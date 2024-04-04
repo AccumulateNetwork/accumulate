@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -72,6 +72,7 @@ func (s *NetworkService) NetworkStatus(ctx context.Context, _ api.NetworkStatusO
 	res.Oracle = values.Oracle
 	res.Routing = values.Routing
 	res.ExecutorVersion = values.ExecutorVersion
+	res.BvnExecutorVersions = values.BvnExecutorVersions
 
 	// Data from the database
 	err := s.database.View(func(batch *database.Batch) error {

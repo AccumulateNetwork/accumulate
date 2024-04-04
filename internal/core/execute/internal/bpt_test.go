@@ -1,8 +1,10 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
+
+//go:build !debug
 
 package internal
 
@@ -58,27 +60,27 @@ func TestEvents(t *testing.T) {
 		batch := db.Begin(true)
 		defer batch.Discard()
 
-		before, err := batch.BPT().GetRootHash()
+		before, err := batch.GetBptRootHash()
 		require.NoError(t, err)
 
 		account := batch.Account(ledgerUrl)
 		fn(account.Events())
 		require.NoError(t, account.Commit())
 
-		after, err := batch.BPT().GetRootHash()
+		after, err := batch.GetBptRootHash()
 		require.NoError(t, err)
 		require.NotEqual(t, hex.EncodeToString(before[:]), hex.EncodeToString(after[:]), msg)
 
 		require.NoError(t, batch.Commit())
 	}
 
-	doesChangeBpt("Expired backlog additions are tracked", func(events *database.AccountEvents) {
-		err := events.Backlog().Expired().Add(url.MustParseTxID("acc://e43be90e349210456662d8b8bdc9cc9e5e46ccb07f2129e7b57a8195e5e916d5@ACME"))
+	doesChangeBpt("Pending transaction additions are tracked", func(events *database.AccountEvents) {
+		err := events.Major().Pending(1).Add(url.MustParseTxID("acc://e43be90e349210456662d8b8bdc9cc9e5e46ccb07f2129e7b57a8195e5e916d5@ACME"))
 		require.NoError(t, err)
 	})
 
-	doesChangeBpt("Pending transaction additions are tracked", func(events *database.AccountEvents) {
-		err := events.Major().Pending(1).Add(url.MustParseTxID("acc://e43be90e349210456662d8b8bdc9cc9e5e46ccb07f2129e7b57a8195e5e916d5@ACME"))
+	doesChangeBpt("Expired backlog additions are tracked", func(events *database.AccountEvents) {
+		err := events.Backlog().Expired().Add(url.MustParseTxID("acc://e43be90e349210456662d8b8bdc9cc9e5e46ccb07f2129e7b57a8195e5e916d5@ACME"))
 		require.NoError(t, err)
 	})
 

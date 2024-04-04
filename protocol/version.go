@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -11,7 +11,17 @@ type ExecutorVersion uint64
 
 // ExecutorVersionLatest is the latest version of the executor.
 // ExecutorVersionLatest is intended primarily for testing.
-const ExecutorVersionLatest = ExecutorVersionV2Baikonur
+const ExecutorVersionLatest = ExecutorVersionV2Vandenberg
+
+func init() {
+	// Verify that ExecutorVersionLatest has been updated, so that tests can
+	// verify that it has been tested.
+	//
+	// TODO Can this be turned into a compile-time check?
+	if ExecutorVersionLatest+1 != ExecutorVersionVNext {
+		panic("ExecutorVersionLatest is out of date")
+	}
+}
 
 // SignatureAnchoringEnabled checks if the version is at least V1 signature anchoring.
 func (v ExecutorVersion) SignatureAnchoringEnabled() bool {
@@ -36,4 +46,9 @@ func (v ExecutorVersion) V2Enabled() bool {
 // V2BaikonurEnabled checks if the version is at least V2 Baikonur.
 func (v ExecutorVersion) V2BaikonurEnabled() bool {
 	return v >= ExecutorVersionV2Baikonur
+}
+
+// V2VandenbergEnabled checks if the version is at least V2 Vandenberg.
+func (v ExecutorVersion) V2VandenbergEnabled() bool {
+	return v >= ExecutorVersionV2Vandenberg
 }

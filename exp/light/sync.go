@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -506,12 +506,12 @@ func (c *Client) pullMessages(ctx context.Context, missing []*missingMessage) er
 	slog.InfoCtx(ctx, "Fetching messages", "chains", accounts, "remaining", len(missing))
 	for i, m := range missing {
 		if i > 0 && i%100 == 0 {
-			slog.InfoCtx(ctx, "Fetching messages", "chains", accounts, "remaining", len(missing)-i)
 			err := batch.Commit()
 			if err != nil {
 				return errors.UnknownError.Wrap(err)
 			}
 			batch = c.OpenDB(true)
+			slog.InfoCtx(ctx, "Fetching messages", "chains", accounts, "remaining", len(missing)-i)
 		}
 
 		// Verify the message is actually missing

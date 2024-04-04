@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -18,15 +18,25 @@ import (
 )
 
 func init() {
+	// Delegated signatures
 	registerSimpleExec[UserSignature](&signatureExecutors,
 		protocol.SignatureTypeDelegated,
+	)
 
+	// Regular signatures
+	registerSimpleExec[UserSignature](&signatureExecutors,
 		protocol.SignatureTypeLegacyED25519,
 		protocol.SignatureTypeED25519,
 		protocol.SignatureTypeRCD1,
 		protocol.SignatureTypeBTC,
 		protocol.SignatureTypeBTCLegacy,
 		protocol.SignatureTypeETH,
+	)
+
+	// RSA signatures (enabled with Vandenberg)
+	registerConditionalExec[UserSignature](&signatureExecutors,
+		func(ctx *SignatureContext) bool { return ctx.GetActiveGlobals().ExecutorVersion.V2VandenbergEnabled() },
+		protocol.SignatureTypeRsaSha256,
 	)
 }
 
@@ -104,20 +114,10 @@ func (x UserSignature) check(batch *database.Batch, ctx *userSigContext) error {
 		return errors.Unauthenticated.WithFormat("invalid signature")
 	}
 
-	ctx.isInitiator = protocol.SignatureDidInitiate(ctx.signature, ctx.transaction.Header.Initiator[:], nil)
-	if ctx.isInitiator {
-		// The initiator must have a timestamp
-		if ctx.keySig.GetTimestamp() == 0 {
-			return errors.BadTimestamp.WithFormat("initial signature does not have a timestamp")
-		}
-
-		// The initiator must accept the transaction. The Merkle style of
-		// initiator hash does not incorporate the vote type so accepting
-		// non-accept votes is potentially problematic. Also, is there any
-		// reason to initiate and reject or abstain?
-		if ctx.keySig.GetVote() != protocol.VoteTypeAccept {
-			return errors.BadRequest.WithFormat("initial signature cannot be a %v vote", ctx.keySig.GetVote())
-		}
+	// Check if the signature initiates the transaction
+	err = x.checkInit(ctx)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
 	}
 
 	// Load the signer and verify the signature against it
@@ -162,6 +162,36 @@ func (UserSignature) unwrapDelegated(ctx *userSigContext) error {
 	for i, n := 0, len(ctx.delegators); i < n/2; i++ {
 		j := n - 1 - i
 		ctx.delegators[i], ctx.delegators[j] = ctx.delegators[j], ctx.delegators[i]
+	}
+
+	return nil
+}
+
+func (UserSignature) checkInit(ctx *userSigContext) error {
+	var initMerkle bool
+	ctx.isInitiator, initMerkle = protocol.SignatureDidInitiate(ctx.signature, ctx.transaction.Header.Initiator[:], nil)
+
+	switch {
+	case ctx.isInitiator && ctx.keySig.GetTimestamp() == 0:
+		// The initiator must have a timestamp
+		return errors.BadTimestamp.WithFormat("initial signature does not have a timestamp")
+
+	case ctx.keySig.GetVote() == protocol.VoteTypeSuggest && ctx.GetActiveGlobals().ExecutorVersion.V2VandenbergEnabled():
+		// A suggestion must be the initiator and must use a plain initiator
+		// hash
+		if !ctx.isInitiator {
+			return errors.BadRequest.With("suggestions cannot be secondary signatures")
+		}
+		if initMerkle {
+			return errors.BadRequest.With("suggestions cannot use Merkle initiator hashes")
+		}
+
+	case ctx.isInitiator && ctx.keySig.GetVote() != protocol.VoteTypeAccept:
+		// The initiator must accept the transaction. The Merkle style of
+		// initiator hash does not incorporate the vote type so accepting
+		// non-accept votes is potentially problematic. Also, is there any
+		// reason to initiate and reject or abstain?
+		return errors.BadRequest.WithFormat("initial signature cannot be a %v vote", ctx.keySig.GetVote())
 	}
 
 	return nil
@@ -339,6 +369,11 @@ func (x UserSignature) Process(batch *database.Batch, ctx *SignatureContext) (_ 
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
+	// Don't send an authority signature if it's a suggestion
+	if ctx2.keySig.GetVote() == protocol.VoteTypeSuggest && ctx.GetActiveGlobals().ExecutorVersion.V2VandenbergEnabled() {
+		return nil, nil
+	}
+
 	// Send the authority signature if the authority is ready
 	err = ctx.maybeSendAuthoritySignature(batch, &protocol.AuthoritySignature{
 		Authority: ctx.getAuthority(),
@@ -372,13 +407,20 @@ func (UserSignature) process(batch *database.Batch, ctx *userSigContext) error {
 		return errors.UnknownError.WithFormat("store signer: %w", err)
 	}
 
-	// Add the signature to the signature set and chain
-	err = addSignature(batch, ctx.SignatureContext, ctx.signer, &database.SignatureSetEntry{
-		KeyIndex: uint64(ctx.keyIndex),
-		Version:  ctx.keySig.GetSignerVersion(),
-		Hash:     ctx.message.Hash(),
-		Path:     ctx.delegators,
-	})
+	if ctx.keySig.GetVote() == protocol.VoteTypeSuggest && ctx.GetActiveGlobals().ExecutorVersion.V2VandenbergEnabled() {
+		// If it's a signature, add it to the chain only
+		err = batch.Account(ctx.getSigner()).
+			Transaction(ctx.transaction.ID().Hash()).
+			RecordHistory(ctx.message)
+	} else {
+		// Otherwise, add it to  the signature set and chain
+		err = addSignature(batch, ctx.SignatureContext, ctx.signer, &database.SignatureSetEntry{
+			KeyIndex: uint64(ctx.keyIndex),
+			Version:  ctx.keySig.GetSignerVersion(),
+			Hash:     ctx.message.Hash(),
+			Path:     ctx.delegators,
+		})
+	}
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
@@ -426,7 +468,7 @@ func (UserSignature) sendSignatureRequests(batch *database.Batch, ctx *userSigCo
 // sendCreditPayment sends the principal a notice that the signer paid and (if
 // the signature is the initiator) the transaction was initiated.
 func (UserSignature) sendCreditPayment(batch *database.Batch, ctx *userSigContext) error {
-	didInit := protocol.SignatureDidInitiate(ctx.signature, ctx.transaction.Header.Initiator[:], nil)
+	didInit, _ := protocol.SignatureDidInitiate(ctx.signature, ctx.transaction.Header.Initiator[:], nil)
 
 	// Don't send a payment if we didn't pay anything. Since we don't (yet)
 	// support anyone besides the initiator paying, this means only the

@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -285,7 +285,7 @@ func processExecuteRequest(req *TxRequest, payload []byte) (*messaging.Envelope,
 	if req.Signer.UseSimpleHash {
 		sigBuilder.UseSimpleHash()
 	} else {
-		sigBuilder.UseMerkleHash()
+		sigBuilder.UseMerkleHash() //nolint:staticcheck
 	}
 	if req.Signer.Version != 0 {
 		sigBuilder.SetVersion(req.Signer.Version)

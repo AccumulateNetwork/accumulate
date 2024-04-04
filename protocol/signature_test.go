@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -8,7 +8,9 @@ package protocol_test
 
 import (
 	"crypto/sha256"
+	"crypto/x509"
 	"encoding/hex"
+	"encoding/pem"
 	"fmt"
 	"testing"
 
@@ -198,4 +200,160 @@ func TestInitWithOtherKeys(t *testing.T) {
 			GetAccount[*TokenAccount](t, sim.DatabaseFor(alice), alice.JoinPath("tokens"))
 		})
 	}
+}
+
+const rsaPrivateKey1024 = `-----BEGIN RSA PRIVATE KEY-----
+MIICXQIBAAKBgQCgA3+iQ1/zYRcKAATz/y+KYAW0boh9VGEFFamlnhe2I2FuEty4
+bFHxu9ntzIS5u1q8Ol49n9pgHF80G4scIKbWqR2M8m0c9YuNDejkXbW/Iqf2tZwk
+jArlMFcRxgvePfjqZXUnUqpu0n8A1BNQ3uo5S1RsK9GvwbVvOcLutlzLgwIDAQAB
+AoGAL/AcYs5whoeF0XckBL1kzr3pt56NwY5v6ogM5RMx411CKSn5ej7pZdRze6yT
+7tjUXCPYa/niAH0/gGroCCs4EAlN/+xCAnF9SM6js4Gu4xMtTstasOyyKN/nlhUE
+zrpbcTLr/cJtjXfZniajFmm4Urz7mzdlW5rULyAcZ5g/PNECQQDjZuXeR6qlxxRE
+jAwKkou4zRuSu95hCJUf9W3val8I7CTkvyk75xilfwDnzquasRp14xdADHy81TW7
+Wp437uVPAkEAtCMQ0YUWrsvftt4Hla5xefczykW8pQ/07FzeN6cN/ajgH3QWJxip
+oXJZJ+P9XvFS60PMXhyE0iHjOfyr6X3RjQJBAItbzPV60A6GQVp8xQhZpLzdHc+/
+yFmI6/LI8tVtR85tAXMZ34gxaL5LZd+pnSrQ7FlgkSgUPwFuXF5z+1Bl3CsCQBTC
+qdCL1xZkFq9bnWIpzZgx3j0kll4rnZ2UAmRFk341dUcKuPbeh8Y8iHvpcaz8gQLu
+OGJsRP52u1pWfXWWc40CQQCqwVesy8mZdV1JgglEsrtlvPcK0a/kVZQqPIGpthfV
+D56486GwVTwyH6QCTD/ZxMficLzw+DpTXiRZd9UHyoBR
+-----END RSA PRIVATE KEY-----`
+
+const rsaPrivateKey2048 = `-----BEGIN RSA PRIVATE KEY-----
+MIIEowIBAAKCAQEAn0hLBj7BdMbm5w0iIK3dGSGoHNR9R8H9mYaRkkomKmQAcz7E
+uuBVHco2I1966Vx7P04L/Rx3KNo//6QhOoFLeYSi0Q7+xit/NVGQejz/J8jKXKs6
+lanUUxefrGnmsAqj+folOnjrHlBHsjzJcmKLvpou8Sf2bSdeLZs15FufQWoDeVv+
+xUPllQZghcg8Bbu814Wl+wFlLSN1eaizUbhxzhCmMVfhsnuFYGBqm6sjUVv/R/Ty
+xMdnfTLWgPDbWSWg0JQiW4vD5b1XEHPFz209+uCVHtXKlo9d7mf20X4bwuvV3nM6
+CDDFi0CIY5ZNbq5cYnD8Ftuz2qCaplRKtiZofwIDAQABAoIBAD2GrEw+Q3X7Osf3
+H76lyijiAlEYl0f3nCEIhQSQFcv8EtxxW4agDuDR8jWZtR2dNpJOcH0V2MV0AJKb
+8KXruZ636Dh+5VThCmMrHXbKRvk0K06+aYPUNQrfrjLoOU643Xw67tR2TsPH2Nn1
+dw7zF+3JGubWO+8P7OYK9Tc/WPXoA2OPtGvQdEQlHAGkJS4u6Gj7u1Wq1BKOwjJJ
+Q04TsGhv5U4epVaKMdgCGEY8DZNwf/xkLz6gSLL3gJivlEkEz3zsMLy/CgssnZQd
+dzzsF+o5UC+TCZNpbOijweL5rtQh/7gdn9qNNEfdRmIfSdTRltXSYkjRWZWVR1Cd
+vUkUs5kCgYEA4pY9PVJwxyrXy3DMyksx6vsHlidLBOxy7RgbE/hwkM72gIG8Fso5
+HXMsDTnzAidOZYX6paCGbwf2pMxUpAIhJiJuG6so2KYGORgN0kwceUoya8pOvuGZ
+KMllT9cr25VPsfsGP4Sj9DazTrUjXgcbd1ysEdUFBaXurmwRqH0WgNMCgYEAs/Vx
+dN7t78Jme7EZRJ+MB0btCLlTuGPaTNkMh4UjnDrLK6mPzfgxAilgAgBH/jhm8OOK
+KA+JsmppomiID+URZeGii7h9JJr0V1TjMSUsk7jJzhsQyaWe9o6hKWHbtocOtQXi
+ylshJpa5B8/x9bQhxMeLVTxzyRX0QygJcBtUziUCgYEAiYx6kIdDPySa6z0GlKch
+HmxVJqmjuNFw0s0XYwAmFUIOEeSvsYYBNgd8bmsHQf9qb+btSS4xbaV/7Hq9xvIj
+/WpZPSKiISJoFLCtc0QQ5PBNu3GMbAO3XjMj9VvBnAL/5iNkn5p9jPrHzrfXSHU4
+DzWKnyiZa9xXEDs6XPXSe1ECgYBkd6a7xKm5rSJh8+FTem9GsMYslKq0yqpZNOPV
+1PKoifpbifKK3wEdX9QFyfpnZz2xRpce/m21ecs3rHwpw40PAAUrU/gps4iuKOod
+yc81OXkQ4/NfYGN66u32mHd9U7FWRs7ygiXj0UnDnshKkCI6Jd0X3QQXQ3Z296ct
+O1UBMQKBgBo0uw7h63SrJo9QBsDHzgaLW6MHBu7YodeE3844UoMtiKZ2jfN9AOOp
+WATvaUxZ6qjUjBMw2dM7j2quqrFS/Orgn/3cxIoA3Lllwx15W21vBHha8iMdGRa/
+uThEun/KbtsVzrNADmJZawAgE7dIFVNsetkvPbzR0LIiJSYHvPj+
+-----END RSA PRIVATE KEY-----`
+const rsaPrivateKey4096 = `-----BEGIN RSA PRIVATE KEY-----
+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
+-----END RSA PRIVATE KEY-----`
+
+func TestRsaSha256Signature(t *testing.T) {
+	message := "ACME will rule DEFI"
+	hash := sha256.Sum256([]byte(message))
+	block, _ := pem.Decode([]byte(rsaPrivateKey1024))
+	privKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+
+	require.NoError(t, err)
+
+	rsaSha256 := new(RsaSha256Signature)
+	rsaSha256.PublicKey = x509.MarshalPKCS1PublicKey(&privKey.PublicKey)
+
+	require.NoError(t, SignRsaSha256(rsaSha256, x509.MarshalPKCS1PrivateKey(privKey), nil, hash[:]))
+
+	//should fail
+	require.Equal(t, VerifyUserSignature(rsaSha256, hash[:]), true)
+	//public key should still match
+	keyComp, err := x509.ParsePKCS1PublicKey(rsaSha256.PublicKey)
+	require.NoError(t, err)
+
+	require.True(t, keyComp.Equal(privKey.Public()), "public keys don't match")
+
+	//now try 2048 key
+
+	block, _ = pem.Decode([]byte(rsaPrivateKey2048))
+	privKey, err = x509.ParsePKCS1PrivateKey(block.Bytes)
+	require.NoError(t, err)
+
+	rsaSha256 = new(RsaSha256Signature)
+	rsaSha256.PublicKey = x509.MarshalPKCS1PublicKey(&privKey.PublicKey)
+
+	require.NoError(t, SignRsaSha256(rsaSha256, x509.MarshalPKCS1PrivateKey(privKey), nil, hash[:]))
+
+	//should fail
+	require.Equal(t, VerifyUserSignature(rsaSha256, hash[:]), true)
+	//public key should still match
+	keyComp, err = x509.ParsePKCS1PublicKey(rsaSha256.PublicKey)
+	require.NoError(t, err)
+
+	require.True(t, keyComp.Equal(privKey.Public()), "public keys don't match")
+
+	//now try 4096 key
+
+	block, _ = pem.Decode([]byte(rsaPrivateKey4096))
+	privKey, err = x509.ParsePKCS1PrivateKey(block.Bytes)
+	require.NoError(t, err)
+
+	rsaSha256 = new(RsaSha256Signature)
+	rsaSha256.PublicKey = x509.MarshalPKCS1PublicKey(&privKey.PublicKey)
+
+	require.NoError(t, SignRsaSha256(rsaSha256, x509.MarshalPKCS1PrivateKey(privKey), nil, hash[:]))
+
+	//should fail
+	require.Equal(t, VerifyUserSignature(rsaSha256, hash[:]), true)
+	//public key should still match
+	keyComp, err = x509.ParsePKCS1PublicKey(rsaSha256.PublicKey)
+	require.NoError(t, err)
+
+	require.True(t, keyComp.Equal(privKey.Public()), "public keys don't match")
+
 }

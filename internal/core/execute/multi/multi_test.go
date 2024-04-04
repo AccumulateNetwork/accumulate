@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -11,10 +11,10 @@ import (
 	"math/big"
 	"testing"
 
+	"github.com/fatih/color"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
@@ -40,10 +40,18 @@ func TestVersionSwitch(t *testing.T) {
 	)
 
 	alice := AccountUrl("alice")
+	bob := AccountUrl("bob")
+	sim.SetRoute(alice, "BVN1")
+	sim.SetRoute(bob, "BVN2")
+
 	aliceKey := acctesting.GenerateKey(alice)
 	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
 	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
 	MakeAccount(t, sim.DatabaseFor(alice), &TokenAccount{Url: alice.JoinPath("tokens"), TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e15)})
+
+	bobKey := acctesting.GenerateKey(bob)
+	MakeIdentity(t, sim.DatabaseFor(bob), bob, bobKey[32:])
+	MakeAccount(t, sim.DatabaseFor(bob), &TokenAccount{Url: bob.JoinPath("tokens"), TokenUrl: AcmeUrl()})
 
 	// Version is unset
 	require.Equal(t, ExecutorVersion(0), GetAccount[*SystemLedger](t, sim.Database(Directory), DnUrl().JoinPath(Ledger)).ExecutorVersion)
@@ -82,9 +90,9 @@ func TestVersionSwitch(t *testing.T) {
 
 	// Verify the DN has updated and the BVNs have _not_ updated
 	require.Equal(t, ExecutorVersionV1Halt, GetAccount[*SystemLedger](t, sim.Database(Directory), DnUrl().JoinPath(Ledger)).ExecutorVersion)
-	require.Equal(t, protocol.ExecutorVersion(0), GetAccount[*SystemLedger](t, sim.Database("BVN0"), PartitionUrl("BVN0").JoinPath(Ledger)).ExecutorVersion)
-	require.Equal(t, protocol.ExecutorVersion(0), GetAccount[*SystemLedger](t, sim.Database("BVN1"), PartitionUrl("BVN1").JoinPath(Ledger)).ExecutorVersion)
-	require.Equal(t, protocol.ExecutorVersion(0), GetAccount[*SystemLedger](t, sim.Database("BVN2"), PartitionUrl("BVN2").JoinPath(Ledger)).ExecutorVersion)
+	require.Equal(t, ExecutorVersion(0), GetAccount[*SystemLedger](t, sim.Database("BVN0"), PartitionUrl("BVN0").JoinPath(Ledger)).ExecutorVersion)
+	require.Equal(t, ExecutorVersion(0), GetAccount[*SystemLedger](t, sim.Database("BVN1"), PartitionUrl("BVN1").JoinPath(Ledger)).ExecutorVersion)
+	require.Equal(t, ExecutorVersion(0), GetAccount[*SystemLedger](t, sim.Database("BVN2"), PartitionUrl("BVN2").JoinPath(Ledger)).ExecutorVersion)
 
 	// Before the update makes it to the BVNs,  do something that produces a
 	// synthetic transaction
@@ -191,4 +199,42 @@ func TestVersionSwitch(t *testing.T) {
 	sim.StepUntil(
 		Txn(st.TxID).Succeeds(),
 		Txn(st.TxID).Produced().Capture(&st).Succeeds())
+
+	// Update to v2 vandenburg
+	fmt.Println("Switching to v2 vandenburg")
+	st = sim.SubmitTxnSuccessfully(MustBuild(t,
+		build.Transaction().For(DnUrl()).
+			ActivateProtocolVersion(ExecutorVersionV2Vandenberg).
+			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(&timestamp).Signer(sim.SignWithNode(Directory, 0))))
+
+	sim.StepUntil(
+		Txn(st.TxID).Succeeds(),
+		VersionIs(ExecutorVersionV2Vandenberg))
+
+	// Do something that produces a synthetic transaction
+	st = sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(alice, "tokens").
+			AddCredits().WithOracle(InitialAcmeOracle).Spend(10).To(bob, "book", "1").
+			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey))
+
+	// Verify it completes
+	sim.StepUntil(
+		Txn(st.TxID).Completes())
+
+	if GetAccount[*SystemLedger](t, sim.Database(Directory), DnUrl().JoinPath(Ledger)).ExecutorVersion != ExecutorVersionLatest {
+		c := color.New(color.BgRed, color.FgWhite, color.Bold)
+		t.Fatal(c.Sprint("!!! THIS TEST NEEDS TO BE UPDATED !!!") + `
+		This test must be updated any time a new protocol version is added`)
+	}
+
+	// Update to the next version (verify that updates aren't broken)
+	fmt.Println("Switching to v2 next")
+	st = sim.SubmitTxnSuccessfully(MustBuild(t,
+		build.Transaction().For(DnUrl()).
+			ActivateProtocolVersion(ExecutorVersionVNext).
+			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(&timestamp).Signer(sim.SignWithNode(Directory, 0))))
+
+	sim.StepUntil(
+		Txn(st.TxID).Succeeds(),
+		VersionIs(ExecutorVersionVNext))
 }

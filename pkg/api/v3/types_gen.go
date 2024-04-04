@@ -299,6 +299,8 @@ type NetworkStatus struct {
 	Routing   *protocol.RoutingTable      `json:"routing,omitempty" form:"routing" query:"routing" validate:"required"`
 	// ExecutorVersion is the active executor version.
 	ExecutorVersion protocol.ExecutorVersion `json:"executorVersion,omitempty" form:"executorVersion" query:"executorVersion"`
+	// BvnExecutorVersions is the active executor version of each BVN.
+	BvnExecutorVersions []*protocol.PartitionExecutorVersion `json:"bvnExecutorVersions,omitempty" form:"bvnExecutorVersions" query:"bvnExecutorVersions" validate:"required"`
 	// DirectoryHeight is the height of the directory network.
 	DirectoryHeight  uint64 `json:"directoryHeight,omitempty" form:"directoryHeight" query:"directoryHeight" validate:"required"`
 	MajorBlockHeight uint64 `json:"majorBlockHeight,omitempty" form:"majorBlockHeight" query:"majorBlockHeight" validate:"required"`
@@ -1184,6 +1186,13 @@ func (v *NetworkStatus) Copy() *NetworkStatus {
 		u.Routing = (v.Routing).Copy()
 	}
 	u.ExecutorVersion = v.ExecutorVersion
+	u.BvnExecutorVersions = make([]*protocol.PartitionExecutorVersion, len(v.BvnExecutorVersions))
+	for i, v := range v.BvnExecutorVersions {
+		v := v
+		if v != nil {
+			u.BvnExecutorVersions[i] = (v).Copy()
+		}
+	}
 	u.DirectoryHeight = v.DirectoryHeight
 	u.MajorBlockHeight = v.MajorBlockHeight
 	if len(v.extraData) > 0 {
@@ -2276,6 +2285,14 @@ func (v *NetworkStatus) Equal(u *NetworkStatus) bool {
 	}
 	if !(v.ExecutorVersion == u.ExecutorVersion) {
 		return false
+	}
+	if len(v.BvnExecutorVersions) != len(u.BvnExecutorVersions) {
+		return false
+	}
+	for i := range v.BvnExecutorVersions {
+		if !((v.BvnExecutorVersions[i]).Equal(u.BvnExecutorVersions[i])) {
+			return false
+		}
 	}
 	if !(v.DirectoryHeight == u.DirectoryHeight) {
 		return false
@@ -4501,8 +4518,9 @@ var fieldNames_NetworkStatus = []string{
 	3: "Network",
 	4: "Routing",
 	5: "ExecutorVersion",
-	6: "DirectoryHeight",
-	7: "MajorBlockHeight",
+	6: "BvnExecutorVersions",
+	7: "DirectoryHeight",
+	8: "MajorBlockHeight",
 }
 
 func (v *NetworkStatus) MarshalBinary() ([]byte, error) {
@@ -4528,11 +4546,16 @@ func (v *NetworkStatus) MarshalBinary() ([]byte, error) {
 	if !(v.ExecutorVersion == 0) {
 		writer.WriteEnum(5, v.ExecutorVersion)
 	}
+	if !(len(v.BvnExecutorVersions) == 0) {
+		for _, v := range v.BvnExecutorVersions {
+			writer.WriteValue(6, v.MarshalBinary)
+		}
+	}
 	if !(v.DirectoryHeight == 0) {
-		writer.WriteUint(6, v.DirectoryHeight)
+		writer.WriteUint(7, v.DirectoryHeight)
 	}
 	if !(v.MajorBlockHeight == 0) {
-		writer.WriteUint(7, v.MajorBlockHeight)
+		writer.WriteUint(8, v.MajorBlockHeight)
 	}
 
 	_, _, err := writer.Reset(fieldNames_NetworkStatus)
@@ -4567,11 +4590,16 @@ func (v *NetworkStatus) IsValid() error {
 		errs = append(errs, "field Routing is not set")
 	}
 	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field BvnExecutorVersions is missing")
+	} else if len(v.BvnExecutorVersions) == 0 {
+		errs = append(errs, "field BvnExecutorVersions is not set")
+	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
 		errs = append(errs, "field DirectoryHeight is missing")
 	} else if v.DirectoryHeight == 0 {
 		errs = append(errs, "field DirectoryHeight is not set")
 	}
-	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
 		errs = append(errs, "field MajorBlockHeight is missing")
 	} else if v.MajorBlockHeight == 0 {
 		errs = append(errs, "field MajorBlockHeight is not set")
@@ -6685,10 +6713,17 @@ func (v *NetworkStatus) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(protocol.ExecutorVersion); reader.ReadEnum(5, x) {
 		v.ExecutorVersion = *x
 	}
-	if x, ok := reader.ReadUint(6); ok {
-		v.DirectoryHeight = x
+	for {
+		if x := new(protocol.PartitionExecutorVersion); reader.ReadValue(6, x.UnmarshalBinaryFrom) {
+			v.BvnExecutorVersions = append(v.BvnExecutorVersions, x)
+		} else {
+			break
+		}
 	}
 	if x, ok := reader.ReadUint(7); ok {
+		v.DirectoryHeight = x
+	}
+	if x, ok := reader.ReadUint(8); ok {
 		v.MajorBlockHeight = x
 	}
 
@@ -7373,7 +7408,7 @@ func (v *ChainEntryRecord[T]) MarshalJSON() ([]byte, error) {
 		Name          string                         `json:"name,omitempty"`
 		Type          merkle.ChainType               `json:"type,omitempty"`
 		Index         uint64                         `json:"index"`
-		Entry         string                         `json:"entry,omitempty"`
+		Entry         *string                        `json:"entry,omitempty"`
 		Value         *encoding.JsonUnmarshalWith[T] `json:"value,omitempty"`
 		Receipt       *Receipt                       `json:"receipt,omitempty"`
 		State         encoding.JsonList[*string]     `json:"state,omitempty"`
@@ -7391,7 +7426,7 @@ func (v *ChainEntryRecord[T]) MarshalJSON() ([]byte, error) {
 	}
 	u.Index = v.Index
 	if !(v.Entry == ([32]byte{})) {
-		u.Entry = encoding.ChainToJSON(v.Entry)
+		u.Entry = encoding.ChainToJSON(&v.Entry)
 	}
 	if !(EqualRecord(v.Value, nil)) {
 		u.Value = &encoding.JsonUnmarshalWith[T]{Value: v.Value, Func: func(b []byte) (T, error) { return encoding.Cast[T](UnmarshalRecordJSON(b)) }}
@@ -7476,8 +7511,8 @@ func (v *ConsensusStatus) MarshalJSON() ([]byte, error) {
 		LastBlock        *LastBlock                            `json:"lastBlock,omitempty"`
 		Version          string                                `json:"version,omitempty"`
 		Commit           string                                `json:"commit,omitempty"`
-		NodeKeyHash      string                                `json:"nodeKeyHash,omitempty"`
-		ValidatorKeyHash string                                `json:"validatorKeyHash,omitempty"`
+		NodeKeyHash      *string                               `json:"nodeKeyHash,omitempty"`
+		ValidatorKeyHash *string                               `json:"validatorKeyHash,omitempty"`
 		PartitionID      string                                `json:"partitionID,omitempty"`
 		PartitionType    protocol.PartitionType                `json:"partitionType,omitempty"`
 		Peers            encoding.JsonList[*ConsensusPeerInfo] `json:"peers,omitempty"`
@@ -7495,10 +7530,10 @@ func (v *ConsensusStatus) MarshalJSON() ([]byte, error) {
 		u.Commit = v.Commit
 	}
 	if !(v.NodeKeyHash == ([32]byte{})) {
-		u.NodeKeyHash = encoding.ChainToJSON(v.NodeKeyHash)
+		u.NodeKeyHash = encoding.ChainToJSON(&v.NodeKeyHash)
 	}
 	if !(v.ValidatorKeyHash == ([32]byte{})) {
-		u.ValidatorKeyHash = encoding.ChainToJSON(v.ValidatorKeyHash)
+		u.ValidatorKeyHash = encoding.ChainToJSON(&v.ValidatorKeyHash)
 	}
 	if !(len(v.PartitionID) == 0) {
 		u.PartitionID = v.PartitionID
@@ -7692,8 +7727,8 @@ func (v *LastBlock) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Height                int64     `json:"height,omitempty"`
 		Time                  time.Time `json:"time,omitempty"`
-		ChainRoot             string    `json:"chainRoot,omitempty"`
-		StateRoot             string    `json:"stateRoot,omitempty"`
+		ChainRoot             *string   `json:"chainRoot,omitempty"`
+		StateRoot             *string   `json:"stateRoot,omitempty"`
 		DirectoryAnchorHeight uint64    `json:"directoryAnchorHeight,omitempty"`
 	}{}
 	if !(v.Height == 0) {
@@ -7703,10 +7738,10 @@ func (v *LastBlock) MarshalJSON() ([]byte, error) {
 		u.Time = v.Time
 	}
 	if !(v.ChainRoot == ([32]byte{})) {
-		u.ChainRoot = encoding.ChainToJSON(v.ChainRoot)
+		u.ChainRoot = encoding.ChainToJSON(&v.ChainRoot)
 	}
 	if !(v.StateRoot == ([32]byte{})) {
-		u.StateRoot = encoding.ChainToJSON(v.StateRoot)
+		u.StateRoot = encoding.ChainToJSON(&v.StateRoot)
 	}
 	if !(v.DirectoryAnchorHeight == 0) {
 		u.DirectoryAnchorHeight = v.DirectoryAnchorHeight
@@ -7741,11 +7776,11 @@ func (v *MajorBlockRecord) MarshalJSON() ([]byte, error) {
 func (v *MessageHashSearchQuery) MarshalJSON() ([]byte, error) {
 	u := struct {
 		QueryType QueryType `json:"queryType"`
-		Hash      string    `json:"hash,omitempty"`
+		Hash      *string   `json:"hash,omitempty"`
 	}{}
 	u.QueryType = v.QueryType()
 	if !(v.Hash == ([32]byte{})) {
-		u.Hash = encoding.ChainToJSON(v.Hash)
+		u.Hash = encoding.ChainToJSON(&v.Hash)
 	}
 	return json.Marshal(&u)
 }
@@ -7842,6 +7877,44 @@ func (v *MinorBlockRecord) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.LastBlockTime == nil) {
 		u.LastBlockTime = v.LastBlockTime
+	}
+	return json.Marshal(&u)
+}
+
+func (v *NetworkStatus) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Oracle              *protocol.AcmeOracle                                  `json:"oracle,omitempty"`
+		Globals             *protocol.NetworkGlobals                              `json:"globals,omitempty"`
+		Network             *protocol.NetworkDefinition                           `json:"network,omitempty"`
+		Routing             *protocol.RoutingTable                                `json:"routing,omitempty"`
+		ExecutorVersion     protocol.ExecutorVersion                              `json:"executorVersion,omitempty"`
+		BvnExecutorVersions encoding.JsonList[*protocol.PartitionExecutorVersion] `json:"bvnExecutorVersions,omitempty"`
+		DirectoryHeight     uint64                                                `json:"directoryHeight,omitempty"`
+		MajorBlockHeight    uint64                                                `json:"majorBlockHeight,omitempty"`
+	}{}
+	if !(v.Oracle == nil) {
+		u.Oracle = v.Oracle
+	}
+	if !(v.Globals == nil) {
+		u.Globals = v.Globals
+	}
+	if !(v.Network == nil) {
+		u.Network = v.Network
+	}
+	if !(v.Routing == nil) {
+		u.Routing = v.Routing
+	}
+	if !(v.ExecutorVersion == 0) {
+		u.ExecutorVersion = v.ExecutorVersion
+	}
+	if !(len(v.BvnExecutorVersions) == 0) {
+		u.BvnExecutorVersions = v.BvnExecutorVersions
+	}
+	if !(v.DirectoryHeight == 0) {
+		u.DirectoryHeight = v.DirectoryHeight
+	}
+	if !(v.MajorBlockHeight == 0) {
+		u.MajorBlockHeight = v.MajorBlockHeight
 	}
 	return json.Marshal(&u)
 }
@@ -8154,7 +8227,7 @@ func (v *ChainEntryRecord[T]) UnmarshalJSON(data []byte) error {
 		Name          string                         `json:"name,omitempty"`
 		Type          merkle.ChainType               `json:"type,omitempty"`
 		Index         uint64                         `json:"index"`
-		Entry         string                         `json:"entry,omitempty"`
+		Entry         *string                        `json:"entry,omitempty"`
 		Value         *encoding.JsonUnmarshalWith[T] `json:"value,omitempty"`
 		Receipt       *Receipt                       `json:"receipt,omitempty"`
 		State         encoding.JsonList[*string]     `json:"state,omitempty"`
@@ -8165,7 +8238,7 @@ func (v *ChainEntryRecord[T]) UnmarshalJSON(data []byte) error {
 	u.Name = v.Name
 	u.Type = v.Type
 	u.Index = v.Index
-	u.Entry = encoding.ChainToJSON(v.Entry)
+	u.Entry = encoding.ChainToJSON(&v.Entry)
 	u.Value = &encoding.JsonUnmarshalWith[T]{Value: v.Value, Func: func(b []byte) (T, error) { return encoding.Cast[T](UnmarshalRecordJSON(b)) }}
 	u.Receipt = v.Receipt
 	u.State = make(encoding.JsonList[*string], len(v.State))
@@ -8186,7 +8259,7 @@ func (v *ChainEntryRecord[T]) UnmarshalJSON(data []byte) error {
 	if x, err := encoding.ChainFromJSON(u.Entry); err != nil {
 		return fmt.Errorf("error decoding Entry: %w", err)
 	} else {
-		v.Entry = x
+		v.Entry = *x
 	}
 	if u.Value != nil {
 		v.Value = u.Value.Value
@@ -8283,8 +8356,8 @@ func (v *ConsensusStatus) UnmarshalJSON(data []byte) error {
 		LastBlock        *LastBlock                            `json:"lastBlock,omitempty"`
 		Version          string                                `json:"version,omitempty"`
 		Commit           string                                `json:"commit,omitempty"`
-		NodeKeyHash      string                                `json:"nodeKeyHash,omitempty"`
-		ValidatorKeyHash string                                `json:"validatorKeyHash,omitempty"`
+		NodeKeyHash      *string                               `json:"nodeKeyHash,omitempty"`
+		ValidatorKeyHash *string                               `json:"validatorKeyHash,omitempty"`
 		PartitionID      string                                `json:"partitionID,omitempty"`
 		PartitionType    protocol.PartitionType                `json:"partitionType,omitempty"`
 		Peers            encoding.JsonList[*ConsensusPeerInfo] `json:"peers,omitempty"`
@@ -8293,8 +8366,8 @@ func (v *ConsensusStatus) UnmarshalJSON(data []byte) error {
 	u.LastBlock = v.LastBlock
 	u.Version = v.Version
 	u.Commit = v.Commit
-	u.NodeKeyHash = encoding.ChainToJSON(v.NodeKeyHash)
-	u.ValidatorKeyHash = encoding.ChainToJSON(v.ValidatorKeyHash)
+	u.NodeKeyHash = encoding.ChainToJSON(&v.NodeKeyHash)
+	u.ValidatorKeyHash = encoding.ChainToJSON(&v.ValidatorKeyHash)
 	u.PartitionID = v.PartitionID
 	u.PartitionType = v.PartitionType
 	u.Peers = v.Peers
@@ -8308,12 +8381,12 @@ func (v *ConsensusStatus) UnmarshalJSON(data []byte) error {
 	if x, err := encoding.ChainFromJSON(u.NodeKeyHash); err != nil {
 		return fmt.Errorf("error decoding NodeKeyHash: %w", err)
 	} else {
-		v.NodeKeyHash = x
+		v.NodeKeyHash = *x
 	}
 	if x, err := encoding.ChainFromJSON(u.ValidatorKeyHash); err != nil {
 		return fmt.Errorf("error decoding ValidatorKeyHash: %w", err)
 	} else {
-		v.ValidatorKeyHash = x
+		v.ValidatorKeyHash = *x
 	}
 	v.PartitionID = u.PartitionID
 	v.PartitionType = u.PartitionType
@@ -8554,14 +8627,14 @@ func (v *LastBlock) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Height                int64     `json:"height,omitempty"`
 		Time                  time.Time `json:"time,omitempty"`
-		ChainRoot             string    `json:"chainRoot,omitempty"`
-		StateRoot             string    `json:"stateRoot,omitempty"`
+		ChainRoot             *string   `json:"chainRoot,omitempty"`
+		StateRoot             *string   `json:"stateRoot,omitempty"`
 		DirectoryAnchorHeight uint64    `json:"directoryAnchorHeight,omitempty"`
 	}{}
 	u.Height = v.Height
 	u.Time = v.Time
-	u.ChainRoot = encoding.ChainToJSON(v.ChainRoot)
-	u.StateRoot = encoding.ChainToJSON(v.StateRoot)
+	u.ChainRoot = encoding.ChainToJSON(&v.ChainRoot)
+	u.StateRoot = encoding.ChainToJSON(&v.StateRoot)
 	u.DirectoryAnchorHeight = v.DirectoryAnchorHeight
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -8571,12 +8644,12 @@ func (v *LastBlock) UnmarshalJSON(data []byte) error {
 	if x, err := encoding.ChainFromJSON(u.ChainRoot); err != nil {
 		return fmt.Errorf("error decoding ChainRoot: %w", err)
 	} else {
-		v.ChainRoot = x
+		v.ChainRoot = *x
 	}
 	if x, err := encoding.ChainFromJSON(u.StateRoot); err != nil {
 		return fmt.Errorf("error decoding StateRoot: %w", err)
 	} else {
-		v.StateRoot = x
+		v.StateRoot = *x
 	}
 	v.DirectoryAnchorHeight = u.DirectoryAnchorHeight
 	return nil
@@ -8611,10 +8684,10 @@ func (v *MajorBlockRecord) UnmarshalJSON(data []byte) error {
 func (v *MessageHashSearchQuery) UnmarshalJSON(data []byte) error {
 	u := struct {
 		QueryType QueryType `json:"queryType"`
-		Hash      string    `json:"hash,omitempty"`
+		Hash      *string   `json:"hash,omitempty"`
 	}{}
 	u.QueryType = v.QueryType()
-	u.Hash = encoding.ChainToJSON(v.Hash)
+	u.Hash = encoding.ChainToJSON(&v.Hash)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -8624,7 +8697,7 @@ func (v *MessageHashSearchQuery) UnmarshalJSON(data []byte) error {
 	if x, err := encoding.ChainFromJSON(u.Hash); err != nil {
 		return fmt.Errorf("error decoding Hash: %w", err)
 	} else {
-		v.Hash = x
+		v.Hash = *x
 	}
 	return nil
 }
@@ -8719,6 +8792,39 @@ func (v *MinorBlockRecord) UnmarshalJSON(data []byte) error {
 	v.Entries = u.Entries
 	v.Anchored = u.Anchored
 	v.LastBlockTime = u.LastBlockTime
+	return nil
+}
+
+func (v *NetworkStatus) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Oracle              *protocol.AcmeOracle                                  `json:"oracle,omitempty"`
+		Globals             *protocol.NetworkGlobals                              `json:"globals,omitempty"`
+		Network             *protocol.NetworkDefinition                           `json:"network,omitempty"`
+		Routing             *protocol.RoutingTable                                `json:"routing,omitempty"`
+		ExecutorVersion     protocol.ExecutorVersion                              `json:"executorVersion,omitempty"`
+		BvnExecutorVersions encoding.JsonList[*protocol.PartitionExecutorVersion] `json:"bvnExecutorVersions,omitempty"`
+		DirectoryHeight     uint64                                                `json:"directoryHeight,omitempty"`
+		MajorBlockHeight    uint64                                                `json:"majorBlockHeight,omitempty"`
+	}{}
+	u.Oracle = v.Oracle
+	u.Globals = v.Globals
+	u.Network = v.Network
+	u.Routing = v.Routing
+	u.ExecutorVersion = v.ExecutorVersion
+	u.BvnExecutorVersions = v.BvnExecutorVersions
+	u.DirectoryHeight = v.DirectoryHeight
+	u.MajorBlockHeight = v.MajorBlockHeight
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Oracle = u.Oracle
+	v.Globals = u.Globals
+	v.Network = u.Network
+	v.Routing = u.Routing
+	v.ExecutorVersion = u.ExecutorVersion
+	v.BvnExecutorVersions = u.BvnExecutorVersions
+	v.DirectoryHeight = u.DirectoryHeight
+	v.MajorBlockHeight = u.MajorBlockHeight
 	return nil
 }
 

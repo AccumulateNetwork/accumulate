@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -156,6 +156,11 @@ func (h *Harness) Submit(envelope *messaging.Envelope) []*protocol.TransactionSt
 		status[i] = sub.Status
 	}
 	return status
+}
+
+func (h *Harness) SubmitRaw(envelope *messaging.Envelope) ([]*api.Submission, error) {
+	h.TB.Helper()
+	return h.services.Submit(context.Background(), envelope, api.SubmitOptions{})
 }
 
 // SubmitSuccessfully submits the envelope and asserts that all transactions and

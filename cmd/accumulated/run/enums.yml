@@ -9,3 +9,45 @@ PrivateKeyType:
     value: 4
   CometNodeKeyFile:
     value: 5
+
+ServiceType:
+  Storage:
+    value: 1
+  Consensus:
+    value: 2
+  Querier:
+    value: 3
+  Network:
+    value: 4
+  Metrics:
+    value: 5
+  Events:
+    value: 6
+  Http:
+    value: 7
+  Router:
+    value: 8
+  Snapshot:
+    value: 9
+  Faucet:
+    value: 10
+  Subnode:
+    value: 11
+
+StorageType:
+  Memory:
+    value: 1
+  Badger:
+    value: 2
+
+ConfigurationType:
+  CoreValidator:
+    value: 1
+  Gateway:
+    value: 2
+  Devnet:
+    value: 3
+
+ConsensusAppType:
+  Core:
+    value: 1

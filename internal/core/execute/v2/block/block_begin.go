@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -53,18 +53,10 @@ func (x *Executor) Begin(params execute.BlockParams) (_ execute.Block, err error
 
 	x.logger.Debug("Begin block", "module", "block", "height", block.Index, "leader", block.IsLeader, "time", block.Time)
 
-	if x.globals.Active.ExecutorVersion.V2BaikonurEnabled() {
-		// Get the previous block's root hash, before making any changes
-		prevRootHash, err := block.Batch.GetBptRootHash()
-		if err != nil {
-			return nil, err
-		}
-
-		// Record it on the BPT chain
-		err = block.Batch.Account(x.Describe.Ledger()).BptChain().Inner().AddEntry(prevRootHash[:], false)
-		if err != nil {
-			return nil, err
-		}
+	// Get the previous block's root hash (before any changes are made)
+	block.State.PreviousStateHash, err = block.Batch.GetBptRootHash()
+	if err != nil {
+		return nil, err
 	}
 
 	// Finalize the previous block
@@ -264,12 +256,16 @@ func (x *Executor) recordAnchor(block *Block, ledger *protocol.SystemLedger) err
 		return errors.UnknownError.Wrap(err)
 	}
 
-	if x.Describe.NetworkType == protocol.PartitionTypeDirectory {
+	if x.Describe.NetworkType == protocol.PartitionTypeDirectory && !x.globals.Active.ExecutorVersion.V2VandenbergEnabled() {
+		// As far as I know, the only thing this achieves (besides logging) is
+		// ensuring the block is not discarded. The only other reference to
+		// OpenedMajorBlock is (*BlockState).Empty. This is not necessary after
+		// v2-vandenburg since it uses a synthetic message (which prevents the
+		// block from being discarded).
 		anchor := anchor.(*protocol.DirectoryAnchor)
 		if anchor.MakeMajorBlock > 0 {
 			x.logger.Info("Start major block", "major-index", anchor.MakeMajorBlock, "minor-index", ledger.Index)
 			block.State.OpenedMajorBlock = true
-			x.ExecutorOptions.MajorBlockScheduler.UpdateNextMajorBlockTime(anchor.MakeMajorBlockTime)
 		}
 	}
 	return nil

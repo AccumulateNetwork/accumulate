@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -17,7 +17,6 @@ import (
 	cmtjson "github.com/cometbft/cometbft/libs/json"
 	tmp2p "github.com/cometbft/cometbft/p2p"
 	"github.com/cometbft/cometbft/privval"
-	. "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/address"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -38,7 +37,7 @@ func (k *TransientPrivateKey) get(inst *Instance) (address.Address, error) {
 		return k.key, nil
 	}
 
-	Warnf("Generating a new key. This is highly discouraged for permanent infrastructure.")
+	inst.logger.WarnContext(inst.context, "Generating a new key. This is highly discouraged for permanent infrastructure.")
 	pk, sk, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		panic(err)
@@ -58,7 +57,7 @@ func (k *PrivateKeySeed) get(inst *Instance) (address.Address, error) {
 		return k.key, nil
 	}
 
-	Warnf("Generating a new key from a seed. This is not at all secure.")
+	inst.logger.WarnContext(inst.context, "Generating a new key from a seed. This is not at all secure.")
 	h := k.Seed.Hash()
 	sk := ed25519.NewKeyFromSeed(h[:])
 	k.key = &address.PrivateKey{

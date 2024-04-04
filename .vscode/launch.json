@@ -263,6 +263,7 @@
       "args": [
         "MainNet",
         "--debug",
+        "--key=seed:foo",
         "--http-listen=/ip4/0.0.0.0/tcp/26660",
       ]
     },
@@ -377,7 +378,7 @@
       "program": "${workspaceFolder}/tools/cmd/gen-types",
       "cwd": "${workspaceFolder}/protocol",
       "args": [
-        "account_auth_operations.yml",
+        "operations.yml",
         "accounts.yml",
         "general.yml",
         "system.yml",
@@ -644,14 +645,34 @@
       "type": "go",
       "request": "launch",
       "mode": "replay",
-      "program": "${workspaceFolder}/internal/bsn",
+      "program": "${workspaceFolder}",
       "backend": "rr",
-      "traceDirPath": "${env:HOME}/.local/share/rr/bsn.test-1",
+      "traceDirPath": "${env:HOME}/.local/share/rr/simulator.test-2",
+      "trace": "log",
+      "stopOnEntry": true,
       "args": [
         "-test.run",
-        "Sim"
+        "^TestSimulator$"
       ]
     },
+    {
+      // https://rr-project.org/
+      "name": "Run a test with RR",
+      "presentation": {
+        "group": "99-Miscellaneous",
+      },
+      "type": "go",
+      "request": "launch",
+      "mode": "test",
+      "program": "${workspaceFolder}/test/simulator",
+      "backend": "rr",
+      "trace": "log",
+      "args": [
+        "-test.run",
+        "^TestSimulator$"
+      ]
+    },
+
     {
       "name": "Database explorer",
       "presentation": {

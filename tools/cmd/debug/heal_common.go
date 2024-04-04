@@ -42,6 +42,8 @@ var cmdHeal = &cobra.Command{
 	Use: "heal",
 }
 
+var flagMaxResponseAge time.Duration = time.Minute
+
 func init() {
 	peerDb = filepath.Join(currentUser.HomeDir, ".accumulate", "cache", "peerdb.json")
 	lightDb = filepath.Join(currentUser.HomeDir, ".accumulate", "cache", "light.db")
@@ -54,6 +56,7 @@ func init() {
 	cmdHeal.PersistentFlags().BoolVar(&healContinuous, "continuous", false, "Run healing in a loop every minute")
 	cmdHeal.PersistentFlags().StringVar(&peerDb, "peer-db", peerDb, "Track peers using a persistent database")
 	cmdHeal.PersistentFlags().StringVar(&pprof, "pprof", "", "Address to run net/http/pprof on")
+	cmdHealAnchor.PersistentFlags().DurationVar(&flagMaxResponseAge, "max-response-age", flagMaxResponseAge, "Maximum age of a response before it is considered too stale to use")
 	cmdHealSynth.PersistentFlags().StringVar(&lightDb, "light-db", lightDb, "Light client database for persisting chain data")
 
 	_ = cmdHeal.MarkFlagFilename("cached-scan", ".json")
@@ -134,8 +137,14 @@ func (h *healer) heal(args []string) {
 		check(json.Unmarshal(data, &h.net))
 	}
 
-	h.router, err = apiutil.InitRouter(ctx, node, args[0])
+	h.router, err = apiutil.InitRouter(apiutil.RouterOptions{
+		Context: ctx,
+		Node:    node,
+		Network: args[0],
+	})
 	check(err)
+
+	<-h.router.(*routing.RouterInstance).Ready()
 
 	dialer := node.DialNetwork()
 	if _, ok := node.Tracker().(*dial.PersistentTracker); !ok {
@@ -238,9 +247,20 @@ func (h *healer) heal(args []string) {
 }
 
 // getAccount fetches the given account.
-func getAccount[T protocol.Account](h *healer, u *url.URL) T {
-	r, err := api.Querier2{Querier: h.C1}.QueryAccount(h.ctx, u, nil)
+func getAccount[T protocol.Account](ctx context.Context, q api.Querier, u *url.URL) T {
+	r, err := api.Querier2{Querier: q}.QueryAccount(ctx, u, nil)
 	checkf(err, "get %v", u)
+
+	if r.LastBlockTime == nil {
+		fatalf("response for %v does not include a last block time", u)
+	}
+
+	age := time.Since(*r.LastBlockTime)
+	if flagMaxResponseAge > 0 && age > flagMaxResponseAge {
+		fatalf("response for %v is too old (%v)", u, age)
+	}
+
+	slog.InfoCtx(ctx, "Got account", "url", u, "lastBlockAge", age.Round(time.Second))
 
 	a := r.Account
 	b, ok := a.(T)

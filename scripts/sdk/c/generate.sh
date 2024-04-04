@@ -27,7 +27,7 @@ function generate {
 PROT=../../../protocol
 SMT=../../../internal/database/smt/managed
 generate enum c protocol $PROT/enums.yml # $SMT/enums.yml
-generate types c protocol  $PROT/account_auth_operations.yml $PROT/accounts.yml $PROT/general.yml $PROT/system.yml $PROT/key_page_operations.yml $PROT/query.yml $PROT/signatures.yml  $PROT/synthetic_transactions.yml $PROT/transaction.yml $PROT/transaction_results.yml $PROT/user_transactions.yml  -x TransactionStatus -x SystemLedger  -x TransactionResultSet
+generate types c protocol  $PROT/operations.yml $PROT/accounts.yml $PROT/general.yml $PROT/system.yml $PROT/key_page_operations.yml $PROT/query.yml $PROT/signatures.yml  $PROT/synthetic_transactions.yml $PROT/transaction.yml $PROT/transaction_results.yml $PROT/user_transactions.yml  -x TransactionStatus -x SystemLedger  -x TransactionResultSet
 
 ERR=../../../pkg/errors
 generate enum c errors $ERR/status.yml

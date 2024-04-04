@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -10,6 +10,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -37,12 +38,12 @@ import (
 	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog"
 	"gitlab.com/accumulatenetwork/accumulate"
+	"gitlab.com/accumulatenetwork/accumulate/exp/loki"
 	"gitlab.com/accumulatenetwork/accumulate/exp/tendermint"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3/tm"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
@@ -64,6 +65,7 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/exp/slog"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type Daemon struct {
@@ -105,6 +107,7 @@ func New(cfg *config.Config, newWriter func(*config.Config) (io.Writer, error)) 
 	daemon.snapshotLock = new(sync.Mutex)
 	daemon.Config = cfg
 	daemon.localTm = tendermint.NewDeferredClient()
+	daemon.done = make(chan struct{})
 
 	if newWriter == nil {
 		newWriter = func(c *config.Config) (io.Writer, error) {
@@ -120,6 +123,52 @@ func New(cfg *config.Config, newWriter func(*config.Config) (io.Writer, error)) 
 	logLevel, logWriter, err := logging.ParseLogLevel(daemon.Config.LogLevel, logWriter)
 	if err != nil {
 		return nil, errors.BadRequest.WithFormat("invalid parse log level: %v", err)
+	}
+
+	if cfg.Accumulate.Logging.EnableLoki {
+		hostname, _ := os.Hostname()
+		ch, err := loki.Start(&cfg.Accumulate.Logging, map[string]string{
+			"hostname":  hostname,
+			"process":   "accumulated",
+			"network":   cfg.Accumulate.Network.Id,
+			"partition": cfg.Accumulate.PartitionId,
+		})
+		if err != nil {
+			return nil, errors.BadRequest.WithFormat("init Loki: %v", err)
+		}
+
+		pipe := make(chan *loki.Entry)
+		go func() {
+			defer close(ch)
+			for {
+				select {
+				case e := <-pipe:
+					ch <- e
+				case <-daemon.done:
+					return
+				}
+			}
+		}()
+
+		logWriter = io.MultiWriter(logWriter, writeFunc(func(b []byte) (int, error) {
+			var evt struct {
+				// Time  time.Time     `json:"time"`
+				Level zerolog.Level `json:"level"`
+			}
+			if json.Unmarshal(b, &evt) != nil || evt.Level < zerolog.InfoLevel {
+				return len(b), nil
+			}
+			// if evt.Time.IsZero() {
+			// 	evt.Time = time.Now()
+			// }
+
+			pipe <- &loki.Entry{
+				Timestamp: timestamppb.Now(),
+				Line:      string(b),
+			}
+
+			return len(b), nil
+		}))
 	}
 
 	daemon.Logger, err = logging.NewTendermintLogger(zerolog.New(logWriter), logLevel, false)
@@ -172,10 +221,6 @@ func (d *Daemon) Start(others ...*Daemon) (err error) {
 	}
 
 	// Set up shutdown notification
-	if d.done != nil {
-		return errors.BadRequest.With("already started")
-	}
-	d.done = make(chan struct{})
 	defer func() {
 		if err != nil {
 			close(d.done)
@@ -365,7 +410,7 @@ func (d *Daemon) startApp(caughtUp <-chan struct{}) (types.Application, error) {
 		// If we are not attached to a DN node, or direct dispatch is disabled,
 		// use the API dispatcher
 		execOpts.NewDispatcher = func() execute.Dispatcher {
-			return newDispatcher(d.Config.Accumulate.Network.Id, d.router, dialer)
+			return NewDispatcher(d.Config.Accumulate.Network.Id, d.router, dialer)
 		}
 
 	} else {
@@ -373,11 +418,6 @@ func (d *Daemon) startApp(caughtUp <-chan struct{}) (types.Application, error) {
 		execOpts.NewDispatcher = func() execute.Dispatcher {
 			return tendermint.NewDispatcher(d.router, d.local)
 		}
-	}
-
-	// On DNs initialize the major block scheduler
-	if execOpts.Describe.NetworkType == protocol.PartitionTypeDirectory {
-		execOpts.MajorBlockScheduler = blockscheduler.Init(execOpts.EventBus)
 	}
 
 	// This must happen before creating the executor since it needs to receive
@@ -426,6 +466,8 @@ func (d *Daemon) startApp(caughtUp <-chan struct{}) (types.Application, error) {
 		Partition:   d.Config.Accumulate.PartitionId,
 		RootDir:     d.Config.RootDir,
 		AnalysisLog: d.Config.Accumulate.AnalysisLog,
+
+		MaxEnvelopesPerBlock: d.Config.Accumulate.MaxEnvelopesPerBlock,
 	})
 	return app, nil
 }
@@ -473,7 +515,10 @@ func (d *Daemon) startConsensus(app types.Application, caughtUp chan<- struct{})
 	})
 
 	// Create a local client
-	d.localTm.Set(local.New(d.node.Node))
+	err = d.localTm.Resolve(local.New(d.node.Node))
+	if err != nil {
+		return err
+	}
 
 	// Signal once the node is caught up
 	if caughtUp != nil {
@@ -609,7 +654,10 @@ func (d *Daemon) StartP2P() error {
 }
 
 func (d *Daemon) startAPI() error {
-	d.router = routing.NewRouter(d.eventBus, d.Logger)
+	d.router = routing.NewRouter(routing.RouterOptions{
+		Events: d.eventBus,
+		Logger: d.Logger,
+	})
 
 	// Setup the p2p node
 	err := d.StartP2P()
@@ -771,4 +819,10 @@ func (d *Daemon) Stop() error {
 
 func (d *Daemon) Done() <-chan struct{} {
 	return d.node.Quit()
+}
+
+type writeFunc func([]byte) (int, error)
+
+func (l writeFunc) Write(b []byte) (int, error) {
+	return l(b)
 }

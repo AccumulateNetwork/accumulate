@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -254,7 +254,6 @@ func (x *Executor) finalizeBlock(block *Block) error {
 		if anchor.MakeMajorBlock > 0 {
 			x.logger.Info("Start major block", "major-index", anchor.MakeMajorBlock, "minor-index", ledger.Index)
 			block.State.OpenedMajorBlock = true
-			x.ExecutorOptions.MajorBlockScheduler.UpdateNextMajorBlockTime(anchor.MakeMajorBlockTime)
 		}
 
 		// DN -> BVN

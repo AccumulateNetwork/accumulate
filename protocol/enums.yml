@@ -19,7 +19,16 @@ ExecutorVersion:
     description: is the second version of the executor system
   V2Baikonur:
     value: 6
-    description: enables the Baikonur release's features
+    aliases: [v2-baikonur]
+    description: enables the Baikonur release
+  V2Vandenberg:
+    value: 7
+    label: v2-vandenberg
+    description: enables the Vandenberg release
+
+  VNext:
+    value: 8
+    description: is a placeholder for testing. DO NOT USE
 
 PartitionType:
   Directory:
@@ -98,6 +107,9 @@ SignatureType:
   Authority:
     value: 13
     description: is a signature produced by an authority
+  RsaSha256:
+    value: 14
+    description: represents an RSA signature of SHA256 hashed data
 
 KeyPageOperationType:
   Unknown:
@@ -141,6 +153,14 @@ AccountAuthOperationType:
   RemoveAuthority:
     value: 4
     description: removes an authority
+
+NetworkMaintenanceOperationType:
+  Unknown:
+    value: 0
+    description: is used when the operation type is not known
+  PendingTransactionGC:
+    value: 1
+    description: removes pending transaction garbage
 
 TransactionMax:
   User:
@@ -218,6 +238,9 @@ TransactionType:
   UpdateKey:
     value: 0x16
     description: update key for existing keys
+  NetworkMaintenance:
+    value: 0x2E
+    description: executes network maintenance operations
   ActivateProtocolVersion:
     value: 0x2F
     description: activates a new version of the protocol

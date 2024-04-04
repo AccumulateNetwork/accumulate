@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -7,179 +7,85 @@
 package main
 
 import (
+	"crypto/ed25519"
+	"crypto/rand"
 	"fmt"
-	"net"
 	"os"
-	"path"
 	"path/filepath"
-	"strings"
 
-	"github.com/cometbft/cometbft/crypto/ed25519"
-	dc "github.com/docker/cli/cli/compose/types"
+	"github.com/multiformats/go-multiaddr"
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
-	cfg "gitlab.com/accumulatenetwork/accumulate/internal/node/config"
-	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
-	"gopkg.in/yaml.v2"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/address"
+	"golang.org/x/exp/slices"
 )
 
-var cmdInitDevnet = &cobra.Command{
-	Use:   "devnet",
-	Short: "Initialize a DevNet",
-	Run:   initDevNet,
-	Args:  cobra.NoArgs,
+func initDevNet(cmd *cobra.Command) *run.Config {
+	f, ok := findConfigFile(flagMain.WorkDir)
+	if !ok {
+		check(os.MkdirAll(flagMain.WorkDir, 0700))
+
+		// Default config
+		dev := &run.DevnetConfiguration{
+			Listen: multiaddr.StringCast(fmt.Sprintf("/tcp/%d", flagRunDevnet.BasePort)),
+		}
+		cfg := &run.Config{
+			Network:        flagRunDevnet.Name,
+			Configurations: []run.Configuration{dev},
+		}
+		applyDevNetFlags(cmd, cfg, dev, false)
+		cfg.SetFilePath(filepath.Join(flagMain.WorkDir, "accumulate.toml"))
+		check(cfg.Save())
+		return cfg
+	}
+
+	cfg := new(run.Config)
+	check(cfg.LoadFrom(f))
+	i := slices.IndexFunc(cfg.Configurations, func(c run.Configuration) bool { return c.Type() == run.ConfigurationTypeDevnet })
+	if i < 0 {
+		fatalf("not a devnet: %q", f)
+	}
+	dev := cfg.Configurations[i].(*run.DevnetConfiguration)
+
+	// Are any of the values different?
+	wantReset := false ||
+		cmd.Flag("name").Changed && cfg.Network != flagRunDevnet.Name ||
+		cmd.Flag("logging").Changed && !flagRunDevnet.Logging.Equal(cfg.Logging) ||
+		cmd.Flag("bvns").Changed && dev.Bvns != uint64(flagRunDevnet.NumBvns) ||
+		cmd.Flag("validators").Changed && dev.Validators != uint64(flagRunDevnet.NumValidators) ||
+		cmd.Flag("followers").Changed && dev.Followers != uint64(flagRunDevnet.NumFollowers) ||
+		cmd.Flag("globals").Changed && !flagRunDevnet.Globals.Equal(dev.Globals)
+	if wantReset && !flagMain.Reset {
+		fatalf("the configuration and flags do not match; use --reset if you wish to override (and reset) the existing configuration")
+	}
+
+	applyDevNetFlags(cmd, cfg, dev, true)
+	check(cfg.Save())
+	return cfg
 }
 
-var baseIP net.IP
-var ipCount byte
-
-func initDevNet(cmd *cobra.Command, _ []string) {
-	count := flagInitDevnet.NumValidators + flagInitDevnet.NumFollowers
-	verifyInitFlags(cmd, count)
-
-	if flagInit.Reset {
-		networkReset()
+func applyDevNetFlags(cmd *cobra.Command, cfg *run.Config, dev *run.DevnetConfiguration, onlyChanged bool) {
+	if cfg.P2P == nil {
+		cfg.P2P = new(run.P2P)
 	}
-
-	initOpts := accumulated.DevnetOptions{
-		BvnCount:       flagInitDevnet.NumBvns,
-		ValidatorCount: flagInitDevnet.NumValidators,
-		FollowerCount:  flagInitDevnet.NumFollowers,
-		BsnCount:       flagInitDevnet.NumBsnNodes,
-		BasePort:       flagInitDevnet.BasePort,
-	}
-
-	if !flagInitDevnet.Compose {
-		initOpts.GenerateKeys = func() (privVal, dnn, bvnn, bsnn []byte) {
-			return ed25519.GenPrivKey(), ed25519.GenPrivKey(), ed25519.GenPrivKey(), ed25519.GenPrivKey()
+	if cfg.P2P.Key == nil {
+		_, sk, err := ed25519.GenerateKey(rand.Reader)
+		check(err)
+		cfg.P2P.Key = &run.RawPrivateKey{
+			Address: address.FromED25519PrivateKey(sk).String(),
 		}
 	}
 
-	if flagInitDevnet.Docker {
-		initOpts.HostName = func(bvnNum, nodeNum int) (host string, listen string) {
-			if bvnNum < 0 {
-				return fmt.Sprintf("bsn-%d%s", nodeNum+1, flagInitDevnet.DnsSuffix), "0.0.0.0"
-			}
-			return fmt.Sprintf("node-%d%s", bvnNum*count+nodeNum+1, flagInitDevnet.DnsSuffix), "0.0.0.0"
-		}
-	} else {
-		initOpts.HostName = func(int, int) (host string, listen string) {
-			return nextIP(), ""
-		}
-	}
-
-	netInit := accumulated.NewDevnet(initOpts)
-
-	if flagInitDevnet.Compose {
-		writeDevnetDockerCompose(cmd, netInit)
-	} else {
-		initNetworkLocalFS(cmd, netInit)
-	}
+	applyDevNetFlag(cmd, "name", &cfg.Network, flagRunDevnet.Name, onlyChanged)
+	applyDevNetFlag(cmd, "logging", &cfg.Logging, &flagRunDevnet.Logging, onlyChanged)
+	applyDevNetFlag(cmd, "bvns", &dev.Bvns, uint64(flagRunDevnet.NumBvns), onlyChanged)
+	applyDevNetFlag(cmd, "validators", &dev.Validators, uint64(flagRunDevnet.NumValidators), onlyChanged)
+	applyDevNetFlag(cmd, "followers", &dev.Followers, uint64(flagRunDevnet.NumFollowers), onlyChanged)
+	applyDevNetFlag(cmd, "globals", &dev.Globals, &flagRunDevnet.Globals, onlyChanged)
 }
 
-func nextIP() string {
-	if len(flagInitDevnet.IPs) > 1 {
-		ipCount++
-		if len(flagInitDevnet.IPs) < int(ipCount) {
-			fatalf("not enough IPs")
-		}
-		return flagInitDevnet.IPs[ipCount-1]
+func applyDevNetFlag[V any](cmd *cobra.Command, name string, ptr *V, value V, onlyChanged bool) {
+	if !onlyChanged || cmd.Flag(name).Changed {
+		*ptr = value
 	}
-
-	if baseIP == nil {
-		baseIP = net.ParseIP(flagInitDevnet.IPs[0])
-		if baseIP == nil {
-			fatalf("invalid IP: %q", flagInitDevnet.IPs[0])
-		}
-		if baseIP[15] == 0 {
-			fatalf("invalid IP: base IP address must not end with .0")
-		}
-	}
-
-	ip := make(net.IP, len(baseIP))
-	copy(ip, baseIP)
-	ip[15] += ipCount
-	ipCount++
-	return ip.String()
-}
-
-func writeDevnetDockerCompose(cmd *cobra.Command, netInit *accumulated.NetworkInit) {
-	nodeCount := flagInitDevnet.NumValidators + flagInitDevnet.NumFollowers
-	compose := new(dc.Config)
-	compose.Version = "3"
-	compose.Services = make([]dc.ServiceConfig, 0, 1+nodeCount*flagInitDevnet.NumBvns)
-	compose.Volumes = make(map[string]dc.VolumeConfig, 1+nodeCount*flagInitDevnet.NumBvns)
-
-	var i int
-	for _, bvn := range netInit.Bvns {
-		for range bvn.Nodes {
-			i++
-			var svc dc.ServiceConfig
-			svc.Name = fmt.Sprintf("node-%d", i)
-			svc.ContainerName = "devnet-" + svc.Name
-			svc.Image = flagInitDevnet.DockerImage
-
-			if flagInitDevnet.UseVolumes {
-				svc.Volumes = []dc.ServiceVolumeConfig{
-					{Type: "volume", Source: svc.Name, Target: "/node"},
-				}
-				compose.Volumes[svc.Name] = dc.VolumeConfig{}
-			} else {
-				svc.Volumes = []dc.ServiceVolumeConfig{
-					{Type: "bind", Source: fmt.Sprintf("./node-%d", i), Target: "/node"},
-				}
-			}
-
-			compose.Services = append(compose.Services, svc)
-		}
-	}
-
-	var svc dc.ServiceConfig
-	api := netInit.Bvns[0].Nodes[0].Advertize().Scheme("http").AccumulateAPI().String() + "/v2"
-	svc.Name = "tools"
-	svc.ContainerName = "devnet-init"
-	svc.Image = flagInitDevnet.DockerImage
-	svc.Environment = map[string]*string{"ACC_API": &api}
-	extras := make(map[string]interface{})
-	extras["profiles"] = [...]string{"init"}
-	svc.Extras = extras
-
-	svc.Command = dc.ShellCommand{"init", "devnet", "-w", "/nodes", "--docker"}
-	cmd.Flags().Visit(func(flag *pflag.Flag) {
-		switch flag.Name {
-		case "work-dir", "docker", "compose", "reset":
-			return
-		}
-
-		s := fmt.Sprintf("--%s=%v", flag.Name, flag.Value)
-		svc.Command = append(svc.Command, s)
-	})
-
-	if flagInitDevnet.UseVolumes {
-		svc.Volumes = make([]dc.ServiceVolumeConfig, len(compose.Services))
-		for i, node := range compose.Services {
-			bits := strings.SplitN(node.Name, "-", 2)
-			svc.Volumes[i] = dc.ServiceVolumeConfig{Type: "volume", Source: node.Name, Target: path.Join("/nodes", bits[0], "Node"+bits[1])}
-		}
-	} else {
-		svc.Volumes = []dc.ServiceVolumeConfig{
-			{Type: "bind", Source: ".", Target: "/nodes"},
-		}
-	}
-
-	compose.Services = append(compose.Services, svc)
-
-	apiPort := uint32(flagInitDevnet.BasePort) + uint32(cfg.PortOffsetAccumulateApi)
-	dn0svc := compose.Services[0]
-	dn0svc.Ports = []dc.ServicePortConfig{
-		{Mode: "host", Protocol: "tcp", Target: apiPort, Published: apiPort},
-	}
-
-	check(os.MkdirAll(flagMain.WorkDir, 0755))
-	f, err := os.Create(filepath.Join(flagMain.WorkDir, "docker-compose.yml"))
-	check(err)
-	defer f.Close()
-
-	err = yaml.NewEncoder(f).Encode(compose)
-	check(err)
 }

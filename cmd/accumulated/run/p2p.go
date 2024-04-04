@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -28,12 +28,14 @@ func (p *P2P) start(inst *Instance) error {
 		return err
 	}
 
+	setDefaultPtr(&p.PeerDB, "")
+
 	node, err := p2p.New(p2p.Options{
 		Key:               sk,
-		Network:           inst.network,
+		Network:           inst.config.Network,
 		Listen:            p.Listen,
 		BootstrapPeers:    p.BootstrapPeers,
-		PeerDatabase:      p.PeerDB,
+		PeerDatabase:      *p.PeerDB,
 		EnablePeerTracker: p.EnablePeerTracking,
 	})
 	if err != nil {
@@ -41,14 +43,14 @@ func (p *P2P) start(inst *Instance) error {
 	}
 	inst.p2p = node
 
-	slog.InfoCtx(inst.context, "We are", "id", node.ID(), "module", "p2p")
+	slog.InfoCtx(inst.context, "We are", "id", node.ID(), "module", "run")
 
 	inst.cleanup(func() {
 		err := node.Close()
 		if err != nil {
-			slog.ErrorCtx(inst.context, "Error while stopping node", "module", "p2p", "id", node.ID(), "error", err)
+			slog.ErrorCtx(inst.context, "Error while stopping node", "module", "run", "id", node.ID(), "error", err)
 		} else {
-			slog.InfoCtx(inst.context, "Stopped", "id", node.ID(), "module", "p2p")
+			slog.InfoCtx(inst.context, "Stopped", "id", node.ID(), "module", "run")
 		}
 	})
 	return nil

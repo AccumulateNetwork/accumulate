@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -70,7 +70,7 @@ func DisableAnchorHealing(opts *simFactory) error {
 
 // CaptureDispatchedMessages allows the caller to capture internally dispatched
 // messages.
-func CaptureDispatchedMessages(fn dispatchInterceptor) Option {
+func CaptureDispatchedMessages(fn DispatchInterceptor) Option {
 	return func(opts *simFactory) error {
 		opts.interceptDispatchedMessages = fn
 		return nil
@@ -247,7 +247,7 @@ func InitialAcmeSupply(v *big.Int) Option {
 	}
 }
 
-// func UseABCI(opts *simFactory) error {
-// 	opts.abci = withABCI
-// 	return nil
-// }
+func UseABCI(opts *simFactory) error {
+	opts.abci = withABCI
+	return nil
+}

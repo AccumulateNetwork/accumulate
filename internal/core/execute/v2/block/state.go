@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -7,6 +7,7 @@
 package block
 
 import (
+	"math/big"
 	"sort"
 	"time"
 
@@ -27,17 +28,30 @@ type BlockState struct {
 	Produced           int
 	ChainUpdates       chain.ChainUpdates
 	ReceivedAnchors    []*chain.ReceivedAnchor
+	PreviousStateHash  [32]byte
+	AcmeBurnt          big.Int
+	NetworkUpdate      []*protocol.NetworkAccountUpdate
 
-	Anchor *BlockAnchorState
+	Anchor     *BlockAnchorState
+	MajorBlock *MajorBlockState
 
-	Pending map[[32]byte]*protocol.Transaction
-	Events  int
+	PendingTxns map[[32]byte]*protocol.Transaction
+	PendingSigs map[[32]byte]*PendingAuthSig
+	Events      int
 }
 
-// BlockAnchorState is used to construc the anchor for the block.
+type PendingAuthSig struct {
+	Transaction *protocol.Transaction
+	Authorities map[[32]byte]*url.URL
+}
+
+// BlockAnchorState is used to construct the anchor for the block.
 type BlockAnchorState struct {
-	ShouldOpenMajorBlock bool
-	OpenMajorBlockTime   time.Time
+}
+
+type MajorBlockState struct {
+	Time  time.Time
+	Index uint64
 }
 
 // ProducedMessage is a message produced by another message.
@@ -56,6 +70,7 @@ type ProducedMessage struct {
 func (s *BlockState) Empty() bool {
 	return !s.OpenedMajorBlock &&
 		s.Anchor == nil &&
+		s.MajorBlock == nil &&
 		s.Delivered == 0 &&
 		s.Signed == 0 &&
 		s.Produced == 0 &&
@@ -63,26 +78,58 @@ func (s *BlockState) Empty() bool {
 }
 
 func (s *BlockState) MarkTransactionPending(txn *protocol.Transaction) {
-	if s.Pending == nil {
-		s.Pending = map[[32]byte]*protocol.Transaction{}
+	if s.PendingTxns == nil {
+		s.PendingTxns = map[[32]byte]*protocol.Transaction{}
 	}
-	s.Pending[txn.Hash()] = txn
+	s.PendingTxns[txn.Hash()] = txn
+}
+
+func (s *BlockState) MarkSignaturePending(txn *protocol.Transaction, auth *url.URL) {
+	if s.PendingSigs == nil {
+		s.PendingSigs = map[[32]byte]*PendingAuthSig{}
+	}
+	t, ok := s.PendingSigs[txn.Hash()]
+	if !ok {
+		t = new(PendingAuthSig)
+		t.Transaction = txn
+		t.Authorities = map[[32]byte]*url.URL{}
+		s.PendingSigs[txn.Hash()] = t
+	}
+	t.Authorities[auth.Hash32()] = auth
 }
 
 func (s *BlockState) MarkTransactionDelivered(id *url.TxID) {
-	if s.Pending == nil {
-		return
+	if s.PendingTxns != nil {
+		delete(s.PendingTxns, id.Hash())
 	}
-	delete(s.Pending, id.Hash())
+	if s.PendingSigs != nil {
+		delete(s.PendingSigs, id.Hash())
+	}
 }
 
-func (s *BlockState) GetPending() []*protocol.Transaction {
-	l := make([]*protocol.Transaction, 0, len(s.Pending))
-	for _, p := range s.Pending {
+func (s *BlockState) GetPendingTxns() []*protocol.Transaction {
+	return sortMapValues(s.PendingTxns, func(a, b *protocol.Transaction) int {
+		return a.ID().Compare(b.ID())
+	})
+}
+
+func (s *BlockState) GetPendingSigs() []*PendingAuthSig {
+	return sortMapValues(s.PendingSigs, func(a, b *PendingAuthSig) int {
+		return a.Transaction.ID().Compare(b.Transaction.ID())
+	})
+}
+
+func (p *PendingAuthSig) GetAuthorities() []*url.URL {
+	return sortMapValues(p.Authorities, (*url.URL).Compare)
+}
+
+func sortMapValues[V any](m map[[32]byte]V, cmp func(a, b V) int) []V {
+	l := make([]V, 0, len(m))
+	for _, p := range m {
 		l = append(l, p)
 	}
 	sort.Slice(l, func(i, j int) bool {
-		return l[i].ID().Compare(l[j].ID()) < 0
+		return cmp(l[i], l[j]) < 0
 	})
 	return l
 }
@@ -105,4 +152,6 @@ func (s *BlockState) MergeTransaction(r *chain.ProcessTransactionState) {
 		s.MakeMajorBlock = r.MakeMajorBlock
 		s.MakeMajorBlockTime = r.MakeMajorBlockTime
 	}
+	s.AcmeBurnt.Add(&s.AcmeBurnt, &r.AcmeBurnt)
+	s.NetworkUpdate = append(s.NetworkUpdate, r.NetworkUpdate...)
 }

@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -203,6 +203,9 @@ type ChainSearchResult2 interface {
 
 	// Index returns the index of the target entry.
 	Index() (uint64, error)
+
+	// TODO Add Next() (ChainSearchResult2, bool) that returns the next entry in
+	// the index.
 }
 
 type beforeResult struct {

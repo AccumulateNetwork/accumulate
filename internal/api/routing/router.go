@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -7,6 +7,8 @@
 package routing
 
 import (
+	"sync"
+
 	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -26,44 +28,68 @@ type Router interface {
 
 // RouterInstance sends transactions to remote nodes via RPC calls.
 type RouterInstance struct {
+	ready  chan struct{}
 	tree   *RouteTree
 	logger logging.OptionalLogger
 }
 
-func NewRouter(eventBus *events.Bus, logger log.Logger) *RouterInstance {
-	r := new(RouterInstance)
-	if logger != nil {
-		r.logger.L = logger.With("module", "router")
-	}
-
-	events.SubscribeSync(eventBus, func(e events.WillChangeGlobals) error {
-		r.logger.Debug("Loading new routing table", "table", e.New.Routing)
-
-		tree, err := NewRouteTree(e.New.Routing)
-		if err != nil {
-			return errors.UnknownError.Wrap(err)
-		}
-
-		r.tree = tree
-		return nil
-	})
-
-	return r
+type RouterOptions struct {
+	Initial *protocol.RoutingTable
+	Events  *events.Bus
+	Logger  log.Logger
 }
 
-// NewStaticRouter returns a router that uses a static routing table
-func NewStaticRouter(table *protocol.RoutingTable, logger log.Logger) (*RouterInstance, error) {
-	tree, err := NewRouteTree(table)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
+// NewRouter constructs a new router. If an initial routing table is provided,
+// the router will be initialized with that table. If an event bus is provided,
+// the router will listen for changes. If no event bus is provided, the router
+// will be static.
+//
+// NewRouter will panic if the initial routing table is invalid. NewRouter will
+// panic unless an initial routing table and/or event bus are specified.
+func NewRouter(opts RouterOptions) *RouterInstance {
+	r := new(RouterInstance)
+	r.ready = make(chan struct{})
+	r.logger.Set(opts.Logger, "module", "router")
+
+	var readyOnce sync.Once
+	markReady := func() {
+		readyOnce.Do(func() {
+			close(r.ready)
+		})
 	}
 
-	r := new(RouterInstance)
-	r.tree = tree
-	if logger != nil {
-		r.logger.L = logger.With("module", "router")
+	var ok bool
+	if opts.Initial != nil {
+		ok = true
+		tree, err := NewRouteTree(opts.Initial)
+		if err != nil {
+			panic(err)
+		}
+		r.tree = tree
+		markReady()
 	}
-	return r, nil
+
+	if opts.Events != nil {
+		ok = true
+		events.SubscribeSync(opts.Events, func(e events.WillChangeGlobals) error {
+			r.logger.Debug("Loading new routing table", "table", e.New.Routing)
+
+			tree, err := NewRouteTree(e.New.Routing)
+			if err != nil {
+				return errors.UnknownError.Wrap(err)
+			}
+
+			r.tree = tree
+			markReady()
+			return nil
+		})
+	}
+
+	if !ok {
+		panic("must have an initial routing table or an event bus")
+	}
+
+	return r
 }
 
 var _ Router = (*RouterInstance)(nil)
@@ -165,6 +191,10 @@ func routeMessage(routeAccount func(*url.URL) (string, error), route *string, ms
 		return errors.BadRequest.With("conflicting routes")
 	}
 	return nil
+}
+
+func (r *RouterInstance) Ready() <-chan struct{} {
+	return r.ready
 }
 
 func (r *RouterInstance) RouteAccount(account *url.URL) (string, error) {

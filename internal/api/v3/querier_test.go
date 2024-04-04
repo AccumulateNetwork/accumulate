@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -343,7 +343,6 @@ func (s *QuerierTestSuite) TestQueryMinorBlock() {
 }
 
 func (s *QuerierTestSuite) TestQueryDirectoryMinorBlock() {
-	s.T().Skip("Flaky")
 	r, err := s.QuerierFor(DnUrl()).QueryMinorBlock(context.Background(), DnUrl(), &api.BlockQuery{Minor: uintp(4)})
 	s.Require().NoError(err)
 	s.Require().NotNil(r.Anchored)

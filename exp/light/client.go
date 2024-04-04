@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -80,12 +80,7 @@ func RouterFromStore() ClientOption {
 			return errors.UnknownError.WithFormat("load globals: %w", err)
 		}
 
-		router, err := routing.NewStaticRouter(g.Routing, nil)
-		if err != nil {
-			return errors.UnknownError.WithFormat("construct router: %w", err)
-		}
-
-		c.router = router
+		c.router = routing.NewRouter(routing.RouterOptions{Initial: g.Routing})
 		return nil
 	}
 }

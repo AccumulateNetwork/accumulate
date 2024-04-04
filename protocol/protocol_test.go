@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -48,7 +48,7 @@ func TestIsValidAdiUrl(t *testing.T) {
 		})
 	}
 
-	for name, c := range bad {
+	for name, c := range bad { //nolint:govet
 		t.Run(name, func(t *testing.T) {
 			require.EqualError(t, IsValidAdiUrl(&c.URL, false), c.err)
 		})

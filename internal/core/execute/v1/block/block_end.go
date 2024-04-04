@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -98,7 +98,10 @@ func (m *Executor) EndBlock(block *Block) ([]*execute.ValidatorUpdate, error) {
 	}
 
 	// Determine if an anchor should be sent
-	m.shouldPrepareAnchor(block)
+	err = m.shouldPrepareAnchor(block)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
 
 	// Do nothing if the block is empty
 	if block.State.Empty() {
@@ -316,6 +319,12 @@ func (m *Executor) EndBlock(block *Block) ([]*execute.ValidatorUpdate, error) {
 
 	// Check if an anchor needs to be sent
 	err = m.prepareAnchor(block)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	// Update the BPT
+	err = block.Batch.UpdateBPT()
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -623,8 +632,12 @@ func (x *Executor) updateMajorIndexChains(block *Block, rootIndexIndex uint64) e
 	return nil
 }
 
-func (x *Executor) shouldPrepareAnchor(block *Block) {
-	openMajorBlock, openMajorBlockTime := x.shouldOpenMajorBlock(block.Batch, block.Time.Add(time.Second))
+func (x *Executor) shouldPrepareAnchor(block *Block) error {
+	openMajorBlock, openMajorBlockTime, err := x.shouldOpenMajorBlock(block)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
 	sendAnchor := openMajorBlock || x.shouldSendAnchor(block)
 	if sendAnchor {
 		block.State.Anchor = &BlockAnchorState{
@@ -632,26 +645,29 @@ func (x *Executor) shouldPrepareAnchor(block *Block) {
 			OpenMajorBlockTime:   openMajorBlockTime,
 		}
 	}
+	return nil
 }
 
-func (x *Executor) shouldOpenMajorBlock(batch *database.Batch, blockTime time.Time) (bool, time.Time) {
+func (x *Executor) shouldOpenMajorBlock(block *Block) (bool, time.Time, error) {
 	// Only the directory network can open a major block
 	if x.Describe.NetworkType != protocol.PartitionTypeDirectory {
-		return false, time.Time{}
+		return false, time.Time{}, nil
 	}
 
-	// Only when majorBlockSchedule is initialized we can open a major block. (not when doing replayBlocks)
-	if x.ExecutorOptions.MajorBlockScheduler == nil || !x.ExecutorOptions.MajorBlockScheduler.IsInitialized() {
-		return false, time.Time{}
+	var anchor *protocol.AnchorLedger
+	err := block.Batch.Account(x.Describe.AnchorPool()).Main().GetAs(&anchor)
+	if err != nil {
+		return false, time.Time{}, errors.UnknownError.WithFormat("load anchor ledger: %w", err)
 	}
 
-	blockTimeUTC := blockTime.UTC()
-	nextBlockTime := x.ExecutorOptions.MajorBlockScheduler.GetNextMajorBlockTime(blockTime)
+	// The addition of a second here is kept for backwards compatibility
+	blockTimeUTC := block.Time.Add(time.Second).UTC()
+	nextBlockTime := x.globals.Active.MajorBlockSchedule().Next(anchor.MajorBlockTime)
 	if blockTimeUTC.IsZero() || blockTimeUTC.Before(nextBlockTime) {
-		return false, time.Time{}
+		return false, time.Time{}, nil
 	}
 
-	return true, blockTimeUTC
+	return true, blockTimeUTC, nil
 }
 
 func (x *Executor) shouldSendAnchor(block *Block) bool {

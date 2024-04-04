@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -18,7 +18,12 @@ import (
 type InitHashMode int
 
 const (
+	// Initiate with a Merkle hash.
+	//
+	// Deprecated: Use [InitWithSimpleHash].
 	InitWithMerkleHash InitHashMode = iota
+
+	// Initiate with a simple hash.
 	InitWithSimpleHash
 )
 
@@ -77,6 +82,12 @@ func (s *Builder) Import(sig protocol.Signature) (*Builder, error) {
 		s.Timestamp = TimestampFromValue(sig.Timestamp)
 		s.Memo = sig.Memo
 		s.Data = sig.Data
+	case *protocol.RsaSha256Signature:
+		s.Url = sig.Signer
+		s.Version = sig.SignerVersion
+		s.Timestamp = TimestampFromValue(sig.Timestamp)
+		s.Memo = sig.Memo
+		s.Data = sig.Data
 	case *protocol.DelegatedSignature:
 		_, err := s.Import(sig.Signature)
 		if err != nil {
@@ -97,11 +108,15 @@ func (s *Builder) Copy() *Builder {
 	return &t
 }
 
+// UseSimpleHash initiate with a simple hash.
 func (s *Builder) UseSimpleHash() *Builder {
 	s.InitMode = InitWithSimpleHash
 	return s
 }
 
+// UseMerkleHash initiate with a Merkle hash.
+//
+// Deprecated: Use [Builder.UseSimpleHash].
 func (s *Builder) UseMerkleHash() *Builder {
 	s.InitMode = InitWithMerkleHash
 	return s
@@ -198,6 +213,7 @@ func (s *Builder) prepare(init bool) (protocol.KeySignature, error) {
 		protocol.SignatureTypeRCD1,
 		protocol.SignatureTypeBTC,
 		protocol.SignatureTypeETH,
+		protocol.SignatureTypeRsaSha256,
 		protocol.SignatureTypeBTCLegacy:
 
 	case protocol.SignatureTypeReceipt, protocol.SignatureTypePartition:
@@ -276,6 +292,16 @@ func (s *Builder) prepare(init bool) (protocol.KeySignature, error) {
 		sig.Data = s.Data
 		return sig, s.Signer.SetPublicKey(sig)
 
+	case protocol.SignatureTypeRsaSha256:
+		sig := new(protocol.RsaSha256Signature)
+		sig.Signer = s.Url
+		sig.SignerVersion = s.Version
+		sig.Timestamp = timestamp
+		sig.Vote = s.Vote
+		sig.Memo = s.Memo
+		sig.Data = s.Data
+		return sig, s.Signer.SetPublicKey(sig)
+
 	default:
 		panic("unreachable")
 	}
@@ -294,6 +320,8 @@ func (s *Builder) sign(sig protocol.Signature, sigMdHash, hash []byte) error {
 	case *protocol.BTCLegacySignature:
 		sig.TransactionHash = *(*[32]byte)(hash)
 	case *protocol.ETHSignature:
+		sig.TransactionHash = *(*[32]byte)(hash)
+	case *protocol.RsaSha256Signature:
 		sig.TransactionHash = *(*[32]byte)(hash)
 	case *protocol.DelegatedSignature:
 		if sigMdHash == nil {

@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -29,6 +29,7 @@ import (
 
 func init() {
 	acctesting.EnableDebugFeatures()
+	acctesting.ConfigureSlog(acctesting.DefaultSlogConfig())
 }
 
 func TestSimulator(t *testing.T) {
@@ -188,40 +189,40 @@ func TestSimulatorFaucet(t *testing.T) {
 	require.NotZero(t, account.Balance.Int64())
 }
 
-// func TestSimulatorWithABCI(t *testing.T) {
-// 	alice := url.MustParse("alice")
-// 	bob := url.MustParse("bob")
-// 	aliceKey := acctesting.GenerateKey(alice)
-// 	bobKey := acctesting.GenerateKey(bob)
+func TestSimulatorWithABCI(t *testing.T) {
+	alice := url.MustParse("alice")
+	bob := url.MustParse("bob")
+	aliceKey := acctesting.GenerateKey(alice)
+	bobKey := acctesting.GenerateKey(bob)
 
-// 	// Initialize
-// 	sim := NewSim(t,
-// 		simulator.SimpleNetwork(t.Name(), 3, 3),
-// 		simulator.Genesis(GenesisTime),
-// 		simulator.UseABCI,
-// 	)
+	// Initialize
+	sim := NewSim(t,
+		simulator.SimpleNetwork(t.Name(), 1, 1),
+		simulator.Genesis(GenesisTime),
+		simulator.UseABCI,
+	)
 
-// 	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
-// 	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
-// 	MakeAccount(t, sim.DatabaseFor(alice), &TokenAccount{Url: alice.JoinPath("tokens"), TokenUrl: AcmeUrl()})
-// 	CreditTokens(t, sim.DatabaseFor(alice), alice.JoinPath("tokens"), big.NewInt(1e12))
-// 	MakeIdentity(t, sim.DatabaseFor(bob), bob, bobKey[32:])
-// 	MakeAccount(t, sim.DatabaseFor(bob), &TokenAccount{Url: bob.JoinPath("tokens"), TokenUrl: AcmeUrl()})
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
+	MakeAccount(t, sim.DatabaseFor(alice), &TokenAccount{Url: alice.JoinPath("tokens"), TokenUrl: AcmeUrl()})
+	CreditTokens(t, sim.DatabaseFor(alice), alice.JoinPath("tokens"), big.NewInt(1e12))
+	MakeIdentity(t, sim.DatabaseFor(bob), bob, bobKey[32:])
+	MakeAccount(t, sim.DatabaseFor(bob), &TokenAccount{Url: bob.JoinPath("tokens"), TokenUrl: AcmeUrl()})
 
-// 	// Execute
-// 	st := sim.BuildAndSubmitTxnSuccessfully(
-// 		build.Transaction().For(alice, "tokens").
-// 			SendTokens(123, 0).To(bob, "tokens").
-// 			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey))
+	// Execute
+	st := sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(alice, "tokens").
+			SendTokens(123, 0).To(bob, "tokens").
+			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey))
 
-// 	sim.StepUntil(
-// 		Txn(st.TxID).Succeeds(),
-// 		Txn(st.TxID).Produced().Succeeds())
+	sim.StepUntil(
+		Txn(st.TxID).Succeeds(),
+		Txn(st.TxID).Produced().Succeeds())
 
-// 	// Verify
-// 	account := GetAccount[*TokenAccount](t, sim.DatabaseFor(bob), bob.JoinPath("tokens"))
-// 	require.Equal(t, 123, int(account.Balance.Int64()))
-// }
+	// Verify
+	account := GetAccount[*TokenAccount](t, sim.DatabaseFor(bob), bob.JoinPath("tokens"))
+	require.Equal(t, 123, int(account.Balance.Int64()))
+}
 
 var flagRecording = flag.String("test.dump-recording", "", "Recording to dump")
 

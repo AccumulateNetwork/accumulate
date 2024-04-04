@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -105,7 +105,7 @@ func (x PartitionAnchor) Execute(st *StateManager, tx *Delivery) (protocol.Trans
 	}
 
 	// Did the partition complete a major block?
-	if body.MajorBlockIndex > 0 {
+	if body.MajorBlockIndex > 0 && !st.Globals.ExecutorVersion.V2VandenbergEnabled() {
 		found := -1
 		for i, u := range ledger.PendingMajorBlockAnchors {
 			if u.Equal(body.Source) {

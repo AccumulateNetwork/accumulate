@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -85,7 +85,7 @@ func (UpdateKey) Execute(st *StateManager, tx *Delivery) (protocol.TransactionRe
 		}
 
 		for _, sig := range sigs {
-			if protocol.SignatureDidInitiate(sig, tx.Transaction.Header.Initiator[:], &initiator) {
+			if ok, _ := protocol.SignatureDidInitiate(sig, tx.Transaction.Header.Initiator[:], &initiator); ok {
 				goto found_init
 			}
 		}

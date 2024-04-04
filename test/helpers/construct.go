@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -232,8 +232,8 @@ func newPage(u *url.URL, pubKeys ...[]byte) *protocol.KeyPage {
 	page.Version = 1
 
 	for _, pubKey := range pubKeys {
-		if len(pubKey) != 32 {
-			panic("expected 32 byte public key")
+		if len(pubKey) == 64 {
+			panic("public key is 64 bytes, this is probably not an actual public key")
 		}
 		keyHash := sha256.Sum256(pubKey)
 		key := new(protocol.KeySpec)

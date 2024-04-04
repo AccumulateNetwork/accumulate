@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -156,6 +156,8 @@ func (d *Daemon) startSummaryApp() (types.Application, error) {
 		Partition:   d.Config.Accumulate.PartitionId,
 		RootDir:     d.Config.RootDir,
 		AnalysisLog: d.Config.Accumulate.AnalysisLog,
+
+		MaxEnvelopesPerBlock: d.Config.Accumulate.MaxEnvelopesPerBlock,
 	})
 
 	return app, nil

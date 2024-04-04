@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -74,7 +74,7 @@ func (x *Executor) Validate(envelope *messaging.Envelope, _ bool) ([]*protocol.T
 // callMessageValidator finds the executor for the message and calls it.
 func (b *bundle) callMessageValidator(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
 	// Find the appropriate executor
-	x, ok := b.Executor.messageExecutors[ctx.Type()]
+	x, ok := getExecutor(b.Executor.messageExecutors, ctx)
 	if !ok {
 		return nil, errors.BadRequest.WithFormat("unsupported message type %v", ctx.Type())
 	}
@@ -86,7 +86,7 @@ func (b *bundle) callMessageValidator(batch *database.Batch, ctx *MessageContext
 // callSignatureValidator finds the executor for the signature and calls it.
 func (b *bundle) callSignatureValidator(batch *database.Batch, ctx *SignatureContext) (*protocol.TransactionStatus, error) {
 	// Find the appropriate executor
-	x, ok := b.Executor.signatureExecutors[ctx.Type()]
+	x, ok := getExecutor(b.Executor.signatureExecutors, ctx)
 	if !ok {
 		return protocol.NewErrorStatus(ctx.message.ID(), errors.BadRequest.WithFormat("unsupported signature type %v", ctx.Type())), nil
 	}

@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -18,7 +18,6 @@ import (
 
 	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
 	cmtjson "github.com/cometbft/cometbft/libs/json"
-	"github.com/ghodss/yaml"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/exp/faucet"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
@@ -86,8 +85,6 @@ func initNetwork(cmd *cobra.Command, args []string) {
 	network, err := loadNetworkConfiguration(networkConfigFile)
 	check(err)
 
-	verifyInitFlags(cmd, len(network.Bvns))
-
 	if flagInit.Reset {
 		networkReset()
 	}
@@ -129,29 +126,6 @@ func initGenesis(cmd *cobra.Command, args []string) {
 		snap, err = cmtjson.MarshalIndent(doc, "", "  ")
 		check(err)
 		check(os.WriteFile(filepath.Join(flagMain.WorkDir, part+".json"), snap, 0600))
-	}
-}
-
-func verifyInitFlags(cmd *cobra.Command, count int) {
-	if flagInitDevnet.Compose {
-		flagInitDevnet.Docker = true
-	}
-
-	if flagInitDevnet.Docker && cmd.Flag("ip").Changed {
-		fatalf("--ip and --docker are mutually exclusive")
-	}
-
-	if count == 0 {
-		fatalf("Must have at least one node")
-	}
-
-	switch len(flagInitDevnet.IPs) {
-	case 1:
-		// Generate a sequence from the base IP
-	case count * flagInitDevnet.NumBvns:
-		// One IP per node
-	default:
-		fatalf("not enough IPs - you must specify one base IP or one IP for each node")
 	}
 }
 
@@ -249,10 +223,6 @@ func buildGenesis(network *accumulated.NetworkInit) map[string][]byte {
 	}
 
 	values := new(core.GlobalValues)
-	if flagInitDevnet.Globals != "" {
-		checkf(yaml.Unmarshal([]byte(flagInitDevnet.Globals), values), "--globals")
-	}
-
 	genDocs, err := accumulated.BuildGenesisDocs(network, values, time.Now(), newLogger(), factomAddresses, snapshots)
 	checkf(err, "build genesis documents")
 	return genDocs

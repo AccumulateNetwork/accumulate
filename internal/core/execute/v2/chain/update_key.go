@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -68,7 +68,7 @@ func (x UpdateKey) AuthorityWillVote(delegate AuthDelegate, batch *database.Batc
 		}
 
 		// Ignore any signatures that are not the initiator
-		if protocol.SignatureDidInitiate(sig, transaction.Header.Initiator[:], nil) {
+		if ok, _ := protocol.SignatureDidInitiate(sig, transaction.Header.Initiator[:], nil); ok {
 			// Initiator received, transaction is ready
 			v := &AuthVote{Source: sig.GetSigner(), Vote: sig.GetVote()}
 			return false, v, nil
@@ -134,7 +134,7 @@ func (x UpdateKey) TransactionIsReady(delegate AuthDelegate, batch *database.Bat
 	}
 }
 
-func (UpdateKey) check(st *StateManager, tx *Delivery) (*protocol.UpdateKey, error) {
+func (UpdateKey) check(_ *StateManager, tx *Delivery) (*protocol.UpdateKey, error) {
 	body, ok := tx.Transaction.Body.(*protocol.UpdateKey)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.UpdateKey), tx.Transaction.Body)

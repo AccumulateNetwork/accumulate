@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -131,8 +131,14 @@ const ExecutorVersionV1Halt ExecutorVersion = 4
 // ExecutorVersionV2 is the second version of the executor system.
 const ExecutorVersionV2 ExecutorVersion = 5
 
-// ExecutorVersionV2Baikonur enables the Baikonur release's features.
+// ExecutorVersionV2Baikonur enables the Baikonur release.
 const ExecutorVersionV2Baikonur ExecutorVersion = 6
+
+// ExecutorVersionV2Vandenberg enables the Vandenberg release.
+const ExecutorVersionV2Vandenberg ExecutorVersion = 7
+
+// ExecutorVersionVNext is a placeholder for testing. DO NOT USE.
+const ExecutorVersionVNext ExecutorVersion = 8
 
 // KeyPageOperationTypeUnknown is used when the key page operation is not known.
 const KeyPageOperationTypeUnknown KeyPageOperationType = 0
@@ -157,6 +163,12 @@ const KeyPageOperationTypeSetRejectThreshold KeyPageOperationType = 6
 
 // KeyPageOperationTypeSetResponseThreshold sets the response threshold.
 const KeyPageOperationTypeSetResponseThreshold KeyPageOperationType = 7
+
+// NetworkMaintenanceOperationTypeUnknown is used when the operation type is not known.
+const NetworkMaintenanceOperationTypeUnknown NetworkMaintenanceOperationType = 0
+
+// NetworkMaintenanceOperationTypePendingTransactionGC removes pending transaction garbage.
+const NetworkMaintenanceOperationTypePendingTransactionGC NetworkMaintenanceOperationType = 1
 
 // ObjectTypeUnknown is used when the object type is not known.
 const ObjectTypeUnknown ObjectType = 0
@@ -220,6 +232,9 @@ const SignatureTypeInternal SignatureType = 12
 
 // SignatureTypeAuthority is a signature produced by an authority.
 const SignatureTypeAuthority SignatureType = 13
+
+// SignatureTypeRsaSha256 represents an RSA signature of SHA256 hashed data.
+const SignatureTypeRsaSha256 SignatureType = 14
 
 // TransactionMaxUser is the highest number reserved for user transactions.
 const TransactionMaxUser TransactionMax = 48
@@ -292,6 +307,9 @@ const TransactionTypeUpdateAccountAuth TransactionType = 21
 
 // TransactionTypeUpdateKey update key for existing keys.
 const TransactionTypeUpdateKey TransactionType = 22
+
+// TransactionTypeNetworkMaintenance executes network maintenance operations.
+const TransactionTypeNetworkMaintenance TransactionType = 46
 
 // TransactionTypeActivateProtocolVersion activates a new version of the protocol.
 const TransactionTypeActivateProtocolVersion TransactionType = 47
@@ -780,7 +798,7 @@ func (v ExecutorVersion) GetEnumValue() uint64 { return uint64(v) }
 func (v *ExecutorVersion) SetEnumValue(id uint64) bool {
 	u := ExecutorVersion(id)
 	switch u {
-	case ExecutorVersionV1, ExecutorVersionV1SignatureAnchoring, ExecutorVersionV1DoubleHashEntries, ExecutorVersionV1Halt, ExecutorVersionV2, ExecutorVersionV2Baikonur:
+	case ExecutorVersionV1, ExecutorVersionV1SignatureAnchoring, ExecutorVersionV1DoubleHashEntries, ExecutorVersionV1Halt, ExecutorVersionV2, ExecutorVersionV2Baikonur, ExecutorVersionV2Vandenberg, ExecutorVersionVNext:
 		*v = u
 		return true
 	}
@@ -802,6 +820,10 @@ func (v ExecutorVersion) String() string {
 		return "v2"
 	case ExecutorVersionV2Baikonur:
 		return "v2Baikonur"
+	case ExecutorVersionV2Vandenberg:
+		return "v2-vandenberg"
+	case ExecutorVersionVNext:
+		return "vnext"
 	}
 	return fmt.Sprintf("ExecutorVersion:%d", v)
 }
@@ -827,6 +849,14 @@ func ExecutorVersionByName(name string) (ExecutorVersion, bool) {
 		return ExecutorVersionV2, true
 	case "v2baikonur":
 		return ExecutorVersionV2Baikonur, true
+	case "v2-baikonur":
+		return ExecutorVersionV2Baikonur, true
+	case "v2vandenberg":
+		return ExecutorVersionV2Vandenberg, true
+	case "v2-vandenberg":
+		return ExecutorVersionV2Vandenberg, true
+	case "vnext":
+		return ExecutorVersionVNext, true
 	}
 	return 0, false
 }
@@ -929,6 +959,63 @@ func (v *KeyPageOperationType) UnmarshalJSON(data []byte) error {
 	*v, ok = KeyPageOperationTypeByName(s)
 	if !ok || strings.ContainsRune(v.String(), ':') {
 		return fmt.Errorf("invalid Key Page Operation Type %q", s)
+	}
+	return nil
+}
+
+// GetEnumValue returns the value of the Network Maintenance Operation Type
+func (v NetworkMaintenanceOperationType) GetEnumValue() uint64 { return uint64(v) }
+
+// SetEnumValue sets the value. SetEnumValue returns false if the value is invalid.
+func (v *NetworkMaintenanceOperationType) SetEnumValue(id uint64) bool {
+	u := NetworkMaintenanceOperationType(id)
+	switch u {
+	case NetworkMaintenanceOperationTypeUnknown, NetworkMaintenanceOperationTypePendingTransactionGC:
+		*v = u
+		return true
+	}
+	return false
+}
+
+// String returns the name of the Network Maintenance Operation Type.
+func (v NetworkMaintenanceOperationType) String() string {
+	switch v {
+	case NetworkMaintenanceOperationTypeUnknown:
+		return "unknown"
+	case NetworkMaintenanceOperationTypePendingTransactionGC:
+		return "pendingTransactionGC"
+	}
+	return fmt.Sprintf("NetworkMaintenanceOperationType:%d", v)
+}
+
+// NetworkMaintenanceOperationTypeByName returns the named Network Maintenance Operation Type.
+func NetworkMaintenanceOperationTypeByName(name string) (NetworkMaintenanceOperationType, bool) {
+	switch strings.ToLower(name) {
+	case "unknown":
+		return NetworkMaintenanceOperationTypeUnknown, true
+	case "pendingtransactiongc":
+		return NetworkMaintenanceOperationTypePendingTransactionGC, true
+	}
+	return 0, false
+}
+
+// MarshalJSON marshals the Network Maintenance Operation Type to JSON as a string.
+func (v NetworkMaintenanceOperationType) MarshalJSON() ([]byte, error) {
+	return json.Marshal(v.String())
+}
+
+// UnmarshalJSON unmarshals the Network Maintenance Operation Type from JSON as a string.
+func (v *NetworkMaintenanceOperationType) UnmarshalJSON(data []byte) error {
+	var s string
+	err := json.Unmarshal(data, &s)
+	if err != nil {
+		return err
+	}
+
+	var ok bool
+	*v, ok = NetworkMaintenanceOperationTypeByName(s)
+	if !ok || strings.ContainsRune(v.String(), ':') {
+		return fmt.Errorf("invalid Network Maintenance Operation Type %q", s)
 	}
 	return nil
 }
@@ -1070,7 +1157,7 @@ func (v SignatureType) GetEnumValue() uint64 { return uint64(v) }
 func (v *SignatureType) SetEnumValue(id uint64) bool {
 	u := SignatureType(id)
 	switch u {
-	case SignatureTypeUnknown, SignatureTypeLegacyED25519, SignatureTypeED25519, SignatureTypeRCD1, SignatureTypeReceipt, SignatureTypePartition, SignatureTypeSet, SignatureTypeRemote, SignatureTypeBTC, SignatureTypeBTCLegacy, SignatureTypeETH, SignatureTypeDelegated, SignatureTypeInternal, SignatureTypeAuthority:
+	case SignatureTypeUnknown, SignatureTypeLegacyED25519, SignatureTypeED25519, SignatureTypeRCD1, SignatureTypeReceipt, SignatureTypePartition, SignatureTypeSet, SignatureTypeRemote, SignatureTypeBTC, SignatureTypeBTCLegacy, SignatureTypeETH, SignatureTypeDelegated, SignatureTypeInternal, SignatureTypeAuthority, SignatureTypeRsaSha256:
 		*v = u
 		return true
 	}
@@ -1108,6 +1195,8 @@ func (v SignatureType) String() string {
 		return "internal"
 	case SignatureTypeAuthority:
 		return "authority"
+	case SignatureTypeRsaSha256:
+		return "rsaSha256"
 	}
 	return fmt.Sprintf("SignatureType:%d", v)
 }
@@ -1145,6 +1234,8 @@ func SignatureTypeByName(name string) (SignatureType, bool) {
 		return SignatureTypeInternal, true
 	case "authority":
 		return SignatureTypeAuthority, true
+	case "rsasha256":
+		return SignatureTypeRsaSha256, true
 	}
 	return 0, false
 }
@@ -1238,7 +1329,7 @@ func (v TransactionType) GetEnumValue() uint64 { return uint64(v) }
 func (v *TransactionType) SetEnumValue(id uint64) bool {
 	u := TransactionType(id)
 	switch u {
-	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateLiteTokenAccount, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeLockAccount, TransactionTypeBurnCredits, TransactionTypeTransferCredits, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeActivateProtocolVersion, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeSystemGenesis, TransactionTypeDirectoryAnchor, TransactionTypeBlockValidatorAnchor, TransactionTypeSystemWriteData:
+	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateLiteTokenAccount, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeLockAccount, TransactionTypeBurnCredits, TransactionTypeTransferCredits, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeNetworkMaintenance, TransactionTypeActivateProtocolVersion, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeSystemGenesis, TransactionTypeDirectoryAnchor, TransactionTypeBlockValidatorAnchor, TransactionTypeSystemWriteData:
 		*v = u
 		return true
 	}
@@ -1290,6 +1381,8 @@ func (v TransactionType) String() string {
 		return "updateAccountAuth"
 	case TransactionTypeUpdateKey:
 		return "updateKey"
+	case TransactionTypeNetworkMaintenance:
+		return "networkMaintenance"
 	case TransactionTypeActivateProtocolVersion:
 		return "activateProtocolVersion"
 	case TransactionTypeRemote:
@@ -1363,6 +1456,8 @@ func TransactionTypeByName(name string) (TransactionType, bool) {
 		return TransactionTypeUpdateAccountAuth, true
 	case "updatekey":
 		return TransactionTypeUpdateKey, true
+	case "networkmaintenance":
+		return TransactionTypeNetworkMaintenance, true
 	case "activateprotocolversion":
 		return TransactionTypeActivateProtocolVersion, true
 	case "remote":
