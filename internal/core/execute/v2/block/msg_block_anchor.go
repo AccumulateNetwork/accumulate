@@ -103,7 +103,7 @@ func (x BlockAnchor) process(batch *database.Batch, ctx *blockAnchorContext) err
 	}
 
 	// Process the transaction
-	_, err = ctx.callMessageExecutor(batch, ctx.sequenced.Message)
+	_, err = ctx.callMessageExecutor(batch, ctx.sequenced)
 	return errors.UnknownError.Wrap(err)
 }
 
