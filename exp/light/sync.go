@@ -586,6 +586,12 @@ func (c *Client) IndexAccountChains(ctx context.Context, acctUrl *url.URL) error
 			return errors.UnknownError.WithFormat("update source index of %s index chain: %w", name, err)
 		}
 
+		// Update the root index index
+		err = buildIndexChainIndex(chain.Inner(), indices.RootIndexIndex(), indexRootIndexIndex)
+		if err != nil {
+			return errors.UnknownError.WithFormat("update root index index of %s index chain: %w", name, err)
+		}
+
 		// Update the block index
 		err = buildIndexChainIndex(chain.Inner(), indices.BlockIndex(), indexBlockIndex)
 		if err != nil {
@@ -631,6 +637,10 @@ func indexBlockTime(e *protocol.IndexEntry) (time.Time, error) {
 		return time.Time{}, errSkip
 	}
 	return *e.BlockTime, nil
+}
+
+func indexRootIndexIndex(e *protocol.IndexEntry) (uint64, error) {
+	return e.RootIndexIndex, nil
 }
 
 func buildMessageIndex[M messaging.Message, T any](batch *DB, chain *merkle.Chain, index *ChainIndex[T], value func(M) (T, error)) error {
