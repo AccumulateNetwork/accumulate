@@ -324,10 +324,11 @@ type IndexDBAccountChain struct {
 	key    *record.Key
 	parent *IndexDBAccount
 
-	didLoad     values.Value[*rangeSet]
-	sourceIndex *ChainIndexUint
-	blockIndex  *ChainIndexUint
-	blockTime   *ChainIndexTime
+	didLoad        values.Value[*rangeSet]
+	sourceIndex    *ChainIndexUint
+	blockIndex     *ChainIndexUint
+	blockTime      *ChainIndexTime
+	rootIndexIndex *ChainIndexUint
 }
 
 func (c *IndexDBAccountChain) Key() *record.Key { return c.key }
@@ -364,6 +365,14 @@ func (c *IndexDBAccountChain) newBlockTime() *ChainIndexTime {
 	return newChainIndexTime(c, c.logger.L, c.store, c.key.Append("BlockTime"), "index-db-account(%[3]v)-(%[5]v)-block-time")
 }
 
+func (c *IndexDBAccountChain) RootIndexIndex() *ChainIndexUint {
+	return values.GetOrCreate(c, &c.rootIndexIndex, (*IndexDBAccountChain).newRootIndexIndex)
+}
+
+func (c *IndexDBAccountChain) newRootIndexIndex() *ChainIndexUint {
+	return newChainIndexUint(c, c.logger.L, c.store, c.key.Append("RootIndexIndex"), "index-db-account(%[3]v)-(%[5]v)-root-index-index")
+}
+
 func (c *IndexDBAccountChain) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	if key.Len() == 0 {
 		return nil, nil, errors.InternalError.With("bad key for chain (1)")
@@ -378,6 +387,8 @@ func (c *IndexDBAccountChain) Resolve(key *record.Key) (record.Record, *record.K
 		return c.BlockIndex(), key.SliceI(1), nil
 	case "BlockTime":
 		return c.BlockTime(), key.SliceI(1), nil
+	case "RootIndexIndex":
+		return c.RootIndexIndex(), key.SliceI(1), nil
 	default:
 		return nil, nil, errors.InternalError.With("bad key for chain (2)")
 	}
@@ -400,6 +411,9 @@ func (c *IndexDBAccountChain) IsDirty() bool {
 	if values.IsDirty(c.blockTime) {
 		return true
 	}
+	if values.IsDirty(c.rootIndexIndex) {
+		return true
+	}
 
 	return false
 }
@@ -417,6 +431,7 @@ func (c *IndexDBAccountChain) Walk(opts record.WalkOptions, fn record.WalkFunc) 
 	values.WalkField(&err, c.sourceIndex, c.newSourceIndex, opts, fn)
 	values.WalkField(&err, c.blockIndex, c.newBlockIndex, opts, fn)
 	values.WalkField(&err, c.blockTime, c.newBlockTime, opts, fn)
+	values.WalkField(&err, c.rootIndexIndex, c.newRootIndexIndex, opts, fn)
 	return err
 }
 
@@ -430,6 +445,7 @@ func (c *IndexDBAccountChain) Commit() error {
 	values.Commit(&err, c.sourceIndex)
 	values.Commit(&err, c.blockIndex)
 	values.Commit(&err, c.blockTime)
+	values.Commit(&err, c.rootIndexIndex)
 
 	return err
 }
