@@ -23,27 +23,27 @@ func init() {
 type SignatureMessage struct{}
 
 func (x SignatureMessage) Validate(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
-	sig, txn, err := x.check(batch, ctx)
+	ctx2, err := x.check(batch, ctx)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	status, err := ctx.callSignatureValidator(batch, ctx.sigWith(sig.Signature, txn))
+	status, err := ctx.callSignatureValidator(batch, ctx2)
 	return status, errors.UnknownError.Wrap(err)
 }
 
-func (SignatureMessage) check(batch *database.Batch, ctx *MessageContext) (*messaging.SignatureMessage, *protocol.Transaction, error) {
+func (SignatureMessage) check(batch *database.Batch, ctx *MessageContext) (*SignatureContext, error) {
 	sig, ok := ctx.message.(*messaging.SignatureMessage)
 	if !ok {
-		return nil, nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", messaging.MessageTypeSignature, ctx.message.Type())
+		return nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", messaging.MessageTypeSignature, ctx.message.Type())
 	}
 
 	// Basic validation
 	if sig.Signature == nil {
-		return nil, nil, errors.BadRequest.With("missing signature")
+		return nil, errors.BadRequest.With("missing signature")
 	}
 	if sig.TxID == nil {
-		return nil, nil, errors.BadRequest.With("missing transaction ID")
+		return nil, errors.BadRequest.With("missing transaction ID")
 	}
 
 	// TODO FIXME If we're within MessageIsReady, presumably this validation has
@@ -63,7 +63,7 @@ func (SignatureMessage) check(batch *database.Batch, ctx *MessageContext) (*mess
 			}
 		}
 		if !hasTxn {
-			return nil, nil, errors.BadRequest.With("cannot process a signature without its transaction")
+			return nil, errors.BadRequest.With("cannot process a signature without its transaction")
 		}
 	}
 
@@ -71,33 +71,34 @@ func (SignatureMessage) check(batch *database.Batch, ctx *MessageContext) (*mess
 	// allow them outside of one
 	if ctx.isWithin(messaging.MessageTypeSynthetic, internal.MessageTypeMessageIsReady, internal.MessageTypePseudoSynthetic) {
 		if sig.Signature.Type() != protocol.SignatureTypeAuthority {
-			return nil, nil, errors.BadRequest.WithFormat("a synthetic message cannot carry a %v signature", sig.Signature.Type())
+			return nil, errors.BadRequest.WithFormat("a synthetic message cannot carry a %v signature", sig.Signature.Type())
 		}
 	} else {
 		if sig.Signature.Type() == protocol.SignatureTypeAuthority {
-			return nil, nil, errors.BadRequest.WithFormat("a non-synthetic message cannot carry a %v signature", sig.Signature.Type())
+			return nil, errors.BadRequest.WithFormat("a non-synthetic message cannot carry a %v signature", sig.Signature.Type())
 		}
 	}
 
 	// Load and check the transaction
 	txn, err := ctx.getTransaction(batch, sig.TxID.Hash())
 	if err != nil {
-		return nil, nil, errors.UnknownError.WithFormat("load transaction: %w", err)
+		return nil, errors.UnknownError.WithFormat("load transaction: %w", err)
 	}
-	if txn.Header.Principal == nil {
-		return nil, nil, errors.BadRequest.WithFormat("invalid transaction: missing principal")
+	ctx2 := ctx.txnWith(txn).sigWith(sig.Signature)
+	if ctx2.effectivePrincipal() == nil {
+		return nil, errors.BadRequest.WithFormat("invalid transaction: missing principal")
 	}
 	if txn.Body == nil {
-		return nil, nil, errors.BadRequest.WithFormat("invalid transaction: missing body")
+		return nil, errors.BadRequest.WithFormat("invalid transaction: missing body")
 	}
 	if !txn.Body.Type().IsUser() {
-		return nil, nil, errors.BadRequest.WithFormat("cannot sign a %v transaction with a %v message", txn.Body.Type(), sig.Type())
+		return nil, errors.BadRequest.WithFormat("cannot sign a %v transaction with a %v message", txn.Body.Type(), sig.Type())
 	}
 
 	// Use the full transaction ID (since normalization uses unknown.acme)
 	sig.TxID = txn.ID()
 
-	return sig, txn, nil
+	return ctx2, nil
 }
 
 func (x SignatureMessage) Process(batch *database.Batch, ctx *MessageContext) (_ *protocol.TransactionStatus, err error) {
@@ -114,9 +115,9 @@ func (x SignatureMessage) Process(batch *database.Batch, ctx *MessageContext) (_
 	ctx.Block.State.MergeSignature(&ProcessSignatureState{})
 
 	// Process the message
-	sig, txn, err := x.check(batch, ctx)
+	ctx2, err := x.check(batch, ctx)
 	if err == nil {
-		_, err = ctx.callSignatureExecutor(batch, ctx.sigWith(sig.Signature, txn))
+		_, err = ctx.callSignatureExecutor(batch, ctx2)
 	}
 
 	// Record the message and its status

@@ -138,6 +138,7 @@ func (g *GlobalValues) loadFromLedger(net *url.URL, getState getStateFunc) error
 		return errors.BadRequest.WithFormat("load system ledger: %w", err)
 	} else {
 		g.ExecutorVersion = ledger.ExecutorVersion
+		g.BvnExecutorVersions = ledger.BvnExecutorVersions
 	}
 	return nil
 }
