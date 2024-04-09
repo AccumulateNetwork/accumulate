@@ -61,7 +61,7 @@ func TestAPIv2Consistency(t *testing.T) {
 			return mem
 		}),
 		simulator.WithNetwork(testData.Network),
-		simulator.Deterministic,
+		simulator.Deterministic(),
 	)
 	require.NoError(t, err)
 

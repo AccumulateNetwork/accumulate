@@ -23,6 +23,7 @@ import (
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/exp/faucet"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -262,8 +263,8 @@ func (d *DevnetConfiguration) buildGenesis(inst *Instance, cfg *Config, nodes []
 			GenesisGlobals:  v,
 			OperatorKeys:    [][]byte{mainPubKey},
 			ConsensusParams: tmtypes.DefaultConsensusParams(),
-			Snapshots: []func() (ioutil.SectionReader, error){
-				func() (ioutil.SectionReader, error) { return ioutil.NewBuffer(faucetSnapshot), nil },
+			Snapshots: []func(*core.GlobalValues) (ioutil.SectionReader, error){
+				func(*core.GlobalValues) (ioutil.SectionReader, error) { return ioutil.NewBuffer(faucetSnapshot), nil },
 			},
 		})
 		if err != nil {
