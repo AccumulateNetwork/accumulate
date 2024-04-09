@@ -260,7 +260,7 @@ func (x *Executor) recordAnchor(block *Block, ledger *protocol.SystemLedger) err
 		// As far as I know, the only thing this achieves (besides logging) is
 		// ensuring the block is not discarded. The only other reference to
 		// OpenedMajorBlock is (*BlockState).Empty. This is not necessary after
-		// v2-vandenburg since it uses a synthetic message (which prevents the
+		// v2-vandenberg since it uses a synthetic message (which prevents the
 		// block from being discarded).
 		anchor := anchor.(*protocol.DirectoryAnchor)
 		if anchor.MakeMajorBlock > 0 {

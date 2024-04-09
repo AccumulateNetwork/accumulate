@@ -128,7 +128,7 @@ func TestVoteTypes(t *testing.T) {
 	bob := AccountUrl("bob")
 	bobKey := acctesting.GenerateKey(bob)
 
-	t.Run("Pre-Vandenburg", func(t *testing.T) {
+	t.Run("Pre-Vandenberg", func(t *testing.T) {
 		// Initialize
 		sim := NewSim(t,
 			simulator.SimpleNetwork(t.Name(), 3, 1),
@@ -153,8 +153,8 @@ func TestVoteTypes(t *testing.T) {
 		require.EqualError(t, st[1].Error, "initial signature cannot be a suggest vote")
 	})
 
-	t.Run("Suggestathon pre-Vandenburg", func(t *testing.T) {
-		// Pre-Vandenburg, what happens if everyone suggests?
+	t.Run("Suggestathon pre-Vandenberg", func(t *testing.T) {
+		// Pre-Vandenberg, what happens if everyone suggests?
 
 		// Initialize
 		sim := NewSim(t,
