@@ -256,7 +256,7 @@ func (x UserSignature) verifyCanPay(batch *database.Batch, ctx *userSigContext) 
 
 	// In the case of a locally signed, non-delegated, non-remote add or burn
 	// credits transaction, verify the account has a sufficient balance
-	isLocal := ctx.signer.GetUrl().LocalTo(ctx.transaction.Header.Principal)
+	isLocal := ctx.signer.GetUrl().LocalTo(ctx.effectivePrincipal())
 	isDirect := ctx.signature.Type() != protocol.SignatureTypeDelegated
 
 	if isLocal && isDirect {
@@ -282,7 +282,7 @@ func (x UserSignature) verifyCanPay(batch *database.Batch, ctx *userSigContext) 
 
 func (UserSignature) verifyTokenBalance(batch *database.Batch, ctx *userSigContext, amount *big.Int) error {
 	// Load the principal
-	account, err := batch.Account(ctx.transaction.Header.Principal).Main().Get()
+	account, err := batch.Account(ctx.effectivePrincipal()).Main().Get()
 	if err != nil {
 		return errors.UnknownError.WithFormat("load transaction principal: %w", err)
 	}
@@ -290,7 +290,7 @@ func (UserSignature) verifyTokenBalance(batch *database.Batch, ctx *userSigConte
 	// Verify it is a token account
 	tokens, ok := account.(protocol.AccountWithTokens)
 	if !ok {
-		return errors.NotAllowed.WithFormat("%v is not a token account", ctx.transaction.Header.Principal)
+		return errors.NotAllowed.WithFormat("%v is not a token account", ctx.effectivePrincipal())
 	}
 
 	// Verify it is an ACME token account
@@ -310,7 +310,7 @@ func (UserSignature) verifyTokenBalance(batch *database.Batch, ctx *userSigConte
 }
 func (UserSignature) verifyCreditBalance(batch *database.Batch, ctx *userSigContext, amount uint64) error {
 	// Load the principal
-	account, err := batch.Account(ctx.transaction.Header.Principal).Main().Get()
+	account, err := batch.Account(ctx.effectivePrincipal()).Main().Get()
 	if err != nil {
 		return errors.UnknownError.WithFormat("load transaction principal: %w", err)
 	}
@@ -438,7 +438,7 @@ func (UserSignature) sendSignatureRequests(batch *database.Batch, ctx *userSigCo
 
 	// Send a notice to the principal
 	msg := new(messaging.SignatureRequest)
-	msg.Authority = ctx.transaction.Header.Principal
+	msg.Authority = ctx.effectivePrincipal()
 	msg.Cause = ctx.message.ID()
 	msg.TxID = ctx.transaction.ID()
 	err := ctx.didProduce(batch, msg.Authority, msg)
@@ -479,7 +479,7 @@ func (UserSignature) sendCreditPayment(batch *database.Batch, ctx *userSigContex
 
 	return ctx.didProduce(
 		batch,
-		ctx.transaction.Header.Principal,
+		ctx.effectivePrincipal(),
 		&messaging.CreditPayment{
 			Paid:      ctx.fee,
 			Payer:     ctx.getSigner(),
