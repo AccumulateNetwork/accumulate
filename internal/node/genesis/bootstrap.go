@@ -316,6 +316,11 @@ func (b *bootstrap) createMainLedger() {
 	ledger.Index = protocol.GenesisBlock
 	ledger.Timestamp = b.InitOpts.GenesisTime
 	ledger.ExecutorVersion = b.GenesisGlobals.ExecutorVersion
+	if b.GenesisGlobals.ExecutorVersion.V2VandenbergEnabled() {
+		for _, bvn := range b.GenesisGlobals.BvnNames() {
+			ledger.SetBvnExecutorVersion(bvn, b.GenesisGlobals.ExecutorVersion)
+		}
+	}
 	b.WriteRecords(ledger)
 }
 
