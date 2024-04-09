@@ -1171,6 +1171,8 @@ gitlab.com/ethan.reesor/vscode-notebooks/go-playbooks v0.0.0-20220417214602-1121
 gitlab.com/ethan.reesor/vscode-notebooks/go-playbooks v0.0.0-20220417214602-1121b9fae118/go.mod h1:WMjfCTtyNvFXHezq+dfQOiTSaaxfxuy7ycIUkL+Zz24=
 gitlab.com/ethan.reesor/vscode-notebooks/yaegi v0.0.0-20220417214422-5c573557938e h1:YYR/xnTbyyJsd+H4pSALxcl0v7HMg1BwuQhmjvCs4Hc=
 gitlab.com/ethan.reesor/vscode-notebooks/yaegi v0.0.0-20220417214422-5c573557938e/go.mod h1:Qk5VJRON+aERbKQ3zTZTemeTBoXDfiyQfpbBQ58LWGk=
+gitlab.com/firelizzard/go-script v0.0.0-20240404234115-d5f0a716003d h1:RE+FNlXt4u37+Uhuja8JFzJwW3kckNFfIdqVrUPJRs8=
+gitlab.com/firelizzard/go-script v0.0.0-20240404234115-d5f0a716003d/go.mod h1:8u+h7N5SG1dgAFbeCC/TN6nvQmoGVaENcb6cwUtQAzg=
 go-simpler.org/assert v0.7.0 h1:OzWWZqfNxt8cLS+MlUp6Tgk1HjPkmgdKBq9qvy8lZsA=
 go-simpler.org/assert v0.7.0/go.mod h1:74Eqh5eI6vCK6Y5l3PI8ZYFXG4Sa+tkr70OIPJAUr28=
 go-simpler.org/musttag v0.9.0 h1:Dzt6/tyP9ONr5g9h9P3cnYWCxeBFRkd0uJL/w+1Mxos=

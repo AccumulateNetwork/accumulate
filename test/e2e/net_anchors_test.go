@@ -8,7 +8,6 @@ package e2e
 
 import (
 	"encoding/json"
-	"math/big"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -28,40 +27,40 @@ import (
 // TestDropInitialAnchor is a simple test that simulates adverse network
 // conditions causing anchors to be dropped when they're initially sent.
 func TestDropInitialAnchor(t *testing.T) {
-	alice := url.MustParse("alice")
-	bob := url.MustParse("bob")
-	aliceKey := acctesting.GenerateKey(alice)
-	bobKey := acctesting.GenerateKey(bob)
+	alice := build.
+		Identity("alice").Create("book").
+		Tokens("tokens").Create("ACME").Add(1e9).Identity().
+		Book("book").Page(1).Create().AddCredits(1e9).Book().Identity()
+	aliceKey := alice.Book("book").Page(1).
+		GenerateKey(SignatureTypeED25519)
+
+	bob := build.
+		Identity("bob").Create("book").
+		Tokens("tokens").Create("ACME").Identity()
 
 	// Initialize
 	sim := NewSim(t,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
-		simulator.Genesis(GenesisTime),
+		simulator.Genesis(GenesisTime).With(alice, bob),
 
 		// Drop anchors when they are initially sent, instead relying on the
 		// Conductor's anchor healing
-		simulator.DropInitialAnchor,
+		simulator.DropInitialAnchor(),
 	)
 
-	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
-	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
-	MakeAccount(t, sim.DatabaseFor(alice), &TokenAccount{Url: alice.JoinPath("tokens"), TokenUrl: AcmeUrl()})
-	CreditTokens(t, sim.DatabaseFor(alice), alice.JoinPath("tokens"), big.NewInt(1e12))
-	MakeIdentity(t, sim.DatabaseFor(bob), bob, bobKey[32:])
-	MakeAccount(t, sim.DatabaseFor(bob), &TokenAccount{Url: bob.JoinPath("tokens"), TokenUrl: AcmeUrl()})
-
 	// Execute
-	st := sim.BuildAndSubmitTxnSuccessfully(
+	st := sim.BuildAndSubmitSuccessfully(
 		build.Transaction().For(alice, "tokens").
 			SendTokens(123, 0).To(bob, "tokens").
 			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey))
 
 	sim.StepUntil(
-		Txn(st.TxID).Succeeds(),
-		Txn(st.TxID).Produced().Succeeds())
+		Sig(st[1].TxID).Completes(),
+		Txn(st[0].TxID).Completes())
 
 	// Verify
-	account := GetAccount[*TokenAccount](t, sim.DatabaseFor(bob), bob.JoinPath("tokens"))
+	account, err := bob.Tokens("tokens").Load(sim.DatabaseFor)
+	require.NoError(t, err)
 	require.Equal(t, 123, int(account.Balance.Int64()))
 }
 

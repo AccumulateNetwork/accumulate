@@ -62,6 +62,10 @@ issues:
     linters:
     - noprint
 
+  - path: ^test/e2e2/generated
+    linters:
+    - goheader
+
   - path: ^test/|.*_test\.go
     linters:
     - noprint
