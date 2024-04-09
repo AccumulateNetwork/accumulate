@@ -76,7 +76,8 @@ func (x TransactionMessage) Validate(batch *database.Batch, ctx *MessageContext)
 		return nil, nil
 	}
 
-	st := chain.NewStatelessManager(ctx.Executor.Describe, ctx.GetActiveGlobals(), txn.Transaction, ctx.Executor.logger.With("operation", "Validate"))
+	ctx2 := ctx.txnWith(txn.Transaction)
+	st := chain.NewStatelessManager(ctx.Executor.Describe, ctx.GetActiveGlobals(), txn.Transaction, ctx2.effectivePrincipal(), ctx.Executor.logger.With("operation", "Validate"))
 	st.Pretend = true
 
 	r, err := exec.Validate(st, &chain.Delivery{Transaction: txn.Transaction})
@@ -344,7 +345,7 @@ func (x TransactionMessage) executeTransaction(batch *database.Batch, ctx *Trans
 		"type", ctx.transaction.Body.Type(),
 		"code", status.Code,
 		"txn-hash", logging.AsHex(ctx.transaction.GetHash()).Slice(0, 4),
-		"principal", ctx.transaction.Header.Principal,
+		"principal", ctx.effectivePrincipal(),
 	}
 	if status.Error != nil {
 		kv = append(kv, "error", status.Error)
@@ -411,7 +412,7 @@ func (x TransactionMessage) postProcess(batch *database.Batch, ctx *TransactionC
 
 	// Clear votes and payments
 	if delivered {
-		txn := batch.Account(ctx.transaction.Header.Principal).
+		txn := batch.Account(ctx.effectivePrincipal()).
 			Transaction(ctx.transaction.ID().Hash())
 
 		err = txn.Payments().Put(nil)
@@ -678,11 +679,11 @@ func (x ExpiredTransaction) expireTransaction(batch *database.Batch, ctx *Messag
 
 	// If the account in the expiring ID is not the principal, skip it (because
 	// it's a signature set expiration)
-	if ctx.GetActiveGlobals().ExecutorVersion.V2BaikonurEnabled() && !msg.TxID.Account().Equal(txn.Transaction.Header.Principal) {
+	ctx2 := ctx.txnWith(txn.Transaction)
+	if ctx.GetActiveGlobals().ExecutorVersion.V2BaikonurEnabled() && !msg.TxID.Account().Equal(ctx2.effectivePrincipal()) {
 		return nil
 	}
 
-	ctx2 := ctx.txnWith(txn.Transaction)
 	_, state, err := ctx2.recordFailedTransaction(batch, &chain.Delivery{Transaction: txn.Transaction}, errors.Expired)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
