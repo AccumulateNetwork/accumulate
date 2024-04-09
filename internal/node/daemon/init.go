@@ -196,7 +196,7 @@ func ConfigureNodePorts(node *NodeInit, cfg *config.Config, part protocol.Partit
 	cfg.Accumulate.API.ListenAddress = node.Listen().Scheme("http").PartitionType(part).AccumulateAPI().String()
 }
 
-func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time time.Time, logger log.Logger, factomAddresses func() (io.Reader, error), snapshots []func() (ioutil2.SectionReader, error)) (map[string][]byte, error) {
+func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time time.Time, logger log.Logger, factomAddresses func() (io.Reader, error), snapshots []func(*core.GlobalValues) (ioutil2.SectionReader, error)) (map[string][]byte, error) {
 	docs := map[string][]byte{}
 	var operators [][]byte
 	netinfo := new(protocol.NetworkDefinition)
