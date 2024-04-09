@@ -16,10 +16,11 @@ secret_detection:
   - if: $CI_PIPELINE_SOURCE
 
 code_intelligence:
-  image: sourcegraph/lsif-go:v1
+  extends: [ .rules all, .go ]
   allow_failure: true
   script:
-    - lsif-go
+    - scip-go
+    - scip convert
   artifacts:
     reports:
       lsif: dump.lsif

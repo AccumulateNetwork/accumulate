@@ -33,6 +33,9 @@ build-image:golang:
     paths:
       - .go-mod-cache
       - .golangci-cache
+  needs:
+    - job: build-image:golang
+      optional: true
   variables:
     GOMODCACHE: ${CI_PROJECT_DIR}/.go-mod-cache
     GOLANGCI_LINT_CACHE: ${CI_PROJECT_DIR}/.golangci-cache
