@@ -207,17 +207,17 @@ func initNetworkLocalFS(cmd *cobra.Command, netInit *accumulated.NetworkInit) {
 
 func buildGenesis(network *accumulated.NetworkInit) map[string][]byte {
 	var factomAddresses func() (io.Reader, error)
-	var snapshots []func() (ioutil2.SectionReader, error)
+	var snapshots []func(*core.GlobalValues) (ioutil2.SectionReader, error)
 	if flagInit.FactomAddresses != "" {
 		factomAddresses = func() (io.Reader, error) { return os.Open(flagInit.FactomAddresses) }
 	}
 	for _, filename := range flagInit.Snapshots {
 		filename := filename // See docs/developer/rangevarref.md
-		snapshots = append(snapshots, func() (ioutil2.SectionReader, error) { return os.Open(filename) })
+		snapshots = append(snapshots, func(*core.GlobalValues) (ioutil2.SectionReader, error) { return os.Open(filename) })
 	}
 	if flagInit.FaucetSeed != "" {
 		b := createFaucet(strings.Split(flagInit.FaucetSeed, " "))
-		snapshots = append(snapshots, func() (ioutil2.SectionReader, error) {
+		snapshots = append(snapshots, func(*core.GlobalValues) (ioutil2.SectionReader, error) {
 			return ioutil2.NewBuffer(b), nil
 		})
 	}

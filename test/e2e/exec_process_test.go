@@ -27,7 +27,7 @@ func TestExecutorProcessResults(t *testing.T) {
 	sim := NewSim(t,
 		simulator.SimpleNetwork(t.Name(), 3, 3), // The node count must be > 1
 		simulator.Genesis(GenesisTime),
-		simulator.IgnoreCommitResults, // Screwing with the account balance will cause the BPT to differ, so instruct the simulator to ignore that
+		simulator.IgnoreCommitResults(), // Screwing with the account balance will cause the BPT to differ, so instruct the simulator to ignore that
 	)
 
 	alice := AccountUrl("alice")

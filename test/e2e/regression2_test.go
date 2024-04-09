@@ -767,7 +767,7 @@ func TestDifferentValidatorSignaturesV1(t *testing.T) {
 	sim := NewSim(t,
 		simulator.SimpleNetwork(t.Name(), 1, 3),
 		simulator.GenesisWith(GenesisTime, g),
-		simulator.IgnoreDeliverResults,
+		simulator.IgnoreDeliverResults(),
 	)
 
 	sim.StepN(10)
@@ -822,7 +822,7 @@ func TestDifferentValidatorSignaturesV2(t *testing.T) {
 	sim := NewSim(t,
 		simulator.SimpleNetwork(t.Name(), 1, 3),
 		simulator.GenesisWith(GenesisTime, g),
-		simulator.IgnoreDeliverResults,
+		simulator.IgnoreDeliverResults(),
 	)
 
 	sim.StepN(10)
