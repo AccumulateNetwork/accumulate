@@ -40,7 +40,7 @@ func TestMissingSynthTxn(t *testing.T) {
 		sim := NewSim(t,
 			simulator.SimpleNetwork(t.Name(), 3, 3),
 			simulator.GenesisWith(GenesisTime, globals),
-			simulator.SkipProposalCheck, // FIXME should not be necessary
+			simulator.SkipProposalCheck(), // FIXME should not be necessary
 
 			simulator.CaptureDispatchedMessages(func(ctx context.Context, env *messaging.Envelope) (send bool, err error) {
 				if didDrop {

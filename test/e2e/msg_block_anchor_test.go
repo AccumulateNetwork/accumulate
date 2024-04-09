@@ -34,7 +34,7 @@ func TestAnchorThreshold(t *testing.T) {
 	opts := []simulator.Option{
 		simulator.SimpleNetwork(t.Name(), bvnCount, valCount),
 		simulator.Genesis(GenesisTime),
-		simulator.DisableAnchorHealing,
+		simulator.DisableAnchorHealing(),
 	}
 
 	// Capture the BVN's anchors and verify they're the same
@@ -113,7 +113,7 @@ func TestAnchorPlaceholder(t *testing.T) {
 
 	opts := []simulator.Option{
 		simulator.Genesis(GenesisTime),
-		simulator.DisableAnchorHealing,
+		simulator.DisableAnchorHealing(),
 	}
 
 	// One BVN, two nodes

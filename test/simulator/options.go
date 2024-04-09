@@ -16,113 +16,138 @@ import (
 	"time"
 
 	"github.com/cometbft/cometbft/libs/log"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/badger"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
-type Option func(*simFactory) error
+type Option interface {
+	apply(*simFactory) error
+}
 
 type OpenDatabaseFunc = func(partition *protocol.PartitionInfo, node int, logger log.Logger) keyvalue.Beginner
 type SnapshotFunc = func(partition string, network *accumulated.NetworkInit, logger log.Logger) (ioutil2.SectionReader, error)
 type RecordingFunc = func(partition string, node int) (io.WriteSeeker, error)
 
+type optionFunc func(*simFactory) error
+
+func (fn optionFunc) apply(f *simFactory) error { return fn(f) }
+
 func WithLogger(logger log.Logger) Option {
-	return func(f *simFactory) error {
+	return optionFunc(func(f *simFactory) error {
 		f.logger = logger
 		return nil
-	}
+	})
 }
 
 // Deterministic attempts to run the simulator in a fully deterministic,
 // repeatable way.
-func Deterministic(opts *simFactory) error {
-	opts.deterministic = true
-	return nil
+func Deterministic() Option {
+	return optionFunc(func(opts *simFactory) error {
+		opts.deterministic = true
+		return nil
+	})
 }
 
 // DropDispatchedMessages drops all internally dispatched messages.
-func DropDispatchedMessages(opts *simFactory) error {
-	opts.dropDispatchedMessages = true
-	opts.dropInitialAnchor = true
-	opts.disableAnchorHealing = true
-	return nil
+func DropDispatchedMessages() Option {
+	return optionFunc(func(opts *simFactory) error {
+		opts.dropDispatchedMessages = true
+		opts.dropInitialAnchor = true
+		opts.disableAnchorHealing = true
+		return nil
+	})
 }
 
 // DropInitialAnchor drops anchors when they are initially submitted.
-func DropInitialAnchor(opts *simFactory) error {
-	opts.dropInitialAnchor = true
-	return nil
+func DropInitialAnchor() Option {
+	return optionFunc(func(opts *simFactory) error {
+		opts.dropInitialAnchor = true
+		return nil
+	})
 }
 
 // DisableAnchorHealing disables healing of anchors after they are initially
 // submitted.
-func DisableAnchorHealing(opts *simFactory) error {
-	opts.disableAnchorHealing = true
-	return nil
+func DisableAnchorHealing() Option {
+	return optionFunc(func(opts *simFactory) error {
+		opts.disableAnchorHealing = true
+		return nil
+	})
 }
 
 // CaptureDispatchedMessages allows the caller to capture internally dispatched
 // messages.
 func CaptureDispatchedMessages(fn DispatchInterceptor) Option {
-	return func(opts *simFactory) error {
+	return optionFunc(func(opts *simFactory) error {
 		opts.interceptDispatchedMessages = fn
 		return nil
-	}
+	})
 }
 
 // SkipProposalCheck skips checking if each non-leader node agrees with the
 // leader's proposed block.
-func SkipProposalCheck(opts *simFactory) error {
-	opts.skipProposalCheck = true
-	return nil
+func SkipProposalCheck() Option {
+	return optionFunc(func(opts *simFactory) error {
+		opts.skipProposalCheck = true
+		return nil
+	})
 }
 
 // IgnoreDeliverResults ignores inconsistencies in the result of DeliverTx.
-func IgnoreDeliverResults(opts *simFactory) error {
-	opts.ignoreDeliverResults = true
-	return nil
+func IgnoreDeliverResults() Option {
+	return optionFunc(func(opts *simFactory) error {
+		opts.ignoreDeliverResults = true
+		return nil
+	})
 }
 
 // IgnoreCommitResults ignores inconsistencies in the result of Commit.
-func IgnoreCommitResults(opts *simFactory) error {
-	opts.ignoreCommitResults = true
-	return nil
+func IgnoreCommitResults() Option {
+	return optionFunc(func(opts *simFactory) error {
+		opts.ignoreCommitResults = true
+		return nil
+	})
 }
 
 func WithNetwork(net *accumulated.NetworkInit) Option {
-	return func(opts *simFactory) error {
+	return optionFunc(func(opts *simFactory) error {
 		opts.network = net
 		return nil
-	}
+	})
 }
 
 func WithDatabase(fn OpenDatabaseFunc) Option {
-	return func(opts *simFactory) error {
+	return optionFunc(func(opts *simFactory) error {
 		opts.storeOpt = fn
 		return nil
-	}
+	})
 }
 
 func WithSnapshot(fn SnapshotFunc) Option {
-	return func(opts *simFactory) error {
+	return optionFunc(func(opts *simFactory) error {
 		opts.snapshot = fn
 		return nil
-	}
+	})
 }
 
 // WithRecordings takes a function that returns files to write node recordings to.
 func WithRecordings(fn RecordingFunc) Option {
-	return func(opts *simFactory) error {
+	return optionFunc(func(opts *simFactory) error {
 		opts.recordings = fn
 		return nil
-	}
+	})
 }
 
 func SimpleNetwork(name string, bvnCount, nodeCount int) Option {
@@ -204,50 +229,129 @@ func SnapshotMap(snapshots map[string][]byte) Option {
 	})
 }
 
-func Genesis(time time.Time) Option {
+func Genesis(time time.Time) genesis {
 	// By default run tests with the new executor version
-	return GenesisWithVersion(time, protocol.ExecutorVersionLatest)
+	return genesis{time: time}
 }
 
-func GenesisWithVersion(time time.Time, version protocol.ExecutorVersion) Option {
-	values := new(core.GlobalValues)
-	values.ExecutorVersion = version
-	return GenesisWith(time, values)
+// DO NOT USE - use Genesis(time).WithVersion(version)
+func GenesisWithVersion(time time.Time, version protocol.ExecutorVersion) genesis {
+	return Genesis(time).WithVersion(version)
 }
 
-func GenesisWith(time time.Time, values *core.GlobalValues) Option {
-	return WithSnapshot(genesis(time, values))
+// DO NOT USE - use Genesis(time).WithValues(values)
+func GenesisWith(time time.Time, values *network.GlobalValues) genesis {
+	return Genesis(time).WithValues(values)
 }
 
-func genesis(time time.Time, values *core.GlobalValues) SnapshotFunc {
-	if values == nil {
-		values = new(core.GlobalValues)
+type genesis struct {
+	time   time.Time
+	values *network.GlobalValues
+	extra  []DbBuilder
+}
+
+func (g genesis) WithValues(values *network.GlobalValues) genesis {
+	g.values = values
+	return g
+}
+
+func (g genesis) WithVersion(version protocol.ExecutorVersion) genesis {
+	if g.values == nil {
+		g.values = new(network.GlobalValues)
+	}
+	g.values.ExecutorVersion = version
+	return g
+}
+
+type DbBuilder interface {
+	Build(func(*url.URL) database.Updater) error
+}
+
+func (g genesis) With(builders ...DbBuilder) genesis {
+	g.extra = append(g.extra, builders...)
+	return g
+}
+
+func (g genesis) apply(opts *simFactory) error {
+	if g.values == nil {
+		g.values = new(network.GlobalValues)
+		g.values.ExecutorVersion = protocol.ExecutorVersionLatest
 	}
 
 	var genDocs map[string][]byte
-	return func(partition string, network *accumulated.NetworkInit, logger log.Logger) (ioutil2.SectionReader, error) {
+	opts.snapshot = func(partition string, net *accumulated.NetworkInit, logger log.Logger) (ioutil2.SectionReader, error) {
+		if genDocs != nil {
+			return ioutil2.NewBuffer(genDocs[partition]), nil
+		}
+
+		var snapshots []func(*network.GlobalValues) (ioutil.SectionReader, error)
+		if len(g.extra) > 0 {
+			var extra []byte
+			snapshots = append(snapshots, func(globals *network.GlobalValues) (ioutil.SectionReader, error) {
+				if extra != nil {
+					return ioutil.NewBuffer(extra), nil
+				}
+
+				db := database.OpenInMemory(nil)
+				db.SetObserver(execute.NewDatabaseObserver())
+
+				// Fake the system ledger
+				err := db.Update(func(batch *database.Batch) error {
+					ledger := &protocol.SystemLedger{
+						Url:             protocol.DnUrl().JoinPath(protocol.Ledger),
+						ExecutorVersion: globals.ExecutorVersion,
+					}
+					return batch.Account(ledger.Url).Main().Put(ledger)
+				})
+				if err != nil {
+					return nil, err
+				}
+
+				for _, b := range g.extra {
+					err := b.Build(func(*url.URL) database.Updater { return db })
+					if err != nil {
+						return nil, err
+					}
+				}
+
+				buf := new(ioutil.Buffer)
+				err = db.Collect(buf, nil, &database.CollectOptions{
+					Predicate: func(r record.Record) (bool, error) {
+						// Do not create a BPT
+						if r.Key().Get(0) == "BPT" {
+							return false, nil
+						}
+						return true, nil
+					},
+				})
+				extra = buf.Bytes()
+				return ioutil.NewBuffer(extra), err
+			})
+		}
+
 		var err error
-		if genDocs == nil {
-			genDocs, err = accumulated.BuildGenesisDocs(network, values, time, logger, nil, nil)
-			if err != nil {
-				return nil, errors.UnknownError.WithFormat("build genesis docs: %w", err)
-			}
+		genDocs, err = accumulated.BuildGenesisDocs(net, g.values, g.time, logger, nil, snapshots)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("build genesis docs: %w", err)
 		}
 
 		return ioutil2.NewBuffer(genDocs[partition]), nil
 	}
+	return nil
 }
 
 // InitialAcmeSupply overrides the default initial ACME supply. A value of nil
 // will disable setting the initial supply.
 func InitialAcmeSupply(v *big.Int) Option {
-	return func(f *simFactory) error {
+	return optionFunc(func(f *simFactory) error {
 		f.initialSupply = v
 		return nil
-	}
+	})
 }
 
-func UseABCI(opts *simFactory) error {
-	opts.abci = withABCI
-	return nil
+func UseABCI() Option {
+	return optionFunc(func(opts *simFactory) error {
+		opts.abci = withABCI
+		return nil
+	})
 }

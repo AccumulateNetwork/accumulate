@@ -54,7 +54,7 @@ func New(opts ...Option) (*Simulator, error) {
 		initialSupply: big.NewInt(1e6 * protocol.AcmePrecision),
 	}
 	for _, opt := range opts {
-		err := opt(o)
+		err := opt.apply(o)
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
 		}
