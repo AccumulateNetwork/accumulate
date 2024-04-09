@@ -84,7 +84,7 @@ func (b TransactionBuilder) CreateIdentity(url any, path ...string) CreateIdenti
 }
 
 func (b CreateIdentityBuilder) WithKey(key any, typ protocol.SignatureType) CreateIdentityBuilder {
-	return b.WithKeyHash(b.t.hashKey(b.t.parsePublicKey(key), typ))
+	return b.WithKeyHash(b.t.hashKey(b.t.parseKey(key, typ, false)))
 }
 
 func (b CreateIdentityBuilder) WithKeyHash(hash any) CreateIdentityBuilder {
@@ -522,7 +522,7 @@ func (b CreateKeyBookBuilder) WithKeyHash(hash any) CreateKeyBookBuilder {
 }
 
 func (b CreateKeyBookBuilder) WithKey(key any, typ protocol.SignatureType) CreateKeyBookBuilder {
-	return b.WithKeyHash(b.t.hashKey(b.t.parsePublicKey(key), typ))
+	return b.WithKeyHash(b.t.hashKey(b.t.parseKey(key, typ, false)))
 }
 
 type AddCreditsBuilder struct {
@@ -693,7 +693,7 @@ type UpdateKeyBuilder struct {
 
 func (b TransactionBuilder) UpdateKey(newKey any, typ protocol.SignatureType) UpdateKeyBuilder {
 	c := UpdateKeyBuilder{t: b}
-	c.body.NewKeyHash = c.t.hashKey(c.t.parsePublicKey(newKey), typ)
+	c.body.NewKeyHash = c.t.hashKey(c.t.parseKey(newKey, typ, false))
 	return c
 }
 
