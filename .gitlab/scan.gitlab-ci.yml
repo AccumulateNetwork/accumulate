@@ -14,3 +14,12 @@ semgrep-sast:
 secret_detection:
   rules:
   - if: $CI_PIPELINE_SOURCE
+
+code_intelligence:
+  image: sourcegraph/lsif-go:v1
+  allow_failure: true
+  script:
+    - lsif-go
+  artifacts:
+    reports:
+      lsif: dump.lsif
