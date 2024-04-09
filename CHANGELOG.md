@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+- New and improved node configuration framework
+- Progress towards snapshot sync
+- Support adding an index to a snapshot
+- Support for Bolt and LevelDB
+- Improve peer-to-peer service discovery
+- Improve reliability of healing
+- Improve performance of light client indexing
+- Exploratory support for RSA signatures
+- Reduce overhead of BPT hash calculations
+- Decouple ACME burns (for credits) from anchors
+- Decouple network updates (e.g. the oracle) from anchors
+- Decouple major blocks from anchors
+- Improve reliability of major blocks
+- Improve reliability of anchoring
+- Redesign the simulator's consensus model
+- Suggested transactions
+
 ## 1.3
 
 - Protocol
