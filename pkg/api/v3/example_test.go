@@ -17,7 +17,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
-func ExampleQueryAccount() {
+func ExampleQueryAccount() { //nolint:govet // Ignore "example refers to an unknown identifier"
 	client := jsonrpc.NewClient(accumulate.ResolveWellKnownEndpoint("mainnet", "v3"))
 
 	resp, err := client.Query(context.Background(), url.MustParse("accumulate.acme"), &api.DefaultQuery{})
@@ -32,6 +32,6 @@ func ExampleQueryAccount() {
 
 	// Output:
 	// {"type":"identity","url":"acc://accumulate.acme","authorities":[{"url":"acc://accumulate.acme/book"}]}
-	b, err := json.Marshal(acct.Account)
+	b, _ := json.Marshal(acct.Account)
 	fmt.Println(string(b))
 }
