@@ -431,7 +431,7 @@ func (d *Daemon) startApp(caughtUp <-chan struct{}) (types.Application, error) {
 		Dispatcher:   execOpts.NewDispatcher(),
 		RunTask:      execOpts.BackgroundTaskLauncher,
 
-		// Disable for now
+		// TODO Fix the flooding issues and enable this by default
 		EnableAnchorHealing: &no,
 
 		Ready: func(execute.WillBeginBlock) bool {

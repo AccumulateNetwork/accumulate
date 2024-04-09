@@ -17,9 +17,8 @@ import (
 
 // SignatureContext is the context in which a message is executed.
 type SignatureContext struct {
-	*MessageContext
-	signature   protocol.Signature
-	transaction *protocol.Transaction
+	*TransactionContext
+	signature protocol.Signature
 }
 
 func (s *SignatureContext) Type() protocol.SignatureType { return s.signature.Type() }
@@ -315,15 +314,16 @@ func (s *SignatureContext) signerCanSignTransaction(batch *database.Batch, txn *
 		}
 	}
 
-	return baseSignerCanSignTransaction(txn, signer)
+	return s.TransactionContext.signerCanSignTransaction(txn, signer)
 }
 
-func baseSignerCanSignTransaction(txn *protocol.Transaction, signer protocol.Signer) error {
+func (x *TransactionContext) signerCanSignTransaction(txn *protocol.Transaction, signer protocol.Signer) error {
 	switch signer := signer.(type) {
 	case *protocol.LiteIdentity:
 		// A lite token account is only allowed to sign for itself
-		if !signer.Url.Equal(txn.Header.Principal.RootIdentity()) {
-			return errors.Unauthorized.WithFormat("%v is not authorized to sign transactions for %v", signer.Url, txn.Header.Principal)
+		principal := x.effectivePrincipal()
+		if !signer.Url.Equal(principal.RootIdentity()) {
+			return errors.Unauthorized.WithFormat("%v is not authorized to sign transactions for %v", signer.Url, principal)
 		}
 		return nil
 
@@ -342,9 +342,9 @@ func baseSignerCanSignTransaction(txn *protocol.Transaction, signer protocol.Sig
 }
 
 // authorityIsAccepted checks that an authority is authorized to sign for an account.
-func (m *MessageContext) authorityIsAccepted(batch *database.Batch, txn *protocol.Transaction, sig *protocol.AuthoritySignature) error {
+func (m *TransactionContext) authorityIsAccepted(batch *database.Batch, txn *protocol.Transaction, sig *protocol.AuthoritySignature) error {
 	// Load the principal
-	principal, err := batch.Account(txn.Header.Principal).Main().Get()
+	principal, err := batch.Account(m.effectivePrincipal()).Main().Get()
 	if err != nil {
 		return errors.UnknownError.WithFormat("load principal: %w", err)
 	}
