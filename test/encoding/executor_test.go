@@ -50,7 +50,7 @@ func TestExecutorConsistency(t *testing.T) {
 		simulator.WithLogger(acctesting.NewTestLogger(t)),
 		simulator.WithNetwork(testData.Network),
 		simulator.SnapshotMap(testData.Genesis),
-		simulator.DropDispatchedMessages,
+		simulator.DropDispatchedMessages(),
 		simulator.InitialAcmeSupply(nil),
 	)
 	require.NoError(t, err)
