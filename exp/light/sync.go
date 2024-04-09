@@ -845,6 +845,7 @@ func (c *Client) IndexAccountTransactions(ctx context.Context, accounts ...*url.
 	// directory's anchor chain index for each partition
 	type PartData struct {
 		ID                        string
+		Url                       *url.URL
 		RootIndex, DirAnchorIndex *IndexDBAccountChain
 		AnchorIndex               []*AnchorMetadata
 	}
@@ -865,6 +866,7 @@ func (c *Client) IndexAccountTransactions(ctx context.Context, accounts ...*url.
 
 		part := new(PartData)
 		part.ID = partId
+		part.Url = protocol.PartitionUrl(partId)
 		parts[partId] = part
 
 		// Load the partition's root chain index
@@ -940,16 +942,16 @@ func (c *Client) IndexAccountTransactions(ctx context.Context, accounts ...*url.
 					return errors.NotFound.WithFormat("cannot find index entry for root chain entry %d: %w", main.Source, err)
 				}
 
-				// Get anchor
-				_, anchor, ok := FindEntry(part.AnchorIndex, ByAnchorBlock(root.BlockIndex))
-				if !ok || anchor.Anchor.MinorBlockIndex != root.BlockIndex {
-					return errors.NotFound.WithFormat("cannot find anchor for %s block %d", part.ID, root.BlockIndex)
+				// Get root chain state
+				state, err := batch.Account(part.Url.JoinPath(protocol.Ledger)).RootChain().State(int64(root.Source))
+				if err != nil {
+					return errors.NotFound.WithFormat("load %s root chain state at %d: %w", part.ID, root.Source, err)
 				}
 
 				// TODO skip if not anchored
 
 				// Find the index when the anchor was anchored
-				dirAnchorPos, err := batch.Account(protocol.DnUrl().JoinPath(protocol.AnchorPool)).AnchorChain(routes[account]).Root().IndexOf(anchor.Anchor.RootChainAnchor[:])
+				dirAnchorPos, err := batch.Account(protocol.DnUrl().JoinPath(protocol.AnchorPool)).AnchorChain(routes[account]).Root().IndexOf(state.Anchor())
 				if err != nil {
 					return errors.UnknownError.WithFormat("locate chain entry for block %d anchor: %w", root.BlockIndex, err)
 				}
