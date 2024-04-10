@@ -5,12 +5,12 @@ info:
   title: Accumulate JSON-RPC
   license:
     name: MIT
-  schemes:
-    - https
-  consumes:
-    - application/json
-  produces:
-    - application/json
+  # schemes:
+  #   - https
+  # consumes:
+  #   - application/json
+  # produces:
+  #   - application/json
 
 servers:
   - url: https://mainnet.accumulatenetwork.io
@@ -21,14 +21,16 @@ servers:
     description: Fozzie TestNet
 
 paths:
-  /query/:id:
+  /query/{id}:
     parameters:
       - name: id
         description: The ID of the account or message
+        schema: { $ref: '#/components/schemas/url' }
         in: path
         required: true
       - name: include_receipt
         description: Whether to include a receipt
+        schema: { type: boolean }
         in: query
     get:
       summary: Query an account or message
@@ -42,10 +44,11 @@ paths:
                   - $ref: '#/components/schemas/accountRecord'
                   - $ref: '#/components/schemas/messageRecord'
 
-  /query/:id/chain:
+  /query/{id}/chain:
     parameters:
       - name: id
         description: The ID of the account or message
+        schema: { $ref: '#/components/schemas/url' }
         in: path
         required: true
     get:
@@ -68,27 +71,33 @@ paths:
                         properties:
                           records: { type: array, items: { $ref: '#/components/schemas/chainRecord' } }
 
-  /query/:id/chain/:name:
+  /query/{id}/chain/{name}:
     parameters:
       - name: id
         description: The account ID
+        schema: { $ref: '#/components/schemas/url' }
         in: path
         required: true
       - name: name
         description: The chain name
+        schema: { type: string }
         in: path
         required: true
       - name: start
         description: The start of the range
+        schema: { type: number }
         in: query
       - name: count
         description: The size of the range
+        schema: { type: number }
         in: query
       - name: from_end
         description: Whether to start querying from the beginning or end
+        schema: { type: boolean }
         in: query
       - name: expand
         description: Whether to resolve chain values
+        schema: { type: boolean }
         in: query
     get:
       summary: Query an account's chain
@@ -107,22 +116,26 @@ paths:
                         properties:
                           records: { type: array, items: { $ref: '#/components/schemas/chainEntryRecord' } }
 
-  /query/:id/chain/:name/index/:index:
+  /query/{id}/chain/{name}/index/{index}:
     parameters:
       - name: id
         description: The account ID
+        schema: { $ref: '#/components/schemas/url' }
         in: path
         required: true
       - name: name
         description: The chain name
+        schema: { type: string }
         in: path
         required: true
       - name: index
         description: The entry index
+        schema: { type: number }
         in: path
         required: true
       - name: include_receipt
         description: Whether to include a receipt
+        schema: { type: boolean }
         in: query
     get:
       summary: Query a chain entry by index
@@ -134,22 +147,26 @@ paths:
               schema:
                 $ref: '#/components/schemas/chainEntryRecord'
 
-  /query/:id/chain/:name/entry/:value:
+  /query/{id}/chain/{name}/entry/{value}:
     parameters:
       - name: id
         description: The account ID
+        schema: { $ref: '#/components/schemas/url' }
         in: path
         required: true
       - name: name
         description: The chain name
+        schema: { type: string }
         in: path
         required: true
       - name: value
         description: The entry value
+        schema: { $ref: '#/components/schemas/bytes' }
         in: path
         required: true
       - name: include_receipt
         description: Whether to include a receipt
+        schema: { type: boolean }
         in: query
     get:
       summary: Look up a chain entry by value
@@ -161,23 +178,28 @@ paths:
               schema:
                 $ref: '#/components/schemas/chainEntryRecord'
 
-  /query/:id/data:
+  /query/{id}/data:
     parameters:
       - name: id
         description: The account ID
+        schema: { $ref: '#/components/schemas/url' }
         in: path
         required: true
       - name: start
         description: The start of the range
+        schema: { type: number }
         in: query
       - name: count
         description: The size of the range
+        schema: { type: number }
         in: query
       - name: from_end
         description: Whether to start querying from the beginning or end
+        schema: { type: boolean }
         in: query
       - name: expand
         description: Whether to resolve chain values
+        schema: { type: boolean }
         in: query
     get:
       summary: Query a data account
@@ -201,14 +223,16 @@ paths:
                         properties:
                           records: { type: array, items: { $ref: '#/components/schemas/chainEntryRecord' } }
 
-  /query/:id/data/index/:index:
+  /query/{id}/data/index/{index}:
     parameters:
       - name: id
         description: The account ID
+        schema: { $ref: '#/components/schemas/url' }
         in: path
         required: true
       - name: index
         description: The entry index
+        schema: { type: number }
         in: path
         required: true
     get:
@@ -226,14 +250,16 @@ paths:
                       # TODO the message is a transaction
                       value: { $ref: '#/components/schemas/messageRecord' }
 
-  /query/:id/data/entry/:hash:
+  /query/{id}/data/entry/{hash}:
     parameters:
       - name: id
         description: The account ID
+        schema: { $ref: '#/components/schemas/url' }
         in: path
         required: true
       - name: hash
         description: The entry hash
+        schema: { $ref: '#/components/schemas/hash' }
         in: path
         required: true
     get:
@@ -251,23 +277,28 @@ paths:
                       # TODO the message is a transaction
                       value: { $ref: '#/components/schemas/messageRecord' }
 
-  /query/:id/directory:
+  /query/{id}/directory:
     parameters:
       - name: id
         description: The account ID
+        schema: { $ref: '#/components/schemas/url' }
         in: path
         required: true
       - name: start
         description: The start of the range
+        schema: { type: number }
         in: query
       - name: count
         description: The size of the range
+        schema: { type: number }
         in: query
       - name: from_end
         description: Whether to start querying from the beginning or end
+        schema: { type: boolean }
         in: query
       - name: expand
         description: Whether to resolve accounts
+        schema: { type: boolean }
         in: query
     get:
       summary: Query an identity's directory entries
@@ -289,23 +320,28 @@ paths:
                         properties:
                           records: { type: array, items: { $ref: '#/components/schemas/accountRecord' } }
 
-  /query/:id/pending:
+  /query/{id}/pending:
     parameters:
       - name: id
         description: The account ID
+        schema: { $ref: '#/components/schemas/url' }
         in: path
         required: true
       - name: start
         description: The start of the range
+        schema: { type: number }
         in: query
       - name: count
         description: The size of the range
+        schema: { type: number }
         in: query
       - name: from_end
         description: Whether to start querying from the beginning or end
+        schema: { type: boolean }
         in: query
       - name: expand
         description: Whether to resolve transactions
+        schema: { type: boolean }
         in: query
     get:
       summary: Query an account's pending transactions
@@ -332,15 +368,19 @@ paths:
     parameters:
       - name: start
         description: The start of the range
+        schema: { type: number }
         in: query
       - name: count
         description: The size of the range
+        schema: { type: number }
         in: query
       - name: from_end
         description: Whether to start querying from the beginning or end
+        schema: { type: boolean }
         in: query
       - name: omit_empty
         description: Whether to omit or include empty blocks
+        schema: { type: boolean }
         in: query
     get:
       summary: List minor blocks
@@ -352,15 +392,19 @@ paths:
     parameters:
       - name: start
         description: The start of the range
+        schema: { type: number }
         in: query
       - name: count
         description: The size of the range
+        schema: { type: number }
         in: query
       - name: from_end
         description: Whether to start querying from the beginning or end
+        schema: { type: boolean }
         in: query
       - name: omit_empty
         description: Whether to omit or include empty blocks
+        schema: { type: boolean }
         in: query
     get:
       summary: List major blocks
@@ -368,20 +412,24 @@ paths:
         '200':
           description: OK
 
-  /block/minor/:index:
+  /block/minor/{index}:
     parameters:
       - name: index
         description: The minor block index
+        schema: { type: number }
         in: path
         required: true
       - name: entry_start
         description: The start of the entry range
+        schema: { type: number }
         in: query
       - name: entry_count
         description: The size of the entry range
+        schema: { type: number }
         in: query
       - name: entry_from_end
         description: Whether to start querying entries from the beginning or end
+        schema: { type: boolean }
         in: query
     get:
       summary: Query a minor block
@@ -389,23 +437,28 @@ paths:
         '200':
           description: OK
 
-  /block/major/:index:
+  /block/major/{index}:
     parameters:
       - name: index
         description: The major block index
+        schema: { type: number }
         in: path
         required: true
       - name: minor_start
         description: The start of the minor block range
+        schema: { type: number }
         in: query
       - name: minor_count
         description: The size of the minor block range
+        schema: { type: number }
         in: query
       - name: minor_from_end
         description: Whether to start querying minor blocks from the beginning or end
+        schema: { type: boolean }
         in: query
       - name: omit_empty
         description: Whether to omit or include empty blocks
+        schema: { type: boolean }
         in: query
     get:
       summary: Query a major block
@@ -413,18 +466,21 @@ paths:
         '200':
           description: OK
 
-  /search/:id/anchor/:value:
+  /search/{id}/anchor/{value}:
     parameters:
       - name: id
         description: The account ID
+        schema: { $ref: '#/components/schemas/url' }
         in: path
         required: true
       - name: value
         description: The anchor value
+        schema: { $ref: '#/components/schemas/hash' }
         in: path
         required: true
       - name: include_receipt
         description: Whether to include a receipt
+        schema: { type: boolean }
         in: query
     get:
       summary: Search an account for an anchor
@@ -432,18 +488,25 @@ paths:
         '200':
           description: OK
 
-  /search/:id/publicKey/:value:
+  /search/{id}/publicKey/{value}:
     parameters:
       - name: id
         description: The account ID
+        schema: { $ref: '#/components/schemas/url' }
         in: path
         required: true
       - name: value
         description: An address, public key, or public key hash
         in: path
+        schema:
+          oneOf:
+            - { $ref: '#/components/schemas/url' }
+            - { $ref: '#/components/schemas/hash' }
+            - { $ref: '#/components/schemas/bytes' }
         required: true
       - name: type
         description: The type of the public key
+        schema: { $ref: '#/components/schemas/signatureType' }
         in: query
     get:
       summary: Search an account for a public key
@@ -451,14 +514,16 @@ paths:
         '200':
           description: OK
 
-  /search/:id/delegate/:value:
+  /search/{id}/delegate/{value}:
     parameters:
       - name: id
         description: The account ID
+        schema: { $ref: '#/components/schemas/url' }
         in: path
         required: true
       - name: value
         description: The delegate URL
+        schema: { $ref: '#/components/schemas/url' }
         in: path
         required: true
     get:
@@ -476,8 +541,8 @@ paths:
             schema:
               type: object
               properties:
-                jsonrpc: { const: "2.0" }
-                method: { const: query }
+                jsonrpc: { enum: ["2.0"] }
+                method: { enum: [query] }
                 id: { type: integer }
                 params:
                   type: object
@@ -517,7 +582,7 @@ paths:
               schema:
                 type: object
                 properties:
-                  jsonrpc: { const: "2.0" }
+                  jsonrpc: { enum: ["2.0"] }
                   id: { type: integer }
                   result: { $ref: '#/components/schemas/record' }
               examples:
@@ -536,16 +601,16 @@ paths:
                       directory:
                         recordType: range
                         records:
-                          - { recordType: url, value: acc://accumulate.acme/business }
-                          - { recordType: url, value: acc://accumulate.acme/committee-members }
-                          - { recordType: url, value: acc://accumulate.acme/core-dev }
-                          - { recordType: url, value: acc://accumulate.acme/dev-block }
-                          - { recordType: url, value: acc://accumulate.acme/ecosystem }
-                          - { recordType: url, value: acc://accumulate.acme/factom-block }
-                          - { recordType: url, value: acc://accumulate.acme/governance }
-                          - { recordType: url, value: acc://accumulate.acme/grant-block }
-                          - { recordType: url, value: acc://accumulate.acme/stake }
-                          - { recordType: url, value: acc://accumulate.acme/treasury-book }
+                          - { recordType: url, value: 'acc://accumulate.acme/business' }
+                          - { recordType: url, value: 'acc://accumulate.acme/committee-members' }
+                          - { recordType: url, value: 'acc://accumulate.acme/core-dev' }
+                          - { recordType: url, value: 'acc://accumulate.acme/dev-block' }
+                          - { recordType: url, value: 'acc://accumulate.acme/ecosystem' }
+                          - { recordType: url, value: 'acc://accumulate.acme/factom-block' }
+                          - { recordType: url, value: 'acc://accumulate.acme/governance' }
+                          - { recordType: url, value: 'acc://accumulate.acme/grant-block' }
+                          - { recordType: url, value: 'acc://accumulate.acme/stake' }
+                          - { recordType: url, value: 'acc://accumulate.acme/treasury-book' }
                         start: 0
                         total: 10
                       pending:
@@ -714,70 +779,80 @@ components:
     query:
       oneOf:
         - type: object
+          required: [queryType]
           properties:
-            queryType: { const: default, required: true }
+            queryType: { enum: [default] }
             includeReceipt: { type: boolean }
 
         - type: object
+          required: [queryType]
           properties:
-            queryType: { const: chain, required: true }
-            index: { type: integer, min: 0 }
+            queryType: { enum: [chain] }
+            index: { type: integer, minimum: 0 }
             entry: { $ref: '#/components/schemas/hash' }
             range: { $ref: '#/components/schemas/rangeOptions' }
             includeReceipt: { type: boolean }
 
         - type: object
+          required: [queryType]
           properties:
-            queryType: { const: data, required: true }
-            index: { type: integer, min: 0 }
+            queryType: { enum: [data] }
+            index: { type: integer, minimum: 0 }
             entry: { $ref: '#/components/schemas/hash' }
             range: { $ref: '#/components/schemas/rangeOptions' }
 
         - type: object
+          required: [queryType]
           properties:
-            queryType: { const: directory, required: true }
+            queryType: { enum: [directory] }
             range: { $ref: '#/components/schemas/rangeOptions' }
 
         - type: object
+          required: [queryType]
           properties:
-            queryType: { const: pending, required: true }
+            queryType: { enum: [pending] }
             range: { $ref: '#/components/schemas/rangeOptions' }
 
         - type: object
+          required: [queryType]
           properties:
-            queryType: { const: block, required: true }
-            minor: { type: integer, min: 1 }
-            major: { type: integer, min: 1 }
+            queryType: { enum: [block] }
+            minor: { type: integer, minimum: 1 }
+            major: { type: integer, minimum: 1 }
             minorRange: { $ref: '#/components/schemas/rangeOptions' }
             majorRange: { $ref: '#/components/schemas/rangeOptions' }
             entryRange: { $ref: '#/components/schemas/rangeOptions' }
             omitEmpty: { type: boolean }
 
         - type: object
+          required: [queryType]
           properties:
-            queryType: { const: anchorSearch, required: true }
+            queryType: { enum: [anchorSearch] }
             anchor: { $ref: '#/components/schemas/hash' }
             includeReceipt: { type: boolean }
 
         - type: object
+          required: [queryType]
           properties:
-            queryType: { const: publicKeySearch, required: true }
+            queryType: { enum: [publicKeySearch] }
             publicKey: { $ref: '#/components/schemas/bytes' }
             type: { $ref: '#/components/schemas/signatureType' }
 
         - type: object
+          required: [queryType]
           properties:
-            queryType: { const: publicKeyHashSearch, required: true }
+            queryType: { enum: [publicKeyHashSearch] }
             publicKeyHash: { $ref: '#/components/schemas/hash' }
 
         - type: object
+          required: [queryType]
           properties:
-            queryType: { const: delegateSearch, required: true }
+            queryType: { enum: [delegateSearch] }
             delegate: { $ref: '#/components/schemas/url' }
 
         - type: object
           properties:
-            queryType: { const: messageHashSearch, required: true }
+            queryType: { enum: [messageHashSearch] }
             hash: { $ref: '#/components/schemas/hash' }
 
     record:
@@ -788,8 +863,8 @@ components:
     rangeOptions:
       type: object
       properties:
-        start: { type: integer, min: 0 }
-        count: { type: integer, min: 0 }
+        start: { type: integer, minimum: 0 }
+        count: { type: integer, minimum: 0 }
         expand: { type: boolean }
         fromEnd: { type: boolean }
 
@@ -797,15 +872,15 @@ components:
     recordRange:
       type: object
       properties:
-        recordType: { const: record }
+        recordType: { enum: [record] }
         records: { type: array, items: { $ref: '#/components/schemas/record' } }
-        start: { type: integer, min: 0 }
-        total: { type: integer, min: 0 }
+        start: { type: integer, minimum: 0 }
+        total: { type: integer, minimum: 0 }
 
     accountRecord:
       type: object
       properties:
-        recordType: { const: account }
+        recordType: { enum: [account] }
         account: { $ref: '#/components/schemas/account' }
         directory:
           allOf:
@@ -824,52 +899,54 @@ components:
     chainRecord:
       type: object
       properties:
-        recordType: { const: chain }
+        recordType: { enum: [chain] }
         name: { type: string }
         type: { $ref: '#/components/schemas/chainType' }
-        count: { type: integer, min: 0 }
+        count: { type: integer, minimum: 0 }
         state: { type: array, items: { $ref: '#/components/schemas/hash' } }
 
     chainEntryRecord:
       type: object
       properties:
-        recordType: { const: chainEntry }
+        recordType: { enum: [chainEntry] }
         account: { $ref: '#/components/schemas/url' }
         name: { type: string }
         type: { $ref: '#/components/schemas/chainType' }
-        index: { type: integer, min: 0 }
+        index: { type: integer, minimum: 0 }
         entry: { $ref: '#/components/schemas/hash' }
-        value: { type: any }
         receipt: { $ref: '#/components/schemas/receipt' }
         state: { type: array, items: { $ref: '#/components/schemas/hash' } }
-
+        value:
+          oneOf:
+            - type: object
+            - $ref: '#/components/schemas/hash'
 
     keyRecord:
       type: object
       properties:
-        recordType: { const: key }
+        recordType: { enum: [key] }
         authority: { $ref: '#/components/schemas/url' }
         signer: { $ref: '#/components/schemas/url' }
-        version: { type: integer, min: 1 }
-        index: { type: integer, min: 0 }
+        version: { type: integer, minimum: 1 }
+        index: { type: integer, minimum: 0 }
         entry:
           type: object
           properties:
             publicKeyHash: { $ref: '#/components/schemas/bytes' }
-            lastUsedOn: { type: integer, min: 0 }
+            lastUsedOn: { type: integer, minimum: 0 }
             delegate: { $ref: '#/components/schemas/url' }
 
     messageRecord:
       type: object
       properties:
-        recordType: { const: message }
+        recordType: { enum: [message] }
         id: { $ref: '#/components/schemas/url' }
         message: { $ref: '#/components/schemas/message' }
         status: { $ref: '#/components/schemas/statusCode' }
-        statusNo: { type: integer, min: 0 }
+        statusNo: { type: integer, minimum: 0 }
         error: { $ref: '#/components/schemas/error' }
         result: { type: object }
-        received: { type: number, min: 1 }
+        received: { type: number, minimum: 1 }
         produced:
           allOf:
             - $ref: '#/components/schemas/recordRange'
@@ -903,7 +980,7 @@ components:
     signatureSetRecord:
       type: object
       properties:
-        recordType: { const: signatureSet }
+        recordType: { enum: [signatureSet] }
         account: { $ref: '#/components/schemas/account' }
         signatures:
           allOf:
@@ -915,8 +992,8 @@ components:
     minorBlockRecord:
       type: object
       properties:
-        recordType: { const: minorBlock }
-        index: { type: integer, min: 0 }
+        recordType: { enum: [minorBlock] }
+        index: { type: integer, minimum: 0 }
         time: { $ref: '#/components/schemas/time' }
         source: { $ref: '#/components/schemas/url' }
         entries:
@@ -935,8 +1012,8 @@ components:
     majorBlockRecord:
       type: object
       properties:
-        recordType: { const: majorBlock }
-        index: { type: integer, min: 0 }
+        recordType: { enum: [majorBlock] }
+        index: { type: integer, minimum: 0 }
         time: { $ref: '#/components/schemas/time' }
         minorBlocks:
           allOf:
@@ -948,32 +1025,32 @@ components:
     urlRecord:
       type: object
       properties:
-        recordType: { const: url }
+        recordType: { enum: [url] }
         value: { $ref: '#/components/schemas/url' }
 
     txidRecord:
       type: object
       properties:
-        recordType: { const: txID }
+        recordType: { enum: [txID] }
         value: { $ref: '#/components/schemas/url' }
 
     indexEntryRecord:
       type: object
       properties:
-        recordType: { const: indexEntry }
+        recordType: { enum: [indexEntry] }
         value:
           type: object
           properties:
-            source: { type: integer, min: 0 }
-            anchor: { type: integer, min: 0 }
-            blockIndex: { type: integer, min: 0 }
+            source: { type: integer, minimum: 0 }
+            anchor: { type: integer, minimum: 0 }
+            blockIndex: { type: integer, minimum: 0 }
             blockTime: { $ref: '#/components/schemas/time' }
-            rootIndexIndex: { type: integer, min: 0 }
+            rootIndexIndex: { type: integer, minimum: 0 }
 
     errorRecord:
       type: object
       properties:
-        recordType: { const: error }
+        recordType: { enum: [error] }
         value: { $ref: '#/components/schemas/error' }
 
 
@@ -1044,11 +1121,11 @@ components:
         code: { $ref: '#/components/schemas/statusCode' }
         codeID: { type: integer }
         cause: { $ref: '#/components/schemas/error' }
-        dat: { type: any }
+        data: { }
 
     url:
       type: string
-      pattern: '^(?<scheme>acc:\/\/)?(?<hash>[0-9a-fA-F]+@)?(?<domain>[-\w]+(\.acme)?)$'
+      pattern: '^(?<scheme>acc:\/\/)?(?<hash>[0-9a-fA-F]+@)?(?<domain>[-\w]+(\.acme)?(?<path>/\w+)*)$'
 
     time:
       type: string
