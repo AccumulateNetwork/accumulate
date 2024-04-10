@@ -29,7 +29,7 @@ func (b KeyPageEntryBuilder[T]) Hash(hash any) KeyPageEntryBuilder[T] {
 }
 
 func (b KeyPageEntryBuilder[T]) Key(key any, typ protocol.SignatureType) KeyPageEntryBuilder[T] {
-	b.entry.KeyHash = b.hashKey(b.parsePublicKey(key), typ)
+	b.entry.KeyHash = b.hashKey(b.parseKey(key, typ, false))
 	return b
 }
 
