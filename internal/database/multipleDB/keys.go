@@ -31,8 +31,8 @@ func GetDBBKey(data[]byte) (address [32]byte, dBBKey *DBBKey, err error) {
 // Unmarshal
 // Returns the address and the DBBKey from a slice of bytes
 func (d *DBBKey) Unmarshal(data []byte) (address [32]byte, err error) {
-	if len(data) < 48 || len(data)%48 != 0 {
-		return address, fmt.Errorf("Invalid data source length %d", len(data))
+	if len(data) < 48  {
+		return address, fmt.Errorf("data source is short %d", len(data))
 	}
 	copy(address[:], data[:32])
 	d.Offset = binary.BigEndian.Uint64(data[32:])

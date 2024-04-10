@@ -68,7 +68,10 @@ type BFile struct {
 // Get
 // Get the value for a given DBKeyFull
 func (b *BFile) Get(Key [32]byte) (value []byte, err error) {
-	dBBKey := b.Keys[Key]
+	dBBKey, ok := b.Keys[Key]
+	if !ok {
+		return nil, fmt.Errorf("key %x not found", Key)
+	}
 	if _, err = b.File.Seek(int64(dBBKey.Offset), io.SeekStart); err != nil {
 		return nil, err
 	}
@@ -90,7 +93,7 @@ func (b *BFile) newBlock() (err error) {
 	}
 	b.bfWriter = NewBFileWriter(b.File, b.BuffPool)
 	b.EOB = 0
-	b.EOD = 8
+	b.EOD = 0
 	return nil
 }
 
@@ -104,7 +107,9 @@ func (b *BFile) Close() {
 		keys := make([][48]byte, len(b.Keys)) // Collect all the keys into a list to sort them
 		i := 0                                // This ensures that all users get the same DBBlocks
 		for k, v := range b.Keys {            // Since maps randomize order
-			keys[i] = [48]byte(v.Bytes(k)) //    Copy each key into a 48 byte entry
+			value := v.Bytes(k)       //         Get the value
+			keys[i] = [48]byte(value) //         Copy each key into a 48 byte entry
+			i++                       //         Get the next key
 		}
 		b.Keys = make(map[[32]byte]DBBKey) //    Once we have the list of keys, we don't need the map anymore
 
@@ -124,52 +129,7 @@ func (b *BFile) Close() {
 	}
 }
 
-// OpenBFile
-// Open a DBBlock file at a given height for read access only
-func OpenBFile(Directory string, Type int, Partition int, Height int) (bFile *BFile, err error) {
-	bFile = new(BFile)          // create a new BFile
-	bFile.Directory = Directory // Set Directory
-	bFile.Type = Type           // Type is like perm, scratch, etc.
-	bFile.Partition = Partition // Set Partition
-	bFile.Height = Height - 1   // OpenNext is going to increment the Height; adjust
-	return bFile.OpenNext()
-}
 
-// OpenNext
-// Open next DBBlock for reading only
-func (b *BFile) OpenNext() (bFile *BFile, err error) {
-
-	b.Height++ // Go to the next DBBlock
-
-	filename := fmt.Sprintf("BBlock_%03d_%02d_%09d.dat", b.Partition, b.Type, b.Height) // Compute the next file name
-	if b.File, err = os.Open(filepath.Join(b.Directory, filename)); err != nil {
-		return nil, err
-	}
-
-	var offsetB [8]byte
-	if _, err := b.File.Read(offsetB[:]); err != nil {
-		return nil, err
-	}
-	if newOffset, err := b.File.Seek(int64(binary.BigEndian.Uint64(offsetB[:])), io.SeekStart); err != nil {
-		return nil, err
-	} else {
-		_ = newOffset
-	}
-
-	// Load all the keys into the map
-	keyList, err := io.ReadAll(b.File)
-	for i := 0; i < len(keyList)/48; i++ {
-		dbBKey := new(DBBKey)
-		address, err := dbBKey.Unmarshal(keyList)
-		if err != nil {
-			return nil, err
-		}
-		b.Keys[address] = *dbBKey
-		keyList = keyList[48:]
-	}
-
-	return b, err
-}
 
 // Block
 // Block waits until all buffers have been returned to the BufferPool.
@@ -198,19 +158,14 @@ func NewBFile(BufferCnt int, Directory string, Type int, Partition int) (*BFile,
 		bFile.BuffPool <- new([BufferSize]byte) // Put some buffers in the waiting queue
 	}
 
-	if err := bFile.newBlock(); err != nil { // Allocate the buffers
+	if err := bFile.newBlock(); err != nil { // Allocate the buffers; buffer will be loaded
 		return nil, err
 	}
-
-	bFile.Buffer = <-bFile.BuffPool // Get the first buffer
 
 	var offsetB [8]byte
-	if _, err := bFile.File.Write(offsetB[:]); err != nil {
+	if err := bFile.Write(offsetB[:]); err != nil {
 		return nil, err
 	}
-
-	bFile.EOB = 8
-	bFile.EOD = 8
 	return bFile, nil
 }
 
@@ -241,29 +196,31 @@ func (b *BFile) Write(Data []byte) error {
 
 	if b.Buffer == nil { // Get a buffer if it is needed
 		b.Buffer = <-b.BuffPool
+		b.EOB = 0
 	}
 
 	space := b.space()
 	// Write to the current buffer
-	if len(Data) < space {
-		copy(b.Buffer[b.EOB:], Data)
-		b.EOB += len(Data)
-		b.EOD += uint64(len(Data))
+	dLen := len(Data)
+	if dLen <= space { //               If the current buffer has room, just
+		copy(b.Buffer[b.EOB:], Data) // add to the buffer then return
+		b.EOB += dLen                // Well, after updating offsets...
+		b.EOD += uint64(dLen)
 		return nil
 	}
 
 	if space > 0 {
-		copy(b.Buffer[b.EOB:], Data[:b.space()]) // Copy what fits into the current buffer
-		b.EOB += space                           // Update b.EOB (should be equal to BufferSize)
+		copy(b.Buffer[b.EOB:], Data[:space]) // Copy what fits into the current buffer
+		b.EOB += space                       // Update b.EOB (should be equal to BufferSize)
+		b.EOD += uint64(space)
+		Data = Data[space:]
 	}
 
 	// Write out the current buffer, get the other buffer, and put the rest of Value there.
 	b.bfWriter.Write(b.Buffer, b.EOB) // Write out this buffer
 	b.Buffer = <-b.BuffPool           // Get the next buffer
-	copy(b.Buffer[:], Data[space:])   // Put the rest of the Value into the buffer
-	b.EOB = len(Data[space:])         // EOB points to the end of the data written
-	b.EOD += uint64(len(Data))
-	return nil
+	b.EOB = 0                         // Start at the beginning of the buffer
+	return b.Write(Data)              // Write out the remaining data
 }
 
 // Next
@@ -272,4 +229,53 @@ func (b *BFile) Next() (err error) {
 	b.Close()
 	b.Height++
 	return b.newBlock() // Create the new DBBlock file and start grabbing key value pairs again!
+}
+
+
+// OpenBFile
+// Open a DBBlock file at a given height for read access only
+func OpenBFile(Directory string, Type int, Partition int, Height int) (bFile *BFile, err error) {
+	bFile = new(BFile)          // create a new BFile
+	bFile.Directory = Directory // Set Directory
+	bFile.Type = Type           // Type is like perm, scratch, etc.
+	bFile.Partition = Partition // Set Partition
+	bFile.Height = Height - 1   // OpenNext is going to increment the Height; adjust
+	return bFile, bFile.OpenNext()
+}
+
+// OpenNext
+// Open next DBBlock for reading only
+func (b *BFile) OpenNext() (err error) {
+
+	b.Height++ // Go to the next DBBlock
+
+	filename := fmt.Sprintf("BBlock_%03d_%02d_%09d.dat", b.Partition, b.Type, b.Height) // Compute the next file name
+	if b.File, err = os.Open(filepath.Join(b.Directory, filename)); err != nil {
+		return err
+	}
+
+	var offsetB [8]byte
+	if _, err := b.File.Read(offsetB[:]); err != nil {
+		return err
+	}
+	off := binary.BigEndian.Uint64(offsetB[:])
+	if _, err := b.File.Seek(int64(off), io.SeekStart); err != nil {
+		return err
+	}
+
+	// Load all the keys into the map
+	b.Keys = map[[32]byte]DBBKey{}
+	keyList, err := io.ReadAll(b.File)
+	cnt := len(keyList)/48
+	for i := 0; i < cnt; i++ {
+		dbBKey := new(DBBKey)
+		address, err := dbBKey.Unmarshal(keyList)
+		if err != nil {
+			return err
+		}
+		b.Keys[address] = *dbBKey
+		keyList = keyList[48:]
+	}
+
+	return err
 }

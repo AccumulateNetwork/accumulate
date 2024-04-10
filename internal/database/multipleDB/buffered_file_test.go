@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/dgraph-io/badger"
-	"github.com/dustin/go-humanize"
 	"github.com/stretchr/testify/assert"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/common"
 )
@@ -28,19 +27,64 @@ const (
 var Directory = filepath.Join(os.TempDir(), "DBBlock")
 var KeySliceDir = filepath.Join(Directory, "keySlice")
 
-func TestReadKeys(t *testing.T) {
+func TestWriteSmallKeys(t *testing.T) {
 	os.RemoveAll(Directory)
 	os.Mkdir(Directory, os.ModePerm)
 
-	const numKeys = 3
+	bFile, err := NewBFile(5, Directory, Type, Partition)
+	assert.NoError(t, err, "expected no error creating BBFile")
+
+	getKey := func(v byte) (r [32]byte) {
+		for i := range r {
+			r[i] = v
+		}
+		return r
+	}
+	for i := 0; i < Writes; i++ { // For numKeys
+		key := getKey(byte(i))
+
+		_, err := bFile.Put(key, key[:])
+		assert.NoError(t, err, "put on BFile fail")
+	}
+	bFile.Close()
+	bFile.Block()
+
+}
+
+func TestWriteKeys(t *testing.T) {
+	os.RemoveAll(Directory)
+	os.Mkdir(Directory, os.ModePerm)
+
+	start := time.Now()
+	bFile, err := NewBFile(5, Directory, Type, Partition)
+	assert.NoError(t, err, "expected no error creating BBFile")
+
+	fr := NewFastRandom([32]byte{}) // Make a random number generator
+	for i := 0; i < Writes; i++ {   // For numKeys
+		key := fr.NextHash()                   // Get a key.    This generates the same keys
+		value := fr.RandBuff(MinSize, MaxSize) // Get a value   and values every time
+
+		_, err := bFile.Put(key, value)
+		assert.NoError(t, err, "put on BFile fail")
+	}
+	// Close the bFile (writes out the keys)
+	bFile.Close() // Close the bFile
+	bFile.Block() // Wait for all writes/close to complete.
+
+	fmt.Printf("Writing %d key/values took %v\n",Writes,time.Since(start))
+}
+
+func TestReadKeys(t *testing.T) {
+	os.RemoveAll(Directory)
+	os.Mkdir(Directory, os.ModePerm)
 
 	bFile, err := NewBFile(5, Directory, Type, Partition)
 	assert.NoError(t, err, "expected no error creating BBFile")
 
 	fr := NewFastRandom([32]byte{}) // Make a random number generator
-	for i := 0; i < numKeys; i++ {  // For numKeys
-		key := fr.NextHash()                   // Get a key
-		value := fr.RandBuff(MinSize, MaxSize) // Get a value
+	for i := 0; i < Writes; i++ {   // For numKeys
+		key := fr.NextHash()                   // Get a key.    This generates the same keys
+		value := fr.RandBuff(MinSize, MaxSize) // Get a value   and values every time
 
 		_, err := bFile.Put(key, value)
 		assert.NoError(t, err, "put on BFile fail")
@@ -53,60 +97,16 @@ func TestReadKeys(t *testing.T) {
 	bFile, err = OpenBFile(Directory, Type, Partition, 0)
 	assert.NoError(t, err, "failed to open BFile for read")
 
-	var keys []int
-	assert.NoError(t, err, "failed to get keys")
-	assert.Equal(t, numKeys, len(keys), "Wrong number of keys written")
-
 	fr = NewFastRandom([32]byte{}) // reset the random number generator
-	for i := 0; i < numKeys; i++ { // For numKeys
-		key := fr.NextHash()                   // Get a key
-		value := fr.RandBuff(MinSize, MaxSize) // Get a value
+	for i := 0; i < Writes; i++ {  // For numKeys
+		key := fr.NextHash()                   // Get a key.    This generates the same keys
+		value := fr.RandBuff(MinSize, MaxSize) // Get a value   and values every time
+
 		v, err := bFile.Get(key)
 		assert.NoError(t, err, "Should get all the values back")
 		assert.True(t, bytes.Equal(value, v), "Should get back the same value")
 	}
 
-}
-
-// keyValue
-// Return a random Key Value
-func keyValue(fr *FastRandom) (key [32]byte, value []byte) {
-	return fr.NextHash(), fr.RandBuff(MinSize, MaxSize)
-}
-
-func TestBBFile(t *testing.T) {
-	fr := NewFastRandom([32]byte{})
-	fmt.Println("TestBBFile Past result: 478825 t/s")
-
-	os.RemoveAll(Directory)
-	os.Mkdir(Directory, os.ModePerm)
-
-	bbFile, err := NewBFile(5, Directory, Type, Partition)
-	assert.NoError(t, err, "expected no error creating BBFile")
-	defer func() {
-		if bbFile.File.Close(); err != nil {
-			panic(err)
-		}
-	}()
-
-	start := time.Now()
-
-	j := 0
-	for i := 0; i < Writes; i++ {
-		if j > DBBlockWrites {
-			err := bbFile.Next()
-			assert.NoError(t, err, "fail going to next DBBlock")
-			j = 0
-		}
-		j++
-		_, err := bbFile.Put(keyValue(fr))
-		assert.NoError(t, err, "put on BFile fail")
-
-	}
-
-	fmt.Printf("Total writes: %s Total time: %v --%10.0f t/s\n",
-		humanize.Comma(Writes), time.Since(start),
-		float64(Writes)/time.Since(start).Seconds())
 }
 
 func TestBBFileBadger(t *testing.T) {
