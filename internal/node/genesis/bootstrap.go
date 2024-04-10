@@ -55,7 +55,7 @@ type InitOpts struct {
 
 	// Preloaded data
 	FactomAddresses func() (io.Reader, error)
-	Snapshots       []func() (ioutil2.SectionReader, error)
+	Snapshots       []func(*core.GlobalValues) (ioutil2.SectionReader, error)
 
 	// Flags
 	IncludeHistoryFromSnapshots bool
@@ -64,6 +64,7 @@ type InitOpts struct {
 func Init(snapshotWriter io.WriteSeeker, opts InitOpts) error {
 	// Initialize globals
 	gg := core.NewGlobals(opts.GenesisGlobals)
+	opts.GenesisGlobals = gg
 
 	// Build the routing table
 	var bvns []string
@@ -465,7 +466,7 @@ func (b *bootstrap) unpackSnapshots() error {
 	var accounts []*url.URL
 	seen := map[[32]byte]bool{}
 	for _, open := range b.Snapshots {
-		file, err := open()
+		file, err := open(b.GenesisGlobals)
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
 		}
@@ -487,6 +488,11 @@ func (b *bootstrap) unpackSnapshots() error {
 
 					// Skip ACME
 					if protocol.AcmeUrl().Equal(u) {
+						return false, nil
+					}
+
+					// Skip system accounts
+					if _, ok := protocol.ParsePartitionUrl(u); ok {
 						return false, nil
 					}
 
@@ -570,7 +576,7 @@ func (b *bootstrap) unpackSnapshots() error {
 
 	// Restore messages
 	for _, open := range b.Snapshots {
-		file, err := open()
+		file, err := open(b.GenesisGlobals)
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
 		}

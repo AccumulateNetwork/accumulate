@@ -36,7 +36,7 @@ func TestVersionSwitch(t *testing.T) {
 	sim := NewSim(t,
 		simulator.SimpleNetwork(t.Name(), 3, 1), // TODO Change to 3 after fixing anchor healing
 		simulator.GenesisWith(GenesisTime, g),
-		simulator.SkipProposalCheck, // FIXME should not be necessary
+		simulator.SkipProposalCheck(), // FIXME should not be necessary
 	)
 
 	alice := AccountUrl("alice")
