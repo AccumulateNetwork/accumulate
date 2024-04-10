@@ -106,7 +106,7 @@ func TestNewSigType(t *testing.T) {
 				Memo("foo").
 				Metadata("bar").
 				Type(SignatureTypeRsaSha256).
-				PrivateKey(x509.MarshalPKCS1PrivateKey(aliceKey))
+				PrivateKey(aliceKey)
 
 			if c.Ok {
 				st := sim.BuildAndSubmitSuccessfully(env)
@@ -360,7 +360,7 @@ func TestSignatureErrors(t *testing.T) {
 	sim := NewSim(t,
 		simulator.SimpleNetwork(t.Name(), 3, 1),
 		simulator.Genesis(GenesisTime),
-		simulator.UseABCI,
+		simulator.UseABCI(),
 	)
 
 	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])

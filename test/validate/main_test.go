@@ -190,7 +190,7 @@ func setupSim(t *testing.T, net *accumulated.NetworkInit) (*simulator.Simulator,
 
 		// FIXME should not be necessary, but it is for the block hook that
 		// drops an anchor
-		simulator.SkipProposalCheck,
+		simulator.SkipProposalCheck(),
 	)
 	require.NoError(t, err)
 

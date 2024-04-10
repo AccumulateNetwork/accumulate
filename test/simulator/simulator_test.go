@@ -199,7 +199,7 @@ func TestSimulatorWithABCI(t *testing.T) {
 	sim := NewSim(t,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
 		simulator.Genesis(GenesisTime),
-		simulator.UseABCI,
+		simulator.UseABCI(),
 	)
 
 	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
