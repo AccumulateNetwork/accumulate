@@ -19,8 +19,10 @@ code_intelligence:
   extends: [ .rules all, .go ]
   allow_failure: true
   script:
+    - apt-get install -y zip
     - scip-go
     - scip convert
+    - zip -r dump.lsif.zip dump.lsif
   artifacts:
     reports:
-      lsif: dump.lsif
+      lsif: dump.lsif.zip
