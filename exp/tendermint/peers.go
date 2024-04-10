@@ -17,7 +17,6 @@ import (
 
 	"github.com/cometbft/cometbft/p2p"
 	"github.com/cometbft/cometbft/rpc/client"
-	"github.com/cometbft/cometbft/rpc/client/http"
 	coretypes "github.com/cometbft/cometbft/rpc/core/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"golang.org/x/exp/slog"
@@ -130,8 +129,8 @@ func getPeers(ctx context.Context, client WalkClient, sem chan struct{}, results
 	}
 }
 
-// NewHTTPClient creates a new Tendermint RPC HTTP client for the given peer.
-func NewHTTPClient(ctx context.Context, peer coretypes.Peer, offset config.PortOffset) (*http.HTTP, error) {
+// NewHTTPClientForPeer creates a new Tendermint RPC HTTP client for the given peer.
+func NewHTTPClientForPeer(peer coretypes.Peer, offset config.PortOffset) (*HTTPClient, error) {
 	// peer.node_info.listen_addr should include the Tendermint P2P port
 	s := peer.NodeInfo.ListenAddr
 	if i := strings.Index(s, "://"); i >= 0 {
@@ -161,5 +160,5 @@ func NewHTTPClient(ctx context.Context, peer coretypes.Peer, offset config.PortO
 	addr := fmt.Sprintf("http://%s:%d", host, port)
 
 	// Create a new client
-	return http.New(addr, addr+"/ws")
+	return NewHTTPClient(addr)
 }

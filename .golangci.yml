@@ -76,6 +76,6 @@ issues:
     - goheader
     - gosimple
 
-  - path: ^test/util/goroutine_leaks\.go$
+  - path: ^test/util/goroutine_leaks\.go|exp/tendermint/http.go$
     linters:
     - goheader
