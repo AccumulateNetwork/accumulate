@@ -11,47 +11,66 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
+	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 var encodeCmd = &cobra.Command{
-	Use:   "encode",
-	Short: "Encode Accumulate records",
+	Use:     "encode",
+	Aliases: []string{"decode"},
+	Short:   "Convert something from JSON to binary",
 }
 
 var encodeTxnCmd = &cobra.Command{
 	Use:     "transaction <transaction (json)>",
+	Short:   "Convert a transaction from JSON to binary",
 	Aliases: []string{"txn"},
-	Args:    cobra.ExactArgs(1),
+	Args:    cobra.RangeArgs(0, 1),
 	Run:     encodeWithValue(new(protocol.Transaction)),
 }
 
 var encodeTxnHeaderCmd = &cobra.Command{
-	Use:  "header <transaction header (json)>",
-	Args: cobra.ExactArgs(1),
-	Run:  encodeWithValue(new(protocol.TransactionHeader)),
+	Use:   "header <transaction header (json)>",
+	Short: "Convert a transaction header from JSON to binary",
+	Args:  cobra.RangeArgs(0, 1),
+	Run:   encodeWithValue(new(protocol.TransactionHeader)),
 }
 
 var encodeTxnBodyCmd = &cobra.Command{
-	Use:  "body <transaction body (json)>",
-	Args: cobra.ExactArgs(1),
-	Run:  encodeWithFunc(protocol.UnmarshalTransactionBodyJSON),
+	Use:   "body <transaction body (json)>",
+	Short: "Convert a transaction body from JSON to binary",
+	Args:  cobra.RangeArgs(0, 1),
+	Run:   encodeWithFunc(protocol.UnmarshalTransactionBodyJSON, protocol.UnmarshalTransactionBody),
 }
 
 var encodeSigCmd = &cobra.Command{
 	Use:     "signature <signature (json)>",
+	Short:   "Convert a signature from JSON to binary",
 	Aliases: []string{"sig"},
-	Run:     encodeWithFunc(protocol.UnmarshalSignatureJSON),
+	Args:    cobra.RangeArgs(0, 1),
+	Run:     encodeWithFunc(protocol.UnmarshalSignatureJSON, protocol.UnmarshalSignature),
+}
+
+var encodeEnvCmd = &cobra.Command{
+	Use:     "envelope <envelope (json)>",
+	Short:   "Convert an envelope from JSON to binary",
+	Aliases: []string{"env"},
+	Args:    cobra.RangeArgs(0, 1),
+	Run:     encodeWithValue(new(messaging.Envelope)),
 }
 
 var signCmd = &cobra.Command{
-	Use:  "sign <signature (json)> <key>",
-	Run:  sign,
-	Args: cobra.ExactArgs(2),
+	Use:   "sign <signature (json)> <key>",
+	Short: "Sign a signature (yes, that's confusing)",
+	Run:   sign,
+	Args:  cobra.ExactArgs(2),
 }
 
 var encodeFlag = struct {
@@ -64,7 +83,7 @@ var encodeSigFlag = struct {
 
 func init() {
 	cmd.AddCommand(encodeCmd, signCmd)
-	encodeCmd.AddCommand(encodeTxnCmd, encodeSigCmd)
+	encodeCmd.AddCommand(encodeTxnCmd, encodeSigCmd, encodeEnvCmd)
 	encodeTxnCmd.AddCommand(encodeTxnHeaderCmd, encodeTxnBodyCmd)
 
 	encodeCmd.PersistentFlags().BoolVarP(&encodeFlag.Hash, "hash", "H", false, "Output the hash instead of the encoded object")
@@ -79,38 +98,85 @@ func doSha256(b ...[]byte) []byte {
 	return digest.Sum(nil)
 }
 
-func encodeWithValue[T encoding.BinaryValue](v T) func(_ *cobra.Command, args []string) {
-	return func(_ *cobra.Command, args []string) {
-		check(json.Unmarshal([]byte(args[0]), v))
-
-		data, err := v.MarshalBinary()
+func argOrStdin(args []string, isHex bool) []byte {
+	var b []byte
+	var err error
+	if len(args) > 0 {
+		b = []byte(args[0])
+	} else {
+		b, err = io.ReadAll(os.Stdin)
 		check(err)
-		if encodeFlag.Hash {
-			if u, ok := any(v).(interface{ GetHash() []byte }); ok {
-				// Use custom hashing for transactions and certain transaction
-				// bodies
-				data = u.GetHash()
-			} else {
-				data = doSha256(data)
-			}
-		}
+	}
+	if !isHex {
+		return b
+	}
 
-		fmt.Printf("%x\n", data)
+	s := strings.TrimSpace(string(b))
+	b, err = hex.DecodeString(s)
+	check(err)
+	return b
+}
+
+func isEncode() bool {
+	switch os.Args[1] {
+	case "encode":
+		return true
+	case "decode":
+		return false
+	default:
+		panic(fmt.Errorf(`os.Args[1] == "%s"`, os.Args[1]))
 	}
 }
 
-func encodeWithFunc[T encoding.BinaryValue](fn func([]byte) (T, error)) func(_ *cobra.Command, args []string) {
-	return func(_ *cobra.Command, args []string) {
-		v, err := fn([]byte(args[0]))
-		check(err)
+func encodeWithValue[T encoding.BinaryValue](v T) func(_ *cobra.Command, args []string) {
+	return func(cmd *cobra.Command, args []string) {
+		if isEncode() {
+			check(json.Unmarshal(argOrStdin(args, false), v))
 
-		data, err := v.MarshalBinary()
-		check(err)
-		if encodeFlag.Hash {
-			data = doSha256(data)
+			data, err := v.MarshalBinary()
+			check(err)
+			if encodeFlag.Hash {
+				if u, ok := any(v).(interface{ GetHash() []byte }); ok {
+					// Use custom hashing for transactions and certain transaction
+					// bodies
+					data = u.GetHash()
+				} else {
+					data = doSha256(data)
+				}
+			}
+
+			fmt.Printf("%x\n", data)
+
+		} else {
+			check(v.UnmarshalBinary(argOrStdin(args, true)))
+			data, err := json.MarshalIndent(v, "", "  ")
+			check(err)
+			fmt.Printf("%s\n", data)
 		}
+	}
+}
 
-		fmt.Printf("%x\n", data)
+func encodeWithFunc[T encoding.BinaryValue](fromJson, fromBinary func([]byte) (T, error)) func(_ *cobra.Command, args []string) {
+	return func(_ *cobra.Command, args []string) {
+		if isEncode() {
+			v, err := fromJson(argOrStdin(args, false))
+			check(err)
+
+			data, err := v.MarshalBinary()
+			check(err)
+			if encodeFlag.Hash {
+				data = doSha256(data)
+			}
+
+			fmt.Printf("%x\n", data)
+
+		} else {
+			v, err := fromBinary(argOrStdin(args, true))
+			check(err)
+			data, err := json.MarshalIndent(v, "", "  ")
+			check(err)
+			fmt.Printf("%s\n", data)
+		}
 	}
 }
 
