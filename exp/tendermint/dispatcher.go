@@ -247,7 +247,7 @@ func (d *dispatcher) getClients(ctx context.Context, want map[string]bool) map[s
 		scanned++
 
 		// Create a client for the BVNN
-		bvn, err := NewHTTPClient(ctx, peer, config.PortOffsetBlockValidator-config.PortOffsetDirectory)
+		bvn, err := NewHTTPClientForPeer(peer, config.PortOffsetBlockValidator-config.PortOffsetDirectory)
 		if err != nil {
 			slog.ErrorCtx(ctx, "Failed to create client for peer (bvn)", "peer", peer.NodeInfo.ID(), "error", err)
 			mGetClientsFailed.Inc()
@@ -281,7 +281,7 @@ func (d *dispatcher) getClients(ctx context.Context, want map[string]bool) map[s
 		}
 
 		// Scan the DNN's peers
-		dir, err := NewHTTPClient(ctx, peer, 0)
+		dir, err := NewHTTPClientForPeer(peer, 0)
 		if err != nil {
 			slog.ErrorCtx(ctx, "Failed to create client for peer (directory)", "peer", peer.NodeInfo.ID(), "error", err)
 			mGetClientsFailed.Inc()
