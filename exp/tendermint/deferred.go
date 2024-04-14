@@ -17,13 +17,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
 )
 
-type Client interface {
-	client.ABCIClient
-	client.NetworkClient
-	client.MempoolClient
-	client.StatusClient
-}
-
 type DeferredClient ioc.PromisedOf[client.Client]
 
 var _ ioc.Promised = (*DeferredClient)(nil)
