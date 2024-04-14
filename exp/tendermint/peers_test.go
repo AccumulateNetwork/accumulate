@@ -29,7 +29,7 @@ func TestWalkPeersMainNet(t *testing.T) {
 	t.Run("All", func(t *testing.T) {
 		WalkPeers(context.Background(), c, func(ctx context.Context, peer coretypes.Peer) (WalkClient, bool) {
 			fmt.Println("Peer", peer.NodeInfo.ID(), peer.NodeInfo.Moniker, peer.RemoteIP)
-			c, err := NewHTTPClient(ctx, peer, 0)
+			c, err := NewHTTPClientForPeer(peer, 0)
 			require.NoError(t, err)
 			return c, true
 		})
@@ -44,7 +44,7 @@ func TestWalkPeersMainNet(t *testing.T) {
 			}
 
 			fmt.Println("Peer", peer.NodeInfo.ID(), peer.NodeInfo.Moniker, peer.RemoteIP)
-			c, err := NewHTTPClient(ctx, peer, 0)
+			c, err := NewHTTPClientForPeer(peer, 0)
 			require.NoError(t, err)
 			return c, true
 		})

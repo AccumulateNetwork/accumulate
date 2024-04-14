@@ -25,6 +25,7 @@ import (
 	tmpv "github.com/cometbft/cometbft/privval"
 	"github.com/cometbft/cometbft/proxy"
 	"github.com/cometbft/cometbft/rpc/client"
+	tmrpc "github.com/cometbft/cometbft/rpc/client"
 	"github.com/cometbft/cometbft/rpc/client/local"
 	tmtypes "github.com/cometbft/cometbft/types"
 	"github.com/fatih/color"
@@ -443,8 +444,16 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 		},
 	}
 
+	// Why does this exist? Why not just use tmlib.DispatcherClient?
+	type Client interface {
+		tmrpc.ABCIClient
+		tmrpc.NetworkClient
+		tmrpc.MempoolClient
+		tmrpc.StatusClient
+	}
+
 	clients := map[string]tmlib.DispatcherClient{}
-	ioc.ForEach(inst.services, func(desc ioc.Descriptor, svc tmlib.Client) {
+	ioc.ForEach(inst.services, func(desc ioc.Descriptor, svc Client) {
 		clients[strings.ToLower(desc.Namespace())] = svc
 	})
 
