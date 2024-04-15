@@ -1,0 +1,22 @@
+messageType:
+  StartBlock:
+    value: 0x10
+  ProposeLeader:
+    value: 0x11
+  ProposeBlock:
+    value: 0x12
+  AcceptBlockProposal:
+    value: 0x13
+  FinalizedBlock:
+    value: 0x14
+  CommittedBlock:
+    value: 0x15
+  ExecutedBlock:
+    value: 0x16
+
+  SubmitEnvelope:
+    value: 0x20
+  AcceptedSubmission:
+    value: 0x21
+  EnvelopeSubmitted:
+    value: 0x22

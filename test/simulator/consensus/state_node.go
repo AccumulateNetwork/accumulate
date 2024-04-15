@@ -14,22 +14,29 @@ import (
 func (n *Node) Receive(messages ...Message) ([]Message, error) {
 	var allOut []Message
 
+	if n.record != nil {
+		err := n.record.DidReceiveMessages(messages)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// Process each message
 	for _, msg := range messages {
 		// Ignore messages from ourself
-		if msg, ok := msg.(nodeMessage); ok &&
-			msg.senderID() == n.self.PubKeyHash {
+		if msg, ok := msg.(NodeMessage); ok &&
+			msg.SenderID() == n.self.PubKeyHash {
 			continue
 		}
 
 		// Ignore messages for other networks
-		if msg, ok := msg.(networkMessage); ok &&
-			msg.network() != n.network {
+		if msg, ok := msg.(NetworkMessage); ok &&
+			msg.PartitionID() != n.network {
 			continue
 		}
 
 		switch msg := msg.(type) {
-		case *Submission:
+		case *SubmitEnvelope:
 			if n.submitState[msg.Envelope] != nil {
 				continue
 			}
@@ -90,25 +97,9 @@ func (n *Node) Receive(messages ...Message) ([]Message, error) {
 	return allOut, nil
 }
 
-// nodeMessages are passed between nodes.
-type nodeMessage interface {
-	Message
-	senderID() [32]byte
-}
-
-type baseNodeMessage struct {
-	sender *Node
-}
-
-var _ networkMessage = (*baseNodeMessage)(nil)
-
 func (n *Node) newMsg() baseNodeMessage {
-	return baseNodeMessage{n}
+	return baseNodeMessage{PubKeyHash: n.self.PubKeyHash, Network: n.network}
 }
-
-func (_ *baseNodeMessage) isMsg()             {}
-func (m *baseNodeMessage) senderID() [32]byte { return m.sender.self.PubKeyHash }
-func (m *baseNodeMessage) network() string    { return m.sender.network }
 
 // Make lint shut up
 func init() {

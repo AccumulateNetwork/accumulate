@@ -5,3 +5,5 @@ recordSectionType:
     value: 2
   Block:
     value: 3
+  Messages:
+    value: 4

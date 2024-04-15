@@ -83,7 +83,8 @@ func convert(types, refTypes typegen.Types, pkgName, subPkgName string) (*Types,
 			union = new(UnionSpec)
 			union.Name = typ.Union.Name
 			union.Type = typ.Union.Type
-			union.Private = typ.Union.Private
+			union.PrivateEnum = typ.Union.Private || typ.Union.PrivateEnum
+			union.PrivateUnion = typ.Union.Private || typ.Union.PrivateUnion
 			union.Registry = typ.Union.Registry
 			union.Package = pkgName
 			union.SubPackage = subPkgName
@@ -226,13 +227,14 @@ type SingleUnionFile struct {
 func (f *SingleUnionFile) IsUnion() bool { return true }
 
 type UnionSpec struct {
-	Package    string
-	Name       string
-	Type       string
-	Members    []*Type
-	SubPackage string
-	Private    bool
-	Registry   bool
+	Package      string
+	Name         string
+	Type         string
+	Members      []*Type
+	SubPackage   string
+	PrivateEnum  bool
+	PrivateUnion bool
+	Registry     bool
 }
 
 type Type struct {
@@ -297,7 +299,7 @@ func (u *UnionSpec) interfaceName(ignorePrivate bool) string {
 	case "transaction":
 		return "TransactionBody"
 	}
-	if !ignorePrivate && u.Private {
+	if !ignorePrivate && u.PrivateUnion {
 		return typegen.LowerFirstWord(u.Name)
 	}
 	return typegen.TitleCase(u.Name)
@@ -314,7 +316,7 @@ func (u *UnionSpec) Enumeration() string {
 	if flags.ElidePackageType && strings.EqualFold(u.Name, u.Package) {
 		return "Type"
 	}
-	if u.Private {
+	if u.PrivateEnum {
 		return typegen.LowerFirstWord(u.Type) + "Type"
 	}
 	return typegen.TitleCase(u.Type) + "Type"
