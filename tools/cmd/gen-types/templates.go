@@ -307,6 +307,10 @@ func (u *UnionSpec) Enumeration() string {
 	if u.Type == "" {
 		return ""
 	}
+	// Hack for new schema stuff
+	if strings.HasSuffix(u.Type, "-") {
+		return strings.TrimSuffix(u.Type, "-")
+	}
 	switch u.Type {
 	case "result":
 		return "TransactionType"
