@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"os/user"
+	"path/filepath"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -43,6 +44,8 @@ var currentUser = func() *user.User {
 	}
 	return u
 }()
+
+var cacheDir = filepath.Join(currentUser.HomeDir, ".accumulate", "cache")
 
 func main() {
 	_ = cmd.Execute()

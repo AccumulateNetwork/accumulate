@@ -9,8 +9,11 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -66,6 +69,15 @@ func sequence(cmd *cobra.Command, args []string) {
 	fmt.Printf("We are %v\n", node.ID())
 
 	var net *healing.NetworkInfo
+	if cachedScan == "" {
+		f := filepath.Join(cacheDir, strings.ToLower(ni.Network)+".json")
+		if st, err := os.Stat(f); err == nil && !st.IsDir() {
+			slog.Info("Detected network scan", "file", f)
+			cachedScan = f
+		} else if !errors.Is(err, fs.ErrNotExist) {
+			check(err)
+		}
+	}
 	if cachedScan != "" {
 		data, err := os.ReadFile(cachedScan)
 		check(err)
