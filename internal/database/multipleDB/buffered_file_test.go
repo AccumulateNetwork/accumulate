@@ -15,8 +15,9 @@ import (
 )
 
 const (
-	Type          = 0          // type specifies stuff like perm, scratch, etc.
-	Partition     = 0          // Partition (DN, BVN0, BVN1, etc.)
+	Type      = BFilePerm // type specifies stuff like perm, scratch, etc.
+	Partition = BFileDN   // Partition (DN, BVN0, BVN1, etc.)
+
 	Writes        = 10_000_000 // Total writes in the test
 	DBBlockWrites = 1_000_000  // Number of writes in a DBBlock
 	MaxSize       = 256        // Max size of a value
@@ -43,7 +44,7 @@ func TestWriteSmallKeys(t *testing.T) {
 	for i := 0; i < Writes; i++ { // For numKeys
 		key := getKey(byte(i))
 
-		_, err := bFile.Put(key, key[:])
+		err := bFile.Put(key, key[:])
 		assert.NoError(t, err, "put on BFile fail")
 	}
 	bFile.Close()
@@ -64,14 +65,14 @@ func TestWriteKeys(t *testing.T) {
 		key := fr.NextHash()                   // Get a key.    This generates the same keys
 		value := fr.RandBuff(MinSize, MaxSize) // Get a value   and values every time
 
-		_, err := bFile.Put(key, value)
+		err := bFile.Put(key, value)
 		assert.NoError(t, err, "put on BFile fail")
 	}
 	// Close the bFile (writes out the keys)
 	bFile.Close() // Close the bFile
 	bFile.Block() // Wait for all writes/close to complete.
 
-	fmt.Printf("Writing %d key/values took %v\n",Writes,time.Since(start))
+	fmt.Printf("Writing %d key/values took %v\n", Writes, time.Since(start))
 }
 
 func TestReadKeys(t *testing.T) {
@@ -86,7 +87,7 @@ func TestReadKeys(t *testing.T) {
 		key := fr.NextHash()                   // Get a key.    This generates the same keys
 		value := fr.RandBuff(MinSize, MaxSize) // Get a value   and values every time
 
-		_, err := bFile.Put(key, value)
+		err := bFile.Put(key, value)
 		assert.NoError(t, err, "put on BFile fail")
 	}
 	// Close the bFile (writes out the keys)
@@ -145,7 +146,7 @@ func TestBBFileBadger(t *testing.T) {
 		j++
 		value := rh.GetRandBuff(rh.GetIntN(MaxSize-MinSize) + MinSize)
 		key := sha256.Sum256(value)
-		_, err := bbFile.Put(key, value)
+		err := bbFile.Put(key, value)
 		assert.NoError(t, err, "put on BFile fail") // BROKEN BROKEN
 		if txSize+32+64 > MaxBadgerSize {
 			err = tx.Commit()

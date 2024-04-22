@@ -36,7 +36,25 @@ import (
 // to the end of the file
 //
 
-const BufferSize = 1024 * 1024 * 1 // N MB, i.e. N *(1024^2)
+const (
+	BufferSize = 1024 * 1024 * 1 // N MB, i.e. N *(1024^2)
+
+	BFilePerm    = iota // Key/Value pairs where the key is a function of the Value (can't change)
+	BFileDynamic        // Key/Value pair where the value can be updated
+
+	BFileDN = iota // Some partitions. Could do this some other way? Use Strings?
+	BFileBVN0
+	BFileBVN1
+	BFileBVN2
+	BFileBVN3
+	BFileBVN4
+	BFileBVN5
+	BFileBVN6
+	BFileBVN7
+	BFileBVN8
+	BFileBVN9
+	BFileBVN10
+)
 
 // BBuff
 // Block Buff
@@ -78,6 +96,18 @@ func (b *BFile) Get(Key [32]byte) (value []byte, err error) {
 	value = make([]byte, dBBKey.Length)
 	_, err = b.File.Read(value)
 	return value, err
+}
+
+// Put
+// Put a key value pair into the BFile, return the *DBBKeyFull
+func (b *BFile) Put(Key [32]byte, Value []byte) (err error) {
+	dbbKey := new(DBBKey)
+	dbbKey.Offset = b.EOD
+	dbbKey.Length = uint64(len(Value))
+
+	b.Keys[Key] = *dbbKey
+	err = b.Write(Value)
+	return err
 }
 
 // newBlock
@@ -129,8 +159,6 @@ func (b *BFile) Close() {
 	}
 }
 
-
-
 // Block
 // Block waits until all buffers have been returned to the BufferPool.
 func (b *BFile) Block() {
@@ -151,7 +179,7 @@ func NewBFile(BufferCnt int, Directory string, Type int, Partition int) (*BFile,
 	bFile.Partition = Partition // Set Partition
 	bFile.Height = 0            //
 
-	bFile.Keys = make(map[[32]byte]DBBKey)                   // Allocate the Keys amp
+	bFile.Keys = make(map[[32]byte]DBBKey)                   // Allocate the Keys map
 	bFile.BufferCnt = BufferCnt                              // How many buffers we are going to use
 	bFile.BuffPool = make(chan *[BufferSize]byte, BufferCnt) // Create the waiting channel
 	for i := 0; i < BufferCnt; i++ {
@@ -173,18 +201,6 @@ func NewBFile(BufferCnt int, Directory string, Type int, Partition int) (*BFile,
 // Returns the number of bytes to the end of the current buffer
 func (b *BFile) space() int {
 	return BufferSize - b.EOB
-}
-
-// Put
-// Put a key value pair into the BFile, return the *DBBKeyFull
-func (b *BFile) Put(Key [32]byte, Value []byte) (dbbKeyFull *DBBKey, err error) {
-	dbbKey := new(DBBKey)
-	dbbKey.Offset = b.EOD
-	dbbKey.Length = uint64(len(Value))
-
-	b.Keys[Key] = *dbbKey
-	err = b.Write(Value)
-	return dbbKey, err
 }
 
 // Write
@@ -231,9 +247,10 @@ func (b *BFile) Next() (err error) {
 	return b.newBlock() // Create the new DBBlock file and start grabbing key value pairs again!
 }
 
-
 // OpenBFile
 // Open a DBBlock file at a given height for read access only
+// Can be used to open for write access too, but the assumption is that
+// this use case is for reading and writing values.
 func OpenBFile(Directory string, Type int, Partition int, Height int) (bFile *BFile, err error) {
 	bFile = new(BFile)          // create a new BFile
 	bFile.Directory = Directory // Set Directory
@@ -266,7 +283,7 @@ func (b *BFile) OpenNext() (err error) {
 	// Load all the keys into the map
 	b.Keys = map[[32]byte]DBBKey{}
 	keyList, err := io.ReadAll(b.File)
-	cnt := len(keyList)/48
+	cnt := len(keyList) / 48
 	for i := 0; i < cnt; i++ {
 		dbBKey := new(DBBKey)
 		address, err := dbBKey.Unmarshal(keyList)
@@ -277,5 +294,12 @@ func (b *BFile) OpenNext() (err error) {
 		keyList = keyList[48:]
 	}
 
+	// The assumption is that the keys will be over written, and data will be
+	// added beginning at the end of the data section (as was stored at offsetB)
+	if _, err := b.File.Seek(int64(off), io.SeekStart); err != nil {
+		return err
+	}
+	b.EOD = off
+	b.EOB = 0
 	return err
 }
