@@ -1,4 +1,5 @@
-package multipleDB
+package blockchainDB
+
 /*
 import (
 	"bytes"
@@ -28,14 +29,14 @@ func NewKeySlice(Directory string) *KeySlice {
 
 func (k *KeySlice) Open(slice int) (err error) {
 	k.slice=slice
-	
+
 	filename := filepath.Join(k.Directory, fmt.Sprintf("KeyFile_%3d.dat", slice))
 	if err = os.MkdirAll(k.Directory,os.ModePerm); err != nil {
 		return err
 	}
 
 	k.File,err = os.OpenFile(filename,os.O_RDWR,os.ModePerm)
-	
+
 	switch {
 	case errors.Is(err, os.ErrNotExist):
 		if k.File, err = os.Create(filename); err != nil {
@@ -80,7 +81,7 @@ func (k *KeySlice) Open(slice int) (err error) {
 // Close
 // close the KeyFile
 func (kf *KeySlice) Close() error {
-	
+
 	// Add new keys to existing keys
 	n := len(kf.Keys)
 	keys := make([]DBBKeyFull,n+len(kf.NewKeys))
@@ -92,7 +93,7 @@ func (kf *KeySlice) Close() error {
 	}
 
 	sort.Slice(kf.Keys,func(i,j int)bool{return bytes.Compare(kf.Keys[i].Key[:],kf.Keys[j].Key[:])<0})
-	
+
 	offset,err := kf.File.Seek(0,io.SeekCurrent)
 	if err != nil {
 		return err

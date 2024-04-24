@@ -1,9 +1,7 @@
-package multipleDB
+package blockchainDB
 
 import (
 	"encoding/binary"
-	"fmt"
-	"path/filepath"
 	"sync"
 )
 
@@ -17,11 +15,7 @@ const (
 type Shard struct {
 	File  string     // The file with the BFile
 	BFile *BFile     // The BFile
-	mutex sync.Mutex // Keeps compression from conflict with access
-}
-
-func (s *Shard) Open() {
-
+	Mutex sync.Mutex // Keeps compression from conflict with access
 }
 
 // ShardDB
@@ -34,9 +28,9 @@ type ShardDB struct {
 }
 
 func (s *ShardDB) Create(Directory string) (err error) {
-	if s.PermBFile, err = NewBFile(5, Directory, BFilePerm, BFileDN); err != nil {
-		return err
-	}
+	//	if s.PermBFile, err = NewBFile(5, Directory, BFilePerm, BFileDN); err != nil {
+	//		return err
+	//	}
 
 	return nil
 }
@@ -52,23 +46,21 @@ func (s *ShardDB) Close() {
 	}
 }
 
+/*
 func (s *ShardDB) Open(Directory string) (err error) {
 
-	if s.PermBFile, err = OpenBFile(Directory, BFilePerm, BFileDN, 0); err != nil {
+	if s.PermBFile, err = OpenBFileList(Directory, BFilePerm, BFileDN, 0); err != nil {
 		return err
 	}
 
 	for i := 0; i < Shards; i++ {
-		SDir := filepath.Join(Directory, fmt.Sprintf("shard-%03x", i))
 		s.Shards[i] = new(Shard)
-		if s.Shards[i].BFile, err = OpenBFile(SDir, BFilePerm, BFileDN, 0); err != nil {
+		s.Shards[i].filename= filepath.Join(Directory, fmt.Sprintf("shard-%03x", i))
+		s.Shards[i].BFile, err = OpenBFileList(SDir, BFilePerm, BFileDN, 0)
 
-		}
 	}
-
-	return nil
 }
-
+*/
 // PutH
 // When the key is the hash (or other function) of the value, where the value will
 // never change, then use PutH.  The assumption is that these values, once recorded,
@@ -85,16 +77,15 @@ func (s *ShardDB) PutH(scratch bool, key [32]byte, value []byte) error {
 
 // Put
 // Put a key into the database
-func (s *ShardDB) Put(key [32]byte, value []byte) {
+func (s *ShardDB) Put(key [32]byte, value []byte) error {
 	k := binary.BigEndian.Uint16(key[:]) >> (16 - ShardBits)
 	shard := s.Shards[k]
 	if shard == nil {
-		shard.Open()
 		shard = new(Shard)
-		shard.Mod = make(map[[32]byte][]byte)
+		//shard.Open()
 		s.Shards[k] = shard
 	}
-	shard.Mod[key] = value
+	return shard.BFile.Put(key, value)
 }
 
 // Get
@@ -105,8 +96,8 @@ func (s *ShardDB) Get(key [32]byte) (value []byte) {
 	if shard == nil {
 		return nil
 	}
-	v := shard.Mod[key]
-	if v == nil {
+	v, err := shard.BFile.Get(key)
+	if err != nil && v == nil {
 		v, _ = s.PermBFile.Get(key) // If the err is not nil, v will be, so no need to check err
 	}
 	return v

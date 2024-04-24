@@ -1,4 +1,4 @@
-package multipleDB
+package blockchainDB
 
 import (
 	"testing"
@@ -9,17 +9,17 @@ import (
 
 func TestShardDB(t *testing.T) {
 	var shardDB ShardDB
-	var r  common.RandHash
-	for i:= 0; i<1000000; i++ {
+	var r common.RandHash
+	for i := 0; i < 1000000; i++ {
 		key := r.NextA()
 		value := r.GetRandBuff(200)
-		shardDB.Put(key,value)
+		shardDB.Put(key, value)
 	}
 	r = *new(common.RandHash)
-	for i:= 0; i<1000000; i++ {
+	for i := 0; i < 1000000; i++ {
 		key := r.NextA()
 		value := r.GetRandBuff(200)
 		v := shardDB.Get(key)
-		assert.Equal(t,value,v, "did not get the same value back")
+		assert.Equal(t, value, v, "did not get the same value back")
 	}
 }

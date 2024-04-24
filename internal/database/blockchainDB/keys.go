@@ -1,4 +1,4 @@
-package multipleDB
+package blockchainDB
 
 import (
 	"encoding/binary"
@@ -22,7 +22,7 @@ func (d *DBBKey) Bytes(address [32]byte) []byte {
 
 // GetDBBKey
 // Converts a 48 byte slice into an Address and a DBBKey
-func GetDBBKey(data[]byte) (address [32]byte, dBBKey *DBBKey, err error) {
+func GetDBBKey(data []byte) (address [32]byte, dBBKey *DBBKey, err error) {
 	dBBKey = new(DBBKey)
 	address, err = dBBKey.Unmarshal(data)
 	return address, dBBKey, err
@@ -31,7 +31,7 @@ func GetDBBKey(data[]byte) (address [32]byte, dBBKey *DBBKey, err error) {
 // Unmarshal
 // Returns the address and the DBBKey from a slice of bytes
 func (d *DBBKey) Unmarshal(data []byte) (address [32]byte, err error) {
-	if len(data) < 48  {
+	if len(data) < 48 {
 		return address, fmt.Errorf("data source is short %d", len(data))
 	}
 	copy(address[:], data[:32])

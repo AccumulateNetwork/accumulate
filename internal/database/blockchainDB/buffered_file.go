@@ -1,4 +1,4 @@
-package multipleDB
+package blockchainDB
 
 import (
 	"bytes"
@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"sort"
 	"time"
 )
@@ -70,11 +69,8 @@ type BBuff struct {
 // Holds the buffers and ID stuff needed to build DBBlocks (Database Blocks)
 type BFile struct {
 	File      *os.File               // The file being buffered
+	FileName  string                 // + The file name to open, and optional details to create a filename
 	Keys      map[[32]byte]DBBKey    // The set of keys written to the BFile
-	Directory string                 // Directory where the files go
-	Type      int                    // Need types: scratch, permanent at least.
-	Partition int                    // Partition of the the BFile
-	Height    int                    // Height of the BFile
 	BuffPool  chan *[BufferSize]byte // Buffer Pool (buffers not in use)
 	Buffer    *[BufferSize]byte      // The current buffer under construction
 	BufferCnt int                    // Number of buffers used by the bfWriter
@@ -108,23 +104,6 @@ func (b *BFile) Put(Key [32]byte, Value []byte) (err error) {
 	b.Keys[Key] = *dbbKey
 	err = b.Write(Value)
 	return err
-}
-
-// newBlock
-// create a new block.  Expects that the Block Height is updated already.  Leaves room
-// for the 8 byte offset to the keys
-func (b *BFile) newBlock() (err error) {
-	filename := fmt.Sprintf("BBlock_%03d_%02d_%09d.dat", b.Partition, b.Type, b.Height) // Compute the next file name
-	if b.File, err = os.Create(filepath.Join(b.Directory, filename)); err != nil {      // Create the new file
-		return err
-	}
-	if b.Buffer == nil {
-		b.Buffer = <-b.BuffPool
-	}
-	b.bfWriter = NewBFileWriter(b.File, b.BuffPool)
-	b.EOB = 0
-	b.EOD = 0
-	return nil
 }
 
 // Close
@@ -167,30 +146,32 @@ func (b *BFile) Block() {
 	}
 }
 
+// CreateBuffers
+// Create the buffers for a BFile, and set up the BWriter
+func (b *BFile) CreateBuffers() {
+	b.BuffPool = make(chan *[BufferSize]byte, b.BufferCnt) // Create the waiting channel
+	for i := 0; i < b.BufferCnt; i++ {
+		b.BuffPool <- new([BufferSize]byte) // Put some buffers in the waiting queue
+	}
+	b.bfWriter = NewBFileWriter(b.File, b.BuffPool)
+}
+
 // NewBFile
 // Creates a new Buffered file.  The caller is responsible for writing the header
-func NewBFile(BufferCnt int, Directory string, Type int, Partition int) (*BFile, error) {
-	if len(Directory) == 0 {
-		return nil, fmt.Errorf("must have a Directory")
+func NewBFile(BufferCnt int, Filename string) (bFile *BFile, err error) {
+	bFile = new(BFile)                     // create a new BFile
+	bFile.Keys = make(map[[32]byte]DBBKey) // Allocate the Keys map
+	bFile.BufferCnt = BufferCnt            // How many buffers we are going to use
+	if bFile.File, err = os.Create(Filename); err != nil {
+		return nil, err
 	}
-	bFile := new(BFile)         // create a new BFile
-	bFile.Directory = Directory // Set Directory
-	bFile.Type = Type           // Type is like perm, scratch, etc.  Could divid up what is stored further
-	bFile.Partition = Partition // Set Partition
-	bFile.Height = 0            //
+	bFile.CreateBuffers()
 
-	bFile.Keys = make(map[[32]byte]DBBKey)                   // Allocate the Keys map
-	bFile.BufferCnt = BufferCnt                              // How many buffers we are going to use
-	bFile.BuffPool = make(chan *[BufferSize]byte, BufferCnt) // Create the waiting channel
-	for i := 0; i < BufferCnt; i++ {
-		bFile.BuffPool <- new([BufferSize]byte) // Put some buffers in the waiting queue
-	}
-
-	if err := bFile.newBlock(); err != nil { // Allocate the buffers; buffer will be loaded
+	if bFile.File, err = os.Create(Filename); err != nil {
 		return nil, err
 	}
 
-	var offsetB [8]byte
+	var offsetB [8]byte // Offset to end of file (8, the length of the offset)
 	if err := bFile.Write(offsetB[:]); err != nil {
 		return nil, err
 	}
@@ -239,45 +220,29 @@ func (b *BFile) Write(Data []byte) error {
 	return b.Write(Data)              // Write out the remaining data
 }
 
-// Next
-// Close out one BFile, and move to the next.
-func (b *BFile) Next() (err error) {
-	b.Close()
-	b.Height++
-	return b.newBlock() // Create the new DBBlock file and start grabbing key value pairs again!
-}
-
-// OpenBFile
+// OpenBFileList
 // Open a DBBlock file at a given height for read access only
 // Can be used to open for write access too, but the assumption is that
 // this use case is for reading and writing values.
-func OpenBFile(Directory string, Type int, Partition int, Height int) (bFile *BFile, err error) {
-	bFile = new(BFile)          // create a new BFile
-	bFile.Directory = Directory // Set Directory
-	bFile.Type = Type           // Type is like perm, scratch, etc.
-	bFile.Partition = Partition // Set Partition
-	bFile.Height = Height - 1   // OpenNext is going to increment the Height; adjust
-	return bFile, bFile.OpenNext()
-}
-
-// OpenNext
-// Open next DBBlock for reading only
-func (b *BFile) OpenNext() (err error) {
-
-	b.Height++ // Go to the next DBBlock
-
-	filename := fmt.Sprintf("BBlock_%03d_%02d_%09d.dat", b.Partition, b.Type, b.Height) // Compute the next file name
-	if b.File, err = os.Open(filepath.Join(b.Directory, filename)); err != nil {
-		return err
+func OpenBFile(BufferCnt int, Filename string) (bFile *BFile, err error) {
+	b := new(BFile) // create a new BFile
+	b.BufferCnt = BufferCnt
+	b.CreateBuffers()
+	if b.File, err = os.OpenFile(Filename, os.O_RDWR, os.ModePerm); err != nil {
+		return nil, err
 	}
 
 	var offsetB [8]byte
 	if _, err := b.File.Read(offsetB[:]); err != nil {
-		return err
+		return nil, fmt.Errorf("%s is not set up as a BFile", Filename)
 	}
 	off := binary.BigEndian.Uint64(offsetB[:])
-	if _, err := b.File.Seek(int64(off), io.SeekStart); err != nil {
-		return err
+	n, err := b.File.Seek(int64(off), io.SeekStart)
+	if err != nil {
+		return nil, err
+	}
+	if uint64(n) != off {
+		return nil, fmt.Errorf("offset in %s is %d expected %d", Filename, n, off)
 	}
 
 	// Load all the keys into the map
@@ -288,7 +253,7 @@ func (b *BFile) OpenNext() (err error) {
 		dbBKey := new(DBBKey)
 		address, err := dbBKey.Unmarshal(keyList)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		b.Keys[address] = *dbBKey
 		keyList = keyList[48:]
@@ -297,9 +262,9 @@ func (b *BFile) OpenNext() (err error) {
 	// The assumption is that the keys will be over written, and data will be
 	// added beginning at the end of the data section (as was stored at offsetB)
 	if _, err := b.File.Seek(int64(off), io.SeekStart); err != nil {
-		return err
+		return nil, err
 	}
 	b.EOD = off
 	b.EOB = 0
-	return err
+	return b, err
 }

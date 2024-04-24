@@ -1,4 +1,4 @@
-package multipleDB
+package blockchainDB
 
 import (
 	"encoding/binary"
@@ -15,7 +15,7 @@ func TestBFileWriter(t *testing.T) {
 	os.RemoveAll(Directory)
 	os.Mkdir(Directory, os.ModePerm)
 	defer os.RemoveAll(Directory)
-	
+
 	const numDataWrites = 20000
 
 	buffPool := make(chan *[BufferSize]byte, 10) // Make the buffPool

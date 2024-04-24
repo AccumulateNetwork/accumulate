@@ -1,4 +1,4 @@
-package multipleDB
+package blockchainDB
 
 import (
 	"encoding/binary"
