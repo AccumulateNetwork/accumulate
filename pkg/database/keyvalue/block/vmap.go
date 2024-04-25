@@ -24,38 +24,44 @@ func (v *vmap[K, V]) release(level int, values map[K]V) {
 	// Decrement the ref-count of the specified level
 	v.refs[level]--
 
-	// If the latest layer has no refs, put directly into it
-	latest := len(v.stack) - 1
-	if latest >= 0 && v.refs[latest] == 0 {
-		m := v.stack[latest]
-		if len(m) == 0 {
-			v.stack[latest] = values
-		} else {
-			for k, v := range values {
-				m[k] = v
-			}
-		}
-	} else {
-		// Otherwise add a new layer
+	i := len(v.stack) - 1
+	switch {
+	case len(values) > 0:
+		// If the commit set has values, append to the stack and compact
 		v.stack = append(v.stack, values)
 		v.refs = append(v.refs, 0)
+		i++
+
+	case v.refs[i] > 0:
+		// If the latest level has refs and the commit set is empty, do nothing
+		return
+
+	default:
+		// If the latest level has no refs, compact
 	}
 
 	// Find the lowest level with no refs
-	lowest := len(v.refs)
-	for lowest > 0 && v.refs[lowest-1] == 0 {
-		lowest--
+	for i > 0 && v.refs[i-1] == 0 {
+		i--
 	}
 
 	// Compact
-	m := v.stack[lowest]
-	for _, l := range v.stack[lowest+1:] {
+	m := v.stack[i]
+	for _, l := range v.stack[i+1:] {
+		if len(m) == 0 {
+			v.stack[i], m = l, l
+			continue
+		}
 		for k, v := range l {
 			m[k] = v
 		}
 	}
-	v.stack = v.stack[:lowest+1]
-	v.refs = v.refs[:lowest+1]
+
+	// Trim
+	i++
+	clear(v.stack[i:]) // for GC
+	v.stack = v.stack[:i]
+	v.refs = v.refs[:i]
 }
 
 func (v *vmap[K, V]) View() *vmapView[K, V] {
