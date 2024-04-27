@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/golang/snappy"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"golang.org/x/exp/slog"
 	"google.golang.org/protobuf/proto"
@@ -27,17 +26,22 @@ import (
 const MaxWait = 10 * time.Second //5 * time.Minute
 const BatchLimit = 5000
 
-func Start(cfg *config.Logging, labels map[string]string) (chan<- *Entry, error) {
-	u, err := url.Parse(cfg.LokiUrl)
+type Options struct {
+	Url, Username, Password string
+	Labels                  map[string]string
+}
+
+func Start(opts Options) (chan<- *Entry, error) {
+	u, err := url.Parse(opts.Url)
 	if err != nil {
 		return nil, errors.BadRequest.WithFormat("Loki URL: %v", err)
 	}
-	u.User = url.UserPassword(cfg.LokiUsername, cfg.LokiPassword)
+	u.User = url.UserPassword(opts.Username, opts.Password)
 
 	strLabels := new(strings.Builder)
 	strLabels.WriteByte('{')
 	var comma bool
-	for k, v := range labels {
+	for k, v := range opts.Labels {
 		if comma {
 			strLabels.WriteByte(',')
 		}

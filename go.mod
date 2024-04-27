@@ -55,6 +55,7 @@ require (
 	github.com/gobeam/stringy v0.0.6
 	github.com/golangci/plugin-module-register v0.0.0-20240305222101-f76272ec86ee
 	github.com/google/pprof v0.0.0-20240207164012-fb44976bdcd5
+	github.com/ipfs/go-cid v0.4.1
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/libp2p/go-libp2p v0.33.1
 	github.com/libp2p/go-libp2p-kad-dht v0.25.2
@@ -64,6 +65,7 @@ require (
 	github.com/multiformats/go-multiaddr v0.12.2
 	github.com/multiformats/go-multiaddr-fmt v0.1.0
 	github.com/multiformats/go-multibase v0.2.0
+	github.com/multiformats/go-multicodec v0.9.0
 	github.com/multiformats/go-multihash v0.2.3
 	github.com/robfig/cron/v3 v3.0.0
 	github.com/sergi/go-diff v1.2.0
@@ -134,7 +136,6 @@ require (
 	github.com/huin/goupnp v1.3.0 // indirect
 	github.com/iancoleman/strcase v0.2.0 // indirect
 	github.com/ipfs/boxo v0.10.0 // indirect
-	github.com/ipfs/go-cid v0.4.1 // indirect
 	github.com/ipfs/go-datastore v0.6.0 // indirect
 	github.com/ipfs/go-log v1.0.5 // indirect
 	github.com/ipfs/go-log/v2 v2.5.1 // indirect
@@ -172,7 +173,6 @@ require (
 	github.com/multiformats/go-base32 v0.1.0 // indirect
 	github.com/multiformats/go-base36 v0.2.0 // indirect
 	github.com/multiformats/go-multiaddr-dns v0.3.1 // indirect
-	github.com/multiformats/go-multicodec v0.9.0 // indirect
 	github.com/multiformats/go-multistream v0.5.0 // indirect
 	github.com/multiformats/go-varint v0.0.7 // indirect
 	github.com/nunnatsa/ginkgolinter v0.15.2 // indirect

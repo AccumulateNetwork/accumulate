@@ -40,6 +40,10 @@ Logging:
       marshal-as: reference
       pointer: true
       repeatable: true
+    - name: Loki
+      type: LokiLogging
+      marshal-as: reference
+      pointer: true
 
 LoggingRule:
   non-binary: true
@@ -52,6 +56,18 @@ LoggingRule:
     - name: Modules
       type: string
       repeatable: true
+
+LokiLogging:
+  non-binary: true
+  fields:
+    - name: Enable
+      type: bool
+    - name: Url
+      type: string
+    - name: Username
+      type: string
+    - name: Password
+      type: string
 
 Instrumentation:
   non-binary: true
@@ -354,6 +370,9 @@ CoreValidatorConfiguration:
   union: { type: configuration }
   non-binary: true
   fields:
+    - name: Mode
+      type: CoreValidatorMode
+      marshal-as: enum
     - name: Listen
       type: p2p.Multiaddr
       marshal-as: union
