@@ -100,9 +100,18 @@ func (d *dialer) Dial(ctx context.Context, addr multiaddr.Multiaddr) (stream mes
 func (d *dialer) BadDial(ctx context.Context, addr multiaddr.Multiaddr, s message.Stream, err error) bool {
 	ss, ok := s.(*stream)
 	if !ok {
+		slog.InfoCtx(ctx, "Bad dial", "address", addr, "error", err)
 		return false
 	}
+
 	slog.InfoCtx(ctx, "Bad dial", "peer", ss.peer, "address", addr, "error", err)
+
+	if errors.Is(err, errors.EncodingError) {
+		// Don't mark a peer bad if there's an encoding failure. Is this a good
+		// idea?
+		return false
+	}
+
 	d.tracker.Mark(ss.peer, addr, api.PeerStatusIsKnownBad)
 	return true
 }

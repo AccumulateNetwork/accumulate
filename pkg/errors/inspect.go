@@ -31,3 +31,18 @@ func Code(err error) Status {
 	}
 	return err2.Code
 }
+
+func (s Status) ErrorAs(err error, ptr **Error) bool {
+	if !errors.As(err, ptr) {
+		return false
+	}
+	err2 := *ptr
+	for err2.Code != s && err2.Cause != nil {
+		err2 = err2.Cause
+	}
+	if err2.Code != s {
+		return false
+	}
+	*ptr = err2
+	return true
+}
