@@ -93,6 +93,7 @@ func chainStateV3(r *api.ChainRecord) *ChainState {
 func chainRespV3(account *api.AccountRecord, chains *api.RecordRange[*api.ChainRecord]) *ChainQueryResponse {
 	res := new(ChainQueryResponse)
 	if account != nil {
+		res.LastBlockTime = account.LastBlockTime
 		res.Type = account.Account.Type().String()
 		res.Data = account.Account
 		res.Receipt = receiptV3(account.Receipt)
@@ -113,6 +114,7 @@ func chainRespV3(account *api.AccountRecord, chains *api.RecordRange[*api.ChainR
 
 func chainEntryV3[T api.Record](r *api.ChainEntryRecord[T]) *ChainQueryResponse {
 	resp := new(ChainQueryResponse)
+	resp.LastBlockTime = r.LastBlockTime
 	resp.Type = "chainEntry"
 	resp.Receipt = receiptV3(r.Receipt)
 	resp.MainChain = &MerkleState{Height: r.Index, Roots: r.State}
@@ -164,6 +166,7 @@ func txReceiptV3[T api.Record](r *api.ChainEntryRecord[T]) *TxReceipt {
 
 func dataEntryV3(r *api.ChainEntryRecord[*api.MessageRecord[*messaging.TransactionMessage]]) *ResponseDataEntry {
 	rde := new(ResponseDataEntry)
+	rde.LastBlockTime = r.LastBlockTime
 	rde.EntryHash = r.Entry
 	if r.Value == nil {
 		return rde
@@ -337,6 +340,7 @@ func (m *JrpcMethods) QueryDirectory(ctx context.Context, params json.RawMessage
 	}
 
 	res := new(MultiResponse)
+	res.LastBlockTime = r.LastBlockTime
 	res.Type = "directory"
 	res.Start = req.Start
 	res.Count = req.Count
@@ -356,6 +360,7 @@ func (m *JrpcMethods) QueryDirectory(ctx context.Context, params json.RawMessage
 
 func sequencedV3[T messaging.Message](r *api.MessageRecord[T], seq *messaging.SequencedMessage) (*TransactionQueryResponse, error) {
 	res := new(TransactionQueryResponse)
+	res.LastBlockTime = r.LastBlockTime
 	txn := seq.Message.(*messaging.TransactionMessage)
 	res.Type = txn.Type().String()
 	res.Origin = txn.Transaction.Header.Principal
@@ -412,6 +417,7 @@ func sequencedV3[T messaging.Message](r *api.MessageRecord[T], seq *messaging.Se
 }
 func transactionV3[T messaging.Message](r *api.MessageRecord[T], txn *messaging.TransactionMessage) (*TransactionQueryResponse, error) {
 	res := new(TransactionQueryResponse)
+	res.LastBlockTime = r.LastBlockTime
 	res.Type = txn.Transaction.Body.Type().String()
 	res.Data = txn.Transaction.Body
 	h := r.ID.Hash()
@@ -540,6 +546,7 @@ func transactionV3[T messaging.Message](r *api.MessageRecord[T], txn *messaging.
 
 func signatureV3(r *api.MessageRecord[messaging.Message], sig *messaging.SignatureMessage) (*TransactionQueryResponse, error) {
 	res := new(TransactionQueryResponse)
+	res.LastBlockTime = r.LastBlockTime
 	res.Type = protocol.TransactionTypeRemote.String()
 	res.Data = &protocol.RemoteTransaction{Hash: sig.Signature.GetTransactionHash()}
 	res.Txid = sig.TxID
@@ -727,6 +734,7 @@ func (m *JrpcMethods) QueryKeyPageIndex(ctx context.Context, params json.RawMess
 	qr.Index--
 
 	res := new(ChainQueryResponse)
+	res.LastBlockTime = r.LastBlockTime
 	res.Data = qr
 	res.Type = "key-page-index"
 	return res
@@ -784,6 +792,7 @@ func (m *JrpcMethods) QueryDataSet(ctx context.Context, params json.RawMessage) 
 	}
 
 	res := new(MultiResponse)
+	res.LastBlockTime = r.LastBlockTime
 	res.Type = "dataSet"
 	res.Start = r.Start
 	res.Count = req.Count
@@ -820,6 +829,7 @@ func (m *JrpcMethods) QueryTxHistory(ctx context.Context, params json.RawMessage
 	}
 
 	res := new(MultiResponse)
+	res.LastBlockTime = r.LastBlockTime
 	res.Type = "txHistory"
 	res.Items = make([]any, len(r.Records))
 	res.Start = req.Start
@@ -977,6 +987,7 @@ func (m *JrpcMethods) Query(ctx context.Context, params json.RawMessage) any {
 			}
 
 			res := new(MultiResponse)
+			res.LastBlockTime = r.LastBlockTime
 			res.Type = "pending"
 			res.Total = r.Total
 			res.Items = make([]any, len(r.Records))
@@ -1016,6 +1027,7 @@ func (m *JrpcMethods) Query(ctx context.Context, params json.RawMessage) any {
 			}
 
 			res := new(ChainQueryResponse)
+			res.LastBlockTime = r.LastBlockTime
 			res.Type = "dataEntry"
 			res.Data = dataEntryV3(r)
 			return res
@@ -1027,6 +1039,7 @@ func (m *JrpcMethods) Query(ctx context.Context, params json.RawMessage) any {
 		}
 
 		res := new(ResponseDataEntrySet)
+		res.LastBlockTime = r.LastBlockTime
 		res.Total = r.Total
 		for _, r := range r.Records {
 			res.DataEntries = append(res.DataEntries, *dataEntryV3(r))
@@ -1086,6 +1099,7 @@ chain_query:
 	}
 
 	resp := new(MultiResponse)
+	resp.LastBlockTime = rr.LastBlockTime
 	resp.Start = q.Range.Start
 	resp.Count = *q.Range.Count
 	resp.Total = rr.Total
@@ -1164,6 +1178,7 @@ func (m *JrpcMethods) QueryMinorBlocks(ctx context.Context, params json.RawMessa
 	}
 
 	mres := new(MultiResponse)
+	mres.LastBlockTime = r.LastBlockTime
 	mres.Type = "minorBlock"
 	mres.Items = make([]interface{}, 0)
 	mres.Start = req.Start
@@ -1252,6 +1267,7 @@ func (m *JrpcMethods) QueryMajorBlocks(ctx context.Context, params json.RawMessa
 	}
 
 	mres := new(MultiResponse)
+	mres.LastBlockTime = r.LastBlockTime
 	mres.Type = "majorBlock"
 	mres.Items = make([]interface{}, 0)
 	mres.Start = req.Start
