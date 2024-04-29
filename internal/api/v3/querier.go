@@ -306,7 +306,7 @@ func (s *Querier) query(ctx context.Context, batch *database.Batch, scope *url.U
 	}
 }
 
-func (s *Querier) queryAccount(ctx context.Context, batch *database.Batch, record *database.Account, wantReceipt bool) (*api.AccountRecord, error) {
+func (s *Querier) queryAccount(ctx context.Context, batch *database.Batch, record *database.Account, wantReceipt *api.ReceiptOptions) (*api.AccountRecord, error) {
 	r := new(api.AccountRecord)
 
 	state, err := record.Main().Get()
@@ -336,7 +336,7 @@ func (s *Querier) queryAccount(ctx context.Context, batch *database.Batch, recor
 	})
 	r.Pending.Total = uint64(len(pending))
 
-	if !wantReceipt {
+	if !wantReceipt.Yes() {
 		return r, nil
 	}
 
@@ -390,7 +390,7 @@ func (s *Querier) queryAccountChains(ctx context.Context, record *database.Accou
 	return r, nil
 }
 
-func (s *Querier) queryTransactionChains(ctx context.Context, batch *database.Batch, hash []byte, wantReceipt bool) (*api.RecordRange[*api.ChainEntryRecord[api.Record]], error) {
+func (s *Querier) queryTransactionChains(ctx context.Context, batch *database.Batch, hash []byte, wantReceipt *api.ReceiptOptions) (*api.RecordRange[*api.ChainEntryRecord[api.Record]], error) {
 	entries, err := batch.Transaction(hash).Chains().Get()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load transaction chains: %w", err)
@@ -444,7 +444,7 @@ func (s *Querier) queryChain(ctx context.Context, record *database.Chain2) (*api
 	return r, nil
 }
 
-func (s *Querier) queryChainEntryByIndex(ctx context.Context, batch *database.Batch, record *database.Chain2, index uint64, expand, wantReceipt bool) (*api.ChainEntryRecord[api.Record], error) {
+func (s *Querier) queryChainEntryByIndex(ctx context.Context, batch *database.Batch, record *database.Chain2, index uint64, expand bool, wantReceipt *api.ReceiptOptions) (*api.ChainEntryRecord[api.Record], error) {
 	value, err := record.Entry(int64(index))
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("get entry: %w", err)
@@ -452,7 +452,7 @@ func (s *Querier) queryChainEntryByIndex(ctx context.Context, batch *database.Ba
 	return s.queryChainEntry(ctx, batch, record, index, value, expand, wantReceipt)
 }
 
-func (s *Querier) queryChainEntryByValue(ctx context.Context, batch *database.Batch, record *database.Chain2, value []byte, expand, wantReceipt bool) (*api.ChainEntryRecord[api.Record], error) {
+func (s *Querier) queryChainEntryByValue(ctx context.Context, batch *database.Batch, record *database.Chain2, value []byte, expand bool, wantReceipt *api.ReceiptOptions) (*api.ChainEntryRecord[api.Record], error) {
 	index, err := record.IndexOf(value)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("get entry index: %w", err)
@@ -460,7 +460,7 @@ func (s *Querier) queryChainEntryByValue(ctx context.Context, batch *database.Ba
 	return s.queryChainEntry(ctx, batch, record, uint64(index), value, expand, wantReceipt)
 }
 
-func (s *Querier) queryChainEntry(ctx context.Context, batch *database.Batch, record *database.Chain2, index uint64, value []byte, expand, wantReceipt bool) (*api.ChainEntryRecord[api.Record], error) {
+func (s *Querier) queryChainEntry(ctx context.Context, batch *database.Batch, record *database.Chain2, index uint64, value []byte, expand bool, wantReceipt *api.ReceiptOptions) (*api.ChainEntryRecord[api.Record], error) {
 	r := new(api.ChainEntryRecord[api.Record])
 	r.Name = record.Name()
 	r.Type = record.Type()
@@ -509,35 +509,44 @@ func (s *Querier) queryChainEntry(ctx context.Context, batch *database.Batch, re
 		}
 	}
 
-	if wantReceipt {
-		block, rootIndexIndex, receipt, err := indexing.ReceiptForChainIndex(s.partition, batch, record, int64(index))
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("get chain receipt: %w", err)
-		}
-
-		r.Receipt = new(api.Receipt)
-		r.Receipt.Receipt = *receipt
-		r.Receipt.LocalBlock = block.BlockIndex
-		if block.BlockTime != nil {
-			r.Receipt.LocalBlockTime = *block.BlockTime
-		}
-
-		// Find the major block
-		rxc, err := batch.Account(s.partition.AnchorPool()).MajorBlockChain().Get()
-		if err != nil {
-			return nil, errors.InternalError.WithFormat("load root index chain: %w", err)
-		}
-		_, major, err := indexing.SearchIndexChain(rxc, 0, indexing.MatchAfter, indexing.SearchIndexChainByRootIndexIndex(rootIndexIndex))
-		switch {
-		case err == nil:
-			r.Receipt.MajorBlock = major.BlockIndex
-		case errors.Is(err, errors.NotFound):
-			// Not in a major block yet
-		default:
-			return nil, errors.InternalError.WithFormat("locate major block for root index entry %d: %w", rootIndexIndex, err)
-		}
+	if !wantReceipt.Yes() {
+		return r, nil
 	}
 
+	var targetHeight *uint64
+	if wantReceipt.ForHeight != 0 {
+		targetHeight = &wantReceipt.ForHeight
+	}
+	block, rootIndexIndex, receipt, err := indexing.ReceiptForChainIndex(s.partition, batch, record, int64(index), targetHeight)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("get chain receipt: %w", err)
+	}
+
+	// These values aren't meaningful once multiple receipts have been combined
+	receipt.StartIndex = 0
+	receipt.EndIndex = 0
+
+	r.Receipt = new(api.Receipt)
+	r.Receipt.Receipt = *receipt
+	r.Receipt.LocalBlock = block.BlockIndex
+	if block.BlockTime != nil {
+		r.Receipt.LocalBlockTime = *block.BlockTime
+	}
+
+	// Find the major block
+	rxc, err := batch.Account(s.partition.AnchorPool()).MajorBlockChain().Get()
+	if err != nil {
+		return nil, errors.InternalError.WithFormat("load root index chain: %w", err)
+	}
+	_, major, err := indexing.SearchIndexChain(rxc, 0, indexing.MatchAfter, indexing.SearchIndexChainByRootIndexIndex(rootIndexIndex))
+	switch {
+	case err == nil:
+		r.Receipt.MajorBlock = major.BlockIndex
+	case errors.Is(err, errors.NotFound):
+		// Not in a major block yet
+	default:
+		return nil, errors.InternalError.WithFormat("locate major block for root index entry %d: %w", rootIndexIndex, err)
+	}
 	return r, nil
 }
 
@@ -603,7 +612,7 @@ func (s *Querier) queryChainEntryRange(ctx context.Context, batch *database.Batc
 		if opts.Expand != nil {
 			expand = *opts.Expand
 		}
-		r.Records[i], err = s.queryChainEntryByIndex(ctx, batch, record, r.Start+uint64(i), expand, false)
+		r.Records[i], err = s.queryChainEntryByIndex(ctx, batch, record, r.Start+uint64(i), expand, nil)
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("get entry %d: %w", r.Start+uint64(i), err)
 		}
@@ -644,7 +653,7 @@ func (s *Querier) queryDirectoryRange(ctx context.Context, batch *database.Batch
 			return &api.UrlRecord{Value: v}, nil
 		}
 
-		r, err := s.queryAccount(ctx, batch, batch.Account(v), false)
+		r, err := s.queryAccount(ctx, batch, batch.Account(v), nil)
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("expand directory entry: %w", err)
 		}
@@ -898,7 +907,7 @@ func (s *Querier) queryMinorBlockRange2(ctx context.Context, batch *database.Bat
 	return blocks, nil
 }
 
-func (s *Querier) searchForAnchor(ctx context.Context, batch *database.Batch, record *database.Account, hash []byte, wantReceipt bool) (*api.RecordRange[*api.ChainEntryRecord[api.Record]], error) {
+func (s *Querier) searchForAnchor(ctx context.Context, batch *database.Batch, record *database.Account, hash []byte, wantReceipt *api.ReceiptOptions) (*api.RecordRange[*api.ChainEntryRecord[api.Record]], error) {
 	chains, err := record.Chains().Get()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load chains index: %w", err)
