@@ -58,7 +58,7 @@ func OpenBadger(filepath string, logger log.Logger) (*Database, error) {
 }
 
 func OpenLevelDB(filepath string, logger log.Logger) (*Database, error) {
-	store, err := leveldb.OpenFile(filepath)
+	store, err := leveldb.Open(filepath)
 	if err != nil {
 		return nil, err
 	}
