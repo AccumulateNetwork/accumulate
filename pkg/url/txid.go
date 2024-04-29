@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
+	"sync/atomic"
 )
 
 // TxID is a transaction identifier.
@@ -18,7 +19,7 @@ type TxID struct {
 	hash [32]byte
 
 	memoize struct {
-		str string
+		str atomic.Pointer[string]
 	}
 }
 
@@ -98,12 +99,9 @@ func (x *TxID) Compare(y *TxID) int {
 // String reassembles the transaction ID into a valid URL string. See
 // net/url.URL.String().
 func (x *TxID) String() string {
-	if x.memoize.str != "" {
-		return x.memoize.str
-	}
-
-	x.memoize.str = x.url.format(x.hash[:], true)
-	return x.memoize.str
+	return getOrMakeAtomic(&x.memoize.str, func() string {
+		return x.url.format(x.hash[:], true)
+	})
 }
 
 // RawString reassembles the URL into a valid URL string without encoding any
@@ -135,6 +133,6 @@ func (x *TxID) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
-	*x = *v
+	*x = *v //nolint:govet
 	return nil
 }
