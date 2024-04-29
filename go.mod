@@ -68,7 +68,7 @@ require (
 	github.com/robfig/cron/v3 v3.0.0
 	github.com/sergi/go-diff v1.2.0
 	github.com/ulikunitz/xz v0.5.11
-	github.com/vektra/mockery/v2 v2.23.1
+	github.com/vektra/mockery/v2 v2.42.3
 	gitlab.com/firelizzard/go-script v0.0.0-20240404234115-d5f0a716003d
 	go.opentelemetry.io/otel v1.16.0
 	go.opentelemetry.io/otel/exporters/stdout/stdouttrace v1.14.0
@@ -103,7 +103,7 @@ require (
 	github.com/butuzov/mirror v1.1.0 // indirect
 	github.com/catenacyber/perfsprint v0.7.1 // indirect
 	github.com/ccojocar/zxcvbn-go v1.0.2 // indirect
-	github.com/chigopher/pathlib v0.12.0 // indirect
+	github.com/chigopher/pathlib v0.19.1 // indirect
 	github.com/ckaznocha/intrange v0.1.0 // indirect
 	github.com/cometbft/cometbft-db v0.7.0 // indirect
 	github.com/containerd/cgroups v1.1.0 // indirect
@@ -131,6 +131,7 @@ require (
 	github.com/gopherjs/gopherjs v0.0.0-20191106031601-ce3c9ade29de // indirect
 	github.com/hashicorp/golang-lru v0.5.5-0.20210104140557-80c98217689d // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.5 // indirect
+	github.com/huandu/xstrings v1.4.0 // indirect
 	github.com/huin/goupnp v1.3.0 // indirect
 	github.com/iancoleman/strcase v0.2.0 // indirect
 	github.com/ipfs/boxo v0.10.0 // indirect
