@@ -29,11 +29,6 @@ func (n *Node) proposeLeader() (blockState, []Message, error) {
 	return s, out, err
 }
 
-type proposeLeader struct {
-	baseNodeMessage
-	LeaderProposal
-}
-
 // didProposeLeader is the state of the node after a leader has been proposed.
 type didProposeLeader struct {
 	*Node
@@ -52,7 +47,7 @@ func (n *didProposeLeader) execute(msg Message) (blockState, []Message, error) {
 	switch msg := msg.(type) {
 	case *proposeLeader:
 		// Verify the proposal matches
-		if msg.LeaderProposal != n.p.LeaderProposal {
+		if !msg.LeaderProposal.Equal(&n.p.LeaderProposal) {
 			slog.ErrorContext(n.context, "Conflicting leader proposal",
 				"mine", logging.AsHex(n.p.Leader).Slice(0, 4),
 				"theirs", logging.AsHex(msg.Leader).Slice(0, 4))
@@ -64,7 +59,7 @@ func (n *didProposeLeader) execute(msg Message) (blockState, []Message, error) {
 		}
 
 		// Add the vote
-		n.votes.add(msg.senderID())
+		n.votes.add(msg.SenderID())
 
 	case *proposeBlock:
 		// Verify the threshold has been reached
@@ -73,7 +68,7 @@ func (n *didProposeLeader) execute(msg Message) (blockState, []Message, error) {
 		}
 
 		// And the block proposal came from the leader
-		if h := msg.senderID(); h != n.p.Leader {
+		if h := msg.SenderID(); h != n.p.Leader {
 			return n, nil, errors.Conflict.WithFormat("got block proposal from wrong leader: want %x, got %x", n.p.Leader[:4], h[:4])
 		}
 
@@ -133,18 +128,8 @@ func (n *Node) acceptBlockProposal(p *proposeBlock) (blockState, []Message, erro
 	m.Node = n
 	m.p = *p
 	m.votes = n.newVotes()
-	m.votes.add(p.senderID())
-	return m, []Message{&acceptBlockProposal{n.newMsg(), *p}}, nil
-}
-
-type proposeBlock struct {
-	baseNodeMessage
-	BlockProposal
-}
-
-type acceptBlockProposal struct {
-	baseNodeMessage
-	p proposeBlock
+	m.votes.add(p.SenderID())
+	return m, []Message{&acceptBlockProposal{baseNodeMessage: n.newMsg(), p: *p}}, nil
 }
 
 // didProposeBlock is the state of the node after a block has been proposed.
@@ -156,7 +141,7 @@ type didProposeBlock struct {
 
 func (m *proposeBlock) equal(n *proposeBlock) bool {
 	// The proposals are equal and were proposed by the same node
-	return m.senderID() == n.senderID() &&
+	return m.SenderID() == n.SenderID() &&
 		m.BlockProposal.Equal(&n.BlockProposal)
 }
 
@@ -174,7 +159,7 @@ func (n *didProposeBlock) execute(msg Message) (blockState, []Message, error) {
 			}
 		}
 
-		n.votes.add(msg.senderID())
+		n.votes.add(msg.SenderID())
 	}
 
 	if !n.votes.reachedThreshold() {
@@ -232,15 +217,16 @@ func (n *Node) finalizeBlock(p *BlockProposal) (blockState, []Message, error) {
 	if !n.IgnoreDeliverResults {
 		m.b.results.MessageResults = res.Results
 	}
-	m.b.results.ValidatorUpdates = res.Updates
+	for _, up := range res.Updates {
+		m.b.results.ValidatorUpdates = append(m.b.results.ValidatorUpdates, &ValidatorUpdate{
+			Type:      up.Type,
+			PublicKey: up.PublicKey,
+			Power:     up.Power,
+		})
+	}
 	m.votes = n.newVotes()
 	m.blockState = res.Block
 	return m, []Message{&m.b}, nil
-}
-
-type finalizedBlock struct {
-	baseNodeMessage
-	results BlockResults
 }
 
 // didFinalizeBlock is the state of a node after the block has been 'finalized'
@@ -266,7 +252,7 @@ func (n *didFinalizeBlock) execute(msg Message) (blockState, []Message, error) {
 			}
 		}
 
-		n.votes.add(msg.senderID())
+		n.votes.add(msg.SenderID())
 	}
 
 	if !n.votes.reachedThreshold() {
@@ -280,7 +266,15 @@ func (n *didFinalizeBlock) execute(msg Message) (blockState, []Message, error) {
 
 func (n *Node) commitBlock(results *BlockResults, state any) (blockState, []Message, error) {
 	// Apply validator updates
-	n.applyValUp(results.ValidatorUpdates)
+	var updates []*execute.ValidatorUpdate
+	for _, up := range results.ValidatorUpdates {
+		updates = append(updates, &execute.ValidatorUpdate{
+			Type:      up.Type,
+			PublicKey: up.PublicKey,
+			Power:     up.Power,
+		})
+	}
+	n.applyValUp(updates)
 
 	// Commit the block
 	hash, err := n.commit(state)
@@ -298,11 +292,6 @@ func (n *Node) commitBlock(results *BlockResults, state any) (blockState, []Mess
 	return m, []Message{&m.b}, nil
 }
 
-type committedBlock struct {
-	baseNodeMessage
-	results CommitResult
-}
-
 // didCommitBlock is the state of the node after a block has been committed.
 type didCommitBlock struct {
 	*Node
@@ -315,7 +304,7 @@ type didCommitBlock struct {
 func (n *didCommitBlock) execute(msg Message) (blockState, []Message, error) {
 	switch msg := msg.(type) {
 	case *committedBlock:
-		if !n.IgnoreCommitResults && n.b.results != msg.results {
+		if !n.IgnoreCommitResults && !n.b.results.Equal(&msg.results) {
 			return n, nil, &ConsensusError[CommitResult]{
 				Message: "conflicting commit results",
 				Mine:    n.b.results,
@@ -323,7 +312,7 @@ func (n *didCommitBlock) execute(msg Message) (blockState, []Message, error) {
 			}
 		}
 
-		n.votes.add(msg.senderID())
+		n.votes.add(msg.SenderID())
 	}
 
 	if !n.votes.reachedThreshold() {

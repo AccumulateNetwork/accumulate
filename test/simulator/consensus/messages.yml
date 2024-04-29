@@ -1,0 +1,144 @@
+StartBlock:
+  union: { type: message, private-enum: true }
+  fields: ~
+
+proposeLeader:
+  union: { type: message, private-enum: true }
+  fields:
+    - type: baseNodeMessage
+      marshal-as: reference
+    - type: LeaderProposal
+      marshal-as: reference
+
+proposeBlock:
+  union: { type: message, private-enum: true }
+  fields:
+    - type: baseNodeMessage
+      marshal-as: reference
+    - type: BlockProposal
+      marshal-as: reference
+
+acceptBlockProposal:
+  union: { type: message, private-enum: true }
+  fields:
+    - type: baseNodeMessage
+      marshal-as: reference
+    - name: p
+      type: proposeBlock
+      marshal-as: reference
+
+finalizedBlock:
+  union: { type: message, private-enum: true }
+  fields:
+    - type: baseNodeMessage
+      marshal-as: reference
+    - name: results
+      type: BlockResults
+      marshal-as: reference
+
+committedBlock:
+  union: { type: message, private-enum: true }
+  fields:
+    - type: baseNodeMessage
+      marshal-as: reference
+    - name: results
+      type: CommitResult
+      marshal-as: reference
+
+ExecutedBlock:
+  union: { type: message, private-enum: true }
+  fields:
+    - name: Network
+      type: string
+    - name: Node
+      type: hash
+
+SubmitEnvelope:
+  union: { type: message, private-enum: true }
+  fields:
+    - name: Network
+      type: string
+    - name: Envelope
+      type: messaging.Envelope
+      pointer: true
+      marshal-as: reference
+    - name: Pretend
+      type: bool
+
+acceptedSubmission:
+  union: { type: message, private-enum: true }
+  fields:
+    - type: baseNodeMessage
+      marshal-as: reference
+    - name: result
+      type: EnvelopeSubmitted
+      marshal-as: reference
+    - name: env
+      type: messaging.Envelope
+      pointer: true
+      marshal-as: reference
+
+EnvelopeSubmitted:
+  union: { type: message, private-enum: true }
+  fields:
+    - name: Results
+      type: protocol.TransactionStatus
+      pointer: true
+      repeatable: true
+      marshal-as: reference
+
+# Types
+
+baseNodeMessage:
+  fields:
+    - name: PubKeyHash
+      type: hash
+    - name: Network
+      type: string
+
+LeaderProposal:
+  fields:
+    - name: Leader
+      type: hash
+
+BlockProposal:
+  fields:
+    - type: LeaderProposal
+      marshal-as: reference
+    - name: Index
+      type: uint
+    - name: Time
+      type: time
+    - name: Envelopes
+      type: messaging.Envelope
+      pointer: true
+      repeatable: true
+      marshal-as: reference
+
+BlockResults:
+  fields:
+    - name: MessageResults
+      type: protocol.TransactionStatus
+      pointer: true
+      repeatable: true
+      marshal-as: reference
+    - name: ValidatorUpdates
+      type: ValidatorUpdate
+      pointer: true
+      repeatable: true
+      marshal-as: reference
+
+ValidatorUpdate:
+  fields:
+    - name: Type
+      type: protocol.SignatureType
+      marshal-as: enum
+    - name: PublicKey
+      type: bytes
+    - name: Power
+      type: int
+
+CommitResult:
+  fields:
+    - name: Hash
+      type: hash
