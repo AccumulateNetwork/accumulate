@@ -291,10 +291,16 @@ func (c *RoutedTransport) dial(ctx context.Context, addr multiaddr.Multiaddr, st
 			return s, nil // Success
 		}
 
-		// Return the error if it's a client error (e.g. misdial)
 		var err2 *errors.Error
-		if errors.As(err, &err2) && err2.Code.IsClientError() {
+		switch {
+		case errors.As(err, &err2) && err2.Code.IsClientError():
+			// Return the error if it's a client error (e.g. misdial)
 			return nil, errors.UnknownError.Wrap(err)
+
+		case errors.EncodingError.ErrorAs(err, &err2):
+			// If the error is an encoding issue, log it and return "internal error"
+			multi.BadDial(ctx, addr, s, err)
+			return nil, errors.InternalError.WithFormat("internal error: %w", err)
 		}
 
 		// Remove the stream from the dictionary
