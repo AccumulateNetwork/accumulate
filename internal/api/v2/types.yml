@@ -21,6 +21,9 @@ ChainQueryResponse:
       type: GeneralReceipt
       marshal-as: reference
       pointer: true
+    - name: LastBlockTime
+      type: time
+      pointer: true
 
 TransactionQueryResponse:
   non-binary: true
@@ -71,6 +74,9 @@ TransactionQueryResponse:
       marshal-as: reference
       pointer: true
       repeatable: true
+    - name: LastBlockTime
+      type: time
+      pointer: true
 
 SignatureBook:
   non-binary: true
@@ -139,6 +145,9 @@ MinorQueryResponse:
       repeatable: true
       pointer: true
       marshal-as: reference
+    - name: LastBlockTime
+      type: time
+      pointer: true
 
 MajorQueryResponse:
   non-binary: true
@@ -156,6 +165,9 @@ MajorQueryResponse:
       repeatable: true
       pointer: true
       marshal-as: reference
+    - name: LastBlockTime
+      type: time
+      pointer: true
 
 MerkleState:
   non-binary: true
@@ -189,6 +201,9 @@ MultiResponse:
     - name: OtherItems
       repeatable: true
       type: any
+    - name: LastBlockTime
+      type: time
+      pointer: true
 
 KeyPage:
   non-binary: true
@@ -460,6 +475,9 @@ TxResponse:
     type: bool
   - name: Result
     type: any
+  - name: LastBlockTime
+    type: time
+    pointer: true
 
 DataEntryQuery:
   fields:
@@ -490,6 +508,9 @@ DataEntryQueryResponse:
       pointer: true
     - name: CauseTxId
       type: txid
+      pointer: true
+    - name: LastBlockTime
+      type: time
       pointer: true
 
 ChainEntry:
