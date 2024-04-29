@@ -17,6 +17,7 @@ import (
 	sv1 "gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/badger"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/block"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/bolt"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/leveldb"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/remote"
@@ -112,7 +113,12 @@ func openDbUrl(arg string, writable bool) (_ dbCloser, _ net.Addr) {
 		return db, nil
 
 	case "leveldb":
-		db, err := leveldb.OpenFile(u.Path)
+		db, err := leveldb.Open(u.Path)
+		check(err)
+		return db, nil
+
+	case "block":
+		db, err := block.Open(u.Path)
 		check(err)
 		return db, nil
 
