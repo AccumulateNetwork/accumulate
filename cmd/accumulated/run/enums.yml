@@ -39,6 +39,13 @@ StorageType:
     value: 1
   Badger:
     value: 2
+  Bolt:
+    value: 3
+  LevelDB:
+    value: 4
+
+  ExpBlockDB:
+    value: 1001
 
 ConfigurationType:
   CoreValidator:
