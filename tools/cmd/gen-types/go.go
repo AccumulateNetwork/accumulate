@@ -148,7 +148,7 @@ var goFuncs = template.FuncMap{
 }
 
 func GoTmplUnionMethod(u *UnionSpec, method string) string {
-	if u.Private {
+	if u.PrivateUnion {
 		method = typegen.LowerFirstWord(method)
 	}
 	if flags.ElidePackageType && strings.EqualFold(u.Name, u.Package) {
