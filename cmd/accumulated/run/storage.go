@@ -7,9 +7,14 @@
 package run
 
 import (
+	"io"
+
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/badger"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/block"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/bolt"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/leveldb"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"golang.org/x/exp/slog"
 )
@@ -84,17 +89,64 @@ func (s *MemoryStorage) open(inst *Instance) (keyvalue.Beginner, error) {
 }
 
 func (s *BadgerStorage) open(inst *Instance) (keyvalue.Beginner, error) {
-	db, err := badger.New(inst.path(s.Path))
+	var db interface {
+		keyvalue.Beginner
+		io.Closer
+	}
+	var err error
+	switch s.Version {
+	case 0, 1:
+		db, err = badger.OpenV1(inst.path(s.Path))
+	case 2:
+		db, err = badger.OpenV2(inst.path(s.Path))
+	case 3:
+		db, err = badger.OpenV3(inst.path(s.Path))
+	case 4:
+		db, err = badger.OpenV4(inst.path(s.Path))
+	}
 	if err != nil {
 		return nil, err
 	}
 
-	inst.cleanup(func() {
-		err := db.Close()
+	inst.cleanupCloser(db, "Error while closing database")
+	return db, nil
+}
+
+func (s *BoltStorage) open(inst *Instance) (keyvalue.Beginner, error) {
+	db, err := bolt.Open(inst.path(s.Path))
+	if err != nil {
+		return nil, err
+	}
+
+	inst.cleanupCloser(db, "Error while closing database")
+	return db, nil
+}
+
+func (s *LevelDBStorage) open(inst *Instance) (keyvalue.Beginner, error) {
+	db, err := leveldb.Open(inst.path(s.Path))
+	if err != nil {
+		return nil, err
+	}
+
+	inst.cleanupCloser(db, "Error while closing database")
+	return db, nil
+}
+
+func (s *ExpBlockDBStorage) open(inst *Instance) (keyvalue.Beginner, error) {
+	db, err := block.Open(inst.path(s.Path))
+	if err != nil {
+		return nil, err
+	}
+
+	inst.cleanupCloser(db, "Error while closing database")
+	return db, nil
+}
+
+func (i *Instance) cleanupCloser(c io.Closer, msg string) {
+	i.cleanup(func() {
+		err := c.Close()
 		if err != nil {
-			slog.ErrorCtx(inst.context, "Error while closing Badger", "error", err)
+			slog.ErrorCtx(i.context, msg, "error", err)
 		}
 	})
-
-	return db, nil
 }
