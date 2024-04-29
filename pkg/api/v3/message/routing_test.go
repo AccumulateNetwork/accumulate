@@ -16,10 +16,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	. "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message/mocks"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	mocks "gitlab.com/accumulatenetwork/accumulate/test/mocks/api_v3"
 )
 
 func TestPrivateMessageRouting(t *testing.T) {
