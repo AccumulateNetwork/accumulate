@@ -575,7 +575,7 @@ func (x *Executor) requestMissingAnchors(ctx context.Context, batch *database.Ba
 		anchors[a] = append(anchors[a], txid)
 		source[txid] = status.SourceNetwork
 
-		r, err := querier.SearchForAnchor(ctx, protocol.DnUrl().JoinPath(protocol.AnchorPool), &api.AnchorSearchQuery{Anchor: status.Proof.Anchor, IncludeReceipt: true})
+		r, err := querier.SearchForAnchor(ctx, protocol.DnUrl().JoinPath(protocol.AnchorPool), &api.AnchorSearchQuery{Anchor: status.Proof.Anchor, IncludeReceipt: &api.ReceiptOptions{ForAny: true}})
 		if err != nil {
 			x.logger.Error("Failed to request anchor", "error", err, "anchor", logging.AsHex(status.Proof.Anchor).Slice(0, 4))
 			continue
