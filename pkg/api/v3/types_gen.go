@@ -43,8 +43,8 @@ type AccountRecord struct {
 // AnchorSearchQuery queries {account}#anchor/{hash}.
 type AnchorSearchQuery struct {
 	fieldsSet      []bool
-	Anchor         []byte `json:"anchor,omitempty" form:"anchor" query:"anchor" validate:"required"`
-	IncludeReceipt bool   `json:"includeReceipt,omitempty" form:"includeReceipt" query:"includeReceipt"`
+	Anchor         []byte          `json:"anchor,omitempty" form:"anchor" query:"anchor" validate:"required"`
+	IncludeReceipt *ReceiptOptions `json:"includeReceipt,omitempty" form:"includeReceipt" query:"includeReceipt"`
 	extraData      []byte
 }
 
@@ -87,11 +87,11 @@ type ChainEntryRecord[T Record] struct {
 
 type ChainQuery struct {
 	fieldsSet      []bool
-	Name           string        `json:"name,omitempty" form:"name" query:"name"`
-	Index          *uint64       `json:"index,omitempty" form:"index" query:"index"`
-	Entry          []byte        `json:"entry,omitempty" form:"entry" query:"entry"`
-	Range          *RangeOptions `json:"range,omitempty" form:"range" query:"range"`
-	IncludeReceipt bool          `json:"includeReceipt,omitempty" form:"includeReceipt" query:"includeReceipt"`
+	Name           string          `json:"name,omitempty" form:"name" query:"name"`
+	Index          *uint64         `json:"index,omitempty" form:"index" query:"index"`
+	Entry          []byte          `json:"entry,omitempty" form:"entry" query:"entry"`
+	Range          *RangeOptions   `json:"range,omitempty" form:"range" query:"range"`
+	IncludeReceipt *ReceiptOptions `json:"includeReceipt,omitempty" form:"includeReceipt" query:"includeReceipt"`
 	extraData      []byte
 }
 
@@ -146,7 +146,7 @@ type DataQuery struct {
 
 type DefaultQuery struct {
 	fieldsSet      []bool
-	IncludeReceipt bool `json:"includeReceipt,omitempty" form:"includeReceipt" query:"includeReceipt"`
+	IncludeReceipt *ReceiptOptions `json:"includeReceipt,omitempty" form:"includeReceipt" query:"includeReceipt"`
 	extraData      []byte
 }
 
@@ -369,6 +369,13 @@ type Receipt struct {
 	extraData      []byte
 }
 
+type ReceiptOptions struct {
+	fieldsSet []bool
+	ForAny    bool   `json:"forAny,omitempty" form:"forAny" query:"forAny" validate:"required"`
+	ForHeight uint64 `json:"forHeight,omitempty" form:"forHeight" query:"forHeight" validate:"required"`
+	extraData []byte
+}
+
 type RecordRange[T Record] struct {
 	fieldsSet     []bool
 	Records       []T        `json:"records,omitempty" form:"records" query:"records" validate:"required"`
@@ -524,7 +531,9 @@ func (v *AnchorSearchQuery) Copy() *AnchorSearchQuery {
 	u := new(AnchorSearchQuery)
 
 	u.Anchor = encoding.BytesCopy(v.Anchor)
-	u.IncludeReceipt = v.IncludeReceipt
+	if v.IncludeReceipt != nil {
+		u.IncludeReceipt = (v.IncludeReceipt).Copy()
+	}
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -660,7 +669,9 @@ func (v *ChainQuery) Copy() *ChainQuery {
 	if v.Range != nil {
 		u.Range = (v.Range).Copy()
 	}
-	u.IncludeReceipt = v.IncludeReceipt
+	if v.IncludeReceipt != nil {
+		u.IncludeReceipt = (v.IncludeReceipt).Copy()
+	}
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -789,7 +800,9 @@ func (v *DataQuery) CopyAsInterface() interface{} { return v.Copy() }
 func (v *DefaultQuery) Copy() *DefaultQuery {
 	u := new(DefaultQuery)
 
-	u.IncludeReceipt = v.IncludeReceipt
+	if v.IncludeReceipt != nil {
+		u.IncludeReceipt = (v.IncludeReceipt).Copy()
+	}
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -1346,6 +1359,21 @@ func (v *Receipt) Copy() *Receipt {
 
 func (v *Receipt) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *ReceiptOptions) Copy() *ReceiptOptions {
+	u := new(ReceiptOptions)
+
+	u.ForAny = v.ForAny
+	u.ForHeight = v.ForHeight
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *ReceiptOptions) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *RecordRange[T]) Copy() *RecordRange[T] {
 	u := new(RecordRange[T])
 
@@ -1562,7 +1590,12 @@ func (v *AnchorSearchQuery) Equal(u *AnchorSearchQuery) bool {
 	if !(bytes.Equal(v.Anchor, u.Anchor)) {
 		return false
 	}
-	if !(v.IncludeReceipt == u.IncludeReceipt) {
+	switch {
+	case v.IncludeReceipt == u.IncludeReceipt:
+		// equal
+	case v.IncludeReceipt == nil || u.IncludeReceipt == nil:
+		return false
+	case !((v.IncludeReceipt).Equal(u.IncludeReceipt)):
 		return false
 	}
 
@@ -1717,7 +1750,12 @@ func (v *ChainQuery) Equal(u *ChainQuery) bool {
 	case !((v.Range).Equal(u.Range)):
 		return false
 	}
-	if !(v.IncludeReceipt == u.IncludeReceipt) {
+	switch {
+	case v.IncludeReceipt == u.IncludeReceipt:
+		// equal
+	case v.IncludeReceipt == nil || u.IncludeReceipt == nil:
+		return false
+	case !((v.IncludeReceipt).Equal(u.IncludeReceipt)):
 		return false
 	}
 
@@ -1862,7 +1900,12 @@ func (v *DataQuery) Equal(u *DataQuery) bool {
 }
 
 func (v *DefaultQuery) Equal(u *DefaultQuery) bool {
-	if !(v.IncludeReceipt == u.IncludeReceipt) {
+	switch {
+	case v.IncludeReceipt == u.IncludeReceipt:
+		// equal
+	case v.IncludeReceipt == nil || u.IncludeReceipt == nil:
+		return false
+	case !((v.IncludeReceipt).Equal(u.IncludeReceipt)):
 		return false
 	}
 
@@ -2421,6 +2464,17 @@ func (v *Receipt) Equal(u *Receipt) bool {
 	return true
 }
 
+func (v *ReceiptOptions) Equal(u *ReceiptOptions) bool {
+	if !(v.ForAny == u.ForAny) {
+		return false
+	}
+	if !(v.ForHeight == u.ForHeight) {
+		return false
+	}
+
+	return true
+}
+
 func (v *RecordRange[T]) Equal(u *RecordRange[T]) bool {
 	if len(v.Records) != len(u.Records) {
 		return false
@@ -2661,8 +2715,8 @@ func (v *AnchorSearchQuery) MarshalBinary() ([]byte, error) {
 	if !(len(v.Anchor) == 0) {
 		writer.WriteBytes(2, v.Anchor)
 	}
-	if !(!v.IncludeReceipt) {
-		writer.WriteBool(3, v.IncludeReceipt)
+	if !(v.IncludeReceipt == nil) {
+		writer.WriteValue(3, v.IncludeReceipt.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_AnchorSearchQuery)
@@ -2992,8 +3046,8 @@ func (v *ChainQuery) MarshalBinary() ([]byte, error) {
 	if !(v.Range == nil) {
 		writer.WriteValue(5, v.Range.MarshalBinary)
 	}
-	if !(!v.IncludeReceipt) {
-		writer.WriteBool(6, v.IncludeReceipt)
+	if !(v.IncludeReceipt == nil) {
+		writer.WriteValue(6, v.IncludeReceipt.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_ChainQuery)
@@ -3410,8 +3464,8 @@ func (v *DefaultQuery) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.QueryType())
-	if !(!v.IncludeReceipt) {
-		writer.WriteBool(2, v.IncludeReceipt)
+	if !(v.IncludeReceipt == nil) {
+		writer.WriteValue(2, v.IncludeReceipt.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_DefaultQuery)
@@ -5050,6 +5104,58 @@ func (v *Receipt) IsValid() error {
 	}
 }
 
+var fieldNames_ReceiptOptions = []string{
+	1: "ForAny",
+	2: "ForHeight",
+}
+
+func (v *ReceiptOptions) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(!v.ForAny) {
+		writer.WriteBool(1, v.ForAny)
+	}
+	if !(v.ForHeight == 0) {
+		writer.WriteUint(2, v.ForHeight)
+	}
+
+	_, _, err := writer.Reset(fieldNames_ReceiptOptions)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *ReceiptOptions) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field ForAny is missing")
+	} else if !v.ForAny {
+		errs = append(errs, "field ForAny is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field ForHeight is missing")
+	} else if v.ForHeight == 0 {
+		errs = append(errs, "field ForHeight is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_RecordRange = []string{
 	1: "RecordType",
 	2: "Records",
@@ -5572,7 +5678,7 @@ func (v *AnchorSearchQuery) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadBytes(2); ok {
 		v.Anchor = x
 	}
-	if x, ok := reader.ReadBool(3); ok {
+	if x := new(ReceiptOptions); reader.ReadValue(3, x.UnmarshalBinaryFrom) {
 		v.IncludeReceipt = x
 	}
 
@@ -5787,7 +5893,7 @@ func (v *ChainQuery) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x := new(RangeOptions); reader.ReadValue(5, x.UnmarshalBinaryFrom) {
 		v.Range = x
 	}
-	if x, ok := reader.ReadBool(6); ok {
+	if x := new(ReceiptOptions); reader.ReadValue(6, x.UnmarshalBinaryFrom) {
 		v.IncludeReceipt = x
 	}
 
@@ -6026,7 +6132,7 @@ func (v *DefaultQuery) UnmarshalBinaryFrom(rd io.Reader) error {
 }
 
 func (v *DefaultQuery) UnmarshalFieldsFrom(reader *encoding.Reader) error {
-	if x, ok := reader.ReadBool(2); ok {
+	if x := new(ReceiptOptions); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
 		v.IncludeReceipt = x
 	}
 
@@ -7002,6 +7108,32 @@ func (v *Receipt) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *ReceiptOptions) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *ReceiptOptions) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadBool(1); ok {
+		v.ForAny = x
+	}
+	if x, ok := reader.ReadUint(2); ok {
+		v.ForHeight = x
+	}
+
+	seen, err := reader.Reset(fieldNames_ReceiptOptions)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *RecordRange[T]) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -7327,15 +7459,15 @@ func (v *AccountRecord) MarshalJSON() ([]byte, error) {
 
 func (v *AnchorSearchQuery) MarshalJSON() ([]byte, error) {
 	u := struct {
-		QueryType      QueryType `json:"queryType"`
-		Anchor         *string   `json:"anchor,omitempty"`
-		IncludeReceipt bool      `json:"includeReceipt,omitempty"`
+		QueryType      QueryType       `json:"queryType"`
+		Anchor         *string         `json:"anchor,omitempty"`
+		IncludeReceipt *ReceiptOptions `json:"includeReceipt,omitempty"`
 	}{}
 	u.QueryType = v.QueryType()
 	if !(len(v.Anchor) == 0) {
 		u.Anchor = encoding.BytesToJSON(v.Anchor)
 	}
-	if !(!v.IncludeReceipt) {
+	if !(v.IncludeReceipt == nil) {
 		u.IncludeReceipt = v.IncludeReceipt
 	}
 	return json.Marshal(&u)
@@ -7448,12 +7580,12 @@ func (v *ChainEntryRecord[T]) MarshalJSON() ([]byte, error) {
 
 func (v *ChainQuery) MarshalJSON() ([]byte, error) {
 	u := struct {
-		QueryType      QueryType     `json:"queryType"`
-		Name           string        `json:"name,omitempty"`
-		Index          *uint64       `json:"index,omitempty"`
-		Entry          *string       `json:"entry,omitempty"`
-		Range          *RangeOptions `json:"range,omitempty"`
-		IncludeReceipt bool          `json:"includeReceipt,omitempty"`
+		QueryType      QueryType       `json:"queryType"`
+		Name           string          `json:"name,omitempty"`
+		Index          *uint64         `json:"index,omitempty"`
+		Entry          *string         `json:"entry,omitempty"`
+		Range          *RangeOptions   `json:"range,omitempty"`
+		IncludeReceipt *ReceiptOptions `json:"includeReceipt,omitempty"`
 	}{}
 	u.QueryType = v.QueryType()
 	if !(len(v.Name) == 0) {
@@ -7468,7 +7600,7 @@ func (v *ChainQuery) MarshalJSON() ([]byte, error) {
 	if !(v.Range == nil) {
 		u.Range = v.Range
 	}
-	if !(!v.IncludeReceipt) {
+	if !(v.IncludeReceipt == nil) {
 		u.IncludeReceipt = v.IncludeReceipt
 	}
 	return json.Marshal(&u)
@@ -7569,11 +7701,11 @@ func (v *DataQuery) MarshalJSON() ([]byte, error) {
 
 func (v *DefaultQuery) MarshalJSON() ([]byte, error) {
 	u := struct {
-		QueryType      QueryType `json:"queryType"`
-		IncludeReceipt bool      `json:"includeReceipt,omitempty"`
+		QueryType      QueryType       `json:"queryType"`
+		IncludeReceipt *ReceiptOptions `json:"includeReceipt,omitempty"`
 	}{}
 	u.QueryType = v.QueryType()
-	if !(!v.IncludeReceipt) {
+	if !(v.IncludeReceipt == nil) {
 		u.IncludeReceipt = v.IncludeReceipt
 	}
 	return json.Marshal(&u)
@@ -8137,9 +8269,9 @@ func (v *AccountRecord) UnmarshalJSON(data []byte) error {
 
 func (v *AnchorSearchQuery) UnmarshalJSON(data []byte) error {
 	u := struct {
-		QueryType      QueryType `json:"queryType"`
-		Anchor         *string   `json:"anchor,omitempty"`
-		IncludeReceipt bool      `json:"includeReceipt,omitempty"`
+		QueryType      QueryType       `json:"queryType"`
+		Anchor         *string         `json:"anchor,omitempty"`
+		IncludeReceipt *ReceiptOptions `json:"includeReceipt,omitempty"`
 	}{}
 	u.QueryType = v.QueryType()
 	u.Anchor = encoding.BytesToJSON(v.Anchor)
@@ -8280,12 +8412,12 @@ func (v *ChainEntryRecord[T]) UnmarshalJSON(data []byte) error {
 
 func (v *ChainQuery) UnmarshalJSON(data []byte) error {
 	u := struct {
-		QueryType      QueryType     `json:"queryType"`
-		Name           string        `json:"name,omitempty"`
-		Index          *uint64       `json:"index,omitempty"`
-		Entry          *string       `json:"entry,omitempty"`
-		Range          *RangeOptions `json:"range,omitempty"`
-		IncludeReceipt bool          `json:"includeReceipt,omitempty"`
+		QueryType      QueryType       `json:"queryType"`
+		Name           string          `json:"name,omitempty"`
+		Index          *uint64         `json:"index,omitempty"`
+		Entry          *string         `json:"entry,omitempty"`
+		Range          *RangeOptions   `json:"range,omitempty"`
+		IncludeReceipt *ReceiptOptions `json:"includeReceipt,omitempty"`
 	}{}
 	u.QueryType = v.QueryType()
 	u.Name = v.Name
@@ -8423,8 +8555,8 @@ func (v *DataQuery) UnmarshalJSON(data []byte) error {
 
 func (v *DefaultQuery) UnmarshalJSON(data []byte) error {
 	u := struct {
-		QueryType      QueryType `json:"queryType"`
-		IncludeReceipt bool      `json:"includeReceipt,omitempty"`
+		QueryType      QueryType       `json:"queryType"`
+		IncludeReceipt *ReceiptOptions `json:"includeReceipt,omitempty"`
 	}{}
 	u.QueryType = v.QueryType()
 	u.IncludeReceipt = v.IncludeReceipt

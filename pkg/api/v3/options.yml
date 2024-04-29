@@ -108,3 +108,10 @@ SubscribeOptions:
       type: url
       pointer: true
       optional: true
+
+ReceiptOptions:
+  fields:
+    - name: ForAny
+      type: bool
+    - name: ForHeight
+      type: uint
