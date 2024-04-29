@@ -174,9 +174,7 @@
       "args": [
         "run",
         "devnet",
-        "-w=${workspaceFolder}/.nodes",
-        "--truncate",
-        "--faucet-seed=ci",
+        "-w=${workspaceFolder}/.nodes/devnet",
       ]
     },
     {

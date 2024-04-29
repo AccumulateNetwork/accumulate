@@ -327,7 +327,7 @@ func TestSignatureChainAnchoring(t *testing.T) {
 		c, err := batch.Account(alicePage).SignatureChain().Index().Get()
 		require.NoError(t, err)
 		require.Zero(t, c.Height(), "%v#chain/signature was indexed", alicePage)
-		_, _, _, err = indexing.ReceiptForChainIndex(config.NetworkUrl{URL: PartitionUrl("BVN0")}, batch, batch.Account(alicePage).SignatureChain(), 0)
+		_, _, _, err = indexing.ReceiptForChainIndex(config.NetworkUrl{URL: PartitionUrl("BVN0")}, batch, batch.Account(alicePage).SignatureChain(), 0, nil)
 		require.EqualError(t, err, "cannot create receipt for entry 0 of signature chain: index chain is empty")
 	})
 
@@ -364,7 +364,7 @@ func TestSignatureChainAnchoring(t *testing.T) {
 		c, err := batch.Account(alicePage).SignatureChain().Index().Get()
 		require.NoError(t, err)
 		require.NotZero(t, c.Height(), "%v#chain/signature was not indexed", alicePage)
-		_, _, _, err = indexing.ReceiptForChainIndex(config.NetworkUrl{URL: PartitionUrl("BVN0")}, batch, batch.Account(alicePage).SignatureChain(), 0)
+		_, _, _, err = indexing.ReceiptForChainIndex(config.NetworkUrl{URL: PartitionUrl("BVN0")}, batch, batch.Account(alicePage).SignatureChain(), 0, nil)
 		require.NoError(t, err)
 	})
 
@@ -990,9 +990,9 @@ func TestProofOverride(t *testing.T) {
 
 	// Construct a valid proof
 	h := synthId.Hash()
-	r1 := sim.QueryChainEntry(PartitionUrl("bvn0").JoinPath(Synthetic), &v3.ChainQuery{Name: "main", Entry: h[:], IncludeReceipt: true})
+	r1 := sim.QueryChainEntry(PartitionUrl("bvn0").JoinPath(Synthetic), &v3.ChainQuery{Name: "main", Entry: h[:], IncludeReceipt: &v3.ReceiptOptions{ForAny: true}})
 	require.NotNil(t, r1.Receipt)
-	r2 := sim.SearchForAnchor(DnUrl().JoinPath(AnchorPool), &v3.AnchorSearchQuery{Anchor: r1.Receipt.Anchor, IncludeReceipt: true})
+	r2 := sim.SearchForAnchor(DnUrl().JoinPath(AnchorPool), &v3.AnchorSearchQuery{Anchor: r1.Receipt.Anchor, IncludeReceipt: &v3.ReceiptOptions{ForAny: true}})
 	require.NotEmpty(t, r2.Records)
 	require.NotEmpty(t, r2.Records[0].Receipt)
 
@@ -1098,7 +1098,7 @@ func TestChainUpdateAnchor(t *testing.T) {
 	r1 := sim.QueryChainEntry(bob.JoinPath("tokens"), &v3.ChainQuery{
 		Name:           "signature",
 		Entry:          h[:],
-		IncludeReceipt: true,
+		IncludeReceipt: &v3.ReceiptOptions{ForAny: true},
 	})
 
 	// Verify the credit payment was processed in the last block, otherwise the
