@@ -42,3 +42,10 @@ recordChange:
     pointer: true
   - name: Value
     type: bytes
+
+recordMessages:
+  fields:
+  - name: Messages
+    type: consensus.Message
+    repeatable: true
+    marshal-as: union
