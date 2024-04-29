@@ -2,8 +2,10 @@ DefaultQuery:
   union: { type: query }
   fields:
     - name: IncludeReceipt
-      type: bool
+      type: ReceiptOptions
       optional: true
+      pointer: true
+      marshal-as: reference
 
 ChainQuery:
   union: { type: query }
@@ -25,8 +27,10 @@ ChainQuery:
       pointer: true
       optional: true
     - name: IncludeReceipt
-      type: bool
+      type: ReceiptOptions
       optional: true
+      pointer: true
+      marshal-as: reference
 
 DataQuery:
   union: { type: query }
@@ -100,8 +104,10 @@ AnchorSearchQuery:
     - name: Anchor
       type: bytes
     - name: IncludeReceipt
-      type: bool
+      type: ReceiptOptions
       optional: true
+      pointer: true
+      marshal-as: reference
 
 PublicKeySearchQuery:
   union: { type: query }
