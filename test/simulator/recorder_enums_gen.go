@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -23,6 +23,9 @@ const recordSectionTypeSnapshot recordSectionType = 2
 // recordSectionTypeBlock .
 const recordSectionTypeBlock recordSectionType = 3
 
+// recordSectionTypeMessages .
+const recordSectionTypeMessages recordSectionType = 4
+
 // GetEnumValue returns the value of the record Section Type
 func (v recordSectionType) GetEnumValue() uint64 { return uint64(v) }
 
@@ -30,7 +33,7 @@ func (v recordSectionType) GetEnumValue() uint64 { return uint64(v) }
 func (v *recordSectionType) SetEnumValue(id uint64) bool {
 	u := recordSectionType(id)
 	switch u {
-	case recordSectionTypeHeader, recordSectionTypeSnapshot, recordSectionTypeBlock:
+	case recordSectionTypeHeader, recordSectionTypeSnapshot, recordSectionTypeBlock, recordSectionTypeMessages:
 		*v = u
 		return true
 	}
@@ -46,6 +49,8 @@ func (v recordSectionType) String() string {
 		return "snapshot"
 	case recordSectionTypeBlock:
 		return "block"
+	case recordSectionTypeMessages:
+		return "messages"
 	}
 	return fmt.Sprintf("recordSectionType:%d", v)
 }
@@ -59,6 +64,8 @@ func recordSectionTypeByName(name string) (recordSectionType, bool) {
 		return recordSectionTypeSnapshot, true
 	case "block":
 		return recordSectionTypeBlock, true
+	case "messages":
+		return recordSectionTypeMessages, true
 	}
 	return 0, false
 }
