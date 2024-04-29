@@ -16,7 +16,7 @@ import (
 func open(t testing.TB) kvtest.Opener {
 	dir := t.TempDir()
 	return func() (keyvalue.Beginner, error) {
-		return OpenFile(dir)
+		return Open(dir)
 	}
 }
 

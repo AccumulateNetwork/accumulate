@@ -18,6 +18,12 @@ func NewStorage(typ StorageType) (Storage, error) {
 	switch typ {
 	case StorageTypeBadger:
 		return new(BadgerStorage), nil
+	case StorageTypeBolt:
+		return new(BoltStorage), nil
+	case StorageTypeExpBlockDB:
+		return new(ExpBlockDBStorage), nil
+	case StorageTypeLevelDB:
+		return new(LevelDBStorage), nil
 	case StorageTypeMemory:
 		return new(MemoryStorage), nil
 	}
@@ -36,6 +42,24 @@ func EqualStorage(a, b Storage) bool {
 		}
 		b, ok := b.(*BadgerStorage)
 		return ok && a.Equal(b)
+	case *BoltStorage:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*BoltStorage)
+		return ok && a.Equal(b)
+	case *ExpBlockDBStorage:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*ExpBlockDBStorage)
+		return ok && a.Equal(b)
+	case *LevelDBStorage:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*LevelDBStorage)
+		return ok && a.Equal(b)
 	case *MemoryStorage:
 		if a == nil {
 			return b == nil
@@ -50,6 +74,12 @@ func EqualStorage(a, b Storage) bool {
 func CopyStorage(v Storage) Storage {
 	switch v := v.(type) {
 	case *BadgerStorage:
+		return v.Copy()
+	case *BoltStorage:
+		return v.Copy()
+	case *ExpBlockDBStorage:
+		return v.Copy()
+	case *LevelDBStorage:
 		return v.Copy()
 	case *MemoryStorage:
 		return v.Copy()
