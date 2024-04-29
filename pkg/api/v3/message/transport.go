@@ -299,7 +299,9 @@ func (c *RoutedTransport) dial(ctx context.Context, addr multiaddr.Multiaddr, st
 
 		case errors.EncodingError.ErrorAs(err, &err2):
 			// If the error is an encoding issue, log it and return "internal error"
-			multi.BadDial(ctx, addr, s, err)
+			if isMulti {
+				multi.BadDial(ctx, addr, s, err)
+			}
 			return nil, errors.InternalError.WithFormat("internal error: %w", err)
 		}
 

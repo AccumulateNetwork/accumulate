@@ -261,6 +261,12 @@ RouterService:
       description: may specify an event bus to use for routing table updates
       type: string
       optional: true
+    - name: PeerMap
+      description: uses a hard-coded peer map for initializing routing
+      type: HttpPeerMapEntry
+      marshal-as: reference
+      pointer: true
+      repeatable: true
 
 FaucetService:
   union: { type: service }
