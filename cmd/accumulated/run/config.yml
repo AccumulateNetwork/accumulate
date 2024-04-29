@@ -74,6 +74,29 @@ Instrumentation:
   fields:
     - type: HttpListener
       marshal-as: reference
+    - name: Monitoring
+      type: Monitor
+      marshal-as: reference
+      pointer: true
+
+Monitor:
+  non-binary: true
+  fields:
+    - name: Directory
+      description: is the directory traces and profiles are written to
+      type: string
+    - name: ProfileMemory
+      description: enables profiling when memory usage increases dramatically
+      type: bool
+      pointer: true
+    - name: MemoryPollingRate
+      description: is rate at which to poll memory usage
+      type: duration
+      pointer: true
+    - name: AllocRateTrigger
+      description: is the rate of allocation in bytes/second that triggers a profile
+      type: float
+      pointer: true
 
 HttpListener:
   non-binary: true

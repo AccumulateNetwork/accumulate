@@ -415,7 +415,7 @@ func (d *DevnetConfiguration) addSubNode(inst *Instance, root *Config, name stri
 	return cfg, sub, nil
 }
 
-func (d *DevnetConfiguration) writeSubNode(inst *Instance, root, cfg *Config, sub *SubnodeService, ip ipOffset) error {
+func (d *DevnetConfiguration) writeSubNode(_ *Instance, root, cfg *Config, sub *SubnodeService, ip ipOffset) error {
 	// Update the subnode configuration
 	sub.NodeKey = cfg.P2P.Key
 	sub.Services = cfg.Services

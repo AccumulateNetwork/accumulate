@@ -172,9 +172,7 @@
       "mode": "auto",
       "program": "${workspaceFolder}/cmd/accumulated",
       "args": [
-        "run",
-        "devnet",
-        "-w=${workspaceFolder}/.nodes/devnet",
+        "${workspaceFolder}/.nodes/devnet",
       ]
     },
     {
@@ -522,12 +520,11 @@
       "type": "go",
       "request": "launch",
       "mode": "auto",
-      "program": "${workspaceFolder}/tools/cmd/debug",
+      "program": "${workspaceFolder}/cmd/accumulated",
       "args": [
-        "comet",
-        "download-genesis",
-        "http://206.189.97.165:16592",
-        "${env:HOME}/Desktop/apollo-genesis.json"
+        "run-dual",
+        "${workspaceFolder}/.nodes/kermit-node/dnn",
+        "${workspaceFolder}/.nodes/kermit-node/bvnn",
       ]
     },
     {
