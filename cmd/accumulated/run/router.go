@@ -12,6 +12,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/http"
 )
 
 var (
@@ -39,13 +40,23 @@ func (r *RouterService) create(inst *Instance) (routing.Router, error) {
 		return nil, err
 	}
 
-	return apiutil.InitRouter(apiutil.RouterOptions{
+	opts := apiutil.RouterOptions{
 		Context: inst.context,
 		Node:    inst.p2p,
 		Network: inst.config.Network,
 		Events:  events,
 		Logger:  (*logging.Slogger)(inst.logger),
-	})
+	}
+
+	if len(r.PeerMap) > 0 {
+		opts.Dialer = &http.DumbDialer{
+			Peers:     peersForDumbDialer(r.PeerMap),
+			Connector: inst.p2p.Connector(),
+			Self:      inst.p2p.ID(),
+		}
+	}
+
+	return apiutil.InitRouter(opts)
 }
 
 func (r *RouterService) start(inst *Instance) error {

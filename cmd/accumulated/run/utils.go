@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -332,4 +333,18 @@ func addService[T Service](cfg *Config, s T, getID func(T) string) T {
 		cfg.Services = append(cfg.Services, s)
 	}
 	return s
+}
+
+func peersForDumbDialer(entries []*HttpPeerMapEntry) map[string][]peer.AddrInfo {
+	m := map[string][]peer.AddrInfo{}
+	for _, p := range entries {
+		for _, part := range p.Partitions {
+			part = strings.ToLower(part)
+			m[part] = append(m[part], peer.AddrInfo{
+				ID:    p.ID,
+				Addrs: p.Addresses,
+			})
+		}
+	}
+	return m
 }

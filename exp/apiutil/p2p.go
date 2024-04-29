@@ -29,6 +29,7 @@ type RouterOptions struct {
 	Network string
 	Events  *events.Bus
 	Logger  log.Logger
+	Dialer  message.Dialer
 }
 
 // InitRouter initializes a router. If an event bus is provided, InitRouter will
@@ -103,11 +104,15 @@ func initRouter(opts RouterOptions) {
 		}
 	}
 
+	if opts.Dialer == nil {
+		opts.Dialer = opts.Node.DialNetwork()
+	}
+
 	slog.InfoCtx(opts.Context, "Fetching routing information")
 	client := &message.Client{
 		Transport: &message.RoutedTransport{
 			Network: opts.Network,
-			Dialer:  opts.Node.DialNetwork(),
+			Dialer:  opts.Dialer,
 			Router:  new(routing.MessageRouter),
 		},
 	}

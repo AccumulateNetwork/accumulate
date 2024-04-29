@@ -69,10 +69,10 @@ func NewHandler(opts Options) (*Handler, error) {
 	// Message clients
 	var netDial message.Dialer
 	if opts.PeerMap != nil {
-		netDial = &dumbDialer{
-			peers:     opts.PeerMap,
-			connector: opts.Node.Connector(),
-			self:      opts.Node.ID(),
+		netDial = &DumbDialer{
+			Peers:     opts.PeerMap,
+			Connector: opts.Node.Connector(),
+			Self:      opts.Node.ID(),
 		}
 	} else {
 		netDial = opts.Node.DialNetwork()
@@ -279,15 +279,16 @@ func (r unrouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 	return service.Multiaddr(), nil
 }
 
-// dumbDialer always dials one of the seed nodes
-type dumbDialer struct {
-	peers     map[string][]peer.AddrInfo
-	connector dial.Connector
-	count     atomic.Int32
-	self      peer.ID
+// DumbDialer always dials one of the seed nodes
+type DumbDialer struct {
+	Peers     map[string][]peer.AddrInfo
+	Connector dial.Connector
+	Self      peer.ID
+
+	count atomic.Int32
 }
 
-func (d *dumbDialer) Dial(ctx context.Context, addr multiaddr.Multiaddr) (message.Stream, error) {
+func (d *DumbDialer) Dial(ctx context.Context, addr multiaddr.Multiaddr) (message.Stream, error) {
 	_, id, sa, ip, err := api.UnpackAddress(addr)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
@@ -301,7 +302,7 @@ func (d *dumbDialer) Dial(ctx context.Context, addr multiaddr.Multiaddr) (messag
 	}
 
 	if id != "" {
-		return d.connector.Connect(ctx, &dial.ConnectionRequest{
+		return d.Connector.Connect(ctx, &dial.ConnectionRequest{
 			Service:  sa,
 			PeerID:   id,
 			PeerAddr: ip,
@@ -309,14 +310,14 @@ func (d *dumbDialer) Dial(ctx context.Context, addr multiaddr.Multiaddr) (messag
 	}
 
 	if sa.Argument == "" {
-		return d.connector.Connect(ctx, &dial.ConnectionRequest{
+		return d.Connector.Connect(ctx, &dial.ConnectionRequest{
 			Service: sa,
-			PeerID:  d.self,
+			PeerID:  d.Self,
 		})
 	}
 
 	// Pick a peer from the map
-	peers, ok := d.peers[strings.ToLower(sa.Argument)]
+	peers, ok := d.Peers[strings.ToLower(sa.Argument)]
 	if !ok {
 		return nil, errors.BadRequest.WithFormat("invalid address %v (unknown partition %q)", addr, sa.Argument)
 	}
@@ -324,7 +325,7 @@ func (d *dumbDialer) Dial(ctx context.Context, addr multiaddr.Multiaddr) (messag
 	if len(peer.Addrs) > 0 {
 		ip = peer.Addrs[0]
 	}
-	return d.connector.Connect(ctx, &dial.ConnectionRequest{
+	return d.Connector.Connect(ctx, &dial.ConnectionRequest{
 		Service:  sa,
 		PeerID:   peer.ID,
 		PeerAddr: ip,
