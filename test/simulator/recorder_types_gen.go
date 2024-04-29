@@ -24,6 +24,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/test/simulator/consensus"
 )
 
 type recordBlock struct {
@@ -50,6 +51,12 @@ type recordHeader struct {
 	Partition *protocol.PartitionInfo `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
 	Config    *accumulated.NodeInit   `json:"config,omitempty" form:"config" query:"config" validate:"required"`
 	NodeID    string                  `json:"nodeID,omitempty" form:"nodeID" query:"nodeID" validate:"required"`
+	extraData []byte
+}
+
+type recordMessages struct {
+	fieldsSet []bool
+	Messages  []consensus.Message `json:"messages,omitempty" form:"messages" query:"messages" validate:"required"`
 	extraData []byte
 }
 
@@ -122,6 +129,26 @@ func (v *recordHeader) Copy() *recordHeader {
 
 func (v *recordHeader) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *recordMessages) Copy() *recordMessages {
+	u := new(recordMessages)
+
+	u.Messages = make([]consensus.Message, len(v.Messages))
+	for i, v := range v.Messages {
+		v := v
+		if v != nil {
+			u.Messages[i] = consensus.CopyMessage(v)
+		}
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *recordMessages) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *recordBlock) Equal(u *recordBlock) bool {
 	if !(v.IsLeader == u.IsLeader) {
 		return false
@@ -193,6 +220,19 @@ func (v *recordHeader) Equal(u *recordHeader) bool {
 	}
 	if !(v.NodeID == u.NodeID) {
 		return false
+	}
+
+	return true
+}
+
+func (v *recordMessages) Equal(u *recordMessages) bool {
+	if len(v.Messages) != len(u.Messages) {
+		return false
+	}
+	for i := range v.Messages {
+		if !(consensus.EqualMessage(v.Messages[i], u.Messages[i])) {
+			return false
+		}
 	}
 
 	return true
@@ -412,6 +452,51 @@ func (v *recordHeader) IsValid() error {
 	}
 }
 
+var fieldNames_recordMessages = []string{
+	1: "Messages",
+}
+
+func (v *recordMessages) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(len(v.Messages) == 0) {
+		for _, v := range v.Messages {
+			writer.WriteValue(1, v.MarshalBinary)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_recordMessages)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *recordMessages) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Messages is missing")
+	} else if len(v.Messages) == 0 {
+		errs = append(errs, "field Messages is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 func (v *recordBlock) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -516,6 +601,38 @@ func (v *recordHeader) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *recordMessages) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *recordMessages) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	for {
+		ok := reader.ReadValue(1, func(r io.Reader) error {
+			x, err := consensus.UnmarshalMessageFrom(r)
+			if err == nil {
+				v.Messages = append(v.Messages, x)
+			}
+			return err
+		})
+		if !ok {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_recordMessages)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *recordBlock) MarshalJSON() ([]byte, error) {
 	u := struct {
 		IsLeader    bool                                   `json:"isLeader,omitempty"`
@@ -560,6 +677,16 @@ func (v *recordChange) MarshalJSON() ([]byte, error) {
 	}
 	if !(len(v.Value) == 0) {
 		u.Value = encoding.BytesToJSON(v.Value)
+	}
+	return json.Marshal(&u)
+}
+
+func (v *recordMessages) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Messages *encoding.JsonUnmarshalListWith[consensus.Message] `json:"messages,omitempty"`
+	}{}
+	if !(len(v.Messages) == 0) {
+		u.Messages = &encoding.JsonUnmarshalListWith[consensus.Message]{Value: v.Messages, Func: consensus.UnmarshalMessageJSON}
 	}
 	return json.Marshal(&u)
 }
@@ -609,6 +736,23 @@ func (v *recordChange) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("error decoding Value: %w", err)
 	} else {
 		v.Value = x
+	}
+	return nil
+}
+
+func (v *recordMessages) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Messages *encoding.JsonUnmarshalListWith[consensus.Message] `json:"messages,omitempty"`
+	}{}
+	u.Messages = &encoding.JsonUnmarshalListWith[consensus.Message]{Value: v.Messages, Func: consensus.UnmarshalMessageJSON}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if u.Messages != nil {
+		v.Messages = make([]consensus.Message, len(u.Messages.Value))
+		for i, x := range u.Messages.Value {
+			v.Messages[i] = x
+		}
 	}
 	return nil
 }
