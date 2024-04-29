@@ -33,8 +33,8 @@ func (p *Partition) Submit(envelope *messaging.Envelope, pretend bool) ([]*proto
 		return st, nil
 	}
 
-	var resp consensus.Capture[*consensus.SubmissionResponse]
-	err = p.sim.hub.With(&resp).Send(&consensus.Submission{
+	var resp consensus.Capture[*consensus.EnvelopeSubmitted]
+	err = p.sim.hub.With(&resp).Send(&consensus.SubmitEnvelope{
 		Network:  p.ID,
 		Envelope: envelope,
 		Pretend:  pretend,

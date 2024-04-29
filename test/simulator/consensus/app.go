@@ -75,9 +75,14 @@ type ExecutorApp struct {
 	Executor execute.Executor
 	Restore  RestoreFunc
 	EventBus *events.Bus
+	Record   Recorder
 }
 
 type RestoreFunc func(ioutil.SectionReader) error
+
+func (a *ExecutorApp) SetRecorder(rec Recorder) {
+	a.Record = rec
+}
 
 func (a *ExecutorApp) Info(*InfoRequest) (*InfoResponse, error) {
 	last, hash, err := a.Executor.LastBlock()
@@ -189,6 +194,13 @@ func (a *ExecutorApp) Commit(req *CommitRequest) (*CommitResponse, error) {
 	hash, err := s.Hash()
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	if a.Record != nil {
+		err = a.Record.DidCommitBlock(s)
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
 	}
 
 	return &CommitResponse{

@@ -14,7 +14,6 @@ import (
 	"sync"
 	"time"
 
-	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
@@ -64,11 +63,6 @@ func (v *validator) cmpKey(k []byte) int { return bytes.Compare(v.PubKey, k) }
 
 type ExecuteHookFunc = func(*Node, execute.BlockParams, []*messaging.Envelope) (_ []*messaging.Envelope, keepHook bool)
 
-type Recorder interface {
-	DidInit(snapshot ioutil.SectionReader) error
-	DidExecuteBlock(state execute.BlockState, submissions []*messaging.Envelope) error
-}
-
 type StatusRequest struct{}
 
 type StatusResponse struct {
@@ -95,6 +89,9 @@ func (n *Node) SetRecorder(rec Recorder) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	n.record = rec
+	if app, ok := n.app.(interface{ SetRecorder(Recorder) }); ok {
+		app.SetRecorder(rec)
+	}
 }
 
 func (n *Node) SetExecuteHook(hook ExecuteHookFunc) {
