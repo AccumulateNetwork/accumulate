@@ -24,6 +24,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
@@ -39,6 +40,7 @@ type QuerierTestSuite struct {
 	suite.Suite
 	sim    *simulator.Simulator
 	faucet *url.URL
+	parts  []*protocol.PartitionInfo
 
 	alice, bob, charlie          *url.URL
 	aliceKey, bobKey, charlieKey ed25519.PrivateKey
@@ -86,17 +88,17 @@ func (s *QuerierTestSuite) SetupSuite() {
 	s.bobKey = acctesting.GenerateKey(s.bob)
 	s.charlieKey = acctesting.GenerateKey(s.charlie)
 
-	parts := sim.Partitions()
-	for i, p := range parts {
+	s.parts = sim.Partitions()
+	for i, p := range s.parts {
 		if p.Type == PartitionTypeDirectory {
-			sortutil.RemoveAt(&parts, i)
+			sortutil.RemoveAt(&s.parts, i)
 			break
 		}
 	}
-	sim.SetRoute(s.alice, parts[0].ID)
-	sim.SetRoute(s.faucet, parts[1].ID)
-	sim.SetRoute(s.bob, parts[1].ID)
-	sim.SetRoute(s.charlie, parts[2].ID)
+	sim.SetRoute(s.alice, s.parts[0].ID)
+	sim.SetRoute(s.faucet, s.parts[1].ID)
+	sim.SetRoute(s.bob, s.parts[1].ID)
+	sim.SetRoute(s.charlie, s.parts[2].ID)
 
 	MakeLiteTokenAccount(s.T(), sim.DatabaseFor(s.faucet), faucetKey[32:], AcmeUrl())
 	CreditTokens(s.T(), sim.DatabaseFor(s.faucet), s.faucet, big.NewInt(1000*AcmePrecision))
@@ -239,7 +241,13 @@ func (s *QuerierTestSuite) TestQueryAccountChains() {
 }
 
 func (s *QuerierTestSuite) TestQueryTransactionChains() {
-	r, err := s.QuerierFor(s.alice).QueryTransactionChains(context.Background(), s.writeData.TxID, &api.ChainQuery{IncludeReceipt: true})
+	r, err := s.QuerierFor(s.alice).QueryChainEntries(context.Background(),
+		protocol.PartitionUrl(s.parts[0].ID).JoinPath(protocol.Ledger),
+		&api.ChainQuery{Name: "root", Range: &api.RangeOptions{FromEnd: true, Count: api.Ptr[uint64](1)}})
+	s.Require().NoError(err)
+	s.Require().Len(r.Records, 1)
+
+	r, err = s.QuerierFor(s.alice).QueryTransactionChains(context.Background(), s.writeData.TxID, &api.ChainQuery{IncludeReceipt: &api.ReceiptOptions{ForHeight: r.Records[0].Index}})
 	s.Require().NoError(err)
 	s.Require().Len(r.Records, 2)
 
