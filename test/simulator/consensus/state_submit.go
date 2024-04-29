@@ -19,7 +19,7 @@ type submitMessage interface {
 	envelope() *messaging.Envelope
 }
 
-func (n *Node) processSubmission(sub *Submission) (submitState, []Message, error) {
+func (n *Node) processSubmission(sub *SubmitEnvelope) (submitState, []Message, error) {
 	result, err := n.check(context.Background(), sub.Envelope)
 	if err != nil {
 		return nil, nil, err
@@ -27,7 +27,7 @@ func (n *Node) processSubmission(sub *Submission) (submitState, []Message, error
 
 	if sub.Pretend {
 		return nil, []Message{
-			&SubmissionResponse{
+			&EnvelopeSubmitted{
 				Results: result,
 			},
 		}, nil
@@ -45,12 +45,6 @@ func (n *Node) processSubmission(sub *Submission) (submitState, []Message, error
 	return s, out, err
 }
 
-type acceptedSubmission struct {
-	baseNodeMessage
-	result SubmissionResponse
-	env    *messaging.Envelope
-}
-
 type didAcceptSubmission struct {
 	*Node
 	s     acceptedSubmission
@@ -64,7 +58,7 @@ func (n *didAcceptSubmission) execute(msg Message) (submitState, []Message, erro
 	case *acceptedSubmission:
 		// Verify the result matches
 		if !msg.result.Equal(&n.s.result) {
-			return n, nil, &ConsensusError[SubmissionResponse]{
+			return n, nil, &ConsensusError[EnvelopeSubmitted]{
 				Message: "conflicting leader proposal",
 				Mine:    n.s.result,
 				Theirs:  msg.result,
@@ -72,7 +66,7 @@ func (n *didAcceptSubmission) execute(msg Message) (submitState, []Message, erro
 		}
 
 		// Add the vote
-		n.votes.add(msg.senderID())
+		n.votes.add(msg.SenderID())
 	}
 
 	if !n.votes.reachedThreshold() {
