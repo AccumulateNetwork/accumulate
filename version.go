@@ -7,7 +7,7 @@
 package accumulate
 
 //go:generate go run github.com/vektra/mockery/v2
-//go:generate go run github.com/rinchsan/gosimports/cmd/gosimports -w test/mocks
+//go:generate go run github.com/rinchsan/gosimports/cmd/gosimports -w test/mocks pkg/api/v3/p2p/dial pkg/api/v3/message internal/api/routing
 
 const unknownVersion = "version unknown"
 

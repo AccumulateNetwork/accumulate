@@ -1,5 +1,0 @@
-name: ^(Router)$
-inpackage: true
-testonly: true
-with-expecter: true
-tags: mockery
