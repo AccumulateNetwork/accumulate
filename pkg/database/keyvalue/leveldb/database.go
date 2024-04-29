@@ -27,7 +27,7 @@ type opts struct {
 
 type Option func(*opts) error
 
-func OpenFile(filepath string, o ...Option) (*Database, error) {
+func Open(filepath string, o ...Option) (*Database, error) {
 	// Make sure all directories exist
 	err := os.MkdirAll(filepath, 0700)
 	if err != nil {

@@ -30,6 +30,11 @@ import (
 )
 
 type BadgerStorage struct {
+	Path    string `json:"path,omitempty" form:"path" query:"path" validate:"required"`
+	Version int64  `json:"version,omitempty" form:"version" query:"version" validate:"required"`
+}
+
+type BoltStorage struct {
 	Path string `json:"path,omitempty" form:"path" query:"path" validate:"required"`
 }
 
@@ -96,6 +101,10 @@ type EventsService struct {
 	Partition string `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
 }
 
+type ExpBlockDBStorage struct {
+	Path string `json:"path,omitempty" form:"path" query:"path" validate:"required"`
+}
+
 type FaucetService struct {
 	Account    *url.URL                      `json:"account,omitempty" form:"account" query:"account" validate:"required"`
 	SigningKey PrivateKey                    `json:"signingKey,omitempty" form:"signingKey" query:"signingKey" validate:"required"`
@@ -142,6 +151,10 @@ type HttpService struct {
 
 type Instrumentation struct {
 	HttpListener
+}
+
+type LevelDBStorage struct {
+	Path string `json:"path,omitempty" form:"path" query:"path" validate:"required"`
 }
 
 type Logging struct {
@@ -228,6 +241,8 @@ type TransientPrivateKey struct {
 
 func (*BadgerStorage) Type() StorageType { return StorageTypeBadger }
 
+func (*BoltStorage) Type() StorageType { return StorageTypeBolt }
+
 func (*CometNodeKeyFile) Type() PrivateKeyType { return PrivateKeyTypeCometNodeKeyFile }
 
 func (*CometPrivValFile) Type() PrivateKeyType { return PrivateKeyTypeCometPrivValFile }
@@ -242,11 +257,15 @@ func (*DevnetConfiguration) Type() ConfigurationType { return ConfigurationTypeD
 
 func (*EventsService) Type() ServiceType { return ServiceTypeEvents }
 
+func (*ExpBlockDBStorage) Type() StorageType { return StorageTypeExpBlockDB }
+
 func (*FaucetService) Type() ServiceType { return ServiceTypeFaucet }
 
 func (*GatewayConfiguration) Type() ConfigurationType { return ConfigurationTypeGateway }
 
 func (*HttpService) Type() ServiceType { return ServiceTypeHttp }
+
+func (*LevelDBStorage) Type() StorageType { return StorageTypeLevelDB }
 
 func (*MemoryStorage) Type() StorageType { return StorageTypeMemory }
 
@@ -274,11 +293,22 @@ func (v *BadgerStorage) Copy() *BadgerStorage {
 	u := new(BadgerStorage)
 
 	u.Path = v.Path
+	u.Version = v.Version
 
 	return u
 }
 
 func (v *BadgerStorage) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *BoltStorage) Copy() *BoltStorage {
+	u := new(BoltStorage)
+
+	u.Path = v.Path
+
+	return u
+}
+
+func (v *BoltStorage) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *CometNodeKeyFile) Copy() *CometNodeKeyFile {
 	u := new(CometNodeKeyFile)
@@ -461,6 +491,16 @@ func (v *EventsService) Copy() *EventsService {
 
 func (v *EventsService) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *ExpBlockDBStorage) Copy() *ExpBlockDBStorage {
+	u := new(ExpBlockDBStorage)
+
+	u.Path = v.Path
+
+	return u
+}
+
+func (v *ExpBlockDBStorage) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *FaucetService) Copy() *FaucetService {
 	u := new(FaucetService)
 
@@ -588,6 +628,16 @@ func (v *Instrumentation) Copy() *Instrumentation {
 }
 
 func (v *Instrumentation) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *LevelDBStorage) Copy() *LevelDBStorage {
+	u := new(LevelDBStorage)
+
+	u.Path = v.Path
+
+	return u
+}
+
+func (v *LevelDBStorage) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *Logging) Copy() *Logging {
 	u := new(Logging)
@@ -808,6 +858,17 @@ func (v *TransientPrivateKey) Copy() *TransientPrivateKey {
 func (v *TransientPrivateKey) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *BadgerStorage) Equal(u *BadgerStorage) bool {
+	if !(v.Path == u.Path) {
+		return false
+	}
+	if !(v.Version == u.Version) {
+		return false
+	}
+
+	return true
+}
+
+func (v *BoltStorage) Equal(u *BoltStorage) bool {
 	if !(v.Path == u.Path) {
 		return false
 	}
@@ -1048,6 +1109,14 @@ func (v *EventsService) Equal(u *EventsService) bool {
 	return true
 }
 
+func (v *ExpBlockDBStorage) Equal(u *ExpBlockDBStorage) bool {
+	if !(v.Path == u.Path) {
+		return false
+	}
+
+	return true
+}
+
 func (v *FaucetService) Equal(u *FaucetService) bool {
 	switch {
 	case v.Account == u.Account:
@@ -1189,6 +1258,14 @@ func (v *HttpService) Equal(u *HttpService) bool {
 
 func (v *Instrumentation) Equal(u *Instrumentation) bool {
 	if !v.HttpListener.Equal(&u.HttpListener) {
+		return false
+	}
+
+	return true
+}
+
+func (v *LevelDBStorage) Equal(u *LevelDBStorage) bool {
+	if !(v.Path == u.Path) {
 		return false
 	}
 
@@ -1626,6 +1703,22 @@ func (v *RouterService) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 
 func (v *BadgerStorage) MarshalJSON() ([]byte, error) {
 	u := struct {
+		Type    StorageType `json:"type"`
+		Path    string      `json:"path,omitempty"`
+		Version int64       `json:"version,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.Path) == 0) {
+		u.Path = v.Path
+	}
+	if !(v.Version == 0) {
+		u.Version = v.Version
+	}
+	return json.Marshal(&u)
+}
+
+func (v *BoltStorage) MarshalJSON() ([]byte, error) {
+	u := struct {
 		Type StorageType `json:"type"`
 		Path string      `json:"path,omitempty"`
 	}{}
@@ -1842,6 +1935,18 @@ func (v *EventsService) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *ExpBlockDBStorage) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type StorageType `json:"type"`
+		Path string      `json:"path,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.Path) == 0) {
+		u.Path = v.Path
+	}
+	return json.Marshal(&u)
+}
+
 func (v *FaucetService) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type       ServiceType                             `json:"type"`
@@ -2004,6 +2109,18 @@ func (v *Instrumentation) MarshalJSON() ([]byte, error) {
 	if !(len(v.HttpListener.TlsKeyPath) == 0) {
 
 		u.TlsKeyPath = v.HttpListener.TlsKeyPath
+	}
+	return json.Marshal(&u)
+}
+
+func (v *LevelDBStorage) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type StorageType `json:"type"`
+		Path string      `json:"path,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.Path) == 0) {
+		u.Path = v.Path
 	}
 	return json.Marshal(&u)
 }
@@ -2237,6 +2354,26 @@ func (v *TransientPrivateKey) MarshalJSON() ([]byte, error) {
 }
 
 func (v *BadgerStorage) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type    StorageType `json:"type"`
+		Path    string      `json:"path,omitempty"`
+		Version int64       `json:"version,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Path = v.Path
+	u.Version = v.Version
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Path = u.Path
+	v.Version = u.Version
+	return nil
+}
+
+func (v *BoltStorage) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type StorageType `json:"type"`
 		Path string      `json:"path,omitempty"`
@@ -2511,6 +2648,23 @@ func (v *EventsService) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *ExpBlockDBStorage) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type StorageType `json:"type"`
+		Path string      `json:"path,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Path = v.Path
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Path = u.Path
+	return nil
+}
+
 func (v *FaucetService) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type       ServiceType                             `json:"type"`
@@ -2711,6 +2865,23 @@ func (v *Instrumentation) UnmarshalJSON(data []byte) error {
 	}
 	v.HttpListener.TlsCertPath = u.TlsCertPath
 	v.HttpListener.TlsKeyPath = u.TlsKeyPath
+	return nil
+}
+
+func (v *LevelDBStorage) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type StorageType `json:"type"`
+		Path string      `json:"path,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Path = v.Path
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Path = u.Path
 	return nil
 }
 
