@@ -182,6 +182,29 @@ BadgerStorage:
   fields:
     - name: Path
       type: string
+    - name: Version
+      type: int
+
+BoltStorage:
+  union: { type: storage }
+  non-binary: true
+  fields:
+    - name: Path
+      type: string
+
+LevelDBStorage:
+  union: { type: storage }
+  non-binary: true
+  fields:
+    - name: Path
+      type: string
+
+ExpBlockDBStorage:
+  union: { type: storage }
+  non-binary: true
+  fields:
+    - name: Path
+      type: string
 
 HttpService:
   union: { type: service }
