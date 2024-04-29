@@ -1,4 +1,0 @@
-dir: ../../../../internal/api/private
-case: underscore
-with-expecter: true
-name: ^(Sequencer)$

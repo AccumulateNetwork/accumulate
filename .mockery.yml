@@ -1,6 +1,48 @@
-output: test/mocks
-case: underscore
-recursive: true
-keeptree: true
 with-expecter: true
-name: ^(NodeService|ConsensusService|NetworkService|MetricsService|Querier|Submitter|Validator|EventService|Sequencer)$
+mockname: '{{.InterfaceName}}'
+filename: '{{.InterfaceName | snakecase}}.go'
+outpkg: mocks
+
+packages:
+  gitlab.com/accumulatenetwork/accumulate/pkg/api/v3:
+    config:
+      # TODO Remove nesting
+      dir: test/mocks/pkg/api/v3
+    interfaces:
+      NodeService: ~
+      ConsensusService: ~
+      NetworkService: ~
+      MetricsService: ~
+      Querier: ~
+      Submitter: ~
+      Validator: ~
+      EventService: ~
+      Sequencer: ~
+
+  gitlab.com/accumulatenetwork/accumulate/internal/api/private:
+    config:
+      dir: test/mocks/api_v3
+    interfaces:
+      Sequencer: ~
+
+  gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p/dial:
+    config: &inpkg_test
+      dir: '{{.InterfaceDir}}'
+      mockname: 'Mock{{.InterfaceName}}'
+      outpkg: '{{.PackageName}}'
+      filename: 'mock_{{.InterfaceName}}_test.go'
+      inpackage: true
+    interfaces:
+      Connector: ~
+      Discoverer: ~
+      MessageStreamHandler: ~
+
+  gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message:
+    config: *inpkg_test
+    interfaces:
+      MultiDialer: ~
+
+  gitlab.com/accumulatenetwork/accumulate/internal/api/routing:
+    config: *inpkg_test
+    interfaces:
+      Router: ~
