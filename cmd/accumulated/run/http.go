@@ -14,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/rs/cors"
 	"gitlab.com/accumulatenetwork/accumulate/exp/apiutil"
@@ -55,6 +54,7 @@ func (h *HttpService) start(inst *Instance) error {
 	var router routing.Router
 	var err error
 	if h.Router.base().hasValue() {
+		h.Router.value.PeerMap = h.PeerMap
 		router, err = h.Router.value.create(inst)
 	} else {
 		router, err = httpRefRouter.Get(inst.services, h)
@@ -81,17 +81,7 @@ func (h *HttpService) start(inst *Instance) error {
 	}
 
 	if len(h.PeerMap) > 0 {
-		m := map[string][]peer.AddrInfo{}
-		apiOpts.PeerMap = m
-		for _, p := range h.PeerMap {
-			for _, part := range p.Partitions {
-				part = strings.ToLower(part)
-				m[part] = append(m[part], peer.AddrInfo{
-					ID:    p.ID,
-					Addrs: p.Addresses,
-				})
-			}
-		}
+		apiOpts.PeerMap = peersForDumbDialer(h.PeerMap)
 	}
 
 	api, err := nodehttp.NewHandler(apiOpts)
