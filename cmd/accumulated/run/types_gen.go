@@ -207,7 +207,9 @@ type RouterService struct {
 	fieldsSet []bool
 	Name      string `json:"name,omitempty" form:"name" query:"name"`
 	// Events may specify an event bus to use for routing table updates.
-	Events    string `json:"events,omitempty" form:"events" query:"events"`
+	Events string `json:"events,omitempty" form:"events" query:"events"`
+	// PeerMap uses a hard-coded peer map for initializing routing.
+	PeerMap   []*HttpPeerMapEntry `json:"peerMap,omitempty" form:"peerMap" query:"peerMap" validate:"required"`
 	extraData []byte
 }
 
@@ -781,6 +783,13 @@ func (v *RouterService) Copy() *RouterService {
 
 	u.Name = v.Name
 	u.Events = v.Events
+	u.PeerMap = make([]*HttpPeerMapEntry, len(v.PeerMap))
+	for i, v := range v.PeerMap {
+		v := v
+		if v != nil {
+			u.PeerMap[i] = (v).Copy()
+		}
+	}
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -1423,6 +1432,14 @@ func (v *RouterService) Equal(u *RouterService) bool {
 	if !(v.Events == u.Events) {
 		return false
 	}
+	if len(v.PeerMap) != len(u.PeerMap) {
+		return false
+	}
+	for i := range v.PeerMap {
+		if !((v.PeerMap[i]).Equal(u.PeerMap[i])) {
+			return false
+		}
+	}
 
 	return true
 }
@@ -1574,6 +1591,7 @@ var fieldNames_RouterService = []string{
 	1: "Type",
 	2: "Name",
 	3: "Events",
+	4: "PeerMap",
 }
 
 func (v *RouterService) MarshalBinary() ([]byte, error) {
@@ -1591,6 +1609,11 @@ func (v *RouterService) MarshalBinary() ([]byte, error) {
 	if !(len(v.Events) == 0) {
 		writer.WriteString(3, v.Events)
 	}
+	if !(len(v.PeerMap) == 0) {
+		for _, v := range v.PeerMap {
+			writer.WriteValue(4, v.MarshalBinary)
+		}
+	}
 
 	_, _, err := writer.Reset(fieldNames_RouterService)
 	if err != nil {
@@ -1605,6 +1628,11 @@ func (v *RouterService) IsValid() error {
 
 	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field PeerMap is missing")
+	} else if len(v.PeerMap) == 0 {
+		errs = append(errs, "field PeerMap is not set")
 	}
 
 	switch len(errs) {
@@ -1687,6 +1715,13 @@ func (v *RouterService) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	}
 	if x, ok := reader.ReadString(3); ok {
 		v.Events = x
+	}
+	for {
+		if x := new(HttpPeerMapEntry); reader.ReadValue(4, x.UnmarshalBinaryFrom) {
+			v.PeerMap = append(v.PeerMap, x)
+		} else {
+			break
+		}
 	}
 
 	seen, err := reader.Reset(fieldNames_RouterService)
@@ -2263,9 +2298,10 @@ func (v *RawPrivateKey) MarshalJSON() ([]byte, error) {
 
 func (v *RouterService) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type   ServiceType `json:"type"`
-		Name   string      `json:"name,omitempty"`
-		Events string      `json:"events,omitempty"`
+		Type    ServiceType                          `json:"type"`
+		Name    string                               `json:"name,omitempty"`
+		Events  string                               `json:"events,omitempty"`
+		PeerMap encoding.JsonList[*HttpPeerMapEntry] `json:"peerMap,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(len(v.Name) == 0) {
@@ -2273,6 +2309,9 @@ func (v *RouterService) MarshalJSON() ([]byte, error) {
 	}
 	if !(len(v.Events) == 0) {
 		u.Events = v.Events
+	}
+	if !(len(v.PeerMap) == 0) {
+		u.PeerMap = v.PeerMap
 	}
 	return json.Marshal(&u)
 }
@@ -3068,13 +3107,15 @@ func (v *RawPrivateKey) UnmarshalJSON(data []byte) error {
 
 func (v *RouterService) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type   ServiceType `json:"type"`
-		Name   string      `json:"name,omitempty"`
-		Events string      `json:"events,omitempty"`
+		Type    ServiceType                          `json:"type"`
+		Name    string                               `json:"name,omitempty"`
+		Events  string                               `json:"events,omitempty"`
+		PeerMap encoding.JsonList[*HttpPeerMapEntry] `json:"peerMap,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Name = v.Name
 	u.Events = v.Events
+	u.PeerMap = v.PeerMap
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -3083,6 +3124,7 @@ func (v *RouterService) UnmarshalJSON(data []byte) error {
 	}
 	v.Name = u.Name
 	v.Events = u.Events
+	v.PeerMap = u.PeerMap
 	return nil
 }
 
