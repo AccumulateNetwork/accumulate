@@ -29,7 +29,7 @@ func (s Querier) Register(r *httprouter.Router) error {
 		var err error
 		id := parseUrl.fromRoute(p).try(&err, "id")
 		s.tryCall(&err, w, r, id, &api.DefaultQuery{
-			IncludeReceipt: parseBool.allowMissing().fromQuery(r).try(&err, "include_receipt"),
+			IncludeReceipt: parseJSON[*api.ReceiptOptions]().allowMissing().fromQuery(r).try(&err, "include_receipt"),
 		})
 	})
 
@@ -56,7 +56,7 @@ func (s Querier) Register(r *httprouter.Router) error {
 		s.tryCall(&err, w, r, id, &api.ChainQuery{
 			Name:           p.ByName("name"),
 			Index:          ptr(parseUint).fromRoute(p).try(&err, "index"),
-			IncludeReceipt: parseBool.allowMissing().fromQuery(r).try(&err, "include_receipt"),
+			IncludeReceipt: parseJSON[*api.ReceiptOptions]().allowMissing().fromQuery(r).try(&err, "include_receipt"),
 		})
 	})
 
@@ -66,7 +66,7 @@ func (s Querier) Register(r *httprouter.Router) error {
 		s.tryCall(&err, w, r, id, &api.ChainQuery{
 			Name:           p.ByName("name"),
 			Entry:          parseBytes.fromRoute(p).try(&err, "entry"),
-			IncludeReceipt: parseBool.allowMissing().fromQuery(r).try(&err, "include_receipt"),
+			IncludeReceipt: parseJSON[*api.ReceiptOptions]().allowMissing().fromQuery(r).try(&err, "include_receipt"),
 		})
 	})
 
@@ -158,7 +158,7 @@ func (s Querier) Register(r *httprouter.Router) error {
 		id := parseUrl.fromRoute(p).try(&err, "id")
 		s.tryCall(&err, w, r, id, &api.AnchorSearchQuery{
 			Anchor:         parseBytes.fromRoute(p).try(&err, "value"),
-			IncludeReceipt: parseBool.allowMissing().fromQuery(r).try(&err, "include_receipt"),
+			IncludeReceipt: parseJSON[*api.ReceiptOptions]().allowMissing().fromQuery(r).try(&err, "include_receipt"),
 		})
 	})
 

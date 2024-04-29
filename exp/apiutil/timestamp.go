@@ -50,7 +50,7 @@ func (s *TimestampService) GetTimestamp(ctx context.Context, id *url.TxID) (_ *M
 	v.LastUpdated = time.Now()
 
 	Q := api.Querier2{Querier: s.Querier}
-	r, err := Q.QueryTransactionChains(ctx, id, &api.ChainQuery{IncludeReceipt: true})
+	r, err := Q.QueryTransactionChains(ctx, id, &api.ChainQuery{IncludeReceipt: &api.ReceiptOptions{ForAny: true}})
 	if err != nil {
 		return nil, err
 	}
@@ -104,7 +104,7 @@ func (s *TimestampService) getAnchorData(ctx context.Context, cache keyvalue.Sto
 	Q := api.Querier2{Querier: s.Querier}
 	r, err := Q.SearchForAnchor(ctx, protocol.DnUrl().JoinPath(protocol.AnchorPool), &api.AnchorSearchQuery{
 		Anchor:         anchor[:],
-		IncludeReceipt: true,
+		IncludeReceipt: &api.ReceiptOptions{ForAny: true},
 	})
 	if err != nil {
 		return nil, err
