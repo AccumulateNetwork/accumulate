@@ -34,7 +34,7 @@ func (d *Dispatcher) Submit(ctx context.Context, dest *url.URL, envelope *messag
 
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	d.queue = append(d.queue, &Submission{
+	d.queue = append(d.queue, &SubmitEnvelope{
 		Network:  partition,
 		Envelope: envelope,
 	})
