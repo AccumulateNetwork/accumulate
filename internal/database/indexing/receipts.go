@@ -181,7 +181,7 @@ func ReceiptForChainEntry(net *config.Describe, batch *database.Batch, account *
 	return rootIndex, r, nil
 }
 
-func ReceiptForChainIndex(partition config.NetworkUrl, batch *database.Batch, c *database.Chain2, index int64) (*protocol.IndexEntry, uint64, *merkle.Receipt, error) {
+func ReceiptForChainIndex(partition config.NetworkUrl, batch *database.Batch, c *database.Chain2, index int64, targetHeight *uint64) (*protocol.IndexEntry, uint64, *merkle.Receipt, error) {
 	if c.Type() == merkle.ChainTypeIndex {
 		return nil, 0, nil, errors.BadRequest.WithFormat("cannot get a receipt for %s: index chains are not anchored", c.Name())
 	}
@@ -211,7 +211,14 @@ func ReceiptForChainIndex(partition config.NetworkUrl, batch *database.Batch, c 
 		return nil, 0, nil, errors.InternalError.With("root index chain is empty")
 	}
 
-	rootIndexIndex, rootEntry, err := SearchIndexChain(rootIndexChain, uint64(rootIndexChain.Height())-1, MatchAfter, SearchIndexChainBySource(entry.Anchor))
+	if targetHeight == nil {
+		targetHeight = &entry.Anchor
+	} else if *targetHeight < entry.Anchor {
+		return nil, 0, nil, fmt.Errorf("cannot satisfy target height %v: entry is anchored at height %v", *targetHeight, entry.Anchor)
+
+	}
+
+	rootIndexIndex, rootEntry, err := SearchIndexChain(rootIndexChain, uint64(rootIndexChain.Height())-1, MatchAfter, SearchIndexChainBySource(*targetHeight))
 	if err != nil {
 		return nil, 0, nil, fmt.Errorf("unable to locate index entry for entry %d of the minor root chain: %w", entry.Anchor, err)
 	}

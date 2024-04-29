@@ -7,6 +7,8 @@
 package api
 
 import (
+	"encoding/json"
+
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
@@ -88,4 +90,21 @@ func (q *BlockQuery) IsValid() error {
 	}
 
 	return nil
+}
+
+func (r *ReceiptOptions) Yes() bool {
+	return r != nil && (r.ForAny || r.ForHeight != 0)
+}
+
+func (r *ReceiptOptions) UnmarshalJSON(b []byte) error {
+	// Unmarshal as a bool
+	var ok bool
+	if json.Unmarshal(b, &ok) == nil {
+		r.ForAny = ok
+		return nil
+	}
+
+	// Unmarshal normally
+	type T ReceiptOptions
+	return json.Unmarshal(b, (*T)(r))
 }

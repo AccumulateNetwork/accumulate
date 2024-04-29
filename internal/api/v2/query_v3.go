@@ -285,7 +285,7 @@ query:
 }
 
 func queryTx(v3 api.Querier, ctx context.Context, txid *url.TxID, includeReceipt, ignorePending, resolveSignature bool) (*TransactionQueryResponse, error) {
-	r, err := api.Querier2{Querier: v3}.QueryMessage(ctx, txid, &api.DefaultQuery{IncludeReceipt: includeReceipt})
+	r, err := api.Querier2{Querier: v3}.QueryMessage(ctx, txid, &api.DefaultQuery{IncludeReceipt: &api.ReceiptOptions{ForAny: includeReceipt}})
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -597,7 +597,7 @@ func seqAndReceiptV3(v3 api.Querier, ctx context.Context, r *api.MessageRecord[m
 	}
 
 	// Get a receipt from the main chain
-	r2, err := chainRangeOf[api.Record](v3.Query(ctx, seq.ID().AsUrl(), &api.ChainQuery{IncludeReceipt: true}))
+	r2, err := chainRangeOf[api.Record](v3.Query(ctx, seq.ID().AsUrl(), &api.ChainQuery{IncludeReceipt: &api.ReceiptOptions{ForAny: true}}))
 	switch {
 	case err == nil:
 		for _, r := range r2.Records {
@@ -621,7 +621,7 @@ func txnAndReceiptV3(v3 api.Querier, ctx context.Context, r *api.MessageRecord[m
 	}
 
 	// Get a receipt from the main chain
-	r2, err := chainRangeOf[api.Record](v3.Query(ctx, txn.ID().AsUrl(), &api.ChainQuery{IncludeReceipt: true}))
+	r2, err := chainRangeOf[api.Record](v3.Query(ctx, txn.ID().AsUrl(), &api.ChainQuery{IncludeReceipt: &api.ReceiptOptions{ForAny: true}}))
 	switch {
 	case err == nil:
 		for _, r := range r2.Records {
@@ -907,7 +907,7 @@ func (m *JrpcMethods) Query(ctx context.Context, params json.RawMessage) any {
 			return jrpcFormatResponse(queryTx(m.Querier, ctx, txid, req.Prove, false, false))
 		}
 
-		acct, err := m.netq().QueryAccount(ctx, req.Url, &api.DefaultQuery{IncludeReceipt: req.Prove})
+		acct, err := m.netq().QueryAccount(ctx, req.Url, &api.DefaultQuery{IncludeReceipt: &api.ReceiptOptions{ForAny: req.Prove}})
 		if err != nil {
 			return accumulateError(err)
 		}
@@ -934,7 +934,7 @@ func (m *JrpcMethods) Query(ctx context.Context, params json.RawMessage) any {
 			return accumulateError(fmt.Errorf("invalid entry: %q is not a hash", fragment[1]))
 		}
 
-		r, err := m.netq().SearchForAnchor(ctx, req.Url, &api.AnchorSearchQuery{Anchor: entryHash, IncludeReceipt: true})
+		r, err := m.netq().SearchForAnchor(ctx, req.Url, &api.AnchorSearchQuery{Anchor: entryHash, IncludeReceipt: &api.ReceiptOptions{ForAny: req.Prove}})
 		if err != nil {
 			return accumulateError(err)
 		}
@@ -1054,7 +1054,7 @@ invalid:
 chain_query:
 	q := new(api.ChainQuery)
 	q.Name = chainName
-	q.IncludeReceipt = req.Prove
+	q.IncludeReceipt = &api.ReceiptOptions{ForAny: req.Prove}
 	q.Range, q.Index, q.Entry, err = chainQueryV3(qv, chainArg)
 	if err != nil {
 		return accumulateError(err)
