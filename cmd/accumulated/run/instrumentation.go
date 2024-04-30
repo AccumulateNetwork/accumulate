@@ -55,10 +55,10 @@ func (i *Instrumentation) listen(inst *Instance) error {
 }
 
 func (m *Monitor) start(inst *Instance) error {
-	setDefaultPtr(&m.ProfileMemory, false)           // Enabled = false
+	setDefaultPtr(&m.ProfileMemory, false)           // Enabled      = false
 	setDefaultPtr(&m.MemoryPollingRate, time.Minute) // Polling rate = every minute
 	setDefaultPtr(&m.AllocRateTrigger, 50<<20)       // Trigger rate = 50 MiB/s
-	setDefaultVal(&m.Directory, "traces")
+	setDefaultVal(&m.Directory, "traces")            // Directory    = ./traces
 
 	if *m.ProfileMemory {
 		err := os.MkdirAll(inst.path(m.Directory), 0700)
@@ -84,9 +84,8 @@ func (m *Monitor) pollMemory(inst *Instance) {
 		runtime.ReadMemStats(&s2)
 		rate := (float64(s2.Alloc) - float64(s1.Alloc)) / t2.Sub(t1).Seconds()
 		s1, t1 = s2, t2
-		if rate > *m.AllocRateTrigger {
-			fmt.Printf("Allocation rate: %.0f\n", rate)
-			// continue
+		if rate < *m.AllocRateTrigger {
+			continue
 		}
 
 		// TODO Capture at a higher frequency, regardless of allocation rate,
