@@ -124,6 +124,15 @@ func (x TransactionMessage) check(batch *database.Batch, ctx *MessageContext, re
 		}
 	}
 
+	// Before anything else other than basic validation, strip the data out of
+	// proxy data entries
+	if writeData, ok := txn.Transaction.Body.(protocol.WithDataEntry); ok {
+		if entry, ok := writeData.GetDataEntry().(*protocol.ProxyDataEntry); ok {
+			entry.EnsureHashes()
+			entry.Data = nil
+		}
+	}
+
 	// Make sure user transactions are signed. Synthetic messages and network
 	// update messages do not require signatures.
 	//

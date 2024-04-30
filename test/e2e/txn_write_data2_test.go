@@ -308,3 +308,7 @@ func Test64ByteHeader(t *testing.T) {
 	sim.StepUntil(
 		Txn(st.TxID).Succeeds())
 }
+
+func TestProxyDataEntries(t *testing.T) {
+	
+}

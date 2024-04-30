@@ -106,6 +106,16 @@ DoubleHashDataEntry:
       repeatable: true
       type: bytes
 
+ProxyDataEntry:
+  union: { type: dataEntry }
+  fields:
+    - name: Hashes
+      repeatable: true
+      type: hash
+    - name: Data
+      repeatable: true
+      type: bytes
+
 FactomDataEntryWrapper:
   union: { type: dataEntry, value: Factom }
   fields:

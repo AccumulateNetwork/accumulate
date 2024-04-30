@@ -260,6 +260,11 @@ func (b WriteDataBuilder) DoubleHash(data ...any) WriteDataBuilder {
 	return b.Entry(&protocol.DoubleHashDataEntry{Data: parts})
 }
 
+func (b WriteDataBuilder) Proxy(data ...any) WriteDataBuilder {
+	parts := b.t.parseDataEntryParts(data...)
+	return b.Entry(&protocol.ProxyDataEntry{Data: parts})
+}
+
 func (b WriteDataBuilder) Scratch() WriteDataBuilder {
 	b.body.Scratch = true
 	return b

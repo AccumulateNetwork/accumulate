@@ -259,6 +259,8 @@ func NewDataEntry(typ DataEntryType) (DataEntry, error) {
 		return new(DoubleHashDataEntry), nil
 	case DataEntryTypeFactom:
 		return new(FactomDataEntryWrapper), nil
+	case DataEntryTypeProxy:
+		return new(ProxyDataEntry), nil
 	}
 	return nil, fmt.Errorf("unknown data entry %v", typ)
 }
@@ -287,6 +289,12 @@ func EqualDataEntry(a, b DataEntry) bool {
 		}
 		b, ok := b.(*FactomDataEntryWrapper)
 		return ok && a.Equal(b)
+	case *ProxyDataEntry:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*ProxyDataEntry)
+		return ok && a.Equal(b)
 	}
 	return false
 }
@@ -299,6 +307,8 @@ func CopyDataEntry(v DataEntry) DataEntry {
 	case *DoubleHashDataEntry:
 		return v.Copy()
 	case *FactomDataEntryWrapper:
+		return v.Copy()
+	case *ProxyDataEntry:
 		return v.Copy()
 	default:
 		return v.CopyAsInterface().(DataEntry)

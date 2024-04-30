@@ -2,15 +2,17 @@
 package e2e2
 
 import (
+	"crypto/sha256"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
 )
 
-func TestExample(t *testing.T) {
+func TestTxnWriteData(t *testing.T) {
 	alice := build.
 		Identity("alice").Create("book").
 		Tokens("tokens").Create("ACME").Add(1e9).Identity().
@@ -30,11 +32,24 @@ func TestExample(t *testing.T) {
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.Genesis(GenesisTime).With(alice, bob),
 	)
+	const foo, bar = "foo", "bar"
 	st := sim.BuildAndSubmitTxnSuccessfully(
-		build.Transaction().For(alice, "tokens").
-			SendTokens(123, 0).To(bob, "tokens").
+		build.Transaction().For(alice, "data").
+			WriteData().Proxy(foo, bar).
 			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey))
 
 	sim.StepUntil(
 		Txn(st.TxID).Completes())
+	txn := sim.QueryTransaction(st.TxID, nil).Message.Transaction
+	require.Equal(t, st.TxID.Hash(), txn.Hash())
+
+	require.IsType(t, txn.Body, (*WriteData)(nil))
+	require.IsType(t, txn.Body.(*WriteData).Entry, (*ProxyDataEntry)(nil))
+	entry := txn.Body.(*WriteData).Entry.(*ProxyDataEntry)
+
+	require.Nil(t, entry.Data)
+	require.Equal(t, [][32]byte{
+		sha256.Sum256([]byte(foo)),
+		sha256.Sum256([]byte(bar)),
+	}, entry.Hashes)
 }

@@ -88,8 +88,8 @@ func (WriteData) check(st *StateManager, tx *Delivery) (*protocol.WriteData, err
 	if body.Entry == nil {
 		return nil, errors.BadRequest.WithFormat("entry is nil")
 	}
-	if !entryIsAccepted(st, body.Entry) {
-		return nil, errors.BadRequest.WithFormat("%v data entries are not accepted", body.Entry.Type())
+	if err := entryIsAccepted(st, body.Entry); err != nil {
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	//check will return error if there is too much data or no data for the entry
@@ -166,30 +166,36 @@ func executeWriteFullDataAccount(st *StateManager, entry protocol.DataEntry, scr
 	return result, nil
 }
 
-func entryIsAccepted(st *StateManager, entry protocol.DataEntry) bool {
-	switch entry.(type) {
+func entryIsAccepted(st *StateManager, entry protocol.DataEntry) error {
+	switch entry := entry.(type) {
 	case *protocol.FactomDataEntryWrapper:
 		// Factom entries are accepted
-		return true
+		return nil
 
 	case *protocol.AccumulateDataEntry:
 		// Accumulate entries are not accepted after v1-doubleHashEntries
-		return false
 
 	case *protocol.DoubleHashDataEntry:
 		// Double hash entries are not accepted before v1-doubleHashEntries
-		return true
+		return nil
+
+	case *protocol.ProxyDataEntry:
+		// Proxy hashes are not accepted before v2-vandenberg
+		if !st.Globals.ExecutorVersion.V2VandenbergEnabled() {
+			break
+		}
+		return entry.Verify()
 	}
 
-	return false
+	return errors.BadRequest.WithFormat("%v data entries are not accepted", entry.Type())
 }
 
 func validateDataEntry(st *StateManager, entry protocol.DataEntry) error {
 	if entry == nil {
 		return errors.BadRequest.WithFormat("entry is missing")
 	}
-	if !entryIsAccepted(st, entry) {
-		return errors.BadRequest.WithFormat("%v data entries are not accepted", entry.Type())
+	if err := entryIsAccepted(st, entry); err != nil {
+		return errors.UnknownError.Wrap(err)
 	}
 
 	limit := int(st.Globals.Globals.Limits.DataEntryParts)

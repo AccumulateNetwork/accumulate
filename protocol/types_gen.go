@@ -685,6 +685,13 @@ type PendingTransactionGCOperation struct {
 	extraData []byte
 }
 
+type ProxyDataEntry struct {
+	fieldsSet []bool
+	Hashes    [][32]byte `json:"hashes,omitempty" form:"hashes" query:"hashes" validate:"required"`
+	Data      [][]byte   `json:"data,omitempty" form:"data" query:"data" validate:"required"`
+	extraData []byte
+}
+
 type RCD1Signature struct {
 	fieldsSet       []bool
 	PublicKey       []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
@@ -1203,6 +1210,8 @@ func (*PartitionSignature) Type() SignatureType { return SignatureTypePartition 
 func (*PendingTransactionGCOperation) Type() NetworkMaintenanceOperationType {
 	return NetworkMaintenanceOperationTypePendingTransactionGC
 }
+
+func (*ProxyDataEntry) Type() DataEntryType { return DataEntryTypeProxy }
 
 func (*RCD1Signature) Type() SignatureType { return SignatureTypeRCD1 }
 
@@ -2691,6 +2700,29 @@ func (v *PendingTransactionGCOperation) Copy() *PendingTransactionGCOperation {
 }
 
 func (v *PendingTransactionGCOperation) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *ProxyDataEntry) Copy() *ProxyDataEntry {
+	u := new(ProxyDataEntry)
+
+	u.Hashes = make([][32]byte, len(v.Hashes))
+	for i, v := range v.Hashes {
+		v := v
+		u.Hashes[i] = v
+	}
+	u.Data = make([][]byte, len(v.Data))
+	for i, v := range v.Data {
+		v := v
+		u.Data[i] = encoding.BytesCopy(v)
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *ProxyDataEntry) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *RCD1Signature) Copy() *RCD1Signature {
 	u := new(RCD1Signature)
@@ -5098,6 +5130,27 @@ func (v *PendingTransactionGCOperation) Equal(u *PendingTransactionGCOperation) 
 		return false
 	case !((v.Account).Equal(u.Account)):
 		return false
+	}
+
+	return true
+}
+
+func (v *ProxyDataEntry) Equal(u *ProxyDataEntry) bool {
+	if len(v.Hashes) != len(u.Hashes) {
+		return false
+	}
+	for i := range v.Hashes {
+		if !(v.Hashes[i] == u.Hashes[i]) {
+			return false
+		}
+	}
+	if len(v.Data) != len(u.Data) {
+		return false
+	}
+	for i := range v.Data {
+		if !(bytes.Equal(v.Data[i], u.Data[i])) {
+			return false
+		}
 	}
 
 	return true
@@ -10487,6 +10540,67 @@ func (v *PendingTransactionGCOperation) IsValid() error {
 		errs = append(errs, "field Account is missing")
 	} else if v.Account == nil {
 		errs = append(errs, "field Account is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_ProxyDataEntry = []string{
+	1: "Type",
+	2: "Hashes",
+	3: "Data",
+}
+
+func (v *ProxyDataEntry) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(len(v.Hashes) == 0) {
+		for _, v := range v.Hashes {
+			writer.WriteHash(2, &v)
+		}
+	}
+	if !(len(v.Data) == 0) {
+		for _, v := range v.Data {
+			writer.WriteBytes(3, v)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_ProxyDataEntry)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *ProxyDataEntry) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Hashes is missing")
+	} else if len(v.Hashes) == 0 {
+		errs = append(errs, "field Hashes is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Data is missing")
+	} else if len(v.Data) == 0 {
+		errs = append(errs, "field Data is not set")
 	}
 
 	switch len(errs) {
@@ -16225,6 +16339,52 @@ func (v *PendingTransactionGCOperation) UnmarshalFieldsFrom(reader *encoding.Rea
 	return nil
 }
 
+func (v *ProxyDataEntry) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *ProxyDataEntry) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType DataEntryType
+	if x := new(DataEntryType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *ProxyDataEntry) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	for {
+		if x, ok := reader.ReadHash(2); ok {
+			v.Hashes = append(v.Hashes, *x)
+		} else {
+			break
+		}
+	}
+	for {
+		if x, ok := reader.ReadBytes(3); ok {
+			v.Data = append(v.Data, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_ProxyDataEntry)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *RCD1Signature) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -19467,6 +19627,28 @@ func (v *PendingTransactionGCOperation) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *ProxyDataEntry) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type   DataEntryType              `json:"type"`
+		Hashes encoding.JsonList[*string] `json:"hashes,omitempty"`
+		Data   encoding.JsonList[*string] `json:"data,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.Hashes) == 0) {
+		u.Hashes = make(encoding.JsonList[*string], len(v.Hashes))
+		for i, x := range v.Hashes {
+			u.Hashes[i] = encoding.ChainToJSON(&x)
+		}
+	}
+	if !(len(v.Data) == 0) {
+		u.Data = make(encoding.JsonList[*string], len(v.Data))
+		for i, x := range v.Data {
+			u.Data[i] = encoding.BytesToJSON(x)
+		}
+	}
+	return json.Marshal(&u)
+}
+
 func (v *RCD1Signature) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type            SignatureType `json:"type"`
@@ -22060,6 +22242,46 @@ func (v *PendingTransactionGCOperation) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Account = u.Account
+	return nil
+}
+
+func (v *ProxyDataEntry) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type   DataEntryType              `json:"type"`
+		Hashes encoding.JsonList[*string] `json:"hashes,omitempty"`
+		Data   encoding.JsonList[*string] `json:"data,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Hashes = make(encoding.JsonList[*string], len(v.Hashes))
+	for i, x := range v.Hashes {
+		u.Hashes[i] = encoding.ChainToJSON(&x)
+	}
+	u.Data = make(encoding.JsonList[*string], len(v.Data))
+	for i, x := range v.Data {
+		u.Data[i] = encoding.BytesToJSON(x)
+	}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Hashes = make([][32]byte, len(u.Hashes))
+	for i, x := range u.Hashes {
+		if x, err := encoding.ChainFromJSON(x); err != nil {
+			return fmt.Errorf("error decoding Hashes: %w", err)
+		} else {
+			v.Hashes[i] = *x
+		}
+	}
+	v.Data = make([][]byte, len(u.Data))
+	for i, x := range u.Data {
+		if x, err := encoding.BytesFromJSON(x); err != nil {
+			return fmt.Errorf("error decoding Data: %w", err)
+		} else {
+			v.Data[i] = x
+		}
+	}
 	return nil
 }
 

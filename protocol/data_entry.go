@@ -11,8 +11,12 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/hash"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
+
+const TransactionSizeMax = 20480 // Must be over 10k to accommodate Factom entries
+const SignatureSizeMax = 1024
 
 type DataEntryType uint64
 
@@ -23,8 +27,14 @@ type DataEntry interface {
 	GetData() [][]byte
 }
 
-const TransactionSizeMax = 20480 // Must be over 10k to accommodate Factom entries
-const SignatureSizeMax = 1024
+type WithDataEntry interface {
+	GetDataEntry() DataEntry
+}
+
+func (w *WriteData) GetDataEntry() DataEntry          { return w.Entry }
+func (w *WriteDataTo) GetDataEntry() DataEntry        { return w.Entry }
+func (w *SyntheticWriteData) GetDataEntry() DataEntry { return w.Entry }
+func (w *SystemWriteData) GetDataEntry() DataEntry    { return w.Entry }
 
 func (e *AccumulateDataEntry) Hash() []byte {
 	h := make(hash.Hasher, 0, len(e.Data))
@@ -51,6 +61,58 @@ func (e *DoubleHashDataEntry) Hash() []byte {
 
 func (e *DoubleHashDataEntry) GetData() [][]byte {
 	return e.Data
+}
+
+func (e *ProxyDataEntry) Hash() []byte {
+	e.EnsureHashes()
+	h := make(hash.Hasher, 0, len(e.Hashes))
+	for _, hash := range e.Hashes {
+		h.AddHash2(hash)
+	}
+
+	// Double hash the Merkle root
+	hh := sha256.Sum256(h.MerkleHash())
+	return hh[:]
+}
+
+func (e *ProxyDataEntry) GetData() [][]byte {
+	// Data may be unavailable but hashes will always be present or calculable,
+	// so we'll return those
+	e.EnsureHashes()
+	r := make([][]byte, len(e.Hashes))
+	for i, hash := range e.Hashes {
+		r[i] = hash[:]
+	}
+	return r
+}
+
+func (e *ProxyDataEntry) EnsureHashes() {
+	// This will race if called from multiple routines
+	if len(e.Hashes) != 0 || len(e.Data) == 0 {
+		return
+	}
+
+	e.Hashes = make([][32]byte, len(e.Data))
+	for i, data := range e.Data {
+		e.Hashes[i] = sha256.Sum256(data)
+	}
+}
+
+func (e *ProxyDataEntry) Verify() error {
+	if len(e.Hashes) == 0 || len(e.Data) == 0 {
+		return nil
+	}
+
+	if len(e.Hashes) != len(e.Data) {
+		return errors.BadRequest.With("len(hashes) != len(data)")
+	}
+
+	for i, h := range e.Hashes {
+		if h != sha256.Sum256(e.Data[i]) {
+			return errors.BadRequest.WithFormat("hash[%d] = H(data[%[1]d])", i)
+		}
+	}
+	return nil
 }
 
 // CheckDataEntrySize is the marshaled size minus the implicit type header,

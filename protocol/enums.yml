@@ -51,6 +51,8 @@ DataEntryType:
     value: 2
   DoubleHash:
     value: 3
+  Proxy:
+    value: 4
 
 ObjectType:
   Unknown:
