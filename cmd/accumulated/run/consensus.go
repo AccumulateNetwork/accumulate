@@ -161,6 +161,10 @@ func (c *ConsensusService) start(inst *Instance) error {
 			return err
 		}
 
+		if d.config.Instrumentation.Prometheus {
+			d.config.Instrumentation.Namespace = c.MetricsNamespace
+		}
+
 	case errors.Is(err, fs.ErrNotExist):
 		d.config.NodeKey = ""
 		d.config.PrivValidatorKey = ""
