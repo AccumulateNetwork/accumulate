@@ -82,5 +82,7 @@ func (b *BFileWriter) Write(buffer *[BufferSize]byte, EOB int) {
 // Note that if what is in the buffer needs to be reflected in the EOD, the caller has
 // to provide the updated EOD.
 func (b *BFileWriter) Close(buffer *[BufferSize]byte, EOB int, EOD uint64) {
-	b.Operations <- cmd{opClose, buffer, EOB, EOD}
+	if b.File != nil {
+		b.Operations <- cmd{opClose, buffer, EOB, EOD}
+	}
 }

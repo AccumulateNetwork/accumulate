@@ -107,8 +107,9 @@ func (b *BFile) Put(Key [32]byte, Value []byte) (err error) {
 }
 
 // Close
-// Closes the BFile, and flushes any buffer to disk.  All buffers remain in the
-// buffer pool.
+// Closes the BFile.  All buffers remain in the buffer pool.  Does not flush
+// the buffers to disk.  If that is needed, then caller needs to call BFile.Block()
+// after the call to BFile.Close()
 func (b *BFile) Close() {
 	if b.bfWriter != nil {
 		eod := b.EOD // Keep the current EOD so we can close the BFile properly with an offset to the keys
@@ -220,10 +221,9 @@ func (b *BFile) Write(Data []byte) error {
 	return b.Write(Data)              // Write out the remaining data
 }
 
-// OpenBFileList
-// Open a DBBlock file at a given height for read access only
-// Can be used to open for write access too, but the assumption is that
-// this use case is for reading and writing values.
+// OpenBFile
+// Open a DBBlock file at a given height for read/write access
+// The only legitimate writes to a BFile would be to add/update keys
 func OpenBFile(BufferCnt int, Filename string) (bFile *BFile, err error) {
 	b := new(BFile) // create a new BFile
 	b.BufferCnt = BufferCnt
@@ -268,3 +268,4 @@ func OpenBFile(BufferCnt int, Filename string) (bFile *BFile, err error) {
 	b.EOB = 0
 	return b, err
 }
+
