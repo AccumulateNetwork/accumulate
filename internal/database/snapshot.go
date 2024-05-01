@@ -13,7 +13,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
@@ -35,6 +34,7 @@ type CollectOptions struct {
 	BuildIndex     bool
 	Predicate      func(database.Record) (bool, error)
 	DidWriteHeader func(*snapshot.Writer) error
+	KeepMessage    func(messaging.Message) (bool, error)
 
 	Metrics *CollectMetrics
 }
@@ -516,7 +516,6 @@ func collectMessageHashes(a *Account, hashes *indexing.Bucket, opts *CollectOpti
 			continue
 		}
 
-		isSig := strings.EqualFold(chain.Name, "signature")
 		c, err := a.ChainByName(chain.Name)
 		if err != nil {
 			return errors.InvalidRecord.Wrap(err)
@@ -553,25 +552,9 @@ func collectMessageHashes(a *Account, hashes *indexing.Bucket, opts *CollectOpti
 			return errors.UnknownError.WithFormat("load %s chain entries: %w", c.Name(), err)
 		}
 		for _, h := range entries {
-			err = hashes.Write(*(*[32]byte)(h), nil)
+			err = collectMessageHash(a, c, hashes, opts, *(*[32]byte)(h))
 			if err != nil {
-				return errors.UnknownError.WithFormat("record %s chain entry: %w", c.Name(), err)
-			}
-
-			if !isSig {
-				continue
-			}
-
-			msg, err := a.parent.newMessage(messageKey{*(*[32]byte)(h)}).Main().Get()
-			if err != nil {
-				slog.Error("Failed to collect message", "account", a.Url(), "hash", logging.AsHex(h), "error", err)
-				continue
-			}
-			if msg, ok := msg.(messaging.MessageForTransaction); ok {
-				err = hashes.Write(msg.GetTxID().Hash(), nil)
-				if err != nil {
-					return errors.UnknownError.WithFormat("record %s chain entry: %w", c.Name(), err)
-				}
+				return errors.UnknownError.Wrap(err)
 			}
 		}
 		if opts.Metrics != nil {
@@ -580,6 +563,36 @@ func collectMessageHashes(a *Account, hashes *indexing.Bucket, opts *CollectOpti
 	}
 
 	return errors.UnknownError.Wrap(err)
+}
+
+func collectMessageHash(a *Account, c *Chain2, hashes *indexing.Bucket, opts *CollectOptions, h [32]byte) error {
+	err := hashes.Write(h, nil)
+	if err != nil {
+		return errors.UnknownError.WithFormat("record %s chain entry: %w", c.Name(), err)
+	}
+
+	msg, err := a.parent.newMessage(messageKey{h}).Main().Get()
+	if err != nil {
+		slog.Error("Failed to collect message", "account", a.Url(), "hash", logging.AsHex(h), "error", err)
+		return nil
+	}
+
+	if opts.KeepMessage != nil {
+		ok, err := opts.KeepMessage(msg)
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+		if !ok {
+			return nil
+		}
+	}
+
+	forTxn, ok := msg.(messaging.MessageForTransaction)
+	if !ok {
+		return nil
+	}
+
+	return collectMessageHash(a, c, hashes, opts, forTxn.GetTxID().Hash())
 }
 
 func writeSnapshotIndex(w *snapshot.Writer, index *indexing.Bucket, opts *CollectOptions) error {
