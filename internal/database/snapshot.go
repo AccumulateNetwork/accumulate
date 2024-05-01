@@ -17,6 +17,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/util/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
@@ -135,7 +136,7 @@ func (batch *Batch) Collect(file io.WriteSeeker, partition *url.URL, opts *Colle
 	return nil
 }
 
-func (batch *Batch) writeSnapshotHeader(w *snapshot.Writer, partition *url.URL, opts *CollectOptions) error {
+func (batch *Batch) writeSnapshotHeader(w *snapshot.Writer, partition *url.URL, _ *CollectOptions) error {
 	header := new(snapshot.Header)
 
 	// Load the BPT root hash
@@ -563,7 +564,8 @@ func collectMessageHashes(a *Account, hashes *indexing.Bucket, opts *CollectOpti
 
 			msg, err := a.parent.newMessage(messageKey{*(*[32]byte)(h)}).Main().Get()
 			if err != nil {
-				return errors.UnknownError.WithFormat("load %s chain entry: %w", c.Name(), err)
+				slog.Error("Failed to collect message", "account", a.Url(), "hash", logging.AsHex(h), "error", err)
+				continue
 			}
 			if msg, ok := msg.(messaging.MessageForTransaction); ok {
 				err = hashes.Write(msg.GetTxID().Hash(), nil)
