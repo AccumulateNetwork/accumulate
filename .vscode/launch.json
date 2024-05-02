@@ -520,11 +520,9 @@
       "type": "go",
       "request": "launch",
       "mode": "auto",
-      "program": "${workspaceFolder}/cmd/accumulated",
+      "program": "${workspaceFolder}/tools/cmd/debug",
       "args": [
-        "run-dual",
-        "${workspaceFolder}/.nodes/kermit-node/dnn",
-        "${workspaceFolder}/.nodes/kermit-node/bvnn",
+        "db", "analyze", "badger://${workspaceFolder}/.nodes/devnet/bvn1-1/bvnn/data/accumulate.db", "--accounts",
       ]
     },
     {
