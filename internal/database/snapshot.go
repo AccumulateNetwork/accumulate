@@ -566,11 +566,6 @@ func collectMessageHashes(a *Account, hashes *indexing.Bucket, opts *CollectOpti
 }
 
 func collectMessageHash(a *Account, c *Chain2, hashes *indexing.Bucket, opts *CollectOptions, h [32]byte) error {
-	err := hashes.Write(h, nil)
-	if err != nil {
-		return errors.UnknownError.WithFormat("record %s chain entry: %w", c.Name(), err)
-	}
-
 	msg, err := a.parent.newMessage(messageKey{h}).Main().Get()
 	if err != nil {
 		slog.Error("Failed to collect message", "account", a.Url(), "hash", logging.AsHex(h), "error", err)
@@ -585,6 +580,11 @@ func collectMessageHash(a *Account, c *Chain2, hashes *indexing.Bucket, opts *Co
 		if !ok {
 			return nil
 		}
+	}
+
+	err = hashes.Write(h, nil)
+	if err != nil {
+		return errors.UnknownError.WithFormat("record %s chain entry: %w", c.Name(), err)
 	}
 
 	forTxn, ok := msg.(messaging.MessageForTransaction)
