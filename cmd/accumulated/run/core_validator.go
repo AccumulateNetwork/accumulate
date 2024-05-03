@@ -138,24 +138,13 @@ func (p partOpts) apply(cfg *Config) error {
 
 	// Storage
 	if !haveService2(cfg, p.ID, func(s *StorageService) string { return s.Name }, nil) {
-		switch *p.StorageType {
-		case StorageTypeMemory:
-			cfg.Services = append(cfg.Services, &StorageService{
-				Name:    p.ID,
-				Storage: &MemoryStorage{},
-			})
-
-		case StorageTypeBadger:
-			cfg.Services = append(cfg.Services, &StorageService{
-				Name: p.ID,
-				Storage: &BadgerStorage{
-					Path: filepath.Join(p.Dir, "data", "accumulate.db"),
-				},
-			})
-
-		default:
-			return errors.BadRequest.WithFormat("unsupported storage type %v", p.StorageType)
+		storage, err := NewStorage(*p.StorageType)
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
 		}
+
+		storage.setPath(filepath.Join(p.Dir, "data", "accumulate.db"))
+		cfg.Services = append(cfg.Services, &StorageService{Name: p.ID, Storage: storage})
 	}
 
 	// Snapshots
