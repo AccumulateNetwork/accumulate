@@ -473,13 +473,13 @@ func (b *bootstrap) unpackSnapshots() error {
 			defer c.Close()
 		}
 
-		accounts, err := Extract(b.db, file, func(u *url.URL) (bool, error) {
+		accounts, err := Extract(b.db, file, func(u *url.URL) bool {
 			// Does the account belong to this partition?
 			partition, err := b.router.RouteAccount(u)
 			if err != nil {
-				return false, errors.InternalError.WithFormat("route %v: %w", u, err)
+				panic(errors.InternalError.WithFormat("route %v: %w", u, err))
 			}
-			return strings.EqualFold(partition, b.PartitionId), nil
+			return strings.EqualFold(partition, b.PartitionId)
 		})
 
 		// Track ACME issued
@@ -490,7 +490,9 @@ func (b *bootstrap) unpackSnapshots() error {
 		}
 
 		for _, a := range accounts {
-			b.accountsFromSnapshots = append(b.accountsFromSnapshots, a.Url)
+			if a.Keep {
+				b.accountsFromSnapshots = append(b.accountsFromSnapshots, a.Url)
+			}
 		}
 	}
 

@@ -152,17 +152,17 @@ func prepareGenesis(cmd *cobra.Command, args []string) {
 		file, err := os.Open(path)
 		check(err)
 		defer file.Close()
-		_, err = genesis.Extract(db, file, func(u *url.URL) (bool, error) {
+		_, err = genesis.Extract(db, file, func(u *url.URL) bool {
 			select {
 			case <-tick.C:
 				h := database.NewKey("Account", u).Hash()
 				fmt.Printf("\033[A\r\033[KProcessing [%x] %v\n", h[:4], u)
 			default:
-				return true, nil
+				return true
 			}
 
 			// Retain everything
-			return true, nil
+			return true
 		})
 		check(err)
 	}

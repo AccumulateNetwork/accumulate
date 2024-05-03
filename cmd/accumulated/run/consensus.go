@@ -504,6 +504,9 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 		Querier:      v3.Querier2{Querier: client},
 		Dispatcher:   execOpts.NewDispatcher(),
 		RunTask:      execOpts.BackgroundTaskLauncher,
+
+		// TODO Fix the flooding issues and enable this by default
+		EnableAnchorHealing: Ptr(false),
 	}
 	err = conductor.Start(d.eventBus)
 	if err != nil {

@@ -21,12 +21,13 @@ import (
 
 type AccountData struct {
 	Url    *url.URL
+	Keep   bool
 	Main   protocol.Account
 	Heads  map[string]*merkle.State
 	States map[string][]*merkle.State
 }
 
-func Extract(db *coredb.Database, snap ioutil2.SectionReader, shouldKeep func(*url.URL) (bool, error)) (map[[32]byte]*AccountData, error) {
+func Extract(db *coredb.Database, snap ioutil2.SectionReader, shouldKeep func(*url.URL) bool) (map[[32]byte]*AccountData, error) {
 	accounts := map[[32]byte]*AccountData{}
 	data := func(u *url.URL) *AccountData {
 		data, ok := accounts[u.AccountID32()]
@@ -35,6 +36,7 @@ func Extract(db *coredb.Database, snap ioutil2.SectionReader, shouldKeep func(*u
 		}
 
 		data = new(AccountData)
+		data.Keep = shouldKeep(u)
 		data.Url = u
 		data.Heads = map[string]*merkle.State{}
 		data.States = map[string][]*merkle.State{}
@@ -43,7 +45,6 @@ func Extract(db *coredb.Database, snap ioutil2.SectionReader, shouldKeep func(*u
 	}
 
 	// Restore accounts
-	seen := map[[32]byte]bool{}
 	err := coredb.Restore(db, snap, &coredb.RestoreOptions{
 		BatchRecordLimit: 50_000,
 		SkipHashCheck:    true,
@@ -66,27 +67,12 @@ func Extract(db *coredb.Database, snap ioutil2.SectionReader, shouldKeep func(*u
 					return false, nil
 				}
 
-				// If we haven't seen this account yet, route it
-				want, ok := seen[u.AccountID32()]
-				if !ok {
-					var err error
-					want, err = shouldKeep(u)
-					if err != nil {
-						return false, errors.UnknownError.Wrap(err)
-					}
-					seen[u.AccountID32()] = want
-				}
-
 				switch e.Key.Get(2) {
 				case "Pending":
 					// Do not preserve pending transactions
 					return false, nil
 
 				case "Main":
-					if !want {
-						break
-					}
-
 					// Record the account main state
 					acct, _ := protocol.UnmarshalAccount(e.Value)
 					data(u).Main = acct
@@ -96,7 +82,8 @@ func Extract(db *coredb.Database, snap ioutil2.SectionReader, shouldKeep func(*u
 					return false, nil
 
 				case "MainChain", "ScratchChain":
-					if !want {
+					data := data(u)
+					if !data.Keep {
 						break
 					}
 
@@ -105,7 +92,6 @@ func Extract(db *coredb.Database, snap ioutil2.SectionReader, shouldKeep func(*u
 					// TODO This is fragile - it breaks if we add new chain
 					// types. Is there a decent way to programmatically detect
 					// if `v` is a child of a chain?
-					data := data(u)
 					switch e.Key.Get(3) {
 					case "States":
 						// Discard mark points unless it's a data account
@@ -135,7 +121,7 @@ func Extract(db *coredb.Database, snap ioutil2.SectionReader, shouldKeep func(*u
 					}
 				}
 
-				return want, nil
+				return data(u).Keep, nil
 
 			default:
 				// Ignore everything else on this pass

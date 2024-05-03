@@ -230,10 +230,10 @@ func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time tim
 	globals.Network = netinfo
 
 	var ids []string
+	ids = append(ids, protocol.Directory)
 	for _, bvn := range network.Bvns {
 		ids = append(ids, bvn.Id)
 	}
-	ids = append(ids, protocol.Directory)
 
 	bsnSnapBuf := new(ioutil2.Buffer)
 	var bsnSnap *snapshot.Writer
