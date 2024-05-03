@@ -196,7 +196,7 @@ func (batch *Batch) collectAccounts(w *snapshot.Writer, index, hashes *indexing.
 		// Collect message hashes from all the message chains
 		err = collectMessageHashes(account, hashes, opts)
 		if err != nil {
-			return errors.UnknownError.Wrap(err)
+			return errors.UnknownError.WithFormat("collect %v message hashes: %w", account.Url(), err)
 		}
 	}
 	if it.Err() != nil {
@@ -310,7 +310,7 @@ func (batch *Batch) collectBPT(w *snapshot.Writer, opts *CollectOptions) error {
 type RestoreOptions struct {
 	BatchRecordLimit int
 	SkipHashCheck    bool
-	Predicate        func(*snapshot.RecordEntry, database.Value) (bool, error)
+	Predicate        func(*snapshot.RecordEntry) (bool, error) //, func() (database.Value, error)
 
 	Metrics *RestoreMetrics
 }
@@ -385,23 +385,23 @@ func Restore(db Beginner, file ioutil.SectionReader, opts *RestoreOptions) error
 				return errors.UnknownError.WithFormat("read next record: %w", err)
 			}
 
-			v, err := values.Resolve[database.Value](batch, entry.Key)
-			if err != nil {
-				return errors.UnknownError.WithFormat("resolve %v: %w", entry.Key, err)
-			}
-
 			if opts.Metrics != nil {
 				opts.Metrics.Records.Restoring = count
 			}
 
 			if opts.Predicate != nil {
-				ok, err := opts.Predicate(entry, v)
+				ok, err := opts.Predicate(entry)
 				if err != nil {
 					return errors.UnknownError.Wrap(err)
 				}
 				if !ok {
 					continue
 				}
+			}
+
+			v, err := values.Resolve[database.Value](batch, entry.Key)
+			if err != nil {
+				return errors.UnknownError.WithFormat("resolve %v: %w", entry.Key, err)
 			}
 
 			err = v.LoadBytes(entry.Value, true)
@@ -546,19 +546,38 @@ func collectMessageHashes(a *Account, hashes *indexing.Bucket, opts *CollectOpti
 		if head.Count == 0 {
 			return nil
 		}
-
-		entries, err := c.Inner().Entries(0, head.Count)
-		if err != nil {
-			return errors.UnknownError.WithFormat("load %s chain entries: %w", c.Name(), err)
-		}
-		for _, h := range entries {
+		for _, h := range head.HashList {
 			err = collectMessageHash(a, c, hashes, opts, *(*[32]byte)(h))
 			if err != nil {
 				return errors.UnknownError.Wrap(err)
 			}
 		}
-		if opts.Metrics != nil {
-			opts.Metrics.Messages.Count += len(entries)
+
+		var gotMP bool
+		for i := 256; i < int(head.Count); i += 256 {
+			s, err := c.State(int64(i) - 1)
+			switch {
+			case err == nil:
+				gotMP = true
+			case !errors.Is(err, errors.NotFound):
+				return errors.UnknownError.Wrap(err)
+			default:
+				// The mark point is missing. Assume this is an error if we have
+				// a previous mark point. However if *all* mark points are
+				// missing, assume that is intentional.
+				if gotMP {
+					slog.Error("Missing mark point", "account", a.Url(), "height", i-1)
+				} else {
+					slog.Debug("Skipping mark point", "account", a.Url(), "height", i-1)
+				}
+				continue
+			}
+			for _, h := range s.HashList {
+				err = collectMessageHash(a, c, hashes, opts, *(*[32]byte)(h))
+				if err != nil {
+					return errors.UnknownError.Wrap(err)
+				}
+			}
 		}
 	}
 
@@ -582,6 +601,9 @@ func collectMessageHash(a *Account, c *Chain2, hashes *indexing.Bucket, opts *Co
 		}
 	}
 
+	if opts.Metrics != nil {
+		opts.Metrics.Messages.Count++
+	}
 	err = hashes.Write(h, nil)
 	if err != nil {
 		return errors.UnknownError.WithFormat("record %s chain entry: %w", c.Name(), err)

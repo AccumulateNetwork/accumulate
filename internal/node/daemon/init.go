@@ -197,6 +197,9 @@ func ConfigureNodePorts(node *NodeInit, cfg *config.Config, part protocol.Partit
 }
 
 func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time time.Time, logger log.Logger, factomAddresses func() (io.Reader, error), snapshots []func(*core.GlobalValues) (ioutil2.SectionReader, error)) (map[string][]byte, error) {
+	if globals == nil {
+		globals = new(core.GlobalValues)
+	}
 	docs := map[string][]byte{}
 	var operators [][]byte
 	netinfo := new(protocol.NetworkDefinition)
@@ -226,10 +229,11 @@ func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time tim
 
 	globals.Network = netinfo
 
-	ids := []string{protocol.Directory}
+	var ids []string
 	for _, bvn := range network.Bvns {
 		ids = append(ids, bvn.Id)
 	}
+	ids = append(ids, protocol.Directory)
 
 	bsnSnapBuf := new(ioutil2.Buffer)
 	var bsnSnap *snapshot.Writer
@@ -264,7 +268,7 @@ func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time tim
 			ConsensusParams: tmtypes.DefaultConsensusParams(),
 		})
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("init %s: %w", id, err)
 		}
 
 		// Write the snapshot to the BSN snapshot
