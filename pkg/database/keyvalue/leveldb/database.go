@@ -45,6 +45,7 @@ func Open(filepath string, o ...Option) (*Database, error) {
 
 	d := new(Database)
 	d.leveldb = db
+	d.open = new(sync.WaitGroup)
 	for _, o := range o {
 		err = o(&d.opts)
 		if err != nil {
