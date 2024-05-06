@@ -83,22 +83,6 @@ func (c *CoreValidatorConfiguration) apply(_ *Instance, cfg *Config) error {
 
 	// Create HTTP configuration
 	if !haveService[*HttpService](cfg, nil, nil) {
-		var addrs []multiaddr.Multiaddr
-		switch c.Mode {
-		case CoreValidatorModeDual:
-			addrs = []multiaddr.Multiaddr{
-				listen(c.Listen, "", portDir+portAccAPI),
-				listen(c.Listen, "", portBVN+portAccAPI),
-			}
-		case CoreValidatorModeDN:
-			addrs = []multiaddr.Multiaddr{
-				listen(c.Listen, "", portDir+portAccAPI),
-			}
-		case CoreValidatorModeBVN:
-			addrs = []multiaddr.Multiaddr{
-				listen(c.Listen, "", portBVN+portAccAPI),
-			}
-		}
 		var routerPart string
 		switch c.Mode {
 		case CoreValidatorModeDual,
@@ -109,8 +93,11 @@ func (c *CoreValidatorConfiguration) apply(_ *Instance, cfg *Config) error {
 		}
 
 		cfg.Services = append(cfg.Services, &HttpService{
-			HttpListener: HttpListener{Listen: addrs},
-			Router:       ServiceReference[*RouterService](routerPart),
+			HttpListener: HttpListener{Listen: []multiaddr.Multiaddr{
+				listen(c.Listen, "", portDir+portAccAPI),
+				listen(c.Listen, "", portBVN+portAccAPI),
+			}},
+			Router: ServiceReference[*RouterService](routerPart),
 		})
 	}
 
