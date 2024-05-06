@@ -6,9 +6,10 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-var fr = NewFastRandom([32]byte{1, 2, 3, 4, 5, 6})
 
 func Test_dBBkey(t *testing.T) {
+	fr := NewFastRandom([32]byte{1, 2, 3, 4, 5, 6})
+	
 	dbbKey := new(DBBKey)
 	dbbKey.Length = 7
 	dbbKey.Offset = 101
