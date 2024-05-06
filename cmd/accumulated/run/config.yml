@@ -430,6 +430,10 @@ CoreValidatorConfiguration:
       type: bool
       optional: true
       pointer: true
+    - name: EnableSnapshots
+      type: bool
+      optional: true
+      pointer: true
     - name: MaxEnvelopesPerBlock
       type: uint
       optional: true

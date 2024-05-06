@@ -86,6 +86,7 @@ type CoreValidatorConfiguration struct {
 	BvnBootstrapPeers    []p2p.Multiaddr   `json:"bvnBootstrapPeers,omitempty" form:"bvnBootstrapPeers" query:"bvnBootstrapPeers" validate:"required"`
 	EnableHealing        *bool             `json:"enableHealing,omitempty" form:"enableHealing" query:"enableHealing"`
 	EnableDirectDispatch *bool             `json:"enableDirectDispatch,omitempty" form:"enableDirectDispatch" query:"enableDirectDispatch"`
+	EnableSnapshots      *bool             `json:"enableSnapshots,omitempty" form:"enableSnapshots" query:"enableSnapshots"`
 	MaxEnvelopesPerBlock *uint64           `json:"maxEnvelopesPerBlock,omitempty" form:"maxEnvelopesPerBlock" query:"maxEnvelopesPerBlock"`
 	StorageType          *StorageType      `json:"storageType,omitempty" form:"storageType" query:"storageType"`
 }
@@ -473,6 +474,10 @@ func (v *CoreValidatorConfiguration) Copy() *CoreValidatorConfiguration {
 	if v.EnableDirectDispatch != nil {
 		u.EnableDirectDispatch = new(bool)
 		*u.EnableDirectDispatch = *v.EnableDirectDispatch
+	}
+	if v.EnableSnapshots != nil {
+		u.EnableSnapshots = new(bool)
+		*u.EnableSnapshots = *v.EnableSnapshots
 	}
 	if v.MaxEnvelopesPerBlock != nil {
 		u.MaxEnvelopesPerBlock = new(uint64)
@@ -1130,6 +1135,14 @@ func (v *CoreValidatorConfiguration) Equal(u *CoreValidatorConfiguration) bool {
 	case v.EnableDirectDispatch == nil || u.EnableDirectDispatch == nil:
 		return false
 	case !(*v.EnableDirectDispatch == *u.EnableDirectDispatch):
+		return false
+	}
+	switch {
+	case v.EnableSnapshots == u.EnableSnapshots:
+		// equal
+	case v.EnableSnapshots == nil || u.EnableSnapshots == nil:
+		return false
+	case !(*v.EnableSnapshots == *u.EnableSnapshots):
 		return false
 	}
 	switch {
@@ -2023,6 +2036,7 @@ func (v *CoreValidatorConfiguration) MarshalJSON() ([]byte, error) {
 		BvnBootstrapPeers    *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"bvnBootstrapPeers,omitempty"`
 		EnableHealing        *bool                                          `json:"enableHealing,omitempty"`
 		EnableDirectDispatch *bool                                          `json:"enableDirectDispatch,omitempty"`
+		EnableSnapshots      *bool                                          `json:"enableSnapshots,omitempty"`
 		MaxEnvelopesPerBlock *uint64                                        `json:"maxEnvelopesPerBlock,omitempty"`
 		StorageType          *StorageType                                   `json:"storageType,omitempty"`
 	}{}
@@ -2056,6 +2070,9 @@ func (v *CoreValidatorConfiguration) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.EnableDirectDispatch == nil) {
 		u.EnableDirectDispatch = v.EnableDirectDispatch
+	}
+	if !(v.EnableSnapshots == nil) {
+		u.EnableSnapshots = v.EnableSnapshots
 	}
 	if !(v.MaxEnvelopesPerBlock == nil) {
 		u.MaxEnvelopesPerBlock = v.MaxEnvelopesPerBlock
@@ -2756,6 +2773,7 @@ func (v *CoreValidatorConfiguration) UnmarshalJSON(data []byte) error {
 		BvnBootstrapPeers    *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"bvnBootstrapPeers,omitempty"`
 		EnableHealing        *bool                                          `json:"enableHealing,omitempty"`
 		EnableDirectDispatch *bool                                          `json:"enableDirectDispatch,omitempty"`
+		EnableSnapshots      *bool                                          `json:"enableSnapshots,omitempty"`
 		MaxEnvelopesPerBlock *uint64                                        `json:"maxEnvelopesPerBlock,omitempty"`
 		StorageType          *StorageType                                   `json:"storageType,omitempty"`
 	}{}
@@ -2770,6 +2788,7 @@ func (v *CoreValidatorConfiguration) UnmarshalJSON(data []byte) error {
 	u.BvnBootstrapPeers = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.BvnBootstrapPeers, Func: p2p.UnmarshalMultiaddrJSON}
 	u.EnableHealing = v.EnableHealing
 	u.EnableDirectDispatch = v.EnableDirectDispatch
+	u.EnableSnapshots = v.EnableSnapshots
 	u.MaxEnvelopesPerBlock = v.MaxEnvelopesPerBlock
 	u.StorageType = v.StorageType
 	if err := json.Unmarshal(data, &u); err != nil {
@@ -2804,6 +2823,7 @@ func (v *CoreValidatorConfiguration) UnmarshalJSON(data []byte) error {
 	}
 	v.EnableHealing = u.EnableHealing
 	v.EnableDirectDispatch = u.EnableDirectDispatch
+	v.EnableSnapshots = u.EnableSnapshots
 	v.MaxEnvelopesPerBlock = u.MaxEnvelopesPerBlock
 	v.StorageType = u.StorageType
 	return nil

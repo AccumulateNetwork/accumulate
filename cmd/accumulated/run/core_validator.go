@@ -18,6 +18,7 @@ import (
 func (c *CoreValidatorConfiguration) apply(_ *Instance, cfg *Config) error {
 	// Set core validator defaults
 	setDefaultPtr(&c.StorageType, StorageTypeBadger)
+	setDefaultPtr(&c.EnableSnapshots, false)
 
 	// Validate
 	if c.Listen == nil {
@@ -148,12 +149,13 @@ func (p partOpts) apply(cfg *Config) error {
 	}
 
 	// Snapshots
-	addService(cfg,
-		&SnapshotService{
-			Partition: p.ID,
-			Directory: filepath.Join(p.Dir, "snapshots"),
-		},
-		func(s *SnapshotService) string { return s.Partition })
+	if *p.EnableSnapshots {
+		addService(cfg,
+			&SnapshotService{
+				Partition: p.ID,
+				Directory: filepath.Join(p.Dir, "snapshots")},
+			func(s *SnapshotService) string { return s.Partition })
+	}
 
 	// Services
 	addService(cfg, &Querier{Partition: p.ID}, func(s *Querier) string { return s.Partition })
