@@ -7,7 +7,6 @@
 package genesis
 
 import (
-	"fmt"
 	"io"
 
 	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -23,7 +22,6 @@ type AccountData struct {
 	Url    *url.URL
 	Keep   bool
 	Main   protocol.Account
-	Heads  map[string]*merkle.State
 	States map[string][]*merkle.State
 }
 
@@ -38,7 +36,6 @@ func Extract(db *coredb.Database, snap ioutil2.SectionReader, shouldKeep func(*u
 		data = new(AccountData)
 		data.Keep = shouldKeep(u)
 		data.Url = u
-		data.Heads = map[string]*merkle.State{}
 		data.States = map[string][]*merkle.State{}
 		accounts[u.AccountID32()] = data
 		return data
@@ -113,11 +110,6 @@ func Extract(db *coredb.Database, snap ioutil2.SectionReader, shouldKeep func(*u
 
 						name := e.Key.Get(2).(string)
 						data.States[name] = append(data.States[name], s)
-
-					case "Index":
-						// Don't care
-					default:
-						fmt.Println("What about", e.Key)
 					}
 				}
 

@@ -481,6 +481,9 @@ func (b *bootstrap) unpackSnapshots() error {
 			}
 			return strings.EqualFold(partition, b.PartitionId)
 		})
+		if err != nil {
+			return err
+		}
 
 		// Track ACME issued
 		for _, account := range accounts {
