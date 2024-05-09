@@ -6,8 +6,8 @@
 
 export enum {{.Name}} {
   {{- range .Values}}
-  /** {{.Name}} {{.Description}}. */
-  {{.Name}} = {{.Value}},
+  /** {{valueName .}} {{.Description}}. */
+  {{valueName .}} = {{.Value}},
   {{- end}}
 }
 
@@ -24,8 +24,8 @@ export namespace {{.Name}} {
     switch (name.toLowerCase()) {
       {{- $typ := .Name}}
       {{- range .Values}}
-      {{- $typ := (print $typ "." .Name)}}
-      case "{{if .Label}}{{lower .Label}}{{else}}{{lower .Name}}{{end}}":
+      {{- $typ := (print $typ "." (valueName .))}}
+      case "{{if .Label}}{{lower .Label}}{{else}}{{lower (valueName .)}}{{end}}":
         return {{$typ}}
       {{- range .Aliases}}
       case "{{.}}":
@@ -41,9 +41,9 @@ export namespace {{.Name}} {
     switch (v) {
       {{- $typ := .Name}}
       {{- range .Values}}
-      {{- $typ := (print $typ "." .Name)}}
+      {{- $typ := (print $typ "." (valueName .))}}
       case {{$typ}}:
-        return "{{if .Label}}{{.Label}}{{else}}{{lowerCamel .Name}}{{end}}"
+        return "{{if .Label}}{{.Label}}{{else}}{{lowerCamel (valueName .)}}{{end}}"
       {{- end}}
       default:
         throw new Error(`Unknown {{.Name}} ${v}`);
