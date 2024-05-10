@@ -69,7 +69,6 @@ func (d *Database) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
 	if d.closing.Load() {
 		err = errors.Conflict.With("closed")
 	} else {
-		d.open.Add(1)
 		snap, err = d.leveldb.GetSnapshot()
 	}
 
@@ -90,8 +89,10 @@ func (d *Database) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
 
 	discard := func() {}
 	if err == nil {
+		d.open.Add(1)
+		var once sync.Once
 		discard = func() {
-			defer d.open.Done()
+			defer once.Do(d.open.Done)
 			snap.Release()
 		}
 	}

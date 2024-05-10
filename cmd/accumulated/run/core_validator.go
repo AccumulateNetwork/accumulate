@@ -18,7 +18,6 @@ import (
 func (c *CoreValidatorConfiguration) apply(_ *Instance, cfg *Config) error {
 	// Set core validator defaults
 	setDefaultPtr(&c.StorageType, StorageTypeBadger)
-	setDefaultPtr(&c.EnableSnapshots, false)
 
 	// Validate
 	if c.Listen == nil {
@@ -116,6 +115,8 @@ type partOpts struct {
 }
 
 func (p partOpts) apply(cfg *Config) error {
+	setDefaultPtr(&p.EnableSnapshots, false)
+
 	// Consensus
 	addService(cfg,
 		&ConsensusService{
