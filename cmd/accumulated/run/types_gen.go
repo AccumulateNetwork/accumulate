@@ -76,17 +76,18 @@ type CoreConsensusApp struct {
 }
 
 type CoreValidatorConfiguration struct {
-	Listen               p2p.Multiaddr   `json:"listen,omitempty" form:"listen" query:"listen" validate:"required"`
-	BVN                  string          `json:"bvn,omitempty" form:"bvn" query:"bvn" validate:"required"`
-	ValidatorKey         PrivateKey      `json:"validatorKey,omitempty" form:"validatorKey" query:"validatorKey" validate:"required"`
-	DnGenesis            string          `json:"dnGenesis,omitempty" form:"dnGenesis" query:"dnGenesis" validate:"required"`
-	BvnGenesis           string          `json:"bvnGenesis,omitempty" form:"bvnGenesis" query:"bvnGenesis" validate:"required"`
-	DnBootstrapPeers     []p2p.Multiaddr `json:"dnBootstrapPeers,omitempty" form:"dnBootstrapPeers" query:"dnBootstrapPeers" validate:"required"`
-	BvnBootstrapPeers    []p2p.Multiaddr `json:"bvnBootstrapPeers,omitempty" form:"bvnBootstrapPeers" query:"bvnBootstrapPeers" validate:"required"`
-	EnableHealing        *bool           `json:"enableHealing,omitempty" form:"enableHealing" query:"enableHealing"`
-	EnableDirectDispatch *bool           `json:"enableDirectDispatch,omitempty" form:"enableDirectDispatch" query:"enableDirectDispatch"`
-	MaxEnvelopesPerBlock *uint64         `json:"maxEnvelopesPerBlock,omitempty" form:"maxEnvelopesPerBlock" query:"maxEnvelopesPerBlock"`
-	StorageType          *StorageType    `json:"storageType,omitempty" form:"storageType" query:"storageType"`
+	Mode                 CoreValidatorMode `json:"mode,omitempty" form:"mode" query:"mode" validate:"required"`
+	Listen               p2p.Multiaddr     `json:"listen,omitempty" form:"listen" query:"listen" validate:"required"`
+	BVN                  string            `json:"bvn,omitempty" form:"bvn" query:"bvn" validate:"required"`
+	ValidatorKey         PrivateKey        `json:"validatorKey,omitempty" form:"validatorKey" query:"validatorKey" validate:"required"`
+	DnGenesis            string            `json:"dnGenesis,omitempty" form:"dnGenesis" query:"dnGenesis" validate:"required"`
+	BvnGenesis           string            `json:"bvnGenesis,omitempty" form:"bvnGenesis" query:"bvnGenesis" validate:"required"`
+	DnBootstrapPeers     []p2p.Multiaddr   `json:"dnBootstrapPeers,omitempty" form:"dnBootstrapPeers" query:"dnBootstrapPeers" validate:"required"`
+	BvnBootstrapPeers    []p2p.Multiaddr   `json:"bvnBootstrapPeers,omitempty" form:"bvnBootstrapPeers" query:"bvnBootstrapPeers" validate:"required"`
+	EnableHealing        *bool             `json:"enableHealing,omitempty" form:"enableHealing" query:"enableHealing"`
+	EnableDirectDispatch *bool             `json:"enableDirectDispatch,omitempty" form:"enableDirectDispatch" query:"enableDirectDispatch"`
+	MaxEnvelopesPerBlock *uint64           `json:"maxEnvelopesPerBlock,omitempty" form:"maxEnvelopesPerBlock" query:"maxEnvelopesPerBlock"`
+	StorageType          *StorageType      `json:"storageType,omitempty" form:"storageType" query:"storageType"`
 }
 
 type DevnetConfiguration struct {
@@ -161,11 +162,19 @@ type Logging struct {
 	Format string         `json:"format,omitempty" form:"format" query:"format" validate:"required"`
 	Color  *bool          `json:"color,omitempty" form:"color" query:"color" validate:"required"`
 	Rules  []*LoggingRule `json:"rules,omitempty" form:"rules" query:"rules" validate:"required"`
+	Loki   *LokiLogging   `json:"loki,omitempty" form:"loki" query:"loki" validate:"required"`
 }
 
 type LoggingRule struct {
 	Level   slog.Level `json:"level" form:"level" query:"level" validate:"required"`
 	Modules []string   `json:"modules,omitempty" form:"modules" query:"modules" validate:"required"`
+}
+
+type LokiLogging struct {
+	Enable   bool   `json:"enable,omitempty" form:"enable" query:"enable" validate:"required"`
+	Url      string `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	Username string `json:"username,omitempty" form:"username" query:"username" validate:"required"`
+	Password string `json:"password,omitempty" form:"password" query:"password" validate:"required"`
 }
 
 type MemoryStorage struct {
@@ -420,6 +429,7 @@ func (v *CoreConsensusApp) CopyAsInterface() interface{} { return v.Copy() }
 func (v *CoreValidatorConfiguration) Copy() *CoreValidatorConfiguration {
 	u := new(CoreValidatorConfiguration)
 
+	u.Mode = v.Mode
 	if v.Listen != nil {
 		u.Listen = p2p.CopyMultiaddr(v.Listen)
 	}
@@ -656,6 +666,9 @@ func (v *Logging) Copy() *Logging {
 			u.Rules[i] = (v).Copy()
 		}
 	}
+	if v.Loki != nil {
+		u.Loki = (v.Loki).Copy()
+	}
 
 	return u
 }
@@ -676,6 +689,19 @@ func (v *LoggingRule) Copy() *LoggingRule {
 }
 
 func (v *LoggingRule) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *LokiLogging) Copy() *LokiLogging {
+	u := new(LokiLogging)
+
+	u.Enable = v.Enable
+	u.Url = v.Url
+	u.Username = v.Username
+	u.Password = v.Password
+
+	return u
+}
+
+func (v *LokiLogging) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *MemoryStorage) Copy() *MemoryStorage {
 	u := new(MemoryStorage)
@@ -1018,6 +1044,9 @@ func (v *CoreConsensusApp) Equal(u *CoreConsensusApp) bool {
 }
 
 func (v *CoreValidatorConfiguration) Equal(u *CoreValidatorConfiguration) bool {
+	if !(v.Mode == u.Mode) {
+		return false
+	}
 	if !(p2p.EqualMultiaddr(v.Listen, u.Listen)) {
 		return false
 	}
@@ -1301,6 +1330,14 @@ func (v *Logging) Equal(u *Logging) bool {
 			return false
 		}
 	}
+	switch {
+	case v.Loki == u.Loki:
+		// equal
+	case v.Loki == nil || u.Loki == nil:
+		return false
+	case !((v.Loki).Equal(u.Loki)):
+		return false
+	}
 
 	return true
 }
@@ -1316,6 +1353,23 @@ func (v *LoggingRule) Equal(u *LoggingRule) bool {
 		if !(v.Modules[i] == u.Modules[i]) {
 			return false
 		}
+	}
+
+	return true
+}
+
+func (v *LokiLogging) Equal(u *LokiLogging) bool {
+	if !(v.Enable == u.Enable) {
+		return false
+	}
+	if !(v.Url == u.Url) {
+		return false
+	}
+	if !(v.Username == u.Username) {
+		return false
+	}
+	if !(v.Password == u.Password) {
+		return false
 	}
 
 	return true
@@ -1881,6 +1935,7 @@ func (v *CoreConsensusApp) MarshalJSON() ([]byte, error) {
 func (v *CoreValidatorConfiguration) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type                 ConfigurationType                              `json:"type"`
+		Mode                 CoreValidatorMode                              `json:"mode,omitempty"`
 		Listen               *encoding.JsonUnmarshalWith[p2p.Multiaddr]     `json:"listen,omitempty"`
 		BVN                  string                                         `json:"bvn,omitempty"`
 		ValidatorKey         *encoding.JsonUnmarshalWith[PrivateKey]        `json:"validatorKey,omitempty"`
@@ -1894,6 +1949,9 @@ func (v *CoreValidatorConfiguration) MarshalJSON() ([]byte, error) {
 		StorageType          *StorageType                                   `json:"storageType,omitempty"`
 	}{}
 	u.Type = v.Type()
+	if !(v.Mode == 0) {
+		u.Mode = v.Mode
+	}
 	if !(p2p.EqualMultiaddr(v.Listen, nil)) {
 		u.Listen = &encoding.JsonUnmarshalWith[p2p.Multiaddr]{Value: v.Listen, Func: p2p.UnmarshalMultiaddrJSON}
 	}
@@ -2165,6 +2223,7 @@ func (v *Logging) MarshalJSON() ([]byte, error) {
 		Format string                          `json:"format,omitempty"`
 		Color  *bool                           `json:"color,omitempty"`
 		Rules  encoding.JsonList[*LoggingRule] `json:"rules,omitempty"`
+		Loki   *LokiLogging                    `json:"loki,omitempty"`
 	}{}
 	if !(len(v.Format) == 0) {
 		u.Format = v.Format
@@ -2174,6 +2233,9 @@ func (v *Logging) MarshalJSON() ([]byte, error) {
 	}
 	if !(len(v.Rules) == 0) {
 		u.Rules = v.Rules
+	}
+	if !(v.Loki == nil) {
+		u.Loki = v.Loki
 	}
 	return json.Marshal(&u)
 }
@@ -2578,6 +2640,7 @@ func (v *CoreConsensusApp) UnmarshalJSON(data []byte) error {
 func (v *CoreValidatorConfiguration) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type                 ConfigurationType                              `json:"type"`
+		Mode                 CoreValidatorMode                              `json:"mode,omitempty"`
 		Listen               *encoding.JsonUnmarshalWith[p2p.Multiaddr]     `json:"listen,omitempty"`
 		BVN                  string                                         `json:"bvn,omitempty"`
 		ValidatorKey         *encoding.JsonUnmarshalWith[PrivateKey]        `json:"validatorKey,omitempty"`
@@ -2591,6 +2654,7 @@ func (v *CoreValidatorConfiguration) UnmarshalJSON(data []byte) error {
 		StorageType          *StorageType                                   `json:"storageType,omitempty"`
 	}{}
 	u.Type = v.Type()
+	u.Mode = v.Mode
 	u.Listen = &encoding.JsonUnmarshalWith[p2p.Multiaddr]{Value: v.Listen, Func: p2p.UnmarshalMultiaddrJSON}
 	u.BVN = v.BVN
 	u.ValidatorKey = &encoding.JsonUnmarshalWith[PrivateKey]{Value: v.ValidatorKey, Func: UnmarshalPrivateKeyJSON}
@@ -2608,6 +2672,7 @@ func (v *CoreValidatorConfiguration) UnmarshalJSON(data []byte) error {
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
+	v.Mode = u.Mode
 	if u.Listen != nil {
 		v.Listen = u.Listen.Value
 	}
@@ -2929,16 +2994,19 @@ func (v *Logging) UnmarshalJSON(data []byte) error {
 		Format string                          `json:"format,omitempty"`
 		Color  *bool                           `json:"color,omitempty"`
 		Rules  encoding.JsonList[*LoggingRule] `json:"rules,omitempty"`
+		Loki   *LokiLogging                    `json:"loki,omitempty"`
 	}{}
 	u.Format = v.Format
 	u.Color = v.Color
 	u.Rules = v.Rules
+	u.Loki = v.Loki
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.Format = u.Format
 	v.Color = u.Color
 	v.Rules = u.Rules
+	v.Loki = u.Loki
 	return nil
 }
 

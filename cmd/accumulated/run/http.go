@@ -31,6 +31,12 @@ import (
 	"golang.org/x/exp/slog"
 )
 
+const (
+	DefaultHTTPReadHeaderTimeout = 10 * time.Second
+	DefaultHTTPConnectionLimit   = 500
+	DefaultHTTPMaxWait           = 10 * time.Second
+)
+
 var (
 	httpRefRouter = ioc.Needs[routing.Router](func(h *HttpService) string { return h.Router.base().refOr("") })
 )
@@ -67,7 +73,7 @@ func (h *HttpService) start(inst *Instance) error {
 		Logger:    (*logging.Slogger)(inst.logger).With("module", "http"),
 		Node:      inst.p2p,
 		Router:    router,
-		MaxWait:   10 * time.Second,
+		MaxWait:   DefaultHTTPMaxWait,
 		NetworkId: inst.config.Network,
 	}
 	client := &message.Client{Transport: &message.RoutedTransport{
@@ -138,8 +144,8 @@ func (h *HttpService) start(inst *Instance) error {
 }
 
 func (h *HttpListener) applyHttpDefaults() {
-	setDefaultPtr(&h.ReadHeaderTimeout, 10*time.Second)
-	setDefaultPtr(&h.ConnectionLimit, 500)
+	setDefaultPtr(&h.ReadHeaderTimeout, DefaultHTTPReadHeaderTimeout)
+	setDefaultPtr(&h.ConnectionLimit, DefaultHTTPConnectionLimit)
 }
 
 func (h *HttpListener) startHTTP(inst *Instance, handler http.Handler) (*http.Server, error) {

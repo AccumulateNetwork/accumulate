@@ -41,10 +41,8 @@ func TestLoggingCtxAttrs(t *testing.T) {
 func TestPlainLogging(t *testing.T) {
 	buf := new(bytes.Buffer)
 	handler, err := NewSlogHandler(SlogConfig{
-		Format:       "plain",
-		NoColor:      true,
 		DefaultLevel: slog.LevelDebug,
-	}, buf)
+	}, ConsoleSlogWriter(buf, false))
 	require.NoError(t, err)
 	logger := slog.New(stripTime{handler})
 
@@ -55,7 +53,6 @@ func TestPlainLogging(t *testing.T) {
 func TestJSONLogging(t *testing.T) {
 	buf := new(bytes.Buffer)
 	handler, err := NewSlogHandler(SlogConfig{
-		Format:       "json",
 		DefaultLevel: slog.LevelDebug,
 	}, buf)
 	require.NoError(t, err)
