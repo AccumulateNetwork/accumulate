@@ -161,6 +161,10 @@ func (c *ConsensusService) start(inst *Instance) error {
 			return err
 		}
 
+		if d.config.Instrumentation.Prometheus {
+			d.config.Instrumentation.Namespace = c.MetricsNamespace
+		}
+
 	case errors.Is(err, fs.ErrNotExist):
 		d.config.NodeKey = ""
 		d.config.PrivValidatorKey = ""
@@ -500,6 +504,9 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 		Querier:      v3.Querier2{Querier: client},
 		Dispatcher:   execOpts.NewDispatcher(),
 		RunTask:      execOpts.BackgroundTaskLauncher,
+
+		// TODO Fix the flooding issues and enable this by default
+		EnableAnchorHealing: Ptr(false),
 	}
 	err = conductor.Start(d.eventBus)
 	if err != nil {

@@ -86,6 +86,7 @@ type CoreValidatorConfiguration struct {
 	BvnBootstrapPeers    []p2p.Multiaddr   `json:"bvnBootstrapPeers,omitempty" form:"bvnBootstrapPeers" query:"bvnBootstrapPeers" validate:"required"`
 	EnableHealing        *bool             `json:"enableHealing,omitempty" form:"enableHealing" query:"enableHealing"`
 	EnableDirectDispatch *bool             `json:"enableDirectDispatch,omitempty" form:"enableDirectDispatch" query:"enableDirectDispatch"`
+	EnableSnapshots      *bool             `json:"enableSnapshots,omitempty" form:"enableSnapshots" query:"enableSnapshots"`
 	MaxEnvelopesPerBlock *uint64           `json:"maxEnvelopesPerBlock,omitempty" form:"maxEnvelopesPerBlock" query:"maxEnvelopesPerBlock"`
 	StorageType          *StorageType      `json:"storageType,omitempty" form:"storageType" query:"storageType"`
 }
@@ -152,6 +153,7 @@ type HttpService struct {
 
 type Instrumentation struct {
 	HttpListener
+	Monitoring *Monitor `json:"monitoring,omitempty" form:"monitoring" query:"monitoring" validate:"required"`
 }
 
 type LevelDBStorage struct {
@@ -182,6 +184,18 @@ type MemoryStorage struct {
 
 type MetricsService struct {
 	Partition string `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
+}
+
+type Monitor struct {
+
+	// Directory is the directory traces and profiles are written to.
+	Directory string `json:"directory,omitempty" form:"directory" query:"directory" validate:"required"`
+	// ProfileMemory enables profiling when memory usage increases dramatically.
+	ProfileMemory *bool `json:"profileMemory,omitempty" form:"profileMemory" query:"profileMemory" validate:"required"`
+	// MemoryPollingRate is rate at which to poll memory usage.
+	MemoryPollingRate *time.Duration `json:"memoryPollingRate,omitempty" form:"memoryPollingRate" query:"memoryPollingRate" validate:"required"`
+	// AllocRateTrigger is the rate of allocation in bytes/second that triggers a profile.
+	AllocRateTrigger *float64 `json:"allocRateTrigger,omitempty" form:"allocRateTrigger" query:"allocRateTrigger" validate:"required"`
 }
 
 type NetworkService struct {
@@ -461,6 +475,10 @@ func (v *CoreValidatorConfiguration) Copy() *CoreValidatorConfiguration {
 		u.EnableDirectDispatch = new(bool)
 		*u.EnableDirectDispatch = *v.EnableDirectDispatch
 	}
+	if v.EnableSnapshots != nil {
+		u.EnableSnapshots = new(bool)
+		*u.EnableSnapshots = *v.EnableSnapshots
+	}
 	if v.MaxEnvelopesPerBlock != nil {
 		u.MaxEnvelopesPerBlock = new(uint64)
 		*u.MaxEnvelopesPerBlock = *v.MaxEnvelopesPerBlock
@@ -635,6 +653,9 @@ func (v *Instrumentation) Copy() *Instrumentation {
 	u := new(Instrumentation)
 
 	u.HttpListener = *v.HttpListener.Copy()
+	if v.Monitoring != nil {
+		u.Monitoring = (v.Monitoring).Copy()
+	}
 
 	return u
 }
@@ -720,6 +741,28 @@ func (v *MetricsService) Copy() *MetricsService {
 }
 
 func (v *MetricsService) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *Monitor) Copy() *Monitor {
+	u := new(Monitor)
+
+	u.Directory = v.Directory
+	if v.ProfileMemory != nil {
+		u.ProfileMemory = new(bool)
+		*u.ProfileMemory = *v.ProfileMemory
+	}
+	if v.MemoryPollingRate != nil {
+		u.MemoryPollingRate = new(time.Duration)
+		*u.MemoryPollingRate = *v.MemoryPollingRate
+	}
+	if v.AllocRateTrigger != nil {
+		u.AllocRateTrigger = new(float64)
+		*u.AllocRateTrigger = *v.AllocRateTrigger
+	}
+
+	return u
+}
+
+func (v *Monitor) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *NetworkService) Copy() *NetworkService {
 	u := new(NetworkService)
@@ -1095,6 +1138,14 @@ func (v *CoreValidatorConfiguration) Equal(u *CoreValidatorConfiguration) bool {
 		return false
 	}
 	switch {
+	case v.EnableSnapshots == u.EnableSnapshots:
+		// equal
+	case v.EnableSnapshots == nil || u.EnableSnapshots == nil:
+		return false
+	case !(*v.EnableSnapshots == *u.EnableSnapshots):
+		return false
+	}
+	switch {
 	case v.MaxEnvelopesPerBlock == u.MaxEnvelopesPerBlock:
 		// equal
 	case v.MaxEnvelopesPerBlock == nil || u.MaxEnvelopesPerBlock == nil:
@@ -1298,6 +1349,14 @@ func (v *Instrumentation) Equal(u *Instrumentation) bool {
 	if !v.HttpListener.Equal(&u.HttpListener) {
 		return false
 	}
+	switch {
+	case v.Monitoring == u.Monitoring:
+		// equal
+	case v.Monitoring == nil || u.Monitoring == nil:
+		return false
+	case !((v.Monitoring).Equal(u.Monitoring)):
+		return false
+	}
 
 	return true
 }
@@ -1382,6 +1441,38 @@ func (v *MemoryStorage) Equal(u *MemoryStorage) bool {
 
 func (v *MetricsService) Equal(u *MetricsService) bool {
 	if !(v.Partition == u.Partition) {
+		return false
+	}
+
+	return true
+}
+
+func (v *Monitor) Equal(u *Monitor) bool {
+	if !(v.Directory == u.Directory) {
+		return false
+	}
+	switch {
+	case v.ProfileMemory == u.ProfileMemory:
+		// equal
+	case v.ProfileMemory == nil || u.ProfileMemory == nil:
+		return false
+	case !(*v.ProfileMemory == *u.ProfileMemory):
+		return false
+	}
+	switch {
+	case v.MemoryPollingRate == u.MemoryPollingRate:
+		// equal
+	case v.MemoryPollingRate == nil || u.MemoryPollingRate == nil:
+		return false
+	case !(*v.MemoryPollingRate == *u.MemoryPollingRate):
+		return false
+	}
+	switch {
+	case v.AllocRateTrigger == u.AllocRateTrigger:
+		// equal
+	case v.AllocRateTrigger == nil || u.AllocRateTrigger == nil:
+		return false
+	case !(*v.AllocRateTrigger == *u.AllocRateTrigger):
 		return false
 	}
 
@@ -1945,6 +2036,7 @@ func (v *CoreValidatorConfiguration) MarshalJSON() ([]byte, error) {
 		BvnBootstrapPeers    *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"bvnBootstrapPeers,omitempty"`
 		EnableHealing        *bool                                          `json:"enableHealing,omitempty"`
 		EnableDirectDispatch *bool                                          `json:"enableDirectDispatch,omitempty"`
+		EnableSnapshots      *bool                                          `json:"enableSnapshots,omitempty"`
 		MaxEnvelopesPerBlock *uint64                                        `json:"maxEnvelopesPerBlock,omitempty"`
 		StorageType          *StorageType                                   `json:"storageType,omitempty"`
 	}{}
@@ -1978,6 +2070,9 @@ func (v *CoreValidatorConfiguration) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.EnableDirectDispatch == nil) {
 		u.EnableDirectDispatch = v.EnableDirectDispatch
+	}
+	if !(v.EnableSnapshots == nil) {
+		u.EnableSnapshots = v.EnableSnapshots
 	}
 	if !(v.MaxEnvelopesPerBlock == nil) {
 		u.MaxEnvelopesPerBlock = v.MaxEnvelopesPerBlock
@@ -2180,6 +2275,7 @@ func (v *Instrumentation) MarshalJSON() ([]byte, error) {
 		ReadHeaderTimeout interface{}                                    `json:"readHeaderTimeout,omitempty"`
 		TlsCertPath       string                                         `json:"tlsCertPath,omitempty"`
 		TlsKeyPath        string                                         `json:"tlsKeyPath,omitempty"`
+		Monitoring        *Monitor                                       `json:"monitoring,omitempty"`
 	}{}
 	if !(len(v.HttpListener.Listen) == 0) {
 
@@ -2202,6 +2298,9 @@ func (v *Instrumentation) MarshalJSON() ([]byte, error) {
 	if !(len(v.HttpListener.TlsKeyPath) == 0) {
 
 		u.TlsKeyPath = v.HttpListener.TlsKeyPath
+	}
+	if !(v.Monitoring == nil) {
+		u.Monitoring = v.Monitoring
 	}
 	return json.Marshal(&u)
 }
@@ -2268,6 +2367,30 @@ func (v *MetricsService) MarshalJSON() ([]byte, error) {
 	u.Type = v.Type()
 	if !(len(v.Partition) == 0) {
 		u.Partition = v.Partition
+	}
+	return json.Marshal(&u)
+}
+
+func (v *Monitor) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Directory         string      `json:"directory,omitempty"`
+		ProfileMemory     *bool       `json:"profileMemory,omitempty"`
+		MemoryPollingRate interface{} `json:"memoryPollingRate,omitempty"`
+		AllocRateTrigger  *float64    `json:"allocRateTrigger,omitempty"`
+	}{}
+	if !(len(v.Directory) == 0) {
+		u.Directory = v.Directory
+	}
+	if !(v.ProfileMemory == nil) {
+		u.ProfileMemory = v.ProfileMemory
+	}
+	if !(v.MemoryPollingRate == nil) {
+		if v.MemoryPollingRate != nil {
+			u.MemoryPollingRate = encoding.DurationToJSON(*v.MemoryPollingRate)
+		}
+	}
+	if !(v.AllocRateTrigger == nil) {
+		u.AllocRateTrigger = v.AllocRateTrigger
 	}
 	return json.Marshal(&u)
 }
@@ -2650,6 +2773,7 @@ func (v *CoreValidatorConfiguration) UnmarshalJSON(data []byte) error {
 		BvnBootstrapPeers    *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"bvnBootstrapPeers,omitempty"`
 		EnableHealing        *bool                                          `json:"enableHealing,omitempty"`
 		EnableDirectDispatch *bool                                          `json:"enableDirectDispatch,omitempty"`
+		EnableSnapshots      *bool                                          `json:"enableSnapshots,omitempty"`
 		MaxEnvelopesPerBlock *uint64                                        `json:"maxEnvelopesPerBlock,omitempty"`
 		StorageType          *StorageType                                   `json:"storageType,omitempty"`
 	}{}
@@ -2664,6 +2788,7 @@ func (v *CoreValidatorConfiguration) UnmarshalJSON(data []byte) error {
 	u.BvnBootstrapPeers = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.BvnBootstrapPeers, Func: p2p.UnmarshalMultiaddrJSON}
 	u.EnableHealing = v.EnableHealing
 	u.EnableDirectDispatch = v.EnableDirectDispatch
+	u.EnableSnapshots = v.EnableSnapshots
 	u.MaxEnvelopesPerBlock = v.MaxEnvelopesPerBlock
 	u.StorageType = v.StorageType
 	if err := json.Unmarshal(data, &u); err != nil {
@@ -2698,6 +2823,7 @@ func (v *CoreValidatorConfiguration) UnmarshalJSON(data []byte) error {
 	}
 	v.EnableHealing = u.EnableHealing
 	v.EnableDirectDispatch = u.EnableDirectDispatch
+	v.EnableSnapshots = u.EnableSnapshots
 	v.MaxEnvelopesPerBlock = u.MaxEnvelopesPerBlock
 	v.StorageType = u.StorageType
 	return nil
@@ -2942,6 +3068,7 @@ func (v *Instrumentation) UnmarshalJSON(data []byte) error {
 		ReadHeaderTimeout interface{}                                    `json:"readHeaderTimeout,omitempty"`
 		TlsCertPath       string                                         `json:"tlsCertPath,omitempty"`
 		TlsKeyPath        string                                         `json:"tlsKeyPath,omitempty"`
+		Monitoring        *Monitor                                       `json:"monitoring,omitempty"`
 	}{}
 	u.Listen = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.HttpListener.Listen, Func: p2p.UnmarshalMultiaddrJSON}
 	u.ConnectionLimit = v.HttpListener.ConnectionLimit
@@ -2950,6 +3077,7 @@ func (v *Instrumentation) UnmarshalJSON(data []byte) error {
 	}
 	u.TlsCertPath = v.HttpListener.TlsCertPath
 	u.TlsKeyPath = v.HttpListener.TlsKeyPath
+	u.Monitoring = v.Monitoring
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -2969,6 +3097,7 @@ func (v *Instrumentation) UnmarshalJSON(data []byte) error {
 	}
 	v.HttpListener.TlsCertPath = u.TlsCertPath
 	v.HttpListener.TlsKeyPath = u.TlsKeyPath
+	v.Monitoring = u.Monitoring
 	return nil
 }
 
@@ -3053,6 +3182,35 @@ func (v *MetricsService) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Partition = u.Partition
+	return nil
+}
+
+func (v *Monitor) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Directory         string      `json:"directory,omitempty"`
+		ProfileMemory     *bool       `json:"profileMemory,omitempty"`
+		MemoryPollingRate interface{} `json:"memoryPollingRate,omitempty"`
+		AllocRateTrigger  *float64    `json:"allocRateTrigger,omitempty"`
+	}{}
+	u.Directory = v.Directory
+	u.ProfileMemory = v.ProfileMemory
+	if v.MemoryPollingRate != nil {
+		u.MemoryPollingRate = encoding.DurationToJSON(*v.MemoryPollingRate)
+	}
+	u.AllocRateTrigger = v.AllocRateTrigger
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Directory = u.Directory
+	v.ProfileMemory = u.ProfileMemory
+	if u.MemoryPollingRate != nil {
+		if x, err := encoding.DurationFromJSON(u.MemoryPollingRate); err != nil {
+			return fmt.Errorf("error decoding MemoryPollingRate: %w", err)
+		} else {
+			v.MemoryPollingRate = &x
+		}
+	}
+	v.AllocRateTrigger = u.AllocRateTrigger
 	return nil
 }
 

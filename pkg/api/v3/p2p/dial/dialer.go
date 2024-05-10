@@ -106,7 +106,7 @@ func (d *dialer) BadDial(ctx context.Context, addr multiaddr.Multiaddr, s messag
 
 	slog.InfoCtx(ctx, "Bad dial", "peer", ss.peer, "address", addr, "error", err)
 
-	if errors.Is(err, errors.EncodingError) {
+	if errors.Is(err, errors.EncodingError) || errors.Is(err, errors.StreamAborted) {
 		// Don't mark a peer bad if there's an encoding failure. Is this a good
 		// idea?
 		return false
