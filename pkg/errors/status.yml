@@ -92,3 +92,6 @@ Status:
   InvalidRecord:
     value: 508
     description: means the database has one or more invalid records
+  StreamAborted:
+    value: 509
+    description: is equivalent to [io.ErrUnexpectedEOF]
