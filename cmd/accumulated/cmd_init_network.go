@@ -21,12 +21,16 @@ import (
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/exp/faucet"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
 var cmdInitNetwork = &cobra.Command{
@@ -43,8 +47,15 @@ var cmdInitGenesis = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 }
 
+var cmdInitPrepareGenesis = &cobra.Command{
+	Use:   "prepare-genesis <output> <inputs...>",
+	Short: "Ingests data from snapshots and produces a single, stripped-down snapshot for genesis",
+	Run:   prepareGenesis,
+	Args:  cobra.MinimumNArgs(2),
+}
+
 func init() {
-	cmdInit.AddCommand(cmdInitGenesis)
+	cmdInit.AddCommand(cmdInitGenesis, cmdInitPrepareGenesis)
 }
 
 func loadNetworkConfiguration(file string) (ret *accumulated.NetworkInit, err error) {
@@ -129,7 +140,68 @@ func initGenesis(cmd *cobra.Command, args []string) {
 	}
 }
 
-func initNetworkLocalFS(cmd *cobra.Command, netInit *accumulated.NetworkInit) {
+func prepareGenesis(cmd *cobra.Command, args []string) {
+	// Timer for updating progress
+	tick := time.NewTicker(time.Second / 2)
+	defer tick.Stop()
+
+	db := coredb.OpenInMemory(nil)
+	db.SetObserver(testing.NullObserver{})
+	for _, path := range args[1:] {
+		fmt.Println("Processing", path)
+		file, err := os.Open(path)
+		check(err)
+		defer file.Close()
+		_, err = genesis.Extract(db, file, func(u *url.URL) bool {
+			select {
+			case <-tick.C:
+				h := database.NewKey("Account", u).Hash()
+				fmt.Printf("\033[A\r\033[KProcessing [%x] %v\n", h[:4], u)
+			default:
+				return true
+			}
+
+			// Retain everything
+			return true
+		})
+		check(err)
+	}
+
+	file, err := os.Create(args[0])
+	check(err)
+	defer file.Close()
+
+	// Collect
+	var metrics coredb.CollectMetrics
+	fmt.Println("Collecting into", args[0])
+	err = db.Collect(file, nil, &coredb.CollectOptions{
+		Metrics: &metrics,
+		Predicate: func(r database.Record) (bool, error) {
+			select {
+			case <-tick.C:
+			default:
+				return true, nil
+			}
+
+			// Print progress
+			switch r.Key().Get(0) {
+			case "Account":
+				k := r.Key().SliceJ(2)
+				h := k.Hash()
+				fmt.Printf("\033[A\r\033[KCollecting [%x] (%d) %v\n", h[:4], metrics.Messages.Count, k.Get(1))
+
+			case "Message", "Transaction":
+				fmt.Printf("\033[A\r\033[KCollecting (%d/%d) %x\n", metrics.Messages.Collecting, metrics.Messages.Count, r.Key().Get(1).([32]byte))
+			}
+
+			// Retain everything
+			return true, nil
+		},
+	})
+	check(err)
+}
+
+func initNetworkLocalFS(_ *cobra.Command, netInit *accumulated.NetworkInit) {
 	if flagInit.LogLevels != "" {
 		_, _, err := logging.ParseLogLevel(flagInit.LogLevels, io.Discard)
 		checkf(err, "--log-level")
@@ -222,8 +294,7 @@ func buildGenesis(network *accumulated.NetworkInit) map[string][]byte {
 		})
 	}
 
-	values := new(core.GlobalValues)
-	genDocs, err := accumulated.BuildGenesisDocs(network, values, time.Now(), newLogger(), factomAddresses, snapshots)
+	genDocs, err := accumulated.BuildGenesisDocs(network, network.Globals, time.Now(), newLogger(), factomAddresses, snapshots)
 	checkf(err, "build genesis documents")
 	return genDocs
 }

@@ -26,7 +26,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain"
 	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
@@ -34,7 +33,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"golang.org/x/sync/errgroup"
@@ -105,7 +103,7 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) error {
 	// Unpack snapshots
 	err := b.unpackSnapshots()
 	if err != nil {
-		return errors.UnknownError.Wrap(err)
+		return errors.UnknownError.WithFormat("unpack snapshots: %w", err)
 	}
 
 	exec, err := block.NewGenesisExecutor(b.db, opts.Logger, &config.Describe{
@@ -129,18 +127,18 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) error {
 
 	err = exec.Genesis(b.block, b)
 	if err != nil {
-		return errors.UnknownError.Wrap(err)
+		return errors.UnknownError.WithFormat("execute: %w", err)
 	}
 
 	err = b.block.Batch.Commit()
 	if err != nil {
-		return errors.UnknownError.Wrap(err)
+		return errors.UnknownError.WithFormat("commit: %w", err)
 	}
 
 	// Wait for background tasks
 	err = errg.Wait()
 	if err != nil {
-		return errors.UnknownError.Wrap(err)
+		return errors.UnknownError.WithFormat("tasks: %w", err)
 	}
 
 	// Create the snapshot
@@ -188,7 +186,10 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) error {
 			return sw.Close()
 		},
 	})
-	return errors.UnknownError.Wrap(err)
+	if err != nil {
+		return errors.UnknownError.WithFormat("collect: %w", err)
+	}
+	return nil
 }
 
 type bootstrap struct {
@@ -463,8 +464,6 @@ func (b *bootstrap) unpackSnapshots() error {
 	// been issued so this still needs to be run for the DN
 
 	// Restore accounts
-	var accounts []*url.URL
-	seen := map[[32]byte]bool{}
 	for _, open := range b.Snapshots {
 		file, err := open(b.GenesisGlobals)
 		if err != nil {
@@ -474,137 +473,32 @@ func (b *bootstrap) unpackSnapshots() error {
 			defer c.Close()
 		}
 
-		err = coredb.Restore(b.db, file, &coredb.RestoreOptions{
-			BatchRecordLimit: 50_000,
-			SkipHashCheck:    true,
-			Predicate: func(e *snapshot.RecordEntry, v record.TerminalRecord) (bool, error) {
-				switch e.Key.Get(0) {
-				case "Account":
-					// Skip the faucet
-					u := e.Key.Get(1).(*url.URL)
-					if protocol.FaucetUrl.Equal(u) {
-						return false, nil
-					}
-
-					// Skip ACME
-					if protocol.AcmeUrl().Equal(u) {
-						return false, nil
-					}
-
-					// Skip system accounts
-					if _, ok := protocol.ParsePartitionUrl(u); ok {
-						return false, nil
-					}
-
-					// Track ACME issued
-					if e.Key.Len() == 3 && e.Key.Get(2) == "Main" {
-						acct, _ := protocol.UnmarshalAccount(e.Value)
-						if acct, ok := acct.(protocol.AccountWithTokens); ok && protocol.AcmeUrl().Equal(acct.GetTokenUrl()) {
-							b.acmeIssued.Add(b.acmeIssued, acct.TokenBalance())
-						}
-					}
-
-					// Do not preserve pending transactions
-					if e.Key.Len() == 3 && e.Key.Get(2) == "Pending" {
-						return false, nil
-					}
-
-					// Is this record for an account that belongs to this
-					// partition?
-					partition, err := b.router.RouteAccount(u)
-					if err != nil {
-						return false, errors.InternalError.WithFormat("route %v: %w", u, err)
-					}
-					if !strings.EqualFold(partition, b.PartitionId) {
-						return false, nil
-					}
-
-					if !seen[u.AccountID32()] {
-						accounts = append(accounts, u)
-						seen[u.AccountID32()] = true
-					}
-					return true, nil
-
-				default:
-					// Ignore everything else on this pass
-					return false, nil
-				}
-			},
+		accounts, err := Extract(b.db, file, func(u *url.URL) bool {
+			// Does the account belong to this partition?
+			partition, err := b.router.RouteAccount(u)
+			if err != nil {
+				panic(errors.InternalError.WithFormat("route %v: %w", u, err))
+			}
+			return strings.EqualFold(partition, b.PartitionId)
 		})
 		if err != nil {
-			return errors.UnknownError.Wrap(err)
+			return err
 		}
-	}
 
-	// Find relevant chain entries
-	hashes := map[[32]byte]bool{}
-	batch := b.db.Begin(false)
-	defer batch.Discard()
-	for _, u := range accounts {
-		a := batch.Account(u)
-		chains, err := a.Chains().Get()
-		if err != nil {
-			return errors.UnknownError.WithFormat("load chains index: %w", err)
+		// Track ACME issued
+		for _, account := range accounts {
+			if acct, ok := account.Main.(protocol.AccountWithTokens); ok && protocol.AcmeUrl().Equal(acct.GetTokenUrl()) {
+				b.acmeIssued.Add(b.acmeIssued, acct.TokenBalance())
+			}
 		}
-		for _, chain := range chains {
-			if chain.Type != merkle.ChainTypeTransaction {
-				continue
-			}
 
-			c, err := a.ChainByName(chain.Name)
-			if err != nil {
-				return errors.InvalidRecord.Wrap(err)
-			}
-
-			head, err := c.Head().Get()
-			if err != nil {
-				return errors.UnknownError.WithFormat("load %v %s chain head: %w", u, c.Name(), err)
-			}
-			if head.Count == 0 {
-				return nil
-			}
-
-			entries, err := c.Inner().Entries(0, head.Count)
-			if err != nil {
-				return errors.UnknownError.WithFormat("load %v %s chain entries: %w", u, c.Name(), err)
-			}
-			for _, h := range entries {
-				hashes[*(*[32]byte)(h)] = true
+		for _, a := range accounts {
+			if a.Keep {
+				b.accountsFromSnapshots = append(b.accountsFromSnapshots, a.Url)
 			}
 		}
 	}
 
-	// Restore messages
-	for _, open := range b.Snapshots {
-		file, err := open(b.GenesisGlobals)
-		if err != nil {
-			return errors.UnknownError.Wrap(err)
-		}
-		if c, ok := file.(io.Closer); ok {
-			defer c.Close()
-		}
-
-		err = coredb.Restore(b.db, file, &coredb.RestoreOptions{
-			BatchRecordLimit: 50_000,
-			SkipHashCheck:    true,
-			Predicate: func(e *snapshot.RecordEntry, v record.TerminalRecord) (bool, error) {
-				switch e.Key.Get(0) {
-				case "Transaction", "Message":
-					h := e.Key.Get(1).([32]byte)
-					return hashes[h], nil
-
-				default:
-					// Ignore everything else on this pass
-					return false, nil
-				}
-			},
-		})
-		if err != nil {
-			return errors.UnknownError.Wrap(err)
-		}
-	}
-
-	b.accountsFromSnapshots = accounts
 	return nil
 }
 
