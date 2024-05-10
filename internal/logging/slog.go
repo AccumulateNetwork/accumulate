@@ -15,7 +15,6 @@ import (
 
 	"github.com/cometbft/cometbft/libs/log"
 	"github.com/rs/zerolog"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"golang.org/x/exp/slog"
 )
 
@@ -39,8 +38,6 @@ func (s *Slogger) With(keyvals ...interface{}) log.Logger {
 }
 
 type SlogConfig struct {
-	Format       string
-	NoColor      bool
 	DefaultLevel slog.Level
 	ModuleLevels map[string]slog.Level
 }
@@ -79,40 +76,35 @@ func NewSlogHandler(c SlogConfig, out io.Writer) (slog.Handler, error) {
 		}
 	}
 
-	var h slog.Handler
-	switch c.Format {
-	case "", "text", "plain":
-		// Use zerolog's console writer to write pretty logs
-		h = slog.NewJSONHandler(&zerolog.ConsoleWriter{
-			Out:        out,
-			TimeFormat: time.RFC3339,
-			NoColor:    c.NoColor,
-			FormatLevel: func(i interface{}) string {
-				if ll, ok := i.(string); ok {
-					return strings.ToUpper(ll)
-				}
-				return "????"
-			},
-			FormatMessage: func(i interface{}) string {
-				s, ok := i.(string)
-				if ok {
-					return s
-				}
-				return fmt.Sprint(i)
-			},
-		}, opts)
-	case "json":
-		h = slog.NewJSONHandler(out, opts)
-	default:
-		return nil, errors.BadRequest.WithFormat("log format %q is not supported", c.Format)
-	}
-
 	return &logHandler{
-		handler:      h,
+		handler:      slog.NewJSONHandler(out, opts),
 		defaultLevel: c.DefaultLevel,
 		lowestLevel:  opts.Level.Level(),
 		modules:      c.ModuleLevels,
 	}, nil
+}
+
+// ConsoleSlogWriter returns a zerolog console writer that outputs nicely
+// formatted logs.
+func ConsoleSlogWriter(w io.Writer, color bool) *zerolog.ConsoleWriter {
+	return &zerolog.ConsoleWriter{
+		Out:        w,
+		TimeFormat: time.RFC3339,
+		NoColor:    !color,
+		FormatLevel: func(i interface{}) string {
+			if ll, ok := i.(string); ok {
+				return strings.ToUpper(ll)
+			}
+			return "????"
+		},
+		FormatMessage: func(i interface{}) string {
+			s, ok := i.(string)
+			if ok {
+				return s
+			}
+			return fmt.Sprint(i)
+		},
+	}
 }
 
 type logHandler struct {
