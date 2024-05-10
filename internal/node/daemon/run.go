@@ -127,11 +127,16 @@ func New(cfg *config.Config, newWriter func(*config.Config) (io.Writer, error)) 
 
 	if cfg.Accumulate.Logging.EnableLoki {
 		hostname, _ := os.Hostname()
-		ch, err := loki.Start(&cfg.Accumulate.Logging, map[string]string{
-			"hostname":  hostname,
-			"process":   "accumulated",
-			"network":   cfg.Accumulate.Network.Id,
-			"partition": cfg.Accumulate.PartitionId,
+		ch, err := loki.Start(loki.Options{
+			Url:      cfg.Accumulate.Logging.LokiUrl,
+			Username: cfg.Accumulate.Logging.LokiUsername,
+			Password: cfg.Accumulate.Logging.LokiPassword,
+			Labels: map[string]string{
+				"hostname":  hostname,
+				"process":   "accumulated",
+				"network":   cfg.Accumulate.Network.Id,
+				"partition": cfg.Accumulate.PartitionId,
+			},
 		})
 		if err != nil {
 			return nil, errors.BadRequest.WithFormat("init Loki: %v", err)

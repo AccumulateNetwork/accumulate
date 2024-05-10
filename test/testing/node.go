@@ -52,8 +52,6 @@ func DefaultSlogConfig() logging.SlogConfig {
 	}
 
 	return logging.SlogConfig{
-		Format:       "plain",
-		NoColor:      false,
 		DefaultLevel: def,
 		ModuleLevels: modules,
 	}
@@ -68,7 +66,8 @@ func SlogDebug(modules ...string) {
 }
 
 func ConfigureSlog(c logging.SlogConfig) {
-	h, err := logging.NewSlogHandler(c, os.Stderr)
+	out := logging.ConsoleSlogWriter(os.Stderr, true)
+	h, err := logging.NewSlogHandler(c, out)
 	if err != nil {
 		panic(err)
 	}

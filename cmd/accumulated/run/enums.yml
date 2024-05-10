@@ -58,3 +58,11 @@ ConfigurationType:
 ConsensusAppType:
   Core:
     value: 1
+
+CoreValidatorMode:
+  Dual:
+    value: 0
+  DN:
+    value: 1
+  BVN:
+    value: 2
