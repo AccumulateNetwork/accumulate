@@ -20,6 +20,7 @@ type (
 	StorageType       int
 	PrivateKeyType    int
 	ConsensusAppType  int
+	CoreValidatorMode int
 )
 
 type Service interface {
