@@ -164,7 +164,7 @@ func (m *Chain) StateAt(element int64) (ms *State, err error) {
 		cState = new(State)
 	}
 	if cState == nil { //                                Should be in the database.
-		return nil, errors.InvalidRecord.With( //        Report error if it isn't in the database'
+		return nil, errors.NotFound.With( //        Report error if it isn't in the database'
 			"should have a state for all elements(1)")
 	}
 	cState.HashList = cState.HashList[:0] //             element is past the previous mark, so clear the HashList
@@ -177,7 +177,7 @@ func (m *Chain) StateAt(element int64) (ms *State, err error) {
 		}
 	} else {
 		if NMark = m.getState(MINext); NMark == nil { //             Read the mark point
-			return nil, errors.InvalidRecord.With("mark not found in the database")
+			return nil, errors.NotFound.With("mark not found in the database")
 		}
 	}
 	for _, v := range NMark.HashList { //                           Now iterate and add to the cState

@@ -20,6 +20,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 )
 
 type BvnInit struct {
@@ -28,10 +29,11 @@ type BvnInit struct {
 }
 
 type NetworkInit struct {
-	Id        string     `json:"id,omitempty" form:"id" query:"id" validate:"required"`
-	Bootstrap *NodeInit  `json:"bootstrap,omitempty" form:"bootstrap" query:"bootstrap" validate:"required"`
-	Bvns      []*BvnInit `json:"bvns,omitempty" form:"bvns" query:"bvns" validate:"required"`
-	Bsn       *BvnInit   `json:"bsn,omitempty" form:"bsn" query:"bsn" validate:"required"`
+	Id        string                `json:"id,omitempty" form:"id" query:"id" validate:"required"`
+	Globals   *network.GlobalValues `json:"globals,omitempty" form:"globals" query:"globals" validate:"required"`
+	Bootstrap *NodeInit             `json:"bootstrap,omitempty" form:"bootstrap" query:"bootstrap" validate:"required"`
+	Bvns      []*BvnInit            `json:"bvns,omitempty" form:"bvns" query:"bvns" validate:"required"`
+	Bsn       *BvnInit              `json:"bsn,omitempty" form:"bsn" query:"bsn" validate:"required"`
 }
 
 type NodeInit struct {
@@ -315,12 +317,16 @@ func (v *BvnInit) MarshalJSON() ([]byte, error) {
 func (v *NetworkInit) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Id        string                      `json:"id,omitempty"`
+		Globals   *network.GlobalValues       `json:"globals,omitempty"`
 		Bootstrap *NodeInit                   `json:"bootstrap,omitempty"`
 		Bvns      encoding.JsonList[*BvnInit] `json:"bvns,omitempty"`
 		Bsn       *BvnInit                    `json:"bsn,omitempty"`
 	}{}
 	if !(len(v.Id) == 0) {
 		u.Id = v.Id
+	}
+	if !(v.Globals == nil) {
+		u.Globals = v.Globals
 	}
 	if !(v.Bootstrap == nil) {
 		u.Bootstrap = v.Bootstrap
@@ -406,11 +412,13 @@ func (v *BvnInit) UnmarshalJSON(data []byte) error {
 func (v *NetworkInit) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Id        string                      `json:"id,omitempty"`
+		Globals   *network.GlobalValues       `json:"globals,omitempty"`
 		Bootstrap *NodeInit                   `json:"bootstrap,omitempty"`
 		Bvns      encoding.JsonList[*BvnInit] `json:"bvns,omitempty"`
 		Bsn       *BvnInit                    `json:"bsn,omitempty"`
 	}{}
 	u.Id = v.Id
+	u.Globals = v.Globals
 	u.Bootstrap = v.Bootstrap
 	u.Bvns = v.Bvns
 	u.Bsn = v.Bsn
@@ -418,6 +426,7 @@ func (v *NetworkInit) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	v.Id = u.Id
+	v.Globals = u.Globals
 	v.Bootstrap = u.Bootstrap
 	v.Bvns = u.Bvns
 	v.Bsn = u.Bsn
