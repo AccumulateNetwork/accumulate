@@ -548,7 +548,9 @@ func initNode(cmd *cobra.Command, args []string) (string, error) {
 			return "", fmt.Errorf("invalid --listen %q %v", flagInitNode.ListenIP, err)
 		}
 
-		if listenUrl.Port() != "" {
+		if listenUrl.Port() == "" {
+			listenUrl.Host += fmt.Sprintf(":%d", basePort)
+		} else {
 			p, err := strconv.ParseInt(listenUrl.Port(), 10, 16)
 			if err != nil {
 				return "", fmt.Errorf("invalid port number %q, %v", listenUrl.Port(), err)
@@ -564,10 +566,11 @@ func initNode(cmd *cobra.Command, args []string) (string, error) {
 			return "", fmt.Errorf("invalid public address %v", err)
 		}
 
-		localAddr, port, err := resolveAddrWithPort(config.Accumulate.API.ListenAddress)
+		localAddr, port, err := resolveAddrWithPort(listenUrl.String())
 		if err != nil {
 			return "", fmt.Errorf("invalid node address %v", err)
 		}
+		port += int(cfg.PortOffsetAccumulateApi)
 		if publicAddr == "" {
 			publicAddr = localAddr
 		}

@@ -26,6 +26,15 @@ const ConfigurationTypeDevnet ConfigurationType = 3
 // ConsensusAppTypeCore .
 const ConsensusAppTypeCore ConsensusAppType = 1
 
+// CoreValidatorModeDual .
+const CoreValidatorModeDual CoreValidatorMode = 0
+
+// CoreValidatorModeDN .
+const CoreValidatorModeDN CoreValidatorMode = 1
+
+// CoreValidatorModeBVN .
+const CoreValidatorModeBVN CoreValidatorMode = 2
+
 // PrivateKeyTypeRaw .
 const PrivateKeyTypeRaw PrivateKeyType = 1
 
@@ -199,6 +208,67 @@ func (v *ConsensusAppType) UnmarshalJSON(data []byte) error {
 	*v, ok = ConsensusAppTypeByName(s)
 	if !ok || strings.ContainsRune(v.String(), ':') {
 		return fmt.Errorf("invalid Consensus App Type %q", s)
+	}
+	return nil
+}
+
+// GetEnumValue returns the value of the Core Validator Mode
+func (v CoreValidatorMode) GetEnumValue() uint64 { return uint64(v) }
+
+// SetEnumValue sets the value. SetEnumValue returns false if the value is invalid.
+func (v *CoreValidatorMode) SetEnumValue(id uint64) bool {
+	u := CoreValidatorMode(id)
+	switch u {
+	case CoreValidatorModeDual, CoreValidatorModeDN, CoreValidatorModeBVN:
+		*v = u
+		return true
+	}
+	return false
+}
+
+// String returns the name of the Core Validator Mode.
+func (v CoreValidatorMode) String() string {
+	switch v {
+	case CoreValidatorModeDual:
+		return "dual"
+	case CoreValidatorModeDN:
+		return "dn"
+	case CoreValidatorModeBVN:
+		return "bvn"
+	}
+	return fmt.Sprintf("CoreValidatorMode:%d", v)
+}
+
+// CoreValidatorModeByName returns the named Core Validator Mode.
+func CoreValidatorModeByName(name string) (CoreValidatorMode, bool) {
+	switch strings.ToLower(name) {
+	case "dual":
+		return CoreValidatorModeDual, true
+	case "dn":
+		return CoreValidatorModeDN, true
+	case "bvn":
+		return CoreValidatorModeBVN, true
+	}
+	return 0, false
+}
+
+// MarshalJSON marshals the Core Validator Mode to JSON as a string.
+func (v CoreValidatorMode) MarshalJSON() ([]byte, error) {
+	return json.Marshal(v.String())
+}
+
+// UnmarshalJSON unmarshals the Core Validator Mode from JSON as a string.
+func (v *CoreValidatorMode) UnmarshalJSON(data []byte) error {
+	var s string
+	err := json.Unmarshal(data, &s)
+	if err != nil {
+		return err
+	}
+
+	var ok bool
+	*v, ok = CoreValidatorModeByName(s)
+	if !ok || strings.ContainsRune(v.String(), ':') {
+		return fmt.Errorf("invalid Core Validator Mode %q", s)
 	}
 	return nil
 }
