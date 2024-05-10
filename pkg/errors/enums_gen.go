@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -98,7 +98,7 @@ const PeerMisbehaved Status = 507
 // InvalidRecord means the database has one or more invalid records.
 const InvalidRecord Status = 508
 
-// StreamAborted is equivalent to [io.UnexpectedEOF].
+// StreamAborted is equivalent to [io.ErrUnexpectedEOF].
 const StreamAborted Status = 509
 
 // GetEnumValue returns the value of the Status
