@@ -109,6 +109,9 @@ func (inst *Instance) StartFiltered(predicate func(Service) bool) (err error) {
 	}()
 
 	// Start metrics
+	if inst.config.Instrumentation == nil {
+		inst.config.Instrumentation = new(Instrumentation)
+	}
 	err = inst.config.Instrumentation.start(inst)
 	if err != nil {
 		return err
