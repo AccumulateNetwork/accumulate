@@ -79,6 +79,7 @@ type BFile struct {
 	EOB       int                    // End of the current buffer... Where to put the next data 'write'
 }
 
+
 // Get
 // Get the value for a given DBKeyFull
 func (b *BFile) Get(Key [32]byte) (value []byte, err error) {
@@ -159,7 +160,7 @@ func (b *BFile) CreateBuffers() {
 
 // NewBFile
 // Creates a new Buffered file.  The caller is responsible for writing the header
-func NewBFile(BufferCnt int, Filename string) (bFile *BFile, err error) {
+func NewBFile( Filename string, BufferCnt int) (bFile *BFile, err error) {
 	bFile = new(BFile)                     // create a new BFile
 	bFile.Keys = make(map[[32]byte]DBBKey) // Allocate the Keys map
 	bFile.BufferCnt = BufferCnt            // How many buffers we are going to use
@@ -220,6 +221,8 @@ func (b *BFile) Write(Data []byte) error {
 	b.EOB = 0                         // Start at the beginning of the buffer
 	return b.Write(Data)              // Write out the remaining data
 }
+
+
 
 // OpenBFile
 // Open a DBBlock file at a given height for read/write access

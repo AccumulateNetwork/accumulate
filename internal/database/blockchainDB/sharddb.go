@@ -2,7 +2,9 @@ package blockchainDB
 
 import (
 	"encoding/binary"
-	"sync"
+	"fmt"
+	"os"
+	"path/filepath"
 )
 
 const (
@@ -10,29 +12,53 @@ const (
 	Shards    = 512 // Number of shards in bits
 )
 
-// Shard
-// Holds the stuff required to access a shard.
-type Shard struct {
-	File  string     // The file with the BFile
-	BFile *BFile     // The BFile
-	Mutex sync.Mutex // Keeps compression from conflict with access
-}
-
 // ShardDB
 // Maintains shards of key value pairs to allow reading and writing of
 // key value pairs even during compression and eventually multi-thread
 // transactions.
 type ShardDB struct {
-	PermBFile *BFile         // The BFile has the directory and file
+	PermBFile *BlockList     // The BFile has the directory and file
+	BufferCnt int            // Buffer count used for BFiles
 	Shards    [Shards]*Shard // List of all the Shards
 }
 
-func (s *ShardDB) Create(Directory string) (err error) {
-	//	if s.PermBFile, err = NewBFile(5, Directory, BFilePerm, BFileDN); err != nil {
-	//		return err
-	//	}
+func CreateShardDB(Directory string, Partition, BufferCnt int) (SDB *ShardDB, err error) {
+	_, err = os.Stat(Directory)
+	if err == nil {
+		return nil, fmt.Errorf("cannot create ShardDB; directory %s exists", Directory)
+	}
+	if !os.IsNotExist(err) {
+		return nil, fmt.Errorf("error getting status on directory '%s': %v", Directory, err)
+	}
+	SDB = new(ShardDB)
+	SDB.BufferCnt = BufferCnt
+	err = os.Mkdir(Directory, os.ModePerm)
+	if err != nil {
+		return nil, err
+	}
+	SDB.PermBFile, err = NewBlockList(filepath.Join(Directory, "PermBFile"), Partition, BufferCnt)
+	if err != nil {
+		return nil, err
+	}
 
-	return nil
+	for i := 0; i < Shards; i++ {
+		sDir := filepath.Join(Directory, fmt.Sprintf("shard%03d-%03d", Partition, i))
+		err = os.Mkdir(sDir, os.ModePerm)
+		if err != nil {
+			os.RemoveAll(Directory)
+			return nil, err
+		}
+		SDB.Shards[i] = new(Shard)
+		SDB.Shards[i].Filename = filepath.Join(sDir, "shard.dat")
+		SDB.Shards[i].BufferCnt = BufferCnt
+		err = SDB.Shards[i].Open()
+		if err != nil {
+			os.RemoveAll(Directory)
+			return nil, err
+		}
+	}
+
+	return SDB, nil
 }
 
 func (s *ShardDB) Close() {
@@ -46,25 +72,6 @@ func (s *ShardDB) Close() {
 	}
 }
 
-/*
-func (s *ShardDB) Open(Directory string) (err error) {
-
-	if s.PermBFile, err = OpenBFileList(Directory, BFilePerm, BFileDN, 0); err != nil {
-		return err
-	}
-
-	for i := 0; i < Shards; i++ {
-		s.Shards[i] = new(Shard)
-		s.Shards[i].filename= filepath.Join(Directory, fmt.Sprintf("shard-%03x", i))
-		s.Shards[i].BFile, err = OpenBFileList(SDir, BFilePerm, BFileDN, 0)
-
-	}
-}
-*/
-// PutH
-// When the key is the hash (or other function) of the value, where the value will
-// never change, then use PutH.  The assumption is that these values, once recorded,
-// will not be used in a validator.
 func (s *ShardDB) PutH(scratch bool, key [32]byte, value []byte) error {
 	k := binary.BigEndian.Uint16(key[:]) >> (16 - ShardBits)
 	shard := s.Shards[k]
@@ -82,7 +89,7 @@ func (s *ShardDB) Put(key [32]byte, value []byte) error {
 	shard := s.Shards[k]
 	if shard == nil {
 		shard = new(Shard)
-		//shard.Open()
+		shard.Open()
 		s.Shards[k] = shard
 	}
 	return shard.BFile.Put(key, value)

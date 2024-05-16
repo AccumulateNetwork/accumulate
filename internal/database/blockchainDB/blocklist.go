@@ -99,7 +99,7 @@ func (b *BlockList) NextBlockFile() (err error) {
 	b.BlockHeight++
 
 	filename := b.GetFilename(b.BlockHeight)
-	if b.BFile, err = NewBFile(b.BufferCnt, filename); err != nil {
+	if b.BFile, err = NewBFile( filename,b.BufferCnt); err != nil {
 		return err
 	}
 
@@ -113,7 +113,7 @@ func NewBlockFile(Directory string, BufferCnt int) (blockFile *BlockList, err er
 	blockFile.LoadState()
 
 	filename := blockFile.GetFilename(blockFile.BlockHeight)
-	if blockFile.BFile, err = NewBFile(BufferCnt, filename); err != nil {
+	if blockFile.BFile, err = NewBFile(filename,BufferCnt); err != nil {
 		return nil, err
 	}
 

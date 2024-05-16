@@ -30,7 +30,7 @@ var KeySliceDir = filepath.Join(Directory, "keySlice")
 func TestWriteSmallKeys(t *testing.T) {
 
 	filename := filepath.Join(os.TempDir(), "BFileTest.dat")
-	bFile, err := NewBFile(5, filename)
+	bFile, err := NewBFile( filename,5)
 	assert.NoError(t, err, "expected no error creating BBFile")
 
 	getKey := func(v byte) (r [32]byte) {
@@ -56,7 +56,7 @@ func TestWriteKeys(t *testing.T) {
 
 	start := time.Now()
 	filename := filepath.Join(os.TempDir(), "BFileTest.dat")
-	bFile, err := NewBFile(5, filename)
+	bFile, err := NewBFile(filename,5)
 	assert.NoError(t, err, "expected no error creating BBFile")
 
 	fr := NewFastRandom([32]byte{}) // Make a random number generator
@@ -79,7 +79,7 @@ func TestReadKeys(t *testing.T) {
 	os.Mkdir(Directory, os.ModePerm)
 
 	filename := filepath.Join(os.TempDir(), "BFileTest.dat")
-	bFile, err := NewBFile(5, filename)
+	bFile, err := NewBFile(filename,5)
 	assert.NoError(t, err, "expected no error creating BBFile")
 
 	fr := NewFastRandom([32]byte{}) // Make a random number generator

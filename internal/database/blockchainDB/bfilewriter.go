@@ -48,10 +48,6 @@ func (b *BFileWriter) process() {
 			if _, err := b.File.Write(buff[:]); err != nil {   //
 				panic(err)
 			}
-
-			if _, err := b.File.Seek(0, io.SeekEnd); err != nil { // Seek to end
-				panic(err)
-			}
 			b.File.Close()
 			b.BuffPool <- c.buffer
 			return
