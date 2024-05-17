@@ -112,11 +112,13 @@ func (v *PeerInfo) UnmarshalJSON(data []byte) error {
 		Status    *api.ConsensusStatus                           `json:"status,omitempty"`
 		Addresses *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"addresses,omitempty"`
 	}{}
+
 	u.Operator = v.Operator
 	u.Key = encoding.ChainToJSON(&v.Key)
 	u.Status = v.Status
 	u.Addresses = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.Addresses, Func: p2p.UnmarshalMultiaddrJSON}
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.Operator = u.Operator

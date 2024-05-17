@@ -642,6 +642,7 @@ func (v *recordBlock) MarshalJSON() ([]byte, error) {
 		Evidence    json.RawMessage                        `json:"evidence,omitempty"`
 		Submissions encoding.JsonList[*messaging.Envelope] `json:"submissions,omitempty"`
 		Changes     encoding.JsonList[*recordChange]       `json:"changes,omitempty"`
+		ExtraData   *string                                `json:"$epilogue,omitempty"`
 	}{}
 	if !(!v.IsLeader) {
 		u.IsLeader = v.IsLeader
@@ -664,13 +665,15 @@ func (v *recordBlock) MarshalJSON() ([]byte, error) {
 	if !(len(v.Changes) == 0) {
 		u.Changes = v.Changes
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *recordChange) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Key   *record.Key `json:"key,omitempty"`
-		Value *string     `json:"value,omitempty"`
+		Key       *record.Key `json:"key,omitempty"`
+		Value     *string     `json:"value,omitempty"`
+		ExtraData *string     `json:"$epilogue,omitempty"`
 	}{}
 	if !(v.Key == nil) {
 		u.Key = v.Key
@@ -678,16 +681,19 @@ func (v *recordChange) MarshalJSON() ([]byte, error) {
 	if !(len(v.Value) == 0) {
 		u.Value = encoding.BytesToJSON(v.Value)
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *recordMessages) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Messages *encoding.JsonUnmarshalListWith[consensus.Message] `json:"messages,omitempty"`
+		Messages  *encoding.JsonUnmarshalListWith[consensus.Message] `json:"messages,omitempty"`
+		ExtraData *string                                            `json:"$epilogue,omitempty"`
 	}{}
 	if !(len(v.Messages) == 0) {
 		u.Messages = &encoding.JsonUnmarshalListWith[consensus.Message]{Value: v.Messages, Func: consensus.UnmarshalMessageJSON}
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
@@ -700,6 +706,7 @@ func (v *recordBlock) UnmarshalJSON(data []byte) error {
 		Evidence    json.RawMessage                        `json:"evidence,omitempty"`
 		Submissions encoding.JsonList[*messaging.Envelope] `json:"submissions,omitempty"`
 		Changes     encoding.JsonList[*recordChange]       `json:"changes,omitempty"`
+		ExtraData   *string                                `json:"$epilogue,omitempty"`
 	}{}
 	u.IsLeader = v.IsLeader
 	u.Index = v.Index
@@ -708,7 +715,8 @@ func (v *recordBlock) UnmarshalJSON(data []byte) error {
 	u.Evidence = v.Evidence
 	u.Submissions = v.Submissions
 	u.Changes = v.Changes
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.IsLeader = u.IsLeader
@@ -718,17 +726,23 @@ func (v *recordBlock) UnmarshalJSON(data []byte) error {
 	v.Evidence = u.Evidence
 	v.Submissions = u.Submissions
 	v.Changes = u.Changes
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (v *recordChange) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Key   *record.Key `json:"key,omitempty"`
-		Value *string     `json:"value,omitempty"`
+		Key       *record.Key `json:"key,omitempty"`
+		Value     *string     `json:"value,omitempty"`
+		ExtraData *string     `json:"$epilogue,omitempty"`
 	}{}
 	u.Key = v.Key
 	u.Value = encoding.BytesToJSON(v.Value)
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.Key = u.Key
@@ -737,15 +751,21 @@ func (v *recordChange) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Value = x
 	}
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (v *recordMessages) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Messages *encoding.JsonUnmarshalListWith[consensus.Message] `json:"messages,omitempty"`
+		Messages  *encoding.JsonUnmarshalListWith[consensus.Message] `json:"messages,omitempty"`
+		ExtraData *string                                            `json:"$epilogue,omitempty"`
 	}{}
 	u.Messages = &encoding.JsonUnmarshalListWith[consensus.Message]{Value: v.Messages, Func: consensus.UnmarshalMessageJSON}
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if u.Messages != nil {
@@ -753,6 +773,10 @@ func (v *recordMessages) UnmarshalJSON(data []byte) error {
 		for i, x := range u.Messages.Value {
 			v.Messages[i] = x
 		}
+	}
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
 	}
 	return nil
 }
