@@ -45,6 +45,7 @@ func (i *Instrumentation) listen(inst *Instance) error {
 	if i == nil || len(i.Listen) == 0 {
 		return nil
 	}
+	i.applyHttpDefaults()
 	_, err := i.startHTTP(inst, promhttp.InstrumentMetricHandler(
 		prometheus.DefaultRegisterer, promhttp.HandlerFor(
 			prometheus.DefaultGatherer,

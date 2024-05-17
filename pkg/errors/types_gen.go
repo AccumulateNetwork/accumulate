@@ -342,6 +342,7 @@ func (v *ErrorBase[Status]) MarshalJSON() ([]byte, error) {
 		Cause     *ErrorBase[Status]           `json:"cause,omitempty"`
 		CallStack encoding.JsonList[*CallSite] `json:"callStack,omitempty"`
 		Data      json.RawMessage              `json:"data,omitempty"`
+		ExtraData *string                      `json:"$epilogue,omitempty"`
 	}{}
 	if !(len(v.Message) == 0) {
 		u.Message = v.Message
@@ -361,6 +362,7 @@ func (v *ErrorBase[Status]) MarshalJSON() ([]byte, error) {
 	if !(len(v.Data) == 0) {
 		u.Data = v.Data
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
@@ -372,6 +374,7 @@ func (v *ErrorBase[Status]) UnmarshalJSON(data []byte) error {
 		Cause     *ErrorBase[Status]           `json:"cause,omitempty"`
 		CallStack encoding.JsonList[*CallSite] `json:"callStack,omitempty"`
 		Data      json.RawMessage              `json:"data,omitempty"`
+		ExtraData *string                      `json:"$epilogue,omitempty"`
 	}{}
 	u.Message = v.Message
 	u.Code = v.Code
@@ -379,7 +382,8 @@ func (v *ErrorBase[Status]) UnmarshalJSON(data []byte) error {
 	u.Cause = v.Cause
 	u.CallStack = v.CallStack
 	u.Data = v.Data
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.Message = u.Message
@@ -387,5 +391,9 @@ func (v *ErrorBase[Status]) UnmarshalJSON(data []byte) error {
 	v.Cause = u.Cause
 	v.CallStack = u.CallStack
 	v.Data = u.Data
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
