@@ -2200,6 +2200,7 @@ func (v *HttpPeerMapEntry) MarshalJSON() ([]byte, error) {
 		ID         *encoding.JsonUnmarshalWith[p2p.PeerID]        `json:"id,omitempty"`
 		Partitions encoding.JsonList[string]                      `json:"partitions,omitempty"`
 		Addresses  *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"addresses,omitempty"`
+		ExtraData  *string                                        `json:"$epilogue,omitempty"`
 	}{}
 	if !(v.ID == ("")) {
 		u.ID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.ID, Func: p2p.UnmarshalPeerIDJSON}
@@ -2210,6 +2211,7 @@ func (v *HttpPeerMapEntry) MarshalJSON() ([]byte, error) {
 	if !(len(v.Addresses) == 0) {
 		u.Addresses = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.Addresses, Func: p2p.UnmarshalMultiaddrJSON}
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
@@ -2229,25 +2231,20 @@ func (v *HttpService) MarshalJSON() ([]byte, error) {
 	}{}
 	u.Type = v.Type()
 	if !(len(v.HttpListener.Listen) == 0) {
-
 		u.Listen = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.HttpListener.Listen, Func: p2p.UnmarshalMultiaddrJSON}
 	}
 	if !(v.HttpListener.ConnectionLimit == nil) {
-
 		u.ConnectionLimit = v.HttpListener.ConnectionLimit
 	}
 	if !(v.HttpListener.ReadHeaderTimeout == nil) {
-
 		if v.HttpListener.ReadHeaderTimeout != nil {
 			u.ReadHeaderTimeout = encoding.DurationToJSON(*v.HttpListener.ReadHeaderTimeout)
 		}
 	}
 	if !(len(v.HttpListener.TlsCertPath) == 0) {
-
 		u.TlsCertPath = v.HttpListener.TlsCertPath
 	}
 	if !(len(v.HttpListener.TlsKeyPath) == 0) {
-
 		u.TlsKeyPath = v.HttpListener.TlsKeyPath
 	}
 	if !(len(v.CorsOrigins) == 0) {
@@ -2278,25 +2275,20 @@ func (v *Instrumentation) MarshalJSON() ([]byte, error) {
 		Monitoring        *Monitor                                       `json:"monitoring,omitempty"`
 	}{}
 	if !(len(v.HttpListener.Listen) == 0) {
-
 		u.Listen = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.HttpListener.Listen, Func: p2p.UnmarshalMultiaddrJSON}
 	}
 	if !(v.HttpListener.ConnectionLimit == nil) {
-
 		u.ConnectionLimit = v.HttpListener.ConnectionLimit
 	}
 	if !(v.HttpListener.ReadHeaderTimeout == nil) {
-
 		if v.HttpListener.ReadHeaderTimeout != nil {
 			u.ReadHeaderTimeout = encoding.DurationToJSON(*v.HttpListener.ReadHeaderTimeout)
 		}
 	}
 	if !(len(v.HttpListener.TlsCertPath) == 0) {
-
 		u.TlsCertPath = v.HttpListener.TlsCertPath
 	}
 	if !(len(v.HttpListener.TlsKeyPath) == 0) {
-
 		u.TlsKeyPath = v.HttpListener.TlsKeyPath
 	}
 	if !(v.Monitoring == nil) {
@@ -2483,10 +2475,11 @@ func (v *RawPrivateKey) MarshalJSON() ([]byte, error) {
 
 func (v *RouterService) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type    ServiceType                          `json:"type"`
-		Name    string                               `json:"name,omitempty"`
-		Events  string                               `json:"events,omitempty"`
-		PeerMap encoding.JsonList[*HttpPeerMapEntry] `json:"peerMap,omitempty"`
+		Type      ServiceType                          `json:"type"`
+		Name      string                               `json:"name,omitempty"`
+		Events    string                               `json:"events,omitempty"`
+		PeerMap   encoding.JsonList[*HttpPeerMapEntry] `json:"peerMap,omitempty"`
+		ExtraData *string                              `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(len(v.Name) == 0) {
@@ -2498,6 +2491,7 @@ func (v *RouterService) MarshalJSON() ([]byte, error) {
 	if !(len(v.PeerMap) == 0) {
 		u.PeerMap = v.PeerMap
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
@@ -2586,7 +2580,8 @@ func (v *BadgerStorage) UnmarshalJSON(data []byte) error {
 	u.Type = v.Type()
 	u.Path = v.Path
 	u.Version = v.Version
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -2604,7 +2599,8 @@ func (v *BoltStorage) UnmarshalJSON(data []byte) error {
 	}{}
 	u.Type = v.Type()
 	u.Path = v.Path
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -2620,8 +2616,10 @@ func (v *CometNodeKeyFile) UnmarshalJSON(data []byte) error {
 		Path string         `json:"path,omitempty"`
 	}{}
 	u.Type = v.Type()
+
 	u.Path = v.Path
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -2637,8 +2635,10 @@ func (v *CometPrivValFile) UnmarshalJSON(data []byte) error {
 		Path string         `json:"path,omitempty"`
 	}{}
 	u.Type = v.Type()
+
 	u.Path = v.Path
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -2657,13 +2657,15 @@ func (v *Config) UnmarshalJSON(data []byte) error {
 		Configurations  *encoding.JsonUnmarshalListWith[Configuration] `json:"configurations,omitempty"`
 		Services        *encoding.JsonUnmarshalListWith[Service]       `json:"services,omitempty"`
 	}{}
+
 	u.Network = v.Network
 	u.Logging = v.Logging
 	u.Instrumentation = v.Instrumentation
 	u.P2P = v.P2P
 	u.Configurations = &encoding.JsonUnmarshalListWith[Configuration]{Value: v.Configurations, Func: UnmarshalConfigurationJSON}
 	u.Services = &encoding.JsonUnmarshalListWith[Service]{Value: v.Services, Func: UnmarshalServiceJSON}
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.Network = u.Network
@@ -2704,7 +2706,8 @@ func (v *ConsensusService) UnmarshalJSON(data []byte) error {
 	u.BootstrapPeers = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.BootstrapPeers, Func: p2p.UnmarshalMultiaddrJSON}
 	u.MetricsNamespace = v.MetricsNamespace
 	u.App = &encoding.JsonUnmarshalWith[ConsensusApp]{Value: v.App, Func: UnmarshalConsensusAppJSON}
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -2747,7 +2750,8 @@ func (v *CoreConsensusApp) UnmarshalJSON(data []byte) error {
 	u.EnableHealing = v.EnableHealing
 	u.EnableDirectDispatch = v.EnableDirectDispatch
 	u.MaxEnvelopesPerBlock = v.MaxEnvelopesPerBlock
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -2791,7 +2795,8 @@ func (v *CoreValidatorConfiguration) UnmarshalJSON(data []byte) error {
 	u.EnableSnapshots = v.EnableSnapshots
 	u.MaxEnvelopesPerBlock = v.MaxEnvelopesPerBlock
 	u.StorageType = v.StorageType
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -2844,7 +2849,8 @@ func (v *DevnetConfiguration) UnmarshalJSON(data []byte) error {
 	u.Validators = v.Validators
 	u.Followers = v.Followers
 	u.Globals = v.Globals
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -2868,7 +2874,8 @@ func (v *EventsService) UnmarshalJSON(data []byte) error {
 	}{}
 	u.Type = v.Type()
 	u.Partition = v.Partition
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -2885,7 +2892,8 @@ func (v *ExpBlockDBStorage) UnmarshalJSON(data []byte) error {
 	}{}
 	u.Type = v.Type()
 	u.Path = v.Path
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -2906,7 +2914,8 @@ func (v *FaucetService) UnmarshalJSON(data []byte) error {
 	u.Account = v.Account
 	u.SigningKey = &encoding.JsonUnmarshalWith[PrivateKey]{Value: v.SigningKey, Func: UnmarshalPrivateKeyJSON}
 	u.Router = v.Router
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -2928,7 +2937,8 @@ func (v *GatewayConfiguration) UnmarshalJSON(data []byte) error {
 	}{}
 	u.Type = v.Type()
 	u.Listen = &encoding.JsonUnmarshalWith[p2p.Multiaddr]{Value: v.Listen, Func: p2p.UnmarshalMultiaddrJSON}
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -2956,7 +2966,8 @@ func (v *HttpListener) UnmarshalJSON(data []byte) error {
 	}
 	u.TlsCertPath = v.TlsCertPath
 	u.TlsKeyPath = v.TlsKeyPath
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if u.Listen != nil {
@@ -2983,11 +2994,13 @@ func (v *HttpPeerMapEntry) UnmarshalJSON(data []byte) error {
 		ID         *encoding.JsonUnmarshalWith[p2p.PeerID]        `json:"id,omitempty"`
 		Partitions encoding.JsonList[string]                      `json:"partitions,omitempty"`
 		Addresses  *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"addresses,omitempty"`
+		ExtraData  *string                                        `json:"$epilogue,omitempty"`
 	}{}
 	u.ID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.ID, Func: p2p.UnmarshalPeerIDJSON}
 	u.Partitions = v.Partitions
 	u.Addresses = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.Addresses, Func: p2p.UnmarshalMultiaddrJSON}
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if u.ID != nil {
@@ -3000,6 +3013,10 @@ func (v *HttpPeerMapEntry) UnmarshalJSON(data []byte) error {
 		for i, x := range u.Addresses.Value {
 			v.Addresses[i] = x
 		}
+	}
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
 	}
 	return nil
 }
@@ -3031,7 +3048,8 @@ func (v *HttpService) UnmarshalJSON(data []byte) error {
 	u.DebugJsonRpc = v.DebugJsonRpc
 	u.Router = v.Router
 	u.PeerMap = v.PeerMap
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -3078,7 +3096,8 @@ func (v *Instrumentation) UnmarshalJSON(data []byte) error {
 	u.TlsCertPath = v.HttpListener.TlsCertPath
 	u.TlsKeyPath = v.HttpListener.TlsKeyPath
 	u.Monitoring = v.Monitoring
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if u.Listen != nil {
@@ -3108,7 +3127,8 @@ func (v *LevelDBStorage) UnmarshalJSON(data []byte) error {
 	}{}
 	u.Type = v.Type()
 	u.Path = v.Path
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -3129,7 +3149,8 @@ func (v *Logging) UnmarshalJSON(data []byte) error {
 	u.Color = v.Color
 	u.Rules = v.Rules
 	u.Loki = v.Loki
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.Format = u.Format
@@ -3146,7 +3167,8 @@ func (v *LoggingRule) UnmarshalJSON(data []byte) error {
 	}{}
 	u.Level = v.Level
 	u.Modules = v.Modules
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.Level = u.Level
@@ -3159,7 +3181,8 @@ func (v *MemoryStorage) UnmarshalJSON(data []byte) error {
 		Type StorageType `json:"type"`
 	}{}
 	u.Type = v.Type()
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -3175,7 +3198,8 @@ func (v *MetricsService) UnmarshalJSON(data []byte) error {
 	}{}
 	u.Type = v.Type()
 	u.Partition = v.Partition
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -3198,7 +3222,8 @@ func (v *Monitor) UnmarshalJSON(data []byte) error {
 		u.MemoryPollingRate = encoding.DurationToJSON(*v.MemoryPollingRate)
 	}
 	u.AllocRateTrigger = v.AllocRateTrigger
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.Directory = u.Directory
@@ -3221,7 +3246,8 @@ func (v *NetworkService) UnmarshalJSON(data []byte) error {
 	}{}
 	u.Type = v.Type()
 	u.Partition = v.Partition
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -3248,7 +3274,8 @@ func (v *P2P) UnmarshalJSON(data []byte) error {
 	u.EnablePeerTracking = v.EnablePeerTracking
 	u.DiscoveryMode = v.DiscoveryMode
 	u.External = &encoding.JsonUnmarshalWith[p2p.Multiaddr]{Value: v.External, Func: p2p.UnmarshalMultiaddrJSON}
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if u.Listen != nil {
@@ -3283,8 +3310,10 @@ func (v *PrivateKeySeed) UnmarshalJSON(data []byte) error {
 		Seed *record.Key    `json:"seed,omitempty"`
 	}{}
 	u.Type = v.Type()
+
 	u.Seed = v.Seed
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -3303,7 +3332,8 @@ func (v *Querier) UnmarshalJSON(data []byte) error {
 	u.Type = v.Type()
 	u.Partition = v.Partition
 	u.Storage = v.Storage
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -3321,7 +3351,8 @@ func (v *RawPrivateKey) UnmarshalJSON(data []byte) error {
 	}{}
 	u.Type = v.Type()
 	u.Address = v.Address
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -3333,16 +3364,18 @@ func (v *RawPrivateKey) UnmarshalJSON(data []byte) error {
 
 func (v *RouterService) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type    ServiceType                          `json:"type"`
-		Name    string                               `json:"name,omitempty"`
-		Events  string                               `json:"events,omitempty"`
-		PeerMap encoding.JsonList[*HttpPeerMapEntry] `json:"peerMap,omitempty"`
+		Type      ServiceType                          `json:"type"`
+		Name      string                               `json:"name,omitempty"`
+		Events    string                               `json:"events,omitempty"`
+		PeerMap   encoding.JsonList[*HttpPeerMapEntry] `json:"peerMap,omitempty"`
+		ExtraData *string                              `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Name = v.Name
 	u.Events = v.Events
 	u.PeerMap = v.PeerMap
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -3351,6 +3384,10 @@ func (v *RouterService) UnmarshalJSON(data []byte) error {
 	v.Name = u.Name
 	v.Events = u.Events
 	v.PeerMap = u.PeerMap
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -3371,7 +3408,8 @@ func (v *SnapshotService) UnmarshalJSON(data []byte) error {
 	u.Schedule = v.Schedule
 	u.RetainCount = v.RetainCount
 	u.EnableIndexing = v.EnableIndexing
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -3395,7 +3433,8 @@ func (v *StorageService) UnmarshalJSON(data []byte) error {
 	u.Type = v.Type()
 	u.Name = v.Name
 	u.Storage = &encoding.JsonUnmarshalWith[Storage]{Value: v.Storage, Func: UnmarshalStorageJSON}
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -3420,7 +3459,8 @@ func (v *SubnodeService) UnmarshalJSON(data []byte) error {
 	u.Name = v.Name
 	u.NodeKey = &encoding.JsonUnmarshalWith[PrivateKey]{Value: v.NodeKey, Func: UnmarshalPrivateKeyJSON}
 	u.Services = &encoding.JsonUnmarshalListWith[Service]{Value: v.Services, Func: UnmarshalServiceJSON}
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -3445,7 +3485,9 @@ func (v *TransientPrivateKey) UnmarshalJSON(data []byte) error {
 		Type PrivateKeyType `json:"type"`
 	}{}
 	u.Type = v.Type()
-	if err := json.Unmarshal(data, &u); err != nil {
+
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
