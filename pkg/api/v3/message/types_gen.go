@@ -3080,9 +3080,10 @@ func (v *ValidateResponse) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 
 func (v *Addressed) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type    Type                                       `json:"type"`
-		Message *encoding.JsonUnmarshalWith[Message]       `json:"message,omitempty"`
-		Address *encoding.JsonUnmarshalWith[p2p.Multiaddr] `json:"address,omitempty"`
+		Type      Type                                       `json:"type"`
+		Message   *encoding.JsonUnmarshalWith[Message]       `json:"message,omitempty"`
+		Address   *encoding.JsonUnmarshalWith[p2p.Multiaddr] `json:"address,omitempty"`
+		ExtraData *string                                    `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(Equal(v.Message, nil)) {
@@ -3091,215 +3092,231 @@ func (v *Addressed) MarshalJSON() ([]byte, error) {
 	if !(p2p.EqualMultiaddr(v.Address, nil)) {
 		u.Address = &encoding.JsonUnmarshalWith[p2p.Multiaddr]{Value: v.Address, Func: p2p.UnmarshalMultiaddrJSON}
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *ConsensusStatusRequest) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type              Type   `json:"type"`
-		NodeID            string `json:"nodeID,omitempty"`
-		Partition         string `json:"partition,omitempty"`
-		IncludePeers      *bool  `json:"includePeers,omitempty"`
-		IncludeAccumulate *bool  `json:"includeAccumulate,omitempty"`
+		Type              Type    `json:"type"`
+		NodeID            string  `json:"nodeID,omitempty"`
+		Partition         string  `json:"partition,omitempty"`
+		IncludePeers      *bool   `json:"includePeers,omitempty"`
+		IncludeAccumulate *bool   `json:"includeAccumulate,omitempty"`
+		ExtraData         *string `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(len(v.ConsensusStatusOptions.NodeID) == 0) {
-
 		u.NodeID = v.ConsensusStatusOptions.NodeID
 	}
 	if !(len(v.ConsensusStatusOptions.Partition) == 0) {
-
 		u.Partition = v.ConsensusStatusOptions.Partition
 	}
 	if !(v.ConsensusStatusOptions.IncludePeers == nil) {
-
 		u.IncludePeers = v.ConsensusStatusOptions.IncludePeers
 	}
 	if !(v.ConsensusStatusOptions.IncludeAccumulate == nil) {
-
 		u.IncludeAccumulate = v.ConsensusStatusOptions.IncludeAccumulate
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *ConsensusStatusResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type  Type                 `json:"type"`
-		Value *api.ConsensusStatus `json:"value,omitempty"`
+		Type      Type                 `json:"type"`
+		Value     *api.ConsensusStatus `json:"value,omitempty"`
+		ExtraData *string              `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Value == nil) {
 		u.Value = v.Value
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *ErrorResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type  Type           `json:"type"`
-		Error *errors2.Error `json:"error,omitempty"`
+		Type      Type           `json:"type"`
+		Error     *errors2.Error `json:"error,omitempty"`
+		ExtraData *string        `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Error == nil) {
 		u.Error = v.Error
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *EventMessage) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type  Type                                       `json:"type"`
-		Value *encoding.JsonUnmarshalListWith[api.Event] `json:"value"`
+		Type      Type                                       `json:"type"`
+		Value     *encoding.JsonUnmarshalListWith[api.Event] `json:"value"`
+		ExtraData *string                                    `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Value = &encoding.JsonUnmarshalListWith[api.Event]{Value: v.Value, Func: api.UnmarshalEventJSON}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *FaucetRequest) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type    Type     `json:"type"`
-		Account *url.URL `json:"account,omitempty"`
-		Token   *url.URL `json:"token,omitempty"`
+		Type      Type     `json:"type"`
+		Account   *url.URL `json:"account,omitempty"`
+		Token     *url.URL `json:"token,omitempty"`
+		ExtraData *string  `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Account == nil) {
 		u.Account = v.Account
 	}
 	if !(v.FaucetOptions.Token == nil) {
-
 		u.Token = v.FaucetOptions.Token
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *FaucetResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type  Type            `json:"type"`
-		Value *api.Submission `json:"value,omitempty"`
+		Type      Type            `json:"type"`
+		Value     *api.Submission `json:"value,omitempty"`
+		ExtraData *string         `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Value == nil) {
 		u.Value = v.Value
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *FindServiceRequest) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type    Type                `json:"type"`
-		Network string              `json:"network,omitempty"`
-		Service *api.ServiceAddress `json:"service,omitempty"`
-		Known   bool                `json:"known,omitempty"`
-		Timeout interface{}         `json:"timeout,omitempty"`
+		Type      Type                `json:"type"`
+		Network   string              `json:"network,omitempty"`
+		Service   *api.ServiceAddress `json:"service,omitempty"`
+		Known     bool                `json:"known,omitempty"`
+		Timeout   interface{}         `json:"timeout,omitempty"`
+		ExtraData *string             `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(len(v.FindServiceOptions.Network) == 0) {
-
 		u.Network = v.FindServiceOptions.Network
 	}
 	if !(v.FindServiceOptions.Service == nil) {
-
 		u.Service = v.FindServiceOptions.Service
 	}
 	if !(!v.FindServiceOptions.Known) {
-
 		u.Known = v.FindServiceOptions.Known
 	}
 	if !(v.FindServiceOptions.Timeout == 0) {
-
 		u.Timeout = encoding.DurationToJSON(v.FindServiceOptions.Timeout)
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *FindServiceResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type  Type                                      `json:"type"`
-		Value encoding.JsonList[*api.FindServiceResult] `json:"value"`
+		Type      Type                                      `json:"type"`
+		Value     encoding.JsonList[*api.FindServiceResult] `json:"value"`
+		ExtraData *string                                   `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Value = v.Value
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *MetricsRequest) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type      Type   `json:"type"`
-		Partition string `json:"partition,omitempty"`
-		Span      uint64 `json:"span,omitempty"`
+		Type      Type    `json:"type"`
+		Partition string  `json:"partition,omitempty"`
+		Span      uint64  `json:"span,omitempty"`
+		ExtraData *string `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(len(v.MetricsOptions.Partition) == 0) {
-
 		u.Partition = v.MetricsOptions.Partition
 	}
 	if !(v.MetricsOptions.Span == 0) {
-
 		u.Span = v.MetricsOptions.Span
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *MetricsResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type  Type         `json:"type"`
-		Value *api.Metrics `json:"value,omitempty"`
+		Type      Type         `json:"type"`
+		Value     *api.Metrics `json:"value,omitempty"`
+		ExtraData *string      `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Value == nil) {
 		u.Value = v.Value
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *NetworkStatusRequest) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type      Type   `json:"type"`
-		Partition string `json:"partition,omitempty"`
+		Type      Type    `json:"type"`
+		Partition string  `json:"partition,omitempty"`
+		ExtraData *string `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(len(v.NetworkStatusOptions.Partition) == 0) {
-
 		u.Partition = v.NetworkStatusOptions.Partition
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *NetworkStatusResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type  Type               `json:"type"`
-		Value *api.NetworkStatus `json:"value,omitempty"`
+		Type      Type               `json:"type"`
+		Value     *api.NetworkStatus `json:"value,omitempty"`
+		ExtraData *string            `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Value == nil) {
 		u.Value = v.Value
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *NodeInfoRequest) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type   Type                                    `json:"type"`
-		PeerID *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"peerID,omitempty"`
+		Type      Type                                    `json:"type"`
+		PeerID    *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"peerID,omitempty"`
+		ExtraData *string                                 `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.NodeInfoOptions.PeerID == ("")) {
-
 		u.PeerID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.NodeInfoOptions.PeerID, Func: p2p.UnmarshalPeerIDJSON}
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *NodeInfoResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type  Type          `json:"type"`
-		Value *api.NodeInfo `json:"value,omitempty"`
+		Type      Type          `json:"type"`
+		Value     *api.NodeInfo `json:"value,omitempty"`
+		ExtraData *string       `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Value == nil) {
 		u.Value = v.Value
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
@@ -3310,6 +3327,7 @@ func (v *PrivateSequenceRequest) MarshalJSON() ([]byte, error) {
 		Destination    *url.URL                                `json:"destination,omitempty"`
 		SequenceNumber uint64                                  `json:"sequenceNumber,omitempty"`
 		NodeID         *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"nodeID,omitempty"`
+		ExtraData      *string                                 `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Source == nil) {
@@ -3322,29 +3340,32 @@ func (v *PrivateSequenceRequest) MarshalJSON() ([]byte, error) {
 		u.SequenceNumber = v.SequenceNumber
 	}
 	if !(v.SequenceOptions.NodeID == ("")) {
-
 		u.NodeID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.SequenceOptions.NodeID, Func: p2p.UnmarshalPeerIDJSON}
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *PrivateSequenceResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type  Type                                  `json:"type"`
-		Value *api.MessageRecord[messaging.Message] `json:"value,omitempty"`
+		Type      Type                                  `json:"type"`
+		Value     *api.MessageRecord[messaging.Message] `json:"value,omitempty"`
+		ExtraData *string                               `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Value == nil) {
 		u.Value = v.Value
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *QueryRequest) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type  Type                                   `json:"type"`
-		Scope *url.URL                               `json:"scope,omitempty"`
-		Query *encoding.JsonUnmarshalWith[api.Query] `json:"query,omitempty"`
+		Type      Type                                   `json:"type"`
+		Scope     *url.URL                               `json:"scope,omitempty"`
+		Query     *encoding.JsonUnmarshalWith[api.Query] `json:"query,omitempty"`
+		ExtraData *string                                `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Scope == nil) {
@@ -3353,50 +3374,55 @@ func (v *QueryRequest) MarshalJSON() ([]byte, error) {
 	if !(api.EqualQuery(v.Query, nil)) {
 		u.Query = &encoding.JsonUnmarshalWith[api.Query]{Value: v.Query, Func: api.UnmarshalQueryJSON}
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *RecordResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type  Type                                    `json:"type"`
-		Value *encoding.JsonUnmarshalWith[api.Record] `json:"value,omitempty"`
+		Type      Type                                    `json:"type"`
+		Value     *encoding.JsonUnmarshalWith[api.Record] `json:"value,omitempty"`
+		ExtraData *string                                 `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(api.EqualRecord(v.Value, nil)) {
 		u.Value = &encoding.JsonUnmarshalWith[api.Record]{Value: v.Value, Func: api.UnmarshalRecordJSON}
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *SubmitRequest) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type     Type                `json:"type"`
-		Envelope *messaging.Envelope `json:"envelope,omitempty"`
-		Verify   *bool               `json:"verify,omitempty"`
-		Wait     *bool               `json:"wait,omitempty"`
+		Type      Type                `json:"type"`
+		Envelope  *messaging.Envelope `json:"envelope,omitempty"`
+		Verify    *bool               `json:"verify,omitempty"`
+		Wait      *bool               `json:"wait,omitempty"`
+		ExtraData *string             `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Envelope == nil) {
 		u.Envelope = v.Envelope
 	}
 	if !(v.SubmitOptions.Verify == nil) {
-
 		u.Verify = v.SubmitOptions.Verify
 	}
 	if !(v.SubmitOptions.Wait == nil) {
-
 		u.Wait = v.SubmitOptions.Wait
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *SubmitResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type  Type                               `json:"type"`
-		Value encoding.JsonList[*api.Submission] `json:"value"`
+		Type      Type                               `json:"type"`
+		Value     encoding.JsonList[*api.Submission] `json:"value"`
+		ExtraData *string                            `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Value = v.Value
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
@@ -3405,64 +3431,71 @@ func (v *SubscribeRequest) MarshalJSON() ([]byte, error) {
 		Type      Type     `json:"type"`
 		Partition string   `json:"partition,omitempty"`
 		Account   *url.URL `json:"account,omitempty"`
+		ExtraData *string  `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(len(v.SubscribeOptions.Partition) == 0) {
-
 		u.Partition = v.SubscribeOptions.Partition
 	}
 	if !(v.SubscribeOptions.Account == nil) {
-
 		u.Account = v.SubscribeOptions.Account
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *SubscribeResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type Type `json:"type"`
+		Type      Type    `json:"type"`
+		ExtraData *string `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *ValidateRequest) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type     Type                `json:"type"`
-		Envelope *messaging.Envelope `json:"envelope,omitempty"`
-		Full     *bool               `json:"full,omitempty"`
+		Type      Type                `json:"type"`
+		Envelope  *messaging.Envelope `json:"envelope,omitempty"`
+		Full      *bool               `json:"full,omitempty"`
+		ExtraData *string             `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Envelope == nil) {
 		u.Envelope = v.Envelope
 	}
 	if !(v.ValidateOptions.Full == nil) {
-
 		u.Full = v.ValidateOptions.Full
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *ValidateResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type  Type                               `json:"type"`
-		Value encoding.JsonList[*api.Submission] `json:"value"`
+		Type      Type                               `json:"type"`
+		Value     encoding.JsonList[*api.Submission] `json:"value"`
+		ExtraData *string                            `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Value = v.Value
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *Addressed) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type    Type                                       `json:"type"`
-		Message *encoding.JsonUnmarshalWith[Message]       `json:"message,omitempty"`
-		Address *encoding.JsonUnmarshalWith[p2p.Multiaddr] `json:"address,omitempty"`
+		Type      Type                                       `json:"type"`
+		Message   *encoding.JsonUnmarshalWith[Message]       `json:"message,omitempty"`
+		Address   *encoding.JsonUnmarshalWith[p2p.Multiaddr] `json:"address,omitempty"`
+		ExtraData *string                                    `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Message = &encoding.JsonUnmarshalWith[Message]{Value: v.Message, Func: UnmarshalJSON}
 	u.Address = &encoding.JsonUnmarshalWith[p2p.Multiaddr]{Value: v.Address, Func: p2p.UnmarshalMultiaddrJSON}
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -3476,23 +3509,29 @@ func (v *Addressed) UnmarshalJSON(data []byte) error {
 		v.Address = u.Address.Value
 	}
 
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (v *ConsensusStatusRequest) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type              Type   `json:"type"`
-		NodeID            string `json:"nodeID,omitempty"`
-		Partition         string `json:"partition,omitempty"`
-		IncludePeers      *bool  `json:"includePeers,omitempty"`
-		IncludeAccumulate *bool  `json:"includeAccumulate,omitempty"`
+		Type              Type    `json:"type"`
+		NodeID            string  `json:"nodeID,omitempty"`
+		Partition         string  `json:"partition,omitempty"`
+		IncludePeers      *bool   `json:"includePeers,omitempty"`
+		IncludeAccumulate *bool   `json:"includeAccumulate,omitempty"`
+		ExtraData         *string `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.NodeID = v.ConsensusStatusOptions.NodeID
 	u.Partition = v.ConsensusStatusOptions.Partition
 	u.IncludePeers = v.ConsensusStatusOptions.IncludePeers
 	u.IncludeAccumulate = v.ConsensusStatusOptions.IncludeAccumulate
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -3502,51 +3541,69 @@ func (v *ConsensusStatusRequest) UnmarshalJSON(data []byte) error {
 	v.ConsensusStatusOptions.Partition = u.Partition
 	v.ConsensusStatusOptions.IncludePeers = u.IncludePeers
 	v.ConsensusStatusOptions.IncludeAccumulate = u.IncludeAccumulate
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (v *ConsensusStatusResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type  Type                 `json:"type"`
-		Value *api.ConsensusStatus `json:"value,omitempty"`
+		Type      Type                 `json:"type"`
+		Value     *api.ConsensusStatus `json:"value,omitempty"`
+		ExtraData *string              `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Value = v.Value
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Value = u.Value
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (v *ErrorResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type  Type           `json:"type"`
-		Error *errors2.Error `json:"error,omitempty"`
+		Type      Type           `json:"type"`
+		Error     *errors2.Error `json:"error,omitempty"`
+		ExtraData *string        `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Error = v.Error
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Error = u.Error
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (v *EventMessage) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type  Type                                       `json:"type"`
-		Value *encoding.JsonUnmarshalListWith[api.Event] `json:"value"`
+		Type      Type                                       `json:"type"`
+		Value     *encoding.JsonUnmarshalListWith[api.Event] `json:"value"`
+		ExtraData *string                                    `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Value = &encoding.JsonUnmarshalListWith[api.Event]{Value: v.Value, Func: api.UnmarshalEventJSON}
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -3558,19 +3615,25 @@ func (v *EventMessage) UnmarshalJSON(data []byte) error {
 			v.Value[i] = x
 		}
 	}
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (v *FaucetRequest) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type    Type     `json:"type"`
-		Account *url.URL `json:"account,omitempty"`
-		Token   *url.URL `json:"token,omitempty"`
+		Type      Type     `json:"type"`
+		Account   *url.URL `json:"account,omitempty"`
+		Token     *url.URL `json:"token,omitempty"`
+		ExtraData *string  `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Account = v.Account
 	u.Token = v.FaucetOptions.Token
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -3578,40 +3641,52 @@ func (v *FaucetRequest) UnmarshalJSON(data []byte) error {
 	}
 	v.Account = u.Account
 	v.FaucetOptions.Token = u.Token
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (v *FaucetResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type  Type            `json:"type"`
-		Value *api.Submission `json:"value,omitempty"`
+		Type      Type            `json:"type"`
+		Value     *api.Submission `json:"value,omitempty"`
+		ExtraData *string         `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Value = v.Value
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Value = u.Value
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (v *FindServiceRequest) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type    Type                `json:"type"`
-		Network string              `json:"network,omitempty"`
-		Service *api.ServiceAddress `json:"service,omitempty"`
-		Known   bool                `json:"known,omitempty"`
-		Timeout interface{}         `json:"timeout,omitempty"`
+		Type      Type                `json:"type"`
+		Network   string              `json:"network,omitempty"`
+		Service   *api.ServiceAddress `json:"service,omitempty"`
+		Known     bool                `json:"known,omitempty"`
+		Timeout   interface{}         `json:"timeout,omitempty"`
+		ExtraData *string             `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Network = v.FindServiceOptions.Network
 	u.Service = v.FindServiceOptions.Service
 	u.Known = v.FindServiceOptions.Known
 	u.Timeout = encoding.DurationToJSON(v.FindServiceOptions.Timeout)
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -3625,36 +3700,48 @@ func (v *FindServiceRequest) UnmarshalJSON(data []byte) error {
 	} else {
 		v.FindServiceOptions.Timeout = x
 	}
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (v *FindServiceResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type  Type                                      `json:"type"`
-		Value encoding.JsonList[*api.FindServiceResult] `json:"value"`
+		Type      Type                                      `json:"type"`
+		Value     encoding.JsonList[*api.FindServiceResult] `json:"value"`
+		ExtraData *string                                   `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Value = v.Value
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Value = u.Value
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (v *MetricsRequest) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type      Type   `json:"type"`
-		Partition string `json:"partition,omitempty"`
-		Span      uint64 `json:"span,omitempty"`
+		Type      Type    `json:"type"`
+		Partition string  `json:"partition,omitempty"`
+		Span      uint64  `json:"span,omitempty"`
+		ExtraData *string `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Partition = v.MetricsOptions.Partition
 	u.Span = v.MetricsOptions.Span
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -3662,68 +3749,92 @@ func (v *MetricsRequest) UnmarshalJSON(data []byte) error {
 	}
 	v.MetricsOptions.Partition = u.Partition
 	v.MetricsOptions.Span = u.Span
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (v *MetricsResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type  Type         `json:"type"`
-		Value *api.Metrics `json:"value,omitempty"`
+		Type      Type         `json:"type"`
+		Value     *api.Metrics `json:"value,omitempty"`
+		ExtraData *string      `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Value = v.Value
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Value = u.Value
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (v *NetworkStatusRequest) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type      Type   `json:"type"`
-		Partition string `json:"partition,omitempty"`
+		Type      Type    `json:"type"`
+		Partition string  `json:"partition,omitempty"`
+		ExtraData *string `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Partition = v.NetworkStatusOptions.Partition
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.NetworkStatusOptions.Partition = u.Partition
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (v *NetworkStatusResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type  Type               `json:"type"`
-		Value *api.NetworkStatus `json:"value,omitempty"`
+		Type      Type               `json:"type"`
+		Value     *api.NetworkStatus `json:"value,omitempty"`
+		ExtraData *string            `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Value = v.Value
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Value = u.Value
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (v *NodeInfoRequest) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type   Type                                    `json:"type"`
-		PeerID *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"peerID,omitempty"`
+		Type      Type                                    `json:"type"`
+		PeerID    *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"peerID,omitempty"`
+		ExtraData *string                                 `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.PeerID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.NodeInfoOptions.PeerID, Func: p2p.UnmarshalPeerIDJSON}
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -3733,23 +3844,33 @@ func (v *NodeInfoRequest) UnmarshalJSON(data []byte) error {
 		v.NodeInfoOptions.PeerID = u.PeerID.Value
 	}
 
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (v *NodeInfoResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type  Type          `json:"type"`
-		Value *api.NodeInfo `json:"value,omitempty"`
+		Type      Type          `json:"type"`
+		Value     *api.NodeInfo `json:"value,omitempty"`
+		ExtraData *string       `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Value = v.Value
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Value = u.Value
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -3760,13 +3881,15 @@ func (v *PrivateSequenceRequest) UnmarshalJSON(data []byte) error {
 		Destination    *url.URL                                `json:"destination,omitempty"`
 		SequenceNumber uint64                                  `json:"sequenceNumber,omitempty"`
 		NodeID         *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"nodeID,omitempty"`
+		ExtraData      *string                                 `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Source = v.Source
 	u.Destination = v.Destination
 	u.SequenceNumber = v.SequenceNumber
 	u.NodeID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.SequenceOptions.NodeID, Func: p2p.UnmarshalPeerIDJSON}
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -3779,36 +3902,48 @@ func (v *PrivateSequenceRequest) UnmarshalJSON(data []byte) error {
 		v.SequenceOptions.NodeID = u.NodeID.Value
 	}
 
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (v *PrivateSequenceResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type  Type                                  `json:"type"`
-		Value *api.MessageRecord[messaging.Message] `json:"value,omitempty"`
+		Type      Type                                  `json:"type"`
+		Value     *api.MessageRecord[messaging.Message] `json:"value,omitempty"`
+		ExtraData *string                               `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Value = v.Value
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Value = u.Value
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (v *QueryRequest) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type  Type                                   `json:"type"`
-		Scope *url.URL                               `json:"scope,omitempty"`
-		Query *encoding.JsonUnmarshalWith[api.Query] `json:"query,omitempty"`
+		Type      Type                                   `json:"type"`
+		Scope     *url.URL                               `json:"scope,omitempty"`
+		Query     *encoding.JsonUnmarshalWith[api.Query] `json:"query,omitempty"`
+		ExtraData *string                                `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Scope = v.Scope
 	u.Query = &encoding.JsonUnmarshalWith[api.Query]{Value: v.Query, Func: api.UnmarshalQueryJSON}
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -3819,17 +3954,23 @@ func (v *QueryRequest) UnmarshalJSON(data []byte) error {
 		v.Query = u.Query.Value
 	}
 
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (v *RecordResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type  Type                                    `json:"type"`
-		Value *encoding.JsonUnmarshalWith[api.Record] `json:"value,omitempty"`
+		Type      Type                                    `json:"type"`
+		Value     *encoding.JsonUnmarshalWith[api.Record] `json:"value,omitempty"`
+		ExtraData *string                                 `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Value = &encoding.JsonUnmarshalWith[api.Record]{Value: v.Value, Func: api.UnmarshalRecordJSON}
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -3839,21 +3980,27 @@ func (v *RecordResponse) UnmarshalJSON(data []byte) error {
 		v.Value = u.Value.Value
 	}
 
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (v *SubmitRequest) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type     Type                `json:"type"`
-		Envelope *messaging.Envelope `json:"envelope,omitempty"`
-		Verify   *bool               `json:"verify,omitempty"`
-		Wait     *bool               `json:"wait,omitempty"`
+		Type      Type                `json:"type"`
+		Envelope  *messaging.Envelope `json:"envelope,omitempty"`
+		Verify    *bool               `json:"verify,omitempty"`
+		Wait      *bool               `json:"wait,omitempty"`
+		ExtraData *string             `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Envelope = v.Envelope
 	u.Verify = v.SubmitOptions.Verify
 	u.Wait = v.SubmitOptions.Wait
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -3862,23 +4009,33 @@ func (v *SubmitRequest) UnmarshalJSON(data []byte) error {
 	v.Envelope = u.Envelope
 	v.SubmitOptions.Verify = u.Verify
 	v.SubmitOptions.Wait = u.Wait
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (v *SubmitResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type  Type                               `json:"type"`
-		Value encoding.JsonList[*api.Submission] `json:"value"`
+		Type      Type                               `json:"type"`
+		Value     encoding.JsonList[*api.Submission] `json:"value"`
+		ExtraData *string                            `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Value = v.Value
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Value = u.Value
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -3887,11 +4044,13 @@ func (v *SubscribeRequest) UnmarshalJSON(data []byte) error {
 		Type      Type     `json:"type"`
 		Partition string   `json:"partition,omitempty"`
 		Account   *url.URL `json:"account,omitempty"`
+		ExtraData *string  `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Partition = v.SubscribeOptions.Partition
 	u.Account = v.SubscribeOptions.Account
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -3899,33 +4058,45 @@ func (v *SubscribeRequest) UnmarshalJSON(data []byte) error {
 	}
 	v.SubscribeOptions.Partition = u.Partition
 	v.SubscribeOptions.Account = u.Account
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (v *SubscribeResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type Type `json:"type"`
+		Type      Type    `json:"type"`
+		ExtraData *string `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
 	}
 	return nil
 }
 
 func (v *ValidateRequest) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type     Type                `json:"type"`
-		Envelope *messaging.Envelope `json:"envelope,omitempty"`
-		Full     *bool               `json:"full,omitempty"`
+		Type      Type                `json:"type"`
+		Envelope  *messaging.Envelope `json:"envelope,omitempty"`
+		Full      *bool               `json:"full,omitempty"`
+		ExtraData *string             `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Envelope = v.Envelope
 	u.Full = v.ValidateOptions.Full
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -3933,22 +4104,32 @@ func (v *ValidateRequest) UnmarshalJSON(data []byte) error {
 	}
 	v.Envelope = u.Envelope
 	v.ValidateOptions.Full = u.Full
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (v *ValidateResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type  Type                               `json:"type"`
-		Value encoding.JsonList[*api.Submission] `json:"value"`
+		Type      Type                               `json:"type"`
+		Value     encoding.JsonList[*api.Submission] `json:"value"`
+		ExtraData *string                            `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Value = v.Value
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Value = u.Value
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
