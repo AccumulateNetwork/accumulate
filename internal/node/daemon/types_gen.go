@@ -355,6 +355,7 @@ func (v *NodeInit) MarshalJSON() ([]byte, error) {
 		DnNodeKey        *string         `json:"dnNodeKey,omitempty"`
 		BvnNodeKey       *string         `json:"bvnNodeKey,omitempty"`
 		BsnNodeKey       *string         `json:"bsnNodeKey,omitempty"`
+		ExtraData        *string         `json:"$epilogue,omitempty"`
 	}{}
 	if !(v.DnnType == 0) {
 		u.DnnType = v.DnnType
@@ -391,6 +392,7 @@ func (v *NodeInit) MarshalJSON() ([]byte, error) {
 	if !(len(v.BsnNodeKey) == 0) {
 		u.BsnNodeKey = encoding.BytesToJSON(v.BsnNodeKey)
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
@@ -401,7 +403,8 @@ func (v *BvnInit) UnmarshalJSON(data []byte) error {
 	}{}
 	u.Id = v.Id
 	u.Nodes = v.Nodes
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.Id = u.Id
@@ -422,7 +425,8 @@ func (v *NetworkInit) UnmarshalJSON(data []byte) error {
 	u.Bootstrap = v.Bootstrap
 	u.Bvns = v.Bvns
 	u.Bsn = v.Bsn
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.Id = u.Id
@@ -448,6 +452,7 @@ func (v *NodeInit) UnmarshalJSON(data []byte) error {
 		DnNodeKey        *string         `json:"dnNodeKey,omitempty"`
 		BvnNodeKey       *string         `json:"bvnNodeKey,omitempty"`
 		BsnNodeKey       *string         `json:"bsnNodeKey,omitempty"`
+		ExtraData        *string         `json:"$epilogue,omitempty"`
 	}{}
 	u.DnnType = v.DnnType
 	u.BvnnType = v.BvnnType
@@ -462,7 +467,8 @@ func (v *NodeInit) UnmarshalJSON(data []byte) error {
 	u.DnNodeKey = encoding.BytesToJSON(v.DnNodeKey)
 	u.BvnNodeKey = encoding.BytesToJSON(v.BvnNodeKey)
 	u.BsnNodeKey = encoding.BytesToJSON(v.BsnNodeKey)
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.DnnType = u.DnnType
@@ -499,6 +505,10 @@ func (v *NodeInit) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("error decoding BsnNodeKey: %w", err)
 	} else {
 		v.BsnNodeKey = x
+	}
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
 	}
 	return nil
 }

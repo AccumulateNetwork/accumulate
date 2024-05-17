@@ -2024,9 +2024,9 @@ func (v *BlockProposal) MarshalJSON() ([]byte, error) {
 		Index     uint64                                 `json:"index,omitempty"`
 		Time      time.Time                              `json:"time,omitempty"`
 		Envelopes encoding.JsonList[*messaging.Envelope] `json:"envelopes,omitempty"`
+		ExtraData *string                                `json:"$epilogue,omitempty"`
 	}{}
 	if !(v.LeaderProposal.Leader == ([32]byte{})) {
-
 		u.Leader = encoding.ChainToJSON(&v.LeaderProposal.Leader)
 	}
 	if !(v.Index == 0) {
@@ -2038,6 +2038,7 @@ func (v *BlockProposal) MarshalJSON() ([]byte, error) {
 	if !(len(v.Envelopes) == 0) {
 		u.Envelopes = v.Envelopes
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
@@ -2045,6 +2046,7 @@ func (v *BlockResults) MarshalJSON() ([]byte, error) {
 	u := struct {
 		MessageResults   encoding.JsonList[*protocol.TransactionStatus] `json:"messageResults,omitempty"`
 		ValidatorUpdates encoding.JsonList[*ValidatorUpdate]            `json:"validatorUpdates,omitempty"`
+		ExtraData        *string                                        `json:"$epilogue,omitempty"`
 	}{}
 	if !(len(v.MessageResults) == 0) {
 		u.MessageResults = v.MessageResults
@@ -2052,36 +2054,42 @@ func (v *BlockResults) MarshalJSON() ([]byte, error) {
 	if !(len(v.ValidatorUpdates) == 0) {
 		u.ValidatorUpdates = v.ValidatorUpdates
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *CommitResult) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Hash *string `json:"hash,omitempty"`
+		Hash      *string `json:"hash,omitempty"`
+		ExtraData *string `json:"$epilogue,omitempty"`
 	}{}
 	if !(v.Hash == ([32]byte{})) {
 		u.Hash = encoding.ChainToJSON(&v.Hash)
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *EnvelopeSubmitted) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type    messageType                                    `json:"type"`
-		Results encoding.JsonList[*protocol.TransactionStatus] `json:"results,omitempty"`
+		Type      messageType                                    `json:"type"`
+		Results   encoding.JsonList[*protocol.TransactionStatus] `json:"results,omitempty"`
+		ExtraData *string                                        `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(len(v.Results) == 0) {
 		u.Results = v.Results
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *ExecutedBlock) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type    messageType `json:"type"`
-		Network string      `json:"network,omitempty"`
-		Node    *string     `json:"node,omitempty"`
+		Type      messageType `json:"type"`
+		Network   string      `json:"network,omitempty"`
+		Node      *string     `json:"node,omitempty"`
+		ExtraData *string     `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(len(v.Network) == 0) {
@@ -2090,33 +2098,39 @@ func (v *ExecutedBlock) MarshalJSON() ([]byte, error) {
 	if !(v.Node == ([32]byte{})) {
 		u.Node = encoding.ChainToJSON(&v.Node)
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *LeaderProposal) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Leader *string `json:"leader,omitempty"`
+		Leader    *string `json:"leader,omitempty"`
+		ExtraData *string `json:"$epilogue,omitempty"`
 	}{}
 	if !(v.Leader == ([32]byte{})) {
 		u.Leader = encoding.ChainToJSON(&v.Leader)
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *StartBlock) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type messageType `json:"type"`
+		Type      messageType `json:"type"`
+		ExtraData *string     `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *SubmitEnvelope) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type     messageType         `json:"type"`
-		Network  string              `json:"network,omitempty"`
-		Envelope *messaging.Envelope `json:"envelope,omitempty"`
-		Pretend  bool                `json:"pretend,omitempty"`
+		Type      messageType         `json:"type"`
+		Network   string              `json:"network,omitempty"`
+		Envelope  *messaging.Envelope `json:"envelope,omitempty"`
+		Pretend   bool                `json:"pretend,omitempty"`
+		ExtraData *string             `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(len(v.Network) == 0) {
@@ -2128,6 +2142,7 @@ func (v *SubmitEnvelope) MarshalJSON() ([]byte, error) {
 	if !(!v.Pretend) {
 		u.Pretend = v.Pretend
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
@@ -2136,6 +2151,7 @@ func (v *ValidatorUpdate) MarshalJSON() ([]byte, error) {
 		Type      protocol.SignatureType `json:"type,omitempty"`
 		PublicKey *string                `json:"publicKey,omitempty"`
 		Power     int64                  `json:"power,omitempty"`
+		ExtraData *string                `json:"$epilogue,omitempty"`
 	}{}
 	if !(v.Type == 0) {
 		u.Type = v.Type
@@ -2146,6 +2162,7 @@ func (v *ValidatorUpdate) MarshalJSON() ([]byte, error) {
 	if !(v.Power == 0) {
 		u.Power = v.Power
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
@@ -2155,19 +2172,19 @@ func (v *acceptBlockProposal) MarshalJSON() ([]byte, error) {
 		PubKeyHash *string      `json:"pubKeyHash,omitempty"`
 		Network    string       `json:"network,omitempty"`
 		p          proposeBlock `json:"p,omitempty"`
+		ExtraData  *string      `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.baseNodeMessage.PubKeyHash == ([32]byte{})) {
-
 		u.PubKeyHash = encoding.ChainToJSON(&v.baseNodeMessage.PubKeyHash)
 	}
 	if !(len(v.baseNodeMessage.Network) == 0) {
-
 		u.Network = v.baseNodeMessage.Network
 	}
 	if !((v.p).Equal(new(proposeBlock))) {
 		u.p = v.p
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
@@ -2178,14 +2195,13 @@ func (v *acceptedSubmission) MarshalJSON() ([]byte, error) {
 		Network    string              `json:"network,omitempty"`
 		result     EnvelopeSubmitted   `json:"result,omitempty"`
 		env        *messaging.Envelope `json:"env,omitempty"`
+		ExtraData  *string             `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.baseNodeMessage.PubKeyHash == ([32]byte{})) {
-
 		u.PubKeyHash = encoding.ChainToJSON(&v.baseNodeMessage.PubKeyHash)
 	}
 	if !(len(v.baseNodeMessage.Network) == 0) {
-
 		u.Network = v.baseNodeMessage.Network
 	}
 	if !((v.result).Equal(new(EnvelopeSubmitted))) {
@@ -2194,6 +2210,7 @@ func (v *acceptedSubmission) MarshalJSON() ([]byte, error) {
 	if !(v.env == nil) {
 		u.env = v.env
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
@@ -2201,6 +2218,7 @@ func (v *baseNodeMessage) MarshalJSON() ([]byte, error) {
 	u := struct {
 		PubKeyHash *string `json:"pubKeyHash,omitempty"`
 		Network    string  `json:"network,omitempty"`
+		ExtraData  *string `json:"$epilogue,omitempty"`
 	}{}
 	if !(v.PubKeyHash == ([32]byte{})) {
 		u.PubKeyHash = encoding.ChainToJSON(&v.PubKeyHash)
@@ -2208,6 +2226,7 @@ func (v *baseNodeMessage) MarshalJSON() ([]byte, error) {
 	if !(len(v.Network) == 0) {
 		u.Network = v.Network
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
@@ -2217,19 +2236,19 @@ func (v *committedBlock) MarshalJSON() ([]byte, error) {
 		PubKeyHash *string      `json:"pubKeyHash,omitempty"`
 		Network    string       `json:"network,omitempty"`
 		results    CommitResult `json:"results,omitempty"`
+		ExtraData  *string      `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.baseNodeMessage.PubKeyHash == ([32]byte{})) {
-
 		u.PubKeyHash = encoding.ChainToJSON(&v.baseNodeMessage.PubKeyHash)
 	}
 	if !(len(v.baseNodeMessage.Network) == 0) {
-
 		u.Network = v.baseNodeMessage.Network
 	}
 	if !((v.results).Equal(new(CommitResult))) {
 		u.results = v.results
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
@@ -2239,19 +2258,19 @@ func (v *finalizedBlock) MarshalJSON() ([]byte, error) {
 		PubKeyHash *string      `json:"pubKeyHash,omitempty"`
 		Network    string       `json:"network,omitempty"`
 		results    BlockResults `json:"results,omitempty"`
+		ExtraData  *string      `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.baseNodeMessage.PubKeyHash == ([32]byte{})) {
-
 		u.PubKeyHash = encoding.ChainToJSON(&v.baseNodeMessage.PubKeyHash)
 	}
 	if !(len(v.baseNodeMessage.Network) == 0) {
-
 		u.Network = v.baseNodeMessage.Network
 	}
 	if !((v.results).Equal(new(BlockResults))) {
 		u.results = v.results
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
@@ -2264,32 +2283,28 @@ func (v *proposeBlock) MarshalJSON() ([]byte, error) {
 		Index          uint64                                 `json:"index,omitempty"`
 		Time           time.Time                              `json:"time,omitempty"`
 		Envelopes      encoding.JsonList[*messaging.Envelope] `json:"envelopes,omitempty"`
+		ExtraData      *string                                `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.baseNodeMessage.PubKeyHash == ([32]byte{})) {
-
 		u.PubKeyHash = encoding.ChainToJSON(&v.baseNodeMessage.PubKeyHash)
 	}
 	if !(len(v.baseNodeMessage.Network) == 0) {
-
 		u.Network = v.baseNodeMessage.Network
 	}
 	if !((v.BlockProposal.LeaderProposal).Equal(new(LeaderProposal))) {
-
 		u.LeaderProposal = v.BlockProposal.LeaderProposal
 	}
 	if !(v.BlockProposal.Index == 0) {
-
 		u.Index = v.BlockProposal.Index
 	}
 	if !(v.BlockProposal.Time == (time.Time{})) {
-
 		u.Time = v.BlockProposal.Time
 	}
 	if !(len(v.BlockProposal.Envelopes) == 0) {
-
 		u.Envelopes = v.BlockProposal.Envelopes
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
@@ -2299,20 +2314,19 @@ func (v *proposeLeader) MarshalJSON() ([]byte, error) {
 		PubKeyHash *string     `json:"pubKeyHash,omitempty"`
 		Network    string      `json:"network,omitempty"`
 		Leader     *string     `json:"leader,omitempty"`
+		ExtraData  *string     `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.baseNodeMessage.PubKeyHash == ([32]byte{})) {
-
 		u.PubKeyHash = encoding.ChainToJSON(&v.baseNodeMessage.PubKeyHash)
 	}
 	if !(len(v.baseNodeMessage.Network) == 0) {
-
 		u.Network = v.baseNodeMessage.Network
 	}
 	if !(v.LeaderProposal.Leader == ([32]byte{})) {
-
 		u.Leader = encoding.ChainToJSON(&v.LeaderProposal.Leader)
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
@@ -2322,12 +2336,14 @@ func (v *BlockProposal) UnmarshalJSON(data []byte) error {
 		Index     uint64                                 `json:"index,omitempty"`
 		Time      time.Time                              `json:"time,omitempty"`
 		Envelopes encoding.JsonList[*messaging.Envelope] `json:"envelopes,omitempty"`
+		ExtraData *string                                `json:"$epilogue,omitempty"`
 	}{}
 	u.Leader = encoding.ChainToJSON(&v.LeaderProposal.Leader)
 	u.Index = v.Index
 	u.Time = v.Time
 	u.Envelopes = v.Envelopes
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if x, err := encoding.ChainFromJSON(u.Leader); err != nil {
@@ -2338,6 +2354,10 @@ func (v *BlockProposal) UnmarshalJSON(data []byte) error {
 	v.Index = u.Index
 	v.Time = u.Time
 	v.Envelopes = u.Envelopes
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -2345,23 +2365,31 @@ func (v *BlockResults) UnmarshalJSON(data []byte) error {
 	u := struct {
 		MessageResults   encoding.JsonList[*protocol.TransactionStatus] `json:"messageResults,omitempty"`
 		ValidatorUpdates encoding.JsonList[*ValidatorUpdate]            `json:"validatorUpdates,omitempty"`
+		ExtraData        *string                                        `json:"$epilogue,omitempty"`
 	}{}
 	u.MessageResults = v.MessageResults
 	u.ValidatorUpdates = v.ValidatorUpdates
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.MessageResults = u.MessageResults
 	v.ValidatorUpdates = u.ValidatorUpdates
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (v *CommitResult) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Hash *string `json:"hash,omitempty"`
+		Hash      *string `json:"hash,omitempty"`
+		ExtraData *string `json:"$epilogue,omitempty"`
 	}{}
 	u.Hash = encoding.ChainToJSON(&v.Hash)
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if x, err := encoding.ChainFromJSON(u.Hash); err != nil {
@@ -2369,36 +2397,48 @@ func (v *CommitResult) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Hash = *x
 	}
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (v *EnvelopeSubmitted) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type    messageType                                    `json:"type"`
-		Results encoding.JsonList[*protocol.TransactionStatus] `json:"results,omitempty"`
+		Type      messageType                                    `json:"type"`
+		Results   encoding.JsonList[*protocol.TransactionStatus] `json:"results,omitempty"`
+		ExtraData *string                                        `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Results = v.Results
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Results = u.Results
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (v *ExecutedBlock) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type    messageType `json:"type"`
-		Network string      `json:"network,omitempty"`
-		Node    *string     `json:"node,omitempty"`
+		Type      messageType `json:"type"`
+		Network   string      `json:"network,omitempty"`
+		Node      *string     `json:"node,omitempty"`
+		ExtraData *string     `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Network = v.Network
 	u.Node = encoding.ChainToJSON(&v.Node)
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -2410,15 +2450,21 @@ func (v *ExecutedBlock) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Node = *x
 	}
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (v *LeaderProposal) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Leader *string `json:"leader,omitempty"`
+		Leader    *string `json:"leader,omitempty"`
+		ExtraData *string `json:"$epilogue,omitempty"`
 	}{}
 	u.Leader = encoding.ChainToJSON(&v.Leader)
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if x, err := encoding.ChainFromJSON(u.Leader); err != nil {
@@ -2426,35 +2472,47 @@ func (v *LeaderProposal) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Leader = *x
 	}
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (v *StartBlock) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type messageType `json:"type"`
+		Type      messageType `json:"type"`
+		ExtraData *string     `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
 	}
 	return nil
 }
 
 func (v *SubmitEnvelope) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type     messageType         `json:"type"`
-		Network  string              `json:"network,omitempty"`
-		Envelope *messaging.Envelope `json:"envelope,omitempty"`
-		Pretend  bool                `json:"pretend,omitempty"`
+		Type      messageType         `json:"type"`
+		Network   string              `json:"network,omitempty"`
+		Envelope  *messaging.Envelope `json:"envelope,omitempty"`
+		Pretend   bool                `json:"pretend,omitempty"`
+		ExtraData *string             `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Network = v.Network
 	u.Envelope = v.Envelope
 	u.Pretend = v.Pretend
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -2463,6 +2521,10 @@ func (v *SubmitEnvelope) UnmarshalJSON(data []byte) error {
 	v.Network = u.Network
 	v.Envelope = u.Envelope
 	v.Pretend = u.Pretend
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -2471,11 +2533,13 @@ func (v *ValidatorUpdate) UnmarshalJSON(data []byte) error {
 		Type      protocol.SignatureType `json:"type,omitempty"`
 		PublicKey *string                `json:"publicKey,omitempty"`
 		Power     int64                  `json:"power,omitempty"`
+		ExtraData *string                `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.Power = v.Power
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.Type = u.Type
@@ -2485,6 +2549,10 @@ func (v *ValidatorUpdate) UnmarshalJSON(data []byte) error {
 		v.PublicKey = x
 	}
 	v.Power = u.Power
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -2494,12 +2562,14 @@ func (v *acceptBlockProposal) UnmarshalJSON(data []byte) error {
 		PubKeyHash *string      `json:"pubKeyHash,omitempty"`
 		Network    string       `json:"network,omitempty"`
 		p          proposeBlock `json:"p,omitempty"`
+		ExtraData  *string      `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.PubKeyHash = encoding.ChainToJSON(&v.baseNodeMessage.PubKeyHash)
 	u.Network = v.baseNodeMessage.Network
 	u.p = v.p
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -2512,6 +2582,10 @@ func (v *acceptBlockProposal) UnmarshalJSON(data []byte) error {
 	}
 	v.baseNodeMessage.Network = u.Network
 	v.p = u.p
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -2522,13 +2596,15 @@ func (v *acceptedSubmission) UnmarshalJSON(data []byte) error {
 		Network    string              `json:"network,omitempty"`
 		result     EnvelopeSubmitted   `json:"result,omitempty"`
 		env        *messaging.Envelope `json:"env,omitempty"`
+		ExtraData  *string             `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.PubKeyHash = encoding.ChainToJSON(&v.baseNodeMessage.PubKeyHash)
 	u.Network = v.baseNodeMessage.Network
 	u.result = v.result
 	u.env = v.env
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -2542,6 +2618,10 @@ func (v *acceptedSubmission) UnmarshalJSON(data []byte) error {
 	v.baseNodeMessage.Network = u.Network
 	v.result = u.result
 	v.env = u.env
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -2549,10 +2629,12 @@ func (v *baseNodeMessage) UnmarshalJSON(data []byte) error {
 	u := struct {
 		PubKeyHash *string `json:"pubKeyHash,omitempty"`
 		Network    string  `json:"network,omitempty"`
+		ExtraData  *string `json:"$epilogue,omitempty"`
 	}{}
 	u.PubKeyHash = encoding.ChainToJSON(&v.PubKeyHash)
 	u.Network = v.Network
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if x, err := encoding.ChainFromJSON(u.PubKeyHash); err != nil {
@@ -2561,6 +2643,10 @@ func (v *baseNodeMessage) UnmarshalJSON(data []byte) error {
 		v.PubKeyHash = *x
 	}
 	v.Network = u.Network
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -2570,12 +2656,14 @@ func (v *committedBlock) UnmarshalJSON(data []byte) error {
 		PubKeyHash *string      `json:"pubKeyHash,omitempty"`
 		Network    string       `json:"network,omitempty"`
 		results    CommitResult `json:"results,omitempty"`
+		ExtraData  *string      `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.PubKeyHash = encoding.ChainToJSON(&v.baseNodeMessage.PubKeyHash)
 	u.Network = v.baseNodeMessage.Network
 	u.results = v.results
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -2588,6 +2676,10 @@ func (v *committedBlock) UnmarshalJSON(data []byte) error {
 	}
 	v.baseNodeMessage.Network = u.Network
 	v.results = u.results
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -2597,12 +2689,14 @@ func (v *finalizedBlock) UnmarshalJSON(data []byte) error {
 		PubKeyHash *string      `json:"pubKeyHash,omitempty"`
 		Network    string       `json:"network,omitempty"`
 		results    BlockResults `json:"results,omitempty"`
+		ExtraData  *string      `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.PubKeyHash = encoding.ChainToJSON(&v.baseNodeMessage.PubKeyHash)
 	u.Network = v.baseNodeMessage.Network
 	u.results = v.results
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -2615,6 +2709,10 @@ func (v *finalizedBlock) UnmarshalJSON(data []byte) error {
 	}
 	v.baseNodeMessage.Network = u.Network
 	v.results = u.results
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -2627,6 +2725,7 @@ func (v *proposeBlock) UnmarshalJSON(data []byte) error {
 		Index          uint64                                 `json:"index,omitempty"`
 		Time           time.Time                              `json:"time,omitempty"`
 		Envelopes      encoding.JsonList[*messaging.Envelope] `json:"envelopes,omitempty"`
+		ExtraData      *string                                `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.PubKeyHash = encoding.ChainToJSON(&v.baseNodeMessage.PubKeyHash)
@@ -2635,7 +2734,8 @@ func (v *proposeBlock) UnmarshalJSON(data []byte) error {
 	u.Index = v.BlockProposal.Index
 	u.Time = v.BlockProposal.Time
 	u.Envelopes = v.BlockProposal.Envelopes
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -2651,6 +2751,10 @@ func (v *proposeBlock) UnmarshalJSON(data []byte) error {
 	v.BlockProposal.Index = u.Index
 	v.BlockProposal.Time = u.Time
 	v.BlockProposal.Envelopes = u.Envelopes
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -2660,12 +2764,14 @@ func (v *proposeLeader) UnmarshalJSON(data []byte) error {
 		PubKeyHash *string     `json:"pubKeyHash,omitempty"`
 		Network    string      `json:"network,omitempty"`
 		Leader     *string     `json:"leader,omitempty"`
+		ExtraData  *string     `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.PubKeyHash = encoding.ChainToJSON(&v.baseNodeMessage.PubKeyHash)
 	u.Network = v.baseNodeMessage.Network
 	u.Leader = encoding.ChainToJSON(&v.LeaderProposal.Leader)
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -2681,6 +2787,10 @@ func (v *proposeLeader) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("error decoding Leader: %w", err)
 	} else {
 		v.LeaderProposal.Leader = *x
+	}
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
 	}
 	return nil
 }
