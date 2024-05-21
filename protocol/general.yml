@@ -207,6 +207,10 @@ FeeSchedule:
       description: is the fee for creating a non-root ADI.
       type: Fee
       marshal-as: enum
+    - name: BareIdentityDiscount
+      description: is the discount for creating an ADI without a key book.
+      type: Fee
+      marshal-as: enum
 
 NetworkLimits:
   fields:
