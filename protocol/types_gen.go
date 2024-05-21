@@ -408,7 +408,9 @@ type FeeSchedule struct {
 	CreateIdentitySliding []Fee `json:"createIdentitySliding,omitempty" form:"createIdentitySliding" query:"createIdentitySliding" validate:"required"`
 	// CreateSubIdentity is the fee for creating a non-root ADI..
 	CreateSubIdentity Fee `json:"createSubIdentity,omitempty" form:"createSubIdentity" query:"createSubIdentity" validate:"required"`
-	extraData         []byte
+	// BareIdentityDiscount is the discount for creating an ADI without a key book..
+	BareIdentityDiscount Fee `json:"bareIdentityDiscount,omitempty" form:"bareIdentityDiscount" query:"bareIdentityDiscount" validate:"required"`
+	extraData            []byte
 }
 
 type HoldUntilOptions struct {
@@ -2153,6 +2155,7 @@ func (v *FeeSchedule) Copy() *FeeSchedule {
 		u.CreateIdentitySliding[i] = v
 	}
 	u.CreateSubIdentity = v.CreateSubIdentity
+	u.BareIdentityDiscount = v.BareIdentityDiscount
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -4546,6 +4549,9 @@ func (v *FeeSchedule) Equal(u *FeeSchedule) bool {
 		}
 	}
 	if !(v.CreateSubIdentity == u.CreateSubIdentity) {
+		return false
+	}
+	if !(v.BareIdentityDiscount == u.BareIdentityDiscount) {
 		return false
 	}
 
@@ -8663,6 +8669,7 @@ func (v *FactomDataEntryWrapper) IsValid() error {
 var fieldNames_FeeSchedule = []string{
 	1: "CreateIdentitySliding",
 	2: "CreateSubIdentity",
+	3: "BareIdentityDiscount",
 }
 
 func (v *FeeSchedule) MarshalBinary() ([]byte, error) {
@@ -8680,6 +8687,9 @@ func (v *FeeSchedule) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.CreateSubIdentity == 0) {
 		writer.WriteEnum(2, v.CreateSubIdentity)
+	}
+	if !(v.BareIdentityDiscount == 0) {
+		writer.WriteEnum(3, v.BareIdentityDiscount)
 	}
 
 	_, _, err := writer.Reset(fieldNames_FeeSchedule)
@@ -8702,6 +8712,11 @@ func (v *FeeSchedule) IsValid() error {
 		errs = append(errs, "field CreateSubIdentity is missing")
 	} else if v.CreateSubIdentity == 0 {
 		errs = append(errs, "field CreateSubIdentity is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field BareIdentityDiscount is missing")
+	} else if v.BareIdentityDiscount == 0 {
+		errs = append(errs, "field BareIdentityDiscount is not set")
 	}
 
 	switch len(errs) {
@@ -15217,6 +15232,9 @@ func (v *FeeSchedule) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(Fee); reader.ReadEnum(2, x) {
 		v.CreateSubIdentity = *x
 	}
+	if x := new(Fee); reader.ReadEnum(3, x) {
+		v.BareIdentityDiscount = *x
+	}
 
 	seen, err := reader.Reset(fieldNames_FeeSchedule)
 	if err != nil {
@@ -19079,6 +19097,7 @@ func (v *FeeSchedule) MarshalJSON() ([]byte, error) {
 	u := struct {
 		CreateIdentitySliding encoding.JsonList[Fee] `json:"createIdentitySliding,omitempty"`
 		CreateSubIdentity     Fee                    `json:"createSubIdentity,omitempty"`
+		BareIdentityDiscount  Fee                    `json:"bareIdentityDiscount,omitempty"`
 		ExtraData             *string                `json:"$epilogue,omitempty"`
 	}{}
 	if !(len(v.CreateIdentitySliding) == 0) {
@@ -19086,6 +19105,9 @@ func (v *FeeSchedule) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.CreateSubIdentity == 0) {
 		u.CreateSubIdentity = v.CreateSubIdentity
+	}
+	if !(v.BareIdentityDiscount == 0) {
+		u.BareIdentityDiscount = v.BareIdentityDiscount
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -21887,16 +21909,19 @@ func (v *FeeSchedule) UnmarshalJSON(data []byte) error {
 	u := struct {
 		CreateIdentitySliding encoding.JsonList[Fee] `json:"createIdentitySliding,omitempty"`
 		CreateSubIdentity     Fee                    `json:"createSubIdentity,omitempty"`
+		BareIdentityDiscount  Fee                    `json:"bareIdentityDiscount,omitempty"`
 		ExtraData             *string                `json:"$epilogue,omitempty"`
 	}{}
 	u.CreateIdentitySliding = v.CreateIdentitySliding
 	u.CreateSubIdentity = v.CreateSubIdentity
+	u.BareIdentityDiscount = v.BareIdentityDiscount
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
 	}
 	v.CreateIdentitySliding = u.CreateIdentitySliding
 	v.CreateSubIdentity = u.CreateSubIdentity
+	v.BareIdentityDiscount = u.BareIdentityDiscount
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err
