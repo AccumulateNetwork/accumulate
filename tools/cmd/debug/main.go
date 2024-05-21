@@ -24,6 +24,7 @@ var (
 	cachedScan        string
 	verbose           bool
 	pretend           bool
+	debug             bool
 	waitForTxn        bool
 	peerDb            string
 	lightDb           string
