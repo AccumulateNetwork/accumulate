@@ -7,6 +7,8 @@
 package block
 
 import (
+	"strings"
+
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -27,11 +29,9 @@ type BlockAnchor struct{}
 type blockAnchorContext struct {
 	*TransactionContext
 
-	sequenced *messaging.SequencedMessage
-
+	sequenced   *messaging.SequencedMessage
 	blockAnchor *messaging.BlockAnchor
-
-	signer protocol.Signer2
+	signer      protocol.Signer2
 }
 
 func (x BlockAnchor) Validate(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
@@ -136,18 +136,12 @@ func (x BlockAnchor) check(ctx *MessageContext, batch *database.Batch) (*blockAn
 
 	// Resolve placeholders
 	txn := txnMsg.Transaction
-	signed := seq.Hash()
 	if txn.Body.Type() == protocol.TransactionTypeRemote && ctx.GetActiveGlobals().ExecutorVersion.V2BaikonurEnabled() {
 		var err error
 		txn, err = ctx.getTransaction(batch, txn.ID().Hash())
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("load transaction: %w", err)
 		}
-
-		// Recalculate the hash with the full transaction
-		seq2 := seq.Copy()
-		seq2.Message = &messaging.TransactionMessage{Transaction: txn}
-		signed = seq2.Hash()
 	}
 
 	// Verify the transaction is an anchor
@@ -157,11 +151,6 @@ func (x BlockAnchor) check(ctx *MessageContext, batch *database.Batch) (*blockAn
 
 	if seq.Source == nil {
 		return nil, errors.InternalError.WithFormat("sequence is missing source")
-	}
-
-	// Basic validation
-	if !anchor.Signature.Verify(nil, signed[:]) {
-		return nil, errors.Unauthenticated.WithFormat("invalid signature")
 	}
 
 	// Verify the signer is a validator of this partition
@@ -180,12 +169,46 @@ func (x BlockAnchor) check(ctx *MessageContext, batch *database.Batch) (*blockAn
 		return nil, errors.Unauthorized.WithFormat("key is not an active validator for %s", partition)
 	}
 
-	return &blockAnchorContext{
+	// Basic validation
+	ctx2 := &blockAnchorContext{
 		TransactionContext: ctx.txnWith(txn),
 		sequenced:          seq,
 		blockAnchor:        anchor,
 		signer:             signer,
-	}, nil
+	}
+	err := x.checkSignature(ctx2)
+	if err != nil {
+		return nil, err
+	}
+
+	return ctx2, nil
+}
+
+func (x BlockAnchor) checkSignature(ctx *blockAnchorContext) error {
+	// Recalculate the hash in case the transaction was originally a remote
+	// transaction
+	txn := &messaging.TransactionMessage{Transaction: ctx.transaction}
+	seq := *ctx.sequenced
+	seq.Message = txn
+	if hash := seq.Hash(); ctx.blockAnchor.Signature.Verify(nil, hash[:]) {
+		return nil
+	}
+
+	// Allow reusing signatures from the DN
+	part, _ := protocol.ParsePartitionUrl(ctx.transaction.Header.Principal)
+	if ctx.GetActiveGlobals().ExecutorVersion.V2VandenbergEnabled() &&
+		ctx.transaction.Body.Type() == protocol.TransactionTypeDirectoryAnchor &&
+		!strings.EqualFold(part, protocol.Directory) {
+
+		seq.Destination = protocol.DnUrl()
+		txn.Transaction = txn.Transaction.Copy()
+		txn.Transaction.Header.Principal = protocol.DnUrl().JoinPath(ctx.transaction.Header.Principal.Path)
+		if hash := seq.Hash(); ctx.blockAnchor.Signature.Verify(nil, hash[:]) {
+			return nil
+		}
+	}
+
+	return errors.Unauthenticated.WithFormat("invalid signature")
 }
 
 func (x BlockAnchor) txnIsReady(batch *database.Batch, ctx *blockAnchorContext) (bool, error) {

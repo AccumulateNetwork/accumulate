@@ -31,6 +31,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p/dial"
+	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/bolt"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -56,6 +57,7 @@ func init() {
 	cmdHeal.PersistentFlags().BoolVar(&healContinuous, "continuous", false, "Run healing in a loop every minute")
 	cmdHeal.PersistentFlags().StringVar(&peerDb, "peer-db", peerDb, "Track peers using a persistent database")
 	cmdHeal.PersistentFlags().StringVar(&pprof, "pprof", "", "Address to run net/http/pprof on")
+	cmdHeal.PersistentFlags().BoolVar(&debug, "debug", false, "Debug network requests")
 	cmdHealAnchor.PersistentFlags().DurationVar(&flagMaxResponseAge, "max-response-age", flagMaxResponseAge, "Maximum age of a response before it is considered too stale to use")
 	cmdHealSynth.PersistentFlags().StringVar(&lightDb, "light-db", lightDb, "Light client database for persisting chain data")
 
@@ -112,6 +114,7 @@ func (h *healer) heal(args []string) {
 	// some reason
 	h.C1 = jsonrpc.NewClient(accumulate.ResolveWellKnownEndpoint(args[0], "v3"))
 	h.C1.Client.Timeout = time.Hour
+	h.C1.Debug = debug
 
 	ni, err := h.C1.NodeInfo(ctx, api.NodeInfoOptions{})
 	check(err)
@@ -144,7 +147,10 @@ func (h *healer) heal(args []string) {
 	})
 	check(err)
 
-	<-h.router.(*routing.RouterInstance).Ready()
+	ok := <-h.router.(*routing.RouterInstance).Ready()
+	if !ok {
+		fatalf("railed to initialize router")
+	}
 
 	dialer := node.DialNetwork()
 	if _, ok := node.Tracker().(*dial.PersistentTracker); !ok {
@@ -161,15 +167,21 @@ func (h *healer) heal(args []string) {
 			Network: ni.Network,
 			Dialer:  dialer,
 			Router:  routing.MessageRouter{Router: h.router},
+			Debug:   debug,
 		},
 	}
 
 	if lightDb != "" {
+		cv2, err := client.New(accumulate.ResolveWellKnownEndpoint(args[0], "v2"))
+		check(err)
+		cv2.DebugRequest = debug
+
 		db, err := bolt.Open(lightDb, bolt.WithPlainKeys)
 		check(err)
+
 		h.light, err = light.NewClient(
 			light.Store(db, ""),
-			light.Server(accumulate.ResolveWellKnownEndpoint(args[0], "v2")),
+			light.ClientV2(cv2),
 			light.Querier(h.C2),
 			light.Router(h.router),
 		)
