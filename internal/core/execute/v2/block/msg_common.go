@@ -60,7 +60,7 @@ func (m *TransactionContext) sigWith(sig protocol.Signature) *SignatureContext {
 	s := new(SignatureContext)
 	s.TransactionContext = m
 	s.signature = sig
-	return s
+		return s
 }
 
 // txnWith constructs a transaction context from this message context for the
@@ -260,7 +260,7 @@ func (b *bundle) GetSignatureAs(batch *database.Batch, hash [32]byte) (protocol.
 
 func (ctx *MessageContext) recordPending(batch *database.Batch) (*protocol.TransactionStatus, error) {
 	// Store the message
-	msg := ctx.message
+msg := ctx.message
 	h := msg.Hash()
 	err := batch.Message(h).Main().Put(msg)
 	if err != nil {

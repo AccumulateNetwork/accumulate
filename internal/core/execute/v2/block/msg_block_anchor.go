@@ -75,7 +75,7 @@ func (x BlockAnchor) Process(batch *database.Batch, ctx *MessageContext) (_ *pro
 
 func (x BlockAnchor) process(batch *database.Batch, ctx *blockAnchorContext) error {
 	// Record the anchor signature
-	err := batch.Account(ctx.effectivePrincipal()).
+	err := batch.Account(ctx.transaction.Header.Principal).
 		Transaction(ctx.transaction.ID().Hash()).
 		ValidatorSignatures().
 		Add(ctx.blockAnchor.Signature)
@@ -85,7 +85,7 @@ func (x BlockAnchor) process(batch *database.Batch, ctx *blockAnchorContext) err
 	}
 
 	// Add the signature to the signature chain
-	err = batch.Account(ctx.effectivePrincipal()).
+	err = batch.Account(ctx.transaction.Header.Principal).
 		Transaction(ctx.transaction.ID().Hash()).
 		RecordHistory(ctx.message)
 	if err != nil {
@@ -189,7 +189,7 @@ func (x BlockAnchor) check(ctx *MessageContext, batch *database.Batch) (*blockAn
 }
 
 func (x BlockAnchor) txnIsReady(batch *database.Batch, ctx *blockAnchorContext) (bool, error) {
-	sigs, err := batch.Account(ctx.effectivePrincipal()).
+	sigs, err := batch.Account(ctx.transaction.Header.Principal).
 		Transaction(ctx.transaction.ID().Hash()).
 		ValidatorSignatures().
 		Get()
