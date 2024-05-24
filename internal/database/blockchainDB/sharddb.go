@@ -8,8 +8,8 @@ import (
 )
 
 const (
-	ShardBits = 9
-	Shards    = 512 // Number of shards in bits
+	ShardBits = 8
+	Shards    = 256 // Number of shards in bits
 )
 
 // ShardDB
@@ -22,7 +22,7 @@ type ShardDB struct {
 	Shards    [Shards]*Shard // List of all the Shards
 }
 
-func CreateShardDB(Directory string, Partition, BufferCnt int) (SDB *ShardDB, err error) {
+func NewShardDB(Directory string, Partition, BufferCnt int) (SDB *ShardDB, err error) {
 	_, err = os.Stat(Directory)
 	if err == nil {
 		return nil, fmt.Errorf("cannot create ShardDB; directory %s exists", Directory)

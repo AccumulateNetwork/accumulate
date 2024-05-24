@@ -79,7 +79,6 @@ type BFile struct {
 	EOB       int                    // End of the current buffer... Where to put the next data 'write'
 }
 
-
 // Get
 // Get the value for a given DBKeyFull
 func (b *BFile) Get(Key [32]byte) (value []byte, err error) {
@@ -134,6 +133,7 @@ func (b *BFile) Close() {
 				panic(err)
 			}
 		}
+		b.Keys = nil                           // Drop the reference to the Keys map
 		b.bfWriter.Close(b.Buffer, b.EOB, eod) // Close that file
 		b.bfWriter = nil                       // kill any reference to the bfWriter
 		b.Buffer = nil                         // Close writes the buffer, and the file is closed. clear the buffer
@@ -160,8 +160,9 @@ func (b *BFile) CreateBuffers() {
 
 // NewBFile
 // Creates a new Buffered file.  The caller is responsible for writing the header
-func NewBFile( Filename string, BufferCnt int) (bFile *BFile, err error) {
+func NewBFile(Filename string, BufferCnt int) (bFile *BFile, err error) {
 	bFile = new(BFile)                     // create a new BFile
+	bFile.FileName = Filename              //
 	bFile.Keys = make(map[[32]byte]DBBKey) // Allocate the Keys map
 	bFile.BufferCnt = BufferCnt            // How many buffers we are going to use
 	if bFile.File, err = os.Create(Filename); err != nil {
@@ -222,8 +223,6 @@ func (b *BFile) Write(Data []byte) error {
 	return b.Write(Data)              // Write out the remaining data
 }
 
-
-
 // OpenBFile
 // Open a DBBlock file at a given height for read/write access
 // The only legitimate writes to a BFile would be to add/update keys
@@ -272,3 +271,46 @@ func OpenBFile(BufferCnt int, Filename string) (bFile *BFile, err error) {
 	return b, err
 }
 
+// Compress
+// Reads the entire BFile into memory then writes it back out again.
+// The BFile is closed.  The new compressed BFile is returned, along with an error
+// If an error is reported, the state of the BFile is undetermined.
+func (b *BFile) Compress() (newBFile *BFile, err error) {
+
+	// Get the state of the BFile needed and
+	// Close the BFile (to flush it all to disk)
+	keys := b.Keys         // These are the keys so far
+	EOD := b.EOD           // The length of the values
+	filename := b.FileName // The filename
+
+	b.Close() // Close the BFile to force all its contents to disk
+	b.Block() // Block here to ensure all writes and the close completes
+
+	// Now read the values into a values buffer
+	values := make([]byte, EOD)    // EOD provides the byte length of all values
+	file, err := os.Open(filename) // Open the file
+	if err != nil {
+		return nil, err
+	}
+	if cnt, err := file.Read(values); cnt != int(EOD) || err != nil {
+		if err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("read %d bytes, tried to read %d bytes",cnt,EOD)
+	}
+
+	// At this point, the keys have the offsets and lengths to each value
+	// Open a new BFile, and write all the keys and values.  Now
+	// no gaps remain in the BFile for values that have had multiple values
+	// written to them.
+
+	if b, err = NewBFile(filename, 5); err != nil { // Create a new BFile
+		return nil, err
+	}
+	for k, v := range keys { //                        Write all the key value pairs
+		value := values[v.Offset : v.Offset+v.Length]
+		b.Put(k, value)
+	}
+
+	return b, nil
+}

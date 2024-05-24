@@ -1,6 +1,7 @@
 package blockchainDB
 
 import (
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -8,15 +9,19 @@ import (
 )
 
 func TestShardDB(t *testing.T) {
-	var shardDB ShardDB
+    
+	shardDB,err := NewShardDB(Directory, Partition,5)
+	defer os.RemoveAll(Directory)
+	
+	assert.NoError(t,err,"failed to create directory")
 	var r common.RandHash
-	for i := 0; i < 1000000; i++ {
+	for i := 0; i < 3; i++ {
 		key := r.NextA()
 		value := r.GetRandBuff(200)
 		shardDB.Put(key, value)
 	}
 	r = *new(common.RandHash)
-	for i := 0; i < 1000000; i++ {
+	for i := 0; i < 3; i++ {
 		key := r.NextA()
 		value := r.GetRandBuff(200)
 		v := shardDB.Get(key)

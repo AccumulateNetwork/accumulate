@@ -2,16 +2,13 @@ package blockchainDB
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/dgraph-io/badger"
 	"github.com/stretchr/testify/assert"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/common"
 )
 
 const (
@@ -24,13 +21,13 @@ const (
 	MaxBadgerSize = 10_000    // Maximum size of Badger tx
 )
 
-var Directory = filepath.Join(os.TempDir(), "DBBlock")
+var Directory = filepath.Join(os.TempDir(), "ShardDBTest")
 var KeySliceDir = filepath.Join(Directory, "keySlice")
 
 func TestWriteSmallKeys(t *testing.T) {
 
 	filename := filepath.Join(os.TempDir(), "BFileTest.dat")
-	bFile, err := NewBFile( filename,5)
+	bFile, err := NewBFile(filename, 5)
 	assert.NoError(t, err, "expected no error creating BBFile")
 
 	getKey := func(v byte) (r [32]byte) {
@@ -56,7 +53,7 @@ func TestWriteKeys(t *testing.T) {
 
 	start := time.Now()
 	filename := filepath.Join(os.TempDir(), "BFileTest.dat")
-	bFile, err := NewBFile(filename,5)
+	bFile, err := NewBFile(filename, 5)
 	assert.NoError(t, err, "expected no error creating BBFile")
 
 	fr := NewFastRandom([32]byte{}) // Make a random number generator
@@ -79,7 +76,7 @@ func TestReadKeys(t *testing.T) {
 	os.Mkdir(Directory, os.ModePerm)
 
 	filename := filepath.Join(os.TempDir(), "BFileTest.dat")
-	bFile, err := NewBFile(filename,5)
+	bFile, err := NewBFile(filename, 5)
 	assert.NoError(t, err, "expected no error creating BBFile")
 
 	fr := NewFastRandom([32]byte{}) // Make a random number generator
@@ -110,46 +107,43 @@ func TestReadKeys(t *testing.T) {
 
 }
 
-func TestBadger(t *testing.T) {
-	fmt.Println("TestBadger 1141.7 t/s")
+func TestCompress(t *testing.T) {
 
-	os.RemoveAll(Directory)
-	os.Mkdir(Directory, os.ModePerm)
+	fr := NewFastRandom([32]byte{1, 2, 3, 4, 5}) // Random generator
 
-	badgerFile := filepath.Join(Directory, "badger")
-	DB, err := badger.Open(badger.DefaultOptions(badgerFile))
-	defer func() {
-		_ = DB.Close()
-	}()
-	assert.NoError(t, err, "failed to open badger db")
-	tx := DB.NewTransaction(true)
-	txSize := 0
+	TotalKeys := 100000            // Allocate some keys
+	Keys := make(map[int][32]byte) // put into a map
+	for i := 0; i < TotalKeys; i++ {
+		Keys[i] = fr.NextHash()
+	}
 
-	start := time.Now()
+	TotalCompressions := 10 // Compress this many times after writing
+	TotalWrites := 10000  // so many keys
 
-	var rh common.RandHash
-	for i := 0; i < Writes; i++ {
-		value := rh.GetRandBuff(rh.GetIntN(MaxSize-MinSize) + MinSize)
-		key := sha256.Sum256(value)
+	Directory := filepath.Join(os.TempDir(), "dynamic")
+	os.Mkdir(Directory,os.ModePerm)
+    defer os.RemoveAll(Directory)
+	filename := filepath.Join(Directory, "shard.dat")
 
-		if txSize+len(value) > MaxBadgerSize {
-			err = tx.Commit()
-			assert.NoError(t, err, "fail to commit")
-			tx.Discard()
-			tx = DB.NewTransaction(true)
+	BFile,err := NewBFile(filename, 5)
+	assert.NoError(t,err,"failed to create BFile")
+	
+	for i := 0; i < TotalCompressions; i++ {
+		newLen :=0
+		for i := 0; i < TotalWrites; i++ {
+			key := Keys[int(fr.UintN(uint(TotalKeys)))]
+			value := fr.RandBuff(200, 1024)
+			err := BFile.Put(key,value)
+			newLen += len(value)
+			assert.NoError(t,err,"failed to write value")
 		}
-		err = tx.Set(key[:], value)
-		assert.NoError(t, err, "badger Set fail")
-		txSize += len(value) + 64 // figure txSize is value + key + overhead. Not exact.
-
-	}
-	err = tx.Commit()
-	assert.NoError(t, err, "fail to commit")
-	tx.Discard()
-
-	for i := 0; i < Writes; i++ {
-
+		fmt.Printf("compress %3d ",i)
+		BFile, err = BFile.Compress()
+		fmt.Print("!\n")
+		if err != nil {
+			panic(err)
+		}
+		assert.NoError(t,err,"failed to compress")
 	}
 
-	fmt.Printf("%10.1f t/s", float64(Writes)/time.Since(start).Seconds())
 }
