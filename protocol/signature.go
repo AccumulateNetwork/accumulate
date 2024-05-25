@@ -35,18 +35,18 @@ type ethSignatureV1 struct {
 }
 
 // VerifyUserSignatureV1 verifies that the user signature signs the given message using version 1 logic
-func VerifyUserSignatureV1(sig UserSignature, message []byte) bool {
+func VerifyUserSignatureV1(sig UserSignature, message []byte, transaction *Transaction) bool {
 	if sig.Type() == SignatureTypeETH {
 		//recast ETHSignature type to use V1 signature format
 		sig = &ethSignatureV1{sig.(*ETHSignature)}
 	}
 
-	return VerifyUserSignature(sig, message)
+	return VerifyUserSignature(sig, message, transaction)
 }
 
 // VerifyUserSignature verifies that the user signature signs the given message.
-func VerifyUserSignature(sig UserSignature, message []byte) bool {
-	if sig.Verify(sig.Metadata().Hash(), message) {
+func VerifyUserSignature(sig UserSignature, message []byte, transaction *Transaction) bool {
+	if sig.Verify(sig.Metadata().Hash(), message, transaction) {
 		return true
 	}
 
@@ -54,7 +54,7 @@ func VerifyUserSignature(sig UserSignature, message []byte) bool {
 	if err != nil {
 		return false
 	}
-	return sig.Verify(h.MerkleHash(), message)
+	return sig.Verify(h.MerkleHash(), message, transaction)
 }
 
 type Signature interface {
@@ -75,7 +75,7 @@ type Signature interface {
 type UserSignature interface {
 	Signature
 	Initiator() (hash.Hasher, error)
-	Verify(sigMdHash, hash []byte) bool
+	Verify(sigMdHash, hash []byte, transaction *Transaction) bool
 }
 
 type KeySignature interface {
@@ -113,7 +113,8 @@ func PublicKeyHash(key []byte, typ SignatureType) ([]byte, error) {
 		SignatureTypeBTCLegacy:
 		return BTCHash(key), nil
 
-	case SignatureTypeETH:
+	case SignatureTypeETH,
+		SignatureTypeEip712TypedData:
 		return ETHhash(key), nil
 
 	case SignatureTypeReceipt,
@@ -150,6 +151,12 @@ func doSha256(data []byte) []byte {
 	hash := sha256.Sum256(data)
 	return hash[:]
 }
+
+//var EIP712DomainType = EIP712Domain{
+//	Name:    "Accumulate",
+//	Version: "0.0.1",
+//	ChainId: 281,
+//}
 
 // generates privatekey and compressed public key
 func SECP256K1Keypair() (privKey []byte, pubKey []byte) {
@@ -319,6 +326,7 @@ func SignLegacyED25519(sig *LegacyED25519Signature, privateKey, sigMdHash, txnHa
 	if sigMdHash == nil {
 		sigMdHash = sig.Metadata().Hash()
 	}
+
 	data := sigMdHash
 	data = append(data, common.Uint64Bytes(sig.Timestamp)...)
 	data = append(data, txnHash...)
@@ -382,7 +390,7 @@ func (s *LegacyED25519Signature) GetVote() VoteType {
 
 // Verify returns true if this signature is a valid legacy ED25519 signature of
 // the hash.
-func (e *LegacyED25519Signature) Verify(sigMdHash, txnHash []byte) bool {
+func (e *LegacyED25519Signature) Verify(sigMdHash, txnHash []byte, _ *Transaction) bool {
 	if len(e.PublicKey) != 32 || len(e.Signature) != 64 {
 		return false
 	}
@@ -460,7 +468,7 @@ func (s *ED25519Signature) GetVote() VoteType {
 
 // Verify returns true if this signature is a valid ED25519 signature of the
 // hash.
-func (e *ED25519Signature) Verify(sigMdHash, txnHash []byte) bool {
+func (e *ED25519Signature) Verify(sigMdHash, txnHash []byte, _ *Transaction) bool {
 	if len(e.PublicKey) != 32 || len(e.Signature) != 64 {
 		return false
 	}
@@ -494,7 +502,7 @@ func (s *RCD1Signature) GetPublicKeyHash() []byte { return GetRCDHashFromPublicK
 func (s *RCD1Signature) GetPublicKey() []byte { return s.PublicKey }
 
 // Verify returns true if this signature is a valid RCD1 signature of the hash.
-func (e *RCD1Signature) Verify(sigMdHash, txnHash []byte) bool {
+func (e *RCD1Signature) Verify(sigMdHash, txnHash []byte, _ *Transaction) bool {
 	if len(e.PublicKey) != 32 || len(e.Signature) != 64 {
 		return false
 	}
@@ -607,7 +615,7 @@ func (s *BTCSignature) GetVote() VoteType {
 
 // Verify returns true if this signature is a valid SECP256K1 signature of the
 // hash.
-func (e *BTCSignature) Verify(sigMdHash, txnHash []byte) bool {
+func (e *BTCSignature) Verify(sigMdHash, txnHash []byte, _ *Transaction) bool {
 	sig, err := btc.ParseSignature(e.Signature, btc.S256())
 	if err != nil {
 		return false
@@ -689,7 +697,7 @@ func (s *BTCLegacySignature) GetVote() VoteType {
 
 // Verify returns true if this signature is a valid SECP256K1 signature of the
 // hash.
-func (e *BTCLegacySignature) Verify(sigMdHash, txnHash []byte) bool {
+func (e *BTCLegacySignature) Verify(sigMdHash, txnHash []byte, _ *Transaction) bool {
 	sig, err := btc.ParseSignature(e.Signature, btc.S256())
 	if err != nil {
 		return false
@@ -792,7 +800,7 @@ func (s *ETHSignature) GetVote() VoteType {
 }
 
 // Deprecated: Verify returns true if this signature is a valid signature in DER format of the hash.
-func (e *ethSignatureV1) Verify(sigMdHash, txnHash []byte) bool {
+func (e *ethSignatureV1) Verify(sigMdHash, txnHash []byte, _ *Transaction) bool {
 	//process signature as DER format
 	sig, err := btc.ParseSignature(e.Signature, btc.S256())
 	if err != nil {
@@ -806,7 +814,7 @@ func (e *ethSignatureV1) Verify(sigMdHash, txnHash []byte) bool {
 }
 
 // Verify returns true if this signature is a valid RSV signature of the hash, with V2 we drop support for DER format
-func (e *ETHSignature) Verify(sigMdHash, txnHash []byte) bool {
+func (e *ETHSignature) Verify(sigMdHash, txnHash []byte, _ *Transaction) bool {
 	sig := e.Signature
 	if len(sig) == 65 {
 		//extract RS of the RSV format
@@ -986,12 +994,12 @@ func (s *DelegatedSignature) Initiator() (hash.Hasher, error) {
 	return hasher, nil
 }
 
-func (s *DelegatedSignature) Verify(sigMdHash, hash []byte) bool {
+func (s *DelegatedSignature) Verify(sigMdHash, hash []byte, transaction *Transaction) bool {
 	switch sig := s.Signature.(type) {
 	case KeySignature:
-		return sig.Verify(sigMdHash, hash)
+		return sig.Verify(sigMdHash, hash, transaction)
 	case *DelegatedSignature:
-		return sig.Verify(sigMdHash, hash)
+		return sig.Verify(sigMdHash, hash, transaction)
 	}
 	return false
 }
@@ -1132,7 +1140,7 @@ func (s *RsaSha256Signature) GetVote() VoteType {
 
 // Verify returns true if this signature is a valid RSA signature of the
 // hash. The public key is expected to be in PKCS#1 ASN.1 DER format
-func (e *RsaSha256Signature) Verify(sigMdHash, txnHash []byte) bool {
+func (e *RsaSha256Signature) Verify(sigMdHash, txnHash []byte, _ *Transaction) bool {
 	//Convert public DER key into and rsa public key struct
 	pubKey, err := x509.ParsePKCS1PublicKey(e.PublicKey)
 	if err != nil {
@@ -1147,4 +1155,101 @@ func (e *RsaSha256Signature) Verify(sigMdHash, txnHash []byte) bool {
 	// Verify signature
 	err = rsa.VerifyPKCS1v15(pubKey, crypto.SHA256, signingHash(e, doSha256, sigMdHash, txnHash), e.Signature)
 	return err == nil
+}
+
+/*
+ * EIP-712 Typed Data Signature
+ * privateKey must be ecdsa
+ */
+func SignEip712TypedData(sig *Eip712TypedDataSignature, privateKeyDer, sigMdHash, txnHash []byte) error {
+	//private key is expected to be in PKCS #1, ASN.1 DER format
+	privateKey, err := x509.ParsePKCS1PrivateKey(privateKeyDer)
+	if err != nil {
+		return err
+	}
+
+	// Sign the signing hash
+	sig.Signature, err = rsa.SignPKCS1v15(rand.Reader, privateKey, crypto.SHA256, signingHash(sig, doSha256, sigMdHash, txnHash))
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// GetSigner returns Signer.
+func (s *Eip712TypedDataSignature) GetSigner() *url.URL { return s.Signer }
+
+// RoutingLocation returns Signer.
+func (s *Eip712TypedDataSignature) RoutingLocation() *url.URL { return s.Signer }
+
+// GetSignerVersion returns SignerVersion.
+func (s *Eip712TypedDataSignature) GetSignerVersion() uint64 { return s.SignerVersion }
+
+// GetTimestamp returns Timestamp.
+func (s *Eip712TypedDataSignature) GetTimestamp() uint64 { return s.Timestamp }
+
+// GetPublicKeyHash returns the hash of PublicKey.
+func (s *Eip712TypedDataSignature) GetPublicKeyHash() []byte { return doSha256(s.PublicKey) }
+
+// GetPublicKey returns PublicKey.
+func (s *Eip712TypedDataSignature) GetPublicKey() []byte { return s.PublicKey }
+
+// GetSignature returns Signature.
+func (s *Eip712TypedDataSignature) GetSignature() []byte { return s.Signature }
+
+// GetTransactionHash returns TransactionHash.
+func (s *Eip712TypedDataSignature) GetTransactionHash() [32]byte { return s.TransactionHash }
+
+// Hash returns the hash of the signature.
+func (s *Eip712TypedDataSignature) Hash() []byte { return signatureHash(s) }
+
+// Metadata returns the signature's metadata.
+func (s *Eip712TypedDataSignature) Metadata() Signature {
+	r := s.Copy()                  // Copy the struct
+	r.Signature = nil              // Clear the signature
+	r.TransactionHash = [32]byte{} // And the transaction hash
+	return r
+}
+
+// Initiator returns a Hasher that calculates the Merkle hash of the signature.
+func (s *Eip712TypedDataSignature) Initiator() (hash.Hasher, error) {
+	if len(s.PublicKey) == 0 || s.Signer == nil || s.SignerVersion == 0 || s.Timestamp == 0 {
+		return nil, ErrCannotInitiate
+	}
+
+	hasher := make(hash.Hasher, 0, 4)
+	hasher.AddBytes(s.PublicKey)
+	hasher.AddUrl(s.Signer)
+	hasher.AddUint(s.SignerVersion)
+	hasher.AddUint(s.Timestamp)
+	return hasher, nil
+}
+
+// GetVote returns how the signer votes on a particular transaction
+func (s *Eip712TypedDataSignature) GetVote() VoteType {
+	return s.Vote
+}
+
+// Verify returns true if this signature is a valid EIP-712 signature following
+// the spec.
+func (e *Eip712TypedDataSignature) Verify(sigMdHash, txnHash []byte, txn *Transaction) bool {
+	//must marshal the typed data from json into binary, and generate transaction hash
+
+	err := txn.UnmarshalBinary(e.Data) //UnmarshalJSON([]byte(e.TypedData))
+	if err != nil {
+		return false
+	}
+
+	//lookup the type
+	//map the type
+	typedDataTxnHash := txn.Hash()
+	if !bytes.Equal(typedDataTxnHash[:], txnHash) {
+		return false
+	}
+	sig := e.Signature
+	if len(sig) == 65 {
+		//extract RS of the RSV format
+		sig = sig[:64]
+	}
+	return eth.VerifySignature(e.PublicKey, signingHash(e, doSha256, sigMdHash, txnHash), sig)
 }

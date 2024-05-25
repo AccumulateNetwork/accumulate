@@ -1615,6 +1615,13 @@ var fieldNames_ChainState = []string{
 	4: "Roots",
 }
 
+var fieldTypes_ChainState = []string{
+	1: "string",
+	2: "string",
+	3: "uint64",
+	4: "bytes[]",
+}
+
 func (v *ChainState) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -1685,6 +1692,11 @@ var fieldNames_DataEntryQuery = []string{
 	2: "EntryHash",
 }
 
+var fieldTypes_DataEntryQuery = []string{
+	1: "string",
+	2: "bytes32",
+}
+
 func (v *DataEntryQuery) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -1732,6 +1744,13 @@ var fieldNames_DataEntryQueryResponse = []string{
 	2: "Entry",
 	3: "TxId",
 	4: "CauseTxId",
+}
+
+var fieldTypes_DataEntryQueryResponse = []string{
+	1: "bytes32",
+	2: "protocol.DataEntry",
+	3: "string",
+	4: "string",
 }
 
 func (v *DataEntryQueryResponse) MarshalBinary() ([]byte, error) {
@@ -1804,6 +1823,15 @@ var fieldNames_GeneralReceipt = []string{
 	4: "MajorBlock",
 	5: "Proof",
 	6: "Error",
+}
+
+var fieldTypes_GeneralReceipt = []string{
+	1: "uint64",
+	2: "string",
+	3: "uint64",
+	4: "uint64",
+	5: "merkle.Receipt",
+	6: "string",
 }
 
 func (v *GeneralReceipt) MarshalBinary() ([]byte, error) {
@@ -1890,6 +1918,11 @@ var fieldNames_NetworkDescription = []string{
 	2: "Partitions",
 }
 
+var fieldTypes_NetworkDescription = []string{
+	1: "string",
+	2: "PartitionDescription[]",
+}
+
 func (v *NetworkDescription) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -1944,6 +1977,11 @@ var fieldNames_NodeDescription = []string{
 	2: "Type",
 }
 
+var fieldTypes_NodeDescription = []string{
+	1: "string",
+	2: "string",
+}
+
 func (v *NodeDescription) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -1996,6 +2034,13 @@ var fieldNames_PartitionDescription = []string{
 	2: "Type",
 	3: "BasePort",
 	4: "Nodes",
+}
+
+var fieldTypes_PartitionDescription = []string{
+	1: "string",
+	2: "string",
+	3: "int64",
+	4: "NodeDescription[]",
 }
 
 func (v *PartitionDescription) MarshalBinary() ([]byte, error) {
@@ -2070,6 +2115,13 @@ var fieldNames_ResponseDataEntry = []string{
 	4: "CauseTxId",
 }
 
+var fieldTypes_ResponseDataEntry = []string{
+	1: "bytes32",
+	2: "protocol.DataEntry",
+	3: "string",
+	4: "string",
+}
+
 func (v *ResponseDataEntry) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -2138,6 +2190,11 @@ var fieldNames_ResponseDataEntrySet = []string{
 	2: "Total",
 }
 
+var fieldTypes_ResponseDataEntrySet = []string{
+	1: "ResponseDataEntry[]",
+	2: "uint64",
+}
+
 func (v *ResponseDataEntrySet) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -2191,6 +2248,12 @@ var fieldNames_ResponseKeyPageIndex = []string{
 	1: "Authority",
 	2: "Signer",
 	3: "Index",
+}
+
+var fieldTypes_ResponseKeyPageIndex = []string{
+	1: "string",
+	2: "string",
+	3: "uint64",
 }
 
 func (v *ResponseKeyPageIndex) MarshalBinary() ([]byte, error) {
@@ -2248,6 +2311,12 @@ var fieldNames_TxReceipt = []string{
 	1: "GeneralReceipt",
 	2: "Account",
 	3: "Chain",
+}
+
+var fieldTypes_TxReceipt = []string{
+	1: "GeneralReceipt",
+	2: "string",
+	3: "string",
 }
 
 func (v *TxReceipt) MarshalBinary() ([]byte, error) {
@@ -2649,6 +2718,353 @@ func (v *TxReceipt) UnmarshalBinaryFrom(rd io.Reader) error {
 		return encoding.Error{E: err}
 	}
 	return nil
+}
+
+func initEip712TypeDictionary() {
+
+	encoding.SchemaDictionary["ChainEntry"] = &[]encoding.TypeField{
+		{"height", "uint64"},
+		{"entry", "bytes"},
+		{"state", "bytes[]"},
+		{"value", "Any"},
+	}
+
+	encoding.SchemaDictionary["ChainIdQuery"] = &[]encoding.TypeField{
+		{"chainId", "bytes"},
+	}
+
+	encoding.SchemaDictionary["ChainQueryResponse"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"mainChain", "MerkleState"},
+		{"chains", "ChainState[]"},
+		{"data", "Any"},
+		{"chainId", "bytes"},
+		{"receipt", "GeneralReceipt"},
+	}
+
+	encoding.SchemaDictionary["ChainState"] = &[]encoding.TypeField{
+		{"name", "string"},
+		{"type", "string"},
+		{"height", "uint64"},
+		{"roots", "bytes[]"},
+	}
+
+	encoding.SchemaDictionary["DataEntryQuery"] = &[]encoding.TypeField{
+		{"url", "string"},
+		{"entryHash", "bytes32"},
+	}
+
+	encoding.SchemaDictionary["DataEntryQueryResponse"] = &[]encoding.TypeField{
+		{"entryHash", "bytes32"},
+		{"entry", "protocol.DataEntry"},
+		{"txId", "string"},
+		{"causeTxId", "string"},
+	}
+
+	encoding.SchemaDictionary["DataEntrySetQuery"] = &[]encoding.TypeField{
+		{"url", "string"},
+		{"start", "uint64"},
+		{"count", "uint64"},
+		{"expand", "bool"},
+		{"height", "uint64"},
+		{"scratch", "bool"},
+		{"prove", "bool"},
+		{"includeRemote", "bool"},
+	}
+
+	encoding.SchemaDictionary["DescriptionResponse"] = &[]encoding.TypeField{
+		{"partitionId", "string"},
+		{"networkType", "string"},
+		{"network", "NetworkDescription"},
+		{"networkAnchor", "bytes32"},
+		{"values", "core.GlobalValues"},
+		{"error", "errors2.Error"},
+	}
+
+	encoding.SchemaDictionary["DirectoryQuery"] = &[]encoding.TypeField{
+		{"url", "string"},
+		{"start", "uint64"},
+		{"count", "uint64"},
+		{"expand", "bool"},
+		{"height", "uint64"},
+		{"scratch", "bool"},
+		{"prove", "bool"},
+		{"includeRemote", "bool"},
+	}
+
+	encoding.SchemaDictionary["ExecuteRequest"] = &[]encoding.TypeField{
+		{"envelope", "messaging.Envelope"},
+		{"checkOnly", "bool"},
+	}
+
+	encoding.SchemaDictionary["GeneralQuery"] = &[]encoding.TypeField{
+		{"url", "string"},
+		{"expand", "bool"},
+		{"height", "uint64"},
+		{"scratch", "bool"},
+		{"prove", "bool"},
+		{"includeRemote", "bool"},
+	}
+
+	encoding.SchemaDictionary["GeneralReceipt"] = &[]encoding.TypeField{
+		{"localBlock", "uint64"},
+		{"localBlockTime", "string"},
+		{"directoryBlock", "uint64"},
+		{"majorBlock", "uint64"},
+		{"proof", "merkle.Receipt"},
+		{"error", "string"},
+	}
+
+	encoding.SchemaDictionary["KeyPage"] = &[]encoding.TypeField{
+		{"version", "uint64"},
+	}
+
+	encoding.SchemaDictionary["KeyPageIndexQuery"] = &[]encoding.TypeField{
+		{"url", "string"},
+		{"key", "bytes"},
+	}
+
+	encoding.SchemaDictionary["MajorBlocksQuery"] = &[]encoding.TypeField{
+		{"url", "string"},
+		{"start", "uint64"},
+		{"count", "uint64"},
+	}
+
+	encoding.SchemaDictionary["MajorQueryResponse"] = &[]encoding.TypeField{
+		{"majorBlockIndex", "uint64"},
+		{"majorBlockTime", "string"},
+		{"minorBlocks", "MinorBlock[]"},
+	}
+
+	encoding.SchemaDictionary["MerkleState"] = &[]encoding.TypeField{
+		{"height", "uint64"},
+		{"roots", "bytes[]"},
+	}
+
+	encoding.SchemaDictionary["MetricsQuery"] = &[]encoding.TypeField{
+		{"metric", "string"},
+		{"duration", "string"},
+	}
+
+	encoding.SchemaDictionary["MetricsResponse"] = &[]encoding.TypeField{
+		{"value", "Any"},
+	}
+
+	encoding.SchemaDictionary["MinorBlock"] = &[]encoding.TypeField{
+		{"blockIndex", "uint64"},
+		{"blockTime", "string"},
+	}
+
+	encoding.SchemaDictionary["MinorBlocksQuery"] = &[]encoding.TypeField{
+		{"url", "string"},
+		{"start", "uint64"},
+		{"count", "uint64"},
+		{"txFetchMode", "string"},
+		{"blockFilterMode", "string"},
+	}
+
+	encoding.SchemaDictionary["MinorQueryResponse"] = &[]encoding.TypeField{
+		{"blockIndex", "uint64"},
+		{"blockTime", "string"},
+		{"txCount", "uint64"},
+		{"txIds", "bytes[]"},
+		{"transactions", "TransactionQueryResponse[]"},
+	}
+
+	encoding.SchemaDictionary["MultiResponse"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"items", "Any[]"},
+		{"start", "uint64"},
+		{"count", "uint64"},
+		{"total", "uint64"},
+		{"otherItems", "Any[]"},
+	}
+
+	encoding.SchemaDictionary["NetworkDescription"] = &[]encoding.TypeField{
+		{"id", "string"},
+		{"partitions", "PartitionDescription[]"},
+	}
+
+	encoding.SchemaDictionary["NodeDescription"] = &[]encoding.TypeField{
+		{"address", "string"},
+		{"type", "string"},
+	}
+
+	encoding.SchemaDictionary["PartitionDescription"] = &[]encoding.TypeField{
+		{"id", "string"},
+		{"type", "string"},
+		{"basePort", "int64"},
+		{"nodes", "NodeDescription[]"},
+	}
+
+	encoding.SchemaDictionary["QueryOptions"] = &[]encoding.TypeField{
+		{"expand", "bool"},
+		{"height", "uint64"},
+		{"scratch", "bool"},
+		{"prove", "bool"},
+		{"includeRemote", "bool"},
+	}
+
+	encoding.SchemaDictionary["QueryPagination"] = &[]encoding.TypeField{
+		{"start", "uint64"},
+		{"count", "uint64"},
+	}
+
+	encoding.SchemaDictionary["ResponseDataEntry"] = &[]encoding.TypeField{
+		{"entryHash", "bytes32"},
+		{"entry", "protocol.DataEntry"},
+		{"txId", "string"},
+		{"causeTxId", "string"},
+	}
+
+	encoding.SchemaDictionary["ResponseDataEntrySet"] = &[]encoding.TypeField{
+		{"dataEntries", "ResponseDataEntry[]"},
+		{"total", "uint64"},
+	}
+
+	encoding.SchemaDictionary["ResponseKeyPageIndex"] = &[]encoding.TypeField{
+		{"authority", "string"},
+		{"signer", "string"},
+		{"index", "uint64"},
+	}
+
+	encoding.SchemaDictionary["SignatureBook"] = &[]encoding.TypeField{
+		{"authority", "string"},
+		{"pages", "SignaturePage[]"},
+	}
+
+	encoding.SchemaDictionary["SignaturePage"] = &[]encoding.TypeField{
+		{"signer", "SignerMetadata"},
+		{"signatures", "protocol.Signature[]"},
+	}
+
+	encoding.SchemaDictionary["Signer"] = &[]encoding.TypeField{
+		{"publicKey", "bytes"},
+		{"timestamp", "uint64"},
+		{"url", "string"},
+		{"version", "uint64"},
+		{"signatureType", "string"},
+		{"useSimpleHash", "bool"},
+	}
+
+	encoding.SchemaDictionary["SignerMetadata"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"url", "string"},
+		{"acceptThreshold", "uint64"},
+	}
+
+	encoding.SchemaDictionary["StatusResponse"] = &[]encoding.TypeField{
+		{"ok", "bool"},
+		{"bvnHeight", "int64"},
+		{"dnHeight", "int64"},
+		{"bvnTime", "string"},
+		{"dnTime", "string"},
+		{"lastDirectoryAnchorHeight", "uint64"},
+		{"bvnRootHash", "bytes32"},
+		{"dnRootHash", "bytes32"},
+		{"bvnBptHash", "bytes32"},
+		{"dnBptHash", "bytes32"},
+	}
+
+	encoding.SchemaDictionary["SyntheticTransactionRequest"] = &[]encoding.TypeField{
+		{"source", "string"},
+		{"destination", "string"},
+		{"sequenceNumber", "uint64"},
+		{"anchor", "bool"},
+	}
+
+	encoding.SchemaDictionary["TokenDeposit"] = &[]encoding.TypeField{
+		{"url", "string"},
+		{"amount", "uint256"},
+		{"txid", "bytes"},
+	}
+
+	encoding.SchemaDictionary["TokenSend"] = &[]encoding.TypeField{
+		{"from", "string"},
+		{"to", "TokenDeposit[]"},
+	}
+
+	encoding.SchemaDictionary["TransactionQueryResponse"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"mainChain", "MerkleState"},
+		{"data", "Any"},
+		{"origin", "string"},
+		{"transactionHash", "bytes"},
+		{"txid", "string"},
+		{"transaction", "protocol.Transaction"},
+		{"signatures", "protocol.Signature[]"},
+		{"status", "protocol.TransactionStatus"},
+		{"produced", "string[]"},
+		{"receipts", "TxReceipt[]"},
+		{"signatureBooks", "SignatureBook[]"},
+	}
+
+	encoding.SchemaDictionary["TxHistoryQuery"] = &[]encoding.TypeField{
+		{"url", "string"},
+		{"start", "uint64"},
+		{"count", "uint64"},
+		{"scratch", "bool"},
+	}
+
+	encoding.SchemaDictionary["TxReceipt"] = &[]encoding.TypeField{
+		{"localBlock", "uint64"},
+		{"localBlockTime", "string"},
+		{"directoryBlock", "uint64"},
+		{"majorBlock", "uint64"},
+		{"proof", "merkle.Receipt"},
+		{"error", "string"},
+		{"account", "string"},
+		{"chain", "string"},
+	}
+
+	encoding.SchemaDictionary["TxRequest"] = &[]encoding.TypeField{
+		{"checkOnly", "bool"},
+		{"isEnvelope", "bool"},
+		{"origin", "string"},
+		{"signer", "Signer"},
+		{"signature", "bytes"},
+		{"keyPage", "KeyPage"},
+		{"txHash", "bytes"},
+		{"payload", "Any"},
+		{"memo", "string"},
+		{"metadata", "bytes"},
+	}
+
+	encoding.SchemaDictionary["TxResponse"] = &[]encoding.TypeField{
+		{"transactionHash", "bytes"},
+		{"txid", "string"},
+		{"signatureHashes", "bytes[]"},
+		{"simpleHash", "bytes"},
+		{"code", "uint64"},
+		{"message", "string"},
+		{"delivered", "bool"},
+		{"result", "Any"},
+	}
+
+	encoding.SchemaDictionary["TxnQuery"] = &[]encoding.TypeField{
+		{"expand", "bool"},
+		{"height", "uint64"},
+		{"scratch", "bool"},
+		{"prove", "bool"},
+		{"includeRemote", "bool"},
+		{"txid", "bytes"},
+		{"txIdUrl", "string"},
+		{"wait", "string"},
+		{"ignorePending", "bool"},
+	}
+
+	encoding.SchemaDictionary["UrlQuery"] = &[]encoding.TypeField{
+		{"url", "string"},
+	}
+
+	encoding.SchemaDictionary["VersionResponse"] = &[]encoding.TypeField{
+		{"version", "string"},
+		{"commit", "string"},
+		{"versionIsKnown", "bool"},
+		{"isTestNet", "bool"},
+	}
+
+	encoding.ResolveTypeDefinitions()
 }
 
 func (v *ChainEntry) MarshalJSON() ([]byte, error) {

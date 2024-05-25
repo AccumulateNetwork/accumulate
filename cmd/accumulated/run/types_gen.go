@@ -336,6 +336,66 @@ func (v *TransientPrivateKey) Equal(u *TransientPrivateKey) bool {
 	return true
 }
 
+func initEip712TypeDictionary() {
+
+	encoding.SchemaDictionary["CometNodeKeyFile"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"key", "address.Address"},
+		{"path", "string"},
+	}
+
+	encoding.SchemaDictionary["CometPrivValFile"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"key", "address.Address"},
+		{"path", "string"},
+	}
+
+	encoding.SchemaDictionary["Config"] = &[]encoding.TypeField{
+		{"file", "string"},
+		{"network", "string"},
+		{"logging", "Logging"},
+		{"p2P", "P2P"},
+	}
+
+	encoding.SchemaDictionary["Logging"] = &[]encoding.TypeField{
+		{"format", "string"},
+		{"rules", "LoggingRule[]"},
+	}
+
+	encoding.SchemaDictionary["LoggingRule"] = &[]encoding.TypeField{
+		{"level", "slog.Level"},
+		{"module", "string"},
+	}
+
+	encoding.SchemaDictionary["P2P"] = &[]encoding.TypeField{
+		{"listen", "p2p.Multiaddr[]"},
+		{"bootstrapPeers", "p2p.Multiaddr[]"},
+		{"key", "PrivateKey"},
+		{"peerDB", "string"},
+		{"enablePeerTracking", "bool"},
+		{"discoveryMode", "DhtMode"},
+		{"external", "p2p.Multiaddr"},
+	}
+
+	encoding.SchemaDictionary["PrivateKeySeed"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"key", "address.Address"},
+		{"seed", "record.Key"},
+	}
+
+	encoding.SchemaDictionary["RawPrivateKey"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"address", "string"},
+	}
+
+	encoding.SchemaDictionary["TransientPrivateKey"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"key", "address.Address"},
+	}
+
+	encoding.ResolveTypeDefinitions()
+}
+
 func (v *CometNodeKeyFile) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type PrivateKeyType `json:"type"`

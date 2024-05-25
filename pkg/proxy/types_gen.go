@@ -429,6 +429,14 @@ var fieldNames_NetworkState = []string{
 	5: "IsTestNet",
 }
 
+var fieldTypes_NetworkState = []string{
+	1: "config.Network",
+	2: "string",
+	3: "string",
+	4: "bool",
+	5: "bool",
+}
+
 func (v *NetworkState) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -504,6 +512,10 @@ var fieldNames_PartitionList = []string{
 	1: "Partitions",
 }
 
+var fieldTypes_PartitionList = []string{
+	1: "string",
+}
+
 func (v *PartitionList) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -549,6 +561,10 @@ var fieldNames_SeedCount = []string{
 	1: "Count",
 }
 
+var fieldTypes_SeedCount = []string{
+	1: "int64",
+}
+
 func (v *SeedCount) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -592,6 +608,12 @@ var fieldNames_SeedList = []string{
 	1: "BasePort",
 	2: "Type",
 	3: "Addresses",
+}
+
+var fieldTypes_SeedList = []string{
+	1: "uint64",
+	2: "string",
+	3: "string",
 }
 
 func (v *SeedList) MarshalBinary() ([]byte, error) {
@@ -767,6 +789,78 @@ func (v *SeedList) UnmarshalBinaryFrom(rd io.Reader) error {
 		return encoding.Error{E: err}
 	}
 	return nil
+}
+
+func initEip712TypeDictionary() {
+
+	encoding.SchemaDictionary["NetworkConfigRequest"] = &[]encoding.TypeField{
+		{"network", "string"},
+		{"sign", "bool"},
+	}
+
+	encoding.SchemaDictionary["NetworkConfigResponse"] = &[]encoding.TypeField{
+		{"networkState", "NetworkState"},
+		{"signature", "protocol.KeySignature"},
+	}
+
+	encoding.SchemaDictionary["NetworkState"] = &[]encoding.TypeField{
+		{"network", "config.Network"},
+		{"version", "string"},
+		{"commit", "string"},
+		{"versionIsKnown", "bool"},
+		{"isTestNet", "bool"},
+	}
+
+	encoding.SchemaDictionary["PartitionList"] = &[]encoding.TypeField{
+		{"partitions", "string"},
+	}
+
+	encoding.SchemaDictionary["PartitionListRequest"] = &[]encoding.TypeField{
+		{"network", "string"},
+		{"sign", "bool"},
+	}
+
+	encoding.SchemaDictionary["PartitionListResponse"] = &[]encoding.TypeField{
+		{"partitions", "string"},
+		{"signature", "protocol.KeySignature"},
+	}
+
+	encoding.SchemaDictionary["SeedCount"] = &[]encoding.TypeField{
+		{"count", "int64"},
+	}
+
+	encoding.SchemaDictionary["SeedCountRequest"] = &[]encoding.TypeField{
+		{"network", "string"},
+		{"partition", "string"},
+		{"sign", "bool"},
+	}
+
+	encoding.SchemaDictionary["SeedCountResponse"] = &[]encoding.TypeField{
+		{"count", "int64"},
+		{"signature", "protocol.KeySignature"},
+	}
+
+	encoding.SchemaDictionary["SeedList"] = &[]encoding.TypeField{
+		{"basePort", "uint64"},
+		{"type", "string"},
+		{"addresses", "string"},
+	}
+
+	encoding.SchemaDictionary["SeedListRequest"] = &[]encoding.TypeField{
+		{"network", "string"},
+		{"partition", "string"},
+		{"count", "int64"},
+		{"sign", "bool"},
+	}
+
+	encoding.SchemaDictionary["SeedListResponse"] = &[]encoding.TypeField{
+		{"basePort", "uint64"},
+		{"type", "string"},
+		{"addresses", "string"},
+		{"signature", "protocol.KeySignature"},
+	}
+
+	encoding.ResolveTypeDefinitions()
 }
 
 func (v *NetworkConfigResponse) MarshalJSON() ([]byte, error) {

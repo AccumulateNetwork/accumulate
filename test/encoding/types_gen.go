@@ -108,6 +108,11 @@ var fieldNames_Signature = []string{
 	2: "Signature",
 }
 
+var fieldTypes_Signature = []string{
+	1: "string",
+	2: "protocol.Signature",
+}
+
 func (v *Signature) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -157,6 +162,10 @@ func (v *Signature) IsValid() error {
 
 var fieldNames_sigSection = []string{
 	1: "Signatures",
+}
+
+var fieldTypes_sigSection = []string{
+	1: "Signature[]",
 }
 
 func (v *sigSection) MarshalBinary() ([]byte, error) {
@@ -255,6 +264,20 @@ func (v *sigSection) UnmarshalBinaryFrom(rd io.Reader) error {
 		return encoding.Error{E: err}
 	}
 	return nil
+}
+
+func initEip712TypeDictionary() {
+
+	encoding.SchemaDictionary["Signature"] = &[]encoding.TypeField{
+		{"txid", "string"},
+		{"signature", "protocol.Signature"},
+	}
+
+	encoding.SchemaDictionary["sigSection"] = &[]encoding.TypeField{
+		{"signatures", "Signature[]"},
+	}
+
+	encoding.ResolveTypeDefinitions()
 }
 
 func (v *Signature) MarshalJSON() ([]byte, error) {

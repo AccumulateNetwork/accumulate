@@ -10,6 +10,7 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/hex"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"testing"
@@ -321,40 +322,97 @@ func TestRsaSha256Signature(t *testing.T) {
 	//now try 2048 key
 
 	block, _ = pem.Decode([]byte(rsaPrivateKey2048))
-        privKey, err = x509.ParsePKCS1PrivateKey(block.Bytes)
+	privKey, err = x509.ParsePKCS1PrivateKey(block.Bytes)
 	require.NoError(t, err)
 
 	rsaSha256 = new(RsaSha256Signature)
-        rsaSha256.PublicKey = x509.MarshalPKCS1PublicKey(&privKey.PublicKey)
+	rsaSha256.PublicKey = x509.MarshalPKCS1PublicKey(&privKey.PublicKey)
 
-        require.NoError(t, SignRsaSha256(rsaSha256, x509.MarshalPKCS1PrivateKey(privKey), nil, hash[:]))
+	require.NoError(t, SignRsaSha256(rsaSha256, x509.MarshalPKCS1PrivateKey(privKey), nil, hash[:]))
 
-        //should fail
-        require.Equal(t, VerifyUserSignature(rsaSha256, hash[:]), true)
-        //public key should still match
-        keyComp, err = x509.ParsePKCS1PublicKey(rsaSha256.PublicKey)
-        require.NoError(t, err)
+	//should fail
+	require.Equal(t, VerifyUserSignature(rsaSha256, hash[:]), true)
+	//public key should still match
+	keyComp, err = x509.ParsePKCS1PublicKey(rsaSha256.PublicKey)
+	require.NoError(t, err)
 
-        require.True(t, keyComp.Equal(privKey.Public()), "public keys don't match")
-
+	require.True(t, keyComp.Equal(privKey.Public()), "public keys don't match")
 
 	//now try 4096 key
 
-        block, _ = pem.Decode([]byte(rsaPrivateKey4096))
-        privKey, err = x509.ParsePKCS1PrivateKey(block.Bytes)
-        require.NoError(t, err)
+	block, _ = pem.Decode([]byte(rsaPrivateKey4096))
+	privKey, err = x509.ParsePKCS1PrivateKey(block.Bytes)
+	require.NoError(t, err)
 
-        rsaSha256 = new(RsaSha256Signature)
-        rsaSha256.PublicKey = x509.MarshalPKCS1PublicKey(&privKey.PublicKey)
+	rsaSha256 = new(RsaSha256Signature)
+	rsaSha256.PublicKey = x509.MarshalPKCS1PublicKey(&privKey.PublicKey)
 
-        require.NoError(t, SignRsaSha256(rsaSha256, x509.MarshalPKCS1PrivateKey(privKey), nil, hash[:]))
+	require.NoError(t, SignRsaSha256(rsaSha256, x509.MarshalPKCS1PrivateKey(privKey), nil, hash[:]))
 
-        //should fail
-        require.Equal(t, VerifyUserSignature(rsaSha256, hash[:]), true)
-        //public key should still match
-        keyComp, err = x509.ParsePKCS1PublicKey(rsaSha256.PublicKey)
-        require.NoError(t, err)
+	//should fail
+	require.Equal(t, VerifyUserSignature(rsaSha256, hash[:]), true)
+	//public key should still match
+	keyComp, err = x509.ParsePKCS1PublicKey(rsaSha256.PublicKey)
+	require.NoError(t, err)
 
-        require.True(t, keyComp.Equal(privKey.Public()), "public keys don't match")
+	require.True(t, keyComp.Equal(privKey.Public()), "public keys don't match")
+
+}
+
+type TypedDataTransaction struct {
+	Transaction     json.RawMessage `json:"transaction"`
+	TransactionHash [32]byte        `json:"transactionHash"`
+}
+
+type Eip712TypedDataPayload struct {
+	Types                json.RawMessage `json:"types"`
+	PrimaryType          string          `json:"types"`
+	TypedDataTransaction TypedDataTransaction
+}
+
+func TestEip712TypedDataSignature(t *testing.T) {
+	tokenTransaction :=
+		`{
+  "types": {
+    "EIP712Domain": [
+      {"name": "name", "type": "string"},
+      {"name": "version", "type": "string"},
+      {"name": "chainId", "type": "uint"},
+    ],
+    "SendTokens": [
+      {"name": "hash", "type": "bytes32"},
+      {"name": "meta", "type": "string"}, 
+      {"name": "to", "type": "TokenRecipient[]"}
+    ],
+    "TokenRecipient": [
+      {"name": "url", "type": "string"},
+      {"name": "amount", "type": "uint256"} 
+    ]
+  },
+  "primaryType": "SendTokens",
+  "domain": {
+    "name": "Accumulate",
+    "version": "1.0",
+    "chainId": 281,
+  },
+  "message": {
+                "header": {
+                  "principal": "acc://adi.acme/ACME",
+                  "initiator": "84e032fba8a5456f631c822a2b2466c18b3fa7804330ab87088ed6e30d690505"
+                },
+                "body": {
+                  "type": "sendTokens",
+                  "to": [
+                    {
+                      "url": "acc://other.acme/ACME",
+                      "amount": "100"
+                    }
+                  ]
+                }
+              }
+}
+`
+
+	sig := Eip712TypedDataSignature{}
 
 }

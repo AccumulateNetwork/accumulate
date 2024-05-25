@@ -67,6 +67,12 @@ var fieldNames_Message = []string{
 	3: "Message",
 }
 
+var fieldTypes_Message = []string{
+	1: "uint64",
+	2: "string",
+	3: "message.Message",
+}
+
 func (v *Message) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -148,6 +154,17 @@ func (v *Message) UnmarshalBinaryFrom(rd io.Reader) error {
 		return encoding.Error{E: err}
 	}
 	return nil
+}
+
+func initEip712TypeDictionary() {
+
+	encoding.SchemaDictionary["Message"] = &[]encoding.TypeField{
+		{"id", "uint64"},
+		{"status", "string"},
+		{"message", "message.Message"},
+	}
+
+	encoding.ResolveTypeDefinitions()
 }
 
 func (v *Message) MarshalJSON() ([]byte, error) {

@@ -234,6 +234,12 @@ var fieldNames_Describe = []string{
 	3: "Network",
 }
 
+var fieldTypes_Describe = []string{
+	1: "string",
+	2: "string",
+	3: "Network",
+}
+
 func (v *Describe) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -293,6 +299,10 @@ var fieldNames_Network = []string{
 	1: "Id",
 }
 
+var fieldTypes_Network = []string{
+	1: "string",
+}
+
 func (v *Network) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -335,6 +345,11 @@ func (v *Network) IsValid() error {
 var fieldNames_Node = []string{
 	1: "Address",
 	2: "Type",
+}
+
+var fieldTypes_Node = []string{
+	1: "string",
+	2: "string",
 }
 
 func (v *Node) MarshalBinary() ([]byte, error) {
@@ -387,6 +402,11 @@ func (v *Node) IsValid() error {
 var fieldNames_P2P = []string{
 	1: "Listen",
 	2: "BootstrapPeers",
+}
+
+var fieldTypes_P2P = []string{
+	1: "p2p.Multiaddr[]",
+	2: "p2p.Multiaddr[]",
 }
 
 func (v *P2P) MarshalBinary() ([]byte, error) {
@@ -445,6 +465,13 @@ var fieldNames_Partition = []string{
 	2: "Type",
 	3: "BasePort",
 	4: "Nodes",
+}
+
+var fieldTypes_Partition = []string{
+	1: "string",
+	2: "string",
+	3: "int64",
+	4: "Node[]",
 }
 
 func (v *Partition) MarshalBinary() ([]byte, error) {
@@ -668,6 +695,38 @@ func (v *Partition) UnmarshalBinaryFrom(rd io.Reader) error {
 		return encoding.Error{E: err}
 	}
 	return nil
+}
+
+func initEip712TypeDictionary() {
+
+	encoding.SchemaDictionary["Describe"] = &[]encoding.TypeField{
+		{"networkType", "string"},
+		{"partitionId", "string"},
+		{"network", "Network"},
+	}
+
+	encoding.SchemaDictionary["Network"] = &[]encoding.TypeField{
+		{"id", "string"},
+	}
+
+	encoding.SchemaDictionary["Node"] = &[]encoding.TypeField{
+		{"address", "string"},
+		{"type", "string"},
+	}
+
+	encoding.SchemaDictionary["P2P"] = &[]encoding.TypeField{
+		{"listen", "p2p.Multiaddr[]"},
+		{"bootstrapPeers", "p2p.Multiaddr[]"},
+	}
+
+	encoding.SchemaDictionary["Partition"] = &[]encoding.TypeField{
+		{"id", "string"},
+		{"type", "string"},
+		{"basePort", "int64"},
+		{"nodes", "Node[]"},
+	}
+
+	encoding.ResolveTypeDefinitions()
 }
 
 func (v *Describe) MarshalJSON() ([]byte, error) {

@@ -159,6 +159,12 @@ var fieldNames_Header = []string{
 	3: "SystemLedger",
 }
 
+var fieldTypes_Header = []string{
+	1: "uint64",
+	2: "bytes32",
+	3: "protocol.SystemLedger",
+}
+
 func (v *Header) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -220,6 +226,12 @@ var fieldNames_RecordEntry = []string{
 	3: "Receipt",
 }
 
+var fieldTypes_RecordEntry = []string{
+	1: "record.Key",
+	2: "bytes",
+	3: "merkle.Receipt",
+}
+
 func (v *RecordEntry) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -277,6 +289,10 @@ func (v *RecordEntry) IsValid() error {
 
 var fieldNames_versionHeader = []string{
 	1: "Version",
+}
+
+var fieldTypes_versionHeader = []string{
+	1: "uint64",
 }
 
 func (v *versionHeader) MarshalBinary() ([]byte, error) {
@@ -397,6 +413,27 @@ func (v *versionHeader) UnmarshalBinaryFrom(rd io.Reader) error {
 		return encoding.Error{E: err}
 	}
 	return nil
+}
+
+func initEip712TypeDictionary() {
+
+	encoding.SchemaDictionary["Header"] = &[]encoding.TypeField{
+		{"version", "uint64"},
+		{"rootHash", "bytes32"},
+		{"systemLedger", "protocol.SystemLedger"},
+	}
+
+	encoding.SchemaDictionary["RecordEntry"] = &[]encoding.TypeField{
+		{"key", "record.Key"},
+		{"value", "bytes"},
+		{"receipt", "merkle.Receipt"},
+	}
+
+	encoding.SchemaDictionary["versionHeader"] = &[]encoding.TypeField{
+		{"version", "uint64"},
+	}
+
+	encoding.ResolveTypeDefinitions()
 }
 
 func (v *Header) MarshalJSON() ([]byte, error) {

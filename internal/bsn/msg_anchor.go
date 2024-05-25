@@ -57,7 +57,7 @@ func (x BlockAnchor) check(batch *ChangeSet, ctx *MessageContext) (*messaging.Bl
 	}
 
 	h := msg.Anchor.Hash()
-	if !msg.Signature.Verify(nil, h[:]) {
+	if !msg.Signature.Verify(nil, h[:], nil) {
 		return nil, nil, errors.Unauthenticated.WithFormat("invalid signature")
 	}
 

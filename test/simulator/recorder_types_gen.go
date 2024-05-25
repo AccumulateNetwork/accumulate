@@ -208,6 +208,16 @@ var fieldNames_recordBlock = []string{
 	7: "Changes",
 }
 
+var fieldTypes_recordBlock = []string{
+	1: "bool",
+	2: "uint64",
+	3: "string",
+	4: "string",
+	5: "string",
+	6: "messaging.Envelope[]",
+	7: "recordChange[]",
+}
+
 func (v *recordBlock) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -304,6 +314,11 @@ var fieldNames_recordChange = []string{
 	2: "Value",
 }
 
+var fieldTypes_recordChange = []string{
+	1: "record.Key",
+	2: "bytes",
+}
+
 func (v *recordChange) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -355,6 +370,12 @@ var fieldNames_recordHeader = []string{
 	1: "Partition",
 	2: "Config",
 	3: "NodeID",
+}
+
+var fieldTypes_recordHeader = []string{
+	1: "protocol.PartitionInfo",
+	2: "accumulated.NodeInit",
+	3: "string",
 }
 
 func (v *recordHeader) MarshalBinary() ([]byte, error) {
@@ -514,6 +535,32 @@ func (v *recordHeader) UnmarshalBinaryFrom(rd io.Reader) error {
 		return encoding.Error{E: err}
 	}
 	return nil
+}
+
+func initEip712TypeDictionary() {
+
+	encoding.SchemaDictionary["recordBlock"] = &[]encoding.TypeField{
+		{"isLeader", "bool"},
+		{"index", "uint64"},
+		{"time", "string"},
+		{"commitInfo", "string"},
+		{"evidence", "string"},
+		{"submissions", "messaging.Envelope[]"},
+		{"changes", "recordChange[]"},
+	}
+
+	encoding.SchemaDictionary["recordChange"] = &[]encoding.TypeField{
+		{"key", "record.Key"},
+		{"value", "bytes"},
+	}
+
+	encoding.SchemaDictionary["recordHeader"] = &[]encoding.TypeField{
+		{"partition", "protocol.PartitionInfo"},
+		{"config", "accumulated.NodeInit"},
+		{"nodeID", "string"},
+	}
+
+	encoding.ResolveTypeDefinitions()
 }
 
 func (v *recordBlock) MarshalJSON() ([]byte, error) {

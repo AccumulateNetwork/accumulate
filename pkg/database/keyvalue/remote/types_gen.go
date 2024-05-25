@@ -486,6 +486,11 @@ var fieldNames_batchCall = []string{
 	2: "Calls",
 }
 
+var fieldTypes_batchCall = []string{
+	1: "string",
+	2: "call[]",
+}
+
 func (v *batchCall) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -534,6 +539,11 @@ func (v *batchCall) IsValid() error {
 var fieldNames_batchResponse = []string{
 	1: "Type",
 	2: "Responses",
+}
+
+var fieldTypes_batchResponse = []string{
+	1: "string",
+	2: "response[]",
 }
 
 func (v *batchResponse) MarshalBinary() ([]byte, error) {
@@ -585,6 +595,10 @@ var fieldNames_commitCall = []string{
 	1: "Type",
 }
 
+var fieldTypes_commitCall = []string{
+	1: "string",
+}
+
 func (v *commitCall) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -622,6 +636,11 @@ func (v *commitCall) IsValid() error {
 
 var fieldNames_deleteCall = []string{
 	1: "Type",
+	2: "keyOrHash",
+}
+
+var fieldTypes_deleteCall = []string{
+	1: "string",
 	2: "keyOrHash",
 }
 
@@ -668,6 +687,12 @@ var fieldNames_entryResponse = []string{
 	1: "Type",
 	2: "keyOrHash",
 	3: "Value",
+}
+
+var fieldTypes_entryResponse = []string{
+	1: "string",
+	2: "keyOrHash",
+	3: "bytes",
 }
 
 func (v *entryResponse) MarshalBinary() ([]byte, error) {
@@ -722,6 +747,11 @@ var fieldNames_errorResponse = []string{
 	2: "Error",
 }
 
+var fieldTypes_errorResponse = []string{
+	1: "string",
+	2: "errors2.Error",
+}
+
 func (v *errorResponse) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -770,6 +800,11 @@ var fieldNames_forEachCall = []string{
 	2: "Hash",
 }
 
+var fieldTypes_forEachCall = []string{
+	1: "string",
+	2: "bool",
+}
+
 func (v *forEachCall) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -810,6 +845,11 @@ func (v *forEachCall) IsValid() error {
 
 var fieldNames_getCall = []string{
 	1: "Type",
+	2: "keyOrHash",
+}
+
+var fieldTypes_getCall = []string{
+	1: "string",
 	2: "keyOrHash",
 }
 
@@ -855,6 +895,11 @@ func (v *getCall) IsValid() error {
 var fieldNames_keyOrHash = []string{
 	1: "Key",
 	2: "Hash",
+}
+
+var fieldTypes_keyOrHash = []string{
+	1: "record.Key",
+	2: "bytes32",
 }
 
 func (v *keyOrHash) MarshalBinary() ([]byte, error) {
@@ -909,6 +954,11 @@ var fieldNames_notFoundResponse = []string{
 	2: "keyOrHash",
 }
 
+var fieldTypes_notFoundResponse = []string{
+	1: "string",
+	2: "keyOrHash",
+}
+
 func (v *notFoundResponse) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -952,6 +1002,10 @@ var fieldNames_okResponse = []string{
 	1: "Type",
 }
 
+var fieldTypes_okResponse = []string{
+	1: "string",
+}
+
 func (v *okResponse) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -991,6 +1045,12 @@ var fieldNames_putCall = []string{
 	1: "Type",
 	2: "keyOrHash",
 	3: "Value",
+}
+
+var fieldTypes_putCall = []string{
+	1: "string",
+	2: "keyOrHash",
+	3: "bytes",
 }
 
 func (v *putCall) MarshalBinary() ([]byte, error) {
@@ -1045,6 +1105,11 @@ var fieldNames_unsupportedCallResponse = []string{
 	2: "CallType",
 }
 
+var fieldTypes_unsupportedCallResponse = []string{
+	1: "string",
+	2: "string",
+}
+
 func (v *unsupportedCallResponse) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -1091,6 +1156,11 @@ func (v *unsupportedCallResponse) IsValid() error {
 var fieldNames_valueResponse = []string{
 	1: "Type",
 	2: "Value",
+}
+
+var fieldTypes_valueResponse = []string{
+	1: "string",
+	2: "bytes",
 }
 
 func (v *valueResponse) MarshalBinary() ([]byte, error) {
@@ -1623,4 +1693,84 @@ func (v *valueResponse) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 		return encoding.Error{E: err}
 	}
 	return nil
+}
+
+func initEip712TypeDictionary() {
+
+	encoding.SchemaDictionary["batchCall"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"calls", "call[]"},
+	}
+
+	encoding.SchemaDictionary["batchResponse"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"responses", "response[]"},
+	}
+
+	encoding.SchemaDictionary["commitCall"] = &[]encoding.TypeField{
+		{"type", "string"},
+	}
+
+	encoding.SchemaDictionary["deleteCall"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"key", "record.Key"},
+		{"hash", "bytes32"},
+	}
+
+	encoding.SchemaDictionary["entryResponse"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"key", "record.Key"},
+		{"hash", "bytes32"},
+		{"value", "bytes"},
+	}
+
+	encoding.SchemaDictionary["errorResponse"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"error", "errors2.Error"},
+	}
+
+	encoding.SchemaDictionary["forEachCall"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"hash", "bool"},
+	}
+
+	encoding.SchemaDictionary["getCall"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"key", "record.Key"},
+		{"hash", "bytes32"},
+	}
+
+	encoding.SchemaDictionary["keyOrHash"] = &[]encoding.TypeField{
+		{"key", "record.Key"},
+		{"hash", "bytes32"},
+	}
+
+	encoding.SchemaDictionary["notFoundResponse"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"key", "record.Key"},
+		{"hash", "bytes32"},
+	}
+
+	encoding.SchemaDictionary["okResponse"] = &[]encoding.TypeField{
+		{"type", "string"},
+	}
+
+	encoding.SchemaDictionary["putCall"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"key", "record.Key"},
+		{"hash", "bytes32"},
+		{"value", "bytes"},
+	}
+
+	encoding.SchemaDictionary["unsupportedCallResponse"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"callType", "string"},
+	}
+
+	encoding.SchemaDictionary["valueResponse"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"value", "bytes"},
+	}
+
+	encoding.ResolveTypeDefinitions()
 }

@@ -255,6 +255,43 @@ func (v *PeerStatus) Equal(u *PeerStatus) bool {
 	return true
 }
 
+func initEip712TypeDictionary() {
+
+	encoding.SchemaDictionary["DB"] = &[]encoding.TypeField{
+		{"lastScan", "string"},
+		{"peers", "AtomicSlice[*PeerStatus, PeerStatus]"},
+	}
+
+	encoding.SchemaDictionary["LastStatus"] = &[]encoding.TypeField{
+		{"success", "string"},
+		{"attempt", "string"},
+		{"failed", "AtomicUint"},
+	}
+
+	encoding.SchemaDictionary["PeerAddressStatus"] = &[]encoding.TypeField{
+		{"address", "p2p.Multiaddr"},
+		{"last", "LastStatus"},
+	}
+
+	encoding.SchemaDictionary["PeerNetworkStatus"] = &[]encoding.TypeField{
+		{"name", "string"},
+		{"services", "AtomicSlice[*PeerServiceStatus, PeerServiceStatus]"},
+	}
+
+	encoding.SchemaDictionary["PeerServiceStatus"] = &[]encoding.TypeField{
+		{"address", "api.ServiceAddress"},
+		{"last", "LastStatus"},
+	}
+
+	encoding.SchemaDictionary["PeerStatus"] = &[]encoding.TypeField{
+		{"id", "p2p.PeerID"},
+		{"addresses", "AtomicSlice[*PeerAddressStatus, PeerAddressStatus]"},
+		{"networks", "AtomicSlice[*PeerNetworkStatus, PeerNetworkStatus]"},
+	}
+
+	encoding.ResolveTypeDefinitions()
+}
+
 func (v *PeerAddressStatus) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Address *encoding.JsonUnmarshalWith[p2p.Multiaddr] `json:"address,omitempty"`

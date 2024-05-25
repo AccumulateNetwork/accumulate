@@ -90,6 +90,124 @@ func (*OtherRecord) Type() RecordType { return RecordTypeOther }
 
 func (*StateRecord) Type() RecordType { return RecordTypeState }
 
+func initEip712TypeDictionary() {
+
+	encoding.SchemaDictionary["ChainRecord"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"name", "string"},
+		{"key", "string"},
+		{"description", "string"},
+		{"parent", "EntityRecord"},
+		{"private", "bool"},
+		{"omitAccessor", "bool"},
+		{"omitConstructor", "bool"},
+		{"customValueConstructor", "bool"},
+		{"parameters", "Field[]"},
+		{"index", "string"},
+		{"chainType", "string"},
+	}
+
+	encoding.SchemaDictionary["EntityRecord"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"name", "string"},
+		{"key", "string"},
+		{"description", "string"},
+		{"parent", "EntityRecord"},
+		{"private", "bool"},
+		{"omitAccessor", "bool"},
+		{"omitConstructor", "bool"},
+		{"customValueConstructor", "bool"},
+		{"parameters", "Field[]"},
+		{"index", "string"},
+		{"fields", "Field[]"},
+		{"customCommit", "bool"},
+		{"customResolve", "bool"},
+		{"customIsDirty", "bool"},
+		{"customWalk", "bool"},
+		{"omitCommit", "bool"},
+		{"omitResolve", "bool"},
+		{"omitIsDirty", "bool"},
+		{"omitWalk", "bool"},
+		{"valueStore", "string"},
+		{"root", "bool"},
+		{"interface", "bool"},
+		{"attributes", "Record[]"},
+	}
+
+	encoding.SchemaDictionary["IndexRecord"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"name", "string"},
+		{"key", "string"},
+		{"description", "string"},
+		{"parent", "EntityRecord"},
+		{"private", "bool"},
+		{"omitAccessor", "bool"},
+		{"omitConstructor", "bool"},
+		{"customValueConstructor", "bool"},
+		{"parameters", "Field[]"},
+		{"index", "string"},
+		{"dataType", "FieldType"},
+		{"pointer", "bool"},
+		{"emptyIfMissing", "bool"},
+		{"union", "bool"},
+		{"collection", "string"},
+		{"comparator", "string"},
+	}
+
+	encoding.SchemaDictionary["OtherRecord"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"name", "string"},
+		{"key", "string"},
+		{"description", "string"},
+		{"parent", "EntityRecord"},
+		{"private", "bool"},
+		{"omitAccessor", "bool"},
+		{"omitConstructor", "bool"},
+		{"customValueConstructor", "bool"},
+		{"parameters", "Field[]"},
+		{"index", "string"},
+		{"dataType", "string"},
+		{"pointer", "bool"},
+		{"hasChains", "bool"},
+		{"constructor", "string"},
+	}
+
+	encoding.SchemaDictionary["RecordBase"] = &[]encoding.TypeField{
+		{"name", "string"},
+		{"key", "string"},
+		{"description", "string"},
+		{"parent", "EntityRecord"},
+		{"private", "bool"},
+		{"omitAccessor", "bool"},
+		{"omitConstructor", "bool"},
+		{"customValueConstructor", "bool"},
+		{"parameters", "Field[]"},
+		{"index", "string"},
+	}
+
+	encoding.SchemaDictionary["StateRecord"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"name", "string"},
+		{"key", "string"},
+		{"description", "string"},
+		{"parent", "EntityRecord"},
+		{"private", "bool"},
+		{"omitAccessor", "bool"},
+		{"omitConstructor", "bool"},
+		{"customValueConstructor", "bool"},
+		{"parameters", "Field[]"},
+		{"index", "string"},
+		{"dataType", "FieldType"},
+		{"pointer", "bool"},
+		{"emptyIfMissing", "bool"},
+		{"union", "bool"},
+		{"collection", "string"},
+		{"comparator", "string"},
+	}
+
+	encoding.ResolveTypeDefinitions()
+}
+
 func (v *ChainRecord) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type                   RecordType                `json:"type"`

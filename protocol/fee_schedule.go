@@ -16,59 +16,10 @@ import (
 // Fee is the unit cost of a transaction.
 type Fee uint64
 
-func (n Fee) AsUInt64() uint64            { return uint64(n) }
-func (n Fee) GetEnumValue() uint64        { return uint64(n) }
-func (n *Fee) SetEnumValue(v uint64) bool { *n = Fee(v); return true }
+//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-enum --out fee_schedule_gen.go fee_schedule.yml
 
-const (
-	// FeeFailedMaximum $0.01
-	FeeFailedMaximum Fee = 100
-
-	// FeeSignature $0.0001
-	FeeSignature Fee = 1
-
-	// FeeCreateIdentity $5.00 = 50000 credits @ 0.0001 / credit.
-	FeeCreateIdentity Fee = 50000
-
-	// FeeCreateAccount $0.25
-	FeeCreateAccount Fee = 2500
-
-	// FeeTransferTokens $0.03
-	FeeTransferTokens Fee = 300
-
-	// FeeTransferTokensExtra $0.01
-	FeeTransferTokensExtra Fee = 100
-
-	// FeeCreateToken $50.00
-	FeeCreateToken Fee = 500000
-
-	// FeeGeneralTiny $0.001
-	FeeGeneralTiny Fee = 1
-
-	// FeeGeneralSmall $0.001
-	FeeGeneralSmall Fee = 10
-
-	// FeeCreateKeyPage $1.00
-	FeeCreateKeyPage Fee = 10000
-
-	// FeeCreateKeyPageExtra $0.01
-	FeeCreateKeyPageExtra Fee = 100
-
-	// FeeData $0.001 / 256 bytes
-	FeeData Fee = 10
-
-	// FeeScratchData $0.0001 / 256 bytes
-	FeeScratchData Fee = 1
-
-	// FeeUpdateAuth $0.03
-	FeeUpdateAuth Fee = 300
-
-	// FeeUpdateAuthExtra $0.01
-	FeeUpdateAuthExtra Fee = 100
-
-	// MinimumCreditPurchase $0.01
-	MinimumCreditPurchase Fee = 100
-)
+// MinimumCreditPurchase MinimumCreditPurchase: deprecated
+var MinimumCreditPurchase = FeeMinimumCreditPurchase
 
 func dataCount(obj encoding.BinaryMarshaler) (int, int, error) {
 	// Check the transaction size (including signatures)

@@ -585,6 +585,15 @@ var fieldNames_Account = []string{
 	6: "Chains",
 }
 
+var fieldTypes_Account = []string{
+	1: "protocol.Account",
+	2: "OldChain[]",
+	3: "string[]",
+	4: "string[]",
+	5: "string",
+	6: "Chain[]",
+}
+
 func (v *Account) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -680,6 +689,14 @@ var fieldNames_Chain = []string{
 	5: "MarkPoints",
 }
 
+var fieldTypes_Chain = []string{
+	1: "string",
+	2: "string",
+	3: "uint64",
+	4: "merkle.State",
+	5: "merkle.State[]",
+}
+
 func (v *Chain) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -760,6 +777,15 @@ var fieldNames_Header = []string{
 	4: "Timestamp",
 	5: "ExecutorVersion",
 	6: "PartitionSnapshotIDs",
+}
+
+var fieldTypes_Header = []string{
+	1: "uint64",
+	2: "uint64",
+	3: "bytes32",
+	4: "string",
+	5: "string",
+	6: "string",
 }
 
 func (v *Header) MarshalBinary() ([]byte, error) {
@@ -851,6 +877,14 @@ var fieldNames_OldChain = []string{
 	5: "Entries",
 }
 
+var fieldTypes_OldChain = []string{
+	1: "string",
+	2: "string",
+	3: "uint64",
+	4: "bytes[]",
+	5: "bytes[]",
+}
+
 func (v *OldChain) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -931,6 +965,11 @@ var fieldNames_Signature = []string{
 	2: "Signature",
 }
 
+var fieldTypes_Signature = []string{
+	1: "string",
+	2: "protocol.Signature",
+}
+
 func (v *Signature) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -982,6 +1021,12 @@ var fieldNames_Transaction = []string{
 	2: "Transaction",
 	3: "Status",
 	4: "SignatureSets",
+}
+
+var fieldTypes_Transaction = []string{
+	2: "protocol.Transaction",
+	3: "protocol.TransactionStatus",
+	4: "TxnSigSet[]",
 }
 
 func (v *Transaction) MarshalBinary() ([]byte, error) {
@@ -1047,6 +1092,12 @@ var fieldNames_TxnSigSet = []string{
 	3: "Entries",
 }
 
+var fieldTypes_TxnSigSet = []string{
+	1: "string",
+	2: "uint64",
+	3: "database.SigSetEntry[]",
+}
+
 func (v *TxnSigSet) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -1108,6 +1159,10 @@ var fieldNames_sigSection = []string{
 	1: "Signatures",
 }
 
+var fieldTypes_sigSection = []string{
+	1: "Signature[]",
+}
+
 func (v *sigSection) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -1151,6 +1206,10 @@ func (v *sigSection) IsValid() error {
 
 var fieldNames_txnSection = []string{
 	1: "Transactions",
+}
+
+var fieldTypes_txnSection = []string{
+	1: "Transaction[]",
 }
 
 func (v *txnSection) MarshalBinary() ([]byte, error) {
@@ -1524,6 +1583,71 @@ func (v *txnSection) UnmarshalBinaryFrom(rd io.Reader) error {
 		return encoding.Error{E: err}
 	}
 	return nil
+}
+
+func initEip712TypeDictionary() {
+
+	encoding.SchemaDictionary["Account"] = &[]encoding.TypeField{
+		{"hash", "bytes32"},
+		{"main", "protocol.Account"},
+		{"oldChains", "OldChain[]"},
+		{"pending", "string[]"},
+		{"directory", "string[]"},
+		{"url", "string"},
+		{"chains", "Chain[]"},
+	}
+
+	encoding.SchemaDictionary["Chain"] = &[]encoding.TypeField{
+		{"name", "string"},
+		{"type", "string"},
+		{"markPower", "uint64"},
+		{"head", "merkle.State"},
+		{"markPoints", "merkle.State[]"},
+	}
+
+	encoding.SchemaDictionary["Header"] = &[]encoding.TypeField{
+		{"version", "uint64"},
+		{"height", "uint64"},
+		{"rootHash", "bytes32"},
+		{"timestamp", "string"},
+		{"executorVersion", "string"},
+		{"partitionSnapshotIDs", "string"},
+	}
+
+	encoding.SchemaDictionary["OldChain"] = &[]encoding.TypeField{
+		{"name", "string"},
+		{"type", "string"},
+		{"count", "uint64"},
+		{"pending", "bytes[]"},
+		{"entries", "bytes[]"},
+	}
+
+	encoding.SchemaDictionary["Signature"] = &[]encoding.TypeField{
+		{"txid", "string"},
+		{"signature", "protocol.Signature"},
+	}
+
+	encoding.SchemaDictionary["Transaction"] = &[]encoding.TypeField{
+		{"transaction", "protocol.Transaction"},
+		{"status", "protocol.TransactionStatus"},
+		{"signatureSets", "TxnSigSet[]"},
+	}
+
+	encoding.SchemaDictionary["TxnSigSet"] = &[]encoding.TypeField{
+		{"signer", "string"},
+		{"version", "uint64"},
+		{"entries", "database.SigSetEntry[]"},
+	}
+
+	encoding.SchemaDictionary["sigSection"] = &[]encoding.TypeField{
+		{"signatures", "Signature[]"},
+	}
+
+	encoding.SchemaDictionary["txnSection"] = &[]encoding.TypeField{
+		{"transactions", "Transaction[]"},
+	}
+
+	encoding.ResolveTypeDefinitions()
 }
 
 func (v *Account) MarshalJSON() ([]byte, error) {

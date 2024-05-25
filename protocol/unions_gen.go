@@ -1057,6 +1057,8 @@ func NewSignature(typ SignatureType) (Signature, error) {
 		return new(ED25519Signature), nil
 	case SignatureTypeETH:
 		return new(ETHSignature), nil
+	case SignatureTypeEip712TypedData:
+		return new(Eip712TypedDataSignature), nil
 	case SignatureTypeInternal:
 		return new(InternalSignature), nil
 	case SignatureTypeLegacyED25519:
@@ -1118,6 +1120,12 @@ func EqualSignature(a, b Signature) bool {
 			return b == nil
 		}
 		b, ok := b.(*ETHSignature)
+		return ok && a.Equal(b)
+	case *Eip712TypedDataSignature:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*Eip712TypedDataSignature)
 		return ok && a.Equal(b)
 	case *InternalSignature:
 		if a == nil {
@@ -1185,6 +1193,8 @@ func CopySignature(v Signature) Signature {
 	case *ED25519Signature:
 		return v.Copy()
 	case *ETHSignature:
+		return v.Copy()
+	case *Eip712TypedDataSignature:
 		return v.Copy()
 	case *InternalSignature:
 		return v.Copy()

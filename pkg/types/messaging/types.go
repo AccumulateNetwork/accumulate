@@ -20,6 +20,10 @@ import (
 //go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --package messaging messages.yml --go-include ./pkg/types/record
 //go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --package messaging --out unions_gen.go --language go-union messages.yml
 
+func init() {
+	initEip712TypeDictionary()
+}
+
 // MessageType is the type of a [Message].
 type MessageType int
 

@@ -239,7 +239,7 @@ func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Deli
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("validate delegated signature: %w", err)
 		}
-		if !md.Nested() && !signature.Verify(signature.Metadata().Hash(), delivery.Transaction.GetHash()) {
+		if !md.Nested() && !signature.Verify(signature.Metadata().Hash(), delivery.Transaction.GetHash(), delivery.Transaction) {
 			return nil, errors.BadRequest.WithFormat("invalid signature")
 		}
 		if !signature.Delegator.LocalTo(md.Location) {
@@ -273,7 +273,7 @@ func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Deli
 		}
 
 		// Basic validation
-		if !md.Nested() && !signature.Verify(nil, delivery.Transaction.GetHash()) {
+		if !md.Nested() && !signature.Verify(nil, delivery.Transaction.GetHash(), delivery.Transaction) {
 			return nil, errors.BadRequest.With("invalid")
 		}
 

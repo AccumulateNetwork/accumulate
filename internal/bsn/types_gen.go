@@ -58,6 +58,11 @@ var fieldNames_LastBlock = []string{
 	2: "Time",
 }
 
+var fieldTypes_LastBlock = []string{
+	1: "uint64",
+	2: "string",
+}
+
 func (v *LastBlock) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -129,4 +134,14 @@ func (v *LastBlock) UnmarshalBinaryFrom(rd io.Reader) error {
 		return encoding.Error{E: err}
 	}
 	return nil
+}
+
+func initEip712TypeDictionary() {
+
+	encoding.SchemaDictionary["LastBlock"] = &[]encoding.TypeField{
+		{"index", "uint64"},
+		{"time", "string"},
+	}
+
+	encoding.ResolveTypeDefinitions()
 }

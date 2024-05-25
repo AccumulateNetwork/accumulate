@@ -374,6 +374,12 @@ var fieldNames_BlockStateSynthTxnEntry = []string{
 	3: "ChainEntry",
 }
 
+var fieldTypes_BlockStateSynthTxnEntry = []string{
+	1: "string",
+	2: "bytes",
+	3: "uint64",
+}
+
 func (v *BlockStateSynthTxnEntry) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -433,6 +439,12 @@ var fieldNames_SigOrTxn = []string{
 	1: "Transaction",
 	2: "Signature",
 	3: "Txid",
+}
+
+var fieldTypes_SigOrTxn = []string{
+	1: "protocol.Transaction",
+	2: "protocol.Signature",
+	3: "string",
 }
 
 func (v *SigOrTxn) MarshalBinary() ([]byte, error) {
@@ -495,6 +507,13 @@ var fieldNames_SigSetEntry = []string{
 	2: "KeyEntryIndex",
 	3: "SignatureHash",
 	4: "ValidatorKeyHash",
+}
+
+var fieldTypes_SigSetEntry = []string{
+	1: "string",
+	2: "uint64",
+	3: "bytes32",
+	4: "bytes32",
 }
 
 func (v *SigSetEntry) MarshalBinary() ([]byte, error) {
@@ -567,6 +586,13 @@ var fieldNames_SignatureSetEntry = []string{
 	4: "Hash",
 }
 
+var fieldTypes_SignatureSetEntry = []string{
+	1: "uint64",
+	2: "uint64",
+	3: "string[]",
+	4: "bytes32",
+}
+
 func (v *SignatureSetEntry) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -633,6 +659,13 @@ var fieldNames_TransactionChainEntry = []string{
 	2: "Chain",
 	3: "ChainIndex",
 	4: "AnchorIndex",
+}
+
+var fieldTypes_TransactionChainEntry = []string{
+	1: "string",
+	2: "string",
+	3: "uint64",
+	4: "uint64",
 }
 
 func (v *TransactionChainEntry) MarshalBinary() ([]byte, error) {
@@ -703,6 +736,11 @@ var fieldNames_VoteEntry = []string{
 	2: "Hash",
 }
 
+var fieldTypes_VoteEntry = []string{
+	1: "string",
+	2: "bytes32",
+}
+
 func (v *VoteEntry) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -753,6 +791,11 @@ func (v *VoteEntry) IsValid() error {
 var fieldNames_sigSetData = []string{
 	1: "Version",
 	2: "Entries",
+}
+
+var fieldTypes_sigSetData = []string{
+	1: "uint64",
+	2: "SigSetEntry[]",
 }
 
 func (v *sigSetData) MarshalBinary() ([]byte, error) {
@@ -1020,6 +1063,54 @@ func (v *sigSetData) UnmarshalBinaryFrom(rd io.Reader) error {
 		return encoding.Error{E: err}
 	}
 	return nil
+}
+
+func initEip712TypeDictionary() {
+
+	encoding.SchemaDictionary["BlockStateSynthTxnEntry"] = &[]encoding.TypeField{
+		{"account", "string"},
+		{"transaction", "bytes"},
+		{"chainEntry", "uint64"},
+	}
+
+	encoding.SchemaDictionary["SigOrTxn"] = &[]encoding.TypeField{
+		{"transaction", "protocol.Transaction"},
+		{"signature", "protocol.Signature"},
+		{"txid", "string"},
+	}
+
+	encoding.SchemaDictionary["SigSetEntry"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"keyEntryIndex", "uint64"},
+		{"signatureHash", "bytes32"},
+		{"validatorKeyHash", "bytes32"},
+	}
+
+	encoding.SchemaDictionary["SignatureSetEntry"] = &[]encoding.TypeField{
+		{"keyIndex", "uint64"},
+		{"version", "uint64"},
+		{"path", "string[]"},
+		{"hash", "bytes32"},
+	}
+
+	encoding.SchemaDictionary["TransactionChainEntry"] = &[]encoding.TypeField{
+		{"account", "string"},
+		{"chain", "string"},
+		{"chainIndex", "uint64"},
+		{"anchorIndex", "uint64"},
+	}
+
+	encoding.SchemaDictionary["VoteEntry"] = &[]encoding.TypeField{
+		{"authority", "string"},
+		{"hash", "bytes32"},
+	}
+
+	encoding.SchemaDictionary["sigSetData"] = &[]encoding.TypeField{
+		{"version", "uint64"},
+		{"entries", "SigSetEntry[]"},
+	}
+
+	encoding.ResolveTypeDefinitions()
 }
 
 func (v *BlockStateSynthTxnEntry) MarshalJSON() ([]byte, error) {

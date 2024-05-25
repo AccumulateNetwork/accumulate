@@ -126,6 +126,20 @@ var fieldNames_NodeInit = []string{
 	11: "BsnNodeKey",
 }
 
+var fieldTypes_NodeInit = []string{
+	1:  "string",
+	2:  "string",
+	3:  "string",
+	4:  "uint64",
+	5:  "string",
+	6:  "string",
+	7:  "string",
+	8:  "bytes",
+	9:  "bytes",
+	10: "bytes",
+	11: "bytes",
+}
+
 func (v *NodeInit) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -296,6 +310,37 @@ func (v *NodeInit) UnmarshalBinaryFrom(rd io.Reader) error {
 		return encoding.Error{E: err}
 	}
 	return nil
+}
+
+func initEip712TypeDictionary() {
+
+	encoding.SchemaDictionary["BvnInit"] = &[]encoding.TypeField{
+		{"id", "string"},
+		{"nodes", "NodeInit[]"},
+	}
+
+	encoding.SchemaDictionary["NetworkInit"] = &[]encoding.TypeField{
+		{"id", "string"},
+		{"bootstrap", "NodeInit"},
+		{"bvns", "BvnInit[]"},
+		{"bsn", "BvnInit"},
+	}
+
+	encoding.SchemaDictionary["NodeInit"] = &[]encoding.TypeField{
+		{"dnnType", "string"},
+		{"bvnnType", "string"},
+		{"bsnnType", "string"},
+		{"basePort", "uint64"},
+		{"advertizeAddress", "string"},
+		{"listenAddress", "string"},
+		{"peerAddress", "string"},
+		{"privValKey", "bytes"},
+		{"dnNodeKey", "bytes"},
+		{"bvnNodeKey", "bytes"},
+		{"bsnNodeKey", "bytes"},
+	}
+
+	encoding.ResolveTypeDefinitions()
 }
 
 func (v *BvnInit) MarshalJSON() ([]byte, error) {

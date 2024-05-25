@@ -11,6 +11,38 @@ import (
 	"io"
 )
 
+type TypeField struct {
+	Name string `json:"name"`
+	Type string `json:"type"`
+}
+
+type TypeDefinition map[string]*[]TypeField
+
+var SchemaDictionary TypeDefinition
+var resolvers map[string]func()
+
+func RegisterTypeDefinitionResolver(name string, deferFunc func()) {
+	if resolvers == nil {
+		resolvers = make(map[string]func())
+	}
+	resolvers[name] = deferFunc
+}
+
+func UnregisterTypeDefinitionResolver(name string) {
+	if resolvers == nil {
+		return
+	}
+	delete(resolvers, name)
+}
+
+func ResolveTypeDefinitions() {
+	//make a copy in case resolver removes itself from the map
+	rs := resolvers
+	for _, v := range rs {
+		v()
+	}
+}
+
 type Error struct {
 	E error
 }

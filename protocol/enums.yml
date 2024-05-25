@@ -101,6 +101,9 @@ SignatureType:
   RsaSha256:
     value: 14
     description: represents an RSA signature of SHA256 hashed data
+  Eip712TypedData:
+    value: 15
+    description: implements EIP-712 sign typed data specification
 
 KeyPageOperationType:
   Unknown:

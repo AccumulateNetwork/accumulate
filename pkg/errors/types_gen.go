@@ -130,6 +130,12 @@ var fieldNames_CallSite = []string{
 	3: "Line",
 }
 
+var fieldTypes_CallSite = []string{
+	1: "string",
+	2: "string",
+	3: "int64",
+}
+
 func (v *CallSite) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -191,6 +197,14 @@ var fieldNames_ErrorBase = []string{
 	3: "Cause",
 	4: "CallStack",
 	5: "Data",
+}
+
+var fieldTypes_ErrorBase = []string{
+	1: "string",
+	2: "string",
+	3: "ErrorBase[Status]",
+	4: "CallSite[]",
+	5: "string",
 }
 
 func (v *ErrorBase[Status]) MarshalBinary() ([]byte, error) {
@@ -332,6 +346,26 @@ func (v *ErrorBase[Status]) UnmarshalBinaryFrom(rd io.Reader) error {
 		return encoding.Error{E: err}
 	}
 	return nil
+}
+
+func initEip712TypeDictionary() {
+
+	encoding.SchemaDictionary["CallSite"] = &[]encoding.TypeField{
+		{"funcName", "string"},
+		{"file", "string"},
+		{"line", "int64"},
+	}
+
+	encoding.SchemaDictionary["ErrorBase"] = &[]encoding.TypeField{
+		{"message", "string"},
+		{"code", "string"},
+		{"codeID", "uint64"},
+		{"cause", "ErrorBase[Status]"},
+		{"callStack", "CallSite[]"},
+		{"data", "string"},
+	}
+
+	encoding.ResolveTypeDefinitions()
 }
 
 func (v *ErrorBase[Status]) MarshalJSON() ([]byte, error) {

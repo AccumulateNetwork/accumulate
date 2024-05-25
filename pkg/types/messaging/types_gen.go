@@ -731,6 +731,13 @@ var fieldNames_BadSyntheticMessage = []string{
 	4: "Proof",
 }
 
+var fieldTypes_BadSyntheticMessage = []string{
+	1: "string",
+	2: "Message",
+	3: "protocol.KeySignature",
+	4: "protocol.AnnotatedReceipt",
+}
+
 func (v *BadSyntheticMessage) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -796,6 +803,12 @@ var fieldNames_BlockAnchor = []string{
 	3: "Anchor",
 }
 
+var fieldTypes_BlockAnchor = []string{
+	1: "string",
+	2: "protocol.KeySignature",
+	3: "Message",
+}
+
 func (v *BlockAnchor) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -855,6 +868,16 @@ var fieldNames_BlockSummary = []string{
 	5: "PreviousBlock",
 	6: "RecordUpdates",
 	7: "StateTreeUpdates",
+}
+
+var fieldTypes_BlockSummary = []string{
+	1: "string",
+	2: "string",
+	3: "uint64",
+	4: "bytes32",
+	5: "uint64",
+	6: "RecordUpdate[]",
+	7: "StateTreeUpdate[]",
 }
 
 func (v *BlockSummary) MarshalBinary() ([]byte, error) {
@@ -953,6 +976,15 @@ var fieldNames_CreditPayment = []string{
 	6: "Cause",
 }
 
+var fieldTypes_CreditPayment = []string{
+	1: "string",
+	2: "string",
+	3: "string",
+	4: "bool",
+	5: "string",
+	6: "string",
+}
+
 func (v *CreditPayment) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -1035,6 +1067,13 @@ var fieldNames_Envelope = []string{
 	4: "Messages",
 }
 
+var fieldTypes_Envelope = []string{
+	1: "protocol.Signature[]",
+	2: "bytes",
+	3: "protocol.Transaction[]",
+	4: "Message[]",
+}
+
 func (v *Envelope) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -1094,6 +1133,11 @@ var fieldNames_RecordUpdate = []string{
 	2: "Value",
 }
 
+var fieldTypes_RecordUpdate = []string{
+	1: "record.Key",
+	2: "bytes",
+}
+
 func (v *RecordUpdate) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -1147,6 +1191,14 @@ var fieldNames_SequencedMessage = []string{
 	3: "Source",
 	4: "Destination",
 	5: "Number",
+}
+
+var fieldTypes_SequencedMessage = []string{
+	1: "string",
+	2: "Message",
+	3: "string",
+	4: "string",
+	5: "uint64",
 }
 
 func (v *SequencedMessage) MarshalBinary() ([]byte, error) {
@@ -1207,6 +1259,12 @@ var fieldNames_SignatureMessage = []string{
 	3: "TxID",
 }
 
+var fieldTypes_SignatureMessage = []string{
+	1: "string",
+	2: "protocol.Signature",
+	3: "string",
+}
+
 func (v *SignatureMessage) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -1263,6 +1321,13 @@ var fieldNames_SignatureRequest = []string{
 	2: "Authority",
 	3: "TxID",
 	4: "Cause",
+}
+
+var fieldTypes_SignatureRequest = []string{
+	1: "string",
+	2: "string",
+	3: "string",
+	4: "string",
 }
 
 func (v *SignatureRequest) MarshalBinary() ([]byte, error) {
@@ -1329,6 +1394,11 @@ var fieldNames_StateTreeUpdate = []string{
 	2: "Hash",
 }
 
+var fieldTypes_StateTreeUpdate = []string{
+	1: "record.Key",
+	2: "bytes32",
+}
+
 func (v *StateTreeUpdate) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -1381,6 +1451,13 @@ var fieldNames_SyntheticMessage = []string{
 	2: "Message",
 	3: "Signature",
 	4: "Proof",
+}
+
+var fieldTypes_SyntheticMessage = []string{
+	1: "string",
+	2: "Message",
+	3: "protocol.KeySignature",
+	4: "protocol.AnnotatedReceipt",
 }
 
 func (v *SyntheticMessage) MarshalBinary() ([]byte, error) {
@@ -1445,6 +1522,11 @@ func (v *SyntheticMessage) IsValid() error {
 var fieldNames_TransactionMessage = []string{
 	1: "Type",
 	2: "Transaction",
+}
+
+var fieldTypes_TransactionMessage = []string{
+	1: "string",
+	2: "protocol.Transaction",
 }
 
 func (v *TransactionMessage) MarshalBinary() ([]byte, error) {
@@ -2009,6 +2091,99 @@ func (v *TransactionMessage) UnmarshalFieldsFrom(reader *encoding.Reader) error 
 		return encoding.Error{E: err}
 	}
 	return nil
+}
+
+func initEip712TypeDictionary() {
+
+	encoding.SchemaDictionary["BadSyntheticMessage"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"message", "Message"},
+		{"signature", "protocol.KeySignature"},
+		{"proof", "protocol.AnnotatedReceipt"},
+	}
+
+	encoding.SchemaDictionary["BlockAnchor"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"signature", "protocol.KeySignature"},
+		{"anchor", "Message"},
+	}
+
+	encoding.SchemaDictionary["BlockSummary"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"partition", "string"},
+		{"index", "uint64"},
+		{"stateTreeHash", "bytes32"},
+		{"previousBlock", "uint64"},
+		{"recordUpdates", "RecordUpdate[]"},
+		{"stateTreeUpdates", "StateTreeUpdate[]"},
+	}
+
+	encoding.SchemaDictionary["CreditPayment"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"paid", "string"},
+		{"payer", "string"},
+		{"initiator", "bool"},
+		{"txID", "string"},
+		{"cause", "string"},
+	}
+
+	encoding.SchemaDictionary["Envelope"] = &[]encoding.TypeField{
+		{"signatures", "protocol.Signature[]"},
+		{"txHash", "bytes"},
+		{"transaction", "protocol.Transaction[]"},
+		{"messages", "Message[]"},
+	}
+
+	encoding.SchemaDictionary["RecordUpdate"] = &[]encoding.TypeField{
+		{"key", "record.Key"},
+		{"value", "bytes"},
+	}
+
+	encoding.SchemaDictionary["SequencedMessage"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"message", "Message"},
+		{"source", "string"},
+		{"destination", "string"},
+		{"number", "uint64"},
+	}
+
+	encoding.SchemaDictionary["SignatureMessage"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"signature", "protocol.Signature"},
+		{"txID", "string"},
+	}
+
+	encoding.SchemaDictionary["SignatureRequest"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"authority", "string"},
+		{"txID", "string"},
+		{"cause", "string"},
+	}
+
+	encoding.SchemaDictionary["StateTreeUpdate"] = &[]encoding.TypeField{
+		{"key", "record.Key"},
+		{"hash", "bytes32"},
+	}
+
+	encoding.SchemaDictionary["SynthFields"] = &[]encoding.TypeField{
+		{"message", "Message"},
+		{"signature", "protocol.KeySignature"},
+		{"proof", "protocol.AnnotatedReceipt"},
+	}
+
+	encoding.SchemaDictionary["SyntheticMessage"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"message", "Message"},
+		{"signature", "protocol.KeySignature"},
+		{"proof", "protocol.AnnotatedReceipt"},
+	}
+
+	encoding.SchemaDictionary["TransactionMessage"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"transaction", "protocol.Transaction"},
+	}
+
+	encoding.ResolveTypeDefinitions()
 }
 
 func (v *BadSyntheticMessage) MarshalJSON() ([]byte, error) {

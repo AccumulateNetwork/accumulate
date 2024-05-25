@@ -83,6 +83,19 @@ func (v *PeerInfo) Equal(u *PeerInfo) bool {
 	return true
 }
 
+func initEip712TypeDictionary() {
+
+	encoding.SchemaDictionary["PeerInfo"] = &[]encoding.TypeField{
+		{"id", "p2p.PeerID"},
+		{"operator", "string"},
+		{"key", "bytes32"},
+		{"status", "api.ConsensusStatus"},
+		{"addresses", "p2p.Multiaddr[]"},
+	}
+
+	encoding.ResolveTypeDefinitions()
+}
+
 func (v *PeerInfo) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Operator  *url.URL                                       `json:"operator,omitempty"`
