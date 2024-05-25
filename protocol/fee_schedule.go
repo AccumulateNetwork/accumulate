@@ -69,8 +69,8 @@ const (
 	// FeeUpdateAuthExtra $0.01
 	FeeUpdateAuthExtra Fee = 100
 
-	// MinimumCreditPurchase $0.01
-	MinimumCreditPurchase Fee = 100
+	// FeeMinimumCreditPurchase $0.01
+	FeeMinimumCreditPurchase Fee = 100
 )
 
 func dataCount(obj encoding.BinaryMarshaler) (int, int, error) {
