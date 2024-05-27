@@ -19,6 +19,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/remote"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -33,6 +34,8 @@ var cmdSnapCollect = &cobra.Command{
 var flagSnapCollect = struct {
 	SkipBPT    bool
 	SkipSystem bool
+	SkipSigs   bool
+	SkipTokens bool
 	Indexed    bool
 	Partition  UrlFlag
 }{}
@@ -41,6 +44,8 @@ func init() {
 	cmdSnap.AddCommand(cmdSnapCollect)
 	cmdSnapCollect.Flags().BoolVar(&flagSnapCollect.SkipBPT, "skip-bpt", false, "Skip the BPT")
 	cmdSnapCollect.Flags().BoolVar(&flagSnapCollect.SkipSystem, "skip-system", false, "Skip system accounts")
+	cmdSnapCollect.Flags().BoolVar(&flagSnapCollect.SkipSigs, "skip-signatures", false, "Skip signatures")
+	cmdSnapCollect.Flags().BoolVar(&flagSnapCollect.SkipTokens, "skip-token-txns", false, "Skip token transactions")
 	cmdSnapCollect.Flags().BoolVar(&flagSnapCollect.Indexed, "indexed", false, "Make an indexed snapshot")
 	cmdSnapCollect.Flags().Var(&flagSnapCollect.Partition, "partition", "Specify the partition instead of determining it from the database")
 }
@@ -112,6 +117,25 @@ func collectSnapshot(_ *cobra.Command, args []string) {
 			}
 
 			// Retain everything
+			return true, nil
+		},
+		KeepMessage: func(msg messaging.Message) (bool, error) {
+			switch msg := msg.(type) {
+			case *messaging.SignatureMessage:
+				return !flagSnapCollect.SkipSigs, nil
+			case *messaging.TransactionMessage:
+				if !flagSnapCollect.SkipTokens {
+					break
+				}
+				switch msg.Transaction.Body.Type() {
+				case protocol.TransactionTypeSendTokens,
+					protocol.TransactionTypeBurnTokens,
+					protocol.TransactionTypeAddCredits,
+					protocol.TransactionTypeSyntheticDepositTokens,
+					protocol.TransactionTypeSyntheticDepositCredits:
+					return false, nil
+				}
+			}
 			return true, nil
 		},
 	}))
