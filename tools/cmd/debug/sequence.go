@@ -43,7 +43,8 @@ var cmdSequence = &cobra.Command{
 func init() {
 	cmd.AddCommand(cmdSequence)
 	cmdSequence.Flags().BoolVarP(&verbose, "verbose", "v", false, "More verbose output")
-	cmdSequence.PersistentFlags().StringVar(&cachedScan, "cached-scan", "", "A cached network scan")
+	cmdSequence.Flags().BoolVar(&debug, "debug", false, "Debug network requests")
+	cmdSequence.Flags().StringVar(&cachedScan, "cached-scan", "", "A cached network scan")
 	cmdSequence.Flags().StringVar(&only, "only", "", "Only scan anchors or synthetic transactions")
 	cmdSequence.Flags().DurationVar(&flagMaxResponseAge, "max-response-age", flagMaxResponseAge, "Maximum age of a response before it is considered too stale to use")
 }
@@ -54,6 +55,7 @@ func sequence(cmd *cobra.Command, args []string) {
 
 	c := jsonrpc.NewClient(accumulate.ResolveWellKnownEndpoint(args[0], "v3"))
 	c.Client.Timeout = time.Hour
+	c.Debug = debug
 	Q := api.Querier2{Querier: c}
 
 	ni, err := c.NodeInfo(ctx, api.NodeInfoOptions{})
@@ -94,6 +96,7 @@ func sequence(cmd *cobra.Command, args []string) {
 				Dialer: node.DialNetwork(),
 			},
 			Router: router,
+			Debug:  debug,
 		},
 	}
 	Q.Querier = c2

@@ -69,6 +69,8 @@ func New(ctx context.Context, cfg *Config) (*Instance, error) {
 	return inst, nil
 }
 
+func (i *Instance) Done() <-chan struct{} { return i.context.Done() }
+
 func (inst *Instance) Reset() error {
 	for _, c := range inst.config.Configurations {
 		c, ok := c.(resetable)
@@ -107,6 +109,9 @@ func (inst *Instance) StartFiltered(predicate func(Service) bool) (err error) {
 	}()
 
 	// Start metrics
+	if inst.config.Instrumentation == nil {
+		inst.config.Instrumentation = new(Instrumentation)
+	}
 	err = inst.config.Instrumentation.start(inst)
 	if err != nil {
 		return err
@@ -174,6 +179,39 @@ func (inst *Instance) StartFiltered(predicate func(Service) bool) (err error) {
 	}
 
 	return nil
+}
+
+// Verify validates the configuration and returns it with all services expanded.
+func (i *Instance) Verify() (*Config, error) {
+	cfg := i.config.Copy()
+
+	// Apply configurations
+	for _, c := range cfg.Configurations {
+		err := c.apply(i, cfg)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Verify initialization is solvable
+	_, err := ioc.Solve(cfg.Services)
+	if err != nil {
+		return nil, err
+	}
+
+	var errs []error
+	for _, svc := range cfg.Services {
+		svc, ok := svc.(interface{ Verify() error })
+		if !ok {
+			continue
+		}
+		err := svc.Verify()
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	return cfg, errors.Join(errs...)
 }
 
 func (i *Instance) Stop() {
