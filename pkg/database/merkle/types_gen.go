@@ -818,6 +818,7 @@ func (v *Receipt) MarshalJSON() ([]byte, error) {
 		EndIndex   int64                            `json:"endIndex,omitempty"`
 		Anchor     *string                          `json:"anchor,omitempty"`
 		Entries    encoding.JsonList[*ReceiptEntry] `json:"entries,omitempty"`
+		ExtraData  *string                          `json:"$epilogue,omitempty"`
 	}{}
 	if !(len(v.Start) == 0) {
 		u.Start = encoding.BytesToJSON(v.Start)
@@ -837,13 +838,15 @@ func (v *Receipt) MarshalJSON() ([]byte, error) {
 	if !(len(v.Entries) == 0) {
 		u.Entries = v.Entries
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *ReceiptEntry) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Right bool    `json:"right,omitempty"`
-		Hash  *string `json:"hash,omitempty"`
+		Right     bool    `json:"right,omitempty"`
+		Hash      *string `json:"hash,omitempty"`
+		ExtraData *string `json:"$epilogue,omitempty"`
 	}{}
 	if !(!v.Right) {
 		u.Right = v.Right
@@ -851,6 +854,7 @@ func (v *ReceiptEntry) MarshalJSON() ([]byte, error) {
 	if !(len(v.Hash) == 0) {
 		u.Hash = encoding.BytesToJSON(v.Hash)
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
@@ -860,6 +864,7 @@ func (v *ReceiptList) MarshalJSON() ([]byte, error) {
 		Elements         encoding.JsonList[*string] `json:"elements,omitempty"`
 		Receipt          *Receipt                   `json:"receipt,omitempty"`
 		ContinuedReceipt *Receipt                   `json:"continuedReceipt,omitempty"`
+		ExtraData        *string                    `json:"$epilogue,omitempty"`
 	}{}
 	if !(v.MerkleState == nil) {
 		u.MerkleState = v.MerkleState
@@ -876,6 +881,7 @@ func (v *ReceiptList) MarshalJSON() ([]byte, error) {
 	if !(v.ContinuedReceipt == nil) {
 		u.ContinuedReceipt = v.ContinuedReceipt
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
@@ -905,9 +911,10 @@ func (v *State) MarshalJSON() ([]byte, error) {
 
 func (v *chainIndexBlock) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Level   uint64                              `json:"level,omitempty"`
-		Index   uint64                              `json:"index,omitempty"`
-		Entries encoding.JsonList[*chainIndexEntry] `json:"entries,omitempty"`
+		Level     uint64                              `json:"level,omitempty"`
+		Index     uint64                              `json:"index,omitempty"`
+		Entries   encoding.JsonList[*chainIndexEntry] `json:"entries,omitempty"`
+		ExtraData *string                             `json:"$epilogue,omitempty"`
 	}{}
 	if !(v.Level == 0) {
 		u.Level = v.Level
@@ -918,6 +925,7 @@ func (v *chainIndexBlock) MarshalJSON() ([]byte, error) {
 	if !(len(v.Entries) == 0) {
 		u.Entries = v.Entries
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
@@ -929,6 +937,7 @@ func (v *Receipt) UnmarshalJSON(data []byte) error {
 		EndIndex   int64                            `json:"endIndex,omitempty"`
 		Anchor     *string                          `json:"anchor,omitempty"`
 		Entries    encoding.JsonList[*ReceiptEntry] `json:"entries,omitempty"`
+		ExtraData  *string                          `json:"$epilogue,omitempty"`
 	}{}
 	u.Start = encoding.BytesToJSON(v.Start)
 	u.StartIndex = v.StartIndex
@@ -936,7 +945,8 @@ func (v *Receipt) UnmarshalJSON(data []byte) error {
 	u.EndIndex = v.EndIndex
 	u.Anchor = encoding.BytesToJSON(v.Anchor)
 	u.Entries = v.Entries
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if x, err := encoding.BytesFromJSON(u.Start); err != nil {
@@ -957,17 +967,23 @@ func (v *Receipt) UnmarshalJSON(data []byte) error {
 		v.Anchor = x
 	}
 	v.Entries = u.Entries
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (v *ReceiptEntry) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Right bool    `json:"right,omitempty"`
-		Hash  *string `json:"hash,omitempty"`
+		Right     bool    `json:"right,omitempty"`
+		Hash      *string `json:"hash,omitempty"`
+		ExtraData *string `json:"$epilogue,omitempty"`
 	}{}
 	u.Right = v.Right
 	u.Hash = encoding.BytesToJSON(v.Hash)
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.Right = u.Right
@@ -975,6 +991,10 @@ func (v *ReceiptEntry) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("error decoding Hash: %w", err)
 	} else {
 		v.Hash = x
+	}
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
 	}
 	return nil
 }
@@ -985,6 +1005,7 @@ func (v *ReceiptList) UnmarshalJSON(data []byte) error {
 		Elements         encoding.JsonList[*string] `json:"elements,omitempty"`
 		Receipt          *Receipt                   `json:"receipt,omitempty"`
 		ContinuedReceipt *Receipt                   `json:"continuedReceipt,omitempty"`
+		ExtraData        *string                    `json:"$epilogue,omitempty"`
 	}{}
 	u.MerkleState = v.MerkleState
 	u.Elements = make(encoding.JsonList[*string], len(v.Elements))
@@ -993,7 +1014,8 @@ func (v *ReceiptList) UnmarshalJSON(data []byte) error {
 	}
 	u.Receipt = v.Receipt
 	u.ContinuedReceipt = v.ContinuedReceipt
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.MerkleState = u.MerkleState
@@ -1007,6 +1029,10 @@ func (v *ReceiptList) UnmarshalJSON(data []byte) error {
 	}
 	v.Receipt = u.Receipt
 	v.ContinuedReceipt = u.ContinuedReceipt
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -1025,7 +1051,8 @@ func (v *State) UnmarshalJSON(data []byte) error {
 	for i, x := range v.HashList {
 		u.HashList[i] = encoding.BytesToJSON(x)
 	}
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.Count = u.Count
@@ -1050,18 +1077,24 @@ func (v *State) UnmarshalJSON(data []byte) error {
 
 func (v *chainIndexBlock) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Level   uint64                              `json:"level,omitempty"`
-		Index   uint64                              `json:"index,omitempty"`
-		Entries encoding.JsonList[*chainIndexEntry] `json:"entries,omitempty"`
+		Level     uint64                              `json:"level,omitempty"`
+		Index     uint64                              `json:"index,omitempty"`
+		Entries   encoding.JsonList[*chainIndexEntry] `json:"entries,omitempty"`
+		ExtraData *string                             `json:"$epilogue,omitempty"`
 	}{}
 	u.Level = v.Level
 	u.Index = v.Index
 	u.Entries = v.Entries
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.Level = u.Level
 	v.Index = u.Index
 	v.Entries = u.Entries
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }

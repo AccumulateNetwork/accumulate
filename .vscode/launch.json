@@ -172,9 +172,7 @@
       "mode": "auto",
       "program": "${workspaceFolder}/cmd/accumulated",
       "args": [
-        "run",
-        "devnet",
-        "-w=${workspaceFolder}/.nodes/devnet",
+        "${workspaceFolder}/.nodes/devnet",
       ]
     },
     {
@@ -524,10 +522,7 @@
       "mode": "auto",
       "program": "${workspaceFolder}/tools/cmd/debug",
       "args": [
-        "comet",
-        "download-genesis",
-        "http://206.189.97.165:16592",
-        "${env:HOME}/Desktop/apollo-genesis.json"
+        "db", "analyze", "badger://${workspaceFolder}/.nodes/devnet/bvn1-1/bvnn/data/accumulate.db", "--accounts",
       ]
     },
     {

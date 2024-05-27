@@ -276,7 +276,8 @@ func (v *PeerAddressStatus) UnmarshalJSON(data []byte) error {
 	}{}
 	u.Address = &encoding.JsonUnmarshalWith[p2p.Multiaddr]{Value: v.Address, Func: p2p.UnmarshalMultiaddrJSON}
 	u.Last = v.Last
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if u.Address != nil {

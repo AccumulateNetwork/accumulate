@@ -76,17 +76,19 @@ type CoreConsensusApp struct {
 }
 
 type CoreValidatorConfiguration struct {
-	Listen               p2p.Multiaddr   `json:"listen,omitempty" form:"listen" query:"listen" validate:"required"`
-	BVN                  string          `json:"bvn,omitempty" form:"bvn" query:"bvn" validate:"required"`
-	ValidatorKey         PrivateKey      `json:"validatorKey,omitempty" form:"validatorKey" query:"validatorKey" validate:"required"`
-	DnGenesis            string          `json:"dnGenesis,omitempty" form:"dnGenesis" query:"dnGenesis" validate:"required"`
-	BvnGenesis           string          `json:"bvnGenesis,omitempty" form:"bvnGenesis" query:"bvnGenesis" validate:"required"`
-	DnBootstrapPeers     []p2p.Multiaddr `json:"dnBootstrapPeers,omitempty" form:"dnBootstrapPeers" query:"dnBootstrapPeers" validate:"required"`
-	BvnBootstrapPeers    []p2p.Multiaddr `json:"bvnBootstrapPeers,omitempty" form:"bvnBootstrapPeers" query:"bvnBootstrapPeers" validate:"required"`
-	EnableHealing        *bool           `json:"enableHealing,omitempty" form:"enableHealing" query:"enableHealing"`
-	EnableDirectDispatch *bool           `json:"enableDirectDispatch,omitempty" form:"enableDirectDispatch" query:"enableDirectDispatch"`
-	MaxEnvelopesPerBlock *uint64         `json:"maxEnvelopesPerBlock,omitempty" form:"maxEnvelopesPerBlock" query:"maxEnvelopesPerBlock"`
-	StorageType          *StorageType    `json:"storageType,omitempty" form:"storageType" query:"storageType"`
+	Mode                 CoreValidatorMode `json:"mode,omitempty" form:"mode" query:"mode" validate:"required"`
+	Listen               p2p.Multiaddr     `json:"listen,omitempty" form:"listen" query:"listen" validate:"required"`
+	BVN                  string            `json:"bvn,omitempty" form:"bvn" query:"bvn" validate:"required"`
+	ValidatorKey         PrivateKey        `json:"validatorKey,omitempty" form:"validatorKey" query:"validatorKey" validate:"required"`
+	DnGenesis            string            `json:"dnGenesis,omitempty" form:"dnGenesis" query:"dnGenesis" validate:"required"`
+	BvnGenesis           string            `json:"bvnGenesis,omitempty" form:"bvnGenesis" query:"bvnGenesis" validate:"required"`
+	DnBootstrapPeers     []p2p.Multiaddr   `json:"dnBootstrapPeers,omitempty" form:"dnBootstrapPeers" query:"dnBootstrapPeers" validate:"required"`
+	BvnBootstrapPeers    []p2p.Multiaddr   `json:"bvnBootstrapPeers,omitempty" form:"bvnBootstrapPeers" query:"bvnBootstrapPeers" validate:"required"`
+	EnableHealing        *bool             `json:"enableHealing,omitempty" form:"enableHealing" query:"enableHealing"`
+	EnableDirectDispatch *bool             `json:"enableDirectDispatch,omitempty" form:"enableDirectDispatch" query:"enableDirectDispatch"`
+	EnableSnapshots      *bool             `json:"enableSnapshots,omitempty" form:"enableSnapshots" query:"enableSnapshots"`
+	MaxEnvelopesPerBlock *uint64           `json:"maxEnvelopesPerBlock,omitempty" form:"maxEnvelopesPerBlock" query:"maxEnvelopesPerBlock"`
+	StorageType          *StorageType      `json:"storageType,omitempty" form:"storageType" query:"storageType"`
 }
 
 type DevnetConfiguration struct {
@@ -151,6 +153,7 @@ type HttpService struct {
 
 type Instrumentation struct {
 	HttpListener
+	Monitoring *Monitor `json:"monitoring,omitempty" form:"monitoring" query:"monitoring" validate:"required"`
 }
 
 type LevelDBStorage struct {
@@ -161,6 +164,7 @@ type Logging struct {
 	Format string         `json:"format,omitempty" form:"format" query:"format" validate:"required"`
 	Color  *bool          `json:"color,omitempty" form:"color" query:"color" validate:"required"`
 	Rules  []*LoggingRule `json:"rules,omitempty" form:"rules" query:"rules" validate:"required"`
+	Loki   *LokiLogging   `json:"loki,omitempty" form:"loki" query:"loki" validate:"required"`
 }
 
 type LoggingRule struct {
@@ -168,11 +172,30 @@ type LoggingRule struct {
 	Modules []string   `json:"modules,omitempty" form:"modules" query:"modules" validate:"required"`
 }
 
+type LokiLogging struct {
+	Enable   bool   `json:"enable,omitempty" form:"enable" query:"enable" validate:"required"`
+	Url      string `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	Username string `json:"username,omitempty" form:"username" query:"username" validate:"required"`
+	Password string `json:"password,omitempty" form:"password" query:"password" validate:"required"`
+}
+
 type MemoryStorage struct {
 }
 
 type MetricsService struct {
 	Partition string `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
+}
+
+type Monitor struct {
+
+	// Directory is the directory traces and profiles are written to.
+	Directory string `json:"directory,omitempty" form:"directory" query:"directory" validate:"required"`
+	// ProfileMemory enables profiling when memory usage increases dramatically.
+	ProfileMemory *bool `json:"profileMemory,omitempty" form:"profileMemory" query:"profileMemory" validate:"required"`
+	// MemoryPollingRate is rate at which to poll memory usage.
+	MemoryPollingRate *time.Duration `json:"memoryPollingRate,omitempty" form:"memoryPollingRate" query:"memoryPollingRate" validate:"required"`
+	// AllocRateTrigger is the rate of allocation in bytes/second that triggers a profile.
+	AllocRateTrigger *float64 `json:"allocRateTrigger,omitempty" form:"allocRateTrigger" query:"allocRateTrigger" validate:"required"`
 }
 
 type NetworkService struct {
@@ -420,6 +443,7 @@ func (v *CoreConsensusApp) CopyAsInterface() interface{} { return v.Copy() }
 func (v *CoreValidatorConfiguration) Copy() *CoreValidatorConfiguration {
 	u := new(CoreValidatorConfiguration)
 
+	u.Mode = v.Mode
 	if v.Listen != nil {
 		u.Listen = p2p.CopyMultiaddr(v.Listen)
 	}
@@ -450,6 +474,10 @@ func (v *CoreValidatorConfiguration) Copy() *CoreValidatorConfiguration {
 	if v.EnableDirectDispatch != nil {
 		u.EnableDirectDispatch = new(bool)
 		*u.EnableDirectDispatch = *v.EnableDirectDispatch
+	}
+	if v.EnableSnapshots != nil {
+		u.EnableSnapshots = new(bool)
+		*u.EnableSnapshots = *v.EnableSnapshots
 	}
 	if v.MaxEnvelopesPerBlock != nil {
 		u.MaxEnvelopesPerBlock = new(uint64)
@@ -625,6 +653,9 @@ func (v *Instrumentation) Copy() *Instrumentation {
 	u := new(Instrumentation)
 
 	u.HttpListener = *v.HttpListener.Copy()
+	if v.Monitoring != nil {
+		u.Monitoring = (v.Monitoring).Copy()
+	}
 
 	return u
 }
@@ -656,6 +687,9 @@ func (v *Logging) Copy() *Logging {
 			u.Rules[i] = (v).Copy()
 		}
 	}
+	if v.Loki != nil {
+		u.Loki = (v.Loki).Copy()
+	}
 
 	return u
 }
@@ -677,6 +711,19 @@ func (v *LoggingRule) Copy() *LoggingRule {
 
 func (v *LoggingRule) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *LokiLogging) Copy() *LokiLogging {
+	u := new(LokiLogging)
+
+	u.Enable = v.Enable
+	u.Url = v.Url
+	u.Username = v.Username
+	u.Password = v.Password
+
+	return u
+}
+
+func (v *LokiLogging) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *MemoryStorage) Copy() *MemoryStorage {
 	u := new(MemoryStorage)
 
@@ -694,6 +741,28 @@ func (v *MetricsService) Copy() *MetricsService {
 }
 
 func (v *MetricsService) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *Monitor) Copy() *Monitor {
+	u := new(Monitor)
+
+	u.Directory = v.Directory
+	if v.ProfileMemory != nil {
+		u.ProfileMemory = new(bool)
+		*u.ProfileMemory = *v.ProfileMemory
+	}
+	if v.MemoryPollingRate != nil {
+		u.MemoryPollingRate = new(time.Duration)
+		*u.MemoryPollingRate = *v.MemoryPollingRate
+	}
+	if v.AllocRateTrigger != nil {
+		u.AllocRateTrigger = new(float64)
+		*u.AllocRateTrigger = *v.AllocRateTrigger
+	}
+
+	return u
+}
+
+func (v *Monitor) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *NetworkService) Copy() *NetworkService {
 	u := new(NetworkService)
@@ -1018,6 +1087,9 @@ func (v *CoreConsensusApp) Equal(u *CoreConsensusApp) bool {
 }
 
 func (v *CoreValidatorConfiguration) Equal(u *CoreValidatorConfiguration) bool {
+	if !(v.Mode == u.Mode) {
+		return false
+	}
 	if !(p2p.EqualMultiaddr(v.Listen, u.Listen)) {
 		return false
 	}
@@ -1063,6 +1135,14 @@ func (v *CoreValidatorConfiguration) Equal(u *CoreValidatorConfiguration) bool {
 	case v.EnableDirectDispatch == nil || u.EnableDirectDispatch == nil:
 		return false
 	case !(*v.EnableDirectDispatch == *u.EnableDirectDispatch):
+		return false
+	}
+	switch {
+	case v.EnableSnapshots == u.EnableSnapshots:
+		// equal
+	case v.EnableSnapshots == nil || u.EnableSnapshots == nil:
+		return false
+	case !(*v.EnableSnapshots == *u.EnableSnapshots):
 		return false
 	}
 	switch {
@@ -1269,6 +1349,14 @@ func (v *Instrumentation) Equal(u *Instrumentation) bool {
 	if !v.HttpListener.Equal(&u.HttpListener) {
 		return false
 	}
+	switch {
+	case v.Monitoring == u.Monitoring:
+		// equal
+	case v.Monitoring == nil || u.Monitoring == nil:
+		return false
+	case !((v.Monitoring).Equal(u.Monitoring)):
+		return false
+	}
 
 	return true
 }
@@ -1301,6 +1389,14 @@ func (v *Logging) Equal(u *Logging) bool {
 			return false
 		}
 	}
+	switch {
+	case v.Loki == u.Loki:
+		// equal
+	case v.Loki == nil || u.Loki == nil:
+		return false
+	case !((v.Loki).Equal(u.Loki)):
+		return false
+	}
 
 	return true
 }
@@ -1321,6 +1417,23 @@ func (v *LoggingRule) Equal(u *LoggingRule) bool {
 	return true
 }
 
+func (v *LokiLogging) Equal(u *LokiLogging) bool {
+	if !(v.Enable == u.Enable) {
+		return false
+	}
+	if !(v.Url == u.Url) {
+		return false
+	}
+	if !(v.Username == u.Username) {
+		return false
+	}
+	if !(v.Password == u.Password) {
+		return false
+	}
+
+	return true
+}
+
 func (v *MemoryStorage) Equal(u *MemoryStorage) bool {
 
 	return true
@@ -1328,6 +1441,38 @@ func (v *MemoryStorage) Equal(u *MemoryStorage) bool {
 
 func (v *MetricsService) Equal(u *MetricsService) bool {
 	if !(v.Partition == u.Partition) {
+		return false
+	}
+
+	return true
+}
+
+func (v *Monitor) Equal(u *Monitor) bool {
+	if !(v.Directory == u.Directory) {
+		return false
+	}
+	switch {
+	case v.ProfileMemory == u.ProfileMemory:
+		// equal
+	case v.ProfileMemory == nil || u.ProfileMemory == nil:
+		return false
+	case !(*v.ProfileMemory == *u.ProfileMemory):
+		return false
+	}
+	switch {
+	case v.MemoryPollingRate == u.MemoryPollingRate:
+		// equal
+	case v.MemoryPollingRate == nil || u.MemoryPollingRate == nil:
+		return false
+	case !(*v.MemoryPollingRate == *u.MemoryPollingRate):
+		return false
+	}
+	switch {
+	case v.AllocRateTrigger == u.AllocRateTrigger:
+		// equal
+	case v.AllocRateTrigger == nil || u.AllocRateTrigger == nil:
+		return false
+	case !(*v.AllocRateTrigger == *u.AllocRateTrigger):
 		return false
 	}
 
@@ -1881,6 +2026,7 @@ func (v *CoreConsensusApp) MarshalJSON() ([]byte, error) {
 func (v *CoreValidatorConfiguration) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type                 ConfigurationType                              `json:"type"`
+		Mode                 CoreValidatorMode                              `json:"mode,omitempty"`
 		Listen               *encoding.JsonUnmarshalWith[p2p.Multiaddr]     `json:"listen,omitempty"`
 		BVN                  string                                         `json:"bvn,omitempty"`
 		ValidatorKey         *encoding.JsonUnmarshalWith[PrivateKey]        `json:"validatorKey,omitempty"`
@@ -1890,10 +2036,14 @@ func (v *CoreValidatorConfiguration) MarshalJSON() ([]byte, error) {
 		BvnBootstrapPeers    *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"bvnBootstrapPeers,omitempty"`
 		EnableHealing        *bool                                          `json:"enableHealing,omitempty"`
 		EnableDirectDispatch *bool                                          `json:"enableDirectDispatch,omitempty"`
+		EnableSnapshots      *bool                                          `json:"enableSnapshots,omitempty"`
 		MaxEnvelopesPerBlock *uint64                                        `json:"maxEnvelopesPerBlock,omitempty"`
 		StorageType          *StorageType                                   `json:"storageType,omitempty"`
 	}{}
 	u.Type = v.Type()
+	if !(v.Mode == 0) {
+		u.Mode = v.Mode
+	}
 	if !(p2p.EqualMultiaddr(v.Listen, nil)) {
 		u.Listen = &encoding.JsonUnmarshalWith[p2p.Multiaddr]{Value: v.Listen, Func: p2p.UnmarshalMultiaddrJSON}
 	}
@@ -1920,6 +2070,9 @@ func (v *CoreValidatorConfiguration) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.EnableDirectDispatch == nil) {
 		u.EnableDirectDispatch = v.EnableDirectDispatch
+	}
+	if !(v.EnableSnapshots == nil) {
+		u.EnableSnapshots = v.EnableSnapshots
 	}
 	if !(v.MaxEnvelopesPerBlock == nil) {
 		u.MaxEnvelopesPerBlock = v.MaxEnvelopesPerBlock
@@ -2047,6 +2200,7 @@ func (v *HttpPeerMapEntry) MarshalJSON() ([]byte, error) {
 		ID         *encoding.JsonUnmarshalWith[p2p.PeerID]        `json:"id,omitempty"`
 		Partitions encoding.JsonList[string]                      `json:"partitions,omitempty"`
 		Addresses  *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"addresses,omitempty"`
+		ExtraData  *string                                        `json:"$epilogue,omitempty"`
 	}{}
 	if !(v.ID == ("")) {
 		u.ID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.ID, Func: p2p.UnmarshalPeerIDJSON}
@@ -2057,6 +2211,7 @@ func (v *HttpPeerMapEntry) MarshalJSON() ([]byte, error) {
 	if !(len(v.Addresses) == 0) {
 		u.Addresses = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.Addresses, Func: p2p.UnmarshalMultiaddrJSON}
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
@@ -2076,25 +2231,20 @@ func (v *HttpService) MarshalJSON() ([]byte, error) {
 	}{}
 	u.Type = v.Type()
 	if !(len(v.HttpListener.Listen) == 0) {
-
 		u.Listen = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.HttpListener.Listen, Func: p2p.UnmarshalMultiaddrJSON}
 	}
 	if !(v.HttpListener.ConnectionLimit == nil) {
-
 		u.ConnectionLimit = v.HttpListener.ConnectionLimit
 	}
 	if !(v.HttpListener.ReadHeaderTimeout == nil) {
-
 		if v.HttpListener.ReadHeaderTimeout != nil {
 			u.ReadHeaderTimeout = encoding.DurationToJSON(*v.HttpListener.ReadHeaderTimeout)
 		}
 	}
 	if !(len(v.HttpListener.TlsCertPath) == 0) {
-
 		u.TlsCertPath = v.HttpListener.TlsCertPath
 	}
 	if !(len(v.HttpListener.TlsKeyPath) == 0) {
-
 		u.TlsKeyPath = v.HttpListener.TlsKeyPath
 	}
 	if !(len(v.CorsOrigins) == 0) {
@@ -2122,28 +2272,27 @@ func (v *Instrumentation) MarshalJSON() ([]byte, error) {
 		ReadHeaderTimeout interface{}                                    `json:"readHeaderTimeout,omitempty"`
 		TlsCertPath       string                                         `json:"tlsCertPath,omitempty"`
 		TlsKeyPath        string                                         `json:"tlsKeyPath,omitempty"`
+		Monitoring        *Monitor                                       `json:"monitoring,omitempty"`
 	}{}
 	if !(len(v.HttpListener.Listen) == 0) {
-
 		u.Listen = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.HttpListener.Listen, Func: p2p.UnmarshalMultiaddrJSON}
 	}
 	if !(v.HttpListener.ConnectionLimit == nil) {
-
 		u.ConnectionLimit = v.HttpListener.ConnectionLimit
 	}
 	if !(v.HttpListener.ReadHeaderTimeout == nil) {
-
 		if v.HttpListener.ReadHeaderTimeout != nil {
 			u.ReadHeaderTimeout = encoding.DurationToJSON(*v.HttpListener.ReadHeaderTimeout)
 		}
 	}
 	if !(len(v.HttpListener.TlsCertPath) == 0) {
-
 		u.TlsCertPath = v.HttpListener.TlsCertPath
 	}
 	if !(len(v.HttpListener.TlsKeyPath) == 0) {
-
 		u.TlsKeyPath = v.HttpListener.TlsKeyPath
+	}
+	if !(v.Monitoring == nil) {
+		u.Monitoring = v.Monitoring
 	}
 	return json.Marshal(&u)
 }
@@ -2165,6 +2314,7 @@ func (v *Logging) MarshalJSON() ([]byte, error) {
 		Format string                          `json:"format,omitempty"`
 		Color  *bool                           `json:"color,omitempty"`
 		Rules  encoding.JsonList[*LoggingRule] `json:"rules,omitempty"`
+		Loki   *LokiLogging                    `json:"loki,omitempty"`
 	}{}
 	if !(len(v.Format) == 0) {
 		u.Format = v.Format
@@ -2174,6 +2324,9 @@ func (v *Logging) MarshalJSON() ([]byte, error) {
 	}
 	if !(len(v.Rules) == 0) {
 		u.Rules = v.Rules
+	}
+	if !(v.Loki == nil) {
+		u.Loki = v.Loki
 	}
 	return json.Marshal(&u)
 }
@@ -2206,6 +2359,30 @@ func (v *MetricsService) MarshalJSON() ([]byte, error) {
 	u.Type = v.Type()
 	if !(len(v.Partition) == 0) {
 		u.Partition = v.Partition
+	}
+	return json.Marshal(&u)
+}
+
+func (v *Monitor) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Directory         string      `json:"directory,omitempty"`
+		ProfileMemory     *bool       `json:"profileMemory,omitempty"`
+		MemoryPollingRate interface{} `json:"memoryPollingRate,omitempty"`
+		AllocRateTrigger  *float64    `json:"allocRateTrigger,omitempty"`
+	}{}
+	if !(len(v.Directory) == 0) {
+		u.Directory = v.Directory
+	}
+	if !(v.ProfileMemory == nil) {
+		u.ProfileMemory = v.ProfileMemory
+	}
+	if !(v.MemoryPollingRate == nil) {
+		if v.MemoryPollingRate != nil {
+			u.MemoryPollingRate = encoding.DurationToJSON(*v.MemoryPollingRate)
+		}
+	}
+	if !(v.AllocRateTrigger == nil) {
+		u.AllocRateTrigger = v.AllocRateTrigger
 	}
 	return json.Marshal(&u)
 }
@@ -2298,10 +2475,11 @@ func (v *RawPrivateKey) MarshalJSON() ([]byte, error) {
 
 func (v *RouterService) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type    ServiceType                          `json:"type"`
-		Name    string                               `json:"name,omitempty"`
-		Events  string                               `json:"events,omitempty"`
-		PeerMap encoding.JsonList[*HttpPeerMapEntry] `json:"peerMap,omitempty"`
+		Type      ServiceType                          `json:"type"`
+		Name      string                               `json:"name,omitempty"`
+		Events    string                               `json:"events,omitempty"`
+		PeerMap   encoding.JsonList[*HttpPeerMapEntry] `json:"peerMap,omitempty"`
+		ExtraData *string                              `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(len(v.Name) == 0) {
@@ -2313,6 +2491,7 @@ func (v *RouterService) MarshalJSON() ([]byte, error) {
 	if !(len(v.PeerMap) == 0) {
 		u.PeerMap = v.PeerMap
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
@@ -2401,7 +2580,8 @@ func (v *BadgerStorage) UnmarshalJSON(data []byte) error {
 	u.Type = v.Type()
 	u.Path = v.Path
 	u.Version = v.Version
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -2419,7 +2599,8 @@ func (v *BoltStorage) UnmarshalJSON(data []byte) error {
 	}{}
 	u.Type = v.Type()
 	u.Path = v.Path
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -2435,8 +2616,10 @@ func (v *CometNodeKeyFile) UnmarshalJSON(data []byte) error {
 		Path string         `json:"path,omitempty"`
 	}{}
 	u.Type = v.Type()
+
 	u.Path = v.Path
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -2452,8 +2635,10 @@ func (v *CometPrivValFile) UnmarshalJSON(data []byte) error {
 		Path string         `json:"path,omitempty"`
 	}{}
 	u.Type = v.Type()
+
 	u.Path = v.Path
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -2472,13 +2657,15 @@ func (v *Config) UnmarshalJSON(data []byte) error {
 		Configurations  *encoding.JsonUnmarshalListWith[Configuration] `json:"configurations,omitempty"`
 		Services        *encoding.JsonUnmarshalListWith[Service]       `json:"services,omitempty"`
 	}{}
+
 	u.Network = v.Network
 	u.Logging = v.Logging
 	u.Instrumentation = v.Instrumentation
 	u.P2P = v.P2P
 	u.Configurations = &encoding.JsonUnmarshalListWith[Configuration]{Value: v.Configurations, Func: UnmarshalConfigurationJSON}
 	u.Services = &encoding.JsonUnmarshalListWith[Service]{Value: v.Services, Func: UnmarshalServiceJSON}
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.Network = u.Network
@@ -2519,7 +2706,8 @@ func (v *ConsensusService) UnmarshalJSON(data []byte) error {
 	u.BootstrapPeers = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.BootstrapPeers, Func: p2p.UnmarshalMultiaddrJSON}
 	u.MetricsNamespace = v.MetricsNamespace
 	u.App = &encoding.JsonUnmarshalWith[ConsensusApp]{Value: v.App, Func: UnmarshalConsensusAppJSON}
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -2562,7 +2750,8 @@ func (v *CoreConsensusApp) UnmarshalJSON(data []byte) error {
 	u.EnableHealing = v.EnableHealing
 	u.EnableDirectDispatch = v.EnableDirectDispatch
 	u.MaxEnvelopesPerBlock = v.MaxEnvelopesPerBlock
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -2578,6 +2767,7 @@ func (v *CoreConsensusApp) UnmarshalJSON(data []byte) error {
 func (v *CoreValidatorConfiguration) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type                 ConfigurationType                              `json:"type"`
+		Mode                 CoreValidatorMode                              `json:"mode,omitempty"`
 		Listen               *encoding.JsonUnmarshalWith[p2p.Multiaddr]     `json:"listen,omitempty"`
 		BVN                  string                                         `json:"bvn,omitempty"`
 		ValidatorKey         *encoding.JsonUnmarshalWith[PrivateKey]        `json:"validatorKey,omitempty"`
@@ -2587,10 +2777,12 @@ func (v *CoreValidatorConfiguration) UnmarshalJSON(data []byte) error {
 		BvnBootstrapPeers    *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"bvnBootstrapPeers,omitempty"`
 		EnableHealing        *bool                                          `json:"enableHealing,omitempty"`
 		EnableDirectDispatch *bool                                          `json:"enableDirectDispatch,omitempty"`
+		EnableSnapshots      *bool                                          `json:"enableSnapshots,omitempty"`
 		MaxEnvelopesPerBlock *uint64                                        `json:"maxEnvelopesPerBlock,omitempty"`
 		StorageType          *StorageType                                   `json:"storageType,omitempty"`
 	}{}
 	u.Type = v.Type()
+	u.Mode = v.Mode
 	u.Listen = &encoding.JsonUnmarshalWith[p2p.Multiaddr]{Value: v.Listen, Func: p2p.UnmarshalMultiaddrJSON}
 	u.BVN = v.BVN
 	u.ValidatorKey = &encoding.JsonUnmarshalWith[PrivateKey]{Value: v.ValidatorKey, Func: UnmarshalPrivateKeyJSON}
@@ -2600,14 +2792,17 @@ func (v *CoreValidatorConfiguration) UnmarshalJSON(data []byte) error {
 	u.BvnBootstrapPeers = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.BvnBootstrapPeers, Func: p2p.UnmarshalMultiaddrJSON}
 	u.EnableHealing = v.EnableHealing
 	u.EnableDirectDispatch = v.EnableDirectDispatch
+	u.EnableSnapshots = v.EnableSnapshots
 	u.MaxEnvelopesPerBlock = v.MaxEnvelopesPerBlock
 	u.StorageType = v.StorageType
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
+	v.Mode = u.Mode
 	if u.Listen != nil {
 		v.Listen = u.Listen.Value
 	}
@@ -2633,6 +2828,7 @@ func (v *CoreValidatorConfiguration) UnmarshalJSON(data []byte) error {
 	}
 	v.EnableHealing = u.EnableHealing
 	v.EnableDirectDispatch = u.EnableDirectDispatch
+	v.EnableSnapshots = u.EnableSnapshots
 	v.MaxEnvelopesPerBlock = u.MaxEnvelopesPerBlock
 	v.StorageType = u.StorageType
 	return nil
@@ -2653,7 +2849,8 @@ func (v *DevnetConfiguration) UnmarshalJSON(data []byte) error {
 	u.Validators = v.Validators
 	u.Followers = v.Followers
 	u.Globals = v.Globals
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -2677,7 +2874,8 @@ func (v *EventsService) UnmarshalJSON(data []byte) error {
 	}{}
 	u.Type = v.Type()
 	u.Partition = v.Partition
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -2694,7 +2892,8 @@ func (v *ExpBlockDBStorage) UnmarshalJSON(data []byte) error {
 	}{}
 	u.Type = v.Type()
 	u.Path = v.Path
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -2715,7 +2914,8 @@ func (v *FaucetService) UnmarshalJSON(data []byte) error {
 	u.Account = v.Account
 	u.SigningKey = &encoding.JsonUnmarshalWith[PrivateKey]{Value: v.SigningKey, Func: UnmarshalPrivateKeyJSON}
 	u.Router = v.Router
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -2737,7 +2937,8 @@ func (v *GatewayConfiguration) UnmarshalJSON(data []byte) error {
 	}{}
 	u.Type = v.Type()
 	u.Listen = &encoding.JsonUnmarshalWith[p2p.Multiaddr]{Value: v.Listen, Func: p2p.UnmarshalMultiaddrJSON}
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -2765,7 +2966,8 @@ func (v *HttpListener) UnmarshalJSON(data []byte) error {
 	}
 	u.TlsCertPath = v.TlsCertPath
 	u.TlsKeyPath = v.TlsKeyPath
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if u.Listen != nil {
@@ -2792,11 +2994,13 @@ func (v *HttpPeerMapEntry) UnmarshalJSON(data []byte) error {
 		ID         *encoding.JsonUnmarshalWith[p2p.PeerID]        `json:"id,omitempty"`
 		Partitions encoding.JsonList[string]                      `json:"partitions,omitempty"`
 		Addresses  *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"addresses,omitempty"`
+		ExtraData  *string                                        `json:"$epilogue,omitempty"`
 	}{}
 	u.ID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.ID, Func: p2p.UnmarshalPeerIDJSON}
 	u.Partitions = v.Partitions
 	u.Addresses = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.Addresses, Func: p2p.UnmarshalMultiaddrJSON}
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if u.ID != nil {
@@ -2809,6 +3013,10 @@ func (v *HttpPeerMapEntry) UnmarshalJSON(data []byte) error {
 		for i, x := range u.Addresses.Value {
 			v.Addresses[i] = x
 		}
+	}
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
 	}
 	return nil
 }
@@ -2840,7 +3048,8 @@ func (v *HttpService) UnmarshalJSON(data []byte) error {
 	u.DebugJsonRpc = v.DebugJsonRpc
 	u.Router = v.Router
 	u.PeerMap = v.PeerMap
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -2877,6 +3086,7 @@ func (v *Instrumentation) UnmarshalJSON(data []byte) error {
 		ReadHeaderTimeout interface{}                                    `json:"readHeaderTimeout,omitempty"`
 		TlsCertPath       string                                         `json:"tlsCertPath,omitempty"`
 		TlsKeyPath        string                                         `json:"tlsKeyPath,omitempty"`
+		Monitoring        *Monitor                                       `json:"monitoring,omitempty"`
 	}{}
 	u.Listen = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.HttpListener.Listen, Func: p2p.UnmarshalMultiaddrJSON}
 	u.ConnectionLimit = v.HttpListener.ConnectionLimit
@@ -2885,7 +3095,9 @@ func (v *Instrumentation) UnmarshalJSON(data []byte) error {
 	}
 	u.TlsCertPath = v.HttpListener.TlsCertPath
 	u.TlsKeyPath = v.HttpListener.TlsKeyPath
-	if err := json.Unmarshal(data, &u); err != nil {
+	u.Monitoring = v.Monitoring
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if u.Listen != nil {
@@ -2904,6 +3116,7 @@ func (v *Instrumentation) UnmarshalJSON(data []byte) error {
 	}
 	v.HttpListener.TlsCertPath = u.TlsCertPath
 	v.HttpListener.TlsKeyPath = u.TlsKeyPath
+	v.Monitoring = u.Monitoring
 	return nil
 }
 
@@ -2914,7 +3127,8 @@ func (v *LevelDBStorage) UnmarshalJSON(data []byte) error {
 	}{}
 	u.Type = v.Type()
 	u.Path = v.Path
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -2929,16 +3143,20 @@ func (v *Logging) UnmarshalJSON(data []byte) error {
 		Format string                          `json:"format,omitempty"`
 		Color  *bool                           `json:"color,omitempty"`
 		Rules  encoding.JsonList[*LoggingRule] `json:"rules,omitempty"`
+		Loki   *LokiLogging                    `json:"loki,omitempty"`
 	}{}
 	u.Format = v.Format
 	u.Color = v.Color
 	u.Rules = v.Rules
-	if err := json.Unmarshal(data, &u); err != nil {
+	u.Loki = v.Loki
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.Format = u.Format
 	v.Color = u.Color
 	v.Rules = u.Rules
+	v.Loki = u.Loki
 	return nil
 }
 
@@ -2949,7 +3167,8 @@ func (v *LoggingRule) UnmarshalJSON(data []byte) error {
 	}{}
 	u.Level = v.Level
 	u.Modules = v.Modules
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.Level = u.Level
@@ -2962,7 +3181,8 @@ func (v *MemoryStorage) UnmarshalJSON(data []byte) error {
 		Type StorageType `json:"type"`
 	}{}
 	u.Type = v.Type()
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -2978,13 +3198,44 @@ func (v *MetricsService) UnmarshalJSON(data []byte) error {
 	}{}
 	u.Type = v.Type()
 	u.Partition = v.Partition
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Partition = u.Partition
+	return nil
+}
+
+func (v *Monitor) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Directory         string      `json:"directory,omitempty"`
+		ProfileMemory     *bool       `json:"profileMemory,omitempty"`
+		MemoryPollingRate interface{} `json:"memoryPollingRate,omitempty"`
+		AllocRateTrigger  *float64    `json:"allocRateTrigger,omitempty"`
+	}{}
+	u.Directory = v.Directory
+	u.ProfileMemory = v.ProfileMemory
+	if v.MemoryPollingRate != nil {
+		u.MemoryPollingRate = encoding.DurationToJSON(*v.MemoryPollingRate)
+	}
+	u.AllocRateTrigger = v.AllocRateTrigger
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	v.Directory = u.Directory
+	v.ProfileMemory = u.ProfileMemory
+	if u.MemoryPollingRate != nil {
+		if x, err := encoding.DurationFromJSON(u.MemoryPollingRate); err != nil {
+			return fmt.Errorf("error decoding MemoryPollingRate: %w", err)
+		} else {
+			v.MemoryPollingRate = &x
+		}
+	}
+	v.AllocRateTrigger = u.AllocRateTrigger
 	return nil
 }
 
@@ -2995,7 +3246,8 @@ func (v *NetworkService) UnmarshalJSON(data []byte) error {
 	}{}
 	u.Type = v.Type()
 	u.Partition = v.Partition
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -3022,7 +3274,8 @@ func (v *P2P) UnmarshalJSON(data []byte) error {
 	u.EnablePeerTracking = v.EnablePeerTracking
 	u.DiscoveryMode = v.DiscoveryMode
 	u.External = &encoding.JsonUnmarshalWith[p2p.Multiaddr]{Value: v.External, Func: p2p.UnmarshalMultiaddrJSON}
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if u.Listen != nil {
@@ -3057,8 +3310,10 @@ func (v *PrivateKeySeed) UnmarshalJSON(data []byte) error {
 		Seed *record.Key    `json:"seed,omitempty"`
 	}{}
 	u.Type = v.Type()
+
 	u.Seed = v.Seed
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -3077,7 +3332,8 @@ func (v *Querier) UnmarshalJSON(data []byte) error {
 	u.Type = v.Type()
 	u.Partition = v.Partition
 	u.Storage = v.Storage
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -3095,7 +3351,8 @@ func (v *RawPrivateKey) UnmarshalJSON(data []byte) error {
 	}{}
 	u.Type = v.Type()
 	u.Address = v.Address
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -3107,16 +3364,18 @@ func (v *RawPrivateKey) UnmarshalJSON(data []byte) error {
 
 func (v *RouterService) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type    ServiceType                          `json:"type"`
-		Name    string                               `json:"name,omitempty"`
-		Events  string                               `json:"events,omitempty"`
-		PeerMap encoding.JsonList[*HttpPeerMapEntry] `json:"peerMap,omitempty"`
+		Type      ServiceType                          `json:"type"`
+		Name      string                               `json:"name,omitempty"`
+		Events    string                               `json:"events,omitempty"`
+		PeerMap   encoding.JsonList[*HttpPeerMapEntry] `json:"peerMap,omitempty"`
+		ExtraData *string                              `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Name = v.Name
 	u.Events = v.Events
 	u.PeerMap = v.PeerMap
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -3125,6 +3384,10 @@ func (v *RouterService) UnmarshalJSON(data []byte) error {
 	v.Name = u.Name
 	v.Events = u.Events
 	v.PeerMap = u.PeerMap
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -3145,7 +3408,8 @@ func (v *SnapshotService) UnmarshalJSON(data []byte) error {
 	u.Schedule = v.Schedule
 	u.RetainCount = v.RetainCount
 	u.EnableIndexing = v.EnableIndexing
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -3169,7 +3433,8 @@ func (v *StorageService) UnmarshalJSON(data []byte) error {
 	u.Type = v.Type()
 	u.Name = v.Name
 	u.Storage = &encoding.JsonUnmarshalWith[Storage]{Value: v.Storage, Func: UnmarshalStorageJSON}
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -3194,7 +3459,8 @@ func (v *SubnodeService) UnmarshalJSON(data []byte) error {
 	u.Name = v.Name
 	u.NodeKey = &encoding.JsonUnmarshalWith[PrivateKey]{Value: v.NodeKey, Func: UnmarshalPrivateKeyJSON}
 	u.Services = &encoding.JsonUnmarshalListWith[Service]{Value: v.Services, Func: UnmarshalServiceJSON}
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -3219,7 +3485,9 @@ func (v *TransientPrivateKey) UnmarshalJSON(data []byte) error {
 		Type PrivateKeyType `json:"type"`
 	}{}
 	u.Type = v.Type()
-	if err := json.Unmarshal(data, &u); err != nil {
+
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
