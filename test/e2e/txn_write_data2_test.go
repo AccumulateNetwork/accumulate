@@ -13,6 +13,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -307,4 +308,49 @@ func Test64ByteHeader(t *testing.T) {
 	st := sim.SubmitTxnSuccessfully(env)
 	sim.StepUntil(
 		Txn(st.TxID).Succeeds())
+}
+
+func TestWriteDataScratch(t *testing.T) {
+	alice := build.
+		Identity("alice").Create("book").
+		Data("data").Create().Identity().
+		Book("book").Page(1).Create().AddCredits(1e9).Book().Identity()
+	aliceKey := alice.Book("book").Page(1).
+		GenerateKey(SignatureTypeED25519)
+
+	// Initialize
+	g := new(core.GlobalValues)
+	g.ExecutorVersion = ExecutorVersionLatest
+	sim := NewSim(t,
+		simulator.SimpleNetwork(t.Name(), 1, 1),
+		simulator.Genesis(GenesisTime).With(alice),
+	)
+
+	st := sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(alice, "data").
+			WriteData().DoubleHash("foo").Scratch().
+			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey))
+	require.NoError(t, st.AsError())
+	sim.StepUntil(
+		Txn(st.TxID).Succeeds())
+
+	// The transaction is on the scratch chain
+	r := sim.QueryMainChainEntries(alice.Url().JoinPath("data"), &api.ChainQuery{Name: "scratch", Range: &api.RangeOptions{
+		Start:   0,
+		Count:   api.Ptr[uint64](1),
+		FromEnd: true,
+		Expand:  api.Ptr(true),
+	}})
+	require.Len(t, r.Records, 1)
+	require.Equal(t, st.TxID.String(), r.Records[0].Value.ID.String())
+	require.IsType(t, (*WriteData)(nil), r.Records[0].Value.Message.Transaction.Body)
+
+	// Not the main chain
+	r = sim.QueryMainChainEntries(alice.Url().JoinPath("data"), &api.ChainQuery{Name: "main", Range: &api.RangeOptions{
+		Start:  0,
+		Expand: api.Ptr(true),
+	}})
+	for _, r := range r.Records {
+		require.NotEqual(t, st.TxID.String(), r.Value.ID.String())
+	}
 }

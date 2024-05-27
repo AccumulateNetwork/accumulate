@@ -419,3 +419,25 @@ func (b *TokenAccountBuilder) Add(amount any) *TokenAccountBuilder {
 	})
 	return b
 }
+
+type DataAccountBuilder struct {
+	AccountBuilder[*protocol.DataAccount]
+}
+
+func (b *IdentityBuilder) Data(path string) *DataAccountBuilder {
+	return &DataAccountBuilder{AccountBuilder[*protocol.DataAccount]{b.child(path)}}
+}
+
+func (b *DataAccountBuilder) Identity() *IdentityBuilder {
+	return &IdentityBuilder{AccountBuilder[*protocol.ADI]{b.parent()}}
+}
+
+func (b *DataAccountBuilder) Create() *DataAccountBuilder {
+	b.AccountBuilder.Create(&protocol.DataAccount{})
+	return b
+}
+
+func (b *DataAccountBuilder) Update(fn func(acct *protocol.DataAccount)) *DataAccountBuilder {
+	b.AccountBuilder.Update(fn)
+	return b
+}
