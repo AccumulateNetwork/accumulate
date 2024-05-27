@@ -387,17 +387,20 @@ func (v *startBlockEntry) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 
 func (v *endBlockEntry) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type entryType `json:"type"`
+		Type      entryType `json:"type"`
+		ExtraData *string   `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *recordEntry) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type   entryType   `json:"type"`
-		Key    *record.Key `json:"key,omitempty"`
-		Length int64       `json:"length,omitempty"`
+		Type      entryType   `json:"type"`
+		Key       *record.Key `json:"key,omitempty"`
+		Length    int64       `json:"length,omitempty"`
+		ExtraData *string     `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Key == nil) {
@@ -406,14 +409,16 @@ func (v *recordEntry) MarshalJSON() ([]byte, error) {
 	if !(v.Length == 0) {
 		u.Length = v.Length
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *startBlockEntry) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type   entryType `json:"type"`
-		ID     uint64    `json:"id,omitempty"`
-		Parent uint64    `json:"parent,omitempty"`
+		Type      entryType `json:"type"`
+		ID        uint64    `json:"id,omitempty"`
+		Parent    uint64    `json:"parent,omitempty"`
+		ExtraData *string   `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.ID == 0) {
@@ -422,33 +427,42 @@ func (v *startBlockEntry) MarshalJSON() ([]byte, error) {
 	if !(v.Parent == 0) {
 		u.Parent = v.Parent
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *endBlockEntry) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type entryType `json:"type"`
+		Type      entryType `json:"type"`
+		ExtraData *string   `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
 	}
 	return nil
 }
 
 func (v *recordEntry) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type   entryType   `json:"type"`
-		Key    *record.Key `json:"key,omitempty"`
-		Length int64       `json:"length,omitempty"`
+		Type      entryType   `json:"type"`
+		Key       *record.Key `json:"key,omitempty"`
+		Length    int64       `json:"length,omitempty"`
+		ExtraData *string     `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Key = v.Key
 	u.Length = v.Length
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -456,19 +470,25 @@ func (v *recordEntry) UnmarshalJSON(data []byte) error {
 	}
 	v.Key = u.Key
 	v.Length = u.Length
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (v *startBlockEntry) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type   entryType `json:"type"`
-		ID     uint64    `json:"id,omitempty"`
-		Parent uint64    `json:"parent,omitempty"`
+		Type      entryType `json:"type"`
+		ID        uint64    `json:"id,omitempty"`
+		Parent    uint64    `json:"parent,omitempty"`
+		ExtraData *string   `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.ID = v.ID
 	u.Parent = v.Parent
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -476,5 +496,9 @@ func (v *startBlockEntry) UnmarshalJSON(data []byte) error {
 	}
 	v.ID = u.ID
 	v.Parent = u.Parent
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }

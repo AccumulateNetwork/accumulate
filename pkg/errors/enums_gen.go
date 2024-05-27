@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -98,6 +98,9 @@ const PeerMisbehaved Status = 507
 // InvalidRecord means the database has one or more invalid records.
 const InvalidRecord Status = 508
 
+// StreamAborted is equivalent to [io.ErrUnexpectedEOF].
+const StreamAborted Status = 509
+
 // GetEnumValue returns the value of the Status
 func (v Status) GetEnumValue() uint64 { return uint64(v) }
 
@@ -105,7 +108,7 @@ func (v Status) GetEnumValue() uint64 { return uint64(v) }
 func (v *Status) SetEnumValue(id uint64) bool {
 	u := Status(id)
 	switch u {
-	case OK, Delivered, Pending, Remote, WrongPartition, BadRequest, Unauthenticated, InsufficientCredits, Unauthorized, NotFound, NotAllowed, Rejected, Expired, Conflict, BadSignerVersion, BadTimestamp, BadUrlLength, IncompleteChain, InsufficientBalance, InternalError, UnknownError, EncodingError, FatalError, NotReady, WrongType, NoPeer, PeerMisbehaved, InvalidRecord:
+	case OK, Delivered, Pending, Remote, WrongPartition, BadRequest, Unauthenticated, InsufficientCredits, Unauthorized, NotFound, NotAllowed, Rejected, Expired, Conflict, BadSignerVersion, BadTimestamp, BadUrlLength, IncompleteChain, InsufficientBalance, InternalError, UnknownError, EncodingError, FatalError, NotReady, WrongType, NoPeer, PeerMisbehaved, InvalidRecord, StreamAborted:
 		*v = u
 		return true
 	}
@@ -171,6 +174,8 @@ func (v Status) String() string {
 		return "peerMisbehaved"
 	case InvalidRecord:
 		return "invalidRecord"
+	case StreamAborted:
+		return "streamAborted"
 	}
 	return fmt.Sprintf("Status:%d", v)
 }
@@ -234,6 +239,8 @@ func StatusByName(name string) (Status, bool) {
 		return PeerMisbehaved, true
 	case "invalidrecord":
 		return InvalidRecord, true
+	case "streamaborted":
+		return StreamAborted, true
 	}
 	return 0, false
 }

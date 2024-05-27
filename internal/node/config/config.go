@@ -138,7 +138,6 @@ func Default(netName string, net protocol.PartitionType, _ NodeType, partitionId
 	c.Accumulate.AnalysisLog.Directory = "analysis"
 	c.Accumulate.AnalysisLog.Enabled = false
 	c.Accumulate.API.ReadHeaderTimeout = 10 * time.Second
-	c.Accumulate.BatchReplayLimit = 500
 	c.Accumulate.P2P.BootstrapPeers = accumulate.BootstrapServers
 	c.Config = *tm.DefaultConfig()
 	c.LogLevel = DefaultLogLevels
@@ -155,7 +154,6 @@ type Config struct {
 
 type Accumulate struct {
 	Describe              `toml:"describe" mapstructure:"describe"`
-	BatchReplayLimit      int    `toml:"batch-replay-limit" mapstructure:"batch-replay-limit"`
 	SummaryNetwork        string `toml:"summary-network" mapstructure:"summary-network"`
 	DisableDirectDispatch bool   `toml:"disable-direct-dispatch" mapstructure:"disable-direct-dispatch"`
 	MaxEnvelopesPerBlock  int    `toml:"max-envelopes-per-block" mapstructure:"max-envelopes-per-block"`
