@@ -99,7 +99,7 @@ func TsObjectify(field *Field, varName string) string {
 	case BigInt, Url, TxID:
 		return fmt.Sprintf("%s.toString()", varName)
 	case Bytes, Hash:
-		return fmt.Sprintf("Buffer.from(%s).toString('hex')", varName)
+		return fmt.Sprintf("%s && Buffer.from(%[1]s).toString('hex')", varName)
 	}
 
 	switch field.MarshalAs {
