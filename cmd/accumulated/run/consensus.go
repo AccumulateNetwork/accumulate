@@ -8,6 +8,7 @@ package run
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io/fs"
 	"os"
@@ -18,6 +19,7 @@ import (
 	tmcfg "github.com/cometbft/cometbft/config"
 	tmcrypto "github.com/cometbft/cometbft/crypto"
 	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
+	"github.com/cometbft/cometbft/crypto/tmhash"
 	cmtjson "github.com/cometbft/cometbft/libs/json"
 	"github.com/cometbft/cometbft/libs/log"
 	tmnode "github.com/cometbft/cometbft/node"
@@ -29,10 +31,8 @@ import (
 	"github.com/cometbft/cometbft/rpc/client/local"
 	tmtypes "github.com/cometbft/cometbft/types"
 	"github.com/fatih/color"
-	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
-	libp2ppb "github.com/libp2p/go-libp2p/core/crypto/pb"
-	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
+	"github.com/multiformats/go-multihash"
 	"github.com/spf13/viper"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
 	tmlib "gitlab.com/accumulatenetwork/accumulate/exp/tendermint"
@@ -102,6 +102,17 @@ func (c *ConsensusService) Provides() []ioc.Provided {
 	)
 }
 
+func (c *ConsensusService) Verify() error {
+	// Verify bootstrap peers can be converted to CometBFT format
+	for i, peer := range c.BootstrapPeers {
+		_, err := cmtPeerAddress(peer)
+		if err != nil {
+			return errors.UnknownError.WithFormat("bootstrap peer %d: %w", i, err)
+		}
+	}
+	return nil
+}
+
 func (c *ConsensusService) prestart(inst *Instance) error {
 	return c.App.prestart(inst)
 }
@@ -132,13 +143,13 @@ func (c *ConsensusService) start(inst *Instance) error {
 	// Load CometBFT config
 	d.config = tmcfg.DefaultConfig()
 	d.config.SetRoot(inst.path(c.NodeDir))
-	_, err = os.Stat(inst.path(c.NodeDir, "config", "config.toml"))
+	_, err = os.Stat(inst.path(c.NodeDir, "config", "tendermint.toml"))
 	switch {
 	case err == nil:
 		// Load the existing file with Viper because that's what Tendermint does
 		nodeDir := inst.path(c.NodeDir)
 		v := viper.New()
-		v.SetConfigFile(filepath.Join(nodeDir, "config", "config.toml"))
+		v.SetConfigFile(filepath.Join(nodeDir, "config", "tendermint.toml"))
 		v.AddConfigPath(filepath.Join(nodeDir, "config"))
 		err = v.ReadInConfig()
 		if err != nil {
@@ -148,6 +159,10 @@ func (c *ConsensusService) start(inst *Instance) error {
 		err = v.Unmarshal(d.config)
 		if err != nil {
 			return err
+		}
+
+		if d.config.Instrumentation.Prometheus {
+			d.config.Instrumentation.Namespace = c.MetricsNamespace
 		}
 
 	case errors.Is(err, fs.ErrNotExist):
@@ -182,7 +197,7 @@ func (c *ConsensusService) start(inst *Instance) error {
 		// Set whether unroutable addresses are allowed
 		d.config.P2P.AddrBookStrict = !isPrivate(c.Listen)
 
-		tmcfg.WriteConfigFile(inst.path(c.NodeDir, "config", "config.toml"), d.config)
+		tmcfg.WriteConfigFile(inst.path(c.NodeDir, "config", "tendermint.toml"), d.config)
 
 	default:
 		return err
@@ -331,13 +346,13 @@ func (c *ConsensusService) genesisDocProvider(inst *Instance) tmnode.GenesisDocP
 }
 
 func cmtPeerAddress(addr multiaddr.Multiaddr) (string, error) {
-	var pub libp2pcrypto.PubKey
+	var pub *multihash.DecodedMultihash
 	var host, port string
 	var err error
 	multiaddr.ForEach(addr, func(c multiaddr.Component) bool {
 		switch c.Protocol().Code {
 		case multiaddr.P_P2P:
-			pub, err = peer.ID(c.RawValue()).ExtractPublicKey()
+			pub, err = multihash.Decode(c.RawValue())
 		case multiaddr.P_IP4,
 			multiaddr.P_IP6,
 			multiaddr.P_DNS,
@@ -366,18 +381,16 @@ func cmtPeerAddress(addr multiaddr.Multiaddr) (string, error) {
 		return "", errors.BadRequest.With("missing port")
 	}
 
-	raw, err := pub.Raw()
-	if err != nil {
-		return "", err
-	}
-
-	switch pub.Type() {
-	case libp2ppb.KeyType_Ed25519:
-		nodeId := tmp2p.PubKeyToID(tmed25519.PubKey(raw))
-		return tmp2p.IDAddressString(nodeId, fmt.Sprintf("%s:%s", host, port)), nil
+	var hash []byte
+	switch pub.Code {
+	case multihash.IDENTITY:
+		hash = tmhash.SumTruncated(pub.Digest)
+	case multihash.SHA2_256:
+		hash = pub.Digest[:tmhash.TruncatedSize]
 	default:
-		return "", errors.BadRequest.With("unsupported key type %v", pub.Type())
+		return "", errors.BadRequest.With("unsupported multihash type %v", pub.Name)
 	}
+	return tmp2p.IDAddressString(tmp2p.ID(hex.EncodeToString(hash)), fmt.Sprintf("%s:%s", host, port)), nil
 }
 
 func (c *CoreConsensusApp) partition() *protocol.PartitionInfo { return c.Partition }
@@ -491,6 +504,9 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 		Querier:      v3.Querier2{Querier: client},
 		Dispatcher:   execOpts.NewDispatcher(),
 		RunTask:      execOpts.BackgroundTaskLauncher,
+
+		// TODO Fix the flooding issues and enable this by default
+		EnableAnchorHealing: Ptr(false),
 	}
 	err = conductor.Start(d.eventBus)
 	if err != nil {
