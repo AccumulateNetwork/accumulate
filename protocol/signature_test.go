@@ -368,67 +368,6 @@ func TestRsaSha256Signature(t *testing.T) {
 }
 
 func generateTestPkiCertificates() (string, string, string, error) {
-
-	certTemplate := x509.Certificate{
-		SerialNumber: big.NewInt(1),
-		Subject: pkix.Name{
-			CommonName: "example.com",
-		},
-		NotBefore:             time.Now(),
-		NotAfter:              time.Now().Add(365 * 24 * time.Hour),
-		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-		BasicConstraintsValid: true,
-	}
-
-	// Generate RSA private key
-	rsaPrivKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		return "", "", "", fmt.Errorf("failed to generate RSA key: %v", err)
-	}
-	rsaCertBytes, err := x509.CreateCertificate(rand.Reader, &certTemplate, &certTemplate, &rsaPrivKey.PublicKey, rsaPrivKey)
-	if err != nil {
-		return "", "", "", fmt.Errorf("failed to create RSA certificate: %v", err)
-	}
-	rsaCertPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: rsaCertBytes})
-	rsaPrivKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(rsaPrivKey)})
-
-	// Generate ECDSA private key
-	ecdsaPrivKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		return "", "", "", fmt.Errorf("failed to generate ECDSA key: %v", err)
-	}
-	ecdsaCertBytes, err := x509.CreateCertificate(rand.Reader, &certTemplate, &certTemplate, &ecdsaPrivKey.PublicKey, ecdsaPrivKey)
-	if err != nil {
-		return "", "", "", fmt.Errorf("failed to create ECDSA certificate: %v", err)
-	}
-	ecdsaCertPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: ecdsaCertBytes})
-	ecdsaPrivKeyBytes, err := x509.MarshalECPrivateKey(ecdsaPrivKey)
-	if err != nil {
-		return "", "", "", fmt.Errorf("failed to marshal ECDSA private key: %v", err)
-	}
-	ecdsaPrivKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: ecdsaPrivKeyBytes})
-
-	// Generate Ed25519 private key
-	_, ed25519PrivKey, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		return "", "", "", fmt.Errorf("failed to generate Ed25519 key: %v", err)
-	}
-	ed25519CertBytes, err := x509.CreateCertificate(rand.Reader, &certTemplate, &certTemplate, ed25519PrivKey.Public().(ed25519.PublicKey), ed25519PrivKey)
-	if err != nil {
-		return "", "", "", fmt.Errorf("failed to create Ed25519 certificate: %v", err)
-	}
-	ed25519CertPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: ed25519CertBytes})
-	ed25519PrivKeyPEM, err := x509.MarshalPKCS8PrivateKey(ed25519PrivKey)
-	if err != nil {
-		return "", "", "", fmt.Errorf("failed to marshal Ed25519 private key: %v", err)
-	}
-	ed25519PrivKeyPEMBytes := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: ed25519PrivKeyPEM})
-
-	return string(rsaCertPEM) + string(rsaPrivKeyPEM), string(ecdsaCertPEM) + string(ecdsaPrivKeyPEM), string(ed25519CertPEM) + string(ed25519PrivKeyPEMBytes), nil
-}
-
-func generateCertificates() (string, string, string, error) {
 	certTemplate := x509.Certificate{
 		SerialNumber: big.NewInt(1),
 		Subject: pkix.Name{
@@ -493,7 +432,7 @@ func generateCertificates() (string, string, string, error) {
 }
 
 func TestPkiSha256Signature(t *testing.T) {
-	rsaCert, ecdsaCert, ed25519Cert, err := generateCertificates() // generateTestPkiCertificates()
+	rsaCert, ecdsaCert, ed25519Cert, err := generateTestPkiCertificates()
 	if err != nil {
 		t.Fatalf("Failed to generate certificates: %v\n", err)
 	}
