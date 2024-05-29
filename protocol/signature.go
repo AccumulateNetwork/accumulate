@@ -9,6 +9,8 @@ package protocol
 import (
 	"bytes"
 	"crypto"
+	"crypto/ecdh"
+	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/rsa"
@@ -103,7 +105,8 @@ func PublicKeyHash(key []byte, typ SignatureType) ([]byte, error) {
 	switch typ {
 	case SignatureTypeED25519,
 		SignatureTypeLegacyED25519,
-		SignatureTypeRsaSha256:
+		SignatureTypeRsaSha256,
+		SignatureTypePkiSha256:
 		return doSha256(key), nil
 
 	case SignatureTypeRCD1:
@@ -1146,5 +1149,131 @@ func (e *RsaSha256Signature) Verify(sigMdHash, txnHash []byte) bool {
 
 	// Verify signature
 	err = rsa.VerifyPKCS1v15(pubKey, crypto.SHA256, signingHash(e, doSha256, sigMdHash, txnHash), e.Signature)
+	return err == nil
+}
+
+/*
+ * SignPkiSha256: Multipurpose RSA, ECDSA, and ED25519 Signature types used in PKI
+ * privateKey must be in PKCS #8, ASN.1 DER format,
+ * returned signature is in the common encoding format for that particular signature type
+ * rsa: PKCS #1 v1.5 format
+ * ecdsa: ANS.1 DER
+ * ed25519: raw unencoded signature
+ */
+func SignPkiSha256(sig *PkiSha256Signature, privateKeyDer, sigMdHash, txnHash []byte) error {
+	//private key is expected to be in PKCS #8, ASN.1 DER format
+	privateKey, err := x509.ParsePKCS8PrivateKey(privateKeyDer)
+	if err != nil {
+		return err
+	}
+
+	// Sign the signing hash
+	switch k := privateKey.(type) {
+	case *rsa.PrivateKey:
+		//PKCS #1 v1.5 format
+		sig.Signature, err = rsa.SignPKCS1v15(nil, k, crypto.SHA256, signingHash(sig, doSha256, sigMdHash, txnHash))
+		if err != nil {
+			return err
+		}
+	case *ecdsa.PrivateKey:
+		//ASN.1 DER encoded signature
+		sig.Signature, err = ecdsa.SignASN1(rand.Reader, k, signingHash(sig, doSha256, sigMdHash, txnHash))
+		if err != nil {
+			return err
+		}
+	case ed25519.PrivateKey:
+		//no encoding required
+		sig.Signature = ed25519.Sign(k, signingHash(sig, doSha256, sigMdHash, txnHash))
+	case *ecdh.PrivateKey:
+		return fmt.Errorf("ecdh can only be used for key exchange")
+
+	}
+	return nil
+}
+
+// GetSigner returns Signer.
+func (s *PkiSha256Signature) GetSigner() *url.URL { return s.Signer }
+
+// RoutingLocation returns Signer.
+func (s *PkiSha256Signature) RoutingLocation() *url.URL { return s.Signer }
+
+// GetSignerVersion returns SignerVersion.
+func (s *PkiSha256Signature) GetSignerVersion() uint64 { return s.SignerVersion }
+
+// GetTimestamp returns Timestamp.
+func (s *PkiSha256Signature) GetTimestamp() uint64 { return s.Timestamp }
+
+// GetPublicKeyHash returns the hash of PublicKey.
+func (s *PkiSha256Signature) GetPublicKeyHash() []byte { return doSha256(s.PublicKey) }
+
+// GetPublicKey returns PublicKey.
+func (s *PkiSha256Signature) GetPublicKey() []byte { return s.PublicKey }
+
+// GetSignature returns Signature.
+func (s *PkiSha256Signature) GetSignature() []byte { return s.Signature }
+
+// GetTransactionHash returns TransactionHash.
+func (s *PkiSha256Signature) GetTransactionHash() [32]byte { return s.TransactionHash }
+
+// Hash returns the hash of the signature.
+func (s *PkiSha256Signature) Hash() []byte { return signatureHash(s) }
+
+// Metadata returns the signature's metadata.
+func (s *PkiSha256Signature) Metadata() Signature {
+	r := s.Copy()                  // Copy the struct
+	r.Signature = nil              // Clear the signature
+	r.TransactionHash = [32]byte{} // And the transaction hash
+	return r
+}
+
+// Initiator returns a Hasher that calculates the Merkle hash of the signature.
+func (s *PkiSha256Signature) Initiator() (hash.Hasher, error) {
+	if len(s.PublicKey) == 0 || s.Signer == nil || s.SignerVersion == 0 || s.Timestamp == 0 {
+		return nil, ErrCannotInitiate
+	}
+
+	hasher := make(hash.Hasher, 0, 4)
+	hasher.AddBytes(s.PublicKey)
+	hasher.AddUrl(s.Signer)
+	hasher.AddUint(s.SignerVersion)
+	hasher.AddUint(s.Timestamp)
+	return hasher, nil
+}
+
+// GetVote returns how the signer votes on a particular transaction
+func (s *PkiSha256Signature) GetVote() VoteType {
+	return s.Vote
+}
+
+// Verify returns true if this signature is a valid RSA signature of the
+// hash. The public key is expected to be in PKCS#1 ASN.1 DER format
+func (e *PkiSha256Signature) Verify(sigMdHash, txnHash []byte) bool {
+	//Convert public ANS.1 encoded key into and associated public key struct
+	pubKey, err := x509.ParsePKIXPublicKey(e.PublicKey)
+	if err != nil {
+		return false
+	}
+
+	switch k := pubKey.(type) {
+	case *rsa.PublicKey:
+		//The length of the signature should be the size of the public key's modulus
+		if k.Size() != len(e.Signature) {
+			return false
+		}
+
+		// Verify signature
+		err = rsa.VerifyPKCS1v15(k, crypto.SHA256, signingHash(e, doSha256, sigMdHash, txnHash), e.Signature)
+	case *ecdsa.PublicKey:
+		return ecdsa.VerifyASN1(k, signingHash(e, doSha256, sigMdHash, txnHash), e.Signature)
+	case ed25519.PublicKey:
+		if len(k) != 32 || len(e.Signature) != 64 {
+			return false
+		}
+		return ed25519.Verify(k, signingHash(e, doSha256, sigMdHash, txnHash), e.Signature)
+	case *ecdh.PublicKey:
+		//not applicable, shouldn't get here
+		return false
+	}
+
 	return err == nil
 }

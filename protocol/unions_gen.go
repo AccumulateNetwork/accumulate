@@ -1073,6 +1073,8 @@ func NewSignature(typ SignatureType) (Signature, error) {
 		return new(LegacyED25519Signature), nil
 	case SignatureTypePartition:
 		return new(PartitionSignature), nil
+	case SignatureTypePkiSha256:
+		return new(PkiSha256Signature), nil
 	case SignatureTypeRCD1:
 		return new(RCD1Signature), nil
 	case SignatureTypeReceipt:
@@ -1147,6 +1149,12 @@ func EqualSignature(a, b Signature) bool {
 		}
 		b, ok := b.(*PartitionSignature)
 		return ok && a.Equal(b)
+	case *PkiSha256Signature:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*PkiSha256Signature)
+		return ok && a.Equal(b)
 	case *RCD1Signature:
 		if a == nil {
 			return b == nil
@@ -1201,6 +1209,8 @@ func CopySignature(v Signature) Signature {
 	case *LegacyED25519Signature:
 		return v.Copy()
 	case *PartitionSignature:
+		return v.Copy()
+	case *PkiSha256Signature:
 		return v.Copy()
 	case *RCD1Signature:
 		return v.Copy()

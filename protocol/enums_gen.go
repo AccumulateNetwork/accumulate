@@ -236,6 +236,9 @@ const SignatureTypeAuthority SignatureType = 13
 // SignatureTypeRsaSha256 represents an RSA signature of SHA256 hashed data.
 const SignatureTypeRsaSha256 SignatureType = 14
 
+// SignatureTypePkiSha256 represents a signature from a PKI certificate of SHA256 hashed data.
+const SignatureTypePkiSha256 SignatureType = 15
+
 // TransactionMaxUser is the highest number reserved for user transactions.
 const TransactionMaxUser TransactionMax = 48
 
@@ -1157,7 +1160,7 @@ func (v SignatureType) GetEnumValue() uint64 { return uint64(v) }
 func (v *SignatureType) SetEnumValue(id uint64) bool {
 	u := SignatureType(id)
 	switch u {
-	case SignatureTypeUnknown, SignatureTypeLegacyED25519, SignatureTypeED25519, SignatureTypeRCD1, SignatureTypeReceipt, SignatureTypePartition, SignatureTypeSet, SignatureTypeRemote, SignatureTypeBTC, SignatureTypeBTCLegacy, SignatureTypeETH, SignatureTypeDelegated, SignatureTypeInternal, SignatureTypeAuthority, SignatureTypeRsaSha256:
+	case SignatureTypeUnknown, SignatureTypeLegacyED25519, SignatureTypeED25519, SignatureTypeRCD1, SignatureTypeReceipt, SignatureTypePartition, SignatureTypeSet, SignatureTypeRemote, SignatureTypeBTC, SignatureTypeBTCLegacy, SignatureTypeETH, SignatureTypeDelegated, SignatureTypeInternal, SignatureTypeAuthority, SignatureTypeRsaSha256, SignatureTypePkiSha256:
 		*v = u
 		return true
 	}
@@ -1197,6 +1200,8 @@ func (v SignatureType) String() string {
 		return "authority"
 	case SignatureTypeRsaSha256:
 		return "rsaSha256"
+	case SignatureTypePkiSha256:
+		return "PkiSha256"
 	}
 	return fmt.Sprintf("SignatureType:%d", v)
 }
@@ -1236,6 +1241,8 @@ func SignatureTypeByName(name string) (SignatureType, bool) {
 		return SignatureTypeAuthority, true
 	case "rsasha256":
 		return SignatureTypeRsaSha256, true
+	case "PkiSha256":
+		return SignatureTypePkiSha256, true
 	}
 	return 0, false
 }

@@ -7,12 +7,21 @@
 package protocol_test
 
 import (
+	"crypto/ecdsa"
+	"crypto/ed25519"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/hex"
 	"encoding/pem"
 	"fmt"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/address"
+	"math/big"
 	"testing"
+	"time"
 
 	btc "github.com/btcsuite/btcd/btcec"
 	"github.com/btcsuite/btcutil/base58"
@@ -120,23 +129,23 @@ func TestBTCaddress(t *testing.T) {
 	//btc private address : "KxukKhTPU11xH2Wfk2366e375166QE4r7y8FWojU9XPbzLYYSM3j"
 	pubKey, err := hex.DecodeString("02f7aa1eb14de438735c026c7cc719db11baf82e47f8fa2c86b55bff92b677eae2")
 	require.NoError(t, err)
-	address := "1Hdh7MEWekWD4qiHVRa2H8Ar3JR8sXunE"
+	addr := "1Hdh7MEWekWD4qiHVRa2H8Ar3JR8sXunE"
 	btcAddress := BTCaddress(pubKey)
-	require.Equal(t, btcAddress, address)
+	require.Equal(t, btcAddress, addr)
 }
 
 func TestETHaddress(t *testing.T) {
 	//m/44'/60'/0'/0/0 yellow ->
 	// eth private address : "0x1b48e04041e23c72cacdaa9b0775d31515fc74d6a6d3c8804172f7e7d1248529"
-	address := "0xa27df20e6579ac472481f0ea918165d24bfb713b"
+	addr := "0xa27df20e6579ac472481f0ea918165d24bfb713b"
 	pubKey, err := hex.DecodeString("02c4755e0a7a0f7082749bf46cdae4fcddb784e11428446a01478d656f588f94c1")
 	require.NoError(t, err)
 	accEthAddress, err := ETHaddress(pubKey)
 	require.NoError(t, err)
-	require.Equal(t, address, accEthAddress)
+	require.Equal(t, addr, accEthAddress)
 
-	checkSum := sha256.Sum256([]byte(address[2:]))
-	accEthLiteAccount, err := url.Parse(fmt.Sprintf("%s%x", address[2:], checkSum[28:]))
+	checkSum := sha256.Sum256([]byte(addr[2:]))
+	accEthLiteAccount, err := url.Parse(fmt.Sprintf("%s%x", addr[2:], checkSum[28:]))
 	require.NoError(t, err)
 	lta, err := LiteTokenAddressFromHash(ETHhash(pubKey), ACME)
 	require.NoError(t, err)
@@ -357,3 +366,176 @@ func TestRsaSha256Signature(t *testing.T) {
 	require.True(t, keyComp.Equal(privKey.Public()), "public keys don't match")
 
 }
+
+func generateTestPkiCertificates() (string, string, string, error) {
+
+	certTemplate := x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject: pkix.Name{
+			CommonName: "example.com",
+		},
+		NotBefore:             time.Now(),
+		NotAfter:              time.Now().Add(365 * 24 * time.Hour),
+		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+	}
+
+	// Generate RSA private key
+	rsaPrivKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to generate RSA key: %v", err)
+	}
+	rsaCertBytes, err := x509.CreateCertificate(rand.Reader, &certTemplate, &certTemplate, &rsaPrivKey.PublicKey, rsaPrivKey)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to create RSA certificate: %v", err)
+	}
+	rsaCertPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: rsaCertBytes})
+	rsaPrivKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(rsaPrivKey)})
+
+	// Generate ECDSA private key
+	ecdsaPrivKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to generate ECDSA key: %v", err)
+	}
+	ecdsaCertBytes, err := x509.CreateCertificate(rand.Reader, &certTemplate, &certTemplate, &ecdsaPrivKey.PublicKey, ecdsaPrivKey)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to create ECDSA certificate: %v", err)
+	}
+	ecdsaCertPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: ecdsaCertBytes})
+	ecdsaPrivKeyBytes, err := x509.MarshalECPrivateKey(ecdsaPrivKey)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to marshal ECDSA private key: %v", err)
+	}
+	ecdsaPrivKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: ecdsaPrivKeyBytes})
+
+	// Generate Ed25519 private key
+	_, ed25519PrivKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to generate Ed25519 key: %v", err)
+	}
+	ed25519CertBytes, err := x509.CreateCertificate(rand.Reader, &certTemplate, &certTemplate, ed25519PrivKey.Public().(ed25519.PublicKey), ed25519PrivKey)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to create Ed25519 certificate: %v", err)
+	}
+	ed25519CertPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: ed25519CertBytes})
+	ed25519PrivKeyPEM, err := x509.MarshalPKCS8PrivateKey(ed25519PrivKey)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to marshal Ed25519 private key: %v", err)
+	}
+	ed25519PrivKeyPEMBytes := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: ed25519PrivKeyPEM})
+
+	return string(rsaCertPEM) + string(rsaPrivKeyPEM), string(ecdsaCertPEM) + string(ecdsaPrivKeyPEM), string(ed25519CertPEM) + string(ed25519PrivKeyPEMBytes), nil
+}
+
+func generateCertificates() (string, string, string, error) {
+	certTemplate := x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject: pkix.Name{
+			CommonName: "example.com",
+		},
+		NotBefore:             time.Now(),
+		NotAfter:              time.Now().Add(365 * 24 * time.Hour),
+		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+	}
+
+	// Generate RSA private key
+	rsaPrivKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to generate RSA key: %v", err)
+	}
+	rsaCertBytes, err := x509.CreateCertificate(rand.Reader, &certTemplate, &certTemplate, &rsaPrivKey.PublicKey, rsaPrivKey)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to create RSA certificate: %v", err)
+	}
+	rsaCertPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: rsaCertBytes})
+	rsaPrivKeyPEM, err := x509.MarshalPKCS8PrivateKey(rsaPrivKey)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to marshal RSA private key: %v", err)
+	}
+	rsaPrivKeyPEMBytes := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: rsaPrivKeyPEM})
+
+	// Generate ECDSA private key
+	ecdsaPrivKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to generate ECDSA key: %v", err)
+	}
+	ecdsaCertBytes, err := x509.CreateCertificate(rand.Reader, &certTemplate, &certTemplate, &ecdsaPrivKey.PublicKey, ecdsaPrivKey)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to create ECDSA certificate: %v", err)
+	}
+	ecdsaCertPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: ecdsaCertBytes})
+	ecdsaPrivKeyPEM, err := x509.MarshalPKCS8PrivateKey(ecdsaPrivKey)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to marshal ECDSA private key: %v", err)
+	}
+	ecdsaPrivKeyPEMBytes := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: ecdsaPrivKeyPEM})
+
+	// Generate Ed25519 private key
+	_, ed25519PrivKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to generate Ed25519 key: %v", err)
+	}
+	ed25519CertBytes, err := x509.CreateCertificate(rand.Reader, &certTemplate, &certTemplate, ed25519PrivKey.Public().(ed25519.PublicKey), ed25519PrivKey)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to create Ed25519 certificate: %v", err)
+	}
+	ed25519CertPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: ed25519CertBytes})
+	ed25519PrivKeyPEM, err := x509.MarshalPKCS8PrivateKey(ed25519PrivKey)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to marshal Ed25519 private key: %v", err)
+	}
+	ed25519PrivKeyPEMBytes := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: ed25519PrivKeyPEM})
+
+	return string(rsaCertPEM) + string(rsaPrivKeyPEMBytes), string(ecdsaCertPEM) + string(ecdsaPrivKeyPEMBytes), string(ed25519CertPEM) + string(ed25519PrivKeyPEMBytes), nil
+}
+
+func TestPkiSha256Signature(t *testing.T) {
+	rsaCert, ecdsaCert, ed25519Cert, err := generateCertificates() // generateTestPkiCertificates()
+	if err != nil {
+		t.Fatalf("Failed to generate certificates: %v\n", err)
+	}
+
+	message := "ACME will rule DEFI"
+	hash := sha256.Sum256([]byte(message))
+
+	for _, c := range []string{rsaCert, ecdsaCert, ed25519Cert} {
+		block, rest := pem.Decode([]byte(c))
+		if block.Type == "CERTIFICATE" {
+			block, _ = pem.Decode(rest)
+		}
+		require.Equal(t, block.Type, "PRIVATE KEY")
+
+		privKey, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+		require.NoError(t, err)
+
+		pub := address.FromPrivateKeyAsPKIX(privKey)
+
+		pkiSha256 := new(PkiSha256Signature)
+		pkiSha256.PublicKey = pub.Key
+
+		require.NoError(t, SignPkiSha256(pkiSha256, block.Bytes, nil, hash[:]))
+
+		//should not fail
+		require.Equal(t, VerifyUserSignature(pkiSha256, hash[:]), true)
+
+	}
+}
+
+//
+//func main() {
+//	rsaCert, ecdsaCert, ed25519Cert, err := generateCertificate()
+//	if err != nil {
+//		fmt.Printf("Failed to generate certificates: %v\n", err)
+//		return
+//	}
+//
+//	fmt.Println("RSA Certificate and Private Key:")
+//	fmt.Println(rsaCert)
+//	fmt.Println("ECDSA Certificate and Private Key:")
+//	fmt.Println(ecdsaCert)
+//	fmt.Println("Ed25519 Certificate and Private Key:")
+//	fmt.Println(ed25519Cert)
+//}
