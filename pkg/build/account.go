@@ -302,7 +302,11 @@ func (b *KeyPageBuilder) AddEntry(entry protocol.KeySpec) *KeyPageBuilder {
 }
 
 func (b *KeyPageBuilder) AddKey(key any) *KeyPageBuilder {
-	hash := b.hashKey(b.parseKey(key, 0, false))
+	return b.AddKeyAs(key, 0)
+}
+
+func (b *KeyPageBuilder) AddKeyAs(key any, typ protocol.SignatureType) *KeyPageBuilder {
+	hash := b.hashKey(b.parseKey(key, typ, false))
 	return b.AddEntry(protocol.KeySpec{PublicKeyHash: hash})
 }
 

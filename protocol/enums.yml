@@ -107,11 +107,8 @@ SignatureType:
   Authority:
     value: 13
     description: is a signature produced by an authority
-  RsaSha256:
-    value: 14
-    description: represents an RSA signature of SHA256 hashed data
   PkiSha256:
-    value: 15
+    value: 14
     description: represents a signature from a PKI certificate of SHA256 hashed data
 
 KeyPageOperationType:

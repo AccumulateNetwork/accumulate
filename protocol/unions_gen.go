@@ -1081,8 +1081,6 @@ func NewSignature(typ SignatureType) (Signature, error) {
 		return new(ReceiptSignature), nil
 	case SignatureTypeRemote:
 		return new(RemoteSignature), nil
-	case SignatureTypeRsaSha256:
-		return new(RsaSha256Signature), nil
 	case SignatureTypeSet:
 		return new(SignatureSet), nil
 	}
@@ -1173,12 +1171,6 @@ func EqualSignature(a, b Signature) bool {
 		}
 		b, ok := b.(*RemoteSignature)
 		return ok && a.Equal(b)
-	case *RsaSha256Signature:
-		if a == nil {
-			return b == nil
-		}
-		b, ok := b.(*RsaSha256Signature)
-		return ok && a.Equal(b)
 	case *SignatureSet:
 		if a == nil {
 			return b == nil
@@ -1217,8 +1209,6 @@ func CopySignature(v Signature) Signature {
 	case *ReceiptSignature:
 		return v.Copy()
 	case *RemoteSignature:
-		return v.Copy()
-	case *RsaSha256Signature:
 		return v.Copy()
 	case *SignatureSet:
 		return v.Copy()

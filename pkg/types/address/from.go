@@ -43,20 +43,6 @@ func FromED25519PrivateKey(key []byte) *PrivateKey {
 	}
 }
 
-func FromRSAPublicKey(key *rsa.PublicKey) *PublicKey {
-	return &PublicKey{
-		Type: protocol.SignatureTypeRsaSha256,
-		Key:  x509.MarshalPKCS1PublicKey(key),
-	}
-}
-
-func FromRSAPrivateKey(key *rsa.PrivateKey) *PrivateKey {
-	return &PrivateKey{
-		PublicKey: *FromRSAPublicKey(&key.PublicKey),
-		Key:       x509.MarshalPKCS1PrivateKey(key),
-	}
-}
-
 func FromPublicKeyAsPKIX(key any) *PublicKey {
 	var err error
 	publicKey := new(PublicKey)
@@ -126,13 +112,6 @@ func FromPrivateKeyBytes(priv []byte, typ protocol.SignatureType) *PrivateKey {
 		protocol.SignatureTypeBTCLegacy:
 		_, pk := btc.PrivKeyFromBytes(btc.S256(), priv)
 		pub = pk.SerializeCompressed()
-
-	case protocol.SignatureTypeRsaSha256:
-		sk, err := x509.ParsePKCS1PrivateKey(priv)
-		if err != nil {
-			panic(err)
-		}
-		pub = x509.MarshalPKCS1PublicKey(&sk.PublicKey)
 
 	case protocol.SignatureTypePkiSha256:
 		sk, err := x509.ParsePKIXPublicKey(priv)

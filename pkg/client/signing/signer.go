@@ -44,13 +44,6 @@ func (k PrivateKey) SetPublicKey(sig protocol.Signature) error {
 		_, pubKey := btc.PrivKeyFromBytes(btc.S256(), k)
 		sig.PublicKey = pubKey.SerializeUncompressed()
 
-	case *protocol.RsaSha256Signature:
-		privKey, err := x509.ParsePKCS1PrivateKey(k)
-		if err != nil {
-			return err
-		}
-		sig.PublicKey = x509.MarshalPKCS1PublicKey(&privKey.PublicKey)
-
 	case *protocol.PkiSha256Signature:
 		privKey, err := x509.ParsePKCS8PrivateKey(k)
 		if err != nil {
@@ -87,9 +80,6 @@ func (k PrivateKey) Sign(sig protocol.Signature, sigMdHash, message []byte) erro
 
 	case *protocol.ETHSignature:
 		return protocol.SignETH(sig, k, sigMdHash, message)
-
-	case *protocol.RsaSha256Signature:
-		return protocol.SignRsaSha256(sig, k, sigMdHash, message)
 
 	case *protocol.PkiSha256Signature:
 		return protocol.SignPkiSha256(sig, k, sigMdHash, message)

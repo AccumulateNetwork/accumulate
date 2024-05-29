@@ -87,6 +87,9 @@ func TestNewSigType(t *testing.T) {
 		{ExecutorVersionLatest, true},
 	}
 
+	pub, err := x509.MarshalPKIXPublicKey(&aliceKey.PublicKey)
+	require.NoError(t, err)
+
 	for _, c := range cases {
 		t.Run(c.Version.String(), func(t *testing.T) {
 			// Initialize
@@ -95,7 +98,7 @@ func TestNewSigType(t *testing.T) {
 				simulator.GenesisWithVersion(GenesisTime, c.Version),
 			)
 
-			MakeIdentity(t, sim.DatabaseFor(alice), alice, x509.MarshalPKCS1PublicKey(&aliceKey.PublicKey))
+			MakeIdentity(t, sim.DatabaseFor(alice), alice, pub)
 			CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e12)
 
 			// Submit
@@ -105,7 +108,7 @@ func TestNewSigType(t *testing.T) {
 				Version(1).Timestamp(1).
 				Memo("foo").
 				Metadata("bar").
-				Type(SignatureTypeRsaSha256).
+				Type(SignatureTypePkiSha256).
 				PrivateKey(aliceKey)
 
 			if c.Ok {
