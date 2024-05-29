@@ -149,11 +149,23 @@ func (x BlockAnchor) check(ctx *MessageContext, batch *database.Batch) (*blockAn
 		return nil, errors.BadRequest.WithFormat("cannot sign a %v transaction with a %v message", txn.Body.Type(), anchor.Type())
 	}
 
-	if seq.Source == nil {
-		return nil, errors.InternalError.WithFormat("sequence is missing source")
+	// Verify the destination and principal match
+	if ctx.GetActiveGlobals().ExecutorVersion.V2VandenbergEnabled() {
+		if seq.Destination == nil {
+			return nil, errors.InternalError.WithFormat("sequence is missing destination")
+		}
+		if txn.Header.Principal == nil {
+			return nil, errors.InternalError.WithFormat("transaction is missing principal")
+		}
+		if !seq.Destination.RootIdentity().Equal(txn.Header.Principal.RootIdentity()) {
+			return nil, errors.BadRequest.WithFormat("sequence destination does not match transaction principal")
+		}
 	}
 
 	// Verify the signer is a validator of this partition
+	if seq.Source == nil {
+		return nil, errors.InternalError.WithFormat("sequence is missing source")
+	}
 	partition, ok := protocol.ParsePartitionUrl(seq.Source)
 	if !ok {
 		return nil, errors.BadRequest.WithFormat("signature source is not a partition")
