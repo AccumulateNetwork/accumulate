@@ -65,8 +65,8 @@ func FromPrivateKeyAsPKIX(key any) *PublicKey {
 	case ecdh.PrivateKey:
 		panic("ecdh keys for signing not supported")
 	}
-	panic("unknown key type")
-	return nil
+	//just return an unknown type
+	return &PublicKey{}
 }
 
 func FromPrivateKeyAsPKCS8(key any) *PrivateKey {
