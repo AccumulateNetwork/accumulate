@@ -41,7 +41,7 @@ func (t *TransactionContext) processTransaction(batch *database.Batch) (*protoco
 	}
 
 	// The status txid should not be nil, but fix it if it is *shrug*
-	if status.TxID == nil && t.effectivePrincipal() != nil {
+	if status.TxID == nil && delivery.Transaction.Header.Principal != nil {
 		status.TxID = delivery.Transaction.ID()
 		err = batch.Transaction(delivery.Transaction.GetHash()).Status().Put(status)
 		if err != nil {
@@ -58,7 +58,7 @@ func (t *TransactionContext) processTransaction(batch *database.Batch) (*protoco
 	}
 
 	// Load the principal
-	principal, err := batch.Account(t.effectivePrincipal()).Main().Get()
+	principal, err := batch.Account(delivery.Transaction.Header.Principal).Main().Get()
 	switch {
 	case err == nil, errors.Is(err, storage.ErrNotFound):
 		// Ok
@@ -81,7 +81,7 @@ func (t *TransactionContext) processTransaction(batch *database.Batch) (*protoco
 	}
 
 	// Set up the state manager
-	st := chain.NewStateManager(x.Describe, &x.globals.Active, t, batch.Begin(true), principal, t.effectivePrincipal(), delivery.Transaction, x.logger.With("operation", "ProcessTransaction"))
+	st := chain.NewStateManager(x.Describe, &x.globals.Active, t, batch.Begin(true), principal, delivery.Transaction, x.logger.With("operation", "ProcessTransaction"))
 	defer st.Discard()
 
 	// Execute the transaction
@@ -147,7 +147,7 @@ func (t *TransactionContext) userTransactionIsReady(batch *database.Batch, deliv
 	if principal == nil {
 		val, ok := getValidator[chain.PrincipalValidator](x, delivery.Transaction.Body.Type())
 		if !ok || !val.AllowMissingPrincipal(delivery.Transaction) {
-			return false, errors.NotFound.WithFormat("missing principal: %v not found", t.effectivePrincipal())
+			return false, errors.NotFound.WithFormat("missing principal: %v not found", delivery.Transaction.Header.Principal)
 		}
 	}
 
@@ -182,18 +182,18 @@ func (t *TransactionContext) userTransactionIsReady(batch *database.Batch, deliv
 
 	// At this point we cannot continue without the principal
 	if principal == nil {
-		return false, errors.NotFound.WithFormat("missing principal: %v not found", t.effectivePrincipal())
+		return false, errors.NotFound.WithFormat("missing principal: %v not found", delivery.Transaction.Header.Principal)
 	}
 
 	// Get the principal's account auth
 	auth, err := t.getAccountAuthoritySet(batch, principal)
 	if err != nil {
-		return false, fmt.Errorf("unable to load authority of %v: %w", t.effectivePrincipal(), err)
+		return false, fmt.Errorf("unable to load authority of %v: %w", delivery.Transaction.Header.Principal, err)
 	}
 
 	// At a minimum (if every authority is disabled), at least one signature is
 	// required
-	voters, err := batch.Account(t.effectivePrincipal()).
+	voters, err := batch.Account(delivery.Transaction.Header.Principal).
 		Transaction(delivery.Transaction.ID().Hash()).
 		Votes().Get()
 	if err != nil {
@@ -244,10 +244,9 @@ func (t *TransactionContext) checkAuth(batch *database.Batch, txn *protocol.Tran
 }
 
 func (m *MessageContext) AuthorityDidVote(batch *database.Batch, transaction *protocol.Transaction, authUrl *url.URL) (bool, protocol.VoteType, error) {
-	t := m.txnWith(transaction)
 	// Find the vote
 	entry, err := batch.
-		Account(t.effectivePrincipal()).
+		Account(transaction.Header.Principal).
 		Transaction(transaction.ID().Hash()).
 		Votes().Find(&database.VoteEntry{Authority: authUrl})
 	switch {
@@ -262,7 +261,7 @@ func (m *MessageContext) AuthorityDidVote(batch *database.Batch, transaction *pr
 	// Load the vote
 	sig, err := m.GetSignatureAs(batch, entry.Hash)
 	if err != nil {
-		return false, 0, errors.UnknownError.WithFormat("load vote %v: %w", t.effectivePrincipal().WithTxID(entry.Hash), err)
+		return false, 0, errors.UnknownError.WithFormat("load vote %v: %w", transaction.Header.Principal.WithTxID(entry.Hash), err)
 	}
 
 	// Verify it is an authority signature
@@ -452,7 +451,7 @@ func (x *TransactionContext) synthTransactionIsReady(batch *database.Batch, deli
 	// https://accumulate.atlassian.net/browse/AC-1704
 	val, ok := getValidator[chain.PrincipalValidator](x.Executor, delivery.Transaction.Body.Type())
 	if !ok || !val.AllowMissingPrincipal(delivery.Transaction) {
-		return false, errors.NotFound.WithFormat("missing principal: %v not found", x.effectivePrincipal())
+		return false, errors.NotFound.WithFormat("missing principal: %v not found", delivery.Transaction.Header.Principal)
 	}
 
 	return true, nil
@@ -485,7 +484,7 @@ func (x *TransactionContext) systemTransactionIsReady(batch *database.Batch, del
 	// https://accumulate.atlassian.net/browse/AC-1704
 	val, ok := getValidator[chain.PrincipalValidator](x.Executor, delivery.Transaction.Body.Type())
 	if !ok || !val.AllowMissingPrincipal(delivery.Transaction) {
-		return false, errors.NotFound.WithFormat("missing principal: %v not found", x.effectivePrincipal())
+		return false, errors.NotFound.WithFormat("missing principal: %v not found", delivery.Transaction.Header.Principal)
 	}
 
 	return true, nil
@@ -540,7 +539,7 @@ func (x *TransactionContext) recordPendingTransaction(net execute.DescribeShim, 
 	}
 
 	// Add the user transaction to the principal's list of pending transactions
-	err = batch.Account(x.effectivePrincipal()).Pending().Add(delivery.Transaction.ID())
+	err = batch.Account(delivery.Transaction.Header.Principal).Pending().Add(delivery.Transaction.ID())
 	if err != nil {
 		return nil, nil, fmt.Errorf("store pending list: %w", err)
 	}
@@ -571,7 +570,7 @@ func (x *TransactionContext) recordSuccessfulTransaction(batch *database.Batch, 
 	}
 
 	// Remove the transaction from the principal's list of pending transactions
-	record := batch.Account(x.effectivePrincipal())
+	record := batch.Account(delivery.Transaction.Header.Principal)
 	err = record.Pending().Remove(delivery.Transaction.ID())
 	if err != nil {
 		return nil, nil, fmt.Errorf("store pending list: %w", err)
@@ -630,7 +629,7 @@ func (x *TransactionContext) recordFailedTransaction(batch *database.Batch, deli
 	}
 
 	// Remove the transaction from the principal's list of pending transactions
-	err = batch.Account(x.effectivePrincipal()).Pending().Remove(delivery.Transaction.ID())
+	err = batch.Account(delivery.Transaction.Header.Principal).Pending().Remove(delivery.Transaction.ID())
 	if err != nil {
 		return nil, nil, fmt.Errorf("update pending list: %w", err)
 	}
