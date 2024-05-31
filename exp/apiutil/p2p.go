@@ -73,12 +73,14 @@ func initRouter(opts RouterOptions) {
 		svcAddr, err := dirNetSvc.MultiaddrFor(opts.Network)
 		if err != nil {
 			slog.ErrorCtx(opts.Context, "Failed to initialize router", "error", err)
+			_ = opts.Events.Publish(events.WillChangeGlobals{New: &network.GlobalValues{}})
 			return
 		}
 
 		err = opts.Node.WaitForService(opts.Context, svcAddr)
 		if err != nil {
 			slog.ErrorCtx(opts.Context, "Failed to initialize router", "error", err)
+			_ = opts.Events.Publish(events.WillChangeGlobals{New: &network.GlobalValues{}})
 			return
 		}
 
@@ -120,6 +122,7 @@ func initRouter(opts RouterOptions) {
 	ns, err := client.NetworkStatus(opts.Context, api.NetworkStatusOptions{})
 	if err != nil {
 		slog.ErrorCtx(opts.Context, "Failed to initialize router", "error", err)
+		_ = opts.Events.Publish(events.WillChangeGlobals{New: &network.GlobalValues{}})
 		return
 	}
 
