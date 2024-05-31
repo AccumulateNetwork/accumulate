@@ -111,7 +111,7 @@ func executeWriteLiteDataAccount(st *StateManager, entry protocol.DataEntry) (pr
 		result.AccountUrl = u
 	}
 
-	st.UpdateData(account, result.EntryHash[:], entry)
+	st.UpdateData(account, result.EntryHash[:], entry, false)
 
 	return result, nil
 }
