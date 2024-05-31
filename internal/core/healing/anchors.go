@@ -174,7 +174,7 @@ func HealAnchor(ctx context.Context, args HealAnchorArgs, si SequencedInfo) erro
 			seq.Message = &messaging.TransactionMessage{
 				Transaction: theAnchorTxn,
 			}
-		} else if !myTxn.Transaction.Equal(theAnchorTxn) {
+		} else if !protocol.EqualTransactionBody(myTxn.Transaction.Body, theAnchorTxn.Body) {
 			slog.ErrorCtx(ctx, "Node gave us an anchor with a different hash", "id", info,
 				"expected", hex.EncodeToString(theAnchorTxn.GetHash()),
 				"got", hex.EncodeToString(myTxn.Transaction.GetHash()))
