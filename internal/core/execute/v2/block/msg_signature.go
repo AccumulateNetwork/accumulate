@@ -85,7 +85,7 @@ func (SignatureMessage) check(batch *database.Batch, ctx *MessageContext) (*Sign
 		return nil, errors.UnknownError.WithFormat("load transaction: %w", err)
 	}
 	ctx2 := ctx.txnWith(txn).sigWith(sig.Signature)
-	if ctx2.effectivePrincipal() == nil {
+	if txn.Header.Principal == nil {
 		return nil, errors.BadRequest.WithFormat("invalid transaction: missing principal")
 	}
 	if txn.Body == nil {

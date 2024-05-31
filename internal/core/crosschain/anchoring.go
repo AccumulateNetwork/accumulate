@@ -209,13 +209,6 @@ func (x ValidatorContext) PrepareAnchorSubmission(ctx context.Context, anchor pr
 	txn.Header.Principal = destination.JoinPath(protocol.AnchorPool)
 	txn.Body = anchor
 
-	// Once the BVNs are all running Vandenberg or later, always set the
-	// principal to acc://dn.acme/anchors so that every partition receives an
-	// identical anchor
-	if isSrcDir && x.Globals.BvnExecutorVersion().V2VandenbergEnabled() {
-		txn.Header.Principal = protocol.DnUrl().JoinPath(protocol.AnchorPool)
-	}
-
 	seq := &messaging.SequencedMessage{
 		Message:     &messaging.TransactionMessage{Transaction: txn},
 		Source:      x.Url(),
