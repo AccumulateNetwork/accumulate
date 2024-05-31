@@ -9,9 +9,9 @@ package signing
 import (
 	"crypto/x509"
 	"fmt"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/address"
 
 	btc "github.com/btcsuite/btcd/btcec"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/address"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
