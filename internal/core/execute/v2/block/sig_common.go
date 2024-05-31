@@ -321,9 +321,8 @@ func (x *TransactionContext) signerCanSignTransaction(txn *protocol.Transaction,
 	switch signer := signer.(type) {
 	case *protocol.LiteIdentity:
 		// A lite token account is only allowed to sign for itself
-		principal := x.effectivePrincipal()
-		if !signer.Url.Equal(principal.RootIdentity()) {
-			return errors.Unauthorized.WithFormat("%v is not authorized to sign transactions for %v", signer.Url, principal)
+		if !signer.Url.Equal(txn.Header.Principal.RootIdentity()) {
+			return errors.Unauthorized.WithFormat("%v is not authorized to sign transactions for %v", signer.Url, txn.Header.Principal)
 		}
 		return nil
 
@@ -344,7 +343,7 @@ func (x *TransactionContext) signerCanSignTransaction(txn *protocol.Transaction,
 // authorityIsAccepted checks that an authority is authorized to sign for an account.
 func (m *TransactionContext) authorityIsAccepted(batch *database.Batch, txn *protocol.Transaction, sig *protocol.AuthoritySignature) error {
 	// Load the principal
-	principal, err := batch.Account(m.effectivePrincipal()).Main().Get()
+	principal, err := batch.Account(txn.Header.Principal).Main().Get()
 	if err != nil {
 		return errors.UnknownError.WithFormat("load principal: %w", err)
 	}
