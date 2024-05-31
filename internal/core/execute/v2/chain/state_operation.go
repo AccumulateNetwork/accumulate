@@ -25,19 +25,20 @@ type addDataEntry struct {
 	liteStateRec protocol.Account
 	hash         []byte
 	entry        protocol.DataEntry
+	scratch      bool
 }
 
 // UpdateData will cache a data associated with a DataAccount chain.
 // the cache data will not be stored directly in the state but can be used
 // upstream for storing a chain in the state database.
-func (m *stateCache) UpdateData(record protocol.Account, entryHash []byte, dataEntry protocol.DataEntry) {
+func (m *stateCache) UpdateData(record protocol.Account, entryHash []byte, dataEntry protocol.DataEntry, scratch bool) {
 	var stateRec protocol.Account
 
 	if record.Type() == protocol.AccountTypeLiteDataAccount {
 		stateRec = record
 	}
 
-	m.operations = append(m.operations, &addDataEntry{record.GetUrl(), stateRec, entryHash, dataEntry})
+	m.operations = append(m.operations, &addDataEntry{record.GetUrl(), stateRec, entryHash, dataEntry, scratch})
 }
 
 func (op *addDataEntry) Execute(st *stateCache) ([]protocol.Account, error) {
@@ -62,5 +63,9 @@ func (op *addDataEntry) Execute(st *stateCache) ([]protocol.Account, error) {
 	}
 
 	// Add TX to main chain
-	return nil, st.State.ChainUpdates.AddChainEntry(st.batch, record.MainChain(), st.txHash[:], 0, 0)
+	chain := record.MainChain()
+	if op.scratch {
+		chain = record.ScratchChain()
+	}
+	return nil, st.State.ChainUpdates.AddChainEntry(st.batch, chain, st.txHash[:], 0, 0)
 }
