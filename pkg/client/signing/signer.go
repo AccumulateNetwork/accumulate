@@ -9,6 +9,7 @@ package signing
 import (
 	"crypto/x509"
 	"fmt"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/address"
 
 	btc "github.com/btcsuite/btcd/btcec"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -49,10 +50,11 @@ func (k PrivateKey) SetPublicKey(sig protocol.Signature) error {
 		if err != nil {
 			return err
 		}
-		sig.PublicKey, err = x509.MarshalPKIXPublicKey(&privKey)
-		if err != nil {
-			return err
+		k := address.FromPrivateKeyAsPKIX(privKey)
+		if k.Type == protocol.SignatureTypeUnknown {
+			return fmt.Errorf("unsupported key provided to signing function")
 		}
+		sig.PublicKey = k.Key
 
 	default:
 		return fmt.Errorf("cannot set the public key on a %T", sig)

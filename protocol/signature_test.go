@@ -306,19 +306,3 @@ func TestPkiSha256Signature(t *testing.T) {
 
 	}
 }
-
-//
-//func main() {
-//	rsaCert, ecdsaCert, ed25519Cert, err := generateCertificate()
-//	if err != nil {
-//		fmt.Printf("Failed to generate certificates: %v\n", err)
-//		return
-//	}
-//
-//	fmt.Println("RSA Certificate and Private Key:")
-//	fmt.Println(rsaCert)
-//	fmt.Println("ECDSA Certificate and Private Key:")
-//	fmt.Println(ecdsaCert)
-//	fmt.Println("Ed25519 Certificate and Private Key:")
-//	fmt.Println(ed25519Cert)
-//}
