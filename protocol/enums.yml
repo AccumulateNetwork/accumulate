@@ -109,10 +109,10 @@ SignatureType:
     description: is a signature produced by an authority
   RsaSha256:
     value: 14
-    description: represents an RSA signature of SHA256 hashed data
-  PkiSha256:
+    description: represents an RSA signature of SHA256 hashed data (PKCS#1 encoding)
+  EcdsaSha256:
     value: 15
-    description: represents a signature from a PKI certificate of SHA256 hashed data
+    description: represents a signature of SHA256 hashed data from an ecdsa algorithm with supported standard curves from NIST, SECG, and Brainpool typically (SEC, ANS.1 enocding)
 
 KeyPageOperationType:
   Unknown:

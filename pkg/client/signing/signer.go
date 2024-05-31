@@ -52,11 +52,11 @@ func (k PrivateKey) SetPublicKey(sig protocol.Signature) error {
 		sig.PublicKey = x509.MarshalPKCS1PublicKey(&privKey.PublicKey)
 
 	case *protocol.EcdsaSha256Signature:
-		privKey, err := x509.ParsePKCS8PrivateKey(k)
+		privKey, err := x509.ParseECPrivateKey(k)
 		if err != nil {
 			return err
 		}
-		sig.PublicKey, err = x509.MarshalPKIXPublicKey(&privKey)
+		sig.PublicKey, err = x509.MarshalPKIXPublicKey(&privKey.PublicKey)
 		if err != nil {
 			return err
 		}

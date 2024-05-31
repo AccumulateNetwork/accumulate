@@ -7,9 +7,19 @@
 package e2e
 
 import (
+	"crypto/ecdsa"
+	"crypto/ed25519"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/rsa"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/pem"
+	"fmt"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/address"
+	"math/big"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
@@ -56,68 +66,143 @@ func TestSignatureMemo(t *testing.T) {
 	require.Equal(t, "bar", string(sig.Data))
 }
 
-const rsaPrivateKey1024 = `-----BEGIN RSA PRIVATE KEY-----
-MIICXQIBAAKBgQCgA3+iQ1/zYRcKAATz/y+KYAW0boh9VGEFFamlnhe2I2FuEty4
-bFHxu9ntzIS5u1q8Ol49n9pgHF80G4scIKbWqR2M8m0c9YuNDejkXbW/Iqf2tZwk
-jArlMFcRxgvePfjqZXUnUqpu0n8A1BNQ3uo5S1RsK9GvwbVvOcLutlzLgwIDAQAB
-AoGAL/AcYs5whoeF0XckBL1kzr3pt56NwY5v6ogM5RMx411CKSn5ej7pZdRze6yT
-7tjUXCPYa/niAH0/gGroCCs4EAlN/+xCAnF9SM6js4Gu4xMtTstasOyyKN/nlhUE
-zrpbcTLr/cJtjXfZniajFmm4Urz7mzdlW5rULyAcZ5g/PNECQQDjZuXeR6qlxxRE
-jAwKkou4zRuSu95hCJUf9W3val8I7CTkvyk75xilfwDnzquasRp14xdADHy81TW7
-Wp437uVPAkEAtCMQ0YUWrsvftt4Hla5xefczykW8pQ/07FzeN6cN/ajgH3QWJxip
-oXJZJ+P9XvFS60PMXhyE0iHjOfyr6X3RjQJBAItbzPV60A6GQVp8xQhZpLzdHc+/
-yFmI6/LI8tVtR85tAXMZ34gxaL5LZd+pnSrQ7FlgkSgUPwFuXF5z+1Bl3CsCQBTC
-qdCL1xZkFq9bnWIpzZgx3j0kll4rnZ2UAmRFk341dUcKuPbeh8Y8iHvpcaz8gQLu
-OGJsRP52u1pWfXWWc40CQQCqwVesy8mZdV1JgglEsrtlvPcK0a/kVZQqPIGpthfV
-D56486GwVTwyH6QCTD/ZxMficLzw+DpTXiRZd9UHyoBR
------END RSA PRIVATE KEY-----`
+func generateTestPkiCertificates() (string, string, string, error) {
+	certTemplate := x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject: pkix.Name{
+			CommonName: "example.com",
+		},
+		NotBefore:             time.Now(),
+		NotAfter:              time.Now().Add(365 * 24 * time.Hour),
+		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+	}
 
-func TestNewSigType(t *testing.T) {
+	// Generate RSA private key
+	rsaPrivKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to generate RSA key: %v", err)
+	}
+	rsaCertBytes, err := x509.CreateCertificate(rand.Reader, &certTemplate, &certTemplate, &rsaPrivKey.PublicKey, rsaPrivKey)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to create RSA certificate: %v", err)
+	}
+	rsaCertPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: rsaCertBytes})
+	rsaPrivKeyPEM, err := x509.MarshalPKCS8PrivateKey(rsaPrivKey)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to marshal RSA private key: %v", err)
+	}
+	rsaPrivKeyPEMBytes := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: rsaPrivKeyPEM})
+
+	// Generate ECDSA private key
+	ecdsaPrivKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to generate ECDSA key: %v", err)
+	}
+	ecdsaCertBytes, err := x509.CreateCertificate(rand.Reader, &certTemplate, &certTemplate, &ecdsaPrivKey.PublicKey, ecdsaPrivKey)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to create ECDSA certificate: %v", err)
+	}
+	ecdsaCertPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: ecdsaCertBytes})
+	ecdsaPrivKeyPEM, err := x509.MarshalPKCS8PrivateKey(ecdsaPrivKey)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to marshal ECDSA private key: %v", err)
+	}
+	ecdsaPrivKeyPEMBytes := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: ecdsaPrivKeyPEM})
+
+	// Generate Ed25519 private key
+	_, ed25519PrivKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to generate Ed25519 key: %v", err)
+	}
+	ed25519CertBytes, err := x509.CreateCertificate(rand.Reader, &certTemplate, &certTemplate, ed25519PrivKey.Public().(ed25519.PublicKey), ed25519PrivKey)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to create Ed25519 certificate: %v", err)
+	}
+	ed25519CertPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: ed25519CertBytes})
+	ed25519PrivKeyPEM, err := x509.MarshalPKCS8PrivateKey(ed25519PrivKey)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to marshal Ed25519 private key: %v", err)
+	}
+	ed25519PrivKeyPEMBytes := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: ed25519PrivKeyPEM})
+
+	return string(rsaCertPEM) + string(rsaPrivKeyPEMBytes), string(ecdsaCertPEM) + string(ecdsaPrivKeyPEMBytes), string(ed25519CertPEM) + string(ed25519PrivKeyPEMBytes), nil
+}
+
+func TestSigTypeFromCerts(t *testing.T) {
+	rsaCert, ecdsaCert, ed25519Cert, err := generateTestPkiCertificates()
+	if err != nil {
+		t.Fatalf("Failed to generate certificates: %v\n", err)
+	}
+
 	alice := AccountUrl("alice")
+	alicePubKey := &address.PublicKey{}
 
-	block, _ := pem.Decode([]byte(rsaPrivateKey1024))
-	aliceKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
-	require.NoError(t, err)
-
-	cases := []struct {
+	cases := map[string][]struct {
 		Version ExecutorVersion
 		Ok      bool
 	}{
-		{ExecutorVersionV2Baikonur, false},
-		{ExecutorVersionLatest, true},
+		rsaCert: {
+			{ExecutorVersionV2Baikonur, false},
+			{ExecutorVersionLatest, true}},
+		ecdsaCert: {
+			{ExecutorVersionV2Baikonur, false},
+			{ExecutorVersionLatest, true}},
+		ed25519Cert: {
+			{ExecutorVersionV2Baikonur, true},
+			{ExecutorVersionLatest, true}},
 	}
 
-	for _, c := range cases {
-		t.Run(c.Version.String(), func(t *testing.T) {
-			// Initialize
-			sim := NewSim(t,
-				simulator.SimpleNetwork(t.Name(), 3, 1),
-				simulator.GenesisWithVersion(GenesisTime, c.Version),
-			)
+	for k, c := range cases {
+		block, rest := pem.Decode([]byte(k))
+		if block.Type == "CERTIFICATE" {
+			block, _ = pem.Decode(rest)
+		}
+		require.Equal(t, block.Type, "PRIVATE KEY")
+		aliceKey, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+		require.NoError(t, err)
+		switch pk := aliceKey.(type) {
+		case *rsa.PrivateKey:
+			alicePubKey = address.FromRSAPublicKey(&pk.PublicKey)
+		case *ecdsa.PrivateKey:
+			alicePubKey = address.FromEcdsaPublicKeyAsPKIX(&pk.PublicKey)
+		case ed25519.PrivateKey:
+			alicePubKey = address.FromED25519PublicKey(pk.Public().(ed25519.PublicKey))
+		}
 
-			MakeIdentity(t, sim.DatabaseFor(alice), alice, x509.MarshalPKCS1PublicKey(&aliceKey.PublicKey))
-			CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e12)
+		for _, ca := range c {
+			t.Run(ca.Version.String(), func(t *testing.T) {
+				// Initialize
+				sim := NewSim(t,
+					simulator.SimpleNetwork(t.Name(), 3, 1),
+					simulator.GenesisWithVersion(GenesisTime, ca.Version),
+				)
 
-			// Submit
-			env := build.Transaction().For(alice, "book", "1").
-				BurnCredits(1).
-				SignWith(alice, "book", "1").
-				Version(1).Timestamp(1).
-				Memo("foo").
-				Metadata("bar").
-				Type(SignatureTypeRsaSha256).
-				PrivateKey(aliceKey)
+				MakeIdentity(t, sim.DatabaseFor(alice), alice, alicePubKey.Key)
+				CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e12)
 
-			if c.Ok {
-				st := sim.BuildAndSubmitSuccessfully(env)
-				sim.StepUntil(
-					Txn(st[0].TxID).Succeeds())
-			} else {
-				st := sim.BuildAndSubmit(env)
-				require.Error(t, st[1].AsError())
-				require.ErrorContains(t, st[1].Error, "unsupported signature type")
-			}
-		})
+				// Submit
+				env := build.Transaction().For(alice, "book", "1").
+					BurnCredits(1).
+					SignWith(alice, "book", "1").
+					Version(1).Timestamp(1).
+					Memo("foo").
+					Metadata("bar").
+					Type(alicePubKey.GetType()).
+					PrivateKey(aliceKey)
+
+				if ca.Ok {
+					st := sim.BuildAndSubmitSuccessfully(env)
+					sim.StepUntil(
+						Txn(st[0].TxID).Succeeds())
+				} else {
+					st := sim.BuildAndSubmit(env)
+					require.Error(t, st[1].AsError())
+					require.ErrorContains(t, st[1].Error, "unsupported signature type")
+				}
+			})
+		}
 	}
 }
 
