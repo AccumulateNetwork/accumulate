@@ -687,7 +687,7 @@ type PendingTransactionGCOperation struct {
 	extraData []byte
 }
 
-type PkiSha256Signature struct {
+type EcdsaSha256Signature struct {
 	fieldsSet       []bool
 	PublicKey       []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
 	Signature       []byte   `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
@@ -1220,7 +1220,7 @@ func (*PendingTransactionGCOperation) Type() NetworkMaintenanceOperationType {
 	return NetworkMaintenanceOperationTypePendingTransactionGC
 }
 
-func (*PkiSha256Signature) Type() SignatureType { return SignatureTypePkiSha256 }
+func (*EcdsaSha256Signature) Type() SignatureType { return SignatureTypeEcdsaSha256 }
 
 func (*RCD1Signature) Type() SignatureType { return SignatureTypeRCD1 }
 
@@ -2711,8 +2711,8 @@ func (v *PendingTransactionGCOperation) Copy() *PendingTransactionGCOperation {
 
 func (v *PendingTransactionGCOperation) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *PkiSha256Signature) Copy() *PkiSha256Signature {
-	u := new(PkiSha256Signature)
+func (v *EcdsaSha256Signature) Copy() *EcdsaSha256Signature {
+	u := new(EcdsaSha256Signature)
 
 	u.PublicKey = encoding.BytesCopy(v.PublicKey)
 	u.Signature = encoding.BytesCopy(v.Signature)
@@ -2733,7 +2733,7 @@ func (v *PkiSha256Signature) Copy() *PkiSha256Signature {
 	return u
 }
 
-func (v *PkiSha256Signature) CopyAsInterface() interface{} { return v.Copy() }
+func (v *EcdsaSha256Signature) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *RCD1Signature) Copy() *RCD1Signature {
 	u := new(RCD1Signature)
@@ -5149,7 +5149,7 @@ func (v *PendingTransactionGCOperation) Equal(u *PendingTransactionGCOperation) 
 	return true
 }
 
-func (v *PkiSha256Signature) Equal(u *PkiSha256Signature) bool {
+func (v *EcdsaSha256Signature) Equal(u *EcdsaSha256Signature) bool {
 	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
 		return false
 	}
@@ -10591,7 +10591,7 @@ func (v *PendingTransactionGCOperation) IsValid() error {
 	}
 }
 
-var fieldNames_PkiSha256Signature = []string{
+var fieldNames_EcdsaSha256Signature = []string{
 	1:  "Type",
 	2:  "PublicKey",
 	3:  "Signature",
@@ -10604,7 +10604,7 @@ var fieldNames_PkiSha256Signature = []string{
 	10: "Data",
 }
 
-func (v *PkiSha256Signature) MarshalBinary() ([]byte, error) {
+func (v *EcdsaSha256Signature) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
 	}
@@ -10641,7 +10641,7 @@ func (v *PkiSha256Signature) MarshalBinary() ([]byte, error) {
 		writer.WriteBytes(10, v.Data)
 	}
 
-	_, _, err := writer.Reset(fieldNames_PkiSha256Signature)
+	_, _, err := writer.Reset(fieldNames_EcdsaSha256Signature)
 	if err != nil {
 		return nil, encoding.Error{E: err}
 	}
@@ -10649,7 +10649,7 @@ func (v *PkiSha256Signature) MarshalBinary() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
-func (v *PkiSha256Signature) IsValid() error {
+func (v *EcdsaSha256Signature) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
@@ -16415,11 +16415,11 @@ func (v *PendingTransactionGCOperation) UnmarshalFieldsFrom(reader *encoding.Rea
 	return nil
 }
 
-func (v *PkiSha256Signature) UnmarshalBinary(data []byte) error {
+func (v *EcdsaSha256Signature) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
 
-func (v *PkiSha256Signature) UnmarshalBinaryFrom(rd io.Reader) error {
+func (v *EcdsaSha256Signature) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
 	var vType SignatureType
@@ -16433,7 +16433,7 @@ func (v *PkiSha256Signature) UnmarshalBinaryFrom(rd io.Reader) error {
 	return v.UnmarshalFieldsFrom(reader)
 }
 
-func (v *PkiSha256Signature) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+func (v *EcdsaSha256Signature) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadBytes(2); ok {
 		v.PublicKey = x
 	}
@@ -16462,7 +16462,7 @@ func (v *PkiSha256Signature) UnmarshalFieldsFrom(reader *encoding.Reader) error 
 		v.Data = x
 	}
 
-	seen, err := reader.Reset(fieldNames_PkiSha256Signature)
+	seen, err := reader.Reset(fieldNames_EcdsaSha256Signature)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -19814,7 +19814,7 @@ func (v *PendingTransactionGCOperation) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *PkiSha256Signature) MarshalJSON() ([]byte, error) {
+func (v *EcdsaSha256Signature) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type            SignatureType `json:"type"`
 		PublicKey       *string       `json:"publicKey,omitempty"`
@@ -22862,7 +22862,7 @@ func (v *PendingTransactionGCOperation) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (v *PkiSha256Signature) UnmarshalJSON(data []byte) error {
+func (v *EcdsaSha256Signature) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type            SignatureType `json:"type"`
 		PublicKey       *string       `json:"publicKey,omitempty"`

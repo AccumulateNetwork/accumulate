@@ -88,7 +88,7 @@ func (s *Builder) Import(sig protocol.Signature) (*Builder, error) {
 		s.Timestamp = TimestampFromValue(sig.Timestamp)
 		s.Memo = sig.Memo
 		s.Data = sig.Data
-	case *protocol.PkiSha256Signature:
+	case *protocol.EcdsaSha256Signature:
 		s.Url = sig.Signer
 		s.Version = sig.SignerVersion
 		s.Timestamp = TimestampFromValue(sig.Timestamp)
@@ -220,7 +220,7 @@ func (s *Builder) prepare(init bool) (protocol.KeySignature, error) {
 		protocol.SignatureTypeBTC,
 		protocol.SignatureTypeETH,
 		protocol.SignatureTypeRsaSha256,
-		protocol.SignatureTypePkiSha256,
+		protocol.SignatureTypeEcdsaSha256,
 		protocol.SignatureTypeBTCLegacy:
 
 	case protocol.SignatureTypeReceipt, protocol.SignatureTypePartition:
@@ -309,8 +309,8 @@ func (s *Builder) prepare(init bool) (protocol.KeySignature, error) {
 		sig.Data = s.Data
 		return sig, s.Signer.SetPublicKey(sig)
 
-	case protocol.SignatureTypePkiSha256:
-		sig := new(protocol.PkiSha256Signature)
+	case protocol.SignatureTypeEcdsaSha256:
+		sig := new(protocol.EcdsaSha256Signature)
 		sig.Signer = s.Url
 		sig.SignerVersion = s.Version
 		sig.Timestamp = timestamp
@@ -340,7 +340,7 @@ func (s *Builder) sign(sig protocol.Signature, sigMdHash, hash []byte) error {
 		sig.TransactionHash = *(*[32]byte)(hash)
 	case *protocol.RsaSha256Signature:
 		sig.TransactionHash = *(*[32]byte)(hash)
-	case *protocol.PkiSha256Signature:
+	case *protocol.EcdsaSha256Signature:
 		sig.TransactionHash = *(*[32]byte)(hash)
 	case *protocol.DelegatedSignature:
 		if sigMdHash == nil {

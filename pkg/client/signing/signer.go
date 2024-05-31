@@ -51,7 +51,7 @@ func (k PrivateKey) SetPublicKey(sig protocol.Signature) error {
 		}
 		sig.PublicKey = x509.MarshalPKCS1PublicKey(&privKey.PublicKey)
 
-	case *protocol.PkiSha256Signature:
+	case *protocol.EcdsaSha256Signature:
 		privKey, err := x509.ParsePKCS8PrivateKey(k)
 		if err != nil {
 			return err
@@ -91,8 +91,8 @@ func (k PrivateKey) Sign(sig protocol.Signature, sigMdHash, message []byte) erro
 	case *protocol.RsaSha256Signature:
 		return protocol.SignRsaSha256(sig, k, sigMdHash, message)
 
-	case *protocol.PkiSha256Signature:
-		return protocol.SignPkiSha256(sig, k, sigMdHash, message)
+	case *protocol.EcdsaSha256Signature:
+		return protocol.SignEcdsaSha256(sig, k, sigMdHash, message)
 
 	default:
 		return fmt.Errorf("cannot sign %T with a key", sig)

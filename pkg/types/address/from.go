@@ -7,7 +7,6 @@
 package address
 
 import (
-	"crypto/ecdh"
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/rsa"
@@ -57,10 +56,10 @@ func FromRSAPrivateKey(key *rsa.PrivateKey) *PrivateKey {
 	}
 }
 
-func FromPublicKeyAsPKIX(key any) *PublicKey {
+func FromEcdsaPublicKeyAsPKIX(key *ecdsa.PublicKey) *PublicKey {
 	var err error
 	publicKey := new(PublicKey)
-	publicKey.Type = protocol.SignatureTypePkiSha256
+	publicKey.Type = protocol.SignatureTypeEcdsaSha256
 	publicKey.Key, err = x509.MarshalPKIXPublicKey(key)
 	if err != nil {
 		panic(err)
@@ -68,32 +67,15 @@ func FromPublicKeyAsPKIX(key any) *PublicKey {
 	return publicKey
 }
 
-func FromPrivateKeyAsPKIX(key any) *PublicKey {
-	switch k := key.(type) {
-	case *rsa.PrivateKey:
-		return FromPublicKeyAsPKIX(&k.PublicKey)
-	case *ecdsa.PrivateKey:
-		return FromPublicKeyAsPKIX(&k.PublicKey)
-	case ed25519.PrivateKey:
-		return FromPublicKeyAsPKIX(k.Public())
-	case ecdh.PrivateKey:
-		panic("ecdh keys for signing not supported")
-	}
-	panic("unknown key type")
-	return nil
-}
-
-func FromPrivateKeyAsPKCS8(key any) *PrivateKey {
+func FromEcdsaPrivateKey(key *ecdsa.PrivateKey) *PrivateKey {
 	var err error
-	privKey := new(PrivateKey)
-	privKey.Type = protocol.SignatureTypePkiSha256
-	privKey.Key, err = x509.MarshalPKCS8PrivateKey(key)
-
+	priv := new(PrivateKey)
+	priv.Type = protocol.SignatureTypeEcdsaSha256
+	priv.Key, err = x509.MarshalECPrivateKey(key)
 	if err != nil {
 		panic(err)
 	}
-
-	return privKey
+	return priv
 }
 
 func FromPrivateKeyBytes(priv []byte, typ protocol.SignatureType) *PrivateKey {
@@ -134,7 +116,7 @@ func FromPrivateKeyBytes(priv []byte, typ protocol.SignatureType) *PrivateKey {
 		}
 		pub = x509.MarshalPKCS1PublicKey(&sk.PublicKey)
 
-	case protocol.SignatureTypePkiSha256:
+	case protocol.SignatureTypeEcdsaSha256:
 		sk, err := x509.ParsePKIXPublicKey(priv)
 		if err != nil {
 			panic(err)

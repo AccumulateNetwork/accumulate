@@ -197,7 +197,7 @@ RsaSha256Signature:
       optional: true
 
 
-PkiSha256Signature:
+EcdsaSha256Signature:
   union: { type: signature }
   fields:
     - name: PublicKey

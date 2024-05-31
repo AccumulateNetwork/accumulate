@@ -42,7 +42,7 @@ func init() {
 	// PKI signatures (enabled with Vandenberg)
 	registerConditionalExec[UserSignature](&signatureExecutors,
 		func(ctx *SignatureContext) bool { return ctx.GetActiveGlobals().ExecutorVersion.V2VandenbergEnabled() },
-		protocol.SignatureTypePkiSha256,
+		protocol.SignatureTypeEcdsaSha256,
 	)
 }
 

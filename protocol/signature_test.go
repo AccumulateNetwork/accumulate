@@ -431,7 +431,7 @@ func generateTestPkiCertificates() (string, string, string, error) {
 	return string(rsaCertPEM) + string(rsaPrivKeyPEMBytes), string(ecdsaCertPEM) + string(ecdsaPrivKeyPEMBytes), string(ed25519CertPEM) + string(ed25519PrivKeyPEMBytes), nil
 }
 
-func TestPkiSha256Signature(t *testing.T) {
+func TestTypesFromCerts(t *testing.T) {
 	rsaCert, ecdsaCert, ed25519Cert, err := generateTestPkiCertificates()
 	if err != nil {
 		t.Fatalf("Failed to generate certificates: %v\n", err)
@@ -440,41 +440,44 @@ func TestPkiSha256Signature(t *testing.T) {
 	message := "ACME will rule DEFI"
 	hash := sha256.Sum256([]byte(message))
 
+	pub := &address.PublicKey{}
+
+	var sig UserSignature
 	for _, c := range []string{rsaCert, ecdsaCert, ed25519Cert} {
 		block, rest := pem.Decode([]byte(c))
 		if block.Type == "CERTIFICATE" {
 			block, _ = pem.Decode(rest)
 		}
 		require.Equal(t, block.Type, "PRIVATE KEY")
-
 		privKey, err := x509.ParsePKCS8PrivateKey(block.Bytes)
 		require.NoError(t, err)
-
-		pub := address.FromPrivateKeyAsPKIX(privKey)
-
-		pkiSha256 := new(PkiSha256Signature)
-		pkiSha256.PublicKey = pub.Key
-
-		require.NoError(t, SignPkiSha256(pkiSha256, block.Bytes, nil, hash[:]))
+		switch k := privKey.(type) {
+		case *rsa.PrivateKey:
+			pub = address.FromRSAPublicKey(&k.PublicKey)
+			priv := address.FromRSAPrivateKey(k)
+			s := new(RsaSha256Signature)
+			s.PublicKey = pub.Key
+			require.NoError(t, SignRsaSha256(s, priv.Key, nil, hash[:]))
+			sig = s
+		case *ecdsa.PrivateKey:
+			pub = address.FromEcdsaPublicKeyAsPKIX(&k.PublicKey)
+			priv := address.FromEcdsaPrivateKey(k)
+			s := new(EcdsaSha256Signature)
+			s.PublicKey = pub.Key
+			require.NoError(t, SignEcdsaSha256(s, priv.Key, nil, hash[:]))
+			sig = s
+		case ed25519.PrivateKey:
+			pub = address.FromED25519PublicKey(k.Public().(ed25519.PublicKey))
+			priv := address.FromED25519PrivateKey(k)
+			s := new(ED25519Signature)
+			s.PublicKey = pub.Key
+			SignED25519(s, priv.Key, nil, hash[:])
+			sig = s
+		default:
+			continue
+		}
 
 		//should not fail
-		require.Equal(t, VerifyUserSignature(pkiSha256, hash[:]), true)
-
+		require.Equal(t, VerifyUserSignature(sig, hash[:]), true)
 	}
 }
-
-//
-//func main() {
-//	rsaCert, ecdsaCert, ed25519Cert, err := generateCertificate()
-//	if err != nil {
-//		fmt.Printf("Failed to generate certificates: %v\n", err)
-//		return
-//	}
-//
-//	fmt.Println("RSA Certificate and Private Key:")
-//	fmt.Println(rsaCert)
-//	fmt.Println("ECDSA Certificate and Private Key:")
-//	fmt.Println(ecdsaCert)
-//	fmt.Println("Ed25519 Certificate and Private Key:")
-//	fmt.Println(ed25519Cert)
-//}
