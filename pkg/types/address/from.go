@@ -30,12 +30,21 @@ func FromED25519PublicKey(key []byte) *PublicKey {
 func FromED25519PrivateKey(key []byte) *PrivateKey {
 	switch len(key) {
 	default:
-		panic("invalid ed25519 private key")
+		skt, err := x509.ParsePKCS8PrivateKey(key)
+		if err != nil {
+			panic(fmt.Errorf("invalid ed25519 key length: want 32 or 64, got %d", len(key)))
+		}
+		var ok bool
+		key, ok = skt.(ed25519.PrivateKey)
+		if !ok {
+			panic("invalid ed25519 private key")
+		}
 	case ed25519.SeedSize:
 		key = ed25519.NewKeyFromSeed(key)
 	case ed25519.PrivateKeySize:
 		// Ok
 	}
+
 	return &PrivateKey{
 		PublicKey: *FromED25519PublicKey(key[32:]),
 		Key:       key,
@@ -96,32 +105,56 @@ func FromPrivateKeyBytes(priv []byte, typ protocol.SignatureType) *PrivateKey {
 		case ed25519.SeedSize:
 			priv = ed25519.NewKeyFromSeed(priv)
 		default:
-			panic(fmt.Errorf("invalid ed25519 key length: want 32 or 64, got %d", len(priv)))
+			skt, err := x509.ParsePKCS8PrivateKey(priv)
+			if err != nil {
+				panic(fmt.Errorf("invalid ed25519 key length: want 32 or 64, got %d", len(priv)))
+			}
+			var ok bool
+			priv, ok = skt.(ed25519.PrivateKey)
+			if !ok {
+				panic(fmt.Errorf("private key is not an edcsa key"))
+			}
 		}
 		pub = priv[32:]
 
-	case protocol.SignatureTypeETH:
+	case protocol.SignatureTypeETH,
+		protocol.SignatureTypeBTCLegacy:
 		_, pk := btc.PrivKeyFromBytes(btc.S256(), priv)
 		pub = pk.SerializeUncompressed()
 
-	case protocol.SignatureTypeBTC,
-		protocol.SignatureTypeBTCLegacy:
+	case protocol.SignatureTypeBTC:
 		_, pk := btc.PrivKeyFromBytes(btc.S256(), priv)
 		pub = pk.SerializeCompressed()
 
 	case protocol.SignatureTypeRsaSha256:
 		sk, err := x509.ParsePKCS1PrivateKey(priv)
 		if err != nil {
-			panic(err)
+			skt, err := x509.ParsePKCS8PrivateKey(priv)
+			if err != nil {
+				panic(err)
+			}
+			var ok bool
+			sk, ok = skt.(*rsa.PrivateKey)
+			if !ok {
+				panic(fmt.Errorf("private key is not an rsa key"))
+			}
 		}
 		pub = x509.MarshalPKCS1PublicKey(&sk.PublicKey)
 
 	case protocol.SignatureTypeEcdsaSha256:
-		sk, err := x509.ParsePKIXPublicKey(priv)
+		sk, err := x509.ParseECPrivateKey(priv)
 		if err != nil {
-			panic(err)
+			skt, err := x509.ParsePKCS8PrivateKey(priv)
+			if err != nil {
+				panic(err)
+			}
+			var ok bool
+			sk, ok = skt.(*ecdsa.PrivateKey)
+			if !ok {
+				panic(fmt.Errorf("private key is not an ecdsa key"))
+			}
 		}
-		pub, err = x509.MarshalPKIXPublicKey(sk)
+		pub, err = x509.MarshalPKIXPublicKey(&sk.PublicKey)
 		if err != nil {
 			panic(err)
 		}

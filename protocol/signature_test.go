@@ -7,6 +7,7 @@
 package protocol_test
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/elliptic"
@@ -453,21 +454,27 @@ func TestTypesFromCerts(t *testing.T) {
 		require.NoError(t, err)
 		switch k := privKey.(type) {
 		case *rsa.PrivateKey:
+			pk := address.FromPrivateKeyBytes(block.Bytes, SignatureTypeRsaSha256)
 			pub = address.FromRSAPublicKey(&k.PublicKey)
+			require.True(t, bytes.Compare(pk.PublicKey.Key, pub.Key) == 0)
 			priv := address.FromRSAPrivateKey(k)
 			s := new(RsaSha256Signature)
 			s.PublicKey = pub.Key
 			require.NoError(t, SignRsaSha256(s, priv.Key, nil, hash[:]))
 			sig = s
 		case *ecdsa.PrivateKey:
+			pk := address.FromPrivateKeyBytes(block.Bytes, SignatureTypeEcdsaSha256)
 			pub = address.FromEcdsaPublicKeyAsPKIX(&k.PublicKey)
+			require.True(t, bytes.Compare(pk.PublicKey.Key, pub.Key) == 0)
 			priv := address.FromEcdsaPrivateKey(k)
 			s := new(EcdsaSha256Signature)
 			s.PublicKey = pub.Key
 			require.NoError(t, SignEcdsaSha256(s, priv.Key, nil, hash[:]))
 			sig = s
 		case ed25519.PrivateKey:
+			pk := address.FromPrivateKeyBytes(block.Bytes, SignatureTypeED25519)
 			pub = address.FromED25519PublicKey(k.Public().(ed25519.PublicKey))
+			require.True(t, bytes.Compare(pk.PublicKey.Key, pub.Key) == 0)
 			priv := address.FromED25519PrivateKey(k)
 			s := new(ED25519Signature)
 			s.PublicKey = pub.Key
