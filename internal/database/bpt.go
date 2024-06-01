@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -25,13 +25,9 @@ func newBPT(parent record.Record, logger log.Logger, store record.Store, key *re
 // GetBptRootHash returns the BPT root hash, after applying updates as necessary
 // for modified accounts.
 func (b *Batch) GetBptRootHash() ([32]byte, error) {
-	for _, a := range b.account {
-		if a.IsDirty() {
-			err := a.putBpt()
-			if err != nil {
-				return [32]byte{}, errors.UnknownError.WithFormat("update BPT entry for %v: %w", a.Url(), err)
-			}
-		}
+	err := b.UpdateBPT()
+	if err != nil {
+		return [32]byte{}, errors.UnknownError.Wrap(err)
 	}
 	return b.BPT().GetRootHash()
 }

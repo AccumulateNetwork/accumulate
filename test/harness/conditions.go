@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -32,6 +32,12 @@ type True func(*Harness) bool
 func (f True) Satisfied(h *Harness) bool { return f(h) }
 
 func (f True) Format(prefix, suffix string) string { return prefix + "(unknown predicate function)" }
+
+type False func(*Harness) bool
+
+func (f False) Satisfied(h *Harness) bool { return !f(h) }
+
+func (f False) Format(prefix, suffix string) string { return prefix + "(unknown predicate function)" }
 
 func MajorBlock(v uint64) majorHeightOnPart {
 	return majorHeightOnPart{v, protocol.Directory}
@@ -99,14 +105,51 @@ func (v blockTimeOnPart) Format(prefix, suffix string) string {
 	return fmt.Sprintf("%s%s reached block time %v%s", prefix, v.partition, v.time, suffix)
 }
 
+func VersionIs(v protocol.ExecutorVersion) executorVersion {
+	if !v.V2VandenbergEnabled() {
+		panic("this feature is not available for versions prior to v2-vandenberg")
+	}
+	return executorVersion{version: v}
+}
+
+type executorVersion struct {
+	version protocol.ExecutorVersion
+}
+
+func (v executorVersion) Satisfied(h *Harness) bool {
+	ns := h.NetworkStatus(api.NetworkStatusOptions{Partition: protocol.Directory})
+	if len(ns.BvnExecutorVersions) == 0 {
+		return false
+	}
+	if ns.ExecutorVersion < v.version {
+		return false
+	}
+	for _, b := range ns.BvnExecutorVersions {
+		if b.Version < v.version {
+			return false
+		}
+	}
+	return true
+}
+
+func (v executorVersion) Format(prefix, suffix string) string {
+	return fmt.Sprintf("%sexecutor version is %v%s", prefix, v.version, suffix)
+}
+
 // Msg defines a condition on a message.
-func Msg(id *url.TxID) msgCond { return msgCond{id: id, message: []string{"message"}} }
+func Msg(id *url.TxID) msgCond {
+	return msgCond{id: id, message: []string{"message " + id.ShortString()}}
+}
 
 // Txn defines a condition on a transaction.
-func Txn(id *url.TxID) txnCond { return txnCond{msgCond{id: id, message: []string{"transaction"}}} }
+func Txn(id *url.TxID) txnCond {
+	return txnCond{msgCond{id: id, message: []string{"transaction " + id.ShortString()}}}
+}
 
 // Sig defines a condition on a signature.
-func Sig(id *url.TxID) sigCond { return sigCond{msgCond{id: id, message: []string{"signature"}}} }
+func Sig(id *url.TxID) sigCond {
+	return sigCond{msgCond{id: id, message: []string{"signature " + id.ShortString()}}}
+}
 
 // txnCond provides methods to define conditions on a transaction.
 type txnCond struct{ msgCond }

@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -8,10 +8,12 @@ package main
 
 import (
 	"net/http"
+	"path/filepath"
 	"time"
 
 	service2 "github.com/cometbft/cometbft/libs/service"
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/badger"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"golang.org/x/exp/slog"
@@ -55,6 +57,13 @@ func runDualNode(cmd *cobra.Command, args []string) (string, error) {
 		s.Addr = flagRun.PprofListen
 		s.ReadHeaderTimeout = time.Minute
 		go func() { check(s.ListenAndServe()) }() //nolint:gosec
+	}
+
+	// Detect new-style configuration
+	c := new(run.Config)
+	if c.LoadFrom(filepath.Join(args[0], "..", "accumulate.toml")) == nil {
+		runCfg(c, nil)
+		return "run complete", nil
 	}
 
 	prog := NewProgram(cmd, func(cmd *cobra.Command) (string, error) {

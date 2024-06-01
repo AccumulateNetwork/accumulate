@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -9,7 +9,6 @@ package simulator
 import (
 	"io"
 	"math/big"
-	"runtime"
 
 	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
@@ -34,6 +33,7 @@ type Simulator struct {
 	tasks         *taskQueue
 	partIDs       []string
 	partitions    map[string]*Partition
+	hub           consensus.Hub
 }
 
 func New(opts ...Option) (*Simulator, error) {
@@ -54,7 +54,7 @@ func New(opts ...Option) (*Simulator, error) {
 		initialSupply: big.NewInt(1e6 * protocol.AcmePrecision),
 	}
 	for _, opt := range opts {
-		err := opt(o)
+		err := opt.apply(o)
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
 		}
@@ -95,6 +95,11 @@ func New(opts ...Option) (*Simulator, error) {
 		}
 	}
 
+	for _, id := range s.partIDs {
+		for _, n := range s.partitions[id].nodes {
+			s.hub.Register(n.consensus)
+		}
+	}
 	return s, nil
 }
 
@@ -122,32 +127,6 @@ func (s *Simulator) BlockIndexFor(account *url.URL) uint64 {
 		panic(err)
 	}
 	return s.BlockIndex(partition)
-}
-
-// Step executes a single simulator step
-func (s *Simulator) Step() error {
-	if s.deterministic {
-		var err error
-		for _, id := range s.partIDs {
-			if e := s.partitions[id].execute(); e != nil {
-				err = e
-			}
-		}
-		return err
-	} else {
-		for _, p := range s.partitions {
-			p := p // Don't capture loop variables
-			s.tasks.Go(p.execute)
-		}
-	}
-
-	// Wait for execution to complete
-	err := s.tasks.Flush()
-
-	// Give any parallel processes a chance to run
-	runtime.Gosched()
-
-	return err
 }
 
 func (s *Simulator) SetSubmitHookFor(account *url.URL, fn SubmitHookFunc) {

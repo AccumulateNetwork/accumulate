@@ -42,6 +42,11 @@
         type: other
         dataType: ChainIndexTime
         pointer: true
+      - name: RootIndexIndex
+        description: indexes the chain's index chain by entries' RootIndexIndex.
+        type: other
+        dataType: ChainIndexUint
+        pointer: true
 
   - name: Partition
     type: entity

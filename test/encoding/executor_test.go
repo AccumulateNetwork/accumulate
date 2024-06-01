@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -50,7 +50,7 @@ func TestExecutorConsistency(t *testing.T) {
 		simulator.WithLogger(acctesting.NewTestLogger(t)),
 		simulator.WithNetwork(testData.Network),
 		simulator.SnapshotMap(testData.Genesis),
-		simulator.DropDispatchedMessages,
+		simulator.DropDispatchedMessages(),
 		simulator.InitialAcmeSupply(nil),
 	)
 	require.NoError(t, err)

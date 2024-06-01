@@ -41,7 +41,7 @@ export type {{.TypescriptFullName true true true true}} = {{if needsCtor .}}{{.T
 export class {{.TypescriptFullName false false true true}} {{if eq .Name "Transaction"}}extends TransactionBase{{end}} {
   {{- if .IsUnion}}
   {{-   if .IsBinary}}
-  @encodeAs.field(1).keepEmpty.enum
+  @encodeAs.field(1).keepEmpty.enum.of({{.UnionType}})
   {{-   end}}
   public readonly {{if $lud}}{{lcName .UnionType}}{{else}}type{{end}} = {{.UnionType}}.{{.UnionValue}};
   {{- end}}

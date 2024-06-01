@@ -204,10 +204,11 @@ func initEip712TypeDictionary() {
 
 func (v *serviceRegisteredEvent) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type    eventType                               `json:"type"`
-		PeerID  *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"peerID,omitempty"`
-		Network string                                  `json:"network,omitempty"`
-		Address *api.ServiceAddress                     `json:"address,omitempty"`
+		Type      eventType                               `json:"type"`
+		PeerID    *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"peerID,omitempty"`
+		Network   string                                  `json:"network,omitempty"`
+		Address   *api.ServiceAddress                     `json:"address,omitempty"`
+		ExtraData *string                                 `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.PeerID == ("")) {
@@ -219,21 +220,24 @@ func (v *serviceRegisteredEvent) MarshalJSON() ([]byte, error) {
 	if !(v.Address == nil) {
 		u.Address = v.Address
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *serviceRegisteredEvent) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type    eventType                               `json:"type"`
-		PeerID  *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"peerID,omitempty"`
-		Network string                                  `json:"network,omitempty"`
-		Address *api.ServiceAddress                     `json:"address,omitempty"`
+		Type      eventType                               `json:"type"`
+		PeerID    *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"peerID,omitempty"`
+		Network   string                                  `json:"network,omitempty"`
+		Address   *api.ServiceAddress                     `json:"address,omitempty"`
+		ExtraData *string                                 `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.PeerID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.PeerID, Func: p2p.UnmarshalPeerIDJSON}
 	u.Network = v.Network
 	u.Address = v.Address
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -245,5 +249,9 @@ func (v *serviceRegisteredEvent) UnmarshalJSON(data []byte) error {
 
 	v.Network = u.Network
 	v.Address = u.Address
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }

@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -14,9 +14,12 @@ import (
 	"github.com/stretchr/testify/require"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
+	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
 func TestSim(t *testing.T) {
+	acctesting.SkipCI(t, "Connections fail in CI")
+
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 

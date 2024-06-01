@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -7,6 +7,7 @@
 package simulator
 
 import (
+	"context"
 	"fmt"
 	"math/big"
 	"sync"
@@ -18,7 +19,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	apiimpl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/bsn"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
@@ -26,6 +26,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
@@ -54,12 +55,13 @@ type simFactory struct {
 	deterministic               bool
 	dropInitialAnchor           bool
 	disableAnchorHealing        bool
-	interceptDispatchedMessages dispatchInterceptor
+	interceptDispatchedMessages DispatchInterceptor
 
 	// State
 	logger           log.Logger
 	taskQueue        *taskQueue
 	router           *Router
+	hub              consensus.Hub
 	services         *services.Network
 	dispatcherFunc   func() execute.Dispatcher
 	networkFactories []*networkFactory
@@ -76,7 +78,6 @@ type networkFactory struct {
 
 	// State
 	logger log.Logger
-	gossip *consensus.Gossip
 }
 
 type nodeFactory struct {
@@ -102,6 +103,7 @@ func (f *simFactory) Build() *Simulator {
 	s.deterministic = f.deterministic
 	s.logger = f.getLogger()
 	s.router = f.getRouter()
+	s.hub = f.getHub()
 	s.services = f.getServices()
 	s.tasks = f.getTaskQueue()
 
@@ -124,7 +126,6 @@ func (f *networkFactory) Build(s *Simulator) *Partition {
 	p.Type = f.typ
 	p.sim = s
 	p.logger = f.getLogger()
-	p.gossip = f.getGossip()
 	p.mu = new(sync.Mutex)
 
 	for id, init := range f.nodes {
@@ -153,6 +154,7 @@ func (f *nodeFactory) Build(p *Partition) *Node {
 	n.logger = f.getLogger()
 	n.eventBus = f.getEventBus()
 	n.nodeKey = f.getNodeKey()
+	n.privValKey = f.network.PrivValKey
 	n.peerID = f.getPeerID()
 	n.consensus = f.app(f)
 	n.services = f.getSvcHandler()
@@ -285,6 +287,15 @@ func (f *simFactory) getRouter() *Router {
 	return f.router
 }
 
+func (f *simFactory) getHub() consensus.Hub {
+	if f.hub != nil {
+		return f.hub
+	}
+
+	f.hub = consensus.NewSimpleHub(context.Background())
+	return f.hub
+}
+
 func (f *simFactory) getServices() *services.Network {
 	if f.services != nil {
 		return f.services
@@ -306,18 +317,23 @@ func (f *simFactory) getDispatcherFunc() func() execute.Dispatcher {
 		return f.dispatcherFunc
 	}
 
-	// Avoid capture
-	services := f.getServices()
+	// Avoid capturing f
 	router := f.getRouter()
+	hub := f.getHub()
 	interceptor := f.interceptDispatchedMessages
 
 	f.dispatcherFunc = func() execute.Dispatcher {
-		d := new(dispatcher)
-		d.client = services
-		d.router = router
-		d.envelopes = map[string][]*messaging.Envelope{}
-		d.interceptor = interceptor
-		return d
+		d := consensus.NewDispatcher(router)
+		hub.Register(d)
+
+		if interceptor == nil {
+			return d
+		}
+
+		return &interceptDispatcher{
+			Dispatcher:  d,
+			interceptor: interceptor,
+		}
 	}
 	return f.dispatcherFunc
 }
@@ -361,15 +377,6 @@ func (f *simFactory) getNetworkFactories() []*networkFactory {
 	}
 
 	return f.networkFactories
-}
-
-func (f *networkFactory) getGossip() *consensus.Gossip {
-	if f.gossip != nil {
-		return f.gossip
-	}
-
-	f.gossip = new(consensus.Gossip)
-	return f.gossip
 }
 
 func (f *nodeFactory) getNodeKey() []byte {
@@ -468,23 +475,17 @@ func noABCI(node *nodeFactory, exec execute.Executor, restore consensus.RestoreF
 	}
 }
 
-// func withABCI(node *nodeFactory, exec execute.Executor, restore consensus.RestoreFunc) consensus.App {
-// 	a := abci.NewAccumulator(abci.AccumulatorOptions{
-// 		Config: &config.Config{
-// 			Accumulate: config.Accumulate{
-// 				Describe: config.Describe{
-// 					PartitionId: node.networkFactory.id,
-// 				},
-// 			},
-// 		},
-// 		Executor: exec,
-// 		EventBus: node.eventBus,
-// 		Logger:   node.logger,
-// 		Database: node.getDatabase(),
-// 		Address:  node.network.PrivValKey,
-// 	})
-// 	return (*consensus.AbciApp)(a)
-// }
+func withABCI(node *nodeFactory, exec execute.Executor, restore consensus.RestoreFunc) consensus.App {
+	a := abci.NewAccumulator(abci.AccumulatorOptions{
+		Partition: node.networkFactory.id,
+		Executor:  exec,
+		EventBus:  node.eventBus,
+		Logger:    node.logger,
+		Database:  node.getDatabase(),
+		Address:   node.network.PrivValKey,
+	})
+	return (*consensus.AbciApp)(a)
+}
 
 type appFunc = func(*nodeFactory) *consensus.Node
 
@@ -573,11 +574,6 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 		})
 	}
 
-	// Initialize the major block scheduler
-	if f.networkFactory.typ == protocol.PartitionTypeDirectory {
-		execOpts.MajorBlockScheduler = blockscheduler.Init(f.getEventBus())
-	}
-
 	// Create the conductor. This must happen before creating the executor since
 	// it needs to receive the initial WillChangeGlobals event.
 	enableAnchorHealing := !f.disableAnchorHealing
@@ -613,7 +609,9 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 }
 
 func (node *nodeFactory) makeConsensusNode(app consensus.App) *consensus.Node {
-	cn := consensus.NewNode(node.network.PrivValKey, app, node.getGossip(), node.getLogger())
+	ctx := context.Background()
+	ctx = logging.With(ctx, "partition", node.networkFactory.id, "node", node.id)
+	cn := consensus.NewNode(ctx, node.networkFactory.id, node.network.PrivValKey, app)
 	cn.SkipProposalCheck = node.skipProposalCheck
 	cn.IgnoreDeliverResults = node.ignoreDeliverResults
 	cn.IgnoreCommitResults = node.ignoreCommitResults

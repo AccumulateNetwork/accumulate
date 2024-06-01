@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -319,7 +319,9 @@ type Union struct {
 	// Value is the name of the corresponding enumeration value.
 	Value string
 	// Private indicates the union is a private type.
-	Private bool
+	Private      bool
+	PrivateEnum  bool `yaml:"private-enum"`
+	PrivateUnion bool `yaml:"private-iface"`
 	// Registry indicates the union supports registering new members.
 	Registry bool
 }

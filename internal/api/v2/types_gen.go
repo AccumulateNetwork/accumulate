@@ -42,12 +42,13 @@ type ChainIdQuery struct {
 }
 
 type ChainQueryResponse struct {
-	Type      string          `json:"type,omitempty" form:"type" query:"type" validate:"required"`
-	MainChain *MerkleState    `json:"mainChain,omitempty" form:"mainChain" query:"mainChain" validate:"required"`
-	Chains    []ChainState    `json:"chains,omitempty" form:"chains" query:"chains" validate:"required"`
-	Data      interface{}     `json:"data,omitempty" form:"data" query:"data" validate:"required"`
-	ChainId   []byte          `json:"chainId,omitempty" form:"chainId" query:"chainId" validate:"required"`
-	Receipt   *GeneralReceipt `json:"receipt,omitempty" form:"receipt" query:"receipt" validate:"required"`
+	Type          string          `json:"type,omitempty" form:"type" query:"type" validate:"required"`
+	MainChain     *MerkleState    `json:"mainChain,omitempty" form:"mainChain" query:"mainChain" validate:"required"`
+	Chains        []ChainState    `json:"chains,omitempty" form:"chains" query:"chains" validate:"required"`
+	Data          interface{}     `json:"data,omitempty" form:"data" query:"data" validate:"required"`
+	ChainId       []byte          `json:"chainId,omitempty" form:"chainId" query:"chainId" validate:"required"`
+	Receipt       *GeneralReceipt `json:"receipt,omitempty" form:"receipt" query:"receipt" validate:"required"`
+	LastBlockTime *time.Time      `json:"lastBlockTime,omitempty" form:"lastBlockTime" query:"lastBlockTime" validate:"required"`
 }
 
 type ChainState struct {
@@ -67,12 +68,13 @@ type DataEntryQuery struct {
 }
 
 type DataEntryQueryResponse struct {
-	fieldsSet []bool
-	EntryHash [32]byte           `json:"entryHash,omitempty" form:"entryHash" query:"entryHash" validate:"required"`
-	Entry     protocol.DataEntry `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
-	TxId      *url.TxID          `json:"txId,omitempty" form:"txId" query:"txId" validate:"required"`
-	CauseTxId *url.TxID          `json:"causeTxId,omitempty" form:"causeTxId" query:"causeTxId" validate:"required"`
-	extraData []byte
+	fieldsSet     []bool
+	EntryHash     [32]byte           `json:"entryHash,omitempty" form:"entryHash" query:"entryHash" validate:"required"`
+	Entry         protocol.DataEntry `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
+	TxId          *url.TxID          `json:"txId,omitempty" form:"txId" query:"txId" validate:"required"`
+	CauseTxId     *url.TxID          `json:"causeTxId,omitempty" form:"causeTxId" query:"causeTxId" validate:"required"`
+	LastBlockTime *time.Time         `json:"lastBlockTime,omitempty" form:"lastBlockTime" query:"lastBlockTime" validate:"required"`
+	extraData     []byte
 }
 
 type DataEntrySetQuery struct {
@@ -138,6 +140,7 @@ type MajorQueryResponse struct {
 	// MajorBlockTime is the start time of the major block..
 	MajorBlockTime *time.Time    `json:"majorBlockTime,omitempty" form:"majorBlockTime" query:"majorBlockTime" validate:"required"`
 	MinorBlocks    []*MinorBlock `json:"minorBlocks,omitempty" form:"minorBlocks" query:"minorBlocks" validate:"required"`
+	LastBlockTime  *time.Time    `json:"lastBlockTime,omitempty" form:"lastBlockTime" query:"lastBlockTime" validate:"required"`
 }
 
 type MerkleState struct {
@@ -172,18 +175,20 @@ type MinorBlocksQuery struct {
 type MinorQueryResponse struct {
 	MinorBlock
 	// TxCount shows how many transactions this block contains.
-	TxCount      uint64                      `json:"txCount,omitempty" form:"txCount" query:"txCount" validate:"required"`
-	TxIds        [][]byte                    `json:"txIds,omitempty" form:"txIds" query:"txIds" validate:"required"`
-	Transactions []*TransactionQueryResponse `json:"transactions,omitempty" form:"transactions" query:"transactions" validate:"required"`
+	TxCount       uint64                      `json:"txCount,omitempty" form:"txCount" query:"txCount" validate:"required"`
+	TxIds         [][]byte                    `json:"txIds,omitempty" form:"txIds" query:"txIds" validate:"required"`
+	Transactions  []*TransactionQueryResponse `json:"transactions,omitempty" form:"transactions" query:"transactions" validate:"required"`
+	LastBlockTime *time.Time                  `json:"lastBlockTime,omitempty" form:"lastBlockTime" query:"lastBlockTime" validate:"required"`
 }
 
 type MultiResponse struct {
-	Type       string        `json:"type,omitempty" form:"type" query:"type" validate:"required"`
-	Items      []interface{} `json:"items,omitempty" form:"items" query:"items" validate:"required"`
-	Start      uint64        `json:"start" form:"start" query:"start" validate:"required"`
-	Count      uint64        `json:"count" form:"count" query:"count" validate:"required"`
-	Total      uint64        `json:"total" form:"total" query:"total" validate:"required"`
-	OtherItems []interface{} `json:"otherItems,omitempty" form:"otherItems" query:"otherItems" validate:"required"`
+	Type          string        `json:"type,omitempty" form:"type" query:"type" validate:"required"`
+	Items         []interface{} `json:"items,omitempty" form:"items" query:"items" validate:"required"`
+	Start         uint64        `json:"start" form:"start" query:"start" validate:"required"`
+	Count         uint64        `json:"count" form:"count" query:"count" validate:"required"`
+	Total         uint64        `json:"total" form:"total" query:"total" validate:"required"`
+	OtherItems    []interface{} `json:"otherItems,omitempty" form:"otherItems" query:"otherItems" validate:"required"`
+	LastBlockTime *time.Time    `json:"lastBlockTime,omitempty" form:"lastBlockTime" query:"lastBlockTime" validate:"required"`
 }
 
 type NetworkDescription struct {
@@ -224,27 +229,30 @@ type QueryPagination struct {
 }
 
 type ResponseDataEntry struct {
-	fieldsSet []bool
-	EntryHash [32]byte           `json:"entryHash,omitempty" form:"entryHash" query:"entryHash" validate:"required"`
-	Entry     protocol.DataEntry `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
-	TxId      *url.TxID          `json:"txId,omitempty" form:"txId" query:"txId" validate:"required"`
-	CauseTxId *url.TxID          `json:"causeTxId,omitempty" form:"causeTxId" query:"causeTxId" validate:"required"`
-	extraData []byte
+	fieldsSet     []bool
+	EntryHash     [32]byte           `json:"entryHash,omitempty" form:"entryHash" query:"entryHash" validate:"required"`
+	Entry         protocol.DataEntry `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
+	TxId          *url.TxID          `json:"txId,omitempty" form:"txId" query:"txId" validate:"required"`
+	CauseTxId     *url.TxID          `json:"causeTxId,omitempty" form:"causeTxId" query:"causeTxId" validate:"required"`
+	LastBlockTime *time.Time         `json:"lastBlockTime,omitempty" form:"lastBlockTime" query:"lastBlockTime" validate:"required"`
+	extraData     []byte
 }
 
 type ResponseDataEntrySet struct {
-	fieldsSet   []bool
-	DataEntries []ResponseDataEntry `json:"dataEntries,omitempty" form:"dataEntries" query:"dataEntries" validate:"required"`
-	Total       uint64              `json:"total,omitempty" form:"total" query:"total" validate:"required"`
-	extraData   []byte
+	fieldsSet     []bool
+	DataEntries   []ResponseDataEntry `json:"dataEntries,omitempty" form:"dataEntries" query:"dataEntries" validate:"required"`
+	Total         uint64              `json:"total,omitempty" form:"total" query:"total" validate:"required"`
+	LastBlockTime *time.Time          `json:"lastBlockTime,omitempty" form:"lastBlockTime" query:"lastBlockTime" validate:"required"`
+	extraData     []byte
 }
 
 type ResponseKeyPageIndex struct {
-	fieldsSet []bool
-	Authority *url.URL `json:"authority,omitempty" form:"authority" query:"authority" validate:"required"`
-	Signer    *url.URL `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
-	Index     uint64   `json:"index" form:"index" query:"index" validate:"required"`
-	extraData []byte
+	fieldsSet     []bool
+	Authority     *url.URL   `json:"authority,omitempty" form:"authority" query:"authority" validate:"required"`
+	Signer        *url.URL   `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
+	Index         uint64     `json:"index" form:"index" query:"index" validate:"required"`
+	LastBlockTime *time.Time `json:"lastBlockTime,omitempty" form:"lastBlockTime" query:"lastBlockTime" validate:"required"`
+	extraData     []byte
 }
 
 type SignatureBook struct {
@@ -317,6 +325,7 @@ type TransactionQueryResponse struct {
 	Produced        []*url.TxID                 `json:"produced,omitempty" form:"produced" query:"produced" validate:"required"`
 	Receipts        []*TxReceipt                `json:"receipts,omitempty" form:"receipts" query:"receipts" validate:"required"`
 	SignatureBooks  []*SignatureBook            `json:"signatureBooks,omitempty" form:"signatureBooks" query:"signatureBooks" validate:"required"`
+	LastBlockTime   *time.Time                  `json:"lastBlockTime,omitempty" form:"lastBlockTime" query:"lastBlockTime" validate:"required"`
 }
 
 type TxHistoryQuery struct {
@@ -356,6 +365,7 @@ type TxResponse struct {
 	Message         string      `json:"message,omitempty" form:"message" query:"message" validate:"required"`
 	Delivered       bool        `json:"delivered,omitempty" form:"delivered" query:"delivered" validate:"required"`
 	Result          interface{} `json:"result,omitempty" form:"result" query:"result" validate:"required"`
+	LastBlockTime   *time.Time  `json:"lastBlockTime,omitempty" form:"lastBlockTime" query:"lastBlockTime" validate:"required"`
 }
 
 type TxnQuery struct {
@@ -428,6 +438,10 @@ func (v *DataEntryQueryResponse) Copy() *DataEntryQueryResponse {
 	}
 	if v.CauseTxId != nil {
 		u.CauseTxId = v.CauseTxId
+	}
+	if v.LastBlockTime != nil {
+		u.LastBlockTime = new(time.Time)
+		*u.LastBlockTime = *v.LastBlockTime
 	}
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
@@ -529,6 +543,10 @@ func (v *ResponseDataEntry) Copy() *ResponseDataEntry {
 	if v.CauseTxId != nil {
 		u.CauseTxId = v.CauseTxId
 	}
+	if v.LastBlockTime != nil {
+		u.LastBlockTime = new(time.Time)
+		*u.LastBlockTime = *v.LastBlockTime
+	}
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -548,6 +566,10 @@ func (v *ResponseDataEntrySet) Copy() *ResponseDataEntrySet {
 		u.DataEntries[i] = *(&v).Copy()
 	}
 	u.Total = v.Total
+	if v.LastBlockTime != nil {
+		u.LastBlockTime = new(time.Time)
+		*u.LastBlockTime = *v.LastBlockTime
+	}
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -568,6 +590,10 @@ func (v *ResponseKeyPageIndex) Copy() *ResponseKeyPageIndex {
 		u.Signer = v.Signer
 	}
 	u.Index = v.Index
+	if v.LastBlockTime != nil {
+		u.LastBlockTime = new(time.Time)
+		*u.LastBlockTime = *v.LastBlockTime
+	}
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -660,6 +686,14 @@ func (v *ChainQueryResponse) Equal(u *ChainQueryResponse) bool {
 	case !((v.Receipt).Equal(u.Receipt)):
 		return false
 	}
+	switch {
+	case v.LastBlockTime == u.LastBlockTime:
+		// equal
+	case v.LastBlockTime == nil || u.LastBlockTime == nil:
+		return false
+	case !((*v.LastBlockTime).Equal(*u.LastBlockTime)):
+		return false
+	}
 
 	return true
 }
@@ -723,6 +757,14 @@ func (v *DataEntryQueryResponse) Equal(u *DataEntryQueryResponse) bool {
 	case v.CauseTxId == nil || u.CauseTxId == nil:
 		return false
 	case !((v.CauseTxId).Equal(u.CauseTxId)):
+		return false
+	}
+	switch {
+	case v.LastBlockTime == u.LastBlockTime:
+		// equal
+	case v.LastBlockTime == nil || u.LastBlockTime == nil:
+		return false
+	case !((*v.LastBlockTime).Equal(*u.LastBlockTime)):
 		return false
 	}
 
@@ -890,6 +932,14 @@ func (v *MajorQueryResponse) Equal(u *MajorQueryResponse) bool {
 			return false
 		}
 	}
+	switch {
+	case v.LastBlockTime == u.LastBlockTime:
+		// equal
+	case v.LastBlockTime == nil || u.LastBlockTime == nil:
+		return false
+	case !((*v.LastBlockTime).Equal(*u.LastBlockTime)):
+		return false
+	}
 
 	return true
 }
@@ -985,6 +1035,14 @@ func (v *MinorQueryResponse) Equal(u *MinorQueryResponse) bool {
 			return false
 		}
 	}
+	switch {
+	case v.LastBlockTime == u.LastBlockTime:
+		// equal
+	case v.LastBlockTime == nil || u.LastBlockTime == nil:
+		return false
+	case !((*v.LastBlockTime).Equal(*u.LastBlockTime)):
+		return false
+	}
 
 	return true
 }
@@ -1017,6 +1075,14 @@ func (v *MultiResponse) Equal(u *MultiResponse) bool {
 		if !(v.OtherItems[i] == u.OtherItems[i]) {
 			return false
 		}
+	}
+	switch {
+	case v.LastBlockTime == u.LastBlockTime:
+		// equal
+	case v.LastBlockTime == nil || u.LastBlockTime == nil:
+		return false
+	case !((*v.LastBlockTime).Equal(*u.LastBlockTime)):
+		return false
 	}
 
 	return true
@@ -1125,6 +1191,14 @@ func (v *ResponseDataEntry) Equal(u *ResponseDataEntry) bool {
 	case !((v.CauseTxId).Equal(u.CauseTxId)):
 		return false
 	}
+	switch {
+	case v.LastBlockTime == u.LastBlockTime:
+		// equal
+	case v.LastBlockTime == nil || u.LastBlockTime == nil:
+		return false
+	case !((*v.LastBlockTime).Equal(*u.LastBlockTime)):
+		return false
+	}
 
 	return true
 }
@@ -1139,6 +1213,14 @@ func (v *ResponseDataEntrySet) Equal(u *ResponseDataEntrySet) bool {
 		}
 	}
 	if !(v.Total == u.Total) {
+		return false
+	}
+	switch {
+	case v.LastBlockTime == u.LastBlockTime:
+		// equal
+	case v.LastBlockTime == nil || u.LastBlockTime == nil:
+		return false
+	case !((*v.LastBlockTime).Equal(*u.LastBlockTime)):
 		return false
 	}
 
@@ -1163,6 +1245,14 @@ func (v *ResponseKeyPageIndex) Equal(u *ResponseKeyPageIndex) bool {
 		return false
 	}
 	if !(v.Index == u.Index) {
+		return false
+	}
+	switch {
+	case v.LastBlockTime == u.LastBlockTime:
+		// equal
+	case v.LastBlockTime == nil || u.LastBlockTime == nil:
+		return false
+	case !((*v.LastBlockTime).Equal(*u.LastBlockTime)):
 		return false
 	}
 
@@ -1437,6 +1527,14 @@ func (v *TransactionQueryResponse) Equal(u *TransactionQueryResponse) bool {
 			return false
 		}
 	}
+	switch {
+	case v.LastBlockTime == u.LastBlockTime:
+		// equal
+	case v.LastBlockTime == nil || u.LastBlockTime == nil:
+		return false
+	case !((*v.LastBlockTime).Equal(*u.LastBlockTime)):
+		return false
+	}
 
 	return true
 }
@@ -1547,6 +1645,14 @@ func (v *TxResponse) Equal(u *TxResponse) bool {
 		return false
 	}
 	if !(v.Result == u.Result) {
+		return false
+	}
+	switch {
+	case v.LastBlockTime == u.LastBlockTime:
+		// equal
+	case v.LastBlockTime == nil || u.LastBlockTime == nil:
+		return false
+	case !((*v.LastBlockTime).Equal(*u.LastBlockTime)):
 		return false
 	}
 
@@ -1744,6 +1850,7 @@ var fieldNames_DataEntryQueryResponse = []string{
 	2: "Entry",
 	3: "TxId",
 	4: "CauseTxId",
+	5: "LastBlockTime",
 }
 
 var fieldTypes_DataEntryQueryResponse = []string{
@@ -1772,6 +1879,9 @@ func (v *DataEntryQueryResponse) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.CauseTxId == nil) {
 		writer.WriteTxid(4, v.CauseTxId)
+	}
+	if !(v.LastBlockTime == nil) {
+		writer.WriteTime(5, *v.LastBlockTime)
 	}
 
 	_, _, err := writer.Reset(fieldNames_DataEntryQueryResponse)
@@ -1804,6 +1914,11 @@ func (v *DataEntryQueryResponse) IsValid() error {
 		errs = append(errs, "field CauseTxId is missing")
 	} else if v.CauseTxId == nil {
 		errs = append(errs, "field CauseTxId is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field LastBlockTime is missing")
+	} else if v.LastBlockTime == nil {
+		errs = append(errs, "field LastBlockTime is not set")
 	}
 
 	switch len(errs) {
@@ -2113,6 +2228,7 @@ var fieldNames_ResponseDataEntry = []string{
 	2: "Entry",
 	3: "TxId",
 	4: "CauseTxId",
+	5: "LastBlockTime",
 }
 
 var fieldTypes_ResponseDataEntry = []string{
@@ -2141,6 +2257,9 @@ func (v *ResponseDataEntry) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.CauseTxId == nil) {
 		writer.WriteTxid(4, v.CauseTxId)
+	}
+	if !(v.LastBlockTime == nil) {
+		writer.WriteTime(5, *v.LastBlockTime)
 	}
 
 	_, _, err := writer.Reset(fieldNames_ResponseDataEntry)
@@ -2174,6 +2293,11 @@ func (v *ResponseDataEntry) IsValid() error {
 	} else if v.CauseTxId == nil {
 		errs = append(errs, "field CauseTxId is not set")
 	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field LastBlockTime is missing")
+	} else if v.LastBlockTime == nil {
+		errs = append(errs, "field LastBlockTime is not set")
+	}
 
 	switch len(errs) {
 	case 0:
@@ -2188,6 +2312,7 @@ func (v *ResponseDataEntry) IsValid() error {
 var fieldNames_ResponseDataEntrySet = []string{
 	1: "DataEntries",
 	2: "Total",
+	3: "LastBlockTime",
 }
 
 var fieldTypes_ResponseDataEntrySet = []string{
@@ -2211,6 +2336,9 @@ func (v *ResponseDataEntrySet) MarshalBinary() ([]byte, error) {
 	if !(v.Total == 0) {
 		writer.WriteUint(2, v.Total)
 	}
+	if !(v.LastBlockTime == nil) {
+		writer.WriteTime(3, *v.LastBlockTime)
+	}
 
 	_, _, err := writer.Reset(fieldNames_ResponseDataEntrySet)
 	if err != nil {
@@ -2233,6 +2361,11 @@ func (v *ResponseDataEntrySet) IsValid() error {
 	} else if v.Total == 0 {
 		errs = append(errs, "field Total is not set")
 	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field LastBlockTime is missing")
+	} else if v.LastBlockTime == nil {
+		errs = append(errs, "field LastBlockTime is not set")
+	}
 
 	switch len(errs) {
 	case 0:
@@ -2248,6 +2381,7 @@ var fieldNames_ResponseKeyPageIndex = []string{
 	1: "Authority",
 	2: "Signer",
 	3: "Index",
+	4: "LastBlockTime",
 }
 
 var fieldTypes_ResponseKeyPageIndex = []string{
@@ -2271,6 +2405,9 @@ func (v *ResponseKeyPageIndex) MarshalBinary() ([]byte, error) {
 		writer.WriteUrl(2, v.Signer)
 	}
 	writer.WriteUint(3, v.Index)
+	if !(v.LastBlockTime == nil) {
+		writer.WriteTime(4, *v.LastBlockTime)
+	}
 
 	_, _, err := writer.Reset(fieldNames_ResponseKeyPageIndex)
 	if err != nil {
@@ -2295,6 +2432,11 @@ func (v *ResponseKeyPageIndex) IsValid() error {
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Index is missing")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field LastBlockTime is missing")
+	} else if v.LastBlockTime == nil {
+		errs = append(errs, "field LastBlockTime is not set")
 	}
 
 	switch len(errs) {
@@ -2454,6 +2596,9 @@ func (v *DataEntryQueryResponse) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	if x, ok := reader.ReadTxid(4); ok {
 		v.CauseTxId = x
+	}
+	if x, ok := reader.ReadTime(5); ok {
+		v.LastBlockTime = &x
 	}
 
 	seen, err := reader.Reset(fieldNames_DataEntryQueryResponse)
@@ -2621,6 +2766,9 @@ func (v *ResponseDataEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadTxid(4); ok {
 		v.CauseTxId = x
 	}
+	if x, ok := reader.ReadTime(5); ok {
+		v.LastBlockTime = &x
+	}
 
 	seen, err := reader.Reset(fieldNames_ResponseDataEntry)
 	if err != nil {
@@ -2651,6 +2799,9 @@ func (v *ResponseDataEntrySet) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(2); ok {
 		v.Total = x
 	}
+	if x, ok := reader.ReadTime(3); ok {
+		v.LastBlockTime = &x
+	}
 
 	seen, err := reader.Reset(fieldNames_ResponseDataEntrySet)
 	if err != nil {
@@ -2679,6 +2830,9 @@ func (v *ResponseKeyPageIndex) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	if x, ok := reader.ReadUint(3); ok {
 		v.Index = x
+	}
+	if x, ok := reader.ReadTime(4); ok {
+		v.LastBlockTime = &x
 	}
 
 	seen, err := reader.Reset(fieldNames_ResponseKeyPageIndex)
@@ -3102,13 +3256,14 @@ func (v *ChainIdQuery) MarshalJSON() ([]byte, error) {
 
 func (v *ChainQueryResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type        string                        `json:"type,omitempty"`
-		MainChain   *MerkleState                  `json:"mainChain,omitempty"`
-		MerkleState *MerkleState                  `json:"merkleState,omitempty"`
-		Chains      encoding.JsonList[ChainState] `json:"chains,omitempty"`
-		Data        interface{}                   `json:"data,omitempty"`
-		ChainId     *string                       `json:"chainId,omitempty"`
-		Receipt     *GeneralReceipt               `json:"receipt,omitempty"`
+		Type          string                        `json:"type,omitempty"`
+		MainChain     *MerkleState                  `json:"mainChain,omitempty"`
+		MerkleState   *MerkleState                  `json:"merkleState,omitempty"`
+		Chains        encoding.JsonList[ChainState] `json:"chains,omitempty"`
+		Data          interface{}                   `json:"data,omitempty"`
+		ChainId       *string                       `json:"chainId,omitempty"`
+		Receipt       *GeneralReceipt               `json:"receipt,omitempty"`
+		LastBlockTime *time.Time                    `json:"lastBlockTime,omitempty"`
 	}{}
 	if !(len(v.Type) == 0) {
 		u.Type = v.Type
@@ -3129,16 +3284,20 @@ func (v *ChainQueryResponse) MarshalJSON() ([]byte, error) {
 	if !(v.Receipt == nil) {
 		u.Receipt = v.Receipt
 	}
+	if !(v.LastBlockTime == nil) {
+		u.LastBlockTime = v.LastBlockTime
+	}
 	return json.Marshal(&u)
 }
 
 func (v *ChainState) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Name   string                     `json:"name,omitempty"`
-		Type   protocol.ChainType         `json:"type,omitempty"`
-		Height uint64                     `json:"height,omitempty"`
-		Count  uint64                     `json:"count,omitempty"`
-		Roots  encoding.JsonList[*string] `json:"roots,omitempty"`
+		Name      string                     `json:"name,omitempty"`
+		Type      protocol.ChainType         `json:"type,omitempty"`
+		Height    uint64                     `json:"height,omitempty"`
+		Count     uint64                     `json:"count,omitempty"`
+		Roots     encoding.JsonList[*string] `json:"roots,omitempty"`
+		ExtraData *string                    `json:"$epilogue,omitempty"`
 	}{}
 	if !(len(v.Name) == 0) {
 		u.Name = v.Name
@@ -3156,32 +3315,37 @@ func (v *ChainState) MarshalJSON() ([]byte, error) {
 			u.Roots[i] = encoding.BytesToJSON(x)
 		}
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *DataEntryQuery) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Url       *url.URL `json:"url,omitempty"`
-		EntryHash string   `json:"entryHash,omitempty"`
+		EntryHash *string  `json:"entryHash,omitempty"`
+		ExtraData *string  `json:"$epilogue,omitempty"`
 	}{}
 	if !(v.Url == nil) {
 		u.Url = v.Url
 	}
 	if !(v.EntryHash == ([32]byte{})) {
-		u.EntryHash = encoding.ChainToJSON(v.EntryHash)
+		u.EntryHash = encoding.ChainToJSON(&v.EntryHash)
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *DataEntryQueryResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		EntryHash string                                          `json:"entryHash,omitempty"`
-		Entry     *encoding.JsonUnmarshalWith[protocol.DataEntry] `json:"entry,omitempty"`
-		TxId      *url.TxID                                       `json:"txId,omitempty"`
-		CauseTxId *url.TxID                                       `json:"causeTxId,omitempty"`
+		EntryHash     *string                                         `json:"entryHash,omitempty"`
+		Entry         *encoding.JsonUnmarshalWith[protocol.DataEntry] `json:"entry,omitempty"`
+		TxId          *url.TxID                                       `json:"txId,omitempty"`
+		CauseTxId     *url.TxID                                       `json:"causeTxId,omitempty"`
+		LastBlockTime *time.Time                                      `json:"lastBlockTime,omitempty"`
+		ExtraData     *string                                         `json:"$epilogue,omitempty"`
 	}{}
 	if !(v.EntryHash == ([32]byte{})) {
-		u.EntryHash = encoding.ChainToJSON(v.EntryHash)
+		u.EntryHash = encoding.ChainToJSON(&v.EntryHash)
 	}
 	if !(protocol.EqualDataEntry(v.Entry, nil)) {
 		u.Entry = &encoding.JsonUnmarshalWith[protocol.DataEntry]{Value: v.Entry, Func: protocol.UnmarshalDataEntryJSON}
@@ -3192,6 +3356,10 @@ func (v *DataEntryQueryResponse) MarshalJSON() ([]byte, error) {
 	if !(v.CauseTxId == nil) {
 		u.CauseTxId = v.CauseTxId
 	}
+	if !(v.LastBlockTime == nil) {
+		u.LastBlockTime = v.LastBlockTime
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
@@ -3208,36 +3376,28 @@ func (v *DataEntrySetQuery) MarshalJSON() ([]byte, error) {
 		IncludeRemote bool     `json:"includeRemote,omitempty"`
 	}{}
 	if !(v.UrlQuery.Url == nil) {
-
 		u.Url = v.UrlQuery.Url
 	}
 	if !(v.QueryPagination.Start == 0) {
-
 		u.Start = v.QueryPagination.Start
 	}
 	if !(v.QueryPagination.Count == 0) {
-
 		u.Count = v.QueryPagination.Count
 	}
 	if !(!v.QueryOptions.Expand) {
-
 		u.Expand = v.QueryOptions.Expand
 		u.ExpandChains = v.QueryOptions.Expand
 	}
 	if !(v.QueryOptions.Height == 0) {
-
 		u.Height = v.QueryOptions.Height
 	}
 	if !(!v.QueryOptions.Scratch) {
-
 		u.Scratch = v.QueryOptions.Scratch
 	}
 	if !(!v.QueryOptions.Prove) {
-
 		u.Prove = v.QueryOptions.Prove
 	}
 	if !(!v.QueryOptions.IncludeRemote) {
-
 		u.IncludeRemote = v.QueryOptions.IncludeRemote
 	}
 	return json.Marshal(&u)
@@ -3248,7 +3408,7 @@ func (v *DescriptionResponse) MarshalJSON() ([]byte, error) {
 		PartitionId   string                 `json:"partitionId,omitempty"`
 		NetworkType   protocol.PartitionType `json:"networkType,omitempty"`
 		Network       NetworkDescription     `json:"network,omitempty"`
-		NetworkAnchor string                 `json:"networkAnchor,omitempty"`
+		NetworkAnchor *string                `json:"networkAnchor,omitempty"`
 		Values        core.GlobalValues      `json:"values,omitempty"`
 		Error         *errors2.Error         `json:"error,omitempty"`
 	}{}
@@ -3262,7 +3422,7 @@ func (v *DescriptionResponse) MarshalJSON() ([]byte, error) {
 		u.Network = v.Network
 	}
 	if !(v.NetworkAnchor == ([32]byte{})) {
-		u.NetworkAnchor = encoding.ChainToJSON(v.NetworkAnchor)
+		u.NetworkAnchor = encoding.ChainToJSON(&v.NetworkAnchor)
 	}
 	if !((v.Values).Equal(new(core.GlobalValues))) {
 		u.Values = v.Values
@@ -3286,36 +3446,28 @@ func (v *DirectoryQuery) MarshalJSON() ([]byte, error) {
 		IncludeRemote bool     `json:"includeRemote,omitempty"`
 	}{}
 	if !(v.UrlQuery.Url == nil) {
-
 		u.Url = v.UrlQuery.Url
 	}
 	if !(v.QueryPagination.Start == 0) {
-
 		u.Start = v.QueryPagination.Start
 	}
 	if !(v.QueryPagination.Count == 0) {
-
 		u.Count = v.QueryPagination.Count
 	}
 	if !(!v.QueryOptions.Expand) {
-
 		u.Expand = v.QueryOptions.Expand
 		u.ExpandChains = v.QueryOptions.Expand
 	}
 	if !(v.QueryOptions.Height == 0) {
-
 		u.Height = v.QueryOptions.Height
 	}
 	if !(!v.QueryOptions.Scratch) {
-
 		u.Scratch = v.QueryOptions.Scratch
 	}
 	if !(!v.QueryOptions.Prove) {
-
 		u.Prove = v.QueryOptions.Prove
 	}
 	if !(!v.QueryOptions.IncludeRemote) {
-
 		u.IncludeRemote = v.QueryOptions.IncludeRemote
 	}
 	return json.Marshal(&u)
@@ -3332,28 +3484,22 @@ func (v *GeneralQuery) MarshalJSON() ([]byte, error) {
 		IncludeRemote bool     `json:"includeRemote,omitempty"`
 	}{}
 	if !(v.UrlQuery.Url == nil) {
-
 		u.Url = v.UrlQuery.Url
 	}
 	if !(!v.QueryOptions.Expand) {
-
 		u.Expand = v.QueryOptions.Expand
 		u.ExpandChains = v.QueryOptions.Expand
 	}
 	if !(v.QueryOptions.Height == 0) {
-
 		u.Height = v.QueryOptions.Height
 	}
 	if !(!v.QueryOptions.Scratch) {
-
 		u.Scratch = v.QueryOptions.Scratch
 	}
 	if !(!v.QueryOptions.Prove) {
-
 		u.Prove = v.QueryOptions.Prove
 	}
 	if !(!v.QueryOptions.IncludeRemote) {
-
 		u.IncludeRemote = v.QueryOptions.IncludeRemote
 	}
 	return json.Marshal(&u)
@@ -3368,6 +3514,7 @@ func (v *GeneralReceipt) MarshalJSON() ([]byte, error) {
 		Proof          merkle.Receipt `json:"proof,omitempty"`
 		Receipt        merkle.Receipt `json:"receipt,omitempty"`
 		Error          string         `json:"error,omitempty"`
+		ExtraData      *string        `json:"$epilogue,omitempty"`
 	}{}
 	if !(v.LocalBlock == 0) {
 		u.LocalBlock = v.LocalBlock
@@ -3388,6 +3535,7 @@ func (v *GeneralReceipt) MarshalJSON() ([]byte, error) {
 	if !(len(v.Error) == 0) {
 		u.Error = v.Error
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
@@ -3409,7 +3557,6 @@ func (v *KeyPageIndexQuery) MarshalJSON() ([]byte, error) {
 		Key *string  `json:"key,omitempty"`
 	}{}
 	if !(v.UrlQuery.Url == nil) {
-
 		u.Url = v.UrlQuery.Url
 	}
 	if !(len(v.Key) == 0) {
@@ -3425,15 +3572,12 @@ func (v *MajorBlocksQuery) MarshalJSON() ([]byte, error) {
 		Count uint64   `json:"count,omitempty"`
 	}{}
 	if !(v.UrlQuery.Url == nil) {
-
 		u.Url = v.UrlQuery.Url
 	}
 	if !(v.QueryPagination.Start == 0) {
-
 		u.Start = v.QueryPagination.Start
 	}
 	if !(v.QueryPagination.Count == 0) {
-
 		u.Count = v.QueryPagination.Count
 	}
 	return json.Marshal(&u)
@@ -3444,6 +3588,7 @@ func (v *MajorQueryResponse) MarshalJSON() ([]byte, error) {
 		MajorBlockIndex uint64                         `json:"majorBlockIndex,omitempty"`
 		MajorBlockTime  *time.Time                     `json:"majorBlockTime,omitempty"`
 		MinorBlocks     encoding.JsonList[*MinorBlock] `json:"minorBlocks,omitempty"`
+		LastBlockTime   *time.Time                     `json:"lastBlockTime,omitempty"`
 	}{}
 	if !(v.MajorBlockIndex == 0) {
 		u.MajorBlockIndex = v.MajorBlockIndex
@@ -3453,6 +3598,9 @@ func (v *MajorQueryResponse) MarshalJSON() ([]byte, error) {
 	}
 	if !(len(v.MinorBlocks) == 0) {
 		u.MinorBlocks = v.MinorBlocks
+	}
+	if !(v.LastBlockTime == nil) {
+		u.LastBlockTime = v.LastBlockTime
 	}
 	return json.Marshal(&u)
 }
@@ -3509,15 +3657,12 @@ func (v *MinorBlocksQuery) MarshalJSON() ([]byte, error) {
 		BlockFilterMode BlockFilterMode `json:"blockFilterMode,omitempty"`
 	}{}
 	if !(v.UrlQuery.Url == nil) {
-
 		u.Url = v.UrlQuery.Url
 	}
 	if !(v.QueryPagination.Start == 0) {
-
 		u.Start = v.QueryPagination.Start
 	}
 	if !(v.QueryPagination.Count == 0) {
-
 		u.Count = v.QueryPagination.Count
 	}
 	if !(v.TxFetchMode == 0) {
@@ -3531,18 +3676,17 @@ func (v *MinorBlocksQuery) MarshalJSON() ([]byte, error) {
 
 func (v *MinorQueryResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		BlockIndex   uint64                                       `json:"blockIndex,omitempty"`
-		BlockTime    *time.Time                                   `json:"blockTime,omitempty"`
-		TxCount      uint64                                       `json:"txCount,omitempty"`
-		TxIds        encoding.JsonList[*string]                   `json:"txIds,omitempty"`
-		Transactions encoding.JsonList[*TransactionQueryResponse] `json:"transactions,omitempty"`
+		BlockIndex    uint64                                       `json:"blockIndex,omitempty"`
+		BlockTime     *time.Time                                   `json:"blockTime,omitempty"`
+		TxCount       uint64                                       `json:"txCount,omitempty"`
+		TxIds         encoding.JsonList[*string]                   `json:"txIds,omitempty"`
+		Transactions  encoding.JsonList[*TransactionQueryResponse] `json:"transactions,omitempty"`
+		LastBlockTime *time.Time                                   `json:"lastBlockTime,omitempty"`
 	}{}
 	if !(v.MinorBlock.BlockIndex == 0) {
-
 		u.BlockIndex = v.MinorBlock.BlockIndex
 	}
 	if !(v.MinorBlock.BlockTime == nil) {
-
 		u.BlockTime = v.MinorBlock.BlockTime
 	}
 	if !(v.TxCount == 0) {
@@ -3557,17 +3701,21 @@ func (v *MinorQueryResponse) MarshalJSON() ([]byte, error) {
 	if !(len(v.Transactions) == 0) {
 		u.Transactions = v.Transactions
 	}
+	if !(v.LastBlockTime == nil) {
+		u.LastBlockTime = v.LastBlockTime
+	}
 	return json.Marshal(&u)
 }
 
 func (v *MultiResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type       string                         `json:"type,omitempty"`
-		Items      encoding.JsonList[interface{}] `json:"items,omitempty"`
-		Start      uint64                         `json:"start"`
-		Count      uint64                         `json:"count"`
-		Total      uint64                         `json:"total"`
-		OtherItems encoding.JsonList[interface{}] `json:"otherItems,omitempty"`
+		Type          string                         `json:"type,omitempty"`
+		Items         encoding.JsonList[interface{}] `json:"items,omitempty"`
+		Start         uint64                         `json:"start"`
+		Count         uint64                         `json:"count"`
+		Total         uint64                         `json:"total"`
+		OtherItems    encoding.JsonList[interface{}] `json:"otherItems,omitempty"`
+		LastBlockTime *time.Time                     `json:"lastBlockTime,omitempty"`
 	}{}
 	if !(len(v.Type) == 0) {
 		u.Type = v.Type
@@ -3587,6 +3735,9 @@ func (v *MultiResponse) MarshalJSON() ([]byte, error) {
 			u.OtherItems[i] = encoding.AnyToJSON(x)
 		}
 	}
+	if !(v.LastBlockTime == nil) {
+		u.LastBlockTime = v.LastBlockTime
+	}
 	return json.Marshal(&u)
 }
 
@@ -3595,6 +3746,7 @@ func (v *NetworkDescription) MarshalJSON() ([]byte, error) {
 		Id         string                                  `json:"id,omitempty"`
 		Partitions encoding.JsonList[PartitionDescription] `json:"partitions,omitempty"`
 		Subnets    encoding.JsonList[PartitionDescription] `json:"subnets,omitempty"`
+		ExtraData  *string                                 `json:"$epilogue,omitempty"`
 	}{}
 	if !(len(v.Id) == 0) {
 		u.Id = v.Id
@@ -3603,15 +3755,17 @@ func (v *NetworkDescription) MarshalJSON() ([]byte, error) {
 		u.Partitions = v.Partitions
 		u.Subnets = v.Partitions
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *PartitionDescription) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Id       string                             `json:"id,omitempty"`
-		Type     protocol.PartitionType             `json:"type,omitempty"`
-		BasePort int64                              `json:"basePort,omitempty"`
-		Nodes    encoding.JsonList[NodeDescription] `json:"nodes,omitempty"`
+		Id        string                             `json:"id,omitempty"`
+		Type      protocol.PartitionType             `json:"type,omitempty"`
+		BasePort  int64                              `json:"basePort,omitempty"`
+		Nodes     encoding.JsonList[NodeDescription] `json:"nodes,omitempty"`
+		ExtraData *string                            `json:"$epilogue,omitempty"`
 	}{}
 	if !(len(v.Id) == 0) {
 		u.Id = v.Id
@@ -3625,6 +3779,7 @@ func (v *PartitionDescription) MarshalJSON() ([]byte, error) {
 	if !(len(v.Nodes) == 0) {
 		u.Nodes = v.Nodes
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
@@ -3658,13 +3813,15 @@ func (v *QueryOptions) MarshalJSON() ([]byte, error) {
 
 func (v *ResponseDataEntry) MarshalJSON() ([]byte, error) {
 	u := struct {
-		EntryHash string                                          `json:"entryHash,omitempty"`
-		Entry     *encoding.JsonUnmarshalWith[protocol.DataEntry] `json:"entry,omitempty"`
-		TxId      *url.TxID                                       `json:"txId,omitempty"`
-		CauseTxId *url.TxID                                       `json:"causeTxId,omitempty"`
+		EntryHash     *string                                         `json:"entryHash,omitempty"`
+		Entry         *encoding.JsonUnmarshalWith[protocol.DataEntry] `json:"entry,omitempty"`
+		TxId          *url.TxID                                       `json:"txId,omitempty"`
+		CauseTxId     *url.TxID                                       `json:"causeTxId,omitempty"`
+		LastBlockTime *time.Time                                      `json:"lastBlockTime,omitempty"`
+		ExtraData     *string                                         `json:"$epilogue,omitempty"`
 	}{}
 	if !(v.EntryHash == ([32]byte{})) {
-		u.EntryHash = encoding.ChainToJSON(v.EntryHash)
+		u.EntryHash = encoding.ChainToJSON(&v.EntryHash)
 	}
 	if !(protocol.EqualDataEntry(v.Entry, nil)) {
 		u.Entry = &encoding.JsonUnmarshalWith[protocol.DataEntry]{Value: v.Entry, Func: protocol.UnmarshalDataEntryJSON}
@@ -3675,13 +3832,19 @@ func (v *ResponseDataEntry) MarshalJSON() ([]byte, error) {
 	if !(v.CauseTxId == nil) {
 		u.CauseTxId = v.CauseTxId
 	}
+	if !(v.LastBlockTime == nil) {
+		u.LastBlockTime = v.LastBlockTime
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *ResponseDataEntrySet) MarshalJSON() ([]byte, error) {
 	u := struct {
-		DataEntries encoding.JsonList[ResponseDataEntry] `json:"dataEntries,omitempty"`
-		Total       uint64                               `json:"total,omitempty"`
+		DataEntries   encoding.JsonList[ResponseDataEntry] `json:"dataEntries,omitempty"`
+		Total         uint64                               `json:"total,omitempty"`
+		LastBlockTime *time.Time                           `json:"lastBlockTime,omitempty"`
+		ExtraData     *string                              `json:"$epilogue,omitempty"`
 	}{}
 	if !(len(v.DataEntries) == 0) {
 		u.DataEntries = v.DataEntries
@@ -3689,16 +3852,22 @@ func (v *ResponseDataEntrySet) MarshalJSON() ([]byte, error) {
 	if !(v.Total == 0) {
 		u.Total = v.Total
 	}
+	if !(v.LastBlockTime == nil) {
+		u.LastBlockTime = v.LastBlockTime
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *ResponseKeyPageIndex) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Authority *url.URL `json:"authority,omitempty"`
-		KeyBook   *url.URL `json:"keyBook,omitempty"`
-		Signer    *url.URL `json:"signer,omitempty"`
-		KeyPage   *url.URL `json:"keyPage,omitempty"`
-		Index     uint64   `json:"index"`
+		Authority     *url.URL   `json:"authority,omitempty"`
+		KeyBook       *url.URL   `json:"keyBook,omitempty"`
+		Signer        *url.URL   `json:"signer,omitempty"`
+		KeyPage       *url.URL   `json:"keyPage,omitempty"`
+		Index         uint64     `json:"index"`
+		LastBlockTime *time.Time `json:"lastBlockTime,omitempty"`
+		ExtraData     *string    `json:"$epilogue,omitempty"`
 	}{}
 	if !(v.Authority == nil) {
 		u.Authority = v.Authority
@@ -3709,6 +3878,10 @@ func (v *ResponseKeyPageIndex) MarshalJSON() ([]byte, error) {
 		u.KeyPage = v.Signer
 	}
 	u.Index = v.Index
+	if !(v.LastBlockTime == nil) {
+		u.LastBlockTime = v.LastBlockTime
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
@@ -3780,10 +3953,10 @@ func (v *StatusResponse) MarshalJSON() ([]byte, error) {
 		BvnTime                   time.Time `json:"bvnTime,omitempty"`
 		DnTime                    time.Time `json:"dnTime,omitempty"`
 		LastDirectoryAnchorHeight uint64    `json:"lastDirectoryAnchorHeight,omitempty"`
-		BvnRootHash               string    `json:"bvnRootHash,omitempty"`
-		DnRootHash                string    `json:"dnRootHash,omitempty"`
-		BvnBptHash                string    `json:"bvnBptHash,omitempty"`
-		DnBptHash                 string    `json:"dnBptHash,omitempty"`
+		BvnRootHash               *string   `json:"bvnRootHash,omitempty"`
+		DnRootHash                *string   `json:"dnRootHash,omitempty"`
+		BvnBptHash                *string   `json:"bvnBptHash,omitempty"`
+		DnBptHash                 *string   `json:"dnBptHash,omitempty"`
 	}{}
 	if !(!v.Ok) {
 		u.Ok = v.Ok
@@ -3804,16 +3977,16 @@ func (v *StatusResponse) MarshalJSON() ([]byte, error) {
 		u.LastDirectoryAnchorHeight = v.LastDirectoryAnchorHeight
 	}
 	if !(v.BvnRootHash == ([32]byte{})) {
-		u.BvnRootHash = encoding.ChainToJSON(v.BvnRootHash)
+		u.BvnRootHash = encoding.ChainToJSON(&v.BvnRootHash)
 	}
 	if !(v.DnRootHash == ([32]byte{})) {
-		u.DnRootHash = encoding.ChainToJSON(v.DnRootHash)
+		u.DnRootHash = encoding.ChainToJSON(&v.DnRootHash)
 	}
 	if !(v.BvnBptHash == ([32]byte{})) {
-		u.BvnBptHash = encoding.ChainToJSON(v.BvnBptHash)
+		u.BvnBptHash = encoding.ChainToJSON(&v.BvnBptHash)
 	}
 	if !(v.DnBptHash == ([32]byte{})) {
-		u.DnBptHash = encoding.ChainToJSON(v.DnBptHash)
+		u.DnBptHash = encoding.ChainToJSON(&v.DnBptHash)
 	}
 	return json.Marshal(&u)
 }
@@ -3867,6 +4040,7 @@ func (v *TransactionQueryResponse) MarshalJSON() ([]byte, error) {
 		SyntheticTxids  encoding.JsonList[*url.TxID]                        `json:"syntheticTxids,omitempty"`
 		Receipts        encoding.JsonList[*TxReceipt]                       `json:"receipts,omitempty"`
 		SignatureBooks  encoding.JsonList[*SignatureBook]                   `json:"signatureBooks,omitempty"`
+		LastBlockTime   *time.Time                                          `json:"lastBlockTime,omitempty"`
 	}{}
 	if !(len(v.Type) == 0) {
 		u.Type = v.Type
@@ -3907,6 +4081,9 @@ func (v *TransactionQueryResponse) MarshalJSON() ([]byte, error) {
 	if !(len(v.SignatureBooks) == 0) {
 		u.SignatureBooks = v.SignatureBooks
 	}
+	if !(v.LastBlockTime == nil) {
+		u.LastBlockTime = v.LastBlockTime
+	}
 	return json.Marshal(&u)
 }
 
@@ -3918,15 +4095,12 @@ func (v *TxHistoryQuery) MarshalJSON() ([]byte, error) {
 		Scratch bool     `json:"scratch,omitempty"`
 	}{}
 	if !(v.UrlQuery.Url == nil) {
-
 		u.Url = v.UrlQuery.Url
 	}
 	if !(v.QueryPagination.Start == 0) {
-
 		u.Start = v.QueryPagination.Start
 	}
 	if !(v.QueryPagination.Count == 0) {
-
 		u.Count = v.QueryPagination.Count
 	}
 	if !(!v.Scratch) {
@@ -3946,30 +4120,25 @@ func (v *TxReceipt) MarshalJSON() ([]byte, error) {
 		Error          string         `json:"error,omitempty"`
 		Account        *url.URL       `json:"account,omitempty"`
 		Chain          string         `json:"chain,omitempty"`
+		ExtraData      *string        `json:"$epilogue,omitempty"`
 	}{}
 	if !(v.GeneralReceipt.LocalBlock == 0) {
-
 		u.LocalBlock = v.GeneralReceipt.LocalBlock
 	}
 	if !(v.GeneralReceipt.LocalBlockTime == nil) {
-
 		u.LocalBlockTime = v.GeneralReceipt.LocalBlockTime
 	}
 	if !(v.GeneralReceipt.DirectoryBlock == 0) {
-
 		u.DirectoryBlock = v.GeneralReceipt.DirectoryBlock
 	}
 	if !(v.GeneralReceipt.MajorBlock == 0) {
-
 		u.MajorBlock = v.GeneralReceipt.MajorBlock
 	}
 	if !((v.GeneralReceipt.Proof).Equal(new(merkle.Receipt))) {
-
 		u.Proof = v.GeneralReceipt.Proof
 		u.Receipt = v.GeneralReceipt.Proof
 	}
 	if !(len(v.GeneralReceipt.Error) == 0) {
-
 		u.Error = v.GeneralReceipt.Error
 	}
 	if !(v.Account == nil) {
@@ -3978,6 +4147,7 @@ func (v *TxReceipt) MarshalJSON() ([]byte, error) {
 	if !(len(v.Chain) == 0) {
 		u.Chain = v.Chain
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
@@ -4040,6 +4210,7 @@ func (v *TxResponse) MarshalJSON() ([]byte, error) {
 		Message         string                     `json:"message,omitempty"`
 		Delivered       bool                       `json:"delivered,omitempty"`
 		Result          interface{}                `json:"result,omitempty"`
+		LastBlockTime   *time.Time                 `json:"lastBlockTime,omitempty"`
 	}{}
 	if !(len(v.TransactionHash) == 0) {
 		u.TransactionHash = encoding.BytesToJSON(v.TransactionHash)
@@ -4069,6 +4240,9 @@ func (v *TxResponse) MarshalJSON() ([]byte, error) {
 	if !(v.Result == nil) {
 		u.Result = encoding.AnyToJSON(v.Result)
 	}
+	if !(v.LastBlockTime == nil) {
+		u.LastBlockTime = v.LastBlockTime
+	}
 	return json.Marshal(&u)
 }
 
@@ -4086,24 +4260,19 @@ func (v *TxnQuery) MarshalJSON() ([]byte, error) {
 		IgnorePending bool        `json:"ignorePending,omitempty"`
 	}{}
 	if !(!v.QueryOptions.Expand) {
-
 		u.Expand = v.QueryOptions.Expand
 		u.ExpandChains = v.QueryOptions.Expand
 	}
 	if !(v.QueryOptions.Height == 0) {
-
 		u.Height = v.QueryOptions.Height
 	}
 	if !(!v.QueryOptions.Scratch) {
-
 		u.Scratch = v.QueryOptions.Scratch
 	}
 	if !(!v.QueryOptions.Prove) {
-
 		u.Prove = v.QueryOptions.Prove
 	}
 	if !(!v.QueryOptions.IncludeRemote) {
-
 		u.IncludeRemote = v.QueryOptions.IncludeRemote
 	}
 	if !(len(v.Txid) == 0) {
@@ -4135,7 +4304,8 @@ func (v *ChainEntry) UnmarshalJSON(data []byte) error {
 		u.State[i] = encoding.BytesToJSON(x)
 	}
 	u.Value = encoding.AnyToJSON(v.Value)
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.Height = u.Height
@@ -4165,7 +4335,8 @@ func (v *ChainIdQuery) UnmarshalJSON(data []byte) error {
 		ChainId *string `json:"chainId,omitempty"`
 	}{}
 	u.ChainId = encoding.BytesToJSON(v.ChainId)
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if x, err := encoding.BytesFromJSON(u.ChainId); err != nil {
@@ -4178,13 +4349,14 @@ func (v *ChainIdQuery) UnmarshalJSON(data []byte) error {
 
 func (v *ChainQueryResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type        string                        `json:"type,omitempty"`
-		MainChain   *MerkleState                  `json:"mainChain,omitempty"`
-		MerkleState *MerkleState                  `json:"merkleState,omitempty"`
-		Chains      encoding.JsonList[ChainState] `json:"chains,omitempty"`
-		Data        interface{}                   `json:"data,omitempty"`
-		ChainId     *string                       `json:"chainId,omitempty"`
-		Receipt     *GeneralReceipt               `json:"receipt,omitempty"`
+		Type          string                        `json:"type,omitempty"`
+		MainChain     *MerkleState                  `json:"mainChain,omitempty"`
+		MerkleState   *MerkleState                  `json:"merkleState,omitempty"`
+		Chains        encoding.JsonList[ChainState] `json:"chains,omitempty"`
+		Data          interface{}                   `json:"data,omitempty"`
+		ChainId       *string                       `json:"chainId,omitempty"`
+		Receipt       *GeneralReceipt               `json:"receipt,omitempty"`
+		LastBlockTime *time.Time                    `json:"lastBlockTime,omitempty"`
 	}{}
 	u.Type = v.Type
 	u.MainChain = v.MainChain
@@ -4193,7 +4365,9 @@ func (v *ChainQueryResponse) UnmarshalJSON(data []byte) error {
 	u.Data = encoding.AnyToJSON(v.Data)
 	u.ChainId = encoding.BytesToJSON(v.ChainId)
 	u.Receipt = v.Receipt
-	if err := json.Unmarshal(data, &u); err != nil {
+	u.LastBlockTime = v.LastBlockTime
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.Type = u.Type
@@ -4214,16 +4388,18 @@ func (v *ChainQueryResponse) UnmarshalJSON(data []byte) error {
 		v.ChainId = x
 	}
 	v.Receipt = u.Receipt
+	v.LastBlockTime = u.LastBlockTime
 	return nil
 }
 
 func (v *ChainState) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Name   string                     `json:"name,omitempty"`
-		Type   protocol.ChainType         `json:"type,omitempty"`
-		Height uint64                     `json:"height,omitempty"`
-		Count  uint64                     `json:"count,omitempty"`
-		Roots  encoding.JsonList[*string] `json:"roots,omitempty"`
+		Name      string                     `json:"name,omitempty"`
+		Type      protocol.ChainType         `json:"type,omitempty"`
+		Height    uint64                     `json:"height,omitempty"`
+		Count     uint64                     `json:"count,omitempty"`
+		Roots     encoding.JsonList[*string] `json:"roots,omitempty"`
+		ExtraData *string                    `json:"$epilogue,omitempty"`
 	}{}
 	u.Name = v.Name
 	u.Type = v.Type
@@ -4233,7 +4409,8 @@ func (v *ChainState) UnmarshalJSON(data []byte) error {
 	for i, x := range v.Roots {
 		u.Roots[i] = encoding.BytesToJSON(x)
 	}
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.Name = u.Name
@@ -4251,46 +4428,60 @@ func (v *ChainState) UnmarshalJSON(data []byte) error {
 			v.Roots[i] = x
 		}
 	}
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (v *DataEntryQuery) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Url       *url.URL `json:"url,omitempty"`
-		EntryHash string   `json:"entryHash,omitempty"`
+		EntryHash *string  `json:"entryHash,omitempty"`
+		ExtraData *string  `json:"$epilogue,omitempty"`
 	}{}
 	u.Url = v.Url
-	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
-	if err := json.Unmarshal(data, &u); err != nil {
+	u.EntryHash = encoding.ChainToJSON(&v.EntryHash)
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.Url = u.Url
 	if x, err := encoding.ChainFromJSON(u.EntryHash); err != nil {
 		return fmt.Errorf("error decoding EntryHash: %w", err)
 	} else {
-		v.EntryHash = x
+		v.EntryHash = *x
+	}
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
 	}
 	return nil
 }
 
 func (v *DataEntryQueryResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		EntryHash string                                          `json:"entryHash,omitempty"`
-		Entry     *encoding.JsonUnmarshalWith[protocol.DataEntry] `json:"entry,omitempty"`
-		TxId      *url.TxID                                       `json:"txId,omitempty"`
-		CauseTxId *url.TxID                                       `json:"causeTxId,omitempty"`
+		EntryHash     *string                                         `json:"entryHash,omitempty"`
+		Entry         *encoding.JsonUnmarshalWith[protocol.DataEntry] `json:"entry,omitempty"`
+		TxId          *url.TxID                                       `json:"txId,omitempty"`
+		CauseTxId     *url.TxID                                       `json:"causeTxId,omitempty"`
+		LastBlockTime *time.Time                                      `json:"lastBlockTime,omitempty"`
+		ExtraData     *string                                         `json:"$epilogue,omitempty"`
 	}{}
-	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
+	u.EntryHash = encoding.ChainToJSON(&v.EntryHash)
 	u.Entry = &encoding.JsonUnmarshalWith[protocol.DataEntry]{Value: v.Entry, Func: protocol.UnmarshalDataEntryJSON}
 	u.TxId = v.TxId
 	u.CauseTxId = v.CauseTxId
-	if err := json.Unmarshal(data, &u); err != nil {
+	u.LastBlockTime = v.LastBlockTime
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if x, err := encoding.ChainFromJSON(u.EntryHash); err != nil {
 		return fmt.Errorf("error decoding EntryHash: %w", err)
 	} else {
-		v.EntryHash = x
+		v.EntryHash = *x
 	}
 	if u.Entry != nil {
 		v.Entry = u.Entry.Value
@@ -4298,6 +4489,11 @@ func (v *DataEntryQueryResponse) UnmarshalJSON(data []byte) error {
 
 	v.TxId = u.TxId
 	v.CauseTxId = u.CauseTxId
+	v.LastBlockTime = u.LastBlockTime
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -4322,7 +4518,8 @@ func (v *DataEntrySetQuery) UnmarshalJSON(data []byte) error {
 	u.Scratch = v.QueryOptions.Scratch
 	u.Prove = v.QueryOptions.Prove
 	u.IncludeRemote = v.QueryOptions.IncludeRemote
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.UrlQuery.Url = u.Url
@@ -4345,17 +4542,18 @@ func (v *DescriptionResponse) UnmarshalJSON(data []byte) error {
 		PartitionId   string                 `json:"partitionId,omitempty"`
 		NetworkType   protocol.PartitionType `json:"networkType,omitempty"`
 		Network       NetworkDescription     `json:"network,omitempty"`
-		NetworkAnchor string                 `json:"networkAnchor,omitempty"`
+		NetworkAnchor *string                `json:"networkAnchor,omitempty"`
 		Values        core.GlobalValues      `json:"values,omitempty"`
 		Error         *errors2.Error         `json:"error,omitempty"`
 	}{}
 	u.PartitionId = v.PartitionId
 	u.NetworkType = v.NetworkType
 	u.Network = v.Network
-	u.NetworkAnchor = encoding.ChainToJSON(v.NetworkAnchor)
+	u.NetworkAnchor = encoding.ChainToJSON(&v.NetworkAnchor)
 	u.Values = v.Values
 	u.Error = v.Error
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.PartitionId = u.PartitionId
@@ -4364,7 +4562,7 @@ func (v *DescriptionResponse) UnmarshalJSON(data []byte) error {
 	if x, err := encoding.ChainFromJSON(u.NetworkAnchor); err != nil {
 		return fmt.Errorf("error decoding NetworkAnchor: %w", err)
 	} else {
-		v.NetworkAnchor = x
+		v.NetworkAnchor = *x
 	}
 	v.Values = u.Values
 	v.Error = u.Error
@@ -4392,7 +4590,8 @@ func (v *DirectoryQuery) UnmarshalJSON(data []byte) error {
 	u.Scratch = v.QueryOptions.Scratch
 	u.Prove = v.QueryOptions.Prove
 	u.IncludeRemote = v.QueryOptions.IncludeRemote
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.UrlQuery.Url = u.Url
@@ -4427,7 +4626,8 @@ func (v *GeneralQuery) UnmarshalJSON(data []byte) error {
 	u.Scratch = v.QueryOptions.Scratch
 	u.Prove = v.QueryOptions.Prove
 	u.IncludeRemote = v.QueryOptions.IncludeRemote
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.UrlQuery.Url = u.Url
@@ -4452,6 +4652,7 @@ func (v *GeneralReceipt) UnmarshalJSON(data []byte) error {
 		Proof          merkle.Receipt `json:"proof,omitempty"`
 		Receipt        merkle.Receipt `json:"receipt,omitempty"`
 		Error          string         `json:"error,omitempty"`
+		ExtraData      *string        `json:"$epilogue,omitempty"`
 	}{}
 	u.LocalBlock = v.LocalBlock
 	u.LocalBlockTime = v.LocalBlockTime
@@ -4460,7 +4661,8 @@ func (v *GeneralReceipt) UnmarshalJSON(data []byte) error {
 	u.Proof = v.Proof
 	u.Receipt = v.Proof
 	u.Error = v.Error
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.LocalBlock = u.LocalBlock
@@ -4473,6 +4675,10 @@ func (v *GeneralReceipt) UnmarshalJSON(data []byte) error {
 		v.Proof = u.Receipt
 	}
 	v.Error = u.Error
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -4483,7 +4689,8 @@ func (v *KeyPage) UnmarshalJSON(data []byte) error {
 	}{}
 	u.Version = v.Version
 	u.Height = v.Version
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(u.Version == 0) {
@@ -4501,7 +4708,8 @@ func (v *KeyPageIndexQuery) UnmarshalJSON(data []byte) error {
 	}{}
 	u.Url = v.UrlQuery.Url
 	u.Key = encoding.BytesToJSON(v.Key)
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.UrlQuery.Url = u.Url
@@ -4522,7 +4730,8 @@ func (v *MajorBlocksQuery) UnmarshalJSON(data []byte) error {
 	u.Url = v.UrlQuery.Url
 	u.Start = v.QueryPagination.Start
 	u.Count = v.QueryPagination.Count
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.UrlQuery.Url = u.Url
@@ -4536,16 +4745,20 @@ func (v *MajorQueryResponse) UnmarshalJSON(data []byte) error {
 		MajorBlockIndex uint64                         `json:"majorBlockIndex,omitempty"`
 		MajorBlockTime  *time.Time                     `json:"majorBlockTime,omitempty"`
 		MinorBlocks     encoding.JsonList[*MinorBlock] `json:"minorBlocks,omitempty"`
+		LastBlockTime   *time.Time                     `json:"lastBlockTime,omitempty"`
 	}{}
 	u.MajorBlockIndex = v.MajorBlockIndex
 	u.MajorBlockTime = v.MajorBlockTime
 	u.MinorBlocks = v.MinorBlocks
-	if err := json.Unmarshal(data, &u); err != nil {
+	u.LastBlockTime = v.LastBlockTime
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.MajorBlockIndex = u.MajorBlockIndex
 	v.MajorBlockTime = u.MajorBlockTime
 	v.MinorBlocks = u.MinorBlocks
+	v.LastBlockTime = u.LastBlockTime
 	return nil
 }
 
@@ -4561,7 +4774,8 @@ func (v *MerkleState) UnmarshalJSON(data []byte) error {
 	for i, x := range v.Roots {
 		u.Roots[i] = encoding.BytesToJSON(x)
 	}
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(u.Height == 0) {
@@ -4587,7 +4801,8 @@ func (v *MetricsQuery) UnmarshalJSON(data []byte) error {
 	}{}
 	u.Metric = v.Metric
 	u.Duration = encoding.DurationToJSON(v.Duration)
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.Metric = u.Metric
@@ -4604,7 +4819,8 @@ func (v *MetricsResponse) UnmarshalJSON(data []byte) error {
 		Value interface{} `json:"value,omitempty"`
 	}{}
 	u.Value = encoding.AnyToJSON(v.Value)
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if x, err := encoding.AnyFromJSON(u.Value); err != nil {
@@ -4628,7 +4844,8 @@ func (v *MinorBlocksQuery) UnmarshalJSON(data []byte) error {
 	u.Count = v.QueryPagination.Count
 	u.TxFetchMode = v.TxFetchMode
 	u.BlockFilterMode = v.BlockFilterMode
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.UrlQuery.Url = u.Url
@@ -4641,11 +4858,12 @@ func (v *MinorBlocksQuery) UnmarshalJSON(data []byte) error {
 
 func (v *MinorQueryResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		BlockIndex   uint64                                       `json:"blockIndex,omitempty"`
-		BlockTime    *time.Time                                   `json:"blockTime,omitempty"`
-		TxCount      uint64                                       `json:"txCount,omitempty"`
-		TxIds        encoding.JsonList[*string]                   `json:"txIds,omitempty"`
-		Transactions encoding.JsonList[*TransactionQueryResponse] `json:"transactions,omitempty"`
+		BlockIndex    uint64                                       `json:"blockIndex,omitempty"`
+		BlockTime     *time.Time                                   `json:"blockTime,omitempty"`
+		TxCount       uint64                                       `json:"txCount,omitempty"`
+		TxIds         encoding.JsonList[*string]                   `json:"txIds,omitempty"`
+		Transactions  encoding.JsonList[*TransactionQueryResponse] `json:"transactions,omitempty"`
+		LastBlockTime *time.Time                                   `json:"lastBlockTime,omitempty"`
 	}{}
 	u.BlockIndex = v.MinorBlock.BlockIndex
 	u.BlockTime = v.MinorBlock.BlockTime
@@ -4655,7 +4873,9 @@ func (v *MinorQueryResponse) UnmarshalJSON(data []byte) error {
 		u.TxIds[i] = encoding.BytesToJSON(x)
 	}
 	u.Transactions = v.Transactions
-	if err := json.Unmarshal(data, &u); err != nil {
+	u.LastBlockTime = v.LastBlockTime
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.MinorBlock.BlockIndex = u.BlockIndex
@@ -4670,17 +4890,19 @@ func (v *MinorQueryResponse) UnmarshalJSON(data []byte) error {
 		}
 	}
 	v.Transactions = u.Transactions
+	v.LastBlockTime = u.LastBlockTime
 	return nil
 }
 
 func (v *MultiResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type       string                         `json:"type,omitempty"`
-		Items      encoding.JsonList[interface{}] `json:"items,omitempty"`
-		Start      uint64                         `json:"start"`
-		Count      uint64                         `json:"count"`
-		Total      uint64                         `json:"total"`
-		OtherItems encoding.JsonList[interface{}] `json:"otherItems,omitempty"`
+		Type          string                         `json:"type,omitempty"`
+		Items         encoding.JsonList[interface{}] `json:"items,omitempty"`
+		Start         uint64                         `json:"start"`
+		Count         uint64                         `json:"count"`
+		Total         uint64                         `json:"total"`
+		OtherItems    encoding.JsonList[interface{}] `json:"otherItems,omitempty"`
+		LastBlockTime *time.Time                     `json:"lastBlockTime,omitempty"`
 	}{}
 	u.Type = v.Type
 	u.Items = make(encoding.JsonList[interface{}], len(v.Items))
@@ -4694,7 +4916,9 @@ func (v *MultiResponse) UnmarshalJSON(data []byte) error {
 	for i, x := range v.OtherItems {
 		u.OtherItems[i] = encoding.AnyToJSON(x)
 	}
-	if err := json.Unmarshal(data, &u); err != nil {
+	u.LastBlockTime = v.LastBlockTime
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.Type = u.Type
@@ -4717,6 +4941,7 @@ func (v *MultiResponse) UnmarshalJSON(data []byte) error {
 			v.OtherItems[i] = x
 		}
 	}
+	v.LastBlockTime = u.LastBlockTime
 	return nil
 }
 
@@ -4725,11 +4950,13 @@ func (v *NetworkDescription) UnmarshalJSON(data []byte) error {
 		Id         string                                  `json:"id,omitempty"`
 		Partitions encoding.JsonList[PartitionDescription] `json:"partitions,omitempty"`
 		Subnets    encoding.JsonList[PartitionDescription] `json:"subnets,omitempty"`
+		ExtraData  *string                                 `json:"$epilogue,omitempty"`
 	}{}
 	u.Id = v.Id
 	u.Partitions = v.Partitions
 	u.Subnets = v.Partitions
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.Id = u.Id
@@ -4738,27 +4965,37 @@ func (v *NetworkDescription) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Partitions = u.Subnets
 	}
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (v *PartitionDescription) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Id       string                             `json:"id,omitempty"`
-		Type     protocol.PartitionType             `json:"type,omitempty"`
-		BasePort int64                              `json:"basePort,omitempty"`
-		Nodes    encoding.JsonList[NodeDescription] `json:"nodes,omitempty"`
+		Id        string                             `json:"id,omitempty"`
+		Type      protocol.PartitionType             `json:"type,omitempty"`
+		BasePort  int64                              `json:"basePort,omitempty"`
+		Nodes     encoding.JsonList[NodeDescription] `json:"nodes,omitempty"`
+		ExtraData *string                            `json:"$epilogue,omitempty"`
 	}{}
 	u.Id = v.Id
 	u.Type = v.Type
 	u.BasePort = v.BasePort
 	u.Nodes = v.Nodes
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.Id = u.Id
 	v.Type = u.Type
 	v.BasePort = u.BasePort
 	v.Nodes = u.Nodes
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -4777,7 +5014,8 @@ func (v *QueryOptions) UnmarshalJSON(data []byte) error {
 	u.Scratch = v.Scratch
 	u.Prove = v.Prove
 	u.IncludeRemote = v.IncludeRemote
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(u.Expand == false) {
@@ -4794,22 +5032,26 @@ func (v *QueryOptions) UnmarshalJSON(data []byte) error {
 
 func (v *ResponseDataEntry) UnmarshalJSON(data []byte) error {
 	u := struct {
-		EntryHash string                                          `json:"entryHash,omitempty"`
-		Entry     *encoding.JsonUnmarshalWith[protocol.DataEntry] `json:"entry,omitempty"`
-		TxId      *url.TxID                                       `json:"txId,omitempty"`
-		CauseTxId *url.TxID                                       `json:"causeTxId,omitempty"`
+		EntryHash     *string                                         `json:"entryHash,omitempty"`
+		Entry         *encoding.JsonUnmarshalWith[protocol.DataEntry] `json:"entry,omitempty"`
+		TxId          *url.TxID                                       `json:"txId,omitempty"`
+		CauseTxId     *url.TxID                                       `json:"causeTxId,omitempty"`
+		LastBlockTime *time.Time                                      `json:"lastBlockTime,omitempty"`
+		ExtraData     *string                                         `json:"$epilogue,omitempty"`
 	}{}
-	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
+	u.EntryHash = encoding.ChainToJSON(&v.EntryHash)
 	u.Entry = &encoding.JsonUnmarshalWith[protocol.DataEntry]{Value: v.Entry, Func: protocol.UnmarshalDataEntryJSON}
 	u.TxId = v.TxId
 	u.CauseTxId = v.CauseTxId
-	if err := json.Unmarshal(data, &u); err != nil {
+	u.LastBlockTime = v.LastBlockTime
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if x, err := encoding.ChainFromJSON(u.EntryHash); err != nil {
 		return fmt.Errorf("error decoding EntryHash: %w", err)
 	} else {
-		v.EntryHash = x
+		v.EntryHash = *x
 	}
 	if u.Entry != nil {
 		v.Entry = u.Entry.Value
@@ -4817,38 +5059,56 @@ func (v *ResponseDataEntry) UnmarshalJSON(data []byte) error {
 
 	v.TxId = u.TxId
 	v.CauseTxId = u.CauseTxId
+	v.LastBlockTime = u.LastBlockTime
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (v *ResponseDataEntrySet) UnmarshalJSON(data []byte) error {
 	u := struct {
-		DataEntries encoding.JsonList[ResponseDataEntry] `json:"dataEntries,omitempty"`
-		Total       uint64                               `json:"total,omitempty"`
+		DataEntries   encoding.JsonList[ResponseDataEntry] `json:"dataEntries,omitempty"`
+		Total         uint64                               `json:"total,omitempty"`
+		LastBlockTime *time.Time                           `json:"lastBlockTime,omitempty"`
+		ExtraData     *string                              `json:"$epilogue,omitempty"`
 	}{}
 	u.DataEntries = v.DataEntries
 	u.Total = v.Total
-	if err := json.Unmarshal(data, &u); err != nil {
+	u.LastBlockTime = v.LastBlockTime
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.DataEntries = u.DataEntries
 	v.Total = u.Total
+	v.LastBlockTime = u.LastBlockTime
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (v *ResponseKeyPageIndex) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Authority *url.URL `json:"authority,omitempty"`
-		KeyBook   *url.URL `json:"keyBook,omitempty"`
-		Signer    *url.URL `json:"signer,omitempty"`
-		KeyPage   *url.URL `json:"keyPage,omitempty"`
-		Index     uint64   `json:"index"`
+		Authority     *url.URL   `json:"authority,omitempty"`
+		KeyBook       *url.URL   `json:"keyBook,omitempty"`
+		Signer        *url.URL   `json:"signer,omitempty"`
+		KeyPage       *url.URL   `json:"keyPage,omitempty"`
+		Index         uint64     `json:"index"`
+		LastBlockTime *time.Time `json:"lastBlockTime,omitempty"`
+		ExtraData     *string    `json:"$epilogue,omitempty"`
 	}{}
 	u.Authority = v.Authority
 	u.KeyBook = v.Authority
 	u.Signer = v.Signer
 	u.KeyPage = v.Signer
 	u.Index = v.Index
-	if err := json.Unmarshal(data, &u); err != nil {
+	u.LastBlockTime = v.LastBlockTime
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(u.Authority == nil) {
@@ -4862,6 +5122,11 @@ func (v *ResponseKeyPageIndex) UnmarshalJSON(data []byte) error {
 		v.Signer = u.KeyPage
 	}
 	v.Index = u.Index
+	v.LastBlockTime = u.LastBlockTime
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -4872,7 +5137,8 @@ func (v *SignatureBook) UnmarshalJSON(data []byte) error {
 	}{}
 	u.Authority = v.Authority
 	u.Pages = v.Pages
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.Authority = u.Authority
@@ -4887,7 +5153,8 @@ func (v *SignaturePage) UnmarshalJSON(data []byte) error {
 	}{}
 	u.Signer = v.Signer
 	u.Signatures = &encoding.JsonUnmarshalListWith[protocol.Signature]{Value: v.Signatures, Func: protocol.UnmarshalSignatureJSON}
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.Signer = u.Signer
@@ -4917,7 +5184,8 @@ func (v *Signer) UnmarshalJSON(data []byte) error {
 	u.Version = v.Version
 	u.SignatureType = v.SignatureType
 	u.UseSimpleHash = v.UseSimpleHash
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if x, err := encoding.BytesFromJSON(u.PublicKey); err != nil {
@@ -4945,10 +5213,10 @@ func (v *StatusResponse) UnmarshalJSON(data []byte) error {
 		BvnTime                   time.Time `json:"bvnTime,omitempty"`
 		DnTime                    time.Time `json:"dnTime,omitempty"`
 		LastDirectoryAnchorHeight uint64    `json:"lastDirectoryAnchorHeight,omitempty"`
-		BvnRootHash               string    `json:"bvnRootHash,omitempty"`
-		DnRootHash                string    `json:"dnRootHash,omitempty"`
-		BvnBptHash                string    `json:"bvnBptHash,omitempty"`
-		DnBptHash                 string    `json:"dnBptHash,omitempty"`
+		BvnRootHash               *string   `json:"bvnRootHash,omitempty"`
+		DnRootHash                *string   `json:"dnRootHash,omitempty"`
+		BvnBptHash                *string   `json:"bvnBptHash,omitempty"`
+		DnBptHash                 *string   `json:"dnBptHash,omitempty"`
 	}{}
 	u.Ok = v.Ok
 	u.BvnHeight = v.BvnHeight
@@ -4956,11 +5224,12 @@ func (v *StatusResponse) UnmarshalJSON(data []byte) error {
 	u.BvnTime = v.BvnTime
 	u.DnTime = v.DnTime
 	u.LastDirectoryAnchorHeight = v.LastDirectoryAnchorHeight
-	u.BvnRootHash = encoding.ChainToJSON(v.BvnRootHash)
-	u.DnRootHash = encoding.ChainToJSON(v.DnRootHash)
-	u.BvnBptHash = encoding.ChainToJSON(v.BvnBptHash)
-	u.DnBptHash = encoding.ChainToJSON(v.DnBptHash)
-	if err := json.Unmarshal(data, &u); err != nil {
+	u.BvnRootHash = encoding.ChainToJSON(&v.BvnRootHash)
+	u.DnRootHash = encoding.ChainToJSON(&v.DnRootHash)
+	u.BvnBptHash = encoding.ChainToJSON(&v.BvnBptHash)
+	u.DnBptHash = encoding.ChainToJSON(&v.DnBptHash)
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.Ok = u.Ok
@@ -4972,22 +5241,22 @@ func (v *StatusResponse) UnmarshalJSON(data []byte) error {
 	if x, err := encoding.ChainFromJSON(u.BvnRootHash); err != nil {
 		return fmt.Errorf("error decoding BvnRootHash: %w", err)
 	} else {
-		v.BvnRootHash = x
+		v.BvnRootHash = *x
 	}
 	if x, err := encoding.ChainFromJSON(u.DnRootHash); err != nil {
 		return fmt.Errorf("error decoding DnRootHash: %w", err)
 	} else {
-		v.DnRootHash = x
+		v.DnRootHash = *x
 	}
 	if x, err := encoding.ChainFromJSON(u.BvnBptHash); err != nil {
 		return fmt.Errorf("error decoding BvnBptHash: %w", err)
 	} else {
-		v.BvnBptHash = x
+		v.BvnBptHash = *x
 	}
 	if x, err := encoding.ChainFromJSON(u.DnBptHash); err != nil {
 		return fmt.Errorf("error decoding DnBptHash: %w", err)
 	} else {
-		v.DnBptHash = x
+		v.DnBptHash = *x
 	}
 	return nil
 }
@@ -5001,7 +5270,8 @@ func (v *TokenDeposit) UnmarshalJSON(data []byte) error {
 	u.Url = v.Url
 	u.Amount = encoding.BigintToJSON(&v.Amount)
 	u.Txid = encoding.BytesToJSON(v.Txid)
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.Url = u.Url
@@ -5025,7 +5295,8 @@ func (v *TokenSend) UnmarshalJSON(data []byte) error {
 	}{}
 	u.From = v.From
 	u.To = v.To
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.From = u.From
@@ -5050,6 +5321,7 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 		SyntheticTxids  encoding.JsonList[*url.TxID]                        `json:"syntheticTxids,omitempty"`
 		Receipts        encoding.JsonList[*TxReceipt]                       `json:"receipts,omitempty"`
 		SignatureBooks  encoding.JsonList[*SignatureBook]                   `json:"signatureBooks,omitempty"`
+		LastBlockTime   *time.Time                                          `json:"lastBlockTime,omitempty"`
 	}{}
 	u.Type = v.Type
 	u.MainChain = v.MainChain
@@ -5066,7 +5338,9 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 	u.SyntheticTxids = v.Produced
 	u.Receipts = v.Receipts
 	u.SignatureBooks = v.SignatureBooks
-	if err := json.Unmarshal(data, &u); err != nil {
+	u.LastBlockTime = v.LastBlockTime
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.Type = u.Type
@@ -5106,6 +5380,7 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 	}
 	v.Receipts = u.Receipts
 	v.SignatureBooks = u.SignatureBooks
+	v.LastBlockTime = u.LastBlockTime
 	return nil
 }
 
@@ -5120,7 +5395,8 @@ func (v *TxHistoryQuery) UnmarshalJSON(data []byte) error {
 	u.Start = v.QueryPagination.Start
 	u.Count = v.QueryPagination.Count
 	u.Scratch = v.Scratch
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.UrlQuery.Url = u.Url
@@ -5141,6 +5417,7 @@ func (v *TxReceipt) UnmarshalJSON(data []byte) error {
 		Error          string         `json:"error,omitempty"`
 		Account        *url.URL       `json:"account,omitempty"`
 		Chain          string         `json:"chain,omitempty"`
+		ExtraData      *string        `json:"$epilogue,omitempty"`
 	}{}
 	u.LocalBlock = v.GeneralReceipt.LocalBlock
 	u.LocalBlockTime = v.GeneralReceipt.LocalBlockTime
@@ -5151,7 +5428,8 @@ func (v *TxReceipt) UnmarshalJSON(data []byte) error {
 	u.Error = v.GeneralReceipt.Error
 	u.Account = v.Account
 	u.Chain = v.Chain
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.GeneralReceipt.LocalBlock = u.LocalBlock
@@ -5166,6 +5444,10 @@ func (v *TxReceipt) UnmarshalJSON(data []byte) error {
 	v.GeneralReceipt.Error = u.Error
 	v.Account = u.Account
 	v.Chain = u.Chain
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -5194,7 +5476,8 @@ func (v *TxRequest) UnmarshalJSON(data []byte) error {
 	u.Payload = encoding.AnyToJSON(v.Payload)
 	u.Memo = v.Memo
 	u.Metadata = encoding.BytesToJSON(v.Metadata)
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.CheckOnly = u.CheckOnly
@@ -5241,6 +5524,7 @@ func (v *TxResponse) UnmarshalJSON(data []byte) error {
 		Message         string                     `json:"message,omitempty"`
 		Delivered       bool                       `json:"delivered,omitempty"`
 		Result          interface{}                `json:"result,omitempty"`
+		LastBlockTime   *time.Time                 `json:"lastBlockTime,omitempty"`
 	}{}
 	u.TransactionHash = encoding.BytesToJSON(v.TransactionHash)
 	u.Txid = v.Txid
@@ -5254,7 +5538,9 @@ func (v *TxResponse) UnmarshalJSON(data []byte) error {
 	u.Message = v.Message
 	u.Delivered = v.Delivered
 	u.Result = encoding.AnyToJSON(v.Result)
-	if err := json.Unmarshal(data, &u); err != nil {
+	u.LastBlockTime = v.LastBlockTime
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if x, err := encoding.BytesFromJSON(u.TransactionHash); err != nil {
@@ -5292,6 +5578,7 @@ func (v *TxResponse) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Result = x
 	}
+	v.LastBlockTime = u.LastBlockTime
 	return nil
 }
 
@@ -5318,7 +5605,8 @@ func (v *TxnQuery) UnmarshalJSON(data []byte) error {
 	u.TxIdUrl = v.TxIdUrl
 	u.Wait = encoding.DurationToJSON(v.Wait)
 	u.IgnorePending = v.IgnorePending
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(u.Expand == false) {

@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -31,7 +31,7 @@ func (x *Executor) ProcessSignature(batch *database.Batch, delivery *chain.Deliv
 	}
 
 	var md sigExecMetadata
-	md.IsInitiator = protocol.SignatureDidInitiate(signature, delivery.Transaction.Header.Initiator[:], nil)
+	md.IsInitiator, _ = protocol.SignatureDidInitiate(signature, delivery.Transaction.Header.Initiator[:], nil)
 	if !signature.Type().IsSystem() {
 		md.Location = signature.RoutingLocation()
 	}

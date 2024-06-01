@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -41,16 +41,8 @@ func (m *MessageContext) GetActiveGlobals() *core.GlobalValues {
 	return &m.Executor.globals.Active
 }
 
-func (m *MessageContext) GetAccountAuthoritySet(batch *database.Batch, account protocol.Account) (*protocol.AccountAuth, error) {
-	return m.getAccountAuthoritySet(batch, account)
-}
-
 func (*MessageContext) TransactionIsInitiated(batch *database.Batch, transaction *protocol.Transaction) (bool, *messaging.CreditPayment, error) {
 	return transactionIsInitiated(batch, transaction.ID())
-}
-
-func (*MessageContext) SignerCanSign(batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer) error {
-	return baseSignerCanSignTransaction(transaction, signer)
 }
 
 // childWith constructs a child message context for the given message.
@@ -64,11 +56,10 @@ func (m *MessageContext) childWith(msg messaging.Message) *MessageContext {
 
 // sigWith constructs a signature context from this message context for the
 // given signature and transaction.
-func (m *MessageContext) sigWith(sig protocol.Signature, txn *protocol.Transaction) *SignatureContext {
+func (m *TransactionContext) sigWith(sig protocol.Signature) *SignatureContext {
 	s := new(SignatureContext)
-	s.MessageContext = m
+	s.TransactionContext = m
 	s.signature = sig
-	s.transaction = txn
 	return s
 }
 
@@ -267,8 +258,9 @@ func (b *bundle) GetSignatureAs(batch *database.Batch, hash [32]byte) (protocol.
 	return txn.GetSignature(), nil
 }
 
-func (b *bundle) recordPending(batch *database.Batch, ctx *MessageContext, msg messaging.Message) (*protocol.TransactionStatus, error) {
+func (ctx *MessageContext) recordPending(batch *database.Batch) (*protocol.TransactionStatus, error) {
 	// Store the message
+	msg := ctx.message
 	h := msg.Hash()
 	err := batch.Message(h).Main().Put(msg)
 	if err != nil {

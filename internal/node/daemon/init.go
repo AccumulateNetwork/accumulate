@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -196,7 +196,10 @@ func ConfigureNodePorts(node *NodeInit, cfg *config.Config, part protocol.Partit
 	cfg.Accumulate.API.ListenAddress = node.Listen().Scheme("http").PartitionType(part).AccumulateAPI().String()
 }
 
-func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time time.Time, logger log.Logger, factomAddresses func() (io.Reader, error), snapshots []func() (ioutil2.SectionReader, error)) (map[string][]byte, error) {
+func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time time.Time, logger log.Logger, factomAddresses func() (io.Reader, error), snapshots []func(*core.GlobalValues) (ioutil2.SectionReader, error)) (map[string][]byte, error) {
+	if globals == nil {
+		globals = new(core.GlobalValues)
+	}
 	docs := map[string][]byte{}
 	var operators [][]byte
 	netinfo := new(protocol.NetworkDefinition)
@@ -226,7 +229,8 @@ func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time tim
 
 	globals.Network = netinfo
 
-	ids := []string{protocol.Directory}
+	var ids []string
+	ids = append(ids, protocol.Directory)
 	for _, bvn := range network.Bvns {
 		ids = append(ids, bvn.Id)
 	}
@@ -264,7 +268,7 @@ func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time tim
 			ConsensusParams: tmtypes.DefaultConsensusParams(),
 		})
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("init %s: %w", id, err)
 		}
 
 		// Write the snapshot to the BSN snapshot

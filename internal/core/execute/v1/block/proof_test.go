@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -45,13 +45,13 @@ func TestExecutor_Query_ProveAccount(t *testing.T) {
 	sim.WaitForTransactionFlow(delivered, env.Transaction[0].GetHash())
 
 	// Get a proof of the account state
-	acctResp := sim.H.QueryAccount(aliceUrl, &api.DefaultQuery{IncludeReceipt: true})
+	acctResp := sim.H.QueryAccount(aliceUrl, &api.DefaultQuery{IncludeReceipt: &api.ReceiptOptions{ForAny: true}})
 	localReceipt := acctResp.Receipt
 	// Execute enough blocks to ensure the block is anchored
 	sim.ExecuteBlocks(10)
 
 	// Get a proof of the BVN anchor
-	chainResp := sim.H.SearchForAnchor(protocol.DnUrl().JoinPath(protocol.AnchorPool), &api.AnchorSearchQuery{Anchor: localReceipt.Anchor, IncludeReceipt: true})
+	chainResp := sim.H.SearchForAnchor(protocol.DnUrl().JoinPath(protocol.AnchorPool), &api.AnchorSearchQuery{Anchor: localReceipt.Anchor, IncludeReceipt: &api.ReceiptOptions{ForAny: true}})
 	require.Len(t, chainResp.Records, 1)
 	dirReceipt := chainResp.Records[0].Receipt
 	fullReceipt, err := localReceipt.Combine(&dirReceipt.Receipt)

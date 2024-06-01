@@ -439,26 +439,29 @@ func initEip712TypeDictionary() {
 func (v *Header) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Version      uint64                 `json:"version,omitempty"`
-		RootHash     string                 `json:"rootHash,omitempty"`
+		RootHash     *string                `json:"rootHash,omitempty"`
 		SystemLedger *protocol.SystemLedger `json:"systemLedger,omitempty"`
+		ExtraData    *string                `json:"$epilogue,omitempty"`
 	}{}
 	if !(v.Version == 0) {
 		u.Version = v.Version
 	}
 	if !(v.RootHash == ([32]byte{})) {
-		u.RootHash = encoding.ChainToJSON(v.RootHash)
+		u.RootHash = encoding.ChainToJSON(&v.RootHash)
 	}
 	if !(v.SystemLedger == nil) {
 		u.SystemLedger = v.SystemLedger
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *RecordEntry) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Key     *record.Key     `json:"key,omitempty"`
-		Value   *string         `json:"value,omitempty"`
-		Receipt *merkle.Receipt `json:"receipt,omitempty"`
+		Key       *record.Key     `json:"key,omitempty"`
+		Value     *string         `json:"value,omitempty"`
+		Receipt   *merkle.Receipt `json:"receipt,omitempty"`
+		ExtraData *string         `json:"$epilogue,omitempty"`
 	}{}
 	if !(v.Key == nil) {
 		u.Key = v.Key
@@ -469,41 +472,50 @@ func (v *RecordEntry) MarshalJSON() ([]byte, error) {
 	if !(v.Receipt == nil) {
 		u.Receipt = v.Receipt
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *Header) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Version      uint64                 `json:"version,omitempty"`
-		RootHash     string                 `json:"rootHash,omitempty"`
+		RootHash     *string                `json:"rootHash,omitempty"`
 		SystemLedger *protocol.SystemLedger `json:"systemLedger,omitempty"`
+		ExtraData    *string                `json:"$epilogue,omitempty"`
 	}{}
 	u.Version = v.Version
-	u.RootHash = encoding.ChainToJSON(v.RootHash)
+	u.RootHash = encoding.ChainToJSON(&v.RootHash)
 	u.SystemLedger = v.SystemLedger
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.Version = u.Version
 	if x, err := encoding.ChainFromJSON(u.RootHash); err != nil {
 		return fmt.Errorf("error decoding RootHash: %w", err)
 	} else {
-		v.RootHash = x
+		v.RootHash = *x
 	}
 	v.SystemLedger = u.SystemLedger
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (v *RecordEntry) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Key     *record.Key     `json:"key,omitempty"`
-		Value   *string         `json:"value,omitempty"`
-		Receipt *merkle.Receipt `json:"receipt,omitempty"`
+		Key       *record.Key     `json:"key,omitempty"`
+		Value     *string         `json:"value,omitempty"`
+		Receipt   *merkle.Receipt `json:"receipt,omitempty"`
+		ExtraData *string         `json:"$epilogue,omitempty"`
 	}{}
 	u.Key = v.Key
 	u.Value = encoding.BytesToJSON(v.Value)
 	u.Receipt = v.Receipt
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.Key = u.Key
@@ -513,5 +525,9 @@ func (v *RecordEntry) UnmarshalJSON(data []byte) error {
 		v.Value = x
 	}
 	v.Receipt = u.Receipt
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }

@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -28,10 +28,51 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/test/testdata"
+	"golang.org/x/exp/slog"
 	"golang.org/x/sync/errgroup"
 )
 
 const LogConsole = true
+
+func DefaultSlogConfig() logging.SlogConfig {
+	// Setup default slogging
+	modules := map[string]slog.Level{}
+	ll := (config.LogLevel{}).Parse(DefaultLogLevels)
+	for _, m := range ll.Modules {
+		var l slog.Level
+		if err := l.UnmarshalText([]byte(m[1])); err != nil {
+			panic(err)
+		}
+		modules[m[0]] = l
+	}
+
+	var def slog.Level
+	if err := def.UnmarshalText([]byte(ll.Default)); err != nil {
+		panic(err)
+	}
+
+	return logging.SlogConfig{
+		DefaultLevel: def,
+		ModuleLevels: modules,
+	}
+}
+
+func SlogDebug(modules ...string) {
+	c := DefaultSlogConfig()
+	for _, m := range modules {
+		c.ModuleLevels[m] = slog.LevelDebug
+	}
+	ConfigureSlog(c)
+}
+
+func ConfigureSlog(c logging.SlogConfig) {
+	out := logging.ConsoleSlogWriter(os.Stderr, true)
+	h, err := logging.NewSlogHandler(c, out)
+	if err != nil {
+		panic(err)
+	}
+	slog.SetDefault(slog.New(h))
+}
 
 func NewTestLogger(t testing.TB) log.Logger {
 	if !LogConsole {

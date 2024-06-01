@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -64,20 +64,26 @@ type Accumulator struct {
 	ready          bool
 
 	onFatal func(error)
+
+	// DisableLateCommit - DO NOT USE IN PRODUCTION - disables the late-commit
+	// logic that prevents consensus failures from being committed.
+	DisableLateCommit bool
 }
 
 type AccumulatorOptions struct {
-	Tracer      trace.Tracer
-	Executor    execute.Executor
-	EventBus    *events.Bus
-	Logger      log.Logger
-	Snapshots   *config.Snapshots
-	Database    coredb.Beginner
-	Address     crypto.Address // This is the address of this node, and is used to determine if the node is the leader
-	Genesis     node.GenesisDocProvider
-	Partition   string
-	RootDir     string
-	AnalysisLog config.AnalysisLog
+	ID                   string // For debugging
+	Tracer               trace.Tracer
+	Executor             execute.Executor
+	EventBus             *events.Bus
+	Logger               log.Logger
+	Snapshots            *config.Snapshots
+	Database             coredb.Beginner
+	Address              crypto.Address // This is the address of this node, and is used to determine if the node is the leader
+	Genesis              node.GenesisDocProvider
+	Partition            string
+	RootDir              string
+	AnalysisLog          config.AnalysisLog
+	MaxEnvelopesPerBlock int
 }
 
 // NewAccumulator returns a new Accumulator.
@@ -369,6 +375,28 @@ func (app *Accumulator) InitChain(_ context.Context, req *abci.RequestInitChain)
 	return &abci.ResponseInitChain{AppHash: root[:], Validators: updates}, nil
 }
 
+func (app *Accumulator) PrepareProposal(ctx context.Context, req *abci.RequestPrepareProposal) (*abci.ResponsePrepareProposal, error) {
+	if app.MaxEnvelopesPerBlock > 0 && len(req.Txs) > app.MaxEnvelopesPerBlock {
+		req.Txs = req.Txs[:app.MaxEnvelopesPerBlock]
+	}
+
+	// Cloned from BaseApplication
+	txs := make([][]byte, 0, len(req.Txs))
+	var totalBytes int64
+	for _, tx := range req.Txs {
+		totalBytes += int64(len(tx))
+		if totalBytes > req.MaxTxBytes {
+			break
+		}
+		txs = append(txs, tx)
+	}
+	return &abci.ResponsePrepareProposal{Txs: txs}, nil
+}
+
+func (app *Accumulator) ProcessProposal(ctx context.Context, req *abci.RequestProcessProposal) (*abci.ResponseProcessProposal, error) {
+	return &abci.ResponseProcessProposal{Status: abci.ResponseProcessProposal_ACCEPT}, nil
+}
+
 func (app *Accumulator) FinalizeBlock(_ context.Context, req *abci.RequestFinalizeBlock) (*abci.ResponseFinalizeBlock, error) {
 	defer app.recover()
 
@@ -378,7 +406,7 @@ func (app *Accumulator) FinalizeBlock(_ context.Context, req *abci.RequestFinali
 	}
 
 	// Commit the previous block
-	if app.block != nil {
+	if app.block != nil && !app.DisableLateCommit {
 		err := app.actualCommit()
 		if err != nil {
 			return nil, err
@@ -511,12 +539,19 @@ func (app *Accumulator) CheckTx(_ context.Context, req *abci.RequestCheckTx) (rc
 	// const maxPriority = (1 << 32) - 1
 
 	txns := map[[32]byte]*protocol.Transaction{}
+	user := map[[32]byte]messaging.Message{}
 	seq := map[[32]byte]uint64{}
 	for _, msg := range messages {
 		switch msg := msg.(type) {
 		case *messaging.TransactionMessage:
-			txns[*(*[32]byte)(msg.Transaction.GetHash())] = msg.Transaction
+			if msg.Transaction.Body.Type().IsUser() {
+				user[msg.Hash()] = msg
+			}
+			txns[msg.Hash()] = msg.Transaction
 		case *messaging.SignatureMessage:
+			if !msg.Signature.Type().IsSystem() {
+				user[msg.Hash()] = msg
+			}
 			sig, ok := msg.Signature.(*protocol.PartitionSignature)
 			if !ok {
 				continue
@@ -525,31 +560,29 @@ func (app *Accumulator) CheckTx(_ context.Context, req *abci.RequestCheckTx) (rc
 		}
 	}
 
-	// If a user transaction fails, the batch fails
+	// TODO Prioritization must be done with ABCI++
+
+	// var priority int64
+	// if txn.Body.Type().IsSystem() {
+	// 	priority = maxPriority
+	// } else if txn.Body.Type().IsSynthetic() {
+	// 	// Set the priority based on the sequence number to try to keep them in order
+	// 	seq := seq[result.TxID.Hash()]
+	// 	priority = maxPriority - 1 - int64(seq)
+	// }
+	// if resp.Priority < priority {
+	// 	resp.Priority = priority
+	// }
+
+	// When checking an initial submission (as opposed to a gossiped
+	// envelope), fail if any user message fails
 	for i, result := range results {
-		txn, ok := txns[result.TxID.Hash()]
+		_, ok := user[result.TxID.Hash()]
 		if !ok {
 			continue
 		}
 
-		// TODO Prioritization must be done with ABCI++
-
-		// var priority int64
-		// if txn.Body.Type().IsSystem() {
-		// 	priority = maxPriority
-		// } else if txn.Body.Type().IsSynthetic() {
-		// 	// Set the priority based on the sequence number to try to keep them in order
-		// 	seq := seq[result.TxID.Hash()]
-		// 	priority = maxPriority - 1 - int64(seq)
-		// }
-		// if resp.Priority < priority {
-		// 	resp.Priority = priority
-		// }
-
 		if result.Error == nil {
-			continue
-		}
-		if !result.Code.Success() && !txn.Body.Type().IsUser() {
 			continue
 		}
 		resp.Code = uint32(protocol.ErrorCodeUnknownError)
@@ -679,7 +712,14 @@ func (app *Accumulator) Commit(_ context.Context, req *abci.RequestCommit) (*abc
 	//
 	// If the block is non-empty, we simply return the root hash and let
 	// BeginBlock handle the actual commit.
-	return &abci.ResponseCommit{}, nil
+	if !app.DisableLateCommit || app.block == nil {
+		return &abci.ResponseCommit{}, nil
+	}
+
+	// TESTING ONLY - commit during commit, so that tests can observe state
+	// changes at the expected time
+	err := app.actualCommit()
+	return &abci.ResponseCommit{}, err
 }
 
 func (app *Accumulator) cleanupBlock() {

@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -552,7 +552,7 @@ func GetAllSignatures(batch *database.Batch, transaction *database.Transaction, 
 		}
 
 		for _, sig := range sigset {
-			if SignatureDidInitiate(sig, txnInitHash, nil) {
+			if ok, _ := SignatureDidInitiate(sig, txnInitHash, nil); ok {
 				signatures[0] = sig
 			} else {
 				signatures = append(signatures, sig)

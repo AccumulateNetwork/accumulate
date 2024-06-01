@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -29,7 +29,7 @@ func (b KeyPageEntryBuilder[T]) Hash(hash any) KeyPageEntryBuilder[T] {
 }
 
 func (b KeyPageEntryBuilder[T]) Key(key any, typ protocol.SignatureType) KeyPageEntryBuilder[T] {
-	b.entry.KeyHash = b.hashKey(b.parsePublicKey(key), typ)
+	b.entry.KeyHash = b.hashKey(b.parseKey(key, typ, false))
 	return b
 }
 

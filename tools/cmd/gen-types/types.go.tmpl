@@ -306,11 +306,14 @@ func (v *{{$typ.FullName true false}}) UnmarshalFieldsFrom(reader *encoding.Read
 	{{- template "jsonField" .}}
 	{{- end}}
 	{{- end}}
+	{{- if .IsBinary}}
+	ExtraData *string `json:"$epilogue,omitempty"`
+	{{- end}}
 }
 {{- end}}
 
 {{define "valueToJson"}}
-{{- if .Field.IsMarshalled}}
+{{- if .Field.IsMarshalled -}}
 {{valueToJson .Field (print .Dst "." .Field.Name) (print .Src "." (get .Field))}}
 {{- if .Field.AlternativeName}}
 {{valueToJson .Field (print .Dst "." .Field.AlternativeName) (print .Src "." (get .Field))}}
@@ -377,7 +380,7 @@ func (v *{{.FullName true false}}) MarshalJSON() ([]byte, error) {
 		{{template "valueToJson" map "Field" . "Src" (print "v." $name) "Dst" "u"}}
 	}
 	{{- else}}
-	{{- template "valueToJson" map "Field" . "Src" (print "v." $name) "Dst" "u"}}
+	{{  template "valueToJson" map "Field" . "Src" (print "v." $name) "Dst" "u"}}
 	{{- end}}
 	{{- end}}
 	{{- end}}
@@ -385,14 +388,18 @@ func (v *{{.FullName true false}}) MarshalJSON() ([]byte, error) {
 	{{- if .IsMarshalled}}
 	{{- if .OmitEmpty}}
 	if !({{isZero . (print "v." (get .))}}) {
-		{{- template "valueToJson" map "Field" . "Src" "v" "Dst" "u"}}
+		{{  template "valueToJson" map "Field" . "Src" "v" "Dst" "u"}}
 	}
 	{{- else}}
-	{{- template "valueToJson" map "Field" . "Src" "v" "Dst" "u"}}
+	{{  template "valueToJson" map "Field" . "Src" "v" "Dst" "u"}}
 	{{- end}}
 	{{- end}}
 	{{- end}}
 	{{- end}}
+
+	{{- if .IsBinary}}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	{{- end  }}
 	return json.Marshal(&u)
 }
 {{end}}{{end}}
@@ -405,13 +412,14 @@ func (v *{{.FullName true false}}) UnmarshalJSON(data []byte) error {
 	{{- if .IsEmbedded}}
 	{{- $name := get .}}
 	{{- range .TypeRef.Fields}}
-	{{- template "valueToJson" map "Field" . "Src" (print "v." $name) "Dst" "u"}}
+	{{  template "valueToJson" map "Field" . "Src" (print "v." $name) "Dst" "u"}}
 	{{- end}}
 	{{- else}}
-	{{- template "valueToJson" map "Field" . "Src" "v" "Dst" "u"}}
+	{{  template "valueToJson" map "Field" . "Src" "v" "Dst" "u"}}
 	{{- end}}
 	{{- end}}
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 
@@ -425,6 +433,13 @@ func (v *{{.FullName true false}}) UnmarshalJSON(data []byte) error {
 	{{- template "valueFromJson" map "Field" . "Src" "u" "Dst" "v"}}
 	{{- end}}
 	{{- end}}
+
+	{{- if .IsBinary}}
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	{{- end  }}
 	return nil
 }
 {{end}}{{end}}

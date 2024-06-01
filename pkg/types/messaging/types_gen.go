@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
@@ -65,6 +66,13 @@ type CreditPayment struct {
 	extraData []byte
 }
 
+type DidUpdateExecutorVersion struct {
+	fieldsSet []bool
+	Partition string                   `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
+	Version   protocol.ExecutorVersion `json:"version,omitempty" form:"version" query:"version" validate:"required"`
+	extraData []byte
+}
+
 type Envelope struct {
 	fieldsSet   []bool
 	Signatures  []protocol.Signature    `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
@@ -72,6 +80,23 @@ type Envelope struct {
 	Transaction []*protocol.Transaction `json:"transaction,omitempty" form:"transaction" query:"transaction"`
 	Messages    []Message               `json:"messages,omitempty" form:"messages" query:"messages"`
 	extraData   []byte
+}
+
+type MakeMajorBlock struct {
+	fieldsSet []bool
+	// MajorBlockIndex is the major block index.
+	MajorBlockIndex uint64 `json:"majorBlockIndex,omitempty" form:"majorBlockIndex" query:"majorBlockIndex" validate:"required"`
+	// MinorBlockIndex is the minor block index.
+	MinorBlockIndex uint64 `json:"minorBlockIndex,omitempty" form:"minorBlockIndex" query:"minorBlockIndex" validate:"required"`
+	// MajorBlockTime is the timestamp of the major block.
+	MajorBlockTime time.Time `json:"majorBlockTime,omitempty" form:"majorBlockTime" query:"majorBlockTime" validate:"required"`
+	extraData      []byte
+}
+
+type NetworkUpdate struct {
+	fieldsSet []bool
+	Accounts  []*protocol.NetworkAccountUpdate `json:"accounts,omitempty" form:"accounts" query:"accounts" validate:"required"`
+	extraData []byte
 }
 
 type RecordUpdate struct {
@@ -143,6 +168,12 @@ func (*BlockAnchor) Type() MessageType { return MessageTypeBlockAnchor }
 func (*BlockSummary) Type() MessageType { return MessageTypeBlockSummary }
 
 func (*CreditPayment) Type() MessageType { return MessageTypeCreditPayment }
+
+func (*DidUpdateExecutorVersion) Type() MessageType { return MessageTypeDidUpdateExecutorVersion }
+
+func (*MakeMajorBlock) Type() MessageType { return MessageTypeMakeMajorBlock }
+
+func (*NetworkUpdate) Type() MessageType { return MessageTypeNetworkUpdate }
 
 func (*SequencedMessage) Type() MessageType { return MessageTypeSequenced }
 
@@ -250,6 +281,21 @@ func (v *CreditPayment) Copy() *CreditPayment {
 
 func (v *CreditPayment) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *DidUpdateExecutorVersion) Copy() *DidUpdateExecutorVersion {
+	u := new(DidUpdateExecutorVersion)
+
+	u.Partition = v.Partition
+	u.Version = v.Version
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *DidUpdateExecutorVersion) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *Envelope) Copy() *Envelope {
 	u := new(Envelope)
 
@@ -284,6 +330,42 @@ func (v *Envelope) Copy() *Envelope {
 }
 
 func (v *Envelope) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *MakeMajorBlock) Copy() *MakeMajorBlock {
+	u := new(MakeMajorBlock)
+
+	u.MajorBlockIndex = v.MajorBlockIndex
+	u.MinorBlockIndex = v.MinorBlockIndex
+	u.MajorBlockTime = v.MajorBlockTime
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *MakeMajorBlock) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *NetworkUpdate) Copy() *NetworkUpdate {
+	u := new(NetworkUpdate)
+
+	u.Accounts = make([]*protocol.NetworkAccountUpdate, len(v.Accounts))
+	for i, v := range v.Accounts {
+		v := v
+		if v != nil {
+			u.Accounts[i] = (v).Copy()
+		}
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *NetworkUpdate) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *RecordUpdate) Copy() *RecordUpdate {
 	u := new(RecordUpdate)
@@ -537,6 +619,17 @@ func (v *CreditPayment) Equal(u *CreditPayment) bool {
 	return true
 }
 
+func (v *DidUpdateExecutorVersion) Equal(u *DidUpdateExecutorVersion) bool {
+	if !(v.Partition == u.Partition) {
+		return false
+	}
+	if !(v.Version == u.Version) {
+		return false
+	}
+
+	return true
+}
+
 func (v *Envelope) Equal(u *Envelope) bool {
 	if len(v.Signatures) != len(u.Signatures) {
 		return false
@@ -562,6 +655,33 @@ func (v *Envelope) Equal(u *Envelope) bool {
 	}
 	for i := range v.Messages {
 		if !(EqualMessage(v.Messages[i], u.Messages[i])) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (v *MakeMajorBlock) Equal(u *MakeMajorBlock) bool {
+	if !(v.MajorBlockIndex == u.MajorBlockIndex) {
+		return false
+	}
+	if !(v.MinorBlockIndex == u.MinorBlockIndex) {
+		return false
+	}
+	if !((v.MajorBlockTime).Equal(u.MajorBlockTime)) {
+		return false
+	}
+
+	return true
+}
+
+func (v *NetworkUpdate) Equal(u *NetworkUpdate) bool {
+	if len(v.Accounts) != len(u.Accounts) {
+		return false
+	}
+	for i := range v.Accounts {
+		if !((v.Accounts[i]).Equal(u.Accounts[i])) {
 			return false
 		}
 	}
@@ -1060,6 +1180,63 @@ func (v *CreditPayment) IsValid() error {
 	}
 }
 
+var fieldNames_DidUpdateExecutorVersion = []string{
+	1: "Type",
+	2: "Partition",
+	3: "Version",
+}
+
+func (v *DidUpdateExecutorVersion) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(len(v.Partition) == 0) {
+		writer.WriteString(2, v.Partition)
+	}
+	if !(v.Version == 0) {
+		writer.WriteEnum(3, v.Version)
+	}
+
+	_, _, err := writer.Reset(fieldNames_DidUpdateExecutorVersion)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *DidUpdateExecutorVersion) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Partition is missing")
+	} else if len(v.Partition) == 0 {
+		errs = append(errs, "field Partition is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Version is missing")
+	} else if v.Version == 0 {
+		errs = append(errs, "field Version is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_Envelope = []string{
 	1: "Signatures",
 	2: "TxHash",
@@ -1116,6 +1293,122 @@ func (v *Envelope) IsValid() error {
 		errs = append(errs, "field Signatures is missing")
 	} else if len(v.Signatures) == 0 {
 		errs = append(errs, "field Signatures is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_MakeMajorBlock = []string{
+	1: "Type",
+	2: "MajorBlockIndex",
+	3: "MinorBlockIndex",
+	4: "MajorBlockTime",
+}
+
+func (v *MakeMajorBlock) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.MajorBlockIndex == 0) {
+		writer.WriteUint(2, v.MajorBlockIndex)
+	}
+	if !(v.MinorBlockIndex == 0) {
+		writer.WriteUint(3, v.MinorBlockIndex)
+	}
+	if !(v.MajorBlockTime == (time.Time{})) {
+		writer.WriteTime(4, v.MajorBlockTime)
+	}
+
+	_, _, err := writer.Reset(fieldNames_MakeMajorBlock)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *MakeMajorBlock) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field MajorBlockIndex is missing")
+	} else if v.MajorBlockIndex == 0 {
+		errs = append(errs, "field MajorBlockIndex is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field MinorBlockIndex is missing")
+	} else if v.MinorBlockIndex == 0 {
+		errs = append(errs, "field MinorBlockIndex is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field MajorBlockTime is missing")
+	} else if v.MajorBlockTime == (time.Time{}) {
+		errs = append(errs, "field MajorBlockTime is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_NetworkUpdate = []string{
+	1: "Type",
+	2: "Accounts",
+}
+
+func (v *NetworkUpdate) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(len(v.Accounts) == 0) {
+		for _, v := range v.Accounts {
+			writer.WriteValue(2, v.MarshalBinary)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_NetworkUpdate)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *NetworkUpdate) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Accounts is missing")
+	} else if len(v.Accounts) == 0 {
+		errs = append(errs, "field Accounts is not set")
 	}
 
 	switch len(errs) {
@@ -1772,6 +2065,44 @@ func (v *CreditPayment) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
+func (v *DidUpdateExecutorVersion) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *DidUpdateExecutorVersion) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType MessageType
+	if x := new(MessageType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *DidUpdateExecutorVersion) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadString(2); ok {
+		v.Partition = x
+	}
+	if x := new(protocol.ExecutorVersion); reader.ReadEnum(3, x) {
+		v.Version = *x
+	}
+
+	seen, err := reader.Reset(fieldNames_DidUpdateExecutorVersion)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *Envelope) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -1815,6 +2146,86 @@ func (v *Envelope) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_Envelope)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *MakeMajorBlock) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *MakeMajorBlock) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType MessageType
+	if x := new(MessageType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *MakeMajorBlock) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadUint(2); ok {
+		v.MajorBlockIndex = x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.MinorBlockIndex = x
+	}
+	if x, ok := reader.ReadTime(4); ok {
+		v.MajorBlockTime = x
+	}
+
+	seen, err := reader.Reset(fieldNames_MakeMajorBlock)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *NetworkUpdate) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *NetworkUpdate) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType MessageType
+	if x := new(MessageType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *NetworkUpdate) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	for {
+		if x := new(protocol.NetworkAccountUpdate); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+			v.Accounts = append(v.Accounts, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_NetworkUpdate)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -2192,6 +2603,7 @@ func (v *BadSyntheticMessage) MarshalJSON() ([]byte, error) {
 		Message   *encoding.JsonUnmarshalWith[Message]               `json:"message,omitempty"`
 		Signature *encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
 		Proof     *protocol.AnnotatedReceipt                         `json:"proof,omitempty"`
+		ExtraData *string                                            `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(EqualMessage(v.Message, nil)) {
@@ -2203,6 +2615,7 @@ func (v *BadSyntheticMessage) MarshalJSON() ([]byte, error) {
 	if !(v.Proof == nil) {
 		u.Proof = v.Proof
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
@@ -2211,6 +2624,7 @@ func (v *BlockAnchor) MarshalJSON() ([]byte, error) {
 		Type      MessageType                                        `json:"type"`
 		Signature *encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
 		Anchor    *encoding.JsonUnmarshalWith[Message]               `json:"anchor,omitempty"`
+		ExtraData *string                                            `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(protocol.EqualKeySignature(v.Signature, nil)) {
@@ -2219,6 +2633,7 @@ func (v *BlockAnchor) MarshalJSON() ([]byte, error) {
 	if !(EqualMessage(v.Anchor, nil)) {
 		u.Anchor = &encoding.JsonUnmarshalWith[Message]{Value: v.Anchor, Func: UnmarshalMessageJSON}
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
@@ -2227,10 +2642,11 @@ func (v *BlockSummary) MarshalJSON() ([]byte, error) {
 		Type             MessageType                         `json:"type"`
 		Partition        string                              `json:"partition,omitempty"`
 		Index            uint64                              `json:"index,omitempty"`
-		StateTreeHash    string                              `json:"stateTreeHash,omitempty"`
+		StateTreeHash    *string                             `json:"stateTreeHash,omitempty"`
 		PreviousBlock    uint64                              `json:"previousBlock,omitempty"`
 		RecordUpdates    encoding.JsonList[*RecordUpdate]    `json:"recordUpdates,omitempty"`
 		StateTreeUpdates encoding.JsonList[*StateTreeUpdate] `json:"stateTreeUpdates,omitempty"`
+		ExtraData        *string                             `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(len(v.Partition) == 0) {
@@ -2240,7 +2656,7 @@ func (v *BlockSummary) MarshalJSON() ([]byte, error) {
 		u.Index = v.Index
 	}
 	if !(v.StateTreeHash == ([32]byte{})) {
-		u.StateTreeHash = encoding.ChainToJSON(v.StateTreeHash)
+		u.StateTreeHash = encoding.ChainToJSON(&v.StateTreeHash)
 	}
 	if !(v.PreviousBlock == 0) {
 		u.PreviousBlock = v.PreviousBlock
@@ -2251,6 +2667,7 @@ func (v *BlockSummary) MarshalJSON() ([]byte, error) {
 	if !(len(v.StateTreeUpdates) == 0) {
 		u.StateTreeUpdates = v.StateTreeUpdates
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
@@ -2262,6 +2679,7 @@ func (v *CreditPayment) MarshalJSON() ([]byte, error) {
 		Initiator bool         `json:"initiator,omitempty"`
 		TxID      *url.TxID    `json:"txID,omitempty"`
 		Cause     *url.TxID    `json:"cause,omitempty"`
+		ExtraData *string      `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Paid == 0) {
@@ -2279,6 +2697,25 @@ func (v *CreditPayment) MarshalJSON() ([]byte, error) {
 	if !(v.Cause == nil) {
 		u.Cause = v.Cause
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *DidUpdateExecutorVersion) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      MessageType              `json:"type"`
+		Partition string                   `json:"partition,omitempty"`
+		Version   protocol.ExecutorVersion `json:"version,omitempty"`
+		ExtraData *string                  `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.Partition) == 0) {
+		u.Partition = v.Partition
+	}
+	if !(v.Version == 0) {
+		u.Version = v.Version
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
@@ -2288,6 +2725,7 @@ func (v *Envelope) MarshalJSON() ([]byte, error) {
 		TxHash      *string                                             `json:"txHash,omitempty"`
 		Transaction encoding.JsonList[*protocol.Transaction]            `json:"transaction,omitempty"`
 		Messages    *encoding.JsonUnmarshalListWith[Message]            `json:"messages,omitempty"`
+		ExtraData   *string                                             `json:"$epilogue,omitempty"`
 	}{}
 	if !(len(v.Signatures) == 0) {
 		u.Signatures = &encoding.JsonUnmarshalListWith[protocol.Signature]{Value: v.Signatures, Func: protocol.UnmarshalSignatureJSON}
@@ -2301,13 +2739,51 @@ func (v *Envelope) MarshalJSON() ([]byte, error) {
 	if !(len(v.Messages) == 0) {
 		u.Messages = &encoding.JsonUnmarshalListWith[Message]{Value: v.Messages, Func: UnmarshalMessageJSON}
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *MakeMajorBlock) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type            MessageType `json:"type"`
+		MajorBlockIndex uint64      `json:"majorBlockIndex,omitempty"`
+		MinorBlockIndex uint64      `json:"minorBlockIndex,omitempty"`
+		MajorBlockTime  time.Time   `json:"majorBlockTime,omitempty"`
+		ExtraData       *string     `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.MajorBlockIndex == 0) {
+		u.MajorBlockIndex = v.MajorBlockIndex
+	}
+	if !(v.MinorBlockIndex == 0) {
+		u.MinorBlockIndex = v.MinorBlockIndex
+	}
+	if !(v.MajorBlockTime == (time.Time{})) {
+		u.MajorBlockTime = v.MajorBlockTime
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *NetworkUpdate) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      MessageType                                       `json:"type"`
+		Accounts  encoding.JsonList[*protocol.NetworkAccountUpdate] `json:"accounts,omitempty"`
+		ExtraData *string                                           `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.Accounts) == 0) {
+		u.Accounts = v.Accounts
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *RecordUpdate) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Key   *record.Key `json:"key,omitempty"`
-		Value *string     `json:"value,omitempty"`
+		Key       *record.Key `json:"key,omitempty"`
+		Value     *string     `json:"value,omitempty"`
+		ExtraData *string     `json:"$epilogue,omitempty"`
 	}{}
 	if !(v.Key == nil) {
 		u.Key = v.Key
@@ -2315,6 +2791,7 @@ func (v *RecordUpdate) MarshalJSON() ([]byte, error) {
 	if !(len(v.Value) == 0) {
 		u.Value = encoding.BytesToJSON(v.Value)
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
@@ -2325,6 +2802,7 @@ func (v *SequencedMessage) MarshalJSON() ([]byte, error) {
 		Source      *url.URL                             `json:"source,omitempty"`
 		Destination *url.URL                             `json:"destination,omitempty"`
 		Number      uint64                               `json:"number,omitempty"`
+		ExtraData   *string                              `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(EqualMessage(v.Message, nil)) {
@@ -2339,6 +2817,7 @@ func (v *SequencedMessage) MarshalJSON() ([]byte, error) {
 	if !(v.Number == 0) {
 		u.Number = v.Number
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
@@ -2347,6 +2826,7 @@ func (v *SignatureMessage) MarshalJSON() ([]byte, error) {
 		Type      MessageType                                     `json:"type"`
 		Signature *encoding.JsonUnmarshalWith[protocol.Signature] `json:"signature,omitempty"`
 		TxID      *url.TxID                                       `json:"txID,omitempty"`
+		ExtraData *string                                         `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(protocol.EqualSignature(v.Signature, nil)) {
@@ -2355,6 +2835,7 @@ func (v *SignatureMessage) MarshalJSON() ([]byte, error) {
 	if !(v.TxID == nil) {
 		u.TxID = v.TxID
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
@@ -2364,6 +2845,7 @@ func (v *SignatureRequest) MarshalJSON() ([]byte, error) {
 		Authority *url.URL    `json:"authority,omitempty"`
 		TxID      *url.TxID   `json:"txID,omitempty"`
 		Cause     *url.TxID   `json:"cause,omitempty"`
+		ExtraData *string     `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Authority == nil) {
@@ -2375,20 +2857,23 @@ func (v *SignatureRequest) MarshalJSON() ([]byte, error) {
 	if !(v.Cause == nil) {
 		u.Cause = v.Cause
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *StateTreeUpdate) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Key  *record.Key `json:"key,omitempty"`
-		Hash string      `json:"hash,omitempty"`
+		Key       *record.Key `json:"key,omitempty"`
+		Hash      *string     `json:"hash,omitempty"`
+		ExtraData *string     `json:"$epilogue,omitempty"`
 	}{}
 	if !(v.Key == nil) {
 		u.Key = v.Key
 	}
 	if !(v.Hash == ([32]byte{})) {
-		u.Hash = encoding.ChainToJSON(v.Hash)
+		u.Hash = encoding.ChainToJSON(&v.Hash)
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
@@ -2416,6 +2901,7 @@ func (v *SyntheticMessage) MarshalJSON() ([]byte, error) {
 		Message   *encoding.JsonUnmarshalWith[Message]               `json:"message,omitempty"`
 		Signature *encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
 		Proof     *protocol.AnnotatedReceipt                         `json:"proof,omitempty"`
+		ExtraData *string                                            `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(EqualMessage(v.Message, nil)) {
@@ -2427,6 +2913,7 @@ func (v *SyntheticMessage) MarshalJSON() ([]byte, error) {
 	if !(v.Proof == nil) {
 		u.Proof = v.Proof
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
@@ -2434,11 +2921,13 @@ func (v *TransactionMessage) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type        MessageType           `json:"type"`
 		Transaction *protocol.Transaction `json:"transaction,omitempty"`
+		ExtraData   *string               `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Transaction == nil) {
 		u.Transaction = v.Transaction
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
@@ -2448,12 +2937,14 @@ func (v *BadSyntheticMessage) UnmarshalJSON(data []byte) error {
 		Message   *encoding.JsonUnmarshalWith[Message]               `json:"message,omitempty"`
 		Signature *encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
 		Proof     *protocol.AnnotatedReceipt                         `json:"proof,omitempty"`
+		ExtraData *string                                            `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Message = &encoding.JsonUnmarshalWith[Message]{Value: v.Message, Func: UnmarshalMessageJSON}
 	u.Signature = &encoding.JsonUnmarshalWith[protocol.KeySignature]{Value: v.Signature, Func: protocol.UnmarshalKeySignatureJSON}
 	u.Proof = v.Proof
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -2468,6 +2959,10 @@ func (v *BadSyntheticMessage) UnmarshalJSON(data []byte) error {
 	}
 
 	v.Proof = u.Proof
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -2476,11 +2971,13 @@ func (v *BlockAnchor) UnmarshalJSON(data []byte) error {
 		Type      MessageType                                        `json:"type"`
 		Signature *encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
 		Anchor    *encoding.JsonUnmarshalWith[Message]               `json:"anchor,omitempty"`
+		ExtraData *string                                            `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Signature = &encoding.JsonUnmarshalWith[protocol.KeySignature]{Value: v.Signature, Func: protocol.UnmarshalKeySignatureJSON}
 	u.Anchor = &encoding.JsonUnmarshalWith[Message]{Value: v.Anchor, Func: UnmarshalMessageJSON}
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -2494,6 +2991,10 @@ func (v *BlockAnchor) UnmarshalJSON(data []byte) error {
 		v.Anchor = u.Anchor.Value
 	}
 
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -2502,19 +3003,21 @@ func (v *BlockSummary) UnmarshalJSON(data []byte) error {
 		Type             MessageType                         `json:"type"`
 		Partition        string                              `json:"partition,omitempty"`
 		Index            uint64                              `json:"index,omitempty"`
-		StateTreeHash    string                              `json:"stateTreeHash,omitempty"`
+		StateTreeHash    *string                             `json:"stateTreeHash,omitempty"`
 		PreviousBlock    uint64                              `json:"previousBlock,omitempty"`
 		RecordUpdates    encoding.JsonList[*RecordUpdate]    `json:"recordUpdates,omitempty"`
 		StateTreeUpdates encoding.JsonList[*StateTreeUpdate] `json:"stateTreeUpdates,omitempty"`
+		ExtraData        *string                             `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Partition = v.Partition
 	u.Index = v.Index
-	u.StateTreeHash = encoding.ChainToJSON(v.StateTreeHash)
+	u.StateTreeHash = encoding.ChainToJSON(&v.StateTreeHash)
 	u.PreviousBlock = v.PreviousBlock
 	u.RecordUpdates = v.RecordUpdates
 	u.StateTreeUpdates = v.StateTreeUpdates
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -2525,11 +3028,15 @@ func (v *BlockSummary) UnmarshalJSON(data []byte) error {
 	if x, err := encoding.ChainFromJSON(u.StateTreeHash); err != nil {
 		return fmt.Errorf("error decoding StateTreeHash: %w", err)
 	} else {
-		v.StateTreeHash = x
+		v.StateTreeHash = *x
 	}
 	v.PreviousBlock = u.PreviousBlock
 	v.RecordUpdates = u.RecordUpdates
 	v.StateTreeUpdates = u.StateTreeUpdates
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -2541,6 +3048,7 @@ func (v *CreditPayment) UnmarshalJSON(data []byte) error {
 		Initiator bool         `json:"initiator,omitempty"`
 		TxID      *url.TxID    `json:"txID,omitempty"`
 		Cause     *url.TxID    `json:"cause,omitempty"`
+		ExtraData *string      `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Paid = v.Paid
@@ -2548,7 +3056,8 @@ func (v *CreditPayment) UnmarshalJSON(data []byte) error {
 	u.Initiator = v.Initiator
 	u.TxID = v.TxID
 	u.Cause = v.Cause
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -2559,6 +3068,36 @@ func (v *CreditPayment) UnmarshalJSON(data []byte) error {
 	v.Initiator = u.Initiator
 	v.TxID = u.TxID
 	v.Cause = u.Cause
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *DidUpdateExecutorVersion) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      MessageType              `json:"type"`
+		Partition string                   `json:"partition,omitempty"`
+		Version   protocol.ExecutorVersion `json:"version,omitempty"`
+		ExtraData *string                  `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Partition = v.Partition
+	u.Version = v.Version
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Partition = u.Partition
+	v.Version = u.Version
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -2568,12 +3107,14 @@ func (v *Envelope) UnmarshalJSON(data []byte) error {
 		TxHash      *string                                             `json:"txHash,omitempty"`
 		Transaction encoding.JsonList[*protocol.Transaction]            `json:"transaction,omitempty"`
 		Messages    *encoding.JsonUnmarshalListWith[Message]            `json:"messages,omitempty"`
+		ExtraData   *string                                             `json:"$epilogue,omitempty"`
 	}{}
 	u.Signatures = &encoding.JsonUnmarshalListWith[protocol.Signature]{Value: v.Signatures, Func: protocol.UnmarshalSignatureJSON}
 	u.TxHash = encoding.BytesToJSON(v.TxHash)
 	u.Transaction = v.Transaction
 	u.Messages = &encoding.JsonUnmarshalListWith[Message]{Value: v.Messages, Func: UnmarshalMessageJSON}
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if u.Signatures != nil {
@@ -2594,17 +3135,75 @@ func (v *Envelope) UnmarshalJSON(data []byte) error {
 			v.Messages[i] = x
 		}
 	}
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *MakeMajorBlock) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type            MessageType `json:"type"`
+		MajorBlockIndex uint64      `json:"majorBlockIndex,omitempty"`
+		MinorBlockIndex uint64      `json:"minorBlockIndex,omitempty"`
+		MajorBlockTime  time.Time   `json:"majorBlockTime,omitempty"`
+		ExtraData       *string     `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.MajorBlockIndex = v.MajorBlockIndex
+	u.MinorBlockIndex = v.MinorBlockIndex
+	u.MajorBlockTime = v.MajorBlockTime
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.MajorBlockIndex = u.MajorBlockIndex
+	v.MinorBlockIndex = u.MinorBlockIndex
+	v.MajorBlockTime = u.MajorBlockTime
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *NetworkUpdate) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      MessageType                                       `json:"type"`
+		Accounts  encoding.JsonList[*protocol.NetworkAccountUpdate] `json:"accounts,omitempty"`
+		ExtraData *string                                           `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Accounts = v.Accounts
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Accounts = u.Accounts
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (v *RecordUpdate) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Key   *record.Key `json:"key,omitempty"`
-		Value *string     `json:"value,omitempty"`
+		Key       *record.Key `json:"key,omitempty"`
+		Value     *string     `json:"value,omitempty"`
+		ExtraData *string     `json:"$epilogue,omitempty"`
 	}{}
 	u.Key = v.Key
 	u.Value = encoding.BytesToJSON(v.Value)
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.Key = u.Key
@@ -2612,6 +3211,10 @@ func (v *RecordUpdate) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("error decoding Value: %w", err)
 	} else {
 		v.Value = x
+	}
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
 	}
 	return nil
 }
@@ -2623,13 +3226,15 @@ func (v *SequencedMessage) UnmarshalJSON(data []byte) error {
 		Source      *url.URL                             `json:"source,omitempty"`
 		Destination *url.URL                             `json:"destination,omitempty"`
 		Number      uint64                               `json:"number,omitempty"`
+		ExtraData   *string                              `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Message = &encoding.JsonUnmarshalWith[Message]{Value: v.Message, Func: UnmarshalMessageJSON}
 	u.Source = v.Source
 	u.Destination = v.Destination
 	u.Number = v.Number
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -2642,6 +3247,10 @@ func (v *SequencedMessage) UnmarshalJSON(data []byte) error {
 	v.Source = u.Source
 	v.Destination = u.Destination
 	v.Number = u.Number
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -2650,11 +3259,13 @@ func (v *SignatureMessage) UnmarshalJSON(data []byte) error {
 		Type      MessageType                                     `json:"type"`
 		Signature *encoding.JsonUnmarshalWith[protocol.Signature] `json:"signature,omitempty"`
 		TxID      *url.TxID                                       `json:"txID,omitempty"`
+		ExtraData *string                                         `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Signature = &encoding.JsonUnmarshalWith[protocol.Signature]{Value: v.Signature, Func: protocol.UnmarshalSignatureJSON}
 	u.TxID = v.TxID
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -2665,6 +3276,10 @@ func (v *SignatureMessage) UnmarshalJSON(data []byte) error {
 	}
 
 	v.TxID = u.TxID
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -2674,12 +3289,14 @@ func (v *SignatureRequest) UnmarshalJSON(data []byte) error {
 		Authority *url.URL    `json:"authority,omitempty"`
 		TxID      *url.TxID   `json:"txID,omitempty"`
 		Cause     *url.TxID   `json:"cause,omitempty"`
+		ExtraData *string     `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Authority = v.Authority
 	u.TxID = v.TxID
 	u.Cause = v.Cause
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -2688,24 +3305,34 @@ func (v *SignatureRequest) UnmarshalJSON(data []byte) error {
 	v.Authority = u.Authority
 	v.TxID = u.TxID
 	v.Cause = u.Cause
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (v *StateTreeUpdate) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Key  *record.Key `json:"key,omitempty"`
-		Hash string      `json:"hash,omitempty"`
+		Key       *record.Key `json:"key,omitempty"`
+		Hash      *string     `json:"hash,omitempty"`
+		ExtraData *string     `json:"$epilogue,omitempty"`
 	}{}
 	u.Key = v.Key
-	u.Hash = encoding.ChainToJSON(v.Hash)
-	if err := json.Unmarshal(data, &u); err != nil {
+	u.Hash = encoding.ChainToJSON(&v.Hash)
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.Key = u.Key
 	if x, err := encoding.ChainFromJSON(u.Hash); err != nil {
 		return fmt.Errorf("error decoding Hash: %w", err)
 	} else {
-		v.Hash = x
+		v.Hash = *x
+	}
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
 	}
 	return nil
 }
@@ -2719,7 +3346,8 @@ func (v *SynthFields) UnmarshalJSON(data []byte) error {
 	u.Message = &encoding.JsonUnmarshalWith[Message]{Value: v.Message, Func: UnmarshalMessageJSON}
 	u.Signature = &encoding.JsonUnmarshalWith[protocol.KeySignature]{Value: v.Signature, Func: protocol.UnmarshalKeySignatureJSON}
 	u.Proof = v.Proof
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if u.Message != nil {
@@ -2740,12 +3368,14 @@ func (v *SyntheticMessage) UnmarshalJSON(data []byte) error {
 		Message   *encoding.JsonUnmarshalWith[Message]               `json:"message,omitempty"`
 		Signature *encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
 		Proof     *protocol.AnnotatedReceipt                         `json:"proof,omitempty"`
+		ExtraData *string                                            `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Message = &encoding.JsonUnmarshalWith[Message]{Value: v.Message, Func: UnmarshalMessageJSON}
 	u.Signature = &encoding.JsonUnmarshalWith[protocol.KeySignature]{Value: v.Signature, Func: protocol.UnmarshalKeySignatureJSON}
 	u.Proof = v.Proof
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -2760,6 +3390,10 @@ func (v *SyntheticMessage) UnmarshalJSON(data []byte) error {
 	}
 
 	v.Proof = u.Proof
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -2767,15 +3401,21 @@ func (v *TransactionMessage) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type        MessageType           `json:"type"`
 		Transaction *protocol.Transaction `json:"transaction,omitempty"`
+		ExtraData   *string               `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Transaction = v.Transaction
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Transaction = u.Transaction
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }

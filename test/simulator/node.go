@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -24,16 +24,17 @@ import (
 )
 
 type Node struct {
-	id        int
-	network   *accumulated.NodeInit
-	partition *Partition
-	logger    log.Logger
-	eventBus  *events.Bus
-	nodeKey   []byte
-	peerID    peer.ID
-	consensus *consensus.Node
-	database  *database.Database
-	services  *message.Handler
+	id         int
+	network    *accumulated.NodeInit
+	partition  *Partition
+	logger     log.Logger
+	eventBus   *events.Bus
+	nodeKey    []byte
+	privValKey []byte
+	peerID     peer.ID
+	consensus  *consensus.Node
+	database   *database.Database
+	services   *message.Handler
 }
 
 // ConsensusStatus implements [api.ConsensusService].
@@ -60,6 +61,7 @@ func (n *Node) ConsensusStatus(ctx context.Context, opts api.ConsensusStatusOpti
 		PartitionType:    n.partition.Type,
 	}, nil
 }
+
 func (n *Node) Submit(ctx context.Context, envelope *messaging.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
 	return n.submit(envelope, false)
 }

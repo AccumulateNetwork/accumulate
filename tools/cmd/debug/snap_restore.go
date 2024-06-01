@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -18,7 +18,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
 	sv1 "gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	sv2 "gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 )
 
@@ -70,7 +69,7 @@ func restoreSnapshotCmd(cmd *cobra.Command, args []string) {
 		var metrics coredb.RestoreMetrics
 		check(coredb.Restore(db, rd, &coredb.RestoreOptions{
 			Metrics: &metrics,
-			Predicate: func(r *sv2.RecordEntry, _ database.Value) (bool, error) {
+			Predicate: func(r *sv2.RecordEntry) (bool, error) {
 				select {
 				case <-tick.C:
 				default:

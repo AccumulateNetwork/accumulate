@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -7,12 +7,17 @@
 package chain
 
 import (
-	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"flag"
+
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
+
+func IsRunningTests() bool {
+	return flag.Lookup("test.v") != nil
+}
 
 type SignatureValidationMetadata struct {
 	Location    *url.URL
@@ -92,12 +97,6 @@ type TransactionExecutorCleanup interface {
 }
 
 type AuthDelegate interface {
-	// GetActiveGlobals returns the active network global values.
-	GetActiveGlobals() *core.GlobalValues
-
-	// GetAccountAuthoritySet returns the authority set of an account.
-	GetAccountAuthoritySet(batch *database.Batch, account protocol.Account) (*protocol.AccountAuth, error)
-
 	// GetMessageAs retrieves a signature by hash from the bundle or database.
 	GetSignatureAs(batch *database.Batch, hash [32]byte) (protocol.Signature, error)
 
@@ -105,16 +104,8 @@ type AuthDelegate interface {
 	// initiator signature has been processed.
 	TransactionIsInitiated(batch *database.Batch, transaction *protocol.Transaction) (bool, *messaging.CreditPayment, error)
 
-	// SignerCanSign returns an error if the signer is not authorized to sign
-	// the transaction (e.g. a key page's transaction blacklist).
-	SignerCanSign(batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer) error
-
 	// AuthorityDidVote verifies the authority is ready to send an authority
 	// signature. For most transactions, this succeeds if at least one of the
 	// authority's signers is satisfied.
 	AuthorityDidVote(batch *database.Batch, transaction *protocol.Transaction, authUrl *url.URL) (bool, protocol.VoteType, error)
-
-	// AuthorityWillVote verifies that an authority signature (aka vote)
-	// approving the transaction has been received from the authority.
-	AuthorityWillVote(batch *database.Batch, block uint64, transaction *protocol.Transaction, authUrl *url.URL) (*AuthVote, error)
 }

@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/exp/light"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
@@ -59,6 +60,7 @@ func (h *Healer) HealSynthetic(ctx context.Context, args HealSyntheticArgs, si S
 	// Has it already been delivered?
 	Q := api.Querier2{Querier: args.Querier}
 	if r, err := Q.QueryMessage(ctx, r.ID, nil); err == nil && r.Status.Delivered() {
+		slog.InfoCtx(ctx, "Synthetic message has been delivered", "id", si.ID, "source", si.Source, "destination", si.Destination, "number", si.Number)
 		return errors.Delivered
 	}
 
@@ -350,7 +352,29 @@ func getAnchorForBlock(batch *light.DB, anchors *light.IndexDBPartitionAnchors, 
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("locate DN anchor for block %d: %w", block, err)
 	}
-	b, err := index.Chain().Entry(int64(i) + int64(skip))
+
+	head, err := index.Chain().Head().Get()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load DN anchor chain head: %w", err)
+	}
+
+	// TODO Use Next() on the chain search result to skip, once that method has
+	// been added.
+
+	for j := int64(skip); int64(i)+j < head.Count; j++ {
+		body, err := loadAnchorFromChain[protocol.DirectoryAnchor](batch, index.Chain(), block, int64(i), j)
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+		if body != nil {
+			return body, nil
+		}
+	}
+	return nil, errors.UnknownError.WithFormat("6 %d (skip %d): reached end of chain", block, skip)
+}
+
+func loadAnchorFromChain[V any](batch *light.DB, chain *database.Chain2, block uint64, i, skip int64) (*V, error) {
+	b, err := chain.Entry(i + skip)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load DN anchor chain entry for block %d (skip %d): %w", block, skip, err)
 	}
@@ -359,9 +383,12 @@ func getAnchorForBlock(batch *light.DB, anchors *light.IndexDBPartitionAnchors, 
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load DN anchor for block %d (skip %d): %w", block, skip, err)
 	}
-	body, ok := msg.Transaction.Body.(*protocol.DirectoryAnchor)
+	body, ok := any(msg.Transaction.Body).(*V)
 	if !ok {
-		return nil, errors.UnknownError.WithFormat("unable to locate DN anchor for block %d (skip %d): not an anchor", block, skip)
+		if skip > 0 {
+			return nil, nil
+		}
+		return nil, errors.UnknownError.WithFormat("unable to locate DN anchor for block %d (skip %d): want %v, got %v", block, skip, protocol.TransactionTypeDirectoryAnchor, msg.Transaction.Body.Type())
 	}
 	return body, nil
 }

@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -138,6 +138,7 @@ func (g *GlobalValues) loadFromLedger(net *url.URL, getState getStateFunc) error
 		return errors.BadRequest.WithFormat("load system ledger: %w", err)
 	} else {
 		g.ExecutorVersion = ledger.ExecutorVersion
+		g.BvnExecutorVersions = ledger.BvnExecutorVersions
 	}
 	return nil
 }

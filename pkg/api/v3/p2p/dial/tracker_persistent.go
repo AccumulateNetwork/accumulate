@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -29,6 +29,7 @@ type PersistentTracker struct {
 	db      *peerdb.DB
 	file    string
 	network string
+	selfID  peer.ID
 	host    Connector
 	peers   Discoverer
 	stopwg  *sync.WaitGroup
@@ -37,6 +38,7 @@ type PersistentTracker struct {
 type PersistentTrackerOptions struct {
 	Network          string
 	Filename         string
+	SelfID           peer.ID
 	Host             Connector
 	Peers            Discoverer
 	PersistFrequency time.Duration
@@ -51,6 +53,7 @@ func NewPersistentTracker(ctx context.Context, opts PersistentTrackerOptions) (*
 	t.db = peerdb.New()
 	t.file = opts.Filename
 	t.network = opts.Network
+	t.selfID = opts.SelfID
 	t.host = opts.Host
 	t.peers = opts.Peers
 	t.stopwg = new(sync.WaitGroup)
@@ -77,7 +80,7 @@ func NewPersistentTracker(ctx context.Context, opts PersistentTrackerOptions) (*
 
 	// Launch async jobs
 	t.runJob(t.writeDb, opts.PersistFrequency, defaultPersistFrequency, false)
-	t.runJob(t.scanPeers, opts.ScanFrequency, defaultScanFrequency, false)
+	t.runJob(t.scanPeers, opts.ScanFrequency, defaultScanFrequency, true)
 
 	return t, nil
 }
@@ -138,10 +141,17 @@ func (t *PersistentTracker) writeDb(time.Duration) {
 
 func (t *PersistentTracker) scanPeers(duration time.Duration) {
 	slog.InfoCtx(t.context, "Scanning for peers")
+	defer slog.InfoCtx(t.context, "Completed peer scan")
 
 	// Update the last scan time
 	now := time.Now()
-	defer func() { t.db.LastScan = &now }()
+	var didFindPeer bool
+	defer func() {
+		// But only if the DHT returned *something*
+		if didFindPeer {
+			t.db.LastScan = &now
+		}
+	}()
 
 	// Run discovery
 	resp, err := t.peers.Discover(t.context, &DiscoveryRequest{
@@ -166,6 +176,12 @@ func (t *PersistentTracker) scanPeers(duration time.Duration) {
 
 	wg := new(sync.WaitGroup)
 	for peer := range peers {
+		// Skip self
+		if t.selfID == peer.ID {
+			continue
+		}
+
+		didFindPeer = true
 		wg.Add(1)
 		peer := peer
 		go func() {
@@ -191,6 +207,8 @@ func (t *PersistentTracker) scanPeer(ctx context.Context, peer peer.AddrInfo) {
 }
 
 func (t *PersistentTracker) scanPeerAddresses(ctx context.Context, peer peer.AddrInfo) {
+	// Filter out private IPs
+	var addrs []multiaddr.Multiaddr
 	for _, addr := range peer.Addrs {
 		// Ignore private IPs
 		if s, err := addr.ValueForProtocol(multiaddr.P_IP4); err == nil {
@@ -199,6 +217,40 @@ func (t *PersistentTracker) scanPeerAddresses(ctx context.Context, peer peer.Add
 			}
 		}
 
+		addrs = append(addrs, addr)
+
+		if !hasQuic.Matches(addr) {
+			continue
+		}
+
+		// This is a hack to deal with nodes that don't advertize TCP even though
+		// they listen on TCP
+		var b multiaddr.Multiaddr
+		multiaddr.ForEach(addr, func(c multiaddr.Component) bool {
+			switch c.Protocol().Code {
+			case multiaddr.P_QUIC,
+				multiaddr.P_QUIC_V1:
+				return true
+			case multiaddr.P_UDP:
+				d, err := multiaddr.NewComponent("tcp", c.Value())
+				if err != nil {
+					panic(err)
+				}
+				c = *d
+			}
+			if b == nil {
+				b = &c
+			} else {
+				b = b.Encapsulate(&c)
+			}
+			return true
+		})
+		if b != nil {
+			addrs = append(addrs, b)
+		}
+	}
+
+	for _, addr := range addrs {
 		t.db.Peer(peer.ID).Address(addr).Last.DidAttempt()
 		_, err := t.host.Connect(ctx, &ConnectionRequest{
 			Service:  api.ServiceTypeNode.Address(),
@@ -351,7 +403,7 @@ func (t *PersistentTracker) attemptIsTooOld(l peerdb.LastStatus) bool {
 
 func (t *PersistentTracker) statusForLastSuccess(l peerdb.LastStatus) api.KnownPeerStatus {
 	// Last success was too long ago?
-	if t.successIsTooOld(l) {
+	if t.SuccessIsTooOld(l) {
 		return api.PeerStatusIsUnknown
 	}
 
@@ -359,7 +411,7 @@ func (t *PersistentTracker) statusForLastSuccess(l peerdb.LastStatus) api.KnownP
 	return api.PeerStatusIsKnownGood
 }
 
-func (t *PersistentTracker) successIsTooOld(l peerdb.LastStatus) bool {
+func (t *PersistentTracker) SuccessIsTooOld(l peerdb.LastStatus) bool {
 	if l.Success == nil {
 		return true
 	}
@@ -466,7 +518,7 @@ func (t *PersistentTracker) Discover(ctx context.Context, req *DiscoveryRequest)
 				// If no service is specified, include the peer if any service is good
 				var found bool
 				for _, s := range p.Network(req.Network).Services.Load() {
-					if !t.successIsTooOld(s.Last) {
+					if !t.SuccessIsTooOld(s.Last) {
 						found = true
 						break
 					}
@@ -475,7 +527,7 @@ func (t *PersistentTracker) Discover(ctx context.Context, req *DiscoveryRequest)
 					continue
 				}
 
-			} else if t.successIsTooOld(p.Network(req.Network).Service(req.Service).Last) {
+			} else if t.SuccessIsTooOld(p.Network(req.Network).Service(req.Service).Last) {
 				// If a service is specified, include the peer if the service is good
 				continue
 			}
@@ -483,12 +535,16 @@ func (t *PersistentTracker) Discover(ctx context.Context, req *DiscoveryRequest)
 			// Get all the valid addresses
 			info := peer.AddrInfo{ID: p.ID}
 			for _, a := range p.Addresses.Load() {
-				if t.successIsTooOld(a.Last) {
+				if t.SuccessIsTooOld(a.Last) {
 					info.Addrs = append(info.Addrs, a.Address)
 				}
 			}
 
-			ch <- info
+			select {
+			case ch <- info:
+			case <-ctx.Done():
+				return
+			}
 		}
 	}()
 

@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -16,10 +16,65 @@ import (
 // Fee is the unit cost of a transaction.
 type Fee uint64
 
-//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-enum --out fee_schedule_gen.go fee_schedule.yml
+func (n Fee) AsUInt64() uint64            { return uint64(n) }
+func (n Fee) GetEnumValue() uint64        { return uint64(n) }
+func (n *Fee) SetEnumValue(v uint64) bool { *n = Fee(v); return true }
 
-// MinimumCreditPurchase MinimumCreditPurchase: deprecated
-var MinimumCreditPurchase = FeeMinimumCreditPurchase
+const (
+	// FeeFailedMaximum $0.01
+	FeeFailedMaximum Fee = 100
+
+	// FeeSignature $0.0001
+	FeeSignature Fee = 1
+
+	// FeeCreateIdentity $5.00 = 50000 credits @ 0.0001 / credit.
+	FeeCreateIdentity Fee = 50000
+
+	// FeeCreateDirectory $0.10
+	FeeCreateDirectory Fee = 1000
+
+	// FeeCreateAccount $0.25
+	FeeCreateAccount Fee = 2500
+
+	// FeeTransferTokens $0.03
+	FeeTransferTokens Fee = 300
+
+	// FeeTransferTokensExtra $0.01
+	FeeTransferTokensExtra Fee = 100
+
+	// FeeCreateToken $50.00
+	FeeCreateToken Fee = 500000
+
+	// FeeGeneralTiny $0.001
+	FeeGeneralTiny Fee = 1
+
+	// FeeGeneralSmall $0.001
+	FeeGeneralSmall Fee = 10
+
+	// FeeCreateKeyPage $1.00
+	FeeCreateKeyPage Fee = 10000
+
+	// FeeCreateKeyPageExtra $0.01
+	FeeCreateKeyPageExtra Fee = 100
+
+	// FeeData $0.001 / 256 bytes
+	FeeData Fee = 10
+
+	// FeeScratchData $0.0001 / 256 bytes
+	FeeScratchData Fee = 1
+
+	// FeeUpdateAuth $0.03
+	FeeUpdateAuth Fee = 300
+
+	// FeeUpdateAuthExtra $0.01
+	FeeUpdateAuthExtra Fee = 100
+
+	// FeeMinimumCreditPurchase $0.01
+	FeeMinimumCreditPurchase Fee = 100
+
+	//Deprecated: Use FeeMinimumCreditPurchase
+	MinimumCreditPurchase = FeeMinimumCreditPurchase
+)
 
 func dataCount(obj encoding.BinaryMarshaler) (int, int, error) {
 	// Check the transaction size (including signatures)
@@ -93,33 +148,21 @@ func (s *FeeSchedule) ComputeTransactionFee(tx *Transaction) (Fee, error) {
 		fee = FeeCreateToken + FeeData*Fee(count-1)
 
 	case *CreateIdentity:
-		fee = FeeData * Fee(count-1)
+		// Compute the base fee
+		fee = s.computeBaseADIFee(body)
 
-		// If the sub-ADI fee has been set, apply it
-		if s != nil && s.CreateSubIdentity != 0 && body.Url != nil && !body.Url.IsRootIdentity() {
-			fee += s.CreateSubIdentity
-			break
+		// Apply the bare ADI discount
+		if s.BareIdentityDiscount > 0 && body.KeyBookUrl == nil {
+			fee -= s.BareIdentityDiscount
+
+			// Don't charge less than the basic create account fee
+			if fee <= 0 {
+				fee = FeeCreateDirectory
+			}
 		}
 
-		// Only apply the sliding schedule if the schedule exists, the name is
-		// suffixed with .acme, and the prefix is not empty
-		if s == nil || body.Url == nil || !body.Url.IsRootIdentity() || !strings.HasSuffix(body.Url.Authority, TLD) {
-			fee += FeeCreateIdentity
-			break
-		}
-
-		name := strings.TrimSuffix(body.Url.Authority, TLD)
-		if len(name) == 0 {
-			fee += FeeCreateIdentity
-			break
-		}
-
-		i := len(name) - 1
-		if s != nil && i < len(s.CreateIdentitySliding) {
-			fee += s.CreateIdentitySliding[i]
-		} else {
-			fee += FeeCreateIdentity
-		}
+		// Apply the data surcharge
+		fee += FeeData * Fee(count-1)
 
 	case *CreateTokenAccount,
 		*CreateDataAccount:
@@ -166,6 +209,7 @@ func (s *FeeSchedule) ComputeTransactionFee(tx *Transaction) (Fee, error) {
 		fee = FeeData * Fee(count)
 
 	case *ActivateProtocolVersion,
+		*NetworkMaintenance,
 		*AddCredits,
 		*BurnCredits,
 		*AcmeFaucet:
@@ -177,6 +221,39 @@ func (s *FeeSchedule) ComputeTransactionFee(tx *Transaction) (Fee, error) {
 	}
 
 	return fee, nil
+}
+
+func (s *FeeSchedule) computeBaseADIFee(body *CreateIdentity) Fee {
+	// If the fee schedule is missing or the URL is missing, return the default
+	// fee. Such a transaction should fail validation but charging the default
+	// fee is safe either way.
+	if s == nil || body.Url == nil {
+		return FeeCreateIdentity
+	}
+
+	// If the transaction is creating a sub-ADI
+	if !body.Url.IsRootIdentity() {
+		// If the sub-ADI fee has been set, use it, otherwise use the default
+		if s.CreateSubIdentity > 0 {
+			return s.CreateSubIdentity
+		}
+		return FeeCreateIdentity
+	}
+
+	// If the URL does not end in .acme, or is equal to .acme, use the default
+	// fee
+	name := strings.TrimSuffix(body.Url.Authority, TLD)
+	if len(name) == len(body.Url.Authority) || len(name) == 0 {
+		return FeeCreateIdentity
+	}
+
+	// Check the sliding fee schedule
+	if i := len(name) - 1; i < len(s.CreateIdentitySliding) {
+		return s.CreateIdentitySliding[i]
+	}
+
+	// Or use the default
+	return FeeCreateIdentity
 }
 
 func (s *FeeSchedule) ComputeSyntheticRefund(txn *Transaction, synthCount int) (Fee, error) {

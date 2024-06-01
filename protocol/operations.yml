@@ -1,0 +1,39 @@
+EnableAccountAuthOperation:
+  union: { type: accountAuthOperation }
+  fields:
+  - name: Authority
+    description: is the authority to enable authorization for
+    type: url
+    pointer: true
+
+DisableAccountAuthOperation:
+  union: { type: accountAuthOperation }
+  fields:
+  - name: Authority
+    description: is the authority to enable authorization for
+    type: url
+    pointer: true
+
+AddAccountAuthorityOperation:
+  union: { type: accountAuthOperation, value: AddAuthority }
+  fields:
+  - name: Authority
+    description: is the authority to add
+    type: url
+    pointer: true
+
+RemoveAccountAuthorityOperation:
+  union: { type: accountAuthOperation, value: RemoveAuthority }
+  fields:
+  - name: Authority
+    description: is the authority to add
+    type: url
+    pointer: true
+
+PendingTransactionGCOperation:
+  union: { type: networkMaintenanceOperation, value: pendingTransactionGC }
+  fields:
+  - name: Account
+    description: is the account to collect garbage from
+    type: url
+    pointer: true

@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -27,10 +27,10 @@ func (BurnCredits) check(st *StateManager, tx *Delivery) (*protocol.BurnCredits,
 	}
 
 	// BurnCredits has no fee so we must enforce a minimum burn amount
-	if body.Amount < uint64(protocol.MinimumCreditPurchase) {
+	if body.Amount < uint64(protocol.FeeMinimumCreditPurchase) {
 		return nil, errors.BadRequest.WithFormat("invalid amount %v, minimum is %v",
 			protocol.FormatAmount(body.Amount, protocol.CreditPrecisionPower),
-			protocol.FormatAmount(uint64(protocol.MinimumCreditPurchase), protocol.CreditPrecisionPower))
+			protocol.FormatAmount(uint64(protocol.FeeMinimumCreditPurchase), protocol.CreditPrecisionPower))
 	}
 
 	return body, nil

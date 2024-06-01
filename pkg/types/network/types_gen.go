@@ -26,7 +26,9 @@ type GlobalValues struct {
 	Routing   *protocol.RoutingTable      `json:"routing,omitempty" form:"routing" query:"routing" validate:"required"`
 	// ExecutorVersion is the active executor version.
 	ExecutorVersion protocol.ExecutorVersion `json:"executorVersion,omitempty" form:"executorVersion" query:"executorVersion"`
-	extraData       []byte
+	// BvnExecutorVersions is the active executor version of each BVN.
+	BvnExecutorVersions []*protocol.PartitionExecutorVersion `json:"bvnExecutorVersions,omitempty" form:"bvnExecutorVersions" query:"bvnExecutorVersions" validate:"required"`
+	extraData           []byte
 }
 
 var machine_GlobalValues = &encoding.Machine[*GlobalValues]{
@@ -38,6 +40,7 @@ var machine_GlobalValues = &encoding.Machine[*GlobalValues]{
 		{Name: "Network", Number: 3, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.StructPtrField[*GlobalValues, *protocol.NetworkDefinition, protocol.NetworkDefinition](func(v *GlobalValues) **protocol.NetworkDefinition { return &v.Network })},
 		{Name: "Routing", Number: 4, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.StructPtrField[*GlobalValues, *protocol.RoutingTable, protocol.RoutingTable](func(v *GlobalValues) **protocol.RoutingTable { return &v.Routing })},
 		{Name: "ExecutorVersion", Number: 5, Binary: true, OmitEmpty: true, Accessor: encoding.EnumField[*GlobalValues, *protocol.ExecutorVersion, protocol.ExecutorVersion](func(v *GlobalValues) *protocol.ExecutorVersion { return &v.ExecutorVersion })},
+		{Name: "BvnExecutorVersions", Number: 6, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.SliceField[*GlobalValues, *protocol.PartitionExecutorVersion, encoding.StructPtrField[encoding.SliceIndex[*protocol.PartitionExecutorVersion], *protocol.PartitionExecutorVersion, protocol.PartitionExecutorVersion]](func(v *GlobalValues) *[]*protocol.PartitionExecutorVersion { return &v.BvnExecutorVersions })},
 	},
 }
 

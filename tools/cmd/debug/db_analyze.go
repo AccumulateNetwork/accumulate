@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -14,9 +14,14 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
+	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/remote"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 var cmdDbAnalyze = &cobra.Command{
@@ -29,8 +34,14 @@ var cmdDbAnalyze = &cobra.Command{
 	Run:  analyzeDatabases,
 }
 
+var flagDbAnalyze = struct {
+	Accounts bool
+}{}
+
 func init() {
 	cmdDb.AddCommand(cmdDbAnalyze)
+
+	cmdDbAnalyze.Flags().BoolVar(&flagDbAnalyze.Accounts, "accounts", false, "Scan accounts via the BPT instead of scanning the entire database")
 }
 
 func analyzeDatabases(_ *cobra.Command, args []string) {
@@ -70,20 +81,81 @@ func analyzeDb(src keyvalue.Store, progress func(string)) error {
 	t := time.NewTicker(time.Second / 2)
 	defer t.Stop()
 
-	var count int
 	n := new(node)
-	err := src.ForEach(func(key *record.Key, value []byte) error {
-		select {
-		case <-t.C:
-			progress(fmt.Sprintf("Analyzing %d...", count))
-		default:
-		}
-		count++
 
-		b, _ := key.MarshalBinary()
-		n.Add(key, int64(len(b)+len(value)))
-		return nil
-	})
+	var err error
+	if flagDbAnalyze.Accounts {
+		db := coredb.New(memory.NewChangeSet(memory.ChangeSetOptions{
+			Get: src.Get,
+		}), nil)
+
+		var count int
+		err = db.Collect(&ioutil.Discard{}, nil, &coredb.CollectOptions{
+			Predicate: func(r database.Record) (bool, error) {
+				// Don't count the BPT
+				if r.Key().Get(0) == "BPT" {
+					return false, nil
+				}
+
+				// Skip chains
+				if _, ok := r.(*coredb.Chain2); ok {
+					return false, nil
+				}
+
+				// Print progress
+				switch r.Key().Get(0) {
+				case "Account":
+					h := r.Key().SliceJ(2).Hash()
+					fmt.Printf("\033[A\r\033[KScanning (%d) [%x] %v\n", count, h[:4], r.Key())
+
+				case "Message", "Transaction":
+					fmt.Printf("\033[A\r\033[KScanning (%d) %v\n", count, r.Key())
+				}
+				count++
+				select {
+				case <-t.C:
+				default:
+				}
+
+				// Walk composite records
+				v, ok := r.(database.Value)
+				if !ok {
+					return true, nil
+				}
+
+				// Get the binary data
+				u, _, err := v.GetValue()
+				if err != nil {
+					return false, errors.UnknownError.WithFormat("get record value: %w", err)
+				}
+				b, err := u.MarshalBinary()
+				if err != nil {
+					return false, errors.EncodingError.WithFormat("marshal record value: %w", err)
+				}
+
+				// Record
+				n.Add(r.Key(), int64(len(b)))
+
+				// Don't actually collect
+				return false, nil
+			},
+		})
+
+	} else {
+		var count int
+		err = src.ForEach(func(key *record.Key, value []byte) error {
+			select {
+			case <-t.C:
+				progress(fmt.Sprintf("Analyzing %d...", count))
+			default:
+			}
+			count++
+
+			b, _ := key.MarshalBinary()
+			n.Add(key, int64(len(b)+len(value)))
+			return nil
+		})
+	}
 	if err != nil {
 		return err
 	}

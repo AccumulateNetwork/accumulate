@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -506,12 +506,12 @@ func (c *Client) pullMessages(ctx context.Context, missing []*missingMessage) er
 	slog.InfoCtx(ctx, "Fetching messages", "chains", accounts, "remaining", len(missing))
 	for i, m := range missing {
 		if i > 0 && i%100 == 0 {
-			slog.InfoCtx(ctx, "Fetching messages", "chains", accounts, "remaining", len(missing)-i)
 			err := batch.Commit()
 			if err != nil {
 				return errors.UnknownError.Wrap(err)
 			}
 			batch = c.OpenDB(true)
+			slog.InfoCtx(ctx, "Fetching messages", "chains", accounts, "remaining", len(missing)-i)
 		}
 
 		// Verify the message is actually missing
@@ -586,6 +586,12 @@ func (c *Client) IndexAccountChains(ctx context.Context, acctUrl *url.URL) error
 			return errors.UnknownError.WithFormat("update source index of %s index chain: %w", name, err)
 		}
 
+		// Update the root index index
+		err = buildIndexChainIndex(chain.Inner(), indices.RootIndexIndex(), indexRootIndexIndex)
+		if err != nil {
+			return errors.UnknownError.WithFormat("update root index index of %s index chain: %w", name, err)
+		}
+
 		// Update the block index
 		err = buildIndexChainIndex(chain.Inner(), indices.BlockIndex(), indexBlockIndex)
 		if err != nil {
@@ -631,6 +637,10 @@ func indexBlockTime(e *protocol.IndexEntry) (time.Time, error) {
 		return time.Time{}, errSkip
 	}
 	return *e.BlockTime, nil
+}
+
+func indexRootIndexIndex(e *protocol.IndexEntry) (uint64, error) {
+	return e.RootIndexIndex, nil
 }
 
 func buildMessageIndex[M messaging.Message, T any](batch *DB, chain *merkle.Chain, index *ChainIndex[T], value func(M) (T, error)) error {
@@ -835,6 +845,7 @@ func (c *Client) IndexAccountTransactions(ctx context.Context, accounts ...*url.
 	// directory's anchor chain index for each partition
 	type PartData struct {
 		ID                        string
+		Url                       *url.URL
 		RootIndex, DirAnchorIndex *IndexDBAccountChain
 		AnchorIndex               []*AnchorMetadata
 	}
@@ -855,6 +866,7 @@ func (c *Client) IndexAccountTransactions(ctx context.Context, accounts ...*url.
 
 		part := new(PartData)
 		part.ID = partId
+		part.Url = protocol.PartitionUrl(partId)
 		parts[partId] = part
 
 		// Load the partition's root chain index
@@ -930,16 +942,16 @@ func (c *Client) IndexAccountTransactions(ctx context.Context, accounts ...*url.
 					return errors.NotFound.WithFormat("cannot find index entry for root chain entry %d: %w", main.Source, err)
 				}
 
-				// Get anchor
-				_, anchor, ok := FindEntry(part.AnchorIndex, ByAnchorBlock(root.BlockIndex))
-				if !ok || anchor.Anchor.MinorBlockIndex != root.BlockIndex {
-					return errors.NotFound.WithFormat("cannot find anchor for %s block %d", part.ID, root.BlockIndex)
+				// Get root chain state
+				state, err := batch.Account(part.Url.JoinPath(protocol.Ledger)).RootChain().State(int64(root.Source))
+				if err != nil {
+					return errors.NotFound.WithFormat("load %s root chain state at %d: %w", part.ID, root.Source, err)
 				}
 
 				// TODO skip if not anchored
 
 				// Find the index when the anchor was anchored
-				dirAnchorPos, err := batch.Account(protocol.DnUrl().JoinPath(protocol.AnchorPool)).AnchorChain(routes[account]).Root().IndexOf(anchor.Anchor.RootChainAnchor[:])
+				dirAnchorPos, err := batch.Account(protocol.DnUrl().JoinPath(protocol.AnchorPool)).AnchorChain(routes[account]).Root().IndexOf(state.Anchor())
 				if err != nil {
 					return errors.UnknownError.WithFormat("locate chain entry for block %d anchor: %w", root.BlockIndex, err)
 				}

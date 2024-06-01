@@ -136,25 +136,33 @@ func initEip712TypeDictionary() {
 
 func (v *SequenceOptions) MarshalJSON() ([]byte, error) {
 	u := struct {
-		NodeID *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"nodeID,omitempty"`
+		NodeID    *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"nodeID,omitempty"`
+		ExtraData *string                                 `json:"$epilogue,omitempty"`
 	}{}
 	if !(v.NodeID == ("")) {
 		u.NodeID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.NodeID, Func: p2p.UnmarshalPeerIDJSON}
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *SequenceOptions) UnmarshalJSON(data []byte) error {
 	u := struct {
-		NodeID *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"nodeID,omitempty"`
+		NodeID    *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"nodeID,omitempty"`
+		ExtraData *string                                 `json:"$epilogue,omitempty"`
 	}{}
 	u.NodeID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.NodeID, Func: p2p.UnmarshalPeerIDJSON}
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if u.NodeID != nil {
 		v.NodeID = u.NodeID.Value
 	}
 
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }

@@ -562,6 +562,7 @@ func (v *DbPatch) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Operations *encoding.JsonUnmarshalListWith[DbPatchOp] `json:"operations,omitempty"`
 		Result     *DbPatchResult                             `json:"result,omitempty"`
+		ExtraData  *string                                    `json:"$epilogue,omitempty"`
 	}{}
 	if !(len(v.Operations) == 0) {
 		u.Operations = &encoding.JsonUnmarshalListWith[DbPatchOp]{Value: v.Operations, Func: UnmarshalDbPatchOpJSON}
@@ -569,36 +570,42 @@ func (v *DbPatch) MarshalJSON() ([]byte, error) {
 	if !(v.Result == nil) {
 		u.Result = v.Result
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *DbPatchResult) MarshalJSON() ([]byte, error) {
 	u := struct {
-		StateHash string `json:"stateHash,omitempty"`
+		StateHash *string `json:"stateHash,omitempty"`
+		ExtraData *string `json:"$epilogue,omitempty"`
 	}{}
 	if !(v.StateHash == ([32]byte{})) {
-		u.StateHash = encoding.ChainToJSON(v.StateHash)
+		u.StateHash = encoding.ChainToJSON(&v.StateHash)
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *DeleteDbPatchOp) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type DbPatchOpType `json:"type"`
-		Key  *record.Key   `json:"key,omitempty"`
+		Type      DbPatchOpType `json:"type"`
+		Key       *record.Key   `json:"key,omitempty"`
+		ExtraData *string       `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Key == nil) {
 		u.Key = v.Key
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *PutDbPatchOp) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type  DbPatchOpType `json:"type"`
-		Key   *record.Key   `json:"key,omitempty"`
-		Value *string       `json:"value,omitempty"`
+		Type      DbPatchOpType `json:"type"`
+		Key       *record.Key   `json:"key,omitempty"`
+		Value     *string       `json:"value,omitempty"`
+		ExtraData *string       `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Key == nil) {
@@ -607,6 +614,7 @@ func (v *PutDbPatchOp) MarshalJSON() ([]byte, error) {
 	if !(len(v.Value) == 0) {
 		u.Value = encoding.BytesToJSON(v.Value)
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
@@ -614,10 +622,12 @@ func (v *DbPatch) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Operations *encoding.JsonUnmarshalListWith[DbPatchOp] `json:"operations,omitempty"`
 		Result     *DbPatchResult                             `json:"result,omitempty"`
+		ExtraData  *string                                    `json:"$epilogue,omitempty"`
 	}{}
 	u.Operations = &encoding.JsonUnmarshalListWith[DbPatchOp]{Value: v.Operations, Func: UnmarshalDbPatchOpJSON}
 	u.Result = v.Result
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if u.Operations != nil {
@@ -627,52 +637,70 @@ func (v *DbPatch) UnmarshalJSON(data []byte) error {
 		}
 	}
 	v.Result = u.Result
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (v *DbPatchResult) UnmarshalJSON(data []byte) error {
 	u := struct {
-		StateHash string `json:"stateHash,omitempty"`
+		StateHash *string `json:"stateHash,omitempty"`
+		ExtraData *string `json:"$epilogue,omitempty"`
 	}{}
-	u.StateHash = encoding.ChainToJSON(v.StateHash)
-	if err := json.Unmarshal(data, &u); err != nil {
+	u.StateHash = encoding.ChainToJSON(&v.StateHash)
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if x, err := encoding.ChainFromJSON(u.StateHash); err != nil {
 		return fmt.Errorf("error decoding StateHash: %w", err)
 	} else {
-		v.StateHash = x
+		v.StateHash = *x
+	}
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
 	}
 	return nil
 }
 
 func (v *DeleteDbPatchOp) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type DbPatchOpType `json:"type"`
-		Key  *record.Key   `json:"key,omitempty"`
+		Type      DbPatchOpType `json:"type"`
+		Key       *record.Key   `json:"key,omitempty"`
+		ExtraData *string       `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Key = v.Key
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Key = u.Key
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (v *PutDbPatchOp) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type  DbPatchOpType `json:"type"`
-		Key   *record.Key   `json:"key,omitempty"`
-		Value *string       `json:"value,omitempty"`
+		Type      DbPatchOpType `json:"type"`
+		Key       *record.Key   `json:"key,omitempty"`
+		Value     *string       `json:"value,omitempty"`
+		ExtraData *string       `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Key = v.Key
 	u.Value = encoding.BytesToJSON(v.Value)
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -683,6 +711,10 @@ func (v *PutDbPatchOp) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("error decoding Value: %w", err)
 	} else {
 		v.Value = x
+	}
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
 	}
 	return nil
 }

@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -190,7 +190,7 @@ func setupSim(t *testing.T, net *accumulated.NetworkInit) (*simulator.Simulator,
 
 		// FIXME should not be necessary, but it is for the block hook that
 		// drops an anchor
-		simulator.SkipProposalCheck,
+		simulator.SkipProposalCheck(),
 	)
 	require.NoError(t, err)
 

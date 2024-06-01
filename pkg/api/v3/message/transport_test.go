@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/multiformats/go-multiaddr"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -58,4 +59,23 @@ func TestTransport(t *testing.T) {
 	// Verify the dialer was only used once and the context was canceled
 	require.Equal(t, 1, dialCount)
 	<-didCancel
+}
+
+func TestEncodingError(t *testing.T) {
+	ctx := context.Background()
+	addr := multiaddr.StringCast("/dns/foo")
+
+	dialer := NewMockMultiDialer(t)
+	dialer.EXPECT().Dial(mock.Anything, addr).Return(nil, nil).Once()
+	dialer.EXPECT().BadDial(mock.Anything, addr, mock.Anything, mock.Anything).Return(true).Once()
+
+	tr := new(RoutedTransport)
+	tr.Dialer = dialer
+	_, err := tr.dial(ctx, addr, map[string]StreamOf[Message]{}, func(s Stream) error {
+		var err error
+		err = errors.EncodingError.With("")
+		err = errors.PeerMisbehaved.Wrap(err)
+		return err
+	})
+	require.ErrorIs(t, err, errors.InternalError)
 }

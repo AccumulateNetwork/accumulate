@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -55,7 +55,7 @@ func (AddCredits) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 
 	// minimum spend (ACME) = minimum spend (credits) * dollars/credit ÷ dollars/ACME
 	minSpend := new(big.Int)
-	minSpend.SetUint64(protocol.MinimumCreditPurchase.AsUInt64() * protocol.AcmeOraclePrecision * protocol.AcmePrecision)
+	minSpend.SetUint64(protocol.FeeMinimumCreditPurchase.AsUInt64() * protocol.AcmeOraclePrecision * protocol.AcmePrecision)
 	minSpend.Div(minSpend, big.NewInt(int64(protocol.CreditUnitsPerFiatUnit*st.Globals.Oracle.Price)))
 	if body.Amount.Cmp(minSpend) < 0 {
 		return nil, fmt.Errorf("amount is less than minimum")

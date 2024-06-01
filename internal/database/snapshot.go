@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -13,10 +13,10 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/util/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
@@ -34,6 +34,7 @@ type CollectOptions struct {
 	BuildIndex     bool
 	Predicate      func(database.Record) (bool, error)
 	DidWriteHeader func(*snapshot.Writer) error
+	KeepMessage    func(messaging.Message) (bool, error)
 
 	Metrics *CollectMetrics
 }
@@ -135,7 +136,7 @@ func (batch *Batch) Collect(file io.WriteSeeker, partition *url.URL, opts *Colle
 	return nil
 }
 
-func (batch *Batch) writeSnapshotHeader(w *snapshot.Writer, partition *url.URL, opts *CollectOptions) error {
+func (batch *Batch) writeSnapshotHeader(w *snapshot.Writer, partition *url.URL, _ *CollectOptions) error {
 	header := new(snapshot.Header)
 
 	// Load the BPT root hash
@@ -195,7 +196,7 @@ func (batch *Batch) collectAccounts(w *snapshot.Writer, index, hashes *indexing.
 		// Collect message hashes from all the message chains
 		err = collectMessageHashes(account, hashes, opts)
 		if err != nil {
-			return errors.UnknownError.Wrap(err)
+			return errors.UnknownError.WithFormat("collect %v message hashes: %w", account.Url(), err)
 		}
 	}
 	if it.Err() != nil {
@@ -309,7 +310,7 @@ func (batch *Batch) collectBPT(w *snapshot.Writer, opts *CollectOptions) error {
 type RestoreOptions struct {
 	BatchRecordLimit int
 	SkipHashCheck    bool
-	Predicate        func(*snapshot.RecordEntry, database.Value) (bool, error)
+	Predicate        func(*snapshot.RecordEntry) (bool, error) //, func() (database.Value, error)
 
 	Metrics *RestoreMetrics
 }
@@ -361,7 +362,13 @@ func Restore(db Beginner, file ioutil.SectionReader, opts *RestoreOptions) error
 		}
 
 		for {
+			// Update the BPT, commit, and recreate the batch after every N
+			// records
 			if opts.BatchRecordLimit != 0 && count > 0 && count%opts.BatchRecordLimit == 0 {
+				err = batch.UpdateBPT()
+				if err != nil {
+					return errors.UnknownError.WithFormat("update BPT: %w", err)
+				}
 				err = batch.Commit()
 				if err != nil {
 					return errors.UnknownError.WithFormat("commit changes: %w", err)
@@ -378,23 +385,23 @@ func Restore(db Beginner, file ioutil.SectionReader, opts *RestoreOptions) error
 				return errors.UnknownError.WithFormat("read next record: %w", err)
 			}
 
-			v, err := values.Resolve[database.Value](batch, entry.Key)
-			if err != nil {
-				return errors.UnknownError.WithFormat("resolve %v: %w", entry.Key, err)
-			}
-
 			if opts.Metrics != nil {
 				opts.Metrics.Records.Restoring = count
 			}
 
 			if opts.Predicate != nil {
-				ok, err := opts.Predicate(entry, v)
+				ok, err := opts.Predicate(entry)
 				if err != nil {
 					return errors.UnknownError.Wrap(err)
 				}
 				if !ok {
 					continue
 				}
+			}
+
+			v, err := values.Resolve[database.Value](batch, entry.Key)
+			if err != nil {
+				return errors.UnknownError.WithFormat("resolve %v: %w", entry.Key, err)
 			}
 
 			err = v.LoadBytes(entry.Value, true)
@@ -409,6 +416,12 @@ func Restore(db Beginner, file ioutil.SectionReader, opts *RestoreOptions) error
 				}
 			}
 		}
+	}
+
+	// Force the BPT to update
+	err = batch.UpdateBPT()
+	if err != nil {
+		return errors.UnknownError.WithFormat("update BPT: %w", err)
 	}
 
 	err = batch.Commit()
@@ -503,7 +516,6 @@ func collectMessageHashes(a *Account, hashes *indexing.Bucket, opts *CollectOpti
 			continue
 		}
 
-		isSig := strings.EqualFold(chain.Name, "signature")
 		c, err := a.ChainByName(chain.Name)
 		if err != nil {
 			return errors.InvalidRecord.Wrap(err)
@@ -534,38 +546,75 @@ func collectMessageHashes(a *Account, hashes *indexing.Bucket, opts *CollectOpti
 		if head.Count == 0 {
 			return nil
 		}
-
-		entries, err := c.Inner().Entries(0, head.Count)
-		if err != nil {
-			return errors.UnknownError.WithFormat("load %s chain entries: %w", c.Name(), err)
-		}
-		for _, h := range entries {
-			err = hashes.Write(*(*[32]byte)(h), nil)
+		for _, h := range head.HashList {
+			err = collectMessageHash(a, c, hashes, opts, *(*[32]byte)(h))
 			if err != nil {
-				return errors.UnknownError.WithFormat("record %s chain entry: %w", c.Name(), err)
+				return errors.UnknownError.Wrap(err)
 			}
+		}
 
-			if !isSig {
+		var gotMP bool
+		for i := 256; i < int(head.Count); i += 256 {
+			s, err := c.State(int64(i) - 1)
+			switch {
+			case err == nil:
+				gotMP = true
+			case !errors.Is(err, errors.NotFound):
+				return errors.UnknownError.Wrap(err)
+			default:
+				// The mark point is missing. Assume this is an error if we have
+				// a previous mark point. However if *all* mark points are
+				// missing, assume that is intentional.
+				if gotMP {
+					slog.Error("Missing mark point", "account", a.Url(), "height", i-1)
+				} else {
+					slog.Debug("Skipping mark point", "account", a.Url(), "height", i-1)
+				}
 				continue
 			}
-
-			msg, err := a.parent.newMessage(messageKey{*(*[32]byte)(h)}).Main().Get()
-			if err != nil {
-				return errors.UnknownError.WithFormat("load %s chain entry: %w", c.Name(), err)
-			}
-			if msg, ok := msg.(messaging.MessageForTransaction); ok {
-				err = hashes.Write(msg.GetTxID().Hash(), nil)
+			for _, h := range s.HashList {
+				err = collectMessageHash(a, c, hashes, opts, *(*[32]byte)(h))
 				if err != nil {
-					return errors.UnknownError.WithFormat("record %s chain entry: %w", c.Name(), err)
+					return errors.UnknownError.Wrap(err)
 				}
 			}
-		}
-		if opts.Metrics != nil {
-			opts.Metrics.Messages.Count += len(entries)
 		}
 	}
 
 	return errors.UnknownError.Wrap(err)
+}
+
+func collectMessageHash(a *Account, c *Chain2, hashes *indexing.Bucket, opts *CollectOptions, h [32]byte) error {
+	msg, err := a.parent.newMessage(messageKey{h}).Main().Get()
+	if err != nil {
+		slog.Error("Failed to collect message", "account", a.Url(), "hash", logging.AsHex(h), "error", err)
+		return nil
+	}
+
+	if opts.KeepMessage != nil {
+		ok, err := opts.KeepMessage(msg)
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+		if !ok {
+			return nil
+		}
+	}
+
+	if opts.Metrics != nil {
+		opts.Metrics.Messages.Count++
+	}
+	err = hashes.Write(h, nil)
+	if err != nil {
+		return errors.UnknownError.WithFormat("record %s chain entry: %w", c.Name(), err)
+	}
+
+	forTxn, ok := msg.(messaging.MessageForTransaction)
+	if !ok {
+		return nil
+	}
+
+	return collectMessageHash(a, c, hashes, opts, forTxn.GetTxID().Hash())
 }
 
 func writeSnapshotIndex(w *snapshot.Writer, index *indexing.Bucket, opts *CollectOptions) error {

@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -168,7 +168,7 @@ func (d *dispatcher) send(ctx context.Context, queue map[string][]*messaging.Env
 
 	check := func(err error, peer *coretypes.Peer) {
 		err = CheckDispatchError(err)
-		if err != nil {
+		if err == nil {
 			return
 		}
 
@@ -243,11 +243,11 @@ func (d *dispatcher) getClients(ctx context.Context, want map[string]bool) map[s
 	}()
 
 	// Walk the directory for dual-mode nodes on the desired partitions
-	WalkPeers(ctx, d.self["directory"], func(ctx context.Context, peer coretypes.Peer) (rpc.NetworkClient, bool) {
+	WalkPeers(ctx, d.self["directory"], func(ctx context.Context, peer coretypes.Peer) (WalkClient, bool) {
 		scanned++
 
 		// Create a client for the BVNN
-		bvn, err := NewHTTPClient(ctx, peer, config.PortOffsetBlockValidator-config.PortOffsetDirectory)
+		bvn, err := NewHTTPClientForPeer(peer, config.PortOffsetBlockValidator-config.PortOffsetDirectory)
 		if err != nil {
 			slog.ErrorCtx(ctx, "Failed to create client for peer (bvn)", "peer", peer.NodeInfo.ID(), "error", err)
 			mGetClientsFailed.Inc()
@@ -281,7 +281,7 @@ func (d *dispatcher) getClients(ctx context.Context, want map[string]bool) map[s
 		}
 
 		// Scan the DNN's peers
-		dir, err := NewHTTPClient(ctx, peer, 0)
+		dir, err := NewHTTPClientForPeer(peer, 0)
 		if err != nil {
 			slog.ErrorCtx(ctx, "Failed to create client for peer (directory)", "peer", peer.NodeInfo.ID(), "error", err)
 			mGetClientsFailed.Inc()

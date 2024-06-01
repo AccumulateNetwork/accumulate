@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -9,6 +9,9 @@ package message
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
+	"os"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
@@ -52,6 +55,9 @@ type RoutedTransport struct {
 
 	// Attempts is the number of connection attempts to make.
 	Attempts int
+
+	// Debug prints round trip requests to stderr.
+	Debug bool
 }
 
 // RoundTrip routes each requests and executes a round-trip call. If there are
@@ -91,6 +97,12 @@ func (c *RoutedTransport) RoundTrip(ctx context.Context, requests []Message, cal
 
 		// Dial the address
 		_, err = c.dial(ctx, addr, streams, func(s Stream) error {
+			if c.Debug {
+				if b, err := json.Marshal(req); err == nil {
+					fmt.Fprintf(os.Stderr, "--> %s\n", b)
+				}
+			}
+
 			// Send the request
 			err := s.Write(req)
 			if err != nil {
@@ -99,12 +111,25 @@ func (c *RoutedTransport) RoundTrip(ctx context.Context, requests []Message, cal
 
 			// Wait for the response
 			res, err := s.Read()
+			if c.Debug {
+				var v any = res
+				if err != nil {
+					v = err
+				}
+				if b, err := json.Marshal(v); err == nil {
+					fmt.Fprintf(os.Stderr, "<-- %s\n", b)
+				}
+			}
 			if err != nil {
 				// Add peer ID
-				p, ok := err.(interface{ Peer() peer.ID })
+				var perr interface{ Peer() peer.ID }
+				ok := errors.As(err, &perr)
+				if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+					err = errors.StreamAborted.WithFormat("%v", err)
+				}
 				err := errors.PeerMisbehaved.WithFormat("read request: %w", err)
 				if ok {
-					err.Data, _ = json.Marshal(struct{ Peer peer.ID }{Peer: p.Peer()})
+					err.Data, _ = json.Marshal(struct{ Peer peer.ID }{Peer: perr.Peer()})
 				}
 				return err
 			}
@@ -291,10 +316,19 @@ func (c *RoutedTransport) dial(ctx context.Context, addr multiaddr.Multiaddr, st
 			return s, nil // Success
 		}
 
-		// Return the error if it's a client error (e.g. misdial)
 		var err2 *errors.Error
-		if errors.As(err, &err2) && err2.Code.IsClientError() {
+		switch {
+		case errors.As(err, &err2) && err2.Code.IsClientError():
+			// Return the error if it's a client error (e.g. misdial)
 			return nil, errors.UnknownError.Wrap(err)
+
+		case errors.EncodingError.ErrorAs(err, &err2),
+			errors.StreamAborted.ErrorAs(err, &err2):
+			// If the error is an encoding issue, log it and return "internal error"
+			if isMulti {
+				multi.BadDial(ctx, addr, s, err)
+			}
+			return nil, errors.InternalError.WithFormat("internal error: %w", err)
 		}
 
 		// Remove the stream from the dictionary

@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -62,6 +62,10 @@ func (c *ChangeSet) Commit() error {
 	// Is there anything to do?
 	if len(entries) == 0 {
 		return nil
+	}
+
+	if c.opts.Commit == nil {
+		panic("attempted to commit entries from a read-only change set")
 	}
 
 	// Commit to the parent

@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -90,8 +90,10 @@ func TestSyntheticAnchor(t *testing.T) {
 	block := &Block{
 		Executor: &Executor{
 			globals: globals,
-			messageExecutors: map[messaging.MessageType]ExecutorFor[messaging.MessageType, *MessageContext]{
-				messaging.MessageTypeSequenced: fakeExecutor{},
+			messageExecutors: map[messaging.MessageType]ExecutorFactory2[messaging.MessageType, *MessageContext]{
+				messaging.MessageTypeSequenced: func(*MessageContext) (ExecutorFor[messaging.MessageType, *MessageContext], bool) {
+					return fakeExecutor{}, true
+				},
 			},
 		},
 	}

@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -65,7 +65,7 @@ func (x AddCredits) Execute(st *StateManager, tx *Delivery) (protocol.Transactio
 
 	// minimum spend (ACME) = minimum spend (credits) * dollars/credit ÷ dollars/ACME
 	minSpend := new(big.Int)
-	minSpend.SetUint64(protocol.MinimumCreditPurchase.AsUInt64() * protocol.AcmeOraclePrecision * protocol.AcmePrecision)
+	minSpend.SetUint64(protocol.FeeMinimumCreditPurchase.AsUInt64() * protocol.AcmeOraclePrecision * protocol.AcmePrecision)
 	minSpend.Div(minSpend, big.NewInt(int64(protocol.CreditUnitsPerFiatUnit*st.Globals.Oracle.Price)))
 	if body.Amount.Cmp(minSpend) < 0 {
 		return nil, fmt.Errorf("amount is less than minimum")
@@ -117,22 +117,18 @@ func (x AddCredits) Execute(st *StateManager, tx *Delivery) (protocol.Transactio
 	}
 	st.Submit(recipient, sdc)
 
-	var ledgerState *protocol.SystemLedger
-	err = st.LoadUrlAs(st.NodeUrl(protocol.Ledger), &ledgerState)
+	// Update the block's total burn amount
+	err = st.markAcmeBurnt(minSpend)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to update accounts: %v", err)
 	}
-
-	// Add the burnt acme to the internal ledger and send it with the anchor
-	// transaction
-	ledgerState.AcmeBurnt.Add(&ledgerState.AcmeBurnt, minSpend)
 
 	res := new(protocol.AddCreditsResult)
 	res.Oracle = st.Globals.Oracle.Price
 	res.Credits = credits.Uint64()
 	res.Amount = body.Amount
 
-	err = st.Update(account, ledgerState)
+	err = st.Update(account)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update accounts: %v", err)
 	}

@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -27,11 +27,11 @@ type StateManager struct {
 // NewStateManager creates a new state manager and loads the transaction's
 // origin. If the origin is not found, NewStateManager returns a valid state
 // manager along with a not-found error.
-func NewStateManager(net execute.DescribeShim, globals *core.GlobalValues, authDelegate AuthDelegate, batch *database.Batch, principal protocol.Account, transaction *protocol.Transaction, logger log.Logger) *StateManager {
+func NewStateManager(net execute.DescribeShim, globals *core.GlobalValues, authDelegate AuthDelegate, batch *database.Batch, principal protocol.Account, effectivePrincipal *url.URL, transaction *protocol.Transaction, logger log.Logger) *StateManager {
 	txid := *(*[32]byte)(transaction.GetHash())
 	m := new(StateManager)
 	m.AuthDelegate = authDelegate
-	m.OriginUrl = transaction.Header.Principal
+	m.OriginUrl = effectivePrincipal
 	m.Origin = principal
 	m.stateCache = *newStateCache(net, globals, transaction.Body.Type(), txid, batch)
 	m.logger.L = logger
@@ -41,10 +41,10 @@ func NewStateManager(net execute.DescribeShim, globals *core.GlobalValues, authD
 // NewStatelessManager creates a new state manager and does *not* hold a
 // reference to any state such as the transaction's principal or the current
 // network variables.
-func NewStatelessManager(net execute.DescribeShim, globals *core.GlobalValues, transaction *protocol.Transaction, logger log.Logger) *StateManager {
+func NewStatelessManager(net execute.DescribeShim, globals *core.GlobalValues, transaction *protocol.Transaction, effectivePrincipal *url.URL, logger log.Logger) *StateManager {
 	txid := *(*[32]byte)(transaction.GetHash())
 	m := new(StateManager)
-	m.OriginUrl = transaction.Header.Principal
+	m.OriginUrl = effectivePrincipal
 	m.stateCache = *newStatelessCache(net, globals, transaction.Body.Type(), txid)
 	m.logger.L = logger
 	return m

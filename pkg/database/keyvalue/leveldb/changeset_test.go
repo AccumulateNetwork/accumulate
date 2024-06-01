@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -16,7 +16,7 @@ import (
 func open(t testing.TB) kvtest.Opener {
 	dir := t.TempDir()
 	return func() (keyvalue.Beginner, error) {
-		return OpenFile(dir)
+		return Open(dir)
 	}
 }
 

@@ -4,6 +4,10 @@ NetworkInit:
   fields:
   - name: Id
     type: string
+  - name: Globals
+    type: network.GlobalValues
+    marshal-as: reference
+    pointer: true
   - name: Bootstrap
     type: NodeInit
     marshal-as: reference

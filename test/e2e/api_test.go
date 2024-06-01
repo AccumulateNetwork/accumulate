@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -23,8 +23,6 @@ import (
 )
 
 func TestMinorBlock_Expand(t *testing.T) {
-	t.Skip("Flaky, block may not contain anchors")
-
 	var timestamp uint64
 
 	// Initialize

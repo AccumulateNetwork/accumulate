@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -22,8 +22,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-var messageExecutors []func(ExecutorOptions) (messaging.MessageType, MessageExecutor)
-var signatureExecutors []func(ExecutorOptions) (protocol.SignatureType, SignatureExecutor)
+var messageExecutors []ExecutorFactory1[messaging.MessageType, *MessageContext]
+var signatureExecutors []ExecutorFactory1[protocol.SignatureType, *SignatureContext]
 
 type Executor struct {
 	ExecutorOptions
@@ -31,8 +31,8 @@ type Executor struct {
 
 	globals            *Globals
 	executors          map[protocol.TransactionType]chain.TransactionExecutor
-	messageExecutors   map[messaging.MessageType]MessageExecutor
-	signatureExecutors map[protocol.SignatureType]SignatureExecutor
+	messageExecutors   map[messaging.MessageType]ExecutorFactory2[messaging.MessageType, *MessageContext]
+	signatureExecutors map[protocol.SignatureType]ExecutorFactory2[protocol.SignatureType, *SignatureContext]
 	logger             logging.OptionalLogger
 	db                 database.Beginner
 	isValidator        bool
@@ -76,6 +76,7 @@ func NewExecutor(opts ExecutorOptions) (*Executor, error) {
 
 		// Operator transactions
 		chain.ActivateProtocolVersion{},
+		chain.NetworkMaintenance{},
 	}
 
 	switch opts.Describe.NetworkType {

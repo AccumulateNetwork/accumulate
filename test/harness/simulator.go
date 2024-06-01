@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -12,6 +12,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -43,6 +44,7 @@ func NewSim(tb testing.TB, opts ...simulator.Option) *Sim {
 
 func Recordings(tb testing.TB) simulator.RecordingFunc {
 	onFail := os.Getenv("RECORD_FAILURE")
+	always := strings.EqualFold(os.Getenv("RECORD_ALWAYS"), "yes")
 	if onFail == "" {
 		return nil
 	}
@@ -60,12 +62,16 @@ func Recordings(tb testing.TB) simulator.RecordingFunc {
 			return nil, err
 		}
 		tb.Cleanup(func() {
-			if !tb.Failed() {
+			if !always && !tb.Failed() {
 				assert.NoError(tb, f.Close())
 				return
 			}
 			if !didAnnounce {
-				tb.Logf("Failure recordings for %s are prefixed with %x", tb.Name(), prefix)
+				msg := "Failure recordings"
+				if !tb.Failed() {
+					msg = "Recordings"
+				}
+				tb.Logf("%s for %s are prefixed with %x", msg, tb.Name(), prefix)
 				didAnnounce = true
 			}
 			dst := filepath.Join(onFail, fmt.Sprintf("%x-%s-%d.record", prefix, partition, node))

@@ -218,13 +218,13 @@ func ETHaddress(pubKey []byte) (string, error) {
 	return fmt.Sprintf("0x%x", h), nil
 }
 
-func SignatureDidInitiate(sig Signature, txnInitHash []byte, initiator *Signature) bool {
+func SignatureDidInitiate(sig Signature, txnInitHash []byte, initiator *Signature) (ok, merkle bool) {
 	for _, sig := range unpackSignature(sig) {
 		if bytes.Equal(txnInitHash, sig.Metadata().Hash()) {
 			if initiator != nil {
 				*initiator = sig
 			}
-			return true
+			return true, false
 		}
 
 		init, ok := sig.(UserSignature)
@@ -234,16 +234,16 @@ func SignatureDidInitiate(sig Signature, txnInitHash []byte, initiator *Signatur
 
 		hash, err := init.Initiator()
 		if err != nil {
-			return false
+			return false, false
 		}
 		if bytes.Equal(txnInitHash, hash.MerkleHash()) {
 			if initiator != nil {
 				*initiator = sig
 			}
-			return true
+			return true, true
 		}
 	}
-	return false
+	return false, false
 }
 
 func unpackSignature(sig Signature) []Signature {

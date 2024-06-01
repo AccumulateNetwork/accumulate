@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -152,7 +152,7 @@ var goFuncs = template.FuncMap{
 }
 
 func GoTmplUnionMethod(u *UnionSpec, method string) string {
-	if u.Private {
+	if u.PrivateUnion {
 		method = typegen.LowerFirstWord(method)
 	}
 	if flags.ElidePackageType && strings.EqualFold(u.Name, u.Package) {
@@ -347,7 +347,7 @@ func goJsonMethod(field *Field) (methodName string, wantPtr bool) {
 	case Bytes, Duration, Any:
 		return code.Title(), false
 	case Hash:
-		return "Chain", false
+		return "Chain", true
 	case BigInt:
 		return "Bigint", true
 	}
@@ -415,7 +415,7 @@ func goJsonTypeSingle(field *Field, pointer string) string {
 	case BigInt:
 		return "*string"
 	case Hash:
-		return "string"
+		return "*string"
 	case Duration, Any:
 		return "interface{}"
 	}
@@ -834,9 +834,14 @@ func GoValueFromJson(field *Field, tgtName, srcName, errName string, errArgs ...
 		ptrPrefix = "&"
 	}
 
-	if !field.Repeatable {
-		return fmt.Sprintf("\tif x, err := encoding.%sFromJSON(%s); err != nil { return %s } else { %s = %sx }", method, srcName, err, tgtName, ptrPrefix), nil
+	if field.Repeatable {
+		return fmt.Sprintf("\t%s = make(%s, len(%s)); for i, x := range %[3]s { if x, err := encoding.%sFromJSON(x); err != nil { return %s } else { %[1]s[i] = %[6]sx } }", tgtName, GoResolveType(field, false, false), srcName, method, err, ptrPrefix), nil
 	}
 
-	return fmt.Sprintf("\t%s = make(%s, len(%s)); for i, x := range %[3]s { if x, err := encoding.%sFromJSON(x); err != nil { return %s } else { %[1]s[i] = %[6]sx } }", tgtName, GoResolveType(field, false, false), srcName, method, err, ptrPrefix), nil
+	expr := fmt.Sprintf("if x, err := encoding.%sFromJSON(%s); err != nil { return %s } else { %s = %sx }", method, srcName, err, tgtName, ptrPrefix)
+	if field.Pointer {
+		expr = fmt.Sprintf("if %s != nil { %s }", srcName, expr)
+	}
+
+	return "\t" + expr, nil
 }

@@ -284,6 +284,7 @@ func (v *Signature) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Txid      *url.TxID                                       `json:"txid,omitempty"`
 		Signature *encoding.JsonUnmarshalWith[protocol.Signature] `json:"signature,omitempty"`
+		ExtraData *string                                         `json:"$epilogue,omitempty"`
 	}{}
 	if !(v.Txid == nil) {
 		u.Txid = v.Txid
@@ -291,16 +292,19 @@ func (v *Signature) MarshalJSON() ([]byte, error) {
 	if !(protocol.EqualSignature(v.Signature, nil)) {
 		u.Signature = &encoding.JsonUnmarshalWith[protocol.Signature]{Value: v.Signature, Func: protocol.UnmarshalSignatureJSON}
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
 func (v *sigSection) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Signatures encoding.JsonList[*Signature] `json:"signatures,omitempty"`
+		ExtraData  *string                       `json:"$epilogue,omitempty"`
 	}{}
 	if !(len(v.Signatures) == 0) {
 		u.Signatures = v.Signatures
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
@@ -308,10 +312,12 @@ func (v *Signature) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Txid      *url.TxID                                       `json:"txid,omitempty"`
 		Signature *encoding.JsonUnmarshalWith[protocol.Signature] `json:"signature,omitempty"`
+		ExtraData *string                                         `json:"$epilogue,omitempty"`
 	}{}
 	u.Txid = v.Txid
 	u.Signature = &encoding.JsonUnmarshalWith[protocol.Signature]{Value: v.Signature, Func: protocol.UnmarshalSignatureJSON}
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.Txid = u.Txid
@@ -319,17 +325,27 @@ func (v *Signature) UnmarshalJSON(data []byte) error {
 		v.Signature = u.Signature.Value
 	}
 
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (v *sigSection) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Signatures encoding.JsonList[*Signature] `json:"signatures,omitempty"`
+		ExtraData  *string                       `json:"$epilogue,omitempty"`
 	}{}
 	u.Signatures = v.Signatures
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.Signatures = u.Signatures
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }

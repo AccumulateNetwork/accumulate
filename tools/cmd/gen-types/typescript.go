@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -99,7 +99,7 @@ func TsObjectify(field *Field, varName string) string {
 	case BigInt, Url, TxID:
 		return fmt.Sprintf("%s.toString()", varName)
 	case Bytes, Hash:
-		return fmt.Sprintf("Buffer.from(%s).toString('hex')", varName)
+		return fmt.Sprintf("%s && Buffer.from(%[1]s).toString('hex')", varName)
 	}
 
 	switch field.MarshalAs {

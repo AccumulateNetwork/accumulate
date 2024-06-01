@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -14,6 +14,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
@@ -31,7 +32,7 @@ func TestFee(t *testing.T) {
 
 		fee, err := s.ComputeTransactionFee(env.Transaction[0])
 		require.NoError(t, err)
-		require.Equal(t, FeeTransferTokens, fee)
+		requireEqualFee(t, FeeTransferTokens, fee)
 	})
 
 	t.Run("Lots of data", func(t *testing.T) {
@@ -46,7 +47,7 @@ func TestFee(t *testing.T) {
 		env.Transaction[0].Header.Metadata = make([]byte, 1024)
 		fee, err := s.ComputeTransactionFee(env.Transaction[0])
 		require.NoError(t, err)
-		require.Equal(t, FeeTransferTokens+FeeData*4, fee)
+		requireEqualFee(t, FeeTransferTokens+FeeData*4, fee)
 	})
 
 	t.Run("Scratch data", func(t *testing.T) {
@@ -61,7 +62,7 @@ func TestFee(t *testing.T) {
 		env.Transaction[0].Header.Metadata = make([]byte, 1024)
 		fee, err := s.ComputeTransactionFee(env.Transaction[0])
 		require.NoError(t, err)
-		require.Equal(t, FeeScratchData*5, fee)
+		requireEqualFee(t, FeeScratchData*5, fee)
 	})
 
 	t.Run("Create root ADI", func(t *testing.T) {
@@ -69,6 +70,9 @@ func TestFee(t *testing.T) {
 
 		// Make sure this is ignored for a root identity
 		s.CreateSubIdentity = 100
+
+		// Don't set the bare identity discount to verify the cost doesn't
+		// change
 
 		env :=
 			MustBuild(t, build.Transaction().
@@ -78,11 +82,14 @@ func TestFee(t *testing.T) {
 
 		fee, err := s.ComputeTransactionFee(env.Transaction[0])
 		require.NoError(t, err)
-		require.Equal(t, FeeCreateIdentity, fee)
+		requireEqualFee(t, FeeCreateIdentity, fee)
 	})
 
 	t.Run("Create sub ADI (original)", func(t *testing.T) {
 		s := new(FeeSchedule)
+
+		// Don't set the bare identity discount to verify the cost doesn't
+		// change
 
 		env :=
 			MustBuild(t, build.Transaction().
@@ -92,13 +99,16 @@ func TestFee(t *testing.T) {
 
 		fee, err := s.ComputeTransactionFee(env.Transaction[0])
 		require.NoError(t, err)
-		require.Equal(t, FeeCreateIdentity, fee)
+		requireEqualFee(t, FeeCreateIdentity, fee)
 	})
 
 	t.Run("Create sub ADI (reduced)", func(t *testing.T) {
 		s := new(FeeSchedule)
 		s.CreateSubIdentity = 100
 
+		// Don't set the bare identity discount to verify the cost doesn't
+		// change
+
 		env :=
 			MustBuild(t, build.Transaction().
 				For(AcmeUrl()).
@@ -107,7 +117,73 @@ func TestFee(t *testing.T) {
 
 		fee, err := s.ComputeTransactionFee(env.Transaction[0])
 		require.NoError(t, err)
-		require.Equal(t, s.CreateSubIdentity, fee)
+		requireEqualFee(t, s.CreateSubIdentity, fee)
+	})
+
+	t.Run("Create non-bare root ADI", func(t *testing.T) {
+		s := new(FeeSchedule)
+		s.CreateSubIdentity = FeeCreateKeyPage
+		s.BareIdentityDiscount = FeeCreateKeyPage
+
+		env :=
+			MustBuild(t, build.Transaction().
+				For(AcmeUrl()).
+				CreateIdentity("foo").
+				WithKeyBook("foo", "book").
+				SignWith(AccountUrl("foo", "book", "1")).Version(1).Timestamp(time.Now()).PrivateKey(acctesting.GenerateKey(t.Name())).Type(SignatureTypeLegacyED25519))
+
+		fee, err := s.ComputeTransactionFee(env.Transaction[0])
+		require.NoError(t, err)
+		requireEqualFee(t, FeeCreateIdentity, fee)
+	})
+
+	t.Run("Create non-bare sub ADI", func(t *testing.T) {
+		s := new(FeeSchedule)
+		s.CreateSubIdentity = FeeCreateKeyPage
+		s.BareIdentityDiscount = FeeCreateKeyPage
+
+		env :=
+			MustBuild(t, build.Transaction().
+				For(AcmeUrl()).
+				CreateIdentity("foo", "bar").
+				WithKeyBook("foo", "bar", "book").
+				SignWith(AccountUrl("foo", "book", "1")).Version(1).Timestamp(time.Now()).PrivateKey(acctesting.GenerateKey(t.Name())).Type(SignatureTypeLegacyED25519))
+
+		fee, err := s.ComputeTransactionFee(env.Transaction[0])
+		require.NoError(t, err)
+		requireEqualFee(t, FeeCreateKeyPage, fee)
+	})
+
+	t.Run("Create bare root ADI", func(t *testing.T) {
+		s := new(FeeSchedule)
+		s.CreateSubIdentity = FeeCreateKeyPage
+		s.BareIdentityDiscount = FeeCreateKeyPage
+
+		env :=
+			MustBuild(t, build.Transaction().
+				For(AcmeUrl()).
+				CreateIdentity("foo").
+				SignWith(AccountUrl("foo", "book", "1")).Version(1).Timestamp(time.Now()).PrivateKey(acctesting.GenerateKey(t.Name())).Type(SignatureTypeLegacyED25519))
+
+		fee, err := s.ComputeTransactionFee(env.Transaction[0])
+		require.NoError(t, err)
+		requireEqualFee(t, FeeCreateIdentity-FeeCreateKeyPage, fee)
+	})
+
+	t.Run("Create bare sub ADI", func(t *testing.T) {
+		s := new(FeeSchedule)
+		s.CreateSubIdentity = FeeCreateKeyPage
+		s.BareIdentityDiscount = FeeCreateKeyPage
+
+		env :=
+			MustBuild(t, build.Transaction().
+				For(AcmeUrl()).
+				CreateIdentity("foo", "bar").
+				SignWith(AccountUrl("foo", "book", "1")).Version(1).Timestamp(time.Now()).PrivateKey(acctesting.GenerateKey(t.Name())).Type(SignatureTypeLegacyED25519))
+
+		fee, err := s.ComputeTransactionFee(env.Transaction[0])
+		require.NoError(t, err)
+		requireEqualFee(t, FeeCreateDirectory, fee)
 	})
 
 	t.Run("All types", func(t *testing.T) {
@@ -137,6 +213,7 @@ func TestFee(t *testing.T) {
 
 				switch i {
 				case TransactionTypeActivateProtocolVersion,
+					TransactionTypeNetworkMaintenance,
 					TransactionTypeAcmeFaucet,
 					TransactionTypeBurnCredits,
 					TransactionTypeAddCredits:
@@ -182,7 +259,7 @@ func TestSubAdiFee(t *testing.T) {
 	fee, err := s.ComputeTransactionFee(env.Transaction[0])
 	require.NoError(t, err)
 
-	require.Equal(t, FeeCreateIdentity, fee)
+	requireEqualFee(t, FeeCreateIdentity, fee)
 }
 
 func TestSlidingIdentityFeeSchedule(t *testing.T) {
@@ -213,9 +290,9 @@ func TestSlidingIdentityFeeSchedule(t *testing.T) {
 		require.NoError(t, err)
 
 		if i < len(s.CreateIdentitySliding) {
-			require.Equal(t, s.CreateIdentitySliding[i], fee)
+			requireEqualFee(t, s.CreateIdentitySliding[i], fee)
 		} else {
-			require.Equal(t, FeeCreateIdentity, fee)
+			requireEqualFee(t, FeeCreateIdentity, fee)
 		}
 	}
 }
@@ -245,4 +322,11 @@ func TestMultiOutputRefund(t *testing.T) {
 
 	// Verify
 	require.GreaterOrEqual(t, fee2, fee1)
+}
+
+func requireEqualFee(t testing.TB, want, got Fee) {
+	t.Helper()
+	a := protocol.FormatAmount(uint64(want), CreditPrecisionPower)
+	b := protocol.FormatAmount(uint64(got), CreditPrecisionPower)
+	require.Equal(t, a, b)
 }

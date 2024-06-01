@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -61,7 +61,7 @@ func TestAPIv2Consistency(t *testing.T) {
 			return mem
 		}),
 		simulator.WithNetwork(testData.Network),
-		simulator.Deterministic,
+		simulator.Deterministic(),
 	)
 	require.NoError(t, err)
 

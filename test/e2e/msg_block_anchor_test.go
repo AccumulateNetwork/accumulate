@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -34,7 +34,7 @@ func TestAnchorThreshold(t *testing.T) {
 	opts := []simulator.Option{
 		simulator.SimpleNetwork(t.Name(), bvnCount, valCount),
 		simulator.Genesis(GenesisTime),
-		simulator.DisableAnchorHealing,
+		simulator.DisableAnchorHealing(),
 	}
 
 	// Capture the BVN's anchors and verify they're the same
@@ -113,7 +113,7 @@ func TestAnchorPlaceholder(t *testing.T) {
 
 	opts := []simulator.Option{
 		simulator.Genesis(GenesisTime),
-		simulator.DisableAnchorHealing,
+		simulator.DisableAnchorHealing(),
 	}
 
 	// One BVN, two nodes

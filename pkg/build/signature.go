@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -28,6 +28,12 @@ type SignatureBuilder struct {
 	// Ignore64Byte (when set) stops the signature builder from automatically
 	// correcting a transaction header or body that marshals to 64 bytes.
 	Ignore64Byte bool
+
+	// Use a Merkle hash to initiate the transaction. Only intended for testing
+	// purposes.
+	//
+	// Deprecated: Use plain hashes for initiation instead.
+	InitMerkle bool
 }
 
 func (b SignatureBuilder) Type(typ protocol.SignatureType) SignatureBuilder {
@@ -62,6 +68,11 @@ func (b SignatureBuilder) Reject() SignatureBuilder {
 
 func (b SignatureBuilder) Abstain() SignatureBuilder {
 	b.signer.Vote = protocol.VoteTypeAbstain
+	return b
+}
+
+func (b SignatureBuilder) Suggest() SignatureBuilder {
+	b.signer.Vote = protocol.VoteTypeSuggest
 	return b
 }
 
@@ -110,8 +121,18 @@ func (b SignatureBuilder) Metadata(v any) SignatureBuilder {
 	return b
 }
 
-func (b SignatureBuilder) PrivateKey(key []byte) SignatureBuilder {
-	b.signer.Signer = signing.PrivateKey(key)
+func (b SignatureBuilder) PrivateKey(key any) SignatureBuilder {
+	addr := b.parseKey(key, b.signer.Type, true)
+	sk, ok := addr.GetPrivateKey()
+	if !ok {
+		b.errorf(errors.BadRequest, "%v is not a private key", addr)
+		return b
+	}
+
+	b.signer.Signer = signing.PrivateKey(sk)
+	if b.signer.Type == 0 {
+		b.signer.Type = addr.GetType()
+	}
 	return b
 }
 
@@ -153,8 +174,11 @@ func (b SignatureBuilder) sign() SignatureBuilder {
 		return b
 	}
 
-	// Always use a simple hash
-	b.signer.InitMode = signing.InitWithSimpleHash
+	if b.InitMerkle {
+		b.signer.InitMode = signing.InitWithMerkleHash //nolint:staticcheck // Yes, this is deprecated. So is InitMerkle.
+	} else {
+		b.signer.InitMode = signing.InitWithSimpleHash
+	}
 
 	var signature protocol.Signature
 	var err error

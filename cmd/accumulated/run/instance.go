@@ -13,36 +13,44 @@ import (
 	"sync"
 	"time"
 
+	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"golang.org/x/exp/slices"
 	"golang.org/x/exp/slog"
 )
 
 type Instance struct {
-	network string
+	config  *Config
 	rootDir string
+	id      string
 
 	running  *sync.WaitGroup    // tracks jobs that want a graceful shutdown
 	context  context.Context    // canceled when the instance shuts down
 	shutdown context.CancelFunc // shuts down the instance
 	logger   *slog.Logger
 	p2p      *p2p.Node
+	services ioc.Registry
 }
 
 const minDiskSpace = 0.05
 
-func Start(ctx context.Context, cfg *Config) (_ *Instance, err error) {
+func Start(ctx context.Context, cfg *Config) (*Instance, error) {
+	inst, err := New(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+	return inst, inst.Start()
+}
+
+func New(ctx context.Context, cfg *Config) (*Instance, error) {
 	inst := new(Instance)
-	inst.network = cfg.Network
+	inst.config = cfg
 	inst.running = new(sync.WaitGroup)
 	inst.context, inst.shutdown = context.WithCancel(ctx)
+	inst.services = ioc.Registry{}
 
-	defer func() {
-		if err != nil {
-			inst.shutdown()
-		}
-	}()
-
+	var err error
 	if cfg.file != "" {
 		inst.rootDir, err = filepath.Abs(filepath.Dir(cfg.file))
 	} else {
@@ -58,29 +66,165 @@ func Start(ctx context.Context, cfg *Config) (_ *Instance, err error) {
 		return nil, errors.UnknownError.WithFormat("start logging: %w", err)
 	}
 
+	return inst, nil
+}
+
+func (i *Instance) Done() <-chan struct{} { return i.context.Done() }
+
+func (inst *Instance) Reset() error {
+	for _, c := range inst.config.Configurations {
+		c, ok := c.(resetable)
+		if !ok {
+			continue
+		}
+		err := c.reset(inst)
+		if err != nil {
+			return errors.UnknownError.WithFormat("reset %T: %w", c, err)
+		}
+	}
+
+	for _, s := range inst.services {
+		s, ok := s.(resetable)
+		if !ok {
+			continue
+		}
+		err := s.reset(inst)
+		if err != nil {
+			return errors.UnknownError.WithFormat("reset %T: %w", s, err)
+		}
+	}
+	return nil
+}
+
+func (inst *Instance) Start() error {
+	return inst.StartFiltered(func(s Service) bool { return true })
+}
+
+func (inst *Instance) StartFiltered(predicate func(Service) bool) (err error) {
+	// Cleanup if boot fails
+	defer func() {
+		if err != nil {
+			inst.shutdown()
+		}
+	}()
+
+	// Start metrics
+	if inst.config.Instrumentation == nil {
+		inst.config.Instrumentation = new(Instrumentation)
+	}
+	err = inst.config.Instrumentation.start(inst)
+	if err != nil {
+		return err
+	}
+
 	// Ensure the disk does not fill up (and is not currently full; requires
 	// logging)
 	free, err := diskUsage(inst.rootDir)
 	if err != nil {
-		return nil, err
+		return err
 	} else if free < minDiskSpace {
-		return nil, errors.FatalError.With("disk is full")
+		return errors.FatalError.With("disk is full")
 	}
 	go inst.checkDiskSpace()
 
-	// Start the P2P node
-	err = cfg.P2P.start(inst)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("start p2p: %w", err)
+	// Apply configurations
+	for _, c := range inst.config.Configurations {
+		err = c.apply(inst, inst.config)
+		if err != nil {
+			return err
+		}
 	}
 
-	return inst, nil
+	// Filter
+	allServices := inst.config.Services
+	if predicate != nil {
+		allServices = slices.DeleteFunc(allServices, func(s Service) bool { return !predicate(s) })
+	}
+
+	// Determine initialization order
+	services, err := ioc.Solve(allServices)
+	if err != nil {
+		return err
+	}
+
+	// Start the P2P node
+	err = inst.config.P2P.start(inst)
+	if err != nil {
+		return errors.UnknownError.WithFormat("start p2p: %w", err)
+	}
+
+	// Prestart
+	for _, services := range services {
+		for _, svc := range services {
+			svc, ok := svc.(prestarter)
+			if !ok {
+				continue
+			}
+			err = svc.prestart(inst)
+			if err != nil {
+				return errors.UnknownError.WithFormat("prestart service %T: %w", svc, err)
+			}
+		}
+	}
+
+	// Start services
+	for _, services := range services {
+		for _, svc := range services {
+			inst.logger.InfoCtx(inst.context, "Starting", "module", "run", "service", svc.Type())
+			err := svc.start(inst)
+			if err != nil {
+				return errors.UnknownError.WithFormat("start service %v: %w", svc.Type(), err)
+			}
+		}
+	}
+
+	return nil
 }
 
-func (i *Instance) Stop() error {
+// Verify validates the configuration and returns it with all services expanded.
+func (i *Instance) Verify() (*Config, error) {
+	cfg := i.config.Copy()
+
+	// Apply configurations
+	for _, c := range cfg.Configurations {
+		err := c.apply(i, cfg)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Verify initialization is solvable
+	_, err := ioc.Solve(cfg.Services)
+	if err != nil {
+		return nil, err
+	}
+
+	var errs []error
+	for _, svc := range cfg.Services {
+		svc, ok := svc.(interface{ Verify() error })
+		if !ok {
+			continue
+		}
+		err := svc.Verify()
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	return cfg, errors.Join(errs...)
+}
+
+func (i *Instance) Stop() {
 	i.shutdown()
 	i.running.Wait()
-	return nil
+}
+
+func (i *Instance) run(fn func()) {
+	i.running.Add(1)
+	go func() {
+		defer i.running.Done()
+		fn()
+	}()
 }
 
 func (i *Instance) cleanup(fn func()) {

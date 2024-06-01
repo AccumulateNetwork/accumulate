@@ -85,6 +85,12 @@ NetworkStatus:
       type: uint
     - name: MajorBlockHeight
       type: uint
+    - name: BvnExecutorVersions
+      description: is the active executor version of each BVN
+      type: protocol.PartitionExecutorVersion
+      marshal-as: reference
+      pointer: true
+      repeatable: true
 
 Metrics:
   fields:

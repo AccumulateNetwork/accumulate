@@ -8,17 +8,13 @@ package main
 
 import (
 	"context"
-	"strings"
 
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/spf13/cobra"
 	. "gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 	cmdutil "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/address"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 func main() {
@@ -33,26 +29,38 @@ var cmd = &cobra.Command{
 }
 
 var flag = struct {
-	Key      string
-	Listen   []multiaddr.Multiaddr
-	Peers    []multiaddr.Multiaddr
-	External multiaddr.Multiaddr
-}{}
+	Key        PrivateKeyFlag
+	Listen     []multiaddr.Multiaddr
+	PromListen []multiaddr.Multiaddr
+	Peers      []multiaddr.Multiaddr
+	External   multiaddr.Multiaddr
+}{
+	Key: cmdutil.PrivateKeyFlag{Value: &TransientPrivateKey{}},
+	PromListen: []multiaddr.Multiaddr{
+		multiaddr.StringCast("/ip4/0.0.0.0/tcp/8081/http"),
+	},
+}
 
 func init() {
-	cmd.Flags().StringVar(&flag.Key, "key", "", "The node key - not required but highly recommended. The value can be a key or a file containing a key. The key must be hex, base64, or an Accumulate secret key address.")
+	cmd.Flags().Var(&flag.Key, "key", "The node key - not required but highly recommended. The value can be a key or a file containing a key. The key must be hex, base64, or an Accumulate secret key address.")
 	cmd.Flags().VarP((*MultiaddrSliceFlag)(&flag.Listen), "listen", "l", "Listening address")
+	cmd.Flags().Var((*MultiaddrSliceFlag)(&flag.PromListen), "prom-listen", "Prometheus listening address(es) (default /ip4/0.0.0.0/tcp/8081/http)")
 	cmd.Flags().VarP((*MultiaddrSliceFlag)(&flag.Peers), "peer", "p", "Peers to connect to")
 	cmd.Flags().Var(MultiaddrFlag{Value: &flag.External}, "external", "External address to advertize")
 }
 
 func run(*cobra.Command, []string) {
 	cfg := &Config{
+		Instrumentation: &Instrumentation{
+			HttpListener: HttpListener{
+				Listen: flag.PromListen,
+			},
+		},
 		P2P: &P2P{
-			Key:            loadOrGenerateKey(),
+			Key:            flag.Key.Value,
 			Listen:         flag.Listen,
 			BootstrapPeers: flag.Peers,
-			DiscoveryMode:  DhtMode(dht.ModeAutoServer),
+			DiscoveryMode:  Ptr(DhtMode(dht.ModeAutoServer)),
 			External:       flag.External,
 		},
 	}
@@ -62,25 +70,5 @@ func run(*cobra.Command, []string) {
 	Check(err)
 
 	<-ctx.Done()
-	Check(inst.Stop())
-}
-
-func loadOrGenerateKey() PrivateKey {
-	if flag.Key == "" {
-		return &TransientPrivateKey{}
-	}
-
-	if strings.HasPrefix(flag.Key, "seed:") {
-		return &PrivateKeySeed{Seed: record.NewKey(flag.Key[5:])}
-	}
-
-	sk := LoadKey(flag.Key)
-	addr := &address.PrivateKey{
-		PublicKey: address.PublicKey{
-			Type: protocol.SignatureTypeED25519,
-			Key:  sk[32:],
-		},
-		Key: sk,
-	}
-	return &RawPrivateKey{Address: addr.String()}
+	inst.Stop()
 }

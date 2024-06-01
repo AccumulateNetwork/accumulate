@@ -225,43 +225,33 @@ func (v *ChainRecord) MarshalJSON() ([]byte, error) {
 	}{}
 	u.Type = v.Type()
 	if !(len(v.RecordBase.Name) == 0) {
-
 		u.Name = v.RecordBase.Name
 	}
 	if !(len(v.RecordBase.Key) == 0) {
-
 		u.Key = v.RecordBase.Key
 	}
 	if !(len(v.RecordBase.Description) == 0) {
-
 		u.Description = v.RecordBase.Description
 	}
 	if !(v.RecordBase.Parent == nil) {
-
 		u.Parent = v.RecordBase.Parent
 	}
 	if !(!v.RecordBase.Private) {
-
 		u.Private = v.RecordBase.Private
 	}
 	if !(!v.RecordBase.OmitAccessor) {
-
 		u.OmitAccessor = v.RecordBase.OmitAccessor
 	}
 	if !(!v.RecordBase.OmitConstructor) {
-
 		u.OmitConstructor = v.RecordBase.OmitConstructor
 	}
 	if !(!v.RecordBase.CustomValueConstructor) {
-
 		u.CustomValueConstructor = v.RecordBase.CustomValueConstructor
 	}
 	if !(len(v.RecordBase.Parameters) == 0) {
-
 		u.Parameters = v.RecordBase.Parameters
 	}
 	if !(len(v.RecordBase.Index) == 0) {
-
 		u.Index = v.RecordBase.Index
 	}
 	if !(len(v.ChainType) == 0) {
@@ -299,43 +289,33 @@ func (v *EntityRecord) MarshalJSON() ([]byte, error) {
 	}{}
 	u.Type = v.Type()
 	if !(len(v.RecordBase.Name) == 0) {
-
 		u.Name = v.RecordBase.Name
 	}
 	if !(len(v.RecordBase.Key) == 0) {
-
 		u.Key = v.RecordBase.Key
 	}
 	if !(len(v.RecordBase.Description) == 0) {
-
 		u.Description = v.RecordBase.Description
 	}
 	if !(v.RecordBase.Parent == nil) {
-
 		u.Parent = v.RecordBase.Parent
 	}
 	if !(!v.RecordBase.Private) {
-
 		u.Private = v.RecordBase.Private
 	}
 	if !(!v.RecordBase.OmitAccessor) {
-
 		u.OmitAccessor = v.RecordBase.OmitAccessor
 	}
 	if !(!v.RecordBase.OmitConstructor) {
-
 		u.OmitConstructor = v.RecordBase.OmitConstructor
 	}
 	if !(!v.RecordBase.CustomValueConstructor) {
-
 		u.CustomValueConstructor = v.RecordBase.CustomValueConstructor
 	}
 	if !(len(v.RecordBase.Parameters) == 0) {
-
 		u.Parameters = v.RecordBase.Parameters
 	}
 	if !(len(v.RecordBase.Index) == 0) {
-
 		u.Index = v.RecordBase.Index
 	}
 	if !(len(v.Fields) == 0) {
@@ -402,43 +382,33 @@ func (v *IndexRecord) MarshalJSON() ([]byte, error) {
 	}{}
 	u.Type = v.Type()
 	if !(len(v.RecordBase.Name) == 0) {
-
 		u.Name = v.RecordBase.Name
 	}
 	if !(len(v.RecordBase.Key) == 0) {
-
 		u.Key = v.RecordBase.Key
 	}
 	if !(len(v.RecordBase.Description) == 0) {
-
 		u.Description = v.RecordBase.Description
 	}
 	if !(v.RecordBase.Parent == nil) {
-
 		u.Parent = v.RecordBase.Parent
 	}
 	if !(!v.RecordBase.Private) {
-
 		u.Private = v.RecordBase.Private
 	}
 	if !(!v.RecordBase.OmitAccessor) {
-
 		u.OmitAccessor = v.RecordBase.OmitAccessor
 	}
 	if !(!v.RecordBase.OmitConstructor) {
-
 		u.OmitConstructor = v.RecordBase.OmitConstructor
 	}
 	if !(!v.RecordBase.CustomValueConstructor) {
-
 		u.CustomValueConstructor = v.RecordBase.CustomValueConstructor
 	}
 	if !(len(v.RecordBase.Parameters) == 0) {
-
 		u.Parameters = v.RecordBase.Parameters
 	}
 	if !(len(v.RecordBase.Index) == 0) {
-
 		u.Index = v.RecordBase.Index
 	}
 	if !((v.DataType).Equal(new(FieldType))) {
@@ -482,43 +452,33 @@ func (v *OtherRecord) MarshalJSON() ([]byte, error) {
 	}{}
 	u.Type = v.Type()
 	if !(len(v.RecordBase.Name) == 0) {
-
 		u.Name = v.RecordBase.Name
 	}
 	if !(len(v.RecordBase.Key) == 0) {
-
 		u.Key = v.RecordBase.Key
 	}
 	if !(len(v.RecordBase.Description) == 0) {
-
 		u.Description = v.RecordBase.Description
 	}
 	if !(v.RecordBase.Parent == nil) {
-
 		u.Parent = v.RecordBase.Parent
 	}
 	if !(!v.RecordBase.Private) {
-
 		u.Private = v.RecordBase.Private
 	}
 	if !(!v.RecordBase.OmitAccessor) {
-
 		u.OmitAccessor = v.RecordBase.OmitAccessor
 	}
 	if !(!v.RecordBase.OmitConstructor) {
-
 		u.OmitConstructor = v.RecordBase.OmitConstructor
 	}
 	if !(!v.RecordBase.CustomValueConstructor) {
-
 		u.CustomValueConstructor = v.RecordBase.CustomValueConstructor
 	}
 	if !(len(v.RecordBase.Parameters) == 0) {
-
 		u.Parameters = v.RecordBase.Parameters
 	}
 	if !(len(v.RecordBase.Index) == 0) {
-
 		u.Index = v.RecordBase.Index
 	}
 	if !(len(v.DataType) == 0) {
@@ -604,43 +564,33 @@ func (v *StateRecord) MarshalJSON() ([]byte, error) {
 	}{}
 	u.Type = v.Type()
 	if !(len(v.RecordBase.Name) == 0) {
-
 		u.Name = v.RecordBase.Name
 	}
 	if !(len(v.RecordBase.Key) == 0) {
-
 		u.Key = v.RecordBase.Key
 	}
 	if !(len(v.RecordBase.Description) == 0) {
-
 		u.Description = v.RecordBase.Description
 	}
 	if !(v.RecordBase.Parent == nil) {
-
 		u.Parent = v.RecordBase.Parent
 	}
 	if !(!v.RecordBase.Private) {
-
 		u.Private = v.RecordBase.Private
 	}
 	if !(!v.RecordBase.OmitAccessor) {
-
 		u.OmitAccessor = v.RecordBase.OmitAccessor
 	}
 	if !(!v.RecordBase.OmitConstructor) {
-
 		u.OmitConstructor = v.RecordBase.OmitConstructor
 	}
 	if !(!v.RecordBase.CustomValueConstructor) {
-
 		u.CustomValueConstructor = v.RecordBase.CustomValueConstructor
 	}
 	if !(len(v.RecordBase.Parameters) == 0) {
-
 		u.Parameters = v.RecordBase.Parameters
 	}
 	if !(len(v.RecordBase.Index) == 0) {
-
 		u.Index = v.RecordBase.Index
 	}
 	if !((v.DataType).Equal(new(FieldType))) {
@@ -691,7 +641,8 @@ func (v *ChainRecord) UnmarshalJSON(data []byte) error {
 	u.Parameters = v.RecordBase.Parameters
 	u.Index = v.RecordBase.Index
 	u.ChainType = v.ChainType
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -762,7 +713,8 @@ func (v *EntityRecord) UnmarshalJSON(data []byte) error {
 	u.Root = v.Root
 	u.Interface = v.Interface
 	u.Attributes = &encoding.JsonUnmarshalListWith[Record]{Value: v.Attributes, Func: UnmarshalRecordJSON}
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -836,7 +788,8 @@ func (v *IndexRecord) UnmarshalJSON(data []byte) error {
 	u.Union = v.Union
 	u.Collection = v.Collection
 	u.Comparator = v.Comparator
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -894,7 +847,8 @@ func (v *OtherRecord) UnmarshalJSON(data []byte) error {
 	u.Pointer = v.Pointer
 	u.HasChains = v.HasChains
 	u.Constructor = v.Constructor
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
@@ -940,7 +894,8 @@ func (v *RecordBase) UnmarshalJSON(data []byte) error {
 	u.CustomValueConstructor = v.CustomValueConstructor
 	u.Parameters = v.Parameters
 	u.Index = v.Index
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.Name = u.Name
@@ -993,7 +948,8 @@ func (v *StateRecord) UnmarshalJSON(data []byte) error {
 	u.Union = v.Union
 	u.Collection = v.Collection
 	u.Comparator = v.Comparator
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {

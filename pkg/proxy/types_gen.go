@@ -880,10 +880,12 @@ func (v *NetworkConfigResponse) MarshalJSON() ([]byte, error) {
 func (v *PartitionList) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Partitions encoding.JsonList[string] `json:"partitions,omitempty"`
+		ExtraData  *string                   `json:"$epilogue,omitempty"`
 	}{}
 	if !(len(v.Partitions) == 0) {
 		u.Partitions = v.Partitions
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
@@ -893,7 +895,6 @@ func (v *PartitionListResponse) MarshalJSON() ([]byte, error) {
 		Signature  *encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
 	}{}
 	if !(len(v.PartitionList.Partitions) == 0) {
-
 		u.Partitions = v.PartitionList.Partitions
 	}
 	if !(protocol.EqualKeySignature(v.Signature, nil)) {
@@ -908,7 +909,6 @@ func (v *SeedCountResponse) MarshalJSON() ([]byte, error) {
 		Signature *encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
 	}{}
 	if !(v.SeedCount.Count == 0) {
-
 		u.Count = v.SeedCount.Count
 	}
 	if !(protocol.EqualKeySignature(v.Signature, nil)) {
@@ -922,6 +922,7 @@ func (v *SeedList) MarshalJSON() ([]byte, error) {
 		BasePort  uint64                    `json:"basePort,omitempty"`
 		Type      protocol.PartitionType    `json:"type,omitempty"`
 		Addresses encoding.JsonList[string] `json:"addresses,omitempty"`
+		ExtraData *string                   `json:"$epilogue,omitempty"`
 	}{}
 	if !(v.BasePort == 0) {
 		u.BasePort = v.BasePort
@@ -932,6 +933,7 @@ func (v *SeedList) MarshalJSON() ([]byte, error) {
 	if !(len(v.Addresses) == 0) {
 		u.Addresses = v.Addresses
 	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
@@ -943,15 +945,12 @@ func (v *SeedListResponse) MarshalJSON() ([]byte, error) {
 		Signature *encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
 	}{}
 	if !(v.SeedList.BasePort == 0) {
-
 		u.BasePort = v.SeedList.BasePort
 	}
 	if !(v.SeedList.Type == 0) {
-
 		u.Type = v.SeedList.Type
 	}
 	if !(len(v.SeedList.Addresses) == 0) {
-
 		u.Addresses = v.SeedList.Addresses
 	}
 	if !(protocol.EqualKeySignature(v.Signature, nil)) {
@@ -967,7 +966,8 @@ func (v *NetworkConfigResponse) UnmarshalJSON(data []byte) error {
 	}{}
 	u.NetworkState = v.NetworkState
 	u.Signature = &encoding.JsonUnmarshalWith[protocol.KeySignature]{Value: v.Signature, Func: protocol.UnmarshalKeySignatureJSON}
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.NetworkState = u.NetworkState
@@ -981,12 +981,18 @@ func (v *NetworkConfigResponse) UnmarshalJSON(data []byte) error {
 func (v *PartitionList) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Partitions encoding.JsonList[string] `json:"partitions,omitempty"`
+		ExtraData  *string                   `json:"$epilogue,omitempty"`
 	}{}
 	u.Partitions = v.Partitions
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.Partitions = u.Partitions
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -997,7 +1003,8 @@ func (v *PartitionListResponse) UnmarshalJSON(data []byte) error {
 	}{}
 	u.Partitions = v.PartitionList.Partitions
 	u.Signature = &encoding.JsonUnmarshalWith[protocol.KeySignature]{Value: v.Signature, Func: protocol.UnmarshalKeySignatureJSON}
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.PartitionList.Partitions = u.Partitions
@@ -1015,7 +1022,8 @@ func (v *SeedCountResponse) UnmarshalJSON(data []byte) error {
 	}{}
 	u.Count = v.SeedCount.Count
 	u.Signature = &encoding.JsonUnmarshalWith[protocol.KeySignature]{Value: v.Signature, Func: protocol.UnmarshalKeySignatureJSON}
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.SeedCount.Count = u.Count
@@ -1031,16 +1039,22 @@ func (v *SeedList) UnmarshalJSON(data []byte) error {
 		BasePort  uint64                    `json:"basePort,omitempty"`
 		Type      protocol.PartitionType    `json:"type,omitempty"`
 		Addresses encoding.JsonList[string] `json:"addresses,omitempty"`
+		ExtraData *string                   `json:"$epilogue,omitempty"`
 	}{}
 	u.BasePort = v.BasePort
 	u.Type = v.Type
 	u.Addresses = v.Addresses
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.BasePort = u.BasePort
 	v.Type = u.Type
 	v.Addresses = u.Addresses
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -1055,7 +1069,8 @@ func (v *SeedListResponse) UnmarshalJSON(data []byte) error {
 	u.Type = v.SeedList.Type
 	u.Addresses = v.SeedList.Addresses
 	u.Signature = &encoding.JsonUnmarshalWith[protocol.KeySignature]{Value: v.Signature, Func: protocol.UnmarshalKeySignatureJSON}
-	if err := json.Unmarshal(data, &u); err != nil {
+	err := json.Unmarshal(data, &u)
+	if err != nil {
 		return err
 	}
 	v.SeedList.BasePort = u.BasePort

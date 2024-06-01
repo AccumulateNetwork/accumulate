@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -9,8 +9,11 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -40,8 +43,10 @@ var cmdSequence = &cobra.Command{
 func init() {
 	cmd.AddCommand(cmdSequence)
 	cmdSequence.Flags().BoolVarP(&verbose, "verbose", "v", false, "More verbose output")
-	cmdSequence.PersistentFlags().StringVar(&cachedScan, "cached-scan", "", "A cached network scan")
+	cmdSequence.Flags().BoolVar(&debug, "debug", false, "Debug network requests")
+	cmdSequence.Flags().StringVar(&cachedScan, "cached-scan", "", "A cached network scan")
 	cmdSequence.Flags().StringVar(&only, "only", "", "Only scan anchors or synthetic transactions")
+	cmdSequence.Flags().DurationVar(&flagMaxResponseAge, "max-response-age", flagMaxResponseAge, "Maximum age of a response before it is considered too stale to use")
 }
 
 func sequence(cmd *cobra.Command, args []string) {
@@ -50,6 +55,7 @@ func sequence(cmd *cobra.Command, args []string) {
 
 	c := jsonrpc.NewClient(accumulate.ResolveWellKnownEndpoint(args[0], "v3"))
 	c.Client.Timeout = time.Hour
+	c.Debug = debug
 	Q := api.Querier2{Querier: c}
 
 	ni, err := c.NodeInfo(ctx, api.NodeInfoOptions{})
@@ -65,6 +71,15 @@ func sequence(cmd *cobra.Command, args []string) {
 	fmt.Printf("We are %v\n", node.ID())
 
 	var net *healing.NetworkInfo
+	if cachedScan == "" {
+		f := filepath.Join(cacheDir, strings.ToLower(ni.Network)+".json")
+		if st, err := os.Stat(f); err == nil && !st.IsDir() {
+			slog.Info("Detected network scan", "file", f)
+			cachedScan = f
+		} else if !errors.Is(err, fs.ErrNotExist) {
+			check(err)
+		}
+	}
 	if cachedScan != "" {
 		data, err := os.ReadFile(cachedScan)
 		check(err)
@@ -81,6 +96,7 @@ func sequence(cmd *cobra.Command, args []string) {
 				Dialer: node.DialNetwork(),
 			},
 			Router: router,
+			Debug:  debug,
 		},
 	}
 	Q.Querier = c2
@@ -88,8 +104,7 @@ func sequence(cmd *cobra.Command, args []string) {
 	fmt.Println("Network status")
 	ns, err := c.NetworkStatus(ctx, api.NetworkStatusOptions{Partition: protocol.Directory})
 	check(err)
-	router.Router, err = routing.NewStaticRouter(ns.Routing, nil)
-	check(err)
+	router.Router = routing.NewRouter(routing.RouterOptions{Initial: ns.Routing})
 
 	var scanSynth, scanAnchors bool
 	switch only {
@@ -112,15 +127,11 @@ func sequence(cmd *cobra.Command, args []string) {
 
 		// Get anchor ledger
 		dst := protocol.PartitionUrl(part.ID)
-		var anchor *protocol.AnchorLedger
-		_, err = Q.QueryAccountAs(ctx, dst.JoinPath(protocol.AnchorPool), nil, &anchor)
-		check(err)
+		anchor := getAccount[*protocol.AnchorLedger](ctx, Q, dst.JoinPath(protocol.AnchorPool))
 		anchors[part.ID] = anchor
 
 		// Get synthetic ledger
-		var synth *protocol.SyntheticLedger
-		_, err = Q.QueryAccountAs(ctx, dst.JoinPath(protocol.Synthetic), nil, &synth)
-		check(err)
+		synth := getAccount[*protocol.SyntheticLedger](ctx, Q, dst.JoinPath(protocol.Synthetic))
 		synths[part.ID] = synth
 
 		// Check pending and received vs delivered
@@ -207,9 +218,7 @@ func findPendingAnchors(ctx context.Context, C *message.Client, Q api.Querier2, 
 	dstId, _ := protocol.ParsePartitionUrl(dst)
 
 	// Check how many have been received
-	var dstLedger *protocol.AnchorLedger
-	_, err := Q.QueryAccountAs(ctx, dst.JoinPath(protocol.AnchorPool), nil, &dstLedger)
-	checkf(err, "query %v → %v anchor ledger", srcId, dstId)
+	dstLedger := getAccount[*protocol.AnchorLedger](ctx, Q, dst.JoinPath(protocol.AnchorPool))
 	dstSrcLedger := dstLedger.Partition(src)
 	received := dstSrcLedger.Received
 

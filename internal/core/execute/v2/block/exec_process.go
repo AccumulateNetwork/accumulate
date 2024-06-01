@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -301,7 +301,7 @@ func (b *bundle) callMessageExecutor(batch *database.Batch, ctx *MessageContext)
 	}
 
 	// Find the appropriate executor
-	x, ok := b.Executor.messageExecutors[ctx.Type()]
+	x, ok := getExecutor(b.Executor.messageExecutors, ctx)
 	if !ok {
 		// If the message type is internal, this is almost certainly a bug
 		if ctx.Type() >= internal.MessageTypeInternal {
@@ -319,7 +319,7 @@ func (b *bundle) callMessageExecutor(batch *database.Batch, ctx *MessageContext)
 // callSignatureExecutor finds the executor for the signature and calls it.
 func (b *bundle) callSignatureExecutor(batch *database.Batch, ctx *SignatureContext) (*protocol.TransactionStatus, error) {
 	// Find the appropriate executor
-	x, ok := b.Executor.signatureExecutors[ctx.Type()]
+	x, ok := getExecutor(b.Executor.signatureExecutors, ctx)
 	if !ok {
 		return protocol.NewErrorStatus(ctx.message.ID(), errors.BadRequest.WithFormat("unsupported signature type %v", ctx.Type())), nil
 	}

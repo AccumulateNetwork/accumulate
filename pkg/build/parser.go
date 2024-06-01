@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -8,8 +8,7 @@ package build
 
 import (
 	"crypto/ed25519"
-	"crypto/sha256"
-	"encoding/hex"
+	"crypto/rsa"
 	"fmt"
 	"math/big"
 	"strconv"
@@ -19,6 +18,7 @@ import (
 	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/address"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -56,7 +56,10 @@ func (p *parser) err() error {
 }
 
 func (p *parser) record(err ...error) {
-	p.errs = append(p.errs, err...)
+	errs := make([]error, 0, len(p.errs)+len(err))
+	errs = append(errs, p.errs...)
+	errs = append(errs, err...)
+	p.errs = errs
 }
 
 func (p *parser) errorf(code errors.Status, format string, args ...interface{}) {
@@ -116,6 +119,8 @@ func (p *parser) parseUrl(v any, path ...string) *url.URL {
 		return v.JoinPath(path...)
 	case *url.URL:
 		return v.JoinPath(path...)
+	case interface{ Url() *url.URL }:
+		return v.Url().JoinPath(path...)
 	case string:
 		str = v
 	case fmt.Stringer:
@@ -169,52 +174,71 @@ func (p *parser) parseHash(v any) []byte {
 	}
 }
 
-func (p *parser) parsePublicKey(key any) []byte {
+func (p *parser) parseKey(key any, typ protocol.SignatureType, private bool) address.Address {
 	switch key := key.(type) {
+	case address.Address:
+		return key
 	case ed25519.PrivateKey:
-		return key[32:]
+		return address.FromED25519PrivateKey(key)
 	case ed25519.PublicKey:
-		return key
+		return address.FromED25519PublicKey(key)
 	case tmed25519.PrivKey:
-		return key[32:]
+		return address.FromED25519PrivateKey(key)
 	case tmed25519.PubKey:
-		return key
+		return address.FromED25519PublicKey(key)
+	case *rsa.PrivateKey:
+		return address.FromRSAPrivateKey(key)
+	case *rsa.PublicKey:
+		return address.FromRSAPublicKey(key)
 	case []byte:
-		return key
+		if typ == protocol.SignatureTypeUnknown {
+			if len(key) == 32 || len(key) == 64 {
+				typ = protocol.SignatureTypeED25519
+			} else {
+				return &address.Unknown{Value: key}
+			}
+		}
+
+		// If the key should be assumed to be private or the key is 64 bytes and
+		// the type is ED25519, process it as a private key
+		if private || len(key) == ed25519.PrivateKeySize &&
+			(typ == protocol.SignatureTypeED25519 ||
+				typ == protocol.SignatureTypeLegacyED25519 ||
+				typ == protocol.SignatureTypeRCD1) {
+			return address.FromPrivateKeyBytes(key, typ)
+		}
+
+		return &address.PublicKey{
+			Type: typ,
+			Key:  key,
+		}
+
 	case string:
-		b, err := hex.DecodeString(key)
+		addr, err := address.Parse(key)
 		if err != nil {
-			p.errorf(errors.BadRequest, "parse key as hex: %w", err)
+			p.record(err)
 			return nil
 		}
-		return b
+		if uk, ok := addr.(*address.Unknown); ok && typ != protocol.SignatureTypeUnknown {
+			return &address.PublicKeyHash{
+				Type: typ,
+				Hash: uk.Value,
+			}
+		}
+		return addr
 	default:
 		p.errorf(errors.BadRequest, "unsupported key type %T", key)
-		return nil
+		return &address.Unknown{}
 	}
 }
 
-func (p *parser) hashKey(key []byte, typ protocol.SignatureType) []byte {
-	switch typ {
-	case protocol.SignatureTypeLegacyED25519,
-		protocol.SignatureTypeED25519:
-		return hash(key)
-	case protocol.SignatureTypeRCD1:
-		return protocol.GetRCDHashFromPublicKey(key, 1)
-	case protocol.SignatureTypeBTC,
-		protocol.SignatureTypeBTCLegacy:
-		return protocol.BTCHash(key)
-	case protocol.SignatureTypeETH:
-		return protocol.ETHhash(key)
-	default:
-		p.errorf(errors.BadRequest, "unsupported key type %v", typ)
-		return nil
+func (p *parser) hashKey(addr address.Address) []byte {
+	hash, ok := addr.GetPublicKeyHash()
+	if ok {
+		return hash
 	}
-}
-
-func hash(b []byte) []byte {
-	h := sha256.Sum256(b)
-	return h[:]
+	p.errorf(errors.BadRequest, "cannot determine hash for %v", addr)
+	return nil
 }
 
 func (p *parser) parseAmount(v any, precision uint64) *big.Int {

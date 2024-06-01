@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -21,7 +21,8 @@ type App interface {
 	Info(*InfoRequest) (*InfoResponse, error)
 	Check(*CheckRequest) (*CheckResponse, error)
 	Init(*InitRequest) (*InitResponse, error)
-	Begin(*BeginRequest) (*BeginResponse, error)
+	Execute(*ExecuteRequest) (*ExecuteResponse, error)
+	Commit(*CommitRequest) (*CommitResponse, error)
 }
 
 type InfoRequest struct{}
@@ -35,7 +36,6 @@ type CheckRequest struct {
 	Context  context.Context
 	Envelope *messaging.Envelope
 	New      bool
-	Pretend  bool
 }
 
 type CheckResponse struct {
@@ -52,21 +52,37 @@ type InitResponse struct {
 	Validators []*execute.ValidatorUpdate
 }
 
-type BeginRequest struct {
-	Params execute.BlockParams
+type ExecuteRequest struct {
+	Params    execute.BlockParams
+	Envelopes []*messaging.Envelope
 }
 
-type BeginResponse struct {
-	Block execute.Block
+type ExecuteResponse struct {
+	Block   any
+	Results []*protocol.TransactionStatus
+	Updates []*execute.ValidatorUpdate
+}
+
+type CommitRequest struct {
+	Block any
+}
+
+type CommitResponse struct {
+	Hash [32]byte
 }
 
 type ExecutorApp struct {
 	Executor execute.Executor
 	Restore  RestoreFunc
 	EventBus *events.Bus
+	Record   Recorder
 }
 
 type RestoreFunc func(ioutil.SectionReader) error
+
+func (a *ExecutorApp) SetRecorder(rec Recorder) {
+	a.Record = rec
+}
 
 func (a *ExecutorApp) Info(*InfoRequest) (*InfoResponse, error) {
 	last, hash, err := a.Executor.LastBlock()
@@ -121,58 +137,73 @@ func (a *ExecutorApp) Init(req *InitRequest) (*InitResponse, error) {
 	return &InitResponse{Hash: root[:], Validators: val}, nil
 }
 
-func (a *ExecutorApp) Begin(req *BeginRequest) (*BeginResponse, error) {
-	res, err := a.Executor.Begin(req.Params)
+func (a *ExecutorApp) Execute(req *ExecuteRequest) (*ExecuteResponse, error) {
+	block, err := a.Executor.Begin(req.Params)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("begin block: %w", err)
 	}
-	return &BeginResponse{Block: &ExecutorBlock{res, a.EventBus}}, nil
-}
 
-type ExecutorBlock struct {
-	execute.Block
-	eventBus *events.Bus
-}
+	var results []*protocol.TransactionStatus
+	for _, envelope := range req.Envelopes {
+		// Copy to avoid interference between nodes
+		s, err := block.Process(envelope.Copy())
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("deliver envelope: %w", err)
+		}
 
-func (b *ExecutorBlock) Process(envelope *messaging.Envelope) ([]*protocol.TransactionStatus, error) {
-	// Copy to avoid interference between nodes
-	return b.Block.Process(envelope.Copy())
-}
-
-func (b *ExecutorBlock) Close() (execute.BlockState, error) {
-	bs, err := b.Block.Close()
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
+		results = append(results, s...)
 	}
-	return &ExecutorBlockState{bs, b.eventBus}, nil
+
+	state, err := block.Close()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("end block: %w", err)
+	}
+
+	valUp, _ := state.DidUpdateValidators()
+	return &ExecuteResponse{
+		Results: results,
+		Block:   state,
+		Updates: valUp,
+	}, nil
 }
 
-type ExecutorBlockState struct {
-	execute.BlockState
-	eventBus *events.Bus
-}
+func (a *ExecutorApp) Commit(req *CommitRequest) (*CommitResponse, error) {
+	s := req.Block.(execute.BlockState)
 
-func (s *ExecutorBlockState) Commit() error {
 	// Discard changes if the block is empty
 	if s.IsEmpty() {
 		s.Discard()
-		return nil
+		return &CommitResponse{}, nil
 	}
 
-	err := s.BlockState.Commit()
+	err := s.Commit()
 	if err != nil {
-		return errors.UnknownError.Wrap(err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	major, _, _ := s.DidCompleteMajorBlock()
-	err = s.eventBus.Publish(events.DidCommitBlock{
+	err = a.EventBus.Publish(events.DidCommitBlock{
 		Index: s.Params().Index,
 		Time:  s.Params().Time,
 		Major: major,
 	})
 	if err != nil {
-		return errors.UnknownError.WithFormat("notify of commit: %w", err)
+		return nil, errors.UnknownError.WithFormat("notify of commit: %w", err)
 	}
 
-	return nil
+	hash, err := s.Hash()
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	if a.Record != nil {
+		err = a.Record.DidCommitBlock(s)
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+	}
+
+	return &CommitResponse{
+		Hash: hash,
+	}, nil
 }

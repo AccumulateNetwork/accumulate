@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -35,7 +35,15 @@ func (block *Block) Close() (execute.BlockState, error) {
 	r := m.BlockTimers.Start(BlockTimerTypeEndBlock)
 	defer m.BlockTimers.Stop(r)
 
-	err := m.processEventBacklog(block)
+	// Is it time for a major block?
+	err := block.shouldOpenMajorBlock()
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	// Process events such as expiring transactions. Depends on
+	// shouldOpenMajorBlock.
+	err = block.processEvents()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("process event backlog: %w", err)
 	}
@@ -64,29 +72,28 @@ func (block *Block) Close() (execute.BlockState, error) {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	// Determine if an anchor should be sent
-	m.shouldPrepareAnchor(block)
+	// Should we send an anchor?
+	if block.shouldSendAnchor() {
+		block.State.Anchor = &BlockAnchorState{}
+	}
+
+	// Send messages produced by the block. Depends on shouldPrepareAnchor.
+	err = block.produceBlockMessages()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("produce block messages: %w", err)
+	}
 
 	// Do nothing if the block is empty
 	if block.State.Empty() {
 		return &closedBlock{*block, nil}, nil
 	}
 
-	// Update active globals - **after** checking if the block is empty, because
-	// we definitely don't want to tell the ABCI that the validator set changed
-	// if the block is getting discarded, though that _should_ be impossible
-	var valUp []*execute.ValidatorUpdate
-	if !m.isGenesis && !m.globals.Active.Equal(&m.globals.Pending) {
-		valUp = execute.DiffValidators(&m.globals.Active, &m.globals.Pending, m.Describe.PartitionId)
-
-		err = m.EventBus.Publish(events.WillChangeGlobals{
-			New: &m.globals.Pending,
-			Old: &m.globals.Active,
-		})
+	// Record the previous block's state hash it on the BPT chain
+	if block.Executor.globals.Active.ExecutorVersion.V2BaikonurEnabled() {
+		err := block.Batch.Account(block.Executor.Describe.Ledger()).BptChain().Inner().AddEntry(block.State.PreviousStateHash[:], false)
 		if err != nil {
-			return nil, errors.UnknownError.WithFormat("publish globals update: %w", err)
+			return nil, err
 		}
-		m.globals.Active = *m.globals.Pending.Copy()
 	}
 
 	m.logger.Debug("Committing",
@@ -223,7 +230,7 @@ func (block *Block) Close() (execute.BlockState, error) {
 	}
 
 	// Update major index chains if it's a major block
-	err = m.updateMajorIndexChains(block, rootIndexIndex)
+	err = m.recordMajorBlock(block, rootIndexIndex)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -234,12 +241,34 @@ func (block *Block) Close() (execute.BlockState, error) {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
+	// Update the BPT
+	err = block.Batch.UpdateBPT()
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	// Update active globals, after everything else is done (don't change logic
+	// in the middle of a block)
+	var valUp []*execute.ValidatorUpdate
+	if !m.isGenesis && !m.globals.Active.Equal(&m.globals.Pending) {
+		valUp = execute.DiffValidators(&m.globals.Active, &m.globals.Pending, m.Describe.PartitionId)
+
+		err = m.EventBus.Publish(events.WillChangeGlobals{
+			New: &m.globals.Pending,
+			Old: &m.globals.Active,
+		})
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("publish globals update: %w", err)
+		}
+		m.globals.Active = *m.globals.Pending.Copy()
+	}
+
 	m.logger.Debug("Committed", "module", "block", "height", block.Index, "duration", time.Since(t))
 	return &closedBlock{*block, valUp}, nil
 }
 
 func (block *Block) recordTransactionExpiration() error {
-	if len(block.State.Pending) == 0 {
+	if len(block.State.PendingTxns) == 0 && len(block.State.PendingSigs) == 0 {
 		return nil
 	}
 
@@ -264,8 +293,7 @@ func (block *Block) recordTransactionExpiration() error {
 	}
 
 	// Determine which major block each transaction should expire on
-	pending := map[uint64][]*url.TxID{}
-	for _, txn := range block.State.GetPending() {
+	shouldExpireOn := func(txn *protocol.Transaction) uint64 {
 		var count uint64
 		switch {
 		case !block.Executor.globals.Active.ExecutorVersion.V2BaikonurEnabled():
@@ -292,8 +320,22 @@ func (block *Block) recordTransactionExpiration() error {
 			count = max
 		}
 
-		major := currentMajor + count
+		return currentMajor + count
+	}
+
+	// Expire transactions
+	pending := map[uint64][]*url.TxID{}
+	for _, txn := range block.State.GetPendingTxns() {
+		major := shouldExpireOn(txn)
 		pending[major] = append(pending[major], txn.ID())
+	}
+
+	// Expire signature sets
+	for _, s := range block.State.GetPendingSigs() {
+		major := shouldExpireOn(s.Transaction)
+		for _, auth := range s.GetAuthorities() {
+			pending[major] = append(pending[major], auth.WithTxID(s.Transaction.Hash()))
+		}
 	}
 
 	// Record the IDs
@@ -507,84 +549,27 @@ func (x *Executor) getKeySignature(r *api.MessageRecord[messaging.Message], part
 	return nil, false
 }
 
-// updateMajorIndexChains updates major index chains.
-func (x *Executor) updateMajorIndexChains(block *Block, rootIndexIndex uint64) error {
-	if block.State.MakeMajorBlock == 0 {
-		return nil
-	}
-
-	// Load the chain
-	account := block.Batch.Account(x.Describe.AnchorPool())
-	mainChain, err := account.MainChain().Get()
-	if err != nil {
-		return errors.UnknownError.WithFormat("load anchor ledger main chain: %w", err)
-	}
-
-	_, err = addIndexChainEntry(account.MajorBlockChain(), &protocol.IndexEntry{
-		Source:         uint64(mainChain.Height() - 1),
-		RootIndexIndex: rootIndexIndex,
-		BlockIndex:     block.State.MakeMajorBlock,
-		BlockTime:      &block.State.MakeMajorBlockTime,
-	})
-	if err != nil {
-		return errors.UnknownError.WithFormat("add anchor ledger index chain entry: %w", err)
-	}
-
-	return nil
-}
-
-func (x *Executor) shouldPrepareAnchor(block *Block) {
-	openMajorBlock, openMajorBlockTime := x.shouldOpenMajorBlock(block.Batch, block.Time.Add(time.Second))
-	sendAnchor := openMajorBlock || x.shouldSendAnchor(block)
-	if sendAnchor {
-		block.State.Anchor = &BlockAnchorState{
-			ShouldOpenMajorBlock: openMajorBlock,
-			OpenMajorBlockTime:   openMajorBlockTime,
-		}
-	}
-}
-
-func (x *Executor) shouldOpenMajorBlock(batch *database.Batch, blockTime time.Time) (bool, time.Time) {
-	// Only the directory network can open a major block
-	if x.Describe.NetworkType != protocol.PartitionTypeDirectory {
-		return false, time.Time{}
-	}
-
-	// Only when majorBlockSchedule is initialized we can open a major block. (not when doing replayBlocks)
-	if x.ExecutorOptions.MajorBlockScheduler == nil || !x.ExecutorOptions.MajorBlockScheduler.IsInitialized() {
-		return false, time.Time{}
-	}
-
-	blockTimeUTC := blockTime.UTC()
-	nextBlockTime := x.ExecutorOptions.MajorBlockScheduler.GetNextMajorBlockTime(blockTime)
-	if blockTimeUTC.IsZero() || blockTimeUTC.Before(nextBlockTime) {
-		return false, time.Time{}
-	}
-
-	return true, blockTimeUTC
-}
-
-func (x *Executor) shouldSendAnchor(block *Block) bool {
+func (b *Block) shouldSendAnchor() bool {
 	// Did we make a major block?
-	if block.State.MakeMajorBlock > 0 {
+	if b.State.MakeMajorBlock > 0 || b.State.MajorBlock != nil {
 		return true
 	}
 
 	// Did we produce synthetic transactions?
-	if block.State.Produced > 0 {
+	if b.State.Produced > 0 {
 		return true
 	}
 
 	var didUpdateOther, didAnchorPartition, didAnchorDirectory bool
-	anchor := block.Batch.Account(x.Describe.AnchorPool())
-	for _, c := range block.State.ChainUpdates.Entries {
+	anchor := b.Batch.Account(b.Executor.Describe.AnchorPool())
+	for _, c := range b.State.ChainUpdates.Entries {
 		// The system ledger is always updated
-		if c.Account.Equal(x.Describe.Ledger()) {
+		if c.Account.Equal(b.Executor.Describe.Ledger()) {
 			continue
 		}
 
 		// Was some other account updated?
-		if !c.Account.Equal(x.Describe.AnchorPool()) {
+		if !c.Account.Equal(b.Executor.Describe.AnchorPool()) {
 			didUpdateOther = true
 			continue
 		}
@@ -592,7 +577,7 @@ func (x *Executor) shouldSendAnchor(block *Block) bool {
 		// Check if a partition anchor was received
 		chain, err := anchor.ChainByName(c.Chain)
 		if err != nil {
-			x.logger.Error("Failed to get chain by name", "error", err, "name", c.Chain)
+			b.Executor.logger.Error("Failed to get chain by name", "error", err, "name", c.Chain)
 			continue
 		}
 
@@ -615,7 +600,7 @@ func (x *Executor) shouldSendAnchor(block *Block) bool {
 	}
 
 	// Send an anchor if a directory anchor was received and the flag is set
-	return didAnchorDirectory && x.globals.Active.Globals.AnchorEmptyBlocks
+	return didAnchorDirectory && b.Executor.globals.Active.Globals.AnchorEmptyBlocks
 }
 
 func (x *Executor) prepareAnchor(block *Block) error {
@@ -627,7 +612,14 @@ func (x *Executor) prepareAnchor(block *Block) error {
 	// Update the anchor ledger
 	anchorLedger, err := database.UpdateAccount(block.Batch, x.Describe.AnchorPool(), func(ledger *protocol.AnchorLedger) error {
 		ledger.MinorBlockSequenceNumber++
-		if !block.State.Anchor.ShouldOpenMajorBlock {
+		if block.State.MajorBlock == nil {
+			return nil
+		}
+
+		ledger.MajorBlockIndex = block.State.MajorBlock.Index
+		ledger.MajorBlockTime = block.State.MajorBlock.Time
+
+		if x.globals.Active.ExecutorVersion.V2VandenbergEnabled() {
 			return nil
 		}
 
@@ -653,8 +645,6 @@ func (x *Executor) prepareAnchor(block *Block) error {
 			})
 		}
 
-		ledger.MajorBlockIndex++
-		ledger.MajorBlockTime = block.State.Anchor.OpenMajorBlockTime
 		ledger.PendingMajorBlockAnchors = make([]*url.URL, len(bvns))
 		for i, bvn := range bvns {
 			ledger.PendingMajorBlockAnchors[i] = protocol.PartitionUrl(bvn)
@@ -690,8 +680,12 @@ func (x *Executor) buildDirectoryAnchor(block *Block, systemLedger *protocol.Sys
 	anchor.Source = x.Describe.NodeUrl()
 	anchor.MinorBlockIndex = block.Index
 	anchor.MajorBlockIndex = block.State.MakeMajorBlock
-	anchor.Updates = systemLedger.PendingUpdates
-	if block.State.Anchor.ShouldOpenMajorBlock {
+
+	if !x.globals.Active.BvnExecutorVersion().V2VandenbergEnabled() {
+		anchor.Updates = systemLedger.PendingUpdates
+	}
+
+	if block.State.MajorBlock != nil && !x.globals.Active.BvnExecutorVersion().V2VandenbergEnabled() {
 		anchor.MakeMajorBlock = anchorLedger.MajorBlockIndex
 		anchor.MakeMajorBlockTime = anchorLedger.MajorBlockTime
 	}
@@ -744,6 +738,103 @@ func (x *Executor) buildDirectoryAnchor(block *Block, systemLedger *protocol.Sys
 	return anchor, nil
 }
 
+func (b *Block) produceBlockMessages() error {
+	// This is likely unnecessarily cautious, but better safe than sorry. This
+	// will prevent any variation in order from causing a consensus failure.
+	bvns := b.Executor.globals.Active.BvnNames()
+	sort.Strings(bvns)
+
+	/* ***** ACME burn (for credits) ***** */
+
+	// If the active version is Vandenberg and ACME has been burnt
+	if b.Executor.globals.Active.ExecutorVersion.V2VandenbergEnabled() &&
+		b.State.AcmeBurnt.Sign() > 0 {
+		body := new(protocol.SyntheticBurnTokens)
+		body.Amount = b.State.AcmeBurnt
+		txn := new(protocol.Transaction)
+		txn.Header.Principal = protocol.AcmeUrl()
+		txn.Body = body
+		msg := new(messaging.TransactionMessage)
+		msg.Transaction = txn
+
+		b.State.Produced++
+
+		err := b.Executor.produceSynthetic(b.Batch, []*ProducedMessage{{
+			Destination: protocol.AcmeUrl(),
+			Message:     msg,
+		}}, b.Index)
+		if err != nil {
+			return errors.UnknownError.WithFormat("queue ACME burn: %w", err)
+		}
+	}
+
+	/* ***** Network account updates (DN) ***** */
+
+	// If the active version is Vandenberg, we're on the DN, and there's a
+	// network update
+	if b.Executor.globals.Active.ExecutorVersion.V2VandenbergEnabled() &&
+		b.Executor.Describe.NetworkType == protocol.PartitionTypeDirectory &&
+		len(b.State.NetworkUpdate) > 0 {
+		for _, bvn := range bvns {
+			b.State.Produced++
+			err := b.Executor.produceSynthetic(b.Batch, []*ProducedMessage{{
+				Destination: protocol.PartitionUrl(bvn),
+				Message: &messaging.NetworkUpdate{
+					Accounts: b.State.NetworkUpdate,
+				},
+			}}, b.Index)
+			if err != nil {
+				return errors.UnknownError.WithFormat("queue network update: %w", err)
+			}
+		}
+	}
+
+	/* ***** Major block notification ***** */
+
+	// If the active version is Vandenberg, we're on the DN, and there's a major
+	// block
+	if b.Executor.globals.Active.ExecutorVersion.V2VandenbergEnabled() &&
+		b.Executor.Describe.NetworkType == protocol.PartitionTypeDirectory &&
+		b.State.MajorBlock != nil {
+		for _, bvn := range bvns {
+			b.State.Produced++
+			err := b.Executor.produceSynthetic(b.Batch, []*ProducedMessage{{
+				Destination: protocol.PartitionUrl(bvn),
+				Message: &messaging.MakeMajorBlock{
+					MajorBlockIndex: b.State.MajorBlock.Index,
+					MajorBlockTime:  b.State.MajorBlock.Time,
+					MinorBlockIndex: b.Index,
+				},
+			}}, b.Index)
+			if err != nil {
+				return errors.UnknownError.WithFormat("queue network update: %w", err)
+			}
+		}
+	}
+
+	/* ***** Did update version (BVN) ***** */
+
+	// If the **pending** version is Vandenberg, we're on a BVN, and the version
+	// is changing
+	if b.Executor.globals.Pending.ExecutorVersion.V2VandenbergEnabled() &&
+		b.Executor.Describe.NetworkType != protocol.PartitionTypeDirectory &&
+		b.Executor.globals.Pending.ExecutorVersion != b.Executor.globals.Active.ExecutorVersion {
+		b.State.Produced++
+		err := b.Executor.produceSynthetic(b.Batch, []*ProducedMessage{{
+			Destination: protocol.DnUrl(),
+			Message: &messaging.DidUpdateExecutorVersion{
+				Partition: b.Executor.Describe.PartitionId,
+				Version:   b.Executor.globals.Pending.ExecutorVersion,
+			},
+		}}, b.Index)
+		if err != nil {
+			return errors.UnknownError.WithFormat("queue update notification: %w", err)
+		}
+	}
+
+	return nil
+}
+
 func (x *Executor) buildPartitionAnchor(block *Block, ledger *protocol.SystemLedger) (*protocol.BlockValidatorAnchor, error) {
 	// Do not populate the root chain index, root chain anchor, or state tree
 	// anchor. Those cannot be populated until the block is complete, thus they
@@ -752,7 +843,11 @@ func (x *Executor) buildPartitionAnchor(block *Block, ledger *protocol.SystemLed
 	anchor.Source = x.Describe.NodeUrl()
 	anchor.MinorBlockIndex = block.Index
 	anchor.MajorBlockIndex = block.State.MakeMajorBlock
-	anchor.AcmeBurnt = ledger.AcmeBurnt
+
+	if !x.globals.Active.ExecutorVersion.V2VandenbergEnabled() {
+		anchor.AcmeBurnt = ledger.AcmeBurnt
+	}
+
 	return anchor, nil
 }
 

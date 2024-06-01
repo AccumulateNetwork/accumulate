@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -24,6 +24,7 @@ import (
 type Client struct {
 	Client http.Client
 	Server string
+	Debug  bool
 }
 
 var _ api.NodeService = (*Client)(nil)
@@ -97,7 +98,7 @@ func (c *PrivateClient) Sequence(ctx context.Context, src, dst *url.URL, num uin
 }
 
 func (c *Client) sendRequest(ctx context.Context, method string, req, resp interface{}) error {
-	jc := jsonrpc2.Client{Client: c.Client}
+	jc := jsonrpc2.Client{Client: c.Client, DebugRequest: c.Debug}
 	err := jc.Request(ctx, c.Server, method, req, &resp)
 	if err == nil {
 		return nil

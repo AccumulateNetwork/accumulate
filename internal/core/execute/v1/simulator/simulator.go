@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -23,7 +23,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block"
@@ -51,7 +50,6 @@ type SimulatorOptions struct {
 	LogLevels       string
 	OpenDB          func(partition string, nodeIndex int, logger log.Logger) *database.Database
 	FactomAddresses func() (io.Reader, error)
-	Snapshots       []func() (ioutil2.SectionReader, error)
 }
 
 type Simulator struct {
@@ -139,7 +137,10 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 
 	mainEventBus := events.NewBus(sim.Logger.With("partition", protocol.Directory))
 	events.SubscribeSync(mainEventBus, sim.willChangeGlobals)
-	sim.router = &router{sim, routing.NewRouter(mainEventBus, sim.Logger)}
+	sim.router = &router{sim, routing.NewRouter(routing.RouterOptions{
+		Events: mainEventBus,
+		Logger: sim.Logger,
+	})}
 
 	// Initialize each executor
 	for i, bvn := range sim.netInit.Bvns[:1] {
@@ -314,7 +315,7 @@ func (s *Simulator) InitFromGenesisWith(values *core.GlobalValues) {
 	// The simulator only runs one DNN so set the threshold low
 	values.Globals.ValidatorAcceptThreshold.Set(1, 1000)
 
-	genDocs, err := accumulated.BuildGenesisDocs(s.netInit, values, GenesisTime, s.Logger, s.opts.FactomAddresses, s.opts.Snapshots)
+	genDocs, err := accumulated.BuildGenesisDocs(s.netInit, values, GenesisTime, s.Logger, s.opts.FactomAddresses, nil)
 	require.NoError(s, err)
 
 	// Execute bootstrap after the entire network is known
@@ -592,9 +593,6 @@ func (x *ExecEntry) init(sim *Simulator, logger log.Logger, partition *config.Pa
 		NewDispatcher: func() block.Dispatcher { return &dispatcher{sim: sim, envelopes: map[string][]*messaging.Envelope{}} },
 		Sequencer:     sim.Services(),
 		Querier:       sim.Services(),
-	}
-	if execOpts.Describe.NetworkType == protocol.PartitionTypeDirectory {
-		execOpts.MajorBlockScheduler = blockscheduler.Init(eventBus)
 	}
 	var err error
 	x.Executor, err = block.NewNodeExecutor(execOpts)

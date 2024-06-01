@@ -11,6 +11,9 @@ ResponseKeyPageIndex:
     - name: Index
       type: uvarint
       keep-empty: true
+    - name: LastBlockTime
+      type: time
+      pointer: true
 
 GeneralReceipt:
   fields:
@@ -53,6 +56,9 @@ ResponseDataEntry:
     - name: CauseTxId
       type: txid
       pointer: true
+    - name: LastBlockTime
+      type: time
+      pointer: true
 
 ResponseDataEntrySet:
   fields:
@@ -62,6 +68,9 @@ ResponseDataEntrySet:
       marshal-as: reference
     - name: Total
       type: uvarint
+    - name: LastBlockTime
+      type: time
+      pointer: true
 
 ChainState:
   fields:

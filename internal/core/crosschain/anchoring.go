@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -179,11 +179,14 @@ func (x ValidatorContext) Url(path ...string) *url.URL {
 }
 
 func (x ValidatorContext) PrepareAnchorSubmission(ctx context.Context, anchor protocol.AnchorBody, sequenceNumber uint64, destination *url.URL) (*messaging.Envelope, *protocol.Transaction, error) {
+	// An anchor sent from the DN to itself must not set MakeMajorBlock. Make a
+	// copy to avoid modifying the original.
+	//
+	// Make no change on Vandenberg and after (all anchors sent from the DN
+	// should be identical).
 	isSrcDir := x.Source.Type == protocol.PartitionTypeDirectory
 	isDstDir := destination.Equal(protocol.DnUrl())
-	if isSrcDir && isDstDir {
-		// An anchor sent from the DN to itself must not set MakeMajorBlock.
-		// Make a copy to avoid modifying the original.
+	if !x.Globals.ExecutorVersion.V2VandenbergEnabled() && isSrcDir && isDstDir {
 		v := anchor.(*protocol.DirectoryAnchor)
 		v = v.Copy()
 		v.MakeMajorBlock = 0
@@ -192,7 +195,7 @@ func (x ValidatorContext) PrepareAnchorSubmission(ctx context.Context, anchor pr
 
 	// If we're on the DN, the last block updated to v2, and the destination is
 	// a BVN, then we must send out the anchor as a v1 anchor since the BVNs
-	// will still be running v1
+	// will still be running v1 (not relevant after v2)
 	if isSrcDir && didUpdateToV2(anchor) && !isDstDir {
 		env, err := shared.PrepareBlockAnchor(x.Url(), x.Globals.Network, x.ValidatorKey, anchor, sequenceNumber, destination)
 		if err != nil {
@@ -205,6 +208,13 @@ func (x ValidatorContext) PrepareAnchorSubmission(ctx context.Context, anchor pr
 	txn := new(protocol.Transaction)
 	txn.Header.Principal = destination.JoinPath(protocol.AnchorPool)
 	txn.Body = anchor
+
+	// Once the BVNs are all running Vandenberg or later, always set the
+	// principal to acc://dn.acme/anchors so that every partition receives an
+	// identical anchor
+	if isSrcDir && x.Globals.BvnExecutorVersion().V2VandenbergEnabled() {
+		txn.Header.Principal = protocol.DnUrl().JoinPath(protocol.AnchorPool)
+	}
 
 	seq := &messaging.SequencedMessage{
 		Message:     &messaging.TransactionMessage{Transaction: txn},

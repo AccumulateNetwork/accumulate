@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -8,8 +8,10 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -54,6 +56,10 @@ func fatalf(format string, args ...interface{}) {
 
 func check(err error) {
 	if err != nil {
+		var xerr *exec.ExitError
+		if errors.As(err, &xerr) {
+			err = fmt.Errorf("%w: %s", xerr, xerr.Stderr)
+		}
 		fatalf("%v", err)
 	}
 }

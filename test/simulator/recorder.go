@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -7,6 +7,7 @@
 package simulator
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,7 +17,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/test/simulator/consensus"
 )
 
 //go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-enum --out recorder_enums_gen.go --package simulator recorder_enums.yml
@@ -34,23 +36,7 @@ type recorder struct {
 }
 
 func (r *recorder) WriteHeader(h *recordHeader) error {
-	b, err := h.MarshalBinary()
-	if err != nil {
-		return errors.EncodingError.WithFormat("encode: %w", err)
-	}
-	w, err := r.Open(recordSectionTypeHeader)
-	if err != nil {
-		return errors.UnknownError.WithFormat("open: %w", err)
-	}
-	_, err = w.Write(b)
-	if err != nil {
-		return errors.UnknownError.WithFormat("write: %w", err)
-	}
-	err = w.Close()
-	if err != nil {
-		return errors.UnknownError.WithFormat("close: %w", err)
-	}
-	return nil
+	return r.writeValue(recordSectionTypeHeader, h)
 }
 
 func (r *recorder) DidInit(snapshot ioutil.SectionReader) error {
@@ -58,22 +44,14 @@ func (r *recorder) DidInit(snapshot ioutil.SectionReader) error {
 	if err != nil {
 		return errors.UnknownError.WithFormat("seek start: %w", err)
 	}
-	w, err := r.Open(recordSectionTypeSnapshot)
-	if err != nil {
-		return errors.UnknownError.WithFormat("open: %w", err)
-	}
-	_, err = io.Copy(w, snapshot)
-	if err != nil {
-		return errors.UnknownError.WithFormat("copy: %w", err)
-	}
-	err = w.Close()
-	if err != nil {
-		return errors.UnknownError.WithFormat("close: %w", err)
-	}
-	return nil
+	return r.writeSection(recordSectionTypeSnapshot, snapshot)
 }
 
-func (r *recorder) DidExecuteBlock(state execute.BlockState, submissions []*messaging.Envelope) error {
+func (r *recorder) DidReceiveMessages(messages []consensus.Message) error {
+	return r.writeValue(recordSectionTypeMessages, &recordMessages{Messages: messages})
+}
+
+func (r *recorder) DidCommitBlock(state execute.BlockState) error {
 	ci, err := json.Marshal(state.Params().CommitInfo)
 	if err != nil {
 		return errors.EncodingError.WithFormat("encode commit info: %w", err)
@@ -83,12 +61,11 @@ func (r *recorder) DidExecuteBlock(state execute.BlockState, submissions []*mess
 		return errors.EncodingError.WithFormat("encode evidence: %w", err)
 	}
 	b := &recordBlock{
-		IsLeader:    state.Params().IsLeader,
-		Index:       state.Params().Index,
-		Time:        state.Params().Time,
-		CommitInfo:  ci,
-		Evidence:    ev,
-		Submissions: submissions,
+		IsLeader:   state.Params().IsLeader,
+		Index:      state.Params().Index,
+		Time:       state.Params().Time,
+		CommitInfo: ci,
+		Evidence:   ev,
 	}
 
 	if !state.IsEmpty() {
@@ -120,17 +97,25 @@ func (r *recorder) DidExecuteBlock(state execute.BlockState, submissions []*mess
 		}
 	}
 
-	v, err := b.MarshalBinary()
+	return r.writeValue(recordSectionTypeBlock, b)
+}
+
+func (r *recorder) writeValue(typ recordSectionType, val encoding.BinaryValue) error {
+	b, err := val.MarshalBinary()
 	if err != nil {
 		return errors.EncodingError.WithFormat("encode: %w", err)
 	}
-	w, err := r.Open(recordSectionTypeBlock)
+	return r.writeSection(typ, bytes.NewReader(b))
+}
+
+func (r *recorder) writeSection(typ recordSectionType, data io.Reader) error {
+	w, err := r.Open(typ)
 	if err != nil {
 		return errors.UnknownError.WithFormat("open: %w", err)
 	}
-	_, err = w.Write(v)
+	_, err = io.Copy(w, data)
 	if err != nil {
-		return errors.UnknownError.WithFormat("write: %w", err)
+		return errors.UnknownError.WithFormat("copy: %w", err)
 	}
 	err = w.Close()
 	if err != nil {
@@ -164,6 +149,24 @@ func DumpRecording(rd ioutil.SectionReader) error {
 				return err
 			}
 			fmt.Printf("  Partition %s (%v) node %v\n", h.Partition.ID, h.Partition.Type, h.NodeID)
+
+		case recordSectionTypeMessages:
+			m := new(recordMessages)
+			err = m.UnmarshalBinaryFrom(r)
+			if err != nil {
+				return err
+			}
+			for _, m := range m.Messages {
+				switch m := m.(type) {
+				case consensus.NodeMessage:
+					s := m.SenderID()
+					fmt.Printf("  Message %v for %s from %x\n", m.Type(), m.PartitionID(), s[:4])
+				case consensus.NetworkMessage:
+					fmt.Printf("  Message %v for %s\n", m.Type(), m.PartitionID())
+				default:
+					fmt.Printf("  Message %v\n", m.Type())
+				}
+			}
 
 		case recordSectionTypeBlock:
 			b := new(recordBlock)

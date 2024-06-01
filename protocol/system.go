@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -12,6 +12,21 @@ import (
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
+
+func (l *SystemLedger) SetBvnExecutorVersion(bvn string, ver ExecutorVersion) {
+	for _, b := range l.BvnExecutorVersions {
+		if strings.EqualFold(b.Partition, bvn) {
+			if ver > b.Version {
+				b.Version = ver
+			}
+			return
+		}
+	}
+	l.BvnExecutorVersions = append(l.BvnExecutorVersions, &PartitionExecutorVersion{
+		Partition: bvn,
+		Version:   ver,
+	})
+}
 
 type SequenceLedger interface {
 	Account

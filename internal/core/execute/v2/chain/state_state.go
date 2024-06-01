@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -7,6 +7,7 @@
 package chain
 
 import (
+	"math/big"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/internal"
@@ -24,6 +25,8 @@ type ProcessTransactionState struct {
 	MakeMajorBlock     uint64
 	MakeMajorBlockTime time.Time
 	ReceivedAnchors    []*ReceivedAnchor
+	AcmeBurnt          big.Int
+	NetworkUpdate      []*protocol.NetworkAccountUpdate
 }
 
 type ReceivedAnchor struct {
@@ -42,6 +45,15 @@ func (s *ProcessTransactionState) DidProduceTxn(url *url.URL, body protocol.Tran
 
 func (s *ProcessTransactionState) DidReceiveAnchor(partition string, body protocol.AnchorBody, index int64) {
 	s.ReceivedAnchors = append(s.ReceivedAnchors, &ReceivedAnchor{partition, body, index})
+}
+
+// ProcessNetworkMaintenanceOp queues a [internal.NetworkMaintenanceOp] message for processing
+// after the current bundle.
+func (s *ProcessTransactionState) ProcessNetworkMaintenanceOp(cause *url.TxID, op protocol.NetworkMaintenanceOperation) {
+	s.AdditionalMessages = append(s.AdditionalMessages, &internal.NetworkMaintenanceOp{
+		Cause:     cause,
+		Operation: op,
+	})
 }
 
 // ProcessNetworkUpdate queues a [internal.NetworkUpdate] message for processing
@@ -71,6 +83,8 @@ func (s *ProcessTransactionState) Merge(r *ProcessTransactionState) {
 	s.AdditionalMessages = append(s.AdditionalMessages, r.AdditionalMessages...)
 	s.ChainUpdates.Merge(&r.ChainUpdates)
 	s.ReceivedAnchors = append(s.ReceivedAnchors, r.ReceivedAnchors...)
+	s.AcmeBurnt.Add(&s.AcmeBurnt, &r.AcmeBurnt)
+	s.NetworkUpdate = append(s.NetworkUpdate, r.NetworkUpdate...)
 }
 
 type ChainUpdates struct {

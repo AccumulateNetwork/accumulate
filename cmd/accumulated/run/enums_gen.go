@@ -14,6 +14,27 @@ import (
 	"strings"
 )
 
+// ConfigurationTypeCoreValidator .
+const ConfigurationTypeCoreValidator ConfigurationType = 1
+
+// ConfigurationTypeGateway .
+const ConfigurationTypeGateway ConfigurationType = 2
+
+// ConfigurationTypeDevnet .
+const ConfigurationTypeDevnet ConfigurationType = 3
+
+// ConsensusAppTypeCore .
+const ConsensusAppTypeCore ConsensusAppType = 1
+
+// CoreValidatorModeDual .
+const CoreValidatorModeDual CoreValidatorMode = 0
+
+// CoreValidatorModeDN .
+const CoreValidatorModeDN CoreValidatorMode = 1
+
+// CoreValidatorModeBVN .
+const CoreValidatorModeBVN CoreValidatorMode = 2
+
 // PrivateKeyTypeRaw .
 const PrivateKeyTypeRaw PrivateKeyType = 1
 
@@ -28,6 +49,229 @@ const PrivateKeyTypeCometPrivValFile PrivateKeyType = 4
 
 // PrivateKeyTypeCometNodeKeyFile .
 const PrivateKeyTypeCometNodeKeyFile PrivateKeyType = 5
+
+// ServiceTypeStorage .
+const ServiceTypeStorage ServiceType = 1
+
+// ServiceTypeConsensus .
+const ServiceTypeConsensus ServiceType = 2
+
+// ServiceTypeQuerier .
+const ServiceTypeQuerier ServiceType = 3
+
+// ServiceTypeNetwork .
+const ServiceTypeNetwork ServiceType = 4
+
+// ServiceTypeMetrics .
+const ServiceTypeMetrics ServiceType = 5
+
+// ServiceTypeEvents .
+const ServiceTypeEvents ServiceType = 6
+
+// ServiceTypeHttp .
+const ServiceTypeHttp ServiceType = 7
+
+// ServiceTypeRouter .
+const ServiceTypeRouter ServiceType = 8
+
+// ServiceTypeSnapshot .
+const ServiceTypeSnapshot ServiceType = 9
+
+// ServiceTypeFaucet .
+const ServiceTypeFaucet ServiceType = 10
+
+// ServiceTypeSubnode .
+const ServiceTypeSubnode ServiceType = 11
+
+// StorageTypeMemory .
+const StorageTypeMemory StorageType = 1
+
+// StorageTypeBadger .
+const StorageTypeBadger StorageType = 2
+
+// StorageTypeBolt .
+const StorageTypeBolt StorageType = 3
+
+// StorageTypeLevelDB .
+const StorageTypeLevelDB StorageType = 4
+
+// StorageTypeExpBlockDB .
+const StorageTypeExpBlockDB StorageType = 1001
+
+// GetEnumValue returns the value of the Configuration Type
+func (v ConfigurationType) GetEnumValue() uint64 { return uint64(v) }
+
+// SetEnumValue sets the value. SetEnumValue returns false if the value is invalid.
+func (v *ConfigurationType) SetEnumValue(id uint64) bool {
+	u := ConfigurationType(id)
+	switch u {
+	case ConfigurationTypeCoreValidator, ConfigurationTypeGateway, ConfigurationTypeDevnet:
+		*v = u
+		return true
+	}
+	return false
+}
+
+// String returns the name of the Configuration Type.
+func (v ConfigurationType) String() string {
+	switch v {
+	case ConfigurationTypeCoreValidator:
+		return "coreValidator"
+	case ConfigurationTypeGateway:
+		return "gateway"
+	case ConfigurationTypeDevnet:
+		return "devnet"
+	}
+	return fmt.Sprintf("ConfigurationType:%d", v)
+}
+
+// ConfigurationTypeByName returns the named Configuration Type.
+func ConfigurationTypeByName(name string) (ConfigurationType, bool) {
+	switch strings.ToLower(name) {
+	case "corevalidator":
+		return ConfigurationTypeCoreValidator, true
+	case "gateway":
+		return ConfigurationTypeGateway, true
+	case "devnet":
+		return ConfigurationTypeDevnet, true
+	}
+	return 0, false
+}
+
+// MarshalJSON marshals the Configuration Type to JSON as a string.
+func (v ConfigurationType) MarshalJSON() ([]byte, error) {
+	return json.Marshal(v.String())
+}
+
+// UnmarshalJSON unmarshals the Configuration Type from JSON as a string.
+func (v *ConfigurationType) UnmarshalJSON(data []byte) error {
+	var s string
+	err := json.Unmarshal(data, &s)
+	if err != nil {
+		return err
+	}
+
+	var ok bool
+	*v, ok = ConfigurationTypeByName(s)
+	if !ok || strings.ContainsRune(v.String(), ':') {
+		return fmt.Errorf("invalid Configuration Type %q", s)
+	}
+	return nil
+}
+
+// GetEnumValue returns the value of the Consensus App Type
+func (v ConsensusAppType) GetEnumValue() uint64 { return uint64(v) }
+
+// SetEnumValue sets the value. SetEnumValue returns false if the value is invalid.
+func (v *ConsensusAppType) SetEnumValue(id uint64) bool {
+	u := ConsensusAppType(id)
+	switch u {
+	case ConsensusAppTypeCore:
+		*v = u
+		return true
+	}
+	return false
+}
+
+// String returns the name of the Consensus App Type.
+func (v ConsensusAppType) String() string {
+	switch v {
+	case ConsensusAppTypeCore:
+		return "core"
+	}
+	return fmt.Sprintf("ConsensusAppType:%d", v)
+}
+
+// ConsensusAppTypeByName returns the named Consensus App Type.
+func ConsensusAppTypeByName(name string) (ConsensusAppType, bool) {
+	switch strings.ToLower(name) {
+	case "core":
+		return ConsensusAppTypeCore, true
+	}
+	return 0, false
+}
+
+// MarshalJSON marshals the Consensus App Type to JSON as a string.
+func (v ConsensusAppType) MarshalJSON() ([]byte, error) {
+	return json.Marshal(v.String())
+}
+
+// UnmarshalJSON unmarshals the Consensus App Type from JSON as a string.
+func (v *ConsensusAppType) UnmarshalJSON(data []byte) error {
+	var s string
+	err := json.Unmarshal(data, &s)
+	if err != nil {
+		return err
+	}
+
+	var ok bool
+	*v, ok = ConsensusAppTypeByName(s)
+	if !ok || strings.ContainsRune(v.String(), ':') {
+		return fmt.Errorf("invalid Consensus App Type %q", s)
+	}
+	return nil
+}
+
+// GetEnumValue returns the value of the Core Validator Mode
+func (v CoreValidatorMode) GetEnumValue() uint64 { return uint64(v) }
+
+// SetEnumValue sets the value. SetEnumValue returns false if the value is invalid.
+func (v *CoreValidatorMode) SetEnumValue(id uint64) bool {
+	u := CoreValidatorMode(id)
+	switch u {
+	case CoreValidatorModeDual, CoreValidatorModeDN, CoreValidatorModeBVN:
+		*v = u
+		return true
+	}
+	return false
+}
+
+// String returns the name of the Core Validator Mode.
+func (v CoreValidatorMode) String() string {
+	switch v {
+	case CoreValidatorModeDual:
+		return "dual"
+	case CoreValidatorModeDN:
+		return "dn"
+	case CoreValidatorModeBVN:
+		return "bvn"
+	}
+	return fmt.Sprintf("CoreValidatorMode:%d", v)
+}
+
+// CoreValidatorModeByName returns the named Core Validator Mode.
+func CoreValidatorModeByName(name string) (CoreValidatorMode, bool) {
+	switch strings.ToLower(name) {
+	case "dual":
+		return CoreValidatorModeDual, true
+	case "dn":
+		return CoreValidatorModeDN, true
+	case "bvn":
+		return CoreValidatorModeBVN, true
+	}
+	return 0, false
+}
+
+// MarshalJSON marshals the Core Validator Mode to JSON as a string.
+func (v CoreValidatorMode) MarshalJSON() ([]byte, error) {
+	return json.Marshal(v.String())
+}
+
+// UnmarshalJSON unmarshals the Core Validator Mode from JSON as a string.
+func (v *CoreValidatorMode) UnmarshalJSON(data []byte) error {
+	var s string
+	err := json.Unmarshal(data, &s)
+	if err != nil {
+		return err
+	}
+
+	var ok bool
+	*v, ok = CoreValidatorModeByName(s)
+	if !ok || strings.ContainsRune(v.String(), ':') {
+		return fmt.Errorf("invalid Core Validator Mode %q", s)
+	}
+	return nil
+}
 
 // GetEnumValue returns the value of the Private Key Type
 func (v PrivateKeyType) GetEnumValue() uint64 { return uint64(v) }
@@ -94,6 +338,168 @@ func (v *PrivateKeyType) UnmarshalJSON(data []byte) error {
 	*v, ok = PrivateKeyTypeByName(s)
 	if !ok || strings.ContainsRune(v.String(), ':') {
 		return fmt.Errorf("invalid Private Key Type %q", s)
+	}
+	return nil
+}
+
+// GetEnumValue returns the value of the Service Type
+func (v ServiceType) GetEnumValue() uint64 { return uint64(v) }
+
+// SetEnumValue sets the value. SetEnumValue returns false if the value is invalid.
+func (v *ServiceType) SetEnumValue(id uint64) bool {
+	u := ServiceType(id)
+	switch u {
+	case ServiceTypeStorage, ServiceTypeConsensus, ServiceTypeQuerier, ServiceTypeNetwork, ServiceTypeMetrics, ServiceTypeEvents, ServiceTypeHttp, ServiceTypeRouter, ServiceTypeSnapshot, ServiceTypeFaucet, ServiceTypeSubnode:
+		*v = u
+		return true
+	}
+	return false
+}
+
+// String returns the name of the Service Type.
+func (v ServiceType) String() string {
+	switch v {
+	case ServiceTypeStorage:
+		return "storage"
+	case ServiceTypeConsensus:
+		return "consensus"
+	case ServiceTypeQuerier:
+		return "querier"
+	case ServiceTypeNetwork:
+		return "network"
+	case ServiceTypeMetrics:
+		return "metrics"
+	case ServiceTypeEvents:
+		return "events"
+	case ServiceTypeHttp:
+		return "http"
+	case ServiceTypeRouter:
+		return "router"
+	case ServiceTypeSnapshot:
+		return "snapshot"
+	case ServiceTypeFaucet:
+		return "faucet"
+	case ServiceTypeSubnode:
+		return "subnode"
+	}
+	return fmt.Sprintf("ServiceType:%d", v)
+}
+
+// ServiceTypeByName returns the named Service Type.
+func ServiceTypeByName(name string) (ServiceType, bool) {
+	switch strings.ToLower(name) {
+	case "storage":
+		return ServiceTypeStorage, true
+	case "consensus":
+		return ServiceTypeConsensus, true
+	case "querier":
+		return ServiceTypeQuerier, true
+	case "network":
+		return ServiceTypeNetwork, true
+	case "metrics":
+		return ServiceTypeMetrics, true
+	case "events":
+		return ServiceTypeEvents, true
+	case "http":
+		return ServiceTypeHttp, true
+	case "router":
+		return ServiceTypeRouter, true
+	case "snapshot":
+		return ServiceTypeSnapshot, true
+	case "faucet":
+		return ServiceTypeFaucet, true
+	case "subnode":
+		return ServiceTypeSubnode, true
+	}
+	return 0, false
+}
+
+// MarshalJSON marshals the Service Type to JSON as a string.
+func (v ServiceType) MarshalJSON() ([]byte, error) {
+	return json.Marshal(v.String())
+}
+
+// UnmarshalJSON unmarshals the Service Type from JSON as a string.
+func (v *ServiceType) UnmarshalJSON(data []byte) error {
+	var s string
+	err := json.Unmarshal(data, &s)
+	if err != nil {
+		return err
+	}
+
+	var ok bool
+	*v, ok = ServiceTypeByName(s)
+	if !ok || strings.ContainsRune(v.String(), ':') {
+		return fmt.Errorf("invalid Service Type %q", s)
+	}
+	return nil
+}
+
+// GetEnumValue returns the value of the Storage Type
+func (v StorageType) GetEnumValue() uint64 { return uint64(v) }
+
+// SetEnumValue sets the value. SetEnumValue returns false if the value is invalid.
+func (v *StorageType) SetEnumValue(id uint64) bool {
+	u := StorageType(id)
+	switch u {
+	case StorageTypeMemory, StorageTypeBadger, StorageTypeBolt, StorageTypeLevelDB, StorageTypeExpBlockDB:
+		*v = u
+		return true
+	}
+	return false
+}
+
+// String returns the name of the Storage Type.
+func (v StorageType) String() string {
+	switch v {
+	case StorageTypeMemory:
+		return "memory"
+	case StorageTypeBadger:
+		return "badger"
+	case StorageTypeBolt:
+		return "bolt"
+	case StorageTypeLevelDB:
+		return "levelDB"
+	case StorageTypeExpBlockDB:
+		return "expBlockDB"
+	}
+	return fmt.Sprintf("StorageType:%d", v)
+}
+
+// StorageTypeByName returns the named Storage Type.
+func StorageTypeByName(name string) (StorageType, bool) {
+	switch strings.ToLower(name) {
+	case "memory":
+		return StorageTypeMemory, true
+	case "badger":
+		return StorageTypeBadger, true
+	case "bolt":
+		return StorageTypeBolt, true
+	case "leveldb":
+		return StorageTypeLevelDB, true
+	case "expblockdb":
+		return StorageTypeExpBlockDB, true
+	}
+	return 0, false
+}
+
+// MarshalJSON marshals the Storage Type to JSON as a string.
+func (v StorageType) MarshalJSON() ([]byte, error) {
+	return json.Marshal(v.String())
+}
+
+// UnmarshalJSON unmarshals the Storage Type from JSON as a string.
+func (v *StorageType) UnmarshalJSON(data []byte) error {
+	var s string
+	err := json.Unmarshal(data, &s)
+	if err != nil {
+		return err
+	}
+
+	var ok bool
+	*v, ok = StorageTypeByName(s)
+	if !ok || strings.ContainsRune(v.String(), ':') {
+		return fmt.Errorf("invalid Storage Type %q", s)
 	}
 	return nil
 }
