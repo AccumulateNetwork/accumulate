@@ -7,7 +7,6 @@
 package protocol_test
 
 import (
-	"bytes"
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/elliptic"
