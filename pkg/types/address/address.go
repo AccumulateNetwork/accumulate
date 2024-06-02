@@ -9,10 +9,10 @@ package address
 import (
 	"encoding/hex"
 	"fmt"
+
 	"github.com/btcsuite/btcd/btcec"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcutil"
-
 	"github.com/btcsuite/btcutil/base58"
 	"github.com/multiformats/go-multibase"
 	"github.com/multiformats/go-multihash"
