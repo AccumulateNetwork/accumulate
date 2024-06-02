@@ -456,7 +456,7 @@ func TestTypesFromCerts(t *testing.T) {
 		case *rsa.PrivateKey:
 			pk := address.FromPrivateKeyBytes(block.Bytes, SignatureTypeRsaSha256)
 			pub = address.FromRSAPublicKey(&k.PublicKey)
-			require.True(t, bytes.Compare(pk.PublicKey.Key, pub.Key) == 0)
+			require.Equal(t,pk.PublicKey.Key, pub.Key)
 			priv := address.FromRSAPrivateKey(k)
 			s := new(RsaSha256Signature)
 			s.PublicKey = pub.Key
@@ -465,7 +465,7 @@ func TestTypesFromCerts(t *testing.T) {
 		case *ecdsa.PrivateKey:
 			pk := address.FromPrivateKeyBytes(block.Bytes, SignatureTypeEcdsaSha256)
 			pub = address.FromEcdsaPublicKeyAsPKIX(&k.PublicKey)
-			require.True(t, bytes.Compare(pk.PublicKey.Key, pub.Key) == 0)
+			require.Equal(t, pk.PublicKey.Key, pub.Key)
 			priv := address.FromEcdsaPrivateKey(k)
 			s := new(EcdsaSha256Signature)
 			s.PublicKey = pub.Key
@@ -474,7 +474,7 @@ func TestTypesFromCerts(t *testing.T) {
 		case ed25519.PrivateKey:
 			pk := address.FromPrivateKeyBytes(block.Bytes, SignatureTypeED25519)
 			pub = address.FromED25519PublicKey(k.Public().(ed25519.PublicKey))
-			require.True(t, bytes.Compare(pk.PublicKey.Key, pub.Key) == 0)
+			require.Equal(t, pk.PublicKey.Key, pub.Key)
 			priv := address.FromED25519PrivateKey(k)
 			s := new(ED25519Signature)
 			s.PublicKey = pub.Key
