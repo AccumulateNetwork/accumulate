@@ -11,6 +11,7 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"strings"
 
 	"github.com/mr-tron/base58"
@@ -32,19 +33,49 @@ func Parse(s string) (Address, error) {
 
 	switch s[:2] {
 	case "AC": // Accumulate public
-		b, err := parse2(s, sha256.Size, "AC1")
-		if err != nil {
-			return nil, errors.BadRequest.WithFormat("invalid AC1 address: %w", err)
+		var b []byte
+		var err error
+		var typ protocol.SignatureType
+		switch s[2:3] {
+		case "1":
+			b, err = parse2(s, sha256.Size, "AC1")
+			typ = protocol.SignatureTypeED25519
+		case "2":
+			b, err = parse2(s, sha256.Size, "AC2")
+			typ = protocol.SignatureTypeEcdsaSha256
+		case "3":
+			b, err = parse2(s, sha256.Size, "AC3")
+			typ = protocol.SignatureTypeRsaSha256
+		default:
+			err = fmt.Errorf("invalid AC version type")
 		}
-		return &PublicKeyHash{Type: protocol.SignatureTypeED25519, Hash: b}, nil
+		if err != nil {
+			return nil, errors.BadRequest.WithFormat("invalid AC address: %w", err)
+		}
+		return &PublicKeyHash{Type: typ, Hash: b}, nil
 
 	case "AS": // Accumulate private
-		b, err := parse2(s, ed25519.SeedSize, "AS1")
+		var b []byte
+		var err error
+		var typ protocol.SignatureType
+		switch s[2:3] {
+		case "1":
+			b, err = parse2(s, ed25519.SeedSize, "AS1")
+			typ = protocol.SignatureTypeED25519
+		case "2":
+			b, err = parse2(s, 0, "AS2")
+			typ = protocol.SignatureTypeEcdsaSha256
+		case "3":
+			b, err = parse2(s, 0, "AS3")
+			typ = protocol.SignatureTypeRsaSha256
+		default:
+			return nil, errors.BadRequest.WithFormat("invalid AC address: %w", err)
+		}
 		if err != nil {
 			return nil, errors.BadRequest.WithFormat("invalid AS1 address: %w", err)
 		}
-		key := ed25519.NewKeyFromSeed(b)
-		return &PrivateKey{PublicKey: PublicKey{Type: protocol.SignatureTypeED25519, Key: key[32:]}, Key: key}, err
+
+		return FromPrivateKeyBytes(b, typ)
 
 	case "FA": // Factom public
 		b, err := parse1(s, sha256.Size, sha256.Size, 0x5f, 0xb1)
@@ -80,6 +111,20 @@ func Parse(s string) (Address, error) {
 
 	case "MH": // Unknown hash (as a multihash)
 		return parseMH(s)
+	default:
+		//now test for a WIF encoded bitcoin key
+		if (s[0] == '5' || s[0] == 'K' || s[0] == 'L') && (len(s) == 51 || len(s) == 52) {
+			//this looks like a WIF key
+			b, compressed, err := parseWIF(s)
+			if err != nil {
+				return nil, err
+			}
+			if compressed {
+				return FromPrivateKeyBytes(b, protocol.SignatureTypeBTC)
+			} else {
+				return FromPrivateKeyBytes(b, protocol.SignatureTypeBTCLegacy)
+			}
+		}
 	}
 
 	// Raw hex - could be a hash or a key
@@ -191,9 +236,15 @@ func parse2(s string, bytelen int, prefix string) ([]byte, error) {
 		return nil, errors.BadRequest.Wrap(err)
 	}
 
-	// Check the length
-	if len(b) != bytelen+4 {
-		return nil, errors.BadRequest.WithFormat("want %d bytes, got %d", bytelen+4, len(b))
+	if bytelen > 0 {
+		// Check the length
+		if len(b) != bytelen+4 {
+			return nil, errors.BadRequest.WithFormat("want %d bytes, got %d", bytelen+4, len(b))
+		}
+	} else {
+		// assume the length is ok, so just set it.
+		// RSA and ECDSA keys can be of varying length depending on strength or curve respectively
+		bytelen = len(b) - 4
 	}
 
 	// Verify the checksum
@@ -207,4 +258,49 @@ func parse2(s string, bytelen int, prefix string) ([]byte, error) {
 	}
 
 	return b[:bytelen], nil
+}
+
+// DecodeWIF decodes a WIF-encoded private key into a raw private key
+func parseWIF(wif string) ([]byte, bool, error) {
+	// Decode the base58 string
+	decoded, err := base58.Decode(wif)
+	if err != nil {
+		return nil, false, err
+	}
+	if len(decoded) != 38 && len(decoded) != 37 {
+		return nil, false, fmt.Errorf("invalid WIF length")
+	}
+
+	// Split the checksum
+	data, checksum := decoded[:len(decoded)-4], decoded[len(decoded)-4:]
+
+	// Compute the checksum of the data
+	hash1 := sha256.Sum256(data)
+	hash2 := sha256.Sum256(hash1[:])
+	computedChecksum := hash2[:4]
+
+	// Verify the checksum
+	for i := 0; i < 4; i++ {
+		if checksum[i] != computedChecksum[i] {
+			return nil, false, fmt.Errorf("invalid WIF checksum")
+		}
+	}
+
+	// Remove the prefix (0x80) and check the length
+	prefix := data[0]
+	if prefix != 0x80 {
+		return nil, false, fmt.Errorf("invalid WIF prefix")
+	}
+
+	// Check if the key is compressed
+	compressed := false
+	privateKey := data[1:]
+	if len(privateKey) == 33 && privateKey[32] == 0x01 {
+		compressed = true
+		privateKey = privateKey[:32]
+	} else if len(privateKey) != 32 {
+		return nil, false, fmt.Errorf("invalid private key length")
+	}
+
+	return privateKey, compressed, nil
 }
