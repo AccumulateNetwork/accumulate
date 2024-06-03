@@ -455,7 +455,7 @@ func TestTypesFromCerts(t *testing.T) {
 		case *rsa.PrivateKey:
 			pk := address.FromPrivateKeyBytes(block.Bytes, SignatureTypeRsaSha256)
 			pub = address.FromRSAPublicKey(&k.PublicKey)
-			require.Equal(t,pk.PublicKey.Key, pub.Key)
+			require.Equal(t, pk.PublicKey.Key, pub.Key)
 			priv := address.FromRSAPrivateKey(k)
 			s := new(RsaSha256Signature)
 			s.PublicKey = pub.Key
