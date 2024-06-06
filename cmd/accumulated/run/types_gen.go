@@ -1673,6 +1673,12 @@ var fieldNames_HttpPeerMapEntry = []string{
 	3: "Addresses",
 }
 
+var fieldTypes_HttpPeerMapEntry = []string{
+	1: "p2p.PeerID",
+	2: "string",
+	3: "p2p.Multiaddr[]",
+}
+
 func (v *HttpPeerMapEntry) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -1737,6 +1743,13 @@ var fieldNames_RouterService = []string{
 	2: "Name",
 	3: "Events",
 	4: "PeerMap",
+}
+
+var fieldTypes_RouterService = []string{
+	1: "string",
+	2: "string",
+	3: "string",
+	4: "HttpPeerMapEntry[]",
 }
 
 func (v *RouterService) MarshalBinary() ([]byte, error) {
@@ -1879,6 +1892,255 @@ func (v *RouterService) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 		return encoding.Error{E: err}
 	}
 	return nil
+}
+
+func initEip712TypeDictionary() {
+
+	encoding.SchemaDictionary["BadgerStorage"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"path", "string"},
+		{"version", "int64"},
+	}
+
+	encoding.SchemaDictionary["BoltStorage"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"path", "string"},
+	}
+
+	encoding.SchemaDictionary["CometNodeKeyFile"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"key", "address.Address"},
+		{"path", "string"},
+	}
+
+	encoding.SchemaDictionary["CometPrivValFile"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"key", "address.Address"},
+		{"path", "string"},
+	}
+
+	encoding.SchemaDictionary["Config"] = &[]encoding.TypeField{
+		{"file", "string"},
+		{"network", "string"},
+		{"logging", "Logging"},
+		{"instrumentation", "Instrumentation"},
+		{"p2P", "P2P"},
+		{"configurations", "Configuration[]"},
+		{"services", "Service[]"},
+	}
+
+	encoding.SchemaDictionary["ConsensusService"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"nodeDir", "string"},
+		{"validatorKey", "PrivateKey"},
+		{"genesis", "string"},
+		{"listen", "p2p.Multiaddr"},
+		{"bootstrapPeers", "p2p.Multiaddr[]"},
+		{"metricsNamespace", "string"},
+		{"app", "ConsensusApp"},
+	}
+
+	encoding.SchemaDictionary["CoreConsensusApp"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"partition", "protocol.PartitionInfo"},
+		{"enableHealing", "bool"},
+		{"enableDirectDispatch", "bool"},
+		{"maxEnvelopesPerBlock", "uint64"},
+	}
+
+	encoding.SchemaDictionary["CoreValidatorConfiguration"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"mode", "string"},
+		{"listen", "p2p.Multiaddr"},
+		{"bvn", "string"},
+		{"validatorKey", "PrivateKey"},
+		{"dnGenesis", "string"},
+		{"bvnGenesis", "string"},
+		{"dnBootstrapPeers", "p2p.Multiaddr[]"},
+		{"bvnBootstrapPeers", "p2p.Multiaddr[]"},
+		{"enableHealing", "bool"},
+		{"enableDirectDispatch", "bool"},
+		{"enableSnapshots", "bool"},
+		{"maxEnvelopesPerBlock", "uint64"},
+		{"storageType", "string"},
+	}
+
+	encoding.SchemaDictionary["DevnetConfiguration"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"listen", "p2p.Multiaddr"},
+		{"bvns", "uint64"},
+		{"validators", "uint64"},
+		{"followers", "uint64"},
+		{"globals", "network.GlobalValues"},
+	}
+
+	encoding.SchemaDictionary["EventsService"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"partition", "string"},
+	}
+
+	encoding.SchemaDictionary["ExpBlockDBStorage"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"path", "string"},
+	}
+
+	encoding.SchemaDictionary["FaucetService"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"account", "string"},
+		{"signingKey", "PrivateKey"},
+		{"router", "ServiceOrRef[*RouterService]"},
+	}
+
+	encoding.SchemaDictionary["GatewayConfiguration"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"listen", "p2p.Multiaddr"},
+	}
+
+	encoding.SchemaDictionary["HttpListener"] = &[]encoding.TypeField{
+		{"listen", "p2p.Multiaddr[]"},
+		{"connectionLimit", "int64"},
+		{"readHeaderTimeout", "string"},
+		{"tlsCertPath", "string"},
+		{"tlsKeyPath", "string"},
+	}
+
+	encoding.SchemaDictionary["HttpPeerMapEntry"] = &[]encoding.TypeField{
+		{"id", "p2p.PeerID"},
+		{"partitions", "string"},
+		{"addresses", "p2p.Multiaddr[]"},
+	}
+
+	encoding.SchemaDictionary["HttpService"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"listen", "p2p.Multiaddr[]"},
+		{"connectionLimit", "int64"},
+		{"readHeaderTimeout", "string"},
+		{"tlsCertPath", "string"},
+		{"tlsKeyPath", "string"},
+		{"corsOrigins", "string"},
+		{"letsEncrypt", "string"},
+		{"debugJsonRpc", "bool"},
+		{"router", "ServiceOrRef[*RouterService]"},
+		{"peerMap", "HttpPeerMapEntry[]"},
+	}
+
+	encoding.SchemaDictionary["Instrumentation"] = &[]encoding.TypeField{
+		{"listen", "p2p.Multiaddr[]"},
+		{"connectionLimit", "int64"},
+		{"readHeaderTimeout", "string"},
+		{"tlsCertPath", "string"},
+		{"tlsKeyPath", "string"},
+		{"monitoring", "Monitor"},
+	}
+
+	encoding.SchemaDictionary["LevelDBStorage"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"path", "string"},
+	}
+
+	encoding.SchemaDictionary["Logging"] = &[]encoding.TypeField{
+		{"format", "string"},
+		{"color", "bool"},
+		{"rules", "LoggingRule[]"},
+		{"loki", "LokiLogging"},
+	}
+
+	encoding.SchemaDictionary["LoggingRule"] = &[]encoding.TypeField{
+		{"level", "slog.Level"},
+		{"modules", "string"},
+	}
+
+	encoding.SchemaDictionary["LokiLogging"] = &[]encoding.TypeField{
+		{"enable", "bool"},
+		{"url", "string"},
+		{"username", "string"},
+		{"password", "string"},
+	}
+
+	encoding.SchemaDictionary["MemoryStorage"] = &[]encoding.TypeField{
+		{"type", "string"},
+	}
+
+	encoding.SchemaDictionary["MetricsService"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"partition", "string"},
+	}
+
+	encoding.SchemaDictionary["Monitor"] = &[]encoding.TypeField{
+		{"directory", "string"},
+		{"profileMemory", "bool"},
+		{"memoryPollingRate", "string"},
+		{"allocRateTrigger", "float"},
+	}
+
+	encoding.SchemaDictionary["NetworkService"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"partition", "string"},
+	}
+
+	encoding.SchemaDictionary["P2P"] = &[]encoding.TypeField{
+		{"listen", "p2p.Multiaddr[]"},
+		{"bootstrapPeers", "p2p.Multiaddr[]"},
+		{"key", "PrivateKey"},
+		{"peerDB", "string"},
+		{"enablePeerTracking", "bool"},
+		{"discoveryMode", "DhtMode"},
+		{"external", "p2p.Multiaddr"},
+	}
+
+	encoding.SchemaDictionary["PrivateKeySeed"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"key", "address.Address"},
+		{"seed", "record.Key"},
+	}
+
+	encoding.SchemaDictionary["Querier"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"partition", "string"},
+		{"storage", "StorageOrRef"},
+	}
+
+	encoding.SchemaDictionary["RawPrivateKey"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"address", "string"},
+	}
+
+	encoding.SchemaDictionary["RouterService"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"name", "string"},
+		{"events", "string"},
+		{"peerMap", "HttpPeerMapEntry[]"},
+	}
+
+	encoding.SchemaDictionary["SnapshotService"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"partition", "string"},
+		{"storage", "StorageOrRef"},
+		{"directory", "string"},
+		{"schedule", "network.CronSchedule"},
+		{"retainCount", "uint64"},
+		{"enableIndexing", "bool"},
+	}
+
+	encoding.SchemaDictionary["StorageService"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"name", "string"},
+		{"storage", "Storage"},
+	}
+
+	encoding.SchemaDictionary["SubnodeService"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"name", "string"},
+		{"nodeKey", "PrivateKey"},
+		{"services", "Service[]"},
+	}
+
+	encoding.SchemaDictionary["TransientPrivateKey"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"key", "address.Address"},
+	}
+
+	encoding.ResolveTypeDefinitions()
 }
 
 func (v *BadgerStorage) MarshalJSON() ([]byte, error) {

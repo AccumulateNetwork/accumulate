@@ -10,8 +10,8 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/hex"
-	"encoding/pem"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"testing"
 

@@ -5,12 +5,13 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
-	"golang.org/x/crypto/sha3"
 	"log"
 	"reflect"
 	"sort"
 	"strings"
+
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
+	"golang.org/x/crypto/sha3"
 )
 
 //go:embed signature_eip712.json

@@ -961,6 +961,12 @@ var fieldNames_Addressed = []string{
 	3: "Address",
 }
 
+var fieldTypes_Addressed = []string{
+	1: "string",
+	2: "Message",
+	3: "p2p.Multiaddr",
+}
+
 func (v *Addressed) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -1017,6 +1023,11 @@ var fieldNames_ConsensusStatusRequest = []string{
 	2: "ConsensusStatusOptions",
 }
 
+var fieldTypes_ConsensusStatusRequest = []string{
+	1: "string",
+	2: "api.ConsensusStatusOptions",
+}
+
 func (v *ConsensusStatusRequest) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -1059,6 +1070,11 @@ func (v *ConsensusStatusRequest) IsValid() error {
 var fieldNames_ConsensusStatusResponse = []string{
 	1: "Type",
 	2: "Value",
+}
+
+var fieldTypes_ConsensusStatusResponse = []string{
+	1: "string",
+	2: "api.ConsensusStatus",
 }
 
 func (v *ConsensusStatusResponse) MarshalBinary() ([]byte, error) {
@@ -1109,6 +1125,11 @@ var fieldNames_ErrorResponse = []string{
 	2: "Error",
 }
 
+var fieldTypes_ErrorResponse = []string{
+	1: "string",
+	2: "errors2.Error",
+}
+
 func (v *ErrorResponse) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -1157,6 +1178,11 @@ var fieldNames_EventMessage = []string{
 	2: "Value",
 }
 
+var fieldTypes_EventMessage = []string{
+	1: "string",
+	2: "api.Event[]",
+}
+
 func (v *EventMessage) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -1202,6 +1228,12 @@ var fieldNames_FaucetRequest = []string{
 	1: "Type",
 	2: "Account",
 	3: "FaucetOptions",
+}
+
+var fieldTypes_FaucetRequest = []string{
+	1: "string",
+	2: "string",
+	3: "api.FaucetOptions",
 }
 
 func (v *FaucetRequest) MarshalBinary() ([]byte, error) {
@@ -1256,6 +1288,11 @@ var fieldNames_FaucetResponse = []string{
 	2: "Value",
 }
 
+var fieldTypes_FaucetResponse = []string{
+	1: "string",
+	2: "api.Submission",
+}
+
 func (v *FaucetResponse) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -1304,6 +1341,11 @@ var fieldNames_FindServiceRequest = []string{
 	2: "FindServiceOptions",
 }
 
+var fieldTypes_FindServiceRequest = []string{
+	1: "string",
+	2: "api.FindServiceOptions",
+}
+
 func (v *FindServiceRequest) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -1346,6 +1388,11 @@ func (v *FindServiceRequest) IsValid() error {
 var fieldNames_FindServiceResponse = []string{
 	1: "Type",
 	2: "Value",
+}
+
+var fieldTypes_FindServiceResponse = []string{
+	1: "string",
+	2: "api.FindServiceResult[]",
 }
 
 func (v *FindServiceResponse) MarshalBinary() ([]byte, error) {
@@ -1394,6 +1441,11 @@ var fieldNames_MetricsRequest = []string{
 	2: "MetricsOptions",
 }
 
+var fieldTypes_MetricsRequest = []string{
+	1: "string",
+	2: "api.MetricsOptions",
+}
+
 func (v *MetricsRequest) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -1436,6 +1488,11 @@ func (v *MetricsRequest) IsValid() error {
 var fieldNames_MetricsResponse = []string{
 	1: "Type",
 	2: "Value",
+}
+
+var fieldTypes_MetricsResponse = []string{
+	1: "string",
+	2: "api.Metrics",
 }
 
 func (v *MetricsResponse) MarshalBinary() ([]byte, error) {
@@ -1486,6 +1543,11 @@ var fieldNames_NetworkStatusRequest = []string{
 	2: "NetworkStatusOptions",
 }
 
+var fieldTypes_NetworkStatusRequest = []string{
+	1: "string",
+	2: "api.NetworkStatusOptions",
+}
+
 func (v *NetworkStatusRequest) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -1528,6 +1590,11 @@ func (v *NetworkStatusRequest) IsValid() error {
 var fieldNames_NetworkStatusResponse = []string{
 	1: "Type",
 	2: "Value",
+}
+
+var fieldTypes_NetworkStatusResponse = []string{
+	1: "string",
+	2: "api.NetworkStatus",
 }
 
 func (v *NetworkStatusResponse) MarshalBinary() ([]byte, error) {
@@ -1578,6 +1645,11 @@ var fieldNames_NodeInfoRequest = []string{
 	2: "NodeInfoOptions",
 }
 
+var fieldTypes_NodeInfoRequest = []string{
+	1: "string",
+	2: "api.NodeInfoOptions",
+}
+
 func (v *NodeInfoRequest) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -1620,6 +1692,11 @@ func (v *NodeInfoRequest) IsValid() error {
 var fieldNames_NodeInfoResponse = []string{
 	1: "Type",
 	2: "Value",
+}
+
+var fieldTypes_NodeInfoResponse = []string{
+	1: "string",
+	2: "api.NodeInfo",
 }
 
 func (v *NodeInfoResponse) MarshalBinary() ([]byte, error) {
@@ -1671,6 +1748,14 @@ var fieldNames_PrivateSequenceRequest = []string{
 	3: "Destination",
 	4: "SequenceNumber",
 	5: "SequenceOptions",
+}
+
+var fieldTypes_PrivateSequenceRequest = []string{
+	1: "string",
+	2: "string",
+	3: "string",
+	4: "uint64",
+	5: "private.SequenceOptions",
 }
 
 func (v *PrivateSequenceRequest) MarshalBinary() ([]byte, error) {
@@ -1741,6 +1826,11 @@ var fieldNames_PrivateSequenceResponse = []string{
 	2: "Value",
 }
 
+var fieldTypes_PrivateSequenceResponse = []string{
+	1: "string",
+	2: "api.MessageRecord[messaging.Message]",
+}
+
 func (v *PrivateSequenceResponse) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -1788,6 +1878,12 @@ var fieldNames_QueryRequest = []string{
 	1: "Type",
 	2: "Scope",
 	3: "Query",
+}
+
+var fieldTypes_QueryRequest = []string{
+	1: "string",
+	2: "string",
+	3: "api.Query",
 }
 
 func (v *QueryRequest) MarshalBinary() ([]byte, error) {
@@ -1841,6 +1937,11 @@ var fieldNames_RecordResponse = []string{
 	2: "Value",
 }
 
+var fieldTypes_RecordResponse = []string{
+	1: "string",
+	2: "api.Record",
+}
+
 func (v *RecordResponse) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -1888,6 +1989,12 @@ var fieldNames_SubmitRequest = []string{
 	1: "Type",
 	2: "Envelope",
 	3: "SubmitOptions",
+}
+
+var fieldTypes_SubmitRequest = []string{
+	1: "string",
+	2: "messaging.Envelope",
+	3: "api.SubmitOptions",
 }
 
 func (v *SubmitRequest) MarshalBinary() ([]byte, error) {
@@ -1942,6 +2049,11 @@ var fieldNames_SubmitResponse = []string{
 	2: "Value",
 }
 
+var fieldTypes_SubmitResponse = []string{
+	1: "string",
+	2: "api.Submission[]",
+}
+
 func (v *SubmitResponse) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -1988,6 +2100,11 @@ var fieldNames_SubscribeRequest = []string{
 	2: "SubscribeOptions",
 }
 
+var fieldTypes_SubscribeRequest = []string{
+	1: "string",
+	2: "api.SubscribeOptions",
+}
+
 func (v *SubscribeRequest) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -2031,6 +2148,10 @@ var fieldNames_SubscribeResponse = []string{
 	1: "Type",
 }
 
+var fieldTypes_SubscribeResponse = []string{
+	1: "string",
+}
+
 func (v *SubscribeResponse) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -2070,6 +2191,12 @@ var fieldNames_ValidateRequest = []string{
 	1: "Type",
 	2: "Envelope",
 	3: "ValidateOptions",
+}
+
+var fieldTypes_ValidateRequest = []string{
+	1: "string",
+	2: "messaging.Envelope",
+	3: "api.ValidateOptions",
 }
 
 func (v *ValidateRequest) MarshalBinary() ([]byte, error) {
@@ -2122,6 +2249,11 @@ func (v *ValidateRequest) IsValid() error {
 var fieldNames_ValidateResponse = []string{
 	1: "Type",
 	2: "Value",
+}
+
+var fieldTypes_ValidateResponse = []string{
+	1: "string",
+	2: "api.Submission[]",
 }
 
 func (v *ValidateResponse) MarshalBinary() ([]byte, error) {
@@ -3076,6 +3208,152 @@ func (v *ValidateResponse) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 		return encoding.Error{E: err}
 	}
 	return nil
+}
+
+func initEip712TypeDictionary() {
+
+	encoding.SchemaDictionary["Addressed"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"message", "Message"},
+		{"address", "p2p.Multiaddr"},
+	}
+
+	encoding.SchemaDictionary["ConsensusStatusRequest"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"nodeID", "string"},
+		{"partition", "string"},
+		{"includePeers", "bool"},
+		{"includeAccumulate", "bool"},
+	}
+
+	encoding.SchemaDictionary["ConsensusStatusResponse"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"value", "api.ConsensusStatus"},
+	}
+
+	encoding.SchemaDictionary["ErrorResponse"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"error", "errors2.Error"},
+	}
+
+	encoding.SchemaDictionary["EventMessage"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"value", "api.Event[]"},
+	}
+
+	encoding.SchemaDictionary["FaucetRequest"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"account", "string"},
+		{"token", "string"},
+	}
+
+	encoding.SchemaDictionary["FaucetResponse"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"value", "api.Submission"},
+	}
+
+	encoding.SchemaDictionary["FindServiceRequest"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"network", "string"},
+		{"service", "api.ServiceAddress"},
+		{"known", "bool"},
+		{"timeout", "string"},
+	}
+
+	encoding.SchemaDictionary["FindServiceResponse"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"value", "api.FindServiceResult[]"},
+	}
+
+	encoding.SchemaDictionary["MetricsRequest"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"partition", "string"},
+		{"span", "uint64"},
+	}
+
+	encoding.SchemaDictionary["MetricsResponse"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"value", "api.Metrics"},
+	}
+
+	encoding.SchemaDictionary["NetworkStatusRequest"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"partition", "string"},
+	}
+
+	encoding.SchemaDictionary["NetworkStatusResponse"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"value", "api.NetworkStatus"},
+	}
+
+	encoding.SchemaDictionary["NodeInfoRequest"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"peerID", "p2p.PeerID"},
+	}
+
+	encoding.SchemaDictionary["NodeInfoResponse"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"value", "api.NodeInfo"},
+	}
+
+	encoding.SchemaDictionary["PrivateSequenceRequest"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"source", "string"},
+		{"destination", "string"},
+		{"sequenceNumber", "uint64"},
+		{"nodeID", "p2p.PeerID"},
+	}
+
+	encoding.SchemaDictionary["PrivateSequenceResponse"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"value", "api.MessageRecord[messaging.Message]"},
+	}
+
+	encoding.SchemaDictionary["QueryRequest"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"scope", "string"},
+		{"query", "api.Query"},
+	}
+
+	encoding.SchemaDictionary["RecordResponse"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"value", "api.Record"},
+	}
+
+	encoding.SchemaDictionary["SubmitRequest"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"envelope", "messaging.Envelope"},
+		{"verify", "bool"},
+		{"wait", "bool"},
+	}
+
+	encoding.SchemaDictionary["SubmitResponse"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"value", "api.Submission[]"},
+	}
+
+	encoding.SchemaDictionary["SubscribeRequest"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"partition", "string"},
+		{"account", "string"},
+	}
+
+	encoding.SchemaDictionary["SubscribeResponse"] = &[]encoding.TypeField{
+		{"type", "string"},
+	}
+
+	encoding.SchemaDictionary["ValidateRequest"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"envelope", "messaging.Envelope"},
+		{"full", "bool"},
+	}
+
+	encoding.SchemaDictionary["ValidateResponse"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"value", "api.Submission[]"},
+	}
+
+	encoding.ResolveTypeDefinitions()
 }
 
 func (v *Addressed) MarshalJSON() ([]byte, error) {

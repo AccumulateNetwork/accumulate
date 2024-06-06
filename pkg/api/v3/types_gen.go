@@ -2715,7 +2715,7 @@ var fieldNames_AnchorSearchQuery = []string{
 var fieldTypes_AnchorSearchQuery = []string{
 	1: "string",
 	2: "bytes",
-	3: "bool",
+	3: "ReceiptOptions",
 }
 
 func (v *AnchorSearchQuery) MarshalBinary() ([]byte, error) {
@@ -3078,7 +3078,7 @@ var fieldTypes_ChainQuery = []string{
 	3: "uint64",
 	4: "bytes",
 	5: "RangeOptions",
-	6: "bool",
+	6: "ReceiptOptions",
 }
 
 func (v *ChainQuery) MarshalBinary() ([]byte, error) {
@@ -3554,7 +3554,7 @@ var fieldNames_DefaultQuery = []string{
 
 var fieldTypes_DefaultQuery = []string{
 	1: "string",
-	2: "bool",
+	2: "ReceiptOptions",
 }
 
 func (v *DefaultQuery) MarshalBinary() ([]byte, error) {
@@ -4801,6 +4801,7 @@ var fieldTypes_NetworkStatus = []string{
 	5: "string",
 	6: "uint64",
 	7: "uint64",
+	8: "protocol.PartitionExecutorVersion[]",
 }
 
 func (v *NetworkStatus) MarshalBinary() ([]byte, error) {
@@ -5379,6 +5380,11 @@ func (v *Receipt) IsValid() error {
 var fieldNames_ReceiptOptions = []string{
 	1: "ForAny",
 	2: "ForHeight",
+}
+
+var fieldTypes_ReceiptOptions = []string{
+	1: "bool",
+	2: "uint64",
 }
 
 func (v *ReceiptOptions) MarshalBinary() ([]byte, error) {
@@ -7764,7 +7770,7 @@ func initEip712TypeDictionary() {
 	encoding.SchemaDictionary["AnchorSearchQuery"] = &[]encoding.TypeField{
 		{"queryType", "string"},
 		{"anchor", "bytes"},
-		{"includeReceipt", "bool"},
+		{"includeReceipt", "ReceiptOptions"},
 	}
 
 	encoding.SchemaDictionary["BlockEvent"] = &[]encoding.TypeField{
@@ -7805,7 +7811,7 @@ func initEip712TypeDictionary() {
 		{"index", "uint64"},
 		{"entry", "bytes"},
 		{"range", "RangeOptions"},
-		{"includeReceipt", "bool"},
+		{"includeReceipt", "ReceiptOptions"},
 	}
 
 	encoding.SchemaDictionary["ChainRecord"] = &[]encoding.TypeField{
@@ -7851,7 +7857,7 @@ func initEip712TypeDictionary() {
 
 	encoding.SchemaDictionary["DefaultQuery"] = &[]encoding.TypeField{
 		{"queryType", "string"},
-		{"includeReceipt", "bool"},
+		{"includeReceipt", "ReceiptOptions"},
 	}
 
 	encoding.SchemaDictionary["DelegateSearchQuery"] = &[]encoding.TypeField{
@@ -7977,6 +7983,7 @@ func initEip712TypeDictionary() {
 		{"executorVersion", "string"},
 		{"directoryHeight", "uint64"},
 		{"majorBlockHeight", "uint64"},
+		{"bvnExecutorVersions", "protocol.PartitionExecutorVersion[]"},
 	}
 
 	encoding.SchemaDictionary["NetworkStatusOptions"] = &[]encoding.TypeField{
@@ -8028,6 +8035,11 @@ func initEip712TypeDictionary() {
 		{"localBlock", "uint64"},
 		{"localBlockTime", "string"},
 		{"majorBlock", "uint64"},
+	}
+
+	encoding.SchemaDictionary["ReceiptOptions"] = &[]encoding.TypeField{
+		{"forAny", "bool"},
+		{"forHeight", "uint64"},
 	}
 
 	encoding.SchemaDictionary["RecordRange"] = &[]encoding.TypeField{

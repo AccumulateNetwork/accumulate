@@ -1186,6 +1186,12 @@ var fieldNames_DidUpdateExecutorVersion = []string{
 	3: "Version",
 }
 
+var fieldTypes_DidUpdateExecutorVersion = []string{
+	1: "string",
+	2: "string",
+	3: "string",
+}
+
 func (v *DidUpdateExecutorVersion) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -1312,6 +1318,13 @@ var fieldNames_MakeMajorBlock = []string{
 	4: "MajorBlockTime",
 }
 
+var fieldTypes_MakeMajorBlock = []string{
+	1: "string",
+	2: "uint64",
+	3: "uint64",
+	4: "string",
+}
+
 func (v *MakeMajorBlock) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -1374,6 +1387,11 @@ func (v *MakeMajorBlock) IsValid() error {
 var fieldNames_NetworkUpdate = []string{
 	1: "Type",
 	2: "Accounts",
+}
+
+var fieldTypes_NetworkUpdate = []string{
+	1: "string",
+	2: "protocol.NetworkAccountUpdate[]",
 }
 
 func (v *NetworkUpdate) MarshalBinary() ([]byte, error) {
@@ -2538,11 +2556,29 @@ func initEip712TypeDictionary() {
 		{"cause", "string"},
 	}
 
+	encoding.SchemaDictionary["DidUpdateExecutorVersion"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"partition", "string"},
+		{"version", "string"},
+	}
+
 	encoding.SchemaDictionary["Envelope"] = &[]encoding.TypeField{
 		{"signatures", "protocol.Signature[]"},
 		{"txHash", "bytes"},
 		{"transaction", "protocol.Transaction[]"},
 		{"messages", "Message[]"},
+	}
+
+	encoding.SchemaDictionary["MakeMajorBlock"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"majorBlockIndex", "uint64"},
+		{"minorBlockIndex", "uint64"},
+		{"majorBlockTime", "string"},
+	}
+
+	encoding.SchemaDictionary["NetworkUpdate"] = &[]encoding.TypeField{
+		{"type", "string"},
+		{"accounts", "protocol.NetworkAccountUpdate[]"},
 	}
 
 	encoding.SchemaDictionary["RecordUpdate"] = &[]encoding.TypeField{

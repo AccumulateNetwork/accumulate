@@ -1858,6 +1858,7 @@ var fieldTypes_DataEntryQueryResponse = []string{
 	2: "protocol.DataEntry",
 	3: "string",
 	4: "string",
+	5: "string",
 }
 
 func (v *DataEntryQueryResponse) MarshalBinary() ([]byte, error) {
@@ -2236,6 +2237,7 @@ var fieldTypes_ResponseDataEntry = []string{
 	2: "protocol.DataEntry",
 	3: "string",
 	4: "string",
+	5: "string",
 }
 
 func (v *ResponseDataEntry) MarshalBinary() ([]byte, error) {
@@ -2318,6 +2320,7 @@ var fieldNames_ResponseDataEntrySet = []string{
 var fieldTypes_ResponseDataEntrySet = []string{
 	1: "ResponseDataEntry[]",
 	2: "uint64",
+	3: "string",
 }
 
 func (v *ResponseDataEntrySet) MarshalBinary() ([]byte, error) {
@@ -2388,6 +2391,7 @@ var fieldTypes_ResponseKeyPageIndex = []string{
 	1: "string",
 	2: "string",
 	3: "uint64",
+	4: "string",
 }
 
 func (v *ResponseKeyPageIndex) MarshalBinary() ([]byte, error) {
@@ -2894,6 +2898,7 @@ func initEip712TypeDictionary() {
 		{"data", "Any"},
 		{"chainId", "bytes"},
 		{"receipt", "GeneralReceipt"},
+		{"lastBlockTime", "string"},
 	}
 
 	encoding.SchemaDictionary["ChainState"] = &[]encoding.TypeField{
@@ -2913,6 +2918,7 @@ func initEip712TypeDictionary() {
 		{"entry", "protocol.DataEntry"},
 		{"txId", "string"},
 		{"causeTxId", "string"},
+		{"lastBlockTime", "string"},
 	}
 
 	encoding.SchemaDictionary["DataEntrySetQuery"] = &[]encoding.TypeField{
@@ -2988,6 +2994,7 @@ func initEip712TypeDictionary() {
 		{"majorBlockIndex", "uint64"},
 		{"majorBlockTime", "string"},
 		{"minorBlocks", "MinorBlock[]"},
+		{"lastBlockTime", "string"},
 	}
 
 	encoding.SchemaDictionary["MerkleState"] = &[]encoding.TypeField{
@@ -3023,6 +3030,7 @@ func initEip712TypeDictionary() {
 		{"txCount", "uint64"},
 		{"txIds", "bytes[]"},
 		{"transactions", "TransactionQueryResponse[]"},
+		{"lastBlockTime", "string"},
 	}
 
 	encoding.SchemaDictionary["MultiResponse"] = &[]encoding.TypeField{
@@ -3032,6 +3040,7 @@ func initEip712TypeDictionary() {
 		{"count", "uint64"},
 		{"total", "uint64"},
 		{"otherItems", "Any[]"},
+		{"lastBlockTime", "string"},
 	}
 
 	encoding.SchemaDictionary["NetworkDescription"] = &[]encoding.TypeField{
@@ -3069,17 +3078,20 @@ func initEip712TypeDictionary() {
 		{"entry", "protocol.DataEntry"},
 		{"txId", "string"},
 		{"causeTxId", "string"},
+		{"lastBlockTime", "string"},
 	}
 
 	encoding.SchemaDictionary["ResponseDataEntrySet"] = &[]encoding.TypeField{
 		{"dataEntries", "ResponseDataEntry[]"},
 		{"total", "uint64"},
+		{"lastBlockTime", "string"},
 	}
 
 	encoding.SchemaDictionary["ResponseKeyPageIndex"] = &[]encoding.TypeField{
 		{"authority", "string"},
 		{"signer", "string"},
 		{"index", "uint64"},
+		{"lastBlockTime", "string"},
 	}
 
 	encoding.SchemaDictionary["SignatureBook"] = &[]encoding.TypeField{
@@ -3151,6 +3163,7 @@ func initEip712TypeDictionary() {
 		{"produced", "string[]"},
 		{"receipts", "TxReceipt[]"},
 		{"signatureBooks", "SignatureBook[]"},
+		{"lastBlockTime", "string"},
 	}
 
 	encoding.SchemaDictionary["TxHistoryQuery"] = &[]encoding.TypeField{
@@ -3193,6 +3206,7 @@ func initEip712TypeDictionary() {
 		{"message", "string"},
 		{"delivered", "bool"},
 		{"result", "Any"},
+		{"lastBlockTime", "string"},
 	}
 
 	encoding.SchemaDictionary["TxnQuery"] = &[]encoding.TypeField{

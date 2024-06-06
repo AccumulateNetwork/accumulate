@@ -237,7 +237,7 @@ const SignatureTypeAuthority SignatureType = 13
 const SignatureTypeRsaSha256 SignatureType = 14
 
 // SignatureTypeEip712TypedData implements EIP-712 sign typed data specification.
-const SignatureTypeEip712TypedData SignatureType = 15
+const SignatureTypeEip712TypedData SignatureType = 16
 
 // TransactionMaxUser is the highest number reserved for user transactions.
 const TransactionMaxUser TransactionMax = 48

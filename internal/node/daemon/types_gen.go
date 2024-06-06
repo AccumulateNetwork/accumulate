@@ -323,6 +323,7 @@ func initEip712TypeDictionary() {
 
 	encoding.SchemaDictionary["NetworkInit"] = &[]encoding.TypeField{
 		{"id", "string"},
+		{"globals", "network.GlobalValues"},
 		{"bootstrap", "NodeInit"},
 		{"bvns", "BvnInit[]"},
 		{"bsn", "BvnInit"},
