@@ -372,6 +372,20 @@ type ETHSignature struct {
 	extraData       []byte
 }
 
+type EcdsaSha256Signature struct {
+	fieldsSet       []bool
+	PublicKey       []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
+	Signature       []byte   `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
+	Signer          *url.URL `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
+	SignerVersion   uint64   `json:"signerVersion,omitempty" form:"signerVersion" query:"signerVersion" validate:"required"`
+	Timestamp       uint64   `json:"timestamp,omitempty" form:"timestamp" query:"timestamp"`
+	Vote            VoteType `json:"vote,omitempty" form:"vote" query:"vote"`
+	TransactionHash [32]byte `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash"`
+	Memo            string   `json:"memo,omitempty" form:"memo" query:"memo"`
+	Data            []byte   `json:"data,omitempty" form:"data" query:"data"`
+	extraData       []byte
+}
+
 type Eip712TypedDataSignature struct {
 	fieldsSet       []bool
 	PublicKey       []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
@@ -1185,6 +1199,8 @@ func (*DoubleHashDataEntry) Type() DataEntryType { return DataEntryTypeDoubleHas
 func (*ED25519Signature) Type() SignatureType { return SignatureTypeED25519 }
 
 func (*ETHSignature) Type() SignatureType { return SignatureTypeETH }
+
+func (*EcdsaSha256Signature) Type() SignatureType { return SignatureTypeEcdsaSha256 }
 
 func (*Eip712TypedDataSignature) Type() SignatureType { return SignatureTypeEip712TypedData }
 
@@ -2085,6 +2101,30 @@ func (v *ETHSignature) Copy() *ETHSignature {
 }
 
 func (v *ETHSignature) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *EcdsaSha256Signature) Copy() *EcdsaSha256Signature {
+	u := new(EcdsaSha256Signature)
+
+	u.PublicKey = encoding.BytesCopy(v.PublicKey)
+	u.Signature = encoding.BytesCopy(v.Signature)
+	if v.Signer != nil {
+		u.Signer = v.Signer
+	}
+	u.SignerVersion = v.SignerVersion
+	u.Timestamp = v.Timestamp
+	u.Vote = v.Vote
+	u.TransactionHash = v.TransactionHash
+	u.Memo = v.Memo
+	u.Data = encoding.BytesCopy(v.Data)
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *EcdsaSha256Signature) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *Eip712TypedDataSignature) Copy() *Eip712TypedDataSignature {
 	u := new(Eip712TypedDataSignature)
@@ -4485,6 +4525,43 @@ func (v *ED25519Signature) Equal(u *ED25519Signature) bool {
 }
 
 func (v *ETHSignature) Equal(u *ETHSignature) bool {
+	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
+		return false
+	}
+	if !(bytes.Equal(v.Signature, u.Signature)) {
+		return false
+	}
+	switch {
+	case v.Signer == u.Signer:
+		// equal
+	case v.Signer == nil || u.Signer == nil:
+		return false
+	case !((v.Signer).Equal(u.Signer)):
+		return false
+	}
+	if !(v.SignerVersion == u.SignerVersion) {
+		return false
+	}
+	if !(v.Timestamp == u.Timestamp) {
+		return false
+	}
+	if !(v.Vote == u.Vote) {
+		return false
+	}
+	if !(v.TransactionHash == u.TransactionHash) {
+		return false
+	}
+	if !(v.Memo == u.Memo) {
+		return false
+	}
+	if !(bytes.Equal(v.Data, u.Data)) {
+		return false
+	}
+
+	return true
+}
+
+func (v *EcdsaSha256Signature) Equal(u *EcdsaSha256Signature) bool {
 	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
 		return false
 	}
@@ -8917,6 +8994,101 @@ func (v *Eip712TypedDataSignature) MarshalBinary() ([]byte, error) {
 }
 
 func (v *Eip712TypedDataSignature) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field PublicKey is missing")
+	} else if len(v.PublicKey) == 0 {
+		errs = append(errs, "field PublicKey is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Signature is missing")
+	} else if len(v.Signature) == 0 {
+		errs = append(errs, "field Signature is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Signer is missing")
+	} else if v.Signer == nil {
+		errs = append(errs, "field Signer is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field SignerVersion is missing")
+	} else if v.SignerVersion == 0 {
+		errs = append(errs, "field SignerVersion is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_EcdsaSha256Signature = []string{
+	1:  "Type",
+	2:  "PublicKey",
+	3:  "Signature",
+	4:  "Signer",
+	5:  "SignerVersion",
+	6:  "Timestamp",
+	7:  "Vote",
+	8:  "TransactionHash",
+	9:  "Memo",
+	10: "Data",
+}
+
+func (v *EcdsaSha256Signature) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(len(v.PublicKey) == 0) {
+		writer.WriteBytes(2, v.PublicKey)
+	}
+	if !(len(v.Signature) == 0) {
+		writer.WriteBytes(3, v.Signature)
+	}
+	if !(v.Signer == nil) {
+		writer.WriteUrl(4, v.Signer)
+	}
+	if !(v.SignerVersion == 0) {
+		writer.WriteUint(5, v.SignerVersion)
+	}
+	if !(v.Timestamp == 0) {
+		writer.WriteUint(6, v.Timestamp)
+	}
+	if !(v.Vote == 0) {
+		writer.WriteEnum(7, v.Vote)
+	}
+	if !(v.TransactionHash == ([32]byte{})) {
+		writer.WriteHash(8, &v.TransactionHash)
+	}
+	if !(len(v.Memo) == 0) {
+		writer.WriteString(9, v.Memo)
+	}
+	if !(len(v.Data) == 0) {
+		writer.WriteBytes(10, v.Data)
+	}
+
+	_, _, err := writer.Reset(fieldNames_EcdsaSha256Signature)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *EcdsaSha256Signature) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
@@ -16083,6 +16255,65 @@ func (v *ETHSignature) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
+func (v *EcdsaSha256Signature) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *EcdsaSha256Signature) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType SignatureType
+	if x := new(SignatureType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *EcdsaSha256Signature) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadBytes(2); ok {
+		v.PublicKey = x
+	}
+	if x, ok := reader.ReadBytes(3); ok {
+		v.Signature = x
+	}
+	if x, ok := reader.ReadUrl(4); ok {
+		v.Signer = x
+	}
+	if x, ok := reader.ReadUint(5); ok {
+		v.SignerVersion = x
+	}
+	if x, ok := reader.ReadUint(6); ok {
+		v.Timestamp = x
+	}
+	if x := new(VoteType); reader.ReadEnum(7, x) {
+		v.Vote = *x
+	}
+	if x, ok := reader.ReadHash(8); ok {
+		v.TransactionHash = *x
+	}
+	if x, ok := reader.ReadString(9); ok {
+		v.Memo = x
+	}
+	if x, ok := reader.ReadBytes(10); ok {
+		v.Data = x
+	}
+
+	seen, err := reader.Reset(fieldNames_EcdsaSha256Signature)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *Eip712TypedDataSignature) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -20996,6 +21227,52 @@ func (v *Eip712TypedDataSignature) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *EcdsaSha256Signature) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type            SignatureType `json:"type"`
+		PublicKey       *string       `json:"publicKey,omitempty"`
+		Signature       *string       `json:"signature,omitempty"`
+		Signer          *url.URL      `json:"signer,omitempty"`
+		SignerVersion   uint64        `json:"signerVersion,omitempty"`
+		Timestamp       uint64        `json:"timestamp,omitempty"`
+		Vote            VoteType      `json:"vote,omitempty"`
+		TransactionHash *string       `json:"transactionHash,omitempty"`
+		Memo            string        `json:"memo,omitempty"`
+		Data            *string       `json:"data,omitempty"`
+		ExtraData       *string       `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.PublicKey) == 0) {
+		u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	}
+	if !(len(v.Signature) == 0) {
+		u.Signature = encoding.BytesToJSON(v.Signature)
+	}
+	if !(v.Signer == nil) {
+		u.Signer = v.Signer
+	}
+	if !(v.SignerVersion == 0) {
+		u.SignerVersion = v.SignerVersion
+	}
+	if !(v.Timestamp == 0) {
+		u.Timestamp = v.Timestamp
+	}
+	if !(v.Vote == 0) {
+		u.Vote = v.Vote
+	}
+	if !(v.TransactionHash == ([32]byte{})) {
+		u.TransactionHash = encoding.ChainToJSON(&v.TransactionHash)
+	}
+	if !(len(v.Memo) == 0) {
+		u.Memo = v.Memo
+	}
+	if !(len(v.Data) == 0) {
+		u.Data = encoding.BytesToJSON(v.Data)
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
 func (v *EmptyResult) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type      TransactionType `json:"type"`
@@ -23689,6 +23966,69 @@ func (v *ED25519Signature) UnmarshalJSON(data []byte) error {
 }
 
 func (v *ETHSignature) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type            SignatureType `json:"type"`
+		PublicKey       *string       `json:"publicKey,omitempty"`
+		Signature       *string       `json:"signature,omitempty"`
+		Signer          *url.URL      `json:"signer,omitempty"`
+		SignerVersion   uint64        `json:"signerVersion,omitempty"`
+		Timestamp       uint64        `json:"timestamp,omitempty"`
+		Vote            VoteType      `json:"vote,omitempty"`
+		TransactionHash *string       `json:"transactionHash,omitempty"`
+		Memo            string        `json:"memo,omitempty"`
+		Data            *string       `json:"data,omitempty"`
+		ExtraData       *string       `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	u.Signature = encoding.BytesToJSON(v.Signature)
+	u.Signer = v.Signer
+	u.SignerVersion = v.SignerVersion
+	u.Timestamp = v.Timestamp
+	u.Vote = v.Vote
+	u.TransactionHash = encoding.ChainToJSON(&v.TransactionHash)
+	u.Memo = v.Memo
+	u.Data = encoding.BytesToJSON(v.Data)
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	if x, err := encoding.BytesFromJSON(u.PublicKey); err != nil {
+		return fmt.Errorf("error decoding PublicKey: %w", err)
+	} else {
+		v.PublicKey = x
+	}
+	if x, err := encoding.BytesFromJSON(u.Signature); err != nil {
+		return fmt.Errorf("error decoding Signature: %w", err)
+	} else {
+		v.Signature = x
+	}
+	v.Signer = u.Signer
+	v.SignerVersion = u.SignerVersion
+	v.Timestamp = u.Timestamp
+	v.Vote = u.Vote
+	if x, err := encoding.ChainFromJSON(u.TransactionHash); err != nil {
+		return fmt.Errorf("error decoding TransactionHash: %w", err)
+	} else {
+		v.TransactionHash = *x
+	}
+	v.Memo = u.Memo
+	if x, err := encoding.BytesFromJSON(u.Data); err != nil {
+		return fmt.Errorf("error decoding Data: %w", err)
+	} else {
+		v.Data = x
+	}
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *EcdsaSha256Signature) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type            SignatureType `json:"type"`
 		PublicKey       *string       `json:"publicKey,omitempty"`
