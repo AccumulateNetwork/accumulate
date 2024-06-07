@@ -156,7 +156,7 @@ func (s *FeeSchedule) ComputeTransactionFee(tx *Transaction) (Fee, error) {
 			fee -= s.BareIdentityDiscount
 
 			// Don't charge less than the basic create account fee
-			if fee <= 0 {
+			if fee < FeeCreateDirectory {
 				fee = FeeCreateDirectory
 			}
 		}
