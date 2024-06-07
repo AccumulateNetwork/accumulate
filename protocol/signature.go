@@ -9,6 +9,7 @@ package protocol
 import (
 	"bytes"
 	"crypto"
+	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/rsa"
@@ -103,7 +104,8 @@ func PublicKeyHash(key []byte, typ SignatureType) ([]byte, error) {
 	switch typ {
 	case SignatureTypeED25519,
 		SignatureTypeLegacyED25519,
-		SignatureTypeRsaSha256:
+		SignatureTypeRsaSha256,
+		SignatureTypeEcdsaSha256:
 		return doSha256(key), nil
 
 	case SignatureTypeRCD1:
@@ -1147,4 +1149,94 @@ func (e *RsaSha256Signature) Verify(sigMdHash, txnHash []byte) bool {
 	// Verify signature
 	err = rsa.VerifyPKCS1v15(pubKey, crypto.SHA256, signingHash(e, doSha256, sigMdHash, txnHash), e.Signature)
 	return err == nil
+}
+
+/*
+ * SignEcdsaSha256: Multipurpose ECDSA signature types used in PKIs
+ * ecdsa privateKey must be in SEC, ASN.1 DER format,
+ * returned signature is in the common encoding format for that particular signature type
+ */
+func SignEcdsaSha256(sig *EcdsaSha256Signature, privateKeyDer, sigMdHash, txnHash []byte) error {
+	//private key is expected to be in SEC, ASN.1 DER format
+	privateKey, err := x509.ParseECPrivateKey(privateKeyDer)
+	if err != nil {
+		return err
+	}
+
+	// Sign the signing hash and set ASN.1 DER encoded signature
+	sig.Signature, err = ecdsa.SignASN1(rand.Reader, privateKey, signingHash(sig, doSha256, sigMdHash, txnHash))
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// GetSigner returns Signer.
+func (s *EcdsaSha256Signature) GetSigner() *url.URL { return s.Signer }
+
+// RoutingLocation returns Signer.
+func (s *EcdsaSha256Signature) RoutingLocation() *url.URL { return s.Signer }
+
+// GetSignerVersion returns SignerVersion.
+func (s *EcdsaSha256Signature) GetSignerVersion() uint64 { return s.SignerVersion }
+
+// GetTimestamp returns Timestamp.
+func (s *EcdsaSha256Signature) GetTimestamp() uint64 { return s.Timestamp }
+
+// GetPublicKeyHash returns the hash of PublicKey.
+func (s *EcdsaSha256Signature) GetPublicKeyHash() []byte { return doSha256(s.PublicKey) }
+
+// GetPublicKey returns PublicKey.
+func (s *EcdsaSha256Signature) GetPublicKey() []byte { return s.PublicKey }
+
+// GetSignature returns Signature.
+func (s *EcdsaSha256Signature) GetSignature() []byte { return s.Signature }
+
+// GetTransactionHash returns TransactionHash.
+func (s *EcdsaSha256Signature) GetTransactionHash() [32]byte { return s.TransactionHash }
+
+// Hash returns the hash of the signature.
+func (s *EcdsaSha256Signature) Hash() []byte { return signatureHash(s) }
+
+// Metadata returns the signature's metadata.
+func (s *EcdsaSha256Signature) Metadata() Signature {
+	r := s.Copy()                  // Copy the struct
+	r.Signature = nil              // Clear the signature
+	r.TransactionHash = [32]byte{} // And the transaction hash
+	return r
+}
+
+// Initiator returns a Hasher that calculates the Merkle hash of the signature.
+func (s *EcdsaSha256Signature) Initiator() (hash.Hasher, error) {
+	if len(s.PublicKey) == 0 || s.Signer == nil || s.SignerVersion == 0 || s.Timestamp == 0 {
+		return nil, ErrCannotInitiate
+	}
+
+	hasher := make(hash.Hasher, 0, 4)
+	hasher.AddBytes(s.PublicKey)
+	hasher.AddUrl(s.Signer)
+	hasher.AddUint(s.SignerVersion)
+	hasher.AddUint(s.Timestamp)
+	return hasher, nil
+}
+
+// GetVote returns how the signer votes on a particular transaction
+func (s *EcdsaSha256Signature) GetVote() VoteType {
+	return s.Vote
+}
+
+// Verify returns true if this signature is a valid ECDSA ANS.1 encoded signature of the
+// hash. The public key is expected to be in PKCS#1 ASN.1 DER format
+func (e *EcdsaSha256Signature) Verify(sigMdHash, txnHash []byte) bool {
+	//Convert public ANS.1 encoded key into and associated public key struct
+	pubKey, err := x509.ParsePKIXPublicKey(e.PublicKey)
+	if err != nil {
+		return false
+	}
+
+	pub, ok := pubKey.(*ecdsa.PublicKey)
+	if !ok {
+		return false
+	}
+	return ecdsa.VerifyASN1(pub, signingHash(e, doSha256, sigMdHash, txnHash), e.Signature)
 }

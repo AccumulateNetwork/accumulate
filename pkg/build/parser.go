@@ -7,6 +7,7 @@
 package build
 
 import (
+	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/rsa"
 	"fmt"
@@ -190,6 +191,10 @@ func (p *parser) parseKey(key any, typ protocol.SignatureType, private bool) add
 		return address.FromRSAPrivateKey(key)
 	case *rsa.PublicKey:
 		return address.FromRSAPublicKey(key)
+	case *ecdsa.PrivateKey:
+		return address.FromEcdsaPrivateKey(key)
+	case *ecdsa.PublicKey:
+		return address.FromEcdsaPublicKeyAsPKIX(key)
 	case []byte:
 		if typ == protocol.SignatureTypeUnknown {
 			if len(key) == 32 || len(key) == 64 {
