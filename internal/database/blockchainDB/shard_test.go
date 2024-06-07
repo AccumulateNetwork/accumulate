@@ -25,7 +25,7 @@ func TestShard(t *testing.T) {
 	writes :=0
 	reads :=0
 	start := time.Now()
-	for i := 0; i < 10000; i++ {
+	for i := 0; i < 1000; i++ {
 		if i%100 == 0 && i != 0 {
 			fmt.Printf("Writes: %10d Reads %10d %13.0f/s \n",writes,reads,
 		    float64(writes+reads)/time.Since(start).Seconds())

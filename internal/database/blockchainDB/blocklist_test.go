@@ -12,8 +12,11 @@ import (
 // Create and close a BlockFile
 func TestCreateBlockFile(t *testing.T) {
 	Directory := filepath.Join(os.TempDir(), "BFTest")
+	os.RemoveAll(Directory)
+
 	bf, err := NewBlockList(Directory, 1, 5)
-	assert.NoError(t, err, "failed to create a BlockFile")
+	assert.NoError(t, err, "error creating BlockList")
+	assert.NotNil(t,bf,"failed to create BlockList")
 	bf.Close()
 
 	os.RemoveAll(Directory)
@@ -21,6 +24,8 @@ func TestCreateBlockFile(t *testing.T) {
 
 func TestOpenBlockFile(t *testing.T) {
 	Directory := filepath.Join(os.TempDir(), "BFTest")
+	os.RemoveAll(Directory)
+
 	bf, err := NewBlockList(Directory, 1, 5)
 	assert.NoError(t, err, "failed to create a BlockFile")
 	bf.Close()
@@ -60,14 +65,14 @@ func TestBlockFileLoad(t *testing.T) {
 	fr = NewFastRandom([32]byte{1, 2, 3})
 	for i := 0; i < 2; i++ {
 		fmt.Printf("%3d ", i)
-		_, err := bf.OpenBFile(i, 5)
+		_, err := bf.OpenBList(i, 5)
 		assert.NoErrorf(t, err, "failed to open block file %d", i)
 		for j := 0; j < 10; j++ {
 			hash := fr.NextHash()
 			value := fr.RandBuff(100, 300)
 			v, err := bf.Get(hash)
 			assert.NoError(t, err, "failed to get value for key")
-			assert.Equalf(t, value, v, "blk %d pair %d value was not the value expected",j,j)
+			assert.Equalf(t, value, v, "blk %d pair %d value was not the value expected", j, j)
 		}
 	}
 	fmt.Print("\nDone\n")

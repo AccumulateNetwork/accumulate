@@ -36,7 +36,7 @@ import (
 //
 
 const (
-	BufferSize = 1024 * 1024 * 1 // N MB, i.e. N *(1024^2)
+	BufferSize = 64 * 1024 * 1 // N MB, i.e. N *(1024^2)
 
 	BFilePerm    = iota // Key/Value pairs where the key is a function of the Value (can't change)
 	BFileDynamic        // Key/Value pair where the value can be updated
@@ -169,10 +169,6 @@ func NewBFile(Filename string, BufferCnt int) (bFile *BFile, err error) {
 		return nil, err
 	}
 	bFile.CreateBuffers()
-
-	if bFile.File, err = os.Create(Filename); err != nil {
-		return nil, err
-	}
 
 	var offsetB [8]byte // Offset to end of file (8, the length of the offset)
 	if err := bFile.Write(offsetB[:]); err != nil {

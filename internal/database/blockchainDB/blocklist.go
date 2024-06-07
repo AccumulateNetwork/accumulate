@@ -99,7 +99,7 @@ func (b *BlockList) NextBlockFile() (err error) {
 	b.BlockHeight++
 
 	filename := b.GetFilename(b.BlockHeight)
-	if b.BFile, err = NewBFile( filename,b.BufferCnt); err != nil {
+	if b.BFile, err = NewBFile(filename, b.BufferCnt); err != nil {
 		return err
 	}
 
@@ -113,19 +113,19 @@ func NewBlockFile(Directory string, BufferCnt int) (blockFile *BlockList, err er
 	blockFile.LoadState()
 
 	filename := blockFile.GetFilename(blockFile.BlockHeight)
-	if blockFile.BFile, err = NewBFile(filename,BufferCnt); err != nil {
+	if blockFile.BFile, err = NewBFile(filename, BufferCnt); err != nil {
 		return nil, err
 	}
 
 	return blockFile, nil
 }
 
-// OpenBFile
+// OpenBList
 // Open a particular BFile in a BlockList at a given height. If a BFile is
 // currently opened, then it is closed.  If the BFile being opened does not
 // exist (has a height > b.BlockHeight) then the provided Height must be
 // b.BlockHeight+1
-func (b *BlockList) OpenBFile(Height int, BufferCnt int) (bFile *BFile, err error) {
+func (b *BlockList) OpenBList(Height int, BufferCnt int) (bFile *BFile, err error) {
 	if Height > b.BlockHeight+1 {
 		return nil, fmt.Errorf("height %d is invalid. current BlockList height is: %d",
 			Height, b.BlockHeight)
