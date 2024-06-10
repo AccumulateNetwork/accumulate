@@ -229,6 +229,10 @@ func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time tim
 
 	globals.Network = netinfo
 
+	if len(network.OperatorKeys) > 0 {
+		operators = network.OperatorKeys
+	}
+
 	var ids []string
 	ids = append(ids, protocol.Directory)
 	for _, bvn := range network.Bvns {

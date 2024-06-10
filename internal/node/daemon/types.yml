@@ -8,6 +8,12 @@ NetworkInit:
     type: network.GlobalValues
     marshal-as: reference
     pointer: true
+  - name: OperatorKeys
+    type: bytes
+    repeatable: true
+  - name: Template
+    description: is a TOML template for the node configuration
+    type: string
   - name: Bootstrap
     type: NodeInit
     marshal-as: reference
