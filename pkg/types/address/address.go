@@ -8,7 +8,11 @@ package address
 
 import (
 	"encoding/hex"
+	"fmt"
 
+	"github.com/btcsuite/btcd/btcec"
+	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcutil"
 	"github.com/btcsuite/btcutil/base58"
 	"github.com/multiformats/go-multibase"
 	"github.com/multiformats/go-multihash"
@@ -112,8 +116,28 @@ func (p *PrivateKey) String() string {
 
 	case protocol.SignatureTypeRCD1:
 		return FormatFs(p.Key[:32])
+
+	case protocol.SignatureTypeETH:
+		return hex.EncodeToString(p.Key)
+
+	case protocol.SignatureTypeBTCLegacy, protocol.SignatureTypeBTC:
+		privKey, _ := btcec.PrivKeyFromBytes(btcec.S256(), p.Key)
+
+		wif, err := btcutil.NewWIF(privKey, &chaincfg.MainNetParams, true)
+		if err != nil {
+			return hex.EncodeToString(p.Key)
+		}
+		return wif.String()
+
+	case protocol.SignatureTypeEcdsaSha256:
+		return FormatAS2(p.Key)
+
+	case protocol.SignatureTypeRsaSha256:
+		return FormatAS3(p.Key)
 	}
-	return p.PublicKey.String()
+
+	//as a failsafe, just return the raw hex encoded bytes
+	return fmt.Sprintf("%X", p.Key)
 }
 
 type Lite struct {
@@ -142,6 +166,12 @@ func formatAddr(typ protocol.SignatureType, hash []byte) string {
 
 	case protocol.SignatureTypeETH:
 		return FormatETH(hash)
+
+	case protocol.SignatureTypeEcdsaSha256:
+		return FormatAC2(hash)
+
+	case protocol.SignatureTypeRsaSha256:
+		return FormatAC3(hash)
 
 	case protocol.SignatureTypeReceipt,
 		protocol.SignatureTypePartition,
