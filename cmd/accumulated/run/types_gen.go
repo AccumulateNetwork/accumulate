@@ -92,11 +92,12 @@ type CoreValidatorConfiguration struct {
 }
 
 type DevnetConfiguration struct {
-	Listen     p2p.Multiaddr         `json:"listen,omitempty" form:"listen" query:"listen" validate:"required"`
-	Bvns       uint64                `json:"bvns,omitempty" form:"bvns" query:"bvns" validate:"required"`
-	Validators uint64                `json:"validators,omitempty" form:"validators" query:"validators" validate:"required"`
-	Followers  uint64                `json:"followers,omitempty" form:"followers" query:"followers"`
-	Globals    *network.GlobalValues `json:"globals,omitempty" form:"globals" query:"globals" validate:"required"`
+	Listen      p2p.Multiaddr         `json:"listen,omitempty" form:"listen" query:"listen" validate:"required"`
+	Bvns        uint64                `json:"bvns,omitempty" form:"bvns" query:"bvns" validate:"required"`
+	Validators  uint64                `json:"validators,omitempty" form:"validators" query:"validators" validate:"required"`
+	Followers   uint64                `json:"followers,omitempty" form:"followers" query:"followers"`
+	Globals     *network.GlobalValues `json:"globals,omitempty" form:"globals" query:"globals" validate:"required"`
+	StorageType *StorageType          `json:"storageType,omitempty" form:"storageType" query:"storageType"`
 }
 
 type EventsService struct {
@@ -504,6 +505,10 @@ func (v *DevnetConfiguration) Copy() *DevnetConfiguration {
 	u.Followers = v.Followers
 	if v.Globals != nil {
 		u.Globals = (v.Globals).Copy()
+	}
+	if v.StorageType != nil {
+		u.StorageType = new(StorageType)
+		*u.StorageType = *v.StorageType
 	}
 
 	return u
@@ -1184,6 +1189,14 @@ func (v *DevnetConfiguration) Equal(u *DevnetConfiguration) bool {
 	case v.Globals == nil || u.Globals == nil:
 		return false
 	case !((v.Globals).Equal(u.Globals)):
+		return false
+	}
+	switch {
+	case v.StorageType == u.StorageType:
+		// equal
+	case v.StorageType == nil || u.StorageType == nil:
+		return false
+	case !(*v.StorageType == *u.StorageType):
 		return false
 	}
 
@@ -2085,12 +2098,13 @@ func (v *CoreValidatorConfiguration) MarshalJSON() ([]byte, error) {
 
 func (v *DevnetConfiguration) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type       ConfigurationType                          `json:"type"`
-		Listen     *encoding.JsonUnmarshalWith[p2p.Multiaddr] `json:"listen,omitempty"`
-		Bvns       uint64                                     `json:"bvns,omitempty"`
-		Validators uint64                                     `json:"validators,omitempty"`
-		Followers  uint64                                     `json:"followers,omitempty"`
-		Globals    *network.GlobalValues                      `json:"globals,omitempty"`
+		Type        ConfigurationType                          `json:"type"`
+		Listen      *encoding.JsonUnmarshalWith[p2p.Multiaddr] `json:"listen,omitempty"`
+		Bvns        uint64                                     `json:"bvns,omitempty"`
+		Validators  uint64                                     `json:"validators,omitempty"`
+		Followers   uint64                                     `json:"followers,omitempty"`
+		Globals     *network.GlobalValues                      `json:"globals,omitempty"`
+		StorageType *StorageType                               `json:"storageType,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(p2p.EqualMultiaddr(v.Listen, nil)) {
@@ -2107,6 +2121,9 @@ func (v *DevnetConfiguration) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.Globals == nil) {
 		u.Globals = v.Globals
+	}
+	if !(v.StorageType == nil) {
+		u.StorageType = v.StorageType
 	}
 	return json.Marshal(&u)
 }
@@ -2836,12 +2853,13 @@ func (v *CoreValidatorConfiguration) UnmarshalJSON(data []byte) error {
 
 func (v *DevnetConfiguration) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type       ConfigurationType                          `json:"type"`
-		Listen     *encoding.JsonUnmarshalWith[p2p.Multiaddr] `json:"listen,omitempty"`
-		Bvns       uint64                                     `json:"bvns,omitempty"`
-		Validators uint64                                     `json:"validators,omitempty"`
-		Followers  uint64                                     `json:"followers,omitempty"`
-		Globals    *network.GlobalValues                      `json:"globals,omitempty"`
+		Type        ConfigurationType                          `json:"type"`
+		Listen      *encoding.JsonUnmarshalWith[p2p.Multiaddr] `json:"listen,omitempty"`
+		Bvns        uint64                                     `json:"bvns,omitempty"`
+		Validators  uint64                                     `json:"validators,omitempty"`
+		Followers   uint64                                     `json:"followers,omitempty"`
+		Globals     *network.GlobalValues                      `json:"globals,omitempty"`
+		StorageType *StorageType                               `json:"storageType,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Listen = &encoding.JsonUnmarshalWith[p2p.Multiaddr]{Value: v.Listen, Func: p2p.UnmarshalMultiaddrJSON}
@@ -2849,6 +2867,7 @@ func (v *DevnetConfiguration) UnmarshalJSON(data []byte) error {
 	u.Validators = v.Validators
 	u.Followers = v.Followers
 	u.Globals = v.Globals
+	u.StorageType = v.StorageType
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -2864,6 +2883,7 @@ func (v *DevnetConfiguration) UnmarshalJSON(data []byte) error {
 	v.Validators = u.Validators
 	v.Followers = u.Followers
 	v.Globals = u.Globals
+	v.StorageType = u.StorageType
 	return nil
 }
 
