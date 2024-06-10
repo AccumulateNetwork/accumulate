@@ -117,13 +117,20 @@ type partOpts struct {
 func (p partOpts) apply(cfg *Config) error {
 	setDefaultPtr(&p.EnableSnapshots, false)
 
+	var offset portOffset
+	if p.Type == protocol.PartitionTypeDirectory {
+		offset = portDir
+	} else {
+		offset = portBVN
+	}
+
 	// Consensus
 	addService(cfg,
 		&ConsensusService{
 			NodeDir:          p.Dir,
 			ValidatorKey:     p.ValidatorKey,
 			Genesis:          p.Genesis,
-			Listen:           p.Listen,
+			Listen:           applyAddrTransforms(p.Listen, offset),
 			BootstrapPeers:   p.BootstrapPeers,
 			MetricsNamespace: p.MetricsNamespace,
 			App: &CoreConsensusApp{
