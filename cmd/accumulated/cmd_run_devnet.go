@@ -33,6 +33,7 @@ var cmdRunDevnet = &cobra.Command{
 var flagRunDevnet = struct {
 	Except        []string
 	Name          string
+	Database      string
 	NumBvns       int
 	NumValidators int
 	NumFollowers  int
@@ -62,6 +63,7 @@ func init() {
 	cmdRunDevnet.Flags().IntVarP(&flagRunDevnet.NumValidators, "validators", "v", 2, "Number of validator nodes per partition to configure")
 	cmdRunDevnet.Flags().IntVarP(&flagRunDevnet.NumFollowers, "followers", "f", 1, "Number of follower nodes per partition to configure")
 	cmdRunDevnet.Flags().IntVar(&flagRunDevnet.BasePort, "port", 26656, "Base port to use for listeners")
+	cmdRunDevnet.Flags().StringVar(&flagRunDevnet.Database, "database", "", "The type of database to use")
 	cmdRunDevnet.Flags().Var(cmdutil.JsonFlagOf(&flagRunDevnet.Globals), "globals", "Override the default global values")
 	cmdRunDevnet.Flags().Var(cmdutil.JsonFlagOf(&flagRunDevnet.Logging), "logging", "Override the default logger configuration")
 
