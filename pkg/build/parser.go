@@ -210,7 +210,12 @@ func (p *parser) parseKey(key any, typ protocol.SignatureType, private bool) add
 			(typ == protocol.SignatureTypeED25519 ||
 				typ == protocol.SignatureTypeLegacyED25519 ||
 				typ == protocol.SignatureTypeRCD1) {
-			return address.FromPrivateKeyBytes(key, typ)
+			k, err := address.FromPrivateKeyBytes(key, typ)
+			if err != nil {
+				p.errorf(errors.BadRequest, "unsupported key type %T, %v", key, err)
+				return &address.Unknown{}
+			}
+			return k
 		}
 
 		return &address.PublicKey{
