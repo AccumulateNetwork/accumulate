@@ -84,16 +84,21 @@ func FromEcdsaPrivateKey(key *ecdsa.PrivateKey) *PrivateKey {
 	if err != nil {
 		panic(err)
 	}
+	priv.PublicKey.Type = protocol.SignatureTypeEcdsaSha256
+	priv.PublicKey.Key, err = x509.MarshalPKIXPublicKey(&key.PublicKey)
+	if err != nil {
+		panic(err)
+	}
 	return priv
 }
 
-func FromPrivateKeyBytes(priv []byte, typ protocol.SignatureType) *PrivateKey {
+func FromPrivateKeyBytes(priv []byte, typ protocol.SignatureType) (*PrivateKey, error) {
 	var pub []byte
 	switch typ {
 	case protocol.SignatureTypeUnknown:
-		panic("key type must be specified")
+		return nil, fmt.Errorf("key type must be specified")
 	default:
-		panic(fmt.Errorf("unknown key type %v", typ))
+		return nil, fmt.Errorf("unknown key type %v", typ)
 
 	case protocol.SignatureTypeED25519,
 		protocol.SignatureTypeLegacyED25519,
@@ -107,12 +112,12 @@ func FromPrivateKeyBytes(priv []byte, typ protocol.SignatureType) *PrivateKey {
 		default:
 			skt, err := x509.ParsePKCS8PrivateKey(priv)
 			if err != nil {
-				panic(fmt.Errorf("invalid ed25519 key length: want 32 or 64, got %d", len(priv)))
+				return nil, fmt.Errorf("invalid ed25519 key length: want 32 or 64, got %d", len(priv))
 			}
 			var ok bool
 			priv, ok = skt.(ed25519.PrivateKey)
 			if !ok {
-				panic(fmt.Errorf("private key is not an edcsa key"))
+				return nil, fmt.Errorf("private key is not an edcsa key")
 			}
 		}
 		pub = priv[32:]
@@ -131,12 +136,12 @@ func FromPrivateKeyBytes(priv []byte, typ protocol.SignatureType) *PrivateKey {
 		if err != nil {
 			skt, err := x509.ParsePKCS8PrivateKey(priv)
 			if err != nil {
-				panic(err)
+				return nil, err
 			}
 			var ok bool
 			sk, ok = skt.(*rsa.PrivateKey)
 			if !ok {
-				panic(fmt.Errorf("private key is not an rsa key"))
+				return nil, fmt.Errorf("private key is not an rsa key")
 			}
 		}
 		pub = x509.MarshalPKCS1PublicKey(&sk.PublicKey)
@@ -146,19 +151,19 @@ func FromPrivateKeyBytes(priv []byte, typ protocol.SignatureType) *PrivateKey {
 		if err != nil {
 			skt, err := x509.ParsePKCS8PrivateKey(priv)
 			if err != nil {
-				panic(err)
+				return nil, err
 			}
 			var ok bool
 			sk, ok = skt.(*ecdsa.PrivateKey)
 			if !ok {
-				panic(fmt.Errorf("private key is not an ecdsa key"))
+				return nil, fmt.Errorf("private key is not an ecdsa key")
 			}
 		}
 		pub, err = x509.MarshalPKIXPublicKey(&sk.PublicKey)
 		if err != nil {
-			panic(err)
+			return nil, err
 		}
 	}
 
-	return &PrivateKey{Key: priv, PublicKey: PublicKey{Type: typ, Key: pub}}
+	return &PrivateKey{Key: priv, PublicKey: PublicKey{Type: typ, Key: pub}}, nil
 }
