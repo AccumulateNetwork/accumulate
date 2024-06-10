@@ -8,7 +8,6 @@ package main
 
 import (
 	"crypto/ed25519"
-	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -136,7 +135,8 @@ func initNetwork(cmd *cobra.Command, args []string) {
 	genDocs := buildGenesis(network)
 	for i, bvn := range network.Bvns {
 		for j, node := range bvn.Nodes {
-			dir := filepath.Join(flagMain.WorkDir, fmt.Sprintf("bvn%d-%d", i+1, j+1))
+			id := fmt.Sprintf("bvn%d-%d", i+1, j+1)
+			dir := filepath.Join(flagMain.WorkDir, id)
 			check(os.MkdirAll(dir, 0755))
 
 			cfg := template.Copy()
@@ -145,20 +145,8 @@ func initNetwork(cmd *cobra.Command, args []string) {
 			// TODO: log levels
 
 			// Configure the node key
-			if node.DnNodeKey != nil {
-				addr := address.FromED25519PrivateKey(node.DnNodeKey)
-				cfg.P2P.Key = &run.RawPrivateKey{Address: addr.String()}
-
-			} else if node.BvnNodeKey != nil {
-				addr := address.FromED25519PrivateKey(node.BvnNodeKey)
-				cfg.P2P.Key = &run.RawPrivateKey{Address: addr.String()}
-
-			} else {
-				_, sk, err := ed25519.GenerateKey(rand.Reader)
-				check(err)
-				addr := address.FromED25519PrivateKey(sk)
-				cfg.P2P.Key = &run.RawPrivateKey{Address: addr.String()}
-			}
+			addr := address.FromED25519PrivateKey(node.DnNodeKey)
+			cfg.P2P.Key = &run.RawPrivateKey{Address: addr.String()}
 
 			// Configure the validator
 			cvc := new(run.CoreValidatorConfiguration)
@@ -170,23 +158,15 @@ func initNetwork(cmd *cobra.Command, args []string) {
 			cvc.EnableHealing = run.Ptr(false)
 			cvc.EnableSnapshots = run.Ptr(false)
 
+			// Configure the validator key
+			addr = address.FromED25519PrivateKey(node.PrivValKey)
+			cvc.ValidatorKey = &run.RawPrivateKey{Address: addr.String()}
+
 			// Write the genesis documents
 			cvc.DnGenesis = "directory-genesis.snap"
 			cvc.BvnGenesis = strings.ToLower(bvn.Id) + "-genesis.snap"
 			check(os.WriteFile(filepath.Join(dir, cvc.DnGenesis), genDocs[protocol.Directory], 0600))
 			check(os.WriteFile(filepath.Join(dir, cvc.BvnGenesis), genDocs[bvn.Id], 0600))
-
-			// Configure the validator key
-			if node.PrivValKey != nil {
-				addr := address.FromED25519PrivateKey(node.PrivValKey)
-				cvc.ValidatorKey = &run.RawPrivateKey{Address: addr.String()}
-
-			} else {
-				_, sk, err := ed25519.GenerateKey(rand.Reader)
-				check(err)
-				addr := address.FromED25519PrivateKey(sk)
-				cvc.ValidatorKey = &run.RawPrivateKey{Address: addr.String()}
-			}
 
 			// Write the node configuration
 			check(cfg.SaveTo(filepath.Join(dir, "accumulate.toml")))
