@@ -9,6 +9,7 @@ package main
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -19,7 +20,6 @@ import (
 	"github.com/BurntSushi/toml"
 	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
 	cmtjson "github.com/cometbft/cometbft/libs/json"
-	"github.com/ghodss/yaml"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run"
 	"gitlab.com/accumulatenetwork/accumulate/exp/faucet"
@@ -34,6 +34,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/test/testing"
+	"gopkg.in/yaml.v3"
 )
 
 var cmdInitNetwork = &cobra.Command{
@@ -66,7 +67,16 @@ func loadNetworkConfiguration(file ...string) *accumulated.NetworkInit {
 	for _, file := range file {
 		b, err := os.ReadFile(file)
 		check(err)
-		check(yaml.Unmarshal(b, &network))
+
+		switch filepath.Ext(file) {
+		case ".yml", ".yaml":
+			var v any
+			check(yaml.Unmarshal(b, &v))
+			b, err = json.Marshal(v)
+			check(err)
+		}
+
+		check(json.Unmarshal(b, &network))
 	}
 
 	for _, bvn := range network.Bvns {
@@ -78,7 +88,10 @@ func loadNetworkConfiguration(file ...string) *accumulated.NetworkInit {
 				node.DnNodeKey = tmed25519.GenPrivKey()
 			}
 			if node.BvnNodeKey == nil {
-				node.BvnNodeKey = tmed25519.GenPrivKey()
+				node.BvnNodeKey = node.DnNodeKey
+			}
+			if node.BsnNodeKey == nil {
+				node.BsnNodeKey = node.DnNodeKey
 			}
 			if node.ListenAddress == "" {
 				node.ListenAddress = "0.0.0.0"
