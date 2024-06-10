@@ -48,7 +48,10 @@ func (j *JsonUnmarshalListWith[T]) unmarshalList(data []byte) error {
 		return err
 	}
 
-	j.Value = make([]T, len(list))
+	if n := len(list) - len(j.Value); n > 0 {
+		j.Value = append(j.Value, make([]T, n)...)
+	}
+
 	for i, raw := range list {
 		j.Value[i], err = j.Func(raw)
 		if err != nil {
@@ -113,7 +116,7 @@ type JsonList[T any] []T
 
 func (j *JsonList[T]) UnmarshalJSON(data []byte) error {
 	// Attempt to unmarshal as a slice
-	var list []T
+	var list []T = *j
 	err1 := json.Unmarshal(data, &list)
 	if err1 == nil {
 		*j = list
