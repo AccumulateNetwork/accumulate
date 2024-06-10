@@ -508,6 +508,11 @@ DevnetConfiguration:
       type: network.GlobalValues
       marshal-as: reference
       pointer: true
+    - name: StorageType
+      type: StorageType
+      marshal-as: enum
+      pointer: true
+      optional: true
 
 SubnodeService:
   union: { type: service }
