@@ -16,14 +16,36 @@ import (
 )
 
 // FormatAC1 formats the hash of an Accumulate public key as an Accumulate AC1
-// address.
+// address. (ed25519)
 func FormatAC1(hash []byte) string {
 	return format2(hash, "AC1")
 }
 
-// FormatAS1 formats an Accumulate private key as an Accumulate AS1 address.
+// FormatAS1 formats an Accumulate private key as an Accumulate AS1 address. (ed25519)
 func FormatAS1(seed []byte) string {
 	return format2(seed, "AS1")
+}
+
+// FormatAC2 formats the hash of an Accumulate public key as an Accumulate AC2 (ecdsa)
+// address.
+func FormatAC2(hash []byte) string {
+	return format2(hash, "AC2")
+}
+
+// FormatAS2 formats an Accumulate private key as an Accumulate AS2 ecdsa address.
+func FormatAS2(seed []byte) string {
+	return format2(seed, "AS2")
+}
+
+// FormatAC3 formats the hash of an Accumulate public key as an Accumulate AC3 (rsa)
+// address.
+func FormatAC3(hash []byte) string {
+	return format2(hash, "AC3")
+}
+
+// FormatAS3 formats an Accumulate private key as an Accumulate AS3 rsa address.
+func FormatAS3(seed []byte) string {
+	return format2(seed, "AS3")
 }
 
 // FormatFA formats the hash of a Factom public key as a Factom FA address.
