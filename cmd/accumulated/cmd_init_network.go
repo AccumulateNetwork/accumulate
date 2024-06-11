@@ -149,14 +149,12 @@ func initNetwork(cmd *cobra.Command, args []string) {
 			cfg.P2P.Key = &run.RawPrivateKey{Address: addr.String()}
 
 			// Configure the validator
-			cvc := new(run.CoreValidatorConfiguration)
+			cvc := run.AddConfiguration(cfg, new(run.CoreValidatorConfiguration), nil)
 			cfg.Configurations = []run.Configuration{cvc}
 			cvc.Listen = node.Listen().Scheme("tcp").Directory().TendermintP2P().Multiaddr()
 			cvc.BVN = bvn.Id
 			cvc.BvnBootstrapPeers = bvn.Peers(node).Scheme("tcp").BlockValidator().TendermintP2P().WithKey().Multiaddr()
 			cvc.DnBootstrapPeers = network.Peers(node).Scheme("tcp").Directory().TendermintP2P().WithKey().Multiaddr()
-			cvc.EnableHealing = run.Ptr(false)
-			cvc.EnableSnapshots = run.Ptr(false)
 
 			// Configure the validator key
 			addr = address.FromED25519PrivateKey(node.PrivValKey)

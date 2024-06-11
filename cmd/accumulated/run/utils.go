@@ -348,3 +348,23 @@ func peersForDumbDialer(entries []*HttpPeerMapEntry) map[string][]peer.AddrInfo 
 	}
 	return m
 }
+
+func HaveConfiguration[T any](cfg *Config, predicate func(T) bool, existing *T) bool {
+	for _, s := range cfg.Configurations {
+		t, ok := s.(T)
+		if ok && (predicate == nil || predicate(t)) {
+			if existing != nil {
+				*existing = t
+			}
+			return true
+		}
+	}
+	return false
+}
+
+func AddConfiguration[T Configuration](cfg *Config, s T, predicate func(T) bool) T {
+	if !HaveConfiguration(cfg, predicate, &s) {
+		cfg.Configurations = append(cfg.Configurations, s)
+	}
+	return s
+}

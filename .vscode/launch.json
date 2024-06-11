@@ -246,6 +246,23 @@
         // "-w=${workspaceFolder}/.nodes/bsn-1/bsnn",
       ]
     },
+    {
+      "name": "Init network",
+      "presentation": {
+        "group": "20-Run"
+      },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/cmd/accumulated",
+      "args": [
+        "init",
+        "network",
+        "-w=${workspaceFolder}/.nodes/fozzie",
+        "${workspaceFolder}/.genesis/fozzie/private.yaml",
+        "${workspaceFolder}/.genesis/fozzie/network.json",
+      ]
+    },
     // Services
     {
       "name": "API (mainnet)",
