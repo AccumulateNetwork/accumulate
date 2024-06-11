@@ -2942,7 +2942,7 @@ func (v *Envelope) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return err
 	}
-	if u.Signatures != nil {
+	if u.Signatures.Value != nil {
 		v.Signatures = make([]protocol.Signature, len(u.Signatures.Value))
 		for i, x := range u.Signatures.Value {
 			v.Signatures[i] = x
@@ -2954,7 +2954,7 @@ func (v *Envelope) UnmarshalJSON(data []byte) error {
 		v.TxHash = x
 	}
 	v.Transaction = u.Transaction
-	if u.Messages != nil {
+	if u.Messages.Value != nil {
 		v.Messages = make([]Message, len(u.Messages.Value))
 		for i, x := range u.Messages.Value {
 			v.Messages[i] = x

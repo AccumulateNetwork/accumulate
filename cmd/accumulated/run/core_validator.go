@@ -39,14 +39,14 @@ func (c *CoreValidatorConfiguration) apply(_ *Instance, cfg *Config) error {
 
 	// Set P2P defaults
 	setDefaultVal(&cfg.P2P, new(P2P))
-	setDefaultVal(&cfg.P2P.BootstrapPeers, accumulate.BootstrapServers) // Bootstrap servers
-	setDefaultVal(&cfg.P2P.Key, nodeKey)                                // Key
-	setDefaultVal(&cfg.P2P.Listen, []multiaddr.Multiaddr{               // Listen addresses
+	setDefaultSlice(&cfg.P2P.BootstrapPeers, accumulate.BootstrapServers...) // Bootstrap servers
+	setDefaultVal(&cfg.P2P.Key, nodeKey)                                     // Key
+	setDefaultSlice(&cfg.P2P.Listen,                                         // Listen addresses
 		listen(c.Listen, "/ip4/0.0.0.0", portDir+portAccP2P, useTCP{}),
 		listen(c.Listen, "/ip4/0.0.0.0", portDir+portAccP2P, useQUIC{}),
 		listen(c.Listen, "/ip4/0.0.0.0", portBVN+portAccP2P, useTCP{}),
 		listen(c.Listen, "/ip4/0.0.0.0", portBVN+portAccP2P, useQUIC{}),
-	})
+	)
 
 	// Create partition services
 	switch c.Mode {
