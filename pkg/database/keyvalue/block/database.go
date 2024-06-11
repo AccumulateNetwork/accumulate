@@ -14,7 +14,6 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/edsrzf/mmap-go"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
@@ -34,11 +33,6 @@ type Database struct {
 
 type records = vmap[[32]byte, recordLocation]
 type recordsView = vmapView[[32]byte, recordLocation]
-
-type blockFile struct {
-	file *os.File
-	mmap mmap.MMap
-}
 
 type blockLocation struct {
 	file   uint
@@ -98,17 +92,12 @@ func Open(path string, options ...Option) (_ *Database, err error) {
 	// Open all the files
 	db.files = make([]*blockFile, 0, len(entries))
 	for _, e := range entries {
-		f, err := os.OpenFile(filepath.Join(path, e.Name()), os.O_RDWR, 0)
+		f, err := openFile(filepath.Join(path, e.Name()), os.O_RDWR, 0)
 		if err != nil {
 			return nil, err
 		}
 
-		m, err := mmap.Map(f, mmap.RDWR, 0)
-		if err != nil {
-			return nil, err
-		}
-
-		db.files = append(db.files, &blockFile{file: f, mmap: m})
+		db.files = append(db.files, f)
 	}
 
 	// Build the block index
@@ -118,7 +107,7 @@ func Open(path string, options ...Option) (_ *Database, err error) {
 		var offset int64
 		var block *uint64
 		for {
-			e, n, err := readEntryMmap(f.mmap, offset)
+			e, n, err := readEntryAt(f, offset)
 			if err != nil {
 				if errors.Is(err, io.EOF) {
 					break
@@ -196,32 +185,21 @@ func (db *Database) newFile() (*blockFile, error) {
 	}
 	name = filepath.Join(db.path, name)
 
-	f, err := os.OpenFile(name, os.O_RDWR|os.O_EXCL|os.O_CREATE, 0600)
+	f, err := openFile(name, os.O_RDWR|os.O_EXCL|os.O_CREATE, 0600)
 	if err != nil {
 		return nil, err
 	}
 
-	bf := &blockFile{f, nil}
-	db.files = append(db.files, bf)
-	return bf, nil
+	db.files = append(db.files, f)
+	return f, nil
 }
 
 func (db *Database) Close() error {
 	var errs []error
 	for _, f := range db.files {
-		e1 := f.mmap.Unmap()
-		e2 := f.file.Close()
-		if e1 != nil {
-			errs = append(errs, e1)
-		}
-		if e2 != nil {
-			errs = append(errs, e2)
-		}
+		errs = append(errs, f.Close())
 	}
-	if len(errs) == 0 {
-		return nil
-	}
-	return errs[0]
+	return errors.Join(errs...)
 }
 
 // Begin begins a change set.
@@ -261,7 +239,7 @@ func (d *Database) get(view *recordsView, key *record.Key) ([]byte, error) {
 	if !d.validLoc(loc) {
 		return nil, errors.InternalError.WithFormat("record is corrupted")
 	}
-	return d.read(loc), nil
+	return d.read(loc)
 }
 
 func (d *Database) forEach(view *recordsView, fn func(*record.Key, []byte) error) error {
@@ -279,7 +257,12 @@ func (d *Database) forEach(view *recordsView, fn func(*record.Key, []byte) error
 			return err
 		}
 
-		return fn(header.Key, d.read(loc))
+		b, err := d.read(loc)
+		if err != nil {
+			return err
+		}
+
+		return fn(header.Key, b)
 	})
 }
 
@@ -298,28 +281,32 @@ func (d *Database) validLoc(loc recordLocation) bool {
 		// loc.file is invalid
 		return false
 
-	case d.files[loc.file].mmap == nil:
-		// File is not memory mapped
-		return false
-
-	case loc.offset+loc.length > int64(len(d.files[loc.file].mmap)):
-		// Requested range is outside the memory mapped region
+	case loc.offset+loc.length > int64(d.files[loc.file].Len()):
+		// File is not memory mapped or requested range is outside the memory
+		// mapped region
 		return false
 	}
 	return true
 }
 
-func (d *Database) read(loc recordLocation) []byte {
+func (d *Database) read(loc recordLocation) ([]byte, error) {
 	b := make([]byte, loc.length)
-	copy(b, d.files[loc.file].mmap[loc.offset:])
-	return b
+	_, err := d.files[loc.file].ReadAt(b, loc.offset)
+	if errors.Is(err, io.EOF) {
+		return b, io.ErrUnexpectedEOF
+	}
+	return b, err
 }
 
 func (d *Database) readHeader(loc recordLocation) (*recordEntry, error) {
-	b := make([]byte, loc.length)
-	copy(b, d.files[loc.file].mmap[loc.header:loc.offset])
+	b := make([]byte, loc.offset-loc.header)
+	_, err := d.files[loc.file].ReadAt(b, loc.header)
+	if err != nil {
+		return nil, err
+	}
+
 	e := new(recordEntry)
-	err := e.UnmarshalBinary(b)
+	err = e.UnmarshalBinary(b)
 	return e, err
 }
 
@@ -361,15 +348,7 @@ func (d *Database) commit(view *recordsView, entries map[[32]byte]memory.Entry) 
 			}
 
 			// Remap the file
-			if f.mmap != nil {
-				err := f.mmap.Unmap()
-				f.mmap = nil
-				if err != nil {
-					return err
-				}
-			}
-
-			f.mmap, err = mmap.Map(f.file, mmap.RDWR, 0)
+			err := f.Remap()
 			if err != nil {
 				return err
 			}
@@ -440,15 +419,7 @@ func (d *Database) commit(view *recordsView, entries map[[32]byte]memory.Entry) 
 	}
 
 	// Remap the file
-	if f.mmap != nil {
-		err := f.mmap.Unmap()
-		f.mmap = nil
-		if err != nil {
-			return err
-		}
-	}
-
-	f.mmap, err = mmap.Map(f.file, mmap.RDWR, 0)
+	err = f.Remap()
 	if err != nil {
 		return err
 	}

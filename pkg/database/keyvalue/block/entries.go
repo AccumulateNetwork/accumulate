@@ -8,26 +8,37 @@ package block
 
 import (
 	"encoding/binary"
+	"errors"
 	"io"
 	"math"
 )
 
-func readEntryMmap(mmap []byte, offset int64) (entry, int, error) {
-	if int64(len(mmap)) <= offset {
-		return nil, 0, io.EOF
-	}
-	if int64(len(mmap)) < offset+2 {
-		return nil, 0, io.ErrUnexpectedEOF
+func readEntryAt(rd io.ReaderAt, offset int64) (entry, int, error) {
+	var lb [2]byte
+	n, err := rd.ReadAt(lb[:], offset)
+	switch {
+	case err == nil:
+		// Ok
+	case !errors.Is(err, io.EOF):
+		return nil, n, err
+	case n == 0:
+		return nil, n, io.EOF
+	default:
+		return nil, n, io.ErrUnexpectedEOF
 	}
 
-	b := make([]byte, binary.BigEndian.Uint16(mmap[offset:offset+2]))
-	n := copy(b, mmap[offset+2:])
-	if n < len(b) {
-		return nil, n + 2, io.ErrUnexpectedEOF
+	b := make([]byte, binary.BigEndian.Uint16(lb[:]))
+	m, err := rd.ReadAt(b, offset+2)
+	n += m
+	if err != nil {
+		if errors.Is(err, io.EOF) {
+			return nil, n, io.EOF
+		}
+		return nil, n, err
 	}
 
 	e, err := unmarshalEntry(b)
-	return e, n + 2, err
+	return e, n, err
 }
 
 func writeEntry(wr io.Writer, e entry) (int, error) {
