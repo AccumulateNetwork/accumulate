@@ -774,13 +774,13 @@ func (v *P2P) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return err
 	}
-	if u.Listen != nil {
+	if u.Listen.Value != nil {
 		v.Listen = make([]p2p.Multiaddr, len(u.Listen.Value))
 		for i, x := range u.Listen.Value {
 			v.Listen[i] = x
 		}
 	}
-	if u.BootstrapPeers != nil {
+	if u.BootstrapPeers.Value != nil {
 		v.BootstrapPeers = make([]p2p.Multiaddr, len(u.BootstrapPeers.Value))
 		for i, x := range u.BootstrapPeers.Value {
 			v.BootstrapPeers[i] = x
