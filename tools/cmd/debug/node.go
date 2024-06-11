@@ -86,7 +86,7 @@ func checkNode(_ *cobra.Command, args []string) {
 		fmt.Printf("Peer ID:\t%v\n", ni.PeerID)
 		fmt.Printf("Network:\t%v\n", ni.Network)
 
-		cs, err := jc.ConsensusStatus(ctx, api.ConsensusStatusOptions{})
+		cs, err := jc.ConsensusStatus(ctx, api.ConsensusStatusOptions{NodeID: peerID})
 		check(err)
 		fmt.Printf("Validator:\t%x\n", cs.ValidatorKeyHash)
 
