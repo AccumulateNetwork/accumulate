@@ -2689,13 +2689,13 @@ func (v *Config) UnmarshalJSON(data []byte) error {
 	v.Logging = u.Logging
 	v.Instrumentation = u.Instrumentation
 	v.P2P = u.P2P
-	if u.Configurations != nil {
+	if u.Configurations.Value != nil {
 		v.Configurations = make([]Configuration, len(u.Configurations.Value))
 		for i, x := range u.Configurations.Value {
 			v.Configurations[i] = x
 		}
 	}
-	if u.Services != nil {
+	if u.Services.Value != nil {
 		v.Services = make([]Service, len(u.Services.Value))
 		for i, x := range u.Services.Value {
 			v.Services[i] = x
@@ -2740,7 +2740,7 @@ func (v *ConsensusService) UnmarshalJSON(data []byte) error {
 		v.Listen = u.Listen.Value
 	}
 
-	if u.BootstrapPeers != nil {
+	if u.BootstrapPeers.Value != nil {
 		v.BootstrapPeers = make([]p2p.Multiaddr, len(u.BootstrapPeers.Value))
 		for i, x := range u.BootstrapPeers.Value {
 			v.BootstrapPeers[i] = x
@@ -2831,13 +2831,13 @@ func (v *CoreValidatorConfiguration) UnmarshalJSON(data []byte) error {
 
 	v.DnGenesis = u.DnGenesis
 	v.BvnGenesis = u.BvnGenesis
-	if u.DnBootstrapPeers != nil {
+	if u.DnBootstrapPeers.Value != nil {
 		v.DnBootstrapPeers = make([]p2p.Multiaddr, len(u.DnBootstrapPeers.Value))
 		for i, x := range u.DnBootstrapPeers.Value {
 			v.DnBootstrapPeers[i] = x
 		}
 	}
-	if u.BvnBootstrapPeers != nil {
+	if u.BvnBootstrapPeers.Value != nil {
 		v.BvnBootstrapPeers = make([]p2p.Multiaddr, len(u.BvnBootstrapPeers.Value))
 		for i, x := range u.BvnBootstrapPeers.Value {
 			v.BvnBootstrapPeers[i] = x
@@ -2990,7 +2990,7 @@ func (v *HttpListener) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return err
 	}
-	if u.Listen != nil {
+	if u.Listen.Value != nil {
 		v.Listen = make([]p2p.Multiaddr, len(u.Listen.Value))
 		for i, x := range u.Listen.Value {
 			v.Listen[i] = x
@@ -3028,7 +3028,7 @@ func (v *HttpPeerMapEntry) UnmarshalJSON(data []byte) error {
 	}
 
 	v.Partitions = u.Partitions
-	if u.Addresses != nil {
+	if u.Addresses.Value != nil {
 		v.Addresses = make([]p2p.Multiaddr, len(u.Addresses.Value))
 		for i, x := range u.Addresses.Value {
 			v.Addresses[i] = x
@@ -3075,7 +3075,7 @@ func (v *HttpService) UnmarshalJSON(data []byte) error {
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
-	if u.Listen != nil {
+	if u.Listen.Value != nil {
 		v.HttpListener.Listen = make([]p2p.Multiaddr, len(u.Listen.Value))
 		for i, x := range u.Listen.Value {
 			v.HttpListener.Listen[i] = x
@@ -3120,7 +3120,7 @@ func (v *Instrumentation) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return err
 	}
-	if u.Listen != nil {
+	if u.Listen.Value != nil {
 		v.HttpListener.Listen = make([]p2p.Multiaddr, len(u.Listen.Value))
 		for i, x := range u.Listen.Value {
 			v.HttpListener.Listen[i] = x
@@ -3298,13 +3298,13 @@ func (v *P2P) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return err
 	}
-	if u.Listen != nil {
+	if u.Listen.Value != nil {
 		v.Listen = make([]p2p.Multiaddr, len(u.Listen.Value))
 		for i, x := range u.Listen.Value {
 			v.Listen[i] = x
 		}
 	}
-	if u.BootstrapPeers != nil {
+	if u.BootstrapPeers.Value != nil {
 		v.BootstrapPeers = make([]p2p.Multiaddr, len(u.BootstrapPeers.Value))
 		for i, x := range u.BootstrapPeers.Value {
 			v.BootstrapPeers[i] = x
@@ -3491,7 +3491,7 @@ func (v *SubnodeService) UnmarshalJSON(data []byte) error {
 		v.NodeKey = u.NodeKey.Value
 	}
 
-	if u.Services != nil {
+	if u.Services.Value != nil {
 		v.Services = make([]Service, len(u.Services.Value))
 		for i, x := range u.Services.Value {
 			v.Services[i] = x
