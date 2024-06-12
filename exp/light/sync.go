@@ -356,12 +356,18 @@ func (c *Client) getBlockForTime(batch *DB, account *url.URL, time time.Time) (u
 	}
 	partU := protocol.PartitionUrl(part)
 	block, err := batch.Index().Account(partU.JoinPath(protocol.Ledger)).Chain("root").BlockTime().FindIndexEntryBefore(time)
-	if err != nil {
+	switch {
+	case err == nil:
+		// Include chain entries since the given minor block
+		return block.BlockIndex, nil
+
+	case errors.Is(err, errors.NotFound):
+		// If there's no entry before the given time, start with block 1
+		return 1, nil
+
+	default:
 		return 0, errors.UnknownError.WithFormat("load anchor metadata: %w", err)
 	}
-
-	// Include chain entries since the given minor block
-	return block.BlockIndex, nil
 }
 
 type missingMessage struct {
@@ -398,6 +404,8 @@ func (c *Client) PullMessagesForAccountSince(ctx context.Context, account *url.U
 }
 
 func (c *Client) pullMessagesForAccount(ctx context.Context, account *url.URL, chains []string, since *time.Time) error {
+	slog.InfoCtx(ctx, "Checking for missing messages", "account", account, "chains", chains)
+
 	if c.query.Querier == nil {
 		return errors.BadRequest.With("client was initialized without a querier")
 	}
@@ -419,7 +427,6 @@ func (c *Client) pullMessagesForAccount(ctx context.Context, account *url.URL, c
 		}
 	}
 
-	slog.InfoCtx(ctx, "Checking for missing messages", "account", account, "chains", chains)
 	var missing []*missingMessage
 	for _, name := range chains {
 		chain, err := batch.Account(account).ChainByName(name)
@@ -435,10 +442,15 @@ func (c *Client) pullMessagesForAccount(ctx context.Context, account *url.URL, c
 		start := int64(0)
 		if since != nil {
 			entry, err := batch.Index().Account(account).Chain(name).BlockIndex().FindIndexEntryAfter(sinceMinor)
-			if err != nil {
+			switch {
+			case err == nil:
+				start = int64(entry.Source)
+			case errors.Is(err, errors.NotFound):
+				// If there's no entry after the given block, there must not have been anything written to the chain since then
+				continue
+			default:
 				return errors.UnknownError.WithFormat("load %v %v chain index: %w", account, name, err)
 			}
-			start = int64(entry.Source)
 		}
 
 		// Scan all the entries
