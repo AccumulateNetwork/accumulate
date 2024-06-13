@@ -62,7 +62,7 @@ func TsNeedsCtor(typ *Type) bool {
 func TsResolveType(field *Field) string {
 	typ := field.Type.TypescriptType(false)
 	if field.Repeatable {
-		typ = typ + "[]"
+		typ = "(" + typ + " | undefined)[]"
 	}
 	return typ
 }
@@ -84,7 +84,7 @@ func TsInputType(field *Field) string {
 		typ = field.Type.TypescriptInputType(false)
 	}
 	if field.Repeatable {
-		typ = "(" + typ + ")[]"
+		typ = "(" + typ + " | undefined)[]"
 	}
 	return typ
 }
@@ -117,7 +117,7 @@ func TsUnobjectify(field *Field, varName string) string {
 		return tsUnobjectify2(field, varName)
 	}
 
-	return fmt.Sprintf("%s.map(v => %s)", varName, tsUnobjectify2(field, "v"))
+	return fmt.Sprintf("%s.map(v => v == undefined ? undefined : %s)", varName, tsUnobjectify2(field, "v"))
 }
 
 func tsUnobjectify2(field *Field, varName string) string {
