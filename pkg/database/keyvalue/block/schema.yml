@@ -1,0 +1,50 @@
+$generate:
+  widgets: true
+
+  methods:
+    json: true
+    binary: true
+
+  import:
+    record: gitlab.com/accumulatenetwork/accumulate/pkg/types/record
+
+  varPrefix:
+    schema: s
+    widget: w
+
+entry:
+  class: union
+  discriminator:
+    field: Type
+    type:
+      name: entryType
+      class: enum
+      underlying: uint
+      values:
+        StartBlock:
+          value: 1
+        Record:
+          value: 2
+        EndBlock:
+          value: 3
+
+  members:
+    - name: startBlockEntry
+      class: composite
+      fields:
+        - name: ID
+          type: uint
+        - name: Parent
+          type: uint
+
+    - name: recordEntry
+      class: composite
+      fields:
+        - name: Key
+          type: '*record.Key'
+        - name: Length
+          type: int
+
+    - name: endBlockEntry
+      class: composite
+      fields: []

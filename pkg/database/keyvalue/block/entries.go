@@ -44,7 +44,7 @@ func readEntryAt(rd io.ReaderAt, offset int64, buffer *bytes.Buffer) (entry, int
 		return nil, n, err
 	}
 
-	e, err := unmarshalEntry(b[:m])
+	e, err := unmarshalEntryBinary(b[:m])
 	return e, n, err
 }
 

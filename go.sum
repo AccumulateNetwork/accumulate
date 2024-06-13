@@ -1168,6 +1168,8 @@ gitlab.com/accumulatenetwork/core/schema v0.1.0 h1:cwi7QeqQ3StKHVgGmnolMgSt54X9V
 gitlab.com/accumulatenetwork/core/schema v0.1.0/go.mod h1:Ld8YhZh4HN4O6TR3FTjlvfWxWib83RneymKw1EP2VwQ=
 gitlab.com/accumulatenetwork/core/schema v0.1.1-0.20240613211246-085073e0300a h1:smkyPgUUYEuHtU2uBQfVBTDf4OvZdCb2/IVBO/55ESE=
 gitlab.com/accumulatenetwork/core/schema v0.1.1-0.20240613211246-085073e0300a/go.mod h1:FTl7W44SWhDenzAtvKkLu30Cin8DAr249mH4eg7BNLY=
+gitlab.com/accumulatenetwork/core/schema v0.1.1-0.20240613214617-0be27c3bb950 h1:dlYE/sYVb60AYrO2Tk4oP3UfmHDn3UVzhZGVXj/HjQs=
+gitlab.com/accumulatenetwork/core/schema v0.1.1-0.20240613214617-0be27c3bb950/go.mod h1:FTl7W44SWhDenzAtvKkLu30Cin8DAr249mH4eg7BNLY=
 gitlab.com/bosi/decorder v0.4.1 h1:VdsdfxhstabyhZovHafFw+9eJ6eU0d2CkFNJcZz/NU4=
 gitlab.com/bosi/decorder v0.4.1/go.mod h1:jecSqWUew6Yle1pCr2eLWTensJMmsxHsBwt+PVbkAqA=
 gitlab.com/ethan.reesor/vscode-notebooks/go-playbooks v0.0.0-20220417214602-1121b9fae118 h1:UnyYFTz6dWVMBzLUyqHPIQwMrdpiuE+CE7p/5kUfvmk=

@@ -203,7 +203,7 @@ require (
 	github.com/whyrusleeping/go-keyspace v0.0.0-20160322163242-5b898ac5add1 // indirect
 	github.com/xen0n/gosmopolitan v1.2.2 // indirect
 	github.com/ykadowak/zerologlint v0.1.5 // indirect
-	gitlab.com/accumulatenetwork/core/schema v0.1.1-0.20240613211246-085073e0300a // indirect
+	gitlab.com/accumulatenetwork/core/schema v0.1.1-0.20240613214617-0be27c3bb950 // indirect
 	go-simpler.org/musttag v0.9.0 // indirect
 	go-simpler.org/sloglint v0.4.0 // indirect
 	go.opencensus.io v0.24.0 // indirect
