@@ -176,7 +176,7 @@ func Open(path string, options ...Option) (_ *Database, err error) {
 					return nil, fmt.Errorf("%v is corrupted", f.file.Name())
 				}
 
-				records.Put(e.Key.Hash(), recordLocation{
+				records.Put(e.KeyHash, recordLocation{
 					file:   uint(fileNo),
 					block:  *block,
 					header: start + 2, // The header has a 2 byte length prefix
@@ -418,7 +418,7 @@ func (d *Database) commit(view *recordsView, entries map[[32]byte]memory.Entry) 
 		}
 
 		// Write the entry
-		n, err := writeEntry(f.file, &recordEntry{Key: e.Key, Length: l})
+		n, err := writeEntry(f.file, &recordEntry{Key: e.Key, Length: l, KeyHash: e.Key.Hash()})
 		if err != nil {
 			return err
 		}

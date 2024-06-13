@@ -168,14 +168,16 @@ func (v *entryType) UnmarshalBinaryV2(dec *binary.Decoder) error {
 }
 
 type recordEntry struct {
-	Key    *record.Key
-	Length int64
+	Key     *record.Key
+	KeyHash [32]byte
+	Length  int64
 }
 
 var wrecordEntry = widget.ForCompositePtr(widget.Fields[recordEntry]{
 	{Name: "type", ID: 1, Widget: widget.ForTag[*entryType]("type", (*recordEntry).Type)},
 	{Name: "key", ID: 2, Widget: widget.ForValue(func(v *recordEntry) **record.Key { return &v.Key })},
-	{Name: "length", ID: 3, Widget: widget.ForInt(func(v *recordEntry) *int64 { return &v.Length })},
+	{Name: "keyHash", ID: 3, Widget: widget.ForHash(func(v *recordEntry) *[32]byte { return &v.KeyHash })},
+	{Name: "length", ID: 4, Widget: widget.ForInt(func(v *recordEntry) *int64 { return &v.Length })},
 }, widget.Identity[**recordEntry])
 
 func (recordEntry) Type() entryType { return entryTypeRecord }

@@ -700,7 +700,11 @@ func (x ExpiredTransaction) eraseSignatures(batch *database.Batch, ctx *MessageC
 	_, isAuth := account.(protocol.Authority)
 	switch {
 	case errors.Is(err, errors.NotFound):
-		slog.Info("Skip erasing signatures for expired transaction: account does not exist", "id", msg.TxID)
+		// The account does not exist. This should only happen for multisig
+		// Create transactions that expire. In that case - a pending transaction
+		// to create some account X - any attempt to use X to sign transactions
+		// must fail, and thus there should never be anything to erase here.
+		slog.Debug("Skip erasing signatures for expired transaction: account does not exist", "id", msg.TxID)
 		return nil
 
 	case err != nil:

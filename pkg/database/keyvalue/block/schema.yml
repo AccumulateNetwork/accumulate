@@ -42,6 +42,8 @@ entry:
       fields:
         - name: Key
           type: '*record.Key'
+        - name: KeyHash
+          type: hash
         - name: Length
           type: int
 

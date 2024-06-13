@@ -83,6 +83,10 @@ func init() {
 				},
 			},
 			{
+				Name: "KeyHash",
+				Type: &schema.SimpleType{Type: schema.SimpleTypeHash},
+			},
+			{
 				Name: "Length",
 				Type: &schema.SimpleType{Type: schema.SimpleTypeInt},
 			},
