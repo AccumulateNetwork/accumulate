@@ -8,7 +8,6 @@ package healing
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"strings"
@@ -16,7 +15,6 @@ import (
 
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -27,13 +25,13 @@ import (
 )
 
 type HealAnchorArgs struct {
-	Client    message.AddressedClient
-	Querier   api.Querier
-	Submitter api.Submitter
-	NetInfo   *NetworkInfo
-	Known     map[[32]byte]*protocol.Transaction
-	Pretend   bool
-	Wait      bool
+	Client  message.AddressedClient
+	Querier api.Querier
+	Submit  func(...messaging.Message) error
+	NetInfo *NetworkInfo
+	Known   map[[32]byte]*protocol.Transaction
+	Pretend bool
+	Wait    bool
 }
 
 func HealAnchor(ctx context.Context, args HealAnchorArgs, si SequencedInfo) error {
@@ -42,9 +40,6 @@ func HealAnchor(ctx context.Context, args HealAnchorArgs, si SequencedInfo) erro
 
 	if args.Querier == nil {
 		args.Querier = args.Client
-	}
-	if args.Submitter == nil {
-		args.Submitter = args.Client
 	}
 
 	// If the message ID is not known, resolve it
@@ -247,39 +242,25 @@ func HealAnchor(ctx context.Context, args HealAnchorArgs, si SequencedInfo) erro
 	} else {
 		slog.InfoCtx(ctx, "Submitting signatures", "count", len(signatures))
 
-		submit := func(env *messaging.Envelope) {
-			// addr := api.ServiceTypeSubmit.AddressFor(seq.Destination).Multiaddr()
-			sub, err := args.Submitter.Submit(ctx, env, api.SubmitOptions{})
-			if err != nil {
-				b, e := env.MarshalBinary()
-				if e == nil {
-					h := sha256.Sum256(b)
-					b = h[:]
-				}
-				slog.ErrorCtx(ctx, "Submission failed", "error", err, "id", env.Messages[0].ID(), "hash", logging.AsHex(b))
-			}
-			for _, sub := range sub {
-				if sub.Success {
-					slog.InfoCtx(ctx, "Submission succeeded", "id", sub.Status.TxID)
-				} else {
-					slog.ErrorCtx(ctx, "Submission failed", "message", sub, "status", sub.Status)
-				}
-			}
-		}
-
 		if args.NetInfo.Status.ExecutorVersion.V2Enabled() {
 			for _, sig := range signatures {
 				blk := &messaging.BlockAnchor{
 					Signature: sig.(protocol.KeySignature),
 					Anchor:    seq,
 				}
-				submit(&messaging.Envelope{Messages: []messaging.Message{blk}})
+				err = args.Submit(blk)
 			}
 		} else {
-			env := new(messaging.Envelope)
-			env.Transaction = []*protocol.Transaction{theAnchorTxn}
-			env.Signatures = signatures
-			submit(env)
+			msg := []messaging.Message{
+				&messaging.TransactionMessage{Transaction: theAnchorTxn},
+			}
+			for _, sig := range signatures {
+				msg = append(msg, &messaging.SignatureMessage{Signature: sig})
+			}
+			err = args.Submit(msg...)
+		}
+		if err != nil {
+			return err
 		}
 	}
 

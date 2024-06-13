@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/healing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"golang.org/x/exp/slog"
@@ -72,13 +73,20 @@ func (h *healer) healSingleAnchor(srcId, dstId string, seqNum uint64, txid *url.
 	var count int
 retry:
 	err := healing.HealAnchor(h.ctx, healing.HealAnchorArgs{
-		Client:    h.C2.ForAddress(nil),
-		Querier:   h.tryEach(),
-		Submitter: h.C2,
-		NetInfo:   h.net,
-		Known:     txns,
-		Pretend:   pretend,
-		Wait:      waitForTxn,
+		Client:  h.C2.ForAddress(nil),
+		Querier: h.tryEach(),
+		NetInfo: h.net,
+		Known:   txns,
+		Pretend: pretend,
+		Wait:    waitForTxn,
+		Submit: func(m ...messaging.Message) error {
+			select {
+			case h.submit <- m:
+				return nil
+			case <-h.ctx.Done():
+				return errors.NotReady.With("canceled")
+			}
+		},
 	}, healing.SequencedInfo{
 		Source:      srcId,
 		Destination: dstId,
