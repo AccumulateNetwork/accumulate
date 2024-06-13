@@ -20,6 +20,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
+	"golang.org/x/exp/slog"
 )
 
 type Database struct {
@@ -128,6 +129,7 @@ func Open(path string, options ...Option) (_ *Database, err error) {
 	blocks := map[uint64]blockLocation{}
 	records := db.records.View()
 	for fileNo, f := range db.files {
+		slog.Info("Indexing", "ordinal", f.number, "module", "database")
 		var offset int64
 		var block *uint64
 		for {
