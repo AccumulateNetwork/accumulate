@@ -19,6 +19,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"golang.org/x/exp/slog"
 )
 
 func init() {
@@ -696,12 +697,17 @@ func (x ExpiredTransaction) expireTransaction(batch *database.Batch, ctx *Messag
 func (x ExpiredTransaction) eraseSignatures(batch *database.Batch, ctx *MessageContext, msg *internal.ExpiredTransaction) error {
 	// Load the account
 	account, err := batch.Account(msg.TxID.Account()).Main().Get()
-	if err != nil {
-		return errors.UnknownError.WithFormat("load account: %w", err)
-	}
+	_, isAuth := account.(protocol.Authority)
+	switch {
+	case errors.Is(err, errors.NotFound):
+		slog.Info("Skip erasing signatures for expired transaction: account does not exist", "id", msg.TxID)
+		return nil
 
-	// Is it an authority?
-	if _, ok := account.(protocol.Authority); !ok {
+	case err != nil:
+		return errors.UnknownError.WithFormat("load account: %w", err)
+
+	case !isAuth:
+		// Is it an authority?
 		return nil
 	}
 
@@ -720,6 +726,6 @@ func (x ExpiredTransaction) eraseSignatures(batch *database.Batch, ctx *MessageC
 	}
 
 	// Clear the signature set
-	err = clearActiveSignatures(batch, account.GetUrl(), txn.ID())
+	err = clearActiveSignatures(batch, msg.TxID.Account(), txn.ID())
 	return errors.UnknownError.Wrap(err)
 }
