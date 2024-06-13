@@ -16,6 +16,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	enc "gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	binary2 "gitlab.com/accumulatenetwork/core/schema/pkg/binary"
 )
 
 // keyPart is a part of a [Key]. keyPart is used for marshalling.
@@ -45,7 +46,11 @@ type keyPart interface {
 	// so here we tell the binary reader we want to read field zero, which
 	// instructs it to skip the field number logic and read the value directly.
 	ReadBinary(r *enc.Reader)
+
+	ReadBinary2(r *binary2.Decoder) error
 }
+
+type dec = binary2.Decoder
 
 // These methods are here to keep them close to the explanation above.
 
@@ -66,6 +71,28 @@ func (k *bytesKeyPart) ReadBinary(r *enc.Reader)  { ReadBinary((*[]byte)(k), r.R
 func (k *urlKeyPart) ReadBinary(r *enc.Reader)    { ReadBinary(&k.URL, r.ReadUrl) }
 func (k *txidKeyPart) ReadBinary(r *enc.Reader)   { ReadBinary(&k.TxID, r.ReadTxid) }
 func (k *timeKeyPart) ReadBinary(r *enc.Reader)   { ReadBinary(&k.Time, r.ReadTime) }
+
+func (k *intKeyPart) ReadBinary2(r *dec) error    { return rdBin2((*int64)(k), r.DecodeInt) }
+func (k *uintKeyPart) ReadBinary2(r *dec) error   { return rdBin2((*uint64)(k), r.DecodeUint) }
+func (k *stringKeyPart) ReadBinary2(r *dec) error { return rdBin2((*string)(k), r.DecodeString) }
+func (k *hashKeyPart) ReadBinary2(r *dec) error   { return rdBin2((*[32]byte)(k), r.DecodeHash) }
+func (k *bytesKeyPart) ReadBinary2(r *dec) error  { return rdBin2((*[]byte)(k), r.DecodeBytes) }
+
+func (k *urlKeyPart) ReadBinary2(r *dec) error {
+	k.URL = new(url.URL)
+	return r.DecodeValueV2(k.URL)
+}
+
+func (k *txidKeyPart) ReadBinary2(r *dec) error {
+	k.TxID = new(url.TxID)
+	return r.DecodeValueV2(k.TxID)
+}
+
+func (k *timeKeyPart) ReadBinary2(r *dec) error {
+	v, err := r.DecodeInt()
+	k.Time = time.Unix(v, 0).UTC()
+	return err
+}
 
 // newKeyPart returns a new key part for the type code.
 func newKeyPart(typ typeCode) (keyPart, error) {
@@ -152,6 +179,12 @@ func ReadBinary[V any](v *V, read func(uint) (V, bool)) {
 	// Read with field = 0 to tell the reader to skip the field number
 	u, _ := read(0)
 	*v = u
+}
+
+func rdBin2[V any](v *V, read func() (V, error)) error {
+	u, err := read()
+	*v = u
+	return err
 }
 
 func (k hashKeyPart) MarshalJSON() ([]byte, error) {
