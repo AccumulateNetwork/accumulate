@@ -7,7 +7,6 @@
 package block
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"io/fs"
@@ -21,6 +20,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
+	binary2 "gitlab.com/accumulatenetwork/core/schema/pkg/binary"
 	"golang.org/x/exp/slog"
 )
 
@@ -129,19 +129,23 @@ func Open(path string, options ...Option) (_ *Database, err error) {
 	// Build the block index
 	blocks := map[uint64]blockLocation{}
 	records := db.records.View()
-	buffer := new(bytes.Buffer)
+	buf := new(buffer)
+	dec := new(binary2.Decoder)
 	for fileNo, f := range db.files {
 		slog.Info("Indexing", "ordinal", f.number, "module", "database")
 		var offset int64
 		var block *uint64
 		for {
-			e, n, err := readEntryAt(f, offset, buffer)
+			e, n, err := readEntryAt(f, offset, buf, dec)
 			if err != nil {
 				if errors.Is(err, io.EOF) {
 					break
 				}
 				return nil, fmt.Errorf("reading entries from %v: %w", f.file.Name(), err)
 			}
+
+			// b, _ := json.Marshal(e)
+			// fmt.Println(string(b))
 
 			start := offset
 			offset += int64(n)
