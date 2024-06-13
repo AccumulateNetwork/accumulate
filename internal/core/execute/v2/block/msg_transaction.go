@@ -563,19 +563,19 @@ func (b *Block) processEvents() error {
 		events := b.Batch.Account(b.Executor.Describe.Ledger()).Events()
 		blocks, err := getBlocksWithEvents(events.Major().Blocks(), majorBlockIndex)
 		if err != nil {
-			return errors.UnknownError.Wrap(err)
+			return errors.UnknownError.WithFormat("get blocks: %w", err)
 		}
 
 		// Expire pending transactions
 		msgs, err := b.expirePendingTransactions(b.Batch, blocks)
 		if err != nil {
-			return errors.UnknownError.Wrap(err)
+			return errors.UnknownError.WithFormat("expire pending: %w", err)
 		}
 
 		// Claim we're on pass 1 so that internal messages are allowed
 		_, err = b.processMessages(msgs, 1)
 		if err != nil {
-			return errors.UnknownError.Wrap(err)
+			return errors.UnknownError.WithFormat("process messages (1): %w", err)
 		}
 	}
 
@@ -623,7 +623,7 @@ func (b *Block) processEvents() error {
 
 	// Claim we're on pass 1 so that internal messages are allowed
 	_, err = b.processMessages(msgs, 1)
-	return errors.UnknownError.Wrap(err)
+	return errors.UnknownError.WithFormat("process messages (2): %w", err)
 }
 
 // ExpiredTransaction expires a transaction
