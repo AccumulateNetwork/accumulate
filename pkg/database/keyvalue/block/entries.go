@@ -7,13 +7,14 @@
 package block
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"io"
 	"math"
 )
 
-func readEntryAt(rd io.ReaderAt, offset int64) (entry, int, error) {
+func readEntryAt(rd io.ReaderAt, offset int64, buffer *bytes.Buffer) (entry, int, error) {
 	var lb [2]byte
 	n, err := rd.ReadAt(lb[:], offset)
 	switch {
@@ -27,7 +28,13 @@ func readEntryAt(rd io.ReaderAt, offset int64) (entry, int, error) {
 		return nil, n, io.ErrUnexpectedEOF
 	}
 
-	b := make([]byte, binary.BigEndian.Uint16(lb[:]))
+	// Reserve the necessary amount of data
+	l := int(binary.BigEndian.Uint16(lb[:]))
+	buffer.Reset()
+	buffer.Grow(l)
+	b := buffer.Bytes()
+	b = b[:l]
+
 	m, err := rd.ReadAt(b, offset+2)
 	n += m
 	if err != nil {
@@ -37,7 +44,7 @@ func readEntryAt(rd io.ReaderAt, offset int64) (entry, int, error) {
 		return nil, n, err
 	}
 
-	e, err := unmarshalEntry(b)
+	e, err := unmarshalEntry(b[:m])
 	return e, n, err
 }
 

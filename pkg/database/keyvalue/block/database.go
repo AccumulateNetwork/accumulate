@@ -7,6 +7,7 @@
 package block
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"io/fs"
@@ -128,12 +129,13 @@ func Open(path string, options ...Option) (_ *Database, err error) {
 	// Build the block index
 	blocks := map[uint64]blockLocation{}
 	records := db.records.View()
+	buffer := new(bytes.Buffer)
 	for fileNo, f := range db.files {
 		slog.Info("Indexing", "ordinal", f.number, "module", "database")
 		var offset int64
 		var block *uint64
 		for {
-			e, n, err := readEntryAt(f, offset)
+			e, n, err := readEntryAt(f, offset, buffer)
 			if err != nil {
 				if errors.Is(err, io.EOF) {
 					break
