@@ -17,6 +17,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -34,6 +35,7 @@ import (
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/bolt"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"golang.org/x/exp/slog"
@@ -85,6 +87,8 @@ type healer struct {
 	net    *healing.NetworkInfo
 	light  *light.Client
 	router routing.Router
+
+	submit chan []messaging.Message
 
 	accounts map[[32]byte]protocol.Account
 }
@@ -171,6 +175,13 @@ func (h *healer) heal(args []string) {
 		},
 	}
 
+	wg := new(sync.WaitGroup)
+	defer wg.Wait()
+
+	h.submit = make(chan []messaging.Message)
+	wg.Add(1)
+	go h.submitLoop(wg)
+
 	if lightDb != "" {
 		cv2, err := client.New(accumulate.ResolveWellKnownEndpoint(args[0], "v2"))
 		check(err)
@@ -256,6 +267,44 @@ func (h *healer) heal(args []string) {
 	seqNo, err := strconv.ParseUint(args[2], 10, 64)
 	check(err)
 	h.healSingle(h, parts[strings.ToLower(srcId)], parts[strings.ToLower(dstId)], seqNo, nil)
+}
+
+func (h *healer) submitLoop(wg *sync.WaitGroup) {
+	defer wg.Done()
+	t := time.NewTicker(3 * time.Second)
+	defer t.Stop()
+
+	var messages []messaging.Message
+	var stop bool
+	for !stop {
+		select {
+		case <-h.ctx.Done():
+			stop = true
+		case msg := <-h.submit:
+			messages = append(messages, msg...)
+			if len(messages) < 50 {
+				continue
+			}
+		case <-t.C:
+		}
+		if len(messages) == 0 {
+			continue
+		}
+
+		env := &messaging.Envelope{Messages: messages}
+		subs, err := h.C2.Submit(h.ctx, env, api.SubmitOptions{})
+		messages = messages[:0]
+		if err != nil {
+			slog.ErrorCtx(h.ctx, "Submission failed", "error", err, "id", env.Messages[0].ID())
+		}
+		for _, sub := range subs {
+			if sub.Success {
+				slog.InfoCtx(h.ctx, "Submission succeeded", "id", sub.Status.TxID)
+			} else {
+				slog.ErrorCtx(h.ctx, "Submission failed", "message", sub, "status", sub.Status)
+			}
+		}
+	}
 }
 
 // getAccount fetches the given account.
