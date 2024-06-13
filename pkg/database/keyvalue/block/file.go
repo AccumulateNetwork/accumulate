@@ -17,13 +17,15 @@ import (
 )
 
 type blockFile struct {
-	file *os.File
-	mu   *sync.RWMutex
-	data mmap.MMap
+	number int
+	mu     *sync.RWMutex
+	file   *os.File
+	data   mmap.MMap
 }
 
-func openFile(name string, flag int, perm fs.FileMode) (*blockFile, error) {
+func openFile(number int, name string, flag int, perm fs.FileMode) (*blockFile, error) {
 	f := new(blockFile)
+	f.number = number
 	f.mu = new(sync.RWMutex)
 
 	var err error

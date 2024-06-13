@@ -12,6 +12,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
@@ -28,7 +29,8 @@ type Database struct {
 	records   records
 	next      uint64
 	fileLimit uint64
-	nameFn    func(i int) string
+	nameFmt   NameFormat
+	filterFn  func(string) bool
 }
 
 type records = vmap[[32]byte, recordLocation]
@@ -55,9 +57,15 @@ func WithFileLimit(limit uint64) Option {
 	}
 }
 
-func WithNameFunc(fn func(i int) string) Option {
+func WithNameFormat(fmt NameFormat) Option {
 	return func(d *Database) {
-		d.nameFn = fn
+		d.nameFmt = fmt
+	}
+}
+
+func FilterFiles(fn func(string) bool) Option {
+	return func(d *Database) {
+		d.filterFn = fn
 	}
 }
 
@@ -83,7 +91,7 @@ func Open(path string, options ...Option) (_ *Database, err error) {
 
 	db.path = path
 	db.fileLimit = 1 << 30
-	db.nameFn = func(i int) string { return fmt.Sprintf("%d.blocks", i) }
+	db.nameFmt = DefaultNameFormat
 
 	for _, o := range options {
 		o(db)
@@ -92,13 +100,29 @@ func Open(path string, options ...Option) (_ *Database, err error) {
 	// Open all the files
 	db.files = make([]*blockFile, 0, len(entries))
 	for _, e := range entries {
-		f, err := openFile(filepath.Join(path, e.Name()), os.O_RDWR, 0)
+		if db.filterFn != nil && !db.filterFn(e.Name()) {
+			continue
+		}
+
+		// Extract the ordinal from the filename
+		number, err := db.nameFmt.Parse(e.Name())
+		if err != nil {
+			return nil, fmt.Errorf("parse index of %q: %w", e.Name(), err)
+		}
+
+		f, err := openFile(number, filepath.Join(path, e.Name()), os.O_RDWR, 0)
 		if err != nil {
 			return nil, err
 		}
 
 		db.files = append(db.files, f)
 	}
+
+	// Sort the files by number, since who knows what order the filesystem
+	// returns them in
+	slices.SortFunc(db.files, func(a, b *blockFile) int {
+		return a.number - b.number
+	})
 
 	// Build the block index
 	blocks := map[uint64]blockLocation{}
@@ -177,7 +201,8 @@ func (db *Database) newFile() (*blockFile, error) {
 	}
 
 	// Create a new file
-	name := db.nameFn(len(db.files))
+	number := len(db.files)
+	name := db.nameFmt.Format(number)
 	if name == "" {
 		return nil, fmt.Errorf("invalid block file name: empty")
 	} else if filepath.Base(name) != name {
@@ -185,7 +210,7 @@ func (db *Database) newFile() (*blockFile, error) {
 	}
 	name = filepath.Join(db.path, name)
 
-	f, err := openFile(name, os.O_RDWR|os.O_EXCL|os.O_CREATE, 0600)
+	f, err := openFile(number, name, os.O_RDWR|os.O_EXCL|os.O_CREATE, 0600)
 	if err != nil {
 		return nil, err
 	}
