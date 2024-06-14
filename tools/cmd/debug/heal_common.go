@@ -48,7 +48,6 @@ var cmdHeal = &cobra.Command{
 var flagMaxResponseAge time.Duration = time.Minute
 
 func init() {
-	peerDb = filepath.Join(currentUser.HomeDir, ".accumulate", "cache", "peerdb.json")
 	lightDb = filepath.Join(currentUser.HomeDir, ".accumulate", "cache", "light.db")
 
 	cmd.AddCommand(cmdHeal)
@@ -57,7 +56,7 @@ func init() {
 	cmdHeal.PersistentFlags().BoolVarP(&pretend, "pretend", "n", false, "Do not submit envelopes, only scan")
 	cmdHeal.PersistentFlags().BoolVar(&waitForTxn, "wait", false, "Wait for the message to finalize (defaults to true for heal synth)")
 	cmdHeal.PersistentFlags().BoolVar(&healContinuous, "continuous", false, "Run healing in a loop every minute")
-	cmdHeal.PersistentFlags().StringVar(&peerDb, "peer-db", peerDb, "Track peers using a persistent database")
+	cmdHeal.PersistentFlags().StringVar(&peerDb, "peer-db", "", "Track peers using a persistent database")
 	cmdHeal.PersistentFlags().StringVar(&pprof, "pprof", "", "Address to run net/http/pprof on")
 	cmdHeal.PersistentFlags().BoolVar(&debug, "debug", false, "Debug network requests")
 	cmdHealAnchor.PersistentFlags().DurationVar(&flagMaxResponseAge, "max-response-age", flagMaxResponseAge, "Maximum age of a response before it is considered too stale to use")
@@ -66,6 +65,9 @@ func init() {
 	_ = cmdHeal.MarkFlagFilename("cached-scan", ".json")
 
 	cmdHeal.PersistentPreRun = func(cmd *cobra.Command, args []string) {
+		if !cmd.Flag("peer-db").Changed {
+			peerDb = filepath.Join(currentUser.HomeDir, ".accumulate", "cache", strings.ToLower(args[0])+"-peers.json")
+		}
 		if !cmd.Flag("cached-scan").Changed {
 			cachedScan = filepath.Join(currentUser.HomeDir, ".accumulate", "cache", strings.ToLower(args[0])+".json")
 		}
