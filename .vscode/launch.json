@@ -141,28 +141,6 @@
     },
     // Run
     {
-      "name": "Init (devnet)",
-      "presentation": {
-        "group": "20-Run"
-      },
-      "type": "go",
-      "request": "launch",
-      "mode": "auto",
-      "program": "${workspaceFolder}/cmd/accumulated",
-      "args": [
-        "init",
-        "devnet",
-        "-w=${workspaceFolder}/.nodes",
-        "--reset",
-        "-b=1",
-        "-v=1",
-        "-f=0",
-        "-s=0",
-        "--globals={\"executorVersion\": \"v2\"}",
-        "--faucet-seed=ci",
-      ]
-    },
-    {
       "name": "Run (devnet)",
       "presentation": {
         "group": "20-Run"
@@ -172,7 +150,11 @@
       "mode": "auto",
       "program": "${workspaceFolder}/cmd/accumulated",
       "args": [
-        "${workspaceFolder}/.nodes/devnet",
+        "run", "devnet",
+        "-w=${workspaceFolder}/.nodes/devnet",
+        "-b=2",
+        "-v=1",
+        "-f=0",
       ]
     },
     {
