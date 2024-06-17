@@ -39,6 +39,7 @@ func (c *closableDb) Close() {
 }
 
 func openDb(t testing.TB, open Opener) *closableDb {
+	t.Helper()
 	db, err := open()
 	require.NoError(t, err)
 	c := &closableDb{db, t, false}
@@ -47,65 +48,79 @@ func openDb(t testing.TB, open Opener) *closableDb {
 }
 
 func TestDatabase(t *testing.T, open Opener) {
-	const N = 10000
+	const N, M = 100, 100
 
 	// Open and write changes
 	db := openDb(t, open)
 
-	batch := db.Begin(nil, true)
-	defer batch.Discard()
-
 	// Read when nothing exists
-	_, err := batch.Get(record.NewKey("answer", 0))
-	require.Error(t, err)
-	require.ErrorAs(t, err, new(*database.NotFoundError))
+	doBatch(t, db, func(batch keyvalue.ChangeSet) {
+		_, err := batch.Get(record.NewKey("answer", 0))
+		require.Error(t, err)
+		require.ErrorAs(t, err, new(*database.NotFoundError))
+	})
 
 	// Write
 	values := map[record.KeyHash]string{}
-	for i := 0; i < N; i++ {
-		key := record.NewKey("answer", i)
-		value := fmt.Sprintf("%x this much data ", i)
-		values[key.Hash()] = value
-		err := batch.Put(key, []byte(value))
-		require.NoError(t, err, "Put")
+	for i := range N {
+		if i > 0 {
+			doBatch(t, db, func(batch keyvalue.ChangeSet) {
+				_, err := batch.Get(record.NewKey("answer", i-1, 0))
+				require.NoError(t, err)
+			})
+		}
+		doBatch(t, db, func(batch keyvalue.ChangeSet) {
+			for j := range M {
+				key := record.NewKey("answer", i, j)
+				value := fmt.Sprintf("%x/%x this much data ", i, j)
+				values[key.Hash()] = value
+				err := batch.Put(key, []byte(value))
+				require.NoError(t, err, "Put")
+			}
+		})
+		if i > 0 {
+			doBatch(t, db, func(batch keyvalue.ChangeSet) {
+				_, err := batch.Get(record.NewKey("answer", i-1, 0))
+				require.NoError(t, err)
+			})
+		}
 	}
-
-	// Commit
-	require.NoError(t, batch.Commit())
 
 	// Verify with a new batch
-	batch = db.Begin(nil, false)
-	defer batch.Discard()
-
-	for i := 0; i < N; i++ {
-		val, err := batch.Get(record.NewKey("answer", i))
-		require.NoError(t, err, "Get")
-		require.Equal(t, fmt.Sprintf("%x this much data ", i), string(val))
-	}
-
-	batch.Discard()
+	doBatch(t, db, func(batch keyvalue.ChangeSet) {
+		for i := range N {
+			for j := range M {
+				val, err := batch.Get(record.NewKey("answer", i, j))
+				require.NoError(t, err, "Get")
+				require.Equal(t, fmt.Sprintf("%x/%x this much data ", i, j), string(val))
+			}
+		}
+	})
 
 	// Verify with a fresh instance
 	db.Close()
 	db = openDb(t, open)
 
-	batch = db.Begin(nil, false)
-	defer batch.Discard()
-
-	for i := 0; i < N; i++ {
-		val, err := batch.Get(record.NewKey("answer", i))
-		require.NoError(t, err, "Get")
-		require.Equal(t, fmt.Sprintf("%x this much data ", i), string(val))
-	}
+	doBatch(t, db, func(batch keyvalue.ChangeSet) {
+		for i := range N {
+			for j := range M {
+				val, err := batch.Get(record.NewKey("answer", i, j))
+				require.NoError(t, err, "Get")
+				require.Equal(t, fmt.Sprintf("%x/%x this much data ", i, j), string(val))
+			}
+		}
+	})
 
 	// Verify ForEach
-	require.NoError(t, batch.ForEach(func(key *record.Key, value []byte) error {
-		expect, ok := values[key.Hash()]
-		require.Truef(t, ok, "%v should exist", key)
-		require.Equalf(t, expect, string(value), "%v should match", key)
-		delete(values, key.Hash())
-		return nil
-	}))
+	doBatch(t, db, func(batch keyvalue.ChangeSet) {
+		require.NoError(t, batch.ForEach(func(key *record.Key, value []byte) error {
+			expect, ok := values[key.Hash()]
+			require.Truef(t, ok, "%v should exist", key)
+			require.Equalf(t, expect, string(value), "%v should match", key)
+			delete(values, key.Hash())
+			return nil
+		}))
+	})
 	require.Empty(t, values, "All values should be iterated over")
 }
 
@@ -225,4 +240,12 @@ func TestDelete(t *testing.T, open Opener) {
 	defer batch.Discard()
 	_, err = batch.Get(record.NewKey("foo"))
 	require.ErrorIs(t, err, errors.NotFound)
+}
+
+func doBatch(t testing.TB, db keyvalue.Beginner, fn func(batch keyvalue.ChangeSet)) {
+	t.Helper()
+	batch := db.Begin(nil, true)
+	defer batch.Discard()
+	fn(batch)
+	require.NoError(t, batch.Commit())
 }
