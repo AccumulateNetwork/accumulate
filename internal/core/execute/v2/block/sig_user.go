@@ -437,6 +437,12 @@ func (UserSignature) process(batch *database.Batch, ctx *userSigContext) error {
 // sendSignatureRequests sends signature requests so that the transaction
 // will appear on the appropriate pending lists.
 func (UserSignature) sendSignatureRequests(batch *database.Batch, ctx *userSigContext) error {
+	// If the signer is a lite identity, do not send a signature request
+	if _, ok := ctx.signer.(*protocol.LiteIdentity); ok &&
+		ctx.GetActiveGlobals().ExecutorVersion.V2VandenbergEnabled() {
+		return nil
+	}
+
 	// If this is the initiator signature
 	if !ctx.isInitiator {
 		return nil
