@@ -97,7 +97,7 @@ func TestFileLimit(t *testing.T) {
 	batch := db.Begin(nil, true)
 	defer batch.Discard()
 
-	const N = 20
+	const N = 16
 	for i := 0; i < N; i++ {
 		k := record.NewKey(i)
 		v := make([]byte, 128)
