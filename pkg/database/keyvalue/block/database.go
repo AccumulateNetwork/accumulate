@@ -12,14 +12,16 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 
-	"github.com/edsrzf/mmap-go"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
+	binary2 "gitlab.com/accumulatenetwork/core/schema/pkg/binary"
+	"golang.org/x/exp/slog"
 )
 
 type Database struct {
@@ -29,16 +31,12 @@ type Database struct {
 	records   records
 	next      uint64
 	fileLimit uint64
-	nameFn    func(i int) string
+	nameFmt   NameFormat
+	filterFn  func(string) bool
 }
 
 type records = vmap[[32]byte, recordLocation]
 type recordsView = vmapView[[32]byte, recordLocation]
-
-type blockFile struct {
-	file *os.File
-	mmap mmap.MMap
-}
 
 type blockLocation struct {
 	file   uint
@@ -61,9 +59,15 @@ func WithFileLimit(limit uint64) Option {
 	}
 }
 
-func WithNameFunc(fn func(i int) string) Option {
+func WithNameFormat(fmt NameFormat) Option {
 	return func(d *Database) {
-		d.nameFn = fn
+		d.nameFmt = fmt
+	}
+}
+
+func FilterFiles(fn func(string) bool) Option {
+	return func(d *Database) {
+		d.filterFn = fn
 	}
 }
 
@@ -89,7 +93,7 @@ func Open(path string, options ...Option) (_ *Database, err error) {
 
 	db.path = path
 	db.fileLimit = 1 << 30
-	db.nameFn = func(i int) string { return fmt.Sprintf("%d.blocks", i) }
+	db.nameFmt = DefaultNameFormat
 
 	for _, o := range options {
 		o(db)
@@ -98,33 +102,50 @@ func Open(path string, options ...Option) (_ *Database, err error) {
 	// Open all the files
 	db.files = make([]*blockFile, 0, len(entries))
 	for _, e := range entries {
-		f, err := os.OpenFile(filepath.Join(path, e.Name()), os.O_RDWR, 0)
+		if db.filterFn != nil && !db.filterFn(e.Name()) {
+			continue
+		}
+
+		// Extract the ordinal from the filename
+		number, err := db.nameFmt.Parse(e.Name())
+		if err != nil {
+			return nil, fmt.Errorf("parse index of %q: %w", e.Name(), err)
+		}
+
+		f, err := openFile(number, filepath.Join(path, e.Name()), os.O_RDWR, 0)
 		if err != nil {
 			return nil, err
 		}
 
-		m, err := mmap.Map(f, mmap.RDWR, 0)
-		if err != nil {
-			return nil, err
-		}
-
-		db.files = append(db.files, &blockFile{file: f, mmap: m})
+		db.files = append(db.files, f)
 	}
+
+	// Sort the files by number, since who knows what order the filesystem
+	// returns them in
+	slices.SortFunc(db.files, func(a, b *blockFile) int {
+		return a.number - b.number
+	})
 
 	// Build the block index
 	blocks := map[uint64]blockLocation{}
 	records := db.records.View()
+	buf := new(buffer)
+	dec := new(binary2.Decoder)
 	for fileNo, f := range db.files {
+		slog.Info("Indexing", "ordinal", f.number, "module", "database")
 		var offset int64
 		var block *uint64
 		for {
-			e, n, err := readEntryMmap(f.mmap, offset)
+			e, n, err := readEntryAt(f, offset, buf, dec)
 			if err != nil {
 				if errors.Is(err, io.EOF) {
 					break
 				}
 				return nil, fmt.Errorf("reading entries from %v: %w", f.file.Name(), err)
 			}
+
+			// b, _ := json.Marshal(e)
+			// fmt.Println(string(b))
 
 			start := offset
 			offset += int64(n)
@@ -155,7 +176,7 @@ func Open(path string, options ...Option) (_ *Database, err error) {
 					return nil, fmt.Errorf("%v is corrupted", f.file.Name())
 				}
 
-				records.Put(e.Key.Hash(), recordLocation{
+				records.Put(e.KeyHash, recordLocation{
 					file:   uint(fileNo),
 					block:  *block,
 					header: start + 2, // The header has a 2 byte length prefix
@@ -188,7 +209,8 @@ func (db *Database) newFile() (*blockFile, error) {
 	}
 
 	// Create a new file
-	name := db.nameFn(len(db.files))
+	number := len(db.files)
+	name := db.nameFmt.Format(number)
 	if name == "" {
 		return nil, fmt.Errorf("invalid block file name: empty")
 	} else if filepath.Base(name) != name {
@@ -196,32 +218,21 @@ func (db *Database) newFile() (*blockFile, error) {
 	}
 	name = filepath.Join(db.path, name)
 
-	f, err := os.OpenFile(name, os.O_RDWR|os.O_EXCL|os.O_CREATE, 0600)
+	f, err := openFile(number, name, os.O_RDWR|os.O_EXCL|os.O_CREATE, 0600)
 	if err != nil {
 		return nil, err
 	}
 
-	bf := &blockFile{f, nil}
-	db.files = append(db.files, bf)
-	return bf, nil
+	db.files = append(db.files, f)
+	return f, nil
 }
 
 func (db *Database) Close() error {
 	var errs []error
 	for _, f := range db.files {
-		e1 := f.mmap.Unmap()
-		e2 := f.file.Close()
-		if e1 != nil {
-			errs = append(errs, e1)
-		}
-		if e2 != nil {
-			errs = append(errs, e2)
-		}
+		errs = append(errs, f.Close())
 	}
-	if len(errs) == 0 {
-		return nil
-	}
-	return errs[0]
+	return errors.Join(errs...)
 }
 
 // Begin begins a change set.
@@ -261,7 +272,7 @@ func (d *Database) get(view *recordsView, key *record.Key) ([]byte, error) {
 	if !d.validLoc(loc) {
 		return nil, errors.InternalError.WithFormat("record is corrupted")
 	}
-	return d.read(loc), nil
+	return d.read(loc)
 }
 
 func (d *Database) forEach(view *recordsView, fn func(*record.Key, []byte) error) error {
@@ -279,7 +290,12 @@ func (d *Database) forEach(view *recordsView, fn func(*record.Key, []byte) error
 			return err
 		}
 
-		return fn(header.Key, d.read(loc))
+		b, err := d.read(loc)
+		if err != nil {
+			return err
+		}
+
+		return fn(header.Key, b)
 	})
 }
 
@@ -298,28 +314,32 @@ func (d *Database) validLoc(loc recordLocation) bool {
 		// loc.file is invalid
 		return false
 
-	case d.files[loc.file].mmap == nil:
-		// File is not memory mapped
-		return false
-
-	case loc.offset+loc.length > int64(len(d.files[loc.file].mmap)):
-		// Requested range is outside the memory mapped region
+	case loc.offset+loc.length > int64(d.files[loc.file].Len()):
+		// File is not memory mapped or requested range is outside the memory
+		// mapped region
 		return false
 	}
 	return true
 }
 
-func (d *Database) read(loc recordLocation) []byte {
+func (d *Database) read(loc recordLocation) ([]byte, error) {
 	b := make([]byte, loc.length)
-	copy(b, d.files[loc.file].mmap[loc.offset:])
-	return b
+	_, err := d.files[loc.file].ReadAt(b, loc.offset)
+	if errors.Is(err, io.EOF) {
+		return b, io.ErrUnexpectedEOF
+	}
+	return b, err
 }
 
 func (d *Database) readHeader(loc recordLocation) (*recordEntry, error) {
-	b := make([]byte, loc.length)
-	copy(b, d.files[loc.file].mmap[loc.header:loc.offset])
+	b := make([]byte, loc.offset-loc.header)
+	_, err := d.files[loc.file].ReadAt(b, loc.header)
+	if err != nil {
+		return nil, err
+	}
+
 	e := new(recordEntry)
-	err := e.UnmarshalBinary(b)
+	err = e.UnmarshalBinary(b)
 	return e, err
 }
 
@@ -361,15 +381,7 @@ func (d *Database) commit(view *recordsView, entries map[[32]byte]memory.Entry) 
 			}
 
 			// Remap the file
-			if f.mmap != nil {
-				err := f.mmap.Unmap()
-				f.mmap = nil
-				if err != nil {
-					return err
-				}
-			}
-
-			f.mmap, err = mmap.Map(f.file, mmap.RDWR, 0)
+			err := f.Remap()
 			if err != nil {
 				return err
 			}
@@ -406,7 +418,7 @@ func (d *Database) commit(view *recordsView, entries map[[32]byte]memory.Entry) 
 		}
 
 		// Write the entry
-		n, err := writeEntry(f.file, &recordEntry{Key: e.Key, Length: l})
+		n, err := writeEntry(f.file, &recordEntry{Key: e.Key, Length: l, KeyHash: e.Key.Hash()})
 		if err != nil {
 			return err
 		}
@@ -440,15 +452,7 @@ func (d *Database) commit(view *recordsView, entries map[[32]byte]memory.Entry) 
 	}
 
 	// Remap the file
-	if f.mmap != nil {
-		err := f.mmap.Unmap()
-		f.mmap = nil
-		if err != nil {
-			return err
-		}
-	}
-
-	f.mmap, err = mmap.Map(f.file, mmap.RDWR, 0)
+	err = f.Remap()
 	if err != nil {
 		return err
 	}
