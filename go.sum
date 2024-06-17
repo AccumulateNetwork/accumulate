@@ -1166,8 +1166,8 @@ github.com/yuin/goldmark v1.2.1/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9dec
 github.com/yuin/goldmark v1.3.5/go.mod h1:mwnBkeHKe2W/ZEtQ+71ViKU8L12m81fl3OWwC1Zlc8k=
 github.com/yuin/goldmark v1.4.1/go.mod h1:mwnBkeHKe2W/ZEtQ+71ViKU8L12m81fl3OWwC1Zlc8k=
 github.com/yuin/goldmark v1.4.13/go.mod h1:6yULJ656Px+3vBD8DxQVa3kxgyrAnzto9xy5taEt/CY=
-gitlab.com/accumulatenetwork/core/schema v0.1.1-0.20240618183058-91669372cfa3 h1:RyNDul6B2nebcjA8+KSBR79MRUftOWWO0NRqN3x0Vh4=
-gitlab.com/accumulatenetwork/core/schema v0.1.1-0.20240618183058-91669372cfa3/go.mod h1:FTl7W44SWhDenzAtvKkLu30Cin8DAr249mH4eg7BNLY=
+gitlab.com/accumulatenetwork/core/schema v0.1.1-0.20240620224759-19369030b361 h1:J9FcjE7osYPinvoEzWrkpagukyqDwzLqH9fplznBA+M=
+gitlab.com/accumulatenetwork/core/schema v0.1.1-0.20240620224759-19369030b361/go.mod h1:FTl7W44SWhDenzAtvKkLu30Cin8DAr249mH4eg7BNLY=
 gitlab.com/bosi/decorder v0.4.1 h1:VdsdfxhstabyhZovHafFw+9eJ6eU0d2CkFNJcZz/NU4=
 gitlab.com/bosi/decorder v0.4.1/go.mod h1:jecSqWUew6Yle1pCr2eLWTensJMmsxHsBwt+PVbkAqA=
 gitlab.com/ethan.reesor/vscode-notebooks/go-playbooks v0.0.0-20220417214602-1121b9fae118 h1:UnyYFTz6dWVMBzLUyqHPIQwMrdpiuE+CE7p/5kUfvmk=

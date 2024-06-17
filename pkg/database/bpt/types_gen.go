@@ -7,6 +7,29 @@ import (
 	"gitlab.com/accumulatenetwork/core/schema/pkg/widget"
 )
 
+type Parameters struct {
+	Power           uint64
+	ArbitraryValues bool
+	Mask            uint64
+}
+
+var wParameters = widget.ForCompositePtr(widget.Fields[Parameters]{
+	{Name: "power", ID: 1, Widget: widget.ForUint(func(v *Parameters) *uint64 { return &v.Power })},
+	{Name: "arbitraryValues", ID: 2, Widget: widget.ForBool(func(v *Parameters) *bool { return &v.ArbitraryValues })},
+}, widget.Identity[**Parameters])
+
+// Copy returns a copy of the Parameters.
+func (v *Parameters) Copy() *Parameters {
+	var u *Parameters
+	wParameters.CopyTo(&u, &v)
+	return u
+}
+
+// EqualParameters returns true if V is equal to U.
+func (v *Parameters) Equal(u *Parameters) bool {
+	return wParameters.Equal(&v, &u)
+}
+
 type branch struct {
 	Height uint64
 	Key    [32]byte
@@ -144,40 +167,16 @@ func (v nodeType) String() string {
 	return snodeType.String(v)
 }
 
-type parameters struct {
-	Power           uint64
-	Mask            uint64
-	ArbitraryValues bool
-}
-
-var wparameters = widget.ForCompositePtr(widget.Fields[parameters]{
-	{Name: "power", ID: 1, Widget: widget.ForUint(func(v *parameters) *uint64 { return &v.Power })},
-	{Name: "mask", ID: 2, Widget: widget.ForUint(func(v *parameters) *uint64 { return &v.Mask })},
-	{Name: "arbitraryValues", ID: 3, Widget: widget.ForBool(func(v *parameters) *bool { return &v.ArbitraryValues })},
-}, widget.Identity[**parameters])
-
-// Copy returns a copy of the parameters.
-func (v *parameters) Copy() *parameters {
-	var u *parameters
-	wparameters.CopyTo(&u, &v)
-	return u
-}
-
-// Equalparameters returns true if V is equal to U.
-func (v *parameters) Equal(u *parameters) bool {
-	return wparameters.Equal(&v, &u)
-}
-
 type stateData struct {
 	RootHash  [32]byte
 	MaxHeight uint64
-	parameters
+	Parameters
 }
 
 var wstateData = widget.ForCompositePtr(widget.Fields[stateData]{
 	{Name: "rootHash", ID: 1, Widget: widget.ForHash(func(v *stateData) *[32]byte { return &v.RootHash })},
 	{Name: "maxHeight", ID: 2, Widget: widget.ForUint(func(v *stateData) *uint64 { return &v.MaxHeight })},
-	{ID: 3, Widget: widget.ForComposite(wparameters.Fields, func(v *stateData) *parameters { return &v.parameters })},
+	{ID: 3, Widget: widget.ForComposite(wParameters.Fields, func(v *stateData) *Parameters { return &v.Parameters })},
 }, widget.Identity[**stateData])
 
 // Copy returns a copy of the stateData.

@@ -19,7 +19,7 @@ type KeyValuePair struct {
 }
 
 // New returns a new BPT.
-func New(parent database.Record, logger log.Logger, store database.Store, key *database.Key) *BPT {
+func New(_ database.Record, logger log.Logger, store database.Store, key *database.Key) *BPT {
 	b := new(BPT)
 	b.logger.Set(logger)
 	b.store = store

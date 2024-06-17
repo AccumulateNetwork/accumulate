@@ -2,7 +2,6 @@ $generate:
   widgets: true
 
   methods:
-    json: true
     binary: true
 
   import:
@@ -11,6 +10,23 @@ $generate:
   varPrefix:
     schema: s
     widget: w
+
+fileHeader:
+  class: composite
+  fields: []
+
+recordLocation:
+  class: composite
+  generate: { methods: { binary: false } }
+  fields:
+    - name: Block
+      type: '*blockID'
+    - name: Offset
+      type: int
+    - name: HeaderLen
+      type: int
+    - name: RecordLen
+      type: int
 
 entry:
   class: union
@@ -32,10 +48,14 @@ entry:
     - name: startBlockEntry
       class: composite
       fields:
-        - name: ID
-          type: uint
-        - name: Parent
-          type: uint
+        - type:
+            name: blockID
+            class: composite
+            fields:
+              - name: ID
+                type: uint
+              - name: Part
+                type: uint
 
     - name: recordEntry
       class: composite
