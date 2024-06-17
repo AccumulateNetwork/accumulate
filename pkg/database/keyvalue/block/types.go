@@ -6,15 +6,13 @@
 
 package block
 
-import "gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
+import "encoding"
 
-type entryType int
+//go:generate go run gitlab.com/accumulatenetwork/core/schema/cmd/generate schema schema.yml -w schema_gen.go
+//go:generate go run gitlab.com/accumulatenetwork/core/schema/cmd/generate types schema.yml -w types_gen.go
+//go:generate go run github.com/rinchsan/gosimports/cmd/gosimports -w .
 
 type entry interface {
-	encoding.UnionValue
 	Type() entryType
+	encoding.BinaryMarshaler
 }
-
-//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-enum --package block enums.yml
-//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --package block types.yml
-//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --package block --language go-union --out unions_gen.go types.yml

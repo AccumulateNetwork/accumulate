@@ -18,6 +18,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
+	binary2 "gitlab.com/accumulatenetwork/core/schema/pkg/binary"
 )
 
 // A Key is the key for a record.
@@ -215,6 +216,68 @@ func (k *Key) MarshalBinary() ([]byte, error) {
 // UnmarshalBinary unmarshals a key from bytes.
 func (k *Key) UnmarshalBinary(b []byte) error {
 	return k.UnmarshalBinaryFrom(bytes.NewBuffer(b))
+}
+
+func (k *Key) UnmarshalBinaryV2(dec *binary2.Decoder) error {
+	err := dec.StartObject()
+	if err != nil {
+		return err
+	}
+
+	// Read the key length (not prefixed with a field number)
+	err = dec.NoField()
+	if err != nil {
+		return errors.UnknownError.WithFormat("decode Key: %w", err)
+	}
+	n, err := dec.DecodeUint()
+	if err != nil {
+		return errors.UnknownError.WithFormat("decode Key: %w", err)
+	}
+
+	// Allocate the values list
+	k.values = make([]any, n)
+
+	// For each field, read the type code then read its value. The encoding
+	// reader expects values to be prefixed with field numbers, and has certain
+	// requirements for those field numbers, so this approach requires a certain
+	// amount of hackiness. This is an abuse but 🤷 it works.
+
+	for i := range k.values {
+		// Read the type code
+		err = dec.NoField()
+		if err != nil {
+			return errors.UnknownError.WithFormat("decode Key: %w", err)
+		}
+		v, err := dec.DecodeUint()
+		if err != nil {
+			return errors.UnknownError.WithFormat("decode Key: %w", err)
+		}
+
+		// Create a key part for that type code
+		p, err := newKeyPart(typeCode(v))
+		if err != nil {
+			return errors.UnknownError.WithFormat("decode Key: %w", err)
+		}
+
+		// Read the value using the encoding reader
+		err = dec.NoField()
+		if err != nil {
+			return errors.UnknownError.WithFormat("decode Key: %w", err)
+		}
+		err = p.ReadBinary2(dec)
+		if err != nil {
+			return errors.UnknownError.WithFormat("decode Key: %w", err)
+		}
+
+		// Put the value in the key
+		k.values[i] = p.Value()
+	}
+
+	err = dec.EndObject()
+	if err != nil {
+		return errors.UnknownError.WithFormat("decode Key: %w", err)
+	}
+	return nil
 }
 
 // UnmarshalBinaryFrom unmarshals a key from bytes.
