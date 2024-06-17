@@ -128,7 +128,7 @@ func (v *PeerInfo) UnmarshalJSON(data []byte) error {
 		v.Key = *x
 	}
 	v.Status = u.Status
-	if u.Addresses.Value != nil {
+	if u.Addresses != nil && u.Addresses.Value != nil {
 		v.Addresses = make([]p2p.Multiaddr, len(u.Addresses.Value))
 		for i, x := range u.Addresses.Value {
 			v.Addresses[i] = x

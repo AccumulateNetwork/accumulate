@@ -8836,7 +8836,7 @@ func (v *FindServiceResult) UnmarshalJSON(data []byte) error {
 	}
 
 	v.Status = u.Status
-	if u.Addresses.Value != nil {
+	if u.Addresses != nil && u.Addresses.Value != nil {
 		v.Addresses = make([]p2p.Multiaddr, len(u.Addresses.Value))
 		for i, x := range u.Addresses.Value {
 			v.Addresses[i] = x
@@ -9383,7 +9383,7 @@ func (v *RecordRange[T]) UnmarshalJSON(data []byte) error {
 	if !(v.RecordType() == u.RecordType) {
 		return fmt.Errorf("field RecordType: not equal: want %v, got %v", v.RecordType(), u.RecordType)
 	}
-	if u.Records.Value != nil {
+	if u.Records != nil && u.Records.Value != nil {
 		v.Records = make([]T, len(u.Records.Value))
 		for i, x := range u.Records.Value {
 			v.Records[i] = x

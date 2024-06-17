@@ -22758,7 +22758,7 @@ func (v *NetworkMaintenance) UnmarshalJSON(data []byte) error {
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
-	if u.Operations.Value != nil {
+	if u.Operations != nil && u.Operations.Value != nil {
 		v.Operations = make([]NetworkMaintenanceOperation, len(u.Operations.Value))
 		for i, x := range u.Operations.Value {
 			v.Operations[i] = x
@@ -23352,7 +23352,7 @@ func (v *SignatureSet) UnmarshalJSON(data []byte) error {
 	} else {
 		v.TransactionHash = *x
 	}
-	if u.Signatures.Value != nil {
+	if u.Signatures != nil && u.Signatures.Value != nil {
 		v.Signatures = make([]Signature, len(u.Signatures.Value))
 		for i, x := range u.Signatures.Value {
 			v.Signatures[i] = x
@@ -23439,7 +23439,7 @@ func (v *SyntheticCreateIdentity) UnmarshalJSON(data []byte) error {
 	v.SyntheticOrigin.Initiator = u.Initiator
 	v.SyntheticOrigin.FeeRefund = u.FeeRefund
 	v.SyntheticOrigin.Index = u.Index
-	if u.Accounts.Value != nil {
+	if u.Accounts != nil && u.Accounts.Value != nil {
 		v.Accounts = make([]Account, len(u.Accounts.Value))
 		for i, x := range u.Accounts.Value {
 			v.Accounts[i] = x
@@ -23998,7 +23998,7 @@ func (v *TransactionStatus) UnmarshalJSON(data []byte) error {
 
 	v.Received = u.Received
 	v.Initiator = u.Initiator
-	if u.Signers.Value != nil {
+	if u.Signers != nil && u.Signers.Value != nil {
 		v.Signers = make([]Signer, len(u.Signers.Value))
 		for i, x := range u.Signers.Value {
 			v.Signers[i] = x
@@ -24129,7 +24129,7 @@ func (v *UpdateAccountAuth) UnmarshalJSON(data []byte) error {
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
-	if u.Operations.Value != nil {
+	if u.Operations != nil && u.Operations.Value != nil {
 		v.Operations = make([]AccountAuthOperation, len(u.Operations.Value))
 		for i, x := range u.Operations.Value {
 			v.Operations[i] = x
@@ -24236,7 +24236,7 @@ func (v *UpdateKeyPage) UnmarshalJSON(data []byte) error {
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
-	if u.Operation.Value != nil {
+	if u.Operation != nil && u.Operation.Value != nil {
 		v.Operation = make([]KeyPageOperation, len(u.Operation.Value))
 		for i, x := range u.Operation.Value {
 			v.Operation[i] = x
