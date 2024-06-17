@@ -585,7 +585,7 @@ func (v *DbPatch) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return err
 	}
-	if u.Operations.Value != nil {
+	if u.Operations != nil && u.Operations.Value != nil {
 		v.Operations = make([]DbPatchOp, len(u.Operations.Value))
 		for i, x := range u.Operations.Value {
 			v.Operations[i] = x
