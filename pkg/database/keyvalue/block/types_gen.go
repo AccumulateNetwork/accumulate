@@ -167,6 +167,56 @@ func (v *entryType) UnmarshalBinaryV2(dec *binary.Decoder) error {
 	return wentryType.UnmarshalBinary(dec, v)
 }
 
+type fileHeader struct {
+	Ordinal uint64
+}
+
+var wfileHeader = widget.ForCompositePtr(widget.Fields[fileHeader]{
+	{Name: "ordinal", ID: 1, Widget: widget.ForUint(func(v *fileHeader) *uint64 { return &v.Ordinal })},
+}, widget.Identity[**fileHeader])
+
+// Copy returns a copy of the fileHeader.
+func (v *fileHeader) Copy() *fileHeader {
+	var u *fileHeader
+	wfileHeader.CopyTo(&u, &v)
+	return u
+}
+
+// EqualfileHeader returns true if V is equal to U.
+func (v *fileHeader) Equal(u *fileHeader) bool {
+	return wfileHeader.Equal(&v, &u)
+}
+
+// MarshalBinary marshals the fileHeader to JSON.
+func (v *fileHeader) MarshalJSON() ([]byte, error) {
+	return widget.MarshalJSON(&v, wfileHeader)
+}
+
+// UnmarshalJSON unmarshals the fileHeader from JSON.
+func (v *fileHeader) UnmarshalJSON(b []byte) error {
+	return widget.UnmarshalJSON(&v, wfileHeader, b)
+}
+
+// MarshalBinary marshals the fileHeader to bytes using [binary].
+func (v *fileHeader) MarshalBinary() ([]byte, error) {
+	return widget.MarshalBinary(&v, wfileHeader)
+}
+
+// MarshalBinary marshals the fileHeader to a [binary.Encoder].
+func (v *fileHeader) MarshalBinaryV2(enc *binary.Encoder) error {
+	return wfileHeader.MarshalBinary(enc, &v)
+}
+
+// UnmarshalBinary unmarshals the fileHeader from bytes using [binary].
+func (v *fileHeader) UnmarshalBinary(b []byte) error {
+	return widget.UnmarshalBinary(&v, wfileHeader, b)
+}
+
+// UnmarshalBinary unmarshals the fileHeader from a [binary.Decoder].
+func (v *fileHeader) UnmarshalBinaryV2(dec *binary.Decoder) error {
+	return wfileHeader.UnmarshalBinary(dec, &v)
+}
+
 type recordEntry struct {
 	Key     *record.Key
 	KeyHash [32]byte

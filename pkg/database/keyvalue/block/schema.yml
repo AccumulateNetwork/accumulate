@@ -12,6 +12,12 @@ $generate:
     schema: s
     widget: w
 
+fileHeader:
+  class: composite
+  fields:
+    - name: Ordinal
+      type: uint
+
 entry:
   class: union
   discriminator:

@@ -13,6 +13,7 @@ var (
 	sendBlockEntry   schema.Methods[*endBlockEntry, *endBlockEntry, *schema.CompositeType]
 	sentry           schema.Methods[entry, *entry, *schema.UnionType]
 	sentryType       schema.EnumMethods[entryType]
+	sfileHeader      schema.Methods[*fileHeader, *fileHeader, *schema.CompositeType]
 	srecordEntry     schema.Methods[*recordEntry, *recordEntry, *schema.CompositeType]
 	sstartBlockEntry schema.Methods[*startBlockEntry, *startBlockEntry, *schema.CompositeType]
 )
@@ -71,6 +72,18 @@ func init() {
 			},
 		}).SetGoType()
 
+	sfileHeader = schema.WithMethods[*fileHeader, *fileHeader](&schema.CompositeType{
+		TypeBase: schema.TypeBase{
+			Name: "fileHeader",
+		},
+		Fields: []*schema.Field{
+			{
+				Name: "Ordinal",
+				Type: &schema.SimpleType{Type: schema.SimpleTypeUint},
+			},
+		},
+	}).SetGoType()
+
 	srecordEntry = schema.WithMethods[*recordEntry, *recordEntry](&schema.CompositeType{
 		TypeBase: schema.TypeBase{
 			Name: "recordEntry",
@@ -114,6 +127,7 @@ func init() {
 		sendBlockEntry.Type,
 		sentry.Type,
 		sentryType.Type,
+		sfileHeader.Type,
 		srecordEntry.Type,
 		sstartBlockEntry.Type,
 	)

@@ -29,7 +29,8 @@ type Database struct {
 	commitMu  sync.Mutex
 	files     []*blockFile
 	records   records
-	next      uint64
+	nextFile  uint64
+	nextBlock uint64
 	fileLimit uint64
 	nameFmt   NameFormat
 	filterFn  func(string) bool
@@ -106,15 +107,17 @@ func Open(path string, options ...Option) (_ *Database, err error) {
 			continue
 		}
 
-		// Extract the ordinal from the filename
-		number, err := db.nameFmt.Parse(e.Name())
-		if err != nil {
-			return nil, fmt.Errorf("parse index of %q: %w", e.Name(), err)
-		}
-
-		f, err := openFile(number, filepath.Join(path, e.Name()), os.O_RDWR, 0)
+		f, err := openFile(filepath.Join(path, e.Name()))
 		if err != nil {
 			return nil, err
+		}
+
+		if f.header.Ordinal == 0 {
+			return nil, fmt.Errorf("%s does not have an ordinal", f.file.Name())
+		}
+
+		if f.header.Ordinal > db.nextFile {
+			db.nextFile = f.header.Ordinal
 		}
 
 		db.files = append(db.files, f)
@@ -123,8 +126,20 @@ func Open(path string, options ...Option) (_ *Database, err error) {
 	// Sort the files by number, since who knows what order the filesystem
 	// returns them in
 	slices.SortFunc(db.files, func(a, b *blockFile) int {
-		return a.number - b.number
+		return int(a.header.Ordinal) - int(b.header.Ordinal)
 	})
+
+	// Ensure the files are a sequence
+	var last uint64
+	for _, f := range db.files {
+		if f.header.Ordinal == last {
+			return nil, fmt.Errorf("multiple files with ordinal %d", last)
+		}
+		last++
+		if f.header.Ordinal > last {
+			return nil, fmt.Errorf("missing file with ordinal %d", last)
+		}
+	}
 
 	// Build the block index
 	blocks := map[uint64]blockLocation{}
@@ -132,7 +147,7 @@ func Open(path string, options ...Option) (_ *Database, err error) {
 	buf := new(buffer)
 	dec := new(binary2.Decoder)
 	for fileNo, f := range db.files {
-		slog.Info("Indexing", "ordinal", f.number, "module", "database")
+		slog.Info("Indexing", "ordinal", f.header.Ordinal, "module", "database")
 		var offset int64
 		var block *uint64
 		for {
@@ -161,8 +176,8 @@ func Open(path string, options ...Option) (_ *Database, err error) {
 				blocks[e.ID] = blockLocation{file: uint(fileNo), offset: start}
 				block = &e.ID
 
-				if db.next < e.ID {
-					db.next = e.ID
+				if db.nextBlock < e.ID {
+					db.nextBlock = e.ID
 				}
 
 			case *endBlockEntry:
@@ -209,16 +224,16 @@ func (db *Database) newFile() (*blockFile, error) {
 	}
 
 	// Create a new file
-	number := len(db.files)
-	name := db.nameFmt.Format(number)
+	db.nextFile++
+	ordinal := db.nextFile
+	name := db.nameFmt.Format(ordinal)
 	if name == "" {
 		return nil, fmt.Errorf("invalid block file name: empty")
 	} else if filepath.Base(name) != name {
 		return nil, fmt.Errorf("invalid block file name: %q contains a slash or is empty", name)
 	}
-	name = filepath.Join(db.path, name)
 
-	f, err := openFile(number, name, os.O_RDWR|os.O_EXCL|os.O_CREATE, 0600)
+	f, err := newFile(ordinal, filepath.Join(db.path, name))
 	if err != nil {
 		return nil, err
 	}
@@ -398,9 +413,9 @@ func (d *Database) commit(view *recordsView, entries map[[32]byte]memory.Entry) 
 		// Time for a new block?
 		if !haveBlock {
 			// Open the block
-			d.next++
+			d.nextBlock++
 			b := new(startBlockEntry)
-			b.ID = d.next
+			b.ID = d.nextBlock
 			b.Parent = block
 			block = b.ID
 			haveBlock = true

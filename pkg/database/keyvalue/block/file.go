@@ -8,37 +8,65 @@ package block
 
 import (
 	"errors"
+	"fmt"
 	"io"
-	"io/fs"
 	"os"
 	"sync"
 
 	"github.com/edsrzf/mmap-go"
 )
 
+const fileHeaderSize = 1024
+
 type blockFile struct {
-	number int
 	mu     *sync.RWMutex
 	file   *os.File
 	data   mmap.MMap
+	header *fileHeader
 }
 
-func openFile(number int, name string, flag int, perm fs.FileMode) (*blockFile, error) {
+func newFile(ordinal uint64, name string) (*blockFile, error) {
 	f := new(blockFile)
-	f.number = number
 	f.mu = new(sync.RWMutex)
+	f.header = new(fileHeader)
+	f.header.Ordinal = ordinal
 
 	var err error
-	f.file, err = os.OpenFile(name, flag, perm)
+	f.file, err = os.Create(name)
 	if err != nil {
 		return nil, err
 	}
 
-	if flag&os.O_CREATE == 0 {
-		f.data, err = mmap.Map(f.file, mmap.RDWR, 0)
-		if err != nil {
-			return nil, err
-		}
+	return f, nil
+}
+
+func openFile(name string) (*blockFile, error) {
+	f := new(blockFile)
+	f.mu = new(sync.RWMutex)
+	f.header = new(fileHeader)
+
+	var err error
+	f.file, err = os.OpenFile(name, os.O_RDWR, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	st, err := f.file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if st.Size() < fileHeaderSize {
+		return nil, errors.New("file header is missing or corrupted")
+	}
+
+	f.data, err = mmap.MapRegion(f.file, int(st.Size()), mmap.RDWR, 0, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	err = f.header.UnmarshalBinary(f.data[:1024])
+	if err != nil {
+		return nil, fmt.Errorf("read header: %w", err)
 	}
 
 	return f, nil

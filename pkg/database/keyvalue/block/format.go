@@ -15,18 +15,18 @@ import (
 var DefaultNameFormat = simpleNameFormat{}
 
 type NameFormat interface {
-	Format(int) string
-	Parse(string) (int, error)
+	Format(uint64) string
+	// Parse(string) (uint64, error)
 }
 
 type simpleNameFormat struct{}
 
-func (simpleNameFormat) Format(i int) string {
+func (simpleNameFormat) Format(i uint64) string {
 	return fmt.Sprintf("%d.blocks", i)
 }
 
-func (simpleNameFormat) Parse(s string) (int, error) {
+func (simpleNameFormat) Parse(s string) (uint64, error) {
 	s = strings.TrimSuffix(s, ".blocks")
-	i, err := strconv.ParseInt(s, 10, 64)
-	return int(i), err
+	i, err := strconv.ParseUint(s, 10, 64)
+	return i, err
 }
