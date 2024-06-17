@@ -169,12 +169,32 @@ type sigCond struct{ msgCond }
 
 // SingleCompletes waits for the signature, credit payment, signature requests,
 // and authority signatures to complete. SingleCompletes is inappropriate for
-// signatures from multi-sig signers.
+// signatures from multi-sig or lite identity signers.
 func (c sigCond) SingleCompletes() Condition {
 	conditions := []Condition{
 		c.Succeeds(),
 		c.CreditPayment().Succeeds(),
 		c.SignatureRequest().Completes(),
+		c.AuthoritySignature().Completes(),
+	}
+	return c.make("completes", func(h *Harness, _ *condition, _ *msgResult) bool {
+		ok := true
+		for _, c := range conditions {
+			if !c.Satisfied(h) {
+				ok = false
+			}
+		}
+		return ok
+	})
+}
+
+// LiteCompletes waits for the signature, credit payment, and authority
+// signatures to complete. LiteCompletes is inappropriate for signatures from
+// multi-sig signers.
+func (c sigCond) LiteCompletes() Condition {
+	conditions := []Condition{
+		c.Succeeds(),
+		c.CreditPayment().Succeeds(),
 		c.AuthoritySignature().Completes(),
 	}
 	return c.make("completes", func(h *Harness, _ *condition, _ *msgResult) bool {
