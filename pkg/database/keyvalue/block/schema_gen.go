@@ -4,6 +4,7 @@ package block
 
 import (
 	"fmt"
+
 	record "gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	"gitlab.com/accumulatenetwork/core/schema"
 )
