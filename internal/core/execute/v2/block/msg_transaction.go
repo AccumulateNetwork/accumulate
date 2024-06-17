@@ -624,7 +624,10 @@ func (b *Block) processEvents() error {
 
 	// Claim we're on pass 1 so that internal messages are allowed
 	_, err = b.processMessages(msgs, 1)
-	return errors.UnknownError.WithFormat("process messages (2): %w", err)
+	if err != nil {
+		return errors.UnknownError.WithFormat("process messages (2): %w", err)
+	}
+	return nil
 }
 
 // ExpiredTransaction expires a transaction
