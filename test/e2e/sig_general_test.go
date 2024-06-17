@@ -462,3 +462,32 @@ func TestSignatureErrors(t *testing.T) {
 	require.Error(t, err)
 	require.ErrorContains(t, err, "insufficient credits: have 0.00, want 0.01")
 }
+
+// Verifies that lite accounts do not produce signature requests.
+func TestLiteAccountSignatureRequests(t *testing.T) {
+	lite := build.LiteIdentity().Generate(t).AddCredits(1000).
+		Tokens("ACME").Create().Add(1000).Identity()
+
+	// Initialize
+	sim := NewSim(t,
+		simulator.SimpleNetwork(t.Name(), 1, 1),
+		simulator.Genesis(GenesisTime).With(lite),
+	)
+
+	// Execute a transaction
+	st := sim.BuildAndSubmitSuccessfully(
+		build.Transaction().For(lite, "ACME").
+			AddCredits().Spend(10).To(lite).WithOracle(InitialAcmeOracle).
+			SignWith(lite).Version(1).Timestamp(1).PrivateKey(lite.Key))
+
+	sim.StepUntil(
+		Txn(st[0].TxID).Completes())
+
+	// Verify that the signature did not produce any signature requests
+	r := sim.QuerySignature(st[1].TxID, nil)
+	for _, r := range r.Produced.Records {
+		r := sim.QueryMessage(r.Value, nil)
+		_, ok := r.Message.(*messaging.SignatureRequest)
+		require.False(t, ok, "A signature request is not produced")
+	}
+}

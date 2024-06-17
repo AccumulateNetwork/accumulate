@@ -84,7 +84,7 @@ func TestLockAccount_LiteToken(t *testing.T) {
 
 	sim.H.StepUntil(
 		Txn(st[0].TxID).Completes(),
-		Sig(st[1].TxID).SingleCompletes())
+		Sig(st[1].TxID).LiteCompletes())
 
 	require.Equal(t, int(2), int(simulator.GetAccount[*LiteTokenAccount](sim, recipient).Balance.Int64()))
 }
