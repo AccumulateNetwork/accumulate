@@ -275,14 +275,14 @@ func (v *recordEntry) UnmarshalBinaryV2(dec *binary.Decoder) error {
 }
 
 type startBlockEntry struct {
-	ID     uint64
-	Parent uint64
+	ID   uint64
+	Part uint64
 }
 
 var wstartBlockEntry = widget.ForCompositePtr(widget.Fields[startBlockEntry]{
 	{Name: "type", ID: 1, Widget: widget.ForTag[*entryType]("type", (*startBlockEntry).Type)},
 	{Name: "iD", ID: 2, Widget: widget.ForUint(func(v *startBlockEntry) *uint64 { return &v.ID })},
-	{Name: "parent", ID: 3, Widget: widget.ForUint(func(v *startBlockEntry) *uint64 { return &v.Parent })},
+	{Name: "part", ID: 3, Widget: widget.ForUint(func(v *startBlockEntry) *uint64 { return &v.Part })},
 }, widget.Identity[**startBlockEntry])
 
 func (startBlockEntry) Type() entryType { return entryTypeStartBlock }

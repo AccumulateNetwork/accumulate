@@ -114,8 +114,8 @@ func TestFileLimit(t *testing.T) {
 		files = append(files, ent.Name())
 	}
 	require.Equal(t, []string{
-		"0.blocks",
 		"1.blocks",
 		"2.blocks",
+		"3.blocks",
 	}, files)
 }

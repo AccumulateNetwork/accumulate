@@ -7,6 +7,7 @@
 package block
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -14,19 +15,28 @@ import (
 	"sync"
 
 	"github.com/edsrzf/mmap-go"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
+	"gitlab.com/accumulatenetwork/core/schema/pkg/binary"
 )
 
 const fileHeaderSize = 1024
 
 type blockFile struct {
+	*config
 	mu     *sync.RWMutex
 	file   *os.File
 	data   mmap.MMap
 	header *fileHeader
 }
 
-func newFile(ordinal uint64, name string) (*blockFile, error) {
+type entryAndData struct {
+	recordEntry
+	Value []byte
+}
+
+func (c *config) newFile(ordinal uint64, name string) (*blockFile, error) {
 	f := new(blockFile)
+	f.config = c
 	f.mu = new(sync.RWMutex)
 	f.header = new(fileHeader)
 	f.header.Ordinal = ordinal
@@ -37,11 +47,30 @@ func newFile(ordinal uint64, name string) (*blockFile, error) {
 		return nil, err
 	}
 
+	b, err := f.header.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+	if len(b) > fileHeaderSize {
+		panic("header is too big")
+	}
+
+	if len(b) < fileHeaderSize {
+		b = append(b, encoding.EmptyObject)
+	}
+	b = append(b, make([]byte, fileHeaderSize-len(b))...)
+
+	_, err = f.file.Write(b)
+	if err != nil {
+		return nil, err
+	}
+
 	return f, nil
 }
 
-func openFile(name string) (*blockFile, error) {
+func (c *config) openFile(name string) (*blockFile, error) {
 	f := new(blockFile)
+	f.config = c
 	f.mu = new(sync.RWMutex)
 	f.header = new(fileHeader)
 
@@ -93,23 +122,6 @@ func (f *blockFile) ReadAt(b []byte, off int64) (int, error) {
 	return n, nil
 }
 
-func (f *blockFile) Remap() error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	var err error
-	if f.data != nil {
-		err = f.data.Unmap()
-		f.data = nil
-	}
-	if err != nil {
-		return err
-	}
-
-	f.data, err = mmap.Map(f.file, mmap.RDWR, 0)
-	return err
-}
-
 func (f *blockFile) Close() error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -123,4 +135,197 @@ func (f *blockFile) Close() error {
 	f.data = nil
 	f.file = nil
 	return errors.Join(errs...)
+}
+
+func (f *blockFile) writeEntries(fileIndex int, view *recordsView, entries []*entryAndData, block *startBlockEntry) (n int, err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	// Check the limit
+	var offset int64
+	if st, err := f.file.Stat(); err != nil {
+		return 0, err
+	} else if st.Size() >= f.fileLimit+fileHeaderSize {
+		return 0, nil
+	} else {
+		offset = st.Size()
+	}
+
+	// Allocate a buffer
+	bufLimit := min(
+		len(entries)*1024,
+		int(f.fileLimit+fileHeaderSize-offset))
+	if bufLimit > 1<<22 {
+		bufLimit = 1 << 22
+	}
+	buf := bytes.NewBuffer(make([]byte, 0, bufLimit))
+
+	// Open the block
+	enc := binary.NewEncoder(buf, binary.WithPool(binary.NewPool()))
+	err = block.MarshalBinaryV2(enc)
+	if err != nil {
+		return 0, err
+	}
+	_ = buf.WriteByte(binary.EmptyObject)
+
+	// Write entries
+	for n < len(entries) {
+		e := entries[n]
+		n++
+
+		// Write the header
+		enc.Reset(buf)
+		err = e.MarshalBinaryV2(enc)
+		if err != nil {
+			return 0, err
+		}
+		_ = buf.WriteByte(binary.EmptyObject)
+
+		// Update the index
+		view.Put(e.KeyHash, recordLocation{
+			file:   fileIndex,
+			block:  block.ID,
+			offset: offset + int64(buf.Len()),
+			length: e.Length,
+		})
+
+		// Write the data
+		_, _ = buf.Write(e.Value)
+
+		// Check the file limit
+		if offset+int64(buf.Len()) > f.fileLimit+fileHeaderSize {
+			break
+		}
+
+		// Write the buffer
+		if buf.Len() > bufLimit {
+			err = f.writeAt(offset, buf.Bytes())
+			if err != nil {
+				return 0, err
+			}
+			offset += int64(buf.Len())
+			buf.Reset()
+		}
+	}
+
+	// Close the block
+	enc.Reset(buf)
+	err = (&endBlockEntry{}).MarshalBinaryV2(enc)
+	if err != nil {
+		return 0, err
+	}
+	_ = buf.WriteByte(binary.EmptyObject)
+
+	// Write the buffer
+	err = f.writeAt(offset, buf.Bytes())
+	if err != nil {
+		return 0, err
+	}
+
+	return n, nil
+}
+
+func (f *blockFile) writeAt(offset int64, b []byte) error {
+	err := f.unmap()
+	if err != nil {
+		return err
+	}
+
+	n := offset + int64(len(b))
+	err = f.file.Truncate(n)
+	if err != nil {
+		return err
+	}
+
+	f.data, err = mmap.MapRegion(f.file, int(n), mmap.RDWR, 0, 0)
+	if err != nil {
+		return err
+	}
+
+	copy(f.data[offset:], b)
+	return nil
+}
+
+func (f *blockFile) unmap() error {
+	if f.data == nil {
+		return nil
+	}
+
+	err := f.data.Unmap()
+	f.data = nil
+	return err
+}
+
+func (f *blockFile) entries() *entryIterator {
+	return &entryIterator{f, nil}
+}
+
+type entryIterator struct {
+	*blockFile
+	err error
+}
+
+type entryPos struct {
+	entry
+	Start int64
+	End   int64
+}
+
+func (e *entryIterator) Range(yield func(int, entryPos) bool) {
+	rd := &offsetReader{e.blockFile, fileHeaderSize}
+	dec := new(binary.Decoder)
+	for i := 0; rd.Len() > 0; i++ {
+		dec.Reset(rd, binary.LeaveTrailing())
+		header := rd.offset
+		entry, err := unmarshalEntryBinaryV2(dec)
+		if err != nil {
+			e.err = err
+			return
+		}
+		pos := entryPos{
+			entry: entry,
+			Start: header,
+			End:   rd.offset,
+		}
+		if !yield(i, pos) {
+			return
+		}
+		if r, ok := entry.(*recordEntry); ok && r.Length > 0 {
+			rd.offset += r.Length
+		}
+	}
+}
+
+type offsetReader struct {
+	*blockFile
+	offset int64
+}
+
+func (r *offsetReader) Len() int {
+	return len(r.data) - int(r.offset)
+}
+
+func (r *offsetReader) Read(b []byte) (int, error) {
+	n, err := r.ReadAt(b, r.offset)
+	r.offset += int64(n)
+	return n, err
+}
+
+func (r *offsetReader) ReadByte() (byte, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if r.Len() <= 0 {
+		return 0, io.EOF
+	}
+	b := r.data[r.offset]
+	r.offset++
+	return b, nil
+}
+
+func (r *offsetReader) UnreadByte() error {
+	if r.offset <= 0 {
+		return io.EOF
+	}
+	r.offset--
+	return nil
 }

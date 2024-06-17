@@ -40,7 +40,7 @@ entry:
       fields:
         - name: ID
           type: uint
-        - name: Parent
+        - name: Part
           type: uint
 
     - name: recordEntry

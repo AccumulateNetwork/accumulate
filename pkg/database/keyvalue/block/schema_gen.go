@@ -117,7 +117,7 @@ func init() {
 				Type: &schema.SimpleType{Type: schema.SimpleTypeUint},
 			},
 			{
-				Name: "Parent",
+				Name: "Part",
 				Type: &schema.SimpleType{Type: schema.SimpleTypeUint},
 			},
 		},

@@ -7,31 +7,37 @@
 package block
 
 import (
+	"encoding/binary"
 	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
+	"sort"
 	"sync"
+	"sync/atomic"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
-	binary2 "gitlab.com/accumulatenetwork/core/schema/pkg/binary"
 	"golang.org/x/exp/slog"
 )
 
 type Database struct {
-	path      string
-	commitMu  sync.Mutex
-	files     []*blockFile
-	records   records
-	nextFile  uint64
-	nextBlock uint64
-	fileLimit uint64
+	config
+	path     string
+	commitMu sync.Mutex
+	files    []*blockFile
+	records  records
+}
+
+type config struct {
+	nextFile  atomic.Uint64
+	nextBlock atomic.Uint64
+	fileLimit int64
 	nameFmt   NameFormat
 	filterFn  func(string) bool
 }
@@ -40,12 +46,12 @@ type records = vmap[[32]byte, recordLocation]
 type recordsView = vmapView[[32]byte, recordLocation]
 
 type blockLocation struct {
-	file   uint
+	file   int
 	offset int64
 }
 
 type recordLocation struct {
-	file   uint
+	file   int
 	block  uint64
 	header int64
 	offset int64
@@ -54,7 +60,7 @@ type recordLocation struct {
 
 type Option func(*Database)
 
-func WithFileLimit(limit uint64) Option {
+func WithFileLimit(limit int64) Option {
 	return func(d *Database) {
 		d.fileLimit = limit
 	}
@@ -107,7 +113,7 @@ func Open(path string, options ...Option) (_ *Database, err error) {
 			continue
 		}
 
-		f, err := openFile(filepath.Join(path, e.Name()))
+		f, err := db.openFile(filepath.Join(path, e.Name()))
 		if err != nil {
 			return nil, err
 		}
@@ -116,8 +122,8 @@ func Open(path string, options ...Option) (_ *Database, err error) {
 			return nil, fmt.Errorf("%s does not have an ordinal", f.file.Name())
 		}
 
-		if f.header.Ordinal > db.nextFile {
-			db.nextFile = f.header.Ordinal
+		if db.nextFile.Load() < f.header.Ordinal {
+			db.nextFile.Store(f.header.Ordinal)
 		}
 
 		db.files = append(db.files, f)
@@ -144,68 +150,55 @@ func Open(path string, options ...Option) (_ *Database, err error) {
 	// Build the block index
 	blocks := map[uint64]blockLocation{}
 	records := db.records.View()
-	buf := new(buffer)
-	dec := new(binary2.Decoder)
-	for fileNo, f := range db.files {
+	for i, f := range db.files {
 		slog.Info("Indexing", "ordinal", f.header.Ordinal, "module", "database")
-		var offset int64
 		var block *uint64
-		for {
-			e, n, err := readEntryAt(f, offset, buf, dec)
-			if err != nil {
-				if errors.Is(err, io.EOF) {
-					break
-				}
-				return nil, fmt.Errorf("reading entries from %v: %w", f.file.Name(), err)
-			}
 
-			// b, _ := json.Marshal(e)
-			// fmt.Println(string(b))
-
-			start := offset
-			offset += int64(n)
-
-			switch e := e.(type) {
+		it := f.entries()
+		it.Range(func(_ int, item entryPos) bool {
+			switch e := item.entry.(type) {
 			case *startBlockEntry:
 				if block != nil {
-					return nil, fmt.Errorf("%v is corrupted", f.file.Name())
+					it.err = fmt.Errorf("%v is corrupted", f.file.Name())
+					return false
 				}
 				if _, ok := blocks[e.ID]; ok {
-					return nil, fmt.Errorf("duplicate block %d", e.ID)
+					it.err = fmt.Errorf("duplicate block %d", e.ID)
+					return false
 				}
-				blocks[e.ID] = blockLocation{file: uint(fileNo), offset: start}
+				blocks[e.ID] = blockLocation{file: i, offset: item.Start}
 				block = &e.ID
 
-				if db.nextBlock < e.ID {
-					db.nextBlock = e.ID
+				if db.nextBlock.Load() < e.ID {
+					db.nextBlock.Store(e.ID)
 				}
 
 			case *endBlockEntry:
 				if block == nil {
-					return nil, fmt.Errorf("%v is corrupted", f.file.Name())
+					it.err = fmt.Errorf("%v is corrupted", f.file.Name())
+					return false
 				}
 				block = nil
 
 			case *recordEntry:
 				if block == nil {
-					return nil, fmt.Errorf("%v is corrupted", f.file.Name())
+					it.err = fmt.Errorf("%v is corrupted", f.file.Name())
+					return false
 				}
 
 				records.Put(e.KeyHash, recordLocation{
-					file:   uint(fileNo),
+					file:   i,
 					block:  *block,
-					header: start + 2, // The header has a 2 byte length prefix
-					offset: offset,
+					header: item.Start,
+					offset: item.End,
 					length: e.Length,
 				})
-
-				if e.Length <= 0 {
-					continue
-				}
-
-				// Skip the record data
-				offset += e.Length
 			}
+			return true
+		})
+
+		if it.err != nil {
+			return nil, it.err
 		}
 	}
 	err = records.Commit()
@@ -224,8 +217,7 @@ func (db *Database) newFile() (*blockFile, error) {
 	}
 
 	// Create a new file
-	db.nextFile++
-	ordinal := db.nextFile
+	ordinal := db.nextFile.Add(1)
 	name := db.nameFmt.Format(ordinal)
 	if name == "" {
 		return nil, fmt.Errorf("invalid block file name: empty")
@@ -233,7 +225,7 @@ func (db *Database) newFile() (*blockFile, error) {
 		return nil, fmt.Errorf("invalid block file name: %q contains a slash or is empty", name)
 	}
 
-	f, err := newFile(ordinal, filepath.Join(db.path, name))
+	f, err := db.config.newFile(ordinal, filepath.Join(db.path, name))
 	if err != nil {
 		return nil, err
 	}
@@ -325,7 +317,7 @@ func (d *Database) validLoc(loc recordLocation) bool {
 		// Corrupted offsets
 		return false
 
-	case loc.file >= uint(len(d.files)):
+	case loc.file >= len(d.files):
 		// loc.file is invalid
 		return false
 
@@ -365,112 +357,65 @@ func (d *Database) commit(view *recordsView, entries map[[32]byte]memory.Entry) 
 	d.commitMu.Lock()
 	defer d.commitMu.Unlock()
 
-	// Seek to the end of the newest file or create a new file
-	fileNo := len(d.files) - 1
-	var f *blockFile
-	var offset int64
-	var err error
-	if fileNo < 0 {
-		fileNo = 0
-		f, err = d.newFile()
-	} else {
-		f = d.files[fileNo]
-		offset, err = f.file.Seek(0, io.SeekEnd)
+	// Construct an ordered list of entries
+	list := make([]*entryAndData, 0, len(entries))
+	for keyHash, entry := range entries {
+		n := int64(len(entry.Value))
+		if entry.Delete {
+			n = -1
+		}
+		list = append(list, &entryAndData{
+			recordEntry{
+				Key:     entry.Key,
+				KeyHash: keyHash,
+				Length:  n,
+			},
+			entry.Value,
+		})
 	}
-	if err != nil {
-		return err
-	}
 
-	var block uint64
-	var haveBlock bool
-	for kh, e := range entries {
-		// Time for a new file?
-		if offset >= int64(d.fileLimit) {
-			// Close the block
-			if haveBlock {
-				haveBlock = false
-				_, err = writeEntry(f.file, &endBlockEntry{})
-				if err != nil {
-					return err
-				}
+	// Sort without allocation (hopefully)
+	sort.Slice(list, func(i, j int) bool {
+		for b := 0; b < 32; b += 8 {
+			x := binary.BigEndian.Uint64(list[i].KeyHash[b : b+8])
+			y := binary.BigEndian.Uint64(list[j].KeyHash[b : b+8])
+			z := x - y
+			if z != 0 {
+				return z < 0
 			}
+		}
+		return false
+	})
 
-			// Remap the file
-			err := f.Remap()
-			if err != nil {
-				return err
-			}
+	// Write all the entries
+	var file *blockFile
+	block := new(startBlockEntry)
+	block.ID = d.nextBlock.Add(1)
+	for len(list) > 0 {
+		// If it's the first time and there are existing files, get the last
+		// file. Otherwise make a new file.
+		var err error
+		if file == nil && len(d.files) > 0 {
+			file = d.files[len(d.files)-1]
 
-			// Open a new file
-			offset = 0
-			fileNo++
-			f, err = d.newFile()
+		} else {
+			file, err = d.newFile()
 			if err != nil {
 				return err
 			}
 		}
 
-		// Time for a new block?
-		if !haveBlock {
-			// Open the block
-			d.nextBlock++
-			b := new(startBlockEntry)
-			b.ID = d.nextBlock
-			b.Parent = block
-			block = b.ID
-			haveBlock = true
-
-			n, err := writeEntry(f.file, b)
-			if err != nil {
-				return err
-			}
-			offset += int64(n)
-		}
-
-		l := int64(len(e.Value))
-		if e.Delete {
-			l = -1
-		}
-
-		// Write the entry
-		n, err := writeEntry(f.file, &recordEntry{Key: e.Key, Length: l, KeyHash: e.Key.Hash()})
+		n, err := file.writeEntries(len(d.files)-1, view, list, block)
 		if err != nil {
 			return err
 		}
-		offset += int64(n)
-		view.Put(kh, recordLocation{file: uint(fileNo), block: block, offset: offset, length: l})
-
-		if e.Delete {
+		if n == 0 {
 			continue
 		}
 
-		// Write the data
-		n, err = f.file.Write(e.Value)
-		if err != nil {
-			return err
-		}
-		offset += int64(n)
-	}
-	err = view.Commit()
-	if err != nil {
-		return err
+		list = list[n:]
+		block.Part++
 	}
 
-	if !haveBlock {
-		return nil
-	}
-
-	// Close the block
-	_, err = writeEntry(f.file, &endBlockEntry{})
-	if err != nil {
-		return err
-	}
-
-	// Remap the file
-	err = f.Remap()
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return view.Commit()
 }
