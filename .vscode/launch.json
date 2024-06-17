@@ -152,9 +152,11 @@
       "args": [
         "run", "devnet",
         "-w=${workspaceFolder}/.nodes/devnet",
-        "-b=2",
+        "-b=1",
         "-v=1",
         "-f=0",
+        // "-s=0",
+        "--globals={\"executorVersion\": \"v2vandenberg\"}",
       ]
     },
     {
