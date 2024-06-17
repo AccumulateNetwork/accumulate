@@ -11,6 +11,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"sync/atomic"
+
+	binary2 "gitlab.com/accumulatenetwork/core/schema/pkg/binary"
 )
 
 // TxID is a transaction identifier.
@@ -127,7 +129,18 @@ func (x *TxID) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return err
 	}
+	return x.unmarshal(s)
+}
 
+func (x *TxID) UnmarshalBinaryV2(dec *binary2.Decoder) error {
+	s, err := dec.DecodeString()
+	if err != nil {
+		return err
+	}
+	return x.unmarshal(s)
+}
+
+func (x *TxID) unmarshal(s string) error {
 	v, err := ParseTxID(s)
 	if err != nil {
 		return err
