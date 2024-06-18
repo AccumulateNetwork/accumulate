@@ -98,14 +98,17 @@ func TestFileLimit(t *testing.T) {
 	defer batch.Discard()
 
 	const N = 16
+	var keys []string
 	for i := 0; i < N; i++ {
 		k := record.NewKey(i)
+		keys = append(keys, k.String())
 		v := make([]byte, 128)
 		_, _ = rand.Read(v)
 		err = batch.Put(k, v)
 		require.NoError(t, err, "Put")
 	}
 	require.NoError(t, batch.Commit())
+	require.NoError(t, db.Close())
 
 	var files []string
 	ent, err := os.ReadDir(dir)
@@ -113,9 +116,23 @@ func TestFileLimit(t *testing.T) {
 	for _, ent := range ent {
 		files = append(files, ent.Name())
 	}
-	require.Equal(t, []string{
+	require.ElementsMatch(t, []string{
 		"1.blocks",
-		"2.blocks",
-		"3.blocks",
+		"1-1.blocks",
+		"1-2.blocks",
 	}, files)
+
+	db, err = Open(dir, WithFileLimit(1<<10))
+	require.NoError(t, err)
+	defer db.Close()
+
+	batch = db.Begin(nil, true)
+	defer batch.Discard()
+
+	var keys2 []string
+	require.NoError(t, batch.ForEach(func(key *record.Key, _ []byte) error {
+		keys2 = append(keys2, key.String())
+		return nil
+	}))
+	require.ElementsMatch(t, keys, keys2)
 }

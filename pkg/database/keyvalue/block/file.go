@@ -34,15 +34,14 @@ type entryAndData struct {
 	Value []byte
 }
 
-func (c *config) newFile(ordinal uint64, name string) (*blockFile, error) {
+func newFile(c *config, name string) (*blockFile, error) {
 	f := new(blockFile)
 	f.config = c
 	f.mu = new(sync.RWMutex)
 	f.header = new(fileHeader)
-	f.header.Ordinal = ordinal
 
 	var err error
-	f.file, err = os.Create(name)
+	f.file, err = os.OpenFile(name, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0600)
 	if err != nil {
 		return nil, err
 	}
@@ -137,7 +136,7 @@ func (f *blockFile) Close() error {
 	return errors.Join(errs...)
 }
 
-func (f *blockFile) writeEntries(fileIndex int, view *recordsView, entries []*entryAndData, block *startBlockEntry) (n int, err error) {
+func (f *blockFile) writeEntries(fileIndex int, view *recordIndexView, entries []*entryAndData, block *startBlockEntry) (n int, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -168,12 +167,15 @@ func (f *blockFile) writeEntries(fileIndex int, view *recordsView, entries []*en
 	}
 	_ = buf.WriteByte(binary.EmptyObject)
 
+	view.blocks.Put(block.blockID, fileIndex)
+
 	// Write entries
 	for n < len(entries) {
 		e := entries[n]
 		n++
 
 		// Write the header
+		before := buf.Len()
 		enc.Reset(buf)
 		err = e.MarshalBinaryV2(enc)
 		if err != nil {
@@ -182,11 +184,11 @@ func (f *blockFile) writeEntries(fileIndex int, view *recordsView, entries []*en
 		_ = buf.WriteByte(binary.EmptyObject)
 
 		// Update the index
-		view.Put(e.KeyHash, recordLocation{
-			file:   fileIndex,
-			block:  block.ID,
-			offset: offset + int64(buf.Len()),
-			length: e.Length,
+		view.records.Put(e.KeyHash, &recordLocation{
+			Block:     block.blockID.Copy(),
+			Offset:    offset + int64(before),
+			HeaderLen: int64(buf.Len() - before),
+			RecordLen: e.Length,
 		})
 
 		// Write the data
@@ -260,6 +262,10 @@ func (f *blockFile) entries() *entryIterator {
 	return &entryIterator{f, nil}
 }
 
+func (f *blockFile) ReadRange(start, end int64) *offsetReader {
+	return &offsetReader{f, start, end}
+}
+
 type entryIterator struct {
 	*blockFile
 	err error
@@ -272,7 +278,7 @@ type entryPos struct {
 }
 
 func (e *entryIterator) Range(yield func(int, entryPos) bool) {
-	rd := &offsetReader{e.blockFile, fileHeaderSize}
+	rd := e.ReadRange(fileHeaderSize, 0)
 	dec := new(binary.Decoder)
 	for i := 0; rd.Len() > 0; i++ {
 		dec.Reset(rd, binary.LeaveTrailing())
@@ -299,13 +305,22 @@ func (e *entryIterator) Range(yield func(int, entryPos) bool) {
 type offsetReader struct {
 	*blockFile
 	offset int64
+	end    int64
 }
 
 func (r *offsetReader) Len() int {
+	if r.end > 0 {
+		return int(r.end - r.offset)
+	}
 	return len(r.data) - int(r.offset)
 }
 
 func (r *offsetReader) Read(b []byte) (int, error) {
+	if n := r.Len(); n == 0 {
+		return 0, io.EOF
+	} else if len(b) > n {
+		b = b[:n]
+	}
 	n, err := r.ReadAt(b, r.offset)
 	r.offset += int64(n)
 	return n, err

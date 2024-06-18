@@ -10,16 +10,34 @@ import (
 )
 
 var (
+	sblockID         schema.Methods[*blockID, *blockID, *schema.CompositeType]
 	sendBlockEntry   schema.Methods[*endBlockEntry, *endBlockEntry, *schema.CompositeType]
 	sentry           schema.Methods[entry, *entry, *schema.UnionType]
 	sentryType       schema.EnumMethods[entryType]
 	sfileHeader      schema.Methods[*fileHeader, *fileHeader, *schema.CompositeType]
 	srecordEntry     schema.Methods[*recordEntry, *recordEntry, *schema.CompositeType]
+	srecordLocation  schema.Methods[*recordLocation, *recordLocation, *schema.CompositeType]
 	sstartBlockEntry schema.Methods[*startBlockEntry, *startBlockEntry, *schema.CompositeType]
 )
 
 func init() {
 	var deferredTypes schema.ResolverSet
+
+	sblockID = schema.WithMethods[*blockID, *blockID](&schema.CompositeType{
+		TypeBase: schema.TypeBase{
+			Name: "blockID",
+		},
+		Fields: []*schema.Field{
+			{
+				Name: "ID",
+				Type: &schema.SimpleType{Type: schema.SimpleTypeUint},
+			},
+			{
+				Name: "Part",
+				Type: &schema.SimpleType{Type: schema.SimpleTypeUint},
+			},
+		},
+	}).SetGoType()
 
 	sendBlockEntry = schema.WithMethods[*endBlockEntry, *endBlockEntry](&schema.CompositeType{
 		TypeBase: schema.TypeBase{
@@ -76,12 +94,6 @@ func init() {
 		TypeBase: schema.TypeBase{
 			Name: "fileHeader",
 		},
-		Fields: []*schema.Field{
-			{
-				Name: "Ordinal",
-				Type: &schema.SimpleType{Type: schema.SimpleTypeUint},
-			},
-		},
 	}).SetGoType()
 
 	srecordEntry = schema.WithMethods[*recordEntry, *recordEntry](&schema.CompositeType{
@@ -107,28 +119,50 @@ func init() {
 		},
 	}).SetGoType()
 
+	srecordLocation = schema.WithMethods[*recordLocation, *recordLocation](&schema.CompositeType{
+		TypeBase: schema.TypeBase{
+			Name: "recordLocation",
+		},
+		Fields: []*schema.Field{
+			{
+				Name: "Block",
+				Type: (&schema.PointerType{
+					TypeBase: schema.TypeBase{},
+				}).
+					ResolveElemTo(&deferredTypes, "blockID"),
+			},
+			{
+				Name: "Offset",
+				Type: &schema.SimpleType{Type: schema.SimpleTypeInt},
+			},
+			{
+				Name: "HeaderLen",
+				Type: &schema.SimpleType{Type: schema.SimpleTypeInt},
+			},
+			{
+				Name: "RecordLen",
+				Type: &schema.SimpleType{Type: schema.SimpleTypeInt},
+			},
+		},
+	}).SetGoType()
+
 	sstartBlockEntry = schema.WithMethods[*startBlockEntry, *startBlockEntry](&schema.CompositeType{
 		TypeBase: schema.TypeBase{
 			Name: "startBlockEntry",
 		},
 		Fields: []*schema.Field{
-			{
-				Name: "ID",
-				Type: &schema.SimpleType{Type: schema.SimpleTypeUint},
-			},
-			{
-				Name: "Part",
-				Type: &schema.SimpleType{Type: schema.SimpleTypeUint},
-			},
+			(&schema.Field{}).ResolveTo(&deferredTypes, "blockID"),
 		},
 	}).SetGoType()
 
 	s, err := schema.New(
+		sblockID.Type,
 		sendBlockEntry.Type,
 		sentry.Type,
 		sentryType.Type,
 		sfileHeader.Type,
 		srecordEntry.Type,
+		srecordLocation.Type,
 		sstartBlockEntry.Type,
 	)
 	if err != nil {

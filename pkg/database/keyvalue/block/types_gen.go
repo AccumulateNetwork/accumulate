@@ -8,6 +8,58 @@ import (
 	"gitlab.com/accumulatenetwork/core/schema/pkg/widget"
 )
 
+type blockID struct {
+	ID   uint64
+	Part uint64
+}
+
+var wblockID = widget.ForCompositePtr(widget.Fields[blockID]{
+	{Name: "iD", ID: 1, Widget: widget.ForUint(func(v *blockID) *uint64 { return &v.ID })},
+	{Name: "part", ID: 2, Widget: widget.ForUint(func(v *blockID) *uint64 { return &v.Part })},
+}, widget.Identity[**blockID])
+
+// Copy returns a copy of the blockID.
+func (v *blockID) Copy() *blockID {
+	var u *blockID
+	wblockID.CopyTo(&u, &v)
+	return u
+}
+
+// EqualblockID returns true if V is equal to U.
+func (v *blockID) Equal(u *blockID) bool {
+	return wblockID.Equal(&v, &u)
+}
+
+// MarshalBinary marshals the blockID to JSON.
+func (v *blockID) MarshalJSON() ([]byte, error) {
+	return widget.MarshalJSON(&v, wblockID)
+}
+
+// UnmarshalJSON unmarshals the blockID from JSON.
+func (v *blockID) UnmarshalJSON(b []byte) error {
+	return widget.UnmarshalJSON(&v, wblockID, b)
+}
+
+// MarshalBinary marshals the blockID to bytes using [binary].
+func (v *blockID) MarshalBinary() ([]byte, error) {
+	return widget.MarshalBinary(&v, wblockID)
+}
+
+// MarshalBinary marshals the blockID to a [binary.Encoder].
+func (v *blockID) MarshalBinaryV2(enc *binary.Encoder) error {
+	return wblockID.MarshalBinary(enc, &v)
+}
+
+// UnmarshalBinary unmarshals the blockID from bytes using [binary].
+func (v *blockID) UnmarshalBinary(b []byte) error {
+	return widget.UnmarshalBinary(&v, wblockID, b)
+}
+
+// UnmarshalBinary unmarshals the blockID from a [binary.Decoder].
+func (v *blockID) UnmarshalBinaryV2(dec *binary.Decoder) error {
+	return wblockID.UnmarshalBinary(dec, &v)
+}
+
 type endBlockEntry struct {
 }
 
@@ -168,12 +220,9 @@ func (v *entryType) UnmarshalBinaryV2(dec *binary.Decoder) error {
 }
 
 type fileHeader struct {
-	Ordinal uint64
 }
 
-var wfileHeader = widget.ForCompositePtr(widget.Fields[fileHeader]{
-	{Name: "ordinal", ID: 1, Widget: widget.ForUint(func(v *fileHeader) *uint64 { return &v.Ordinal })},
-}, widget.Identity[**fileHeader])
+var wfileHeader = widget.ForCompositePtr(widget.Fields[fileHeader]{}, widget.Identity[**fileHeader])
 
 // Copy returns a copy of the fileHeader.
 func (v *fileHeader) Copy() *fileHeader {
@@ -274,15 +323,69 @@ func (v *recordEntry) UnmarshalBinaryV2(dec *binary.Decoder) error {
 	return wrecordEntry.UnmarshalBinary(dec, &v)
 }
 
+type recordLocation struct {
+	Block     *blockID
+	Offset    int64
+	HeaderLen int64
+	RecordLen int64
+}
+
+var wrecordLocation = widget.ForCompositePtr(widget.Fields[recordLocation]{
+	{Name: "block", ID: 1, Widget: widget.ForCompositePtr(wblockID.Fields, func(v *recordLocation) **blockID { return &v.Block })},
+	{Name: "offset", ID: 2, Widget: widget.ForInt(func(v *recordLocation) *int64 { return &v.Offset })},
+	{Name: "headerLen", ID: 3, Widget: widget.ForInt(func(v *recordLocation) *int64 { return &v.HeaderLen })},
+	{Name: "recordLen", ID: 4, Widget: widget.ForInt(func(v *recordLocation) *int64 { return &v.RecordLen })},
+}, widget.Identity[**recordLocation])
+
+// Copy returns a copy of the recordLocation.
+func (v *recordLocation) Copy() *recordLocation {
+	var u *recordLocation
+	wrecordLocation.CopyTo(&u, &v)
+	return u
+}
+
+// EqualrecordLocation returns true if V is equal to U.
+func (v *recordLocation) Equal(u *recordLocation) bool {
+	return wrecordLocation.Equal(&v, &u)
+}
+
+// MarshalBinary marshals the recordLocation to JSON.
+func (v *recordLocation) MarshalJSON() ([]byte, error) {
+	return widget.MarshalJSON(&v, wrecordLocation)
+}
+
+// UnmarshalJSON unmarshals the recordLocation from JSON.
+func (v *recordLocation) UnmarshalJSON(b []byte) error {
+	return widget.UnmarshalJSON(&v, wrecordLocation, b)
+}
+
+// MarshalBinary marshals the recordLocation to bytes using [binary].
+func (v *recordLocation) MarshalBinary() ([]byte, error) {
+	return widget.MarshalBinary(&v, wrecordLocation)
+}
+
+// MarshalBinary marshals the recordLocation to a [binary.Encoder].
+func (v *recordLocation) MarshalBinaryV2(enc *binary.Encoder) error {
+	return wrecordLocation.MarshalBinary(enc, &v)
+}
+
+// UnmarshalBinary unmarshals the recordLocation from bytes using [binary].
+func (v *recordLocation) UnmarshalBinary(b []byte) error {
+	return widget.UnmarshalBinary(&v, wrecordLocation, b)
+}
+
+// UnmarshalBinary unmarshals the recordLocation from a [binary.Decoder].
+func (v *recordLocation) UnmarshalBinaryV2(dec *binary.Decoder) error {
+	return wrecordLocation.UnmarshalBinary(dec, &v)
+}
+
 type startBlockEntry struct {
-	ID   uint64
-	Part uint64
+	blockID
 }
 
 var wstartBlockEntry = widget.ForCompositePtr(widget.Fields[startBlockEntry]{
 	{Name: "type", ID: 1, Widget: widget.ForTag[*entryType]("type", (*startBlockEntry).Type)},
-	{Name: "iD", ID: 2, Widget: widget.ForUint(func(v *startBlockEntry) *uint64 { return &v.ID })},
-	{Name: "part", ID: 3, Widget: widget.ForUint(func(v *startBlockEntry) *uint64 { return &v.Part })},
+	{ID: 2, Widget: widget.ForComposite(wblockID.Fields, func(v *startBlockEntry) *blockID { return &v.blockID })},
 }, widget.Identity[**startBlockEntry])
 
 func (startBlockEntry) Type() entryType { return entryTypeStartBlock }

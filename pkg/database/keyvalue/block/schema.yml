@@ -14,9 +14,19 @@ $generate:
 
 fileHeader:
   class: composite
+  fields: []
+
+recordLocation:
+  class: composite
   fields:
-    - name: Ordinal
-      type: uint
+    - name: Block
+      type: '*blockID'
+    - name: Offset
+      type: int
+    - name: HeaderLen
+      type: int
+    - name: RecordLen
+      type: int
 
 entry:
   class: union
@@ -38,10 +48,14 @@ entry:
     - name: startBlockEntry
       class: composite
       fields:
-        - name: ID
-          type: uint
-        - name: Part
-          type: uint
+        - type:
+            name: blockID
+            class: composite
+            fields:
+              - name: ID
+                type: uint
+              - name: Part
+                type: uint
 
     - name: recordEntry
       class: composite
