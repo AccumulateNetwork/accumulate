@@ -81,19 +81,11 @@ func (e *branch) newBranch(key [32]byte) (*branch, error) {
 	}
 
 	// Update max height
-	s, err := e.bpt.getState().Get()
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load params: %w", err)
-	}
-	if f.Height <= s.MaxHeight {
-		return f, nil
+	s := e.bpt.mustLoadState()
+	if s.MaxHeight < f.Height {
+		s.MaxHeight = f.Height
 	}
 
-	s.MaxHeight = f.Height
-	err = e.bpt.getState().Put(s)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("store params: %w", err)
-	}
 	return f, nil
 }
 
@@ -163,7 +155,7 @@ func (e *branch) load() error {
 
 	// If this is the root node, get the hash from the parameters
 	if e.Height == 0 {
-		s, err := e.bpt.getState().Get()
+		s, err := e.bpt.loadState()
 		if err != nil {
 			return errors.UnknownError.WithFormat("load params: %w", err)
 		}

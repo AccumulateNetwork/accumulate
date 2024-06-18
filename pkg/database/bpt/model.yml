@@ -7,10 +7,11 @@
   fields:
   - name: pending
     type: map[[32]byte]*mutation
+  - name: loadedState
+    type: '*stateData'
   attributes:
   - name: State
     private: true
-    omitConstructor: true
     type: state
     key: Root
     dataType: stateData

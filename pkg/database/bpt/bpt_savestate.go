@@ -121,7 +121,7 @@ func SaveSnapshotV1(b *BPT, file io.WriteSeeker, loadState func(key storage.Key,
 
 // LoadSnapshotV1 restores a snapshot to the BPT
 func LoadSnapshotV1(b *BPT, file ioutil2.SectionReader, storeState func(key storage.Key, hash [32]byte, reader ioutil2.SectionReader) error) error {
-	s, err := b.getState().Get()
+	s, err := b.loadState()
 	if err != nil {
 		return err
 	}
