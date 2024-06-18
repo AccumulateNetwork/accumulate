@@ -35,7 +35,6 @@ func (b *BPT) SetParams(p parameters) error {
 
 	if b.loadedState.parameters == (parameters{}) {
 		b.loadedState.parameters = p
-		b.loadedState.Mask = b.loadedState.Power - 1
 		return b.storeState()
 	}
 
@@ -61,12 +60,10 @@ func (b *BPT) loadState() (*stateData, error) {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	s = new(stateData)
-	s.Power = 8
-	s.Mask = s.Power - 1
-	b.loadedState = s
-
-	return s, b.storeState()
+	// Set defaults
+	b.loadedState = new(stateData)
+	err = b.storeState()
+	return b.loadedState, err
 }
 
 func (b *BPT) mustLoadState() *stateData {
@@ -78,10 +75,20 @@ func (b *BPT) mustLoadState() *stateData {
 }
 
 func (b *BPT) storeState() error {
-	if b.loadedState == nil {
+	s := b.loadedState
+	if s == nil {
 		panic("state has not been loaded")
 	}
-	return b.getState().Put(b.loadedState)
+
+	// Default power
+	if s.Power == 0 {
+		s.Power = 8
+	}
+
+	// Mask is always power - 1
+	s.Mask = s.Power - 1
+
+	return b.getState().Put(s)
 }
 
 func (r *stateData) MarshalBinary() ([]byte, error) {

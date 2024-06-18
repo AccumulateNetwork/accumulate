@@ -188,6 +188,10 @@ func init() {
 				Name: "Mask",
 				Type: &schema.SimpleType{Type: schema.SimpleTypeUint},
 			},
+			{
+				Name: "ArbitraryValues",
+				Type: &schema.SimpleType{Type: schema.SimpleTypeBool},
+			},
 		},
 	}).SetGoType()
 

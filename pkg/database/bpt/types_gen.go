@@ -145,13 +145,15 @@ func (v nodeType) String() string {
 }
 
 type parameters struct {
-	Power uint64
-	Mask  uint64
+	Power           uint64
+	Mask            uint64
+	ArbitraryValues bool
 }
 
 var wparameters = widget.ForCompositePtr(widget.Fields[parameters]{
 	{Name: "power", ID: 1, Widget: widget.ForUint(func(v *parameters) *uint64 { return &v.Power })},
 	{Name: "mask", ID: 2, Widget: widget.ForUint(func(v *parameters) *uint64 { return &v.Mask })},
+	{Name: "arbitraryValues", ID: 3, Widget: widget.ForBool(func(v *parameters) *bool { return &v.ArbitraryValues })},
 }, widget.Identity[**parameters])
 
 // Copy returns a copy of the parameters.
