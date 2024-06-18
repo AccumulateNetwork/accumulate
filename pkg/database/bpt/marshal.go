@@ -26,7 +26,7 @@ const branchStateSize = 32 + 1 + 32
 // leafStateSize is the marshaled size of [leaf].
 const leafStateSize = 32 + 32
 
-func (r *parameters) MarshalBinary() ([]byte, error) {
+func (r *stateData) MarshalBinary() ([]byte, error) {
 	// Marshal the fields
 	var data []byte
 	data = append(data, byte(r.MaxHeight))
@@ -36,7 +36,7 @@ func (r *parameters) MarshalBinary() ([]byte, error) {
 	return data, nil
 }
 
-func (r *parameters) UnmarshalBinary(data []byte) error {
+func (r *stateData) UnmarshalBinary(data []byte) error {
 	// Check the size
 	if len(data) != paramsStateSize {
 		return encoding.ErrNotEnoughData
@@ -50,7 +50,7 @@ func (r *parameters) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
-func (r *parameters) UnmarshalBinaryFrom(rd io.Reader) error {
+func (r *stateData) UnmarshalBinaryFrom(rd io.Reader) error {
 	// Read paramStateSize bytes
 	var buf [paramsStateSize]byte
 	_, err := io.ReadFull(rd, buf[:])

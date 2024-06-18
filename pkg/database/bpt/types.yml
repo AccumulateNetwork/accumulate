@@ -1,4 +1,4 @@
-parameters:
+stateData:
   non-binary: true
   non-json: true
   fields:

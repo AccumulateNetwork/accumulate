@@ -33,7 +33,7 @@ type node interface {
 
 	// copyWith copies the receiver with the given branch as the parent of the
 	// new copy.
-	copyWith(_ *parameters, _ *branch, clean bool) node
+	copyWith(_ *stateData, _ *branch, clean bool) node
 
 	// writeTo marshals the node and writes it to the writer.
 	writeTo(io.Writer) error
@@ -190,13 +190,13 @@ func (e *branch) load() error {
 }
 
 // copyWith returns a new empty node with parent set to the given branch.
-func (e *emptyNode) copyWith(s *parameters, p *branch, clean bool) node {
+func (e *emptyNode) copyWith(s *stateData, p *branch, clean bool) node {
 	return &emptyNode{parent: p}
 }
 
 // copyWith returns a copy of the branch with parent set to the given branch.
 // copyWith copies recursively if put is true.
-func (e *branch) copyWith(s *parameters, p *branch, clean bool) node {
+func (e *branch) copyWith(s *stateData, p *branch, clean bool) node {
 	// Ensure the hash is up to date
 	e.getHash()
 
@@ -231,7 +231,7 @@ func (e *branch) copyWith(s *parameters, p *branch, clean bool) node {
 // copyWith returns a copy of the leaf node with parent set to the given branch.
 // If the receiver's parent is nil, copyWith returns it instead after setting
 // its parent.
-func (e *leaf) copyWith(s *parameters, p *branch, clean bool) node {
+func (e *leaf) copyWith(s *stateData, p *branch, clean bool) node {
 	f := *e
 	f.parent = p
 	return &f
