@@ -89,14 +89,14 @@ func (b *Batch) IterateAccounts() *AccountIterator {
 }
 
 func (b *Batch) ForEachAccount(fn func(account *Account, hash [32]byte) error) error {
-	return bpt.ForEach(b.BPT(), func(key *record.Key, hash [32]byte) error {
+	return bpt.ForEach(b.BPT(), func(key *record.Key, hash []byte) error {
 		// Create an Account object
 		u, err := b.getAccountUrl(key)
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
 		}
 
-		return fn(b.Account(u), hash)
+		return fn(b.Account(u), *(*[32]byte)(hash))
 	})
 }
 

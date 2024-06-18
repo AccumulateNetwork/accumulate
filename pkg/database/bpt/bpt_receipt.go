@@ -31,8 +31,8 @@ func (b *BPT) GetReceipt(key *record.Key) (*merkle.Receipt, error) {
 
 	// Walk up the tree
 	receipt := new(merkle.Receipt)
-	receipt.Start = n.Hash[:]
-	working := n.Hash
+	receipt.Start = n.Value
+	working, _ := n.getHash()
 	var br *branch
 	for n := node(n); ; n = br {
 		// Get the parent
