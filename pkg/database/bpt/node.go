@@ -14,16 +14,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
-// nodeType is the type of an [Node].
-type nodeType uint64
-
 // node is an node in a [BPT].
 type node interface {
 	// Type is the type of the node.
 	Type() nodeType
-
-	// CopyAsInterface implements [encoding.BinaryValue].
-	CopyAsInterface() any
 
 	// IsDirty returns true if the node has been modified.
 	IsDirty() bool
