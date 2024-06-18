@@ -49,20 +49,20 @@ func (b *BPT) GetRootHash() ([32]byte, error) {
 	return h, nil
 }
 
-func (b *BPT) newState() values.Value[*parameters] {
-	v := values.NewValue(b.logger.L, b.store, b.key.Append("Root"), false, values.Struct[parameters]())
+func (b *BPT) newState() values.Value[*stateData] {
+	v := values.NewValue(b.logger.L, b.store, b.key.Append("Root"), false, values.Struct[stateData]())
 	return paramsRecord{v}
 }
 
 // paramsRecord is a wrapper around Value that sets the power to 8 if the
 // parameters have not been configured.
 type paramsRecord struct {
-	values.Value[*parameters]
+	values.Value[*stateData]
 }
 
 // Get loads the parameters, initializing them to the default values if they
 // have not been set.
-func (p paramsRecord) Get() (*parameters, error) {
+func (p paramsRecord) Get() (*stateData, error) {
 	v, err := p.Value.Get()
 	switch {
 	case err == nil:
@@ -72,7 +72,7 @@ func (p paramsRecord) Get() (*parameters, error) {
 	}
 
 	// TODO Allow power to be configurable?
-	v = new(parameters)
+	v = new(stateData)
 	v.Power = 8
 	v.Mask = v.Power - 1
 	err = p.Value.Put(v)

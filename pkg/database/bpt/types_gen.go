@@ -38,7 +38,7 @@ type leaf struct {
 	parent *branch
 }
 
-type parameters struct {
+type stateData struct {
 	RootHash  [32]byte `json:"rootHash,omitempty" form:"rootHash" query:"rootHash" validate:"required"`
 	MaxHeight uint64   `json:"maxHeight,omitempty" form:"maxHeight" query:"maxHeight" validate:"required"`
 	Power     uint64   `json:"power,omitempty" form:"power" query:"power" validate:"required"`
@@ -78,8 +78,8 @@ func (v *leaf) Copy() *leaf {
 
 func (v *leaf) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *parameters) Copy() *parameters {
-	u := new(parameters)
+func (v *stateData) Copy() *stateData {
+	u := new(stateData)
 
 	u.RootHash = v.RootHash
 	u.MaxHeight = v.MaxHeight
@@ -89,7 +89,7 @@ func (v *parameters) Copy() *parameters {
 	return u
 }
 
-func (v *parameters) CopyAsInterface() interface{} { return v.Copy() }
+func (v *stateData) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *branch) Equal(u *branch) bool {
 	if !(v.Height == u.Height) {
@@ -126,7 +126,7 @@ func (v *leaf) Equal(u *leaf) bool {
 	return true
 }
 
-func (v *parameters) Equal(u *parameters) bool {
+func (v *stateData) Equal(u *stateData) bool {
 	if !(v.RootHash == u.RootHash) {
 		return false
 	}
