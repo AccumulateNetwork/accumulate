@@ -10,21 +10,15 @@ import (
 	"errors"
 	"io"
 	"os"
-	"sync"
-
-	"github.com/edsrzf/mmap-go"
 )
 
 type file struct {
-	mu   *sync.RWMutex
 	file *os.File
-	data mmap.MMap
+	mmap mmapRef
 }
 
 func openFile(name string, flags int) (_ *file, err error) {
 	f := new(file)
-	f.mu = new(sync.RWMutex)
-
 	defer func() {
 		if err != nil {
 			_ = f.Close()
@@ -45,7 +39,7 @@ func openFile(name string, flags int) (_ *file, err error) {
 		return f, nil
 	}
 
-	f.data, err = mmap.MapRegion(f.file, int(st.Size()), mmap.RDWR, 0, 0)
+	err = f.mmap.Map(f.file, int(st.Size()))
 	if err != nil {
 		return nil, err
 	}
@@ -57,21 +51,15 @@ func (f *file) Name() string {
 	return f.file.Name()
 }
 
-func (f *file) Len() int {
-	f.mu.RLock()
-	defer f.mu.RUnlock()
-	return len(f.data)
-}
+func (f *file) ReadAt(b []byte, off int64) (n int, err error) {
+	m := f.mmap.Acquire()
+	defer doRelease(&err, m)
 
-func (f *file) ReadAt(b []byte, off int64) (int, error) {
-	f.mu.RLock()
-	defer f.mu.RUnlock()
-
-	if int(off) >= len(f.data) {
+	if int(off) >= len(m.data) {
 		return 0, io.EOF
 	}
 
-	n := copy(b, f.data[off:])
+	n = copy(b, m.data[off:])
 	if n < len(b) {
 		return n, io.EOF
 	}
@@ -82,50 +70,31 @@ func (f *file) ReadRange(start, end int64) *fileReader {
 	return &fileReader{f, start, end}
 }
 
-func (f *file) WriteAt(offset int64, b []byte) (int, error) {
-	err := f.unmap()
-	if err != nil {
-		return 0, err
+func (f *file) WriteAt(offset int64, b []byte) (n int, err error) {
+	end := offset + int64(len(b))
+	for {
+		m := f.mmap.Acquire()
+		defer doRelease(&err, m)
+
+		if int(end) <= len(m.data) {
+			n := copy(m.data[offset:], b)
+			return n, nil
+		}
+
+		err := f.file.Truncate(end)
+		if err != nil {
+			return 0, err
+		}
+
+		err = f.mmap.Map(f.file, int(end))
+		if err != nil {
+			return 0, err
+		}
 	}
-
-	n := offset + int64(len(b))
-	err = f.file.Truncate(n)
-	if err != nil {
-		return 0, err
-	}
-
-	f.data, err = mmap.MapRegion(f.file, int(n), mmap.RDWR, 0, 0)
-	if err != nil {
-		return 0, err
-	}
-
-	m := copy(f.data[offset:], b)
-	return m, nil
-}
-
-func (f *file) unmap() error {
-	if f.data == nil {
-		return nil
-	}
-
-	err := f.data.Unmap()
-	f.data = nil
-	return err
 }
 
 func (f *file) Close() error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	var errs []error
-	if f.data != nil {
-		errs = append(errs, f.data.Unmap())
-	}
-	if f.file != nil {
-		errs = append(errs, f.file.Close())
-	}
-
-	f.data = nil
-	f.file = nil
-	return errors.Join(errs...)
+	return errors.Join(
+		f.mmap.Close(),
+		f.file.Close())
 }

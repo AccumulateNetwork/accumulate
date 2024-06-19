@@ -6,7 +6,9 @@
 
 package block
 
-import "io"
+import (
+	"io"
+)
 
 type fileReader struct {
 	*file
@@ -15,10 +17,7 @@ type fileReader struct {
 }
 
 func (r *fileReader) Len() int {
-	if r.end > 0 {
-		return int(r.end - r.offset)
-	}
-	return len(r.data) - int(r.offset)
+	return int(r.end - r.offset)
 }
 
 func (r *fileReader) Read(b []byte) (int, error) {
@@ -32,13 +31,18 @@ func (r *fileReader) Read(b []byte) (int, error) {
 	return n, err
 }
 
-func (r *fileReader) ReadByte() (byte, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	if r.Len() <= 0 {
+func (r *fileReader) ReadByte() (c byte, err error) {
+	if r.Len() == 0 {
 		return 0, io.EOF
 	}
-	b := r.data[r.offset]
+
+	m := r.mmap.Acquire()
+	defer doRelease(&err, m)
+
+	if int(r.offset) >= len(m.data) {
+		return 0, io.EOF
+	}
+	b := m.data[r.offset]
 	r.offset++
 	return b, nil
 }

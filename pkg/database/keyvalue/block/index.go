@@ -270,12 +270,7 @@ func (r *recordIndexView) getFile(l *recordLocation) (*blockFile, error) {
 	if i >= len(r.files) || r.files[i] == nil {
 		return nil, errors.InternalError.With("corrupted: invalid block index entry")
 	}
-
-	f := r.files[i]
-	if f.file.Len() < int(l.end()) {
-		return nil, errors.InternalError.With("corrupted: record is past the end of the file")
-	}
-	return f, nil
+	return r.files[i], nil
 }
 
 func (r *recordIndexView) Discard() {

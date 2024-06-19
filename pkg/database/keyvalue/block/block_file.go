@@ -24,7 +24,6 @@ type blockFile struct {
 	*config
 	file   *file
 	header *fileHeader
-	dec    binary.Decoder
 }
 
 type entryAndData struct {
@@ -75,22 +74,30 @@ func (c *config) openFile(name string) (*blockFile, error) {
 		return nil, err
 	}
 
-	if f.file.Len() < fileHeaderSize {
-		return nil, errors.New("file header is missing or corrupted")
-	}
-
-	err = f.header.UnmarshalBinary(f.file.data[:fileHeaderSize])
+	dec := f.decodeRange(0, fileHeaderSize)
+	err = f.header.UnmarshalBinaryV2(dec)
 	if err != nil {
+		if errors.Is(err, io.EOF) {
+			err = io.ErrUnexpectedEOF
+		}
 		return nil, fmt.Errorf("read header: %w", err)
 	}
 
 	return f, nil
 }
 
+func (f *blockFile) decodeRange(start, end int64) *binary.Decoder {
+	rd := f.file.ReadRange(start, end)
+	return binary.NewDecoder(rd)
+}
+
 func (f *blockFile) ReadHeader(l *recordLocation) (*recordEntry, error) {
-	f.dec.Reset(f.file.ReadRange(l.Offset, l.Offset+l.HeaderLen))
+	dec := f.decodeRange(l.Offset, l.Offset+l.HeaderLen)
 	e := new(recordEntry)
-	err := e.UnmarshalBinaryV2(&f.dec)
+	err := e.UnmarshalBinaryV2(dec)
+	if errors.Is(err, io.EOF) {
+		return nil, io.ErrUnexpectedEOF
+	}
 	return e, err
 }
 
@@ -100,6 +107,9 @@ func (f *blockFile) ReadRecord(l *recordLocation) ([]byte, error) {
 	}
 	b := make([]byte, l.RecordLen)
 	_, err := f.file.ReadAt(b, l.Offset+l.HeaderLen)
+	if errors.Is(err, io.EOF) {
+		return nil, io.ErrUnexpectedEOF
+	}
 	return b, err
 }
 
@@ -108,9 +118,6 @@ func (f *blockFile) Close() error {
 }
 
 func (f *blockFile) writeEntries(fileIndex int, view *recordIndexView, entries []*entryAndData, block *startBlockEntry) (n int, err error) {
-	f.file.mu.Lock()
-	defer f.file.mu.Unlock()
-
 	// Check the limit
 	var offset int64
 	if st, err := f.file.file.Stat(); err != nil {
@@ -241,14 +248,25 @@ func (e *entryIterator) Range(yield func(int, entryPos) bool) {
 	rd := e.file.ReadRange(0, fileHeaderSize)
 	dec := new(binary.Decoder)
 	var typ entryType
-	for i := 0; rd.offset < int64(len(e.file.data)); i++ {
+	var lenBuf [4]byte
+	for i := 0; ; i++ {
 		rd.offset = rd.end
 
 		// Read the length
-		n := stdbin.BigEndian.Uint32(e.file.data[rd.offset:])
+		n, err := e.file.ReadAt(lenBuf[:], rd.offset)
+		if err != nil {
+			if !errors.Is(err, io.EOF) {
+				e.err = err
+			} else if n > 0 {
+				e.err = io.ErrUnexpectedEOF
+			}
+			break
+		}
+
+		length := stdbin.BigEndian.Uint32(lenBuf[:])
 		rd.offset += 4
 		start := rd.offset
-		rd.end = rd.offset + int64(n)
+		rd.end = rd.offset + int64(length)
 
 		if e.want != nil {
 			// Read the entry type
