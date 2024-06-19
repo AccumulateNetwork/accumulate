@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p/dial"
@@ -61,7 +60,7 @@ func scanPeers(_ *cobra.Command, args []string) {
 	node, err := p2p.New(p2p.Options{
 		Key:               sk,
 		Network:           args[1],
-		BootstrapPeers:    accumulate.BootstrapServers,
+		BootstrapPeers:    bootstrap,
 		PeerDatabase:      args[0],
 		PeerScanFrequency: -1,
 	})

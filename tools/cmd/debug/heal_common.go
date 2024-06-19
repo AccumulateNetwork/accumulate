@@ -127,7 +127,7 @@ func (h *healer) heal(args []string) {
 
 	node, err := p2p.New(p2p.Options{
 		Network:           ni.Network,
-		BootstrapPeers:    accumulate.BootstrapServers,
+		BootstrapPeers:    bootstrap,
 		PeerDatabase:      peerDb,
 		EnablePeerTracker: true,
 

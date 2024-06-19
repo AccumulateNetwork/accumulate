@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 
 	"github.com/syndtr/goleveldb/leveldb"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
@@ -79,9 +80,10 @@ func (r *recordIndex) openDB(dir string) (exists bool, err error) {
 		return false, err
 	}
 
-	rBPT := r.openBPT((*kvstore)(r))
+	rBPT := new(atomic.Pointer[bpt.BPT])
+	rBPT.Store(r.openBPT((*kvstore)(r)))
 	r.records.fn.get = func(key [32]byte) (*recordLocation, bool) {
-		b, err := rBPT.Get(record.KeyFromHash(key))
+		b, err := rBPT.Load().Get(record.KeyFromHash(key))
 		if err != nil {
 			if !errors.Is(err, errors.NotFound) {
 				slog.Error("Failed to look up record location", "error", err)
@@ -99,7 +101,7 @@ func (r *recordIndex) openDB(dir string) (exists bool, err error) {
 	}
 
 	r.records.fn.forEach = func(fn func([32]byte, *recordLocation) error) error {
-		return bpt.ForEach(rBPT, func(key *record.Key, value []byte) error {
+		return bpt.ForEach(rBPT.Load(), func(key *record.Key, value []byte) error {
 			loc := new(recordLocation)
 			err = loc.UnmarshalBinary(value)
 			if err != nil {
@@ -133,7 +135,7 @@ func (r *recordIndex) openDB(dir string) (exists bool, err error) {
 			return err
 		}
 
-		rBPT = r.openBPT((*kvstore)(r))
+		rBPT.Store(r.openBPT((*kvstore)(r)))
 		return nil
 	}
 

@@ -63,7 +63,7 @@ func sequence(cmd *cobra.Command, args []string) {
 
 	node, err := p2p.New(p2p.Options{
 		Network:        ni.Network,
-		BootstrapPeers: accumulate.BootstrapServers,
+		BootstrapPeers: bootstrap,
 	})
 	check(err)
 	defer func() { _ = node.Close() }()
