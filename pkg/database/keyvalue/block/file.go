@@ -92,7 +92,7 @@ func (c *config) openFile(name string) (*blockFile, error) {
 		return nil, err
 	}
 
-	err = f.header.UnmarshalBinary(f.data[:1024])
+	err = f.header.UnmarshalBinary(f.data[:fileHeaderSize])
 	if err != nil {
 		return nil, fmt.Errorf("read header: %w", err)
 	}

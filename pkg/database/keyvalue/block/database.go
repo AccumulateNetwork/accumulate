@@ -110,7 +110,7 @@ func Open(path string, options ...Option) (_ *Database, err error) {
 func (db *Database) Close() error {
 	return errors.Join(
 		db.files.Close(),
-		db.index.db.Close(),
+		db.index.Close(),
 	)
 }
 

@@ -216,6 +216,13 @@ func (r *recordIndex) View(files []*blockFile) *recordIndexView {
 	}
 }
 
+func (r *recordIndex) Close() error {
+	if r.db == nil {
+		return nil
+	}
+	return r.db.Close()
+}
+
 func (r *recordIndexView) Get(key *record.Key) ([]byte, error) {
 	loc, ok := r.records.Get(key.Hash())
 	if !ok || loc.RecordLen < 0 {
