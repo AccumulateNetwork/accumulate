@@ -39,6 +39,7 @@ func (c *closableDb) Close() {
 }
 
 func openDb(t testing.TB, open Opener) *closableDb {
+	t.Helper()
 	db, err := open()
 	require.NoError(t, err)
 	c := &closableDb{db, t, false}

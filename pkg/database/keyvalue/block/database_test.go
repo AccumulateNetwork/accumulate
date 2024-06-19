@@ -21,6 +21,13 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 )
 
+func TestFoo(t *testing.T) {
+	t.Skip("Manual")
+	db, err := Open("../../../../.nodes/devnet/bvn1-1/bvnn/data/accumulate.db")
+	require.NoError(t, err)
+	require.NoError(t, db.Close())
+}
+
 func BenchmarkCommit(b *testing.B) {
 	kvtest.BenchmarkCommit(b, newOpener(b))
 }
