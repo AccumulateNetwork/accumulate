@@ -8,6 +8,7 @@ package block
 
 import (
 	"bytes"
+	stdbin "encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -150,22 +151,23 @@ func (f *blockFile) writeEntries(fileIndex int, view *recordIndexView, entries [
 		offset = st.Size()
 	}
 
-	// Allocate a buffer
+	// Allocate buffers
 	bufLimit := min(
 		len(entries)*1024,
 		int(f.fileLimit+fileHeaderSize-offset))
 	if bufLimit > 1<<22 {
 		bufLimit = 1 << 22
 	}
-	buf := bytes.NewBuffer(make([]byte, 0, bufLimit))
+	w := new(entryWriter)
+	w.mainBuf = bytes.NewBuffer(make([]byte, 0, bufLimit))
+	w.encBuf = new(bytes.Buffer)
+	w.enc = binary.NewEncoder(w.encBuf, binary.WithPool(binary.NewPool()))
 
 	// Open the block
-	enc := binary.NewEncoder(buf, binary.WithPool(binary.NewPool()))
-	err = block.MarshalBinaryV2(enc)
+	_, err = w.write(block, nil)
 	if err != nil {
 		return 0, err
 	}
-	_ = buf.WriteByte(binary.EmptyObject)
 
 	view.blocks.Put(block.blockID, fileIndex)
 
@@ -174,52 +176,41 @@ func (f *blockFile) writeEntries(fileIndex int, view *recordIndexView, entries [
 		e := entries[n]
 		n++
 
-		// Write the header
-		before := buf.Len()
-		enc.Reset(buf)
-		err = e.MarshalBinaryV2(enc)
+		// Write the entry
+		loc, err := w.write(&e.recordEntry, e.Value)
 		if err != nil {
 			return 0, err
 		}
-		_ = buf.WriteByte(binary.EmptyObject)
 
 		// Update the index
-		view.records.Put(e.KeyHash, &recordLocation{
-			Block:     block.blockID.Copy(),
-			Offset:    offset + int64(before),
-			HeaderLen: int64(buf.Len() - before),
-			RecordLen: e.Length,
-		})
-
-		// Write the data
-		_, _ = buf.Write(e.Value)
+		loc.Offset += offset
+		loc.Block = block.blockID.Copy()
+		view.records.Put(e.KeyHash, loc)
 
 		// Check the file limit
-		if offset+int64(buf.Len()) > f.fileLimit+fileHeaderSize {
+		if offset+int64(w.mainBuf.Len()) > f.fileLimit+fileHeaderSize {
 			break
 		}
 
 		// Write the buffer
-		if buf.Len() > bufLimit {
-			err = f.writeAt(offset, buf.Bytes())
+		if w.mainBuf.Len() > bufLimit {
+			err = f.writeAt(offset, w.mainBuf.Bytes())
 			if err != nil {
 				return 0, err
 			}
-			offset += int64(buf.Len())
-			buf.Reset()
+			offset += int64(w.mainBuf.Len())
+			w.mainBuf.Reset()
 		}
 	}
 
 	// Close the block
-	enc.Reset(buf)
-	err = (&endBlockEntry{}).MarshalBinaryV2(enc)
+	_, err = w.write(&endBlockEntry{}, nil)
 	if err != nil {
 		return 0, err
 	}
-	_ = buf.WriteByte(binary.EmptyObject)
 
 	// Write the buffer
-	err = f.writeAt(offset, buf.Bytes())
+	err = f.writeAt(offset, w.mainBuf.Bytes())
 	if err != nil {
 		return 0, err
 	}
@@ -258,8 +249,41 @@ func (f *blockFile) unmap() error {
 	return err
 }
 
-func (f *blockFile) entries() *entryIterator {
-	return &entryIterator{f, nil}
+type entryWriter struct {
+	mainBuf *bytes.Buffer
+	encBuf  *bytes.Buffer
+	lenBuf  [4]byte
+	enc     *binary.Encoder
+}
+
+func (w *entryWriter) write(e entry, record []byte) (*recordLocation, error) {
+	// Encode the entry
+	w.encBuf.Reset()
+	w.enc.Reset(w.encBuf)
+	err := w.enc.Encode(e)
+	if err != nil {
+		return nil, err
+	}
+	if len(record) > 0 {
+		_ = w.encBuf.WriteByte(binary.EmptyObject)
+	}
+
+	// Encode the length
+	loc := new(recordLocation)
+	loc.HeaderLen = int64(w.encBuf.Len())
+	loc.RecordLen = int64(len(record))
+	stdbin.BigEndian.PutUint32(w.lenBuf[:], uint32(loc.HeaderLen+loc.RecordLen))
+
+	// Write to the main buffer
+	_, _ = w.mainBuf.Write(w.lenBuf[:])
+	loc.Offset = int64(w.mainBuf.Len())
+	_, _ = io.Copy(w.mainBuf, w.encBuf)
+	_, _ = w.mainBuf.Write(record)
+	return loc, nil
+}
+
+func (f *blockFile) entries(want func(typ entryType) bool) *entryIterator {
+	return &entryIterator{f, want, nil}
 }
 
 func (f *blockFile) ReadRange(start, end int64) *offsetReader {
@@ -268,7 +292,8 @@ func (f *blockFile) ReadRange(start, end int64) *offsetReader {
 
 type entryIterator struct {
 	*blockFile
-	err error
+	want func(entryType) bool
+	err  error
 }
 
 type entryPos struct {
@@ -278,26 +303,66 @@ type entryPos struct {
 }
 
 func (e *entryIterator) Range(yield func(int, entryPos) bool) {
-	rd := e.ReadRange(fileHeaderSize, 0)
+	rd := e.ReadRange(0, fileHeaderSize)
 	dec := new(binary.Decoder)
-	for i := 0; rd.Len() > 0; i++ {
+	var typ entryType
+	for i := 0; rd.offset < int64(len(e.data)); i++ {
+		rd.offset = rd.end
+
+		// Read the length
+		n := stdbin.BigEndian.Uint32(e.data[rd.offset:])
+		rd.offset += 4
+		start := rd.offset
+		rd.end = rd.offset + int64(n)
+
+		if e.want != nil {
+			// Read the entry type
+			dec.Reset(rd, binary.LeaveTrailing())
+			err := dec.StartObject()
+			if err != nil {
+				e.err = err
+				return
+			}
+			id, err := dec.Field()
+			switch {
+			case err == nil && id == 1:
+				// Ok
+			case err == nil /* and id != 1 */ || errors.Is(err, io.EOF):
+				e.err = errors.New("field Type is missing")
+				return
+			default:
+				e.err = err
+				return
+			}
+
+			err = typ.UnmarshalBinaryV2(dec)
+			if err != nil {
+				e.err = err
+				return
+			}
+
+			if !e.want(typ) {
+				continue
+			}
+		}
+
+		// Read the entry
+		rd.offset = start
 		dec.Reset(rd, binary.LeaveTrailing())
-		header := rd.offset
 		entry, err := unmarshalEntryBinaryV2(dec)
 		if err != nil {
 			e.err = err
 			return
 		}
+
+		// Yield
 		pos := entryPos{
 			entry: entry,
-			Start: header,
+			Start: start,
 			End:   rd.offset,
 		}
 		if !yield(i, pos) {
 			return
-		}
-		if r, ok := entry.(*recordEntry); ok && r.Length > 0 {
-			rd.offset += r.Length
 		}
 	}
 }

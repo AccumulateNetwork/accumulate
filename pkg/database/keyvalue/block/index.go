@@ -42,13 +42,11 @@ func (r *recordIndex) indexBlocks(files []*blockFile) error {
 	for i, f := range files {
 		slog.Info("Indexing blocks", "file", filepath.Base(f.file.Name()), "module", "database")
 
-		it := f.entries()
+		it := f.entries(func(typ entryType) bool {
+			return typ == entryTypeStartBlock
+		})
 		it.Range(func(_ int, item entryPos) bool {
-			s, ok := item.entry.(*startBlockEntry)
-			if !ok {
-				return true
-			}
-
+			s := item.entry.(*startBlockEntry)
 			if _, ok := blocks.Get(s.blockID); ok {
 				it.err = fmt.Errorf("%v is corrupted: duplicate block %v", f.file.Name(), s.blockID.String())
 				return false
@@ -157,7 +155,7 @@ func (r *recordIndex) indexRecords(dir string, files []*blockFile) error {
 		slog.Info("Indexing entries", "file", filepath.Base(f.file.Name()), "module", "database")
 		var block *blockID
 
-		it := f.entries()
+		it := f.entries(nil)
 		it.Range(func(_ int, item entryPos) bool {
 			switch e := item.entry.(type) {
 			case *startBlockEntry:

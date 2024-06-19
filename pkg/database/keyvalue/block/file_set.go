@@ -62,7 +62,7 @@ func (db *Database) openFileSet(dir string) error {
 	// Determine the first block of each file
 	first := make(map[*blockFile]*blockID, len(db.files.files))
 	for _, f := range db.files.files {
-		it := f.entries()
+		it := f.entries(nil)
 		it.Range(func(_ int, item entryPos) bool {
 			s, ok := item.entry.(*startBlockEntry)
 			if ok {

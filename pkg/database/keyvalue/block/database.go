@@ -75,13 +75,11 @@ func Open(path string, options ...Option) (_ *Database, err error) {
 
 	// Determine the next block number
 	if len(db.files.files) > 0 {
-		it := db.files.files[len(db.files.files)-1].entries()
+		it := db.files.files[len(db.files.files)-1].entries(func(typ entryType) bool {
+			return typ == entryTypeStartBlock
+		})
 		it.Range(func(_ int, item entryPos) bool {
-			s, ok := item.entry.(*startBlockEntry)
-			if !ok {
-				return true
-			}
-
+			s := item.entry.(*startBlockEntry)
 			if db.nextBlock.Load() < s.ID {
 				db.nextBlock.Store(s.ID)
 			}
