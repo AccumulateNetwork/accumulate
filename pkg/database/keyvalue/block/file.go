@@ -24,12 +24,7 @@ type file struct {
 func openFile(name string, flags int) (_ *file, err error) {
 	f := new(file)
 	f.mu = new(sync.RWMutex)
-
-	defer func() {
-		if err != nil {
-			_ = f.Close()
-		}
-	}()
+	defer closeIfError(&err, f)
 
 	f.file, err = os.OpenFile(name, flags, 0600)
 	if err != nil {
@@ -82,34 +77,52 @@ func (f *file) ReadRange(start, end int64) *fileReader {
 	return &fileReader{f, start, end}
 }
 
-func (f *file) WriteAt(offset int64, b []byte) (int, error) {
-	err := f.unmap()
+func (f *file) WriteRange(start, end int64) *fileWriter {
+	return &fileWriter{f, start, end}
+}
+
+func (f *file) WriteAt(b []byte, offset int64) (int, error) {
+	err := f.Grow(offset + int64(len(b)))
 	if err != nil {
 		return 0, err
 	}
 
-	n := offset + int64(len(b))
-	err = f.file.Truncate(n)
-	if err != nil {
-		return 0, err
-	}
-
-	f.data, err = mmap.MapRegion(f.file, int(n), mmap.RDWR, 0, 0)
-	if err != nil {
-		return 0, err
-	}
-
+	f.mu.RLock()
+	defer f.mu.RUnlock()
 	m := copy(f.data[offset:], b)
 	return m, nil
 }
 
-func (f *file) unmap() error {
-	if f.data == nil {
+func (f *file) Grow(size int64) error {
+	// Fast path
+	f.mu.RLock()
+	if len(f.data) >= int(size) {
+		f.mu.RUnlock()
 		return nil
 	}
 
-	err := f.data.Unmap()
-	f.data = nil
+	// Upgrade to exclusive lock
+	f.mu.RUnlock()
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if len(f.data) >= int(size) {
+		return nil
+	}
+
+	if f.data != nil {
+		err := f.data.Unmap()
+		if err != nil {
+			return err
+		}
+	}
+
+	err := f.file.Truncate(size)
+	if err != nil {
+		return err
+	}
+
+	f.data, err = mmap.MapRegion(f.file, int(size), mmap.RDWR, 0, 0)
 	return err
 }
 

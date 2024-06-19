@@ -24,7 +24,6 @@ type blockFile struct {
 	*config
 	file   *file
 	header *fileHeader
-	dec    binary.Decoder
 }
 
 type entryAndData struct {
@@ -32,16 +31,16 @@ type entryAndData struct {
 	Value []byte
 }
 
-func newBlockFile(c *config, name string) (*blockFile, error) {
+func newBlockFile(c *config, name string) (_ *blockFile, err error) {
 	f := new(blockFile)
 	f.config = c
 	f.header = new(fileHeader)
 
-	var err error
 	f.file, err = openFile(name, os.O_RDWR|os.O_CREATE|os.O_EXCL)
 	if err != nil {
 		return nil, err
 	}
+	defer closeIfError(&err, f)
 
 	b, err := f.header.MarshalBinary()
 	if err != nil {
@@ -56,7 +55,7 @@ func newBlockFile(c *config, name string) (*blockFile, error) {
 	}
 	b = append(b, make([]byte, fileHeaderSize-len(b))...)
 
-	_, err = f.file.WriteAt(0, b)
+	_, err = f.file.WriteAt(b, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -64,16 +63,16 @@ func newBlockFile(c *config, name string) (*blockFile, error) {
 	return f, nil
 }
 
-func (c *config) openFile(name string) (*blockFile, error) {
+func (c *config) openFile(name string) (_ *blockFile, err error) {
 	f := new(blockFile)
 	f.config = c
 	f.header = new(fileHeader)
 
-	var err error
 	f.file, err = openFile(name, os.O_RDWR)
 	if err != nil {
 		return nil, err
 	}
+	defer closeIfError(&err, f)
 
 	if f.file.Len() < fileHeaderSize {
 		return nil, errors.New("file header is missing or corrupted")
@@ -88,9 +87,10 @@ func (c *config) openFile(name string) (*blockFile, error) {
 }
 
 func (f *blockFile) ReadHeader(l *recordLocation) (*recordEntry, error) {
-	f.dec.Reset(f.file.ReadRange(l.Offset, l.Offset+l.HeaderLen))
+	rd := f.file.ReadRange(l.Offset, l.Offset+l.HeaderLen)
+	dec := binary.NewDecoder(rd)
 	e := new(recordEntry)
-	err := e.UnmarshalBinaryV2(&f.dec)
+	err := e.UnmarshalBinaryV2(dec)
 	return e, err
 }
 
@@ -164,7 +164,7 @@ func (f *blockFile) writeEntries(fileIndex int, view *recordIndexView, entries [
 
 		// Write the buffer
 		if w.mainBuf.Len() > bufLimit {
-			_, err = f.file.WriteAt(offset, w.mainBuf.Bytes())
+			_, err = f.file.WriteAt(w.mainBuf.Bytes(), offset)
 			if err != nil {
 				return 0, err
 			}
@@ -180,7 +180,7 @@ func (f *blockFile) writeEntries(fileIndex int, view *recordIndexView, entries [
 	}
 
 	// Write the buffer
-	_, err = f.file.WriteAt(offset, w.mainBuf.Bytes())
+	_, err = f.file.WriteAt(w.mainBuf.Bytes(), offset)
 	if err != nil {
 		return 0, err
 	}
