@@ -15,7 +15,11 @@ type vmap[K comparable, V any] struct {
 	mu    sync.Mutex
 	stack []map[K]V
 	refs  []int
-	read  func(K) (V, bool)
+	fn    struct {
+		get     func(K) (V, bool)
+		forEach func(func(K, V) error) error
+		commit  func(map[K]V) error
+	}
 }
 
 func (v *vmap[K, V]) View() *vmapView[K, V] {
@@ -36,7 +40,11 @@ func (v *vmap[K, V]) View() *vmapView[K, V] {
 	return u
 }
 
-func (v *vmap[K, V]) Commit(fn func(map[K]V) error) error {
+func (v *vmap[K, V]) commit() error {
+	if v.fn.commit == nil {
+		return nil
+	}
+
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
@@ -48,7 +56,7 @@ func (v *vmap[K, V]) Commit(fn func(map[K]V) error) error {
 	v.stack[0] = nil
 	v.stack = v.stack[:0]
 	v.refs = v.refs[:0]
-	return fn(values)
+	return v.fn.commit(values)
 }
 
 func (v *vmap[K, V]) get(level int, k K) (V, bool) {
@@ -58,8 +66,8 @@ func (v *vmap[K, V]) get(level int, k K) (V, bool) {
 		}
 	}
 
-	if v.read != nil {
-		return v.read(k)
+	if v.fn.get != nil {
+		return v.fn.get(k)
 	}
 
 	var z V
@@ -79,6 +87,17 @@ func (v *vmap[K, V]) forEach(level int, seen map[K]bool, fn func(K, V) error) er
 			}
 		}
 	}
+
+	if v.fn.forEach != nil {
+		return v.fn.forEach(func(k K, v V) error {
+			if seen[k] {
+				return nil
+			}
+			seen[k] = true
+			return fn(k, v)
+		})
+	}
+
 	return nil
 }
 
@@ -167,5 +186,5 @@ func (v *vmapView[K, V]) Discard() {
 
 func (v *vmapView[K, V]) Commit() error {
 	v.done.Do(func() { v.vm.release(v.level, v.mine) })
-	return nil
+	return v.vm.commit()
 }

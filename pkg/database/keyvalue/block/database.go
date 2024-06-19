@@ -8,6 +8,7 @@ package block
 
 import (
 	"encoding/binary"
+	"errors"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -98,7 +99,7 @@ func Open(path string, options ...Option) (_ *Database, err error) {
 	}
 
 	// Build the block index
-	err = db.index.indexRecords(db.files.files)
+	err = db.index.indexRecords(path, db.files.files)
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +108,10 @@ func Open(path string, options ...Option) (_ *Database, err error) {
 }
 
 func (db *Database) Close() error {
-	return db.files.Close()
+	return errors.Join(
+		db.files.Close(),
+		db.index.db.Close(),
+	)
 }
 
 // Begin begins a change set.

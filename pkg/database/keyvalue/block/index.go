@@ -8,21 +8,29 @@ package block
 
 import (
 	"fmt"
+	"io/fs"
+	"os"
 	"path/filepath"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
+	"github.com/syndtr/goleveldb/leveldb"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/bpt"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
+	ldb2 "gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/leveldb"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	"gitlab.com/accumulatenetwork/core/schema/pkg/binary"
 	"golang.org/x/exp/slog"
 )
 
 type recordIndex struct {
+	db      *leveldb.DB
 	blocks  vmap[blockID, int]
 	records vmap[[32]byte, *recordLocation]
 }
 
 type recordIndexView struct {
+	index   *recordIndex
 	files   []*blockFile
 	blocks  *vmapView[blockID, int]
 	records *vmapView[[32]byte, *recordLocation]
@@ -56,7 +64,92 @@ func (r *recordIndex) indexBlocks(files []*blockFile) error {
 	return blocks.Commit()
 }
 
-func (r *recordIndex) indexRecords(files []*blockFile) error {
+func (r *recordIndex) openDB(dir string) (exists bool, err error) {
+	path := filepath.Join(dir, "index.ldb")
+	_, err = os.Stat(path)
+	switch {
+	case err == nil:
+		exists = true
+	case !errors.Is(err, fs.ErrNotExist):
+		return false, err
+	}
+
+	r.db, err = leveldb.OpenFile(path, nil)
+	if err != nil {
+		return false, err
+	}
+
+	rBPT := r.openBPT((*kvstore)(r))
+	r.records.fn.get = func(key [32]byte) (*recordLocation, bool) {
+		b, err := rBPT.Get(record.KeyFromHash(key))
+		if err != nil {
+			if !errors.Is(err, errors.NotFound) {
+				slog.Error("Failed to look up record location", "error", err)
+			}
+			return nil, false
+		}
+
+		loc := new(recordLocation)
+		err = loc.UnmarshalBinary(b)
+		if err != nil {
+			slog.Error("Failed to decode record location", "error", err)
+			return nil, false
+		}
+		return loc, true
+	}
+
+	r.records.fn.forEach = func(fn func([32]byte, *recordLocation) error) error {
+		return bpt.ForEach(rBPT, func(key *record.Key, value []byte) error {
+			loc := new(recordLocation)
+			err = loc.UnmarshalBinary(value)
+			if err != nil {
+				return err
+			}
+			return fn(key.Hash(), loc)
+		})
+	}
+
+	r.records.fn.commit = func(entries map[[32]byte]*recordLocation) error {
+		batch := ldb2.New(r.db).Begin(nil, true)
+		wBPT := r.openBPT(keyvalue.RecordStore{Store: batch})
+
+		for kh, loc := range entries {
+			b, err := loc.MarshalBinary()
+			if err != nil {
+				return err
+			}
+			err = wBPT.Insert(record.KeyFromHash(kh), b)
+			if err != nil {
+				return err
+			}
+		}
+
+		err = wBPT.Commit()
+		if err != nil {
+			return err
+		}
+		err = batch.Commit()
+		if err != nil {
+			return err
+		}
+
+		rBPT = r.openBPT((*kvstore)(r))
+		return nil
+	}
+
+	return exists, nil
+}
+
+func (r *recordIndex) indexRecords(dir string, files []*blockFile) error {
+	exists, err := r.openDB(dir)
+	if err != nil {
+		return err
+	}
+
+	if exists {
+		return nil
+	}
+
 	records := r.records.View()
 	for _, f := range files {
 		slog.Info("Indexing entries", "file", filepath.Base(f.file.Name()), "module", "database")
@@ -103,11 +196,23 @@ func (r *recordIndex) indexRecords(files []*blockFile) error {
 	return records.Commit()
 }
 
+func (r *recordIndex) openBPT(store database.Store) *bpt.BPT {
+	b := bpt.New(nil, nil, store, nil)
+	err := b.SetParams(bpt.Parameters{
+		Power:           8,
+		ArbitraryValues: true,
+	})
+	if err != nil {
+		panic(err)
+	}
+	return b
+}
+
 func (r *recordIndex) View(files []*blockFile) *recordIndexView {
 	return &recordIndexView{
-		files:   files,
-		blocks:  r.blocks.View(),
-		records: r.records.View(),
+		r, files,
+		r.blocks.View(),
+		r.records.View(),
 	}
 }
 
@@ -202,4 +307,23 @@ func (l *recordLocation) readRecord(f *blockFile) ([]byte, error) {
 	b := make([]byte, l.RecordLen)
 	_, err := f.ReadAt(b, l.Offset+l.HeaderLen)
 	return b, err
+}
+
+type kvstore recordIndex
+
+func (s *kvstore) GetValue(key *record.Key, value database.Value) error {
+	kh := key.Hash()
+	b, err := s.db.Get(kh[:], nil)
+	switch {
+	case err == nil:
+		return value.LoadBytes(b, false)
+	case errors.Is(err, leveldb.ErrNotFound):
+		return (*database.NotFoundError)(key)
+	default:
+		return err
+	}
+}
+
+func (s *kvstore) PutValue(key *record.Key, value database.Value) error {
+	panic("read-only")
 }

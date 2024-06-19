@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"math/big"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -114,7 +115,9 @@ func TestFileLimit(t *testing.T) {
 	ent, err := os.ReadDir(dir)
 	require.NoError(t, err)
 	for _, ent := range ent {
-		files = append(files, ent.Name())
+		if strings.HasSuffix(ent.Name(), dotBlocks) {
+			files = append(files, ent.Name())
+		}
 	}
 	require.ElementsMatch(t, []string{
 		"1.blocks",
