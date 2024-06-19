@@ -20,7 +20,6 @@ import (
 	ldb2 "gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/leveldb"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
-	"gitlab.com/accumulatenetwork/core/schema/pkg/binary"
 	"golang.org/x/exp/slog"
 )
 
@@ -234,7 +233,7 @@ func (r *recordIndexView) Get(key *record.Key) ([]byte, error) {
 		return nil, err
 	}
 
-	return loc.readRecord(f)
+	return f.ReadRecord(loc)
 }
 
 func (r *recordIndexView) ForEach(fn func(*record.Key, []byte) error) error {
@@ -249,12 +248,12 @@ func (r *recordIndexView) ForEach(fn func(*record.Key, []byte) error) error {
 			return err
 		}
 
-		header, err := loc.readHeader(f)
+		header, err := f.ReadHeader(loc)
 		if err != nil {
 			return err
 		}
 
-		record, err := loc.readRecord(f)
+		record, err := f.ReadRecord(loc)
 		if err != nil {
 			return err
 		}
@@ -273,7 +272,7 @@ func (r *recordIndexView) getFile(l *recordLocation) (*blockFile, error) {
 	}
 
 	f := r.files[i]
-	if f.Len() < int(l.end()) {
+	if f.file.Len() < int(l.end()) {
 		return nil, errors.InternalError.With("corrupted: record is past the end of the file")
 	}
 	return f, nil
@@ -297,23 +296,6 @@ func (l *recordLocation) end() int64 {
 		x += l.RecordLen
 	}
 	return x
-}
-
-func (l *recordLocation) readHeader(f *blockFile) (*recordEntry, error) {
-	rd := f.ReadRange(l.Offset, l.Offset+l.HeaderLen)
-	dec := binary.NewDecoder(rd)
-	e := new(recordEntry)
-	err := e.UnmarshalBinaryV2(dec)
-	return e, err
-}
-
-func (l *recordLocation) readRecord(f *blockFile) ([]byte, error) {
-	if l.RecordLen < 0 {
-		panic("record was deleted")
-	}
-	b := make([]byte, l.RecordLen)
-	_, err := f.ReadAt(b, l.Offset+l.HeaderLen)
-	return b, err
 }
 
 type kvstore recordIndex

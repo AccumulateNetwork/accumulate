@@ -100,7 +100,7 @@ func (b *blockFileSet) new(block *blockID) (*blockFile, error) {
 		return nil, fmt.Errorf("invalid block file name: %q contains a slash or is empty", name)
 	}
 
-	f, err := newFile(b.config, filepath.Join(b.path, name))
+	f, err := newBlockFile(b.config, filepath.Join(b.path, name))
 	if err != nil {
 		return nil, err
 	}
