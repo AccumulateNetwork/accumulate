@@ -11,7 +11,6 @@ import (
 	"io"
 	"unsafe"
 
-	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/core/schema/pkg/binary"
 )
@@ -21,33 +20,75 @@ const paramsV2Magic = "\xC0\xFF\xEE"
 // paramsStateSize is the marshaled size of [parameters].
 const paramsStateSize = 1 + 2 + 2 + 32
 
-// paramsRecord is a wrapper around Value that sets the power to 8 if the
-// parameters have not been configured.
-type paramsRecord struct {
-	values.Value[*stateData]
+func (b *BPT) SetParams(p parameters) error {
+	if b.loadedState == nil {
+		s, err := b.getState().Get()
+		switch {
+		case err == nil:
+			b.loadedState = s
+		case errors.Is(err, errors.NotFound):
+			b.loadedState = new(stateData)
+		default:
+			return errors.UnknownError.Wrap(err)
+		}
+	}
+
+	if b.loadedState.parameters == (parameters{}) {
+		b.loadedState.parameters = p
+		return b.storeState()
+	}
+
+	if !b.loadedState.parameters.Equal(&p) {
+		return errors.BadRequest.With("BPT parameters cannot be modified")
+	}
+	return nil
 }
 
-// Get loads the parameters, initializing them to the default values if they
-// have not been set.
-func (p paramsRecord) Get() (*stateData, error) {
-	v, err := p.Value.Get()
+// loadState loads the state or returns the previously loaded value. If the
+// state has not been populated, loadState sets it to the default.
+func (b *BPT) loadState() (*stateData, error) {
+	if b.loadedState != nil {
+		return b.loadedState, nil
+	}
+
+	s, err := b.getState().Get()
 	switch {
 	case err == nil:
-		return v, nil
+		b.loadedState = s
+		return s, nil
 	case !errors.Is(err, errors.NotFound):
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	// TODO Allow power to be configurable?
-	v = new(stateData)
-	v.Power = 8
-	v.Mask = v.Power - 1
-	err = p.Value.Put(v)
+	// Set defaults
+	b.loadedState = new(stateData)
+	err = b.storeState()
+	return b.loadedState, err
+}
+
+func (b *BPT) mustLoadState() *stateData {
+	s, err := b.loadState()
 	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
+		panic(err)
+	}
+	return s
+}
+
+func (b *BPT) storeState() error {
+	s := b.loadedState
+	if s == nil {
+		panic("state has not been loaded")
 	}
 
-	return v, nil
+	// Default power
+	if s.Power == 0 {
+		s.Power = 8
+	}
+
+	// Mask is always power - 1
+	s.Mask = s.Power - 1
+
+	return b.getState().Put(s)
 }
 
 func (r *stateData) MarshalBinary() ([]byte, error) {
