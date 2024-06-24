@@ -7,6 +7,9 @@
 package bpt
 
 import (
+	"bytes"
+	"fmt"
+
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 )
@@ -16,16 +19,22 @@ type mutation struct {
 	committed bool
 	delete    bool
 	key       *record.Key
-	value     [32]byte
+	value     []byte
 }
 
 // Insert updates or inserts a hash for the given key. Insert may defer the
 // actual update.
-func (b *BPT) Insert(key *record.Key, hash [32]byte) error {
+func (b *BPT) Insert(key *record.Key, value []byte) error {
 	if b.pending == nil {
 		b.pending = map[[32]byte]*mutation{}
 	}
-	b.pending[key.Hash()] = &mutation{key: key, value: hash}
+	if len(value) != 32 {
+		return fmt.Errorf("invalid value: want 32 bytes, got %d", len(value))
+	}
+	// Copy the value
+	v := make([]byte, len(value))
+	copy(v, value)
+	b.pending[key.Hash()] = &mutation{key: key, value: v}
 	return nil
 }
 
@@ -52,7 +61,7 @@ func (b *BPT) executePending() error {
 		if e.delete {
 			_, err = b.getRoot().delete(e.key)
 		} else {
-			_, err = b.getRoot().insert(&leaf{Key: e.key, Hash: e.value})
+			_, err = b.getRoot().insert(&leaf{Key: e.key, Value: e.value})
 		}
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
@@ -93,12 +102,12 @@ func (e *branch) insert(l *leaf) (updated bool, err error) {
 		// hash is new, update the hash and return the value to indicate it has been
 		// updated. If the key does not match, the value must be split.
 		if g.Key.Hash() == l.Key.Hash() {
-			if g.Hash == l.Hash {
+			if bytes.Equal(g.Value, l.Value) {
 				return false, nil // No change
 			}
 
 			g.Key = l.Key             // Update the key in case its expanded now
-			g.Hash = l.Hash           // Update the hash
+			g.Value = l.Value         // Update the value
 			e.status = branchUnhashed // Mark the branch as unhashed
 			return true, nil
 		}

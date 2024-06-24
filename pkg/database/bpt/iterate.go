@@ -12,7 +12,7 @@ import (
 )
 
 // ForEach calls the callback for each BPT entry.
-func ForEach(b *BPT, fn func(key *record.Key, hash [32]byte) error) error {
+func ForEach(b *BPT, fn func(key *record.Key, hash []byte) error) error {
 	it := b.Iterate(1000)
 	for it.Next() {
 		for _, v := range it.Value() {
@@ -82,19 +82,19 @@ func (it *Iterator) Err() error { return it.err }
 // walkNode processes the entry (which is both left and right, but the same logic)
 func walkNode(n node, found *bool, key [32]byte, values []KeyValuePair, pos *int) error {
 	switch n := n.(type) {
-	case *emptyNode: //                                           If we find a nil, we have found our starting
-		*found = true //                                          point. But we have nothing to do.
+	case *emptyNode: //                                            If we find a nil, we have found our starting
+		*found = true //                                           point. But we have nothing to do.
 
-	case *branch: //                                              If a node, recurse and get its stuff.
+	case *branch: //                                               If a node, recurse and get its stuff.
 		return n.walkRange(found, key, values, pos)
 
-	case *leaf: //                                                If not a node, not nil, it is a value.
-		*found = true            //                                      No matter what, start collecting the range
-		if n.Key.Hash() == key { //                                      But don't collect if equal to the key
-			break //                                              because we use the last key to get the
-		} //                                                      next range
-		values[*pos] = KeyValuePair{Key: n.Key, Value: n.Hash} // Otherwise copy the value out of the BPT
-		*pos++                                                 // and stuff it in the values list
+	case *leaf: //                                                 If not a node, not nil, it is a value.
+		*found = true            //                                       No matter what, start collecting the range
+		if n.Key.Hash() == key { //                                       But don't collect if equal to the key
+			break //                                               because we use the last key to get the
+		} //                                                       next range
+		values[*pos] = KeyValuePair{Key: n.Key, Value: n.Value} // Otherwise copy the value out of the BPT
+		*pos++                                                  // and stuff it in the values list
 	}
 
 	return nil
