@@ -153,7 +153,7 @@ func TestRange(t *testing.T) {
 	require.NoError(t, model.Commit())
 
 	// Make sure there are enough entries to create multiple blocks
-	s, err := model.BPT().getState().Get()
+	s, err := model.BPT().loadState()
 	require.NoError(t, err)
 	fmt.Printf("Max height is %d\n", s.MaxHeight)
 	require.Greater(t, s.MaxHeight, s.Power)
