@@ -22,13 +22,13 @@ type BPT struct {
 	key     *record.Key
 	pending map[[32]byte]*mutation
 
-	state values.Value[*parameters]
+	state values.Value[*stateData]
 	root  *rootRecord
 }
 
 func (c *BPT) Key() *record.Key { return c.key }
 
-func (c *BPT) getState() values.Value[*parameters] {
+func (c *BPT) getState() values.Value[*stateData] {
 	return values.GetOrCreate(c, &c.state, (*BPT).newState)
 }
 
