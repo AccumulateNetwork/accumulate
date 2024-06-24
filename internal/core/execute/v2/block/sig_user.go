@@ -33,15 +33,10 @@ func init() {
 		protocol.SignatureTypeETH,
 	)
 
-	// RSA signatures (enabled with Vandenberg)
+	// Vandenberg: RSA and ECDSA signatures
 	registerConditionalExec[UserSignature](&signatureExecutors,
 		func(ctx *SignatureContext) bool { return ctx.GetActiveGlobals().ExecutorVersion.V2VandenbergEnabled() },
 		protocol.SignatureTypeRsaSha256,
-	)
-
-	// PKI signatures (enabled with Vandenberg)
-	registerConditionalExec[UserSignature](&signatureExecutors,
-		func(ctx *SignatureContext) bool { return ctx.GetActiveGlobals().ExecutorVersion.V2VandenbergEnabled() },
 		protocol.SignatureTypeEcdsaSha256,
 	)
 }
@@ -136,6 +131,14 @@ func (x UserSignature) check(batch *database.Batch, ctx *userSigContext) error {
 	err = x.verifyCanPay(batch, ctx)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
+	}
+
+	// A lite identity may not require additional authorities
+	if ctx.GetActiveGlobals().ExecutorVersion.V2VandenbergEnabled() &&
+		ctx.signer.Type() == protocol.AccountTypeLiteIdentity &&
+		len(ctx.transaction.Header.Authorities) > 0 &&
+		ctx.isInitiator {
+		return errors.BadRequest.WithFormat("a transaction initiated by a lite identity cannot require additional authorities")
 	}
 
 	return nil
@@ -437,25 +440,23 @@ func (UserSignature) process(batch *database.Batch, ctx *userSigContext) error {
 // sendSignatureRequests sends signature requests so that the transaction
 // will appear on the appropriate pending lists.
 func (UserSignature) sendSignatureRequests(batch *database.Batch, ctx *userSigContext) error {
-	// If the signer is a lite identity, do not send a signature request
-	if _, ok := ctx.signer.(*protocol.LiteIdentity); ok &&
-		ctx.GetActiveGlobals().ExecutorVersion.V2VandenbergEnabled() {
-		return nil
-	}
-
 	// If this is the initiator signature
 	if !ctx.isInitiator {
 		return nil
 	}
 
-	// Send a notice to the principal
-	msg := new(messaging.SignatureRequest)
-	msg.Authority = ctx.transaction.Header.Principal
-	msg.Cause = ctx.message.ID()
-	msg.TxID = ctx.transaction.ID()
-	err := ctx.didProduce(batch, msg.Authority, msg)
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
+	// Send a notice to the principal, unless principal is a lite identity
+	_, err := protocol.ParseLiteAddress(ctx.transaction.Header.Principal)
+	isLite := err == nil && ctx.GetActiveGlobals().ExecutorVersion.V2VandenbergEnabled()
+	if !isLite {
+		msg := new(messaging.SignatureRequest)
+		msg.Authority = ctx.transaction.Header.Principal
+		msg.Cause = ctx.message.ID()
+		msg.TxID = ctx.transaction.ID()
+		err := ctx.didProduce(batch, msg.Authority, msg)
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
 	}
 
 	// If transaction requests additional authorities, send out signature requests
