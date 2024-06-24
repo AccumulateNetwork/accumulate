@@ -144,8 +144,13 @@ func (v *leaf) writeTo(wr io.Writer) (err error) {
 		tryWrite(&err, wr, kh[:])
 	}
 
-	// Write the value hash
-	tryWrite(&err, wr, v.Hash[:])
+	if len(v.Value) == 32 {
+		// Write the value hash
+		tryWrite(&err, wr, v.Value[:])
+
+	} else {
+		return fmt.Errorf("invalid BPT value length: want 32 bytes, got %d", len(v.Value))
+	}
 	return err
 }
 
@@ -159,7 +164,7 @@ func (v *leaf) readFrom(rd *bytes.Buffer, o marshalOpts) error {
 
 		// Read the key
 		b := make([]byte, l)
-		_, err = rd.Read(b)
+		_, err = io.ReadFull(rd, b)
 		if err != nil {
 			return err
 		}
@@ -172,7 +177,8 @@ func (v *leaf) readFrom(rd *bytes.Buffer, o marshalOpts) error {
 		}
 
 		// Read the hash
-		_, err = rd.Read(v.Hash[:])
+		v.Value = make([]byte, 32)
+		_, err = io.ReadFull(rd, v.Value)
 		return err
 	}
 
@@ -185,7 +191,7 @@ func (v *leaf) readFrom(rd *bytes.Buffer, o marshalOpts) error {
 
 	// Read the fields
 	v.Key = record.NewKey(*(*record.KeyHash)(buf[:]))
-	v.Hash = *(*[32]byte)(buf[32:])
+	v.Value = buf[32:]
 	return nil
 }
 
