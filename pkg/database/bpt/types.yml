@@ -66,8 +66,8 @@ leaf:
       type: record.Key
       marshal-as: reference
       pointer: true
-    - name: Hash
-      type: hash
+    - name: Value
+      type: bytes
 
     - name: parent
       type: branch
