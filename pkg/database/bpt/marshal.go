@@ -13,54 +13,14 @@ import (
 	"io"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 )
-
-// paramsStateSize is the marshaled size of [parameters].
-const paramsStateSize = 1 + 2 + 2 + 32
 
 // branchStateSize is the marshaled size of [branch].
 const branchStateSize = 32 + 1 + 32
 
 // leafStateSize is the marshaled size of [leaf].
 const leafStateSize = 32 + 32
-
-func (r *parameters) MarshalBinary() ([]byte, error) {
-	// Marshal the fields
-	var data []byte
-	data = append(data, byte(r.MaxHeight))
-	data = append(data, byte(r.Power>>8), byte(r.Power))
-	data = append(data, byte(r.Mask>>8), byte(r.Mask))
-	data = append(data, r.RootHash[:]...)
-	return data, nil
-}
-
-func (r *parameters) UnmarshalBinary(data []byte) error {
-	// Check the size
-	if len(data) != paramsStateSize {
-		return encoding.ErrNotEnoughData
-	}
-
-	// Unmarshal the fields
-	r.MaxHeight = uint64(data[0])
-	r.Power = uint64(data[1])<<8 + uint64(data[2])
-	r.Mask = uint64(data[3])<<8 + uint64(data[4])
-	r.RootHash = *(*[32]byte)(data[5:])
-	return nil
-}
-
-func (r *parameters) UnmarshalBinaryFrom(rd io.Reader) error {
-	// Read paramStateSize bytes
-	var buf [paramsStateSize]byte
-	_, err := io.ReadFull(rd, buf[:])
-	if err != nil {
-		return err
-	}
-
-	// Unmarshal
-	return r.UnmarshalBinary(buf[:])
-}
 
 // tryWrite writes the bytes to the writer if err is nil. If the write returns
 // an error, tryWrite assigns it to err.
@@ -103,10 +63,6 @@ func (n *branch) readFrom(rd *bytes.Buffer, o marshalOpts) error {
 	n.Hash = *(*[32]byte)(buf[33:])
 	return nil
 }
-
-func (*emptyNode) Type() nodeType { return nodeTypeEmpty }
-
-func (*branch) Type() nodeType { return nodeTypeBranch }
 
 func (v *leaf) Type() nodeType {
 	if isExpandedKey(v.Key) {
