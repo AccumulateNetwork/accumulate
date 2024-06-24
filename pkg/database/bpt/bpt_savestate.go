@@ -7,6 +7,7 @@
 package bpt
 
 import (
+	"crypto/sha256"
 	"io"
 	"os"
 
@@ -66,13 +67,21 @@ func SaveSnapshotV1(b *BPT, file io.WriteSeeker, loadState func(key storage.Key,
 		bptVals := it.Value() // Read a thousand values from the BPT (intentionally mask the other variable)
 		NodeCnt += uint64(len(bptVals))
 
+		s := b.mustLoadState()
 		for _, v := range bptVals { //                      For all the key values we got (as many as 1000)
-			kh := v.Key.Hash()                                    //
+			kh := v.Key.Hash()
+			var vh [32]byte
+			if s.ArbitraryValues {
+				vh = sha256.Sum256(v.Value)
+			} else {
+				vh = [32]byte(v.Value)
+			}
+
 			_, e1 := file.Write(kh[:])                            // Write the key out
-			_, e2 := file.Write(v.Value)                          // Write the hash out
+			_, e2 := file.Write(vh[:])                            // Write the hash out
 			_, e3 := file.Write(common.Uint64FixedBytes(vOffset)) // And the current offset to the next value
 
-			value, e4 := loadState(kh, [32]byte(v.Value))        // Get that next value
+			value, e4 := loadState(kh, vh)                       // Get that next value
 			vLen := uint64(len(value))                           // get the value's length as uint64
 			_, e5 := values.Write(common.Uint64FixedBytes(vLen)) // Write out the length
 			_, e6 := values.Write(value)                         // write out the value
@@ -121,7 +130,7 @@ func SaveSnapshotV1(b *BPT, file io.WriteSeeker, loadState func(key storage.Key,
 
 // LoadSnapshotV1 restores a snapshot to the BPT
 func LoadSnapshotV1(b *BPT, file ioutil2.SectionReader, storeState func(key storage.Key, hash [32]byte, reader ioutil2.SectionReader) error) error {
-	s, err := b.getState().Get()
+	s, err := b.loadState()
 	if err != nil {
 		return err
 	}
