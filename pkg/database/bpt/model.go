@@ -14,11 +14,6 @@ import (
 
 func (v *stateData) CopyAsInterface() any { return v.Copy() }
 
-func (b *BPT) newState() values.Value[*stateData] {
-	v := values.NewValue(b.logger.L, b.store, b.key.Append("Root"), false, values.Struct[stateData]())
-	return paramsRecord{v}
-}
-
 // getRoot returns the root branch node, creating it if necessary.
 func (b *BPT) getRoot() *branch {
 	return values.GetOrCreate(b, &b.root, (*BPT).newRoot).branch

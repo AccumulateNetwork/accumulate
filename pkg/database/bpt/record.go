@@ -108,12 +108,9 @@ func (b *BPT) Commit() error {
 	}
 
 	// Update the root hash
-	s, err := b.getState().Get()
-	if err != nil {
-		return errors.UnknownError.WithFormat("load params: %w", err)
-	}
+	s := b.mustLoadState()
 	s.RootHash, _ = b.getRoot().getHash()
-	err = b.getState().Put(s)
+	err = b.storeState()
 	if err != nil {
 		return errors.UnknownError.WithFormat("store params: %w", err)
 	}
@@ -184,7 +181,7 @@ func (e nodeRecord) LoadValue(value record.ValueReader, put bool) error {
 	src := u.value
 
 	// Load the parameters
-	s, err := dst.bpt.getState().Get()
+	s, err := dst.bpt.loadState()
 	if err != nil {
 		return errors.UnknownError.WithFormat("load params: %w", err)
 	}
@@ -203,7 +200,7 @@ func (e nodeRecord) LoadBytes(data []byte, put bool) error {
 	}
 
 	// Load the BPT's parameters
-	s, err := e.value.bpt.getState().Get()
+	s, err := e.value.bpt.loadState()
 	if err != nil {
 		return errors.UnknownError.WithFormat("load BPT params: %w", err)
 	}
@@ -242,7 +239,7 @@ func (e nodeValue) UnmarshalBinary(data []byte) error { panic(errShim()) }
 // MarshalBinary implements [encoding.BinaryValue].
 func (e nodeValue) MarshalBinary() (data []byte, err error) {
 	// Load the BPT's parameters
-	s, err := e.value.bpt.getState().Get()
+	s, err := e.value.bpt.loadState()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load params: %w", err)
 	}
@@ -269,7 +266,7 @@ func (e *rootRecord) Key() *database.Key { return e.bpt.key.Append(e.Key) }
 // Commit implements [record.Commit].
 func (e *rootRecord) Commit() error {
 	// Load the BPT's parameters
-	s, err := e.bpt.getState().Get()
+	s, err := e.bpt.loadState()
 	if err != nil {
 		return errors.UnknownError.WithFormat("load params: %w", err)
 	}

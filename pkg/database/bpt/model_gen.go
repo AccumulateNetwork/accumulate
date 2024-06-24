@@ -17,10 +17,11 @@ import (
 )
 
 type BPT struct {
-	logger  logging.OptionalLogger
-	store   record.Store
-	key     *record.Key
-	pending map[[32]byte]*mutation
+	logger      logging.OptionalLogger
+	store       record.Store
+	key         *record.Key
+	pending     map[[32]byte]*mutation
+	loadedState *stateData
 
 	state values.Value[*stateData]
 	root  *rootRecord
@@ -30,6 +31,10 @@ func (c *BPT) Key() *record.Key { return c.key }
 
 func (c *BPT) getState() values.Value[*stateData] {
 	return values.GetOrCreate(c, &c.state, (*BPT).newState)
+}
+
+func (c *BPT) newState() values.Value[*stateData] {
+	return values.NewValue(c.logger.L, c.store, c.key.Append("Root"), false, values.Struct[stateData]())
 }
 
 func (c *BPT) baseIsDirty() bool {

@@ -62,9 +62,9 @@ func (e *leaf) IsDirty() bool { return false }
 func (e *branch) IsDirty() bool { return e.status != branchClean }
 
 // newBranch constructs a new child branch for the given key. newBranch updates
-// the parameters' max height if appropriate. newBranch returns an error if the
-// depth limit is exceeded.
-func (e *branch) newBranch(key [32]byte) (*branch, error) {
+// the parameters' max height if appropriate. newBranch panics if the depth
+// limit is exceeded.
+func (e *branch) newBranch(key [32]byte) *branch {
 	// Construct the branch
 	f := new(branch)
 	f.bpt = e.bpt
@@ -77,31 +77,28 @@ func (e *branch) newBranch(key [32]byte) (*branch, error) {
 	var ok bool
 	f.Key, ok = nodeKeyAt(f.Height, key)
 	if !ok {
-		return nil, errors.FatalError.With("BPT depth limit exceeded")
+		panic(errors.FatalError.With("BPT depth limit exceeded"))
 	}
 
 	// Update max height
-	s, err := e.bpt.getState().Get()
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load params: %w", err)
-	}
-	if f.Height <= s.MaxHeight {
-		return f, nil
+	s := e.bpt.mustLoadState()
+	if s.MaxHeight < f.Height {
+		s.MaxHeight = f.Height
 	}
 
-	s.MaxHeight = f.Height
-	err = e.bpt.getState().Put(s)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("store params: %w", err)
-	}
-	return f, nil
+	return f
 }
 
 // getHash returns an empty hash.
 func (*emptyNode) getHash() ([32]byte, bool) { return [32]byte{}, false }
 
 // getHash returns the leaf's hash.
-func (e *leaf) getHash() ([32]byte, bool) { return *(*[32]byte)(e.Value), true }
+func (e *leaf) getHash() ([32]byte, bool) {
+	if e.parent.bpt.mustLoadState().ArbitraryValues {
+		return sha256.Sum256(e.Value), true
+	}
+	return *(*[32]byte)(e.Value), true
+}
 
 // getHash returns the branch's hash, recalculating it if the branch has been
 // changed since the last getHash call.
@@ -163,7 +160,7 @@ func (e *branch) load() error {
 
 	// If this is the root node, get the hash from the parameters
 	if e.Height == 0 {
-		s, err := e.bpt.getState().Get()
+		s, err := e.bpt.loadState()
 		if err != nil {
 			return errors.UnknownError.WithFormat("load params: %w", err)
 		}
