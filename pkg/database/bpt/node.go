@@ -107,7 +107,7 @@ func (e *branch) newBranch(key [32]byte) (*branch, error) {
 func (*emptyNode) getHash() ([32]byte, bool) { return [32]byte{}, false }
 
 // getHash returns the leaf's hash.
-func (e *leaf) getHash() ([32]byte, bool) { return e.Hash, true }
+func (e *leaf) getHash() ([32]byte, bool) { return *(*[32]byte)(e.Value), true }
 
 // getHash returns the branch's hash, recalculating it if the branch has been
 // changed since the last getHash call.
