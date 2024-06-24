@@ -24,7 +24,7 @@ func BenchmarkInsert(b *testing.B) {
 
 	var rh common.RandHash
 	for i := 0; i < b.N; i++ {
-		err := bpt.Insert(record.KeyFromHash(rh.NextA()), rh.NextA())
+		err := bpt.Insert(record.KeyFromHash(rh.NextA()), rh.Next())
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -41,7 +41,7 @@ func BenchmarkInsertSubbatch(b *testing.B) {
 	var rh common.RandHash
 	for i := 0; i < b.N; i++ {
 		sub := model.Begin()
-		err := sub.BPT().Insert(record.KeyFromHash(rh.NextA()), rh.NextA())
+		err := sub.BPT().Insert(record.KeyFromHash(rh.NextA()), rh.Next())
 		if err != nil {
 			b.Fatal(err)
 		}

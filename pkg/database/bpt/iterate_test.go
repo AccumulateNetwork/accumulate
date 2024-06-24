@@ -36,7 +36,7 @@ func GetRangeFor(t *testing.T, numberEntries, rangeNum int) {
 	values.SetSeed([]byte{1, 2, 3})            //     use a different sequence for values
 	for i := 0; i < numberEntries; i++ {       // For the number of Entries specified for the BPT
 		chainID := keys.NextAList()                           //      Get a key, keep a list
-		value := values.NextA()                               //      Get some value (don't really care what it is)
+		value := values.Next()                                //      Get some value (don't really care what it is)
 		err := bpt.Insert(record.KeyFromHash(chainID), value) //      Insert the Key with the value into the BPT
 		require.NoError(t, err)
 	}
