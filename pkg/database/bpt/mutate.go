@@ -8,7 +8,6 @@ package bpt
 
 import (
 	"bytes"
-	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
@@ -28,9 +27,7 @@ func (b *BPT) Insert(key *record.Key, value []byte) error {
 	if b.pending == nil {
 		b.pending = map[[32]byte]*mutation{}
 	}
-	if len(value) != 32 {
-		return fmt.Errorf("invalid value: want 32 bytes, got %d", len(value))
-	}
+
 	// Copy the value
 	v := make([]byte, len(value))
 	copy(v, value)
@@ -50,8 +47,17 @@ func (b *BPT) Delete(key *record.Key) error {
 
 // executePending pushes pending updates into the tree.
 func (b *BPT) executePending() error {
+	s, err := b.loadState()
+	if err != nil {
+		return errors.UnknownError.WithFormat("load params: %w", err)
+	}
+
 	// Push the updates
 	for _, e := range b.pending {
+		if !s.ArbitraryValues && !e.delete && len(e.value) != 32 {
+			panic(errors.BadRequest.WithFormat("invalid value: want 32 bytes, got %d", len(e.value)))
+		}
+
 		if e.applied {
 			continue
 		}
@@ -113,10 +119,7 @@ func (e *branch) insert(l *leaf) (updated bool, err error) {
 		}
 
 		// Create a new branch
-		br, err := e.newBranch(g.Key.Hash())
-		if err != nil {
-			return false, errors.UnknownError.Wrap(err)
-		}
+		br := e.newBranch(g.Key.Hash())
 
 		// Insert the leaves into the branch
 		_, err = br.insert(g)
