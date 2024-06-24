@@ -6,8 +6,8 @@
 
 package bpt
 
-//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-enum --package bpt enums.yml
-//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --package bpt types.yml --union-skip-type
-//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --package bpt --language go-union --out unions_gen.go types.yml --union-skip-new
+//go:generate go run gitlab.com/accumulatenetwork/core/schema/cmd/generate schema schema.yml -w schema_gen.go
+//go:generate go run gitlab.com/accumulatenetwork/core/schema/cmd/generate types schema.yml -w types_gen.go
 //go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-model --package bpt model.yml
 //go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-model --package bpt --out model_gen_test.go model_test.yml
+//go:generate go run github.com/rinchsan/gosimports/cmd/gosimports -w .
