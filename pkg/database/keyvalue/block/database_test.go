@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"math/big"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -92,7 +93,7 @@ func TestDelete(t *testing.T) {
 func newOpener(t testing.TB) kvtest.Opener {
 	path := t.TempDir()
 	return func() (keyvalue.Beginner, error) {
-		return Open(path)
+		return Open(filepath.Join(path, "test.db"))
 	}
 }
 

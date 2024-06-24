@@ -8,6 +8,7 @@ package block
 
 import (
 	"bytes"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -53,7 +54,13 @@ func openIndexFileTree(cfg *config) (_ *indexFileTree, err error) {
 	defer closeIfError(&err, s)
 
 	entries, err := os.ReadDir(cfg.path)
-	if err != nil {
+	switch {
+	case err == nil,
+		errors.Is(err, fs.ErrNotExist):
+		// Directory exists, or doesn't
+
+	default:
+		// Some other error
 		return nil, err
 	}
 

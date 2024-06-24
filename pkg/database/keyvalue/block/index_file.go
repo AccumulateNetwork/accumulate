@@ -10,7 +10,9 @@ import (
 	stdbin "encoding/binary"
 	stderr "errors"
 	"fmt"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"sort"
 	"sync/atomic"
 	"unsafe"
@@ -28,6 +30,12 @@ type indexFile struct {
 }
 
 func newIndexFile(name string, level int) (_ *indexFile, err error) {
+	// Ensure the directory exists
+	err = os.Mkdir(filepath.Dir(name), 0700)
+	if err != nil && !errors.Is(err, fs.ErrExist) {
+		return nil, err
+	}
+
 	f := new(indexFile)
 	f.level = level
 	f.file, err = ioutil.OpenMappedFile(name, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0600)
