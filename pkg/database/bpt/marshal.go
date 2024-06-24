@@ -19,9 +19,6 @@ import (
 // branchStateSize is the marshaled size of [branch].
 const branchStateSize = 32 + 1 + 32
 
-// leafStateSize is the marshaled size of [leaf].
-const leafStateSize = 32 + 32
-
 // tryWrite writes the bytes to the writer if err is nil. If the write returns
 // an error, tryWrite assigns it to err.
 func tryWrite(err *error, wr io.Writer, b []byte) {
@@ -100,12 +97,20 @@ func (v *leaf) writeTo(wr io.Writer) (err error) {
 		tryWrite(&err, wr, kh[:])
 	}
 
-	if len(v.Value) == 32 {
+	s := v.parent.bpt.mustLoadState()
+	if !s.ArbitraryValues {
+		if len(v.Value) != 32 {
+			panic("value is not a hash")
+		}
 		// Write the value hash
 		tryWrite(&err, wr, v.Value[:])
 
 	} else {
-		return fmt.Errorf("invalid BPT value length: want 32 bytes, got %d", len(v.Value))
+		// Write the length then the value
+		var buf [10]byte
+		n := binary.PutUvarint(buf[:], uint64(len(v.Value)))
+		tryWrite(&err, wr, buf[:n])
+		tryWrite(&err, wr, v.Value)
 	}
 	return err
 }
@@ -132,22 +137,39 @@ func (v *leaf) readFrom(rd *bytes.Buffer, o marshalOpts) error {
 			return err
 		}
 
-		// Read the hash
-		v.Value = make([]byte, 32)
+	} else {
+		// Read the key hash
+		var kh [32]byte
+		_, err := io.ReadFull(rd, kh[:])
+		if err != nil {
+			return err
+		}
+		v.Key = record.KeyFromHash(kh)
+	}
+
+	s := v.parent.bpt.mustLoadState()
+	if s.ArbitraryValues {
+		// Read the value size
+		l, err := binary.ReadUvarint(rd)
+		if err != nil {
+			return err
+		}
+
+		// Read the value
+		v.Value = make([]byte, l)
 		_, err = io.ReadFull(rd, v.Value)
-		return err
-	}
+		if err != nil {
+			return err
+		}
 
-	// Read leafStateSize bytes
-	var buf [leafStateSize]byte
-	_, err := io.ReadFull(rd, buf[:])
-	if err != nil {
-		return err
+	} else {
+		// Read the value hash
+		v.Value = make([]byte, 32)
+		_, err := io.ReadFull(rd, v.Value)
+		if err != nil {
+			return err
+		}
 	}
-
-	// Read the fields
-	v.Key = record.NewKey(*(*record.KeyHash)(buf[:]))
-	v.Value = buf[32:]
 	return nil
 }
 
