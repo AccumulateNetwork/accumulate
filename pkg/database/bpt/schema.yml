@@ -1,0 +1,95 @@
+$generate:
+  widgets: true
+
+  import:
+    record: gitlab.com/accumulatenetwork/accumulate/pkg/types/record
+
+  varPrefix:
+    schema: s
+    widget: w
+
+stateData:
+  class: composite
+  fields:
+    - name: RootHash
+      type: hash
+    - name: MaxHeight
+      type: uint
+    - type:
+        name: parameters
+        class: composite
+        fields:
+          - name: Power
+            type: uint
+          - name: Mask
+            type: uint
+
+node:
+  class: union
+  discriminator:
+    field: Type
+    type:
+      name: nodeType
+      class: enum
+      underlying: int
+      values:
+        Empty:
+          description: is an empty node
+          value: 1
+        Branch:
+          description: is a branch node
+          value: 2
+        Leaf:
+          description: is a leaf node
+          value: 3
+        Boundary:
+          description: is the boundary between blocks
+          value: 4
+        LeafWithExpandedKey:
+          description: is a leaf node with an expanded key
+          label: leaf+key
+          value: 5
+
+  members:
+    - name: emptyNode
+      class: composite
+      transients:
+        - name: parent
+          type: '*branch'
+
+    - name: branch
+      class: composite
+      fields:
+        - name: Height
+          type: uint
+        - name: Key
+          type: hash
+        - name: Hash
+          type: hash
+
+      transients:
+        - name: bpt
+          type: '*BPT'
+        - name: parent
+          type: '*branch'
+        - name: status
+          type: branchStatus
+
+        - name: Left
+          type: node
+        - name: Right
+          type: node
+
+    - name: leaf
+      class: composite
+      generate:
+        methods: { discriminator: false }
+      fields:
+        - name: Key
+          type: '*record.Key'
+        - name: Value
+          type: bytes
+
+      transients:
+        - name: parent
+          type: '*branch'

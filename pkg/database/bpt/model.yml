@@ -13,7 +13,7 @@
     omitConstructor: true
     type: state
     key: Root
-    dataType: parameters
+    dataType: stateData
     pointer: true
   - name: Root
     private: true
