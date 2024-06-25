@@ -85,20 +85,22 @@ type MappedFileRange struct {
 	End      int64
 }
 
-func (f *MappedFile) Acquire() *MappedFileRange {
+func (f *MappedFile) acquire() *MappedFileRange {
 	f.mu.RLock()
 	h := f.pool.Get()
 	h.f = f
 	h.released.Store(false)
+	return h
+}
+
+func (f *MappedFile) Acquire() *MappedFileRange {
+	h := f.acquire()
 	h.SetRange(0, int64(len(f.data)))
 	return h
 }
 
 func (f *MappedFile) AcquireRange(start, end int64) *MappedFileRange {
-	f.mu.RLock()
-	h := f.pool.Get()
-	h.f = f
-	h.released.Store(false)
+	h := f.acquire()
 	h.SetRange(start, end)
 	return h
 }
