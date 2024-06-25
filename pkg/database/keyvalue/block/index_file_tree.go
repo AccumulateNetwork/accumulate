@@ -103,6 +103,12 @@ func openIndexFileNode(dir string, level int, files map[string]bool) (indexFileN
 		parts[i] = map[string]bool{}
 	}
 	for file := range files {
+		// If there's an old index file hanging around that didn't get deleted
+		// somehow, just ignore it
+		if len(file) <= level {
+			continue
+		}
+
 		i, err := strconv.ParseUint(file[level:level+1], 16, 4)
 		if err != nil {
 			strconv.ParseUint(file[level:level+1], 16, 4)
