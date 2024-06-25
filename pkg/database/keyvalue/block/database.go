@@ -26,10 +26,11 @@ var poolBuffer = binary.NewPointerPool[bytes.Buffer]()
 
 type Database struct {
 	config
-	commitMu   sync.Mutex
-	records    *recordFileSet
-	indexFiles *indexFileTree
-	index      recordIndex
+	commitMu       sync.Mutex
+	records        *recordFileSet
+	indexFiles     *indexFileTree
+	blockIndex     vmap[blockID, int]
+	recordLocation vmap[[32]byte, *recordLocation]
 }
 
 type config struct {
@@ -88,8 +89,8 @@ func Open(path string, options ...Option) (_ *Database, err error) {
 		return nil, err
 	}
 
-	db.index.records.fn.forEach = db.indexFiles.ForEach
-	db.index.records.fn.commit = db.indexFiles.Commit
+	db.recordLocation.fn.forEach = db.indexFiles.ForEach
+	db.recordLocation.fn.commit = db.indexFiles.Commit
 
 	// Determine the next block number
 	if len(db.records.files) > 0 {
@@ -109,7 +110,7 @@ func Open(path string, options ...Option) (_ *Database, err error) {
 	}
 
 	// Index blocks
-	err = db.index.indexBlocks(db.records)
+	err = db.indexBlocks()
 	if err != nil {
 		return nil, err
 	}
@@ -135,8 +136,8 @@ func (d *Database) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
 	view := &databaseView{
 		recordFiles: d.records,
 		indexFiles:  d.indexFiles,
-		blocks:      d.index.blocks.View(),
-		records:     d.index.records.View(),
+		blocks:      d.blockIndex.View(),
+		records:     d.recordLocation.View(),
 	}
 
 	get := func(key *record.Key) ([]byte, error) {

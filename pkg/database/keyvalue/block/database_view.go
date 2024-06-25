@@ -16,11 +16,6 @@ import (
 	"golang.org/x/exp/slog"
 )
 
-type recordIndex struct {
-	blocks  vmap[blockID, int]
-	records vmap[[32]byte, *recordLocation]
-}
-
 type databaseView struct {
 	recordFiles *recordFileSet
 	indexFiles  *indexFileTree
@@ -28,9 +23,9 @@ type databaseView struct {
 	records     *vmapView[[32]byte, *recordLocation]
 }
 
-func (r *recordIndex) indexBlocks(records *recordFileSet) error {
-	blocks := r.blocks.View()
-	it := records.entries(func(typ entryType) bool {
+func (db *Database) indexBlocks() error {
+	blocks := db.blockIndex.View()
+	it := db.records.entries(func(typ entryType) bool {
 		return typ == entryTypeStartBlock
 	})
 	var prev *recordFile
@@ -62,7 +57,7 @@ func (db *Database) indexRecords() error {
 		return nil
 	}
 
-	records := db.index.records.View()
+	records := db.recordLocation.View()
 	it := db.records.entries(nil)
 
 	var prev *recordFile
@@ -81,6 +76,7 @@ func (db *Database) indexRecords() error {
 				return false
 			}
 			block = &e.blockID
+			slog.Info("Indexing block", "file", filepath.Base(item.File.file.Name()), "block", block, "module", "database")
 
 		case *endBlockEntry:
 			if block == nil {
@@ -88,6 +84,15 @@ func (db *Database) indexRecords() error {
 				return false
 			}
 			block = nil
+
+			// Commit at the end of each block to keep the memory usage under
+			// control for large databases
+			err := records.Commit()
+			if err != nil {
+				it.err = err
+				return false
+			}
+			records = db.recordLocation.View()
 
 		case *recordEntry:
 			if block == nil {
