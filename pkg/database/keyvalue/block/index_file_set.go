@@ -73,7 +73,9 @@ func newIndexFileSet(f *indexFile) (_ *indexFileSet, err error) {
 func (s *indexFileSet) Close() error {
 	var errs []error
 	for _, n := range s.children {
-		errs = append(errs, n.Close())
+		if n != nil {
+			errs = append(errs, n.Close())
+		}
 	}
 	return errors.Join(errs...)
 }
