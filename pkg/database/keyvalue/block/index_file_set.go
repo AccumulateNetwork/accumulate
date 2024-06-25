@@ -25,8 +25,8 @@ func newIndexFileSet(f *indexFile) (_ *indexFileSet, err error) {
 	set.level = f.level
 	defer closeIfError(&err, set)
 
-	fh := f.file.Acquire()
-	defer fh.Release()
+	src := f.file.Acquire()
+	defer src.Release()
 
 	var j int
 	var entry [64]byte
@@ -41,14 +41,14 @@ func newIndexFileSet(f *indexFile) (_ *indexFileSet, err error) {
 		}
 		set.children[i] = g
 
-		gh := g.file.Acquire()
-		defer gh.Release()
+		dst := g.file.Acquire()
+		defer dst.Release()
 
 		for j < int(count) {
 			if !entryOk {
 				entryOk = true
 				j++
-				_, err = fh.Read(entry[:])
+				_, err = src.Read(entry[:])
 				if err != nil {
 					return nil, err
 				}
@@ -57,7 +57,7 @@ func newIndexFileSet(f *indexFile) (_ *indexFileSet, err error) {
 			if indexFor(entry[:], f.level) == byte(i) {
 				entryOk = false
 				g.count.Add(1)
-				_, err = gh.Write(entry[:])
+				_, err = dst.Write(entry[:])
 				if err != nil {
 					return nil, err
 				}
@@ -95,7 +95,7 @@ func (s *indexFileSet) forEach(fn func([32]byte, *recordLocation) error) error {
 
 func (s *indexFileSet) commit(entries []*locationAndHash) (indexFileNode, error) {
 	type Range struct {
-		X     byte
+		Index byte
 		Start int
 		End   int
 	}
@@ -103,19 +103,19 @@ func (s *indexFileSet) commit(entries []*locationAndHash) (indexFileNode, error)
 	var ranges []Range
 	for i, e := range entries {
 		x := indexFor(e.Hash[:], s.level)
-		if len(ranges) == 0 || ranges[len(ranges)-1].X != x {
-			ranges = append(ranges, Range{X: x, Start: i, End: i + 1})
+		if len(ranges) == 0 || ranges[len(ranges)-1].Index != x {
+			ranges = append(ranges, Range{Index: x, Start: i, End: i + 1})
 		} else {
 			ranges[len(ranges)-1].End = i + 1
 		}
 	}
 
 	for _, r := range ranges {
-		n, err := s.children[r.X].commit(entries[r.Start:r.End])
+		n, err := s.children[r.Index].commit(entries[r.Start:r.End])
 		if err != nil {
 			return nil, err
 		}
-		s.children[r.X] = n
+		s.children[r.Index] = n
 	}
 	return s, nil
 }

@@ -15,7 +15,6 @@ import (
 	"path/filepath"
 	"sort"
 	"sync/atomic"
-	"unsafe"
 
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -99,15 +98,9 @@ func (f *indexFile) get(hash [32]byte) (*recordLocation, bool) {
 	dec := poolDecoder.Get()
 	defer poolDecoder.Put(dec)
 
-	var entry [32]byte
-	offset := int64(index) * indexFileEntrySize
-	_, err := h.ReadAt(entry[:], offset+32)
-	if err != nil {
-		panic(errors.FatalError.WithFormat("read record location: %w", err))
-	}
-
 	loc := poolLocation.Get()
-	readLocation(&entry, loc)
+	offset := int64(index) * indexFileEntrySize
+	readLocation((*[32]byte)(data[offset+32:]), loc)
 	return loc, true
 }
 
@@ -219,8 +212,8 @@ func (f *indexFile) insert(data []byte, indices []int64, entries []*locationAndH
 		}
 	}
 
-	b := unsafe.Slice((*[64]byte)(unsafe.Pointer(unsafe.SliceData(data))), len(data)/64)
-	_ = b
+	// b := unsafe.Slice((*[64]byte)(unsafe.Pointer(unsafe.SliceData(data))), len(data)/64)
+	// _ = b
 
 	if len(ranges) > 0 {
 		for i := range ranges[1:] {
