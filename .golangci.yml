@@ -80,6 +80,6 @@ issues:
     - goheader
     - gosimple
 
-  - path: ^test/util/goroutine_leaks\.go|exp/tendermint/http.go$
+  - path: ^(test/util/goroutine_leaks\.go|exp/tendermint/http\.go|exp/telemetry/translate\.go)$
     linters:
     - goheader

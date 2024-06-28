@@ -56,6 +56,7 @@ type Config struct {
 	Network         string           `json:"network,omitempty" form:"network" query:"network" validate:"required"`
 	Logging         *Logging         `json:"logging,omitempty" form:"logging" query:"logging" validate:"required"`
 	Instrumentation *Instrumentation `json:"instrumentation,omitempty" form:"instrumentation" query:"instrumentation" validate:"required"`
+	Telemetry       *Telemetry       `json:"telemetry,omitempty" form:"telemetry" query:"telemetry" validate:"required"`
 	P2P             *P2P             `json:"p2P,omitempty" form:"p2P" query:"p2P" validate:"required"`
 	Configurations  []Configuration  `json:"configurations,omitempty" form:"configurations" query:"configurations" validate:"required"`
 	Services        []Service        `json:"services,omitempty" form:"services" query:"services" validate:"required"`
@@ -207,6 +208,13 @@ type NetworkService struct {
 	Partition string `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
 }
 
+type OtlpConfig struct {
+	Enabled  *bool  `json:"enabled,omitempty" form:"enabled" query:"enabled" validate:"required"`
+	Endpoint string `json:"endpoint,omitempty" form:"endpoint" query:"endpoint" validate:"required"`
+	Username string `json:"username,omitempty" form:"username" query:"username" validate:"required"`
+	Password string `json:"password,omitempty" form:"password" query:"password" validate:"required"`
+}
+
 type P2P struct {
 	Listen             []p2p.Multiaddr `json:"listen,omitempty" form:"listen" query:"listen" validate:"required"`
 	BootstrapPeers     []p2p.Multiaddr `json:"bootstrapPeers,omitempty" form:"bootstrapPeers" query:"bootstrapPeers" validate:"required"`
@@ -263,6 +271,20 @@ type SubnodeService struct {
 	Name     string     `json:"name,omitempty" form:"name" query:"name" validate:"required"`
 	NodeKey  PrivateKey `json:"nodeKey,omitempty" form:"nodeKey" query:"nodeKey" validate:"required"`
 	Services []Service  `json:"services,omitempty" form:"services" query:"services" validate:"required"`
+}
+
+type Telemetry struct {
+	Enabled *bool            `json:"enabled,omitempty" form:"enabled" query:"enabled" validate:"required"`
+	Stdout  *bool            `json:"stdout,omitempty" form:"stdout" query:"stdout" validate:"required"`
+	Otlp    *OtlpConfig      `json:"otlp,omitempty" form:"otlp" query:"otlp" validate:"required"`
+	Export  *HttpListener    `json:"export,omitempty" form:"export" query:"export" validate:"required"`
+	Rules   []*TelemetryRule `json:"rules,omitempty" form:"rules" query:"rules" validate:"required"`
+}
+
+type TelemetryRule struct {
+	Match []string      `json:"match,omitempty" form:"match" query:"match" validate:"required"`
+	Drop  bool          `json:"drop,omitempty" form:"drop" query:"drop" validate:"required"`
+	Rate  time.Duration `json:"rate,omitempty" form:"rate" query:"rate" validate:"required"`
 }
 
 type TransientPrivateKey struct {
@@ -373,6 +395,9 @@ func (v *Config) Copy() *Config {
 	}
 	if v.Instrumentation != nil {
 		u.Instrumentation = (v.Instrumentation).Copy()
+	}
+	if v.Telemetry != nil {
+		u.Telemetry = (v.Telemetry).Copy()
 	}
 	if v.P2P != nil {
 		u.P2P = (v.P2P).Copy()
@@ -790,6 +815,22 @@ func (v *NetworkService) Copy() *NetworkService {
 
 func (v *NetworkService) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *OtlpConfig) Copy() *OtlpConfig {
+	u := new(OtlpConfig)
+
+	if v.Enabled != nil {
+		u.Enabled = new(bool)
+		*u.Enabled = *v.Enabled
+	}
+	u.Endpoint = v.Endpoint
+	u.Username = v.Username
+	u.Password = v.Password
+
+	return u
+}
+
+func (v *OtlpConfig) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *P2P) Copy() *P2P {
 	u := new(P2P)
 
@@ -943,6 +984,52 @@ func (v *SubnodeService) Copy() *SubnodeService {
 
 func (v *SubnodeService) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *Telemetry) Copy() *Telemetry {
+	u := new(Telemetry)
+
+	if v.Enabled != nil {
+		u.Enabled = new(bool)
+		*u.Enabled = *v.Enabled
+	}
+	if v.Stdout != nil {
+		u.Stdout = new(bool)
+		*u.Stdout = *v.Stdout
+	}
+	if v.Otlp != nil {
+		u.Otlp = (v.Otlp).Copy()
+	}
+	if v.Export != nil {
+		u.Export = (v.Export).Copy()
+	}
+	u.Rules = make([]*TelemetryRule, len(v.Rules))
+	for i, v := range v.Rules {
+		v := v
+		if v != nil {
+			u.Rules[i] = (v).Copy()
+		}
+	}
+
+	return u
+}
+
+func (v *Telemetry) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *TelemetryRule) Copy() *TelemetryRule {
+	u := new(TelemetryRule)
+
+	u.Match = make([]string, len(v.Match))
+	for i, v := range v.Match {
+		v := v
+		u.Match[i] = v
+	}
+	u.Drop = v.Drop
+	u.Rate = v.Rate
+
+	return u
+}
+
+func (v *TelemetryRule) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *TransientPrivateKey) Copy() *TransientPrivateKey {
 	u := new(TransientPrivateKey)
 
@@ -1012,6 +1099,14 @@ func (v *Config) Equal(u *Config) bool {
 	case v.Instrumentation == nil || u.Instrumentation == nil:
 		return false
 	case !((v.Instrumentation).Equal(u.Instrumentation)):
+		return false
+	}
+	switch {
+	case v.Telemetry == u.Telemetry:
+		// equal
+	case v.Telemetry == nil || u.Telemetry == nil:
+		return false
+	case !((v.Telemetry).Equal(u.Telemetry)):
 		return false
 	}
 	switch {
@@ -1522,6 +1617,28 @@ func (v *NetworkService) Equal(u *NetworkService) bool {
 	return true
 }
 
+func (v *OtlpConfig) Equal(u *OtlpConfig) bool {
+	switch {
+	case v.Enabled == u.Enabled:
+		// equal
+	case v.Enabled == nil || u.Enabled == nil:
+		return false
+	case !(*v.Enabled == *u.Enabled):
+		return false
+	}
+	if !(v.Endpoint == u.Endpoint) {
+		return false
+	}
+	if !(v.Username == u.Username) {
+		return false
+	}
+	if !(v.Password == u.Password) {
+		return false
+	}
+
+	return true
+}
+
 func (v *P2P) Equal(u *P2P) bool {
 	if len(v.Listen) != len(u.Listen) {
 		return false
@@ -1692,6 +1809,70 @@ func (v *SubnodeService) Equal(u *SubnodeService) bool {
 		if !(EqualService(v.Services[i], u.Services[i])) {
 			return false
 		}
+	}
+
+	return true
+}
+
+func (v *Telemetry) Equal(u *Telemetry) bool {
+	switch {
+	case v.Enabled == u.Enabled:
+		// equal
+	case v.Enabled == nil || u.Enabled == nil:
+		return false
+	case !(*v.Enabled == *u.Enabled):
+		return false
+	}
+	switch {
+	case v.Stdout == u.Stdout:
+		// equal
+	case v.Stdout == nil || u.Stdout == nil:
+		return false
+	case !(*v.Stdout == *u.Stdout):
+		return false
+	}
+	switch {
+	case v.Otlp == u.Otlp:
+		// equal
+	case v.Otlp == nil || u.Otlp == nil:
+		return false
+	case !((v.Otlp).Equal(u.Otlp)):
+		return false
+	}
+	switch {
+	case v.Export == u.Export:
+		// equal
+	case v.Export == nil || u.Export == nil:
+		return false
+	case !((v.Export).Equal(u.Export)):
+		return false
+	}
+	if len(v.Rules) != len(u.Rules) {
+		return false
+	}
+	for i := range v.Rules {
+		if !((v.Rules[i]).Equal(u.Rules[i])) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (v *TelemetryRule) Equal(u *TelemetryRule) bool {
+	if len(v.Match) != len(u.Match) {
+		return false
+	}
+	for i := range v.Match {
+		if !(v.Match[i] == u.Match[i]) {
+			return false
+		}
+	}
+	if !(v.Drop == u.Drop) {
+		return false
+	}
+	if !(v.Rate == u.Rate) {
+		return false
 	}
 
 	return true
@@ -1974,6 +2155,7 @@ func (v *Config) MarshalJSON() ([]byte, error) {
 		Network         string                                         `json:"network,omitempty"`
 		Logging         *Logging                                       `json:"logging,omitempty"`
 		Instrumentation *Instrumentation                               `json:"instrumentation,omitempty"`
+		Telemetry       *Telemetry                                     `json:"telemetry,omitempty"`
 		P2P             *P2P                                           `json:"p2P,omitempty"`
 		Configurations  *encoding.JsonUnmarshalListWith[Configuration] `json:"configurations,omitempty"`
 		Services        *encoding.JsonUnmarshalListWith[Service]       `json:"services,omitempty"`
@@ -1989,6 +2171,9 @@ func (v *Config) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.Instrumentation == nil) {
 		u.Instrumentation = v.Instrumentation
+	}
+	if !(v.Telemetry == nil) {
+		u.Telemetry = v.Telemetry
 	}
 	if !(v.P2P == nil) {
 		u.P2P = v.P2P
@@ -2610,6 +2795,50 @@ func (v *SubnodeService) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *Telemetry) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Enabled *bool                             `json:"enabled,omitempty"`
+		Stdout  *bool                             `json:"stdout,omitempty"`
+		Otlp    *OtlpConfig                       `json:"otlp,omitempty"`
+		Export  *HttpListener                     `json:"export,omitempty"`
+		Rules   encoding.JsonList[*TelemetryRule] `json:"rules,omitempty"`
+	}{}
+	if !(v.Enabled == nil) {
+		u.Enabled = v.Enabled
+	}
+	if !(v.Stdout == nil) {
+		u.Stdout = v.Stdout
+	}
+	if !(v.Otlp == nil) {
+		u.Otlp = v.Otlp
+	}
+	if !(v.Export == nil) {
+		u.Export = v.Export
+	}
+	if !(len(v.Rules) == 0) {
+		u.Rules = v.Rules
+	}
+	return json.Marshal(&u)
+}
+
+func (v *TelemetryRule) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Match encoding.JsonList[string] `json:"match,omitempty"`
+		Drop  bool                      `json:"drop,omitempty"`
+		Rate  interface{}               `json:"rate,omitempty"`
+	}{}
+	if !(len(v.Match) == 0) {
+		u.Match = v.Match
+	}
+	if !(!v.Drop) {
+		u.Drop = v.Drop
+	}
+	if !(v.Rate == 0) {
+		u.Rate = encoding.DurationToJSON(v.Rate)
+	}
+	return json.Marshal(&u)
+}
+
 func (v *TransientPrivateKey) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type PrivateKeyType `json:"type"`
@@ -2701,6 +2930,7 @@ func (v *Config) UnmarshalJSON(data []byte) error {
 		Network         string                                         `json:"network,omitempty"`
 		Logging         *Logging                                       `json:"logging,omitempty"`
 		Instrumentation *Instrumentation                               `json:"instrumentation,omitempty"`
+		Telemetry       *Telemetry                                     `json:"telemetry,omitempty"`
 		P2P             *P2P                                           `json:"p2P,omitempty"`
 		Configurations  *encoding.JsonUnmarshalListWith[Configuration] `json:"configurations,omitempty"`
 		Services        *encoding.JsonUnmarshalListWith[Service]       `json:"services,omitempty"`
@@ -2710,6 +2940,7 @@ func (v *Config) UnmarshalJSON(data []byte) error {
 	u.Network = v.Network
 	u.Logging = v.Logging
 	u.Instrumentation = v.Instrumentation
+	u.Telemetry = v.Telemetry
 	u.P2P = v.P2P
 	u.Configurations = &encoding.JsonUnmarshalListWith[Configuration]{Value: v.Configurations, Func: UnmarshalConfigurationJSON}
 	u.Services = &encoding.JsonUnmarshalListWith[Service]{Value: v.Services, Func: UnmarshalServiceJSON}
@@ -2721,6 +2952,7 @@ func (v *Config) UnmarshalJSON(data []byte) error {
 	v.Network = u.Network
 	v.Logging = u.Logging
 	v.Instrumentation = u.Instrumentation
+	v.Telemetry = u.Telemetry
 	v.P2P = u.P2P
 	if u.Configurations != nil && u.Configurations.Value != nil {
 		v.Configurations = make([]Configuration, len(u.Configurations.Value))
@@ -3535,6 +3767,54 @@ func (v *SubnodeService) UnmarshalJSON(data []byte) error {
 		for i, x := range u.Services.Value {
 			v.Services[i] = x
 		}
+	}
+	return nil
+}
+
+func (v *Telemetry) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Enabled *bool                             `json:"enabled,omitempty"`
+		Stdout  *bool                             `json:"stdout,omitempty"`
+		Otlp    *OtlpConfig                       `json:"otlp,omitempty"`
+		Export  *HttpListener                     `json:"export,omitempty"`
+		Rules   encoding.JsonList[*TelemetryRule] `json:"rules,omitempty"`
+	}{}
+	u.Enabled = v.Enabled
+	u.Stdout = v.Stdout
+	u.Otlp = v.Otlp
+	u.Export = v.Export
+	u.Rules = v.Rules
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	v.Enabled = u.Enabled
+	v.Stdout = u.Stdout
+	v.Otlp = u.Otlp
+	v.Export = u.Export
+	v.Rules = u.Rules
+	return nil
+}
+
+func (v *TelemetryRule) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Match encoding.JsonList[string] `json:"match,omitempty"`
+		Drop  bool                      `json:"drop,omitempty"`
+		Rate  interface{}               `json:"rate,omitempty"`
+	}{}
+	u.Match = v.Match
+	u.Drop = v.Drop
+	u.Rate = encoding.DurationToJSON(v.Rate)
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	v.Match = u.Match
+	v.Drop = u.Drop
+	if x, err := encoding.DurationFromJSON(u.Rate); err != nil {
+		return fmt.Errorf("error decoding Rate: %w", err)
+	} else {
+		v.Rate = x
 	}
 	return nil
 }
