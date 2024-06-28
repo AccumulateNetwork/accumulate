@@ -9,6 +9,8 @@ package run
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -16,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
+	"github.com/joho/godotenv"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gopkg.in/yaml.v3"
 )
@@ -58,7 +61,31 @@ func (c *Config) Load(b []byte, format func([]byte, any) error) error {
 		return err
 	}
 
-	return json.Unmarshal(b, c)
+	err = json.Unmarshal(b, c)
+	if err != nil {
+		return err
+	}
+
+	return c.applyDotEnv()
+}
+
+func (c *Config) applyDotEnv() error {
+	if !setDefaultPtr(&c.DotEnv, false) {
+		return nil
+	}
+
+	file := ".env"
+	if c.file != "" {
+		dir := filepath.Dir(c.file)
+		file = filepath.Join(dir, file)
+	}
+
+	env, err := godotenv.Read(file)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+
+	return errors.Join(expandEnv(reflect.ValueOf(c), env)...)
 }
 
 func (c *Config) Save() error {
@@ -164,4 +191,44 @@ func float2int(v reflect.Value) any {
 	default:
 		return v.Interface()
 	}
+}
+
+func expandEnv(v reflect.Value, env map[string]string) (errs []error) {
+	switch v.Kind() {
+	case reflect.String:
+		s := v.String()
+		s = os.Expand(s, func(name string) string {
+			value, ok := env[name]
+			if ok {
+				return value
+			}
+			errs = append(errs, fmt.Errorf("%q is not defined", name))
+			return fmt.Sprintf("#!MISSING(%q)", name)
+		})
+		v.SetString(s)
+
+	case reflect.Pointer, reflect.Interface:
+		errs = append(errs, expandEnv(v.Elem(), env)...)
+
+	case reflect.Slice, reflect.Array:
+		for i, n := 0, v.Len(); i < n; i++ {
+			errs = append(errs, expandEnv(v.Index(i), env)...)
+		}
+
+	case reflect.Map:
+		it := v.MapRange()
+		for it.Next() {
+			errs = append(errs, expandEnv(it.Key(), env)...)
+			errs = append(errs, expandEnv(it.Value(), env)...)
+		}
+
+	case reflect.Struct:
+		typ := v.Type()
+		for i, n := 0, typ.NumField(); i < n; i++ {
+			if typ.Field(i).IsExported() {
+				errs = append(errs, expandEnv(v.Field(i), env)...)
+			}
+		}
+	}
+	return errs
 }
