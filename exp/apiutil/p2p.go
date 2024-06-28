@@ -8,6 +8,7 @@ package apiutil
 
 import (
 	"context"
+	"log/slog"
 	"runtime/debug"
 	"time"
 
@@ -20,7 +21,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p/dial"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"golang.org/x/exp/slog"
 )
 
 type RouterOptions struct {
@@ -58,7 +58,7 @@ func InitRouter(opts RouterOptions) (routing.Router, error) {
 func initRouter(opts RouterOptions) {
 	defer func() {
 		if r := recover(); r != nil {
-			slog.ErrorCtx(opts.Context, "Panicked while initializing router", "error", r, "stack", debug.Stack())
+			slog.ErrorContext(opts.Context, "Panicked while initializing router", "error", r, "stack", debug.Stack())
 		}
 	}()
 
@@ -69,17 +69,17 @@ func initRouter(opts RouterOptions) {
 	tr, ok := opts.Node.Tracker().(*dial.PersistentTracker)
 	if !ok {
 		// If we're not using a persistent tracker, wait for the service
-		slog.InfoCtx(opts.Context, "Waiting for a live network service")
+		slog.InfoContext(opts.Context, "Waiting for a live network service")
 		svcAddr, err := dirNetSvc.MultiaddrFor(opts.Network)
 		if err != nil {
-			slog.ErrorCtx(opts.Context, "Failed to initialize router", "error", err)
+			slog.ErrorContext(opts.Context, "Failed to initialize router", "error", err)
 			_ = opts.Events.Publish(events.WillChangeGlobals{New: &network.GlobalValues{}})
 			return
 		}
 
 		err = opts.Node.WaitForService(opts.Context, svcAddr)
 		if err != nil {
-			slog.ErrorCtx(opts.Context, "Failed to initialize router", "error", err)
+			slog.ErrorContext(opts.Context, "Failed to initialize router", "error", err)
 			_ = opts.Events.Publish(events.WillChangeGlobals{New: &network.GlobalValues{}})
 			return
 		}
@@ -100,7 +100,7 @@ func initRouter(opts RouterOptions) {
 
 		// If not then scan the network (synchronously)
 		if !found {
-			slog.InfoCtx(opts.Context, "Scanning for peers")
+			slog.InfoContext(opts.Context, "Scanning for peers")
 			time.Sleep(time.Minute) // Give the DHT time
 			tr.ScanPeers(5 * time.Minute)
 		}
@@ -110,7 +110,7 @@ func initRouter(opts RouterOptions) {
 		opts.Dialer = opts.Node.DialNetwork()
 	}
 
-	slog.InfoCtx(opts.Context, "Fetching routing information")
+	slog.InfoContext(opts.Context, "Fetching routing information")
 	client := &message.Client{
 		Transport: &message.RoutedTransport{
 			Network: opts.Network,
@@ -121,7 +121,7 @@ func initRouter(opts RouterOptions) {
 
 	ns, err := client.NetworkStatus(opts.Context, api.NetworkStatusOptions{})
 	if err != nil {
-		slog.ErrorCtx(opts.Context, "Failed to initialize router", "error", err)
+		slog.ErrorContext(opts.Context, "Failed to initialize router", "error", err)
 		_ = opts.Events.Publish(events.WillChangeGlobals{New: &network.GlobalValues{}})
 		return
 	}
@@ -136,7 +136,7 @@ func initRouter(opts RouterOptions) {
 		},
 	})
 	if err != nil {
-		slog.ErrorCtx(opts.Context, "Failed to initialize router", "error", err)
+		slog.ErrorContext(opts.Context, "Failed to initialize router", "error", err)
 		return
 	}
 }

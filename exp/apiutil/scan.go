@@ -9,6 +9,7 @@ package apiutil
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"os"
 	"strings"
 	"sync"
@@ -20,7 +21,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"golang.org/x/exp/slog"
 )
 
 type NetworkScan = healing.NetworkInfo
@@ -153,7 +153,7 @@ func (h *StaticDialer) Dial(ctx context.Context, addr multiaddr.Multiaddr) (mess
 			h.markGood(addr, n.PeerID)
 			return s, nil
 		}
-		slog.ErrorCtx(ctx, "Failed to dial", "peer", n.PeerID, "error", err)
+		slog.ErrorContext(ctx, "Failed to dial", "peer", n.PeerID, "error", err)
 	}
 	return nil, errors.NoPeer.WithFormat("no peers are responding for %v", addr)
 }

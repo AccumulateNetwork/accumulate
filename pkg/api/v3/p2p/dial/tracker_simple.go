@@ -7,12 +7,12 @@
 package dial
 
 import (
+	"log/slog"
 	"sync"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
-	"golang.org/x/exp/slog"
 )
 
 type SimpleTracker struct {

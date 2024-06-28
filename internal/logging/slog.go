@@ -10,12 +10,12 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/cometbft/cometbft/libs/log"
 	"github.com/rs/zerolog"
-	"golang.org/x/exp/slog"
 )
 
 type Slogger slog.Logger

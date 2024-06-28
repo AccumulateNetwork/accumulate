@@ -10,10 +10,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"reflect"
 	"strings"
-
-	"golang.org/x/exp/slog"
 )
 
 type LogAsHex interface {

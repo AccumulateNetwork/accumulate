@@ -8,6 +8,7 @@ package dial
 
 import (
 	"context"
+	"log/slog"
 	"net"
 	"os"
 	"sort"
@@ -20,7 +21,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p/peerdb"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"golang.org/x/exp/slog"
 )
 
 type PersistentTracker struct {
@@ -124,24 +124,24 @@ func (t *PersistentTracker) runJob(fn func(time.Duration), frequency, defaultFre
 }
 
 func (t *PersistentTracker) writeDb(time.Duration) {
-	slog.InfoCtx(t.context, "Writing peer database")
+	slog.InfoContext(t.context, "Writing peer database")
 
 	f, err := os.OpenFile(t.file, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
-		slog.ErrorCtx(t.context, "Failed to open peer database", "error", err)
+		slog.ErrorContext(t.context, "Failed to open peer database", "error", err)
 		return
 	}
 	defer f.Close()
 
 	err = t.db.Store(f)
 	if err != nil {
-		slog.ErrorCtx(t.context, "Failed to write peer database", "error", err)
+		slog.ErrorContext(t.context, "Failed to write peer database", "error", err)
 	}
 }
 
 func (t *PersistentTracker) scanPeers(duration time.Duration) {
-	slog.InfoCtx(t.context, "Scanning for peers")
-	defer slog.InfoCtx(t.context, "Completed peer scan")
+	slog.InfoContext(t.context, "Scanning for peers")
+	defer slog.InfoContext(t.context, "Completed peer scan")
 
 	// Update the last scan time
 	now := time.Now()
@@ -159,14 +159,14 @@ func (t *PersistentTracker) scanPeers(duration time.Duration) {
 		Network: t.network,
 	})
 	if err != nil {
-		slog.ErrorCtx(t.context, "Failed to scan for peers", "error", err)
+		slog.ErrorContext(t.context, "Failed to scan for peers", "error", err)
 		return
 	}
 
 	// The response should only ever be DiscoveredPeers
 	peers, ok := resp.(DiscoveredPeers)
 	if !ok {
-		slog.ErrorCtx(t.context, "Failed to scan for peers", "error", errors.InternalError.WithFormat("bad discovery response: want %T, got %T", make(DiscoveredPeers), resp))
+		slog.ErrorContext(t.context, "Failed to scan for peers", "error", errors.InternalError.WithFormat("bad discovery response: want %T, got %T", make(DiscoveredPeers), resp))
 		return
 	}
 
@@ -195,7 +195,7 @@ func (t *PersistentTracker) scanPeers(duration time.Duration) {
 }
 
 func (t *PersistentTracker) scanPeer(ctx context.Context, peer peer.AddrInfo) {
-	slog.DebugCtx(ctx, "Scanning peer", "id", peer.ID)
+	slog.DebugContext(ctx, "Scanning peer", "id", peer.ID)
 
 	// TODO Check addresses
 
@@ -258,7 +258,7 @@ func (t *PersistentTracker) scanPeerAddresses(ctx context.Context, peer peer.Add
 			PeerAddr: addr,
 		})
 		if err != nil {
-			slog.InfoCtx(ctx, "Unable to connect to peer", "peer", peer.ID, "error", err, "address", addr)
+			slog.InfoContext(ctx, "Unable to connect to peer", "peer", peer.ID, "error", err, "address", addr)
 			continue
 		}
 		t.db.Peer(peer.ID).Address(addr).Last.DidSucceed()
@@ -277,40 +277,40 @@ func (t *PersistentTracker) scanPeerServices(ctx context.Context, peer peer.Addr
 	t.db.Peer(peer.ID).Network(t.network).Service(creq.Service).Last.DidAttempt()
 	s, err := t.host.Connect(ctx, creq)
 	if err != nil {
-		slog.InfoCtx(ctx, "Unable to connect to peer", "peer", peer.ID, "error", err)
+		slog.InfoContext(ctx, "Unable to connect to peer", "peer", peer.ID, "error", err)
 		return
 	}
 	t.db.Peer(peer.ID).Network(t.network).Service(creq.Service).Last.DidSucceed()
 
 	err = s.Write(&message.NodeInfoRequest{})
 	if err != nil {
-		slog.InfoCtx(ctx, "Failed to request node info", "peer", peer.ID, "error", err)
+		slog.InfoContext(ctx, "Failed to request node info", "peer", peer.ID, "error", err)
 		return
 	}
 	res, err := s.Read()
 	if err != nil {
-		slog.InfoCtx(ctx, "Failed to request node info", "peer", peer.ID, "error", err)
+		slog.InfoContext(ctx, "Failed to request node info", "peer", peer.ID, "error", err)
 		return
 	}
 	var ni *message.NodeInfoResponse
 	switch res := res.(type) {
 	case *message.ErrorResponse:
-		slog.InfoCtx(ctx, "Failed to request node info", "peer", peer.ID, "error", res.Error)
+		slog.InfoContext(ctx, "Failed to request node info", "peer", peer.ID, "error", res.Error)
 		return
 	case *message.NodeInfoResponse:
 		ni = res
 	default:
-		slog.InfoCtx(ctx, "Invalid node info response", "peer", peer.ID, "want", message.TypeNodeInfoResponse, "got", res.Type())
+		slog.InfoContext(ctx, "Invalid node info response", "peer", peer.ID, "want", message.TypeNodeInfoResponse, "got", res.Type())
 		return
 	}
 
 	for _, svc := range ni.Value.Services {
-		slog.DebugCtx(ctx, "Attempting to conenct to service", "id", peer.ID, "service", svc)
+		slog.DebugContext(ctx, "Attempting to conenct to service", "id", peer.ID, "service", svc)
 
 		t.db.Peer(peer.ID).Network(t.network).Service(svc).Last.DidAttempt()
 		_, err := t.host.Connect(ctx, &ConnectionRequest{Service: svc, PeerID: peer.ID})
 		if err != nil {
-			slog.InfoCtx(ctx, "Unable to connect to peer", "peer", peer.ID, "error", err)
+			slog.InfoContext(ctx, "Unable to connect to peer", "peer", peer.ID, "error", err)
 			return
 		}
 		t.db.Peer(peer.ID).Network(t.network).Service(svc).Last.DidSucceed()
