@@ -7,7 +7,6 @@
 package run
 
 import (
-	"context"
 	"encoding/json"
 	"log/slog"
 	"net"
@@ -154,28 +153,14 @@ func (h *HttpListener) startHTTP(inst *Instance, handler http.Handler) (*http.Se
 		ReadHeaderTimeout: *h.ReadHeaderTimeout,
 	}
 
-	inst.cleanup(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		err := server.Shutdown(ctx)
-		slog.Error("Server stopped", "error", err)
-	})
+	inst.cleanup(server.Shutdown)
 
 	for _, l := range h.Listen {
-		proto, addr, port, http, err := decomposeListen(l)
+		l, secure, err := httpListen(l)
 		if err != nil {
 			return nil, err
 		}
-		if proto == "" || port == "" {
-			return nil, errors.UnknownError.WithFormat("invalid listen address: %v", l)
-		}
-		addr += ":" + port
-
-		l, err := net.Listen(proto, addr)
-		if err != nil {
-			return nil, err
-		}
-		err = h.serveHTTP(inst, server, l, http == "https")
+		err = h.serveHTTP(inst, server, l, secure)
 		if err != nil {
 			return nil, err
 		}
