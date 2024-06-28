@@ -9,6 +9,7 @@ package run
 import (
 	"encoding/json"
 	"io"
+	"log"
 	"log/slog"
 	"os"
 	"strings"
@@ -70,6 +71,9 @@ func (l *Logging) start(inst *Instance) error {
 
 	inst.logger = slog.New(h)
 	slog.SetDefault(inst.logger)
+
+	// TODO explain me
+	log.SetOutput(&logging.StdlogWriter{Handler: h})
 
 	return nil
 }
