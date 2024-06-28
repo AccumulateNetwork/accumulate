@@ -155,7 +155,8 @@ type HttpService struct {
 
 type Instrumentation struct {
 	HttpListener
-	Monitoring *Monitor `json:"monitoring,omitempty" form:"monitoring" query:"monitoring" validate:"required"`
+	Monitoring  *Monitor      `json:"monitoring,omitempty" form:"monitoring" query:"monitoring" validate:"required"`
+	PprofListen p2p.Multiaddr `json:"pprofListen,omitempty" form:"pprofListen" query:"pprofListen" validate:"required"`
 }
 
 type LevelDBStorage struct {
@@ -665,6 +666,9 @@ func (v *Instrumentation) Copy() *Instrumentation {
 	u.HttpListener = *v.HttpListener.Copy()
 	if v.Monitoring != nil {
 		u.Monitoring = (v.Monitoring).Copy()
+	}
+	if v.PprofListen != nil {
+		u.PprofListen = p2p.CopyMultiaddr(v.PprofListen)
 	}
 
 	return u
@@ -1381,6 +1385,9 @@ func (v *Instrumentation) Equal(u *Instrumentation) bool {
 	case v.Monitoring == nil || u.Monitoring == nil:
 		return false
 	case !((v.Monitoring).Equal(u.Monitoring)):
+		return false
+	}
+	if !(p2p.EqualMultiaddr(v.PprofListen, u.PprofListen)) {
 		return false
 	}
 
@@ -2307,6 +2314,7 @@ func (v *Instrumentation) MarshalJSON() ([]byte, error) {
 		TlsCertPath       string                                         `json:"tlsCertPath,omitempty"`
 		TlsKeyPath        string                                         `json:"tlsKeyPath,omitempty"`
 		Monitoring        *Monitor                                       `json:"monitoring,omitempty"`
+		PprofListen       *encoding.JsonUnmarshalWith[p2p.Multiaddr]     `json:"pprofListen,omitempty"`
 	}{}
 	if !(len(v.HttpListener.Listen) == 0) {
 		u.Listen = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.HttpListener.Listen, Func: p2p.UnmarshalMultiaddrJSON}
@@ -2327,6 +2335,9 @@ func (v *Instrumentation) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.Monitoring == nil) {
 		u.Monitoring = v.Monitoring
+	}
+	if !(p2p.EqualMultiaddr(v.PprofListen, nil)) {
+		u.PprofListen = &encoding.JsonUnmarshalWith[p2p.Multiaddr]{Value: v.PprofListen, Func: p2p.UnmarshalMultiaddrJSON}
 	}
 	return json.Marshal(&u)
 }
@@ -3127,6 +3138,7 @@ func (v *Instrumentation) UnmarshalJSON(data []byte) error {
 		TlsCertPath       string                                         `json:"tlsCertPath,omitempty"`
 		TlsKeyPath        string                                         `json:"tlsKeyPath,omitempty"`
 		Monitoring        *Monitor                                       `json:"monitoring,omitempty"`
+		PprofListen       *encoding.JsonUnmarshalWith[p2p.Multiaddr]     `json:"pprofListen,omitempty"`
 	}{}
 	u.Listen = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.HttpListener.Listen, Func: p2p.UnmarshalMultiaddrJSON}
 	u.ConnectionLimit = v.HttpListener.ConnectionLimit
@@ -3136,6 +3148,7 @@ func (v *Instrumentation) UnmarshalJSON(data []byte) error {
 	u.TlsCertPath = v.HttpListener.TlsCertPath
 	u.TlsKeyPath = v.HttpListener.TlsKeyPath
 	u.Monitoring = v.Monitoring
+	u.PprofListen = &encoding.JsonUnmarshalWith[p2p.Multiaddr]{Value: v.PprofListen, Func: p2p.UnmarshalMultiaddrJSON}
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -3157,6 +3170,10 @@ func (v *Instrumentation) UnmarshalJSON(data []byte) error {
 	v.HttpListener.TlsCertPath = u.TlsCertPath
 	v.HttpListener.TlsKeyPath = u.TlsKeyPath
 	v.Monitoring = u.Monitoring
+	if u.PprofListen != nil {
+		v.PprofListen = u.PprofListen.Value
+	}
+
 	return nil
 }
 

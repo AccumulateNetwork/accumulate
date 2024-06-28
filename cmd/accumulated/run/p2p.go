@@ -7,6 +7,7 @@
 package run
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"strconv"
@@ -45,13 +46,13 @@ func (p *P2P) start(inst *Instance) error {
 
 	slog.InfoContext(inst.context, "We are", "id", node.ID(), "module", "run")
 
-	inst.cleanup(func() {
+	inst.cleanup(func(context.Context) error {
 		err := node.Close()
 		if err != nil {
-			slog.ErrorContext(inst.context, "Error while stopping node", "module", "run", "id", node.ID(), "error", err)
-		} else {
-			slog.InfoContext(inst.context, "Stopped", "id", node.ID(), "module", "run")
+			return err
 		}
+		slog.InfoContext(inst.context, "Stopped", "id", node.ID(), "module", "run")
+		return nil
 	})
 	return nil
 }
