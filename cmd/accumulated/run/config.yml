@@ -17,6 +17,10 @@ Config:
       type: Instrumentation
       marshal-as: reference
       pointer: true
+    - name: Telemetry
+      type: Telemetry
+      marshal-as: reference
+      pointer: true
     - name: P2P
       type: P2P
       marshal-as: reference
@@ -84,6 +88,53 @@ Instrumentation:
     - name: PprofListen
       type: p2p.Multiaddr
       marshal-as: union
+
+Telemetry:
+  non-binary: true
+  fields:
+    - name: Enabled
+      type: bool
+      pointer: true
+    - name: Stdout
+      type: bool
+      pointer: true
+    - name: Otlp
+      type: OtlpConfig
+      pointer: true
+      marshal-as: reference
+    - name: Export
+      type: HttpListener
+      pointer: true
+      marshal-as: reference
+    - name: Rules
+      type: TelemetryRule
+      pointer: true
+      repeatable: true
+      marshal-as: reference
+
+TelemetryRule:
+  non-binary: true
+  fields:
+    - name: Match
+      type: string
+      repeatable: true
+    - name: Drop
+      type: bool
+    - name: Rate
+      type: duration
+
+OtlpConfig:
+  non-binary: true
+  fields:
+    - name: Enabled
+      type: bool
+      pointer: true
+    - name: Endpoint
+      type: string
+    - name: Username
+      type: string
+    - name: Password
+      type: string
 
 Monitor:
   non-binary: true

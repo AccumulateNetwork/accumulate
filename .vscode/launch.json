@@ -247,6 +247,19 @@
         "${workspaceFolder}/.genesis/fozzie/network.json",
       ]
     },
+    {
+      "name": "Run bootstrap node",
+      "presentation": {
+        "group": "20-Run"
+      },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/cmd/accumulated",
+      "args": [
+        "${workspaceFolder}/.nodes/devnet/bootstrap",
+      ]
+    },
     // Services
     {
       "name": "API (mainnet)",
