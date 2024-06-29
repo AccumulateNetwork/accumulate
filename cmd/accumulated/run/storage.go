@@ -39,14 +39,6 @@ func (s *StorageService) start(inst *Instance) error {
 	return storageProvides.Register(inst.services, s, store)
 }
 
-type Storage interface {
-	Type() StorageType
-	CopyAsInterface() any
-
-	setPath(path string)
-	open(*Instance) (keyvalue.Beginner, error)
-}
-
 func (s *BadgerStorage) setPath(path string)     { s.Path = path }
 func (s *BoltStorage) setPath(path string)       { s.Path = path }
 func (s *ExpBlockDBStorage) setPath(path string) { s.Path = path }

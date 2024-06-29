@@ -19,6 +19,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
 
 func (i *Instrumentation) start(inst *Instance) error {
@@ -90,10 +91,10 @@ func (m *Monitor) start(inst *Instance) error {
 		m = new(Monitor)
 	}
 
-	setDefaultPtr(&m.ProfileMemory, false)           // Enabled      = false
-	setDefaultPtr(&m.MemoryPollingRate, time.Minute) // Polling rate = every minute
-	setDefaultPtr(&m.AllocRateTrigger, 50<<20)       // Trigger rate = 50 MiB/s
-	setDefaultVal(&m.Directory, "traces")            // Directory    = ./traces
+	setDefaultPtr(&m.ProfileMemory, false)                              // Enabled      = false
+	setDefaultPtr(&m.MemoryPollingRate, encoding.Duration(time.Minute)) // Polling rate = every minute
+	setDefaultPtr(&m.AllocRateTrigger, 50<<20)                          // Trigger rate = 50 MiB/s
+	setDefaultVal(&m.Directory, "traces")                               // Directory    = ./traces
 
 	if *m.ProfileMemory {
 		err := os.MkdirAll(inst.path(m.Directory), 0700)
@@ -108,7 +109,7 @@ func (m *Monitor) start(inst *Instance) error {
 }
 
 func (m *Monitor) pollMemory(inst *Instance) {
-	tick := time.NewTicker(*m.MemoryPollingRate)
+	tick := time.NewTicker(m.MemoryPollingRate.Get())
 	inst.cleanup(func(context.Context) error { tick.Stop(); return nil })
 
 	var s1, s2 runtime.MemStats
