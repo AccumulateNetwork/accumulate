@@ -164,7 +164,7 @@ func (t *Telemetry) setupMeterProvider(res *resource.Resource, inst *Instance) e
 		defaultRule = new(TelemetryRule)
 	}
 	if !defaultRule.Drop && defaultRule.Rate == 0 {
-		defaultRule.Rate = time.Minute
+		defaultRule.Rate.Set(time.Minute)
 	}
 
 	var drop []func(string) bool
@@ -190,7 +190,7 @@ func (t *Telemetry) setupMeterProvider(res *resource.Resource, inst *Instance) e
 			return err
 		}
 		rateFilters = append(rateFilters, f)
-		rates = append(rates, r.Rate)
+		rates = append(rates, r.Rate.Get())
 	}
 
 	for _, exporter := range exporters {
@@ -217,7 +217,7 @@ func (t *Telemetry) setupMeterProvider(res *resource.Resource, inst *Instance) e
 				metric.WithReader(
 					metric.NewPeriodicReader(&filterExporter{Exporter: exporter, match: match},
 						metric.WithProducer(otelProm),
-						metric.WithInterval(defaultRule.Rate))))
+						metric.WithInterval(defaultRule.Rate.Get()))))
 		}
 
 		for i, rate := range rates {

@@ -1,0 +1,611 @@
+$generate:
+  methods:
+    json: true
+
+  import:
+    url:      gitlab.com/accumulatenetwork/accumulate/pkg/url
+    record:   gitlab.com/accumulatenetwork/accumulate/pkg/types/record
+    encoding: gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding
+
+  varPrefix:
+    schema: s
+    widget: w
+
+Config:
+  class: composite
+  transients:
+    - name: file
+      type: string
+      marshal-as: none
+  fields:
+    - name: DotEnv
+      type: '*bool'
+    - name: Network
+      type: string
+    - name: Configurations
+      type: '[]Configuration'
+    - name: Services
+      type: '[]Service'
+
+    - name: P2P
+      type:
+        name: P2P
+        class: composite
+        pointer: true
+        fields:
+          - name: Listen
+            type: '[]p2p.Multiaddr'
+          - name: BootstrapPeers
+            type: '[]p2p.Multiaddr'
+          - name: Key
+            type: PrivateKey
+          - name: PeerDB
+            type: '*string'
+          - name: EnablePeerTracking
+            type: bool
+          - name: DiscoveryMode
+            type: '*DhtMode'
+          - name: External
+            type: p2p.Multiaddr
+
+    - name: Logging
+      type:
+        name: Logging
+        class: composite
+        pointer: true
+        fields:
+          - name: Format
+            type: string
+          - name: Color
+            type: '*bool'
+
+          - name: Rules
+            type:
+              name: LoggingRule
+              class: composite
+              pointer: true
+              repeatable: true
+              fields:
+                - name: Level
+                  type: slog.Level
+                  keep-empty: true
+                - name: Modules
+                  type: '[]string'
+
+          - name: Loki
+            type:
+              name: LokiLogging
+              class: composite
+              pointer: true
+              fields:
+                - name: Enable
+                  type: bool
+                - name: Url
+                  type: string
+                - name: Username
+                  type: string
+                - name: Password
+                  type: string
+
+    - name: Instrumentation
+      type:
+        name: Instrumentation
+        class: composite
+        pointer: true
+        fields:
+          - type: HttpListener
+          - name: PprofListen
+            type: p2p.Multiaddr
+
+          - name: Monitoring
+            type:
+              name: Monitor
+              class: composite
+              pointer: true
+              fields:
+                - name: Directory
+                  description: is the directory traces and profiles are written to
+                  type: string
+                - name: ProfileMemory
+                  description: enables profiling when memory usage increases dramatically
+                  type: '*bool'
+                - name: MemoryPollingRate
+                  description: is rate at which to poll memory usage
+                  type: '*encoding.Duration'
+                - name: AllocRateTrigger
+                  description: is the rate of allocation in bytes/second that triggers a profile
+                  type: '*float'
+
+    - name: Telemetry
+      type:
+        name: Telemetry
+        class: composite
+        pointer: true
+        fields:
+          - name: Enabled
+            type: '*bool'
+          - name: Stdout
+            type: '*bool'
+          - name: Export
+            type: '*HttpListener'
+
+          - name: Otlp
+            type:
+              name: OtlpConfig
+              class: composite
+              pointer: true
+              fields:
+                - name: Enabled
+                  type: '*bool'
+                - name: Endpoint
+                  type: string
+                - name: Username
+                  type: string
+                - name: Password
+                  type: string
+
+          - name: Rules
+            type:
+              name: TelemetryRule
+              class: composite
+              pointer: true
+              repeatable: true
+              fields:
+                - name: Match
+                  type: '[]string'
+                - name: Drop
+                  type: bool
+                - name: Rate
+                  type: encoding.Duration
+
+Configuration:
+  class: union
+  discriminator:
+    field: Type
+    type:
+      name: ConfigurationType
+      class: enum
+      underlying: int
+      values:
+        CoreValidator:
+          value: 1
+        Gateway:
+          value: 2
+        Devnet:
+          value: 3
+
+  members:
+    - name: CoreValidatorConfiguration
+      class: composite
+      pointer: true
+      fields:
+        - name: Mode
+          type:
+            name: CoreValidatorMode
+            class: enum
+            underlying: int
+            values:
+              Dual:
+                value: 0
+              DN:
+                value: 1
+              BVN:
+                value: 2
+        - name: Listen
+          type: p2p.Multiaddr
+        - name: BVN
+          type: string
+        - name: ValidatorKey
+          type: PrivateKey
+        - name: DnGenesis
+          type: string
+        - name: BvnGenesis
+          type: string
+        - name: DnBootstrapPeers
+          type: '[]p2p.Multiaddr'
+        - name: BvnBootstrapPeers
+          type: '[]p2p.Multiaddr'
+        - name: EnableHealing
+          type: '*bool'
+          optional: true
+        - name: EnableDirectDispatch
+          type: '*bool'
+          optional: true
+        - name: EnableSnapshots
+          type: '*bool'
+          optional: true
+        - name: MaxEnvelopesPerBlock
+          type: '*uint'
+          optional: true
+        - name: StorageType
+          type: '*StorageType'
+          optional: true
+
+    - name: GatewayConfiguration
+      class: composite
+      pointer: true
+      fields:
+        - name: Listen
+          type: p2p.Multiaddr
+
+    - name: DevnetConfiguration
+      class: composite
+      pointer: true
+      fields:
+        - name: Listen
+          type: p2p.Multiaddr
+        - name: Bvns
+          type: uint
+        - name: Validators
+          type: uint
+        - name: Followers
+          type: uint
+          optional: true
+        - name: Globals
+          type: '*network.GlobalValues'
+        - name: StorageType
+          type: '*StorageType'
+          optional: true
+
+Service:
+  class: union
+  discriminator:
+    field: Type
+    type:
+      name: ServiceType
+      class: enum
+      underlying: int
+      values:
+        Storage:
+          value: 1
+        Consensus:
+          value: 2
+        Querier:
+          value: 3
+        Network:
+          value: 4
+        Metrics:
+          value: 5
+        Events:
+          value: 6
+        Http:
+          value: 7
+        Router:
+          value: 8
+        Snapshot:
+          value: 9
+        Faucet:
+          value: 10
+        Subnode:
+          value: 11
+
+  members:
+    - name: StorageService
+      class: composite
+      pointer: true
+      fields:
+        - name: Name
+          type: string
+          optional: true
+        - name: Storage
+          type: Storage
+
+    - name: ConsensusService
+      class: composite
+      pointer: true
+      fields:
+        - name: NodeDir
+          type: string
+        - name: ValidatorKey
+          type: PrivateKey
+        - name: Genesis
+          type: string
+        - name: Listen
+          type: p2p.Multiaddr
+        - name: BootstrapPeers
+          type: '[]p2p.Multiaddr'
+        - name: MetricsNamespace
+          type: string
+          optional: true
+        - name: App
+          type:
+            name: ConsensusApp
+            class: union
+            discriminator:
+              field: Type
+              type:
+                name: ConsensusAppType
+                class: enum
+                underlying: int
+                values:
+                  Core:
+                    value: 1
+            members:
+              - name: CoreConsensusApp
+                class: composite
+                pointer: true
+                fields:
+                  - name: Partition
+                    type: '*protocol.PartitionInfo'
+                  - name: EnableHealing
+                    type: '*bool'
+                    optional: true
+                  - name: EnableDirectDispatch
+                    type: '*bool'
+                    optional: true
+                  - name: MaxEnvelopesPerBlock
+                    type: '*uint'
+                    optional: true
+
+
+    - name: Querier
+      class: composite
+      pointer: true
+      fields:
+        - name: Partition
+          type: string
+        - name: Storage
+          type: '*StorageOrRef'
+          optional: true
+
+    - name: NetworkService
+      class: composite
+      pointer: true
+      fields:
+        - name: Partition
+          type: string
+
+    - name: MetricsService
+      class: composite
+      pointer: true
+      fields:
+        - name: Partition
+          type: string
+
+    - name: EventsService
+      class: composite
+      pointer: true
+      fields:
+        - name: Partition
+          type: string
+
+    - name: HttpService
+      class: composite
+      pointer: true
+      fields:
+        - type:
+            name: HttpListener
+            class: composite
+            fields:
+              - name: Listen
+                description: are the addresses and schemes to listen on
+                type: '[]p2p.Multiaddr'
+              - name: ConnectionLimit
+                description: limits the number of concurrent connections
+                type: '*int'
+                optional: true
+              - name: ReadHeaderTimeout
+                description: protects against slow-loris attacks
+                type: '*encoding.Duration'
+                optional: true
+              - name: TlsCertPath
+                description: is the path of the TLS certificate
+                type: string
+                optional: true
+              - name: TlsKeyPath
+                description: is the path of the TLS key
+                type: string
+                optional: true
+        - name: CorsOrigins
+          description: is a list of allowed CORS origins
+          type: '[]string'
+          optional: true
+        - name: LetsEncrypt
+          description: automatically retrieves a certificate from Let's Encrypt for the specified domains
+          type: '[]string'
+          optional: true
+        - name: DebugJsonRpc
+          type: '*bool'
+          optional: true
+        - name: Router
+          type: '*RouterServiceRef'
+        - name: PeerMap
+          description: hard-codes the peer map
+          # type: '[]*HttpPeerMapEntry'
+          type:
+            name: HttpPeerMapEntry
+            class: composite
+            pointer: true
+            repeatable: true
+            fields:
+              - name: ID
+                type: p2p.PeerID
+              - name: Partitions
+                type: '[]string'
+              - name: Addresses
+                type: '[]p2p.Multiaddr'
+
+    - name: RouterService
+      class: composite
+      pointer: true
+      fields:
+        - name: Name
+          type: string
+          optional: true
+        - name: Events
+          description: may specify an event bus to use for routing table updates
+          type: string
+          optional: true
+        - name: PeerMap
+          description: uses a hard-coded peer map for initializing routing
+          type: '[]*HttpPeerMapEntry'
+
+    - name: SnapshotService
+      class: composite
+      pointer: true
+      fields:
+        - name: Partition
+          type: string
+        - name: Storage
+          type: '*StorageOrRef'
+          optional: true
+        - name: Directory
+          description: is the directory to store snapshots in
+          type: string
+        - name: Schedule
+          description: is the schedule for capturing snapshots
+          type: '*network.CronSchedule'
+          optional: true
+        - name: RetainCount
+          description:  is the number of snapshots to retain
+          type: '*uint'
+          optional: true
+        - name: EnableIndexing
+          description: enables indexing of snapshots
+          type: '*bool'
+          optional: true
+
+    - name: FaucetService
+      class: composite
+      pointer: true
+      fields:
+        - name: Account
+          type: '*url.URL'
+        - name: SigningKey
+          type: PrivateKey
+        - name: Router
+          type: '*RouterServiceRef'
+
+    - name: SubnodeService
+      class: composite
+      pointer: true
+      fields:
+        - name: Name
+          type: string
+        - name: NodeKey
+          type: PrivateKey
+        - name: Services
+          type: '[]Service'
+
+Storage:
+  class: union
+  discriminator:
+    field: Type
+    type:
+      name: StorageType
+      class: enum
+      underlying: int
+      values:
+        Memory:
+          value: 1
+        Badger:
+          value: 2
+        Bolt:
+          value: 3
+        LevelDB:
+          value: 4
+
+        ExpBlockDB:
+          value: 1001
+
+  members:
+    - name: MemoryStorage
+      class: composite
+      pointer: true
+      fields: []
+
+    - name: BadgerStorage
+      class: composite
+      pointer: true
+      fields:
+        - name: Path
+          type: string
+        - name: Version
+          type: int
+
+    - name: BoltStorage
+      class: composite
+      pointer: true
+      fields:
+        - name: Path
+          type: string
+
+    - name: LevelDBStorage
+      class: composite
+      pointer: true
+      fields:
+        - name: Path
+          type: string
+
+    - name: ExpBlockDBStorage
+      class: composite
+      pointer: true
+      fields:
+        - name: Path
+          type: string
+
+PrivateKey:
+  class: union
+  discriminator:
+    field: Type
+    type:
+      name: PrivateKeyType
+      class: enum
+      underlying: int
+      values:
+        Raw:
+          value: 1
+        Transient:
+          value: 2
+        Seed:
+          value: 3
+        CometPrivValFile:
+          value: 4
+        CometNodeKeyFile:
+          value: 5
+
+  members:
+    - name: RawPrivateKey
+      class: composite
+      pointer: true
+      fields:
+        - name: Address
+          type: string
+
+    - name: TransientPrivateKey
+      class: composite
+      pointer: true
+      transients:
+        - name: key
+          type: address.Address
+
+    - name: PrivateKeySeed
+      discriminator: seed
+      class: composite
+      pointer: true
+      fields:
+        - name: Seed
+          type: '*record.Key'
+      transients:
+        - name: key
+          type: address.Address
+
+    - name: CometPrivValFile
+      class: composite
+      pointer: true
+      fields:
+        - name: Path
+          type: string
+      transients:
+        - name: key
+          type: address.Address
+
+    - name: CometNodeKeyFile
+      class: composite
+      pointer: true
+      fields:
+        - name: Path
+          type: string
+      transients:
+        - name: key
+          type: address.Address

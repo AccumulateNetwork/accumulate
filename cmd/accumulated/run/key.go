@@ -21,13 +21,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-type PrivateKey interface {
-	Type() PrivateKeyType
-	CopyAsInterface() any
-
-	get(inst *Instance) (address.Address, error)
-}
-
 func (k *RawPrivateKey) get(inst *Instance) (address.Address, error) {
 	return address.Parse(k.Address)
 }
