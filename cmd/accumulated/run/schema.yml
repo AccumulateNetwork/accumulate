@@ -16,6 +16,8 @@ Config:
     - name: file
       type: string
   fields:
+    - name: InstanceID
+      type: string
     - name: DotEnv
       type: '*bool'
     - name: Network

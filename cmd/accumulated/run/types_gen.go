@@ -122,6 +122,7 @@ func (v *CometPrivValFile) UnmarshalJSON(b []byte) error {
 }
 
 type Config struct {
+	InstanceID      string
 	DotEnv          *bool
 	Network         string
 	Configurations  []Configuration

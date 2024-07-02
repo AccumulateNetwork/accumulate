@@ -52,6 +52,7 @@ func Start(ctx context.Context, cfg *Config) (*Instance, error) {
 
 func New(ctx context.Context, cfg *Config) (*Instance, error) {
 	inst := new(Instance)
+	inst.id = cfg.InstanceID
 	inst.config = cfg
 	inst.running = new(sync.WaitGroup)
 	inst.context, inst.shutdown = context.WithCancel(ctx)
@@ -78,7 +79,7 @@ func New(ctx context.Context, cfg *Config) (*Instance, error) {
 	setDefaultVal[PrivateKey](&cfg.P2P.Key, new(TransientPrivateKey))
 	if key, err := getPrivateKey(cfg.P2P.Key, inst); err != nil {
 		return nil, errors.UnknownError.WithFormat("load key: %w", err)
-	} else {
+	} else if inst.id == "" {
 		inst.id = uuid.NewSHA1(uuid.Nil, key[32:]).String()
 	}
 

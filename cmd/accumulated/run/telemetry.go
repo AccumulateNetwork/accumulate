@@ -108,7 +108,7 @@ func (t *Telemetry) setupTraceProvider(res *resource.Resource, inst *Instance) e
 }
 
 func (t *Telemetry) setupMeterProvider(res *resource.Resource, inst *Instance) error {
-	otelProm := &telemetry.OtelPromProducer{Gatherer: prometheus.DefaultGatherer}
+	otelProm := &telemetry.OtelPromProducer{Network: inst.config.Network, Gatherer: prometheus.DefaultGatherer}
 	options := []metric.Option{
 		metric.WithResource(res),
 	}

@@ -27,6 +27,7 @@ import (
 var reConsensus = regexp.MustCompile(`^(?:cometbft|consensus|tendermint)_([A-Za-z\d]+)(?:_(\d+))_((?:abci|blocksync|consensus|mempool|p2p|state)_.*)`)
 
 type OtelPromProducer struct {
+	Network  string
 	Gatherer prometheus.Gatherer
 }
 
@@ -66,7 +67,6 @@ func (p *OtelPromProducer) Produce(ctx context.Context) ([]metricdata.ScopeMetri
 		mOtel.Description = fProm.GetHelp()
 		mOtel.Unit = unitWordToUCUM(fProm.GetUnit())
 
-
 		// Transform cometbft_ and consensus_ to tendermint_ and remove the
 		// partition. For example:
 		//
@@ -74,6 +74,10 @@ func (p *OtelPromProducer) Produce(ctx context.Context) ([]metricdata.ScopeMetri
 		// tendermint_chico_consensus_total_txs ->
 		// tendermint_consensus_total_txs{partition="chico"}
 		var attrs []attribute.KeyValue
+		if p.Network != "" {
+			attrs = append(attrs,
+				attribute.String("network", p.Network))
+		}
 		if m := reConsensus.FindStringSubmatch(mOtel.Name); m != nil {
 			attrs = append(attrs,
 				attribute.String("partition", m[1]))

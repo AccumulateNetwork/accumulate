@@ -40,6 +40,7 @@ var cmd = &cobra.Command{
 }
 
 var flag = struct {
+	Config       string
 	Key          PrivateKeyFlag
 	LogLevel     string
 	HttpListen   []multiaddr.Multiaddr
@@ -73,6 +74,7 @@ func init() {
 		flag.PeerDatabase = filepath.Join(cu.HomeDir, ".accumulate", "cache", "peerdb.json")
 	}
 
+	cmd.Flags().StringVar(&flag.Config, "config", "", "Specifies a configuration file. Overrides the default configuration.")
 	cmd.Flags().Var(&flag.Key, "key", "The node key - not required but highly recommended. The value can be a key or a file containing a key. The key must be hex, base64, or an Accumulate secret key address.")
 	cmd.Flags().VarP((*MultiaddrSliceFlag)(&flag.HttpListen), "http-listen", "l", "HTTP listening address(es) (default /ip4/0.0.0.0/tcp/8080/http)")
 	cmd.Flags().Var((*MultiaddrSliceFlag)(&flag.PromListen), "prom-listen", "Prometheus listening address(es)")
@@ -113,30 +115,10 @@ func run(cmd *cobra.Command, args []string) {
 		Fatalf("must specify at least one peer")
 	}
 
-	http := &HttpService{
-		HttpListener: HttpListener{
-			Listen:            flag.HttpListen,
-			ConnectionLimit:   &flag.ConnLimit,
-			ReadHeaderTimeout: (*encoding.Duration)(&flag.Timeout),
-			TlsCertPath:       flag.TlsCert,
-			TlsKeyPath:        flag.TlsKey,
-		},
-		CorsOrigins: flag.CorsOrigins,
-		LetsEncrypt: flag.LetsEncrypt,
-		Router:      ServiceValue(&RouterService{}),
-	}
 	cfg := &Config{
-		Network: args[0],
-		Logging: &Logging{
-			Rules: []*LoggingRule{{
-				Level: slog.LevelInfo,
-			}},
-		},
-		Instrumentation: &Instrumentation{
-			HttpListener: HttpListener{
-				Listen: flag.PromListen,
-			},
-		},
+		Network:         args[0],
+		Logging:         &Logging{},
+		Instrumentation: &Instrumentation{},
 		P2P: &P2P{
 			Key:                flag.Key.Value,
 			Listen:             flag.P2pListen,
@@ -144,10 +126,60 @@ func run(cmd *cobra.Command, args []string) {
 			PeerDB:             &flag.PeerDatabase,
 			EnablePeerTracking: true,
 		},
-		Services: []Service{http},
 	}
 
-	if strings.EqualFold(args[0], "MainNet") {
+	var http *HttpService
+	if flag.Config != "" {
+		Check(cfg.LoadFrom(flag.Config))
+		for _, s := range cfg.Services {
+			if h, ok := s.(*HttpService); ok {
+				http = h
+				break
+			}
+		}
+	}
+
+	if len(cfg.Logging.Rules) == 0 {
+		cfg.Logging.Rules = []*LoggingRule{{
+			Level: slog.LevelInfo,
+		}}
+	}
+
+	if len(cfg.Instrumentation.HttpListener.Listen) == 0 {
+		cfg.Instrumentation.HttpListener.Listen = flag.PromListen
+	}
+
+	if http == nil {
+		http = &HttpService{}
+		cfg.Services = append(cfg.Services, http)
+	}
+
+	if http.Listen == nil {
+		http.Listen = flag.HttpListen
+	}
+	if http.ConnectionLimit == nil {
+		http.ConnectionLimit = &flag.ConnLimit
+	}
+	if http.ReadHeaderTimeout == nil {
+		http.ReadHeaderTimeout = (*encoding.Duration)(&flag.Timeout)
+	}
+	if http.TlsCertPath == "" {
+		http.TlsCertPath = flag.TlsCert
+	}
+	if http.TlsKeyPath == "" {
+		http.TlsKeyPath = flag.TlsKey
+	}
+	if http.CorsOrigins == nil {
+		http.CorsOrigins = flag.CorsOrigins
+	}
+	if http.LetsEncrypt == nil {
+		http.LetsEncrypt = flag.LetsEncrypt
+	}
+	if http.Router == nil {
+		http.Router = ServiceValue(&RouterService{})
+	}
+
+	if strings.EqualFold(args[0], "MainNet") && http.PeerMap == nil {
 		// Hard code the peers used for the MainNet as a hack for stability
 		http.PeerMap = []*HttpPeerMapEntry{
 			{

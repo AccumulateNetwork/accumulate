@@ -140,6 +140,10 @@ func init() {
 		},
 		Fields: []*schema.Field{
 			{
+				Name: "InstanceID",
+				Type: &schema.SimpleType{Type: schema.SimpleTypeString},
+			},
+			{
 				Name: "DotEnv",
 				Type: &schema.PointerType{
 					TypeBase: schema.TypeBase{},
@@ -1576,7 +1580,6 @@ func init() {
 		},
 		"varPrefix": schema.MapValue{
 			"schema": schema.StringValue("s"),
-			"widget": schema.StringValue("w"),
 		},
 	}
 
