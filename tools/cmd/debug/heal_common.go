@@ -66,13 +66,19 @@ func init() {
 
 	cmdHeal.PersistentPreRun = func(cmd *cobra.Command, args []string) {
 		if !cmd.Flag("peer-db").Changed {
-			peerDb = filepath.Join(currentUser.HomeDir, ".accumulate", "cache", strings.ToLower(args[0])+"-peers.json")
+			path := filepath.Join(".accumulate", "cache", strings.ToLower(args[0])+"-peers.json")
+			peerDb = filepath.Join(currentUser.HomeDir, path)
+			slog.Info("Automatically selected peer database", "path", filepath.Join("~", path))
 		}
 		if !cmd.Flag("cached-scan").Changed {
-			cachedScan = filepath.Join(currentUser.HomeDir, ".accumulate", "cache", strings.ToLower(args[0])+".json")
+			path := filepath.Join(".accumulate", "cache", strings.ToLower(args[0])+".json")
+			cachedScan = filepath.Join(currentUser.HomeDir, path)
+			slog.Info("Automatically selected cached scan", "path", filepath.Join("~", path))
 		}
 		if f := cmd.Flag("light-db"); f != nil && !f.Changed {
-			lightDb = filepath.Join(currentUser.HomeDir, ".accumulate", "cache", strings.ToLower(args[0])+".db")
+			path := filepath.Join(".accumulate", "cache", strings.ToLower(args[0])+".db")
+			lightDb = filepath.Join(currentUser.HomeDir, path)
+			slog.Info("Automatically selected light database", "path", filepath.Join("~", path))
 		}
 	}
 }
