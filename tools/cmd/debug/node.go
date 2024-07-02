@@ -22,6 +22,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 var cmdCheckNode = &cobra.Command{
@@ -86,7 +87,7 @@ func checkNode(_ *cobra.Command, args []string) {
 		fmt.Printf("Peer ID:\t%v\n", ni.PeerID)
 		fmt.Printf("Network:\t%v\n", ni.Network)
 
-		cs, err := jc.ConsensusStatus(ctx, api.ConsensusStatusOptions{NodeID: peerID})
+		cs, err := jc.ConsensusStatus(ctx, api.ConsensusStatusOptions{NodeID: peerID, Partition: protocol.Directory})
 		check(err)
 		fmt.Printf("Validator:\t%x\n", cs.ValidatorKeyHash)
 
