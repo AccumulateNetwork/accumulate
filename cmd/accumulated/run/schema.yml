@@ -9,14 +9,12 @@ $generate:
 
   varPrefix:
     schema: s
-    widget: w
 
 Config:
   class: composite
   transients:
     - name: file
       type: string
-      marshal-as: none
   fields:
     - name: DotEnv
       type: '*bool'
