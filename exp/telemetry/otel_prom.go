@@ -75,6 +75,8 @@ func (p *OtelPromProducer) Produce(ctx context.Context) ([]metricdata.ScopeMetri
 		// tendermint_consensus_total_txs{partition="chico"}
 		var attrs []attribute.KeyValue
 		if p.Network != "" {
+			// TODO: Replace with a proper, pipelined label rewriter that also
+			// works for native otel metrics
 			attrs = append(attrs,
 				attribute.String("network", p.Network))
 		}
