@@ -62,6 +62,11 @@ func initRouter(opts RouterOptions) {
 		}
 	}()
 
+	// Give the DHT time. Things seem to run more smoothly with a delay, for
+	// whatever reason. Scanning is unreliable without this, and even if a scan
+	// isn't needed, simply querying a node can fail without this.
+	time.Sleep(time.Minute)
+
 	// Address of the network service for the directory partition
 	dirNetSvc := api.ServiceTypeNetwork.AddressFor(protocol.Directory)
 
@@ -101,7 +106,6 @@ func initRouter(opts RouterOptions) {
 		// If not then scan the network (synchronously)
 		if !found {
 			slog.InfoContext(opts.Context, "Scanning for peers")
-			time.Sleep(time.Minute) // Give the DHT time
 			tr.ScanPeers(5 * time.Minute)
 		}
 	}
