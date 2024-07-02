@@ -7,6 +7,8 @@
 package run
 
 import (
+	"log/slog"
+
 	"gitlab.com/accumulatenetwork/accumulate/exp/apiutil"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
@@ -56,7 +58,20 @@ func (r *RouterService) create(inst *Instance) (routing.Router, error) {
 		}
 	}
 
-	return apiutil.InitRouter(opts)
+	router, err := apiutil.InitRouter(opts)
+	if err != nil {
+		return nil, err
+	}
+
+	go func() {
+		if !<-router.(*routing.RouterInstance).Ready() {
+			// Failed to initialize router
+			slog.ErrorContext(inst.context, "Shutting down", "error", "failed to initialize router")
+			inst.shutdown()
+		}
+	}()
+
+	return router, nil
 }
 
 func (r *RouterService) start(inst *Instance) error {
