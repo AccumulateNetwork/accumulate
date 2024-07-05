@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
@@ -21,7 +22,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	binary2 "gitlab.com/accumulatenetwork/core/schema/pkg/binary"
-	"golang.org/x/exp/slog"
 )
 
 type Database struct {

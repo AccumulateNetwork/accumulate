@@ -8,6 +8,7 @@ package block
 
 import (
 	"bytes"
+	"log/slog"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
@@ -16,7 +17,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"golang.org/x/exp/slog"
 )
 
 // bundle is a bundle of messages to be processed.
@@ -206,7 +206,7 @@ func (d *bundle) process() ([]*protocol.TransactionStatus, error) {
 	}
 	for h, c := range pCount {
 		if c > 1 {
-			slog.ErrorCtx(d.Context, "Duplicate synthetic messages", "id", pID[h], "count", c)
+			slog.ErrorContext(d.Context, "Duplicate synthetic messages", "id", pID[h], "count", c)
 		}
 	}
 

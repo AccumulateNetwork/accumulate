@@ -9,6 +9,7 @@ package simulator
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"math/big"
 	"sync"
 
@@ -36,7 +37,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator/consensus"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator/services"
-	"golang.org/x/exp/slog"
 )
 
 type simFactory struct {

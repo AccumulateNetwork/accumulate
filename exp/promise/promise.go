@@ -9,11 +9,10 @@ package promise
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"runtime"
 	"sync"
 	"sync/atomic"
-
-	"golang.org/x/exp/slog"
 )
 
 // A Promise represents an asynchronous process.

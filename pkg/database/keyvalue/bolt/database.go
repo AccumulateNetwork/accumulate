@@ -7,6 +7,8 @@
 package bolt
 
 import (
+	"log/slog"
+
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
@@ -14,7 +16,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	bolt "go.etcd.io/bbolt"
-	"golang.org/x/exp/slog"
 )
 
 type Database struct {

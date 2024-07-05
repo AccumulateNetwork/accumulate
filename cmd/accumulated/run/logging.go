@@ -9,6 +9,7 @@ package run
 import (
 	"encoding/json"
 	"io"
+	"log/slog"
 	"os"
 	"strings"
 
@@ -16,7 +17,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/exp/loki"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"golang.org/x/exp/slog"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 

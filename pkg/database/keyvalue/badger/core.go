@@ -7,6 +7,7 @@
 package badger
 
 import (
+	"log/slog"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -17,7 +18,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
-	"golang.org/x/exp/slog"
 )
 
 // TruncateBadger controls whether Badger is configured to truncate corrupted

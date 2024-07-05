@@ -8,6 +8,7 @@ package run
 
 import (
 	"io"
+	"log/slog"
 
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
@@ -16,7 +17,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/bolt"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/leveldb"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
-	"golang.org/x/exp/slog"
 )
 
 var storageProvides = ioc.Provides[keyvalue.Beginner](func(c *StorageService) string { return c.Name })
@@ -153,7 +153,7 @@ func (i *Instance) cleanupCloser(c io.Closer, msg string) {
 	i.cleanup(func() {
 		err := c.Close()
 		if err != nil {
-			slog.ErrorCtx(i.context, msg, "error", err)
+			slog.ErrorContext(i.context, msg, "error", err)
 		}
 	})
 }
