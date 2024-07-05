@@ -9,10 +9,10 @@ package main
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"sync"
 
 	"gitlab.com/accumulatenetwork/accumulate/exp/promise"
-	"golang.org/x/exp/slog"
 )
 
 var errNone = errors.New("none")
@@ -47,7 +47,7 @@ func try[V any](fn func() (V, error)) func() promise.Result[V] {
 func catchAndLog[V any](ctx context.Context, p promise.Promise[V], message string, args ...any) promise.Promise[V] {
 	return promise.Catch(p, func(err error) promise.Result[V] {
 		args = append(args, "error", err)
-		slog.DebugCtx(ctx, message, args...)
+		slog.DebugContext(ctx, message, args...)
 		return promise.ErrorOf[V](err)
 	})
 }

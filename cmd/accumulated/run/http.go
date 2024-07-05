@@ -9,6 +9,7 @@ package run
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net"
 	"net/http"
 	"strings"
@@ -28,7 +29,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"golang.org/x/crypto/acme/autocert"
-	"golang.org/x/exp/slog"
 )
 
 const (
@@ -111,7 +111,7 @@ func (h *HttpService) start(inst *Instance) error {
 		if err == nil {
 			err := json.NewEncoder(w).Encode(res)
 			if err != nil {
-				slog.ErrorCtx(r.Context(), "Failed to encode response", "error", err)
+				slog.ErrorContext(r.Context(), "Failed to encode response", "error", err)
 			}
 			return
 		}
@@ -121,7 +121,7 @@ func (h *HttpService) start(inst *Instance) error {
 
 		err = json.NewEncoder(w).Encode(err2)
 		if err != nil {
-			slog.ErrorCtx(r.Context(), "Failed to encode response", "error", err)
+			slog.ErrorContext(r.Context(), "Failed to encode response", "error", err)
 		}
 	})
 
@@ -192,7 +192,7 @@ func (h *HttpListener) serveHTTP(inst *Instance, server *http.Server, l net.List
 	if secure {
 		scheme = "https"
 	}
-	slog.InfoCtx(inst.context, "Listening", "module", "http", "address", l.Addr(), "scheme", scheme)
+	slog.InfoContext(inst.context, "Listening", "module", "http", "address", l.Addr(), "scheme", scheme)
 
 	if *h.ConnectionLimit > 0 {
 		pool := make(chan struct{}, *h.ConnectionLimit)

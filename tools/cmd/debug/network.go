@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	stdurl "net/url"
 	"os"
 	"path/filepath"
@@ -47,7 +48,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"golang.org/x/exp/slog"
 )
 
 var networkCmd = &cobra.Command{
@@ -221,7 +221,7 @@ func networkStatus(_ *cobra.Command, args []string) {
 	fmt.Fprintln(os.Stderr, "Identifying validators...")
 	work(mu, wg, func() {
 		for _, val := range ns.Network.Validators {
-			slog.DebugCtx(ctx, "Checking validator", "id", logging.AsHex(val.PublicKeyHash).Slice(0, 4), "operator", val.Operator)
+			slog.DebugContext(ctx, "Checking validator", "id", logging.AsHex(val.PublicKeyHash).Slice(0, 4), "operator", val.Operator)
 			st := new(nodeStatus)
 			st.PeerID = peerByKeyHash[val.PublicKeyHash]
 			st.Key = val.PublicKey
@@ -237,7 +237,7 @@ func networkStatus(_ *cobra.Command, args []string) {
 				}
 			}
 			if len(st.Parts) == 0 {
-				slog.DebugCtx(ctx, "Validator is inactive", "id", logging.AsHex(val.PublicKeyHash).Slice(0, 4), "operator", val.Operator)
+				slog.DebugContext(ctx, "Validator is inactive", "id", logging.AsHex(val.PublicKeyHash).Slice(0, 4), "operator", val.Operator)
 				continue
 			}
 
@@ -245,7 +245,7 @@ func networkStatus(_ *cobra.Command, args []string) {
 			nodes = append(nodes, st)
 
 			for _, addr := range addrByKeyHash[val.PublicKeyHash] {
-				slog.DebugCtx(ctx, "Checking validator address", "id", logging.AsHex(val.PublicKeyHash).Slice(0, 4), "operator", val.Operator, "address", addr)
+				slog.DebugContext(ctx, "Checking validator address", "id", logging.AsHex(val.PublicKeyHash).Slice(0, 4), "operator", val.Operator, "address", addr)
 
 				var host string
 				multiaddr.ForEach(addr, func(c multiaddr.Component) bool {
@@ -268,7 +268,7 @@ func networkStatus(_ *cobra.Command, args []string) {
 				base := fmt.Sprintf("http://%s:16592", host)
 				c, err := http.New(base, base+"/ws")
 				if err != nil {
-					slog.DebugCtx(ctx, "Error while creating consensus client", "error", err, "host", host)
+					slog.DebugContext(ctx, "Error while creating consensus client", "error", err, "host", host)
 					continue
 				}
 
@@ -278,7 +278,7 @@ func networkStatus(_ *cobra.Command, args []string) {
 
 					status, err := c.Status(ctx)
 					if err != nil {
-						slog.DebugCtx(ctx, "Error while querying consensus status", "error", err, "host", host)
+						slog.DebugContext(ctx, "Error while querying consensus status", "error", err, "host", host)
 						return nil, false
 					}
 					return status, true
@@ -294,7 +294,7 @@ func networkStatus(_ *cobra.Command, args []string) {
 
 					netInfo, err := c.NetInfo(ctx)
 					if err != nil {
-						slog.DebugCtx(ctx, "Error while querying consensus status", "error", err, "host", host)
+						slog.DebugContext(ctx, "Error while querying consensus status", "error", err, "host", host)
 						return nil, false
 					}
 					return netInfo, true
@@ -318,11 +318,11 @@ func networkStatus(_ *cobra.Command, args []string) {
 					continue
 				}
 				seenComet[peer.NodeInfo.ID()] = true
-				slog.DebugCtx(ctx, "Checking peer", "comet-id", peer.NodeInfo.ID(), "remote-ip", peer.RemoteIP)
+				slog.DebugContext(ctx, "Checking peer", "comet-id", peer.NodeInfo.ID(), "remote-ip", peer.RemoteIP)
 
 				c, err := httpClientForPeer(peer, 0)
 				if err != nil {
-					slog.DebugCtx(ctx, "Error while creating consensus client", "error", err, "host", peer.RemoteIP)
+					slog.DebugContext(ctx, "Error while creating consensus client", "error", err, "host", peer.RemoteIP)
 					continue
 				}
 
@@ -332,7 +332,7 @@ func networkStatus(_ *cobra.Command, args []string) {
 
 					netInfo, err := c.NetInfo(ctx)
 					if err != nil {
-						slog.DebugCtx(ctx, "Error while querying consensus network info", "error", err, "host", peer.RemoteIP)
+						slog.DebugContext(ctx, "Error while querying consensus network info", "error", err, "host", peer.RemoteIP)
 						return nil, false
 					}
 					return netInfo, true
@@ -352,7 +352,7 @@ func networkStatus(_ *cobra.Command, args []string) {
 
 					status, err := c.Status(ctx)
 					if err != nil {
-						slog.DebugCtx(ctx, "Error while querying consensus status", "error", err, "host", peer.RemoteIP)
+						slog.DebugContext(ctx, "Error while querying consensus status", "error", err, "host", peer.RemoteIP)
 						return nil, false
 					}
 					return status, true
@@ -380,7 +380,7 @@ func networkStatus(_ *cobra.Command, args []string) {
 					c := jsonrpc.NewClient(fmt.Sprintf("http://%s:16595/v3", node.Host))
 					nodeInfo, err := c.NodeInfo(ctx, api.NodeInfoOptions{})
 					if err != nil {
-						slog.DebugCtx(ctx, "Error while querying node info", "error", err, "host", node.Host)
+						slog.DebugContext(ctx, "Error while querying node info", "error", err, "host", node.Host)
 						return promise.ErrorOf[any](err)
 					}
 
@@ -437,7 +437,7 @@ func networkStatus(_ *cobra.Command, args []string) {
 			}
 
 			kh := sha256.Sum256(node.Key)
-			slog.DebugCtx(ctx, "Checking API v3", "operator", node.Operator, "id", logging.AsHex(kh).Slice(0, 4), "host", node.Host)
+			slog.DebugContext(ctx, "Checking API v3", "operator", node.Operator, "id", logging.AsHex(kh).Slice(0, 4), "host", node.Host)
 			addr, err := multiaddr.NewMultiaddr(fmt.Sprintf("/dns/%s/tcp/16593/p2p/%v", node.Host, node.PeerID))
 			check(err)
 
@@ -457,7 +457,7 @@ func networkStatus(_ *cobra.Command, args []string) {
 
 				_, err = dialer.Dial(ctx, addr.Encapsulate(api.ServiceTypeNode.Address().Multiaddr()))
 				if err != nil {
-					slog.DebugCtx(ctx, "Error while dialing libp2p", "error", err, "address", addr)
+					slog.DebugContext(ctx, "Error while dialing libp2p", "error", err, "address", addr)
 				}
 				return nil, err == nil
 			}))
@@ -476,14 +476,14 @@ func networkStatus(_ *cobra.Command, args []string) {
 				}}
 				ni, err = mc.NodeInfo(ctx, api.NodeInfoOptions{PeerID: node.PeerID})
 				if err != nil {
-					slog.DebugCtx(ctx, "Error while querying via libp2p", "error", err, "address", addr)
+					slog.DebugContext(ctx, "Error while querying via libp2p", "error", err, "address", addr)
 					return promise.ErrorOf[*api.NodeInfo](nil)
 				}
 				return promise.ValueOf(ni)
 			})
 			waitFor(wg, promise.SyncThen(mu, query, done(func(ni *api.NodeInfo) {
 				if ni.PeerID != node.PeerID {
-					slog.InfoCtx(ctx, "Got wrong peer ID", "expected", node.PeerID, "actual", ni.PeerID, "address", addr)
+					slog.InfoContext(ctx, "Got wrong peer ID", "expected", node.PeerID, "actual", ni.PeerID, "address", addr)
 				}
 				node.API.QueryV3 = true
 			})))
@@ -502,7 +502,7 @@ func networkStatus(_ *cobra.Command, args []string) {
 			for _, port := range []int{16592, 16692} {
 				base := fmt.Sprintf("http://%s:%d", node.Host, port)
 				kh := sha256.Sum256(node.Key)
-				slog.DebugCtx(ctx, "Checking consensus", "operator", node.Operator, "id", logging.AsHex(kh).Slice(0, 4), "host", base)
+				slog.DebugContext(ctx, "Checking consensus", "operator", node.Operator, "id", logging.AsHex(kh).Slice(0, 4), "host", base)
 
 				c, err := http.New(base, base+"/ws")
 				if err != nil {

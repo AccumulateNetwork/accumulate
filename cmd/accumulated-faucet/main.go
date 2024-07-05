@@ -8,6 +8,7 @@ package main
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/multiformats/go-multiaddr"
 	"github.com/spf13/cobra"
@@ -15,7 +16,6 @@ import (
 	. "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 	cmdutil "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/accumulate"
-	"golang.org/x/exp/slog"
 )
 
 func main() {

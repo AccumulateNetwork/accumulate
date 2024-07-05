@@ -8,6 +8,7 @@ package dial
 
 import (
 	"context"
+	"log/slog"
 	"runtime/debug"
 	"sync"
 	"sync/atomic"
@@ -20,7 +21,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"golang.org/x/exp/slog"
 )
 
 type Discoverer interface {
@@ -100,11 +100,11 @@ func (d *dialer) Dial(ctx context.Context, addr multiaddr.Multiaddr) (stream mes
 func (d *dialer) BadDial(ctx context.Context, addr multiaddr.Multiaddr, s message.Stream, err error) bool {
 	ss, ok := s.(*stream)
 	if !ok {
-		slog.InfoCtx(ctx, "Bad dial", "address", addr, "error", err)
+		slog.InfoContext(ctx, "Bad dial", "address", addr, "error", err)
 		return false
 	}
 
-	slog.InfoCtx(ctx, "Bad dial", "peer", ss.peer, "address", addr, "error", err)
+	slog.InfoContext(ctx, "Bad dial", "peer", ss.peer, "address", addr, "error", err)
 
 	if errors.Is(err, errors.EncodingError) || errors.Is(err, errors.StreamAborted) {
 		// Don't mark a peer bad if there's an encoding failure. Is this a good
@@ -358,33 +358,33 @@ func classifyDialError(ctx context.Context, peer peer.ID, service *api.ServiceAd
 	// Connection attempted timed out, mark peer bad
 	var timeoutError interface{ Timeout() bool }
 	if errors.As(err, &timeoutError) && timeoutError.Timeout() {
-		slog.InfoCtx(ctx, "Unable to dial peer", "peer", peer, "service", service, "error", err)
+		slog.InfoContext(ctx, "Unable to dial peer", "peer", peer, "service", service, "error", err)
 		return severityMarkBad
 	}
 
 	// To many connection attempts failed, mark peer bad
 	if errors.Is(err, swarm.ErrDialBackoff) {
-		slog.InfoCtx(ctx, "Unable to dial peer", "peer", peer, "service", service, "error", err)
+		slog.InfoContext(ctx, "Unable to dial peer", "peer", peer, "service", service, "error", err)
 		return severityMarkBad
 	}
 
 	// Unable to create a connection, mark peer dead
 	if errors.Is(err, network.ErrNoConn) {
-		slog.InfoCtx(ctx, "Unable to dial peer", "peer", peer, "service", service, "error", err)
+		slog.InfoContext(ctx, "Unable to dial peer", "peer", peer, "service", service, "error", err)
 		return severityMarkDead
 	}
 
 	// No known addresses, mark peer dead
 	if errors.Is(err, network.ErrNoRemoteAddrs) ||
 		errors.Is(err, swarm.ErrNoAddresses) {
-		slog.InfoCtx(ctx, "Unable to dial peer", "peer", peer, "service", service, "error", err)
+		slog.InfoContext(ctx, "Unable to dial peer", "peer", peer, "service", service, "error", err)
 		return severityMarkDead
 	}
 
 	// Failed to dial, mark peer bad
 	if errors.Is(err, swarm.ErrDialBackoff) ||
 		errors.Is(err, swarm.ErrNoGoodAddresses) {
-		slog.InfoCtx(ctx, "Unable to dial peer", "peer", peer, "service", service, "error", err)
+		slog.InfoContext(ctx, "Unable to dial peer", "peer", peer, "service", service, "error", err)
 		return severityMarkDead
 	}
 
@@ -402,6 +402,6 @@ func classifyDialError(ctx context.Context, peer peer.ID, service *api.ServiceAd
 	}
 
 	// Unknown error, mark peer bad
-	slog.WarnCtx(ctx, "Unknown error while dialing peer", "peer", peer, "service", service, "error", err)
+	slog.WarnContext(ctx, "Unknown error while dialing peer", "peer", peer, "service", service, "error", err)
 	return severityMarkBad
 }
