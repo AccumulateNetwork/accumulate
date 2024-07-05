@@ -8,10 +8,10 @@ package message
 
 import (
 	"context"
+	"log/slog"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"golang.org/x/exp/slog"
 )
 
 // A Service is implements binary message transport for an API v3 service.

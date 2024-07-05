@@ -7,6 +7,7 @@
 package main
 
 import (
+	"log/slog"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -15,7 +16,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"golang.org/x/exp/slog"
 )
 
 var cmdHealSynth = &cobra.Command{

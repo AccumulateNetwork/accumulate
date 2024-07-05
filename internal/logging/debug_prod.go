@@ -10,8 +10,9 @@
 package logging
 
 import (
+	"log/slog"
+
 	"github.com/fatih/color"
-	"golang.org/x/exp/slog"
 )
 
 func EnableDebugFeatures() {

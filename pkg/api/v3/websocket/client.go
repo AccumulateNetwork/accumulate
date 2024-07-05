@@ -9,6 +9,7 @@ package websocket
 import (
 	"context"
 	"io"
+	"log/slog"
 	"runtime/debug"
 	"sync"
 
@@ -19,7 +20,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
-	"golang.org/x/exp/slog"
 )
 
 // Client is a WebSocket message transport client for API v3.
