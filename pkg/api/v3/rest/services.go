@@ -11,6 +11,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -22,7 +23,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"golang.org/x/exp/slog"
 )
 
 type Service interface {
@@ -286,7 +286,7 @@ func (r responder) write(res any, err error) {
 	if err == nil {
 		err := json.NewEncoder(r.w).Encode(res)
 		if err != nil {
-			slog.ErrorCtx(r.r.Context(), "Failed to encode response", "error", err)
+			slog.ErrorContext(r.r.Context(), "Failed to encode response", "error", err)
 		}
 		return
 	}
@@ -296,6 +296,6 @@ func (r responder) write(res any, err error) {
 
 	err = json.NewEncoder(r.w).Encode(err2)
 	if err != nil {
-		slog.ErrorCtx(r.r.Context(), "Failed to encode response", "error", err)
+		slog.ErrorContext(r.r.Context(), "Failed to encode response", "error", err)
 	}
 }

@@ -11,6 +11,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -55,7 +56,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"golang.org/x/exp/slog"
 )
 
 var (
@@ -127,7 +127,7 @@ func (c *ConsensusService) start(inst *Instance) error {
 	d.eventBus = events.NewBus(d.logger.With("module", "events"))
 
 	events.SubscribeAsync(d.eventBus, func(e events.FatalError) {
-		slog.ErrorCtx(inst.context, "Shutting down due to a fatal error", "error", e.Err)
+		slog.ErrorContext(inst.context, "Shutting down due to a fatal error", "error", e.Err)
 		inst.shutdown()
 	})
 
@@ -249,7 +249,7 @@ func (c *ConsensusService) start(inst *Instance) error {
 	inst.cleanup(func() {
 		err := node.Stop()
 		if err != nil {
-			slog.ErrorCtx(inst.context, "Error while stopping node", "error", err)
+			slog.ErrorContext(inst.context, "Error while stopping node", "error", err)
 		}
 		node.Wait()
 	})
