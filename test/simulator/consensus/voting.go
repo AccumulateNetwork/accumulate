@@ -8,9 +8,9 @@ package consensus
 
 import (
 	"context"
+	"log/slog"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"golang.org/x/exp/slog"
 )
 
 // votes tracks votes by validators.

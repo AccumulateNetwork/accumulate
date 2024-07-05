@@ -8,6 +8,7 @@ package p2p
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 
 	dht "github.com/libp2p/go-libp2p-kad-dht"
@@ -17,7 +18,6 @@ import (
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"golang.org/x/exp/slog"
 )
 
 // startDHT bootstraps a DHT instance.

@@ -8,13 +8,13 @@ package p2p
 
 import (
 	"context"
+	"log/slog"
 	"runtime/debug"
 
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"golang.org/x/exp/slog"
 )
 
 // selfDialer always dials the [Node] directly.
