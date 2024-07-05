@@ -8,6 +8,7 @@ package main
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	_ "net/http/pprof" //nolint:gosec
 	"os"
@@ -24,7 +25,6 @@ import (
 	. "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 	cmdutil "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/accumulate"
-	"golang.org/x/exp/slog"
 )
 
 func main() {

@@ -10,12 +10,12 @@ package values
 
 import (
 	"io"
+	"log/slog"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
-	"golang.org/x/exp/slog"
 )
 
 // debug is a bit field for enabling debug log messages

@@ -8,6 +8,7 @@ package services
 
 import (
 	"context"
+	"log/slog"
 	"runtime/debug"
 
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -16,7 +17,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"golang.org/x/exp/slog"
 )
 
 type Network struct {

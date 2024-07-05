@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -21,7 +22,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"golang.org/x/exp/slog"
 )
 
 type HealAnchorArgs struct {
@@ -60,7 +60,7 @@ func HealAnchor(ctx context.Context, args HealAnchorArgs, si SequencedInfo) erro
 	switch {
 	case err == nil:
 		if res.Status.Delivered() {
-			slog.InfoCtx(ctx, "Anchor has been delivered", "id", si.ID, "source", si.Source, "destination", si.Destination, "number", si.Number)
+			slog.InfoContext(ctx, "Anchor has been delivered", "id", si.ID, "source", si.Source, "destination", si.Destination, "number", si.Number)
 			return errors.Delivered
 		}
 		switch msg := res.Message.(type) {
@@ -98,7 +98,7 @@ func HealAnchor(ctx context.Context, args HealAnchorArgs, si SequencedInfo) erro
 				continue
 			}
 			k := msg.Signature.GetPublicKey()
-			slog.DebugCtx(ctx, "Anchor has been signed by", "validator", hex.EncodeToString(k[:4]))
+			slog.DebugContext(ctx, "Anchor has been signed by", "validator", hex.EncodeToString(k[:4]))
 			signed[*(*[32]byte)(k)] = true
 		}
 	}
@@ -112,7 +112,7 @@ func HealAnchor(ctx context.Context, args HealAnchorArgs, si SequencedInfo) erro
 	}
 	threshold := g.ValidatorThreshold(si.Source)
 
-	slog.InfoCtx(ctx, "Healing anchor",
+	slog.InfoContext(ctx, "Healing anchor",
 		"source", si.Source,
 		"destination", si.Destination,
 		"sequence-number", si.Number,
@@ -121,7 +121,7 @@ func HealAnchor(ctx context.Context, args HealAnchorArgs, si SequencedInfo) erro
 		"txid", theAnchorTxn.ID())
 
 	if len(signed) >= int(threshold) {
-		slog.InfoCtx(ctx, "Sufficient signatures have been received")
+		slog.InfoContext(ctx, "Sufficient signatures have been received")
 		return errors.Delivered
 	}
 
@@ -152,16 +152,16 @@ func HealAnchor(ctx context.Context, args HealAnchorArgs, si SequencedInfo) erro
 		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 
-		slog.InfoCtx(ctx, "Querying node for its signature", "id", peer)
+		slog.InfoContext(ctx, "Querying node for its signature", "id", peer)
 		res, err := args.Client.ForAddress(addr).Private().Sequence(ctx, srcUrl.JoinPath(protocol.AnchorPool), dstUrl, si.Number, private.SequenceOptions{})
 		if err != nil {
-			slog.ErrorCtx(ctx, "Query failed", "error", err)
+			slog.ErrorContext(ctx, "Query failed", "error", err)
 			continue
 		}
 
 		myTxn, ok := res.Message.(*messaging.TransactionMessage)
 		if !ok {
-			slog.ErrorCtx(ctx, "Node gave us an anchor that is not a transaction", "id", info, "type", res.Message.Type())
+			slog.ErrorContext(ctx, "Node gave us an anchor that is not a transaction", "id", info, "type", res.Message.Type())
 			continue
 		}
 		if theAnchorTxn == nil {
@@ -170,7 +170,7 @@ func HealAnchor(ctx context.Context, args HealAnchorArgs, si SequencedInfo) erro
 				Transaction: theAnchorTxn,
 			}
 		} else if !protocol.EqualTransactionBody(myTxn.Transaction.Body, theAnchorTxn.Body) {
-			slog.ErrorCtx(ctx, "Node gave us an anchor with a different hash", "id", info,
+			slog.ErrorContext(ctx, "Node gave us an anchor with a different hash", "id", info,
 				"expected", hex.EncodeToString(theAnchorTxn.GetHash()),
 				"got", hex.EncodeToString(myTxn.Transaction.GetHash()))
 			continue
@@ -180,21 +180,21 @@ func HealAnchor(ctx context.Context, args HealAnchorArgs, si SequencedInfo) erro
 			for _, sig := range sigs.Signatures.Records {
 				msg, ok := sig.Message.(*messaging.SignatureMessage)
 				if !ok {
-					slog.ErrorCtx(ctx, "Node gave us a signature that is not a signature", "id", info, "type", sig.Message.Type())
+					slog.ErrorContext(ctx, "Node gave us a signature that is not a signature", "id", info, "type", sig.Message.Type())
 					continue
 				}
 
 				if args.NetInfo.Status.ExecutorVersion.V2Enabled() {
 					sig, ok := msg.Signature.(protocol.KeySignature)
 					if !ok {
-						slog.ErrorCtx(ctx, "Node gave us a signature that is not a key signature", "id", info, "type", sig.Type())
+						slog.ErrorContext(ctx, "Node gave us a signature that is not a key signature", "id", info, "type", sig.Type())
 						continue
 					}
 
 					// Filter out bad signatures
 					h := seq.Hash()
 					if !sig.Verify(nil, h[:]) {
-						slog.ErrorCtx(ctx, "Node gave us an invalid signature", "id", info)
+						slog.ErrorContext(ctx, "Node gave us an invalid signature", "id", info)
 						continue
 					}
 
@@ -210,12 +210,12 @@ func HealAnchor(ctx context.Context, args HealAnchorArgs, si SequencedInfo) erro
 					case protocol.UserSignature:
 						// Filter out bad signatures
 						if !sig.Verify(nil, theAnchorTxn.GetHash()) {
-							slog.ErrorCtx(ctx, "Node gave us an invalid signature", "id", info)
+							slog.ErrorContext(ctx, "Node gave us an invalid signature", "id", info)
 							continue
 						}
 
 					default:
-						slog.ErrorCtx(ctx, "Node gave us a signature that is not a user signature", "id", info, "type", sig.Type())
+						slog.ErrorContext(ctx, "Node gave us a signature that is not a user signature", "id", info, "type", sig.Type())
 						continue
 					}
 				}
@@ -230,17 +230,17 @@ func HealAnchor(ctx context.Context, args HealAnchorArgs, si SequencedInfo) erro
 		if err != nil {
 			panic(err)
 		}
-		slog.InfoCtx(ctx, "Would have submitted anchor", "signatures", len(signatures), "source", si.Source, "destination", si.Destination, "number", si.Number, "txn-size", len(b))
+		slog.InfoContext(ctx, "Would have submitted anchor", "signatures", len(signatures), "source", si.Source, "destination", si.Destination, "number", si.Number, "txn-size", len(b))
 		return nil
 	}
 
 	// We should always have a partition signature, so there's only something to
 	// sent if we have more than 1 signature
 	if gotPartSig && len(signatures) <= 1 || !gotPartSig && len(signatures) == 0 {
-		slog.InfoCtx(ctx, "Nothing to send")
+		slog.InfoContext(ctx, "Nothing to send")
 
 	} else {
-		slog.InfoCtx(ctx, "Submitting signatures", "count", len(signatures))
+		slog.InfoContext(ctx, "Submitting signatures", "count", len(signatures))
 
 		if args.NetInfo.Status.ExecutorVersion.V2Enabled() {
 			for _, sig := range signatures {

@@ -8,8 +8,7 @@ package logging
 
 import (
 	"context"
-
-	"golang.org/x/exp/slog"
+	"log/slog"
 )
 
 type _contextKey struct{}

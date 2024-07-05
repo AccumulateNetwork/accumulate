@@ -9,11 +9,11 @@ package message
 import (
 	"context"
 	"io"
+	"log/slog"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/network"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"golang.org/x/exp/slog"
 )
 
 // Handler handles message streams.
