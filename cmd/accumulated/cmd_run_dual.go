@@ -7,6 +7,7 @@
 package main
 
 import (
+	"log/slog"
 	"net/http"
 	"path/filepath"
 	"time"
@@ -16,7 +17,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/badger"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"golang.org/x/exp/slog"
 )
 
 var cmdRunDual = &cobra.Command{
@@ -82,7 +82,7 @@ func runDualNode(cmd *cobra.Command, args []string) (string, error) {
 	if err != nil {
 		//if it is already stopped, that is ok.
 		if !errors.Is(err, service2.ErrAlreadyStopped) {
-			slog.Error("Service failed", err)
+			slog.Error("Service failed", "error", err)
 			return "", err
 		}
 	}

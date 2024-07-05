@@ -9,13 +9,13 @@ package websocket
 import (
 	"context"
 	"io"
+	"log/slog"
 	"net/http"
 	"runtime/debug"
 
 	"github.com/gorilla/websocket"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"golang.org/x/exp/slog"
 )
 
 // NewHandler constructs a new Handler with the given list of services.

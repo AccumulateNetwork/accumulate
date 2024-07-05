@@ -57,7 +57,7 @@ func (s *SubnodeService) start(inst *Instance) error {
 	// Start services
 	for _, services := range services {
 		for _, svc := range services {
-			inst.logger.InfoCtx(inst.context, "Starting", "subnode", s.Name, "service", svc.Type(), "module", "run")
+			inst.logger.InfoContext(inst.context, "Starting", "subnode", s.Name, "service", svc.Type(), "module", "run")
 			err := svc.start(sub)
 			if err != nil {
 				return errors.UnknownError.WithFormat("start service %v: %w", svc.Type(), err)

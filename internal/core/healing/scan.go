@@ -10,13 +10,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"golang.org/x/exp/slog"
 )
 
 func (p *PeerInfo) String() string {
@@ -103,7 +103,7 @@ func ScanNetwork(ctx context.Context, endpoint ScanServices) (*NetworkInfo, erro
 		partPeers := PeerList{}
 		peers[strings.ToLower(part.ID)] = partPeers
 
-		slog.InfoCtx(ctx, "Finding peers for", "partition", part.ID)
+		slog.InfoContext(ctx, "Finding peers for", "partition", part.ID)
 		find := api.FindServiceOptions{
 			Network: epNodeInfo.Network,
 			Service: api.ServiceTypeConsensus.AddressFor(part.ID),
@@ -118,10 +118,10 @@ func ScanNetwork(ctx context.Context, endpoint ScanServices) (*NetworkInfo, erro
 			ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 			defer cancel()
 
-			slog.InfoCtx(ctx, "Getting identity of", "peer", peer.PeerID)
+			slog.InfoContext(ctx, "Getting identity of", "peer", peer.PeerID)
 			info, err := endpoint.ConsensusStatus(ctx, api.ConsensusStatusOptions{NodeID: peer.PeerID.String(), Partition: part.ID})
 			if err != nil {
-				slog.ErrorCtx(ctx, "Query failed", "error", err)
+				slog.ErrorContext(ctx, "Query failed", "error", err)
 				continue
 			}
 
@@ -170,7 +170,7 @@ func ScanNode(ctx context.Context, endpoint ScanServices) (*PeerInfo, error) {
 		hash2key[val.PublicKeyHash] = *(*[32]byte)(val.PublicKey)
 	}
 
-	slog.InfoCtx(ctx, "Getting identity of", "peer", nodeInfo.PeerID)
+	slog.InfoContext(ctx, "Getting identity of", "peer", nodeInfo.PeerID)
 	info, err := endpoint.ConsensusStatus(ctx, api.ConsensusStatusOptions{})
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("query consensus status: %w", err)
