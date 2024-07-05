@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"strings"
 	"time"
@@ -50,6 +51,7 @@ type CometPrivValFile struct {
 
 type Config struct {
 	file            string
+	fs              fs.FS
 	DotEnv          *bool            `json:"dotEnv,omitempty" form:"dotEnv" query:"dotEnv" validate:"required"`
 	Network         string           `json:"network,omitempty" form:"network" query:"network" validate:"required"`
 	Logging         *Logging         `json:"logging,omitempty" form:"logging" query:"logging" validate:"required"`

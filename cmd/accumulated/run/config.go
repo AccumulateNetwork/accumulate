@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -27,6 +28,10 @@ func (c *Config) FilePath() string     { return c.file }
 func (c *Config) SetFilePath(p string) { c.file = p }
 
 func (c *Config) LoadFrom(file string) error {
+	return c.LoadFromFS(os.DirFS("."), file)
+}
+
+func (c *Config) LoadFromFS(fs fs.FS, file string) error {
 	var format func([]byte, any) error
 	switch s := filepath.Ext(file); s {
 	case ".toml", ".tml", ".ini":
@@ -39,12 +44,19 @@ func (c *Config) LoadFrom(file string) error {
 		return errors.BadRequest.WithFormat("unknown file type %s", s)
 	}
 
-	b, err := os.ReadFile(file)
+	f, err := fs.Open(file)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = f.Close() }()
+
+	b, err := io.ReadAll(f)
 	if err != nil {
 		return err
 	}
 
 	c.file = file
+	c.fs = fs
 	return c.Load(b, format)
 }
 
@@ -80,17 +92,53 @@ func (c *Config) applyDotEnv() error {
 		file = filepath.Join(dir, file)
 	}
 
-	env, err := godotenv.Read(file)
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+	var expand func(name string) string
+	var errs []error
+
+	f, err := c.fs.Open(file)
+	switch {
+	case err == nil:
+		defer func() { _ = f.Close() }()
+
+		// Parse
+		env, err := godotenv.Parse(f)
+		if err != nil {
+			return err
+		}
+
+		// And expand
+		expand = func(name string) string {
+			value, ok := env[name]
+			if ok {
+				return value
+			}
+			errs = append(errs, fmt.Errorf("%q is not defined", name))
+			return fmt.Sprintf("#!MISSING(%q)", name)
+		}
+
+	case errors.Is(err, fs.ErrNotExist):
+		// Only return an error if there is at least one ${ENV}
+		expand = func(name string) string {
+			if len(errs) == 0 {
+				errs = append(errs, err)
+			}
+			return fmt.Sprintf("#!MISSING(%q)", name)
+		}
+
+	default:
 		return err
 	}
 
-	return errors.Join(expandEnv(reflect.ValueOf(c), env)...)
+	expandEnv(reflect.ValueOf(c), expand)
+	return errors.Join(errs...)
 }
 
 func (c *Config) Save() error {
 	if c.file == "" {
 		return errors.BadRequest.With("not loaded from a file")
+	}
+	if c.fs != os.DirFS(".") {
+		return errors.BadRequest.With("loaded from an immutable filesystem")
 	}
 	return c.SaveTo(c.file)
 }
@@ -193,42 +241,34 @@ func float2int(v reflect.Value) any {
 	}
 }
 
-func expandEnv(v reflect.Value, env map[string]string) (errs []error) {
+func expandEnv(v reflect.Value, expand func(string) string) {
 	switch v.Kind() {
 	case reflect.String:
 		s := v.String()
-		s = os.Expand(s, func(name string) string {
-			value, ok := env[name]
-			if ok {
-				return value
-			}
-			errs = append(errs, fmt.Errorf("%q is not defined", name))
-			return fmt.Sprintf("#!MISSING(%q)", name)
-		})
+		s = os.Expand(s, expand)
 		v.SetString(s)
 
 	case reflect.Pointer, reflect.Interface:
-		errs = append(errs, expandEnv(v.Elem(), env)...)
+		expandEnv(v.Elem(), expand)
 
 	case reflect.Slice, reflect.Array:
 		for i, n := 0, v.Len(); i < n; i++ {
-			errs = append(errs, expandEnv(v.Index(i), env)...)
+			expandEnv(v.Index(i), expand)
 		}
 
 	case reflect.Map:
 		it := v.MapRange()
 		for it.Next() {
-			errs = append(errs, expandEnv(it.Key(), env)...)
-			errs = append(errs, expandEnv(it.Value(), env)...)
+			expandEnv(it.Key(), expand)
+			expandEnv(it.Value(), expand)
 		}
 
 	case reflect.Struct:
 		typ := v.Type()
 		for i, n := 0, typ.NumField(); i < n; i++ {
 			if typ.Field(i).IsExported() {
-				errs = append(errs, expandEnv(v.Field(i), env)...)
+				expandEnv(v.Field(i), expand)
 			}
 		}
 	}
-	return errs
 }
