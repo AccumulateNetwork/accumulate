@@ -8,9 +8,9 @@ package snapshot
 
 import (
 	"bytes"
+	"log/slog"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"golang.org/x/exp/slog"
 )
 
 type Indexer struct {

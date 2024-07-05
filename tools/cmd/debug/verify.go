@@ -7,10 +7,11 @@
 package main
 
 import (
+	"log/slog"
+
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"golang.org/x/exp/slog"
 )
 
 var verifyCmd = &cobra.Command{

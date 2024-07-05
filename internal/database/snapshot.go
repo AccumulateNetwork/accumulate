@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -27,7 +28,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"golang.org/x/exp/slog"
 )
 
 type CollectOptions struct {
