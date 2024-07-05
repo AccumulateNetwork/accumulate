@@ -77,6 +77,18 @@ func TestDotenv(t *testing.T) {
 	})
 }
 
+func TestSaveToFS(t *testing.T) {
+	fs := mkfs(map[string]string{
+		"accumulate.toml": `network = "foo"`,
+	})
+
+	cfg := new(Config)
+	require.NoError(t, cfg.LoadFromFS(fs, "accumulate.toml"))
+
+	// Ensure Save doesn't panic when loaded from [fs.FS]
+	require.Error(t, cfg.Save())
+}
+
 func mkfs(files map[string]string) fs.FS {
 	root := new(testutil.Dir)
 	for name, data := range files {

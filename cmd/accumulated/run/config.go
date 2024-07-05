@@ -137,7 +137,7 @@ func (c *Config) Save() error {
 	if c.file == "" {
 		return errors.BadRequest.With("not loaded from a file")
 	}
-	if c.fs != os.DirFS(".") {
+	if c.fs != nil && c.fs != os.DirFS(".") {
 		return errors.BadRequest.With("loaded from an immutable filesystem")
 	}
 	return c.SaveTo(c.file)
