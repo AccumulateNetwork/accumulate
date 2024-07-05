@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	_ "net/http/pprof" //nolint:gosec
 	"os"
@@ -26,7 +27,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/badger"
 	"gitlab.com/accumulatenetwork/accumulate/test/testing"
-	"golang.org/x/exp/slog"
 )
 
 var cmdRun = &cobra.Command{
@@ -99,7 +99,7 @@ func runNode(cmd *cobra.Command, _ []string) (string, error) {
 	if err != nil {
 		//if it is already stopped, that is ok.
 		if !errors.Is(err, service2.ErrAlreadyStopped) {
-			slog.Error("Service failed", err)
+			slog.Error("Service failed", "error", err)
 			return "", err
 		}
 	}

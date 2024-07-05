@@ -7,6 +7,8 @@
 package block
 
 import (
+	"log/slog"
+
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -14,7 +16,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"golang.org/x/exp/slog"
 )
 
 // MessageContext is the context in which a message is processed.
@@ -162,7 +163,7 @@ func (m *MessageContext) didProduce(batch *database.Batch, dest *url.URL, msg me
 		// that does not satisfy this interface, but they are not used in v2
 		txn, ok := msg.Transaction.Body.(protocol.SyntheticTransaction)
 		if !ok {
-			slog.ErrorCtx(m.Context, "Synthetic transaction is not synthetic", "id", msg.ID())
+			slog.ErrorContext(m.Context, "Synthetic transaction is not synthetic", "id", msg.ID())
 			break
 		}
 

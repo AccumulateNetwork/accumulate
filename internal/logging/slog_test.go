@@ -9,11 +9,11 @@ package logging
 import (
 	"bytes"
 	"context"
+	"log/slog"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"golang.org/x/exp/slog"
 )
 
 func TestLoggingCtxAttrs(t *testing.T) {
@@ -110,7 +110,7 @@ func (h *groupHandler) Handle(ctx context.Context, r slog.Record) error {
 		return true
 	})
 	r = slog.NewRecord(r.Time, r.Level, r.Message, r.PC)
-	r.AddAttrs(slog.Group(h.group, attrs))
+	r.AddAttrs(slog.Attr{Key: h.group, Value: slog.GroupValue(attrs...)})
 	return h.Handler.Handle(ctx, r)
 }
 
