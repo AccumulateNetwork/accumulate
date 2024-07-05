@@ -8,6 +8,7 @@ package run
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -17,7 +18,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"golang.org/x/exp/slices"
-	"golang.org/x/exp/slog"
 )
 
 type Instance struct {
@@ -170,7 +170,7 @@ func (inst *Instance) StartFiltered(predicate func(Service) bool) (err error) {
 	// Start services
 	for _, services := range services {
 		for _, svc := range services {
-			inst.logger.InfoCtx(inst.context, "Starting", "module", "run", "service", svc.Type())
+			inst.logger.InfoContext(inst.context, "Starting", "module", "run", "service", svc.Type())
 			err := svc.start(inst)
 			if err != nil {
 				return errors.UnknownError.WithFormat("start service %v: %w", svc.Type(), err)

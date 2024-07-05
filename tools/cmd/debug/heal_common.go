@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -38,7 +39,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"golang.org/x/exp/slog"
 )
 
 var cmdHeal = &cobra.Command{
@@ -297,13 +297,13 @@ func (h *healer) submitLoop(wg *sync.WaitGroup) {
 		subs, err := h.C2.Submit(h.ctx, env, api.SubmitOptions{})
 		messages = messages[:0]
 		if err != nil {
-			slog.ErrorCtx(h.ctx, "Submission failed", "error", err, "id", env.Messages[0].ID())
+			slog.ErrorContext(h.ctx, "Submission failed", "error", err, "id", env.Messages[0].ID())
 		}
 		for _, sub := range subs {
 			if sub.Success {
-				slog.InfoCtx(h.ctx, "Submission succeeded", "id", sub.Status.TxID)
+				slog.InfoContext(h.ctx, "Submission succeeded", "id", sub.Status.TxID)
 			} else {
-				slog.ErrorCtx(h.ctx, "Submission failed", "message", sub, "status", sub.Status)
+				slog.ErrorContext(h.ctx, "Submission failed", "message", sub, "status", sub.Status)
 			}
 		}
 	}
@@ -323,7 +323,7 @@ func getAccount[T protocol.Account](ctx context.Context, q api.Querier, u *url.U
 		fatalf("response for %v is too old (%v)", u, age)
 	}
 
-	slog.InfoCtx(ctx, "Got account", "url", u, "lastBlockAge", age.Round(time.Second))
+	slog.InfoContext(ctx, "Got account", "url", u, "lastBlockAge", age.Round(time.Second))
 
 	a := r.Account
 	b, ok := a.(T)
@@ -366,7 +366,7 @@ func (q *tryEachQuerier) Query(ctx context.Context, scope *url.URL, query api.Qu
 			return nil, err
 		}
 		lastErr = err
-		slog.ErrorCtx(ctx, "Failed to query", "peer", peer, "scope", scope, "error", err)
+		slog.ErrorContext(ctx, "Failed to query", "peer", peer, "scope", scope, "error", err)
 	}
 	return nil, lastErr
 }

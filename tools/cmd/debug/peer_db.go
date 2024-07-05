@@ -11,6 +11,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"fmt"
+	"log/slog"
 	"os"
 	"time"
 
@@ -20,7 +21,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p/dial"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p/peerdb"
-	"golang.org/x/exp/slog"
 )
 
 var peerDbCmd = &cobra.Command{

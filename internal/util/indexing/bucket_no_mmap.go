@@ -11,8 +11,7 @@ package indexing
 import (
 	"errors"
 	"io"
-
-	"golang.org/x/exp/slog"
+	"log/slog"
 )
 
 // This file exists entirely because of

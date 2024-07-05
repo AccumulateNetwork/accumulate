@@ -8,6 +8,7 @@ package healing
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -18,7 +19,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"golang.org/x/exp/slog"
 )
 
 type SequencedInfo struct {
@@ -45,7 +45,7 @@ func ResolveSequenced[T messaging.Message](ctx context.Context, client message.A
 
 	// If the client has an address, use that
 	if client.Address != nil {
-		slog.InfoCtx(ctx, "Querying node", "address", client.Address)
+		slog.InfoContext(ctx, "Querying node", "address", client.Address)
 		res, err := client.Private().Sequence(ctx, srcUrl.JoinPath(account), dstUrl, seqNum, private.SequenceOptions{})
 		if err != nil {
 			return nil, err
@@ -59,21 +59,21 @@ func ResolveSequenced[T messaging.Message](ctx context.Context, client message.A
 	}
 
 	// Otherwise try each node until one succeeds
-	slog.InfoCtx(ctx, "Resolving the message ID", "source", srcId, "destination", dstId, "number", seqNum)
+	slog.InfoContext(ctx, "Resolving the message ID", "source", srcId, "destination", dstId, "number", seqNum)
 	for peer := range net.Peers[strings.ToLower(srcId)] {
 		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 
-		slog.InfoCtx(ctx, "Querying node", "id", peer)
+		slog.InfoContext(ctx, "Querying node", "id", peer)
 		res, err := client.ForPeer(peer).Private().Sequence(ctx, srcUrl.JoinPath(account), dstUrl, seqNum, private.SequenceOptions{})
 		if err != nil {
-			slog.ErrorCtx(ctx, "Query failed", "error", err)
+			slog.ErrorContext(ctx, "Query failed", "error", err)
 			continue
 		}
 
 		r2, err := api.MessageRecordAs[T](res)
 		if err != nil {
-			slog.ErrorCtx(ctx, "Query failed", "error", err)
+			slog.ErrorContext(ctx, "Query failed", "error", err)
 			continue
 		}
 

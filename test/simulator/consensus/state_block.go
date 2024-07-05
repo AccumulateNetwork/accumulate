@@ -7,12 +7,12 @@
 package consensus
 
 import (
+	"log/slog"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"golang.org/x/exp/slog"
 )
 
 type blockState state[blockState]

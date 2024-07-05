@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"strconv"
 	"strings"
@@ -19,7 +20,6 @@ import (
 	"github.com/cometbft/cometbft/rpc/client"
 	coretypes "github.com/cometbft/cometbft/rpc/core/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
-	"golang.org/x/exp/slog"
 )
 
 var _ client.NetworkClient
@@ -104,7 +104,7 @@ func getPeers(ctx context.Context, client WalkClient, sem chan struct{}, results
 
 	defer func() {
 		if r := recover(); r != nil {
-			slog.ErrorCtx(ctx, "Panicked while querying peers", "error", r)
+			slog.ErrorContext(ctx, "Panicked while querying peers", "error", r)
 		}
 	}()
 
@@ -123,7 +123,7 @@ func getPeers(ctx context.Context, client WalkClient, sem chan struct{}, results
 	// Query the node
 	info, err := client.NetInfo(ctx)
 	if err != nil {
-		slog.InfoCtx(ctx, "Failed to query net info", "error", err)
+		slog.InfoContext(ctx, "Failed to query net info", "error", err)
 	} else {
 		peers = info.Peers
 	}

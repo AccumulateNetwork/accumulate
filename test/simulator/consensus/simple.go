@@ -9,10 +9,10 @@ package consensus
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"sync"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"golang.org/x/exp/slog"
 )
 
 const debugSynchronous = false

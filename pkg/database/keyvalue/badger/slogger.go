@@ -8,9 +8,8 @@ package badger
 
 import (
 	"fmt"
+	"log/slog"
 	"strings"
-
-	"golang.org/x/exp/slog"
 )
 
 type slogger struct{}

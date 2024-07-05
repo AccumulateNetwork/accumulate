@@ -8,6 +8,7 @@ package p2p
 
 import (
 	"context"
+	"log/slog"
 	"runtime/debug"
 	"time"
 
@@ -19,7 +20,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"golang.org/x/exp/slog"
 )
 
 // A MessageStreamHandler handles an incoming [message.Stream].

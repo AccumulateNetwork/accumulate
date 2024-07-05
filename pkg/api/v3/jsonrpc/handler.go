@@ -8,11 +8,11 @@ package jsonrpc
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"golang.org/x/exp/slog"
 )
 
 type Service interface {

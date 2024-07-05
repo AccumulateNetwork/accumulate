@@ -8,6 +8,7 @@ package run
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"runtime"
 	"runtime/pprof"
@@ -16,7 +17,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"golang.org/x/exp/slog"
 )
 
 func (i *Instrumentation) start(inst *Instance) error {

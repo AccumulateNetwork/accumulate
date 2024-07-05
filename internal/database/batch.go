@@ -8,6 +8,7 @@ package database
 
 import (
 	"fmt"
+	"log/slog"
 	"sync/atomic"
 
 	"github.com/cometbft/cometbft/libs/log"
@@ -18,7 +19,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
-	"golang.org/x/exp/slog"
 )
 
 type Viewer interface {
