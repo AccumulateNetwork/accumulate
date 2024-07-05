@@ -8,6 +8,7 @@ package badger
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"testing"
 
@@ -16,7 +17,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/kvtest"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
-	"golang.org/x/exp/slog"
 )
 
 func init() {

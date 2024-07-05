@@ -8,11 +8,11 @@ package run
 
 import (
 	"encoding/json"
+	"log/slog"
 	"strconv"
 
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
-	"golang.org/x/exp/slog"
 )
 
 func (p *P2P) start(inst *Instance) error {
@@ -43,14 +43,14 @@ func (p *P2P) start(inst *Instance) error {
 	}
 	inst.p2p = node
 
-	slog.InfoCtx(inst.context, "We are", "id", node.ID(), "module", "run")
+	slog.InfoContext(inst.context, "We are", "id", node.ID(), "module", "run")
 
 	inst.cleanup(func() {
 		err := node.Close()
 		if err != nil {
-			slog.ErrorCtx(inst.context, "Error while stopping node", "module", "run", "id", node.ID(), "error", err)
+			slog.ErrorContext(inst.context, "Error while stopping node", "module", "run", "id", node.ID(), "error", err)
 		} else {
-			slog.InfoCtx(inst.context, "Stopped", "id", node.ID(), "module", "run")
+			slog.InfoContext(inst.context, "Stopped", "id", node.ID(), "module", "run")
 		}
 	})
 	return nil
