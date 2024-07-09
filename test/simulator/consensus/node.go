@@ -11,6 +11,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/sha256"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -21,7 +22,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"golang.org/x/exp/slog"
 )
 
 type Node struct {

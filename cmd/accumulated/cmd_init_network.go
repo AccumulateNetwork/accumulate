@@ -16,35 +16,38 @@ import (
 	"strings"
 	"time"
 
+	"github.com/BurntSushi/toml"
 	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
 	cmtjson "github.com/cometbft/cometbft/libs/json"
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run"
 	"gitlab.com/accumulatenetwork/accumulate/exp/faucet"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/address"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/test/testing"
+	"gopkg.in/yaml.v3"
 )
 
 var cmdInitNetwork = &cobra.Command{
 	Use:   "network <network configuration file>",
 	Short: "Initialize a network",
 	Run:   initNetwork,
-	Args:  cobra.ExactArgs(1),
+	Args:  cobra.MinimumNArgs(1),
 }
 
 var cmdInitGenesis = &cobra.Command{
 	Use:   "genesis <network configuration file>",
 	Short: "Generate genesis files for a network",
 	Run:   initGenesis,
-	Args:  cobra.ExactArgs(1),
+	Args:  cobra.MinimumNArgs(1),
 }
 
 var cmdInitPrepareGenesis = &cobra.Command{
@@ -58,20 +61,24 @@ func init() {
 	cmdInit.AddCommand(cmdInitGenesis, cmdInitPrepareGenesis)
 }
 
-func loadNetworkConfiguration(file string) (ret *accumulated.NetworkInit, err error) {
-	jsonFile, err := os.Open(file)
-	defer func() { _ = jsonFile.Close() }()
-	// if we os.Open returns an error then handle it
-	if err != nil {
-		return ret, err
-	}
-	data, _ := io.ReadAll(jsonFile)
-	err = json.Unmarshal(data, &ret)
-	if err != nil {
-		return nil, err
+func loadNetworkConfiguration(file ...string) *accumulated.NetworkInit {
+	network := new(accumulated.NetworkInit)
+	for _, file := range file {
+		b, err := os.ReadFile(file)
+		check(err)
+
+		switch filepath.Ext(file) {
+		case ".yml", ".yaml":
+			var v any
+			check(yaml.Unmarshal(b, &v))
+			b, err = json.Marshal(v)
+			check(err)
+		}
+
+		check(json.Unmarshal(b, &network))
 	}
 
-	for _, bvn := range ret.Bvns {
+	for _, bvn := range network.Bvns {
 		for _, node := range bvn.Nodes {
 			if node.PrivValKey == nil {
 				node.PrivValKey = tmed25519.GenPrivKey()
@@ -80,21 +87,22 @@ func loadNetworkConfiguration(file string) (ret *accumulated.NetworkInit, err er
 				node.DnNodeKey = tmed25519.GenPrivKey()
 			}
 			if node.BvnNodeKey == nil {
-				node.BvnNodeKey = tmed25519.GenPrivKey()
+				node.BvnNodeKey = node.DnNodeKey
+			}
+			if node.BsnNodeKey == nil {
+				node.BsnNodeKey = node.DnNodeKey
 			}
 			if node.ListenAddress == "" {
 				node.ListenAddress = "0.0.0.0"
 			}
 		}
 	}
-	return ret, err
+	return network
 }
 
 // load network config file
 func initNetwork(cmd *cobra.Command, args []string) {
-	networkConfigFile := args[0]
-	network, err := loadNetworkConfiguration(networkConfigFile)
-	check(err)
+	network := loadNetworkConfiguration(args...)
 
 	if flagInit.Reset {
 		networkReset()
@@ -117,13 +125,55 @@ func initNetwork(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	initNetworkLocalFS(cmd, network)
+	template := new(run.Config)
+	template.Logging = new(run.Logging)
+	template.P2P = new(run.P2P)
+	if network.Template != "" {
+		check(template.Load([]byte(network.Template), toml.Unmarshal))
+	}
+
+	genDocs := buildGenesis(network)
+	for i, bvn := range network.Bvns {
+		for j, node := range bvn.Nodes {
+			id := fmt.Sprintf("bvn%d-%d", i+1, j+1)
+			dir := filepath.Join(flagMain.WorkDir, id)
+			check(os.MkdirAll(dir, 0755))
+
+			cfg := template.Copy()
+			cfg.Network = network.Id
+
+			// TODO: log levels
+
+			// Configure the node key
+			addr := address.FromED25519PrivateKey(node.DnNodeKey)
+			cfg.P2P.Key = &run.RawPrivateKey{Address: addr.String()}
+
+			// Configure the validator
+			cvc := run.AddConfiguration(cfg, new(run.CoreValidatorConfiguration), nil)
+			cfg.Configurations = []run.Configuration{cvc}
+			cvc.Listen = node.Listen().Scheme("tcp").Directory().TendermintP2P().Multiaddr()
+			cvc.BVN = bvn.Id
+			cvc.BvnBootstrapPeers = bvn.Peers(node).Scheme("tcp").BlockValidator().TendermintP2P().WithKey().Multiaddr()
+			cvc.DnBootstrapPeers = network.Peers(node).Scheme("tcp").Directory().TendermintP2P().WithKey().Multiaddr()
+
+			// Configure the validator key
+			addr = address.FromED25519PrivateKey(node.PrivValKey)
+			cvc.ValidatorKey = &run.RawPrivateKey{Address: addr.String()}
+
+			// Write the genesis documents
+			cvc.DnGenesis = "directory-genesis.snap"
+			cvc.BvnGenesis = strings.ToLower(bvn.Id) + "-genesis.snap"
+			check(os.WriteFile(filepath.Join(dir, cvc.DnGenesis), genDocs[protocol.Directory], 0600))
+			check(os.WriteFile(filepath.Join(dir, cvc.BvnGenesis), genDocs[bvn.Id], 0600))
+
+			// Write the node configuration
+			check(cfg.SaveTo(filepath.Join(dir, "accumulate.toml")))
+		}
+	}
 }
 
 func initGenesis(cmd *cobra.Command, args []string) {
-	networkConfigFile := args[0]
-	network, err := loadNetworkConfiguration(networkConfigFile)
-	check(err)
+	network := loadNetworkConfiguration(args...)
 
 	// Generate genesis docs
 	genDocs := buildGenesis(network)
@@ -199,82 +249,6 @@ func prepareGenesis(cmd *cobra.Command, args []string) {
 		},
 	})
 	check(err)
-}
-
-func initNetworkLocalFS(_ *cobra.Command, netInit *accumulated.NetworkInit) {
-	if flagInit.LogLevels != "" {
-		_, _, err := logging.ParseLogLevel(flagInit.LogLevels, io.Discard)
-		checkf(err, "--log-level")
-	}
-
-	check(os.MkdirAll(flagMain.WorkDir, 0755))
-
-	netFile, err := os.Create(filepath.Join(flagMain.WorkDir, "network.json"))
-	check(err)
-	enc := json.NewEncoder(netFile)
-	enc.SetIndent("", "    ")
-	check(enc.Encode(netInit))
-	check(netFile.Close())
-
-	configs := accumulated.BuildNodesConfig(netInit, nil)
-	for _, configs := range configs {
-		for _, configs := range configs {
-			for _, config := range configs {
-				// Use binary genesis files
-				config.Genesis = "config/genesis.snap"
-
-				if flagInit.LogLevels != "" {
-					config.LogLevel = flagInit.LogLevels
-				}
-
-				if flagInit.NoEmptyBlocks {
-					config.Consensus.CreateEmptyBlocks = false
-				}
-			}
-		}
-	}
-
-	var count int
-	genDocs := buildGenesis(netInit)
-	dnGenDoc := genDocs[protocol.Directory]
-	for i, bvn := range netInit.Bvns {
-		bvnGenDoc := genDocs[bvn.Id]
-		for j, node := range bvn.Nodes {
-			count++
-			configs[i][j][0].SetRoot(filepath.Join(flagMain.WorkDir, fmt.Sprintf("node-%d", count), "dnn"))
-			configs[i][j][1].SetRoot(filepath.Join(flagMain.WorkDir, fmt.Sprintf("node-%d", count), "bvnn"))
-
-			configs[i][j][0].Config.PrivValidatorKey = "../priv_validator_key.json"
-			err = accumulated.WriteNodeFiles(configs[i][j][0], node.PrivValKey, node.DnNodeKey, dnGenDoc)
-			checkf(err, "write DNN files")
-			configs[i][j][1].Config.PrivValidatorKey = "../priv_validator_key.json"
-			err = accumulated.WriteNodeFiles(configs[i][j][1], node.PrivValKey, node.BvnNodeKey, bvnGenDoc)
-			checkf(err, "write BVNN files")
-		}
-	}
-
-	if netInit.Bsn != nil {
-		bsnGenDoc := genDocs[netInit.Bsn.Id]
-		i := len(netInit.Bvns)
-		for j, node := range netInit.Bsn.Nodes {
-			configs[i][j][0].SetRoot(filepath.Join(flagMain.WorkDir, fmt.Sprintf("bsn-%d", j+1), "bsnn"))
-
-			configs[i][j][0].Config.PrivValidatorKey = "../priv_validator_key.json"
-			err = accumulated.WriteNodeFiles(configs[i][j][0], node.PrivValKey, node.BsnNodeKey, bsnGenDoc)
-			checkf(err, "write BSNN files")
-		}
-	}
-
-	if netInit.Bootstrap != nil {
-		i := len(netInit.Bvns)
-		if netInit.Bsn != nil {
-			i++
-		}
-		configs[i][0][0].SetRoot(filepath.Join(flagMain.WorkDir, "bootstrap"))
-
-		err = accumulated.WriteNodeFiles(configs[i][0][0], nil, netInit.Bootstrap.PrivValKey, nil)
-		checkf(err, "write bootstrap files")
-	}
 }
 
 func buildGenesis(network *accumulated.NetworkInit) map[string][]byte {

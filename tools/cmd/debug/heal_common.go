@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -17,6 +18,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -31,11 +33,12 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p/dial"
+	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/bolt"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"golang.org/x/exp/slog"
 )
 
 var cmdHeal = &cobra.Command{
@@ -45,7 +48,6 @@ var cmdHeal = &cobra.Command{
 var flagMaxResponseAge time.Duration = time.Minute
 
 func init() {
-	peerDb = filepath.Join(currentUser.HomeDir, ".accumulate", "cache", "peerdb.json")
 	lightDb = filepath.Join(currentUser.HomeDir, ".accumulate", "cache", "light.db")
 
 	cmd.AddCommand(cmdHeal)
@@ -54,14 +56,18 @@ func init() {
 	cmdHeal.PersistentFlags().BoolVarP(&pretend, "pretend", "n", false, "Do not submit envelopes, only scan")
 	cmdHeal.PersistentFlags().BoolVar(&waitForTxn, "wait", false, "Wait for the message to finalize (defaults to true for heal synth)")
 	cmdHeal.PersistentFlags().BoolVar(&healContinuous, "continuous", false, "Run healing in a loop every minute")
-	cmdHeal.PersistentFlags().StringVar(&peerDb, "peer-db", peerDb, "Track peers using a persistent database")
+	cmdHeal.PersistentFlags().StringVar(&peerDb, "peer-db", "", "Track peers using a persistent database")
 	cmdHeal.PersistentFlags().StringVar(&pprof, "pprof", "", "Address to run net/http/pprof on")
+	cmdHeal.PersistentFlags().BoolVar(&debug, "debug", false, "Debug network requests")
 	cmdHealAnchor.PersistentFlags().DurationVar(&flagMaxResponseAge, "max-response-age", flagMaxResponseAge, "Maximum age of a response before it is considered too stale to use")
 	cmdHealSynth.PersistentFlags().StringVar(&lightDb, "light-db", lightDb, "Light client database for persisting chain data")
 
 	_ = cmdHeal.MarkFlagFilename("cached-scan", ".json")
 
 	cmdHeal.PersistentPreRun = func(cmd *cobra.Command, args []string) {
+		if !cmd.Flag("peer-db").Changed {
+			peerDb = filepath.Join(currentUser.HomeDir, ".accumulate", "cache", strings.ToLower(args[0])+"-peers.json")
+		}
 		if !cmd.Flag("cached-scan").Changed {
 			cachedScan = filepath.Join(currentUser.HomeDir, ".accumulate", "cache", strings.ToLower(args[0])+".json")
 		}
@@ -83,6 +89,8 @@ type healer struct {
 	net    *healing.NetworkInfo
 	light  *light.Client
 	router routing.Router
+
+	submit chan []messaging.Message
 
 	accounts map[[32]byte]protocol.Account
 }
@@ -112,6 +120,7 @@ func (h *healer) heal(args []string) {
 	// some reason
 	h.C1 = jsonrpc.NewClient(accumulate.ResolveWellKnownEndpoint(args[0], "v3"))
 	h.C1.Client.Timeout = time.Hour
+	h.C1.Debug = debug
 
 	ni, err := h.C1.NodeInfo(ctx, api.NodeInfoOptions{})
 	check(err)
@@ -144,7 +153,10 @@ func (h *healer) heal(args []string) {
 	})
 	check(err)
 
-	<-h.router.(*routing.RouterInstance).Ready()
+	ok := <-h.router.(*routing.RouterInstance).Ready()
+	if !ok {
+		fatalf("railed to initialize router")
+	}
 
 	dialer := node.DialNetwork()
 	if _, ok := node.Tracker().(*dial.PersistentTracker); !ok {
@@ -161,15 +173,28 @@ func (h *healer) heal(args []string) {
 			Network: ni.Network,
 			Dialer:  dialer,
 			Router:  routing.MessageRouter{Router: h.router},
+			Debug:   debug,
 		},
 	}
 
+	wg := new(sync.WaitGroup)
+	defer wg.Wait()
+
+	h.submit = make(chan []messaging.Message)
+	wg.Add(1)
+	go h.submitLoop(wg)
+
 	if lightDb != "" {
+		cv2, err := client.New(accumulate.ResolveWellKnownEndpoint(args[0], "v2"))
+		check(err)
+		cv2.DebugRequest = debug
+
 		db, err := bolt.Open(lightDb, bolt.WithPlainKeys)
 		check(err)
+
 		h.light, err = light.NewClient(
 			light.Store(db, ""),
-			light.Server(accumulate.ResolveWellKnownEndpoint(args[0], "v2")),
+			light.ClientV2(cv2),
 			light.Querier(h.C2),
 			light.Router(h.router),
 		)
@@ -246,6 +271,44 @@ func (h *healer) heal(args []string) {
 	h.healSingle(h, parts[strings.ToLower(srcId)], parts[strings.ToLower(dstId)], seqNo, nil)
 }
 
+func (h *healer) submitLoop(wg *sync.WaitGroup) {
+	defer wg.Done()
+	t := time.NewTicker(3 * time.Second)
+	defer t.Stop()
+
+	var messages []messaging.Message
+	var stop bool
+	for !stop {
+		select {
+		case <-h.ctx.Done():
+			stop = true
+		case msg := <-h.submit:
+			messages = append(messages, msg...)
+			if len(messages) < 50 {
+				continue
+			}
+		case <-t.C:
+		}
+		if len(messages) == 0 {
+			continue
+		}
+
+		env := &messaging.Envelope{Messages: messages}
+		subs, err := h.C2.Submit(h.ctx, env, api.SubmitOptions{})
+		messages = messages[:0]
+		if err != nil {
+			slog.ErrorContext(h.ctx, "Submission failed", "error", err, "id", env.Messages[0].ID())
+		}
+		for _, sub := range subs {
+			if sub.Success {
+				slog.InfoContext(h.ctx, "Submission succeeded", "id", sub.Status.TxID)
+			} else {
+				slog.ErrorContext(h.ctx, "Submission failed", "message", sub, "status", sub.Status)
+			}
+		}
+	}
+}
+
 // getAccount fetches the given account.
 func getAccount[T protocol.Account](ctx context.Context, q api.Querier, u *url.URL) T {
 	r, err := api.Querier2{Querier: q}.QueryAccount(ctx, u, nil)
@@ -260,7 +323,7 @@ func getAccount[T protocol.Account](ctx context.Context, q api.Querier, u *url.U
 		fatalf("response for %v is too old (%v)", u, age)
 	}
 
-	slog.InfoCtx(ctx, "Got account", "url", u, "lastBlockAge", age.Round(time.Second))
+	slog.InfoContext(ctx, "Got account", "url", u, "lastBlockAge", age.Round(time.Second))
 
 	a := r.Account
 	b, ok := a.(T)
@@ -303,7 +366,7 @@ func (q *tryEachQuerier) Query(ctx context.Context, scope *url.URL, query api.Qu
 			return nil, err
 		}
 		lastErr = err
-		slog.ErrorCtx(ctx, "Failed to query", "peer", peer, "scope", scope, "error", err)
+		slog.ErrorContext(ctx, "Failed to query", "peer", peer, "scope", scope, "error", err)
 	}
 	return nil, lastErr
 }

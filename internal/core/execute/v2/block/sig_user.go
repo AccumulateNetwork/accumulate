@@ -33,10 +33,11 @@ func init() {
 		protocol.SignatureTypeETH,
 	)
 
-	// RSA signatures (enabled with Vandenberg)
+	// Vandenberg: RSA and ECDSA signatures
 	registerConditionalExec[UserSignature](&signatureExecutors,
 		func(ctx *SignatureContext) bool { return ctx.GetActiveGlobals().ExecutorVersion.V2VandenbergEnabled() },
 		protocol.SignatureTypeRsaSha256,
+		protocol.SignatureTypeEcdsaSha256,
 	)
 
 	// PKI signatures (enabled with Vandenberg)
@@ -142,6 +143,14 @@ func (x UserSignature) check(batch *database.Batch, ctx *userSigContext) error {
 	err = x.verifyCanPay(batch, ctx)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
+	}
+
+	// A lite identity may not require additional authorities
+	if ctx.GetActiveGlobals().ExecutorVersion.V2VandenbergEnabled() &&
+		ctx.signer.Type() == protocol.AccountTypeLiteIdentity &&
+		len(ctx.transaction.Header.Authorities) > 0 &&
+		ctx.isInitiator {
+		return errors.BadRequest.WithFormat("a transaction initiated by a lite identity cannot require additional authorities")
 	}
 
 	return nil
@@ -268,7 +277,7 @@ func (x UserSignature) verifyCanPay(batch *database.Batch, ctx *userSigContext) 
 
 	// In the case of a locally signed, non-delegated, non-remote add or burn
 	// credits transaction, verify the account has a sufficient balance
-	isLocal := ctx.signer.GetUrl().LocalTo(ctx.effectivePrincipal())
+	isLocal := ctx.signer.GetUrl().LocalTo(ctx.transaction.Header.Principal)
 	isDirect := ctx.signature.Type() != protocol.SignatureTypeDelegated
 
 	if isLocal && isDirect {
@@ -294,7 +303,7 @@ func (x UserSignature) verifyCanPay(batch *database.Batch, ctx *userSigContext) 
 
 func (UserSignature) verifyTokenBalance(batch *database.Batch, ctx *userSigContext, amount *big.Int) error {
 	// Load the principal
-	account, err := batch.Account(ctx.effectivePrincipal()).Main().Get()
+	account, err := batch.Account(ctx.transaction.Header.Principal).Main().Get()
 	if err != nil {
 		return errors.UnknownError.WithFormat("load transaction principal: %w", err)
 	}
@@ -302,7 +311,7 @@ func (UserSignature) verifyTokenBalance(batch *database.Batch, ctx *userSigConte
 	// Verify it is a token account
 	tokens, ok := account.(protocol.AccountWithTokens)
 	if !ok {
-		return errors.NotAllowed.WithFormat("%v is not a token account", ctx.effectivePrincipal())
+		return errors.NotAllowed.WithFormat("%v is not a token account", ctx.transaction.Header.Principal)
 	}
 
 	// Verify it is an ACME token account
@@ -322,7 +331,7 @@ func (UserSignature) verifyTokenBalance(batch *database.Batch, ctx *userSigConte
 }
 func (UserSignature) verifyCreditBalance(batch *database.Batch, ctx *userSigContext, amount uint64) error {
 	// Load the principal
-	account, err := batch.Account(ctx.effectivePrincipal()).Main().Get()
+	account, err := batch.Account(ctx.transaction.Header.Principal).Main().Get()
 	if err != nil {
 		return errors.UnknownError.WithFormat("load transaction principal: %w", err)
 	}
@@ -448,14 +457,18 @@ func (UserSignature) sendSignatureRequests(batch *database.Batch, ctx *userSigCo
 		return nil
 	}
 
-	// Send a notice to the principal
-	msg := new(messaging.SignatureRequest)
-	msg.Authority = ctx.effectivePrincipal()
-	msg.Cause = ctx.message.ID()
-	msg.TxID = ctx.transaction.ID()
-	err := ctx.didProduce(batch, msg.Authority, msg)
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
+	// Send a notice to the principal, unless principal is a lite identity
+	_, err := protocol.ParseLiteAddress(ctx.transaction.Header.Principal)
+	isLite := err == nil && ctx.GetActiveGlobals().ExecutorVersion.V2VandenbergEnabled()
+	if !isLite {
+		msg := new(messaging.SignatureRequest)
+		msg.Authority = ctx.transaction.Header.Principal
+		msg.Cause = ctx.message.ID()
+		msg.TxID = ctx.transaction.ID()
+		err := ctx.didProduce(batch, msg.Authority, msg)
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
 	}
 
 	// If transaction requests additional authorities, send out signature requests
@@ -491,7 +504,7 @@ func (UserSignature) sendCreditPayment(batch *database.Batch, ctx *userSigContex
 
 	return ctx.didProduce(
 		batch,
-		ctx.effectivePrincipal(),
+		ctx.transaction.Header.Principal,
 		&messaging.CreditPayment{
 			Paid:      ctx.fee,
 			Payer:     ctx.getSigner(),

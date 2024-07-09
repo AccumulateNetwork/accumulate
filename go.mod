@@ -32,12 +32,12 @@ require (
 	github.com/stretchr/testify v1.9.0
 	gitlab.com/ethan.reesor/vscode-notebooks/go-playbooks v0.0.0-20220417214602-1121b9fae118
 	gitlab.com/ethan.reesor/vscode-notebooks/yaegi v0.0.0-20220417214422-5c573557938e
-	golang.org/x/exp v0.0.0-20240213143201-ec583247a57a
-	golang.org/x/sync v0.6.0
-	golang.org/x/sys v0.18.0
-	golang.org/x/term v0.18.0
+	golang.org/x/exp v0.0.0-20240416160154-fe59bbe5cc7f
+	golang.org/x/sync v0.7.0
+	golang.org/x/sys v0.19.0
+	golang.org/x/term v0.19.0
 	golang.org/x/text v0.14.0
-	golang.org/x/tools v0.19.0
+	golang.org/x/tools v0.20.0
 	gopkg.in/yaml.v3 v3.0.1
 	gotest.tools/gotestsum v1.8.1
 )
@@ -71,6 +71,7 @@ require (
 	github.com/sergi/go-diff v1.2.0
 	github.com/ulikunitz/xz v0.5.11
 	github.com/vektra/mockery/v2 v2.42.3
+	gitlab.com/accumulatenetwork/core/schema v0.1.1-0.20240618183058-91669372cfa3
 	gitlab.com/firelizzard/go-script v0.0.0-20240404234115-d5f0a716003d
 	go.opentelemetry.io/otel v1.16.0
 	go.opentelemetry.io/otel/exporters/stdout/stdouttrace v1.14.0
@@ -296,6 +297,7 @@ require (
 	github.com/jingyugao/rowserrcheck v1.1.1 // indirect
 	github.com/jirfag/go-printf-func-name v0.0.0-20200119135958-7558a9eaa5af // indirect
 	github.com/jmhodges/levigo v1.0.0 // indirect
+	github.com/joho/godotenv v1.5.1
 	github.com/jonboulle/clockwork v0.3.0 // indirect
 	github.com/julz/importas v0.1.0 // indirect
 	github.com/kisielk/errcheck v1.7.0 // indirect
@@ -367,10 +369,10 @@ require (
 	gitlab.com/bosi/decorder v0.4.1 // indirect
 	go.etcd.io/bbolt v1.3.6
 	go.uber.org/multierr v1.11.0 // indirect
-	go.uber.org/zap v1.27.0 // indirect
-	golang.org/x/crypto v0.21.0
-	golang.org/x/mod v0.16.0 // indirect
-	golang.org/x/net v0.22.0 // indirect
+	go.uber.org/zap v1.27.0
+	golang.org/x/crypto v0.22.0
+	golang.org/x/mod v0.17.0 // indirect
+	golang.org/x/net v0.24.0 // indirect
 	google.golang.org/grpc v1.59.0 // indirect
 	google.golang.org/protobuf v1.32.0
 	gopkg.in/ini.v1 v1.67.0 // indirect

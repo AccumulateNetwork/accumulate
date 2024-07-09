@@ -28,9 +28,10 @@ type Router interface {
 
 // RouterInstance sends transactions to remote nodes via RPC calls.
 type RouterInstance struct {
-	ready  chan struct{}
-	tree   *RouteTree
-	logger logging.OptionalLogger
+	readyCh chan struct{}
+	readyOk bool
+	tree    *RouteTree
+	logger  logging.OptionalLogger
 }
 
 type RouterOptions struct {
@@ -48,13 +49,14 @@ type RouterOptions struct {
 // panic unless an initial routing table and/or event bus are specified.
 func NewRouter(opts RouterOptions) *RouterInstance {
 	r := new(RouterInstance)
-	r.ready = make(chan struct{})
+	r.readyCh = make(chan struct{})
 	r.logger.Set(opts.Logger, "module", "router")
 
 	var readyOnce sync.Once
-	markReady := func() {
+	markReady := func(ok bool) {
 		readyOnce.Do(func() {
-			close(r.ready)
+			r.readyOk = ok
+			close(r.readyCh)
 		})
 	}
 
@@ -66,21 +68,27 @@ func NewRouter(opts RouterOptions) *RouterInstance {
 			panic(err)
 		}
 		r.tree = tree
-		markReady()
+		markReady(true)
 	}
 
 	if opts.Events != nil {
 		ok = true
 		events.SubscribeSync(opts.Events, func(e events.WillChangeGlobals) error {
+			if e.New.Routing == nil {
+				markReady(false)
+				return errors.InternalError.With("missing routing table")
+			}
+
 			r.logger.Debug("Loading new routing table", "table", e.New.Routing)
 
 			tree, err := NewRouteTree(e.New.Routing)
 			if err != nil {
+				markReady(false)
 				return errors.UnknownError.Wrap(err)
 			}
 
 			r.tree = tree
-			markReady()
+			markReady(true)
 			return nil
 		})
 	}
@@ -193,8 +201,13 @@ func routeMessage(routeAccount func(*url.URL) (string, error), route *string, ms
 	return nil
 }
 
-func (r *RouterInstance) Ready() <-chan struct{} {
-	return r.ready
+func (r *RouterInstance) Ready() <-chan bool {
+	ch := make(chan bool, 1)
+	go func() {
+		<-r.readyCh
+		ch <- r.readyOk
+	}()
+	return ch
 }
 
 func (r *RouterInstance) RouteAccount(account *url.URL) (string, error) {

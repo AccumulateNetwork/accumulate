@@ -16,6 +16,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"unicode/utf8"
+
+	binary2 "gitlab.com/accumulatenetwork/core/schema/pkg/binary"
 )
 
 // URL is an Accumulate URL.
@@ -507,7 +509,18 @@ func (u *URL) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return err
 	}
+	return u.unmarshal(s)
+}
 
+func (u *URL) UnmarshalBinaryV2(dec *binary2.Decoder) error {
+	s, err := dec.DecodeString()
+	if err != nil {
+		return err
+	}
+	return u.unmarshal(s)
+}
+
+func (u *URL) unmarshal(s string) error {
 	v, err := Parse(s)
 	if err != nil {
 		return err

@@ -10,6 +10,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"fmt"
+	"log/slog"
 	"runtime/debug"
 	"sync/atomic"
 
@@ -23,7 +24,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"golang.org/x/exp/slog"
 )
 
 type interceptor = func(ctx context.Context, env *messaging.Envelope) (send bool, err error)
@@ -132,7 +132,7 @@ func (c *Conductor) willBeginBlock(e execute.WillBeginBlock) error {
 
 	// Did anything happen last block?
 	if ledger.Index < e.Index-1 {
-		slog.DebugCtx(e.Context, "Skipping anchor", "module", "conductor", "index", ledger.Index)
+		slog.DebugContext(e.Context, "Skipping anchor", "module", "conductor", "index", ledger.Index)
 		return nil
 	}
 
@@ -180,7 +180,7 @@ func (c *Conductor) sendAnchorForLastBlock(e execute.WillBeginBlock, batch *data
 
 func (c *Conductor) sendBlockAnchor(ctx context.Context, anchor protocol.AnchorBody, sequenceNumber uint64, destPart string) error {
 	destination := protocol.PartitionUrl(destPart)
-	slog.DebugCtx(ctx, "Sending an anchor", "module", "conductor",
+	slog.DebugContext(ctx, "Sending an anchor", "module", "conductor",
 		"block", anchor.GetPartitionAnchor().MinorBlockIndex,
 		"destination", destination,
 		"source-block", anchor.GetPartitionAnchor().MinorBlockIndex,

@@ -10,12 +10,14 @@ import (
 	"context"
 	"fmt"
 	"io"
+	stdlog "log"
+	"log/slog"
+	"runtime"
 	"strings"
 	"time"
 
 	"github.com/cometbft/cometbft/libs/log"
 	"github.com/rs/zerolog"
-	"golang.org/x/exp/slog"
 )
 
 type Slogger slog.Logger
@@ -130,6 +132,9 @@ func (h *logHandler) WithGroup(name string) slog.Handler {
 }
 
 func (h *logHandler) Enabled(ctx context.Context, level slog.Level) bool {
+	if ctx.Value(isStdlog) != nil {
+		return true
+	}
 	if level < h.lowestLevel {
 		return false
 	}
@@ -141,7 +146,8 @@ func (h *logHandler) Enabled(ctx context.Context, level slog.Level) bool {
 
 func (h *logHandler) Handle(ctx context.Context, record slog.Record) error {
 	record.AddAttrs(Attrs(ctx)...)
-	if record.Level < h.levelFor(h.defaultLevel, record.Attrs) {
+	if ctx.Value(isStdlog) == nil &&
+		record.Level < h.levelFor(h.defaultLevel, record.Attrs) {
 		return nil
 	}
 
@@ -193,4 +199,30 @@ func (h *logHandler) levelFor(level slog.Level, fn func(func(slog.Attr) bool)) s
 		return false
 	})
 	return level
+}
+
+var isStdlog _contextKey
+
+type StdlogWriter struct {
+	Handler slog.Handler
+}
+
+func (w *StdlogWriter) Write(buf []byte) (int, error) {
+	var pc uintptr
+	if stdlog.Flags()&(stdlog.Lshortfile|stdlog.Llongfile) != 0 {
+		// skip [runtime.Callers, w.Write, Logger.Output, log.Print]
+		var pcs [1]uintptr
+		runtime.Callers(4, pcs[:])
+		pc = pcs[0]
+	}
+
+	// Remove final newline.
+	origLen := len(buf) // Report that the entire buf was written.
+	if len(buf) > 0 && buf[len(buf)-1] == '\n' {
+		buf = buf[:len(buf)-1]
+	}
+
+	ctx := context.WithValue(context.Background(), isStdlog, true)
+	r := slog.NewRecord(time.Now(), slog.LevelInfo, string(buf), pc)
+	return origLen, w.Handler.Handle(ctx, r)
 }

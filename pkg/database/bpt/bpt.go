@@ -10,13 +10,12 @@ import (
 	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 type KeyValuePair struct {
 	Key   *record.Key
-	Value [32]byte
+	Value []byte
 }
 
 // New returns a new BPT.
@@ -47,40 +46,6 @@ func (b *BPT) GetRootHash() ([32]byte, error) {
 	// Return its hash
 	h, _ := r.getHash()
 	return h, nil
-}
-
-func (b *BPT) newState() values.Value[*parameters] {
-	v := values.NewValue(b.logger.L, b.store, b.key.Append("Root"), false, values.Struct[parameters]())
-	return paramsRecord{v}
-}
-
-// paramsRecord is a wrapper around Value that sets the power to 8 if the
-// parameters have not been configured.
-type paramsRecord struct {
-	values.Value[*parameters]
-}
-
-// Get loads the parameters, initializing them to the default values if they
-// have not been set.
-func (p paramsRecord) Get() (*parameters, error) {
-	v, err := p.Value.Get()
-	switch {
-	case err == nil:
-		return v, nil
-	case !errors.Is(err, errors.NotFound):
-		return nil, errors.UnknownError.Wrap(err)
-	}
-
-	// TODO Allow power to be configurable?
-	v = new(parameters)
-	v.Power = 8
-	v.Mask = v.Power - 1
-	err = p.Value.Put(v)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-
-	return v, nil
 }
 
 // nodeKeyAt
@@ -128,33 +93,20 @@ func parseNodeKey(nodeKey [32]byte) (height uint64, key [32]byte, ok bool) { //n
 	return byteIdx*8 + 8 - bit, key, true
 }
 
-// getRoot returns the root branch node, creating it if necessary.
-func (b *BPT) getRoot() *branch {
-	return values.GetOrCreate(b, &b.root, (*BPT).newRoot).branch
-}
-
-func (b *BPT) newRoot() *rootRecord {
-	e := new(branch)
-	e.bpt = b
-	e.Height = 0
-	e.Key, _ = nodeKeyAt(0, [32]byte{})
-	return &rootRecord{e}
-}
-
 // Get retrieves the latest hash associated with the given key.
-func (b *BPT) Get(key *record.Key) ([32]byte, error) {
+func (b *BPT) Get(key *record.Key) ([]byte, error) {
 	if v, ok := b.pending[key.Hash()]; ok {
 		if v.delete {
-			return [32]byte{}, errors.NotFound
+			return nil, errors.NotFound
 		}
 		return v.value, nil
 	}
 
 	e, err := b.getRoot().getLeaf(key.Hash())
 	if err != nil {
-		return [32]byte{}, errors.UnknownError.Wrap(err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
-	return e.Hash, nil
+	return e.Value, nil
 }
 
 // getLeaf walks the tree and returns the leaf node for the given key.
@@ -198,38 +150,4 @@ again:
 	// Recurse, but not actually
 	e = g
 	goto again
-}
-
-// Resolve implements [database.Record].
-func (b *BPT) Resolve(key *database.Key) (database.Record, *database.Key, error) {
-	if key.Len() == 0 {
-		return nil, nil, errors.InternalError.With("bad key for bpt")
-	}
-
-	// Execute any pending updates
-	err := b.executePending()
-	if err != nil {
-		return nil, nil, errors.UnknownError.Wrap(err)
-	}
-
-	if key.Get(0) == "Root" {
-		return b.getState(), key.SliceI(1), nil
-	}
-
-	nodeKey, ok := key.Get(0).([32]byte)
-	if !ok {
-		return nil, nil, errors.InternalError.With("bad key for bpt")
-	}
-	e, err := b.getRoot().getBranch(nodeKey)
-	if err != nil {
-		return nil, nil, errors.UnknownError.WithFormat("bad key for BPT: %x", err)
-	}
-
-	// Ensure the node is loaded
-	err = e.load()
-	if err != nil {
-		return nil, nil, errors.UnknownError.WithFormat("load node: %w", err)
-	}
-
-	return nodeRecord{e}, key.SliceI(1), nil
 }

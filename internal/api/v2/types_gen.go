@@ -5098,7 +5098,7 @@ func (v *SignaturePage) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	v.Signer = u.Signer
-	if u.Signatures != nil {
+	if u.Signatures != nil && u.Signatures.Value != nil {
 		v.Signatures = make([]protocol.Signature, len(u.Signatures.Value))
 		for i, x := range u.Signatures.Value {
 			v.Signatures[i] = x
@@ -5306,7 +5306,7 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 	}
 	v.Txid = u.Txid
 	v.Transaction = u.Transaction
-	if u.Signatures != nil {
+	if u.Signatures != nil && u.Signatures.Value != nil {
 		v.Signatures = make([]protocol.Signature, len(u.Signatures.Value))
 		for i, x := range u.Signatures.Value {
 			v.Signatures[i] = x

@@ -80,6 +80,7 @@ func (d *DevnetConfiguration) apply(inst *Instance, cfg *Config) error {
 	setDefaultVal(&d.Bvns, 2)
 	setDefaultVal(&d.Validators, 2)
 	setDefaultVal(&d.Listen, multiaddr.StringCast("/tcp/26656"))
+	setDefaultPtr(&d.StorageType, StorageTypeBadger)
 
 	// Prepare nodes
 	perPart := int(d.Validators) + int(d.Followers)
@@ -370,9 +371,9 @@ func (n nodeOpts) apply(inst *Instance, root *Config) error {
 	// Create partition services
 	opts := partOpts{
 		CoreValidatorConfiguration: &CoreValidatorConfiguration{
-			Listen:       listen(n.DevNet.Listen, devNetDefaultHost, n.IP, portDir),
+			Listen:       listen(n.DevNet.Listen, devNetDefaultHost, n.IP),
 			ValidatorKey: rawPrivKeyFrom(n.PrivVal),
-			StorageType:  Ptr(StorageTypeBadger),
+			StorageType:  n.DevNet.StorageType,
 		},
 		ID:               protocol.Directory,
 		Type:             protocol.PartitionTypeDirectory,
@@ -390,7 +391,6 @@ func (n nodeOpts) apply(inst *Instance, root *Config) error {
 	opts.Type = protocol.PartitionTypeBlockValidator
 	opts.Dir = "bvnn"
 	opts.Genesis = filepath.Join("..", fmt.Sprintf("bvn%d-genesis.snap", n.BVN))
-	opts.Listen = listen(n.DevNet.Listen, devNetDefaultHost, n.IP, portBVN)
 	opts.MetricsNamespace = fmt.Sprintf("consensus_bvn%d_%d", n.BVN, n.IP)
 	opts.BootstrapPeers = n.BvnBootstrap
 	err = opts.apply(cfg)

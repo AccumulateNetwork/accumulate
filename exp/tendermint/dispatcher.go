@@ -8,6 +8,7 @@ package tendermint
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -25,7 +26,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
-	"golang.org/x/exp/slog"
 )
 
 type DispatcherClient interface {
@@ -148,7 +148,7 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 func (d *dispatcher) send(ctx context.Context, queue map[string][]*messaging.Envelope, errs chan<- error) {
 	defer func() {
 		if r := recover(); r != nil {
-			slog.ErrorCtx(ctx, "Panicked while dispatching", "error", r)
+			slog.ErrorContext(ctx, "Panicked while dispatching", "error", r)
 			mDispatchPanics.Inc()
 		}
 	}()
@@ -249,7 +249,7 @@ func (d *dispatcher) getClients(ctx context.Context, want map[string]bool) map[s
 		// Create a client for the BVNN
 		bvn, err := NewHTTPClientForPeer(peer, config.PortOffsetBlockValidator-config.PortOffsetDirectory)
 		if err != nil {
-			slog.ErrorCtx(ctx, "Failed to create client for peer (bvn)", "peer", peer.NodeInfo.ID(), "error", err)
+			slog.ErrorContext(ctx, "Failed to create client for peer (bvn)", "peer", peer.NodeInfo.ID(), "error", err)
 			mGetClientsFailed.Inc()
 			return nil, true
 		}
@@ -257,7 +257,7 @@ func (d *dispatcher) getClients(ctx context.Context, want map[string]bool) map[s
 		// Check which BVN its on
 		st, err := bvn.Status(ctx)
 		if err != nil {
-			slog.ErrorCtx(ctx, "Failed to query BVN status", "peer", peer.NodeInfo.ID(), "error", err)
+			slog.ErrorContext(ctx, "Failed to query BVN status", "peer", peer.NodeInfo.ID(), "error", err)
 			mGetClientsFailed.Inc()
 			return nil, true
 		}
@@ -283,7 +283,7 @@ func (d *dispatcher) getClients(ctx context.Context, want map[string]bool) map[s
 		// Scan the DNN's peers
 		dir, err := NewHTTPClientForPeer(peer, 0)
 		if err != nil {
-			slog.ErrorCtx(ctx, "Failed to create client for peer (directory)", "peer", peer.NodeInfo.ID(), "error", err)
+			slog.ErrorContext(ctx, "Failed to create client for peer (directory)", "peer", peer.NodeInfo.ID(), "error", err)
 			mGetClientsFailed.Inc()
 		}
 		return dir, true

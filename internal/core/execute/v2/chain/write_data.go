@@ -162,7 +162,13 @@ func executeWriteFullDataAccount(st *StateManager, entry protocol.DataEntry, scr
 	result.AccountID = st.OriginUrl.AccountID()
 	result.AccountUrl = st.OriginUrl
 
-	st.UpdateData(st.Origin, result.EntryHash[:], entry)
+	if !st.Globals.ExecutorVersion.V2VandenbergEnabled() {
+		// There was an error in previous versions that needs to be preserved to
+		// avoid consensus failure
+		scratch = false
+	}
+
+	st.UpdateData(st.Origin, result.EntryHash[:], entry, scratch)
 	return result, nil
 }
 

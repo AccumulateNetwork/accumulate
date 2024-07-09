@@ -462,3 +462,90 @@ func TestSignatureErrors(t *testing.T) {
 	require.Error(t, err)
 	require.ErrorContains(t, err, "insufficient credits: have 0.00, want 0.01")
 }
+
+// Verifies that ADI accounts do produce signature requests.
+func TestAdiAccountSignatureRequests(t *testing.T) {
+	alice := build.
+		Identity("alice").Create("book").
+		Tokens("tokens").Create("ACME").Add(1e9).Identity().
+		Book("book").Page(1).Create().AddCredits(1e9).Book().Identity()
+	aliceKey := alice.Book("book").Page(1).
+		GenerateKey(SignatureTypeED25519)
+
+	// Initialize
+	sim := NewSim(t,
+		simulator.SimpleNetwork(t.Name(), 1, 1),
+		simulator.Genesis(GenesisTime).With(alice),
+	)
+
+	// Execute a transaction
+	st := sim.BuildAndSubmitSuccessfully(
+		build.Transaction().For(alice, "tokens").
+			AddCredits().Spend(10).To(alice, "book", "1").WithOracle(InitialAcmeOracle).
+			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey))
+
+	sim.StepUntil(
+		Txn(st[0].TxID).Completes())
+
+	// Verify that the signature did not produce any signature requests
+	r := sim.QuerySignature(st[1].TxID, nil)
+	var ok bool
+	for _, r := range r.Produced.Records {
+		r := sim.QueryMessage(r.Value, nil)
+		_, x := r.Message.(*messaging.SignatureRequest)
+		if x {
+			ok = true
+		}
+	}
+	require.True(t, ok, "A signature request is produced")
+}
+
+// Verifies that lite accounts do not produce signature requests.
+func TestLiteAccountSignatureRequests(t *testing.T) {
+	lite := build.LiteIdentity().Generate(t).AddCredits(1000).
+		Tokens("ACME").Create().Add(1000).Identity()
+
+	// Initialize
+	sim := NewSim(t,
+		simulator.SimpleNetwork(t.Name(), 1, 1),
+		simulator.Genesis(GenesisTime).With(lite),
+	)
+
+	// Execute a transaction
+	st := sim.BuildAndSubmitSuccessfully(
+		build.Transaction().For(lite, "ACME").
+			AddCredits().Spend(10).To(lite).WithOracle(InitialAcmeOracle).
+			SignWith(lite).Version(1).Timestamp(1).PrivateKey(lite.Key))
+
+	sim.StepUntil(
+		Txn(st[0].TxID).Completes())
+
+	// Verify that the signature did not produce any signature requests
+	r := sim.QuerySignature(st[1].TxID, nil)
+	for _, r := range r.Produced.Records {
+		r := sim.QueryMessage(r.Value, nil)
+		_, ok := r.Message.(*messaging.SignatureRequest)
+		require.False(t, ok, "A signature request is not produced")
+	}
+}
+
+func TestLiteAdditionalAuthorities(t *testing.T) {
+	lite := build.LiteIdentity().Generate(t).AddCredits(1000).
+		Tokens("ACME").Create().Add(1000).Identity()
+
+	// Initialize
+	sim := NewSim(t,
+		simulator.SimpleNetwork(t.Name(), 1, 1),
+		simulator.Genesis(GenesisTime).With(lite),
+	)
+
+	// Execute a transaction with additional authorities
+	st := sim.BuildAndSubmit(
+		build.Transaction().For(lite, "ACME").
+			AdditionalAuthority("alice.acme/book/1").
+			AddCredits().Spend(10).To(lite).WithOracle(InitialAcmeOracle).
+			SignWith(lite).Version(1).Timestamp(1).PrivateKey(lite.Key))
+
+	require.Error(t, st[1].AsError())
+	require.ErrorContains(t, st[1].Error, "a transaction initiated by a lite identity cannot require additional authorities")
+}

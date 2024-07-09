@@ -12,12 +12,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"go.uber.org/zap/buffer"
-	"golang.org/x/crypto/sha3"
 	"math/big"
 	"reflect"
 	"sort"
 	"strings"
+
+	"go.uber.org/zap/buffer"
+	"golang.org/x/crypto/sha3"
 )
 
 type TypeField struct {

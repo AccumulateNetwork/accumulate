@@ -16,6 +16,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -26,7 +28,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"golang.org/x/exp/slog"
 )
 
 type BadgerStorage struct {
@@ -50,6 +51,8 @@ type CometPrivValFile struct {
 
 type Config struct {
 	file            string
+	fs              fs.FS
+	DotEnv          *bool            `json:"dotEnv,omitempty" form:"dotEnv" query:"dotEnv" validate:"required"`
 	Network         string           `json:"network,omitempty" form:"network" query:"network" validate:"required"`
 	Logging         *Logging         `json:"logging,omitempty" form:"logging" query:"logging" validate:"required"`
 	Instrumentation *Instrumentation `json:"instrumentation,omitempty" form:"instrumentation" query:"instrumentation" validate:"required"`
@@ -92,11 +95,12 @@ type CoreValidatorConfiguration struct {
 }
 
 type DevnetConfiguration struct {
-	Listen     p2p.Multiaddr         `json:"listen,omitempty" form:"listen" query:"listen" validate:"required"`
-	Bvns       uint64                `json:"bvns,omitempty" form:"bvns" query:"bvns" validate:"required"`
-	Validators uint64                `json:"validators,omitempty" form:"validators" query:"validators" validate:"required"`
-	Followers  uint64                `json:"followers,omitempty" form:"followers" query:"followers"`
-	Globals    *network.GlobalValues `json:"globals,omitempty" form:"globals" query:"globals" validate:"required"`
+	Listen      p2p.Multiaddr         `json:"listen,omitempty" form:"listen" query:"listen" validate:"required"`
+	Bvns        uint64                `json:"bvns,omitempty" form:"bvns" query:"bvns" validate:"required"`
+	Validators  uint64                `json:"validators,omitempty" form:"validators" query:"validators" validate:"required"`
+	Followers   uint64                `json:"followers,omitempty" form:"followers" query:"followers"`
+	Globals     *network.GlobalValues `json:"globals,omitempty" form:"globals" query:"globals" validate:"required"`
+	StorageType *StorageType          `json:"storageType,omitempty" form:"storageType" query:"storageType"`
 }
 
 type EventsService struct {
@@ -358,6 +362,10 @@ func (v *CometPrivValFile) CopyAsInterface() interface{} { return v.Copy() }
 func (v *Config) Copy() *Config {
 	u := new(Config)
 
+	if v.DotEnv != nil {
+		u.DotEnv = new(bool)
+		*u.DotEnv = *v.DotEnv
+	}
 	u.Network = v.Network
 	if v.Logging != nil {
 		u.Logging = (v.Logging).Copy()
@@ -504,6 +512,10 @@ func (v *DevnetConfiguration) Copy() *DevnetConfiguration {
 	u.Followers = v.Followers
 	if v.Globals != nil {
 		u.Globals = (v.Globals).Copy()
+	}
+	if v.StorageType != nil {
+		u.StorageType = new(StorageType)
+		*u.StorageType = *v.StorageType
 	}
 
 	return u
@@ -971,6 +983,14 @@ func (v *CometPrivValFile) Equal(u *CometPrivValFile) bool {
 }
 
 func (v *Config) Equal(u *Config) bool {
+	switch {
+	case v.DotEnv == u.DotEnv:
+		// equal
+	case v.DotEnv == nil || u.DotEnv == nil:
+		return false
+	case !(*v.DotEnv == *u.DotEnv):
+		return false
+	}
 	if !(v.Network == u.Network) {
 		return false
 	}
@@ -1184,6 +1204,14 @@ func (v *DevnetConfiguration) Equal(u *DevnetConfiguration) bool {
 	case v.Globals == nil || u.Globals == nil:
 		return false
 	case !((v.Globals).Equal(u.Globals)):
+		return false
+	}
+	switch {
+	case v.StorageType == u.StorageType:
+		// equal
+	case v.StorageType == nil || u.StorageType == nil:
+		return false
+	case !(*v.StorageType == *u.StorageType):
 		return false
 	}
 
@@ -1908,6 +1936,8 @@ func init() {
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("file", "string"),
+		encoding.NewTypeField("fs", "fs.FS"),
+		encoding.NewTypeField("dotEnv", "bool"),
 		encoding.NewTypeField("network", "string"),
 		encoding.NewTypeField("logging", "Logging"),
 		encoding.NewTypeField("instrumentation", "Instrumentation"),
@@ -1959,6 +1989,7 @@ func init() {
 		encoding.NewTypeField("validators", "uint64"),
 		encoding.NewTypeField("followers", "uint64"),
 		encoding.NewTypeField("globals", "network.GlobalValues"),
+		encoding.NewTypeField("storageType", "string"),
 	}, "DevnetConfiguration", "devnetConfiguration")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -2183,6 +2214,7 @@ func (v *CometPrivValFile) MarshalJSON() ([]byte, error) {
 
 func (v *Config) MarshalJSON() ([]byte, error) {
 	u := struct {
+		DotEnv          *bool                                          `json:"dotEnv,omitempty"`
 		Network         string                                         `json:"network,omitempty"`
 		Logging         *Logging                                       `json:"logging,omitempty"`
 		Instrumentation *Instrumentation                               `json:"instrumentation,omitempty"`
@@ -2190,6 +2222,9 @@ func (v *Config) MarshalJSON() ([]byte, error) {
 		Configurations  *encoding.JsonUnmarshalListWith[Configuration] `json:"configurations,omitempty"`
 		Services        *encoding.JsonUnmarshalListWith[Service]       `json:"services,omitempty"`
 	}{}
+	if !(v.DotEnv == nil) {
+		u.DotEnv = v.DotEnv
+	}
 	if !(len(v.Network) == 0) {
 		u.Network = v.Network
 	}
@@ -2333,12 +2368,13 @@ func (v *CoreValidatorConfiguration) MarshalJSON() ([]byte, error) {
 
 func (v *DevnetConfiguration) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type       ConfigurationType                          `json:"type"`
-		Listen     *encoding.JsonUnmarshalWith[p2p.Multiaddr] `json:"listen,omitempty"`
-		Bvns       uint64                                     `json:"bvns,omitempty"`
-		Validators uint64                                     `json:"validators,omitempty"`
-		Followers  uint64                                     `json:"followers,omitempty"`
-		Globals    *network.GlobalValues                      `json:"globals,omitempty"`
+		Type        ConfigurationType                          `json:"type"`
+		Listen      *encoding.JsonUnmarshalWith[p2p.Multiaddr] `json:"listen,omitempty"`
+		Bvns        uint64                                     `json:"bvns,omitempty"`
+		Validators  uint64                                     `json:"validators,omitempty"`
+		Followers   uint64                                     `json:"followers,omitempty"`
+		Globals     *network.GlobalValues                      `json:"globals,omitempty"`
+		StorageType *StorageType                               `json:"storageType,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(p2p.EqualMultiaddr(v.Listen, nil)) {
@@ -2355,6 +2391,9 @@ func (v *DevnetConfiguration) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.Globals == nil) {
 		u.Globals = v.Globals
+	}
+	if !(v.StorageType == nil) {
+		u.StorageType = v.StorageType
 	}
 	return json.Marshal(&u)
 }
@@ -2898,6 +2937,7 @@ func (v *CometPrivValFile) UnmarshalJSON(data []byte) error {
 
 func (v *Config) UnmarshalJSON(data []byte) error {
 	u := struct {
+		DotEnv          *bool                                          `json:"dotEnv,omitempty"`
 		Network         string                                         `json:"network,omitempty"`
 		Logging         *Logging                                       `json:"logging,omitempty"`
 		Instrumentation *Instrumentation                               `json:"instrumentation,omitempty"`
@@ -2906,6 +2946,7 @@ func (v *Config) UnmarshalJSON(data []byte) error {
 		Services        *encoding.JsonUnmarshalListWith[Service]       `json:"services,omitempty"`
 	}{}
 
+	u.DotEnv = v.DotEnv
 	u.Network = v.Network
 	u.Logging = v.Logging
 	u.Instrumentation = v.Instrumentation
@@ -2916,17 +2957,18 @@ func (v *Config) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return err
 	}
+	v.DotEnv = u.DotEnv
 	v.Network = u.Network
 	v.Logging = u.Logging
 	v.Instrumentation = u.Instrumentation
 	v.P2P = u.P2P
-	if u.Configurations != nil {
+	if u.Configurations != nil && u.Configurations.Value != nil {
 		v.Configurations = make([]Configuration, len(u.Configurations.Value))
 		for i, x := range u.Configurations.Value {
 			v.Configurations[i] = x
 		}
 	}
-	if u.Services != nil {
+	if u.Services != nil && u.Services.Value != nil {
 		v.Services = make([]Service, len(u.Services.Value))
 		for i, x := range u.Services.Value {
 			v.Services[i] = x
@@ -2971,7 +3013,7 @@ func (v *ConsensusService) UnmarshalJSON(data []byte) error {
 		v.Listen = u.Listen.Value
 	}
 
-	if u.BootstrapPeers != nil {
+	if u.BootstrapPeers != nil && u.BootstrapPeers.Value != nil {
 		v.BootstrapPeers = make([]p2p.Multiaddr, len(u.BootstrapPeers.Value))
 		for i, x := range u.BootstrapPeers.Value {
 			v.BootstrapPeers[i] = x
@@ -3062,13 +3104,13 @@ func (v *CoreValidatorConfiguration) UnmarshalJSON(data []byte) error {
 
 	v.DnGenesis = u.DnGenesis
 	v.BvnGenesis = u.BvnGenesis
-	if u.DnBootstrapPeers != nil {
+	if u.DnBootstrapPeers != nil && u.DnBootstrapPeers.Value != nil {
 		v.DnBootstrapPeers = make([]p2p.Multiaddr, len(u.DnBootstrapPeers.Value))
 		for i, x := range u.DnBootstrapPeers.Value {
 			v.DnBootstrapPeers[i] = x
 		}
 	}
-	if u.BvnBootstrapPeers != nil {
+	if u.BvnBootstrapPeers != nil && u.BvnBootstrapPeers.Value != nil {
 		v.BvnBootstrapPeers = make([]p2p.Multiaddr, len(u.BvnBootstrapPeers.Value))
 		for i, x := range u.BvnBootstrapPeers.Value {
 			v.BvnBootstrapPeers[i] = x
@@ -3084,12 +3126,13 @@ func (v *CoreValidatorConfiguration) UnmarshalJSON(data []byte) error {
 
 func (v *DevnetConfiguration) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type       ConfigurationType                          `json:"type"`
-		Listen     *encoding.JsonUnmarshalWith[p2p.Multiaddr] `json:"listen,omitempty"`
-		Bvns       uint64                                     `json:"bvns,omitempty"`
-		Validators uint64                                     `json:"validators,omitempty"`
-		Followers  uint64                                     `json:"followers,omitempty"`
-		Globals    *network.GlobalValues                      `json:"globals,omitempty"`
+		Type        ConfigurationType                          `json:"type"`
+		Listen      *encoding.JsonUnmarshalWith[p2p.Multiaddr] `json:"listen,omitempty"`
+		Bvns        uint64                                     `json:"bvns,omitempty"`
+		Validators  uint64                                     `json:"validators,omitempty"`
+		Followers   uint64                                     `json:"followers,omitempty"`
+		Globals     *network.GlobalValues                      `json:"globals,omitempty"`
+		StorageType *StorageType                               `json:"storageType,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Listen = &encoding.JsonUnmarshalWith[p2p.Multiaddr]{Value: v.Listen, Func: p2p.UnmarshalMultiaddrJSON}
@@ -3097,6 +3140,7 @@ func (v *DevnetConfiguration) UnmarshalJSON(data []byte) error {
 	u.Validators = v.Validators
 	u.Followers = v.Followers
 	u.Globals = v.Globals
+	u.StorageType = v.StorageType
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -3112,6 +3156,7 @@ func (v *DevnetConfiguration) UnmarshalJSON(data []byte) error {
 	v.Validators = u.Validators
 	v.Followers = u.Followers
 	v.Globals = u.Globals
+	v.StorageType = u.StorageType
 	return nil
 }
 
@@ -3218,7 +3263,7 @@ func (v *HttpListener) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return err
 	}
-	if u.Listen != nil {
+	if u.Listen != nil && u.Listen.Value != nil {
 		v.Listen = make([]p2p.Multiaddr, len(u.Listen.Value))
 		for i, x := range u.Listen.Value {
 			v.Listen[i] = x
@@ -3256,7 +3301,7 @@ func (v *HttpPeerMapEntry) UnmarshalJSON(data []byte) error {
 	}
 
 	v.Partitions = u.Partitions
-	if u.Addresses != nil {
+	if u.Addresses != nil && u.Addresses.Value != nil {
 		v.Addresses = make([]p2p.Multiaddr, len(u.Addresses.Value))
 		for i, x := range u.Addresses.Value {
 			v.Addresses[i] = x
@@ -3303,7 +3348,7 @@ func (v *HttpService) UnmarshalJSON(data []byte) error {
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
-	if u.Listen != nil {
+	if u.Listen != nil && u.Listen.Value != nil {
 		v.HttpListener.Listen = make([]p2p.Multiaddr, len(u.Listen.Value))
 		for i, x := range u.Listen.Value {
 			v.HttpListener.Listen[i] = x
@@ -3348,7 +3393,7 @@ func (v *Instrumentation) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return err
 	}
-	if u.Listen != nil {
+	if u.Listen != nil && u.Listen.Value != nil {
 		v.HttpListener.Listen = make([]p2p.Multiaddr, len(u.Listen.Value))
 		for i, x := range u.Listen.Value {
 			v.HttpListener.Listen[i] = x
@@ -3526,13 +3571,13 @@ func (v *P2P) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return err
 	}
-	if u.Listen != nil {
+	if u.Listen != nil && u.Listen.Value != nil {
 		v.Listen = make([]p2p.Multiaddr, len(u.Listen.Value))
 		for i, x := range u.Listen.Value {
 			v.Listen[i] = x
 		}
 	}
-	if u.BootstrapPeers != nil {
+	if u.BootstrapPeers != nil && u.BootstrapPeers.Value != nil {
 		v.BootstrapPeers = make([]p2p.Multiaddr, len(u.BootstrapPeers.Value))
 		for i, x := range u.BootstrapPeers.Value {
 			v.BootstrapPeers[i] = x
@@ -3719,7 +3764,7 @@ func (v *SubnodeService) UnmarshalJSON(data []byte) error {
 		v.NodeKey = u.NodeKey.Value
 	}
 
-	if u.Services != nil {
+	if u.Services != nil && u.Services.Value != nil {
 		v.Services = make([]Service, len(u.Services.Value))
 		for i, x := range u.Services.Value {
 			v.Services[i] = x

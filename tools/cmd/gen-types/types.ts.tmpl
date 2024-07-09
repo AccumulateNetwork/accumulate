@@ -10,7 +10,7 @@ import { encodeAs } from "../encoding";
 {{  define "objectify"}}
 this.{{lcName .Name}} &&
 {{-   if .Repeatable -}}
-this.{{lcName .Name}}?.map(v => {{objectify . "v"}})
+this.{{lcName .Name}}?.map(v => v == undefined ? undefined : {{objectify . "v"}})
 {{-   else}}
 {{objectify . (print "this." (lcName .Name))}}
 {{-   end}}

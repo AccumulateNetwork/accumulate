@@ -797,7 +797,7 @@ func (v *recordMessages) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return err
 	}
-	if u.Messages != nil {
+	if u.Messages != nil && u.Messages.Value != nil {
 		v.Messages = make([]consensus.Message, len(u.Messages.Value))
 		for i, x := range u.Messages.Value {
 			v.Messages[i] = x

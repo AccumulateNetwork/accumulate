@@ -16,7 +16,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -27,6 +26,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -308,7 +308,7 @@ type TypedData struct {
 	Types    []TypesEntry
 }
 
-var Eip712DomainType = []TypesEntry{
+var EIP712DomainType = []TypesEntry{
 	{Name: "name", Type: "string"},
 	{Name: "version", Type: "string"},
 	{Name: "chainId", Type: "string"},
@@ -321,7 +321,7 @@ var Eip712DomainType = []TypesEntry{
 //	ChainId string `json:"chainId,omitempty" form:"chainId" query:"chainId" validate:"required"`
 //}
 
-//var Eip712Domain = EIP712Domain{
+//var EIP712Domain = EIP712Domain{
 //	Name:    "Accumulate",
 //	Version: "0.0.7",
 //	ChainId: 281,
@@ -627,6 +627,7 @@ func printTypedData(data *TypedData, typedDataList []*TypedData, typesList *map[
 	(*typesList)[data.TypeName] = json.RawMessage(d)
 	return
 }
+
 func mapTypedData(typedDataMap *map[string]*TypedData, typedDataList *[]*TypedData, data *TypedData) {
 	if data == nil {
 		return

@@ -11,6 +11,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -31,6 +32,7 @@ import (
 	"github.com/cometbft/cometbft/rpc/client/local"
 	tmtypes "github.com/cometbft/cometbft/types"
 	"github.com/fatih/color"
+	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/multiformats/go-multihash"
 	"github.com/spf13/viper"
@@ -54,7 +56,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"golang.org/x/exp/slog"
 )
 
 var (
@@ -126,7 +127,7 @@ func (c *ConsensusService) start(inst *Instance) error {
 	d.eventBus = events.NewBus(d.logger.With("module", "events"))
 
 	events.SubscribeAsync(d.eventBus, func(e events.FatalError) {
-		slog.ErrorCtx(inst.context, "Shutting down due to a fatal error", "error", e.Err)
+		slog.ErrorContext(inst.context, "Shutting down due to a fatal error", "error", e.Err)
 		inst.shutdown()
 	})
 
@@ -248,7 +249,7 @@ func (c *ConsensusService) start(inst *Instance) error {
 	inst.cleanup(func() {
 		err := node.Stop()
 		if err != nil {
-			slog.ErrorCtx(inst.context, "Error while stopping node", "error", err)
+			slog.ErrorContext(inst.context, "Error while stopping node", "error", err)
 		}
 		node.Wait()
 	})
@@ -384,7 +385,15 @@ func cmtPeerAddress(addr multiaddr.Multiaddr) (string, error) {
 	var hash []byte
 	switch pub.Code {
 	case multihash.IDENTITY:
-		hash = tmhash.SumTruncated(pub.Digest)
+		p, err := crypto.UnmarshalPublicKey(pub.Digest)
+		if err != nil {
+			return "", errors.BadRequest.WithFormat("decode public key: %w", err)
+		}
+		b, err := p.Raw()
+		if err != nil {
+			return "", errors.BadRequest.WithFormat("unwrap public key: %w", err)
+		}
+		hash = tmhash.SumTruncated(b)
 	case multihash.SHA2_256:
 		hash = pub.Digest[:tmhash.TruncatedSize]
 	default:

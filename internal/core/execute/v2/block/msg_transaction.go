@@ -8,6 +8,7 @@ package block
 
 import (
 	"bytes"
+	"log/slog"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
@@ -76,8 +77,7 @@ func (x TransactionMessage) Validate(batch *database.Batch, ctx *MessageContext)
 		return nil, nil
 	}
 
-	ctx2 := ctx.txnWith(txn.Transaction)
-	st := chain.NewStatelessManager(ctx.Executor.Describe, ctx.GetActiveGlobals(), txn.Transaction, ctx2.effectivePrincipal(), ctx.Executor.logger.With("operation", "Validate"))
+	st := chain.NewStatelessManager(ctx.Executor.Describe, ctx.GetActiveGlobals(), txn.Transaction, ctx.Executor.logger.With("operation", "Validate"))
 	st.Pretend = true
 
 	r, err := exec.Validate(st, &chain.Delivery{Transaction: txn.Transaction})
@@ -345,7 +345,7 @@ func (x TransactionMessage) executeTransaction(batch *database.Batch, ctx *Trans
 		"type", ctx.transaction.Body.Type(),
 		"code", status.Code,
 		"txn-hash", logging.AsHex(ctx.transaction.GetHash()).Slice(0, 4),
-		"principal", ctx.effectivePrincipal(),
+		"principal", ctx.transaction.Header.Principal,
 	}
 	if status.Error != nil {
 		kv = append(kv, "error", status.Error)
@@ -412,7 +412,7 @@ func (x TransactionMessage) postProcess(batch *database.Batch, ctx *TransactionC
 
 	// Clear votes and payments
 	if delivered {
-		txn := batch.Account(ctx.effectivePrincipal()).
+		txn := batch.Account(ctx.transaction.Header.Principal).
 			Transaction(ctx.transaction.ID().Hash())
 
 		err = txn.Payments().Put(nil)
@@ -564,19 +564,19 @@ func (b *Block) processEvents() error {
 		events := b.Batch.Account(b.Executor.Describe.Ledger()).Events()
 		blocks, err := getBlocksWithEvents(events.Major().Blocks(), majorBlockIndex)
 		if err != nil {
-			return errors.UnknownError.Wrap(err)
+			return errors.UnknownError.WithFormat("get blocks: %w", err)
 		}
 
 		// Expire pending transactions
 		msgs, err := b.expirePendingTransactions(b.Batch, blocks)
 		if err != nil {
-			return errors.UnknownError.Wrap(err)
+			return errors.UnknownError.WithFormat("expire pending: %w", err)
 		}
 
 		// Claim we're on pass 1 so that internal messages are allowed
 		_, err = b.processMessages(msgs, 1)
 		if err != nil {
-			return errors.UnknownError.Wrap(err)
+			return errors.UnknownError.WithFormat("process messages (1): %w", err)
 		}
 	}
 
@@ -624,7 +624,10 @@ func (b *Block) processEvents() error {
 
 	// Claim we're on pass 1 so that internal messages are allowed
 	_, err = b.processMessages(msgs, 1)
-	return errors.UnknownError.Wrap(err)
+	if err != nil {
+		return errors.UnknownError.WithFormat("process messages (2): %w", err)
+	}
+	return nil
 }
 
 // ExpiredTransaction expires a transaction
@@ -679,11 +682,11 @@ func (x ExpiredTransaction) expireTransaction(batch *database.Batch, ctx *Messag
 
 	// If the account in the expiring ID is not the principal, skip it (because
 	// it's a signature set expiration)
-	ctx2 := ctx.txnWith(txn.Transaction)
-	if ctx.GetActiveGlobals().ExecutorVersion.V2BaikonurEnabled() && !msg.TxID.Account().Equal(ctx2.effectivePrincipal()) {
+	if ctx.GetActiveGlobals().ExecutorVersion.V2BaikonurEnabled() && !msg.TxID.Account().Equal(txn.Transaction.Header.Principal) {
 		return nil
 	}
 
+	ctx2 := ctx.txnWith(txn.Transaction)
 	_, state, err := ctx2.recordFailedTransaction(batch, &chain.Delivery{Transaction: txn.Transaction}, errors.Expired)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
@@ -697,12 +700,21 @@ func (x ExpiredTransaction) expireTransaction(batch *database.Batch, ctx *Messag
 func (x ExpiredTransaction) eraseSignatures(batch *database.Batch, ctx *MessageContext, msg *internal.ExpiredTransaction) error {
 	// Load the account
 	account, err := batch.Account(msg.TxID.Account()).Main().Get()
-	if err != nil {
-		return errors.UnknownError.WithFormat("load account: %w", err)
-	}
+	_, isAuth := account.(protocol.Authority)
+	switch {
+	case errors.Is(err, errors.NotFound):
+		// The account does not exist. This should only happen for multisig
+		// Create transactions that expire. In that case - a pending transaction
+		// to create some account X - any attempt to use X to sign transactions
+		// must fail, and thus there should never be anything to erase here.
+		slog.Debug("Skip erasing signatures for expired transaction: account does not exist", "id", msg.TxID)
+		return nil
 
-	// Is it an authority?
-	if _, ok := account.(protocol.Authority); !ok {
+	case err != nil:
+		return errors.UnknownError.WithFormat("load account: %w", err)
+
+	case !isAuth:
+		// Is it an authority?
 		return nil
 	}
 
@@ -721,6 +733,6 @@ func (x ExpiredTransaction) eraseSignatures(batch *database.Batch, ctx *MessageC
 	}
 
 	// Clear the signature set
-	err = clearActiveSignatures(batch, account.GetUrl(), txn.ID())
+	err = clearActiveSignatures(batch, msg.TxID.Account(), txn.ID())
 	return errors.UnknownError.Wrap(err)
 }

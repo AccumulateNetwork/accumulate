@@ -4,6 +4,12 @@ Config:
     - name: file
       type: string
       marshal-as: none
+    - name: fs
+      type: fs.FS
+      marshal-as: none
+    - name: DotEnv
+      type: bool
+      pointer: true
     - name: Network
       type: string
     - name: Logging
@@ -508,6 +514,11 @@ DevnetConfiguration:
       type: network.GlobalValues
       marshal-as: reference
       pointer: true
+    - name: StorageType
+      type: StorageType
+      marshal-as: enum
+      pointer: true
+      optional: true
 
 SubnodeService:
   union: { type: service }

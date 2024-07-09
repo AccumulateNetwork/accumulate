@@ -9,6 +9,7 @@ package healing
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -22,7 +23,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"golang.org/x/exp/slog"
 )
 
 type Healer struct {
@@ -60,11 +60,11 @@ func (h *Healer) HealSynthetic(ctx context.Context, args HealSyntheticArgs, si S
 	// Has it already been delivered?
 	Q := api.Querier2{Querier: args.Querier}
 	if r, err := Q.QueryMessage(ctx, r.ID, nil); err == nil && r.Status.Delivered() {
-		slog.InfoCtx(ctx, "Synthetic message has been delivered", "id", si.ID, "source", si.Source, "destination", si.Destination, "number", si.Number)
+		slog.InfoContext(ctx, "Synthetic message has been delivered", "id", si.ID, "source", si.Source, "destination", si.Destination, "number", si.Number)
 		return errors.Delivered
 	}
 
-	slog.InfoCtx(ctx, "Resubmitting", "source", si.Source, "destination", si.Destination, "number", si.Number, "id", r.Message.ID())
+	slog.InfoContext(ctx, "Resubmitting", "source", si.Source, "destination", si.Destination, "number", si.Number, "id", r.Message.ID())
 
 	// Build the receipt
 	receipt, err := h.buildSynthReceipt(ctx, args, si)
@@ -145,15 +145,15 @@ func (h *Healer) HealSynthetic(ctx context.Context, args HealSyntheticArgs, si S
 
 	sub, err := args.Submitter.Submit(ctx, env, api.SubmitOptions{})
 	if err != nil {
-		slog.ErrorCtx(ctx, "Submission failed", "error", err, "id", env.Messages[0].ID())
+		slog.ErrorContext(ctx, "Submission failed", "error", err, "id", env.Messages[0].ID())
 	}
 	for _, sub := range sub {
 		if !sub.Success {
-			slog.ErrorCtx(ctx, "Submission failed", "message", sub, "status", sub.Status, "id", sub.Status.TxID)
+			slog.ErrorContext(ctx, "Submission failed", "message", sub, "status", sub.Status, "id", sub.Status.TxID)
 			continue
 		}
 
-		slog.InfoCtx(ctx, "Submission succeeded", "id", sub.Status.TxID)
+		slog.InfoContext(ctx, "Submission succeeded", "id", sub.Status.TxID)
 		if !args.Wait || dontWait[sub.Status.TxID.Hash()] {
 			continue
 		}
@@ -171,7 +171,7 @@ func (h *Healer) HealSynthetic(ctx context.Context, args HealSyntheticArgs, si S
 }
 
 func waitFor(ctx context.Context, Q api.Querier, id *url.TxID) error {
-	slog.InfoCtx(ctx, "Waiting", "for", id)
+	slog.InfoContext(ctx, "Waiting", "for", id)
 	for i := 0; i < 10; i++ {
 		r, err := api.Querier2{Querier: Q}.QueryMessage(ctx, id, nil)
 		switch {

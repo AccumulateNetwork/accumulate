@@ -9,6 +9,8 @@ package run
 import (
 	"encoding/json"
 	"io"
+	"log"
+	"log/slog"
 	"os"
 	"strings"
 
@@ -16,7 +18,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/exp/loki"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"golang.org/x/exp/slog"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -70,6 +71,17 @@ func (l *Logging) start(inst *Instance) error {
 
 	inst.logger = slog.New(h)
 	slog.SetDefault(inst.logger)
+
+	// [slog.SetDefault] also sets the [log] output to pass all [log] messages
+	// through [slog]. By default this bridge logs [log] calls with level INFO.
+	// Which means all [log] calls will get dropped if the [slog] level is
+	// greater than INFO. The log level of the bridge can be changed (before the
+	// call to [slog.SetDefault]) via [slog.SetLogLoggerLevel], but IMO setting
+	// the default level to something more severe (i.e. WARN or ERROR) is not a
+	// good solution. So instead, we set the [log] output to
+	// [logging.StdlogWriter] which cooperates with [logging]'s [slog.Handler]
+	// to exclude [log] messages from filtering.
+	log.SetOutput(&logging.StdlogWriter{Handler: h})
 
 	return nil
 }

@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
+	"log/slog"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/shared"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -19,7 +20,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"golang.org/x/exp/slog"
 )
 
 func (c *Conductor) healAnchors(ctx context.Context, batch *database.Batch, destination *url.URL, currentBlock uint64) error {
@@ -133,7 +133,7 @@ func ConstructLastAnchor(ctx context.Context, batch *database.Batch, partition *
 
 	// Is there an anchor to send?
 	if systemLedger.Anchor == nil {
-		slog.DebugCtx(ctx, "Skipping anchor", "module", "anchoring", "index", systemLedger.Index)
+		slog.DebugContext(ctx, "Skipping anchor", "module", "anchoring", "index", systemLedger.Index)
 		return nil, 0, nil
 	}
 
@@ -146,7 +146,7 @@ func ConstructLastAnchor(ctx context.Context, batch *database.Batch, partition *
 
 	// Send the block anchor
 	sequenceNumber := anchorLedger.MinorBlockSequenceNumber
-	slog.DebugCtx(ctx, "Anchor block", "module", "anchoring", "index", systemLedger.Index, "seq-num", sequenceNumber)
+	slog.DebugContext(ctx, "Anchor block", "module", "anchoring", "index", systemLedger.Index, "seq-num", sequenceNumber)
 
 	// Load the root chain
 	rootChain, err := batch.Account(partition.JoinPath(protocol.Ledger)).RootChain().Get()
@@ -208,13 +208,6 @@ func (x ValidatorContext) PrepareAnchorSubmission(ctx context.Context, anchor pr
 	txn := new(protocol.Transaction)
 	txn.Header.Principal = destination.JoinPath(protocol.AnchorPool)
 	txn.Body = anchor
-
-	// Once the BVNs are all running Vandenberg or later, always set the
-	// principal to acc://dn.acme/anchors so that every partition receives an
-	// identical anchor
-	if isSrcDir && x.Globals.BvnExecutorVersion().V2VandenbergEnabled() {
-		txn.Header.Principal = protocol.DnUrl().JoinPath(protocol.AnchorPool)
-	}
 
 	seq := &messaging.SequencedMessage{
 		Message:     &messaging.TransactionMessage{Transaction: txn},

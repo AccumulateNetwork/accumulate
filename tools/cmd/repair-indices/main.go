@@ -152,8 +152,8 @@ func collect(db database.Beginner, partition config.NetworkUrl) (map[[32]byte]*D
 				continue
 			}
 
-			// Only care about the main chain
-			if e.Chain != "main" {
+			// Only care about the main chains
+			if e.Chain != "main" && e.Chain != "scratch" {
 				continue
 			}
 

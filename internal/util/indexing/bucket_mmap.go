@@ -11,9 +11,9 @@ package indexing
 import (
 	"errors"
 	"io"
+	"log/slog"
 
 	"github.com/edsrzf/mmap-go"
-	"golang.org/x/exp/slog"
 )
 
 const pageSize = 4 << 10 // 4 kiB

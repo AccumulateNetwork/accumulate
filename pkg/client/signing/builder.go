@@ -320,6 +320,16 @@ func (s *Builder) prepare(init bool) (protocol.KeySignature, error) {
 		sig.Data = s.Data
 		return sig, s.Signer.SetPublicKey(sig)
 
+	case protocol.SignatureTypeEcdsaSha256:
+		sig := new(protocol.EcdsaSha256Signature)
+		sig.Signer = s.Url
+		sig.SignerVersion = s.Version
+		sig.Timestamp = timestamp
+		sig.Vote = s.Vote
+		sig.Memo = s.Memo
+		sig.Data = s.Data
+		return sig, s.Signer.SetPublicKey(sig)
+
 	case protocol.SignatureTypeEip712TypedData:
 		sig := new(protocol.Eip712TypedDataSignature)
 		sig.Signer = s.Url
@@ -328,16 +338,6 @@ func (s *Builder) prepare(init bool) (protocol.KeySignature, error) {
 		sig.Vote = s.Vote
 		sig.Memo = s.Memo
 		sig.Data = s.Data
-		//build the typed data json structure
-		//txn := protocol.Transaction{}
-		//err := txn.UnmarshalBinary(sig.Data)
-		//if err != nil {
-		//	return nil, err
-		//}
-		//sig.TypedData, err = txn.MarshalJSON()
-		//if err != nil {
-		//	return nil, err
-		//}
 		return sig, s.Signer.SetPublicKey(sig)
 	default:
 		panic("unreachable")

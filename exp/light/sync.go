@@ -11,6 +11,7 @@ import (
 	"context"
 	"encoding/hex"
 	stderr "errors"
+	"log/slog"
 	"sort"
 	"strings"
 	"time"
@@ -25,7 +26,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"golang.org/x/exp/slices"
-	"golang.org/x/exp/slog"
 )
 
 // PullAccount fetches the latest version of the account and its chains.
@@ -122,7 +122,7 @@ func (c *Client) PullAccountWithChains(ctx context.Context, acctUrl *url.URL, pr
 		var failed error
 		for name, start := range starts {
 			// Query the next 1000 entries
-			slog.InfoCtx(ctx, "Pull chain entries", "account", acctUrl, "chain", name, "start", start, "of", total[name])
+			slog.InfoContext(ctx, "Pull chain entries", "account", acctUrl, "chain", name, "start", start, "of", total[name])
 			r, err := c.query.QueryChainEntries(ctx, acctUrl, &api.ChainQuery{
 				Name: name,
 				Range: &api.RangeOptions{
@@ -176,7 +176,7 @@ func (c *Client) PullAccountWithChains(ctx context.Context, acctUrl *url.URL, pr
 			}
 			if !bytes.Equal(head.Anchor(), remote.Anchor()) {
 				failed = errors.Conflict.WithFormat("checksum failed while pulling %v %v chain", acctUrl, name)
-				slog.ErrorCtx(ctx, "Checksum failed while pulling chain", "account", acctUrl, "chain", name)
+				slog.ErrorContext(ctx, "Checksum failed while pulling chain", "account", acctUrl, "chain", name)
 			}
 		}
 		if failed != nil {
@@ -308,7 +308,7 @@ func (c *Client) PullPendingTransactionsForAccount(ctx context.Context, account 
 	}
 
 	// Pull the transactions
-	slog.InfoCtx(ctx, "Pulling transactions", "count", len(txids), "account", account)
+	slog.InfoContext(ctx, "Pulling transactions", "count", len(txids), "account", account)
 	err = c.PullTransactions(ctx, txids...)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
@@ -356,12 +356,18 @@ func (c *Client) getBlockForTime(batch *DB, account *url.URL, time time.Time) (u
 	}
 	partU := protocol.PartitionUrl(part)
 	block, err := batch.Index().Account(partU.JoinPath(protocol.Ledger)).Chain("root").BlockTime().FindIndexEntryBefore(time)
-	if err != nil {
+	switch {
+	case err == nil:
+		// Include chain entries since the given minor block
+		return block.BlockIndex, nil
+
+	case errors.Is(err, errors.NotFound):
+		// If there's no entry before the given time, start with block 1
+		return 1, nil
+
+	default:
 		return 0, errors.UnknownError.WithFormat("load anchor metadata: %w", err)
 	}
-
-	// Include chain entries since the given minor block
-	return block.BlockIndex, nil
 }
 
 type missingMessage struct {
@@ -398,6 +404,8 @@ func (c *Client) PullMessagesForAccountSince(ctx context.Context, account *url.U
 }
 
 func (c *Client) pullMessagesForAccount(ctx context.Context, account *url.URL, chains []string, since *time.Time) error {
+	slog.InfoContext(ctx, "Checking for missing messages", "account", account, "chains", chains)
+
 	if c.query.Querier == nil {
 		return errors.BadRequest.With("client was initialized without a querier")
 	}
@@ -419,7 +427,7 @@ func (c *Client) pullMessagesForAccount(ctx context.Context, account *url.URL, c
 		}
 	}
 
-	slog.InfoCtx(ctx, "Checking for missing messages", "account", account, "chains", chains)
+	slog.InfoContext(ctx, "Checking for missing messages", "account", account, "chains", chains)
 	var missing []*missingMessage
 	for _, name := range chains {
 		chain, err := batch.Account(account).ChainByName(name)
@@ -435,10 +443,15 @@ func (c *Client) pullMessagesForAccount(ctx context.Context, account *url.URL, c
 		start := int64(0)
 		if since != nil {
 			entry, err := batch.Index().Account(account).Chain(name).BlockIndex().FindIndexEntryAfter(sinceMinor)
-			if err != nil {
+			switch {
+			case err == nil:
+				start = int64(entry.Source)
+			case errors.Is(err, errors.NotFound):
+				// If there's no entry after the given block, there must not have been anything written to the chain since then
+				continue
+			default:
 				return errors.UnknownError.WithFormat("load %v %v chain index: %w", account, name, err)
 			}
-			start = int64(entry.Source)
 		}
 
 		// Scan all the entries
@@ -503,7 +516,7 @@ func (c *Client) pullMessages(ctx context.Context, missing []*missingMessage) er
 		}
 	}
 
-	slog.InfoCtx(ctx, "Fetching messages", "chains", accounts, "remaining", len(missing))
+	slog.InfoContext(ctx, "Fetching messages", "chains", accounts, "remaining", len(missing))
 	for i, m := range missing {
 		if i > 0 && i%100 == 0 {
 			err := batch.Commit()
@@ -511,7 +524,7 @@ func (c *Client) pullMessages(ctx context.Context, missing []*missingMessage) er
 				return errors.UnknownError.Wrap(err)
 			}
 			batch = c.OpenDB(true)
-			slog.InfoCtx(ctx, "Fetching messages", "chains", accounts, "remaining", len(missing)-i)
+			slog.InfoContext(ctx, "Fetching messages", "chains", accounts, "remaining", len(missing)-i)
 		}
 
 		// Verify the message is actually missing
@@ -571,7 +584,7 @@ func (c *Client) IndexAccountChains(ctx context.Context, acctUrl *url.URL) error
 		// index chains that don't have a suffix, such as major-block (currently
 		// that's the only one but there could be others in the future).
 		name := strings.TrimSuffix(x.Name, "-index")
-		slog.InfoCtx(ctx, "Indexing an index chain", "account", acctUrl, "chain", name)
+		slog.InfoContext(ctx, "Indexing an index chain", "account", acctUrl, "chain", name)
 
 		// Load the index chain
 		chain, err := batch.Account(acctUrl).ChainByName(x.Name)
@@ -725,7 +738,7 @@ func (c *Client) IndexProducedAnchors(ctx context.Context, partUrl *url.URL) err
 		return nil
 	}
 
-	slog.InfoCtx(ctx, "Indexing produced anchors", "account", partUrl)
+	slog.InfoContext(ctx, "Indexing produced anchors", "account", partUrl)
 
 	// Load the new entries
 	start := int64(len(anchors))
@@ -781,7 +794,7 @@ func (c *Client) IndexReceivedAnchors(ctx context.Context, partUrl *url.URL) err
 		return errors.UnknownError.WithFormat("load globals: %w", err)
 	}
 
-	slog.InfoCtx(ctx, "Indexing received anchors", "account", partUrl)
+	slog.InfoContext(ctx, "Indexing received anchors", "account", partUrl)
 
 	// Index by DN block
 	chain := batch.Account(partUrl.JoinPath(protocol.AnchorPool)).MainChain()
@@ -926,7 +939,7 @@ func (c *Client) IndexAccountTransactions(ctx context.Context, accounts ...*url.
 				}
 
 				if !didLog {
-					slog.InfoCtx(ctx, "Indexing transactions", "account", account)
+					slog.InfoContext(ctx, "Indexing transactions", "account", account)
 					didLog = true
 				}
 

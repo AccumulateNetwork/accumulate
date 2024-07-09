@@ -13,54 +13,11 @@ import (
 	"io"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 )
 
-// paramsStateSize is the marshaled size of [parameters].
-const paramsStateSize = 1 + 2 + 2 + 32
-
 // branchStateSize is the marshaled size of [branch].
 const branchStateSize = 32 + 1 + 32
-
-// leafStateSize is the marshaled size of [leaf].
-const leafStateSize = 32 + 32
-
-func (r *parameters) MarshalBinary() ([]byte, error) {
-	// Marshal the fields
-	var data []byte
-	data = append(data, byte(r.MaxHeight))
-	data = append(data, byte(r.Power>>8), byte(r.Power))
-	data = append(data, byte(r.Mask>>8), byte(r.Mask))
-	data = append(data, r.RootHash[:]...)
-	return data, nil
-}
-
-func (r *parameters) UnmarshalBinary(data []byte) error {
-	// Check the size
-	if len(data) != paramsStateSize {
-		return encoding.ErrNotEnoughData
-	}
-
-	// Unmarshal the fields
-	r.MaxHeight = uint64(data[0])
-	r.Power = uint64(data[1])<<8 + uint64(data[2])
-	r.Mask = uint64(data[3])<<8 + uint64(data[4])
-	r.RootHash = *(*[32]byte)(data[5:])
-	return nil
-}
-
-func (r *parameters) UnmarshalBinaryFrom(rd io.Reader) error {
-	// Read paramStateSize bytes
-	var buf [paramsStateSize]byte
-	_, err := io.ReadFull(rd, buf[:])
-	if err != nil {
-		return err
-	}
-
-	// Unmarshal
-	return r.UnmarshalBinary(buf[:])
-}
 
 // tryWrite writes the bytes to the writer if err is nil. If the write returns
 // an error, tryWrite assigns it to err.
@@ -104,10 +61,6 @@ func (n *branch) readFrom(rd *bytes.Buffer, o marshalOpts) error {
 	return nil
 }
 
-func (*emptyNode) Type() nodeType { return nodeTypeEmpty }
-
-func (*branch) Type() nodeType { return nodeTypeBranch }
-
 func (v *leaf) Type() nodeType {
 	if isExpandedKey(v.Key) {
 		return nodeTypeLeafWithExpandedKey
@@ -144,8 +97,21 @@ func (v *leaf) writeTo(wr io.Writer) (err error) {
 		tryWrite(&err, wr, kh[:])
 	}
 
-	// Write the value hash
-	tryWrite(&err, wr, v.Hash[:])
+	s := v.parent.bpt.mustLoadState()
+	if !s.ArbitraryValues {
+		if len(v.Value) != 32 {
+			panic("value is not a hash")
+		}
+		// Write the value hash
+		tryWrite(&err, wr, v.Value[:])
+
+	} else {
+		// Write the length then the value
+		var buf [10]byte
+		n := binary.PutUvarint(buf[:], uint64(len(v.Value)))
+		tryWrite(&err, wr, buf[:n])
+		tryWrite(&err, wr, v.Value)
+	}
 	return err
 }
 
@@ -159,7 +125,7 @@ func (v *leaf) readFrom(rd *bytes.Buffer, o marshalOpts) error {
 
 		// Read the key
 		b := make([]byte, l)
-		_, err = rd.Read(b)
+		_, err = io.ReadFull(rd, b)
 		if err != nil {
 			return err
 		}
@@ -171,21 +137,39 @@ func (v *leaf) readFrom(rd *bytes.Buffer, o marshalOpts) error {
 			return err
 		}
 
-		// Read the hash
-		_, err = rd.Read(v.Hash[:])
-		return err
+	} else {
+		// Read the key hash
+		var kh [32]byte
+		_, err := io.ReadFull(rd, kh[:])
+		if err != nil {
+			return err
+		}
+		v.Key = record.KeyFromHash(kh)
 	}
 
-	// Read leafStateSize bytes
-	var buf [leafStateSize]byte
-	_, err := io.ReadFull(rd, buf[:])
-	if err != nil {
-		return err
-	}
+	s := v.parent.bpt.mustLoadState()
+	if s.ArbitraryValues {
+		// Read the value size
+		l, err := binary.ReadUvarint(rd)
+		if err != nil {
+			return err
+		}
 
-	// Read the fields
-	v.Key = record.NewKey(*(*record.KeyHash)(buf[:]))
-	v.Hash = *(*[32]byte)(buf[32:])
+		// Read the value
+		v.Value = make([]byte, l)
+		_, err = io.ReadFull(rd, v.Value)
+		if err != nil {
+			return err
+		}
+
+	} else {
+		// Read the value hash
+		v.Value = make([]byte, 32)
+		_, err := io.ReadFull(rd, v.Value)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

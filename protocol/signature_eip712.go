@@ -3,6 +3,7 @@ package protocol
 import (
 	_ "embed"
 	"encoding/json"
+
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
 
