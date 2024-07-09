@@ -108,10 +108,8 @@ func (inst *Instance) StartFiltered(predicate func(Service) bool) (err error) {
 		}
 	}()
 
-	// Start metrics
-	if inst.config.Instrumentation == nil {
-		inst.config.Instrumentation = new(Instrumentation)
-	}
+	// Start instrumentation
+	setDefaultVal(&inst.config.Instrumentation, new(Instrumentation))
 	err = inst.config.Instrumentation.start(inst)
 	if err != nil {
 		return err
@@ -227,12 +225,18 @@ func (i *Instance) run(fn func()) {
 	}()
 }
 
-func (i *Instance) cleanup(fn func()) {
+func (i *Instance) cleanup(fn func(context.Context) error) {
 	i.running.Add(1)
 	go func() {
 		defer i.running.Done()
 		<-i.context.Done()
-		fn()
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		err := fn(ctx)
+		if err != nil {
+			slog.Error("Error during shutdown", "error", err)
+		}
 	}()
 }
 
