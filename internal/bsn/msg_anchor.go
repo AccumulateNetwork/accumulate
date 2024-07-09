@@ -56,8 +56,7 @@ func (x BlockAnchor) check(batch *ChangeSet, ctx *MessageContext) (*messaging.Bl
 		return nil, nil, errors.BadRequest.WithFormat("invalid anchor: expected %v, got %v", messaging.MessageTypeBlockSummary, ctx.message.Type())
 	}
 
-	h := msg.Anchor.Hash()
-	if !msg.Signature.Verify(nil, h[:], nil) {
+	if !msg.Signature.Verify(nil, msg.Anchor) {
 		return nil, nil, errors.Unauthenticated.WithFormat("invalid signature")
 	}
 

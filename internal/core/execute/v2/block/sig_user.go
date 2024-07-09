@@ -33,22 +33,11 @@ func init() {
 		protocol.SignatureTypeETH,
 	)
 
-	// Vandenberg: RSA and ECDSA signatures
+	// Vandenberg: RSA, ECDSA, and EIP-712 signatures
 	registerConditionalExec[UserSignature](&signatureExecutors,
 		func(ctx *SignatureContext) bool { return ctx.GetActiveGlobals().ExecutorVersion.V2VandenbergEnabled() },
 		protocol.SignatureTypeRsaSha256,
 		protocol.SignatureTypeEcdsaSha256,
-	)
-
-	// PKI signatures (enabled with Vandenberg)
-	registerConditionalExec[UserSignature](&signatureExecutors,
-		func(ctx *SignatureContext) bool { return ctx.GetActiveGlobals().ExecutorVersion.V2VandenbergEnabled() },
-		protocol.SignatureTypeEcdsaSha256,
-	)
-
-	// Eip712 signatures (enabled with Vandenberg)
-	registerConditionalExec[UserSignature](&signatureExecutors,
-		func(ctx *SignatureContext) bool { return ctx.GetActiveGlobals().ExecutorVersion.V2VandenbergEnabled() },
 		protocol.SignatureTypeEip712TypedData,
 	)
 }
@@ -123,7 +112,7 @@ func (x UserSignature) check(batch *database.Batch, ctx *userSigContext) error {
 	}
 
 	// Verify the signature signs the transaction
-	if !verifySignature(sig, ctx.transaction.GetHash(), ctx.transaction) {
+	if !verifySignature(sig, ctx.transaction) {
 		return errors.Unauthenticated.WithFormat("invalid signature")
 	}
 

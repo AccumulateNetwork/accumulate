@@ -59,7 +59,7 @@ func TestSDK(t *testing.T) {
 											continue
 										}
 
-										require.True(t, sig.Verify(nil, env.Transaction[0].GetHash(), nil), "Signature is valid")
+										require.True(t, sig.Verify(nil, env.Transaction[0]), "Signature is valid")
 									}
 								})
 

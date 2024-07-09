@@ -54,7 +54,7 @@ func TestBTCSignature(t *testing.T) {
 	secp.PublicKey = pbkey.SerializeCompressed()
 
 	require.NoError(t, SignBTC(secp, privkey.Serialize(), nil, hash[:]))
-	res := secp.Verify(nil, hash[:], nil)
+	res := secp.Verify(nil, SignableHash(hash))
 
 	require.Equal(t, res, true)
 
@@ -74,7 +74,7 @@ func TestBTCLegacySignature(t *testing.T) {
 	secp.PublicKey = pbkey.SerializeUncompressed()
 
 	require.NoError(t, SignBTCLegacy(secp, privkey.Serialize(), nil, hash[:]))
-	res := secp.Verify(nil, hash[:], nil)
+	res := secp.Verify(nil, SignableHash(hash))
 
 	require.Equal(t, res, true)
 
@@ -98,9 +98,9 @@ func TestETHSignature(t *testing.T) {
 	t.Logf("Eth ad Der Hash        %x", hash[:])
 
 	//should fail
-	require.Equal(t, VerifyUserSignature(secp, hash[:], nil), false)
+	require.Equal(t, VerifyUserSignature(secp, SignableHash(hash)), false)
 	//should pass
-	require.Equal(t, VerifyUserSignatureV1(secp, hash[:], nil), true)
+	require.Equal(t, VerifyUserSignatureV1(secp, SignableHash(hash)), true)
 
 	//public key should still match
 	keyComp, err := eth.UnmarshalPubkey(secp.PublicKey)
@@ -117,9 +117,9 @@ func TestETHSignature(t *testing.T) {
 	t.Logf("Eth as VRS signature  %x", secp.Signature)
 	t.Logf("Eth ad VRS Hash       %x", hash[:])
 	//should fail
-	require.Equal(t, VerifyUserSignatureV1(secp, hash[:], nil), false)
+	require.Equal(t, VerifyUserSignatureV1(secp, SignableHash(hash)), false)
 	//should pass
-	require.Equal(t, VerifyUserSignature(secp, hash[:], nil), true)
+	require.Equal(t, VerifyUserSignature(secp, SignableHash(hash)), true)
 
 	t.Logf("Signature: %x", secp.Signature)
 }
@@ -320,7 +320,7 @@ func TestRsaSha256Signature(t *testing.T) {
 	require.NoError(t, SignRsaSha256(rsaSha256, x509.MarshalPKCS1PrivateKey(privKey), nil, hash[:]))
 
 	//should fail
-	require.Equal(t, VerifyUserSignature(rsaSha256, hash[:], nil), true)
+	require.Equal(t, VerifyUserSignature(rsaSha256, SignableHash(hash)), true)
 	//public key should still match
 	keyComp, err := x509.ParsePKCS1PublicKey(rsaSha256.PublicKey)
 	require.NoError(t, err)
@@ -339,7 +339,7 @@ func TestRsaSha256Signature(t *testing.T) {
 	require.NoError(t, SignRsaSha256(rsaSha256, x509.MarshalPKCS1PrivateKey(privKey), nil, hash[:]))
 
 	//should fail
-	require.Equal(t, VerifyUserSignature(rsaSha256, hash[:], nil), true)
+	require.Equal(t, VerifyUserSignature(rsaSha256, SignableHash(hash)), true)
 	//public key should still match
 	keyComp, err = x509.ParsePKCS1PublicKey(rsaSha256.PublicKey)
 	require.NoError(t, err)
@@ -358,7 +358,7 @@ func TestRsaSha256Signature(t *testing.T) {
 	require.NoError(t, SignRsaSha256(rsaSha256, x509.MarshalPKCS1PrivateKey(privKey), nil, hash[:]))
 
 	//should fail
-	require.Equal(t, VerifyUserSignature(rsaSha256, hash[:], nil), true)
+	require.Equal(t, VerifyUserSignature(rsaSha256, SignableHash(hash)), true)
 	//public key should still match
 	keyComp, err = x509.ParsePKCS1PublicKey(rsaSha256.PublicKey)
 	require.NoError(t, err)
@@ -487,7 +487,7 @@ func TestTypesFromCerts(t *testing.T) {
 		}
 
 		//should not fail
-		require.Equal(t, VerifyUserSignature(sig, hash[:], nil), true)
+		require.Equal(t, VerifyUserSignature(sig, SignableHash(hash)), true)
 	}
 }
 
@@ -565,16 +565,18 @@ func TestEip712TypedDataSignature(t *testing.T) {
 
 	// Sign the transaction
 	priv, _ := SECP256K1Keypair()
-	require.NoError(t, SignEip712TypedData(eip712sig, priv, txn))
+	require.NoError(t, SignEip712TypedData(eip712sig, priv, nil, txn))
 
 	// Verify the signature
-	require.True(t, eip712sig.Verify(nil, nil, txn))
+	require.True(t, eip712sig.Verify(nil, txn))
+}
 
-	//test edge case:
-	keyPageUpdate := []byte(`{
+func TestEIP712DelegatedKeyPageUpdate(t *testing.T) {
+	txn := &Transaction{}
+	err := txn.UnmarshalJSON([]byte(`{
 		"header": {
-			"principal": "acc://adi.acme",
-			"initiator": "5c90ac449d17c448141def36197ce8d63852b85f91621b1015e553ccbbd0f2f2"
+			"principal": "acc://adi.acme/ACME",
+			"initiator": "84e032fba8a5456f631c822a2b2466c18b3fa7804330ab87088ed6e30d690505"
 		},
 		"body": {
 			"type": "updateKeyPage",
@@ -583,12 +585,24 @@ func TestEip712TypedDataSignature(t *testing.T) {
 				"entry": { "keyHash": "e55d973bf691381c94602354d1e1f655f7b1c4bd56760dffeffa2bef4541ec11" }
 			}]
 		}
-	}`)
-
-	// TODO: Delegated signature
-	err = txn.UnmarshalJSON(keyPageUpdate)
+	}`))
 	require.NoError(t, err)
 
-	_, err = Eip712Hasher(txn, eip712sig)
-	require.NoError(t, err)
+	inner := &Eip712TypedDataSignature{
+		Signer:        url.MustParse("acc://adi.acme/book/1"),
+		SignerVersion: 1,
+		Timestamp:     1720564975623,
+		Vote:          VoteTypeAccept,
+	}
+	outer := &DelegatedSignature{
+		Signature: inner,
+		Delegator: url.MustParse("acc://foo.bar"),
+	}
+
+	// Sign the transaction
+	priv, _ := SECP256K1Keypair()
+	require.NoError(t, SignEip712TypedData(inner, priv, outer, txn))
+
+	// Verify the signature
+	require.True(t, outer.Verify(nil, txn))
 }
