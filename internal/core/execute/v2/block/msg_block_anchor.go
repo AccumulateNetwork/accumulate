@@ -160,7 +160,7 @@ func (x BlockAnchor) check(ctx *MessageContext, batch *database.Batch) (*blockAn
 	}
 
 	// Basic validation
-	if !anchor.Signature.Verify(nil, signed[:]) {
+	if !anchor.Signature.Verify(nil, signed[:], txn) {
 		return nil, errors.Unauthenticated.WithFormat("invalid signature")
 	}
 

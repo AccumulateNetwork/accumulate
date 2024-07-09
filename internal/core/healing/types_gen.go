@@ -83,17 +83,16 @@ func (v *PeerInfo) Equal(u *PeerInfo) bool {
 	return true
 }
 
-func initEip712TypeDictionary() {
+func init() {
 
-	encoding.SchemaDictionary["PeerInfo"] = &[]encoding.TypeField{
-		{"id", "p2p.PeerID"},
-		{"operator", "string"},
-		{"key", "bytes32"},
-		{"status", "api.ConsensusStatus"},
-		{"addresses", "p2p.Multiaddr[]"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("id", "p2p.PeerID"),
+		encoding.NewTypeField("operator", "string"),
+		encoding.NewTypeField("key", "bytes32"),
+		encoding.NewTypeField("status", "api.ConsensusStatus"),
+		encoding.NewTypeField("addresses", "p2p.Multiaddr[]"),
+	}, "PeerInfo", "peerInfo")
 
-	encoding.ResolveTypeDefinitions()
 }
 
 func (v *PeerInfo) MarshalJSON() ([]byte, error) {

@@ -55,10 +55,6 @@ var fieldNames_SequenceOptions = []string{
 	1: "NodeID",
 }
 
-var fieldTypes_SequenceOptions = []string{
-	1: "p2p.PeerID",
-}
-
 func (v *SequenceOptions) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -125,13 +121,12 @@ func (v *SequenceOptions) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
-func initEip712TypeDictionary() {
+func init() {
 
-	encoding.SchemaDictionary["SequenceOptions"] = &[]encoding.TypeField{
-		{"nodeID", "p2p.PeerID"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("nodeID", "p2p.PeerID"),
+	}, "SequenceOptions", "sequenceOptions")
 
-	encoding.ResolveTypeDefinitions()
 }
 
 func (v *SequenceOptions) MarshalJSON() ([]byte, error) {

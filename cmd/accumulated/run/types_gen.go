@@ -1673,12 +1673,6 @@ var fieldNames_HttpPeerMapEntry = []string{
 	3: "Addresses",
 }
 
-var fieldTypes_HttpPeerMapEntry = []string{
-	1: "p2p.PeerID",
-	2: "string",
-	3: "p2p.Multiaddr[]",
-}
-
 func (v *HttpPeerMapEntry) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -1743,13 +1737,6 @@ var fieldNames_RouterService = []string{
 	2: "Name",
 	3: "Events",
 	4: "PeerMap",
-}
-
-var fieldTypes_RouterService = []string{
-	1: "string",
-	2: "string",
-	3: "string",
-	4: "HttpPeerMapEntry[]",
 }
 
 func (v *RouterService) MarshalBinary() ([]byte, error) {
@@ -1894,253 +1881,252 @@ func (v *RouterService) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
-func initEip712TypeDictionary() {
+func init() {
 
-	encoding.SchemaDictionary["BadgerStorage"] = &[]encoding.TypeField{
-		{"type", "string"},
-		{"path", "string"},
-		{"version", "int64"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("path", "string"),
+		encoding.NewTypeField("version", "int64"),
+	}, "BadgerStorage", "badgerStorage")
 
-	encoding.SchemaDictionary["BoltStorage"] = &[]encoding.TypeField{
-		{"type", "string"},
-		{"path", "string"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("path", "string"),
+	}, "BoltStorage", "boltStorage")
 
-	encoding.SchemaDictionary["CometNodeKeyFile"] = &[]encoding.TypeField{
-		{"type", "string"},
-		{"key", "address.Address"},
-		{"path", "string"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("key", "address.Address"),
+		encoding.NewTypeField("path", "string"),
+	}, "CometNodeKeyFile", "cometNodeKeyFile")
 
-	encoding.SchemaDictionary["CometPrivValFile"] = &[]encoding.TypeField{
-		{"type", "string"},
-		{"key", "address.Address"},
-		{"path", "string"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("key", "address.Address"),
+		encoding.NewTypeField("path", "string"),
+	}, "CometPrivValFile", "cometPrivValFile")
 
-	encoding.SchemaDictionary["Config"] = &[]encoding.TypeField{
-		{"file", "string"},
-		{"network", "string"},
-		{"logging", "Logging"},
-		{"instrumentation", "Instrumentation"},
-		{"p2P", "P2P"},
-		{"configurations", "Configuration[]"},
-		{"services", "Service[]"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("file", "string"),
+		encoding.NewTypeField("network", "string"),
+		encoding.NewTypeField("logging", "Logging"),
+		encoding.NewTypeField("instrumentation", "Instrumentation"),
+		encoding.NewTypeField("p2P", "P2P"),
+		encoding.NewTypeField("configurations", "Configuration[]"),
+		encoding.NewTypeField("services", "Service[]"),
+	}, "Config", "config")
 
-	encoding.SchemaDictionary["ConsensusService"] = &[]encoding.TypeField{
-		{"type", "string"},
-		{"nodeDir", "string"},
-		{"validatorKey", "PrivateKey"},
-		{"genesis", "string"},
-		{"listen", "p2p.Multiaddr"},
-		{"bootstrapPeers", "p2p.Multiaddr[]"},
-		{"metricsNamespace", "string"},
-		{"app", "ConsensusApp"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("nodeDir", "string"),
+		encoding.NewTypeField("validatorKey", "PrivateKey"),
+		encoding.NewTypeField("genesis", "string"),
+		encoding.NewTypeField("listen", "p2p.Multiaddr"),
+		encoding.NewTypeField("bootstrapPeers", "p2p.Multiaddr[]"),
+		encoding.NewTypeField("metricsNamespace", "string"),
+		encoding.NewTypeField("app", "ConsensusApp"),
+	}, "ConsensusService", "consensusService")
 
-	encoding.SchemaDictionary["CoreConsensusApp"] = &[]encoding.TypeField{
-		{"type", "string"},
-		{"partition", "protocol.PartitionInfo"},
-		{"enableHealing", "bool"},
-		{"enableDirectDispatch", "bool"},
-		{"maxEnvelopesPerBlock", "uint64"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("partition", "protocol.PartitionInfo"),
+		encoding.NewTypeField("enableHealing", "bool"),
+		encoding.NewTypeField("enableDirectDispatch", "bool"),
+		encoding.NewTypeField("maxEnvelopesPerBlock", "uint64"),
+	}, "CoreConsensusApp", "coreConsensusApp")
 
-	encoding.SchemaDictionary["CoreValidatorConfiguration"] = &[]encoding.TypeField{
-		{"type", "string"},
-		{"mode", "string"},
-		{"listen", "p2p.Multiaddr"},
-		{"bvn", "string"},
-		{"validatorKey", "PrivateKey"},
-		{"dnGenesis", "string"},
-		{"bvnGenesis", "string"},
-		{"dnBootstrapPeers", "p2p.Multiaddr[]"},
-		{"bvnBootstrapPeers", "p2p.Multiaddr[]"},
-		{"enableHealing", "bool"},
-		{"enableDirectDispatch", "bool"},
-		{"enableSnapshots", "bool"},
-		{"maxEnvelopesPerBlock", "uint64"},
-		{"storageType", "string"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("mode", "string"),
+		encoding.NewTypeField("listen", "p2p.Multiaddr"),
+		encoding.NewTypeField("bvn", "string"),
+		encoding.NewTypeField("validatorKey", "PrivateKey"),
+		encoding.NewTypeField("dnGenesis", "string"),
+		encoding.NewTypeField("bvnGenesis", "string"),
+		encoding.NewTypeField("dnBootstrapPeers", "p2p.Multiaddr[]"),
+		encoding.NewTypeField("bvnBootstrapPeers", "p2p.Multiaddr[]"),
+		encoding.NewTypeField("enableHealing", "bool"),
+		encoding.NewTypeField("enableDirectDispatch", "bool"),
+		encoding.NewTypeField("enableSnapshots", "bool"),
+		encoding.NewTypeField("maxEnvelopesPerBlock", "uint64"),
+		encoding.NewTypeField("storageType", "string"),
+	}, "CoreValidatorConfiguration", "coreValidatorConfiguration")
 
-	encoding.SchemaDictionary["DevnetConfiguration"] = &[]encoding.TypeField{
-		{"type", "string"},
-		{"listen", "p2p.Multiaddr"},
-		{"bvns", "uint64"},
-		{"validators", "uint64"},
-		{"followers", "uint64"},
-		{"globals", "network.GlobalValues"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("listen", "p2p.Multiaddr"),
+		encoding.NewTypeField("bvns", "uint64"),
+		encoding.NewTypeField("validators", "uint64"),
+		encoding.NewTypeField("followers", "uint64"),
+		encoding.NewTypeField("globals", "network.GlobalValues"),
+	}, "DevnetConfiguration", "devnetConfiguration")
 
-	encoding.SchemaDictionary["EventsService"] = &[]encoding.TypeField{
-		{"type", "string"},
-		{"partition", "string"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("partition", "string"),
+	}, "EventsService", "eventsService")
 
-	encoding.SchemaDictionary["ExpBlockDBStorage"] = &[]encoding.TypeField{
-		{"type", "string"},
-		{"path", "string"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("path", "string"),
+	}, "ExpBlockDBStorage", "expBlockDBStorage")
 
-	encoding.SchemaDictionary["FaucetService"] = &[]encoding.TypeField{
-		{"type", "string"},
-		{"account", "string"},
-		{"signingKey", "PrivateKey"},
-		{"router", "ServiceOrRef[*RouterService]"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("account", "string"),
+		encoding.NewTypeField("signingKey", "PrivateKey"),
+		encoding.NewTypeField("router", "ServiceOrRef[*RouterService]"),
+	}, "FaucetService", "faucetService")
 
-	encoding.SchemaDictionary["GatewayConfiguration"] = &[]encoding.TypeField{
-		{"type", "string"},
-		{"listen", "p2p.Multiaddr"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("listen", "p2p.Multiaddr"),
+	}, "GatewayConfiguration", "gatewayConfiguration")
 
-	encoding.SchemaDictionary["HttpListener"] = &[]encoding.TypeField{
-		{"listen", "p2p.Multiaddr[]"},
-		{"connectionLimit", "int64"},
-		{"readHeaderTimeout", "string"},
-		{"tlsCertPath", "string"},
-		{"tlsKeyPath", "string"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("listen", "p2p.Multiaddr[]"),
+		encoding.NewTypeField("connectionLimit", "int64"),
+		encoding.NewTypeField("readHeaderTimeout", "string"),
+		encoding.NewTypeField("tlsCertPath", "string"),
+		encoding.NewTypeField("tlsKeyPath", "string"),
+	}, "HttpListener", "httpListener")
 
-	encoding.SchemaDictionary["HttpPeerMapEntry"] = &[]encoding.TypeField{
-		{"id", "p2p.PeerID"},
-		{"partitions", "string"},
-		{"addresses", "p2p.Multiaddr[]"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("id", "p2p.PeerID"),
+		encoding.NewTypeField("partitions", "string[]"),
+		encoding.NewTypeField("addresses", "p2p.Multiaddr[]"),
+	}, "HttpPeerMapEntry", "httpPeerMapEntry")
 
-	encoding.SchemaDictionary["HttpService"] = &[]encoding.TypeField{
-		{"type", "string"},
-		{"listen", "p2p.Multiaddr[]"},
-		{"connectionLimit", "int64"},
-		{"readHeaderTimeout", "string"},
-		{"tlsCertPath", "string"},
-		{"tlsKeyPath", "string"},
-		{"corsOrigins", "string"},
-		{"letsEncrypt", "string"},
-		{"debugJsonRpc", "bool"},
-		{"router", "ServiceOrRef[*RouterService]"},
-		{"peerMap", "HttpPeerMapEntry[]"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("listen", "p2p.Multiaddr[]"),
+		encoding.NewTypeField("connectionLimit", "int64"),
+		encoding.NewTypeField("readHeaderTimeout", "string"),
+		encoding.NewTypeField("tlsCertPath", "string"),
+		encoding.NewTypeField("tlsKeyPath", "string"),
+		encoding.NewTypeField("corsOrigins", "string[]"),
+		encoding.NewTypeField("letsEncrypt", "string[]"),
+		encoding.NewTypeField("debugJsonRpc", "bool"),
+		encoding.NewTypeField("router", "ServiceOrRef[*RouterService]"),
+		encoding.NewTypeField("peerMap", "HttpPeerMapEntry[]"),
+	}, "HttpService", "httpService")
 
-	encoding.SchemaDictionary["Instrumentation"] = &[]encoding.TypeField{
-		{"listen", "p2p.Multiaddr[]"},
-		{"connectionLimit", "int64"},
-		{"readHeaderTimeout", "string"},
-		{"tlsCertPath", "string"},
-		{"tlsKeyPath", "string"},
-		{"monitoring", "Monitor"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("listen", "p2p.Multiaddr[]"),
+		encoding.NewTypeField("connectionLimit", "int64"),
+		encoding.NewTypeField("readHeaderTimeout", "string"),
+		encoding.NewTypeField("tlsCertPath", "string"),
+		encoding.NewTypeField("tlsKeyPath", "string"),
+		encoding.NewTypeField("monitoring", "Monitor"),
+	}, "Instrumentation", "instrumentation")
 
-	encoding.SchemaDictionary["LevelDBStorage"] = &[]encoding.TypeField{
-		{"type", "string"},
-		{"path", "string"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("path", "string"),
+	}, "LevelDBStorage", "levelDBStorage")
 
-	encoding.SchemaDictionary["Logging"] = &[]encoding.TypeField{
-		{"format", "string"},
-		{"color", "bool"},
-		{"rules", "LoggingRule[]"},
-		{"loki", "LokiLogging"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("format", "string"),
+		encoding.NewTypeField("color", "bool"),
+		encoding.NewTypeField("rules", "LoggingRule[]"),
+		encoding.NewTypeField("loki", "LokiLogging"),
+	}, "Logging", "logging")
 
-	encoding.SchemaDictionary["LoggingRule"] = &[]encoding.TypeField{
-		{"level", "slog.Level"},
-		{"modules", "string"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("level", "slog.Level"),
+		encoding.NewTypeField("modules", "string[]"),
+	}, "LoggingRule", "loggingRule")
 
-	encoding.SchemaDictionary["LokiLogging"] = &[]encoding.TypeField{
-		{"enable", "bool"},
-		{"url", "string"},
-		{"username", "string"},
-		{"password", "string"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("enable", "bool"),
+		encoding.NewTypeField("url", "string"),
+		encoding.NewTypeField("username", "string"),
+		encoding.NewTypeField("password", "string"),
+	}, "LokiLogging", "lokiLogging")
 
-	encoding.SchemaDictionary["MemoryStorage"] = &[]encoding.TypeField{
-		{"type", "string"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+	}, "MemoryStorage", "memoryStorage")
 
-	encoding.SchemaDictionary["MetricsService"] = &[]encoding.TypeField{
-		{"type", "string"},
-		{"partition", "string"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("partition", "string"),
+	}, "MetricsService", "metricsService")
 
-	encoding.SchemaDictionary["Monitor"] = &[]encoding.TypeField{
-		{"directory", "string"},
-		{"profileMemory", "bool"},
-		{"memoryPollingRate", "string"},
-		{"allocRateTrigger", "float"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("directory", "string"),
+		encoding.NewTypeField("profileMemory", "bool"),
+		encoding.NewTypeField("memoryPollingRate", "string"),
+		encoding.NewTypeField("allocRateTrigger", "float"),
+	}, "Monitor", "monitor")
 
-	encoding.SchemaDictionary["NetworkService"] = &[]encoding.TypeField{
-		{"type", "string"},
-		{"partition", "string"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("partition", "string"),
+	}, "NetworkService", "networkService")
 
-	encoding.SchemaDictionary["P2P"] = &[]encoding.TypeField{
-		{"listen", "p2p.Multiaddr[]"},
-		{"bootstrapPeers", "p2p.Multiaddr[]"},
-		{"key", "PrivateKey"},
-		{"peerDB", "string"},
-		{"enablePeerTracking", "bool"},
-		{"discoveryMode", "DhtMode"},
-		{"external", "p2p.Multiaddr"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("listen", "p2p.Multiaddr[]"),
+		encoding.NewTypeField("bootstrapPeers", "p2p.Multiaddr[]"),
+		encoding.NewTypeField("key", "PrivateKey"),
+		encoding.NewTypeField("peerDB", "string"),
+		encoding.NewTypeField("enablePeerTracking", "bool"),
+		encoding.NewTypeField("discoveryMode", "DhtMode"),
+		encoding.NewTypeField("external", "p2p.Multiaddr"),
+	}, "P2P", "p2P")
 
-	encoding.SchemaDictionary["PrivateKeySeed"] = &[]encoding.TypeField{
-		{"type", "string"},
-		{"key", "address.Address"},
-		{"seed", "record.Key"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("key", "address.Address"),
+		encoding.NewTypeField("seed", "record.Key"),
+	}, "PrivateKeySeed", "privateKeySeed")
 
-	encoding.SchemaDictionary["Querier"] = &[]encoding.TypeField{
-		{"type", "string"},
-		{"partition", "string"},
-		{"storage", "StorageOrRef"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("partition", "string"),
+		encoding.NewTypeField("storage", "StorageOrRef"),
+	}, "Querier", "querier")
 
-	encoding.SchemaDictionary["RawPrivateKey"] = &[]encoding.TypeField{
-		{"type", "string"},
-		{"address", "string"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("address", "string"),
+	}, "RawPrivateKey", "rawPrivateKey")
 
-	encoding.SchemaDictionary["RouterService"] = &[]encoding.TypeField{
-		{"type", "string"},
-		{"name", "string"},
-		{"events", "string"},
-		{"peerMap", "HttpPeerMapEntry[]"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("name", "string"),
+		encoding.NewTypeField("events", "string"),
+		encoding.NewTypeField("peerMap", "HttpPeerMapEntry[]"),
+	}, "RouterService", "routerService")
 
-	encoding.SchemaDictionary["SnapshotService"] = &[]encoding.TypeField{
-		{"type", "string"},
-		{"partition", "string"},
-		{"storage", "StorageOrRef"},
-		{"directory", "string"},
-		{"schedule", "network.CronSchedule"},
-		{"retainCount", "uint64"},
-		{"enableIndexing", "bool"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("partition", "string"),
+		encoding.NewTypeField("storage", "StorageOrRef"),
+		encoding.NewTypeField("directory", "string"),
+		encoding.NewTypeField("schedule", "network.CronSchedule"),
+		encoding.NewTypeField("retainCount", "uint64"),
+		encoding.NewTypeField("enableIndexing", "bool"),
+	}, "SnapshotService", "snapshotService")
 
-	encoding.SchemaDictionary["StorageService"] = &[]encoding.TypeField{
-		{"type", "string"},
-		{"name", "string"},
-		{"storage", "Storage"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("name", "string"),
+		encoding.NewTypeField("storage", "Storage"),
+	}, "StorageService", "storageService")
 
-	encoding.SchemaDictionary["SubnodeService"] = &[]encoding.TypeField{
-		{"type", "string"},
-		{"name", "string"},
-		{"nodeKey", "PrivateKey"},
-		{"services", "Service[]"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("name", "string"),
+		encoding.NewTypeField("nodeKey", "PrivateKey"),
+		encoding.NewTypeField("services", "Service[]"),
+	}, "SubnodeService", "subnodeService")
 
-	encoding.SchemaDictionary["TransientPrivateKey"] = &[]encoding.TypeField{
-		{"type", "string"},
-		{"key", "address.Address"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("key", "address.Address"),
+	}, "TransientPrivateKey", "transientPrivateKey")
 
-	encoding.ResolveTypeDefinitions()
 }
 
 func (v *BadgerStorage) MarshalJSON() ([]byte, error) {
