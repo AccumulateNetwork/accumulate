@@ -9,6 +9,9 @@ package run
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -16,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
+	"github.com/joho/godotenv"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gopkg.in/yaml.v3"
 )
@@ -24,6 +28,10 @@ func (c *Config) FilePath() string     { return c.file }
 func (c *Config) SetFilePath(p string) { c.file = p }
 
 func (c *Config) LoadFrom(file string) error {
+	return c.LoadFromFS(os.DirFS("."), file)
+}
+
+func (c *Config) LoadFromFS(fs fs.FS, file string) error {
 	var format func([]byte, any) error
 	switch s := filepath.Ext(file); s {
 	case ".toml", ".tml", ".ini":
@@ -36,12 +44,19 @@ func (c *Config) LoadFrom(file string) error {
 		return errors.BadRequest.WithFormat("unknown file type %s", s)
 	}
 
-	b, err := os.ReadFile(file)
+	f, err := fs.Open(file)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = f.Close() }()
+
+	b, err := io.ReadAll(f)
 	if err != nil {
 		return err
 	}
 
 	c.file = file
+	c.fs = fs
 	return c.Load(b, format)
 }
 
@@ -58,12 +73,72 @@ func (c *Config) Load(b []byte, format func([]byte, any) error) error {
 		return err
 	}
 
-	return json.Unmarshal(b, c)
+	err = json.Unmarshal(b, c)
+	if err != nil {
+		return err
+	}
+
+	return c.applyDotEnv()
+}
+
+func (c *Config) applyDotEnv() error {
+	if !setDefaultPtr(&c.DotEnv, false) {
+		return nil
+	}
+
+	file := ".env"
+	if c.file != "" {
+		dir := filepath.Dir(c.file)
+		file = filepath.Join(dir, file)
+	}
+
+	var expand func(name string) string
+	var errs []error
+
+	f, err := c.fs.Open(file)
+	switch {
+	case err == nil:
+		defer func() { _ = f.Close() }()
+
+		// Parse
+		env, err := godotenv.Parse(f)
+		if err != nil {
+			return err
+		}
+
+		// And expand
+		expand = func(name string) string {
+			value, ok := env[name]
+			if ok {
+				return value
+			}
+			errs = append(errs, fmt.Errorf("%q is not defined", name))
+			return fmt.Sprintf("#!MISSING(%q)", name)
+		}
+
+	case errors.Is(err, fs.ErrNotExist):
+		// Only return an error if there is at least one ${ENV}
+		expand = func(name string) string {
+			if len(errs) == 0 {
+				errs = append(errs, err)
+			}
+			return fmt.Sprintf("#!MISSING(%q)", name)
+		}
+
+	default:
+		return err
+	}
+
+	expandEnv(reflect.ValueOf(c), expand)
+	return errors.Join(errs...)
 }
 
 func (c *Config) Save() error {
 	if c.file == "" {
 		return errors.BadRequest.With("not loaded from a file")
+	}
+	if c.fs != nil && c.fs != os.DirFS(".") {
+		return errors.BadRequest.With("loaded from an immutable filesystem")
 	}
 	return c.SaveTo(c.file)
 }
@@ -163,5 +238,37 @@ func float2int(v reflect.Value) any {
 		return v
 	default:
 		return v.Interface()
+	}
+}
+
+func expandEnv(v reflect.Value, expand func(string) string) {
+	switch v.Kind() {
+	case reflect.String:
+		s := v.String()
+		s = os.Expand(s, expand)
+		v.SetString(s)
+
+	case reflect.Pointer, reflect.Interface:
+		expandEnv(v.Elem(), expand)
+
+	case reflect.Slice, reflect.Array:
+		for i, n := 0, v.Len(); i < n; i++ {
+			expandEnv(v.Index(i), expand)
+		}
+
+	case reflect.Map:
+		it := v.MapRange()
+		for it.Next() {
+			expandEnv(it.Key(), expand)
+			expandEnv(it.Value(), expand)
+		}
+
+	case reflect.Struct:
+		typ := v.Type()
+		for i, n := 0, typ.NumField(); i < n; i++ {
+			if typ.Field(i).IsExported() {
+				expandEnv(v.Field(i), expand)
+			}
+		}
 	}
 }
