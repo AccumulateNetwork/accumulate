@@ -95,7 +95,6 @@ var goFuncs = template.FuncMap{
 	"get":                     GoGetField,
 	"areEqual":                GoAreEqual,
 	"copy":                    GoCopy,
-	"isComplexType":           GoIsComplexType,
 	"binaryMarshalValue":      GoBinaryMarshalValue,
 	"binaryUnmarshalValue":    GoBinaryUnmarshalValue,
 	"valueToJson":             GoValueToJson,
@@ -236,85 +235,6 @@ func goUnionMethod(field *Field, name string) string {
 	}
 
 	return strings.ToLower(name[:1]) + name[1:] + strings.ToUpper(parts[0][:1]) + parts[0][1:]
-}
-
-func GoIsComplexType(field *Field) bool {
-	//return field.Type.GoType() == "Any"
-	switch code := field.EffectiveMarshalType(); code {
-	case Int, Uint, Bool, String, Hash, Bytes, Url, TxID, BigInt, RawJson, Float, Time, Duration:
-		return false
-	}
-	//	case Time, Duration:
-	//	typ = code.Title()
-	//case BigInt:
-	//	typ = "uint256"
-	//case RawJson:
-	//	typ = "string"
-	//case Float:
-	//	typ = "float"
-
-	return true
-	//cast = field.MarshalAsType != typegen.TypeCodeUnknown
-	//
-	//typ := field.Type.GoType()
-	//
-	//isPod := true
-	//switch code := field.EffectiveMarshalType(); code {
-	//case Int:
-	//	return "int64"
-	//case Uint:
-	//	return "uint64"
-	//case Bool, String:
-	//	return field.Type.GoType()
-	//case Hash:
-	//	return "bytes32"
-	//case Bytes:
-	//	typ = "bytes"
-	//case Url, TxID:
-	//	typ = "string"
-	//case Time, Duration:
-	//	typ = code.Title()
-	//case BigInt:
-	//	typ = "uint256"
-	//case RawJson:
-	//	typ = "string"
-	//case Float:
-	//	typ = "float"
-	//case Any:
-	//	typ = code.Title()
-	//	isPod = false
-	//}
-	//
-	//_ = isPod
-	//if field.Repeatable && !ignoreRepeatable {
-	//	typ = typ + "[]"
-	//}
-	//
-	//return typ
-	//
-	//
-	//
-	//switch code := field.EffectiveMarshalType(); code {
-	//case Bool, String, Duration, Time, Bytes, Uint, Int, Float:
-	//	return typegen.TitleCase(code.String()), cast, false
-	//case Url, TxID, Hash:
-	//	return typegen.TitleCase(code.String()), cast, true
-	//case RawJson:
-	//	return "Bytes", cast, false
-	//case BigInt:
-	//	return "BigInt", cast, true
-	//}
-	//
-	//switch field.MarshalAs {
-	//case Reference:
-	//	return "Value", cast, true
-	//case Value, Union:
-	//	return "Value", cast, false
-	//case Enum:
-	//	return "Enum", cast, false
-	//}
-	//
-	//return "", cast, false
 }
 
 func goBinaryMethod(field *Field) (methodName string, cast, wantPtr bool) {
