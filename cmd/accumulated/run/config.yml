@@ -84,6 +84,9 @@ Instrumentation:
       type: Monitor
       marshal-as: reference
       pointer: true
+    - name: PprofListen
+      type: p2p.Multiaddr
+      marshal-as: union
 
 Monitor:
   non-binary: true
