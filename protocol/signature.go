@@ -1246,14 +1246,20 @@ func (e *EcdsaSha256Signature) Verify(sigMdHash, txnHash []byte, _ *Transaction)
  * EIP-712 Typed Data Signature
  * privateKey must be ecdsa
  */
-func SignEip712TypedData(sig *Eip712TypedDataSignature, privateKey, sigMdHash, txnHash []byte) error {
+func SignEip712TypedData(sig *Eip712TypedDataSignature, privateKey []byte, txn *Transaction) error {
 	priv, err := eth.ToECDSA(privateKey)
 	if err != nil {
 		return err
 	}
-
 	sig.PublicKey = eth.FromECDSAPub(&priv.PublicKey)
-	sig.Signature, err = eth.Sign(signingHash(sig, doSha256, sigMdHash, txnHash), priv)
+	sig.TransactionHash = txn.Hash()
+
+	hash, err := Eip712Hasher(txn, sig)
+	if err != nil {
+		return err
+	}
+
+	sig.Signature, err = eth.Sign(hash, priv)
 	return nil
 }
 
@@ -1313,19 +1319,17 @@ func (s *Eip712TypedDataSignature) GetVote() VoteType {
 
 // Verify returns true if this signature is a valid EIP-712 signature following
 // the spec.
-func (e *Eip712TypedDataSignature) Verify(sigMdHash, txnHash []byte, txn *Transaction) bool {
-	typedDataTxnHash, err := Eip712Hasher(txn)
+func (e *Eip712TypedDataSignature) Verify(_, _ []byte, txn *Transaction) bool {
+	typedDataTxnHash, err := Eip712Hasher(txn, e)
+	
 	if err != nil {
 		return false
 	}
 
-	if !bytes.Equal(typedDataTxnHash[:], txnHash) {
-		return false
-	}
 	sig := e.Signature
 	if len(sig) == 65 {
 		//extract RS of the RSV format
 		sig = sig[:64]
 	}
-	return eth.VerifySignature(e.PublicKey, signingHash(e, doSha256, sigMdHash, txnHash), sig)
+	return eth.VerifySignature(e.PublicKey, typedDataTxnHash, sig)
 }

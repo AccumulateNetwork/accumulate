@@ -11,6 +11,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"reflect"
@@ -264,6 +265,7 @@ func (td *TypeDefinition) hash(v interface{}, typeName string) ([]byte, error) {
 		if !ok {
 			continue
 		}
+		delete(data, field.Name)
 
 		//now run the hasher
 		encodedValue, err := field.encoder.hasher(value)
@@ -278,6 +280,11 @@ func (td *TypeDefinition) hash(v interface{}, typeName string) ([]byte, error) {
 		first = false
 	}
 	header.WriteString(")")
+
+	if len(data) > 0 {
+		return nil, errors.New("eip712 payload contains unknown fields")
+	}
+
 	return keccak256(append(keccak256(header.Bytes()), body.Bytes()...)), nil
 }
 
@@ -291,6 +298,17 @@ func (t *TypeField) types(ret map[string]*TypeDefinition, v interface{}, fieldTy
 
 func NewEncoder[T any](hasher func(T) ([]byte, error), types func(ret map[string]*TypeDefinition, v interface{}, typeField string) error) Eip712Encoder {
 	return Eip712Encoder{func(v interface{}) ([]byte, error) {
+		// JSON always decodes numbers as floats
+		if u, ok := v.(float64); ok {
+			var z T
+			switch any(z).(type) {
+			case int64:
+				v = int64(u)
+			case uint64:
+				v = uint64(u)
+			}
+		}
+
 		t, ok := v.(T)
 		if !ok {
 			return nil, fmt.Errorf("eip712 value of type %T does not match type field", v)

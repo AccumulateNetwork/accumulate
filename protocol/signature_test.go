@@ -492,106 +492,103 @@ func TestTypesFromCerts(t *testing.T) {
 }
 
 func TestEip712TypedDataSignature(t *testing.T) {
-	tokenTransaction :=
-		[]byte(`{
-		  "types": {
+	tokenTransaction := []byte(`{
+		"types": {
 			"EIP712Domain": [
-			  {"name": "name", "type": "string"},
-			  {"name": "version", "type": "string"},
-			  {"name": "chainId", "type": "uint256"},
+				{ "name": "name", "type": "string" },
+				{ "name": "version", "type": "string" },
+				{ "name": "chainId", "type": "uint256" },
 			],
-			"SendTokens": [ 
-			  {"name": "type", "type": "string"},
-			  {"name": "to", "type": "TokenRecipient[]"}
+			"SendTokens": [
+				{ "name": "type", "type": "string" },
+				{ "name": "to", "type": "TokenRecipient[]" }
 			],
 			"TokenRecipient": [
-			  {"name": "url", "type": "string"},
-			  {"name": "amount", "type": "uint256"},
+				{ "name": "url", "type": "string" },
+				{ "name": "amount", "type": "uint256" },
 			],
-			"TransactionHeader" : [
-			   {"name": "principal", "type": "string"},
-			   {"name": "initiator", "type": "bytes32"},
+			"TransactionHeader": [
+				{ "name": "principal", "type": "string" },
+				{ "name": "initiator", "type": "bytes32" },
 			],
-			"Transaction" : [
-				{ "name" : "header", "type" : "TransactionHeader" },
-				{ "name" : "body", "type" : "SendTokens" }, 
+			"Transaction": [
+				{ "name": "header", "type": "TransactionHeader" },
+				{ "name": "body", "type": "SendTokens" },
 			],
-		  },
-		  "primaryType": "SendTokens",
-		  "domain": {
+		},
+		"primaryType": "SendTokens",
+		"domain": {
 			"name": "Accumulate",
 			"version": "1.0.0",
 			"chainId": "281",
-		  },
+		},
 		"message": {
 			"header": {
-			  "principal": "acc://adi.acme/ACME",
-			  "initiator": "84e032fba8a5456f631c822a2b2466c18b3fa7804330ab87088ed6e30d690505"
+				"principal": "acc://adi.acme/ACME",
+				"initiator": "84e032fba8a5456f631c822a2b2466c18b3fa7804330ab87088ed6e30d690505"
 			},
 			"body": {
-			  "type": "sendTokens",
-			  "to": [
-				{
-				  "url": "acc://other.acme/ACME",
-				  "amount": "10000000000"
-				}
-			  ]
+				"type": "sendTokens",
+				"to": [
+					{
+						"url": "acc://other.acme/ACME",
+						"amount": "10000000000"
+					}
+				]
 			}
-		  }
-		}`)
-
-	txn := Transaction{}
-	err := txn.UnmarshalJSON([]byte(`{"header": {
-		"principal": "acc://adi.acme/ACME",
-			"initiator": "84e032fba8a5456f631c822a2b2466c18b3fa7804330ab87088ed6e30d690505"
-	},
-	"body": {
-		"type": "sendTokens",
-			"to": [
-	{
-	"url": "acc://other.acme/ACME",
-	"amount": "10000000000"
-	}
-	]
-	}}`))
-
-	require.NoError(t, err)
-
+		}
+	}`)
 	_ = tokenTransaction
 
-	hash, err := Eip712Hasher(&txn)
+	txn := &Transaction{}
+	err := txn.UnmarshalJSON([]byte(`{
+		"header": {
+			"principal": "acc://adi.acme/ACME",
+			"initiator": "84e032fba8a5456f631c822a2b2466c18b3fa7804330ab87088ed6e30d690505"
+		},
+		"body": {
+			"type": "sendTokens",
+			"to": [{
+				"url": "acc://other.acme/ACME",
+				"amount": "10000000000"
+			}]
+		}
+	}`))
 	require.NoError(t, err)
 
-	eip712sig := new(Eip712TypedDataSignature)
-	priv, _ := SECP256K1Keypair()
-	require.NoError(t, SignEip712TypedData(eip712sig, priv, nil, hash[:]))
+	eip712sig := &Eip712TypedDataSignature{
+		Signer:        url.MustParse("acc://adi.acme/book/1"),
+		SignerVersion: 1,
+		Timestamp:     1720564975623,
+		Vote:          VoteTypeAccept,
+	}
 
-	require.True(t, eip712sig.Verify(nil, hash, &txn))
+	// Sign the transaction
+	priv, _ := SECP256K1Keypair()
+	require.NoError(t, SignEip712TypedData(eip712sig, priv, txn))
+
+	// Verify the signature
+	require.True(t, eip712sig.Verify(nil, nil, txn))
 
 	//test edge case:
-	keyPageUpdate := []byte(
-		`{
-                "header": {
-                  "principal": "acc://adi.acme",
-                  "initiator": "5c90ac449d17c448141def36197ce8d63852b85f91621b1015e553ccbbd0f2f2"
-                },
-                "body": {
-                  "type": "updateKeyPage",
-                  "operation": [
-                    {
-                      "type": "add",
-                      "entry": {
-                        "keyHash": "e55d973bf691381c94602354d1e1f655f7b1c4bd56760dffeffa2bef4541ec11"
-                      }
-                    }
-                  ]
-                }
-		}`)
+	keyPageUpdate := []byte(`{
+		"header": {
+			"principal": "acc://adi.acme",
+			"initiator": "5c90ac449d17c448141def36197ce8d63852b85f91621b1015e553ccbbd0f2f2"
+		},
+		"body": {
+			"type": "updateKeyPage",
+			"operation": [{
+				"type": "add",
+				"entry": { "keyHash": "e55d973bf691381c94602354d1e1f655f7b1c4bd56760dffeffa2bef4541ec11" }
+			}]
+		}
+	}`)
 
+	// TODO: Delegated signature
 	err = txn.UnmarshalJSON(keyPageUpdate)
 	require.NoError(t, err)
 
-	hash, err = Eip712Hasher(&txn)
+	_, err = Eip712Hasher(txn, eip712sig)
 	require.NoError(t, err)
-
 }

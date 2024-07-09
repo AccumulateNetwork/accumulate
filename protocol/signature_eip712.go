@@ -14,6 +14,7 @@ func init() {
 	encoding.RegisterEnumeratedTypeInterface(NewDataEntry)
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
 		encoding.NewTypeField("publicKey", "bytes"),
 		encoding.NewTypeField("signer", "string"),
 		encoding.NewTypeField("signerVersion", "uint64"),
@@ -69,9 +70,9 @@ func MarshalEip712(transaction Transaction) (ret []byte, err error) {
 } //
 
 func Eip712Hasher(txn *Transaction, sig Signature) ([]byte, error) {
-	var delegators []string
+	var delegators []any
 	var inner *Eip712TypedDataSignature
-	for inner != nil {
+	for inner == nil {
 		switch s := sig.(type) {
 		case *DelegatedSignature:
 			delegators = append(delegators, s.Delegator.String())
@@ -92,7 +93,9 @@ func Eip712Hasher(txn *Transaction, sig Signature) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	jsig["delegators"] = delegators
+	if len(delegators) > 0 {
+		jsig["delegators"] = delegators
+	}
 
 	j, err = txn.MarshalJSON()
 	if err != nil {
