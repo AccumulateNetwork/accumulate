@@ -255,41 +255,40 @@ func (v *PeerStatus) Equal(u *PeerStatus) bool {
 	return true
 }
 
-func initEip712TypeDictionary() {
+func init() {
 
-	encoding.SchemaDictionary["DB"] = &[]encoding.TypeField{
-		{"lastScan", "string"},
-		{"peers", "AtomicSlice[*PeerStatus, PeerStatus]"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("lastScan", "string"),
+		encoding.NewTypeField("peers", "AtomicSlice[*PeerStatus, PeerStatus]"),
+	}, "DB", "db")
 
-	encoding.SchemaDictionary["LastStatus"] = &[]encoding.TypeField{
-		{"success", "string"},
-		{"attempt", "string"},
-		{"failed", "AtomicUint"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("success", "string"),
+		encoding.NewTypeField("attempt", "string"),
+		encoding.NewTypeField("failed", "AtomicUint"),
+	}, "LastStatus", "lastStatus")
 
-	encoding.SchemaDictionary["PeerAddressStatus"] = &[]encoding.TypeField{
-		{"address", "p2p.Multiaddr"},
-		{"last", "LastStatus"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("address", "p2p.Multiaddr"),
+		encoding.NewTypeField("last", "LastStatus"),
+	}, "PeerAddressStatus", "peerAddressStatus")
 
-	encoding.SchemaDictionary["PeerNetworkStatus"] = &[]encoding.TypeField{
-		{"name", "string"},
-		{"services", "AtomicSlice[*PeerServiceStatus, PeerServiceStatus]"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("name", "string"),
+		encoding.NewTypeField("services", "AtomicSlice[*PeerServiceStatus, PeerServiceStatus]"),
+	}, "PeerNetworkStatus", "peerNetworkStatus")
 
-	encoding.SchemaDictionary["PeerServiceStatus"] = &[]encoding.TypeField{
-		{"address", "api.ServiceAddress"},
-		{"last", "LastStatus"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("address", "api.ServiceAddress"),
+		encoding.NewTypeField("last", "LastStatus"),
+	}, "PeerServiceStatus", "peerServiceStatus")
 
-	encoding.SchemaDictionary["PeerStatus"] = &[]encoding.TypeField{
-		{"id", "p2p.PeerID"},
-		{"addresses", "AtomicSlice[*PeerAddressStatus, PeerAddressStatus]"},
-		{"networks", "AtomicSlice[*PeerNetworkStatus, PeerNetworkStatus]"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("id", "p2p.PeerID"),
+		encoding.NewTypeField("addresses", "AtomicSlice[*PeerAddressStatus, PeerAddressStatus]"),
+		encoding.NewTypeField("networks", "AtomicSlice[*PeerNetworkStatus, PeerNetworkStatus]"),
+	}, "PeerStatus", "peerStatus")
 
-	encoding.ResolveTypeDefinitions()
 }
 
 func (v *PeerAddressStatus) MarshalJSON() ([]byte, error) {

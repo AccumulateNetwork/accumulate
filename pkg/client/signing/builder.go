@@ -329,11 +329,11 @@ func (s *Builder) prepare(init bool) (protocol.KeySignature, error) {
 		sig.Memo = s.Memo
 		sig.Data = s.Data
 		//build the typed data json structure
-		txn := protocol.Transaction{}
-		err := txn.UnmarshalBinary(sig.Data)
-		if err != nil {
-			return nil, err
-		}
+		//txn := protocol.Transaction{}
+		//err := txn.UnmarshalBinary(sig.Data)
+		//if err != nil {
+		//	return nil, err
+		//}
 		//sig.TypedData, err = txn.MarshalJSON()
 		//if err != nil {
 		//	return nil, err

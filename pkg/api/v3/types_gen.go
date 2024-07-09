@@ -2622,15 +2622,6 @@ var fieldNames_AccountRecord = []string{
 	6: "LastBlockTime",
 }
 
-var fieldTypes_AccountRecord = []string{
-	1: "string",
-	2: "protocol.Account",
-	3: "RecordRange[*UrlRecord]",
-	4: "RecordRange[*TxIDRecord]",
-	5: "Receipt",
-	6: "string",
-}
-
 func (v *AccountRecord) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -2712,12 +2703,6 @@ var fieldNames_AnchorSearchQuery = []string{
 	3: "IncludeReceipt",
 }
 
-var fieldTypes_AnchorSearchQuery = []string{
-	1: "string",
-	2: "bytes",
-	3: "ReceiptOptions",
-}
-
 func (v *AnchorSearchQuery) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -2771,15 +2756,6 @@ var fieldNames_BlockEvent = []string{
 	4: "Time",
 	5: "Major",
 	6: "Entries",
-}
-
-var fieldTypes_BlockEvent = []string{
-	1: "string",
-	2: "string",
-	3: "uint64",
-	4: "string",
-	5: "uint64",
-	6: "ChainEntryRecord[Record][]",
 }
 
 func (v *BlockEvent) MarshalBinary() ([]byte, error) {
@@ -2869,16 +2845,6 @@ var fieldNames_BlockQuery = []string{
 	7: "OmitEmpty",
 }
 
-var fieldTypes_BlockQuery = []string{
-	1: "string",
-	2: "uint64",
-	3: "uint64",
-	4: "RangeOptions",
-	5: "RangeOptions",
-	6: "RangeOptions",
-	7: "bool",
-}
-
 func (v *BlockQuery) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -2943,19 +2909,6 @@ var fieldNames_ChainEntryRecord = []string{
 	8:  "Receipt",
 	9:  "State",
 	10: "LastBlockTime",
-}
-
-var fieldTypes_ChainEntryRecord = []string{
-	1:  "string",
-	2:  "string",
-	3:  "string",
-	4:  "string",
-	5:  "uint64",
-	6:  "bytes32",
-	7:  "T",
-	8:  "Receipt",
-	9:  "bytes[]",
-	10: "string",
 }
 
 func (v *ChainEntryRecord[T]) MarshalBinary() ([]byte, error) {
@@ -3072,15 +3025,6 @@ var fieldNames_ChainQuery = []string{
 	6: "IncludeReceipt",
 }
 
-var fieldTypes_ChainQuery = []string{
-	1: "string",
-	2: "string",
-	3: "uint64",
-	4: "bytes",
-	5: "RangeOptions",
-	6: "ReceiptOptions",
-}
-
 func (v *ChainQuery) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -3138,15 +3082,6 @@ var fieldNames_ChainRecord = []string{
 	4: "Count",
 	5: "State",
 	6: "LastBlockTime",
-}
-
-var fieldTypes_ChainRecord = []string{
-	1: "string",
-	2: "string",
-	3: "string",
-	4: "uint64",
-	5: "bytes[]",
-	6: "string",
 }
 
 func (v *ChainRecord) MarshalBinary() ([]byte, error) {
@@ -3232,12 +3167,6 @@ var fieldNames_ConsensusPeerInfo = []string{
 	3: "Port",
 }
 
-var fieldTypes_ConsensusPeerInfo = []string{
-	1: "string",
-	2: "string",
-	3: "uint64",
-}
-
 func (v *ConsensusPeerInfo) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -3303,18 +3232,6 @@ var fieldNames_ConsensusStatus = []string{
 	7: "PartitionID",
 	8: "PartitionType",
 	9: "Peers",
-}
-
-var fieldTypes_ConsensusStatus = []string{
-	1: "bool",
-	2: "LastBlock",
-	3: "string",
-	4: "string",
-	5: "bytes32",
-	6: "bytes32",
-	7: "string",
-	8: "string",
-	9: "ConsensusPeerInfo[]",
 }
 
 func (v *ConsensusStatus) MarshalBinary() ([]byte, error) {
@@ -3429,13 +3346,6 @@ var fieldNames_ConsensusStatusOptions = []string{
 	4: "IncludeAccumulate",
 }
 
-var fieldTypes_ConsensusStatusOptions = []string{
-	1: "string",
-	2: "string",
-	3: "bool",
-	4: "bool",
-}
-
 func (v *ConsensusStatusOptions) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -3496,13 +3406,6 @@ var fieldNames_DataQuery = []string{
 	4: "Range",
 }
 
-var fieldTypes_DataQuery = []string{
-	1: "string",
-	2: "uint64",
-	3: "bytes",
-	4: "RangeOptions",
-}
-
 func (v *DataQuery) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -3552,11 +3455,6 @@ var fieldNames_DefaultQuery = []string{
 	2: "IncludeReceipt",
 }
 
-var fieldTypes_DefaultQuery = []string{
-	1: "string",
-	2: "ReceiptOptions",
-}
-
 func (v *DefaultQuery) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -3598,11 +3496,6 @@ func (v *DefaultQuery) IsValid() error {
 var fieldNames_DelegateSearchQuery = []string{
 	1: "QueryType",
 	2: "Delegate",
-}
-
-var fieldTypes_DelegateSearchQuery = []string{
-	1: "string",
-	2: "string",
 }
 
 func (v *DelegateSearchQuery) MarshalBinary() ([]byte, error) {
@@ -3653,11 +3546,6 @@ var fieldNames_DirectoryQuery = []string{
 	2: "Range",
 }
 
-var fieldTypes_DirectoryQuery = []string{
-	1: "string",
-	2: "RangeOptions",
-}
-
 func (v *DirectoryQuery) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -3704,11 +3592,6 @@ func (v *DirectoryQuery) IsValid() error {
 var fieldNames_ErrorEvent = []string{
 	1: "EventType",
 	2: "Err",
-}
-
-var fieldTypes_ErrorEvent = []string{
-	1: "string",
-	2: "errors2.Error",
 }
 
 func (v *ErrorEvent) MarshalBinary() ([]byte, error) {
@@ -3759,11 +3642,6 @@ var fieldNames_ErrorRecord = []string{
 	2: "Value",
 }
 
-var fieldTypes_ErrorRecord = []string{
-	1: "string",
-	2: "errors2.Error",
-}
-
 func (v *ErrorRecord) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -3811,10 +3689,6 @@ var fieldNames_FaucetOptions = []string{
 	1: "Token",
 }
 
-var fieldTypes_FaucetOptions = []string{
-	1: "string",
-}
-
 func (v *FaucetOptions) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -3853,13 +3727,6 @@ var fieldNames_FindServiceOptions = []string{
 	2: "Service",
 	3: "Known",
 	4: "Timeout",
-}
-
-var fieldTypes_FindServiceOptions = []string{
-	1: "string",
-	2: "ServiceAddress",
-	3: "bool",
-	4: "string",
 }
 
 func (v *FindServiceOptions) MarshalBinary() ([]byte, error) {
@@ -3919,12 +3786,6 @@ var fieldNames_FindServiceResult = []string{
 	1: "PeerID",
 	2: "Status",
 	3: "Addresses",
-}
-
-var fieldTypes_FindServiceResult = []string{
-	1: "p2p.PeerID",
-	2: "string",
-	3: "p2p.Multiaddr[]",
 }
 
 func (v *FindServiceResult) MarshalBinary() ([]byte, error) {
@@ -3990,12 +3851,6 @@ var fieldNames_GlobalsEvent = []string{
 	3: "New",
 }
 
-var fieldTypes_GlobalsEvent = []string{
-	1: "string",
-	2: "core.GlobalValues",
-	3: "core.GlobalValues",
-}
-
 func (v *GlobalsEvent) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -4052,11 +3907,6 @@ var fieldNames_IndexEntryRecord = []string{
 	2: "Value",
 }
 
-var fieldTypes_IndexEntryRecord = []string{
-	1: "string",
-	2: "protocol.IndexEntry",
-}
-
 func (v *IndexEntryRecord) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -4107,15 +3957,6 @@ var fieldNames_KeyRecord = []string{
 	4: "Version",
 	5: "Index",
 	6: "Entry",
-}
-
-var fieldTypes_KeyRecord = []string{
-	1: "string",
-	2: "string",
-	3: "string",
-	4: "uint64",
-	5: "uint64",
-	6: "protocol.KeySpec",
 }
 
 func (v *KeyRecord) MarshalBinary() ([]byte, error) {
@@ -4201,14 +4042,6 @@ var fieldNames_LastBlock = []string{
 	5: "DirectoryAnchorHeight",
 }
 
-var fieldTypes_LastBlock = []string{
-	1: "int64",
-	2: "string",
-	3: "bytes32",
-	4: "bytes32",
-	5: "uint64",
-}
-
 func (v *LastBlock) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -4288,14 +4121,6 @@ var fieldNames_MajorBlockRecord = []string{
 	5: "LastBlockTime",
 }
 
-var fieldTypes_MajorBlockRecord = []string{
-	1: "string",
-	2: "uint64",
-	3: "string",
-	4: "RecordRange[*MinorBlockRecord]",
-	5: "string",
-}
-
 func (v *MajorBlockRecord) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -4368,11 +4193,6 @@ var fieldNames_MessageHashSearchQuery = []string{
 	2: "Hash",
 }
 
-var fieldTypes_MessageHashSearchQuery = []string{
-	1: "string",
-	2: "bytes32",
-}
-
 func (v *MessageHashSearchQuery) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -4431,23 +4251,6 @@ var fieldNames_MessageRecord = []string{
 	12: "Sequence",
 	13: "SourceReceipt",
 	14: "LastBlockTime",
-}
-
-var fieldTypes_MessageRecord = []string{
-	1:  "string",
-	2:  "string",
-	3:  "T",
-	4:  "string",
-	5:  "errors2.Error",
-	6:  "protocol.TransactionResult",
-	7:  "uint64",
-	8:  "RecordRange[*TxIDRecord]",
-	9:  "RecordRange[*TxIDRecord]",
-	10: "RecordRange[*SignatureSetRecord]",
-	11: "bool",
-	12: "messaging.SequencedMessage",
-	13: "merkle.Receipt",
-	14: "string",
 }
 
 func (v *MessageRecord[T]) MarshalBinary() ([]byte, error) {
@@ -4588,10 +4391,6 @@ var fieldNames_Metrics = []string{
 	1: "TPS",
 }
 
-var fieldTypes_Metrics = []string{
-	1: "float",
-}
-
 func (v *Metrics) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -4630,11 +4429,6 @@ func (v *Metrics) IsValid() error {
 var fieldNames_MetricsOptions = []string{
 	1: "Partition",
 	2: "Span",
-}
-
-var fieldTypes_MetricsOptions = []string{
-	1: "string",
-	2: "uint64",
 }
 
 func (v *MetricsOptions) MarshalBinary() ([]byte, error) {
@@ -4687,16 +4481,6 @@ var fieldNames_MinorBlockRecord = []string{
 	5: "Entries",
 	6: "Anchored",
 	7: "LastBlockTime",
-}
-
-var fieldTypes_MinorBlockRecord = []string{
-	1: "string",
-	2: "uint64",
-	3: "string",
-	4: "string",
-	5: "RecordRange[*ChainEntryRecord[Record]]",
-	6: "RecordRange[*MinorBlockRecord]",
-	7: "string",
 }
 
 func (v *MinorBlockRecord) MarshalBinary() ([]byte, error) {
@@ -4791,17 +4575,6 @@ var fieldNames_NetworkStatus = []string{
 	6: "DirectoryHeight",
 	7: "MajorBlockHeight",
 	8: "BvnExecutorVersions",
-}
-
-var fieldTypes_NetworkStatus = []string{
-	1: "protocol.AcmeOracle",
-	2: "protocol.NetworkGlobals",
-	3: "protocol.NetworkDefinition",
-	4: "protocol.RoutingTable",
-	5: "string",
-	6: "uint64",
-	7: "uint64",
-	8: "protocol.PartitionExecutorVersion[]",
 }
 
 func (v *NetworkStatus) MarshalBinary() ([]byte, error) {
@@ -4900,10 +4673,6 @@ var fieldNames_NetworkStatusOptions = []string{
 	1: "Partition",
 }
 
-var fieldTypes_NetworkStatusOptions = []string{
-	1: "string",
-}
-
 func (v *NetworkStatusOptions) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -4949,14 +4718,6 @@ var fieldNames_NodeInfo = []string{
 	3: "Services",
 	4: "Version",
 	5: "Commit",
-}
-
-var fieldTypes_NodeInfo = []string{
-	1: "p2p.PeerID",
-	2: "string",
-	3: "ServiceAddress[]",
-	4: "string",
-	5: "string",
 }
 
 func (v *NodeInfo) MarshalBinary() ([]byte, error) {
@@ -5036,10 +4797,6 @@ var fieldNames_NodeInfoOptions = []string{
 	1: "PeerID",
 }
 
-var fieldTypes_NodeInfoOptions = []string{
-	1: "p2p.PeerID",
-}
-
 func (v *NodeInfoOptions) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -5082,11 +4839,6 @@ func (v *NodeInfoOptions) IsValid() error {
 var fieldNames_PendingQuery = []string{
 	1: "QueryType",
 	2: "Range",
-}
-
-var fieldTypes_PendingQuery = []string{
-	1: "string",
-	2: "RangeOptions",
 }
 
 func (v *PendingQuery) MarshalBinary() ([]byte, error) {
@@ -5137,11 +4889,6 @@ var fieldNames_PublicKeyHashSearchQuery = []string{
 	2: "PublicKeyHash",
 }
 
-var fieldTypes_PublicKeyHashSearchQuery = []string{
-	1: "string",
-	2: "bytes",
-}
-
 func (v *PublicKeyHashSearchQuery) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -5189,12 +4936,6 @@ var fieldNames_PublicKeySearchQuery = []string{
 	1: "QueryType",
 	2: "PublicKey",
 	3: "Type",
-}
-
-var fieldTypes_PublicKeySearchQuery = []string{
-	1: "string",
-	2: "bytes",
-	3: "string",
 }
 
 func (v *PublicKeySearchQuery) MarshalBinary() ([]byte, error) {
@@ -5255,13 +4996,6 @@ var fieldNames_RangeOptions = []string{
 	4: "FromEnd",
 }
 
-var fieldTypes_RangeOptions = []string{
-	1: "uint64",
-	2: "uint64",
-	3: "bool",
-	4: "bool",
-}
-
 func (v *RangeOptions) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -5309,13 +5043,6 @@ var fieldNames_Receipt = []string{
 	2: "LocalBlock",
 	3: "LocalBlockTime",
 	4: "MajorBlock",
-}
-
-var fieldTypes_Receipt = []string{
-	1: "merkle.Receipt",
-	2: "uint64",
-	3: "string",
-	4: "uint64",
 }
 
 func (v *Receipt) MarshalBinary() ([]byte, error) {
@@ -5382,11 +5109,6 @@ var fieldNames_ReceiptOptions = []string{
 	2: "ForHeight",
 }
 
-var fieldTypes_ReceiptOptions = []string{
-	1: "bool",
-	2: "uint64",
-}
-
 func (v *ReceiptOptions) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -5440,14 +5162,6 @@ var fieldNames_RecordRange = []string{
 	3: "Start",
 	4: "Total",
 	5: "LastBlockTime",
-}
-
-var fieldTypes_RecordRange = []string{
-	1: "string",
-	2: "T[]",
-	3: "uint64",
-	4: "uint64",
-	5: "string",
 }
 
 func (v *RecordRange[T]) MarshalBinary() ([]byte, error) {
@@ -5516,11 +5230,6 @@ var fieldNames_ServiceAddress = []string{
 	2: "Argument",
 }
 
-var fieldTypes_ServiceAddress = []string{
-	1: "uint64",
-	2: "string",
-}
-
 func (v *ServiceAddress) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -5567,12 +5276,6 @@ var fieldNames_SignatureSetRecord = []string{
 	1: "RecordType",
 	2: "Account",
 	3: "Signatures",
-}
-
-var fieldTypes_SignatureSetRecord = []string{
-	1: "string",
-	2: "protocol.Account",
-	3: "RecordRange[*MessageRecord[messaging.Message]]",
 }
 
 func (v *SignatureSetRecord) MarshalBinary() ([]byte, error) {
@@ -5630,12 +5333,6 @@ var fieldNames_Submission = []string{
 	1: "Status",
 	2: "Success",
 	3: "Message",
-}
-
-var fieldTypes_Submission = []string{
-	1: "protocol.TransactionStatus",
-	2: "bool",
-	3: "string",
 }
 
 func (v *Submission) MarshalBinary() ([]byte, error) {
@@ -5698,11 +5395,6 @@ var fieldNames_SubmitOptions = []string{
 	2: "Wait",
 }
 
-var fieldTypes_SubmitOptions = []string{
-	1: "bool",
-	2: "bool",
-}
-
 func (v *SubmitOptions) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -5744,11 +5436,6 @@ var fieldNames_SubscribeOptions = []string{
 	2: "Account",
 }
 
-var fieldTypes_SubscribeOptions = []string{
-	1: "string",
-	2: "string",
-}
-
 func (v *SubscribeOptions) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -5788,11 +5475,6 @@ func (v *SubscribeOptions) IsValid() error {
 var fieldNames_TxIDRecord = []string{
 	1: "RecordType",
 	2: "Value",
-}
-
-var fieldTypes_TxIDRecord = []string{
-	1: "string",
-	2: "string",
 }
 
 func (v *TxIDRecord) MarshalBinary() ([]byte, error) {
@@ -5843,11 +5525,6 @@ var fieldNames_UrlRecord = []string{
 	2: "Value",
 }
 
-var fieldTypes_UrlRecord = []string{
-	1: "string",
-	2: "string",
-}
-
 func (v *UrlRecord) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -5893,10 +5570,6 @@ func (v *UrlRecord) IsValid() error {
 
 var fieldNames_ValidateOptions = []string{
 	1: "Full",
-}
-
-var fieldTypes_ValidateOptions = []string{
-	1: "bool",
 }
 
 func (v *ValidateOptions) MarshalBinary() ([]byte, error) {
@@ -7756,342 +7429,341 @@ func (v *ValidateOptions) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
-func initEip712TypeDictionary() {
+func init() {
 
-	encoding.SchemaDictionary["AccountRecord"] = &[]encoding.TypeField{
-		{"recordType", "string"},
-		{"account", "protocol.Account"},
-		{"directory", "RecordRange[*UrlRecord]"},
-		{"pending", "RecordRange[*TxIDRecord]"},
-		{"receipt", "Receipt"},
-		{"lastBlockTime", "string"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("recordType", "string"),
+		encoding.NewTypeField("account", "protocol.Account"),
+		encoding.NewTypeField("directory", "RecordRange[*UrlRecord]"),
+		encoding.NewTypeField("pending", "RecordRange[*TxIDRecord]"),
+		encoding.NewTypeField("receipt", "Receipt"),
+		encoding.NewTypeField("lastBlockTime", "string"),
+	}, "AccountRecord", "accountRecord")
 
-	encoding.SchemaDictionary["AnchorSearchQuery"] = &[]encoding.TypeField{
-		{"queryType", "string"},
-		{"anchor", "bytes"},
-		{"includeReceipt", "ReceiptOptions"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("queryType", "string"),
+		encoding.NewTypeField("anchor", "bytes"),
+		encoding.NewTypeField("includeReceipt", "ReceiptOptions"),
+	}, "AnchorSearchQuery", "anchorSearchQuery")
 
-	encoding.SchemaDictionary["BlockEvent"] = &[]encoding.TypeField{
-		{"eventType", "string"},
-		{"partition", "string"},
-		{"index", "uint64"},
-		{"time", "string"},
-		{"major", "uint64"},
-		{"entries", "ChainEntryRecord[Record][]"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("eventType", "string"),
+		encoding.NewTypeField("partition", "string"),
+		encoding.NewTypeField("index", "uint64"),
+		encoding.NewTypeField("time", "string"),
+		encoding.NewTypeField("major", "uint64"),
+		encoding.NewTypeField("entries", "ChainEntryRecord[Record][]"),
+	}, "BlockEvent", "blockEvent")
 
-	encoding.SchemaDictionary["BlockQuery"] = &[]encoding.TypeField{
-		{"queryType", "string"},
-		{"minor", "uint64"},
-		{"major", "uint64"},
-		{"minorRange", "RangeOptions"},
-		{"majorRange", "RangeOptions"},
-		{"entryRange", "RangeOptions"},
-		{"omitEmpty", "bool"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("queryType", "string"),
+		encoding.NewTypeField("minor", "uint64"),
+		encoding.NewTypeField("major", "uint64"),
+		encoding.NewTypeField("minorRange", "RangeOptions"),
+		encoding.NewTypeField("majorRange", "RangeOptions"),
+		encoding.NewTypeField("entryRange", "RangeOptions"),
+		encoding.NewTypeField("omitEmpty", "bool"),
+	}, "BlockQuery", "blockQuery")
 
-	encoding.SchemaDictionary["ChainEntryRecord"] = &[]encoding.TypeField{
-		{"recordType", "string"},
-		{"account", "string"},
-		{"name", "string"},
-		{"type", "string"},
-		{"index", "uint64"},
-		{"entry", "bytes32"},
-		{"value", "T"},
-		{"receipt", "Receipt"},
-		{"state", "bytes[]"},
-		{"lastBlockTime", "string"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("recordType", "string"),
+		encoding.NewTypeField("account", "string"),
+		encoding.NewTypeField("name", "string"),
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("index", "uint64"),
+		encoding.NewTypeField("entry", "bytes32"),
+		encoding.NewTypeField("value", "T"),
+		encoding.NewTypeField("receipt", "Receipt"),
+		encoding.NewTypeField("state", "bytes[]"),
+		encoding.NewTypeField("lastBlockTime", "string"),
+	}, "ChainEntryRecord", "chainEntryRecord")
 
-	encoding.SchemaDictionary["ChainQuery"] = &[]encoding.TypeField{
-		{"queryType", "string"},
-		{"name", "string"},
-		{"index", "uint64"},
-		{"entry", "bytes"},
-		{"range", "RangeOptions"},
-		{"includeReceipt", "ReceiptOptions"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("queryType", "string"),
+		encoding.NewTypeField("name", "string"),
+		encoding.NewTypeField("index", "uint64"),
+		encoding.NewTypeField("entry", "bytes"),
+		encoding.NewTypeField("range", "RangeOptions"),
+		encoding.NewTypeField("includeReceipt", "ReceiptOptions"),
+	}, "ChainQuery", "chainQuery")
 
-	encoding.SchemaDictionary["ChainRecord"] = &[]encoding.TypeField{
-		{"recordType", "string"},
-		{"name", "string"},
-		{"type", "string"},
-		{"count", "uint64"},
-		{"state", "bytes[]"},
-		{"lastBlockTime", "string"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("recordType", "string"),
+		encoding.NewTypeField("name", "string"),
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("count", "uint64"),
+		encoding.NewTypeField("state", "bytes[]"),
+		encoding.NewTypeField("lastBlockTime", "string"),
+	}, "ChainRecord", "chainRecord")
 
-	encoding.SchemaDictionary["ConsensusPeerInfo"] = &[]encoding.TypeField{
-		{"nodeID", "string"},
-		{"host", "string"},
-		{"port", "uint64"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("nodeID", "string"),
+		encoding.NewTypeField("host", "string"),
+		encoding.NewTypeField("port", "uint64"),
+	}, "ConsensusPeerInfo", "consensusPeerInfo")
 
-	encoding.SchemaDictionary["ConsensusStatus"] = &[]encoding.TypeField{
-		{"ok", "bool"},
-		{"lastBlock", "LastBlock"},
-		{"version", "string"},
-		{"commit", "string"},
-		{"nodeKeyHash", "bytes32"},
-		{"validatorKeyHash", "bytes32"},
-		{"partitionID", "string"},
-		{"partitionType", "string"},
-		{"peers", "ConsensusPeerInfo[]"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("ok", "bool"),
+		encoding.NewTypeField("lastBlock", "LastBlock"),
+		encoding.NewTypeField("version", "string"),
+		encoding.NewTypeField("commit", "string"),
+		encoding.NewTypeField("nodeKeyHash", "bytes32"),
+		encoding.NewTypeField("validatorKeyHash", "bytes32"),
+		encoding.NewTypeField("partitionID", "string"),
+		encoding.NewTypeField("partitionType", "string"),
+		encoding.NewTypeField("peers", "ConsensusPeerInfo[]"),
+	}, "ConsensusStatus", "consensusStatus")
 
-	encoding.SchemaDictionary["ConsensusStatusOptions"] = &[]encoding.TypeField{
-		{"nodeID", "string"},
-		{"partition", "string"},
-		{"includePeers", "bool"},
-		{"includeAccumulate", "bool"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("nodeID", "string"),
+		encoding.NewTypeField("partition", "string"),
+		encoding.NewTypeField("includePeers", "bool"),
+		encoding.NewTypeField("includeAccumulate", "bool"),
+	}, "ConsensusStatusOptions", "consensusStatusOptions")
 
-	encoding.SchemaDictionary["DataQuery"] = &[]encoding.TypeField{
-		{"queryType", "string"},
-		{"index", "uint64"},
-		{"entry", "bytes"},
-		{"range", "RangeOptions"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("queryType", "string"),
+		encoding.NewTypeField("index", "uint64"),
+		encoding.NewTypeField("entry", "bytes"),
+		encoding.NewTypeField("range", "RangeOptions"),
+	}, "DataQuery", "dataQuery")
 
-	encoding.SchemaDictionary["DefaultQuery"] = &[]encoding.TypeField{
-		{"queryType", "string"},
-		{"includeReceipt", "ReceiptOptions"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("queryType", "string"),
+		encoding.NewTypeField("includeReceipt", "ReceiptOptions"),
+	}, "DefaultQuery", "defaultQuery")
 
-	encoding.SchemaDictionary["DelegateSearchQuery"] = &[]encoding.TypeField{
-		{"queryType", "string"},
-		{"delegate", "string"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("queryType", "string"),
+		encoding.NewTypeField("delegate", "string"),
+	}, "DelegateSearchQuery", "delegateSearchQuery")
 
-	encoding.SchemaDictionary["DirectoryQuery"] = &[]encoding.TypeField{
-		{"queryType", "string"},
-		{"range", "RangeOptions"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("queryType", "string"),
+		encoding.NewTypeField("range", "RangeOptions"),
+	}, "DirectoryQuery", "directoryQuery")
 
-	encoding.SchemaDictionary["ErrorEvent"] = &[]encoding.TypeField{
-		{"eventType", "string"},
-		{"err", "errors2.Error"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("eventType", "string"),
+		encoding.NewTypeField("err", "errors2.Error"),
+	}, "ErrorEvent", "errorEvent")
 
-	encoding.SchemaDictionary["ErrorRecord"] = &[]encoding.TypeField{
-		{"recordType", "string"},
-		{"value", "errors2.Error"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("recordType", "string"),
+		encoding.NewTypeField("value", "errors2.Error"),
+	}, "ErrorRecord", "errorRecord")
 
-	encoding.SchemaDictionary["FaucetOptions"] = &[]encoding.TypeField{
-		{"token", "string"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("token", "string"),
+	}, "FaucetOptions", "faucetOptions")
 
-	encoding.SchemaDictionary["FindServiceOptions"] = &[]encoding.TypeField{
-		{"network", "string"},
-		{"service", "ServiceAddress"},
-		{"known", "bool"},
-		{"timeout", "string"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("network", "string"),
+		encoding.NewTypeField("service", "ServiceAddress"),
+		encoding.NewTypeField("known", "bool"),
+		encoding.NewTypeField("timeout", "string"),
+	}, "FindServiceOptions", "findServiceOptions")
 
-	encoding.SchemaDictionary["FindServiceResult"] = &[]encoding.TypeField{
-		{"peerID", "p2p.PeerID"},
-		{"status", "string"},
-		{"addresses", "p2p.Multiaddr[]"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("peerID", "p2p.PeerID"),
+		encoding.NewTypeField("status", "string"),
+		encoding.NewTypeField("addresses", "p2p.Multiaddr[]"),
+	}, "FindServiceResult", "findServiceResult")
 
-	encoding.SchemaDictionary["GlobalsEvent"] = &[]encoding.TypeField{
-		{"eventType", "string"},
-		{"old", "core.GlobalValues"},
-		{"new", "core.GlobalValues"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("eventType", "string"),
+		encoding.NewTypeField("old", "core.GlobalValues"),
+		encoding.NewTypeField("new", "core.GlobalValues"),
+	}, "GlobalsEvent", "globalsEvent")
 
-	encoding.SchemaDictionary["IndexEntryRecord"] = &[]encoding.TypeField{
-		{"recordType", "string"},
-		{"value", "protocol.IndexEntry"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("recordType", "string"),
+		encoding.NewTypeField("value", "protocol.IndexEntry"),
+	}, "IndexEntryRecord", "indexEntryRecord")
 
-	encoding.SchemaDictionary["KeyRecord"] = &[]encoding.TypeField{
-		{"recordType", "string"},
-		{"authority", "string"},
-		{"signer", "string"},
-		{"version", "uint64"},
-		{"index", "uint64"},
-		{"entry", "protocol.KeySpec"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("recordType", "string"),
+		encoding.NewTypeField("authority", "string"),
+		encoding.NewTypeField("signer", "string"),
+		encoding.NewTypeField("version", "uint64"),
+		encoding.NewTypeField("index", "uint64"),
+		encoding.NewTypeField("entry", "protocol.KeySpec"),
+	}, "KeyRecord", "keyRecord")
 
-	encoding.SchemaDictionary["LastBlock"] = &[]encoding.TypeField{
-		{"height", "int64"},
-		{"time", "string"},
-		{"chainRoot", "bytes32"},
-		{"stateRoot", "bytes32"},
-		{"directoryAnchorHeight", "uint64"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("height", "int64"),
+		encoding.NewTypeField("time", "string"),
+		encoding.NewTypeField("chainRoot", "bytes32"),
+		encoding.NewTypeField("stateRoot", "bytes32"),
+		encoding.NewTypeField("directoryAnchorHeight", "uint64"),
+	}, "LastBlock", "lastBlock")
 
-	encoding.SchemaDictionary["MajorBlockRecord"] = &[]encoding.TypeField{
-		{"recordType", "string"},
-		{"index", "uint64"},
-		{"time", "string"},
-		{"minorBlocks", "RecordRange[*MinorBlockRecord]"},
-		{"lastBlockTime", "string"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("recordType", "string"),
+		encoding.NewTypeField("index", "uint64"),
+		encoding.NewTypeField("time", "string"),
+		encoding.NewTypeField("minorBlocks", "RecordRange[*MinorBlockRecord]"),
+		encoding.NewTypeField("lastBlockTime", "string"),
+	}, "MajorBlockRecord", "majorBlockRecord")
 
-	encoding.SchemaDictionary["MessageHashSearchQuery"] = &[]encoding.TypeField{
-		{"queryType", "string"},
-		{"hash", "bytes32"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("queryType", "string"),
+		encoding.NewTypeField("hash", "bytes32"),
+	}, "MessageHashSearchQuery", "messageHashSearchQuery")
 
-	encoding.SchemaDictionary["MessageRecord"] = &[]encoding.TypeField{
-		{"recordType", "string"},
-		{"id", "string"},
-		{"message", "T"},
-		{"status", "string"},
-		{"statusNo", "uint64"},
-		{"error", "errors2.Error"},
-		{"result", "protocol.TransactionResult"},
-		{"received", "uint64"},
-		{"produced", "RecordRange[*TxIDRecord]"},
-		{"cause", "RecordRange[*TxIDRecord]"},
-		{"signatures", "RecordRange[*SignatureSetRecord]"},
-		{"historical", "bool"},
-		{"sequence", "messaging.SequencedMessage"},
-		{"sourceReceipt", "merkle.Receipt"},
-		{"lastBlockTime", "string"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("recordType", "string"),
+		encoding.NewTypeField("id", "string"),
+		encoding.NewTypeField("message", "T"),
+		encoding.NewTypeField("status", "string"),
+		encoding.NewTypeField("statusNo", "uint64"),
+		encoding.NewTypeField("error", "errors2.Error"),
+		encoding.NewTypeField("result", "protocol.TransactionResult"),
+		encoding.NewTypeField("received", "uint64"),
+		encoding.NewTypeField("produced", "RecordRange[*TxIDRecord]"),
+		encoding.NewTypeField("cause", "RecordRange[*TxIDRecord]"),
+		encoding.NewTypeField("signatures", "RecordRange[*SignatureSetRecord]"),
+		encoding.NewTypeField("historical", "bool"),
+		encoding.NewTypeField("sequence", "messaging.SequencedMessage"),
+		encoding.NewTypeField("sourceReceipt", "merkle.Receipt"),
+		encoding.NewTypeField("lastBlockTime", "string"),
+	}, "MessageRecord", "messageRecord")
 
-	encoding.SchemaDictionary["Metrics"] = &[]encoding.TypeField{
-		{"tps", "float"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("tps", "float"),
+	}, "Metrics", "metrics")
 
-	encoding.SchemaDictionary["MetricsOptions"] = &[]encoding.TypeField{
-		{"partition", "string"},
-		{"span", "uint64"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("partition", "string"),
+		encoding.NewTypeField("span", "uint64"),
+	}, "MetricsOptions", "metricsOptions")
 
-	encoding.SchemaDictionary["MinorBlockRecord"] = &[]encoding.TypeField{
-		{"recordType", "string"},
-		{"index", "uint64"},
-		{"time", "string"},
-		{"source", "string"},
-		{"entries", "RecordRange[*ChainEntryRecord[Record]]"},
-		{"anchored", "RecordRange[*MinorBlockRecord]"},
-		{"lastBlockTime", "string"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("recordType", "string"),
+		encoding.NewTypeField("index", "uint64"),
+		encoding.NewTypeField("time", "string"),
+		encoding.NewTypeField("source", "string"),
+		encoding.NewTypeField("entries", "RecordRange[*ChainEntryRecord[Record]]"),
+		encoding.NewTypeField("anchored", "RecordRange[*MinorBlockRecord]"),
+		encoding.NewTypeField("lastBlockTime", "string"),
+	}, "MinorBlockRecord", "minorBlockRecord")
 
-	encoding.SchemaDictionary["NetworkStatus"] = &[]encoding.TypeField{
-		{"oracle", "protocol.AcmeOracle"},
-		{"globals", "protocol.NetworkGlobals"},
-		{"network", "protocol.NetworkDefinition"},
-		{"routing", "protocol.RoutingTable"},
-		{"executorVersion", "string"},
-		{"directoryHeight", "uint64"},
-		{"majorBlockHeight", "uint64"},
-		{"bvnExecutorVersions", "protocol.PartitionExecutorVersion[]"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("oracle", "protocol.AcmeOracle"),
+		encoding.NewTypeField("globals", "protocol.NetworkGlobals"),
+		encoding.NewTypeField("network", "protocol.NetworkDefinition"),
+		encoding.NewTypeField("routing", "protocol.RoutingTable"),
+		encoding.NewTypeField("executorVersion", "string"),
+		encoding.NewTypeField("directoryHeight", "uint64"),
+		encoding.NewTypeField("majorBlockHeight", "uint64"),
+		encoding.NewTypeField("bvnExecutorVersions", "protocol.PartitionExecutorVersion[]"),
+	}, "NetworkStatus", "networkStatus")
 
-	encoding.SchemaDictionary["NetworkStatusOptions"] = &[]encoding.TypeField{
-		{"partition", "string"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("partition", "string"),
+	}, "NetworkStatusOptions", "networkStatusOptions")
 
-	encoding.SchemaDictionary["NodeInfo"] = &[]encoding.TypeField{
-		{"peerID", "p2p.PeerID"},
-		{"network", "string"},
-		{"services", "ServiceAddress[]"},
-		{"version", "string"},
-		{"commit", "string"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("peerID", "p2p.PeerID"),
+		encoding.NewTypeField("network", "string"),
+		encoding.NewTypeField("services", "ServiceAddress[]"),
+		encoding.NewTypeField("version", "string"),
+		encoding.NewTypeField("commit", "string"),
+	}, "NodeInfo", "nodeInfo")
 
-	encoding.SchemaDictionary["NodeInfoOptions"] = &[]encoding.TypeField{
-		{"peerID", "p2p.PeerID"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("peerID", "p2p.PeerID"),
+	}, "NodeInfoOptions", "nodeInfoOptions")
 
-	encoding.SchemaDictionary["PendingQuery"] = &[]encoding.TypeField{
-		{"queryType", "string"},
-		{"range", "RangeOptions"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("queryType", "string"),
+		encoding.NewTypeField("range", "RangeOptions"),
+	}, "PendingQuery", "pendingQuery")
 
-	encoding.SchemaDictionary["PublicKeyHashSearchQuery"] = &[]encoding.TypeField{
-		{"queryType", "string"},
-		{"publicKeyHash", "bytes"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("queryType", "string"),
+		encoding.NewTypeField("publicKeyHash", "bytes"),
+	}, "PublicKeyHashSearchQuery", "publicKeyHashSearchQuery")
 
-	encoding.SchemaDictionary["PublicKeySearchQuery"] = &[]encoding.TypeField{
-		{"queryType", "string"},
-		{"publicKey", "bytes"},
-		{"type", "string"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("queryType", "string"),
+		encoding.NewTypeField("publicKey", "bytes"),
+		encoding.NewTypeField("type", "string"),
+	}, "PublicKeySearchQuery", "publicKeySearchQuery")
 
-	encoding.SchemaDictionary["RangeOptions"] = &[]encoding.TypeField{
-		{"start", "uint64"},
-		{"count", "uint64"},
-		{"expand", "bool"},
-		{"fromEnd", "bool"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("start", "uint64"),
+		encoding.NewTypeField("count", "uint64"),
+		encoding.NewTypeField("expand", "bool"),
+		encoding.NewTypeField("fromEnd", "bool"),
+	}, "RangeOptions", "rangeOptions")
 
-	encoding.SchemaDictionary["Receipt"] = &[]encoding.TypeField{
-		{"start", "bytes"},
-		{"startIndex", "int64"},
-		{"end", "bytes"},
-		{"endIndex", "int64"},
-		{"anchor", "bytes"},
-		{"entries", "merkle.ReceiptEntry[]"},
-		{"localBlock", "uint64"},
-		{"localBlockTime", "string"},
-		{"majorBlock", "uint64"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("start", "bytes"),
+		encoding.NewTypeField("startIndex", "int64"),
+		encoding.NewTypeField("end", "bytes"),
+		encoding.NewTypeField("endIndex", "int64"),
+		encoding.NewTypeField("anchor", "bytes"),
+		encoding.NewTypeField("entries", "merkle.ReceiptEntry[]"),
+		encoding.NewTypeField("localBlock", "uint64"),
+		encoding.NewTypeField("localBlockTime", "string"),
+		encoding.NewTypeField("majorBlock", "uint64"),
+	}, "Receipt", "receipt")
 
-	encoding.SchemaDictionary["ReceiptOptions"] = &[]encoding.TypeField{
-		{"forAny", "bool"},
-		{"forHeight", "uint64"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("forAny", "bool"),
+		encoding.NewTypeField("forHeight", "uint64"),
+	}, "ReceiptOptions", "receiptOptions")
 
-	encoding.SchemaDictionary["RecordRange"] = &[]encoding.TypeField{
-		{"recordType", "string"},
-		{"records", "T[]"},
-		{"start", "uint64"},
-		{"total", "uint64"},
-		{"lastBlockTime", "string"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("recordType", "string"),
+		encoding.NewTypeField("records", "T[]"),
+		encoding.NewTypeField("start", "uint64"),
+		encoding.NewTypeField("total", "uint64"),
+		encoding.NewTypeField("lastBlockTime", "string"),
+	}, "RecordRange", "recordRange")
 
-	encoding.SchemaDictionary["ServiceAddress"] = &[]encoding.TypeField{
-		{"type", "uint64"},
-		{"argument", "string"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "uint64"),
+		encoding.NewTypeField("argument", "string"),
+	}, "ServiceAddress", "serviceAddress")
 
-	encoding.SchemaDictionary["SignatureSetRecord"] = &[]encoding.TypeField{
-		{"recordType", "string"},
-		{"account", "protocol.Account"},
-		{"signatures", "RecordRange[*MessageRecord[messaging.Message]]"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("recordType", "string"),
+		encoding.NewTypeField("account", "protocol.Account"),
+		encoding.NewTypeField("signatures", "RecordRange[*MessageRecord[messaging.Message]]"),
+	}, "SignatureSetRecord", "signatureSetRecord")
 
-	encoding.SchemaDictionary["Submission"] = &[]encoding.TypeField{
-		{"status", "protocol.TransactionStatus"},
-		{"success", "bool"},
-		{"message", "string"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("status", "protocol.TransactionStatus"),
+		encoding.NewTypeField("success", "bool"),
+		encoding.NewTypeField("message", "string"),
+	}, "Submission", "submission")
 
-	encoding.SchemaDictionary["SubmitOptions"] = &[]encoding.TypeField{
-		{"verify", "bool"},
-		{"wait", "bool"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("verify", "bool"),
+		encoding.NewTypeField("wait", "bool"),
+	}, "SubmitOptions", "submitOptions")
 
-	encoding.SchemaDictionary["SubscribeOptions"] = &[]encoding.TypeField{
-		{"partition", "string"},
-		{"account", "string"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("partition", "string"),
+		encoding.NewTypeField("account", "string"),
+	}, "SubscribeOptions", "subscribeOptions")
 
-	encoding.SchemaDictionary["TxIDRecord"] = &[]encoding.TypeField{
-		{"recordType", "string"},
-		{"value", "string"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("recordType", "string"),
+		encoding.NewTypeField("value", "string"),
+	}, "TxIDRecord", "txIDRecord")
 
-	encoding.SchemaDictionary["UrlRecord"] = &[]encoding.TypeField{
-		{"recordType", "string"},
-		{"value", "string"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("recordType", "string"),
+		encoding.NewTypeField("value", "string"),
+	}, "UrlRecord", "urlRecord")
 
-	encoding.SchemaDictionary["ValidateOptions"] = &[]encoding.TypeField{
-		{"full", "bool"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("full", "bool"),
+	}, "ValidateOptions", "validateOptions")
 
-	encoding.ResolveTypeDefinitions()
 }
 
 func (v *AccountRecord) MarshalJSON() ([]byte, error) {

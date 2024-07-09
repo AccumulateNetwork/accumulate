@@ -141,38 +141,37 @@ func (v *parameters) Equal(u *parameters) bool {
 	return true
 }
 
-func initEip712TypeDictionary() {
+func init() {
 
-	encoding.SchemaDictionary["branch"] = &[]encoding.TypeField{
-		{"type", "string"},
-		{"bpt", "BPT"},
-		{"parent", "branch"},
-		{"status", "branchStatus"},
-		{"height", "uint64"},
-		{"key", "bytes32"},
-		{"hash", "bytes32"},
-		{"left", "node"},
-		{"right", "node"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("bpt", "BPT"),
+		encoding.NewTypeField("parent", "branch"),
+		encoding.NewTypeField("status", "branchStatus"),
+		encoding.NewTypeField("height", "uint64"),
+		encoding.NewTypeField("key", "bytes32"),
+		encoding.NewTypeField("hash", "bytes32"),
+		encoding.NewTypeField("left", "node"),
+		encoding.NewTypeField("right", "node"),
+	}, "branch", "branch")
 
-	encoding.SchemaDictionary["emptyNode"] = &[]encoding.TypeField{
-		{"type", "string"},
-		{"parent", "branch"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("parent", "branch"),
+	}, "emptyNode", "emptyNode")
 
-	encoding.SchemaDictionary["leaf"] = &[]encoding.TypeField{
-		{"type", "string"},
-		{"key", "record.Key"},
-		{"hash", "bytes32"},
-		{"parent", "branch"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("key", "record.Key"),
+		encoding.NewTypeField("hash", "bytes32"),
+		encoding.NewTypeField("parent", "branch"),
+	}, "leaf", "leaf")
 
-	encoding.SchemaDictionary["parameters"] = &[]encoding.TypeField{
-		{"rootHash", "bytes32"},
-		{"maxHeight", "uint64"},
-		{"power", "uint64"},
-		{"mask", "uint64"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("rootHash", "bytes32"),
+		encoding.NewTypeField("maxHeight", "uint64"),
+		encoding.NewTypeField("power", "uint64"),
+		encoding.NewTypeField("mask", "uint64"),
+	}, "parameters", "parameters")
 
-	encoding.ResolveTypeDefinitions()
 }

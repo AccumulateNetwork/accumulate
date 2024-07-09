@@ -234,12 +234,6 @@ var fieldNames_Describe = []string{
 	3: "Network",
 }
 
-var fieldTypes_Describe = []string{
-	1: "string",
-	2: "string",
-	3: "Network",
-}
-
 func (v *Describe) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -299,10 +293,6 @@ var fieldNames_Network = []string{
 	1: "Id",
 }
 
-var fieldTypes_Network = []string{
-	1: "string",
-}
-
 func (v *Network) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -345,11 +335,6 @@ func (v *Network) IsValid() error {
 var fieldNames_Node = []string{
 	1: "Address",
 	2: "Type",
-}
-
-var fieldTypes_Node = []string{
-	1: "string",
-	2: "string",
 }
 
 func (v *Node) MarshalBinary() ([]byte, error) {
@@ -402,11 +387,6 @@ func (v *Node) IsValid() error {
 var fieldNames_P2P = []string{
 	1: "Listen",
 	2: "BootstrapPeers",
-}
-
-var fieldTypes_P2P = []string{
-	1: "p2p.Multiaddr[]",
-	2: "p2p.Multiaddr[]",
 }
 
 func (v *P2P) MarshalBinary() ([]byte, error) {
@@ -465,13 +445,6 @@ var fieldNames_Partition = []string{
 	2: "Type",
 	3: "BasePort",
 	4: "Nodes",
-}
-
-var fieldTypes_Partition = []string{
-	1: "string",
-	2: "string",
-	3: "int64",
-	4: "Node[]",
 }
 
 func (v *Partition) MarshalBinary() ([]byte, error) {
@@ -697,36 +670,35 @@ func (v *Partition) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
-func initEip712TypeDictionary() {
+func init() {
 
-	encoding.SchemaDictionary["Describe"] = &[]encoding.TypeField{
-		{"networkType", "string"},
-		{"partitionId", "string"},
-		{"network", "Network"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("networkType", "string"),
+		encoding.NewTypeField("partitionId", "string"),
+		encoding.NewTypeField("network", "Network"),
+	}, "Describe", "describe")
 
-	encoding.SchemaDictionary["Network"] = &[]encoding.TypeField{
-		{"id", "string"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("id", "string"),
+	}, "Network", "network")
 
-	encoding.SchemaDictionary["Node"] = &[]encoding.TypeField{
-		{"address", "string"},
-		{"type", "string"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("address", "string"),
+		encoding.NewTypeField("type", "string"),
+	}, "Node", "node")
 
-	encoding.SchemaDictionary["P2P"] = &[]encoding.TypeField{
-		{"listen", "p2p.Multiaddr[]"},
-		{"bootstrapPeers", "p2p.Multiaddr[]"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("listen", "p2p.Multiaddr[]"),
+		encoding.NewTypeField("bootstrapPeers", "p2p.Multiaddr[]"),
+	}, "P2P", "p2P")
 
-	encoding.SchemaDictionary["Partition"] = &[]encoding.TypeField{
-		{"id", "string"},
-		{"type", "string"},
-		{"basePort", "int64"},
-		{"nodes", "Node[]"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("id", "string"),
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("basePort", "int64"),
+		encoding.NewTypeField("nodes", "Node[]"),
+	}, "Partition", "partition")
 
-	encoding.ResolveTypeDefinitions()
 }
 
 func (v *Describe) MarshalJSON() ([]byte, error) {

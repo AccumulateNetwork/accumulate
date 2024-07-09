@@ -79,13 +79,6 @@ var fieldNames_serviceRegisteredEvent = []string{
 	4: "Address",
 }
 
-var fieldTypes_serviceRegisteredEvent = []string{
-	1: "string",
-	2: "p2p.PeerID",
-	3: "string",
-	4: "api.ServiceAddress",
-}
-
 func (v *serviceRegisteredEvent) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -190,16 +183,15 @@ func (v *serviceRegisteredEvent) UnmarshalFieldsFrom(reader *encoding.Reader) er
 	return nil
 }
 
-func initEip712TypeDictionary() {
+func init() {
 
-	encoding.SchemaDictionary["serviceRegisteredEvent"] = &[]encoding.TypeField{
-		{"type", "string"},
-		{"peerID", "p2p.PeerID"},
-		{"network", "string"},
-		{"address", "api.ServiceAddress"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("peerID", "p2p.PeerID"),
+		encoding.NewTypeField("network", "string"),
+		encoding.NewTypeField("address", "api.ServiceAddress"),
+	}, "serviceRegisteredEvent", "serviceRegisteredEvent")
 
-	encoding.ResolveTypeDefinitions()
 }
 
 func (v *serviceRegisteredEvent) MarshalJSON() ([]byte, error) {

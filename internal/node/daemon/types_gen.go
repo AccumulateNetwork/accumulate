@@ -128,20 +128,6 @@ var fieldNames_NodeInit = []string{
 	11: "BsnNodeKey",
 }
 
-var fieldTypes_NodeInit = []string{
-	1:  "string",
-	2:  "string",
-	3:  "string",
-	4:  "uint64",
-	5:  "string",
-	6:  "string",
-	7:  "string",
-	8:  "bytes",
-	9:  "bytes",
-	10: "bytes",
-	11: "bytes",
-}
-
 func (v *NodeInit) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -314,36 +300,35 @@ func (v *NodeInit) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
-func initEip712TypeDictionary() {
+func init() {
 
-	encoding.SchemaDictionary["BvnInit"] = &[]encoding.TypeField{
-		{"id", "string"},
-		{"nodes", "NodeInit[]"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("id", "string"),
+		encoding.NewTypeField("nodes", "NodeInit[]"),
+	}, "BvnInit", "bvnInit")
 
-	encoding.SchemaDictionary["NetworkInit"] = &[]encoding.TypeField{
-		{"id", "string"},
-		{"globals", "network.GlobalValues"},
-		{"bootstrap", "NodeInit"},
-		{"bvns", "BvnInit[]"},
-		{"bsn", "BvnInit"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("id", "string"),
+		encoding.NewTypeField("globals", "network.GlobalValues"),
+		encoding.NewTypeField("bootstrap", "NodeInit"),
+		encoding.NewTypeField("bvns", "BvnInit[]"),
+		encoding.NewTypeField("bsn", "BvnInit"),
+	}, "NetworkInit", "networkInit")
 
-	encoding.SchemaDictionary["NodeInit"] = &[]encoding.TypeField{
-		{"dnnType", "string"},
-		{"bvnnType", "string"},
-		{"bsnnType", "string"},
-		{"basePort", "uint64"},
-		{"advertizeAddress", "string"},
-		{"listenAddress", "string"},
-		{"peerAddress", "string"},
-		{"privValKey", "bytes"},
-		{"dnNodeKey", "bytes"},
-		{"bvnNodeKey", "bytes"},
-		{"bsnNodeKey", "bytes"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("dnnType", "string"),
+		encoding.NewTypeField("bvnnType", "string"),
+		encoding.NewTypeField("bsnnType", "string"),
+		encoding.NewTypeField("basePort", "uint64"),
+		encoding.NewTypeField("advertizeAddress", "string"),
+		encoding.NewTypeField("listenAddress", "string"),
+		encoding.NewTypeField("peerAddress", "string"),
+		encoding.NewTypeField("privValKey", "bytes"),
+		encoding.NewTypeField("dnNodeKey", "bytes"),
+		encoding.NewTypeField("bvnNodeKey", "bytes"),
+		encoding.NewTypeField("bsnNodeKey", "bytes"),
+	}, "NodeInit", "nodeInit")
 
-	encoding.ResolveTypeDefinitions()
 }
 
 func (v *BvnInit) MarshalJSON() ([]byte, error) {
