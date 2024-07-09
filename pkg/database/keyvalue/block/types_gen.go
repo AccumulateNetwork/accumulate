@@ -128,10 +128,6 @@ var fieldNames_endBlockEntry = []string{
 	1: "Type",
 }
 
-var fieldTypes_endBlockEntry = []string{
-	1: "string",
-}
-
 func (v *endBlockEntry) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -171,12 +167,6 @@ var fieldNames_recordEntry = []string{
 	1: "Type",
 	2: "Key",
 	3: "Length",
-}
-
-var fieldTypes_recordEntry = []string{
-	1: "string",
-	2: "record.Key",
-	3: "int64",
 }
 
 func (v *recordEntry) MarshalBinary() ([]byte, error) {
@@ -234,12 +224,6 @@ var fieldNames_startBlockEntry = []string{
 	1: "Type",
 	2: "ID",
 	3: "Parent",
-}
-
-var fieldTypes_startBlockEntry = []string{
-	1: "string",
-	2: "uint64",
-	3: "uint64",
 }
 
 func (v *startBlockEntry) MarshalBinary() ([]byte, error) {
@@ -401,25 +385,24 @@ func (v *startBlockEntry) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
-func initEip712TypeDictionary() {
+func init() {
 
-	encoding.SchemaDictionary["endBlockEntry"] = &[]encoding.TypeField{
-		{"type", "string"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+	}, "endBlockEntry", "endBlockEntry")
 
-	encoding.SchemaDictionary["recordEntry"] = &[]encoding.TypeField{
-		{"type", "string"},
-		{"key", "record.Key"},
-		{"length", "int64"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("key", "record.Key"),
+		encoding.NewTypeField("length", "int64"),
+	}, "recordEntry", "recordEntry")
 
-	encoding.SchemaDictionary["startBlockEntry"] = &[]encoding.TypeField{
-		{"type", "string"},
-		{"id", "uint64"},
-		{"parent", "uint64"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("id", "uint64"),
+		encoding.NewTypeField("parent", "uint64"),
+	}, "startBlockEntry", "startBlockEntry")
 
-	encoding.ResolveTypeDefinitions()
 }
 
 func (v *endBlockEntry) MarshalJSON() ([]byte, error) {

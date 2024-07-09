@@ -154,7 +154,6 @@ func doSha256(data []byte) []byte {
 	return hash[:]
 }
 
-
 // generates privatekey and compressed public key
 func SECP256K1Keypair() (privKey []byte, pubKey []byte) {
 	priv, _ := btc.NewPrivateKey(btc.S256())
@@ -1247,18 +1246,14 @@ func (e *EcdsaSha256Signature) Verify(sigMdHash, txnHash []byte, _ *Transaction)
  * EIP-712 Typed Data Signature
  * privateKey must be ecdsa
  */
-func SignEip712TypedData(sig *Eip712TypedDataSignature, privateKeyDer, sigMdHash, txnHash []byte) error {
-	//private key is expected to be in PKCS #1, ASN.1 DER format
-	privateKey, err := x509.ParsePKCS1PrivateKey(privateKeyDer)
+func SignEip712TypedData(sig *Eip712TypedDataSignature, privateKey, sigMdHash, txnHash []byte) error {
+	priv, err := eth.ToECDSA(privateKey)
 	if err != nil {
 		return err
 	}
 
-	// Sign the signing hash
-	sig.Signature, err = rsa.SignPKCS1v15(rand.Reader, privateKey, crypto.SHA256, signingHash(sig, doSha256, sigMdHash, txnHash))
-	if err != nil {
-		return err
-	}
+	sig.PublicKey = eth.FromECDSAPub(&priv.PublicKey)
+	sig.Signature, err = eth.Sign(signingHash(sig, doSha256, sigMdHash, txnHash), priv)
 	return nil
 }
 
@@ -1319,16 +1314,11 @@ func (s *Eip712TypedDataSignature) GetVote() VoteType {
 // Verify returns true if this signature is a valid EIP-712 signature following
 // the spec.
 func (e *Eip712TypedDataSignature) Verify(sigMdHash, txnHash []byte, txn *Transaction) bool {
-	//must marshal the typed data from json into binary, and generate transaction hash
-
-	err := txn.UnmarshalBinary(e.Data) //UnmarshalJSON([]byte(e.TypedData))
+	typedDataTxnHash, err := Eip712Hasher(txn)
 	if err != nil {
 		return false
 	}
 
-	//lookup the type
-	//map the type
-	typedDataTxnHash := txn.Hash()
 	if !bytes.Equal(typedDataTxnHash[:], txnHash) {
 		return false
 	}

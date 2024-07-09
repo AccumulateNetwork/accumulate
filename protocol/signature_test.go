@@ -16,7 +16,6 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/hex"
-	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"math/big"
@@ -55,7 +54,7 @@ func TestBTCSignature(t *testing.T) {
 	secp.PublicKey = pbkey.SerializeCompressed()
 
 	require.NoError(t, SignBTC(secp, privkey.Serialize(), nil, hash[:]))
-	res := secp.Verify(nil, hash[:])
+	res := secp.Verify(nil, hash[:], nil)
 
 	require.Equal(t, res, true)
 
@@ -75,7 +74,7 @@ func TestBTCLegacySignature(t *testing.T) {
 	secp.PublicKey = pbkey.SerializeUncompressed()
 
 	require.NoError(t, SignBTCLegacy(secp, privkey.Serialize(), nil, hash[:]))
-	res := secp.Verify(nil, hash[:])
+	res := secp.Verify(nil, hash[:], nil)
 
 	require.Equal(t, res, true)
 
@@ -99,9 +98,9 @@ func TestETHSignature(t *testing.T) {
 	t.Logf("Eth ad Der Hash        %x", hash[:])
 
 	//should fail
-	require.Equal(t, VerifyUserSignature(secp, hash[:]), false)
+	require.Equal(t, VerifyUserSignature(secp, hash[:], nil), false)
 	//should pass
-	require.Equal(t, VerifyUserSignatureV1(secp, hash[:]), true)
+	require.Equal(t, VerifyUserSignatureV1(secp, hash[:], nil), true)
 
 	//public key should still match
 	keyComp, err := eth.UnmarshalPubkey(secp.PublicKey)
@@ -118,9 +117,9 @@ func TestETHSignature(t *testing.T) {
 	t.Logf("Eth as VRS signature  %x", secp.Signature)
 	t.Logf("Eth ad VRS Hash       %x", hash[:])
 	//should fail
-	require.Equal(t, VerifyUserSignatureV1(secp, hash[:]), false)
+	require.Equal(t, VerifyUserSignatureV1(secp, hash[:], nil), false)
 	//should pass
-	require.Equal(t, VerifyUserSignature(secp, hash[:]), true)
+	require.Equal(t, VerifyUserSignature(secp, hash[:], nil), true)
 
 	t.Logf("Signature: %x", secp.Signature)
 }
@@ -321,7 +320,7 @@ func TestRsaSha256Signature(t *testing.T) {
 	require.NoError(t, SignRsaSha256(rsaSha256, x509.MarshalPKCS1PrivateKey(privKey), nil, hash[:]))
 
 	//should fail
-	require.Equal(t, VerifyUserSignature(rsaSha256, hash[:]), true)
+	require.Equal(t, VerifyUserSignature(rsaSha256, hash[:], nil), true)
 	//public key should still match
 	keyComp, err := x509.ParsePKCS1PublicKey(rsaSha256.PublicKey)
 	require.NoError(t, err)
@@ -340,7 +339,7 @@ func TestRsaSha256Signature(t *testing.T) {
 	require.NoError(t, SignRsaSha256(rsaSha256, x509.MarshalPKCS1PrivateKey(privKey), nil, hash[:]))
 
 	//should fail
-	require.Equal(t, VerifyUserSignature(rsaSha256, hash[:]), true)
+	require.Equal(t, VerifyUserSignature(rsaSha256, hash[:], nil), true)
 	//public key should still match
 	keyComp, err = x509.ParsePKCS1PublicKey(rsaSha256.PublicKey)
 	require.NoError(t, err)
@@ -359,7 +358,7 @@ func TestRsaSha256Signature(t *testing.T) {
 	require.NoError(t, SignRsaSha256(rsaSha256, x509.MarshalPKCS1PrivateKey(privKey), nil, hash[:]))
 
 	//should fail
-	require.Equal(t, VerifyUserSignature(rsaSha256, hash[:]), true)
+	require.Equal(t, VerifyUserSignature(rsaSha256, hash[:], nil), true)
 	//public key should still match
 	keyComp, err = x509.ParsePKCS1PublicKey(rsaSha256.PublicKey)
 	require.NoError(t, err)
@@ -488,70 +487,111 @@ func TestTypesFromCerts(t *testing.T) {
 		}
 
 		//should not fail
-		require.Equal(t, VerifyUserSignature(sig, hash[:]), true)
+		require.Equal(t, VerifyUserSignature(sig, hash[:], nil), true)
 	}
-}
-
-//var EIP712DomainType = EIP712Domain{
-//	Name:    "Accumulate",
-//	Version: "0.0.1",
-//	ChainId: 281,
-//}
-
-type TypedDataTransaction struct {
-	Transaction     json.RawMessage `json:"transaction"`
-	TransactionHash [32]byte        `json:"transactionHash"`
-}
-
-type Eip712TypedDataPayload struct {
-	Types                json.RawMessage `json:"types"`
-	PrimaryType          string          `json:"types"`
-	TypedDataTransaction TypedDataTransaction
 }
 
 func TestEip712TypedDataSignature(t *testing.T) {
 	tokenTransaction :=
+		[]byte(`{
+		  "types": {
+			"EIP712Domain": [
+			  {"name": "name", "type": "string"},
+			  {"name": "version", "type": "string"},
+			  {"name": "chainId", "type": "uint256"},
+			],
+			"SendTokens": [ 
+			  {"name": "type", "type": "string"},
+			  {"name": "to", "type": "TokenRecipient[]"}
+			],
+			"TokenRecipient": [
+			  {"name": "url", "type": "string"},
+			  {"name": "amount", "type": "uint256"},
+			],
+			"TransactionHeader" : [
+			   {"name": "principal", "type": "string"},
+			   {"name": "initiator", "type": "bytes32"},
+			],
+			"Transaction" : [
+				{ "name" : "header", "type" : "TransactionHeader" },
+				{ "name" : "body", "type" : "SendTokens" }, 
+			],
+		  },
+		  "primaryType": "SendTokens",
+		  "domain": {
+			"name": "Accumulate",
+			"version": "1.0.0",
+			"chainId": "281",
+		  },
+		"message": {
+			"header": {
+			  "principal": "acc://adi.acme/ACME",
+			  "initiator": "84e032fba8a5456f631c822a2b2466c18b3fa7804330ab87088ed6e30d690505"
+			},
+			"body": {
+			  "type": "sendTokens",
+			  "to": [
+				{
+				  "url": "acc://other.acme/ACME",
+				  "amount": "10000000000"
+				}
+			  ]
+			}
+		  }
+		}`)
+
+	txn := Transaction{}
+	err := txn.UnmarshalJSON([]byte(`{"header": {
+		"principal": "acc://adi.acme/ACME",
+			"initiator": "84e032fba8a5456f631c822a2b2466c18b3fa7804330ab87088ed6e30d690505"
+	},
+	"body": {
+		"type": "sendTokens",
+			"to": [
+	{
+	"url": "acc://other.acme/ACME",
+	"amount": "10000000000"
+	}
+	]
+	}}`))
+
+	require.NoError(t, err)
+
+	_ = tokenTransaction
+
+	hash, err := Eip712Hasher(&txn)
+	require.NoError(t, err)
+
+	eip712sig := new(Eip712TypedDataSignature)
+	priv, _ := SECP256K1Keypair()
+	require.NoError(t, SignEip712TypedData(eip712sig, priv, nil, hash[:]))
+
+	require.True(t, eip712sig.Verify(nil, hash, &txn))
+
+	//test edge case:
+	keyPageUpdate := []byte(
 		`{
-  "types": {
-    "EIP712Domain": [
-      {"name": "name", "type": "string"},
-      {"name": "version", "type": "string"},
-      {"name": "chainId", "type": "uint"},
-    ],
-    "SendTokens": [
-      {"name": "hash", "type": "bytes32"},
-      {"name": "meta", "type": "string"}, 
-      {"name": "to", "type": "TokenRecipient[]"}
-    ],
-    "TokenRecipient": [
-      {"name": "url", "type": "string"},
-      {"name": "amount", "type": "uint256"} 
-    ]
-  },
-  "primaryType": "SendTokens",
-  "domain": {
-    "name": "Accumulate",
-    "version": "1.0",
-    "chainId": 281,
-  },
-  "message": {
                 "header": {
-                  "principal": "acc://adi.acme/ACME",
-                  "initiator": "84e032fba8a5456f631c822a2b2466c18b3fa7804330ab87088ed6e30d690505"
+                  "principal": "acc://adi.acme",
+                  "initiator": "5c90ac449d17c448141def36197ce8d63852b85f91621b1015e553ccbbd0f2f2"
                 },
                 "body": {
-                  "type": "sendTokens",
-                  "to": [
+                  "type": "updateKeyPage",
+                  "operation": [
                     {
-                      "url": "acc://other.acme/ACME",
-                      "amount": "100"
+                      "type": "add",
+                      "entry": {
+                        "keyHash": "e55d973bf691381c94602354d1e1f655f7b1c4bd56760dffeffa2bef4541ec11"
+                      }
                     }
                   ]
                 }
-              }
-}
-`
+		}`)
 
-	sig := Eip712TypedDataSignature{}
+	err = txn.UnmarshalJSON(keyPageUpdate)
+	require.NoError(t, err)
+
+	hash, err = Eip712Hasher(&txn)
+	require.NoError(t, err)
 
 }
