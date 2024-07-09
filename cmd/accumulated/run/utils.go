@@ -38,11 +38,11 @@ var (
 
 func Ptr[T any](v T) *T { return &v }
 
-func setDefaultPtr[V any](ptr **V, def V) *V {
+func setDefaultPtr[V any](ptr **V, def V) V {
 	if *ptr == nil {
 		*ptr = &def
 	}
-	return *ptr
+	return **ptr
 }
 
 func setDefaultVal[V any](ptr *V, def V) V {
