@@ -248,16 +248,6 @@ var fieldNames_recordBlock = []string{
 	7: "Changes",
 }
 
-var fieldTypes_recordBlock = []string{
-	1: "bool",
-	2: "uint64",
-	3: "string",
-	4: "string",
-	5: "string",
-	6: "messaging.Envelope[]",
-	7: "recordChange[]",
-}
-
 func (v *recordBlock) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -354,11 +344,6 @@ var fieldNames_recordChange = []string{
 	2: "Value",
 }
 
-var fieldTypes_recordChange = []string{
-	1: "record.Key",
-	2: "bytes",
-}
-
 func (v *recordChange) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -410,12 +395,6 @@ var fieldNames_recordHeader = []string{
 	1: "Partition",
 	2: "Config",
 	3: "NodeID",
-}
-
-var fieldTypes_recordHeader = []string{
-	1: "protocol.PartitionInfo",
-	2: "accumulated.NodeInit",
-	3: "string",
 }
 
 func (v *recordHeader) MarshalBinary() ([]byte, error) {
@@ -475,10 +454,6 @@ func (v *recordHeader) IsValid() error {
 
 var fieldNames_recordMessages = []string{
 	1: "Messages",
-}
-
-var fieldTypes_recordMessages = []string{
-	1: "consensus.Message[]",
 }
 
 func (v *recordMessages) MarshalBinary() ([]byte, error) {
@@ -658,34 +633,33 @@ func (v *recordMessages) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
-func initEip712TypeDictionary() {
+func init() {
 
-	encoding.SchemaDictionary["recordBlock"] = &[]encoding.TypeField{
-		{"isLeader", "bool"},
-		{"index", "uint64"},
-		{"time", "string"},
-		{"commitInfo", "string"},
-		{"evidence", "string"},
-		{"submissions", "messaging.Envelope[]"},
-		{"changes", "recordChange[]"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("isLeader", "bool"),
+		encoding.NewTypeField("index", "uint64"),
+		encoding.NewTypeField("time", "string"),
+		encoding.NewTypeField("commitInfo", "string"),
+		encoding.NewTypeField("evidence", "string"),
+		encoding.NewTypeField("submissions", "messaging.Envelope[]"),
+		encoding.NewTypeField("changes", "recordChange[]"),
+	}, "recordBlock", "recordBlock")
 
-	encoding.SchemaDictionary["recordChange"] = &[]encoding.TypeField{
-		{"key", "record.Key"},
-		{"value", "bytes"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("key", "record.Key"),
+		encoding.NewTypeField("value", "bytes"),
+	}, "recordChange", "recordChange")
 
-	encoding.SchemaDictionary["recordHeader"] = &[]encoding.TypeField{
-		{"partition", "protocol.PartitionInfo"},
-		{"config", "accumulated.NodeInit"},
-		{"nodeID", "string"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("partition", "protocol.PartitionInfo"),
+		encoding.NewTypeField("config", "accumulated.NodeInit"),
+		encoding.NewTypeField("nodeID", "string"),
+	}, "recordHeader", "recordHeader")
 
-	encoding.SchemaDictionary["recordMessages"] = &[]encoding.TypeField{
-		{"messages", "consensus.Message[]"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("messages", "consensus.Message[]"),
+	}, "recordMessages", "recordMessages")
 
-	encoding.ResolveTypeDefinitions()
 }
 
 func (v *recordBlock) MarshalJSON() ([]byte, error) {

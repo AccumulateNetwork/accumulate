@@ -637,13 +637,6 @@ var fieldNames_BlockProposal = []string{
 	4: "Envelopes",
 }
 
-var fieldTypes_BlockProposal = []string{
-	1: "LeaderProposal",
-	2: "uint64",
-	3: "string",
-	4: "messaging.Envelope[]",
-}
-
 func (v *BlockProposal) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -710,11 +703,6 @@ var fieldNames_BlockResults = []string{
 	2: "ValidatorUpdates",
 }
 
-var fieldTypes_BlockResults = []string{
-	1: "protocol.TransactionStatus[]",
-	2: "ValidatorUpdate[]",
-}
-
 func (v *BlockResults) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -770,10 +758,6 @@ var fieldNames_CommitResult = []string{
 	1: "Hash",
 }
 
-var fieldTypes_CommitResult = []string{
-	1: "bytes32",
-}
-
 func (v *CommitResult) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -816,11 +800,6 @@ func (v *CommitResult) IsValid() error {
 var fieldNames_EnvelopeSubmitted = []string{
 	1: "Type",
 	2: "Results",
-}
-
-var fieldTypes_EnvelopeSubmitted = []string{
-	1: "string",
-	2: "protocol.TransactionStatus[]",
 }
 
 func (v *EnvelopeSubmitted) MarshalBinary() ([]byte, error) {
@@ -872,12 +851,6 @@ var fieldNames_ExecutedBlock = []string{
 	1: "Type",
 	2: "Network",
 	3: "Node",
-}
-
-var fieldTypes_ExecutedBlock = []string{
-	1: "string",
-	2: "string",
-	3: "bytes32",
 }
 
 func (v *ExecutedBlock) MarshalBinary() ([]byte, error) {
@@ -935,10 +908,6 @@ var fieldNames_LeaderProposal = []string{
 	1: "Leader",
 }
 
-var fieldTypes_LeaderProposal = []string{
-	1: "bytes32",
-}
-
 func (v *LeaderProposal) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -982,10 +951,6 @@ var fieldNames_StartBlock = []string{
 	1: "Type",
 }
 
-var fieldTypes_StartBlock = []string{
-	1: "string",
-}
-
 func (v *StartBlock) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -1026,13 +991,6 @@ var fieldNames_SubmitEnvelope = []string{
 	2: "Network",
 	3: "Envelope",
 	4: "Pretend",
-}
-
-var fieldTypes_SubmitEnvelope = []string{
-	1: "string",
-	2: "string",
-	3: "messaging.Envelope",
-	4: "bool",
 }
 
 func (v *SubmitEnvelope) MarshalBinary() ([]byte, error) {
@@ -1100,12 +1058,6 @@ var fieldNames_ValidatorUpdate = []string{
 	3: "Power",
 }
 
-var fieldTypes_ValidatorUpdate = []string{
-	1: "string",
-	2: "bytes",
-	3: "int64",
-}
-
 func (v *ValidatorUpdate) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -1167,12 +1119,6 @@ var fieldNames_acceptBlockProposal = []string{
 	3: "p",
 }
 
-var fieldTypes_acceptBlockProposal = []string{
-	1: "string",
-	2: "baseNodeMessage",
-	3: "proposeBlock",
-}
-
 func (v *acceptBlockProposal) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -1225,13 +1171,6 @@ var fieldNames_acceptedSubmission = []string{
 	2: "baseNodeMessage",
 	3: "result",
 	4: "env",
-}
-
-var fieldTypes_acceptedSubmission = []string{
-	1: "string",
-	2: "baseNodeMessage",
-	3: "EnvelopeSubmitted",
-	4: "messaging.Envelope",
 }
 
 func (v *acceptedSubmission) MarshalBinary() ([]byte, error) {
@@ -1294,11 +1233,6 @@ var fieldNames_baseNodeMessage = []string{
 	2: "Network",
 }
 
-var fieldTypes_baseNodeMessage = []string{
-	1: "bytes32",
-	2: "string",
-}
-
 func (v *baseNodeMessage) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -1350,12 +1284,6 @@ var fieldNames_committedBlock = []string{
 	1: "Type",
 	2: "baseNodeMessage",
 	3: "results",
-}
-
-var fieldTypes_committedBlock = []string{
-	1: "string",
-	2: "baseNodeMessage",
-	3: "CommitResult",
 }
 
 func (v *committedBlock) MarshalBinary() ([]byte, error) {
@@ -1411,12 +1339,6 @@ var fieldNames_finalizedBlock = []string{
 	3: "results",
 }
 
-var fieldTypes_finalizedBlock = []string{
-	1: "string",
-	2: "baseNodeMessage",
-	3: "BlockResults",
-}
-
 func (v *finalizedBlock) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -1470,12 +1392,6 @@ var fieldNames_proposeBlock = []string{
 	3: "BlockProposal",
 }
 
-var fieldTypes_proposeBlock = []string{
-	1: "string",
-	2: "baseNodeMessage",
-	3: "BlockProposal",
-}
-
 func (v *proposeBlock) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -1521,12 +1437,6 @@ func (v *proposeBlock) IsValid() error {
 
 var fieldNames_proposeLeader = []string{
 	1: "Type",
-	2: "baseNodeMessage",
-	3: "LeaderProposal",
-}
-
-var fieldTypes_proposeLeader = []string{
-	1: "string",
 	2: "baseNodeMessage",
 	3: "LeaderProposal",
 }
@@ -2108,108 +2018,107 @@ func (v *proposeLeader) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
-func initEip712TypeDictionary() {
+func init() {
 
-	encoding.SchemaDictionary["BlockProposal"] = &[]encoding.TypeField{
-		{"leader", "bytes32"},
-		{"index", "uint64"},
-		{"time", "string"},
-		{"envelopes", "messaging.Envelope[]"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("leader", "bytes32"),
+		encoding.NewTypeField("index", "uint64"),
+		encoding.NewTypeField("time", "string"),
+		encoding.NewTypeField("envelopes", "messaging.Envelope[]"),
+	}, "BlockProposal", "blockProposal")
 
-	encoding.SchemaDictionary["BlockResults"] = &[]encoding.TypeField{
-		{"messageResults", "protocol.TransactionStatus[]"},
-		{"validatorUpdates", "ValidatorUpdate[]"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("messageResults", "protocol.TransactionStatus[]"),
+		encoding.NewTypeField("validatorUpdates", "ValidatorUpdate[]"),
+	}, "BlockResults", "blockResults")
 
-	encoding.SchemaDictionary["CommitResult"] = &[]encoding.TypeField{
-		{"hash", "bytes32"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("hash", "bytes32"),
+	}, "CommitResult", "commitResult")
 
-	encoding.SchemaDictionary["EnvelopeSubmitted"] = &[]encoding.TypeField{
-		{"type", "string"},
-		{"results", "protocol.TransactionStatus[]"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("results", "protocol.TransactionStatus[]"),
+	}, "EnvelopeSubmitted", "envelopeSubmitted")
 
-	encoding.SchemaDictionary["ExecutedBlock"] = &[]encoding.TypeField{
-		{"type", "string"},
-		{"network", "string"},
-		{"node", "bytes32"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("network", "string"),
+		encoding.NewTypeField("node", "bytes32"),
+	}, "ExecutedBlock", "executedBlock")
 
-	encoding.SchemaDictionary["LeaderProposal"] = &[]encoding.TypeField{
-		{"leader", "bytes32"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("leader", "bytes32"),
+	}, "LeaderProposal", "leaderProposal")
 
-	encoding.SchemaDictionary["StartBlock"] = &[]encoding.TypeField{
-		{"type", "string"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+	}, "StartBlock", "startBlock")
 
-	encoding.SchemaDictionary["SubmitEnvelope"] = &[]encoding.TypeField{
-		{"type", "string"},
-		{"network", "string"},
-		{"envelope", "messaging.Envelope"},
-		{"pretend", "bool"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("network", "string"),
+		encoding.NewTypeField("envelope", "messaging.Envelope"),
+		encoding.NewTypeField("pretend", "bool"),
+	}, "SubmitEnvelope", "submitEnvelope")
 
-	encoding.SchemaDictionary["ValidatorUpdate"] = &[]encoding.TypeField{
-		{"type", "string"},
-		{"publicKey", "bytes"},
-		{"power", "int64"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("publicKey", "bytes"),
+		encoding.NewTypeField("power", "int64"),
+	}, "ValidatorUpdate", "validatorUpdate")
 
-	encoding.SchemaDictionary["acceptBlockProposal"] = &[]encoding.TypeField{
-		{"type", "string"},
-		{"pubKeyHash", "bytes32"},
-		{"network", "string"},
-		{"p", "proposeBlock"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("pubKeyHash", "bytes32"),
+		encoding.NewTypeField("network", "string"),
+		encoding.NewTypeField("p", "proposeBlock"),
+	}, "acceptBlockProposal", "acceptBlockProposal")
 
-	encoding.SchemaDictionary["acceptedSubmission"] = &[]encoding.TypeField{
-		{"type", "string"},
-		{"pubKeyHash", "bytes32"},
-		{"network", "string"},
-		{"result", "EnvelopeSubmitted"},
-		{"env", "messaging.Envelope"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("pubKeyHash", "bytes32"),
+		encoding.NewTypeField("network", "string"),
+		encoding.NewTypeField("result", "EnvelopeSubmitted"),
+		encoding.NewTypeField("env", "messaging.Envelope"),
+	}, "acceptedSubmission", "acceptedSubmission")
 
-	encoding.SchemaDictionary["baseNodeMessage"] = &[]encoding.TypeField{
-		{"pubKeyHash", "bytes32"},
-		{"network", "string"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("pubKeyHash", "bytes32"),
+		encoding.NewTypeField("network", "string"),
+	}, "baseNodeMessage", "baseNodeMessage")
 
-	encoding.SchemaDictionary["committedBlock"] = &[]encoding.TypeField{
-		{"type", "string"},
-		{"pubKeyHash", "bytes32"},
-		{"network", "string"},
-		{"results", "CommitResult"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("pubKeyHash", "bytes32"),
+		encoding.NewTypeField("network", "string"),
+		encoding.NewTypeField("results", "CommitResult"),
+	}, "committedBlock", "committedBlock")
 
-	encoding.SchemaDictionary["finalizedBlock"] = &[]encoding.TypeField{
-		{"type", "string"},
-		{"pubKeyHash", "bytes32"},
-		{"network", "string"},
-		{"results", "BlockResults"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("pubKeyHash", "bytes32"),
+		encoding.NewTypeField("network", "string"),
+		encoding.NewTypeField("results", "BlockResults"),
+	}, "finalizedBlock", "finalizedBlock")
 
-	encoding.SchemaDictionary["proposeBlock"] = &[]encoding.TypeField{
-		{"type", "string"},
-		{"pubKeyHash", "bytes32"},
-		{"network", "string"},
-		{"leaderProposal", "LeaderProposal"},
-		{"index", "uint64"},
-		{"time", "string"},
-		{"envelopes", "messaging.Envelope[]"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("pubKeyHash", "bytes32"),
+		encoding.NewTypeField("network", "string"),
+		encoding.NewTypeField("leaderProposal", "LeaderProposal"),
+		encoding.NewTypeField("index", "uint64"),
+		encoding.NewTypeField("time", "string"),
+		encoding.NewTypeField("envelopes", "messaging.Envelope[]"),
+	}, "proposeBlock", "proposeBlock")
 
-	encoding.SchemaDictionary["proposeLeader"] = &[]encoding.TypeField{
-		{"type", "string"},
-		{"pubKeyHash", "bytes32"},
-		{"network", "string"},
-		{"leader", "bytes32"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("pubKeyHash", "bytes32"),
+		encoding.NewTypeField("network", "string"),
+		encoding.NewTypeField("leader", "bytes32"),
+	}, "proposeLeader", "proposeLeader")
 
-	encoding.ResolveTypeDefinitions()
 }
 
 func (v *BlockProposal) MarshalJSON() ([]byte, error) {

@@ -165,18 +165,6 @@ var fieldNames_{{.Name}} = []string{
 	{{- end}}
 }
 
-var fieldTypes_{{.Name}} = []string{
-	{{- range .Fields}}
-	{{- if and .IsBinary .IsMarshalled}}
-	{{- if .IsEmbedded}}
-	{{.Number}}: "{{resolveEip712Type . false}}",
-	{{- else}}
-	{{.Number}}: "{{resolveEip712Type . false}}",
-	{{- end}}
-	{{- end}}
-	{{- end}}
-}
-
 
 func (v *{{.FullName true false}}) MarshalBinary() ([]byte, error) {
 	if v == nil {
@@ -348,22 +336,21 @@ if !({{template "jsonAltIsZero" .}}) {
 {{- end}}
 
 
-func initEip712TypeDictionary() {
+func init() {
 {{range .Types}}
-    encoding.SchemaDictionary["{{.Name}}"] = &[]encoding.TypeField{
-    {{- range .Fields}}
-    	{{- if .IsEmbedded}}
-    	{{- $name := get .}}
-    	{{- range .TypeRef.Fields}}
-    	{"{{lcName .Name}}", "{{resolveEip712Type . false}}"},
-    	{{- end}}
-    	{{- else}}
-    	{"{{lcName .Name}}", "{{resolveEip712Type . false}}"},
-        {{- end}}
-        {{- end}}
-    }
+    encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+        {{- range .Fields}}
+            {{- if .IsEmbedded}}
+            {{- $name := get .}}
+            {{- range .TypeRef.Fields}}
+            {{resolveEip712Type . false}},
+            {{- end}}
+            {{- else}}
+            {{resolveEip712Type . false}},
+            {{- end}}
+            {{- end}}
+        }, "{{.Name}}", "{{lcName .Name}}")
 {{end}}
-    encoding.ResolveTypeDefinitions()
 }
 
 {{range .Types}}{{if needsCustomJSON .}}

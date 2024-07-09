@@ -185,11 +185,6 @@ var fieldNames_DbPatch = []string{
 	2: "Result",
 }
 
-var fieldTypes_DbPatch = []string{
-	1: "DbPatchOp[]",
-	2: "DbPatchResult",
-}
-
 func (v *DbPatch) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -243,10 +238,6 @@ var fieldNames_DbPatchResult = []string{
 	1: "StateHash",
 }
 
-var fieldTypes_DbPatchResult = []string{
-	1: "bytes32",
-}
-
 func (v *DbPatchResult) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -289,11 +280,6 @@ func (v *DbPatchResult) IsValid() error {
 var fieldNames_DeleteDbPatchOp = []string{
 	1: "Type",
 	2: "Key",
-}
-
-var fieldTypes_DeleteDbPatchOp = []string{
-	1: "string",
-	2: "record.Key",
 }
 
 func (v *DeleteDbPatchOp) MarshalBinary() ([]byte, error) {
@@ -343,12 +329,6 @@ var fieldNames_PutDbPatchOp = []string{
 	1: "Type",
 	2: "Key",
 	3: "Value",
-}
-
-var fieldTypes_PutDbPatchOp = []string{
-	1: "string",
-	2: "record.Key",
-	3: "bytes",
 }
 
 func (v *PutDbPatchOp) MarshalBinary() ([]byte, error) {
@@ -533,29 +513,28 @@ func (v *PutDbPatchOp) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
-func initEip712TypeDictionary() {
+func init() {
 
-	encoding.SchemaDictionary["DbPatch"] = &[]encoding.TypeField{
-		{"operations", "DbPatchOp[]"},
-		{"result", "DbPatchResult"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("operations", "DbPatchOp[]"),
+		encoding.NewTypeField("result", "DbPatchResult"),
+	}, "DbPatch", "dbPatch")
 
-	encoding.SchemaDictionary["DbPatchResult"] = &[]encoding.TypeField{
-		{"stateHash", "bytes32"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("stateHash", "bytes32"),
+	}, "DbPatchResult", "dbPatchResult")
 
-	encoding.SchemaDictionary["DeleteDbPatchOp"] = &[]encoding.TypeField{
-		{"type", "string"},
-		{"key", "record.Key"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("key", "record.Key"),
+	}, "DeleteDbPatchOp", "deleteDbPatchOp")
 
-	encoding.SchemaDictionary["PutDbPatchOp"] = &[]encoding.TypeField{
-		{"type", "string"},
-		{"key", "record.Key"},
-		{"value", "bytes"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("key", "record.Key"),
+		encoding.NewTypeField("value", "bytes"),
+	}, "PutDbPatchOp", "putDbPatchOp")
 
-	encoding.ResolveTypeDefinitions()
 }
 
 func (v *DbPatch) MarshalJSON() ([]byte, error) {
