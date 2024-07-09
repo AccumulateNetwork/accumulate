@@ -7,6 +7,7 @@
 package run
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -246,12 +247,10 @@ func (c *ConsensusService) start(inst *Instance) error {
 		return errors.UnknownError.WithFormat("start consensus: %w", err)
 	}
 
-	inst.cleanup(func() {
+	inst.cleanup(func(context.Context) error {
 		err := node.Stop()
-		if err != nil {
-			slog.ErrorContext(inst.context, "Error while stopping node", "error", err)
-		}
 		node.Wait()
+		return err
 	})
 
 	err = consensusProvidesEventBus.Register(inst.services, c, d.eventBus)

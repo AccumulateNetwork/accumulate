@@ -7,6 +7,7 @@
 package run
 
 import (
+	"context"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
@@ -98,7 +99,7 @@ func (f *FaucetService) start(inst *Instance) error {
 			return
 		}
 
-		inst.cleanup(func() { impl.Stop() })
+		inst.cleanup(func(context.Context) error { impl.Stop(); return nil })
 		registerRpcService(inst, impl.ServiceAddress(), message.Faucet{Faucet: impl})
 		inst.logger.Info("Ready", "module", "run", "service", "faucet")
 	}()
