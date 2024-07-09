@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"strings"
 	"time"
@@ -50,6 +51,8 @@ type CometPrivValFile struct {
 
 type Config struct {
 	file            string
+	fs              fs.FS
+	DotEnv          *bool            `json:"dotEnv,omitempty" form:"dotEnv" query:"dotEnv" validate:"required"`
 	Network         string           `json:"network,omitempty" form:"network" query:"network" validate:"required"`
 	Logging         *Logging         `json:"logging,omitempty" form:"logging" query:"logging" validate:"required"`
 	Instrumentation *Instrumentation `json:"instrumentation,omitempty" form:"instrumentation" query:"instrumentation" validate:"required"`
@@ -359,6 +362,10 @@ func (v *CometPrivValFile) CopyAsInterface() interface{} { return v.Copy() }
 func (v *Config) Copy() *Config {
 	u := new(Config)
 
+	if v.DotEnv != nil {
+		u.DotEnv = new(bool)
+		*u.DotEnv = *v.DotEnv
+	}
 	u.Network = v.Network
 	if v.Logging != nil {
 		u.Logging = (v.Logging).Copy()
@@ -976,6 +983,14 @@ func (v *CometPrivValFile) Equal(u *CometPrivValFile) bool {
 }
 
 func (v *Config) Equal(u *Config) bool {
+	switch {
+	case v.DotEnv == u.DotEnv:
+		// equal
+	case v.DotEnv == nil || u.DotEnv == nil:
+		return false
+	case !(*v.DotEnv == *u.DotEnv):
+		return false
+	}
 	if !(v.Network == u.Network) {
 		return false
 	}
@@ -1948,6 +1963,7 @@ func (v *CometPrivValFile) MarshalJSON() ([]byte, error) {
 
 func (v *Config) MarshalJSON() ([]byte, error) {
 	u := struct {
+		DotEnv          *bool                                          `json:"dotEnv,omitempty"`
 		Network         string                                         `json:"network,omitempty"`
 		Logging         *Logging                                       `json:"logging,omitempty"`
 		Instrumentation *Instrumentation                               `json:"instrumentation,omitempty"`
@@ -1955,6 +1971,9 @@ func (v *Config) MarshalJSON() ([]byte, error) {
 		Configurations  *encoding.JsonUnmarshalListWith[Configuration] `json:"configurations,omitempty"`
 		Services        *encoding.JsonUnmarshalListWith[Service]       `json:"services,omitempty"`
 	}{}
+	if !(v.DotEnv == nil) {
+		u.DotEnv = v.DotEnv
+	}
 	if !(len(v.Network) == 0) {
 		u.Network = v.Network
 	}
@@ -2667,6 +2686,7 @@ func (v *CometPrivValFile) UnmarshalJSON(data []byte) error {
 
 func (v *Config) UnmarshalJSON(data []byte) error {
 	u := struct {
+		DotEnv          *bool                                          `json:"dotEnv,omitempty"`
 		Network         string                                         `json:"network,omitempty"`
 		Logging         *Logging                                       `json:"logging,omitempty"`
 		Instrumentation *Instrumentation                               `json:"instrumentation,omitempty"`
@@ -2675,6 +2695,7 @@ func (v *Config) UnmarshalJSON(data []byte) error {
 		Services        *encoding.JsonUnmarshalListWith[Service]       `json:"services,omitempty"`
 	}{}
 
+	u.DotEnv = v.DotEnv
 	u.Network = v.Network
 	u.Logging = v.Logging
 	u.Instrumentation = v.Instrumentation
@@ -2685,6 +2706,7 @@ func (v *Config) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return err
 	}
+	v.DotEnv = u.DotEnv
 	v.Network = u.Network
 	v.Logging = u.Logging
 	v.Instrumentation = u.Instrumentation
