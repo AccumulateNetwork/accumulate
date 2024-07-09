@@ -327,15 +327,6 @@ var fieldNames_Receipt = []string{
 	6: "Entries",
 }
 
-var fieldTypes_Receipt = []string{
-	1: "bytes",
-	2: "int64",
-	3: "bytes",
-	4: "int64",
-	5: "bytes",
-	6: "ReceiptEntry[]",
-}
-
 func (v *Receipt) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -422,11 +413,6 @@ var fieldNames_ReceiptEntry = []string{
 	2: "Hash",
 }
 
-var fieldTypes_ReceiptEntry = []string{
-	1: "bool",
-	2: "bytes",
-}
-
 func (v *ReceiptEntry) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -479,13 +465,6 @@ var fieldNames_ReceiptList = []string{
 	2: "Elements",
 	3: "Receipt",
 	4: "ContinuedReceipt",
-}
-
-var fieldTypes_ReceiptList = []string{
-	1: "State",
-	2: "bytes[]",
-	3: "Receipt",
-	4: "Receipt",
 }
 
 func (v *ReceiptList) MarshalBinary() ([]byte, error) {
@@ -559,12 +538,6 @@ var fieldNames_chainIndexBlock = []string{
 	3: "Entries",
 }
 
-var fieldTypes_chainIndexBlock = []string{
-	1: "uint64",
-	2: "uint64",
-	3: "chainIndexEntry[]",
-}
-
 func (v *chainIndexBlock) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -625,11 +598,6 @@ func (v *chainIndexBlock) IsValid() error {
 var fieldNames_chainIndexEntry = []string{
 	1: "Index",
 	2: "Key",
-}
-
-var fieldTypes_chainIndexEntry = []string{
-	1: "uint64",
-	2: "record.Key",
 }
 
 func (v *chainIndexEntry) MarshalBinary() ([]byte, error) {
@@ -842,47 +810,46 @@ func (v *chainIndexEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
-func initEip712TypeDictionary() {
+func init() {
 
-	encoding.SchemaDictionary["Receipt"] = &[]encoding.TypeField{
-		{"start", "bytes"},
-		{"startIndex", "int64"},
-		{"end", "bytes"},
-		{"endIndex", "int64"},
-		{"anchor", "bytes"},
-		{"entries", "ReceiptEntry[]"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("start", "bytes"),
+		encoding.NewTypeField("startIndex", "int64"),
+		encoding.NewTypeField("end", "bytes"),
+		encoding.NewTypeField("endIndex", "int64"),
+		encoding.NewTypeField("anchor", "bytes"),
+		encoding.NewTypeField("entries", "ReceiptEntry[]"),
+	}, "Receipt", "receipt")
 
-	encoding.SchemaDictionary["ReceiptEntry"] = &[]encoding.TypeField{
-		{"right", "bool"},
-		{"hash", "bytes"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("right", "bool"),
+		encoding.NewTypeField("hash", "bytes"),
+	}, "ReceiptEntry", "receiptEntry")
 
-	encoding.SchemaDictionary["ReceiptList"] = &[]encoding.TypeField{
-		{"merkleState", "State"},
-		{"elements", "bytes[]"},
-		{"receipt", "Receipt"},
-		{"continuedReceipt", "Receipt"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("merkleState", "State"),
+		encoding.NewTypeField("elements", "bytes[]"),
+		encoding.NewTypeField("receipt", "Receipt"),
+		encoding.NewTypeField("continuedReceipt", "Receipt"),
+	}, "ReceiptList", "receiptList")
 
-	encoding.SchemaDictionary["State"] = &[]encoding.TypeField{
-		{"count", "int64"},
-		{"pending", "bytes[]"},
-		{"hashList", "bytes[]"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("count", "int64"),
+		encoding.NewTypeField("pending", "bytes[]"),
+		encoding.NewTypeField("hashList", "bytes[]"),
+	}, "State", "state")
 
-	encoding.SchemaDictionary["chainIndexBlock"] = &[]encoding.TypeField{
-		{"level", "uint64"},
-		{"index", "uint64"},
-		{"entries", "chainIndexEntry[]"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("level", "uint64"),
+		encoding.NewTypeField("index", "uint64"),
+		encoding.NewTypeField("entries", "chainIndexEntry[]"),
+	}, "chainIndexBlock", "chainIndexBlock")
 
-	encoding.SchemaDictionary["chainIndexEntry"] = &[]encoding.TypeField{
-		{"index", "uint64"},
-		{"key", "record.Key"},
-	}
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("index", "uint64"),
+		encoding.NewTypeField("key", "record.Key"),
+	}, "chainIndexEntry", "chainIndexEntry")
 
-	encoding.ResolveTypeDefinitions()
 }
 
 func (v *Receipt) MarshalJSON() ([]byte, error) {

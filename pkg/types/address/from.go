@@ -123,7 +123,8 @@ func FromPrivateKeyBytes(priv []byte, typ protocol.SignatureType) (*PrivateKey, 
 		pub = priv[32:]
 
 	case protocol.SignatureTypeETH,
-		protocol.SignatureTypeBTCLegacy:
+		protocol.SignatureTypeBTCLegacy,
+		protocol.SignatureTypeEip712TypedData:
 		_, pk := btc.PrivKeyFromBytes(btc.S256(), priv)
 		pub = pk.SerializeUncompressed()
 
