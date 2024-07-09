@@ -7,8 +7,8 @@
 package run
 
 import (
+	"context"
 	"io"
-	"log/slog"
 
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
@@ -115,7 +115,7 @@ func (s *BadgerStorage) open(inst *Instance) (keyvalue.Beginner, error) {
 		return nil, err
 	}
 
-	inst.cleanupCloser(db, "Error while closing database")
+	inst.cleanup(func(context.Context) error { return db.Close() })
 	return db, nil
 }
 
@@ -125,7 +125,7 @@ func (s *BoltStorage) open(inst *Instance) (keyvalue.Beginner, error) {
 		return nil, err
 	}
 
-	inst.cleanupCloser(db, "Error while closing database")
+	inst.cleanup(func(context.Context) error { return db.Close() })
 	return db, nil
 }
 
@@ -135,7 +135,7 @@ func (s *LevelDBStorage) open(inst *Instance) (keyvalue.Beginner, error) {
 		return nil, err
 	}
 
-	inst.cleanupCloser(db, "Error while closing database")
+	inst.cleanup(func(context.Context) error { return db.Close() })
 	return db, nil
 }
 
@@ -145,15 +145,6 @@ func (s *ExpBlockDBStorage) open(inst *Instance) (keyvalue.Beginner, error) {
 		return nil, err
 	}
 
-	inst.cleanupCloser(db, "Error while closing database")
+	inst.cleanup(func(context.Context) error { return db.Close() })
 	return db, nil
-}
-
-func (i *Instance) cleanupCloser(c io.Closer, msg string) {
-	i.cleanup(func() {
-		err := c.Close()
-		if err != nil {
-			slog.ErrorContext(i.context, msg, "error", err)
-		}
-	})
 }
