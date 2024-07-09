@@ -158,6 +158,20 @@ func decomposeListen(addr multiaddr.Multiaddr) (proto, host, port, http string, 
 	return
 }
 
+func httpListen(ma multiaddr.Multiaddr) (net.Listener, bool, error) {
+	proto, addr, port, http, err := decomposeListen(ma)
+	if err != nil {
+		return nil, false, err
+	}
+	if proto == "" || port == "" {
+		return nil, false, errors.UnknownError.WithFormat("invalid listen address: %v", ma)
+	}
+	addr += ":" + port
+
+	l, err := net.Listen(proto, addr)
+	return l, http == "https", err
+}
+
 func isPrivate(addr multiaddr.Multiaddr) bool {
 	var private bool
 	multiaddr.ForEach(addr, func(c multiaddr.Component) bool {
