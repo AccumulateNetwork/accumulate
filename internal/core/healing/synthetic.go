@@ -100,7 +100,7 @@ func (h *Healer) HealSynthetic(ctx context.Context, args HealSyntheticArgs, si S
 	}
 
 	hash := msg.Message.Hash()
-	if !msg.Signature.Verify(nil, hash[:]) {
+	if !msg.Signature.Verify(nil, hash[:], nil) {
 		return fmt.Errorf("signature is not valid")
 	}
 

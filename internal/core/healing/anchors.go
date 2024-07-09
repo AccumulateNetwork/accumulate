@@ -193,7 +193,7 @@ func HealAnchor(ctx context.Context, args HealAnchorArgs, si SequencedInfo) erro
 
 					// Filter out bad signatures
 					h := seq.Hash()
-					if !sig.Verify(nil, h[:]) {
+					if !sig.Verify(nil, h[:], nil) {
 						slog.ErrorContext(ctx, "Node gave us an invalid signature", "id", info)
 						continue
 					}
@@ -209,7 +209,7 @@ func HealAnchor(ctx context.Context, args HealAnchorArgs, si SequencedInfo) erro
 
 					case protocol.UserSignature:
 						// Filter out bad signatures
-						if !sig.Verify(nil, theAnchorTxn.GetHash()) {
+						if !sig.Verify(nil, theAnchorTxn.GetHash(), nil) {
 							slog.ErrorContext(ctx, "Node gave us an invalid signature", "id", info)
 							continue
 						}

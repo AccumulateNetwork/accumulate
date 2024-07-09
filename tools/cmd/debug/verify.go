@@ -47,7 +47,7 @@ func verifyEnvelope(_ *cobra.Command, args []string) {
 			slog.Info("Skipping signature: no transaction hash", "type", sigMsg.Signature.Type())
 			continue
 		}
-		if !sig.Verify(nil, h[:]) {
+		if !sig.Verify(nil, h[:], nil) {
 			slog.Error("Signature is invalid", "message", i)
 		}
 	}

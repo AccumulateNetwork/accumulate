@@ -132,7 +132,7 @@ func initFollowerNodeFromSeedNodeUrl(seedNodeUrl string) (int, *config.Config, *
 	}
 
 	txHash := sha256.Sum256(b)
-	if !resp.Signature.Verify(nil, txHash[:]) {
+	if !resp.Signature.Verify(nil, txHash[:], nil) {
 		return 0, nil, nil, fmt.Errorf("invalid signature from proxy")
 	}
 
@@ -223,7 +223,7 @@ func initFollowerNodeFromSeedNodeUrl(seedNodeUrl string) (int, *config.Config, *
 	}
 
 	h := sha256.Sum256(d)
-	if !nc.Signature.Verify(nil, h[:]) {
+	if !nc.Signature.Verify(nil, h[:], nil) {
 		return 0, nil, nil, fmt.Errorf("cannot verify network configuration from proxy")
 	}
 	_, _, found = kp.EntryByKeyHash(nc.Signature.GetPublicKeyHash())
