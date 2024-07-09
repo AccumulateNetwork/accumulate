@@ -7,8 +7,10 @@
 package run
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"runtime"
 	"runtime/pprof"
@@ -20,14 +22,17 @@ import (
 )
 
 func (i *Instrumentation) start(inst *Instance) error {
-	err := i.listen(inst)
+	err := i.startPprof(inst)
+	if err != nil {
+		return errors.UnknownError.WithFormat("pprof: %w", err)
+	}
+
+	err = i.listen(inst)
 	if err != nil {
 		return errors.UnknownError.WithFormat("listen: %w", err)
 	}
 
-	if i.Monitoring == nil {
-		i.Monitoring = new(Monitor)
-	}
+	setDefaultVal(&i.Monitoring, new(Monitor))
 	err = i.Monitoring.start(inst)
 	if err != nil {
 		return errors.UnknownError.WithFormat("monitoring: %w", err)
@@ -55,6 +60,31 @@ func (i *Instrumentation) listen(inst *Instance) error {
 	return err
 }
 
+func (i *Instrumentation) startPprof(inst *Instance) error {
+	if i.PprofListen == nil {
+		return nil
+	}
+
+	l, secure, err := httpListen(i.PprofListen)
+	if err != nil {
+		return err
+	}
+	if secure {
+		return errors.BadRequest.With("https pprof not supported")
+	}
+
+	// Default HTTP server plus slow-loris prevention
+	s := &http.Server{ReadHeaderTimeout: time.Minute}
+
+	inst.run(func() {
+		err := s.Serve(l)
+		slog.Error("Server stopped (pprof)", "error", err)
+	})
+
+	inst.cleanup(s.Shutdown)
+	return nil
+}
+
 func (m *Monitor) start(inst *Instance) error {
 	setDefaultPtr(&m.ProfileMemory, false)           // Enabled      = false
 	setDefaultPtr(&m.MemoryPollingRate, time.Minute) // Polling rate = every minute
@@ -75,7 +105,7 @@ func (m *Monitor) start(inst *Instance) error {
 
 func (m *Monitor) pollMemory(inst *Instance) {
 	tick := time.NewTicker(*m.MemoryPollingRate)
-	inst.cleanup(tick.Stop)
+	inst.cleanup(func(context.Context) error { tick.Stop(); return nil })
 
 	var s1, s2 runtime.MemStats
 	runtime.ReadMemStats(&s1)
