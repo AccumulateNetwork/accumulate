@@ -4,6 +4,12 @@ Config:
     - name: file
       type: string
       marshal-as: none
+    - name: fs
+      type: fs.FS
+      marshal-as: none
+    - name: DotEnv
+      type: bool
+      pointer: true
     - name: Network
       type: string
     - name: Logging
