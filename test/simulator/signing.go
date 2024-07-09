@@ -76,6 +76,9 @@ func (n nodeSigner) Sign(sig protocol.Signature, sigMdHash, message []byte) erro
 	case *protocol.ETHSignature:
 		return protocol.SignETH(sig, k, sigMdHash, message)
 
+	case *protocol.Eip712TypedDataSignature:
+		return protocol.SignEip712TypedData(sig, k, sigMdHash, message)
+
 	default:
 		return fmt.Errorf("cannot sign %T with a key", sig)
 	}
