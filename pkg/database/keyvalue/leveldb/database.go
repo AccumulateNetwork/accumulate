@@ -29,7 +29,7 @@ type Database struct {
 type opts struct {
 }
 
-type Option func(*opts) error
+type Option func(*opts)
 
 func Open(filepath string, o ...Option) (*Database, error) {
 	// Make sure all directories exist
@@ -43,17 +43,18 @@ func Open(filepath string, o ...Option) (*Database, error) {
 		return nil, errors.UnknownError.WithFormat("open %q: %w", filepath, err)
 	}
 
+	return New(db, o...), nil
+}
+
+func New(db *leveldb.DB, o ...Option) *Database {
 	d := new(Database)
 	d.leveldb = db
 	d.open = new(sync.WaitGroup)
 	for _, o := range o {
-		err = o(&d.opts)
-		if err != nil {
-			return nil, errors.UnknownError.Wrap(err)
-		}
+		o(&d.opts)
 	}
 
-	return d, nil
+	return d
 }
 
 func (d *Database) key(key *record.Key) []byte {
