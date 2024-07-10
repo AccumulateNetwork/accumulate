@@ -97,7 +97,7 @@ func (r *stateData) MarshalBinary() ([]byte, error) {
 	buf := new(bytes.Buffer)
 	_, _ = buf.WriteString(paramsV2Magic)
 	enc := binary.NewEncoder(buf)
-	err := wstateData.MarshalBinary(enc, &r)
+	err := wstateData.MarshalBinary(enc, r)
 	return buf.Bytes(), err
 }
 
@@ -116,7 +116,7 @@ func (r *stateData) UnmarshalBinaryFrom(rd io.Reader) error {
 	// If the first 3 bytes matches the magic value, decode using the schema
 	if unsafe.String(&magic[0], N) == paramsV2Magic {
 		dec := binary.NewDecoder(rd)
-		return wstateData.UnmarshalBinary(dec, &r)
+		return wstateData.UnmarshalBinary(dec, r)
 	}
 
 	// Otherwise decode the old way

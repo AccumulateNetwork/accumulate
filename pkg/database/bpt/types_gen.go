@@ -13,21 +13,21 @@ type Parameters struct {
 	Mask            uint64
 }
 
-var wParameters = widget.ForCompositePtr(widget.Fields[Parameters]{
+var wParameters = widget.ForComposite(widget.Fields[Parameters]{
 	{Name: "power", ID: 1, Widget: widget.ForUint(func(v *Parameters) *uint64 { return &v.Power })},
 	{Name: "arbitraryValues", ID: 2, Widget: widget.ForBool(func(v *Parameters) *bool { return &v.ArbitraryValues })},
-}, widget.Identity[**Parameters])
+}, widget.Identity[*Parameters])
 
 // Copy returns a copy of the Parameters.
 func (v *Parameters) Copy() *Parameters {
-	var u *Parameters
-	wParameters.CopyTo(&u, &v)
+	var u = new(Parameters)
+	wParameters.CopyTo(u, v)
 	return u
 }
 
 // EqualParameters returns true if V is equal to U.
 func (v *Parameters) Equal(u *Parameters) bool {
-	return wParameters.Equal(&v, &u)
+	return wParameters.Equal(v, u)
 }
 
 type branch struct {
@@ -41,47 +41,47 @@ type branch struct {
 	Right  node
 }
 
-var wbranch = widget.ForCompositePtr(widget.Fields[branch]{
+var wbranch = widget.ForComposite(widget.Fields[branch]{
 	{Name: "type", ID: 1, Widget: widget.ForTag[*nodeType]("type", (*branch).Type)},
 	{Name: "height", ID: 2, Widget: widget.ForUint(func(v *branch) *uint64 { return &v.Height })},
 	{Name: "key", ID: 3, Widget: widget.ForHash(func(v *branch) *[32]byte { return &v.Key })},
 	{Name: "hash", ID: 4, Widget: widget.ForHash(func(v *branch) *[32]byte { return &v.Hash })},
-}, widget.Identity[**branch])
+}, widget.Identity[*branch])
 
 func (branch) Type() nodeType { return nodeTypeBranch }
 
 // Copy returns a copy of the branch.
 func (v *branch) Copy() *branch {
-	var u *branch
-	wbranch.CopyTo(&u, &v)
+	var u = new(branch)
+	wbranch.CopyTo(u, v)
 	return u
 }
 
 // Equalbranch returns true if V is equal to U.
 func (v *branch) Equal(u *branch) bool {
-	return wbranch.Equal(&v, &u)
+	return wbranch.Equal(v, u)
 }
 
 type emptyNode struct {
 	parent *branch
 }
 
-var wemptyNode = widget.ForCompositePtr(widget.Fields[emptyNode]{
+var wemptyNode = widget.ForComposite(widget.Fields[emptyNode]{
 	{Name: "type", ID: 1, Widget: widget.ForTag[*nodeType]("type", (*emptyNode).Type)},
-}, widget.Identity[**emptyNode])
+}, widget.Identity[*emptyNode])
 
 func (emptyNode) Type() nodeType { return nodeTypeEmpty }
 
 // Copy returns a copy of the emptyNode.
 func (v *emptyNode) Copy() *emptyNode {
-	var u *emptyNode
-	wemptyNode.CopyTo(&u, &v)
+	var u = new(emptyNode)
+	wemptyNode.CopyTo(u, v)
 	return u
 }
 
 // EqualemptyNode returns true if V is equal to U.
 func (v *emptyNode) Equal(u *emptyNode) bool {
-	return wemptyNode.Equal(&v, &u)
+	return wemptyNode.Equal(v, u)
 }
 
 type leaf struct {
@@ -90,22 +90,22 @@ type leaf struct {
 	parent *branch
 }
 
-var wleaf = widget.ForCompositePtr(widget.Fields[leaf]{
+var wleaf = widget.ForComposite(widget.Fields[leaf]{
 	{Name: "type", ID: 1, Widget: widget.ForTag[*nodeType]("type", (*leaf).Type)},
 	{Name: "key", ID: 2, Widget: widget.ForValue(func(v *leaf) **record.Key { return &v.Key })},
 	{Name: "value", ID: 3, Widget: widget.ForBytes(func(v *leaf) *[]byte { return &v.Value })},
-}, widget.Identity[**leaf])
+}, widget.Identity[*leaf])
 
 // Copy returns a copy of the leaf.
 func (v *leaf) Copy() *leaf {
-	var u *leaf
-	wleaf.CopyTo(&u, &v)
+	var u = new(leaf)
+	wleaf.CopyTo(u, v)
 	return u
 }
 
 // Equalleaf returns true if V is equal to U.
 func (v *leaf) Equal(u *leaf) bool {
-	return wleaf.Equal(&v, &u)
+	return wleaf.Equal(v, u)
 }
 
 // TODO type node interface {}
@@ -173,20 +173,20 @@ type stateData struct {
 	Parameters
 }
 
-var wstateData = widget.ForCompositePtr(widget.Fields[stateData]{
+var wstateData = widget.ForComposite(widget.Fields[stateData]{
 	{Name: "rootHash", ID: 1, Widget: widget.ForHash(func(v *stateData) *[32]byte { return &v.RootHash })},
 	{Name: "maxHeight", ID: 2, Widget: widget.ForUint(func(v *stateData) *uint64 { return &v.MaxHeight })},
 	{ID: 3, Widget: widget.ForComposite(wParameters.Fields, func(v *stateData) *Parameters { return &v.Parameters })},
-}, widget.Identity[**stateData])
+}, widget.Identity[*stateData])
 
 // Copy returns a copy of the stateData.
 func (v *stateData) Copy() *stateData {
-	var u *stateData
-	wstateData.CopyTo(&u, &v)
+	var u = new(stateData)
+	wstateData.CopyTo(u, v)
 	return u
 }
 
 // EqualstateData returns true if V is equal to U.
 func (v *stateData) Equal(u *stateData) bool {
-	return wstateData.Equal(&v, &u)
+	return wstateData.Equal(v, u)
 }
