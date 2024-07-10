@@ -17,20 +17,12 @@ import (
 )
 
 func (p *P2P) start(inst *Instance) error {
-	if p == nil {
-		p = new(P2P)
-	}
-	if p.Key == nil {
-		p.Key = new(TransientPrivateKey)
-	}
-
 	sk, err := getPrivateKey(p.Key, inst)
 	if err != nil {
 		return err
 	}
 
 	setDefaultPtr(&p.PeerDB, "")
-
 	node, err := p2p.New(p2p.Options{
 		Key:               sk,
 		Network:           inst.config.Network,
@@ -44,7 +36,7 @@ func (p *P2P) start(inst *Instance) error {
 	}
 	inst.p2p = node
 
-	slog.InfoContext(inst.context, "We are", "id", node.ID(), "module", "run")
+	slog.InfoContext(inst.context, "We are", "node-id", node.ID(), "instance-id", inst.id, "module", "run")
 
 	inst.cleanup(func(context.Context) error {
 		err := node.Close()
