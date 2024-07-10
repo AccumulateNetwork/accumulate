@@ -20,12 +20,13 @@ const paramsV2Magic = "\xC0\xFF\xEE"
 // paramsStateSize is the marshaled size of [parameters].
 const paramsStateSize = 1 + 2 + 2 + 32
 
-func (b *BPT) SetParams(p parameters) error {
+func (b *BPT) SetParams(p Parameters) error {
 	if b.loadedState == nil {
 		s, err := b.getState().Get()
 		switch {
 		case err == nil:
 			b.loadedState = s
+			s.Mask = s.Power - 1
 		case errors.Is(err, errors.NotFound):
 			b.loadedState = new(stateData)
 		default:
@@ -33,12 +34,12 @@ func (b *BPT) SetParams(p parameters) error {
 		}
 	}
 
-	if b.loadedState.parameters == (parameters{}) {
-		b.loadedState.parameters = p
+	if b.loadedState.Parameters == (Parameters{}) {
+		b.loadedState.Parameters = p
 		return b.storeState()
 	}
 
-	if !b.loadedState.parameters.Equal(&p) {
+	if !b.loadedState.Parameters.Equal(&p) {
 		return errors.BadRequest.With("BPT parameters cannot be modified")
 	}
 	return nil
@@ -55,6 +56,7 @@ func (b *BPT) loadState() (*stateData, error) {
 	switch {
 	case err == nil:
 		b.loadedState = s
+		s.Mask = s.Power - 1
 		return s, nil
 	case !errors.Is(err, errors.NotFound):
 		return nil, errors.UnknownError.Wrap(err)
@@ -95,7 +97,7 @@ func (r *stateData) MarshalBinary() ([]byte, error) {
 	buf := new(bytes.Buffer)
 	_, _ = buf.WriteString(paramsV2Magic)
 	enc := binary.NewEncoder(buf)
-	err := wstateData.MarshalBinary(enc, &r)
+	err := wstateData.MarshalBinary(enc, r)
 	return buf.Bytes(), err
 }
 
@@ -114,7 +116,7 @@ func (r *stateData) UnmarshalBinaryFrom(rd io.Reader) error {
 	// If the first 3 bytes matches the magic value, decode using the schema
 	if unsafe.String(&magic[0], N) == paramsV2Magic {
 		dec := binary.NewDecoder(rd)
-		return wstateData.UnmarshalBinary(dec, &r)
+		return wstateData.UnmarshalBinary(dec, r)
 	}
 
 	// Otherwise decode the old way
