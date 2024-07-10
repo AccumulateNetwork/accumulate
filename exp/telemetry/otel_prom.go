@@ -66,7 +66,6 @@ func (p *OtelPromProducer) Produce(ctx context.Context) ([]metricdata.ScopeMetri
 		mOtel.Description = fProm.GetHelp()
 		mOtel.Unit = unitWordToUCUM(fProm.GetUnit())
 
-
 		// Transform cometbft_ and consensus_ to tendermint_ and remove the
 		// partition. For example:
 		//
