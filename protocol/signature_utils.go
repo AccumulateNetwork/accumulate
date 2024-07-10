@@ -13,11 +13,17 @@ type SignableHash [32]byte
 func (h SignableHash) Hash() [32]byte { return h }
 
 func verifySig(inner, outer Signature, merkle bool, msg interface{ Hash() [32]byte }, verify func([]byte) bool) bool {
+	return verifySigSplit(inner, outer, merkle, msg, func(sig, msg []byte) bool {
+		return verify(doSha256(sig, msg))
+	})
+}
+
+func verifySigSplit(inner, outer Signature, merkle bool, msg interface{ Hash() [32]byte }, verify func(_, _ []byte) bool) bool {
 	if outer == nil {
 		outer = inner
 	}
 	msgHash := msg.Hash()
-	if verify(doSha256(outer.Metadata().Hash(), msgHash[:])) {
+	if verify(outer.Metadata().Hash(), msgHash[:]) {
 		return true
 	}
 	if !merkle {
@@ -32,7 +38,7 @@ func verifySig(inner, outer Signature, merkle bool, msg interface{ Hash() [32]by
 	if err != nil {
 		return false
 	}
-	return verify(doSha256(h.MerkleHash(), msgHash[:]))
+	return verify(h.MerkleHash(), msgHash[:])
 }
 
 func signatureHash(sig Signature) []byte {

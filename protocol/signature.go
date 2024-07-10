@@ -361,8 +361,9 @@ func (e *LegacyED25519Signature) Verify(sig Signature, msg Signable) bool {
 	if len(e.PublicKey) != 32 || len(e.Signature) != 64 {
 		return false
 	}
-	return verifySig(e, sig, true, msg, func(msg []byte) bool {
-		return ed25519.Verify(e.PublicKey, msg, e.Signature)
+	return verifySigSplit(e, sig, true, msg, func(sig, msg []byte) bool {
+		hash := doSha256(sig, common.Uint64Bytes(e.Timestamp), msg)
+		return ed25519.Verify(e.PublicKey, hash, e.Signature)
 	})
 }
 
