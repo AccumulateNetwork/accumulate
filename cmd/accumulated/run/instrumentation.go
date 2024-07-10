@@ -86,6 +86,10 @@ func (i *Instrumentation) startPprof(inst *Instance) error {
 }
 
 func (m *Monitor) start(inst *Instance) error {
+	if m == nil {
+		m = new(Monitor)
+	}
+
 	setDefaultPtr(&m.ProfileMemory, false)           // Enabled      = false
 	setDefaultPtr(&m.MemoryPollingRate, time.Minute) // Polling rate = every minute
 	setDefaultPtr(&m.AllocRateTrigger, 50<<20)       // Trigger rate = 50 MiB/s
