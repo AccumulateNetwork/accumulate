@@ -36,6 +36,13 @@ var (
 	portAccP2P  = portOffset(config.PortOffsetAccumulateP2P)
 )
 
+func must[V any](v V, err error) V {
+	if err != nil {
+		panic(err)
+	}
+	return v
+}
+
 func Ptr[T any](v T) *T { return &v }
 
 func setDefaultPtr[V any](ptr **V, def V) V {
