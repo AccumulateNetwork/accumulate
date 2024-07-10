@@ -126,26 +126,6 @@ func PublicKeyHash(key []byte, typ SignatureType) ([]byte, error) {
 	}
 }
 
-// generates privatekey and compressed public key
-func SECP256K1Keypair() (privKey []byte, pubKey []byte) {
-	priv, _ := btc.NewPrivateKey(btc.S256())
-
-	privKey = priv.Serialize()
-	_, pub := btc.PrivKeyFromBytes(btc.S256(), privKey)
-	pubKey = pub.SerializeCompressed()
-	return privKey, pubKey
-}
-
-// generates privatekey and Un-compressed public key
-func SECP256K1UncompressedKeypair() (privKey []byte, pubKey []byte) {
-	priv, _ := btc.NewPrivateKey(btc.S256())
-
-	privKey = priv.Serialize()
-	_, pub := btc.PrivKeyFromBytes(btc.S256(), privKey)
-	pubKey = pub.SerializeUncompressed()
-	return privKey, pubKey
-}
-
 func BTCHash(pubKey []byte) []byte {
 	hasher := ripemd160.New()
 	hash := sha256.Sum256(pubKey[:])

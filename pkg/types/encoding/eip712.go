@@ -11,7 +11,6 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math/big"
 	"reflect"
@@ -50,8 +49,9 @@ var Eip712Domain = EIP712Domain{
 }
 
 type Eip712Encoder struct {
-	hasher func(v interface{}) ([]byte, error)
-	types  func(ret map[string][]*TypeField, v interface{}, fieldType string) error
+	hasher   func(v interface{}) ([]byte, error)
+	resolver func(any, string) (eipResolvedValue, error)
+	types    func(ret map[string][]*TypeField, v interface{}, fieldType string) error
 }
 
 var eip712EncoderMap map[string]Eip712Encoder
@@ -250,48 +250,169 @@ func (td *TypeDefinition) types(ret map[string][]*TypeField, d interface{}, type
 	return nil
 }
 
-func (td *TypeDefinition) hash(v interface{}, typeName string) ([]byte, error) {
-	data, ok := v.(map[string]interface{})
+func (td *TypeDefinition) Resolve(v any, typeName string) (*eipResolvedStruct, error) {
+	data, ok := v.(map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("cannot hash type definition with invalid interface %T", v)
 	}
 
-	//define the type structure
-	var header bytes.Buffer
-	var body bytes.Buffer
-
-	//now loop through the fields and either encode the value or recursively dive into more types
-	first := true
-	//the stripping shouldn't be necessary, but do it as a precaution
-	strippedType, _ := stripSlice(typeName)
-	header.WriteString(strippedType + "(")
+	var fields []*eipResolvedField
 	for _, field := range *td.Fields {
 		value, ok := data[field.Name]
 		if !ok {
 			continue
 		}
-		delete(data, field.Name)
 
-		//now run the hasher
-		encodedValue, err := field.encoder.hasher(value)
+		r, err := field.encoder.resolver(value, field.Type)
 		if err != nil {
 			return nil, err
 		}
-		if !first {
+
+		fields = append(fields, &eipResolvedField{
+			Name:  field.Name,
+			Type:  field.Type,
+			Value: r,
+		})
+	}
+
+	return &eipResolvedStruct{
+		Type:   typeName,
+		Fields: fields,
+	}, nil
+}
+
+func (td *TypeDefinition) hash(v interface{}, typeName string) ([]byte, error) {
+	e, err := td.Resolve(v, typeName)
+	if err != nil {
+		return nil, err
+	}
+	return e.Hash()
+}
+
+type eipResolvedValue interface {
+	Hash() ([]byte, error)
+	header(map[string]string)
+	types(map[string][]*TypeField)
+}
+
+type eipResolvedStruct struct {
+	Type   string
+	Fields []*eipResolvedField
+}
+
+type eipResolvedField struct {
+	Name  string
+	Type  string
+	Value eipResolvedValue
+}
+
+type eipResolvedArray []eipResolvedValue
+
+type eipResolvedAtomic struct {
+	Value  any
+	hasher func(any) ([]byte, error)
+}
+
+func (e *eipResolvedStruct) Hash() ([]byte, error) {
+	//the stripping shouldn't be necessary, but do it as a precaution
+	strippedType, _ := stripSlice(e.Type)
+
+	deps := map[string]string{}
+	e.header(deps)
+
+	var header bytes.Buffer
+	header.WriteString(deps[strippedType])
+	delete(deps, strippedType)
+
+	var depNames []string
+	for name := range deps {
+		depNames = append(depNames, name)
+	}
+	sort.Strings(depNames)
+	for _, name := range depNames {
+		header.WriteString(deps[name])
+	}
+
+	var buf bytes.Buffer
+	buf.Write(keccak256(header.Bytes()))
+
+	//now loop through the fields and either encode the value or recursively dive into more types
+	for _, field := range e.Fields {
+		//now run the hasher
+		encodedValue, err := field.Value.Hash()
+		if err != nil {
+			return nil, err
+		}
+		buf.Write(encodedValue)
+	}
+
+	return keccak256(buf.Bytes()), nil
+}
+
+func (e *eipResolvedStruct) header(ret map[string]string) {
+	//the stripping shouldn't be necessary, but do it as a precaution
+	strippedType, _ := stripSlice(e.Type)
+
+	//define the type structure
+	var header strings.Builder
+	header.WriteString(strippedType + "(")
+	for i, field := range e.Fields {
+		if i > 0 {
 			header.WriteString(",")
 		}
 		header.WriteString(field.Type + " " + field.Name)
-		body.Write(encodedValue)
-		first = false
+		field.Value.header(ret)
 	}
 	header.WriteString(")")
-
-	if len(data) > 0 {
-		return nil, errors.New("eip712 payload contains unknown fields")
-	}
-
-	return keccak256(append(keccak256(header.Bytes()), body.Bytes()...)), nil
+	ret[strippedType] = header.String()
 }
+
+func (e *eipResolvedStruct) Types() map[string][]*TypeField {
+	ret := map[string][]*TypeField{}
+	e.types(ret)
+	return ret
+}
+
+func (e *eipResolvedStruct) types(ret map[string][]*TypeField) {
+	var fields []*TypeField
+	for _, f := range e.Fields {
+		fields = append(fields, &TypeField{Name: f.Name, Type: f.Type})
+		f.Value.types(ret)
+	}
+	name, _ := stripSlice(e.Type)
+	ret[name] = fields
+}
+
+func (e eipResolvedArray) Hash() ([]byte, error) {
+	var buf bytes.Buffer
+	for _, v := range e {
+		hash, err := v.Hash()
+		if err != nil {
+			return nil, err
+		}
+		_, _ = buf.Write(hash)
+	}
+	return keccak256(buf.Bytes()), nil
+}
+
+func (e eipResolvedArray) header(ret map[string]string) {
+	for _, v := range e {
+		v.header(ret)
+	}
+}
+
+func (e eipResolvedArray) types(ret map[string][]*TypeField) {
+	for _, v := range e {
+		v.types(ret)
+	}
+}
+
+func (e *eipResolvedAtomic) Hash() ([]byte, error) {
+	return e.hasher(e.Value)
+}
+
+func (e *eipResolvedAtomic) header(map[string]string)      {}
+func (e *eipResolvedAtomic) types(map[string][]*TypeField) {}
 
 func (t *TypeField) types(ret map[string][]*TypeField, v interface{}, fieldType string) error {
 	if t.encoder.types != nil {
@@ -302,7 +423,7 @@ func (t *TypeField) types(ret map[string][]*TypeField, v interface{}, fieldType 
 }
 
 func NewEncoder[T any](hasher func(T) ([]byte, error), types func(ret map[string][]*TypeField, v interface{}, typeField string) error) Eip712Encoder {
-	return Eip712Encoder{func(v interface{}) ([]byte, error) {
+	hasher2 := func(v interface{}) ([]byte, error) {
 		// JSON always decodes numbers as floats
 		if u, ok := v.(float64); ok {
 			var z T
@@ -319,7 +440,11 @@ func NewEncoder[T any](hasher func(T) ([]byte, error), types func(ret map[string
 			return nil, fmt.Errorf("eip712 value of type %T does not match type field", v)
 		}
 		return hasher(t)
-	}, types}
+	}
+	resolver := func(v any, _ string) (eipResolvedValue, error) {
+		return &eipResolvedAtomic{v, hasher2}, nil
+	}
+	return Eip712Encoder{hasher2, resolver, types}
 }
 
 func NewTypeField(n string, tp string) *TypeField {
@@ -389,6 +514,59 @@ func NewTypeField(n string, tp string) *TypeField {
 				return nil, err
 			}
 			return b, nil
+		}, func(v any, typeName string) (eipResolvedValue, error) {
+			strippedType, slices := stripSlice(tp)
+			encoder, ok := eip712EncoderMap[strippedType]
+			if ok {
+				if slices > 0 {
+					vv, ok := v.([]interface{})
+					if !ok {
+						return nil, fmt.Errorf("eip712 field %s is not of an array of interfaces", n)
+					}
+					var array eipResolvedArray
+					for _, vvv := range vv {
+						r, err := encoder.resolver(vvv, tp)
+						if err != nil {
+							return nil, err
+						}
+						array = append(array, r)
+					}
+					return array, nil
+				}
+				return encoder.resolver(v, tp)
+			}
+
+			//from here on down we are expecting a struct
+			if slices > 0 {
+				//we expect a slice
+				vv, ok := v.([]interface{})
+				if !ok {
+					return nil, fmt.Errorf("eip712 field %s is not of an array of interfaces", n)
+				}
+				var array eipResolvedArray
+				for _, vvv := range vv {
+					//now run the hasher for the type
+					// look for encoder, if we don't have one, call the types encoder
+					fields, ok := SchemaDictionary[strippedType]
+					if !ok {
+						return nil, fmt.Errorf("eip712 field %s", tp)
+					}
+					r, err := fields.Resolve(vvv, tp)
+					if err != nil {
+						return nil, err
+					}
+					array = append(array, r)
+				}
+				return array, nil
+			}
+
+			//if we get here, we are expecting a struct
+			fields, ok := SchemaDictionary[strippedType]
+			if !ok {
+				return nil, fmt.Errorf("eip712 field %s", tp)
+			}
+
+			return fields.Resolve(v, tp)
 		}, func(ret map[string][]*TypeField, v interface{}, fieldType string) error {
 			strippedType, slices := stripSlice(tp)
 			encoder, ok := eip712EncoderMap[strippedType]
@@ -480,17 +658,21 @@ func RegisterTypeDefinition(tf *[]*TypeField, aliases ...string) {
 }
 
 func Eip712Hash(v map[string]interface{}, typeName string, td *TypeDefinition) ([]byte, error) {
-	messageHash, err := td.hash(v, typeName)
+	r, err := td.Resolve(v, typeName)
 	if err != nil {
 		return nil, err
 	}
-	return keccak256(append(EIP712DomainHash, messageHash...)), nil
-}
+	messageHash, err := r.Hash()
+	if err != nil {
+		return nil, err
+	}
 
-func Eip712Types(v map[string]any, typeName string, td *TypeDefinition) (map[string][]*TypeField, error) {
-	ret := map[string][]*TypeField{}
-	err := td.types(ret, v, typeName)
-	return ret, err
+	var buf bytes.Buffer
+	buf.WriteByte(0x19)
+	buf.WriteByte(0x01)
+	buf.Write(EIP712DomainHash)
+	buf.Write(messageHash)
+	return keccak256(buf.Bytes()), nil
 }
 
 func Eip712DomainType() *TypeDefinition {

@@ -7,6 +7,7 @@
 package protocol_test
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/elliptic"
@@ -15,10 +16,15 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"math/big"
+	badrand "math/rand"
+	"os"
+	"os/exec"
 	"testing"
 	"time"
 
@@ -26,6 +32,7 @@ import (
 	"github.com/btcsuite/btcutil/base58"
 	eth "github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/address"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -491,6 +498,17 @@ func TestTypesFromCerts(t *testing.T) {
 	}
 }
 
+// generates privatekey and compressed public key
+func NewSECP256K1(seed ...any) *btc.PrivateKey {
+	hash := record.NewKey(seed...).Hash()
+	src := badrand.NewSource(int64(binary.BigEndian.Uint64(hash[:])))
+	priv, err := ecdsa.GenerateKey(btc.S256(), badrand.New(src))
+	if err != nil {
+		panic(err)
+	}
+	return (*btc.PrivateKey)(priv)
+}
+
 func TestEip712TypedDataSignature(t *testing.T) {
 	txn := &Transaction{}
 	err := txn.UnmarshalJSON([]byte(`{
@@ -516,8 +534,8 @@ func TestEip712TypedDataSignature(t *testing.T) {
 	}
 
 	// Sign the transaction
-	priv, _ := SECP256K1Keypair()
-	require.NoError(t, SignEip712TypedData(eip712sig, priv, nil, txn))
+	priv := NewSECP256K1(t.Name())
+	require.NoError(t, SignEip712TypedData(eip712sig, priv.Serialize(), nil, txn))
 
 	// Verify the signature
 	require.True(t, eip712sig.Verify(nil, txn))
@@ -552,16 +570,25 @@ func TestEIP712DelegatedKeyPageUpdate(t *testing.T) {
 	}
 
 	// Sign the transaction
-	priv, _ := SECP256K1Keypair()
-	require.NoError(t, SignEip712TypedData(inner, priv, outer, txn))
+	priv := NewSECP256K1(t.Name())
+	require.NoError(t, SignEip712TypedData(inner, priv.Serialize(), outer, txn))
 
 	// Verify the signature
 	require.True(t, outer.Verify(nil, txn))
 }
 
 func TestEIP712MessageForWallet(t *testing.T) {
+	// Verify the system has node
+	_, err := exec.LookPath("node")
+	if err != nil {
+		if !errors.Is(err, exec.ErrNotFound) || os.Getenv("CI") == "true" {
+			require.NoError(t, err)
+		}
+		t.Skip("Cannot locate node binary")
+	}
+
 	txn := &Transaction{}
-	err := txn.UnmarshalJSON([]byte(`{
+	err = txn.UnmarshalJSON([]byte(`{
 		"header": {
 			"principal": "acc://adi.acme/ACME"
 		},
@@ -575,10 +602,9 @@ func TestEIP712MessageForWallet(t *testing.T) {
 	}`))
 	require.NoError(t, err)
 
-	pub, err := hex.DecodeString("04c4755e0a7a0f7082749bf46cdae4fcddb784e11428446a01478d656f588f94c17d02f3312b43364a0c480d628483c4fb4e3e9f687ac064717d90fdc42cfb6e0e")
-	require.NoError(t, err)
+	priv := NewSECP256K1(t.Name())
 	sig := &Eip712TypedDataSignature{
-		PublicKey:     pub,
+		PublicKey:     eth.FromECDSAPub(&priv.PublicKey),
 		Signer:        url.MustParse("acc://adi.acme/book/1"),
 		SignerVersion: 1,
 		Timestamp:     1720564975623,
@@ -588,10 +614,16 @@ func TestEIP712MessageForWallet(t *testing.T) {
 
 	b, err := MarshalEip712(txn, sig)
 	require.NoError(t, err)
-	fmt.Printf("%s\n", b)
 
-	// Result from metamask
-	sig.Signature, err = hex.DecodeString("d420cddc64babaa548a09a9b05ae4b5cab6ab78fcb715870bd3a794be84b608763f52b044f672e4e2152beb42dcea00b8b5e36a1eecf6aa26ae62436c6e6d70f1b")
+	cmd := exec.Command("../test/cmd/eth_signTypedData/execute.sh", hex.EncodeToString(priv.Serialize()), string(b))
+	cmd.Stderr = os.Stderr
+	out, err := cmd.Output()
+	require.NoError(t, err)
+
+	out = bytes.TrimSpace(out)
+	out = bytes.TrimPrefix(out, []byte("0x"))
+	sig.Signature = make([]byte, len(out)/2)
+	_, err = hex.Decode(sig.Signature, out)
 	require.NoError(t, err)
 	require.True(t, sig.Verify(nil, txn))
 }

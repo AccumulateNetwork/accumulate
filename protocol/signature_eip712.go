@@ -45,6 +45,10 @@ func MarshalEip712(txn *Transaction, sig Signature) (ret []byte, err error) {
 	if err != nil {
 		return nil, err
 	}
+	r, err := NewEip712TransactionDefinition(txn).Resolve(jtx, "Transaction")
+	if err != nil {
+		return nil, err
+	}
 
 	// Construct the wallet RPC call
 	type eip712 struct {
@@ -56,16 +60,8 @@ func MarshalEip712(txn *Transaction, sig Signature) (ret []byte, err error) {
 	e := eip712{}
 	e.PrimaryType = "Transaction"
 	e.Domain = encoding.Eip712Domain
-
-	// Reformat the message JSON to be compatible with Ethereum
-	td := NewEip712TransactionDefinition(txn)
-	formatEIP712Message(jtx, td)
 	e.Message = jtx
-
-	e.Types, err = encoding.Eip712Types(jtx, "Transaction", td)
-	if err != nil {
-		return nil, err
-	}
+	e.Types = r.Types()
 	e.Types["EIP712Domain"] = *encoding.Eip712DomainType().Fields
 
 	return json.Marshal(e)
@@ -131,6 +127,8 @@ func makeEIP712Message(txn *Transaction, sig Signature) (map[string]any, error) 
 	}
 	jtx["signature"] = jsig
 
+	// Reformat the message JSON to be compatible with Ethereum
+	formatEIP712Message(jtx, NewEip712TransactionDefinition(txn))
 	return jtx, nil
 }
 
