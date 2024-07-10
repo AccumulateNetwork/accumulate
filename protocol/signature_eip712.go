@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
@@ -33,43 +34,64 @@ func NewEip712TransactionDefinition(txn *Transaction) *encoding.TypeDefinition {
 		encoding.NewTypeField("signature", "SignatureMetadata"),
 	}
 
-	return &encoding.TypeDefinition{txnSchema}
+	return &encoding.TypeDefinition{Fields: txnSchema}
 }
 
-// MarshalEip712 This will create an EIP712 json message needed to submit to a wallet
-func MarshalEip712(transaction Transaction) (ret []byte, err error) {
+// MarshalEip712 This will create an EIP-712 json message needed to submit to a
+// wallet.
+func MarshalEip712(txn *Transaction, sig Signature) (ret []byte, err error) {
+	// Convert the transaction and signature to an EIP-712 message
+	jtx, err := makeEIP712Message(txn, sig)
+	if err != nil {
+		return nil, err
+	}
+
+	// Construct the wallet RPC call
 	type eip712 struct {
-		PrimaryType  string `json:"primary_type"`
-		Types        []encoding.TypeDefinition
-		EIP712Domain encoding.EIP712Domain `json:"EIP712Domain"`
-		Message      json.RawMessage       `json:"message"`
+		Types       map[string][]*encoding.TypeField `json:"types"`
+		PrimaryType string                           `json:"primaryType"`
+		Domain      encoding.EIP712Domain            `json:"domain"`
+		Message     any                              `json:"message"`
 	}
 	e := eip712{}
 	e.PrimaryType = "Transaction"
-	e.Message, err = transaction.MarshalJSON()
-	e.EIP712Domain = encoding.Eip712Domain
-	//go through transaction and build types list
-	txMap := map[string]interface{}{}
-	txj, err := transaction.MarshalJSON()
+	e.Domain = encoding.Eip712Domain
+
+	// Reformat the message JSON to be compatible with Ethereum
+	td := NewEip712TransactionDefinition(txn)
+	formatEIP712Message(jtx, td)
+	e.Message = jtx
+
+	e.Types, err = encoding.Eip712Types(jtx, "Transaction", td)
 	if err != nil {
 		return nil, err
 	}
+	e.Types["EIP712Domain"] = *encoding.Eip712DomainType().Fields
 
-	err = json.Unmarshal(txj, &txMap)
-	if err != nil {
-		return nil, err
+	return json.Marshal(e)
+}
+
+func formatEIP712Message(v map[string]any, td *encoding.TypeDefinition) {
+	for _, field := range *td.Fields {
+		fv, ok := v[field.Name]
+		if !ok {
+			continue
+		}
+
+		switch field.Type {
+		case "bytes", "bytes32":
+			v[field.Name] = fmt.Sprintf("0x%v", fv)
+			continue
+		}
+
+		sch, ok := encoding.SchemaDictionary[strings.TrimPrefix(field.Type, "[]")]
+		if ok {
+			formatEIP712Message(fv.(map[string]any), sch)
+		}
 	}
+}
 
-	//capture types from txMap
-
-	j, err := json.Marshal(e)
-	if err != nil {
-		return nil, err
-	}
-	return j, nil
-} //
-
-func Eip712Hasher(txn *Transaction, sig Signature) ([]byte, error) {
+func makeEIP712Message(txn *Transaction, sig Signature) (map[string]any, error) {
 	var delegators []any
 	var inner *Eip712TypedDataSignature
 	for inner == nil {
@@ -108,6 +130,15 @@ func Eip712Hasher(txn *Transaction, sig Signature) ([]byte, error) {
 		return nil, err
 	}
 	jtx["signature"] = jsig
+
+	return jtx, nil
+}
+
+func Eip712Hasher(txn *Transaction, sig Signature) ([]byte, error) {
+	jtx, err := makeEIP712Message(txn, sig)
+	if err != nil {
+		return nil, err
+	}
 
 	h, err := encoding.Eip712Hash(jtx, "Transaction", NewEip712TransactionDefinition(txn))
 	if err != nil {

@@ -523,11 +523,13 @@ func printStructFields(typeName string, t reflect.Type, indent string) *TypedDat
 			parts = strings.Split(fieldTypeName, ".")
 			fieldTypeName = parts[len(parts)-1]
 
-			encoding.RegisterTypeDefinitionResolver("KeyPageOperation", func() {
+			encoding.RegisterTypeDefinitionResolver("KeyPageOperation", func() error {
 				_ = typeFields(&typeEntries, structName, "KeyPageOperation", NewKeyPageOperation)
+				return nil
 			})
-			encoding.RegisterTypeDefinitionResolver("DataEntry", func() {
+			encoding.RegisterTypeDefinitionResolver("DataEntry", func() error {
 				_ = typeFields(&typeEntries, structName, "DataEntry", NewDataEntry)
+				return nil
 			})
 			_ = typeFields(&typeEntries, structName, "KeyPageOperation", NewKeyPageOperation)
 

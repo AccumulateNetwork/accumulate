@@ -38,13 +38,20 @@ type EIP712Domain struct {
 	ChainId *big.Int `json:"chainId,omitempty" form:"chainId" query:"chainId" validate:"required"`
 }
 
-var Eip712Domain = EIP712Domain{Name: "Accumulate", Version: "1.0.0", ChainId: big.NewInt(281)}
 var EIP712DomainMap map[string]interface{}
 var EIP712DomainHash []byte
+var Eip712Domain = EIP712Domain{
+	Name:    "Accumulate",
+	Version: "1.0.0",
+
+	// Use a fake domain for the moment
+	ChainId: big.NewInt(1),
+	// ChainId: big.NewInt(281),
+}
 
 type Eip712Encoder struct {
 	hasher func(v interface{}) ([]byte, error)
-	types  func(ret map[string]*TypeDefinition, v interface{}, fieldType string) error
+	types  func(ret map[string][]*TypeField, v interface{}, fieldType string) error
 }
 
 var eip712EncoderMap map[string]Eip712Encoder
@@ -141,7 +148,7 @@ func RegisterEnumeratedTypeInterface[T any, R any](op Func[T, R]) {
 	tp, typesMap := mapEnumTypes(op)
 	eip712EncoderMap[tp] = NewEncoder(func(v interface{}) ([]byte, error) {
 		return FromTypedInterfaceToBytes(v, typesMap)
-	}, func(ret map[string]*TypeDefinition, v interface{}, typeField string) error {
+	}, func(ret map[string][]*TypeField, v interface{}, typeField string) error {
 		return FromTypedInterfaceToTypes(ret, v, typesMap)
 	})
 }
@@ -175,7 +182,7 @@ func FromTypedInterfaceToBytes(v interface{}, typesAliasMap map[string]string) (
 	return keccak256(b), nil
 }
 
-func FromTypedInterfaceToTypes(ret map[string]*TypeDefinition, v interface{}, typesAliasMap map[string]string) error {
+func FromTypedInterfaceToTypes(ret map[string][]*TypeField, v interface{}, typesAliasMap map[string]string) error {
 	//this is a complex structure, so upcast it to an interface map
 	vv, ok := v.(map[string]interface{})
 	if !ok {
@@ -210,11 +217,11 @@ type TypedData struct {
 	Types    []TypeField
 }
 
-func (td *TypeDefinition) types(ret map[string]*TypeDefinition, d interface{}, typeName string) error {
+func (td *TypeDefinition) types(ret map[string][]*TypeField, d interface{}, typeName string) error {
 	var err error
 	//define the type structure
 	if ret == nil {
-		ret = make(map[string]*TypeDefinition)
+		ret = make(map[string][]*TypeField)
 	}
 
 	data := d.(map[string]interface{})
@@ -223,8 +230,6 @@ func (td *TypeDefinition) types(ret map[string]*TypeDefinition, d interface{}, t
 
 	//the stripping shouldn't be necessary, but do it as a precaution
 	strippedType, _ := stripSlice(typeName)
-	tdr := &TypeDefinition{}
-	ret[strippedType] = tdr
 
 	for i, field := range *td.Fields {
 		value, ok := data[field.Name]
@@ -233,7 +238,7 @@ func (td *TypeDefinition) types(ret map[string]*TypeDefinition, d interface{}, t
 		}
 
 		//append the fields
-		*tdr.Fields = append(*tdr.Fields, (*td.Fields)[i])
+		ret[strippedType] = append(ret[strippedType], (*td.Fields)[i])
 
 		//breakdown field further if required
 		err = field.types(ret, value, field.Type)
@@ -288,7 +293,7 @@ func (td *TypeDefinition) hash(v interface{}, typeName string) ([]byte, error) {
 	return keccak256(append(keccak256(header.Bytes()), body.Bytes()...)), nil
 }
 
-func (t *TypeField) types(ret map[string]*TypeDefinition, v interface{}, fieldType string) error {
+func (t *TypeField) types(ret map[string][]*TypeField, v interface{}, fieldType string) error {
 	if t.encoder.types != nil {
 		//process more complex type
 		return t.encoder.types(ret, v, fieldType)
@@ -296,7 +301,7 @@ func (t *TypeField) types(ret map[string]*TypeDefinition, v interface{}, fieldTy
 	return nil
 }
 
-func NewEncoder[T any](hasher func(T) ([]byte, error), types func(ret map[string]*TypeDefinition, v interface{}, typeField string) error) Eip712Encoder {
+func NewEncoder[T any](hasher func(T) ([]byte, error), types func(ret map[string][]*TypeField, v interface{}, typeField string) error) Eip712Encoder {
 	return Eip712Encoder{func(v interface{}) ([]byte, error) {
 		// JSON always decodes numbers as floats
 		if u, ok := v.(float64); ok {
@@ -314,8 +319,7 @@ func NewEncoder[T any](hasher func(T) ([]byte, error), types func(ret map[string
 			return nil, fmt.Errorf("eip712 value of type %T does not match type field", v)
 		}
 		return hasher(t)
-	}, types,
-	}
+	}, types}
 }
 
 func NewTypeField(n string, tp string) *TypeField {
@@ -385,10 +389,49 @@ func NewTypeField(n string, tp string) *TypeField {
 				return nil, err
 			}
 			return b, nil
-		}, func(ret map[string]*TypeDefinition, v interface{}, fieldType string) error {
-			return nil
-		},
-		},
+		}, func(ret map[string][]*TypeField, v interface{}, fieldType string) error {
+			strippedType, slices := stripSlice(tp)
+			encoder, ok := eip712EncoderMap[strippedType]
+			if ok {
+				if encoder.types == nil {
+					return nil
+				}
+				if slices > 0 {
+					vv, ok := v.([]interface{})
+					if !ok {
+						return fmt.Errorf("eip712 field %s is not of an array of interfaces", n)
+					}
+					for _, vvv := range vv {
+						err := encoder.types(ret, vvv, fieldType)
+						if err != nil {
+							return err
+						}
+					}
+					return nil
+				}
+				return encoder.types(ret, v, fieldType)
+			}
+
+			fields, ok := SchemaDictionary[strippedType]
+			if !ok {
+				return fmt.Errorf("eip712 field %s", tp)
+			}
+			if slices > 0 {
+				vv, ok := v.([]interface{})
+				if !ok {
+					return fmt.Errorf("eip712 field %s is not of an array of interfaces", n)
+				}
+				for _, vvv := range vv {
+					err := fields.types(ret, vvv, fieldType)
+					if err != nil {
+						return err
+					}
+				}
+				return nil
+			}
+
+			return fields.types(ret, v, fieldType)
+		}},
 	}
 }
 
@@ -442,6 +485,16 @@ func Eip712Hash(v map[string]interface{}, typeName string, td *TypeDefinition) (
 		return nil, err
 	}
 	return keccak256(append(EIP712DomainHash, messageHash...)), nil
+}
+
+func Eip712Types(v map[string]any, typeName string, td *TypeDefinition) (map[string][]*TypeField, error) {
+	ret := map[string][]*TypeField{}
+	err := td.types(ret, v, typeName)
+	return ret, err
+}
+
+func Eip712DomainType() *TypeDefinition {
+	return SchemaDictionary["EIP712Domain"]
 }
 
 func FromstringToBytes(s string) ([]byte, error) {

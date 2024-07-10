@@ -492,54 +492,6 @@ func TestTypesFromCerts(t *testing.T) {
 }
 
 func TestEip712TypedDataSignature(t *testing.T) {
-	tokenTransaction := []byte(`{
-		"types": {
-			"EIP712Domain": [
-				{ "name": "name", "type": "string" },
-				{ "name": "version", "type": "string" },
-				{ "name": "chainId", "type": "uint256" },
-			],
-			"SendTokens": [
-				{ "name": "type", "type": "string" },
-				{ "name": "to", "type": "TokenRecipient[]" }
-			],
-			"TokenRecipient": [
-				{ "name": "url", "type": "string" },
-				{ "name": "amount", "type": "uint256" },
-			],
-			"TransactionHeader": [
-				{ "name": "principal", "type": "string" },
-				{ "name": "initiator", "type": "bytes32" },
-			],
-			"Transaction": [
-				{ "name": "header", "type": "TransactionHeader" },
-				{ "name": "body", "type": "SendTokens" },
-			],
-		},
-		"primaryType": "SendTokens",
-		"domain": {
-			"name": "Accumulate",
-			"version": "1.0.0",
-			"chainId": "281",
-		},
-		"message": {
-			"header": {
-				"principal": "acc://adi.acme/ACME",
-				"initiator": "84e032fba8a5456f631c822a2b2466c18b3fa7804330ab87088ed6e30d690505"
-			},
-			"body": {
-				"type": "sendTokens",
-				"to": [
-					{
-						"url": "acc://other.acme/ACME",
-						"amount": "10000000000"
-					}
-				]
-			}
-		}
-	}`)
-	_ = tokenTransaction
-
 	txn := &Transaction{}
 	err := txn.UnmarshalJSON([]byte(`{
 		"header": {
@@ -605,4 +557,41 @@ func TestEIP712DelegatedKeyPageUpdate(t *testing.T) {
 
 	// Verify the signature
 	require.True(t, outer.Verify(nil, txn))
+}
+
+func TestEIP712MessageForWallet(t *testing.T) {
+	txn := &Transaction{}
+	err := txn.UnmarshalJSON([]byte(`{
+		"header": {
+			"principal": "acc://adi.acme/ACME"
+		},
+		"body": {
+			"type": "sendTokens",
+			"to": [{
+				"url": "acc://other.acme/ACME",
+				"amount": "10000000000"
+			}]
+		}
+	}`))
+	require.NoError(t, err)
+
+	pub, err := hex.DecodeString("04c4755e0a7a0f7082749bf46cdae4fcddb784e11428446a01478d656f588f94c17d02f3312b43364a0c480d628483c4fb4e3e9f687ac064717d90fdc42cfb6e0e")
+	require.NoError(t, err)
+	sig := &Eip712TypedDataSignature{
+		PublicKey:     pub,
+		Signer:        url.MustParse("acc://adi.acme/book/1"),
+		SignerVersion: 1,
+		Timestamp:     1720564975623,
+		Vote:          VoteTypeAccept,
+	}
+	txn.Header.Initiator = [32]byte(sig.Metadata().Hash())
+
+	b, err := MarshalEip712(txn, sig)
+	require.NoError(t, err)
+	fmt.Printf("%s\n", b)
+
+	// Result from metamask
+	sig.Signature, err = hex.DecodeString("d420cddc64babaa548a09a9b05ae4b5cab6ab78fcb715870bd3a794be84b608763f52b044f672e4e2152beb42dcea00b8b5e36a1eecf6aa26ae62436c6e6d70f1b")
+	require.NoError(t, err)
+	require.True(t, sig.Verify(nil, txn))
 }
