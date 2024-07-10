@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	. "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
@@ -31,11 +33,16 @@ var (
 	only              string
 	pprof             string
 	healSinceDuration time.Duration
+	bootstrap         = accumulate.BootstrapServers
 )
 
 var cmd = &cobra.Command{
 	Use:   "debug",
 	Short: "Accumulate debug utilities",
+}
+
+func init() {
+	cmd.PersistentFlags().Var((*MultiaddrSliceFlag)(&bootstrap), "bootstrap", "Set the bootstrap servers")
 }
 
 var currentUser = func() *user.User {
