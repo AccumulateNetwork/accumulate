@@ -14,7 +14,6 @@ import (
 	"github.com/spf13/cobra"
 	. "gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
-	cmdutil "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 )
 
 func main() {
@@ -35,7 +34,7 @@ var flag = struct {
 	Peers      []multiaddr.Multiaddr
 	External   multiaddr.Multiaddr
 }{
-	Key: cmdutil.PrivateKeyFlag{Value: &TransientPrivateKey{}},
+	Key: PrivateKeyFlag{Value: &TransientPrivateKey{}},
 	PromListen: []multiaddr.Multiaddr{
 		multiaddr.StringCast("/ip4/0.0.0.0/tcp/8081/http"),
 	},
@@ -65,7 +64,7 @@ func run(*cobra.Command, []string) {
 		},
 	}
 
-	ctx := cmdutil.ContextForMainProcess(context.Background())
+	ctx := ContextForMainProcess(context.Background())
 	inst, err := Start(ctx, cfg)
 	Check(err)
 
