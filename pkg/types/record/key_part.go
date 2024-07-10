@@ -34,7 +34,7 @@ type keyPart interface {
 	// treating the type code as if it was a field number. This is a violation
 	// of the field-number tagged encoding scheme, but the writer doesn't pay
 	// any attention to the field numbers so this still works.
-	WriteBinary(w *enc.Writer)
+	WriteBinary(*enc.Writer)
 
 	// ReadBinary reads the key part from the binary reader.
 	//
@@ -45,12 +45,14 @@ type keyPart interface {
 	// number logic. [Key.UnmarshalBinaryFrom] handles reading the type codes,
 	// so here we tell the binary reader we want to read field zero, which
 	// instructs it to skip the field number logic and read the value directly.
-	ReadBinary(r *enc.Reader)
+	ReadBinary(*enc.Reader)
 
-	ReadBinary2(r *binary2.Decoder) error
+	WriteBinary2(*binary2.Encoder) error
+	ReadBinary2(*binary2.Decoder) error
 }
 
-type dec = binary2.Decoder
+type enc2 = binary2.Encoder
+type dec2 = binary2.Decoder
 
 // These methods are here to keep them close to the explanation above.
 
@@ -72,23 +74,32 @@ func (k *urlKeyPart) ReadBinary(r *enc.Reader)    { ReadBinary(&k.URL, r.ReadUrl
 func (k *txidKeyPart) ReadBinary(r *enc.Reader)   { ReadBinary(&k.TxID, r.ReadTxid) }
 func (k *timeKeyPart) ReadBinary(r *enc.Reader)   { ReadBinary(&k.Time, r.ReadTime) }
 
-func (k *intKeyPart) ReadBinary2(r *dec) error    { return rdBin2((*int64)(k), r.DecodeInt) }
-func (k *uintKeyPart) ReadBinary2(r *dec) error   { return rdBin2((*uint64)(k), r.DecodeUint) }
-func (k *stringKeyPart) ReadBinary2(r *dec) error { return rdBin2((*string)(k), r.DecodeString) }
-func (k *hashKeyPart) ReadBinary2(r *dec) error   { return rdBin2((*[32]byte)(k), r.DecodeHash) }
-func (k *bytesKeyPart) ReadBinary2(r *dec) error  { return rdBin2((*[]byte)(k), r.DecodeBytes) }
+func (k intKeyPart) WriteBinary2(w *enc2) error    { return w.EncodeInt(int64(k)) }
+func (k uintKeyPart) WriteBinary2(w *enc2) error   { return w.EncodeUint(uint64(k)) }
+func (k stringKeyPart) WriteBinary2(w *enc2) error { return w.EncodeString(string(k)) }
+func (k hashKeyPart) WriteBinary2(w *enc2) error   { return w.EncodeHash(k) }
+func (k bytesKeyPart) WriteBinary2(w *enc2) error  { return w.EncodeBytes(k) }
+func (k urlKeyPart) WriteBinary2(w *enc2) error    { return w.EncodeString(k.URL.String()) }
+func (k txidKeyPart) WriteBinary2(w *enc2) error   { return w.EncodeString(k.TxID.String()) }
+func (k timeKeyPart) WriteBinary2(w *enc2) error   { return w.EncodeInt(k.Time.UTC().Unix()) }
 
-func (k *urlKeyPart) ReadBinary2(r *dec) error {
+func (k *intKeyPart) ReadBinary2(r *dec2) error    { return rdBin2((*int64)(k), r.DecodeInt) }
+func (k *uintKeyPart) ReadBinary2(r *dec2) error   { return rdBin2((*uint64)(k), r.DecodeUint) }
+func (k *stringKeyPart) ReadBinary2(r *dec2) error { return rdBin2((*string)(k), r.DecodeString) }
+func (k *hashKeyPart) ReadBinary2(r *dec2) error   { return rdBin2((*[32]byte)(k), r.DecodeHash) }
+func (k *bytesKeyPart) ReadBinary2(r *dec2) error  { return rdBin2((*[]byte)(k), r.DecodeBytes) }
+
+func (k *urlKeyPart) ReadBinary2(r *dec2) error {
 	k.URL = new(url.URL)
 	return r.DecodeValueV2(k.URL)
 }
 
-func (k *txidKeyPart) ReadBinary2(r *dec) error {
+func (k *txidKeyPart) ReadBinary2(r *dec2) error {
 	k.TxID = new(url.TxID)
 	return r.DecodeValueV2(k.TxID)
 }
 
-func (k *timeKeyPart) ReadBinary2(r *dec) error {
+func (k *timeKeyPart) ReadBinary2(r *dec2) error {
 	v, err := r.DecodeInt()
 	k.Time = time.Unix(v, 0).UTC()
 	return err

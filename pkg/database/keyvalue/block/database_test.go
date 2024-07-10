@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"math/big"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,6 +21,13 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/kvtest"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 )
+
+func TestFoo(t *testing.T) {
+	t.Skip("Manual")
+	db, err := Open("../../../../.nodes/devnet/bvn1-1/bvnn/data/accumulate.db")
+	require.NoError(t, err)
+	require.NoError(t, db.Close())
+}
 
 func BenchmarkCommit(b *testing.B) {
 	kvtest.BenchmarkCommit(b, newOpener(b))
@@ -84,13 +93,13 @@ func TestDelete(t *testing.T) {
 func newOpener(t testing.TB) kvtest.Opener {
 	path := t.TempDir()
 	return func() (keyvalue.Beginner, error) {
-		return Open(path)
+		return Open(filepath.Join(path, "test.db"))
 	}
 }
 
 func TestFileLimit(t *testing.T) {
 	dir := t.TempDir()
-	db, err := Open(dir, WithFileLimit(1<<10))
+	db, err := Open(dir, WithFileLimit(2<<10))
 	require.NoError(t, err)
 	defer db.Close()
 
@@ -98,24 +107,43 @@ func TestFileLimit(t *testing.T) {
 	defer batch.Discard()
 
 	const N = 16
+	var keys []string
 	for i := 0; i < N; i++ {
 		k := record.NewKey(i)
+		keys = append(keys, k.String())
 		v := make([]byte, 128)
 		_, _ = rand.Read(v)
 		err = batch.Put(k, v)
 		require.NoError(t, err, "Put")
 	}
 	require.NoError(t, batch.Commit())
+	require.NoError(t, db.Close())
 
 	var files []string
 	ent, err := os.ReadDir(dir)
 	require.NoError(t, err)
 	for _, ent := range ent {
-		files = append(files, ent.Name())
+		if strings.HasSuffix(ent.Name(), dotBlocks) {
+			files = append(files, ent.Name())
+		}
 	}
-	require.Equal(t, []string{
-		"0.blocks",
+	require.ElementsMatch(t, []string{
 		"1.blocks",
-		"2.blocks",
+		"1-1.blocks",
+		"1-2.blocks",
 	}, files)
+
+	db, err = Open(dir, WithFileLimit(1<<10))
+	require.NoError(t, err)
+	defer db.Close()
+
+	batch = db.Begin(nil, true)
+	defer batch.Discard()
+
+	var keys2 []string
+	require.NoError(t, batch.ForEach(func(key *record.Key, _ []byte) error {
+		keys2 = append(keys2, key.String())
+		return nil
+	}))
+	require.ElementsMatch(t, keys, keys2)
 }
