@@ -29,7 +29,7 @@ func TestNonHashValues(t *testing.T) {
 	store := memory.New(nil).Begin(nil, true)
 	model := new(ChangeSet)
 	model.store = keyvalue.RecordStore{Store: store}
-	err := model.BPT().SetParams(parameters{
+	err := model.BPT().SetParams(Parameters{
 		ArbitraryValues: true,
 	})
 	require.NoError(t, err)

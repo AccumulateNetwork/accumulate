@@ -16,15 +16,17 @@ stateData:
     - name: MaxHeight
       type: uint
     - type:
-        name: parameters
+        name: Parameters
         class: composite
         fields:
           - name: Power
             type: uint
-          - name: Mask
-            type: uint
           - name: ArbitraryValues
             type: boolean
+
+        transients:
+          - name: Mask
+            type: uint
 
 node:
   class: union

@@ -218,11 +218,56 @@ func (k *Key) UnmarshalBinary(b []byte) error {
 	return k.UnmarshalBinaryFrom(bytes.NewBuffer(b))
 }
 
+func (k *Key) MarshalBinaryV2(enc *binary2.Encoder) error {
+	err := enc.StartObject()
+	if err != nil {
+		return errors.UnknownError.WithFormat("encode Key: %w", err)
+	}
+
+	enc.WithOptions(binary2.IgnoreFieldOrder())
+
+	// Write the key length (not prefixed with a field number)
+	err = enc.NoField()
+	if err != nil {
+		return errors.UnknownError.WithFormat("encode Key: %w", err)
+	}
+	err = enc.EncodeUint(uint64(len(k.values)))
+	if err != nil {
+		return errors.UnknownError.WithFormat("encode Key: %w", err)
+	}
+
+	// Write each field using the encoding writer, but prefix values with their
+	// type code instead of with a field number. This is an abuse but 🤷 it
+	// works.
+	for _, v := range k.values {
+		p, err := asKeyPart(v)
+		if err != nil {
+			return errors.UnknownError.WithFormat("encode Key: %w", err)
+		}
+		err = enc.Field(uint(p.Type()))
+		if err != nil {
+			return errors.UnknownError.WithFormat("encode Key: %w", err)
+		}
+		err = p.WriteBinary2(enc)
+		if err != nil {
+			return errors.UnknownError.WithFormat("encode Key: %w", err)
+		}
+	}
+
+	err = enc.EndObject()
+	if err != nil {
+		return errors.UnknownError.WithFormat("encode Key: %w", err)
+	}
+	return nil
+}
+
 func (k *Key) UnmarshalBinaryV2(dec *binary2.Decoder) error {
 	err := dec.StartObject()
 	if err != nil {
-		return err
+		return errors.UnknownError.WithFormat("decode Key: %w", err)
 	}
+
+	dec.WithOptions(binary2.IgnoreFieldOrder())
 
 	// Read the key length (not prefixed with a field number)
 	err = dec.NoField()
@@ -241,14 +286,9 @@ func (k *Key) UnmarshalBinaryV2(dec *binary2.Decoder) error {
 	// reader expects values to be prefixed with field numbers, and has certain
 	// requirements for those field numbers, so this approach requires a certain
 	// amount of hackiness. This is an abuse but 🤷 it works.
-
 	for i := range k.values {
 		// Read the type code
-		err = dec.NoField()
-		if err != nil {
-			return errors.UnknownError.WithFormat("decode Key: %w", err)
-		}
-		v, err := dec.DecodeUint()
+		v, err := dec.Field()
 		if err != nil {
 			return errors.UnknownError.WithFormat("decode Key: %w", err)
 		}
@@ -260,10 +300,6 @@ func (k *Key) UnmarshalBinaryV2(dec *binary2.Decoder) error {
 		}
 
 		// Read the value using the encoding reader
-		err = dec.NoField()
-		if err != nil {
-			return errors.UnknownError.WithFormat("decode Key: %w", err)
-		}
 		err = p.ReadBinary2(dec)
 		if err != nil {
 			return errors.UnknownError.WithFormat("decode Key: %w", err)
