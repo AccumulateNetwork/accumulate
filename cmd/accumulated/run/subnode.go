@@ -7,6 +7,7 @@
 package run
 
 import (
+	"log/slog"
 	"sync"
 
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
@@ -57,7 +58,7 @@ func (s *SubnodeService) start(inst *Instance) error {
 	// Start services
 	for _, services := range services {
 		for _, svc := range services {
-			inst.logger.InfoContext(inst.context, "Starting", "subnode", s.Name, "service", svc.Type(), "module", "run")
+			slog.InfoContext(inst.context, "Starting", "subnode", s.Name, "service", svc.Type(), "module", "run")
 			err := svc.start(sub)
 			if err != nil {
 				return errors.UnknownError.WithFormat("start service %v: %w", svc.Type(), err)
