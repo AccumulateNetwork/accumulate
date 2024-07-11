@@ -26,6 +26,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"golang.org/x/crypto/acme/autocert"
 )
@@ -143,14 +144,14 @@ func (h *HttpService) start(inst *Instance) error {
 }
 
 func (h *HttpListener) applyHttpDefaults() {
-	setDefaultPtr(&h.ReadHeaderTimeout, DefaultHTTPReadHeaderTimeout)
+	setDefaultPtr(&h.ReadHeaderTimeout, encoding.Duration(DefaultHTTPReadHeaderTimeout))
 	setDefaultPtr(&h.ConnectionLimit, DefaultHTTPConnectionLimit)
 }
 
 func (h *HttpListener) startHTTP(inst *Instance, handler http.Handler) (*http.Server, error) {
 	server := &http.Server{
 		Handler:           handler,
-		ReadHeaderTimeout: *h.ReadHeaderTimeout,
+		ReadHeaderTimeout: h.ReadHeaderTimeout.Get(),
 	}
 
 	inst.cleanup(server.Shutdown)

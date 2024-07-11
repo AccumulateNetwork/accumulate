@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
 
 type baseRef[T comparable] struct {
@@ -83,7 +82,6 @@ type ServiceOrRef[T serviceType[T]] baseRef[T]
 
 type serviceType[T any] interface {
 	Service
-	encoding.BinaryValue
 	Copy() T
 	Equal(T) bool
 	comparable
