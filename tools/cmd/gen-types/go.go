@@ -288,74 +288,38 @@ func GoResolveType(field *Field, forNew, ignoreRepeatable bool) string {
 
 func GoResolveEip712Type(field *Field, forNew, ignoreRepeatable bool) string {
 	typ := field.Type.GoType()
-	isPod := true
-	cast := "undefined"
-	_ = cast
 	switch code := field.EffectiveMarshalType(); code {
-	case Int:
-		typ = "int64"
-		cast = "int64"
-	case Uint:
-		typ = "uint64"
-		cast = "uint64"
-	case Bool, String:
+	case Int, Uint, Bool, String:
 		typ = field.Type.GoType()
-		cast = typ
 	case Hash:
 		typ = "bytes32"
-		cast = "string" //bytes are expected to be encoded in hex
 	case Bytes:
 		typ = "bytes"
-		cast = "string" //bytes are expected to be encoded in hex
 	case Url, TxID:
 		typ = "string" // reduces the Url and transaction id to a string
-		cast = "string"
 	case Time, Duration:
 		typ = "string" //???? reduces time.Time and time.Duration to a string
-		cast = "string"
 	case BigInt:
 		typ = "uint256"
-		cast = "big.Int"
 	case RawJson:
 		typ = "string"
-		cast = "string"
 	case Float:
 		typ = "float"
-		cast = "float64"
 	case Any:
 		typ = code.Title()
-		isPod = false
-	default:
-		isPod = false
 	}
 
 	field.Type.GoType()
 	if field.AsEnum() {
 		typ = "string" //interpret as string types
-		cast = "string"
-		isPod = true
 	}
 
 	ret := ""
 	lcName := typegen.LowerFirstWord(field.Name)
-	ptr := ""
-	_ = ptr
-	if forNew {
-		ptr = "*"
-	}
-	if isPod {
-		if field.Repeatable && !ignoreRepeatable {
-			ret = "encoding.NewTypeField(\"" + lcName + "\",\"" + typ + "[]\")"
-		} else {
-			ret = "encoding.NewTypeField(\"" + lcName + "\",\"" + typ + "\")"
-		}
+	if field.Repeatable && !ignoreRepeatable {
+		ret = "encoding.NewTypeField(\"" + lcName + "\",\"" + typ + "[]\")"
 	} else {
-		if field.Repeatable && !ignoreRepeatable {
-			ret = "encoding.NewTypeField(\"" + lcName + "\",\"" + typ + "[]\")"
-		} else {
-			//we're dealing with complex type
-			ret = "encoding.NewTypeField(\"" + lcName + "\",\"" + typ + "\")"
-		}
+		ret = "encoding.NewTypeField(\"" + lcName + "\",\"" + typ + "\")"
 	}
 	return ret
 }

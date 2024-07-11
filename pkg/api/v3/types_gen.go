@@ -7724,7 +7724,7 @@ func init() {
 	}, "RecordRange", "recordRange")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
-		encoding.NewTypeField("type", "uint64"),
+		encoding.NewTypeField("type", "ServiceType"),
 		encoding.NewTypeField("argument", "string"),
 	}, "ServiceAddress", "serviceAddress")
 

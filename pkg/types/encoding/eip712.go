@@ -42,10 +42,7 @@ var EIP712DomainHash []byte
 var Eip712Domain = EIP712Domain{
 	Name:    "Accumulate",
 	Version: "1.0.0",
-
-	// Use a fake domain for the moment
-	ChainId: big.NewInt(1),
-	// ChainId: big.NewInt(281),
+	ChainId: big.NewInt(281),
 }
 
 type Eip712Encoder struct {
@@ -123,7 +120,6 @@ func mapEnumTypes[T any, R any](f Func[T, R]) (string, map[string]string) {
 		}
 		op, err := f(*enumType)
 		if err != nil {
-			//fmt.Println("Error calling function with enum:", err)
 			continue
 		}
 
@@ -175,7 +171,7 @@ func FromTypedInterfaceToBytes(v interface{}, typesAliasMap map[string]string) (
 		return nil, fmt.Errorf("invalid data entry type: %T", vv["type"])
 	}
 
-	b, err := d.hash(vv, t) //encodeData(vv, t, d)
+	b, err := d.hash(vv, t)
 	if err != nil {
 		return nil, err
 	}
@@ -509,7 +505,7 @@ func NewTypeField(n string, tp string) *TypeField {
 				return nil, fmt.Errorf("eip712 field %s", tp)
 			}
 
-			b, err := fields.hash(v, tp) //encodeData(m, tp, fields)
+			b, err := fields.hash(v, tp)
 			if err != nil {
 				return nil, err
 			}
@@ -751,9 +747,7 @@ func FromfloatToBytes(value float64) ([]byte, error) {
 }
 
 func hexStringToBytes(hexStr string) ([]byte, error) {
-	if strings.HasPrefix(hexStr, "0x") {
-		hexStr = hexStr[2:]
-	}
+	hexStr = strings.TrimPrefix(hexStr, "0x")
 	b, err := hex.DecodeString(hexStr)
 	if err != nil {
 		return nil, err

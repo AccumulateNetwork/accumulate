@@ -1210,7 +1210,7 @@ func SignEip712TypedData(sig *Eip712TypedDataSignature, privateKey []byte, outer
 
 	sig.TransactionHash = txn.Hash()
 	sig.Signature, err = eth.Sign(hash, priv)
-	return nil
+	return err
 }
 
 // GetSigner returns Signer.
