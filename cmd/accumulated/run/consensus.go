@@ -71,18 +71,6 @@ var (
 	coreConsensusProvidesClient    = ioc.Provides[client.Client](func(c *CoreConsensusApp) string { return c.Partition.ID })
 )
 
-type ConsensusApp interface {
-	Type() ConsensusAppType
-	CopyAsInterface() any
-
-	partition() *protocol.PartitionInfo
-	Requires() []ioc.Requirement
-	Provides() []ioc.Provided
-	prestart(*Instance) error
-	start(*Instance, *tendermint) (types.Application, error)
-	register(*Instance, *tendermint, *tmnode.Node) error
-}
-
 type tendermint struct {
 	config   *tmcfg.Config
 	privVal  *tmpv.FilePV
