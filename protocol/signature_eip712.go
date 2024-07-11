@@ -67,14 +67,18 @@ func MarshalEip712(txn *Transaction, sig Signature) (ret []byte, err error) {
 	e.PrimaryType = "Transaction"
 	e.Domain = encoding.Eip712Domain
 	e.Message = jtx
-	e.Types = r.Types()
-	e.Types["EIP712Domain"] = *encoding.Eip712DomainType().Fields
+	e.Types = map[string][]*encoding.TypeField{}
+	r.Types(e.Types)
+	encoding.EIP712DomainValue.Types(e.Types)
+
+	// Reformat the message JSON to be compatible with Ethereum
+	formatEIP712Message(jtx, e.Types, e.Types[e.PrimaryType])
 
 	return json.Marshal(e)
 }
 
-func formatEIP712Message(v map[string]any, td *encoding.TypeDefinition) {
-	for _, field := range *td.Fields {
+func formatEIP712Message(v map[string]any, types map[string][]*encoding.TypeField, fields []*encoding.TypeField) {
+	for _, field := range fields {
 		fv, ok := v[field.Name]
 		if !ok {
 			continue
@@ -86,9 +90,9 @@ func formatEIP712Message(v map[string]any, td *encoding.TypeDefinition) {
 			continue
 		}
 
-		sch, ok := encoding.SchemaDictionary[strings.TrimPrefix(field.Type, "[]")]
+		fields, ok := types[strings.TrimPrefix(field.Type, "[]")]
 		if ok {
-			formatEIP712Message(fv.(map[string]any), sch)
+			formatEIP712Message(fv.(map[string]any), types, fields)
 		}
 	}
 }
@@ -133,8 +137,6 @@ func makeEIP712Message(txn *Transaction, sig Signature) (map[string]any, error) 
 	}
 	jtx["signature"] = jsig
 
-	// Reformat the message JSON to be compatible with Ethereum
-	formatEIP712Message(jtx, NewEip712TransactionDefinition(txn))
 	return jtx, nil
 }
 
