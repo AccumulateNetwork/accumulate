@@ -7,30 +7,20 @@
 package run
 
 import (
+	types "github.com/cometbft/cometbft/abci/types"
+	tmnode "github.com/cometbft/cometbft/node"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/address"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-enum  --package run enums.yml
-//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --package run config.yml
-//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --package run --language go-union --out unions_gen.go config.yml
+//go:generate go run gitlab.com/accumulatenetwork/core/schema/cmd/generate schema schema.yml -w schema_gen.go
+//go:generate go run gitlab.com/accumulatenetwork/core/schema/cmd/generate types schema.yml -w types_gen.go
+//go:generate go run github.com/rinchsan/gosimports/cmd/gosimports -w .
 
-type (
-	ConfigurationType int
-	ServiceType       int
-	StorageType       int
-	PrivateKeyType    int
-	ConsensusAppType  int
-	CoreValidatorMode int
-)
-
-type Service interface {
-	ioc.Factory
-
-	Type() ServiceType
-	CopyAsInterface() any
-
-	start(inst *Instance) error
-}
+// TODO: Remove (once schema supports it)
+type RouterServiceRef = ServiceOrRef[*RouterService]
 
 type resetable interface {
 	reset(inst *Instance) error
@@ -42,7 +32,32 @@ type prestarter interface {
 
 type Configuration interface {
 	Type() ConfigurationType
-	CopyAsInterface() any
-
 	apply(inst *Instance, cfg *Config) error
+}
+
+type Service interface {
+	ioc.Factory
+	Type() ServiceType
+	start(inst *Instance) error
+}
+
+type Storage interface {
+	Type() StorageType
+	setPath(path string)
+	open(*Instance) (keyvalue.Beginner, error)
+}
+
+type PrivateKey interface {
+	Type() PrivateKeyType
+	get(inst *Instance) (address.Address, error)
+}
+
+type ConsensusApp interface {
+	Type() ConsensusAppType
+	partition() *protocol.PartitionInfo
+	Requires() []ioc.Requirement
+	Provides() []ioc.Provided
+	prestart(*Instance) error
+	start(*Instance, *tendermint) (types.Application, error)
+	register(*Instance, *tendermint, *tmnode.Node) error
 }

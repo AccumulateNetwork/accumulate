@@ -93,8 +93,8 @@ func applyDevNetFlags(cmd *cobra.Command, cfg *run.Config, dev *run.DevnetConfig
 	}
 
 	if cmd.Flag("database").Changed {
-		typ, ok := run.StorageTypeByName(flagRunDevnet.Database)
-		if !ok {
+		var typ run.StorageType
+		if !typ.SetByName(flagRunDevnet.Database) {
 			fatalf("--database: %q is not a valid storage type", flagRunDevnet.Database)
 		}
 		dev.StorageType = &typ
