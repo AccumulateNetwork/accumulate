@@ -12,7 +12,7 @@ import (
 var (
 	sblockID         schema.Methods[*blockID, *blockID, *schema.CompositeType]
 	sendBlockEntry   schema.Methods[*endBlockEntry, *endBlockEntry, *schema.CompositeType]
-	sentry           schema.Methods[entry, *entry, *schema.UnionType]
+	sentry           schema.UnionMethods[entry, entryType]
 	sentryType       schema.EnumMethods[entryType]
 	sfileHeader      schema.Methods[*fileHeader, *fileHeader, *schema.CompositeType]
 	srecordEntry     schema.Methods[*recordEntry, *recordEntry, *schema.CompositeType]
@@ -45,7 +45,7 @@ func init() {
 		},
 	}).SetGoType()
 
-	sentry = schema.WithMethods[entry, *entry](
+	sentry = schema.WithUnionMethods[entry, entryType](
 		&schema.UnionType{
 			TypeBase: schema.TypeBase{
 				Name: "entry",
@@ -105,7 +105,7 @@ func init() {
 				Name: "Key",
 				Type: &schema.PointerType{
 					TypeBase: schema.TypeBase{},
-					Elem:     schema.ExternalTypeReference[record.Key](),
+					Elem:     schema.TypeReferenceFor[record.Key](),
 				},
 			},
 			{

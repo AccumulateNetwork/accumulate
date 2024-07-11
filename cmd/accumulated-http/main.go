@@ -25,6 +25,7 @@ import (
 	. "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 	cmdutil "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/accumulate"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
 
 func main() {
@@ -116,7 +117,7 @@ func run(cmd *cobra.Command, args []string) {
 		HttpListener: HttpListener{
 			Listen:            flag.HttpListen,
 			ConnectionLimit:   &flag.ConnLimit,
-			ReadHeaderTimeout: &flag.Timeout,
+			ReadHeaderTimeout: (*encoding.Duration)(&flag.Timeout),
 			TlsCertPath:       flag.TlsCert,
 			TlsKeyPath:        flag.TlsKey,
 		},
