@@ -16,13 +16,10 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"encoding/binary"
 	"encoding/hex"
 	"encoding/pem"
-	"errors"
 	"fmt"
 	"math/big"
-	badrand "math/rand"
 	"os"
 	"os/exec"
 	"testing"
@@ -32,7 +29,6 @@ import (
 	"github.com/btcsuite/btcutil/base58"
 	eth "github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/address"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -498,23 +494,11 @@ func TestTypesFromCerts(t *testing.T) {
 	}
 }
 
-// generates privatekey and compressed public key
-func NewSECP256K1(seed ...any) *btc.PrivateKey {
-	hash := record.NewKey(seed...).Hash()
-	src := badrand.NewSource(int64(binary.BigEndian.Uint64(hash[:])))
-	priv, err := ecdsa.GenerateKey(btc.S256(), badrand.New(src))
-	if err != nil {
-		panic(err)
-	}
-	return (*btc.PrivateKey)(priv)
-}
-
 func TestEip712TypedDataSignature(t *testing.T) {
 	txn := &Transaction{}
 	err := txn.UnmarshalJSON([]byte(`{
 		"header": {
 			"principal": "acc://adi.acme/ACME",
-			"initiator": "84e032fba8a5456f631c822a2b2466c18b3fa7804330ab87088ed6e30d690505"
 		},
 		"body": {
 			"type": "sendTokens",
@@ -532,9 +516,10 @@ func TestEip712TypedDataSignature(t *testing.T) {
 		Timestamp:     1720564975623,
 		Vote:          VoteTypeAccept,
 	}
+	txn.Header.Initiator = [32]byte(eip712sig.Metadata().Hash())
 
 	// Sign the transaction
-	priv := NewSECP256K1(t.Name())
+	priv := acctesting.NewSECP256K1(t.Name())
 	require.NoError(t, SignEip712TypedData(eip712sig, priv.Serialize(), nil, txn))
 
 	// Verify the signature
@@ -546,7 +531,6 @@ func TestEIP712DelegatedKeyPageUpdate(t *testing.T) {
 	err := txn.UnmarshalJSON([]byte(`{
 		"header": {
 			"principal": "acc://adi.acme/ACME",
-			"initiator": "84e032fba8a5456f631c822a2b2466c18b3fa7804330ab87088ed6e30d690505"
 		},
 		"body": {
 			"type": "updateKeyPage",
@@ -568,9 +552,10 @@ func TestEIP712DelegatedKeyPageUpdate(t *testing.T) {
 		Signature: inner,
 		Delegator: url.MustParse("acc://foo.bar"),
 	}
+	txn.Header.Initiator = [32]byte(outer.Metadata().Hash())
 
 	// Sign the transaction
-	priv := NewSECP256K1(t.Name())
+	priv := acctesting.NewSECP256K1(t.Name())
 	require.NoError(t, SignEip712TypedData(inner, priv.Serialize(), outer, txn))
 
 	// Verify the signature
@@ -578,17 +563,10 @@ func TestEIP712DelegatedKeyPageUpdate(t *testing.T) {
 }
 
 func TestEIP712MessageForWallet(t *testing.T) {
-	// Verify the system has node
-	_, err := exec.LookPath("node")
-	if err != nil {
-		if !errors.Is(err, exec.ErrNotFound) || os.Getenv("CI") == "true" {
-			require.NoError(t, err)
-		}
-		t.Skip("Cannot locate node binary")
-	}
+	acctesting.SkipWithoutTool(t, "node")
 
 	txn := &Transaction{}
-	err = txn.UnmarshalJSON([]byte(`{
+	err := txn.UnmarshalJSON([]byte(`{
 		"header": {
 			"principal": "acc://adi.acme/ACME"
 		},
@@ -602,7 +580,7 @@ func TestEIP712MessageForWallet(t *testing.T) {
 	}`))
 	require.NoError(t, err)
 
-	priv := NewSECP256K1(t.Name())
+	priv := acctesting.NewSECP256K1(t.Name())
 	sig := &Eip712TypedDataSignature{
 		PublicKey:     eth.FromECDSAPub(&priv.PublicKey),
 		Signer:        url.MustParse("acc://adi.acme/book/1"),

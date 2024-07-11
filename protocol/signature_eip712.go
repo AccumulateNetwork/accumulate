@@ -140,7 +140,7 @@ func makeEIP712Message(txn *Transaction, sig Signature) (map[string]any, error) 
 	return jtx, nil
 }
 
-func Eip712Hasher(txn *Transaction, sig Signature) ([]byte, error) {
+func EIP712Hash(txn *Transaction, sig Signature) ([]byte, error) {
 	jtx, err := makeEIP712Message(txn, sig)
 	if err != nil {
 		return nil, err

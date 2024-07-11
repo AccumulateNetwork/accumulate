@@ -1203,7 +1203,7 @@ func SignEip712TypedData(sig *Eip712TypedDataSignature, privateKey []byte, outer
 	if outer == nil {
 		outer = sig
 	}
-	hash, err := Eip712Hasher(txn, outer)
+	hash, err := EIP712Hash(txn, outer)
 	if err != nil {
 		return err
 	}
@@ -1279,7 +1279,7 @@ func (e *Eip712TypedDataSignature) Verify(sig Signature, msg Signable) bool {
 	if sig == nil {
 		sig = e
 	}
-	typedDataTxnHash, err := Eip712Hasher(txn, sig)
+	typedDataTxnHash, err := EIP712Hash(txn, sig)
 	if err != nil {
 		return false
 	}

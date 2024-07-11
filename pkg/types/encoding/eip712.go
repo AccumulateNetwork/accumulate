@@ -169,12 +169,6 @@ func (r eip712EnumResolver) Resolve(v any, typeName string) (eipResolvedValue, e
 	return d.Resolve(v, typeName)
 }
 
-type TypedData struct {
-	TypeName string
-	Structs  []*TypedData
-	Types    []TypeField
-}
-
 func (td *TypeDefinition) Resolve(v any, typeName string) (eipResolvedValue, error) {
 	data, ok := v.(map[string]any)
 	if !ok {
@@ -206,14 +200,6 @@ func (td *TypeDefinition) Resolve(v any, typeName string) (eipResolvedValue, err
 	}, nil
 }
 
-func (td *TypeDefinition) hash(v interface{}, typeName string) ([]byte, error) {
-	e, err := td.Resolve(v, typeName)
-	if err != nil {
-		return nil, err
-	}
-	return e.Hash()
-}
-
 type eipResolvedValue interface {
 	Hash() ([]byte, error)
 	Types(map[string][]*TypeField)
@@ -233,10 +219,7 @@ type eipResolvedField struct {
 
 type eipResolvedArray []eipResolvedValue
 
-type eipResolvedAtomic struct {
-	Value  any
-	hasher func(any) ([]byte, error)
-}
+type eipResolvedAtomic func() ([]byte, error)
 
 func (e *eipResolvedStruct) Hash() ([]byte, error) {
 	//the stripping shouldn't be necessary, but do it as a precaution
@@ -326,12 +309,9 @@ func (e eipResolvedArray) Types(ret map[string][]*TypeField) {
 	}
 }
 
-func (e *eipResolvedAtomic) Hash() ([]byte, error) {
-	return e.hasher(e.Value)
-}
-
-func (e *eipResolvedAtomic) header(map[string]string)      {}
-func (e *eipResolvedAtomic) Types(map[string][]*TypeField) {}
+func (e eipResolvedAtomic) Hash() ([]byte, error)         { return e() }
+func (e eipResolvedAtomic) header(map[string]string)      {}
+func (e eipResolvedAtomic) Types(map[string][]*TypeField) {}
 
 type eip712AtomicResolver[V any] func(V) ([]byte, error)
 
@@ -352,12 +332,7 @@ func (r eip712AtomicResolver[T]) Resolve(v any, _ string) (eipResolvedValue, err
 		return nil, fmt.Errorf("eip712 value of type %T does not match type field", v)
 	}
 
-	return &eipResolvedAtomic{
-		Value: v,
-		hasher: func(any) ([]byte, error) {
-			return r(t)
-		},
-	}, nil
+	return eipResolvedAtomic(func() ([]byte, error) { return r(t) }), nil
 }
 
 func newAtomicEncoder[T any](hasher func(T) ([]byte, error)) EIP712Resolver {
