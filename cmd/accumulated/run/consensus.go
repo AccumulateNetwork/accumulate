@@ -7,6 +7,7 @@
 package run
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -69,18 +70,6 @@ var (
 	coreConsensusProvidesRouter    = ioc.Provides[routing.Router](func(c *CoreConsensusApp) string { return c.Partition.ID })
 	coreConsensusProvidesClient    = ioc.Provides[client.Client](func(c *CoreConsensusApp) string { return c.Partition.ID })
 )
-
-type ConsensusApp interface {
-	Type() ConsensusAppType
-	CopyAsInterface() any
-
-	partition() *protocol.PartitionInfo
-	Requires() []ioc.Requirement
-	Provides() []ioc.Provided
-	prestart(*Instance) error
-	start(*Instance, *tendermint) (types.Application, error)
-	register(*Instance, *tendermint, *tmnode.Node) error
-}
 
 type tendermint struct {
 	config   *tmcfg.Config
@@ -246,12 +235,10 @@ func (c *ConsensusService) start(inst *Instance) error {
 		return errors.UnknownError.WithFormat("start consensus: %w", err)
 	}
 
-	inst.cleanup(func() {
+	inst.cleanup(func(context.Context) error {
 		err := node.Stop()
-		if err != nil {
-			slog.ErrorContext(inst.context, "Error while stopping node", "error", err)
-		}
 		node.Wait()
+		return err
 	})
 
 	err = consensusProvidesEventBus.Register(inst.services, c, d.eventBus)

@@ -10,15 +10,34 @@ import (
 )
 
 var (
+	sblockID         schema.Methods[*blockID, *blockID, *schema.CompositeType]
 	sendBlockEntry   schema.Methods[*endBlockEntry, *endBlockEntry, *schema.CompositeType]
-	sentry           schema.Methods[entry, *entry, *schema.UnionType]
+	sentry           schema.UnionMethods[entry, entryType]
 	sentryType       schema.EnumMethods[entryType]
+	sfileHeader      schema.Methods[*fileHeader, *fileHeader, *schema.CompositeType]
 	srecordEntry     schema.Methods[*recordEntry, *recordEntry, *schema.CompositeType]
+	srecordLocation  schema.Methods[*recordLocation, *recordLocation, *schema.CompositeType]
 	sstartBlockEntry schema.Methods[*startBlockEntry, *startBlockEntry, *schema.CompositeType]
 )
 
 func init() {
 	var deferredTypes schema.ResolverSet
+
+	sblockID = schema.WithMethods[*blockID, *blockID](&schema.CompositeType{
+		TypeBase: schema.TypeBase{
+			Name: "blockID",
+		},
+		Fields: []*schema.Field{
+			{
+				Name: "ID",
+				Type: &schema.SimpleType{Type: schema.SimpleTypeUint},
+			},
+			{
+				Name: "Part",
+				Type: &schema.SimpleType{Type: schema.SimpleTypeUint},
+			},
+		},
+	}).SetGoType()
 
 	sendBlockEntry = schema.WithMethods[*endBlockEntry, *endBlockEntry](&schema.CompositeType{
 		TypeBase: schema.TypeBase{
@@ -26,7 +45,7 @@ func init() {
 		},
 	}).SetGoType()
 
-	sentry = schema.WithMethods[entry, *entry](
+	sentry = schema.WithUnionMethods[entry, entryType](
 		&schema.UnionType{
 			TypeBase: schema.TypeBase{
 				Name: "entry",
@@ -71,6 +90,12 @@ func init() {
 			},
 		}).SetGoType()
 
+	sfileHeader = schema.WithMethods[*fileHeader, *fileHeader](&schema.CompositeType{
+		TypeBase: schema.TypeBase{
+			Name: "fileHeader",
+		},
+	}).SetGoType()
+
 	srecordEntry = schema.WithMethods[*recordEntry, *recordEntry](&schema.CompositeType{
 		TypeBase: schema.TypeBase{
 			Name: "recordEntry",
@@ -80,7 +105,7 @@ func init() {
 				Name: "Key",
 				Type: &schema.PointerType{
 					TypeBase: schema.TypeBase{},
-					Elem:     schema.ExternalTypeReference[record.Key](),
+					Elem:     schema.TypeReferenceFor[record.Key](),
 				},
 			},
 			{
@@ -94,27 +119,55 @@ func init() {
 		},
 	}).SetGoType()
 
+	srecordLocation = schema.WithMethods[*recordLocation, *recordLocation](&schema.CompositeType{
+		TypeBase: schema.TypeBase{
+			Name: "recordLocation",
+			Generate: schema.MapValue{
+				"methods": schema.MapValue{
+					"binary": schema.BooleanValue(false),
+				},
+			},
+		},
+		Fields: []*schema.Field{
+			{
+				Name: "Block",
+				Type: (&schema.PointerType{
+					TypeBase: schema.TypeBase{},
+				}).
+					ResolveElemTo(&deferredTypes, "blockID"),
+			},
+			{
+				Name: "Offset",
+				Type: &schema.SimpleType{Type: schema.SimpleTypeInt},
+			},
+			{
+				Name: "HeaderLen",
+				Type: &schema.SimpleType{Type: schema.SimpleTypeInt},
+			},
+			{
+				Name: "RecordLen",
+				Type: &schema.SimpleType{Type: schema.SimpleTypeInt},
+			},
+		},
+	}).SetGoType()
+
 	sstartBlockEntry = schema.WithMethods[*startBlockEntry, *startBlockEntry](&schema.CompositeType{
 		TypeBase: schema.TypeBase{
 			Name: "startBlockEntry",
 		},
 		Fields: []*schema.Field{
-			{
-				Name: "ID",
-				Type: &schema.SimpleType{Type: schema.SimpleTypeUint},
-			},
-			{
-				Name: "Parent",
-				Type: &schema.SimpleType{Type: schema.SimpleTypeUint},
-			},
+			(&schema.Field{}).ResolveTo(&deferredTypes, "blockID"),
 		},
 	}).SetGoType()
 
 	s, err := schema.New(
+		sblockID.Type,
 		sendBlockEntry.Type,
 		sentry.Type,
 		sentryType.Type,
+		sfileHeader.Type,
 		srecordEntry.Type,
+		srecordLocation.Type,
 		sstartBlockEntry.Type,
 	)
 	if err != nil {
@@ -127,7 +180,6 @@ func init() {
 		},
 		"methods": schema.MapValue{
 			"binary": schema.BooleanValue(true),
-			"json":   schema.BooleanValue(true),
 		},
 		"varPrefix": schema.MapValue{
 			"schema": schema.StringValue("s"),

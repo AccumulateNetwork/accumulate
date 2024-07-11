@@ -8,55 +8,87 @@ import (
 	"gitlab.com/accumulatenetwork/core/schema/pkg/widget"
 )
 
+type blockID struct {
+	ID   uint64
+	Part uint64
+}
+
+var wblockID = widget.ForComposite(widget.Fields[blockID]{
+	{Name: "id", ID: 1, Widget: widget.ForUint(func(v *blockID) *uint64 { return &v.ID })},
+	{Name: "part", ID: 2, Widget: widget.ForUint(func(v *blockID) *uint64 { return &v.Part })},
+}, widget.Identity[*blockID])
+
+// Copy returns a copy of the blockID.
+func (v *blockID) Copy() *blockID {
+	var u = new(blockID)
+	wblockID.CopyTo(u, v)
+	return u
+}
+
+// EqualblockID returns true if V is equal to U.
+func (v *blockID) Equal(u *blockID) bool {
+	return wblockID.Equal(v, u)
+}
+
+// MarshalBinary marshals the blockID to bytes using [binary].
+func (v *blockID) MarshalBinary() ([]byte, error) {
+	return widget.MarshalBinary(v, wblockID)
+}
+
+// MarshalBinary marshals the blockID to a [binary.Encoder].
+func (v *blockID) MarshalBinaryV2(enc *binary.Encoder) error {
+	return wblockID.MarshalBinary(enc, v)
+}
+
+// UnmarshalBinary unmarshals the blockID from bytes using [binary].
+func (v *blockID) UnmarshalBinary(b []byte) error {
+	return widget.UnmarshalBinary(v, wblockID, b)
+}
+
+// UnmarshalBinary unmarshals the blockID from a [binary.Decoder].
+func (v *blockID) UnmarshalBinaryV2(dec *binary.Decoder) error {
+	return wblockID.UnmarshalBinary(dec, v)
+}
+
 type endBlockEntry struct {
 }
 
-var wendBlockEntry = widget.ForCompositePtr(widget.Fields[endBlockEntry]{
+var wendBlockEntry = widget.ForComposite(widget.Fields[endBlockEntry]{
 	{Name: "type", ID: 1, Widget: widget.ForTag[*entryType]("type", (*endBlockEntry).Type)},
-}, widget.Identity[**endBlockEntry])
+}, widget.Identity[*endBlockEntry])
 
 func (endBlockEntry) Type() entryType { return entryTypeEndBlock }
 
 // Copy returns a copy of the endBlockEntry.
 func (v *endBlockEntry) Copy() *endBlockEntry {
-	var u *endBlockEntry
-	wendBlockEntry.CopyTo(&u, &v)
+	var u = new(endBlockEntry)
+	wendBlockEntry.CopyTo(u, v)
 	return u
 }
 
 // EqualendBlockEntry returns true if V is equal to U.
 func (v *endBlockEntry) Equal(u *endBlockEntry) bool {
-	return wendBlockEntry.Equal(&v, &u)
-}
-
-// MarshalBinary marshals the endBlockEntry to JSON.
-func (v *endBlockEntry) MarshalJSON() ([]byte, error) {
-	return widget.MarshalJSON(&v, wendBlockEntry)
-}
-
-// UnmarshalJSON unmarshals the endBlockEntry from JSON.
-func (v *endBlockEntry) UnmarshalJSON(b []byte) error {
-	return widget.UnmarshalJSON(&v, wendBlockEntry, b)
+	return wendBlockEntry.Equal(v, u)
 }
 
 // MarshalBinary marshals the endBlockEntry to bytes using [binary].
 func (v *endBlockEntry) MarshalBinary() ([]byte, error) {
-	return widget.MarshalBinary(&v, wendBlockEntry)
+	return widget.MarshalBinary(v, wendBlockEntry)
 }
 
 // MarshalBinary marshals the endBlockEntry to a [binary.Encoder].
 func (v *endBlockEntry) MarshalBinaryV2(enc *binary.Encoder) error {
-	return wendBlockEntry.MarshalBinary(enc, &v)
+	return wendBlockEntry.MarshalBinary(enc, v)
 }
 
 // UnmarshalBinary unmarshals the endBlockEntry from bytes using [binary].
 func (v *endBlockEntry) UnmarshalBinary(b []byte) error {
-	return widget.UnmarshalBinary(&v, wendBlockEntry, b)
+	return widget.UnmarshalBinary(v, wendBlockEntry, b)
 }
 
 // UnmarshalBinary unmarshals the endBlockEntry from a [binary.Decoder].
 func (v *endBlockEntry) UnmarshalBinaryV2(dec *binary.Decoder) error {
-	return wendBlockEntry.UnmarshalBinary(dec, &v)
+	return wendBlockEntry.UnmarshalBinary(dec, v)
 }
 
 // TODO type entry interface {}
@@ -87,13 +119,6 @@ func copyEntry(v entry) entry {
 // equalEntry returns true if A and B are equal.
 func equalEntry(a, b entry) bool {
 	return wentry.Equal(&a, &b)
-}
-
-// unmarshalEntryJSON unmarshals a entry from JSON.
-func unmarshalEntryJSON(b []byte) (entry, error) {
-	var v entry
-	err := widget.UnmarshalJSON(&v, wentry, b)
-	return v, err
 }
 
 // unmarshalEntryBinary unmarshals a entry from bytes using [binary].
@@ -137,16 +162,6 @@ func (v entryType) String() string {
 	return sentryType.String(v)
 }
 
-// MarshalBinary marshals the entryType to JSON.
-func (v entryType) MarshalJSON() ([]byte, error) {
-	return widget.MarshalJSON(&v, wentryType)
-}
-
-// UnmarshalJSON unmarshals the entryType from JSON.
-func (v *entryType) UnmarshalJSON(b []byte) error {
-	return widget.UnmarshalJSON(v, wentryType, b)
-}
-
 // MarshalBinary marshals the entryType to bytes using [binary].
 func (v entryType) MarshalBinary() ([]byte, error) {
 	return widget.MarshalBinary(&v, wentryType)
@@ -167,114 +182,155 @@ func (v *entryType) UnmarshalBinaryV2(dec *binary.Decoder) error {
 	return wentryType.UnmarshalBinary(dec, v)
 }
 
+type fileHeader struct {
+}
+
+var wfileHeader = widget.ForComposite(widget.Fields[fileHeader]{}, widget.Identity[*fileHeader])
+
+// Copy returns a copy of the fileHeader.
+func (v *fileHeader) Copy() *fileHeader {
+	var u = new(fileHeader)
+	wfileHeader.CopyTo(u, v)
+	return u
+}
+
+// EqualfileHeader returns true if V is equal to U.
+func (v *fileHeader) Equal(u *fileHeader) bool {
+	return wfileHeader.Equal(v, u)
+}
+
+// MarshalBinary marshals the fileHeader to bytes using [binary].
+func (v *fileHeader) MarshalBinary() ([]byte, error) {
+	return widget.MarshalBinary(v, wfileHeader)
+}
+
+// MarshalBinary marshals the fileHeader to a [binary.Encoder].
+func (v *fileHeader) MarshalBinaryV2(enc *binary.Encoder) error {
+	return wfileHeader.MarshalBinary(enc, v)
+}
+
+// UnmarshalBinary unmarshals the fileHeader from bytes using [binary].
+func (v *fileHeader) UnmarshalBinary(b []byte) error {
+	return widget.UnmarshalBinary(v, wfileHeader, b)
+}
+
+// UnmarshalBinary unmarshals the fileHeader from a [binary.Decoder].
+func (v *fileHeader) UnmarshalBinaryV2(dec *binary.Decoder) error {
+	return wfileHeader.UnmarshalBinary(dec, v)
+}
+
 type recordEntry struct {
 	Key     *record.Key
 	KeyHash [32]byte
 	Length  int64
 }
 
-var wrecordEntry = widget.ForCompositePtr(widget.Fields[recordEntry]{
+var wrecordEntry = widget.ForComposite(widget.Fields[recordEntry]{
 	{Name: "type", ID: 1, Widget: widget.ForTag[*entryType]("type", (*recordEntry).Type)},
 	{Name: "key", ID: 2, Widget: widget.ForValue(func(v *recordEntry) **record.Key { return &v.Key })},
 	{Name: "keyHash", ID: 3, Widget: widget.ForHash(func(v *recordEntry) *[32]byte { return &v.KeyHash })},
 	{Name: "length", ID: 4, Widget: widget.ForInt(func(v *recordEntry) *int64 { return &v.Length })},
-}, widget.Identity[**recordEntry])
+}, widget.Identity[*recordEntry])
 
 func (recordEntry) Type() entryType { return entryTypeRecord }
 
 // Copy returns a copy of the recordEntry.
 func (v *recordEntry) Copy() *recordEntry {
-	var u *recordEntry
-	wrecordEntry.CopyTo(&u, &v)
+	var u = new(recordEntry)
+	wrecordEntry.CopyTo(u, v)
 	return u
 }
 
 // EqualrecordEntry returns true if V is equal to U.
 func (v *recordEntry) Equal(u *recordEntry) bool {
-	return wrecordEntry.Equal(&v, &u)
-}
-
-// MarshalBinary marshals the recordEntry to JSON.
-func (v *recordEntry) MarshalJSON() ([]byte, error) {
-	return widget.MarshalJSON(&v, wrecordEntry)
-}
-
-// UnmarshalJSON unmarshals the recordEntry from JSON.
-func (v *recordEntry) UnmarshalJSON(b []byte) error {
-	return widget.UnmarshalJSON(&v, wrecordEntry, b)
+	return wrecordEntry.Equal(v, u)
 }
 
 // MarshalBinary marshals the recordEntry to bytes using [binary].
 func (v *recordEntry) MarshalBinary() ([]byte, error) {
-	return widget.MarshalBinary(&v, wrecordEntry)
+	return widget.MarshalBinary(v, wrecordEntry)
 }
 
 // MarshalBinary marshals the recordEntry to a [binary.Encoder].
 func (v *recordEntry) MarshalBinaryV2(enc *binary.Encoder) error {
-	return wrecordEntry.MarshalBinary(enc, &v)
+	return wrecordEntry.MarshalBinary(enc, v)
 }
 
 // UnmarshalBinary unmarshals the recordEntry from bytes using [binary].
 func (v *recordEntry) UnmarshalBinary(b []byte) error {
-	return widget.UnmarshalBinary(&v, wrecordEntry, b)
+	return widget.UnmarshalBinary(v, wrecordEntry, b)
 }
 
 // UnmarshalBinary unmarshals the recordEntry from a [binary.Decoder].
 func (v *recordEntry) UnmarshalBinaryV2(dec *binary.Decoder) error {
-	return wrecordEntry.UnmarshalBinary(dec, &v)
+	return wrecordEntry.UnmarshalBinary(dec, v)
+}
+
+type recordLocation struct {
+	Block     *blockID
+	Offset    int64
+	HeaderLen int64
+	RecordLen int64
+}
+
+var wrecordLocation = widget.ForComposite(widget.Fields[recordLocation]{
+	{Name: "block", ID: 1, Widget: widget.ForCompositePtr(wblockID.Fields, func(v *recordLocation) **blockID { return &v.Block })},
+	{Name: "offset", ID: 2, Widget: widget.ForInt(func(v *recordLocation) *int64 { return &v.Offset })},
+	{Name: "headerLen", ID: 3, Widget: widget.ForInt(func(v *recordLocation) *int64 { return &v.HeaderLen })},
+	{Name: "recordLen", ID: 4, Widget: widget.ForInt(func(v *recordLocation) *int64 { return &v.RecordLen })},
+}, widget.Identity[*recordLocation])
+
+// Copy returns a copy of the recordLocation.
+func (v *recordLocation) Copy() *recordLocation {
+	var u = new(recordLocation)
+	wrecordLocation.CopyTo(u, v)
+	return u
+}
+
+// EqualrecordLocation returns true if V is equal to U.
+func (v *recordLocation) Equal(u *recordLocation) bool {
+	return wrecordLocation.Equal(v, u)
 }
 
 type startBlockEntry struct {
-	ID     uint64
-	Parent uint64
+	blockID
 }
 
-var wstartBlockEntry = widget.ForCompositePtr(widget.Fields[startBlockEntry]{
+var wstartBlockEntry = widget.ForComposite(widget.Fields[startBlockEntry]{
 	{Name: "type", ID: 1, Widget: widget.ForTag[*entryType]("type", (*startBlockEntry).Type)},
-	{Name: "iD", ID: 2, Widget: widget.ForUint(func(v *startBlockEntry) *uint64 { return &v.ID })},
-	{Name: "parent", ID: 3, Widget: widget.ForUint(func(v *startBlockEntry) *uint64 { return &v.Parent })},
-}, widget.Identity[**startBlockEntry])
+	{ID: 2, Widget: widget.ForComposite(wblockID.Fields, func(v *startBlockEntry) *blockID { return &v.blockID })},
+}, widget.Identity[*startBlockEntry])
 
 func (startBlockEntry) Type() entryType { return entryTypeStartBlock }
 
 // Copy returns a copy of the startBlockEntry.
 func (v *startBlockEntry) Copy() *startBlockEntry {
-	var u *startBlockEntry
-	wstartBlockEntry.CopyTo(&u, &v)
+	var u = new(startBlockEntry)
+	wstartBlockEntry.CopyTo(u, v)
 	return u
 }
 
 // EqualstartBlockEntry returns true if V is equal to U.
 func (v *startBlockEntry) Equal(u *startBlockEntry) bool {
-	return wstartBlockEntry.Equal(&v, &u)
-}
-
-// MarshalBinary marshals the startBlockEntry to JSON.
-func (v *startBlockEntry) MarshalJSON() ([]byte, error) {
-	return widget.MarshalJSON(&v, wstartBlockEntry)
-}
-
-// UnmarshalJSON unmarshals the startBlockEntry from JSON.
-func (v *startBlockEntry) UnmarshalJSON(b []byte) error {
-	return widget.UnmarshalJSON(&v, wstartBlockEntry, b)
+	return wstartBlockEntry.Equal(v, u)
 }
 
 // MarshalBinary marshals the startBlockEntry to bytes using [binary].
 func (v *startBlockEntry) MarshalBinary() ([]byte, error) {
-	return widget.MarshalBinary(&v, wstartBlockEntry)
+	return widget.MarshalBinary(v, wstartBlockEntry)
 }
 
 // MarshalBinary marshals the startBlockEntry to a [binary.Encoder].
 func (v *startBlockEntry) MarshalBinaryV2(enc *binary.Encoder) error {
-	return wstartBlockEntry.MarshalBinary(enc, &v)
+	return wstartBlockEntry.MarshalBinary(enc, v)
 }
 
 // UnmarshalBinary unmarshals the startBlockEntry from bytes using [binary].
 func (v *startBlockEntry) UnmarshalBinary(b []byte) error {
-	return widget.UnmarshalBinary(&v, wstartBlockEntry, b)
+	return widget.UnmarshalBinary(v, wstartBlockEntry, b)
 }
 
 // UnmarshalBinary unmarshals the startBlockEntry from a [binary.Decoder].
 func (v *startBlockEntry) UnmarshalBinaryV2(dec *binary.Decoder) error {
-	return wstartBlockEntry.UnmarshalBinary(dec, &v)
+	return wstartBlockEntry.UnmarshalBinary(dec, v)
 }

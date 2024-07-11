@@ -15,18 +15,42 @@ import (
 var DefaultNameFormat = simpleNameFormat{}
 
 type NameFormat interface {
-	Format(int) string
-	Parse(string) (int, error)
+	Format(*blockID) string
+	Parse(string) (*blockID, error)
 }
 
 type simpleNameFormat struct{}
 
-func (simpleNameFormat) Format(i int) string {
-	return fmt.Sprintf("%d.blocks", i)
+const dotBlocks = ".blocks"
+
+func (simpleNameFormat) Format(b *blockID) string {
+	if b.Part == 0 {
+		return fmt.Sprintf("%d"+dotBlocks, b.ID)
+	}
+	return fmt.Sprintf("%d-%d"+dotBlocks, b.ID, b.Part)
 }
 
-func (simpleNameFormat) Parse(s string) (int, error) {
-	s = strings.TrimSuffix(s, ".blocks")
-	i, err := strconv.ParseInt(s, 10, 64)
-	return int(i), err
+func (simpleNameFormat) Parse(s string) (*blockID, error) {
+	if !strings.HasSuffix(s, dotBlocks) {
+		return nil, fmt.Errorf("%q is not a block file", s)
+	}
+
+	b := strings.Split(s[:len(s)-len(dotBlocks)], "-")
+	if len(b) > 2 {
+		return nil, fmt.Errorf("%q is not a block file", s)
+	}
+
+	i, err := strconv.ParseUint(b[0], 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("%q is not a block file: %w", s, err)
+	}
+	if len(b) == 1 {
+		return &blockID{ID: i}, nil
+	}
+
+	j, err := strconv.ParseUint(b[1], 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("%q is not a block file: %w", s, err)
+	}
+	return &blockID{ID: i, Part: j}, nil
 }

@@ -10,17 +10,39 @@ import (
 )
 
 var (
+	sParameters schema.Methods[*Parameters, *Parameters, *schema.CompositeType]
 	sbranch     schema.Methods[*branch, *branch, *schema.CompositeType]
 	semptyNode  schema.Methods[*emptyNode, *emptyNode, *schema.CompositeType]
 	sleaf       schema.Methods[*leaf, *leaf, *schema.CompositeType]
-	snode       schema.Methods[node, *node, *schema.UnionType]
+	snode       schema.UnionMethods[node, nodeType]
 	snodeType   schema.EnumMethods[nodeType]
-	sparameters schema.Methods[*parameters, *parameters, *schema.CompositeType]
 	sstateData  schema.Methods[*stateData, *stateData, *schema.CompositeType]
 )
 
 func init() {
 	var deferredTypes schema.ResolverSet
+
+	sParameters = schema.WithMethods[*Parameters, *Parameters](&schema.CompositeType{
+		TypeBase: schema.TypeBase{
+			Name: "Parameters",
+		},
+		Fields: []*schema.Field{
+			{
+				Name: "Power",
+				Type: &schema.SimpleType{Type: schema.SimpleTypeUint},
+			},
+			{
+				Name: "ArbitraryValues",
+				Type: &schema.SimpleType{Type: schema.SimpleTypeBool},
+			},
+		},
+		Transients: []*schema.Field{
+			{
+				Name: "Mask",
+				Type: &schema.SimpleType{Type: schema.SimpleTypeUint},
+			},
+		},
+	}).SetGoType()
 
 	sbranch = schema.WithMethods[*branch, *branch](&schema.CompositeType{
 		TypeBase: schema.TypeBase{
@@ -45,7 +67,7 @@ func init() {
 				Name: "bpt",
 				Type: &schema.PointerType{
 					TypeBase: schema.TypeBase{},
-					Elem:     schema.ExternalTypeReference[BPT](),
+					Elem:     schema.TypeReferenceFor[BPT](),
 				},
 			},
 			{
@@ -57,7 +79,7 @@ func init() {
 			},
 			{
 				Name: "status",
-				Type: schema.ExternalTypeReference[branchStatus](),
+				Type: schema.TypeReferenceFor[branchStatus](),
 			},
 			(&schema.Field{
 				Name: "Left",
@@ -97,7 +119,7 @@ func init() {
 				Name: "Key",
 				Type: &schema.PointerType{
 					TypeBase: schema.TypeBase{},
-					Elem:     schema.ExternalTypeReference[record.Key](),
+					Elem:     schema.TypeReferenceFor[record.Key](),
 				},
 			},
 			{
@@ -116,7 +138,7 @@ func init() {
 		},
 	}).SetGoType()
 
-	snode = schema.WithMethods[node, *node](
+	snode = schema.WithUnionMethods[node, nodeType](
 		&schema.UnionType{
 			TypeBase: schema.TypeBase{
 				Name: "node",
@@ -175,26 +197,6 @@ func init() {
 			},
 		}).SetGoType()
 
-	sparameters = schema.WithMethods[*parameters, *parameters](&schema.CompositeType{
-		TypeBase: schema.TypeBase{
-			Name: "parameters",
-		},
-		Fields: []*schema.Field{
-			{
-				Name: "Power",
-				Type: &schema.SimpleType{Type: schema.SimpleTypeUint},
-			},
-			{
-				Name: "Mask",
-				Type: &schema.SimpleType{Type: schema.SimpleTypeUint},
-			},
-			{
-				Name: "ArbitraryValues",
-				Type: &schema.SimpleType{Type: schema.SimpleTypeBool},
-			},
-		},
-	}).SetGoType()
-
 	sstateData = schema.WithMethods[*stateData, *stateData](&schema.CompositeType{
 		TypeBase: schema.TypeBase{
 			Name: "stateData",
@@ -208,17 +210,17 @@ func init() {
 				Name: "MaxHeight",
 				Type: &schema.SimpleType{Type: schema.SimpleTypeUint},
 			},
-			(&schema.Field{}).ResolveTo(&deferredTypes, "parameters"),
+			(&schema.Field{}).ResolveTo(&deferredTypes, "Parameters"),
 		},
 	}).SetGoType()
 
 	s, err := schema.New(
+		sParameters.Type,
 		sbranch.Type,
 		semptyNode.Type,
 		sleaf.Type,
 		snode.Type,
 		snodeType.Type,
-		sparameters.Type,
 		sstateData.Type,
 	)
 	if err != nil {

@@ -14,11 +14,18 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 	"golang.org/x/exp/slices"
 )
+
+var meter = otel.Meter("gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run")
+var serviceUp = must(meter.Int64Counter("accumulated_service_up"))
 
 type Instance struct {
 	config  *Config
@@ -66,6 +73,15 @@ func New(ctx context.Context, cfg *Config) (*Instance, error) {
 		return nil, errors.UnknownError.WithFormat("start logging: %w", err)
 	}
 
+	// Set the ID
+	setDefaultVal(&cfg.P2P, new(P2P))
+	setDefaultVal[PrivateKey](&cfg.P2P.Key, new(TransientPrivateKey))
+	if key, err := getPrivateKey(cfg.P2P.Key, inst); err != nil {
+		return nil, errors.UnknownError.WithFormat("load key: %w", err)
+	} else {
+		inst.id = uuid.NewSHA1(uuid.Nil, key[32:]).String()
+	}
+
 	return inst, nil
 }
 
@@ -108,11 +124,15 @@ func (inst *Instance) StartFiltered(predicate func(Service) bool) (err error) {
 		}
 	}()
 
-	// Start metrics
-	if inst.config.Instrumentation == nil {
-		inst.config.Instrumentation = new(Instrumentation)
-	}
+	// Start instrumentation and telemetry
+	setDefaultVal(&inst.config.Instrumentation, new(Instrumentation))
 	err = inst.config.Instrumentation.start(inst)
+	if err != nil {
+		return err
+	}
+
+	setDefaultVal(&inst.config.Telemetry, new(Telemetry))
+	err = inst.config.Telemetry.start(inst)
 	if err != nil {
 		return err
 	}
@@ -170,11 +190,20 @@ func (inst *Instance) StartFiltered(predicate func(Service) bool) (err error) {
 	// Start services
 	for _, services := range services {
 		for _, svc := range services {
-			inst.logger.InfoContext(inst.context, "Starting", "module", "run", "service", svc.Type())
+			slog.InfoContext(inst.context, "Starting", "module", "run", "service", svc.Type())
 			err := svc.start(inst)
 			if err != nil {
 				return errors.UnknownError.WithFormat("start service %v: %w", svc.Type(), err)
 			}
+
+			serviceUp.Add(inst.context, 1, metric.WithAttributes(
+				attribute.String("type", svc.Type().String())))
+
+			inst.cleanup(func(ctx context.Context) error {
+				serviceUp.Add(inst.context, -1, metric.WithAttributes(
+					attribute.String("type", svc.Type().String())))
+				return nil
+			})
 		}
 	}
 
@@ -227,12 +256,18 @@ func (i *Instance) run(fn func()) {
 	}()
 }
 
-func (i *Instance) cleanup(fn func()) {
+func (i *Instance) cleanup(fn func(context.Context) error) {
 	i.running.Add(1)
 	go func() {
 		defer i.running.Done()
 		<-i.context.Done()
-		fn()
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		err := fn(ctx)
+		if err != nil {
+			slog.Error("Error during shutdown", "error", err)
+		}
 	}()
 }
 

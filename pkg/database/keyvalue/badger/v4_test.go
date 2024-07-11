@@ -17,6 +17,10 @@ func BenchmarkV4Commit(b *testing.B) {
 	kvtest.BenchmarkCommit(b, newOpenerV4(b))
 }
 
+func BenchmarkV4Open(b *testing.B) {
+	kvtest.BenchmarkOpen(b, newOpenerV4(b))
+}
+
 func BenchmarkV4ReadRandom(b *testing.B) {
 	kvtest.BenchmarkReadRandom(b, newOpenerV4(b))
 }

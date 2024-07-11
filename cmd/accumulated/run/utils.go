@@ -36,6 +36,13 @@ var (
 	portAccP2P  = portOffset(config.PortOffsetAccumulateP2P)
 )
 
+func must[V any](v V, err error) V {
+	if err != nil {
+		panic(err)
+	}
+	return v
+}
+
 func Ptr[T any](v T) *T { return &v }
 
 func setDefaultPtr[V any](ptr **V, def V) V {
@@ -156,6 +163,20 @@ func decomposeListen(addr multiaddr.Multiaddr) (proto, host, port, http string, 
 		return true
 	})
 	return
+}
+
+func httpListen(ma multiaddr.Multiaddr) (net.Listener, bool, error) {
+	proto, addr, port, http, err := decomposeListen(ma)
+	if err != nil {
+		return nil, false, err
+	}
+	if proto == "" || port == "" {
+		return nil, false, errors.UnknownError.WithFormat("invalid listen address: %v", ma)
+	}
+	addr += ":" + port
+
+	l, err := net.Listen(proto, addr)
+	return l, http == "https", err
 }
 
 func isPrivate(addr multiaddr.Multiaddr) bool {

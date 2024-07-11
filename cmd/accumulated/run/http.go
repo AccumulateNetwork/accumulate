@@ -7,7 +7,6 @@
 package run
 
 import (
-	"context"
 	"encoding/json"
 	"log/slog"
 	"net"
@@ -27,6 +26,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"golang.org/x/crypto/acme/autocert"
 )
@@ -144,38 +144,24 @@ func (h *HttpService) start(inst *Instance) error {
 }
 
 func (h *HttpListener) applyHttpDefaults() {
-	setDefaultPtr(&h.ReadHeaderTimeout, DefaultHTTPReadHeaderTimeout)
+	setDefaultPtr(&h.ReadHeaderTimeout, encoding.Duration(DefaultHTTPReadHeaderTimeout))
 	setDefaultPtr(&h.ConnectionLimit, DefaultHTTPConnectionLimit)
 }
 
 func (h *HttpListener) startHTTP(inst *Instance, handler http.Handler) (*http.Server, error) {
 	server := &http.Server{
 		Handler:           handler,
-		ReadHeaderTimeout: *h.ReadHeaderTimeout,
+		ReadHeaderTimeout: h.ReadHeaderTimeout.Get(),
 	}
 
-	inst.cleanup(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		err := server.Shutdown(ctx)
-		slog.Error("Server stopped", "error", err)
-	})
+	inst.cleanup(server.Shutdown)
 
 	for _, l := range h.Listen {
-		proto, addr, port, http, err := decomposeListen(l)
+		l, secure, err := httpListen(l)
 		if err != nil {
 			return nil, err
 		}
-		if proto == "" || port == "" {
-			return nil, errors.UnknownError.WithFormat("invalid listen address: %v", l)
-		}
-		addr += ":" + port
-
-		l, err := net.Listen(proto, addr)
-		if err != nil {
-			return nil, err
-		}
-		err = h.serveHTTP(inst, server, l, http == "https")
+		err = h.serveHTTP(inst, server, l, secure)
 		if err != nil {
 			return nil, err
 		}

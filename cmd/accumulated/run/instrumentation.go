@@ -7,8 +7,10 @@
 package run
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"runtime"
 	"runtime/pprof"
@@ -17,17 +19,21 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
 
 func (i *Instrumentation) start(inst *Instance) error {
-	err := i.listen(inst)
+	err := i.startPprof(inst)
+	if err != nil {
+		return errors.UnknownError.WithFormat("pprof: %w", err)
+	}
+
+	err = i.listen(inst)
 	if err != nil {
 		return errors.UnknownError.WithFormat("listen: %w", err)
 	}
 
-	if i.Monitoring == nil {
-		i.Monitoring = new(Monitor)
-	}
+	setDefaultVal(&i.Monitoring, new(Monitor))
 	err = i.Monitoring.start(inst)
 	if err != nil {
 		return errors.UnknownError.WithFormat("monitoring: %w", err)
@@ -55,11 +61,40 @@ func (i *Instrumentation) listen(inst *Instance) error {
 	return err
 }
 
+func (i *Instrumentation) startPprof(inst *Instance) error {
+	if i.PprofListen == nil {
+		return nil
+	}
+
+	l, secure, err := httpListen(i.PprofListen)
+	if err != nil {
+		return err
+	}
+	if secure {
+		return errors.BadRequest.With("https pprof not supported")
+	}
+
+	// Default HTTP server plus slow-loris prevention
+	s := &http.Server{ReadHeaderTimeout: time.Minute}
+
+	inst.run(func() {
+		err := s.Serve(l)
+		slog.Error("Server stopped (pprof)", "error", err)
+	})
+
+	inst.cleanup(s.Shutdown)
+	return nil
+}
+
 func (m *Monitor) start(inst *Instance) error {
-	setDefaultPtr(&m.ProfileMemory, false)           // Enabled      = false
-	setDefaultPtr(&m.MemoryPollingRate, time.Minute) // Polling rate = every minute
-	setDefaultPtr(&m.AllocRateTrigger, 50<<20)       // Trigger rate = 50 MiB/s
-	setDefaultVal(&m.Directory, "traces")            // Directory    = ./traces
+	if m == nil {
+		m = new(Monitor)
+	}
+
+	setDefaultPtr(&m.ProfileMemory, false)                              // Enabled      = false
+	setDefaultPtr(&m.MemoryPollingRate, encoding.Duration(time.Minute)) // Polling rate = every minute
+	setDefaultPtr(&m.AllocRateTrigger, 50<<20)                          // Trigger rate = 50 MiB/s
+	setDefaultVal(&m.Directory, "traces")                               // Directory    = ./traces
 
 	if *m.ProfileMemory {
 		err := os.MkdirAll(inst.path(m.Directory), 0700)
@@ -74,8 +109,8 @@ func (m *Monitor) start(inst *Instance) error {
 }
 
 func (m *Monitor) pollMemory(inst *Instance) {
-	tick := time.NewTicker(*m.MemoryPollingRate)
-	inst.cleanup(tick.Stop)
+	tick := time.NewTicker(m.MemoryPollingRate.Get())
+	inst.cleanup(func(context.Context) error { tick.Stop(); return nil })
 
 	var s1, s2 runtime.MemStats
 	runtime.ReadMemStats(&s1)
