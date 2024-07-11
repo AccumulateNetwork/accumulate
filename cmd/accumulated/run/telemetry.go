@@ -38,7 +38,10 @@ import (
 )
 
 func (t *Telemetry) start(inst *Instance) error {
-	if !setDefaultPtr(&t.Enabled, true) {
+	setDefaultPtr(&t.Enabled, true)
+	setDefaultPtr(&t.Stdout, false)
+
+	if !*t.Enabled {
 		return nil
 	}
 
@@ -83,6 +86,9 @@ func (t *Telemetry) setupPropagator(*resource.Resource, *Instance) error {
 }
 
 func (t *Telemetry) setupTraceProvider(res *resource.Resource, inst *Instance) error {
+	if !*t.Stdout {
+		return nil
+	}
 	exporter, err := stdouttrace.New(
 		stdouttrace.WithPrettyPrint())
 	if err != nil {
@@ -130,7 +136,7 @@ func (t *Telemetry) setupMeterProvider(res *resource.Resource, inst *Instance) e
 	}
 
 	var exporters []metric.Exporter
-	if setDefaultPtr(&t.Stdout, false) {
+	if *t.Stdout {
 		exporter, err := stdoutmetric.New()
 		if err != nil {
 			return err
@@ -164,7 +170,7 @@ func (t *Telemetry) setupMeterProvider(res *resource.Resource, inst *Instance) e
 		defaultRule = new(TelemetryRule)
 	}
 	if !defaultRule.Drop && defaultRule.Rate == 0 {
-		defaultRule.Rate = time.Minute
+		defaultRule.Rate.Set(time.Minute)
 	}
 
 	var drop []func(string) bool
@@ -190,7 +196,7 @@ func (t *Telemetry) setupMeterProvider(res *resource.Resource, inst *Instance) e
 			return err
 		}
 		rateFilters = append(rateFilters, f)
-		rates = append(rates, r.Rate)
+		rates = append(rates, r.Rate.Get())
 	}
 
 	for _, exporter := range exporters {
@@ -217,7 +223,7 @@ func (t *Telemetry) setupMeterProvider(res *resource.Resource, inst *Instance) e
 				metric.WithReader(
 					metric.NewPeriodicReader(&filterExporter{Exporter: exporter, match: match},
 						metric.WithProducer(otelProm),
-						metric.WithInterval(defaultRule.Rate))))
+						metric.WithInterval(defaultRule.Rate.Get()))))
 		}
 
 		for i, rate := range rates {
@@ -252,6 +258,9 @@ func (t *Telemetry) setupMeterProvider(res *resource.Resource, inst *Instance) e
 }
 
 func (t *Telemetry) setupLoggerProvider(res *resource.Resource, inst *Instance) error {
+	if !*t.Stdout {
+		return nil
+	}
 	exporter, err := stdoutlog.New()
 	if err != nil {
 		return err
