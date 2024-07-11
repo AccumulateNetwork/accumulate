@@ -112,7 +112,7 @@ func init() {
 		Transients: []*schema.Field{
 			{
 				Name: "key",
-				Type: schema.ExternalTypeReference[address.Address](),
+				Type: schema.TypeReferenceFor[address.Address](),
 			},
 		},
 	}).SetGoType()
@@ -130,7 +130,7 @@ func init() {
 		Transients: []*schema.Field{
 			{
 				Name: "key",
-				Type: schema.ExternalTypeReference[address.Address](),
+				Type: schema.TypeReferenceFor[address.Address](),
 			},
 		},
 	}).SetGoType()
@@ -201,7 +201,7 @@ func init() {
 			},
 			{
 				Name: "fs",
-				Type: schema.ExternalTypeReference[fs.FS](),
+				Type: schema.TypeReferenceFor[fs.FS](),
 			},
 		},
 	}).SetGoType()
@@ -316,13 +316,13 @@ func init() {
 			},
 			{
 				Name: "Listen",
-				Type: schema.ExternalTypeReference[p2p.Multiaddr](),
+				Type: schema.TypeReferenceFor[p2p.Multiaddr](),
 			},
 			{
 				Name: "BootstrapPeers",
 				Type: &schema.ArrayType{
 					TypeBase: schema.TypeBase{},
-					Elem:     schema.ExternalTypeReference[p2p.Multiaddr](),
+					Elem:     schema.TypeReferenceFor[p2p.Multiaddr](),
 				},
 			},
 			{
@@ -345,7 +345,7 @@ func init() {
 				Name: "Partition",
 				Type: &schema.PointerType{
 					TypeBase: schema.TypeBase{},
-					Elem:     schema.ExternalTypeReference[protocol.PartitionInfo](),
+					Elem:     schema.TypeReferenceFor[protocol.PartitionInfo](),
 				},
 			},
 			{
@@ -385,7 +385,7 @@ func init() {
 			}).ResolveTo(&deferredTypes, "CoreValidatorMode"),
 			{
 				Name: "Listen",
-				Type: schema.ExternalTypeReference[p2p.Multiaddr](),
+				Type: schema.TypeReferenceFor[p2p.Multiaddr](),
 			},
 			{
 				Name: "BVN",
@@ -406,14 +406,14 @@ func init() {
 				Name: "DnBootstrapPeers",
 				Type: &schema.ArrayType{
 					TypeBase: schema.TypeBase{},
-					Elem:     schema.ExternalTypeReference[p2p.Multiaddr](),
+					Elem:     schema.TypeReferenceFor[p2p.Multiaddr](),
 				},
 			},
 			{
 				Name: "BvnBootstrapPeers",
 				Type: &schema.ArrayType{
 					TypeBase: schema.TypeBase{},
-					Elem:     schema.ExternalTypeReference[p2p.Multiaddr](),
+					Elem:     schema.TypeReferenceFor[p2p.Multiaddr](),
 				},
 			},
 			{
@@ -488,7 +488,7 @@ func init() {
 		Fields: []*schema.Field{
 			{
 				Name: "Listen",
-				Type: schema.ExternalTypeReference[p2p.Multiaddr](),
+				Type: schema.TypeReferenceFor[p2p.Multiaddr](),
 			},
 			{
 				Name: "Bvns",
@@ -507,7 +507,7 @@ func init() {
 				Name: "Globals",
 				Type: &schema.PointerType{
 					TypeBase: schema.TypeBase{},
-					Elem:     schema.ExternalTypeReference[network.GlobalValues](),
+					Elem:     schema.TypeReferenceFor[network.GlobalValues](),
 				},
 			},
 			{
@@ -554,7 +554,7 @@ func init() {
 				Name: "Account",
 				Type: &schema.PointerType{
 					TypeBase: schema.TypeBase{},
-					Elem:     schema.ExternalTypeReference[url.URL](),
+					Elem:     schema.TypeReferenceFor[url.URL](),
 				},
 			},
 			(&schema.Field{
@@ -564,7 +564,7 @@ func init() {
 				Name: "Router",
 				Type: &schema.PointerType{
 					TypeBase: schema.TypeBase{},
-					Elem:     schema.ExternalTypeReference[RouterServiceRef](),
+					Elem:     schema.TypeReferenceFor[RouterServiceRef](),
 				},
 			},
 		},
@@ -577,7 +577,7 @@ func init() {
 		Fields: []*schema.Field{
 			{
 				Name: "Listen",
-				Type: schema.ExternalTypeReference[p2p.Multiaddr](),
+				Type: schema.TypeReferenceFor[p2p.Multiaddr](),
 			},
 		},
 	}).SetGoType()
@@ -592,7 +592,7 @@ func init() {
 				Description: "are the addresses and schemes to listen on",
 				Type: &schema.ArrayType{
 					TypeBase: schema.TypeBase{},
-					Elem:     schema.ExternalTypeReference[p2p.Multiaddr](),
+					Elem:     schema.TypeReferenceFor[p2p.Multiaddr](),
 				},
 			},
 			{
@@ -610,7 +610,7 @@ func init() {
 				Optional:    true,
 				Type: &schema.PointerType{
 					TypeBase: schema.TypeBase{},
-					Elem:     schema.ExternalTypeReference[encoding.Duration](),
+					Elem:     schema.TypeReferenceFor[encoding.Duration](),
 				},
 			},
 			{
@@ -635,7 +635,7 @@ func init() {
 		Fields: []*schema.Field{
 			{
 				Name: "ID",
-				Type: schema.ExternalTypeReference[p2p.PeerID](),
+				Type: schema.TypeReferenceFor[p2p.PeerID](),
 			},
 			{
 				Name: "Partitions",
@@ -648,7 +648,7 @@ func init() {
 				Name: "Addresses",
 				Type: &schema.ArrayType{
 					TypeBase: schema.TypeBase{},
-					Elem:     schema.ExternalTypeReference[p2p.Multiaddr](),
+					Elem:     schema.TypeReferenceFor[p2p.Multiaddr](),
 				},
 			},
 		},
@@ -690,7 +690,7 @@ func init() {
 				Name: "Router",
 				Type: &schema.PointerType{
 					TypeBase: schema.TypeBase{},
-					Elem:     schema.ExternalTypeReference[RouterServiceRef](),
+					Elem:     schema.TypeReferenceFor[RouterServiceRef](),
 				},
 			},
 			{
@@ -715,7 +715,7 @@ func init() {
 			(&schema.Field{}).ResolveTo(&deferredTypes, "HttpListener"),
 			{
 				Name: "PprofListen",
-				Type: schema.ExternalTypeReference[p2p.Multiaddr](),
+				Type: schema.TypeReferenceFor[p2p.Multiaddr](),
 			},
 			{
 				Name: "Monitoring",
@@ -782,7 +782,7 @@ func init() {
 		Fields: []*schema.Field{
 			{
 				Name: "Level",
-				Type: schema.ExternalTypeReference[slog.Level](),
+				Type: schema.TypeReferenceFor[slog.Level](),
 			},
 			{
 				Name: "Modules",
@@ -859,7 +859,7 @@ func init() {
 				Description: "is rate at which to poll memory usage",
 				Type: &schema.PointerType{
 					TypeBase: schema.TypeBase{},
-					Elem:     schema.ExternalTypeReference[encoding.Duration](),
+					Elem:     schema.TypeReferenceFor[encoding.Duration](),
 				},
 			},
 			{
@@ -921,14 +921,14 @@ func init() {
 				Name: "Listen",
 				Type: &schema.ArrayType{
 					TypeBase: schema.TypeBase{},
-					Elem:     schema.ExternalTypeReference[p2p.Multiaddr](),
+					Elem:     schema.TypeReferenceFor[p2p.Multiaddr](),
 				},
 			},
 			{
 				Name: "BootstrapPeers",
 				Type: &schema.ArrayType{
 					TypeBase: schema.TypeBase{},
-					Elem:     schema.ExternalTypeReference[p2p.Multiaddr](),
+					Elem:     schema.TypeReferenceFor[p2p.Multiaddr](),
 				},
 			},
 			(&schema.Field{
@@ -949,12 +949,12 @@ func init() {
 				Name: "DiscoveryMode",
 				Type: &schema.PointerType{
 					TypeBase: schema.TypeBase{},
-					Elem:     schema.ExternalTypeReference[DhtMode](),
+					Elem:     schema.TypeReferenceFor[DhtMode](),
 				},
 			},
 			{
 				Name: "External",
-				Type: schema.ExternalTypeReference[p2p.Multiaddr](),
+				Type: schema.TypeReferenceFor[p2p.Multiaddr](),
 			},
 		},
 	}).SetGoType()
@@ -1017,14 +1017,14 @@ func init() {
 				Name: "Seed",
 				Type: &schema.PointerType{
 					TypeBase: schema.TypeBase{},
-					Elem:     schema.ExternalTypeReference[record.Key](),
+					Elem:     schema.TypeReferenceFor[record.Key](),
 				},
 			},
 		},
 		Transients: []*schema.Field{
 			{
 				Name: "key",
-				Type: schema.ExternalTypeReference[address.Address](),
+				Type: schema.TypeReferenceFor[address.Address](),
 			},
 		},
 	}).SetGoType()
@@ -1073,7 +1073,7 @@ func init() {
 				Optional: true,
 				Type: &schema.PointerType{
 					TypeBase: schema.TypeBase{},
-					Elem:     schema.ExternalTypeReference[StorageOrRef](),
+					Elem:     schema.TypeReferenceFor[StorageOrRef](),
 				},
 			},
 		},
@@ -1280,7 +1280,7 @@ func init() {
 				Optional: true,
 				Type: &schema.PointerType{
 					TypeBase: schema.TypeBase{},
-					Elem:     schema.ExternalTypeReference[StorageOrRef](),
+					Elem:     schema.TypeReferenceFor[StorageOrRef](),
 				},
 			},
 			{
@@ -1294,7 +1294,7 @@ func init() {
 				Optional:    true,
 				Type: &schema.PointerType{
 					TypeBase: schema.TypeBase{},
-					Elem:     schema.ExternalTypeReference[network.CronSchedule](),
+					Elem:     schema.TypeReferenceFor[network.CronSchedule](),
 				},
 			},
 			{
@@ -1499,7 +1499,7 @@ func init() {
 			},
 			{
 				Name: "Rate",
-				Type: schema.ExternalTypeReference[encoding.Duration](),
+				Type: schema.TypeReferenceFor[encoding.Duration](),
 			},
 		},
 	}).SetGoType()
@@ -1511,7 +1511,7 @@ func init() {
 		Transients: []*schema.Field{
 			{
 				Name: "key",
-				Type: schema.ExternalTypeReference[address.Address](),
+				Type: schema.TypeReferenceFor[address.Address](),
 			},
 		},
 	}).SetGoType()
