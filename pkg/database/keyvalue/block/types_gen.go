@@ -14,7 +14,7 @@ type blockID struct {
 }
 
 var wblockID = widget.ForComposite(widget.Fields[blockID]{
-	{Name: "iD", ID: 1, Widget: widget.ForUint(func(v *blockID) *uint64 { return &v.ID })},
+	{Name: "id", ID: 1, Widget: widget.ForUint(func(v *blockID) *uint64 { return &v.ID })},
 	{Name: "part", ID: 2, Widget: widget.ForUint(func(v *blockID) *uint64 { return &v.Part })},
 }, widget.Identity[*blockID])
 

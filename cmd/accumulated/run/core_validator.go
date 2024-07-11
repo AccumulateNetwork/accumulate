@@ -147,7 +147,7 @@ func (p partOpts) apply(cfg *Config) error {
 
 	// Storage
 	if !haveService2(cfg, p.ID, func(s *StorageService) string { return s.Name }, nil) {
-		storage, err := NewStorage(*p.StorageType)
+		storage, err := sStorage.New(*p.StorageType)
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
 		}
