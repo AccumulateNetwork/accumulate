@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"math/big"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 
@@ -45,6 +46,9 @@ func (s TypeSet) AddField(base, name, typ string) {
 		}
 	}
 	fields = append(fields, &TypeField{name, typ})
+	slices.SortFunc(fields, func(a, b *TypeField) int {
+		return strings.Compare(a.Name, b.Name)
+	})
 	s[base] = fields
 }
 
@@ -246,14 +250,14 @@ func (td *TypeDefinition) Resolve(v any, typeName string) (eipResolvedValue, err
 		return nil, fmt.Errorf("cannot hash type definition with invalid interface %T", v)
 	}
 
-	var fields []*resolvedFieldValue
+	fields := map[string]*resolvedFieldValue{}
 	for _, field := range *td.Fields {
 		value, _ := data[field.Name]
 		v, err := field.resolve(value)
 		if err != nil {
 			return nil, err
 		}
-		fields = append(fields, v)
+		fields[field.Name] = v
 	}
 
 	return &eipResolvedStruct{
@@ -264,7 +268,7 @@ func (td *TypeDefinition) Resolve(v any, typeName string) (eipResolvedValue, err
 
 type eipResolvedStruct struct {
 	typeName string
-	fields   []*resolvedFieldValue
+	fields   map[string]*resolvedFieldValue
 }
 
 type resolvedFieldValue struct {
@@ -306,7 +310,7 @@ type eipResolvedAtomic struct {
 func (e *eipResolvedStruct) MarshalJSON() ([]byte, error) {
 	v := map[string]json.RawMessage{}
 	for _, f := range e.fields {
-		if f.skip {
+		if _, ok := f.value.(*eipEmptyStruct); ok {
 			continue
 		}
 
@@ -319,15 +323,13 @@ func (e *eipResolvedStruct) MarshalJSON() ([]byte, error) {
 	return json.Marshal(v)
 }
 
-const debugHash = false
-
 func (e *eipResolvedStruct) Hash(types map[string][]*TypeField) ([]byte, error) {
 	//the stripping shouldn't be necessary, but do it as a precaution
 	strippedType, _ := stripSlice(e.typeName)
 
 	return hashStruct(strippedType, types, func(fn func(encodedValue []byte)) error {
-		for _, field := range e.fields {
-			encodedValue, err := field.value.Hash(types)
+		for _, field := range types[strippedType] {
+			encodedValue, err := e.fields[field.Name].value.Hash(types)
 			if err != nil {
 				return err
 			}
@@ -342,11 +344,14 @@ func getDeps(deps map[string]bool, typeName string, types map[string][]*TypeFiel
 	if !ok {
 		return
 	}
+
 	deps[typeName] = true
 	for _, f := range fields {
 		getDeps(deps, strings.TrimSuffix(f.Type, "[]"), types)
 	}
 }
+
+const debugHash = false
 
 func hashStruct(typeName string, types map[string][]*TypeField, rangeFields func(func(encodedValue []byte)) error) ([]byte, error) {
 	deps := map[string]bool{}
@@ -412,6 +417,9 @@ func hashStruct(typeName string, types map[string][]*TypeField, rangeFields func
 func (e *eipResolvedStruct) Types(ret TypeSet) {
 	name, _ := stripSlice(e.typeName)
 	for _, f := range e.fields {
+		if f.skip {
+			continue
+		}
 		ret.AddField(name, f.Name, f.Type)
 		f.value.Types(ret)
 	}
@@ -493,7 +501,7 @@ func (f *TypeField) resolve(v any) (*resolvedFieldValue, error) {
 		if slices {
 			// If v is nil, return an empty array
 			if v == nil {
-				return &resolvedFieldValue{*f, false, eipResolvedArray{}}, nil
+				return &resolvedFieldValue{*f, true, eipResolvedArray{}}, nil
 			}
 			vv, ok := v.([]interface{})
 			if !ok {
@@ -513,7 +521,7 @@ func (f *TypeField) resolve(v any) (*resolvedFieldValue, error) {
 		if err != nil {
 			return nil, err
 		}
-		return &resolvedFieldValue{*f, false, r}, nil
+		return &resolvedFieldValue{*f, v == nil, r}, nil
 	}
 
 	//if we get here, we are expecting a struct
