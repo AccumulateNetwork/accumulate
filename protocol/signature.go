@@ -1194,16 +1194,15 @@ func (e *EcdsaSha256Signature) Verify(sig Signature, msg Signable) bool {
  * privateKey must be ecdsa
  */
 func SignEip712TypedData(sig *Eip712TypedDataSignature, privateKey []byte, outer Signature, txn *Transaction) error {
-	priv, err := eth.ToECDSA(privateKey)
-	if err != nil {
-		return err
-	}
-	sig.PublicKey = eth.FromECDSAPub(&priv.PublicKey)
-
 	if outer == nil {
 		outer = sig
 	}
 	hash, err := EIP712Hash(txn, outer)
+	if err != nil {
+		return err
+	}
+
+	priv, err := eth.ToECDSA(privateKey)
 	if err != nil {
 		return err
 	}
@@ -1226,7 +1225,7 @@ func (s *Eip712TypedDataSignature) GetSignerVersion() uint64 { return s.SignerVe
 func (s *Eip712TypedDataSignature) GetTimestamp() uint64 { return s.Timestamp }
 
 // GetPublicKeyHash returns the hash of PublicKey.
-func (s *Eip712TypedDataSignature) GetPublicKeyHash() []byte { return doSha256(s.PublicKey) }
+func (s *Eip712TypedDataSignature) GetPublicKeyHash() []byte { return ETHhash(s.PublicKey) }
 
 // GetPublicKey returns PublicKey.
 func (s *Eip712TypedDataSignature) GetPublicKey() []byte { return s.PublicKey }

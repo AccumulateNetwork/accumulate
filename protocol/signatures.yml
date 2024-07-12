@@ -231,6 +231,9 @@ Eip712TypedDataSignature:
   fields:
     - name: PublicKey
       type: bytes
+    - name: ChainID
+      type: bigint
+      pointer: true
     - name: Signature
       type: bytes
     - name: Signer

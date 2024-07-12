@@ -11,6 +11,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"os"
@@ -59,14 +60,6 @@ type EIP712Domain struct {
 	ChainId *big.Int `json:"chainId,omitempty" form:"chainId" query:"chainId" validate:"required"`
 }
 
-var EIP712DomainValue eipResolvedValue
-var EIP712DomainHash []byte
-var Eip712Domain = EIP712Domain{
-	Name:    "Accumulate",
-	Version: "1.0.0",
-	ChainId: big.NewInt(281),
-}
-
 type EIP712Resolver interface {
 	Resolve(any) (eipResolvedValue, error)
 }
@@ -80,6 +73,15 @@ type eipResolvedValue interface {
 var eip712EncoderMap = map[string]EIP712Resolver{}
 var schemaDictionary = map[string]*TypeDefinition{}
 
+var eip712DomainTypeDef = &TypeDefinition{
+	Name: "EIP712Domain",
+	Fields: &[]*TypeField{
+		NewTypeField("name", "string"),
+		NewTypeField("version", "string"),
+		NewTypeField("chainId", "uint256"),
+	},
+}
+
 func init() {
 	eip712EncoderMap["bool"] = newAtomicEncoder("bool", FromboolToBytes)
 	eip712EncoderMap["bytes"] = newAtomicEncoder("bytes", FrombytesToBytes)
@@ -91,24 +93,6 @@ func init() {
 	eip712EncoderMap["uint256"] = newAtomicEncoder("uint256", Fromuint256ToBytes)
 	eip712EncoderMap["float64"] = newAtomicEncoder("float64", FromfloatToBytes)
 	eip712EncoderMap["float"] = newAtomicEncoder("float", FromfloatToBytes) //Note = Float is not a valid type in EIP-712, so it is converted to a string
-
-	// Handle EIP712 domain initialization
-	var jdomain map[string]interface{}
-	j := must2(Eip712Domain.MarshalJSON())
-	must(json.Unmarshal(j, &jdomain))
-
-	const eipDomainKey = "EIP712Domain"
-	RegisterTypeDefinition(&[]*TypeField{
-		NewTypeField("name", "string"),
-		NewTypeField("version", "string"),
-		NewTypeField("chainId", "uint256"),
-	}, eipDomainKey)
-
-	td := schemaDictionary[eipDomainKey]
-	EIP712DomainValue = must2(td.Resolve(jdomain))
-	EIP712DomainHash = must2(EIP712DomainValue.Hash(map[string][]*TypeField{
-		eipDomainKey: *td.Fields,
-	}))
 }
 
 func must(err error) {
@@ -582,26 +566,54 @@ type EIP712Call struct {
 	Message     eipResolvedValue        `json:"message"`
 }
 
-func NewEIP712Call(value any, typ EIP712Resolver) (*EIP712Call, error) {
+func NewEIP712Call(value any, chainID *big.Int, typ EIP712Resolver) (*EIP712Call, error) {
 	r, err := typ.Resolve(value)
 	if err != nil {
 		return nil, err
 	}
 
-	e := EIP712Call{}
-	e.PrimaryType = "Transaction"
-	e.Domain = Eip712Domain
-	e.Message = r
+	e := EIP712Call{
+		PrimaryType: "Transaction",
+		Message:     r,
+		Domain: EIP712Domain{
+			Name:    "Accumulate",
+			Version: "1.0.0",
+			ChainId: chainID,
+		},
+		Types: map[string][]*TypeField{
+			eip712DomainTypeDef.Name: *eip712DomainTypeDef.Fields,
+		},
+	}
 
-	e.Types = map[string][]*TypeField{}
 	r.Types(e.Types)
-	EIP712DomainValue.Types(e.Types)
 
 	return &e, nil
 }
 
 func (c *EIP712Call) Hash() ([]byte, error) {
+	if c.Domain.ChainId == nil {
+		return nil, errors.New("missing chain ID")
+	}
+
 	messageHash, err := c.Message.Hash(c.Types)
+	if err != nil {
+		return nil, err
+	}
+
+	var jdomain map[string]any
+	b, err := c.Domain.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+	err = json.Unmarshal(b, &jdomain)
+	if err != nil {
+		return nil, err
+	}
+	domain, err := eip712DomainTypeDef.Resolve(jdomain)
+	if err != nil {
+		return nil, err
+	}
+	domainHash, err := domain.Hash(c.Types)
 	if err != nil {
 		return nil, err
 	}
@@ -609,7 +621,7 @@ func (c *EIP712Call) Hash() ([]byte, error) {
 	var buf bytes.Buffer
 	buf.WriteByte(0x19)
 	buf.WriteByte(0x01)
-	buf.Write(EIP712DomainHash)
+	buf.Write(domainHash)
 	buf.Write(messageHash)
 	return keccak256(buf.Bytes()), nil
 }

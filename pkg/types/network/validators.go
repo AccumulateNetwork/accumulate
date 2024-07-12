@@ -9,6 +9,7 @@ package network
 import (
 	"fmt"
 	"math"
+	"math/big"
 	"strings"
 
 	"github.com/robfig/cron/v3"
@@ -16,6 +17,10 @@ import (
 )
 
 var CronFormat = cron.NewParser(cron.SecondOptional | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
+
+func (g *GlobalValues) ChainID() *big.Int {
+	return protocol.EthChainID(g.Network.NetworkName)
+}
 
 type globalValueMemos struct {
 	bvns               []string

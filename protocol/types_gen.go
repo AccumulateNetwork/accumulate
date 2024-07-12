@@ -389,6 +389,7 @@ type EcdsaSha256Signature struct {
 type Eip712TypedDataSignature struct {
 	fieldsSet       []bool
 	PublicKey       []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
+	ChainID         *big.Int `json:"chainID,omitempty" form:"chainID" query:"chainID" validate:"required"`
 	Signature       []byte   `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
 	Signer          *url.URL `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
 	SignerVersion   uint64   `json:"signerVersion,omitempty" form:"signerVersion" query:"signerVersion" validate:"required"`
@@ -2130,6 +2131,9 @@ func (v *Eip712TypedDataSignature) Copy() *Eip712TypedDataSignature {
 	u := new(Eip712TypedDataSignature)
 
 	u.PublicKey = encoding.BytesCopy(v.PublicKey)
+	if v.ChainID != nil {
+		u.ChainID = encoding.BigintCopy(v.ChainID)
+	}
 	u.Signature = encoding.BytesCopy(v.Signature)
 	if v.Signer != nil {
 		u.Signer = v.Signer
@@ -4600,6 +4604,14 @@ func (v *EcdsaSha256Signature) Equal(u *EcdsaSha256Signature) bool {
 
 func (v *Eip712TypedDataSignature) Equal(u *Eip712TypedDataSignature) bool {
 	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
+		return false
+	}
+	switch {
+	case v.ChainID == u.ChainID:
+		// equal
+	case v.ChainID == nil || u.ChainID == nil:
+		return false
+	case !((v.ChainID).Cmp(u.ChainID) == 0):
 		return false
 	}
 	if !(bytes.Equal(v.Signature, u.Signature)) {
@@ -8750,14 +8762,15 @@ func (v *EcdsaSha256Signature) IsValid() error {
 var fieldNames_Eip712TypedDataSignature = []string{
 	1:  "Type",
 	2:  "PublicKey",
-	3:  "Signature",
-	4:  "Signer",
-	5:  "SignerVersion",
-	6:  "Timestamp",
-	7:  "Vote",
-	8:  "TransactionHash",
-	9:  "Memo",
-	10: "Data",
+	3:  "ChainID",
+	4:  "Signature",
+	5:  "Signer",
+	6:  "SignerVersion",
+	7:  "Timestamp",
+	8:  "Vote",
+	9:  "TransactionHash",
+	10: "Memo",
+	11: "Data",
 }
 
 func (v *Eip712TypedDataSignature) MarshalBinary() ([]byte, error) {
@@ -8772,29 +8785,32 @@ func (v *Eip712TypedDataSignature) MarshalBinary() ([]byte, error) {
 	if !(len(v.PublicKey) == 0) {
 		writer.WriteBytes(2, v.PublicKey)
 	}
+	if !(v.ChainID == nil) {
+		writer.WriteBigInt(3, v.ChainID)
+	}
 	if !(len(v.Signature) == 0) {
-		writer.WriteBytes(3, v.Signature)
+		writer.WriteBytes(4, v.Signature)
 	}
 	if !(v.Signer == nil) {
-		writer.WriteUrl(4, v.Signer)
+		writer.WriteUrl(5, v.Signer)
 	}
 	if !(v.SignerVersion == 0) {
-		writer.WriteUint(5, v.SignerVersion)
+		writer.WriteUint(6, v.SignerVersion)
 	}
 	if !(v.Timestamp == 0) {
-		writer.WriteUint(6, v.Timestamp)
+		writer.WriteUint(7, v.Timestamp)
 	}
 	if !(v.Vote == 0) {
-		writer.WriteEnum(7, v.Vote)
+		writer.WriteEnum(8, v.Vote)
 	}
 	if !(v.TransactionHash == ([32]byte{})) {
-		writer.WriteHash(8, &v.TransactionHash)
+		writer.WriteHash(9, &v.TransactionHash)
 	}
 	if !(len(v.Memo) == 0) {
-		writer.WriteString(9, v.Memo)
+		writer.WriteString(10, v.Memo)
 	}
 	if !(len(v.Data) == 0) {
-		writer.WriteBytes(10, v.Data)
+		writer.WriteBytes(11, v.Data)
 	}
 
 	_, _, err := writer.Reset(fieldNames_Eip712TypedDataSignature)
@@ -8817,16 +8833,21 @@ func (v *Eip712TypedDataSignature) IsValid() error {
 		errs = append(errs, "field PublicKey is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field ChainID is missing")
+	} else if v.ChainID == nil {
+		errs = append(errs, "field ChainID is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Signature is missing")
 	} else if len(v.Signature) == 0 {
 		errs = append(errs, "field Signature is not set")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field Signer is missing")
 	} else if v.Signer == nil {
 		errs = append(errs, "field Signer is not set")
 	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
 		errs = append(errs, "field SignerVersion is missing")
 	} else if v.SignerVersion == 0 {
 		errs = append(errs, "field SignerVersion is not set")
@@ -15517,28 +15538,31 @@ func (v *Eip712TypedDataSignature) UnmarshalFieldsFrom(reader *encoding.Reader) 
 	if x, ok := reader.ReadBytes(2); ok {
 		v.PublicKey = x
 	}
-	if x, ok := reader.ReadBytes(3); ok {
+	if x, ok := reader.ReadBigInt(3); ok {
+		v.ChainID = x
+	}
+	if x, ok := reader.ReadBytes(4); ok {
 		v.Signature = x
 	}
-	if x, ok := reader.ReadUrl(4); ok {
+	if x, ok := reader.ReadUrl(5); ok {
 		v.Signer = x
 	}
-	if x, ok := reader.ReadUint(5); ok {
+	if x, ok := reader.ReadUint(6); ok {
 		v.SignerVersion = x
 	}
-	if x, ok := reader.ReadUint(6); ok {
+	if x, ok := reader.ReadUint(7); ok {
 		v.Timestamp = x
 	}
-	if x := new(VoteType); reader.ReadEnum(7, x) {
+	if x := new(VoteType); reader.ReadEnum(8, x) {
 		v.Vote = *x
 	}
-	if x, ok := reader.ReadHash(8); ok {
+	if x, ok := reader.ReadHash(9); ok {
 		v.TransactionHash = *x
 	}
-	if x, ok := reader.ReadString(9); ok {
+	if x, ok := reader.ReadString(10); ok {
 		v.Memo = x
 	}
-	if x, ok := reader.ReadBytes(10); ok {
+	if x, ok := reader.ReadBytes(11); ok {
 		v.Data = x
 	}
 
@@ -18966,6 +18990,7 @@ func init() {
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("type", "string"),
 		encoding.NewTypeField("publicKey", "bytes"),
+		encoding.NewTypeField("chainID", "uint256"),
 		encoding.NewTypeField("signature", "bytes"),
 		encoding.NewTypeField("signer", "string"),
 		encoding.NewTypeField("signerVersion", "uint64"),
@@ -20424,6 +20449,7 @@ func (v *Eip712TypedDataSignature) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type            SignatureType `json:"type"`
 		PublicKey       *string       `json:"publicKey,omitempty"`
+		ChainID         *string       `json:"chainID,omitempty"`
 		Signature       *string       `json:"signature,omitempty"`
 		Signer          *url.URL      `json:"signer,omitempty"`
 		SignerVersion   uint64        `json:"signerVersion,omitempty"`
@@ -20437,6 +20463,9 @@ func (v *Eip712TypedDataSignature) MarshalJSON() ([]byte, error) {
 	u.Type = v.Type()
 	if !(len(v.PublicKey) == 0) {
 		u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	}
+	if !(v.ChainID == nil) {
+		u.ChainID = encoding.BigintToJSON(v.ChainID)
 	}
 	if !(len(v.Signature) == 0) {
 		u.Signature = encoding.BytesToJSON(v.Signature)
@@ -23288,6 +23317,7 @@ func (v *Eip712TypedDataSignature) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type            SignatureType `json:"type"`
 		PublicKey       *string       `json:"publicKey,omitempty"`
+		ChainID         *string       `json:"chainID,omitempty"`
 		Signature       *string       `json:"signature,omitempty"`
 		Signer          *url.URL      `json:"signer,omitempty"`
 		SignerVersion   uint64        `json:"signerVersion,omitempty"`
@@ -23300,6 +23330,7 @@ func (v *Eip712TypedDataSignature) UnmarshalJSON(data []byte) error {
 	}{}
 	u.Type = v.Type()
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	u.ChainID = encoding.BigintToJSON(v.ChainID)
 	u.Signature = encoding.BytesToJSON(v.Signature)
 	u.Signer = v.Signer
 	u.SignerVersion = v.SignerVersion
@@ -23319,6 +23350,13 @@ func (v *Eip712TypedDataSignature) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("error decoding PublicKey: %w", err)
 	} else {
 		v.PublicKey = x
+	}
+	if u.ChainID != nil {
+		if x, err := encoding.BigintFromJSON(u.ChainID); err != nil {
+			return fmt.Errorf("error decoding ChainID: %w", err)
+		} else {
+			v.ChainID = x
+		}
 	}
 	if x, err := encoding.BytesFromJSON(u.Signature); err != nil {
 		return fmt.Errorf("error decoding Signature: %w", err)

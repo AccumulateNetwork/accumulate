@@ -32,6 +32,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/address"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
@@ -501,7 +502,10 @@ func TestEip712TypedDataSignature(t *testing.T) {
 		Done()
 	require.NoError(t, err)
 
+	priv := acctesting.NewSECP256K1(t.Name())
 	eip712sig := &Eip712TypedDataSignature{
+		ChainID:       protocol.EthChainID("MainNet"),
+		PublicKey:     eth.FromECDSAPub(&priv.PublicKey),
 		Signer:        url.MustParse("acc://adi.acme/book/1"),
 		SignerVersion: 1,
 		Timestamp:     1720564975623,
@@ -510,7 +514,7 @@ func TestEip712TypedDataSignature(t *testing.T) {
 	txn.Header.Initiator = [32]byte(eip712sig.Metadata().Hash())
 
 	// Sign the transaction
-	priv := acctesting.NewSECP256K1(t.Name())
+
 	require.NoError(t, SignEip712TypedData(eip712sig, priv.Serialize(), nil, txn))
 
 	// Verify the signature
@@ -525,7 +529,10 @@ func TestEIP712DelegatedKeyPageUpdate(t *testing.T) {
 		Done()
 	require.NoError(t, err)
 
+	priv := acctesting.NewSECP256K1(t.Name())
 	inner := &Eip712TypedDataSignature{
+		ChainID:       protocol.EthChainID("MainNet"),
+		PublicKey:     eth.FromECDSAPub(&priv.PublicKey),
 		Signer:        url.MustParse("acc://adi.acme/book/1"),
 		SignerVersion: 1,
 		Timestamp:     1720564975623,
@@ -538,7 +545,6 @@ func TestEIP712DelegatedKeyPageUpdate(t *testing.T) {
 	txn.Header.Initiator = [32]byte(outer.Metadata().Hash())
 
 	// Sign the transaction
-	priv := acctesting.NewSECP256K1(t.Name())
 	require.NoError(t, SignEip712TypedData(inner, priv.Serialize(), outer, txn))
 
 	// Verify the signature
@@ -565,6 +571,7 @@ func TestEIP712MessageForWallet(t *testing.T) {
 
 	priv := acctesting.NewSECP256K1(t.Name())
 	sig := &Eip712TypedDataSignature{
+		ChainID:       protocol.EthChainID("MainNet"),
 		PublicKey:     eth.FromECDSAPub(&priv.PublicKey),
 		Signer:        url.MustParse("acc://adi.acme/book/1"),
 		SignerVersion: 1,
@@ -575,6 +582,7 @@ func TestEIP712MessageForWallet(t *testing.T) {
 
 	b, err := MarshalEip712(txn, sig)
 	require.NoError(t, err)
+	fmt.Printf("%s\n", b)
 
 	cmd := exec.Command("../test/cmd/eth_signTypedData/execute.sh", hex.EncodeToString(priv.Serialize()), string(b))
 	cmd.Stderr = os.Stderr

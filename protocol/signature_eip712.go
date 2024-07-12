@@ -7,15 +7,37 @@
 package protocol
 
 import (
+	"crypto/sha256"
 	_ "embed"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"reflect"
+	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
 
 var eip712Transaction *encoding.TypeDefinition
+
+// EthChainID returns the Ethereum chain ID for an Accumulate network name.
+func EthChainID(name string) *big.Int {
+	// This exists purely for documentation purposes
+	const MetaMask_MaxSafeChainID = 0xFFFFFFFFFFFEC
+
+	if strings.EqualFold(name, "mainnet") {
+		return big.NewInt(281) // 0x119
+	}
+
+	// Use the last 2 bytes of the hash
+	name = strings.ToLower(name)
+	hash := sha256.Sum256([]byte(name))
+	id := binary.BigEndian.Uint16(hash[len(hash)-2:])
+
+	// This will generate something like 0xBEEF0119
+	return big.NewInt(281 | int64(id)<<16)
+}
 
 func init() {
 	//need to handle the edge cases for Key page operations and data entries
@@ -118,5 +140,5 @@ func newEIP712Call(txn *Transaction, sig Signature) (*encoding.EIP712Call, error
 	delete(body.(map[string]any), "type")
 	jtx[txn.Body.Type().String()] = body
 
-	return encoding.NewEIP712Call(jtx, eip712Transaction)
+	return encoding.NewEIP712Call(jtx, inner.ChainID, eip712Transaction)
 }
