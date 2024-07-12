@@ -40,7 +40,7 @@ func TestEIP712Signature(t *testing.T) {
 		// Sign it
 		pk, _ := aliceKey.GetPublicKey()
 		sig := &Eip712TypedDataSignature{
-			ChainID:       EthChainID("MainNet"),
+			ChainID:       EthChainID("DevNet"),
 			Signer:        alice.Url().JoinPath("book", "1"),
 			PublicKey:     pk,
 			SignerVersion: 1,

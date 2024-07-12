@@ -19,8 +19,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
 
-var eip712Transaction *encoding.TypeDefinition
-
 // EthChainID returns the Ethereum chain ID for an Accumulate network name.
 func EthChainID(name string) *big.Int {
 	// This exists purely for documentation purposes
@@ -35,9 +33,11 @@ func EthChainID(name string) *big.Int {
 	hash := sha256.Sum256([]byte(name))
 	id := binary.BigEndian.Uint16(hash[len(hash)-2:])
 
-	// This will generate something like 0xBEEF0119
+	// This will generate something like 0xHASH0119
 	return big.NewInt(281 | int64(id)<<16)
 }
+
+var eip712Transaction *encoding.TypeDefinition
 
 func init() {
 	//need to handle the edge cases for Key page operations and data entries
@@ -48,6 +48,12 @@ func init() {
 	txnFields := []*encoding.TypeField{
 		encoding.NewTypeField("header", "TransactionHeader"),
 		encoding.NewTypeField("signature", "SignatureMetadata"),
+
+		// The loop below dynamically adds a field for each user transaction
+		// types. These fields look like:
+		//
+		//    encoding.NewTypeField("addCredits", "AddCredits")
+		//    encoding.NewTypeField("sendTokens", "SendTokens")
 	}
 	for i := TransactionType(0); i < TransactionType(TransactionMaxUser); i++ {
 		v, err := NewTransactionBody(i)

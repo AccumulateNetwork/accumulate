@@ -65,9 +65,9 @@ type EIP712Resolver interface {
 }
 
 type eipResolvedValue interface {
-	Hash(types map[string][]*TypeField) ([]byte, error)
 	Types(TypeSet)
 	MarshalJSON() ([]byte, error)
+	Hash(types map[string][]*TypeField) ([]byte, error)
 }
 
 var eip712EncoderMap = map[string]EIP712Resolver{}
@@ -120,7 +120,8 @@ func RegisterUnion[T any, R any](op Func[T, R]) {
 	if !ok {
 		panic(fmt.Errorf("%T is not an enumeration type", *enumType))
 	}
-	//build a map of types
+	//build a map of types, e.g.
+	//    map[string]string{ "add": "AddKeyOperation" }
 	for maxType := uint64(0); ; maxType++ {
 		if !enumValue.SetEnumValue(maxType) {
 			break
@@ -215,11 +216,7 @@ func (e *eipResolvedUnionValue) Types(ret TypeSet) {
 }
 
 func (e *eipResolvedUnionValue) MarshalJSON() ([]byte, error) {
-	b, err := e.value.MarshalJSON()
-	if err != nil {
-		return nil, err
-	}
-	return json.Marshal(map[string]json.RawMessage{e.enum: b})
+	return json.Marshal(map[string]any{e.enum: e.value})
 }
 
 func (td *TypeDefinition) Resolve(v any) (eipResolvedValue, error) {
@@ -509,11 +506,6 @@ func (f *TypeField) resolve(v any) (*resolvedFieldValue, error) {
 		var array eipResolvedArray
 		for _, vvv := range vv {
 			//now run the hasher for the type
-			// look for encoder, if we don't have one, call the types encoder
-			fields, ok := schemaDictionary[typeName]
-			if !ok {
-				return nil, fmt.Errorf("eip712 field %s", f.Type)
-			}
 			r, err := fields.Resolve(vvv)
 			if err != nil {
 				return nil, err
