@@ -30,6 +30,24 @@ type TypeDefinition struct {
 	Fields *[]*TypeField
 }
 
+type TypeSet map[string][]*TypeField
+
+func (s TypeSet) AddField(base, name, typ string) {
+	fields, ok := s[base]
+	if !ok {
+		s[base] = []*TypeField{{name, typ}}
+		return
+	}
+
+	for _, f := range fields {
+		if f.Name == name {
+			return
+		}
+	}
+	fields = append(fields, &TypeField{name, typ})
+	s[base] = fields
+}
+
 type EIP712Domain struct {
 	Name    string   `json:"name,omitempty" form:"name" query:"name" validate:"required"`
 	Version string   `json:"version,omitempty" form:"version" query:"version" validate:"required"`
@@ -50,14 +68,14 @@ type EIP712Resolver interface {
 
 type eipResolvedValue interface {
 	Hash(types map[string][]*TypeField) ([]byte, error)
-	Types(map[string][]*TypeField)
+	Types(TypeSet)
 	MarshalJSON() ([]byte, error)
 }
 
-var eip712EncoderMap map[string]EIP712Resolver
+var eip712EncoderMap = map[string]EIP712Resolver{}
+var schemaDictionary = map[string]*TypeDefinition{}
 
 func init() {
-	eip712EncoderMap = make(map[string]EIP712Resolver)
 	eip712EncoderMap["bool"] = newAtomicEncoder("bool", FromboolToBytes)
 	eip712EncoderMap["bytes"] = newAtomicEncoder("bytes", FrombytesToBytes)
 	eip712EncoderMap["bytes32"] = newAtomicEncoder("bytes32", Frombytes32ToBytes)
@@ -81,7 +99,7 @@ func init() {
 		NewTypeField("chainId", "uint256"),
 	}, eipDomainKey)
 
-	td := SchemaDictionary[eipDomainKey]
+	td := schemaDictionary[eipDomainKey]
 	EIP712DomainValue = must2(td.Resolve(jdomain, eipDomainKey))
 	EIP712DomainHash = must2(EIP712DomainValue.Hash(map[string][]*TypeField{
 		eipDomainKey: *td.Fields,
@@ -166,7 +184,7 @@ func (r eip712EnumResolver) Resolve(v any, typeName string) (eipResolvedValue, e
 		return nil, fmt.Errorf("type alias does not exist in map: %T, %v", v, t)
 	}
 
-	d, ok := SchemaDictionary[a]
+	d, ok := schemaDictionary[a]
 	if !ok {
 		return nil, fmt.Errorf("invalid data entry type: %T", vv["type"])
 	}
@@ -192,13 +210,25 @@ type eipResolvedUnionValue struct {
 }
 
 func (e *eipResolvedUnionValue) Hash(types map[string][]*TypeField) ([]byte, error) {
-	return hashStruct(e.union, types, func(fn func(eipResolvedValue) error) error {
-		return fn(e.value)
+	return hashStruct(e.union, types, func(fn func(encodedValue []byte)) error {
+		for _, field := range types[e.union] {
+			if field.Name != e.enum {
+				fn(make([]byte, 32))
+				continue
+			}
+
+			encodedValue, err := e.value.Hash(types)
+			if err != nil {
+				return err
+			}
+			fn(encodedValue)
+		}
+		return nil
 	})
 }
 
-func (e *eipResolvedUnionValue) Types(ret map[string][]*TypeField) {
-	ret[e.union] = []*TypeField{{Name: e.enum, Type: e.member}}
+func (e *eipResolvedUnionValue) Types(ret TypeSet) {
+	ret.AddField(e.union, e.enum, e.member)
 	e.value.Types(ret)
 }
 
@@ -260,9 +290,11 @@ func (e *eipEmptyStruct) Hash(types map[string][]*TypeField) ([]byte, error) {
 	return make([]byte, 32), nil
 }
 
-func (e *eipEmptyStruct) Types(ret map[string][]*TypeField) {
+func (e *eipEmptyStruct) Types(ret TypeSet) {
 	name, _ := stripSlice(e.typeName)
-	ret[name] = *e.td.Fields
+	for _, f := range *e.td.Fields {
+		ret.AddField(name, f.Name, f.Type)
+	}
 }
 
 type eipResolvedAtomic struct {
@@ -293,12 +325,13 @@ func (e *eipResolvedStruct) Hash(types map[string][]*TypeField) ([]byte, error) 
 	//the stripping shouldn't be necessary, but do it as a precaution
 	strippedType, _ := stripSlice(e.typeName)
 
-	return hashStruct(strippedType, types, func(fn func(eipResolvedValue) error) error {
+	return hashStruct(strippedType, types, func(fn func(encodedValue []byte)) error {
 		for _, field := range e.fields {
-			err := fn(field.value)
+			encodedValue, err := field.value.Hash(types)
 			if err != nil {
 				return err
 			}
+			fn(encodedValue)
 		}
 		return nil
 	})
@@ -315,7 +348,7 @@ func getDeps(deps map[string]bool, typeName string, types map[string][]*TypeFiel
 	}
 }
 
-func hashStruct(typeName string, types map[string][]*TypeField, rangeFields func(func(eipResolvedValue) error) error) ([]byte, error) {
+func hashStruct(typeName string, types map[string][]*TypeField, rangeFields func(func(encodedValue []byte)) error) ([]byte, error) {
 	deps := map[string]bool{}
 	getDeps(deps, typeName, types)
 
@@ -350,16 +383,11 @@ func hashStruct(typeName string, types map[string][]*TypeField, rangeFields func
 		parts = append(parts, hash)
 	}
 
-	err := rangeFields(func(v eipResolvedValue) error {
-		encodedValue, err := v.Hash(types)
-		if err != nil {
-			return err
-		}
+	err := rangeFields(func(encodedValue []byte) {
 		buf.Write(encodedValue)
 		if debugHash {
 			parts = append(parts, encodedValue)
 		}
-		return nil
 	})
 	if err != nil {
 		return nil, err
@@ -381,14 +409,12 @@ func hashStruct(typeName string, types map[string][]*TypeField, rangeFields func
 	return hash, nil
 }
 
-func (e *eipResolvedStruct) Types(ret map[string][]*TypeField) {
-	var fields []*TypeField
+func (e *eipResolvedStruct) Types(ret TypeSet) {
+	name, _ := stripSlice(e.typeName)
 	for _, f := range e.fields {
-		fields = append(fields, &TypeField{Name: f.Name, Type: f.Type})
+		ret.AddField(name, f.Name, f.Type)
 		f.value.Types(ret)
 	}
-	name, _ := stripSlice(e.typeName)
-	ret[name] = fields
 }
 
 func (e eipResolvedArray) Hash(types map[string][]*TypeField) ([]byte, error) {
@@ -403,14 +429,15 @@ func (e eipResolvedArray) Hash(types map[string][]*TypeField) ([]byte, error) {
 	return keccak256(buf.Bytes()), nil
 }
 
-func (e eipResolvedArray) Types(ret map[string][]*TypeField) {
+func (e eipResolvedArray) Types(ret TypeSet) {
 	for _, v := range e {
 		v.Types(ret)
 	}
 }
 
+func (e *eipResolvedAtomic) Types(TypeSet) {}
+
 func (e *eipResolvedAtomic) Hash(map[string][]*TypeField) ([]byte, error) { return e.hash() }
-func (e *eipResolvedAtomic) Types(map[string][]*TypeField)                {}
 
 func (e *eipResolvedAtomic) MarshalJSON() ([]byte, error) {
 	v := e.value
@@ -490,7 +517,7 @@ func (f *TypeField) resolve(v any) (*resolvedFieldValue, error) {
 	}
 
 	//if we get here, we are expecting a struct
-	fields, ok := SchemaDictionary[strippedType]
+	fields, ok := schemaDictionary[strippedType]
 	if !ok {
 		return nil, fmt.Errorf("eip712 field %s", f.Type)
 	}
@@ -511,7 +538,7 @@ func (f *TypeField) resolve(v any) (*resolvedFieldValue, error) {
 		for _, vvv := range vv {
 			//now run the hasher for the type
 			// look for encoder, if we don't have one, call the types encoder
-			fields, ok := SchemaDictionary[strippedType]
+			fields, ok := schemaDictionary[strippedType]
 			if !ok {
 				return nil, fmt.Errorf("eip712 field %s", f.Type)
 			}
@@ -542,8 +569,6 @@ func stripSlice(input string) (string, bool) {
 	return s, len(s) < len(input)
 }
 
-var SchemaDictionary map[string]*TypeDefinition
-
 func (td *TypeDefinition) sort() {
 	//all types need to be sorted, so just make sure they are...
 	sort.Slice(*td.Fields, func(i, j int) bool {
@@ -555,13 +580,9 @@ func RegisterTypeDefinition(tf *[]*TypeField, name string, aliases ...string) {
 	td := &TypeDefinition{name, tf}
 	td.sort()
 
-	if SchemaDictionary == nil {
-		SchemaDictionary = make(map[string]*TypeDefinition)
-	}
-
-	SchemaDictionary[name] = td
+	schemaDictionary[name] = td
 	for _, alias := range aliases {
-		SchemaDictionary[alias] = td
+		schemaDictionary[alias] = td
 	}
 }
 

@@ -36,16 +36,16 @@ func TestEIP712Arrays(t *testing.T) {
 			Add().Entry().Hash([32]byte{1, 2, 3}).FinishEntry().FinishOperation().
 			Add().Entry().Owner("foo.bar").FinishEntry().FinishOperation().
 			Done()),
-		// must(build.Transaction().
-		// 	For("adi.acme", "book", "1").
-		// 	UpdateKeyPage().
-		// 	Add().Entry().Hash([32]byte{1, 2, 3}).FinishEntry().FinishOperation().
-		// 	SetThreshold(2).
-		// 	Done()),
+		must(build.Transaction().
+			For("adi.acme", "book", "1").
+			UpdateKeyPage().
+			Add().Entry().Hash([32]byte{1, 2, 3}).FinishEntry().FinishOperation().
+			SetThreshold(2).
+			Done()),
 	}
 
-	for i, txn := range cases {
-		t.Run(fmt.Sprintf("Case %d", i), func(t *testing.T) {
+	for _, txn := range cases {
+		t.Run(hex.EncodeToString(txn.GetHash()), func(t *testing.T) {
 			priv := acctesting.NewSECP256K1(t.Name())
 			sig := &protocol.Eip712TypedDataSignature{
 				PublicKey:     eth.FromECDSAPub(&priv.PublicKey),
