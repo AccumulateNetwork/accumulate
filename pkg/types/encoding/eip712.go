@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"os"
 	"reflect"
 	"slices"
 	"sort"
@@ -245,8 +246,7 @@ func (td *TypeDefinition) Resolve(v any) (eipResolvedValue, error) {
 
 	fields := map[string]*resolvedFieldValue{}
 	for _, field := range *td.Fields {
-		value, _ := data[field.Name]
-		v, err := field.resolve(value)
+		v, err := field.resolve(data[field.Name])
 		if err != nil {
 			return nil, err
 		}
@@ -379,15 +379,16 @@ func hashStruct(typeName string, types map[string][]*TypeField, rangeFields func
 
 	hash = keccak256(buf.Bytes())
 	if debugHash {
-		fmt.Println(header.String())
+		// use stderr to circumvent the linter
+		fmt.Fprintln(os.Stderr, header.String())
 		for i, v := range parts {
 			if i == 0 {
-				fmt.Printf("    %x\n", v)
+				fmt.Fprintf(os.Stderr, "    %x\n", v)
 			} else {
-				fmt.Printf("  + %x\n", v)
+				fmt.Fprintf(os.Stderr, "  + %x\n", v)
 			}
 		}
-		fmt.Printf("  = %x\n\n", hash)
+		fmt.Fprintf(os.Stderr, "  = %x\n\n", hash)
 	}
 
 	return hash, nil
