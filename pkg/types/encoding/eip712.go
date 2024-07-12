@@ -48,6 +48,12 @@ type EIP712Resolver interface {
 	Resolve(any, string) (eipResolvedValue, error)
 }
 
+type eipResolvedValue interface {
+	Hash(types map[string][]*TypeField) ([]byte, error)
+	Types(map[string][]*TypeField)
+	MarshalJSON() ([]byte, error)
+}
+
 var eip712EncoderMap map[string]EIP712Resolver
 
 func init() {
@@ -68,15 +74,18 @@ func init() {
 	j := must2(Eip712Domain.MarshalJSON())
 	must(json.Unmarshal(j, &jdomain))
 
+	const eipDomainKey = "EIP712Domain"
 	RegisterTypeDefinition(&[]*TypeField{
 		NewTypeField("name", "string"),
 		NewTypeField("version", "string"),
 		NewTypeField("chainId", "uint256"),
-	}, "EIP712Domain")
+	}, eipDomainKey)
 
-	td := SchemaDictionary["EIP712Domain"]
-	EIP712DomainValue = must2(td.Resolve(jdomain, "EIP712Domain"))
-	EIP712DomainHash = must2(EIP712DomainValue.Hash())
+	td := SchemaDictionary[eipDomainKey]
+	EIP712DomainValue = must2(td.Resolve(jdomain, eipDomainKey))
+	EIP712DomainHash = must2(EIP712DomainValue.Hash(map[string][]*TypeField{
+		eipDomainKey: *td.Fields,
+	}))
 }
 
 func must(err error) {
@@ -182,15 +191,10 @@ type eipResolvedUnionValue struct {
 	value  eipResolvedValue
 }
 
-func (e *eipResolvedUnionValue) Hash() ([]byte, error) {
-	return hashStruct(e.union, e, func(fn func(eipResolvedValue) error) error {
+func (e *eipResolvedUnionValue) Hash(types map[string][]*TypeField) ([]byte, error) {
+	return hashStruct(e.union, types, func(fn func(eipResolvedValue) error) error {
 		return fn(e.value)
 	})
-}
-
-func (e *eipResolvedUnionValue) header(ret map[string]string) {
-	ret[e.union] = fmt.Sprintf("%s(%s %s)", e.union, e.member, e.enum)
-	e.value.header(ret)
 }
 
 func (e *eipResolvedUnionValue) Types(ret map[string][]*TypeField) {
@@ -228,13 +232,6 @@ func (td *TypeDefinition) Resolve(v any, typeName string) (eipResolvedValue, err
 	}, nil
 }
 
-type eipResolvedValue interface {
-	Hash() ([]byte, error)
-	Types(map[string][]*TypeField)
-	MarshalJSON() ([]byte, error)
-	header(map[string]string)
-}
-
 type eipResolvedStruct struct {
 	typeName string
 	fields   []*resolvedFieldValue
@@ -259,15 +256,7 @@ type eipEmptyStruct struct {
 
 func (e *eipEmptyStruct) MarshalJSON() ([]byte, error) { panic("invalid call") }
 
-func (e *eipEmptyStruct) header(ret map[string]string) {
-	headerFor(ret, e.typeName, func(fn func(*TypeField)) {
-		for _, field := range *e.td.Fields {
-			fn(field)
-		}
-	})
-}
-
-func (e *eipEmptyStruct) Hash() ([]byte, error) {
+func (e *eipEmptyStruct) Hash(types map[string][]*TypeField) ([]byte, error) {
 	return make([]byte, 32), nil
 }
 
@@ -298,13 +287,13 @@ func (e *eipResolvedStruct) MarshalJSON() ([]byte, error) {
 	return json.Marshal(v)
 }
 
-const debugHash = true
+const debugHash = false
 
-func (e *eipResolvedStruct) Hash() ([]byte, error) {
+func (e *eipResolvedStruct) Hash(types map[string][]*TypeField) ([]byte, error) {
 	//the stripping shouldn't be necessary, but do it as a precaution
 	strippedType, _ := stripSlice(e.typeName)
 
-	return hashStruct(strippedType, e, func(fn func(eipResolvedValue) error) error {
+	return hashStruct(strippedType, types, func(fn func(eipResolvedValue) error) error {
 		for _, field := range e.fields {
 			err := fn(field.value)
 			if err != nil {
@@ -315,21 +304,41 @@ func (e *eipResolvedStruct) Hash() ([]byte, error) {
 	})
 }
 
-func hashStruct(typeName string, e eipResolvedValue, rangeFields func(func(eipResolvedValue) error) error) ([]byte, error) {
-	deps := map[string]string{}
-	e.header(deps)
+func getDeps(deps map[string]bool, typeName string, types map[string][]*TypeField) {
+	fields, ok := types[typeName]
+	if !ok {
+		return
+	}
+	deps[typeName] = true
+	for _, f := range fields {
+		getDeps(deps, strings.TrimSuffix(f.Type, "[]"), types)
+	}
+}
 
-	var header bytes.Buffer
-	header.WriteString(deps[typeName])
+func hashStruct(typeName string, types map[string][]*TypeField, rangeFields func(func(eipResolvedValue) error) error) ([]byte, error) {
+	deps := map[string]bool{}
+	getDeps(deps, typeName, types)
+
+	depNames := []string{typeName}
 	delete(deps, typeName)
-
-	var depNames []string
 	for name := range deps {
 		depNames = append(depNames, name)
 	}
-	sort.Strings(depNames)
+	sort.Strings(depNames[1:])
+
+	var header bytes.Buffer
 	for _, name := range depNames {
-		header.WriteString(deps[name])
+		header.WriteString(name)
+		header.WriteRune('(')
+		for i, f := range types[name] {
+			if i > 0 {
+				header.WriteRune(',')
+			}
+			header.WriteString(f.Type)
+			header.WriteRune(' ')
+			header.WriteString(f.Name)
+		}
+		header.WriteRune(')')
 	}
 
 	var buf bytes.Buffer
@@ -342,7 +351,7 @@ func hashStruct(typeName string, e eipResolvedValue, rangeFields func(func(eipRe
 	}
 
 	err := rangeFields(func(v eipResolvedValue) error {
-		encodedValue, err := v.Hash()
+		encodedValue, err := v.Hash(types)
 		if err != nil {
 			return err
 		}
@@ -372,37 +381,6 @@ func hashStruct(typeName string, e eipResolvedValue, rangeFields func(func(eipRe
 	return hash, nil
 }
 
-func (e *eipResolvedStruct) header(ret map[string]string) {
-	headerFor(ret, e.typeName, func(fn func(*TypeField)) {
-		for _, field := range e.fields {
-			fn(&field.TypeField)
-		}
-	})
-	for _, field := range e.fields {
-		field.value.header(ret)
-	}
-}
-
-func headerFor(ret map[string]string, typeName string, fields func(func(*TypeField))) {
-	//the stripping shouldn't be necessary, but do it as a precaution
-	strippedType, _ := stripSlice(typeName)
-
-	//define the type structure
-	var header strings.Builder
-	header.WriteString(strippedType + "(")
-	first := true
-	fields(func(field *TypeField) {
-		if first {
-			first = false
-		} else {
-			header.WriteString(",")
-		}
-		header.WriteString(field.Type + " " + field.Name)
-	})
-	header.WriteString(")")
-	ret[strippedType] = header.String()
-}
-
 func (e *eipResolvedStruct) Types(ret map[string][]*TypeField) {
 	var fields []*TypeField
 	for _, f := range e.fields {
@@ -413,10 +391,10 @@ func (e *eipResolvedStruct) Types(ret map[string][]*TypeField) {
 	ret[name] = fields
 }
 
-func (e eipResolvedArray) Hash() ([]byte, error) {
+func (e eipResolvedArray) Hash(types map[string][]*TypeField) ([]byte, error) {
 	var buf bytes.Buffer
 	for _, v := range e {
-		hash, err := v.Hash()
+		hash, err := v.Hash(types)
 		if err != nil {
 			return nil, err
 		}
@@ -425,21 +403,14 @@ func (e eipResolvedArray) Hash() ([]byte, error) {
 	return keccak256(buf.Bytes()), nil
 }
 
-func (e eipResolvedArray) header(ret map[string]string) {
-	for _, v := range e {
-		v.header(ret)
-	}
-}
-
 func (e eipResolvedArray) Types(ret map[string][]*TypeField) {
 	for _, v := range e {
 		v.Types(ret)
 	}
 }
 
-func (e *eipResolvedAtomic) Hash() ([]byte, error)         { return e.hash() }
-func (e *eipResolvedAtomic) header(map[string]string)      {}
-func (e *eipResolvedAtomic) Types(map[string][]*TypeField) {}
+func (e *eipResolvedAtomic) Hash(map[string][]*TypeField) ([]byte, error) { return e.hash() }
+func (e *eipResolvedAtomic) Types(map[string][]*TypeField)                {}
 
 func (e *eipResolvedAtomic) MarshalJSON() ([]byte, error) {
 	v := e.value
@@ -594,12 +565,34 @@ func RegisterTypeDefinition(tf *[]*TypeField, name string, aliases ...string) {
 	}
 }
 
-func Eip712Hash(v map[string]interface{}, typeName string, td *TypeDefinition) ([]byte, error) {
-	r, err := td.Resolve(v, typeName)
+// Construct the wallet RPC call
+type EIP712Call struct {
+	Types       map[string][]*TypeField `json:"types"`
+	PrimaryType string                  `json:"primaryType"`
+	Domain      EIP712Domain            `json:"domain"`
+	Message     eipResolvedValue        `json:"message"`
+}
+
+func NewEIP712Call(value any, typ EIP712Resolver) (*EIP712Call, error) {
+	r, err := typ.Resolve(value, "")
 	if err != nil {
 		return nil, err
 	}
-	messageHash, err := r.Hash()
+
+	e := EIP712Call{}
+	e.PrimaryType = "Transaction"
+	e.Domain = Eip712Domain
+	e.Message = r
+
+	e.Types = map[string][]*TypeField{}
+	r.Types(e.Types)
+	EIP712DomainValue.Types(e.Types)
+
+	return &e, nil
+}
+
+func (c *EIP712Call) Hash() ([]byte, error) {
+	messageHash, err := c.Message.Hash(c.Types)
 	if err != nil {
 		return nil, err
 	}

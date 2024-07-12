@@ -44,43 +44,26 @@ func NewEip712TransactionDefinition(txn *Transaction) *encoding.TypeDefinition {
 	return &encoding.TypeDefinition{Name: "Transaction", Fields: txnSchema}
 }
 
-// MarshalEip712 This will create an EIP-712 json message needed to submit to a
-// wallet.
+// MarshalEip712 creates the EIP-712 json message needed to submit a transaction
+// and signature to an Ethereum wallet.
 func MarshalEip712(txn *Transaction, sig Signature) (ret []byte, err error) {
-	// Convert the transaction and signature to an EIP-712 message
-	jtx, err := makeEIP712Message(txn, sig)
+	call, err := newEIP712Call(txn, sig)
 	if err != nil {
 		return nil, err
 	}
-	r, err := NewEip712TransactionDefinition(txn).Resolve(jtx, "Transaction")
-	if err != nil {
-		return nil, err
-	}
-
-	// Construct the wallet RPC call
-	type eip712 struct {
-		Types       map[string][]*encoding.TypeField `json:"types"`
-		PrimaryType string                           `json:"primaryType"`
-		Domain      encoding.EIP712Domain            `json:"domain"`
-		Message     json.RawMessage                  `json:"message"`
-	}
-	e := eip712{}
-	e.PrimaryType = "Transaction"
-	e.Domain = encoding.Eip712Domain
-
-	e.Message, err = r.MarshalJSON()
-	if err != nil {
-		return nil, err
-	}
-
-	e.Types = map[string][]*encoding.TypeField{}
-	r.Types(e.Types)
-	encoding.EIP712DomainValue.Types(e.Types)
-
-	return json.Marshal(e)
+	return json.Marshal(call)
 }
 
-func makeEIP712Message(txn *Transaction, sig Signature) (map[string]any, error) {
+func EIP712Hash(txn *Transaction, sig Signature) ([]byte, error) {
+	call, err := newEIP712Call(txn, sig)
+	if err != nil {
+		return nil, err
+	}
+	return call.Hash()
+}
+
+// newEIP712Call converts the transaction and signature to an EIP-712 message.
+func newEIP712Call(txn *Transaction, sig Signature) (*encoding.EIP712Call, error) {
 	var delegators []any
 	var inner *Eip712TypedDataSignature
 	for inner == nil {
@@ -120,19 +103,6 @@ func makeEIP712Message(txn *Transaction, sig Signature) (map[string]any, error) 
 	}
 	jtx["signature"] = jsig
 
-	return jtx, nil
-}
-
-func EIP712Hash(txn *Transaction, sig Signature) ([]byte, error) {
-	jtx, err := makeEIP712Message(txn, sig)
-	if err != nil {
-		return nil, err
-	}
-
-	h, err := encoding.Eip712Hash(jtx, "Transaction", NewEip712TransactionDefinition(txn))
-	if err != nil {
-		return nil, err
-	}
-
-	return h, nil
+	td := NewEip712TransactionDefinition(txn)
+	return encoding.NewEIP712Call(jtx, td)
 }
