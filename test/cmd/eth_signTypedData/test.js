@@ -65,11 +65,12 @@ const sig = eth.TypedDataUtils.eip712Hash(data, "V4").toString("hex");
 process.stdout.write(sig);
 
 /*
-process.stderr.write(`${encodeType(primaryType, types)}\n`)
+process.stderr.write(`!! ${encodeType(primaryType, types)}\n`)
 for (const i in encodedValues) {
     const b = abi_utils_1.encode([encodedTypes[i]], [encodedValues[i]])
-    process.stderr.write(`  ${i == 0 ? ' ' : '+'} ${Buffer.from(b).toString('hex')}\n`)
+    process.stderr.write(`!!   ${i == 0 ? ' ' : '+'} ${Buffer.from(b).toString('hex')}\n`)
 }
 const enc = (0, util_1.arrToBufArr)((0, abi_utils_1.encode)(encodedTypes, encodedValues));
-process.stderr.write(`  = ${Buffer.from(keccak_1.keccak256(enc)).toString('hex')}\n\n`)
+process.stderr.write(`!!   = ${Buffer.from(keccak_1.keccak256(enc)).toString('hex')}\n\n`)
+return enc;
 */

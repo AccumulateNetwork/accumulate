@@ -10,7 +10,6 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
@@ -61,40 +60,22 @@ func MarshalEip712(txn *Transaction, sig Signature) (ret []byte, err error) {
 		Types       map[string][]*encoding.TypeField `json:"types"`
 		PrimaryType string                           `json:"primaryType"`
 		Domain      encoding.EIP712Domain            `json:"domain"`
-		Message     any                              `json:"message"`
+		Message     json.RawMessage                  `json:"message"`
 	}
 	e := eip712{}
 	e.PrimaryType = "Transaction"
 	e.Domain = encoding.Eip712Domain
-	e.Message = jtx
+
+	e.Message, err = r.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+
 	e.Types = map[string][]*encoding.TypeField{}
 	r.Types(e.Types)
 	encoding.EIP712DomainValue.Types(e.Types)
 
-	// Reformat the message JSON to be compatible with Ethereum
-	formatEIP712Message(jtx, e.Types, e.Types[e.PrimaryType])
-
 	return json.Marshal(e)
-}
-
-func formatEIP712Message(v map[string]any, types map[string][]*encoding.TypeField, fields []*encoding.TypeField) {
-	for _, field := range fields {
-		fv, ok := v[field.Name]
-		if !ok {
-			continue
-		}
-
-		switch field.Type {
-		case "bytes", "bytes32":
-			v[field.Name] = fmt.Sprintf("0x%v", fv)
-			continue
-		}
-
-		fields, ok := types[strings.TrimPrefix(field.Type, "[]")]
-		if ok {
-			formatEIP712Message(fv.(map[string]any), types, fields)
-		}
-	}
 }
 
 func makeEIP712Message(txn *Transaction, sig Signature) (map[string]any, error) {

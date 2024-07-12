@@ -9,12 +9,15 @@ package encoding_test
 import (
 	"bytes"
 	"encoding/hex"
+	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"testing"
 
 	eth "github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
@@ -26,40 +29,23 @@ func TestEIP712Arrays(t *testing.T) {
 	// These aren't supposed to be a real transactions, it's just an easy test
 	// case for how our EIP-712 implementation handles arrays. Specifically
 	// there's an array with two values
-	cases := map[string]string{
-		"SendTokens": `{
-			"header": {
-				"principal": "acc://adi.acme/ACME"
-			},
-			"body": {
-				"type": "sendTokens",
-				"to": [
-					{"url": "acc://other.acme/ACME"},
-					{"amount": "10000000000"}
-				]
-			}
-		}`,
-
-		"UpdateKeyPage": `{
-			"header": {
-				"principal": "acc://adi.acme/ACME"
-			},
-			"body": {
-				"type": "updateKeyPage",
-				"operations": [
-					{"type": "add", "entry": { "keyHash": "c0ffee" }},
-					{"type": "setThreshold", "threshold": 1}
-				]
-			}
-		}`,
+	cases := []*protocol.Transaction{
+		must(build.Transaction().
+			For("adi.acme", "book", "1").
+			UpdateKeyPage().
+			Add().Entry().Hash([32]byte{1, 2, 3}).FinishEntry().FinishOperation().
+			Add().Entry().Owner("foo.bar").FinishEntry().FinishOperation().
+			Done()),
+		must(build.Transaction().
+			For("adi.acme", "book", "1").
+			UpdateKeyPage().
+			Add().Entry().Hash([32]byte{1, 2, 3}).FinishEntry().FinishOperation().
+			SetThreshold(2).
+			Done()),
 	}
 
-	for name, src := range cases {
-		t.Run(name, func(t *testing.T) {
-			txn := &protocol.Transaction{}
-			err := txn.UnmarshalJSON([]byte(src))
-			require.NoError(t, err)
-
+	for i, txn := range cases {
+		t.Run(fmt.Sprintf("Case %d", i), func(t *testing.T) {
 			priv := acctesting.NewSECP256K1(t.Name())
 			sig := &protocol.Eip712TypedDataSignature{
 				PublicKey:     eth.FromECDSAPub(&priv.PublicKey),
@@ -69,8 +55,15 @@ func TestEIP712Arrays(t *testing.T) {
 			}
 			txn.Header.Initiator = [32]byte(sig.Metadata().Hash())
 
-			b, err := protocol.MarshalEip712(txn, sig)
+			b, err := json.Marshal(txn)
 			require.NoError(t, err)
+			fmt.Printf("%s\n", b)
+
+			b, err = protocol.MarshalEip712(txn, sig)
+			require.NoError(t, err)
+			buf := new(bytes.Buffer)
+			require.NoError(t, json.Indent(buf, b, "", "  "))
+			fmt.Println(buf.String())
 
 			cmd := exec.Command("../../../test/cmd/eth_signTypedData/execute.sh", hex.EncodeToString(priv.Serialize()), string(b))
 			cmd.Stderr = os.Stderr
@@ -85,4 +78,11 @@ func TestEIP712Arrays(t *testing.T) {
 			require.True(t, sig.Verify(nil, txn))
 		})
 	}
+}
+
+func must[V any](v V, err error) V {
+	if err != nil {
+		panic(err)
+	}
+	return v
 }
