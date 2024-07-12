@@ -26,7 +26,8 @@ type TypeField struct {
 }
 
 type TypeDefinition struct {
-	Fields *[]*TypeField `json:"types"`
+	Name   string
+	Fields *[]*TypeField
 }
 
 type EIP712Domain struct {
@@ -95,27 +96,27 @@ type Enum interface {
 	String() string
 }
 
-func mapEnumTypes[T any, R any](f Func[T, R]) (string, map[string]string) {
+func RegisterEnumeratedTypeInterface[T any, R any](op Func[T, R]) {
 	//need to store allocator
-	ret := make(map[string]string)
+	typesMap := make(map[string]string)
 	enumType := new(T)
 	enumValue, ok := any(enumType).(Enum)
 	if !ok {
-		return "unknown", nil
+		panic(fmt.Errorf("%T is not an enumeration type", *enumType))
 	}
 	var a *R
-	opName := reflect.TypeOf(a).Elem().String()
+	tp := reflect.TypeOf(a).Elem().String()
 	//strip package name if present
-	idx := strings.LastIndex(opName, ".")
+	idx := strings.LastIndex(tp, ".")
 	if idx != -1 {
-		opName = opName[idx+1:]
+		tp = tp[idx+1:]
 	}
 	//build a map of types
 	for maxType := uint64(0); ; maxType++ {
 		if !enumValue.SetEnumValue(maxType) {
 			break
 		}
-		op, err := f(*enumType)
+		op, err := op(*enumType)
 		if err != nil {
 			continue
 		}
@@ -132,13 +133,8 @@ func mapEnumTypes[T any, R any](f Func[T, R]) (string, map[string]string) {
 		}
 
 		key := enumValue.String()
-		ret[key] = name
+		typesMap[key] = name
 	}
-	return opName, ret
-}
-
-func RegisterEnumeratedTypeInterface[T any, R any](op Func[T, R]) {
-	tp, typesMap := mapEnumTypes(op)
 	eip712EncoderMap[tp] = eip712EnumResolver(typesMap)
 }
 
@@ -166,7 +162,48 @@ func (r eip712EnumResolver) Resolve(v any, typeName string) (eipResolvedValue, e
 		return nil, fmt.Errorf("invalid data entry type: %T", vv["type"])
 	}
 
-	return d.Resolve(v, typeName)
+	rv, err := d.Resolve(vv, typeName)
+	if err != nil {
+		return nil, err
+	}
+
+	return &eipResolvedUnionValue{
+		union:  typeName,
+		enum:   t,
+		member: a,
+		value:  rv,
+	}, nil
+}
+
+type eipResolvedUnionValue struct {
+	union  string
+	enum   string
+	member string
+	value  eipResolvedValue
+}
+
+func (e *eipResolvedUnionValue) Hash() ([]byte, error) {
+	return hashStruct(e.union, e, func(fn func(eipResolvedValue) error) error {
+		return fn(e.value)
+	})
+}
+
+func (e *eipResolvedUnionValue) header(ret map[string]string) {
+	ret[e.union] = fmt.Sprintf("%s(%s %s)", e.union, e.member, e.enum)
+	e.value.header(ret)
+}
+
+func (e *eipResolvedUnionValue) Types(ret map[string][]*TypeField) {
+	ret[e.union] = []*TypeField{{Name: e.enum, Type: e.member}}
+	e.value.Types(ret)
+}
+
+func (e *eipResolvedUnionValue) MarshalJSON() ([]byte, error) {
+	b, err := e.value.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(map[string]json.RawMessage{e.enum: b})
 }
 
 func (td *TypeDefinition) Resolve(v any, typeName string) (eipResolvedValue, error) {
@@ -186,7 +223,7 @@ func (td *TypeDefinition) Resolve(v any, typeName string) (eipResolvedValue, err
 	}
 
 	return &eipResolvedStruct{
-		typeName: typeName,
+		typeName: td.Name,
 		fields:   fields,
 	}, nil
 }
@@ -261,18 +298,30 @@ func (e *eipResolvedStruct) MarshalJSON() ([]byte, error) {
 	return json.Marshal(v)
 }
 
-const debugHash = false
+const debugHash = true
 
 func (e *eipResolvedStruct) Hash() ([]byte, error) {
 	//the stripping shouldn't be necessary, but do it as a precaution
 	strippedType, _ := stripSlice(e.typeName)
 
+	return hashStruct(strippedType, e, func(fn func(eipResolvedValue) error) error {
+		for _, field := range e.fields {
+			err := fn(field.value)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+func hashStruct(typeName string, e eipResolvedValue, rangeFields func(func(eipResolvedValue) error) error) ([]byte, error) {
 	deps := map[string]string{}
 	e.header(deps)
 
 	var header bytes.Buffer
-	header.WriteString(deps[strippedType])
-	delete(deps, strippedType)
+	header.WriteString(deps[typeName])
+	delete(deps, typeName)
 
 	var depNames []string
 	for name := range deps {
@@ -292,18 +341,19 @@ func (e *eipResolvedStruct) Hash() ([]byte, error) {
 		parts = append(parts, hash)
 	}
 
-	//now loop through the fields and either encode the value or recursively dive into more types
-	for _, field := range e.fields {
-		//now run the hasher
-		encodedValue, err := field.value.Hash()
+	err := rangeFields(func(v eipResolvedValue) error {
+		encodedValue, err := v.Hash()
 		if err != nil {
-			return nil, err
+			return err
 		}
 		buf.Write(encodedValue)
-
 		if debugHash {
 			parts = append(parts, encodedValue)
 		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	hash = keccak256(buf.Bytes())
@@ -316,7 +366,7 @@ func (e *eipResolvedStruct) Hash() ([]byte, error) {
 				fmt.Printf("  + %x\n", v)
 			}
 		}
-		fmt.Printf("  = %x\n", hash)
+		fmt.Printf("  = %x\n\n", hash)
 	}
 
 	return hash, nil
@@ -395,6 +445,9 @@ func (e *eipResolvedAtomic) MarshalJSON() ([]byte, error) {
 	v := e.value
 	switch e.ethType {
 	case "bytes", "bytes32", "address":
+		if s, ok := v.(string); ok && s == "" {
+			return json.Marshal("")
+		}
 		v = fmt.Sprintf("0x%v", v)
 	}
 	return json.Marshal(v)
@@ -450,7 +503,7 @@ func (f *TypeField) resolve(v any) (*resolvedFieldValue, error) {
 			}
 			var array eipResolvedArray
 			for _, vvv := range vv {
-				r, err := encoder.Resolve(vvv, f.Type)
+				r, err := encoder.Resolve(vvv, strippedType)
 				if err != nil {
 					return nil, err
 				}
@@ -491,7 +544,7 @@ func (f *TypeField) resolve(v any) (*resolvedFieldValue, error) {
 			if !ok {
 				return nil, fmt.Errorf("eip712 field %s", f.Type)
 			}
-			r, err := fields.Resolve(vvv, f.Type)
+			r, err := fields.Resolve(vvv, strippedType)
 			if err != nil {
 				return nil, err
 			}
@@ -527,14 +580,15 @@ func (td *TypeDefinition) sort() {
 	})
 }
 
-func RegisterTypeDefinition(tf *[]*TypeField, aliases ...string) {
-	td := &TypeDefinition{tf}
+func RegisterTypeDefinition(tf *[]*TypeField, name string, aliases ...string) {
+	td := &TypeDefinition{name, tf}
 	td.sort()
 
 	if SchemaDictionary == nil {
 		SchemaDictionary = make(map[string]*TypeDefinition)
 	}
 
+	SchemaDictionary[name] = td
 	for _, alias := range aliases {
 		SchemaDictionary[alias] = td
 	}

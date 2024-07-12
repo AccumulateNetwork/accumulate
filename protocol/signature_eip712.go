@@ -10,6 +10,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
@@ -33,13 +34,14 @@ func init() {
 }
 
 func NewEip712TransactionDefinition(txn *Transaction) *encoding.TypeDefinition {
+	body := txn.Body.Type().String()
 	txnSchema := &[]*encoding.TypeField{
 		encoding.NewTypeField("header", "TransactionHeader"),
-		encoding.NewTypeField("body", txn.Body.Type().String()),
+		encoding.NewTypeField("body", strings.ToUpper(body[:1])+body[1:]),
 		encoding.NewTypeField("signature", "SignatureMetadata"),
 	}
 
-	return &encoding.TypeDefinition{Fields: txnSchema}
+	return &encoding.TypeDefinition{Name: "Transaction", Fields: txnSchema}
 }
 
 // MarshalEip712 This will create an EIP-712 json message needed to submit to a

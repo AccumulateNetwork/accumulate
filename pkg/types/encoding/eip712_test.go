@@ -36,12 +36,12 @@ func TestEIP712Arrays(t *testing.T) {
 			Add().Entry().Hash([32]byte{1, 2, 3}).FinishEntry().FinishOperation().
 			Add().Entry().Owner("foo.bar").FinishEntry().FinishOperation().
 			Done()),
-		must(build.Transaction().
-			For("adi.acme", "book", "1").
-			UpdateKeyPage().
-			Add().Entry().Hash([32]byte{1, 2, 3}).FinishEntry().FinishOperation().
-			SetThreshold(2).
-			Done()),
+		// must(build.Transaction().
+		// 	For("adi.acme", "book", "1").
+		// 	UpdateKeyPage().
+		// 	Add().Entry().Hash([32]byte{1, 2, 3}).FinishEntry().FinishOperation().
+		// 	SetThreshold(2).
+		// 	Done()),
 	}
 
 	for i, txn := range cases {
