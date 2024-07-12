@@ -495,19 +495,10 @@ func TestTypesFromCerts(t *testing.T) {
 }
 
 func TestEip712TypedDataSignature(t *testing.T) {
-	txn := &Transaction{}
-	err := txn.UnmarshalJSON([]byte(`{
-		"header": {
-			"principal": "acc://adi.acme/ACME",
-		},
-		"body": {
-			"type": "sendTokens",
-			"to": [{
-				"url": "acc://other.acme/ACME",
-				"amount": "10000000000"
-			}]
-		}
-	}`))
+	txn, err := build.Transaction().
+		For("adi.acme", "tokens").
+		SendTokens(100, AcmePrecisionPower).To("other.acme", "tokens").
+		Done()
 	require.NoError(t, err)
 
 	eip712sig := &Eip712TypedDataSignature{
@@ -527,19 +518,11 @@ func TestEip712TypedDataSignature(t *testing.T) {
 }
 
 func TestEIP712DelegatedKeyPageUpdate(t *testing.T) {
-	txn := &Transaction{}
-	err := txn.UnmarshalJSON([]byte(`{
-		"header": {
-			"principal": "acc://adi.acme/ACME",
-		},
-		"body": {
-			"type": "updateKeyPage",
-			"operation": [{
-				"type": "add",
-				"entry": { "keyHash": "e55d973bf691381c94602354d1e1f655f7b1c4bd56760dffeffa2bef4541ec11" }
-			}]
-		}
-	}`))
+	txn, err := build.Transaction().
+		For("adi.acme", "book", "1").
+		UpdateKeyPage().
+		Add().Entry().Hash([32]byte{1, 2, 3}).FinishEntry().FinishOperation().
+		Done()
 	require.NoError(t, err)
 
 	inner := &Eip712TypedDataSignature{
