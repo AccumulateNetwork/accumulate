@@ -257,7 +257,9 @@ func (td *TypeDefinition) Resolve(v any, typeName string) (eipResolvedValue, err
 		if err != nil {
 			return nil, err
 		}
-		fields[field.Name] = v
+		if v != nil {
+			fields[field.Name] = v
+		}
 	}
 
 	return &eipResolvedStruct{
@@ -273,7 +275,7 @@ type eipResolvedStruct struct {
 
 type resolvedFieldValue struct {
 	TypeField
-	skip  bool
+	empty bool
 	value eipResolvedValue
 }
 
@@ -281,24 +283,6 @@ type eipResolvedArray []eipResolvedValue
 
 func (e eipResolvedArray) MarshalJSON() ([]byte, error) {
 	return json.Marshal([]eipResolvedValue(e))
-}
-
-type eipEmptyStruct struct {
-	typeName string
-	td       *TypeDefinition
-}
-
-func (e *eipEmptyStruct) MarshalJSON() ([]byte, error) { panic("invalid call") }
-
-func (e *eipEmptyStruct) Hash(types map[string][]*TypeField) ([]byte, error) {
-	return make([]byte, 32), nil
-}
-
-func (e *eipEmptyStruct) Types(ret TypeSet) {
-	name, _ := stripSlice(e.typeName)
-	for _, f := range *e.td.Fields {
-		ret.AddField(name, f.Name, f.Type)
-	}
 }
 
 type eipResolvedAtomic struct {
@@ -310,10 +294,6 @@ type eipResolvedAtomic struct {
 func (e *eipResolvedStruct) MarshalJSON() ([]byte, error) {
 	v := map[string]json.RawMessage{}
 	for _, f := range e.fields {
-		if _, ok := f.value.(*eipEmptyStruct); ok {
-			continue
-		}
-
 		var err error
 		v[f.Name], err = f.value.MarshalJSON()
 		if err != nil {
@@ -329,7 +309,13 @@ func (e *eipResolvedStruct) Hash(types map[string][]*TypeField) ([]byte, error) 
 
 	return hashStruct(strippedType, types, func(fn func(encodedValue []byte)) error {
 		for _, field := range types[strippedType] {
-			encodedValue, err := e.fields[field.Name].value.Hash(types)
+			f, ok := e.fields[field.Name]
+			if !ok {
+				fn(make([]byte, 32))
+				continue
+			}
+
+			encodedValue, err := f.value.Hash(types)
 			if err != nil {
 				return err
 			}
@@ -417,7 +403,7 @@ func hashStruct(typeName string, types map[string][]*TypeField, rangeFields func
 func (e *eipResolvedStruct) Types(ret TypeSet) {
 	name, _ := stripSlice(e.typeName)
 	for _, f := range e.fields {
-		if f.skip {
+		if f.empty {
 			continue
 		}
 		ret.AddField(name, f.Name, f.Type)
@@ -532,7 +518,7 @@ func (f *TypeField) resolve(v any) (*resolvedFieldValue, error) {
 
 	// If v is nil and the type is a struct, skip this value
 	if v == nil {
-		return &resolvedFieldValue{*f, true, &eipEmptyStruct{strippedType, fields}}, nil
+		return nil, nil
 	}
 
 	//from here on down we are expecting a struct
