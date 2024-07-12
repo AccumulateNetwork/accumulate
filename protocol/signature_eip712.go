@@ -63,7 +63,6 @@ func MarshalEip712(txn *Transaction, sig Signature) (ret []byte, err error) {
 		Message     json.RawMessage                  `json:"message"`
 	}
 	e := eip712{}
-	e.PrimaryType = "Transaction"
 	e.Domain = encoding.Eip712Domain
 
 	e.Message, err = r.MarshalJSON()
@@ -72,7 +71,7 @@ func MarshalEip712(txn *Transaction, sig Signature) (ret []byte, err error) {
 	}
 
 	e.Types = map[string][]*encoding.TypeField{}
-	r.Types(e.Types)
+	e.PrimaryType = r.Types(e.Types)
 	encoding.EIP712DomainValue.Types(e.Types)
 
 	return json.Marshal(e)

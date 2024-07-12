@@ -176,13 +176,16 @@ func (td *TypeDefinition) Resolve(v any, typeName string) (eipResolvedValue, err
 	}
 
 	var fields []*resolvedFieldValue
-	for _, field := range *td.Fields {
-		value, _ := data[field.Name]
-		v, err := field.resolve(value)
+	for i, field := range *td.Fields {
+		value, ok := data[field.Name]
+		if !ok {
+			continue
+		}
+		v, err := field.resolve(value, typeName)
 		if err != nil {
 			return nil, err
 		}
-		fields = append(fields, v)
+		fields = append(fields, &resolvedFieldValue{*field, i, v})
 	}
 
 	return &eipResolvedStruct{
@@ -193,7 +196,7 @@ func (td *TypeDefinition) Resolve(v any, typeName string) (eipResolvedValue, err
 
 type eipResolvedValue interface {
 	Hash() ([]byte, error)
-	Types(map[string][]*TypeField)
+	Types(ret map[string][]*TypeField) string
 	MarshalJSON() ([]byte, error)
 	header(map[string]string)
 }
@@ -205,38 +208,8 @@ type eipResolvedStruct struct {
 
 type resolvedFieldValue struct {
 	TypeField
-	skip  bool
+	index int
 	value eipResolvedValue
-}
-
-type eipResolvedArray []eipResolvedValue
-
-func (e eipResolvedArray) MarshalJSON() ([]byte, error) {
-	return json.Marshal([]eipResolvedValue(e))
-}
-
-type eipEmptyStruct struct {
-	typeName string
-	td       *TypeDefinition
-}
-
-func (e *eipEmptyStruct) MarshalJSON() ([]byte, error) { panic("invalid call") }
-
-func (e *eipEmptyStruct) header(ret map[string]string) {
-	headerFor(ret, e.typeName, func(fn func(*TypeField)) {
-		for _, field := range *e.td.Fields {
-			fn(field)
-		}
-	})
-}
-
-func (e *eipEmptyStruct) Hash() ([]byte, error) {
-	return make([]byte, 32), nil
-}
-
-func (e *eipEmptyStruct) Types(ret map[string][]*TypeField) {
-	name, _ := stripSlice(e.typeName)
-	ret[name] = *e.td.Fields
 }
 
 type eipResolvedAtomic struct {
@@ -248,10 +221,6 @@ type eipResolvedAtomic struct {
 func (e *eipResolvedStruct) MarshalJSON() ([]byte, error) {
 	v := map[string]json.RawMessage{}
 	for _, f := range e.fields {
-		if f.skip {
-			continue
-		}
-
 		var err error
 		v[f.Name], err = f.value.MarshalJSON()
 		if err != nil {
@@ -261,7 +230,7 @@ func (e *eipResolvedStruct) MarshalJSON() ([]byte, error) {
 	return json.Marshal(v)
 }
 
-const debugHash = false
+const debugHash = true
 
 func (e *eipResolvedStruct) Hash() ([]byte, error) {
 	//the stripping shouldn't be necessary, but do it as a precaution
@@ -323,49 +292,70 @@ func (e *eipResolvedStruct) Hash() ([]byte, error) {
 }
 
 func (e *eipResolvedStruct) header(ret map[string]string) {
-	headerFor(ret, e.typeName, func(fn func(*TypeField)) {
-		for _, field := range e.fields {
-			fn(&field.TypeField)
-		}
-	})
+	//the stripping shouldn't be necessary, but do it as a precaution
+	name, _ := stripSlice(e.typeName)
+
+	//scan the fields
+	var mask int
+	var fields []string
+	for _, f := range e.fields {
+		mask |= 1 << f.index
+		fields = append(fields, f.value.Types(nil)+" "+f.Name)
+	}
+
+	//define the type structure
+	if name != "EIP712Domain" && name != "Transaction" {
+		name = fmt.Sprintf("%s{%x}", name, mask)
+	}
+	ret[name] = fmt.Sprintf("%s(%s)", name, strings.Join(fields, ","))
+
+	//find dependencies
 	for _, field := range e.fields {
 		field.value.header(ret)
 	}
 }
 
-func headerFor(ret map[string]string, typeName string, fields func(func(*TypeField))) {
-	//the stripping shouldn't be necessary, but do it as a precaution
-	strippedType, _ := stripSlice(typeName)
-
-	//define the type structure
-	var header strings.Builder
-	header.WriteString(strippedType + "(")
-	first := true
-	fields(func(field *TypeField) {
-		if first {
-			first = false
-		} else {
-			header.WriteString(",")
-		}
-		header.WriteString(field.Type + " " + field.Name)
-	})
-	header.WriteString(")")
-	ret[strippedType] = header.String()
-}
-
-func (e *eipResolvedStruct) Types(ret map[string][]*TypeField) {
+func (e *eipResolvedStruct) Types(ret map[string][]*TypeField) string {
+	var mask int
 	var fields []*TypeField
 	for _, f := range e.fields {
-		fields = append(fields, &TypeField{Name: f.Name, Type: f.Type})
-		f.value.Types(ret)
+		mask |= 1 << f.index
+		fields = append(fields, &TypeField{
+			Name: f.Name,
+			Type: f.value.Types(ret),
+		})
+
 	}
 	name, _ := stripSlice(e.typeName)
-	ret[name] = fields
+	if name != "EIP712Domain" && name != "Transaction" {
+		name = fmt.Sprintf("%s{%x}", name, mask)
+	}
+	if ret != nil {
+		ret[name] = fields
+	}
+	return name
 }
 
-func (e eipResolvedArray) Hash() ([]byte, error) {
+type eipResolvedArray struct {
+	typeName string
+	values   []eipResolvedValue
+}
+
+func (e *eipResolvedArray) MarshalJSON() ([]byte, error) {
+	v := map[string]json.RawMessage{}
+	for i, elem := range e.values {
+		var err error
+		v[fmt.Sprint(i)], err = elem.MarshalJSON()
+		if err != nil {
+			return nil, err
+		}
+	}
+	return json.Marshal(v)
+}
+
+func (e *eipResolvedArray) Hash() ([]byte, error) {
 	var buf bytes.Buffer
-	for _, v := range e {
+	for _, v := range e.values {
 		hash, err := v.Hash()
 		if err != nil {
 			return nil, err
@@ -375,21 +365,34 @@ func (e eipResolvedArray) Hash() ([]byte, error) {
 	return keccak256(buf.Bytes()), nil
 }
 
-func (e eipResolvedArray) header(ret map[string]string) {
-	for _, v := range e {
+func (e *eipResolvedArray) header(ret map[string]string) {
+	var fields []string
+	for i, v := range e.values {
+		fields = append(fields, fmt.Sprintf("%s %d", v.Types(nil), i))
 		v.header(ret)
 	}
-}
-
-func (e eipResolvedArray) Types(ret map[string][]*TypeField) {
-	for _, v := range e {
-		v.Types(ret)
+	if ret != nil {
+		ret[e.typeName] = fmt.Sprintf("%s(%s)", e.typeName, strings.Join(fields, ","))
 	}
 }
 
-func (e *eipResolvedAtomic) Hash() ([]byte, error)         { return e.hash() }
-func (e *eipResolvedAtomic) header(map[string]string)      {}
-func (e *eipResolvedAtomic) Types(map[string][]*TypeField) {}
+func (e *eipResolvedArray) Types(ret map[string][]*TypeField) string {
+	var fields []*TypeField
+	for i, v := range e.values {
+		fields = append(fields, &TypeField{
+			Name: fmt.Sprint(i),
+			Type: v.Types(ret),
+		})
+	}
+	if ret != nil {
+		ret[e.typeName] = fields
+	}
+	return e.typeName
+}
+
+func (e *eipResolvedAtomic) Hash() ([]byte, error)                    { return e.hash() }
+func (e *eipResolvedAtomic) header(map[string]string)                 {}
+func (e *eipResolvedAtomic) Types(ret map[string][]*TypeField) string { return e.ethType }
 
 func (e *eipResolvedAtomic) MarshalJSON() ([]byte, error) {
 	v := e.value
@@ -435,45 +438,37 @@ func newAtomicEncoder[T any](ethType string, hasher func(T) ([]byte, error)) EIP
 	return &eip712AtomicResolver[T]{ethType, hasher}
 }
 
-func (f *TypeField) resolve(v any) (*resolvedFieldValue, error) {
+func (f *TypeField) resolve(v any, parentType string) (eipResolvedValue, error) {
 	strippedType, slices := stripSlice(f.Type)
 	encoder, ok := eip712EncoderMap[strippedType]
 	if ok {
 		if slices {
-			// If v is nil, return an empty array
-			if v == nil {
-				return &resolvedFieldValue{*f, false, eipResolvedArray{}}, nil
-			}
 			vv, ok := v.([]interface{})
 			if !ok {
 				return nil, fmt.Errorf("eip712 field %s is not of an array of interfaces", f.Name)
 			}
 			var array eipResolvedArray
+			array.typeName = fmt.Sprintf("%s{%s}", parentType, f.Name)
 			for _, vvv := range vv {
 				r, err := encoder.Resolve(vvv, f.Type)
 				if err != nil {
 					return nil, err
 				}
-				array = append(array, r)
+				array.values = append(array.values, r)
 			}
-			return &resolvedFieldValue{*f, false, array}, nil
+			return &array, nil
 		}
 		r, err := encoder.Resolve(v, f.Type)
 		if err != nil {
 			return nil, err
 		}
-		return &resolvedFieldValue{*f, false, r}, nil
+		return r, nil
 	}
 
 	//if we get here, we are expecting a struct
 	fields, ok := SchemaDictionary[strippedType]
 	if !ok {
 		return nil, fmt.Errorf("eip712 field %s", f.Type)
-	}
-
-	// If v is nil and the type is a struct, skip this value
-	if v == nil {
-		return &resolvedFieldValue{*f, true, &eipEmptyStruct{strippedType, fields}}, nil
 	}
 
 	//from here on down we are expecting a struct
@@ -484,27 +479,22 @@ func (f *TypeField) resolve(v any) (*resolvedFieldValue, error) {
 			return nil, fmt.Errorf("eip712 field %s is not of an array of interfaces", f.Name)
 		}
 		var array eipResolvedArray
+		array.typeName = fmt.Sprintf("%s{%s}", parentType, f.Name)
 		for _, vvv := range vv {
-			//now run the hasher for the type
-			// look for encoder, if we don't have one, call the types encoder
-			fields, ok := SchemaDictionary[strippedType]
-			if !ok {
-				return nil, fmt.Errorf("eip712 field %s", f.Type)
-			}
 			r, err := fields.Resolve(vvv, f.Type)
 			if err != nil {
 				return nil, err
 			}
-			array = append(array, r)
+			array.values = append(array.values, r)
 		}
-		return &resolvedFieldValue{*f, false, array}, nil
+		return &array, nil
 	}
 
 	r, err := fields.Resolve(v, f.Type)
 	if err != nil {
 		return nil, err
 	}
-	return &resolvedFieldValue{*f, false, r}, nil
+	return r, nil
 }
 
 func NewTypeField(n string, tp string) *TypeField {

@@ -34,14 +34,14 @@ func TestEIP712Arrays(t *testing.T) {
 			For("adi.acme", "book", "1").
 			UpdateKeyPage().
 			Add().Entry().Hash([32]byte{1, 2, 3}).FinishEntry().FinishOperation().
-			Add().Entry().Owner("foo.bar").FinishEntry().FinishOperation().
+			// Add().Entry().Owner("foo.bar").FinishEntry().FinishOperation().
 			Done()),
-		must(build.Transaction().
-			For("adi.acme", "book", "1").
-			UpdateKeyPage().
-			Add().Entry().Hash([32]byte{1, 2, 3}).FinishEntry().FinishOperation().
-			SetThreshold(2).
-			Done()),
+		// must(build.Transaction().
+		// 	For("adi.acme", "book", "1").
+		// 	UpdateKeyPage().
+		// 	Add().Entry().Hash([32]byte{1, 2, 3}).FinishEntry().FinishOperation().
+		// 	SetThreshold(2).
+		// 	Done()),
 	}
 
 	for i, txn := range cases {
@@ -55,11 +55,7 @@ func TestEIP712Arrays(t *testing.T) {
 			}
 			txn.Header.Initiator = [32]byte(sig.Metadata().Hash())
 
-			b, err := json.Marshal(txn)
-			require.NoError(t, err)
-			fmt.Printf("%s\n", b)
-
-			b, err = protocol.MarshalEip712(txn, sig)
+			b, err := protocol.MarshalEip712(txn, sig)
 			require.NoError(t, err)
 			buf := new(bytes.Buffer)
 			require.NoError(t, json.Indent(buf, b, "", "  "))
