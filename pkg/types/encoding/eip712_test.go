@@ -9,7 +9,6 @@ package encoding_test
 import (
 	"bytes"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -55,15 +54,9 @@ func TestEIP712Arrays(t *testing.T) {
 			}
 			txn.Header.Initiator = [32]byte(sig.Metadata().Hash())
 
-			b, err := json.Marshal(txn)
+			b, err := protocol.MarshalEip712(txn, sig)
 			require.NoError(t, err)
 			fmt.Printf("%s\n", b)
-
-			b, err = protocol.MarshalEip712(txn, sig)
-			require.NoError(t, err)
-			buf := new(bytes.Buffer)
-			require.NoError(t, json.Indent(buf, b, "", "  "))
-			fmt.Println(buf.String())
 
 			cmd := exec.Command("../../../test/cmd/eth_signTypedData/execute.sh", hex.EncodeToString(priv.Serialize()), string(b))
 			cmd.Stderr = os.Stderr
