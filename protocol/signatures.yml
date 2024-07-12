@@ -226,7 +226,7 @@ EcdsaSha256Signature:
       type: bytes
       optional: true
 
-Eip712TypedDataSignature:
+TypedDataSignature:
   description: is an EIP-712 compliant typed data signature for an Accumulate transaction
   union: { type: signature }
   fields:

@@ -503,7 +503,7 @@ func TestEip712TypedDataSignature(t *testing.T) {
 	require.NoError(t, err)
 
 	priv := acctesting.NewSECP256K1(t.Name())
-	eip712sig := &Eip712TypedDataSignature{
+	eip712sig := &TypedDataSignature{
 		ChainID:       protocol.EthChainID("MainNet"),
 		PublicKey:     eth.FromECDSAPub(&priv.PublicKey),
 		Signer:        url.MustParse("acc://adi.acme/book/1"),
@@ -530,7 +530,7 @@ func TestEIP712DelegatedKeyPageUpdate(t *testing.T) {
 	require.NoError(t, err)
 
 	priv := acctesting.NewSECP256K1(t.Name())
-	inner := &Eip712TypedDataSignature{
+	inner := &TypedDataSignature{
 		ChainID:       protocol.EthChainID("MainNet"),
 		PublicKey:     eth.FromECDSAPub(&priv.PublicKey),
 		Signer:        url.MustParse("acc://adi.acme/book/1"),
@@ -570,7 +570,7 @@ func TestEIP712MessageForWallet(t *testing.T) {
 	require.NoError(t, err)
 
 	priv := acctesting.NewSECP256K1(t.Name())
-	sig := &Eip712TypedDataSignature{
+	sig := &TypedDataSignature{
 		ChainID:       protocol.EthChainID("MainNet"),
 		PublicKey:     eth.FromECDSAPub(&priv.PublicKey),
 		Signer:        url.MustParse("acc://adi.acme/book/1"),

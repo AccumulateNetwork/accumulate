@@ -103,13 +103,13 @@ func EIP712Hash(txn *Transaction, sig Signature) ([]byte, error) {
 // newEIP712Call converts the transaction and signature to an EIP-712 message.
 func newEIP712Call(txn *Transaction, sig Signature) (*encoding.EIP712Call, error) {
 	var delegators []any
-	var inner *Eip712TypedDataSignature
+	var inner *TypedDataSignature
 	for inner == nil {
 		switch s := sig.(type) {
 		case *DelegatedSignature:
 			delegators = append(delegators, s.Delegator.String())
 			sig = s.Signature
-		case *Eip712TypedDataSignature:
+		case *TypedDataSignature:
 			inner = s
 		default:
 			return nil, fmt.Errorf("unsupported signature type %v", s.Type())

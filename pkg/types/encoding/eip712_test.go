@@ -46,7 +46,7 @@ func TestEIP712Arrays(t *testing.T) {
 	for _, txn := range cases {
 		t.Run(hex.EncodeToString(txn.GetHash()), func(t *testing.T) {
 			priv := acctesting.NewSECP256K1(t.Name())
-			sig := &protocol.Eip712TypedDataSignature{
+			sig := &protocol.TypedDataSignature{
 				ChainID:       protocol.EthChainID("Kermit"),
 				PublicKey:     eth.FromECDSAPub(&priv.PublicKey),
 				Signer:        url.MustParse("acc://adi.acme/book/1"),

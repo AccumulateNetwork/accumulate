@@ -38,7 +38,7 @@ func init() {
 		func(ctx *SignatureContext) bool { return ctx.GetActiveGlobals().ExecutorVersion.V2VandenbergEnabled() },
 		protocol.SignatureTypeRsaSha256,
 		protocol.SignatureTypeEcdsaSha256,
-		protocol.SignatureTypeEip712TypedData,
+		protocol.SignatureTypeTypedData,
 	)
 }
 
@@ -184,7 +184,7 @@ func (UserSignature) unwrapDelegated(ctx *userSigContext) error {
 }
 
 func (UserSignature) checkChainID(ctx *userSigContext) error {
-	sig, ok := ctx.keySig.(*protocol.Eip712TypedDataSignature)
+	sig, ok := ctx.keySig.(*protocol.TypedDataSignature)
 	if !ok {
 		return nil
 	}

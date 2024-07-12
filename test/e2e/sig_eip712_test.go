@@ -39,7 +39,7 @@ func TestEIP712Signature(t *testing.T) {
 
 		// Sign it
 		pk, _ := aliceKey.GetPublicKey()
-		sig := &Eip712TypedDataSignature{
+		sig := &TypedDataSignature{
 			ChainID:       EthChainID("DevNet"),
 			Signer:        alice.Url().JoinPath("book", "1"),
 			PublicKey:     pk,
@@ -75,7 +75,7 @@ func TestEIP712Signature(t *testing.T) {
 
 		// Sign it
 		pk, _ := aliceKey.GetPublicKey()
-		sig := &Eip712TypedDataSignature{
+		sig := &TypedDataSignature{
 			ChainID:       EthChainID("MainNet"),
 			Signer:        alice.Url().JoinPath("book", "1"),
 			PublicKey:     pk,
@@ -119,7 +119,7 @@ func TestEIP712ExternalWallet(t *testing.T) {
 
 	// Sign it
 	pk, _ := aliceKey.GetPublicKey()
-	sig := &Eip712TypedDataSignature{
+	sig := &TypedDataSignature{
 		ChainID:       EthChainID("DevNet"),
 		Signer:        alice.Url().JoinPath("book", "1"),
 		PublicKey:     pk,

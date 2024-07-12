@@ -221,7 +221,7 @@ func (s *Builder) prepare(init bool) (protocol.KeySignature, error) {
 		protocol.SignatureTypeETH,
 		protocol.SignatureTypeRsaSha256,
 		protocol.SignatureTypeEcdsaSha256,
-		protocol.SignatureTypeEip712TypedData,
+		protocol.SignatureTypeTypedData,
 		protocol.SignatureTypeBTCLegacy:
 
 	case protocol.SignatureTypeReceipt, protocol.SignatureTypePartition:
@@ -320,8 +320,8 @@ func (s *Builder) prepare(init bool) (protocol.KeySignature, error) {
 		sig.Data = s.Data
 		return sig, s.Signer.SetPublicKey(sig)
 
-	case protocol.SignatureTypeEip712TypedData:
-		sig := new(protocol.Eip712TypedDataSignature)
+	case protocol.SignatureTypeTypedData:
+		sig := new(protocol.TypedDataSignature)
 		sig.Signer = s.Url
 		sig.SignerVersion = s.Version
 		sig.Timestamp = timestamp

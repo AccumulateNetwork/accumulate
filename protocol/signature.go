@@ -110,7 +110,7 @@ func PublicKeyHash(key []byte, typ SignatureType) ([]byte, error) {
 		return BTCHash(key), nil
 
 	case SignatureTypeETH,
-		SignatureTypeEip712TypedData:
+		SignatureTypeTypedData:
 		return ETHhash(key), nil
 
 	case SignatureTypeReceipt,
@@ -1193,7 +1193,7 @@ func (e *EcdsaSha256Signature) Verify(sig Signature, msg Signable) bool {
  * EIP-712 Typed Data Signature
  * privateKey must be ecdsa
  */
-func SignEip712TypedData(sig *Eip712TypedDataSignature, privateKey []byte, outer Signature, txn *Transaction) error {
+func SignEip712TypedData(sig *TypedDataSignature, privateKey []byte, outer Signature, txn *Transaction) error {
 	if outer == nil {
 		outer = sig
 	}
@@ -1213,34 +1213,34 @@ func SignEip712TypedData(sig *Eip712TypedDataSignature, privateKey []byte, outer
 }
 
 // GetSigner returns Signer.
-func (s *Eip712TypedDataSignature) GetSigner() *url.URL { return s.Signer }
+func (s *TypedDataSignature) GetSigner() *url.URL { return s.Signer }
 
 // RoutingLocation returns Signer.
-func (s *Eip712TypedDataSignature) RoutingLocation() *url.URL { return s.Signer }
+func (s *TypedDataSignature) RoutingLocation() *url.URL { return s.Signer }
 
 // GetSignerVersion returns SignerVersion.
-func (s *Eip712TypedDataSignature) GetSignerVersion() uint64 { return s.SignerVersion }
+func (s *TypedDataSignature) GetSignerVersion() uint64 { return s.SignerVersion }
 
 // GetTimestamp returns Timestamp.
-func (s *Eip712TypedDataSignature) GetTimestamp() uint64 { return s.Timestamp }
+func (s *TypedDataSignature) GetTimestamp() uint64 { return s.Timestamp }
 
 // GetPublicKeyHash returns the hash of PublicKey.
-func (s *Eip712TypedDataSignature) GetPublicKeyHash() []byte { return ETHhash(s.PublicKey) }
+func (s *TypedDataSignature) GetPublicKeyHash() []byte { return ETHhash(s.PublicKey) }
 
 // GetPublicKey returns PublicKey.
-func (s *Eip712TypedDataSignature) GetPublicKey() []byte { return s.PublicKey }
+func (s *TypedDataSignature) GetPublicKey() []byte { return s.PublicKey }
 
 // GetSignature returns Signature.
-func (s *Eip712TypedDataSignature) GetSignature() []byte { return s.Signature }
+func (s *TypedDataSignature) GetSignature() []byte { return s.Signature }
 
 // GetTransactionHash returns TransactionHash.
-func (s *Eip712TypedDataSignature) GetTransactionHash() [32]byte { return s.TransactionHash }
+func (s *TypedDataSignature) GetTransactionHash() [32]byte { return s.TransactionHash }
 
 // Hash returns the hash of the signature.
-func (s *Eip712TypedDataSignature) Hash() []byte { return signatureHash(s) }
+func (s *TypedDataSignature) Hash() []byte { return signatureHash(s) }
 
 // Metadata returns the signature's metadata.
-func (s *Eip712TypedDataSignature) Metadata() Signature {
+func (s *TypedDataSignature) Metadata() Signature {
 	r := s.Copy()                  // Copy the struct
 	r.Signature = nil              // Clear the signature
 	r.TransactionHash = [32]byte{} // And the transaction hash
@@ -1248,7 +1248,7 @@ func (s *Eip712TypedDataSignature) Metadata() Signature {
 }
 
 // Initiator returns a Hasher that calculates the Merkle hash of the signature.
-func (s *Eip712TypedDataSignature) Initiator() (hash.Hasher, error) {
+func (s *TypedDataSignature) Initiator() (hash.Hasher, error) {
 	if len(s.PublicKey) == 0 || s.Signer == nil || s.SignerVersion == 0 || s.Timestamp == 0 {
 		return nil, ErrCannotInitiate
 	}
@@ -1262,13 +1262,13 @@ func (s *Eip712TypedDataSignature) Initiator() (hash.Hasher, error) {
 }
 
 // GetVote returns how the signer votes on a particular transaction
-func (s *Eip712TypedDataSignature) GetVote() VoteType {
+func (s *TypedDataSignature) GetVote() VoteType {
 	return s.Vote
 }
 
 // Verify returns true if this signature is a valid EIP-712 signature following
 // the spec.
-func (e *Eip712TypedDataSignature) Verify(sig Signature, msg Signable) bool {
+func (e *TypedDataSignature) Verify(sig Signature, msg Signable) bool {
 	txn, ok := msg.(*Transaction)
 	if !ok {
 		// EIP-712 cannot be used to sign something that isn't a transaction
