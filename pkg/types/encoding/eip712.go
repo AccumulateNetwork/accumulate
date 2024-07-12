@@ -127,7 +127,7 @@ type Enum interface {
 	String() string
 }
 
-func RegisterEnumeratedTypeInterface[T any, R any](op Func[T, R]) {
+func RegisterUnion[T any, R any](op Func[T, R]) {
 	//need to store allocator
 	typesMap := make(map[string]string)
 	enumType := new(T)
@@ -193,6 +193,7 @@ func (r eip712EnumResolver) Resolve(v any, typeName string) (eipResolvedValue, e
 		return nil, fmt.Errorf("invalid data entry type: %T", vv["type"])
 	}
 
+	delete(vv, "type")
 	rv, err := d.Resolve(vv, typeName)
 	if err != nil {
 		return nil, err

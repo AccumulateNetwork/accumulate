@@ -10,15 +10,36 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
-	"strings"
+	"reflect"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
 
+var eip712Transaction *encoding.TypeDefinition
+
 func init() {
 	//need to handle the edge cases for Key page operations and data entries
-	encoding.RegisterEnumeratedTypeInterface(NewKeyPageOperation)
-	encoding.RegisterEnumeratedTypeInterface(NewDataEntry)
+	encoding.RegisterUnion(NewKeyPageOperation)
+	encoding.RegisterUnion(NewAccountAuthOperation)
+	encoding.RegisterUnion(NewDataEntry)
+
+	txnFields := []*encoding.TypeField{
+		encoding.NewTypeField("header", "TransactionHeader"),
+		encoding.NewTypeField("signature", "SignatureMetadata"),
+	}
+	for i := TransactionType(0); i < TransactionType(TransactionMaxUser); i++ {
+		v, err := NewTransactionBody(i)
+		if err != nil {
+			continue
+		}
+		name := v.Type().String()
+		typ := reflect.TypeOf(v).Elem().Name()
+		txnFields = append(txnFields, encoding.NewTypeField(name, typ))
+	}
+	eip712Transaction = &encoding.TypeDefinition{
+		Name:   "Transaction",
+		Fields: &txnFields,
+	}
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("type", "string"),
@@ -31,17 +52,6 @@ func init() {
 		encoding.NewTypeField("data", "bytes"),
 		encoding.NewTypeField("delegators", "string[]"),
 	}, "SignatureMetadata", "signatureMetadata")
-}
-
-func NewEip712TransactionDefinition(txn *Transaction) *encoding.TypeDefinition {
-	body := txn.Body.Type().String()
-	txnSchema := &[]*encoding.TypeField{
-		encoding.NewTypeField("header", "TransactionHeader"),
-		encoding.NewTypeField("body", strings.ToUpper(body[:1])+body[1:]),
-		encoding.NewTypeField("signature", "SignatureMetadata"),
-	}
-
-	return &encoding.TypeDefinition{Name: "Transaction", Fields: txnSchema}
 }
 
 // MarshalEip712 creates the EIP-712 json message needed to submit a transaction
@@ -96,13 +106,17 @@ func newEIP712Call(txn *Transaction, sig Signature) (*encoding.EIP712Call, error
 		return nil, err
 	}
 
-	var jtx map[string]interface{}
+	var jtx map[string]any
 	err = json.Unmarshal(j, &jtx)
 	if err != nil {
 		return nil, err
 	}
 	jtx["signature"] = jsig
 
-	td := NewEip712TransactionDefinition(txn)
-	return encoding.NewEIP712Call(jtx, td)
+	body := jtx["body"]
+	delete(jtx, "body")
+	delete(body.(map[string]any), "type")
+	jtx[txn.Body.Type().String()] = body
+
+	return encoding.NewEIP712Call(jtx, eip712Transaction)
 }
