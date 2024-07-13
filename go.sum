@@ -1172,6 +1172,8 @@ github.com/yuin/goldmark v1.4.1/go.mod h1:mwnBkeHKe2W/ZEtQ+71ViKU8L12m81fl3OWwC1
 github.com/yuin/goldmark v1.4.13/go.mod h1:6yULJ656Px+3vBD8DxQVa3kxgyrAnzto9xy5taEt/CY=
 gitlab.com/accumulatenetwork/core/schema v0.2.1-0.20240711192735-5b3657ff1135 h1:DawYWpRLfW7HeTaN1k4idFrv1B+esoNAHjWbtGRqi80=
 gitlab.com/accumulatenetwork/core/schema v0.2.1-0.20240711192735-5b3657ff1135/go.mod h1:FTl7W44SWhDenzAtvKkLu30Cin8DAr249mH4eg7BNLY=
+gitlab.com/accumulatenetwork/utils/jsonrpc v0.1.0 h1:t4Akt7LvcROop2bh++KRIhbv+NORJT1m5WWIsiEUIF8=
+gitlab.com/accumulatenetwork/utils/jsonrpc v0.1.0/go.mod h1:Kopfqa//YI6CkXkVpHRMOZqODMNFwifB8IvKw+m52no=
 gitlab.com/bosi/decorder v0.4.1 h1:VdsdfxhstabyhZovHafFw+9eJ6eU0d2CkFNJcZz/NU4=
 gitlab.com/bosi/decorder v0.4.1/go.mod h1:jecSqWUew6Yle1pCr2eLWTensJMmsxHsBwt+PVbkAqA=
 gitlab.com/ethan.reesor/vscode-notebooks/go-playbooks v0.0.0-20220417214602-1121b9fae118 h1:UnyYFTz6dWVMBzLUyqHPIQwMrdpiuE+CE7p/5kUfvmk=

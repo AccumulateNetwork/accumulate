@@ -377,6 +377,7 @@ require (
 	github.com/uudashr/gocognit v1.1.2 // indirect
 	github.com/yagipy/maintidx v1.0.0 // indirect
 	github.com/yeya24/promlinter v0.2.0 // indirect
+	gitlab.com/accumulatenetwork/utils/jsonrpc v0.1.0
 	gitlab.com/bosi/decorder v0.4.1 // indirect
 	go.etcd.io/bbolt v1.3.6
 	go.uber.org/multierr v1.11.0 // indirect

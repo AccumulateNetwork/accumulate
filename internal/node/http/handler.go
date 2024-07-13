@@ -17,11 +17,13 @@ import (
 	"github.com/julienschmidt/httprouter"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
+	ethimpl "gitlab.com/accumulatenetwork/accumulate/internal/api/ethereum"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	v2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/web"
+	ethrpc "gitlab.com/accumulatenetwork/accumulate/pkg/api/ethereum"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
@@ -126,6 +128,7 @@ func NewHandler(opts Options) (*Handler, error) {
 		return nil, errors.UnknownError.WithFormat("initialize websocket API: %w", err)
 	}
 
+	// JSON-RPC API v2
 	v2, err := v2.NewJrpc(v2.Options{
 		Logger:        opts.Logger,
 		Describe:      opts.Network,
@@ -141,7 +144,12 @@ func NewHandler(opts Options) (*Handler, error) {
 		return nil, errors.UnknownError.WithFormat("initialize API v2: %v", err)
 	}
 
-	// Set up mux
+	// Ethereum JSON-RPC
+	eth := ethrpc.NewHandler(&ethimpl.Service{
+		Network: selfClient,
+	})
+
+	// REST API
 	h.mux, err = rest.NewHandler(
 		v2,
 		rest.NodeService{NodeService: selfClient},
@@ -157,9 +165,14 @@ func NewHandler(opts Options) (*Handler, error) {
 		return nil, errors.UnknownError.WithFormat("register API v2: %v", err)
 	}
 
+	// Setup mux
 	v3h := ws.FallbackTo(v3)
 	h.mux.POST("/v3", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		v3h.ServeHTTP(w, r)
+	})
+
+	h.mux.POST("/eth", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+		eth.ServeHTTP(w, r)
 	})
 
 	h.mux.GET("/", func(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
