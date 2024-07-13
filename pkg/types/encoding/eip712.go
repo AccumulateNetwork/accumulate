@@ -95,17 +95,6 @@ func init() {
 	eip712EncoderMap["float"] = newAtomicEncoder("float", FromfloatToBytes) //Note = Float is not a valid type in EIP-712, so it is converted to a string
 }
 
-func must(err error) {
-	if err != nil {
-		panic(err)
-	}
-}
-
-func must2[V any](v V, err error) V {
-	must(err)
-	return v
-}
-
 type Func[T any, R any] func(T) (R, error)
 type Enum interface {
 	SetEnumValue(id uint64) bool

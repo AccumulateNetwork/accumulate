@@ -22,7 +22,7 @@ import (
 // EthChainID returns the Ethereum chain ID for an Accumulate network name.
 func EthChainID(name string) *big.Int {
 	// This exists purely for documentation purposes
-	const MetaMask_MaxSafeChainID = 0xFFFFFFFFFFFEC
+	// const MetaMask_MaxSafeChainID = 0xFFFFFFFFFFFEC
 
 	if strings.EqualFold(name, "mainnet") {
 		return big.NewInt(281) // 0x119
