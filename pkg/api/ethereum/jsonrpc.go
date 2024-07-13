@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math/big"
 	"net/http"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/accumulate"
@@ -30,8 +29,8 @@ func NewHandler(service Service) http.Handler {
 	return jsonrpc.HTTPHandler{H: &JSONRPCHandler{Service: service}}
 }
 
-func (c *JSONRPCClient) EthChainId(ctx context.Context) (Bytes, error) {
-	return call[Bytes](c, ctx, "eth_chainId", json.RawMessage("{}"))
+func (c *JSONRPCClient) EthChainId(ctx context.Context) (*Number, error) {
+	return clientCall[*Number](c, ctx, "eth_chainId", []any{})
 }
 
 func (h *JSONRPCHandler) eth_chainId(ctx context.Context, _ json.RawMessage) (any, error) {
@@ -43,21 +42,43 @@ func (h *JSONRPCHandler) net_version(ctx context.Context, _ json.RawMessage) (an
 	if err != nil {
 		return nil, err
 	}
-	ver := new(big.Int)
-	ver.SetBytes(id)
-	return ver, nil
+	return id.Int().Uint64(), nil
 }
 
-func (c *JSONRPCClient) EthBlockNumber(ctx context.Context) (uint64, error) {
-	return call[uint64](c, ctx, "eth_blockNumber", json.RawMessage("{}"))
+func (c *JSONRPCClient) EthBlockNumber(ctx context.Context) (*Number, error) {
+	return clientCall[*Number](c, ctx, "eth_blockNumber", []any{})
 }
 
 func (h *JSONRPCHandler) eth_blockNumber(ctx context.Context, _ json.RawMessage) (any, error) {
 	return h.Service.EthBlockNumber(ctx)
 }
 
+func (c *JSONRPCClient) EthGasPrice(ctx context.Context) (*Number, error) {
+	return clientCall[*Number](c, ctx, "eth_gasPrice", []any{})
+}
+
+func (h *JSONRPCHandler) eth_gasPrice(ctx context.Context, _ json.RawMessage) (any, error) {
+	return h.Service.EthGasPrice(ctx)
+}
+
+func (c *JSONRPCClient) EthGetBalance(ctx context.Context, addr Address, block string) (*Number, error) {
+	return clientCall[*Number](c, ctx, "eth_getBalance", []any{})
+}
+
+func (h *JSONRPCHandler) eth_getBalance(ctx context.Context, raw json.RawMessage) (any, error) {
+	return handlerCall2(ctx, raw, h.Service.EthGetBalance)
+}
+
+func (c *JSONRPCClient) EthGetBlockByNumber(ctx context.Context, block string, expand bool) (*BlockData, error) {
+	return clientCall[*BlockData](c, ctx, "eth_getBlockByNumber", []any{block, expand})
+}
+
+func (h *JSONRPCHandler) eth_getBlockByNumber(ctx context.Context, raw json.RawMessage) (any, error) {
+	return handlerCall2(ctx, raw, h.Service.EthGetBlockByNumber)
+}
+
 func (c *JSONRPCClient) AccTypedData(ctx context.Context, txn *protocol.Transaction, sig protocol.Signature) (*encoding.EIP712Call, error) {
-	return call[*encoding.EIP712Call](c, ctx, "acc_typedData", map[string]any{
+	return clientCall[*encoding.EIP712Call](c, ctx, "acc_typedData", map[string]any{
 		"transaction": txn,
 		"signature":   sig,
 	})
@@ -85,10 +106,41 @@ func (h *JSONRPCHandler) acc_typedData(ctx context.Context, raw json.RawMessage)
 	return h.Service.AccTypedData(ctx, params.Transaction, params.Signature.Value)
 }
 
-func call[V any](c *JSONRPCClient, ctx context.Context, method string, params any) (V, error) {
+func clientCall[V any](c *JSONRPCClient, ctx context.Context, method string, params any) (V, error) {
 	var v V
 	err := c.Client.Call(ctx, c.Endpoint, method, params, &v)
 	return v, err
+}
+
+func handlerCall2[V1, V2, R any](ctx context.Context, raw json.RawMessage, fn func(context.Context, V1, V2) (R, error)) (any, error) {
+	v1, v2, err := decode2[V1, V2](raw)
+	if err != nil {
+		return nil, err
+	}
+	return fn(ctx, v1, v2)
+}
+
+func decode2[V1, V2 any](raw json.RawMessage) (v1 V1, v2 V2, err error) {
+	return v1, v2, decodeN(raw, &v1, &v2)
+}
+
+func decodeN(raw json.RawMessage, v ...any) error {
+	var params []json.RawMessage
+	err := json.Unmarshal(raw, &params)
+	if err != nil {
+		return jsonrpc.InvalidParams.With(err, err)
+	}
+	if len(params) != len(v) {
+		err := fmt.Errorf("expected %d parameters, got %d", len(v), len(params))
+		return jsonrpc.InvalidParams.With(err, err)
+	}
+	for i, param := range params {
+		err = json.Unmarshal(param, v[i])
+		if err != nil {
+			return jsonrpc.InvalidParams.With(err, err)
+		}
+	}
+	return nil
 }
 
 func (h *JSONRPCHandler) ServeJSONRPC(ctx context.Context, method string, params json.RawMessage) (result any, err error) {
@@ -100,11 +152,22 @@ func (h *JSONRPCHandler) ServeJSONRPC(ctx context.Context, method string, params
 		return h.eth_chainId(ctx, params)
 	case "eth_blockNumber":
 		return h.eth_blockNumber(ctx, params)
+	case "eth_gasPrice":
+		return h.eth_gasPrice(ctx, params)
+	case "eth_getBalance":
+		return h.eth_getBalance(ctx, params)
+	case "eth_getBlockByNumber":
+		return h.eth_getBlockByNumber(ctx, params)
 
 	case "acc_typedData":
 		return h.acc_typedData(ctx, params)
 	}
 
+	/*
+	   Missing "eth_getCode"
+	   Missing "eth_estimateGas"
+	   Missing "eth_getTransactionCount"
+	*/
 	return nil, &jsonrpc.Error{
 		Code:    jsonrpc.MethodNotFound,
 		Message: fmt.Sprintf("%q is not a supported method", method),

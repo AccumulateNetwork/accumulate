@@ -4,12 +4,42 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"strings"
 )
 
+type Number big.Int
 type Bytes []byte
 type Bytes32 [32]byte
 type Address [20]byte
+
+func NewNumber(v int64) *Number { return (*Number)(big.NewInt(v)) }
+
+func (n *Number) Int() *big.Int { return (*big.Int)(n) }
+
+func (n *Number) Equal(m *Number) bool {
+	return n.Int().Cmp(m.Int()) == 0
+}
+
+func (n *Number) MarshalJSON() ([]byte, error) {
+	s := n.Int().Text(16)
+	return json.Marshal("0x" + s)
+}
+
+func (n *Number) UnmarshalJSON(c []byte) error {
+	var s string
+	err := json.Unmarshal(c, &s)
+	if err != nil {
+		return err
+	}
+
+	s = strings.TrimPrefix(s, "0x")
+	_, ok := n.Int().SetString(s, 16)
+	if !ok {
+		return fmt.Errorf("%q is not a valid number", s)
+	}
+	return nil
+}
 
 func (b Bytes) MarshalJSON() ([]byte, error) {
 	if len(b) == 0 {
@@ -31,7 +61,7 @@ func (b *Bytes) UnmarshalJSON(c []byte) error {
 }
 
 func (b *Bytes32) MarshalJSON() ([]byte, error) {
-	return json.Marshal(fmt.Sprintf("0x%x", b))
+	return json.Marshal(fmt.Sprintf("0x%x", *b))
 }
 
 func (b *Bytes32) UnmarshalJSON(c []byte) error {
@@ -55,7 +85,7 @@ func (b *Bytes32) UnmarshalJSON(c []byte) error {
 }
 
 func (b *Address) MarshalJSON() ([]byte, error) {
-	return json.Marshal(fmt.Sprintf("0x%x", b))
+	return json.Marshal(fmt.Sprintf("0x%x", *b))
 }
 
 func (b *Address) UnmarshalJSON(c []byte) error {

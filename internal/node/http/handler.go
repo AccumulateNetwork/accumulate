@@ -147,6 +147,7 @@ func NewHandler(opts Options) (*Handler, error) {
 	// Ethereum JSON-RPC
 	eth := ethrpc.NewHandler(&ethimpl.Service{
 		Network: selfClient,
+		Query:   client,
 	})
 
 	// REST API
