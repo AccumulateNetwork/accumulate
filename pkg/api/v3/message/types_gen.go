@@ -3078,6 +3078,151 @@ func (v *ValidateResponse) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
+func init() {
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("message", "Message"),
+		encoding.NewTypeField("address", "p2p.Multiaddr"),
+	}, "Addressed", "addressed")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("nodeID", "string"),
+		encoding.NewTypeField("partition", "string"),
+		encoding.NewTypeField("includePeers", "bool"),
+		encoding.NewTypeField("includeAccumulate", "bool"),
+	}, "ConsensusStatusRequest", "consensusStatusRequest")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("value", "api.ConsensusStatus"),
+	}, "ConsensusStatusResponse", "consensusStatusResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("error", "errors2.Error"),
+	}, "ErrorResponse", "errorResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("value", "api.Event[]"),
+	}, "EventMessage", "eventMessage")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("account", "string"),
+		encoding.NewTypeField("token", "string"),
+	}, "FaucetRequest", "faucetRequest")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("value", "api.Submission"),
+	}, "FaucetResponse", "faucetResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("network", "string"),
+		encoding.NewTypeField("service", "api.ServiceAddress"),
+		encoding.NewTypeField("known", "bool"),
+		encoding.NewTypeField("timeout", "string"),
+	}, "FindServiceRequest", "findServiceRequest")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("value", "api.FindServiceResult[]"),
+	}, "FindServiceResponse", "findServiceResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("partition", "string"),
+		encoding.NewTypeField("span", "uint64"),
+	}, "MetricsRequest", "metricsRequest")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("value", "api.Metrics"),
+	}, "MetricsResponse", "metricsResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("partition", "string"),
+	}, "NetworkStatusRequest", "networkStatusRequest")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("value", "api.NetworkStatus"),
+	}, "NetworkStatusResponse", "networkStatusResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("peerID", "p2p.PeerID"),
+	}, "NodeInfoRequest", "nodeInfoRequest")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("value", "api.NodeInfo"),
+	}, "NodeInfoResponse", "nodeInfoResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("source", "string"),
+		encoding.NewTypeField("destination", "string"),
+		encoding.NewTypeField("sequenceNumber", "uint64"),
+		encoding.NewTypeField("nodeID", "p2p.PeerID"),
+	}, "PrivateSequenceRequest", "privateSequenceRequest")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("value", "api.MessageRecord[messaging.Message]"),
+	}, "PrivateSequenceResponse", "privateSequenceResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("scope", "string"),
+		encoding.NewTypeField("query", "api.Query"),
+	}, "QueryRequest", "queryRequest")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("value", "api.Record"),
+	}, "RecordResponse", "recordResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("envelope", "messaging.Envelope"),
+		encoding.NewTypeField("verify", "bool"),
+		encoding.NewTypeField("wait", "bool"),
+	}, "SubmitRequest", "submitRequest")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("value", "api.Submission[]"),
+	}, "SubmitResponse", "submitResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("partition", "string"),
+		encoding.NewTypeField("account", "string"),
+	}, "SubscribeRequest", "subscribeRequest")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+	}, "SubscribeResponse", "subscribeResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("envelope", "messaging.Envelope"),
+		encoding.NewTypeField("full", "bool"),
+	}, "ValidateRequest", "validateRequest")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("value", "api.Submission[]"),
+	}, "ValidateResponse", "validateResponse")
+
+}
+
 func (v *Addressed) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type      Type                                       `json:"type"`
