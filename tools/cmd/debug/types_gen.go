@@ -513,6 +513,30 @@ func (v *PutDbPatchOp) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
+func init() {
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("operations", "DbPatchOp[]"),
+		encoding.NewTypeField("result", "DbPatchResult"),
+	}, "DbPatch", "dbPatch")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("stateHash", "bytes32"),
+	}, "DbPatchResult", "dbPatchResult")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("key", "record.Key"),
+	}, "DeleteDbPatchOp", "deleteDbPatchOp")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("key", "record.Key"),
+		encoding.NewTypeField("value", "bytes"),
+	}, "PutDbPatchOp", "putDbPatchOp")
+
+}
+
 func (v *DbPatch) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Operations *encoding.JsonUnmarshalListWith[DbPatchOp] `json:"operations,omitempty"`
