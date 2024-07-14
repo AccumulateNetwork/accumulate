@@ -166,6 +166,8 @@ func (x BlockAnchor) check(ctx *MessageContext, batch *database.Batch) (*blockAn
 	if seq.Source == nil {
 		return nil, errors.InternalError.WithFormat("sequence is missing source")
 	}
+
+	// Verify the signer is a validator of this partition
 	partition, ok := protocol.ParsePartitionUrl(seq.Source)
 	if !ok {
 		return nil, errors.BadRequest.WithFormat("signature source is not a partition")
@@ -202,7 +204,7 @@ func (x BlockAnchor) checkSignature(ctx *blockAnchorContext) error {
 	txn := &messaging.TransactionMessage{Transaction: ctx.transaction}
 	seq := *ctx.sequenced
 	seq.Message = txn
-	if hash := seq.Hash(); ctx.blockAnchor.Signature.Verify(nil, hash[:]) {
+	if ctx.blockAnchor.Signature.Verify(nil, &seq) {
 		return nil
 	}
 
@@ -215,7 +217,7 @@ func (x BlockAnchor) checkSignature(ctx *blockAnchorContext) error {
 		seq.Destination = protocol.DnUrl()
 		txn.Transaction = txn.Transaction.Copy()
 		txn.Transaction.Header.Principal = protocol.DnUrl().JoinPath(ctx.transaction.Header.Principal.Path)
-		if hash := seq.Hash(); ctx.blockAnchor.Signature.Verify(nil, hash[:]) {
+		if ctx.blockAnchor.Signature.Verify(nil, &seq) {
 			return nil
 		}
 	}
