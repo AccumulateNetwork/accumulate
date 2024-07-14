@@ -255,6 +255,42 @@ func (v *PeerStatus) Equal(u *PeerStatus) bool {
 	return true
 }
 
+func init() {
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("lastScan", "string"),
+		encoding.NewTypeField("peers", "AtomicSlice[*PeerStatus, PeerStatus]"),
+	}, "DB", "db")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("success", "string"),
+		encoding.NewTypeField("attempt", "string"),
+		encoding.NewTypeField("failed", "AtomicUint"),
+	}, "LastStatus", "lastStatus")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("address", "p2p.Multiaddr"),
+		encoding.NewTypeField("last", "LastStatus"),
+	}, "PeerAddressStatus", "peerAddressStatus")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("name", "string"),
+		encoding.NewTypeField("services", "AtomicSlice[*PeerServiceStatus, PeerServiceStatus]"),
+	}, "PeerNetworkStatus", "peerNetworkStatus")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("address", "api.ServiceAddress"),
+		encoding.NewTypeField("last", "LastStatus"),
+	}, "PeerServiceStatus", "peerServiceStatus")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("id", "p2p.PeerID"),
+		encoding.NewTypeField("addresses", "AtomicSlice[*PeerAddressStatus, PeerAddressStatus]"),
+		encoding.NewTypeField("networks", "AtomicSlice[*PeerNetworkStatus, PeerNetworkStatus]"),
+	}, "PeerStatus", "peerStatus")
+
+}
+
 func (v *PeerAddressStatus) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Address *encoding.JsonUnmarshalWith[p2p.Multiaddr] `json:"address,omitempty"`

@@ -165,6 +165,7 @@ var fieldNames_{{.Name}} = []string{
 	{{- end}}
 }
 
+
 func (v *{{.FullName true false}}) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
@@ -333,6 +334,24 @@ if !({{template "jsonAltIsZero" .}}) {
 {{- end}}
 {{- end}}
 {{- end}}
+
+
+func init() {
+{{range .Types}}
+    encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+        {{- range .Fields}}
+            {{- if .IsEmbedded}}
+            {{- $name := get .}}
+            {{- range .TypeRef.Fields}}
+            {{resolveEip712Type . false}},
+            {{- end}}
+            {{- else}}
+            {{resolveEip712Type . false}},
+            {{- end}}
+            {{- end}}
+        }, "{{.Name}}", "{{lcName .Name}}")
+{{end}}
+}
 
 {{range .Types}}{{if needsCustomJSON .}}
 func (v *{{.FullName true false}}) MarshalJSON() ([]byte, error) {

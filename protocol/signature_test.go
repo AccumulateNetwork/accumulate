@@ -7,6 +7,7 @@
 package protocol_test
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/elliptic"
@@ -19,6 +20,8 @@ import (
 	"encoding/pem"
 	"fmt"
 	"math/big"
+	"os"
+	"os/exec"
 	"testing"
 	"time"
 
@@ -29,6 +32,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/address"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
@@ -54,7 +58,7 @@ func TestBTCSignature(t *testing.T) {
 	secp.PublicKey = pbkey.SerializeCompressed()
 
 	require.NoError(t, SignBTC(secp, privkey.Serialize(), nil, hash[:]))
-	res := secp.Verify(nil, hash[:])
+	res := secp.Verify(nil, SignableHash(hash))
 
 	require.Equal(t, res, true)
 
@@ -74,7 +78,7 @@ func TestBTCLegacySignature(t *testing.T) {
 	secp.PublicKey = pbkey.SerializeUncompressed()
 
 	require.NoError(t, SignBTCLegacy(secp, privkey.Serialize(), nil, hash[:]))
-	res := secp.Verify(nil, hash[:])
+	res := secp.Verify(nil, SignableHash(hash))
 
 	require.Equal(t, res, true)
 
@@ -98,9 +102,9 @@ func TestETHSignature(t *testing.T) {
 	t.Logf("Eth ad Der Hash        %x", hash[:])
 
 	//should fail
-	require.Equal(t, VerifyUserSignature(secp, hash[:]), false)
+	require.Equal(t, VerifyUserSignature(secp, SignableHash(hash)), false)
 	//should pass
-	require.Equal(t, VerifyUserSignatureV1(secp, hash[:]), true)
+	require.Equal(t, VerifyUserSignatureV1(secp, SignableHash(hash)), true)
 
 	//public key should still match
 	keyComp, err := eth.UnmarshalPubkey(secp.PublicKey)
@@ -117,9 +121,9 @@ func TestETHSignature(t *testing.T) {
 	t.Logf("Eth as VRS signature  %x", secp.Signature)
 	t.Logf("Eth ad VRS Hash       %x", hash[:])
 	//should fail
-	require.Equal(t, VerifyUserSignatureV1(secp, hash[:]), false)
+	require.Equal(t, VerifyUserSignatureV1(secp, SignableHash(hash)), false)
 	//should pass
-	require.Equal(t, VerifyUserSignature(secp, hash[:]), true)
+	require.Equal(t, VerifyUserSignature(secp, SignableHash(hash)), true)
 
 	t.Logf("Signature: %x", secp.Signature)
 }
@@ -320,7 +324,7 @@ func TestRsaSha256Signature(t *testing.T) {
 	require.NoError(t, SignRsaSha256(rsaSha256, x509.MarshalPKCS1PrivateKey(privKey), nil, hash[:]))
 
 	//should fail
-	require.Equal(t, VerifyUserSignature(rsaSha256, hash[:]), true)
+	require.Equal(t, VerifyUserSignature(rsaSha256, SignableHash(hash)), true)
 	//public key should still match
 	keyComp, err := x509.ParsePKCS1PublicKey(rsaSha256.PublicKey)
 	require.NoError(t, err)
@@ -339,7 +343,7 @@ func TestRsaSha256Signature(t *testing.T) {
 	require.NoError(t, SignRsaSha256(rsaSha256, x509.MarshalPKCS1PrivateKey(privKey), nil, hash[:]))
 
 	//should fail
-	require.Equal(t, VerifyUserSignature(rsaSha256, hash[:]), true)
+	require.Equal(t, VerifyUserSignature(rsaSha256, SignableHash(hash)), true)
 	//public key should still match
 	keyComp, err = x509.ParsePKCS1PublicKey(rsaSha256.PublicKey)
 	require.NoError(t, err)
@@ -358,7 +362,7 @@ func TestRsaSha256Signature(t *testing.T) {
 	require.NoError(t, SignRsaSha256(rsaSha256, x509.MarshalPKCS1PrivateKey(privKey), nil, hash[:]))
 
 	//should fail
-	require.Equal(t, VerifyUserSignature(rsaSha256, hash[:]), true)
+	require.Equal(t, VerifyUserSignature(rsaSha256, SignableHash(hash)), true)
 	//public key should still match
 	keyComp, err = x509.ParsePKCS1PublicKey(rsaSha256.PublicKey)
 	require.NoError(t, err)
@@ -487,6 +491,108 @@ func TestTypesFromCerts(t *testing.T) {
 		}
 
 		//should not fail
-		require.Equal(t, VerifyUserSignature(sig, hash[:]), true)
+		require.Equal(t, VerifyUserSignature(sig, SignableHash(hash)), true)
 	}
+}
+
+func TestEip712TypedDataSignature(t *testing.T) {
+	txn, err := build.Transaction().
+		For("adi.acme", "tokens").
+		SendTokens(100, AcmePrecisionPower).To("other.acme", "tokens").
+		Done()
+	require.NoError(t, err)
+
+	priv := acctesting.NewSECP256K1(t.Name())
+	eip712sig := &TypedDataSignature{
+		ChainID:       protocol.EthChainID("MainNet"),
+		PublicKey:     eth.FromECDSAPub(&priv.PublicKey),
+		Signer:        url.MustParse("acc://adi.acme/book/1"),
+		SignerVersion: 1,
+		Timestamp:     1720564975623,
+		Vote:          VoteTypeAccept,
+	}
+	txn.Header.Initiator = [32]byte(eip712sig.Metadata().Hash())
+
+	// Sign the transaction
+
+	require.NoError(t, SignEip712TypedData(eip712sig, priv.Serialize(), nil, txn))
+
+	// Verify the signature
+	require.True(t, eip712sig.Verify(nil, txn))
+}
+
+func TestEIP712DelegatedKeyPageUpdate(t *testing.T) {
+	txn, err := build.Transaction().
+		For("adi.acme", "book", "1").
+		UpdateKeyPage().
+		Add().Entry().Hash([32]byte{1, 2, 3}).FinishEntry().FinishOperation().
+		Done()
+	require.NoError(t, err)
+
+	priv := acctesting.NewSECP256K1(t.Name())
+	inner := &TypedDataSignature{
+		ChainID:       protocol.EthChainID("MainNet"),
+		PublicKey:     eth.FromECDSAPub(&priv.PublicKey),
+		Signer:        url.MustParse("acc://adi.acme/book/1"),
+		SignerVersion: 1,
+		Timestamp:     1720564975623,
+		Vote:          VoteTypeAccept,
+	}
+	outer := &DelegatedSignature{
+		Signature: inner,
+		Delegator: url.MustParse("acc://foo.bar"),
+	}
+	txn.Header.Initiator = [32]byte(outer.Metadata().Hash())
+
+	// Sign the transaction
+	require.NoError(t, SignEip712TypedData(inner, priv.Serialize(), outer, txn))
+
+	// Verify the signature
+	require.True(t, outer.Verify(nil, txn))
+}
+
+func TestEIP712MessageForWallet(t *testing.T) {
+	acctesting.SkipWithoutTool(t, "node")
+
+	txn := &Transaction{}
+	err := txn.UnmarshalJSON([]byte(`{
+		"header": {
+			"principal": "acc://adi.acme/ACME"
+		},
+		"body": {
+			"type": "sendTokens",
+			"to": [{
+				"url": "acc://other.acme/ACME",
+				"amount": "10000000000"
+			}]
+		}
+	}`))
+	require.NoError(t, err)
+
+	priv := acctesting.NewSECP256K1(t.Name())
+	sig := &TypedDataSignature{
+		ChainID:       protocol.EthChainID("MainNet"),
+		PublicKey:     eth.FromECDSAPub(&priv.PublicKey),
+		Signer:        url.MustParse("acc://adi.acme/book/1"),
+		SignerVersion: 1,
+		Timestamp:     1720564975623,
+		Vote:          VoteTypeAccept,
+	}
+	txn.Header.Initiator = [32]byte(sig.Metadata().Hash())
+
+	b, err := MarshalEip712(txn, sig)
+	require.NoError(t, err)
+	fmt.Printf("%s\n", b)
+
+	cmd := exec.Command("../test/cmd/eth_signTypedData/execute.sh", hex.EncodeToString(priv.Serialize()), string(b))
+	cmd.Stderr = os.Stderr
+	out, err := cmd.Output()
+	require.NoError(t, err)
+
+	out = bytes.TrimSpace(out)
+	out = bytes.TrimPrefix(out, []byte("0x"))
+	sig.Signature = make([]byte, len(out)/2)
+	_, err = hex.Decode(sig.Signature, out)
+	require.NoError(t, err)
+	require.True(t, sig.Verify(nil, txn))
 }
