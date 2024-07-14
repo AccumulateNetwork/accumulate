@@ -6,10 +6,11 @@ import (
 	"io/fs"
 	"log/slog"
 
+	peer "github.com/libp2p/go-libp2p/core/peer"
+	multiaddr "github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/address"
 	encoding "gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/p2p"
 	record "gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	url "gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -265,8 +266,8 @@ type ConsensusService struct {
 	NodeDir          string
 	ValidatorKey     PrivateKey
 	Genesis          string
-	Listen           p2p.Multiaddr
-	BootstrapPeers   []p2p.Multiaddr
+	Listen           Multiaddr
+	BootstrapPeers   []Multiaddr
 	MetricsNamespace string
 	App              ConsensusApp
 }
@@ -324,13 +325,13 @@ func (v *CoreConsensusApp) UnmarshalJSON(b []byte) error {
 
 type CoreValidatorConfiguration struct {
 	Mode                 CoreValidatorMode
-	Listen               p2p.Multiaddr
+	Listen               Multiaddr
 	BVN                  string
 	ValidatorKey         PrivateKey
 	DnGenesis            string
 	BvnGenesis           string
-	DnBootstrapPeers     []p2p.Multiaddr
-	BvnBootstrapPeers    []p2p.Multiaddr
+	DnBootstrapPeers     []Multiaddr
+	BvnBootstrapPeers    []Multiaddr
 	EnableHealing        *bool
 	EnableDirectDispatch *bool
 	EnableSnapshots      *bool
@@ -396,7 +397,7 @@ func (v *CoreValidatorMode) UnmarshalJSON(b []byte) error {
 }
 
 type DevnetConfiguration struct {
-	Listen      p2p.Multiaddr
+	Listen      Multiaddr
 	Bvns        uint64
 	Validators  uint64
 	Followers   uint64
@@ -507,7 +508,7 @@ func (v *FaucetService) UnmarshalJSON(b []byte) error {
 }
 
 type GatewayConfiguration struct {
-	Listen p2p.Multiaddr
+	Listen Multiaddr
 }
 
 func (GatewayConfiguration) Type() ConfigurationType { return ConfigurationTypeGateway }
@@ -534,7 +535,7 @@ func (v *GatewayConfiguration) UnmarshalJSON(b []byte) error {
 
 type HttpListener struct {
 	// Listen are the addresses and schemes to listen on.
-	Listen []p2p.Multiaddr
+	Listen []Multiaddr
 	// ConnectionLimit limits the number of concurrent connections.
 	ConnectionLimit *int64
 	// ReadHeaderTimeout protects against slow-loris attacks.
@@ -566,9 +567,9 @@ func (v *HttpListener) UnmarshalJSON(b []byte) error {
 }
 
 type HttpPeerMapEntry struct {
-	ID         p2p.PeerID
+	ID         PeerID
 	Partitions []string
-	Addresses  []p2p.Multiaddr
+	Addresses  []Multiaddr
 }
 
 // Copy returns a copy of the HttpPeerMapEntry.
@@ -627,7 +628,7 @@ func (v *HttpService) UnmarshalJSON(b []byte) error {
 
 type Instrumentation struct {
 	HttpListener
-	PprofListen p2p.Multiaddr
+	PprofListen Multiaddr
 	Monitoring  *Monitor
 }
 
@@ -838,6 +839,8 @@ func (v *Monitor) UnmarshalJSON(b []byte) error {
 	return sMonitor.UnmarshalJSON(b, v)
 }
 
+type Multiaddr = multiaddr.Multiaddr
+
 type NetworkService struct {
 	Partition string
 }
@@ -892,13 +895,13 @@ func (v *OtlpConfig) UnmarshalJSON(b []byte) error {
 }
 
 type P2P struct {
-	Listen             []p2p.Multiaddr
-	BootstrapPeers     []p2p.Multiaddr
+	Listen             []Multiaddr
+	BootstrapPeers     []Multiaddr
 	Key                PrivateKey
 	PeerDB             *string
 	EnablePeerTracking bool
 	DiscoveryMode      *DhtMode
-	External           p2p.Multiaddr
+	External           Multiaddr
 }
 
 // Copy returns a copy of the P2P.
@@ -920,6 +923,8 @@ func (v *P2P) MarshalJSON() ([]byte, error) {
 func (v *P2P) UnmarshalJSON(b []byte) error {
 	return sP2P.UnmarshalJSON(b, v)
 }
+
+type PeerID = peer.ID
 
 // TODO type PrivateKey interface {}
 

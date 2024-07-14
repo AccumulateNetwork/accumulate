@@ -3,9 +3,11 @@ $generate:
     json: true
 
   import:
-    url:      gitlab.com/accumulatenetwork/accumulate/pkg/url
-    record:   gitlab.com/accumulatenetwork/accumulate/pkg/types/record
-    encoding: gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding
+    url:       gitlab.com/accumulatenetwork/accumulate/pkg/url
+    record:    gitlab.com/accumulatenetwork/accumulate/pkg/types/record
+    encoding:  gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding
+    multiaddr: github.com/multiformats/go-multiaddr
+    peer:      github.com/libp2p/go-libp2p/core/peer
 
   varPrefix:
     schema: s
@@ -36,9 +38,15 @@ Config:
         pointer: true
         fields:
           - name: Listen
-            type: '[]p2p.Multiaddr'
+            type:
+              name: Multiaddr
+              repeatable: true
+              class: external
+              underlying: multiaddr.Multiaddr
+              generate: { widgets: true }
+              encode: { withWidget: wMultiaddr }
           - name: BootstrapPeers
-            type: '[]p2p.Multiaddr'
+            type: '[]Multiaddr'
           - name: Key
             type: PrivateKey
           - name: PeerDB
@@ -48,7 +56,7 @@ Config:
           - name: DiscoveryMode
             type: '*DhtMode'
           - name: External
-            type: p2p.Multiaddr
+            type: Multiaddr
 
     - name: Logging
       type:
@@ -97,7 +105,7 @@ Config:
         fields:
           - type: HttpListener
           - name: PprofListen
-            type: p2p.Multiaddr
+            type: Multiaddr
 
           - name: Monitoring
             type:
@@ -194,7 +202,7 @@ Configuration:
               BVN:
                 value: 2
         - name: Listen
-          type: p2p.Multiaddr
+          type: Multiaddr
         - name: BVN
           type: string
         - name: ValidatorKey
@@ -204,9 +212,9 @@ Configuration:
         - name: BvnGenesis
           type: string
         - name: DnBootstrapPeers
-          type: '[]p2p.Multiaddr'
+          type: '[]Multiaddr'
         - name: BvnBootstrapPeers
-          type: '[]p2p.Multiaddr'
+          type: '[]Multiaddr'
         - name: EnableHealing
           type: '*bool'
           optional: true
@@ -228,14 +236,14 @@ Configuration:
       pointer: true
       fields:
         - name: Listen
-          type: p2p.Multiaddr
+          type: Multiaddr
 
     - name: DevnetConfiguration
       class: composite
       pointer: true
       fields:
         - name: Listen
-          type: p2p.Multiaddr
+          type: Multiaddr
         - name: Bvns
           type: uint
         - name: Validators
@@ -303,9 +311,9 @@ Service:
         - name: Genesis
           type: string
         - name: Listen
-          type: p2p.Multiaddr
+          type: Multiaddr
         - name: BootstrapPeers
-          type: '[]p2p.Multiaddr'
+          type: '[]Multiaddr'
         - name: MetricsNamespace
           type: string
           optional: true
@@ -381,7 +389,7 @@ Service:
             fields:
               - name: Listen
                 description: are the addresses and schemes to listen on
-                type: '[]p2p.Multiaddr'
+                type: '[]Multiaddr'
               - name: ConnectionLimit
                 description: limits the number of concurrent connections
                 type: '*int'
@@ -413,7 +421,6 @@ Service:
           type: '*RouterServiceRef'
         - name: PeerMap
           description: hard-codes the peer map
-          # type: '[]*HttpPeerMapEntry'
           type:
             name: HttpPeerMapEntry
             class: composite
@@ -421,11 +428,16 @@ Service:
             repeatable: true
             fields:
               - name: ID
-                type: p2p.PeerID
+                type:
+                  name: PeerID
+                  class: external
+                  underlying: peer.ID
+                  generate: { widgets: true }
+                  encode: { withWidget: wPeerID }
               - name: Partitions
                 type: '[]string'
               - name: Addresses
-                type: '[]p2p.Multiaddr'
+                type: '[]Multiaddr'
 
     - name: RouterService
       class: composite
