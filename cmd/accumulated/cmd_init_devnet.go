@@ -58,20 +58,29 @@ func initDevNet(cmd *cobra.Command) *run.Config {
 		cmd.Flag("validators").Changed && dev.Validators != uint64(flagRunDevnet.NumValidators) ||
 		cmd.Flag("followers").Changed && dev.Followers != uint64(flagRunDevnet.NumFollowers) ||
 		cmd.Flag("globals").Changed && !flagRunDevnet.Globals.Equal(dev.Globals)
-	if wantReset && !flagMain.Reset {
-		if !term.IsTerminal(int(os.Stdout.Fd())) || !term.IsTerminal(int(os.Stderr.Fd())) {
-			fatalf("the configuration and flags do not match; use --reset if you wish to override (and reset) the existing configuration")
-		}
-		fmt.Fprint(os.Stderr, "Configuration and flags do not match. Reset? [yN] ")
-		s, err := bufio.NewReader(os.Stdin).ReadString('\n')
-		check(err)
-		s = strings.TrimSpace(s)
-		s = strings.ToLower(s)
-		switch s {
-		case "y", "yes":
+	if wantReset {
+		switch {
+		case flagMain.Reset:
+			// Ok
+
+		case flagRunDevnet.SoftReset:
 			flagMain.Reset = true
+
+		case term.IsTerminal(int(os.Stdin.Fd())):
+			fmt.Fprint(os.Stderr, "Configuration and flags do not match. Reset? [yN] ")
+			s, err := bufio.NewReader(os.Stdin).ReadString('\n')
+			check(err)
+			s = strings.TrimSpace(s)
+			s = strings.ToLower(s)
+			switch s {
+			case "y", "yes":
+				flagMain.Reset = true
+			default:
+				os.Exit(0)
+			}
+
 		default:
-			os.Exit(0)
+			fatalf("the configuration and flags do not match; use --reset if you wish to override (and reset) the existing configuration")
 		}
 	}
 

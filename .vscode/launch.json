@@ -152,6 +152,7 @@
       "args": [
         "run", "devnet",
         "-w=${workspaceFolder}/.nodes/devnet",
+        "--soft-reset",
         "-b=1",
         "-v=1",
         "-f=0",

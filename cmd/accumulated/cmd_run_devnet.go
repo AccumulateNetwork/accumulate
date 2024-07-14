@@ -40,6 +40,7 @@ var flagRunDevnet = struct {
 	BasePort      int
 	Globals       network.GlobalValues
 	Logging       run.Logging
+	SoftReset     bool
 }{
 	Globals: network.GlobalValues{
 		ExecutorVersion: protocol.ExecutorVersionLatest,
@@ -66,6 +67,7 @@ func init() {
 	cmdRunDevnet.Flags().StringVar(&flagRunDevnet.Database, "database", "", "The type of database to use")
 	cmdRunDevnet.Flags().Var(cmdutil.JsonFlagOf(&flagRunDevnet.Globals), "globals", "Override the default global values")
 	cmdRunDevnet.Flags().Var(cmdutil.JsonFlagOf(&flagRunDevnet.Logging), "logging", "Override the default logger configuration")
+	cmdRunDevnet.Flags().BoolVar(&flagRunDevnet.SoftReset, "soft-reset", false, "Reset only if necessary")
 
 	setRunFlags(cmdRunDevnet)
 
