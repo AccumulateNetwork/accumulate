@@ -399,6 +399,26 @@ func (v *versionHeader) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func init() {
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("version", "uint64"),
+		encoding.NewTypeField("rootHash", "bytes32"),
+		encoding.NewTypeField("systemLedger", "protocol.SystemLedger"),
+	}, "Header", "header")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("key", "record.Key"),
+		encoding.NewTypeField("value", "bytes"),
+		encoding.NewTypeField("receipt", "merkle.Receipt"),
+	}, "RecordEntry", "recordEntry")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("version", "uint64"),
+	}, "versionHeader", "versionHeader")
+
+}
+
 func (v *Header) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Version      uint64                 `json:"version,omitempty"`

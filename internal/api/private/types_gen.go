@@ -121,6 +121,14 @@ func (v *SequenceOptions) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func init() {
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("nodeID", "p2p.PeerID"),
+	}, "SequenceOptions", "sequenceOptions")
+
+}
+
 func (v *SequenceOptions) MarshalJSON() ([]byte, error) {
 	u := struct {
 		NodeID    *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"nodeID,omitempty"`

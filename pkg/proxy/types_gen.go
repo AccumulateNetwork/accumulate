@@ -769,6 +769,77 @@ func (v *SeedList) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func init() {
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("network", "string"),
+		encoding.NewTypeField("sign", "bool"),
+	}, "NetworkConfigRequest", "networkConfigRequest")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("networkState", "NetworkState"),
+		encoding.NewTypeField("signature", "protocol.KeySignature"),
+	}, "NetworkConfigResponse", "networkConfigResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("network", "config.Network"),
+		encoding.NewTypeField("version", "string"),
+		encoding.NewTypeField("commit", "string"),
+		encoding.NewTypeField("versionIsKnown", "bool"),
+		encoding.NewTypeField("isTestNet", "bool"),
+	}, "NetworkState", "networkState")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("partitions", "string[]"),
+	}, "PartitionList", "partitionList")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("network", "string"),
+		encoding.NewTypeField("sign", "bool"),
+	}, "PartitionListRequest", "partitionListRequest")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("partitions", "string[]"),
+		encoding.NewTypeField("signature", "protocol.KeySignature"),
+	}, "PartitionListResponse", "partitionListResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("count", "int64"),
+	}, "SeedCount", "seedCount")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("network", "string"),
+		encoding.NewTypeField("partition", "string"),
+		encoding.NewTypeField("sign", "bool"),
+	}, "SeedCountRequest", "seedCountRequest")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("count", "int64"),
+		encoding.NewTypeField("signature", "protocol.KeySignature"),
+	}, "SeedCountResponse", "seedCountResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("basePort", "uint64"),
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("addresses", "string[]"),
+	}, "SeedList", "seedList")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("network", "string"),
+		encoding.NewTypeField("partition", "string"),
+		encoding.NewTypeField("count", "int64"),
+		encoding.NewTypeField("sign", "bool"),
+	}, "SeedListRequest", "seedListRequest")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("basePort", "uint64"),
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("addresses", "string[]"),
+		encoding.NewTypeField("signature", "protocol.KeySignature"),
+	}, "SeedListResponse", "seedListResponse")
+
+}
+
 func (v *NetworkConfigResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
 		NetworkState NetworkState                                       `json:"networkState,omitempty"`
