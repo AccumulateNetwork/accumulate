@@ -1624,3 +1624,82 @@ func (v *valueResponse) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	}
 	return nil
 }
+
+func init() {
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("calls", "call[]"),
+	}, "batchCall", "batchCall")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("responses", "response[]"),
+	}, "batchResponse", "batchResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+	}, "commitCall", "commitCall")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("key", "record.Key"),
+		encoding.NewTypeField("hash", "bytes32"),
+	}, "deleteCall", "deleteCall")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("key", "record.Key"),
+		encoding.NewTypeField("hash", "bytes32"),
+		encoding.NewTypeField("value", "bytes"),
+	}, "entryResponse", "entryResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("error", "errors2.Error"),
+	}, "errorResponse", "errorResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("hash", "bool"),
+	}, "forEachCall", "forEachCall")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("key", "record.Key"),
+		encoding.NewTypeField("hash", "bytes32"),
+	}, "getCall", "getCall")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("key", "record.Key"),
+		encoding.NewTypeField("hash", "bytes32"),
+	}, "keyOrHash", "keyOrHash")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("key", "record.Key"),
+		encoding.NewTypeField("hash", "bytes32"),
+	}, "notFoundResponse", "notFoundResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+	}, "okResponse", "okResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("key", "record.Key"),
+		encoding.NewTypeField("hash", "bytes32"),
+		encoding.NewTypeField("value", "bytes"),
+	}, "putCall", "putCall")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("callType", "string"),
+	}, "unsupportedCallResponse", "unsupportedCallResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("value", "bytes"),
+	}, "valueResponse", "valueResponse")
+
+}

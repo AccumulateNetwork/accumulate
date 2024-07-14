@@ -7,12 +7,16 @@
 package testing
 
 import (
+	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/sha256"
+	"encoding/binary"
 	"fmt"
 	"math/big"
+	badrand "math/rand"
 	"strings"
 
+	btc "github.com/btcsuite/btcd/btcec"
 	tmcrypto "github.com/cometbft/cometbft/crypto"
 	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -20,6 +24,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -33,6 +38,17 @@ func GenerateKey(seed ...interface{}) ed25519.PrivateKey {
 
 func GenerateTmKey(seed ...interface{}) tmed25519.PrivKey {
 	return tmed25519.PrivKey(GenerateKey(seed...))
+}
+
+// generates privatekey and compressed public key
+func NewSECP256K1(seed ...any) *btc.PrivateKey {
+	hash := record.NewKey(seed...).Hash()
+	src := badrand.NewSource(int64(binary.BigEndian.Uint64(hash[:])))
+	priv, err := ecdsa.GenerateKey(btc.S256(), badrand.New(src))
+	if err != nil {
+		panic(err)
+	}
+	return (*btc.PrivateKey)(priv)
 }
 
 func ParseUrl(s string) (*url.URL, error) {
