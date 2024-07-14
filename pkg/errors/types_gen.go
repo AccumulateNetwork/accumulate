@@ -334,6 +334,25 @@ func (v *ErrorBase[Status]) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func init() {
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("funcName", "string"),
+		encoding.NewTypeField("file", "string"),
+		encoding.NewTypeField("line", "int64"),
+	}, "CallSite", "callSite")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("message", "string"),
+		encoding.NewTypeField("code", "string"),
+		encoding.NewTypeField("codeID", "uint64"),
+		encoding.NewTypeField("cause", "ErrorBase[Status]"),
+		encoding.NewTypeField("callStack", "CallSite[]"),
+		encoding.NewTypeField("data", "string"),
+	}, "ErrorBase", "errorBase")
+
+}
+
 func (v *ErrorBase[Status]) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Message   string                       `json:"message,omitempty"`

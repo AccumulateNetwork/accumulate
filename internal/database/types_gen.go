@@ -1022,6 +1022,53 @@ func (v *sigSetData) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func init() {
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("account", "string"),
+		encoding.NewTypeField("transaction", "bytes"),
+		encoding.NewTypeField("chainEntry", "uint64"),
+	}, "BlockStateSynthTxnEntry", "blockStateSynthTxnEntry")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("transaction", "protocol.Transaction"),
+		encoding.NewTypeField("signature", "protocol.Signature"),
+		encoding.NewTypeField("txid", "string"),
+	}, "SigOrTxn", "sigOrTxn")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("keyEntryIndex", "uint64"),
+		encoding.NewTypeField("signatureHash", "bytes32"),
+		encoding.NewTypeField("validatorKeyHash", "bytes32"),
+	}, "SigSetEntry", "sigSetEntry")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("keyIndex", "uint64"),
+		encoding.NewTypeField("version", "uint64"),
+		encoding.NewTypeField("path", "string[]"),
+		encoding.NewTypeField("hash", "bytes32"),
+	}, "SignatureSetEntry", "signatureSetEntry")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("account", "string"),
+		encoding.NewTypeField("chain", "string"),
+		encoding.NewTypeField("chainIndex", "uint64"),
+		encoding.NewTypeField("anchorIndex", "uint64"),
+	}, "TransactionChainEntry", "transactionChainEntry")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("authority", "string"),
+		encoding.NewTypeField("hash", "bytes32"),
+	}, "VoteEntry", "voteEntry")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("version", "uint64"),
+		encoding.NewTypeField("entries", "SigSetEntry[]"),
+	}, "sigSetData", "sigSetData")
+
+}
+
 func (v *BlockStateSynthTxnEntry) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Account     *url.URL `json:"account,omitempty"`

@@ -14,6 +14,7 @@ import (
 	"fmt"
 
 	btc "github.com/btcsuite/btcd/btcec"
+	eth "github.com/ethereum/go-ethereum/crypto"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -92,6 +93,15 @@ func FromEcdsaPrivateKey(key *ecdsa.PrivateKey) *PrivateKey {
 	return priv
 }
 
+func FromETHPrivateKey(key *ecdsa.PrivateKey) *PrivateKey {
+	priv := new(PrivateKey)
+	priv.Type = protocol.SignatureTypeEcdsaSha256
+	priv.Key = eth.FromECDSA(key)
+	priv.PublicKey.Type = protocol.SignatureTypeEcdsaSha256
+	priv.PublicKey.Key = eth.FromECDSAPub(&key.PublicKey)
+	return priv
+}
+
 func FromPrivateKeyBytes(priv []byte, typ protocol.SignatureType) (*PrivateKey, error) {
 	var pub []byte
 	switch typ {
@@ -123,7 +133,8 @@ func FromPrivateKeyBytes(priv []byte, typ protocol.SignatureType) (*PrivateKey, 
 		pub = priv[32:]
 
 	case protocol.SignatureTypeETH,
-		protocol.SignatureTypeBTCLegacy:
+		protocol.SignatureTypeBTCLegacy,
+		protocol.SignatureTypeTypedData:
 		_, pk := btc.PrivKeyFromBytes(btc.S256(), priv)
 		pub = pk.SerializeUncompressed()
 

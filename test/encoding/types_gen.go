@@ -257,6 +257,19 @@ func (v *sigSection) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func init() {
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("txid", "string"),
+		encoding.NewTypeField("signature", "protocol.Signature"),
+	}, "Signature", "signature")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("signatures", "Signature[]"),
+	}, "sigSection", "sigSection")
+
+}
+
 func (v *Signature) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Txid      *url.TxID                                       `json:"txid,omitempty"`

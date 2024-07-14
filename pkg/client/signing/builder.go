@@ -221,6 +221,7 @@ func (s *Builder) prepare(init bool) (protocol.KeySignature, error) {
 		protocol.SignatureTypeETH,
 		protocol.SignatureTypeRsaSha256,
 		protocol.SignatureTypeEcdsaSha256,
+		protocol.SignatureTypeTypedData,
 		protocol.SignatureTypeBTCLegacy:
 
 	case protocol.SignatureTypeReceipt, protocol.SignatureTypePartition:
@@ -319,6 +320,15 @@ func (s *Builder) prepare(init bool) (protocol.KeySignature, error) {
 		sig.Data = s.Data
 		return sig, s.Signer.SetPublicKey(sig)
 
+	case protocol.SignatureTypeTypedData:
+		sig := new(protocol.TypedDataSignature)
+		sig.Signer = s.Url
+		sig.SignerVersion = s.Version
+		sig.Timestamp = timestamp
+		sig.Vote = s.Vote
+		sig.Memo = s.Memo
+		sig.Data = s.Data
+		return sig, s.Signer.SetPublicKey(sig)
 	default:
 		panic("unreachable")
 	}

@@ -2018,6 +2018,109 @@ func (v *proposeLeader) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
+func init() {
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("leader", "bytes32"),
+		encoding.NewTypeField("index", "uint64"),
+		encoding.NewTypeField("time", "string"),
+		encoding.NewTypeField("envelopes", "messaging.Envelope[]"),
+	}, "BlockProposal", "blockProposal")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("messageResults", "protocol.TransactionStatus[]"),
+		encoding.NewTypeField("validatorUpdates", "ValidatorUpdate[]"),
+	}, "BlockResults", "blockResults")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("hash", "bytes32"),
+	}, "CommitResult", "commitResult")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("results", "protocol.TransactionStatus[]"),
+	}, "EnvelopeSubmitted", "envelopeSubmitted")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("network", "string"),
+		encoding.NewTypeField("node", "bytes32"),
+	}, "ExecutedBlock", "executedBlock")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("leader", "bytes32"),
+	}, "LeaderProposal", "leaderProposal")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+	}, "StartBlock", "startBlock")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("network", "string"),
+		encoding.NewTypeField("envelope", "messaging.Envelope"),
+		encoding.NewTypeField("pretend", "bool"),
+	}, "SubmitEnvelope", "submitEnvelope")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("publicKey", "bytes"),
+		encoding.NewTypeField("power", "int64"),
+	}, "ValidatorUpdate", "validatorUpdate")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("pubKeyHash", "bytes32"),
+		encoding.NewTypeField("network", "string"),
+		encoding.NewTypeField("p", "proposeBlock"),
+	}, "acceptBlockProposal", "acceptBlockProposal")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("pubKeyHash", "bytes32"),
+		encoding.NewTypeField("network", "string"),
+		encoding.NewTypeField("result", "EnvelopeSubmitted"),
+		encoding.NewTypeField("env", "messaging.Envelope"),
+	}, "acceptedSubmission", "acceptedSubmission")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("pubKeyHash", "bytes32"),
+		encoding.NewTypeField("network", "string"),
+	}, "baseNodeMessage", "baseNodeMessage")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("pubKeyHash", "bytes32"),
+		encoding.NewTypeField("network", "string"),
+		encoding.NewTypeField("results", "CommitResult"),
+	}, "committedBlock", "committedBlock")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("pubKeyHash", "bytes32"),
+		encoding.NewTypeField("network", "string"),
+		encoding.NewTypeField("results", "BlockResults"),
+	}, "finalizedBlock", "finalizedBlock")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("pubKeyHash", "bytes32"),
+		encoding.NewTypeField("network", "string"),
+		encoding.NewTypeField("leaderProposal", "LeaderProposal"),
+		encoding.NewTypeField("index", "uint64"),
+		encoding.NewTypeField("time", "string"),
+		encoding.NewTypeField("envelopes", "messaging.Envelope[]"),
+	}, "proposeBlock", "proposeBlock")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("pubKeyHash", "bytes32"),
+		encoding.NewTypeField("network", "string"),
+		encoding.NewTypeField("leader", "bytes32"),
+	}, "proposeLeader", "proposeLeader")
+
+}
+
 func (v *BlockProposal) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Leader    *string                                `json:"leader,omitempty"`

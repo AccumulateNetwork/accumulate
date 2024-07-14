@@ -1037,6 +1037,22 @@ type TxIdSet struct {
 	extraData []byte
 }
 
+// TypedDataSignature is an EIP-712 compliant typed data signature for an Accumulate transaction.
+type TypedDataSignature struct {
+	fieldsSet       []bool
+	PublicKey       []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
+	Signature       []byte   `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
+	Signer          *url.URL `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
+	SignerVersion   uint64   `json:"signerVersion,omitempty" form:"signerVersion" query:"signerVersion" validate:"required"`
+	Timestamp       uint64   `json:"timestamp,omitempty" form:"timestamp" query:"timestamp"`
+	Vote            VoteType `json:"vote,omitempty" form:"vote" query:"vote"`
+	TransactionHash [32]byte `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash"`
+	Memo            string   `json:"memo,omitempty" form:"memo" query:"memo"`
+	Data            []byte   `json:"data,omitempty" form:"data" query:"data"`
+	ChainID         *big.Int `json:"chainID,omitempty" form:"chainID" query:"chainID" validate:"required"`
+	extraData       []byte
+}
+
 type UnknownAccount struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
@@ -1281,6 +1297,8 @@ func (*TokenAccount) Type() AccountType { return AccountTypeTokenAccount }
 func (*TokenIssuer) Type() AccountType { return AccountTypeTokenIssuer }
 
 func (*TransferCredits) Type() TransactionType { return TransactionTypeTransferCredits }
+
+func (*TypedDataSignature) Type() SignatureType { return SignatureTypeTypedData }
 
 func (*UnknownAccount) Type() AccountType { return AccountTypeUnknown }
 
@@ -3496,6 +3514,33 @@ func (v *TxIdSet) Copy() *TxIdSet {
 }
 
 func (v *TxIdSet) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *TypedDataSignature) Copy() *TypedDataSignature {
+	u := new(TypedDataSignature)
+
+	u.PublicKey = encoding.BytesCopy(v.PublicKey)
+	u.Signature = encoding.BytesCopy(v.Signature)
+	if v.Signer != nil {
+		u.Signer = v.Signer
+	}
+	u.SignerVersion = v.SignerVersion
+	u.Timestamp = v.Timestamp
+	u.Vote = v.Vote
+	u.TransactionHash = v.TransactionHash
+	u.Memo = v.Memo
+	u.Data = encoding.BytesCopy(v.Data)
+	if v.ChainID != nil {
+		u.ChainID = encoding.BigintCopy(v.ChainID)
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *TypedDataSignature) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *UnknownAccount) Copy() *UnknownAccount {
 	u := new(UnknownAccount)
@@ -5969,6 +6014,51 @@ func (v *TxIdSet) Equal(u *TxIdSet) bool {
 		if !((v.Entries[i]).Equal(u.Entries[i])) {
 			return false
 		}
+	}
+
+	return true
+}
+
+func (v *TypedDataSignature) Equal(u *TypedDataSignature) bool {
+	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
+		return false
+	}
+	if !(bytes.Equal(v.Signature, u.Signature)) {
+		return false
+	}
+	switch {
+	case v.Signer == u.Signer:
+		// equal
+	case v.Signer == nil || u.Signer == nil:
+		return false
+	case !((v.Signer).Equal(u.Signer)):
+		return false
+	}
+	if !(v.SignerVersion == u.SignerVersion) {
+		return false
+	}
+	if !(v.Timestamp == u.Timestamp) {
+		return false
+	}
+	if !(v.Vote == u.Vote) {
+		return false
+	}
+	if !(v.TransactionHash == u.TransactionHash) {
+		return false
+	}
+	if !(v.Memo == u.Memo) {
+		return false
+	}
+	if !(bytes.Equal(v.Data, u.Data)) {
+		return false
+	}
+	switch {
+	case v.ChainID == u.ChainID:
+		// equal
+	case v.ChainID == nil || u.ChainID == nil:
+		return false
+	case !((v.ChainID).Cmp(u.ChainID) == 0):
+		return false
 	}
 
 	return true
@@ -13037,6 +13127,110 @@ func (v *TxIdSet) IsValid() error {
 	}
 }
 
+var fieldNames_TypedDataSignature = []string{
+	1:  "Type",
+	2:  "PublicKey",
+	3:  "Signature",
+	4:  "Signer",
+	5:  "SignerVersion",
+	6:  "Timestamp",
+	7:  "Vote",
+	8:  "TransactionHash",
+	9:  "Memo",
+	10: "Data",
+	11: "ChainID",
+}
+
+func (v *TypedDataSignature) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(len(v.PublicKey) == 0) {
+		writer.WriteBytes(2, v.PublicKey)
+	}
+	if !(len(v.Signature) == 0) {
+		writer.WriteBytes(3, v.Signature)
+	}
+	if !(v.Signer == nil) {
+		writer.WriteUrl(4, v.Signer)
+	}
+	if !(v.SignerVersion == 0) {
+		writer.WriteUint(5, v.SignerVersion)
+	}
+	if !(v.Timestamp == 0) {
+		writer.WriteUint(6, v.Timestamp)
+	}
+	if !(v.Vote == 0) {
+		writer.WriteEnum(7, v.Vote)
+	}
+	if !(v.TransactionHash == ([32]byte{})) {
+		writer.WriteHash(8, &v.TransactionHash)
+	}
+	if !(len(v.Memo) == 0) {
+		writer.WriteString(9, v.Memo)
+	}
+	if !(len(v.Data) == 0) {
+		writer.WriteBytes(10, v.Data)
+	}
+	if !(v.ChainID == nil) {
+		writer.WriteBigInt(11, v.ChainID)
+	}
+
+	_, _, err := writer.Reset(fieldNames_TypedDataSignature)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *TypedDataSignature) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field PublicKey is missing")
+	} else if len(v.PublicKey) == 0 {
+		errs = append(errs, "field PublicKey is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Signature is missing")
+	} else if len(v.Signature) == 0 {
+		errs = append(errs, "field Signature is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Signer is missing")
+	} else if v.Signer == nil {
+		errs = append(errs, "field Signer is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field SignerVersion is missing")
+	} else if v.SignerVersion == 0 {
+		errs = append(errs, "field SignerVersion is not set")
+	}
+	if len(v.fieldsSet) > 10 && !v.fieldsSet[10] {
+		errs = append(errs, "field ChainID is missing")
+	} else if v.ChainID == nil {
+		errs = append(errs, "field ChainID is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_UnknownAccount = []string{
 	1: "Type",
 	2: "Url",
@@ -17966,6 +18160,68 @@ func (v *TxIdSet) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *TypedDataSignature) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *TypedDataSignature) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType SignatureType
+	if x := new(SignatureType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *TypedDataSignature) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadBytes(2); ok {
+		v.PublicKey = x
+	}
+	if x, ok := reader.ReadBytes(3); ok {
+		v.Signature = x
+	}
+	if x, ok := reader.ReadUrl(4); ok {
+		v.Signer = x
+	}
+	if x, ok := reader.ReadUint(5); ok {
+		v.SignerVersion = x
+	}
+	if x, ok := reader.ReadUint(6); ok {
+		v.Timestamp = x
+	}
+	if x := new(VoteType); reader.ReadEnum(7, x) {
+		v.Vote = *x
+	}
+	if x, ok := reader.ReadHash(8); ok {
+		v.TransactionHash = *x
+	}
+	if x, ok := reader.ReadString(9); ok {
+		v.Memo = x
+	}
+	if x, ok := reader.ReadBytes(10); ok {
+		v.Data = x
+	}
+	if x, ok := reader.ReadBigInt(11); ok {
+		v.ChainID = x
+	}
+
+	seen, err := reader.Reset(fieldNames_TypedDataSignature)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *UnknownAccount) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -18434,6 +18690,896 @@ func (v *WriteDataTo) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 		return encoding.Error{E: err}
 	}
 	return nil
+}
+
+func init() {
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("url", "string"),
+		encoding.NewTypeField("authorities", "AuthorityEntry[]"),
+	}, "ADI", "adi")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("authorities", "AuthorityEntry[]"),
+	}, "AccountAuth", "accountAuth")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("data", "bytes[]"),
+	}, "AccumulateDataEntry", "accumulateDataEntry")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("url", "string"),
+	}, "AcmeFaucet", "acmeFaucet")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("price", "uint64"),
+	}, "AcmeOracle", "acmeOracle")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("version", "string"),
+	}, "ActivateProtocolVersion", "activateProtocolVersion")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("authority", "string"),
+	}, "AddAccountAuthorityOperation", "addAccountAuthorityOperation")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("recipient", "string"),
+		encoding.NewTypeField("amount", "uint256"),
+		encoding.NewTypeField("oracle", "uint64"),
+	}, "AddCredits", "addCredits")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("amount", "uint256"),
+		encoding.NewTypeField("credits", "uint64"),
+		encoding.NewTypeField("oracle", "uint64"),
+	}, "AddCreditsResult", "addCreditsResult")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("entry", "KeySpecParams"),
+	}, "AddKeyOperation", "addKeyOperation")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("url", "string"),
+		encoding.NewTypeField("minorBlockSequenceNumber", "uint64"),
+		encoding.NewTypeField("majorBlockIndex", "uint64"),
+		encoding.NewTypeField("majorBlockTime", "string"),
+		encoding.NewTypeField("pendingMajorBlockAnchors", "string[]"),
+		encoding.NewTypeField("sequence", "PartitionSyntheticLedger[]"),
+	}, "AnchorLedger", "anchorLedger")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("name", "string"),
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("account", "string"),
+		encoding.NewTypeField("index", "uint64"),
+		encoding.NewTypeField("sourceIndex", "uint64"),
+		encoding.NewTypeField("sourceBlock", "uint64"),
+		encoding.NewTypeField("entry", "bytes"),
+	}, "AnchorMetadata", "anchorMetadata")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("receipt", "merkle.Receipt"),
+		encoding.NewTypeField("anchor", "AnchorMetadata"),
+	}, "AnnotatedReceipt", "annotatedReceipt")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("url", "string"),
+		encoding.NewTypeField("disabled", "bool"),
+	}, "AuthorityEntry", "authorityEntry")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("origin", "string"),
+		encoding.NewTypeField("authority", "string"),
+		encoding.NewTypeField("vote", "string"),
+		encoding.NewTypeField("txID", "string"),
+		encoding.NewTypeField("cause", "string"),
+		encoding.NewTypeField("delegator", "string[]"),
+		encoding.NewTypeField("memo", "string"),
+	}, "AuthoritySignature", "authoritySignature")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("publicKey", "bytes"),
+		encoding.NewTypeField("signature", "bytes"),
+		encoding.NewTypeField("signer", "string"),
+		encoding.NewTypeField("signerVersion", "uint64"),
+		encoding.NewTypeField("timestamp", "uint64"),
+		encoding.NewTypeField("vote", "string"),
+		encoding.NewTypeField("transactionHash", "bytes32"),
+		encoding.NewTypeField("memo", "string"),
+		encoding.NewTypeField("data", "bytes"),
+	}, "BTCLegacySignature", "btclegacySignature")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("publicKey", "bytes"),
+		encoding.NewTypeField("signature", "bytes"),
+		encoding.NewTypeField("signer", "string"),
+		encoding.NewTypeField("signerVersion", "uint64"),
+		encoding.NewTypeField("timestamp", "uint64"),
+		encoding.NewTypeField("vote", "string"),
+		encoding.NewTypeField("transactionHash", "bytes32"),
+		encoding.NewTypeField("memo", "string"),
+		encoding.NewTypeField("data", "bytes"),
+	}, "BTCSignature", "btcsignature")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("account", "string"),
+		encoding.NewTypeField("chain", "string"),
+		encoding.NewTypeField("index", "uint64"),
+	}, "BlockEntry", "blockEntry")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("url", "string"),
+		encoding.NewTypeField("index", "uint64"),
+		encoding.NewTypeField("time", "string"),
+		encoding.NewTypeField("entries", "BlockEntry[]"),
+	}, "BlockLedger", "blockLedger")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("source", "string"),
+		encoding.NewTypeField("majorBlockIndex", "uint64"),
+		encoding.NewTypeField("minorBlockIndex", "uint64"),
+		encoding.NewTypeField("rootChainIndex", "uint64"),
+		encoding.NewTypeField("rootChainAnchor", "bytes32"),
+		encoding.NewTypeField("stateTreeAnchor", "bytes32"),
+		encoding.NewTypeField("acmeBurnt", "uint256"),
+	}, "BlockValidatorAnchor", "blockValidatorAnchor")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("amount", "uint64"),
+	}, "BurnCredits", "burnCredits")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("amount", "uint256"),
+	}, "BurnTokens", "burnTokens")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("name", "string"),
+		encoding.NewTypeField("type", "string"),
+	}, "ChainMetadata", "chainMetadata")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("data", "bytes"),
+		encoding.NewTypeField("isUpdate", "bool"),
+	}, "ChainParams", "chainParams")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("url", "string"),
+		encoding.NewTypeField("authorities", "string[]"),
+	}, "CreateDataAccount", "createDataAccount")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("url", "string"),
+		encoding.NewTypeField("keyHash", "bytes"),
+		encoding.NewTypeField("keyBookUrl", "string"),
+		encoding.NewTypeField("authorities", "string[]"),
+	}, "CreateIdentity", "createIdentity")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("url", "string"),
+		encoding.NewTypeField("publicKeyHash", "bytes"),
+		encoding.NewTypeField("authorities", "string[]"),
+	}, "CreateKeyBook", "createKeyBook")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("keys", "KeySpecParams[]"),
+	}, "CreateKeyPage", "createKeyPage")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+	}, "CreateLiteTokenAccount", "createLiteTokenAccount")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("url", "string"),
+		encoding.NewTypeField("symbol", "string"),
+		encoding.NewTypeField("precision", "uint64"),
+		encoding.NewTypeField("properties", "string"),
+		encoding.NewTypeField("supplyLimit", "uint256"),
+		encoding.NewTypeField("authorities", "string[]"),
+	}, "CreateToken", "createToken")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("url", "string"),
+		encoding.NewTypeField("tokenUrl", "string"),
+		encoding.NewTypeField("authorities", "string[]"),
+		encoding.NewTypeField("proof", "TokenIssuerProof"),
+	}, "CreateTokenAccount", "createTokenAccount")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("url", "string"),
+		encoding.NewTypeField("amount", "uint64"),
+	}, "CreditRecipient", "creditRecipient")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("url", "string"),
+		encoding.NewTypeField("authorities", "AuthorityEntry[]"),
+		encoding.NewTypeField("entry", "DataEntry"),
+	}, "DataAccount", "dataAccount")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("signature", "Signature"),
+		encoding.NewTypeField("delegator", "string"),
+	}, "DelegatedSignature", "delegatedSignature")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("source", "string"),
+		encoding.NewTypeField("majorBlockIndex", "uint64"),
+		encoding.NewTypeField("minorBlockIndex", "uint64"),
+		encoding.NewTypeField("rootChainIndex", "uint64"),
+		encoding.NewTypeField("rootChainAnchor", "bytes32"),
+		encoding.NewTypeField("stateTreeAnchor", "bytes32"),
+		encoding.NewTypeField("updates", "NetworkAccountUpdate[]"),
+		encoding.NewTypeField("receipts", "PartitionAnchorReceipt[]"),
+		encoding.NewTypeField("makeMajorBlock", "uint64"),
+		encoding.NewTypeField("makeMajorBlockTime", "string"),
+	}, "DirectoryAnchor", "directoryAnchor")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("authority", "string"),
+	}, "DisableAccountAuthOperation", "disableAccountAuthOperation")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("data", "bytes[]"),
+	}, "DoubleHashDataEntry", "doubleHashDataEntry")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("publicKey", "bytes"),
+		encoding.NewTypeField("signature", "bytes"),
+		encoding.NewTypeField("signer", "string"),
+		encoding.NewTypeField("signerVersion", "uint64"),
+		encoding.NewTypeField("timestamp", "uint64"),
+		encoding.NewTypeField("vote", "string"),
+		encoding.NewTypeField("transactionHash", "bytes32"),
+		encoding.NewTypeField("memo", "string"),
+		encoding.NewTypeField("data", "bytes"),
+	}, "ED25519Signature", "ed25519Signature")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("publicKey", "bytes"),
+		encoding.NewTypeField("signature", "bytes"),
+		encoding.NewTypeField("signer", "string"),
+		encoding.NewTypeField("signerVersion", "uint64"),
+		encoding.NewTypeField("timestamp", "uint64"),
+		encoding.NewTypeField("vote", "string"),
+		encoding.NewTypeField("transactionHash", "bytes32"),
+		encoding.NewTypeField("memo", "string"),
+		encoding.NewTypeField("data", "bytes"),
+	}, "ETHSignature", "ethsignature")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("publicKey", "bytes"),
+		encoding.NewTypeField("signature", "bytes"),
+		encoding.NewTypeField("signer", "string"),
+		encoding.NewTypeField("signerVersion", "uint64"),
+		encoding.NewTypeField("timestamp", "uint64"),
+		encoding.NewTypeField("vote", "string"),
+		encoding.NewTypeField("transactionHash", "bytes32"),
+		encoding.NewTypeField("memo", "string"),
+		encoding.NewTypeField("data", "bytes"),
+	}, "EcdsaSha256Signature", "ecdsaSha256Signature")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+	}, "EmptyResult", "emptyResult")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("authority", "string"),
+	}, "EnableAccountAuthOperation", "enableAccountAuthOperation")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("atTime", "string"),
+	}, "ExpireOptions", "expireOptions")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("accountId", "bytes32"),
+		encoding.NewTypeField("data", "bytes"),
+		encoding.NewTypeField("extIds", "bytes[]"),
+	}, "FactomDataEntry", "factomDataEntry")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("accountId", "bytes32"),
+		encoding.NewTypeField("data", "bytes"),
+		encoding.NewTypeField("extIds", "bytes[]"),
+	}, "FactomDataEntryWrapper", "factomDataEntryWrapper")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("createIdentitySliding", "string[]"),
+		encoding.NewTypeField("createSubIdentity", "string"),
+		encoding.NewTypeField("bareIdentityDiscount", "string"),
+	}, "FeeSchedule", "feeSchedule")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("minorBlock", "uint64"),
+	}, "HoldUntilOptions", "holdUntilOptions")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("source", "uint64"),
+		encoding.NewTypeField("anchor", "uint64"),
+		encoding.NewTypeField("blockIndex", "uint64"),
+		encoding.NewTypeField("blockTime", "string"),
+		encoding.NewTypeField("rootIndexIndex", "uint64"),
+	}, "IndexEntry", "indexEntry")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("cause", "bytes32"),
+		encoding.NewTypeField("transactionHash", "bytes32"),
+	}, "InternalSignature", "internalSignature")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("recipient", "string"),
+		encoding.NewTypeField("amount", "uint256"),
+		encoding.NewTypeField("to", "TokenRecipient[]"),
+	}, "IssueTokens", "issueTokens")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("url", "string"),
+		encoding.NewTypeField("bookType", "string"),
+		encoding.NewTypeField("authorities", "AuthorityEntry[]"),
+		encoding.NewTypeField("pageCount", "uint64"),
+	}, "KeyBook", "keyBook")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("keyBook", "string"),
+		encoding.NewTypeField("url", "string"),
+		encoding.NewTypeField("creditBalance", "uint64"),
+		encoding.NewTypeField("acceptThreshold", "uint64"),
+		encoding.NewTypeField("rejectThreshold", "uint64"),
+		encoding.NewTypeField("responseThreshold", "uint64"),
+		encoding.NewTypeField("blockThreshold", "uint64"),
+		encoding.NewTypeField("version", "uint64"),
+		encoding.NewTypeField("keys", "KeySpec[]"),
+		encoding.NewTypeField("transactionBlacklist", "string"),
+	}, "KeyPage", "keyPage")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("publicKeyHash", "bytes"),
+		encoding.NewTypeField("lastUsedOn", "uint64"),
+		encoding.NewTypeField("delegate", "string"),
+	}, "KeySpec", "keySpec")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("keyHash", "bytes"),
+		encoding.NewTypeField("delegate", "string"),
+	}, "KeySpecParams", "keySpecParams")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("timestamp", "uint64"),
+		encoding.NewTypeField("publicKey", "bytes"),
+		encoding.NewTypeField("signature", "bytes"),
+		encoding.NewTypeField("signer", "string"),
+		encoding.NewTypeField("signerVersion", "uint64"),
+		encoding.NewTypeField("vote", "string"),
+		encoding.NewTypeField("transactionHash", "bytes32"),
+	}, "LegacyED25519Signature", "legacyED25519Signature")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("url", "string"),
+	}, "LiteDataAccount", "liteDataAccount")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("url", "string"),
+		encoding.NewTypeField("creditBalance", "uint64"),
+		encoding.NewTypeField("lastUsedOn", "uint64"),
+	}, "LiteIdentity", "liteIdentity")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("url", "string"),
+		encoding.NewTypeField("tokenUrl", "string"),
+		encoding.NewTypeField("balance", "uint256"),
+		encoding.NewTypeField("lockHeight", "uint64"),
+	}, "LiteTokenAccount", "liteTokenAccount")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("height", "uint64"),
+	}, "LockAccount", "lockAccount")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("metric", "string"),
+		encoding.NewTypeField("duration", "string"),
+	}, "MetricsRequest", "metricsRequest")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("value", "Any"),
+	}, "MetricsResponse", "metricsResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("name", "string"),
+		encoding.NewTypeField("body", "TransactionBody"),
+	}, "NetworkAccountUpdate", "networkAccountUpdate")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("networkName", "string"),
+		encoding.NewTypeField("version", "uint64"),
+		encoding.NewTypeField("partitions", "PartitionInfo[]"),
+		encoding.NewTypeField("validators", "ValidatorInfo[]"),
+	}, "NetworkDefinition", "networkDefinition")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("operatorAcceptThreshold", "Rational"),
+		encoding.NewTypeField("validatorAcceptThreshold", "Rational"),
+		encoding.NewTypeField("majorBlockSchedule", "string"),
+		encoding.NewTypeField("anchorEmptyBlocks", "bool"),
+		encoding.NewTypeField("feeSchedule", "FeeSchedule"),
+		encoding.NewTypeField("limits", "NetworkLimits"),
+	}, "NetworkGlobals", "networkGlobals")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("dataEntryParts", "uint64"),
+		encoding.NewTypeField("accountAuthorities", "uint64"),
+		encoding.NewTypeField("bookPages", "uint64"),
+		encoding.NewTypeField("pageEntries", "uint64"),
+		encoding.NewTypeField("identityAccounts", "uint64"),
+		encoding.NewTypeField("pendingMajorBlocks", "uint64"),
+		encoding.NewTypeField("eventsPerBlock", "uint64"),
+	}, "NetworkLimits", "networkLimits")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("operations", "NetworkMaintenanceOperation[]"),
+	}, "NetworkMaintenance", "networkMaintenance")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("chains", "ChainMetadata[]"),
+		encoding.NewTypeField("pending", "TxIdSet"),
+	}, "Object", "object")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("source", "string"),
+		encoding.NewTypeField("majorBlockIndex", "uint64"),
+		encoding.NewTypeField("minorBlockIndex", "uint64"),
+		encoding.NewTypeField("rootChainIndex", "uint64"),
+		encoding.NewTypeField("rootChainAnchor", "bytes32"),
+		encoding.NewTypeField("stateTreeAnchor", "bytes32"),
+	}, "PartitionAnchor", "partitionAnchor")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("anchor", "PartitionAnchor"),
+		encoding.NewTypeField("rootChainReceipt", "merkle.Receipt"),
+	}, "PartitionAnchorReceipt", "partitionAnchorReceipt")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("partition", "string"),
+		encoding.NewTypeField("version", "string"),
+	}, "PartitionExecutorVersion", "partitionExecutorVersion")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("id", "string"),
+		encoding.NewTypeField("type", "string"),
+	}, "PartitionInfo", "partitionInfo")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("sourceNetwork", "string"),
+		encoding.NewTypeField("destinationNetwork", "string"),
+		encoding.NewTypeField("sequenceNumber", "uint64"),
+		encoding.NewTypeField("transactionHash", "bytes32"),
+	}, "PartitionSignature", "partitionSignature")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("url", "string"),
+		encoding.NewTypeField("produced", "uint64"),
+		encoding.NewTypeField("received", "uint64"),
+		encoding.NewTypeField("delivered", "uint64"),
+		encoding.NewTypeField("pending", "string[]"),
+	}, "PartitionSyntheticLedger", "partitionSyntheticLedger")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("account", "string"),
+	}, "PendingTransactionGCOperation", "pendingTransactionGCOperation")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("publicKey", "bytes"),
+		encoding.NewTypeField("signature", "bytes"),
+		encoding.NewTypeField("signer", "string"),
+		encoding.NewTypeField("signerVersion", "uint64"),
+		encoding.NewTypeField("timestamp", "uint64"),
+		encoding.NewTypeField("vote", "string"),
+		encoding.NewTypeField("transactionHash", "bytes32"),
+		encoding.NewTypeField("memo", "string"),
+		encoding.NewTypeField("data", "bytes"),
+	}, "RCD1Signature", "rcd1Signature")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("numerator", "uint64"),
+		encoding.NewTypeField("denominator", "uint64"),
+	}, "Rational", "rational")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("sourceNetwork", "string"),
+		encoding.NewTypeField("proof", "merkle.Receipt"),
+		encoding.NewTypeField("transactionHash", "bytes32"),
+	}, "ReceiptSignature", "receiptSignature")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("destination", "string"),
+		encoding.NewTypeField("signature", "Signature"),
+		encoding.NewTypeField("cause", "bytes32[]"),
+	}, "RemoteSignature", "remoteSignature")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("hash", "bytes32"),
+	}, "RemoteTransaction", "remoteTransaction")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("authority", "string"),
+	}, "RemoveAccountAuthorityOperation", "removeAccountAuthorityOperation")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("entry", "KeySpecParams"),
+	}, "RemoveKeyOperation", "removeKeyOperation")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("length", "uint64"),
+		encoding.NewTypeField("value", "uint64"),
+		encoding.NewTypeField("partition", "string"),
+	}, "Route", "route")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("account", "string"),
+		encoding.NewTypeField("partition", "string"),
+	}, "RouteOverride", "routeOverride")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("overrides", "RouteOverride[]"),
+		encoding.NewTypeField("routes", "Route[]"),
+	}, "RoutingTable", "routingTable")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("publicKey", "bytes"),
+		encoding.NewTypeField("signature", "bytes"),
+		encoding.NewTypeField("signer", "string"),
+		encoding.NewTypeField("signerVersion", "uint64"),
+		encoding.NewTypeField("timestamp", "uint64"),
+		encoding.NewTypeField("vote", "string"),
+		encoding.NewTypeField("transactionHash", "bytes32"),
+		encoding.NewTypeField("memo", "string"),
+		encoding.NewTypeField("data", "bytes"),
+	}, "RsaSha256Signature", "rsaSha256Signature")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("hash", "bytes32"),
+		encoding.NewTypeField("meta", "string"),
+		encoding.NewTypeField("to", "TokenRecipient[]"),
+	}, "SendTokens", "sendTokens")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("threshold", "uint64"),
+	}, "SetRejectThresholdKeyPageOperation", "setRejectThresholdKeyPageOperation")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("threshold", "uint64"),
+	}, "SetResponseThresholdKeyPageOperation", "setResponseThresholdKeyPageOperation")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("threshold", "uint64"),
+	}, "SetThresholdKeyPageOperation", "setThresholdKeyPageOperation")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("vote", "string"),
+		encoding.NewTypeField("signer", "string"),
+		encoding.NewTypeField("transactionHash", "bytes32"),
+		encoding.NewTypeField("signatures", "Signature[]"),
+		encoding.NewTypeField("authority", "string"),
+	}, "SignatureSet", "signatureSet")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("cause", "string"),
+		encoding.NewTypeField("source", "string"),
+		encoding.NewTypeField("initiator", "string"),
+		encoding.NewTypeField("feeRefund", "uint64"),
+		encoding.NewTypeField("index", "uint64"),
+		encoding.NewTypeField("amount", "uint256"),
+		encoding.NewTypeField("isRefund", "bool"),
+	}, "SyntheticBurnTokens", "syntheticBurnTokens")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("cause", "string"),
+		encoding.NewTypeField("source", "string"),
+		encoding.NewTypeField("initiator", "string"),
+		encoding.NewTypeField("feeRefund", "uint64"),
+		encoding.NewTypeField("index", "uint64"),
+		encoding.NewTypeField("accounts", "Account[]"),
+	}, "SyntheticCreateIdentity", "syntheticCreateIdentity")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("cause", "string"),
+		encoding.NewTypeField("source", "string"),
+		encoding.NewTypeField("initiator", "string"),
+		encoding.NewTypeField("feeRefund", "uint64"),
+		encoding.NewTypeField("index", "uint64"),
+		encoding.NewTypeField("amount", "uint64"),
+		encoding.NewTypeField("acmeRefundAmount", "uint256"),
+		encoding.NewTypeField("isRefund", "bool"),
+	}, "SyntheticDepositCredits", "syntheticDepositCredits")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("cause", "string"),
+		encoding.NewTypeField("source", "string"),
+		encoding.NewTypeField("initiator", "string"),
+		encoding.NewTypeField("feeRefund", "uint64"),
+		encoding.NewTypeField("index", "uint64"),
+		encoding.NewTypeField("token", "string"),
+		encoding.NewTypeField("amount", "uint256"),
+		encoding.NewTypeField("isIssuer", "bool"),
+		encoding.NewTypeField("isRefund", "bool"),
+	}, "SyntheticDepositTokens", "syntheticDepositTokens")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("signatures", "RemoteSignature[]"),
+		encoding.NewTypeField("transaction", "Transaction"),
+	}, "SyntheticForwardTransaction", "syntheticForwardTransaction")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("url", "string"),
+		encoding.NewTypeField("sequence", "PartitionSyntheticLedger[]"),
+	}, "SyntheticLedger", "syntheticLedger")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("cause", "string"),
+		encoding.NewTypeField("source", "string"),
+		encoding.NewTypeField("initiator", "string"),
+		encoding.NewTypeField("feeRefund", "uint64"),
+		encoding.NewTypeField("index", "uint64"),
+	}, "SyntheticOrigin", "syntheticOrigin")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("cause", "string"),
+		encoding.NewTypeField("source", "string"),
+		encoding.NewTypeField("initiator", "string"),
+		encoding.NewTypeField("feeRefund", "uint64"),
+		encoding.NewTypeField("index", "uint64"),
+		encoding.NewTypeField("entry", "DataEntry"),
+	}, "SyntheticWriteData", "syntheticWriteData")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+	}, "SystemGenesis", "systemGenesis")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("url", "string"),
+		encoding.NewTypeField("index", "uint64"),
+		encoding.NewTypeField("timestamp", "string"),
+		encoding.NewTypeField("acmeBurnt", "uint256"),
+		encoding.NewTypeField("pendingUpdates", "NetworkAccountUpdate[]"),
+		encoding.NewTypeField("anchor", "AnchorBody"),
+		encoding.NewTypeField("executorVersion", "string"),
+		encoding.NewTypeField("bvnExecutorVersions", "PartitionExecutorVersion[]"),
+	}, "SystemLedger", "systemLedger")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("entry", "DataEntry"),
+		encoding.NewTypeField("writeToState", "bool"),
+	}, "SystemWriteData", "systemWriteData")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("url", "string"),
+		encoding.NewTypeField("authorities", "AuthorityEntry[]"),
+		encoding.NewTypeField("tokenUrl", "string"),
+		encoding.NewTypeField("balance", "uint256"),
+	}, "TokenAccount", "tokenAccount")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("url", "string"),
+		encoding.NewTypeField("authorities", "AuthorityEntry[]"),
+		encoding.NewTypeField("symbol", "string"),
+		encoding.NewTypeField("precision", "uint64"),
+		encoding.NewTypeField("properties", "string"),
+		encoding.NewTypeField("issued", "uint256"),
+		encoding.NewTypeField("supplyLimit", "uint256"),
+	}, "TokenIssuer", "tokenIssuer")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("transaction", "CreateToken"),
+		encoding.NewTypeField("receipt", "merkle.Receipt"),
+	}, "TokenIssuerProof", "tokenIssuerProof")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("url", "string"),
+		encoding.NewTypeField("amount", "uint256"),
+	}, "TokenRecipient", "tokenRecipient")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("header", "TransactionHeader"),
+		encoding.NewTypeField("body", "TransactionBody"),
+		encoding.NewTypeField("hash", "bytes"),
+		encoding.NewTypeField("header64bytes", "bool"),
+		encoding.NewTypeField("body64bytes", "bool"),
+	}, "Transaction", "transaction")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("principal", "string"),
+		encoding.NewTypeField("initiator", "bytes32"),
+		encoding.NewTypeField("memo", "string"),
+		encoding.NewTypeField("metadata", "bytes"),
+		encoding.NewTypeField("expire", "ExpireOptions"),
+		encoding.NewTypeField("holdUntil", "HoldUntilOptions"),
+		encoding.NewTypeField("authorities", "string[]"),
+	}, "TransactionHeader", "transactionHeader")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("results", "TransactionStatus[]"),
+	}, "TransactionResultSet", "transactionResultSet")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("txID", "string"),
+		encoding.NewTypeField("code", "string"),
+		encoding.NewTypeField("remote", "bool"),
+		encoding.NewTypeField("delivered", "bool"),
+		encoding.NewTypeField("pending", "bool"),
+		encoding.NewTypeField("failed", "bool"),
+		encoding.NewTypeField("codeNum", "uint64"),
+		encoding.NewTypeField("error", "errors2.Error"),
+		encoding.NewTypeField("result", "TransactionResult"),
+		encoding.NewTypeField("received", "uint64"),
+		encoding.NewTypeField("initiator", "string"),
+		encoding.NewTypeField("signers", "Signer[]"),
+		encoding.NewTypeField("sourceNetwork", "string"),
+		encoding.NewTypeField("destinationNetwork", "string"),
+		encoding.NewTypeField("sequenceNumber", "uint64"),
+		encoding.NewTypeField("gotDirectoryReceipt", "bool"),
+		encoding.NewTypeField("proof", "merkle.Receipt"),
+		encoding.NewTypeField("anchorSigners", "bytes[]"),
+	}, "TransactionStatus", "transactionStatus")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("to", "CreditRecipient[]"),
+	}, "TransferCredits", "transferCredits")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("entries", "string[]"),
+	}, "TxIdSet", "txIdSet")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("publicKey", "bytes"),
+		encoding.NewTypeField("signature", "bytes"),
+		encoding.NewTypeField("signer", "string"),
+		encoding.NewTypeField("signerVersion", "uint64"),
+		encoding.NewTypeField("timestamp", "uint64"),
+		encoding.NewTypeField("vote", "string"),
+		encoding.NewTypeField("transactionHash", "bytes32"),
+		encoding.NewTypeField("memo", "string"),
+		encoding.NewTypeField("data", "bytes"),
+		encoding.NewTypeField("chainID", "uint256"),
+	}, "TypedDataSignature", "typedDataSignature")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("url", "string"),
+	}, "UnknownAccount", "unknownAccount")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("url", "string"),
+		encoding.NewTypeField("version", "uint64"),
+	}, "UnknownSigner", "unknownSigner")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("operations", "AccountAuthOperation[]"),
+	}, "UpdateAccountAuth", "updateAccountAuth")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("allow", "string[]"),
+		encoding.NewTypeField("deny", "string[]"),
+	}, "UpdateAllowedKeyPageOperation", "updateAllowedKeyPageOperation")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("newKeyHash", "bytes"),
+	}, "UpdateKey", "updateKey")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("oldEntry", "KeySpecParams"),
+		encoding.NewTypeField("newEntry", "KeySpecParams"),
+	}, "UpdateKeyOperation", "updateKeyOperation")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("operation", "KeyPageOperation[]"),
+	}, "UpdateKeyPage", "updateKeyPage")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("publicKey", "bytes"),
+		encoding.NewTypeField("publicKeyHash", "bytes32"),
+		encoding.NewTypeField("operator", "string"),
+		encoding.NewTypeField("partitions", "ValidatorPartitionInfo[]"),
+	}, "ValidatorInfo", "validatorInfo")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("id", "string"),
+		encoding.NewTypeField("active", "bool"),
+	}, "ValidatorPartitionInfo", "validatorPartitionInfo")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("entry", "DataEntry"),
+		encoding.NewTypeField("scratch", "bool"),
+		encoding.NewTypeField("writeToState", "bool"),
+	}, "WriteData", "writeData")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("entryHash", "bytes32"),
+		encoding.NewTypeField("accountUrl", "string"),
+		encoding.NewTypeField("accountID", "bytes"),
+	}, "WriteDataResult", "writeDataResult")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("recipient", "string"),
+		encoding.NewTypeField("entry", "DataEntry"),
+	}, "WriteDataTo", "writeDataTo")
+
 }
 
 func (v *ADI) MarshalJSON() ([]byte, error) {
@@ -20699,6 +21845,56 @@ func (v *TxIdSet) MarshalJSON() ([]byte, error) {
 	}{}
 	if !(len(v.Entries) == 0) {
 		u.Entries = v.Entries
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *TypedDataSignature) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type            SignatureType `json:"type"`
+		PublicKey       *string       `json:"publicKey,omitempty"`
+		Signature       *string       `json:"signature,omitempty"`
+		Signer          *url.URL      `json:"signer,omitempty"`
+		SignerVersion   uint64        `json:"signerVersion,omitempty"`
+		Timestamp       uint64        `json:"timestamp,omitempty"`
+		Vote            VoteType      `json:"vote,omitempty"`
+		TransactionHash *string       `json:"transactionHash,omitempty"`
+		Memo            string        `json:"memo,omitempty"`
+		Data            *string       `json:"data,omitempty"`
+		ChainID         *string       `json:"chainID,omitempty"`
+		ExtraData       *string       `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.PublicKey) == 0) {
+		u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	}
+	if !(len(v.Signature) == 0) {
+		u.Signature = encoding.BytesToJSON(v.Signature)
+	}
+	if !(v.Signer == nil) {
+		u.Signer = v.Signer
+	}
+	if !(v.SignerVersion == 0) {
+		u.SignerVersion = v.SignerVersion
+	}
+	if !(v.Timestamp == 0) {
+		u.Timestamp = v.Timestamp
+	}
+	if !(v.Vote == 0) {
+		u.Vote = v.Vote
+	}
+	if !(v.TransactionHash == ([32]byte{})) {
+		u.TransactionHash = encoding.ChainToJSON(&v.TransactionHash)
+	}
+	if !(len(v.Memo) == 0) {
+		u.Memo = v.Memo
+	}
+	if !(len(v.Data) == 0) {
+		u.Data = encoding.BytesToJSON(v.Data)
+	}
+	if !(v.ChainID == nil) {
+		u.ChainID = encoding.BigintToJSON(v.ChainID)
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -24058,6 +25254,78 @@ func (v *TxIdSet) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	v.Entries = u.Entries
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *TypedDataSignature) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type            SignatureType `json:"type"`
+		PublicKey       *string       `json:"publicKey,omitempty"`
+		Signature       *string       `json:"signature,omitempty"`
+		Signer          *url.URL      `json:"signer,omitempty"`
+		SignerVersion   uint64        `json:"signerVersion,omitempty"`
+		Timestamp       uint64        `json:"timestamp,omitempty"`
+		Vote            VoteType      `json:"vote,omitempty"`
+		TransactionHash *string       `json:"transactionHash,omitempty"`
+		Memo            string        `json:"memo,omitempty"`
+		Data            *string       `json:"data,omitempty"`
+		ChainID         *string       `json:"chainID,omitempty"`
+		ExtraData       *string       `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	u.Signature = encoding.BytesToJSON(v.Signature)
+	u.Signer = v.Signer
+	u.SignerVersion = v.SignerVersion
+	u.Timestamp = v.Timestamp
+	u.Vote = v.Vote
+	u.TransactionHash = encoding.ChainToJSON(&v.TransactionHash)
+	u.Memo = v.Memo
+	u.Data = encoding.BytesToJSON(v.Data)
+	u.ChainID = encoding.BigintToJSON(v.ChainID)
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	if x, err := encoding.BytesFromJSON(u.PublicKey); err != nil {
+		return fmt.Errorf("error decoding PublicKey: %w", err)
+	} else {
+		v.PublicKey = x
+	}
+	if x, err := encoding.BytesFromJSON(u.Signature); err != nil {
+		return fmt.Errorf("error decoding Signature: %w", err)
+	} else {
+		v.Signature = x
+	}
+	v.Signer = u.Signer
+	v.SignerVersion = u.SignerVersion
+	v.Timestamp = u.Timestamp
+	v.Vote = u.Vote
+	if x, err := encoding.ChainFromJSON(u.TransactionHash); err != nil {
+		return fmt.Errorf("error decoding TransactionHash: %w", err)
+	} else {
+		v.TransactionHash = *x
+	}
+	v.Memo = u.Memo
+	if x, err := encoding.BytesFromJSON(u.Data); err != nil {
+		return fmt.Errorf("error decoding Data: %w", err)
+	} else {
+		v.Data = x
+	}
+	if u.ChainID != nil {
+		if x, err := encoding.BigintFromJSON(u.ChainID); err != nil {
+			return fmt.Errorf("error decoding ChainID: %w", err)
+		} else {
+			v.ChainID = x
+		}
+	}
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err
