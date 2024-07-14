@@ -90,6 +90,123 @@ func (*OtherRecord) Type() RecordType { return RecordTypeOther }
 
 func (*StateRecord) Type() RecordType { return RecordTypeState }
 
+func init() {
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("name", "string"),
+		encoding.NewTypeField("key", "string"),
+		encoding.NewTypeField("description", "string"),
+		encoding.NewTypeField("parent", "EntityRecord"),
+		encoding.NewTypeField("private", "bool"),
+		encoding.NewTypeField("omitAccessor", "bool"),
+		encoding.NewTypeField("omitConstructor", "bool"),
+		encoding.NewTypeField("customValueConstructor", "bool"),
+		encoding.NewTypeField("parameters", "Field[]"),
+		encoding.NewTypeField("index", "string"),
+		encoding.NewTypeField("chainType", "string"),
+	}, "ChainRecord", "chainRecord")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("name", "string"),
+		encoding.NewTypeField("key", "string"),
+		encoding.NewTypeField("description", "string"),
+		encoding.NewTypeField("parent", "EntityRecord"),
+		encoding.NewTypeField("private", "bool"),
+		encoding.NewTypeField("omitAccessor", "bool"),
+		encoding.NewTypeField("omitConstructor", "bool"),
+		encoding.NewTypeField("customValueConstructor", "bool"),
+		encoding.NewTypeField("parameters", "Field[]"),
+		encoding.NewTypeField("index", "string"),
+		encoding.NewTypeField("fields", "Field[]"),
+		encoding.NewTypeField("customCommit", "bool"),
+		encoding.NewTypeField("customResolve", "bool"),
+		encoding.NewTypeField("customIsDirty", "bool"),
+		encoding.NewTypeField("customWalk", "bool"),
+		encoding.NewTypeField("omitCommit", "bool"),
+		encoding.NewTypeField("omitResolve", "bool"),
+		encoding.NewTypeField("omitIsDirty", "bool"),
+		encoding.NewTypeField("omitWalk", "bool"),
+		encoding.NewTypeField("valueStore", "string"),
+		encoding.NewTypeField("root", "bool"),
+		encoding.NewTypeField("interface", "bool"),
+		encoding.NewTypeField("attributes", "Record[]"),
+	}, "EntityRecord", "entityRecord")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("name", "string"),
+		encoding.NewTypeField("key", "string"),
+		encoding.NewTypeField("description", "string"),
+		encoding.NewTypeField("parent", "EntityRecord"),
+		encoding.NewTypeField("private", "bool"),
+		encoding.NewTypeField("omitAccessor", "bool"),
+		encoding.NewTypeField("omitConstructor", "bool"),
+		encoding.NewTypeField("customValueConstructor", "bool"),
+		encoding.NewTypeField("parameters", "Field[]"),
+		encoding.NewTypeField("index", "string"),
+		encoding.NewTypeField("dataType", "FieldType"),
+		encoding.NewTypeField("pointer", "bool"),
+		encoding.NewTypeField("emptyIfMissing", "bool"),
+		encoding.NewTypeField("union", "bool"),
+		encoding.NewTypeField("collection", "string"),
+		encoding.NewTypeField("comparator", "string"),
+	}, "IndexRecord", "indexRecord")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("name", "string"),
+		encoding.NewTypeField("key", "string"),
+		encoding.NewTypeField("description", "string"),
+		encoding.NewTypeField("parent", "EntityRecord"),
+		encoding.NewTypeField("private", "bool"),
+		encoding.NewTypeField("omitAccessor", "bool"),
+		encoding.NewTypeField("omitConstructor", "bool"),
+		encoding.NewTypeField("customValueConstructor", "bool"),
+		encoding.NewTypeField("parameters", "Field[]"),
+		encoding.NewTypeField("index", "string"),
+		encoding.NewTypeField("dataType", "string"),
+		encoding.NewTypeField("pointer", "bool"),
+		encoding.NewTypeField("hasChains", "bool"),
+		encoding.NewTypeField("constructor", "string"),
+	}, "OtherRecord", "otherRecord")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("name", "string"),
+		encoding.NewTypeField("key", "string"),
+		encoding.NewTypeField("description", "string"),
+		encoding.NewTypeField("parent", "EntityRecord"),
+		encoding.NewTypeField("private", "bool"),
+		encoding.NewTypeField("omitAccessor", "bool"),
+		encoding.NewTypeField("omitConstructor", "bool"),
+		encoding.NewTypeField("customValueConstructor", "bool"),
+		encoding.NewTypeField("parameters", "Field[]"),
+		encoding.NewTypeField("index", "string"),
+	}, "RecordBase", "recordBase")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("name", "string"),
+		encoding.NewTypeField("key", "string"),
+		encoding.NewTypeField("description", "string"),
+		encoding.NewTypeField("parent", "EntityRecord"),
+		encoding.NewTypeField("private", "bool"),
+		encoding.NewTypeField("omitAccessor", "bool"),
+		encoding.NewTypeField("omitConstructor", "bool"),
+		encoding.NewTypeField("customValueConstructor", "bool"),
+		encoding.NewTypeField("parameters", "Field[]"),
+		encoding.NewTypeField("index", "string"),
+		encoding.NewTypeField("dataType", "FieldType"),
+		encoding.NewTypeField("pointer", "bool"),
+		encoding.NewTypeField("emptyIfMissing", "bool"),
+		encoding.NewTypeField("union", "bool"),
+		encoding.NewTypeField("collection", "string"),
+		encoding.NewTypeField("comparator", "string"),
+	}, "StateRecord", "stateRecord")
+
+}
+
 func (v *ChainRecord) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type                   RecordType                `json:"type"`
