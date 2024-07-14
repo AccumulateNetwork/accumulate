@@ -83,6 +83,18 @@ func (v *PeerInfo) Equal(u *PeerInfo) bool {
 	return true
 }
 
+func init() {
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("id", "p2p.PeerID"),
+		encoding.NewTypeField("operator", "string"),
+		encoding.NewTypeField("key", "bytes32"),
+		encoding.NewTypeField("status", "api.ConsensusStatus"),
+		encoding.NewTypeField("addresses", "p2p.Multiaddr[]"),
+	}, "PeerInfo", "peerInfo")
+
+}
+
 func (v *PeerInfo) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Operator  *url.URL                                       `json:"operator,omitempty"`

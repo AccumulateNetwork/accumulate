@@ -2422,6 +2422,116 @@ func (v *TransactionMessage) UnmarshalFieldsFrom(reader *encoding.Reader) error 
 	return nil
 }
 
+func init() {
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("message", "Message"),
+		encoding.NewTypeField("signature", "protocol.KeySignature"),
+		encoding.NewTypeField("proof", "protocol.AnnotatedReceipt"),
+	}, "BadSyntheticMessage", "badSyntheticMessage")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("signature", "protocol.KeySignature"),
+		encoding.NewTypeField("anchor", "Message"),
+	}, "BlockAnchor", "blockAnchor")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("partition", "string"),
+		encoding.NewTypeField("index", "uint64"),
+		encoding.NewTypeField("stateTreeHash", "bytes32"),
+		encoding.NewTypeField("previousBlock", "uint64"),
+		encoding.NewTypeField("recordUpdates", "RecordUpdate[]"),
+		encoding.NewTypeField("stateTreeUpdates", "StateTreeUpdate[]"),
+	}, "BlockSummary", "blockSummary")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("paid", "string"),
+		encoding.NewTypeField("payer", "string"),
+		encoding.NewTypeField("initiator", "bool"),
+		encoding.NewTypeField("txID", "string"),
+		encoding.NewTypeField("cause", "string"),
+	}, "CreditPayment", "creditPayment")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("partition", "string"),
+		encoding.NewTypeField("version", "string"),
+	}, "DidUpdateExecutorVersion", "didUpdateExecutorVersion")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("signatures", "protocol.Signature[]"),
+		encoding.NewTypeField("txHash", "bytes"),
+		encoding.NewTypeField("transaction", "protocol.Transaction[]"),
+		encoding.NewTypeField("messages", "Message[]"),
+	}, "Envelope", "envelope")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("majorBlockIndex", "uint64"),
+		encoding.NewTypeField("minorBlockIndex", "uint64"),
+		encoding.NewTypeField("majorBlockTime", "string"),
+	}, "MakeMajorBlock", "makeMajorBlock")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("accounts", "protocol.NetworkAccountUpdate[]"),
+	}, "NetworkUpdate", "networkUpdate")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("key", "record.Key"),
+		encoding.NewTypeField("value", "bytes"),
+	}, "RecordUpdate", "recordUpdate")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("message", "Message"),
+		encoding.NewTypeField("source", "string"),
+		encoding.NewTypeField("destination", "string"),
+		encoding.NewTypeField("number", "uint64"),
+	}, "SequencedMessage", "sequencedMessage")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("signature", "protocol.Signature"),
+		encoding.NewTypeField("txID", "string"),
+	}, "SignatureMessage", "signatureMessage")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("authority", "string"),
+		encoding.NewTypeField("txID", "string"),
+		encoding.NewTypeField("cause", "string"),
+	}, "SignatureRequest", "signatureRequest")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("key", "record.Key"),
+		encoding.NewTypeField("hash", "bytes32"),
+	}, "StateTreeUpdate", "stateTreeUpdate")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("message", "Message"),
+		encoding.NewTypeField("signature", "protocol.KeySignature"),
+		encoding.NewTypeField("proof", "protocol.AnnotatedReceipt"),
+	}, "SynthFields", "synthFields")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("message", "Message"),
+		encoding.NewTypeField("signature", "protocol.KeySignature"),
+		encoding.NewTypeField("proof", "protocol.AnnotatedReceipt"),
+	}, "SyntheticMessage", "syntheticMessage")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("transaction", "protocol.Transaction"),
+	}, "TransactionMessage", "transactionMessage")
+
+}
+
 func (v *BadSyntheticMessage) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type      MessageType                                        `json:"type"`

@@ -117,7 +117,7 @@ func (p *PrivateKey) String() string {
 	case protocol.SignatureTypeRCD1:
 		return FormatFs(p.Key[:32])
 
-	case protocol.SignatureTypeETH:
+	case protocol.SignatureTypeETH, protocol.SignatureTypeTypedData:
 		return hex.EncodeToString(p.Key)
 
 	case protocol.SignatureTypeBTCLegacy, protocol.SignatureTypeBTC:
@@ -164,7 +164,7 @@ func formatAddr(typ protocol.SignatureType, hash []byte) string {
 		protocol.SignatureTypeBTCLegacy:
 		return FormatBTC(hash)
 
-	case protocol.SignatureTypeETH:
+	case protocol.SignatureTypeETH, protocol.SignatureTypeTypedData:
 		return FormatETH(hash)
 
 	case protocol.SignatureTypeEcdsaSha256:

@@ -33,11 +33,12 @@ func init() {
 		protocol.SignatureTypeETH,
 	)
 
-	// Vandenberg: RSA and ECDSA signatures
+	// Vandenberg: RSA, ECDSA, and EIP-712 signatures
 	registerConditionalExec[UserSignature](&signatureExecutors,
 		func(ctx *SignatureContext) bool { return ctx.GetActiveGlobals().ExecutorVersion.V2VandenbergEnabled() },
 		protocol.SignatureTypeRsaSha256,
 		protocol.SignatureTypeEcdsaSha256,
+		protocol.SignatureTypeTypedData,
 	)
 }
 
@@ -111,8 +112,14 @@ func (x UserSignature) check(batch *database.Batch, ctx *userSigContext) error {
 	}
 
 	// Verify the signature signs the transaction
-	if !verifySignature(sig, ctx.transaction.GetHash()) {
+	if !verifySignature(sig, ctx.transaction) {
 		return errors.Unauthenticated.WithFormat("invalid signature")
+	}
+
+	// Check the chain ID, if this is an EIP-712 signature
+	err = x.checkChainID(ctx)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
 	}
 
 	// Check if the signature initiates the transaction
@@ -173,6 +180,17 @@ func (UserSignature) unwrapDelegated(ctx *userSigContext) error {
 		ctx.delegators[i], ctx.delegators[j] = ctx.delegators[j], ctx.delegators[i]
 	}
 
+	return nil
+}
+
+func (UserSignature) checkChainID(ctx *userSigContext) error {
+	sig, ok := ctx.keySig.(*protocol.TypedDataSignature)
+	if !ok {
+		return nil
+	}
+	if ctx.GetActiveGlobals().ChainID().Cmp(sig.ChainID) != 0 {
+		return errors.BadRequest.WithFormat("invalid chain ID: want %d, got %d", ctx.GetActiveGlobals().ChainID(), sig.ChainID)
+	}
 	return nil
 }
 

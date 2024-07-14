@@ -226,6 +226,39 @@ EcdsaSha256Signature:
       type: bytes
       optional: true
 
+TypedDataSignature:
+  description: is an EIP-712 compliant typed data signature for an Accumulate transaction
+  union: { type: signature }
+  fields:
+    - name: PublicKey
+      type: bytes
+    - name: Signature
+      type: bytes
+    - name: Signer
+      type: url
+      pointer: true
+    - name: SignerVersion
+      type: uint
+    - name: Timestamp
+      type: uint
+      optional: true
+    - name: Vote
+      type: VoteType
+      marshal-as: enum
+      optional: true
+    - name: TransactionHash
+      type: hash
+      optional: true
+    - name: Memo
+      type: string
+      optional: true
+    - name: Data
+      type: bytes
+      optional: true
+    - name: ChainID
+      type: bigint
+      pointer: true
+
 ReceiptSignature:
   union: { type: signature }
   fields:

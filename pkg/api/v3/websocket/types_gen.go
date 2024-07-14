@@ -150,6 +150,16 @@ func (v *Message) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func init() {
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("id", "uint64"),
+		encoding.NewTypeField("status", "string"),
+		encoding.NewTypeField("message", "message.Message"),
+	}, "Message", "message")
+
+}
+
 func (v *Message) MarshalJSON() ([]byte, error) {
 	u := struct {
 		ID        uint64                                       `json:"id,omitempty"`

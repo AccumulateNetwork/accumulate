@@ -113,6 +113,9 @@ SignatureType:
   EcdsaSha256:
     value: 15
     description: represents a signature of SHA256 hashed data from an ecdsa algorithm with supported standard curves from NIST, SECG, and Brainpool typically (SEC, ANS.1 enocding)
+  TypedData:
+    value: 16
+    description: implements EIP-712 sign typed data specification
 
 KeyPageOperationType:
   Unknown:

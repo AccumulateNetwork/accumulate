@@ -303,6 +303,39 @@ func (v *NodeInit) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func init() {
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("id", "string"),
+		encoding.NewTypeField("nodes", "NodeInit[]"),
+	}, "BvnInit", "bvnInit")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("id", "string"),
+		encoding.NewTypeField("globals", "network.GlobalValues"),
+		encoding.NewTypeField("operatorKeys", "bytes[]"),
+		encoding.NewTypeField("template", "string"),
+		encoding.NewTypeField("bootstrap", "NodeInit"),
+		encoding.NewTypeField("bvns", "BvnInit[]"),
+		encoding.NewTypeField("bsn", "BvnInit"),
+	}, "NetworkInit", "networkInit")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("dnnType", "string"),
+		encoding.NewTypeField("bvnnType", "string"),
+		encoding.NewTypeField("bsnnType", "string"),
+		encoding.NewTypeField("basePort", "uint64"),
+		encoding.NewTypeField("advertizeAddress", "string"),
+		encoding.NewTypeField("listenAddress", "string"),
+		encoding.NewTypeField("peerAddress", "string"),
+		encoding.NewTypeField("privValKey", "bytes"),
+		encoding.NewTypeField("dnNodeKey", "bytes"),
+		encoding.NewTypeField("bvnNodeKey", "bytes"),
+		encoding.NewTypeField("bsnNodeKey", "bytes"),
+	}, "NodeInit", "nodeInit")
+
+}
+
 func (v *BvnInit) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Id    string                       `json:"id,omitempty"`

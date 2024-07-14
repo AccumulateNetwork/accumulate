@@ -7,9 +7,13 @@
 package testing
 
 import (
+	"errors"
 	"os"
+	"os/exec"
 	"runtime"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 // SkipLong skips a long test when running in -short mode.
@@ -37,5 +41,18 @@ func SkipPlatform(t testing.TB, goos, reason string) {
 func SkipPlatformCI(t testing.TB, goos, reason string) {
 	if runtime.GOOS == goos && os.Getenv("CI") == "true" {
 		t.Skipf("Skipping test: running CI on %s: %s", goos, reason)
+	}
+}
+
+// SkipWithoutTool skips a test if the given tool is not found on the path,
+// unless the test is running in CI, in which case it fails if the tool is not
+// present.
+func SkipWithoutTool(t testing.TB, toolName string) {
+	_, err := exec.LookPath(toolName)
+	if err != nil {
+		if !errors.Is(err, exec.ErrNotFound) || os.Getenv("CI") == "true" {
+			require.NoError(t, err)
+		}
+		t.Skip("Cannot locate node binary")
 	}
 }

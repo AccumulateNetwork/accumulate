@@ -102,7 +102,7 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("process delegated signature: %w", err)
 		}
-		if !md.Nested() && !signature.Verify(signature.Metadata().Hash(), delivery.Transaction.GetHash()) {
+		if !md.Nested() && !signature.Verify(nil, delivery.Transaction) {
 			return nil, errors.BadRequest.WithFormat("invalid signature")
 		}
 
@@ -137,7 +137,7 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 			}
 
 			// Basic validation
-			if !md.Nested() && !signature.Verify(nil, delivery.Transaction.GetHash()) {
+			if !md.Nested() && !signature.Verify(nil, delivery.Transaction) {
 				return nil, errors.BadRequest.WithFormat("invalid signature")
 			}
 
@@ -153,7 +153,7 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 			}
 
 			// Basic validation
-			if !md.Nested() && !signature.Verify(nil, delivery.Transaction.GetHash()) {
+			if !md.Nested() && !signature.Verify(nil, delivery.Transaction) {
 				return nil, errors.BadRequest.WithFormat("invalid signature")
 			}
 		}

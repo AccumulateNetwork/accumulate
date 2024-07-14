@@ -63,7 +63,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/charithe/durationcheck v0.0.10 // indirect
 	github.com/chavacava/garif v0.1.0 // indirect
-	github.com/chigopher/pathlib v0.12.0 // indirect
+	github.com/chigopher/pathlib v0.19.1 // indirect
 	github.com/chzyer/readline v1.5.1 // indirect
 	github.com/ckaznocha/intrange v0.1.0 // indirect
 	github.com/cometbft/cometbft v0.38.0-rc3 // indirect
@@ -306,7 +306,7 @@ require (
 	github.com/ultraware/funlen v0.1.0 // indirect
 	github.com/ultraware/whitespace v0.1.0 // indirect
 	github.com/uudashr/gocognit v1.1.2 // indirect
-	github.com/vektra/mockery/v2 v2.23.1 // indirect
+	github.com/vektra/mockery/v2 v2.42.3 // indirect
 	github.com/whyrusleeping/go-keyspace v0.0.0-20160322163242-5b898ac5add1 // indirect
 	github.com/xen0n/gosmopolitan v1.2.2 // indirect
 	github.com/yagipy/maintidx v1.0.0 // indirect

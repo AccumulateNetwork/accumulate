@@ -1085,6 +1085,8 @@ func NewSignature(typ SignatureType) (Signature, error) {
 		return new(RsaSha256Signature), nil
 	case SignatureTypeSet:
 		return new(SignatureSet), nil
+	case SignatureTypeTypedData:
+		return new(TypedDataSignature), nil
 	}
 	return nil, fmt.Errorf("unknown signature %v", typ)
 }
@@ -1185,6 +1187,12 @@ func EqualSignature(a, b Signature) bool {
 		}
 		b, ok := b.(*SignatureSet)
 		return ok && a.Equal(b)
+	case *TypedDataSignature:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*TypedDataSignature)
+		return ok && a.Equal(b)
 	}
 	return false
 }
@@ -1221,6 +1229,8 @@ func CopySignature(v Signature) Signature {
 	case *RsaSha256Signature:
 		return v.Copy()
 	case *SignatureSet:
+		return v.Copy()
+	case *TypedDataSignature:
 		return v.Copy()
 	default:
 		return v.CopyAsInterface().(Signature)

@@ -77,6 +77,9 @@ var goFuncs = template.FuncMap{
 	"resolveType": func(field *Field, forNew bool) string {
 		return GoResolveType(field, forNew, false)
 	},
+	"resolveEip712Type": func(field *Field, forNew bool) string {
+		return GoResolveEip712Type(field, forNew, false)
+	},
 	"resolveElemType": func(field *Field, forNew bool) string {
 		return GoResolveType(field, forNew, true)
 	},
@@ -281,6 +284,44 @@ func GoResolveType(field *Field, forNew, ignoreRepeatable bool) string {
 		typ = "[]" + typ
 	}
 	return typ
+}
+
+func GoResolveEip712Type(field *Field, forNew, ignoreRepeatable bool) string {
+	typ := field.Type.GoType()
+	switch code := field.EffectiveMarshalType(); code {
+	case Int, Uint, Bool, String:
+		typ = field.Type.GoType()
+	case Hash:
+		typ = "bytes32"
+	case Bytes:
+		typ = "bytes"
+	case Url, TxID:
+		typ = "string" // reduces the Url and transaction id to a string
+	case Time, Duration:
+		typ = "string" //???? reduces time.Time and time.Duration to a string
+	case BigInt:
+		typ = "uint256"
+	case RawJson:
+		typ = "string"
+	case Float:
+		typ = "float"
+	case Any:
+		typ = code.Title()
+	}
+
+	field.Type.GoType()
+	if field.AsEnum() {
+		typ = "string" //interpret as string types
+	}
+
+	ret := ""
+	lcName := typegen.LowerFirstWord(field.Name)
+	if field.Repeatable && !ignoreRepeatable {
+		ret = "encoding.NewTypeField(\"" + lcName + "\",\"" + typ + "[]\")"
+	} else {
+		ret = "encoding.NewTypeField(\"" + lcName + "\",\"" + typ + "\")"
+	}
+	return ret
 }
 
 func goJsonTypeSingle(field *Field, pointer string) string {

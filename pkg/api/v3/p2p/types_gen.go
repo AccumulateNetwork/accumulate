@@ -183,6 +183,17 @@ func (v *serviceRegisteredEvent) UnmarshalFieldsFrom(reader *encoding.Reader) er
 	return nil
 }
 
+func init() {
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("peerID", "p2p.PeerID"),
+		encoding.NewTypeField("network", "string"),
+		encoding.NewTypeField("address", "api.ServiceAddress"),
+	}, "serviceRegisteredEvent", "serviceRegisteredEvent")
+
+}
+
 func (v *serviceRegisteredEvent) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type      eventType                               `json:"type"`

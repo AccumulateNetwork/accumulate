@@ -1526,6 +1526,70 @@ func (v *txnSection) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func init() {
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("hash", "bytes32"),
+		encoding.NewTypeField("main", "protocol.Account"),
+		encoding.NewTypeField("oldChains", "OldChain[]"),
+		encoding.NewTypeField("pending", "string[]"),
+		encoding.NewTypeField("directory", "string[]"),
+		encoding.NewTypeField("url", "string"),
+		encoding.NewTypeField("chains", "Chain[]"),
+	}, "Account", "account")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("name", "string"),
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("markPower", "uint64"),
+		encoding.NewTypeField("head", "merkle.State"),
+		encoding.NewTypeField("markPoints", "merkle.State[]"),
+	}, "Chain", "chain")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("version", "uint64"),
+		encoding.NewTypeField("height", "uint64"),
+		encoding.NewTypeField("rootHash", "bytes32"),
+		encoding.NewTypeField("timestamp", "string"),
+		encoding.NewTypeField("executorVersion", "string"),
+		encoding.NewTypeField("partitionSnapshotIDs", "string[]"),
+	}, "Header", "header")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("name", "string"),
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("count", "uint64"),
+		encoding.NewTypeField("pending", "bytes[]"),
+		encoding.NewTypeField("entries", "bytes[]"),
+	}, "OldChain", "oldChain")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("txid", "string"),
+		encoding.NewTypeField("signature", "protocol.Signature"),
+	}, "Signature", "signature")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("transaction", "protocol.Transaction"),
+		encoding.NewTypeField("status", "protocol.TransactionStatus"),
+		encoding.NewTypeField("signatureSets", "TxnSigSet[]"),
+	}, "Transaction", "transaction")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("signer", "string"),
+		encoding.NewTypeField("version", "uint64"),
+		encoding.NewTypeField("entries", "database.SigSetEntry[]"),
+	}, "TxnSigSet", "txnSigSet")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("signatures", "Signature[]"),
+	}, "sigSection", "sigSection")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("transactions", "Transaction[]"),
+	}, "txnSection", "txnSection")
+
+}
+
 func (v *Account) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Main      *encoding.JsonUnmarshalWith[protocol.Account] `json:"main,omitempty"`
