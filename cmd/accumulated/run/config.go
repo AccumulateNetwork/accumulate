@@ -28,7 +28,7 @@ func (c *Config) FilePath() string     { return c.file }
 func (c *Config) SetFilePath(p string) { c.file = p }
 
 func (c *Config) LoadFrom(file string) error {
-	return c.LoadFromFS(os.DirFS("."), file)
+	return c.LoadFromFS(nil, file)
 }
 
 func (c *Config) LoadFromFS(fs fs.FS, file string) error {
@@ -44,7 +44,10 @@ func (c *Config) LoadFromFS(fs fs.FS, file string) error {
 		return errors.BadRequest.WithFormat("unknown file type %s", s)
 	}
 
-	f, err := fs.Open(file)
+	c.file = file
+	c.fs = fs
+
+	f, err := c.open(file)
 	if err != nil {
 		return err
 	}
@@ -55,9 +58,14 @@ func (c *Config) LoadFromFS(fs fs.FS, file string) error {
 		return err
 	}
 
-	c.file = file
-	c.fs = fs
 	return c.Load(b, format)
+}
+
+func (c *Config) open(file string) (fs.File, error) {
+	if c.fs != nil {
+		return c.fs.Open(file)
+	}
+	return os.Open(file)
 }
 
 func (c *Config) Load(b []byte, format func([]byte, any) error) error {
@@ -95,7 +103,7 @@ func (c *Config) applyDotEnv() error {
 	var expand func(name string) string
 	var errs []error
 
-	f, err := c.fs.Open(file)
+	f, err := c.open(file)
 	switch {
 	case err == nil:
 		defer func() { _ = f.Close() }()
@@ -137,7 +145,7 @@ func (c *Config) Save() error {
 	if c.file == "" {
 		return errors.BadRequest.With("not loaded from a file")
 	}
-	if c.fs != nil && c.fs != os.DirFS(".") {
+	if c.fs != nil {
 		return errors.BadRequest.With("loaded from an immutable filesystem")
 	}
 	return c.SaveTo(c.file)

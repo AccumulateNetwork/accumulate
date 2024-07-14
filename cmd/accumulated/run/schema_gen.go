@@ -7,10 +7,11 @@ import (
 	"io/fs"
 	"log/slog"
 
+	peer "github.com/libp2p/go-libp2p/core/peer"
+	multiaddr "github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/address"
 	encoding "gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/p2p"
 	record "gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	url "gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -47,9 +48,11 @@ var (
 	sMemoryStorage              schema.Methods[*MemoryStorage, *MemoryStorage, *schema.CompositeType]
 	sMetricsService             schema.Methods[*MetricsService, *MetricsService, *schema.CompositeType]
 	sMonitor                    schema.Methods[*Monitor, *Monitor, *schema.CompositeType]
+	sMultiaddr                  schema.Methods[*Multiaddr, *Multiaddr, *schema.ExternalType]
 	sNetworkService             schema.Methods[*NetworkService, *NetworkService, *schema.CompositeType]
 	sOtlpConfig                 schema.Methods[*OtlpConfig, *OtlpConfig, *schema.CompositeType]
 	sP2P                        schema.Methods[*P2P, *P2P, *schema.CompositeType]
+	sPeerID                     schema.Methods[*PeerID, *PeerID, *schema.ExternalType]
 	sPrivateKey                 schema.UnionMethods[PrivateKey, PrivateKeyType]
 	sPrivateKeySeed             schema.Methods[*PrivateKeySeed, *PrivateKeySeed, *schema.CompositeType]
 	sPrivateKeyType             schema.EnumMethods[PrivateKeyType]
@@ -314,16 +317,15 @@ func init() {
 				Name: "Genesis",
 				Type: &schema.SimpleType{Type: schema.SimpleTypeString},
 			},
-			{
+			(&schema.Field{
 				Name: "Listen",
-				Type: schema.TypeReferenceFor[p2p.Multiaddr](),
-			},
+			}).ResolveTo(&deferredTypes, "Multiaddr"),
 			{
 				Name: "BootstrapPeers",
-				Type: &schema.ArrayType{
+				Type: (&schema.ArrayType{
 					TypeBase: schema.TypeBase{},
-					Elem:     schema.TypeReferenceFor[p2p.Multiaddr](),
-				},
+				}).
+					ResolveElemTo(&deferredTypes, "Multiaddr"),
 			},
 			{
 				Name:     "MetricsNamespace",
@@ -383,10 +385,9 @@ func init() {
 			(&schema.Field{
 				Name: "Mode",
 			}).ResolveTo(&deferredTypes, "CoreValidatorMode"),
-			{
+			(&schema.Field{
 				Name: "Listen",
-				Type: schema.TypeReferenceFor[p2p.Multiaddr](),
-			},
+			}).ResolveTo(&deferredTypes, "Multiaddr"),
 			{
 				Name: "BVN",
 				Type: &schema.SimpleType{Type: schema.SimpleTypeString},
@@ -404,17 +405,17 @@ func init() {
 			},
 			{
 				Name: "DnBootstrapPeers",
-				Type: &schema.ArrayType{
+				Type: (&schema.ArrayType{
 					TypeBase: schema.TypeBase{},
-					Elem:     schema.TypeReferenceFor[p2p.Multiaddr](),
-				},
+				}).
+					ResolveElemTo(&deferredTypes, "Multiaddr"),
 			},
 			{
 				Name: "BvnBootstrapPeers",
-				Type: &schema.ArrayType{
+				Type: (&schema.ArrayType{
 					TypeBase: schema.TypeBase{},
-					Elem:     schema.TypeReferenceFor[p2p.Multiaddr](),
-				},
+				}).
+					ResolveElemTo(&deferredTypes, "Multiaddr"),
 			},
 			{
 				Name:     "EnableHealing",
@@ -486,10 +487,9 @@ func init() {
 			Name: "DevnetConfiguration",
 		},
 		Fields: []*schema.Field{
-			{
+			(&schema.Field{
 				Name: "Listen",
-				Type: schema.TypeReferenceFor[p2p.Multiaddr](),
-			},
+			}).ResolveTo(&deferredTypes, "Multiaddr"),
 			{
 				Name: "Bvns",
 				Type: &schema.SimpleType{Type: schema.SimpleTypeUint},
@@ -575,10 +575,9 @@ func init() {
 			Name: "GatewayConfiguration",
 		},
 		Fields: []*schema.Field{
-			{
+			(&schema.Field{
 				Name: "Listen",
-				Type: schema.TypeReferenceFor[p2p.Multiaddr](),
-			},
+			}).ResolveTo(&deferredTypes, "Multiaddr"),
 		},
 	}).SetGoType()
 
@@ -590,10 +589,10 @@ func init() {
 			{
 				Name:        "Listen",
 				Description: "are the addresses and schemes to listen on",
-				Type: &schema.ArrayType{
+				Type: (&schema.ArrayType{
 					TypeBase: schema.TypeBase{},
-					Elem:     schema.TypeReferenceFor[p2p.Multiaddr](),
-				},
+				}).
+					ResolveElemTo(&deferredTypes, "Multiaddr"),
 			},
 			{
 				Name:        "ConnectionLimit",
@@ -633,10 +632,9 @@ func init() {
 			Name: "HttpPeerMapEntry",
 		},
 		Fields: []*schema.Field{
-			{
+			(&schema.Field{
 				Name: "ID",
-				Type: schema.TypeReferenceFor[p2p.PeerID](),
-			},
+			}).ResolveTo(&deferredTypes, "PeerID"),
 			{
 				Name: "Partitions",
 				Type: &schema.ArrayType{
@@ -646,10 +644,10 @@ func init() {
 			},
 			{
 				Name: "Addresses",
-				Type: &schema.ArrayType{
+				Type: (&schema.ArrayType{
 					TypeBase: schema.TypeBase{},
-					Elem:     schema.TypeReferenceFor[p2p.Multiaddr](),
-				},
+				}).
+					ResolveElemTo(&deferredTypes, "Multiaddr"),
 			},
 		},
 	}).SetGoType()
@@ -713,10 +711,9 @@ func init() {
 		},
 		Fields: []*schema.Field{
 			(&schema.Field{}).ResolveTo(&deferredTypes, "HttpListener"),
-			{
+			(&schema.Field{
 				Name: "PprofListen",
-				Type: schema.TypeReferenceFor[p2p.Multiaddr](),
-			},
+			}).ResolveTo(&deferredTypes, "Multiaddr"),
 			{
 				Name: "Monitoring",
 				Type: (&schema.PointerType{
@@ -873,6 +870,21 @@ func init() {
 		},
 	}).SetGoType()
 
+	sMultiaddr = schema.WithMethods[*Multiaddr, *Multiaddr](
+		&schema.ExternalType{
+			TypeBase: schema.TypeBase{
+				Name: "Multiaddr",
+				Encode: schema.MapValue{
+					"withWidget": schema.StringValue("wMultiaddr"),
+				},
+				Generate: schema.MapValue{
+					"widgets": schema.BooleanValue(true),
+				},
+			},
+			Underlying: schema.TypeReferenceFor[multiaddr.Multiaddr](),
+			Encoder:    schema.WidgetExternalEncoder[Multiaddr]{W: wMultiaddr},
+		}).SetGoType()
+
 	sNetworkService = schema.WithMethods[*NetworkService, *NetworkService](&schema.CompositeType{
 		TypeBase: schema.TypeBase{
 			Name: "NetworkService",
@@ -919,17 +931,17 @@ func init() {
 		Fields: []*schema.Field{
 			{
 				Name: "Listen",
-				Type: &schema.ArrayType{
+				Type: (&schema.ArrayType{
 					TypeBase: schema.TypeBase{},
-					Elem:     schema.TypeReferenceFor[p2p.Multiaddr](),
-				},
+				}).
+					ResolveElemTo(&deferredTypes, "Multiaddr"),
 			},
 			{
 				Name: "BootstrapPeers",
-				Type: &schema.ArrayType{
+				Type: (&schema.ArrayType{
 					TypeBase: schema.TypeBase{},
-					Elem:     schema.TypeReferenceFor[p2p.Multiaddr](),
-				},
+				}).
+					ResolveElemTo(&deferredTypes, "Multiaddr"),
 			},
 			(&schema.Field{
 				Name: "Key",
@@ -952,12 +964,26 @@ func init() {
 					Elem:     schema.TypeReferenceFor[DhtMode](),
 				},
 			},
-			{
+			(&schema.Field{
 				Name: "External",
-				Type: schema.TypeReferenceFor[p2p.Multiaddr](),
-			},
+			}).ResolveTo(&deferredTypes, "Multiaddr"),
 		},
 	}).SetGoType()
+
+	sPeerID = schema.WithMethods[*PeerID, *PeerID](
+		&schema.ExternalType{
+			TypeBase: schema.TypeBase{
+				Name: "PeerID",
+				Encode: schema.MapValue{
+					"withWidget": schema.StringValue("wPeerID"),
+				},
+				Generate: schema.MapValue{
+					"widgets": schema.BooleanValue(true),
+				},
+			},
+			Underlying: schema.TypeReferenceFor[peer.ID](),
+			Encoder:    schema.WidgetExternalEncoder[PeerID]{W: wPeerID},
+		}).SetGoType()
 
 	sPrivateKey = schema.WithUnionMethods[PrivateKey, PrivateKeyType](
 		&schema.UnionType{
@@ -1546,9 +1572,11 @@ func init() {
 		sMemoryStorage.Type,
 		sMetricsService.Type,
 		sMonitor.Type,
+		sMultiaddr.Type,
 		sNetworkService.Type,
 		sOtlpConfig.Type,
 		sP2P.Type,
+		sPeerID.Type,
 		sPrivateKey.Type,
 		sPrivateKeySeed.Type,
 		sPrivateKeyType.Type,
@@ -1572,9 +1600,11 @@ func init() {
 
 	s.Generate = schema.MapValue{
 		"import": schema.MapValue{
-			"encoding": schema.StringValue("gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"),
-			"record":   schema.StringValue("gitlab.com/accumulatenetwork/accumulate/pkg/types/record"),
-			"url":      schema.StringValue("gitlab.com/accumulatenetwork/accumulate/pkg/url"),
+			"encoding":  schema.StringValue("gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"),
+			"multiaddr": schema.StringValue("github.com/multiformats/go-multiaddr"),
+			"peer":      schema.StringValue("github.com/libp2p/go-libp2p/core/peer"),
+			"record":    schema.StringValue("gitlab.com/accumulatenetwork/accumulate/pkg/types/record"),
+			"url":       schema.StringValue("gitlab.com/accumulatenetwork/accumulate/pkg/url"),
 		},
 		"methods": schema.MapValue{
 			"json": schema.BooleanValue(true),

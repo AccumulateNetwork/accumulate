@@ -33,6 +33,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+const localHost = "/ip4/127.0.0.1"
 const devNetDefaultHost = "/ip4/127.0.1.1"
 
 var devnetAsset = regexp.MustCompile(`^` +
@@ -325,7 +326,7 @@ func (d *DevnetConfiguration) applyBootstrap(inst *Instance, root *Config, ip ip
 	http := addService(cfg, &HttpService{}, func(*HttpService) string { return "" })
 	setDefaultVal(&http.Router, ServiceReference[*RouterService](""))
 	setDefaultVal(&http.Listen, []multiaddr.Multiaddr{
-		listen(d.Listen, devNetDefaultHost, ip, portAccAPI, useHTTP{}),
+		listen(d.Listen, localHost, ip, portAccAPI, useHTTP{}),
 	})
 
 	// Faucet
