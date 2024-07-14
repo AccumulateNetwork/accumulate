@@ -670,6 +670,37 @@ func (v *Partition) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func init() {
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("networkType", "string"),
+		encoding.NewTypeField("partitionId", "string"),
+		encoding.NewTypeField("network", "Network"),
+	}, "Describe", "describe")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("id", "string"),
+	}, "Network", "network")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("address", "string"),
+		encoding.NewTypeField("type", "string"),
+	}, "Node", "node")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("listen", "p2p.Multiaddr[]"),
+		encoding.NewTypeField("bootstrapPeers", "p2p.Multiaddr[]"),
+	}, "P2P", "p2P")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("id", "string"),
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("basePort", "int64"),
+		encoding.NewTypeField("nodes", "Node[]"),
+	}, "Partition", "partition")
+
+}
+
 func (v *Describe) MarshalJSON() ([]byte, error) {
 	u := struct {
 		NetworkType protocol.PartitionType `json:"networkType,omitempty"`
