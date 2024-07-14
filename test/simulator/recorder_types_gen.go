@@ -633,6 +633,35 @@ func (v *recordMessages) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func init() {
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("isLeader", "bool"),
+		encoding.NewTypeField("index", "uint64"),
+		encoding.NewTypeField("time", "string"),
+		encoding.NewTypeField("commitInfo", "string"),
+		encoding.NewTypeField("evidence", "string"),
+		encoding.NewTypeField("submissions", "messaging.Envelope[]"),
+		encoding.NewTypeField("changes", "recordChange[]"),
+	}, "recordBlock", "recordBlock")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("key", "record.Key"),
+		encoding.NewTypeField("value", "bytes"),
+	}, "recordChange", "recordChange")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("partition", "protocol.PartitionInfo"),
+		encoding.NewTypeField("config", "accumulated.NodeInit"),
+		encoding.NewTypeField("nodeID", "string"),
+	}, "recordHeader", "recordHeader")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("messages", "consensus.Message[]"),
+	}, "recordMessages", "recordMessages")
+
+}
+
 func (v *recordBlock) MarshalJSON() ([]byte, error) {
 	u := struct {
 		IsLeader    bool                                   `json:"isLeader,omitempty"`

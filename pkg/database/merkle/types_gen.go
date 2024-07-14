@@ -810,6 +810,48 @@ func (v *chainIndexEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func init() {
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("start", "bytes"),
+		encoding.NewTypeField("startIndex", "int64"),
+		encoding.NewTypeField("end", "bytes"),
+		encoding.NewTypeField("endIndex", "int64"),
+		encoding.NewTypeField("anchor", "bytes"),
+		encoding.NewTypeField("entries", "ReceiptEntry[]"),
+	}, "Receipt", "receipt")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("right", "bool"),
+		encoding.NewTypeField("hash", "bytes"),
+	}, "ReceiptEntry", "receiptEntry")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("merkleState", "State"),
+		encoding.NewTypeField("elements", "bytes[]"),
+		encoding.NewTypeField("receipt", "Receipt"),
+		encoding.NewTypeField("continuedReceipt", "Receipt"),
+	}, "ReceiptList", "receiptList")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("count", "int64"),
+		encoding.NewTypeField("pending", "bytes[]"),
+		encoding.NewTypeField("hashList", "bytes[]"),
+	}, "State", "state")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("level", "uint64"),
+		encoding.NewTypeField("index", "uint64"),
+		encoding.NewTypeField("entries", "chainIndexEntry[]"),
+	}, "chainIndexBlock", "chainIndexBlock")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("index", "uint64"),
+		encoding.NewTypeField("key", "record.Key"),
+	}, "chainIndexEntry", "chainIndexEntry")
+
+}
+
 func (v *Receipt) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Start      *string                          `json:"start,omitempty"`

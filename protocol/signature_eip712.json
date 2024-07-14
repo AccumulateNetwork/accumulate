@@ -1,0 +1,434 @@
+{
+  "AcmeFaucet": {
+    "AcmeFaucet": [
+      {
+        "name": "url",
+        "type": "string"
+      }
+    ]
+  },
+  "AddCredits": {
+    "AddCredits": [
+      {
+        "name": "recipient",
+        "type": "string"
+      },
+      {
+        "name": "amount",
+        "type": "uint256"
+      },
+      {
+        "name": "oracle",
+        "type": "uint64"
+      }
+    ]
+  },
+  "BurnTokens": {
+    "BurnTokens": [
+      {
+        "name": "amount",
+        "type": "uint256"
+      }
+    ]
+  },
+  "CreateDataAccount": {
+    "CreateDataAccount": [
+      {
+        "name": "url",
+        "type": "string"
+      },
+      {
+        "name": "authorities",
+        "type": "string[]"
+      }
+    ]
+  },
+  "CreateIdentity": {
+    "CreateIdentity": [
+      {
+        "name": "url",
+        "type": "string"
+      },
+      {
+        "name": "keyHash",
+        "type": "uint8[]"
+      },
+      {
+        "name": "keyBookUrl",
+        "type": "string"
+      },
+      {
+        "name": "authorities",
+        "type": "string[]"
+      }
+    ]
+  },
+  "CreateKeyBook": {
+    "CreateKeyBook": [
+      {
+        "name": "url",
+        "type": "string"
+      },
+      {
+        "name": "publicKeyHash",
+        "type": "uint8[]"
+      },
+      {
+        "name": "authorities",
+        "type": "string[]"
+      }
+    ]
+  },
+  "CreateKeyPage": {
+    "CreateKeyPage": [
+      {
+        "name": "keys",
+        "type": "KeySpecParams[]"
+      }
+    ],
+    "KeySpecParams": [
+      {
+        "name": "keyHash",
+        "type": "uint8[]"
+      },
+      {
+        "name": "delegate",
+        "type": "string"
+      }
+    ]
+  },
+  "CreateToken": {
+    "CreateToken": [
+      {
+        "name": "url",
+        "type": "string"
+      },
+      {
+        "name": "symbol",
+        "type": "string"
+      },
+      {
+        "name": "precision",
+        "type": "uint64"
+      },
+      {
+        "name": "properties",
+        "type": "string"
+      },
+      {
+        "name": "supplyLimit",
+        "type": "uint256"
+      },
+      {
+        "name": "authorities",
+        "type": "string[]"
+      }
+    ]
+  },
+  "CreateTokenAccount": {
+    "CreateToken": [
+      {
+        "name": "url",
+        "type": "string"
+      },
+      {
+        "name": "symbol",
+        "type": "string"
+      },
+      {
+        "name": "precision",
+        "type": "uint64"
+      },
+      {
+        "name": "properties",
+        "type": "string"
+      },
+      {
+        "name": "supplyLimit",
+        "type": "uint256"
+      },
+      {
+        "name": "authorities",
+        "type": "string[]"
+      }
+    ],
+    "CreateTokenAccount": [
+      {
+        "name": "url",
+        "type": "string"
+      },
+      {
+        "name": "tokenUrl",
+        "type": "string"
+      },
+      {
+        "name": "authorities",
+        "type": "string[]"
+      },
+      {
+        "name": "proof",
+        "type": "TokenIssuerProof"
+      }
+    ],
+    "Receipt": [
+      {
+        "name": "start",
+        "type": "uint8[]"
+      },
+      {
+        "name": "startIndex",
+        "type": "int64"
+      },
+      {
+        "name": "end",
+        "type": "uint8[]"
+      },
+      {
+        "name": "endIndex",
+        "type": "int64"
+      },
+      {
+        "name": "anchor",
+        "type": "uint8[]"
+      },
+      {
+        "name": "entries",
+        "type": "ReceiptEntry[]"
+      }
+    ],
+    "ReceiptEntry": [
+      {
+        "name": "right",
+        "type": "bool"
+      },
+      {
+        "name": "hash",
+        "type": "uint8[]"
+      }
+    ],
+    "TokenIssuerProof": [
+      {
+        "name": "transaction",
+        "type": "CreateToken"
+      },
+      {
+        "name": "receipt",
+        "type": "Receipt"
+      }
+    ]
+  },
+  "IssueTokens": {
+    "IssueTokens": [
+      {
+        "name": "recipient",
+        "type": "string"
+      },
+      {
+        "name": "amount",
+        "type": "uint256"
+      },
+      {
+        "name": "to",
+        "type": "TokenRecipient[]"
+      }
+    ],
+    "TokenRecipient": [
+      {
+        "name": "url",
+        "type": "string"
+      },
+      {
+        "name": "amount",
+        "type": "uint256"
+      }
+    ]
+  },
+  "SendTokens": {
+    "SendTokens": [
+      {
+        "name": "hash",
+        "type": "uint8[32]"
+      },
+      {
+        "name": "meta",
+        "type": "RawMessage"
+      },
+      {
+        "name": "to",
+        "type": "TokenRecipient[]"
+      }
+    ],
+    "TokenRecipient": [
+      {
+        "name": "url",
+        "type": "string"
+      },
+      {
+        "name": "amount",
+        "type": "uint256"
+      }
+    ]
+  },
+  "SignPending": {
+    "RemoteTransaction": [
+      {
+        "name": "hash",
+        "type": "uint8[32]"
+      }
+    ]
+  },
+  "SyntheticBurnTokens": {
+    "SyntheticBurnTokens": [
+      {
+        "name": "amount",
+        "type": "uint256"
+      },
+      {
+        "name": "isRefund",
+        "type": "bool"
+      }
+    ]
+  },
+  "SyntheticCreateIdentity": {
+    "SyntheticCreateIdentity": [
+      {
+        "name": "accounts",
+        "type": "Account[]"
+      }
+    ]
+  },
+  "SyntheticDepositCredits": {
+    "SyntheticDepositCredits": [
+      {
+        "name": "amount",
+        "type": "uint64"
+      },
+      {
+        "name": "acmeRefundAmount",
+        "type": "uint256"
+      },
+      {
+        "name": "isRefund",
+        "type": "bool"
+      }
+    ]
+  },
+  "SyntheticDepositTokens": {
+    "SyntheticDepositTokens": [
+      {
+        "name": "token",
+        "type": "string"
+      },
+      {
+        "name": "amount",
+        "type": "uint256"
+      },
+      {
+        "name": "isIssuer",
+        "type": "bool"
+      },
+      {
+        "name": "isRefund",
+        "type": "bool"
+      }
+    ]
+  },
+  "SyntheticWriteData": {
+    "DataEntry": [
+      {
+        "name": "data",
+        "type": "uint8[][]"
+      }
+    ],
+    "SyntheticWriteData": [
+      {
+        "name": "entry",
+        "type": "DataEntry"
+      }
+    ]
+  },
+  "UpdateKeyPage": {
+    "KeyPageOperation": [
+      {
+        "name": "oldEntry",
+        "type": "KeySpecParams"
+      },
+      {
+        "name": "newEntry",
+        "type": "KeySpecParams"
+      },
+      {
+        "name": "entry",
+        "type": "KeySpecParams"
+      },
+      {
+        "name": "threshold",
+        "type": "uint64"
+      },
+      {
+        "name": "allow",
+        "type": "TransactionType[]"
+      },
+      {
+        "name": "deny",
+        "type": "TransactionType[]"
+      }
+    ],
+    "KeySpecParams": [
+      {
+        "name": "keyHash",
+        "type": "uint8[]"
+      },
+      {
+        "name": "delegate",
+        "type": "string"
+      }
+    ],
+    "UpdateKeyPage": [
+      {
+        "name": "operation",
+        "type": "KeyPageOperation[]"
+      }
+    ]
+  },
+  "WriteData": {
+    "DataEntry": [
+      {
+        "name": "data",
+        "type": "uint8[][]"
+      }
+    ],
+    "WriteData": [
+      {
+        "name": "entry",
+        "type": "DataEntry"
+      },
+      {
+        "name": "scratch",
+        "type": "bool"
+      },
+      {
+        "name": "writeToState",
+        "type": "bool"
+      }
+    ]
+  },
+  "WriteDataTo": {
+    "DataEntry": [
+      {
+        "name": "data",
+        "type": "uint8[][]"
+      }
+    ],
+    "WriteDataTo": [
+      {
+        "name": "recipient",
+        "type": "string"
+      },
+      {
+        "name": "entry",
+        "type": "DataEntry"
+      }
+    ]
+  }
+}

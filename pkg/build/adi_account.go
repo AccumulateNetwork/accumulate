@@ -7,9 +7,16 @@
 package build
 
 import (
+	"crypto/ecdsa"
 	"crypto/ed25519"
+	"crypto/elliptic"
+	"encoding/binary"
 	"fmt"
+	"io"
+	"math/big"
+	badrand "math/rand"
 
+	btc "github.com/btcsuite/btcd/btcec"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -134,10 +141,46 @@ func (b *KeyPageBuilder) GenerateKey(typ protocol.SignatureType, seedParts ...an
 		addr.Type = typ
 		b.AddKey(addr)
 		return addr
+
+	case protocol.SignatureTypeETH,
+		protocol.SignatureTypeBTC,
+		protocol.SignatureTypeBTCLegacy:
+		sk := ecdsaFromSeed(btc.S256(), seed)
+		addr := address.FromETHPrivateKey(sk)
+		addr.Type = typ
+		b.AddKey(addr)
+		return addr
+
 	default:
 		b.errorf(errors.BadRequest, "generating %v keys is not supported", typ)
 		return nil
 	}
+}
+
+func ecdsaFromSeed(c elliptic.Curve, seed [32]byte) *ecdsa.PrivateKey {
+	rand := badrand.New(badrand.NewSource(int64(binary.BigEndian.Uint64(seed[:]))))
+
+	var k *big.Int
+	for {
+		N := c.Params().N
+		b := make([]byte, (N.BitLen()+7)/8)
+		if _, err := io.ReadFull(rand, b); err != nil {
+			panic(err)
+		}
+		if excess := len(b)*8 - N.BitLen(); excess > 0 {
+			b[0] >>= excess
+		}
+		k = new(big.Int).SetBytes(b)
+		if k.Sign() != 0 && k.Cmp(N) < 0 {
+			break
+		}
+	}
+
+	priv := new(ecdsa.PrivateKey)
+	priv.PublicKey.Curve = c
+	priv.D = k
+	priv.PublicKey.X, priv.PublicKey.Y = c.ScalarBaseMult(k.Bytes())
+	return priv
 }
 
 func (b *KeyPageBuilder) SetAcceptThreshold(v uint64) *KeyPageBuilder {
