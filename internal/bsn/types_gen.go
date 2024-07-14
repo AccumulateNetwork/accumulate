@@ -130,3 +130,12 @@ func (v *LastBlock) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	return nil
 }
+
+func init() {
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("index", "uint64"),
+		encoding.NewTypeField("time", "string"),
+	}, "LastBlock", "lastBlock")
+
+}

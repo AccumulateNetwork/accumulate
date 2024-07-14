@@ -2805,6 +2805,362 @@ func (v *TxReceipt) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func init() {
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("height", "uint64"),
+		encoding.NewTypeField("entry", "bytes"),
+		encoding.NewTypeField("state", "bytes[]"),
+		encoding.NewTypeField("value", "Any"),
+	}, "ChainEntry", "chainEntry")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("chainId", "bytes"),
+	}, "ChainIdQuery", "chainIdQuery")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("mainChain", "MerkleState"),
+		encoding.NewTypeField("chains", "ChainState[]"),
+		encoding.NewTypeField("data", "Any"),
+		encoding.NewTypeField("chainId", "bytes"),
+		encoding.NewTypeField("receipt", "GeneralReceipt"),
+		encoding.NewTypeField("lastBlockTime", "string"),
+	}, "ChainQueryResponse", "chainQueryResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("name", "string"),
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("height", "uint64"),
+		encoding.NewTypeField("roots", "bytes[]"),
+	}, "ChainState", "chainState")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("url", "string"),
+		encoding.NewTypeField("entryHash", "bytes32"),
+	}, "DataEntryQuery", "dataEntryQuery")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("entryHash", "bytes32"),
+		encoding.NewTypeField("entry", "protocol.DataEntry"),
+		encoding.NewTypeField("txId", "string"),
+		encoding.NewTypeField("causeTxId", "string"),
+		encoding.NewTypeField("lastBlockTime", "string"),
+	}, "DataEntryQueryResponse", "dataEntryQueryResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("url", "string"),
+		encoding.NewTypeField("start", "uint64"),
+		encoding.NewTypeField("count", "uint64"),
+		encoding.NewTypeField("expand", "bool"),
+		encoding.NewTypeField("height", "uint64"),
+		encoding.NewTypeField("scratch", "bool"),
+		encoding.NewTypeField("prove", "bool"),
+		encoding.NewTypeField("includeRemote", "bool"),
+	}, "DataEntrySetQuery", "dataEntrySetQuery")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("partitionId", "string"),
+		encoding.NewTypeField("networkType", "string"),
+		encoding.NewTypeField("network", "NetworkDescription"),
+		encoding.NewTypeField("networkAnchor", "bytes32"),
+		encoding.NewTypeField("values", "core.GlobalValues"),
+		encoding.NewTypeField("error", "errors2.Error"),
+	}, "DescriptionResponse", "descriptionResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("url", "string"),
+		encoding.NewTypeField("start", "uint64"),
+		encoding.NewTypeField("count", "uint64"),
+		encoding.NewTypeField("expand", "bool"),
+		encoding.NewTypeField("height", "uint64"),
+		encoding.NewTypeField("scratch", "bool"),
+		encoding.NewTypeField("prove", "bool"),
+		encoding.NewTypeField("includeRemote", "bool"),
+	}, "DirectoryQuery", "directoryQuery")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("envelope", "messaging.Envelope"),
+		encoding.NewTypeField("checkOnly", "bool"),
+	}, "ExecuteRequest", "executeRequest")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("url", "string"),
+		encoding.NewTypeField("expand", "bool"),
+		encoding.NewTypeField("height", "uint64"),
+		encoding.NewTypeField("scratch", "bool"),
+		encoding.NewTypeField("prove", "bool"),
+		encoding.NewTypeField("includeRemote", "bool"),
+	}, "GeneralQuery", "generalQuery")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("localBlock", "uint64"),
+		encoding.NewTypeField("localBlockTime", "string"),
+		encoding.NewTypeField("directoryBlock", "uint64"),
+		encoding.NewTypeField("majorBlock", "uint64"),
+		encoding.NewTypeField("proof", "merkle.Receipt"),
+		encoding.NewTypeField("error", "string"),
+	}, "GeneralReceipt", "generalReceipt")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("version", "uint64"),
+	}, "KeyPage", "keyPage")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("url", "string"),
+		encoding.NewTypeField("key", "bytes"),
+	}, "KeyPageIndexQuery", "keyPageIndexQuery")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("url", "string"),
+		encoding.NewTypeField("start", "uint64"),
+		encoding.NewTypeField("count", "uint64"),
+	}, "MajorBlocksQuery", "majorBlocksQuery")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("majorBlockIndex", "uint64"),
+		encoding.NewTypeField("majorBlockTime", "string"),
+		encoding.NewTypeField("minorBlocks", "MinorBlock[]"),
+		encoding.NewTypeField("lastBlockTime", "string"),
+	}, "MajorQueryResponse", "majorQueryResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("height", "uint64"),
+		encoding.NewTypeField("roots", "bytes[]"),
+	}, "MerkleState", "merkleState")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("metric", "string"),
+		encoding.NewTypeField("duration", "string"),
+	}, "MetricsQuery", "metricsQuery")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("value", "Any"),
+	}, "MetricsResponse", "metricsResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("blockIndex", "uint64"),
+		encoding.NewTypeField("blockTime", "string"),
+	}, "MinorBlock", "minorBlock")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("url", "string"),
+		encoding.NewTypeField("start", "uint64"),
+		encoding.NewTypeField("count", "uint64"),
+		encoding.NewTypeField("txFetchMode", "string"),
+		encoding.NewTypeField("blockFilterMode", "string"),
+	}, "MinorBlocksQuery", "minorBlocksQuery")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("blockIndex", "uint64"),
+		encoding.NewTypeField("blockTime", "string"),
+		encoding.NewTypeField("txCount", "uint64"),
+		encoding.NewTypeField("txIds", "bytes[]"),
+		encoding.NewTypeField("transactions", "TransactionQueryResponse[]"),
+		encoding.NewTypeField("lastBlockTime", "string"),
+	}, "MinorQueryResponse", "minorQueryResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("items", "Any[]"),
+		encoding.NewTypeField("start", "uint64"),
+		encoding.NewTypeField("count", "uint64"),
+		encoding.NewTypeField("total", "uint64"),
+		encoding.NewTypeField("otherItems", "Any[]"),
+		encoding.NewTypeField("lastBlockTime", "string"),
+	}, "MultiResponse", "multiResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("id", "string"),
+		encoding.NewTypeField("partitions", "PartitionDescription[]"),
+	}, "NetworkDescription", "networkDescription")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("address", "string"),
+		encoding.NewTypeField("type", "string"),
+	}, "NodeDescription", "nodeDescription")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("id", "string"),
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("basePort", "int64"),
+		encoding.NewTypeField("nodes", "NodeDescription[]"),
+	}, "PartitionDescription", "partitionDescription")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("expand", "bool"),
+		encoding.NewTypeField("height", "uint64"),
+		encoding.NewTypeField("scratch", "bool"),
+		encoding.NewTypeField("prove", "bool"),
+		encoding.NewTypeField("includeRemote", "bool"),
+	}, "QueryOptions", "queryOptions")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("start", "uint64"),
+		encoding.NewTypeField("count", "uint64"),
+	}, "QueryPagination", "queryPagination")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("entryHash", "bytes32"),
+		encoding.NewTypeField("entry", "protocol.DataEntry"),
+		encoding.NewTypeField("txId", "string"),
+		encoding.NewTypeField("causeTxId", "string"),
+		encoding.NewTypeField("lastBlockTime", "string"),
+	}, "ResponseDataEntry", "responseDataEntry")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("dataEntries", "ResponseDataEntry[]"),
+		encoding.NewTypeField("total", "uint64"),
+		encoding.NewTypeField("lastBlockTime", "string"),
+	}, "ResponseDataEntrySet", "responseDataEntrySet")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("authority", "string"),
+		encoding.NewTypeField("signer", "string"),
+		encoding.NewTypeField("index", "uint64"),
+		encoding.NewTypeField("lastBlockTime", "string"),
+	}, "ResponseKeyPageIndex", "responseKeyPageIndex")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("authority", "string"),
+		encoding.NewTypeField("pages", "SignaturePage[]"),
+	}, "SignatureBook", "signatureBook")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("signer", "SignerMetadata"),
+		encoding.NewTypeField("signatures", "protocol.Signature[]"),
+	}, "SignaturePage", "signaturePage")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("publicKey", "bytes"),
+		encoding.NewTypeField("timestamp", "uint64"),
+		encoding.NewTypeField("url", "string"),
+		encoding.NewTypeField("version", "uint64"),
+		encoding.NewTypeField("signatureType", "string"),
+		encoding.NewTypeField("useSimpleHash", "bool"),
+	}, "Signer", "signer")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("url", "string"),
+		encoding.NewTypeField("acceptThreshold", "uint64"),
+	}, "SignerMetadata", "signerMetadata")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("ok", "bool"),
+		encoding.NewTypeField("bvnHeight", "int64"),
+		encoding.NewTypeField("dnHeight", "int64"),
+		encoding.NewTypeField("bvnTime", "string"),
+		encoding.NewTypeField("dnTime", "string"),
+		encoding.NewTypeField("lastDirectoryAnchorHeight", "uint64"),
+		encoding.NewTypeField("bvnRootHash", "bytes32"),
+		encoding.NewTypeField("dnRootHash", "bytes32"),
+		encoding.NewTypeField("bvnBptHash", "bytes32"),
+		encoding.NewTypeField("dnBptHash", "bytes32"),
+	}, "StatusResponse", "statusResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("source", "string"),
+		encoding.NewTypeField("destination", "string"),
+		encoding.NewTypeField("sequenceNumber", "uint64"),
+		encoding.NewTypeField("anchor", "bool"),
+	}, "SyntheticTransactionRequest", "syntheticTransactionRequest")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("url", "string"),
+		encoding.NewTypeField("amount", "uint256"),
+		encoding.NewTypeField("txid", "bytes"),
+	}, "TokenDeposit", "tokenDeposit")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("from", "string"),
+		encoding.NewTypeField("to", "TokenDeposit[]"),
+	}, "TokenSend", "tokenSend")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("mainChain", "MerkleState"),
+		encoding.NewTypeField("data", "Any"),
+		encoding.NewTypeField("origin", "string"),
+		encoding.NewTypeField("transactionHash", "bytes"),
+		encoding.NewTypeField("txid", "string"),
+		encoding.NewTypeField("transaction", "protocol.Transaction"),
+		encoding.NewTypeField("signatures", "protocol.Signature[]"),
+		encoding.NewTypeField("status", "protocol.TransactionStatus"),
+		encoding.NewTypeField("produced", "string[]"),
+		encoding.NewTypeField("receipts", "TxReceipt[]"),
+		encoding.NewTypeField("signatureBooks", "SignatureBook[]"),
+		encoding.NewTypeField("lastBlockTime", "string"),
+	}, "TransactionQueryResponse", "transactionQueryResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("url", "string"),
+		encoding.NewTypeField("start", "uint64"),
+		encoding.NewTypeField("count", "uint64"),
+		encoding.NewTypeField("scratch", "bool"),
+	}, "TxHistoryQuery", "txHistoryQuery")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("localBlock", "uint64"),
+		encoding.NewTypeField("localBlockTime", "string"),
+		encoding.NewTypeField("directoryBlock", "uint64"),
+		encoding.NewTypeField("majorBlock", "uint64"),
+		encoding.NewTypeField("proof", "merkle.Receipt"),
+		encoding.NewTypeField("error", "string"),
+		encoding.NewTypeField("account", "string"),
+		encoding.NewTypeField("chain", "string"),
+	}, "TxReceipt", "txReceipt")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("checkOnly", "bool"),
+		encoding.NewTypeField("isEnvelope", "bool"),
+		encoding.NewTypeField("origin", "string"),
+		encoding.NewTypeField("signer", "Signer"),
+		encoding.NewTypeField("signature", "bytes"),
+		encoding.NewTypeField("keyPage", "KeyPage"),
+		encoding.NewTypeField("txHash", "bytes"),
+		encoding.NewTypeField("payload", "Any"),
+		encoding.NewTypeField("memo", "string"),
+		encoding.NewTypeField("metadata", "bytes"),
+	}, "TxRequest", "txRequest")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("transactionHash", "bytes"),
+		encoding.NewTypeField("txid", "string"),
+		encoding.NewTypeField("signatureHashes", "bytes[]"),
+		encoding.NewTypeField("simpleHash", "bytes"),
+		encoding.NewTypeField("code", "uint64"),
+		encoding.NewTypeField("message", "string"),
+		encoding.NewTypeField("delivered", "bool"),
+		encoding.NewTypeField("result", "Any"),
+		encoding.NewTypeField("lastBlockTime", "string"),
+	}, "TxResponse", "txResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("expand", "bool"),
+		encoding.NewTypeField("height", "uint64"),
+		encoding.NewTypeField("scratch", "bool"),
+		encoding.NewTypeField("prove", "bool"),
+		encoding.NewTypeField("includeRemote", "bool"),
+		encoding.NewTypeField("txid", "bytes"),
+		encoding.NewTypeField("txIdUrl", "string"),
+		encoding.NewTypeField("wait", "string"),
+		encoding.NewTypeField("ignorePending", "bool"),
+	}, "TxnQuery", "txnQuery")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("url", "string"),
+	}, "UrlQuery", "urlQuery")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("version", "string"),
+		encoding.NewTypeField("commit", "string"),
+		encoding.NewTypeField("versionIsKnown", "bool"),
+		encoding.NewTypeField("isTestNet", "bool"),
+	}, "VersionResponse", "versionResponse")
+
+}
+
 func (v *ChainEntry) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Height uint64                     `json:"height"`
