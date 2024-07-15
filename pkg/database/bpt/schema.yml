@@ -21,12 +21,10 @@ stateData:
         fields:
           - name: Power
             type: uint
-          - name: ArbitraryValues
-            type: boolean
-
-        transients:
           - name: Mask
             type: uint
+          - name: ArbitraryValues
+            type: boolean
 
 node:
   class: union

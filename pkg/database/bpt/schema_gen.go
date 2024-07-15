@@ -32,14 +32,12 @@ func init() {
 				Type: &schema.SimpleType{Type: schema.SimpleTypeUint},
 			},
 			{
-				Name: "ArbitraryValues",
-				Type: &schema.SimpleType{Type: schema.SimpleTypeBool},
-			},
-		},
-		Transients: []*schema.Field{
-			{
 				Name: "Mask",
 				Type: &schema.SimpleType{Type: schema.SimpleTypeUint},
+			},
+			{
+				Name: "ArbitraryValues",
+				Type: &schema.SimpleType{Type: schema.SimpleTypeBool},
 			},
 		},
 	}).SetGoType()
