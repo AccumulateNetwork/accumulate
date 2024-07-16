@@ -85,7 +85,7 @@ func init() {
 // MarshalEip712 creates the EIP-712 json message needed to submit a transaction
 // and signature to an Ethereum wallet.
 func MarshalEip712(txn *Transaction, sig Signature) (ret []byte, err error) {
-	call, err := newEIP712Call(txn, sig)
+	call, err := NewEIP712Call(txn, sig)
 	if err != nil {
 		return nil, err
 	}
@@ -93,15 +93,15 @@ func MarshalEip712(txn *Transaction, sig Signature) (ret []byte, err error) {
 }
 
 func EIP712Hash(txn *Transaction, sig Signature) ([]byte, error) {
-	call, err := newEIP712Call(txn, sig)
+	call, err := NewEIP712Call(txn, sig)
 	if err != nil {
 		return nil, err
 	}
 	return call.Hash()
 }
 
-// newEIP712Call converts the transaction and signature to an EIP-712 message.
-func newEIP712Call(txn *Transaction, sig Signature) (*encoding.EIP712Call, error) {
+// NewEIP712Call converts the transaction and signature to an EIP-712 message.
+func NewEIP712Call(txn *Transaction, sig Signature) (*encoding.EIP712Call, error) {
 	var delegators []any
 	var inner *TypedDataSignature
 	for inner == nil {
