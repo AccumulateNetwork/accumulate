@@ -5,6 +5,7 @@ package ethrpc
 import (
 	json "encoding/json"
 	"fmt"
+
 	"gitlab.com/accumulatenetwork/core/schema"
 )
 
