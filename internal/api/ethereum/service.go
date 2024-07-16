@@ -1,3 +1,9 @@
+// Copyright 2024 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package ethimpl
 
 import (
@@ -28,6 +34,7 @@ func (s *Service) EthChainId(ctx context.Context) (*ethrpc.Number, error) {
 }
 
 func (s *Service) EthBlockNumber(ctx context.Context) (*ethrpc.Number, error) {
+	// TODO: Is this the right number?
 	ns, err := s.Network.NetworkStatus(ctx, api.NetworkStatusOptions{Partition: protocol.Directory})
 	if err != nil {
 		return nil, err
@@ -41,7 +48,9 @@ func (s *Service) EthGasPrice(ctx context.Context) (*ethrpc.Number, error) {
 		return nil, err
 	}
 	// Instead of the ACME precision, we have to use 18, because Ethereum
-	// wallets require native tokens to have a precision of 18
+	// wallets require native tokens to have a precision of 18.
+	//
+	// TODO: Verify this is the right result.
 	v := big.NewInt(1e18 / protocol.CreditPrecision)
 	v.Div(v, big.NewInt(int64(ns.Oracle.Price)))
 	return (*ethrpc.Number)(v), nil
@@ -77,5 +86,11 @@ func (s *Service) EthGetBlockByNumber(ctx context.Context, block string, expand 
 }
 
 func (s *Service) AccTypedData(_ context.Context, txn *protocol.Transaction, sig protocol.Signature) (*encoding.EIP712Call, error) {
+	if txn == nil {
+		return nil, errors.BadRequest.WithFormat("missing transaction")
+	}
+	if sig == nil {
+		return nil, errors.BadRequest.WithFormat("missing signature")
+	}
 	return protocol.NewEIP712Call(txn, sig)
 }

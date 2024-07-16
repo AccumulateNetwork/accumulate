@@ -1,3 +1,9 @@
+// Copyright 2024 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package ethrpc
 
 import (
@@ -20,6 +26,8 @@ type JSONRPCClient struct {
 type JSONRPCHandler struct {
 	Service Service
 }
+
+var _ Service = (*JSONRPCClient)(nil)
 
 func NewClient(endpoint string) Service {
 	return &JSONRPCClient{Endpoint: accumulate.ResolveWellKnownEndpoint(endpoint, "eth")}
@@ -62,7 +70,7 @@ func (h *JSONRPCHandler) eth_gasPrice(ctx context.Context, _ json.RawMessage) (a
 }
 
 func (c *JSONRPCClient) EthGetBalance(ctx context.Context, addr Address, block string) (*Number, error) {
-	return clientCall[*Number](c, ctx, "eth_getBalance", []any{})
+	return clientCall[*Number](c, ctx, "eth_getBalance", []any{addr, block})
 }
 
 func (h *JSONRPCHandler) eth_getBalance(ctx context.Context, raw json.RawMessage) (any, error) {
@@ -78,32 +86,13 @@ func (h *JSONRPCHandler) eth_getBlockByNumber(ctx context.Context, raw json.RawM
 }
 
 func (c *JSONRPCClient) AccTypedData(ctx context.Context, txn *protocol.Transaction, sig protocol.Signature) (*encoding.EIP712Call, error) {
-	return clientCall[*encoding.EIP712Call](c, ctx, "acc_typedData", map[string]any{
-		"transaction": txn,
-		"signature":   sig,
-	})
+	return clientCall[*encoding.EIP712Call](c, ctx, "acc_typedData", []any{txn, sig})
 }
 
 func (h *JSONRPCHandler) acc_typedData(ctx context.Context, raw json.RawMessage) (any, error) {
-	var params struct {
-		Transaction *protocol.Transaction                          `json:"transaction"`
-		Signature   encoding.JsonUnmarshalWith[protocol.Signature] `json:"signature"`
-	}
-	params.Signature.Func = protocol.UnmarshalSignatureJSON
-
-	err := json.Unmarshal(raw, &params)
-	if err != nil {
-		return nil, jsonrpc.InvalidParams.With(err, err)
-	}
-
-	if params.Transaction == nil {
-		return nil, jsonrpc.InvalidParams.With("missing transaction", nil)
-	}
-	if params.Signature.Value == nil {
-		return nil, jsonrpc.InvalidParams.With("missing signature", nil)
-	}
-
-	return h.Service.AccTypedData(ctx, params.Transaction, params.Signature.Value)
+	return handlerCall2(ctx, raw, func(ctx context.Context, txn *protocol.Transaction, sig *signatureWrapper) (any, error) {
+		return h.Service.AccTypedData(ctx, txn, sig.V)
+	})
 }
 
 func clientCall[V any](c *JSONRPCClient, ctx context.Context, method string, params any) (V, error) {
@@ -113,15 +102,13 @@ func clientCall[V any](c *JSONRPCClient, ctx context.Context, method string, par
 }
 
 func handlerCall2[V1, V2, R any](ctx context.Context, raw json.RawMessage, fn func(context.Context, V1, V2) (R, error)) (any, error) {
-	v1, v2, err := decode2[V1, V2](raw)
+	var v1 V1
+	var v2 V2
+	err := decodeN(raw, &v1, &v2)
 	if err != nil {
 		return nil, err
 	}
 	return fn(ctx, v1, v2)
-}
-
-func decode2[V1, V2 any](raw json.RawMessage) (v1 V1, v2 V2, err error) {
-	return v1, v2, decodeN(raw, &v1, &v2)
 }
 
 func decodeN(raw json.RawMessage, v ...any) error {
@@ -172,4 +159,18 @@ func (h *JSONRPCHandler) ServeJSONRPC(ctx context.Context, method string, params
 		Code:    jsonrpc.MethodNotFound,
 		Message: fmt.Sprintf("%q is not a supported method", method),
 	}
+}
+
+type signatureWrapper struct {
+	V protocol.Signature
+}
+
+func (s *signatureWrapper) MarshalJSON() ([]byte, error) {
+	return json.Marshal(s.V)
+}
+
+func (s *signatureWrapper) UnmarshalJSON(b []byte) error {
+	var err error
+	s.V, err = protocol.UnmarshalSignatureJSON(b)
+	return err
 }

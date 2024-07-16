@@ -2,9 +2,6 @@ $generate:
   methods:
     json: true
 
-  encode:
-    keepEmpty: true
-
   import:
     json: encoding/json
 
