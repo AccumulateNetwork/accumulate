@@ -1,0 +1,32 @@
+$generate:
+  methods:
+    json: true
+
+  import:
+    json: encoding/json
+
+  varPrefix:
+    schema: s
+
+BlockData:
+  class: composite
+  fields:
+    - { name: Number,           type: Number,              encode: { keepEmpty: true } }
+    - { name: Hash,             type: Bytes32,             encode: { keepEmpty: true } }
+    - { name: ParentHash,       type: Bytes32,             encode: { keepEmpty: true } }
+    - { name: Nonce,            type: Bytes,               encode: { keepEmpty: true } }
+    - { name: SHA3Uncles,       type: Bytes32,             encode: { keepEmpty: true } }
+    - { name: LogsBloom,        type: Bytes,               encode: { keepEmpty: true } }
+    - { name: TransactionsRoot, type: Bytes32,             encode: { keepEmpty: true } }
+    - { name: StateRoot,        type: Bytes32,             encode: { keepEmpty: true } }
+    - { name: ReceiptsRoot,     type: Bytes32,             encode: { keepEmpty: true } }
+    - { name: Miner,            type: Address,             encode: { keepEmpty: true } }
+    - { name: Difficulty,       type: Number,              encode: { keepEmpty: true } }
+    - { name: TotalDifficulty,  type: Number,              encode: { keepEmpty: true } }
+    - { name: ExtraData,        type: Bytes,               encode: { keepEmpty: true } }
+    - { name: Size,             type: Number,              encode: { keepEmpty: true } }
+    - { name: GasLimit,         type: Number,              encode: { keepEmpty: true } }
+    - { name: GasUsed,          type: Number,              encode: { keepEmpty: true } }
+    - { name: GasTimestamp,     type: Number,              encode: { keepEmpty: true } }
+    - { name: Transactions,     type: '[]json.RawMessage', encode: { keepEmpty: true } }
+    - { name: Uncles,           type: '[]Bytes32',         encode: { keepEmpty: true } }
