@@ -170,9 +170,6 @@ func init() {
 	}
 
 	s.Generate = schema.MapValue{
-		"encode": schema.MapValue{
-			"keepEmpty": schema.BooleanValue(true),
-		},
 		"import": schema.MapValue{
 			"json": schema.StringValue("encoding/json"),
 		},
