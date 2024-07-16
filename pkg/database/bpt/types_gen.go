@@ -9,13 +9,14 @@ import (
 
 type Parameters struct {
 	Power           uint64
-	ArbitraryValues bool
 	Mask            uint64
+	ArbitraryValues bool
 }
 
 var wParameters = widget.ForComposite(widget.Fields[Parameters]{
 	{Name: "power", ID: 1, Widget: widget.ForUint(func(v *Parameters) *uint64 { return &v.Power })},
-	{Name: "arbitraryValues", ID: 2, Widget: widget.ForBool(func(v *Parameters) *bool { return &v.ArbitraryValues })},
+	{Name: "mask", ID: 2, Widget: widget.ForUint(func(v *Parameters) *uint64 { return &v.Mask })},
+	{Name: "arbitraryValues", ID: 3, Widget: widget.ForBool(func(v *Parameters) *bool { return &v.ArbitraryValues })},
 }, widget.Identity[*Parameters])
 
 // Copy returns a copy of the Parameters.
