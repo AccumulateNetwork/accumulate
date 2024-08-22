@@ -72,7 +72,7 @@ require (
 	github.com/sergi/go-diff v1.2.0
 	github.com/ulikunitz/xz v0.5.11
 	github.com/vektra/mockery/v2 v2.42.3
-	gitlab.com/accumulatenetwork/core/schema v0.2.1-0.20240713035306-1121dbc75e5d
+	gitlab.com/accumulatenetwork/core/schema v0.2.1-0.20240821231041-fb3e1def212f
 	gitlab.com/firelizzard/go-script v0.0.0-20240404234115-d5f0a716003d
 	go.opentelemetry.io/otel v1.27.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.27.0
