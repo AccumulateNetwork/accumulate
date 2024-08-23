@@ -19,8 +19,8 @@ import (
 	binary2 "gitlab.com/accumulatenetwork/core/schema/pkg/binary"
 )
 
-// keyPart is a part of a [Key]. keyPart is used for marshalling.
-type keyPart interface {
+// keyPartRd is a part of a [Key]. keyPartRd is used for marshalling.
+type keyPartRd interface {
 	// Type returns the key part's type.
 	Type() typeCode
 
@@ -36,6 +36,12 @@ type keyPart interface {
 	// any attention to the field numbers so this still works.
 	WriteBinary(*enc.Writer)
 
+	WriteBinary2(*binary2.Encoder) error
+}
+
+type keyPartWr interface {
+	keyPartRd
+
 	// ReadBinary reads the key part from the binary reader.
 	//
 	// The intended use of the binary reader is reading field-number tagged
@@ -47,7 +53,6 @@ type keyPart interface {
 	// instructs it to skip the field number logic and read the value directly.
 	ReadBinary(*enc.Reader)
 
-	WriteBinary2(*binary2.Encoder) error
 	ReadBinary2(*binary2.Decoder) error
 }
 
@@ -61,52 +66,44 @@ func (k uintKeyPart) WriteBinary(w *enc.Writer)   { w.WriteUint(uint(k.Type()), 
 func (k stringKeyPart) WriteBinary(w *enc.Writer) { w.WriteString(uint(k.Type()), string(k)) }
 func (k hashKeyPart) WriteBinary(w *enc.Writer)   { w.WriteHash(uint(k.Type()), (*[32]byte)(&k)) }
 func (k bytesKeyPart) WriteBinary(w *enc.Writer)  { w.WriteBytes(uint(k.Type()), k) }
-func (k urlKeyPart) WriteBinary(w *enc.Writer)    { w.WriteUrl(uint(k.Type()), k.URL) }
-func (k txidKeyPart) WriteBinary(w *enc.Writer)   { w.WriteTxid(uint(k.Type()), k.TxID) }
-func (k timeKeyPart) WriteBinary(w *enc.Writer)   { w.WriteTime(uint(k.Type()), k.Time) }
+func (k *urlKeyPart) WriteBinary(w *enc.Writer)   { w.WriteUrl(uint(k.Type()), (*url.URL)(k)) }
+func (k *txidKeyPart) WriteBinary(w *enc.Writer)  { w.WriteTxid(uint(k.Type()), (*url.TxID)(k)) }
+func (k timeKeyPart) WriteBinary(w *enc.Writer)   { w.WriteTime(uint(k.Type()), time.Time(k)) }
 
-func (k *intKeyPart) ReadBinary(r *enc.Reader)    { ReadBinary((*int64)(k), r.ReadInt) }
-func (k *uintKeyPart) ReadBinary(r *enc.Reader)   { ReadBinary((*uint64)(k), r.ReadUint) }
-func (k *stringKeyPart) ReadBinary(r *enc.Reader) { ReadBinary((*string)(k), r.ReadString) }
-func (k *hashKeyPart) ReadBinary(r *enc.Reader)   { ReadBinary((*[32]byte)(k), r.ReadHash2) }
-func (k *bytesKeyPart) ReadBinary(r *enc.Reader)  { ReadBinary((*[]byte)(k), r.ReadBytes) }
-func (k *urlKeyPart) ReadBinary(r *enc.Reader)    { ReadBinary(&k.URL, r.ReadUrl) }
-func (k *txidKeyPart) ReadBinary(r *enc.Reader)   { ReadBinary(&k.TxID, r.ReadTxid) }
-func (k *timeKeyPart) ReadBinary(r *enc.Reader)   { ReadBinary(&k.Time, r.ReadTime) }
+func (k *intKeyPart) ReadBinary(r *enc.Reader)    { rdBinVal((*int64)(k), r.ReadInt) }
+func (k *uintKeyPart) ReadBinary(r *enc.Reader)   { rdBinVal((*uint64)(k), r.ReadUint) }
+func (k *stringKeyPart) ReadBinary(r *enc.Reader) { rdBinVal((*string)(k), r.ReadString) }
+func (k *hashKeyPart) ReadBinary(r *enc.Reader)   { rdBinVal((*[32]byte)(k), r.ReadHash2) }
+func (k *bytesKeyPart) ReadBinary(r *enc.Reader)  { rdBinVal((*[]byte)(k), r.ReadBytes) }
+func (k *urlKeyPart) ReadBinary(r *enc.Reader)    { rdBinPtr((*url.URL)(k), r.ReadUrl) }
+func (k *txidKeyPart) ReadBinary(r *enc.Reader)   { rdBinPtr((*url.TxID)(k), r.ReadTxid) }
+func (k *timeKeyPart) ReadBinary(r *enc.Reader)   { rdBinVal((*time.Time)(k), r.ReadTime) }
 
 func (k intKeyPart) WriteBinary2(w *enc2) error    { return w.EncodeInt(int64(k)) }
 func (k uintKeyPart) WriteBinary2(w *enc2) error   { return w.EncodeUint(uint64(k)) }
 func (k stringKeyPart) WriteBinary2(w *enc2) error { return w.EncodeString(string(k)) }
 func (k hashKeyPart) WriteBinary2(w *enc2) error   { return w.EncodeHash(k) }
 func (k bytesKeyPart) WriteBinary2(w *enc2) error  { return w.EncodeBytes(k) }
-func (k urlKeyPart) WriteBinary2(w *enc2) error    { return w.EncodeString(k.URL.String()) }
-func (k txidKeyPart) WriteBinary2(w *enc2) error   { return w.EncodeString(k.TxID.String()) }
-func (k timeKeyPart) WriteBinary2(w *enc2) error   { return w.EncodeInt(k.Time.UTC().Unix()) }
+func (k *urlKeyPart) WriteBinary2(w *enc2) error   { return w.EncodeString((*url.URL)(k).String()) }
+func (k *txidKeyPart) WriteBinary2(w *enc2) error  { return w.EncodeString((*url.TxID)(k).String()) }
+func (k timeKeyPart) WriteBinary2(w *enc2) error   { return w.EncodeInt(time.Time(k).UTC().Unix()) }
 
 func (k *intKeyPart) ReadBinary2(r *dec2) error    { return rdBin2((*int64)(k), r.DecodeInt) }
 func (k *uintKeyPart) ReadBinary2(r *dec2) error   { return rdBin2((*uint64)(k), r.DecodeUint) }
 func (k *stringKeyPart) ReadBinary2(r *dec2) error { return rdBin2((*string)(k), r.DecodeString) }
 func (k *hashKeyPart) ReadBinary2(r *dec2) error   { return rdBin2((*[32]byte)(k), r.DecodeHash) }
 func (k *bytesKeyPart) ReadBinary2(r *dec2) error  { return rdBin2((*[]byte)(k), r.DecodeBytes) }
-
-func (k *urlKeyPart) ReadBinary2(r *dec2) error {
-	k.URL = new(url.URL)
-	return r.DecodeValueV2(k.URL)
-}
-
-func (k *txidKeyPart) ReadBinary2(r *dec2) error {
-	k.TxID = new(url.TxID)
-	return r.DecodeValueV2(k.TxID)
-}
+func (k *urlKeyPart) ReadBinary2(r *dec2) error    { return r.DecodeValueV2((*url.URL)(k)) }
+func (k *txidKeyPart) ReadBinary2(r *dec2) error   { return r.DecodeValueV2((*url.TxID)(k)) }
 
 func (k *timeKeyPart) ReadBinary2(r *dec2) error {
 	v, err := r.DecodeInt()
-	k.Time = time.Unix(v, 0).UTC()
+	*k = timeKeyPart(time.Unix(v, 0).UTC())
 	return err
 }
 
 // newKeyPart returns a new key part for the type code.
-func newKeyPart(typ typeCode) (keyPart, error) {
+func newKeyPart(typ typeCode) (keyPartWr, error) {
 	switch typ {
 	case typeCodeInt:
 		return new(intKeyPart), nil
@@ -130,32 +127,55 @@ func newKeyPart(typ typeCode) (keyPart, error) {
 }
 
 // asKeyPart converts the value to a key part.
-func asKeyPart(v any) (keyPart, error) {
+func asKeyPart(v any) (keyPartRd, error) {
 	switch v := v.(type) {
 	case int64:
-		return (*intKeyPart)(&v), nil
+		return intKeyPart(v), nil
 	case int:
 		u := int64(v)
-		return (*intKeyPart)(&u), nil
+		return intKeyPart(u), nil
 	case uint64:
-		return (*uintKeyPart)(&v), nil
+		return uintKeyPart(v), nil
 	case uint:
 		u := uint64(v)
-		return (*uintKeyPart)(&u), nil
+		return uintKeyPart(u), nil
 	case string:
-		return (*stringKeyPart)(&v), nil
+		return stringKeyPart(v), nil
 	case [32]byte:
-		return (*hashKeyPart)(&v), nil
+		return hashKeyPart(v), nil
 	case []byte:
-		return (*bytesKeyPart)(&v), nil
+		return bytesKeyPart(v), nil
 	case *url.URL:
-		return &urlKeyPart{v}, nil
+		return (*urlKeyPart)(v), nil
 	case *url.TxID:
-		return &txidKeyPart{v}, nil
+		return (*txidKeyPart)(v), nil
 	case time.Time:
-		return &timeKeyPart{v}, nil
+		return timeKeyPart(v), nil
 	default:
 		return nil, errors.NotAllowed.WithFormat("%T is not a supported key part type", v)
+	}
+}
+
+func keyPartTypeOf(v any) (typeCode, bool) {
+	switch v.(type) {
+	case int64, int:
+		return typeCodeInt, true
+	case uint64, uint:
+		return typeCodeUint, true
+	case string:
+		return typeCodeString, true
+	case [32]byte:
+		return typeCodeHash, true
+	case []byte:
+		return typeCodeBytes, true
+	case *url.URL:
+		return typeCodeUrl, true
+	case *url.TxID:
+		return typeCodeTxid, true
+	case time.Time:
+		return typeCodeTime, true
+	default:
+		return 0, false
 	}
 }
 
@@ -164,9 +184,9 @@ type uintKeyPart uint64
 type stringKeyPart string
 type hashKeyPart [32]byte
 type bytesKeyPart []byte
-type urlKeyPart struct{ *url.URL }
-type txidKeyPart struct{ *url.TxID }
-type timeKeyPart struct{ time.Time }
+type urlKeyPart url.URL
+type txidKeyPart url.TxID
+type timeKeyPart time.Time
 
 func (k intKeyPart) Type() typeCode    { return typeCodeInt }
 func (k uintKeyPart) Type() typeCode   { return typeCodeUint }
@@ -182,14 +202,20 @@ func (k uintKeyPart) Value() any   { return uint64(k) }
 func (k stringKeyPart) Value() any { return string(k) }
 func (k hashKeyPart) Value() any   { return [32]byte(k) }
 func (k bytesKeyPart) Value() any  { return []byte(k) }
-func (k urlKeyPart) Value() any    { return k.URL }
-func (k txidKeyPart) Value() any   { return k.TxID }
-func (k timeKeyPart) Value() any   { return k.Time }
+func (k *urlKeyPart) Value() any   { return (*url.URL)(k) }
+func (k *txidKeyPart) Value() any  { return (*url.TxID)(k) }
+func (k timeKeyPart) Value() any   { return time.Time(k) }
 
-func ReadBinary[V any](v *V, read func(uint) (V, bool)) {
+func rdBinVal[V any](v *V, read func(uint) (V, bool)) {
 	// Read with field = 0 to tell the reader to skip the field number
 	u, _ := read(0)
 	*v = u
+}
+
+func rdBinPtr[V any](v *V, read func(uint) (*V, bool)) {
+	// Read with field = 0 to tell the reader to skip the field number
+	u, _ := read(0)
+	*v = *u
 }
 
 func rdBin2[V any](v *V, read func() (V, error)) error {
@@ -237,17 +263,15 @@ func (k *bytesKeyPart) UnmarshalJSON(b []byte) error {
 }
 
 func (k *urlKeyPart) UnmarshalJSON(b []byte) error {
-	k.URL = new(url.URL)
-	return k.URL.UnmarshalJSON(b)
+	return (*url.URL)(k).UnmarshalJSON(b)
 }
 
 func (k *txidKeyPart) UnmarshalJSON(b []byte) error {
-	k.TxID = new(url.TxID)
-	return k.TxID.UnmarshalJSON(b)
+	return (*url.TxID)(k).UnmarshalJSON(b)
 }
 
 func (k *timeKeyPart) UnmarshalJSON(b []byte) error {
-	return json.Unmarshal(b, &k.Time)
+	return json.Unmarshal(b, (*time.Time)(k))
 }
 
 // keyPartsEqual returns true if U and V are the same.
@@ -303,43 +327,73 @@ func keyPartsEqual(v, u any) bool {
 }
 
 func keyPartsCompare(v, u any) int {
-	a, err := asKeyPart(v)
-	if err != nil {
-		panic(err)
+	a, ok := keyPartTypeOf(v)
+	if !ok {
+		panic(errors.NotAllowed.WithFormat("%T is not a supported key part type", v))
 	}
-	b, err := asKeyPart(u)
-	if err != nil {
-		panic(err)
+	b, ok := keyPartTypeOf(u)
+	if !ok {
+		panic(errors.NotAllowed.WithFormat("%T is not a supported key part type", u))
+	}
+	if a != b {
+		return int(a) - int(b)
 	}
 
-	if a.Type() != b.Type() {
-		return int(a.Type()) - int(b.Type())
-	}
-	switch v := a.(type) {
-	case *intKeyPart:
-		u := b.(*intKeyPart)
-		return int(*v) - int(*u)
-	case *uintKeyPart:
-		u := b.(*uintKeyPart)
-		return int(*v) - int(*u)
-	case *stringKeyPart:
-		u := b.(*stringKeyPart)
-		return strings.Compare(string(*v), string(*u))
-	case *hashKeyPart:
-		u := b.(*hashKeyPart)
+	switch a {
+	case typeCodeInt:
+		var i, j int64
+		if x, ok := v.(int); ok {
+			i = int64(x)
+		} else {
+			i = v.(int64)
+		}
+		if x, ok := u.(int); ok {
+			j = int64(x)
+		} else {
+			j = u.(int64)
+		}
+		if i < j {
+			return -1
+		} else if i > j {
+			return +1
+		}
+		return 0
+	case typeCodeUint:
+		var i, j uint64
+		if x, ok := v.(uint); ok {
+			i = uint64(x)
+		} else {
+			i = v.(uint64)
+		}
+		if x, ok := u.(uint); ok {
+			j = uint64(x)
+		} else {
+			j = u.(uint64)
+		}
+		if i < j {
+			return -1
+		} else if i > j {
+			return +1
+		}
+		return 0
+	case typeCodeString:
+		v, u := v.(string), u.(string)
+		return strings.Compare(v, u)
+	case typeCodeHash:
+		v, u := v.([32]byte), u.([32]byte)
 		return bytes.Compare(v[:], u[:])
-	case *bytesKeyPart:
-		u := b.(*bytesKeyPart)
-		return bytes.Compare(*v, *u)
-	case *urlKeyPart:
-		u := b.(*urlKeyPart)
-		return v.Compare(u.URL)
-	case *txidKeyPart:
-		u := b.(*txidKeyPart)
-		return v.Compare(u.TxID)
-	case *timeKeyPart:
-		u := b.(*timeKeyPart)
-		return v.Compare(u.Time)
+	case typeCodeBytes:
+		v, u := v.([]byte), u.([]byte)
+		return bytes.Compare(v, u)
+	case typeCodeUrl:
+		v, u := v.(*url.URL), u.(*url.URL)
+		return (*url.URL)(v).Compare(u)
+	case typeCodeTxid:
+		v, u := v.(*url.TxID), u.(*url.TxID)
+		return v.Compare(u)
+	case typeCodeTime:
+		v, u := v.(time.Time), u.(time.Time)
+		return v.Compare(u)
 	default:
 		panic("unknown type")
 	}

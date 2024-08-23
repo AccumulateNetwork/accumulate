@@ -129,7 +129,7 @@ func BenchmarkLog_Find(b *testing.B) {
 			var err error
 			for i := 0; i < 1<<N; i++ {
 				v := fmt.Sprint(i)
-				err = x.Append(record.NewKey(v), v)
+				err = x.Append(record.NewKey(uint64(i)), v)
 			}
 			require.NoError(b, err)
 
