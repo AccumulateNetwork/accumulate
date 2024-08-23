@@ -1,0 +1,29 @@
+- name: Log
+  type: entity
+  typeParameters:
+    - { name: V, constraint: any }
+  fields:
+    - name: blockSize
+      type: uint
+
+  # Head is empty if missing because a Log with no head should behave as if the
+  # head was empty. However, Block is **not** empty if missing because an empty
+  # block (except head) should never exist.
+
+  attributes:
+    - name: Head
+      type: state
+      private: true
+      emptyIfMissing: true
+      dataType: Block[V]
+      pointer: true
+    - name: Block
+      parameters:
+        - name: Level
+          type: uint
+        - name: Index
+          type: uint
+      type: state
+      private: true
+      dataType: Block[V]
+      pointer: true

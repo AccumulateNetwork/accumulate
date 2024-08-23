@@ -59,6 +59,11 @@ func init() {
 		},
 		Fields: []*schema.Field{
 			{
+				Name:        "Index",
+				Description: "is used internally for multi-level indices",
+				Type:        &schema.SimpleType{Type: schema.SimpleTypeUint},
+			},
+			{
 				Name:        "Key",
 				Description: "is the key being indexed",
 				Type: &schema.PointerType{

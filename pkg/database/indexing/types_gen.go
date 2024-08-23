@@ -66,6 +66,8 @@ func (v *Block[V]) UnmarshalBinaryV2(dec *binary.Decoder) error {
 }
 
 type Entry[V any] struct {
+	// Index is used internally for multi-level indices.
+	Index uint64
 	// Key is the key being indexed.
 	Key *record.Key
 	// Value is the value being indexed.
@@ -74,8 +76,9 @@ type Entry[V any] struct {
 
 func wEntry[V any]() *widget.Composite[*Entry[V], Entry[V]] {
 	return widget.ForComposite(widget.Fields[Entry[V]]{
-		{Name: "key", ID: 1, Widget: widget.ForValue(func(v *Entry[V]) **record.Key { return &v.Key })},
-		{Name: "value", ID: 2, Widget: schema.UnsafeWidgetFor(sEntry.Type.Fields[1].Type, func(v *Entry[V]) *V { return &v.Value })},
+		{Name: "index", ID: 1, Widget: widget.ForUint(func(v *Entry[V]) *uint64 { return &v.Index })},
+		{Name: "key", ID: 2, Widget: widget.ForValue(func(v *Entry[V]) **record.Key { return &v.Key })},
+		{Name: "value", ID: 3, Widget: schema.UnsafeWidgetFor(sEntry.Type.Fields[2].Type, func(v *Entry[V]) *V { return &v.Value })},
 	}, widget.Identity[*Entry[V]])
 }
 

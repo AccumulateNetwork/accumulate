@@ -25,6 +25,27 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 )
 
+
+{{  define "typeParams"}}
+{{-   if .TypeParameters -}}
+[
+{{-     range .TypeParameters -}}
+{{.Name}} {{.Constraint}},
+{{-     end -}}
+]
+{{-   end -}}
+{{  end}}
+
+{{  define "typeArgs"}}
+{{-   if .TypeParameters -}}
+[
+{{-     range .TypeParameters -}}
+{{.Name}},
+{{-     end -}}
+]
+{{-   end -}}
+{{  end}}
+
 {{  define "accessor"}}
 {{- if .Private}}get{{end}}{{.Name}}
 {{- end}}
@@ -85,7 +106,7 @@ return values.NewCounted(c.logger.L, c.{{valueStore .}}, {{template "key" .}}, v
 {{$c := .}}
 
 {{if .Interface}}
-type {{.FullName}} interface {
+type {{.FullName}}{{template "typeParams" .}} interface {
 	record.Record
 	{{- range .Attributes}}
 	{{template "accessor" .}}({{range .GetParameters}}{{lower .Name}} {{parameterType .}},{{end}}) {{recordType . false}}
@@ -93,7 +114,7 @@ type {{.FullName}} interface {
 }
 {{end}}
 
-type {{fullName .}} struct {
+type {{structName .}}{{template "typeParams" .}} struct {
 	logger {{logger}}
 	store record.Store
 	{{- if not .Root}}

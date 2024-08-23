@@ -15,6 +15,9 @@ $generate:
 Entry[V any]:
   class: composite
   fields:
+    - name: Index
+      description: is used internally for multi-level indices
+      type: uint
     - name: Key
       description: is the key being indexed
       type: '*record.Key'
