@@ -156,26 +156,30 @@ func asKeyPart(v any) (keyPartRd, error) {
 	}
 }
 
-func keyPartTypeOf(v any) (typeCode, bool) {
-	switch v.(type) {
-	case int64, int:
-		return typeCodeInt, true
-	case uint64, uint:
-		return typeCodeUint, true
+func normalize(v any) (any, typeCode, bool) {
+	switch u := v.(type) {
+	case int64:
+		return v, typeCodeInt, true
+	case int:
+		return int64(u), typeCodeInt, true
+	case uint64:
+		return v, typeCodeUint, true
+	case uint:
+		return uint64(u), typeCodeUint, true
 	case string:
-		return typeCodeString, true
+		return v, typeCodeString, true
 	case [32]byte:
-		return typeCodeHash, true
+		return v, typeCodeHash, true
 	case []byte:
-		return typeCodeBytes, true
+		return v, typeCodeBytes, true
 	case *url.URL:
-		return typeCodeUrl, true
+		return v, typeCodeUrl, true
 	case *url.TxID:
-		return typeCodeTxid, true
+		return v, typeCodeTxid, true
 	case time.Time:
-		return typeCodeTime, true
+		return v, typeCodeTime, true
 	default:
-		return 0, false
+		return v, typeCodeUnknown, false
 	}
 }
 
@@ -276,106 +280,72 @@ func (k *timeKeyPart) UnmarshalJSON(b []byte) error {
 
 // keyPartsEqual returns true if U and V are the same.
 func keyPartsEqual(v, u any) bool {
-	switch v := v.(type) {
-	case int64:
-		_, ok := u.(int64)
-		if !ok {
-			return false
-		}
-	case uint64:
-		_, ok := u.(uint64)
-		if !ok {
-			return false
-		}
-	case string:
-		_, ok := u.(string)
-		if !ok {
-			return false
-		}
-	case [32]byte:
-		_, ok := u.([32]byte)
-		if !ok {
-			return false
-		}
-	case []byte:
-		u, ok := u.([]byte)
-		if !ok {
-			return false
-		}
+	v, a, ok := normalize(v)
+	if !ok {
+		panic(errors.NotAllowed.WithFormat("%T is not a supported key part type", v))
+	}
+	u, b, ok := normalize(u)
+	if !ok {
+		panic(errors.NotAllowed.WithFormat("%T is not a supported key part type", u))
+	}
+	if a != b {
+		return false
+	}
+
+	switch a {
+	case typeCodeInt:
+		v, u := v.(int64), u.(int64)
+		return v == u
+	case typeCodeUint:
+		v, u := v.(uint64), u.(uint64)
+		return v == u
+	case typeCodeString:
+		v, u := v.(string), u.(string)
+		return v == u
+	case typeCodeHash:
+		v, u := v.([32]byte), u.([32]byte)
+		return v == u
+	case typeCodeBytes:
+		v, u := v.([]byte), u.([]byte)
 		return bytes.Equal(v, u)
-	case *url.URL:
-		u, ok := u.(*url.URL)
-		if !ok {
-			return false
-		}
+	case typeCodeUrl:
+		v, u := v.(*url.URL), u.(*url.URL)
 		return v.Equal(u)
-	case *url.TxID:
-		u, ok := u.(*url.TxID)
-		if !ok {
-			return false
-		}
+	case typeCodeTxid:
+		v, u := v.(*url.TxID), u.(*url.TxID)
 		return v.Equal(u)
-	case time.Time:
-		u, ok := u.(time.Time)
-		if !ok {
-			return false
-		}
+	case typeCodeTime:
+		v, u := v.(time.Time), u.(time.Time)
 		return v.Equal(u)
 	}
 
 	return v == u
 }
 
+func invalidKeyPart(v any) error {
+	return errors.NotAllowed.WithFormat("%T is not a supported key part type", v)
+}
+
 func keyPartsCompare(v, u any) int {
-	a, ok := keyPartTypeOf(v)
+	v, a, ok := normalize(v)
 	if !ok {
-		panic(errors.NotAllowed.WithFormat("%T is not a supported key part type", v))
+		panic(invalidKeyPart(v))
 	}
-	b, ok := keyPartTypeOf(u)
+	u, b, ok := normalize(u)
 	if !ok {
-		panic(errors.NotAllowed.WithFormat("%T is not a supported key part type", u))
+		panic(invalidKeyPart(u))
 	}
 	if a != b {
-		return int(a) - int(b)
+		return int(a - b)
 	}
 
 	switch a {
 	case typeCodeInt:
-		var i, j int64
-		if x, ok := v.(int); ok {
-			i = int64(x)
-		} else {
-			i = v.(int64)
-		}
-		if x, ok := u.(int); ok {
-			j = int64(x)
-		} else {
-			j = u.(int64)
-		}
-		if i < j {
-			return -1
-		} else if i > j {
-			return +1
-		}
-		return 0
+		v, u := v.(int64), u.(int64)
+		return int(v - u)
 	case typeCodeUint:
-		var i, j uint64
-		if x, ok := v.(uint); ok {
-			i = uint64(x)
-		} else {
-			i = v.(uint64)
-		}
-		if x, ok := u.(uint); ok {
-			j = uint64(x)
-		} else {
-			j = u.(uint64)
-		}
-		if i < j {
-			return -1
-		} else if i > j {
-			return +1
-		}
-		return 0
+		v, u := v.(uint64), u.(uint64)
+		return int(v - u)
 	case typeCodeString:
 		v, u := v.(string), u.(string)
 		return strings.Compare(v, u)
