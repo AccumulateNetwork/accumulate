@@ -17,11 +17,20 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
+
+type BlockLedger struct {
+	fieldsSet []bool
+	Index     uint64                 `json:"index,omitempty" form:"index" query:"index" validate:"required"`
+	Time      time.Time              `json:"time,omitempty" form:"time" query:"time" validate:"required"`
+	Entries   []*protocol.BlockEntry `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
+	extraData []byte
+}
 
 type BlockStateSynthTxnEntry struct {
 	fieldsSet   []bool
@@ -88,6 +97,28 @@ type sigSetData struct {
 	Entries   []SigSetEntry `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
 	extraData []byte
 }
+
+func (v *BlockLedger) Copy() *BlockLedger {
+	u := new(BlockLedger)
+
+	u.Index = v.Index
+	u.Time = v.Time
+	u.Entries = make([]*protocol.BlockEntry, len(v.Entries))
+	for i, v := range v.Entries {
+		v := v
+		if v != nil {
+			u.Entries[i] = (v).Copy()
+		}
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *BlockLedger) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *BlockStateSynthTxnEntry) Copy() *BlockStateSynthTxnEntry {
 	u := new(BlockStateSynthTxnEntry)
@@ -226,6 +257,25 @@ func (v *sigSetData) Copy() *sigSetData {
 }
 
 func (v *sigSetData) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *BlockLedger) Equal(u *BlockLedger) bool {
+	if !(v.Index == u.Index) {
+		return false
+	}
+	if !((v.Time).Equal(u.Time)) {
+		return false
+	}
+	if len(v.Entries) != len(u.Entries) {
+		return false
+	}
+	for i := range v.Entries {
+		if !((v.Entries[i]).Equal(u.Entries[i])) {
+			return false
+		}
+	}
+
+	return true
+}
 
 func (v *BlockStateSynthTxnEntry) Equal(u *BlockStateSynthTxnEntry) bool {
 	switch {
@@ -366,6 +416,69 @@ func (v *sigSetData) Equal(u *sigSetData) bool {
 	}
 
 	return true
+}
+
+var fieldNames_BlockLedger = []string{
+	1: "Index",
+	2: "Time",
+	3: "Entries",
+}
+
+func (v *BlockLedger) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Index == 0) {
+		writer.WriteUint(1, v.Index)
+	}
+	if !(v.Time == (time.Time{})) {
+		writer.WriteTime(2, v.Time)
+	}
+	if !(len(v.Entries) == 0) {
+		for _, v := range v.Entries {
+			writer.WriteValue(3, v.MarshalBinary)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_BlockLedger)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *BlockLedger) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Index is missing")
+	} else if v.Index == 0 {
+		errs = append(errs, "field Index is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Time is missing")
+	} else if v.Time == (time.Time{}) {
+		errs = append(errs, "field Time is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Entries is missing")
+	} else if len(v.Entries) == 0 {
+		errs = append(errs, "field Entries is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
 }
 
 var fieldNames_BlockStateSynthTxnEntry = []string{
@@ -804,6 +917,39 @@ func (v *sigSetData) IsValid() error {
 	}
 }
 
+func (v *BlockLedger) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *BlockLedger) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUint(1); ok {
+		v.Index = x
+	}
+	if x, ok := reader.ReadTime(2); ok {
+		v.Time = x
+	}
+	for {
+		if x := new(protocol.BlockEntry); reader.ReadValue(3, x.UnmarshalBinaryFrom) {
+			v.Entries = append(v.Entries, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_BlockLedger)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *BlockStateSynthTxnEntry) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -1025,6 +1171,12 @@ func (v *sigSetData) UnmarshalBinaryFrom(rd io.Reader) error {
 func init() {
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("index", "uint64"),
+		encoding.NewTypeField("time", "string"),
+		encoding.NewTypeField("entries", "protocol.BlockEntry[]"),
+	}, "BlockLedger", "blockLedger")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("account", "string"),
 		encoding.NewTypeField("transaction", "bytes"),
 		encoding.NewTypeField("chainEntry", "uint64"),
@@ -1067,6 +1219,26 @@ func init() {
 		encoding.NewTypeField("entries", "SigSetEntry[]"),
 	}, "sigSetData", "sigSetData")
 
+}
+
+func (v *BlockLedger) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Index     uint64                                  `json:"index,omitempty"`
+		Time      time.Time                               `json:"time,omitempty"`
+		Entries   encoding.JsonList[*protocol.BlockEntry] `json:"entries,omitempty"`
+		ExtraData *string                                 `json:"$epilogue,omitempty"`
+	}{}
+	if !(v.Index == 0) {
+		u.Index = v.Index
+	}
+	if !(v.Time == (time.Time{})) {
+		u.Time = v.Time
+	}
+	if !(len(v.Entries) == 0) {
+		u.Entries = v.Entries
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
 }
 
 func (v *BlockStateSynthTxnEntry) MarshalJSON() ([]byte, error) {
@@ -1185,6 +1357,30 @@ func (v *sigSetData) MarshalJSON() ([]byte, error) {
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
+}
+
+func (v *BlockLedger) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Index     uint64                                  `json:"index,omitempty"`
+		Time      time.Time                               `json:"time,omitempty"`
+		Entries   encoding.JsonList[*protocol.BlockEntry] `json:"entries,omitempty"`
+		ExtraData *string                                 `json:"$epilogue,omitempty"`
+	}{}
+	u.Index = v.Index
+	u.Time = v.Time
+	u.Entries = v.Entries
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	v.Index = u.Index
+	v.Time = u.Time
+	v.Entries = u.Entries
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (v *BlockStateSynthTxnEntry) UnmarshalJSON(data []byte) error {

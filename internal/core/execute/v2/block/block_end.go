@@ -25,6 +25,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -32,6 +33,9 @@ import (
 // Close ends the block and returns the block state.
 func (block *Block) Close() (execute.BlockState, error) {
 	m := block.Executor
+	ledgerUrl := m.Describe.NodeUrl(protocol.Ledger)
+	ledger := block.Batch.Account(ledgerUrl)
+
 	r := m.BlockTimers.Start(BlockTimerTypeEndBlock)
 	defer m.BlockTimers.Stop(r)
 
@@ -90,7 +94,7 @@ func (block *Block) Close() (execute.BlockState, error) {
 
 	// Record the previous block's state hash it on the BPT chain
 	if block.Executor.globals.Active.ExecutorVersion.V2BaikonurEnabled() {
-		err := block.Batch.Account(block.Executor.Describe.Ledger()).BptChain().Inner().AddEntry(block.State.PreviousStateHash[:], false)
+		err := ledger.BptChain().Inner().AddEntry(block.State.PreviousStateHash[:], false)
 		if err != nil {
 			return nil, err
 		}
@@ -112,8 +116,6 @@ func (block *Block) Close() (execute.BlockState, error) {
 	}
 
 	// Load the main chain of the minor root
-	ledgerUrl := m.Describe.NodeUrl(protocol.Ledger)
-	ledger := block.Batch.Account(ledgerUrl)
 	rootChain, err := ledger.RootChain().Get()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load root chain: %w", err)
@@ -169,12 +171,20 @@ func (block *Block) Close() (execute.BlockState, error) {
 	}
 
 	// Record the block entries
-	bl := new(protocol.BlockLedger)
-	bl.Url = m.Describe.Ledger().JoinPath(strconv.FormatUint(block.Index, 10))
-	bl.Index = block.Index
-	bl.Time = block.Time
-	bl.Entries = block.State.ChainUpdates.Entries
-	err = block.Batch.Account(bl.Url).Main().Put(bl)
+	if block.Executor.globals.Active.ExecutorVersion.V2JiuquanEnabled() {
+		bl := new(database.BlockLedger)
+		bl.Index = block.Index
+		bl.Time = block.Time
+		bl.Entries = block.State.ChainUpdates.Entries
+		err = ledger.BlockLedger().Append(record.NewKey(block.Index), bl)
+	} else {
+		bl := new(protocol.BlockLedger)
+		bl.Url = m.Describe.Ledger().JoinPath(strconv.FormatUint(block.Index, 10))
+		bl.Index = block.Index
+		bl.Time = block.Time
+		bl.Entries = block.State.ChainUpdates.Entries
+		err = block.Batch.Account(bl.Url).Main().Put(bl)
+	}
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("store block ledger: %w", err)
 	}

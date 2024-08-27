@@ -79,7 +79,7 @@ func BenchmarkExecuteBlock(b *testing.B) {
 	sim.ExecuteBlocks(b.N)
 }
 
-func TestBlockLedger(t *testing.T) {
+func TestOldBlockLedger(t *testing.T) {
 	// Initialize
 	sim := simulator.New(t, 3)
 	sim.InitFromGenesis()

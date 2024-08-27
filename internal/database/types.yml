@@ -86,3 +86,15 @@ BlockStateSynthTxnEntry:
     type: bytes
   - name: ChainEntry
     type: uvarint
+
+BlockLedger:
+  fields:
+    - name: Index
+      type: uint
+    - name: Time
+      type: time
+    - name: Entries
+      type: protocol.BlockEntry
+      marshal-as: reference
+      pointer: true
+      repeatable: true

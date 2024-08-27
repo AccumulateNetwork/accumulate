@@ -88,7 +88,7 @@ func structName(r typegen.Record) string {
 func fullName(r typegen.Record) string {
 	name := structName(r)
 	if len(r.GetTypeParameters()) == 0 {
-		return ""
+		return name
 	}
 	var params []string
 	for _, p := range r.GetTypeParameters() {

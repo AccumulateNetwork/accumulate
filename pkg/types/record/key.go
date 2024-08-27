@@ -69,13 +69,6 @@ func (k *Key) Append(v ...any) *Key {
 	if len(v) == 0 {
 		return k
 	}
-	for i, u := range v {
-		var ok bool
-		v[i], _, ok = normalize(u)
-		if !ok {
-			panic(errors.NotAllowed.WithFormat("%T is not a supported key part type", u))
-		}
-	}
 	if k.Len() == 0 {
 		return &Key{values: v}
 	}

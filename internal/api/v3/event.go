@@ -14,9 +14,11 @@ import (
 	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -75,15 +77,19 @@ func (s *EventService) didCommitBlock(e events.DidCommitBlock) error {
 func (s *EventService) loadBlockInfo(batch *database.Batch, e *api.BlockEvent) {
 	defer batch.Discard()
 
-	var ledger *protocol.BlockLedger
-	err := batch.Account(s.partition.BlockLedger(e.Index)).Main().GetAs(&ledger)
-	if err != nil {
-		s.logger.Error("Loading block ledger failed", "error", err, "block", e.Index, "url", s.partition.BlockLedger(e.Index))
+	var entries []*protocol.BlockEntry
+	if _, l1, e1 := batch.Account(s.partition.Ledger()).BlockLedger().Find(record.NewKey(e.Index)).Exact().Get(); e1 == nil {
+		entries = l1.Entries
+	} else if l2, e2 := batch.Account(s.partition.BlockLedger(e.Index)).Main().Get(); e2 == nil && l2.Type() == protocol.AccountTypeBlockLedger {
+		entries = l2.(*protocol.BlockLedger).Entries
+	} else {
+		s.logger.Error("Loading block ledger failed", "error", errors.Join(e1, e2), "block", e.Index, "url", s.partition.BlockLedger(e.Index))
 		return
 	}
 
-	e.Entries = make([]*api.ChainEntryRecord[api.Record], len(ledger.Entries))
-	for i, le := range ledger.Entries {
+	e.Entries = make([]*api.ChainEntryRecord[api.Record], len(entries))
+	for i, le := range entries {
+		var err error
 		e.Entries[i], err = loadBlockEntry(batch, le)
 		if err != nil {
 			s.logger.Error("Loading block entry", "error", err, "block", e.Index, "account", le.Account, "chain", le.Chain, "index", le.Index)

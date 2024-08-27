@@ -8,10 +8,10 @@ package indexing
 
 import (
 	"github.com/cometbft/cometbft/libs/log"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 )
 
 // NewLog constructs a new Log data model object. Log supports appending keys in

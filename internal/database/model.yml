@@ -124,6 +124,13 @@
         constructor: newBPT
         pointer: true
 
+    - name: BlockLedger
+      description: indexes entries of a block. Should only be used on the system ledger
+      type: other
+      dataType: indexing.Log[*BlockLedger]
+      constructor: newBlockEntryLog
+      pointer: true
+
     - name: Transaction
       type: entity
       index: getTransactionKeys # Indexed by pending (more or less)

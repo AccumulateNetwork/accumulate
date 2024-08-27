@@ -9,8 +9,8 @@ package indexing
 import (
 	"slices"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 )
 
 // Find searches for the closest index entry to the target.
