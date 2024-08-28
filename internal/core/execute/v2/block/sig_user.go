@@ -435,12 +435,12 @@ func (UserSignature) process(batch *database.Batch, ctx *userSigContext) error {
 	}
 
 	if ctx.keySig.GetVote() == protocol.VoteTypeSuggest && ctx.GetActiveGlobals().ExecutorVersion.V2VandenbergEnabled() {
-		// If it's a signature, add it to the chain only
+		// If it's a suggestion, add it to the chain only
 		err = batch.Account(ctx.getSigner()).
 			Transaction(ctx.transaction.ID().Hash()).
 			RecordHistory(ctx.message)
 	} else {
-		// Otherwise, add it to  the signature set and chain
+		// Otherwise, add it to the signature set and chain
 		err = addSignature(batch, ctx.SignatureContext, ctx.signer, &database.SignatureSetEntry{
 			KeyIndex: uint64(ctx.keyIndex),
 			Version:  ctx.keySig.GetSignerVersion(),
