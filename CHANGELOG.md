@@ -1,23 +1,39 @@
 # Changelog
 
-## Unreleased
+## 1.4
 
-- New and improved node configuration framework
-- Progress towards snapshot sync
-- Support adding an index to a snapshot
-- Support for Bolt and LevelDB
-- Improve peer-to-peer service discovery
-- Improve reliability of healing
-- Improve performance of light client indexing
-- Exploratory support for RSA signatures
-- Reduce overhead of BPT hash calculations
-- Decouple ACME burns (for credits) from anchors
-- Decouple network updates (e.g. the oracle) from anchors
-- Decouple major blocks from anchors
-- Improve reliability of major blocks
-- Improve reliability of anchoring
-- Redesign the simulator's consensus model
-- Suggested transactions
+- Protocol
+  - Support for EIP-712 (typed data) signatures
+  - Support for PKIX RSA signatures
+  - Support for PKIX ECDSA signatures
+  - Support for AC2/AS2 (PKIX ECDSA), AC3/AS3 (PKIX RSA), and WIF addresses
+  - Suggested transactions
+  - Discount creation of bare ADIs (without a key book)
+  - Discount creation of sub-ADIs
+- API
+  - Support for retrieving a receipt at a specific height
+  - Support appending an epilogue to a transaction
+  - Support minimum viable Ethereum RPC for MetaMask
+- Node operations
+  - New and improved node configuration framework
+  - Progress towards snapshot sync
+  - Support adding an index to a snapshot
+  - Support for Bolt and LevelDB
+  - Exploratory custom database implementation to improve TPS
+- Network operations
+  - Improve peer-to-peer service discovery
+  - Improve reliability of healing
+  - Improve performance of light client indexing
+  - Decouple ACME burns (for credits) from anchors
+  - Decouple network updates (e.g. the oracle) from anchors
+  - Decouple major blocks from anchors
+  - Improve reliability of major blocks
+  - Improve reliability of anchoring
+  - Improve API stability
+- Other
+  - Reduce overhead of BPT hash calculations
+  - Redesign the simulator's consensus model
+  - Fix lite account authority handling bugs
 
 ## 1.3
 
@@ -36,7 +52,6 @@
   - Anchoring improvements
   - Enable snapshot v2
   - Use binary genesis file for new nodes
-- API improvements
 - SDK
   - Embedded checkpoint for validating network state
 
