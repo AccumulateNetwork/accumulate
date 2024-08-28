@@ -4,9 +4,9 @@
 
 - Protocol
   - Support for EIP-712 (typed data) signatures
-  - Support for PKIX RSA signatures
-  - Support for PKIX ECDSA signatures
-  - Support for AC2/AS2 (PKIX ECDSA), AC3/AS3 (PKIX RSA), and WIF addresses
+  - Support for PKIX ECDSA signatures and AC2/AS2 addresses
+  - Support for PKIX RSA signatures and AC3/AS3 addresses
+  - Support for WIF addresses
   - Suggested transactions
   - Discount creation of bare ADIs (without a key book)
   - Discount creation of sub-ADIs
