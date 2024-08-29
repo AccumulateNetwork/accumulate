@@ -6,6 +6,8 @@
   - Support for EIP-712 (typed data) signatures
   - Support for PKIX ECDSA signatures and AC2/AS2 addresses
   - Support for PKIX RSA signatures and AC3/AS3 addresses
+    - **NOTE**, an RSA or ECDSA lite account cannot bootstrap due to [an issue
+      with credits][aip-51].
   - Support for WIF addresses
   - Suggested transactions
   - Discount creation of bare ADIs (without a key book)
@@ -34,6 +36,8 @@
   - Reduce overhead of BPT hash calculations
   - Redesign the simulator's consensus model
   - Fix lite account authority handling bugs
+
+[aip-51]: https://gitlab.com/accumulatenetwork/governance/aip/-/issues/51
 
 ## 1.3
 
