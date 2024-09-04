@@ -35,9 +35,6 @@ var flag = struct {
 	External   multiaddr.Multiaddr
 }{
 	Key: PrivateKeyFlag{Value: &TransientPrivateKey{}},
-	PromListen: []multiaddr.Multiaddr{
-		multiaddr.StringCast("/ip4/0.0.0.0/tcp/8081/http"),
-	},
 }
 
 func init() {
@@ -46,6 +43,12 @@ func init() {
 	cmd.Flags().Var((*MultiaddrSliceFlag)(&flag.PromListen), "prom-listen", "Prometheus listening address(es) (default /ip4/0.0.0.0/tcp/8081/http)")
 	cmd.Flags().VarP((*MultiaddrSliceFlag)(&flag.Peers), "peer", "p", "Peers to connect to")
 	cmd.Flags().Var(MultiaddrFlag{Value: &flag.External}, "external", "External address to advertize")
+
+	cmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
+		if !cmd.Flag("prom-listen").Changed {
+			flag.PromListen = []multiaddr.Multiaddr{multiaddr.StringCast("/ip4/0.0.0.0/tcp/8081/http")}
+		}
+	}
 }
 
 func run(*cobra.Command, []string) {
@@ -67,7 +70,6 @@ func run(*cobra.Command, []string) {
 	ctx := ContextForMainProcess(context.Background())
 	inst, err := Start(ctx, cfg)
 	Check(err)
-
-	<-ctx.Done()
+	<-inst.Done()
 	inst.Stop()
 }
