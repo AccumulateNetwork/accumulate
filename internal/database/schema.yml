@@ -1,0 +1,28 @@
+$generate:
+  widgets: true
+
+  methods:
+    json: true
+    binary: true
+
+  import:
+    protocol: gitlab.com/accumulatenetwork/accumulate/protocol
+    encoding: gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding
+
+  varPrefix:
+    schema: s
+    widget: w
+
+BlockLedger:
+  class: composite
+  fields:
+    - name: Index
+      type: uint
+    - name: Time
+      type:
+        class: reference
+        name: time.Time
+        encode:
+          withWidget: encoding.TimeWidget
+    - name: Entries
+      type: '[]*protocol.BlockEntry'

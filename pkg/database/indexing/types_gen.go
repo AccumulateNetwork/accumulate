@@ -4,7 +4,6 @@ package indexing
 
 import (
 	record "gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
-	"gitlab.com/accumulatenetwork/core/schema"
 	"gitlab.com/accumulatenetwork/core/schema/pkg/binary"
 	"gitlab.com/accumulatenetwork/core/schema/pkg/widget"
 )
@@ -71,14 +70,14 @@ type Entry[V any] struct {
 	// Key is the key being indexed.
 	Key *record.Key
 	// Value is the value being indexed.
-	Value V
+	Value *Value[V]
 }
 
 func wEntry[V any]() *widget.Composite[*Entry[V], Entry[V]] {
 	return widget.ForComposite(widget.Fields[Entry[V]]{
 		{Name: "index", ID: 1, Widget: widget.ForUint(func(v *Entry[V]) *uint64 { return &v.Index })},
 		{Name: "key", ID: 2, Widget: widget.ForValue(func(v *Entry[V]) **record.Key { return &v.Key })},
-		{Name: "value", ID: 3, Widget: schema.UnsafeWidgetFor(sEntry.Type.Fields[2].Type, func(v *Entry[V]) *V { return &v.Value })},
+		{Name: "value", ID: 3, Widget: widget.ForPtr(wValue, func(v *Entry[V]) **Value[V] { return &v.Value })},
 	}, widget.Identity[*Entry[V]])
 }
 
@@ -122,4 +121,21 @@ func (v *Entry[V]) UnmarshalBinary(b []byte) error {
 // UnmarshalBinary unmarshals the Entry from a [binary.Decoder].
 func (v *Entry[V]) UnmarshalBinaryV2(dec *binary.Decoder) error {
 	return wEntry[V]().UnmarshalBinary(dec, v)
+}
+
+type Value[V any] struct {
+	data    []byte
+	dataOk  bool
+	value   V
+	valueOk bool
+}
+
+// Copy returns a copy of the Value.
+func (v *Value[V]) Copy() *Value[V] {
+	return sValue.Copy(v).(*Value[V])
+}
+
+// EqualValue returns true if V is equal to U.
+func (v *Value[V]) Equal(u *Value[V]) bool {
+	return sValue.Equal(v, u)
 }

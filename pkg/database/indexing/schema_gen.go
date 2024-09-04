@@ -4,7 +4,6 @@ package indexing
 
 import (
 	"fmt"
-
 	record "gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	"gitlab.com/accumulatenetwork/core/schema"
 )
@@ -12,6 +11,7 @@ import (
 var (
 	sBlock schema.UnsafeMethods[*Block[any], *schema.CompositeType]
 	sEntry schema.UnsafeMethods[*Entry[any], *schema.CompositeType]
+	sValue schema.UnsafeMethods[*Value[any], *schema.CompositeType]
 )
 
 func init() {
@@ -74,10 +74,51 @@ func init() {
 			{
 				Name:        "Value",
 				Description: "is the value being indexed",
+				Type: (&schema.PointerType{
+					TypeBase: schema.TypeBase{},
+				}).
+					ResolveElemTo(&deferredTypes, "Value"),
+			},
+		},
+	}).SetGoType()
+
+	sValue = schema.WithUnsafeMethods[*Value[any]](&schema.CompositeType{
+		TypeBase: schema.TypeBase{
+			Name: "Value",
+			Encode: schema.MapValue{
+				"withWidget": schema.StringValue("wValue"),
+			},
+			Generate: schema.MapValue{
+				"methods": schema.MapValue{
+					"binary": schema.BooleanValue(false),
+					"json":   schema.BooleanValue(false),
+				},
+			},
+			Parameters: []*schema.TypeParameter{
+				{
+					Name:       "V",
+					Constraint: schema.TypeReferenceFor[any](),
+				}},
+		},
+		Fields: []*schema.Field{
+			{
+				Name: "data",
+				Type: &schema.SimpleType{Type: schema.SimpleTypeBytes},
+			},
+			{
+				Name: "dataOk",
+				Type: &schema.SimpleType{Type: schema.SimpleTypeBool},
+			},
+			{
+				Name: "value",
 				Type: (&schema.TypeArgument{
 					Value: schema.TypeReferenceFor[any](),
 				}).
-					ResolveParameterTo(&deferredTypes, "Entry", "V"),
+					ResolveParameterTo(&deferredTypes, "Value", "V"),
+			},
+			{
+				Name: "valueOk",
+				Type: &schema.SimpleType{Type: schema.SimpleTypeBool},
 			},
 		},
 	}).SetGoType()
@@ -85,6 +126,7 @@ func init() {
 	s, err := schema.New(
 		sBlock.Type,
 		sEntry.Type,
+		sValue.Type,
 	)
 	if err != nil {
 		panic(fmt.Errorf("invalid embedded schema: %w", err))

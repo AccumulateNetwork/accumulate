@@ -15,7 +15,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 )
 
-const debugSynchronous = false
+const debugSynchronous = true
 
 // SimpleHub is a simple implementation of [Hub].
 type SimpleHub struct {

@@ -99,7 +99,7 @@ func TestLog(t *testing.T) {
 	}
 }
 
-func BenchmarkLog_Insert(b *testing.B) {
+func BenchmarkLog_Append(b *testing.B) {
 	for _, P := range []int{8, 10, 12, 14, 16} {
 		b.Run(fmt.Sprint(1<<P), func(b *testing.B) {
 			store := memory.New(nil).Begin(nil, true)

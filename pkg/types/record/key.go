@@ -24,9 +24,9 @@ import (
 	json2 "gitlab.com/accumulatenetwork/core/schema/pkg/json"
 )
 
-var binEncPool = binary2.NewPointerPool[binary2.Encoder]()
-var jsonEncPool = binary2.NewPointerPool[json2.Encoder]()
-var bufferPool = binary2.NewPointerPool[bytes.Buffer]()
+var binEncPool = binary2.NewEncoderPool()
+var jsonEncPool = json2.NewEncoderPool()
+var bufferPool = binary2.NewBufferPool()
 
 // A Key is the key for a record.
 type Key struct {
@@ -194,11 +194,9 @@ func (k *Key) Compare(l *Key) int {
 func (k *Key) MarshalBinary() ([]byte, error) {
 	buf := bufferPool.Get()
 	defer bufferPool.Put(buf)
-	buf.Reset()
 
-	enc := binEncPool.Get()
+	enc := binEncPool.Get(buf, binary2.WithBufferPool(bufferPool))
 	defer binEncPool.Put(enc)
-	enc.Reset(buf, binary2.WithBufferPool(bufferPool))
 
 	err := k.MarshalBinaryV2(enc)
 	return buf.Bytes(), err
@@ -375,11 +373,9 @@ func (k *Key) UnmarshalBinaryFrom(rd io.Reader) error {
 func (k *Key) MarshalJSON() ([]byte, error) {
 	buf := bufferPool.Get()
 	defer bufferPool.Put(buf)
-	buf.Reset()
 
-	enc := jsonEncPool.Get()
+	enc := jsonEncPool.Get(buf)
 	defer jsonEncPool.Put(enc)
-	enc.Reset(buf)
 
 	err := k.MarshalJSONV2(enc)
 	return buf.Bytes(), err

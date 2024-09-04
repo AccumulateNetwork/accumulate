@@ -12,6 +12,16 @@ $generate:
     schema: s
     widget: w
 
+Block[V any]:
+  class: composite
+  fields:
+    - name: Level
+      type: uint
+    - name: Index
+      type: uint
+    - name: Entries
+      type: '[]*Entry[V]'
+
 Entry[V any]:
   class: composite
   fields:
@@ -23,14 +33,18 @@ Entry[V any]:
       type: '*record.Key'
     - name: Value
       description: is the value being indexed
-      type: V
+      type: '*Value[V]'
 
-Block[V any]:
+Value[V any]:
   class: composite
   fields:
-    - name: Level
-      type: uint
-    - name: Index
-      type: uint
-    - name: Entries
-      type: '[]*Entry[V]'
+    - { name: data,    type: bytes   }
+    - { name: dataOk,  type: boolean }
+    - { name: value,   type: V       }
+    - { name: valueOk, type: boolean }
+  encode:
+    withWidget: wValue
+  generate:
+    methods:
+      json: false
+      binary: false

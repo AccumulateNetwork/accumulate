@@ -32,13 +32,17 @@ type QueryResult[V any] interface {
 
 type ValueResult[V any] struct {
 	Key   *record.Key
-	Value V
+	Value *Value[V]
 }
 
-func (r ValueResult[V]) Before() QueryResult[V]       { return r }
-func (r ValueResult[V]) Exact() QueryResult[V]        { return r }
-func (r ValueResult[V]) After() QueryResult[V]        { return r }
-func (r ValueResult[V]) Get() (*record.Key, V, error) { return r.Key, r.Value, nil }
+func (r ValueResult[V]) Before() QueryResult[V] { return r }
+func (r ValueResult[V]) Exact() QueryResult[V]  { return r }
+func (r ValueResult[V]) After() QueryResult[V]  { return r }
+
+func (r ValueResult[V]) Get() (*record.Key, V, error) {
+	v, err := r.Value.Get()
+	return r.Key, v, err
+}
 
 type ErrorResult[V any] struct{ error }
 

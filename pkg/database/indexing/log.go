@@ -47,13 +47,14 @@ func (x *Log[V]) Last() (*record.Key, V, error) {
 		}
 	}
 	e := b.Entries[len(b.Entries)-1]
-	return e.Key, e.Value, nil
+	v, err := e.Value.Get()
+	return e.Key, v, err
 }
 
 // Append appends a (key, value) entry into the chain. Append returns an
 // error if the key does not come after all other entries.
 func (x *Log[V]) Append(key *record.Key, value V) error {
-	new, err := x.append1(x.getHead(), &Entry[V]{Key: key, Value: value})
+	new, err := x.append1(x.getHead(), &Entry[V]{Key: key, Value: &Value[V]{value: value, valueOk: true}})
 	if new == nil || err != nil {
 		return err
 	}
