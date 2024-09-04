@@ -66,7 +66,11 @@ func (f *FaucetService) start(inst *Instance) error {
 	go func() {
 		if r, ok := router.(*routing.RouterInstance); ok {
 			inst.logger.Info("Waiting for router", "module", "run", "service", "faucet")
-			<-r.Ready()
+			if !<-r.Ready() {
+				inst.logger.Error("Failed to start faucet", "error", "unable to start router")
+				inst.Stop()
+				return
+			}
 		}
 
 		for {
