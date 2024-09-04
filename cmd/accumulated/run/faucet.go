@@ -103,7 +103,7 @@ func (f *FaucetService) start(inst *Instance) error {
 			return
 		}
 
-		inst.cleanup(func(context.Context) error { impl.Stop(); return nil })
+		inst.cleanup("faucet", func(context.Context) error { impl.Stop(); return nil })
 		registerRpcService(inst, impl.ServiceAddress(), message.Faucet{Faucet: impl})
 		inst.logger.Info("Ready", "module", "run", "service", "faucet")
 	}()

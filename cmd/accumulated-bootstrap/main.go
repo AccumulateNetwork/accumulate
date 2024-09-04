@@ -70,7 +70,6 @@ func run(*cobra.Command, []string) {
 	ctx := ContextForMainProcess(context.Background())
 	inst, err := Start(ctx, cfg)
 	Check(err)
-
-	<-ctx.Done()
+	<-inst.Done()
 	inst.Stop()
 }

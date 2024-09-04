@@ -58,15 +58,12 @@ func init() {
 	cmd.Flags().Var(&flag.Key, "key", "The key used to sign faucet transactions")
 	cmd.Flags().Var(&flag.Account, "account", "The faucet account")
 	cmd.Flags().Var((*MultiaddrSliceFlag)(&flag.Listen), "listen", "P2P listening address(es)")
-	cmd.Flags().Var((*MultiaddrSliceFlag)(&flag.PromListen), "prom-listen", "Prometheus listening address(es) (default /ip4/0.0.0.0/tcp/8081/http)")
+	cmd.Flags().Var((*MultiaddrSliceFlag)(&flag.PromListen), "prom-listen", "Prometheus listening address(es)")
 	cmd.Flags().VarP((*MultiaddrSliceFlag)(&flag.Peers), "peer", "p", "Peers to connect to")
 	cmd.Flags().StringVar(&flag.PeerDatabase, "peer-db", flag.PeerDatabase, "Track peers using a persistent database.")
 	cmd.Flags().StringVar(&flag.LogLevel, "log-level", "error", "Log level")
 
 	cmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
-		if !cmd.Flag("prom-listen").Changed {
-			flag.PromListen = []multiaddr.Multiaddr{multiaddr.StringCast("/ip4/0.0.0.0/tcp/8081/http")}
-		}
 		if !cmd.Flag("peer").Changed {
 			flag.Peers = accumulate.BootstrapServers
 		}
@@ -107,6 +104,6 @@ func run(_ *cobra.Command, args []string) {
 	ctx := cmdutil.ContextForMainProcess(context.Background())
 	inst, err := Start(ctx, cfg)
 	Check(err)
-	<-ctx.Done()
+	<-inst.Done()
 	inst.Stop()
 }

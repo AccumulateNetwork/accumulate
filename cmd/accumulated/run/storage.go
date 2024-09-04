@@ -107,7 +107,7 @@ func (s *BadgerStorage) open(inst *Instance) (keyvalue.Beginner, error) {
 		return nil, err
 	}
 
-	inst.cleanup(func(context.Context) error { return db.Close() })
+	inst.cleanup("storage", func(context.Context) error { return db.Close() })
 	return db, nil
 }
 
@@ -117,7 +117,7 @@ func (s *BoltStorage) open(inst *Instance) (keyvalue.Beginner, error) {
 		return nil, err
 	}
 
-	inst.cleanup(func(context.Context) error { return db.Close() })
+	inst.cleanup("storage", func(context.Context) error { return db.Close() })
 	return db, nil
 }
 
@@ -127,7 +127,7 @@ func (s *LevelDBStorage) open(inst *Instance) (keyvalue.Beginner, error) {
 		return nil, err
 	}
 
-	inst.cleanup(func(context.Context) error { return db.Close() })
+	inst.cleanup("storage", func(context.Context) error { return db.Close() })
 	return db, nil
 }
 
@@ -137,6 +137,6 @@ func (s *ExpBlockDBStorage) open(inst *Instance) (keyvalue.Beginner, error) {
 		return nil, err
 	}
 
-	inst.cleanup(func(context.Context) error { return db.Close() })
+	inst.cleanup("storage", func(context.Context) error { return db.Close() })
 	return db, nil
 }

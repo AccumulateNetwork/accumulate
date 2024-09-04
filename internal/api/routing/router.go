@@ -88,7 +88,7 @@ func NewRouter(opts RouterOptions) *RouterInstance {
 			}
 
 			r.tree = tree
-			markReady(true)
+			markReady(false)
 			return nil
 		})
 	}

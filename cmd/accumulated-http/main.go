@@ -175,7 +175,7 @@ func run(cmd *cobra.Command, args []string) {
 	ctx := cmdutil.ContextForMainProcess(context.Background())
 	inst, err := Start(ctx, cfg)
 	Check(err)
-	<-ctx.Done()
+	<-inst.Done()
 	inst.Stop()
 }
 
