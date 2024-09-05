@@ -15,8 +15,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -39,10 +37,8 @@ type Simulator struct {
 func New(opts ...Option) (*Simulator, error) {
 	// Process options
 	o := &simFactory{
-		network: NewSimpleNetwork("Sim", 3, 3),
-		storeOpt: func(_ *protocol.PartitionInfo, _ int, logger log.Logger) keyvalue.Beginner {
-			return memory.New(nil)
-		},
+		network:  NewSimpleNetwork("Sim", 3, 3),
+		storeOpt: MemoryDbOpener,
 		snapshot: func(string, *accumulated.NetworkInit, log.Logger) (ioutil2.SectionReader, error) {
 			return new(ioutil2.Buffer), nil
 		},
