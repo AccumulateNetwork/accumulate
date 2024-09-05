@@ -38,6 +38,8 @@ func NewDispatcher(network string, router routing.Router, dialer message.Dialer)
 	return d
 }
 
+func (d *dispatcher) Close() { /* Nothing to do */ }
+
 // Submit routes the account URL, constructs a multiaddr, and queues addressed
 // submit requests.
 func (d *dispatcher) Submit(ctx context.Context, u *url.URL, env *messaging.Envelope) error {

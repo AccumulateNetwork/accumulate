@@ -38,5 +38,5 @@ func GetSignaturesForSigner(transaction *Transaction, signer protocol.Signer) ([
 }
 
 func newBlockEntryLog(_ record.Record, logger log.Logger, store record.Store, key *record.Key, _ string) *indexing.Log[*BlockLedger] {
-	return indexing.NewLog[*BlockLedger](logger, store, key, 1024)
+	return indexing.NewLog[*BlockLedger](logger, store, key, 4<<10)
 }

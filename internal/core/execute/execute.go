@@ -81,6 +81,9 @@ type Dispatcher interface {
 
 	// Send submits the queued transactions.
 	Send(context.Context) <-chan error
+
+	// Close closes the dispatcher.
+	Close()
 }
 
 // BlockParams are the parameters for a new [Block].

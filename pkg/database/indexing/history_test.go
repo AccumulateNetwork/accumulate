@@ -32,32 +32,50 @@ func TestNetworkHistory(t *testing.T) {
 
 	sim := NewSim(t,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
-		simulator.Genesis(GenesisTime).With(alice),
+		simulator.Genesis(GenesisTime).With(alice).WithVersion(ExecutorVersionV2Vandenberg),
+		simulator.BadgerDatabaseFromDirectory("/tmp/accumulate-test-network-history", func(err error) { require.NoError(t, err) }),
 	)
+	before := getHeight(t, sim)
 
 	// Generate history
 	var st *TransactionStatus
-	var timestamp uint64
 	start := time.Now()
-	for i := range 500 {
-		st = sim.BuildAndSubmitTxnSuccessfully(
-			build.Transaction().For(alice, "book", "1").
-				BurnCredits(1).
-				SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey))
+	var last time.Duration
+	for i := 0; ; i++ {
+		if i%8 == 0 {
+			st = sim.BuildAndSubmitTxnSuccessfully(
+				build.Transaction().For(alice, "book", "1").
+					BurnCredits(1).
+					SignWith(alice, "book", "1").Version(1).Timestamp(time.Now().UnixMicro()).PrivateKey(aliceKey))
+		}
 
 		sim.Step()
-		if (i+1)%20 == 0 {
-			fmt.Printf("%d (%v)\n", i+1, time.Since(start)/time.Duration(i+1))
+
+		d := time.Since(start)
+		if d-last > 2*time.Second {
+			last = d
+			h := getHeight(t, sim)
+			fmt.Printf("%d (%d blocks, %v per)\n", h, i+1, d/time.Duration(i+1))
+			if h > 10500 {
+				break
+			}
 		}
 	}
 	sim.StepUntil(
 		Txn(st.TxID).Completes())
 
 	// Check the root index
+	h := getHeight(t, sim)
+	fmt.Printf("%d (%v)\n", h, time.Since(start)/time.Duration(h-before))
+}
+
+func getHeight(t testing.TB, sim *Sim) uint64 {
+	var height uint64
 	View(t, sim.Database("BVN0"), func(batch *database.Batch) {
 		a := batch.Account(url.MustParse("bvn-bvn0.acme/ledger"))
 		h, err := a.RootChain().Index().Head().Get()
 		require.NoError(t, err)
-		t.Log(h.Count)
+		height = uint64(h.Count)
 	})
+	return height
 }
