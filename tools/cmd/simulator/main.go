@@ -134,7 +134,7 @@ func run(*cobra.Command, []string) {
 		net = simulator.NewSimpleNetwork("Simulator", flag.BvnCount, flag.ValCount)
 		for i, bvn := range net.Bvns {
 			for j, node := range bvn.Nodes {
-				node.AdvertizeAddress = fmt.Sprintf("%s", nextIP(localhost, i*flag.ValCount+j).String())
+				node.AdvertizeAddress = nextIP(localhost, i*flag.ValCount+j).String()
 				node.BasePort = uint64(flag.BasePort)
 			}
 		}
