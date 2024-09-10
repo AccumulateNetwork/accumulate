@@ -538,13 +538,25 @@ func (c *Client) pullMessages(ctx context.Context, missing []*missingMessage) er
 
 		default:
 			// Get the message
-			r, err := c.query.QueryMessage(ctx, m.ID, nil)
-			if err != nil {
-				return errors.UnknownError.WithFormat("query %v: %w", m.ID, err)
+			var message messaging.Message
+			var err error
+			if m.Chain == "" {
+				r, err := c.query.QueryMessage(ctx, m.ID, nil)
+				if err != nil {
+					return errors.UnknownError.WithFormat("query %v: %w", m.ID, err)
+				}
+				message = r.Message
+
+			} else {
+				r, err := c.query.QueryMainChainEntry(ctx, m.ID.Account(), &api.ChainQuery{Name: m.Chain, Index: &m.Index})
+				if err != nil {
+					return errors.UnknownError.WithFormat("query %v: %w", m.ID, err)
+				}
+				message = r.Value.Message
 			}
 
 			// Record it
-			err = batch.Message(m.ID.Hash()).Main().Put(r.Message)
+			err = batch.Message(m.ID.Hash()).Main().Put(message)
 			if err != nil {
 				return errors.UnknownError.WithFormat("store message %v (1): %w", m.ID, err)
 			}
