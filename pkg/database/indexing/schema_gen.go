@@ -4,14 +4,17 @@ package indexing
 
 import (
 	"fmt"
+
 	record "gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	"gitlab.com/accumulatenetwork/core/schema"
 )
 
 var (
-	sBlock schema.UnsafeMethods[*Block[any], *schema.CompositeType]
-	sEntry schema.UnsafeMethods[*Entry[any], *schema.CompositeType]
-	sValue schema.UnsafeMethods[*Value[any], *schema.CompositeType]
+	sBlock    schema.UnsafeMethods[*Block[any], *schema.CompositeType]
+	sEntry    schema.UnsafeMethods[*Entry[any], *schema.CompositeType]
+	sRange    schema.Methods[*Range, *Range, *schema.CompositeType]
+	sRangeSet schema.Methods[RangeSet, *RangeSet, *schema.ArrayType]
+	sValue    schema.UnsafeMethods[*Value[any], *schema.CompositeType]
 )
 
 func init() {
@@ -82,6 +85,29 @@ func init() {
 		},
 	}).SetGoType()
 
+	sRange = schema.WithMethods[*Range, *Range](&schema.CompositeType{
+		TypeBase: schema.TypeBase{
+			Name: "Range",
+		},
+		Fields: []*schema.Field{
+			{
+				Name: "Start",
+				Type: &schema.SimpleType{Type: schema.SimpleTypeUint},
+			},
+			{
+				Name: "End",
+				Type: &schema.SimpleType{Type: schema.SimpleTypeUint},
+			},
+		},
+	}).SetGoType()
+
+	sRangeSet = schema.WithMethods[RangeSet, *RangeSet]((&schema.ArrayType{
+		TypeBase: schema.TypeBase{
+			Name: "RangeSet",
+		},
+	}).
+		ResolveElemTo(&deferredTypes, "Range")).SetGoType()
+
 	sValue = schema.WithUnsafeMethods[*Value[any]](&schema.CompositeType{
 		TypeBase: schema.TypeBase{
 			Name: "Value",
@@ -93,6 +119,7 @@ func init() {
 					"binary": schema.BooleanValue(false),
 					"json":   schema.BooleanValue(false),
 				},
+				"widgets": schema.BooleanValue(false),
 			},
 			Parameters: []*schema.TypeParameter{
 				{
@@ -126,6 +153,8 @@ func init() {
 	s, err := schema.New(
 		sBlock.Type,
 		sEntry.Type,
+		sRange.Type,
+		sRangeSet.Type,
 		sValue.Type,
 	)
 	if err != nil {

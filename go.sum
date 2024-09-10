@@ -1170,14 +1170,8 @@ github.com/yuin/goldmark v1.2.1/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9dec
 github.com/yuin/goldmark v1.3.5/go.mod h1:mwnBkeHKe2W/ZEtQ+71ViKU8L12m81fl3OWwC1Zlc8k=
 github.com/yuin/goldmark v1.4.1/go.mod h1:mwnBkeHKe2W/ZEtQ+71ViKU8L12m81fl3OWwC1Zlc8k=
 github.com/yuin/goldmark v1.4.13/go.mod h1:6yULJ656Px+3vBD8DxQVa3kxgyrAnzto9xy5taEt/CY=
-gitlab.com/accumulatenetwork/core/schema v0.2.1-0.20240904170137-87d1085f11e4 h1:jTLLHhUd6wGuF4mWTUGI1jJlAVEuhGkkZKozwME/QjA=
-gitlab.com/accumulatenetwork/core/schema v0.2.1-0.20240904170137-87d1085f11e4/go.mod h1:ZEUsUF0Gr3daHqbDee9MnLB0IX3hdg7AYUogv+Xm2js=
-gitlab.com/accumulatenetwork/core/schema v0.2.1-0.20240904190936-ae51bd5f98df h1:S/cEgi5ghcLbN0iHCQAtMw+SpbkUmaCswrfEUSkkZ7Q=
-gitlab.com/accumulatenetwork/core/schema v0.2.1-0.20240904190936-ae51bd5f98df/go.mod h1:ZEUsUF0Gr3daHqbDee9MnLB0IX3hdg7AYUogv+Xm2js=
-gitlab.com/accumulatenetwork/core/schema v0.2.1-0.20240904211628-4f0647a4a18e h1:w3RCSDXxzAGMwHLtnqIIk58u4u8aqbhYL4ZF9kChEhE=
-gitlab.com/accumulatenetwork/core/schema v0.2.1-0.20240904211628-4f0647a4a18e/go.mod h1:ZEUsUF0Gr3daHqbDee9MnLB0IX3hdg7AYUogv+Xm2js=
-gitlab.com/accumulatenetwork/utils/jsonrpc v0.1.1-0.20240904170803-0c2c1eb51aa0 h1:qhJq0LmyowYAGQw5n7246CiOuv3QkMN2rjpMWVTNNkI=
-gitlab.com/accumulatenetwork/utils/jsonrpc v0.1.1-0.20240904170803-0c2c1eb51aa0/go.mod h1:v0NbYAScNN8dtgBFgggFkhvJtKz7/UYY/LPCSD6a5Tk=
+gitlab.com/accumulatenetwork/core/schema v0.2.1-0.20240907004549-633fb4d3fa26 h1:7j2DSwhzl2VtHg3JeoOsGeWVF8pD/T03iw6rLzw6IpI=
+gitlab.com/accumulatenetwork/core/schema v0.2.1-0.20240907004549-633fb4d3fa26/go.mod h1:ZEUsUF0Gr3daHqbDee9MnLB0IX3hdg7AYUogv+Xm2js=
 gitlab.com/accumulatenetwork/utils/jsonrpc v0.1.1-0.20240904211734-7057029b6ad1 h1:w7bF8KV1SmNXwdA+MVxyL/u997CgvHggApyH4pa9mpQ=
 gitlab.com/accumulatenetwork/utils/jsonrpc v0.1.1-0.20240904211734-7057029b6ad1/go.mod h1:/lKDPIe8tS8Tui1Qw7C0HajOwtljBfBXNkvmmfbYgTA=
 gitlab.com/bosi/decorder v0.4.1 h1:VdsdfxhstabyhZovHafFw+9eJ6eU0d2CkFNJcZz/NU4=

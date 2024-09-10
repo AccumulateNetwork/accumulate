@@ -45,6 +45,19 @@ Value[V any]:
   encode:
     withWidget: wValue
   generate:
+    widgets: false
     methods:
       json: false
       binary: false
+
+RangeSet:
+  class: array
+  elem: Range
+
+Range:
+  class: composite
+  fields:
+    - name: Start
+      type: uint
+    - name: End
+      type: uint

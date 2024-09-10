@@ -123,6 +123,104 @@ func (v *Entry[V]) UnmarshalBinaryV2(dec *binary.Decoder) error {
 	return wEntry[V]().UnmarshalBinary(dec, v)
 }
 
+type Range struct {
+	Start uint64
+	End   uint64
+}
+
+var wRange = widget.ForComposite(widget.Fields[Range]{
+	{Name: "start", ID: 1, Widget: widget.ForUint(func(v *Range) *uint64 { return &v.Start })},
+	{Name: "end", ID: 2, Widget: widget.ForUint(func(v *Range) *uint64 { return &v.End })},
+}, widget.Identity[*Range])
+
+// Copy returns a copy of the Range.
+func (v *Range) Copy() *Range {
+	var u = new(Range)
+	wRange.CopyTo(u, v)
+	return u
+}
+
+// EqualRange returns true if V is equal to U.
+func (v *Range) Equal(u *Range) bool {
+	return wRange.Equal(v, u)
+}
+
+// MarshalBinary marshals the Range to JSON.
+func (v *Range) MarshalJSON() ([]byte, error) {
+	return widget.MarshalJSON(v, wRange)
+}
+
+// UnmarshalJSON unmarshals the Range from JSON.
+func (v *Range) UnmarshalJSON(b []byte) error {
+	return widget.UnmarshalJSON(v, wRange, b)
+}
+
+// MarshalBinary marshals the Range to bytes using [binary].
+func (v *Range) MarshalBinary() ([]byte, error) {
+	return widget.MarshalBinary(v, wRange)
+}
+
+// MarshalBinary marshals the Range to a [binary.Encoder].
+func (v *Range) MarshalBinaryV2(enc *binary.Encoder) error {
+	return wRange.MarshalBinary(enc, v)
+}
+
+// UnmarshalBinary unmarshals the Range from bytes using [binary].
+func (v *Range) UnmarshalBinary(b []byte) error {
+	return widget.UnmarshalBinary(v, wRange, b)
+}
+
+// UnmarshalBinary unmarshals the Range from a [binary.Decoder].
+func (v *Range) UnmarshalBinaryV2(dec *binary.Decoder) error {
+	return wRange.UnmarshalBinary(dec, v)
+}
+
+type RangeSet []Range
+
+var wRangeSet = widget.ForArray(widget.ForComposite(wRange.Fields, widget.GetElem[RangeSet]), widget.Identity[*RangeSet])
+
+// Copy returns a copy of the RangeSet.
+func (v RangeSet) Copy() RangeSet {
+	var u RangeSet
+	wRangeSet.CopyTo(&u, &v)
+	return u
+}
+
+// EqualRangeSet returns true if V is equal to U.
+func (v RangeSet) Equal(u RangeSet) bool {
+	return wRangeSet.Equal(&v, &u)
+}
+
+// MarshalBinary marshals the RangeSet to JSON.
+func (v RangeSet) MarshalJSON() ([]byte, error) {
+	return widget.MarshalJSON(&v, wRangeSet)
+}
+
+// UnmarshalJSON unmarshals the RangeSet from JSON.
+func (v *RangeSet) UnmarshalJSON(b []byte) error {
+	return widget.UnmarshalJSON(v, wRangeSet, b)
+}
+
+// MarshalBinary marshals the RangeSet to bytes using [binary].
+func (v RangeSet) MarshalBinary() ([]byte, error) {
+	return widget.MarshalBinary(&v, wRangeSet)
+}
+
+// MarshalBinary marshals the RangeSet to a [binary.Encoder].
+func (v RangeSet) MarshalBinaryV2(enc *binary.Encoder) error {
+	return wRangeSet.MarshalBinary(enc, &v)
+}
+
+// UnmarshalBinary unmarshals the RangeSet from bytes using [binary].
+func (v *RangeSet) UnmarshalBinary(b []byte) error {
+	return widget.UnmarshalBinary(v, wRangeSet, b)
+}
+
+// UnmarshalBinary unmarshals the RangeSet from a [binary.Decoder].
+func (v *RangeSet) UnmarshalBinaryV2(dec *binary.Decoder) error {
+	return wRangeSet.UnmarshalBinary(dec, v)
+}
+
 type Value[V any] struct {
 	data    []byte
 	dataOk  bool
