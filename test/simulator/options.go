@@ -206,19 +206,26 @@ func MemoryDbOpener(partition *protocol.PartitionInfo, node int, logger log.Logg
 }
 
 func BadgerDbOpener(dir string, onErr func(error)) OpenDatabaseFunc {
+	dbs := map[string]keyvalue.Beginner{}
 	return func(partition *protocol.PartitionInfo, node int, logger log.Logger) keyvalue.Beginner {
+		file := fmt.Sprintf("%s-%d.db", partition.ID, node)
+		if db, ok := dbs[file]; ok {
+			return db
+		}
+
 		err := os.MkdirAll(dir, 0700)
 		if err != nil {
 			onErr(err)
 			panic(err)
 		}
 
-		db, err := badger.New(filepath.Join(dir, fmt.Sprintf("%s-%d.db", partition.ID, node)))
+		db, err := badger.New(filepath.Join(dir, file))
 		if err != nil {
 			onErr(err)
 			panic(err)
 		}
 
+		dbs[file] = db
 		return db
 	}
 }

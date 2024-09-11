@@ -45,7 +45,9 @@ func (s *SimpleHub) Register(module Module) {
 func (s *SimpleHub) Unregister(module Module) {
 	for {
 		m := s.modules.Load()
-		n := slices.DeleteFunc(*m, func(m Module) bool { return m == module })
+		n := make([]Module, len(*m))
+		copy(n, *m)
+		n = slices.DeleteFunc(n, func(m Module) bool { return m == module })
 		if s.modules.CompareAndSwap(m, &n) {
 			break
 		}

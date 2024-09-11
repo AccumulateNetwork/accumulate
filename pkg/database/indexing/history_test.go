@@ -7,23 +7,34 @@
 package indexing_test
 
 import (
+	"flag"
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
 )
 
+var buildNetworkHistoryDb = flag.Bool("build-network-history-db", false, "Build the database for testing network history")
+
 func TestNetworkHistory(t *testing.T) {
+	dir := filepath.Join(os.TempDir(), "accumulate-"+t.Name()+".badger")
+	if !*buildNetworkHistoryDb {
+		if ent, err := os.ReadDir(dir); len(ent) == 0 {
+			require.NoError(t, err)
+			t.Skip("Run with -build-network-history-db to build the database")
+		}
+	}
+
 	// Setup
 	alice := build.
 		Identity("alice").Create("book").
@@ -32,58 +43,63 @@ func TestNetworkHistory(t *testing.T) {
 	aliceKey := alice.Book("book").Page(1).
 		GenerateKey(SignatureTypeED25519)
 
-	badger := simulator.BadgerDbOpener("/tmp/accumulate-test-network-history", func(err error) { require.NoError(t, err) })
-	_ = badger
-
-	sim := NewSim(t,
+	badger := simulator.BadgerDbOpener(dir, func(err error) { require.NoError(t, err) })
+	simOpts := []simulator.Option{
 		simulator.SimpleNetwork(t.Name(), 1, 1),
 		simulator.Genesis(GenesisTime).With(alice).WithVersion(ExecutorVersionV2Vandenberg),
-		simulator.OverlayDatabase(simulator.MemoryDbOpener, badger),
-	)
+	}
 
 	// Generate history
-	var st *TransactionStatus
-	start := time.Now()
-	var last time.Duration
-	for i := 0; getHeight(t, sim) < 12000; i++ {
-		if i%8 == 0 {
-			st = sim.BuildAndSubmitTxnSuccessfully(
-				build.Transaction().For(alice, "book", "1").
-					BurnCredits(1).
-					SignWith(alice, "book", "1").Version(1).Timestamp(time.Now().UnixMicro()).PrivateKey(aliceKey))
-		}
+	if *buildNetworkHistoryDb {
+		sim := NewSim(t, append(simOpts,
+			simulator.WithDatabase(badger),
+		)...)
 
-		sim.Step()
+		var st *TransactionStatus
+		start := time.Now()
+		var last time.Duration
+		for i := 0; getHeight(t, sim) < 12000; i++ {
+			if i%8 == 0 {
+				st = sim.BuildAndSubmitTxnSuccessfully(
+					build.Transaction().For(alice, "book", "1").
+						BurnCredits(1).
+						SignWith(alice, "book", "1").Version(1).Timestamp(time.Now().UnixMicro()).PrivateKey(aliceKey))
+			}
 
-		d := time.Since(start)
-		if d-last > 2*time.Second {
-			last = d
-			fmt.Printf("%d (%d blocks, %v per)\n", getHeight(t, sim), i+1, d/time.Duration(i+1))
-		}
-	}
-	if st != nil {
-		sim.StepUntil(
-			Txn(st.TxID).Completes())
-	}
+			sim.Step()
 
-	start = time.Now()
-	Update(t, sim.Database("BVN0"), func(batch *database.Batch) {
-		a := batch.Account(url.MustParse("bvn-bvn0.acme/ledger"))
-		c := a.RootChain().Index()
-		h, err := c.Head().Get()
-		require.NoError(t, err)
-		for i := 0; i < int(h.Count); i += 256 {
-			entries, err := c.Inner().Entries(int64(i), int64(i+256))
-			require.NoError(t, err)
-
-			for _, h := range entries {
-				entry := new(protocol.IndexEntry)
-				require.NoError(t, entry.UnmarshalBinary(h))
-				require.NoError(t, a.BlockLedger().Append(record.NewKey(entry.BlockIndex), &database.BlockLedger{}))
+			d := time.Since(start)
+			if d-last > 2*time.Second {
+				last = d
+				fmt.Printf("%d (%d blocks, %v per)\n", getHeight(t, sim), i+1, d/time.Duration(i+1))
 			}
 		}
+		if st != nil {
+			sim.StepUntil(
+				Txn(st.TxID).Completes())
+		}
+	}
+
+	sim := NewSim(t, append(simOpts,
+		simulator.OverlayDatabase(simulator.MemoryDbOpener, badger),
+	)...)
+
+	// Update to Jiuquan
+	st := sim.SubmitTxnSuccessfully(MustBuild(t,
+		build.Transaction().For(DnUrl()).
+			ActivateProtocolVersion(ExecutorVersionV2Jiuquan).
+			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(1).Signer(sim.SignWithNode(Directory, 0))))
+
+	sim.StepUntil(
+		Txn(st.TxID).Succeeds(),
+		VersionIs(ExecutorVersionV2Jiuquan))
+
+	View(t, sim.Database(Directory), func(batch *database.Batch) {
+		a := batch.Account(DnUrl().JoinPath(Ledger))
+		k, _, err := a.BlockLedger().Last()
+		require.NoError(t, err)
+		require.Equal(t, sim.S.BlockIndex(Directory), k.Get(0))
 	})
-	fmt.Println("Allocating blocks took", time.Since(start))
 }
 
 func getHeight(t testing.TB, sim *Sim) uint64 {

@@ -221,6 +221,17 @@ func TestVersionSwitch(t *testing.T) {
 	sim.StepUntil(
 		Txn(st.TxID).Completes())
 
+	// Update to v2 jiuquan
+	fmt.Println("Switching to v2 jiuquan")
+	st = sim.SubmitTxnSuccessfully(MustBuild(t,
+		build.Transaction().For(DnUrl()).
+			ActivateProtocolVersion(ExecutorVersionV2Jiuquan).
+			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(&timestamp).Signer(sim.SignWithNode(Directory, 0))))
+
+	sim.StepUntil(
+		Txn(st.TxID).Succeeds(),
+		VersionIs(ExecutorVersionV2Jiuquan))
+
 	if GetAccount[*SystemLedger](t, sim.Database(Directory), DnUrl().JoinPath(Ledger)).ExecutorVersion != ExecutorVersionLatest {
 		c := color.New(color.BgRed, color.FgWhite, color.Bold)
 		t.Fatal(c.Sprint("!!! THIS TEST NEEDS TO BE UPDATED !!!") + `

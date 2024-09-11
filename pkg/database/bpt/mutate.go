@@ -73,6 +73,8 @@ func (b *BPT) executePending() error {
 			return errors.UnknownError.Wrap(err)
 		}
 	}
+
+	clear(b.pending)
 	return nil
 }
 

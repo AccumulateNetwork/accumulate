@@ -12,7 +12,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
@@ -251,6 +250,12 @@ func (block *Block) Close() (execute.BlockState, error) {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
+	// Execute post-update actions
+	err = block.executePostUpdateActions()
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
 	// Update the BPT
 	err = block.Batch.UpdateBPT()
 	if err != nil {
@@ -275,6 +280,51 @@ func (block *Block) Close() (execute.BlockState, error) {
 
 	m.logger.Debug("Committed", "module", "block", "height", block.Index, "duration", time.Since(t))
 	return &closedBlock{*block, valUp}, nil
+}
+
+func (b *Block) executePostUpdateActions() error {
+	version := b.Executor.globals.Pending.ExecutorVersion
+	if b.Executor.globals.Active.ExecutorVersion == version {
+		return nil
+	}
+
+	switch version {
+	case protocol.ExecutorVersionV2Jiuquan:
+		// For each previously recorded block, add a placeholder to the new
+		// block ledger and delete the BPT entry for the old block ledger
+		// account
+		acct := b.Batch.Account(b.Executor.Describe.Ledger())
+		chain := acct.RootChain().Index()
+		head, err := chain.Head().Get()
+		if err != nil {
+			return errors.UnknownError.WithFormat("load root index chain head: %w", err)
+		}
+
+		var entry protocol.IndexEntry
+		for i := 0; i < int(head.Count); i += 256 {
+			entries, err := chain.Inner().Entries(int64(i), int64(i+256))
+			if err != nil {
+				return errors.UnknownError.WithFormat("load root index chain entries (%d, %d): %w", i, i+255, err)
+			}
+
+			for j, data := range entries {
+				entry = protocol.IndexEntry{}
+				err = entry.UnmarshalBinary(data)
+				if err != nil {
+					return errors.UnknownError.WithFormat("decode root index chain entry %d: %w", i+j, err)
+				}
+				err = acct.BlockLedger().Append(record.NewKey(entry.BlockIndex), &database.BlockLedger{})
+				if err != nil {
+					return errors.UnknownError.WithFormat("add ledger entry for block %d: %w", i+j, err)
+				}
+				err = b.Batch.BPT().Delete(b.Batch.Account(b.Executor.Describe.BlockLedger(entry.BlockIndex)).Key())
+				if err != nil {
+					return errors.UnknownError.WithFormat("delete BPT entry for block ledger %d: %w", i+j, err)
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func (block *Block) recordTransactionExpiration() error {
@@ -409,7 +459,6 @@ func (x *Executor) requestMissingSyntheticTransactions(blockIndex uint64, synthL
 	defer batch.Discard()
 
 	// Setup
-	wg := new(sync.WaitGroup)
 	dispatcher := x.NewDispatcher()
 	defer dispatcher.Close()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -417,13 +466,12 @@ func (x *Executor) requestMissingSyntheticTransactions(blockIndex uint64, synthL
 
 	// For each partition
 	for _, partition := range synthLedger.Sequence {
-		x.requestMissingTransactionsFromPartition(ctx, wg, dispatcher, partition, false)
+		x.requestMissingTransactionsFromPartition(ctx, dispatcher, partition, false)
 	}
 	for _, partition := range anchorLedger.Sequence {
-		x.requestMissingTransactionsFromPartition(ctx, wg, dispatcher, partition, true)
+		x.requestMissingTransactionsFromPartition(ctx, dispatcher, partition, true)
 	}
 
-	wg.Wait()
 	for err := range dispatcher.Send(ctx) {
 		switch err := err.(type) {
 		case protocol.TransactionStatusError:
@@ -434,7 +482,7 @@ func (x *Executor) requestMissingSyntheticTransactions(blockIndex uint64, synthL
 	}
 }
 
-func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, wg *sync.WaitGroup, dispatcher Dispatcher, partition *protocol.PartitionSyntheticLedger, anchor bool) {
+func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, dispatcher Dispatcher, partition *protocol.PartitionSyntheticLedger, anchor bool) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
