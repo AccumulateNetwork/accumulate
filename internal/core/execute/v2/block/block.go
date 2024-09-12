@@ -70,3 +70,11 @@ func (s *closedBlock) Commit() error {
 func (s *closedBlock) Discard() {
 	s.Batch.Discard()
 }
+
+func (b *Block) defaultExpiration() uint64 {
+	if b.Executor.globals.Active.Globals.Limits.PendingMajorBlocks == 0 {
+		return 14 // default to 2 weeks
+	} else {
+		return b.Executor.globals.Active.Globals.Limits.PendingMajorBlocks
+	}
+}

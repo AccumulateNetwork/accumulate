@@ -108,6 +108,10 @@ func (m *DidUpdateExecutorVersion) ID() *url.TxID {
 	return protocol.PartitionUrl(m.Partition).WithTxID(m.Hash())
 }
 
+func (m *SecretRelease) ID() *url.TxID {
+	return m.Recipient.Account().WithTxID(m.Hash())
+}
+
 func (m *BadSyntheticMessage) Unwrap() Message { return m.Message }
 func (m *SyntheticMessage) Unwrap() Message    { return m.Message }
 func (m *SequencedMessage) Unwrap() Message    { return m.Message }
@@ -196,3 +200,4 @@ func (m *SyntheticMessage) Hash() [32]byte         { return encoding.Hash(m) }
 func (m *NetworkUpdate) Hash() [32]byte            { return encoding.Hash(m) }
 func (m *MakeMajorBlock) Hash() [32]byte           { return encoding.Hash(m) }
 func (m *DidUpdateExecutorVersion) Hash() [32]byte { return encoding.Hash(m) }
+func (m *SecretRelease) Hash() [32]byte            { return encoding.Hash(m) }

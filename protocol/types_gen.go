@@ -427,6 +427,13 @@ type FeeSchedule struct {
 	extraData            []byte
 }
 
+type HashTimeLock struct {
+	fieldsSet []bool
+	Hash      []byte     `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"`
+	Expires   *time.Time `json:"expires,omitempty" form:"expires" query:"expires" validate:"required"`
+	extraData []byte
+}
+
 type HoldUntilOptions struct {
 	fieldsSet  []bool
 	MinorBlock uint64 `json:"minorBlock,omitempty" form:"minorBlock" query:"minorBlock"`
@@ -988,8 +995,9 @@ type TransactionHeader struct {
 	// HoldUntil holds the transaction as pending until the condition(s) are met.
 	HoldUntil *HoldUntilOptions `json:"holdUntil,omitempty" form:"holdUntil" query:"holdUntil"`
 	// Authorities is a list of additional authorities that must approve the transaction.
-	Authorities []*url.URL `json:"authorities,omitempty" form:"authorities" query:"authorities"`
-	extraData   []byte
+	Authorities  []*url.URL    `json:"authorities,omitempty" form:"authorities" query:"authorities"`
+	HashTimeLock *HashTimeLock `json:"hashTimeLock,omitempty" form:"hashTimeLock" query:"hashTimeLock"`
+	extraData    []byte
 }
 
 type TransactionResultSet struct {
@@ -2224,6 +2232,24 @@ func (v *FeeSchedule) Copy() *FeeSchedule {
 
 func (v *FeeSchedule) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *HashTimeLock) Copy() *HashTimeLock {
+	u := new(HashTimeLock)
+
+	u.Hash = encoding.BytesCopy(v.Hash)
+	if v.Expires != nil {
+		u.Expires = new(time.Time)
+		*u.Expires = *v.Expires
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *HashTimeLock) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *HoldUntilOptions) Copy() *HoldUntilOptions {
 	u := new(HoldUntilOptions)
 
@@ -3394,6 +3420,9 @@ func (v *TransactionHeader) Copy() *TransactionHeader {
 		if v != nil {
 			u.Authorities[i] = v
 		}
+	}
+	if v.HashTimeLock != nil {
+		u.HashTimeLock = (v.HashTimeLock).Copy()
 	}
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
@@ -4680,6 +4709,22 @@ func (v *FeeSchedule) Equal(u *FeeSchedule) bool {
 	return true
 }
 
+func (v *HashTimeLock) Equal(u *HashTimeLock) bool {
+	if !(bytes.Equal(v.Hash, u.Hash)) {
+		return false
+	}
+	switch {
+	case v.Expires == u.Expires:
+		// equal
+	case v.Expires == nil || u.Expires == nil:
+		return false
+	case !((*v.Expires).Equal(*u.Expires)):
+		return false
+	}
+
+	return true
+}
+
 func (v *HoldUntilOptions) Equal(u *HoldUntilOptions) bool {
 	if !(v.MinorBlock == u.MinorBlock) {
 		return false
@@ -5891,6 +5936,14 @@ func (v *TransactionHeader) Equal(u *TransactionHeader) bool {
 		if !((v.Authorities[i]).Equal(u.Authorities[i])) {
 			return false
 		}
+	}
+	switch {
+	case v.HashTimeLock == u.HashTimeLock:
+		// equal
+	case v.HashTimeLock == nil || u.HashTimeLock == nil:
+		return false
+	case !((v.HashTimeLock).Equal(u.HashTimeLock)):
+		return false
 	}
 
 	return true
@@ -8979,6 +9032,58 @@ func (v *FeeSchedule) IsValid() error {
 		errs = append(errs, "field BareIdentityDiscount is missing")
 	} else if v.BareIdentityDiscount == 0 {
 		errs = append(errs, "field BareIdentityDiscount is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_HashTimeLock = []string{
+	1: "Hash",
+	2: "Expires",
+}
+
+func (v *HashTimeLock) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(len(v.Hash) == 0) {
+		writer.WriteBytes(1, v.Hash)
+	}
+	if !(v.Expires == nil) {
+		writer.WriteTime(2, *v.Expires)
+	}
+
+	_, _, err := writer.Reset(fieldNames_HashTimeLock)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *HashTimeLock) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Hash is missing")
+	} else if len(v.Hash) == 0 {
+		errs = append(errs, "field Hash is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Expires is missing")
+	} else if v.Expires == nil {
+		errs = append(errs, "field Expires is not set")
 	}
 
 	switch len(errs) {
@@ -12766,6 +12871,7 @@ var fieldNames_TransactionHeader = []string{
 	5: "Expire",
 	6: "HoldUntil",
 	7: "Authorities",
+	8: "HashTimeLock",
 }
 
 func (v *TransactionHeader) MarshalBinary() ([]byte, error) {
@@ -12798,6 +12904,9 @@ func (v *TransactionHeader) MarshalBinary() ([]byte, error) {
 		for _, v := range v.Authorities {
 			writer.WriteUrl(7, v)
 		}
+	}
+	if !(v.HashTimeLock == nil) {
+		writer.WriteValue(8, v.HashTimeLock.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_TransactionHeader)
@@ -15673,6 +15782,32 @@ func (v *FeeSchedule) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *HashTimeLock) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *HashTimeLock) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadBytes(1); ok {
+		v.Hash = x
+	}
+	if x, ok := reader.ReadTime(2); ok {
+		v.Expires = &x
+	}
+
+	seen, err := reader.Reset(fieldNames_HashTimeLock)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *HoldUntilOptions) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -17978,6 +18113,9 @@ func (v *TransactionHeader) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
+	if x := new(HashTimeLock); reader.ReadValue(8, x.UnmarshalBinaryFrom) {
+		v.HashTimeLock = x
+	}
 
 	seen, err := reader.Reset(fieldNames_TransactionHeader)
 	if err != nil {
@@ -19021,6 +19159,11 @@ func init() {
 	}, "FeeSchedule", "feeSchedule")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("hash", "bytes"),
+		encoding.NewTypeField("expires", "string"),
+	}, "HashTimeLock", "hashTimeLock")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("minorBlock", "uint64"),
 	}, "HoldUntilOptions", "holdUntilOptions")
 
@@ -19460,6 +19603,7 @@ func init() {
 		encoding.NewTypeField("expire", "ExpireOptions"),
 		encoding.NewTypeField("holdUntil", "HoldUntilOptions"),
 		encoding.NewTypeField("authorities", "string[]"),
+		encoding.NewTypeField("hashTimeLock", "HashTimeLock"),
 	}, "TransactionHeader", "transactionHeader")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -20531,6 +20675,22 @@ func (v *FeeSchedule) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.BareIdentityDiscount == 0) {
 		u.BareIdentityDiscount = v.BareIdentityDiscount
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *HashTimeLock) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Hash      *string    `json:"hash,omitempty"`
+		Expires   *time.Time `json:"expires,omitempty"`
+		ExtraData *string    `json:"$epilogue,omitempty"`
+	}{}
+	if !(len(v.Hash) == 0) {
+		u.Hash = encoding.BytesToJSON(v.Hash)
+	}
+	if !(v.Expires == nil) {
+		u.Expires = v.Expires
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -21695,14 +21855,15 @@ func (v *Transaction) MarshalJSON() ([]byte, error) {
 
 func (v *TransactionHeader) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Principal   *url.URL                    `json:"principal,omitempty"`
-		Initiator   *string                     `json:"initiator,omitempty"`
-		Memo        string                      `json:"memo,omitempty"`
-		Metadata    *string                     `json:"metadata,omitempty"`
-		Expire      *ExpireOptions              `json:"expire,omitempty"`
-		HoldUntil   *HoldUntilOptions           `json:"holdUntil,omitempty"`
-		Authorities encoding.JsonList[*url.URL] `json:"authorities,omitempty"`
-		ExtraData   *string                     `json:"$epilogue,omitempty"`
+		Principal    *url.URL                    `json:"principal,omitempty"`
+		Initiator    *string                     `json:"initiator,omitempty"`
+		Memo         string                      `json:"memo,omitempty"`
+		Metadata     *string                     `json:"metadata,omitempty"`
+		Expire       *ExpireOptions              `json:"expire,omitempty"`
+		HoldUntil    *HoldUntilOptions           `json:"holdUntil,omitempty"`
+		Authorities  encoding.JsonList[*url.URL] `json:"authorities,omitempty"`
+		HashTimeLock *HashTimeLock               `json:"hashTimeLock,omitempty"`
+		ExtraData    *string                     `json:"$epilogue,omitempty"`
 	}{}
 	if !(v.Principal == nil) {
 		u.Principal = v.Principal
@@ -21724,6 +21885,9 @@ func (v *TransactionHeader) MarshalJSON() ([]byte, error) {
 	}
 	if !(len(v.Authorities) == 0) {
 		u.Authorities = v.Authorities
+	}
+	if !(v.HashTimeLock == nil) {
+		u.HashTimeLock = v.HashTimeLock
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -23465,6 +23629,31 @@ func (v *FeeSchedule) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *HashTimeLock) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Hash      *string    `json:"hash,omitempty"`
+		Expires   *time.Time `json:"expires,omitempty"`
+		ExtraData *string    `json:"$epilogue,omitempty"`
+	}{}
+	u.Hash = encoding.BytesToJSON(v.Hash)
+	u.Expires = v.Expires
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if x, err := encoding.BytesFromJSON(u.Hash); err != nil {
+		return fmt.Errorf("error decoding Hash: %w", err)
+	} else {
+		v.Hash = x
+	}
+	v.Expires = u.Expires
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (v *InternalSignature) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type            SignatureType `json:"type"`
@@ -25078,14 +25267,15 @@ func (v *Transaction) UnmarshalJSON(data []byte) error {
 
 func (v *TransactionHeader) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Principal   *url.URL                    `json:"principal,omitempty"`
-		Initiator   *string                     `json:"initiator,omitempty"`
-		Memo        string                      `json:"memo,omitempty"`
-		Metadata    *string                     `json:"metadata,omitempty"`
-		Expire      *ExpireOptions              `json:"expire,omitempty"`
-		HoldUntil   *HoldUntilOptions           `json:"holdUntil,omitempty"`
-		Authorities encoding.JsonList[*url.URL] `json:"authorities,omitempty"`
-		ExtraData   *string                     `json:"$epilogue,omitempty"`
+		Principal    *url.URL                    `json:"principal,omitempty"`
+		Initiator    *string                     `json:"initiator,omitempty"`
+		Memo         string                      `json:"memo,omitempty"`
+		Metadata     *string                     `json:"metadata,omitempty"`
+		Expire       *ExpireOptions              `json:"expire,omitempty"`
+		HoldUntil    *HoldUntilOptions           `json:"holdUntil,omitempty"`
+		Authorities  encoding.JsonList[*url.URL] `json:"authorities,omitempty"`
+		HashTimeLock *HashTimeLock               `json:"hashTimeLock,omitempty"`
+		ExtraData    *string                     `json:"$epilogue,omitempty"`
 	}{}
 	u.Principal = v.Principal
 	u.Initiator = encoding.ChainToJSON(&v.Initiator)
@@ -25094,6 +25284,7 @@ func (v *TransactionHeader) UnmarshalJSON(data []byte) error {
 	u.Expire = v.Expire
 	u.HoldUntil = v.HoldUntil
 	u.Authorities = v.Authorities
+	u.HashTimeLock = v.HashTimeLock
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -25113,6 +25304,7 @@ func (v *TransactionHeader) UnmarshalJSON(data []byte) error {
 	v.Expire = u.Expire
 	v.HoldUntil = u.HoldUntil
 	v.Authorities = u.Authorities
+	v.HashTimeLock = u.HashTimeLock
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err

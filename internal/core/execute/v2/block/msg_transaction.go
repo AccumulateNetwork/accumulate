@@ -199,6 +199,26 @@ func (x TransactionMessage) check(batch *database.Batch, ctx *MessageContext, re
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
+	// Check the hashed time lock
+	if htl := txn.Transaction.Header.HashTimeLock; htl != nil {
+		if txn.Transaction.Body.Type() != protocol.TransactionTypeSendTokens {
+			return nil, errors.BadRequest.WithFormat("%v transactions do not support hashed time locks", txn.Transaction.Body.Type())
+		}
+		if len(htl.Hash) == 0 {
+			return nil, errors.BadRequest.With("hashed time lock: missing hash")
+		}
+		if htl.Expires == nil {
+			return nil, errors.BadRequest.With("hashed time lock: missing expiration")
+		}
+		count, err := expirationTimeToMajorBlockCount(ctx.Block, *htl.Expires)
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+		if count > ctx.defaultExpiration() {
+			return nil, errors.BadRequest.WithFormat("hashed time lock: expiration time too far in the future")
+		}
+	}
+
 	return txn, nil
 }
 

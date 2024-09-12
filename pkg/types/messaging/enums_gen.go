@@ -50,6 +50,9 @@ const MessageTypeMakeMajorBlock MessageType = 11
 // MessageTypeDidUpdateExecutorVersion notifies the DN that a BVN updated the executor version.
 const MessageTypeDidUpdateExecutorVersion MessageType = 12
 
+// MessageTypeSecretRelease is the release of a secret for a hash-locked operation.
+const MessageTypeSecretRelease MessageType = 13
+
 // GetEnumValue returns the value of the Message Type
 func (v MessageType) GetEnumValue() uint64 { return uint64(v) }
 
@@ -57,7 +60,7 @@ func (v MessageType) GetEnumValue() uint64 { return uint64(v) }
 func (v *MessageType) SetEnumValue(id uint64) bool {
 	u := MessageType(id)
 	switch u {
-	case MessageTypeTransaction, MessageTypeSignature, MessageTypeBadSynthetic, MessageTypeBlockAnchor, MessageTypeSequenced, MessageTypeSignatureRequest, MessageTypeCreditPayment, MessageTypeBlockSummary, MessageTypeSynthetic, MessageTypeNetworkUpdate, MessageTypeMakeMajorBlock, MessageTypeDidUpdateExecutorVersion:
+	case MessageTypeTransaction, MessageTypeSignature, MessageTypeBadSynthetic, MessageTypeBlockAnchor, MessageTypeSequenced, MessageTypeSignatureRequest, MessageTypeCreditPayment, MessageTypeBlockSummary, MessageTypeSynthetic, MessageTypeNetworkUpdate, MessageTypeMakeMajorBlock, MessageTypeDidUpdateExecutorVersion, MessageTypeSecretRelease:
 		*v = u
 		return true
 	}
@@ -91,6 +94,8 @@ func (v MessageType) String() string {
 		return "makeMajorBlock"
 	case MessageTypeDidUpdateExecutorVersion:
 		return "didUpdateExecutorVersion"
+	case MessageTypeSecretRelease:
+		return "secretRelease"
 	}
 	return fmt.Sprintf("MessageType:%d", v)
 }
@@ -122,6 +127,8 @@ func MessageTypeByName(name string) (MessageType, bool) {
 		return MessageTypeMakeMajorBlock, true
 	case "didupdateexecutorversion":
 		return MessageTypeDidUpdateExecutorVersion, true
+	case "secretrelease":
+		return MessageTypeSecretRelease, true
 	}
 	return 0, false
 }

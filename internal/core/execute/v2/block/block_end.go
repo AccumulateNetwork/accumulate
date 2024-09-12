@@ -278,14 +278,6 @@ func (block *Block) recordTransactionExpiration() error {
 		return errors.UnknownError.Wrap(err)
 	}
 
-	// Set the expiration height
-	var max uint64
-	if block.Executor.globals.Active.Globals.Limits.PendingMajorBlocks == 0 {
-		max = 14 // default to 2 weeks
-	} else {
-		max = block.Executor.globals.Active.Globals.Limits.PendingMajorBlocks
-	}
-
 	// Parse the schedule
 	schedule, err := core.Cron.Parse(block.Executor.globals.Active.Globals.MajorBlockSchedule)
 	if err != nil && block.Executor.globals.Active.ExecutorVersion.V2BaikonurEnabled() {
@@ -293,6 +285,7 @@ func (block *Block) recordTransactionExpiration() error {
 	}
 
 	// Determine which major block each transaction should expire on
+	max := block.defaultExpiration()
 	shouldExpireOn := func(txn *protocol.Transaction) uint64 {
 		var count uint64
 		switch {

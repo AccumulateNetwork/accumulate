@@ -106,6 +106,13 @@ type RecordUpdate struct {
 	extraData []byte
 }
 
+type SecretRelease struct {
+	fieldsSet []bool
+	Secret    []byte    `json:"secret,omitempty" form:"secret" query:"secret" validate:"required"`
+	Recipient *url.TxID `json:"recipient,omitempty" form:"recipient" query:"recipient" validate:"required"`
+	extraData []byte
+}
+
 type SequencedMessage struct {
 	fieldsSet []bool
 	Message   Message `json:"message,omitempty" form:"message" query:"message" validate:"required"`
@@ -174,6 +181,8 @@ func (*DidUpdateExecutorVersion) Type() MessageType { return MessageTypeDidUpdat
 func (*MakeMajorBlock) Type() MessageType { return MessageTypeMakeMajorBlock }
 
 func (*NetworkUpdate) Type() MessageType { return MessageTypeNetworkUpdate }
+
+func (*SecretRelease) Type() MessageType { return MessageTypeSecretRelease }
 
 func (*SequencedMessage) Type() MessageType { return MessageTypeSequenced }
 
@@ -383,6 +392,23 @@ func (v *RecordUpdate) Copy() *RecordUpdate {
 }
 
 func (v *RecordUpdate) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *SecretRelease) Copy() *SecretRelease {
+	u := new(SecretRelease)
+
+	u.Secret = encoding.BytesCopy(v.Secret)
+	if v.Recipient != nil {
+		u.Recipient = v.Recipient
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *SecretRelease) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *SequencedMessage) Copy() *SequencedMessage {
 	u := new(SequencedMessage)
@@ -699,6 +725,22 @@ func (v *RecordUpdate) Equal(u *RecordUpdate) bool {
 		return false
 	}
 	if !(bytes.Equal(v.Value, u.Value)) {
+		return false
+	}
+
+	return true
+}
+
+func (v *SecretRelease) Equal(u *SecretRelease) bool {
+	if !(bytes.Equal(v.Secret, u.Secret)) {
+		return false
+	}
+	switch {
+	case v.Recipient == u.Recipient:
+		// equal
+	case v.Recipient == nil || u.Recipient == nil:
+		return false
+	case !((v.Recipient).Equal(u.Recipient)):
 		return false
 	}
 
@@ -1422,6 +1464,63 @@ func (v *RecordUpdate) IsValid() error {
 		errs = append(errs, "field Value is missing")
 	} else if len(v.Value) == 0 {
 		errs = append(errs, "field Value is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_SecretRelease = []string{
+	1: "Type",
+	2: "Secret",
+	3: "Recipient",
+}
+
+func (v *SecretRelease) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(len(v.Secret) == 0) {
+		writer.WriteBytes(2, v.Secret)
+	}
+	if !(v.Recipient == nil) {
+		writer.WriteTxid(3, v.Recipient)
+	}
+
+	_, _, err := writer.Reset(fieldNames_SecretRelease)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *SecretRelease) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Secret is missing")
+	} else if len(v.Secret) == 0 {
+		errs = append(errs, "field Secret is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Recipient is missing")
+	} else if v.Recipient == nil {
+		errs = append(errs, "field Recipient is not set")
 	}
 
 	switch len(errs) {
@@ -2181,6 +2280,44 @@ func (v *RecordUpdate) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *SecretRelease) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *SecretRelease) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType MessageType
+	if x := new(MessageType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *SecretRelease) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadBytes(2); ok {
+		v.Secret = x
+	}
+	if x, ok := reader.ReadTxid(3); ok {
+		v.Recipient = x
+	}
+
+	seen, err := reader.Reset(fieldNames_SecretRelease)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *SequencedMessage) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -2488,6 +2625,12 @@ func init() {
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("secret", "bytes"),
+		encoding.NewTypeField("recipient", "string"),
+	}, "SecretRelease", "secretRelease")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
 		encoding.NewTypeField("message", "Message"),
 		encoding.NewTypeField("source", "string"),
 		encoding.NewTypeField("destination", "string"),
@@ -2725,6 +2868,24 @@ func (v *RecordUpdate) MarshalJSON() ([]byte, error) {
 	}
 	if !(len(v.Value) == 0) {
 		u.Value = encoding.BytesToJSON(v.Value)
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *SecretRelease) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      MessageType `json:"type"`
+		Secret    *string     `json:"secret,omitempty"`
+		Recipient *url.TxID   `json:"recipient,omitempty"`
+		ExtraData *string     `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.Secret) == 0) {
+		u.Secret = encoding.BytesToJSON(v.Secret)
+	}
+	if !(v.Recipient == nil) {
+		u.Recipient = v.Recipient
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -3147,6 +3308,36 @@ func (v *RecordUpdate) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Value = x
 	}
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *SecretRelease) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      MessageType `json:"type"`
+		Secret    *string     `json:"secret,omitempty"`
+		Recipient *url.TxID   `json:"recipient,omitempty"`
+		ExtraData *string     `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Secret = encoding.BytesToJSON(v.Secret)
+	u.Recipient = v.Recipient
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	if x, err := encoding.BytesFromJSON(u.Secret); err != nil {
+		return fmt.Errorf("error decoding Secret: %w", err)
+	} else {
+		v.Secret = x
+	}
+	v.Recipient = u.Recipient
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err

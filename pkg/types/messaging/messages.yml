@@ -185,6 +185,15 @@ DidUpdateExecutorVersion:
       type: protocol.ExecutorVersion
       marshal-as: enum
 
+SecretRelease:
+  union: { type: message }
+  fields:
+    - name: Secret
+      type: bytes
+    - name: Recipient
+      type: txid
+      pointer: true
+
 # Components
 
 RecordUpdate:

@@ -35,3 +35,6 @@ MessageType:
   DidUpdateExecutorVersion:
     value: 12
     description: notifies the DN that a BVN updated the executor version
+  SecretRelease:
+    value: 13
+    description: is the release of a secret for a hash-locked operation

@@ -31,6 +31,11 @@ TransactionHeader:
       optional: true
       pointer: true
       repeatable: true
+    - name: HashTimeLock
+      type: HashTimeLock
+      optional: true
+      pointer: true
+      marshal-as: reference
 
 Transaction:
   fields:
@@ -55,6 +60,14 @@ HoldUntilOptions:
     - name: MinorBlock
       type: uint
       optional: true
+
+HashTimeLock:
+  fields:
+    - name: Hash
+      type: bytes
+    - name: Expires
+      type: time
+      pointer: true
 
 ExpireOptions:
   fields:

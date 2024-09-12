@@ -74,6 +74,8 @@ func (x SendTokens) Execute(st *StateManager, tx *Delivery) (protocol.Transactio
 		return nil, fmt.Errorf("failed to update account %v: %v", account.GetUrl(), err)
 	}
 
+	// TODO: Add a mechanism to store the synthetic transaction as a pending
+	// operation waiting on the secret to be revealed.
 	for _, to := range body.To {
 		deposit := new(protocol.SyntheticDepositTokens)
 		deposit.Token = account.GetTokenUrl()

@@ -34,6 +34,8 @@ func NewMessage(typ MessageType) (Message, error) {
 		return new(MakeMajorBlock), nil
 	case MessageTypeNetworkUpdate:
 		return new(NetworkUpdate), nil
+	case MessageTypeSecretRelease:
+		return new(SecretRelease), nil
 	case MessageTypeSequenced:
 		return new(SequencedMessage), nil
 	case MessageTypeSignature:
@@ -96,6 +98,12 @@ func EqualMessage(a, b Message) bool {
 		}
 		b, ok := b.(*NetworkUpdate)
 		return ok && a.Equal(b)
+	case *SecretRelease:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*SecretRelease)
+		return ok && a.Equal(b)
 	case *SequencedMessage:
 		if a == nil {
 			return b == nil
@@ -146,6 +154,8 @@ func CopyMessage(v Message) Message {
 	case *MakeMajorBlock:
 		return v.Copy()
 	case *NetworkUpdate:
+		return v.Copy()
+	case *SecretRelease:
 		return v.Copy()
 	case *SequencedMessage:
 		return v.Copy()

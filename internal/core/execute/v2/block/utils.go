@@ -8,7 +8,9 @@ package block
 
 import (
 	"fmt"
+	"time"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/shared"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
@@ -183,4 +185,23 @@ func getValidator[T any](x *Executor, typ protocol.TransactionType) (T, bool) {
 
 	val, ok := txn.(T)
 	return val, ok
+}
+
+func expirationTimeToMajorBlockCount(block *Block, expiration time.Time) (uint64, error) {
+	// Parse the schedule
+	schedule, err := core.Cron.Parse(block.Executor.globals.Active.Globals.MajorBlockSchedule)
+	if err != nil && block.Executor.globals.Active.ExecutorVersion.V2BaikonurEnabled() {
+		return 0, errors.UnknownError.Wrap(err)
+	}
+
+	// Always at least the next major block
+	var count uint64 = 1
+
+	// Increment until the expire time is after the expected major block time
+	now := block.Time
+	for expiration.After(schedule.Next(now)) {
+		now = schedule.Next(now)
+		count++
+	}
+	return count, nil
 }
