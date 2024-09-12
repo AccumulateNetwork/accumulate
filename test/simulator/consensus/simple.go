@@ -61,9 +61,12 @@ func (s *SimpleHub) With(modules ...Module) Hub {
 	copy(n[len(m):], modules)
 
 	// Use the same mutex
-	r := *s
+	r := &SimpleHub{
+		mu:      s.mu,
+		context: s.context,
+	}
 	r.modules.Store(&n)
-	return &r
+	return r
 }
 
 func (s *SimpleHub) Send(messages ...Message) error {

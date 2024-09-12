@@ -7,8 +7,10 @@
 package indexing_test
 
 import (
+	"errors"
 	"flag"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -30,7 +32,9 @@ func TestNetworkHistory(t *testing.T) {
 	dir := filepath.Join(os.TempDir(), "accumulate-"+t.Name()+".badger")
 	if !*buildNetworkHistoryDb {
 		if ent, err := os.ReadDir(dir); len(ent) == 0 {
-			require.NoError(t, err)
+			if !errors.Is(err, fs.ErrNotExist) {
+				require.NoError(t, err)
+			}
 			t.Skip("Run with -build-network-history-db to build the database")
 		}
 	}

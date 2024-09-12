@@ -126,36 +126,6 @@ func newKeyPart(typ typeCode) (keyPartWr, error) {
 	}
 }
 
-// asKeyPart converts the value to a key part.
-func asKeyPart(v any) (keyPartRd, error) {
-	switch v := v.(type) {
-	case int64:
-		return intKeyPart(v), nil
-	case int:
-		u := int64(v)
-		return intKeyPart(u), nil
-	case uint64:
-		return uintKeyPart(v), nil
-	case uint:
-		u := uint64(v)
-		return uintKeyPart(u), nil
-	case string:
-		return stringKeyPart(v), nil
-	case [32]byte:
-		return hashKeyPart(v), nil
-	case []byte:
-		return bytesKeyPart(v), nil
-	case *url.URL:
-		return (*urlKeyPart)(v), nil
-	case *url.TxID:
-		return (*txidKeyPart)(v), nil
-	case time.Time:
-		return timeKeyPart(v), nil
-	default:
-		return nil, errors.NotAllowed.WithFormat("%T is not a supported key part type", v)
-	}
-}
-
 func normalize(v any) (any, typeCode, bool) {
 	switch u := v.(type) {
 	case int64:
@@ -197,8 +167,8 @@ func (k uintKeyPart) Type() typeCode   { return typeCodeUint }
 func (k stringKeyPart) Type() typeCode { return typeCodeString }
 func (k hashKeyPart) Type() typeCode   { return typeCodeHash }
 func (k bytesKeyPart) Type() typeCode  { return typeCodeBytes }
-func (k urlKeyPart) Type() typeCode    { return typeCodeUrl }
-func (k txidKeyPart) Type() typeCode   { return typeCodeTxid }
+func (k *urlKeyPart) Type() typeCode   { return typeCodeUrl }
+func (k *txidKeyPart) Type() typeCode  { return typeCodeTxid }
 func (k timeKeyPart) Type() typeCode   { return typeCodeTime }
 
 func (k intKeyPart) Value() any    { return int64(k) }
@@ -357,7 +327,7 @@ func keyPartsCompare(v, u any) int {
 		return bytes.Compare(v, u)
 	case typeCodeUrl:
 		v, u := v.(*url.URL), u.(*url.URL)
-		return (*url.URL)(v).Compare(u)
+		return v.Compare(u)
 	case typeCodeTxid:
 		v, u := v.(*url.TxID), u.(*url.TxID)
 		return v.Compare(u)

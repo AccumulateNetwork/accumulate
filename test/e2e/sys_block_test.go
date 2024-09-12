@@ -7,7 +7,6 @@
 package e2e
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -136,7 +135,7 @@ func TestBlockLedger(t *testing.T) {
 			require.NoError(t, err)
 			for _, e := range bl.Entries {
 				if !e.Account.RootIdentity().Equal(PartitionUrl("BVN0")) {
-					accounts = append(accounts, e.Account.WithFragment(fmt.Sprintf("%s", e.Chain)).String())
+					accounts = append(accounts, e.Account.WithFragment(e.Chain).String())
 				}
 			}
 			return true
