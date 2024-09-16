@@ -317,7 +317,8 @@ func (b *Block) executePostUpdateActions() error {
 				if err != nil {
 					return errors.UnknownError.WithFormat("add ledger entry for block %d: %w", i+j, err)
 				}
-				err = b.Batch.BPT().Delete(b.Batch.Account(b.Executor.Describe.BlockLedger(entry.BlockIndex)).Key())
+				blockLedgerAccount := b.Batch.Account(b.Executor.Describe.BlockLedger(entry.BlockIndex))
+				err = b.Batch.BPT().Delete(blockLedgerAccount.Key())
 				if err != nil {
 					return errors.UnknownError.WithFormat("delete BPT entry for block ledger %d: %w", i+j, err)
 				}

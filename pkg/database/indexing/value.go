@@ -34,6 +34,7 @@ func (v *Value[V]) Get() (V, error) {
 	dec := binDecPool.Get(bytes.NewReader(v.data))
 	defer binDecPool.Put(dec)
 	err := dec.Decode(&v.value)
+	v.valueOk = err == nil
 	return v.value, err
 }
 
