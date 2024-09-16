@@ -199,7 +199,7 @@ func (inst *Instance) StartFiltered(predicate func(Service) bool) (err error) {
 			serviceUp.Add(inst.context, 1, metric.WithAttributes(
 				attribute.String("type", svc.Type().String())))
 
-			inst.cleanup(func(ctx context.Context) error {
+			inst.cleanup("service metrics", func(ctx context.Context) error {
 				serviceUp.Add(inst.context, -1, metric.WithAttributes(
 					attribute.String("type", svc.Type().String())))
 				return nil
@@ -256,17 +256,20 @@ func (i *Instance) run(fn func()) {
 	}()
 }
 
-func (i *Instance) cleanup(fn func(context.Context) error) {
+func (i *Instance) cleanup(name string, fn func(context.Context) error) {
 	i.running.Add(1)
 	go func() {
 		defer i.running.Done()
 		<-i.context.Done()
 
+		slog.Debug("Stopping", "process", name)
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		err := fn(ctx)
 		if err != nil {
-			slog.Error("Error during shutdown", "error", err)
+			slog.Error("Error during shutdown", "error", err, "process", name)
+		} else {
+			slog.Debug("Stopped", "process", name)
 		}
 	}()
 }
