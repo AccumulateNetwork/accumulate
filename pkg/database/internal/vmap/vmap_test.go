@@ -3,7 +3,7 @@
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
-package block
+package vmap
 
 import (
 	"fmt"
@@ -13,7 +13,7 @@ import (
 func TestCommit(t *testing.T) {
 	t.Run("Scenario 1", func(t *testing.T) {
 		fmt.Println(t.Name())
-		m := new(vmap[int, int])
+		m := new(Map[int, int])
 		a := m.View()
 		a.Put(1, 1)
 		b := m.View()
@@ -24,7 +24,7 @@ func TestCommit(t *testing.T) {
 
 	t.Run("Scenario 2", func(t *testing.T) {
 		fmt.Println(t.Name())
-		m := new(vmap[int, int])
+		m := new(Map[int, int])
 		a := m.View()
 		b := m.View()
 		b.Put(2, 2)
@@ -34,7 +34,7 @@ func TestCommit(t *testing.T) {
 
 	t.Run("Scenario 3", func(t *testing.T) {
 		fmt.Println(t.Name())
-		m := new(vmap[int, int])
+		m := new(Map[int, int])
 		a := m.View()
 		a.Put(1, 1)
 		b := m.View()
@@ -44,7 +44,7 @@ func TestCommit(t *testing.T) {
 
 	t.Run("Scenario 4", func(t *testing.T) {
 		fmt.Println(t.Name())
-		m := new(vmap[int, int])
+		m := new(Map[int, int])
 		a := m.View()
 		a.Put(1, 1)
 		b := m.View()

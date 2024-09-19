@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/util/pool"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/internal/vmap"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
@@ -30,8 +31,8 @@ type Database struct {
 	commitMu       sync.Mutex
 	records        *recordFileSet
 	indexFiles     *indexFileTree
-	blockIndex     vmap[blockID, int]
-	recordLocation vmap[[32]byte, *recordLocation]
+	blockIndex     *vmap.Map[blockID, int]
+	recordLocation *vmap.Map[[32]byte, *recordLocation]
 }
 
 type config struct {
@@ -90,8 +91,10 @@ func Open(path string, options ...Option) (_ *Database, err error) {
 		return nil, err
 	}
 
-	db.recordLocation.fn.forEach = db.indexFiles.ForEach
-	db.recordLocation.fn.commit = db.indexFiles.Commit
+	db.blockIndex = vmap.New[blockID, int]()
+	db.recordLocation = vmap.New(
+		vmap.WithCommit(db.indexFiles.Commit),
+		vmap.WithForEach(db.indexFiles.ForEach))
 
 	// Determine the next block number
 	if len(db.records.files) > 0 {
