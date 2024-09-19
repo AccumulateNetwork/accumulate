@@ -47,6 +47,14 @@ func openDb(t testing.TB, open Opener) *closableDb {
 	return c
 }
 
+func TestSuite(t *testing.T, open Opener) {
+	t.Run("Database", func(t *testing.T) { TestDatabase(t, open) })
+	t.Run("Isolation", func(t *testing.T) { TestIsolation(t, open) })
+	t.Run("SubBatch", func(t *testing.T) { TestSubBatch(t, open) })
+	t.Run("Prefix", func(t *testing.T) { TestPrefix(t, open) })
+	t.Run("Delete", func(t *testing.T) { TestDelete(t, open) })
+}
+
 func TestDatabase(t *testing.T, open Opener) {
 	const N, M = 100, 100
 

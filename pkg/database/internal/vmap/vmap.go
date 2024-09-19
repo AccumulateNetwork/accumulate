@@ -130,15 +130,17 @@ func (v *Map[K, V]) release(level int, values map[K]V) error {
 	defer v.mu.Unlock()
 
 	// Check for a conflict
-	for _, m := range v.stack[level:] {
-		// Iterate over the smaller of the two
-		n := values
-		if len(m) < len(n) {
-			m, n = n, m
-		}
-		for k := range n {
-			if _, ok := m[k]; ok {
-				return ErrConflictingWrite
+	if level+1 < len(v.stack) {
+		for _, m := range v.stack[level+1:] {
+			// Iterate over the smaller of the two
+			n := values
+			if len(m) < len(n) {
+				m, n = n, m
+			}
+			for k := range n {
+				if _, ok := m[k]; ok {
+					return ErrConflictingWrite
+				}
 			}
 		}
 	}
