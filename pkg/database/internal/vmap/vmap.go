@@ -4,14 +4,36 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package block
+package vmap
 
 import (
 	"sync"
 )
 
-// vmap is a versioned map.
-type vmap[K comparable, V any] struct {
+type Option[K comparable, V any] func(*Map[K, V])
+
+func WithForEach[K comparable, V any](fn func(func(K, V) error) error) Option[K, V] {
+	return func(m *Map[K, V]) {
+		m.fn.forEach = fn
+	}
+}
+
+func WithCommit[K comparable, V any](fn func(map[K]V) error) Option[K, V] {
+	return func(m *Map[K, V]) {
+		m.fn.commit = fn
+	}
+}
+
+func New[K comparable, V any](opts ...Option[K, V]) *Map[K, V] {
+	m := new(Map[K, V])
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// Map is a versioned map.
+type Map[K comparable, V any] struct {
 	mu    sync.Mutex
 	stack []map[K]V
 	refs  []int
@@ -21,7 +43,7 @@ type vmap[K comparable, V any] struct {
 	}
 }
 
-func (v *vmap[K, V]) View() *vmapView[K, V] {
+func (v *Map[K, V]) View() *View[K, V] {
 	v.mu.Lock()
 	l := len(v.stack) - 1
 	if l < 0 {
@@ -32,14 +54,14 @@ func (v *vmap[K, V]) View() *vmapView[K, V] {
 	v.refs[l]++
 	v.mu.Unlock()
 
-	u := new(vmapView[K, V])
+	u := new(View[K, V])
 	u.vm = v
 	u.level = l
 	u.mine = map[K]V{}
 	return u
 }
 
-func (v *vmap[K, V]) commit() error {
+func (v *Map[K, V]) commit() error {
 	if v.fn.commit == nil {
 		return nil
 	}
@@ -60,7 +82,7 @@ func (v *vmap[K, V]) commit() error {
 	return v.fn.commit(values)
 }
 
-func (v *vmap[K, V]) get(level int, k K) (V, bool) {
+func (v *Map[K, V]) get(level int, k K) (V, bool) {
 	for i := level; i >= 0; i-- {
 		if v, ok := v.stack[i][k]; ok {
 			return v, true
@@ -71,7 +93,7 @@ func (v *vmap[K, V]) get(level int, k K) (V, bool) {
 	return z, false
 }
 
-func (v *vmap[K, V]) forEach(level int, seen map[K]bool, fn func(K, V) error) error {
+func (v *Map[K, V]) forEach(level int, seen map[K]bool, fn func(K, V) error) error {
 	for i := level; i >= 0; i-- {
 		for k, v := range v.stack[i] {
 			if seen[k] {
@@ -98,7 +120,7 @@ func (v *vmap[K, V]) forEach(level int, seen map[K]bool, fn func(K, V) error) er
 	return nil
 }
 
-func (v *vmap[K, V]) release(level int, values map[K]V) {
+func (v *Map[K, V]) release(level int, values map[K]V) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
@@ -145,22 +167,22 @@ func (v *vmap[K, V]) release(level int, values map[K]V) {
 	v.refs = v.refs[:i]
 }
 
-// vmapView is a view into a specific version of a vmap.
-type vmapView[K comparable, V any] struct {
-	vm    *vmap[K, V]
+// View is a view into a specific version of a vmap.
+type View[K comparable, V any] struct {
+	vm    *Map[K, V]
 	level int
 	mine  map[K]V
 	done  sync.Once
 }
 
-func (v *vmapView[K, V]) Get(k K) (V, bool) {
+func (v *View[K, V]) Get(k K) (V, bool) {
 	if v, ok := v.mine[k]; ok {
 		return v, true
 	}
 	return v.vm.get(v.level, k)
 }
 
-func (v *vmapView[K, V]) ForEach(fn func(K, V) error) error {
+func (v *View[K, V]) ForEach(fn func(K, V) error) error {
 	seen := map[K]bool{}
 	for k, v := range v.mine {
 		seen[k] = true
@@ -173,15 +195,15 @@ func (v *vmapView[K, V]) ForEach(fn func(K, V) error) error {
 	return v.vm.forEach(v.level, seen, fn)
 }
 
-func (v *vmapView[K, V]) Put(k K, u V) {
+func (v *View[K, V]) Put(k K, u V) {
 	v.mine[k] = u
 }
 
-func (v *vmapView[K, V]) Discard() {
+func (v *View[K, V]) Discard() {
 	v.done.Do(func() { v.vm.release(v.level, nil) })
 }
 
-func (v *vmapView[K, V]) Commit() error {
+func (v *View[K, V]) Commit() error {
 	v.done.Do(func() { v.vm.release(v.level, v.mine) })
 	return v.vm.commit()
 }

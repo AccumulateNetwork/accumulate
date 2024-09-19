@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/internal/vmap"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	"golang.org/x/exp/slog"
@@ -19,8 +20,8 @@ import (
 type databaseView struct {
 	recordFiles *recordFileSet
 	indexFiles  *indexFileTree
-	blocks      *vmapView[blockID, int]
-	records     *vmapView[[32]byte, *recordLocation]
+	blocks      *vmap.View[blockID, int]
+	records     *vmap.View[[32]byte, *recordLocation]
 }
 
 func (db *Database) indexBlocks() error {
