@@ -20,6 +20,10 @@ func open(t testing.TB) kvtest.Opener {
 	}
 }
 
+func TestSuite(t *testing.T) {
+	kvtest.TestSuite(t, open(t))
+}
+
 func BenchmarkCommit(b *testing.B) {
 	kvtest.BenchmarkCommit(b, open(b))
 }
@@ -30,24 +34,4 @@ func BenchmarkOpen(b *testing.B) {
 
 func BenchmarkReadRandom(b *testing.B) {
 	kvtest.BenchmarkReadRandom(b, open(b))
-}
-
-func TestDatabase(t *testing.T) {
-	kvtest.TestDatabase(t, open(t))
-}
-
-func TestIsolation(t *testing.T) {
-	kvtest.TestIsolation(t, open(t))
-}
-
-func TestSubBatch(t *testing.T) {
-	kvtest.TestSubBatch(t, open(t))
-}
-
-func TestPrefix(t *testing.T) {
-	kvtest.TestPrefix(t, open(t))
-}
-
-func TestDelete(t *testing.T) {
-	kvtest.TestDelete(t, open(t))
 }

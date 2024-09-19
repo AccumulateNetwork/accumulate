@@ -14,30 +14,13 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 )
 
-func open(*testing.T) kvtest.Opener {
+func open(testing.TB) kvtest.Opener {
 	db := Open(memory.New(nil), memory.New(nil))
 	return func() (keyvalue.Beginner, error) {
 		return db, nil
 	}
 }
 
-func TestDatabase(t *testing.T) {
-	kvtest.TestDatabase(t, open(t))
-}
-
-func TestIsolation(t *testing.T) {
-	t.Skip("Not supported by the underlying databases")
-	kvtest.TestIsolation(t, open(t))
-}
-
-func TestSubBatch(t *testing.T) {
-	kvtest.TestSubBatch(t, open(t))
-}
-
-func TestPrefix(t *testing.T) {
-	kvtest.TestPrefix(t, open(t))
-}
-
-func TestDelete(t *testing.T) {
-	kvtest.TestDelete(t, open(t))
+func TestSuite(t *testing.T) {
+	kvtest.TestSuite(t, open(t))
 }

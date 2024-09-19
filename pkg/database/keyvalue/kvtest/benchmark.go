@@ -53,7 +53,7 @@ func BenchmarkOpen(b *testing.B, open Opener) {
 }
 
 func BenchmarkReadRandom(b *testing.B, open Opener) {
-	const N = 1000
+	const N = 1000000
 
 	// Populate
 	db := openDb(b, open)

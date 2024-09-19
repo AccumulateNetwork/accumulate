@@ -17,8 +17,8 @@ import (
 
 // ChangeSet is a key-value change set.
 type ChangeSet struct {
-	mu      sync.RWMutex       //
-	entries map[[32]byte]Entry //
+	mu      sync.RWMutex
+	entries map[[32]byte]Entry
 	opts    ChangeSetOptions
 }
 

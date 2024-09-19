@@ -13,29 +13,24 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/kvtest"
 )
 
-func open() kvtest.Opener {
+func open(testing.TB) kvtest.Opener {
 	// Reuse the same in-memory database each time
 	db := New(nil)
 	return func() (keyvalue.Beginner, error) { return db, nil }
 }
 
-func TestDatabase(t *testing.T) {
-	kvtest.TestDatabase(t, open())
+func TestSuite(t *testing.T) {
+	kvtest.TestSuite(t, open(t))
 }
 
-func TestIsolation(t *testing.T) {
-	t.Skip("Isolation not supported")
-	kvtest.TestIsolation(t, open())
+func BenchmarkCommit(b *testing.B) {
+	kvtest.BenchmarkCommit(b, open(b))
 }
 
-func TestSubBatch(t *testing.T) {
-	kvtest.TestSubBatch(t, open())
+func BenchmarkOpen(b *testing.B) {
+	kvtest.BenchmarkOpen(b, open(b))
 }
 
-func TestPrefix(t *testing.T) {
-	kvtest.TestPrefix(t, open())
-}
-
-func TestDelete(t *testing.T) {
-	kvtest.TestDelete(t, open())
+func BenchmarkReadRandom(b *testing.B) {
+	kvtest.BenchmarkReadRandom(b, open(b))
 }
