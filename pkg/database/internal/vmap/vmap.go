@@ -7,8 +7,13 @@
 package vmap
 
 import (
+	"errors"
 	"sync"
+	"sync/atomic"
 )
+
+var ErrAlreadyClosed = errors.New("already closed")
+var ErrConflictingWrite = errors.New("conflicting write")
 
 type Option[K comparable, V any] func(*Map[K, V])
 
@@ -120,9 +125,23 @@ func (v *Map[K, V]) forEach(level int, seen map[K]bool, fn func(K, V) error) err
 	return nil
 }
 
-func (v *Map[K, V]) release(level int, values map[K]V) {
+func (v *Map[K, V]) release(level int, values map[K]V) error {
 	v.mu.Lock()
 	defer v.mu.Unlock()
+
+	// Check for a conflict
+	for _, m := range v.stack[level:] {
+		// Iterate over the smaller of the two
+		n := values
+		if len(m) < len(n) {
+			m, n = n, m
+		}
+		for k := range n {
+			if _, ok := m[k]; ok {
+				return ErrConflictingWrite
+			}
+		}
+	}
 
 	// Decrement the ref-count of the specified level
 	v.refs[level]--
@@ -137,7 +156,7 @@ func (v *Map[K, V]) release(level int, values map[K]V) {
 
 	case v.refs[i] > 0:
 		// If the latest level has refs and the commit set is empty, do nothing
-		return
+		return nil
 
 	default:
 		// If the latest level has no refs, compact
@@ -165,6 +184,7 @@ func (v *Map[K, V]) release(level int, values map[K]V) {
 	clear(v.stack[i:]) // for GC
 	v.stack = v.stack[:i]
 	v.refs = v.refs[:i]
+	return nil
 }
 
 // View is a view into a specific version of a vmap.
@@ -172,7 +192,7 @@ type View[K comparable, V any] struct {
 	vm    *Map[K, V]
 	level int
 	mine  map[K]V
-	done  sync.Once
+	done  atomic.Bool
 }
 
 func (v *View[K, V]) Get(k K) (V, bool) {
@@ -200,10 +220,19 @@ func (v *View[K, V]) Put(k K, u V) {
 }
 
 func (v *View[K, V]) Discard() {
-	v.done.Do(func() { v.vm.release(v.level, nil) })
+	if !v.done.CompareAndSwap(false, true) {
+		return
+	}
+	v.vm.release(v.level, nil)
 }
 
 func (v *View[K, V]) Commit() error {
-	v.done.Do(func() { v.vm.release(v.level, v.mine) })
+	if !v.done.CompareAndSwap(false, true) {
+		return ErrAlreadyClosed
+	}
+	err := v.vm.release(v.level, v.mine)
+	if err != nil {
+		return err
+	}
 	return v.vm.commit()
 }

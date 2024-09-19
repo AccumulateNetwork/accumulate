@@ -8,6 +8,8 @@ package vmap
 import (
 	"fmt"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestCommit(t *testing.T) {
@@ -18,8 +20,8 @@ func TestCommit(t *testing.T) {
 		a.Put(1, 1)
 		b := m.View()
 		b.Put(2, 2)
-		_ = a.Commit()
-		_ = b.Commit()
+		require.NoError(t, a.Commit())
+		require.NoError(t, b.Commit())
 	})
 
 	t.Run("Scenario 2", func(t *testing.T) {
@@ -28,8 +30,8 @@ func TestCommit(t *testing.T) {
 		a := m.View()
 		b := m.View()
 		b.Put(2, 2)
-		_ = a.Commit()
-		_ = b.Commit()
+		require.NoError(t, a.Commit())
+		require.NoError(t, b.Commit())
 	})
 
 	t.Run("Scenario 3", func(t *testing.T) {
@@ -38,8 +40,8 @@ func TestCommit(t *testing.T) {
 		a := m.View()
 		a.Put(1, 1)
 		b := m.View()
-		_ = a.Commit()
-		_ = b.Commit()
+		require.NoError(t, a.Commit())
+		require.NoError(t, b.Commit())
 	})
 
 	t.Run("Scenario 4", func(t *testing.T) {
@@ -48,7 +50,17 @@ func TestCommit(t *testing.T) {
 		a := m.View()
 		a.Put(1, 1)
 		b := m.View()
-		_ = a.Commit()
+		require.NoError(t, a.Commit())
 		b.Discard()
 	})
+}
+
+func TestConflict(t *testing.T) {
+	m := new(Map[int, int])
+	a := m.View()
+	a.Put(1, 1)
+	b := m.View()
+	b.Put(1, 2)
+	require.NoError(t, a.Commit())
+	require.ErrorIs(t, ErrConflictingWrite, b.Commit())
 }
