@@ -130,31 +130,3 @@ func (x *Log[V]) append2(record values.Value[*Block[V]], e *Entry[V]) (*Block[V]
 	}
 	return new, x.getBlock(new.Level, new.Index).Put(new)
 }
-
-func (x *Log[V]) All(yield func(QueryResult[V]) bool) {
-	x.all(x.getHead(), yield)
-}
-
-func (x *Log[V]) all(block values.Value[*Block[V]], yield func(QueryResult[V]) bool) bool {
-	b, err := block.Get()
-	if err != nil {
-		yield(errResult[V](err))
-		return false
-	}
-
-	if b.Level == 0 {
-		for _, e := range b.Entries {
-			if !yield(entry(e)) {
-				return false
-			}
-		}
-		return true
-	}
-
-	for _, e := range b.Entries {
-		if !x.all(x.getBlock(b.Level-1, e.Index), yield) {
-			return false
-		}
-	}
-	return true
-}
