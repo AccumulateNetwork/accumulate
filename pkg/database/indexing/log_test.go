@@ -8,6 +8,7 @@ package indexing
 
 import (
 	"fmt"
+	"iter"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -44,14 +45,14 @@ func TestLog(t *testing.T) {
 			}
 
 			// Verify the sequence is correct
-			require.Equal(t, strs, getAll(t, x))
+			require.Equal(t, strs, get(t, x.Scan().All()))
 
 			// Verify everything is persisted correctly
 			require.NoError(t, x.Commit())
 			x = new(Log[string])
 			x.store = keyvalue.RecordStore{Store: store}
 			x.blockSize = 1 << P
-			require.Equal(t, strs, getAll(t, x))
+			require.Equal(t, strs, get(t, x.Scan().All()))
 
 			// Verify each element can be found
 			for _, v := range values {
@@ -99,6 +100,35 @@ func TestLog(t *testing.T) {
 	}
 }
 
+func TestLog_Scan(t *testing.T) {
+	const P = 2
+	const N = 1 << (P * 3)
+
+	store := memory.New(nil).Begin(nil, true)
+	x := new(Log[string])
+	x.store = keyvalue.RecordStore{Store: store}
+	x.blockSize = 1 << P
+
+	var rand lxrand.Sequence
+	var v uint64 = 1
+	var keys []*record.Key
+	var strs []string
+	for i := 0; i < N; i++ {
+		v = uint64(i)
+		k, s := record.NewKey(i), fmt.Sprint(i)
+		require.NoError(t, x.Append(k, s), "insert %d", i)
+		keys = append(keys, k)
+		strs = append(strs, s)
+		v += uint64(rand.Byte()%16 + 1)
+	}
+
+	// Verify
+	require.Equal(t, strs, get(t, x.Scan().All()))
+	require.Equal(t, strs[10:], get(t, x.Scan().From(keys[10]).ToLast()))
+	require.Equal(t, strs[:50], get(t, x.Scan().FromFirst().To(keys[50])))
+	require.Equal(t, strs[10:50], get(t, x.Scan().From(keys[10]).To(keys[50])))
+}
+
 func BenchmarkLog_Append(b *testing.B) {
 	for _, P := range []int{8, 10, 12, 14, 16} {
 		b.Run(fmt.Sprint(1<<P), func(b *testing.B) {
@@ -144,14 +174,14 @@ func BenchmarkLog_Find(b *testing.B) {
 		})
 	}
 }
-func getAll[V any](t testing.TB, x *Log[V]) []V {
+
+func get[V any](t testing.TB, seq iter.Seq[QueryResult[V]]) []V {
 	var all []V
-	x.All(func(r QueryResult[V]) bool {
+	for r := range seq {
 		_, v, err := r.Get()
 		require.NoError(t, err)
 		all = append(all, v)
-		return true
-	})
+	}
 	return all
 }
 
