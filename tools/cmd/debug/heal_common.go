@@ -101,6 +101,10 @@ func (h *healer) Reset() {
 }
 
 func (h *healer) heal(args []string) {
+	// Wait must be called after cancel (so the defer must happen first)
+	wg := new(sync.WaitGroup)
+	defer wg.Wait()
+
 	ctx := cmdutil.ContextForMainProcess(context.Background())
 	ctx, cancel, _ := api.ContextWithBatchData(ctx)
 	defer cancel()
@@ -176,9 +180,6 @@ func (h *healer) heal(args []string) {
 			Debug:   debug,
 		},
 	}
-
-	wg := new(sync.WaitGroup)
-	defer wg.Wait()
 
 	h.submit = make(chan []messaging.Message)
 	wg.Add(1)
