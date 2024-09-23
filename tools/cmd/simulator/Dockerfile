@@ -21,5 +21,5 @@ COPY --from=build /root/simulator /go/bin/dlv /bin/
 
 EXPOSE 26660
 
-ENTRYPOINT ["simulator", "-b=1", "-v=1", "-s=100ms", "--database=/data/accumulate.db", "--globals={\"executorVersion\": \"v2vandenberg\"}"]
+ENTRYPOINT ["simulator", "-b=1", "-v=1", "-s=100ms", "--database=/data", "--globals={\"executorVersion\": \"v2vandenberg\"}"]
 CMD ["-a=0.0.0.0"]
