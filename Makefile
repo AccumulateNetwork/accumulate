@@ -36,3 +36,12 @@ faucet-docker:
 
 faucet-docker-push: faucet-docker
 	docker push "$(IMAGE)/faucet"
+
+sim:
+	go build -trimpath $(FLAGS) ./tools/cmd/simulator
+
+sim-docker:
+	docker build --build-arg "GIT_DESCRIBE=$(GIT_DESCRIBE)" --build-arg "GIT_COMMIT=$(GIT_COMMIT)" -t "$(IMAGE)/simulator" -f tools/cmd/simulator/Dockerfile .
+
+sim-docker-push: sim-docker
+	docker push "$(IMAGE)/simulator"

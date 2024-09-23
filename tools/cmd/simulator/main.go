@@ -47,7 +47,7 @@ var flag = struct {
 	LogFormat string
 	Step      string
 	Globals   string
-	Localhost bool
+	BaseAddr  string
 	BvnCount  int
 	ValCount  int
 	BasePort  int
@@ -65,7 +65,7 @@ func init() {
 	cmd.Flags().IntVarP(&flag.BvnCount, "bvns", "b", 3, "Number of BVNs to create; applicable only when --network=simple")
 	cmd.Flags().IntVarP(&flag.ValCount, "validators", "v", 3, "Number of validators to create per BVN; applicable only when --network=simple")
 	cmd.Flags().IntVarP(&flag.BasePort, "port", "p", 26656, "Base port to listen on")
-	cmd.Flags().BoolVarP(&flag.Localhost, "localhost", "l", false, "Base loopback URL is 'localhost'")
+	cmd.Flags().StringVarP(&flag.BaseAddr, "address", "a", "127.0.1.1", "Base address to listen on")
 	cmd.Flags().StringSliceVarP(&flag.Cors, "cors", "c", []string{"*"}, "Specify url's for CORS requests, (default=*)")
 
 	cmd.MarkFlagsMutuallyExclusive("snapshot", "globals")
@@ -113,13 +113,15 @@ func nextIP(ip net.IP, addToIP int) net.IP {
 }
 
 func run(*cobra.Command, []string) {
-	localhost := net.ParseIP("127.0.1.1")
-	if flag.Localhost {
+	var baseAddr net.IP
+	if flag.BaseAddr == "localhost" {
 		ips := findLoopback()
 		if len(ips) == 0 {
 			log.Fatal("No IP addresses found")
 		}
-		localhost = ips[0]
+		baseAddr = ips[0]
+	} else {
+		baseAddr = net.ParseIP(flag.BaseAddr)
 	}
 
 	jsonrpc2.DebugMethodFunc = true
@@ -134,7 +136,7 @@ func run(*cobra.Command, []string) {
 		net = simulator.NewSimpleNetwork("Simulator", flag.BvnCount, flag.ValCount)
 		for i, bvn := range net.Bvns {
 			for j, node := range bvn.Nodes {
-				node.AdvertizeAddress = nextIP(localhost, i*flag.ValCount+j).String()
+				node.AdvertizeAddress = nextIP(baseAddr, i*flag.ValCount+j).String()
 				node.BasePort = uint64(flag.BasePort)
 			}
 		}
@@ -178,18 +180,8 @@ func run(*cobra.Command, []string) {
 			ListenHTTPv3: true,
 			ServeError:   check,
 			HookHTTP: func(h http.Handler, w http.ResponseWriter, r *http.Request) {
-
-				if flag.Cors != nil {
-					cors := strings.Join(flag.Cors, ",")
-					w.Header().Set("Access-Control-Allow-Origin", cors) // set "*" for testing, but use specific origin in production
-					w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-					w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-
-					// Handle preflight OPTIONS request
-					if r.Method == "OPTIONS" {
-						w.WriteHeader(http.StatusOK)
-						return
-					}
+				if handleCORS(w, r) {
+					return
 				}
 				onWaitHook(sim, h, w, r)
 			},
@@ -213,18 +205,10 @@ func run(*cobra.Command, []string) {
 		ListenHTTPv3: true,
 		ServeError:   check,
 		HookHTTP: func(h http.Handler, w http.ResponseWriter, r *http.Request) {
-			if flag.Cors != nil {
-				cors := strings.Join(flag.Cors, ",")
-				w.Header().Set("Access-Control-Allow-Origin", cors) // set "*" for testing, but use specific origin in production
-				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-
-				// Handle preflight OPTIONS request
-				if r.Method == "OPTIONS" {
-					w.WriteHeader(http.StatusOK)
-					return
-				}
+			if handleCORS(w, r) {
+				return
 			}
+			h.ServeHTTP(w, r)
 		},
 	}))
 
@@ -326,4 +310,22 @@ func waitForTxID(sim *simulator.Simulator, txid *url.TxID, ignorePending bool) {
 			check(sim.Step())
 		}
 	}
+}
+
+func handleCORS(w http.ResponseWriter, r *http.Request) bool {
+	if flag.Cors == nil {
+		return false
+	}
+
+	cors := strings.Join(flag.Cors, ",")
+	w.Header().Set("Access-Control-Allow-Origin", cors) // set "*" for testing, but use specific origin in production
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+	// Handle preflight OPTIONS request
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return true
+	}
+	return false
 }
