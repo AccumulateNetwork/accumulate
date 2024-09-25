@@ -23,6 +23,15 @@ func TestSuite(t *testing.T) {
 	kvtest.TestSuite(t, open(t))
 }
 
+func TestChangeSetAsDatabase(t *testing.T) {
+	// TODO: Use a vmap for ChangeSet? This would require vmap having a root
+	// view or equivalent. Is it actually useful for ChangeSet to have
+	// isolation?
+	t.Skip()
+	db := New(nil).Begin(nil, true)
+	kvtest.TestSuite(t, func() (keyvalue.Beginner, error) { return db, nil })
+}
+
 func BenchmarkCommit(b *testing.B) {
 	kvtest.BenchmarkCommit(b, open(b))
 }

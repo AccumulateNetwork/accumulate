@@ -12,6 +12,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 )
 
+func entry[V any](e *Entry[V]) ValueResult[V] {
+	return value(e.Key, e.Value)
+}
+
 func value[V any](k *record.Key, v *Value[V]) ValueResult[V] {
 	return ValueResult[V]{k, v}
 }

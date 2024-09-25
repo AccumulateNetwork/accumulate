@@ -130,3 +130,18 @@ func (x *Log[V]) append2(record values.Value[*Block[V]], e *Entry[V]) (*Block[V]
 	}
 	return new, x.getBlock(new.Level, new.Index).Put(new)
 }
+
+// Replace replaces an existing entry. Replace returns [errors.NotFound] if
+// there is no existing entry.
+func (x *Log[V]) Replace(key *record.Key, value V) error {
+	r, err := x.find(key)
+	if err != nil {
+		return err
+	}
+	if !r.exact {
+		return (*database.NotFoundError)(key)
+	}
+
+	r.block.Entries[r.index].Value = &Value[V]{value: value, valueOk: true}
+	return r.record.Put(r.block)
+}

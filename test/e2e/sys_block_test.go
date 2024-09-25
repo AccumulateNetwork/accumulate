@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/database/indexing"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
@@ -130,7 +129,7 @@ func TestBlockLedger(t *testing.T) {
 	// Check the block ledger
 	var accounts []string
 	View(t, sim.Database("BVN0"), func(batch *database.Batch) {
-		batch.Account(PartitionUrl("BVN0").JoinPath(Ledger)).BlockLedger().All(func(r indexing.QueryResult[*database.BlockLedger]) bool {
+		for r := range batch.Account(PartitionUrl("BVN0").JoinPath(Ledger)).BlockLedger().Scan().All() {
 			_, bl, err := r.Get()
 			require.NoError(t, err)
 			for _, e := range bl.Entries {
@@ -138,8 +137,7 @@ func TestBlockLedger(t *testing.T) {
 					accounts = append(accounts, e.Account.WithFragment(e.Chain).String())
 				}
 			}
-			return true
-		})
+		}
 	})
 	require.Contains(t, accounts, "acc://alice.acme/tokens#main")
 }

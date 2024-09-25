@@ -6,7 +6,9 @@
 
 package indexing
 
-import "gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
+import (
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
+)
 
 type Query[V any] interface {
 	// Before returns the target entry if the match was exact, the entry before

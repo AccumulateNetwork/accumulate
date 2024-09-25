@@ -437,29 +437,16 @@ func (app *Accumulator) FinalizeBlock(_ context.Context, req *abci.RequestFinali
 	}
 	res.ValidatorUpdates = end.ValidatorUpdates
 
-	// If the block is empty, discard it
-	if app.blockState.IsEmpty() {
-		app.discardBlock()
+	// Get the new root
+	root, err := app.blockState.Hash()
+	if err != nil {
+		return nil, err
+	}
+	res.AppHash = root[:]
 
-		// Get the old root
-		_, root, err := app.Executor.LastBlock()
-		if err != nil {
-			return nil, err
-		}
-		res.AppHash = root[:]
-
-	} else {
-		// Get the new root
-		root, err := app.blockState.Hash()
-		if err != nil {
-			return nil, err
-		}
-		res.AppHash = root[:]
-
-		// Collect the changeset
-		if false {
-			app.collectBlock(req.Height, root)
-		}
+	// Collect the changeset
+	if false && !app.blockState.IsEmpty() {
+		app.collectBlock(req.Height, root)
 	}
 
 	return res, nil
@@ -651,50 +638,6 @@ func (app *Accumulator) endBlock() (ResponseEndBlock, error) {
 	return resp, nil
 }
 
-func (app *Accumulator) discardBlock() {
-	defer app.cleanupBlock()
-
-	timeSinceAppStart := time.Since(app.startTime).Seconds()
-	ds := app.AnalysisLog.GetDataSet("accumulator")
-	if ds != nil {
-		blockTime := time.Since(app.timer).Seconds()
-		aveBlockTime := 0.0
-		estTps := 0.0
-		if app.txct != 0 {
-			aveBlockTime = blockTime / float64(app.txct)
-			estTps = 1.0 / aveBlockTime
-		}
-		ds.Save("height", app.block.Params().Index, 10, true)
-		ds.Save("time_since_app_start", timeSinceAppStart, 6, false)
-		ds.Save("block_time", blockTime, 6, false)
-		ds.Save("ave_block_time", aveBlockTime, 10, false)
-		ds.Save("est_tps", estTps, 10, false)
-		ds.Save("txct", app.txct, 10, false)
-		app.blockSpan.SetAttributes(
-			attribute.Float64("time_since_app_start", timeSinceAppStart),
-			attribute.Float64("block_time", blockTime),
-			attribute.Float64("ave_block_time", aveBlockTime),
-			attribute.Float64("est_tps", estTps),
-			attribute.Int64("txct", app.txct),
-		)
-	}
-
-	ds = app.AnalysisLog.GetDataSet("executor")
-	if ds != nil {
-		ds.Save("height", app.block.Params().Index, 10, true)
-		ds.Save("time_since_app_start", timeSinceAppStart, 6, false)
-		app.Executor.StoreBlockTimers(ds)
-	}
-
-	go app.AnalysisLog.Flush()
-
-	// Discard changes
-	app.blockState.Discard()
-
-	duration := time.Since(app.timer)
-	app.logger.Debug("Committed empty block", "duration", duration.String())
-}
-
 // Commit implements github.com/cometbft/cometbft/abci/types.Application.
 //
 // Commits the transaction block to the chains.
@@ -733,71 +676,38 @@ func (app *Accumulator) actualCommit() error {
 	_, span := app.Tracer.Start(app.block.Params().Context, "Commit")
 	defer span.End()
 
-	// Commit the batch
+	// Commit the batch. If the block is empty, the executor will discard it
+	// instead.
 	tick := time.Now()
-
 	err := app.blockState.Commit()
-
 	commitTime := time.Since(tick).Seconds()
-	tick = time.Now()
-
 	if err != nil {
 		return err
 	}
 
 	// Notify the world of the committed block
+	tick = time.Now()
 	major, _, _ := app.blockState.DidCompleteMajorBlock()
-	err = app.EventBus.Publish(events.DidCommitBlock{
-		Index: app.block.Params().Index,
-		Time:  app.block.Params().Time,
-		Major: major,
-	})
+	if !app.blockState.IsEmpty() {
+		err = app.EventBus.Publish(events.DidCommitBlock{
+			Index: app.block.Params().Index,
+			Time:  app.block.Params().Time,
+			Major: major,
+		})
+	}
+	publishEventTime := time.Since(tick).Seconds()
 	if err != nil {
 		return err
 	}
 
-	publishEventTime := time.Since(tick).Seconds()
+	app.collectBlockStats(commitTime, publishEventTime)
 
-	timeSinceAppStart := time.Since(app.startTime).Seconds()
-	ds := app.AnalysisLog.GetDataSet("accumulator")
-	if ds != nil {
-		blockTime := time.Since(app.timer).Seconds()
-		aveBlockTime := 0.0
-		estTps := 0.0
-		if app.txct != 0 {
-			aveBlockTime = blockTime / float64(app.txct)
-			estTps = 1.0 / aveBlockTime
-		}
-		ds.Save("height", app.block.Params().Index, 10, true)
-		ds.Save("time_since_app_start", timeSinceAppStart, 6, false)
-		ds.Save("block_time", blockTime, 6, false)
-		ds.Save("commit_time", commitTime, 6, false)
-		ds.Save("event_time", publishEventTime, 6, false)
-		ds.Save("ave_block_time", aveBlockTime, 10, false)
-		ds.Save("est_tps", estTps, 10, false)
-		ds.Save("txct", app.txct, 10, false)
-		app.blockSpan.SetAttributes(
-			attribute.Float64("time_since_app_start", timeSinceAppStart),
-			attribute.Float64("block_time", blockTime),
-			attribute.Float64("commit_time", commitTime),
-			attribute.Float64("event_time", publishEventTime),
-			attribute.Float64("ave_block_time", aveBlockTime),
-			attribute.Float64("est_tps", estTps),
-			attribute.Int64("txct", app.txct),
-		)
-
-	}
-
-	ds = app.AnalysisLog.GetDataSet("executor")
-	if ds != nil {
-		ds.Save("height", app.block.Params().Index, 10, true)
-		ds.Save("time_since_app_start", timeSinceAppStart, 6, false)
-		app.Executor.StoreBlockTimers(ds)
-	}
-
-	go app.AnalysisLog.Flush()
 	duration := time.Since(app.timer)
-	app.logger.Debug("Committed", "minor", app.block.Params().Index, "major", major, "duration", duration, "count", app.txct)
+	if app.blockState.IsEmpty() {
+		app.logger.Debug("Committed empty block", "duration", duration.String())
+	} else {
+		app.logger.Debug("Committed", "minor", app.block.Params().Index, "major", major, "duration", duration, "count", app.txct)
+	}
 	return nil
 }
 
@@ -842,4 +752,44 @@ func (app *Accumulator) collectBlock(height int64, rootHash [32]byte) {
 	if err != nil {
 		panic(err)
 	}
+}
+
+func (app *Accumulator) collectBlockStats(commitTime, publishEventTime float64) {
+	timeSinceAppStart := time.Since(app.startTime).Seconds()
+	ds := app.AnalysisLog.GetDataSet("accumulator")
+	if ds != nil {
+		blockTime := time.Since(app.timer).Seconds()
+		aveBlockTime := 0.0
+		estTps := 0.0
+		if app.txct != 0 {
+			aveBlockTime = blockTime / float64(app.txct)
+			estTps = 1.0 / aveBlockTime
+		}
+		ds.Save("height", app.block.Params().Index, 10, true)
+		ds.Save("time_since_app_start", timeSinceAppStart, 6, false)
+		ds.Save("block_time", blockTime, 6, false)
+		ds.Save("commit_time", commitTime, 6, false)
+		ds.Save("event_time", publishEventTime, 6, false)
+		ds.Save("ave_block_time", aveBlockTime, 10, false)
+		ds.Save("est_tps", estTps, 10, false)
+		ds.Save("txct", app.txct, 10, false)
+		app.blockSpan.SetAttributes(
+			attribute.Float64("time_since_app_start", timeSinceAppStart),
+			attribute.Float64("block_time", blockTime),
+			attribute.Float64("commit_time", commitTime),
+			attribute.Float64("event_time", publishEventTime),
+			attribute.Float64("ave_block_time", aveBlockTime),
+			attribute.Float64("est_tps", estTps),
+			attribute.Int64("txct", app.txct),
+		)
+	}
+
+	ds = app.AnalysisLog.GetDataSet("executor")
+	if ds != nil {
+		ds.Save("height", app.block.Params().Index, 10, true)
+		ds.Save("time_since_app_start", timeSinceAppStart, 6, false)
+		app.Executor.StoreBlockTimers(ds)
+	}
+
+	go app.AnalysisLog.Flush()
 }

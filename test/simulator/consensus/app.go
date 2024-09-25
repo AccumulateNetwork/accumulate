@@ -170,23 +170,19 @@ func (a *ExecutorApp) Execute(req *ExecuteRequest) (*ExecuteResponse, error) {
 func (a *ExecutorApp) Commit(req *CommitRequest) (*CommitResponse, error) {
 	s := req.Block.(execute.BlockState)
 
-	// Discard changes if the block is empty
-	if s.IsEmpty() {
-		s.Discard()
-		return &CommitResponse{}, nil
-	}
-
 	err := s.Commit()
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	major, _, _ := s.DidCompleteMajorBlock()
-	err = a.EventBus.Publish(events.DidCommitBlock{
-		Index: s.Params().Index,
-		Time:  s.Params().Time,
-		Major: major,
-	})
+	if !s.IsEmpty() {
+		err = a.EventBus.Publish(events.DidCommitBlock{
+			Index: s.Params().Index,
+			Time:  s.Params().Time,
+			Major: major,
+		})
+	}
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("notify of commit: %w", err)
 	}
@@ -196,7 +192,7 @@ func (a *ExecutorApp) Commit(req *CommitRequest) (*CommitResponse, error) {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	if a.Record != nil {
+	if a.Record != nil && !s.IsEmpty() {
 		err = a.Record.DidCommitBlock(s)
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
