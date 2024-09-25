@@ -141,3 +141,53 @@ func TestBlockLedger(t *testing.T) {
 	})
 	require.Contains(t, accounts, "acc://alice.acme/tokens#main")
 }
+
+func TestBlockLedgerUpgrade(t *testing.T) {
+	alice := build.
+		Identity("alice").Create("book").
+		Tokens("tokens").Create("ACME").Add(1e9).Identity().
+		Book("book").Page(1).Create().AddCredits(1e9).Book().Identity()
+	aliceKey := alice.Book("book").Page(1).
+		GenerateKey(SignatureTypeED25519)
+
+	// Initialize
+	sim := NewSim(t,
+		simulator.SimpleNetwork(t.Name(), 1, 1),
+		simulator.Genesis(GenesisTime).With(alice).WithVersion(ExecutorVersionV2Vandenberg),
+	)
+
+	// Do something
+	st := sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(alice, "tokens").
+			BurnTokens(1, 1).
+			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey))
+
+	sim.StepUntil(
+		Txn(st.TxID).Completes())
+
+	// Upgrade
+	st = sim.SubmitTxnSuccessfully(MustBuild(t,
+		build.Transaction().For(DnUrl()).
+			ActivateProtocolVersion(ExecutorVersionV2Jiuquan).
+			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(1).Signer(sim.SignWithNode(Directory, 0))))
+
+	sim.StepUntil(
+		Txn(st.TxID).Succeeds(),
+		VersionIs(ExecutorVersionV2Jiuquan))
+
+	// Check the block ledger
+	var accounts []string
+	View(t, sim.Database("BVN0"), func(batch *database.Batch) {
+		for r := range batch.Account(PartitionUrl("BVN0").JoinPath(Ledger)).BlockLedger().Scan().All() {
+			_, bl, err := r.Get()
+			require.NoError(t, err)
+			for _, e := range bl.Entries {
+				if !e.Account.RootIdentity().Equal(PartitionUrl("BVN0")) {
+					accounts = append(accounts, e.Account.WithFragment(e.Chain).String())
+				}
+			}
+		}
+	})
+	require.Contains(t, accounts, "acc://alice.acme/tokens#main")
+
+}
