@@ -12,8 +12,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
+	"math/big"
+	"net"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
@@ -43,9 +47,11 @@ var flag = struct {
 	LogFormat string
 	Step      string
 	Globals   string
+	BaseAddr  string
 	BvnCount  int
 	ValCount  int
 	BasePort  int
+	Cors      []string
 }{}
 
 func init() {
@@ -59,8 +65,26 @@ func init() {
 	cmd.Flags().IntVarP(&flag.BvnCount, "bvns", "b", 3, "Number of BVNs to create; applicable only when --network=simple")
 	cmd.Flags().IntVarP(&flag.ValCount, "validators", "v", 3, "Number of validators to create per BVN; applicable only when --network=simple")
 	cmd.Flags().IntVarP(&flag.BasePort, "port", "p", 26656, "Base port to listen on")
+	cmd.Flags().StringVarP(&flag.BaseAddr, "address", "a", "127.0.1.1", "Base address to listen on")
+	cmd.Flags().StringSliceVarP(&flag.Cors, "cors", "c", []string{"*"}, "Specify url's for CORS requests, (default=*)")
 
 	cmd.MarkFlagsMutuallyExclusive("snapshot", "globals")
+}
+
+func findLoopback() (ret []net.IP) {
+	ips, err := net.LookupIP("localhost")
+	if err != nil {
+		log.Fatalf("Could not resolve localhost: %v\n", err)
+	}
+
+	// Find and print the default 127.x.x.x address (typically 127.0.0.1)
+	for i, ip := range ips {
+		if ip.To4() != nil && ip.IsLoopback() {
+			fmt.Printf("Default 127.x.x.x address: %s\n", ip.String())
+			ret = append(ret, ips[i])
+		}
+	}
+	return ret
 }
 
 var DefaultLogLevels = config.LogLevel{}.
@@ -71,7 +95,35 @@ var DefaultLogLevels = config.LogLevel{}.
 
 func main() { _ = cmd.Execute() }
 
+func nextIP(ip net.IP, addToIP int) net.IP {
+	// Convert IP to a big.Int
+	ipInt := big.NewInt(0).SetBytes(ip.To16()) // To16 ensures it works for both IPv4 and IPv6
+
+	// Add 1 to the IP address
+	ipInt.Add(ipInt, big.NewInt(int64(addToIP)))
+
+	// Convert back to IP
+	newIP := ipInt.Bytes()
+
+	// Handle IPv4 by slicing the last 4 bytes
+	if ip.To4() != nil {
+		return net.IP(newIP[len(newIP)-4:])
+	}
+	return net.IP(newIP)
+}
+
 func run(*cobra.Command, []string) {
+	var baseAddr net.IP
+	if flag.BaseAddr == "localhost" {
+		ips := findLoopback()
+		if len(ips) == 0 {
+			log.Fatal("No IP addresses found")
+		}
+		baseAddr = ips[0]
+	} else {
+		baseAddr = net.ParseIP(flag.BaseAddr)
+	}
+
 	jsonrpc2.DebugMethodFunc = true
 
 	var opts []simulator.Option
@@ -84,7 +136,7 @@ func run(*cobra.Command, []string) {
 		net = simulator.NewSimpleNetwork("Simulator", flag.BvnCount, flag.ValCount)
 		for i, bvn := range net.Bvns {
 			for j, node := range bvn.Nodes {
-				node.AdvertizeAddress = fmt.Sprintf("127.0.1.%d", 1+i*flag.ValCount+j)
+				node.AdvertizeAddress = nextIP(baseAddr, i*flag.ValCount+j).String()
 				node.BasePort = uint64(flag.BasePort)
 			}
 		}
@@ -128,6 +180,9 @@ func run(*cobra.Command, []string) {
 			ListenHTTPv3: true,
 			ServeError:   check,
 			HookHTTP: func(h http.Handler, w http.ResponseWriter, r *http.Request) {
+				if handleCORS(w, r) {
+					return
+				}
 				onWaitHook(sim, h, w, r)
 			},
 		}))
@@ -149,6 +204,12 @@ func run(*cobra.Command, []string) {
 		ListenHTTPv2: true,
 		ListenHTTPv3: true,
 		ServeError:   check,
+		HookHTTP: func(h http.Handler, w http.ResponseWriter, r *http.Request) {
+			if handleCORS(w, r) {
+				return
+			}
+			h.ServeHTTP(w, r)
+		},
 	}))
 
 	select {}
@@ -249,4 +310,22 @@ func waitForTxID(sim *simulator.Simulator, txid *url.TxID, ignorePending bool) {
 			check(sim.Step())
 		}
 	}
+}
+
+func handleCORS(w http.ResponseWriter, r *http.Request) bool {
+	if flag.Cors == nil {
+		return false
+	}
+
+	cors := strings.Join(flag.Cors, ",")
+	w.Header().Set("Access-Control-Allow-Origin", cors) // set "*" for testing, but use specific origin in production
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+	// Handle preflight OPTIONS request
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return true
+	}
+	return false
 }
