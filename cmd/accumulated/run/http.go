@@ -154,7 +154,7 @@ func (h *HttpListener) startHTTP(inst *Instance, handler http.Handler) (*http.Se
 		ReadHeaderTimeout: h.ReadHeaderTimeout.Get(),
 	}
 
-	inst.cleanup(server.Shutdown)
+	inst.cleanup("http listener", server.Shutdown)
 
 	for _, l := range h.Listen {
 		l, secure, err := httpListen(l)

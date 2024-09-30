@@ -82,7 +82,7 @@ func (i *Instrumentation) startPprof(inst *Instance) error {
 		slog.Error("Server stopped (pprof)", "error", err)
 	})
 
-	inst.cleanup(s.Shutdown)
+	inst.cleanup("pprof http", s.Shutdown)
 	return nil
 }
 
@@ -110,7 +110,7 @@ func (m *Monitor) start(inst *Instance) error {
 
 func (m *Monitor) pollMemory(inst *Instance) {
 	tick := time.NewTicker(m.MemoryPollingRate.Get())
-	inst.cleanup(func(context.Context) error { tick.Stop(); return nil })
+	inst.cleanup("memory tracking", func(context.Context) error { tick.Stop(); return nil })
 
 	var s1, s2 runtime.MemStats
 	runtime.ReadMemStats(&s1)
