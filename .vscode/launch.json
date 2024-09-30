@@ -261,6 +261,22 @@
         "${workspaceFolder}/.nodes/devnet/bootstrap",
       ]
     },
+    {
+      "name": "Run faucet",
+      "presentation": {
+        "group": "20-Run"
+      },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/cmd/accumulated-faucet",
+      "args": [
+        "Kermit",
+        "--account=acc://7a6f9db5789710a6b27e0c5965e337d8fc7431075290434d/ACME",
+        "--key=${workspaceFolder}/.nodes/faucet/key",
+        "--node-key=seed:foo",
+      ]
+    },
     // Services
     {
       "name": "API (mainnet)",
