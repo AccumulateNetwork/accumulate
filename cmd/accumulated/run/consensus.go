@@ -235,7 +235,7 @@ func (c *ConsensusService) start(inst *Instance) error {
 		return errors.UnknownError.WithFormat("start consensus: %w", err)
 	}
 
-	inst.cleanup(func(context.Context) error {
+	inst.cleanup("consensus node", func(context.Context) error {
 		err := node.Stop()
 		node.Wait()
 		return err
