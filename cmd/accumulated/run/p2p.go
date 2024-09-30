@@ -38,7 +38,7 @@ func (p *P2P) start(inst *Instance) error {
 
 	slog.InfoContext(inst.context, "We are", "node-id", node.ID(), "instance-id", inst.id, "module", "run")
 
-	inst.cleanup(func(context.Context) error {
+	inst.cleanup("p2p node", func(context.Context) error {
 		err := node.Close()
 		if err != nil {
 			return err
