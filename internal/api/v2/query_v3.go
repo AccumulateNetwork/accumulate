@@ -776,6 +776,7 @@ func (m *JrpcMethods) QueryData(ctx context.Context, params json.RawMessage) any
 	qr.ChainId = req.Url.AccountID()
 	qr.Type = "dataEntry"
 	qr.Data = dataEntryV3(r2)
+	qr.LastBlockTime = r2.LastBlockTime
 	return qr
 }
 
