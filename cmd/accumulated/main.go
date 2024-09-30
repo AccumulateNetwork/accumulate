@@ -103,7 +103,7 @@ func runCfg(c *run.Config, predicate func(run.Service) bool) {
 
 	check(i.StartFiltered(predicate))
 	color.HiBlue("\n----- Running -----\n\n")
-	<-ctx.Done()
+	<-i.Done()
 	color.HiBlack("\n----- Stopping -----\n\n")
 	i.Stop()
 }
