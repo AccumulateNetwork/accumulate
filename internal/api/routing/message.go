@@ -156,7 +156,7 @@ func (r MessageRouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 			if t != nil {
 				token = t
 			} else {
-				return nil, errors.BadRequest.WithFormat("%v is not a lite token address and the request does not specify a token type", t)
+				return nil, errors.BadRequest.WithFormat("%v is not a lite token address and the request does not specify a token type", msg.Account)
 			}
 		}
 

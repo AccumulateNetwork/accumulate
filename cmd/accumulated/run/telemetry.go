@@ -102,7 +102,7 @@ func (t *Telemetry) setupTraceProvider(res *resource.Resource, inst *Instance) e
 			trace.WithBatchTimeout(time.Second)),
 	)
 
-	inst.cleanup(provider.Shutdown)
+	inst.cleanup("otel (traces)", provider.Shutdown)
 	otel.SetTracerProvider(provider)
 	return nil
 }
@@ -252,7 +252,7 @@ func (t *Telemetry) setupMeterProvider(res *resource.Resource, inst *Instance) e
 	}
 
 	provider := metric.NewMeterProvider(options...)
-	inst.cleanup(provider.Shutdown)
+	inst.cleanup("otel (metrics)", provider.Shutdown)
 	otel.SetMeterProvider(provider)
 	return nil
 }
@@ -271,7 +271,7 @@ func (t *Telemetry) setupLoggerProvider(res *resource.Resource, inst *Instance) 
 		log.WithProcessor(log.NewBatchProcessor(exporter)),
 	)
 
-	inst.cleanup(provider.Shutdown)
+	inst.cleanup("otel (logs)", provider.Shutdown)
 	global.SetLoggerProvider(provider)
 	return nil
 }
