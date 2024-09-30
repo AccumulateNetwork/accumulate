@@ -14,6 +14,7 @@ func MapRange[U, V Record](r *RecordRange[V], fn func(V) (U, error)) (*RecordRan
 	s := new(RecordRange[U])
 	s.Start = r.Start
 	s.Total = r.Total
+	s.LastBlockTime = r.LastBlockTime
 	s.Records = make([]U, len(r.Records))
 	var err error
 	for i, v := range r.Records {
