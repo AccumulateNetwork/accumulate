@@ -8,6 +8,7 @@ package api
 
 import (
 	"context"
+	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -74,8 +75,7 @@ func (c *Collator) messageHashSearch(ctx context.Context, scope *url.URL, query 
 	}
 
 	// For each partition
-	var values []Record
-	var total uint64
+	all := new(RecordRange[Record])
 	for _, part := range ns.Network.Partitions {
 		// Don't query the summary network
 		if part.Type == protocol.PartitionTypeBlockSummary {
@@ -99,14 +99,12 @@ func (c *Collator) messageHashSearch(ctx context.Context, scope *url.URL, query 
 		if !ok {
 			return nil, errors.InternalError.WithFormat("unexpected response: want %v, got %v", RecordTypeRange, r.RecordType())
 		}
-		values = append(values, rr.Records...)
-		total += rr.Total
+		all.Records = append(all.Records, rr.Records...)
+		all.Total += rr.Total
+		setLastBlockTime(&all.LastBlockTime, rr.LastBlockTime)
 	}
 
-	rr := new(RecordRange[Record])
-	rr.Records = values
-	rr.Total = total
-	return rr, nil
+	return all, nil
 }
 
 func (c *Collator) queryMessage(ctx context.Context, scope *url.URL, query *DefaultQuery) (Record, error) {
@@ -141,6 +139,7 @@ func (c *Collator) queryMessage(ctx context.Context, scope *url.URL, query *Defa
 		all.Produced.Append(r.Produced)
 		all.Cause.Append(r.Cause)
 		all.Signatures.Append(r.Signatures)
+		setLastBlockTime(&all.LastBlockTime, r.LastBlockTime)
 		return nil
 	})
 	if err != nil || txid == nil {
@@ -178,6 +177,7 @@ func (c *Collator) queryChain(ctx context.Context, scope *url.URL, query *ChainQ
 		// Collate the response
 		all.Records = append(all.Records, r.Records...)
 		all.Total += r.Total
+		setLastBlockTime(&all.LastBlockTime, r.LastBlockTime)
 		return nil
 	})
 	if err != nil || txid == nil {
@@ -317,5 +317,16 @@ func mergeSignatureSets(r *RecordRange[*SignatureSetRecord]) {
 			seen[h] = true
 		}
 		r.Signatures.Records = unique
+	}
+}
+
+// setLastBlockTime is used to set LastBlockTime to the earliest value from all
+// collated responses.
+func setLastBlockTime(dst **time.Time, src *time.Time) {
+	if src == nil {
+		return
+	}
+	if *dst == nil || (**dst).After(*src) {
+		*dst = src
 	}
 }
