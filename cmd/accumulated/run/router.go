@@ -56,7 +56,25 @@ func (r *RouterService) create(inst *Instance) (routing.Router, error) {
 		}
 	}
 
-	return apiutil.InitRouter(opts)
+	router, err := apiutil.InitRouter(opts)
+	if err != nil {
+		return nil, err
+	}
+
+	// Stop if initializing the router fails
+	go func() {
+		r, ok := router.(*routing.RouterInstance)
+		if !ok {
+			return
+		}
+		if <-r.Ready() {
+			return
+		}
+		inst.logger.Error("Unable to initialize the router")
+		inst.Stop()
+	}()
+
+	return router, nil
 }
 
 func (r *RouterService) start(inst *Instance) error {

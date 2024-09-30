@@ -72,14 +72,14 @@ func initRouter(opts RouterOptions) {
 		slog.InfoContext(opts.Context, "Waiting for a live network service")
 		svcAddr, err := dirNetSvc.MultiaddrFor(opts.Network)
 		if err != nil {
-			slog.ErrorContext(opts.Context, "Failed to initialize router", "error", err)
+			slog.ErrorContext(opts.Context, "Failed to initialize router (1)", "error", err)
 			_ = opts.Events.Publish(events.WillChangeGlobals{New: &network.GlobalValues{}})
 			return
 		}
 
 		err = opts.Node.WaitForService(opts.Context, svcAddr)
 		if err != nil {
-			slog.ErrorContext(opts.Context, "Failed to initialize router", "error", err)
+			slog.ErrorContext(opts.Context, "Failed to initialize router (2)", "error", err)
 			_ = opts.Events.Publish(events.WillChangeGlobals{New: &network.GlobalValues{}})
 			return
 		}
@@ -121,7 +121,7 @@ func initRouter(opts RouterOptions) {
 
 	ns, err := client.NetworkStatus(opts.Context, api.NetworkStatusOptions{})
 	if err != nil {
-		slog.ErrorContext(opts.Context, "Failed to initialize router", "error", err)
+		slog.ErrorContext(opts.Context, "Failed to initialize router (3)", "error", err)
 		_ = opts.Events.Publish(events.WillChangeGlobals{New: &network.GlobalValues{}})
 		return
 	}
@@ -136,7 +136,7 @@ func initRouter(opts RouterOptions) {
 		},
 	})
 	if err != nil {
-		slog.ErrorContext(opts.Context, "Failed to initialize router", "error", err)
+		slog.ErrorContext(opts.Context, "Failed to initialize router (4)", "error", err)
 		return
 	}
 }
