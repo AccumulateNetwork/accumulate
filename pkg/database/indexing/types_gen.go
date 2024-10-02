@@ -24,6 +24,9 @@ func wBlock[V any]() *widget.Composite[*Block[V], Block[V]] {
 
 // Copy returns a copy of the Block.
 func (v *Block[V]) Copy() *Block[V] {
+	if v == nil {
+		return nil
+	}
 	var u = new(Block[V])
 	wBlock[V]().CopyTo(u, v)
 	return u
@@ -83,6 +86,9 @@ func wEntry[V any]() *widget.Composite[*Entry[V], Entry[V]] {
 
 // Copy returns a copy of the Entry.
 func (v *Entry[V]) Copy() *Entry[V] {
+	if v == nil {
+		return nil
+	}
 	var u = new(Entry[V])
 	wEntry[V]().CopyTo(u, v)
 	return u
@@ -135,6 +141,9 @@ var wRange = widget.ForComposite(widget.Fields[Range]{
 
 // Copy returns a copy of the Range.
 func (v *Range) Copy() *Range {
+	if v == nil {
+		return nil
+	}
 	var u = new(Range)
 	wRange.CopyTo(u, v)
 	return u

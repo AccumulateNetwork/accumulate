@@ -25,6 +25,9 @@ var wBlockLedger = widget.ForComposite(widget.Fields[BlockLedger]{
 
 // Copy returns a copy of the BlockLedger.
 func (v *BlockLedger) Copy() *BlockLedger {
+	if v == nil {
+		return nil
+	}
 	var u = new(BlockLedger)
 	wBlockLedger.CopyTo(u, v)
 	return u

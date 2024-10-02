@@ -20,6 +20,9 @@ var wblockID = widget.ForComposite(widget.Fields[blockID]{
 
 // Copy returns a copy of the blockID.
 func (v *blockID) Copy() *blockID {
+	if v == nil {
+		return nil
+	}
 	var u = new(blockID)
 	wblockID.CopyTo(u, v)
 	return u
@@ -61,6 +64,9 @@ func (endBlockEntry) Type() entryType { return entryTypeEndBlock }
 
 // Copy returns a copy of the endBlockEntry.
 func (v *endBlockEntry) Copy() *endBlockEntry {
+	if v == nil {
+		return nil
+	}
 	var u = new(endBlockEntry)
 	wendBlockEntry.CopyTo(u, v)
 	return u
@@ -189,6 +195,9 @@ var wfileHeader = widget.ForComposite(widget.Fields[fileHeader]{}, widget.Identi
 
 // Copy returns a copy of the fileHeader.
 func (v *fileHeader) Copy() *fileHeader {
+	if v == nil {
+		return nil
+	}
 	var u = new(fileHeader)
 	wfileHeader.CopyTo(u, v)
 	return u
@@ -236,6 +245,9 @@ func (recordEntry) Type() entryType { return entryTypeRecord }
 
 // Copy returns a copy of the recordEntry.
 func (v *recordEntry) Copy() *recordEntry {
+	if v == nil {
+		return nil
+	}
 	var u = new(recordEntry)
 	wrecordEntry.CopyTo(u, v)
 	return u
@@ -282,6 +294,9 @@ var wrecordLocation = widget.ForComposite(widget.Fields[recordLocation]{
 
 // Copy returns a copy of the recordLocation.
 func (v *recordLocation) Copy() *recordLocation {
+	if v == nil {
+		return nil
+	}
 	var u = new(recordLocation)
 	wrecordLocation.CopyTo(u, v)
 	return u
@@ -305,6 +320,9 @@ func (startBlockEntry) Type() entryType { return entryTypeStartBlock }
 
 // Copy returns a copy of the startBlockEntry.
 func (v *startBlockEntry) Copy() *startBlockEntry {
+	if v == nil {
+		return nil
+	}
 	var u = new(startBlockEntry)
 	wstartBlockEntry.CopyTo(u, v)
 	return u

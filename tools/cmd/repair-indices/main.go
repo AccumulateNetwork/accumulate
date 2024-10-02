@@ -123,8 +123,7 @@ func collect(db database.Beginner, partition config.NetworkUrl) (map[[32]byte]*D
 		if i%(N*M) == 0 {
 			println()
 		}
-		var block *protocol.BlockLedger
-		err = batch.Account(partition.BlockLedger(i)).Main().GetAs(&block)
+		_, entries, err := indexing.LoadBlockLedger(batch.Account(partition.Ledger()), i)
 		switch {
 		case err == nil:
 			// Ok
@@ -136,7 +135,7 @@ func collect(db database.Beginner, partition config.NetworkUrl) (map[[32]byte]*D
 
 		var votes = partition.JoinPath(protocol.Votes).AccountID32()
 		var evidence = partition.JoinPath(protocol.Evidence).AccountID32()
-		for _, e := range block.Entries {
+		for _, e := range entries {
 			// Do not attempt to index Factom LDAs
 			if i == protocol.GenesisBlock {
 				_, err := protocol.ParseLiteAddress(e.Account)

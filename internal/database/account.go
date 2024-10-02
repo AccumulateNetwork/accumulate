@@ -24,6 +24,10 @@ func (b *Batch) AccountTransaction(id *url.TxID) *AccountTransaction {
 	return b.Account(id.Account()).Transaction(id.Hash())
 }
 
+func (a *Account) Account(path ...string) *Account {
+	return a.parent.Account(a.Url().JoinPath(path...))
+}
+
 // Hash retrieves or calculates the state hash of the account.
 func (a *Account) Hash() ([32]byte, error) {
 	// TODO Retrieve from the BPT

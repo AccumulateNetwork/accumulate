@@ -14,11 +14,10 @@ import (
 	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -81,13 +80,9 @@ func (s *EventService) loadBlockInfo(batch *database.Batch, e *api.BlockEvent) {
 	// incomplete there will be empty entries, so we also need to check for that
 	// (hence l1.Index == 0). If there is not an entry in the new block ledger
 	// or it is empty, check for an old block ledger account.
-	var entries []*protocol.BlockEntry
-	if _, l1, e1 := batch.Account(s.partition.Ledger()).BlockLedger().Find(record.NewKey(e.Index)).Exact().Get(); e1 == nil || l1.Index == 0 {
-		entries = l1.Entries
-	} else if l2, e2 := batch.Account(s.partition.BlockLedger(e.Index)).Main().Get(); e2 == nil && l2.Type() == protocol.AccountTypeBlockLedger {
-		entries = l2.(*protocol.BlockLedger).Entries
-	} else {
-		s.logger.Error("Loading block ledger failed", "error", errors.Join(e1, e2), "block", e.Index, "url", s.partition.BlockLedger(e.Index))
+	_, entries, err := indexing.LoadBlockLedger(batch.Account(s.partition.Ledger()), e.Index)
+	if err != nil {
+		s.logger.Error("Loading block ledger failed", "error", err, "block", e.Index, "url", s.partition.BlockLedger(e.Index))
 		return
 	}
 
