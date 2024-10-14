@@ -25,9 +25,13 @@ ExecutorVersion:
     value: 7
     label: v2-vandenberg
     description: enables the Vandenberg release
+  V2Jiuquan:
+    value: 8
+    label: v2-jiuquan
+    description: enables the Jiuquan release
 
   VNext:
-    value: 8
+    value: 9
     description: is a placeholder for testing. DO NOT USE
 
 PartitionType:
