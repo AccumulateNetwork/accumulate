@@ -11,10 +11,11 @@ import (
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/core/schema/pkg/binary"
 	"gitlab.com/accumulatenetwork/core/schema/pkg/json"
+	"gitlab.com/accumulatenetwork/core/schema/pkg/widget"
 )
 
-var wMultiaddr = multiaddrWidget{}
-var wPeerID = peerIdWidget{}
+func wMultiaddr() widget.Widget[*multiaddr.Multiaddr] { return multiaddrWidget{} }
+func wPeerID() widget.Widget[*peer.ID]                { return peerIdWidget{} }
 
 type multiaddrWidget struct{}
 
