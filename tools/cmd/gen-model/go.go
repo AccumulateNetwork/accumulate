@@ -32,6 +32,7 @@ func (c *Counter) Next() int {
 
 var goFuncs = template.FuncMap{
 	"fullName":        fullName,
+	"structName":      structName,
 	"hasChains":       hasChains,
 	"fieldType":       fieldType,
 	"recordType":      recordType,
@@ -75,13 +76,25 @@ func wrapped(r typegen.Record) bool {
 	return typ.Code == typegen.TypeCodeUnknown && typ.Name == "raw"
 }
 
-func fullName(r typegen.Record) string {
+func structName(r typegen.Record) string {
 	e, ok := r.(*typegen.EntityRecord)
 	if !ok || !e.Interface {
 		return r.FullName()
 	}
-	name := e.FullName()
+	name := r.FullName()
 	return strings.ToLower(name[:1]) + name[1:]
+}
+
+func fullName(r typegen.Record) string {
+	name := structName(r)
+	if len(r.GetTypeParameters()) == 0 {
+		return name
+	}
+	var params []string
+	for _, p := range r.GetTypeParameters() {
+		params = append(params, p.Name)
+	}
+	return name + "[" + strings.Join(params, ", ") + "]"
 }
 
 func hasChains(r typegen.Record) bool {
