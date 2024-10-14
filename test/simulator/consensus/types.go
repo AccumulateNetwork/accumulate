@@ -20,9 +20,10 @@ type Module interface {
 
 // A Hub distributes messages to modules.
 type Hub interface {
-	Register(module Module)
+	Register(Module)
+	Unregister(Module)
 	Send(...Message) error
-	With(modules ...Module) Hub
+	With(...Module) Hub
 }
 
 type Recorder interface {

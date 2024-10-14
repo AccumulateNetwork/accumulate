@@ -326,12 +326,17 @@ func (f *simFactory) getDispatcherFunc() func() execute.Dispatcher {
 		d := consensus.NewDispatcher(router)
 		hub.Register(d)
 
+		e := &closeDispatcher{
+			Dispatcher: d,
+			close:      func() { hub.Unregister(d) },
+		}
+
 		if interceptor == nil {
-			return d
+			return e
 		}
 
 		return &interceptDispatcher{
-			Dispatcher:  d,
+			Dispatcher:  e,
 			interceptor: interceptor,
 		}
 	}
