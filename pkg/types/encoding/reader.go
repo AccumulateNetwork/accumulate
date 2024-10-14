@@ -18,9 +18,10 @@ import (
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	bin2 "gitlab.com/accumulatenetwork/core/schema/pkg/binary"
 )
 
-var ErrFieldsOutOfOrder = errors.New("fields are out of order")
+var ErrFieldsOutOfOrder = bin2.ErrFieldsOutOfOrder
 
 const MaxValueSize = 1 << 24
 
