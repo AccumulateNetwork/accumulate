@@ -15,20 +15,20 @@ import (
 	"sync/atomic"
 
 	"github.com/edsrzf/mmap-go"
-	"gitlab.com/accumulatenetwork/core/schema/pkg/binary"
+	"gitlab.com/accumulatenetwork/accumulate/internal/util/pool"
 )
 
 type MappedFile struct {
 	mu   *sync.RWMutex
 	file *os.File
 	data mmap.MMap
-	pool *binary.Pool[*MappedFileRange]
+	pool *pool.Pool[*MappedFileRange]
 }
 
 func OpenMappedFile(name string, flags int, perm fs.FileMode) (_ *MappedFile, err error) {
 	f := new(MappedFile)
 	f.mu = new(sync.RWMutex)
-	f.pool = binary.NewPointerPool[MappedFileRange]()
+	f.pool = pool.New[MappedFileRange]()
 	defer func() {
 		if err != nil {
 			_ = f.Close()

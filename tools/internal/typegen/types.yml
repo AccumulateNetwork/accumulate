@@ -19,12 +19,24 @@ RecordBase:
       type: bool
     - name: CustomValueConstructor
       type: bool
+    - name: TypeParameters
+      type: TypeParameter
+      pointer: true
+      marshal-as: reference
+      repeatable: true
     - name: Parameters
       type: Field
       pointer: true
       marshal-as: reference
       repeatable: true
     - name: Index
+      type: string
+
+TypeParameter:
+  fields:
+    - name: Name
+      type: string
+    - name: Constraint
       type: string
 
 EntityRecord:

@@ -13,51 +13,30 @@ import (
 
 	"gitlab.com/accumulatenetwork/core/schema/pkg/binary"
 	"gitlab.com/accumulatenetwork/core/schema/pkg/json"
+	"gitlab.com/accumulatenetwork/core/schema/pkg/widget"
 )
 
-type Time time.Time
+func TimeWidget() widget.Widget[*time.Time] { return timeWidget{} }
 
-func (u Time) Get() time.Time   { return time.Time(u) }
-func (u *Time) Set(v time.Time) { *u = Time(v) }
+type timeWidget struct{}
 
-func (u *Time) String() string     { return u.Get().String() }
-func (u *Time) Copy() *Time        { return u }
-func (u *Time) Equal(v *Time) bool { return strings.EqualFold(u.String(), v.String()) }
+func (timeWidget) IsNil(v *time.Time) bool                           { return false }
+func (timeWidget) Empty(v *time.Time) bool                           { return *v == time.Time{} }
+func (timeWidget) CopyTo(dst, src *time.Time)                        { *dst = *src }
+func (timeWidget) Equal(a, b *time.Time) bool                        { return (*a).Equal(*b) }
+func (timeWidget) MarshalJSON(e *json.Encoder, v *time.Time) error   { return e.Encode(v) }
+func (timeWidget) UnmarshalJSON(d *json.Decoder, v *time.Time) error { return d.Decode(v) }
 
-func (u *Time) MarshalJSON() ([]byte, error) {
-	return json.Marshal(u)
+func (timeWidget) MarshalBinary(e *binary.Encoder, v *time.Time) error {
+	return e.EncodeInt(v.UTC().Unix())
 }
 
-func (u *Time) UnmarshalJSON(b []byte) error {
-	return json.Unmarshal(b, u)
-}
-
-func (u *Time) MarshalJSONV2(e *json.Encoder) error {
-	return e.Encode(u.Get())
-}
-
-func (u *Time) UnmarshalJSONV2(d *json.Decoder) error {
-	return d.Decode((*time.Time)(u))
-}
-
-func (u *Time) MarshalBinary() ([]byte, error) {
-	return binary.Marshal(u)
-}
-
-func (u *Time) UnmarshalBinary(b []byte) error {
-	return binary.Unmarshal(b, u)
-}
-
-func (u *Time) MarshalBinaryV2(e *binary.Encoder) error {
-	return e.EncodeInt(u.Get().UTC().Unix())
-}
-
-func (u *Time) UnmarshalBinaryV2(d *binary.Decoder) error {
-	v, err := d.DecodeInt()
+func (timeWidget) UnmarshalBinary(d *binary.Decoder, v *time.Time) error {
+	u, err := d.DecodeInt()
 	if err != nil {
 		return err
 	}
-	u.Set(time.Unix(v, 0).UTC())
+	*v = time.Unix(u, 0).UTC()
 	return nil
 }
 
