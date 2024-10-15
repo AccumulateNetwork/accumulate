@@ -403,6 +403,7 @@ func (x *Executor) requestMissingSyntheticTransactions(blockIndex uint64, synthL
 	// Setup
 	wg := new(sync.WaitGroup)
 	dispatcher := x.NewDispatcher()
+	defer dispatcher.Close()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
