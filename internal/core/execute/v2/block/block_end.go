@@ -12,7 +12,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
@@ -399,20 +398,19 @@ func (x *Executor) requestMissingSyntheticTransactions(blockIndex uint64, synthL
 	defer batch.Discard()
 
 	// Setup
-	wg := new(sync.WaitGroup)
 	dispatcher := x.NewDispatcher()
+	defer dispatcher.Close()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	// For each partition
 	for _, partition := range synthLedger.Sequence {
-		x.requestMissingTransactionsFromPartition(ctx, wg, dispatcher, partition, false)
+		x.requestMissingTransactionsFromPartition(ctx, dispatcher, partition, false)
 	}
 	for _, partition := range anchorLedger.Sequence {
-		x.requestMissingTransactionsFromPartition(ctx, wg, dispatcher, partition, true)
+		x.requestMissingTransactionsFromPartition(ctx, dispatcher, partition, true)
 	}
 
-	wg.Wait()
 	for err := range dispatcher.Send(ctx) {
 		switch err := err.(type) {
 		case protocol.TransactionStatusError:
@@ -423,7 +421,7 @@ func (x *Executor) requestMissingSyntheticTransactions(blockIndex uint64, synthL
 	}
 }
 
-func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, wg *sync.WaitGroup, dispatcher Dispatcher, partition *protocol.PartitionSyntheticLedger, anchor bool) {
+func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, dispatcher Dispatcher, partition *protocol.PartitionSyntheticLedger, anchor bool) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
