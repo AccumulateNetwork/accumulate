@@ -23,6 +23,8 @@ type dispatcher struct {
 
 var _ execute.Dispatcher = (*dispatcher)(nil)
 
+func (d *dispatcher) Close() { /* Nothing to do */ }
+
 // Submit routes the envelope and adds it to the queue for a partition.
 func (d *dispatcher) Submit(ctx context.Context, u *url.URL, env *messaging.Envelope) error {
 	partition, err := d.sim.router.RouteAccount(u)

@@ -17,6 +17,8 @@ import (
 // fakeDispatcher drops everything
 type fakeDispatcher struct{}
 
+func (fakeDispatcher) Close() { /* Nothing to do */ }
+
 func (fakeDispatcher) Submit(ctx context.Context, dest *url.URL, envelope *messaging.Envelope) error {
 	// Drop it
 	return nil
@@ -27,6 +29,16 @@ func (fakeDispatcher) Send(context.Context) <-chan error {
 	ch := make(chan error)
 	close(ch)
 	return ch
+}
+
+type closeDispatcher struct {
+	execute.Dispatcher
+	close func()
+}
+
+func (d *closeDispatcher) Close() {
+	d.close()
+	d.Dispatcher.Close()
 }
 
 type DispatchInterceptor = func(ctx context.Context, env *messaging.Envelope) (send bool, err error)
