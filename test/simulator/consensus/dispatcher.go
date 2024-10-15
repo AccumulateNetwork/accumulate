@@ -25,6 +25,8 @@ func NewDispatcher(router routing.Router) *Dispatcher {
 	return &Dispatcher{router: router, mu: new(sync.Mutex)}
 }
 
+func (d *Dispatcher) Close() { /* Nothing to do */ }
+
 // Submit adds an envelope to the queue.
 func (d *Dispatcher) Submit(ctx context.Context, dest *url.URL, envelope *messaging.Envelope) error {
 	partition, err := d.router.RouteAccount(dest)
