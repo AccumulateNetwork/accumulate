@@ -14,6 +14,7 @@ import (
 	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -75,15 +76,19 @@ func (s *EventService) didCommitBlock(e events.DidCommitBlock) error {
 func (s *EventService) loadBlockInfo(batch *database.Batch, e *api.BlockEvent) {
 	defer batch.Discard()
 
-	var ledger *protocol.BlockLedger
-	err := batch.Account(s.partition.BlockLedger(e.Index)).Main().GetAs(&ledger)
+	// Check for an entry in the new block ledger. If the conversion process is
+	// incomplete there will be empty entries, so we also need to check for that
+	// (hence l1.Index == 0). If there is not an entry in the new block ledger
+	// or it is empty, check for an old block ledger account.
+	_, entries, err := indexing.LoadBlockLedger(batch.Account(s.partition.Ledger()), e.Index)
 	if err != nil {
 		s.logger.Error("Loading block ledger failed", "error", err, "block", e.Index, "url", s.partition.BlockLedger(e.Index))
 		return
 	}
 
-	e.Entries = make([]*api.ChainEntryRecord[api.Record], len(ledger.Entries))
-	for i, le := range ledger.Entries {
+	e.Entries = make([]*api.ChainEntryRecord[api.Record], len(entries))
+	for i, le := range entries {
+		var err error
 		e.Entries[i], err = loadBlockEntry(batch, le)
 		if err != nil {
 			s.logger.Error("Loading block entry", "error", err, "block", e.Index, "account", le.Account, "chain", le.Chain, "index", le.Index)
