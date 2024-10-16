@@ -15,11 +15,18 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	binary2 "gitlab.com/accumulatenetwork/core/schema/pkg/binary"
+	json2 "gitlab.com/accumulatenetwork/core/schema/pkg/json"
 )
+
+var binEncPool = binary2.NewEncoderPool()
+var jsonEncPool = json2.NewEncoderPool()
+var bufferPool = binary2.NewBufferPool()
 
 // A Key is the key for a record.
 type Key struct {
@@ -28,7 +35,7 @@ type Key struct {
 }
 
 func NewKey(v ...any) *Key {
-	return &Key{values: v}
+	return (*Key)(nil).Append(v...)
 }
 
 func KeyFromHash(kh KeyHash) *Key {
@@ -185,32 +192,14 @@ func (k *Key) Compare(l *Key) int {
 
 // MarshalBinary marshals the key to bytes.
 func (k *Key) MarshalBinary() ([]byte, error) {
-	buf := new(bytes.Buffer)
+	buf := bufferPool.Get()
+	defer bufferPool.Put(buf)
 
-	// Write the length
-	_, _ = buf.Write(encoding.MarshalUint(uint64(k.Len())))
-	if k.Len() == 0 {
-		return buf.Bytes(), nil
-	}
+	enc := binEncPool.Get(buf, binary2.WithBufferPool(bufferPool))
+	defer binEncPool.Put(enc)
 
-	// Write each field using the encoding writer, but prefix values with their
-	// type code instead of with a field number. This is an abuse but 🤷 it
-	// works.
-	w := encoding.NewWriter(buf)
-	for _, v := range k.values {
-		p, err := asKeyPart(v)
-		if err != nil {
-			return nil, errors.UnknownError.Wrap(err)
-		}
-		p.WriteBinary(w)
-	}
-
-	// Finish up
-	_, _, err := w.Reset(nil)
-	if err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
+	err := k.MarshalBinaryV2(enc)
+	return buf.Bytes(), err
 }
 
 // UnmarshalBinary unmarshals a key from bytes.
@@ -240,15 +229,24 @@ func (k *Key) MarshalBinaryV2(enc *binary2.Encoder) error {
 	// type code instead of with a field number. This is an abuse but 🤷 it
 	// works.
 	for _, v := range k.values {
-		p, err := asKeyPart(v)
+		v, typ, ok := normalize(v)
+		if !ok {
+			return invalidKeyPart(v)
+		}
+		err = enc.Field(uint(typ))
 		if err != nil {
 			return errors.UnknownError.WithFormat("encode Key: %w", err)
 		}
-		err = enc.Field(uint(p.Type()))
-		if err != nil {
-			return errors.UnknownError.WithFormat("encode Key: %w", err)
+		switch typ {
+		case typeCodeUrl:
+			err = enc.EncodeString(v.(*url.URL).String())
+		case typeCodeTxid:
+			err = enc.EncodeString(v.(*url.TxID).String())
+		case typeCodeTime:
+			err = enc.EncodeInt(v.(time.Time).UTC().Unix())
+		default:
+			err = enc.Encode(v)
 		}
-		err = p.WriteBinary2(enc)
 		if err != nil {
 			return errors.UnknownError.WithFormat("encode Key: %w", err)
 		}
@@ -373,22 +371,39 @@ func (k *Key) UnmarshalBinaryFrom(rd io.Reader) error {
 //
 //	[{"string": "Account"}, {"url": "foo.acme"}, {"string": "MainChain"}, {"string": "Element"}, {"int": 1}]
 func (k *Key) MarshalJSON() ([]byte, error) {
-	if k.Len() == 0 {
-		return []byte("[]"), nil
+	buf := bufferPool.Get()
+	defer bufferPool.Put(buf)
+
+	enc := jsonEncPool.Get(buf)
+	defer jsonEncPool.Put(enc)
+
+	err := k.MarshalJSONV2(enc)
+	return buf.Bytes(), err
+}
+
+func (k *Key) MarshalJSONV2(enc *json2.Encoder) error {
+	err := enc.StartArray()
+	if err != nil {
+		return err
 	}
 
-	parts := make([]map[string]any, len(k.values))
-	for i, v := range k.values {
-		// Convert the value to a key part
-		p, err := asKeyPart(v)
-		if err != nil {
-			return nil, errors.UnknownError.Wrap(err)
+	for _, v := range k.values {
+		v, typ, ok := normalize(v)
+		if !ok {
+			return invalidKeyPart(v)
 		}
-
-		// Record as { [type]: value }
-		parts[i] = map[string]any{p.Type().String(): p}
+		err = errors.First(
+			enc.StartObject(),
+			enc.Field(typ.String()),
+			enc.Encode(v),
+			enc.EndObject(),
+		)
+		if err != nil {
+			return err
+		}
 	}
-	return json.Marshal(parts)
+
+	return enc.EndArray()
 }
 
 // UnmarshalJSON unmarshals a key from JSON.
@@ -427,7 +442,7 @@ func (k *Key) UnmarshalJSON(b []byte) error {
 		}
 
 		// Unmarshal the value
-		err = json.Unmarshal(b, &kp)
+		err = json.Unmarshal(b, kp)
 		if err != nil {
 			return errors.UnknownError.WithFormat("decode Key: %w", err)
 		}
