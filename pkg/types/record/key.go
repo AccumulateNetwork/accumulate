@@ -192,11 +192,16 @@ func (k *Key) Compare(l *Key) int {
 
 // MarshalBinary marshals the key to bytes.
 func (k *Key) MarshalBinary() ([]byte, error) {
-	buf := bufferPool.Get()
-	defer bufferPool.Put(buf)
+	// The pools are causing difficult to diagnose concurrency bugs, so we're
+	// going to avoid them for now (though it hurts performance)
+	buf := new(bytes.Buffer)
+	enc := binary2.NewEncoder(buf)
 
-	enc := binEncPool.Get(buf, binary2.WithBufferPool(bufferPool))
-	defer binEncPool.Put(enc)
+	// buf := bufferPool.Get()
+	// defer bufferPool.Put(buf)
+
+	// enc := binEncPool.Get(buf, binary2.WithBufferPool(bufferPool))
+	// defer binEncPool.Put(enc)
 
 	err := k.MarshalBinaryV2(enc)
 	return buf.Bytes(), err
@@ -371,11 +376,16 @@ func (k *Key) UnmarshalBinaryFrom(rd io.Reader) error {
 //
 //	[{"string": "Account"}, {"url": "foo.acme"}, {"string": "MainChain"}, {"string": "Element"}, {"int": 1}]
 func (k *Key) MarshalJSON() ([]byte, error) {
-	buf := bufferPool.Get()
-	defer bufferPool.Put(buf)
+	// The pools are causing difficult to diagnose concurrency bugs, so we're
+	// going to avoid them for now (though it hurts performance)
+	buf := new(bytes.Buffer)
+	enc := json2.NewEncoder(buf)
 
-	enc := jsonEncPool.Get(buf)
-	defer jsonEncPool.Put(enc)
+	// buf := bufferPool.Get()
+	// defer bufferPool.Put(buf)
+
+	// enc := jsonEncPool.Get(buf)
+	// defer jsonEncPool.Put(enc)
 
 	err := k.MarshalJSONV2(enc)
 	return buf.Bytes(), err

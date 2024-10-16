@@ -102,6 +102,8 @@ func BenchmarkKey_MarshalJSON(b *testing.B) {
 }
 
 func BenchmarkKey_MarshalBinary(b *testing.B) {
+	// BenchmarkKey_MarshalBinary       6599190               178.6 ns/op             0 B/op          0 allocs/op
+	// BenchmarkKey_MarshalBinary       2352801               518.5 ns/op           360 B/op          9 allocs/op
 	key := NewKey("foo", 1)
 	var err error
 	for range b.N {
