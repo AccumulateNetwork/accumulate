@@ -36,6 +36,7 @@ type batchResponse struct {
 
 type commitCall struct {
 	fieldsSet []bool
+	Discard   bool `json:"discard,omitempty" form:"discard" query:"discard" validate:"required"`
 	extraData []byte
 }
 
@@ -176,6 +177,7 @@ func (v *batchResponse) CopyAsInterface() interface{} { return v.Copy() }
 func (v *commitCall) Copy() *commitCall {
 	u := new(commitCall)
 
+	u.Discard = v.Discard
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -373,6 +375,9 @@ func (v *batchResponse) Equal(u *batchResponse) bool {
 }
 
 func (v *commitCall) Equal(u *commitCall) bool {
+	if !(v.Discard == u.Discard) {
+		return false
+	}
 
 	return true
 }
@@ -583,6 +588,7 @@ func (v *batchResponse) IsValid() error {
 
 var fieldNames_commitCall = []string{
 	1: "Type",
+	2: "Discard",
 }
 
 func (v *commitCall) MarshalBinary() ([]byte, error) {
@@ -594,6 +600,9 @@ func (v *commitCall) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+	if !(!v.Discard) {
+		writer.WriteBool(2, v.Discard)
+	}
 
 	_, _, err := writer.Reset(fieldNames_commitCall)
 	if err != nil {
@@ -608,6 +617,11 @@ func (v *commitCall) IsValid() error {
 
 	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Discard is missing")
+	} else if !v.Discard {
+		errs = append(errs, "field Discard is not set")
 	}
 
 	switch len(errs) {
@@ -1243,6 +1257,9 @@ func (v *commitCall) UnmarshalBinaryFrom(rd io.Reader) error {
 }
 
 func (v *commitCall) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadBool(2); ok {
+		v.Discard = x
+	}
 
 	seen, err := reader.Reset(fieldNames_commitCall)
 	if err != nil {
@@ -1639,6 +1656,7 @@ func init() {
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("discard", "bool"),
 	}, "commitCall", "commitCall")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{

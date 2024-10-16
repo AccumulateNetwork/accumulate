@@ -19,14 +19,26 @@ import (
 
 // Serve opens a batch and serves it over the connection. Serve returns once the
 // connection is closed or the remote side calls Commit. See [Connect].
-func Serve(db keyvalue.Beginner, conn io.ReadWriteCloser, prefix *record.Key, writable bool) error {
-	defer conn.Close()
+func Serve(db keyvalue.Beginner, conn io.ReadWriteCloser, prefix *record.Key, writable bool) <-chan error {
 	batch := db.Begin(prefix, writable)
-	defer batch.Discard()
+	ch := make(chan error)
+	go func() {
+		defer conn.Close()
+		defer batch.Discard()
+		defer close(ch)
+		ch <- serve(batch, conn)
+	}()
+	return ch
+}
 
+func serve(batch keyvalue.ChangeSet, conn io.ReadWriteCloser) error {
 	rd := bufio.NewReader(conn)
 	run := true
-	for run {
+	for {
+		if !run {
+			return nil
+		}
+
 		c, err := read(rd, unmarshalCall)
 		switch {
 		case err == nil:
@@ -41,6 +53,11 @@ func Serve(db keyvalue.Beginner, conn io.ReadWriteCloser, prefix *record.Key, wr
 			switch c := c.(type) {
 			case *commitCall:
 				run = false
+				if c.Discard {
+					batch.Discard()
+					return new(okResponse)
+				}
+
 				err := batch.Commit()
 				if err != nil {
 					return errResp(err)
@@ -58,7 +75,6 @@ func Serve(db keyvalue.Beginner, conn io.ReadWriteCloser, prefix *record.Key, wr
 			return err
 		}
 	}
-	return nil
 }
 
 // DB is a remote key-value database client that creates a connection to the
@@ -105,9 +121,12 @@ func (c *DB) Begin(prefix *database.Key, writable bool) keyvalue.ChangeSet {
 	}
 
 	discard := func() {
-		if err == nil {
-			_ = conn.Close()
+		if err != nil {
+			return
 		}
+
+		_ = c.discard(rd, conn)
+		_ = conn.Close()
 	}
 
 	return memory.NewChangeSet(memory.ChangeSetOptions{
@@ -125,6 +144,11 @@ func (c *DB) get(rd *bufio.Reader, wr io.Writer, key *record.Key) ([]byte, error
 		return nil, err
 	}
 	return r.Value, nil
+}
+
+func (c *DB) discard(rd *bufio.Reader, wr io.WriteCloser) error {
+	_, err := roundTrip[*okResponse](rd, wr, &commitCall{Discard: true})
+	return err
 }
 
 func (c *DB) commit(rd *bufio.Reader, wr io.WriteCloser, entries map[[32]byte]memory.Entry) error {
