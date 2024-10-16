@@ -194,6 +194,7 @@ func (v *value[T]) Commit() error {
 		return errors.UnknownError.Wrap(err)
 	}
 
+	// TODO: v.status = valueClean?
 	return nil
 }
 
