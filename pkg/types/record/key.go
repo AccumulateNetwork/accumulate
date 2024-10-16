@@ -24,10 +24,6 @@ import (
 	json2 "gitlab.com/accumulatenetwork/core/schema/pkg/json"
 )
 
-var binEncPool = binary2.NewEncoderPool()
-var jsonEncPool = json2.NewEncoderPool()
-var bufferPool = binary2.NewBufferPool()
-
 // A Key is the key for a record.
 type Key struct {
 	values []any
