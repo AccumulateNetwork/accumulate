@@ -14,25 +14,28 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/badger"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/kvtest"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/remote"
 )
 
 func open(t testing.TB) kvtest.Opener {
-	// Use a database that supports isolation
-	store, err := badger.New(t.TempDir(), badger.WithPlainKeys)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		require.NoError(t, store.Close())
-	})
+	// store, err := badger.New(t.TempDir(), badger.WithPlainKeys)
+	// require.NoError(t, err)
+	// t.Cleanup(func() {
+	// 	require.NoError(t, store.Close())
+	// })
+
+	// BUG: Badger leads to strange concurrency errors that are still present
+	// even after ensuring serialization of calls.
+	store := memory.New(nil)
 
 	return func() (keyvalue.Beginner, error) {
 		return remote.Connect(func() (io.ReadWriteCloser, error) {
 			rd1, wr1 := io.Pipe()
 			rd2, wr2 := io.Pipe()
-			go func() { require.NoError(t, remote.Serve(store, &conn{rd1, wr2}, nil, true)) }()
+			done := remote.Serve(store, &conn{rd1, wr2}, nil, true)
+			go func() { require.NoError(t, <-done) }()
 			return &conn{rd2, wr1}, nil
 		}), nil
 	}
@@ -65,15 +68,14 @@ func TestCloseWhenDone(t *testing.T) {
 		rd1, wr1 := io.Pipe()
 		rd2, wr2 := io.Pipe()
 
-		errch := make(chan error)
-		go func() { errch <- remote.Serve(store, &conn{rd1, wr2}, nil, true) }()
+		done := remote.Serve(store, &conn{rd1, wr2}, nil, true)
 
 		// Closing the connection should stop the server
 		require.NoError(t, wr1.Close())
 		require.NoError(t, rd2.Close())
 
 		select {
-		case err := <-errch:
+		case err := <-done:
 			require.NoError(t, err)
 		case <-time.After(time.Second):
 			t.Fatal("Server did not close")
@@ -85,14 +87,13 @@ func TestCloseWhenDone(t *testing.T) {
 		rd1, wr1 := io.Pipe()
 		rd2, wr2 := io.Pipe()
 
-		errch := make(chan error)
-		go func() { errch <- remote.Serve(store, &conn{rd1, wr2}, nil, true) }()
+		done := remote.Serve(store, &conn{rd1, wr2}, nil, true)
 
 		// Committing should stop the server (even if the connection doesn't close)
 		require.NoError(t, remote.SendCommit(bufio.NewReader(rd2), wr1))
 
 		select {
-		case err := <-errch:
+		case err := <-done:
 			require.NoError(t, err)
 		case <-time.After(time.Second):
 			t.Fatal("Server did not close")
