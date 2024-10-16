@@ -267,10 +267,10 @@ func TestAnchoring(t *testing.T) {
 
 	// Verify that the latest block has a single entry for alice.acme/data#chain/main, and that entry has index = 3
 	ledger := GetAccount[*SystemLedger](t, sim.DatabaseFor(alice), PartitionUrl("BVN0").JoinPath(Ledger))
-	block := GetAccount[*BlockLedger](t, sim.DatabaseFor(alice), PartitionUrl("BVN0").JoinPath(Ledger, fmt.Sprint(ledger.Index)))
+	_, blockEntries := LoadBlockLedger(t, sim.DatabaseFor(alice), "BVN0", ledger.Index)
 
 	var entries []uint64
-	for _, e := range block.Entries {
+	for _, e := range blockEntries {
 		if alice.JoinPath("data").Equal(e.Account) && e.Chain == "main" {
 			entries = append(entries, e.Index)
 		}

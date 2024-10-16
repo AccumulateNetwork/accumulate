@@ -24,6 +24,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -31,6 +32,9 @@ import (
 // Close ends the block and returns the block state.
 func (block *Block) Close() (execute.BlockState, error) {
 	m := block.Executor
+	ledgerUrl := m.Describe.NodeUrl(protocol.Ledger)
+	ledger := block.Batch.Account(ledgerUrl)
+
 	r := m.BlockTimers.Start(BlockTimerTypeEndBlock)
 	defer m.BlockTimers.Stop(r)
 
@@ -89,7 +93,7 @@ func (block *Block) Close() (execute.BlockState, error) {
 
 	// Record the previous block's state hash it on the BPT chain
 	if block.Executor.globals.Active.ExecutorVersion.V2BaikonurEnabled() {
-		err := block.Batch.Account(block.Executor.Describe.Ledger()).BptChain().Inner().AddEntry(block.State.PreviousStateHash[:], false)
+		err := ledger.BptChain().Inner().AddEntry(block.State.PreviousStateHash[:], false)
 		if err != nil {
 			return nil, err
 		}
@@ -111,8 +115,6 @@ func (block *Block) Close() (execute.BlockState, error) {
 	}
 
 	// Load the main chain of the minor root
-	ledgerUrl := m.Describe.NodeUrl(protocol.Ledger)
-	ledger := block.Batch.Account(ledgerUrl)
 	rootChain, err := ledger.RootChain().Get()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load root chain: %w", err)
@@ -168,12 +170,20 @@ func (block *Block) Close() (execute.BlockState, error) {
 	}
 
 	// Record the block entries
-	bl := new(protocol.BlockLedger)
-	bl.Url = m.Describe.Ledger().JoinPath(strconv.FormatUint(block.Index, 10))
-	bl.Index = block.Index
-	bl.Time = block.Time
-	bl.Entries = block.State.ChainUpdates.Entries
-	err = block.Batch.Account(bl.Url).Main().Put(bl)
+	if block.Executor.globals.Active.ExecutorVersion.V2JiuquanEnabled() {
+		bl := new(database.BlockLedger)
+		bl.Index = block.Index
+		bl.Time = block.Time
+		bl.Entries = block.State.ChainUpdates.Entries
+		err = ledger.BlockLedger().Append(record.NewKey(block.Index), bl)
+	} else {
+		bl := new(protocol.BlockLedger)
+		bl.Url = m.Describe.Ledger().JoinPath(strconv.FormatUint(block.Index, 10))
+		bl.Index = block.Index
+		bl.Time = block.Time
+		bl.Entries = block.State.ChainUpdates.Entries
+		err = block.Batch.Account(bl.Url).Main().Put(bl)
+	}
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("store block ledger: %w", err)
 	}
@@ -240,6 +250,12 @@ func (block *Block) Close() (execute.BlockState, error) {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
+	// Execute post-update actions
+	err = block.executePostUpdateActions()
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
 	// Update the BPT
 	err = block.Batch.UpdateBPT()
 	if err != nil {
@@ -264,6 +280,52 @@ func (block *Block) Close() (execute.BlockState, error) {
 
 	m.logger.Debug("Committed", "module", "block", "height", block.Index, "duration", time.Since(t))
 	return &closedBlock{*block, valUp}, nil
+}
+
+func (b *Block) executePostUpdateActions() error {
+	version := b.Executor.globals.Pending.ExecutorVersion
+	if b.Executor.globals.Active.ExecutorVersion == version {
+		return nil
+	}
+
+	switch version {
+	case protocol.ExecutorVersionV2Jiuquan:
+		// For each previously recorded block, add a placeholder to the new
+		// block ledger and delete the BPT entry for the old block ledger
+		// account
+		acct := b.Batch.Account(b.Executor.Describe.Ledger())
+		chain := acct.RootChain().Index()
+		head, err := chain.Head().Get()
+		if err != nil {
+			return errors.UnknownError.WithFormat("load root index chain head: %w", err)
+		}
+
+		var entry protocol.IndexEntry
+		for i := 0; i < int(head.Count); i += 256 {
+			entries, err := chain.Inner().Entries(int64(i), int64(i+256))
+			if err != nil {
+				return errors.UnknownError.WithFormat("load root index chain entries (%d, %d): %w", i, i+255, err)
+			}
+
+			for j, data := range entries {
+				entry = protocol.IndexEntry{}
+				err = entry.UnmarshalBinary(data)
+				if err != nil {
+					return errors.UnknownError.WithFormat("decode root index chain entry %d: %w", i+j, err)
+				}
+				err = acct.BlockLedger().Append(record.NewKey(entry.BlockIndex), &database.BlockLedger{})
+				if err != nil {
+					return errors.UnknownError.WithFormat("add ledger entry for block %d: %w", i+j, err)
+				}
+				blockLedgerAccount := b.Batch.Account(b.Executor.Describe.BlockLedger(entry.BlockIndex))
+				err = b.Batch.BPT().Delete(blockLedgerAccount.Key())
+				if err != nil {
+					return errors.UnknownError.WithFormat("delete BPT entry for block ledger %d: %w", i+j, err)
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func (block *Block) recordTransactionExpiration() error {
