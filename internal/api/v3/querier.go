@@ -688,22 +688,20 @@ func (s *Querier) queryMinorBlock(ctx context.Context, batch *database.Batch, mi
 		*entryRange.Count = defaultPageSize
 	}
 
-	var ledger *protocol.BlockLedger
-	err := batch.Account(s.partition.BlockLedger(minorIndex)).Main().GetAs(&ledger)
+	blockTime, allEntries, err := indexing.LoadBlockLedger(batch.Account(s.partition.Ledger()), minorIndex)
 	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load block ledger: %w", err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	// allEntries, err := normalizeBlockEntries(batch, ledger)
 	// if err != nil {
 	// 	return nil, errors.InternalError.Wrap(err)
 	// }
-	allEntries := ledger.Entries
 
 	// Convert entries into records
 	r := new(api.MinorBlockRecord)
-	r.Index = ledger.Index
-	r.Time = &ledger.Time
+	r.Index = minorIndex
+	r.Time = &blockTime
 	r.Source = s.partition.URL
 	r.Entries = new(api.RecordRange[*api.ChainEntryRecord[api.Record]])
 	r.Entries.Total = uint64(len(allEntries))
