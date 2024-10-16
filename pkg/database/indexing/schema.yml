@@ -1,0 +1,63 @@
+$generate:
+  widgets: true
+
+  methods:
+    json: true
+    binary: true
+
+  import:
+    record: gitlab.com/accumulatenetwork/accumulate/pkg/types/record
+
+  varPrefix:
+    schema: s
+    widget: w
+
+Block[V any]:
+  class: composite
+  fields:
+    - name: Level
+      type: uint
+    - name: Index
+      type: uint
+    - name: Entries
+      type: '[]*Entry[V]'
+
+Entry[V any]:
+  class: composite
+  fields:
+    - name: Index
+      description: is used internally for multi-level indices
+      type: uint
+    - name: Key
+      description: is the key being indexed
+      type: '*record.Key'
+    - name: Value
+      description: is the value being indexed
+      type: '*Value[V]'
+
+Value[V any]:
+  class: composite
+  fields:
+    - { name: data,    type: bytes   }
+    - { name: dataOk,  type: boolean }
+    - { name: value,   type: V       }
+    - { name: valueOk, type: boolean }
+  encode:
+    withWidget: wValue
+  generate:
+    widgets: false
+    methods:
+      json: false
+      binary: false
+
+RangeSet:
+  class: array
+  elem: Range
+
+Range:
+  class: composite
+  fields:
+    - name: Start
+      type: uint
+    - name: End
+      type: uint

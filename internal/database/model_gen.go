@@ -14,6 +14,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	record "gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/bpt"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -299,6 +300,7 @@ type Account struct {
 	syntheticForAnchor     map[accountSyntheticForAnchorMapKey]values.Set[*url.TxID]
 	directory              values.Set[*url.URL]
 	events                 *AccountEvents
+	blockLedger            *indexing.Log[*BlockLedger]
 	transaction            map[accountTransactionMapKey]*AccountTransaction
 	mainChain              *Chain2
 	scratchChain           *Chain2
@@ -415,6 +417,14 @@ func (c *Account) newEvents() *AccountEvents {
 	v.key = c.key.Append("Events")
 	v.parent = c
 	return v
+}
+
+func (c *Account) BlockLedger() *indexing.Log[*BlockLedger] {
+	return values.GetOrCreate(c, &c.blockLedger, (*Account).newBlockLedger)
+}
+
+func (c *Account) newBlockLedger() *indexing.Log[*BlockLedger] {
+	return newBlockEntryLog(c, c.logger.L, c.store, c.key.Append("BlockLedger"), "block-ledger")
 }
 
 func (c *Account) Transaction(hash [32]byte) *AccountTransaction {
@@ -562,6 +572,8 @@ func (c *Account) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 		return c.Directory(), key.SliceI(1), nil
 	case "Events":
 		return c.Events(), key.SliceI(1), nil
+	case "BlockLedger":
+		return c.BlockLedger(), key.SliceI(1), nil
 	case "Transaction":
 		if key.Len() < 2 {
 			return nil, nil, errors.InternalError.With("bad key for account (4)")
@@ -640,6 +652,9 @@ func (c *Account) IsDirty() bool {
 		return true
 	}
 	if values.IsDirty(c.events) {
+		return true
+	}
+	if values.IsDirty(c.blockLedger) {
 		return true
 	}
 	for _, v := range c.transaction {
@@ -730,6 +745,7 @@ func (c *Account) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	values.WalkMap(&err, c.syntheticForAnchor, c.newSyntheticForAnchor, nil, opts, fn)
 	values.WalkField(&err, c.directory, c.newDirectory, opts, fn)
 	values.WalkField(&err, c.events, c.newEvents, opts, fn)
+	values.WalkField(&err, c.blockLedger, c.newBlockLedger, opts, fn)
 	values.WalkMap(&err, c.transaction, c.newTransaction, c.getTransactionKeys, opts, fn)
 	values.WalkField(&err, c.mainChain, c.newMainChain, opts, fn)
 	values.WalkField(&err, c.scratchChain, c.newScratchChain, opts, fn)
@@ -762,6 +778,7 @@ func (c *Account) baseCommit() error {
 	}
 	values.Commit(&err, c.directory)
 	values.Commit(&err, c.events)
+	values.Commit(&err, c.blockLedger)
 	for _, v := range c.transaction {
 		values.Commit(&err, v)
 	}
