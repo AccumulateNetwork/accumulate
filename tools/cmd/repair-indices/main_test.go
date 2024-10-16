@@ -11,13 +11,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
-	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
@@ -78,13 +76,13 @@ func TestRepairIndices(t *testing.T) {
 	})
 
 	// Save to and restore from snapshot
-	logger := logging.NewTestLogger(t, "plain", acctesting.DefaultLogLevels, false)
 	snapshots := map[string][]byte{}
 	for _, p := range sim.Partitions() {
 		View(t, sim.Database(p.ID), func(batch *database.Batch) {
-			buf := new(ioutil2.Buffer)
-			err := snapshot.FullCollect(batch, buf, config.NetworkUrl{URL: PartitionUrl(p.ID)}, logger, true)
-			require.NoError(t, err)
+			buf := new(ioutil.Buffer)
+			require.NoError(t, sim.S.Collect(p.ID, buf, &database.CollectOptions{
+				BuildIndex: true,
+			}))
 			snapshots[p.ID] = buf.Bytes()
 		})
 	}
