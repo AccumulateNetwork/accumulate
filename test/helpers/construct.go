@@ -11,10 +11,12 @@ import (
 	"math/big"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -81,6 +83,20 @@ func GetAccount[T protocol.Account](t testing.TB, db database.Viewer, account *u
 		require.NoError(t, batch.Account(account).Main().GetAs(&v))
 	})
 	return v
+}
+
+func LoadBlockLedger(t testing.TB, db database.Viewer, partID string, block uint64) (time.Time, []*protocol.BlockEntry) {
+	var blockTime time.Time
+	var entries []*protocol.BlockEntry
+	var err error
+	t.Helper()
+	View(t, db, func(batch *database.Batch) {
+		t.Helper()
+		ledger := batch.Account(protocol.PartitionUrl(partID).JoinPath(protocol.Ledger))
+		blockTime, entries, err = indexing.LoadBlockLedger(ledger, block)
+		require.NoError(t, err)
+	})
+	return blockTime, entries
 }
 
 // PutAccount writes the account's main state.
