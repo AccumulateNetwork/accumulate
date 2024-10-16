@@ -25,6 +25,8 @@ import (
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/badger"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/overlay"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -199,22 +201,46 @@ func NewLocalNetwork(name string, bvnCount, nodeCount int, baseIP net.IP, basePo
 // Deprecated: This is a no-op
 func MemoryDatabase(*simFactory) error { return nil }
 
-func BadgerDatabaseFromDirectory(dir string, onErr func(error)) Option {
-	return WithDatabase(func(partition *protocol.PartitionInfo, node int, _ log.Logger) keyvalue.Beginner {
+func MemoryDbOpener(partition *protocol.PartitionInfo, node int, logger log.Logger) keyvalue.Beginner {
+	return memory.New(nil)
+}
+
+func BadgerDbOpener(dir string, onErr func(error)) OpenDatabaseFunc {
+	dbs := map[string]keyvalue.Beginner{}
+	return func(partition *protocol.PartitionInfo, node int, logger log.Logger) keyvalue.Beginner {
+		file := fmt.Sprintf("%s-%d.db", partition.ID, node)
+		if db, ok := dbs[file]; ok {
+			return db
+		}
+
 		err := os.MkdirAll(dir, 0700)
 		if err != nil {
 			onErr(err)
 			panic(err)
 		}
 
-		db, err := badger.New(filepath.Join(dir, fmt.Sprintf("%s-%d.db", partition.ID, node)))
+		db, err := badger.New(filepath.Join(dir, file))
 		if err != nil {
 			onErr(err)
 			panic(err)
 		}
 
+		dbs[file] = db
 		return db
+	}
+}
+
+func OverlayDatabase(a, b OpenDatabaseFunc) Option {
+	return WithDatabase(func(partition *protocol.PartitionInfo, node int, logger log.Logger) keyvalue.Beginner {
+		return overlay.Open(
+			a(partition, node, logger),
+			b(partition, node, logger),
+		)
 	})
+}
+
+func BadgerDatabaseFromDirectory(dir string, onErr func(error)) Option {
+	return WithDatabase(BadgerDbOpener(dir, onErr))
 }
 
 func SnapshotFromDirectory(dir string) Option {

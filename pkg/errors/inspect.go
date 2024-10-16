@@ -20,6 +20,15 @@ func Is(err, target error) bool { return errors.Is(err, target) }
 // Unwrap calls stdlib errors.Unwrap.
 func Unwrap(err error) error { return errors.Unwrap(err) }
 
+func First(errs ...error) error {
+	for _, err := range errs {
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // Code returns the status code if the error is an [Error], or 0.
 func Code(err error) Status {
 	var err2 *ErrorBase[Status]

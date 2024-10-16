@@ -47,7 +47,8 @@ func serveKeyValueStore(ctx context.Context, store keyvalue.Beginner, addr net.A
 			}
 		}
 
-		err = remote.Serve(store, c, nil, false)
+		done := remote.Serve(store, c, nil, false)
+		err = <-done
 		if err != nil {
 			return err
 		}
