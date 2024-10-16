@@ -145,5 +145,5 @@ func TestNonLedgerEvents(t *testing.T) {
 	require.NoError(t, foo.Events().Minor().Blocks().Add(1))
 
 	err := foo.Commit()
-	require.EqualError(t, err, "acc://foo is not allowed to have events")
+	require.EqualError(t, err, "acc://foo is not allowed to have events/blocks")
 }
