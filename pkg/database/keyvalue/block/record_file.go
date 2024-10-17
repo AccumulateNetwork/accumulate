@@ -94,9 +94,8 @@ func (f *recordFile) ReadHeader(l *recordLocation) (*recordEntry, error) {
 	rd := h.AcquireRange(l.Offset, l.Offset+l.HeaderLen)
 	defer rd.Release()
 
-	dec := poolDecoder.Get()
+	dec := poolDecoder.Get(rd, binary.LeaveTrailing())
 	defer poolDecoder.Put(dec)
-	dec.Reset(rd, binary.LeaveTrailing())
 
 	e := new(recordEntry)
 	err := e.UnmarshalBinaryV2(dec)
