@@ -77,7 +77,7 @@ func (s *recordFileSet) Close() error {
 func (s *recordFileSet) Commit(view *databaseView, entries []*entryAndData) error {
 	rw := new(recordWriter)
 	rw.encBuf = poolBuffer.Get()
-	rw.enc = poolEncoder.Get()
+	rw.enc = poolEncoder.Get(rw.encBuf)
 	defer poolBuffer.Put(rw.encBuf)
 	defer poolEncoder.Put(rw.enc)
 

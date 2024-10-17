@@ -20,8 +20,8 @@ import (
 	"gitlab.com/accumulatenetwork/core/schema/pkg/binary"
 )
 
-var poolEncoder = pool.New[binary.Encoder]()
-var poolDecoder = pool.New[binary.Decoder]()
+var poolEncoder = binary.NewEncoderPool()
+var poolDecoder = binary.NewDecoderPool()
 var poolLocation = pool.New[recordLocation]()
 var poolBuffer = binary.NewBufferPool()
 
