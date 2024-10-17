@@ -114,9 +114,8 @@ func TestLog_Scan(t *testing.T) {
 	var keys []*record.Key
 	var strs []string
 	for i := 0; i < N; i++ {
-		v = uint64(i)
-		k, s := record.NewKey(i), fmt.Sprint(i)
-		require.NoError(t, x.Append(k, s), "insert %d", i)
+		k, s := record.NewKey(v), fmt.Sprint(v)
+		require.NoError(t, x.Append(k, s), "insert %d", v)
 		keys = append(keys, k)
 		strs = append(strs, s)
 		v += uint64(rand.Byte()%16 + 1)

@@ -225,6 +225,10 @@ func (s *BlockStateV1) DidCompleteMajorBlock() (uint64, time.Time, bool) {
 }
 
 func (s *BlockStateV1) Hash() ([32]byte, error) {
+	if s.IsEmpty() {
+		_, root, err := (*ExecutorV1)(s.Executor).LastBlock()
+		return root, err
+	}
 	return s.Block.Batch.GetBptRootHash()
 }
 

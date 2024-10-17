@@ -7,12 +7,15 @@
 package e2e
 
 import (
+	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/database/indexing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
@@ -130,7 +133,7 @@ func TestBlockLedger(t *testing.T) {
 	// Check the block ledger
 	var accounts []string
 	View(t, sim.Database("BVN0"), func(batch *database.Batch) {
-		batch.Account(PartitionUrl("BVN0").JoinPath(Ledger)).BlockLedger().All(func(r indexing.QueryResult[*database.BlockLedger]) bool {
+		for r := range batch.Account(PartitionUrl("BVN0").JoinPath(Ledger)).BlockLedger().Scan().All() {
 			_, bl, err := r.Get()
 			require.NoError(t, err)
 			for _, e := range bl.Entries {
@@ -138,8 +141,80 @@ func TestBlockLedger(t *testing.T) {
 					accounts = append(accounts, e.Account.WithFragment(e.Chain).String())
 				}
 			}
-			return true
-		})
+		}
 	})
 	require.Contains(t, accounts, "acc://alice.acme/tokens#main")
+}
+
+func TestBlockLedgerUpgrade(t *testing.T) {
+	alice := build.
+		Identity("alice").Create("book").
+		Tokens("tokens").Create("ACME").Add(1e9).Identity().
+		Book("book").Page(1).Create().AddCredits(1e9).Book().Identity()
+	aliceKey := alice.Book("book").Page(1).
+		GenerateKey(SignatureTypeED25519)
+
+	// Initialize
+	sim := NewSim(t,
+		simulator.SimpleNetwork(t.Name(), 1, 1),
+		simulator.Genesis(GenesisTime).With(alice).WithVersion(ExecutorVersionV2Vandenberg),
+	)
+
+	// Do something
+	st := sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(alice, "tokens").
+			BurnTokens(1, 1).
+			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey))
+
+	sim.StepUntil(
+		Txn(st.TxID).Completes())
+
+	// Verify an old ledger account exists
+	ledger := GetAccount[*SystemLedger](t, sim.Database("BVN0"), PartitionUrl("BVN0").JoinPath(Ledger))
+	blu := ledger.Url.JoinPath(fmt.Sprint(ledger.Index))
+	View(t, sim.Database("BVN0"), func(batch *database.Batch) {
+		account := batch.Account(blu)
+		require.NoError(t, account.Main().GetAs(new(*BlockLedger)))
+		_, err := batch.BPT().Get(account.Key())
+		require.NoError(t, err)
+	})
+
+	// Upgrade
+	st = sim.SubmitTxnSuccessfully(MustBuild(t,
+		build.Transaction().For(DnUrl()).
+			ActivateProtocolVersion(ExecutorVersionV2Jiuquan).
+			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(1).Signer(sim.SignWithNode(Directory, 0))))
+
+	sim.StepUntil(
+		Txn(st.TxID).Succeeds(),
+		VersionIs(ExecutorVersionV2Jiuquan))
+
+	// Convert the index
+	Update(t, sim.Database("BVN0"), func(batch *database.Batch) {
+		bli := indexing.NewBlockLedgerIndexer(context.Background(), batch, "BVN0")
+		<-bli.ScanDone()
+		bli.Write(batch)
+	})
+
+	// Check the block ledger
+	var accounts []string
+	View(t, sim.Database("BVN0"), func(batch *database.Batch) {
+		for r := range batch.Account(PartitionUrl("BVN0").JoinPath(Ledger)).BlockLedger().Scan().All() {
+			_, bl, err := r.Get()
+			require.NoError(t, err)
+			for _, e := range bl.Entries {
+				if !e.Account.RootIdentity().Equal(PartitionUrl("BVN0")) {
+					accounts = append(accounts, e.Account.WithFragment(e.Chain).String())
+				}
+			}
+		}
+	})
+	require.Contains(t, accounts, "acc://alice.acme/tokens#main")
+
+	// Verify the old ledger account is no longer in the BPT
+	View(t, sim.Database("BVN0"), func(batch *database.Batch) {
+		account := batch.Account(blu)
+		_, err := batch.BPT().Get(account.Key())
+		require.ErrorIs(t, err, errors.NotFound)
+	})
 }

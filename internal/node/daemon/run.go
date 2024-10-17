@@ -49,6 +49,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
@@ -389,6 +390,9 @@ func (d *Daemon) loadKeys() error {
 }
 
 func (d *Daemon) startApp(caughtUp <-chan struct{}) (types.Application, error) {
+	bli := indexing.NewBlockLedgerIndexer(context.Background(), d.db, d.Config.Accumulate.PartitionId)
+	go func() { <-d.done; bli.Stop() }()
+
 	dialer := d.p2pnode.DialNetwork()
 	client := &message.Client{Transport: &message.RoutedTransport{
 		Network: d.Config.Accumulate.Network.Id,
@@ -407,6 +411,9 @@ func (d *Daemon) startApp(caughtUp <-chan struct{}) (types.Application, error) {
 		Describe: execute.DescribeShim{
 			NetworkType: d.Config.Accumulate.Describe.NetworkType,
 			PartitionId: d.Config.Accumulate.Describe.PartitionId,
+		},
+		Indexers: []func(*database.Batch){
+			bli.Write,
 		},
 	}
 

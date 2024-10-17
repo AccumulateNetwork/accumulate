@@ -14,7 +14,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	record "gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/bpt"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -300,7 +299,7 @@ type Account struct {
 	syntheticForAnchor     map[accountSyntheticForAnchorMapKey]values.Set[*url.TxID]
 	directory              values.Set[*url.URL]
 	events                 *AccountEvents
-	blockLedger            *indexing.Log[*BlockLedger]
+	blockLedger            *BlockLedgerLog
 	transaction            map[accountTransactionMapKey]*AccountTransaction
 	mainChain              *Chain2
 	scratchChain           *Chain2
@@ -419,12 +418,8 @@ func (c *Account) newEvents() *AccountEvents {
 	return v
 }
 
-func (c *Account) BlockLedger() *indexing.Log[*BlockLedger] {
+func (c *Account) BlockLedger() *BlockLedgerLog {
 	return values.GetOrCreate(c, &c.blockLedger, (*Account).newBlockLedger)
-}
-
-func (c *Account) newBlockLedger() *indexing.Log[*BlockLedger] {
-	return newBlockEntryLog(c, c.logger.L, c.store, c.key.Append("BlockLedger"), "block-ledger")
 }
 
 func (c *Account) Transaction(hash [32]byte) *AccountTransaction {

@@ -24,7 +24,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -175,7 +174,7 @@ func (block *Block) Close() (execute.BlockState, error) {
 		bl.Index = block.Index
 		bl.Time = block.Time
 		bl.Entries = block.State.ChainUpdates.Entries
-		err = ledger.BlockLedger().Append(record.NewKey(block.Index), bl)
+		err = ledger.BlockLedger().Append(block.Index, bl)
 	} else {
 		bl := new(protocol.BlockLedger)
 		bl.Url = m.Describe.Ledger().JoinPath(strconv.FormatUint(block.Index, 10))
@@ -313,7 +312,7 @@ func (b *Block) executePostUpdateActions() error {
 				if err != nil {
 					return errors.UnknownError.WithFormat("decode root index chain entry %d: %w", i+j, err)
 				}
-				err = acct.BlockLedger().Append(record.NewKey(entry.BlockIndex), &database.BlockLedger{})
+				err = acct.BlockLedger().Append(entry.BlockIndex, &database.BlockLedger{})
 				if err != nil {
 					return errors.UnknownError.WithFormat("add ledger entry for block %d: %w", i+j, err)
 				}

@@ -127,8 +127,8 @@
     - name: BlockLedger
       description: indexes entries of a block. Should only be used on the system ledger
       type: other
-      dataType: indexing.Log[*BlockLedger]
-      constructor: newBlockEntryLog
+      dataType: BlockLedgerLog
+      omitConstructor: true
       pointer: true
 
     - name: Transaction

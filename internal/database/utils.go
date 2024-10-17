@@ -9,9 +9,6 @@ package database
 import (
 	"fmt"
 
-	"github.com/cometbft/cometbft/libs/log"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -35,8 +32,4 @@ func GetSignaturesForSigner(transaction *Transaction, signer protocol.Signer) ([
 		signatures = append(signatures, msg.GetSignature())
 	}
 	return signatures, nil
-}
-
-func newBlockEntryLog(_ record.Record, logger log.Logger, store record.Store, key *record.Key, _ string) *indexing.Log[*BlockLedger] {
-	return indexing.NewLog[*BlockLedger](logger, store, key, 4<<10)
 }

@@ -25,6 +25,7 @@ import (
 	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
@@ -555,6 +556,9 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 		}),
 	})
 
+	// Setup indexing
+	bli := indexing.NewBlockLedgerIndexer(context.TODO(), f.getDatabase(), f.networkFactory.id)
+
 	// Set up the executor options
 	execOpts := block.ExecutorOptions{
 		Logger:        f.getLogger(),
@@ -567,6 +571,7 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 		Querier:       f.getServices(),
 		EnableHealing: true,
 		Describe:      execute.DescribeShim{NetworkType: f.networkFactory.typ, PartitionId: f.networkFactory.id},
+		Indexers:      []func(*database.Batch){bli.Write},
 	}
 
 	// Add background tasks to the block's error group. The simulator must call

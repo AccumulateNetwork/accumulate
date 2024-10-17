@@ -225,7 +225,7 @@ func (v *View[K, V]) Discard() {
 	if !v.done.CompareAndSwap(false, true) {
 		return
 	}
-	v.vm.release(v.level, nil)
+	_ = v.vm.release(v.level, nil)
 }
 
 func (v *View[K, V]) Commit() error {

@@ -47,6 +47,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
@@ -431,13 +432,15 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 		return nil, err
 	}
 
+	db := database.New(store, d.logger)
+	bli := indexing.NewBlockLedgerIndexer(inst.context, db, c.Partition.ID)
+
 	dialer := inst.p2p.DialNetwork()
 	client := &message.Client{Transport: &message.RoutedTransport{
 		Network: inst.config.Network,
 		Dialer:  dialer,
 		Router:  routing.MessageRouter{Router: router},
 	}}
-	db := database.New(store, d.logger)
 	execOpts := execute.Options{
 		Logger:        d.logger.With("module", "executor"),
 		Database:      db,
@@ -450,6 +453,9 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 		Describe: execute.DescribeShim{
 			NetworkType: c.Partition.Type,
 			PartitionId: c.Partition.ID,
+		},
+		Indexers: []func(*database.Batch){
+			bli.Write,
 		},
 	}
 

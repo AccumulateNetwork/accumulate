@@ -9,50 +9,81 @@ package indexing
 import (
 	"slices"
 
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 )
 
 // Find searches for the closest index entry to the target.
 func (x *Log[V]) Find(target *record.Key) Query[V] {
-	b, err := x.getHead().Get()
+	r, err := x.find(target)
 	if err != nil {
-		return rejectNotFound[V](err)
+		return err
 	}
 
-	flat := b.Level == 0
+	switch {
+	case r.exact:
+		// Found an exact match
+		return entry(r.block.Entries[r.index])
+	case r.index == 0:
+		// The target key comes before the first entry
+		return &beforeResult[V]{x, target, r.flat}
+	default:
+		// The target comes between I-1 and I, or after the end if I ==
+		// len(Entries)
+		return &closestResult[V]{x, target, r.block, r.index - 1}
+	}
+}
+
+func (x *Log[V]) find(target *record.Key) (findResult[V], queryError[V]) {
+	var r findResult[V]
+	var first bool
+	var err error
+	r.record = x.getHead()
 	for {
+		r.block, err = r.record.Get()
+		if err != nil {
+			return r, rejectNotFound[V](err)
+		}
+
+		// If the highest level is zero, the index is flat
+		if first {
+			first = false
+			r.flat = r.block.Level == 0
+		}
+
 		// Find the target entry (binary search)
-		i, exact := slices.BinarySearchFunc(b.Entries, target, func(e *Entry[V], t *record.Key) int {
+		r.index, r.exact = slices.BinarySearchFunc(r.block.Entries, target, func(e *Entry[V], t *record.Key) int {
 			return e.Key.Compare(t)
 		})
 
-		switch {
-		case i == 0 && !exact:
-			// The target key comes before the first entry
-			return &beforeResult[V]{x, target, flat}
-
-		case b.Level == 0 && exact:
-			// Found an exact match
-			return entry(b.Entries[i])
-
-		case b.Level == 0:
-			// The target comes between I-1 and I, or after the end if I ==
-			// len(Entries)
-			return &closestResult[V]{x, target, b, i - 1}
+		// If we reached the bottom level or the target is before the first
+		// entry, return
+		if r.block.Level == 0 || r.index == 0 && !r.exact {
+			return r, nil
 		}
 
 		// Adjust the index if the match is not exact
-		if !exact {
-			i--
+		if !r.exact {
+			r.index--
 		}
 
 		// We need to go down a level
-		b, err = x.getBlock(b.Level-1, b.Entries[i].Index).Get()
-		if err != nil {
-			return rejectNotFound[V](err)
-		}
+		r.record = x.getBlock(r.block.Level-1, r.block.Entries[r.index].Index)
 	}
+}
+
+type findResult[V any] struct {
+	flat   bool
+	record values.Value[*Block[V]]
+	block  *Block[V]
+	index  int
+	exact  bool
+}
+
+type queryError[V any] interface {
+	Query[V]
+	error
 }
 
 type beforeResult[V any] struct {
@@ -133,8 +164,4 @@ func (r *closestResult[V]) After() QueryResult[V] {
 		// Unknown error
 		return errResult[V](err)
 	}
-}
-
-func entry[V any](e *Entry[V]) ValueResult[V] {
-	return value(e.Key, e.Value)
 }

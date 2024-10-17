@@ -11,13 +11,12 @@ import (
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 func LoadBlockLedger(ledger *database.Account, index uint64) (time.Time, []*protocol.BlockEntry, error) {
-	_, l1, err := ledger.BlockLedger().Find(record.NewKey(index)).Exact().Get()
+	_, l1, err := ledger.BlockLedger().Find(index).Exact().Get()
 	switch {
 	case err != nil && !errors.Is(err, errors.NotFound):
 		return time.Time{}, nil, errors.UnknownError.Wrap(err)
