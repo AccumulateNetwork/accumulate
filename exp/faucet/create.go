@@ -50,7 +50,7 @@ func CreateLite(url *url.URL) ([]byte, error) {
 	}
 
 	buf := new(ioutil.Buffer)
-	err = db.Collect(buf, nil, &database.CollectOptions{
+	_, err = db.Collect(buf, nil, &database.CollectOptions{
 		Predicate: func(r record.Record) (bool, error) {
 			// Do not create a BPT
 			if r.Key().Get(0) == "BPT" {

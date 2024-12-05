@@ -59,7 +59,7 @@ func ConvertSnapshotToJson(snap []byte) (*types.GenesisDoc, error) {
 	if err != nil {
 		return nil, err
 	}
-	p := new(consensusDoc)
+	p := new(ConsensusDoc)
 	err = p.UnmarshalBinaryFrom(rd)
 	if err != nil {
 		return nil, err

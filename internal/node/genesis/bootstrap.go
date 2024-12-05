@@ -142,12 +142,12 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) error {
 	}
 
 	// Create the snapshot
-	err = b.db.Collect(snapshotWriter, b.partition.URL, &coredb.CollectOptions{
+	_, err = b.db.Collect(snapshotWriter, b.partition.URL, &coredb.CollectOptions{
 		DidWriteHeader: func(w *snapshot.Writer) error {
 			// Convert the consensus parameters
-			doc := new(consensusDoc)
+			doc := new(ConsensusDoc)
 			doc.ChainID = opts.NetworkID + "." + opts.PartitionId
-			doc.Params = (*consensusParams)(opts.ConsensusParams)
+			doc.Params = (*ConsensusParams)(opts.ConsensusParams)
 			for _, v := range opts.GenesisGlobals.Network.Validators {
 				if !v.IsActiveOn(opts.PartitionId) {
 					continue
@@ -161,7 +161,7 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) error {
 				}
 
 				key := tmed25519.PubKey(v.PublicKey)
-				doc.Validators = append(doc.Validators, &genesisValidator{
+				doc.Validators = append(doc.Validators, &GenesisValidator{
 					Address: key.Address(),
 					PubKey:  key,
 					Type:    protocol.SignatureTypeED25519,

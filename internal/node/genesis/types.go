@@ -16,14 +16,14 @@ import (
 
 //go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --package genesis --language go-alt types.yml
 
-type consensusParams types.ConsensusParams
+type ConsensusParams types.ConsensusParams
 
-func (c *consensusParams) CopyAsInterface() any {
+func (c *ConsensusParams) CopyAsInterface() any {
 	d := *c
 	return &d
 }
 
-func (c *consensusParams) Equal(d *consensusParams) bool {
+func (c *ConsensusParams) Equal(d *ConsensusParams) bool {
 	switch {
 	case c == d:
 		return true
@@ -45,22 +45,22 @@ func (c *consensusParams) Equal(d *consensusParams) bool {
 	return true
 }
 
-func (c *consensusParams) MarshalBinary() ([]byte, error) {
+func (c *ConsensusParams) MarshalBinary() ([]byte, error) {
 	d := (*types.ConsensusParams)(c).ToProto()
 	return proto.Marshal(&d)
 }
 
-func (c *consensusParams) UnmarshalBinary(b []byte) error {
+func (c *ConsensusParams) UnmarshalBinary(b []byte) error {
 	d := new(cmtproto.ConsensusParams)
 	err := proto.Unmarshal(b, d)
 	if err != nil {
 		return err
 	}
-	*c = consensusParams(types.ConsensusParamsFromProto(*d))
+	*c = ConsensusParams(types.ConsensusParamsFromProto(*d))
 	return nil
 }
 
-func (c *consensusParams) UnmarshalBinaryFrom(rd io.Reader) error {
+func (c *ConsensusParams) UnmarshalBinaryFrom(rd io.Reader) error {
 	b, err := io.ReadAll(rd)
 	if err != nil {
 		return err

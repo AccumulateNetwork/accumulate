@@ -113,7 +113,7 @@ func resetConsensus(_ *cobra.Command, args []string) {
 		defer tick.Stop()
 
 		fmt.Println("Collecting...")
-		err = db.Collect(buf, partUrl, &coredb.CollectOptions{
+		_, err = db.Collect(buf, partUrl, &coredb.CollectOptions{
 			// BuildIndex: true,
 			Metrics: &metrics,
 			Predicate: func(r database.Record) (bool, error) {

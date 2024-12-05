@@ -12,6 +12,7 @@ import (
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -156,12 +157,13 @@ func (p partOpts) apply(cfg *Config) error {
 		cfg.Services = append(cfg.Services, &StorageService{Name: p.ID, Storage: storage})
 	}
 
-	// Snapshots
+	// Snapshots; capture on every major block
 	if *p.EnableSnapshots {
 		addService(cfg,
 			&SnapshotService{
 				Partition: p.ID,
-				Directory: filepath.Join(p.Dir, "snapshots")},
+				Directory: filepath.Join(p.Dir, "snapshots"),
+				Schedule:  network.MustParseCron("* * * * *")},
 			func(s *SnapshotService) string { return s.Partition })
 	}
 

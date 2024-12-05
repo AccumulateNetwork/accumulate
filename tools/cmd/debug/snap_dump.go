@@ -21,6 +21,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	sv1 "gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 	sv2 "gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 	"golang.org/x/text/cases"
@@ -143,6 +144,16 @@ func dumpV2(f ioutil.SectionReader) {
 				check(err)
 				fmt.Printf("  %x in section %d offset %d\n", e.Key[:8], e.Section, e.Offset)
 			}
+
+		case sv2.SectionTypeConsensus:
+			rd, err := s.Open()
+			check(err)
+
+			doc := new(genesis.ConsensusDoc)
+			check(doc.UnmarshalBinaryFrom(rd))
+			b, err := json.MarshalIndent(doc, "  ", "  ")
+			check(err)
+			fmt.Printf("  %s\n", b)
 		}
 	}
 }

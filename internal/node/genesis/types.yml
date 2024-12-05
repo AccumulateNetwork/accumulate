@@ -1,18 +1,31 @@
-consensusDoc:
+ConsensusDoc:
   fields:
     - name: ChainID
       type: string
     - name: Params
-      type: consensusParams
+      type: ConsensusParams
       marshal-as: reference
       pointer: true
     - name: Validators
-      type: genesisValidator
+      type: GenesisValidator
       marshal-as: reference
       repeatable: true
       pointer: true
+    - name: Block
+      type: ConsensusBlock
+      marshal-as: reference
+      pointer: true
 
-genesisValidator:
+ConsensusBlock:
+  fields:
+    - name: Height
+      type: int
+    - name: HeaderHash
+      type: bytes
+    - name: AppHash
+      type: bytes
+
+GenesisValidator:
   fields:
     - name: Address
       type: bytes

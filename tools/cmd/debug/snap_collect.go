@@ -82,7 +82,7 @@ func collectSnapshot(_ *cobra.Command, args []string) {
 	// Collect a snapshot
 	var metrics coredb.CollectMetrics
 	fmt.Println("Collecting...")
-	check(db.Collect(f, partUrl, &coredb.CollectOptions{
+	_, err = db.Collect(f, partUrl, &coredb.CollectOptions{
 		BuildIndex: flagSnapCollect.Indexed,
 		Metrics:    &metrics,
 		Predicate: func(r database.Record) (bool, error) {
@@ -138,7 +138,8 @@ func collectSnapshot(_ *cobra.Command, args []string) {
 			}
 			return true, nil
 		},
-	}))
+	})
+	check(err)
 }
 
 func getPartition(db *coredb.Database, path string) string {

@@ -49,7 +49,7 @@ type CollectMetrics struct {
 // Collect collects a snapshot of the database.
 //
 // Collect is a wrapper around [Batch.Collect].
-func (db *Database) Collect(file io.WriteSeeker, partition *url.URL, opts *CollectOptions) error {
+func (db *Database) Collect(file io.WriteSeeker, partition *url.URL, opts *CollectOptions) (*snapshot.Writer, error) {
 	batch := db.Begin(false)
 	defer batch.Discard()
 	return batch.Collect(file, partition, opts)
@@ -59,7 +59,7 @@ func (db *Database) Collect(file io.WriteSeeker, partition *url.URL, opts *Colle
 //
 // WARNING: If the batch is nested (if it is not a root batch), Collect may
 // cause excessive memory consumption until the root batch is discarded.
-func (batch *Batch) Collect(file io.WriteSeeker, partition *url.URL, opts *CollectOptions) error {
+func (batch *Batch) Collect(file io.WriteSeeker, partition *url.URL, opts *CollectOptions) (*snapshot.Writer, error) {
 	if opts == nil {
 		opts = new(CollectOptions)
 	}
@@ -67,31 +67,31 @@ func (batch *Batch) Collect(file io.WriteSeeker, partition *url.URL, opts *Colle
 	// Start the snapshot
 	w, err := snapshot.Create(file)
 	if err != nil {
-		return errors.UnknownError.WithFormat("open snapshot: %w", err)
+		return nil, errors.UnknownError.WithFormat("open snapshot: %w", err)
 	}
 
 	// Write the header
 	err = batch.writeSnapshotHeader(w, partition, opts)
 	if err != nil {
-		return errors.UnknownError.Wrap(err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	if opts.DidWriteHeader != nil {
 		err = opts.DidWriteHeader(w)
 		if err != nil {
-			return errors.UnknownError.Wrap(err)
+			return nil, errors.UnknownError.Wrap(err)
 		}
 	}
 
 	// Collect the BPT
 	err = batch.collectBPT(w, opts)
 	if err != nil {
-		return errors.UnknownError.Wrap(err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	dir, err := os.MkdirTemp("", "accumulate-snapshot-*")
 	if err != nil {
-		return errors.UnknownError.Wrap(err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 	defer func() {
 		err := os.RemoveAll(dir)
@@ -102,7 +102,7 @@ func (batch *Batch) Collect(file io.WriteSeeker, partition *url.URL, opts *Colle
 
 	hashes, err := indexing.OpenBucket(filepath.Join(dir, "hash"), 0, true)
 	if err != nil {
-		return errors.UnknownError.Wrap(err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 	defer func() { _ = hashes.Close() }()
 
@@ -110,7 +110,7 @@ func (batch *Batch) Collect(file io.WriteSeeker, partition *url.URL, opts *Colle
 	if opts.BuildIndex {
 		index, err = indexing.OpenBucket(filepath.Join(dir, "index"), indexDataSize, true)
 		if err != nil {
-			return errors.UnknownError.Wrap(err)
+			return nil, errors.UnknownError.Wrap(err)
 		}
 		defer func() { _ = index.Close() }()
 	}
@@ -118,22 +118,22 @@ func (batch *Batch) Collect(file io.WriteSeeker, partition *url.URL, opts *Colle
 	// Collect accounts
 	err = batch.collectAccounts(w, index, hashes, opts)
 	if err != nil {
-		return errors.UnknownError.Wrap(err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	// Collect messages
 	err = batch.collectMessages(w, index, hashes, opts)
 	if err != nil {
-		return errors.UnknownError.Wrap(err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	// Write the record index
 	err = writeSnapshotIndex(w, index, opts)
 	if err != nil {
-		return errors.UnknownError.WithFormat("write index: %w", err)
+		return nil, errors.UnknownError.WithFormat("write index: %w", err)
 	}
 
-	return nil
+	return w, nil
 }
 
 func (batch *Batch) writeSnapshotHeader(w *snapshot.Writer, partition *url.URL, _ *CollectOptions) error {

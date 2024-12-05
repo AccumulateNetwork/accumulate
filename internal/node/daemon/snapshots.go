@@ -144,7 +144,7 @@ func (d *Daemon) collectSnapshot(batch *coredb.Batch, blockTime time.Time, major
 	defer tick.Stop()
 
 	var metrics coredb.CollectMetrics
-	err = batch.Collect(file, d.Config.Accumulate.PartitionUrl().URL, &coredb.CollectOptions{
+	_, err = batch.Collect(file, d.Config.Accumulate.PartitionUrl().URL, &coredb.CollectOptions{
 		Metrics:    &metrics,
 		BuildIndex: d.Config.Accumulate.Snapshots.EnableIndexing,
 		Predicate: func(r database.Record) (bool, error) {

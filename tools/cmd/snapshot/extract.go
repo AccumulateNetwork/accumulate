@@ -54,7 +54,7 @@ func extractSnapshot(_ *cobra.Command, args []string) {
 
 	fmt.Println("Collecting...")
 	var metrics database.CollectMetrics
-	check(db.Collect(f, nil, &database.CollectOptions{
+	_, err = db.Collect(f, nil, &database.CollectOptions{
 		BuildIndex: true,
 		Metrics:    &metrics,
 		Predicate: func(r record.Record) (bool, error) {
@@ -117,5 +117,6 @@ func extractSnapshot(_ *cobra.Command, args []string) {
 
 			return true, nil
 		},
-	}))
+	})
+	check(err)
 }

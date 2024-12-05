@@ -7,6 +7,7 @@
 package run
 
 import (
+	"context"
 	"fmt"
 	"io/fs"
 	"log/slog"
@@ -17,13 +18,16 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cometbft/cometbft/rpc/client"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -31,11 +35,17 @@ import (
 )
 
 var (
-	snapshotNeedsEvents = ioc.Needs[*events.Bus](func(s *SnapshotService) string { return s.Partition })
+	snapshotNeedsEvents    = ioc.Needs[*events.Bus](func(s *SnapshotService) string { return s.Partition })
+	snapshotWantsConsensus = ioc.Wants[client.Client](func(s *SnapshotService) string { return s.Partition })
 )
 
 func (s *SnapshotService) Requires() []ioc.Requirement {
-	return s.Storage.Required(s.Partition)
+	req := []ioc.Requirement{
+		snapshotNeedsEvents.Requirement(s),
+		snapshotWantsConsensus.Requirement(s),
+	}
+	req = append(req, s.Storage.Required(s.Partition)...)
+	return req
 }
 
 func (s *SnapshotService) Provides() []ioc.Provided {
@@ -56,6 +66,11 @@ func (s *SnapshotService) start(inst *Instance) error {
 		return err
 	}
 
+	consensus, err := snapshotWantsConsensus.Get(inst.services, s)
+	if err != nil {
+		return err
+	}
+
 	c := new(snapshotCollector)
 	c.mu = new(sync.Mutex)
 	c.partition = protocol.PartitionUrl(s.Partition)
@@ -65,6 +80,7 @@ func (s *SnapshotService) start(inst *Instance) error {
 	c.db = coredb.New(store, (*logging.Slogger)(inst.logger))
 	c.index = *s.EnableIndexing
 	c.events = bus
+	c.consensus = consensus
 	c.retain = *s.RetainCount
 
 	events.SubscribeSync(bus, c.didCommitBlock)
@@ -80,6 +96,7 @@ type snapshotCollector struct {
 	db        *coredb.Database
 	index     bool
 	events    *events.Bus
+	consensus client.Client
 	retain    uint64
 }
 
@@ -94,41 +111,46 @@ func (c *snapshotCollector) didCommitBlock(e events.DidCommitBlock) error {
 	return nil
 }
 
-func (d *snapshotCollector) collect(batch *coredb.Batch, blockTime time.Time, majorBlock, minorBlock uint64) {
-	if !d.isTimeForSnapshot(blockTime) {
+func (c *snapshotCollector) collect(batch *coredb.Batch, blockTime time.Time, majorBlock, minorBlock uint64) {
+	if !c.isTimeForSnapshot(blockTime) {
 		return
 	}
 
 	// Don't collect a snapshot if one is still being collected
-	if !d.mu.TryLock() {
+	if !c.mu.TryLock() {
 		return
 	}
-	defer d.mu.Unlock()
+	defer c.mu.Unlock()
 
 	defer func() {
 		if err := recover(); err != nil {
-			d.logger.Error("Panicked while creating snapshot", "error", err, "major-block", majorBlock, "minor-block", minorBlock, "module", "snapshot", "stack", string(debug.Stack()))
+			c.logger.Error("Panicked while creating snapshot", "error", err, "major-block", majorBlock, "minor-block", minorBlock, "module", "snapshot", "stack", string(debug.Stack()))
 		}
 	}()
 	defer batch.Discard()
 
-	d.logger.Info("Creating a snapshot", "major-block", majorBlock, "minor-block", minorBlock, "module", "snapshot")
-	err := os.Mkdir(d.directory, 0755)
+	// Clear the manual trigger file, if it exists
+	if err := os.Remove(filepath.Join(c.directory, ".capture")); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		c.logger.Error("Failed to remove manual trigger file", "error", err, "major-block", majorBlock, "minor-block", minorBlock, "module", "snapshot")
+	}
+
+	c.logger.Info("Creating a snapshot", "major-block", majorBlock, "minor-block", minorBlock, "module", "snapshot")
+	err := os.Mkdir(c.directory, 0755)
 	if err != nil && !errors.Is(err, fs.ErrExist) {
-		d.logger.Error("Failed to create snapshot directory", "error", err, "major-block", majorBlock, "minor-block", minorBlock, "module", "snapshot")
+		c.logger.Error("Failed to create snapshot directory", "error", err, "major-block", majorBlock, "minor-block", minorBlock, "module", "snapshot")
 		return
 	}
 
-	filename := filepath.Join(d.directory, fmt.Sprintf(core.SnapshotMajorFormat, minorBlock))
+	filename := filepath.Join(c.directory, fmt.Sprintf(core.SnapshotMajorFormat, minorBlock))
 	file, err := os.OpenFile(filename, os.O_RDWR|os.O_EXCL|os.O_CREATE, 0666)
 	if err != nil {
-		d.logger.Error("Failed to create snapshot", "error", err, "major-block", majorBlock, "minor-block", minorBlock, "module", "snapshot")
+		c.logger.Error("Failed to create snapshot", "error", err, "major-block", majorBlock, "minor-block", minorBlock, "module", "snapshot")
 		return
 	}
 	defer func() {
 		err = file.Close()
 		if err != nil {
-			d.logger.Error("Failed to close snapshot", "error", err, "major-block", majorBlock, "minor-block", minorBlock, "module", "snapshot")
+			c.logger.Error("Failed to close snapshot", "error", err, "major-block", majorBlock, "minor-block", minorBlock, "module", "snapshot")
 			return
 		}
 	}()
@@ -138,9 +160,9 @@ func (d *snapshotCollector) collect(batch *coredb.Batch, blockTime time.Time, ma
 	defer tick.Stop()
 
 	var metrics coredb.CollectMetrics
-	err = batch.Collect(file, d.partition, &coredb.CollectOptions{
+	w, err := batch.Collect(file, c.partition, &coredb.CollectOptions{
 		Metrics:    &metrics,
-		BuildIndex: d.index,
+		BuildIndex: c.index,
 		Predicate: func(r database.Record) (bool, error) {
 			select {
 			case <-tick.C:
@@ -164,25 +186,31 @@ func (d *snapshotCollector) collect(batch *coredb.Batch, blockTime time.Time, ma
 		},
 	})
 	if err != nil {
-		d.logger.Error("Failed to create snapshot", "error", err, "major-block", majorBlock, "minor-block", minorBlock, "module", "snapshot")
+		c.logger.Error("Failed to create snapshot", "error", err, "major-block", majorBlock, "minor-block", minorBlock, "module", "snapshot")
 		return
 	}
 
-	err = d.events.Publish(events.DidSaveSnapshot{
+	// Write consensus info
+	err = c.collectConsensusDoc(w, minorBlock)
+	if err != nil {
+		c.logger.Error("Failed to collect consensus doc", "error", err, "major-block", majorBlock, "minor-block", minorBlock, "module", "snapshot")
+	}
+
+	err = c.events.Publish(events.DidSaveSnapshot{
 		MinorIndex: minorBlock,
 	})
 	if err != nil {
-		d.logger.Error("Failed to publish snapshot notification", "error", err, "major-block", majorBlock, "minor-block", minorBlock, "module", "snapshot")
+		c.logger.Error("Failed to publish snapshot notification", "error", err, "major-block", majorBlock, "minor-block", minorBlock, "module", "snapshot")
 		return
 	}
 
-	if d.retain == 0 {
+	if c.retain == 0 {
 		return
 	}
 
-	entries, err := os.ReadDir(d.directory)
+	entries, err := os.ReadDir(c.directory)
 	if err != nil {
-		d.logger.Error("Failed to prune snapshot", "error", err, "major-block", majorBlock, "minor-block", minorBlock, "module", "snapshot")
+		c.logger.Error("Failed to prune snapshot", "error", err, "major-block", majorBlock, "minor-block", minorBlock, "module", "snapshot")
 		return
 	}
 
@@ -199,22 +227,27 @@ func (d *snapshotCollector) collect(batch *coredb.Batch, blockTime time.Time, ma
 	}
 
 	sort.Strings(snapshots)
-	if len(snapshots) <= int(d.retain) {
+	if len(snapshots) <= int(c.retain) {
 		return
 	}
 
-	for _, filename := range snapshots[:len(snapshots)-int(d.retain)] {
-		err = os.Remove(filepath.Join(d.directory, filename))
+	for _, filename := range snapshots[:len(snapshots)-int(c.retain)] {
+		err = os.Remove(filepath.Join(c.directory, filename))
 		if err != nil {
-			d.logger.Error("Failed to prune snapshot", "error", err, "major-block", majorBlock, "minor-block", minorBlock, "module", "snapshot")
+			c.logger.Error("Failed to prune snapshot", "error", err, "major-block", majorBlock, "minor-block", minorBlock, "module", "snapshot")
 		}
 	}
 }
 
 func (c *snapshotCollector) isTimeForSnapshot(blockTime time.Time) bool {
-	// If the schedule is unset, capture a snapshot on every major block
-	if c.schedule == nil {
+	// This is a hack to manually trigger a snapshot
+	if st, err := os.Stat(filepath.Join(c.directory, ".capture")); err == nil && !st.IsDir() {
 		return true
+	}
+
+	// Don't capture a snapshot unless it's manually triggered or scheduled
+	if c.schedule == nil {
+		return false
 	}
 
 	// If there are no snapshots, capture a snapshot
@@ -231,4 +264,44 @@ func (c *snapshotCollector) isTimeForSnapshot(blockTime time.Time) bool {
 	// If the block time is after the next schedule time, capture a snapshot
 	next := c.schedule.Next(snapshots[0].Timestamp.Add(time.Nanosecond))
 	return blockTime.Add(time.Nanosecond).After(next)
+}
+
+func (c *snapshotCollector) collectConsensusDoc(w *snapshot.Writer, minorBlock uint64) error {
+	if c.consensus == nil {
+		return nil
+	}
+
+	ctx := context.Background()
+	block, err := c.consensus.Block(ctx, Ptr(int64(minorBlock)+1))
+	if err != nil {
+		return errors.UnknownError.WithFormat("get consensus block %d: %w", minorBlock+1, err)
+	}
+	if block.Block.LastCommit.Height != int64(minorBlock) {
+		return errors.InvalidRecord.WithFormat("last commit height does not match: want %d, got %d", minorBlock, block.Block.LastCommit.Height)
+	}
+	// TODO: Check block.Block.AppHash?
+
+	doc := new(genesis.ConsensusDoc)
+	doc.Block = new(genesis.ConsensusBlock)
+	doc.Block.Height = block.Block.Header.Height
+	doc.Block.HeaderHash = block.Block.Header.Hash()
+	doc.Block.AppHash = block.Block.AppHash
+
+	b, err := doc.MarshalBinary()
+	if err != nil {
+		return errors.UnknownError.WithFormat("marshal consensus doc: %w", err)
+	}
+
+	sw, err := w.OpenRaw(snapshot.SectionTypeConsensus)
+	if err != nil {
+		return errors.UnknownError.WithFormat("open consensus section: %w", err)
+	}
+	defer sw.Close()
+
+	_, err = sw.Write(b)
+	if err != nil {
+		return errors.UnknownError.WithFormat("write consensus section: %w", err)
+	}
+
+	return nil
 }

@@ -17,39 +17,77 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-type consensusDoc struct {
+type ConsensusBlock struct {
 	fieldsSet  []bool
-	ChainID    string              `json:"chainID,omitempty" form:"chainID" query:"chainID" validate:"required"`
-	Params     *consensusParams    `json:"params,omitempty" form:"params" query:"params" validate:"required"`
-	Validators []*genesisValidator `json:"validators,omitempty" form:"validators" query:"validators" validate:"required"`
+	Height     int64  `json:"height,omitempty" form:"height" query:"height" validate:"required"`
+	HeaderHash []byte `json:"headerHash,omitempty" form:"headerHash" query:"headerHash" validate:"required"`
+	AppHash    []byte `json:"appHash,omitempty" form:"appHash" query:"appHash" validate:"required"`
 	extraData  []byte
 }
 
-var machine_consensusDoc = &encoding.Machine[*consensusDoc]{
-	ExtraData: func(v *consensusDoc) *[]byte { return &v.extraData },
-	Seen:      func(v *consensusDoc) *[]bool { return &v.fieldsSet },
-	Fields: []*encoding.Field[*consensusDoc]{
-		{Name: "ChainID", Number: 1, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.StringField[*consensusDoc](func(v *consensusDoc) *string { return &v.ChainID })},
-		{Name: "Params", Number: 2, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.StructPtrField[*consensusDoc, *consensusParams, consensusParams](func(v *consensusDoc) **consensusParams { return &v.Params })},
-		{Name: "Validators", Number: 3, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.SliceField[*consensusDoc, *genesisValidator, encoding.StructPtrField[encoding.SliceIndex[*genesisValidator], *genesisValidator, genesisValidator]](func(v *consensusDoc) *[]*genesisValidator { return &v.Validators })},
+var machine_ConsensusBlock = &encoding.Machine[*ConsensusBlock]{
+	ExtraData: func(v *ConsensusBlock) *[]byte { return &v.extraData },
+	Seen:      func(v *ConsensusBlock) *[]bool { return &v.fieldsSet },
+	Fields: []*encoding.Field[*ConsensusBlock]{
+		{Name: "Height", Number: 1, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.IntField[*ConsensusBlock](func(v *ConsensusBlock) *int64 { return &v.Height })},
+		{Name: "HeaderHash", Number: 2, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.BytesField[*ConsensusBlock](func(v *ConsensusBlock) *[]byte { return &v.HeaderHash })},
+		{Name: "AppHash", Number: 3, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.BytesField[*ConsensusBlock](func(v *ConsensusBlock) *[]byte { return &v.AppHash })},
 	},
 }
 
-func (v *consensusDoc) IsValid() error                 { return machine_consensusDoc.IsValid(v) }
-func (v *consensusDoc) Copy() *consensusDoc            { return encoding.Copy(machine_consensusDoc, v) }
-func (v *consensusDoc) CopyAsInterface() interface{}   { return v.Copy() }
-func (v *consensusDoc) Equal(u *consensusDoc) bool     { return machine_consensusDoc.Equal(v, u) }
-func (v *consensusDoc) MarshalBinary() ([]byte, error) { return machine_consensusDoc.MarshalBinary(v) }
-func (v *consensusDoc) UnmarshalBinary(data []byte) error {
-	return machine_consensusDoc.Unmarshal(data, v)
+func (v *ConsensusBlock) IsValid() error               { return machine_ConsensusBlock.IsValid(v) }
+func (v *ConsensusBlock) Copy() *ConsensusBlock        { return encoding.Copy(machine_ConsensusBlock, v) }
+func (v *ConsensusBlock) CopyAsInterface() interface{} { return v.Copy() }
+func (v *ConsensusBlock) Equal(u *ConsensusBlock) bool { return machine_ConsensusBlock.Equal(v, u) }
+func (v *ConsensusBlock) MarshalBinary() ([]byte, error) {
+	return machine_ConsensusBlock.MarshalBinary(v)
 }
-func (v *consensusDoc) UnmarshalBinaryFrom(rd io.Reader) error {
-	return machine_consensusDoc.UnmarshalFrom(rd, v)
+func (v *ConsensusBlock) UnmarshalBinary(data []byte) error {
+	return machine_ConsensusBlock.Unmarshal(data, v)
 }
-func (v *consensusDoc) MarshalJSON() ([]byte, error) { return machine_consensusDoc.JSONMarshal(v) }
-func (v *consensusDoc) UnmarshalJSON(b []byte) error { return machine_consensusDoc.JSONUnmarshal(b, v) }
+func (v *ConsensusBlock) UnmarshalBinaryFrom(rd io.Reader) error {
+	return machine_ConsensusBlock.UnmarshalFrom(rd, v)
+}
+func (v *ConsensusBlock) MarshalJSON() ([]byte, error) { return machine_ConsensusBlock.JSONMarshal(v) }
+func (v *ConsensusBlock) UnmarshalJSON(b []byte) error {
+	return machine_ConsensusBlock.JSONUnmarshal(b, v)
+}
 
-type genesisValidator struct {
+type ConsensusDoc struct {
+	fieldsSet  []bool
+	ChainID    string              `json:"chainID,omitempty" form:"chainID" query:"chainID" validate:"required"`
+	Params     *ConsensusParams    `json:"params,omitempty" form:"params" query:"params" validate:"required"`
+	Validators []*GenesisValidator `json:"validators,omitempty" form:"validators" query:"validators" validate:"required"`
+	Block      *ConsensusBlock     `json:"block,omitempty" form:"block" query:"block" validate:"required"`
+	extraData  []byte
+}
+
+var machine_ConsensusDoc = &encoding.Machine[*ConsensusDoc]{
+	ExtraData: func(v *ConsensusDoc) *[]byte { return &v.extraData },
+	Seen:      func(v *ConsensusDoc) *[]bool { return &v.fieldsSet },
+	Fields: []*encoding.Field[*ConsensusDoc]{
+		{Name: "ChainID", Number: 1, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.StringField[*ConsensusDoc](func(v *ConsensusDoc) *string { return &v.ChainID })},
+		{Name: "Params", Number: 2, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.StructPtrField[*ConsensusDoc, *ConsensusParams, ConsensusParams](func(v *ConsensusDoc) **ConsensusParams { return &v.Params })},
+		{Name: "Validators", Number: 3, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.SliceField[*ConsensusDoc, *GenesisValidator, encoding.StructPtrField[encoding.SliceIndex[*GenesisValidator], *GenesisValidator, GenesisValidator]](func(v *ConsensusDoc) *[]*GenesisValidator { return &v.Validators })},
+		{Name: "Block", Number: 4, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.StructPtrField[*ConsensusDoc, *ConsensusBlock, ConsensusBlock](func(v *ConsensusDoc) **ConsensusBlock { return &v.Block })},
+	},
+}
+
+func (v *ConsensusDoc) IsValid() error                 { return machine_ConsensusDoc.IsValid(v) }
+func (v *ConsensusDoc) Copy() *ConsensusDoc            { return encoding.Copy(machine_ConsensusDoc, v) }
+func (v *ConsensusDoc) CopyAsInterface() interface{}   { return v.Copy() }
+func (v *ConsensusDoc) Equal(u *ConsensusDoc) bool     { return machine_ConsensusDoc.Equal(v, u) }
+func (v *ConsensusDoc) MarshalBinary() ([]byte, error) { return machine_ConsensusDoc.MarshalBinary(v) }
+func (v *ConsensusDoc) UnmarshalBinary(data []byte) error {
+	return machine_ConsensusDoc.Unmarshal(data, v)
+}
+func (v *ConsensusDoc) UnmarshalBinaryFrom(rd io.Reader) error {
+	return machine_ConsensusDoc.UnmarshalFrom(rd, v)
+}
+func (v *ConsensusDoc) MarshalJSON() ([]byte, error) { return machine_ConsensusDoc.JSONMarshal(v) }
+func (v *ConsensusDoc) UnmarshalJSON(b []byte) error { return machine_ConsensusDoc.JSONUnmarshal(b, v) }
+
+type GenesisValidator struct {
 	fieldsSet []bool
 	Address   []byte                 `json:"address,omitempty" form:"address" query:"address" validate:"required"`
 	Type      protocol.SignatureType `json:"type,omitempty" form:"type" query:"type" validate:"required"`
@@ -59,38 +97,38 @@ type genesisValidator struct {
 	extraData []byte
 }
 
-var machine_genesisValidator = &encoding.Machine[*genesisValidator]{
-	ExtraData: func(v *genesisValidator) *[]byte { return &v.extraData },
-	Seen:      func(v *genesisValidator) *[]bool { return &v.fieldsSet },
-	Fields: []*encoding.Field[*genesisValidator]{
-		{Name: "Address", Number: 1, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.BytesField[*genesisValidator](func(v *genesisValidator) *[]byte { return &v.Address })},
-		{Name: "Type", Number: 2, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.EnumField[*genesisValidator, *protocol.SignatureType, protocol.SignatureType](func(v *genesisValidator) *protocol.SignatureType { return &v.Type })},
-		{Name: "PubKey", Number: 3, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.BytesField[*genesisValidator](func(v *genesisValidator) *[]byte { return &v.PubKey })},
-		{Name: "Power", Number: 4, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.IntField[*genesisValidator](func(v *genesisValidator) *int64 { return &v.Power })},
-		{Name: "Name", Number: 5, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.StringField[*genesisValidator](func(v *genesisValidator) *string { return &v.Name })},
+var machine_GenesisValidator = &encoding.Machine[*GenesisValidator]{
+	ExtraData: func(v *GenesisValidator) *[]byte { return &v.extraData },
+	Seen:      func(v *GenesisValidator) *[]bool { return &v.fieldsSet },
+	Fields: []*encoding.Field[*GenesisValidator]{
+		{Name: "Address", Number: 1, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.BytesField[*GenesisValidator](func(v *GenesisValidator) *[]byte { return &v.Address })},
+		{Name: "Type", Number: 2, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.EnumField[*GenesisValidator, *protocol.SignatureType, protocol.SignatureType](func(v *GenesisValidator) *protocol.SignatureType { return &v.Type })},
+		{Name: "PubKey", Number: 3, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.BytesField[*GenesisValidator](func(v *GenesisValidator) *[]byte { return &v.PubKey })},
+		{Name: "Power", Number: 4, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.IntField[*GenesisValidator](func(v *GenesisValidator) *int64 { return &v.Power })},
+		{Name: "Name", Number: 5, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.StringField[*GenesisValidator](func(v *GenesisValidator) *string { return &v.Name })},
 	},
 }
 
-func (v *genesisValidator) IsValid() error { return machine_genesisValidator.IsValid(v) }
-func (v *genesisValidator) Copy() *genesisValidator {
-	return encoding.Copy(machine_genesisValidator, v)
+func (v *GenesisValidator) IsValid() error { return machine_GenesisValidator.IsValid(v) }
+func (v *GenesisValidator) Copy() *GenesisValidator {
+	return encoding.Copy(machine_GenesisValidator, v)
 }
-func (v *genesisValidator) CopyAsInterface() interface{} { return v.Copy() }
-func (v *genesisValidator) Equal(u *genesisValidator) bool {
-	return machine_genesisValidator.Equal(v, u)
+func (v *GenesisValidator) CopyAsInterface() interface{} { return v.Copy() }
+func (v *GenesisValidator) Equal(u *GenesisValidator) bool {
+	return machine_GenesisValidator.Equal(v, u)
 }
-func (v *genesisValidator) MarshalBinary() ([]byte, error) {
-	return machine_genesisValidator.MarshalBinary(v)
+func (v *GenesisValidator) MarshalBinary() ([]byte, error) {
+	return machine_GenesisValidator.MarshalBinary(v)
 }
-func (v *genesisValidator) UnmarshalBinary(data []byte) error {
-	return machine_genesisValidator.Unmarshal(data, v)
+func (v *GenesisValidator) UnmarshalBinary(data []byte) error {
+	return machine_GenesisValidator.Unmarshal(data, v)
 }
-func (v *genesisValidator) UnmarshalBinaryFrom(rd io.Reader) error {
-	return machine_genesisValidator.UnmarshalFrom(rd, v)
+func (v *GenesisValidator) UnmarshalBinaryFrom(rd io.Reader) error {
+	return machine_GenesisValidator.UnmarshalFrom(rd, v)
 }
-func (v *genesisValidator) MarshalJSON() ([]byte, error) {
-	return machine_genesisValidator.JSONMarshal(v)
+func (v *GenesisValidator) MarshalJSON() ([]byte, error) {
+	return machine_GenesisValidator.JSONMarshal(v)
 }
-func (v *genesisValidator) UnmarshalJSON(b []byte) error {
-	return machine_genesisValidator.JSONUnmarshal(b, v)
+func (v *GenesisValidator) UnmarshalJSON(b []byte) error {
+	return machine_GenesisValidator.JSONUnmarshal(b, v)
 }

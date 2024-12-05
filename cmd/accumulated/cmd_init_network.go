@@ -224,7 +224,7 @@ func prepareGenesis(cmd *cobra.Command, args []string) {
 	// Collect
 	var metrics coredb.CollectMetrics
 	fmt.Println("Collecting into", args[0])
-	err = db.Collect(file, nil, &coredb.CollectOptions{
+	_, err = db.Collect(file, nil, &coredb.CollectOptions{
 		Metrics: &metrics,
 		Predicate: func(r database.Record) (bool, error) {
 			select {

@@ -79,7 +79,7 @@ func BenchmarkCollect(b *testing.B) {
 				require.NoError(b, err)
 				defer f.Close()
 
-				err = db.Collect(f, protocol.DnUrl(), nil)
+				_, err = db.Collect(f, protocol.DnUrl(), nil)
 				require.NoError(b, err)
 
 				runtime.ReadMemStats(&ms)

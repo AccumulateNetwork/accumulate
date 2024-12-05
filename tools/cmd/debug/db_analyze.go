@@ -90,7 +90,7 @@ func analyzeDb(src keyvalue.Store, progress func(string)) error {
 		}), nil)
 
 		var count int
-		err = db.Collect(&ioutil.Discard{}, nil, &coredb.CollectOptions{
+		_, err = db.Collect(&ioutil.Discard{}, nil, &coredb.CollectOptions{
 			Predicate: func(r database.Record) (bool, error) {
 				// Don't count the BPT
 				if r.Key().Get(0) == "BPT" {
