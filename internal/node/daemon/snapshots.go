@@ -252,17 +252,18 @@ func (d *Daemon) isTimeForSnapshot(blockTime time.Time) bool {
 	}
 
 	// If there are no snapshots, capture a snapshot
-	snapshots, err := abci.ListSnapshots(d.Config)
+	snapDir := config.MakeAbsolute(d.Config.RootDir, d.Config.Accumulate.Snapshots.Directory)
+	snapshots, err := abci.ListSnapshots(snapDir)
 	if err != nil || len(snapshots) == 0 {
 		return true
 	}
 
 	// Order by time, descending
 	sort.Slice(snapshots, func(i, j int) bool {
-		return snapshots[i].Timestamp.After(snapshots[j].Timestamp)
+		return snapshots[i].Timestamp().After(snapshots[j].Timestamp())
 	})
 
 	// If the block time is after the next schedule time, capture a snapshot
-	next := d.snapshotSchedule.Next(snapshots[0].Timestamp.Add(time.Nanosecond))
+	next := d.snapshotSchedule.Next(snapshots[0].Timestamp().Add(time.Nanosecond))
 	return blockTime.Add(time.Nanosecond).After(next)
 }

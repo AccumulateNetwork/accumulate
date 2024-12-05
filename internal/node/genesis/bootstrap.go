@@ -32,6 +32,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/cometbft"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -145,9 +146,9 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) error {
 	_, err = b.db.Collect(snapshotWriter, b.partition.URL, &coredb.CollectOptions{
 		DidWriteHeader: func(w *snapshot.Writer) error {
 			// Convert the consensus parameters
-			doc := new(ConsensusDoc)
+			doc := new(cometbft.GenesisDoc)
 			doc.ChainID = opts.NetworkID + "." + opts.PartitionId
-			doc.Params = (*ConsensusParams)(opts.ConsensusParams)
+			doc.Params = (*cometbft.ConsensusParams)(opts.ConsensusParams)
 			for _, v := range opts.GenesisGlobals.Network.Validators {
 				if !v.IsActiveOn(opts.PartitionId) {
 					continue
@@ -161,7 +162,7 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) error {
 				}
 
 				key := tmed25519.PubKey(v.PublicKey)
-				doc.Validators = append(doc.Validators, &GenesisValidator{
+				doc.Validators = append(doc.Validators, &cometbft.Validator{
 					Address: key.Address(),
 					PubKey:  key,
 					Type:    protocol.SignatureTypeED25519,

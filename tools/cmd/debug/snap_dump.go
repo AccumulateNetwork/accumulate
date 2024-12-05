@@ -21,9 +21,9 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	sv1 "gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 	sv2 "gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/cometbft"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
@@ -149,7 +149,7 @@ func dumpV2(f ioutil.SectionReader) {
 			rd, err := s.Open()
 			check(err)
 
-			doc := new(genesis.ConsensusDoc)
+			doc := new(cometbft.GenesisDoc)
 			check(doc.UnmarshalBinaryFrom(rd))
 			b, err := json.MarshalIndent(doc, "  ", "  ")
 			check(err)

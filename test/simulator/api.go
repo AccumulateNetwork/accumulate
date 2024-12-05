@@ -184,6 +184,7 @@ func (n *Node) listenAndServeHTTP(ctx context.Context, opts ListenOptions) error
 		ws, err := websocket.NewHandler(
 			message.ConsensusService{ConsensusService: n},
 			message.NetworkService{NetworkService: network},
+			message.SnapshotService{SnapshotService: network},
 			message.MetricsService{MetricsService: network},
 			message.Querier{Querier: network},
 			message.Submitter{Submitter: network},

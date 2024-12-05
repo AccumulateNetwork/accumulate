@@ -23,20 +23,24 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
+	sv1 "gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
+	sv2 "gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/cometbft"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 var (
-	snapshotNeedsEvents    = ioc.Needs[*events.Bus](func(s *SnapshotService) string { return s.Partition })
-	snapshotWantsConsensus = ioc.Wants[client.Client](func(s *SnapshotService) string { return s.Partition })
+	snapshotNeedsEvents     = ioc.Needs[*events.Bus](func(s *SnapshotService) string { return s.Partition })
+	snapshotWantsConsensus  = ioc.Wants[client.Client](func(s *SnapshotService) string { return s.Partition })
+	snapshotProvidesService = ioc.Provides[api.SnapshotService](func(s *SnapshotService) string { return s.Partition })
 )
 
 func (s *SnapshotService) Requires() []ioc.Requirement {
@@ -49,7 +53,9 @@ func (s *SnapshotService) Requires() []ioc.Requirement {
 }
 
 func (s *SnapshotService) Provides() []ioc.Provided {
-	return nil
+	return []ioc.Provided{
+		snapshotProvidesService.Provided(s),
+	}
 }
 
 func (s *SnapshotService) start(inst *Instance) error {
@@ -82,6 +88,12 @@ func (s *SnapshotService) start(inst *Instance) error {
 	c.events = bus
 	c.consensus = consensus
 	c.retain = *s.RetainCount
+
+	err = snapshotProvidesService.Register(inst.services, s, c)
+	if err != nil {
+		return err
+	}
+	registerRpcService(inst, api.ServiceTypeSnapshot.AddressFor(s.Partition), message.SnapshotService{SnapshotService: c})
 
 	events.SubscribeSync(bus, c.didCommitBlock)
 	return nil
@@ -251,22 +263,22 @@ func (c *snapshotCollector) isTimeForSnapshot(blockTime time.Time) bool {
 	}
 
 	// If there are no snapshots, capture a snapshot
-	snapshots, err := abci.ListSnapshots2(c.directory)
+	snapshots, err := abci.ListSnapshots(c.directory)
 	if err != nil || len(snapshots) == 0 {
 		return true
 	}
 
 	// Order by time, descending
 	sort.Slice(snapshots, func(i, j int) bool {
-		return snapshots[i].Timestamp.After(snapshots[j].Timestamp)
+		return snapshots[i].Timestamp().After(snapshots[j].Timestamp())
 	})
 
 	// If the block time is after the next schedule time, capture a snapshot
-	next := c.schedule.Next(snapshots[0].Timestamp.Add(time.Nanosecond))
+	next := c.schedule.Next(snapshots[0].Timestamp().Add(time.Nanosecond))
 	return blockTime.Add(time.Nanosecond).After(next)
 }
 
-func (c *snapshotCollector) collectConsensusDoc(w *snapshot.Writer, minorBlock uint64) error {
+func (c *snapshotCollector) collectConsensusDoc(w *sv2.Writer, minorBlock uint64) error {
 	if c.consensus == nil {
 		return nil
 	}
@@ -281,8 +293,8 @@ func (c *snapshotCollector) collectConsensusDoc(w *snapshot.Writer, minorBlock u
 	}
 	// TODO: Check block.Block.AppHash?
 
-	doc := new(genesis.ConsensusDoc)
-	doc.Block = new(genesis.ConsensusBlock)
+	doc := new(cometbft.GenesisDoc)
+	doc.Block = new(cometbft.Block)
 	doc.Block.Height = block.Block.Header.Height
 	doc.Block.HeaderHash = block.Block.Header.Hash()
 	doc.Block.AppHash = block.Block.AppHash
@@ -292,7 +304,7 @@ func (c *snapshotCollector) collectConsensusDoc(w *snapshot.Writer, minorBlock u
 		return errors.UnknownError.WithFormat("marshal consensus doc: %w", err)
 	}
 
-	sw, err := w.OpenRaw(snapshot.SectionTypeConsensus)
+	sw, err := w.OpenRaw(sv2.SectionTypeConsensus)
 	if err != nil {
 		return errors.UnknownError.WithFormat("open consensus section: %w", err)
 	}
@@ -304,4 +316,84 @@ func (c *snapshotCollector) collectConsensusDoc(w *snapshot.Writer, minorBlock u
 	}
 
 	return nil
+}
+
+var _ api.SnapshotService = (*snapshotCollector)(nil)
+
+func (c *snapshotCollector) ListSnapshots(ctx context.Context, opts api.ListSnapshotsOptions) ([]*api.SnapshotInfo, error) {
+	snapshots, err := abci.ListSnapshots(c.directory)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("list snapshots: %w", err)
+	}
+
+	info := make([]*api.SnapshotInfo, 0, len(snapshots))
+	for _, s := range snapshots {
+		err := (func() error {
+			f, err := s.Open()
+			if err != nil {
+				return errors.UnknownError.WithFormat("open snapshot file: %w", err)
+			}
+			defer f.Close()
+
+			switch s.Version() {
+			case sv1.Version1:
+				h, _, err := sv1.Open(f)
+				if err != nil {
+					return errors.UnknownError.WithFormat("open snapshot (v1): %w", err)
+				}
+
+				// Version 1 snapshots do not include consensus info
+				info = append(info, &api.SnapshotInfo{
+					Header: &sv2.Header{
+						Version:  h.Version,
+						RootHash: h.RootHash,
+						SystemLedger: &protocol.SystemLedger{
+							Url:             c.partition,
+							Index:           h.Height,
+							Timestamp:       h.Timestamp,
+							ExecutorVersion: h.ExecutorVersion,
+						},
+					},
+				})
+				return nil
+
+			case sv2.Version2:
+				r, err := sv2.Open(f)
+				if err != nil {
+					return errors.UnknownError.WithFormat("open snapshot (v2): %w", err)
+				}
+
+				var consensus *cometbft.GenesisDoc
+				for _, s := range r.Sections {
+					if s.Type() != sv2.SectionTypeConsensus {
+						continue
+					}
+
+					consensus = new(cometbft.GenesisDoc)
+					r, err := s.Open()
+					if err != nil {
+						return errors.UnknownError.WithFormat("open consensus section: %w", err)
+					}
+
+					err = consensus.UnmarshalBinaryFrom(r)
+					if err != nil {
+						return errors.UnknownError.WithFormat("unmarshal consensus doc: %w", err)
+					}
+				}
+
+				info = append(info, &api.SnapshotInfo{
+					Header:        r.Header,
+					ConsensusInfo: consensus,
+				})
+				return nil
+
+			default:
+				return errors.UnknownError.WithFormat("unknown snapshot version: %d", s.Version())
+			}
+		})()
+		if err != nil {
+			c.logger.ErrorContext(ctx, "Failed to read snapshot", "error", err, "module", "snapshots", "height", s.Height())
+		}
+	}
+	return info, nil
 }

@@ -72,6 +72,10 @@ type NetworkService interface {
 	NetworkStatus(ctx context.Context, opts NetworkStatusOptions) (*NetworkStatus, error)
 }
 
+type SnapshotService interface {
+	ListSnapshots(ctx context.Context, opts ListSnapshotsOptions) ([]*SnapshotInfo, error)
+}
+
 type MetricsService interface {
 	// Metrics returns network metrics such as transactions per second.
 	Metrics(ctx context.Context, opts MetricsOptions) (*Metrics, error)

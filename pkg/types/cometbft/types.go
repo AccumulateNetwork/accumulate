@@ -1,10 +1,4 @@
-// Copyright 2024 The Accumulate Authors
-//
-// Use of this source code is governed by an MIT-style
-// license that can be found in the LICENSE file or at
-// https://opensource.org/licenses/MIT.
-
-package genesis
+package cometbft
 
 import (
 	"io"
@@ -12,13 +6,21 @@ import (
 	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	"github.com/cometbft/cometbft/types"
 	"github.com/cosmos/gogoproto/proto"
+	"gitlab.com/accumulatenetwork/core/schema/pkg/binary"
 )
 
-//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --package genesis --language go-alt types.yml
+//go:generate go run gitlab.com/accumulatenetwork/core/schema/cmd/generate schema schema.yml -w schema_gen.go
+//go:generate go run gitlab.com/accumulatenetwork/core/schema/cmd/generate types schema.yml -w types_gen.go
+//go:generate go run github.com/rinchsan/gosimports/cmd/gosimports -w .
+
+func (v *GenesisDoc) UnmarshalBinaryFrom(rd io.Reader) error {
+	dec := binary.NewDecoder(rd)
+	return v.UnmarshalBinaryV2(dec)
+}
 
 type ConsensusParams types.ConsensusParams
 
-func (c *ConsensusParams) CopyAsInterface() any {
+func (c *ConsensusParams) Copy() *ConsensusParams {
 	d := *c
 	return &d
 }

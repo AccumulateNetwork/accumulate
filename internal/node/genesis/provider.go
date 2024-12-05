@@ -18,6 +18,7 @@ import (
 	"github.com/cometbft/cometbft/node"
 	"github.com/cometbft/cometbft/types"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/cometbft"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -59,7 +60,7 @@ func ConvertSnapshotToJson(snap []byte) (*types.GenesisDoc, error) {
 	if err != nil {
 		return nil, err
 	}
-	p := new(ConsensusDoc)
+	p := new(cometbft.GenesisDoc)
 	err = p.UnmarshalBinaryFrom(rd)
 	if err != nil {
 		return nil, err

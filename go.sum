@@ -1174,6 +1174,8 @@ gitlab.com/accumulatenetwork/core/schema v0.2.1-0.20240713035306-1121dbc75e5d h1
 gitlab.com/accumulatenetwork/core/schema v0.2.1-0.20240713035306-1121dbc75e5d/go.mod h1:FTl7W44SWhDenzAtvKkLu30Cin8DAr249mH4eg7BNLY=
 gitlab.com/accumulatenetwork/core/schema v0.2.1-0.20241002211257-5a76a2dad5eb h1:AeG7HjYtyMj/3Xq736CwELkpplss4ieFW8fsSEf1dh8=
 gitlab.com/accumulatenetwork/core/schema v0.2.1-0.20241002211257-5a76a2dad5eb/go.mod h1:ZEUsUF0Gr3daHqbDee9MnLB0IX3hdg7AYUogv+Xm2js=
+gitlab.com/accumulatenetwork/core/schema v0.2.1-0.20241205222729-1b1e71c42b78 h1:azTZWDCeUaUfOhRCd/ZQfiioPE93OgBCcJpO7SwT04M=
+gitlab.com/accumulatenetwork/core/schema v0.2.1-0.20241205222729-1b1e71c42b78/go.mod h1:ZEUsUF0Gr3daHqbDee9MnLB0IX3hdg7AYUogv+Xm2js=
 gitlab.com/accumulatenetwork/utils/jsonrpc v0.1.0 h1:t4Akt7LvcROop2bh++KRIhbv+NORJT1m5WWIsiEUIF8=
 gitlab.com/accumulatenetwork/utils/jsonrpc v0.1.0/go.mod h1:Kopfqa//YI6CkXkVpHRMOZqODMNFwifB8IvKw+m52no=
 gitlab.com/accumulatenetwork/utils/jsonrpc v0.1.1-0.20240904211734-7057029b6ad1 h1:w7bF8KV1SmNXwdA+MVxyL/u997CgvHggApyH4pa9mpQ=

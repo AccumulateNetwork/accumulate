@@ -30,6 +30,7 @@ type Client struct {
 var _ api.NodeService = (*Client)(nil)
 var _ api.ConsensusService = (*Client)(nil)
 var _ api.NetworkService = (*Client)(nil)
+var _ api.SnapshotService = (*Client)(nil)
 var _ api.MetricsService = (*Client)(nil)
 var _ api.Querier = (*Client)(nil)
 var _ api.Submitter = (*Client)(nil)
@@ -58,6 +59,10 @@ func (c *Client) ConsensusStatus(ctx context.Context, opts api.ConsensusStatusOp
 
 func (c *Client) NetworkStatus(ctx context.Context, opts api.NetworkStatusOptions) (*api.NetworkStatus, error) {
 	return sendRequestUnmarshalAs[*api.NetworkStatus](c, ctx, "network-status", &message.NetworkStatusRequest{NetworkStatusOptions: opts})
+}
+
+func (c *Client) ListSnapshots(ctx context.Context, opts api.ListSnapshotsOptions) ([]*api.SnapshotInfo, error) {
+	return sendRequestUnmarshalAs[[]*api.SnapshotInfo](c, ctx, "list-snapshots", &message.ListSnapshotsRequest{ListSnapshotsOptions: opts})
 }
 
 func (c *Client) Metrics(ctx context.Context, opts api.MetricsOptions) (*api.Metrics, error) {
