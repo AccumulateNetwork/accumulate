@@ -24,6 +24,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+var ErrRetry = fmt.Errorf("retry")
+
 type HealAnchorArgs struct {
 	Client  message.AddressedClient
 	Querier api.Querier
@@ -35,6 +37,80 @@ type HealAnchorArgs struct {
 }
 
 func HealAnchor(ctx context.Context, args HealAnchorArgs, si SequencedInfo) error {
+	// If the network is running Vandenberg and the anchor is from the DN to a
+	// BVN, use version 2
+	if args.NetInfo.Status.ExecutorVersion.V2VandenbergEnabled() &&
+		strings.EqualFold(si.Source, protocol.Directory) &&
+		!strings.EqualFold(si.Destination, protocol.Directory) {
+		return healDnAnchorV2(ctx, args, si)
+	}
+	return healAnchorV1(ctx, args, si)
+}
+
+func healDnAnchorV2(ctx context.Context, args HealAnchorArgs, si SequencedInfo) error {
+	if args.Querier == nil {
+		args.Querier = args.Client
+	}
+
+	// Resolve the anchor sent to the BVN
+	rBVN, err := ResolveSequenced[*messaging.TransactionMessage](ctx, args.Client, args.NetInfo, protocol.Directory, si.Destination, si.Number, true)
+	if err != nil {
+		return err
+	}
+
+	// Resolve the anchor the DN sent to itself
+	rDN, err := ResolveSequenced[*messaging.TransactionMessage](ctx, args.Client, args.NetInfo, protocol.Directory, protocol.Directory, si.Number, true)
+	if err != nil {
+		return err
+	}
+
+	// Fetch the transaction and signatures
+	var signatures []messaging.Message
+	Q := api.Querier2{Querier: args.Querier}
+	res, err := Q.QueryMessage(ctx, rDN.ID, nil)
+	switch {
+	case err == nil:
+		// If the DN self-anchor has not been delivered, fall back to version 1
+		if !res.Status.Delivered() {
+			slog.InfoContext(ctx, "DN self anchor has not been delivered, falling back", "id", rDN.ID, "source", si.Source, "destination", si.Destination, "number", si.Number)
+			return healAnchorV1(ctx, args, si)
+		}
+
+		for _, set := range res.Signatures.Records {
+			for _, sig := range set.Signatures.Records {
+				blk, ok := sig.Message.(*messaging.BlockAnchor)
+				if !ok {
+					continue
+				}
+
+				// Use the DN -> DN signature but the DN -> BVN sequenced message
+				signatures = append(signatures, &messaging.BlockAnchor{
+					Anchor:    rBVN.Sequence,
+					Signature: blk.Signature,
+				})
+			}
+		}
+
+	case !errors.Is(err, errors.NotFound):
+		return err
+	}
+	if args.Pretend {
+		return nil
+	}
+
+	slog.InfoContext(ctx, "Submitting signatures from the DN", "count", len(signatures))
+	err = args.Submit(signatures...)
+	if err != nil {
+		return err
+	}
+
+	if args.Wait {
+		return waitFor(ctx, Q.Querier, si.ID)
+	}
+	return nil
+}
+
+func healAnchorV1(ctx context.Context, args HealAnchorArgs, si SequencedInfo) error {
 	srcUrl := protocol.PartitionUrl(si.Source)
 	dstUrl := protocol.PartitionUrl(si.Destination)
 
@@ -268,5 +344,3 @@ func HealAnchor(ctx context.Context, args HealAnchorArgs, si SequencedInfo) erro
 	}
 	return nil
 }
-
-var ErrRetry = fmt.Errorf("retry")

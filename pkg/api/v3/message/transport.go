@@ -322,8 +322,12 @@ func (c *RoutedTransport) dial(ctx context.Context, addr multiaddr.Multiaddr, st
 			// Return the error if it's a client error (e.g. misdial)
 			return nil, errors.UnknownError.Wrap(err)
 
-		case errors.EncodingError.ErrorAs(err, &err2),
-			errors.StreamAborted.ErrorAs(err, &err2):
+		case errors.StreamAborted.ErrorAs(err, &err2):
+			// The other side hung up, try again. Historically this has been
+			// caused by encoding errors, which indicates a mismatch between the
+			// client and server, so it's possible retrying is a bad idea.
+
+		case errors.EncodingError.ErrorAs(err, &err2):
 			// If the error is an encoding issue, log it and return "internal error"
 			if isMulti {
 				multi.BadDial(ctx, addr, s, err)

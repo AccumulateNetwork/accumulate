@@ -8,9 +8,18 @@ package api
 
 import (
 	"encoding/json"
+	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
+
+func (r *RecordRange[V]) GetLastBlockTime() *time.Time      { return r.LastBlockTime }
+func (r *AccountRecord) GetLastBlockTime() *time.Time       { return r.LastBlockTime }
+func (r *ChainRecord) GetLastBlockTime() *time.Time         { return r.LastBlockTime }
+func (r *ChainEntryRecord[V]) GetLastBlockTime() *time.Time { return r.LastBlockTime }
+func (r *MessageRecord[V]) GetLastBlockTime() *time.Time    { return r.LastBlockTime }
+func (r *MinorBlockRecord) GetLastBlockTime() *time.Time    { return r.LastBlockTime }
+func (r *MajorBlockRecord) GetLastBlockTime() *time.Time    { return r.LastBlockTime }
 
 func (q *ChainQuery) IsValid() error {
 	err := q.baseIsValid()
