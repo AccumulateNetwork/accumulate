@@ -24,7 +24,7 @@ func EnumWidgetFor[U enumGet, V enumSet[U]]() widget.Widget[V] {
 // Enum types are assumed to be integers and thus are treated as such.
 
 func (EnumWidget[V, U]) IsNil(v V) bool    { return false }
-func (EnumWidget[V, U]) Empty(v V) bool    { return U(*v).GetEnumValue() == 0 }
+func (EnumWidget[V, U]) Empty(v V) bool    { return (*v).GetEnumValue() == 0 }
 func (EnumWidget[V, U]) CopyTo(dst, src V) { *dst = *src }
 func (EnumWidget[V, U]) Equal(a, b V) bool { return *a == *b }
 
@@ -34,7 +34,7 @@ func (EnumWidget[V, U]) MarshalJSON(e *json.Encoder, v V) error   { return e.Enc
 func (EnumWidget[V, U]) UnmarshalJSON(d *json.Decoder, v V) error { return d.Decode(v) }
 
 func (EnumWidget[V, U]) MarshalBinary(e *binary.Encoder, v V) error {
-	return e.EncodeUint(U(*v).GetEnumValue())
+	return e.EncodeUint((*v).GetEnumValue())
 }
 
 func (EnumWidget[V, U]) UnmarshalBinary(d *binary.Decoder, v V) error {
@@ -43,7 +43,7 @@ func (EnumWidget[V, U]) UnmarshalBinary(d *binary.Decoder, v V) error {
 		return err
 	}
 	if !v.SetEnumValue(u) {
-		return fmt.Errorf("%d is not a valid value of %T", u, U(*v))
+		return fmt.Errorf("%d is not a valid value of %T", u, *v)
 	}
 	return nil
 }

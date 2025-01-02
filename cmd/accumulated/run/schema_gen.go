@@ -1316,7 +1316,7 @@ func init() {
 			},
 			{
 				Name:        "Schedule",
-				Description: "is the schedule for capturing snapshots",
+				Description: "is the schedule for automatically capturing snapshots",
 				Optional:    true,
 				Type: &schema.PointerType{
 					TypeBase: schema.TypeBase{},
