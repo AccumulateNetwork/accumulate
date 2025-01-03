@@ -41,13 +41,3 @@ Validator:
       type: int
     - name: Name
       type: string
-
-Block:
-  class: composite
-  fields:
-    - name: Height
-      type: int
-    - name: HeaderHash
-      type: bytes
-    - name: AppHash
-      type: bytes

@@ -294,10 +294,7 @@ func (c *snapshotCollector) collectConsensusDoc(w *sv2.Writer, minorBlock uint64
 	// TODO: Check block.Block.AppHash?
 
 	doc := new(cometbft.GenesisDoc)
-	doc.Block = new(cometbft.Block)
-	doc.Block.Height = block.Block.Header.Height
-	doc.Block.HeaderHash = block.Block.Header.Hash()
-	doc.Block.AppHash = block.Block.AppHash
+	doc.Block = (*cometbft.Block)(block.Block)
 
 	b, err := doc.MarshalBinary()
 	if err != nil {

@@ -9,63 +9,6 @@ import (
 	"gitlab.com/accumulatenetwork/core/schema/pkg/widget"
 )
 
-type Block struct {
-	Height     int64
-	HeaderHash []byte
-	AppHash    []byte
-}
-
-var wBlock = widget.ForComposite(widget.Fields[Block]{
-	{Name: "height", ID: 1, Widget: widget.ForInt(func(v *Block) *int64 { return &v.Height })},
-	{Name: "headerHash", ID: 2, Widget: widget.ForBytes(func(v *Block) *[]byte { return &v.HeaderHash })},
-	{Name: "appHash", ID: 3, Widget: widget.ForBytes(func(v *Block) *[]byte { return &v.AppHash })},
-}, widget.Identity[*Block])
-
-// Copy returns a copy of the Block.
-func (v *Block) Copy() *Block {
-	if v == nil {
-		return nil
-	}
-	var u = new(Block)
-	wBlock.CopyTo(u, v)
-	return u
-}
-
-// EqualBlock returns true if V is equal to U.
-func (v *Block) Equal(u *Block) bool {
-	return wBlock.Equal(v, u)
-}
-
-// MarshalBinary marshals the Block to JSON.
-func (v *Block) MarshalJSON() ([]byte, error) {
-	return widget.MarshalJSON(v, wBlock)
-}
-
-// UnmarshalJSON unmarshals the Block from JSON.
-func (v *Block) UnmarshalJSON(b []byte) error {
-	return widget.UnmarshalJSON(v, wBlock, b)
-}
-
-// MarshalBinary marshals the Block to bytes using [binary].
-func (v *Block) MarshalBinary() ([]byte, error) {
-	return widget.MarshalBinary(v, wBlock)
-}
-
-// MarshalBinary marshals the Block to a [binary.Encoder].
-func (v *Block) MarshalBinaryV2(enc *binary.Encoder) error {
-	return wBlock.MarshalBinary(enc, v)
-}
-
-// UnmarshalBinary unmarshals the Block from bytes using [binary].
-func (v *Block) UnmarshalBinary(b []byte) error {
-	return widget.UnmarshalBinary(v, wBlock, b)
-}
-
-// UnmarshalBinary unmarshals the Block from a [binary.Decoder].
-func (v *Block) UnmarshalBinaryV2(dec *binary.Decoder) error {
-	return wBlock.UnmarshalBinary(dec, v)
-}
-
 type GenesisDoc struct {
 	ChainID    string
 	Params     *ConsensusParams
@@ -77,7 +20,7 @@ var wGenesisDoc = widget.ForComposite(widget.Fields[GenesisDoc]{
 	{Name: "chainID", ID: 1, Widget: widget.ForString(func(v *GenesisDoc) *string { return &v.ChainID })},
 	{Name: "params", ID: 2, Widget: widget.ForValue(func(v *GenesisDoc) **ConsensusParams { return &v.Params })},
 	{Name: "validators", ID: 3, Widget: widget.ForArray(widget.ForCompositePtr(wValidator.Fields, widget.GetElem[[]*Validator]), func(v *GenesisDoc) *[]*Validator { return &v.Validators })},
-	{Name: "block", ID: 4, Widget: widget.ForCompositePtr(wBlock.Fields, func(v *GenesisDoc) **Block { return &v.Block })},
+	{Name: "block", ID: 4, Widget: widget.ForValue(func(v *GenesisDoc) **Block { return &v.Block })},
 }, widget.Identity[*GenesisDoc])
 
 // Copy returns a copy of the GenesisDoc.

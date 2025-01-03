@@ -10,33 +10,12 @@ import (
 )
 
 var (
-	sBlock      schema.Methods[*Block, *Block, *schema.CompositeType]
 	sGenesisDoc schema.Methods[*GenesisDoc, *GenesisDoc, *schema.CompositeType]
 	sValidator  schema.Methods[*Validator, *Validator, *schema.CompositeType]
 )
 
 func init() {
 	var deferredTypes schema.ResolverSet
-
-	sBlock = schema.WithMethods[*Block, *Block](&schema.CompositeType{
-		TypeBase: schema.TypeBase{
-			Name: "Block",
-		},
-		Fields: []*schema.Field{
-			{
-				Name: "Height",
-				Type: &schema.SimpleType{Type: schema.SimpleTypeInt},
-			},
-			{
-				Name: "HeaderHash",
-				Type: &schema.SimpleType{Type: schema.SimpleTypeBytes},
-			},
-			{
-				Name: "AppHash",
-				Type: &schema.SimpleType{Type: schema.SimpleTypeBytes},
-			},
-		},
-	}).SetGoType()
 
 	sGenesisDoc = schema.WithMethods[*GenesisDoc, *GenesisDoc](&schema.CompositeType{
 		TypeBase: schema.TypeBase{
@@ -66,10 +45,10 @@ func init() {
 			},
 			{
 				Name: "Block",
-				Type: (&schema.PointerType{
+				Type: &schema.PointerType{
 					TypeBase: schema.TypeBase{},
-				}).
-					ResolveElemTo(&deferredTypes, "Block"),
+					Elem:     schema.TypeReferenceFor[Block](),
+				},
 			},
 		},
 	}).SetGoType()
@@ -103,7 +82,6 @@ func init() {
 	}).SetGoType()
 
 	s, err := schema.New(
-		sBlock.Type,
 		sGenesisDoc.Type,
 		sValidator.Type,
 	)
