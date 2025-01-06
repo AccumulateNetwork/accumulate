@@ -32,7 +32,9 @@ forEachCall:
 commitCall:
   non-json: true
   union: { type: call, private: true }
-  fields: ~
+  fields:
+  - name: Discard
+    type: bool
 
 batchCall:
   non-json: true

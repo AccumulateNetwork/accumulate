@@ -54,11 +54,7 @@ var flag = struct {
 	TlsKey       string
 	PeerDatabase string
 	Pprof        string
-}{
-	PromListen: []multiaddr.Multiaddr{
-		multiaddr.StringCast("/ip4/0.0.0.0/tcp/8081/http"),
-	},
-}
+}{}
 
 var cu = func() *user.User {
 	cu, _ := user.Current()
@@ -67,7 +63,6 @@ var cu = func() *user.User {
 
 func init() {
 	flag.Key.Value = &TransientPrivateKey{}
-	flag.Peers = accumulate.BootstrapServers
 
 	if cu != nil {
 		flag.PeerDatabase = filepath.Join(cu.HomeDir, ".accumulate", "cache", "peerdb.json")
@@ -88,6 +83,15 @@ func init() {
 	cmd.Flags().StringVar(&flag.PeerDatabase, "peer-db", flag.PeerDatabase, "Track peers using a persistent database.")
 	cmd.Flags().BoolVar(&jsonrpc2.DebugMethodFunc, "debug", false, "Print out a stack trace if an API method fails")
 	cmd.Flags().StringVar(&flag.Pprof, "pprof", "", "Address to run net/http/pprof on")
+
+	cmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
+		if !cmd.Flag("prom-listen").Changed {
+			flag.PromListen = []multiaddr.Multiaddr{multiaddr.StringCast("/ip4/0.0.0.0/tcp/8081/http")}
+		}
+		if !cmd.Flag("peer").Changed {
+			flag.Peers = accumulate.BootstrapServers
+		}
+	}
 }
 
 func run(cmd *cobra.Command, args []string) {
@@ -152,17 +156,17 @@ func run(cmd *cobra.Command, args []string) {
 		http.PeerMap = []*HttpPeerMapEntry{
 			{
 				ID:         mustParsePeer("12D3KooWAgrBYpWEXRViTnToNmpCoC3dvHdmR6m1FmyKjDn1NYpj"),
-				Addresses:  []multiaddr.Multiaddr{mustParseMulti("/dns/apollo-mainnet.accumulate.defidevs.io")},
+				Addresses:  []multiaddr.Multiaddr{mustParseMulti("/dns/apollo-mainnet.accumulate.defidevs.io/tcp/16593")},
 				Partitions: []string{"Apollo", "Directory"},
 			},
 			{
 				ID:         mustParsePeer("12D3KooWDqFDwjHEog1bNbxai2dKSaR1aFvq2LAZ2jivSohgoSc7"),
-				Addresses:  []multiaddr.Multiaddr{mustParseMulti("/dns/yutu-mainnet.accumulate.defidevs.io")},
+				Addresses:  []multiaddr.Multiaddr{mustParseMulti("/dns/yutu-mainnet.accumulate.defidevs.io/tcp/16593")},
 				Partitions: []string{"Yutu", "Directory"},
 			},
 			{
 				ID:         mustParsePeer("12D3KooWHzjkoeAqe7L55tAaepCbMbhvNu9v52ayZNVQobdEE1RL"),
-				Addresses:  []multiaddr.Multiaddr{mustParseMulti("/dns/chandrayaan-mainnet.accumulate.defidevs.io")},
+				Addresses:  []multiaddr.Multiaddr{mustParseMulti("/dns/chandrayaan-mainnet.accumulate.defidevs.io/tcp/16593")},
 				Partitions: []string{"Chandrayaan", "Directory"},
 			},
 		}
@@ -171,7 +175,7 @@ func run(cmd *cobra.Command, args []string) {
 	ctx := cmdutil.ContextForMainProcess(context.Background())
 	inst, err := Start(ctx, cfg)
 	Check(err)
-	<-ctx.Done()
+	<-inst.Done()
 	inst.Stop()
 }
 

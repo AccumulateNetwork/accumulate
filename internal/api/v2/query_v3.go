@@ -93,7 +93,6 @@ func chainStateV3(r *api.ChainRecord) *ChainState {
 func chainRespV3(account *api.AccountRecord, chains *api.RecordRange[*api.ChainRecord]) *ChainQueryResponse {
 	res := new(ChainQueryResponse)
 	if account != nil {
-		res.LastBlockTime = account.LastBlockTime
 		res.Type = account.Account.Type().String()
 		res.Data = account.Account
 		res.Receipt = receiptV3(account.Receipt)
@@ -108,6 +107,11 @@ func chainRespV3(account *api.AccountRecord, chains *api.RecordRange[*api.ChainR
 				res.MainChain.Roots = chain.State
 			}
 		}
+	}
+	if account != nil {
+		res.LastBlockTime = account.LastBlockTime
+	} else if chains != nil {
+		res.LastBlockTime = chains.LastBlockTime
 	}
 	return res
 }
@@ -772,6 +776,7 @@ func (m *JrpcMethods) QueryData(ctx context.Context, params json.RawMessage) any
 	qr.ChainId = req.Url.AccountID()
 	qr.Type = "dataEntry"
 	qr.Data = dataEntryV3(r2)
+	qr.LastBlockTime = r2.LastBlockTime
 	return qr
 }
 

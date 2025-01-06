@@ -16,6 +16,8 @@ import (
 // nullDispatcher is a [Dispatcher] that discards everything.
 type nullDispatcher struct{}
 
+func (nullDispatcher) Close() { /* Nothing to do */ }
+
 func (nullDispatcher) Submit(context.Context, *url.URL, *messaging.Envelope) error { return nil }
 
 func (nullDispatcher) Send(context.Context) <-chan error {

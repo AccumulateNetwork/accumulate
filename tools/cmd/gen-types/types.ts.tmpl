@@ -8,12 +8,12 @@ import { encodeAs } from "../encoding";
 /* eslint-disable @typescript-eslint/ban-types */
 
 {{  define "objectify"}}
-this.{{lcName .Name}} &&
+this.{{lcName .Name}} === undefined ? undefined : (
 {{-   if .Repeatable -}}
 this.{{lcName .Name}}?.map(v => v == undefined ? undefined : {{objectify . "v"}})
 {{-   else}}
 {{objectify . (print "this." (lcName .Name))}}
-{{-   end}}
+{{-   end}})
 {{- end}}
 
 {{  $lud := .LongUnionDiscriminator -}}
@@ -41,7 +41,7 @@ export type {{.TypescriptFullName true true true true}} = {{if needsCtor .}}{{.T
 export class {{.TypescriptFullName false false true true}} {{if eq .Name "Transaction"}}extends TransactionBase{{end}} {
   {{- if .IsUnion}}
   {{-   if .IsBinary}}
-  @encodeAs.field(1).keepEmpty.enum.of({{.UnionType}})
+  @(encodeAs.field(1).keepEmpty.enum.of({{.UnionType}}))
   {{-   end}}
   public readonly {{if $lud}}{{lcName .UnionType}}{{else}}type{{end}} = {{.UnionType}}.{{.UnionValue}};
   {{- end}}
@@ -52,13 +52,13 @@ export class {{.TypescriptFullName false false true true}} {{if eq .Name "Transa
   {{-     if .IsEmbedded}}
   {{-       range .TypeRef.Fields}}
   {{-         if $bin}}
-  @encodeAs.field({{$no}}, {{.Number}}){{if .Repeatable}}.repeatable{{end}}{{if .KeepEmpty}}.keepEmpty{{end}}.{{encodeAnnotation .}}
+  @(encodeAs.field({{$no}}, {{.Number}}){{if .Repeatable}}.repeatable{{end}}{{if .KeepEmpty}}.keepEmpty{{end}}.{{encodeAnnotation .}})
   {{-         end}}
   public {{lcName .Name}}?: {{resolveType .}};
   {{-       end}}
   {{-     else}}
   {{-       if $bin}}
-  @encodeAs.field({{.Number}}){{if .Repeatable}}.repeatable{{end}}{{if .KeepEmpty}}.keepEmpty{{end}}.{{encodeAnnotation .}}
+  @(encodeAs.field({{.Number}}){{if .Repeatable}}.repeatable{{end}}{{if .KeepEmpty}}.keepEmpty{{end}}.{{encodeAnnotation .}})
   {{-       end}}
   public {{lcName .Name}}?: {{resolveType .}};
   {{-     end}}

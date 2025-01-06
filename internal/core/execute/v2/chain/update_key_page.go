@@ -310,6 +310,15 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, book *protocol.Key
 		}
 		return nil
 
+	case *protocol.SetMiningParametersOperation:
+		if op.Enabled != nil {
+			page.MiningEnabled = *op.Enabled
+		}
+		if op.Difficulty != nil {
+			page.MiningDifficulty = *op.Difficulty
+		}
+		return nil
+
 	default:
 		return errors.InternalError.WithFormat("invalid operation: %v", op.Type())
 	}

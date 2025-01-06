@@ -258,7 +258,7 @@ func (t *PersistentTracker) scanPeerAddresses(ctx context.Context, peer peer.Add
 			PeerAddr: addr,
 		})
 		if err != nil {
-			slog.InfoContext(ctx, "Unable to connect to peer", "peer", peer.ID, "error", err, "address", addr)
+			slog.DebugContext(ctx, "Unable to connect to peer", "peer", peer.ID, "error", err, "address", addr)
 			continue
 		}
 		t.db.Peer(peer.ID).Address(addr).Last.DidSucceed()
@@ -277,7 +277,7 @@ func (t *PersistentTracker) scanPeerServices(ctx context.Context, peer peer.Addr
 	t.db.Peer(peer.ID).Network(t.network).Service(creq.Service).Last.DidAttempt()
 	s, err := t.host.Connect(ctx, creq)
 	if err != nil {
-		slog.InfoContext(ctx, "Unable to connect to peer", "peer", peer.ID, "error", err)
+		slog.DebugContext(ctx, "Unable to connect to peer", "peer", peer.ID, "error", err)
 		return
 	}
 	t.db.Peer(peer.ID).Network(t.network).Service(creq.Service).Last.DidSucceed()
@@ -310,7 +310,7 @@ func (t *PersistentTracker) scanPeerServices(ctx context.Context, peer peer.Addr
 		t.db.Peer(peer.ID).Network(t.network).Service(svc).Last.DidAttempt()
 		_, err := t.host.Connect(ctx, &ConnectionRequest{Service: svc, PeerID: peer.ID})
 		if err != nil {
-			slog.InfoContext(ctx, "Unable to connect to peer", "peer", peer.ID, "error", err)
+			slog.DebugContext(ctx, "Unable to connect to peer", "peer", peer.ID, "error", err)
 			return
 		}
 		t.db.Peer(peer.ID).Network(t.network).Service(svc).Last.DidSucceed()

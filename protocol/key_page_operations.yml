@@ -53,3 +53,13 @@ UpdateAllowedKeyPageOperation:
       repeatable: true
       marshal-as: enum
       optional: true
+
+SetMiningParametersOperation:
+  union: { type: keyPageOperation }
+  fields:
+    - name: Enabled
+      type: bool
+      optional: true
+    - name: Difficulty
+      type: uint
+      optional: true
