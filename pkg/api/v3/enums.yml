@@ -29,6 +29,9 @@ ServiceType:
   Faucet:
     description: is the type of [Faucet]
     value: 9
+  Snapshot:
+    description: is the type of [SnapshotService]
+    value: 10
 
 QueryType:
   Default:
