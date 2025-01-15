@@ -9,7 +9,6 @@ import (
 	"io"
 
 	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
-
 	"github.com/cometbft/cometbft/types"
 	"github.com/cosmos/gogoproto/proto"
 	"gitlab.com/accumulatenetwork/core/schema/pkg/binary"
