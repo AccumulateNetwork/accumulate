@@ -1,4 +1,4 @@
-// Copyright 2024 The Accumulate Authors
+// Copyright 2025 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -229,5 +229,6 @@ func (s *Simulator) ViewAll(fn func(batch *database.Batch) error) error {
 }
 
 func (s *Simulator) Collect(partition string, file io.WriteSeeker, opts *database.CollectOptions) error {
-	return s.partitions[partition].nodes[0].database.Collect(file, protocol.PartitionUrl(partition), opts)
+	_, err := s.partitions[partition].nodes[0].database.Collect(file, protocol.PartitionUrl(partition), opts)
+	return err
 }

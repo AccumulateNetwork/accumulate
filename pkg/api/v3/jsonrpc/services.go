@@ -1,4 +1,4 @@
-// Copyright 2024 The Accumulate Authors
+// Copyright 2025 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -105,6 +105,22 @@ func (s NetworkService) networkStatus(ctx context.Context, params json.RawMessag
 		return formatResponse(nil, err)
 	}
 	return formatResponse(s.NetworkService.NetworkStatus(ctx, req.NetworkStatusOptions))
+}
+
+type SnapshotService struct{ api.SnapshotService }
+
+func (s SnapshotService) methods() jsonrpc2.MethodMap {
+	return jsonrpc2.MethodMap{
+		"list-snapshots": s.listSnapshots,
+	}
+}
+
+func (s SnapshotService) listSnapshots(ctx context.Context, params json.RawMessage) interface{} {
+	req, err := parseRequest[*message.ListSnapshotsRequest](params)
+	if err != nil {
+		return formatResponse(nil, err)
+	}
+	return formatResponse(s.SnapshotService.ListSnapshots(ctx, req.ListSnapshotsOptions))
 }
 
 type MetricsService struct{ api.MetricsService }

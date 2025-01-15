@@ -1,4 +1,4 @@
-// Copyright 2024 The Accumulate Authors
+// Copyright 2025 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -50,7 +50,7 @@ func BenchmarkCollect(b *testing.B) {
 	require.NoError(b, batch.Commit())
 
 	b.ResetTimer()
-	err := db.Collect(new(ioutil.Discard), nil, &database.CollectOptions{
+	_, err := db.Collect(new(ioutil.Discard), nil, &database.CollectOptions{
 		BuildIndex: true,
 	})
 	require.NoError(b, err)
@@ -281,7 +281,8 @@ func TestPreservationOfOldTransactions(t *testing.T) {
 
 	// Collect a snapshot
 	buf := new(ioutil.Buffer)
-	require.NoError(t, db.Collect(buf, nil, nil))
+	_, err = db.Collect(buf, nil, nil)
+	require.NoError(t, err)
 
 	// Restore the snapshot
 	db = database.OpenInMemory(nil)
