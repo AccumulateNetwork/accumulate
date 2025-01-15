@@ -1,4 +1,4 @@
-// Copyright 2024 The Accumulate Authors
+// Copyright 2025 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -60,6 +60,28 @@ func (r MessageRouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 		} else {
 			service.Argument = msg.Partition
 		}
+
+	case *message.ListSnapshotsRequest:
+		service.Type = api.ServiceTypeSnapshot
+
+		// Route to the requested node and partition
+		if msg.NodeID == "" {
+			return nil, errors.BadRequest.With("node ID is missing")
+		}
+		if msg.Partition == "" {
+			service.Argument = protocol.Directory
+		} else {
+			service.Argument = msg.Partition
+		}
+
+		// Return /p2p/{id}/acc/{service}:{partition}
+		c1, err := multiaddr.NewComponent("p2p", msg.NodeID)
+		if err != nil {
+			return nil, errors.BadRequest.WithFormat("build multiaddr: %w", err)
+		}
+		c2 := service.Multiaddr()
+
+		return c1.Encapsulate(c2), nil
 
 	case *message.ConsensusStatusRequest:
 		service.Type = api.ServiceTypeConsensus
