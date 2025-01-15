@@ -1,4 +1,4 @@
-// Copyright 2024 The Accumulate Authors
+// Copyright 2025 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -77,7 +77,7 @@ func (s *recordFileSet) Close() error {
 func (s *recordFileSet) Commit(view *databaseView, entries []*entryAndData) error {
 	rw := new(recordWriter)
 	rw.encBuf = poolBuffer.Get()
-	rw.enc = poolEncoder.Get()
+	rw.enc = poolEncoder.Get(rw.encBuf)
 	defer poolBuffer.Put(rw.encBuf)
 	defer poolEncoder.Put(rw.enc)
 
