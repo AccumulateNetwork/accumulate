@@ -1,4 +1,4 @@
-// Copyright 2024 The Accumulate Authors
+// Copyright 2025 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -13,16 +13,17 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/util/pool"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	"gitlab.com/accumulatenetwork/core/schema/pkg/binary"
 )
 
-var poolEncoder = binary.NewPointerPool[binary.Encoder]()
-var poolDecoder = binary.NewPointerPool[binary.Decoder]()
-var poolLocation = binary.NewPointerPool[recordLocation]()
-var poolBuffer = binary.NewPointerPool[bytes.Buffer]()
+var poolEncoder = binary.NewEncoderPool()
+var poolDecoder = binary.NewDecoderPool()
+var poolLocation = pool.New[recordLocation]()
+var poolBuffer = binary.NewBufferPool()
 
 type Database struct {
 	config

@@ -1,4 +1,4 @@
-// Copyright 2024 The Accumulate Authors
+// Copyright 2025 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -184,6 +184,7 @@ func (n *Node) listenAndServeHTTP(ctx context.Context, opts ListenOptions) error
 		ws, err := websocket.NewHandler(
 			message.ConsensusService{ConsensusService: n},
 			message.NetworkService{NetworkService: network},
+			message.SnapshotService{SnapshotService: network},
 			message.MetricsService{MetricsService: network},
 			message.Querier{Querier: network},
 			message.Submitter{Submitter: network},

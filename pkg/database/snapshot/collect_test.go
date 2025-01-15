@@ -1,4 +1,4 @@
-// Copyright 2024 The Accumulate Authors
+// Copyright 2025 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -79,7 +79,7 @@ func BenchmarkCollect(b *testing.B) {
 				require.NoError(b, err)
 				defer f.Close()
 
-				err = db.Collect(f, protocol.DnUrl(), nil)
+				_, err = db.Collect(f, protocol.DnUrl(), nil)
 				require.NoError(b, err)
 
 				runtime.ReadMemStats(&ms)

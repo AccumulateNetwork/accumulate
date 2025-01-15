@@ -1,4 +1,4 @@
-// Copyright 2024 The Accumulate Authors
+// Copyright 2025 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -7,6 +7,7 @@
 package block
 
 import (
+	"bytes"
 	stdbin "encoding/binary"
 	"errors"
 	"io"
@@ -66,7 +67,7 @@ func (it *recordFileIterator) Range(yield func(int, recordPos) bool) bool {
 	rd := it.file.file.AcquireRange(0, recordFileHeaderSize)
 	defer rd.Release()
 
-	dec := poolDecoder.Get()
+	dec := poolDecoder.Get(bytes.NewReader(nil))
 	defer poolDecoder.Put(dec)
 
 	var typ entryType

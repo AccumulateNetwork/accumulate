@@ -1,4 +1,4 @@
-// Copyright 2024 The Accumulate Authors
+// Copyright 2025 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -92,9 +92,6 @@ func (f *indexFile) get(hash [32]byte) (*recordLocation, bool) {
 		return nil, false
 	}
 
-	dec := poolDecoder.Get()
-	defer poolDecoder.Put(dec)
-
 	loc := poolLocation.Get()
 	offset := index * indexFileEntrySize
 	readLocation((*[32]byte)(data[offset+32:]), loc)
@@ -104,9 +101,6 @@ func (f *indexFile) get(hash [32]byte) (*recordLocation, bool) {
 func (f *indexFile) forEach(fn func([32]byte, *recordLocation) error) error {
 	h := f.file.Acquire()
 	defer h.Release()
-
-	dec := poolDecoder.Get()
-	defer poolDecoder.Put(dec)
 
 	var hash [64]byte
 	loc := new(recordLocation)
