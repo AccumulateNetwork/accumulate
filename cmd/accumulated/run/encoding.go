@@ -1,4 +1,4 @@
-// Copyright 2024 The Accumulate Authors
+// Copyright 2025 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -11,10 +11,11 @@ import (
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/core/schema/pkg/binary"
 	"gitlab.com/accumulatenetwork/core/schema/pkg/json"
+	"gitlab.com/accumulatenetwork/core/schema/pkg/widget"
 )
 
-var wMultiaddr = multiaddrWidget{}
-var wPeerID = peerIdWidget{}
+func wMultiaddr() widget.Widget[*multiaddr.Multiaddr] { return multiaddrWidget{} }
+func wPeerID() widget.Widget[*peer.ID]                { return peerIdWidget{} }
 
 type multiaddrWidget struct{}
 
