@@ -21,6 +21,9 @@ var wParameters = widget.ForComposite(widget.Fields[Parameters]{
 
 // Copy returns a copy of the Parameters.
 func (v *Parameters) Copy() *Parameters {
+	if v == nil {
+		return nil
+	}
 	var u = new(Parameters)
 	wParameters.CopyTo(u, v)
 	return u
@@ -53,6 +56,9 @@ func (branch) Type() nodeType { return nodeTypeBranch }
 
 // Copy returns a copy of the branch.
 func (v *branch) Copy() *branch {
+	if v == nil {
+		return nil
+	}
 	var u = new(branch)
 	wbranch.CopyTo(u, v)
 	return u
@@ -75,6 +81,9 @@ func (emptyNode) Type() nodeType { return nodeTypeEmpty }
 
 // Copy returns a copy of the emptyNode.
 func (v *emptyNode) Copy() *emptyNode {
+	if v == nil {
+		return nil
+	}
 	var u = new(emptyNode)
 	wemptyNode.CopyTo(u, v)
 	return u
@@ -99,6 +108,9 @@ var wleaf = widget.ForComposite(widget.Fields[leaf]{
 
 // Copy returns a copy of the leaf.
 func (v *leaf) Copy() *leaf {
+	if v == nil {
+		return nil
+	}
 	var u = new(leaf)
 	wleaf.CopyTo(u, v)
 	return u
@@ -182,6 +194,9 @@ var wstateData = widget.ForComposite(widget.Fields[stateData]{
 
 // Copy returns a copy of the stateData.
 func (v *stateData) Copy() *stateData {
+	if v == nil {
+		return nil
+	}
 	var u = new(stateData)
 	wstateData.CopyTo(u, v)
 	return u

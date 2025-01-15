@@ -1,4 +1,4 @@
-// Copyright 2024 The Accumulate Authors
+// Copyright 2025 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -70,6 +70,10 @@ type ConsensusService interface {
 type NetworkService interface {
 	// NetworkService returns the status of the network.
 	NetworkStatus(ctx context.Context, opts NetworkStatusOptions) (*NetworkStatus, error)
+}
+
+type SnapshotService interface {
+	ListSnapshots(ctx context.Context, opts ListSnapshotsOptions) ([]*SnapshotInfo, error)
 }
 
 type MetricsService interface {

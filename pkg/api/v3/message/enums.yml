@@ -22,6 +22,8 @@ Type:
     value: 0x09
   FaucetRequest:
     value: 0x0A
+  ListSnapshotsRequest:
+    value: 0x0B
 
   ErrorResponse:
     value: 0x20
@@ -45,6 +47,8 @@ Type:
     value: 0x29
   FaucetResponse:
     value: 0x2A
+  ListSnapshotsResponse:
+    value: 0x2B
 
   Event:
     value: 0x40

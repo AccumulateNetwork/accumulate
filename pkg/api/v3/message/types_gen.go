@@ -83,6 +83,18 @@ type FindServiceResponse struct {
 	extraData []byte
 }
 
+type ListSnapshotsRequest struct {
+	fieldsSet []bool
+	api.ListSnapshotsOptions
+	extraData []byte
+}
+
+type ListSnapshotsResponse struct {
+	fieldsSet []bool
+	Value     []*api.SnapshotInfo `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	extraData []byte
+}
+
 type MetricsRequest struct {
 	fieldsSet []bool
 	api.MetricsOptions
@@ -201,6 +213,10 @@ func (*FaucetResponse) Type() Type { return TypeFaucetResponse }
 func (*FindServiceRequest) Type() Type { return TypeFindServiceRequest }
 
 func (*FindServiceResponse) Type() Type { return TypeFindServiceResponse }
+
+func (*ListSnapshotsRequest) Type() Type { return TypeListSnapshotsRequest }
+
+func (*ListSnapshotsResponse) Type() Type { return TypeListSnapshotsResponse }
 
 func (*MetricsRequest) Type() Type { return TypeMetricsRequest }
 
@@ -385,6 +401,40 @@ func (v *FindServiceResponse) Copy() *FindServiceResponse {
 }
 
 func (v *FindServiceResponse) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *ListSnapshotsRequest) Copy() *ListSnapshotsRequest {
+	u := new(ListSnapshotsRequest)
+
+	u.ListSnapshotsOptions = *v.ListSnapshotsOptions.Copy()
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *ListSnapshotsRequest) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *ListSnapshotsResponse) Copy() *ListSnapshotsResponse {
+	u := new(ListSnapshotsResponse)
+
+	u.Value = make([]*api.SnapshotInfo, len(v.Value))
+	for i, v := range v.Value {
+		v := v
+		if v != nil {
+			u.Value[i] = (v).Copy()
+		}
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *ListSnapshotsResponse) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *MetricsRequest) Copy() *MetricsRequest {
 	u := new(MetricsRequest)
@@ -745,6 +795,27 @@ func (v *FindServiceRequest) Equal(u *FindServiceRequest) bool {
 }
 
 func (v *FindServiceResponse) Equal(u *FindServiceResponse) bool {
+	if len(v.Value) != len(u.Value) {
+		return false
+	}
+	for i := range v.Value {
+		if !((v.Value[i]).Equal(u.Value[i])) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (v *ListSnapshotsRequest) Equal(u *ListSnapshotsRequest) bool {
+	if !v.ListSnapshotsOptions.Equal(&u.ListSnapshotsOptions) {
+		return false
+	}
+
+	return true
+}
+
+func (v *ListSnapshotsResponse) Equal(u *ListSnapshotsResponse) bool {
 	if len(v.Value) != len(u.Value) {
 		return false
 	}
@@ -1377,6 +1448,100 @@ func (v *FindServiceResponse) IsValid() error {
 	}
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Value is missing")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_ListSnapshotsRequest = []string{
+	1: "Type",
+	2: "ListSnapshotsOptions",
+}
+
+func (v *ListSnapshotsRequest) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	writer.WriteValue(2, v.ListSnapshotsOptions.MarshalBinary)
+
+	_, _, err := writer.Reset(fieldNames_ListSnapshotsRequest)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *ListSnapshotsRequest) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if err := v.ListSnapshotsOptions.IsValid(); err != nil {
+		errs = append(errs, err.Error())
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_ListSnapshotsResponse = []string{
+	1: "Type",
+	2: "Value",
+}
+
+func (v *ListSnapshotsResponse) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(len(v.Value) == 0) {
+		for _, v := range v.Value {
+			writer.WriteValue(2, v.MarshalBinary)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_ListSnapshotsResponse)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *ListSnapshotsResponse) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Value is missing")
+	} else if len(v.Value) == 0 {
+		errs = append(errs, "field Value is not set")
 	}
 
 	switch len(errs) {
@@ -2501,6 +2666,78 @@ func (v *FindServiceResponse) UnmarshalFieldsFrom(reader *encoding.Reader) error
 	return nil
 }
 
+func (v *ListSnapshotsRequest) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *ListSnapshotsRequest) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *ListSnapshotsRequest) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	reader.ReadValue(2, v.ListSnapshotsOptions.UnmarshalBinaryFrom)
+
+	seen, err := reader.Reset(fieldNames_ListSnapshotsRequest)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *ListSnapshotsResponse) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *ListSnapshotsResponse) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *ListSnapshotsResponse) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	for {
+		if x := new(api.SnapshotInfo); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+			v.Value = append(v.Value, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_ListSnapshotsResponse)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *MetricsRequest) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -3135,6 +3372,17 @@ func init() {
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("nodeID", "string"),
+		encoding.NewTypeField("partition", "string"),
+	}, "ListSnapshotsRequest", "listSnapshotsRequest")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("value", "api.SnapshotInfo[]"),
+	}, "ListSnapshotsResponse", "listSnapshotsResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
 		encoding.NewTypeField("partition", "string"),
 		encoding.NewTypeField("span", "uint64"),
 	}, "MetricsRequest", "metricsRequest")
@@ -3373,6 +3621,38 @@ func (v *FindServiceResponse) MarshalJSON() ([]byte, error) {
 	}{}
 	u.Type = v.Type()
 	u.Value = v.Value
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *ListSnapshotsRequest) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      Type    `json:"type"`
+		NodeID    string  `json:"nodeID,omitempty"`
+		Partition string  `json:"partition,omitempty"`
+		ExtraData *string `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.ListSnapshotsOptions.NodeID) == 0) {
+		u.NodeID = v.ListSnapshotsOptions.NodeID
+	}
+	if !(len(v.ListSnapshotsOptions.Partition) == 0) {
+		u.Partition = v.ListSnapshotsOptions.Partition
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *ListSnapshotsResponse) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      Type                                 `json:"type"`
+		Value     encoding.JsonList[*api.SnapshotInfo] `json:"value,omitempty"`
+		ExtraData *string                              `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.Value) == 0) {
+		u.Value = v.Value
+	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
@@ -3857,6 +4137,55 @@ func (v *FindServiceResponse) UnmarshalJSON(data []byte) error {
 		Type      Type                                      `json:"type"`
 		Value     encoding.JsonList[*api.FindServiceResult] `json:"value"`
 		ExtraData *string                                   `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Value = v.Value
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Value = u.Value
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *ListSnapshotsRequest) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      Type    `json:"type"`
+		NodeID    string  `json:"nodeID,omitempty"`
+		Partition string  `json:"partition,omitempty"`
+		ExtraData *string `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.NodeID = v.ListSnapshotsOptions.NodeID
+	u.Partition = v.ListSnapshotsOptions.Partition
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.ListSnapshotsOptions.NodeID = u.NodeID
+	v.ListSnapshotsOptions.Partition = u.Partition
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *ListSnapshotsResponse) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      Type                                 `json:"type"`
+		Value     encoding.JsonList[*api.SnapshotInfo] `json:"value,omitempty"`
+		ExtraData *string                              `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Value = v.Value
