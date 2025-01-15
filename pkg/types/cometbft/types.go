@@ -1,3 +1,8 @@
+// Copyright 2025 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
 package cometbft
 
 import (
@@ -63,7 +68,7 @@ func (b *Block) FromProto(c cmtproto.Block) {
 	if err != nil {
 		panic(err)
 	}
-	*(*types.Block)(b) = *d
+	*(*types.Block)(b) = *d //nolint:govet
 }
 
 func (b *Block) Copy() *Block {
