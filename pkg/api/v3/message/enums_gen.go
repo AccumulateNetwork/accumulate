@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -44,6 +44,9 @@ const TypeSubscribeRequest Type = 9
 // TypeFaucetRequest .
 const TypeFaucetRequest Type = 10
 
+// TypeListSnapshotsRequest .
+const TypeListSnapshotsRequest Type = 11
+
 // TypeErrorResponse .
 const TypeErrorResponse Type = 32
 
@@ -77,6 +80,9 @@ const TypeSubscribeResponse Type = 41
 // TypeFaucetResponse .
 const TypeFaucetResponse Type = 42
 
+// TypeListSnapshotsResponse .
+const TypeListSnapshotsResponse Type = 43
+
 // TypeEvent .
 const TypeEvent Type = 64
 
@@ -96,7 +102,7 @@ func (v Type) GetEnumValue() uint64 { return uint64(v) }
 func (v *Type) SetEnumValue(id uint64) bool {
 	u := Type(id)
 	switch u {
-	case TypeNodeInfoRequest, TypeFindServiceRequest, TypeConsensusStatusRequest, TypeNetworkStatusRequest, TypeMetricsRequest, TypeQueryRequest, TypeSubmitRequest, TypeValidateRequest, TypeSubscribeRequest, TypeFaucetRequest, TypeErrorResponse, TypeNodeInfoResponse, TypeFindServiceResponse, TypeConsensusStatusResponse, TypeNetworkStatusResponse, TypeMetricsResponse, TypeRecordResponse, TypeSubmitResponse, TypeValidateResponse, TypeSubscribeResponse, TypeFaucetResponse, TypeEvent, TypePrivateSequenceRequest, TypePrivateSequenceResponse, TypeAddressed:
+	case TypeNodeInfoRequest, TypeFindServiceRequest, TypeConsensusStatusRequest, TypeNetworkStatusRequest, TypeMetricsRequest, TypeQueryRequest, TypeSubmitRequest, TypeValidateRequest, TypeSubscribeRequest, TypeFaucetRequest, TypeListSnapshotsRequest, TypeErrorResponse, TypeNodeInfoResponse, TypeFindServiceResponse, TypeConsensusStatusResponse, TypeNetworkStatusResponse, TypeMetricsResponse, TypeRecordResponse, TypeSubmitResponse, TypeValidateResponse, TypeSubscribeResponse, TypeFaucetResponse, TypeListSnapshotsResponse, TypeEvent, TypePrivateSequenceRequest, TypePrivateSequenceResponse, TypeAddressed:
 		*v = u
 		return true
 	}
@@ -130,6 +136,8 @@ func (v Type) String() string {
 		return "subscribeRequest"
 	case TypeFaucetRequest:
 		return "faucetRequest"
+	case TypeListSnapshotsRequest:
+		return "listSnapshotsRequest"
 	case TypeErrorResponse:
 		return "errorResponse"
 	case TypeNodeInfoResponse:
@@ -152,6 +160,8 @@ func (v Type) String() string {
 		return "subscribeResponse"
 	case TypeFaucetResponse:
 		return "faucetResponse"
+	case TypeListSnapshotsResponse:
+		return "listSnapshotsResponse"
 	case TypeEvent:
 		return "event"
 	case TypePrivateSequenceRequest:
@@ -190,6 +200,8 @@ func TypeByName(name string) (Type, bool) {
 		return TypeSubscribeRequest, true
 	case "faucetrequest":
 		return TypeFaucetRequest, true
+	case "listsnapshotsrequest":
+		return TypeListSnapshotsRequest, true
 	case "errorresponse":
 		return TypeErrorResponse, true
 	case "nodeinforesponse":
@@ -212,6 +224,8 @@ func TypeByName(name string) (Type, bool) {
 		return TypeSubscribeResponse, true
 	case "faucetresponse":
 		return TypeFaucetResponse, true
+	case "listsnapshotsresponse":
+		return TypeListSnapshotsResponse, true
 	case "event":
 		return TypeEvent, true
 	case "privatesequencerequest":

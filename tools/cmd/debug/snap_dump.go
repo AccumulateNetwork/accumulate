@@ -1,4 +1,4 @@
-// Copyright 2024 The Accumulate Authors
+// Copyright 2025 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -23,6 +23,7 @@ import (
 	sv1 "gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 	sv2 "gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/cometbft"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
@@ -143,6 +144,16 @@ func dumpV2(f ioutil.SectionReader) {
 				check(err)
 				fmt.Printf("  %x in section %d offset %d\n", e.Key[:8], e.Section, e.Offset)
 			}
+
+		case sv2.SectionTypeConsensus:
+			rd, err := s.Open()
+			check(err)
+
+			doc := new(cometbft.GenesisDoc)
+			check(doc.UnmarshalBinaryFrom(rd))
+			b, err := json.MarshalIndent(doc, "  ", "  ")
+			check(err)
+			fmt.Printf("  %s\n", b)
 		}
 	}
 }
