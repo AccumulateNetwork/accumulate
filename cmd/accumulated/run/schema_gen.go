@@ -882,7 +882,7 @@ func init() {
 				},
 			},
 			Underlying: schema.TypeReferenceFor[multiaddr.Multiaddr](),
-			Encoder:    schema.WidgetExternalEncoder[Multiaddr]{W: wMultiaddr},
+			Encoder:    schema.WidgetExternalEncoder(wMultiaddr),
 		}).SetGoType()
 
 	sNetworkService = schema.WithMethods[*NetworkService, *NetworkService](&schema.CompositeType{
@@ -982,7 +982,7 @@ func init() {
 				},
 			},
 			Underlying: schema.TypeReferenceFor[peer.ID](),
-			Encoder:    schema.WidgetExternalEncoder[PeerID]{W: wPeerID},
+			Encoder:    schema.WidgetExternalEncoder(wPeerID),
 		}).SetGoType()
 
 	sPrivateKey = schema.WithUnionMethods[PrivateKey, PrivateKeyType](
@@ -1316,7 +1316,7 @@ func init() {
 			},
 			{
 				Name:        "Schedule",
-				Description: "is the schedule for capturing snapshots",
+				Description: "is the schedule for automatically capturing snapshots",
 				Optional:    true,
 				Type: &schema.PointerType{
 					TypeBase: schema.TypeBase{},

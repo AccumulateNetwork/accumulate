@@ -1,4 +1,4 @@
-// Copyright 2024 The Accumulate Authors
+// Copyright 2025 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -315,7 +315,7 @@ func (g genesis) apply(opts *simFactory) error {
 				}
 
 				buf := new(ioutil.Buffer)
-				err = db.Collect(buf, nil, &database.CollectOptions{
+				_, err = db.Collect(buf, nil, &database.CollectOptions{
 					Predicate: func(r record.Record) (bool, error) {
 						// Do not create a BPT
 						if r.Key().Get(0) == "BPT" {
