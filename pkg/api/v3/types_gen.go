@@ -21,7 +21,9 @@ import (
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 	errors2 "gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/cometbft"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -232,6 +234,13 @@ type LastBlock struct {
 	extraData             []byte
 }
 
+type ListSnapshotsOptions struct {
+	fieldsSet []bool
+	NodeID    string `json:"nodeID,omitempty" form:"nodeID" query:"nodeID" validate:"required"`
+	Partition string `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
+	extraData []byte
+}
+
 type MajorBlockRecord struct {
 	fieldsSet     []bool
 	Index         uint64                          `json:"index,omitempty" form:"index" query:"index" validate:"required"`
@@ -397,6 +406,13 @@ type SignatureSetRecord struct {
 	Account    protocol.Account                                `json:"account,omitempty" form:"account" query:"account" validate:"required"`
 	Signatures *RecordRange[*MessageRecord[messaging.Message]] `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
 	extraData  []byte
+}
+
+type SnapshotInfo struct {
+	fieldsSet     []bool
+	Header        *snapshot.Header     `json:"header,omitempty" form:"header" query:"header" validate:"required"`
+	ConsensusInfo *cometbft.GenesisDoc `json:"consensusInfo,omitempty" form:"consensusInfo" query:"consensusInfo" validate:"required"`
+	extraData     []byte
 }
 
 type Submission struct {
@@ -1013,6 +1029,21 @@ func (v *LastBlock) Copy() *LastBlock {
 
 func (v *LastBlock) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *ListSnapshotsOptions) Copy() *ListSnapshotsOptions {
+	u := new(ListSnapshotsOptions)
+
+	u.NodeID = v.NodeID
+	u.Partition = v.Partition
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *ListSnapshotsOptions) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *MajorBlockRecord) Copy() *MajorBlockRecord {
 	u := new(MajorBlockRecord)
 
@@ -1440,6 +1471,25 @@ func (v *SignatureSetRecord) Copy() *SignatureSetRecord {
 }
 
 func (v *SignatureSetRecord) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *SnapshotInfo) Copy() *SnapshotInfo {
+	u := new(SnapshotInfo)
+
+	if v.Header != nil {
+		u.Header = (v.Header).Copy()
+	}
+	if v.ConsensusInfo != nil {
+		u.ConsensusInfo = (v.ConsensusInfo).Copy()
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *SnapshotInfo) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *Submission) Copy() *Submission {
 	u := new(Submission)
@@ -2107,6 +2157,17 @@ func (v *LastBlock) Equal(u *LastBlock) bool {
 	return true
 }
 
+func (v *ListSnapshotsOptions) Equal(u *ListSnapshotsOptions) bool {
+	if !(v.NodeID == u.NodeID) {
+		return false
+	}
+	if !(v.Partition == u.Partition) {
+		return false
+	}
+
+	return true
+}
+
 func (v *MajorBlockRecord) Equal(u *MajorBlockRecord) bool {
 	if !(v.Index == u.Index) {
 		return false
@@ -2512,6 +2573,27 @@ func (v *SignatureSetRecord) Equal(u *SignatureSetRecord) bool {
 	case v.Signatures == nil || u.Signatures == nil:
 		return false
 	case !((v.Signatures).Equal(u.Signatures)):
+		return false
+	}
+
+	return true
+}
+
+func (v *SnapshotInfo) Equal(u *SnapshotInfo) bool {
+	switch {
+	case v.Header == u.Header:
+		// equal
+	case v.Header == nil || u.Header == nil:
+		return false
+	case !((v.Header).Equal(u.Header)):
+		return false
+	}
+	switch {
+	case v.ConsensusInfo == u.ConsensusInfo:
+		// equal
+	case v.ConsensusInfo == nil || u.ConsensusInfo == nil:
+		return false
+	case !((v.ConsensusInfo).Equal(u.ConsensusInfo)):
 		return false
 	}
 
@@ -4113,6 +4195,58 @@ func (v *LastBlock) IsValid() error {
 	}
 }
 
+var fieldNames_ListSnapshotsOptions = []string{
+	1: "NodeID",
+	2: "Partition",
+}
+
+func (v *ListSnapshotsOptions) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(len(v.NodeID) == 0) {
+		writer.WriteString(1, v.NodeID)
+	}
+	if !(len(v.Partition) == 0) {
+		writer.WriteString(2, v.Partition)
+	}
+
+	_, _, err := writer.Reset(fieldNames_ListSnapshotsOptions)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *ListSnapshotsOptions) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field NodeID is missing")
+	} else if len(v.NodeID) == 0 {
+		errs = append(errs, "field NodeID is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Partition is missing")
+	} else if len(v.Partition) == 0 {
+		errs = append(errs, "field Partition is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_MajorBlockRecord = []string{
 	1: "RecordType",
 	2: "Index",
@@ -5317,6 +5451,58 @@ func (v *SignatureSetRecord) IsValid() error {
 		errs = append(errs, "field Signatures is missing")
 	} else if v.Signatures == nil {
 		errs = append(errs, "field Signatures is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_SnapshotInfo = []string{
+	1: "Header",
+	2: "ConsensusInfo",
+}
+
+func (v *SnapshotInfo) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Header == nil) {
+		writer.WriteValue(1, v.Header.MarshalBinary)
+	}
+	if !(v.ConsensusInfo == nil) {
+		writer.WriteValue(2, v.ConsensusInfo.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_SnapshotInfo)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *SnapshotInfo) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Header is missing")
+	} else if v.Header == nil {
+		errs = append(errs, "field Header is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field ConsensusInfo is missing")
+	} else if v.ConsensusInfo == nil {
+		errs = append(errs, "field ConsensusInfo is not set")
 	}
 
 	switch len(errs) {
@@ -6540,6 +6726,32 @@ func (v *LastBlock) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *ListSnapshotsOptions) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *ListSnapshotsOptions) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadString(1); ok {
+		v.NodeID = x
+	}
+	if x, ok := reader.ReadString(2); ok {
+		v.Partition = x
+	}
+
+	seen, err := reader.Reset(fieldNames_ListSnapshotsOptions)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *MajorBlockRecord) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -7255,6 +7467,32 @@ func (v *SignatureSetRecord) UnmarshalFieldsFrom(reader *encoding.Reader) error 
 	return nil
 }
 
+func (v *SnapshotInfo) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *SnapshotInfo) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x := new(snapshot.Header); reader.ReadValue(1, x.UnmarshalBinaryFrom) {
+		v.Header = x
+	}
+	if x := new(cometbft.GenesisDoc); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+		v.ConsensusInfo = x
+	}
+
+	seen, err := reader.Reset(fieldNames_SnapshotInfo)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *Submission) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -7599,6 +7837,11 @@ func init() {
 	}, "LastBlock", "lastBlock")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("nodeID", "string"),
+		encoding.NewTypeField("partition", "string"),
+	}, "ListSnapshotsOptions", "listSnapshotsOptions")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("recordType", "string"),
 		encoding.NewTypeField("index", "uint64"),
 		encoding.NewTypeField("time", "string"),
@@ -7733,6 +7976,11 @@ func init() {
 		encoding.NewTypeField("account", "protocol.Account"),
 		encoding.NewTypeField("signatures", "RecordRange[*MessageRecord[messaging.Message]]"),
 	}, "SignatureSetRecord", "signatureSetRecord")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("header", "snapshot.Header"),
+		encoding.NewTypeField("consensusInfo", "cometbft.GenesisDoc"),
+	}, "SnapshotInfo", "snapshotInfo")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("status", "protocol.TransactionStatus"),

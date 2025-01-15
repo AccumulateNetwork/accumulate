@@ -1,4 +1,4 @@
-// Copyright 2024 The Accumulate Authors
+// Copyright 2025 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -18,6 +18,7 @@ import (
 	"github.com/cometbft/cometbft/node"
 	"github.com/cometbft/cometbft/types"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/cometbft"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -59,7 +60,7 @@ func ConvertSnapshotToJson(snap []byte) (*types.GenesisDoc, error) {
 	if err != nil {
 		return nil, err
 	}
-	p := new(consensusDoc)
+	p := new(cometbft.GenesisDoc)
 	err = p.UnmarshalBinaryFrom(rd)
 	if err != nil {
 		return nil, err
