@@ -72,7 +72,7 @@ require (
 	github.com/sergi/go-diff v1.2.0
 	github.com/ulikunitz/xz v0.5.11
 	github.com/vektra/mockery/v2 v2.42.3
-	gitlab.com/accumulatenetwork/core/schema v0.2.1-0.20240713035306-1121dbc75e5d
+	gitlab.com/accumulatenetwork/core/schema v0.2.1-0.20241205222729-1b1e71c42b78
 	gitlab.com/firelizzard/go-script v0.0.0-20240404234115-d5f0a716003d
 	go.opentelemetry.io/otel v1.27.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.27.0
@@ -377,7 +377,7 @@ require (
 	github.com/uudashr/gocognit v1.1.2 // indirect
 	github.com/yagipy/maintidx v1.0.0 // indirect
 	github.com/yeya24/promlinter v0.2.0 // indirect
-	gitlab.com/accumulatenetwork/utils/jsonrpc v0.1.0
+	gitlab.com/accumulatenetwork/utils/jsonrpc v0.1.1-0.20240904211734-7057029b6ad1
 	gitlab.com/bosi/decorder v0.4.1 // indirect
 	go.etcd.io/bbolt v1.3.6
 	go.uber.org/multierr v1.11.0 // indirect

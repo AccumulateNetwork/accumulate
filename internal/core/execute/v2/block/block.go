@@ -1,4 +1,4 @@
-// Copyright 2024 The Accumulate Authors
+// Copyright 2025 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -38,9 +38,7 @@ func (s *closedBlock) ChangeSet() record.Record    { return s.Batch }
 func (s *closedBlock) IsEmpty() bool               { return s.State.Empty() }
 
 func (s *closedBlock) DidCompleteMajorBlock() (uint64, time.Time, bool) {
-	return s.State.MakeMajorBlock,
-		s.State.MakeMajorBlockTime,
-		s.State.MakeMajorBlock > 0
+	return s.didOpenMajorBlock()
 }
 
 func (s *closedBlock) DidUpdateValidators() ([]*execute.ValidatorUpdate, bool) {
