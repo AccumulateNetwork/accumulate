@@ -216,7 +216,7 @@ func (x *Executor) finalizeBlock(block *Block) error {
 	if err != nil {
 		// We didn't write anything so don't break if we get an error. This
 		// could be masking a consensus error but I'm too tired to care.
-		x.logger.Error("An error occured while sending synthetic transactions", "error", err, "block", block.Index, "is-leader", block.IsLeader)
+		x.logger.Error("An error occurred while sending synthetic transactions", "error", err, "block", block.Index, "is-leader", block.IsLeader)
 	}
 
 	return nil
