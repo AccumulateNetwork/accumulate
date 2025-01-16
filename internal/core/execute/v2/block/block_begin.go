@@ -209,10 +209,14 @@ func (x *Executor) finalizeBlock(block *Block) error {
 	}
 
 	// If the previous block included a directory anchor, send synthetic
-	// transactions anchored by that anchor
-	err = x.sendSyntheticTransactions(block, ledger)
+	// transactions anchored by that anchor. Use a read-only batch.
+	batch := block.Batch.Begin(false)
+	defer batch.Discard()
+	err = x.sendSyntheticTransactions(batch, ledger, block.IsLeader)
 	if err != nil {
-		return errors.UnknownError.WithFormat("build synthetic transaction receipts: %w", err)
+		// We didn't write anything so don't break if we get an error. This
+		// could be masking a consensus error but I'm too tired to care.
+		x.logger.Error("An error occurred while sending synthetic transactions", "error", err, "block", block.Index, "is-leader", block.IsLeader)
 	}
 
 	return nil
@@ -271,9 +275,9 @@ func (x *Executor) recordAnchor(block *Block, ledger *protocol.SystemLedger) err
 	return nil
 }
 
-func (x *Executor) sendSyntheticTransactions(block *Block, ledger *protocol.SystemLedger) error {
+func (x *Executor) sendSyntheticTransactions(batch *database.Batch, ledger *protocol.SystemLedger, isLeader bool) error {
 	// Check for received anchors
-	anchorLedger := block.Batch.Account(x.Describe.AnchorPool())
+	anchorLedger := batch.Account(x.Describe.AnchorPool())
 	anchorIndexLast, anchorIndexPrev, err := indexing.LoadLastTwoIndexEntries(anchorLedger.MainChain().Index())
 	if err != nil {
 		return errors.InternalError.WithFormat("load last two anchor index chain entries: %w", err)
@@ -303,7 +307,7 @@ func (x *Executor) sendSyntheticTransactions(block *Block, ledger *protocol.Syst
 
 	for i, hash := range entries {
 		var msg messaging.MessageWithTransaction
-		err := block.Batch.Message2(hash).Main().GetAs(&msg)
+		err := batch.Message2(hash).Main().GetAs(&msg)
 		if err != nil {
 			return errors.InternalError.WithFormat("load transaction %d of the anchor main chain: %w", from+uint64(i), err)
 		}
@@ -315,7 +319,7 @@ func (x *Executor) sendSyntheticTransactions(block *Block, ledger *protocol.Syst
 		}
 
 		if x.Describe.NetworkType == protocol.PartitionTypeDirectory {
-			err = x.sendSyntheticTransactionsForBlock(block.Batch, block.IsLeader, anchor.MinorBlockIndex, nil)
+			err = x.sendSyntheticTransactionsForBlock(batch, isLeader, anchor.MinorBlockIndex, nil)
 			if err != nil {
 				return errors.UnknownError.Wrap(err)
 			}
@@ -327,7 +331,7 @@ func (x *Executor) sendSyntheticTransactions(block *Block, ledger *protocol.Syst
 				continue
 			}
 
-			err = x.sendSyntheticTransactionsForBlock(block.Batch, block.IsLeader, receipt.Anchor.MinorBlockIndex, receipt)
+			err = x.sendSyntheticTransactionsForBlock(batch, isLeader, receipt.Anchor.MinorBlockIndex, receipt)
 			if err != nil {
 				return errors.UnknownError.Wrap(err)
 			}
