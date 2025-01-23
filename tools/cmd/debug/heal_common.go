@@ -261,6 +261,13 @@ func (h *healer) heal(args []string) {
 	heal:
 		for _, src := range h.net.Status.Network.Partitions {
 			for _, dst := range h.net.Status.Network.Partitions {
+				// Stopped?
+				select {
+				default:
+				case <-ctx.Done():
+					return
+				}
+
 				h.healSequence(h, src, dst)
 			}
 		}
@@ -268,7 +275,9 @@ func (h *healer) heal(args []string) {
 		// Heal continuously?
 		if healContinuous {
 			color.Yellow("Healing complete, sleeping for a minute")
-			time.Sleep(time.Minute)
+			ctx, cancel := context.WithTimeout(ctx, time.Minute)
+			defer cancel()
+			<-ctx.Done()
 			h.Reset()
 			goto heal
 		}
