@@ -246,8 +246,8 @@ func TestFormatAC3(t *testing.T) {
 	require.NoError(t, err)
 	//AC36QP3SoTKgwfjgfMsqzJk9tGoDFeqMSc67jz1EpH61rGzEUJ7J
 	t.Logf("seed: %x", block.Bytes)
-	t.Logf(pk.String())
-	t.Logf(pk.PublicKey.String())
+	t.Logf("%s", pk.String())
+	t.Logf("%s", pk.PublicKey.String())
 	kh, _ := pk.PublicKey.GetPublicKeyHash()
 	t.Logf("key hash: %x", kh)
 	t.Logf("%x", pk.PublicKey.Key)
@@ -261,8 +261,8 @@ func TestFormatAC2(t *testing.T) {
 
 	pk := FromEcdsaPrivateKey(ecdsaPrivKey)
 	t.Logf("seed: %x", pk.Key)
-	t.Logf(pk.String())
-	t.Logf(pk.PublicKey.String())
+	t.Logf("%s", pk.String())
+	t.Logf("%s", pk.PublicKey.String())
 	kh, _ := pk.PublicKey.GetPublicKeyHash()
 	t.Logf("%x", pk.PublicKey.Key)
 	t.Logf("key hash: %x", kh)
