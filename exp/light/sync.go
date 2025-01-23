@@ -57,9 +57,24 @@ func (c *Client) PullAccountWithChains(ctx context.Context, acctUrl *url.URL, pr
 		return errors.UnknownError.WithFormat("query account chains: %w", err)
 	}
 
+	chains := map[string]*api.ChainRecord{}
+	indexOf := map[*api.ChainRecord]*api.ChainRecord{}
+	for _, chain := range r2.Records {
+		chains[chain.Name] = chain
+	}
+	for _, chain := range r2.Records {
+		if !strings.HasSuffix(chain.Name, "-index") {
+			continue
+		}
+		indexOf[chain] = chains[strings.TrimSuffix(chain.Name, "-index")]
+	}
+
 	starts := map[string]uint64{}
 	total := map[string]uint64{}
 	for _, state := range r2.Records {
+		if state.IndexOf == nil {
+			state.IndexOf = indexOf[state]
+		}
 		if !predicate(state) {
 			continue
 		}
