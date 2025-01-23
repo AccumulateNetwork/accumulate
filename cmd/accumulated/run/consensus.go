@@ -309,7 +309,7 @@ func convertKeyToComet(inst *Instance, key PrivateKey) (tmcrypto.PrivKey, error)
 	case protocol.SignatureTypeED25519:
 		return tmed25519.PrivKey(sk), nil
 	default:
-		return nil, errors.BadRequest.With("unsupported key type %v", addr.GetType())
+		return nil, errors.BadRequest.WithFormat("unsupported key type %v", addr.GetType())
 	}
 }
 
@@ -384,7 +384,7 @@ func cmtPeerAddress(addr multiaddr.Multiaddr) (string, error) {
 	case multihash.SHA2_256:
 		hash = pub.Digest[:tmhash.TruncatedSize]
 	default:
-		return "", errors.BadRequest.With("unsupported multihash type %v", pub.Name)
+		return "", errors.BadRequest.WithFormat("unsupported multihash type %v", pub.Name)
 	}
 	return tmp2p.IDAddressString(tmp2p.ID(hex.EncodeToString(hash)), fmt.Sprintf("%s:%s", host, port)), nil
 }

@@ -29,7 +29,7 @@ func (r *PromisedOf[T]) Resolve(v any) error {
 	u, ok := v.(T)
 	if !ok {
 		var z T
-		return errors.Conflict.With("want %T, got %T", z, v)
+		return errors.Conflict.WithFormat("want %T, got %T", z, v)
 	}
 	r.resolve(u)
 	return nil

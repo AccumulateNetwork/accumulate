@@ -113,6 +113,15 @@ func (c *Chain2) Anchor() ([]byte, error) {
 }
 
 // AnchorAt calculates the anchor of the chain at the given height.
+func (c *Chain2) AnchorAt(height uint64) ([]byte, error) {
+	ms, err := c.State(int64(height))
+	if err != nil {
+		return nil, err
+	}
+	return ms.Anchor(), nil
+}
+
+// AnchorAt calculates the anchor of the chain at the given height.
 func (c *Chain) AnchorAt(height uint64) ([]byte, error) {
 	ms, err := c.State(int64(height))
 	if err != nil {
