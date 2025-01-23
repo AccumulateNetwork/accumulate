@@ -1,4 +1,4 @@
-// Copyright 2024 The Accumulate Authors
+// Copyright 2025 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -113,7 +113,7 @@ func resetConsensus(_ *cobra.Command, args []string) {
 		defer tick.Stop()
 
 		fmt.Println("Collecting...")
-		err = db.Collect(buf, partUrl, &coredb.CollectOptions{
+		_, err = db.Collect(buf, partUrl, &coredb.CollectOptions{
 			// BuildIndex: true,
 			Metrics: &metrics,
 			Predicate: func(r database.Record) (bool, error) {

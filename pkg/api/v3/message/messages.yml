@@ -33,6 +33,12 @@ NetworkStatusRequest:
     - type: api.NetworkStatusOptions
       marshal-as: reference
 
+ListSnapshotsRequest:
+  union: { type: message }
+  fields:
+    - type: api.ListSnapshotsOptions
+      marshal-as: reference
+
 MetricsRequest:
   union: { type: message }
   fields:
@@ -126,6 +132,15 @@ NetworkStatusResponse:
       type: api.NetworkStatus
       marshal-as: reference
       pointer: true
+
+ListSnapshotsResponse:
+  union: { type: message }
+  fields:
+    - name: Value
+      type: api.SnapshotInfo
+      repeatable: true
+      pointer: true
+      marshal-as: reference
 
 MetricsResponse:
   union: { type: message }

@@ -467,7 +467,7 @@ Service:
           description: is the directory to store snapshots in
           type: string
         - name: Schedule
-          description: is the schedule for capturing snapshots
+          description: is the schedule for automatically capturing snapshots
           type: '*network.CronSchedule'
           optional: true
         - name: RetainCount

@@ -1,4 +1,4 @@
-// Copyright 2024 The Accumulate Authors
+// Copyright 2025 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -224,7 +224,7 @@ func prepareGenesis(cmd *cobra.Command, args []string) {
 	// Collect
 	var metrics coredb.CollectMetrics
 	fmt.Println("Collecting into", args[0])
-	err = db.Collect(file, nil, &coredb.CollectOptions{
+	_, err = db.Collect(file, nil, &coredb.CollectOptions{
 		Metrics: &metrics,
 		Predicate: func(r database.Record) (bool, error) {
 			select {

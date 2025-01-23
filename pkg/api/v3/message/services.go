@@ -1,4 +1,4 @@
-// Copyright 2024 The Accumulate Authors
+// Copyright 2025 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -139,6 +139,25 @@ func (s NetworkService) networkStatus(c *call[*NetworkStatusRequest]) {
 		return
 	}
 	c.Write(&NetworkStatusResponse{Value: res})
+}
+
+// SnapshotService forwards [ListSnapshotsRequest]s to a [api.SnapshotService].
+type SnapshotService struct {
+	api.SnapshotService
+}
+
+func (s SnapshotService) methods() serviceMethodMap {
+	typ, fn := makeServiceMethod(s.ListSnapshots)
+	return serviceMethodMap{typ: fn}
+}
+
+func (s SnapshotService) ListSnapshots(c *call[*ListSnapshotsRequest]) {
+	res, err := s.SnapshotService.ListSnapshots(c.context, c.params.ListSnapshotsOptions)
+	if err != nil {
+		c.Write(&ErrorResponse{Error: errors.UnknownError.Wrap(err).(*errors.Error)})
+		return
+	}
+	c.Write(&ListSnapshotsResponse{Value: res})
 }
 
 // MetricsService forwards [MetricsRequest]s to a [api.MetricsService].
