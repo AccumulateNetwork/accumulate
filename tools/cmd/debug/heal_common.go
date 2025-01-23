@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
@@ -21,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/exp/apiutil"
 	"gitlab.com/accumulatenetwork/accumulate/exp/light"
@@ -48,31 +50,33 @@ var cmdHeal = &cobra.Command{
 var flagMaxResponseAge time.Duration = time.Minute
 
 func init() {
-	lightDb = filepath.Join(currentUser.HomeDir, ".accumulate", "cache", "light.db")
-
 	cmd.AddCommand(cmdHeal)
 
-	cmdHeal.PersistentFlags().StringVar(&cachedScan, "cached-scan", "", "A cached network scan")
+	healerFlags(cmdHeal)
 	cmdHeal.PersistentFlags().BoolVarP(&pretend, "pretend", "n", false, "Do not submit envelopes, only scan")
 	cmdHeal.PersistentFlags().BoolVar(&waitForTxn, "wait", false, "Wait for the message to finalize (defaults to true for heal synth)")
 	cmdHeal.PersistentFlags().BoolVar(&healContinuous, "continuous", false, "Run healing in a loop every minute")
-	cmdHeal.PersistentFlags().StringVar(&peerDb, "peer-db", "", "Track peers using a persistent database")
 	cmdHeal.PersistentFlags().StringVar(&pprof, "pprof", "", "Address to run net/http/pprof on")
-	cmdHeal.PersistentFlags().BoolVar(&debug, "debug", false, "Debug network requests")
-	cmdHealAnchor.PersistentFlags().DurationVar(&flagMaxResponseAge, "max-response-age", flagMaxResponseAge, "Maximum age of a response before it is considered too stale to use")
 	cmdHealSynth.PersistentFlags().StringVar(&lightDb, "light-db", lightDb, "Light client database for persisting chain data")
 
-	_ = cmdHeal.MarkFlagFilename("cached-scan", ".json")
+	_ = cmdHealSynth.MarkFlagFilename("light-db", ".db")
+}
 
-	cmdHeal.PersistentPreRun = func(cmd *cobra.Command, args []string) {
+func healerFlags(cmd *cobra.Command) {
+	cmd.PersistentFlags().StringVar(&cachedScan, "cached-scan", "", "A cached network scan")
+	cmd.PersistentFlags().StringVar(&peerDb, "peer-db", "", "Track peers using a persistent database")
+	cmd.PersistentFlags().BoolVar(&debug, "debug", false, "Debug network requests")
+	cmd.PersistentFlags().DurationVar(&flagMaxResponseAge, "max-response-age", flagMaxResponseAge, "Maximum age of a response before it is considered too stale to use")
+
+	_ = cmd.MarkFlagFilename("cached-scan", ".json")
+	_ = cmd.MarkFlagFilename("peer-db", ".json")
+
+	cmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
 		if !cmd.Flag("peer-db").Changed {
-			peerDb = filepath.Join(currentUser.HomeDir, ".accumulate", "cache", strings.ToLower(args[0])+"-peers.json")
-		}
-		if !cmd.Flag("cached-scan").Changed {
-			cachedScan = filepath.Join(currentUser.HomeDir, ".accumulate", "cache", strings.ToLower(args[0])+".json")
+			peerDb = filepath.Join(cacheDir, strings.ToLower(args[0])+"-peers.json")
 		}
 		if f := cmd.Flag("light-db"); f != nil && !f.Changed {
-			lightDb = filepath.Join(currentUser.HomeDir, ".accumulate", "cache", strings.ToLower(args[0])+".db")
+			lightDb = filepath.Join(cacheDir, strings.ToLower(args[0])+".db")
 		}
 	}
 }
@@ -83,12 +87,13 @@ type healer struct {
 	healSingle   func(h *healer, src, dst *protocol.PartitionInfo, num uint64, txid *url.TxID)
 	healSequence func(h *healer, src, dst *protocol.PartitionInfo)
 
-	ctx    context.Context
-	C1     *jsonrpc.Client
-	C2     *message.Client
-	net    *healing.NetworkInfo
-	light  *light.Client
-	router routing.Router
+	network string
+	ctx     context.Context
+	C1      *jsonrpc.Client
+	C2      *message.Client
+	net     *healing.NetworkInfo
+	light   *light.Client
+	router  routing.Router
 
 	submit chan []messaging.Message
 
@@ -100,15 +105,9 @@ func (h *healer) Reset() {
 	h.accounts = map[[32]byte]protocol.Account{}
 }
 
-func (h *healer) heal(args []string) {
-	// Wait must be called after cancel (so the defer must happen first)
-	wg := new(sync.WaitGroup)
-	defer wg.Wait()
-
-	ctx := cmdutil.ContextForMainProcess(context.Background())
-	ctx, cancel, _ := api.ContextWithBatchData(ctx)
-	defer cancel()
+func (h *healer) setup(ctx context.Context, network string) {
 	h.ctx = ctx
+	h.network = network
 	h.accounts = map[[32]byte]protocol.Account{}
 
 	if pprof != "" {
@@ -122,7 +121,7 @@ func (h *healer) heal(args []string) {
 
 	// We should be able to use only the p2p client but it doesn't work well for
 	// some reason
-	h.C1 = jsonrpc.NewClient(accumulate.ResolveWellKnownEndpoint(args[0], "v3"))
+	h.C1 = jsonrpc.NewClient(accumulate.ResolveWellKnownEndpoint(network, "v3"))
 	h.C1.Client.Timeout = time.Hour
 	h.C1.Debug = debug
 
@@ -140,20 +139,14 @@ func (h *healer) heal(args []string) {
 		PeerPersistFrequency: -1,
 	})
 	checkf(err, "start p2p node")
-	defer func() { _ = node.Close() }()
+	go func() { <-ctx.Done(); _ = node.Close() }()
 
 	fmt.Fprintf(os.Stderr, "We are %v\n", node.ID())
-
-	if cachedScan != "" {
-		data, err := os.ReadFile(cachedScan)
-		check(err)
-		check(json.Unmarshal(data, &h.net))
-	}
 
 	h.router, err = apiutil.InitRouter(apiutil.RouterOptions{
 		Context: ctx,
 		Node:    node,
-		Network: args[0],
+		Network: network,
 	})
 	check(err)
 
@@ -162,31 +155,33 @@ func (h *healer) heal(args []string) {
 		fatalf("railed to initialize router")
 	}
 
-	dialer := node.DialNetwork()
+	// The client must be initialized before we load the network status since
+	// that will query the network
+	transport := &message.RoutedTransport{
+		Network: ni.Network,
+		Dialer:  node.DialNetwork(),
+		Router:  routing.MessageRouter{Router: h.router},
+		Debug:   debug,
+	}
+	h.C2 = &message.Client{
+		Transport: transport,
+	}
+
+	h.loadNetworkStatus()
+
+	// Use a hack dialer that uses the API for peer discovery if the peer
+	// tracker is not persistent. This has to be done after loading the network
+	// status since it requires that scan.
 	if _, ok := node.Tracker().(*dial.PersistentTracker); !ok {
-		// Use a hack dialer that uses the API for peer discovery
-		dialer = &apiutil.StaticDialer{
+		transport.Dialer = &apiutil.StaticDialer{
 			Scan:   h.net,
 			Nodes:  h.C1,
-			Dialer: dialer,
+			Dialer: transport.Dialer,
 		}
 	}
 
-	h.C2 = &message.Client{
-		Transport: &message.RoutedTransport{
-			Network: ni.Network,
-			Dialer:  dialer,
-			Router:  routing.MessageRouter{Router: h.router},
-			Debug:   debug,
-		},
-	}
-
-	h.submit = make(chan []messaging.Message)
-	wg.Add(1)
-	go h.submitLoop(wg)
-
 	if lightDb != "" {
-		cv2, err := client.New(accumulate.ResolveWellKnownEndpoint(args[0], "v2"))
+		cv2, err := client.New(accumulate.ResolveWellKnownEndpoint(network, "v2"))
 		check(err)
 		cv2.DebugRequest = debug
 
@@ -200,26 +195,89 @@ func (h *healer) heal(args []string) {
 			light.Router(h.router),
 		)
 		check(err)
-		defer func() { _ = h.light.Close() }()
+		go func() { <-ctx.Done(); _ = h.light.Close() }()
+	}
+}
+
+func (h *healer) loadNetworkStatus() {
+	if cachedScan == "" {
+		f := filepath.Join(cacheDir, strings.ToLower(h.network)+".json")
+		if st, err := os.Stat(f); err == nil && !st.IsDir() {
+			slog.Info("Detected network scan", "file", f)
+			cachedScan = f
+		} else if !errors.Is(err, fs.ErrNotExist) {
+			check(err)
+		} else {
+			h.net, err = healing.ScanNetwork(h.ctx, h.C2)
+			check(err)
+			return
+		}
 	}
 
-	if cachedScan == "" {
-		h.net, err = healing.ScanNetwork(ctx, h.C2)
-		check(err)
+	slog.Info("Loading cached network scan")
+	data, err := os.ReadFile(cachedScan)
+	check(err)
+	check(json.Unmarshal(data, &h.net))
+
+	// Get the current state of the network
+	ns, err := h.C2.NetworkStatus(h.ctx, api.NetworkStatusOptions{Partition: protocol.Directory})
+	check(err)
+	if h.net.Status.Equal(ns) {
+		return
 	}
+
+	// Rescan if the validator set has changed
+	if !h.net.Status.Network.Equal(ns.Network) {
+		slog.Info("Validator set has changed since last scan")
+		h.net, err = healing.ScanNetwork(h.ctx, h.C2)
+		check(err)
+	} else {
+		h.net.Status = ns
+	}
+
+	// Update the cached file if anything has changed
+	data, err = json.MarshalIndent(&h.net, "", "  ")
+	check(err)
+	check(os.WriteFile(cachedScan, data, 0644))
+}
+
+func (h *healer) heal(args []string) {
+	// Wait must be called after cancel (so the defer must happen first)
+	wg := new(sync.WaitGroup)
+	defer wg.Wait()
+
+	ctx := cmdutil.ContextForMainProcess(context.Background())
+	ctx, cancel, _ := api.ContextWithBatchData(ctx)
+	defer cancel()
+
+	h.setup(ctx, args[0])
+
+	h.submit = make(chan []messaging.Message)
+	wg.Add(1)
+	go h.submitLoop(wg)
 
 	// Heal all partitions
 	if len(args) < 2 {
 	heal:
 		for _, src := range h.net.Status.Network.Partitions {
 			for _, dst := range h.net.Status.Network.Partitions {
+				// Stopped?
+				select {
+				default:
+				case <-ctx.Done():
+					return
+				}
+
 				h.healSequence(h, src, dst)
 			}
 		}
 
 		// Heal continuously?
 		if healContinuous {
-			time.Sleep(time.Minute)
+			color.Yellow("Healing complete, sleeping for a minute")
+			ctx, cancel := context.WithTimeout(ctx, time.Minute)
+			defer cancel()
+			<-ctx.Done()
 			h.Reset()
 			goto heal
 		}
@@ -311,20 +369,9 @@ func (h *healer) submitLoop(wg *sync.WaitGroup) {
 }
 
 // getAccount fetches the given account.
-func getAccount[T protocol.Account](ctx context.Context, q api.Querier, u *url.URL) T {
-	r, err := api.Querier2{Querier: q}.QueryAccount(ctx, u, nil)
+func getAccount[T protocol.Account](h *healer, u *url.URL) T {
+	r, err := h.tryEach().QueryAccount(h.ctx, u, nil)
 	checkf(err, "get %v", u)
-
-	if r.LastBlockTime == nil {
-		fatalf("response for %v does not include a last block time", u)
-	}
-
-	age := time.Since(*r.LastBlockTime)
-	if flagMaxResponseAge > 0 && age > flagMaxResponseAge {
-		fatalf("response for %v is too old (%v)", u, age)
-	}
-
-	slog.InfoContext(ctx, "Got account", "url", u, "lastBlockAge", age.Round(time.Second))
 
 	a := r.Account
 	b, ok := a.(T)
@@ -360,14 +407,35 @@ func (q *tryEachQuerier) Query(ctx context.Context, scope *url.URL, query api.Qu
 		defer cancel()
 
 		r, err := c.Query(ctx, scope, query)
-		if err == nil {
+		if err != nil {
+			if errors.Code(err).IsClientError() {
+				return nil, err
+			}
+			lastErr = err
+			slog.ErrorContext(ctx, "Failed to query", "peer", peer, "scope", scope, "error", err)
+			continue
+		}
+
+		r2, ok := r.(api.WithLastBlockTime)
+		if !ok {
 			return r, nil
 		}
-		if errors.Code(err).IsClientError() {
-			return nil, err
+
+		if r2.GetLastBlockTime() == nil {
+			cmdutil.Warnf("response for %v does not include a last block time", scope)
+			continue
 		}
-		lastErr = err
-		slog.ErrorContext(ctx, "Failed to query", "peer", peer, "scope", scope, "error", err)
+
+		age := time.Since(*r2.GetLastBlockTime())
+		if flagMaxResponseAge > 0 && age > flagMaxResponseAge {
+			cmdutil.Warnf("response for %v is too old (%v)", scope, age)
+			continue
+		}
+
+		return r, nil
+	}
+	if lastErr != nil {
+		return nil, fmt.Errorf("unable to query %v (ran out of peers to try)", scope)
 	}
 	return nil, lastErr
 }

@@ -8,6 +8,7 @@ package api
 
 import (
 	"context"
+	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -46,6 +47,12 @@ type Query interface {
 type Record interface {
 	encoding.UnionValue
 	RecordType() RecordType
+}
+
+// WithLastBlockTime is a response, usually [Record], that may include the last
+// block time from the node serving the request.
+type WithLastBlockTime interface {
+	GetLastBlockTime() *time.Time
 }
 
 // Event is an event returned by [EventService].

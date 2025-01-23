@@ -54,6 +54,11 @@ ChainRecord:
       type: time
       pointer: true
 
+    - name: IndexOf
+      type: ChainRecord
+      pointer: true
+      marshal-as: reference
+
 ChainEntryRecord[T Record]:
   union: { type: record }
   fields:
