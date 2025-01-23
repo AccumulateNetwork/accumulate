@@ -104,6 +104,7 @@ type ChainRecord struct {
 	Count         uint64           `json:"count,omitempty" form:"count" query:"count" validate:"required"`
 	State         [][]byte         `json:"state,omitempty" form:"state" query:"state" validate:"required"`
 	LastBlockTime *time.Time       `json:"lastBlockTime,omitempty" form:"lastBlockTime" query:"lastBlockTime" validate:"required"`
+	IndexOf       *ChainRecord     `json:"indexOf,omitempty" form:"indexOf" query:"indexOf" validate:"required"`
 	extraData     []byte
 }
 
@@ -712,6 +713,9 @@ func (v *ChainRecord) Copy() *ChainRecord {
 	if v.LastBlockTime != nil {
 		u.LastBlockTime = new(time.Time)
 		*u.LastBlockTime = *v.LastBlockTime
+	}
+	if v.IndexOf != nil {
+		u.IndexOf = (v.IndexOf).Copy()
 	}
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
@@ -1836,6 +1840,14 @@ func (v *ChainRecord) Equal(u *ChainRecord) bool {
 	case v.LastBlockTime == nil || u.LastBlockTime == nil:
 		return false
 	case !((*v.LastBlockTime).Equal(*u.LastBlockTime)):
+		return false
+	}
+	switch {
+	case v.IndexOf == u.IndexOf:
+		// equal
+	case v.IndexOf == nil || u.IndexOf == nil:
+		return false
+	case !((v.IndexOf).Equal(u.IndexOf)):
 		return false
 	}
 
@@ -3164,6 +3176,7 @@ var fieldNames_ChainRecord = []string{
 	4: "Count",
 	5: "State",
 	6: "LastBlockTime",
+	7: "IndexOf",
 }
 
 func (v *ChainRecord) MarshalBinary() ([]byte, error) {
@@ -3191,6 +3204,9 @@ func (v *ChainRecord) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.LastBlockTime == nil) {
 		writer.WriteTime(6, *v.LastBlockTime)
+	}
+	if !(v.IndexOf == nil) {
+		writer.WriteValue(7, v.IndexOf.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_ChainRecord)
@@ -3231,6 +3247,11 @@ func (v *ChainRecord) IsValid() error {
 		errs = append(errs, "field LastBlockTime is missing")
 	} else if v.LastBlockTime == nil {
 		errs = append(errs, "field LastBlockTime is not set")
+	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+		errs = append(errs, "field IndexOf is missing")
+	} else if v.IndexOf == nil {
+		errs = append(errs, "field IndexOf is not set")
 	}
 
 	switch len(errs) {
@@ -6133,6 +6154,9 @@ func (v *ChainRecord) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadTime(6); ok {
 		v.LastBlockTime = &x
 	}
+	if x := new(ChainRecord); reader.ReadValue(7, x.UnmarshalBinaryFrom) {
+		v.IndexOf = x
+	}
 
 	seen, err := reader.Reset(fieldNames_ChainRecord)
 	if err != nil {
@@ -7732,6 +7756,7 @@ func init() {
 		encoding.NewTypeField("count", "uint64"),
 		encoding.NewTypeField("state", "bytes[]"),
 		encoding.NewTypeField("lastBlockTime", "string"),
+		encoding.NewTypeField("indexOf", "ChainRecord"),
 	}, "ChainRecord", "chainRecord")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -8211,6 +8236,7 @@ func (v *ChainRecord) MarshalJSON() ([]byte, error) {
 		Count         uint64                     `json:"count,omitempty"`
 		State         encoding.JsonList[*string] `json:"state,omitempty"`
 		LastBlockTime *time.Time                 `json:"lastBlockTime,omitempty"`
+		IndexOf       *ChainRecord               `json:"indexOf,omitempty"`
 		ExtraData     *string                    `json:"$epilogue,omitempty"`
 	}{}
 	u.RecordType = v.RecordType()
@@ -8231,6 +8257,9 @@ func (v *ChainRecord) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.LastBlockTime == nil) {
 		u.LastBlockTime = v.LastBlockTime
+	}
+	if !(v.IndexOf == nil) {
+		u.IndexOf = v.IndexOf
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -9136,6 +9165,7 @@ func (v *ChainRecord) UnmarshalJSON(data []byte) error {
 		Count         uint64                     `json:"count,omitempty"`
 		State         encoding.JsonList[*string] `json:"state,omitempty"`
 		LastBlockTime *time.Time                 `json:"lastBlockTime,omitempty"`
+		IndexOf       *ChainRecord               `json:"indexOf,omitempty"`
 		ExtraData     *string                    `json:"$epilogue,omitempty"`
 	}{}
 	u.RecordType = v.RecordType()
@@ -9147,6 +9177,7 @@ func (v *ChainRecord) UnmarshalJSON(data []byte) error {
 		u.State[i] = encoding.BytesToJSON(x)
 	}
 	u.LastBlockTime = v.LastBlockTime
+	u.IndexOf = v.IndexOf
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -9166,6 +9197,7 @@ func (v *ChainRecord) UnmarshalJSON(data []byte) error {
 		}
 	}
 	v.LastBlockTime = u.LastBlockTime
+	v.IndexOf = u.IndexOf
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err
