@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/exp/apiutil"
 	"gitlab.com/accumulatenetwork/accumulate/exp/light"
@@ -266,6 +267,7 @@ func (h *healer) heal(args []string) {
 
 		// Heal continuously?
 		if healContinuous {
+			color.Yellow("Healing complete, sleeping for a minute")
 			time.Sleep(time.Minute)
 			h.Reset()
 			goto heal
