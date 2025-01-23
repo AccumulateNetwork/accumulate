@@ -8,11 +8,13 @@ package main
 
 import (
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/healing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -43,7 +45,6 @@ func healSynth(cmd *cobra.Command, args []string) {
 			// Pull chains
 			pullSynthDirChains(h)
 			pullSynthSrcChains(h, srcUrl)
-			pullSynthDstChains(h, dstUrl)
 
 			// Pull accounts
 			pullSynthLedger(h, srcUrl)
@@ -59,7 +60,6 @@ func healSynth(cmd *cobra.Command, args []string) {
 			// Pull chains
 			pullSynthDirChains(h)
 			pullSynthSrcChains(h, srcUrl)
-			pullSynthDstChains(h, dstUrl)
 
 			// Pull accounts
 		pullAgain:
@@ -132,44 +132,32 @@ func pullSynthDirChains(h *healer) {
 	ctx, cancel, _ := api.ContextWithBatchData(h.ctx)
 	defer cancel()
 
-	check(h.light.PullAccountWithChains(ctx, protocol.DnUrl().JoinPath(protocol.Ledger), skipSigChain))
-	check(h.light.IndexAccountChains(ctx, protocol.DnUrl().JoinPath(protocol.Ledger)))
 	check(h.light.PullAccount(ctx, protocol.DnUrl().JoinPath(protocol.Network)))
+
+	check(h.light.PullAccountWithChains(ctx, protocol.DnUrl().JoinPath(protocol.Ledger), includeRootChain))
+	check(h.light.IndexAccountChains(ctx, protocol.DnUrl().JoinPath(protocol.Ledger)))
+
+	check(h.light.PullAccountWithChains(ctx, protocol.DnUrl().JoinPath(protocol.AnchorPool), func(c *api.ChainRecord) bool {
+		return c.Type == merkle.ChainTypeAnchor || c.IndexOf != nil && c.IndexOf.Type == merkle.ChainTypeAnchor
+	}))
+	check(h.light.IndexAccountChains(ctx, protocol.DnUrl().JoinPath(protocol.AnchorPool)))
 }
 
 func pullSynthSrcChains(h *healer, part *url.URL) {
 	ctx, cancel, _ := api.ContextWithBatchData(h.ctx)
 	defer cancel()
 
-	check(h.light.PullAccountWithChains(ctx, part.JoinPath(protocol.Ledger), skipSigChain))
+	check(h.light.PullAccountWithChains(ctx, part.JoinPath(protocol.Ledger), includeRootChain))
 	check(h.light.IndexAccountChains(ctx, part.JoinPath(protocol.Ledger)))
 
-	check(h.light.PullAccountWithChains(ctx, part.JoinPath(protocol.Synthetic), skipSigChain))
+	check(h.light.PullAccountWithChains(ctx, part.JoinPath(protocol.Synthetic), func(c *api.ChainRecord) bool {
+		return strings.HasPrefix(c.Name, "synthetic-sequence") || c.Name == "main" || c.Name == "main-index"
+	}))
 	check(h.light.IndexAccountChains(ctx, part.JoinPath(protocol.Synthetic)))
 }
 
-func pullSynthDstChains(h *healer, part *url.URL) {
-	ctx, cancel, _ := api.ContextWithBatchData(h.ctx)
-	defer cancel()
-
-	check(h.light.PullAccountWithChains(ctx, part.JoinPath(protocol.Ledger), func(c *api.ChainRecord) bool {
-		return c.Name == "root" ||
-			c.Name == "root-index"
-	}))
-	check(h.light.IndexAccountChains(ctx, part.JoinPath(protocol.Ledger)))
-	check(h.light.PullAccountWithChains(ctx, part.JoinPath(protocol.AnchorPool), skipSigChain))
-	check(h.light.IndexAccountChains(ctx, part.JoinPath(protocol.AnchorPool)))
-
-	if healSinceDuration > 0 {
-		check(h.light.PullMessagesForAccountSince(ctx, part.JoinPath(protocol.AnchorPool), time.Now().Add(-healSinceDuration), "main"))
-	} else {
-		check(h.light.PullMessagesForAccount(ctx, part.JoinPath(protocol.AnchorPool), "main"))
-	}
-	check(h.light.IndexReceivedAnchors(ctx, part))
-}
-
 func pullSynthLedger(h *healer, part *url.URL) *protocol.SyntheticLedger {
-	check(h.light.PullAccountWithChains(h.ctx, part.JoinPath(protocol.Synthetic), skipSigChain))
+	check(h.light.PullAccountWithChains(h.ctx, part.JoinPath(protocol.Synthetic), func(cr *api.ChainRecord) bool { return false }))
 
 	batch := h.light.OpenDB(false)
 	defer batch.Discard()
@@ -179,6 +167,10 @@ func pullSynthLedger(h *healer, part *url.URL) *protocol.SyntheticLedger {
 	return ledger
 }
 
-func skipSigChain(c *api.ChainRecord) bool {
-	return c.Name != "signature"
+func includeRootChain(c *api.ChainRecord) bool {
+	switch c.Name {
+	case "root", "root-index":
+		return true
+	}
+	return false
 }
