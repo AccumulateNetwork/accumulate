@@ -57,9 +57,20 @@ func (h *Healer) HealSynthetic(ctx context.Context, args HealSyntheticArgs, si S
 	}
 	si.ID = r.ID
 
-	// Has it already been delivered?
+	// Query the status
 	Q := api.Querier2{Querier: args.Querier}
-	if r, err := Q.QueryMessage(ctx, r.ID, nil); err == nil && r.Status.Delivered() {
+	if s, err := Q.QueryMessage(ctx, r.ID, nil); err == nil &&
+		// Has it already been delivered?
+		s.Status.Delivered() &&
+		// Does the sequence info match?
+		s.Sequence != nil &&
+		s.Sequence.Source.Equal(protocol.PartitionUrl(si.Source)) &&
+		s.Sequence.Destination.Equal(protocol.PartitionUrl(si.Destination)) &&
+		s.Sequence.Number == si.Number {
+		// If it's been delivered (and the sequence ID of the delivered message
+		// matches what was passed to this call), skip it. If it's been
+		// delivered with a different sequence ID, something weird is going on
+		// so resubmit it anyways.
 		slog.InfoContext(ctx, "Synthetic message has been delivered", "id", si.ID, "source", si.Source, "destination", si.Destination, "number", si.Number)
 		return errors.Delivered
 	}
