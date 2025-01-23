@@ -1,4 +1,4 @@
-// Copyright 2024 The Accumulate Authors
+// Copyright 2025 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -90,7 +90,7 @@ func analyzeDb(src keyvalue.Store, progress func(string)) error {
 		}), nil)
 
 		var count int
-		err = db.Collect(&ioutil.Discard{}, nil, &coredb.CollectOptions{
+		_, err = db.Collect(&ioutil.Discard{}, nil, &coredb.CollectOptions{
 			Predicate: func(r database.Record) (bool, error) {
 				// Don't count the BPT
 				if r.Key().Get(0) == "BPT" {
