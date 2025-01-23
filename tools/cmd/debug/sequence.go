@@ -8,27 +8,15 @@ package main
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"io/fs"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
-	"gitlab.com/accumulatenetwork/accumulate/exp/apiutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/healing"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -37,74 +25,27 @@ import (
 var cmdSequence = &cobra.Command{
 	Use:   "sequence [server]",
 	Short: "Debug synthetic and anchor sequencing",
+	Args:  cobra.ExactArgs(1),
 	Run:   sequence,
 }
 
 func init() {
 	cmd.AddCommand(cmdSequence)
 	cmdSequence.Flags().BoolVarP(&verbose, "verbose", "v", false, "More verbose output")
-	cmdSequence.Flags().BoolVar(&debug, "debug", false, "Debug network requests")
-	cmdSequence.Flags().StringVar(&cachedScan, "cached-scan", "", "A cached network scan")
 	cmdSequence.Flags().StringVar(&only, "only", "", "Only scan anchors or synthetic transactions")
-	cmdSequence.Flags().DurationVar(&flagMaxResponseAge, "max-response-age", flagMaxResponseAge, "Maximum age of a response before it is considered too stale to use")
+	healerFlags(cmdSequence)
 }
 
 func sequence(cmd *cobra.Command, args []string) {
 	ctx, cancel, _ := api.ContextWithBatchData(cmd.Context())
 	defer cancel()
 
-	c := jsonrpc.NewClient(accumulate.ResolveWellKnownEndpoint(args[0], "v3"))
-	c.Client.Timeout = time.Hour
-	c.Debug = debug
-	Q := api.Querier2{Querier: c}
-
-	ni, err := c.NodeInfo(ctx, api.NodeInfoOptions{})
-	check(err)
-
-	node, err := p2p.New(p2p.Options{
-		Network:        ni.Network,
-		BootstrapPeers: bootstrap,
-	})
-	check(err)
-	defer func() { _ = node.Close() }()
-
-	fmt.Printf("We are %v\n", node.ID())
-
-	var net *healing.NetworkInfo
-	if cachedScan == "" {
-		f := filepath.Join(cacheDir, strings.ToLower(ni.Network)+".json")
-		if st, err := os.Stat(f); err == nil && !st.IsDir() {
-			slog.Info("Detected network scan", "file", f)
-			cachedScan = f
-		} else if !errors.Is(err, fs.ErrNotExist) {
-			check(err)
-		}
-	}
-	if cachedScan != "" {
-		data, err := os.ReadFile(cachedScan)
-		check(err)
-		check(json.Unmarshal(data, &net))
-	}
-
-	router := new(routing.MessageRouter)
-	c2 := &message.Client{
-		Transport: &message.RoutedTransport{
-			Network: ni.Network,
-			Dialer: &apiutil.StaticDialer{
-				Scan:   net,
-				Nodes:  c,
-				Dialer: node.DialNetwork(),
-			},
-			Router: router,
-			Debug:  debug,
-		},
-	}
-	Q.Querier = c2
+	h := new(healer)
+	h.setup(ctx, args[0])
 
 	fmt.Println("Network status")
-	ns, err := c.NetworkStatus(ctx, api.NetworkStatusOptions{Partition: protocol.Directory})
+	ns, err := h.C2.NetworkStatus(ctx, api.NetworkStatusOptions{Partition: protocol.Directory})
 	check(err)
-	router.Router = routing.NewRouter(routing.RouterOptions{Initial: ns.Routing})
 
 	var scanSynth, scanAnchors bool
 	switch only {
@@ -127,17 +68,17 @@ func sequence(cmd *cobra.Command, args []string) {
 
 		// Get anchor ledger
 		dst := protocol.PartitionUrl(part.ID)
-		anchor := getAccount[*protocol.AnchorLedger](ctx, Q, dst.JoinPath(protocol.AnchorPool))
+		anchor := getAccount[*protocol.AnchorLedger](h, dst.JoinPath(protocol.AnchorPool))
 		anchors[part.ID] = anchor
 
 		// Get synthetic ledger
-		synth := getAccount[*protocol.SyntheticLedger](ctx, Q, dst.JoinPath(protocol.Synthetic))
+		synth := getAccount[*protocol.SyntheticLedger](h, dst.JoinPath(protocol.Synthetic))
 		synths[part.ID] = synth
 
 		// Check pending and received vs delivered
 		if scanAnchors {
 			for _, src := range anchor.Sequence {
-				ids, _ := findPendingAnchors(ctx, c2, Q, net, src.Url, dst, verbose)
+				ids, _ := h.findPendingAnchors(src.Url, dst, verbose)
 				src.Pending = append(src.Pending, ids...)
 
 				checkSequence1(part, src, bad, "anchors")
@@ -213,17 +154,17 @@ func checkSequence1(dst *protocol.PartitionInfo, src *protocol.PartitionSyntheti
 	}
 }
 
-func findPendingAnchors(ctx context.Context, C *message.Client, Q api.Querier2, net *healing.NetworkInfo, src, dst *url.URL, resolve bool) ([]*url.TxID, map[[32]byte]*protocol.Transaction) {
+func (h *healer) findPendingAnchors(src, dst *url.URL, resolve bool) ([]*url.TxID, map[[32]byte]*protocol.Transaction) {
 	srcId, _ := protocol.ParsePartitionUrl(src)
 	dstId, _ := protocol.ParsePartitionUrl(dst)
 
 	// Check how many have been received
-	dstLedger := getAccount[*protocol.AnchorLedger](ctx, Q, dst.JoinPath(protocol.AnchorPool))
+	dstLedger := getAccount[*protocol.AnchorLedger](h, dst.JoinPath(protocol.AnchorPool))
 	dstSrcLedger := dstLedger.Partition(src)
 	received := dstSrcLedger.Received
 
 	// Check how many should have been sent
-	srcDstChain, err := Q.QueryChain(ctx, src.JoinPath(protocol.AnchorPool), &api.ChainQuery{Name: "anchor-sequence"})
+	srcDstChain, err := h.tryEach().QueryChain(h.ctx, src.JoinPath(protocol.AnchorPool), &api.ChainQuery{Name: "anchor-sequence"})
 	checkf(err, "query %v anchor sequence chain", srcId)
 
 	if received >= srcDstChain.Count-1 {
@@ -239,16 +180,16 @@ func findPendingAnchors(ctx context.Context, C *message.Client, Q api.Querier2, 
 	txns := map[[32]byte]*protocol.Transaction{}
 	for i := received + 1; i <= srcDstChain.Count; i++ {
 		var msg *api.MessageRecord[messaging.Message]
-		if net == nil {
+		if h.net == nil {
 			slog.Info("Checking anchor", "source", src, "destination", dst, "number", i, "remaining", srcDstChain.Count-i)
-			msg, err = C.Private().Sequence(ctx, src.JoinPath(protocol.AnchorPool), dst, i, private.SequenceOptions{})
+			msg, err = h.C2.Private().Sequence(h.ctx, src.JoinPath(protocol.AnchorPool), dst, i, private.SequenceOptions{})
 			checkf(err, "query %v → %v anchor #%d", srcId, dstId, i)
 		} else {
-			for _, peer := range net.Peers[strings.ToLower(srcId)] {
-				ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			for _, peer := range h.net.Peers[strings.ToLower(srcId)] {
+				ctx, cancel := context.WithTimeout(h.ctx, 10*time.Second)
 				defer cancel()
 				slog.Info("Checking anchor", "source", src, "destination", dst, "number", i, "remaining", srcDstChain.Count-i, "peer", peer.ID)
-				msg, err = C.ForPeer(peer.ID).Private().Sequence(ctx, src.JoinPath(protocol.AnchorPool), dst, i, private.SequenceOptions{})
+				msg, err = h.C2.ForPeer(peer.ID).Private().Sequence(ctx, src.JoinPath(protocol.AnchorPool), dst, i, private.SequenceOptions{})
 				if err == nil {
 					break
 				}
