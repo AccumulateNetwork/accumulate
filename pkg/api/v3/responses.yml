@@ -92,6 +92,17 @@ NetworkStatus:
       pointer: true
       repeatable: true
 
+SnapshotInfo:
+  fields:
+    - name: Header
+      type: snapshot.Header
+      marshal-as: reference
+      pointer: true
+    - name: ConsensusInfo
+      type: cometbft.GenesisDoc
+      marshal-as: reference
+      pointer: true
+
 Metrics:
   fields:
     - name: TPS
