@@ -1,4 +1,4 @@
-// Copyright 2024 The Accumulate Authors
+// Copyright 2025 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -14,12 +14,12 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 
 	abci "github.com/cometbft/cometbft/abci/types"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/exp/torrent"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	sv1 "gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	sv2 "gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
@@ -27,35 +27,12 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// ListSnapshots queries the node for available snapshots.
-func ListSnapshots(cfg *config.Config) ([]*snapshot.Header, error) {
-	snapDir := config.MakeAbsolute(cfg.RootDir, cfg.Accumulate.Snapshots.Directory)
-	return ListSnapshots2(snapDir)
-}
-
-func ListSnapshots2(snapDir string) ([]*snapshot.Header, error) {
-	info, err := listSnapshots(snapDir)
-	if err != nil {
-		return nil, err
-	}
-
-	snapshots := make([]*snapshot.Header, 0, len(info))
-	for _, info := range info {
-		snapshots = append(snapshots, &sv1.Header{
-			Version:  info.version,
-			Height:   info.height,
-			RootHash: info.rootHash,
-		})
-	}
-	return snapshots, nil
-}
-
 // ListSnapshots returns a list of snapshot metadata objects.
 //
 // This is one of four ABCI functions we have to implement for
 // Tendermint/CometBFT.
 func (app *Accumulator) ListSnapshots(_ context.Context, req *abci.RequestListSnapshots) (*abci.ResponseListSnapshots, error) {
-	info, err := listSnapshots(config.MakeAbsolute(app.RootDir, app.Snapshots.Directory))
+	info, err := ListSnapshots(config.MakeAbsolute(app.RootDir, app.Snapshots.Directory))
 	if err != nil {
 		return nil, err
 	}
@@ -63,16 +40,16 @@ func (app *Accumulator) ListSnapshots(_ context.Context, req *abci.RequestListSn
 	resp := new(abci.ResponseListSnapshots)
 	resp.Snapshots = make([]*abci.Snapshot, 0, len(info))
 	for _, info := range info {
-		b, err := info.md.MarshalBinary()
+		b, err := info.fileMd.MarshalBinary()
 		if err != nil {
 			return nil, err
 		}
 
 		resp.Snapshots = append(resp.Snapshots, &abci.Snapshot{
-			Height:   info.height,
-			Format:   uint32(info.version),
-			Chunks:   uint32(len(info.md.Chunks)),
-			Hash:     info.hash[:],
+			Height:   info.Height(),
+			Format:   uint32(info.Version()),
+			Chunks:   uint32(len(info.fileMd.Chunks)),
+			Hash:     info.fileHash[:],
 			Metadata: b,
 		})
 	}
@@ -161,7 +138,7 @@ func (app *Accumulator) ApplySnapshotChunk(_ context.Context, req *abci.RequestA
 		return nil, e2
 	}
 
-	err = snapshot.FullRestore(app.Database, buf, app.logger, config.NetworkUrl{
+	err = sv1.FullRestore(app.Database, buf, app.logger, config.NetworkUrl{
 		URL: protocol.PartitionUrl(app.Partition),
 	})
 	if err != nil {
@@ -182,18 +159,55 @@ func (app *Accumulator) ApplySnapshotChunk(_ context.Context, req *abci.RequestA
 }
 
 type snapshotInfo struct {
-	md       torrent.FileMetadata
-	version  uint64
-	height   uint64
-	hash     [32]byte
-	rootHash [32]byte
+	file     string
+	fileHash [32]byte
+	fileMd   torrent.FileMetadata
+	v1       *sv1.Header
+	v2       *sv2.Header
+}
+
+func (s *snapshotInfo) Version() uint64 {
+	switch {
+	case s.v1 != nil:
+		return 1
+	case s.v2 != nil:
+		return 2
+	default:
+		panic("inconsistent application state")
+	}
+}
+
+func (s *snapshotInfo) Height() uint64 {
+	switch {
+	case s.v1 != nil:
+		return s.v1.Height
+	case s.v2 != nil:
+		return s.v2.SystemLedger.Index
+	default:
+		panic("inconsistent application state")
+	}
+}
+
+func (s *snapshotInfo) Timestamp() time.Time {
+	switch {
+	case s.v1 != nil:
+		return s.v1.Timestamp
+	case s.v2 != nil:
+		return s.v2.SystemLedger.Timestamp
+	default:
+		panic("inconsistent application state")
+	}
+}
+
+func (s *snapshotInfo) Open() (*os.File, error) {
+	return os.Open(s.file)
 }
 
 const chunkSize = 10 << 20
 
-// listSnapshots finds snapshots in the given directory and reads metadata from
+// ListSnapshots finds snapshots in the given directory and reads metadata from
 // each.
-func listSnapshots(dir string) ([]*snapshotInfo, error) {
+func ListSnapshots(dir string) ([]*snapshotInfo, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load snapshot: %w", err)
@@ -253,14 +267,14 @@ func listSnapshots(dir string) ([]*snapshotInfo, error) {
 		if err != nil {
 			return nil, err
 		}
-		info.hash = *(*[32]byte)(hasher.Sum(nil))
+		info.fileHash = *(*[32]byte)(hasher.Sum(nil))
 
 		// Chunk the file
 		_, err = f.Seek(0, io.SeekStart)
 		if err != nil {
 			return nil, err
 		}
-		info.md.Chunks, err = torrent.ChunksBySize(f, chunkSize)
+		info.fileMd.Chunks, err = torrent.ChunksBySize(f, chunkSize)
 		if err != nil {
 			return nil, err
 		}
@@ -276,11 +290,7 @@ func snapshotInfoV1(f *os.File) (*snapshotInfo, error) {
 		return nil, errors.UnknownError.WithFormat("open snapshot %s: %w", f.Name(), err)
 	}
 
-	return &snapshotInfo{
-		version:  header.Version,
-		height:   header.Height,
-		rootHash: header.RootHash,
-	}, nil
+	return &snapshotInfo{file: f.Name(), v1: header}, nil
 }
 
 func snapshotInfoV2(f *os.File) (*snapshotInfo, error) {
@@ -289,11 +299,7 @@ func snapshotInfoV2(f *os.File) (*snapshotInfo, error) {
 		return nil, errors.UnknownError.WithFormat("open snapshot %s: %w", f.Name(), err)
 	}
 
-	return &snapshotInfo{
-		version:  s.Header.Version,
-		height:   s.Header.SystemLedger.Index,
-		rootHash: s.Header.RootHash,
-	}, nil
+	return &snapshotInfo{file: f.Name(), v2: s.Header}, nil
 }
 
 type snapshotManager struct {

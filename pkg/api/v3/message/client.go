@@ -1,4 +1,4 @@
-// Copyright 2024 The Accumulate Authors
+// Copyright 2025 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -36,6 +36,7 @@ type Router interface {
 var _ api.NodeService = (*Client)(nil)
 var _ api.ConsensusService = (*Client)(nil)
 var _ api.NetworkService = (*Client)(nil)
+var _ api.SnapshotService = (*Client)(nil)
 var _ api.MetricsService = (*Client)(nil)
 var _ api.Querier = (*Client)(nil)
 var _ api.Submitter = (*Client)(nil)
@@ -83,6 +84,11 @@ func (c *Client) ConsensusStatus(ctx context.Context, opts api.ConsensusStatusOp
 // NetworkStatus implements [api.NetworkService.NetworkStatus].
 func (c *Client) NetworkStatus(ctx context.Context, opts api.NetworkStatusOptions) (*api.NetworkStatus, error) {
 	return c.ForAddress(nil).NetworkStatus(ctx, opts)
+}
+
+// ListSnapshots implements [api.SnapshotService.ListSnapshots].
+func (c *Client) ListSnapshots(ctx context.Context, opts api.ListSnapshotsOptions) ([]*api.SnapshotInfo, error) {
+	return c.ForAddress(nil).ListSnapshots(ctx, opts)
 }
 
 // Metrics implements [api.MetricsService.Metrics].
@@ -136,6 +142,13 @@ func (c AddressedClient) NetworkStatus(ctx context.Context, opts api.NetworkStat
 	// Wrap the request as a NetworkStatusRequest and expect a
 	// NetworkStatusResponse, which is unpacked into a NetworkStatus
 	return typedRequest[*NetworkStatusResponse, *api.NetworkStatus](c, ctx, &NetworkStatusRequest{NetworkStatusOptions: opts})
+}
+
+// ListSnapshots implements [api.NetworkService.ListSnapshots].
+func (c AddressedClient) ListSnapshots(ctx context.Context, opts api.ListSnapshotsOptions) ([]*api.SnapshotInfo, error) {
+	// Wrap the request as a ListSnapshotsRequest and expect a
+	// ListSnapshotsResponse, which is unpacked into a ListSnapshots
+	return typedRequest[*ListSnapshotsResponse, []*api.SnapshotInfo](c, ctx, &ListSnapshotsRequest{ListSnapshotsOptions: opts})
 }
 
 // Metrics implements [api.MetricsService.Metrics].
@@ -219,6 +232,7 @@ func (r *NodeInfoResponse) rval() *api.NodeInfo               { return r.Value }
 func (r *FindServiceResponse) rval() []*api.FindServiceResult { return unNilArray(r.Value) } //nolint:unused
 func (r *ConsensusStatusResponse) rval() *api.ConsensusStatus { return r.Value }             //nolint:unused
 func (r *NetworkStatusResponse) rval() *api.NetworkStatus     { return r.Value }             //nolint:unused
+func (r *ListSnapshotsResponse) rval() []*api.SnapshotInfo    { return r.Value }             //nolint:unused
 func (r *MetricsResponse) rval() *api.Metrics                 { return r.Value }             //nolint:unused
 func (r *RecordResponse) rval() api.Record                    { return r.Value }             //nolint:unused
 func (r *SubmitResponse) rval() []*api.Submission             { return unNilArray(r.Value) } //nolint:unused
