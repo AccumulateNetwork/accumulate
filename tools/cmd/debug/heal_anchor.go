@@ -44,10 +44,10 @@ func healAnchor(_ *cobra.Command, args []string) {
 			dstUrl := protocol.PartitionUrl(dst.ID)
 
 		pullAgain:
-			dstLedger := getAccount[*protocol.AnchorLedger](h.ctx, h.C1, dstUrl.JoinPath(protocol.AnchorPool))
+			dstLedger := getAccount[*protocol.AnchorLedger](h, dstUrl.JoinPath(protocol.AnchorPool))
 			src2dst := dstLedger.Partition(srcUrl)
 
-			ids, txns := findPendingAnchors(h.ctx, h.C2, h.tryEach(), h.net, srcUrl, dstUrl, true)
+			ids, txns := h.findPendingAnchors(srcUrl, dstUrl, true)
 
 			var all []*url.TxID
 			all = append(all, src2dst.Pending...)

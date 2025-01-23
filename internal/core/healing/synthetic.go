@@ -57,9 +57,20 @@ func (h *Healer) HealSynthetic(ctx context.Context, args HealSyntheticArgs, si S
 	}
 	si.ID = r.ID
 
-	// Has it already been delivered?
+	// Query the status
 	Q := api.Querier2{Querier: args.Querier}
-	if r, err := Q.QueryMessage(ctx, r.ID, nil); err == nil && r.Status.Delivered() {
+	if s, err := Q.QueryMessage(ctx, r.ID, nil); err == nil &&
+		// Has it already been delivered?
+		s.Status.Delivered() &&
+		// Does the sequence info match?
+		s.Sequence != nil &&
+		s.Sequence.Source.Equal(protocol.PartitionUrl(si.Source)) &&
+		s.Sequence.Destination.Equal(protocol.PartitionUrl(si.Destination)) &&
+		s.Sequence.Number == si.Number {
+		// If it's been delivered (and the sequence ID of the delivered message
+		// matches what was passed to this call), skip it. If it's been
+		// delivered with a different sequence ID, something weird is going on
+		// so resubmit it anyways.
 		slog.InfoContext(ctx, "Synthetic message has been delivered", "id", si.ID, "source", si.Source, "destination", si.Destination, "number", si.Number)
 		return errors.Delivered
 	}
@@ -67,7 +78,12 @@ func (h *Healer) HealSynthetic(ctx context.Context, args HealSyntheticArgs, si S
 	slog.InfoContext(ctx, "Resubmitting", "source", si.Source, "destination", si.Destination, "number", si.Number, "id", r.Message.ID())
 
 	// Build the receipt
-	receipt, err := h.buildSynthReceipt(ctx, args, si)
+	var receipt *merkle.Receipt
+	if args.NetInfo.Status.ExecutorVersion.V2VandenbergEnabled() {
+		receipt, err = h.buildSynthReceiptV2(ctx, args, si)
+	} else {
+		receipt, err = h.buildSynthReceiptV1(ctx, args, si)
+	}
 	if err != nil {
 		return err
 	}
@@ -130,43 +146,59 @@ func (h *Healer) HealSynthetic(ctx context.Context, args HealSyntheticArgs, si S
 		return nil
 	}
 
-	// Submit directly to an appropriate node
-	if c, ok := args.Submitter.(message.AddressedClient); ok && c.Address == nil {
-		for peer, info := range args.NetInfo.Peers[strings.ToLower(si.Destination)] {
-			if len(info.Addresses) > 0 {
-				args.Submitter = c.ForAddress(info.Addresses[0]).ForPeer(peer)
-			} else {
-				args.Submitter = c.ForPeer(peer)
+	submit := func(s api.Submitter) (error, bool) {
+		sub, err := s.Submit(ctx, env, api.SubmitOptions{})
+		if err != nil {
+			slog.ErrorContext(ctx, "Submission failed", "error", err, "id", env.Messages[0].ID())
+			return nil, false
+		}
+		for _, sub := range sub {
+			if !sub.Success {
+				slog.ErrorContext(ctx, "Submission failed", "message", sub, "status", sub.Status, "id", sub.Status.TxID)
+				continue
 			}
-			break
-		}
-	}
 
-	sub, err := args.Submitter.Submit(ctx, env, api.SubmitOptions{})
-	if err != nil {
-		slog.ErrorContext(ctx, "Submission failed", "error", err, "id", env.Messages[0].ID())
-	}
-	for _, sub := range sub {
-		if !sub.Success {
-			slog.ErrorContext(ctx, "Submission failed", "message", sub, "status", sub.Status, "id", sub.Status.TxID)
-			continue
+			slog.InfoContext(ctx, "Submission succeeded", "id", sub.Status.TxID)
+			if !args.Wait || dontWait[sub.Status.TxID.Hash()] {
+				continue
+			}
+
+			err := waitFor(ctx, Q, sub.Status.TxID)
+			if err != nil && strings.HasSuffix(err.Error(), " is not a known directory anchor") {
+				return ErrRetry, false
+			}
 		}
 
-		slog.InfoContext(ctx, "Submission succeeded", "id", sub.Status.TxID)
-		if !args.Wait || dontWait[sub.Status.TxID.Hash()] {
-			continue
+		if args.Wait {
+			return waitFor(ctx, Q, si.ID), true
 		}
-
-		err := waitFor(ctx, Q, sub.Status.TxID)
-		if err != nil && strings.HasSuffix(err.Error(), " is not a known directory anchor") {
-			return ErrRetry
-		}
+		return nil, true
 	}
 
-	if args.Wait {
-		return waitFor(ctx, Q, si.ID)
+	// Submit directly to an appropriate node
+	switch submitter := args.Submitter.(type) {
+	// case message.AddressedClient:
+
+	case *message.Client:
+		for peer, info := range args.NetInfo.Peers[strings.ToLower(si.Destination)] {
+			var s api.Submitter
+			if len(info.Addresses) > 0 {
+				s = submitter.ForAddress(info.Addresses[0]).ForPeer(peer)
+			} else {
+				s = submitter.ForPeer(peer)
+			}
+			slog.Info("Submitting to", "peer", peer)
+			err, ok := submit(s)
+			if ok || err != nil {
+				return err
+			}
+		}
+		return errors.UnknownError.With("failed to submit")
+
+	default:
+		err, _ := submit(args.Submitter)
+		return err
 	}
-	return nil
 }
 
 func waitFor(ctx context.Context, Q api.Querier, id *url.TxID) error {
@@ -199,7 +231,7 @@ func waitFor(ctx context.Context, Q api.Querier, id *url.TxID) error {
 	return ErrRetry
 }
 
-func (h *Healer) buildSynthReceipt(ctx context.Context, args HealSyntheticArgs, si SequencedInfo) (*merkle.Receipt, error) {
+func (h *Healer) buildSynthReceiptV1(_ context.Context, args HealSyntheticArgs, si SequencedInfo) (*merkle.Receipt, error) {
 	batch := args.Light.OpenDB(false)
 	defer batch.Discard()
 	uSrc := protocol.PartitionUrl(si.Source)
@@ -390,4 +422,113 @@ func loadAnchorFromChain[V any](batch *light.DB, chain *database.Chain2, block u
 		return nil, errors.UnknownError.WithFormat("unable to locate DN anchor for block %d (skip %d): want %v, got %v", block, skip, protocol.TransactionTypeDirectoryAnchor, msg.Transaction.Body.Type())
 	}
 	return body, nil
+}
+
+func (h *Healer) buildSynthReceiptV2(_ context.Context, args HealSyntheticArgs, si SequencedInfo) (*merkle.Receipt, error) {
+	batch := args.Light.OpenDB(false)
+	defer batch.Discard()
+	uSrc := protocol.PartitionUrl(si.Source)
+	uSrcSys := uSrc.JoinPath(protocol.Ledger)
+	uSrcSynth := uSrc.JoinPath(protocol.Synthetic)
+	uDn := protocol.DnUrl()
+	uDnSys := uDn.JoinPath(protocol.Ledger)
+	uDnAnchor := uDn.JoinPath(protocol.AnchorPool)
+
+	// Load the synthetic sequence chain entry
+	b, err := batch.Account(uSrcSynth).SyntheticSequenceChain(si.Destination).Entry(int64(si.Number) - 1)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat(
+			"load synthetic sequence chain entry %d: %w", si.Number, err)
+	}
+	seqEntry := new(protocol.IndexEntry)
+	err = seqEntry.UnmarshalBinary(b)
+	if err != nil {
+		return nil, err
+	}
+
+	// Locate the synthetic ledger main chain index entry
+	mainIndex, err := batch.Index().Account(uSrcSynth).Chain("main").SourceIndex().FindIndexEntryAfter(seqEntry.Source)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat(
+			"locate synthetic ledger main chain index entry after %d: %w", seqEntry.Source, err)
+	}
+
+	// Build the synthetic ledger part of the receipt
+	receipt, err := batch.Account(uSrcSynth).MainChain().Receipt(seqEntry.Source, mainIndex.Source)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat(
+			"build synthetic ledger receipt: %w", err)
+	}
+
+	// Locate the BVN root index entry
+	bvnRootIndex, err := batch.Index().Account(uSrcSys).Chain("root").SourceIndex().FindIndexEntryAfter(mainIndex.Anchor)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat(
+			"locate BVN root index entry after %d: %w", mainIndex.Anchor, err)
+	}
+
+	// Build the BVN part of the receipt
+	bvnReceipt, err := batch.Account(uSrcSys).RootChain().Receipt(mainIndex.Anchor, bvnRootIndex.Source)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat(
+			"build BVN receipt: %w", err)
+	}
+	receipt, err = receipt.Combine(bvnReceipt)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat(
+			"append BVN receipt: %w", err)
+	}
+
+	// If the source is the DN we don't need to do anything else
+	if strings.EqualFold(si.Source, protocol.Directory) {
+		return receipt, nil
+	}
+
+	// Locate the DN-BVN anchor entry
+	dnBvnAnchorChain := batch.Account(uDnAnchor).AnchorChain(si.Source).Root()
+	bvnAnchorHeight, err := dnBvnAnchorChain.IndexOf(receipt.Anchor)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat(
+			"locate DN-BVN anchor entry: %w", err)
+	}
+
+	// Locate the DN-BVN anchor index entry
+	bvnAnchorIndex, err := batch.Index().Account(uDnAnchor).Chain(dnBvnAnchorChain.Name()).SourceIndex().FindIndexEntryAfter(uint64(bvnAnchorHeight))
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat(
+			"locate DN-BVN anchor index entry after %d: %w", bvnAnchorHeight, err)
+	}
+
+	// Build the DN-BVN part of the receipt
+	bvnDnReceipt, err := dnBvnAnchorChain.Receipt(uint64(bvnAnchorHeight), bvnAnchorIndex.Source)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat(
+			"build DN-BVN receipt: %w", err)
+	}
+	receipt, err = receipt.Combine(bvnDnReceipt)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat(
+			"append DN-BVN receipts: %w", err)
+	}
+
+	// Locate the DN root index entry
+	dnRootIndex, err := batch.Index().Account(uDnSys).Chain("root").SourceIndex().FindIndexEntryAfter(bvnAnchorIndex.Anchor)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat(
+			"locate DN root index entry after %d: %w", bvnAnchorIndex.Anchor, err)
+	}
+
+	// Build the DN part of the receipt
+	dnReceipt, err := batch.Account(uDnSys).RootChain().Receipt(bvnAnchorIndex.Anchor, dnRootIndex.Source)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat(
+			"build DN receipt: %w", err)
+	}
+	receipt, err = receipt.Combine(dnReceipt)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat(
+			"append DN receipt: %w", err)
+	}
+
+	return receipt, nil
 }

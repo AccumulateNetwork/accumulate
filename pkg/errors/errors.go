@@ -223,9 +223,9 @@ func (e *ErrorBase[Status]) Unwrap() error {
 
 func (e *ErrorBase[Status]) Format(f fmt.State, verb rune) {
 	if f.Flag('+') {
-		f.Write([]byte(e.Print()))
+		_, _ = f.Write([]byte(e.Print()))
 	} else {
-		f.Write([]byte(e.Error()))
+		_, _ = f.Write([]byte(e.Error()))
 	}
 }
 
