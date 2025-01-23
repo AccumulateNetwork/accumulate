@@ -1,0 +1,43 @@
+$generate:
+  widgets: true
+
+  methods:
+    json: true
+    binary: true
+
+  import:
+    protocol: gitlab.com/accumulatenetwork/accumulate/protocol
+    encoding: gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding
+
+  varPrefix:
+    schema: s
+    widget: w
+
+GenesisDoc:
+  class: composite
+  fields:
+    - name: ChainID
+      type: string
+    - name: Params
+      type: '*ConsensusParams'
+    - name: Validators
+      type: '[]*Validator'
+    - name: Block
+      type: '*Block'
+
+Validator:
+  class: composite
+  fields:
+    - name: Address
+      type: bytes
+    - name: Type
+      type:
+        class: reference
+        name: protocol.SignatureType
+        encode: { withWidget: encoding.EnumWidgetFor }
+    - name: PubKey
+      type: bytes
+    - name: Power
+      type: int
+    - name: Name
+      type: string

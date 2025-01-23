@@ -1159,7 +1159,7 @@ type SnapshotService struct {
 	Storage   *StorageOrRef
 	// Directory is the directory to store snapshots in.
 	Directory string
-	// Schedule is the schedule for capturing snapshots.
+	// Schedule is the schedule for automatically capturing snapshots.
 	Schedule *network.CronSchedule
 	// RetainCount is the number of snapshots to retain.
 	RetainCount *uint64

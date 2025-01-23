@@ -1,5 +1,5 @@
-// Copyright 2024 The Accumulate Authors
-//
+// Copyright 2025 The Accumulate Authors
+// 
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
@@ -20,6 +20,7 @@ import (
 	sv1 "gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	sv2 "gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/cometbft"
 )
 
 func openSnapshotFile(filename string) ioutil.SectionReader {
@@ -40,9 +41,10 @@ func openSnapshotFile(filename string) ioutil.SectionReader {
 }
 
 type snapshotScanArgs struct {
-	Section func(typ sv2.SectionType, size, offset int64) bool
-	Header  func(version, height uint64, timestamp time.Time, rootHash [32]byte)
-	Record  func(any)
+	Section   func(typ sv2.SectionType, size, offset int64) bool
+	Header    func(version, height uint64, timestamp time.Time, rootHash [32]byte)
+	Record    func(any)
+	Consensus func(*cometbft.GenesisDoc)
 }
 
 func scanSnapshot(f ioutil.SectionReader, args snapshotScanArgs) {
@@ -122,6 +124,18 @@ func scanSnapV2(f ioutil.SectionReader, args snapshotScanArgs) {
 				check(err)
 				args.Record(e)
 			}
+
+		case sv2.SectionTypeConsensus:
+			if args.Consensus == nil {
+				break
+			}
+
+			rd, err := s.Open()
+			check(err)
+
+			doc := new(cometbft.GenesisDoc)
+			check(doc.UnmarshalBinaryFrom(rd))
+			args.Consensus(doc)
 		}
 	}
 }
