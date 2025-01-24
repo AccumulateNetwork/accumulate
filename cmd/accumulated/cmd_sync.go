@@ -13,6 +13,7 @@ import (
 	"os"
 	"time"
 
+	rpchttp "github.com/cometbft/cometbft/rpc/client/http"
 	"github.com/manifoldco/promptui"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -91,7 +92,7 @@ func restoreSnapshot(_ *cobra.Command, args []string) {
 	checkf(err, "load snapshot")
 }
 
-func selectSnapshot(ctx context.Context, config *cfg.Config, client api.SnapshotService, opts api.ListSnapshotsOptions, rpc string, skippable bool) error {
+func selectSnapshot(ctx context.Context, config *cfg.Config, client api.SnapshotService, opts api.ListSnapshotsOptions, tmRPC string, skippable bool) error {
 	if skippable {
 		if !term.IsTerminal(int(os.Stdin.Fd())) {
 			return nil
@@ -147,8 +148,32 @@ func selectSnapshot(ctx context.Context, config *cfg.Config, client api.Snapshot
 	ss := config.StateSync
 	ss.Enable = true
 	ss.TrustPeriod = 48 * time.Hour
-	ss.RPCServers = append(ss.RPCServers, rpc)
+	ss.RPCServers = append(ss.RPCServers, tmRPC)
 	ss.TrustHeight = snap.ConsensusInfo.Block.Height
 	ss.TrustHash = snap.ConsensusInfo.Block.Header.Hash().String()
+
+	tmClient, err := rpchttp.New(tmRPC, tmRPC+"/websocket")
+	if err != nil {
+		return fmt.Errorf("create Tendermint client for %s: %v", tmRPC, err)
+	}
+
+	tmni, err := tmClient.NetInfo(ctx)
+	if err != nil {
+		return fmt.Errorf("get network info from node")
+	}
+
+	_, netPort, err := resolveAddrWithPort(tmRPC)
+	if err != nil {
+		return fmt.Errorf("failed to parse port from %q", tmRPC)
+	}
+
+	for _, peer := range tmni.Peers {
+		addr, err := resolveAddr(peer.RemoteIP)
+		if err != nil {
+			continue
+		}
+		ss.RPCServers = append(ss.RPCServers, fmt.Sprintf("tcp://%s:%d", addr, netPort+int(cfg.PortOffsetTendermintRpc)))
+	}
+
 	return nil
 }
