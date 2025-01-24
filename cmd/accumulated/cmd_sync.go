@@ -175,5 +175,9 @@ func selectSnapshot(ctx context.Context, config *cfg.Config, client api.Snapshot
 		ss.RPCServers = append(ss.RPCServers, fmt.Sprintf("tcp://%s:%d", addr, netPort+int(cfg.PortOffsetTendermintRpc)))
 	}
 
+	if len(ss.RPCServers) < 2 {
+		warnf("Too few network peers to sync from. Consensus will refuse to start with only %d state sync peer(s).", len(ss.RPCServers))
+	}
+
 	return nil
 }
