@@ -390,8 +390,8 @@ func initNodeFromPeer(cmd *cobra.Command, args []string) (int, *cfg.Config, *typ
 	}
 
 	accClient := jsonrpc.NewClient(fmt.Sprintf("http://%s:%d/v3", netAddr, netPort+int(cfg.PortOffsetAccumulateApi)))
-	saddr := fmt.Sprintf("tcp://%s:%d", netAddr, netPort+int(cfg.PortOffsetTendermintRpc))
-	tmClient, err := rpchttp.New(saddr, saddr+"/websocket")
+	tmRPC := fmt.Sprintf("tcp://%s:%d", netAddr, netPort+int(cfg.PortOffsetTendermintRpc))
+	tmClient, err := rpchttp.New(tmRPC, tmRPC+"/websocket")
 	if err != nil {
 		return 0, nil, nil, fmt.Errorf("failed to create Tendermint client for %s, %v", args[0], err)
 	}
@@ -472,7 +472,7 @@ func initNodeFromPeer(cmd *cobra.Command, args []string) (int, *cfg.Config, *typ
 	err = selectSnapshot(cmd.Context(), config, accClient, v3.ListSnapshotsOptions{
 		NodeID:    ni.PeerID.String(),
 		Partition: cs.PartitionID,
-	}, true)
+	}, tmRPC, true)
 	if err != nil {
 		return 0, nil, nil, err
 	}

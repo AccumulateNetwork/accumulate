@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
 
 	"github.com/manifoldco/promptui"
 	"github.com/spf13/cobra"
@@ -50,8 +51,11 @@ var cmdRestoreSnapshot = &cobra.Command{
 }
 
 func syncToSnapshot(cmd *cobra.Command, args []string) {
-	client := jsonrpc.NewClient(accumulate.ResolveWellKnownEndpoint(args[0], "v3"))
+	addr := accumulate.ResolveWellKnownEndpoint(args[0], "")
+	netAddr, netPort, err := resolveAddrWithPort(addr)
+	checkf(err, "resolve tendermint RPC server")
 
+	client := jsonrpc.NewClient(fmt.Sprintf("http://%s:%d/v3", netAddr, netPort+int(cfg.PortOffsetAccumulateApi)))
 	ni, err := client.NodeInfo(cmd.Context(), api.NodeInfoOptions{})
 	checkf(err, "get node info from %s", args[0])
 
@@ -63,10 +67,11 @@ func syncToSnapshot(cmd *cobra.Command, args []string) {
 	c, err := config.Load(flagMain.WorkDir)
 	checkf(err, "load configuration")
 
+	tmRPC := fmt.Sprintf("tcp://%s:%d", netAddr, netPort+int(cfg.PortOffsetTendermintRpc))
 	err = selectSnapshot(cmd.Context(), c, client, api.ListSnapshotsOptions{
 		NodeID:    ni.PeerID.String(),
 		Partition: cs.PartitionID,
-	}, false)
+	}, tmRPC, false)
 
 	err = config.Store(c)
 	checkf(err, "store configuration")
@@ -86,7 +91,7 @@ func restoreSnapshot(_ *cobra.Command, args []string) {
 	checkf(err, "load snapshot")
 }
 
-func selectSnapshot(ctx context.Context, config *cfg.Config, client api.SnapshotService, opts api.ListSnapshotsOptions, skippable bool) error {
+func selectSnapshot(ctx context.Context, config *cfg.Config, client api.SnapshotService, opts api.ListSnapshotsOptions, rpc string, skippable bool) error {
 	if skippable {
 		if !term.IsTerminal(int(os.Stdin.Fd())) {
 			return nil
@@ -141,7 +146,8 @@ func selectSnapshot(ctx context.Context, config *cfg.Config, client api.Snapshot
 	snap := snaps[i-1]
 	ss := config.StateSync
 	ss.Enable = true
-	// ss.UseP2P = true
+	ss.TrustPeriod = 48 * time.Hour
+	ss.RPCServers = append(ss.RPCServers, rpc)
 	ss.TrustHeight = snap.ConsensusInfo.Block.Height
 	ss.TrustHash = snap.ConsensusInfo.Block.Header.Hash().String()
 	return nil
