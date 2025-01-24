@@ -7,18 +7,22 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	"encoding/hex"
+	"fmt"
 	"io"
 	"os"
-	"strconv"
 
-	"github.com/cometbft/cometbft/rpc/client/http"
+	"github.com/manifoldco/promptui"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
+	cfg "gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/accumulate"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"golang.org/x/term"
 )
 
 func init() {
@@ -32,9 +36,9 @@ var cmdSync = &cobra.Command{
 }
 
 var cmdSyncSnapshot = &cobra.Command{
-	Use:   "snapshot [tendermint RPC server] [height] [hash]",
+	Use:   "snapshot [tendermint RPC server]",
 	Short: "Configures state sync to pull a snapshot",
-	Args:  cobra.ExactArgs(3),
+	Args:  cobra.ExactArgs(1),
 	Run:   syncToSnapshot,
 }
 
@@ -45,45 +49,24 @@ var cmdRestoreSnapshot = &cobra.Command{
 	Run:   restoreSnapshot,
 }
 
-func syncToSnapshot(_ *cobra.Command, args []string) {
-	client, err := http.New(args[0], args[0]+"/websocket")
-	checkf(err, "server")
+func syncToSnapshot(cmd *cobra.Command, args []string) {
+	client := jsonrpc.NewClient(accumulate.ResolveWellKnownEndpoint(args[0], "v3"))
 
-	height, err := strconv.ParseInt(args[1], 10, 64)
-	checkf(err, "height")
+	ni, err := client.NodeInfo(cmd.Context(), api.NodeInfoOptions{})
+	checkf(err, "get node info from %s", args[0])
 
-	hash, err := hex.DecodeString(args[2])
-	checkf(err, "hash")
+	cs, err := client.ConsensusStatus(cmd.Context(), api.ConsensusStatusOptions{
+		NodeID: ni.PeerID.String(),
+	})
+	checkf(err, "get consensus state from %s", args[0])
 
 	c, err := config.Load(flagMain.WorkDir)
 	checkf(err, "load configuration")
 
-	// The Tendermint height is one more than the last commit height
-	blockHeight := height + 1
-
-	// TODO The user should specify the block header hash directly instead of us
-	// querying a node for it
-	tmblock, err := client.Block(context.Background(), &blockHeight)
-	checkf(err, "fetching block")
-
-	if tmblock == nil {
-		fatalf("Block not found")
-		panic("unreachable") // For static check
-	}
-
-	if tmblock.Block.LastCommit.Height != height {
-		fatalf("Last commit height does not match: want %d, got %d", height, tmblock.Block.Height)
-	}
-
-	if !bytes.Equal(tmblock.Block.AppHash, hash) {
-		fatalf("App hash does not match: want %x, got %x", hash, tmblock.Block.AppHash)
-	}
-
-	ss := c.StateSync
-	ss.Enable = true
-	// ss.UseP2P = true
-	ss.TrustHeight = tmblock.Block.Height
-	ss.TrustHash = tmblock.Block.Header.Hash().String()
+	err = selectSnapshot(cmd.Context(), c, client, api.ListSnapshotsOptions{
+		NodeID:    ni.PeerID.String(),
+		Partition: cs.PartitionID,
+	}, false)
 
 	err = config.Store(c)
 	checkf(err, "store configuration")
@@ -101,4 +84,65 @@ func restoreSnapshot(_ *cobra.Command, args []string) {
 
 	err = daemon.LoadSnapshot(f)
 	checkf(err, "load snapshot")
+}
+
+func selectSnapshot(ctx context.Context, config *cfg.Config, client api.SnapshotService, opts api.ListSnapshotsOptions, skippable bool) error {
+	if skippable {
+		if !term.IsTerminal(int(os.Stdin.Fd())) {
+			return nil
+		}
+
+		i, _, err := (&promptui.Select{
+			Label: "Check for snapshots to sync to?",
+			Items: []string{
+				"Yes",
+				"No",
+			},
+		}).Run()
+		if err != nil {
+			return fmt.Errorf("select a snapshot: %v", err)
+		}
+		if i != 0 {
+			return nil
+		}
+	}
+
+	snaps, err := client.ListSnapshots(ctx, opts)
+	if err != nil {
+		// Don't fail if the node doesn't have a snapshot service
+		if errors.Is(err, errors.NotFound) {
+			return nil
+		}
+		return fmt.Errorf("fetch snapshot list: %v", err)
+	}
+
+	if len(snaps) == 0 {
+		fmt.Println("No snapshots available from this node")
+		return nil
+	}
+
+	var items []string
+	if skippable {
+		items = append(items, "Sync from genesis")
+	} else {
+		items = append(items, "Abort")
+	}
+	for _, s := range snaps {
+		items = append(items, fmt.Sprintf("Block %d (%x)", s.Header.SystemLedger.Index, s.Header.RootHash[:8]))
+	}
+	i, _, err := (&promptui.Select{Label: "Select a snapshot", Items: items}).Run()
+	if err != nil {
+		return fmt.Errorf("select a snapshot: %v", err)
+	}
+	if i == 0 {
+		return nil
+	}
+
+	snap := snaps[i-1]
+	ss := config.StateSync
+	ss.Enable = true
+	// ss.UseP2P = true
+	ss.TrustHeight = snap.ConsensusInfo.Block.Height
+	ss.TrustHash = snap.ConsensusInfo.Block.Header.Hash().String()
+	return nil
 }

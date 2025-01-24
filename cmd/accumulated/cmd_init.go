@@ -11,7 +11,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -35,7 +34,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	cfg "gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
+	v3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/proxy"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -171,8 +173,8 @@ func networkReset() {
 			continue
 		}
 
-		fmt.Printf("Deleting %s\n", dir)
-		err = os.Remove(dir)
+		fmt.Fprintf(os.Stderr, "Deleting %s\n", dir)
+		err = os.RemoveAll(dir)
 		check(err)
 	}
 }
@@ -184,7 +186,7 @@ func nodeReset(dir string) bool {
 	for _, ent := range ent {
 		if ent.Name() == "priv_validator_key.json" {
 			file := filepath.Join(dir, ent.Name())
-			fmt.Printf("Deleting %s\n", file)
+			fmt.Fprintf(os.Stderr, "Deleting %s\n", file)
 			err := os.Remove(file)
 			check(err)
 			continue
@@ -218,7 +220,7 @@ func bootstrapReset(dir string) bool {
 		switch ent.Name() {
 		case "node_key.json", "accumulate.toml":
 			file := filepath.Join(dir, ent.Name())
-			fmt.Printf("Deleting %s\n", file)
+			fmt.Fprintf(os.Stderr, "Deleting %s\n", file)
 			err := os.Remove(file)
 			check(err)
 			continue
@@ -387,33 +389,35 @@ func initNodeFromPeer(cmd *cobra.Command, args []string) (int, *cfg.Config, *typ
 		return 0, nil, nil, fmt.Errorf("invalid peer url %v", err)
 	}
 
-	accClient, err := client.New(fmt.Sprintf("http://%s:%d", netAddr, netPort+int(cfg.PortOffsetAccumulateApi)))
-	if err != nil {
-		return 0, nil, nil, fmt.Errorf("failed to create API client for %s, %v", args[0], err)
-	}
-
+	accClient := jsonrpc.NewClient(fmt.Sprintf("http://%s:%d/v3", netAddr, netPort+int(cfg.PortOffsetAccumulateApi)))
 	saddr := fmt.Sprintf("tcp://%s:%d", netAddr, netPort+int(cfg.PortOffsetTendermintRpc))
 	tmClient, err := rpchttp.New(saddr, saddr+"/websocket")
 	if err != nil {
 		return 0, nil, nil, fmt.Errorf("failed to create Tendermint client for %s, %v", args[0], err)
 	}
 
-	version, err := getVersion(accClient)
+	ni, err := accClient.NodeInfo(cmd.Context(), v3.NodeInfoOptions{})
 	if err != nil {
 		return 0, nil, nil, err
 	}
 
-	err = versionCheck(version, args[0])
+	err = versionCheck(&api.VersionResponse{
+		Version:        ni.Version,
+		Commit:         ni.Commit,
+		VersionIsKnown: ni.Commit != "",
+	}, args[0])
 	if err != nil {
 		return 0, nil, nil, err
 	}
 
-	description, err := accClient.Describe(context.Background())
+	cs, err := accClient.ConsensusStatus(cmd.Context(), v3.ConsensusStatusOptions{
+		NodeID: ni.PeerID.String(),
+	})
 	if err != nil {
 		return 0, nil, nil, fmt.Errorf("failed to get description from %s, %v", args[0], err)
 	}
 
-	if description.NetworkType == protocol.PartitionTypeBlockValidator {
+	if cs.PartitionType == protocol.PartitionTypeBlockValidator {
 		netPort -= config.PortOffsetBlockValidator
 	}
 
@@ -427,7 +431,7 @@ func initNodeFromPeer(cmd *cobra.Command, args []string) (int, *cfg.Config, *typ
 		return 0, nil, nil, fmt.Errorf("failed to get status of %s, %v", args[0], err)
 	}
 
-	config := cfg.Default(description.Network.Id, description.NetworkType, getNodeTypeFromFlag(), description.PartitionId)
+	config := cfg.Default(ni.Network, cs.PartitionType, getNodeTypeFromFlag(), cs.PartitionID)
 	config.P2P.PersistentPeers = fmt.Sprintf("%s@%s:%d", status.NodeInfo.DefaultNodeID, netAddr, netPort+int(cfg.PortOffsetTendermintP2P))
 
 	// //otherwise make the best out of what we have to establish our bootstrap peers
@@ -464,9 +468,19 @@ func initNodeFromPeer(cmd *cobra.Command, args []string) (int, *cfg.Config, *typ
 	// 	config.P2P.BootstrapPeers += "," + u.String()
 	// }
 
+	// Check for snapshots
+	err = selectSnapshot(cmd.Context(), config, accClient, v3.ListSnapshotsOptions{
+		NodeID:    ni.PeerID.String(),
+		Partition: cs.PartitionID,
+	}, true)
+	if err != nil {
+		return 0, nil, nil, err
+	}
+
 	config.Accumulate.Describe = cfg.Describe{
-		NetworkType: description.NetworkType, PartitionId: description.PartitionId,
-		Network: cfg.Network{Id: description.Network.Id}}
+		NetworkType: cs.PartitionType,
+		PartitionId: cs.PartitionID,
+		Network:     cfg.Network{Id: ni.Network}}
 	return netPort, config, genDoc, nil
 }
 
