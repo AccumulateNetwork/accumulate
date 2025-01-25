@@ -127,11 +127,18 @@ func TestEntriesWithIncompleteState(t *testing.T) {
 		{s1.Count - 1, s1.Count + 1},
 	}
 
-	for i, tt := range tests {
-		t.Run(fmt.Sprintf("Case %d", i), func(t *testing.T) {
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("Range %d:%d", tt.begin, tt.end), func(t *testing.T) {
 			entries, err := c.Entries(tt.begin, tt.end)
 			require.NoError(t, err)
 			require.Equal(t, rh.List[tt.begin:tt.end], entries)
+		})
+	}
+
+	for _, s := range []int64{s1.Count - 2, s2.Count - 2, s3.Count - 2} {
+		t.Run(fmt.Sprintf("State at %d", s), func(t *testing.T) {
+			_, err := c.StateAt(s)
+			require.NoError(t, err)
 		})
 	}
 }
