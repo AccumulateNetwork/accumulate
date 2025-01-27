@@ -143,7 +143,14 @@ func TestEntriesWithIncompleteState(t *testing.T) {
 	}
 }
 
-// TestPartialTree verifies that a merkle tree can be correctly reconstructed from a partial state
+// TestPartialTree verifies that a Merkle tree can be correctly reconstructed from a partial state.
+// Could not follow the logic of TestEntriesWithIncompleteState, so I rewrote the test.
+//
+// 1. Building a chain with 1000 entries (A)
+// 2. Created a partial chain by starting it from a state extracted from A (B)
+// 3. Demonstrated that all elements of B can match what is in A from the initial state to the end of A
+// 4. Demonstrated that all elements of B match what is in A from the first mark point before the state B holds
+// 5. Demonstrated that no elements from the first element of A to the mark point before the initial state are in B
 func TestPartialTree(t *testing.T) {
 	var rh common.RandHash
 	store := begin()
