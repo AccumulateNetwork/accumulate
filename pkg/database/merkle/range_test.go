@@ -142,3 +142,86 @@ func TestEntriesWithIncompleteState(t *testing.T) {
 		})
 	}
 }
+
+// TestPartialTree verifies that a merkle tree can be correctly reconstructed from a partial state
+func TestPartialTree(t *testing.T) {
+	var rh common.RandHash
+	store := begin()
+
+	// Create merkle tree A with 1000 entries
+	mmA := testChain(store, 8, "treeA") // power 2 for reasonable mark spacing
+	for i := 0; i < 1000; i++ {
+		require.NoError(t, mmA.AddEntry(rh.NextList(), false))
+	}
+
+	// Get the state at 700th element
+	state700, err := mmA.StateAt(699) // 0-based index
+	require.NoError(t, err)
+
+	// Create truncated merkle tree B starting with state700
+	mmB := testChain(store, 8, "treeB")
+	err = mmB.Head().Put(state700)
+	require.NoError(t, err)
+
+	// Add the next 300 hashes from A to B
+	for i := 700; i < 1000; i++ {
+		require.NoError(t, mmB.AddEntry(rh.List[i], false))
+	}
+
+	// Get final states of both trees
+	stateA, err := mmA.Head().Get()
+	require.NoError(t, err)
+	stateB, err := mmB.Head().Get()
+	require.NoError(t, err)
+
+	// Compare the final states
+	require.Equal(t, stateA.Count, stateB.Count, "final counts should match")
+	require.Equal(t, stateA.Anchor(), stateB.Anchor(), "final anchor hashes should match")
+
+	// Compare range queries between trees
+	entriesA, err := mmA.Entries(950, 975)
+	require.NoError(t, err, "failed to get entries from tree A")
+	entriesB, err := mmB.Entries(950, 975)
+	require.NoError(t, err, "failed to get entries from tree B")
+	require.Equal(t, entriesA, entriesB, "entries from range [950,975] should match between trees")
+
+	// Verify all entries in tree A match the original entries
+	entriesA, err = mmA.Entries(0, 1000)
+	require.NoError(t, err, "failed to get all entries from tree A")
+	require.Equal(t, rh.List[:1000], entriesA, "all entries in tree A should match original entries")
+
+	// Verify tree B cannot access entries before its starting point
+	_, err = mmB.Entries(0, 700)
+	require.Error(t, err, "tree B should not be able to access entries before 700")
+
+	// Verify range 700-1000 is identical in both trees and matches original entries
+	entriesA, err = mmA.Entries(700, 1000)
+	require.NoError(t, err, "failed to get range from tree A")
+	entriesB, err = mmB.Entries(700, 1000)
+	require.NoError(t, err, "failed to get range from tree B")
+	require.Equal(t, rh.List[700:1000], entriesA, "entries from A should match original")
+	require.Equal(t, entriesA, entriesB, "entries should match between trees")
+
+	// With power=8, mark points are at multiples of 256
+	// Tree B starts at 700, which is between mark points 512 and 768
+	// B should have the complete state from mark point 512
+	entriesB, err = mmB.Entries(512, 768)
+	require.NoError(t, err, "tree B should be able to access entries from mark point 512")
+	require.Equal(t, rh.List[512:768], entriesB, "entries from mark point 512 should match original")
+
+	// Verify B cannot access entries before mark point 512
+	_, err = mmB.Entries(256, 512)
+	require.Error(t, err, "tree B should not be able to access entries before mark point 512")
+
+	// Test precise boundary behavior at mark point 512
+	_, err = mmB.Entries(511, 512)
+	require.Error(t, err, "tree B should not be able to access entry 511 (before mark point)")
+
+	entriesB, err = mmB.Entries(512, 513)
+	require.NoError(t, err, "tree B should be able to access entry 512 (mark point)")
+	require.Equal(t, rh.List[512:513], entriesB, "entry 512 should match original")
+
+	entriesB, err = mmB.Entries(513, 514)
+	require.NoError(t, err, "tree B should be able to access entry 513 (after mark point)")
+	require.Equal(t, rh.List[513:514], entriesB, "entry 513 should match original")
+}
