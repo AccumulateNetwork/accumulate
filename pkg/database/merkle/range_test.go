@@ -16,6 +16,13 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/common"
 )
 
+const (
+	// Number of iterations for each benchmark test
+	benchmarkIterations = 1000000
+	// Size of the pre-allocated slices (should be >= iterations)
+	benchmarkAllocation = benchmarkIterations
+)
+
 func b2i(b []byte) int64 {
 	i := int64(b[0])<<24 + int64(b[1])<<16 + int64(b[2])<<8 + int64(b[3])
 	return i
@@ -265,27 +272,28 @@ func (k *MapKeyBuffer) ForMap() [32]byte {
 	return keyBuf
 }
 
-// Using direct keys is the fastest (1)
-// Using what we are doing with ForMap is the slowest
-// Using a ForMap returning a direct key is half way between.
+// Using direct keys is the fastest (baseline)
+// Using what we are doing with ForMap() is slower for reads but slightly faster for writes
+// Using a ForMap() returning a direct key is slowest overall
 
-// Speed read = 2236963/2236963 = 1
-// Speed write = 444986/444986 = 1
-// Speed random = 545871/545871 = 1
+// Direct access (baseline)
+// Speed write = 260143967/260143967 = 1
+// Speed read = 75658919/75658919 = 1
+// Speed random = 121236565/121236565 = 1
 // goos: linux
 // goarch: amd64
 // pkg: gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle
 // cpu: Intel(R) Core(TM) i7-8809G CPU @ 3.10GHz
-// BenchmarkDirectMapOperations/Write-8         	     568	   2236963 ns/op
-// BenchmarkDirectMapOperations/Sequential_Read-8         	    2457	    444986 ns/op
-// BenchmarkDirectMapOperations/Random_Read-8             	    2209	    545871 ns/op
+// BenchmarkDirectMapOperations/Write-8         	       4	 260143967 ns/op	276907126 B/op	   38372 allocs/op
+// BenchmarkDirectMapOperations/Sequential_Read-8         	      16	  75658919 ns/op	       0 B/op	       0 allocs/op
+// BenchmarkDirectMapOperations/Random_Read-8             	       9	 121236565 ns/op	       0 B/op	       0 allocs/op
 // PASS
 func BenchmarkDirectMapOperations(b *testing.B) {
-	// Generate 10,000 random hashes
+	// Generate random hashes
 	var rh common.RandHash
-	data := make([][]byte, 100000)
-	keys := make([]MapKey, 100000)
-	for i := 0; i < 10000; i++ {
+	data := make([][]byte, benchmarkAllocation)
+	keys := make([]MapKey, benchmarkAllocation)
+	for i := 0; i < benchmarkIterations; i++ {
 		data[i] = rh.NextList()
 		keyHash := rh.Next()
 		copy(keys[i][:], keyHash)
@@ -295,7 +303,7 @@ func BenchmarkDirectMapOperations(b *testing.B) {
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			directMap := make(map[MapKey][]byte)
-			for j := 0; j < 10000; j++ {
+			for j := 0; j < benchmarkIterations; j++ {
 				directMap[keys[j]] = data[j]
 			}
 		}
@@ -303,13 +311,13 @@ func BenchmarkDirectMapOperations(b *testing.B) {
 
 	b.Run("Sequential Read", func(b *testing.B) {
 		directMap := make(map[MapKey][]byte)
-		for i := 0; i < 10000; i++ {
+		for i := 0; i < benchmarkIterations; i++ {
 			directMap[keys[i]] = data[i]
 		}
 
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			for j := 0; j < 10000; j++ {
+			for j := 0; j < benchmarkIterations; j++ {
 				_ = directMap[keys[j]]
 			}
 		}
@@ -317,11 +325,11 @@ func BenchmarkDirectMapOperations(b *testing.B) {
 
 	b.Run("Random Read", func(b *testing.B) {
 		directMap := make(map[MapKey][]byte)
-		for i := 0; i < 10000; i++ {
+		for i := 0; i < benchmarkIterations; i++ {
 			directMap[keys[i]] = data[i]
 		}
 
-		indices := rand.Perm(10000)
+		indices := rand.Perm(benchmarkIterations)
 
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
@@ -332,23 +340,24 @@ func BenchmarkDirectMapOperations(b *testing.B) {
 	})
 }
 
-// Speed = write 2404727/2236963 = 5.4
-// Speed = read 636407/444986 = 1.4
-// Speed = random 897242/545871 = 1.6
+// Indirect with struct
+// Speed = write 259762569/260143967 = 1.00
+// Speed = read 100821385/75658919 = 1.33
+// Speed = random 174377338/121236565 = 1.44
 // goarch: amd64
 // pkg: gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle
 // cpu: Intel(R) Core(TM) i7-8809G CPU @ 3.10GHz
-// BenchmarkIndirectMapOperations/Write-8         	     456	   2404727 ns/op
-// BenchmarkIndirectMapOperations/Sequential_Read-8         	    2058	    636407 ns/op
-// BenchmarkIndirectMapOperations/Random_Read-8             	    1177	    897242 ns/op
+// BenchmarkIndirectMapOperations/Write-8         	       4	 259762569 ns/op	276888072 B/op	   38333 allocs/op
+// BenchmarkIndirectMapOperations/Sequential_Read-8         	      10	 100821385 ns/op	       0 B/op	       0 allocs/op
+// BenchmarkIndirectMapOperations/Random_Read-8             	       6	 174377338 ns/op	       0 B/op	       0 allocs/op
 // PASS
 
 func BenchmarkIndirectMapOperations(b *testing.B) {
-	// Generate 10,000 random hashes
+	// Generate random hashes
 	var rh common.RandHash
-	data := make([][]byte, 100000)
-	keys := make([]SliceKey, 100000)
-	for i := 0; i < 10000; i++ {
+	data := make([][]byte, benchmarkAllocation)
+	keys := make([]SliceKey, benchmarkAllocation)
+	for i := 0; i < benchmarkIterations; i++ {
 		data[i] = rh.NextList()
 		keyHash := rh.Next()
 		keys[i].Hash = make([]byte, 32)
@@ -359,7 +368,7 @@ func BenchmarkIndirectMapOperations(b *testing.B) {
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			indirectMap := make(map[MapKeyIndirect][]byte)
-			for j := 0; j < 10000; j++ {
+			for j := 0; j < benchmarkIterations; j++ {
 				indirectMap[keys[j].ForMap()] = data[j]
 			}
 		}
@@ -367,13 +376,13 @@ func BenchmarkIndirectMapOperations(b *testing.B) {
 
 	b.Run("Sequential Read", func(b *testing.B) {
 		indirectMap := make(map[MapKeyIndirect][]byte)
-		for i := 0; i < 10000; i++ {
+		for i := 0; i < benchmarkIterations; i++ {
 			indirectMap[keys[i].ForMap()] = data[i]
 		}
 
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			for j := 0; j < 10000; j++ {
+			for j := 0; j < benchmarkIterations; j++ {
 				_ = indirectMap[keys[j].ForMap()]
 			}
 		}
@@ -381,11 +390,11 @@ func BenchmarkIndirectMapOperations(b *testing.B) {
 
 	b.Run("Random Read", func(b *testing.B) {
 		indirectMap := make(map[MapKeyIndirect][]byte)
-		for i := 0; i < 10000; i++ {
+		for i := 0; i < benchmarkIterations; i++ {
 			indirectMap[keys[i].ForMap()] = data[i]
 		}
 
-		indices := rand.Perm(10000)
+		indices := rand.Perm(benchmarkIterations)
 
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
@@ -396,23 +405,24 @@ func BenchmarkIndirectMapOperations(b *testing.B) {
 	})
 }
 
-// Speed = write 1921595/2236963 = 0.86
-// Speed = read 555300/444986 = 1.25
-// Speed = random 792946/545871 = 1.45
+// Buffered with shared array
+// Speed = write 297293183/260143967 = 1.14
+// Speed = read 106562581/75658919 = 1.41
+// Speed = random 186280970/121236565 = 1.54
 // goos: linux
 // goarch: amd64
 // pkg: gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle
 // cpu: Intel(R) Core(TM) i7-8809G CPU @ 3.10GHz
-// BenchmarkBufferedMapOperations/Write-8         	     636	   1921595 ns/op
-// BenchmarkBufferedMapOperations/Sequential_Read-8         	    2217	    555300 ns/op
-// BenchmarkBufferedMapOperations/Random_Read-8             	    1462	    792946 ns/op
+// BenchmarkBufferedMapOperations/Write-8         	       4	 297293183 ns/op	276939308 B/op	   38440 allocs/op
+// BenchmarkBufferedMapOperations/Sequential_Read-8         	      12	 106562581 ns/op	       0 B/op	       0 allocs/op
+// BenchmarkBufferedMapOperations/Random_Read-8             	       6	 186280970 ns/op	       0 B/op	       0 allocs/op
 // PASS
 func BenchmarkBufferedMapOperations(b *testing.B) {
-	// Generate 10,000 random hashes
+	// Generate random hashes
 	var rh common.RandHash
-	data := make([][]byte, 1000000)
-	keys := make([]MapKeyBuffer, 1000000)
-	for i := 0; i < 10000; i++ {
+	data := make([][]byte, benchmarkAllocation)
+	keys := make([]MapKeyBuffer, benchmarkAllocation)
+	for i := 0; i < benchmarkIterations; i++ {
 		data[i] = rh.NextList()
 		keyHash := rh.Next()
 		keys[i].Hash = make([]byte, 32)
@@ -423,7 +433,7 @@ func BenchmarkBufferedMapOperations(b *testing.B) {
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			indirectMap := make(map[[32]byte][]byte)
-			for j := 0; j < 10000; j++ {
+			for j := 0; j < benchmarkIterations; j++ {
 				indirectMap[keys[j].ForMap()] = data[j]
 			}
 		}
@@ -431,13 +441,13 @@ func BenchmarkBufferedMapOperations(b *testing.B) {
 
 	b.Run("Sequential Read", func(b *testing.B) {
 		indirectMap := make(map[[32]byte][]byte)
-		for i := 0; i < 10000; i++ {
+		for i := 0; i < benchmarkIterations; i++ {
 			indirectMap[keys[i].ForMap()] = data[i]
 		}
 
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			for j := 0; j < 10000; j++ {
+			for j := 0; j < benchmarkIterations; j++ {
 				_ = indirectMap[keys[j].ForMap()]
 			}
 		}
@@ -445,11 +455,11 @@ func BenchmarkBufferedMapOperations(b *testing.B) {
 
 	b.Run("Random Read", func(b *testing.B) {
 		indirectMap := make(map[[32]byte][]byte)
-		for i := 0; i < 10000; i++ {
+		for i := 0; i < benchmarkIterations; i++ {
 			indirectMap[keys[i].ForMap()] = data[i]
 		}
 
-		indices := rand.Perm(10000)
+		indices := rand.Perm(benchmarkIterations)
 
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
