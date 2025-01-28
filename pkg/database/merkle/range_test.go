@@ -9,6 +9,7 @@ package merkle
 import (
 	"bytes"
 	"fmt"
+	"math/rand"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -231,4 +232,230 @@ func TestPartialTree(t *testing.T) {
 	entriesB, err = mmB.Entries(513, 514)
 	require.NoError(t, err, "tree B should be able to access entry 513 (after mark point)")
 	require.Equal(t, rh.List[513:514], entriesB, "entry 513 should match original")
+}
+
+// MapKey represents a basic key as a fixed array
+type MapKey [32]byte
+
+// SliceKey represents the input key as a slice
+type SliceKey struct {
+	Hash []byte
+}
+
+// MapKeyIndirect wraps a fixed-size byte array
+type MapKeyIndirect struct {
+	Hash [32]byte
+}
+
+func (k SliceKey) ForMap() MapKeyIndirect {
+	var ind MapKeyIndirect
+	copy(ind.Hash[:], k.Hash)
+	return ind
+}
+
+// MapKeyBuffer provides ForMap with a reusable buffer
+type MapKeyBuffer struct {
+	Hash []byte
+}
+
+var keyBuf [32]byte
+
+func (k *MapKeyBuffer) ForMap() [32]byte {
+	copy(keyBuf[:], k.Hash)
+	return keyBuf
+}
+
+// Using direct keys is the fastest (1)
+// Using what we are doing with ForMap is the slowest
+// Using a ForMap returning a direct key is half way between.
+
+// Speed read = 2236963/2236963 = 1
+// Speed write = 444986/444986 = 1
+// Speed random = 545871/545871 = 1
+// goos: linux
+// goarch: amd64
+// pkg: gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle
+// cpu: Intel(R) Core(TM) i7-8809G CPU @ 3.10GHz
+// BenchmarkDirectMapOperations/Write-8         	     568	   2236963 ns/op
+// BenchmarkDirectMapOperations/Sequential_Read-8         	    2457	    444986 ns/op
+// BenchmarkDirectMapOperations/Random_Read-8             	    2209	    545871 ns/op
+// PASS
+func BenchmarkDirectMapOperations(b *testing.B) {
+	// Generate 10,000 random hashes
+	var rh common.RandHash
+	data := make([][]byte, 100000)
+	keys := make([]MapKey, 100000)
+	for i := 0; i < 10000; i++ {
+		data[i] = rh.NextList()
+		keyHash := rh.Next()
+		copy(keys[i][:], keyHash)
+	}
+
+	b.Run("Write", func(b *testing.B) {
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			directMap := make(map[MapKey][]byte)
+			for j := 0; j < 10000; j++ {
+				directMap[keys[j]] = data[j]
+			}
+		}
+	})
+
+	b.Run("Sequential Read", func(b *testing.B) {
+		directMap := make(map[MapKey][]byte)
+		for i := 0; i < 10000; i++ {
+			directMap[keys[i]] = data[i]
+		}
+
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			for j := 0; j < 10000; j++ {
+				_ = directMap[keys[j]]
+			}
+		}
+	})
+
+	b.Run("Random Read", func(b *testing.B) {
+		directMap := make(map[MapKey][]byte)
+		for i := 0; i < 10000; i++ {
+			directMap[keys[i]] = data[i]
+		}
+
+		indices := rand.Perm(10000)
+
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			for _, j := range indices {
+				_ = directMap[keys[j]]
+			}
+		}
+	})
+}
+
+// Speed = write 2404727/2236963 = 5.4
+// Speed = read 636407/444986 = 1.4
+// Speed = random 897242/545871 = 1.6
+// goarch: amd64
+// pkg: gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle
+// cpu: Intel(R) Core(TM) i7-8809G CPU @ 3.10GHz
+// BenchmarkIndirectMapOperations/Write-8         	     456	   2404727 ns/op
+// BenchmarkIndirectMapOperations/Sequential_Read-8         	    2058	    636407 ns/op
+// BenchmarkIndirectMapOperations/Random_Read-8             	    1177	    897242 ns/op
+// PASS
+
+func BenchmarkIndirectMapOperations(b *testing.B) {
+	// Generate 10,000 random hashes
+	var rh common.RandHash
+	data := make([][]byte, 100000)
+	keys := make([]SliceKey, 100000)
+	for i := 0; i < 10000; i++ {
+		data[i] = rh.NextList()
+		keyHash := rh.Next()
+		keys[i].Hash = make([]byte, 32)
+		copy(keys[i].Hash, keyHash)
+	}
+
+	b.Run("Write", func(b *testing.B) {
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			indirectMap := make(map[MapKeyIndirect][]byte)
+			for j := 0; j < 10000; j++ {
+				indirectMap[keys[j].ForMap()] = data[j]
+			}
+		}
+	})
+
+	b.Run("Sequential Read", func(b *testing.B) {
+		indirectMap := make(map[MapKeyIndirect][]byte)
+		for i := 0; i < 10000; i++ {
+			indirectMap[keys[i].ForMap()] = data[i]
+		}
+
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			for j := 0; j < 10000; j++ {
+				_ = indirectMap[keys[j].ForMap()]
+			}
+		}
+	})
+
+	b.Run("Random Read", func(b *testing.B) {
+		indirectMap := make(map[MapKeyIndirect][]byte)
+		for i := 0; i < 10000; i++ {
+			indirectMap[keys[i].ForMap()] = data[i]
+		}
+
+		indices := rand.Perm(10000)
+
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			for _, j := range indices {
+				_ = indirectMap[keys[j].ForMap()]
+			}
+		}
+	})
+}
+
+// Speed = write 1921595/2236963 = 0.86
+// Speed = read 555300/444986 = 1.25
+// Speed = random 792946/545871 = 1.45
+// goos: linux
+// goarch: amd64
+// pkg: gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle
+// cpu: Intel(R) Core(TM) i7-8809G CPU @ 3.10GHz
+// BenchmarkBufferedMapOperations/Write-8         	     636	   1921595 ns/op
+// BenchmarkBufferedMapOperations/Sequential_Read-8         	    2217	    555300 ns/op
+// BenchmarkBufferedMapOperations/Random_Read-8             	    1462	    792946 ns/op
+// PASS
+func BenchmarkBufferedMapOperations(b *testing.B) {
+	// Generate 10,000 random hashes
+	var rh common.RandHash
+	data := make([][]byte, 1000000)
+	keys := make([]MapKeyBuffer, 1000000)
+	for i := 0; i < 10000; i++ {
+		data[i] = rh.NextList()
+		keyHash := rh.Next()
+		keys[i].Hash = make([]byte, 32)
+		copy(keys[i].Hash, keyHash)
+	}
+
+	b.Run("Write", func(b *testing.B) {
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			indirectMap := make(map[[32]byte][]byte)
+			for j := 0; j < 10000; j++ {
+				indirectMap[keys[j].ForMap()] = data[j]
+			}
+		}
+	})
+
+	b.Run("Sequential Read", func(b *testing.B) {
+		indirectMap := make(map[[32]byte][]byte)
+		for i := 0; i < 10000; i++ {
+			indirectMap[keys[i].ForMap()] = data[i]
+		}
+
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			for j := 0; j < 10000; j++ {
+				_ = indirectMap[keys[j].ForMap()]
+			}
+		}
+	})
+
+	b.Run("Random Read", func(b *testing.B) {
+		indirectMap := make(map[[32]byte][]byte)
+		for i := 0; i < 10000; i++ {
+			indirectMap[keys[i].ForMap()] = data[i]
+		}
+
+		indices := rand.Perm(10000)
+
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			for _, j := range indices {
+				_ = indirectMap[keys[j].ForMap()]
+			}
+		}
+	})
 }
