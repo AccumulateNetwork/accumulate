@@ -382,3 +382,20 @@ AuthoritySignature:
     - name: Memo
       type: string
       optional: true
+
+LxrMiningSignature:
+  union: { type: signature }
+  fields:
+    - name: Nonce
+      type: bytes
+    - name: ComputedHash
+      type: hash
+    - name: BlockHash
+      type: hash
+    - name: Signer
+      type: url
+      pointer: true
+    - name: SignerVersion
+      type: uint
+    - name: Timestamp
+      type: uint

@@ -122,6 +122,12 @@ KeyPage:
       marshal-as: enum
       pointer: true
       optional: true
+    - name: MiningDifficulty
+      type: uint
+      optional: true
+    - name: MiningEnabled
+      type: bool
+      optional: true
 
 DataAccount:
   union: { type: account, value: DataAccount }

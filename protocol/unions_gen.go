@@ -906,6 +906,8 @@ func NewKeyPageOperation(typ KeyPageOperationType) (KeyPageOperation, error) {
 		return new(AddKeyOperation), nil
 	case KeyPageOperationTypeRemove:
 		return new(RemoveKeyOperation), nil
+	case KeyPageOperationTypeSetMiningParametersOperation:
+		return new(SetMiningParametersOperation), nil
 	case KeyPageOperationTypeSetRejectThreshold:
 		return new(SetRejectThresholdKeyPageOperation), nil
 	case KeyPageOperationTypeSetResponseThreshold:
@@ -937,6 +939,12 @@ func EqualKeyPageOperation(a, b KeyPageOperation) bool {
 			return b == nil
 		}
 		b, ok := b.(*RemoveKeyOperation)
+		return ok && a.Equal(b)
+	case *SetMiningParametersOperation:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*SetMiningParametersOperation)
 		return ok && a.Equal(b)
 	case *SetRejectThresholdKeyPageOperation:
 		if a == nil {
@@ -978,6 +986,8 @@ func CopyKeyPageOperation(v KeyPageOperation) KeyPageOperation {
 	case *AddKeyOperation:
 		return v.Copy()
 	case *RemoveKeyOperation:
+		return v.Copy()
+	case *SetMiningParametersOperation:
 		return v.Copy()
 	case *SetRejectThresholdKeyPageOperation:
 		return v.Copy()
@@ -1073,6 +1083,8 @@ func NewSignature(typ SignatureType) (Signature, error) {
 		return new(InternalSignature), nil
 	case SignatureTypeLegacyED25519:
 		return new(LegacyED25519Signature), nil
+	case SignatureTypeLxrMining:
+		return new(LxrMiningSignature), nil
 	case SignatureTypePartition:
 		return new(PartitionSignature), nil
 	case SignatureTypeRCD1:
@@ -1151,6 +1163,12 @@ func EqualSignature(a, b Signature) bool {
 		}
 		b, ok := b.(*LegacyED25519Signature)
 		return ok && a.Equal(b)
+	case *LxrMiningSignature:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*LxrMiningSignature)
+		return ok && a.Equal(b)
 	case *PartitionSignature:
 		if a == nil {
 			return b == nil
@@ -1217,6 +1235,8 @@ func CopySignature(v Signature) Signature {
 	case *InternalSignature:
 		return v.Copy()
 	case *LegacyED25519Signature:
+		return v.Copy()
+	case *LxrMiningSignature:
 		return v.Copy()
 	case *PartitionSignature:
 		return v.Copy()

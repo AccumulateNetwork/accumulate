@@ -490,6 +490,8 @@ type KeyPage struct {
 	Version              uint64               `json:"version,omitempty" form:"version" query:"version" validate:"required"`
 	Keys                 []*KeySpec           `json:"keys,omitempty" form:"keys" query:"keys" validate:"required"`
 	TransactionBlacklist *AllowedTransactions `json:"transactionBlacklist,omitempty" form:"transactionBlacklist" query:"transactionBlacklist"`
+	MiningDifficulty     uint64               `json:"miningDifficulty,omitempty" form:"miningDifficulty" query:"miningDifficulty"`
+	MiningEnabled        bool                 `json:"miningEnabled,omitempty" form:"miningEnabled" query:"miningEnabled"`
 	extraData            []byte
 }
 
@@ -549,6 +551,17 @@ type LockAccount struct {
 	// Height is the major block height when the account will be released.
 	Height    uint64 `json:"height,omitempty" form:"height" query:"height" validate:"required"`
 	extraData []byte
+}
+
+type LxrMiningSignature struct {
+	fieldsSet     []bool
+	Nonce         []byte   `json:"nonce,omitempty" form:"nonce" query:"nonce" validate:"required"`
+	ComputedHash  [32]byte `json:"computedHash,omitempty" form:"computedHash" query:"computedHash" validate:"required"`
+	BlockHash     [32]byte `json:"blockHash,omitempty" form:"blockHash" query:"blockHash" validate:"required"`
+	Signer        *url.URL `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
+	SignerVersion uint64   `json:"signerVersion,omitempty" form:"signerVersion" query:"signerVersion" validate:"required"`
+	Timestamp     uint64   `json:"timestamp,omitempty" form:"timestamp" query:"timestamp" validate:"required"`
+	extraData     []byte
 }
 
 type MetricsRequest struct {
@@ -803,6 +816,13 @@ type SendTokens struct {
 	Meta      json.RawMessage   `json:"meta,omitempty" form:"meta" query:"meta"`
 	To        []*TokenRecipient `json:"to,omitempty" form:"to" query:"to" validate:"required"`
 	extraData []byte
+}
+
+type SetMiningParametersOperation struct {
+	fieldsSet  []bool
+	Enabled    bool   `json:"enabled,omitempty" form:"enabled" query:"enabled"`
+	Difficulty uint64 `json:"difficulty,omitempty" form:"difficulty" query:"difficulty"`
+	extraData  []byte
 }
 
 type SetRejectThresholdKeyPageOperation struct {
@@ -1230,6 +1250,8 @@ func (*LiteTokenAccount) Type() AccountType { return AccountTypeLiteTokenAccount
 
 func (*LockAccount) Type() TransactionType { return TransactionTypeLockAccount }
 
+func (*LxrMiningSignature) Type() SignatureType { return SignatureTypeLxrMining }
+
 func (*NetworkMaintenance) Type() TransactionType { return TransactionTypeNetworkMaintenance }
 
 func (*PartitionSignature) Type() SignatureType { return SignatureTypePartition }
@@ -1255,6 +1277,10 @@ func (*RemoveKeyOperation) Type() KeyPageOperationType { return KeyPageOperation
 func (*RsaSha256Signature) Type() SignatureType { return SignatureTypeRsaSha256 }
 
 func (*SendTokens) Type() TransactionType { return TransactionTypeSendTokens }
+
+func (*SetMiningParametersOperation) Type() KeyPageOperationType {
+	return KeyPageOperationTypeSetMiningParametersOperation
+}
 
 func (*SetRejectThresholdKeyPageOperation) Type() KeyPageOperationType {
 	return KeyPageOperationTypeSetRejectThreshold
@@ -2340,6 +2366,8 @@ func (v *KeyPage) Copy() *KeyPage {
 		u.TransactionBlacklist = new(AllowedTransactions)
 		*u.TransactionBlacklist = *v.TransactionBlacklist
 	}
+	u.MiningDifficulty = v.MiningDifficulty
+	u.MiningEnabled = v.MiningEnabled
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -2475,6 +2503,27 @@ func (v *LockAccount) Copy() *LockAccount {
 }
 
 func (v *LockAccount) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *LxrMiningSignature) Copy() *LxrMiningSignature {
+	u := new(LxrMiningSignature)
+
+	u.Nonce = encoding.BytesCopy(v.Nonce)
+	u.ComputedHash = v.ComputedHash
+	u.BlockHash = v.BlockHash
+	if v.Signer != nil {
+		u.Signer = v.Signer
+	}
+	u.SignerVersion = v.SignerVersion
+	u.Timestamp = v.Timestamp
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *LxrMiningSignature) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *MetricsRequest) Copy() *MetricsRequest {
 	u := new(MetricsRequest)
@@ -2979,6 +3028,21 @@ func (v *SendTokens) Copy() *SendTokens {
 }
 
 func (v *SendTokens) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *SetMiningParametersOperation) Copy() *SetMiningParametersOperation {
+	u := new(SetMiningParametersOperation)
+
+	u.Enabled = v.Enabled
+	u.Difficulty = v.Difficulty
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *SetMiningParametersOperation) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *SetRejectThresholdKeyPageOperation) Copy() *SetRejectThresholdKeyPageOperation {
 	u := new(SetRejectThresholdKeyPageOperation)
@@ -4813,6 +4877,12 @@ func (v *KeyPage) Equal(u *KeyPage) bool {
 	case !(*v.TransactionBlacklist == *u.TransactionBlacklist):
 		return false
 	}
+	if !(v.MiningDifficulty == u.MiningDifficulty) {
+		return false
+	}
+	if !(v.MiningEnabled == u.MiningEnabled) {
+		return false
+	}
 
 	return true
 }
@@ -4944,6 +5014,34 @@ func (v *LiteTokenAccount) Equal(u *LiteTokenAccount) bool {
 
 func (v *LockAccount) Equal(u *LockAccount) bool {
 	if !(v.Height == u.Height) {
+		return false
+	}
+
+	return true
+}
+
+func (v *LxrMiningSignature) Equal(u *LxrMiningSignature) bool {
+	if !(bytes.Equal(v.Nonce, u.Nonce)) {
+		return false
+	}
+	if !(v.ComputedHash == u.ComputedHash) {
+		return false
+	}
+	if !(v.BlockHash == u.BlockHash) {
+		return false
+	}
+	switch {
+	case v.Signer == u.Signer:
+		// equal
+	case v.Signer == nil || u.Signer == nil:
+		return false
+	case !((v.Signer).Equal(u.Signer)):
+		return false
+	}
+	if !(v.SignerVersion == u.SignerVersion) {
+		return false
+	}
+	if !(v.Timestamp == u.Timestamp) {
 		return false
 	}
 
@@ -5453,6 +5551,17 @@ func (v *SendTokens) Equal(u *SendTokens) bool {
 		if !((v.To[i]).Equal(u.To[i])) {
 			return false
 		}
+	}
+
+	return true
+}
+
+func (v *SetMiningParametersOperation) Equal(u *SetMiningParametersOperation) bool {
+	if !(v.Enabled == u.Enabled) {
+		return false
+	}
+	if !(v.Difficulty == u.Difficulty) {
+		return false
 	}
 
 	return true
@@ -9314,6 +9423,8 @@ var fieldNames_KeyPage = []string{
 	8:  "Version",
 	9:  "Keys",
 	10: "TransactionBlacklist",
+	11: "MiningDifficulty",
+	12: "MiningEnabled",
 }
 
 func (v *KeyPage) MarshalBinary() ([]byte, error) {
@@ -9353,6 +9464,12 @@ func (v *KeyPage) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.TransactionBlacklist == nil) {
 		writer.WriteEnum(10, *v.TransactionBlacklist)
+	}
+	if !(v.MiningDifficulty == 0) {
+		writer.WriteUint(11, v.MiningDifficulty)
+	}
+	if !(!v.MiningEnabled) {
+		writer.WriteBool(12, v.MiningEnabled)
 	}
 
 	_, _, err := writer.Reset(fieldNames_KeyPage)
@@ -9845,6 +9962,99 @@ func (v *LockAccount) IsValid() error {
 		errs = append(errs, "field Height is missing")
 	} else if v.Height == 0 {
 		errs = append(errs, "field Height is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_LxrMiningSignature = []string{
+	1: "Type",
+	2: "Nonce",
+	3: "ComputedHash",
+	4: "BlockHash",
+	5: "Signer",
+	6: "SignerVersion",
+	7: "Timestamp",
+}
+
+func (v *LxrMiningSignature) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(len(v.Nonce) == 0) {
+		writer.WriteBytes(2, v.Nonce)
+	}
+	if !(v.ComputedHash == ([32]byte{})) {
+		writer.WriteHash(3, &v.ComputedHash)
+	}
+	if !(v.BlockHash == ([32]byte{})) {
+		writer.WriteHash(4, &v.BlockHash)
+	}
+	if !(v.Signer == nil) {
+		writer.WriteUrl(5, v.Signer)
+	}
+	if !(v.SignerVersion == 0) {
+		writer.WriteUint(6, v.SignerVersion)
+	}
+	if !(v.Timestamp == 0) {
+		writer.WriteUint(7, v.Timestamp)
+	}
+
+	_, _, err := writer.Reset(fieldNames_LxrMiningSignature)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *LxrMiningSignature) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Nonce is missing")
+	} else if len(v.Nonce) == 0 {
+		errs = append(errs, "field Nonce is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field ComputedHash is missing")
+	} else if v.ComputedHash == ([32]byte{}) {
+		errs = append(errs, "field ComputedHash is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field BlockHash is missing")
+	} else if v.BlockHash == ([32]byte{}) {
+		errs = append(errs, "field BlockHash is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Signer is missing")
+	} else if v.Signer == nil {
+		errs = append(errs, "field Signer is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field SignerVersion is missing")
+	} else if v.SignerVersion == 0 {
+		errs = append(errs, "field SignerVersion is not set")
+	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+		errs = append(errs, "field Timestamp is missing")
+	} else if v.Timestamp == 0 {
+		errs = append(errs, "field Timestamp is not set")
 	}
 
 	switch len(errs) {
@@ -11501,6 +11711,53 @@ func (v *SendTokens) IsValid() error {
 		errs = append(errs, "field To is missing")
 	} else if len(v.To) == 0 {
 		errs = append(errs, "field To is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_SetMiningParametersOperation = []string{
+	1: "Type",
+	2: "Enabled",
+	3: "Difficulty",
+}
+
+func (v *SetMiningParametersOperation) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(!v.Enabled) {
+		writer.WriteBool(2, v.Enabled)
+	}
+	if !(v.Difficulty == 0) {
+		writer.WriteUint(3, v.Difficulty)
+	}
+
+	_, _, err := writer.Reset(fieldNames_SetMiningParametersOperation)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *SetMiningParametersOperation) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
 	}
 
 	switch len(errs) {
@@ -15906,6 +16163,12 @@ func (v *KeyPage) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x := new(AllowedTransactions); reader.ReadEnum(10, x) {
 		v.TransactionBlacklist = x
 	}
+	if x, ok := reader.ReadUint(11); ok {
+		v.MiningDifficulty = x
+	}
+	if x, ok := reader.ReadBool(12); ok {
+		v.MiningEnabled = x
+	}
 
 	seen, err := reader.Reset(fieldNames_KeyPage)
 	if err != nil {
@@ -16171,6 +16434,56 @@ func (v *LockAccount) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_LockAccount)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *LxrMiningSignature) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *LxrMiningSignature) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType SignatureType
+	if x := new(SignatureType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *LxrMiningSignature) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadBytes(2); ok {
+		v.Nonce = x
+	}
+	if x, ok := reader.ReadHash(3); ok {
+		v.ComputedHash = *x
+	}
+	if x, ok := reader.ReadHash(4); ok {
+		v.BlockHash = *x
+	}
+	if x, ok := reader.ReadUrl(5); ok {
+		v.Signer = x
+	}
+	if x, ok := reader.ReadUint(6); ok {
+		v.SignerVersion = x
+	}
+	if x, ok := reader.ReadUint(7); ok {
+		v.Timestamp = x
+	}
+
+	seen, err := reader.Reset(fieldNames_LxrMiningSignature)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -17130,6 +17443,44 @@ func (v *SendTokens) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_SendTokens)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *SetMiningParametersOperation) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *SetMiningParametersOperation) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType KeyPageOperationType
+	if x := new(KeyPageOperationType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *SetMiningParametersOperation) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadBool(2); ok {
+		v.Enabled = x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.Difficulty = x
+	}
+
+	seen, err := reader.Reset(fieldNames_SetMiningParametersOperation)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -19065,6 +19416,8 @@ func init() {
 		encoding.NewTypeField("version", "uint64"),
 		encoding.NewTypeField("keys", "KeySpec[]"),
 		encoding.NewTypeField("transactionBlacklist", "string"),
+		encoding.NewTypeField("miningDifficulty", "uint64"),
+		encoding.NewTypeField("miningEnabled", "bool"),
 	}, "KeyPage", "keyPage")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -19113,6 +19466,16 @@ func init() {
 		encoding.NewTypeField("type", "string"),
 		encoding.NewTypeField("height", "uint64"),
 	}, "LockAccount", "lockAccount")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("nonce", "bytes"),
+		encoding.NewTypeField("computedHash", "bytes32"),
+		encoding.NewTypeField("blockHash", "bytes32"),
+		encoding.NewTypeField("signer", "string"),
+		encoding.NewTypeField("signerVersion", "uint64"),
+		encoding.NewTypeField("timestamp", "uint64"),
+	}, "LxrMiningSignature", "lxrMiningSignature")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("metric", "string"),
@@ -19292,6 +19655,12 @@ func init() {
 		encoding.NewTypeField("meta", "string"),
 		encoding.NewTypeField("to", "TokenRecipient[]"),
 	}, "SendTokens", "sendTokens")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("enabled", "bool"),
+		encoding.NewTypeField("difficulty", "uint64"),
+	}, "SetMiningParametersOperation", "setMiningParametersOperation")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("type", "string"),
@@ -20616,6 +20985,8 @@ func (v *KeyPage) MarshalJSON() ([]byte, error) {
 		Version              uint64                      `json:"version,omitempty"`
 		Keys                 encoding.JsonList[*KeySpec] `json:"keys,omitempty"`
 		TransactionBlacklist *AllowedTransactions        `json:"transactionBlacklist,omitempty"`
+		MiningDifficulty     uint64                      `json:"miningDifficulty,omitempty"`
+		MiningEnabled        bool                        `json:"miningEnabled,omitempty"`
 		ExtraData            *string                     `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -20649,6 +21020,12 @@ func (v *KeyPage) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.TransactionBlacklist == nil) {
 		u.TransactionBlacklist = v.TransactionBlacklist
+	}
+	if !(v.MiningDifficulty == 0) {
+		u.MiningDifficulty = v.MiningDifficulty
+	}
+	if !(!v.MiningEnabled) {
+		u.MiningEnabled = v.MiningEnabled
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -20801,6 +21178,40 @@ func (v *LockAccount) MarshalJSON() ([]byte, error) {
 	u.Type = v.Type()
 	if !(v.Height == 0) {
 		u.Height = v.Height
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *LxrMiningSignature) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type          SignatureType `json:"type"`
+		Nonce         *string       `json:"nonce,omitempty"`
+		ComputedHash  *string       `json:"computedHash,omitempty"`
+		BlockHash     *string       `json:"blockHash,omitempty"`
+		Signer        *url.URL      `json:"signer,omitempty"`
+		SignerVersion uint64        `json:"signerVersion,omitempty"`
+		Timestamp     uint64        `json:"timestamp,omitempty"`
+		ExtraData     *string       `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.Nonce) == 0) {
+		u.Nonce = encoding.BytesToJSON(v.Nonce)
+	}
+	if !(v.ComputedHash == ([32]byte{})) {
+		u.ComputedHash = encoding.ChainToJSON(&v.ComputedHash)
+	}
+	if !(v.BlockHash == ([32]byte{})) {
+		u.BlockHash = encoding.ChainToJSON(&v.BlockHash)
+	}
+	if !(v.Signer == nil) {
+		u.Signer = v.Signer
+	}
+	if !(v.SignerVersion == 0) {
+		u.SignerVersion = v.SignerVersion
+	}
+	if !(v.Timestamp == 0) {
+		u.Timestamp = v.Timestamp
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -21220,6 +21631,24 @@ func (v *SendTokens) MarshalJSON() ([]byte, error) {
 	}
 	if !(len(v.To) == 0) {
 		u.To = v.To
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *SetMiningParametersOperation) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type       KeyPageOperationType `json:"type"`
+		Enabled    bool                 `json:"enabled,omitempty"`
+		Difficulty uint64               `json:"difficulty,omitempty"`
+		ExtraData  *string              `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(!v.Enabled) {
+		u.Enabled = v.Enabled
+	}
+	if !(v.Difficulty == 0) {
+		u.Difficulty = v.Difficulty
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -23578,6 +24007,8 @@ func (v *KeyPage) UnmarshalJSON(data []byte) error {
 		Version              uint64                      `json:"version,omitempty"`
 		Keys                 encoding.JsonList[*KeySpec] `json:"keys,omitempty"`
 		TransactionBlacklist *AllowedTransactions        `json:"transactionBlacklist,omitempty"`
+		MiningDifficulty     uint64                      `json:"miningDifficulty,omitempty"`
+		MiningEnabled        bool                        `json:"miningEnabled,omitempty"`
 		ExtraData            *string                     `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -23592,6 +24023,8 @@ func (v *KeyPage) UnmarshalJSON(data []byte) error {
 	u.Version = v.Version
 	u.Keys = v.Keys
 	u.TransactionBlacklist = v.TransactionBlacklist
+	u.MiningDifficulty = v.MiningDifficulty
+	u.MiningEnabled = v.MiningEnabled
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -23612,6 +24045,8 @@ func (v *KeyPage) UnmarshalJSON(data []byte) error {
 	v.Version = u.Version
 	v.Keys = u.Keys
 	v.TransactionBlacklist = u.TransactionBlacklist
+	v.MiningDifficulty = u.MiningDifficulty
+	v.MiningEnabled = u.MiningEnabled
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err
@@ -23839,6 +24274,56 @@ func (v *LockAccount) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Height = u.Height
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *LxrMiningSignature) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type          SignatureType `json:"type"`
+		Nonce         *string       `json:"nonce,omitempty"`
+		ComputedHash  *string       `json:"computedHash,omitempty"`
+		BlockHash     *string       `json:"blockHash,omitempty"`
+		Signer        *url.URL      `json:"signer,omitempty"`
+		SignerVersion uint64        `json:"signerVersion,omitempty"`
+		Timestamp     uint64        `json:"timestamp,omitempty"`
+		ExtraData     *string       `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Nonce = encoding.BytesToJSON(v.Nonce)
+	u.ComputedHash = encoding.ChainToJSON(&v.ComputedHash)
+	u.BlockHash = encoding.ChainToJSON(&v.BlockHash)
+	u.Signer = v.Signer
+	u.SignerVersion = v.SignerVersion
+	u.Timestamp = v.Timestamp
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	if x, err := encoding.BytesFromJSON(u.Nonce); err != nil {
+		return fmt.Errorf("error decoding Nonce: %w", err)
+	} else {
+		v.Nonce = x
+	}
+	if x, err := encoding.ChainFromJSON(u.ComputedHash); err != nil {
+		return fmt.Errorf("error decoding ComputedHash: %w", err)
+	} else {
+		v.ComputedHash = *x
+	}
+	if x, err := encoding.ChainFromJSON(u.BlockHash); err != nil {
+		return fmt.Errorf("error decoding BlockHash: %w", err)
+	} else {
+		v.BlockHash = *x
+	}
+	v.Signer = u.Signer
+	v.SignerVersion = u.SignerVersion
+	v.Timestamp = u.Timestamp
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err
@@ -24442,6 +24927,32 @@ func (v *SendTokens) UnmarshalJSON(data []byte) error {
 	}
 	v.Meta = u.Meta
 	v.To = u.To
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *SetMiningParametersOperation) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type       KeyPageOperationType `json:"type"`
+		Enabled    bool                 `json:"enabled,omitempty"`
+		Difficulty uint64               `json:"difficulty,omitempty"`
+		ExtraData  *string              `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Enabled = v.Enabled
+	u.Difficulty = v.Difficulty
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Enabled = u.Enabled
+	v.Difficulty = u.Difficulty
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err

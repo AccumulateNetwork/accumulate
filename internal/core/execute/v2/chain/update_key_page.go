@@ -210,6 +210,17 @@ func (UpdateKeyPage) checkOperation(st *StateManager, tx *Delivery, op protocol.
 
 		return nil
 
+	case *protocol.SetMiningParametersOperation:
+		// Validate difficulty is within acceptable range
+		if op.Enabled && op.Difficulty == 0 {
+			// Optional: Add upper bound check if needed
+			// if op.Difficulty > MAX_DIFFICULTY {
+			//     return errors.BadRequest.With("mining difficulty too high")
+			// }
+			return errors.BadRequest.With("mining difficulty cannot be zero")
+		}
+		return nil
+
 	default:
 		return errors.BadRequest.WithFormat("invalid operation: %v", op.Type())
 	}
@@ -311,12 +322,9 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, book *protocol.Key
 		return nil
 
 	case *protocol.SetMiningParametersOperation:
-		if op.Enabled != nil {
-			page.MiningEnabled = *op.Enabled
-		}
-		if op.Difficulty != nil {
-			page.MiningDifficulty = *op.Difficulty
-		}
+		// Update mining parameters
+		page.MiningEnabled = op.Enabled
+		page.MiningDifficulty = op.Difficulty
 		return nil
 
 	default:
