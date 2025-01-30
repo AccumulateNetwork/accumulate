@@ -532,6 +532,37 @@ paths:
         '200':
           description: OK
 
+  /submit:
+    parameters:
+      - name: verify
+        description: Verify the envelope is well-formed
+        in: query
+        schema:
+          type: boolean
+          default: true
+        required: false
+      - name: wait
+        description: Block until the envelope has been submitted to or rejected by the consensus engine
+        in: query
+        schema:
+          type: boolean
+          default: true
+        required: false
+
+    post:
+      summary: Submit a transaction
+
+      requestBody:
+        description: The envelope (transactions and signatures) to submit
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/envelope' }
+
+      responses:
+        '200':
+          description: Submitted
+
   /v3:
     post:
       summary: API v3 (query)
@@ -1063,6 +1094,19 @@ components:
 
     receipt:
       type: object
+
+    transaction:
+      type: object
+
+    signature:
+      type: object
+
+    envelope:
+      type: object
+      properties:
+        signatures:  { type: array, items: { $ref: '#/components/schemas/signature'   } }
+        transaction: { type: array, items: { $ref: '#/components/schemas/transaction' } }
+        messages:    { type: array, items: { $ref: '#/components/schemas/message'     } }
 
     # Protocol enumerations
     signatureType:
