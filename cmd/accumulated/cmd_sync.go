@@ -73,6 +73,7 @@ func syncToSnapshot(cmd *cobra.Command, args []string) {
 		NodeID:    ni.PeerID.String(),
 		Partition: cs.PartitionID,
 	}, tmRPC, false)
+	checkf(err, "select a snapshot")
 
 	err = config.Store(c)
 	checkf(err, "store configuration")
@@ -113,12 +114,10 @@ func selectSnapshot(ctx context.Context, config *cfg.Config, client api.Snapshot
 		}
 	}
 
+	// List snapshots. If the node doesn't have a snapshot service, don't fail
+	// just pretend like it has no snapshots.
 	snaps, err := client.ListSnapshots(ctx, opts)
-	if err != nil {
-		// Don't fail if the node doesn't have a snapshot service
-		if errors.Is(err, errors.NotFound) {
-			return nil
-		}
+	if err != nil && !errors.Is(err, errors.NotFound) {
 		return fmt.Errorf("fetch snapshot list: %v", err)
 	}
 
