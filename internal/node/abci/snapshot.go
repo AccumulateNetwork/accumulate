@@ -398,25 +398,3 @@ func (m *snapshotManager) WriteTo(f io.ReadWriteSeeker) error {
 	}
 	return nil
 }
-
-func fileHash(f *os.File) ([32]byte, error) {
-	var buf [128 * 1024 * 1024]byte
-	hasher := sha256.New()
-	var N int
-	for {
-		n, err := f.Read(buf[:])
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			return [32]byte{}, nil
-		}
-
-		hasher.Write(buf[:n])
-		N += n
-		fmt.Printf("Hash progress: %.3f GB\n", float64(N)/(1<<30))
-	}
-
-	defer fmt.Println("Finished hashing")
-	return [32]byte(hasher.Sum(nil)), nil
-}

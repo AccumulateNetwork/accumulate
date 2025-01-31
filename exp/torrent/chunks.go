@@ -9,7 +9,6 @@ package torrent
 import (
 	"crypto/sha256"
 	"errors"
-	"fmt"
 	"io"
 )
 
@@ -26,9 +25,6 @@ func ChunksBySize(file io.Reader, size uint64) ([]*ChunkMetadata, [32]byte, erro
 			break
 		}
 		fileHash.Write(buf)
-		if i%30 == 29 {
-			fmt.Println(i)
-		}
 		chunks = append(chunks, &ChunkMetadata{
 			Index:  uint64(i),
 			Size:   uint64(n),
