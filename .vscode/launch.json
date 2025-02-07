@@ -181,6 +181,27 @@
       ]
     },
     {
+      "name": "Init (single)",
+      "presentation": {
+        "group": "20-Run"
+      },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/cmd/accumulated",
+      "console": "integratedTerminal",
+      "args": [
+        "init",
+        "node",
+        "--reset",
+        "-w=${workspaceFolder}/.nodes/kermit-node",
+        "tcp://kermit-bvn0.accumulate.defidevs.io:16591",
+        "-l=tcp://127.0.2.1",
+        "-p=127.0.2.1",
+        "--skip-version-check"
+      ]
+    },
+    {
       "name": "Init (dual)",
       "presentation": {
         "group": "20-Run"
@@ -192,8 +213,8 @@
       "args": [
         "init",
         "dual",
-        "-w=${workspaceFolder}/.nodes/node-1",
-        "tcp://bvn1-seed.testnet.accumulatenetwork.io:16691",
+        "-w=${workspaceFolder}/.nodes/kermit-node",
+        "tcp://kermit-bvn0.accumulate.defidevs.io:16691",
         "-l=tcp://127.0.2.1",
         "-p=127.0.2.1",
         "--skip-version-check"
