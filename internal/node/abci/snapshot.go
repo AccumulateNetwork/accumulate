@@ -31,8 +31,8 @@ import (
 //
 // This is one of four ABCI functions we have to implement for
 // Tendermint/CometBFT.
-func (app *Accumulator) ListSnapshots(_ context.Context, req *abci.RequestListSnapshots) (*abci.ResponseListSnapshots, error) {
-	info, err := ListSnapshots(config.MakeAbsolute(app.RootDir, app.Snapshots.Directory))
+func (app *Accumulator) ListSnapshots(ctx context.Context, req *abci.RequestListSnapshots) (*abci.ResponseListSnapshots, error) {
+	info, err := ListSnapshots(ctx, config.MakeAbsolute(app.RootDir, app.Snapshots.Directory))
 	if err != nil {
 		return nil, err
 	}
@@ -40,7 +40,12 @@ func (app *Accumulator) ListSnapshots(_ context.Context, req *abci.RequestListSn
 	resp := new(abci.ResponseListSnapshots)
 	resp.Snapshots = make([]*abci.Snapshot, 0, len(info))
 	for _, info := range info {
-		b, err := info.fileMd.MarshalBinary()
+		md, hash, err := info.FileMetadata()
+		if err != nil {
+			return nil, err
+		}
+
+		b, err := md.MarshalBinary()
 		if err != nil {
 			return nil, err
 		}
@@ -48,8 +53,8 @@ func (app *Accumulator) ListSnapshots(_ context.Context, req *abci.RequestListSn
 		resp.Snapshots = append(resp.Snapshots, &abci.Snapshot{
 			Height:   info.Height(),
 			Format:   uint32(info.Version()),
-			Chunks:   uint32(len(info.fileMd.Chunks)),
-			Hash:     info.fileHash[:],
+			Chunks:   uint32(len(md.Chunks)),
+			Hash:     hash[:],
 			Metadata: b,
 		})
 	}
@@ -159,11 +164,33 @@ func (app *Accumulator) ApplySnapshotChunk(_ context.Context, req *abci.RequestA
 }
 
 type snapshotInfo struct {
-	file     string
-	fileHash [32]byte
-	fileMd   torrent.FileMetadata
-	v1       *sv1.Header
-	v2       *sv2.Header
+	file string
+	v1   *sv1.Header
+	v2   *sv2.Header
+
+	cache struct {
+		fileHash [32]byte
+		fileMd   *torrent.FileMetadata
+	}
+}
+
+func (s *snapshotInfo) FileMetadata() (*torrent.FileMetadata, [32]byte, error) {
+	if s.cache.fileMd != nil {
+		return s.cache.fileMd, s.cache.fileHash, nil
+	}
+
+	f, err := os.Open(s.file)
+	if err != nil {
+		return nil, [32]byte{}, err
+	}
+	defer f.Close()
+
+	s.cache.fileMd.Chunks, s.cache.fileHash, err = torrent.ChunksBySize(f, chunkSize)
+	if err != nil {
+		return nil, [32]byte{}, err
+	}
+
+	return s.cache.fileMd, s.cache.fileHash, nil
 }
 
 func (s *snapshotInfo) Version() uint64 {
@@ -207,7 +234,7 @@ const chunkSize = 10 << 20
 
 // ListSnapshots finds snapshots in the given directory and reads metadata from
 // each.
-func ListSnapshots(dir string) ([]*snapshotInfo, error) {
+func ListSnapshots(ctx context.Context, dir string) ([]*snapshotInfo, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load snapshot: %w", err)
@@ -215,6 +242,12 @@ func ListSnapshots(dir string) ([]*snapshotInfo, error) {
 
 	snapshots := make([]*snapshotInfo, 0, len(entries))
 	for _, entry := range entries {
+		select {
+		default:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+
 		// Is it a file?
 		if entry.IsDir() {
 			continue
@@ -232,6 +265,9 @@ func ListSnapshots(dir string) ([]*snapshotInfo, error) {
 			return nil, errors.UnknownError.WithFormat("load snapshot %s: %w", entry.Name(), err)
 		}
 		defer f.Close()
+
+		// Close if the context is canceled to abort any in-progress reads
+		go func() { <-ctx.Done(); f.Close() }()
 
 		// Determine the snapshot version and reset the offset
 		ver, err := sv2.GetVersion(f)
@@ -253,28 +289,6 @@ func ListSnapshots(dir string) ([]*snapshotInfo, error) {
 		default:
 			return nil, errors.InternalError.WithFormat("unsupported snapshot version %d", ver)
 		}
-		if err != nil {
-			return nil, err
-		}
-
-		// Hash the file
-		_, err = f.Seek(0, io.SeekStart)
-		if err != nil {
-			return nil, err
-		}
-		hasher := sha256.New()
-		_, err = io.Copy(hasher, f)
-		if err != nil {
-			return nil, err
-		}
-		info.fileHash = *(*[32]byte)(hasher.Sum(nil))
-
-		// Chunk the file
-		_, err = f.Seek(0, io.SeekStart)
-		if err != nil {
-			return nil, err
-		}
-		info.fileMd.Chunks, err = torrent.ChunksBySize(f, chunkSize)
 		if err != nil {
 			return nil, err
 		}
