@@ -28,7 +28,7 @@ func TestTransfer(t *testing.T) {
 	// Build the metadata (32 KiB blocks)
 	const chunkSize = 1 << 15
 	md := new(FileMetadata)
-	md.Chunks, err = ChunksBySize(bytes.NewBuffer(file), chunkSize)
+	md.Chunks, _, err = ChunksBySize(bytes.NewBuffer(file), chunkSize)
 	require.NoError(t, err)
 
 	// Start a job
