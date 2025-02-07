@@ -7,33 +7,8 @@
 package main
 
 import (
-	"context"
-	"encoding/json"
-	"fmt"
-
 	"github.com/spf13/cobra"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
-	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 )
-
-func getVersion(client *client.Client) (*api.VersionResponse, error) {
-	resp, err := client.Version(context.Background())
-	if err != nil {
-		return nil, fmt.Errorf("failed to get version, %v", err)
-	}
-
-	data, err := json.Marshal(resp.Data)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get version, %v", err)
-	}
-
-	version := new(api.VersionResponse)
-	err = json.Unmarshal(data, version)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get version, %v", err)
-	}
-	return version, err
-}
 
 var DidError error
 
