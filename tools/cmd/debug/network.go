@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"net"
 	stdurl "net/url"
 	"os"
 	"path/filepath"
@@ -104,6 +105,7 @@ func init() {
 
 	networkCmd.PersistentFlags().BoolVarP(&outputJSON, "json", "j", false, "Output result as JSON")
 	networkStatusCmd.PersistentFlags().StringVar(&cachedScan, "cached-scan", "", "A cached network scan")
+	networkStatusCmd.PersistentFlags().BoolVarP(&debug, "verbose", "v", false, "Enable debug logging")
 }
 
 func scanNetwork(_ *cobra.Command, args []string) {
@@ -153,9 +155,11 @@ func scanNode(_ *cobra.Command, args []string) {
 }
 
 func networkStatus(_ *cobra.Command, args []string) {
-	// slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-	// 	Level: slog.LevelDebug,
-	// })))
+	if debug {
+		slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+			Level: slog.LevelDebug,
+		})))
+	}
 
 	ctx := cmdutil.ContextForMainProcess(context.Background())
 
@@ -317,12 +321,23 @@ func networkStatus(_ *cobra.Command, args []string) {
 				if seenComet[peer.NodeInfo.ID()] {
 					continue
 				}
+
+				if peer.NodeInfo.ID() == "81f4f8fafc81b8508ae4099c83b8f2fc899fc3b2" {
+					print("")
+				}
+
+				// Find a usable address
+				addr, ok := addressForPeer(peer)
+				if !ok {
+					slog.DebugContext(ctx, "No usable address for peer", "comet-id", peer.NodeInfo.ID(), "remote-ip", peer.RemoteIP, "listen-address", peer.NodeInfo.ListenAddr)
+				}
+
 				seenComet[peer.NodeInfo.ID()] = true
-				slog.DebugContext(ctx, "Checking peer", "comet-id", peer.NodeInfo.ID(), "remote-ip", peer.RemoteIP)
+				slog.DebugContext(ctx, "Checking peer", "comet-id", peer.NodeInfo.ID(), "remote-ip", addr)
 
 				c, err := httpClientForPeer(peer, 0)
 				if err != nil {
-					slog.DebugContext(ctx, "Error while creating consensus client", "error", err, "host", peer.RemoteIP)
+					slog.DebugContext(ctx, "Error while creating consensus client", "error", err, "host", addr)
 					continue
 				}
 
@@ -332,7 +347,7 @@ func networkStatus(_ *cobra.Command, args []string) {
 
 					netInfo, err := c.NetInfo(ctx)
 					if err != nil {
-						slog.DebugContext(ctx, "Error while querying consensus network info", "error", err, "host", peer.RemoteIP)
+						slog.DebugContext(ctx, "Error while querying consensus network info", "error", err, "host", addr)
 						return nil, false
 					}
 					return netInfo, true
@@ -345,14 +360,13 @@ func networkStatus(_ *cobra.Command, args []string) {
 					}
 				})))
 
-				peer := peer
 				status := promise.Call(maybe(func() (*coretypes.ResultStatus, bool) {
 					ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 					defer cancel()
 
 					status, err := c.Status(ctx)
 					if err != nil {
-						slog.DebugContext(ctx, "Error while querying consensus status", "error", err, "host", peer.RemoteIP)
+						slog.DebugContext(ctx, "Error while querying consensus status", "error", err, "host", addr)
 						return nil, false
 					}
 					return status, true
@@ -361,7 +375,7 @@ func networkStatus(_ *cobra.Command, args []string) {
 					kh := sha256.Sum256(status.ValidatorInfo.PubKey.Bytes())
 					node, ok := nodeByKeyHash[kh]
 					if ok {
-						node.Host = peer.RemoteIP
+						node.Host = addr
 						return node
 					}
 
@@ -370,7 +384,7 @@ func networkStatus(_ *cobra.Command, args []string) {
 					node.Parts = map[string]*nodePartStatus{}
 					nodeByKeyHash[kh] = node
 					nodes = append(nodes, node)
-					node.Host = peer.RemoteIP
+					node.Host = addr
 					return node
 				}))
 				waitFor(wg, promise.Then(node, func(node *nodeStatus) promise.Result[any] {
@@ -637,10 +651,43 @@ func httpClientForPeer(peer coretypes.Peer, offset config.PortOffset) (*http.HTT
 	port = port - uint64(config.PortOffsetTendermintP2P) + uint64(config.PortOffsetTendermintRpc) + uint64(offset)
 
 	// Construct the address from peer.remote_ip and the calculated port
-	addr := fmt.Sprintf("http://%s:%d", peer.RemoteIP, port)
+	addr, ok := addressForPeer(peer)
+	if !ok {
+		return nil, fmt.Errorf("could not determine address for peer %s", peer.NodeInfo.ID())
+	}
+	addr = fmt.Sprintf("http://%s:%d", addr, port)
 
 	// Create a new client
 	return http.New(addr, addr+"/ws")
+}
+
+func addressForPeer(peer coretypes.Peer) (string, bool) {
+	// Prefer the remote IP. If it's not an IP, assume it's a domain name. If
+	// it's private or unspecified, don't use it.
+	ip := net.ParseIP(peer.RemoteIP)
+	if ip == nil || (!ip.IsPrivate() && !ip.IsUnspecified()) {
+		return peer.RemoteIP, true
+	}
+
+	// The listen address may or may not start with tcp:// and have a port
+	// number
+	s := peer.NodeInfo.ListenAddr
+	if !strings.Contains(s, "://") {
+		s = "tcp://" + s
+	}
+	u, err := stdurl.Parse(s)
+	if err != nil {
+		return "", false
+	}
+
+	// If it's not an IP, assume it's a domain name. If it's private or
+	// unspecified, don't use it.
+	ip = net.ParseIP(u.Hostname())
+	if ip == nil || (!ip.IsPrivate() && !ip.IsUnspecified()) {
+		return u.Hostname(), true
+	}
+
+	return "", false
 }
 
 func nodeIsZombie(ctx context.Context, c client.MempoolClient) (bool, error) {
