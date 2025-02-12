@@ -32,6 +32,8 @@ func run(_ *cobra.Command, args []string) {
 	switch flags.Language {
 	case "java", "Java":
 		generateJava(tapi)
+	case "csharp", "CSharp":
+		generateCSharp(tapi)
 	default:
 		w := new(bytes.Buffer)
 		check(Go.Execute(w, tapi))
@@ -46,6 +48,20 @@ func generateJava(tapi *TApi) {
 	filename := strings.Replace(dir, "{{.SubPackage}}", flags.SubPackage, 1) + "/RPCMethod.java" // FIXME
 	check(Java.Execute(w, tapi))
 	check(typegen.WriteFile(filename, w))
+}
+
+func generateCSharp(tapi *TApi) {
+	w := new(bytes.Buffer)
+	check(Templates.Execute(w, "csharp", tapi))
+
+	// Ensure the output directory exists.
+	outDir := filepath.Dir(flags.Out)
+	if err := os.MkdirAll(outDir, 0755); err != nil {
+		fatalf("failed to create directory %s: %v", outDir, err)
+	}
+
+	// Write (and possibly format) the output file.
+	check(typegen.WriteFile(flags.Out, w))
 }
 
 func readFile(file string) typegen.API {

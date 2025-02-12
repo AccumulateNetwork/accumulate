@@ -72,7 +72,7 @@ func checkf(err error, format string, otherArgs ...interface{}) {
 
 func run(_ *cobra.Command, args []string) {
 	switch flags.Language {
-	case "java", "Java", "c", "c-source", "c-header":
+	case "csharp", "cs", "java", "Java", "c", "c-source", "c-header":
 		flags.FilePerType = true
 	}
 
@@ -117,8 +117,14 @@ func run(_ *cobra.Command, args []string) {
 			filename := w.String()
 
 			w.Reset()
-			check(Templates.Execute(w, flags.Language, SingleTypeFile{flags.Package, typ}))
+			check(Templates.Execute(w, flags.Language, SingleTypeFile{flags.Package, flags.SubPackage, typ}))
 			check(typegen.WriteFile(filename, w))
 		}
 	}
+}
+
+type SingleTypeFile struct {
+	Package    string
+	SubPackage string
+	*Type
 }

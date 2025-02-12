@@ -221,7 +221,9 @@ func (f *SingleTypeFile) IsUnion() bool { return f.Union.Type != "" }
 
 type SingleUnionFile struct {
 	Package string
+	SubPackage string
 	*UnionSpec
+	Fields []*Field
 }
 
 func (f *SingleUnionFile) IsUnion() bool { return true }

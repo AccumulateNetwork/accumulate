@@ -118,7 +118,7 @@ func getPackagePath(dir string) string {
 
 func run(_ *cobra.Command, args []string) {
 	switch flags.Language {
-	case "java", "Java", "c-source", "c-header":
+	case "csharp", "cs", "java", "Java", "c", "c-source", "c-header":
 		flags.FilePerType = true
 		flags.ExpandEmbedded = true
 		flags.LanguageUnion = flags.Language + "-union"
@@ -133,6 +133,7 @@ func run(_ *cobra.Command, args []string) {
 	for _, typ := range ttypes.Types {
 		for _, field := range typ.Fields {
 			if field.IsEmbedded && field.TypeRef == nil {
+				fmt.Printf("DEBUG: Missing type reference for field %q in type %q (field.Type: %q)\n", field.Name, typ.Name, field.Type.String())
 				missing = append(missing, fmt.Sprintf("%s (%s.%s)", field.Type.String(), typ.Name, field.Name))
 			}
 		}
@@ -166,6 +167,26 @@ func run(_ *cobra.Command, args []string) {
 			}
 			check(err)
 			check(typegen.WriteFile(filename, w))
+
+			// For union types, add a virtual discriminator field.
+			if typ.IsUnion() {
+				field := new(Field)
+				if flags.LongUnionDiscriminator {
+					field.Name = typ.UnionType()
+				} else {
+					field.Name = "Type"
+				}
+				// Use the union spec's enumeration for the field type
+				// and override its package with the union type's name.
+				// This creates a qualified type string such as "ADI.AccountAuth".
+				enumeration := typ.UnionSpec.Enumeration()
+				qualified := typ.Name + "." + typegen.TitleCase(enumeration)
+				field.Type.SetNamed(qualified)
+				field.MarshalAs = typegen.MarshalAsEnum
+				field.KeepEmpty = true
+				field.Virtual = true
+				typ.Fields = append(typ.Fields, field)
+			}
 		}
 		for _, typ := range ttypes.Unions {
 			w.Reset()
@@ -179,7 +200,21 @@ func run(_ *cobra.Command, args []string) {
 			w.Reset()
 
 			fmt.Printf("union filename: %s\n", filename)
-			err = Templates.Execute(w, flags.LanguageUnion, &SingleUnionFile{flags.Package, typ})
+			var unionFields []*Field
+			for _, member := range typ.Members {
+				unionFields = append(unionFields, &Field{
+					Field: typegen.Field{
+						Name: member.Name,
+					},
+					TypeRef: member,
+				})
+			}
+			err = Templates.Execute(w, flags.LanguageUnion, &SingleUnionFile{
+				Package:    flags.Package,
+				SubPackage: flags.SubPackage,
+				UnionSpec:  typ,
+				Fields:     unionFields,
+			})
 			if errors.Is(err, typegen.ErrSkip) {
 				continue
 			}
@@ -226,3 +261,11 @@ func read(files []string, main bool) typegen.Types {
 	v.Sort()
 	return v
 }
+
+// If not already declared, add the following definition:
+//type SingleUnionFile struct {
+//Package    string
+//SubPackage string
+//*UnionSpec
+//Fields []*Field
+//}
