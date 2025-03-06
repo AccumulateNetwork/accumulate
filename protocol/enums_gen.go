@@ -116,6 +116,21 @@ const ErrorCodeDidPanic ErrorCode = 3
 // ErrorCodeUnknownError indicates the request failed due to an unknown error.
 const ErrorCodeUnknownError ErrorCode = 4
 
+// ErrorCodeNoActiveWindow indicates there is no active mining window.
+const ErrorCodeNoActiveWindow ErrorCode = 5
+
+// ErrorCodeWindowClosed indicates the mining window is closed.
+const ErrorCodeWindowClosed ErrorCode = 6
+
+// ErrorCodeInsufficientDifficulty indicates the mining solution does not meet the minimum difficulty.
+const ErrorCodeInsufficientDifficulty ErrorCode = 7
+
+// ErrorCodeInvalidBlockHash indicates the block hash in the mining solution is invalid.
+const ErrorCodeInvalidBlockHash ErrorCode = 8
+
+// ErrorCodeInvalidSignature indicates the mining signature is invalid.
+const ErrorCodeInvalidSignature ErrorCode = 9
+
 // ExecutorVersionV1 is the first version of the executor system.
 const ExecutorVersionV1 ExecutorVersion = 1
 
@@ -166,6 +181,9 @@ const KeyPageOperationTypeSetRejectThreshold KeyPageOperationType = 6
 
 // KeyPageOperationTypeSetResponseThreshold sets the response threshold.
 const KeyPageOperationTypeSetResponseThreshold KeyPageOperationType = 7
+
+// KeyPageOperationTypeSetMiningParametersOperation sets the mining parameters for the key page.
+const KeyPageOperationTypeSetMiningParametersOperation KeyPageOperationType = 8
 
 // NetworkMaintenanceOperationTypeUnknown is used when the operation type is not known.
 const NetworkMaintenanceOperationTypeUnknown NetworkMaintenanceOperationType = 0
@@ -244,6 +262,9 @@ const SignatureTypeEcdsaSha256 SignatureType = 15
 
 // SignatureTypeTypedData implements EIP-712 sign typed data specification.
 const SignatureTypeTypedData SignatureType = 16
+
+// SignatureTypeLxrMining represents a proof-of-work signature using the LXR hash algorithm.
+const SignatureTypeLxrMining SignatureType = 17
 
 // TransactionMaxUser is the highest number reserved for user transactions.
 const TransactionMaxUser TransactionMax = 48
@@ -738,7 +759,7 @@ func (v ErrorCode) GetEnumValue() uint64 { return uint64(v) }
 func (v *ErrorCode) SetEnumValue(id uint64) bool {
 	u := ErrorCode(id)
 	switch u {
-	case ErrorCodeOK, ErrorCodeEncodingError, ErrorCodeFailed, ErrorCodeDidPanic, ErrorCodeUnknownError:
+	case ErrorCodeOK, ErrorCodeEncodingError, ErrorCodeFailed, ErrorCodeDidPanic, ErrorCodeUnknownError, ErrorCodeNoActiveWindow, ErrorCodeWindowClosed, ErrorCodeInsufficientDifficulty, ErrorCodeInvalidBlockHash, ErrorCodeInvalidSignature:
 		*v = u
 		return true
 	}
@@ -758,6 +779,16 @@ func (v ErrorCode) String() string {
 		return "didPanic"
 	case ErrorCodeUnknownError:
 		return "unknownError"
+	case ErrorCodeNoActiveWindow:
+		return "noActiveWindow"
+	case ErrorCodeWindowClosed:
+		return "windowClosed"
+	case ErrorCodeInsufficientDifficulty:
+		return "insufficientDifficulty"
+	case ErrorCodeInvalidBlockHash:
+		return "invalidBlockHash"
+	case ErrorCodeInvalidSignature:
+		return "invalidSignature"
 	}
 	return fmt.Sprintf("ErrorCode:%d", v)
 }
@@ -775,6 +806,16 @@ func ErrorCodeByName(name string) (ErrorCode, bool) {
 		return ErrorCodeDidPanic, true
 	case "unknownerror":
 		return ErrorCodeUnknownError, true
+	case "noactivewindow":
+		return ErrorCodeNoActiveWindow, true
+	case "windowclosed":
+		return ErrorCodeWindowClosed, true
+	case "insufficientdifficulty":
+		return ErrorCodeInsufficientDifficulty, true
+	case "invalidblockhash":
+		return ErrorCodeInvalidBlockHash, true
+	case "invalidsignature":
+		return ErrorCodeInvalidSignature, true
 	}
 	return 0, false
 }
@@ -904,7 +945,7 @@ func (v KeyPageOperationType) GetEnumValue() uint64 { return uint64(v) }
 func (v *KeyPageOperationType) SetEnumValue(id uint64) bool {
 	u := KeyPageOperationType(id)
 	switch u {
-	case KeyPageOperationTypeUnknown, KeyPageOperationTypeUpdate, KeyPageOperationTypeRemove, KeyPageOperationTypeAdd, KeyPageOperationTypeSetThreshold, KeyPageOperationTypeUpdateAllowed, KeyPageOperationTypeSetRejectThreshold, KeyPageOperationTypeSetResponseThreshold:
+	case KeyPageOperationTypeUnknown, KeyPageOperationTypeUpdate, KeyPageOperationTypeRemove, KeyPageOperationTypeAdd, KeyPageOperationTypeSetThreshold, KeyPageOperationTypeUpdateAllowed, KeyPageOperationTypeSetRejectThreshold, KeyPageOperationTypeSetResponseThreshold, KeyPageOperationTypeSetMiningParametersOperation:
 		*v = u
 		return true
 	}
@@ -930,6 +971,8 @@ func (v KeyPageOperationType) String() string {
 		return "setRejectThreshold"
 	case KeyPageOperationTypeSetResponseThreshold:
 		return "setResponseThreshold"
+	case KeyPageOperationTypeSetMiningParametersOperation:
+		return "setMiningParametersOperation"
 	}
 	return fmt.Sprintf("KeyPageOperationType:%d", v)
 }
@@ -953,6 +996,8 @@ func KeyPageOperationTypeByName(name string) (KeyPageOperationType, bool) {
 		return KeyPageOperationTypeSetRejectThreshold, true
 	case "setresponsethreshold":
 		return KeyPageOperationTypeSetResponseThreshold, true
+	case "setminingparametersoperation":
+		return KeyPageOperationTypeSetMiningParametersOperation, true
 	}
 	return 0, false
 }
@@ -1172,7 +1217,7 @@ func (v SignatureType) GetEnumValue() uint64 { return uint64(v) }
 func (v *SignatureType) SetEnumValue(id uint64) bool {
 	u := SignatureType(id)
 	switch u {
-	case SignatureTypeUnknown, SignatureTypeLegacyED25519, SignatureTypeED25519, SignatureTypeRCD1, SignatureTypeReceipt, SignatureTypePartition, SignatureTypeSet, SignatureTypeRemote, SignatureTypeBTC, SignatureTypeBTCLegacy, SignatureTypeETH, SignatureTypeDelegated, SignatureTypeInternal, SignatureTypeAuthority, SignatureTypeRsaSha256, SignatureTypeEcdsaSha256, SignatureTypeTypedData:
+	case SignatureTypeUnknown, SignatureTypeLegacyED25519, SignatureTypeED25519, SignatureTypeRCD1, SignatureTypeReceipt, SignatureTypePartition, SignatureTypeSet, SignatureTypeRemote, SignatureTypeBTC, SignatureTypeBTCLegacy, SignatureTypeETH, SignatureTypeDelegated, SignatureTypeInternal, SignatureTypeAuthority, SignatureTypeRsaSha256, SignatureTypeEcdsaSha256, SignatureTypeTypedData, SignatureTypeLxrMining:
 		*v = u
 		return true
 	}
@@ -1216,6 +1261,8 @@ func (v SignatureType) String() string {
 		return "ecdsaSha256"
 	case SignatureTypeTypedData:
 		return "typedData"
+	case SignatureTypeLxrMining:
+		return "lxrMining"
 	}
 	return fmt.Sprintf("SignatureType:%d", v)
 }
@@ -1259,6 +1306,8 @@ func SignatureTypeByName(name string) (SignatureType, bool) {
 		return SignatureTypeEcdsaSha256, true
 	case "typeddata":
 		return SignatureTypeTypedData, true
+	case "lxrmining":
+		return SignatureTypeLxrMining, true
 	}
 	return 0, false
 }

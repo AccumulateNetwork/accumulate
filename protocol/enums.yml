@@ -120,6 +120,9 @@ SignatureType:
   TypedData:
     value: 16
     description: implements EIP-712 sign typed data specification
+  LxrMining:
+    value: 17
+    description: represents a proof-of-work signature using the LXR hash algorithm
 
 KeyPageOperationType:
   Unknown:
@@ -146,6 +149,9 @@ KeyPageOperationType:
   SetResponseThreshold:
     value: 7
     description: sets the response threshold
+  SetMiningParametersOperation:
+    value: 8
+    description: sets the mining parameters for the key page
 
 AccountAuthOperationType:
   Unknown:

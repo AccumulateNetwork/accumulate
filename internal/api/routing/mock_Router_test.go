@@ -5,6 +5,7 @@ package routing
 import (
 	mock "github.com/stretchr/testify/mock"
 	messaging "gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+
 	url "gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 

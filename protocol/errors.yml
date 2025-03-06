@@ -14,3 +14,18 @@ ErrorCode:
   UnknownError:
     value: 4
     description: indicates the request failed due to an unknown error
+  NoActiveWindow:
+    value: 5
+    description: indicates there is no active mining window
+  WindowClosed:
+    value: 6
+    description: indicates the mining window is closed
+  InsufficientDifficulty:
+    value: 7
+    description: indicates the mining solution does not meet the minimum difficulty
+  InvalidBlockHash:
+    value: 8
+    description: indicates the block hash in the mining solution is invalid
+  InvalidSignature:
+    value: 9
+    description: indicates the mining signature is invalid

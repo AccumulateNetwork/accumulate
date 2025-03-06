@@ -220,6 +220,16 @@ func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Deli
 	case *protocol.SignatureSet:
 		return nil, errors.BadRequest.With("a signature set is not allowed outside of a forwarded transaction")
 
+	case *protocol.LxrMiningSignature:
+		// Verify the LXR mining signature
+		err = verifyLxrMiningSignature(batch, delivery.Transaction, signature, md)
+		if err != nil {
+			return nil, err
+		}
+
+		// Get the signer
+		signer, err = getSigner(batch, signature.Signer, signature.SignerVersion)
+
 	case *protocol.DelegatedSignature:
 		if !md.Nested() {
 			// Limit delegation depth
