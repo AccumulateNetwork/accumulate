@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/lxrpow"
 	"gitlab.com/accumulatenetwork/accumulate/internal/mining"
+	"gitlab.com/accumulatenetwork/accumulate/internal/mining/lxr"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
@@ -35,12 +35,8 @@ func TestLxrMiningSimulation(t *testing.T) {
 	copy(blockHash[:], acctesting.GenerateKey("blockhash"))
 
 	// Create a hasher for mining
-	hasher := lxrpow.NewLxrHasher(lxrpow.LxrConfig{
-		Width:  8,
-		Range:  8 * 1024,
-		Seed:   2,
-		Target: 100, // Low difficulty for testing
-	})
+	lxr.IsTestEnvironment = true // Use small hash table for testing
+	hasher := lxr.NewHasher()
 
 	// Track rewards distributed
 	rewardsDistributed := make(map[string]uint64)
@@ -62,8 +58,11 @@ func TestLxrMiningSimulation(t *testing.T) {
 		return nil
 	})
 
-	// Create a validator
-	validator := mining.NewValidator(hasher, blockHash)
+	// Create a validator with 60 second window duration and queue capacity of 10
+	validator := mining.NewValidator(60, 10)
+	
+	// Start a new mining window
+	validator.StartNewWindow(blockHash, 100) // 100 is the minimum difficulty
 
 	// Set the reward distributor and transaction forwarder
 	validator.SetRewardDistributor(rewardDistributor)
@@ -89,7 +88,9 @@ func TestLxrMiningSimulation(t *testing.T) {
 		}
 		
 		// Submit the signature
-		validator.SubmitSignature(validSig)
+		accepted, err := validator.SubmitSignature(validSig)
+		require.NoError(t, err, "Failed to submit signature for %s", miner)
+		require.True(t, accepted, "Signature for %s should be accepted", miner)
 	}
 
 	// Close the mining window and distribute rewards
