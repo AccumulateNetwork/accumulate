@@ -17,6 +17,8 @@ import (
 	"testing"
 	"time"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/mining/lxr"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -1521,6 +1523,198 @@ func TestDelegatedKeypageUpdate(t *testing.T) {
 	//look for the key.
 	_, _, found = page.EntryByKeyHash(newKey2hash[:])
 	require.True(t, found, "key not found in page")
+}
+
+func TestLxrMiningSignature(t *testing.T) {
+	// Create a new test node
+	check := newDefaultCheckError(t, false)
+	n := simulator.NewFakeNode(t, check.ErrorHandler())
+	
+	// Skip the test if not running in v2 mode
+	if !n.IsV2() {
+		t.Skip("LXR mining signatures are only supported in v2")
+	}
+	
+	// Create a key for the miner
+	minerKey := generateKey()
+	minerKeyHash := sha256.Sum256(minerKey.PubKey().Bytes())
+	
+	// Create an ADI for the miner
+	n.Update(func(batch *database.Batch) {
+		require.NoError(t, acctesting.CreateAdiWithCredits(batch, minerKey, "miner", 1e9))
+	})
+	
+	// Get the key page
+	keyPage := n.GetKeyPage("miner/book0/1")
+	require.Len(t, keyPage.Keys, 1)
+	require.Equal(t, minerKeyHash[:], keyPage.Keys[0].PublicKeyHash)
+	
+	// Enable mining on the key page
+	n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
+		body := new(protocol.UpdateKeyPage)
+		body.Operation = protocol.KeyPageOperation_SetMiningEnabled
+		body.MiningEnabled = true
+		body.MiningDifficulty = 100 // Set a low difficulty for testing
+		
+		send(
+			MustBuild(t, build.Transaction().
+				For(mustParseOrigin("miner/book0/1")).
+				Body(body).
+				SignWith(protocol.AccountUrl("miner", "book0", "1")).Version(1).Timestamp(&globalNonce).PrivateKey(minerKey).Type(protocol.SignatureTypeLegacyED25519)),
+		)
+	})
+	
+	// Verify mining is enabled
+	keyPage = n.GetKeyPage("miner/book0/1")
+	require.True(t, keyPage.MiningEnabled)
+	require.Equal(t, uint64(100), keyPage.MiningDifficulty)
+	
+	// Create a transaction to sign with LXR mining
+	txn := new(protocol.Transaction)
+	txn.Header.Principal = protocol.AccountUrl("miner")
+	txn.Body = new(protocol.WriteData)
+	txnHash := txn.GetHash()
+	
+	// Create a block hash to mine against
+	blockHash := [32]byte{}
+	copy(blockHash[:], acctesting.GenerateKey("blockhash").Bytes())
+	
+	// Enable test environment for LXR hasher
+	lxr.IsTestEnvironment = true
+	
+	// Create a hasher for mining
+	hasher := lxr.NewHasher()
+	
+	// Create a nonce
+	nonce := []byte("test nonce for mining")
+	
+	// Calculate the proof of work
+	computedHash, difficulty := hasher.CalculatePow(blockHash[:], nonce)
+	require.GreaterOrEqual(t, difficulty, uint64(100), "Mining difficulty should be at least 100")
+	
+	// Create a valid mining signature
+	validSig := &protocol.LxrMiningSignature{
+		Nonce:         nonce,
+		ComputedHash:  computedHash,
+		BlockHash:     blockHash,
+		Signer:        protocol.AccountUrl("miner", "book0", "1"),
+		SignerVersion: keyPage.Version,
+		Timestamp:     uint64(time.Now().Unix()),
+	}
+	
+	// Submit the transaction with the LXR mining signature
+	txid, err := n.SubmitTxn(txn, validSig)
+	require.NoError(t, err, "Failed to submit transaction with LXR mining signature")
+	
+	// Wait for the transaction to be processed
+	n.MustWaitForTxns(txid)
+	
+	// Verify the transaction was processed successfully
+	status, err := n.GetTxnStatus(txid)
+	require.NoError(t, err)
+	require.Equal(t, protocol.TransactionStatusSuccess, status.Code)
+	
+	// Try with an invalid signature (wrong block hash)
+	invalidBlockHash := [32]byte{}
+	copy(invalidBlockHash[:], acctesting.GenerateKey("invalid").Bytes())
+	
+	invalidSig := &protocol.LxrMiningSignature{
+		Nonce:         nonce,
+		ComputedHash:  computedHash,
+		BlockHash:     invalidBlockHash, // Different block hash
+		Signer:        protocol.AccountUrl("miner", "book0", "1"),
+		SignerVersion: keyPage.Version,
+		Timestamp:     uint64(time.Now().Unix()),
+	}
+	
+	// Submit the transaction with the invalid LXR mining signature
+	txn2 := new(protocol.Transaction)
+	txn2.Header.Principal = protocol.AccountUrl("miner")
+	txn2.Body = new(protocol.WriteData)
+	
+	_, err = n.SubmitTxn(txn2, invalidSig)
+	require.Error(t, err, "Transaction with invalid LXR mining signature should fail")
+	require.Contains(t, err.Error(), "invalid LXR mining signature")
+	
+	// Test with an invalid signature (wrong computed hash)
+	invalidComputedHash := [32]byte{}
+	copy(invalidComputedHash[:], acctesting.GenerateKey("invalid-hash").Bytes())
+	
+	invalidSig2 := &protocol.LxrMiningSignature{
+		Nonce:         nonce,
+		ComputedHash:  invalidComputedHash, // Different computed hash
+		BlockHash:     blockHash,
+		Signer:        protocol.AccountUrl("miner", "book0", "1"),
+		SignerVersion: keyPage.Version,
+		Timestamp:     uint64(time.Now().Unix()),
+	}
+	
+	// Submit the transaction with the invalid computed hash
+	txn3 := new(protocol.Transaction)
+	txn3.Header.Principal = protocol.AccountUrl("miner")
+	txn3.Body = new(protocol.WriteData)
+	
+	_, err = n.SubmitTxn(txn3, invalidSig2)
+	require.Error(t, err, "Transaction with invalid computed hash should fail")
+	require.Contains(t, err.Error(), "invalid LXR mining signature")
+	
+	// Test with a higher difficulty than the signature provides
+	// First update the key page to require a higher difficulty
+	n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
+		body := new(protocol.UpdateKeyPage)
+		body.Operation = protocol.KeyPageOperation_SetMiningEnabled
+		body.MiningEnabled = true
+		body.MiningDifficulty = difficulty + 1000 // Set a much higher difficulty
+		
+		send(
+			MustBuild(t, build.Transaction().
+				For(mustParseOrigin("miner/book0/1")).
+				Body(body).
+				SignWith(protocol.AccountUrl("miner", "book0", "1")).Version(1).Timestamp(&globalNonce).PrivateKey(minerKey).Type(protocol.SignatureTypeLegacyED25519)),
+		)
+	})
+	
+	// Verify mining difficulty is updated
+	keyPage = n.GetKeyPage("miner/book0/1")
+	require.True(t, keyPage.MiningEnabled)
+	require.Equal(t, difficulty + 1000, keyPage.MiningDifficulty)
+	
+	// Try to use the same signature that doesn't meet the new difficulty
+	txn4 := new(protocol.Transaction)
+	txn4.Header.Principal = protocol.AccountUrl("miner")
+	txn4.Body = new(protocol.WriteData)
+	
+	_, err = n.SubmitTxn(txn4, validSig)
+	require.Error(t, err, "Transaction with insufficient mining difficulty should fail")
+	require.Contains(t, err.Error(), "difficulty")
+	
+	// Test with a disabled mining key page
+	// Disable mining on the key page
+	n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
+		body := new(protocol.UpdateKeyPage)
+		body.Operation = protocol.KeyPageOperation_SetMiningEnabled
+		body.MiningEnabled = false
+		
+		send(
+			MustBuild(t, build.Transaction().
+				For(mustParseOrigin("miner/book0/1")).
+				Body(body).
+				SignWith(protocol.AccountUrl("miner", "book0", "1")).Version(1).Timestamp(&globalNonce).PrivateKey(minerKey).Type(protocol.SignatureTypeLegacyED25519)),
+		)
+	})
+	
+	// Verify mining is disabled
+	keyPage = n.GetKeyPage("miner/book0/1")
+	require.False(t, keyPage.MiningEnabled)
+	
+	// Try to use a mining signature with mining disabled
+	txn5 := new(protocol.Transaction)
+	txn5.Header.Principal = protocol.AccountUrl("miner")
+	txn5.Body = new(protocol.WriteData)
+	
+	_, err = n.SubmitTxn(txn5, validSig)
+	require.Error(t, err, "Transaction with mining disabled should fail")
+	require.Contains(t, err.Error(), "mining is not enabled")
 }
 
 func TestDuplicateKeyNewKeypage(t *testing.T) {
