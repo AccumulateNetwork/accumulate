@@ -40,21 +40,26 @@ var cmd = &cobra.Command{
 }
 
 var flag = struct {
-	Key          PrivateKeyFlag
-	LogLevel     string
-	HttpListen   []multiaddr.Multiaddr
-	PromListen   []multiaddr.Multiaddr
-	P2pListen    []multiaddr.Multiaddr
-	Peers        []multiaddr.Multiaddr
-	Timeout      time.Duration
-	ConnLimit    int64
-	CorsOrigins  []string
-	LetsEncrypt  []string
-	TlsCert      string
-	TlsKey       string
-	PeerDatabase string
-	Pprof        string
-}{}
+	Key           PrivateKeyFlag
+	LogLevel      []*LoggingRule
+	HttpListen    []multiaddr.Multiaddr
+	PromListen    []multiaddr.Multiaddr
+	P2pListen     []multiaddr.Multiaddr
+	Peers         []multiaddr.Multiaddr
+	Timeout       time.Duration
+	ConnLimit     int64
+	CorsOrigins   []string
+	LetsEncrypt   []string
+	TlsCert       string
+	TlsKey        string
+	PeerDatabase  string
+	Pprof         string
+	ExtraServices string
+}{
+	LogLevel: []*LoggingRule{{
+		Level: slog.LevelInfo,
+	}},
+}
 
 var cu = func() *user.User {
 	cu, _ := user.Current()
@@ -73,7 +78,7 @@ func init() {
 	cmd.Flags().Var((*MultiaddrSliceFlag)(&flag.PromListen), "prom-listen", "Prometheus listening address(es)")
 	cmd.Flags().Var((*MultiaddrSliceFlag)(&flag.P2pListen), "p2p-listen", "P2P listening address(es)")
 	cmd.Flags().VarP((*MultiaddrSliceFlag)(&flag.Peers), "peer", "p", "Peers to connect to")
-	cmd.Flags().StringVar(&flag.LogLevel, "log-level", "error", "Log level")
+	cmd.Flags().Var((*LogLevelFlag)(&flag.LogLevel), "log-level", "Log level")
 	cmd.Flags().DurationVar(&flag.Timeout, "read-header-timeout", 10*time.Second, "ReadHeaderTimeout to prevent slow loris attacks")
 	cmd.Flags().Int64Var(&flag.ConnLimit, "connection-limit", 500, "Limit the number of concurrent connections (set to zero to disable)")
 	cmd.Flags().StringSliceVar(&flag.CorsOrigins, "cors-origin", nil, "Allowed CORS origins")
@@ -83,6 +88,7 @@ func init() {
 	cmd.Flags().StringVar(&flag.PeerDatabase, "peer-db", flag.PeerDatabase, "Track peers using a persistent database.")
 	cmd.Flags().BoolVar(&jsonrpc2.DebugMethodFunc, "debug", false, "Print out a stack trace if an API method fails")
 	cmd.Flags().StringVar(&flag.Pprof, "pprof", "", "Address to run net/http/pprof on")
+	cmd.Flags().StringVar(&flag.ExtraServices, "extra-services", "", "A file containing additional services, formatted the same as accumulate.toml")
 
 	cmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
 		if !cmd.Flag("prom-listen").Changed {
@@ -127,14 +133,12 @@ func run(cmd *cobra.Command, args []string) {
 		},
 		CorsOrigins: flag.CorsOrigins,
 		LetsEncrypt: flag.LetsEncrypt,
-		Router:      ServiceValue(&RouterService{}),
+		Router:      ServiceReference[*RouterService]("router"),
 	}
 	cfg := &Config{
 		Network: args[0],
 		Logging: &Logging{
-			Rules: []*LoggingRule{{
-				Level: slog.LevelInfo,
-			}},
+			Rules: flag.LogLevel,
 		},
 		Instrumentation: &Instrumentation{
 			HttpListener: HttpListener{
@@ -148,7 +152,10 @@ func run(cmd *cobra.Command, args []string) {
 			PeerDB:             &flag.PeerDatabase,
 			EnablePeerTracking: true,
 		},
-		Services: []Service{http},
+		Services: []Service{
+			&RouterService{Name: "router"},
+			http,
+		},
 	}
 
 	if strings.EqualFold(args[0], "MainNet") {
@@ -170,6 +177,13 @@ func run(cmd *cobra.Command, args []string) {
 				Partitions: []string{"Chandrayaan", "Directory"},
 			},
 		}
+	}
+
+	if flag.ExtraServices != "" {
+		extra := new(Config)
+		Check(extra.LoadFrom(flag.ExtraServices))
+		cfg.Configurations = append(cfg.Configurations, extra.Configurations...)
+		cfg.Services = append(cfg.Services, extra.Services...)
 	}
 
 	ctx := cmdutil.ContextForMainProcess(context.Background())
