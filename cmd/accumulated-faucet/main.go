@@ -34,13 +34,17 @@ var cmd = &cobra.Command{
 var flag = struct {
 	NodeKey      PrivateKeyFlag
 	Key          PrivateKeyFlag
-	LogLevel     string
+	LogLevel     []*LoggingRule
 	Account      UrlFlag
 	Listen       []multiaddr.Multiaddr
 	PromListen   []multiaddr.Multiaddr
 	Peers        []multiaddr.Multiaddr
 	PeerDatabase string
-}{}
+}{
+	LogLevel: []*LoggingRule{{
+		Level: slog.LevelInfo,
+	}},
+}
 
 var cu = func() *user.User {
 	cu, _ := user.Current()
@@ -61,7 +65,7 @@ func init() {
 	cmd.Flags().Var((*MultiaddrSliceFlag)(&flag.PromListen), "prom-listen", "Prometheus listening address(es)")
 	cmd.Flags().VarP((*MultiaddrSliceFlag)(&flag.Peers), "peer", "p", "Peers to connect to")
 	cmd.Flags().StringVar(&flag.PeerDatabase, "peer-db", flag.PeerDatabase, "Track peers using a persistent database.")
-	cmd.Flags().StringVar(&flag.LogLevel, "log-level", "error", "Log level")
+	cmd.Flags().Var((*LogLevelFlag)(&flag.LogLevel), "log-level", "Log level")
 
 	cmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
 		if !cmd.Flag("peer").Changed {
@@ -82,9 +86,7 @@ func run(_ *cobra.Command, args []string) {
 	cfg := &Config{
 		Network: args[0],
 		Logging: &Logging{
-			Rules: []*LoggingRule{{
-				Level: slog.LevelInfo,
-			}},
+			Rules: flag.LogLevel,
 		},
 		Instrumentation: &Instrumentation{
 			HttpListener: HttpListener{
