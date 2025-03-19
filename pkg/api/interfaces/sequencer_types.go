@@ -7,19 +7,36 @@
 package interfaces
 
 import (
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"context"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
-// PrivateSequenceRequest defines a request to sequence a message between source and destination
-type PrivateSequenceRequest struct {
-	Source         *url.URL `json:"source,omitempty" validate:"required"`
-	Destination    *url.URL `json:"destination,omitempty" validate:"required"`
-	SequenceNumber uint64   `json:"sequenceNumber,omitempty" validate:"required"`
-	SequenceOptions
+// MessageRecord represents a basic message record
+type MessageRecord struct {
+	ID             *url.TxID `json:"id,omitempty"`
+	SequenceNumber uint64    `json:"sequenceNumber,omitempty"`
 }
 
-// PrivateSequenceResponse defines the response to a sequence request
+// SequenceOptions defines options for sequence operations
+type SequenceOptions struct {
+	NodeID p2p.PeerID `json:"nodeID,omitempty"`
+}
+
+// PrivateSequenceRequest represents a request to sequence a private message
+type PrivateSequenceRequest struct {
+	Source          *url.URL       `json:"source,omitempty"`
+	Destination     *url.URL       `json:"destination,omitempty"`
+	SequenceNumber  uint64         `json:"sequenceNumber,omitempty"`
+	SequenceOptions SequenceOptions `json:"options,omitempty"`
+}
+
+// PrivateSequenceResponse represents a response to a private sequence request
 type PrivateSequenceResponse struct {
 	Record *MessageRecord `json:"record,omitempty"`
+}
+
+// Sequencer defines the interface for private message sequencing
+type Sequencer interface {
+	Sequence(ctx context.Context, src, dst *url.URL, num uint64, opts SequenceOptions) (*MessageRecord, error)
 }

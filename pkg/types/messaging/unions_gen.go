@@ -219,3 +219,275 @@ func UnmarshalMessageJSON(data []byte) (Message, error) {
 
 	return acnt, nil
 }
+
+// UnmarshalBinaryFrom implements Message
+func (m *BadSyntheticMessage) UnmarshalBinaryFrom(rd io.Reader) error {
+	data, err := io.ReadAll(rd)
+	if err != nil {
+		return err
+	}
+	return m.UnmarshalBinary(data)
+}
+
+// UnmarshalBinaryFrom implements Message
+func (m *BlockAnchor) UnmarshalBinaryFrom(rd io.Reader) error {
+	data, err := io.ReadAll(rd)
+	if err != nil {
+		return err
+	}
+	return m.UnmarshalBinary(data)
+}
+
+// UnmarshalBinaryFrom implements Message
+func (m *CreditPayment) UnmarshalBinaryFrom(rd io.Reader) error {
+	data, err := io.ReadAll(rd)
+	if err != nil {
+		return err
+	}
+	return m.UnmarshalBinary(data)
+}
+
+// UnmarshalBinaryFrom implements Message
+func (m *DidUpdateExecutorVersion) UnmarshalBinaryFrom(rd io.Reader) error {
+	data, err := io.ReadAll(rd)
+	if err != nil {
+		return err
+	}
+	return m.UnmarshalBinary(data)
+}
+
+// UnmarshalBinaryFrom implements Message
+func (m *MakeMajorBlock) UnmarshalBinaryFrom(rd io.Reader) error {
+	data, err := io.ReadAll(rd)
+	if err != nil {
+		return err
+	}
+	return m.UnmarshalBinary(data)
+}
+
+// UnmarshalBinaryFrom implements Message
+func (m *SequencedMessage) UnmarshalBinaryFrom(rd io.Reader) error {
+	data, err := io.ReadAll(rd)
+	if err != nil {
+		return err
+	}
+	return m.UnmarshalBinary(data)
+}
+
+// UnmarshalBinaryFrom implements Message
+func (m *SignatureMessage) UnmarshalBinaryFrom(rd io.Reader) error {
+	data, err := io.ReadAll(rd)
+	if err != nil {
+		return err
+	}
+	return m.UnmarshalBinary(data)
+}
+
+// UnmarshalBinaryFrom implements Message
+func (m *SignatureRequest) UnmarshalBinaryFrom(rd io.Reader) error {
+	data, err := io.ReadAll(rd)
+	if err != nil {
+		return err
+	}
+	return m.UnmarshalBinary(data)
+}
+
+// UnmarshalBinaryFrom implements Message
+func (m *TransactionMessage) UnmarshalBinaryFrom(rd io.Reader) error {
+	data, err := io.ReadAll(rd)
+	if err != nil {
+		return err
+	}
+	return m.UnmarshalBinary(data)
+}
+
+func readerToBytes(r io.Reader) ([]byte, error) {
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read data: %w", err)
+	}
+	return data, nil
+}
+
+func (m *BadSyntheticMessage) UnmarshalFieldsFrom(rd *encoding.Reader) error {
+	if !rd.ReadValue(1, func(r io.Reader) error {
+		data, err := readerToBytes(r)
+		if err != nil {
+			return err
+		}
+		return m.UnmarshalBinary(data)
+	}) {
+		return fmt.Errorf("failed to read message data")
+	}
+	return nil
+}
+
+func (m *BlockAnchor) UnmarshalFieldsFrom(rd *encoding.Reader) error {
+	if !rd.ReadValue(1, func(r io.Reader) error {
+		data, err := readerToBytes(r)
+		if err != nil {
+			return err
+		}
+		return m.UnmarshalBinary(data)
+	}) {
+		return fmt.Errorf("failed to read message data")
+	}
+	return nil
+}
+
+func (m *CreditPayment) UnmarshalFieldsFrom(rd *encoding.Reader) error {
+	if !rd.ReadValue(1, func(r io.Reader) error {
+		data, err := readerToBytes(r)
+		if err != nil {
+			return err
+		}
+		return m.UnmarshalBinary(data)
+	}) {
+		return fmt.Errorf("failed to read message data")
+	}
+	return nil
+}
+
+func (m *DidUpdateExecutorVersion) UnmarshalFieldsFrom(rd *encoding.Reader) error {
+	if !rd.ReadValue(1, func(r io.Reader) error {
+		data, err := readerToBytes(r)
+		if err != nil {
+			return err
+		}
+		return m.UnmarshalBinary(data)
+	}) {
+		return fmt.Errorf("failed to read message data")
+	}
+	return nil
+}
+
+func (m *MakeMajorBlock) UnmarshalFieldsFrom(rd *encoding.Reader) error {
+	if !rd.ReadValue(1, func(r io.Reader) error {
+		data, err := readerToBytes(r)
+		if err != nil {
+			return err
+		}
+		return m.UnmarshalBinary(data)
+	}) {
+		return fmt.Errorf("failed to read message data")
+	}
+	return nil
+}
+
+func (m *SequencedMessage) UnmarshalFieldsFrom(rd *encoding.Reader) error {
+	if !rd.ReadValue(1, func(r io.Reader) error {
+		data, err := readerToBytes(r)
+		if err != nil {
+			return err
+		}
+		return m.UnmarshalBinary(data)
+	}) {
+		return fmt.Errorf("failed to read message data")
+	}
+	return nil
+}
+
+func (m *SignatureMessage) UnmarshalFieldsFrom(rd *encoding.Reader) error {
+	if !rd.ReadValue(1, func(r io.Reader) error {
+		data, err := readerToBytes(r)
+		if err != nil {
+			return err
+		}
+		return m.UnmarshalBinary(data)
+	}) {
+		return fmt.Errorf("failed to read message data")
+	}
+	return nil
+}
+
+func (m *SignatureRequest) UnmarshalFieldsFrom(rd *encoding.Reader) error {
+	if !rd.ReadValue(1, func(r io.Reader) error {
+		data, err := readerToBytes(r)
+		if err != nil {
+			return err
+		}
+		return m.UnmarshalBinary(data)
+	}) {
+		return fmt.Errorf("failed to read message data")
+	}
+	return nil
+}
+
+func (m *TransactionMessage) UnmarshalFieldsFrom(rd *encoding.Reader) error {
+	if !rd.ReadValue(1, func(r io.Reader) error {
+		data, err := readerToBytes(r)
+		if err != nil {
+			return err
+		}
+		return m.UnmarshalBinary(data)
+	}) {
+		return fmt.Errorf("failed to read message data")
+	}
+	return nil
+}
+
+func (m *SyntheticMessage) MarshalBinary() ([]byte, error) {
+	wr := encoding.NewWriter(nil)
+	wr.WriteValue(1, func() ([]byte, error) {
+		return m.Body.MarshalBinary()
+	})
+	written, _, err := wr.Reset(nil)
+	if err != nil {
+		return nil, err
+	}
+	data := make([]byte, written)
+	wr = encoding.NewWriter(data)
+	wr.WriteValue(1, func() ([]byte, error) {
+		return m.Body.MarshalBinary()
+	})
+	return data, nil
+}
+
+func (m *SyntheticMessage) UnmarshalBinary(data []byte) error {
+	rd := encoding.NewReader(bytes.NewReader(data))
+	return m.UnmarshalFieldsFrom(rd)
+}
+
+func (m *NetworkUpdate) MarshalBinary() ([]byte, error) {
+	wr := encoding.NewWriter(nil)
+	wr.WriteValue(1, func() ([]byte, error) {
+		return m.Body.MarshalBinary()
+	})
+	written, _, err := wr.Reset(nil)
+	if err != nil {
+		return nil, err
+	}
+	data := make([]byte, written)
+	wr = encoding.NewWriter(data)
+	wr.WriteValue(1, func() ([]byte, error) {
+		return m.Body.MarshalBinary()
+	})
+	return data, nil
+}
+
+func (m *NetworkUpdate) UnmarshalBinary(data []byte) error {
+	rd := encoding.NewReader(bytes.NewReader(data))
+	return m.UnmarshalFieldsFrom(rd)
+}
+
+func (m *Envelope) MarshalBinary() ([]byte, error) {
+	wr := encoding.NewWriter(nil)
+	wr.WriteValue(1, func() ([]byte, error) {
+		return m.Message.MarshalBinary()
+	})
+	written, _, err := wr.Reset(nil)
+	if err != nil {
+		return nil, err
+	}
+	data := make([]byte, written)
+	wr = encoding.NewWriter(data)
+	wr.WriteValue(1, func() ([]byte, error) {
+		return m.Message.MarshalBinary()
+	})
+	return data, nil
+}
+
+func (m *Envelope) UnmarshalBinary(data []byte) error {
+	rd := encoding.NewReader(bytes.NewReader(data))
+	return m.UnmarshalFieldsFrom(rd)
+}

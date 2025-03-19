@@ -8,82 +8,57 @@ package message
 
 import (
 	"context"
-
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/api/interfaces"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/generated"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/interfaces"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/model"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/transport"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
-// Sequencer forwards private sequence requests to a [private.Sequencer].
-type Sequencer struct {
-	private.Sequencer
-}
+var ErrUnexpectedResponse = errors.New("unexpected response type")
 
-func (s Sequencer) methods() serviceMethodMap {
-	typ, fn := makeServiceMethod(s.sequence)
-	return serviceMethodMap{typ: fn}
-}
-
-// sequence handles incoming sequence requests
-func (s Sequencer) sequence(c *call[*interfaces.PrivateSequenceRequest]) {
-	// Use the interface type for sequence options
-	opts := interfaces.SequenceOptions{
-		NodeID: c.params.SequenceOptions.NodeID,
-	}
-
-	// Call the sequencer implementation via the interface
-	res, err := s.Sequencer.Sequence(c.context, c.params.Source, c.params.Destination, c.params.SequenceNumber, opts)
-	if err != nil {
-		c.Write(&ErrorResponse{Error: errors.UnknownError.Wrap(err).(*errors.Error)})
-		return
-	}
-
-	// Convert the message record to the appropriate response type
-	msgID, err := url.ParseTxID(res.ID)
-	if err != nil {
-		c.Write(&ErrorResponse{Error: errors.UnknownError.Wrap(err).(*errors.Error)})
-		return
-	}
-
-	// Create a MessageRecord with the minimum required fields
-	record := &api.MessageRecord[messaging.Message]{
-		ID:              res.ID,
-		Status:          api.MessageStatusDelivered,
-		Source:          res.Source,
-		Destination:     res.Destination,
-		SequenceNumber:  res.SequenceNumber,
-		TransactionHash: res.TransactionHash,
-		Message:         res.Message,
-	}
-
-	c.Write(&interfaces.PrivateSequenceResponse{Record: res})
-}
-
-// PrivateClient is a binary message transport client for private API v3 services.
+// PrivateClient is a client for making private requests
 type PrivateClient struct {
-	*addressedClient
+	*Client
+	url *url.URL
 }
 
-// Private returns a [PrivateClient].
-func (c *Client) Private() private.Sequencer {
-	return PrivateClient{c.addressed(ServiceTypePrivate)}
+// NewPrivateClient creates a new private client
+func NewPrivateClient(transport transport.Transport, url *url.URL) *PrivateClient {
+	return &PrivateClient{
+		Client: NewClient(transport),
+		url:    url,
+	}
 }
 
-// Private returns a [PrivateClient].
-func (c *addressedClient) Private() private.Sequencer {
-	return PrivateClient{c}
+// GetURL returns the URL associated with the client
+func (c *PrivateClient) GetURL() *url.URL {
+	return c.url
 }
 
-// Sequence implements [private.Sequencer.Sequence].
-func (c PrivateClient) Sequence(ctx context.Context, src, dst *url.URL, num uint64, opts interfaces.SequenceOptions) (*interfaces.MessageRecord, error) {
-	req := &interfaces.PrivateSequenceRequest{Source: src, Destination: dst, SequenceNumber: num, SequenceOptions: opts}
-	resp := new(interfaces.PrivateSequenceResponse)
-	err := c.Request(ctx, req, resp)
+// Request sends a request to the private client's URL
+func (c *PrivateClient) Request(ctx context.Context, req interfaces.Message) (interfaces.Message, error) {
+	// Set destination URL if request supports it
+	if req, ok := req.(interfaces.AddressedMessage); ok {
+		req.SetDestination(c.url)
+	}
+
+	return c.Client.Request(ctx, req)
+}
+
+// RequestSequence requests a sequence of messages
+func (c *PrivateClient) RequestSequence(ctx context.Context, options *model.SequenceOptions) (*model.MessageRecord, error) {
+	req := &generated.PrivateSequenceRequest{Options: options}
+	resp, err := c.Request(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return resp.Record, nil
+
+	seqResp, ok := resp.(*generated.PrivateSequenceResponse)
+	if !ok {
+		return nil, ErrUnexpectedResponse
+	}
+
+	return seqResp.GetRecord(), nil
 }

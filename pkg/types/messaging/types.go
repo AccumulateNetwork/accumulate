@@ -7,10 +7,12 @@
 package messaging
 
 import (
+	"encoding/json"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/hash"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"io"
 )
 
 //go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-enum --package messaging enums.yml
@@ -33,6 +35,12 @@ type Message interface {
 
 	// Hash returns the hash of the message.
 	Hash() [32]byte
+
+	// MarshalBinary returns the binary representation of the message.
+	MarshalBinary() ([]byte, error)
+
+	// UnmarshalBinary unmarshals the binary representation of the message.
+	UnmarshalBinary([]byte) error
 }
 
 // UnwrapAs returns the message as the given type, unwrapping any wrappers.
@@ -196,3 +204,54 @@ func (m *SyntheticMessage) Hash() [32]byte         { return encoding.Hash(m) }
 func (m *NetworkUpdate) Hash() [32]byte            { return encoding.Hash(m) }
 func (m *MakeMajorBlock) Hash() [32]byte           { return encoding.Hash(m) }
 func (m *DidUpdateExecutorVersion) Hash() [32]byte { return encoding.Hash(m) }
+
+func (m *TransactionMessage) MarshalBinary() ([]byte, error) { return json.Marshal(m) }
+func (m *TransactionMessage) UnmarshalBinary(data []byte) error { return json.Unmarshal(data, m) }
+
+func (m *BlockAnchor) MarshalBinary() ([]byte, error) { return json.Marshal(m) }
+func (m *BlockAnchor) UnmarshalBinary(data []byte) error { return json.Unmarshal(data, m) }
+
+func (m *SequencedMessage) MarshalBinary() ([]byte, error) { return json.Marshal(m) }
+func (m *SequencedMessage) UnmarshalBinary(data []byte) error { return json.Unmarshal(data, m) }
+
+func (m *SignatureMessage) MarshalBinary() ([]byte, error) { return json.Marshal(m) }
+func (m *SignatureMessage) UnmarshalBinary(data []byte) error { return json.Unmarshal(data, m) }
+
+func (m *SignatureRequest) MarshalBinary() ([]byte, error) { return json.Marshal(m) }
+func (m *SignatureRequest) UnmarshalBinary(data []byte) error { return json.Unmarshal(data, m) }
+
+func (m *MakeMajorBlock) MarshalBinary() ([]byte, error) { return json.Marshal(m) }
+func (m *MakeMajorBlock) UnmarshalBinary(data []byte) error { return json.Unmarshal(data, m) }
+
+func (m *CreditPayment) MarshalBinary() ([]byte, error) { return json.Marshal(m) }
+func (m *CreditPayment) UnmarshalBinary(data []byte) error { return json.Unmarshal(data, m) }
+
+func (m *DidUpdateExecutorVersion) MarshalBinary() ([]byte, error) { return json.Marshal(m) }
+func (m *DidUpdateExecutorVersion) UnmarshalBinary(data []byte) error { return json.Unmarshal(data, m) }
+
+func (m *BadSyntheticMessage) MarshalBinary() ([]byte, error) { return json.Marshal(m) }
+func (m *BadSyntheticMessage) UnmarshalBinary(data []byte) error { return json.Unmarshal(data, m) }
+
+func (m *NetworkUpdate) MarshalBinary() ([]byte, error) { return json.Marshal(m) }
+func (m *NetworkUpdate) UnmarshalBinary(data []byte) error { return json.Unmarshal(data, m) }
+
+func (m *SyntheticMessage) MarshalBinary() ([]byte, error) { return json.Marshal(m) }
+func (m *SyntheticMessage) UnmarshalBinary(data []byte) error { return json.Unmarshal(data, m) }
+
+// UnmarshalBinaryFrom implements encoding.BinaryUnmarshaler for NetworkUpdate
+func (m *NetworkUpdate) UnmarshalBinaryFrom(r io.Reader) error {
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return err
+	}
+	return m.UnmarshalBinary(data)
+}
+
+// UnmarshalBinaryFrom implements encoding.BinaryUnmarshaler for SyntheticMessage
+func (m *SyntheticMessage) UnmarshalBinaryFrom(r io.Reader) error {
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return err
+	}
+	return m.UnmarshalBinary(data)
+}

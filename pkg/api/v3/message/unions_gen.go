@@ -354,3 +354,14 @@ func UnmarshalJSON(data []byte) (Message, error) {
 
 	return acnt, nil
 }
+
+func (m *Addressed) Type() uint32 { return uint32(m.Type()) }
+func (m *EventMessage) Type() uint32 { return uint32(m.Type()) }
+func (m *MetricsRequest) Type() uint32 { return uint32(m.Type()) }
+func (m *MetricsResponse) Type() uint32 { return uint32(m.Type()) }
+func (m *PrivateSequenceRequest) Type() uint32 { return uint32(m.Type()) }
+func (m *PrivateSequenceResponse) Type() uint32 { return uint32(m.Type()) }
+func (m *SubscribeRequest) Type() uint32 { return uint32(m.Type()) }
+func (m *SubscribeResponse) Type() uint32 { return uint32(m.Type()) }
+func (m *ValidateRequest) Type() uint32 { return uint32(m.Type()) }
+func (m *ValidateResponse) Type() uint32 { return uint32(m.Type()) }

@@ -7,6 +7,53 @@
 package abci
 
 import (
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+)
+
+// Message type wrappers
+type (
+	TransactionMessage struct {
+		*messaging.TransactionMessage
+	}
+
+	SignatureMessage struct {
+		*messaging.SignatureMessage
+	}
+
+	BlockAnchor struct {
+		*messaging.BlockAnchor
+	}
+)
+
+// MarshalBinary implementations
+func (m *TransactionMessage) MarshalBinary() ([]byte, error) {
+	return m.TransactionMessage.MarshalBinary()
+}
+
+func (m *SignatureMessage) MarshalBinary() ([]byte, error) {
+	return m.SignatureMessage.MarshalBinary()
+}
+
+func (m *BlockAnchor) MarshalBinary() ([]byte, error) {
+	return m.BlockAnchor.MarshalBinary()
+}
+
+// Ensure message types implement required interfaces
+var (
+	_ messaging.Message = (*TransactionMessage)(nil)
+	_ messaging.Message = (*SignatureMessage)(nil)
+	_ messaging.Message = (*BlockAnchor)(nil)
+)
+
+// Copyright 2024 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
+package abci
+
+import (
 	"bytes"
 	"context"
 	_ "crypto/sha256"
