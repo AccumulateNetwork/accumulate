@@ -7,9 +7,17 @@
 package interfaces
 
 import (
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
+
+// MessageRecordExt extends MessageRecord with additional fields needed for full message processing
+type MessageRecordExt struct {
+	*MessageRecord
+	Source          *url.URL `json:"source,omitempty"`
+	Destination     *url.URL `json:"destination,omitempty"`
+	TransactionHash []byte   `json:"transactionHash,omitempty"`
+	Message         []byte   `json:"message,omitempty"`
+}
 
 // PrivateSequenceRequest defines a request to sequence a message between source and destination
 type PrivateSequenceRequest struct {
@@ -21,5 +29,5 @@ type PrivateSequenceRequest struct {
 
 // PrivateSequenceResponse defines the response to a sequence request
 type PrivateSequenceResponse struct {
-	Record *MessageRecord `json:"record,omitempty"`
+	Record *MessageRecordExt `json:"record,omitempty"`
 }

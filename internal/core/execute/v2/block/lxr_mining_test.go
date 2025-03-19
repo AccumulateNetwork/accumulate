@@ -39,7 +39,7 @@ func TestVerifyLxrMiningSignature(t *testing.T) {
 
 	// Create a test transaction
 	transaction := &protocol.Transaction{
-		Header: &protocol.TransactionHeader{
+		Header: protocol.TransactionHeader{
 			Principal: testdata.AccountUrl("test", "account"),
 		},
 		Body: &protocol.SendTokens{},

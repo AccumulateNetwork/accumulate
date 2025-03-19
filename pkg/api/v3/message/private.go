@@ -17,6 +17,9 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
+// ServiceTypePrivate defines the service type ID for private services
+const ServiceTypePrivate uint32 = 0xF000
+
 // Sequencer forwards private sequence requests to a [private.Sequencer].
 type Sequencer struct {
 	private.Sequencer
@@ -41,49 +44,40 @@ func (s Sequencer) sequence(c *call[*interfaces.PrivateSequenceRequest]) {
 		return
 	}
 
-	// Convert the message record to the appropriate response type
-	msgID, err := url.ParseTxID(res.ID)
+	// Convert interfaces.MessageRecord to api.MessageRecord for the response
+	txID, err := url.ParseTxID(res.ID)
 	if err != nil {
 		c.Write(&ErrorResponse{Error: errors.UnknownError.Wrap(err).(*errors.Error)})
 		return
 	}
-
-	// Create a MessageRecord with the minimum required fields
-	record := &api.MessageRecord[messaging.Message]{
-		ID:              res.ID,
-		Status:          api.MessageStatusDelivered,
-		Source:          res.Source,
-		Destination:     res.Destination,
-		SequenceNumber:  res.SequenceNumber,
-		TransactionHash: res.TransactionHash,
-		Message:         res.Message,
+	
+	apiRecord := &api.MessageRecord[messaging.Message]{
+		ID:     txID,
+		Status: errors.Pending, // Use pending status as default
 	}
-
-	c.Write(&interfaces.PrivateSequenceResponse{Record: res})
+	
+	// Use the proper message type for the response with the converted record
+	c.Write(&PrivateSequenceResponse{Value: apiRecord})
 }
 
-// PrivateClient is a binary message transport client for private API v3 services.
+// PrivateClient implements private.Sequencer by adapting an AddressedClient
 type PrivateClient struct {
-	*addressedClient
+	AddressedClient
 }
 
-// Private returns a [PrivateClient].
+// Request implements interfaces.RequestHandler
+func (c PrivateClient) Request(ctx context.Context, req interface{}, resp interface{}) error {
+	return c.AddressedClient.Request(ctx, req, resp)
+}
+
+// Private returns a [private.Sequencer].
 func (c *Client) Private() private.Sequencer {
-	return PrivateClient{c.addressed(ServiceTypePrivate)}
+	client := PrivateClient{c.ForAddress(nil)}
+	return &interfaces.SequencerAdapter{Handler: client}
 }
 
-// Private returns a [PrivateClient].
-func (c *addressedClient) Private() private.Sequencer {
-	return PrivateClient{c}
-}
-
-// Sequence implements [private.Sequencer.Sequence].
-func (c PrivateClient) Sequence(ctx context.Context, src, dst *url.URL, num uint64, opts interfaces.SequenceOptions) (*interfaces.MessageRecord, error) {
-	req := &interfaces.PrivateSequenceRequest{Source: src, Destination: dst, SequenceNumber: num, SequenceOptions: opts}
-	resp := new(interfaces.PrivateSequenceResponse)
-	err := c.Request(ctx, req, resp)
-	if err != nil {
-		return nil, err
-	}
-	return resp.Record, nil
+// Private returns a [private.Sequencer].
+func (c AddressedClient) Private() private.Sequencer {
+	client := PrivateClient{c}
+	return &interfaces.SequencerAdapter{Handler: client}
 }
