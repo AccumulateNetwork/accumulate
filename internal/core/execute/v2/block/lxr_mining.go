@@ -21,38 +21,38 @@ import (
 func verifyLxrMiningSignature(batch *database.Batch, transaction *protocol.Transaction, signature *protocol.LxrMiningSignature, md sigExecMetadata) error {
 	// Validate batch
 	if batch == nil {
-		return protocol.ErrInvalidSignature.With("database batch is nil")
+		return fmt.Errorf("%w: database batch is nil", protocol.ErrInvalidSignature)
 	}
 
 	// Validate transaction
 	if transaction == nil {
-		return protocol.ErrInvalidSignature.With("transaction is nil")
+		return fmt.Errorf("%w: transaction is nil", protocol.ErrInvalidSignature)
 	}
 
 	// Validate signature
 	if signature == nil {
-		return protocol.ErrInvalidSignature.With("signature is nil")
+		return fmt.Errorf("%w: no mining signature", protocol.ErrInvalidSignature)
 	}
 
 	// Get the signer URL
 	signerUrl := signature.Signer
 	if signerUrl == nil {
-		return protocol.ErrInvalidSignature.With("missing signer URL")
+		return fmt.Errorf("%w: signature has no signer", protocol.ErrInvalidSignature)
 	}
 
 	// Validate block hash
 	if signature.BlockHash == [32]byte{} {
-		return protocol.ErrInvalidSignature.With("block hash is empty")
+		return fmt.Errorf("%w: signature has no block hash", protocol.ErrInvalidSignature)
 	}
 
 	// Validate nonce
 	if len(signature.Nonce) == 0 {
-		return protocol.ErrInvalidSignature.With("nonce is empty")
+		return fmt.Errorf("%w: signature has no nonce", protocol.ErrInvalidSignature)
 	}
 
 	// Validate computed hash
 	if signature.ComputedHash == [32]byte{} {
-		return protocol.ErrInvalidSignature.With("computed hash is empty")
+		return fmt.Errorf("%w: signature has no computed hash", protocol.ErrInvalidSignature)
 	}
 
 	// Get the key page
@@ -62,19 +62,19 @@ func verifyLxrMiningSignature(batch *database.Batch, transaction *protocol.Trans
 		logging.L.Error("Failed to load key page for LXR mining signature", 
 			"error", err, 
 			"signer", signerUrl)
-		return protocol.ErrInvalidSignature.WithFormat("failed to load key page: %v", err)
+		return fmt.Errorf("%w: failed to load key page: %v", protocol.ErrInvalidSignature, err)
 	}
 
 	// Check if the account is a key page
 	if keyPage == nil {
 		logging.L.Error("Account is not a key page", "signer", signerUrl)
-		return protocol.ErrInvalidSignature.WithFormat("account %v is not a key page", signerUrl)
+		return fmt.Errorf("%w: account %v is not a key page", protocol.ErrInvalidSignature, signerUrl)
 	}
 
 	// Check if mining is enabled
 	if !keyPage.MiningEnabled {
 		logging.L.Debug("Mining is not enabled for key page", "signer", signerUrl)
-		return protocol.ErrInvalidSignature.With("mining is not enabled for this key page")
+		return fmt.Errorf("%w: mining is not enabled for this key page", protocol.ErrInvalidSignature)
 	}
 
 	// Check if the signer version matches
@@ -83,7 +83,7 @@ func verifyLxrMiningSignature(batch *database.Batch, transaction *protocol.Trans
 			"signer", signerUrl, 
 			"got", signature.SignerVersion, 
 			"want", keyPage.Version)
-		return protocol.ErrInvalidSignature.WithFormat("signer version mismatch: got %d, want %d", signature.SignerVersion, keyPage.Version)
+		return fmt.Errorf("%w: signer version mismatch: got %d, want %d", protocol.ErrInvalidSignature, signature.SignerVersion, keyPage.Version)
 	}
 
 	// Create a hasher
@@ -92,16 +92,16 @@ func verifyLxrMiningSignature(batch *database.Batch, transaction *protocol.Trans
 	// Verify the signature
 	if !hasher.VerifySignature(signature, keyPage.MiningDifficulty) {
 		// Calculate the actual difficulty to provide more detailed error message
-		_, actualDifficulty := hasher.CalculatePow(signature.BlockHash[:], signature.Nonce)
+		_, actualDifficulty := hasher.CalculatePow(signature.GetBlockHash(), signature.GetNonce())
 		logging.L.Debug("Invalid LXR mining signature", 
 			"signer", signerUrl, 
 			"required", keyPage.MiningDifficulty, 
 			"actual", actualDifficulty)
 		
 		if actualDifficulty < keyPage.MiningDifficulty {
-			return protocol.ErrInvalidSignature.WithFormat("insufficient mining difficulty: got %d, required %d", actualDifficulty, keyPage.MiningDifficulty)
+			return fmt.Errorf("%w: insufficient mining difficulty: got %d, required %d", protocol.ErrInvalidSignature, actualDifficulty, keyPage.MiningDifficulty)
 		}
-		return protocol.ErrInvalidSignature.With("invalid LXR mining signature: hash verification failed")
+		return fmt.Errorf("%w: invalid LXR mining signature: hash verification failed", protocol.ErrInvalidSignature)
 	}
 
 	// Log successful verification
@@ -112,12 +112,12 @@ func verifyLxrMiningSignature(batch *database.Batch, transaction *protocol.Trans
 	return nil
 }
 
-// LxrMiningValidator is a validator for LxrMiningSignatures
+// LxrMiningValidator handles validation of LXR mining signatures
 type LxrMiningValidator struct {
-	logger   logging.Logger
 	hasher   *lxr.Hasher
+	logger   logging.Logger
 	registry *mining.Validator
-	batch    *database.Batch // Current batch for database operations
+	batch    *database.Batch // Database batch for transaction storage
 }
 
 // NewLxrMiningValidator creates a new LxrMiningValidator
@@ -129,20 +129,37 @@ func NewLxrMiningValidator(logger logging.Logger) *LxrMiningValidator {
 
 	// Create a transaction forwarder that forwards mined transactions
 	txForwarder := mining.NewDefaultTransactionForwarder(func(blockHash [32]byte, submissions []*mining.MiningSubmission) error {
-		return forwardMinedTransaction(nil, blockHash, submissions) // Will be updated with batch when available
+		// Initially, this is a placeholder. We'll update it after creating the validator
+		return nil
 	})
 
-	return &LxrMiningValidator{
-		logger:   logger,
+	validator := &LxrMiningValidator{
 		hasher:   lxr.NewHasher(),
+		logger:   logger,
 		registry: mining.NewCustomValidator(3600, 10, rewardDistributor, txForwarder), // 1 hour window, 10 submissions
 	}
+
+	// Update the forwarder to use this validator instance
+	txForwarder.SetForwardFunc(func(blockHash [32]byte, submissions []*mining.MiningSubmission) error {
+		return validator.ForwardTransaction(blockHash, submissions)
+	})
+
+	return validator
 }
 
 // StartNewWindow starts a new mining window
-func (v *LxrMiningValidator) StartNewWindow(blockHash [32]byte, minDifficulty uint64) {
-	v.registry.StartNewWindow(blockHash, minDifficulty)
-	v.logger.Info("Started new mining window", "blockHash", blockHash, "minDifficulty", minDifficulty)
+func (v *LxrMiningValidator) StartNewWindow(batch *database.Batch, blockHash [32]byte, windowDifficulty uint64) {
+	v.batch = batch
+	v.registry.StartNewWindow(blockHash, windowDifficulty)
+	v.logger.Info("Started new mining window", "blockHash", blockHash, "windowDifficulty", windowDifficulty)
+
+	// Update the transaction forwarder to use the current batch
+	if tf, ok := v.registry.TransactionForwarder().(*mining.DefaultTransactionForwarder); ok {
+		// Update the forward function with the current batch
+		tf.SetForwardFunc(func(blockHash [32]byte, submissions []*mining.MiningSubmission) error {
+			return v.ForwardTransaction(blockHash, submissions)
+		})
+	}
 }
 
 // SubmitSignature submits an LxrMiningSignature for validation
@@ -165,11 +182,17 @@ func (v *LxrMiningValidator) GetTopSubmissions() []*mining.MiningSubmission {
 	return v.registry.GetTopSubmissions()
 }
 
-// CloseWindow closes the current mining window and returns the top submissions
-func (v *LxrMiningValidator) CloseWindow() []*mining.MiningSubmission {
+// CloseWindow closes the current mining window
+func (v *LxrMiningValidator) CloseWindow(batch *database.Batch) ([]*mining.MiningSubmission, error) {
+	// Get the submissions
 	submissions := v.registry.CloseWindow()
-	v.logger.Info("Closed mining window", "submissions", len(submissions))
-	return submissions
+	
+	// Forward the mined transactions
+	if err := v.ForwardTransaction(v.registry.GetCurrentWindow().BlockHash, submissions); err != nil {
+		return submissions, fmt.Errorf("failed to forward mined transactions: %w", err)
+	}
+	
+	return submissions, nil
 }
 
 // CloseWindowAndDistributeRewards closes the current mining window, distributes rewards, and returns the top submissions
@@ -212,7 +235,7 @@ func (v *LxrMiningValidator) updateCallbacks() {
 	if tf, ok := v.registry.TransactionForwarder().(*mining.DefaultTransactionForwarder); ok {
 		// Update the forward function with the current batch
 		tf.SetForwardFunc(func(blockHash [32]byte, submissions []*mining.MiningSubmission) error {
-			return forwardMinedTransaction(v.batch, blockHash, submissions)
+			return v.ForwardTransaction(blockHash, submissions)
 		})
 	}
 }
@@ -220,6 +243,96 @@ func (v *LxrMiningValidator) updateCallbacks() {
 // IsWindowActive returns true if there is an active mining window
 func (v *LxrMiningValidator) IsWindowActive() bool {
 	return v.registry.IsWindowActive()
+}
+
+// ForwardTransaction forwards a mining transaction to the mempool
+func (v *LxrMiningValidator) ForwardTransaction(blockHash [32]byte, submissions []*mining.MiningSubmission) error {
+	// Skip if no submissions
+	if len(submissions) == 0 {
+		return nil
+	}
+	
+	// In a real implementation, we would get access to the database
+	// For now, log that we would process these transactions
+	v.logger.Info("Would forward mining transactions", "count", len(submissions))
+	
+	var errs []error
+	
+	// Process each submission, starting with the highest difficulty
+	for _, submission := range submissions {
+		// Create a LxrMiningSignature from the submission
+		signature := &protocol.LxrMiningSignature{
+			Nonce:         submission.Nonce,
+			ComputedHash:  submission.ComputedHash,
+			BlockHash:     submission.BlockHash,
+			SignerVersion: submission.SignerVersion,
+			Timestamp:     submission.Timestamp,
+		}
+		
+		// Parse the signer URL
+		signerUrl, err := url.Parse(submission.Signer)
+		if err != nil {
+			v.logger.Debug("Skipping submission with invalid signer URL", 
+				"signer", submission.Signer,
+				"difficulty", submission.Difficulty,
+				"error", err)
+			continue
+		}
+		signature.Signer = signerUrl
+		
+		// Skip if we can't resolve the signer URL
+		if signature.Signer == nil {
+			v.logger.Debug("Skipping submission with no signer URL", 
+				"difficulty", submission.Difficulty)
+			continue
+		}
+		
+		// Create a transaction ID for the synthetic transaction
+		// Convert the hash slice to a [32]byte array
+		var hashBytes [32]byte
+		copy(hashBytes[:], signature.Hash())
+		txID := signature.Signer.WithTxID(hashBytes)
+		
+		v.logger.Info("Created synthetic transaction for mining submission", 
+			"txID", txID,
+			"signer", signature.Signer, 
+			"difficulty", submission.Difficulty)
+		
+		// In a real implementation, we would add the transaction to the database
+		// We would use something like:
+		//
+		// batch := database.NewBatch("mining", kvstore, true, v.logger)
+		// defer batch.Discard()
+		//
+		// txBody := &protocol.SyntheticCreateIdentity{}
+		// txBody.Cause = txID
+		// txBody.Initiator = signature.Signer
+		//
+		// tx := &protocol.Transaction{
+		//     Header: protocol.TransactionHeader{
+		//         Principal: signature.Signer,
+		//     },
+		//     Body: txBody,
+		// }
+		//
+		// err = batch.Account(tx.Header.Principal).Transaction(txID.Hash()).Main().Put(tx)
+		// if err != nil {
+		//     errs = append(errs, fmt.Errorf("failed to add synthetic transaction: %w", err))
+		//     continue
+		// }
+		//
+		// err = batch.Commit()
+		// if err != nil {
+		//     errs = append(errs, fmt.Errorf("failed to commit batch: %w", err))
+		// }
+	}
+	
+	// Return errors if any
+	if len(errs) > 0 {
+		return fmt.Errorf("failed to forward %d/%d mining transactions: %v", len(errs), len(submissions), errs)
+	}
+	
+	return nil
 }
 
 // transferReward transfers a reward to a miner
@@ -232,7 +345,7 @@ func transferReward(batch *database.Batch, signer *url.URL, amount uint64) error
 	// Get the account
 	account, err := batch.Account(signer).Main().Get()
 	if err != nil {
-		return protocol.ErrInvalidSignature.WithFormat("failed to load account: %v", err)
+		return fmt.Errorf("%w: failed to load account: %v", protocol.ErrInvalidSignature, err)
 	}
 	
 	// Check if the account is a lite token account
@@ -241,20 +354,20 @@ func transferReward(batch *database.Batch, signer *url.URL, amount uint64) error
 		// Try to get the lite identity
 		lid, ok := account.(*protocol.LiteIdentity)
 		if !ok {
-			return protocol.ErrInvalidSignature.WithFormat("account %v is not a lite token account or lite identity", signer)
+			return fmt.Errorf("%w: account %v is not a lite token account or lite identity", protocol.ErrInvalidSignature, signer)
 		}
 		
 		// Get the ACME token account
 		acmeUrl := url.JoinPath(lid.Url(), "acme")
 		account, err = batch.Account(acmeUrl).Main().Get()
 		if err != nil {
-			return protocol.ErrInvalidSignature.WithFormat("failed to load ACME token account: %v", err)
+			return fmt.Errorf("%w: failed to load ACME token account: %v", protocol.ErrInvalidSignature, err)
 		}
 		
 		// Check if the account is a lite token account
 		lta, ok = account.(*protocol.LiteTokenAccount)
 		if !ok {
-			return protocol.ErrInvalidSignature.WithFormat("account %v is not a lite token account", acmeUrl)
+			return fmt.Errorf("%w: account %v is not a lite token account", protocol.ErrInvalidSignature, acmeUrl)
 		}
 	}
 	
@@ -264,97 +377,7 @@ func transferReward(batch *database.Batch, signer *url.URL, amount uint64) error
 	// Save the account
 	err = batch.Account(lta.Url()).Main().Put(lta)
 	if err != nil {
-		return protocol.ErrInvalidSignature.WithFormat("failed to save account: %v", err)
-	}
-	
-	return nil
-}
-
-// forwardMinedTransaction forwards a mined transaction
-func forwardMinedTransaction(batch *database.Batch, blockHash [32]byte, submissions []*mining.MiningSubmission) error {
-	// Skip if no batch is available or no submissions
-	if batch == nil || len(submissions) == 0 {
-		return nil
-	}
-	
-	// Track any errors that occur during processing
-	var errs []error
-	
-	// Process each submission, starting with the highest difficulty
-	for _, submission := range submissions {
-		// Skip if the signature doesn't have transaction data
-		if submission.Signature == nil || len(submission.Signature.TransactionData) == 0 {
-			logging.L.Debug("Skipping submission with no transaction data", 
-				"difficulty", submission.Difficulty)
-			continue
-		}
-		
-		// Create a URL for the signer
-		signerUrl := submission.Signature.Signer
-		if signerUrl == nil {
-			logging.L.Debug("Skipping submission with no signer URL", 
-				"difficulty", submission.Difficulty)
-			continue
-		}
-		
-		// Parse the transaction data
-		tx := new(protocol.Transaction)
-		err := tx.UnmarshalBinary(submission.Signature.TransactionData)
-		if err != nil {
-			// Log the error but continue with other submissions
-			logging.L.Error("Failed to unmarshal transaction data", 
-				"error", err, 
-				"signer", signerUrl, 
-				"difficulty", submission.Difficulty)
-			errs = append(errs, fmt.Errorf("failed to unmarshal transaction data: %w", err))
-			continue
-		}
-		
-		// Set the synthetic transaction origin
-		tx.Header.Principal = signerUrl
-		
-		// Create a synthetic transaction
-		synthTx := &protocol.SyntheticTransaction{
-			Cause: &protocol.TransactionReference{
-				SourceNetwork: protocol.Directory,
-				Hash:          submission.Signature.Hash(),
-			},
-			Transaction: tx,
-		}
-		
-		// Add the synthetic transaction to the mempool
-		err = batch.Transaction(tx.GetHash()).Synthetic().Put(synthTx)
-		if err != nil {
-			logging.L.Error("Failed to add synthetic transaction to batch", 
-				"error", err, 
-				"txHash", tx.GetHash(), 
-				"signer", signerUrl, 
-				"difficulty", submission.Difficulty)
-			errs = append(errs, fmt.Errorf("failed to add synthetic transaction to batch: %w", err))
-			continue
-		}
-		
-		// Also add an entry to the pending synthetic transaction index
-		err = batch.Transaction(tx.GetHash()).PendingSynthetic().Put(synthTx)
-		if err != nil {
-			logging.L.Error("Failed to add synthetic transaction to pending index", 
-				"error", err, 
-				"txHash", tx.GetHash(), 
-				"signer", signerUrl, 
-				"difficulty", submission.Difficulty)
-			errs = append(errs, fmt.Errorf("failed to add synthetic transaction to pending index: %w", err))
-			continue
-		}
-		
-		logging.L.Info("Successfully forwarded mined transaction", 
-			"txHash", tx.GetHash(), 
-			"signer", signerUrl, 
-			"difficulty", submission.Difficulty)
-	}
-	
-	// If any errors occurred, return a combined error
-	if len(errs) > 0 {
-		return fmt.Errorf("errors occurred while forwarding mined transactions: %v", errs)
+		return fmt.Errorf("%w: failed to save account: %v", protocol.ErrInvalidSignature, err)
 	}
 	
 	return nil

@@ -11,7 +11,6 @@ import (
 	"encoding/binary"
 	
 	"gitlab.com/accumulatenetwork/accumulate/internal/lxrpow"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // Hasher provides a wrapper around the LXRPoW implementation
@@ -46,14 +45,27 @@ func NewCustomHasher(loops, bits, passes uint64) *Hasher {
 
 // CalculatePow calculates the proof of work for a given block hash and nonce
 // Returns the computed hash and the difficulty value
-func (h *Hasher) CalculatePow(blockHash []byte, nonce []byte) ([32]byte, uint64) {
+// This can accept both a slice ([]byte) or a fixed-size array ([32]byte)
+func (h *Hasher) CalculatePow(blockHash interface{}, nonce []byte) ([32]byte, uint64) {
 	// Ensure we have a 32-byte hash
 	var hashData [32]byte
-	if len(blockHash) == 32 {
-		copy(hashData[:], blockHash)
-	} else {
-		// If the block hash is not 32 bytes, hash it to get a 32-byte hash
-		hashData = sha256.Sum256(append(blockHash, nonce...))
+	
+	// Handle different types of blockHash
+	switch hash := blockHash.(type) {
+	case [32]byte:
+		// If it's already a [32]byte, just use it
+		hashData = hash
+	case []byte:
+		// If it's a []byte slice
+		if len(hash) == 32 {
+			copy(hashData[:], hash)
+		} else {
+			// If the block hash is not 32 bytes, hash it to get a 32-byte hash
+			hashData = sha256.Sum256(append(hash, nonce...))
+		}
+	default:
+		// If it's neither, return an empty hash with zero difficulty
+		return hashData, 0
 	}
 	
 	// Convert nonce to uint64 for LxrPoWHash
@@ -71,16 +83,16 @@ func (h *Hasher) CalculatePow(blockHash []byte, nonce []byte) ([32]byte, uint64)
 	return result, difficulty
 }
 
-// VerifySignature verifies an LxrMiningSignature
+// VerifySignature verifies a mining signature through the SignatureVerification interface
 // Returns true if the signature is valid, false otherwise
-func (h *Hasher) VerifySignature(sig *protocol.LxrMiningSignature, minDifficulty uint64) bool {
+func (h *Hasher) VerifySignature(sig SignatureVerification, minDifficulty uint64) bool {
 	// Check if the signature is nil
 	if sig == nil {
 		return false
 	}
 	
 	// Calculate the proof of work
-	computedHash, difficulty := h.CalculatePow(sig.BlockHash[:], sig.Nonce)
+	computedHash, difficulty := h.CalculatePow(sig.GetBlockHash(), sig.GetNonce())
 	
 	// Check if the difficulty meets the minimum requirement
 	if difficulty < minDifficulty {
@@ -88,8 +100,9 @@ func (h *Hasher) VerifySignature(sig *protocol.LxrMiningSignature, minDifficulty
 	}
 	
 	// Check if the computed hash matches the one in the signature
+	sigHash := sig.GetComputedHash()
 	for i := 0; i < 32; i++ {
-		if computedHash[i] != sig.ComputedHash[i] {
+		if computedHash[i] != sigHash[i] {
 			return false
 		}
 	}

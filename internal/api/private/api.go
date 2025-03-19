@@ -9,15 +9,16 @@ package private
 import (
 	"context"
 
-	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/interfaces"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
 //go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --package private types.yml
 
-const ServiceTypeSequencer api.ServiceType = 0xF001
+// ServiceTypeSequencer defines the service type ID for sequencer services
+const ServiceTypeSequencer uint32 = 0xF001
 
+// Sequencer defines the interface for sequencing operations
 type Sequencer interface {
-	Sequence(ctx context.Context, src, dst *url.URL, num uint64, opts SequenceOptions) (*api.MessageRecord[messaging.Message], error)
+	Sequence(ctx context.Context, src, dst *url.URL, num uint64, opts interfaces.SequenceOptions) (*interfaces.MessageRecord, error)
 }

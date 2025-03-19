@@ -106,7 +106,7 @@ func TestLxrMiningValidator(t *testing.T) {
 	blockHash := sha256.Sum256([]byte("test block"))
 
 	// Start a new mining window
-	validator.StartNewWindow(blockHash, 0) // Use 0 difficulty for testing
+	validator.StartNewWindow(nil, blockHash, 0) // Use 0 difficulty for testing
 
 	// Verify the window is active
 	require.True(t, validator.IsWindowActive())
@@ -170,7 +170,7 @@ func TestLxrMiningValidatorWithRewards(t *testing.T) {
 	blockHash := sha256.Sum256([]byte("test block"))
 
 	// Start a new mining window
-	validator.StartNewWindow(blockHash, 0) // Use 0 difficulty for testing
+	validator.StartNewWindow(nil, blockHash, 0) // Use 0 difficulty for testing
 
 	// Create multiple test signatures
 	hasher := lxr.NewCustomHasher(3, 20, 2) // Use smaller values for testing

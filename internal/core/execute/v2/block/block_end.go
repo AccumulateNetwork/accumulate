@@ -594,16 +594,25 @@ func (x *Executor) getKeySignature(r *api.MessageRecord[messaging.Message], part
 		}
 
 		for _, r := range set.Signatures.Records {
-			msg, ok := r.Message.(*messaging.SignatureMessage)
-			if !ok {
+			if r.Message == nil {
 				continue
 			}
-			sig, ok := msg.Signature.(protocol.KeySignature)
-			if !ok {
-				x.logger.Error("Invalid signature in response to query-synth", "errors", errors.Conflict.WithFormat("expected key signature, got %T", msg.Signature), "from", partition.Url, "seq-num", seq.Number, "is-anchor", anchor, "hash", logging.AsHex(msg.Signature.Hash()), "signature", msg.Signature)
-				return nil, true
+			
+			// Check if the message has a signature that's a KeySignature
+			if msg, ok := r.Message.(interface{ GetSignature() protocol.Signature }); ok {
+				sig, ok := msg.GetSignature().(protocol.KeySignature)
+				if !ok {
+					x.logger.Error("Invalid signature in response to query-synth", 
+						"errors", errors.Conflict.WithFormat("expected key signature, got %T", msg.GetSignature()), 
+						"from", partition.Url, 
+						"seq-num", seq.Number, 
+						"is-anchor", anchor, 
+						"hash", logging.AsHex(msg.GetSignature().Hash()), 
+						"signature", msg.GetSignature())
+					return nil, true
+				}
+				return sig, false
 			}
-			return sig, false
 		}
 	}
 	return nil, false
@@ -741,7 +750,7 @@ func (x *Executor) buildDirectoryAnchor(block *Block, systemLedger *protocol.Sys
 	anchor.MinorBlockIndex = block.Index
 	anchor.MajorBlockIndex = block.State.MakeMajorBlock
 
-	if !x.globals.Active.BvnExecutorVersion().V2VandenbergEnabled() {
+	if !x.globals.Active.ExecutorVersion.V2VandenbergEnabled() {
 		anchor.Updates = systemLedger.PendingUpdates
 	}
 
