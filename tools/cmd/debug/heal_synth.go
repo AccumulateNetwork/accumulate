@@ -66,8 +66,44 @@ func healSynth(cmd *cobra.Command, args []string) {
 			ab := pullSynthLedger(h, srcUrl).Partition(dstUrl)
 			ba := pullSynthLedger(h, dstUrl).Partition(srcUrl)
 
-			// Heal
-			for i := uint64(0); i+ba.Delivered < ab.Produced; i++ {
+			// Calculate missing synthetic transactions
+			totalMissingTxs := uint64(0)
+			if ab.Produced > ba.Delivered {
+				totalMissingTxs = ab.Produced - ba.Delivered
+			}
+			
+			// Skip if no synthetic transactions are missing
+			if totalMissingTxs <= 0 {
+				return
+			}
+			
+			// Limit the number of synthetic transactions to process to 5 per partition pair (source/destination) per pass
+			maxTxsToProcess := uint64(5)
+			processLimit := totalMissingTxs
+			if totalMissingTxs > maxTxsToProcess {
+				processLimit = maxTxsToProcess
+			}
+			
+			// Log the synthetic healing status
+			var status string
+			if processLimit < totalMissingTxs {
+				status = "limited_per_pair"
+			} else {
+				status = "processing_all"
+			}
+			
+			slog.InfoContext(h.ctx, "Synthetic healing status for partition pair",
+				"node", h.network,
+				"source", src.ID,
+				"destination", dst.ID,
+				"current_height", ba.Delivered,
+				"first_missing_height", ba.Delivered + 1,
+				"missing_txs", totalMissingTxs,
+				"processing", processLimit,
+				"status", status)
+
+			// Heal only up to the limit
+			for i := uint64(0); i < processLimit; i++ {
 				select {
 				case <-h.ctx.Done():
 					return
@@ -90,6 +126,8 @@ func healSynth(cmd *cobra.Command, args []string) {
 
 func healSingleSynth(h *healer, source, destination string, number uint64, id *url.TxID) bool {
 	var count int
+	var status string
+	
 retry:
 	err := h.HealSynthetic(h.ctx, healing.HealSyntheticArgs{
 		Client:    h.C2.ForAddress(nil),
@@ -108,23 +146,60 @@ retry:
 		Number:      number,
 		ID:          id,
 	})
+	
+	// Determine the status based on the error
 	if err == nil {
+		status = "healed"
+		slog.InfoContext(h.ctx, "Synthetic healing status for transaction", 
+			"node", h.network,
+			"source", source,
+			"destination", destination,
+			"height", number,
+			"status", status)
 		return false
-	}
-	if errors.Is(err, errors.Delivered) {
+	} else if errors.Is(err, errors.Delivered) {
+		status = "already_delivered"
+		slog.InfoContext(h.ctx, "Synthetic healing status for transaction", 
+			"node", h.network,
+			"source", source,
+			"destination", destination,
+			"height", number,
+			"status", status)
 		return true
-	}
-	if !errors.Is(err, healing.ErrRetry) {
-		slog.Error("Failed to heal", "source", source, "destination", destination, "number", number, "error", err)
+	} else if !errors.Is(err, healing.ErrRetry) {
+		status = "failed"
+		slog.InfoContext(h.ctx, "Synthetic healing status for transaction", 
+			"node", h.network,
+			"source", source,
+			"destination", destination,
+			"height", number,
+			"status", status,
+			"error", err)
 		return false
 	}
-
+	
+	// It's a retry error
 	count++
 	if count >= 3 {
-		slog.Error("Message still pending, skipping", "attempts", count)
+		status = "skipped_after_retries"
+		slog.InfoContext(h.ctx, "Synthetic healing status for transaction", 
+			"node", h.network,
+			"source", source,
+			"destination", destination,
+			"height", number,
+			"status", status,
+			"attempts", count)
 		return false
 	}
-	slog.Error("Message still pending, trying next anchor", "attempts", count)
+	
+	status = "retrying"
+	slog.InfoContext(h.ctx, "Synthetic healing status for transaction", 
+		"node", h.network,
+		"source", source,
+		"destination", destination,
+		"height", number,
+		"status", status,
+		"attempts", count)
 	goto retry
 }
 

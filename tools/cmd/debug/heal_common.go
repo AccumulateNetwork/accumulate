@@ -203,16 +203,16 @@ func (h *healer) loadNetworkStatus() {
 	if cachedScan == "" {
 		f := filepath.Join(cacheDir, strings.ToLower(h.network)+".json")
 		if st, err := os.Stat(f); err == nil && !st.IsDir() {
-			slog.Info("Detected network scan", "file", f)
-			cachedScan = f
-		} else if !errors.Is(err, fs.ErrNotExist) {
-			check(err)
-		} else {
-			h.net, err = healing.ScanNetwork(h.ctx, h.C2)
-			check(err)
-			return
-		}
+		slog.Info("Detected network scan", "file", f)
+		cachedScan = f
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		check(err)
+	} else {
+		h.net, err = healing.ScanNetwork(h.ctx, h.C2)
+		check(err)
+		return
 	}
+}
 
 	slog.Info("Loading cached network scan")
 	data, err := os.ReadFile(cachedScan)
@@ -358,18 +358,36 @@ func (h *healer) submitLoop(wg *sync.WaitGroup) {
 		if err != nil {
 			slog.ErrorContext(h.ctx, "Submission failed", "error", err, "id", env.Messages[0].ID())
 		}
-		for _, sub := range subs {
-			// Extract partition information from transaction message if available
+		for i, sub := range subs {
+			// Extract partition information if available
 			var source, destination string
-			if len(env.Messages) > 0 {
-				if txMsg, ok := env.Messages[0].(*messaging.TransactionMessage); ok && txMsg != nil {
-					if txn := txMsg.Transaction; txn != nil {
-						// Check for anchor transaction
-						if anchor, ok := txn.Body.(*protocol.PartitionAnchor); ok && anchor != nil && anchor.Source != nil {
-							source = anchor.Source.String()
-							// The destination is not directly in the anchor, but can be extracted from the transaction
-							if txn.Header != nil && txn.Header.Principal != nil {
-								destination = txn.Header.Principal.String()
+			
+			// Try to extract source and destination from the message
+			if i < len(env.Messages) {
+				if txMsg, ok := env.Messages[i].(*messaging.TransactionMessage); ok && txMsg != nil && txMsg.Transaction != nil {
+					// Get destination from the transaction header
+					if txMsg.Transaction.Header.Principal != nil {
+						destination = txMsg.Transaction.Header.Principal.String()
+					}
+					
+					// Try to get source from the transaction body
+					// This is a generic approach since we don't know the exact type
+					if txMsg.Transaction.Body != nil {
+						// Use reflection to check if the body has a Source field
+						bodyVal := reflect.ValueOf(txMsg.Transaction.Body)
+						if bodyVal.Kind() == reflect.Ptr && !bodyVal.IsNil() {
+							bodyVal = bodyVal.Elem()
+							if bodyVal.Kind() == reflect.Struct {
+								// Look for a Source field
+								sourceField := bodyVal.FieldByName("Source")
+								if sourceField.IsValid() && !sourceField.IsZero() {
+									// If Source is a *url.URL, convert it to string
+									if sourceURL, ok := sourceField.Interface().(*url.URL); ok && sourceURL != nil {
+										source = sourceURL.String()
+									} else if sourceStr, ok := sourceField.Interface().(string); ok {
+										source = sourceStr
+									}
+								}
 							}
 						}
 					}
