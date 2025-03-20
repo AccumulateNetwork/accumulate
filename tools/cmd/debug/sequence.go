@@ -69,10 +69,20 @@ func sequence(cmd *cobra.Command, args []string) {
 		// Get anchor ledger
 		dst := protocol.PartitionUrl(part.ID)
 		anchor := getAccount[*protocol.AnchorLedger](h, dst.JoinPath(protocol.AnchorPool))
+		// Check if the ledger is nil before proceeding
+		if anchor == nil {
+			slog.WarnContext(h.ctx, "Unable to process anchors due to nil ledger", "destination", dst)
+			continue
+		}
 		anchors[part.ID] = anchor
 
 		// Get synthetic ledger
 		synth := getAccount[*protocol.SyntheticLedger](h, dst.JoinPath(protocol.Synthetic))
+		// Check if the ledger is nil before proceeding
+		if synth == nil {
+			slog.WarnContext(h.ctx, "Unable to process synthetic transactions due to nil ledger", "destination", dst)
+			continue
+		}
 		synths[part.ID] = synth
 
 		// Check pending and received vs delivered
@@ -160,47 +170,107 @@ func (h *healer) findPendingAnchors(src, dst *url.URL, resolve bool) ([]*url.TxI
 
 	// Check how many have been received
 	dstLedger := getAccount[*protocol.AnchorLedger](h, dst.JoinPath(protocol.AnchorPool))
+	// Check if the ledger is nil before proceeding
+	if dstLedger == nil {
+		slog.WarnContext(h.ctx, "Unable to process anchors due to nil ledger", "destination", dst)
+		return nil, nil
+	}
+	
 	dstSrcLedger := dstLedger.Partition(src)
 	received := dstSrcLedger.Received
 
 	// Check how many should have been sent
 	srcDstChain, err := h.tryEach().QueryChain(h.ctx, src.JoinPath(protocol.AnchorPool), &api.ChainQuery{Name: "anchor-sequence"})
-	checkf(err, "query %v anchor sequence chain", srcId)
+	if err != nil {
+		// Check if it's a PeerUnavailableError
+		if _, ok := err.(*PeerUnavailableError); ok {
+			slog.WarnContext(h.ctx, "Unable to query anchor sequence chain due to peer unavailability", "source", srcId)
+			return nil, nil
+		}
+		// For other errors, use the original behavior
+		checkf(err, "query %v anchor sequence chain", srcId)
+	}
 
 	if received >= srcDstChain.Count-1 {
 		return nil, nil
 	}
 
+	// Calculate missing anchor information
+	firstMissingHeight := received + 1
+	totalMissingAnchors := srcDstChain.Count - received - 1
+
+	// Limit the number of anchors to process to 5 per pass
+	maxAnchorsToProcess := uint64(5)
+	pendingCount := totalMissingAnchors
+	processLimit := pendingCount
+	if pendingCount > maxAnchorsToProcess {
+		processLimit = maxAnchorsToProcess
+	}
+	
+	// Single comprehensive log for the pending anchors
+	logAttrs := []any{
+		"node", h.network,
+		"source", srcId,
+		"destination", dstId,
+		"current_height", received,
+		"first_missing_height", firstMissingHeight,
+		"missing_anchors", totalMissingAnchors,
+	}
+	
+	if processLimit < pendingCount {
+		logAttrs = append(logAttrs, 
+			"processing", processLimit,
+			"status", "limited")
+	} else {
+		logAttrs = append(logAttrs, "status", "processing_all")
+	}
+	
+	slog.InfoContext(h.ctx, "Anchor healing status", logAttrs...)
+
 	// Non-verbose mode doesn't care about the actual IDs
 	if !resolve {
-		return make([]*url.TxID, srcDstChain.Count-received-1), nil
+		return make([]*url.TxID, processLimit), nil
 	}
 
 	var ids []*url.TxID
 	txns := map[[32]byte]*protocol.Transaction{}
-	for i := received + 1; i <= srcDstChain.Count; i++ {
+	// Process only up to the limit (starting with the oldest)
+	processedCount := uint64(0)
+	for i := received + 1; i <= srcDstChain.Count && processedCount < maxAnchorsToProcess; i++ {
 		var msg *api.MessageRecord[messaging.Message]
 		if h.net == nil {
-			slog.Info("Checking anchor", "source", src, "destination", dst, "number", i, "remaining", srcDstChain.Count-i)
+			slog.DebugContext(h.ctx, "Checking anchor", "source", src, "destination", dst, "number", i, "remaining", srcDstChain.Count-i)
 			msg, err = h.C2.Private().Sequence(h.ctx, src.JoinPath(protocol.AnchorPool), dst, i, private.SequenceOptions{})
-			checkf(err, "query %v → %v anchor #%d", srcId, dstId, i)
+			if err != nil {
+				// Check if it's a PeerUnavailableError
+				if _, ok := err.(*PeerUnavailableError); ok {
+					slog.WarnContext(h.ctx, "Unable to query sequence due to peer unavailability", 
+						"source", srcId, "destination", dstId, "number", i)
+					continue
+				}
+				// For other errors, use the original behavior
+				checkf(err, "query %v → %v anchor #%d", srcId, dstId, i)
+			}
 		} else {
 			for _, peer := range h.net.Peers[strings.ToLower(srcId)] {
 				ctx, cancel := context.WithTimeout(h.ctx, 10*time.Second)
 				defer cancel()
-				slog.Info("Checking anchor", "source", src, "destination", dst, "number", i, "remaining", srcDstChain.Count-i, "peer", peer.ID)
+				slog.DebugContext(h.ctx, "Checking anchor", "source", src, "destination", dst, "number", i, "remaining", srcDstChain.Count-i, "peer", peer.ID)
 				msg, err = h.C2.ForPeer(peer.ID).Private().Sequence(ctx, src.JoinPath(protocol.AnchorPool), dst, i, private.SequenceOptions{})
 				if err == nil {
 					break
 				}
-				slog.Error("Failed to check anchor", "source", src, "destination", dst, "number", i, "remaining", srcDstChain.Count-i, "peer", peer.ID, "error", err)
+				slog.WarnContext(h.ctx, "Failed to check anchor", "source", src, "destination", dst, "number", i, "peer", peer.ID, "error", err)
 			}
 			if msg == nil {
-				fatalf("query %v → %v anchor #%d failed", srcId, dstId, i)
+				slog.WarnContext(h.ctx, "Unable to query anchor due to peer unavailability", 
+					"source", srcId, "destination", dstId, "number", i)
+				continue
 			}
 		}
 
 		ids = append(ids, msg.ID)
+		processedCount++
 
 		txn := msg.Message.(*messaging.TransactionMessage)
 		txns[txn.Hash()] = txn.Transaction

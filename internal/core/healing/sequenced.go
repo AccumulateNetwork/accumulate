@@ -60,24 +60,80 @@ func ResolveSequenced[T messaging.Message](ctx context.Context, client message.A
 
 	// Otherwise try each node until one succeeds
 	slog.InfoContext(ctx, "Resolving the message ID", "source", srcId, "destination", dstId, "number", seqNum)
-	for peer := range net.Peers[strings.ToLower(srcId)] {
-		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		defer cancel()
+	if anchor {
+		// Limit the number of anchors to process
+		anchorLimit := 5
+		anchorCount := 0
 
-		slog.InfoContext(ctx, "Querying node", "id", peer)
-		res, err := client.ForPeer(peer).Private().Sequence(ctx, srcUrl.JoinPath(account), dstUrl, seqNum, private.SequenceOptions{})
-		if err != nil {
-			slog.ErrorContext(ctx, "Query failed", "error", err)
-			continue
+		// Check if we have peers for this source partition
+		peers, ok := net.Peers[strings.ToLower(srcId)]
+		if !ok || len(peers) == 0 {
+			slog.WarnContext(ctx, "No peers found for source partition", "source", srcId)
+			// Continue processing without breaking out or terminating
+			return nil, errors.UnknownError.WithFormat("no peers found for %s", srcId)
 		}
 
-		r2, err := api.MessageRecordAs[T](res)
-		if err != nil {
-			slog.ErrorContext(ctx, "Query failed", "error", err)
-			continue
+		for peer := range peers {
+			if anchorCount >= anchorLimit {
+				slog.InfoContext(ctx, "Anchor limit reached, stopping further processing")
+				break
+			}
+			ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			defer cancel()
+
+			slog.InfoContext(ctx, "Querying node", "id", peer)
+			res, err := client.ForPeer(peer).Private().Sequence(ctx, srcUrl.JoinPath(account), dstUrl, seqNum, private.SequenceOptions{})
+			if err != nil {
+				slog.ErrorContext(ctx, "Query failed", "error", err)
+				continue
+			}
+
+			r2, err := api.MessageRecordAs[T](res)
+			if err != nil {
+				slog.ErrorContext(ctx, "Query failed", "error", err)
+				continue
+			}
+
+			anchorCount++ // Increment the anchor count
+			return r2, nil
+		}
+	} else {
+		// Limit the number of synthetic transactions to process
+		synthLimit := 5
+		synthCount := 0
+
+		// Check if we have peers for this source partition
+		peers, ok := net.Peers[strings.ToLower(srcId)]
+		if !ok || len(peers) == 0 {
+			slog.WarnContext(ctx, "No peers found for source partition", "source", srcId)
+			// Continue processing without breaking out or terminating
+			return nil, errors.UnknownError.WithFormat("no peers found for %s", srcId)
 		}
 
-		return r2, nil
+		for peer := range peers {
+			if synthCount >= synthLimit {
+				slog.InfoContext(ctx, "Synthetic transaction limit reached, stopping further processing")
+				break
+			}
+			ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			defer cancel()
+
+			slog.InfoContext(ctx, "Querying node", "id", peer)
+			res, err := client.ForPeer(peer).Private().Sequence(ctx, srcUrl.JoinPath(account), dstUrl, seqNum, private.SequenceOptions{})
+			if err != nil {
+				slog.ErrorContext(ctx, "Query failed", "error", err)
+				continue
+			}
+
+			r2, err := api.MessageRecordAs[T](res)
+			if err != nil {
+				slog.ErrorContext(ctx, "Query failed", "error", err)
+				continue
+			}
+
+			synthCount++ // Increment the synthetic transaction count
+			return r2, nil
+		}
 	}
 
 	return nil, errors.UnknownError.WithFormat("cannot resolve %s→%s #%d", srcId, dstId, seqNum)

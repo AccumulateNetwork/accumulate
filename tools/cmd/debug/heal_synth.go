@@ -157,13 +157,21 @@ func pullSynthSrcChains(h *healer, part *url.URL) {
 }
 
 func pullSynthLedger(h *healer, part *url.URL) *protocol.SyntheticLedger {
-	check(h.light.PullAccountWithChains(h.ctx, part.JoinPath(protocol.Synthetic), func(cr *api.ChainRecord) bool { return false }))
+	err := h.light.PullAccountWithChains(h.ctx, part.JoinPath(protocol.Synthetic), func(cr *api.ChainRecord) bool { return false })
+	if err != nil {
+		slog.WarnContext(h.ctx, "Failed to pull synthetic ledger", "part", part, "error", err)
+		return nil
+	}
 
 	batch := h.light.OpenDB(false)
 	defer batch.Discard()
 
 	var ledger *protocol.SyntheticLedger
-	check(batch.Account(part.JoinPath(protocol.Synthetic)).Main().GetAs(&ledger))
+	err = batch.Account(part.JoinPath(protocol.Synthetic)).Main().GetAs(&ledger)
+	if err != nil {
+		slog.WarnContext(h.ctx, "Failed to get synthetic ledger", "part", part, "error", err)
+		return nil
+	}
 	return ledger
 }
 

@@ -47,7 +47,7 @@ var cmdHeal = &cobra.Command{
 	Use: "heal",
 }
 
-var flagMaxResponseAge time.Duration = time.Minute
+var flagMaxResponseAge time.Duration = 48 * time.Hour
 
 func init() {
 	cmd.AddCommand(cmdHeal)
@@ -359,8 +359,32 @@ func (h *healer) submitLoop(wg *sync.WaitGroup) {
 			slog.ErrorContext(h.ctx, "Submission failed", "error", err, "id", env.Messages[0].ID())
 		}
 		for _, sub := range subs {
+			// Extract partition information from transaction message if available
+			var source, destination string
+			if len(env.Messages) > 0 {
+				if txMsg, ok := env.Messages[0].(*messaging.TransactionMessage); ok && txMsg != nil {
+					if txn := txMsg.Transaction; txn != nil {
+						// Check for anchor transaction
+						if anchor, ok := txn.Body.(*protocol.PartitionAnchor); ok && anchor != nil && anchor.Source != nil {
+							source = anchor.Source.String()
+							// The destination is not directly in the anchor, but can be extracted from the transaction
+							if txn.Header != nil && txn.Header.Principal != nil {
+								destination = txn.Header.Principal.String()
+							}
+						}
+					}
+				}
+			}
+			
 			if sub.Success {
-				slog.InfoContext(h.ctx, "Submission succeeded", "id", sub.Status.TxID)
+				if source != "" && destination != "" {
+					slog.InfoContext(h.ctx, "Submission succeeded", 
+						"id", sub.Status.TxID,
+						"source", source,
+						"destination", destination)
+				} else {
+					slog.InfoContext(h.ctx, "Submission succeeded", "id", sub.Status.TxID)
+				}
 			} else {
 				slog.ErrorContext(h.ctx, "Submission failed", "message", sub, "status", sub.Status)
 			}
@@ -371,7 +395,16 @@ func (h *healer) submitLoop(wg *sync.WaitGroup) {
 // getAccount fetches the given account.
 func getAccount[T protocol.Account](h *healer, u *url.URL) T {
 	r, err := h.tryEach().QueryAccount(h.ctx, u, nil)
-	checkf(err, "get %v", u)
+	if err != nil {
+		// Check if it's a PeerUnavailableError
+		if _, ok := err.(*PeerUnavailableError); ok {
+			slog.WarnContext(h.ctx, "Unable to get account due to peer unavailability", "url", u)
+			var zero T
+			return zero
+		}
+		// For other errors, use the original behavior
+		checkf(err, "get %v", u)
+	}
 
 	a := r.Account
 	b, ok := a.(T)
@@ -435,7 +468,20 @@ func (q *tryEachQuerier) Query(ctx context.Context, scope *url.URL, query api.Qu
 		return r, nil
 	}
 	if lastErr != nil {
-		return nil, fmt.Errorf("unable to query %v (ran out of peers to try)", scope)
+		slog.WarnContext(ctx, "Unable to query (ran out of peers to try)", "scope", scope, "error", lastErr)
+		return nil, &PeerUnavailableError{
+			Scope: scope,
+			Err:   lastErr,
+		}
 	}
 	return nil, lastErr
+}
+
+type PeerUnavailableError struct {
+	Scope *url.URL
+	Err   error
+}
+
+func (e *PeerUnavailableError) Error() string {
+	return fmt.Sprintf("peer unavailable for %v: %v", e.Scope, e.Err)
 }
