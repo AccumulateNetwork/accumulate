@@ -574,6 +574,23 @@
       ]
     },
     {
+      "name": "Heal All",
+      "presentation": {
+        "group": "99-Miscellaneous",
+      },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/cmd/debug",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "heal",
+        "all",
+        "MainNet",
+        "--continuous"
+      ]
+    },
+    {
       "name": "Heal Synth",
       "presentation": {
         "group": "99-Miscellaneous",
