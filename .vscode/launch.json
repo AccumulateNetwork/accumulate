@@ -544,22 +544,10 @@
     },
     // Miscellaneous
     {
-      "name": "Debug du jour",
-      "presentation": {
-        "group": "99-Miscellaneous",
-      },
-      "type": "go",
-      "request": "launch",
-      "mode": "auto",
-      "program": "${workspaceFolder}/tools/cmd/debug",
-      "args": [
-        "db", "analyze", "badger://${workspaceFolder}/.nodes/devnet/bvn1-1/bvnn/data/accumulate.db", "--accounts",
-      ]
-    },
-    {
       "name": "Heal Anchors",
       "presentation": {
         "group": "99-Miscellaneous",
+        "order": 1
       },
       "type": "go",
       "request": "launch",
@@ -571,7 +559,7 @@
         "anchor",
         "MainNet",
         "--continuous"
-      ]
+      ],
     },
     {
       "name": "Heal All",
@@ -699,7 +687,7 @@
       // https://rr-project.org/
       "name": "Run a test with RR",
       "presentation": {
-        "group": "99-Miscellaneous",
+        "group": "99-Miscellaneous"
       },
       "type": "go",
       "request": "launch",
@@ -743,7 +731,7 @@
     {
       "name": "Verify envelope",
       "presentation": {
-        "group": "99-Miscellaneous",
+        "group": "99-Miscellaneous"
       },
       "type": "go",
       "request": "launch",

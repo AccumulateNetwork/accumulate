@@ -191,13 +191,13 @@ func (h *healer) findPendingAnchors(src, dst *url.URL, resolve bool) ([]*url.TxI
 		checkf(err, "query %v anchor sequence chain", srcId)
 	}
 
-	if received >= srcDstChain.Count-1 {
+	if received >= srcDstChain.Count {
 		return nil, nil
 	}
 
 	// Calculate missing anchor information
 	firstMissingHeight := received + 1
-	totalMissingAnchors := srcDstChain.Count - received - 1
+	totalMissingAnchors := srcDstChain.Count - received
 
 	// Limit the number of anchors to process to 5 per pass
 	maxAnchorsToProcess := uint64(5)
@@ -232,11 +232,59 @@ func (h *healer) findPendingAnchors(src, dst *url.URL, resolve bool) ([]*url.TxI
 		return make([]*url.TxID, processLimit), nil
 	}
 
+	// First, get the latest anchor from the source partition
+	// This will be used for constructing proofs
+	var latestMsg *api.MessageRecord[messaging.Message]
+	if h.net == nil {
+		slog.DebugContext(h.ctx, "Fetching latest anchor", "source", src, "destination", dst)
+		latestMsg, err = h.C2.Private().Sequence(h.ctx, src.JoinPath(protocol.AnchorPool), dst, srcDstChain.Count, private.SequenceOptions{})
+		if err != nil {
+			// Check if it's a PeerUnavailableError
+			if _, ok := err.(*PeerUnavailableError); ok {
+				slog.WarnContext(h.ctx, "Unable to fetch latest anchor due to peer unavailability", 
+					"source", srcId, "destination", dstId)
+				return nil, nil
+			}
+			// For other errors, use the original behavior
+			checkf(err, "query latest anchor %v → %v", srcId, dstId)
+		}
+	} else {
+		for _, peer := range h.net.Peers[strings.ToLower(srcId)] {
+			ctx, cancel := context.WithTimeout(h.ctx, 10*time.Second)
+			defer cancel()
+			slog.DebugContext(h.ctx, "Fetching latest anchor", "source", src, "destination", dst, "peer", peer.ID)
+			latestMsg, err = h.C2.ForPeer(peer.ID).Private().Sequence(ctx, src.JoinPath(protocol.AnchorPool), dst, srcDstChain.Count, private.SequenceOptions{})
+			if err == nil {
+				break
+			}
+			slog.WarnContext(h.ctx, "Failed to fetch latest anchor", "source", src, "destination", dst, "peer", peer.ID, "error", err)
+		}
+		if latestMsg == nil {
+			slog.WarnContext(h.ctx, "Unable to fetch latest anchor due to peer unavailability", 
+				"source", srcId, "destination", dstId)
+			return nil, nil
+		}
+	}
+
+	// Extract the latest transaction to use for proofs
+	latestTxn := latestMsg.Message.(*messaging.TransactionMessage)
+	
+	slog.InfoContext(h.ctx, "Using latest anchor for proofs", 
+		"source", srcId, 
+		"destination", dstId, 
+		"latest_height", srcDstChain.Count,
+		"txid", latestMsg.ID)
+
 	var ids []*url.TxID
 	txns := map[[32]byte]*protocol.Transaction{}
+	
+	// Add the latest transaction to our map for proofs
+	txns[latestTxn.Hash()] = latestTxn.Transaction
+
+	// Now collect the missing anchors (up to processLimit)
 	// Process only up to the limit (starting with the oldest)
 	processedCount := uint64(0)
-	for i := received + 1; i <= srcDstChain.Count && processedCount < maxAnchorsToProcess; i++ {
+	for i := received + 1; i <= srcDstChain.Count && processedCount < processLimit; i++ {
 		var msg *api.MessageRecord[messaging.Message]
 		if h.net == nil {
 			slog.DebugContext(h.ctx, "Checking anchor", "source", src, "destination", dst, "number", i, "remaining", srcDstChain.Count-i)
@@ -269,11 +317,20 @@ func (h *healer) findPendingAnchors(src, dst *url.URL, resolve bool) ([]*url.TxI
 			}
 		}
 
+		// Use the ID from the missing anchor, but we'll use the latest transaction for the proof
 		ids = append(ids, msg.ID)
 		processedCount++
-
+		
+		// Also store the actual transaction in case we need it
 		txn := msg.Message.(*messaging.TransactionMessage)
 		txns[txn.Hash()] = txn.Transaction
+		
+		slog.DebugContext(h.ctx, "Collected missing anchor", 
+			"source", srcId, 
+			"destination", dstId, 
+			"anchor_height", i, 
+			"txid", msg.ID)
 	}
+	
 	return ids, txns
 }

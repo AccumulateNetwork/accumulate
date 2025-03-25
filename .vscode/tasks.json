@@ -7,6 +7,15 @@
             "label": "Init DevNet",
             "type": "shell",
             "command": "go run ./cmd/accumulated init devnet -w .nodes --reset -f 0 -v 1 -b 1 -s 0 --faucet-seed ci --globals '{\"executorVersion\": \"v2baikonur\"}'"
+        },
+        {
+            "label": "Heal Anchors Task",
+            "type": "shell",
+            "command": "echo 'Preparing to run Heal Anchors...'",
+            "presentation": {
+                "reveal": "silent",
+                "panel": "shared"
+            }
         }
     ]
 }

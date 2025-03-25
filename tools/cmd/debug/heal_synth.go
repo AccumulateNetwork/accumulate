@@ -37,91 +37,102 @@ func healSynth(cmd *cobra.Command, args []string) {
 		waitForTxn = true
 	}
 
-	h := &healer{
-		healSingle: func(h *healer, src, dst *protocol.PartitionInfo, num uint64, txid *url.TxID) {
-			srcUrl := protocol.PartitionUrl(src.ID)
-			dstUrl := protocol.PartitionUrl(dst.ID)
-
-			// Pull chains
-			pullSynthDirChains(h)
-			pullSynthSrcChains(h, srcUrl)
-
-			// Pull accounts
-			pullSynthLedger(h, srcUrl)
-			pullSynthLedger(h, dstUrl)
-
-			// Heal
-			healSingleSynth(h, src.ID, dst.ID, num, txid)
-		},
-		healSequence: func(h *healer, src, dst *protocol.PartitionInfo) {
-			srcUrl := protocol.PartitionUrl(src.ID)
-			dstUrl := protocol.PartitionUrl(dst.ID)
-
-			// Pull chains
-			pullSynthDirChains(h)
-			pullSynthSrcChains(h, srcUrl)
-
-			// Pull accounts
-		pullAgain:
-			ab := pullSynthLedger(h, srcUrl).Partition(dstUrl)
-			ba := pullSynthLedger(h, dstUrl).Partition(srcUrl)
-
-			// Calculate missing synthetic transactions
-			totalMissingTxs := uint64(0)
-			if ab.Produced > ba.Delivered {
-				totalMissingTxs = ab.Produced - ba.Delivered
-			}
-			
-			// Skip if no synthetic transactions are missing
-			if totalMissingTxs <= 0 {
-				return
-			}
-			
-			// Limit the number of synthetic transactions to process to 5 per partition pair (source/destination) per pass
-			maxTxsToProcess := uint64(5)
-			processLimit := totalMissingTxs
-			if totalMissingTxs > maxTxsToProcess {
-				processLimit = maxTxsToProcess
-			}
-			
-			// Log the synthetic healing status
-			var status string
-			if processLimit < totalMissingTxs {
-				status = "limited_per_pair"
-			} else {
-				status = "processing_all"
-			}
-			
-			slog.InfoContext(h.ctx, "Synthetic healing status for partition pair",
-				"node", h.network,
-				"source", src.ID,
-				"destination", dst.ID,
-				"current_height", ba.Delivered,
-				"first_missing_height", ba.Delivered + 1,
-				"missing_txs", totalMissingTxs,
-				"processing", processLimit,
-				"status", status)
-
-			// Heal only up to the limit
-			for i := uint64(0); i < processLimit; i++ {
-				select {
-				case <-h.ctx.Done():
-					return
-				default:
-				}
-				var id *url.TxID
-				if i < uint64(len(ba.Pending)) {
-					id = ba.Pending[i]
-				}
-				if healSingleSynth(h, src.ID, dst.ID, ba.Delivered+i+1, id) {
-					// If it was already delivered, recheck the ledgers
-					goto pullAgain
-				}
-			}
-		},
+	// Create the healer instance
+	h := &healer{}
+	
+	// Set up the function handlers
+	h.healSingle = func(src, dst *protocol.PartitionInfo, num uint64, txid *url.TxID) {
+		healSingleWrapper(h, src, dst, num, txid)
+	}
+	
+	h.healSequence = func(src, dst *protocol.PartitionInfo) {
+		healSequenceWrapper(h, src, dst)
 	}
 
 	h.heal(args)
+}
+
+func healSingleWrapper(h *healer, src, dst *protocol.PartitionInfo, num uint64, txid *url.TxID) {
+	srcUrl := protocol.PartitionUrl(src.ID)
+	dstUrl := protocol.PartitionUrl(dst.ID)
+
+	// Pull chains
+	pullSynthDirChains(h)
+	pullSynthSrcChains(h, srcUrl)
+
+	// Pull accounts
+	pullSynthLedger(h, srcUrl)
+	pullSynthLedger(h, dstUrl)
+
+	// Heal
+	healSingleSynth(h, src.ID, dst.ID, num, txid)
+}
+
+func healSequenceWrapper(h *healer, src, dst *protocol.PartitionInfo) {
+	srcUrl := protocol.PartitionUrl(src.ID)
+	dstUrl := protocol.PartitionUrl(dst.ID)
+
+	// Pull chains
+	pullSynthDirChains(h)
+	pullSynthSrcChains(h, srcUrl)
+
+	// Pull accounts
+	pullAgain:
+	ab := pullSynthLedger(h, srcUrl).Partition(dstUrl)
+	ba := pullSynthLedger(h, dstUrl).Partition(srcUrl)
+
+	// Calculate missing synthetic transactions
+	totalMissingTxs := uint64(0)
+	if ab.Produced > ba.Delivered {
+		totalMissingTxs = ab.Produced - ba.Delivered
+	}
+	
+	// Skip if no synthetic transactions are missing
+	if totalMissingTxs <= 0 {
+		return
+	}
+	
+	// Limit the number of synthetic transactions to process to 5 per partition pair (source/destination) per pass
+	maxTxsToProcess := uint64(5)
+	processLimit := totalMissingTxs
+	if totalMissingTxs > maxTxsToProcess {
+		processLimit = maxTxsToProcess
+	}
+	
+	// Log the synthetic healing status
+	var status string
+	if processLimit < totalMissingTxs {
+		status = "limited_per_pair"
+	} else {
+		status = "processing_all"
+	}
+	
+	slog.InfoContext(h.ctx, "Synthetic healing status for partition pair",
+		"node", h.network,
+		"source", src.ID,
+		"destination", dst.ID,
+		"current_height", ba.Delivered,
+		"first_missing_height", ba.Delivered + 1,
+		"missing_txs", totalMissingTxs,
+		"processing", processLimit,
+		"status", status)
+
+	// Heal only up to the limit
+	for i := uint64(0); i < processLimit; i++ {
+		select {
+		case <-h.ctx.Done():
+			return
+		default:
+		}
+		var id *url.TxID
+		if i < uint64(len(ba.Pending)) {
+			id = ba.Pending[i]
+		}
+		if healSingleSynth(h, src.ID, dst.ID, ba.Delivered+i+1, id) {
+			// If it was already delivered, recheck the ledgers
+			goto pullAgain
+		}
+	}
 }
 
 func healSingleSynth(h *healer, source, destination string, number uint64, id *url.TxID) bool {
