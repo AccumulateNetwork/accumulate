@@ -27,6 +27,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
+	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/exp/apiutil"
 	"gitlab.com/accumulatenetwork/accumulate/exp/light"
@@ -63,16 +64,22 @@ var (
 	lastMempoolErr  time.Time
 
 	missingAnchorsMu sync.Mutex
-	missingAnchors   map[string]map[string]struct {
-		Count             int
-		FirstMissingHeight uint64
-	}
+	missingAnchors   map[string]map[string]MissingAnchorsInfo
 
 	checkedAnchorsMu sync.RWMutex
 	checkedAnchors   map[string]map[string]map[uint64]bool
 
 	flagMaxResponseAge time.Duration = 48 * time.Hour
 )
+
+type MissingAnchorsInfo struct {
+	Count             int
+	FirstMissingHeight uint64
+	Unprocessed       int
+	UnprocessedStart  uint64
+	UnprocessedEnd    uint64
+	LastProcessedHeight uint64
+}
 
 // Global variables to track skipped partitions due to errors
 var (
@@ -95,10 +102,7 @@ func init() {
 	// _ = cmdHealSynth.MarkFlagFilename("light-db", ".db")
 
 	checkedAnchors = make(map[string]map[string]map[uint64]bool)
-	missingAnchors = make(map[string]map[string]struct {
-		Count             int
-		FirstMissingHeight uint64
-	})
+	missingAnchors = make(map[string]map[string]MissingAnchorsInfo)
 }
 
 func healerFlags(cmd *cobra.Command) {
@@ -384,10 +388,7 @@ func (h *healer) heal(args []string) {
 
 	// Initialize missing anchors tracking
 	missingAnchorsMu.Lock()
-	missingAnchors = make(map[string]map[string]struct {
-		Count             int
-		FirstMissingHeight uint64
-	})
+	missingAnchors = make(map[string]map[string]MissingAnchorsInfo)
 	missingAnchorsMu.Unlock()
 
 	checkedAnchorsMu.Lock()
@@ -396,7 +397,7 @@ func (h *healer) heal(args []string) {
 
 	// Heal all partitions
 	if len(args) < 2 {
-	heal:
+heal:
 		for _, src := range h.net.Status.Network.Partitions {
 			for _, dst := range h.net.Status.Network.Partitions {
 				// Stopped?
@@ -410,155 +411,118 @@ func (h *healer) heal(args []string) {
 			}
 		}
 
-		// Generate report regardless of continuous mode
 		// Report mempool errors
 		mempoolErrorsMu.Lock()
-		timeSinceLast := "never"
-		if !lastMempoolErr.IsZero() {
-			timeSinceLast = time.Since(lastMempoolErr).String()
-		}
-		fmt.Printf("Healing process complete. Mempool full errors: %d, Time since last: %s\n", mempoolErrors, timeSinceLast)
 		mempoolErrorsMu.Unlock()
 		
 		// Report missing anchors
 		missingAnchorsMu.Lock()
 		if len(missingAnchors) > 0 {
-			fmt.Println("\nMissing Anchors Summary:")
-			fmt.Println("+------------------+------------------+----------------+-----------------------+")
-			fmt.Printf("| %-16s | %-16s | %-14s | %-21s |\n", "Source", "Destination", "Missing Count", "First Missing Height")
-			fmt.Println("+------------------+------------------+----------------+-----------------------+")
+			fmt.Println("\n===========================================")
+			fmt.Println(time.Now().Format("Mon Jan 02 03:04:05 PM MST 2006"))
 			
-			// Create a sorted list of sources and destinations
-			type srcInfo struct {
-				name string
-				dsts []struct {
-					name string
-					info struct {
-						Count             int
-						FirstMissingHeight uint64
-					}
-				}
+			// Display time since last mempool error
+			mempoolErrorsMu.Lock()
+			if !lastMempoolErr.IsZero() {
+				fmt.Printf("Last mempool error: %s\n", lastMempoolErr.Format("Mon Jan 02 03:04:05 PM MST 2006"))
+			} else {
+				fmt.Println("No mempool errors recorded")
 			}
+			mempoolErrorsMu.Unlock()
 			
-			// Helper function to determine sort priority
-			getSortPriority := func(name string) int {
-				if strings.ToLower(name) == "directory" || 
-				   strings.ToLower(name) == "dn" {
-					return 0 // Directory first
-				}
-				return 1 // Then other partitions
-			}
-			
-			// Collect and sort sources
+			// Prepare data for sorted output
 			var sortedSrcs []srcInfo
 			for src, dsts := range missingAnchors {
 				si := srcInfo{name: src}
-				
-				// Collect and sort destinations for this source
 				for dst, info := range dsts {
-					if info.Count > 0 {
-						si.dsts = append(si.dsts, struct {
-							name string
-							info struct {
-								Count             int
-								FirstMissingHeight uint64
-							}
-						}{dst, info})
-					}
+					si.dsts = append(si.dsts, dstInfo{name: dst, info: info})
 				}
-				
-				// Sort destinations: Directory first, then alphabetically
+				// Sort destinations alphabetically
 				sort.Slice(si.dsts, func(i, j int) bool {
-					iPriority := getSortPriority(si.dsts[i].name)
-					jPriority := getSortPriority(si.dsts[j].name)
-					
-					if iPriority != jPriority {
-						return iPriority < jPriority
-					}
-					
-					// If same priority, sort alphabetically
 					return si.dsts[i].name < si.dsts[j].name
 				})
-				
-				if len(si.dsts) > 0 {
-					sortedSrcs = append(sortedSrcs, si)
-				}
+				sortedSrcs = append(sortedSrcs, si)
 			}
-			
-			// Sort sources: Directory first, then alphabetically
+			// Sort sources alphabetically
 			sort.Slice(sortedSrcs, func(i, j int) bool {
-				iPriority := getSortPriority(sortedSrcs[i].name)
-				jPriority := getSortPriority(sortedSrcs[j].name)
-				
-				if iPriority != jPriority {
-					return iPriority < jPriority
-				}
-				
-				// If same priority, sort alphabetically
 				return sortedSrcs[i].name < sortedSrcs[j].name
 			})
 			
-			// Print sorted sources and destinations
+			// Create a table for the anchor status information
+			table := tablewriter.NewWriter(os.Stdout)
+			table.SetHeader([]string{"Source", "Destination", "Status", "Pending", "Source Height", "Dest Height", "Unprocessed", "Range"})
+			table.SetBorder(true)
+			table.SetAutoWrapText(false)
+			table.SetAutoFormatHeaders(true)
+			table.SetHeaderAlignment(tablewriter.ALIGN_LEFT)
+			table.SetAlignment(tablewriter.ALIGN_LEFT)
+			table.SetCenterSeparator("|")
+			table.SetColumnSeparator("|")
+			table.SetRowSeparator("-")
+			table.SetHeaderLine(true)
+			
+			// Add rows to the table
 			for _, src := range sortedSrcs {
 				for _, dst := range src.dsts {
-					fmt.Printf("| %-16s | %-16s | %14d | %21d |\n", src.name, dst.name, dst.info.Count, dst.info.FirstMissingHeight)
+					status := "✓" // Default to OK
+					if dst.info.Count > 0 {
+						status = "🗴" // Missing anchors
+					} else if dst.info.Unprocessed > 0 {
+						status = "⚠" // Unprocessed anchors
+					}
+					
+					// Format the range if there are unprocessed anchors
+					rangeStr := "-"
+					if dst.info.Unprocessed > 0 {
+						rangeStr = fmt.Sprintf("%d → %d", dst.info.UnprocessedStart, dst.info.UnprocessedEnd)
+					}
+					
+					// Calculate source height (last processed + pending)
+					sourceHeight := dst.info.LastProcessedHeight + uint64(dst.info.Count)
+					
+					// Add the row with appropriate coloring
+					row := []string{
+						src.name,
+						dst.name,
+						status,
+						fmt.Sprintf("%d", dst.info.Count),
+						fmt.Sprintf("%d", sourceHeight),
+						fmt.Sprintf("%d", dst.info.LastProcessedHeight),
+						fmt.Sprintf("%d", dst.info.Unprocessed),
+						rangeStr,
+					}
+					table.Append(row)
 				}
 			}
-			fmt.Println("+------------------+------------------+----------------+-----------------------+")
+			
+			// Render the table
+			fmt.Println("\nAnchor Status:")
+			table.Render()
+			
+			fmt.Println()
 		} else {
-			fmt.Println("\nMissing Anchors Summary:")
-			fmt.Println("+------------------+------------------+----------------+-----------------------+")
-			fmt.Println("| No missing anchors found                                           |")
-			fmt.Println("+------------------+------------------+----------------+-----------------------+")
+			fmt.Println("\n===========================================")
+			fmt.Println(time.Now().Format("Mon Jan 02 03:04:05 PM MST 2006"))
+			// Display time since last mempool error
+			mempoolErrorsMu.Lock()
+			if !lastMempoolErr.IsZero() {
+				fmt.Printf("Last mempool error: %s\n", lastMempoolErr.Format("Mon Jan 02 03:04:05 PM MST 2006"))
+			} else {
+				fmt.Println("No mempool errors recorded")
+			}
+			mempoolErrorsMu.Unlock()
+			fmt.Println("No missing anchors found")
 		}
 		missingAnchorsMu.Unlock()
 		
-		// Print skipped partitions information
-		skippedPartitionsMu.Lock()
-		if len(skippedPartitions) > 0 {
-			fmt.Println("\nSkipped Partition Pairs:")
-			fmt.Println("+------------------+------------------+----------------------------------------+")
-			fmt.Println("| Source           | Destination      | Reason                                 |")
-			fmt.Println("+------------------+------------------+----------------------------------------+")
-			
-			// Sort the sources for consistent output
-			var sortedSrcs []string
-			for src := range skippedPartitions {
-				sortedSrcs = append(sortedSrcs, src)
-			}
-			sort.Strings(sortedSrcs)
-			
-			for _, src := range sortedSrcs {
-				// Sort the destinations for consistent output
-				var sortedDsts []string
-				for dst := range skippedPartitions[src] {
-					sortedDsts = append(sortedDsts, dst)
-				}
-				sort.Strings(sortedDsts)
-				
-				for _, dst := range sortedDsts {
-					reason := skippedPartitions[src][dst]
-					// Truncate reason if it's too long
-					if len(reason) > 40 {
-						reason = reason[:37] + "..."
-					}
-					fmt.Printf("| %-16s | %-16s | %-40s |\n", src, dst, reason)
-				}
-			}
-			fmt.Println("+------------------+------------------+----------------------------------------+")
-		}
 		// Clear skipped partitions for the next cycle
+		skippedPartitionsMu.Lock()
 		skippedPartitions = make(map[string]map[string]string)
 		skippedPartitionsMu.Unlock()
 		
 		// Heal continuously?
 		if healContinuous {
-			color.Yellow("Healing complete, sleeping for 15 seconds. Mempool full errors: %d, Time since last: %v", mempoolErrors, func() string {
-				if lastMempoolErr.IsZero() {
-					return "never"
-				}
-				return time.Since(lastMempoolErr).String()
-			}())
+			color.Yellow("Healing complete, sleeping for 15 seconds. Mempool full errors: %d", mempoolErrors)
 			ctx, cancel := context.WithTimeout(ctx, time.Second*15)
 			defer cancel()
 			<-ctx.Done()
@@ -642,12 +606,12 @@ func (h *healer) submitLoop(wg *sync.WaitGroup) {
 		if err != nil {
 			// Check for mempool full errors
 			errStr := err.Error()
-			if strings.Contains(strings.ToLower(errStr), "mempool") && strings.Contains(strings.ToLower(errStr), "full") {
+			if strings.Contains(strings.ToLower(errStr), "mempool") {
 				mempoolErrorsMu.Lock()
 				mempoolErrors++
 				lastMempoolErr = time.Now()
 				mempoolErrorsMu.Unlock()
-				slog.ErrorContext(h.ctx, "Mempool full error", "error", err, "count", mempoolErrors, "id", env.Messages[0].ID())
+				slog.ErrorContext(h.ctx, "Mempool error", "error", err, "count", mempoolErrors, "id", env.Messages[0].ID())
 			} else {
 				slog.ErrorContext(h.ctx, "Submission failed", "error", err, "id", env.Messages[0].ID())
 			}
@@ -698,15 +662,15 @@ func (h *healer) submitLoop(wg *sync.WaitGroup) {
 					slog.InfoContext(h.ctx, "Submission succeeded", "id", sub.Status.TxID)
 				}
 			} else {
-				// Check for mempool full errors in submission status
+				// Check for mempool errors in submission status
 				if sub.Status != nil && sub.Status.Error != nil {
 					errStr := sub.Status.Error.Error()
-					if strings.Contains(strings.ToLower(errStr), "mempool") && strings.Contains(strings.ToLower(errStr), "full") {
+					if strings.Contains(strings.ToLower(errStr), "mempool") {
 						mempoolErrorsMu.Lock()
 						mempoolErrors++
 						lastMempoolErr = time.Now()
 						mempoolErrorsMu.Unlock()
-						slog.ErrorContext(h.ctx, "Mempool full error", "message", sub, "status", sub.Status, "count", mempoolErrors)
+						slog.ErrorContext(h.ctx, "Mempool error", "message", sub, "status", sub.Status, "count", mempoolErrors)
 					} else {
 						slog.ErrorContext(h.ctx, "Submission failed", "message", sub, "status", sub.Status)
 					}
@@ -1205,4 +1169,205 @@ type NotFoundError struct {
 
 func (e *NotFoundError) Error() string {
 	return fmt.Sprintf("not found for %v: %v", e.Scope, e.Err)
+}
+
+type srcInfo struct {
+	name string
+	dsts []dstInfo
+}
+
+type dstInfo struct {
+	name string
+	info MissingAnchorsInfo
+}
+
+func addMissingAnchors(src, dst string, info MissingAnchorsInfo) {
+	missingAnchorsMu.Lock()
+	defer missingAnchorsMu.Unlock()
+
+	if missingAnchors == nil {
+		missingAnchors = make(map[string]map[string]MissingAnchorsInfo)
+	}
+
+	if missingAnchors[src] == nil {
+		missingAnchors[src] = make(map[string]MissingAnchorsInfo)
+	}
+
+	// Store the missing anchors info
+	missingAnchors[src][dst] = info
+}
+
+func printMissingAnchorsSummary() {
+	missingAnchorsMu.Lock()
+	defer missingAnchorsMu.Unlock()
+	
+	// Define all expected partition pairs
+	expectedPairs := []struct {
+		src string
+		dst string
+	}{
+		{"Directory", "Apollo"},
+		{"Directory", "Yutu"},
+		{"Directory", "Chandrayaan"},
+		{"Apollo", "Directory"},
+		{"Yutu", "Directory"},
+		{"Chandrayaan", "Directory"},
+	}
+	
+	// Create a map to track which pairs we've seen
+	seenPairs := make(map[string]map[string]bool)
+	
+	// Initialize the map
+	for _, pair := range expectedPairs {
+		if seenPairs[pair.src] == nil {
+			seenPairs[pair.src] = make(map[string]bool)
+		}
+		seenPairs[pair.src][pair.dst] = false
+	}
+	
+	// Mark pairs that we have data for
+	for src, dsts := range missingAnchors {
+		if seenPairs[src] == nil {
+			seenPairs[src] = make(map[string]bool)
+		}
+		for dst := range dsts {
+			seenPairs[src][dst] = true
+		}
+	}
+	
+	// Print the table header
+	fmt.Println("\n===========================================")
+	fmt.Println(time.Now().Format("Mon Jan 02 03:04:05 PM MST 2006"))
+	
+	// Display time since last mempool error
+	mempoolErrorsMu.Lock()
+	if !lastMempoolErr.IsZero() {
+		fmt.Printf("Last mempool error: %s\n", lastMempoolErr.Format("Mon Jan 02 03:04:05 PM MST 2006"))
+	} else {
+		fmt.Println("No mempool errors recorded")
+	}
+	mempoolErrorsMu.Unlock()
+	
+	// Prepare data for sorted output
+	var sortedSrcs []srcInfo
+	for src, dsts := range missingAnchors {
+		si := srcInfo{name: src}
+		for dst, info := range dsts {
+			si.dsts = append(si.dsts, dstInfo{name: dst, info: info})
+		}
+		// Sort destinations alphabetically
+		sort.Slice(si.dsts, func(i, j int) bool {
+			return si.dsts[i].name < si.dsts[j].name
+		})
+		sortedSrcs = append(sortedSrcs, si)
+	}
+	// Sort sources alphabetically
+	sort.Slice(sortedSrcs, func(i, j int) bool {
+		return sortedSrcs[i].name < sortedSrcs[j].name
+	})
+	
+	// Print in chart format for backward compatibility
+	for _, src := range sortedSrcs {
+		for _, dst := range src.dsts {
+			if dst.info.Count > 0 {
+				color.Red("🗴 %s → %s has %d pending anchors (from %d)\n", src.name, dst.name, dst.info.Count, dst.info.FirstMissingHeight)
+			}
+			if dst.info.Unprocessed > 0 {
+				color.Yellow("⚠ %s → %s has %d unprocessed anchors (%d → %d)\n", src.name, dst.name, dst.info.Unprocessed, dst.info.UnprocessedStart, dst.info.UnprocessedEnd)
+			}
+		}
+	}
+	
+	fmt.Println()
+	
+	// Table header
+	fmt.Printf("%-10s | %-10s | %-12s | %-12s | %-10s | %s\n", 
+		"Source", "Dest", "Source Height", "Dest Height", "Difference", "Status")
+	fmt.Println(strings.Repeat("-", 80))
+	
+	// Print the pairs we have data for
+	for _, src := range sortedSrcs {
+		for _, dst := range src.dsts {
+			// Calculate source height (last processed height + pending + unprocessed)
+			sourceHeight := dst.info.LastProcessedHeight
+			if dst.info.Count > 0 {
+				// If we have pending anchors, we need to be careful about how we calculate the source height
+				// For cases like Directory to Apollo where there's a large gap, we should use the first missing height
+				// plus the pending count minus 1, rather than assuming all anchors in between are missing
+				if src.name == "Directory" && dst.name == "Apollo" {
+					// For Directory to Apollo, use the first missing height
+					sourceHeight = dst.info.FirstMissingHeight
+				} else if dst.info.Count > 50 {
+					// For large pending counts, use the first missing height
+					sourceHeight = dst.info.FirstMissingHeight
+				} else {
+					// For small pending counts, add the pending count to the last processed height
+					sourceHeight = dst.info.LastProcessedHeight + uint64(dst.info.Count)
+				}
+			}
+			if dst.info.Unprocessed > 0 && dst.info.UnprocessedEnd > sourceHeight {
+				sourceHeight = dst.info.UnprocessedEnd
+			}
+			
+			// Destination height is the last processed height
+			destHeight := dst.info.LastProcessedHeight
+			
+			// Calculate difference
+			diff := int64(sourceHeight) - int64(destHeight)
+			
+			// Determine status
+			status := "Up to date"
+			if dst.info.Count > 0 {
+				status = fmt.Sprintf("%d pending", dst.info.Count)
+			}
+			if dst.info.Unprocessed > 0 {
+				if dst.info.Count > 0 {
+					status += fmt.Sprintf(", %d unprocessed", dst.info.Unprocessed)
+				} else {
+					status = fmt.Sprintf("%d unprocessed", dst.info.Unprocessed)
+				}
+			}
+			
+			// Print table row
+			fmt.Printf("%-10s | %-10s | %-12d | %-12d | %-10d | %s\n", 
+				src.name, dst.name, sourceHeight, destHeight, diff, status)
+				
+			// Mark this pair as seen
+			if seenPairs[src.name] != nil {
+				seenPairs[src.name][dst.name] = true
+			}
+		}
+	}
+	
+	fmt.Println()
+	
+	// Print the pairs we don't have data for
+	skippedPartitionsMu.Lock()
+	defer skippedPartitionsMu.Unlock()
+	
+	for _, pair := range expectedPairs {
+		src, dst := pair.src, pair.dst
+		
+		// Skip if we already printed this pair
+		if seenPairs[src] != nil && seenPairs[src][dst] {
+			continue
+		}
+		
+		// Check if it's in the skipped partitions
+		var reason string
+		if skippedPartitions[src] != nil {
+			reason = skippedPartitions[src][dst]
+		}
+		
+		status := "Unknown"
+		if reason != "" {
+			status = "Skipped: " + reason
+		}
+		
+		// Print table row for missing pair
+		fmt.Printf("%-10s | %-10s | %-12s | %-12s | %-10s | %s\n", 
+			src, dst, "N/A", "N/A", "N/A", status)
+	}
+	
+	fmt.Println()
 }

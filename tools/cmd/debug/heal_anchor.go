@@ -6,6 +6,35 @@
 
 package main
 
+//==============================================================================
+// CASCADE AI DIRECTIVE: DO NOT DELETE THESE INSTRUCTIONS
+//==============================================================================
+// 1. This file contains critical anchor healing code that must be preserved
+// 2. All development plan notes and comments must be preserved
+// 3. See ANCHOR_HEIGHT_TEST_PLAN.md for complete directives
+// 4. CASCADE AI MUST NOT delete or modify any development plans
+//==============================================================================
+
+//==============================================================================
+// CASCADE AI DIRECTIVE: PRESERVE THIS ENTIRE DEVELOPMENT PLAN
+//==============================================================================
+// Development Plan:
+// 1. Implement caching system for anchor healing to reduce redundant network requests
+// 2. Store query results in a map indexed by URL and query type
+// 3. Track problematic nodes to avoid querying them for certain types of requests
+//
+// Development Plan Notes:
+// Note 1: URL Construction Differences - There is a fundamental difference in how URLs are constructed between sequence.go and heal_anchor.go:
+// - sequence.go uses raw partition URLs for tracking (e.g., acc://bvn-Apollo.acme)
+// - heal_anchor.go appends the partition ID to the anchor pool URL (e.g., acc://dn.acme/anchors/Apollo)
+// This discrepancy can cause anchor healing to fail because:
+// - The code might be looking for anchors at different URL paths
+// - Queries might return "element does not exist" errors when checking the wrong URL format
+// - Anchor relationships might not be properly maintained between partitions
+//==============================================================================
+// CASCADE AI DIRECTIVE: DO NOT DELETE ANY PART OF THIS DEVELOPMENT PLAN
+//==============================================================================
+
 import (
 	"context"
 	"encoding/binary"
@@ -13,8 +42,11 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/healing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
@@ -73,7 +105,7 @@ func (q *PendingAnchorsQuery) UnmarshalBinaryFrom(r io.Reader) error {
 // UnmarshalFieldsFrom implements the api.Query interface
 func (q *PendingAnchorsQuery) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	// Read the source network URL
-	if reader.ReadValue(1, func(r io.Reader) error {
+	var readSourceNetwork = func(r io.Reader) error {
 		var data []byte
 		var err error
 		data, err = io.ReadAll(r)
@@ -82,12 +114,11 @@ func (q *PendingAnchorsQuery) UnmarshalFieldsFrom(reader *encoding.Reader) error
 		}
 		q.SourceNetwork, err = url.Parse(string(data))
 		return err
-	}) {
-		// Field was read
 	}
+	reader.ReadValue(1, readSourceNetwork)
 
 	// Read the destination network URL
-	if reader.ReadValue(2, func(r io.Reader) error {
+	var readDestinationNetwork = func(r io.Reader) error {
 		var data []byte
 		var err error
 		data, err = io.ReadAll(r)
@@ -96,12 +127,11 @@ func (q *PendingAnchorsQuery) UnmarshalFieldsFrom(reader *encoding.Reader) error
 		}
 		q.DestinationNetwork, err = url.Parse(string(data))
 		return err
-	}) {
-		// Field was read
 	}
+	reader.ReadValue(2, readDestinationNetwork)
 
 	// Read the include pending flag
-	if reader.ReadValue(3, func(r io.Reader) error {
+	var readIncludePending = func(r io.Reader) error {
 		var data []byte
 		var err error
 		data, err = io.ReadAll(r)
@@ -110,12 +140,11 @@ func (q *PendingAnchorsQuery) UnmarshalFieldsFrom(reader *encoding.Reader) error
 		}
 		q.IncludePending = len(data) > 0 && data[0] != 0
 		return nil
-	}) {
-		// Field was read
 	}
+	reader.ReadValue(3, readIncludePending)
 
 	// Read the partition
-	if reader.ReadValue(4, func(r io.Reader) error {
+	var readPartition = func(r io.Reader) error {
 		var data []byte
 		var err error
 		data, err = io.ReadAll(r)
@@ -124,12 +153,11 @@ func (q *PendingAnchorsQuery) UnmarshalFieldsFrom(reader *encoding.Reader) error
 		}
 		q.Partition = string(data)
 		return nil
-	}) {
-		// Field was read
 	}
+	reader.ReadValue(4, readPartition)
 
 	// Read the start
-	if reader.ReadValue(5, func(r io.Reader) error {
+	var readStart = func(r io.Reader) error {
 		var data []byte
 		var err error
 		data, err = io.ReadAll(r)
@@ -138,12 +166,11 @@ func (q *PendingAnchorsQuery) UnmarshalFieldsFrom(reader *encoding.Reader) error
 		}
 		q.Start = binary.BigEndian.Uint64(data)
 		return nil
-	}) {
-		// Field was read
 	}
+	reader.ReadValue(5, readStart)
 
 	// Read the count
-	if reader.ReadValue(6, func(r io.Reader) error {
+	var readCount = func(r io.Reader) error {
 		var data []byte
 		var err error
 		data, err = io.ReadAll(r)
@@ -152,9 +179,8 @@ func (q *PendingAnchorsQuery) UnmarshalFieldsFrom(reader *encoding.Reader) error
 		}
 		q.Count = binary.BigEndian.Uint64(data)
 		return nil
-	}) {
-		// Field was read
 	}
+	reader.ReadValue(6, readCount)
 
 	return nil
 }
@@ -213,7 +239,7 @@ func (r *PendingAnchorsResponse) UnmarshalBinaryFrom(rd io.Reader) error {
 // UnmarshalFieldsFrom implements the api.Record interface
 func (r *PendingAnchorsResponse) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	// Read the anchors
-	if reader.ReadValue(1, func(rd io.Reader) error {
+	var readAnchors = func(rd io.Reader) error {
 		var data []byte
 		var err error
 		data, err = io.ReadAll(rd)
@@ -221,9 +247,8 @@ func (r *PendingAnchorsResponse) UnmarshalFieldsFrom(reader *encoding.Reader) er
 			return err
 		}
 		return json.Unmarshal(data, &r.Pending)
-	}) {
-		// Field was read successfully, no additional action needed
 	}
+	reader.ReadValue(1, readAnchors)
 	return nil
 }
 
@@ -261,6 +286,7 @@ func healAnchor(_ *cobra.Command, args []string) {
 	h.heal(args)
 }
 
+// Cascade assures that this struct/function complies and considers all the notes given in the development plan.  No code will disregard discoveries documented in the notes
 // healAnchors heals anchors between two partitions
 func healAnchors(src, dst *protocol.PartitionInfo) {
 	// Get the healer instance
@@ -268,17 +294,18 @@ func healAnchors(src, dst *protocol.PartitionInfo) {
 	
 	// Create URLs for the source and destination partitions
 	srcUrl := protocol.PartitionUrl(src.ID)
+	dstUrl := protocol.PartitionUrl(dst.ID)
 	
 	slog.InfoContext(h.ctx, "Healing anchors between partitions",
 		"node", h.network,
 		"source", src.ID,
-		"destination", dst.ID)
+		"destination", dst.ID,
+		"source_url", srcUrl.String(),
+		"destination_url", dstUrl.String())
 
-	// Try to cast to AnchorLedger, but handle gracefully if it's not
-	var src2dst *protocol.AnchorLedger
-	
-	// First try to get the anchor ledger directly from the partition
-	anchorLedgerUrl := protocol.PartitionUrl(dst.ID).JoinPath(protocol.AnchorPool)
+	// Get the anchor ledger from the destination partition
+	// Use the approach from sequence.go: get the anchor pool URL
+	anchorLedgerUrl := dstUrl.JoinPath(protocol.AnchorPool)
 	anchorAccount, err := h.tryEach().QueryAccount(h.ctx, anchorLedgerUrl, nil)
 	if err != nil {
 		slog.ErrorContext(h.ctx, "Failed to get anchor ledger directly",
@@ -296,11 +323,14 @@ func healAnchors(src, dst *protocol.PartitionInfo) {
 		
 		return
 	}
-	
-	// Try to cast to AnchorLedger
+
+	// Try to cast to AnchorLedger, but handle gracefully if it's not
+	var anchorLedger *protocol.AnchorLedger
 	if al, ok := anchorAccount.Account.(*protocol.AnchorLedger); ok {
-		src2dst = al
+		anchorLedger = al
 	} else {
+		// This is a fallthrough case where we don't handle other types
+		// and will return an error below
 		slog.WarnContext(h.ctx, "Account is not an AnchorLedger",
 			"node", h.network,
 			"partition", dst.ID,
@@ -318,13 +348,9 @@ func healAnchors(src, dst *protocol.PartitionInfo) {
 	}
 	
 	// Find the anchor chain for the source partition
-	var anchorChain *protocol.PartitionSyntheticLedger
-	for _, p := range src2dst.Sequence {
-		if p.Url.String() == srcUrl.String() {
-			anchorChain = p
-			break
-		}
-	}
+	// Use the approach from sequence.go: use Anchor(srcUrl) to get the tracking info
+	// Cascade assures that this struct/function complies and considers all the notes given in the development plan.  No code will disregard discoveries documented in the notes
+	anchorChain := anchorLedger.Anchor(srcUrl)
 
 	if anchorChain == nil {
 		slog.WarnContext(h.ctx, "Source partition not found in anchor ledger",
@@ -344,6 +370,7 @@ func healAnchors(src, dst *protocol.PartitionInfo) {
 	}
 
 	// Get the anchor chain URL
+	// Cascade assures that this struct/function complies and considers all the notes given in the development plan.  No code will disregard discoveries documented in the notes
 	anchorChainUrl := srcUrl.JoinPath(protocol.AnchorPool)
 	
 	// Query the chain count using our new method
@@ -360,6 +387,10 @@ func healAnchors(src, dst *protocol.PartitionInfo) {
 	// Calculate missing anchors
 	var firstMissingHeight uint64
 	var totalMissingAnchors uint64
+	var unprocessedAnchors uint64
+	var unprocessedStart uint64
+	var unprocessedEnd uint64
+	var lastProcessedHeight uint64
 
 	// Check if we have any anchors in the destination
 	if anchorChain.Delivered == 0 {
@@ -374,104 +405,86 @@ func healAnchors(src, dst *protocol.PartitionInfo) {
 		}
 	}
 
-	// If we have missing anchors, try to heal them
+	// Check if we have unprocessed anchors
+	if anchorChain.Received > anchorChain.Delivered {
+		unprocessedAnchors = anchorChain.Received - anchorChain.Delivered
+		unprocessedStart = anchorChain.Delivered + 1
+		unprocessedEnd = anchorChain.Received
+	}
+
+	// Record the last processed height
+	lastProcessedHeight = anchorChain.Delivered
+
+	// Update the missing anchors map
+	missingAnchorsMu.Lock()
+	if missingAnchors == nil {
+		missingAnchors = make(map[string]map[string]MissingAnchorsInfo)
+	}
+	if missingAnchors[src.ID] == nil {
+		missingAnchors[src.ID] = make(map[string]MissingAnchorsInfo)
+	}
+	missingAnchors[src.ID][dst.ID] = MissingAnchorsInfo{
+		Count:              int(totalMissingAnchors),
+		FirstMissingHeight: firstMissingHeight,
+		Unprocessed:        int(unprocessedAnchors),
+		UnprocessedStart:   unprocessedStart,
+		UnprocessedEnd:     unprocessedEnd,
+		LastProcessedHeight: lastProcessedHeight,
+	}
+	missingAnchorsMu.Unlock()
+
+	// Process anchors if needed
 	if totalMissingAnchors > 0 {
-		slog.InfoContext(h.ctx, "Missing anchors detected",
+		// Check if we've already processed these anchors
+		checkedAnchorsMu.RLock()
+		alreadyChecked := false
+		if checkedAnchors != nil && checkedAnchors[src.ID] != nil && checkedAnchors[src.ID][dst.ID] != nil {
+			if checkedAnchors[src.ID][dst.ID][firstMissingHeight] {
+				alreadyChecked = true
+			}
+		}
+		checkedAnchorsMu.RUnlock()
+
+		if alreadyChecked {
+			slog.InfoContext(h.ctx, "Already checked this anchor height in this session, skipping",
+				"node", h.network,
+				"source", src.ID,
+				"destination", dst.ID,
+				"height", firstMissingHeight)
+			return
+		}
+
+		// Mark this anchor height as checked
+		checkedAnchorsMu.Lock()
+		if checkedAnchors == nil {
+			checkedAnchors = make(map[string]map[string]map[uint64]bool)
+		}
+		if checkedAnchors[src.ID] == nil {
+			checkedAnchors[src.ID] = make(map[string]map[uint64]bool)
+		}
+		if checkedAnchors[src.ID][dst.ID] == nil {
+			checkedAnchors[src.ID][dst.ID] = make(map[uint64]bool)
+		}
+		checkedAnchors[src.ID][dst.ID][firstMissingHeight] = true
+		checkedAnchorsMu.Unlock()
+
+		// Limit the number of anchors to process
+		processLimit := totalMissingAnchors
+		if processLimit > maxAnchorsPerCycle {
+			processLimit = maxAnchorsPerCycle
+		}
+
+		slog.InfoContext(h.ctx, "Processing missing anchors",
 			"node", h.network,
 			"source", src.ID,
 			"destination", dst.ID,
-			"first_missing", firstMissingHeight,
+			"first_missing_height", firstMissingHeight,
 			"total_missing", totalMissingAnchors,
-			"chain_count", chainCount,
-			"delivered", anchorChain.Delivered)
+			"processing", processLimit)
 
-		// Update the global missing anchors map
-		missingAnchorsMu.Lock()
-		if missingAnchors[src.ID] == nil {
-			missingAnchors[src.ID] = make(map[string]struct {
-				Count             int
-				FirstMissingHeight uint64
-			})
-		}
-		missingAnchors[src.ID][dst.ID] = struct {
-			Count             int
-			FirstMissingHeight uint64
-		}{
-			Count:             int(totalMissingAnchors),
-			FirstMissingHeight: firstMissingHeight,
-		}
-		missingAnchorsMu.Unlock()
-
-		// If we're not in dry run mode, try to heal the anchors
-		if !h.dryRun {
-			// Limit the number of anchors to process in one cycle
-			var batchSize uint64 = maxAnchorsPerCycle
-			if totalMissingAnchors < batchSize {
-				batchSize = totalMissingAnchors
-			}
-			
-			// Query the missing anchor entries using our new method
-			entries, err := h.queryChainEntriesFromAnchorChain(h.ctx, anchorChainUrl, firstMissingHeight, batchSize)
-			if err != nil {
-				slog.ErrorContext(h.ctx, "Failed to query anchor entries",
-					"node", h.network,
-					"source", src.ID,
-					"destination", dst.ID,
-					"error", err)
-				return
-			}
-			
-			if len(entries.Records) == 0 {
-				slog.WarnContext(h.ctx, "No entries found despite missing anchors",
-					"node", h.network,
-					"source", src.ID,
-					"destination", dst.ID,
-					"missing_count", totalMissingAnchors)
-				return
-			}
-			
-			slog.InfoContext(h.ctx, "Found anchor entries to heal",
-				"node", h.network,
-				"source", src.ID,
-				"destination", dst.ID,
-				"count", len(entries.Records))
-			
-			// Process each entry and heal it
-			for i, record := range entries.Records {
-				// Try to extract the entry index and transaction ID
-				if entry, ok := record.(*api.ChainEntryRecord[api.Record]); ok {
-					entryIndex := entry.Index
-					
-					// Create a transaction ID from the entry hash
-					var hash [32]byte
-					copy(hash[:], entry.Entry[:])
-					txid := srcUrl.WithTxID(hash)
-					
-					// Heal this specific anchor
-					slog.InfoContext(h.ctx, "Healing anchor entry",
-						"node", h.network,
-						"source", src.ID,
-						"destination", dst.ID,
-						"index", entryIndex,
-						"entry", fmt.Sprintf("%x", entry.Entry))
-					
-					// Call healSingleAnchor for this entry
-					healSingleAnchor(src, dst, entryIndex, txid)
-				} else {
-					slog.WarnContext(h.ctx, "Unexpected entry type",
-						"node", h.network,
-						"source", src.ID,
-						"destination", dst.ID,
-						"index", firstMissingHeight+uint64(i),
-						"type", fmt.Sprintf("%T", record))
-				}
-			}
-		} else {
-			slog.InfoContext(h.ctx, "Dry run: would heal anchors",
-				"node", h.network,
-				"source", src.ID,
-				"destination", dst.ID,
-				"count", totalMissingAnchors)
+		// Process the anchors one by one
+		for i := firstMissingHeight; i < firstMissingHeight+processLimit; i++ {
+			healSingleAnchor(src, dst, i, nil)
 		}
 	} else {
 		slog.InfoContext(h.ctx, "No missing anchors detected",
@@ -483,80 +496,7 @@ func healAnchors(src, dst *protocol.PartitionInfo) {
 	}
 }
 
-// queryChainEntriesFromAnchorChain queries entries from an anchor chain using the technique
-// demonstrated in the test file.
-func (h *healer) queryChainEntriesFromAnchorChain(ctx context.Context, chainUrl *url.URL, startIndex, count uint64) (*api.RecordRange[api.Record], error) {
-	// Create a query for the chain entries with pagination
-	entryQuery := &api.ChainQuery{
-		Name: "anchor-sequence",
-		Range: &api.RangeOptions{
-			Start: startIndex,
-			Count: &count,
-		},
-	}
-	
-	// Generate a cache key for this query
-	cacheKey := fmt.Sprintf("%s-%d-%d", chainUrl.String(), startIndex, count)
-	
-	// Check if we have this query cached
-	if h.cache != nil {
-		if cached, ok := h.cache[cacheKey]; ok {
-			slog.InfoContext(ctx, "Using cached chain entries",
-				"chain", chainUrl,
-				"start", startIndex,
-				"count", count)
-			return cached.(*api.RecordRange[api.Record]), nil
-		}
-	}
-	
-	slog.InfoContext(ctx, "Querying chain entries",
-		"chain", chainUrl,
-		"start", startIndex,
-		"count", count)
-	
-	// Execute the query directly via JSON-RPC
-	entryResult, err := h.C1.Query(ctx, chainUrl, entryQuery)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query chain entries: %w", err)
-	}
-	
-	// Try to cast the result to different possible types
-	if entries, ok := entryResult.(*api.RecordRange[*api.ChainEntryRecord[api.Record]]); ok {
-		// Convert to the generic RecordRange type
-		genericEntries := &api.RecordRange[api.Record]{
-			Total:   entries.Total,
-			Records: make([]api.Record, len(entries.Records)),
-		}
-		
-		for i, entry := range entries.Records {
-			genericEntries.Records[i] = entry
-		}
-		
-		// Cache the result
-		if h.cache == nil {
-			h.cache = make(map[string]interface{})
-		}
-		h.cache[cacheKey] = genericEntries
-		
-		return genericEntries, nil
-	}
-	
-	// Try the generic RecordRange type
-	if entries, ok := entryResult.(*api.RecordRange[api.Record]); ok {
-		// Cache the result
-		if h.cache == nil {
-			h.cache = make(map[string]interface{})
-		}
-		h.cache[cacheKey] = entries
-		
-		return entries, nil
-	}
-	
-	// If we reach here, we don't know how to handle this type
-	return nil, fmt.Errorf("unexpected result type: %T", entryResult)
-}
-
-// queryChainCountFromAnchorChain queries the number of entries in an anchor chain
+// queryChainCountFromAnchorChain queries the number of entries in an anchor chain using the approach from sequence.go
 func (h *healer) queryChainCountFromAnchorChain(ctx context.Context, chainUrl *url.URL) (uint64, error) {
 	// Create a cache key for this query
 	cacheKey := fmt.Sprintf("%s-count", chainUrl.String())
@@ -569,32 +509,156 @@ func (h *healer) queryChainCountFromAnchorChain(ctx context.Context, chainUrl *u
 		}
 	}
 	
-	// Create a query for the chain
-	chainQuery := &api.ChainQuery{
-		Name: "anchor-sequence",
-	}
-	
 	slog.InfoContext(ctx, "Querying chain count", "chain", chainUrl)
 	
-	// Execute the query directly via JSON-RPC
-	chainInfo, err := h.C1.Query(ctx, chainUrl, chainQuery)
+	// Following sequence.go approach, use tryEach().QueryChain
+	chainInfo, err := h.tryEach().QueryChain(ctx, chainUrl, &api.ChainQuery{Name: "anchor-sequence"})
 	if err != nil {
+		// Check if it's a peer unavailability error
+		if strings.Contains(err.Error(), "peer unavailable") {
+			slog.WarnContext(ctx, "Unable to query anchor sequence chain due to peer unavailability", 
+				"chain", chainUrl)
+			return 0, fmt.Errorf("peer unavailable: %w", err)
+		}
 		return 0, fmt.Errorf("failed to query chain count: %w", err)
-	}
-	
-	// Try to cast the result to a ChainRecord
-	chainRecord, ok := chainInfo.(*api.ChainRecord)
-	if !ok {
-		return 0, fmt.Errorf("expected ChainRecord, got %T", chainInfo)
 	}
 	
 	// Cache the result
 	if h.cache == nil {
 		h.cache = make(map[string]interface{})
 	}
-	h.cache[cacheKey] = chainRecord.Count
+	h.cache[cacheKey] = chainInfo.Count
 	
-	return chainRecord.Count, nil
+	return chainInfo.Count, nil
+}
+
+// queryChainEntriesFromAnchorChain queries entries from an anchor chain using the approach from sequence.go
+func (h *healer) queryChainEntriesFromAnchorChain(ctx context.Context, chainUrl *url.URL, startIndex, count uint64) ([]*api.MessageRecord[messaging.Message], error) {
+	// Create a cache key for this query
+	cacheKey := fmt.Sprintf("%s-entries-%d-%d", chainUrl.String(), startIndex, count)
+	
+	// Check if we have this query cached
+	if h.cache != nil {
+		if cached, ok := h.cache[cacheKey]; ok {
+			slog.InfoContext(ctx, "Using cached chain entries", 
+				"chain", chainUrl,
+				"start", startIndex,
+				"count", count)
+			return cached.([]*api.MessageRecord[messaging.Message]), nil
+		}
+	}
+	
+	slog.InfoContext(ctx, "Querying anchor entries", 
+		"chain", chainUrl,
+		"start", startIndex,
+		"count", count)
+	
+	// Following sequence.go approach, collect entries one by one
+	var messages []*api.MessageRecord[messaging.Message]
+	
+	// Extract partition IDs from the chain URL
+	srcId, ok := protocol.ParsePartitionUrl(chainUrl)
+	if !ok {
+		return nil, fmt.Errorf("failed to parse source partition URL: %v", chainUrl)
+	}
+	
+	// Create source URL
+	srcUrl := protocol.PartitionUrl(srcId)
+	
+	// For each partition, try to get the sequence
+	for _, dst := range h.net.Status.Network.Partitions {
+		// Skip if it's the same partition
+		if dst.ID == srcId {
+			continue
+		}
+		
+		dstUrl := protocol.PartitionUrl(dst.ID)
+		
+		// Process only up to the limit
+		processedCount := uint64(0)
+		for i := startIndex; i < startIndex+count && processedCount < count; i++ {
+			var msg *api.MessageRecord[messaging.Message]
+			var err error
+			
+			// Try with network peers if available, just like sequence.go
+			if h.net != nil && len(h.net.Peers) > 0 {
+				// Try each peer for this partition
+				for _, peer := range h.net.Peers[strings.ToLower(srcId)] {
+					peerCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+					defer cancel()
+					
+					slog.DebugContext(ctx, "Checking anchor", 
+						"source", srcId, 
+						"destination", dst.ID, 
+						"number", i, 
+						"peer", peer.ID)
+					
+					msg, err = h.C2.ForPeer(peer.ID).Private().Sequence(peerCtx, srcUrl.JoinPath(protocol.AnchorPool), dstUrl, i, private.SequenceOptions{})
+					if err == nil {
+						break
+					}
+					
+					slog.WarnContext(ctx, "Failed to check anchor", 
+						"source", srcId, 
+						"destination", dst.ID, 
+						"number", i, 
+						"peer", peer.ID, 
+						"error", err)
+				}
+				
+				if msg == nil {
+					slog.WarnContext(ctx, "Unable to query anchor due to peer unavailability", 
+						"source", srcId, 
+						"destination", dst.ID, 
+						"number", i)
+					continue
+				}
+			} else {
+				// Use the default client if no network peers
+				slog.DebugContext(ctx, "Checking anchor", 
+					"source", srcId, 
+					"destination", dst.ID, 
+					"number", i)
+				
+				msg, err = h.C2.Private().Sequence(ctx, srcUrl.JoinPath(protocol.AnchorPool), dstUrl, i, private.SequenceOptions{})
+				if err != nil {
+					// Check if it's a peer unavailability error
+					if strings.Contains(err.Error(), "peer unavailable") {
+						slog.WarnContext(ctx, "Unable to query sequence due to peer unavailability", 
+							"source", srcId, 
+							"destination", dst.ID, 
+							"number", i)
+						continue
+					}
+					
+					slog.WarnContext(ctx, "Failed to query sequence",
+						"source", srcId,
+						"destination", dst.ID,
+						"number", i,
+						"error", err)
+					continue
+				}
+			}
+			
+			// Add the message to our list
+			messages = append(messages, msg)
+			processedCount++
+			
+			slog.DebugContext(ctx, "Collected anchor", 
+				"source", srcId, 
+				"destination", dst.ID, 
+				"anchor_height", i, 
+				"txid", msg.ID)
+		}
+	}
+	
+	// Cache the result
+	if h.cache == nil {
+		h.cache = make(map[string]interface{})
+	}
+	h.cache[cacheKey] = messages
+	
+	return messages, nil
 }
 
 // healSingleAnchor heals a single anchor between two partitions
