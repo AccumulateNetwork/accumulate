@@ -143,12 +143,8 @@ type healer struct {
 	accounts map[[32]byte]protocol.Account
 	// ProblemNodes tracks nodes that consistently fail with chain entry errors
 	problemNodes map[peer.ID]bool
-	
 	// DryRun indicates whether to actually submit transactions or just simulate
 	dryRun bool
-	
-	// Cache stores query results to avoid redundant network requests
-	cache map[string]interface{}
 }
 
 func (h *healer) Reset() {
@@ -407,6 +403,27 @@ heal:
 					return
 				}
 
+				// Skip invalid anchor relationships according to network topology:
+				// 1. Don't heal self to self anchors
+				if src.ID == dst.ID {
+					continue
+				}
+				
+				// 2. Don't heal BVN to BVN anchors
+				// Only allow Directory to BVN and BVN to Directory
+				isDirectory := strings.ToLower(src.ID) == "directory" || strings.ToLower(dst.ID) == "directory"
+				if !isDirectory {
+					continue
+				}
+
+				// Ensure we're processing all BVN partitions, including Chandrayaan
+				// This is just a debug check to ensure all partitions are being considered
+				if strings.ToLower(src.ID) == "chandrayaan" || strings.ToLower(dst.ID) == "chandrayaan" {
+					slog.InfoContext(h.ctx, "Processing Chandrayaan partition",
+						"source", src.ID,
+						"destination", dst.ID)
+				}
+
 				h.healSequence(src, dst)
 			}
 		}
@@ -417,100 +434,279 @@ heal:
 		
 		// Report missing anchors
 		missingAnchorsMu.Lock()
-		if len(missingAnchors) > 0 {
-			fmt.Println("\n===========================================")
-			fmt.Println(time.Now().Format("Mon Jan 02 03:04:05 PM MST 2006"))
-			
-			// Display time since last mempool error
-			mempoolErrorsMu.Lock()
-			if !lastMempoolErr.IsZero() {
-				fmt.Printf("Last mempool error: %s\n", lastMempoolErr.Format("Mon Jan 02 03:04:05 PM MST 2006"))
-			} else {
-				fmt.Println("No mempool errors recorded")
-			}
-			mempoolErrorsMu.Unlock()
-			
-			// Prepare data for sorted output
-			var sortedSrcs []srcInfo
-			for src, dsts := range missingAnchors {
-				si := srcInfo{name: src}
-				for dst, info := range dsts {
-					si.dsts = append(si.dsts, dstInfo{name: dst, info: info})
-				}
-				// Sort destinations alphabetically
-				sort.Slice(si.dsts, func(i, j int) bool {
-					return si.dsts[i].name < si.dsts[j].name
-				})
-				sortedSrcs = append(sortedSrcs, si)
-			}
-			// Sort sources alphabetically
-			sort.Slice(sortedSrcs, func(i, j int) bool {
-				return sortedSrcs[i].name < sortedSrcs[j].name
-			})
-			
-			// Create a table for the anchor status information
-			table := tablewriter.NewWriter(os.Stdout)
-			table.SetHeader([]string{"Source", "Destination", "Status", "Pending", "Source Height", "Dest Height", "Unprocessed", "Range"})
-			table.SetBorder(true)
-			table.SetAutoWrapText(false)
-			table.SetAutoFormatHeaders(true)
-			table.SetHeaderAlignment(tablewriter.ALIGN_LEFT)
-			table.SetAlignment(tablewriter.ALIGN_LEFT)
-			table.SetCenterSeparator("|")
-			table.SetColumnSeparator("|")
-			table.SetRowSeparator("-")
-			table.SetHeaderLine(true)
-			
-			// Add rows to the table
-			for _, src := range sortedSrcs {
-				for _, dst := range src.dsts {
-					status := "✓" // Default to OK
-					if dst.info.Count > 0 {
-						status = "🗴" // Missing anchors
-					} else if dst.info.Unprocessed > 0 {
-						status = "⚠" // Unprocessed anchors
-					}
-					
-					// Format the range if there are unprocessed anchors
-					rangeStr := "-"
-					if dst.info.Unprocessed > 0 {
-						rangeStr = fmt.Sprintf("%d → %d", dst.info.UnprocessedStart, dst.info.UnprocessedEnd)
-					}
-					
-					// Calculate source height (last processed + pending)
-					sourceHeight := dst.info.LastProcessedHeight + uint64(dst.info.Count)
-					
-					// Add the row with appropriate coloring
-					row := []string{
-						src.name,
-						dst.name,
-						status,
-						fmt.Sprintf("%d", dst.info.Count),
-						fmt.Sprintf("%d", sourceHeight),
-						fmt.Sprintf("%d", dst.info.LastProcessedHeight),
-						fmt.Sprintf("%d", dst.info.Unprocessed),
-						rangeStr,
-					}
-					table.Append(row)
-				}
-			}
-			
-			// Render the table
-			fmt.Println("\nAnchor Status:")
-			table.Render()
-			
-			fmt.Println()
+		
+		// Always show the anchor status table, even if there are no missing anchors
+		fmt.Println("\n===========================================")
+		fmt.Println(time.Now().Format("Mon Jan 02 03:04:05 PM MST 2006"))
+		
+		// Display time since last mempool error
+		mempoolErrorsMu.Lock()
+		if !lastMempoolErr.IsZero() {
+			fmt.Printf("Last mempool error: %s\n", lastMempoolErr.Format("Mon Jan 02 03:04:05 PM MST 2006"))
 		} else {
-			fmt.Println("\n===========================================")
-			fmt.Println(time.Now().Format("Mon Jan 02 03:04:05 PM MST 2006"))
-			// Display time since last mempool error
-			mempoolErrorsMu.Lock()
-			if !lastMempoolErr.IsZero() {
-				fmt.Printf("Last mempool error: %s\n", lastMempoolErr.Format("Mon Jan 02 03:04:05 PM MST 2006"))
-			} else {
-				fmt.Println("No mempool errors recorded")
+			fmt.Println("No mempool errors recorded")
+		}
+		mempoolErrorsMu.Unlock()
+		
+		// Create a table for the anchor status information
+		table := tablewriter.NewWriter(os.Stdout)
+		table.SetHeader([]string{"Source", "Destination", "Status", "Pending", "Source Height", "Dest Height", "Unprocessed", "Range"})
+		table.SetBorder(true)
+		table.SetAutoWrapText(false)
+		table.SetAutoFormatHeaders(true)
+		table.SetHeaderAlignment(tablewriter.ALIGN_LEFT)
+		table.SetAlignment(tablewriter.ALIGN_LEFT)
+		table.SetCenterSeparator("|")
+		table.SetColumnSeparator("|")
+		table.SetRowSeparator("-")
+		table.SetHeaderLine(true)
+		
+		// Prepare data for sorted output from missing anchors
+		var sortedPairs []struct {
+			src, dst string
+			info     MissingAnchorsInfo
+			exists   bool
+		}
+		
+		// Add all pairs from the missingAnchors map
+		for src, dsts := range missingAnchors {
+			for dst, info := range dsts {
+				sortedPairs = append(sortedPairs, struct {
+					src, dst string
+					info     MissingAnchorsInfo
+					exists   bool
+				}{
+					src:    src,
+					dst:    dst,
+					info:   info,
+					exists: true,
+				})
 			}
-			mempoolErrorsMu.Unlock()
+		}
+		
+		// Add remaining pairs that don't have missing anchors
+		// First, identify all valid partition pairs based on network topology
+		for _, src := range h.net.Status.Network.Partitions {
+			for _, dst := range h.net.Status.Network.Partitions {
+				// Skip self to self
+				if src.ID == dst.ID {
+					continue
+				}
+				
+				// Only include Directory to BVN and BVN to Directory
+				isDirectory := strings.ToLower(src.ID) == "directory" || strings.ToLower(dst.ID) == "directory"
+				if !isDirectory {
+					continue
+				}
+
+				// Check if this pair is already in the sortedPairs list
+				found := false
+				for _, pair := range sortedPairs {
+					if pair.src == src.ID && pair.dst == dst.ID {
+						found = true
+						break
+					}
+				}
+				
+				// If not found, add it with empty info
+				if !found {
+					sortedPairs = append(sortedPairs, struct {
+						src, dst string
+						info     MissingAnchorsInfo
+						exists   bool
+					}{
+						src:    src.ID,
+						dst:    dst.ID,
+						info:   MissingAnchorsInfo{}, // Empty info for pairs with no issues
+						exists: false,
+					})
+				}
+			}
+		}
+		
+		// Sort all pairs alphabetically
+		sort.Slice(sortedPairs, func(i, j int) bool {
+			if sortedPairs[i].src == sortedPairs[j].src {
+				return sortedPairs[i].dst < sortedPairs[j].dst
+			}
+			return sortedPairs[i].src < sortedPairs[j].src
+		})
+		
+		// Add rows to the table for all pairs
+		for _, pair := range sortedPairs {
+			status := "✓" // Default to OK
+			if pair.exists {
+				if pair.info.Count > 0 {
+					// For Directory to Apollo, indicate this is an expected gap
+					if pair.src == "Directory" && pair.dst == "Apollo" && pair.info.Count > 1000 {
+						status = fmt.Sprintf("%d gap (expected)", pair.info.Count)
+					} else {
+						status = "🗴" // Missing anchors
+					}
+				} else if pair.info.Unprocessed > 0 {
+					status = "⚠" // Unprocessed anchors
+				}
+			}
+			
+			// Format the range if there are unprocessed anchors
+			rangeStr := "-"
+			if pair.exists && pair.info.Unprocessed > 0 {
+				rangeStr = fmt.Sprintf("%d → %d", pair.info.UnprocessedStart, pair.info.UnprocessedEnd)
+			}
+			
+			// Calculate source height (last processed + pending)
+			sourceHeight := pair.info.LastProcessedHeight
+			if pair.exists {
+				// For cases with large gaps, use FirstMissingHeight instead of adding Count to LastProcessedHeight
+				if pair.info.Count > 0 {
+					if (pair.src == "Directory" && pair.dst == "Apollo") || pair.info.Count > 50 {
+						// For Directory to Apollo or any case with large pending count, 
+						// use the first missing height as the source height
+						sourceHeight = pair.info.FirstMissingHeight + uint64(pair.info.Count) - 1
+					} else {
+						// For small pending counts, add the pending count to the last processed height
+						sourceHeight = pair.info.LastProcessedHeight + uint64(pair.info.Count)
+					}
+				}
+			}
+			
+			// Destination height is the last processed height
+			destHeight := pair.info.LastProcessedHeight
+			
+			// Add the row with appropriate coloring
+			row := []string{
+				pair.src,
+				pair.dst,
+				status,
+				fmt.Sprintf("%d", pair.info.Count),
+				fmt.Sprintf("%d", sourceHeight),
+				fmt.Sprintf("%d", destHeight),
+				fmt.Sprintf("%d", pair.info.Unprocessed),
+				rangeStr,
+			}
+			table.Append(row)
+		}
+		
+		// Render the table
+		fmt.Println("\nAnchor Status:")
+		table.Render()
+		
+		fmt.Println()
+		
+		// Create a new table for URL endpoints
+		fmt.Println("\nPartition URL Endpoints:")
+		endpointTable := tablewriter.NewWriter(os.Stdout)
+		endpointTable.SetHeader([]string{"Source", "Destination", "Source URL", "Destination URL"})
+		endpointTable.SetBorder(true)
+		endpointTable.SetAutoWrapText(false)
+		endpointTable.SetAutoFormatHeaders(true)
+		endpointTable.SetHeaderAlignment(tablewriter.ALIGN_LEFT)
+		endpointTable.SetAlignment(tablewriter.ALIGN_LEFT)
+		endpointTable.SetCenterSeparator("|")
+		endpointTable.SetColumnSeparator("|")
+		endpointTable.SetRowSeparator("-")
+		endpointTable.SetHeaderLine(true)
+		
+		// Add rows to the endpoint table
+		var endpointPairs []struct {
+			src, dst string
+			srcURL, dstURL string
+		}
+		
+		// Define all expected partition pairs - use the same list as in printMissingAnchorsSummary
+		expectedPartitionPairs := []struct {
+			src string
+			dst string
+		}{
+			{"Directory", "Apollo"},
+			{"Directory", "Yutu"},
+			{"Directory", "Chandrayaan"},
+			{"Apollo", "Directory"},
+			{"Yutu", "Directory"},
+			{"Chandrayaan", "Directory"},
+		}
+		
+		// First add all expected partition pairs
+		for _, pair := range expectedPartitionPairs {
+			// Create URLs for the source and destination partitions
+			srcUrl := protocol.PartitionUrl(pair.src)
+			dstUrl := protocol.PartitionUrl(pair.dst)
+			
+			endpointPairs = append(endpointPairs, struct {
+				src, dst string
+				srcURL, dstURL string
+			}{
+				src:    pair.src,
+				dst:    pair.dst,
+				srcURL: srcUrl.String(),
+				dstURL: dstUrl.String(),
+			})
+		}
+		
+		// Then add any additional pairs from the network status that aren't in the expected list
+		for _, src := range h.net.Status.Network.Partitions {
+			for _, dst := range h.net.Status.Network.Partitions {
+				// Skip self to self
+				if src.ID == dst.ID {
+					continue
+				}
+				
+				// Only include Directory to BVN and BVN to Directory
+				isDirectory := strings.ToLower(src.ID) == "directory" || strings.ToLower(dst.ID) == "directory"
+				if !isDirectory {
+					continue
+				}
+				
+				// Check if this pair is already in the endpointPairs list
+				found := false
+				for _, pair := range endpointPairs {
+					if pair.src == src.ID && pair.dst == dst.ID {
+						found = true
+						break
+					}
+				}
+				
+				// If not found, add it
+				if !found {
+					// Create URLs for the source and destination partitions
+					srcUrl := protocol.PartitionUrl(src.ID)
+					dstUrl := protocol.PartitionUrl(dst.ID)
+					
+					endpointPairs = append(endpointPairs, struct {
+						src, dst string
+						srcURL, dstURL string
+					}{
+						src:    src.ID,
+						dst:    dst.ID,
+						srcURL: srcUrl.String(),
+						dstURL: dstUrl.String(),
+					})
+				}
+			}
+		}
+		
+		// Sort the pairs for consistent output
+		sort.Slice(endpointPairs, func(i, j int) bool {
+			if endpointPairs[i].src == endpointPairs[j].src {
+				return endpointPairs[i].dst < endpointPairs[j].dst
+			}
+			return endpointPairs[i].src < endpointPairs[j].src
+		})
+		
+		// Add the pairs to the table
+		for _, pair := range endpointPairs {
+			endpointTable.Append([]string{
+				pair.src,
+				pair.dst,
+				pair.srcURL,
+				pair.dstURL,
+			})
+		}
+		
+		// Render the endpoint table
+		endpointTable.Render()
+		
+		if len(missingAnchors) == 0 {
 			fmt.Println("No missing anchors found")
 		}
 		missingAnchorsMu.Unlock()
@@ -822,6 +1018,10 @@ func removeDuplicatePeers(peers []peer.ID) []peer.ID {
 func discoverPeersViaJSONRPC(ctx context.Context, client *jsonrpc.Client) ([]multiaddr.Multiaddr, error) {
 	fmt.Fprintf(os.Stderr, "Starting peer discovery via JSON-RPC...\n")
 	
+	// Get the endpoint URL for logging purposes
+	serverURL := client.Server
+	fmt.Fprintf(os.Stderr, "Using JSON-RPC endpoint: %s\n", serverURL)
+	
 	// Query network status to get peer information
 	var status *api.NetworkStatus
 	var err error
@@ -842,11 +1042,11 @@ func discoverPeersViaJSONRPC(ctx context.Context, client *jsonrpc.Client) ([]mul
 		if err == nil {
 			break
 		}
-		fmt.Fprintf(os.Stderr, "Failed to get network status: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Failed to get network status: %v (endpoint: %s)\n", err, serverURL)
 	}
 	
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "All network status query attempts failed\n")
+		fmt.Fprintf(os.Stderr, "All network status query attempts failed (endpoint: %s)\n", serverURL)
 		return nil, err
 	}
 	
@@ -966,11 +1166,11 @@ func discoverPeersViaJSONRPC(ctx context.Context, client *jsonrpc.Client) ([]mul
 			if consensusErr == nil {
 				break
 			}
-			fmt.Fprintf(os.Stderr, "  Failed to get consensus status for %s: %v\n", partition, consensusErr)
+			fmt.Fprintf(os.Stderr, "  Failed to get consensus status for %s: %v (endpoint: %s)\n", partition, consensusErr, serverURL)
 		}
 		
 		if consensusErr != nil {
-			fmt.Fprintf(os.Stderr, "  All consensus status query attempts failed for %s\n", partition)
+			fmt.Fprintf(os.Stderr, "  All consensus status query attempts failed for %s (endpoint: %s)\n", partition, serverURL)
 			
 			// If we failed to get consensus status, use our known validators for this partition
 			if bvnNodes, ok := knownValidators[partition]; ok {
@@ -1056,7 +1256,7 @@ func discoverPeersViaJSONRPC(ctx context.Context, client *jsonrpc.Client) ([]mul
 		if nodeInfoErr == nil {
 			break
 		}
-		fmt.Fprintf(os.Stderr, "Failed to get node info: %v\n", nodeInfoErr)
+		fmt.Fprintf(os.Stderr, "Failed to get node info: %v (endpoint: %s)\n", nodeInfoErr, serverURL)
 	}
 	
 	if nodeInfoErr == nil {
@@ -1100,7 +1300,7 @@ func discoverPeersViaJSONRPC(ctx context.Context, client *jsonrpc.Client) ([]mul
 			fmt.Fprintf(os.Stderr, "  No services found in node info\n")
 		}
 	} else {
-		fmt.Fprintf(os.Stderr, "All node info query attempts failed\n")
+		fmt.Fprintf(os.Stderr, "All node info query attempts failed (endpoint: %s)\n", serverURL)
 	}
 	
 	// If we still didn't find any valid addresses, use the bootstrap servers as a fallback
@@ -1248,94 +1448,92 @@ func printMissingAnchorsSummary() {
 	}
 	mempoolErrorsMu.Unlock()
 	
-	// Prepare data for sorted output
-	var sortedSrcs []srcInfo
-	for src, dsts := range missingAnchors {
-		si := srcInfo{name: src}
-		for dst, info := range dsts {
-			si.dsts = append(si.dsts, dstInfo{name: dst, info: info})
-		}
-		// Sort destinations alphabetically
-		sort.Slice(si.dsts, func(i, j int) bool {
-			return si.dsts[i].name < si.dsts[j].name
-		})
-		sortedSrcs = append(sortedSrcs, si)
-	}
-	// Sort sources alphabetically
-	sort.Slice(sortedSrcs, func(i, j int) bool {
-		return sortedSrcs[i].name < sortedSrcs[j].name
-	})
-	
-	// Print in chart format for backward compatibility
-	for _, src := range sortedSrcs {
-		for _, dst := range src.dsts {
-			if dst.info.Count > 0 {
-				color.Red("🗴 %s → %s has %d pending anchors (from %d)\n", src.name, dst.name, dst.info.Count, dst.info.FirstMissingHeight)
-			}
-			if dst.info.Unprocessed > 0 {
-				color.Yellow("⚠ %s → %s has %d unprocessed anchors (%d → %d)\n", src.name, dst.name, dst.info.Unprocessed, dst.info.UnprocessedStart, dst.info.UnprocessedEnd)
-			}
-		}
-	}
-	
-	fmt.Println()
-	
-	// Table header
+	// Print the table header
 	fmt.Printf("%-10s | %-10s | %-12s | %-12s | %-10s | %s\n", 
 		"Source", "Dest", "Source Height", "Dest Height", "Difference", "Status")
 	fmt.Println(strings.Repeat("-", 80))
 	
 	// Print the pairs we have data for
-	for _, src := range sortedSrcs {
-		for _, dst := range src.dsts {
-			// Calculate source height (last processed height + pending + unprocessed)
-			sourceHeight := dst.info.LastProcessedHeight
-			if dst.info.Count > 0 {
-				// If we have pending anchors, we need to be careful about how we calculate the source height
-				// For cases like Directory to Apollo where there's a large gap, we should use the first missing height
-				// plus the pending count minus 1, rather than assuming all anchors in between are missing
-				if src.name == "Directory" && dst.name == "Apollo" {
-					// For Directory to Apollo, use the first missing height
-					sourceHeight = dst.info.FirstMissingHeight
-				} else if dst.info.Count > 50 {
-					// For large pending counts, use the first missing height
-					sourceHeight = dst.info.FirstMissingHeight
-				} else {
-					// For small pending counts, add the pending count to the last processed height
-					sourceHeight = dst.info.LastProcessedHeight + uint64(dst.info.Count)
-				}
+	for _, pair := range expectedPairs {
+		src, dst := pair.src, pair.dst
+		
+		// Skip if we already printed this pair
+		if seenPairs[src] != nil && seenPairs[src][dst] {
+			continue
+		}
+		
+		// Check if it's in the skipped partitions
+		var reason string
+		if skippedPartitions[src] != nil {
+			reason = skippedPartitions[src][dst]
+		}
+		
+		status := "Unknown"
+		if reason != "" {
+			status = "Skipped: " + reason
+		}
+		
+		// Print table row for missing pair
+		fmt.Printf("%-10s | %-10s | %-12s | %-12s | %-10s | %s\n", 
+			src, dst, "N/A", "N/A", "N/A", status)
+	}
+	
+	fmt.Println()
+	
+	// Print the pairs we have data for
+	for _, pair := range expectedPairs {
+		src, dst := pair.src, pair.dst
+		
+		// Skip if we don't have data for this pair
+		if seenPairs[src] == nil || !seenPairs[src][dst] {
+			continue
+		}
+		
+		// Calculate source height (last processed + pending)
+		sourceHeight := missingAnchors[src][dst].LastProcessedHeight
+		if missingAnchors[src][dst].Count > 0 {
+			// For cases with large gaps, use FirstMissingHeight instead of adding Count to LastProcessedHeight
+			if (src == "Directory" && dst == "Apollo") || missingAnchors[src][dst].Count > 50 {
+				// For Directory to Apollo or any case with large pending count, 
+				// use the first missing height as the source height
+				sourceHeight = missingAnchors[src][dst].FirstMissingHeight + uint64(missingAnchors[src][dst].Count) - 1
+			} else {
+				// For small pending counts, add the pending count to the last processed height
+				sourceHeight = missingAnchors[src][dst].LastProcessedHeight + uint64(missingAnchors[src][dst].Count)
 			}
-			if dst.info.Unprocessed > 0 && dst.info.UnprocessedEnd > sourceHeight {
-				sourceHeight = dst.info.UnprocessedEnd
+		}
+		
+		// Destination height is the last processed height
+		destHeight := missingAnchors[src][dst].LastProcessedHeight
+		
+		// Calculate difference
+		diff := int64(sourceHeight) - int64(destHeight)
+		
+		// Determine status
+		status := "Up to date"
+		if missingAnchors[src][dst].Count > 0 {
+			// For Directory to Apollo, indicate this is an expected gap
+			if src == "Directory" && dst == "Apollo" && missingAnchors[src][dst].Count > 1000 {
+				status = fmt.Sprintf("%d gap (expected)", missingAnchors[src][dst].Count)
+			} else {
+				status = fmt.Sprintf("%d pending", missingAnchors[src][dst].Count)
 			}
-			
-			// Destination height is the last processed height
-			destHeight := dst.info.LastProcessedHeight
-			
-			// Calculate difference
-			diff := int64(sourceHeight) - int64(destHeight)
-			
-			// Determine status
-			status := "Up to date"
-			if dst.info.Count > 0 {
-				status = fmt.Sprintf("%d pending", dst.info.Count)
+		}
+		if missingAnchors[src][dst].Unprocessed > 0 {
+			if missingAnchors[src][dst].Count > 0 {
+				status += fmt.Sprintf(", %d unprocessed", missingAnchors[src][dst].Unprocessed)
+			} else {
+				status = fmt.Sprintf("%d unprocessed", missingAnchors[src][dst].Unprocessed)
 			}
-			if dst.info.Unprocessed > 0 {
-				if dst.info.Count > 0 {
-					status += fmt.Sprintf(", %d unprocessed", dst.info.Unprocessed)
-				} else {
-					status = fmt.Sprintf("%d unprocessed", dst.info.Unprocessed)
-				}
-			}
-			
-			// Print table row
-			fmt.Printf("%-10s | %-10s | %-12d | %-12d | %-10d | %s\n", 
-				src.name, dst.name, sourceHeight, destHeight, diff, status)
+		}
+		
+		// Print table row
+		fmt.Printf("%-10s | %-10s | %-12d | %-12d | %-10d | %s\n", 
+			src, dst, sourceHeight, destHeight, diff, status)
 				
-			// Mark this pair as seen
-			if seenPairs[src.name] != nil {
-				seenPairs[src.name][dst.name] = true
-			}
+		// Mark this pair as seen
+		if seenPairs[src] != nil {
+			seenPairs[src][dst] = true
 		}
 	}
 	

@@ -54,6 +54,27 @@ In addition to the table formatting, we also made changes to ensure that charts 
 2. Ensuring all data is collected and stored in the `missingAnchors` map
 3. Printing the comprehensive summary table at the end of the healing process
 
+## Network Topology Enforcement
+
+A critical issue was identified where the anchor healing process was attempting to heal anchor relationships that don't exist in the actual network topology. The system was trying to heal anchors between all partition pairs, including BVN-to-BVN and self-to-self relationships, which don't exist in the network.
+
+### Network Topology Rules
+
+The Accumulate network follows these anchor relationship rules:
+1. BVN partitions (Apollo, Yutu, etc.) push anchors to the Directory partition
+2. Directory partition pushes anchors to the BVN partitions
+3. BVNs do not anchor directly to each other
+4. Partitions do not anchor to themselves
+
+### Implementation Changes
+
+The code was modified to enforce these topology rules by:
+1. Adding a check to skip self-to-self anchor relationships (e.g., Apollo→Apollo)
+2. Adding a check to skip BVN-to-BVN anchor relationships (e.g., Apollo→Yutu)
+3. Only allowing Directory-to-BVN and BVN-to-Directory anchor relationships
+
+This ensures that the anchor healing process only attempts to heal anchor relationships that actually exist in the network topology, eliminating false positives and improving the accuracy of the output.
+
 ## Differences Between sequence.go and heal_anchor.go
 
 There are several key differences between the two files that affect how anchor data is processed:

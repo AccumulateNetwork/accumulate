@@ -392,15 +392,34 @@ func healAnchors(src, dst *protocol.PartitionInfo) {
 	var unprocessedEnd uint64
 	var lastProcessedHeight uint64
 
+	// Use the same approach as sequence.go for calculating missing anchors
+	// In sequence.go, it compares Produced with Received
+	slog.InfoContext(h.ctx, "Anchor chain details",
+		"source", src.ID,
+		"destination", dst.ID,
+		"chain_count", chainCount,
+		"delivered", anchorChain.Delivered,
+		"received", anchorChain.Received,
+		"produced", anchorChain.Produced)
+
 	// Check if we have any anchors in the destination
 	if anchorChain.Delivered == 0 {
 		// No anchors in the destination, start from the beginning
 		firstMissingHeight = 1
-		totalMissingAnchors = chainCount
+		// Use the same logic as sequence.go: compare produced with received
+		totalMissingAnchors = anchorChain.Produced - anchorChain.Received
+		if totalMissingAnchors == 0 && chainCount > 0 {
+			// Fallback to chain count if produced is 0
+			totalMissingAnchors = chainCount
+		}
 	} else {
 		// We have some anchors, check if we're missing any
 		firstMissingHeight = anchorChain.Delivered + 1
-		if chainCount >= firstMissingHeight {
+		// Use the same logic as sequence.go: compare produced with received
+		if anchorChain.Produced > anchorChain.Received {
+			totalMissingAnchors = anchorChain.Produced - anchorChain.Received
+		} else if chainCount > anchorChain.Delivered {
+			// Fallback to chain count if produced is less than delivered
 			totalMissingAnchors = chainCount - anchorChain.Delivered
 		}
 	}
@@ -496,58 +515,8 @@ func healAnchors(src, dst *protocol.PartitionInfo) {
 	}
 }
 
-// queryChainCountFromAnchorChain queries the number of entries in an anchor chain using the approach from sequence.go
-func (h *healer) queryChainCountFromAnchorChain(ctx context.Context, chainUrl *url.URL) (uint64, error) {
-	// Create a cache key for this query
-	cacheKey := fmt.Sprintf("%s-count", chainUrl.String())
-	
-	// Check if we have this query cached
-	if h.cache != nil {
-		if cached, ok := h.cache[cacheKey]; ok {
-			slog.InfoContext(ctx, "Using cached chain count", "chain", chainUrl)
-			return cached.(uint64), nil
-		}
-	}
-	
-	slog.InfoContext(ctx, "Querying chain count", "chain", chainUrl)
-	
-	// Following sequence.go approach, use tryEach().QueryChain
-	chainInfo, err := h.tryEach().QueryChain(ctx, chainUrl, &api.ChainQuery{Name: "anchor-sequence"})
-	if err != nil {
-		// Check if it's a peer unavailability error
-		if strings.Contains(err.Error(), "peer unavailable") {
-			slog.WarnContext(ctx, "Unable to query anchor sequence chain due to peer unavailability", 
-				"chain", chainUrl)
-			return 0, fmt.Errorf("peer unavailable: %w", err)
-		}
-		return 0, fmt.Errorf("failed to query chain count: %w", err)
-	}
-	
-	// Cache the result
-	if h.cache == nil {
-		h.cache = make(map[string]interface{})
-	}
-	h.cache[cacheKey] = chainInfo.Count
-	
-	return chainInfo.Count, nil
-}
-
 // queryChainEntriesFromAnchorChain queries entries from an anchor chain using the approach from sequence.go
 func (h *healer) queryChainEntriesFromAnchorChain(ctx context.Context, chainUrl *url.URL, startIndex, count uint64) ([]*api.MessageRecord[messaging.Message], error) {
-	// Create a cache key for this query
-	cacheKey := fmt.Sprintf("%s-entries-%d-%d", chainUrl.String(), startIndex, count)
-	
-	// Check if we have this query cached
-	if h.cache != nil {
-		if cached, ok := h.cache[cacheKey]; ok {
-			slog.InfoContext(ctx, "Using cached chain entries", 
-				"chain", chainUrl,
-				"start", startIndex,
-				"count", count)
-			return cached.([]*api.MessageRecord[messaging.Message]), nil
-		}
-	}
-	
 	slog.InfoContext(ctx, "Querying anchor entries", 
 		"chain", chainUrl,
 		"start", startIndex,
@@ -652,13 +621,38 @@ func (h *healer) queryChainEntriesFromAnchorChain(ctx context.Context, chainUrl 
 		}
 	}
 	
-	// Cache the result
-	if h.cache == nil {
-		h.cache = make(map[string]interface{})
-	}
-	h.cache[cacheKey] = messages
-	
 	return messages, nil
+}
+
+// queryChainCountFromAnchorChain queries the count of an anchor chain using the approach from sequence.go
+func (h *healer) queryChainCountFromAnchorChain(ctx context.Context, chainUrl *url.URL) (uint64, error) {
+	slog.InfoContext(ctx, "Querying chain count", "chain", chainUrl)
+	
+	// Following sequence.go approach, use tryEach().QueryChain
+	chainInfo, err := h.tryEach().QueryChain(ctx, chainUrl, &api.ChainQuery{Name: "anchor-sequence"})
+	if err != nil {
+		// Check if it's a peer unavailability error
+		if strings.Contains(err.Error(), "peer unavailable") {
+			slog.WarnContext(ctx, "Unable to query anchor sequence chain due to peer unavailability", 
+				"chain", chainUrl)
+			return 0, fmt.Errorf("peer unavailable: %w", err)
+		}
+		
+		// Log the error details for debugging
+		slog.ErrorContext(ctx, "Failed to query chain count with detailed error",
+			"chain", chainUrl,
+			"error", err,
+			"error_type", fmt.Sprintf("%T", err))
+		
+		return 0, fmt.Errorf("failed to query chain count: %w", err)
+	}
+	
+	// Log the chain count for debugging
+	slog.InfoContext(ctx, "Successfully queried chain count",
+		"chain", chainUrl,
+		"count", chainInfo.Count)
+	
+	return chainInfo.Count, nil
 }
 
 // healSingleAnchor heals a single anchor between two partitions
