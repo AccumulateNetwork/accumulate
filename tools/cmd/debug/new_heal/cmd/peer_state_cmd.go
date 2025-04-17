@@ -76,6 +76,26 @@ func runPeerStateTest(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	fmt.Printf("Discovered %d peers\n", totalPeers)
+	
+	// Log all discovered peers and their addresses
+	fmt.Println("\n=== Discovered Peer Addresses ===")
+	peers := addressDir.GetNetworkPeers()
+	for _, peer := range peers {
+		fmt.Printf("Peer ID: %s\n", peer.ID)
+		fmt.Printf("  Validator: %t\n", peer.IsValidator)
+		if peer.ValidatorID != "" {
+			fmt.Printf("  Validator ID: %s\n", peer.ValidatorID)
+		}
+		fmt.Printf("  Partition: %s\n", peer.PartitionID)
+		fmt.Printf("  Addresses (%d):\n", len(peer.Addresses))
+		for _, addr := range peer.Addresses {
+			fmt.Printf("    %s\n", addr)
+		}
+		
+		// Try to extract RPC endpoint
+		endpoint := addressDir.GetPeerRPCEndpoint(peer)
+		fmt.Printf("  RPC Endpoint: %s\n", endpoint)
+		fmt.Println()
 
 	// Create a new PeerState
 	peerState := new_heal.NewPeerState(addressDir)
@@ -135,3 +155,4 @@ func runPeerStateTest(cmd *cobra.Command, args []string) error {
 
 	return nil
 }
+

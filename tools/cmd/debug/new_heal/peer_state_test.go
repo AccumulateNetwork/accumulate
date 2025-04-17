@@ -13,6 +13,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/tools/cmd/debug/new_heal"
+	"gitlab.com/accumulatenetwork/accumulate/tools/cmd/debug/new_heal/testdata"
 )
 
 // MockNetworkServiceWithHeights is a mock implementation of the NetworkService interface
@@ -99,6 +100,66 @@ func TestPeerState(t *testing.T) {
 
 // TestPeerStateMainnet tests the PeerState against the mainnet
 // This is an integration test that requires network connectivity
+func TestPeerStateWithRealData(t *testing.T) {
+	// Skip this test if running in short mode
+	if testing.Short() {
+		t.Skip("Skipping test in short mode")
+	}
+
+	// Create a mock network service using the real network data
+	mockService, err := testdata.DefaultMockNetworkService()
+	if err != nil {
+		t.Fatalf("Failed to create mock network service: %v", err)
+	}
+
+	// Create a new AddressDir
+	addressDir := new_heal.NewAddressDir()
+
+	// Set the network name explicitly
+	addressDir.SetNetworkName("mainnet")
+
+	// Discover network peers
+	ctx := context.Background()
+	totalPeers, err := addressDir.DiscoverNetworkPeers(ctx, mockService)
+	if err != nil {
+		t.Fatalf("Failed to discover network peers: %v", err)
+	}
+
+	t.Logf("Discovered %d peers", totalPeers)
+
+	// Log all discovered peers and their addresses
+	peers := addressDir.GetNetworkPeers()
+	for _, peer := range peers {
+		t.Logf("Peer ID: %s", peer.ID)
+		t.Logf("  Validator: %t", peer.IsValidator)
+		if peer.ValidatorID != "" {
+			t.Logf("  Validator ID: %s", peer.ValidatorID)
+		}
+		t.Logf("  Partition: %s", peer.PartitionID)
+		t.Logf("  Addresses (%d):", len(peer.Addresses))
+		for _, addr := range peer.Addresses {
+			t.Logf("    %s", addr)
+		}
+		
+		// Try to extract RPC endpoint
+		endpoint := addressDir.GetPeerRPCEndpoint(peer)
+		t.Logf("  RPC Endpoint: %s", endpoint)
+		t.Logf("")
+	}
+
+	// Create a new PeerState
+	peerState := new_heal.NewPeerState(addressDir)
+
+	// Verify that the PeerState was created correctly
+	if peerState == nil {
+		t.Errorf("PeerState should not be nil")
+	}
+
+	// Get all peers from the AddressDir
+	if len(peers) != totalPeers {
+		t.Errorf("Expected %d peers, got %d", totalPeers, len(peers))
+	}
+}
 func TestPeerStateMainnet(t *testing.T) {
 	// Skip if not running in CI environment
 	t.Skip("Skipping test in non-CI environment")

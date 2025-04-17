@@ -9,6 +9,8 @@ package new_heal
 import (
 	"context"
 	"fmt"
+	"log"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -44,6 +46,15 @@ type AddressDir struct {
 
 	// Network name (mainnet, testnet, devnet)
 	networkName string
+
+	// PeerDiscovery provides enhanced methods for extracting hosts
+	peerDiscovery *PeerDiscovery
+
+	// Logger for detailed logging
+	logger *log.Logger
+
+	// Statistics for peer discovery
+	discoveryStats DiscoveryStats
 }
 
 // Validator represents a validator with its multiaddresses
@@ -223,15 +234,33 @@ type NetworkPeer struct {
 	LastSeen time.Time
 }
 
+// DiscoveryStats tracks statistics about peer discovery
+type DiscoveryStats struct {
+	TotalAttempts       int
+	MultiaddrSuccess    int
+	URLSuccess          int
+	ValidatorMapSuccess int
+	Failures            int
+	MethodStats         map[string]int
+}
+
 // NewAddressDir creates a new AddressDir instance
 func NewAddressDir() *AddressDir {
+	// Create a logger for detailed logging
+	logger := log.New(os.Stdout, "[AddressDir] ", log.LstdFlags)
+
 	return &AddressDir{
-		Validators:    make([]Validator, 0),
-		DNValidators:  make([]string, 0),
-		BVNValidators: make(map[string][]string),
-		ProblemNodes:  make(map[string]ProblemNode),
-		NetworkPeers:  make(map[string]NetworkPeer),
-		URLHelpers:    make(map[string]string),
+		Validators:     []Validator{},
+		DNValidators:   []string{},
+		BVNValidators:  make(map[string][]string),
+		ProblemNodes:   make(map[string]ProblemNode),
+		NetworkPeers:   make(map[string]NetworkPeer),
+		URLHelpers:     make(map[string]string),
+		peerDiscovery:  NewPeerDiscovery(logger),
+		logger:         logger,
+		discoveryStats: DiscoveryStats{
+			MethodStats: make(map[string]int),
+		},
 	}
 }
 
@@ -528,6 +557,7 @@ func (a *AddressDir) validateAddress(address string) (bool, map[string]string) {
 	// Parse the multiaddress
 	maddr, err := multiaddr.NewMultiaddr(address)
 	if err != nil {
+		a.logger.Printf("Failed to parse multiaddr %s: %v", address, err)
 		return false, components
 	}
 
@@ -542,17 +572,32 @@ func (a *AddressDir) validateAddress(address string) (bool, map[string]string) {
 		case multiaddr.P_IP4, multiaddr.P_IP6:
 			hasIP = true
 			components["ip"] = c.Value()
+			a.logger.Printf("Found IP component in %s: %s", address, c.Value())
+		case multiaddr.P_DNS, multiaddr.P_DNS4, multiaddr.P_DNS6:
+			hasIP = true // DNS counts as an IP for our purposes
+			components["ip"] = c.Value()
+			a.logger.Printf("Found DNS component in %s: %s", address, c.Value())
 		case multiaddr.P_TCP:
 			hasTCP = true
 			components["port"] = c.Value()
+			a.logger.Printf("Found TCP port in %s: %s", address, c.Value())
 		case multiaddr.P_P2P:
 			hasPeerID = true
 			components["peerID"] = c.Value()
+			a.logger.Printf("Found peer ID in %s: %s", address, c.Value())
 		}
 		return true
 	})
 
-	return hasIP && hasTCP && hasPeerID, components
+	valid := hasIP && hasTCP && hasPeerID
+	if valid {
+		a.logger.Printf("Successfully validated multiaddr %s", address)
+	} else {
+		a.logger.Printf("Multiaddr validation failed for %s (hasIP=%v, hasTCP=%v, hasPeerID=%v)", 
+			address, hasIP, hasTCP, hasPeerID)
+	}
+
+	return valid, components
 }
 
 // GetHealthyValidators returns a slice of healthy validators for a specific partition
@@ -1507,44 +1552,31 @@ func (a *AddressDir) GetPeerRPCEndpoint(peer NetworkPeer) string {
 					return fmt.Sprintf("http://%s:16592", host)
 				}
 			}
-		}
 	}
-	
-	// If no known address is found, try to extract from peer addresses
+
+	// If we have a host, construct an endpoint
+	if peer.Host != "" {
+		endpoint := fmt.Sprintf("http://%s:16592", peer.Host)
+		a.logger.Printf("Constructed RPC endpoint from known host for peer %s: %s", peer.ID, endpoint)
+		return endpoint
+	}
+
+	// Try to extract a host from one of the addresses
 	for _, addr := range peer.Addresses {
-		fmt.Printf("Processing peer address: %s\n", addr)
+		a.logger.Printf("Attempting to extract host from address for peer %s: %s", peer.ID, addr)
 		
-		// Check if this is a simple IP address (not a multiaddr)
-		if !strings.Contains(addr, "/") {
-			fmt.Printf("Using direct IP address: %s\n", addr)
-			return fmt.Sprintf("http://%s:16592", addr)
-		}
-		
-		// Try to parse as a multiaddr
-		maddr, err := multiaddr.NewMultiaddr(addr)
-		if err != nil {
-			fmt.Printf("Error parsing multiaddr %s: %v\n", addr, err)
-			continue
-		}
-		
-		// Extract the IP address from the multiaddr
-		host := ""
-		multiaddr.ForEach(maddr, func(c multiaddr.Component) bool {
-			if c.Protocol().Code == multiaddr.P_IP4 || c.Protocol().Code == multiaddr.P_IP6 {
-				host = c.Value()
-				return false
-			}
-			return true
-		})
-		
+		// Use our enhanced host extraction logic
+		host, method := a.extractHost(addr)
 		if host != "" {
-			fmt.Printf("Extracted host from multiaddr: %s\n", host)
-			return fmt.Sprintf("http://%s:16592", host)
+			endpoint := fmt.Sprintf("http://%s:16592", host)
+			a.logger.Printf("Extracted host using %s method for peer %s: %s -> %s", 
+				method, peer.ID, host, endpoint)
+			return endpoint
 		}
 	}
-	
-	// If we couldn't extract a host, return an empty string
-	fmt.Printf("Could not extract host from any address for peer %s\n", peer.ID)
+
+	// No host found
+	a.logger.Printf("Failed to extract host from any address for peer %s", peer.ID)
 	return ""
 }
 
@@ -1574,14 +1606,14 @@ func (a *AddressDir) getKnownAddressesForValidator(validatorID, partitionID stri
 	// Map of partition IDs to known IP addresses
 	partitionAddresses := map[string]string{
 		"directory": "65.108.73.113",
-		"apollo": "65.108.73.121",
-		"artemis": "65.108.73.139",
-		"athena": "65.108.73.147",
-		"demeter": "65.108.73.155",
-		"hermes": "65.108.73.163",
-		"hera": "65.108.73.171",
-		"poseidon": "65.108.73.179",
-		"zeus": "65.108.73.187",
+		"apollo":    "65.108.73.121",
+		"artemis":   "65.108.73.139",
+		"athena":    "65.108.73.147",
+		"demeter":   "65.108.73.155",
+		"hermes":    "65.108.73.163",
+		"hera":      "65.108.73.171",
+		"poseidon":  "65.108.73.179",
+		"zeus":      "65.108.73.187",
 	}
 
 	// Result addresses
