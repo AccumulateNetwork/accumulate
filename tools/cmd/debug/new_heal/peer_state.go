@@ -135,23 +135,23 @@ func (ps *PeerState) UpdatePeerStates(ctx context.Context, client api.NetworkSer
 		peerState.ValidatorID = peer.ValidatorID
 		peerState.PartitionID = peer.PartitionID
 
-		// Get host information for this peer
-		// This is a simplified approach - in a real implementation, you would need to
-		// extract the host from the peer's addresses
-		var host string
-		for _, addr := range peer.Addresses {
-			// Extract host from address
-			// For simplicity, we'll assume the first address is usable
-			parts := strings.Split(addr, "/")
-			for i, part := range parts {
-				if part == "ip4" && i+1 < len(parts) {
-					host = parts[i+1]
-					break
-				}
-			}
-			if host != "" {
-				break
-			}
+		// Get the RPC endpoint for this peer using the AddressDir's GetPeerRPCEndpoint method
+		networkPeer, exists := ps.addressDir.GetNetworkPeerByID(peerState.ID)
+		if !exists {
+			fmt.Printf("Peer %s not found in AddressDir\n", peerState.ID)
+			continue // Skip this peer and continue with others
+		}
+		
+		endpoint := ps.addressDir.GetPeerRPCEndpoint(networkPeer)
+		if endpoint == "" {
+			fmt.Printf("Could not get RPC endpoint for peer %s\n", peerState.ID)
+			continue // Skip this peer and continue with others
+		}
+		
+		// Extract the host from the endpoint (remove http:// and port)
+		host := strings.TrimPrefix(endpoint, "http://")
+		if idx := strings.LastIndex(host, ":"); idx >= 0 {
+			host = host[:idx]
 		}
 
 		// Skip if no host is available
@@ -355,4 +355,19 @@ func (ps *PeerState) GetPeersByPartition(partitionID string) []PeerStateInfo {
 	}
 
 	return peers
+}
+
+// GetZombiePeers returns peers that are not participating in consensus
+func (ps *PeerState) GetZombiePeers() []PeerStateInfo {
+	ps.mu.RLock()
+	defer ps.mu.RUnlock()
+
+	zombiePeers := make([]PeerStateInfo, 0)
+	for _, state := range ps.peerStates {
+		if state.IsZombie {
+			zombiePeers = append(zombiePeers, state)
+		}
+	}
+
+	return zombiePeers
 }
