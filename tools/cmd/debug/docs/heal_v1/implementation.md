@@ -2,10 +2,9 @@
 
 This document provides practical guidelines and best practices for implementing and modifying the healing code in the Accumulate network.
 
-<!-- ai:context-priority
-This document is critical for understanding implementation patterns and API usage in healing.
-Key files to load alongside this document: healing/heal_anchor.go, healing/heal_synth.go, protocol/url.go
--->
+> **📋 CONTEXT PRIORITY**  
+> This document is critical for understanding implementation patterns and API usage in healing.  
+> Key files to load alongside this document: healing/heal_anchor.go, healing/heal_synth.go, protocol/url.go
 
 ## Shared Components {#shared-components}
 
@@ -79,9 +78,8 @@ When implementing or modifying healing code, follow these guidelines:
 
 ### 1. URL Construction {#url-construction}
 
-<!-- ai:pattern-library
-This section documents the URL construction patterns that should be used in healing code.
--->
+> **📚 PATTERN LIBRARY**  
+> This section documents the URL construction patterns that should be used in healing code.
 
 There is a fundamental difference in how URLs are constructed between different parts of the codebase:
 - `sequence.go` uses raw partition URLs (e.g., `acc://bvn-Apollo.acme`)
@@ -287,9 +285,8 @@ When modifying network tracking:
 
 ## API Usage Guidelines {#api-usage-guidelines}
 
-<!-- ai:context-management
-This section provides guidelines for using the Accumulate API in healing code.
--->
+> **🔄 CONTEXT MANAGEMENT**  
+> This section provides guidelines for using the Accumulate API in healing code.
 
 ### Core API Interfaces
 
@@ -382,9 +379,8 @@ func submitTransaction(ctx context.Context, client api.Client, envelope *protoco
 
 ## Implementation Checklist {#implementation-checklist}
 
-<!-- ai:diagnostic-flow
+### Diagnostic Flow
 This checklist helps ensure healing code is implemented correctly.
--->
 
 When implementing new healing code or modifying existing code, use this checklist:
 

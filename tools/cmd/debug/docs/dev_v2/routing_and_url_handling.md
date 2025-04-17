@@ -49,8 +49,8 @@ For more detailed information about routing and URL handling, refer to the follo
 1. [**route.md**](../heal_v1/route.md) - Comprehensive documentation on the routing system
 2. [**routing_errors.md**](../heal_v1/routing_errors.md) - Detailed explanation of routing error causes
 3. [**implementation_plan.md**](../heal_v1/implementation_plan.md) - Plan for resolving routing issues
-4. [**url_normalization.go**](../heal_v1/url_normalization.go) - Sample implementation of URL normalization
-5. [**modified_submit_loop.go**](../heal_v1/modified_submit_loop.go) - Enhanced submission process with routing conflict handling
+4. **URL Normalization** - See [URL Normalization](../code_examples.md#url-normalization) for example implementation
+5. **Enhanced Submission Process** - See [Enhanced Submission Process](../code_examples.md#enhanced-submission-process) for example implementation
 
 ## Best Practices
 
