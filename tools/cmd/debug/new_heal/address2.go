@@ -27,17 +27,61 @@ import (
 	// "gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+// NetworkInfo contains information about a network and its partitions
+type NetworkInfo struct {
+	// Name of the network (e.g., "mainnet", "testnet")
+	Name string
+	
+	// ID of the network (e.g., "acme")
+	ID string
+	
+	// Whether this is the mainnet
+	IsMainnet bool
+	
+	// List of partitions in this network
+	Partitions []*PartitionInfo
+	
+	// Map of partition ID to partition info for quick lookup
+	PartitionMap map[string]*PartitionInfo
+	
+	// API endpoint for this network
+	APIEndpoint string
+}
+
+// PartitionInfo contains information about a network partition
+type PartitionInfo struct {
+	// ID of the partition (e.g., "Apollo", "Chandrayaan")
+	ID string
+	
+	// Type of the partition ("dn" or "bvn")
+	Type string
+	
+	// Full URL of the partition (e.g., "acc://bvn-Apollo.acme")
+	URL string
+	
+	// Whether this partition is active
+	Active bool
+	
+	// BVN index (0, 1, or 2 for mainnet BVNs)
+	BVNIndex int
+}
+
 // AddressDir is the central structure that manages validator multiaddresses
 type AddressDir struct {
 	mu             sync.RWMutex
+	
+	// Network information (replaces NetworkName string)
+	Network        *NetworkInfo
+	
+	// For backward compatibility
 	NetworkName    string
+	
 	DNValidators   []Validator
 	BVNValidators  [][]Validator
 	NetworkPeers   map[string]NetworkPeer
 	URLHelpers     map[string]string
 	Logger         *log.Logger
 	DiscoveryStats DiscoveryStats
-	peerDiscovery  *PeerDiscovery
 }
 
 // Validator represents a validator with its multiaddresses

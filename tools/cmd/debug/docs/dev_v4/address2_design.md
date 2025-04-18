@@ -34,8 +34,8 @@ type AddressDir struct {
     // URL construction helpers
     URLHelpers map[string]string
     
-    // Network name (mainnet, testnet, devnet)
-    NetworkName string
+    // Network information (replaces NetworkName string)
+    Network *NetworkInfo
     
     // Logger for detailed logging
     Logger *log.Logger
@@ -168,6 +168,55 @@ type NetworkPeer struct {
 
     // When this peer was last seen
     LastSeen time.Time
+}
+```
+
+### NetworkInfo
+
+Contains information about a network and its partitions:
+
+```go
+type NetworkInfo struct {
+    // Name of the network (e.g., "mainnet", "testnet")
+    Name string
+    
+    // ID of the network (e.g., "acme")
+    ID string
+    
+    // Whether this is the mainnet
+    IsMainnet bool
+    
+    // List of partitions in this network
+    Partitions []*PartitionInfo
+    
+    // Map of partition ID to partition info for quick lookup
+    PartitionMap map[string]*PartitionInfo
+    
+    // API endpoint for this network
+    APIEndpoint string
+}
+```
+
+### PartitionInfo
+
+Contains information about a network partition:
+
+```go
+type PartitionInfo struct {
+    // ID of the partition (e.g., "Apollo", "Chandrayaan")
+    ID string
+    
+    // Type of the partition ("dn" or "bvn")
+    Type string
+    
+    // Full URL of the partition (e.g., "acc://bvn-Apollo.acme")
+    URL string
+    
+    // Whether this partition is active
+    Active bool
+    
+    // BVN index (0, 1, or 2 for mainnet BVNs)
+    BVNIndex int
 }
 ```
 
@@ -770,17 +819,244 @@ The implementation and testing of simple_peer_discovery provided several valuabl
 
 These lessons will be incorporated into the address2.go implementation to ensure robust handling of validator addresses and network peers.
 
+## Network Usage and Management
+
+### Network Information Usage
+
+The `Network` field in `AddressDir` is central to the operation of the address management system. It replaces the simple `NetworkName` string and provides comprehensive information about the network and its partitions.
+
+```go
+// InitializeNetwork sets up the Network field with appropriate information
+func (a *AddressDir) InitializeNetwork(networkName string) error {
+    // Create a new NetworkInfo instance
+    network := &NetworkInfo{
+        Name:         networkName,
+        ID:           "acme", // Default network ID
+        IsMainnet:    networkName == "mainnet",
+        Partitions:   make([]*PartitionInfo, 0),
+        PartitionMap: make(map[string]*PartitionInfo),
+    }
+    
+    // Set the API endpoint based on the network name
+    network.APIEndpoint = resolveNetworkEndpoint(networkName)
+    
+    // Initialize the network's partitions
+    if err := a.initializeNetworkPartitions(network); err != nil {
+        return err
+    }
+    
+    // Set the Network field
+    a.Network = network
+    return nil
+}
+```
+
+The Network field is used to:
+
+1. **Determine API Endpoints**: The `APIEndpoint` field provides the base URL for API requests
+2. **Identify Network Type**: The `IsMainnet` flag allows for network-specific behavior
+3. **Access Partition Information**: The `Partitions` and `PartitionMap` fields provide partition data
+4. **Standardize URL Construction**: Ensures consistent URL formats across the codebase
+
+### Error Handling Strategy
+
+Error handling in address2.go follows these principles:
+
+1. **Non-blocking Operation**: Discovery processes should never hang or panic
+2. **Error Classification**: Errors are categorized by type and severity
+3. **Node-specific Error Tracking**: Errors are associated with specific nodes
+4. **Automatic Recovery**: The system attempts to recover from transient errors
+5. **Error Reporting**: Comprehensive error statistics are maintained
+
+```go
+// Error classification constants
+const (
+    ErrorSeverityLow    = 1 // Transient errors that can be retried
+    ErrorSeverityMedium = 2 // Errors that may require attention
+    ErrorSeverityHigh   = 3 // Critical errors that prevent operation
+)
+
+// NodeError represents an error associated with a specific node
+type NodeError struct {
+    NodeID      string    // ID of the node that experienced the error
+    ErrorType   string    // Type of error (e.g., "connection", "timeout", "validation")
+    ErrorMessage string    // Detailed error message
+    Timestamp   time.Time // When the error occurred
+    Severity    int       // Error severity level
+    RetryCount  int       // Number of retry attempts made
+}
+```
+
+When errors occur during discovery:
+
+1. The error is logged with appropriate context
+2. The error is associated with the specific node
+3. The node's error count and last error are updated
+4. For problematic nodes, they may be marked as such
+5. The discovery process continues with other nodes
+
+### Update Strategy
+
+When performing network discovery, the system follows a clear update strategy to maintain the most current state of the blockchain network:
+
+1. **Incremental Updates**: Only changed information is updated
+2. **Timestamp Tracking**: All updates include timestamps for freshness evaluation
+3. **Conflict Resolution**: When conflicting information is received, resolution rules apply:
+   - Newer information takes precedence over older information
+   - Information from more reliable nodes is prioritized
+   - Consensus-based resolution for critical information
+
+```go
+// UpdateNetworkState updates the network state based on discovery results
+func (a *AddressDir) UpdateNetworkState(ctx context.Context, client api.NetworkService) (RefreshStats, error) {
+    stats := RefreshStats{}
+    
+    // 1. Discover network peers
+    peerCount, err := a.DiscoverNetworkPeers(ctx, client)
+    if err != nil {
+        // Log error but continue with partial results
+        a.Logger.Printf("Error discovering network peers: %v", err)
+    }
+    stats.TotalPeers = peerCount
+    
+    // 2. Update validator information
+    a.updateValidatorInformation(ctx, client, &stats)
+    
+    // 3. Update partition information
+    a.updatePartitionInformation(ctx, client, &stats)
+    
+    // 4. Prune stale information
+    a.pruneStaleInformation(&stats)
+    
+    return stats, nil
+}
+```
+
+This update strategy ensures that all processes have access to the best current state of the blockchain network, which is critical for proper operation.
+
+### Partition Management
+
+Partition management is driven entirely by the `NetworkInfo` structure. The system:
+
+1. **Discovers Partitions**: Automatically identifies all partitions in the network
+2. **Tracks Partition Status**: Monitors the active/inactive status of partitions
+3. **Standardizes URLs**: Uses consistent URL formats for all partitions
+4. **Maps Validators to Partitions**: Maintains the relationship between validators and partitions
+
+```go
+// initializeNetworkPartitions sets up the partitions for a network
+func (a *AddressDir) initializeNetworkPartitions(network *NetworkInfo) error {
+    // For mainnet, we know the partitions
+    if network.IsMainnet {
+        // Add Directory Network
+        dnPartition := &PartitionInfo{
+            ID:       "dn",
+            Type:     "dn",
+            URL:      "acc://dn.acme",
+            Active:   true,
+            BVNIndex: -1,
+        }
+        network.Partitions = append(network.Partitions, dnPartition)
+        network.PartitionMap["dn"] = dnPartition
+        
+        // Add BVNs
+        bvnNames := []string{"Apollo", "Chandrayaan", "Yutu"}
+        for i, name := range bvnNames {
+            bvnPartition := &PartitionInfo{
+                ID:       name,
+                Type:     "bvn",
+                URL:      fmt.Sprintf("acc://bvn-%s.acme", name),
+                Active:   true,
+                BVNIndex: i,
+            }
+            network.Partitions = append(network.Partitions, bvnPartition)
+            network.PartitionMap[name] = bvnPartition
+        }
+        return nil
+    }
+    
+    // For other networks, discover partitions dynamically
+    return a.discoverNetworkPartitions(network)
+}
+```
+
+This approach ensures that partition selection and management are consistent across the codebase, addressing the URL construction differences identified in the development plan.
+
+## Implementation Plan
+
+### Phase 1: Core Structure Implementation
+
+1. **Define Data Structures**
+   - Implement `NetworkInfo` and `PartitionInfo` structures
+   - Update `AddressDir` to use `Network` instead of `NetworkName`
+   - Implement error tracking structures
+
+2. **Network Initialization**
+   - Implement `InitializeNetwork` function
+   - Implement partition initialization for different network types
+   - Add support for custom network configurations
+
+### Phase 2: Network Discovery Implementation
+
+1. **Directory Network Discovery**
+   - Implement `discoverDirectoryPeers` function
+   - Add support for validator identification and tracking
+   - Implement error handling for discovery failures
+
+2. **Partition Discovery**
+   - Implement `discoverPartitionPeers` function
+   - Add support for BVN-specific discovery
+   - Implement partition status tracking
+
+3. **Non-validator Discovery**
+   - Implement `discoverCommonNonValidators` function
+   - Add support for known peer tracking
+
+### Phase 3: Update and Maintenance
+
+1. **Network State Updates**
+   - Implement `UpdateNetworkState` function
+   - Add support for incremental updates
+   - Implement conflict resolution logic
+
+2. **Error Management**
+   - Implement error classification system
+   - Add support for node-specific error tracking
+   - Implement automatic recovery mechanisms
+
+3. **Partition Management**
+   - Implement URL standardization
+   - Add support for partition-validator mapping
+   - Implement partition status monitoring
+
+### Phase 4: Testing and Validation
+
+1. **Unit Testing**
+   - Test each component in isolation
+   - Verify error handling behavior
+   - Validate update strategies
+
+2. **Integration Testing**
+   - Test network discovery against mock networks
+   - Verify interaction between components
+   - Validate partition management
+
+3. **Mainnet Testing**
+   - Test against the live mainnet
+   - Verify discovery of all validators and partitions
+   - Validate error handling in real-world scenarios
+
 ## Conclusion
 
-This simplified design for address2.go will provide a more maintainable and robust implementation compared to the original address.go. By focusing on a minimal set of core data structures and independent helper functions coordinated by a master function, we can ensure that the code is easier to understand, test, and extend in the future.
+This enhanced design for address2.go provides a comprehensive approach to network discovery and management. By focusing on a robust Network structure, clear error handling, and consistent update strategies, we can ensure that the code is reliable, maintainable, and effective in managing the Accumulate network.
 
 The design prioritizes:
 
-1. **Simplicity**: Using simpler data structures with direct relationships
-2. **Modularity**: Clear separation of concerns between different types of functionality
-3. **Incremental Development**: Starting with the minimal functionality needed and adding more as required
-4. **Maintainability**: Making the code easier to understand and modify
-5. **Testability**: Ensuring all components are independently testable against mainnet
-6. **Robustness**: Incorporating lessons from simple_peer_discovery to handle edge cases
+1. **Clarity**: Clear definition of network structures and relationships
+2. **Reliability**: Robust error handling and recovery mechanisms
+3. **Consistency**: Standardized URL construction and partition management
+4. **Currency**: Always maintaining the most up-to-date network state
+5. **Modularity**: Clear separation of concerns between different components
+6. **Testability**: Ensuring all components are independently testable
 
-This approach will allow us to fix the syntax errors in the original implementation while also improving the overall design of the code.
+This approach will address the URL construction differences identified in the development plan and provide a solid foundation for the anchor healing process.

@@ -6,6 +6,15 @@
 
 This document outlines the design for implementing network discovery functionality in address2.go. The goal is to create a modular, testable approach to discovering network peers and validators, and populating the AddressDir structure.
 
+A key aspect of this design is the use of a Network struct instead of a simple string to represent the network. This allows us to store and query information about the network's partitions, which is essential for the discovery process. The design also distinguishes between mainnet and other networks, as they may have different discovery requirements.
+
+The Network struct will replace the current NetworkName string field in the AddressDir struct. This change provides several benefits:
+
+1. **Complete Network Information**: Stores all relevant network data in one place
+2. **Partition Awareness**: Maintains a list of partitions for discovery
+3. **Network-Specific Behavior**: Allows for different handling of mainnet vs. other networks
+4. **API Endpoint Management**: Stores the appropriate API endpoint for the network
+
 ## Current Implementation Analysis
 
 The current implementation in address.go.gox has several key components:
@@ -22,9 +31,21 @@ The implementation has some challenges:
 
 ## Proposed Design
 
-We will implement a more modular approach with helper functions that have clear, single responsibilities:
+We will implement a more modular approach with helper functions that have clear, single responsibilities. All discovery-related functions will use the "discover" naming convention for consistency.
 
-### 1. Main Discovery Function
+### 1. Network Structure
+
+The network discovery process will use the `NetworkInfo` structure defined in the address2_design.md document. This structure replaces the simple `NetworkName` string in the `AddressDir` struct and provides comprehensive information about the network and its partitions.
+
+Key benefits of using the `NetworkInfo` structure for network discovery:
+
+1. **Complete Network Information**: Stores all relevant network data in one place
+2. **Partition Awareness**: Maintains a list of partitions for discovery
+3. **Network-Specific Behavior**: Allows for different handling of mainnet vs. other networks
+4. **API Endpoint Management**: Stores the appropriate API endpoint for the network
+5. **URL Standardization**: Ensures consistent URL construction across the codebase
+
+### 2. Main Discovery Function
 
 ```go
 // DiscoverNetworkPeers discovers all network peers and populates the AddressDir
@@ -33,9 +54,9 @@ func (a *AddressDir) DiscoverNetworkPeers(ctx context.Context, client api.Networ
 }
 ```
 
-### 2. Helper Functions
+### 3. Helper Functions
 
-#### 2.1 Network Status Query Helper
+#### 3.1 Network Status Query Helper
 
 ```go
 // queryNetworkStatus queries the network status for a specific partition
@@ -44,7 +65,7 @@ func queryNetworkStatus(ctx context.Context, client api.NetworkService, partitio
 }
 ```
 
-#### 2.2 Directory Peer Discovery Helper
+#### 3.2 Directory Peer Discovery Helper
 
 ```go
 // discoverDirectoryPeers discovers peers from the Directory Network
@@ -57,7 +78,7 @@ func (a *AddressDir) discoverDirectoryPeers(ctx context.Context, ns *api.Network
 }
 ```
 
-#### 2.3 Partition Peer Discovery Helper
+#### 3.3 Partition Peer Discovery Helper
 
 ```go
 // discoverPartitionPeers discovers peers from specific partitions (BVNs)
@@ -70,7 +91,7 @@ func (a *AddressDir) discoverPartitionPeers(ctx context.Context, client api.Netw
 }
 ```
 
-#### 2.4 Common Non-Validator Discovery Helper
+#### 3.4 Common Non-Validator Discovery Helper
 
 ```go
 // discoverCommonNonValidators adds known non-validator peers to the peer list
@@ -82,16 +103,16 @@ func (a *AddressDir) discoverCommonNonValidators(seenPeers map[string]bool) int 
 }
 ```
 
-#### 2.4 Peer Processing Helper
+#### 3.5 Peer Processing Helper
 
 ```go
-// processPeer processes a single peer and updates AddressDir
-func (a *AddressDir) processPeer(peer *protocol.ValidatorInfo, partitionID string, validators map[string]bool, seenPeers map[string]bool) bool {
+// discoverPeer discovers and processes a single peer and updates AddressDir
+func (a *AddressDir) discoverPeer(peer *protocol.ValidatorInfo, partitionID string, validators map[string]bool, seenPeers map[string]bool) bool {
     // Process a single peer and update AddressDir
 }
 ```
 
-#### 2.5 Peer Update Helper
+#### 3.6 Peer Update Helper
 
 ```go
 // updateExistingPeer updates an existing peer with new information
@@ -100,7 +121,7 @@ func (a *AddressDir) updateExistingPeer(existingPeer *NetworkPeer, newInfo *prot
 }
 ```
 
-### 3. Testing Approach
+### 4. Testing Approach
 
 We will create comprehensive tests for each helper function:
 
@@ -108,7 +129,7 @@ We will create comprehensive tests for each helper function:
 2. **Integration Tests**: Test the interaction between helper functions
 3. **End-to-End Tests**: Test the complete discovery process against mock and real networks
 
-### 4. Implementation Strategy
+### 5. Implementation Strategy
 
 1. Implement and test each helper function individually
 2. Integrate helper functions into the main discovery function
@@ -121,23 +142,14 @@ We will create comprehensive tests for each helper function:
 
 ```go
 func (a *AddressDir) DiscoverNetworkPeers(ctx context.Context, client api.NetworkService) (int, error) {
-    // 1. Query main network status
-    // 2. Initialize tracking maps (validators, seenPeers)
-    // 3. Process directory peers using discoverDirectoryPeers
-    // 4. Process partition peers using discoverPartitionPeers
-    // 5. Process known non-validators using discoverCommonNonValidators
-    // 6. Return total peer count
-}
-```
-
-### processDirectoryPeers
-
-```go
-func (a *AddressDir) processDirectoryPeers(ns *api.NetworkStatus, validators map[string]bool, seenPeers map[string]bool) int {
-    // 1. Process each validator in network status
-    // 2. Create/update NetworkPeer entries
-    // 3. Set appropriate partition information
-    // 4. Return peer count
+    // 1. Verify that Network is properly initialized
+    // 2. Query main network status using the Network.APIEndpoint
+    // 3. Initialize tracking maps (validators, seenPeers)
+    // 4. Process directory peers using discoverDirectoryPeers
+    // 5. Process partition peers using discoverPartitionPeers for each partition in Network.Partitions
+    // 6. Process known non-validators using discoverCommonNonValidators
+    // 7. Update DiscoveryStats with metrics
+    // 8. Return total peer count
 }
 ```
 
@@ -150,6 +162,8 @@ func (a *AddressDir) discoverDirectoryPeers(ctx context.Context, ns *api.Network
     // 3. Set appropriate partition information
     // 4. Return peer count
 }
+```
+
 ```
 
 ### discoverPartitionPeers
