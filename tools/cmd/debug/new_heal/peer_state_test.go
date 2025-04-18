@@ -77,23 +77,23 @@ func TestPeerState(t *testing.T) {
 	// In a real test, we would update peer states here
 	// However, since our mock doesn't support the actual height querying,
 	// we'll just verify that the PeerState was created correctly
-	
+
 	// Get all peers from the AddressDir
 	peers := addressDir.GetNetworkPeers()
-	
+
 	// Verify that we have the expected number of peers
 	if len(peers) != totalPeers {
 		t.Errorf("Expected %d peers, got %d", totalPeers, len(peers))
 	}
-	
+
 	// Verify that the PeerState was created correctly
 	if peerState == nil {
 		t.Errorf("PeerState should not be nil")
 	}
-	
+
 	// Log some information about the peers
 	for _, peer := range peers {
-		t.Logf("Peer: ID=%s, IsValidator=%v, ValidatorID=%s, Partition=%s", 
+		t.Logf("Peer: ID=%s, IsValidator=%v, ValidatorID=%s, Partition=%s",
 			peer.ID, peer.IsValidator, peer.ValidatorID, peer.PartitionID)
 	}
 }
@@ -140,7 +140,7 @@ func TestPeerStateWithRealData(t *testing.T) {
 		for _, addr := range peer.Addresses {
 			t.Logf("    %s", addr)
 		}
-		
+
 		// Try to extract RPC endpoint
 		endpoint := addressDir.GetPeerRPCEndpoint(peer)
 		t.Logf("  RPC Endpoint: %s", endpoint)
@@ -212,7 +212,7 @@ func TestPeerStateMainnet(t *testing.T) {
 	// Log some information about the peer states
 	for _, state := range peerStates {
 		if state.DNHeight > 0 || state.BVNHeight > 0 {
-			t.Logf("Peer state: ID=%s, DNHeight=%d, BVNHeight=%d", 
+			t.Logf("Peer state: ID=%s, DNHeight=%d, BVNHeight=%d",
 				state.ID, state.DNHeight, state.BVNHeight)
 		}
 	}
@@ -221,7 +221,7 @@ func TestPeerStateMainnet(t *testing.T) {
 	laggingPeers := peerState.GetLaggingPeers(5)
 	t.Logf("Found %d lagging peers", len(laggingPeers))
 	for _, peer := range laggingPeers {
-		t.Logf("Lagging peer: ID=%s, DNHeight=%d, BVNHeight=%d", 
+		t.Logf("Lagging peer: ID=%s, DNHeight=%d, BVNHeight=%d",
 			peer.ID, peer.DNHeight, peer.BVNHeight)
 	}
 }

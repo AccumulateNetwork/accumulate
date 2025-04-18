@@ -110,14 +110,14 @@ type entry struct {
 
 // MemDBBatch implements a transaction for the MemDB.
 type MemDBBatch struct {
-	db       *MemDB                // Reference to the database
-	writable bool                  // Flag indicating if the transaction is writable
-	prefix   *record.Key           // Key prefix for this batch
+	db       *MemDB                  // Reference to the database
+	writable bool                    // Flag indicating if the transaction is writable
+	prefix   *record.Key             // Key prefix for this batch
 	snapshot map[[32]byte]valueEntry // Snapshot of data at transaction start (for read-only)
-	changes  map[[32]byte]entry    // Pending changes
-	closed   bool                  // Flag indicating if the transaction is closed
-	parent   *MemDBBatch           // Parent batch for nested transactions
-	mu       sync.RWMutex          // Mutex for thread safety within the batch
+	changes  map[[32]byte]entry      // Pending changes
+	closed   bool                    // Flag indicating if the transaction is closed
+	parent   *MemDBBatch             // Parent batch for nested transactions
+	mu       sync.RWMutex            // Mutex for thread safety within the batch
 }
 
 // Ensure MemDBBatch implements the required interfaces

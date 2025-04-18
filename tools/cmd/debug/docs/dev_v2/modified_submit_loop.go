@@ -86,9 +86,9 @@ func (h *healer) submitLoop(wg *sync.WaitGroup) {
 		} else {
 			// Check specifically for routing conflicts
 			if errors.Is(err, errors.BadRequest) && strings.Contains(err.Error(), "conflicting routes") {
-				slog.WarnContext(h.ctx, "Detected routing conflict, attempting with more aggressive URL normalization", 
+				slog.WarnContext(h.ctx, "Detected routing conflict, attempting with more aggressive URL normalization",
 					"id", env.Messages[0].ID(), "error", err)
-				
+
 				// Create a new envelope with more aggressive URL normalization
 				normalizedEnv := new(messaging.Envelope)
 				for _, msg := range messages {
@@ -100,7 +100,7 @@ func (h *healer) submitLoop(wg *sync.WaitGroup) {
 					}
 					normalizedEnv.Messages = append(normalizedEnv.Messages, msg)
 				}
-				
+
 				// Try submission with normalized envelope
 				subs, err = h.C2.Submit(h.ctx, normalizedEnv, api.SubmitOptions{})
 				if err == nil {
@@ -119,7 +119,7 @@ func (h *healer) submitLoop(wg *sync.WaitGroup) {
 				}
 			} else {
 				lastErr = err
-				slog.ErrorContext(h.ctx, "Default submission failed, trying individual peers", 
+				slog.ErrorContext(h.ctx, "Default submission failed, trying individual peers",
 					"error", err, "id", env.Messages[0].ID())
 			}
 
@@ -130,51 +130,51 @@ func (h *healer) submitLoop(wg *sync.WaitGroup) {
 					if submitted {
 						break
 					}
-					
+
 					slog.InfoContext(h.ctx, "Trying peers from partition", "partition", partition.ID)
-					
+
 					// Make sure peers map is initialized for this partition
 					if h.net == nil || h.net.Peers == nil || h.net.Peers[strings.ToLower(partition.ID)] == nil {
 						slog.WarnContext(h.ctx, "No peers available for partition", "partition", partition.ID)
 						continue
 					}
-					
+
 					for peerID, info := range h.net.Peers[strings.ToLower(partition.ID)] {
 						// Create a client for this peer
 						c := h.C2.ForPeer(peerID)
 						if len(info.Addresses) > 0 {
 							c = c.ForAddress(info.Addresses[0])
 						}
-						
+
 						slog.InfoContext(h.ctx, "Trying submission with peer", "peer", peerID, "partition", partition.ID)
-						
+
 						// Set a timeout for this specific submission attempt
 						submitCtx, cancel := context.WithTimeout(h.ctx, 10*time.Second)
 						subs, err := c.Submit(submitCtx, env, api.SubmitOptions{})
 						cancel()
-						
+
 						if err == nil {
 							// Process successful submissions
 							for _, sub := range subs {
 								if sub.Success {
-									slog.InfoContext(h.ctx, "Submission succeeded with peer", 
+									slog.InfoContext(h.ctx, "Submission succeeded with peer",
 										"peer", peerID, "id", sub.Status.TxID)
 									submitted = true
 								} else {
-									slog.ErrorContext(h.ctx, "Submission failed with peer", 
+									slog.ErrorContext(h.ctx, "Submission failed with peer",
 										"peer", peerID, "message", sub, "status", sub.Status)
 								}
 							}
-							
+
 							if submitted {
 								submissionCache[cacheKey] = true
 								break // Exit the peer loop on success
 							}
 						} else if errors.Is(err, errors.BadRequest) && strings.Contains(err.Error(), "conflicting routes") {
 							// If routing conflict, try with normalized envelope
-							slog.WarnContext(h.ctx, "Detected routing conflict with peer, trying normalized URLs", 
+							slog.WarnContext(h.ctx, "Detected routing conflict with peer, trying normalized URLs",
 								"peer", peerID, "error", err)
-							
+
 							// Create a new envelope with more aggressive URL normalization
 							normalizedEnv := new(messaging.Envelope)
 							for _, msg := range messages {
@@ -185,15 +185,15 @@ func (h *healer) submitLoop(wg *sync.WaitGroup) {
 								}
 								normalizedEnv.Messages = append(normalizedEnv.Messages, msg)
 							}
-							
+
 							submitCtx, cancel := context.WithTimeout(h.ctx, 10*time.Second)
 							subs, err = c.Submit(submitCtx, normalizedEnv, api.SubmitOptions{})
 							cancel()
-							
+
 							if err == nil {
 								for _, sub := range subs {
 									if sub.Success {
-										slog.InfoContext(h.ctx, "Submission succeeded with normalized URLs", 
+										slog.InfoContext(h.ctx, "Submission succeeded with normalized URLs",
 											"peer", peerID, "id", sub.Status.TxID)
 										submitted = true
 									}
@@ -205,20 +205,20 @@ func (h *healer) submitLoop(wg *sync.WaitGroup) {
 							}
 						} else {
 							lastErr = err
-							slog.ErrorContext(h.ctx, "Submission failed with peer", 
+							slog.ErrorContext(h.ctx, "Submission failed with peer",
 								"peer", peerID, "error", err)
 						}
 					}
 				}
 			}
 		}
-		
+
 		// Clear messages if submitted successfully, otherwise keep for retry
 		if submitted {
 			messages = messages[:0]
 		} else {
 			// If we tried all peers and still failed, log the error
-			slog.ErrorContext(h.ctx, "Submission failed on all peers", 
+			slog.ErrorContext(h.ctx, "Submission failed on all peers",
 				"error", lastErr, "id", env.Messages[0].ID())
 		}
 	}

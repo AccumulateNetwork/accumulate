@@ -29,14 +29,14 @@ func NewSimplePeerDiscovery(logger *log.Logger) *SimplePeerDiscovery {
 // ExtractHostFromMultiaddr extracts the host from a multiaddr
 func (d *SimplePeerDiscovery) ExtractHostFromMultiaddr(addrStr string) (string, error) {
 	d.log("Attempting to extract host from: %s", addrStr)
-	
+
 	// Try to parse as multiaddr
 	maddr, err := multiaddr.NewMultiaddr(addrStr)
 	if err != nil {
 		d.log("Error parsing multiaddr: %v", err)
 		return "", fmt.Errorf("error parsing multiaddr: %w", err)
 	}
-	
+
 	// Extract host from multiaddr
 	var host string
 	multiaddr.ForEach(maddr, func(c multiaddr.Component) bool {
@@ -54,19 +54,19 @@ func (d *SimplePeerDiscovery) ExtractHostFromMultiaddr(addrStr string) (string, 
 		}
 		return true
 	})
-	
+
 	if host == "" {
 		d.log("No host component found in multiaddr")
 		return "", fmt.Errorf("no host component found in multiaddr")
 	}
-	
+
 	return host, nil
 }
 
 // ExtractHostFromURL attempts to extract a host from a URL-like string
 func (d *SimplePeerDiscovery) ExtractHostFromURL(urlStr string) (string, error) {
 	d.log("Attempting to extract host from URL: %s", urlStr)
-	
+
 	// Check if it's a URL with scheme
 	if strings.Contains(urlStr, "://") {
 		parts := strings.Split(urlStr, "://")
@@ -83,7 +83,7 @@ func (d *SimplePeerDiscovery) ExtractHostFromURL(urlStr string) (string, error) 
 			}
 		}
 	}
-	
+
 	return "", fmt.Errorf("could not extract host from URL")
 }
 
@@ -91,20 +91,20 @@ func (d *SimplePeerDiscovery) ExtractHostFromURL(urlStr string) (string, error) 
 func (d *SimplePeerDiscovery) GetKnownAddressForValidator(validatorID string) string {
 	// Hardcoded mappings for known validators
 	knownAddresses := map[string]string{
-		"defidevs.acme":         "65.108.73.121",
-		"LunaNova.acme":         "65.108.73.121",
-		"Sphereon.acme":         "65.108.4.175",
+		"defidevs.acme":          "65.108.73.121",
+		"LunaNova.acme":          "65.108.73.121",
+		"Sphereon.acme":          "65.108.4.175",
 		"ConsensusNetworks.acme": "65.21.231.58",
-		"tfa.acme":              "65.108.201.154",
-		"HighStakes.acme":       "65.109.33.17",
-		"TurtleBoat.acme":       "135.181.114.121",
+		"tfa.acme":               "65.108.201.154",
+		"HighStakes.acme":        "65.109.33.17",
+		"TurtleBoat.acme":        "135.181.114.121",
 	}
-	
+
 	if addr, ok := knownAddresses[validatorID]; ok {
 		d.log("Found known address for validator %s: %s", validatorID, addr)
 		return addr
 	}
-	
+
 	d.log("No known address for validator %s", validatorID)
 	return ""
 }
@@ -114,7 +114,7 @@ func (d *SimplePeerDiscovery) GetPeerRPCEndpoint(host string) string {
 	if host == "" {
 		return ""
 	}
-	
+
 	// Use the standard Tendermint RPC port
 	endpoint := fmt.Sprintf("http://%s:16592", host)
 	d.log("Constructed RPC endpoint: %s", endpoint)

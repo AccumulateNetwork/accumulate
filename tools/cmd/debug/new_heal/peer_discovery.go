@@ -116,12 +116,12 @@ func (p *PeerDiscovery) GetPeerRPCEndpoint(host string) string {
 func (p *PeerDiscovery) LookupValidatorHost(validatorID string) (string, bool) {
 	// Known validator hosts
 	validatorHostMap := map[string]string{
-		"defidevs.acme":  "65.108.73.121",
-		"lunanova.acme":  "65.108.4.175",
-		"tfa.acme":       "65.108.201.154",
-		"factoshi.acme":  "135.181.114.121",
+		"defidevs.acme":    "65.108.73.121",
+		"lunanova.acme":    "65.108.4.175",
+		"tfa.acme":         "65.108.201.154",
+		"factoshi.acme":    "135.181.114.121",
 		"compumatrix.acme": "65.21.231.58",
-		"ertai.acme":     "65.108.201.154",
+		"ertai.acme":       "65.108.201.154",
 	}
 
 	host, ok := validatorHostMap[validatorID]

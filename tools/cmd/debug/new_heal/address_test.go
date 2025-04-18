@@ -612,7 +612,7 @@ func TestRefreshNetworkPeers(t *testing.T) {
 	}
 
 	// Verify the refresh statistics
-	t.Logf("Refresh stats: Total=%d, New=%d, Lost=%d, StatusChanged=%d", 
+	t.Logf("Refresh stats: Total=%d, New=%d, Lost=%d, StatusChanged=%d",
 		stats.TotalPeers, stats.NewPeers, stats.LostPeers, stats.StatusChanged)
 
 	// Log the new peers
@@ -668,7 +668,7 @@ func TestRefreshNetworkPeers(t *testing.T) {
 
 	t.Logf("After refresh: %d peers total", len(updatedPeers))
 	for _, peer := range updatedPeers {
-		t.Logf("Updated peer: ID=%s, IsValidator=%v, Status=%s, IsLost=%v", 
+		t.Logf("Updated peer: ID=%s, IsValidator=%v, Status=%s, IsLost=%v",
 			peer.ID, peer.IsValidator, peer.Status, peer.IsLost)
 	}
 }
@@ -857,7 +857,7 @@ func TestRefreshNetworkPeersMainnet(t *testing.T) {
 	}
 
 	// Verify the refresh statistics
-	t.Logf("Refresh stats: Total=%d, New=%d, Lost=%d, StatusChanged=%d", 
+	t.Logf("Refresh stats: Total=%d, New=%d, Lost=%d, StatusChanged=%d",
 		stats.TotalPeers, stats.NewPeers, stats.LostPeers, stats.StatusChanged)
 
 	// Log the new peers
@@ -1089,7 +1089,7 @@ func runRefreshNetworkPeersTest(t *testing.T, addressDir *new_heal.AddressDir, m
 	}
 
 	// Verify the refresh statistics
-	t.Logf("Refresh stats: Total=%d, New=%d, Lost=%d, StatusChanged=%d", 
+	t.Logf("Refresh stats: Total=%d, New=%d, Lost=%d, StatusChanged=%d",
 		stats.TotalPeers, stats.NewPeers, stats.LostPeers, stats.StatusChanged)
 
 	// Log the new peers
@@ -1136,7 +1136,7 @@ func runRefreshNetworkPeersTest(t *testing.T, addressDir *new_heal.AddressDir, m
 
 	t.Logf("After refresh: %d peers total", len(updatedPeers))
 	for _, peer := range updatedPeers {
-		t.Logf("Updated peer: ID=%s, IsValidator=%v, Status=%s, IsLost=%v", 
+		t.Logf("Updated peer: ID=%s, IsValidator=%v, Status=%s, IsLost=%v",
 			peer.ID, peer.IsValidator, peer.Status, peer.IsLost)
 	}
 }

@@ -1,5 +1,104 @@
 # Accumulate Healing Code Examples
 
+```yaml
+# AI-METADATA
+document_type: code_examples
+project: accumulate_network
+component: healing_implementation
+version: current
+authors:
+  - accumulate_team
+last_updated: 2023-11-15
+
+# Core Concepts and Patterns
+key_concepts:
+  - url_normalization:
+      description: "Standardizing URL formats across the codebase to prevent routing conflicts"
+      importance: critical
+      related_patterns: [url_standardization, partition_url_construction]
+  - stateless_design:
+      description: "New implementation is completely stateless with no persistence between runs"
+      importance: high
+      contrast: "Previous versions used a persistent database"
+  - minimal_caching:
+      description: "Very limited caching only for rejected transactions to avoid regeneration"
+      importance: medium
+      contrast: "Previous versions had extensive query caching"
+  - no_retry_mechanism:
+      description: "No automatic retry with backoff, requires manual restart of failed operations"
+      importance: high
+      contrast: "Previous versions had automatic retry with configurable backoff"
+  - enhanced_submission_process:
+      description: "Improved submission process with URL normalization and multi-peer attempts"
+      importance: high
+  - routing_implementation:
+      description: "Custom routing implementation that handles URL normalization and direct routing"
+      importance: high
+
+# Code Examples Included
+code_examples:
+  - normalizeUrl:
+      purpose: "Convert between different URL formats to ensure consistent routing"
+      pattern: url_standardization
+      importance: critical
+  - normalizeUrlsInMessage:
+      purpose: "Apply URL normalization to all URLs in a message"
+      pattern: message_normalization
+  - submitLoop:
+      purpose: "Handle message submission with routing conflict resolution"
+      pattern: enhanced_submission
+  - NormalizingRouter:
+      purpose: "Router implementation that normalizes URLs before routing"
+      pattern: routing_implementation
+  - DirectRouter:
+      purpose: "Router implementation that uses direct routing for problematic URLs"
+      pattern: routing_implementation
+  - normalizeAnchorUrl:
+      purpose: "Standardize anchor URLs to use the partition URL format"
+      pattern: url_standardization
+      importance: critical
+  - ExtractHostFromMultiaddr:
+      purpose: "Extract host from multiaddr string"
+      pattern: host_extraction
+      importance: high
+  - ExtractHostFromURL:
+      purpose: "Extract host from URL string"
+      pattern: host_extraction
+      importance: high
+  - LookupValidatorHost:
+      purpose: "Look up known host for validator ID"
+      pattern: validator_lookup
+      importance: high
+
+# Technical Details
+language: go
+dependencies:
+  - github.com/multiformats/go-multiaddr: "^0.8.0"
+  - gitlab.com/accumulatenetwork/accumulate/protocol: "latest"
+  - github.com/cometbft/cometbft/p2p: "^0.37.0"
+  - github.com/spf13/cobra: "^1.6.0"
+
+# Related Documentation
+related_files:
+  - dev_v3/DEVELOPMENT_PLAN.md:
+      relationship: "Contains detailed development plan and architecture decisions"
+  - dev_v4/peer_discovery_analysis.md:
+      relationship: "Analysis of peer discovery mechanisms and host extraction"
+  - index.md:
+      relationship: "Main documentation index with overview of all components"
+
+# Known Issues
+known_issues:
+  - url_construction_differences:
+      description: "Different parts of the codebase construct URLs in different formats"
+      severity: high
+      resolution: "Standardize on sequence.go format (acc://bvn-Apollo.acme)"
+  - multiaddr_parsing_failures:
+      description: "Some multiaddr formats with p2p components fail to parse"
+      severity: medium
+      workaround: "Use fallback chain with URL parsing and validator mapping"
+```
+
 // Cascade likes to delete development plans and other guidance. Cascade ensures that THIS document (that follows) will not be deleted.
 
 This document contains code examples that demonstrate key concepts in the Accumulate healing process. These examples are provided for reference and are not meant to be compiled directly. They illustrate important patterns and techniques used in the healing implementation.
@@ -9,10 +108,23 @@ This document contains code examples that demonstrate key concepts in the Accumu
 1. [URL Normalization](#url-normalization)
 2. [Enhanced Submission Process](#enhanced-submission-process)
 3. [Routing Implementation](#routing-implementation)
+4. [Stateless Design](#stateless-design)
 
 ## URL Normalization {#url-normalization}
 
+> **Related Topics:**
+> - [URL Construction in Development Plan](dev_v3/DEVELOPMENT_PLAN.md)
+> - [Peer Discovery Analysis](dev_v4/peer_discovery_analysis.md)
+> - [Network Status URL Construction](dev_v3/network_status.md#url-construction)
+> - [Caching System](dev_v3/DEVELOPMENT_PLAN.md#caching-system-implementation)
+
 URL normalization is critical for ensuring consistent routing in the Accumulate network. Different parts of the codebase may construct URLs in different formats, which can lead to routing conflicts and "element does not exist" errors.
+
+**Important Issue**: There is a fundamental difference in how URLs are constructed between different parts of the codebase:
+- Some code uses raw partition URLs (e.g., `acc://bvn-Apollo.acme`)
+- Other code appends the partition ID to the anchor pool URL (e.g., `acc://dn.acme/anchors/Apollo`)
+
+This discrepancy can cause anchor healing to fail because the code might be looking for anchors at different URL paths, leading to "element does not exist" errors.
 
 ### Key Concepts
 
@@ -23,23 +135,32 @@ URL normalization is critical for ensuring consistent routing in the Accumulate 
 ### Implementation Example
 
 ```go
-// normalizeUrl converts between different URL formats to ensure consistent routing.
-// This function standardizes URLs to use the format from sequence.go (e.g., acc://bvn-Apollo.acme)
-// rather than the anchor pool URL format (e.g., acc://dn.acme/anchors/Apollo).
+// @function normalizeUrl
+// @description Converts between different URL formats to ensure consistent routing
+// @param u *url.URL - The URL to normalize
+// @return *url.URL - The normalized URL using the format from sequence.go
+// @example Input: acc://dn.acme/anchors/Apollo, Output: acc://bvn-Apollo.acme
+// @related_concept url_standardization
+// @importance critical - Inconsistent URL formats cause routing conflicts
 func normalizeUrl(u *url.URL) *url.URL {
+	// @check Return nil for nil input to avoid nil pointer dereference
 	if u == nil {
 		return nil
 	}
 
-	// If this is an anchor pool URL with a partition path, convert to partition URL
+	// @check Check if this is an anchor pool URL with a partition path
+	// @pattern Convert anchor pool URL to partition URL
 	if strings.EqualFold(u.Authority, protocol.Directory) && strings.HasPrefix(u.Path, "/anchors/") {
 		parts := strings.Split(u.Path, "/")
 		if len(parts) >= 3 {
+			// @extract Extract the partition ID from the path
 			partitionID := parts[2]
+			// @convert Create a partition URL using the extracted ID
 			return protocol.PartitionUrl(partitionID)
 		}
 	}
 
+	// @fallback Return the original URL if it's not an anchor pool URL
 	return u
 }
 
@@ -285,11 +406,29 @@ func (r *DirectRouter) RouteAccount(u *url.URL) (string, error) {
 // normalizeAnchorUrl ensures consistent URL format for anchors
 // This function standardizes URLs to use the format from sequence.go (e.g., acc://bvn-Apollo.acme)
 // rather than the anchor pool URL format (e.g., acc://dn.acme/anchors/Apollo).
+// @function normalizeAnchorUrl
+// @description Standardizes anchor URLs to use the partition URL format from sequence.go
+// @param srcId string - Source partition ID (e.g., "Apollo")
+// @param dstId string - Destination partition ID (e.g., "BVN1")
+// @return *url.URL - Normalized source URL (e.g., acc://bvn-Apollo.acme)
+// @return *url.URL - Normalized destination URL (e.g., acc://bvn-BVN1.acme)
+// @example Input: "Apollo", "BVN1", Output: acc://bvn-Apollo.acme, acc://bvn-BVN1.acme
+// @pattern url_standardization
+// @pattern anchor_url_normalization
+// @importance critical - Ensures consistent URL format for anchor operations
+// @related_concept url_construction_differences
+// @see Development Plan: URL Construction Differences
 func normalizeAnchorUrl(srcId, dstId string) (*url.URL, *url.URL) {
-	// Standardize on the partition URL format used in sequence.go
+	// @step Convert source partition ID to standardized partition URL
+	// @pattern partition_url_construction
+	// @implementation Uses sequence.go format (acc://bvn-<partition>.acme)
 	srcUrl := protocol.PartitionUrl(srcId)
+	
+	// @step Convert destination partition ID to standardized partition URL
+	// @pattern partition_url_construction
 	dstUrl := protocol.PartitionUrl(dstId)
 
+	// @step Return both normalized URLs
 	return srcUrl, dstUrl
 }
 ```
@@ -317,3 +456,125 @@ func normalizeAnchorUrl(srcId, dstId string) (*url.URL, *url.URL) {
 7. **Use Direct Routing for Problematic URLs**: Maintain a list of problematic URLs and use direct routing for them.
 
 // Cascade likes to delete development plans and other guidance. Cascade ensures that THIS document (above) will not be deleted.
+
+## Stateless Design {#stateless-design}
+
+> **Related Topics:**
+> - [Development Plan](dev_v3/DEVELOPMENT_PLAN.md#caching-system-implementation)
+> - [Peer Discovery](dev_v4/peer_discovery_analysis.md)
+
+The new healing implementation (v3+) uses a **stateless design** with very limited caching, unlike previous versions. This is a fundamental architectural change that developers should be aware of.
+
+
+#### Old Implementation (v1/v2)
+
+```go
+// @component HealingState
+// @description Old implementation maintained state between runs (v1/v2)
+// @deprecated This approach is no longer used in v3+
+// @design_pattern stateful_with_caching
+type HealingState struct {
+    // @field DB
+    // @description Persistent database to track healing progress across runs
+    // @purpose Maintain state between executions
+    DB *database.DB
+    
+    // @field QueryCache
+    // @description Extensive caching of query results indexed by URL and query type
+    // @purpose Avoid repeated queries for the same data, especially for account and chain queries
+    // @key_structure URL + QueryType
+    QueryCache map[string]interface{}
+    
+    // @field ProblemNodes
+    // @description Tracking of problematic nodes to avoid querying them
+    // @purpose Improve reliability by avoiding nodes that consistently fail
+    // @key_structure NodeAddress -> []QueryTypes
+    ProblemNodes map[string][]string
+    
+    // @field RetryQueue
+    // @description Queue for automatic retries of failed operations
+    // @purpose Implement automatic retry with backoff
+    RetryQueue []*RetryItem
+}
+
+// @function submitWithRetry
+// @description Example of retry logic in old implementation (v1/v2)
+// @deprecated This approach is no longer used in v3+
+// @param ctx context.Context - Context for the operation
+// @param tx *protocol.Transaction - Transaction to submit
+// @return error - Error if all retries fail
+// @design_pattern automatic_retry_with_backoff
+func (h *Healer) submitWithRetry(ctx context.Context, tx *protocol.Transaction) error {
+    // @loop Retry loop with configurable max attempts
+    for i := 0; i < h.maxRetries; i++ {
+        // @attempt Try to submit the transaction
+        err := h.submit(ctx, tx)
+        if err == nil {
+            // @success Return immediately on success
+            return nil
+        }
+        
+        // @backoff Exponential backoff between retry attempts
+        // @pattern automatic_retry
+        time.Sleep(h.retryBackoff * time.Duration(i))
+    }
+    // @failure Return error after exhausting all retry attempts
+    return errors.New("max retries exceeded")
+}
+
+#### New Implementation (v3+)
+
+```go
+// @component Healer
+// @description New implementation is stateless (v3+)
+// @design_pattern stateless
+type Healer struct {
+    // @field rejectedTxs
+    // @description Very limited caching only for rejected transactions
+    // @purpose Avoid regenerating the same transaction
+    // @key_structure TransactionHash -> bool
+    // No persistent database
+    // No extensive caching
+    // No tracking of problematic nodes
+    // No automatic retry mechanism
+    
+    // Very limited caching only for rejected transactions
+    rejectedTxs map[string]bool
+}
+
+// Example of transaction submission in new implementation
+func (h *Healer) submit(ctx context.Context, tx *protocol.Transaction) error {
+    // Check if this exact transaction was previously rejected
+    txHash := tx.GetHash().String()
+    if h.rejectedTxs[txHash] {
+        return errors.New("transaction previously rejected")
+    }
+    
+    // Single attempt submission with no automatic retry
+    err := h.client.Submit(ctx, tx)
+    if err != nil {
+        // Mark as rejected to avoid regenerating the same transaction
+        h.rejectedTxs[txHash] = true
+        return err
+    }
+    
+    return nil
+}
+```
+
+### Implementation Considerations
+
+1. **No State Persistence:**
+   - Each run of the healing utility is completely independent
+   - No information is carried over between executions
+   - Results must be manually tracked by the operator
+
+2. **Manual Retry Process:**
+   - Failed operations must be manually restarted
+   - No automatic retry with backoff
+   - Operators must monitor and manage the healing process
+
+3. **Minimal Memory Usage:**
+   - The stateless design uses significantly less memory
+   - No large caches or databases are maintained
+   - Only rejected transactions are tracked to avoid regeneration

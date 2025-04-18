@@ -40,7 +40,7 @@ func TestComparePeerDiscovery(t *testing.T) {
 
 	// 1. Test addresses from the original code
 	logger.Printf("\n===== TESTING ORIGINAL CODE ADDRESSES =====")
-	
+
 	// These are the multiaddrs that would be processed by the original code
 	originalAddrs := []string{
 		"/ip4/65.108.73.121/tcp/16593/p2p/12D3KooWBSEYCpvBcQUL8KPSXUQrQEAhQNFCT7fKZ44WarJkQskY",
@@ -56,17 +56,17 @@ func TestComparePeerDiscovery(t *testing.T) {
 	// 2. Extract hosts using original code logic
 	logger.Printf("Extracting hosts using original code logic...")
 	originalResults := make(map[string]string)
-	
+
 	for i, addr := range originalAddrs {
 		logger.Printf("Original address %d: %s", i+1, addr)
-		
+
 		// Parse the multiaddr
 		maddr, err := multiaddr.NewMultiaddr(addr)
 		if err != nil {
 			logger.Printf("  Error parsing multiaddr: %v", err)
 			continue
 		}
-		
+
 		// Extract host using the original code logic
 		var host string
 		multiaddr.ForEach(maddr, func(c multiaddr.Component) bool {
@@ -81,7 +81,7 @@ func TestComparePeerDiscovery(t *testing.T) {
 			}
 			return true
 		})
-		
+
 		if host != "" {
 			endpoint := fmt.Sprintf("http://%s:16592", host)
 			originalResults[addr] = endpoint
@@ -90,23 +90,23 @@ func TestComparePeerDiscovery(t *testing.T) {
 			logger.Printf("  Original code failed to extract host")
 		}
 	}
-	
+
 	// 3. Extract hosts using our simplified utility
 	logger.Printf("\n===== TESTING SIMPLIFIED UTILITY =====")
 	logger.Printf("Extracting hosts using simplified utility...")
-	
+
 	discovery := NewSimplePeerDiscovery(logger)
 	simplifiedResults := make(map[string]string)
-	
+
 	for i, addr := range originalAddrs {
 		logger.Printf("Testing address %d: %s", i+1, addr)
-		
+
 		host, err := discovery.ExtractHostFromMultiaddr(addr)
 		if err != nil {
 			logger.Printf("  Simplified utility error: %v", err)
 			continue
 		}
-		
+
 		if host != "" {
 			endpoint := discovery.GetPeerRPCEndpoint(host)
 			simplifiedResults[addr] = endpoint
@@ -115,10 +115,10 @@ func TestComparePeerDiscovery(t *testing.T) {
 			logger.Printf("  Simplified utility failed to extract host")
 		}
 	}
-	
+
 	// 4. Compare results
 	logger.Printf("\n===== COMPARING RESULTS =====")
-	
+
 	// Sort addresses for consistent output
 	var addresses []string
 	for addr := range originalResults {
@@ -130,16 +130,16 @@ func TestComparePeerDiscovery(t *testing.T) {
 		}
 	}
 	sort.Strings(addresses)
-	
+
 	matchCount := 0
 	mismatchCount := 0
 	onlyInOriginal := 0
 	onlyInSimplified := 0
-	
+
 	for _, addr := range addresses {
 		originalEndpoint, inOriginal := originalResults[addr]
 		simplifiedEndpoint, inSimplified := simplifiedResults[addr]
-		
+
 		switch {
 		case inOriginal && inSimplified:
 			if originalEndpoint == simplifiedEndpoint {
@@ -162,7 +162,7 @@ func TestComparePeerDiscovery(t *testing.T) {
 			logger.Printf("  Endpoint: %s", simplifiedEndpoint)
 		}
 	}
-	
+
 	// 5. Print summary
 	totalAddresses := len(addresses)
 	logger.Printf("\n===== SUMMARY =====")
@@ -171,13 +171,13 @@ func TestComparePeerDiscovery(t *testing.T) {
 	logger.Printf("Mismatches: %d (%.1f%%)", mismatchCount, float64(mismatchCount)/float64(totalAddresses)*100)
 	logger.Printf("Only in original: %d (%.1f%%)", onlyInOriginal, float64(onlyInOriginal)/float64(totalAddresses)*100)
 	logger.Printf("Only in simplified: %d (%.1f%%)", onlyInSimplified, float64(onlyInSimplified)/float64(totalAddresses)*100)
-	
+
 	// 6. Verify success
 	successRate := float64(matchCount) / float64(matchCount+mismatchCount) * 100
 	logger.Printf("Success rate: %.1f%%", successRate)
-	
+
 	// Test passes if we have at least 80% match rate
 	require.GreaterOrEqual(t, successRate, 80.0, "Simplified utility should match original code at least 80% of the time")
-	
+
 	fmt.Printf("\nComparison test completed. See log file for details: %s\n", logFilePath)
 }

@@ -1641,9 +1641,11 @@ func (a *AddressDir) getKnownAddressesForValidator(validatorID, partitionID stri
 		// Convert to lowercase for case-insensitive matching
 		partID := strings.ToLower(partitionID)
 		if ip, ok := partitionAddresses[partID]; ok {
-			// Create a proper multiaddress format
-			maddr := fmt.Sprintf("/ip4/%s/tcp/16593/p2p/%s", ip, validatorID)
-			addresses = append(addresses, maddr)
+			// Create a proper multiaddress format if validatorID is provided
+			if validatorID != "" {
+				maddr := fmt.Sprintf("/ip4/%s/tcp/16593/p2p/%s", ip, validatorID)
+				addresses = append(addresses, maddr)
+			}
 			// Also add the IP directly as a fallback
 			addresses = append(addresses, ip)
 		}

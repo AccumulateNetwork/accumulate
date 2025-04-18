@@ -11,7 +11,7 @@ package new_heal
 func (a *AddressDir) extractHost(addr string) (string, string) {
 	// Update statistics
 	a.mu.Lock()
-	a.discoveryStats.TotalAttempts++
+	a.DiscoveryStats.TotalAttempts++
 	a.mu.Unlock()
 
 	// Try all extraction methods
@@ -21,17 +21,17 @@ func (a *AddressDir) extractHost(addr string) (string, string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	a.discoveryStats.MethodStats[method]++
+	a.DiscoveryStats.MethodStats[method]++
 
 	switch method {
 	case "multiaddr":
-		a.discoveryStats.MultiaddrSuccess++
+		a.DiscoveryStats.MultiaddrSuccess++
 	case "url":
-		a.discoveryStats.URLSuccess++
+		a.DiscoveryStats.URLSuccess++
 	case "validator_map":
-		a.discoveryStats.ValidatorMapSuccess++
+		a.DiscoveryStats.ValidatorMapSuccess++
 	case "failed":
-		a.discoveryStats.Failures++
+		a.DiscoveryStats.Failures++
 	}
 
 	return host, method

@@ -84,21 +84,21 @@ func TestIntegrationWithAddressDir(t *testing.T) {
 
 	// Process each peer
 	logger.Printf("\n===== PROCESSING PEERS =====")
-	
+
 	successCount := 0
 	totalCount := len(testPeers)
-	
+
 	for i, peer := range testPeers {
 		logger.Printf("Processing peer %d: %s", i+1, peer.ID)
-		
+
 		// Extract host and construct RPC endpoint
 		var host string
 		var method string
-		
+
 		// Try to extract a host from one of the addresses
 		for _, addr := range peer.Addresses {
 			logger.Printf("Attempting to extract host from address: %s", addr)
-			
+
 			// Use our peer discovery utility
 			extractedHost, extractionMethod := peerDiscovery.ExtractHost(addr)
 			if extractedHost != "" {
@@ -107,24 +107,24 @@ func TestIntegrationWithAddressDir(t *testing.T) {
 				break
 			}
 		}
-		
+
 		// If no host was found and this is a validator, try the validator ID
 		if host == "" && peer.IsValidator && peer.ValidatorID != "" {
 			logger.Printf("Attempting to extract host from validator ID: %s", peer.ValidatorID)
-			
+
 			extractedHost, ok := peerDiscovery.LookupValidatorHost(peer.ValidatorID)
 			if ok {
 				host = extractedHost
 				method = "validator_id_lookup"
 			}
 		}
-		
+
 		if host != "" {
 			successCount++
 			endpoint := peerDiscovery.GetPeerRPCEndpoint(host)
 			logger.Printf("✅ SUCCESS: Extracted host %s using method %s", host, method)
 			logger.Printf("Constructed endpoint: %s", endpoint)
-			
+
 			// Update the peer with the extracted information
 			testPeers[i].Host = host
 			testPeers[i].RPCEndpoint = endpoint
@@ -132,21 +132,21 @@ func TestIntegrationWithAddressDir(t *testing.T) {
 			logger.Printf("❌ FAILED: Could not extract host for peer %s", peer.ID)
 		}
 	}
-	
+
 	// Log statistics
 	logger.Printf("\n===== INTEGRATION TEST STATISTICS =====")
 	logger.Printf("Total peers processed: %d", totalCount)
-	logger.Printf("Successful extractions: %d (%.1f%%)", 
+	logger.Printf("Successful extractions: %d (%.1f%%)",
 		successCount, float64(successCount)/float64(totalCount)*100)
-	
+
 	// Verify that we have a reasonable success rate
 	successRate := float64(successCount) / float64(totalCount) * 100
 	assert.GreaterOrEqual(t, successRate, 75.0, "Should have at least 75%% success rate")
-	
+
 	// Verify that all peers have a host and RPC endpoint
 	for _, peer := range testPeers {
 		logger.Printf("Peer %s: Host=%s, RPCEndpoint=%s", peer.ID, peer.Host, peer.RPCEndpoint)
 	}
-	
+
 	logger.Printf("\n======= INTEGRATION TEST COMPLETED =======")
 }

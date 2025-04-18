@@ -141,13 +141,13 @@ func (ps *PeerState) UpdatePeerStates(ctx context.Context, client api.NetworkSer
 			fmt.Printf("Peer %s not found in AddressDir\n", peerState.ID)
 			continue // Skip this peer and continue with others
 		}
-		
+
 		endpoint := ps.addressDir.GetPeerRPCEndpoint(networkPeer)
 		if endpoint == "" {
 			fmt.Printf("Could not get RPC endpoint for peer %s\n", peerState.ID)
 			continue // Skip this peer and continue with others
 		}
-		
+
 		// Extract the host from the endpoint (remove http:// and port)
 		host := strings.TrimPrefix(endpoint, "http://")
 		if idx := strings.LastIndex(host, ":"); idx >= 0 {
@@ -266,7 +266,7 @@ func (ps *PeerState) queryNodeHeights(ctx context.Context, peerState *PeerStateI
 		} else {
 			// This is a BVN node
 			peerState.BVNHeight = height
-			fmt.Printf("Updated BVN height for peer %s (partition %s): %d\n", 
+			fmt.Printf("Updated BVN height for peer %s (partition %s): %d\n",
 				peerState.ID, part, height)
 		}
 

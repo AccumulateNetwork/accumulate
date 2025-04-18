@@ -1,5 +1,36 @@
 # Peer Discovery Testing Guide
 
+```yaml
+# AI-METADATA
+document_type: testing_guide
+project: accumulate_network
+component: peer_discovery
+version: v4
+test_types:
+  - unit_tests
+  - integration_tests
+  - performance_tests
+key_test_functions:
+  - TestExtractHostFromMultiaddr
+  - TestExtractHostFromURL
+  - TestLookupValidatorHost
+  - BenchmarkHostExtraction
+dependencies:
+  - github.com/stretchr/testify/assert
+  - github.com/stretchr/testify/require
+  - github.com/multiformats/go-multiaddr
+related_files:
+  - peer_discovery_analysis.md
+  - ../../code_examples.md#url-normalization
+  - ../../dev_v3/network_status.md
+```
+
+> **Related Topics:**
+> - [Peer Discovery Analysis](peer_discovery_analysis.md)
+> - [URL Handling and Normalization](../../code_examples.md#url-normalization)
+> - [Multiaddress Handling](../../dev_v3/network_status.md#multiaddress-handling)
+> - [URL Construction Standardization](../../dev_v3/DEVELOPMENT_PLAN.md#url-construction-standardization)
+
 This document provides comprehensive guidance on testing the peer discovery utility to ensure it correctly extracts hosts from various address formats and constructs valid RPC endpoints.
 
 ## Test Setup

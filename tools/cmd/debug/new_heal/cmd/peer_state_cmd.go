@@ -4,7 +4,7 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package main
+package cmd
 
 import (
 	"context"
@@ -96,6 +96,7 @@ func runPeerStateTest(cmd *cobra.Command, args []string) error {
 		endpoint := addressDir.GetPeerRPCEndpoint(peer)
 		fmt.Printf("  RPC Endpoint: %s\n", endpoint)
 		fmt.Println()
+	}
 
 	// Create a new PeerState
 	peerState := new_heal.NewPeerState(addressDir)

@@ -9,11 +9,11 @@ package memdb
 import (
 	"testing"
 
+	"errors"
+	"fmt"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
-	"fmt"
-	"errors"
 )
 
 func TestMemDB_BasicOperations(t *testing.T) {
@@ -441,17 +441,17 @@ func TestMemDB_NestedTransactions(t *testing.T) {
 	// Test discard of child
 	parent = db.Begin(nil, true)
 	child = parent.Begin(nil, true)
-	
+
 	err = child.Put(key1, []byte("discarded-value"))
 	require.NoError(t, err)
-	
+
 	child.Discard()
-	
+
 	// Try to use discarded child
 	err = child.Put(key1, []byte("after-discard"))
 	require.Error(t, err)
 	require.Equal(t, ErrBatchClosed, err)
-	
+
 	// Parent should be unaffected by discarded child
 	val, err = parent.Get(key1)
 	require.NoError(t, err)
@@ -536,68 +536,68 @@ func TestMemDB_ErrorHandling(t *testing.T) {
 
 	// Verify operations on a closed database fail with ErrBatchClosed
 	db.Close()
-	
+
 	batch := db.Begin(nil, true)
 	_, err := batch.Get(record.NewKey("test"))
 	require.Error(t, err)
 	require.Equal(t, ErrBatchClosed, err)
-	
+
 	err = batch.Put(record.NewKey("test"), []byte("value"))
 	require.Error(t, err)
 	require.Equal(t, ErrBatchClosed, err)
-	
+
 	err = batch.Delete(record.NewKey("test"))
 	require.Error(t, err)
 	require.Equal(t, ErrBatchClosed, err)
-	
+
 	// Verify operations on a closed batch fail
 	db = New()
 	defer db.Close()
-	
+
 	batch = db.Begin(nil, true)
 	batch.Discard()
-	
+
 	// Verify operations on a closed batch fail
 	_, err = batch.Get(record.NewKey("test"))
 	require.Error(t, err)
-	
+
 	err = batch.Put(record.NewKey("test"), []byte("value"))
 	require.Error(t, err)
-	
+
 	err = batch.Delete(record.NewKey("test"))
 	require.Error(t, err)
-	
+
 	// Verify nested batch error propagation
 	db = New()
 	parent := db.Begin(nil, true)
 	child := parent.Begin(nil, true)
-	
+
 	// Close parent, which should affect child operations when committing
 	parent.Discard()
-	
+
 	// Child operations may still work until commit time
 	err = child.Put(record.NewKey("test"), []byte("value"))
 	// The current implementation doesn't check parent status during operations
 	// so this might not return an error
-	
+
 	// Verify child operations after parent is discarded
 	// Note: We don't try to commit the child after parent is discarded
 	// because the current implementation would panic due to nil map access
 	child.Discard() // Just discard the child instead of committing
-	
+
 	// Test operations on a read-only batch
 	db = New()
 	batch = db.Begin(nil, false)
-	
+
 	// Verify write operations on a read-only batch fail
 	err = batch.Put(record.NewKey("test"), []byte("value"))
 	require.Error(t, err)
 	require.Equal(t, ErrReadOnlyBatch, err)
-	
+
 	err = batch.Delete(record.NewKey("test"))
 	require.Error(t, err)
 	require.Equal(t, ErrReadOnlyBatch, err)
-	
+
 	// Verify nested batch error propagation
 }
 
@@ -612,7 +612,7 @@ func TestMemDB_DeleteOperations(t *testing.T) {
 	// Add some test data
 	keys := make([]*record.Key, 10)
 	values := make([][]byte, 10)
-	
+
 	// Add some regular keys
 	for i := 0; i < 5; i++ {
 		keys[i] = record.NewKey(fmt.Sprintf("test%d", i))
@@ -620,7 +620,7 @@ func TestMemDB_DeleteOperations(t *testing.T) {
 		err := batch.Put(keys[i], values[i])
 		require.NoError(t, err)
 	}
-	
+
 	// Add some prefixed keys
 	prefix := record.NewKey("prefix")
 	prefixBatch := batch.Begin(prefix, true)
@@ -633,11 +633,11 @@ func TestMemDB_DeleteOperations(t *testing.T) {
 	}
 	err := prefixBatch.Commit()
 	require.NoError(t, err)
-	
+
 	// Commit the batch to make sure all data is in the database
 	err = batch.Commit()
 	require.NoError(t, err)
-	
+
 	// Verify all keys exist
 	readBatch := db.Begin(nil, false)
 	for i := 0; i < 5; i++ {
@@ -645,41 +645,41 @@ func TestMemDB_DeleteOperations(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, values[i], val)
 	}
-	
+
 	prefixReadBatch := db.Begin(prefix, false)
 	for i := 5; i < 10; i++ {
 		val, err := prefixReadBatch.Get(keys[i])
 		require.NoError(t, err)
 		require.Equal(t, values[i], val)
 	}
-	
+
 	// Test deleting a single key
 	writeBatch := db.Begin(nil, true)
 	err = writeBatch.Delete(keys[0])
 	require.NoError(t, err)
 	err = writeBatch.Commit()
 	require.NoError(t, err)
-	
+
 	// Verify the key is deleted
 	readBatch = db.Begin(nil, false)
 	_, err = readBatch.Get(keys[0])
 	require.Error(t, err)
 	require.IsType(t, &database.NotFoundError{}, err)
-	
+
 	// Verify other keys still exist
 	for i := 1; i < 5; i++ {
 		val, err := readBatch.Get(keys[i])
 		require.NoError(t, err)
 		require.Equal(t, values[i], val)
 	}
-	
+
 	// Test deleting a key that doesn't exist (should not error)
 	writeBatch = db.Begin(nil, true)
 	err = writeBatch.Delete(record.NewKey("nonexistent"))
 	require.NoError(t, err)
 	err = writeBatch.Commit()
 	require.NoError(t, err)
-	
+
 	// Test deleting multiple keys in a batch
 	writeBatch = db.Begin(nil, true)
 	for i := 1; i < 3; i++ {
@@ -688,7 +688,7 @@ func TestMemDB_DeleteOperations(t *testing.T) {
 	}
 	err = writeBatch.Commit()
 	require.NoError(t, err)
-	
+
 	// Verify the keys are deleted
 	readBatch = db.Begin(nil, false)
 	for i := 0; i < 3; i++ {
@@ -696,14 +696,14 @@ func TestMemDB_DeleteOperations(t *testing.T) {
 		require.Error(t, err)
 		require.IsType(t, &database.NotFoundError{}, err)
 	}
-	
+
 	// Verify remaining keys still exist
 	for i := 3; i < 5; i++ {
 		val, err := readBatch.Get(keys[i])
 		require.NoError(t, err)
 		require.Equal(t, values[i], val)
 	}
-	
+
 	// Test deleting with prefix
 	prefixWriteBatch := db.Begin(prefix, true)
 	for i := 5; i < 7; i++ {
@@ -712,7 +712,7 @@ func TestMemDB_DeleteOperations(t *testing.T) {
 	}
 	err = prefixWriteBatch.Commit()
 	require.NoError(t, err)
-	
+
 	// Verify prefixed keys are deleted
 	prefixReadBatch = db.Begin(prefix, false)
 	for i := 5; i < 7; i++ {
@@ -720,64 +720,64 @@ func TestMemDB_DeleteOperations(t *testing.T) {
 		require.Error(t, err)
 		require.IsType(t, &database.NotFoundError{}, err)
 	}
-	
+
 	// Verify remaining prefixed keys still exist
 	for i := 7; i < 10; i++ {
 		val, err := prefixReadBatch.Get(keys[i])
 		require.NoError(t, err)
 		require.Equal(t, values[i], val)
 	}
-	
+
 	// Test delete in nested transaction
 	parent := db.Begin(nil, true)
 	child := parent.Begin(nil, true)
-	
+
 	// Delete in child
 	err = child.Delete(keys[3])
 	require.NoError(t, err)
-	
+
 	// Verify parent doesn't see the deletion yet
 	val, err := parent.Get(keys[3])
 	require.NoError(t, err)
 	require.Equal(t, values[3], val)
-	
+
 	// Commit child to parent
 	err = child.Commit()
 	require.NoError(t, err)
-	
+
 	// Verify parent now sees the deletion
 	_, err = parent.Get(keys[3])
 	require.Error(t, err)
 	require.IsType(t, &database.NotFoundError{}, err)
-	
+
 	// But database doesn't see it yet
 	readBatch = db.Begin(nil, false)
 	val, err = readBatch.Get(keys[3])
 	require.NoError(t, err)
 	require.Equal(t, values[3], val)
-	
+
 	// Commit parent to database
 	err = parent.Commit()
 	require.NoError(t, err)
-	
+
 	// Now database should see the deletion
 	readBatch = db.Begin(nil, false)
 	_, err = readBatch.Get(keys[3])
 	require.Error(t, err)
 	require.IsType(t, &database.NotFoundError{}, err)
-	
+
 	// Test delete and put in same transaction
 	writeBatch = db.Begin(nil, true)
 	err = writeBatch.Delete(keys[4])
 	require.NoError(t, err)
-	
+
 	newValue := []byte("new-value")
 	err = writeBatch.Put(keys[4], newValue)
 	require.NoError(t, err)
-	
+
 	err = writeBatch.Commit()
 	require.NoError(t, err)
-	
+
 	// Verify the key has the new value
 	readBatch = db.Begin(nil, false)
 	val, err = readBatch.Get(keys[4])

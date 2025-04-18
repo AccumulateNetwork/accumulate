@@ -51,7 +51,7 @@ func analyzeURLFormat(urlStr string) string {
 	// Build description
 	var desc strings.Builder
 	desc.WriteString(fmt.Sprintf("Scheme: %s", scheme))
-	
+
 	if hasPort {
 		desc.WriteString(fmt.Sprintf(", Port: %s", port))
 	} else {
@@ -176,7 +176,7 @@ func TestSimplePeerDiscovery(t *testing.T) {
 
 	// Create a logger
 	logger := log.New(multiWriter, "[PeerDiscovery] ", log.LstdFlags)
-	
+
 	// Log the start of the test
 	logger.Printf("======= PEER DISCOVERY ANALYSIS STARTED =======")
 	logger.Printf("Test started at: %s", time.Now().Format(time.RFC3339))
@@ -204,12 +204,12 @@ func TestSimplePeerDiscovery(t *testing.T) {
 
 	logger.Printf("Analyzing %d multiaddr formats", len(multiaddrs))
 	fmt.Println("\n=== Testing Multiaddr Host Extraction ===")
-	
+
 	var successCount, failureCount int
 	for i, addr := range multiaddrs {
 		logger.Printf("\nTEST CASE %d: %s", i+1, addr)
 		logger.Printf("Format analysis: %s", analyzeMultiaddrFormat(addr))
-		
+
 		host, err := discovery.ExtractHostFromMultiaddr(addr)
 		if err != nil {
 			failureCount++
@@ -224,7 +224,7 @@ func TestSimplePeerDiscovery(t *testing.T) {
 			fmt.Printf("   RPC Endpoint: %s\n", endpoint)
 		}
 	}
-	
+
 	logger.Printf("\nMULTIADDR EXTRACTION SUMMARY:")
 	logger.Printf("Total tested: %d", len(multiaddrs))
 	logger.Printf("Successful extractions: %d (%.1f%%)", successCount, float64(successCount)/float64(len(multiaddrs))*100)
@@ -247,12 +247,12 @@ func TestSimplePeerDiscovery(t *testing.T) {
 
 	logger.Printf("Analyzing %d URL formats", len(urls))
 	fmt.Println("\n=== Testing URL Host Extraction ===")
-	
+
 	var urlSuccessCount, urlFailureCount int
 	for i, url := range urls {
 		logger.Printf("\nURL TEST CASE %d: %s", i+1, url)
 		logger.Printf("Format analysis: %s", analyzeURLFormat(url))
-		
+
 		host, err := discovery.ExtractHostFromURL(url)
 		if err != nil {
 			urlFailureCount++
@@ -267,7 +267,7 @@ func TestSimplePeerDiscovery(t *testing.T) {
 			fmt.Printf("   RPC Endpoint: %s\n", endpoint)
 		}
 	}
-	
+
 	logger.Printf("\nURL EXTRACTION SUMMARY:")
 	logger.Printf("Total tested: %d", len(urls))
 	logger.Printf("Successful extractions: %d (%.1f%%)", urlSuccessCount, float64(urlSuccessCount)/float64(len(urls))*100)
@@ -292,11 +292,11 @@ func TestSimplePeerDiscovery(t *testing.T) {
 
 	logger.Printf("Analyzing %d validator IDs", len(validators))
 	fmt.Println("\n=== Testing Known Validator Addresses ===")
-	
+
 	var validatorSuccessCount, validatorFailureCount int
 	for i, validator := range validators {
 		logger.Printf("\nVALIDATOR TEST CASE %d: %s", i+1, validator)
-		
+
 		// Try to get a known address for the validator
 		host := discovery.GetKnownAddressForValidator(validator)
 		if host == "" {
@@ -312,7 +312,7 @@ func TestSimplePeerDiscovery(t *testing.T) {
 			fmt.Printf("   RPC Endpoint: %s\n", endpoint)
 		}
 	}
-	
+
 	logger.Printf("\nVALIDATOR ADDRESS LOOKUP SUMMARY:")
 	logger.Printf("Total tested: %d", len(validators))
 	logger.Printf("Successful lookups: %d (%.1f%%)", validatorSuccessCount, float64(validatorSuccessCount)/float64(len(validators))*100)
@@ -326,14 +326,14 @@ func TestSimplePeerDiscovery(t *testing.T) {
 	// Compare with our current implementation
 	fmt.Println("\n=== Comparison with Current Implementation ===")
 	addrDir := NewAddressDir()
-	
+
 	var matchCount, mismatchCount int
 	logger.Printf("Comparing implementations for %d validators", len(validators))
-	
+
 	for i, validator := range validators {
 		if host := discovery.GetKnownAddressForValidator(validator); host != "" {
 			logger.Printf("\nCOMPARISON TEST CASE %d: %s", i+1, validator)
-			
+
 			// Create a NetworkPeer object for our current implementation
 			networkPeer := NetworkPeer{
 				ID:          "test-id",
@@ -341,15 +341,15 @@ func TestSimplePeerDiscovery(t *testing.T) {
 				PartitionID: "Apollo", // Assuming Apollo partition for testing
 				IsValidator: true,
 			}
-			
+
 			// Get RPC endpoints from both implementations
 			simplePeerEndpoint := discovery.GetPeerRPCEndpoint(host)
 			currentEndpoint := addrDir.GetPeerRPCEndpoint(networkPeer)
-			
+
 			// Log the comparison results
 			logger.Printf("Simple implementation: %s", simplePeerEndpoint)
 			logger.Printf("Current implementation: %s", currentEndpoint)
-			
+
 			if simplePeerEndpoint == currentEndpoint {
 				matchCount++
 				logger.Printf("✅ MATCH: Both implementations return the same endpoint")
@@ -357,16 +357,16 @@ func TestSimplePeerDiscovery(t *testing.T) {
 				mismatchCount++
 				logger.Printf("❌ MISMATCH: Implementations return different endpoints")
 			}
-			
+
 			fmt.Printf("Validator: %s\n", validator)
 			fmt.Printf("  Simple implementation: %s\n", simplePeerEndpoint)
 			fmt.Printf("  Current implementation: %s\n", currentEndpoint)
 			fmt.Printf("  Match: %v\n\n", simplePeerEndpoint == currentEndpoint)
 		}
 	}
-	
+
 	logger.Printf("\nIMPLEMENTATION COMPARISON SUMMARY:")
-	logger.Printf("Total compared: %d", matchCount + mismatchCount)
+	logger.Printf("Total compared: %d", matchCount+mismatchCount)
 	logger.Printf("Matching endpoints: %d (%.1f%%)", matchCount, float64(matchCount)/float64(matchCount+mismatchCount)*100)
 	logger.Printf("Mismatched endpoints: %d (%.1f%%)", mismatchCount, float64(mismatchCount)/float64(matchCount+mismatchCount)*100)
 
@@ -375,8 +375,8 @@ func TestSimplePeerDiscovery(t *testing.T) {
 	edgeCases := []string{
 		"/p2p/QmcEPkctU9P7ZWBxAE8CX8qDuDjQDQfR9JuJLt6VfbGZoX", // No IP or DNS
 		"/tcp/16593/p2p/defidevs.acme",                        // No IP or DNS
-		"invalid-multiaddr",                                    // Invalid multiaddr
-		"",                                                     // Empty string
+		"invalid-multiaddr",                                   // Invalid multiaddr
+		"",                                                    // Empty string
 	}
 
 	for _, addr := range edgeCases {

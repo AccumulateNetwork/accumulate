@@ -54,24 +54,24 @@ func TestPeerDiscovery(t *testing.T) {
 
 	// Test each address individually
 	logger.Printf("\n===== TESTING INDIVIDUAL ADDRESS EXTRACTION =====")
-	
+
 	successCount := 0
 	totalCount := len(testAddresses)
 	methodStats := make(map[string]int)
-	
+
 	for _, addr := range testAddresses {
 		logger.Printf("Testing address: %s", addr)
-		
+
 		// Test with peer discovery implementation
 		host, method := peerDiscovery.ExtractHost(addr)
 		logger.Printf("Method: %s, Host: %s", method, host)
-		
+
 		methodStats[method]++
-		
+
 		if host != "" {
 			successCount++
 			logger.Printf("✅ SUCCESS: Extracted host %s using method %s", host, method)
-			
+
 			// Test endpoint construction
 			endpoint := peerDiscovery.GetPeerRPCEndpoint(host)
 			logger.Printf("Constructed endpoint: %s", endpoint)
@@ -79,22 +79,22 @@ func TestPeerDiscovery(t *testing.T) {
 			logger.Printf("❌ FAILED: Could not extract host from %s", addr)
 		}
 	}
-	
+
 	// Log statistics
 	logger.Printf("\n===== DISCOVERY STATISTICS =====")
 	logger.Printf("Total addresses tested: %d", totalCount)
-	logger.Printf("Successful extractions: %d (%.1f%%)", 
+	logger.Printf("Successful extractions: %d (%.1f%%)",
 		successCount, float64(successCount)/float64(totalCount)*100)
-	
+
 	logger.Printf("\nMethod statistics:")
 	for method, count := range methodStats {
-		logger.Printf("  %s: %d (%.1f%%)", method, count, 
+		logger.Printf("  %s: %d (%.1f%%)", method, count,
 			float64(count)/float64(totalCount)*100)
 	}
-	
+
 	// Verify that we have a reasonable success rate
 	successRate := float64(successCount) / float64(totalCount) * 100
 	assert.GreaterOrEqual(t, successRate, 75.0, "Should have at least 75%% success rate")
-	
+
 	logger.Printf("\n======= PEER DISCOVERY TEST COMPLETED =======")
 }

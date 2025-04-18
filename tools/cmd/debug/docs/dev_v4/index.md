@@ -1,10 +1,15 @@
-# Peer Discovery Documentation Index
+# Development Version 4 Documentation
 
-This directory contains comprehensive documentation for the Peer Discovery utility implementation in the Accumulate Network.
+This directory contains comprehensive documentation for the latest development version (v4) of the debug tools, with a focus on the Peer Discovery utility and AddressDir implementation.
 
 ## Overview
 
-The Peer Discovery utility is responsible for extracting host information from various address formats and constructing RPC endpoints for network communication. This functionality is critical for the proper operation of the network healing process.
+Version 4 introduces significant improvements to peer discovery and address management, including:
+
+1. Enhanced peer discovery with multiple extraction methods
+2. Robust error handling and fallback mechanisms
+3. Comprehensive logging for debugging
+4. AI-optimized documentation for better maintainability
 
 ## Documentation Files
 
@@ -51,6 +56,7 @@ The Peer Discovery utility has been successfully implemented and tested. It prov
 
 ## Related Code
 
-- [Peer Discovery Package](/tools/cmd/debug/new_heal/peerdiscovery/discovery.go)
-- [Peer Discovery Tests](/tools/cmd/debug/new_heal/peerdiscovery/discovery_test.go)
-- [Integration Tests](/tools/cmd/debug/new_heal/peerdiscovery/integration_test.go)
+- [Peer Discovery Package](../../new_heal/peerdiscovery/discovery.go)
+- [Peer Discovery Tests](../../new_heal/peerdiscovery/discovery_test.go)
+- [Integration Tests](../../new_heal/peerdiscovery/integration_test.go)
+- [Address Directory Implementation](../../new_heal/address.go)

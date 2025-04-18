@@ -64,21 +64,21 @@ func TestEnhancedPeerDiscovery(t *testing.T) {
 
 	// Test each address individually with both implementations
 	logger.Printf("\n===== TESTING INDIVIDUAL ADDRESS EXTRACTION =====")
-	
+
 	successCount := 0
 	totalCount := len(testAddresses)
-	
+
 	for _, addr := range testAddresses {
 		logger.Printf("Testing address: %s", addr)
-		
+
 		// Test with standalone implementation
 		host, method := peerDiscovery.ExtractHost(addr)
 		logger.Printf("Standalone implementation: host=%s, method=%s", host, method)
-		
+
 		// Test with AddressDir implementation
 		addrHost, addrMethod := addressDir.extractHost(addr)
 		logger.Printf("AddressDir implementation: host=%s, method=%s", addrHost, addrMethod)
-		
+
 		// Compare results
 		if host == addrHost {
 			logger.Printf("✅ MATCH: Both implementations extracted the same host: %s", host)
@@ -95,35 +95,35 @@ func TestEnhancedPeerDiscovery(t *testing.T) {
 
 	// Test GetPeerRPCEndpoint with the test peer
 	logger.Printf("\n===== TESTING GetPeerRPCEndpoint =====")
-	
+
 	endpoint := addressDir.GetPeerRPCEndpoint(testPeer)
 	logger.Printf("GetPeerRPCEndpoint result: %s", endpoint)
-	
+
 	// Verify that we got a valid endpoint
 	assert.NotEmpty(t, endpoint, "Should have extracted a valid endpoint")
-	
+
 	// Log statistics
 	logger.Printf("\n===== DISCOVERY STATISTICS =====")
 	logger.Printf("Total addresses tested: %d", totalCount)
-	logger.Printf("Successful extractions: %d (%.1f%%)", 
+	logger.Printf("Successful extractions: %d (%.1f%%)",
 		successCount, float64(successCount)/float64(totalCount)*100)
-	
+
 	addressDir.mu.RLock()
 	logger.Printf("AddressDir stats - Total attempts: %d", addressDir.discoveryStats.TotalAttempts)
 	logger.Printf("AddressDir stats - Multiaddr successes: %d", addressDir.discoveryStats.MultiaddrSuccess)
 	logger.Printf("AddressDir stats - URL successes: %d", addressDir.discoveryStats.URLSuccess)
 	logger.Printf("AddressDir stats - Validator map successes: %d", addressDir.discoveryStats.ValidatorMapSuccess)
 	logger.Printf("AddressDir stats - Failures: %d", addressDir.discoveryStats.Failures)
-	
+
 	logger.Printf("\nMethod statistics:")
 	for method, count := range addressDir.discoveryStats.MethodStats {
 		logger.Printf("  %s: %d", method, count)
 	}
 	addressDir.mu.RUnlock()
-	
+
 	// Verify that we have a reasonable success rate
 	successRate := float64(successCount) / float64(totalCount) * 100
 	assert.GreaterOrEqual(t, successRate, 75.0, "Should have at least 75%% success rate")
-	
+
 	logger.Printf("\n======= ADDRESS DISCOVERY TEST COMPLETED =======")
 }
