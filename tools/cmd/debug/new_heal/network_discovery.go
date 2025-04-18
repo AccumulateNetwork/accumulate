@@ -10,10 +10,12 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // NodeError represents an error associated with a specific node
@@ -445,11 +447,54 @@ func (nd *NetworkDiscovery) discoverPartitionPeers(ctx context.Context, client a
 }
 
 // extractBaseUrl is a helper function to extract the base URL from a validator partition info
-// This is a workaround for the BaseUrl field not being directly accessible
+// Since ValidatorPartitionInfo doesn't have a direct BaseUrl field, we need to construct it
 func (nd *NetworkDiscovery) extractBaseUrl(partInfo interface{}) string {
-	// In a real implementation, this would extract the base URL from the partition info
-	// For now, return an empty string
-	return ""
+	// Try to get the partition ID
+	var partitionID string
+	var active bool
+	
+	if pi, ok := partInfo.(*protocol.ValidatorPartitionInfo); ok {
+		partitionID = pi.ID
+		active = pi.Active
+	} else if pi, ok := partInfo.(*PartitionInfo); ok {
+		partitionID = pi.ID
+		active = pi.Active
+	} else {
+		nd.log("Unknown partition info type: %T", partInfo)
+		return ""
+	}
+	
+	// Skip inactive partitions
+	if !active {
+		nd.log("Partition %s is not active, skipping", partitionID)
+		return ""
+	}
+	
+	// Get the network info from the address directory
+	nd.addressDir.mu.RLock()
+	network := nd.addressDir.Network
+	nd.addressDir.mu.RUnlock()
+	
+	if network == nil {
+		nd.log("Network information not available")
+		return ""
+	}
+	
+	// Construct the base URL based on the partition ID and network ID
+	var baseUrl string
+	if strings.HasPrefix(partitionID, "bvn-") {
+		// For BVNs with bvn- prefix, use the ID as is
+		baseUrl = fmt.Sprintf("acc://%s.%s", partitionID, network.ID)
+	} else if strings.HasPrefix(partitionID, "dn") {
+		// For directory network
+		baseUrl = fmt.Sprintf("acc://%s.%s", partitionID, network.ID)
+	} else {
+		// For BVNs without prefix, add the bvn- prefix
+		baseUrl = fmt.Sprintf("acc://bvn-%s.%s", partitionID, network.ID)
+	}
+	
+	nd.log("Constructed base URL for partition %s: %s", partitionID, baseUrl)
+	return baseUrl
 }
 
 // discoverCommonNonValidators adds known non-validator peers to the peer list

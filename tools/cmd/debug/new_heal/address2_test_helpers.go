@@ -17,13 +17,21 @@ import (
 
 // NewTestAddressDir creates a new AddressDir instance for testing
 func NewTestAddressDir() *AddressDir {
+	logger := log.New(os.Stdout, "AddressDir: ", log.LstdFlags)
 	return &AddressDir{
-		DNValidators:  make([]Validator, 0),
-		BVNValidators: make([][]Validator, 3), // 3 BVNs for mainnet
+		Validators:   make([]*Validator, 0),
 		NetworkPeers:  make(map[string]NetworkPeer),
 		URLHelpers:    make(map[string]string),
-		NetworkName:   "acme",
-		Logger:        log.New(os.Stdout, "AddressDir: ", log.LstdFlags),
+		NetworkInfo: &NetworkInfo{
+			Name:        "acme",
+			ID:          "acme",
+			IsMainnet:   false,
+			Partitions:  make([]*PartitionInfo, 0),
+			PartitionMap: make(map[string]*PartitionInfo),
+			APIEndpoint: "https://mainnet.accumulatenetwork.io/v2",
+		},
+		Logger:        logger,
+		peerDiscovery: NewSimplePeerDiscovery(logger),
 		DiscoveryStats: DiscoveryStats{
 			ByMethod:    make(map[string]int),
 			ByPartition: make(map[string]int),

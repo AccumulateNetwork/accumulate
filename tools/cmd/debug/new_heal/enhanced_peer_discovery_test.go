@@ -16,8 +16,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestEnhancedPeerDiscovery tests the enhanced peer discovery implementation
-func TestEnhancedPeerDiscovery(t *testing.T) {
+// TestStandalonePeerDiscovery tests the standalone peer discovery implementation
+func TestStandalonePeerDiscovery(t *testing.T) {
 	// Create a log directory if it doesn't exist
 	logDir := "logs"
 	err := os.MkdirAll(logDir, 0755)

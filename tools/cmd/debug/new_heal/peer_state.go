@@ -135,14 +135,13 @@ func (ps *PeerState) UpdatePeerStates(ctx context.Context, client api.NetworkSer
 		peerState.ValidatorID = peer.ValidatorID
 		peerState.PartitionID = peer.PartitionID
 
-		// Get the RPC endpoint for this peer using the AddressDir's GetPeerRPCEndpoint method
-		networkPeer, exists := ps.addressDir.GetNetworkPeerByID(peerState.ID)
-		if !exists {
+		// Check if the peer exists in the AddressDir
+		if _, found := ps.addressDir.GetNetworkPeerByID(peerState.ID); !found {
 			fmt.Printf("Peer %s not found in AddressDir\n", peerState.ID)
 			continue // Skip this peer and continue with others
 		}
 
-		endpoint := ps.addressDir.GetPeerRPCEndpoint(networkPeer)
+		endpoint := ps.addressDir.GetPeerRPCEndpoint(peerState.ID)
 		if endpoint == "" {
 			fmt.Printf("Could not get RPC endpoint for peer %s\n", peerState.ID)
 			continue // Skip this peer and continue with others

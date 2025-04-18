@@ -1,0 +1,283 @@
+// Copyright 2025 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
+package new_heal
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"os"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+)
+
+// MockNetworkService implements the api.NetworkService interface for testing
+type MockNetworkService struct {
+	// Mock network status response
+	networkStatus *api.NetworkStatus
+	// Error to return
+	err error
+}
+
+// NetworkStatus implements the api.NetworkService interface
+func (m *MockNetworkService) NetworkStatus(ctx context.Context, opts api.NetworkStatusOptions) (*api.NetworkStatus, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.networkStatus, nil
+}
+
+// createMockNetworkStatus creates a mock network status response
+func createMockNetworkStatus() *api.NetworkStatus {
+	// Create a mock network definition
+	network := &protocol.NetworkDefinition{
+		NetworkName: "testnet",
+		Partitions: []*protocol.PartitionInfo{
+			{
+				ID:   "dn",
+				Type: protocol.PartitionTypeDirectory,
+			},
+			{
+				ID:   "bvn-apollo",
+				Type: protocol.PartitionTypeBlockValidator,
+			},
+		},
+		Validators: []*protocol.ValidatorInfo{
+			{
+				// Validator 1 - active in DN
+				Operator: protocol.AccountUrl("operator1.acme"),
+				Partitions: []*protocol.ValidatorPartitionInfo{
+					{
+						ID:     "dn",
+						Active: true,
+					},
+				},
+			},
+			{
+				// Validator 2 - active in BVN
+				Operator: protocol.AccountUrl("operator2.acme"),
+				Partitions: []*protocol.ValidatorPartitionInfo{
+					{
+						ID:     "bvn-apollo",
+						Active: true,
+					},
+				},
+			},
+			{
+				// Validator 3 - active in both
+				Operator: protocol.AccountUrl("operator3.acme"),
+				Partitions: []*protocol.ValidatorPartitionInfo{
+					{
+						ID:     "dn",
+						Active: true,
+					},
+					{
+						ID:     "bvn-apollo",
+						Active: true,
+					},
+				},
+			},
+		},
+	}
+
+	// Create the network status response
+	return &api.NetworkStatus{
+		Network: network,
+	}
+}
+
+// TestNetworkDiscovery tests the network discovery functionality
+func TestNetworkDiscovery(t *testing.T) {
+	// Create a logger
+	logger := log.New(os.Stdout, "[TEST] ", log.LstdFlags)
+
+	// Create an address directory
+	addressDir := &AddressDir{
+		NetworkPeers:   make(map[string]NetworkPeer),
+		URLHelpers:     make(map[string]string),
+		DiscoveryStats: DiscoveryStats{
+			ByMethod:    make(map[string]int),
+			ByPartition: make(map[string]int),
+		},
+	}
+	addressDir.Logger = logger
+
+	// Create a network discovery instance
+	discovery := NewNetworkDiscovery(addressDir, logger)
+
+	// Initialize the network
+	err := discovery.InitializeNetwork("testnet")
+	require.NoError(t, err, "Failed to initialize network")
+
+	// Verify network information
+	assert.Equal(t, "testnet", addressDir.Network.Name, "Network name mismatch")
+	assert.Equal(t, "acme", addressDir.Network.ID, "Network ID mismatch")
+	assert.False(t, addressDir.Network.IsMainnet, "Network should not be mainnet")
+	assert.NotEmpty(t, addressDir.Network.APIEndpoint, "API endpoint should not be empty")
+
+	// Verify partitions
+	assert.NotEmpty(t, addressDir.Network.Partitions, "Partitions should not be empty")
+	assert.NotEmpty(t, addressDir.Network.PartitionMap, "Partition map should not be empty")
+
+	// Create a mock network service
+	mockService := &MockNetworkService{
+		networkStatus: createMockNetworkStatus(),
+	}
+
+	// Discover network peers
+	stats, err := discovery.DiscoverNetworkPeers(context.Background(), mockService)
+	require.NoError(t, err, "Failed to discover network peers")
+
+	// Verify discovery statistics
+	assert.True(t, stats.TotalPeers > 0, "Should discover at least one peer")
+	assert.True(t, stats.DNValidators > 0, "Should discover at least one DN validator")
+
+	// Verify address directory was updated
+	assert.NotEmpty(t, addressDir.DNValidators, "DN validators should not be empty")
+}
+
+// TestNetworkDiscoveryMainnet tests the network discovery functionality for mainnet
+func TestNetworkDiscoveryMainnet(t *testing.T) {
+	// Create a logger
+	logger := log.New(os.Stdout, "[TEST] ", log.LstdFlags)
+
+	// Create an address directory
+	addressDir := &AddressDir{
+		NetworkPeers:   make(map[string]NetworkPeer),
+		URLHelpers:     make(map[string]string),
+		DiscoveryStats: DiscoveryStats{
+			ByMethod:    make(map[string]int),
+			ByPartition: make(map[string]int),
+		},
+	}
+	addressDir.Logger = logger
+
+	// Create a network discovery instance
+	discovery := NewNetworkDiscovery(addressDir, logger)
+
+	// Initialize the network
+	err := discovery.InitializeNetwork("mainnet")
+	require.NoError(t, err, "Failed to initialize network")
+
+	// Verify network information
+	assert.Equal(t, "mainnet", addressDir.Network.Name, "Network name mismatch")
+	assert.Equal(t, "acme", addressDir.Network.ID, "Network ID mismatch")
+	assert.True(t, addressDir.Network.IsMainnet, "Network should be mainnet")
+	assert.NotEmpty(t, addressDir.Network.APIEndpoint, "API endpoint should not be empty")
+
+	// Verify partitions
+	assert.Equal(t, 4, len(addressDir.Network.Partitions), "Should have 4 partitions (DN + 3 BVNs)")
+	assert.Equal(t, 4, len(addressDir.Network.PartitionMap), "Should have 4 partitions in map")
+
+	// Verify DN partition
+	dnPartition, ok := addressDir.Network.PartitionMap["dn"]
+	assert.True(t, ok, "DN partition should exist")
+	assert.Equal(t, "dn", dnPartition.ID, "DN partition ID mismatch")
+	assert.Equal(t, "dn", dnPartition.Type, "DN partition type mismatch")
+	assert.Equal(t, "acc://dn.acme", dnPartition.URL, "DN partition URL mismatch")
+	assert.True(t, dnPartition.Active, "DN partition should be active")
+	assert.Equal(t, -1, dnPartition.BVNIndex, "DN partition BVN index mismatch")
+
+	// Verify BVN partitions
+	bvnNames := []string{"Apollo", "Chandrayaan", "Yutu"}
+	for i, name := range bvnNames {
+		bvnPartition, ok := addressDir.Network.PartitionMap[name]
+		assert.True(t, ok, "%s partition should exist", name)
+		assert.Equal(t, name, bvnPartition.ID, "%s partition ID mismatch", name)
+		assert.Equal(t, "bvn", bvnPartition.Type, "%s partition type mismatch", name)
+		assert.Equal(t, fmt.Sprintf("acc://bvn-%s.acme", name), bvnPartition.URL, "%s partition URL mismatch", name)
+		assert.True(t, bvnPartition.Active, "%s partition should be active", name)
+		assert.Equal(t, i, bvnPartition.BVNIndex, "%s partition BVN index mismatch", name)
+	}
+}
+
+// TestUpdateNetworkState tests the UpdateNetworkState function
+func TestUpdateNetworkState(t *testing.T) {
+	// Create a logger
+	logger := log.New(os.Stdout, "[TEST] ", log.LstdFlags)
+
+	// Create an address directory
+	addressDir := &AddressDir{
+		NetworkPeers:   make(map[string]NetworkPeer),
+		URLHelpers:     make(map[string]string),
+		DiscoveryStats: DiscoveryStats{
+			ByMethod:    make(map[string]int),
+			ByPartition: make(map[string]int),
+		},
+	}
+	addressDir.Logger = logger
+
+	// Create a network discovery instance
+	discovery := NewNetworkDiscovery(addressDir, logger)
+
+	// Initialize the network
+	err := discovery.InitializeNetwork("testnet")
+	require.NoError(t, err, "Failed to initialize network")
+
+	// Create a mock network service
+	mockService := &MockNetworkService{
+		networkStatus: createMockNetworkStatus(),
+	}
+
+	// Update network state
+	stats, err := discovery.UpdateNetworkState(context.Background(), mockService)
+	require.NoError(t, err, "Failed to update network state")
+
+	// Verify update statistics
+	assert.True(t, stats.TotalPeers > 0, "Should discover at least one peer")
+	assert.True(t, stats.DNValidators > 0, "Should discover at least one DN validator")
+
+	// Verify discovery stats were updated
+	assert.NotEqual(t, time.Time{}, addressDir.DiscoveryStats.LastDiscovery, "Last discovery time should be set")
+	assert.True(t, addressDir.DiscoveryStats.DiscoveryAttempts > 0, "Discovery attempts should be incremented")
+	assert.True(t, addressDir.DiscoveryStats.SuccessfulDiscoveries > 0, "Successful discoveries should be incremented")
+}
+
+// TestErrorHandling tests error handling during network discovery
+func TestErrorHandling(t *testing.T) {
+	// Create a logger
+	logger := log.New(os.Stdout, "[TEST] ", log.LstdFlags)
+
+	// Create an address directory
+	addressDir := &AddressDir{
+		NetworkPeers:   make(map[string]NetworkPeer),
+		URLHelpers:     make(map[string]string),
+		DiscoveryStats: DiscoveryStats{
+			ByMethod:    make(map[string]int),
+			ByPartition: make(map[string]int),
+		},
+	}
+	addressDir.Logger = logger
+
+	// Create a network discovery instance
+	discovery := NewNetworkDiscovery(addressDir, logger)
+
+	// Initialize the network
+	err := discovery.InitializeNetwork("testnet")
+	require.NoError(t, err, "Failed to initialize network")
+
+	// Create a mock network service with error
+	mockService := &MockNetworkService{
+		err: fmt.Errorf("mock error"),
+	}
+
+	// Discover network peers
+	stats, err := discovery.DiscoverNetworkPeers(context.Background(), mockService)
+	// We expect an error but the function should still return stats
+	assert.Error(t, err, "Should return an error")
+	assert.Equal(t, 0, stats.TotalPeers, "Should not discover any peers")
+
+	// Verify discovery stats were updated
+	assert.NotEqual(t, time.Time{}, addressDir.DiscoveryStats.LastDiscovery, "Last discovery time should be set")
+	assert.True(t, addressDir.DiscoveryStats.DiscoveryAttempts > 0, "Discovery attempts should be incremented")
+	assert.True(t, addressDir.DiscoveryStats.FailedDiscoveries > 0, "Failed discoveries should be incremented")
+}

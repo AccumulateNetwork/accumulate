@@ -94,9 +94,9 @@ func TestEnhancedPeerDiscovery(t *testing.T) {
 	}
 
 	// Test GetPeerRPCEndpoint with the test peer
-	logger.Printf("\n===== TESTING GetPeerRPCEndpoint =====")
+	logger.Printf("\n===== TESTING GetPeerRPCEndpoint =====\n")
 
-	endpoint := addressDir.GetPeerRPCEndpoint(testPeer)
+	endpoint := addressDir.GetPeerRPCEndpoint(testPeer.ID)
 	logger.Printf("GetPeerRPCEndpoint result: %s", endpoint)
 
 	// Verify that we got a valid endpoint
@@ -109,14 +109,14 @@ func TestEnhancedPeerDiscovery(t *testing.T) {
 		successCount, float64(successCount)/float64(totalCount)*100)
 
 	addressDir.mu.RLock()
-	logger.Printf("AddressDir stats - Total attempts: %d", addressDir.discoveryStats.TotalAttempts)
-	logger.Printf("AddressDir stats - Multiaddr successes: %d", addressDir.discoveryStats.MultiaddrSuccess)
-	logger.Printf("AddressDir stats - URL successes: %d", addressDir.discoveryStats.URLSuccess)
-	logger.Printf("AddressDir stats - Validator map successes: %d", addressDir.discoveryStats.ValidatorMapSuccess)
-	logger.Printf("AddressDir stats - Failures: %d", addressDir.discoveryStats.Failures)
+	logger.Printf("AddressDir stats - Total attempts: %d", addressDir.DiscoveryStats.TotalAttempts)
+	logger.Printf("AddressDir stats - Multiaddr successes: %d", addressDir.DiscoveryStats.MultiaddrSuccess)
+	logger.Printf("AddressDir stats - URL successes: %d", addressDir.DiscoveryStats.URLSuccess)
+	logger.Printf("AddressDir stats - Validator map successes: %d", addressDir.DiscoveryStats.ValidatorMapSuccess)
+	logger.Printf("AddressDir stats - Failures: %d", addressDir.DiscoveryStats.Failures)
 
 	logger.Printf("\nMethod statistics:")
-	for method, count := range addressDir.discoveryStats.MethodStats {
+	for method, count := range addressDir.DiscoveryStats.MethodStats {
 		logger.Printf("  %s: %d", method, count)
 	}
 	addressDir.mu.RUnlock()
