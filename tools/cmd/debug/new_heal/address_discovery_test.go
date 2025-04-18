@@ -56,10 +56,19 @@ func TestEnhancedPeerDiscovery(t *testing.T) {
 		"65.108.4.175",
 	}
 
+	// Convert test addresses to ValidatorAddress objects
+	testValidatorAddresses := make([]ValidatorAddress, 0, len(testAddresses))
+	for _, addr := range testAddresses {
+		testValidatorAddresses = append(testValidatorAddresses, ValidatorAddress{
+			Address: addr,
+			IP:      addr, // For simplicity in tests
+		})
+	}
+
 	// Create a NetworkPeer for testing
 	testPeer := NetworkPeer{
 		ID:        "test-peer",
-		Addresses: testAddresses,
+		Addresses: testValidatorAddresses,
 	}
 
 	// Test each address individually with both implementations

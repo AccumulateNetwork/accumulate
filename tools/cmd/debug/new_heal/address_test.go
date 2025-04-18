@@ -115,8 +115,8 @@ func TestSetValidatorStatus(t *testing.T) {
 	addressDir := createTestAddressDir()
 
 	// Test setting status for an existing validator
-	success := addressDir.SetValidatorStatus("validator1", "active")
-	require.True(t, success)
+	err := addressDir.SetValidatorStatus("validator1", "active")
+	require.NoError(t, err)
 
 	// Verify the status was set
 	validator, _, exists := addressDir.FindValidator("validator1")
@@ -124,8 +124,9 @@ func TestSetValidatorStatus(t *testing.T) {
 	require.Equal(t, "active", validator.Status)
 
 	// Test setting status for a non-existent validator
-	success = addressDir.SetValidatorStatus("nonexistent", "active")
-	require.False(t, success)
+	err = addressDir.SetValidatorStatus("nonexistent", "active")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "not found")
 }
 
 // TestAddValidatorAddress tests adding addresses to validators

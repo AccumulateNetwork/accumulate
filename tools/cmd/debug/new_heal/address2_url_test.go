@@ -21,9 +21,9 @@ func TestURLConstructionConsistency(t *testing.T) {
 		expectedURL     string
 		expectedAnchorURL string
 	}{
-		{"dn", "acc://dn.acme", fmt.Sprintf("acc://dn.%s/anchors/dn", addrDir.NetworkName)},
-		{"bvn-Apollo", "acc://bvn-Apollo.acme", fmt.Sprintf("acc://dn.%s/anchors/bvn-Apollo", addrDir.NetworkName)},
-		{"bvn-Artemis", "acc://bvn-Artemis.acme", fmt.Sprintf("acc://dn.%s/anchors/bvn-Artemis", addrDir.NetworkName)},
+		{"dn", "acc://dn.acme", fmt.Sprintf("acc://dn.%s/anchors/dn", addrDir.GetNetworkName())},
+		{"bvn-Apollo", "acc://bvn-Apollo.acme", fmt.Sprintf("acc://dn.%s/anchors/bvn-Apollo", addrDir.GetNetworkName())},
+		{"bvn-Artemis", "acc://bvn-Artemis.acme", fmt.Sprintf("acc://dn.%s/anchors/bvn-Artemis", addrDir.GetNetworkName())},
 	}
 	
 	for _, tc := range testCases {
@@ -154,7 +154,7 @@ func TestCacheConsistency(t *testing.T) {
 		t.Fatalf("Expected to find validator with PeerID peer1, got nil")
 	}
 	
-	expectedAnchorURL := fmt.Sprintf("acc://dn.%s/anchors/bvn-Apollo", addrDir.NetworkName)
+	expectedAnchorURL := fmt.Sprintf("acc://dn.%s/anchors/bvn-Apollo", addrDir.GetNetworkName())
 	if retrievedValidator.URLs["anchor"] != expectedAnchorURL {
 		t.Errorf("Expected anchor URL to be %s, got %s", 
 			expectedAnchorURL, retrievedValidator.URLs["anchor"])

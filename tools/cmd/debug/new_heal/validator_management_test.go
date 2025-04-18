@@ -8,7 +8,6 @@ package new_heal
 
 import (
 	"testing"
-	"time"
 )
 
 // TestValidatorManagement tests the validator management functions

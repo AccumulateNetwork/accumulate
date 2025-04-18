@@ -138,7 +138,7 @@ func TestPeerStateWithRealData(t *testing.T) {
 		t.Logf("  Partition: %s", peer.PartitionID)
 		t.Logf("  Addresses (%d):", len(peer.Addresses))
 		for _, addr := range peer.Addresses {
-			t.Logf("    %s", addr)
+			t.Logf("    %s", addr.Address)
 		}
 
 		// Try to extract RPC endpoint

@@ -86,11 +86,9 @@ func (nd *NetworkDiscovery) InitializeNetwork(networkName string) error {
 		return err
 	}
 	
-	// Store the network information in the AddressDir
-	nd.addressDir.mu.Lock()
-	nd.addressDir.Network = network
-	nd.addressDir.NetworkName = networkName // For backward compatibility
-	nd.addressDir.mu.Unlock()
+	// Store the network information in the AddressDir using the accessor methods
+	nd.addressDir.SetNetwork(network)
+	nd.addressDir.SetNetworkName(networkName)
 	
 	nd.log("Initialized network %s with API endpoint %s", networkName, network.APIEndpoint)
 	return nil
@@ -470,10 +468,8 @@ func (nd *NetworkDiscovery) extractBaseUrl(partInfo interface{}) string {
 		return ""
 	}
 	
-	// Get the network info from the address directory
-	nd.addressDir.mu.RLock()
-	network := nd.addressDir.Network
-	nd.addressDir.mu.RUnlock()
+	// Get the network info from the address directory using the accessor method
+	network := nd.addressDir.GetNetwork()
 	
 	if network == nil {
 		nd.log("Network information not available")
@@ -508,9 +504,9 @@ func (nd *NetworkDiscovery) discoverCommonNonValidators(ctx context.Context) (ma
 	nonValidators := make(map[string]NetworkPeer)
 	
 	// Add some well-known non-validator peers for mainnet
-	nd.addressDir.mu.RLock()
-	isMainnet := nd.addressDir.Network != nil && nd.addressDir.Network.IsMainnet
-	nd.addressDir.mu.RUnlock()
+	// Use the accessor method to get the network information
+	network := nd.addressDir.GetNetwork()
+	isMainnet := network != nil && network.IsMainnet
 	
 	if isMainnet {
 		// Example of adding a known peer
@@ -518,7 +514,7 @@ func (nd *NetworkDiscovery) discoverCommonNonValidators(ctx context.Context) (ma
 			ID:                   "public-api-1",
 			IsValidator:          false,
 			PartitionID:          "dn",
-			Addresses:            []string{"/ip4/65.108.73.121/tcp/16593/p2p/QmPublicAPI1"},
+			Addresses:            []ValidatorAddress{{Address: "/ip4/65.108.73.121/tcp/16593/p2p/QmPublicAPI1", Validated: true, IP: "65.108.73.121", Port: "16593", PeerID: "QmPublicAPI1"}},
 			Status:               "active",
 			LastSeen:             time.Now(),
 			FirstSeen:            time.Now(),

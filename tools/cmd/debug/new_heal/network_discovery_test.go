@@ -119,14 +119,15 @@ func TestNetworkDiscovery(t *testing.T) {
 	require.NoError(t, err, "Failed to initialize network")
 
 	// Verify network information
-	assert.Equal(t, "testnet", addressDir.Network.Name, "Network name mismatch")
-	assert.Equal(t, "acme", addressDir.Network.ID, "Network ID mismatch")
-	assert.False(t, addressDir.Network.IsMainnet, "Network should not be mainnet")
-	assert.NotEmpty(t, addressDir.Network.APIEndpoint, "API endpoint should not be empty")
+	network := addressDir.GetNetwork()
+	assert.Equal(t, "testnet", network.Name, "Network name mismatch")
+	assert.Equal(t, "acme", network.ID, "Network ID mismatch")
+	assert.False(t, network.IsMainnet, "Network should not be mainnet")
+	assert.NotEmpty(t, network.APIEndpoint, "API endpoint should not be empty")
 
 	// Verify partitions
-	assert.NotEmpty(t, addressDir.Network.Partitions, "Partitions should not be empty")
-	assert.NotEmpty(t, addressDir.Network.PartitionMap, "Partition map should not be empty")
+	assert.NotEmpty(t, network.Partitions, "Partitions should not be empty")
+	assert.NotEmpty(t, network.PartitionMap, "Partition map should not be empty")
 
 	// Create a mock network service
 	mockService := &MockNetworkService{
@@ -169,17 +170,20 @@ func TestNetworkDiscoveryMainnet(t *testing.T) {
 	require.NoError(t, err, "Failed to initialize network")
 
 	// Verify network information
-	assert.Equal(t, "mainnet", addressDir.Network.Name, "Network name mismatch")
-	assert.Equal(t, "acme", addressDir.Network.ID, "Network ID mismatch")
-	assert.True(t, addressDir.Network.IsMainnet, "Network should be mainnet")
-	assert.NotEmpty(t, addressDir.Network.APIEndpoint, "API endpoint should not be empty")
+	network := addressDir.GetNetwork()
+	assert.Equal(t, "mainnet", network.Name, "Network name mismatch")
+	assert.Equal(t, "acme", network.ID, "Network ID mismatch")
+	assert.True(t, network.IsMainnet, "Network should be mainnet")
+	assert.NotEmpty(t, network.APIEndpoint, "API endpoint should not be empty")
 
 	// Verify partitions
-	assert.Equal(t, 4, len(addressDir.Network.Partitions), "Should have 4 partitions (DN + 3 BVNs)")
-	assert.Equal(t, 4, len(addressDir.Network.PartitionMap), "Should have 4 partitions in map")
+	assert.Equal(t, 4, len(network.Partitions), "Should have 4 partitions (DN + 3 BVNs)")
+	assert.Equal(t, 4, len(network.PartitionMap), "Should have 4 partitions in map")
 
+	// We already have the network information from earlier
+	
 	// Verify DN partition
-	dnPartition, ok := addressDir.Network.PartitionMap["dn"]
+	dnPartition, ok := network.PartitionMap["dn"]
 	assert.True(t, ok, "DN partition should exist")
 	assert.Equal(t, "dn", dnPartition.ID, "DN partition ID mismatch")
 	assert.Equal(t, "dn", dnPartition.Type, "DN partition type mismatch")
@@ -190,7 +194,7 @@ func TestNetworkDiscoveryMainnet(t *testing.T) {
 	// Verify BVN partitions
 	bvnNames := []string{"Apollo", "Chandrayaan", "Yutu"}
 	for i, name := range bvnNames {
-		bvnPartition, ok := addressDir.Network.PartitionMap[name]
+		bvnPartition, ok := network.PartitionMap[name]
 		assert.True(t, ok, "%s partition should exist", name)
 		assert.Equal(t, name, bvnPartition.ID, "%s partition ID mismatch", name)
 		assert.Equal(t, "bvn", bvnPartition.Type, "%s partition type mismatch", name)

@@ -154,21 +154,21 @@ func TestURLConstruction(t *testing.T) {
 	
 	// Test partition URL construction
 	partitionURL := addrDir.constructPartitionURL("bvn-Apollo")
-	expectedURL := fmt.Sprintf("acc://bvn-Apollo.%s", addrDir.NetworkName)
+	expectedURL := fmt.Sprintf("acc://bvn-Apollo.%s", addrDir.GetNetworkName())
 	if partitionURL != expectedURL {
 		t.Errorf("Expected partition URL to be %s, got %s", expectedURL, partitionURL)
 	}
 	
 	// Test anchor URL construction
 	anchorURL := addrDir.constructAnchorURL("bvn-Apollo")
-	expectedAnchorURL := fmt.Sprintf("acc://dn.%s/anchors/bvn-Apollo", addrDir.NetworkName)
+	expectedAnchorURL := fmt.Sprintf("acc://dn.%s/anchors/bvn-Apollo", addrDir.GetNetworkName())
 	if anchorURL != expectedAnchorURL {
 		t.Errorf("Expected anchor URL to be %s, got %s", expectedAnchorURL, anchorURL)
 	}
 	
 	// Test anchor URL construction for DN
 	dnAnchorURL := addrDir.constructAnchorURL("dn")
-	expectedDNAnchorURL := fmt.Sprintf("acc://dn.%s/anchors/dn", addrDir.NetworkName)
+	expectedDNAnchorURL := fmt.Sprintf("acc://dn.%s/anchors/dn", addrDir.GetNetworkName())
 	if dnAnchorURL != expectedDNAnchorURL {
 		t.Errorf("Expected DN anchor URL to be %s, got %s", expectedDNAnchorURL, dnAnchorURL)
 	}

@@ -61,7 +61,7 @@ func TestNetworkPeer(id string, isValidator bool, validatorID, partitionID strin
 		IsValidator:  isValidator,
 		ValidatorID:  validatorID,
 		PartitionID:  partitionID,
-		Addresses:    []string{"/ip4/127.0.0.1/tcp/16593/p2p/" + id},
+		Addresses:    []ValidatorAddress{{Address: "/ip4/127.0.0.1/tcp/16593/p2p/" + id, Validated: true, IP: "127.0.0.1", Port: "16593", PeerID: id}},
 		Status:       "active",
 		LastSeen:     time.Now(),
 		FirstSeen:    time.Now(),

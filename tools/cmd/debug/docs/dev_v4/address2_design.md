@@ -4,6 +4,24 @@
 
 This document outlines the design for `address2.go`, a replacement for the original `address.go` file in the Accumulate Network codebase. The new implementation will use a modular approach with a master function that coordinates independent helper functions to manage validator addresses and network peers.
 
+## Required Imports
+
+```go
+import (
+	"context"
+	"fmt"
+	"log"
+	"os"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/multiformats/go-multiaddr"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+)
+```
+
 ## Goals
 
 1. Fix the syntax errors present in the original implementation
@@ -35,7 +53,7 @@ type AddressDir struct {
     URLHelpers map[string]string
     
     // Network information (replaces NetworkName string)
-    Network *NetworkInfo
+    NetworkInfo *NetworkInfo
     
     // Logger for detailed logging
     Logger *log.Logger
@@ -344,21 +362,74 @@ type ProblemNode struct {
 
 The master function will be responsible for initializing the AddressDir and coordinating the various helper functions:
 
+### NewAddressDir
+
 ```go
 func NewAddressDir() *AddressDir {
+    logger := log.New(os.Stdout, "[AddressDir] ", log.LstdFlags)
     return &AddressDir{
         mu:            sync.RWMutex{},
         DNValidators:  make([]Validator, 0),
         BVNValidators: make([][]Validator, 0),
         NetworkPeers:  make(map[string]NetworkPeer),
         URLHelpers:    make(map[string]string),
-        Logger:        log.New(os.Stdout, "[AddressDir] ", log.LstdFlags),
+        Logger:        logger,
+        NetworkInfo: &NetworkInfo{
+            Name:        "acme",
+            ID:          "acme",
+            IsMainnet:   false,
+            Partitions:  make([]*PartitionInfo, 0),
+            PartitionMap: make(map[string]*PartitionInfo),
+            APIEndpoint: "https://mainnet.accumulatenetwork.io/v2",
+        },
         DiscoveryStats: DiscoveryStats{
             MethodStats: make(map[string]int),
         },
+        Validators:    make([]*Validator, 0), // For backward compatibility
+        peerDiscovery: NewSimplePeerDiscovery(logger),
     }
 }
 ```
+
+**Implementation Notes:**
+- Creates a logger with standard formatting
+- Initializes all slices and maps to empty collections
+- Sets default network information for "acme" network
+- Initializes discovery statistics
+- Creates a simple peer discovery instance
+
+### NewAddressDirWithOptions
+
+```go
+func NewAddressDirWithOptions(options AddressDirOptions) *AddressDir {
+    dir := NewAddressDir()
+    
+    if options.Logger != nil {
+        dir.Logger = options.Logger
+    }
+    
+    if options.NetworkInfo != nil {
+        dir.NetworkInfo = options.NetworkInfo
+    }
+    
+    if options.MaxDiscoveryAttempts > 0 {
+        dir.peerDiscovery.SetMaxAttempts(options.MaxDiscoveryAttempts)
+    }
+    
+    return dir
+}
+
+type AddressDirOptions struct {
+    Logger              *log.Logger
+    NetworkInfo         *NetworkInfo
+    MaxDiscoveryAttempts int
+}
+```
+
+**Implementation Notes:**
+- Provides customization options for the AddressDir
+- Allows setting a custom logger, network info, and discovery parameters
+- Uses the default NewAddressDir as a base and applies customizations
 
 ## Key Helper Functions
 
@@ -367,106 +438,786 @@ func NewAddressDir() *AddressDir {
 ```go
 // AddValidator adds a new validator to the directory with partition information
 // If validator with PeerID already exists, update its information and return it
-func (a *AddressDir) AddValidator(peerID, name, partitionID, partitionType string) *Validator
+func (a *AddressDir) AddValidator(peerID, name, partitionID, partitionType string) *Validator {
+    a.mu.Lock()
+    defer a.mu.Unlock()
+    
+    // Check if validator already exists
+    if validator, found := a.FindValidator(peerID); found {
+        // Update existing validator
+        validator.Name = name
+        validator.PartitionID = partitionID
+        validator.PartitionType = partitionType
+        validator.LastUpdated = time.Now()
+        return validator
+    }
+    
+    // Create new validator
+    validator := &Validator{
+        ID:            peerID, // For backward compatibility
+        PeerID:        peerID,
+        Name:          name,
+        PartitionID:   partitionID,
+        PartitionType: partitionType,
+        Status:        "unknown",
+        Addresses:     make([]string, 0),
+        AddressStatus: make(map[string]string),
+        URLs:          make(map[string]string),
+        LastUpdated:   time.Now(),
+    }
+    
+    // Add to appropriate collections based on partition type
+    if partitionType == "dn" {
+        a.AddDNValidator(*validator)
+    } else if strings.HasPrefix(partitionType, "bvn") {
+        // Extract BVN index from partition type or ID
+        bvnIndex := 0
+        if partitionID == "Apollo" {
+            bvnIndex = 0
+        } else if partitionID == "Chandrayaan" {
+            bvnIndex = 1
+        } else if partitionID == "Voyager" {
+            bvnIndex = 2
+        }
+        a.AddBVNValidator(bvnIndex, *validator)
+    }
+    
+    // Add to legacy Validators slice for backward compatibility
+    a.Validators = append(a.Validators, validator)
+    
+    return validator
+}
 
 // AddDNValidator adds a validator to the Directory Network
-func (a *AddressDir) AddDNValidator(validator Validator)
+func (a *AddressDir) AddDNValidator(validator Validator) {
+    a.mu.Lock()
+    defer a.mu.Unlock()
+    
+    // Check if validator already exists in DNValidators
+    for i, v := range a.DNValidators {
+        if v.PeerID == validator.PeerID || v.ID == validator.PeerID {
+            // Update existing validator
+            a.DNValidators[i] = validator
+            return
+        }
+    }
+    
+    // Add new validator
+    validator.PartitionType = "dn"
+    a.DNValidators = append(a.DNValidators, validator)
+}
 
 // AddBVNValidator adds a validator to a specific BVN
 // Sets the validator's BVN field to the specified bvnIndex (0, 1, or 2 for mainnet)
-func (a *AddressDir) AddBVNValidator(bvnIndex int, validator Validator)
+func (a *AddressDir) AddBVNValidator(bvnIndex int, validator Validator) {
+    a.mu.Lock()
+    defer a.mu.Unlock()
+    
+    // Ensure BVNValidators has enough capacity
+    for len(a.BVNValidators) <= bvnIndex {
+        a.BVNValidators = append(a.BVNValidators, make([]Validator, 0))
+    }
+    
+    // Check if validator already exists in this BVN
+    for i, v := range a.BVNValidators[bvnIndex] {
+        if v.PeerID == validator.PeerID || v.ID == validator.PeerID {
+            // Update existing validator
+            a.BVNValidators[bvnIndex][i] = validator
+            return
+        }
+    }
+    
+    // Set BVN index and add to collection
+    validator.BVN = bvnIndex
+    validator.PartitionType = fmt.Sprintf("bvn-%d", bvnIndex)
+    a.BVNValidators[bvnIndex] = append(a.BVNValidators[bvnIndex], validator)
+}
 
 // FindValidator finds a validator by PeerID
 // Returns the validator and a boolean indicating if found
-func (a *AddressDir) FindValidator(peerID string) (*Validator, bool)
+func (a *AddressDir) FindValidator(peerID string) (*Validator, bool) {
+    a.mu.RLock()
+    defer a.mu.RUnlock()
+    
+    // Search in DN validators
+    for i := range a.DNValidators {
+        if a.DNValidators[i].PeerID == peerID || a.DNValidators[i].ID == peerID {
+            return &a.DNValidators[i], true
+        }
+    }
+    
+    // Search in BVN validators
+    for _, bvnList := range a.BVNValidators {
+        for i := range bvnList {
+            if bvnList[i].PeerID == peerID || bvnList[i].ID == peerID {
+                return &bvnList[i], true
+            }
+        }
+    }
+    
+    // For backward compatibility, also check the Validators slice
+    for _, validator := range a.Validators {
+        if validator.ID == peerID || validator.PeerID == peerID {
+            return validator, true
+        }
+    }
+    
+    return nil, false
+}
 
-// FindValidatorsByPartition finds all validators belonging to a specific partition
-func (a *AddressDir) FindValidatorsByPartition(partitionID string) []Validator
+// FindValidatorsByPartition finds all validators for a specific partition
+func (a *AddressDir) FindValidatorsByPartition(partitionID string) []Validator {
+    a.mu.RLock()
+    defer a.mu.RUnlock()
+    
+    result := make([]Validator, 0)
+    
+    // Check if this is the directory network
+    if partitionID == "dn" {
+        return append(result, a.DNValidators...)
+    }
+    
+    // Search in BVN validators
+    for _, bvnList := range a.BVNValidators {
+        for _, validator := range bvnList {
+            if validator.PartitionID == partitionID {
+                result = append(result, validator)
+            }
+        }
+    }
+    
+    return result
+}
 
-// FindValidatorsByBVN finds all validators belonging to a specific BVN index
-func (a *AddressDir) FindValidatorsByBVN(bvnIndex int) []Validator
+// FindValidatorsByBVN finds all validators for a specific BVN index
+func (a *AddressDir) FindValidatorsByBVN(bvnIndex int) []Validator {
+    a.mu.RLock()
+    defer a.mu.RUnlock()
+    
+    if bvnIndex < 0 || bvnIndex >= len(a.BVNValidators) {
+        return make([]Validator, 0)
+    }
+    
+    return append(make([]Validator, 0), a.BVNValidators[bvnIndex]...)
+}
 
 // SetValidatorStatus updates the status of a validator
-func (a *AddressDir) SetValidatorStatus(peerID, status string) bool
+func (a *AddressDir) SetValidatorStatus(peerID, status string) bool {
+    validator, found := a.FindValidator(peerID)
+    if !found {
+        return false
+    }
+    
+    a.mu.Lock()
+    defer a.mu.Unlock()
+    
+    validator.Status = status
+    validator.LastUpdated = time.Now()
+    return true
+}
 
-// UpdateValidatorHeight updates the last observed block height for a validator
-func (a *AddressDir) UpdateValidatorHeight(peerID string, height int64) bool
+// UpdateValidatorHeight updates the height of a validator
+func (a *AddressDir) UpdateValidatorHeight(peerID string, dnHeight, bvnHeight uint64) bool {
+    validator, found := a.FindValidator(peerID)
+    if !found {
+        return false
+    }
+    
+    a.mu.Lock()
+    defer a.mu.Unlock()
+    
+    validator.DNHeight = dnHeight
+    validator.BVNHeight = bvnHeight
+    validator.LastUpdated = time.Now()
+    return true
+}
+```
+
+**Implementation Notes:**
+- All methods use proper locking to ensure thread safety
+- AddValidator acts as a high-level function that delegates to AddDNValidator or AddBVNValidator based on partition type
+- FindValidator searches through all validator collections (DN, BVN, and legacy Validators)
+- Partition-specific methods allow efficient filtering of validators
+- Height tracking methods allow monitoring of validator sync status
 
 // QueryNodeHeights queries the heights of a node for both DN and BVN partitions
 // This method uses the Tendermint RPC client to query the node's status
 func (a *AddressDir) QueryNodeHeights(ctx context.Context, peer *NetworkPeer, host string) error
 ```
 
+
 ### 2. Address Management
 
 ```go
 // SetValidatorP2PAddress sets the P2P address for a validator
-func (a *AddressDir) SetValidatorP2PAddress(peerID, address string) error
+func (a *AddressDir) SetValidatorP2PAddress(peerID, address string) bool {
+    validator, found := a.FindValidator(peerID)
+    if !found {
+        return false
+    }
+    
+    a.mu.Lock()
+    defer a.mu.Unlock()
+    
+    validator.P2PAddress = address
+    
+    // Also add to the Addresses slice for backward compatibility
+    addressExists := false
+    for _, addr := range validator.Addresses {
+        if addr == address {
+            addressExists = true
+            break
+        }
+    }
+    
+    if !addressExists {
+        validator.Addresses = append(validator.Addresses, address)
+    }
+    
+    // Set address status
+    validator.AddressStatus[address] = "active"
+    validator.LastUpdated = time.Now()
+    return true
+}
+
+// SetValidatorRPCAddress sets the RPC address for a validator
+func (a *AddressDir) SetValidatorRPCAddress(peerID, address string) bool {
+    validator, found := a.FindValidator(peerID)
+    if !found {
+        return false
+    }
+    
+    a.mu.Lock()
+    defer a.mu.Unlock()
+    
+    validator.RPCAddress = address
+    validator.LastUpdated = time.Now()
+    return true
+}
+
+// SetValidatorAPIAddress sets the API address for a validator
+func (a *AddressDir) SetValidatorAPIAddress(peerID, address string) bool {
+    validator, found := a.FindValidator(peerID)
+    if !found {
+        return false
+    }
+    
+    a.mu.Lock()
+    defer a.mu.Unlock()
+    
+    validator.APIAddress = address
+    validator.LastUpdated = time.Now()
+    return true
+}
 
 // SetValidatorIPAddress sets the IP address for a validator
-func (a *AddressDir) SetValidatorIPAddress(peerID, address string) error
+func (a *AddressDir) SetValidatorIPAddress(peerID, address string) bool {
+    validator, found := a.FindValidator(peerID)
+    if !found {
+        return false
+    }
+    
+    a.mu.Lock()
+    defer a.mu.Unlock()
+    
+    validator.IPAddress = address
+    validator.LastUpdated = time.Now()
+    return true
+}
 
-// SetValidatorRPCAddress sets the RPC endpoint address for a validator
-func (a *AddressDir) SetValidatorRPCAddress(peerID, address string) error
+// SetValidatorMetricsAddress sets the metrics address for a validator
+func (a *AddressDir) SetValidatorMetricsAddress(peerID, address string) bool {
+    validator, found := a.FindValidator(peerID)
+    if !found {
+        return false
+    }
+    
+    a.mu.Lock()
+    defer a.mu.Unlock()
+    
+    validator.MetricsAddress = address
+    validator.LastUpdated = time.Now()
+    return true
+}
 
-// SetValidatorAPIAddress sets the API endpoint address for a validator
-func (a *AddressDir) SetValidatorAPIAddress(peerID, address string) error
-
-// SetValidatorMetricsAddress sets the metrics endpoint address for a validator
-func (a *AddressDir) SetValidatorMetricsAddress(peerID, address string) error
-
-// GetKnownAddressesForValidator returns known addresses for a validator based on peerID and partitionID
-func (a *AddressDir) GetKnownAddressesForValidator(peerID, partitionID string) (p2p string, ip string, rpc string)
+// GetKnownAddressesForValidator returns all known addresses for a validator
+func (a *AddressDir) GetKnownAddressesForValidator(peerID string) map[string]string {
+    validator, found := a.FindValidator(peerID)
+    if !found {
+        return make(map[string]string)
+    }
+    
+    a.mu.RLock()
+    defer a.mu.RUnlock()
+    
+    addresses := make(map[string]string)
+    
+    if validator.P2PAddress != "" {
+        addresses["p2p"] = validator.P2PAddress
+    }
+    
+    if validator.RPCAddress != "" {
+        addresses["rpc"] = validator.RPCAddress
+    }
+    
+    if validator.APIAddress != "" {
+        addresses["api"] = validator.APIAddress
+    }
+    
+    if validator.IPAddress != "" {
+        addresses["ip"] = validator.IPAddress
+    }
+    
+    if validator.MetricsAddress != "" {
+        addresses["metrics"] = validator.MetricsAddress
+    }
+    
+    return addresses
+}
 ```
+
+**Implementation Notes:**
+- Each address type has a dedicated setter method
+- P2P addresses are also added to the legacy Addresses slice for backward compatibility
+- All methods use proper locking to ensure thread safety
+- GetKnownAddressesForValidator provides a convenient way to access all address types
 
 ### 3. Problem Node Management
 
 ```go
-// MarkNodeProblematic marks a node as problematic
-func (a *AddressDir) MarkNodeProblematic(peerID, reason string) bool
+// MarkNodeProblematic marks a node as problematic with a reason
+func (a *AddressDir) MarkNodeProblematic(peerID, reason string) bool {
+    validator, found := a.FindValidator(peerID)
+    if !found {
+        return false
+    }
+    
+    a.mu.Lock()
+    defer a.mu.Unlock()
+    
+    validator.IsProblematic = true
+    validator.ProblemReason = reason
+    validator.ProblemSince = time.Now()
+    validator.LastUpdated = time.Now()
+    return true
+}
 
-// IsNodeProblematic checks if a node is problematic
-func (a *AddressDir) IsNodeProblematic(peerID string) bool
+// IsNodeProblematic checks if a node is marked as problematic
+func (a *AddressDir) IsNodeProblematic(peerID string) (bool, string) {
+    validator, found := a.FindValidator(peerID)
+    if !found {
+        return false, ""
+    }
+    
+    a.mu.RLock()
+    defer a.mu.RUnlock()
+    
+    return validator.IsProblematic, validator.ProblemReason
+}
 
-// GetProblemNodes returns all problem nodes
-func (a *AddressDir) GetProblemNodes() []Validator
+// GetProblemNodes returns a list of all problematic nodes
+func (a *AddressDir) GetProblemNodes() []*ProblemNode {
+    a.mu.RLock()
+    defer a.mu.RUnlock()
+    
+    result := make([]*ProblemNode, 0)
+    
+    // Check DN validators
+    for i := range a.DNValidators {
+        if a.DNValidators[i].IsProblematic {
+            node := &ProblemNode{
+                ValidatorID: a.DNValidators[i].PeerID,
+                PartitionID: a.DNValidators[i].PartitionID,
+                MarkedAt:    a.DNValidators[i].ProblemSince,
+                Reason:      a.DNValidators[i].ProblemReason,
+                AvoidForRequestTypes: a.DNValidators[i].AvoidForRequestTypes,
+            }
+            result = append(result, node)
+        }
+    }
+    
+    // Check BVN validators
+    for _, bvnList := range a.BVNValidators {
+        for i := range bvnList {
+            if bvnList[i].IsProblematic {
+                node := &ProblemNode{
+                    ValidatorID: bvnList[i].PeerID,
+                    PartitionID: bvnList[i].PartitionID,
+                    MarkedAt:    bvnList[i].ProblemSince,
+                    Reason:      bvnList[i].ProblemReason,
+                    AvoidForRequestTypes: bvnList[i].AvoidForRequestTypes,
+                }
+                result = append(result, node)
+            }
+        }
+    }
+    
+    return result
+}
 
-// AddRequestTypeToAvoid adds a request type that should not be sent to this validator
-func (a *AddressDir) AddRequestTypeToAvoid(peerID, requestType string) bool
+// AddRequestTypeToAvoid adds a request type to avoid for a problematic node
+func (a *AddressDir) AddRequestTypeToAvoid(peerID, requestType string) bool {
+    validator, found := a.FindValidator(peerID)
+    if !found {
+        return false
+    }
+    
+    a.mu.Lock()
+    defer a.mu.Unlock()
+    
+    // Check if request type is already in the list
+    for _, rt := range validator.AvoidForRequestTypes {
+        if rt == requestType {
+            return true // Already in the list
+        }
+    }
+    
+    validator.AvoidForRequestTypes = append(validator.AvoidForRequestTypes, requestType)
+    validator.LastUpdated = time.Now()
+    return true
+}
 
-// ShouldAvoidForRequestType checks if a validator should be avoided for a specific request type
-func (a *AddressDir) ShouldAvoidForRequestType(peerID, requestType string) bool
+// ShouldAvoidForRequestType checks if a node should be avoided for a specific request type
+func (a *AddressDir) ShouldAvoidForRequestType(peerID, requestType string) bool {
+    validator, found := a.FindValidator(peerID)
+    if !found {
+        return false
+    }
+    
+    a.mu.RLock()
+    defer a.mu.RUnlock()
+    
+    if !validator.IsProblematic {
+        return false
+    }
+    
+    // Check if this request type should be avoided
+    for _, rt := range validator.AvoidForRequestTypes {
+        if rt == requestType || rt == "*" {
+            return true
+        }
+    }
+    
+    return false
+}
 
 // ClearProblematicStatus clears the problematic status of a node
-func (a *AddressDir) ClearProblematicStatus(peerID string) bool
+func (a *AddressDir) ClearProblematicStatus(peerID string) bool {
+    validator, found := a.FindValidator(peerID)
+    if !found {
+        return false
+    }
+    
+    a.mu.Lock()
+    defer a.mu.Unlock()
+    
+    validator.IsProblematic = false
+    validator.ProblemReason = ""
+    validator.AvoidForRequestTypes = make([]string, 0)
+    validator.LastUpdated = time.Now()
+    return true
+}
 ```
 
-### 4. Network Peer Management
+**Implementation Notes:**
+- Problem node management allows tracking of problematic validators
+- Request type avoidance allows fine-grained control over which operations to avoid on specific nodes
+- GetProblemNodes provides a consolidated view of all problematic nodes across partitions
+- All methods use proper locking to ensure thread safety
+
+### 4. Network Peer Discovery
 
 ```go
-// GetValidatorPeers returns all peers that are validators
-func (a *AddressDir) GetValidatorPeers() []NetworkPeer
+// DiscoverNetworkPeers discovers peers in the network using the provided client
+// Returns the number of peers discovered and any error encountered
+func (a *AddressDir) DiscoverNetworkPeers(ctx context.Context, client api.NetworkService) (int, error) {
+    // Get network status from the client
+    status, err := client.NetworkStatus(ctx, api.NetworkStatusOptions{})
+    if err != nil {
+        return 0, fmt.Errorf("failed to get network status: %w", err)
+    }
+    
+    // Update network information
+    a.mu.Lock()
+    a.NetworkInfo.Name = status.Network.Name
+    a.NetworkInfo.ID = status.Network.ID
+    a.NetworkInfo.IsMainnet = status.Network.IsMainnet
+    a.NetworkInfo.APIEndpoint = client.BaseURL()
+    
+    // Update partitions
+    a.NetworkInfo.Partitions = make([]*PartitionInfo, 0, len(status.Network.Partitions))
+    a.NetworkInfo.PartitionMap = make(map[string]*PartitionInfo)
+    
+    for _, p := range status.Network.Partitions {
+        partition := &PartitionInfo{
+            ID:       p.ID,
+            Type:     p.Type,
+            URL:      a.constructPartitionURL(p.ID),
+            Active:   true,
+            BVNIndex: -1,
+        }
+        
+        // Set BVN index for BVNs
+        if p.Type == "bvn" {
+            if p.ID == "Apollo" {
+                partition.BVNIndex = 0
+            } else if p.ID == "Chandrayaan" {
+                partition.BVNIndex = 1
+            } else if p.ID == "Voyager" {
+                partition.BVNIndex = 2
+            }
+        }
+        
+        a.NetworkInfo.Partitions = append(a.NetworkInfo.Partitions, partition)
+        a.NetworkInfo.PartitionMap[p.ID] = partition
+    }
+    a.mu.Unlock()
+    
+    // Track validators and seen peers
+    validators := make(map[string]bool)
+    seenPeers := make(map[string]bool)
+    
+    // Discover directory peers
+    dirPeers := a.discoverDirectoryPeers(ctx, status, validators, seenPeers)
+    
+    // Discover partition peers
+    partitionPeers := 0
+    for _, partition := range status.Network.Partitions {
+        count, err := a.discoverPartitionPeers(ctx, client, partition, validators, seenPeers)
+        if err != nil {
+            a.Logger.Printf("Error discovering peers for partition %s: %v", partition.ID, err)
+            continue
+        }
+        partitionPeers += count
+    }
+    
+    // Add known non-validator peers
+    nonValidatorPeers := a.discoverCommonNonValidators(seenPeers)
+    
+    // Return total number of peers
+    return dirPeers + partitionPeers + nonValidatorPeers, nil
+}
 
-// GetNonValidatorPeers returns all peers that are not validators
-func (a *AddressDir) GetNonValidatorPeers() []NetworkPeer
+// discoverDirectoryPeers discovers peers in the directory network
+func (a *AddressDir) discoverDirectoryPeers(ctx context.Context, status *api.NetworkStatus, validators map[string]bool, seenPeers map[string]bool) int {
+    a.mu.Lock()
+    defer a.mu.Unlock()
+    
+    count := 0
+    
+    // Process directory validators
+    for _, validator := range status.Directory.Validators {
+        // Skip if already seen
+        if validators[validator.ID] {
+            continue
+        }
+        
+        // Add validator
+        v := a.AddValidator(validator.ID, validator.Name, "dn", "dn")
+        
+        // Add validator addresses
+        if validator.Address != "" {
+            a.SetValidatorP2PAddress(validator.ID, validator.Address)
+        }
+        
+        // Mark as seen
+        validators[validator.ID] = true
+        seenPeers[validator.ID] = true
+        count++
+        
+        // Add to discovery stats
+        a.DiscoveryStats.TotalValidators++
+        a.DiscoveryStats.MethodStats["directory"]++
+    }
+    
+    return count
+}
 
-// AddPeerAddress adds an address to a peer
-func (a *AddressDir) AddPeerAddress(peerID string, address string) error
+// discoverPartitionPeers discovers peers in a specific partition
+func (a *AddressDir) discoverPartitionPeers(ctx context.Context, client api.NetworkService, partition api.PartitionInfo, validators map[string]bool, seenPeers map[string]bool) (int, error) {
+    a.mu.Lock()
+    defer a.mu.Unlock()
+    
+    count := 0
+    bvnIndex := -1
+    
+    // Set BVN index for BVNs
+    if partition.Type == "bvn" {
+        if partition.ID == "Apollo" {
+            bvnIndex = 0
+        } else if partition.ID == "Chandrayaan" {
+            bvnIndex = 1
+        } else if partition.ID == "Voyager" {
+            bvnIndex = 2
+        }
+    }
+    
+    // Get partition info
+    partitionInfo, err := client.PartitionInfo(ctx, api.PartitionInfoOptions{Partition: partition.ID})
+    if err != nil {
+        return 0, fmt.Errorf("failed to get partition info: %w", err)
+    }
+    
+    // Process validators
+    for _, validator := range partitionInfo.Validators {
+        // Skip if already seen
+        if validators[validator.ID] {
+            continue
+        }
+        
+        // Add validator
+        v := a.AddValidator(validator.ID, validator.Name, partition.ID, partition.Type)
+        
+        // Set BVN index for BVN validators
+        if bvnIndex >= 0 {
+            v.BVN = bvnIndex
+        }
+        
+        // Add validator addresses
+        if validator.Address != "" {
+            a.SetValidatorP2PAddress(validator.ID, validator.Address)
+        }
+        
+        // Mark as seen
+        validators[validator.ID] = true
+        seenPeers[validator.ID] = true
+        count++
+        
+        // Add to discovery stats
+        a.DiscoveryStats.TotalValidators++
+        a.DiscoveryStats.MethodStats["partition"]++
+    }
+    
+    return count, nil
+}
 
-// GetPeerRPCEndpoint returns the best RPC endpoint for a peer
-func (a *AddressDir) GetPeerRPCEndpoint(peerID string) (string, error)
+// discoverCommonNonValidators adds known non-validator peers
+func (a *AddressDir) discoverCommonNonValidators(seenPeers map[string]bool) int {
+    a.mu.Lock()
+    defer a.mu.Unlock()
+    
+    count := 0
+    
+    // Add common non-validator peers (e.g., seed nodes, bootstrap nodes)
+    commonPeers := []struct {
+        id      string
+        address string
+    }{
+        {"seed-1", "/ip4/1.2.3.4/tcp/26656/p2p/12D3KooWL4Ck5aNMzfk9xM9M8MhTKfQPMVTFQQyKnQkTMGnKj9Td"},
+        {"seed-2", "/ip4/5.6.7.8/tcp/26656/p2p/12D3KooWA9Cuph1ULM1QmkXrNiHeFKZFsVMCpHp5XQJBYTUxdXFZ"},
+        // Add more common peers as needed
+    }
+    
+    for _, peer := range commonPeers {
+        // Skip if already seen
+        if seenPeers[peer.id] {
+            continue
+        }
+        
+        // Create network peer
+        networkPeer := NetworkPeer{
+            ID:              peer.id,
+            IsValidator:     false,
+            Addresses:       []string{peer.address},
+            Status:          "active",
+            LastSeen:        time.Now(),
+            FirstSeen:       time.Now(),
+            DiscoveryMethod: "static",
+            DiscoveredAt:    time.Now(),
+        }
+        
+        // Add to network peers
+        a.NetworkPeers[peer.id] = networkPeer
+        seenPeers[peer.id] = true
+        count++
+        
+        // Add to discovery stats
+        a.DiscoveryStats.TotalNonValidators++
+        a.DiscoveryStats.MethodStats["static"]++
+    }
+    
+    return count
+}
 
-// DiscoverNetworkPeers discovers peers in the network using various methods
-func (a *AddressDir) DiscoverNetworkPeers(ctx context.Context, client api.NetworkService) (int, error)
+// RefreshNetworkPeers refreshes the status of known network peers
+// Returns statistics about the refresh operation
+func (a *AddressDir) RefreshNetworkPeers(ctx context.Context) RefreshStats {
+    a.mu.Lock()
+    defer a.mu.Unlock()
+    
+    stats := RefreshStats{
+        TotalPeers:        len(a.NetworkPeers),
+        NewPeers:          0,
+        LostPeers:         0,
+        UpdatedPeers:      0,
+        UnchangedPeers:    0,
+        TotalValidators:   0,
+        TotalNonValidators: 0,
+        ActiveValidators:  0,
+        InactiveValidators: 0,
+        UnreachableValidators: 0,
+    }
+    
+    // Check each peer
+    for id, peer := range a.NetworkPeers {
+        // Skip non-validators for now
+        if !peer.IsValidator {
+            stats.TotalNonValidators++
+            continue
+        }
+        
+        stats.TotalValidators++
+        
+        // Check if validator exists
+        validator, found := a.FindValidator(id)
+        if !found {
+            // Validator not found, mark as lost
+            peer.IsLost = true
+            peer.Status = "lost"
+            a.NetworkPeers[id] = peer
+            stats.LostPeers++
+            stats.LostPeerIDs = append(stats.LostPeerIDs, id)
+            continue
+        }
+        
+        // Update peer status based on validator status
+        oldStatus := peer.Status
+        if validator.IsProblematic {
+            peer.Status = "problematic"
+            stats.UnreachableValidators++
+        } else if validator.Status == "active" {
+            peer.Status = "active"
+            stats.ActiveValidators++
+        } else {
+            peer.Status = "inactive"
+            stats.InactiveValidators++
+        }
+        
+        // Check if status changed
+        if oldStatus != peer.Status {
+            stats.UpdatedPeers++
+            stats.ChangedPeerIDs = append(stats.ChangedPeerIDs, id)
+        } else {
+            stats.UnchangedPeers++
+        }
+        
+        // Update peer
+        peer.LastSeen = time.Now()
+        a.NetworkPeers[id] = peer
+    }
+    
+    return stats
+}
+```
 
-// RefreshNetworkPeers updates the network peer information while preserving history
-func (a *AddressDir) RefreshNetworkPeers(ctx context.Context, client api.NetworkService) (RefreshStats, error)
-
-// constructPartitionURL standardizes URL construction for partitions
-func (a *AddressDir) constructPartitionURL(partitionID string) string
-
-// constructAnchorURL standardizes URL construction for anchors
-func (a *AddressDir) constructAnchorURL(partitionID string) string
+**Implementation Notes:**
+- DiscoverNetworkPeers is the main entry point for peer discovery
+- It uses helper methods for discovering different types of peers:
+  - discoverDirectoryPeers for directory network validators
+  - discoverPartitionPeers for partition-specific validators
+  - discoverCommonNonValidators for known non-validator peers
+- The discovery process updates network information, partitions, and validators
+- RefreshNetworkPeers updates the status of known peers and provides statistics
 ```
 
 ### 5. Fixed getKnownAddressesForValidator Function
@@ -590,6 +1341,503 @@ It's important to note that healing and monitoring of Accumulate simply can't be
 3. **Accurate Address Management**: The address management functions provide up-to-date information about validator addresses, helping direct requests to the most reliable nodes.
 
 By focusing on these aspects, address2.go will improve the reliability and efficiency of network operations without relying on caching mechanisms.
+
+## Implementation Plan to Align with Design
+
+### Phase 1: Structural Preparation ✅
+
+1. **Move Helper Functions to address2_help.go** ✅
+   - ✅ Created address2_help.go file
+   - ✅ Moved the following helper functions with updates to work with the new structure:
+     - constructPartitionURL
+     - constructAnchorURL
+     - findValidatorByID (updated to search in DNValidators and BVNValidators)
+     - ValidateMultiaddress
+     - parseMultiaddress
+     - GetPeerRPCEndpoint
+   - ✅ Created comprehensive tests in address2_help_test.go
+
+2. **Update AddressDir Structure** ✅
+   - ✅ Modified the AddressDir struct to include:
+     ```go
+     type AddressDir struct {
+         mu sync.RWMutex
+         
+         // DNValidators is a list of validators in the Directory Network
+         DNValidators []Validator
+         
+         // BVNValidators is a list of lists of validators in BVNs
+         BVNValidators [][]Validator
+         
+         // NetworkPeers is a map of peer ID to NetworkPeer
+         NetworkPeers map[string]NetworkPeer
+         
+         // URL construction helpers
+         URLHelpers map[string]string
+         
+         // Network information
+         NetworkInfo *NetworkInfo
+         
+         // Logger for detailed logging
+         Logger *log.Logger
+         
+         // Statistics for peer discovery
+         DiscoveryStats DiscoveryStats
+         
+         // Keep Validators for backward compatibility during transition
+         Validators []*Validator
+         
+         // Keep peerDiscovery for implementation needs
+         peerDiscovery *SimplePeerDiscovery
+     }
+     ```
+
+3. **Update Validator Structure** ✅
+   - ✅ Modified the Validator struct to include all fields from the design:
+     ```go
+     type Validator struct {
+         // Unique peer identifier for the validator
+         PeerID string `json:"peer_id"`
+         
+         // Name or description of the validator
+         Name string `json:"name"`
+         
+         // Partition information
+         PartitionID   string `json:"partition_id"`
+         PartitionType string `json:"partition_type"`
+         
+         // BVN index (0, 1, or 2 for mainnet)
+         BVN int `json:"bvn"`
+         
+         // Status of the validator
+         Status string `json:"status"`
+         
+         // Different address types for this validator
+         P2PAddress     string `json:"p2p_address"`
+         IPAddress      string `json:"ip_address"`
+         RPCAddress     string `json:"rpc_address"`
+         APIAddress     string `json:"api_address"`
+         MetricsAddress string `json:"metrics_address"`
+         
+         // URLs associated with this validator
+         URLs map[string]string `json:"urls"`
+         
+         // Heights for different networks
+         DNHeight  uint64 `json:"dn_height"`
+         BVNHeight uint64 `json:"bvn_height"`
+         
+         // Problem node tracking
+         IsProblematic bool      `json:"is_problematic"`
+         ProblemReason string    `json:"problem_reason"`
+         ProblemSince  time.Time `json:"problem_since"`
+         
+         // Last block height observed for this validator
+         LastHeight int64 `json:"last_height"`
+         
+         // Request types to avoid sending to this validator
+         AvoidForRequestTypes []string `json:"avoid_for_request_types"`
+         
+         // Last updated timestamp
+         LastUpdated time.Time `json:"last_updated"`
+         
+         // Keep ID for backward compatibility
+         ID string `json:"id"`
+         
+         // Keep Addresses and AddressStatus for compatibility
+         Addresses     []string         `json:"addresses"`
+         AddressStatus map[string]string `json:"address_status"`
+     }
+     ```
+
+### Phase 2: Method Implementation ⏳
+
+1. **Update NewAddressDir and NewTestAddressDir** ⏳
+   - Implement NewAddressDir according to the design:
+     ```go
+     func NewAddressDir() *AddressDir {
+         logger := log.New(os.Stdout, "[AddressDir] ", log.LstdFlags)
+         return &AddressDir{
+             mu:            sync.RWMutex{},
+             DNValidators:  make([]Validator, 0),
+             BVNValidators: make([][]Validator, 0),
+             NetworkPeers:  make(map[string]NetworkPeer),
+             URLHelpers:    make(map[string]string),
+             Logger:        logger,
+             NetworkInfo: &NetworkInfo{
+                 Name:        "acme",
+                 ID:          "acme",
+                 IsMainnet:   false,
+                 Partitions:  make([]*PartitionInfo, 0),
+                 PartitionMap: make(map[string]*PartitionInfo),
+                 APIEndpoint: "https://mainnet.accumulatenetwork.io/v2",
+             },
+             DiscoveryStats: DiscoveryStats{
+                 MethodStats: make(map[string]int),
+             },
+             Validators:    make([]*Validator, 0), // For backward compatibility
+             peerDiscovery: NewSimplePeerDiscovery(logger),
+         }
+     }
+     ```
+   - Add NewAddressDirWithOptions for customization options
+
+2. **Implement Validator Management Methods** ⏳
+   - Implement AddValidator to work with both DNValidators and BVNValidators:
+     ```go
+     func (a *AddressDir) AddValidator(peerID, name, partitionID, partitionType string) *Validator {
+         a.mu.Lock()
+         defer a.mu.Unlock()
+         
+         // Check if validator already exists
+         if validator, found := a.FindValidator(peerID); found {
+             // Update existing validator
+             validator.Name = name
+             validator.PartitionID = partitionID
+             validator.PartitionType = partitionType
+             validator.LastUpdated = time.Now()
+             return validator
+         }
+         
+         // Create new validator
+         validator := &Validator{
+             ID:            peerID, // For backward compatibility
+             PeerID:        peerID,
+             Name:          name,
+             PartitionID:   partitionID,
+             PartitionType: partitionType,
+             Status:        "unknown",
+             Addresses:     make([]string, 0),
+             AddressStatus: make(map[string]string),
+             URLs:          make(map[string]string),
+             LastUpdated:   time.Now(),
+         }
+         
+         // Add to appropriate collections based on partition type
+         if partitionType == "dn" {
+             a.AddDNValidator(*validator)
+         } else if strings.HasPrefix(partitionType, "bvn") {
+             // Extract BVN index from partition type or ID
+             bvnIndex := 0
+             if partitionID == "Apollo" {
+                 bvnIndex = 0
+             } else if partitionID == "Chandrayaan" {
+                 bvnIndex = 1
+             } else if partitionID == "Voyager" {
+                 bvnIndex = 2
+             }
+             a.AddBVNValidator(bvnIndex, *validator)
+         }
+         
+         // Add to legacy Validators slice for backward compatibility
+         a.Validators = append(a.Validators, validator)
+         
+         return validator
+     }
+     ```
+   - Implement AddDNValidator, AddBVNValidator, FindValidatorsByPartition, FindValidatorsByBVN, and UpdateValidatorHeight
+   - Update FindValidator to search in DNValidators, BVNValidators, and legacy Validators
+
+3. **Implement Address Management Methods** ⏳
+   - Implement address setters with proper locking and validation:
+     ```go
+     func (a *AddressDir) SetValidatorP2PAddress(peerID, address string) bool {
+         validator, found := a.FindValidator(peerID)
+         if !found {
+             return false
+         }
+         
+         a.mu.Lock()
+         defer a.mu.Unlock()
+         
+         validator.P2PAddress = address
+         
+         // Also add to the Addresses slice for backward compatibility
+         addressExists := false
+         for _, addr := range validator.Addresses {
+             if addr == address {
+                 addressExists = true
+                 break
+             }
+         }
+         
+         if !addressExists {
+             validator.Addresses = append(validator.Addresses, address)
+         }
+         
+         // Set address status
+         validator.AddressStatus[address] = "active"
+         validator.LastUpdated = time.Now()
+         return true
+     }
+     ```
+   - Implement similar methods for other address types (RPC, API, IP, Metrics)
+   - Implement GetKnownAddressesForValidator to return all address types in a map
+
+4. **Implement Problem Node Management Methods** ⏳
+   - Implement methods for tracking problematic nodes:
+     ```go
+     func (a *AddressDir) MarkNodeProblematic(peerID, reason string) bool {
+         validator, found := a.FindValidator(peerID)
+         if !found {
+             return false
+         }
+         
+         a.mu.Lock()
+         defer a.mu.Unlock()
+         
+         validator.IsProblematic = true
+         validator.ProblemReason = reason
+         validator.ProblemSince = time.Now()
+         validator.LastUpdated = time.Now()
+         return true
+     }
+     ```
+   - Implement methods for request type avoidance (AddRequestTypeToAvoid, ShouldAvoidForRequestType)
+   - Implement GetProblemNodes to return a consolidated list of problematic nodes
+
+### Phase 3: Network Peer Discovery ⏳
+
+1. **Update DiscoverNetworkPeers** ⏳
+   - Implement according to the design with detailed network status processing:
+     ```go
+     func (a *AddressDir) DiscoverNetworkPeers(ctx context.Context, client api.NetworkService) (int, error) {
+         // Get network status from the client
+         status, err := client.NetworkStatus(ctx, api.NetworkStatusOptions{})
+         if err != nil {
+             return 0, fmt.Errorf("failed to get network status: %w", err)
+         }
+         
+         // Update network information
+         a.mu.Lock()
+         a.NetworkInfo.Name = status.Network.Name
+         a.NetworkInfo.ID = status.Network.ID
+         a.NetworkInfo.IsMainnet = status.Network.IsMainnet
+         a.NetworkInfo.APIEndpoint = client.BaseURL()
+         
+         // Update partitions
+         a.NetworkInfo.Partitions = make([]*PartitionInfo, 0, len(status.Network.Partitions))
+         a.NetworkInfo.PartitionMap = make(map[string]*PartitionInfo)
+         
+         for _, p := range status.Network.Partitions {
+             partition := &PartitionInfo{
+                 ID:       p.ID,
+                 Type:     p.Type,
+                 URL:      a.constructPartitionURL(p.ID),
+                 Active:   true,
+                 BVNIndex: -1,
+             }
+             
+             // Set BVN index for BVNs
+             if p.Type == "bvn" {
+                 if p.ID == "Apollo" {
+                     partition.BVNIndex = 0
+                 } else if p.ID == "Chandrayaan" {
+                     partition.BVNIndex = 1
+                 } else if p.ID == "Voyager" {
+                     partition.BVNIndex = 2
+                 }
+             }
+             
+             a.NetworkInfo.Partitions = append(a.NetworkInfo.Partitions, partition)
+             a.NetworkInfo.PartitionMap[p.ID] = partition
+         }
+         a.mu.Unlock()
+         
+         // Track validators and seen peers
+         validators := make(map[string]bool)
+         seenPeers := make(map[string]bool)
+         
+         // Discover directory peers
+         dirPeers := a.discoverDirectoryPeers(ctx, status, validators, seenPeers)
+         
+         // Discover partition peers
+         partitionPeers := 0
+         for _, partition := range status.Network.Partitions {
+             count, err := a.discoverPartitionPeers(ctx, client, partition, validators, seenPeers)
+             if err != nil {
+                 a.Logger.Printf("Error discovering peers for partition %s: %v", partition.ID, err)
+                 continue
+             }
+             partitionPeers += count
+         }
+         
+         // Add known non-validator peers
+         nonValidatorPeers := a.discoverCommonNonValidators(seenPeers)
+         
+         // Return total number of peers
+         return dirPeers + partitionPeers + nonValidatorPeers, nil
+     }
+     ```
+
+2. **Implement Helper Methods** ⏳
+   - Implement discoverDirectoryPeers to process directory validators:
+     ```go
+     func (a *AddressDir) discoverDirectoryPeers(ctx context.Context, status *api.NetworkStatus, validators map[string]bool, seenPeers map[string]bool) int {
+         a.mu.Lock()
+         defer a.mu.Unlock()
+         
+         count := 0
+         
+         // Process directory validators
+         for _, validator := range status.Directory.Validators {
+             // Skip if already seen
+             if validators[validator.ID] {
+                 continue
+             }
+             
+             // Add validator
+             v := a.AddValidator(validator.ID, validator.Name, "dn", "dn")
+             
+             // Add validator addresses
+             if validator.Address != "" {
+                 a.SetValidatorP2PAddress(validator.ID, validator.Address)
+             }
+             
+             // Mark as seen
+             validators[validator.ID] = true
+             seenPeers[validator.ID] = true
+             count++
+             
+             // Add to discovery stats
+             a.DiscoveryStats.TotalValidators++
+             a.DiscoveryStats.MethodStats["directory"]++
+         }
+         
+         return count
+     }
+     ```
+   - Implement discoverPartitionPeers to process partition-specific validators
+   - Implement discoverCommonNonValidators to add known non-validator peers
+
+3. **Implement RefreshNetworkPeers** ⏳
+   - Implement the RefreshNetworkPeers method with detailed status tracking:
+     ```go
+     func (a *AddressDir) RefreshNetworkPeers(ctx context.Context) RefreshStats {
+         a.mu.Lock()
+         defer a.mu.Unlock()
+         
+         stats := RefreshStats{
+             TotalPeers:        len(a.NetworkPeers),
+             NewPeers:          0,
+             LostPeers:         0,
+             UpdatedPeers:      0,
+             UnchangedPeers:    0,
+             TotalValidators:   0,
+             TotalNonValidators: 0,
+             ActiveValidators:  0,
+             InactiveValidators: 0,
+             UnreachableValidators: 0,
+         }
+         
+         // Check each peer
+         for id, peer := range a.NetworkPeers {
+             // Skip non-validators for now
+             if !peer.IsValidator {
+                 stats.TotalNonValidators++
+                 continue
+             }
+             
+             stats.TotalValidators++
+             
+             // Check if validator exists
+             validator, found := a.FindValidator(id)
+             if !found {
+                 // Validator not found, mark as lost
+                 peer.IsLost = true
+                 peer.Status = "lost"
+                 a.NetworkPeers[id] = peer
+                 stats.LostPeers++
+                 stats.LostPeerIDs = append(stats.LostPeerIDs, id)
+                 continue
+             }
+             
+             // Update peer status based on validator status
+             oldStatus := peer.Status
+             if validator.IsProblematic {
+                 peer.Status = "problematic"
+                 stats.UnreachableValidators++
+             } else if validator.Status == "active" {
+                 peer.Status = "active"
+                 stats.ActiveValidators++
+             } else {
+                 peer.Status = "inactive"
+                 stats.InactiveValidators++
+             }
+             
+             // Check if status changed
+             if oldStatus != peer.Status {
+                 stats.UpdatedPeers++
+                 stats.ChangedPeerIDs = append(stats.ChangedPeerIDs, id)
+             } else {
+                 stats.UnchangedPeers++
+             }
+             
+             // Update peer
+             peer.LastSeen = time.Now()
+             a.NetworkPeers[id] = peer
+         }
+         
+         return stats
+     }
+     ```
+
+### Phase 4: URL Construction Standardization ⏳
+
+1. **Standardize URL Construction** ⏳
+   - Ensure consistent URL construction across the codebase using the helper methods:
+     ```go
+     func (a *AddressDir) constructPartitionURL(partitionID string) string {
+         return fmt.Sprintf("acc://%s.%s", partitionID, a.NetworkInfo.ID)
+     }
+     
+     func (a *AddressDir) constructAnchorURL(partitionID string) string {
+         return fmt.Sprintf("acc://dn.%s/anchors/%s", a.NetworkInfo.ID, partitionID)
+     }
+     ```
+   - Update all code that constructs URLs to use these helper methods
+   - Ensure heal_anchor.go uses the same URL construction logic as sequence.go
+
+2. **Add URL Construction Tests** ⏳
+   - Create tests to verify URL construction consistency
+   - Test both partition URLs and anchor URLs
+   - Test with different network IDs and partition IDs
+
+3. **Update Caching System** ⏳
+   - Ensure the caching system is aware of the standardized URL format
+   - Update any code that queries URLs to use the standardized format
+
+### Phase 5: Testing and Finalization ⏳
+
+1. **Update Tests** ⏳
+   - Update existing tests to work with the new structure
+   - Add tests for new functionality:
+     - Validator management tests
+     - Address management tests
+     - Problem node management tests
+     - Network peer discovery tests
+
+2. **Add Comprehensive Test Cases** ⏳
+   - Test edge cases and error conditions
+   - Test with different network configurations
+   - Test with problematic nodes and request type avoidance
+
+3. **Final Verification** ⏳
+   - Verify all structs and methods match the design
+   - Ensure all tests pass
+   - Verify no regressions in functionality
+   - Verify URL construction standardization
+
+### Phase 6: Documentation and Integration ⏳
+
+1. **Update Documentation** ⏳
+   - Update inline documentation to reflect the changes
+   - Add examples for new methods
+   - Document the URL construction standardization
+
+2. **Integration with Anchor Healing** ⏳
+   - Ensure the updated AddressDir works correctly with the anchor healing process
+   - Verify that the caching system works with the standardized URLs
+   - Test the integration with real network data
 
 ## URL Construction Standardization
 

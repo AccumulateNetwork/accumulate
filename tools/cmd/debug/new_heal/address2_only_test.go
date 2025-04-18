@@ -63,26 +63,25 @@ func TestConstructAnchorURL_Only(t *testing.T) {
 		{
 			name:        "Directory Network",
 			partitionID: "dn",
-			want:        fmt.Sprintf("acc://dn.%s/anchors/dn", anchorAddrDir.NetworkName),
+			want:        fmt.Sprintf("acc://dn.%s/anchors/dn", anchorAddrDir.GetNetworkName()),
 		},
 		{
 			name:        "BVN Apollo",
 			partitionID: "bvn-Apollo",
-			want:        fmt.Sprintf("acc://dn.%s/anchors/bvn-Apollo", anchorAddrDir.NetworkName),
+			want:        fmt.Sprintf("acc://dn.%s/anchors/bvn-Apollo", anchorAddrDir.GetNetworkName()),
 		},
 		{
 			name:        "BVN Artemis",
 			partitionID: "bvn-Artemis",
-			want:        fmt.Sprintf("acc://dn.%s/anchors/bvn-Artemis", anchorAddrDir.NetworkName),
+			want:        fmt.Sprintf("acc://dn.%s/anchors/bvn-Artemis", anchorAddrDir.GetNetworkName()),
 		},
 		{
 			name:        "Empty partition",
 			partitionID: "",
-			want:        fmt.Sprintf("acc://dn.%s/anchors/", anchorAddrDir.NetworkName), // Edge case, should probably handle this better
+			want:        fmt.Sprintf("acc://dn.%s/anchors/", anchorAddrDir.GetNetworkName()), // Edge case, should probably handle this better
 		},
 	}
 
-	addrDir := NewAddressDir()
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := anchorAddrDir.constructAnchorURL(tt.partitionID)
