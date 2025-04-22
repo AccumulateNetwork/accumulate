@@ -53,13 +53,16 @@ func healAnchor(_ *cobra.Command, args []string) {
 			all = append(all, src2dst.Pending...)
 			all = append(all, ids...)
 
-			for i, txid := range all {
+			// Only heal the first anchor if there are any
+			if len(all) > 0 {
 				select {
 				case <-h.ctx.Done():
 					return
 				default:
 				}
-				if h.healSingleAnchor(src.ID, dst.ID, src2dst.Delivered+1+uint64(i), txid, txns) {
+				
+				// Heal only the first anchor
+				if h.healSingleAnchor(src.ID, dst.ID, src2dst.Delivered+1, all[0], txns) {
 					// If it was already delivered, recheck the ledgers
 					goto pullAgain
 				}
