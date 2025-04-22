@@ -32,11 +32,7 @@ func NewTestAddressDir() *AddressDir {
 		},
 		Logger:        logger,
 		peerDiscovery: NewSimplePeerDiscovery(logger),
-		DiscoveryStats: DiscoveryStats{
-			ByMethod:    make(map[string]int),
-			ByPartition: make(map[string]int),
-			MethodStats: make(map[string]int),
-		},
+		DiscoveryStats: NewDiscoveryStats(),
 	}
 }
 

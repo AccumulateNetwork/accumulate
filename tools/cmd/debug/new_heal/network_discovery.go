@@ -15,6 +15,7 @@ import (
 
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -54,21 +55,43 @@ type NetworkDiscovery struct {
 	// Reference to the AddressDir that will store the discovered information
 	addressDir *AddressDir
 	
+	// Network type (mainnet, testnet, devnet)
+	networkType string
+	
+	// Validator repository for centralized validator information
+	validatorRepo *ValidatorRepository
+	
 	// Error tracking
 	nodeErrors map[string][]*NodeError
+	
+	// Retry configuration
+	maxRetries int
+	retryDelay time.Duration
 }
 
 // NewNetworkDiscovery creates a new NetworkDiscovery instance
 func NewNetworkDiscovery(addressDir *AddressDir, logger *log.Logger) *NetworkDiscovery {
 	return &NetworkDiscovery{
-		Logger:     logger,
-		addressDir: addressDir,
-		nodeErrors: make(map[string][]*NodeError),
+		addressDir:    addressDir,
+		Logger:        logger,
+		validatorRepo: NewValidatorRepository(logger),
+		nodeErrors:    make(map[string][]*NodeError),
+		maxRetries:    3,
+		retryDelay:    time.Second * 2,
 	}
+}
+
+// getKnownAddressForValidator returns a known IP address for a validator ID
+func (nd *NetworkDiscovery) getKnownAddressForValidator(validatorID string) string {
+	// Use the validator repository to get the known address
+	return nd.validatorRepo.GetKnownAddressForValidator(validatorID)
 }
 
 // InitializeNetwork sets up the Network field with appropriate information
 func (nd *NetworkDiscovery) InitializeNetwork(networkName string) error {
+	// Set the network type
+	nd.networkType = networkName
+	
 	// Create a new NetworkInfo instance
 	network := &NetworkInfo{
 		Name:         networkName,
@@ -189,6 +212,23 @@ func (nd *NetworkDiscovery) DiscoverNetworkPeers(ctx context.Context, client api
 	startTime := time.Now()
 	stats := RefreshStats{}
 	
+	// Initialize enhanced discovery statistics
+	discoveryStats := EnhancedDiscoveryStats{
+		TotalValidators:   0,
+		DNValidators:      0,
+		BVNValidators:     make(map[string]int),
+		TotalNonValidators: 0,
+		TotalPeers:        0,
+		AddressTypeStats:  make(map[string]AddressTypeStats),
+		VersionCounts:     make(map[string]int),
+		ZombieNodes:       0,
+		APIV3Available:    0,
+		APIV3Unavailable:  0,
+		NewPeers:          0,
+		LostPeers:         0,
+		SuccessRate:       0,
+	}
+	
 	// Update discovery stats
 	defer func() {
 		nd.addressDir.mu.Lock()
@@ -213,27 +253,181 @@ func (nd *NetworkDiscovery) DiscoverNetworkPeers(ctx context.Context, client api
 	}
 	
 	// 1. Discover directory peers
+	nd.log("Discovering Directory Network peers with enhanced address collection")
 	dnPeers, err := nd.discoverDirectoryPeers(ctx, client)
 	if err != nil {
 		nd.logError("Error discovering directory peers", err, ErrorSeverityMedium)
 		// Continue with partial results
 	}
 	stats.DNValidators = len(dnPeers)
+	discoveryStats.DNValidators = len(dnPeers)
+	
+	// Process each DN validator to collect all address types
+	for i := range dnPeers {
+		validator := &dnPeers[i]
+		
+		// Skip validators without an IP address
+		if validator.IPAddress == "" {
+			for _, addr := range validator.Addresses {
+				if addr.IP != "" {
+					validator.IPAddress = addr.IP
+					break
+				}
+			}
+			
+			// If still no IP address, try to get one from the validator repository
+			if validator.IPAddress == "" {
+				validator.IPAddress = nd.getKnownAddressForValidator(validator.Name)
+			}
+			
+			// If still no IP address, skip this validator
+			if validator.IPAddress == "" {
+				nd.log("No IP address available for validator %s, skipping address collection", validator.Name)
+				continue
+			}
+		}
+		
+		// Collect all address types
+		addressStats, err := nd.collectValidatorAddresses(ctx, validator, validator.IPAddress)
+		if err != nil {
+			nd.logError(fmt.Sprintf("Error collecting addresses for validator %s", validator.Name), err, ErrorSeverityMedium)
+			// Continue with partial results
+		}
+		
+		// Update address type statistics
+		for addrType, count := range addressStats.TotalByType {
+			if _, ok := discoveryStats.AddressTypeStats[addrType]; !ok {
+				discoveryStats.AddressTypeStats[addrType] = AddressTypeStats{}
+			}
+			stats := discoveryStats.AddressTypeStats[addrType]
+			stats.Total += count
+			stats.Valid += addressStats.ValidByType[addrType]
+			stats.Invalid += (count - addressStats.ValidByType[addrType])
+			discoveryStats.AddressTypeStats[addrType] = stats
+		}
+		
+		// Test API v3 connectivity
+		apiStatus, err := nd.testAPIv3Connectivity(ctx, validator)
+		if err != nil {
+			nd.log("Error testing API v3 connectivity for validator %s: %v", validator.Name, err)
+		} else {
+			validator.APIV3Status = apiStatus.Available
+			if apiStatus.Available {
+				discoveryStats.APIV3Available++
+			} else {
+				discoveryStats.APIV3Unavailable++
+			}
+		}
+		
+		// Collect version information
+		if err := nd.collectVersionInfo(ctx, validator); err != nil {
+			nd.log("Error collecting version information for validator %s: %v", validator.Name, err)
+		} else if validator.Version != "" {
+			discoveryStats.VersionCounts[validator.Version]++
+		}
+		
+		// Check consensus status
+		consensusStatus, err := nd.checkConsensusStatus(ctx, validator)
+		if err != nil {
+			nd.log("Error checking consensus status for validator %s: %v", validator.Name, err)
+		} else {
+			if consensusStatus.IsZombie {
+				discoveryStats.ZombieNodes++
+			}
+		}
+	}
 	
 	// 2. Discover partition peers for each BVN
 	bvnPeers := make([][]Validator, 0)
 	for _, partition := range network.Partitions {
 		if partition.Type == "bvn" {
+			nd.log("Discovering peers for BVN partition %s with enhanced address collection", partition.ID)
 			peers, err := nd.discoverPartitionPeers(ctx, client, partition)
 			if err != nil {
 				nd.logError(fmt.Sprintf("Error discovering peers for partition %s", partition.ID), err, ErrorSeverityMedium)
 				// Continue with partial results
 			}
 			
+			// Process each BVN validator to collect all address types
+			for i := range peers {
+				validator := &peers[i]
+				
+				// Skip validators without an IP address
+				if validator.IPAddress == "" {
+					for _, addr := range validator.Addresses {
+						if addr.IP != "" {
+							validator.IPAddress = addr.IP
+							break
+						}
+					}
+					
+					// If still no IP address, try to get one from the validator repository
+					if validator.IPAddress == "" {
+						validator.IPAddress = nd.getKnownAddressForValidator(validator.Name)
+					}
+					
+					// If still no IP address, skip this validator
+					if validator.IPAddress == "" {
+						nd.log("No IP address available for validator %s, skipping address collection", validator.Name)
+						continue
+					}
+				}
+				
+				// Collect all address types
+				addressStats, err := nd.collectValidatorAddresses(ctx, validator, validator.IPAddress)
+				if err != nil {
+					nd.logError(fmt.Sprintf("Error collecting addresses for validator %s", validator.Name), err, ErrorSeverityMedium)
+					// Continue with partial results
+				}
+				
+				// Update address type statistics
+				for addrType, count := range addressStats.TotalByType {
+					if _, ok := discoveryStats.AddressTypeStats[addrType]; !ok {
+						discoveryStats.AddressTypeStats[addrType] = AddressTypeStats{}
+					}
+					stats := discoveryStats.AddressTypeStats[addrType]
+					stats.Total += count
+					stats.Valid += addressStats.ValidByType[addrType]
+					stats.Invalid += (count - addressStats.ValidByType[addrType])
+					discoveryStats.AddressTypeStats[addrType] = stats
+				}
+				
+				// Test API v3 connectivity
+				apiStatus, err := nd.testAPIv3Connectivity(ctx, validator)
+				if err != nil {
+					nd.log("Error testing API v3 connectivity for validator %s: %v", validator.Name, err)
+				} else {
+					validator.APIV3Status = apiStatus.Available
+					if apiStatus.Available {
+						discoveryStats.APIV3Available++
+					} else {
+						discoveryStats.APIV3Unavailable++
+					}
+				}
+				
+				// Collect version information
+				if err := nd.collectVersionInfo(ctx, validator); err != nil {
+					nd.log("Error collecting version information for validator %s: %v", validator.Name, err)
+				} else if validator.Version != "" {
+					discoveryStats.VersionCounts[validator.Version]++
+				}
+				
+				// Check consensus status
+				consensusStatus, err := nd.checkConsensusStatus(ctx, validator)
+				if err != nil {
+					nd.log("Error checking consensus status for validator %s: %v", validator.Name, err)
+				} else {
+					if consensusStatus.IsZombie {
+						discoveryStats.ZombieNodes++
+					}
+				}
+			}
+			
 			// Add to BVN validators
 			if len(peers) > 0 {
 				bvnPeers = append(bvnPeers, peers)
 				stats.BVNValidators += len(peers)
+				discoveryStats.BVNValidators[partition.ID] = len(peers)
 			}
 		}
 	}
@@ -261,91 +455,256 @@ func (nd *NetworkDiscovery) DiscoverNetworkPeers(ctx context.Context, client api
 	// Calculate total peers
 	stats.TotalPeers = stats.DNValidators + stats.BVNValidators + stats.TotalNonValidators
 	stats.TotalValidators = stats.DNValidators + stats.BVNValidators
+	discoveryStats.TotalValidators = stats.TotalValidators
+	discoveryStats.TotalPeers = stats.TotalPeers
 	
+	// Calculate average response times and success rates for each address type
+	for addrType, addrStats := range discoveryStats.AddressTypeStats {
+		if addrStats.Total > 0 {
+			addrStats.SuccessRate = float64(addrStats.Valid) / float64(addrStats.Total)
+			discoveryStats.AddressTypeStats[addrType] = addrStats
+		}
+	}
+	
+	// Calculate overall success rate
+	totalAddresses := 0
+	totalValid := 0
+	for _, addrStats := range discoveryStats.AddressTypeStats {
+		totalAddresses += addrStats.Total
+		totalValid += addrStats.Valid
+	}
+	if totalAddresses > 0 {
+		discoveryStats.SuccessRate = float64(totalValid) / float64(totalAddresses)
+	}
+	
+	// Copy enhanced stats to the legacy stats structure
+	stats.ZombieNodes = discoveryStats.ZombieNodes
+	stats.APIV3Available = discoveryStats.APIV3Available
+	stats.APIV3Unavailable = discoveryStats.APIV3Unavailable
+	
+	// Log detailed discovery results
 	nd.log("Discovered %d total peers (%d validators, %d non-validators)",
 		stats.TotalPeers, stats.TotalValidators, stats.TotalNonValidators)
+	nd.log("Address collection statistics:")
+	for addrType, addrStats := range discoveryStats.AddressTypeStats {
+		nd.log("  %s: %d total, %d valid (%.2f%% success rate)",
+			addrType, addrStats.Total, addrStats.Valid, addrStats.SuccessRate*100)
+	}
+	nd.log("API v3 connectivity: %d available, %d unavailable",
+		discoveryStats.APIV3Available, discoveryStats.APIV3Unavailable)
+	nd.log("Zombie nodes detected: %d", discoveryStats.ZombieNodes)
+	nd.log("Version distribution:")
+	for version, count := range discoveryStats.VersionCounts {
+		nd.log("  %s: %d validators", version, count)
+	}
 	
 	return stats, nil
 }
-
 // discoverDirectoryPeers discovers peers from the Directory Network
 func (nd *NetworkDiscovery) discoverDirectoryPeers(ctx context.Context, client api.NetworkService) ([]Validator, error) {
 	nd.log("Discovering Directory Network peers")
 	
-	// Query network status for the Directory Network
-	opts := api.NetworkStatusOptions{
-		Partition: "dn",
+	// Create a client for the directory network
+	dnClient := client
+	
+	// Initialize network status
+	var netStatus *api.NetworkStatus
+	var err error
+	
+	// Try different approaches to get network status with retry logic
+	for attempt := 0; attempt <= nd.maxRetries; attempt++ {
+		if attempt > 0 {
+			nd.log("Retry attempt %d/%d after waiting %v", attempt, nd.maxRetries, nd.retryDelay)
+			time.Sleep(nd.retryDelay)
+			// Exponential backoff
+			nd.retryDelay = nd.retryDelay * 2
+		}
+		
+		// Try approach 1: Query the directory network directly
+		netStatus, err = dnClient.NetworkStatus(ctx, api.NetworkStatusOptions{Partition: "dn"})
+		if err == nil {
+			break
+		}
+		nd.log("Error querying DN directly: %v. Trying alternative approaches", err)
+		
+		// Try approach 2: Query without specifying a partition
+		netStatus, err = dnClient.NetworkStatus(ctx, api.NetworkStatusOptions{})
+		if err == nil {
+			break
+		}
+		nd.log("Error querying without partition: %v", err)
+		
+		// Try approach 3: For mainnet, use a direct query to a known validator
+		if nd.networkType == "mainnet" {
+			// Create a client for a known DN validator
+			knownDNValidator := "defidevs.acme"
+			knownAddr := nd.validatorRepo.GetKnownAddressForValidator(knownDNValidator)
+			if knownAddr != "" {
+				endpoints := nd.validatorRepo.GetValidatorEndpoints(knownDNValidator)
+				if endpoints.RPCAddress != "" {
+					nd.log("Trying direct query to known validator %s at %s", knownDNValidator, endpoints.RPCAddress)
+					
+					// Create a client for this validator
+					validatorClient := jsonrpc.NewClient(endpoints.RPCAddress)
+					{
+						netStatus, err = validatorClient.NetworkStatus(ctx, api.NetworkStatusOptions{})
+						if err == nil {
+							break
+						}
+						nd.log("Error querying validator %s: %v", knownDNValidator, err)
+					}
+				}
+			}
+		}
+		
+		// If this is the last attempt and we still have an error
+		if attempt == nd.maxRetries {
+			nd.log("All attempts to query network status failed")
+			return nil, fmt.Errorf("failed to get network status after %d attempts: %w", nd.maxRetries+1, err)
+		}
 	}
 	
-	status, err := client.NetworkStatus(ctx, opts)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get network status for DN: %w", err)
-	}
-	
-	// Process validators from the network status
+	// Extract validators from the network status
 	validators := make([]Validator, 0)
 	
-	if status.Network != nil {
-		for _, valInfo := range status.Network.Validators {
+	// Process the validators from the network status
+	if netStatus != nil && netStatus.Network != nil && netStatus.Network.Validators != nil {
+		nd.log("Found %d validators in network status", len(netStatus.Network.Validators))
+		
+		for _, v := range netStatus.Network.Validators {
 			// Skip validators without operator information
-			if valInfo.Operator == nil {
+			if v.Operator == nil {
+				nd.log("Validator has no operator information, skipping")
 				continue
 			}
 			
-			// Check if this validator is active in the DN
+			// Extract validator name from the operator URL
+			name := v.Operator.Authority
+			
+			// Check if this validator is a DN validator
 			isDNValidator := false
-			for _, partInfo := range valInfo.Partitions {
+			for _, partInfo := range v.Partitions {
 				if partInfo.ID == "dn" {
 					isDNValidator = true
 					break
 				}
 			}
 			
+			// For mainnet, we need to be more flexible about validator detection
+			if nd.networkType == "mainnet" && !isDNValidator {
+				// Check if this validator is in our known DN validators list
+				if nd.validatorRepo.GetKnownAddressForValidator(name) != "" {
+					isDNValidator = true
+				}
+			}
+			
 			if !isDNValidator {
+				nd.log("Validator %s is not an active DN validator, skipping", name)
 				continue
 			}
 			
-			// Create a validator entry
-			validator := Validator{
-				PeerID:        valInfo.Operator.String(),
-				Name:          valInfo.Operator.String(),
-				PartitionID:   "dn",
-				PartitionType: "dn",
-				BVN:           -1,
-				Status:        "active",
-				LastUpdated:   time.Now(),
+			// Get the validator's partition info
+			var partInfo *protocol.ValidatorPartitionInfo
+			for _, pi := range v.Partitions {
+				if pi.ID == "dn" {
+					partInfo = pi
+					break
+				}
 			}
 			
-			// Add multiaddresses if available
-			for _, partInfo := range valInfo.Partitions {
-				if partInfo.ID == "dn" {
-					// Try to extract base URL from validator info
-					baseUrl := nd.extractBaseUrl(partInfo)
-					if baseUrl != "" {
-						// Try to parse as multiaddress
-						maddr, err := multiaddr.NewMultiaddr(baseUrl)
-						if err == nil {
-							validator.P2PAddress = baseUrl
-							
-							// Extract IP address
-							var ip string
-							multiaddr.ForEach(maddr, func(c multiaddr.Component) bool {
-								if c.Protocol().Code == multiaddr.P_IP4 || c.Protocol().Code == multiaddr.P_IP6 {
-									ip = c.Value()
-									return false
-								}
-								return true
-							})
-							
-							if ip != "" {
-								validator.IPAddress = ip
-								validator.RPCAddress = fmt.Sprintf("http://%s:26657", ip)
-								validator.APIAddress = fmt.Sprintf("http://%s:8080", ip)
-								validator.MetricsAddress = fmt.Sprintf("http://%s:9090", ip)
-							}
-						}
-					}
+			// For mainnet, if we don't have DN partition info but we know it's a DN validator,
+			// use any partition info available
+			if partInfo == nil && nd.networkType == "mainnet" && len(v.Partitions) > 0 {
+				partInfo = v.Partitions[0]
+				nd.log("Using %s partition info for DN validator %s", partInfo.ID, name)
+			}
+			
+			if partInfo == nil {
+				nd.log("Validator %s has no partition info, skipping", name)
+				continue
+			}
+			
+			// Get known address for this validator
+			knownAddr := nd.getKnownAddressForValidator(name)
+			if knownAddr == "" {
+				nd.log("No known address for validator %s", name)
+			}
+			
+			// Get partition info from network status
+			var addresses []string
+			if partInfo != nil {
+				// For validator partition info, we need to use a different method
+				addresses = nd.extractAddressesFromValidatorPartition(partInfo)
+			}
+			if len(addresses) > 0 {
+				nd.log("Found %d additional addresses for validator %s from partition info", len(addresses), name)
+			}
+			
+			// Create validator addresses
+			validatorAddresses := make([]ValidatorAddress, 0, len(addresses))
+			
+			// If we have a known address but no extracted addresses, create a validator address directly
+			if len(addresses) == 0 && knownAddr != "" {
+				// Instead of constructing a multiaddress that needs to be parsed, create the validator address directly
+				valAddr := ValidatorAddress{
+					Address:   fmt.Sprintf("/ip4/%s/tcp/26656", knownAddr),
+					Validated: true,
+					IP:        knownAddr,
+					Port:      "26656",
+					PeerID:    "", // Leave peer ID empty as we don't have a valid one
 				}
+				validatorAddresses = append(validatorAddresses, valAddr)
+				nd.log("Added direct validator address for %s: %s", name, knownAddr)
+			}
+			for _, addr := range addresses {
+				// Parse the multiaddress
+				maddr, err := multiaddr.NewMultiaddr(addr)
+				if err != nil {
+					nd.log("Error parsing multiaddress %s: %v", addr, err)
+					continue
+				}
+				
+				// Extract components
+				var ip, port, peerID string
+				multiaddr.ForEach(maddr, func(c multiaddr.Component) bool {
+					switch c.Protocol().Code {
+					case multiaddr.P_IP4, multiaddr.P_IP6:
+						ip = c.Value()
+					case multiaddr.P_TCP:
+						port = c.Value()
+					case multiaddr.P_P2P:
+						peerID = c.Value()
+					}
+					return true
+				})
+				
+				// Create validator address
+				validatorAddresses = append(validatorAddresses, ValidatorAddress{
+					Address:   addr,
+					Validated: true,
+					IP:        ip,
+					Port:      port,
+					PeerID:    peerID,
+				})
+			}
+			
+			// Create validator
+			validator := Validator{
+				Name:          name,
+				PartitionID:   "dn",
+				PartitionType: "directory",
+				Status:        "active",
+				LastUpdated:   time.Now(),
+				Addresses:     validatorAddresses,
+			}
+			
+			// Add validator to the list
+			validators = append(validators, validator)
+			
+			// Log the validator information
+			nd.log("Added DN validator: %s with %d addresses", validator.Name, len(validator.Addresses))
+			for i, addr := range validator.Addresses {
+				nd.log("  Address %d: %s (Valid: %v, IP: %s, Port: %s)", i+1, addr.Address, addr.Validated, addr.IP, addr.Port)
 			}
 			
 			validators = append(validators, validator)
@@ -380,11 +739,17 @@ func (nd *NetworkDiscovery) discoverPartitionPeers(ctx context.Context, client a
 				continue
 			}
 			
+			// Get the validator ID
+			validatorID := valInfo.Operator.String()
+			
 			// Check if this validator is active in this partition
 			isPartitionValidator := false
+			var activePartInfo *protocol.ValidatorPartitionInfo
+			
 			for _, partInfo := range valInfo.Partitions {
 				if partInfo.ID == partition.ID {
 					isPartitionValidator = true
+					activePartInfo = partInfo
 					break
 				}
 			}
@@ -395,45 +760,128 @@ func (nd *NetworkDiscovery) discoverPartitionPeers(ctx context.Context, client a
 			
 			// Create a validator entry
 			validator := Validator{
-				PeerID:        valInfo.Operator.String(),
-				Name:          valInfo.Operator.String(),
+				PeerID:        validatorID,
+				Name:          validatorID,
 				PartitionID:   partition.ID,
 				PartitionType: partition.Type,
 				BVN:           partition.BVNIndex,
 				Status:        "active",
 				LastUpdated:   time.Now(),
+				URLs:          make(map[string]string),
+				Addresses:     make([]ValidatorAddress, 0),
+				AddressStatus: make(map[string]string),
 			}
 			
-			// Add multiaddresses if available
-			for _, partInfo := range valInfo.Partitions {
-				if partInfo.ID == partition.ID {
-					// Try to extract base URL from validator info
-					baseUrl := nd.extractBaseUrl(partInfo)
-					if baseUrl != "" {
-						// Try to parse as multiaddress
-						maddr, err := multiaddr.NewMultiaddr(baseUrl)
-						if err == nil {
-							validator.P2PAddress = baseUrl
-							
-							// Extract IP address
-							var ip string
-							multiaddr.ForEach(maddr, func(c multiaddr.Component) bool {
-								if c.Protocol().Code == multiaddr.P_IP4 || c.Protocol().Code == multiaddr.P_IP6 {
-									ip = c.Value()
-									return false
-								}
-								return true
-							})
-							
-							if ip != "" {
-								validator.IPAddress = ip
-								validator.RPCAddress = fmt.Sprintf("http://%s:26657", ip)
-								validator.APIAddress = fmt.Sprintf("http://%s:8080", ip)
-								validator.MetricsAddress = fmt.Sprintf("http://%s:9090", ip)
-							}
+			// Set URLs for this validator
+			network := nd.addressDir.GetNetwork()
+			if network != nil {
+				validator.URLs["partition"] = nd.addressDir.constructPartitionURL(partition.ID)
+				validator.URLs["anchor"] = nd.addressDir.constructAnchorURL(partition.ID)
+			}
+			
+			// First try to get a known address for this validator
+			knownIP := nd.getKnownAddressForValidator(validatorID)
+			if knownIP != "" {
+				// Construct a multiaddress with the known IP
+				addr := fmt.Sprintf("/ip4/%s/tcp/26656", knownIP)
+				nd.log("Using known address for validator %s: %s", validatorID, addr)
+				
+				// Try to parse and validate the multiaddress
+				_, port, peerID, valid := nd.addressDir.ValidateMultiaddress(addr)
+				
+				validatorAddr := ValidatorAddress{
+					Address:   addr,
+					Validated: valid,
+					IP:        knownIP,
+					Port:      port,
+					PeerID:    peerID,
+				}
+				
+				validator.Addresses = append(validator.Addresses, validatorAddr)
+				validator.AddressStatus[addr] = "active"
+				validator.P2PAddress = addr
+				validator.IPAddress = knownIP
+				
+				// Construct standard service addresses based on IP
+				validator.RPCAddress = fmt.Sprintf("http://%s:26657", knownIP)
+				validator.APIAddress = fmt.Sprintf("http://%s:8080", knownIP)
+				validator.MetricsAddress = fmt.Sprintf("http://%s:9090", knownIP)
+			}
+			
+			// Also try to extract addresses from partition info
+			if activePartInfo != nil {
+				// Try to extract addresses from validator info
+				addresses := nd.extractAddressesFromValidatorPartition(activePartInfo)
+				nd.log("Found %d additional addresses for validator %s from partition info", len(addresses), validatorID)
+				
+				for _, addr := range addresses {
+					// Skip if we already have this address
+					if _, exists := validator.AddressStatus[addr]; exists {
+						continue
+					}
+					
+					// Try to parse and validate the multiaddress
+					ip, port, peerID, valid := nd.addressDir.ValidateMultiaddress(addr)
+					
+					validatorAddr := ValidatorAddress{
+						Address:   addr,
+						Validated: valid,
+						IP:        ip,
+						Port:      port,
+						PeerID:    peerID,
+					}
+					
+					validator.Addresses = append(validator.Addresses, validatorAddr)
+					validator.AddressStatus[addr] = "active"
+					
+					// Set the first valid address as the P2P address if we don't have one yet
+					if valid && validator.P2PAddress == "" {
+						validator.P2PAddress = addr
+						validator.IPAddress = ip
+						
+						// Construct standard service addresses based on IP
+						if ip != "" {
+							validator.RPCAddress = fmt.Sprintf("http://%s:26657", ip)
+							validator.APIAddress = fmt.Sprintf("http://%s:8080", ip)
+							validator.MetricsAddress = fmt.Sprintf("http://%s:9090", ip)
 						}
 					}
 				}
+			}
+			
+			// Also try to extract base URL from validator info (legacy method)
+			if activePartInfo != nil && len(validator.Addresses) == 0 {
+				baseUrl := nd.extractBaseUrl(activePartInfo)
+				if baseUrl != "" {
+					// Try to parse as multiaddress
+					maddr, err := multiaddr.NewMultiaddr(baseUrl)
+					if err == nil {
+						validator.P2PAddress = baseUrl
+						
+						// Extract IP address
+						var ip string
+						multiaddr.ForEach(maddr, func(c multiaddr.Component) bool {
+							if c.Protocol().Code == multiaddr.P_IP4 || c.Protocol().Code == multiaddr.P_IP6 {
+								ip = c.Value()
+								return false
+							}
+							return true
+						})
+						
+						if ip != "" {
+							validator.IPAddress = ip
+							validator.RPCAddress = fmt.Sprintf("http://%s:26657", ip)
+							validator.APIAddress = fmt.Sprintf("http://%s:8080", ip)
+							validator.MetricsAddress = fmt.Sprintf("http://%s:9090", ip)
+						}
+					}
+				}
+			}
+			
+			// Log the validator information
+			nd.log("Added BVN validator: %s with %d addresses for partition %s", validator.Name, len(validator.Addresses), partition.ID)
+			for i, addr := range validator.Addresses {
+				nd.log("  Address %d: %s (Valid: %v, IP: %s, Port: %s)", i+1, addr.Address, addr.Validated, addr.IP, addr.Port)
 			}
 			
 			validators = append(validators, validator)
@@ -491,6 +939,77 @@ func (nd *NetworkDiscovery) extractBaseUrl(partInfo interface{}) string {
 	
 	nd.log("Constructed base URL for partition %s: %s", partitionID, baseUrl)
 	return baseUrl
+}
+
+// extractAddressesFromPartition extracts addresses from protocol.PartitionInfo
+func (nd *NetworkDiscovery) extractAddressesFromPartition(partInfo *protocol.PartitionInfo) []string {
+	if partInfo == nil {
+		return nil
+	}
+
+	// Get addresses from partition info
+	addresses := make([]string, 0)
+	
+	// Extract addresses based on partition ID
+	partitionID := partInfo.ID
+	nd.log("Extracting addresses for partition %s", partitionID)
+	
+	// Add additional address extraction logic here based on the PartitionInfo structure
+	// This would involve accessing any fields in the PartitionInfo that might contain address information
+	
+	// For mainnet, use well-known validator addresses
+	if nd.networkType == "mainnet" {
+		// Add some well-known mainnet validator addresses for testing
+		// These are example addresses that would be replaced with actual discovery in production
+		knownAddresses := map[string][]string{
+			"dn": {
+				"/ip4/65.108.73.121/tcp/16593/p2p/QmPublicAPI1",
+				"/ip4/144.76.105.23/tcp/16593/p2p/QmPublicAPI2",
+			},
+			"Apollo": {
+				"/ip4/65.21.231.58/tcp/26656/p2p/12D3KooWL1NF6fdTJ7N6SnEyqTrCxqCmYKxCaKJjMVc3qRNgfhQu", // Kompendium
+				"/ip4/65.109.104.118/tcp/26656/p2p/12D3KooWHFrjfPdpGC5xfBLJK9TqJHnxZ1ZExJGXLBxXE7Sbx5YE", // LunaNova
+				"/ip4/135.181.114.121/tcp/26656/p2p/12D3KooWBSEYV8Hk3SrGLwRMZ3QsVQmU2eNPMcuJeHUADoiRUGQk", // TurtleBoat
+			},
+			"Chandrayaan": {
+				"/ip4/65.108.238.102/tcp/26656/p2p/12D3KooWLANUByqHFqGwzA9SvNv7NX6JwfMeg9Yx4jxGKCXoQwKm", // PrestigeIT
+				"/ip4/65.108.141.109/tcp/26656/p2p/12D3KooWCMr9mU894i8JXJFHWd4nLBJfTXCwuSeCXMV4yvQdYHaJ", // Sphereon
+				"/ip4/65.108.4.175/tcp/26656/p2p/12D3KooWJwzMvhDZQ5JJF9Lc3CCKyKN8B1xXWzRuUopNkRPQCRfL", // Sphereon
+			},
+			"Yutu": {
+				"/ip4/65.108.0.22/tcp/26656/p2p/12D3KooWNMEKxFRpAzS8G3XbMGextBrWxqVMWCEXiZMP7rkiTQJC", // MusicCityNode
+				"/ip4/65.109.85.226/tcp/26656/p2p/12D3KooWJvyP3VJYymTqG7e6kJ6tvzNg8MKtUuAGXQ3Gz8b3QobU", // HighStakes
+				"/ip4/65.108.201.154/tcp/26656/p2p/12D3KooWRBhwfeP2Y9CDkBVUbxdRrMg3WpZx7Dk7jKaRA7SnLrjQ", // tfa
+			},
+		}
+		
+		if knownAddrs, ok := knownAddresses[partInfo.ID]; ok {
+			addresses = append(addresses, knownAddrs...)
+		}
+	} else if nd.networkType == "testnet" {
+		// Add some well-known testnet validator addresses
+		knownAddresses := map[string][]string{
+			"dn": {
+				"/ip4/95.216.2.219/tcp/16593/p2p/QmTestnetDN1",
+			},
+			"Apollo": {
+				"/ip4/65.108.73.121/tcp/26656/p2p/12D3KooWTestnetApollo1",
+			},
+		}
+		
+		if knownAddrs, ok := knownAddresses[partInfo.ID]; ok {
+			addresses = append(addresses, knownAddrs...)
+		}
+	}
+	
+	// If we don't have any addresses yet, try to get known addresses based on partition ID
+	if len(addresses) == 0 {
+		// Try to get known addresses for this partition
+		nd.log("No known addresses for partition %s from hardcoded list", partInfo.ID)
+	}
+	
+	nd.log("Extracted %d addresses for partition %s", len(addresses), partInfo.ID)
+	return addresses
 }
 
 // discoverCommonNonValidators adds known non-validator peers to the peer list

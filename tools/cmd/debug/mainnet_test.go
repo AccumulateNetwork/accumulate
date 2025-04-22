@@ -1,8 +1,7 @@
-package debug
+package main
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
@@ -27,20 +26,8 @@ func TestMainnetPeerState(t *testing.T) {
 	}
 
 	// Print network information
-	t.Logf("Network: %s", networkStatus.Network)
-	t.Logf("Version: %s", networkStatus.Version)
-	
-	// Print partition information
-	t.Logf("\nPartitions:")
-	for _, partition := range networkStatus.Partitions {
-		t.Logf("  %s (Type: %s)", partition.ID, partition.Type)
-		t.Logf("    Validators: %d", len(partition.Validators))
-		
-		// Print validator information
-		for _, validator := range partition.Validators {
-			t.Logf("    - %s (Address: %s)", validator.ID, validator.Address)
-		}
-	}
+	t.Logf("Network: %+v", networkStatus.Network)
+	// t.Logf("Version: %s", networkStatus.Version) // commented out: field does not exist
 
 	// Query node info
 	nodeInfo, err := client.NodeInfo(ctx, api.NodeInfoOptions{})
@@ -51,6 +38,6 @@ func TestMainnetPeerState(t *testing.T) {
 	// Print node information
 	t.Logf("\nNode Info:")
 	t.Logf("  Network: %s", nodeInfo.Network)
-	t.Logf("  Version: %s", nodeInfo.Version)
-	t.Logf("  P2P Address: %s", nodeInfo.P2PAddress)
+	// t.Logf("  Version: %s", nodeInfo.Version) // commented out: field does not exist
+	// t.Logf("  P2P Address: %s", nodeInfo.P2PAddress) // commented out: field does not exist
 }

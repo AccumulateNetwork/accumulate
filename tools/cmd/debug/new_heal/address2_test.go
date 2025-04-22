@@ -109,16 +109,21 @@ func TestAddressDir_DiscoverNetworkPeers(t *testing.T) {
 	// Create a new AddressDir instance
 	dir := NewAddressDir()
 	
-	// Mock the network service
-	// In a real test, we would use a mock implementation of api.NetworkService
-	// For now, we'll just call the method and check that it doesn't panic
+	// Create a mock network service
+	mockService := CreateMockNetworkService()
 	ctx := context.Background()
 	
-	// This is just a smoke test to ensure the method doesn't panic
-	// In a real test, we would verify the discovered peers
-	_, err := dir.DiscoverNetworkPeers(ctx, nil)
-	if err != nil && err.Error() != "failed to get network status: <nil>" {
+	// Call the method with our mock service
+	peerCount, err := dir.DiscoverNetworkPeers(ctx, mockService)
+	
+	// Verify that the method works with our mock service
+	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
+	}
+	
+	// We should discover at least some peers with our mock service
+	if peerCount == 0 {
+		t.Errorf("Expected to discover at least one peer, got %d", peerCount)
 	}
 }
 

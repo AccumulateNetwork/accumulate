@@ -106,7 +106,7 @@ type AddressDir struct {
 	Logger *log.Logger
 	
 	// Statistics for peer discovery
-	DiscoveryStats DiscoveryStats
+	DiscoveryStats *DiscoveryStats
 	
 	// Keep Validators for backward compatibility during transition
 	Validators []*Validator
@@ -137,6 +137,12 @@ type Validator struct {
 	
 	// Status of the validator
 	Status string `json:"status"`
+	
+	// Mainnet report fields
+	Version    string `json:"version"`     // Software version
+	APIV3Status bool   `json:"api_v3_status"` // API v3 status
+	IsInDN     bool   `json:"is_in_dn"`     // Is in Directory Network
+	BVNHeights map[string]uint64 `json:"bvn_heights"` // Heights for each BVN
 	
 	// Different address types for this validator
 	P2PAddress     string `json:"p2p_address"`
@@ -454,11 +460,38 @@ type RefreshStats struct {
 
 	// IDs of BVN lagging nodes
 	BVNLaggingNodeIDs []string
+
+	// Enhanced discovery metrics
+	
+	// Number of validators with API v3 available
+	APIV3Available int
+
+	// Number of validators with API v3 unavailable
+	APIV3Unavailable int
+
+	// Number of zombie nodes detected
+	ZombieNodes int
+
+	// Number of validators by version
+	VersionCounts map[string]int
+
+	// Address validation statistics
+	AddressStats map[string]struct {
+		Total   int
+		Valid   int
+		Invalid int
+	}
+
+	// Average response time across all validators
+	AverageResponseTime time.Duration
+
+	// Overall success rate for address validation
+	SuccessRate float64
 }
 
 // NewDiscoveryStats creates a new DiscoveryStats instance
-func NewDiscoveryStats() DiscoveryStats {
-	return DiscoveryStats{
+func NewDiscoveryStats() *DiscoveryStats {
+	return &DiscoveryStats{
 		ByMethod:    make(map[string]int),
 		ByPartition: make(map[string]int),
 		MethodStats: make(map[string]int),
@@ -488,11 +521,7 @@ func NewAddressDir() *AddressDir {
 		URLHelpers:    make(map[string]string),
 		Logger:        logger,
 		NetworkInfo:   networkInfo,
-		DiscoveryStats: DiscoveryStats{
-			MethodStats: make(map[string]int),
-			ByMethod:    make(map[string]int),
-			ByPartition: make(map[string]int),
-		},
+		DiscoveryStats: NewDiscoveryStats(),
 		Validators:    make([]*Validator, 0), // For backward compatibility
 		peerDiscovery: NewSimplePeerDiscovery(logger),
 		// For backward compatibility
@@ -1087,121 +1116,71 @@ func (a *AddressDir) AddValidator(idOrValidator interface{}, args ...interface{}
 	// Check which form of the method is being called
 	switch v := idOrValidator.(type) {
 	case Validator:
-		// First form: AddValidator(validator Validator)
 		a.mu.Lock()
 		defer a.mu.Unlock()
-		
-		// Add to the appropriate validators list based on partition type
 		if strings.ToLower(v.PartitionType) == "dn" {
-			// Add to DNValidators
 			a.DNValidators = append(a.DNValidators, v)
 			a.Logger.Printf("Added DN validator: %s (%s)", v.Name, v.PeerID)
 		} else if strings.HasPrefix(strings.ToLower(v.PartitionType), "bvn") {
-			// Extract BVN index from partition ID
-			bvnIndex := 0 // Default to 0 if we can't extract
+			bvnIndex := 0
 			if strings.HasPrefix(v.PartitionID, "bvn") {
-				// Try to extract a number if present
 				parts := strings.Split(v.PartitionID, "-")
 				if len(parts) > 1 {
-					// Use the partition name as an index
 					bvnIndex = len(a.BVNValidators)
 				}
 			}
-			
-			// Ensure we have enough BVN slices
 			for len(a.BVNValidators) <= bvnIndex {
 				a.BVNValidators = append(a.BVNValidators, make([]Validator, 0))
 			}
-			
-			// Add to the appropriate BVN slice
 			a.BVNValidators[bvnIndex] = append(a.BVNValidators[bvnIndex], v)
 			v.BVN = bvnIndex
 			a.Logger.Printf("Added BVN validator: %s (%s) to BVN %d", v.Name, v.PeerID, bvnIndex)
 		}
-		
-		// Also add to the legacy Validators slice for backward compatibility
-		validatorPtr := v // Create a copy
+		validatorPtr := v
 		a.Validators = append(a.Validators, &validatorPtr)
-		
-		// Return the validator pointer for consistency
 		return &validatorPtr
-	
 	case string:
-		// Second form: AddValidator(id string, name string, partitionID string, partitionType string)
 		if len(args) < 3 {
-			a.Logger.Printf("Error: not enough arguments for AddValidator")
 			return nil
 		}
-		
 		id := v
-		name, ok := args[0].(string)
-		if !ok {
-			a.Logger.Printf("Error: name must be a string")
-			return nil
+		name, _ := args[0].(string)
+		partitionID, _ := args[1].(string)
+		partitionType, _ := args[2].(string)
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		validator := &Validator{
+			ID:            id,
+			PeerID:        id,
+			Name:          name,
+			PartitionID:   partitionID,
+			PartitionType: partitionType,
+			LastUpdated:   time.Now(),
+			Addresses:     make([]ValidatorAddress, 0),
+			AddressStatus: make(map[string]string),
 		}
-		
-		partitionID, ok := args[1].(string)
-		if !ok {
-			a.Logger.Printf("Error: partitionID must be a string")
-			return nil
-		}
-		
-		partitionType, ok := args[2].(string)
-		if !ok {
-			a.Logger.Printf("Error: partitionType must be a string")
-			return nil
-		}
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	
-	// Create a new validator
-	validator := &Validator{
-		ID:            id,
-		PeerID:        id, // For backward compatibility
-		Name:          name,
-		PartitionID:   partitionID,
-		PartitionType: partitionType,
-		LastUpdated:   time.Now(),
-		Addresses:     make([]ValidatorAddress, 0),
-		AddressStatus: make(map[string]string),
-	}
-	
-	// Add to the appropriate validators list
-	if strings.ToLower(partitionType) == "dn" {
-		// Add to DNValidators
-		a.DNValidators = append(a.DNValidators, *validator)
-		a.Logger.Printf("Added DN validator: %s (%s)", name, id)
-	} else if strings.HasPrefix(strings.ToLower(partitionType), "bvn") {
-		// Extract BVN index from partition ID
-		bvnIndex := 0 // Default to 0 if we can't extract
-		if strings.HasPrefix(partitionID, "bvn") {
-			// Try to extract a number if present
-			parts := strings.Split(partitionID, "-")
-			if len(parts) > 1 {
-				// Use the partition name as an index
-				bvnIndex = len(a.BVNValidators)
+		if strings.ToLower(partitionType) == "dn" {
+			a.DNValidators = append(a.DNValidators, *validator)
+			a.Logger.Printf("Added DN validator: %s (%s)", name, id)
+		} else if strings.HasPrefix(strings.ToLower(partitionType), "bvn") {
+			bvnIndex := 0
+			if strings.HasPrefix(partitionID, "bvn") {
+				parts := strings.Split(partitionID, "-")
+				if len(parts) > 1 {
+					bvnIndex = len(a.BVNValidators)
+				}
 			}
+			for len(a.BVNValidators) <= bvnIndex {
+				a.BVNValidators = append(a.BVNValidators, make([]Validator, 0))
+			}
+			a.BVNValidators[bvnIndex] = append(a.BVNValidators[bvnIndex], *validator)
+			validator.BVN = bvnIndex
+			a.Logger.Printf("Added BVN validator: %s (%s) to BVN %d", name, id, bvnIndex)
 		}
-		
-		// Ensure we have enough BVN slices
-		for len(a.BVNValidators) <= bvnIndex {
-			a.BVNValidators = append(a.BVNValidators, make([]Validator, 0))
-		}
-		
-		// Add to the appropriate BVN slice
-		a.BVNValidators[bvnIndex] = append(a.BVNValidators[bvnIndex], *validator)
-		validator.BVN = bvnIndex
-		a.Logger.Printf("Added BVN validator: %s (%s) to BVN %d", name, id, bvnIndex)
+		a.Validators = append(a.Validators, validator)
+		return validator
 	}
-	
-	// Also add to the legacy Validators slice for backward compatibility
-	a.Validators = append(a.Validators, validator)
-	
-	return validator
-	default:
-		// Return nil for invalid arguments
-		return nil
-	}
+	return nil
 }
 
 // AddDNValidator adds a validator to the Directory Network validators list
@@ -2043,6 +2022,11 @@ func (a *AddressDir) AddNetworkPeer(peerOrID interface{}, args ...interface{}) *
 
 // DiscoverNetworkPeers discovers network peers using the provided NetworkService
 func (a *AddressDir) DiscoverNetworkPeers(ctx context.Context, client api.NetworkService) (int, error) {
+	// Check if client is nil
+	if client == nil {
+		return 0, fmt.Errorf("network service client is nil")
+	}
+	
 	// Get network status from the client
 	status, err := client.NetworkStatus(ctx, api.NetworkStatusOptions{})
 	if err != nil {
@@ -2065,10 +2049,13 @@ func (a *AddressDir) DiscoverNetworkPeers(ctx context.Context, client api.Networ
 	a.NetworkInfo.PartitionMap = make(map[string]*PartitionInfo)
 
 	// Check if network and partitions are available
-	if status.Network != nil && status.Network.Partitions != nil {
+	if status != nil && status.Network != nil {
 		for _, p := range status.Network.Partitions {
-			// Convert partition type to string
-			partitionType := fmt.Sprint(p.Type)
+			// Determine partition type
+			partitionType := "bvn"
+			if p.Type.String() == "directory" {
+				partitionType = "dn"
+			}
 			
 			partition := &PartitionInfo{
 				ID:       p.ID,
@@ -2079,7 +2066,7 @@ func (a *AddressDir) DiscoverNetworkPeers(ctx context.Context, client api.Networ
 			}
 
 			// Set BVN index for BVNs
-			if partitionType == "bvn" || fmt.Sprint(p.Type) == "bvn" {
+			if partitionType == "bvn" {
 				if p.ID == "Apollo" {
 					partition.BVNIndex = 0
 				} else if p.ID == "Chandrayaan" {
@@ -2343,10 +2330,10 @@ func (a *AddressDir) discoverPartitionPeers(ctx context.Context, client api.Netw
 			PartitionType: partitionType,
 			BVN:           bvnIndex,
 			Status:        "active",
+			LastUpdated:   time.Now(),
 			Addresses:     make([]ValidatorAddress, 0),
 			AddressStatus: make(map[string]string),
 			URLs:          make(map[string]string),
-			LastUpdated:   time.Now(),
 		}
 
 		// Add to appropriate validators collection
@@ -2363,10 +2350,10 @@ func (a *AddressDir) discoverPartitionPeers(ctx context.Context, client api.Netw
 			PartitionType: partitionType,
 			BVN:           bvnIndex,
 			Status:        "active",
+			LastUpdated:   time.Now(),
 			Addresses:     make([]ValidatorAddress, 0),
 			AddressStatus: make(map[string]string),
 			URLs:          make(map[string]string),
-			LastUpdated:   time.Now(),
 		}
 		a.Validators = append(a.Validators, legacyVal)
 
@@ -2665,8 +2652,6 @@ func (a *AddressDir) AddValidatorToBVN(id string, bvnID string) {
 	a.BVNValidators[bvnIndex] = append(a.BVNValidators[bvnIndex], *validator)
 	a.Logger.Printf("Added validator %s (%s) to BVN validators for %s", validator.Name, id, bvnID)
 }
-
-
 
 // GetBVNValidators returns all validators for a specific BVN
 func (a *AddressDir) GetBVNValidators(bvnID string) []*Validator {

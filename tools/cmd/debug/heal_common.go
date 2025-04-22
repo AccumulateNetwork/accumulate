@@ -48,6 +48,7 @@ var cmdHeal = &cobra.Command{
 }
 
 var flagMaxResponseAge time.Duration = time.Minute
+var healDelay time.Duration = time.Minute
 
 func init() {
 	cmd.AddCommand(cmdHeal)
@@ -55,7 +56,8 @@ func init() {
 	healerFlags(cmdHeal)
 	cmdHeal.PersistentFlags().BoolVarP(&pretend, "pretend", "n", false, "Do not submit envelopes, only scan")
 	cmdHeal.PersistentFlags().BoolVar(&waitForTxn, "wait", false, "Wait for the message to finalize (defaults to true for heal synth)")
-	cmdHeal.PersistentFlags().BoolVar(&healContinuous, "continuous", false, "Run healing in a loop every minute")
+	cmdHeal.PersistentFlags().BoolVar(&healContinuous, "continuous", false, "Run healing in a loop")
+	cmdHeal.PersistentFlags().DurationVar(&healDelay, "delay", healDelay, "Delay between healing cycles when running continuously")
 	cmdHeal.PersistentFlags().StringVar(&pprof, "pprof", "", "Address to run net/http/pprof on")
 	cmdHealSynth.PersistentFlags().StringVar(&lightDb, "light-db", lightDb, "Light client database for persisting chain data")
 
@@ -274,8 +276,8 @@ func (h *healer) heal(args []string) {
 
 		// Heal continuously?
 		if healContinuous {
-			color.Yellow("Healing complete, sleeping for a minute")
-			ctx, cancel := context.WithTimeout(ctx, time.Minute)
+			color.Yellow("Healing complete, sleeping for %v", healDelay)
+			ctx, cancel := context.WithTimeout(ctx, healDelay)
 			defer cancel()
 			<-ctx.Done()
 			h.Reset()

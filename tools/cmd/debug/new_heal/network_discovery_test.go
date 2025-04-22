@@ -7,6 +7,7 @@
 package new_heal
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log"
@@ -20,21 +21,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// MockNetworkService implements the api.NetworkService interface for testing
-type MockNetworkService struct {
-	// Mock network status response
-	networkStatus *api.NetworkStatus
-	// Error to return
-	err error
-}
-
-// NetworkStatus implements the api.NetworkService interface
-func (m *MockNetworkService) NetworkStatus(ctx context.Context, opts api.NetworkStatusOptions) (*api.NetworkStatus, error) {
-	if m.err != nil {
-		return nil, m.err
-	}
-	return m.networkStatus, nil
-}
+// createMockNetworkStatusForTest creates a mock network status for test purposes
+// This is different from the CreateMockNetworkService function in discovery_mocks_test.go
 
 // createMockNetworkStatus creates a mock network status response
 func createMockNetworkStatus() *api.NetworkStatus {
@@ -104,10 +92,7 @@ func TestNetworkDiscovery(t *testing.T) {
 	addressDir := &AddressDir{
 		NetworkPeers:   make(map[string]NetworkPeer),
 		URLHelpers:     make(map[string]string),
-		DiscoveryStats: DiscoveryStats{
-			ByMethod:    make(map[string]int),
-			ByPartition: make(map[string]int),
-		},
+		DiscoveryStats: NewDiscoveryStats(),
 	}
 	addressDir.Logger = logger
 
@@ -130,9 +115,7 @@ func TestNetworkDiscovery(t *testing.T) {
 	assert.NotEmpty(t, network.PartitionMap, "Partition map should not be empty")
 
 	// Create a mock network service
-	mockService := &MockNetworkService{
-		networkStatus: createMockNetworkStatus(),
-	}
+	mockService := CreateMockNetworkService()
 
 	// Discover network peers
 	stats, err := discovery.DiscoverNetworkPeers(context.Background(), mockService)
@@ -144,6 +127,14 @@ func TestNetworkDiscovery(t *testing.T) {
 
 	// Verify address directory was updated
 	assert.NotEmpty(t, addressDir.DNValidators, "DN validators should not be empty")
+
+	// Generate and print a report of the discovered network
+	if testing.Verbose() {
+		t.Log("Generating network report...")
+		var buf bytes.Buffer
+		GenerateAddressDirReport(addressDir, &buf)
+		t.Log("\n" + buf.String())
+	}
 }
 
 // TestNetworkDiscoveryMainnet tests the network discovery functionality for mainnet
@@ -155,10 +146,7 @@ func TestNetworkDiscoveryMainnet(t *testing.T) {
 	addressDir := &AddressDir{
 		NetworkPeers:   make(map[string]NetworkPeer),
 		URLHelpers:     make(map[string]string),
-		DiscoveryStats: DiscoveryStats{
-			ByMethod:    make(map[string]int),
-			ByPartition: make(map[string]int),
-		},
+		DiscoveryStats: NewDiscoveryStats(),
 	}
 	addressDir.Logger = logger
 
@@ -202,6 +190,14 @@ func TestNetworkDiscoveryMainnet(t *testing.T) {
 		assert.True(t, bvnPartition.Active, "%s partition should be active", name)
 		assert.Equal(t, i, bvnPartition.BVNIndex, "%s partition BVN index mismatch", name)
 	}
+
+	// Generate and print a report of the discovered network
+	if testing.Verbose() {
+		t.Log("Generating mainnet network report...")
+		var buf bytes.Buffer
+		GenerateAddressDirReport(addressDir, &buf)
+		t.Log("\n" + buf.String())
+	}
 }
 
 // TestUpdateNetworkState tests the UpdateNetworkState function
@@ -213,10 +209,7 @@ func TestUpdateNetworkState(t *testing.T) {
 	addressDir := &AddressDir{
 		NetworkPeers:   make(map[string]NetworkPeer),
 		URLHelpers:     make(map[string]string),
-		DiscoveryStats: DiscoveryStats{
-			ByMethod:    make(map[string]int),
-			ByPartition: make(map[string]int),
-		},
+		DiscoveryStats: NewDiscoveryStats(),
 	}
 	addressDir.Logger = logger
 
@@ -228,9 +221,7 @@ func TestUpdateNetworkState(t *testing.T) {
 	require.NoError(t, err, "Failed to initialize network")
 
 	// Create a mock network service
-	mockService := &MockNetworkService{
-		networkStatus: createMockNetworkStatus(),
-	}
+	mockService := CreateMockNetworkService()
 
 	// Update network state
 	stats, err := discovery.UpdateNetworkState(context.Background(), mockService)
@@ -244,6 +235,14 @@ func TestUpdateNetworkState(t *testing.T) {
 	assert.NotEqual(t, time.Time{}, addressDir.DiscoveryStats.LastDiscovery, "Last discovery time should be set")
 	assert.True(t, addressDir.DiscoveryStats.DiscoveryAttempts > 0, "Discovery attempts should be incremented")
 	assert.True(t, addressDir.DiscoveryStats.SuccessfulDiscoveries > 0, "Successful discoveries should be incremented")
+
+	// Generate and print a report of the updated network state
+	if testing.Verbose() {
+		t.Log("Generating network state report...")
+		var buf bytes.Buffer
+		GenerateAddressDirReport(addressDir, &buf)
+		t.Log("\n" + buf.String())
+	}
 }
 
 // TestErrorHandling tests error handling during network discovery
@@ -255,10 +254,7 @@ func TestErrorHandling(t *testing.T) {
 	addressDir := &AddressDir{
 		NetworkPeers:   make(map[string]NetworkPeer),
 		URLHelpers:     make(map[string]string),
-		DiscoveryStats: DiscoveryStats{
-			ByMethod:    make(map[string]int),
-			ByPartition: make(map[string]int),
-		},
+		DiscoveryStats: NewDiscoveryStats(),
 	}
 	addressDir.Logger = logger
 
@@ -270,9 +266,8 @@ func TestErrorHandling(t *testing.T) {
 	require.NoError(t, err, "Failed to initialize network")
 
 	// Create a mock network service with error
-	mockService := &MockNetworkService{
-		err: fmt.Errorf("mock error"),
-	}
+	mockService := CreateMockNetworkService()
+	mockService.NetworkStatusError = fmt.Errorf("mock error")
 
 	// Discover network peers
 	stats, err := discovery.DiscoverNetworkPeers(context.Background(), mockService)
@@ -284,4 +279,12 @@ func TestErrorHandling(t *testing.T) {
 	assert.NotEqual(t, time.Time{}, addressDir.DiscoveryStats.LastDiscovery, "Last discovery time should be set")
 	assert.True(t, addressDir.DiscoveryStats.DiscoveryAttempts > 0, "Discovery attempts should be incremented")
 	assert.True(t, addressDir.DiscoveryStats.FailedDiscoveries > 0, "Failed discoveries should be incremented")
+
+	// Generate and print a report of the error state
+	if testing.Verbose() {
+		t.Log("Generating error handling report...")
+		var buf bytes.Buffer
+		GenerateAddressDirReport(addressDir, &buf)
+		t.Log("\n" + buf.String())
+	}
 }

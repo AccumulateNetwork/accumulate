@@ -34,6 +34,8 @@ import (
 
 ### AddressDir
 
+> **CRITICAL DESIGN REQUIREMENT**: The AddressDir structure MUST use slices for DNValidators and BVNValidators as specified below. DO NOT MODIFY OR CONVERT THESE TO MAPS. The slice-based implementation is REQUIRED for compatibility with existing code.
+
 The central structure that manages validator multiaddresses:
 
 ```go
@@ -1841,21 +1843,25 @@ By focusing on these aspects, address2.go will improve the reliability and effic
 
 ## URL Construction Standardization
 
-To address the URL construction differences between sequence.go and heal_anchor.go, we'll implement a standardized URL construction approach:
+To address the URL construction differences between sequence.go and heal_anchor.go, we'll implement a standardized URL construction approach that matches the working code in the codebase:
 
 ```go
 func (a *AddressDir) constructPartitionURL(partitionID string) string {
-    // Use the sequence.go approach (raw partition URLs)
-    return fmt.Sprintf("acc://%s.acme", partitionID)
+    // Use dynamic network ID from NetworkInfo
+    return fmt.Sprintf("acc://%s.%s", partitionID, a.NetworkInfo.ID)
 }
 
 func (a *AddressDir) constructAnchorURL(partitionID string) string {
-    // Use the sequence.go approach instead of appending to anchor pool URL
-    return fmt.Sprintf("acc://%s.acme", partitionID)
+    // Format anchor URLs as acc://dn.{networkID}/anchors/{partitionID}
+    return fmt.Sprintf("acc://dn.%s/anchors/%s", a.NetworkInfo.ID, partitionID)
 }
 ```
 
-This standardization will ensure consistency across the codebase and prevent anchor healing failures due to URL format discrepancies.
+This standardization will ensure consistency across the codebase and prevent anchor healing failures due to URL format discrepancies. The implementation:
+
+1. Uses the dynamic network ID from NetworkInfo instead of hardcoding "acme"
+2. Correctly formats anchor URLs as `acc://dn.{networkID}/anchors/{partitionID}`
+3. Aligns with the behavior of the protocol.PartitionUrl function and the healing code
 
 ## Testability
 

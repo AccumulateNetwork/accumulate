@@ -66,18 +66,22 @@ func healSynth(cmd *cobra.Command, args []string) {
 			ab := pullSynthLedger(h, srcUrl).Partition(dstUrl)
 			ba := pullSynthLedger(h, dstUrl).Partition(srcUrl)
 
-			// Heal
-			for i := uint64(0); i+ba.Delivered < ab.Produced; i++ {
+			// Heal only the first synthetic transaction if there are any
+			if ab.Produced > ba.Delivered {
 				select {
 				case <-h.ctx.Done():
 					return
 				default:
 				}
+				
+				// Get the ID if available
 				var id *url.TxID
-				if i < uint64(len(ba.Pending)) {
-					id = ba.Pending[i]
+				if uint64(len(ba.Pending)) > 0 {
+					id = ba.Pending[0]
 				}
-				if healSingleSynth(h, src.ID, dst.ID, ba.Delivered+i+1, id) {
+				
+				// Heal only the first transaction
+				if healSingleSynth(h, src.ID, dst.ID, ba.Delivered+1, id) {
 					// If it was already delivered, recheck the ledgers
 					goto pullAgain
 				}

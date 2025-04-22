@@ -94,6 +94,9 @@ type nodeStatus struct {
 	} `json:"api"`
 }
 
+var skipConsensusCheck bool
+var statusTimeout time.Duration = 10 * time.Second
+
 func init() {
 	cmd.AddCommand(networkCmd)
 	networkCmd.AddCommand(
@@ -104,11 +107,13 @@ func init() {
 
 	networkCmd.PersistentFlags().BoolVarP(&outputJSON, "json", "j", false, "Output result as JSON")
 	networkStatusCmd.PersistentFlags().StringVar(&cachedScan, "cached-scan", "", "A cached network scan")
+	networkStatusCmd.PersistentFlags().BoolVar(&skipConsensusCheck, "skip-consensus", false, "Skip consensus checking (faster)")
+	networkStatusCmd.PersistentFlags().DurationVar(&statusTimeout, "timeout", 10*time.Second, "Timeout for network operations")
 }
 
 func scanNetwork(_ *cobra.Command, args []string) {
 	client := jsonrpc.NewClient(accumulate.ResolveWellKnownEndpoint(args[0], "v3"))
-	client.Client.Timeout = time.Hour
+	client.Client.Timeout = statusTimeout
 	net, err := healing.ScanNetwork(context.Background(), client)
 	check(err)
 
@@ -132,7 +137,7 @@ func scanNode(_ *cobra.Command, args []string) {
 	checkf(err, "invalid port")
 
 	client := jsonrpc.NewClient(accumulate.ResolveWellKnownEndpoint(args[0], "v3"))
-	client.Client.Timeout = time.Hour
+	client.Client.Timeout = statusTimeout
 	peer, err := healing.ScanNode(context.Background(), client)
 	check(err)
 
@@ -219,6 +224,9 @@ func networkStatus(_ *cobra.Command, args []string) {
 
 	// Find a host for each validator
 	fmt.Fprintln(os.Stderr, "Identifying validators...")
+	if debug {
+		fmt.Fprintln(os.Stderr, "[DEBUG] Starting validator identification with detailed logging")
+	}
 	work(mu, wg, func() {
 		for _, val := range ns.Network.Validators {
 			slog.DebugContext(ctx, "Checking validator", "id", logging.AsHex(val.PublicKeyHash).Slice(0, 4), "operator", val.Operator)
@@ -266,20 +274,35 @@ func networkStatus(_ *cobra.Command, args []string) {
 
 				// Check if we can connect to Tendermint
 				base := fmt.Sprintf("http://%s:16592", host)
+				if debug {
+					fmt.Fprintf(os.Stderr, "[DEBUG] Attempting to connect to validator at %s\n", base)
+				}
 				c, err := http.New(base, base+"/ws")
 				if err != nil {
 					slog.DebugContext(ctx, "Error while creating consensus client", "error", err, "host", host)
+					if debug {
+						fmt.Fprintf(os.Stderr, "[DEBUG] Failed to create client for %s: %v\n", host, err)
+					}
 					continue
 				}
 
 				status := promise.Call(maybe(func() (*coretypes.ResultStatus, bool) {
-					ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+					ctx, cancel := context.WithTimeout(ctx, statusTimeout)
 					defer cancel()
 
+					if debug {
+						fmt.Fprintf(os.Stderr, "[DEBUG] Getting status from %s (timeout: %v)\n", host, statusTimeout)
+					}
 					status, err := c.Status(ctx)
 					if err != nil {
 						slog.DebugContext(ctx, "Error while querying consensus status", "error", err, "host", host)
+						if debug {
+							fmt.Fprintf(os.Stderr, "[DEBUG] Failed to get status from %s: %v\n", host, err)
+						}
 						return nil, false
+					}
+					if debug {
+						fmt.Fprintf(os.Stderr, "[DEBUG] Successfully got status from %s\n", host)
 					}
 					return status, true
 				}))
@@ -289,17 +312,29 @@ func networkStatus(_ *cobra.Command, args []string) {
 				})))
 
 				netInfo := promise.Call(maybe(func() (*coretypes.ResultNetInfo, bool) {
-					ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+					ctx, cancel := context.WithTimeout(ctx, statusTimeout)
 					defer cancel()
 
+					if debug {
+						fmt.Fprintf(os.Stderr, "[DEBUG] Getting network info from %s (timeout: %v)\n", host, statusTimeout)
+					}
 					netInfo, err := c.NetInfo(ctx)
 					if err != nil {
-						slog.DebugContext(ctx, "Error while querying consensus status", "error", err, "host", host)
+						slog.DebugContext(ctx, "Error while querying consensus network info", "error", err, "host", host)
+						if debug {
+							fmt.Fprintf(os.Stderr, "[DEBUG] Failed to get network info from %s: %v\n", host, err)
+						}
 						return nil, false
+					}
+					if debug {
+						fmt.Fprintf(os.Stderr, "[DEBUG] Successfully got network info from %s with %d peers\n", host, len(netInfo.Peers))
 					}
 					return netInfo, true
 				}))
 				waitFor(wg, promise.SyncThen(mu, netInfo, done(func(netInfo *coretypes.ResultNetInfo) {
+					if debug {
+						fmt.Fprintf(os.Stderr, "[DEBUG] Adding %d peers from %s to the peer list\n", len(netInfo.Peers), host)
+					}
 					cometPeers = append(cometPeers, netInfo.Peers...)
 				})))
 				break
@@ -309,6 +344,9 @@ func networkStatus(_ *cobra.Command, args []string) {
 
 	// Use consensus peers to find hosts
 	fmt.Fprintln(os.Stderr, "Checking peers...")
+	if debug {
+		fmt.Fprintf(os.Stderr, "[DEBUG] Starting peer checking with %d initial peers\n", len(cometPeers))
+	}
 	work(mu, wg, func() {
 		for len(cometPeers) > 0 {
 			scan := cometPeers
@@ -327,7 +365,7 @@ func networkStatus(_ *cobra.Command, args []string) {
 				}
 
 				netInfo := promise.Call(maybe(func() (*coretypes.ResultNetInfo, bool) {
-					ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+					ctx, cancel := context.WithTimeout(ctx, statusTimeout)
 					defer cancel()
 
 					netInfo, err := c.NetInfo(ctx)
@@ -347,7 +385,7 @@ func networkStatus(_ *cobra.Command, args []string) {
 
 				peer := peer
 				status := promise.Call(maybe(func() (*coretypes.ResultStatus, bool) {
-					ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+					ctx, cancel := context.WithTimeout(ctx, statusTimeout)
 					defer cancel()
 
 					status, err := c.Status(ctx)
@@ -357,6 +395,7 @@ func networkStatus(_ *cobra.Command, args []string) {
 					}
 					return status, true
 				}))
+				catchAndLog(ctx, status, "Error while querying consensus status", "host", peer.RemoteIP)
 				node := promise.SyncThen(mu, status, definitely(func(status *coretypes.ResultStatus) *nodeStatus {
 					kh := sha256.Sum256(status.ValidatorInfo.PubKey.Bytes())
 					node, ok := nodeByKeyHash[kh]
@@ -374,7 +413,7 @@ func networkStatus(_ *cobra.Command, args []string) {
 					return node
 				}))
 				waitFor(wg, promise.Then(node, func(node *nodeStatus) promise.Result[any] {
-					ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+					ctx, cancel := context.WithTimeout(ctx, statusTimeout)
 					defer cancel()
 
 					c := jsonrpc.NewClient(fmt.Sprintf("http://%s:16595/v3", node.Host))
@@ -452,7 +491,7 @@ func networkStatus(_ *cobra.Command, args []string) {
 			node := node
 
 			connect := promise.Call(maybe(func() (any, bool) {
-				ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+				ctx, cancel := context.WithTimeout(ctx, statusTimeout)
 				defer cancel()
 
 				_, err = dialer.Dial(ctx, addr.Encapsulate(api.ServiceTypeNode.Address().Multiaddr()))
@@ -466,7 +505,7 @@ func networkStatus(_ *cobra.Command, args []string) {
 				return promise.ValueOf[any](nil)
 			})
 			query := promise.Then(didConnect, func(any) promise.Result[*api.NodeInfo] {
-				ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+				ctx, cancel := context.WithTimeout(ctx, statusTimeout)
 				defer cancel()
 
 				mc := &message.Client{Transport: &message.RoutedTransport{
@@ -492,59 +531,68 @@ func networkStatus(_ *cobra.Command, args []string) {
 
 	// Check consensus
 	fmt.Fprintln(os.Stderr, "Checking consensus...")
-	work(mu, wg, func() {
-		for _, node := range nodes {
-			if node.Host == "" {
-				continue
-			}
-
-			// Query Tendermint
-			for _, port := range []int{16592, 16692} {
-				base := fmt.Sprintf("http://%s:%d", node.Host, port)
-				kh := sha256.Sum256(node.Key)
-				slog.DebugContext(ctx, "Checking consensus", "operator", node.Operator, "id", logging.AsHex(kh).Slice(0, 4), "host", base)
-
-				c, err := http.New(base, base+"/ws")
-				if err != nil {
+	if !skipConsensusCheck {
+		work(mu, wg, func() {
+			for _, node := range nodes {
+				if node.Host == "" {
 					continue
 				}
 
-				node := node
-				status := promise.Call(try(func() (*coretypes.ResultStatus, error) {
-					ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-					defer cancel()
+				// Query Tendermint
+				for _, port := range []int{16592, 16692} {
+					base := fmt.Sprintf("http://%s:%d", node.Host, port)
+					kh := sha256.Sum256(node.Key)
+					slog.DebugContext(ctx, "Checking consensus", "operator", node.Operator, "id", logging.AsHex(kh).Slice(0, 4), "host", base)
 
-					return c.Status(ctx)
-				}))
-				catchAndLog(ctx, status, "Error while querying consensus status", "host", node.Host)
-				part := promise.SyncThen(mu, status, func(status *coretypes.ResultStatus) promise.Result[*nodePartStatus] {
-					part := status.NodeInfo.Network
-					if i := strings.LastIndexByte(part, '.'); i >= 0 {
-						part = part[i+1:]
-					}
-					part = strings.ToLower(part)
-
-					st, ok := node.Parts[part]
-					if !ok {
-						st = new(nodePartStatus)
-						node.Parts[part] = st
-					}
-
-					st.Height = uint64(status.SyncInfo.LatestBlockHeight)
-					return promise.ValueOf(st)
-				})
-
-				waitFor(wg, promise.Then(part, func(part *nodePartStatus) promise.Result[any] {
-					z, err := nodeIsZombie(ctx, c)
+					c, err := http.New(base, base+"/ws")
 					if err != nil {
-						return promise.ErrorOf[any](err)
+						continue
 					}
-					part.Zombie = z
-					return promise.ValueOf[any](nil)
-				}))
+
+					node := node
+					status := promise.Call(maybe(func() (*coretypes.ResultStatus, bool) {
+						ctx, cancel := context.WithTimeout(ctx, statusTimeout)
+						defer cancel()
+
+						status, err := c.Status(ctx)
+						if err != nil {
+							slog.DebugContext(ctx, "Error while querying consensus status", "error", err, "host", node.Host)
+							return nil, false
+						}
+						return status, true
+					}))
+					catchAndLog(ctx, status, "Error while querying consensus status", "host", node.Host)
+					part := promise.SyncThen(mu, status, func(status *coretypes.ResultStatus) promise.Result[*nodePartStatus] {
+						part := status.NodeInfo.Network
+						if i := strings.LastIndexByte(part, '.'); i >= 0 {
+							part = part[i+1:]
+						}
+						part = strings.ToLower(part)
+
+						st, ok := node.Parts[part]
+						if !ok {
+							st = new(nodePartStatus)
+							node.Parts[part] = st
+						}
+
+						st.Height = uint64(status.SyncInfo.LatestBlockHeight)
+						return promise.ValueOf(st)
+					})
+
+					waitFor(wg, promise.Then(part, func(part *nodePartStatus) promise.Result[any] {
+						z, err := nodeIsZombie(ctx, c)
+						if err != nil {
+							return promise.ErrorOf[any](err)
+						}
+						part.Zombie = z
+						return promise.ValueOf[any](nil)
+					}))
+				}
 			}
-		}
-	})
+		})
+	} else {
+		fmt.Fprintln(os.Stderr, "Consensus check skipped")
+	}
 
 	if outputJSON {
 		check(json.NewEncoder(os.Stdout).Encode(nodes))
