@@ -22,6 +22,12 @@ docker:
 docker-push: docker
 	docker push "$(IMAGE)"
 
+healing-docker:
+	$(MAKE) docker IMAGE="$(IMAGE):healing"
+
+healing-docker-push: healing-docker
+	docker push "$(IMAGE):healing"
+
 http:
 	go build -trimpath $(FLAGS) ./cmd/accumulated-http
 
