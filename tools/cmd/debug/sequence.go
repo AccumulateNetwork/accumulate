@@ -124,6 +124,12 @@ type Dir struct {
 }
 
 func checkSequence2(a, b *protocol.PartitionInfo, bad map[Dir]bool, kind string, ab, ba *protocol.PartitionSyntheticLedger) {
+	if kind == "anchors" && a.Type != protocol.PartitionTypeDirectory && b.Type != protocol.PartitionTypeDirectory {
+		// BVN → BVN is not a valid anchor sequence, and I'm not sure how this
+		// even happened.
+		return
+	}
+
 	if ab.Produced > ba.Received {
 		color.Red("🗴 %s → %s has %d unreceived %s (%d → %d)\n", a.ID, b.ID, ab.Produced-ba.Received, kind, ba.Received, ab.Produced)
 		bad[Dir{From: a.ID, To: b.ID}] = true
@@ -138,6 +144,12 @@ func checkSequence2(a, b *protocol.PartitionInfo, bad map[Dir]bool, kind string,
 }
 
 func checkSequence1(dst *protocol.PartitionInfo, src *protocol.PartitionSyntheticLedger, bad map[Dir]bool, kind string) {
+	if kind == "anchors" && dst.Type != protocol.PartitionTypeDirectory && !protocol.IsDnUrl(src.Url) {
+		// BVN → BVN is not a valid anchor sequence, and I'm not sure how this
+		// even happened.
+		return
+	}
+
 	id, _ := protocol.ParsePartitionUrl(src.Url)
 	if len(src.Pending) > 0 {
 		color.Red("🗴 %s → %s has %d pending %s (from %d)\n", id, dst.ID, len(src.Pending), kind, src.Delivered+1)
