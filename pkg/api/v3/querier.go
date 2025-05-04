@@ -196,11 +196,16 @@ func doQuery[T any, PT queryPtr[T]](q Querier, ctx context.Context, scope *url.U
 	if err != nil {
 		return nil, err
 	}
-
+	if r == nil {
+		return nil, fmt.Errorf("rpc returned nil")
+	}
 	// Remarshal to erase type info. TODO: add a method that does the same thing.
 	b, err := r.MarshalBinary()
 	if err != nil {
 		return nil, errors.EncodingError.Wrap(err)
+	}
+	if r == nil {
+		return nil, errors.EncodingError.Wrap(fmt.Errorf("rpc returned nil"))
 	}
 	r, err = UnmarshalRecord(b)
 	if err != nil {
