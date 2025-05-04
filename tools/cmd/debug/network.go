@@ -208,6 +208,9 @@ func networkStatus(_ *cobra.Command, args []string) {
 			c, err := multiaddr.NewComponent("p2p", peer.ID.String())
 			check(err)
 			for _, addr := range peer.Addresses {
+				if shouldSkipAddr(addr) {
+					continue
+				}
 				addrByKeyHash[kh] = append(addrByKeyHash[kh], addr.Encapsulate(c))
 			}
 		}
@@ -276,21 +279,17 @@ func networkStatus(_ *cobra.Command, args []string) {
 					continue
 				}
 
-				status := promise.Call(maybe(func() (*coretypes.ResultStatus, bool) {
-					ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-					defer cancel()
+				callCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+				defer cancel()
 
-					status, err := c.Status(ctx)
-					if err != nil {
-						slog.DebugContext(ctx, "Error while querying consensus status", "error", err, "host", host)
-						return nil, false
-					}
-					return status, true
-				}))
-				waitFor(wg, promise.SyncThen(mu, status, done(func(status *coretypes.ResultStatus) {
-					st.Host = host
-					seenComet[status.NodeInfo.ID()] = true
-				})))
+				status, err := c.Status(callCtx)
+				if err != nil {
+					slog.DebugContext(ctx, "Error while querying consensus status", "error", err, "host", host)
+					continue
+				}
+
+				st.Host = host
+				seenComet[status.NodeInfo.ID()] = true
 
 				netInfo := promise.Call(maybe(func() (*coretypes.ResultNetInfo, bool) {
 					ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -713,4 +712,27 @@ func nodeIsZombie(ctx context.Context, c client.MempoolClient) (bool, error) {
 		return true, nil
 	}
 	return false, err
+}
+
+func shouldSkipAddr(addr multiaddr.Multiaddr) bool {
+	var skip bool
+	multiaddr.ForEach(addr, func(c multiaddr.Component) bool {
+		var ip net.IP
+		switch c.Protocol().Name {
+		case "ip4", "ip6":
+			ip = net.ParseIP(c.Value())
+		default:
+			return true
+		}
+		if ip == nil {
+			return false
+		}
+
+		if !ip.IsGlobalUnicast() ||
+			ip.IsPrivate() {
+			skip = true
+		}
+		return false
+	})
+	return skip
 }
