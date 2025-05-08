@@ -227,7 +227,7 @@ func (h *healer) loadNetworkStatus() {
 	}
 
 	// Rescan if the validator set has changed
-	if !h.net.Status.Network.Equal(ns.Network) {
+	if false && !h.net.Status.Network.Equal(ns.Network) {
 		slog.Info("Validator set has changed since last scan")
 		h.net, err = healing.ScanNetwork(h.ctx, h.C2)
 		check(err)
@@ -351,20 +351,33 @@ func (h *healer) submitLoop(wg *sync.WaitGroup) {
 		if len(messages) == 0 {
 			continue
 		}
+		for _, msg := range messages {
+			var server = "http://apollo-mainnet.accumulate.defidevs.io:16595/v3"
+			if msg, ok := msg.(*messaging.BlockAnchor); ok {
+				bvn, _ := protocol.ParsePartitionUrl(msg.Anchor.ID().Account())
+				if !strings.EqualFold(bvn, protocol.Directory) {
+					server = fmt.Sprintf("http://%s-mainnet.accumulate.defidevs.io:16695/v3", strings.ToLower(bvn))
+				}
+			}
 
-		env := &messaging.Envelope{Messages: messages}
-		subs, err := h.C2.Submit(h.ctx, env, api.SubmitOptions{})
-		messages = messages[:0]
-		if err != nil {
-			slog.ErrorContext(h.ctx, "Submission failed", "error", err, "id", env.Messages[0].ID())
-		}
-		for _, sub := range subs {
-			if sub.Success {
-				slog.InfoContext(h.ctx, "Submission succeeded", "id", sub.Status.TxID)
-			} else {
-				slog.ErrorContext(h.ctx, "Submission failed", "message", sub, "status", sub.Status)
+			fmt.Println("Sending to", server)
+			c := jsonrpc.NewClient(server)
+
+			env := &messaging.Envelope{Messages: []messaging.Message{msg}}
+			subs, err := c.Submit(context.Background(), env, api.SubmitOptions{})
+			if err != nil {
+				slog.ErrorContext(h.ctx, "Submission failed", "error", err, "id", env.Messages[0].ID())
+			}
+			for _, sub := range subs {
+				if sub.Success {
+					slog.InfoContext(h.ctx, "Submission succeeded", "id", sub.Status.TxID)
+				} else {
+					slog.ErrorContext(h.ctx, "Submission failed", "message", sub, "status", sub.Status)
+				}
 			}
 		}
+
+		messages = messages[:0]
 	}
 }
 

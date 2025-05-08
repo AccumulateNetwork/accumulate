@@ -553,7 +553,7 @@
       "mode": "auto",
       "program": "${workspaceFolder}/tools/cmd/debug",
       "args": [
-        "db", "analyze", "badger://${workspaceFolder}/.nodes/devnet/bvn1-1/bvnn/data/accumulate.db", "--accounts",
+        "sequence", "mainnet", "--only=a", "--max-response-age=24h"
       ]
     },
     {
@@ -570,8 +570,7 @@
         "heal",
         "anchor",
         "MainNet",
-        "--cached-scan=${env:HOME}/.accumulate/cache/mainnet.json",
-        "Directory → Apollo", "70911"
+        "Directory → Apollo", "751312"
       ]
     },
     {
