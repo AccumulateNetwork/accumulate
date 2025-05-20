@@ -68,6 +68,9 @@ func healSynth(cmd *cobra.Command, args []string) {
 
 			// Heal
 			for i := uint64(0); i+ba.Delivered < ab.Produced; i++ {
+				if i > 20 {
+					break
+				}
 				select {
 				case <-h.ctx.Done():
 					return
