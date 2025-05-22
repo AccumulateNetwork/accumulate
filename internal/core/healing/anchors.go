@@ -39,6 +39,7 @@ type HealAnchorArgs struct {
 func HealAnchor(ctx context.Context, args HealAnchorArgs, si SequencedInfo) error {
 	// If the network is running Vandenberg and the anchor is from the DN to a
 	// BVN, use version 2
+
 	if args.NetInfo.Status.ExecutorVersion.V2VandenbergEnabled() &&
 		strings.EqualFold(si.Source, protocol.Directory) &&
 		!strings.EqualFold(si.Destination, protocol.Directory) {
@@ -97,6 +98,16 @@ func healDnAnchorV2(ctx context.Context, args HealAnchorArgs, si SequencedInfo) 
 	if args.Pretend {
 		return nil
 	}
+
+	slog.InfoContext(ctx, "Healing anchor (V2)",
+		"source", si.Source,
+		"destination", si.Destination,
+		"sequence-number", si.Number,
+		// "want", threshold,
+		// "have", len(signed),
+		"txid", rBVN.ID,
+		"txid(dn)", rDN.ID,
+	)
 
 	slog.InfoContext(ctx, "Submitting signatures from the DN", "count", len(signatures))
 	err = args.Submit(signatures...)
@@ -188,7 +199,7 @@ func healAnchorV1(ctx context.Context, args HealAnchorArgs, si SequencedInfo) er
 	}
 	threshold := g.ValidatorThreshold(si.Source)
 
-	slog.InfoContext(ctx, "Healing anchor",
+	slog.InfoContext(ctx, "Healing anchor (V1)",
 		"source", si.Source,
 		"destination", si.Destination,
 		"sequence-number", si.Number,

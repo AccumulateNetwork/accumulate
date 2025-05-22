@@ -203,8 +203,26 @@ func (h *Healer) HealSynthetic(ctx context.Context, args HealSyntheticArgs, si S
 
 func waitFor(ctx context.Context, Q api.Querier, id *url.TxID) error {
 	slog.InfoContext(ctx, "Waiting", "for", id)
+	var last *time.Time
+
 	for i := 0; i < 10; i++ {
+	retry:
 		r, err := api.Querier2{Querier: Q}.QueryMessage(ctx, id, nil)
+
+		// If we haven't changed blocks since the last query, wait and don't count it against the number of tries
+		if r != nil && r.LastBlockTime != nil {
+			if last == nil {
+				last = r.LastBlockTime
+			} else {
+				if !r.LastBlockTime.After(*last) {
+					slog.Info("Waiting for a new block...")
+					time.Sleep(time.Second * 5)
+					goto retry
+				}
+				last = r.LastBlockTime
+			}
+		}
+
 		switch {
 		case errors.Is(err, errors.NotFound):
 			// Not found, wait
