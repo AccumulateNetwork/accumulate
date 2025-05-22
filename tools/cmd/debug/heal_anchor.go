@@ -51,12 +51,6 @@ func healAnchor(_ *cobra.Command, args []string) {
 
 			var all []*url.TxID
 			all = append(all, src2dst.Pending...)
-			if len(all) > 20 {
-				all = all[:20]
-			}
-			if len(ids) > 20 {
-				ids = ids[:20]
-			}
 			all = append(all, ids...)
 
 			for i, txid := range all {
