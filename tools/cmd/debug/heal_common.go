@@ -383,7 +383,7 @@ func (h *healer) submitLoop(wg *sync.WaitGroup) {
 			// Wait until the mempool doesn't have much in it
 		waitMore:
 			r, err := tm.NumUnconfirmedTxs(context.Background())
-			if err == nil && r.Total > 500 {
+			if err == nil && r.Total > 100 {
 				slog.WarnContext(h.ctx, "Mempool is too full, waiting", "mempool", r)
 				time.Sleep(time.Minute)
 				goto waitMore
