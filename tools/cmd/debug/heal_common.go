@@ -347,7 +347,7 @@ func (h *healer) submitLoop(wg *sync.WaitGroup) {
 			stop = true
 		case msg := <-h.submit:
 			messages = append(messages, msg...)
-			if len(messages) < 50 {
+			if len(messages) < 10 {
 				continue
 			}
 		case <-t.C:
@@ -355,17 +355,36 @@ func (h *healer) submitLoop(wg *sync.WaitGroup) {
 		if len(messages) == 0 {
 			continue
 		}
+		part := map[[32]byte]*url.URL{}
+		block := map[[32]byte]time.Time{}
 		for _, msg := range messages {
 			var server = "http://apollo-mainnet.accumulate.defidevs.io:16595/v3"
+			partUrl := protocol.DnUrl()
 			if msg, ok := msg.(*messaging.BlockAnchor); ok {
+
 				bvn, _ := protocol.ParsePartitionUrl(msg.Anchor.ID().Account())
 				if !strings.EqualFold(bvn, protocol.Directory) {
 					server = fmt.Sprintf("http://%s-mainnet.accumulate.defidevs.io:16695/v3", strings.ToLower(bvn))
+					partUrl = msg.Anchor.ID().Account().RootIdentity()
 				}
 			}
+			part[partUrl.AccountID32()] = partUrl
 
 			fmt.Println("Sending to", server)
 			c := jsonrpc.NewClient(server)
+
+			// What block is this partition on?
+			if _, ok := block[partUrl.AccountID32()]; !ok {
+				r, err := h.C1.Query(context.Background(), partUrl, &api.DefaultQuery{})
+				if err != nil {
+					continue
+				}
+				a, ok := r.(*api.AccountRecord)
+				if !ok || a.LastBlockTime == nil {
+					continue
+				}
+				block[partUrl.AccountID32()] = *a.LastBlockTime
+			}
 
 			env := &messaging.Envelope{Messages: []messaging.Message{msg}}
 			subs, err := c.Submit(context.Background(), env, api.SubmitOptions{})
@@ -382,6 +401,25 @@ func (h *healer) submitLoop(wg *sync.WaitGroup) {
 		}
 
 		messages = messages[:0]
+
+		// Wait for a new block
+		for hash, last := range block {
+			for {
+				r, err := h.C1.Query(context.Background(), part[hash], &api.DefaultQuery{})
+				if err != nil {
+					break
+				}
+				a, ok := r.(*api.AccountRecord)
+				if !ok || a.LastBlockTime == nil {
+					break
+				}
+				if a.LastBlockTime.After(last) {
+					break
+				}
+				slog.InfoContext(h.ctx, "Waiting for a new block", "partition", part[hash])
+				time.Sleep(5 * time.Second)
+			}
+		}
 	}
 }
 
