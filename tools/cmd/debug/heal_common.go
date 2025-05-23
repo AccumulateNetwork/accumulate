@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/fatih/color"
+	"github.com/lmittmann/tint"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/exp/apiutil"
 	"gitlab.com/accumulatenetwork/accumulate/exp/light"
@@ -106,6 +107,9 @@ func (h *healer) Reset() {
 }
 
 func (h *healer) setup(ctx context.Context, network string) {
+	// Color the logs
+	slog.SetDefault(slog.New(tint.NewHandler(os.Stderr, &tint.Options{Level: slog.LevelInfo})))
+
 	h.ctx = ctx
 	h.network = network
 	h.accounts = map[[32]byte]protocol.Account{}
