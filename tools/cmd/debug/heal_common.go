@@ -370,7 +370,7 @@ func (h *healer) submitLoop(wg *sync.WaitGroup) {
 			}
 			part[partUrl.AccountID32()] = partUrl
 
-			fmt.Println("Sending to", server)
+			slog.DebugContext(h.ctx, "Sending to", "server", server)
 			c := jsonrpc.NewClient(server)
 
 			// What block is this partition on?
