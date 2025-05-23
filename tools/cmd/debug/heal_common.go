@@ -375,7 +375,7 @@ func (h *healer) submitLoop(wg *sync.WaitGroup) {
 
 			slog.DebugContext(h.ctx, "Sending to", "server", host, "port", port)
 			acc := jsonrpc.NewClient(fmt.Sprintf("http://%s:%d/v3", host, port+4))
-			tm, err := rpchttp.New(fmt.Sprintf("http://%s:%d", host, port+2), fmt.Sprintf("http://%s:%d/websocket", host, port+2))
+			tm, err := rpchttp.New(fmt.Sprintf("http://%s:%d", host, port+1), fmt.Sprintf("http://%s:%d/websocket", host, port+1))
 			if err != nil {
 				panic(err)
 			}
@@ -384,7 +384,7 @@ func (h *healer) submitLoop(wg *sync.WaitGroup) {
 		waitMore:
 			r, err := tm.NumUnconfirmedTxs(context.Background())
 			if err == nil && r.Total > 500 {
-				slog.InfoContext(h.ctx, "Mempool is too full, waiting", "mempool", r)
+				slog.WarnContext(h.ctx, "Mempool is too full, waiting", "mempool", r)
 				time.Sleep(time.Minute)
 				goto waitMore
 			}
@@ -432,7 +432,7 @@ func (h *healer) submitLoop(wg *sync.WaitGroup) {
 				if a.LastBlockTime.After(last) {
 					break
 				}
-				slog.InfoContext(h.ctx, "Waiting for a new block", "partition", part[hash])
+				slog.WarnContext(h.ctx, "Waiting for a new block", "partition", part[hash])
 				time.Sleep(5 * time.Second)
 			}
 		}
@@ -483,7 +483,7 @@ func (q *tryEachQuerier) Query(ctx context.Context, scope *url.URL, query api.Qu
 				return nil, err
 			}
 			lastErr = err
-			slog.ErrorContext(ctx, "Failed to query", "peer", peer, "scope", scope, "error", err)
+			slog.WarnContext(ctx, "Failed to query", "peer", peer, "scope", scope, "error", err)
 			continue
 		}
 
@@ -493,13 +493,13 @@ func (q *tryEachQuerier) Query(ctx context.Context, scope *url.URL, query api.Qu
 		}
 
 		if r2.GetLastBlockTime() == nil {
-			cmdutil.Warnf("response for %v does not include a last block time", scope)
+			slog.WarnContext(ctx, "Response does not include a last block time", "scope", scope)
 			continue
 		}
 
 		age := time.Since(*r2.GetLastBlockTime())
 		if flagMaxResponseAge > 0 && age > flagMaxResponseAge {
-			cmdutil.Warnf("response for %v is too old (%v)", scope, age)
+			slog.WarnContext(ctx, "Response is too old", "scope", scope, "age", age)
 			continue
 		}
 

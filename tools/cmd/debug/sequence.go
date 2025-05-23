@@ -205,7 +205,7 @@ func (h *healer) findPendingAnchors(src, dst *url.URL, resolve bool) ([]*url.TxI
 				if err == nil {
 					break
 				}
-				slog.Error("Failed to check anchor", "source", src, "destination", dst, "number", i, "remaining", srcDstChain.Count-i, "peer", peer.ID, "error", err)
+				slog.WarnContext(h.ctx, "Failed to check anchor", "source", src, "destination", dst, "number", i, "remaining", srcDstChain.Count-i, "peer", peer.ID, "error", err)
 			}
 			if msg == nil {
 				fatalf("query %v → %v anchor #%d failed", srcId, dstId, i)

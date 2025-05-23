@@ -125,13 +125,13 @@ func ScanNetwork(ctx context.Context, endpoint ScanServices) (*NetworkInfo, erro
 			// This is a hack to circumvent libp2p's issues
 			client := jsonrpcClientForPeer(peer.Addresses)
 			if client == nil {
-				slog.ErrorContext(ctx, "Unable to determine address of", "peer", peer.PeerID)
+				slog.WarnContext(ctx, "Unable to determine address of", "peer", peer.PeerID)
 				continue
 			}
 
 			info, err := client.ConsensusStatus(ctx, api.ConsensusStatusOptions{NodeID: peer.PeerID.String(), Partition: part.ID})
 			if err != nil {
-				slog.ErrorContext(ctx, "Query failed", "error", err)
+				slog.WarnContext(ctx, "Query failed", "error", err)
 				continue
 			}
 

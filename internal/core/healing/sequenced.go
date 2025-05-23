@@ -67,7 +67,7 @@ func ResolveSequenced[T messaging.Message](ctx context.Context, client message.A
 		slog.InfoContext(ctx, "Querying node", "id", peer)
 		client := jsonrpcClientForPeer(info.Addresses)
 		if client == nil {
-			slog.ErrorContext(ctx, "Unable to determine address of", "peer", peer)
+			slog.WarnContext(ctx, "Unable to determine address of", "peer", peer)
 			continue
 		}
 
@@ -75,13 +75,13 @@ func ResolveSequenced[T messaging.Message](ctx context.Context, client message.A
 		res, err := client.Private().
 			Sequence(ctx, srcUrl.JoinPath(account), dstUrl, seqNum, private.SequenceOptions{})
 		if err != nil {
-			slog.ErrorContext(ctx, "Query failed", "error", err)
+			slog.WarnContext(ctx, "Query failed", "error", err)
 			continue
 		}
 
 		r2, err := api.MessageRecordAs[T](res)
 		if err != nil {
-			slog.ErrorContext(ctx, "Query failed", "error", err)
+			slog.WarnContext(ctx, "Query failed", "error", err)
 			continue
 		}
 

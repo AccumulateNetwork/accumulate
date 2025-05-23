@@ -242,7 +242,7 @@ func healAnchorV1(ctx context.Context, args HealAnchorArgs, si SequencedInfo) er
 		slog.InfoContext(ctx, "Querying node for its signature", "id", peer)
 		client := jsonrpcClientForPeer(info.Addresses)
 		if client == nil {
-			slog.ErrorContext(ctx, "Unable to determine address of", "peer", peer)
+			slog.WarnContext(ctx, "Unable to determine address of", "peer", peer)
 			continue
 		}
 
@@ -250,7 +250,7 @@ func healAnchorV1(ctx context.Context, args HealAnchorArgs, si SequencedInfo) er
 		res, err := client.Private().
 			Sequence(ctx, srcUrl.JoinPath(protocol.AnchorPool), dstUrl, si.Number, private.SequenceOptions{})
 		if err != nil {
-			slog.ErrorContext(ctx, "Query failed", "error", err)
+			slog.WarnContext(ctx, "Query failed", "error", err)
 			continue
 		}
 
