@@ -15,8 +15,11 @@ import (
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/p2p"
 )
 
 func (p *PeerInfo) String() string {
@@ -115,11 +118,18 @@ func ScanNetwork(ctx context.Context, endpoint ScanServices) (*NetworkInfo, erro
 		}
 
 		for _, peer := range res {
+			slog.InfoContext(ctx, "Getting identity of", "peer", peer.PeerID)
 			ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 			defer cancel()
 
-			slog.InfoContext(ctx, "Getting identity of", "peer", peer.PeerID)
-			info, err := endpoint.ConsensusStatus(ctx, api.ConsensusStatusOptions{NodeID: peer.PeerID.String(), Partition: part.ID})
+			// This is a hack to circumvent libp2p's issues
+			client := jsonrpcClientForPeer(peer.Addresses)
+			if client == nil {
+				slog.ErrorContext(ctx, "Unable to determine address of", "peer", peer.PeerID)
+				continue
+			}
+
+			info, err := client.ConsensusStatus(ctx, api.ConsensusStatusOptions{NodeID: peer.PeerID.String(), Partition: part.ID})
 			if err != nil {
 				slog.ErrorContext(ctx, "Query failed", "error", err)
 				continue
@@ -149,6 +159,25 @@ func ScanNetwork(ctx context.Context, endpoint ScanServices) (*NetworkInfo, erro
 		ID:     epNodeInfo.Network,
 		Peers:  peers,
 	}, nil
+}
+
+// This is a hack to circumvent libp2p's issues
+func jsonrpcClientForPeer(addrs []p2p.Multiaddr) *jsonrpc.Client {
+	for _, addr := range addrs {
+		var host string
+		multiaddr.ForEach(addr, func(c multiaddr.Component) bool {
+			switch c.Protocol().Code {
+			case multiaddr.P_IP4, multiaddr.P_IP6, multiaddr.P_DNS:
+				host = c.Value()
+				return false
+			}
+			return true
+		})
+		if host != "" {
+			return jsonrpc.NewClient(fmt.Sprintf("http://%s:16595/v3", host))
+		}
+	}
+	return nil
 }
 
 func ScanNode(ctx context.Context, endpoint ScanServices) (*PeerInfo, error) {

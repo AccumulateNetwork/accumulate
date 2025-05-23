@@ -240,7 +240,15 @@ func healAnchorV1(ctx context.Context, args HealAnchorArgs, si SequencedInfo) er
 		defer cancel()
 
 		slog.InfoContext(ctx, "Querying node for its signature", "id", peer)
-		res, err := args.Client.ForAddress(addr).Private().Sequence(ctx, srcUrl.JoinPath(protocol.AnchorPool), dstUrl, si.Number, private.SequenceOptions{})
+		client := jsonrpcClientForPeer(info.Addresses)
+		if client == nil {
+			slog.ErrorContext(ctx, "Unable to determine address of", "peer", peer)
+			continue
+		}
+
+		// res, err := args.Client.ForAddress(addr).Private().
+		res, err := client.Private().
+			Sequence(ctx, srcUrl.JoinPath(protocol.AnchorPool), dstUrl, si.Number, private.SequenceOptions{})
 		if err != nil {
 			slog.ErrorContext(ctx, "Query failed", "error", err)
 			continue
@@ -335,10 +343,10 @@ func healAnchorV1(ctx context.Context, args HealAnchorArgs, si SequencedInfo) er
 		slog.ErrorContext(ctx, "Unable to heal: did not receive any signatures", "signed-by", keys)
 
 	} else {
-if len(signed)+sigCount < int(threshold) {
+		if len(signed)+sigCount < int(threshold) {
 			slog.ErrorContext(ctx, "Did not receive sufficient signatures (but still submitting them)", "want", int(threshold)-len(signed), "got", sigCount, "signed-by", keys)
 		} else {
-		slog.InfoContext(ctx, "Submitting signatures", "count", sigCount)
+			slog.InfoContext(ctx, "Submitting signatures", "count", sigCount)
 		}
 
 		if args.NetInfo.Status.ExecutorVersion.V2Enabled() {
