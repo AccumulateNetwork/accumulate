@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	rpchttp "github.com/cometbft/cometbft/rpc/client/http"
 	"github.com/fatih/color"
 	"github.com/lmittmann/tint"
 	"github.com/spf13/cobra"
@@ -358,20 +359,35 @@ func (h *healer) submitLoop(wg *sync.WaitGroup) {
 		part := map[[32]byte]*url.URL{}
 		block := map[[32]byte]time.Time{}
 		for _, msg := range messages {
-			var server = "http://apollo-mainnet.accumulate.defidevs.io:16595/v3"
+			var host = "apollo-mainnet.accumulate.defidevs.io"
+			var port = 16591
 			partUrl := protocol.DnUrl()
 			if msg, ok := msg.(*messaging.BlockAnchor); ok {
 
 				bvn, _ := protocol.ParsePartitionUrl(msg.Anchor.ID().Account())
 				if !strings.EqualFold(bvn, protocol.Directory) {
-					server = fmt.Sprintf("http://%s-mainnet.accumulate.defidevs.io:16695/v3", strings.ToLower(bvn))
+					host = fmt.Sprintf("%s-mainnet.accumulate.defidevs.io", strings.ToLower(bvn))
+					port = 16691
 					partUrl = msg.Anchor.ID().Account().RootIdentity()
 				}
 			}
 			part[partUrl.AccountID32()] = partUrl
 
-			slog.DebugContext(h.ctx, "Sending to", "server", server)
-			c := jsonrpc.NewClient(server)
+			slog.DebugContext(h.ctx, "Sending to", "server", host, "port", port)
+			acc := jsonrpc.NewClient(fmt.Sprintf("http://%s:%d/v3", host, port+4))
+			tm, err := rpchttp.New(fmt.Sprintf("http://%s:%d", host, port+2), fmt.Sprintf("http://%s:%d/websocket", host, port+2))
+			if err != nil {
+				panic(err)
+			}
+
+			// Wait until the mempool doesn't have much in it
+		waitMore:
+			r, err := tm.NumUnconfirmedTxs(context.Background())
+			if err == nil && r.Total > 500 {
+				slog.InfoContext(h.ctx, "Mempool is too full, waiting", "mempool", r)
+				time.Sleep(time.Minute)
+				goto waitMore
+			}
 
 			// What block is this partition on?
 			if _, ok := block[partUrl.AccountID32()]; !ok {
@@ -387,7 +403,7 @@ func (h *healer) submitLoop(wg *sync.WaitGroup) {
 			}
 
 			env := &messaging.Envelope{Messages: []messaging.Message{msg}}
-			subs, err := c.Submit(context.Background(), env, api.SubmitOptions{})
+			subs, err := acc.Submit(context.Background(), env, api.SubmitOptions{})
 			if err != nil {
 				slog.ErrorContext(h.ctx, "Submission failed", "error", err, "id", env.Messages[0].ID())
 			}
