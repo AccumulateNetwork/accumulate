@@ -322,11 +322,24 @@ func healAnchorV1(ctx context.Context, args HealAnchorArgs, si SequencedInfo) er
 
 	// We should always have a partition signature, so there's only something to
 	// sent if we have more than 1 signature
-	if gotPartSig && len(signatures) <= 1 || !gotPartSig && len(signatures) == 0 {
-		slog.InfoContext(ctx, "Nothing to send")
+	sigCount := len(signatures)
+	if gotPartSig {
+		sigCount--
+	}
+
+	var keys []string
+	for key := range signed {
+		keys = append(keys, hex.EncodeToString(key[:4]))
+	}
+	if sigCount <= 0 {
+		slog.ErrorContext(ctx, "Unable to heal: did not receive any signatures", "signed-by", keys)
 
 	} else {
-		slog.InfoContext(ctx, "Submitting signatures", "count", len(signatures))
+if len(signed)+sigCount < int(threshold) {
+			slog.ErrorContext(ctx, "Did not receive sufficient signatures (but still submitting them)", "want", int(threshold)-len(signed), "got", sigCount, "signed-by", keys)
+		} else {
+		slog.InfoContext(ctx, "Submitting signatures", "count", sigCount)
+		}
 
 		if args.NetInfo.Status.ExecutorVersion.V2Enabled() {
 			for _, sig := range signatures {
