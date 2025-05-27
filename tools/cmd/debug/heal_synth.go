@@ -7,6 +7,7 @@
 package main
 
 import (
+	"context"
 	"log/slog"
 	"strings"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -99,6 +101,10 @@ retry:
 		Light:     h.light,
 		Pretend:   pretend,
 		Wait:      waitForTxn,
+
+		Submit: func(ctx context.Context, env *messaging.Envelope, opts api.SubmitOptions, part string) ([]*api.Submission, error) {
+			return h.safeSubmit(ctx, env, opts, part, nil)
+		},
 
 		// If an attempt fails, use the next anchor
 		SkipAnchors: count,

@@ -356,54 +356,15 @@ func (h *healer) submitLoop(wg *sync.WaitGroup) {
 		if len(messages) == 0 {
 			continue
 		}
-		part := map[[32]byte]*url.URL{}
-		block := map[[32]byte]time.Time{}
+		block := map[string]*PartInfo{}
 		for _, msg := range messages {
-			var host = "apollo-mainnet.accumulate.defidevs.io"
-			var port = 16591
-			partUrl := protocol.DnUrl()
+			bvn := protocol.Directory
 			if msg, ok := msg.(*messaging.BlockAnchor); ok {
-
-				bvn, _ := protocol.ParsePartitionUrl(msg.Anchor.ID().Account())
-				if !strings.EqualFold(bvn, protocol.Directory) {
-					host = fmt.Sprintf("%s-mainnet.accumulate.defidevs.io", strings.ToLower(bvn))
-					port = 16691
-					partUrl = msg.Anchor.ID().Account().RootIdentity()
-				}
-			}
-			part[partUrl.AccountID32()] = partUrl
-
-			slog.DebugContext(h.ctx, "Sending to", "server", host, "port", port)
-			acc := jsonrpc.NewClient(fmt.Sprintf("http://%s:%d/v3", host, port+4))
-			tm, err := rpchttp.New(fmt.Sprintf("http://%s:%d", host, port+1), fmt.Sprintf("http://%s:%d/websocket", host, port+1))
-			if err != nil {
-				panic(err)
-			}
-
-			// Wait until the mempool doesn't have much in it
-		waitMore:
-			r, err := tm.NumUnconfirmedTxs(context.Background())
-			if err == nil && r.Total > 100 {
-				slog.WarnContext(h.ctx, "Mempool is too full, waiting", "mempool", r)
-				time.Sleep(time.Minute)
-				goto waitMore
-			}
-
-			// What block is this partition on?
-			if _, ok := block[partUrl.AccountID32()]; !ok {
-				r, err := h.C1.Query(context.Background(), partUrl, &api.DefaultQuery{})
-				if err != nil {
-					continue
-				}
-				a, ok := r.(*api.AccountRecord)
-				if !ok || a.LastBlockTime == nil {
-					continue
-				}
-				block[partUrl.AccountID32()] = *a.LastBlockTime
+				bvn, _ = protocol.ParsePartitionUrl(msg.Anchor.ID().Account())
 			}
 
 			env := &messaging.Envelope{Messages: []messaging.Message{msg}}
-			subs, err := acc.Submit(context.Background(), env, api.SubmitOptions{})
+			subs, err := h.safeSubmit(context.Background(), env, api.SubmitOptions{}, bvn, block)
 			if err != nil {
 				slog.ErrorContext(h.ctx, "Submission failed", "error", err, "id", env.Messages[0].ID())
 			}
@@ -419,9 +380,9 @@ func (h *healer) submitLoop(wg *sync.WaitGroup) {
 		messages = messages[:0]
 
 		// Wait for a new block
-		for hash, last := range block {
+		for part, info := range block {
 			for {
-				r, err := h.C1.Query(context.Background(), part[hash], &api.DefaultQuery{})
+				r, err := h.C1.Query(context.Background(), info.Url, &api.DefaultQuery{})
 				if err != nil {
 					break
 				}
@@ -429,14 +390,60 @@ func (h *healer) submitLoop(wg *sync.WaitGroup) {
 				if !ok || a.LastBlockTime == nil {
 					break
 				}
-				if a.LastBlockTime.After(last) {
+				if a.LastBlockTime.After(info.Block) {
 					break
 				}
-				slog.WarnContext(h.ctx, "Waiting for a new block", "partition", part[hash])
+				slog.WarnContext(h.ctx, "Waiting for a new block", "partition", part)
 				time.Sleep(5 * time.Second)
 			}
 		}
 	}
+}
+
+type PartInfo struct {
+	Url   *url.URL
+	Block time.Time
+}
+
+func (h *healer) safeSubmit(ctx context.Context, env *messaging.Envelope, opts api.SubmitOptions, part string, block map[string]*PartInfo) ([]*api.Submission, error) {
+	part = strings.ToLower(part)
+
+	var host = "apollo-mainnet.accumulate.defidevs.io"
+	var port = 16591
+	if !strings.EqualFold(part, protocol.Directory) {
+		host = fmt.Sprintf("%s-mainnet.accumulate.defidevs.io", part)
+		port = 16691
+	}
+
+	slog.DebugContext(h.ctx, "Sending to", "server", host, "port", port)
+	acc := jsonrpc.NewClient(fmt.Sprintf("http://%s:%d/v3", host, port+4))
+	tm, err := rpchttp.New(fmt.Sprintf("http://%s:%d", host, port+1), fmt.Sprintf("http://%s:%d/websocket", host, port+1))
+	if err != nil {
+		panic(err)
+	}
+
+	// Wait until the mempool doesn't have much in it
+waitMore:
+	r, err := tm.NumUnconfirmedTxs(context.Background())
+	if err == nil && r.Total > 100 {
+		slog.WarnContext(h.ctx, "Mempool is too full, waiting", "mempool", r)
+		time.Sleep(time.Minute)
+		goto waitMore
+	}
+
+	// What block is this partition on?
+	if _, ok := block[part]; !ok && block != nil {
+		url := protocol.PartitionUrl(part)
+		r, err := h.C1.Query(context.Background(), url, &api.DefaultQuery{})
+		if err == nil {
+			a, ok := r.(*api.AccountRecord)
+			if ok && a.LastBlockTime != nil {
+				block[part] = &PartInfo{Url: url, Block: *a.LastBlockTime}
+			}
+		}
+	}
+
+	return acc.Submit(ctx, env, opts)
 }
 
 // getAccount fetches the given account.

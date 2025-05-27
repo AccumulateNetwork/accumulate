@@ -35,6 +35,7 @@ type HealSyntheticArgs struct {
 	Client      message.AddressedClient
 	Querier     api.Querier
 	Submitter   api.Submitter
+	Submit      func(context.Context, *messaging.Envelope, api.SubmitOptions, string) ([]*api.Submission, error)
 	NetInfo     *NetworkInfo
 	Light       *light.Client
 	Pretend     bool
@@ -147,7 +148,8 @@ func (h *Healer) HealSynthetic(ctx context.Context, args HealSyntheticArgs, si S
 	}
 
 	submit := func(s api.Submitter) (error, bool) {
-		sub, err := s.Submit(ctx, env, api.SubmitOptions{})
+		sub, err := args.Submit(ctx, env, api.SubmitOptions{}, si.Destination)
+		// sub, err := s.Submit(ctx, env, api.SubmitOptions{})
 		if err != nil {
 			slog.ErrorContext(ctx, "Submission failed", "error", err, "id", env.Messages[0].ID())
 			return nil, false
