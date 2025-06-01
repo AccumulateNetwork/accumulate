@@ -50,8 +50,16 @@ func healAnchor(_ *cobra.Command, args []string) {
 			ids, txns := h.findPendingAnchors(srcUrl, dstUrl, true)
 
 			var all []*url.TxID
-			all = append(all, src2dst.Pending...)
-			all = append(all, ids...)
+			if len(src2dst.Pending) > 5 {
+				all = append(all, src2dst.Pending[:1]...)
+			} else {
+				all = append(all, src2dst.Pending...)
+			}
+			if len(ids) > 5 {
+				all = append(all, ids[:1]...)
+			} else {
+				all = append(all, ids...)
+			}
 
 			for i, txid := range all {
 				select {
