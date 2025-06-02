@@ -191,6 +191,11 @@ func (h *healer) findPendingAnchors(src, dst *url.URL, resolve bool) ([]*url.TxI
 	var ids []*url.TxID
 	txns := map[[32]byte]*protocol.Transaction{}
 	for i := received + 1; i <= srcDstChain.Count; i++ {
+
+		if i > 5 {
+			break
+		}
+
 		var msg *api.MessageRecord[messaging.Message]
 		if h.net == nil {
 			slog.Info("Checking anchor", "source", src, "destination", dst, "number", i, "remaining", srcDstChain.Count-i)
