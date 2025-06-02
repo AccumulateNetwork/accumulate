@@ -70,9 +70,12 @@ func healSynth(cmd *cobra.Command, args []string) {
 
 			// Heal
 			for i := uint64(0); i+ba.Delivered < ab.Produced; i++ {
-				if i > 1 {
+				// Limit how many synthetic transactions we are submitting for healing
+				// Avoid filling the mempool up
+				if i > 5 {
 					break
 				}
+
 				select {
 				case <-h.ctx.Done():
 					return
@@ -129,7 +132,7 @@ retry:
 	}
 
 	count++
-	if count >= 3 {
+	if count >= 1 {
 		slog.Error("Message still pending, skipping", "attempts", count)
 		return false
 	}

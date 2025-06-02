@@ -339,15 +339,11 @@ func healAnchorV1(ctx context.Context, args HealAnchorArgs, si SequencedInfo) er
 	for key := range signed {
 		keys = append(keys, hex.EncodeToString(key[:4]))
 	}
-	if sigCount <= 0 {
-		slog.ErrorContext(ctx, "Unable to heal: did not receive any signatures", "signed-by", keys)
+	if sigCount < int(threshold) { // Stop submitting txs that don't have all the signatures they need.
+		slog.ErrorContext(ctx, fmt.Sprintf("Unable to heal: received %d of %d signatures signed-by %s", sigCount, int(threshold), keys))
 
 	} else {
-		if len(signed)+sigCount < int(threshold) {
-			slog.ErrorContext(ctx, "Did not receive sufficient signatures (but still submitting them)", "want", int(threshold)-len(signed), "got", sigCount, "signed-by", keys)
-		} else {
-			slog.InfoContext(ctx, "Submitting signatures", "count", sigCount)
-		}
+		slog.InfoContext(ctx, "Submitting signatures", "count", sigCount)
 
 		if args.NetInfo.Status.ExecutorVersion.V2Enabled() {
 			for _, sig := range signatures {

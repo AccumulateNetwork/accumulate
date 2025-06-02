@@ -50,13 +50,16 @@ func healAnchor(_ *cobra.Command, args []string) {
 			ids, txns := h.findPendingAnchors(srcUrl, dstUrl, true)
 
 			var all []*url.TxID
-			if len(src2dst.Pending) > 5 {
-				all = append(all, src2dst.Pending[:1]...)
+
+			// Limit how many anchors we are submitting for healing
+			// Avoid filling the mempool up
+			if len(src2dst.Pending) > 20 {
+				all = append(all, src2dst.Pending[:5]...)
 			} else {
 				all = append(all, src2dst.Pending...)
 			}
-			if len(ids) > 5 {
-				all = append(all, ids[:1]...)
+			if len(ids) > 20 {
+				all = append(all, ids[:5]...)
 			} else {
 				all = append(all, ids...)
 			}
@@ -114,7 +117,7 @@ retry:
 	}
 
 	count++
-	if count >= 10 {
+	if count >= 1 {
 		slog.Error("Anchor still pending, skipping", "attempts", count)
 		return false
 	}
