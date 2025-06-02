@@ -72,7 +72,7 @@ func healSynth(cmd *cobra.Command, args []string) {
 			for i := uint64(0); i+ba.Delivered < ab.Produced; i++ {
 				// Limit how many synthetic transactions we are submitting for healing
 				// Avoid filling the mempool up
-				if i > 5 {
+				if i > HealLimit {
 					break
 				}
 

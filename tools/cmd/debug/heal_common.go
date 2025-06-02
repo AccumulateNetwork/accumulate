@@ -45,6 +45,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+const HealLimit = 20
+
 var cmdHeal = &cobra.Command{
 	Use: "heal",
 }

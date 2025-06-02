@@ -53,13 +53,13 @@ func healAnchor(_ *cobra.Command, args []string) {
 
 			// Limit how many anchors we are submitting for healing
 			// Avoid filling the mempool up
-			if len(src2dst.Pending) > 20 {
-				all = append(all, src2dst.Pending[:5]...)
+			if len(src2dst.Pending) > HealLimit+20 {
+				all = append(all, src2dst.Pending[:HealLimit]...)
 			} else {
 				all = append(all, src2dst.Pending...)
 			}
-			if len(ids) > 20 {
-				all = append(all, ids[:5]...)
+			if len(ids) > HealLimit+20 {
+				all = append(all, ids[:HealLimit]...)
 			} else {
 				all = append(all, ids...)
 			}

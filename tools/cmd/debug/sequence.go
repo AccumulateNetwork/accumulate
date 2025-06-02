@@ -192,7 +192,7 @@ func (h *healer) findPendingAnchors(src, dst *url.URL, resolve bool) ([]*url.TxI
 	txns := map[[32]byte]*protocol.Transaction{}
 	for i := received + 1; i <= srcDstChain.Count; i++ {
 
-		if i > 5 {
+		if i > HealLimit {
 			break
 		}
 
