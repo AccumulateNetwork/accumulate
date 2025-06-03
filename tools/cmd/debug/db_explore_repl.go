@@ -26,17 +26,22 @@ var repl = newCmd(
 		&cobra.Command{
 			Use:  "account",
 			Args: cobra.ExactArgs(1),
-			RunE: acctPrintVal[protocol.Account]((*database.Account).Main),
+			RunE: acctPrintVal((*database.Account).Main),
 		},
+		newCmd(&cobra.Command{
+			Use:  "ls",
+			Args: cobra.RangeArgs(0, 1),
+			RunE: acctLs(),
+		}),
 		newCmd(&cobra.Command{
 			Use:  "pending",
 			Args: cobra.ExactArgs(1),
-			RunE: acctPrintVal[[]*url.TxID]((*database.Account).Pending),
+			RunE: acctPrintVal((*database.Account).Pending),
 		}),
 		newCmd(&cobra.Command{
 			Use:  "directory",
 			Args: cobra.ExactArgs(1),
-			RunE: acctPrintVal[[]*url.URL]((*database.Account).Directory),
+			RunE: acctPrintVal((*database.Account).Directory),
 		}),
 		newCmd(&cobra.Command{
 			Use:  "chain",
@@ -102,6 +107,18 @@ func acct(run func(*cobra.Command, *database.Account, []string) error) func(*cob
 			return err
 		}
 		return run(cmd, batch.Account(u), args[1:])
+	})
+}
+
+func acctLs() func(*cobra.Command, []string) error {
+	return db(func(cmd *cobra.Command, batch *database.Batch, args []string) error {
+		it := batch.BPT().Iterate(1000)
+		for it.Next() {
+			for _, kvp := range it.Value() {
+				fmt.Println(kvp.Key)
+			}
+		}
+		return it.Err()
 	})
 }
 
