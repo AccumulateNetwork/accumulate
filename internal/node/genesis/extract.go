@@ -116,7 +116,9 @@ func Extract(db *coredb.Database, snap ioutil2.SectionReader, shouldKeep func(*u
 				return data(u).Keep, nil
 
 			default:
-				// Ignore everything else on this pass
+				// Ignore everything that isn't an Account on this pass. So,
+				// transactions/signatures/etc aka messages. And other system
+				// data.
 				return false, nil
 			}
 		},
@@ -159,7 +161,6 @@ func Extract(db *coredb.Database, snap ioutil2.SectionReader, shouldKeep func(*u
 	})
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
-
 	}
 
 	return accounts, nil
