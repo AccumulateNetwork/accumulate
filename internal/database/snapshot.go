@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
@@ -507,12 +508,21 @@ func readBptSnapshot(snap *snapshot.Reader, opts *RestoreOptions) (map[[32]byte]
 }
 
 func collectMessageHashes(a *Account, hashes *indexing.Bucket, opts *CollectOptions) error {
+	if a.Url().String() == "acc://bvn-BVN1.acme/synthetic" {
+		print("")
+	}
 	chains, err := a.Chains().Get()
 	if err != nil {
 		return errors.UnknownError.WithFormat("load chains index: %w", err)
 	}
 	for _, chain := range chains {
-		if chain.Type != merkle.ChainTypeTransaction {
+		// The data model incorrectly labels synthetic sequence chains as
+		// transaction chains when in reality they are index chains
+		typ := chain.Type
+		if strings.HasPrefix(chain.Name, "synthetic-sequence(") {
+			typ = merkle.ChainTypeIndex
+		}
+		if typ != merkle.ChainTypeTransaction {
 			continue
 		}
 
