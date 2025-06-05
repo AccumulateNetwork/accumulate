@@ -83,8 +83,9 @@ func collectSnapshot(_ *cobra.Command, args []string) {
 	var metrics coredb.CollectMetrics
 	fmt.Println("Collecting...")
 	_, err = db.Collect(f, partUrl, &coredb.CollectOptions{
-		BuildIndex: flagSnapCollect.Indexed,
-		Metrics:    &metrics,
+		BuildIndex:      flagSnapCollect.Indexed,
+		Metrics:         &metrics,
+		SkipMessageRefs: flagSnapCollect.SkipSigs,
 		Predicate: func(r database.Record) (bool, error) {
 			// Skip the BPT
 			if flagSnapCollect.SkipBPT && r.Key().Get(0) == "BPT" {
