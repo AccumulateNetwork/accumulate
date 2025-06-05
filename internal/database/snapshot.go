@@ -626,7 +626,7 @@ func collectMessageHash(a *Account, c *Chain2, hashes *indexing.Bucket, opts *Co
 
 	msg, err := a.parent.newMessage(messageKey{h}).Main().Get()
 	if err != nil {
-		slog.Error("Failed to collect message", "account", a.Url(), "hash", logging.AsHex(h), "error", err)
+		slog.Error("Failed to collect message", "account", a.Url(), "chain", c.Name(), "hash", logging.AsHex(h), "error", err)
 		return nil
 	}
 
