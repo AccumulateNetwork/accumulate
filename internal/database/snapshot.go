@@ -257,15 +257,15 @@ func (batch *Batch) collectMessages(w *snapshot.Writer, index, hashes *indexing.
 			if opts.KeepMessage != nil {
 				msg, err := message.Main().Get()
 				if err != nil {
-					return errors.UnknownError.Wrap(err)
-				}
-
-				ok, err := opts.KeepMessage(msg)
-				if err != nil {
-					return errors.UnknownError.Wrap(err)
-				}
-				if !ok {
-					return nil
+					slog.Error("Failed to collect message", "hash", logging.AsHex(hash.Hash), "error", err)
+				} else {
+					ok, err := opts.KeepMessage(msg)
+					if err != nil {
+						return errors.UnknownError.Wrap(err)
+					}
+					if !ok {
+						continue
+					}
 				}
 			}
 
