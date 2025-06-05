@@ -508,10 +508,7 @@ func readBptSnapshot(snap *snapshot.Reader, opts *RestoreOptions) (map[[32]byte]
 }
 
 func collectMessageHashes(a *Account, hashes *indexing.Bucket, opts *CollectOptions) error {
-	if a.Url().String() == "acc://bvn-BVN1.acme/synthetic" {
-		print("")
-	}
-	chains, err := a.Chains().Get()
+		chains, err := a.Chains().Get()
 	if err != nil {
 		return errors.UnknownError.WithFormat("load chains index: %w", err)
 	}
