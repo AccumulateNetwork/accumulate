@@ -37,6 +37,10 @@ type CollectOptions struct {
 	DidWriteHeader func(*snapshot.Writer) error
 	KeepMessage    func(messaging.Message) (bool, error)
 
+	// When processing a message chain, don't try to follow a message's links to
+	// other messages (e.g. a signature's link to a transaction).
+	SkipMessageRefs bool
+
 	Metrics *CollectMetrics
 }
 
@@ -246,6 +250,22 @@ func (batch *Batch) collectMessages(w *snapshot.Writer, index, hashes *indexing.
 				}
 				if !ok {
 					continue
+				}
+			}
+
+			// This may be a duplicate check, but better safe than sorry
+			if opts.KeepMessage != nil {
+				msg, err := message.Main().Get()
+				if err != nil {
+					return errors.UnknownError.Wrap(err)
+				}
+
+				ok, err := opts.KeepMessage(msg)
+				if err != nil {
+					return errors.UnknownError.Wrap(err)
+				}
+				if !ok {
+					return nil
 				}
 			}
 
@@ -508,7 +528,7 @@ func readBptSnapshot(snap *snapshot.Reader, opts *RestoreOptions) (map[[32]byte]
 }
 
 func collectMessageHashes(a *Account, hashes *indexing.Bucket, opts *CollectOptions) error {
-		chains, err := a.Chains().Get()
+	chains, err := a.Chains().Get()
 	if err != nil {
 		return errors.UnknownError.WithFormat("load chains index: %w", err)
 	}
@@ -592,6 +612,18 @@ func collectMessageHashes(a *Account, hashes *indexing.Bucket, opts *CollectOpti
 }
 
 func collectMessageHash(a *Account, c *Chain2, hashes *indexing.Bucket, opts *CollectOptions, h [32]byte) error {
+	// If we're not following signatures, just
+	if opts.SkipMessageRefs {
+		if opts.Metrics != nil {
+			opts.Metrics.Messages.Count++
+		}
+		err := hashes.Write(h, nil)
+		if err != nil {
+			return errors.UnknownError.WithFormat("record %s chain entry: %w", c.Name(), err)
+		}
+		return nil
+	}
+
 	msg, err := a.parent.newMessage(messageKey{h}).Main().Get()
 	if err != nil {
 		slog.Error("Failed to collect message", "account", a.Url(), "hash", logging.AsHex(h), "error", err)
