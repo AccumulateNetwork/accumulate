@@ -30,8 +30,9 @@ var cmdSnapDump = &cobra.Command{
 }
 
 var flagSnapDump = struct {
-	Short  bool
-	Verify bool
+	Short   bool
+	Verify  bool
+	Section int
 }{}
 
 func init() {
@@ -39,6 +40,7 @@ func init() {
 
 	cmdSnapDump.Flags().BoolVarP(&flagSnapDump.Short, "short", "s", false, "Short output")
 	cmdSnapDump.Flags().BoolVar(&flagSnapDump.Verify, "verify", false, "Verify the hash of accounts")
+	cmdSnapDump.Flags().IntVar(&flagSnapDump.Section, "section", -1, "The index of the section to dump (-1 for all; v2 only)")
 }
 
 var enUsTitle = cases.Title(language.AmericanEnglish)
@@ -51,7 +53,10 @@ func dumpSnapshot(_ *cobra.Command, args []string) {
 
 	db := database.OpenInMemory(nil)
 	scanSnapshot(rd, snapshotScanArgs{
-		Section: func(typ sv2.SectionType, size, offset int64) bool {
+		Section: func(index int, typ sv2.SectionType, size, offset int64) bool {
+			if flagSnapDump.Section >= 0 && index != flagSnapDump.Section {
+				return false
+			}
 			typstr := typ.String()
 			fmt.Printf("%s%s section at %d (size %d)\n", enUsTitle.String(typstr[:1]), typstr[1:], offset, size)
 			return typ == sv2.SectionTypeHeader ||
