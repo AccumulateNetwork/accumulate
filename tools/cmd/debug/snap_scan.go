@@ -41,7 +41,7 @@ func openSnapshotFile(filename string) ioutil.SectionReader {
 }
 
 type snapshotScanArgs struct {
-	Section   func(typ sv2.SectionType, size, offset int64) bool
+	Section   func(index int, typ sv2.SectionType, size, offset int64) bool
 	Header    func(version, height uint64, timestamp time.Time, rootHash [32]byte)
 	Record    func(any)
 	Consensus func(*cometbft.GenesisDoc)
@@ -67,7 +67,7 @@ func scanSnapV2(f ioutil.SectionReader, args snapshotScanArgs) {
 
 	for i, s := range r.Sections {
 		if args.Section != nil {
-			if !args.Section(s.Type(), s.Size(), s.Offset()) {
+			if !args.Section(i, s.Type(), s.Size(), s.Offset()) {
 				continue
 			}
 		}
@@ -150,7 +150,7 @@ func scanSnapV1(f ioutil.SectionReader, args snapshotScanArgs) {
 	_, err = header.ReadFrom(sr)
 	checkf(err, "read header")
 
-	ok := args.Section == nil || args.Section(sv2.SectionTypeHeader, s.Size(), s.Offset())
+	ok := args.Section == nil || args.Section(-1, sv2.SectionTypeHeader, s.Size(), s.Offset())
 	if ok && args.Header != nil {
 		args.Header(header.Version, header.Height, time.Time{}, header.RootHash)
 	}
@@ -168,7 +168,7 @@ func (v scanVisitor) VisitSection(s *sv1.ReaderSection) error {
 		return nil
 	}
 
-	if !v.Section(s.Type(), s.Size(), s.Offset()) {
+	if !v.Section(-1, s.Type(), s.Size(), s.Offset()) {
 		return sv1.ErrSkip
 	}
 	return nil
