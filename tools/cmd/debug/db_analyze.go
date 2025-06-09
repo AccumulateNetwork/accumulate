@@ -7,8 +7,13 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
+	"log/slog"
 	"net"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -34,32 +39,38 @@ var cmdDbAnalyze = &cobra.Command{
 	Run:  analyzeDatabases,
 }
 
+var cmdDbAnalyzeScan = &cobra.Command{
+	Use:   "scan [database]",
+	Short: "Dump JSON records that can be used to build an analysis tree",
+	Args:  cobra.ExactArgs(1),
+	Run:   analyzeScan,
+}
+
+var cmdDbAnalyzeLog = &cobra.Command{
+	Use:   "log [file]",
+	Short: "Analyze a log made by the scan command",
+	Args:  cobra.ExactArgs(1),
+	Run:   analyzeLog,
+}
+
 var flagDbAnalyze = struct {
 	Accounts bool
 }{}
 
 func init() {
 	cmdDb.AddCommand(cmdDbAnalyze)
+	cmdDbAnalyze.AddCommand(cmdDbAnalyzeScan, cmdDbAnalyzeLog)
 
-	cmdDbAnalyze.Flags().BoolVar(&flagDbAnalyze.Accounts, "accounts", false, "Scan accounts via the BPT instead of scanning the entire database")
+	cmdDbAnalyze.PersistentFlags().BoolVar(&flagDbAnalyze.Accounts, "accounts", false, "Scan accounts via the BPT instead of scanning the entire database")
 }
 
 func analyzeDatabases(_ *cobra.Command, args []string) {
 	local, remote := openDbUrl(args[0], false)
 
-	var didProgress bool
-	progress := func(s string) {
-		if !didProgress {
-			fmt.Println(s)
-			didProgress = true
-			return
-		}
-		fmt.Printf("\033[A\r\033[K%s\n", s)
-	}
-
+	progress := newProgress()
 	if remote != nil {
 		// Analyze remote
-		check(analyzeRemote(remote, progress))
+		check(analyzeRemote(remote, false, progress))
 		return
 	}
 
@@ -67,21 +78,107 @@ func analyzeDatabases(_ *cobra.Command, args []string) {
 	defer func() { check(local.Close()) }()
 	batch := local.Begin(nil, false)
 	defer batch.Discard()
-	check(analyzeDb(batch, progress))
+	check(analyzeDb(batch, false, progress))
 }
 
-func analyzeRemote(addr net.Addr, progress func(string)) error {
+func analyzeScan(_ *cobra.Command, args []string) {
+	local, remote := openDbUrl(args[0], false)
+
+	progress := func(s string, a ...any) {}
+	if remote != nil {
+		// Analyze remote
+		check(analyzeRemote(remote, true, progress))
+		return
+	}
+
+	// Analyze local
+	defer func() { check(local.Close()) }()
+	batch := local.Begin(nil, false)
+	defer batch.Discard()
+	check(analyzeDb(batch, true, progress))
+}
+
+func analyzeLog(_ *cobra.Command, args []string) {
+	f, err := os.Open(args[0])
+	check(err)
+	defer func() { f.Close() }()
+
+	// Count the number of entries
+	progress := newProgress()
+	progress("Counting...")
+	var buf [32 * 1024]byte
+	var count int
+	for {
+		n, err := f.Read(buf[:])
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		check(err)
+		count += bytes.Count(buf[:n], []byte("\n"))
+	}
+
+	_, err = f.Seek(0, io.SeekStart)
+	check(err)
+
+	tick := time.NewTicker(time.Second / 2)
+	defer tick.Stop()
+
+	progress("Analyzing...")
+	n := new(node)
+	dec := json.NewDecoder(f)
+	for i := 0; ; i++ {
+		var v analyzeLogRecord
+		err := dec.Decode(&v)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			slog.Warn("Invalid record", "error", err)
+			continue
+		}
+		n.Add(v.Key, v.Size)
+
+		select {
+		case <-tick.C:
+			progress("Analyzing [%d/%d] %v", i+1, count, v.Key)
+		default:
+		}
+	}
+
+	n.Print()
+}
+
+func analyzeRemote(addr net.Addr, scan bool, progress func(string, ...any)) error {
 	return withRemoteKeyValueStore(addr, func(src *remote.Store) error {
-		return analyzeDb(src, progress)
+		return analyzeDb(src, scan, progress)
 	})
 }
 
-func analyzeDb(src keyvalue.Store, progress func(string)) error {
+type analyzeLogRecord struct {
+	Key  *record.Key `json:"key"`
+	Size int64       `json:"size"`
+}
+
+func analyzeDb(src keyvalue.Store, scan bool, progress func(string, ...any)) error {
 	progress("Analyzing...")
 	t := time.NewTicker(time.Second / 2)
 	defer t.Stop()
 
 	n := new(node)
+
+	add := func(key *record.Key, size int64) {
+		if !scan {
+			n.Add(key, size)
+			return
+		}
+
+		b, err := json.Marshal(analyzeLogRecord{key, size})
+		if err == nil {
+			fmt.Printf("%s\n", b)
+		} else {
+			slog.Warn("Error marshalling record", "error", err)
+		}
+	}
 
 	var err error
 	if flagDbAnalyze.Accounts {
@@ -103,17 +200,17 @@ func analyzeDb(src keyvalue.Store, progress func(string)) error {
 				}
 
 				// Print progress
-				switch r.Key().Get(0) {
-				case "Account":
-					h := r.Key().SliceJ(2).Hash()
-					fmt.Printf("\033[A\r\033[KScanning (%d) [%x] %v\n", count, h[:4], r.Key())
-
-				case "Message", "Transaction":
-					fmt.Printf("\033[A\r\033[KScanning (%d) %v\n", count, r.Key())
-				}
 				count++
 				select {
 				case <-t.C:
+					switch r.Key().Get(0) {
+					case "Account":
+						h := r.Key().SliceJ(2).Hash()
+						progress("\033[A\r\033[KScanning (%d) [%x] %v\n", count, h[:4], r.Key())
+
+					case "Message", "Transaction":
+						progress("\033[A\r\033[KScanning (%d) %v\n", count, r.Key())
+					}
 				default:
 				}
 
@@ -134,7 +231,7 @@ func analyzeDb(src keyvalue.Store, progress func(string)) error {
 				}
 
 				// Record
-				n.Add(r.Key(), int64(len(b)))
+				add(r.Key(), int64(len(b)))
 
 				// Don't actually collect
 				return false, nil
@@ -146,13 +243,13 @@ func analyzeDb(src keyvalue.Store, progress func(string)) error {
 		err = src.ForEach(func(key *record.Key, value []byte) error {
 			select {
 			case <-t.C:
-				progress(fmt.Sprintf("Analyzing %d...", count))
+				progress("Analyzing %d...", count)
 			default:
 			}
 			count++
 
 			b, _ := key.MarshalBinary()
-			n.Add(key, int64(len(b)+len(value)))
+			add(key, int64(len(b)+len(value)))
 			return nil
 		})
 	}
@@ -244,4 +341,16 @@ func byteCountIEC(b int64) string {
 	s := fmt.Sprintf("%.0f", float64(b)/float64(div))
 	s = strings.Repeat(" ", 4-len(s)) + s
 	return fmt.Sprintf("%s %ciB", s, "KMGTPE"[exp])
+}
+
+func newProgress() func(string, ...any) {
+	var didProgress bool
+	return func(s string, a ...any) {
+		if !didProgress {
+			fmt.Printf(s, a...)
+			didProgress = true
+			return
+		}
+		fmt.Fprintf(os.Stderr, "\033[A\r\033[K%s\n", fmt.Sprintf(s, a...))
+	}
 }
