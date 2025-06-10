@@ -281,10 +281,18 @@ func (r rawBptReader) ReadAt(offset int64) (*RecordEntry, error) {
 	}, nil
 }
 
+// AI: Writer manages the creation of a snapshot file, organizing its content
+// AI: into multiple sections (header, accounts, BPT, messages, etc.). The
+// AI: header section must be written first; this is enforced by the wroteHeader
+// AI: flag. Each subsequent section is assigned a unique section number via the
+// AI: sections counter. The wr field is the underlying writer for the file.
+// AI: Sections are opened using OpenRaw, which returns a SectionWriter for
+// AI: writing records to that section. This struct ensures the snapshot is
+// AI: well-formed and sections are written in a controlled order.
 type Writer struct {
-	wr          *rawWriter
-	wroteHeader bool
-	sections    int
+	wr          *rawWriter      // AI: underlying writer for the snapshot file
+	wroteHeader bool            // AI: true if the header section has been written
+	sections    int             // AI: counter for assigning unique section numbers
 }
 
 func (w *Writer) WriteHeader(header *Header) error {
@@ -306,6 +314,9 @@ func (w *Writer) WriteHeader(header *Header) error {
 	return nil
 }
 
+// AI: OpenRaw opens a new raw section in the snapshot for writing data of the
+// AI: specified SectionType. It enforces that the header section must be written
+// AI: before any other sections. Each section is assigned a unique number.
 func (w *Writer) OpenRaw(typ SectionType) (*SectionWriter, error) {
 	if typ != SectionTypeHeader && !w.wroteHeader {
 		return nil, errors.NotReady.WithFormat("header has not been written")
@@ -320,13 +331,19 @@ func (w *Writer) OpenRaw(typ SectionType) (*SectionWriter, error) {
 	return &SectionWriter{no, *sw}, nil
 }
 
+// AI: SectionWriter wraps a segment of the snapshot file, allowing records to
+// AI: be written to a specific section (e.g., accounts, BPT, messages). The
+// AI: section number (no) uniquely identifies each section within the snapshot.
 type SectionWriter struct {
 	no int
 	ioutil.SegmentWriter[SectionType, *SectionType]
 }
 
+// AI: SectionNumber returns the unique section number for this writer.
 func (c *SectionWriter) SectionNumber() int { return c.no }
 
+// AI: WriteValue encodes and writes a BinaryValue to the current snapshot
+// AI: section. Used for writing individual records.
 func (c *SectionWriter) WriteValue(r encoding.BinaryValue) error {
 	_, err := writeValue(c, r)
 	return err

@@ -1,3 +1,11 @@
+# --------------------------------------------------------------------------
+# This file is processed by the Accumulate enum generator:
+#   tools/cmd/gen-enum
+# To regenerate enums_gen.go, run:
+#   go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-enum --package v3 enums.yml
+# DO NOT EDIT enums_gen.go by hand; it is generated from this file.
+# --------------------------------------------------------------------------
+
 ServiceType:
   Unknown:
     description: indicates an unknown service type
