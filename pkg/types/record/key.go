@@ -24,7 +24,24 @@ import (
 	json2 "gitlab.com/accumulatenetwork/core/schema/pkg/json"
 )
 
-// A Key is the key for a record.
+// AI: Key represents a hierarchical or composite key for database records in
+// AI: Accumulate. The first element of the key is typically a type or namespace
+// AI: (e.g., "Account", "Transaction") or a KeyHash (for long account URLs).
+// AI: Keys can be extended using Append or AppendKey to create more specific
+// AI: record paths. This structure supports both human-readable and hashed keys.
+// AI:
+// AI: Examples:
+// AI:   // Short account URL (used directly):
+// AI:   Key{"Account", "alice.acme"}
+// AI:
+// AI:   // Long account URL (hashed):
+// AI:   Key{KeyHash(0x1234...), "Url"}
+// AI:   // The hash maps to the original URL via a special mapping in the db.
+// AI:
+// AI:   // Extended key (e.g., for a field):
+// AI:   Key{"Account", "alice.acme", "MainChain"}
+// AI:
+// AI: The Key type enables structured, efficient, and extensible record lookup.
 type Key struct {
 	values []any
 	hash   *KeyHash

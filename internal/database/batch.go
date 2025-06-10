@@ -205,16 +205,31 @@ func (b *Batch) getAccountUrl(key *record.Key) (*url.URL, error) {
 	return v, nil
 }
 
-// resolveAccountKey resolves a key beginning with a KeyHash. If the key does
-// not begin with a key hash, it is returned unchanged. If it does,
-// resolveAccountKey looks up the account URL and constructs a resolved key by
-// replacing the first component (the KeyHash) with two components, "Account"
-// and the account URL.
+// AI: resolveAccountKey attempts to resolve a database key that may begin with
+// AI: a KeyHash. If the key does not start with a KeyHash, it is returned
+// AI: unchanged. If it does, the function looks up the corresponding account
+// AI: URL using getAccountUrl. If successful, it constructs a new key where
+// AI: the first component is replaced by "Account" and the resolved URL,
+// AI: followed by the remaining components. If resolution fails, the original
+// AI: key is returned and an error is logged.
+// AI:
+// AI: Example 1 (short URL):
+// AI:   key = record.NewKey("Account", "RedWagon.acme")
+// AI:   // Used directly; no hash needed.
+// AI:
+// AI: Example 2 (long URL):
+// AI:   key = record.NewKey(KeyHash(0x1234...), "Url")
+// AI:   // The long URL is hashed to produce KeyHash. The resolver attempts to
+// AI:   // recover the original URL from the hash using getAccountUrl.
+// AI:   // If found, the key is rewritten as record.NewKey("Account", url).
+// AI:   // If not found, the hash-based key remains.
 func (b *Batch) resolveAccountKey(key *record.Key) *record.Key {
+	// Check if the key is short or does not start with a KeyHash
 	if key.Len() < 1 {
 		return key
 	}
 
+	// Detect if the key starts with a KeyHash
 	kh, ok := key.Get(0).(record.KeyHash)
 	if !ok {
 		return key
@@ -229,6 +244,8 @@ func (b *Batch) resolveAccountKey(key *record.Key) *record.Key {
 	return record.NewKey("Account", u).AppendKey(key.SliceI(1))
 }
 
+// AI: keyIsAccountUrl checks if a key is of the form [KeyHash, "Url"], which
+// AI: is used to identify account URL keys in the database.
 func keyIsAccountUrl(key *record.Key) bool {
 	if key.Len() != 2 {
 		return false
