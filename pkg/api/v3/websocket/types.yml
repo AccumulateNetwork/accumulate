@@ -1,3 +1,10 @@
+# --------------------------------------------------------------------------
+# This file is processed by the Accumulate types generator:
+#   tools/cmd/gen-types
+# To regenerate types_gen.go, run:
+#   go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --package websocket types.yml
+# DO NOT EDIT types_gen.go by hand; it is generated from this file.
+# --------------------------------------------------------------------------
 Message:
   fields:
     - name: ID
@@ -5,7 +12,7 @@ Message:
     - name: Status
       type: StreamStatus
       marshal-as: enum
-    - name: Message
+    - name: WebSocketMessage
       type: message.Message
       marshal-as: union
       elide-union-methods: true

@@ -1,3 +1,10 @@
+# --------------------------------------------------------------------------
+# This file is processed by the Accumulate model generator:
+#   tools/cmd/gen-model
+# To regenerate model_gen.go, run:
+#   go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-model --package light model.yml
+# DO NOT EDIT model_gen.go by hand; it is generated from this file.
+# --------------------------------------------------------------------------
 - name: IndexDB
   type: entity
   fields:

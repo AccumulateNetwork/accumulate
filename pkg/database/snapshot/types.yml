@@ -4,6 +4,14 @@ versionHeader:
     description: is the snapshot format version
     type: uint
 
+# --------------------------------------------------------------------------
+# This file is processed by the Accumulate types generator:
+#   tools/cmd/gen-types
+# To regenerate types_gen.go, run:
+#   go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --package snapshot types.yml
+# DO NOT EDIT types_gen.go by hand; it is generated from this file.
+# --------------------------------------------------------------------------
+
 Header:
   fields:
   - name: Version
