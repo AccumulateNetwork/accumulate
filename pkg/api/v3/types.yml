@@ -22,6 +22,14 @@ LastBlock:
     - name: DirectoryAnchorHeight
       type: uint
 
+# --------------------------------------------------------------------------
+# This file is processed by the Accumulate types generator:
+#   tools/cmd/gen-types
+# To regenerate types_gen.go, run:
+#   go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --package v3 types.yml
+# DO NOT EDIT types_gen.go by hand; it is generated from this file.
+# --------------------------------------------------------------------------
+
 ConsensusPeerInfo:
   fields:
     - name: NodeID

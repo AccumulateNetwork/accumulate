@@ -1,3 +1,10 @@
+# --------------------------------------------------------------------------
+# This file is processed by the Accumulate types generator:
+#   tools/cmd/gen-types
+# To regenerate types_gen.go, run:
+#   go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --package database types.yml
+# DO NOT EDIT types_gen.go by hand; it is generated from this file.
+# --------------------------------------------------------------------------
 sigSetData:
   fields:
     - name: Version

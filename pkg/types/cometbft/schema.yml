@@ -1,3 +1,11 @@
+# --------------------------------------------------------------------------
+# This file is processed by the Accumulate schema generator:
+#   tools/cmd/gen-schema
+# To regenerate schema_gen.go, run:
+#   go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-schema --package cometbft schema.yml
+# DO NOT EDIT schema_gen.go by hand; it is generated from this file.
+# --------------------------------------------------------------------------
+
 $generate:
   widgets: true
 
