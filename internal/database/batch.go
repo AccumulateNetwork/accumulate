@@ -237,7 +237,7 @@ func (b *Batch) resolveAccountKey(key *record.Key) *record.Key {
 
 	u, err := b.getAccountUrl(key.SliceJ(1))
 	if err != nil {
-		slog.Error("Unable to resolve account", "key-hash", logging.AsHex(kh), "error", err)
+		slog.Error("Unable to resolve account in the BPT", "key-hash", logging.AsHex(kh), "error", err)
 		return key
 	}
 
