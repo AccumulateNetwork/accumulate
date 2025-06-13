@@ -77,13 +77,11 @@ func (db *Database) Collect(file io.WriteSeeker, partition *url.URL, opts *Colle
 	return batch.Collect(file, partition, opts)
 }
 
-// AI: Batch.Collect performs the core snapshot logic. WARNING: If this batch is
-// AI: nested (not a root batch), memory usage can spike until the root batch is
-// AI: discarded. Always prefer root batches for large snapshots.
 // Collect collects a snapshot of the database.
 //
 // WARNING: If the batch is nested (if it is not a root batch), Collect may
 // cause excessive memory consumption until the root batch is discarded.
+// AI: Always prefer root batches for large snapshots.
 func (batch *Batch) Collect(file io.WriteSeeker, partition *url.URL, opts *CollectOptions) (*snapshot.Writer, error) {
 	//AI: Ensure options are always non-nil for downstream logic.
 	if opts == nil {
@@ -385,17 +383,17 @@ func (batch *Batch) collectBPT(w *snapshot.Writer, opts *CollectOptions) error {
 	accountTypeCounters := make(map[protocol.AccountType]int)
 	unresolvedKeys := 0
 	totalEntries := 0
-	
+
 	// AI: Record start time for estimating completion time
 	startTime := time.Now()
-	
+
 	// AI: Create a file for writing URLs
 	// Get the current working directory
 	cwd, err := os.Getwd()
 	if err != nil {
 		return errors.UnknownError.WithFormat("failed to get current working directory: %w", err)
 	}
-	
+
 	// Create a file with .urls extension in the current directory
 	// Use SNAPSHOT_URLS_PATH environment variable if set, otherwise use default name
 	urlsFileName := os.Getenv("SNAPSHOT_URLS_PATH")
@@ -408,7 +406,7 @@ func (batch *Batch) collectBPT(w *snapshot.Writer, opts *CollectOptions) error {
 		return errors.UnknownError.WithFormat("failed to create URLs file: %w", err)
 	}
 	defer urlsFile.Close()
-	
+
 	// Write header with aligned columns
 	_, err = fmt.Fprintf(urlsFile, "%-25s %s\n", "# ACCOUNT TYPE", "URL")
 	if err != nil {
@@ -418,7 +416,7 @@ func (batch *Batch) collectBPT(w *snapshot.Writer, opts *CollectOptions) error {
 	if err != nil {
 		return errors.UnknownError.WithFormat("failed to write separator to URLs file: %w", err)
 	}
-	
+
 	fmt.Printf("[INFO] Writing URLs to %s\n", urlsFilePath)
 
 	// AI: Iterate over all BPT entries in batches of 1000 and write each key/value
@@ -486,17 +484,17 @@ func (batch *Batch) collectBPT(w *snapshot.Writer, opts *CollectOptions) error {
 				progress := estimateBPTProgress(currentHash)
 				// AI: Estimate total entries based on progress and current count
 				estimatedTotal := int64(float64(cnt) / progress)
-				
+
 				// AI: Calculate elapsed time and estimate remaining time
 				elapsedTime := time.Since(startTime)
 				estimatedTotalTime := time.Duration(float64(elapsedTime) / progress)
 				estimatedRemainingTime := estimatedTotalTime - elapsedTime
 				estimatedCompletionTime := time.Now().Add(estimatedRemainingTime)
-				
+
 				fmt.Printf("[INFO] Collecting BPT (progress) count=%s (%.2f%% complete, est. total: %s)\n",
 					humanize.Comma(int64(cnt)), progress*100, humanize.Comma(estimatedTotal))
 				fmt.Printf("[INFO] Time elapsed: %s, est. remaining: %s, est. completion: %s\n",
-					elapsedTime.Round(time.Second), estimatedRemainingTime.Round(time.Second), 
+					elapsedTime.Round(time.Second), estimatedRemainingTime.Round(time.Second),
 					estimatedCompletionTime.Format("15:04:05"))
 				// AI: Sort account types for consistent output
 				types := make([]protocol.AccountType, 0, len(accountTypeCounters))
@@ -524,7 +522,7 @@ func (batch *Batch) collectBPT(w *snapshot.Writer, opts *CollectOptions) error {
 	}
 	// AI: Calculate total elapsed time
 	totalElapsedTime := time.Since(startTime)
-	fmt.Printf("[INFO] Collected BPT count=%s (total time: %s)\n", 
+	fmt.Printf("[INFO] Collected BPT count=%s (total time: %s)\n",
 		humanize.Comma(int64(cnt)), totalElapsedTime.Round(time.Second))
 
 	// AI: Print account type distribution report
@@ -538,7 +536,7 @@ func (batch *Batch) collectBPT(w *snapshot.Writer, opts *CollectOptions) error {
 	sort.Slice(types, func(i, j int) bool {
 		return types[i].String() < types[j].String()
 	})
-	
+
 	// AI: Calculate the final progress for accurate estimates
 	finalProgress := estimateBPTProgress(currentHash)
 
@@ -551,7 +549,7 @@ func (batch *Batch) collectBPT(w *snapshot.Writer, opts *CollectOptions) error {
 		fmt.Printf("[INFO] %-20s: %10s (%6.2f%%) (est. final: %s)\n",
 			t.String(), humanize.Comma(int64(count)), percent, humanize.Comma(estimatedFinalCount))
 	}
-	
+
 	// AI: Print URL file summary
 	fmt.Printf("[INFO] URLs written to %s\n", urlsFilePath)
 
@@ -576,24 +574,24 @@ func (batch *Batch) collectBPT(w *snapshot.Writer, opts *CollectOptions) error {
 func estimateBPTProgress(currentHash [32]byte) float64 {
 	// Use only the high order 6 bytes for efficiency
 	var value uint64
-	
+
 	// Convert the first 6 bytes to a uint64
 	for i := 0; i < 6; i++ {
 		value = (value << 8) | uint64(currentHash[i])
 	}
-	
+
 	// Calculate progress as (max - current) / max
 	// The maximum possible value for 6 bytes is 0xFFFFFFFFFFFF
 	const maxValue = 0xFFFFFFFFFFFF
-	progress := float64(maxValue - value) / float64(maxValue)
-	
+	progress := float64(maxValue-value) / float64(maxValue)
+
 	// Ensure progress is between 0.001 and 1 (avoid division by zero later)
 	if progress < 0.001 {
 		progress = 0.001
 	} else if progress > 1 {
 		progress = 1
 	}
-	
+
 	return progress
 }
 
