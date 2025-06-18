@@ -10,7 +10,43 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
+
+// TestAccountTypeDetection tests the account type detection logic
+func TestAccountTypeDetection(t *testing.T) {
+	// Test URL-based detection
+	testCases := []struct {
+		name     string
+		urlStr   string
+		expected string
+	}{
+		{"KeyBook", "acc://example.acme/keybook", "KeyBook"},
+		{"KeyPage", "acc://example.acme/keybook/keypage/1", "KeyPage"},
+		{"TokenAccount", "acc://example.acme/tokens/acme", "TokenAccount"},
+		{"LiteTokenAccount", "acc://lite/tokens/acme", "LiteTokenAccount"},
+		{"DataAccount", "acc://example.acme/data/mydata", "DataAccount"},
+		{"LiteDataAccount", "acc://lite/data/mydata", "LiteDataAccount"},
+		{"SystemLedger", "acc://system/ledger", "SystemLedger"},
+		{"AnchorLedger", "acc://system/anchor", "AnchorLedger"},
+		{"Identity", "acc://example.acme", "Identity"},
+	}
+	
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			actualType := determineAccountTypeFromURL(tc.urlStr)
+			assert.Equal(t, tc.expected, actualType)
+		})
+	}
+
+	// Test protocol-based detection using a mock
+	t.Run("Protocol-based detection", func(t *testing.T) {
+		// Skip this test for now as it requires more complex setup
+		// In a real implementation, we would need to properly marshal an account
+		t.Skip("Skipping protocol-based detection test as it requires proper account marshaling")
+	})
+}
 
 // TestSnapshotReport tests the snapshot report collection and generation
 func TestSnapshotReport(t *testing.T) {

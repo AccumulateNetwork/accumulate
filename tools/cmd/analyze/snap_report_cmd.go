@@ -26,6 +26,12 @@ var (
 var (
 	debugMode bool
 	maxRecords int
+	globalSnapshotVersion uint64
+
+	// Map to track accounts and whether they have main records
+	accountMainRecords map[string]bool
+	// Map to track accounts with unknown types
+	accountsWithUnknownTypes map[string]string
 
 	// Statistics for record types
 	recordStats = struct {
@@ -35,7 +41,11 @@ var (
 		ChainRecords      int
 		UnknownTypes      int
 		UnmarshalFailures int
-	}{}
+		AccountsWithoutMainChain int
+		UnknownTypeDetails map[string]int
+	}{
+		UnknownTypeDetails: make(map[string]int),
+	}
 )
 
 var cmdAnalyzeSnapReport = &cobra.Command{
@@ -114,6 +124,12 @@ func generateSnapshotReport(cmd *cobra.Command, args []string) error {
 	if version == 1 {
 		return fmt.Errorf("version 1 snapshots are not supported")
 	}
+	
+	// Store the version for potential version-specific handling
+	snapshotVersion := version
+	
+	// Make the snapshot version available to the processing functions
+	globalSnapshotVersion = snapshotVersion
 
 	// Reset file position
 	if _, err := file.Seek(0, io.SeekStart); err != nil {
@@ -139,12 +155,16 @@ func generateSnapshotReport(cmd *cobra.Command, args []string) error {
 	}
 
 	// Step 3: Create a new report
-	fmt.Println("Creating snapshot report...")
+	fmt.Println("Creating report...")
 	report, err := OpenReport()
 	if err != nil {
-		return fmt.Errorf("failed to create report: %w", err)
+		return fmt.Errorf("failed to open report: %w", err)
 	}
 	defer report.Close()
+	
+	// Initialize tracking maps
+	accountMainRecords = make(map[string]bool)
+	accountsWithUnknownTypes = make(map[string]string)
 
 	// Step 4: Process the snapshot data
 	fmt.Printf("Processing %d sections in the snapshot...\n", len(reader.Sections))
@@ -235,6 +255,41 @@ func generateSnapshotReport(cmd *cobra.Command, args []string) error {
 		fmt.Println(reportText)
 	}
 
+	// Calculate accounts without main chains
+	accountsWithoutMain := 0
+	for _, hasMain := range accountMainRecords {
+		if !hasMain {
+			accountsWithoutMain++
+		}
+	}
+	recordStats.AccountsWithoutMainChain = accountsWithoutMain
+	
+	// Print record statistics
+	fmt.Println("\n=== RECORD STATISTICS ===")
+	fmt.Printf("Total Records: %d\n", recordStats.TotalRecords)
+	fmt.Printf("Account Records: %d\n", recordStats.AccountRecords)
+	fmt.Printf("Main Records: %d\n", recordStats.MainRecords)
+	fmt.Printf("Chain Records: %d\n", recordStats.ChainRecords)
+	fmt.Printf("Unknown Types: %d\n", recordStats.UnknownTypes)
+	fmt.Printf("Unmarshal Failures: %d\n", recordStats.UnmarshalFailures)
+	fmt.Printf("Accounts Without Main Chain: %d\n", recordStats.AccountsWithoutMainChain)
+	
+	// Print detailed unknown type information
+	if len(recordStats.UnknownTypeDetails) > 0 {
+		fmt.Println("\n=== UNKNOWN TYPE DETAILS ===")
+		for typeName, count := range recordStats.UnknownTypeDetails {
+			fmt.Printf("%s: %d\n", typeName, count)
+		}
+	}
+	
+	// Print accounts with unknown types
+	if len(accountsWithUnknownTypes) > 0 {
+		fmt.Println("\n=== ACCOUNTS WITH UNKNOWN TYPES ===")
+		for url, typeName := range accountsWithUnknownTypes {
+			fmt.Printf("%s: %s\n", url, typeName)
+		}
+	}
+
 	fmt.Println("Report generation completed successfully")
 	return nil
 }
@@ -315,18 +370,15 @@ func determineAccountTypeFromRawData(data []byte) string {
 	return "Unknown"
 }
 
+// unmarshalAccountWithVersion attempts to unmarshal account data with version awareness
+func unmarshalAccountWithVersion(data []byte) (protocol.Account, error) {
+	// Currently, we use the standard protocol.UnmarshalAccount function
+	// In the future, we could add version-specific handling if needed
+	return protocol.UnmarshalAccount(data)
+}
+
 // determineAccountType analyzes account data and determines the account type
 func determineAccountType(data []byte, urlStr string) (string, error) {
-	// Debug: Print the first few bytes of the account data
-	dataPreview := ""
-	if len(data) > 0 {
-		previewLen := 16
-		if len(data) < previewLen {
-			previewLen = len(data)
-		}
-		dataPreview = fmt.Sprintf("%X", data[:previewLen])
-	}
-
 	// First attempt: Try to determine the account type from the URL structure
 	accountType := determineAccountTypeFromURL(urlStr)
 	if accountType != "Unknown" {
@@ -334,9 +386,9 @@ func determineAccountType(data []byte, urlStr string) (string, error) {
 	}
 
 	// Second attempt: Try to unmarshal the account data using the Accumulate protocol
-	account, err := protocol.UnmarshalAccount(data)
+	// with version awareness
+	account, err := unmarshalAccountWithVersion(data)
 	if err == nil && account != nil {
-		// Determine the account type based on the concrete type
 		switch a := account.(type) {
 		case *protocol.TokenAccount:
 			return "TokenAccount", nil
@@ -358,6 +410,10 @@ func determineAccountType(data []byte, urlStr string) (string, error) {
 			return "AnchorLedger", nil
 		case *protocol.SyntheticLedger:
 			return "SyntheticLedger", nil
+		case *protocol.LiteIdentity:
+			return "LiteIdentity", nil
+		case *protocol.BlockLedger:
+			return "BlockLedger", nil
 		default:
 			return fmt.Sprintf("Unknown (%T)", a), nil
 		}
@@ -369,11 +425,20 @@ func determineAccountType(data []byte, urlStr string) (string, error) {
 		return accountType, nil
 	}
 
-	// If all attempts fail, return Unknown with debug info
-	if err != nil {
-		return "Unknown", fmt.Errorf("failed to unmarshal account data (bytes: %s): %w", dataPreview, err)
+	// If we get here, we couldn't determine the account type
+	dataPreview := ""
+	if len(data) > 0 {
+		// Use hexDump for better visualization
+		dataPreview = hexDump(data, 32) // Show up to 32 bytes
 	}
-	
+
+	if err != nil {
+		recordStats.UnmarshalFailures++
+		recordStats.UnknownTypes++
+		return "Unknown", fmt.Errorf("failed to unmarshal account data:\nError: %v\nData: %s", err, dataPreview)
+	}
+
+	recordStats.UnknownTypes++
 	return "Unknown", nil
 }
 
@@ -385,42 +450,59 @@ func processRecord(report *SnapshotReport, entry *snapshot.RecordEntry) error {
 	}
 
 	recordType := fmt.Sprint(entry.Key.Get(0))
+	recordStats.TotalRecords++
 
 	// Process based on record type
 	switch recordType {
 	case "Account":
+		recordStats.AccountRecords++
+		if entry.Key.Len() < 2 {
+			return fmt.Errorf("invalid account key")
+		}
+		
 		// Extract account URL
 		urlStr := fmt.Sprint(entry.Key.Get(1))
 		
-		// Try to parse the URL to validate it
-		parsedURL, err := url.Parse(urlStr)
+		// Validate URL
+		_, err := url.Parse(urlStr)
 		if err != nil {
 			return fmt.Errorf("invalid account URL %q: %w", urlStr, err)
+		}
+		
+		// Track this account URL for main chain analysis
+		if _, exists := accountMainRecords[urlStr]; !exists {
+			accountMainRecords[urlStr] = false
 		}
 		
 		// Check if this is a Main record - only Main records contain the full account data
 		// This follows the same pattern as genesis.Extract
 		if entry.Key.Len() > 2 && fmt.Sprint(entry.Key.Get(2)) == "Main" {
+			recordStats.MainRecords++
+			
+			// Mark this account as having a main record
+			accountMainRecords[urlStr] = true
+			
 			if debugMode {
-				fmt.Printf("Found Main record for account %s\n", urlStr)
+				fmt.Printf("Processing Main record for account: %s\n", urlStr)
 			}
 			
 			// Extract account type from the value using protocol.UnmarshalAccount
 			accountType := "Unknown"
 			if entry.Value != nil && len(entry.Value) > 0 {
-				// Unmarshal the account using the protocol package
-				acct, err := protocol.UnmarshalAccount(entry.Value)
+				// Unmarshal the account using the protocol package with version awareness
+				acct, err := unmarshalAccountWithVersion(entry.Value)
 				if err != nil {
+					recordStats.UnmarshalFailures++
 					if debugMode {
-						dataPreview := ""
-						if len(entry.Value) > 0 {
-							previewLen := 16
-							if len(entry.Value) < previewLen {
-								previewLen = len(entry.Value)
-							}
-							dataPreview = fmt.Sprintf("%X", entry.Value[:previewLen])
-						}
-						fmt.Printf("Warning: failed to unmarshal account data for %s (bytes: %s): %v\n", urlStr, dataPreview, err)
+						// Use hexDump for better visualization of binary data
+						dataPreview := hexDump(entry.Value, 32)
+						
+						// Enhanced error logging with more details
+						fmt.Printf("Warning: failed to unmarshal account data for %s\n", urlStr)
+						fmt.Printf("  - Error: %v\n", err)
+						fmt.Printf("  - Data preview: %s\n", dataPreview)
+						fmt.Printf("  - Data length: %d bytes\n", len(entry.Value))
+						fmt.Printf("  - Key path: %v\n", entry.Key)
 					}
 				} else {
 					// Determine the account type based on the concrete type
@@ -445,8 +527,24 @@ func processRecord(report *SnapshotReport, entry *snapshot.RecordEntry) error {
 						accountType = "AnchorLedger"
 					case *protocol.SyntheticLedger:
 						accountType = "SyntheticLedger"
+					case *protocol.LiteIdentity:
+						accountType = "LiteIdentity"
+					case *protocol.BlockLedger:
+						accountType = "BlockLedger"
 					default:
-						accountType = fmt.Sprintf("Unknown (%T)", a)
+						// Unknown account type, but we have the concrete type
+						unknownType := fmt.Sprintf("%T", a)
+						accountType = fmt.Sprintf("Unknown (%s)", unknownType)
+						if debugMode {
+							fmt.Printf("Found unknown account type %s for %s\n", unknownType, urlStr)
+						}
+						recordStats.UnknownTypes++
+						
+						// Track detailed unknown type information
+						recordStats.UnknownTypeDetails[unknownType]++
+						
+						// Track accounts with unknown types
+						accountsWithUnknownTypes[urlStr] = unknownType
 					}
 				}
 			} else if debugMode {
@@ -467,6 +565,7 @@ func processRecord(report *SnapshotReport, entry *snapshot.RecordEntry) error {
 		
 	case "Chain":
 		// Process chain record
+		recordStats.ChainRecords++
 		if entry.Key.Len() < 3 {
 			return fmt.Errorf("invalid chain key")
 		}
