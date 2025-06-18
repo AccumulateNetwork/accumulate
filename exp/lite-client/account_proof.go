@@ -37,6 +37,14 @@ type AccountProof struct {
 // CreateAccountProof builds a Merkle receipt for the provided account URL and
 // returns the relevant proof elements in a portable struct.
 func CreateAccountProof(batch *database.Batch, accountUrl string) (*AccountProof, error) {
+	// Validate input parameters
+	if batch == nil {
+		return nil, fmt.Errorf("batch cannot be nil")
+	}
+	if accountUrl == "" {
+		return nil, fmt.Errorf("account URL cannot be empty")
+	}
+
 	// 1. Parse and validate the input string
 	u, err := accurl.Parse(accountUrl)
 	if err != nil {
@@ -47,17 +55,26 @@ func CreateAccountProof(batch *database.Batch, accountUrl string) (*AccountProof
 	key := record.NewKey("Account", u)
 	receipt, err := batch.BPT().GetReceipt(key)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get BPT receipt for %v: %w", u, err)
+		return nil, fmt.Errorf("failed to get BPT receipt for account %v: %w", u, err)
+	}
+	if receipt == nil {
+		return nil, fmt.Errorf("no receipt found for account %v", u)
 	}
 
 	// 3. Extract leaf hash and sibling hashes from the receipt
+	if receipt.Start == nil {
+		return nil, fmt.Errorf("invalid receipt: missing start hash for account %v", u)
+	}
 	leafHash := receipt.Start
 	siblings := extractSiblingsFromReceipt(receipt)
 
 	// 4. Fetch the current BPT root hash from the batch
 	root, err := batch.GetBptRootHash()
 	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve BPT root hash: %w", err)
+		return nil, fmt.Errorf("failed to retrieve BPT root hash for account %v: %w", u, err)
+	}
+	if root == ([32]byte{}) {
+		return nil, fmt.Errorf("invalid BPT root hash for account %v", u)
 	}
 
 	// 5. Return the constructed proof
@@ -83,5 +100,15 @@ func extractSiblingsFromReceipt(receipt *merkle.Receipt) [][]byte {
 // VerifyAccountProof recomputes the hash path from the leaf through the siblings
 // and checks if it leads to the given root hash.
 func VerifyAccountProof(p *AccountProof) bool {
+	if p == nil {
+		return false
+	}
+	if p.LeafHash == nil || len(p.LeafHash) != 32 {
+		return false
+	}
+	if p.RootHash == nil || len(p.RootHash) != 32 {
+		return false
+	}
+
 	return VerifyBptProof(p.LeafHash, p.Siblings, p.RootHash)
 }
