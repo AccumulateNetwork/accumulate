@@ -244,6 +244,7 @@ require (
 
 require (
 	4d63.com/gochecknoglobals v0.2.1 // indirect
+	github.com/AccumulateNetwork/BlockchainDB v0.0.0-20250518175237-92a6c4d7858a
 	github.com/AndreasBriese/bbloom v0.0.0-20190825152654-46b345b51c96 // indirect
 	github.com/Antonboom/errname v1.0.0 // indirect
 	github.com/Antonboom/nilnil v1.0.1 // indirect
