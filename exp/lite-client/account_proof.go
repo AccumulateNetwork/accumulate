@@ -31,6 +31,7 @@ type AccountProof struct {
 	LeafHash   []byte   // The leaf hash of the account data
 	Siblings   [][]byte // The Merkle sibling hashes forming the proof path
 	RootHash   []byte   // The target root hash that this path must match
+	RootIndex  int64    // The block index where this root was committed
 }
 
 // CreateAccountProof builds a Merkle receipt for the provided account URL and
@@ -65,6 +66,7 @@ func CreateAccountProof(batch *database.Batch, accountUrl string) (*AccountProof
 		LeafHash:   leafHash,
 		Siblings:   siblings,
 		RootHash:   root[:],
+		RootIndex:  receipt.EndIndex,
 	}, nil
 }
 

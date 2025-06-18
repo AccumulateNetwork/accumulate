@@ -110,6 +110,9 @@ func TestCreateAccountProof_ValidAccount(t *testing.T) {
 	}
 	if len(proofSingle.RootHash) != sha256.Size {
 		t.Errorf("Invalid RootHash size: got %d, want %d", len(proofSingle.RootHash), sha256.Size)
+		if proofSingle.RootIndex <= 0 {
+			t.Errorf("Invalid RootIndex for single proof: got %d, want > 0", proofSingle.RootIndex)
+		}
 	}
 	if len(proofSingle.Siblings) == 0 {
 		t.Log("No siblings found for single-node BPT (expected)")
@@ -147,6 +150,9 @@ func TestCreateAccountProof_ValidAccount(t *testing.T) {
 	}
 	if len(proofMulti.Siblings) == 0 {
 		t.Error("Expected sibling hashes with multiple accounts, got none")
+		if proofMulti.RootIndex <= 0 {
+			t.Errorf("Invalid RootIndex for multi proof: got %d, want > 0", proofMulti.RootIndex)
+		}
 	} else {
 		t.Logf("Proof with multiple accounts includes %d sibling(s)", len(proofMulti.Siblings))
 	}
@@ -177,6 +183,9 @@ func TestCreateAccountProof_MissingAccount(t *testing.T) {
 
 	if proof != nil {
 		t.Errorf("Expected nil proof for missing account, got: %+v", proof)
+	}
+	if proof != nil && proof.RootIndex != 0 {
+		t.Errorf("Expected RootIndex 0 for missing proof, got %d", proof.RootIndex)
 	}
 }
 
@@ -371,6 +380,9 @@ func TestCreateAccountProof_RealisticData(t *testing.T) {
 		if proof == nil {
 			t.Errorf("[%s] Expected non-nil proof", tc.name)
 			continue
+		}
+		if proof.RootIndex <= 0 {
+			t.Errorf("[%s] Invalid RootIndex: got %d", tc.name, proof.RootIndex)
 		}
 		if !VerifyAccountProof(proof) {
 			t.Errorf("[%s] Expected proof to verify, but it failed", tc.name)
