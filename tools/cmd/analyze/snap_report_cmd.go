@@ -19,6 +19,25 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+// URLIssueType represents the type of issue detected in a URL
+type URLIssueType int
+
+const (
+	NoIssue URLIssueType = iota
+	MalformedURL
+	MissingDomain
+	InvalidDomain
+	TypoInURL
+	InvalidFormat
+	DoubleColon
+)
+
+// URLIssue represents an issue detected in a URL
+type URLIssue struct {
+	IssueType URLIssueType
+	Message   string
+}
+
 var (
 	outputFile string
 )
@@ -28,10 +47,18 @@ var (
 	maxRecords int
 	globalSnapshotVersion uint64
 
-	// Map to track accounts and whether they have main records
+	// Maps to track accounts with and without main chain records
 	accountMainRecords map[string]bool
 	// Map to track accounts with unknown types
 	accountsWithUnknownTypes map[string]string
+	// Map to track URL issues for accounts without main chains
+	accountURLIssues = make(map[string]URLIssue)
+	// Set of valid ADI authorities (e.g., "redwagon.acme")
+	validADIs = make(map[string]bool)
+	// Map of ADI to valid account paths (e.g., "redwagon.acme" -> ["book", "tokens", etc.])
+	validAccountPaths = make(map[string]map[string]bool)
+	// Common valid account path components
+	commonAccountPaths = []string{"book", "keybook", "tokens", "staking", "data", "keypage", "page"}
 
 	// Statistics for record types
 	recordStats = struct {
@@ -72,24 +99,189 @@ func init() {
 // hexDump returns a formatted hex representation of binary data for debugging
 func hexDump(data []byte, maxBytes int) string {
 	if len(data) == 0 {
-		return "empty"
+		return "[empty]"
 	}
 	
+	// Limit the number of bytes to display
 	if len(data) > maxBytes {
-		data = data[:maxBytes]
+		return fmt.Sprintf("%x... (%d more bytes)", data[:maxBytes], len(data)-maxBytes)
 	}
 	
-	var buf strings.Builder
-	for i, b := range data {
-		if i > 0 && i%16 == 0 {
-			buf.WriteString("\n")
-		} else if i > 0 {
-			buf.WriteString(" ")
+	return fmt.Sprintf("%x", data)
+}
+
+// analyzeURL checks for common issues in account URLs
+func analyzeURL(urlStr string) URLIssue {
+	// Check for empty URL
+	if urlStr == "" {
+		return URLIssue{IssueType: MalformedURL, Message: "Empty URL"}
+	}
+	
+	// Check if it's an Accumulate URL
+	if !strings.HasPrefix(urlStr, "acc://") {
+		return URLIssue{IssueType: InvalidFormat, Message: "URL does not start with acc://"}
+	}
+	
+	// Check for specific malformed URLs from our list
+	if strings.Contains(urlStr, "defactoacc:/") {
+		return URLIssue{IssueType: MalformedURL, Message: "URL contains invalid scheme format 'defactoacc:/'"}
+	}
+	
+	// Parse the URL for further analysis
+	parsedURL, err := url.Parse(urlStr)
+	if err != nil {
+		return URLIssue{IssueType: MalformedURL, Message: fmt.Sprintf("Failed to parse URL: %v", err)}
+	}
+	
+	// Check for missing domain in authority
+	if parsedURL.Authority == "" {
+		return URLIssue{IssueType: MissingDomain, Message: "URL is missing an authority component"}
+	}
+	
+	// Check if the authority is a valid ADI
+	authority := parsedURL.Authority
+	if !strings.Contains(authority, ".") && !strings.HasPrefix(authority, "0x") && len(authority) < 64 {
+		return URLIssue{IssueType: MissingDomain, Message: "URL authority is missing domain extension"}
+	}
+	
+	// Check for typos in ADI authority by comparing with valid ADIs
+	if strings.HasSuffix(authority, ".acme") {
+		adiName := strings.TrimSuffix(authority, ".acme")
+		
+		// Check for similar ADI names (potential typos)
+		for validADI := range validADIs {
+			if strings.HasSuffix(validADI, ".acme") {
+				validADIName := strings.TrimSuffix(validADI, ".acme")
+				
+				// Check for simple typos (one character difference)
+				if levenshteinDistance(adiName, validADIName) == 1 {
+					return URLIssue{IssueType: TypoInURL, Message: fmt.Sprintf("Possible typo in ADI name: '%s' is similar to valid ADI '%s'", adiName, validADIName)}
+				}
+			}
 		}
-		buf.WriteString(fmt.Sprintf("%02x", b))
+		
+		// Check if this ADI exists in our dictionary
+		if _, exists := validADIs[authority]; !exists {
+			// This is not necessarily an error, as it could be a reference to an ADI that doesn't have a main record
+			// But we'll note it as a potential issue
+			return URLIssue{IssueType: InvalidDomain, Message: fmt.Sprintf("ADI '%s' not found in snapshot", authority)}
+		}
 	}
 	
-	return buf.String()
+	// Extract domain from the URL
+	parts := strings.Split(parsedURL.Authority, ".")
+	if len(parts) < 2 {
+		return URLIssue{IssueType: MissingDomain, Message: "URL is missing a domain extension"}
+	}
+	
+	// Check if domain is valid
+	domain := parts[len(parts)-1]
+	if domain != "acme" {
+		return URLIssue{IssueType: InvalidDomain, Message: fmt.Sprintf("Invalid domain extension: %s (expected 'acme')", domain)}
+	}
+	
+	// Check for common typos in URL path and check against our dictionary of valid paths
+	path := parsedURL.Path
+	
+	// Remove leading slash if present
+	if strings.HasPrefix(path, "/") {
+		path = path[1:]
+	}
+	
+	// Check for common hardcoded typos
+	if strings.Contains(path, "memebers") {
+		return URLIssue{IssueType: TypoInURL, Message: "Possible typo: 'memebers' instead of 'members'"}
+	}
+	if strings.Contains(path, "daisuek") {
+		return URLIssue{IssueType: TypoInURL, Message: "Possible typo: 'daisuek' instead of 'daisuke'"}
+	}
+	if strings.Contains(path, "tesettest") {
+		return URLIssue{IssueType: TypoInURL, Message: "Possible typo: 'tesettest' instead of 'testtest'"}
+	}
+	if strings.Contains(path, "boo_k") {
+		return URLIssue{IssueType: TypoInURL, Message: "Possible typo: 'boo_k' instead of 'book'"}
+	}
+	if strings.Contains(path, "committee-memebers") {
+		return URLIssue{IssueType: TypoInURL, Message: "Possible typo: 'committee-memebers' instead of 'committee-members'"}
+	}
+	
+	// Check if this is a path for a known ADI
+	if strings.HasSuffix(authority, ".acme") && path != "" {
+		// Split path into components
+		pathParts := strings.Split(path, "/")
+		if len(pathParts) > 0 && pathParts[0] != "" {
+			firstComponent := pathParts[0]
+			
+			// Check if this ADI has any known paths
+			if validPaths, exists := validAccountPaths[authority]; exists {
+				// Check if this path component is valid for this ADI
+				if _, pathExists := validPaths[firstComponent]; !pathExists {
+					// Path doesn't exist for this ADI, check for typos
+					for validPath := range validPaths {
+						// Check for simple typos (one character difference)
+						if levenshteinDistance(firstComponent, validPath) == 1 {
+							return URLIssue{IssueType: TypoInURL, Message: fmt.Sprintf("Possible typo in path: '%s' is similar to valid path '%s' for ADI '%s'", firstComponent, validPath, authority)}
+						}
+					}
+					
+					// Check against common account paths
+					for _, commonPath := range commonAccountPaths {
+						if levenshteinDistance(firstComponent, commonPath) == 1 {
+							return URLIssue{IssueType: TypoInURL, Message: fmt.Sprintf("Possible typo in path: '%s' is similar to common path '%s'", firstComponent, commonPath)}
+						}
+					}
+				}
+			}
+		}
+	}
+	
+	// Check for invalid domain extensions
+	if strings.HasSuffix(parsedURL.Authority, ".com") {
+		return URLIssue{IssueType: InvalidDomain, Message: "Invalid domain extension: '.com' (expected '.acme')"}
+	}
+	
+	// No issues found
+	return URLIssue{IssueType: NoIssue, Message: ""}
+}
+
+// levenshteinDistance calculates the Levenshtein distance between two strings
+func levenshteinDistance(s1, s2 string) int {
+	// Create a matrix of size (len(s1)+1) x (len(s2)+1)
+	d := make([][]int, len(s1)+1)
+	for i := range d {
+		d[i] = make([]int, len(s2)+1)
+	}
+
+	// Initialize the first row and column
+	for i := 0; i <= len(s1); i++ {
+		d[i][0] = i
+	}
+	for j := 0; j <= len(s2); j++ {
+		d[0][j] = j
+	}
+
+	// Fill in the rest of the matrix
+	for i := 1; i <= len(s1); i++ {
+		for j := 1; j <= len(s2); j++ {
+			cost := 1
+			if s1[i-1] == s2[j-1] {
+				cost = 0
+			}
+			d[i][j] = min(d[i-1][j]+1, // deletion
+				min(d[i][j-1]+1, // insertion
+					d[i-1][j-1]+cost)) // substitution
+		}
+	}
+
+	return d[len(s1)][len(s2)]
+}
+
+// min returns the minimum of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // generateSnapshotReport processes a snapshot file and generates a detailed report
@@ -289,6 +481,104 @@ func generateSnapshotReport(cmd *cobra.Command, args []string) error {
 			fmt.Printf("%s: %s\n", url, typeName)
 		}
 	}
+	
+	// Analyze accounts without main chains
+	if accountsWithoutMain > 0 {
+		fmt.Println("\n=== ACCOUNTS WITHOUT MAIN CHAIN ===")
+		
+		// Track issues by type for summary
+	issuesByType := make(map[URLIssueType]int)
+		
+		// First pass: analyze all accounts without main chains
+		for url, hasMain := range accountMainRecords {
+			if !hasMain {
+				// Analyze the URL for issues
+				issue := analyzeURL(url)
+				accountURLIssues[url] = issue
+				
+				// Count issues by type
+				if issue.IssueType != NoIssue {
+					issuesByType[issue.IssueType]++
+				}
+			}
+		}
+		
+		// Print accounts without main chains grouped by issue type
+		fmt.Printf("Total accounts without main chain: %d\n", accountsWithoutMain)
+		
+		// First print accounts with no detected issues
+		fmt.Println("\n--- Accounts with no detected issues ---")
+		for url, issue := range accountURLIssues {
+			if issue.IssueType == NoIssue {
+				fmt.Printf("%s\n", url)
+			}
+		}
+		
+		// Then print accounts with issues, grouped by issue type
+		if len(issuesByType) > 0 {
+			fmt.Println("\n--- Accounts with potential issues ---")
+			
+			// Print malformed URLs
+			if count := issuesByType[MalformedURL]; count > 0 {
+				fmt.Printf("\nMalformed URLs (%d):\n", count)
+				for url, issue := range accountURLIssues {
+					if issue.IssueType == MalformedURL {
+						fmt.Printf("%s - %s\n", url, issue.Message)
+					}
+				}
+			}
+			
+			// Print missing domains
+			if count := issuesByType[MissingDomain]; count > 0 {
+				fmt.Printf("\nMissing domains (%d):\n", count)
+				for url, issue := range accountURLIssues {
+					if issue.IssueType == MissingDomain {
+						fmt.Printf("%s - %s\n", url, issue.Message)
+					}
+				}
+			}
+			
+			// Print invalid domains
+			if count := issuesByType[InvalidDomain]; count > 0 {
+				fmt.Printf("\nInvalid domains (%d):\n", count)
+				for url, issue := range accountURLIssues {
+					if issue.IssueType == InvalidDomain {
+						fmt.Printf("%s - %s\n", url, issue.Message)
+					}
+				}
+			}
+			
+			// Print typos
+			if count := issuesByType[TypoInURL]; count > 0 {
+				fmt.Printf("\nPossible typos (%d):\n", count)
+				for url, issue := range accountURLIssues {
+					if issue.IssueType == TypoInURL {
+						fmt.Printf("%s - %s\n", url, issue.Message)
+					}
+				}
+			}
+			
+			// Print double colons
+			if count := issuesByType[DoubleColon]; count > 0 {
+				fmt.Printf("\nDouble colon issues (%d):\n", count)
+				for url, issue := range accountURLIssues {
+					if issue.IssueType == DoubleColon {
+						fmt.Printf("%s - %s\n", url, issue.Message)
+					}
+				}
+			}
+			
+			// Print invalid formats
+			if count := issuesByType[InvalidFormat]; count > 0 {
+				fmt.Printf("\nInvalid formats (%d):\n", count)
+				for url, issue := range accountURLIssues {
+					if issue.IssueType == InvalidFormat {
+						fmt.Printf("%s - %s\n", url, issue.Message)
+					}
+				}
+			}
+		}
+	}
 
 	fmt.Println("Report generation completed successfully")
 	return nil
@@ -331,6 +621,10 @@ func determineAccountTypeFromURL(urlStr string) string {
 			return "LiteIdentity"
 		}
 		return "Identity"
+	} else if strings.Contains(urlStr, "/ACME") || strings.Contains(urlStr, "/tokens") {
+		// Check for token issuer accounts
+		// Token issuers often have token symbol in the URL path
+		return "TokenIssuer"
 	}
 	
 	return "Unknown"
@@ -414,6 +708,10 @@ func determineAccountType(data []byte, urlStr string) (string, error) {
 			return "LiteIdentity", nil
 		case *protocol.BlockLedger:
 			return "BlockLedger", nil
+		case *protocol.TokenIssuer:
+			return "TokenIssuer", nil
+		case *protocol.UnknownSigner:
+			return "UnknownSigner", nil
 		default:
 			return fmt.Sprintf("Unknown (%T)", a), nil
 		}
@@ -481,6 +779,34 @@ func processRecord(report *SnapshotReport, entry *snapshot.RecordEntry) error {
 			
 			// Mark this account as having a main record
 			accountMainRecords[urlStr] = true
+			
+			// Extract ADI authority and path for dictionary building
+			parsedURL, err := url.Parse(urlStr)
+			if err == nil && parsedURL.Authority != "" {
+				// Store valid ADI authority
+				validADIs[parsedURL.Authority] = true
+				
+				// Extract path components
+				if parsedURL.Path != "" {
+					// Remove leading slash if present
+					path := parsedURL.Path
+					if strings.HasPrefix(path, "/") {
+						path = path[1:]
+					}
+					
+					// Split path into components
+					pathParts := strings.Split(path, "/")
+					if len(pathParts) > 0 && pathParts[0] != "" {
+						// Initialize map for this ADI if it doesn't exist
+						if _, exists := validAccountPaths[parsedURL.Authority]; !exists {
+							validAccountPaths[parsedURL.Authority] = make(map[string]bool)
+						}
+						
+						// Store the first path component as valid for this ADI
+						validAccountPaths[parsedURL.Authority][pathParts[0]] = true
+					}
+				}
+			}
 			
 			if debugMode {
 				fmt.Printf("Processing Main record for account: %s\n", urlStr)

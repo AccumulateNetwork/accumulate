@@ -72,6 +72,7 @@ func (s *SnapshotDB) Close() error {
 		if err != nil {
 			return fmt.Errorf("failed to remove temp directory: %w", err)
 		}
+		fmt.Println("\n=== CLEAN UP ===")
 		fmt.Printf("Removed temporary directory at %s\n", s.dbPath)
 		s.dbPath = ""
 	}
