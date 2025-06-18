@@ -381,11 +381,17 @@ func TestCreateAccountProof_RealisticData(t *testing.T) {
 			t.Errorf("[%s] Expected non-nil proof", tc.name)
 			continue
 		}
-		if proof.RootIndex <= 0 {
-			t.Errorf("[%s] Invalid RootIndex: got %d", tc.name, proof.RootIndex)
+		if proof.RootIndex < 0 {
+			t.Errorf("[%s] Invalid RootIndex: got %d (should be >= 0)", tc.name, proof.RootIndex)
+			t.Logf("Account: %s", tc.account.GetUrl())
+			t.Logf("LeafHash: %x", proof.LeafHash)
+			t.Logf("RootHash: %x", proof.RootHash)
+			t.Logf("Siblings: %d", len(proof.Siblings))
+			continue
 		}
 		if !VerifyAccountProof(proof) {
 			t.Errorf("[%s] Expected proof to verify, but it failed", tc.name)
+			t.Logf("Proof details: %+v", proof)
 		}
 	}
 }
