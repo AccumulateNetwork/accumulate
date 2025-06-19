@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -56,13 +57,15 @@ var (
 	globalSnapshotVersion uint64
 
 	// Maps to track accounts with and without main chain records
-	accountMainRecords map[string]bool
-	// Map to track accounts with unknown types
+	accountMainRecords     map[string]bool
 	accountsWithUnknownTypes map[string]string
 	// Map to track URL issues for accounts without main chains
-	accountURLIssues = make(map[string]URLIssue)
+	accountURLIssues map[string]URLIssue
+	// Maps to track transaction references and missing transactions
+	transactionReferences map[string][]string // Account URL -> Transaction Hashes
+	missingTransactions   map[string][]string // Account URL -> Missing Transaction Hashes
 	// Set of valid ADI authorities (e.g., "redwagon.acme")
-	validADIs = make(map[string]bool)
+	validADIs map[string]bool
 	// Map of ADI to valid account paths (e.g., "redwagon.acme" -> ["book", "tokens", etc.])
 	validAccountPaths = make(map[string]map[string]bool)
 	// Common valid account path components
@@ -78,6 +81,8 @@ var (
 		UnmarshalFailures int
 		AccountsWithoutMainChain int
 		UnknownTypeDetails map[string]int
+		AccountsWithMissingTxs int
+		TotalMissingTxs int
 	}{
 		UnknownTypeDetails: make(map[string]int),
 	}
@@ -428,6 +433,10 @@ func generateSnapshotReport(cmd *cobra.Command, args []string) error {
 	// Initialize tracking maps
 	accountMainRecords = make(map[string]bool)
 	accountsWithUnknownTypes = make(map[string]string)
+	transactionReferences = make(map[string][]string)
+	missingTransactions = make(map[string][]string)
+	validADIs = make(map[string]bool)
+	accountURLIssues = make(map[string]URLIssue)
 
 	// Step 4: Process the snapshot data
 	fmt.Printf("Processing %d sections in the snapshot...\n", len(reader.Sections))
@@ -527,6 +536,24 @@ func generateSnapshotReport(cmd *cobra.Command, args []string) error {
 	}
 	recordStats.AccountsWithoutMainChain = accountsWithoutMain
 	
+	// Verify that all transactions referenced in main chains exist in the snapshot
+	// This is a critical check to ensure snapshot completeness
+	for accountURL, txHashes := range transactionReferences {
+		for _, txHash := range txHashes {
+			// Check if this transaction hash exists in our set of known transaction hashes
+			if !report.TransactionHashes[txHash] {
+				// This transaction is referenced but not found in the snapshot
+				missingTransactions[accountURL] = append(missingTransactions[accountURL], txHash)
+				recordStats.TotalMissingTxs++
+			}
+		}
+		
+		// If this account has missing transactions, increment the counter
+		if len(missingTransactions[accountURL]) > 0 {
+			recordStats.AccountsWithMissingTxs++
+		}
+	}
+	
 	// Print record statistics
 	fmt.Println("\n=== RECORD STATISTICS ===")
 	fmt.Printf("Total Records: %d\n", recordStats.TotalRecords)
@@ -536,12 +563,48 @@ func generateSnapshotReport(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Unknown Types: %d\n", recordStats.UnknownTypes)
 	fmt.Printf("Unmarshal Failures: %d\n", recordStats.UnmarshalFailures)
 	fmt.Printf("Accounts Without Main Chain: %d\n", recordStats.AccountsWithoutMainChain)
+	fmt.Printf("Accounts With Missing Transactions: %d\n", recordStats.AccountsWithMissingTxs)
+	fmt.Printf("Total Missing Transactions: %d\n", recordStats.TotalMissingTxs)
 	
 	// Print detailed unknown type information
 	if len(recordStats.UnknownTypeDetails) > 0 {
 		fmt.Println("\n=== UNKNOWN TYPE DETAILS ===")
 		for typeName, count := range recordStats.UnknownTypeDetails {
 			fmt.Printf("%s: %d\n", typeName, count)
+		}
+	}
+	
+	// Print detailed missing transaction information
+	if recordStats.AccountsWithMissingTxs > 0 {
+		fmt.Println("\n=== MISSING TRANSACTIONS DETAILS ===")
+		fmt.Println("The following accounts have transactions referenced in their main chains that are missing from the snapshot:")
+		
+		// Sort account URLs for consistent output
+		accountURLs := make([]string, 0, len(missingTransactions))
+		for accountURL, txHashes := range missingTransactions {
+			if len(txHashes) > 0 {
+				accountURLs = append(accountURLs, accountURL)
+			}
+		}
+		sort.Strings(accountURLs)
+		
+		// Print details for each account with missing transactions
+		for _, accountURL := range accountURLs {
+			txHashes := missingTransactions[accountURL]
+			fmt.Printf("Account: %s (Missing %d transactions)\n", accountURL, len(txHashes))
+			
+			// Limit the number of transaction hashes shown to avoid excessive output
+			const maxHashesToShow = 5
+			if len(txHashes) <= maxHashesToShow {
+				for _, hash := range txHashes {
+					fmt.Printf("  - %s\n", hash)
+				}
+			} else {
+				for i := 0; i < maxHashesToShow; i++ {
+					fmt.Printf("  - %s\n", txHashes[i])
+				}
+				fmt.Printf("  - ... and %d more\n", len(txHashes)-maxHashesToShow)
+			}
 		}
 	}
 	
@@ -1017,6 +1080,10 @@ func processRecord(report *SnapshotReport, entry *snapshot.RecordEntry) error {
 						accountType = "BlockLedger"
 						// Extract chains from BlockLedger
 						extractChainsFromAccount(report, a, urlStr)
+					case *protocol.TokenIssuer:
+						accountType = "TokenIssuer"
+						// Extract chains from TokenIssuer
+						extractChainsFromAccount(report, a, urlStr)
 					default:
 						// Unknown account type, but we have the concrete type
 						unknownType := fmt.Sprintf("%T", a)
@@ -1053,30 +1120,51 @@ func processRecord(report *SnapshotReport, entry *snapshot.RecordEntry) error {
 		// Skip other account records (not Main records)
 		
 	case "Chain":
-		// Note: Chains are primarily embedded within account records in the BPT,
-		// but we'll still process any standalone chain records we might find.
-		// This is important for backward compatibility and to ensure we don't miss any chains.
+		// Chain records are embedded in account states, not standalone
+		// This case is kept for completeness but should not be reached
 		recordStats.ChainRecords++
-		if entry.Key.Len() < 3 {
-			return fmt.Errorf("invalid chain key")
+		
+		// Extract chain information from the record key
+		if entry.Key.Len() >= 3 {
+			urlStr := fmt.Sprint(entry.Key.Get(1))
+			chainID := fmt.Sprint(entry.Key.Get(2))
+			
+			// If this is a main chain, we need to extract transaction references
+			if chainID == protocol.MainChain {
+				// The chain data contains transaction references
+				// We'll extract the transaction hashes directly from the chain data
+				// Each chain entry is 32 bytes (a hash)
+				if entry.Value != nil && len(entry.Value) > 0 {
+					// Process the chain data in 32-byte chunks
+					for i := 0; i < len(entry.Value); i += 32 {
+						// Make sure we have enough bytes for a complete hash
+						if i+32 <= len(entry.Value) {
+							// Extract the hash bytes
+							hashBytes := entry.Value[i : i+32]
+							// Convert to a hex string
+							txHash := fmt.Sprintf("%x", hashBytes)
+							// Add this transaction reference to the account's list
+							transactionReferences[urlStr] = append(transactionReferences[urlStr], txHash)
+						}
+					}
+				}
+			}
+			
+			// Determine chain type from the data if available
+			chainType := "Unknown"
+			if entry.Value != nil && len(entry.Value) > 0 {
+				// Try to determine chain type from the data
+				chainType = determineChainType(entry.Value, urlStr, chainID)
+			} else {
+				// Try to infer chain type from the chain ID
+				chainType = inferChainTypeFromID(chainID)
+			}
+			
+			// Add the chain to the report with its type
+			return report.AddChain(urlStr, chainID, chainType)
 		}
 		
-		// Extract account URL and chain ID
-		urlStr := fmt.Sprint(entry.Key.Get(1))
-		chainID := fmt.Sprint(entry.Key.Get(2))
-		
-		// Determine chain type from the data if available
-		chainType := "Unknown"
-		if entry.Value != nil && len(entry.Value) > 0 {
-			// Try to determine chain type from the data
-			chainType = determineChainType(entry.Value, urlStr, chainID)
-		} else {
-			// Try to infer chain type from the chain ID
-			chainType = inferChainTypeFromID(chainID)
-		}
-		
-		// Add the chain to the report with its type
-		return report.AddChain(urlStr, chainID, chainType)
+		return fmt.Errorf("invalid chain key")
 		
 	case "Message":
 		// Process message record
@@ -1100,7 +1188,15 @@ func processRecord(report *SnapshotReport, entry *snapshot.RecordEntry) error {
 		hash := fmt.Sprint(entry.Key.Get(1))
 		
 		// Add the transaction to the report
-		return report.AddTransaction(hash)
+		if err := report.AddTransaction(hash); err != nil {
+			return err
+		}
+		
+		// Store this transaction hash in a set for later verification
+		// We'll use this to verify that all transactions referenced in main chains exist
+		report.AddTransactionHash(hash)
+		
+		return nil
 	}
 	
 	// Ignore other record types

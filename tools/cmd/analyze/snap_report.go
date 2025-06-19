@@ -56,6 +56,9 @@ type SnapshotReport struct {
 	Chains       map[string][]string      // Account URL -> Chain IDs
 	ChainTypes   map[string]int           // Chain Type -> Count
 	
+	// Transaction verification
+	TransactionHashes map[string]bool      // Set of transaction hashes found in the snapshot
+	
 	// Analysis collections
 	AccountTypes map[string]int           // Type -> Count
 	ADIs         []string                 // List of ADI URLs
@@ -87,6 +90,7 @@ func OpenReport() (*SnapshotReport, error) {
 		ChainTypes:   make(map[string]int),
 		AccountTypes: make(map[string]int),
 		ADIs:         make([]string, 0),
+		TransactionHashes: make(map[string]bool),
 	}
 	
 	fmt.Printf("Created temporary database at %s\n", db.dbPath)
@@ -158,15 +162,24 @@ func (r *SnapshotReport) AddMessage(hash string) error {
 
 // AddTransaction adds a transaction to the report
 func (r *SnapshotReport) AddTransaction(hash string) error {
+	// Validate input
 	if hash == "" {
 		return fmt.Errorf("invalid transaction: empty hash")
 	}
 	
-	// Store in memory map or increment count if already exists
+	// Increment the transaction count for this hash
 	r.Transactions[hash]++
 	r.TransactionCount++
 	
+	// No database storage needed for transactions in this implementation
 	return nil
+}
+
+// AddTransactionHash adds a transaction hash to the set of known transaction hashes
+// This is used for verification that all referenced transactions exist in the snapshot
+func (r *SnapshotReport) AddTransactionHash(hash string) {
+	// Add the hash to our set of known transaction hashes
+	r.TransactionHashes[hash] = true
 }
 
 // Commit commits any pending changes to the report
