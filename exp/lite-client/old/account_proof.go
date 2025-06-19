@@ -16,8 +16,6 @@
 package liteclient
 
 import (
-	"bytes"
-	"crypto/sha256"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -113,28 +111,4 @@ func VerifyAccountProof(p *AccountProof) bool {
 	}
 
 	return VerifyBptProof(p.LeafHash, p.Siblings, p.RootHash)
-}
-
-// VerifyBptProof verifies a BPT inclusion proof using the leaf hash, siblings, and expected root.
-func VerifyBptProof(leafHash []byte, siblings [][]byte, rootHash []byte) bool {
-	if len(leafHash) != 32 || len(rootHash) != 32 {
-		return false
-	}
-
-	current := leafHash
-	for _, sib := range siblings {
-		if len(sib) != 32 {
-			return false
-		}
-		h := sha256.New()
-		if bytes.Compare(current, sib) < 0 {
-			h.Write(current)
-			h.Write(sib)
-		} else {
-			h.Write(sib)
-			h.Write(current)
-		}
-		current = h.Sum(nil)
-	}
-	return bytes.Equal(current, rootHash)
 }
