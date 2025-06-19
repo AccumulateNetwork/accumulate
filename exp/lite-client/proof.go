@@ -1,7 +1,9 @@
 package liteclient
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"fmt"
 
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
@@ -39,8 +41,24 @@ func (c *LiteClient) FetchProof(ctx context.Context, account string) (*VerifiedA
 }
 
 func (c *LiteClient) VerifyProof(receipt *merkle.Receipt, root []byte) bool {
-	// TODO: Verify that the receipt matches the known BPT root hash
-	return false
+	if receipt == nil {
+		return false
+	}
+	current := receipt.Start
+	for _, node := range receipt.Entries {
+		if node.Right {
+			current = doSha(append(current, node.Hash...))
+		} else {
+			current = doSha(append(node.Hash, current...))
+		}
+	}
+	return bytes.Equal(current, root)
+}
+
+// doSha is a helper function that computes the SHA-256 hash of the input.
+func doSha(data []byte) []byte {
+	h := sha256.Sum256(data)
+	return h[:]
 }
 
 func (c *LiteClient) ValidateAndCacheProof(ctx context.Context, account string, knownRoot []byte) error {

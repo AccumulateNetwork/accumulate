@@ -2,7 +2,6 @@ package liteclient
 
 import (
 	"context"
-	"sync"
 
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 )
@@ -10,7 +9,6 @@ import (
 type LiteClient struct {
 	v2    *client.Client
 	cache map[string]VerifiedAccount
-	mu    sync.RWMutex
 }
 
 // NewLiteClient creates a new LiteClient for Phase 1 (account proof creation).
