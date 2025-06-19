@@ -34,6 +34,7 @@ func init() {
 	rootCmd.AddCommand(cmdAnalyzeSnapVersion)
 	rootCmd.AddCommand(cmdAnalyzePartition)
 	rootCmd.AddCommand(cmdAnalyzeSnapReport)
+	rootCmd.AddCommand(cmdAnalyzeSnapCombine)
 }
 
 func main() {
