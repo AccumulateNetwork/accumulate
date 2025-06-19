@@ -275,7 +275,6 @@ func TestVerifyAccountProof_Incorrect(t *testing.T) {
 }
 
 // TestExtractSiblingsFromReceipt
-// ✅ TODO: Construct a mock `merkle.Receipt` and validate that sibling hashes are extracted in correct order.
 func TestExtractSiblingsFromReceipt(t *testing.T) {
 	// Mock a simple Merkle receipt with known sibling hashes
 	var h1 = sha256.Sum256([]byte("sibling1"))
