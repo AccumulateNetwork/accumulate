@@ -89,7 +89,21 @@ func TestSnapshotReport(t *testing.T) {
 
 	for url, chains := range testChains {
 		for _, chainID := range chains {
-			err := report.AddChain(url, chainID)
+			// Infer chain type from the chain ID for testing purposes
+			chainType := "Unknown"
+			if chainID == "main" {
+				chainType = "Main"
+			} else if strings.Contains(chainID, "data") {
+				chainType = "Data"
+			} else if strings.Contains(chainID, "directory") {
+				chainType = "Directory"
+			} else if strings.Contains(chainID, "registry") {
+				chainType = "Registry"
+			} else if strings.Contains(chainID, "secondary") {
+				chainType = "Secondary"
+			}
+			
+			err := report.AddChain(url, chainID, chainType)
 			if err != nil {
 				t.Fatalf("Failed to add chain %s to account %s: %v", chainID, url, err)
 			}
@@ -266,12 +280,12 @@ func TestErrorHandling(t *testing.T) {
 	}
 
 	// Test adding invalid chains
-	err = report.AddChain("", "main")
+	err = report.AddChain("", "main", "Main")
 	if err == nil {
 		t.Error("Expected error when adding chain with empty account URL, got nil")
 	}
 
-	err = report.AddChain("acc://example.acme", "")
+	err = report.AddChain("acc://example.acme", "", "Main")
 	if err == nil {
 		t.Error("Expected error when adding chain with empty chain ID, got nil")
 	}

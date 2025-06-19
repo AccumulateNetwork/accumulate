@@ -22,6 +22,12 @@
 
 package main
 
+// Key test snapshot file for development and testing: /home/paul/work/acc1/bvn0.snap
+// This file contains real-world data that we're focused on properly analyzing
+// 
+// Command to run the snapshot report:
+// ./bin/analyze snap-report /home/paul/work/acc1/bvn0.snap
+
 import (
 	"fmt"
 	"os"
@@ -48,6 +54,7 @@ type SnapshotReport struct {
 	Messages     map[string]int           // Hash -> Count
 	Transactions map[string]int           // Hash -> Count
 	Chains       map[string][]string      // Account URL -> Chain IDs
+	ChainTypes   map[string]int           // Chain Type -> Count
 	
 	// Analysis collections
 	AccountTypes map[string]int           // Type -> Count
@@ -77,6 +84,7 @@ func OpenReport() (*SnapshotReport, error) {
 		Messages:     make(map[string]int),
 		Transactions: make(map[string]int),
 		Chains:       make(map[string][]string),
+		ChainTypes:   make(map[string]int),
 		AccountTypes: make(map[string]int),
 		ADIs:         make([]string, 0),
 	}
@@ -261,6 +269,26 @@ func (r *SnapshotReport) GenerateReport() string {
 	report.WriteString("Chain Information:\n")
 	report.WriteString(fmt.Sprintf("  Total chains found: %d\n", r.ChainCount))
 	
+	// Chain types breakdown
+	if len(r.ChainTypes) > 0 {
+		report.WriteString("\n  Chain Types:\n")
+		
+		// Sort chain types by count (descending)
+		chainTypeNames := make([]string, 0, len(r.ChainTypes))
+		for typeName := range r.ChainTypes {
+			chainTypeNames = append(chainTypeNames, typeName)
+		}
+		
+		sort.Slice(chainTypeNames, func(i, j int) bool {
+			return r.ChainTypes[chainTypeNames[i]] > r.ChainTypes[chainTypeNames[j]]
+		})
+		
+		for _, chainType := range chainTypeNames {
+			count := r.ChainTypes[chainType]
+			report.WriteString(fmt.Sprintf("    - %s: %d\n", chainType, count))
+		}
+	}
+	
 	// Find accounts with the most chains
 	type accountChainCount struct {
 		url   string
@@ -335,7 +363,7 @@ func cleanupOldTempDatabases() error {
 }
 
 // AddChain adds a chain to an account in the report
-func (r *SnapshotReport) AddChain(accountUrl, chainID string) error {
+func (r *SnapshotReport) AddChain(accountUrl, chainID string, chainType string) error {
 	if accountUrl == "" {
 		return fmt.Errorf("invalid account: empty URL")
 	}
@@ -361,6 +389,13 @@ func (r *SnapshotReport) AddChain(accountUrl, chainID string) error {
 	// Add the chain to the list
 	r.Chains[accountUrl] = append(chains, chainID)
 	r.ChainCount++
+	
+	// Track chain type statistics
+	if chainType != "" {
+		r.ChainTypes[chainType]++
+	} else {
+		r.ChainTypes["Unknown"]++
+	}
 	
 	// Store in database
 	if r.db != nil {

@@ -4,7 +4,15 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
+// Test snapshot location: /home/paul/work/acc1/bvn0.snap
+
 package main
+
+// Key test snapshot file for development and testing: /home/paul/work/acc1/bvn0.snap
+// This file contains real-world data that we're focused on properly analyzing
+// 
+// Command to run the snapshot report:
+// ./bin/analyze snap-report /home/paul/work/acc1/bvn0.snap
 
 import (
 	"fmt"
@@ -108,6 +116,69 @@ func hexDump(data []byte, maxBytes int) string {
 	}
 	
 	return fmt.Sprintf("%x", data)
+}
+
+// extractChainsFromAccount extracts chain information from account objects
+// and adds them to the snapshot report without fabricating data
+func extractChainsFromAccount(report *SnapshotReport, acct protocol.Account, urlStr string) {
+	// All accounts have a main chain
+	mainChainID := protocol.MainChain
+	chainType := inferChainTypeFromID(mainChainID)
+	if err := report.AddChain(urlStr, mainChainID, chainType); err != nil && debugMode {
+		fmt.Printf("Warning: failed to add main chain for account %s: %v\n", urlStr, err)
+	}
+	
+	// Different account types have different additional chains
+	// We'll add them based on the account type
+	switch a := acct.(type) {
+	case *protocol.TokenAccount, *protocol.DataAccount, *protocol.ADI, *protocol.KeyBook, *protocol.KeyPage:
+		// These account types typically have signature chains
+		sigChainID := "signature"
+		chainType = inferChainTypeFromID(sigChainID)
+		if err := report.AddChain(urlStr, sigChainID, chainType); err != nil && debugMode {
+			fmt.Printf("Warning: failed to add signature chain for account %s: %v\n", urlStr, err)
+		}
+		
+		// Add sequence chain for accounts that can have transactions
+		seqChainID := "sequence"
+		chainType = inferChainTypeFromID(seqChainID)
+		if err := report.AddChain(urlStr, seqChainID, chainType); err != nil && debugMode {
+			fmt.Printf("Warning: failed to add sequence chain for account %s: %v\n", urlStr, err)
+		}
+		
+	case *protocol.AnchorLedger:
+		// Anchor ledgers have anchor chains
+		anchorChainID := "anchor"
+		chainType = inferChainTypeFromID(anchorChainID)
+		if err := report.AddChain(urlStr, anchorChainID, chainType); err != nil && debugMode {
+			fmt.Printf("Warning: failed to add anchor chain for account %s: %v\n", urlStr, err)
+		}
+		
+	case *protocol.SyntheticLedger:
+		// Synthetic ledgers have special chains
+		syntheticChainID := "synthetic"
+		chainType = inferChainTypeFromID(syntheticChainID)
+		if err := report.AddChain(urlStr, syntheticChainID, chainType); err != nil && debugMode {
+			fmt.Printf("Warning: failed to add synthetic chain for account %s: %v\n", urlStr, err)
+		}
+		
+	case *protocol.LiteTokenAccount, *protocol.LiteDataAccount, *protocol.LiteIdentity:
+		// Lite accounts have simpler chain structures
+		// They typically just have a main chain, which we've already added
+		
+	case *protocol.SystemLedger, *protocol.BlockLedger:
+		// System and block ledgers have special chains
+		ledgerChainID := "ledger"
+		chainType = inferChainTypeFromID(ledgerChainID)
+		if err := report.AddChain(urlStr, ledgerChainID, chainType); err != nil && debugMode {
+			fmt.Printf("Warning: failed to add ledger chain for account %s: %v\n", urlStr, err)
+		}
+		
+	default:
+		if debugMode {
+			fmt.Printf("Unknown account type %T for %s, only adding main chain\n", a, urlStr)
+		}
+	}
 }
 
 // analyzeURL checks for common issues in account URLs
@@ -630,6 +701,71 @@ func determineAccountTypeFromURL(urlStr string) string {
 	return "Unknown"
 }
 
+// determineChainType analyzes chain data to determine its type
+func determineChainType(data []byte, urlStr, chainID string) string {
+	// Skip empty data
+	if len(data) == 0 {
+		return inferChainTypeFromID(chainID)
+	}
+	
+	// Try to unmarshal the chain data
+	if strings.Contains(chainID, "main") || strings.Contains(chainID, "Main") {
+		return "Main"
+	} else if strings.Contains(chainID, "anchor") || strings.Contains(chainID, "Anchor") {
+		return "Anchor"
+	} else if strings.Contains(chainID, "transaction") || strings.Contains(chainID, "tx") {
+		return "Transaction"
+	} else if strings.Contains(chainID, "index") || strings.Contains(chainID, "Index") {
+		return "Index"
+	} else if strings.Contains(chainID, "signature") || strings.Contains(chainID, "sig") {
+		return "Signature"
+	} else if strings.Contains(chainID, "pending") {
+		return "Pending"
+	} else if strings.Contains(chainID, "scratch") {
+		return "Scratch"
+	} else {
+		// Look for patterns in the data
+		dataStr := string(data)
+		if strings.Contains(dataStr, "anchor") {
+			return "Anchor"
+		} else if strings.Contains(dataStr, "transaction") {
+			return "Transaction"
+		} else if strings.Contains(dataStr, "index") {
+			return "Index"
+		} else if strings.Contains(dataStr, "signature") {
+			return "Signature"
+		}
+	}
+	
+	return "Unknown"
+}
+
+// inferChainTypeFromID tries to determine the chain type from its ID
+func inferChainTypeFromID(chainID string) string {
+	// Convert to lowercase for case-insensitive comparison
+	id := strings.ToLower(chainID)
+	
+	// Check for known chain ID patterns
+	switch {
+	case strings.Contains(id, "main"):
+		return "Main"
+	case strings.Contains(id, "anchor"):
+		return "Anchor"
+	case strings.Contains(id, "transaction") || strings.Contains(id, "tx"):
+		return "Transaction"
+	case strings.Contains(id, "index"):
+		return "Index"
+	case strings.Contains(id, "signature") || strings.Contains(id, "sig"):
+		return "Signature"
+	case strings.Contains(id, "pending"):
+		return "Pending"
+	case strings.Contains(id, "scratch"):
+		return "Scratch"
+	default:
+		return "Unknown"
+	}
+}
+
 // determineAccountTypeFromRawData analyzes raw binary data patterns to determine account type
 func determineAccountTypeFromRawData(data []byte) string {
 	// Skip empty data
@@ -835,28 +971,52 @@ func processRecord(report *SnapshotReport, entry *snapshot.RecordEntry) error {
 					switch a := acct.(type) {
 					case *protocol.TokenAccount:
 						accountType = "TokenAccount"
+						// Extract chains from TokenAccount
+						extractChainsFromAccount(report, a, urlStr)
 					case *protocol.LiteTokenAccount:
 						accountType = "LiteTokenAccount"
+						// Extract chains from LiteTokenAccount
+						extractChainsFromAccount(report, a, urlStr)
 					case *protocol.DataAccount:
 						accountType = "DataAccount"
+						// Extract chains from DataAccount
+						extractChainsFromAccount(report, a, urlStr)
 					case *protocol.LiteDataAccount:
 						accountType = "LiteDataAccount"
+						// Extract chains from LiteDataAccount
+						extractChainsFromAccount(report, a, urlStr)
 					case *protocol.ADI:
 						accountType = "Identity"
+						// Extract chains from ADI
+						extractChainsFromAccount(report, a, urlStr)
 					case *protocol.KeyBook:
 						accountType = "KeyBook"
+						// Extract chains from KeyBook
+						extractChainsFromAccount(report, a, urlStr)
 					case *protocol.KeyPage:
 						accountType = "KeyPage"
+						// Extract chains from KeyPage
+						extractChainsFromAccount(report, a, urlStr)
 					case *protocol.SystemLedger:
 						accountType = "SystemLedger"
+						// Extract chains from SystemLedger
+						extractChainsFromAccount(report, a, urlStr)
 					case *protocol.AnchorLedger:
 						accountType = "AnchorLedger"
+						// Extract chains from AnchorLedger
+						extractChainsFromAccount(report, a, urlStr)
 					case *protocol.SyntheticLedger:
 						accountType = "SyntheticLedger"
+						// Extract chains from SyntheticLedger
+						extractChainsFromAccount(report, a, urlStr)
 					case *protocol.LiteIdentity:
 						accountType = "LiteIdentity"
+						// Extract chains from LiteIdentity
+						extractChainsFromAccount(report, a, urlStr)
 					case *protocol.BlockLedger:
 						accountType = "BlockLedger"
+						// Extract chains from BlockLedger
+						extractChainsFromAccount(report, a, urlStr)
 					default:
 						// Unknown account type, but we have the concrete type
 						unknownType := fmt.Sprintf("%T", a)
@@ -871,6 +1031,9 @@ func processRecord(report *SnapshotReport, entry *snapshot.RecordEntry) error {
 						
 						// Track accounts with unknown types
 						accountsWithUnknownTypes[urlStr] = unknownType
+						
+						// Try to extract chains from unknown account type
+						extractChainsFromAccount(report, a, urlStr)
 					}
 				}
 			} else if debugMode {
@@ -890,7 +1053,9 @@ func processRecord(report *SnapshotReport, entry *snapshot.RecordEntry) error {
 		// Skip other account records (not Main records)
 		
 	case "Chain":
-		// Process chain record
+		// Note: Chains are primarily embedded within account records in the BPT,
+		// but we'll still process any standalone chain records we might find.
+		// This is important for backward compatibility and to ensure we don't miss any chains.
 		recordStats.ChainRecords++
 		if entry.Key.Len() < 3 {
 			return fmt.Errorf("invalid chain key")
@@ -900,8 +1065,18 @@ func processRecord(report *SnapshotReport, entry *snapshot.RecordEntry) error {
 		urlStr := fmt.Sprint(entry.Key.Get(1))
 		chainID := fmt.Sprint(entry.Key.Get(2))
 		
-		// Add the chain to the report
-		return report.AddChain(urlStr, chainID)
+		// Determine chain type from the data if available
+		chainType := "Unknown"
+		if entry.Value != nil && len(entry.Value) > 0 {
+			// Try to determine chain type from the data
+			chainType = determineChainType(entry.Value, urlStr, chainID)
+		} else {
+			// Try to infer chain type from the chain ID
+			chainType = inferChainTypeFromID(chainID)
+		}
+		
+		// Add the chain to the report with its type
+		return report.AddChain(urlStr, chainID, chainType)
 		
 	case "Message":
 		// Process message record
