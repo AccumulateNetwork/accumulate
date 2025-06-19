@@ -1,8 +1,6 @@
 package liteclient
 
 import (
-	"context"
-
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 )
 
@@ -21,10 +19,4 @@ func NewLiteClient(server string) (*LiteClient, error) {
 		v2:    cli,
 		cache: make(map[string]VerifiedAccount),
 	}, nil
-}
-
-func (c *LiteClient) QueryAccountWithReceipt(ctx context.Context, account string) (*client.ChainQueryResponse, *client.GeneralReceipt, error) {
-	// TODO: Query account state + receipt from full node
-	// Use standalone functions from proof.go for proof construction and verification.
-	return nil, nil, nil
 }

@@ -18,11 +18,18 @@ func FetchProof(api *client.Client, ctx context.Context, account string) (*Verif
 		return nil, fmt.Errorf("invalid account URL: %w", err)
 	}
 
-	// Build and send query request
+	// GeneralQuery object is what is used to request data from an Accumulate Node
+	// It contains the account URL
 	req := &client.GeneralQuery{UrlQuery: client.UrlQuery{Url: u}}
+	// resp is a placeholder for a variable that will be filled with the responde
+	// from the Accumulate node
 	var resp client.ChainQueryResponse
 
 	// Fetch proof receipt via v2 API
+	// ctx is the context for cancellation and timeouts
+	// "query" is the API endpoint to call
+	// req is the request object
+	// resp is a pointer to the object that must be populated
 	err = api.RequestAPIv2(ctx, "query", req, &resp)
 	if err != nil {
 		return nil, fmt.Errorf("query failed: %w", err)
@@ -79,7 +86,24 @@ func calculateExpectedRoot(start []byte, entryHash []byte, right bool) []byte {
 	return doSha(append(entryHash, start...))
 }
 
-func (c *LiteClient) ValidateAndCacheProof(ctx context.Context, account string, knownRoot []byte) error {
-	// TODO: Fetch, verify, and cache the account proof if valid
+// ValidateAndCacheProof fetches, verifies, and caches a proof for the given account using the provided LiteClient.
+func ValidateAndCacheProof(client *LiteClient, ctx context.Context, account string, knownRoot []byte) error {
+	// Step 1: Fetch proof for the account from the node
+	verified, err := FetchProof(client.v2, ctx, account)
+	if err != nil {
+		return fmt.Errorf("failed to fetch proof: %w", err)
+	}
+
+	// Step 2: Verify the proof against the known root
+	if verified.Receipt == nil {
+		return fmt.Errorf("no receipt in fetched proof for account: %s", account)
+	}
+	if !VerifyProof(verified.Receipt, knownRoot) {
+		return fmt.Errorf("proof verification failed for account: %s", account)
+	}
+
+	// Step 3: Cache/store the verified proof for future use
+	client.StoreProof(account, verified.Receipt, verified.Height)
+
 	return nil
 }

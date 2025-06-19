@@ -1,12 +1,21 @@
 package liteclient
 
-import client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
+import (
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
+)
 
 func (c *LiteClient) IsProofStale(account string, currentHeight int64) bool {
-	// TODO: Compare current height vs. cached proof height
-	return true
+	va, found := c.cache[account]
+	if !found {
+		return true // No proof, so it's stale
+	}
+	return va.Height != currentHeight
 }
 
-func (c *LiteClient) StoreProof(account string, receipt *client.GeneralReceipt, height int64) {
-	// TODO: Store verified proof in cache
+func (c *LiteClient) StoreProof(account string, receipt *merkle.Receipt, height int64) {
+	c.cache[account] = VerifiedAccount{
+		Url:     account,
+		Receipt: receipt,
+		Height:  height,
+	}
 }
