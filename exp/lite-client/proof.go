@@ -11,7 +11,7 @@ import (
 	accurl "gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
-func (c *LiteClient) FetchProof(ctx context.Context, account string) (*VerifiedAccount, error) {
+func FetchProof(api *client.Client, ctx context.Context, account string) (*VerifiedAccount, error) {
 	// Parse account URL
 	u, err := accurl.Parse(account)
 	if err != nil {
@@ -23,7 +23,7 @@ func (c *LiteClient) FetchProof(ctx context.Context, account string) (*VerifiedA
 	var resp client.ChainQueryResponse
 
 	// Fetch proof receipt via v2 API
-	err = c.v2.RequestAPIv2(ctx, "query", req, &resp)
+	err = api.RequestAPIv2(ctx, "query", req, &resp)
 	if err != nil {
 		return nil, fmt.Errorf("query failed: %w", err)
 	}
@@ -40,7 +40,7 @@ func (c *LiteClient) FetchProof(ctx context.Context, account string) (*VerifiedA
 	}, nil
 }
 
-func (c *LiteClient) VerifyProof(receipt *merkle.Receipt, root []byte) bool {
+func VerifyProof(receipt *merkle.Receipt, root []byte) bool {
 	if receipt == nil {
 		return false
 	}
@@ -55,10 +55,28 @@ func (c *LiteClient) VerifyProof(receipt *merkle.Receipt, root []byte) bool {
 	return bytes.Equal(current, root)
 }
 
-// doSha is a helper function that computes the SHA-256 hash of the input.
+// doSha computes the SHA-256 hash of the input.
 func doSha(data []byte) []byte {
 	h := sha256.Sum256(data)
 	return h[:]
+}
+
+// buildTestReceipt constructs a trivial Merkle receipt for testing.
+func buildTestReceipt(leaf []byte, entryHash []byte, right bool) *merkle.Receipt {
+	return &merkle.Receipt{
+		Start: leaf,
+		Entries: []*merkle.ReceiptEntry{
+			{Hash: entryHash, Right: right},
+		},
+	}
+}
+
+// calculateExpectedRoot calculates the expected Merkle root for a single-entry receipt.
+func calculateExpectedRoot(start []byte, entryHash []byte, right bool) []byte {
+	if right {
+		return doSha(append(start, entryHash...))
+	}
+	return doSha(append(entryHash, start...))
 }
 
 func (c *LiteClient) ValidateAndCacheProof(ctx context.Context, account string, knownRoot []byte) error {

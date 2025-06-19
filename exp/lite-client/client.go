@@ -25,5 +25,6 @@ func NewLiteClient(server string) (*LiteClient, error) {
 
 func (c *LiteClient) QueryAccountWithReceipt(ctx context.Context, account string) (*client.ChainQueryResponse, *client.GeneralReceipt, error) {
 	// TODO: Query account state + receipt from full node
+	// Use standalone functions from proof.go for proof construction and verification.
 	return nil, nil, nil
 }
