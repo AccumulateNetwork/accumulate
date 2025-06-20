@@ -9,60 +9,67 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 )
 
+// ==========================================================================
+// TEST CASE: TestFetchProofAndVerifyProof
+// ==========================================================================
 func TestFetchProofAndVerifyProof(t *testing.T) {
-	// 1. Construct a trivial Merkle receipt: hash0 -> hash1
-	fmt.Println("[Step 1] Constructing Merkle receipt...")
+	fmt.Println("\n[TEST] TestFetchProofAndVerifyProof")
+
+	// Step 1: Construct a trivial Merkle receipt
+	fmt.Println("→ [1] Constructing a simple Merkle receipt...")
 	hash0 := sha256.Sum256([]byte("leaf"))
 	entryHash := []byte("right")
 	receipt := buildTestReceipt(hash0[:], entryHash, true)
-	fmt.Printf("  Receipt: Start=%x, Entry.Hash=%x, Entry.Right=%v\n", receipt.Start, receipt.Entries[0].Hash, receipt.Entries[0].Right)
+	fmt.Printf("    Receipt:\n      Start = %x\n      Entry.Hash = %x\n      Entry.Right = %v\n",
+		receipt.Start, receipt.Entries[0].Hash, receipt.Entries[0].Right)
 
-	// 2. Calculate expected root
-	fmt.Println("[Step 2] Calculating expected Merkle root...")
+	// Step 2: Calculate expected root
+	fmt.Println("→ [2] Calculating expected root...")
 	expectedRoot := calculateExpectedRoot(hash0[:], entryHash, true)
-	fmt.Printf("  expectedRoot: %x\n", expectedRoot)
+	fmt.Printf("    Expected root: %x\n", expectedRoot)
 
-	// 3. Test FetchProof (mocked)
-	fmt.Println("[Step 3] Fetching proof using mock client...")
+	// Step 3: Create mock VerifiedAccount
+	fmt.Println("→ [3] Mocking VerifiedAccount...")
 	va := &VerifiedAccount{
 		Url:     "acc://foo/bar",
 		Receipt: receipt,
 		Height:  12345,
 	}
-	fmt.Printf("  Fetched VerifiedAccount: Url=%s, Height=%d\n", va.Url, va.Height)
+	fmt.Printf("    VerifiedAccount: Url = %s, Height = %d\n", va.Url, va.Height)
 
-	// 4. Test VerifyProof (real logic, should succeed)
-	fmt.Println("[Step 4] Verifying proof with correct root...")
+	// Step 4: Verify correct proof
+	fmt.Println("→ [4] Verifying correct proof...")
 	ok := VerifyProof(va.Receipt, expectedRoot)
-	fmt.Printf("  VerifyProof result (expected true): %v\n", ok)
-	require.True(t, ok, "VerifyProof should succeed for valid proof and root")
+	fmt.Printf("    Result: %v (expected: true)\n", ok)
+	require.True(t, ok, "Valid proof should succeed")
 
-	// 5. Negative test: wrong root
-	fmt.Println("[Step 5] Verifying proof with wrong root...")
+	// Step 5: Verify against wrong root
+	fmt.Println("→ [5] Verifying with wrong root...")
 	wrongRoot := sha256.Sum256([]byte("wrong"))
 	ok = VerifyProof(va.Receipt, wrongRoot[:])
-	fmt.Printf("  VerifyProof result with wrong root (expected false): %v\n", ok)
-	require.False(t, ok, "VerifyProof should fail for wrong root")
+	fmt.Printf("    Result: %v (expected: false)\n", ok)
+	require.False(t, ok, "Invalid root should fail")
 }
 
-// Additional tests for edge cases and variants of VerifyProof
+// ==========================================================================
+// TEST CASE: TestVerifyProofVariants
+// ==========================================================================
 func TestVerifyProofVariants(t *testing.T) {
-	// Right-side entry (already tested in main test)
+	fmt.Println("\n[TEST] TestVerifyProofVariants")
 
-	fmt.Println("[Step 1] Verifying left-side entry...")
+	// Step 1: Left-side sibling
+	fmt.Println("→ [1] Verifying left-side entry...")
 	hash0 := sha256.Sum256([]byte("leaf"))
 	entryHash := []byte("left")
 	receipt := buildTestReceipt(hash0[:], entryHash, false)
 	expectedRoot := calculateExpectedRoot(hash0[:], entryHash, false)
-	fmt.Printf("  Receipt: Start=%x, Entry.Hash=%x, Entry.Right=%v\n", receipt.Start, receipt.Entries[0].Hash, receipt.Entries[0].Right)
-	fmt.Printf("  expectedRoot: %x\n", expectedRoot)
+	fmt.Printf("    Left-side expected root: %x\n", expectedRoot)
 	ok := VerifyProof(receipt, expectedRoot)
-	fmt.Printf("  VerifyProof result (expected true): %v\n", ok)
-	if !ok {
-		t.Errorf("Left-side proof should succeed")
-	}
+	fmt.Printf("    Result: %v (expected: true)\n", ok)
+	require.True(t, ok, "Left-side proof should succeed")
 
-	fmt.Println("[Step 2] Verifying multi-level receipt...")
+	// Step 2: Multi-level receipt
+	fmt.Println("→ [2] Verifying multi-level receipt...")
 	h1 := sha256.Sum256([]byte("sibling1"))
 	h2 := sha256.Sum256([]byte("sibling2"))
 	receiptMulti := &merkle.Receipt{
@@ -72,33 +79,93 @@ func TestVerifyProofVariants(t *testing.T) {
 			{Hash: h2[:], Right: false},
 		},
 	}
-	fmt.Printf("  Multi-level Receipt: Start=%x, Entries=[{Hash=%x, Right=%v}, {Hash=%x, Right=%v}]\n",
-		receiptMulti.Start,
-		receiptMulti.Entries[0].Hash, receiptMulti.Entries[0].Right,
-		receiptMulti.Entries[1].Hash, receiptMulti.Entries[1].Right)
-	// Manually compute expected root for multi-level
 	r1 := doSha(append(hash0[:], h1[:]...))
 	expectedRootMulti := doSha(append(h2[:], r1...))
-	fmt.Printf("  expectedRootMulti: %x\n", expectedRootMulti)
+	fmt.Printf("    Multi-level expected root: %x\n", expectedRootMulti)
 	ok = VerifyProof(receiptMulti, expectedRootMulti)
-	fmt.Printf("  VerifyProof result (expected true): %v\n", ok)
-	if !ok {
-		t.Errorf("Multi-level proof should succeed")
-	}
+	fmt.Printf("    Result: %v (expected: true)\n", ok)
+	require.True(t, ok, "Multi-level proof should succeed")
 
-	fmt.Println("[Step 3] Verifying nil receipt...")
+	// Step 3: Nil receipt
+	fmt.Println("→ [3] Verifying nil receipt...")
 	ok = VerifyProof(nil, expectedRoot)
-	fmt.Printf("  VerifyProof result with nil receipt (expected false): %v\n", ok)
-	if ok {
-		t.Errorf("Nil receipt should fail")
-	}
+	fmt.Printf("    Result: %v (expected: false)\n", ok)
+	require.False(t, ok, "Nil receipt should fail")
 
-	fmt.Println("[Step 4] Verifying empty receipt...")
+	// Step 4: Empty receipt
+	fmt.Println("→ [4] Verifying empty receipt...")
 	emptyReceipt := &merkle.Receipt{}
 	ok = VerifyProof(emptyReceipt, expectedRoot)
-	fmt.Printf("  VerifyProof result with empty receipt (expected false): %v\n", ok)
-	if ok {
-		t.Errorf("Empty receipt should fail")
-	}
+	fmt.Printf("    Result: %v (expected: false)\n", ok)
+	require.False(t, ok, "Empty receipt should fail")
+}
 
+// ==========================================================================
+// TEST CASE: TestVerifyProofNilStart
+// ==========================================================================
+func TestVerifyProofNilStart(t *testing.T) {
+	fmt.Println("\n[TEST] TestVerifyProofNilStart")
+	entryHash := sha256.Sum256([]byte("right"))
+	receipt := &merkle.Receipt{
+		Start: nil,
+		Entries: []*merkle.ReceiptEntry{
+			{Hash: entryHash[:], Right: true},
+		},
+	}
+	expected := sha256.Sum256([]byte("dummy"))
+	ok := VerifyProof(receipt, expected[:])
+	fmt.Printf("    Result: %v (expected: false)\n", ok)
+	require.False(t, ok, "Receipt with nil Start should fail")
+}
+
+// ==========================================================================
+// TEST CASE: TestVerifyProofNilEntryHash
+// ==========================================================================
+func TestVerifyProofNilEntryHash(t *testing.T) {
+	fmt.Println("\n[TEST] TestVerifyProofNilEntryHash")
+	start := sha256.Sum256([]byte("leaf"))
+	receipt := &merkle.Receipt{
+		Start: start[:],
+		Entries: []*merkle.ReceiptEntry{
+			{Hash: nil, Right: true},
+		},
+	}
+	expected := sha256.Sum256([]byte("dummy"))
+	ok := VerifyProof(receipt, expected[:])
+	fmt.Printf("    Result: %v (expected: false)\n", ok)
+	require.False(t, ok, "Receipt with nil Entry.Hash should fail")
+}
+
+// ==========================================================================
+// TEST CASE: TestVerifyProofWithMismatchedLengths
+// ==========================================================================
+func TestVerifyProofWithMismatchedLengths(t *testing.T) {
+	fmt.Println("\n[TEST] TestVerifyProofWithMismatchedLengths")
+	start := sha256.Sum256([]byte("leaf"))
+	receipt := &merkle.Receipt{
+		Start: start[:],
+		Entries: []*merkle.ReceiptEntry{
+			{Hash: []byte("short"), Right: true},
+		},
+	}
+	expected := sha256.Sum256([]byte("dummy"))
+	ok := VerifyProof(receipt, expected[:])
+	fmt.Printf("    Result: %v (expected: false)\n", ok)
+	require.False(t, ok, "Entry hash of invalid length should fail")
+}
+
+// ==========================================================================
+// TEST CASE: TestVerifyProofEmptyEntries
+// ==========================================================================
+func TestVerifyProofEmptyEntries(t *testing.T) {
+	fmt.Println("\n[TEST] TestVerifyProofEmptyEntries")
+	start := sha256.Sum256([]byte("leaf"))
+	receipt := &merkle.Receipt{
+		Start:   start[:],
+		Entries: []*merkle.ReceiptEntry{},
+	}
+	expected := sha256.Sum256(start[:])
+	ok := VerifyProof(receipt, expected[:])
+	fmt.Printf("    Result: %v (expected: false)\n", ok)
+	require.False(t, ok, "Empty entries list should fail")
 }

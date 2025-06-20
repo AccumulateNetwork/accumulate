@@ -21,7 +21,7 @@ func FetchProof(api *client.Client, ctx context.Context, account string) (*Verif
 	// GeneralQuery object is what is used to request data from an Accumulate Node
 	// It contains the account URL
 	req := &client.GeneralQuery{UrlQuery: client.UrlQuery{Url: u}}
-	// resp is a placeholder for a variable that will be filled with the responde
+	// resp is a placeholder for a variable that will be filled with the response
 	// from the Accumulate node
 	var resp client.ChainQueryResponse
 
