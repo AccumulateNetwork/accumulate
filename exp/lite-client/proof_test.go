@@ -161,3 +161,11 @@ func buildTestReceipt(leaf []byte, entryHash []byte, right bool) *merkle.Receipt
 		},
 	}
 }
+
+// calculateExpectedRoot calculates the expected Merkle root for a single-entry receipt.
+func calculateExpectedRoot(start []byte, entryHash []byte, right bool) []byte {
+	if right {
+		return doSha(append(start, entryHash...))
+	}
+	return doSha(append(entryHash, start...))
+}

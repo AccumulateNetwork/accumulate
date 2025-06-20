@@ -65,14 +65,6 @@ func doSha(data []byte) []byte {
 	return h[:]
 }
 
-// calculateExpectedRoot calculates the expected Merkle root for a single-entry receipt.
-func calculateExpectedRoot(start []byte, entryHash []byte, right bool) []byte {
-	if right {
-		return doSha(append(start, entryHash...))
-	}
-	return doSha(append(entryHash, start...))
-}
-
 // ValidateAndCacheProof fetches, verifies, and caches a proof for the given account using the provided LiteClient.
 func ValidateAndCacheProof(client *LiteClient, ctx context.Context, account string, knownRoot []byte) error {
 	// Step 1: Fetch proof for the account from the node
