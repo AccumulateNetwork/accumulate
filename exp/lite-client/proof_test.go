@@ -9,9 +9,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 )
 
-// ==========================================================================
-// TEST CASE: TestFetchProofAndVerifyProof
-// ==========================================================================
 func TestFetchProofAndVerifyProof(t *testing.T) {
 	fmt.Println("\n[TEST] TestFetchProofAndVerifyProof")
 
@@ -51,9 +48,6 @@ func TestFetchProofAndVerifyProof(t *testing.T) {
 	require.False(t, ok, "Invalid root should fail")
 }
 
-// ==========================================================================
-// TEST CASE: TestVerifyProofVariants
-// ==========================================================================
 func TestVerifyProofVariants(t *testing.T) {
 	fmt.Println("\n[TEST] TestVerifyProofVariants")
 
@@ -100,9 +94,6 @@ func TestVerifyProofVariants(t *testing.T) {
 	require.False(t, ok, "Empty receipt should fail")
 }
 
-// ==========================================================================
-// TEST CASE: TestVerifyProofNilStart
-// ==========================================================================
 func TestVerifyProofNilStart(t *testing.T) {
 	fmt.Println("\n[TEST] TestVerifyProofNilStart")
 	entryHash := sha256.Sum256([]byte("right"))
@@ -118,9 +109,6 @@ func TestVerifyProofNilStart(t *testing.T) {
 	require.False(t, ok, "Receipt with nil Start should fail")
 }
 
-// ==========================================================================
-// TEST CASE: TestVerifyProofNilEntryHash
-// ==========================================================================
 func TestVerifyProofNilEntryHash(t *testing.T) {
 	fmt.Println("\n[TEST] TestVerifyProofNilEntryHash")
 	start := sha256.Sum256([]byte("leaf"))
@@ -136,9 +124,6 @@ func TestVerifyProofNilEntryHash(t *testing.T) {
 	require.False(t, ok, "Receipt with nil Entry.Hash should fail")
 }
 
-// ==========================================================================
-// TEST CASE: TestVerifyProofWithMismatchedLengths
-// ==========================================================================
 func TestVerifyProofWithMismatchedLengths(t *testing.T) {
 	fmt.Println("\n[TEST] TestVerifyProofWithMismatchedLengths")
 	start := sha256.Sum256([]byte("leaf"))
@@ -154,9 +139,6 @@ func TestVerifyProofWithMismatchedLengths(t *testing.T) {
 	require.False(t, ok, "Entry hash of invalid length should fail")
 }
 
-// ==========================================================================
-// TEST CASE: TestVerifyProofEmptyEntries
-// ==========================================================================
 func TestVerifyProofEmptyEntries(t *testing.T) {
 	fmt.Println("\n[TEST] TestVerifyProofEmptyEntries")
 	start := sha256.Sum256([]byte("leaf"))

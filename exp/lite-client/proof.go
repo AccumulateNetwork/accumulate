@@ -47,19 +47,16 @@ func FetchProof(api *client.Client, ctx context.Context, account string) (*Verif
 	}, nil
 }
 
-func VerifyProof(receipt *merkle.Receipt, root []byte) bool {
-	if receipt == nil {
+func VerifyProof(receipt *merkle.Receipt, expectedRoot []byte) bool {
+	if receipt == nil || receipt.Anchor == nil {
 		return false
 	}
-	current := receipt.Start
-	for _, node := range receipt.Entries {
-		if node.Right {
-			current = doSha(append(current, node.Hash...))
-		} else {
-			current = doSha(append(node.Hash, current...))
-		}
+	if !bytes.Equal(receipt.Anchor, expectedRoot) {
+		return false
 	}
-	return bytes.Equal(current, root)
+	return receipt.Validate(&merkle.ValidateOptions{
+		Relaxed: false,
+	})
 }
 
 // doSha computes the SHA-256 hash of the input.
