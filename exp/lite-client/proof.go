@@ -68,16 +68,6 @@ func doSha(data []byte) []byte {
 	return h[:]
 }
 
-// buildTestReceipt constructs a trivial Merkle receipt for testing.
-func buildTestReceipt(leaf []byte, entryHash []byte, right bool) *merkle.Receipt {
-	return &merkle.Receipt{
-		Start: leaf,
-		Entries: []*merkle.ReceiptEntry{
-			{Hash: entryHash, Right: right},
-		},
-	}
-}
-
 // calculateExpectedRoot calculates the expected Merkle root for a single-entry receipt.
 func calculateExpectedRoot(start []byte, entryHash []byte, right bool) []byte {
 	if right {

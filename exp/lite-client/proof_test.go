@@ -169,3 +169,13 @@ func TestVerifyProofEmptyEntries(t *testing.T) {
 	fmt.Printf("    Result: %v (expected: false)\n", ok)
 	require.False(t, ok, "Empty entries list should fail")
 }
+
+// buildTestReceipt constructs a trivial Merkle receipt for testing.
+func buildTestReceipt(leaf []byte, entryHash []byte, right bool) *merkle.Receipt {
+	return &merkle.Receipt{
+		Start: leaf,
+		Entries: []*merkle.ReceiptEntry{
+			{Hash: entryHash, Right: right},
+		},
+	}
+}
