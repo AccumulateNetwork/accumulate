@@ -21,6 +21,12 @@ func abs(n int64) int64 {
 
 // sc_ReconstructSnapshotImpl rebuilds a snapshot file from its parsed components
 // This is the implementation of the stub function defined in sc.go
+//
+// The reconstruction process preserves the exact structure of the original snapshot file,
+// including multiple sections of the same type. Multiple sections of the same type are created
+// during snapshot collection when a section's data exceeds the maximum size limit. When
+// reconstructing, we maintain these separate sections exactly as they appeared in the original
+// file, preserving their order and content.
 func sc_ReconstructSnapshotImpl(state *sc_State, outputPath string) error {
 	fmt.Printf("Reconstructing snapshot to %s\n", outputPath)
 
@@ -95,11 +101,9 @@ func sc_ReconstructSnapshotImpl(state *sc_State, outputPath string) error {
 		fmt.Printf("\n")
 	}
 
-	// Fix the specific offset value at position 0xD7 (215 - 64 = 151 in header data)
-	// This byte appears to be an internal reference to the first section offset (192 or 0xC0)
+	// Print debug information about the header data
 	if headerDataSize > 151 {
-		// Print the current value for debugging
-		fmt.Printf("Header data bytes around offset 0xD7 (before fix):\n")
+		fmt.Printf("Header data bytes around offset 0xD7:\n")
 		for i := 140; i < 160; i++ {
 			fmt.Printf("%02x ", headerDataBuf[i])
 			if (i+1) % 8 == 0 {
@@ -111,18 +115,8 @@ func sc_ReconstructSnapshotImpl(state *sc_State, outputPath string) error {
 		fmt.Printf("Value at offset 0xD7 (151 in header data): 0x%02x, FirstSectionOffset: %d (0x%x)\n", 
 			headerDataBuf[151], state.FirstSectionOffset, state.FirstSectionOffset)
 		
-		// Explicitly set to 0xC0 (192) as seen in the original file
-		// This is the first section offset value
-		fmt.Printf("Setting byte at offset 0xD7 to 0xC0 (192) - first section offset\n")
-		headerDataBuf[151] = 0xC0
-		
-		// Verify the fix was applied
-		fmt.Printf("Value after fix: 0x%02x\n", headerDataBuf[151])
-		
-		// Double check the buffer to make sure the fix is applied
-		if headerDataBuf[151] != 0xC0 {
-			fmt.Printf("WARNING: Fix was not applied correctly!\n")
-		}
+		// We preserve the original value from the snapshot file
+		// No modifications to headerDataBuf[151]
 	}
 	
 	// Write the header data to the output file
@@ -146,22 +140,8 @@ func sc_ReconstructSnapshotImpl(state *sc_State, outputPath string) error {
 			fmt.Printf("Warning: Failed to read back header data: %v\n", err)
 		} else if headerDataSize > 151 {
 			fmt.Printf("Verification - Value at offset 0xD7 after writing: 0x%02x\n", verifyBuf[151])
-			if verifyBuf[151] != 0xC0 {
-				fmt.Printf("WARNING: Fix was not preserved in the written file! Attempting direct fix...\n")
-				// Direct fix: seek to the exact position and write the correct byte
-				_, err = outFile.Seek(215, io.SeekStart) // 64 (header) + 151 = 215
-				if err != nil {
-					fmt.Printf("ERROR: Failed to seek to offset 0xD7: %v\n", err)
-				} else {
-					// Write the correct byte
-					_, err = outFile.Write([]byte{0xC0})
-					if err != nil {
-						fmt.Printf("ERROR: Failed to write correct byte at offset 0xD7: %v\n", err)
-					} else {
-						fmt.Printf("Direct fix applied at offset 0xD7\n")
-					}
-				}
-			}
+			// Simply report the value we read back, without making assumptions about what it should be
+			// This ensures we're not artificially expecting a specific value
 		}
 		// Seek back to the end of the header data
 		_, err = outFile.Seek(int64(64+n), io.SeekStart)
@@ -170,74 +150,121 @@ func sc_ReconstructSnapshotImpl(state *sc_State, outputPath string) error {
 		}
 	}
 	
-	// If we have a first section offset from the original file, pad to that offset
-	if state.FirstSectionOffset > 0 && uint64(currentPos) < state.FirstSectionOffset {
-		// Calculate padding size
-		paddingSize := state.FirstSectionOffset - uint64(currentPos)
-		fmt.Printf("Adding %d bytes of padding to align to first section offset %d\n", paddingSize, state.FirstSectionOffset)
+	// After writing header data, we need to align to a 64-byte boundary
+	// This is exactly what the segmented writer does
+	if currentPos % 64 > 0 {
+		// Calculate padding size using the segmented writer formula
+		paddingSize := 64 - (currentPos % 64)
+		fmt.Printf("Adding %d bytes of padding to align to 64-byte boundary after header data\n", paddingSize)
 		
 		// Create and write padding
 		padding := make([]byte, paddingSize)
 		_, err = outFile.Write(padding)
 		if err != nil {
-			return fmt.Errorf("failed to write padding before first section: %v", err)
+			return fmt.Errorf("failed to write padding after header data: %v", err)
 		}
-		currentPos = int64(state.FirstSectionOffset)
+		currentPos += paddingSize
 	}
 	
-	nextSectionOffset := uint64(0)
+	// Verify that we're now at the expected first section offset
+	if state.FirstSectionOffset > 0 && uint64(currentPos) != state.FirstSectionOffset {
+		fmt.Printf("WARNING: Current position %d does not match expected first section offset %d\n", 
+			currentPos, state.FirstSectionOffset)
+		fmt.Printf("This suggests the original file may not have followed the segmented writer algorithm exactly\n")
+	}
+	
+	// We'll track section offsets in the sectionInfos slice
 
 	// Create a slice to store section information for debugging
 	sectionInfos := make([]SectionInfo, 0)
 	
-	// Track which section types we've already processed to avoid duplication
-	processedSectionTypes := make(map[uint32]bool)
-	
-	// Skip the header section (type 1) as we've already processed it
-	// Process only data sections (starting from the first section offset)
-	for i := 0; i < len(state.OriginalSections); i++ {
-		section := state.OriginalSections[i]
+	// Process all sections in the exact order they appear in the original snapshot
+	// This preserves multiple instances of the same section type
+	for _, section := range state.OriginalSections {
 		sectionType := section.Type
+		sectionInstance := section.Instance
 		
 		// Skip header section (type 1) as we've already handled it separately
 		if sectionType == 1 {
 			continue
 		}
 		
-		// Skip if we've already processed this section type
-		// This prevents duplication of sections like type 7 (records)
-		if processedSectionTypes[sectionType] {
-			fmt.Printf("Skipping duplicate section type %d (instance %d) - already processed\n", sectionType, section.Instance)
-			continue
-		}
+		// Print the section info for debugging
+		fmt.Printf("Processing section type %d (instance %d)\n", sectionType, sectionInstance)
+		// We already have the section from the loop, no need to search for it
 		
-		tmpFile := state.SectionFiles[sectionType]
+		// Create a unique key for this section type and instance
+		sectionKey := fmt.Sprintf("%d_%d", sectionType, sectionInstance)
+		
+		tmpFile := state.SectionFiles[sectionKey]
 		if tmpFile == nil {
-			fmt.Printf("Warning: No temp file for section type %d, skipping\n", sectionType)
-			continue // Skip if no temp file for this section type
+			fmt.Printf("Warning: No temp file for section type %d (instance %d), skipping\n", sectionType, sectionInstance)
+			continue // Skip if no temp file for this section type and instance
 		}
 		
-		// Mark this section type as processed
-		processedSectionTypes[sectionType] = true
-		
-		// Use the original section's start offset to ensure exact byte-for-byte replication
-		if currentPos < section.StartOffset {
-			// Add padding if needed to match the original section start offset
-			padding := make([]byte, section.StartOffset - currentPos)
+		// CRITICAL: Position the output file exactly at the original section's start offset
+		// This ensures we maintain the exact byte layout of the original file
+		if currentPos != section.StartOffset {
+			// Verify the current file position matches our calculated position before adding padding
+			actualPos, err := outFile.Seek(0, io.SeekCurrent)
+			if err != nil {
+				return fmt.Errorf("failed to get current position before adding padding: %v", err)
+			}
+			
+			if int64(currentPos) != actualPos {
+				fmt.Printf("ERROR: Position mismatch before adding padding for section type %d\n", sectionType)
+				fmt.Printf("  Calculated position: %d, Actual file position: %d, Difference: %d\n", 
+					currentPos, actualPos, int64(currentPos) - actualPos)
+				return fmt.Errorf("position mismatch before adding padding")
+			}
+			
+			paddingSize := section.StartOffset - currentPos
+			padding := make([]byte, paddingSize)
+			// Fill padding with zeros
+			for i := range padding {
+				padding[i] = 0
+			}
+			
+			// Write padding
 			_, err = outFile.Write(padding)
 			if err != nil {
 				return fmt.Errorf("failed to write padding before section %d: %v", sectionType, err)
 			}
-			currentPos = section.StartOffset
-			fmt.Printf("Added %d bytes of padding to align to original section offset %d\n", len(padding), section.StartOffset)
+			
+			// Verify the position after adding padding
+			actualPos, err = outFile.Seek(0, io.SeekCurrent)
+			if err != nil {
+				return fmt.Errorf("failed to get current position after adding padding: %v", err)
+			}
+			
+			expectedPos := currentPos + paddingSize
+			if int64(expectedPos) != actualPos {
+				fmt.Printf("ERROR: Position mismatch after adding padding for section type %d\n", sectionType)
+				fmt.Printf("  Expected position: %d, Actual file position: %d, Difference: %d\n", 
+					expectedPos, actualPos, int64(expectedPos) - actualPos)
+				return fmt.Errorf("position mismatch after adding padding")
+			}
+			
+			fmt.Printf("Added %d bytes of padding to align to original section offset %d\n", paddingSize, section.StartOffset)
+			currentPos += paddingSize
+		} else if section.StartOffset < currentPos {
+			return fmt.Errorf("current position %d is past the expected section offset %d for section type %d", 
+				currentPos, section.StartOffset, sectionType)
 		}
-
-		// Get section size from the temporary file
+		
+		// We already have the temp file from the state
+		// No need to open it again, just rewind it
+		_, err = tmpFile.Seek(0, io.SeekStart)
+		if err != nil {
+			return fmt.Errorf("failed to seek to beginning of temporary file for section %d: %v", sectionType, err)
+		}
+		
+		// Get section data size from the temporary file
 		tmpStat, err := tmpFile.Stat()
 		if err != nil {
 			return fmt.Errorf("failed to stat temporary file for section %d: %v", sectionType, err)
 		}
-		sectionSize := uint64(tmpStat.Size())
+		sectionDataSize := uint64(tmpStat.Size())
 
 		// Create section info for tracking
 		sectionInfo := SectionInfo{
@@ -245,14 +272,14 @@ func sc_ReconstructSnapshotImpl(state *sc_State, outputPath string) error {
 			Instance:    section.Instance,
 			StartOffset: currentPos,
 			HeaderOffset: currentPos,
-			Size:        sectionSize,
+			Size:        sectionDataSize, // Will be updated after writing data
 		}
 
-		// Instead of generating a new section header, read the original section header
-		// This ensures we preserve all the original header bytes exactly
+		// To match the exact format of the original file, we need to read the original section header
+		// and then update only the necessary fields
 		sectionHeader := make([]byte, 64)
 		
-		// Store current position in the output file
+		// Save current position in the output file
 		currentOutPos, err := outFile.Seek(0, io.SeekCurrent)
 		if err != nil {
 			return fmt.Errorf("failed to get current position in output file: %v", err)
@@ -270,66 +297,222 @@ func sc_ReconstructSnapshotImpl(state *sc_State, outputPath string) error {
 			return fmt.Errorf("failed to read original section header: %v", err)
 		}
 		
-		// Restore position in the input file
+		// Restore position in the output file
 		_, err = outFile.Seek(currentOutPos, io.SeekStart)
 		if err != nil {
 			return fmt.Errorf("failed to restore position in output file: %v", err)
 		}
 		
-		// Update the section size in the header if needed
-		// This is necessary because we might have combined multiple instances of the same section type
-		binary.BigEndian.PutUint64(sectionHeader[8:16], sectionSize)
+		// Print the original section header bytes for debugging
+		fmt.Printf("Original section header for type %d:\n", sectionType)
+		for i := 0; i < 64; i += 16 {
+			fmt.Printf("%04x: ", i)
+			for j := 0; j < 16 && i+j < 64; j++ {
+				fmt.Printf("%02x ", sectionHeader[i+j])
+				if j == 7 {
+					fmt.Printf("| ")
+				}
+			}
+			fmt.Printf("\n")
+		}
 		
-		// Calculate the next section offset
-		nextSectionOffset = uint64(currentPos) + 64 + sectionSize // Current pos + header size + section size
+		// IMPORTANT: We GENERATE the headers exactly as the segmented writer does.
+		// We do NOT reuse headers from the original snapshot.
+		// This is critical because ultimately we will be folding multiple snapshots
+		// together into these segments, and there will be NO HEADERS to copy.
 		
-		// Update the next section offset in the header
-		binary.BigEndian.PutUint64(sectionHeader[16:24], nextSectionOffset)
+		// Generate a new section header (64 bytes of zeros)
+		for i := range sectionHeader {
+			sectionHeader[i] = 0
+		}
+		
+		// Set the section type (bytes 0-1) - EXACTLY as in segmented writer
+		// From segment_writer.go: binary.BigEndian.PutUint16(header[0:], uint16(s.typ.GetEnumValue()))
+		binary.BigEndian.PutUint16(sectionHeader[0:2], uint16(sectionType))
+		
+		// Set the section size (bytes 8-15)
+		// The segmented writer calculates size as: current - offset - 64
+		// Where current is the end position after writing the data
+		// offset is the start of the section header
+		// and 64 is the size of the header
+		
+		// Initially set the section size to 0
+		// We'll update it after writing the data, exactly like the segmented writer does
+		binary.BigEndian.PutUint64(sectionHeader[8:16], 0)
+		
+		// Next section offset (bytes 16-23) will be updated later
+		// Leave it as zeros for now
+		
+		fmt.Printf("Generated new section header for type %d following segmented writer algorithm\n", sectionType)
+		
+		// Print key header values for verification
+		fmt.Printf("  Section Type: %d\n", binary.BigEndian.Uint32(sectionHeader[0:4]))
+		fmt.Printf("  Instance: %d\n", binary.BigEndian.Uint32(sectionHeader[4:8]))
+		fmt.Printf("  Size: %d\n", binary.BigEndian.Uint64(sectionHeader[8:16]))
+		fmt.Printf("  Next Offset: %d\n", binary.BigEndian.Uint64(sectionHeader[16:24]))
+		
+		// Verify the current file position matches our calculated position
+		actualPos, err := outFile.Seek(0, io.SeekCurrent)
+		if err != nil {
+			return fmt.Errorf("failed to get current position in output file: %v", err)
+		}
+		
+		if int64(currentPos) != actualPos {
+			fmt.Printf("ERROR: Position mismatch before writing section header for type %d\n", sectionType)
+			fmt.Printf("  Calculated position: %d, Actual file position: %d, Difference: %d\n", 
+				currentPos, actualPos, int64(currentPos) - actualPos)
+			return fmt.Errorf("position mismatch before writing section header")
+		}
 		
 		// Write the section header
 		_, err = outFile.Write(sectionHeader)
 		if err != nil {
-			return fmt.Errorf("failed to write section header for type %d: %v", sectionType, err)
+			return fmt.Errorf("failed to write section header: %v", err)
 		}
-		currentPos += 64 // Update current position after writing header
-		sectionInfo.DataOffset = currentPos
-
-		// Copy the section data from the temporary file
-		_, err = tmpFile.Seek(0, 0) // Reset to beginning of temp file
+		
+		// Verify the position after writing header
+		actualPos, err = outFile.Seek(0, io.SeekCurrent)
 		if err != nil {
-			return fmt.Errorf("failed to seek to beginning of temp file for section %d: %v", sectionType, err)
+			return fmt.Errorf("failed to get current position after writing header: %v", err)
 		}
 		
-		buffer := make([]byte, 1024*1024) // 1MB buffer for copying
-		copied := int64(0)
+		expectedPos := currentPos + 64 // Header size is 64 bytes
+		if int64(expectedPos) != actualPos {
+			fmt.Printf("ERROR: Position mismatch after writing section header for type %d\n", sectionType)
+			fmt.Printf("  Expected position: %d, Actual file position: %d, Difference: %d\n", 
+				expectedPos, actualPos, int64(expectedPos) - actualPos)
+			return fmt.Errorf("position mismatch after writing section header")
+		}
 		
-		for copied < tmpStat.Size() {
-			n, err := tmpFile.Read(buffer)
-			if err != nil && err != io.EOF {
-				return fmt.Errorf("error reading from temp file for section %d: %v", sectionType, err)
-			}
-			if n == 0 {
-				break // End of file
-			}
-			
-			_, err = outFile.Write(buffer[:n])
+		// Save the header position for later size calculation
+		headerPos := currentPos
+		
+		// Move past the header to the data position
+		currentPos += 64 // Header size is 64 bytes
+		sectionInfo.DataOffset = currentPos
+		
+		// Write the section data
+		_, err = io.Copy(outFile, tmpFile)
+		if err != nil {
+			return fmt.Errorf("failed to write section data for section %d: %v", sectionType, err)
+		}
+		
+		// Get current position after writing data
+		endDataPos, err := outFile.Seek(0, io.SeekCurrent)
+		if err != nil {
+			return fmt.Errorf("failed to get current position after writing section data: %v", err)
+		}
+		
+		// Update current position
+		currentPos = endDataPos
+		
+		// Calculate section size EXACTLY as the segmented writer does:
+		// From segment_writer.go: binary.BigEndian.PutUint64(header[8:], uint64(current-s.offset-64))
+		// Where current is the position after writing data
+		// offset is the start of the section header
+		// and 64 is the header size
+		actualSectionSize := uint64(endDataPos - headerPos - 64)
+		
+		// Update the section info with the actual size
+		sectionInfo.Size = actualSectionSize
+		
+		// Now go back and update the size in the header
+		_, err = outFile.Seek(headerPos+8, io.SeekStart) // Seek to size field in header
+		if err != nil {
+			return fmt.Errorf("failed to seek to size field in header: %v", err)
+		}
+		
+		// Write the actual section size
+		sizeBuf := make([]byte, 8)
+		binary.BigEndian.PutUint64(sizeBuf, actualSectionSize)
+		_, err = outFile.Write(sizeBuf)
+		if err != nil {
+			return fmt.Errorf("failed to update section size in header: %v", err)
+		}
+		
+		// Return to the end of the data
+		_, err = outFile.Seek(currentPos, io.SeekStart)
+		if err != nil {
+			return fmt.Errorf("failed to seek back to end of data: %v", err)
+		}
+		
+		// Print debug info about the section size
+		fmt.Printf("Section type %d: calculated size = %d bytes\n", sectionType, actualSectionSize)
+		
+		// Current position is already updated after writing data, no need to verify or update it further
+		
+		// Add padding to align to 64-byte boundary, exactly as the segmented writer does
+		if currentPos % 64 > 0 {
+			padSize := 64 - (currentPos % 64)
+			padding := make([]byte, padSize)
+			_, err = outFile.Write(padding)
 			if err != nil {
-				return fmt.Errorf("error writing section %d data: %v", sectionType, err)
+				return fmt.Errorf("failed to write padding after section data: %v", err)
 			}
-			
-			copied += int64(n)
-			currentPos += int64(n)
+			fmt.Printf("Added %d bytes of padding to align to 64-byte boundary\n", padSize)
+			currentPos += padSize
 		}
 
 		// Update section info with end offset
 		sectionInfo.EndOffset = currentPos
 		sectionInfos = append(sectionInfos, sectionInfo)
 
-		fmt.Printf("Wrote section type %d (instance %d) (%d bytes) to output file\n", sectionType, section.Instance, sectionSize)
+		fmt.Printf("Wrote section type %d (instance %d) (%d bytes) to output file\n", sectionType, section.Instance, actualSectionSize)
 	}
 
-	// We've already set the correct first section offset in the main header when we wrote it
-	// No need to update it again, as that would overwrite our carefully preserved original offset
+	// Update the next section offset for all sections
+	// EXACTLY as the segmented writer does in Open() method
+	if len(sectionInfos) > 0 {
+		fmt.Printf("Updating next section offsets for all sections...\n")
+		
+		for i := 0; i < len(sectionInfos)-1; i++ {
+			// Get the current and next section
+			currentSection := sectionInfos[i]
+			nextSection := sectionInfos[i+1]
+			
+			// Calculate the next section offset
+			// From segment_writer.go: binary.BigEndian.PutUint64(headerPart[:], uint64(offset))
+			nextOffset := nextSection.HeaderOffset
+			
+			// Seek to the next offset field in the current section header
+			// This is at bytes 16-23 in the section header (exactly as in segmented writer)
+			// From segment_writer.go: _, err = w.file.Seek(w.prevSegment+16, io.SeekStart)
+			nextOffsetPos := currentSection.HeaderOffset + 16
+			_, err = outFile.Seek(nextOffsetPos, io.SeekStart)
+			if err != nil {
+				return fmt.Errorf("failed to seek to next offset field in section header: %v", err)
+			}
+			
+			// Write the next section offset
+			nextOffsetBuf := make([]byte, 8)
+			binary.BigEndian.PutUint64(nextOffsetBuf, uint64(nextOffset))
+			_, err = outFile.Write(nextOffsetBuf)
+			if err != nil {
+				return fmt.Errorf("failed to write next section offset: %v", err)
+			}
+			
+			fmt.Printf("Updated section %d next offset to %d (0x%x)\n", 
+				currentSection.Type, nextOffset, nextOffset)
+		}
+		
+		// The last section's next offset should be 0
+		lastSection := sectionInfos[len(sectionInfos)-1]
+		lastOffsetPos := lastSection.HeaderOffset + 16
+		_, err = outFile.Seek(lastOffsetPos, io.SeekStart)
+		if err != nil {
+			return fmt.Errorf("failed to seek to next offset field in last section header: %v", err)
+		}
+		
+		// Write 0 as the next section offset for the last section
+		zeroOffsetBuf := make([]byte, 8)
+		_, err = outFile.Write(zeroOffsetBuf)
+		if err != nil {
+			return fmt.Errorf("failed to write zero next section offset for last section: %v", err)
+		}
+		
+		fmt.Printf("Set last section %d next offset to 0\n", lastSection.Type)
+	}
+	
 	fmt.Printf("Reconstruction complete. First section offset preserved at %d bytes.\n", state.FirstSectionOffset)
 
 	// Print section information for debugging
@@ -498,34 +681,7 @@ func sc_ValidateReconstructionImpl(originalPath, reconstructedPath string) (bool
 	fmt.Printf("Original file size: %d bytes\n", originalSize)
 	fmt.Printf("Reconstructed file size: %d bytes\n", reconstructedSize)
 	
-	// Apply the direct fix to the byte at offset 0xD7 (215)
-	// Open the reconstructed file for writing
-	reconstructedFileRW, err := os.OpenFile(reconstructedPath, os.O_RDWR, 0644)
-	if err != nil {
-		fmt.Printf("Warning: Could not open reconstructed file for writing to fix offset 0xD7: %v\n", err)
-	} else {
-		defer reconstructedFileRW.Close()
-		
-		// Seek to offset 0xD7 (215)
-		_, err = reconstructedFileRW.Seek(215, io.SeekStart)
-		if err != nil {
-			fmt.Printf("Warning: Could not seek to offset 0xD7: %v\n", err)
-		} else {
-			// Write the correct byte (0xC0)
-			_, err = reconstructedFileRW.Write([]byte{0xC0})
-			if err != nil {
-				fmt.Printf("Warning: Could not write to offset 0xD7: %v\n", err)
-			} else {
-				fmt.Printf("Fixed byte at offset 0xD7 (215) to 0xC0\n")
-				
-				// Sync to ensure the write is flushed to disk
-				err = reconstructedFileRW.Sync()
-				if err != nil {
-					fmt.Printf("Warning: Could not sync file after fixing offset 0xD7: %v\n", err)
-				}
-			}
-		}
-	}
+	// No artificial byte modifications - we want to validate the actual reconstruction
 	
 	// Check if file sizes match
 	if originalSize != reconstructedSize {
