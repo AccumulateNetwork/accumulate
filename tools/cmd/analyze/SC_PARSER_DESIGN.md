@@ -8,6 +8,37 @@ The snapshot parser reads snapshot files section by section, writing each sectio
 
 ## Snapshot File Format
 
+### Segmented Writer Algorithm
+
+The snapshot file is created using a segmented writer that follows this precise algorithm for each section:
+
+1. **Opening a Section**:
+   - If a previous section exists, update its "next section offset" field (bytes 16-23) with the current file position
+   - Write a 64-byte placeholder for the section header
+   - Record the current file position as the section data start
+
+2. **Writing Section Data**:
+   - Write the section data to the file
+   - Track the total bytes written
+
+3. **Closing a Section**:
+   - Calculate the current file position after writing data
+   - Seek back to the section header position
+   - Write the section header with:
+     - Section type (bytes 0-1): Set to the section's type value
+     - Section size (bytes 8-15): Set to the exact data size (excluding header and padding)
+     - Next section offset (bytes 16-23): Set to 0 (will be updated when the next section is opened)
+   - Seek back to the end of the section data
+   - Add padding bytes if needed to align to the next 64-byte boundary using the formula:
+     `padding_size = (64 - (current_position % 64)) % 64`
+   - Update the file position to after the padding
+   - Record this position as the start of the next section
+
+This algorithm ensures that:
+- All sections are properly aligned on 64-byte boundaries
+- The "next section offset" field in each section header points to the exact file position where the next section begins
+- The section size reflects only the actual data size, not including the header or padding
+
 ### File Structure
 
 The Accumulate snapshot file uses a segmented file format with the following characteristics:
@@ -33,8 +64,8 @@ Each section header follows the same format:
 
 - Bytes 0-1: Section type (uint16 in big-endian format)
 - Bytes 2-7: Reserved (6 bytes)
-- Bytes 8-15: Section size (uint64 in big-endian format)
-- Bytes 16-23: Next section offset (uint64 in big-endian format)
+- Bytes 8-15: Section size (uint64 in big-endian format) - Exact data size excluding header and padding
+- Bytes 16-23: Next section offset (uint64 in big-endian format) - Absolute file offset where the next section begins
 - Bytes 24-63: Additional metadata (40 bytes)
 
 ### First Section Offset
@@ -194,6 +225,42 @@ When the `--test-parse` flag is present:
 
 The snapshot reconstruction process must precisely replicate the original snapshot file structure, including all section headers and their exact positions. This is critical for maintaining compatibility with tools that read the snapshot format.
 
+##### Reconstruction Algorithm
+
+To ensure byte-for-byte identical reconstruction, the reconstruction process must follow the exact same algorithm as the original segmented writer:
+
+1. **Write Main Header**:
+   - Write the 64-byte main header with the original first section offset
+   - The first section offset must match the original file (e.g., 192 bytes)
+
+2. **Write Header Data**:
+   - Write the header data immediately after the main header
+   - Apply any necessary fixes to the header data (e.g., the byte at offset 0xD7)
+
+3. **Header Data Reconstruction**:
+   - The header data must be reconstructed exactly as it appears in the original file
+   - The byte at offset 0xD7 (215) must be set to 0xC0 (192) to match the first section offset
+   - This ensures byte-for-byte compatibility with the original snapshot format
+
+4. **Add Padding After Header Data**:
+   - Add padding bytes to reach the first section offset
+   - For example, if header data is 121 bytes and first section offset is 192, add 7 bytes of padding
+
+5. **Process Each Section in Original Order**:
+   - For each section in the original file order:
+     - Write the section header at the exact same offset as in the original file
+     - Update the section header fields:
+       - Section type: Use the original section type
+       - Section size: Use the exact data size from the original section
+       - Next section offset: Use the original next section offset value
+     - Write the section data
+     - Add padding bytes to align to the next 64-byte boundary using the formula:
+       `padding_size = (64 - (current_position % 64)) % 64`
+
+6. **Update Next Section Offsets**:
+   - Ensure each section header's "next section offset" field points to the correct absolute file position of the next section
+   - The last section should have a next section offset of 0
+
 ```go
 // sc_ReconstructSnapshot rebuilds a snapshot file from its parsed components
 func sc_ReconstructSnapshot(state *sc_State, outputPath string) error {
@@ -228,6 +295,8 @@ This function will:
 
 3. **Alignment and Padding**:
    - Sections must be aligned on 64-byte boundaries
+   - After writing a section's data, padding bytes (zeros) must be added if needed to reach the next 64-byte boundary
+   - The formula for calculating padding: `padding_size = (64 - (current_position % 64)) % 64`
    - Padding must be added after the header data to reach the first section offset
    - For example, if header data is 121 bytes, add 7 bytes of padding to reach 192 bytes
 
@@ -238,6 +307,8 @@ This function will:
 5. **Multiple Section Instances**:
    - Some section types may appear multiple times in the file
    - Each instance must be tracked and processed separately
+   - Multiple sections of the same type are created when a section's data exceeds the maximum section size limit
+   - The snapshot writer automatically creates new sections when needed based on size
 
 ### Example: Reconstructing dn.snap
 
@@ -309,6 +380,45 @@ The reconstruction module will be designed with these principles:
 3. Add validation functions to `sc.go`
 4. Update the `sc_Run` function to implement the test-parse workflow
 5. Add reporting functions for validation results
+
+## Multiple Sections of the Same Type
+
+### Why Multiple Sections Exist
+
+The snapshot format allows multiple sections of the same type (e.g., multiple type 7 record sections) to exist in a single snapshot file. This is not an error or anomaly, but a deliberate design feature. Multiple sections of the same type are created when:
+
+1. **Section Size Limits**: When a section's data exceeds the maximum size limit, the snapshot writer automatically:
+   - Closes the current section
+   - Opens a new section of the same type
+   - Continues writing records to the new section
+
+2. **Data Organization**: Different groups of related records may be stored in separate sections even if they're the same type
+
+### Handling During Reconstruction
+
+When reconstructing snapshots, it's critical to:
+
+1. Preserve all instances of each section type in their original order
+2. Maintain the exact section structure from the original file
+3. Not attempt to combine or merge sections of the same type
+4. Process each section independently, even if they have the same type
+
+### Snapshot Combination Process
+
+When multiple snapshots are combined (e.g., using the "debug genesis ingest" command):
+
+1. Each snapshot is processed independently
+2. Records from all sections (including multiple sections of the same type) are read and added to the database
+3. The original section structure is not preserved in the database - records are organized by their keys
+4. When creating a new snapshot from the combined database:
+   - Records are organized by type
+   - New sections are created based on size limits, not based on which original snapshot the records came from
+   - The new snapshot will have its own section structure that may differ from any of the input snapshots
+
+This means that when combining snapshots:
+- It's perfectly fine to combine all records of the same type from different snapshots
+- The section structure of the original snapshots doesn't need to be preserved
+- The new snapshot will have its own section structure based solely on the size of the data
 
 ## Future Integration with URL Hash Handling
 

@@ -10,7 +10,7 @@
 // - Keep methods short; factor into helper functions and more methods to keep things short
 // - Keep methods independent enough to easly test
 // - Keep logging and printing out of long inter loops
-// - Keep summaries like counts of record types or files processed, error types, etc. in the sc_state 
+// - Keep summaries like counts of record types or files processed, error types, etc. in the sc_state
 // - At the end of execution produce a report using the summaries collected
 //
 // sc implements the 'sc' command for the analyze tool.
@@ -38,7 +38,14 @@
 //
 // EXAMPLE USAGE:
 // cd ~/work/acc1
-// ./analyze sc dn.snap
+// 
+// Process a single snapshot (future: will combine multiple snapshots):
+// ./analyze sc combined.snap dn.snap
+// ./analyze sc combined.snap dn1.snap dn2.snap dn3.snap
+//
+// Test parsing and reconstruction accuracy:
+// ./analyze sc combined.snap dn.snap --test-parse
+// ./analyze sc combined.snap dn1.snap dn2.snap --test-parse
 
 package main
 
@@ -55,41 +62,41 @@ import (
 // sc_State holds state for the sc command
 // SectionInfo tracks detailed information about a section during reconstruction
 type SectionInfo struct {
-	Type        uint32
-	StartOffset int64  // Offset of the section in the file
-	HeaderOffset int64 // Offset of the section header
-	DataOffset  int64  // Offset of the section data
-	Size        uint64 // Size of the section data
-	EndOffset   int64  // End offset of the section
-	Order       int    // Original order in the snapshot file
-	Instance    int    // Instance number for sections with the same type
+	Type         uint32
+	StartOffset  int64  // Offset of the section in the file
+	HeaderOffset int64  // Offset of the section header
+	DataOffset   int64  // Offset of the section data
+	Size         uint64 // Size of the section data
+	EndOffset    int64  // End offset of the section
+	Order        int    // Original order in the snapshot file
+	Instance     int    // Instance number for sections with the same type
 }
 
 type sc_State struct {
 	// File paths and handles
-	SnapshotPath string            // Path to the snapshot file
-	File         *os.File          // File handle for the snapshot
-	TempDir      string            // Directory for temporary files
-	SectionFiles map[uint32]*os.File // Map of section type to temporary file
-	
+	SnapshotPath string                        // Path to the snapshot file
+	File         *os.File                      // File handle for the snapshot
+	TempDir      string                        // Directory for temporary files
+	SectionFiles map[string]*os.File           // Map of section type and instance to temporary file
+
 	// Snapshot metadata
-	FormatVersion uint32          // Detected snapshot format version
-	
+	FormatVersion uint32 // Detected snapshot format version
+
 	// Track original section information during parsing
-	OriginalSections []SectionInfo
+	OriginalSections   []SectionInfo
 	FirstSectionOffset uint64 // Offset to the first section in the original file
-	
+
 	// Reconstruction tracking
 	ReconstructionInfo []SectionInfo // Information about reconstructed sections
-	
+
 	// Summary statistics
-	SectionCounts   map[uint32]int // Count of records by section type
-	SectionSizes    map[uint32]int64 // Size of each section in bytes
-	TotalRecords    int            // Total number of records processed
-	TotalSections   int            // Total number of sections found
-	ErrorCounts     map[string]int // Count of errors by type
-	StartTime       time.Time      // When processing started
-	ProcessingTime  time.Duration  // Total processing time
+	SectionCounts  map[uint32]int   // Count of records by section type
+	SectionSizes   map[uint32]int64 // Size of each section in bytes
+	TotalRecords   int              // Total number of records processed
+	TotalSections  int              // Total number of sections found
+	ErrorCounts    map[string]int   // Count of errors by type
+	StartTime      time.Time        // When processing started
+	ProcessingTime time.Duration    // Total processing time
 }
 
 // Init initializes the sc_State by opening the snapshot file
@@ -105,7 +112,7 @@ func (s *sc_State) Init(snapshotPath string) error {
 
 	// Store the file handle
 	s.File = file
-	
+
 	// Create a temporary directory for section files
 	tempDir, err := os.MkdirTemp("", "sc-sections-*")
 	if err != nil {
@@ -113,25 +120,32 @@ func (s *sc_State) Init(snapshotPath string) error {
 		return fmt.Errorf("failed to create temporary directory: %w", err)
 	}
 	s.TempDir = tempDir
-	
+
 	// Initialize maps
-	s.SectionFiles = make(map[uint32]*os.File)
+	s.SectionFiles = make(map[string]*os.File)
 	s.SectionCounts = make(map[uint32]int)
 	s.SectionSizes = make(map[uint32]int64)
 	s.ErrorCounts = make(map[string]int)
-	
+
 	// Record start time
 	s.StartTime = time.Now()
-	
+
 	return nil
 }
 
 // Command for the sc functionality
 var sc_Cmd = &cobra.Command{
-	Use:   "sc [snapshot-path...] [destination-path]",
-	Short: "Process snapshot files",
-	Long:  `Process snapshot files, optionally testing parsing accuracy with --test-parse.`,
-	Args:  cobra.MinimumNArgs(1), // At least one snapshot path required
+	Use:   "sc <destination-snapshot> <input-snapshot-1> [input-snapshot-2...]",
+	Short: "Process and combine snapshot files",
+	Long:  `Process and optionally combine multiple snapshot files into a destination snapshot.
+
+When used with --test-parse, each input snapshot is parsed and reconstructed individually,
+then compared with the original to verify byte-for-byte accuracy. The destination snapshot
+is not created in this mode.
+
+Without --test-parse, the command will (eventually) combine all input snapshots into
+the destination snapshot.`,
+	Args:  cobra.MinimumNArgs(2), // At least destination and one input snapshot required
 	RunE:  sc_Run,
 }
 
@@ -147,17 +161,17 @@ func (s *sc_State) Cleanup() {
 		s.File.Close()
 		s.File = nil
 	}
-	
+
 	// Close all section files
 	for _, file := range s.SectionFiles {
 		if file != nil {
 			file.Close()
 		}
 	}
-	
+
 	// Clear the section files map
 	s.SectionFiles = nil
-	
+
 	// Remove the temporary directory and all its contents
 	if s.TempDir != "" {
 		os.RemoveAll(s.TempDir)
@@ -169,16 +183,16 @@ func (s *sc_State) Cleanup() {
 func (s *sc_State) sc_GenerateReport() {
 	// Calculate processing time
 	s.ProcessingTime = time.Since(s.StartTime)
-	
+
 	// Print report header
 	fmt.Println("\n===== Snapshot Processing Report =====")
 	fmt.Printf("Snapshot file: %s\n", s.SnapshotPath)
 	fmt.Printf("Processing time: %v\n", s.ProcessingTime)
-	
+
 	// Print section statistics
 	fmt.Println("\nSection Statistics:")
 	fmt.Printf("Total sections: %d\n", s.TotalSections)
-	
+
 	// Print section details
 	if len(s.SectionCounts) > 0 {
 		fmt.Println("Section details:")
@@ -187,10 +201,10 @@ func (s *sc_State) sc_GenerateReport() {
 			fmt.Printf("  Section type %d: %d records, %d bytes\n", sectionType, count, sectionSize)
 		}
 	}
-	
+
 	// Print record statistics
 	fmt.Printf("\nTotal records: %d\n", s.TotalRecords)
-	
+
 	// Print error statistics if any
 	if len(s.ErrorCounts) > 0 {
 		fmt.Println("\nError Statistics:")
@@ -198,7 +212,7 @@ func (s *sc_State) sc_GenerateReport() {
 			fmt.Printf("  %s: %d occurrences\n", errorType, count)
 		}
 	}
-	
+
 	fmt.Println("====================================")
 }
 
@@ -220,54 +234,56 @@ var sc_ValidateReconstruction = func(originalPath, reconstructedPath string) (bo
 func sc_Run(cmd *cobra.Command, args []string) error {
 	// Check for test-parse flag
 	testParse, _ := cmd.Flags().GetBool("test-parse")
+
+	// The first argument is always the destination snapshot
+	destinationPath := args[0]
 	
+	// The remaining arguments are input snapshots
+	inputSnapshots := args[1:]
+
 	if testParse {
 		// Test parse mode - process each input snapshot independently
 		fmt.Println("Running in test-parse mode")
-		
+		fmt.Printf("Destination snapshot (not created in test mode): %s\n", destinationPath)
+		fmt.Printf("Number of input snapshots to test: %d\n", len(inputSnapshots))
+
 		// Process each input snapshot file
-		for _, snapshotPath := range args {
-			// Skip the destination path if it's the last argument and we have more than one argument
-			if len(args) > 1 && snapshotPath == args[len(args)-1] {
-				fmt.Println("Skipping destination path in test-parse mode:", snapshotPath)
-				continue
-			}
-			
-			fmt.Printf("Processing snapshot file: %s\n", snapshotPath)
-			
+		for _, snapshotPath := range inputSnapshots {
+			fmt.Printf("\nProcessing snapshot file: %s\n", snapshotPath)
+
 			// Create a new sc_State for this snapshot
 			state := &sc_State{}
-			
+
 			// Initialize the state with the snapshot path
 			err := state.Init(snapshotPath)
 			if err != nil {
 				fmt.Printf("Error initializing state for %s: %v\n", snapshotPath, err)
 				continue
 			}
-			
+
 			// Ensure cleanup happens when we're done with this snapshot
 			defer state.Cleanup()
-			
+
 			// Parse the snapshot file
 			err = sc_ParseSnapshot(state)
 			if err != nil {
 				fmt.Printf("Error parsing %s: %v\n", snapshotPath, err)
 				continue
 			}
-			
+
 			// Generate output path for the reconstructed snapshot
 			baseName := filepath.Base(snapshotPath)
 			extension := filepath.Ext(baseName)
 			fileNameWithoutExt := strings.TrimSuffix(baseName, extension)
-			outputPath := filepath.Join("/home/paul/work/acc1/output", fileNameWithoutExt + "-parsed" + extension)
-			
+			outputPath := filepath.Join("/home/paul/work/acc1/output", fileNameWithoutExt+"-parsed"+extension)
+
 			// Reconstruct the snapshot
 			err = sc_ReconstructSnapshot(state, outputPath)
 			if err != nil {
 				fmt.Printf("Error reconstructing %s: %v\n", snapshotPath, err)
 				continue
 			}
-			
+
 			// Validate the reconstruction
 			match, err := sc_ValidateReconstruction(snapshotPath, outputPath)
 			if err != nil {
@@ -277,38 +293,47 @@ func sc_Run(cmd *cobra.Command, args []string) error {
 			} else {
 				fmt.Printf("✗ Reconstruction of %s does NOT match the original\n", snapshotPath)
 			}
-			
+
 			// Generate and print the summary report
 			state.sc_GenerateReport()
 		}
-		
+
 		return nil
 	} else {
-		// Original functionality - process a single snapshot
-		// Create a new sc_State
-		state := &sc_State{}
-
-		// Initialize the state with the snapshot path
-		snapshotPath := args[0]
-		err := state.Init(snapshotPath)
-		if err != nil {
-			return err
-		}
-
-		// Ensure cleanup happens when we're done
-		defer state.Cleanup()
+		// Regular mode - will eventually combine snapshots
+		fmt.Printf("Processing %d input snapshots to create: %s\n", len(inputSnapshots), destinationPath)
 		
-		// Parse the snapshot file
-		err = sc_ParseSnapshot(state)
-		if err != nil {
-			return err
-		}
+		// For now, just parse the first input snapshot
+		// This will be expanded to combine all input snapshots in the future
+		if len(inputSnapshots) > 0 {
+			snapshotPath := inputSnapshots[0]
+			fmt.Printf("Parsing snapshot file: %s\n", snapshotPath)
+			
+			// Create a new sc_State
+			state := &sc_State{}
 
-		// Generate and print the summary report
-		state.sc_GenerateReport()
-		
-		// Print success message
-		fmt.Printf("Successfully parsed snapshot file: %s\n", snapshotPath)
+			// Initialize the state with the snapshot path
+			err := state.Init(snapshotPath)
+			if err != nil {
+				return err
+			}
+
+			// Ensure cleanup happens when we're done
+			defer state.Cleanup()
+
+			// Parse the snapshot file
+			err = sc_ParseSnapshot(state)
+			if err != nil {
+				return err
+			}
+
+			// Generate and print the summary report
+			state.sc_GenerateReport()
+
+			// Print success message
+			fmt.Printf("Successfully parsed snapshot file: %s\n", snapshotPath)
+			fmt.Printf("Note: Snapshot combination functionality is not yet implemented.\n")
+		}
 
 		return nil
 	}

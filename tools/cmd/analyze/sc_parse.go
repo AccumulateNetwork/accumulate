@@ -16,7 +16,13 @@ import (
 
 // Note: Section type constants are defined in snap_combiner.go
 
-// sc_ParseSnapshot reads all sections from the snapshot file and writes records to temporary files
+// sc_ParseSnapshot reads all sections from the snapshot file and writes records to temporary files.  
+// Multiple sections of the same type may exist in a snapshot file. This is not an error but a deliberate
+// design feature. The snapshot writer creates multiple sections of the same type when:
+// 1. A section's data exceeds the maximum size limit
+// 2. Different groups of related records need to be stored separately
+// 
+// Each section instance is tracked separately and written to its own temporary file.
 func sc_ParseSnapshot(state *sc_State) error {
 	// Reset the file position to the beginning
 	_, err := state.File.Seek(0, io.SeekStart)
@@ -45,6 +51,9 @@ func sc_ParseSnapshot(state *sc_State) error {
 	var sectionOrder int = 0
 	
 	// Track section instances (for sections that appear multiple times)
+	// Multiple sections of the same type are created during snapshot collection when a section's
+	// data exceeds the maximum size limit. The snapshot writer automatically closes the current
+	// section and opens a new one of the same type to continue writing records.
 	sectionInstances := make(map[uint32]int)
 	
 	for {
@@ -93,8 +102,8 @@ func sc_ParseSnapshot(state *sc_State) error {
 		state.OriginalSections = append(state.OriginalSections, sectionInfo)
 		sectionOrder++
 
-		// Create or get the temporary file for this section type
-		tmpFile, err := sc_getOrCreateSectionFile(state, sectionType)
+		// Create or get the temporary file for this section type and instance
+		tmpFile, err := sc_getOrCreateSectionFile(state, sectionType, sectionInstances[sectionType])
 		if err != nil {
 			return sc_recordError(state, "temp_file_error", err)
 		}
@@ -403,24 +412,27 @@ func sc_getSectionTypeName(sectionType uint16) string {
 	}
 }
 
-// sc_getOrCreateSectionFile returns an existing file handle for the section type or creates a new one
-func sc_getOrCreateSectionFile(state *sc_State, sectionType uint32) (*os.File, error) {
-	// Check if we already have a file for this section type
-	if file, exists := state.SectionFiles[sectionType]; exists {
+// sc_getOrCreateSectionFile returns an existing file handle for the section type and instance or creates a new one
+func sc_getOrCreateSectionFile(state *sc_State, sectionType uint32, instance int) (*os.File, error) {
+	// Create a unique key for this section type and instance
+	sectionKey := fmt.Sprintf("%d_%d", sectionType, instance)
+	
+	// Check if we already have a file for this section type and instance
+	if file, exists := state.SectionFiles[sectionKey]; exists {
 		return file, nil
 	}
 
-	// Create a new file for this section type
-	fileName := fmt.Sprintf("section_%d.tmp", sectionType)
+	// Create a new file for this section type and instance
+	fileName := fmt.Sprintf("section_%d_%d.tmp", sectionType, instance)
 	filePath := filepath.Join(state.TempDir, fileName)
 	
 	file, err := os.Create(filePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create temporary file for section %d: %w", sectionType, err)
+		return nil, fmt.Errorf("failed to create temporary file for section %d (instance %d): %w", sectionType, instance, err)
 	}
 
 	// Store the file handle in the map
-	state.SectionFiles[sectionType] = file
+	state.SectionFiles[sectionKey] = file
 	
 	return file, nil
 }
