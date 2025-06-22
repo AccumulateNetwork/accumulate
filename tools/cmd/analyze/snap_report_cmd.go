@@ -471,7 +471,7 @@ func generateSnapshotReport(cmd *cobra.Command, args []string) error {
 			
 			// Process the record based on its key
 			if err := processRecord(report, entry); err != nil {
-				fmt.Printf("Warning: failed to process record: %v\n", err)
+				return fmt.Errorf("error processing record: %v", err)
 			}
 			
 			// If in debug mode, print more information about the record
