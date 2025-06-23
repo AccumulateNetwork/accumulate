@@ -11,8 +11,8 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/accumulate"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/accumulate"
 )
 
 var (
@@ -29,12 +29,12 @@ func init() {
 	rootCmd.PersistentFlags().Var((*MultiaddrSliceFlag)(&bootstrap), "bootstrap", "Set the bootstrap servers")
 	
 	// Add commands directly to the root command
-	rootCmd.AddCommand(cmdAnalyzeDB)
+	// rootCmd.AddCommand(cmdAnalyzeDB) // Commented out - undefined reference
 	rootCmd.AddCommand(cmdAnalyzeSnap)
 	rootCmd.AddCommand(cmdAnalyzeSnapVersion)
-	rootCmd.AddCommand(cmdAnalyzePartition)
+	// rootCmd.AddCommand(cmdAnalyzePartition) // Commented out - undefined reference
 	rootCmd.AddCommand(cmdAnalyzeSnapReport)
-	rootCmd.AddCommand(cmdAnalyzeSnapCombine)
+	// rootCmd.AddCommand(cmdAnalyzeSnapCombine) // Commented out - undefined reference
 	rootCmd.AddCommand(sc_Cmd)
 }
 

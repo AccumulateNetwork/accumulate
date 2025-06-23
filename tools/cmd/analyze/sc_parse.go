@@ -23,27 +23,35 @@ import (
 // 2. Different groups of related records need to be stored separately
 // 
 // Each section instance is tracked separately and written to its own temporary file.
-func sc_ParseSnapshot(state *sc_State) error {
+func sc_ParseSnapshot(scState *sc_State) error {
+	// We need to have at least one input file
+	if len(scState.InputFiles) == 0 {
+		return sc_recordError(scState, "no_input_files", fmt.Errorf("no input files available for parsing"))
+	}
+	
+	// Process the first file (primary file)
+	primaryFile := scState.InputFiles[0]
+	
 	// Reset the file position to the beginning
-	_, err := state.File.Seek(0, io.SeekStart)
+	_, err := primaryFile.Seek(0, io.SeekStart)
 	if err != nil {
-		return sc_recordError(state, "seek_error", fmt.Errorf("failed to seek to beginning of file: %w", err))
+		return sc_recordError(scState, "seek_error", fmt.Errorf("failed to seek to beginning of file: %w", err))
 	}
 
 	// Check for snapshot format version and get the first section offset
-	if err := sc_checkSnapshotVersion(state); err != nil {
+	if err := sc_checkSnapshotVersion(scState, primaryFile); err != nil {
 		return err
 	}
 	
 	// Initialize the original sections slice
-	state.OriginalSections = make([]SectionInfo, 0)
+	scState.OriginalSections = make([]SectionInfo, 0)
 
 	fmt.Println("Parsing snapshot file...")
 
 	// Reset the file position to the beginning again to start parsing sections
-	_, err = state.File.Seek(0, io.SeekStart)
+	_, err = primaryFile.Seek(0, io.SeekStart)
 	if err != nil {
-		return sc_recordError(state, "seek_error", fmt.Errorf("failed to seek to beginning of file: %w", err))
+		return sc_recordError(scState, "seek_error", fmt.Errorf("failed to seek to beginning of file: %w", err))
 	}
 
 	// Read sections until EOF or until nextOffset is 0
@@ -58,19 +66,19 @@ func sc_ParseSnapshot(state *sc_State) error {
 	
 	for {
 		// Seek to the current section header
-		_, err := state.File.Seek(currentOffset, io.SeekStart)
+		_, err := primaryFile.Seek(currentOffset, io.SeekStart)
 		if err != nil {
-			return sc_recordError(state, "seek_error", fmt.Errorf("failed to seek to section at offset %d: %w", currentOffset, err))
+			return sc_recordError(scState, "seek_error", fmt.Errorf("failed to seek to section at offset %d: %w", currentOffset, err))
 		}
 
 		// Read section header (64 bytes)
-		header, err := sc_readSectionHeader(state)
+		header, err := sc_readSectionHeader(scState, primaryFile)
 		if err != nil {
 			if err == io.EOF {
 				// End of file reached
 				break
 			}
-			return sc_recordError(state, "header_read_error", fmt.Errorf("failed to read section header at offset %d: %w", currentOffset, err))
+			return sc_recordError(scState, "header_read_error", fmt.Errorf("failed to read section header at offset %d: %w", currentOffset, err))
 		}
 
 		// Convert section type to uint32 for compatibility with existing code
@@ -78,8 +86,8 @@ func sc_ParseSnapshot(state *sc_State) error {
 		sectionSize := header.Size
 
 		// Update statistics
-		state.TotalSections++
-		state.SectionSizes[sectionType] += int64(sectionSize)
+		scState.TotalSections++
+		scState.SectionSizes[sectionType] += int64(sectionSize)
 		
 		// Log section info
 		fmt.Printf("Processing section type: %d (%s), size: %d bytes, at offset: %d\n", 
@@ -99,24 +107,24 @@ func sc_ParseSnapshot(state *sc_State) error {
 			Order:       sectionOrder,
 			Instance:    sectionInstances[uint32(header.Type)],
 		}
-		state.OriginalSections = append(state.OriginalSections, sectionInfo)
+		scState.OriginalSections = append(scState.OriginalSections, sectionInfo)
 		sectionOrder++
 
 		// Create or get the temporary file for this section type and instance
-		tmpFile, err := sc_getOrCreateSectionFile(state, sectionType, sectionInstances[sectionType])
+		tmpFile, err := sc_getOrCreateSectionFile(scState, sectionType, sectionInstances[sectionType])
 		if err != nil {
-			return sc_recordError(state, "temp_file_error", err)
+			return sc_recordError(scState, "temp_file_error", err)
 		}
 
 		// Process the section data
-		recordCount, err := sc_processSectionData(state, tmpFile, sectionType, sectionSize)
+		recordCount, err := sc_processSectionData(scState, primaryFile, tmpFile, sectionType, sectionSize)
 		if err != nil {
 			return err
 		}
 		
 		// Update record count for this section type
-		state.SectionCounts[sectionType] += recordCount
-		state.TotalRecords += recordCount
+		scState.SectionCounts[sectionType] += recordCount
+		scState.TotalRecords += recordCount
 
 		// Log completion of section processing
 		fmt.Printf("Section type %d processed: %d records\n", sectionType, recordCount)
@@ -135,11 +143,11 @@ func sc_ParseSnapshot(state *sc_State) error {
 
 // sc_processSectionData reads and processes section data based on section type
 // Returns the number of records processed in the section
-func sc_processSectionData(state *sc_State, tmpFile *os.File, sectionType uint32, sectionSize uint64) (int, error) {
+func sc_processSectionData(scState *sc_State, file *os.File, tmpFile *os.File, sectionType uint32, sectionSize uint64) (int, error) {
 	// Save the current position to restore it later
-	currentPos, err := state.File.Seek(0, io.SeekCurrent)
+	currentPos, err := file.Seek(0, io.SeekCurrent)
 	if err != nil {
-		return 0, sc_recordError(state, "seek_error", fmt.Errorf("failed to get current position: %w", err))
+		return 0, sc_recordError(scState, "seek_error", fmt.Errorf("failed to get current position: %w", err))
 	}
 	
 	// Process the section based on its type
@@ -147,13 +155,14 @@ func sc_processSectionData(state *sc_State, tmpFile *os.File, sectionType uint32
 	
 	switch sectionType {
 	case 1: // SectionTypeHeader
-		// Header section is already processed in sc_checkSnapshotVersion
-		// Just skip the content
-		_, err = state.File.Seek(int64(sectionSize), io.SeekCurrent)
+		// Skip the header section content since we've already processed it in sc_checkSnapshotVersion
+		// and created a special header section file with just the format version
+		_, err = file.Seek(int64(sectionSize), io.SeekCurrent)
 		if err != nil {
-			return 0, sc_recordError(state, "seek_error", fmt.Errorf("failed to skip header content: %w", err))
+			return 0, sc_recordError(scState, "seek_error", fmt.Errorf("failed to skip header content: %w", err))
 		}
 		recordCount = 1 // Count the header as one record
+		fmt.Printf("Skipped header section data (already processed)\n")
 		
 	case 7: // SectionTypeRecords
 		// Create a section header for the records section
@@ -165,9 +174,9 @@ func sc_processSectionData(state *sc_State, tmpFile *os.File, sectionType uint32
 		
 		// Process the records section
 		var err error
-		recordCount, err = processRecordsSection(state.File, header, tmpFile)
+		recordCount, err = processRecordsSection(file, header, tmpFile)
 		if err != nil {
-			return 0, sc_recordError(state, "records_processing_error", err)
+			return 0, sc_recordError(scState, "records_processing_error", err)
 		}
 		
 	case 8: // SectionTypeRecordIndex
@@ -180,9 +189,9 @@ func sc_processSectionData(state *sc_State, tmpFile *os.File, sectionType uint32
 		
 		// Process the record index section
 		var err error
-		recordCount, err = processRecordIndexSection(state.File, header, tmpFile)
+		recordCount, err = processRecordIndexSection(file, header, tmpFile)
 		if err != nil {
-			return 0, sc_recordError(state, "record_index_processing_error", err)
+			return 0, sc_recordError(scState, "record_index_processing_error", err)
 		}
 		
 	case 11: // SectionTypeBPT
@@ -195,9 +204,9 @@ func sc_processSectionData(state *sc_State, tmpFile *os.File, sectionType uint32
 		
 		// Process the BPT section
 		var err error
-		recordCount, err = processBPTSection(state.File, header, tmpFile)
+		recordCount, err = processBPTSection(file, header, tmpFile)
 		if err != nil {
-			return 0, sc_recordError(state, "bpt_processing_error", err)
+			return 0, sc_recordError(scState, "bpt_processing_error", err)
 		}
 		
 	default:
@@ -216,20 +225,20 @@ func sc_processSectionData(state *sc_State, tmpFile *os.File, sectionType uint32
 			}
 			
 			// Read the chunk
-			n, err := io.ReadFull(state.File, buffer[:readSize])
+			n, err := io.ReadFull(file, buffer[:readSize])
 			if err != nil {
 				if err == io.EOF {
 					// End of file reached (shouldn't happen in the middle of a section)
-					return 0, sc_recordError(state, "unexpected_eof", 
+					return 0, sc_recordError(scState, "unexpected_eof", 
 						fmt.Errorf("unexpected EOF while reading section data: %d bytes remaining", remaining))
 				}
-				return 0, sc_recordError(state, "read_error", fmt.Errorf("failed to read section data: %w", err))
+				return 0, sc_recordError(scState, "read_error", fmt.Errorf("failed to read section data: %w", err))
 			}
 			
 			// Write the chunk to the temporary file
 			_, err = tmpFile.Write(buffer[:n])
 			if err != nil {
-				return 0, sc_recordError(state, "write_error", fmt.Errorf("failed to write section data: %w", err))
+				return 0, sc_recordError(scState, "write_error", fmt.Errorf("failed to write section data: %w", err))
 			}
 			
 			// Update remaining bytes
@@ -243,12 +252,6 @@ func sc_processSectionData(state *sc_State, tmpFile *os.File, sectionType uint32
 	return recordCount, nil
 }
 
-// sc_recordError records an error in the state's error counts and returns the error
-func sc_recordError(state *sc_State, errorType string, err error) error {
-	state.ErrorCounts[errorType]++
-	return err
-}
-
 // sc_SectionHeader represents a snapshot section header
 type sc_SectionHeader struct {
 	Type            uint16 // Section type (2 bytes)
@@ -259,16 +262,16 @@ type sc_SectionHeader struct {
 }
 
 // sc_readSectionHeader reads a section header from the current position in the file
-func sc_readSectionHeader(state *sc_State) (*sc_SectionHeader, error) {
+func sc_readSectionHeader(scState *sc_State, file *os.File) (*sc_SectionHeader, error) {
 	// Get current position
-	currentPos, err := state.File.Seek(0, io.SeekCurrent)
+	currentPos, err := file.Seek(0, io.SeekCurrent)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get current position: %w", err)
 	}
 	
 	// Read the 64-byte header
 	headerBytes := make([]byte, 64)
-	n, err := io.ReadFull(state.File, headerBytes)
+	n, err := io.ReadFull(file, headerBytes)
 	if err != nil {
 		if err == io.EOF || err == io.ErrUnexpectedEOF {
 			// End of file reached
@@ -298,18 +301,18 @@ func sc_readSectionHeader(state *sc_State) (*sc_SectionHeader, error) {
 }
 
 // sc_checkSnapshotVersion checks if the snapshot file has a valid format version
-func sc_checkSnapshotVersion(state *sc_State) error {
+func sc_checkSnapshotVersion(scState *sc_State, file *os.File) error {
 	// Read the first 64 bytes to check for a valid header
 	headerBytes := make([]byte, 64)
-	_, err := io.ReadFull(state.File, headerBytes)
+	_, err := io.ReadFull(file, headerBytes)
 	if err != nil {
-		return sc_recordError(state, "header_read_error", fmt.Errorf("failed to read snapshot header: %w", err))
+		return sc_recordError(scState, "header_read_error", fmt.Errorf("failed to read snapshot header: %w", err))
 	}
 	
 	// Reset position after reading
-	_, err = state.File.Seek(0, io.SeekStart)
+	_, err = file.Seek(0, io.SeekStart)
 	if err != nil {
-		return sc_recordError(state, "seek_error", fmt.Errorf("failed to reset file position: %w", err))
+		return sc_recordError(scState, "seek_error", fmt.Errorf("failed to reset file position: %w", err))
 	}
 	
 	// Print the first 64 bytes for diagnostic purposes
@@ -335,7 +338,7 @@ func sc_checkSnapshotVersion(state *sc_State) error {
 	
 	// The first section must be a header section (type 1)
 	if sectionType != 1 { // SectionTypeHeader
-		return sc_recordError(state, "invalid_header", 
+		return sc_recordError(scState, "invalid_header", 
 			fmt.Errorf("invalid first section type: %d (expected 1 for header)", sectionType))
 	}
 	
@@ -347,36 +350,92 @@ func sc_checkSnapshotVersion(state *sc_State) error {
 	nextSectionOffset := binary.BigEndian.Uint64(headerBytes[16:24])
 	fmt.Printf("Next section offset: %d bytes\n", nextSectionOffset)
 	
-	// Store the first section offset in the state
-	state.FirstSectionOffset = nextSectionOffset
+	// Store the first section offset in the scState
+	scState.FirstSectionOffset = nextSectionOffset
 	
 	// Read the header content (which follows the 64-byte section header)
 	// The header content contains the format version
 	headerContent := make([]byte, sectionSize)
-	_, err = io.ReadFull(state.File, headerContent)
+	_, err = io.ReadFull(file, headerContent)
 	if err != nil {
-		return sc_recordError(state, "header_content_error", 
+		return sc_recordError(scState, "header_content_error", 
 			fmt.Errorf("failed to read header content: %w", err))
 	}
 	
+	// Debug: Print the first few bytes of the header content
+	fmt.Printf("Header content first 16 bytes: ")
+	for i := 0; i < 16 && i < len(headerContent); i++ {
+		fmt.Printf("%02x ", headerContent[i])
+	}
+	fmt.Println()
+	
 	// Reset position after reading
-	_, err = state.File.Seek(0, io.SeekStart)
+	_, err = file.Seek(0, io.SeekStart)
 	if err != nil {
-		return sc_recordError(state, "seek_error", fmt.Errorf("failed to reset file position: %w", err))
+		return sc_recordError(scState, "seek_error", fmt.Errorf("failed to reset file position: %w", err))
 	}
 	
 	// The header content should contain the format version as a uint32 in big-endian format
 	if len(headerContent) < 4 {
-		return sc_recordError(state, "invalid_header_content", 
+		return sc_recordError(scState, "invalid_header_content", 
 			fmt.Errorf("header content too small: %d bytes", len(headerContent)))
 	}
 	
-	// Parse the format version (first 4 bytes of header content, big-endian)
-	formatVersion := binary.BigEndian.Uint32(headerContent[0:4])
-	fmt.Printf("Detected snapshot format version: %d\n", formatVersion)
+	// Debug: Print the raw bytes of the format version
+	fmt.Printf("Format version bytes: [%02x %02x %02x %02x]\n", 
+		headerContent[0], headerContent[1], headerContent[2], headerContent[3])
 	
-	// Store the format version in the state for future reference
-	state.FormatVersion = formatVersion
+	// Parse the format version (first 4 bytes of header content, big-endian)
+	// The format is stored as a big-endian uint32
+	detectedVersion := binary.BigEndian.Uint32(headerContent[0:4])
+	fmt.Printf("Detected snapshot format version: %d (0x%x)\n", detectedVersion, detectedVersion)
+	
+	// Always use format version 2 for reconstruction regardless of what's in the file
+	// This ensures consistent reconstruction across different snapshot versions
+	scState.FormatVersion = 2
+	fmt.Printf("Using format version %d for reconstruction\n", scState.FormatVersion)
+	
+	// Update the format version in the header section file
+	// Get the existing header section file
+	tmpFile := scState.SectionFiles["1_1"]
+	if tmpFile == nil {
+		return sc_recordError(scState, "missing_header_file", fmt.Errorf("header section file not found"))
+	}
+	
+	// Reset the file position to the beginning
+	_, err = tmpFile.Seek(0, io.SeekStart)
+	if err != nil {
+		return sc_recordError(scState, "seek_error", fmt.Errorf("failed to seek to start of header file: %w", err))
+	}
+	
+	// Write the format version to the header file
+	formatVersionBytes := make([]byte, 4)
+	binary.BigEndian.PutUint32(formatVersionBytes, scState.FormatVersion)
+	_, err = tmpFile.Write(formatVersionBytes)
+	if err != nil {
+		return sc_recordError(scState, "write_error", fmt.Errorf("failed to update format version in header file: %w", err))
+	}
+	
+	// Truncate the file to just the format version (4 bytes)
+	err = tmpFile.Truncate(4)
+	if err != nil {
+		return sc_recordError(scState, "truncate_error", fmt.Errorf("failed to truncate header file: %w", err))
+	}
+	
+	// Flush the file to ensure the data is written
+	err = tmpFile.Sync()
+	if err != nil {
+		return sc_recordError(scState, "sync_error", fmt.Errorf("failed to sync header file: %w", err))
+	}
+	
+	// Check the file size to verify it was written correctly
+	fileInfo, err := tmpFile.Stat()
+	if err != nil {
+		return sc_recordError(scState, "stat_error", fmt.Errorf("failed to get header file info: %w", err))
+	}
+	
+	fmt.Printf("Updated header section file with format version: %d (file size: %d bytes)\n", 
+		scState.FormatVersion, fileInfo.Size())
 	
 	return nil
 }
@@ -413,18 +472,18 @@ func sc_getSectionTypeName(sectionType uint16) string {
 }
 
 // sc_getOrCreateSectionFile returns an existing file handle for the section type and instance or creates a new one
-func sc_getOrCreateSectionFile(state *sc_State, sectionType uint32, instance int) (*os.File, error) {
+func sc_getOrCreateSectionFile(scState *sc_State, sectionType uint32, instance int) (*os.File, error) {
 	// Create a unique key for this section type and instance
 	sectionKey := fmt.Sprintf("%d_%d", sectionType, instance)
 	
 	// Check if we already have a file for this section type and instance
-	if file, exists := state.SectionFiles[sectionKey]; exists {
+	if file, exists := scState.SectionFiles[sectionKey]; exists {
 		return file, nil
 	}
 
 	// Create a new file for this section type and instance
 	fileName := fmt.Sprintf("section_%d_%d.tmp", sectionType, instance)
-	filePath := filepath.Join(state.TempDir, fileName)
+	filePath := filepath.Join(scState.TempDir, fileName)
 	
 	file, err := os.Create(filePath)
 	if err != nil {
@@ -432,7 +491,7 @@ func sc_getOrCreateSectionFile(state *sc_State, sectionType uint32, instance int
 	}
 
 	// Store the file handle in the map
-	state.SectionFiles[sectionKey] = file
+	scState.SectionFiles[sectionKey] = file
 	
 	return file, nil
 }
