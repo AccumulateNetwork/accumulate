@@ -1,0 +1,439 @@
+{
+  "network": {
+    "id": "MainNet",
+    "partitions": [
+      {
+        "id": "Apollo",
+        "type": "blockValidator"
+      },
+      {
+        "id": "Chandrayaan",
+        "type": "blockValidator"
+      },
+      {
+        "id": "Directory",
+        "type": "directory"
+      },
+      {
+        "id": "Yutu",
+        "type": "blockValidator"
+      }
+    ],
+    "subnets": [
+      {
+        "id": "Apollo",
+        "type": "blockValidator"
+      },
+      {
+        "id": "Chandrayaan",
+        "type": "blockValidator"
+      },
+      {
+        "id": "Directory",
+        "type": "directory"
+      },
+      {
+        "id": "Yutu",
+        "type": "blockValidator"
+      }
+    ]
+  },
+  "values": {
+    "globals": {
+      "feeSchedule": {
+        "createIdentitySliding": [
+          4800000,
+          1200000,
+          350000,
+          90000,
+          25000,
+          7000,
+          1800
+        ],
+        "createSubIdentity": 2500
+      },
+      "limits": {
+        "accountAuthorities": 20,
+        "bookPages": 20,
+        "dataEntryParts": 100,
+        "identityAccounts": 1000,
+        "pageEntries": 100,
+        "pendingMajorBlocks": 28
+      },
+      "majorBlockSchedule": "0 */12 * * *",
+      "operatorAcceptThreshold": {
+        "denominator": 3,
+        "numerator": 2
+      },
+      "validatorAcceptThreshold": {
+        "denominator": 3,
+        "numerator": 2
+      }
+    },
+    "network": {
+      "networkName": "MainNet",
+      "partitions": [
+        {
+          "id": "Apollo",
+          "type": "blockValidator"
+        },
+        {
+          "id": "Chandrayaan",
+          "type": "blockValidator"
+        },
+        {
+          "id": "Directory",
+          "type": "directory"
+        },
+        {
+          "id": "Yutu",
+          "type": "blockValidator"
+        }
+      ],
+      "validators": [
+        {
+          "operator": "acc://kompendium.acme",
+          "partitions": [
+            {
+              "active": true,
+              "id": "Directory"
+            },
+            {
+              "active": true,
+              "id": "Apollo"
+            }
+          ],
+          "publicKey": "04d2ec3361e045dd18cbe268b3aa88e83a74f2de6aa02746c4852223a058f51d",
+          "publicKeyHash": "0b2d838cfa761034aacb6bd4a4e4df1329ba952c5eb0f1481500ec16b158e2be"
+        },
+        {
+          "operator": "acc://LunaNova.acme",
+          "partitions": [
+            {
+              "active": true,
+              "id": "Directory"
+            },
+            {
+              "active": true,
+              "id": "Apollo"
+            }
+          ],
+          "publicKey": "fd98c940693f0a2d1865cd60b7fd7aace089d9a93bceb78259f8b21995d33406",
+          "publicKeyHash": "0db47c9a229cb7f1ea04b955f4f91305c0b2c1dcdd5e41557dff16078e098f64"
+        },
+        {
+          "operator": "acc://Factoshi.acme",
+          "publicKey": "be9a3a976ff1ad3e13185c378edd3f99c32af07ca4d5034a8e60f7fe83bcfc87",
+          "publicKeyHash": "2952ec857ed6f558b53d6ad95cb00112df5473ee9294202590a9d2cdf9f9f79a"
+        },
+        {
+          "operator": "acc://TurtleBoat.acme",
+          "partitions": [
+            {
+              "active": true,
+              "id": "Directory"
+            },
+            {
+              "active": true,
+              "id": "Chandrayaan"
+            }
+          ],
+          "publicKey": "06f2b4ffa3c5e2df68979b9b143e86f6542e7150af49caedc0209698b3136424",
+          "publicKeyHash": "31b66a348e9f052c53b08a90db65038e625fca6e83d54eb2741b704fbed1f6f3"
+        },
+        {
+          "operator": "acc://Stamp-It.acme",
+          "publicKey": "e609b262fd26bfad5ee2be7bd43958484224c83ad6862d514d20ea947e4c9afc",
+          "publicKeyHash": "3e58a2873e59a646f48c54c2d5354db1a565c7babbcb71389a7051979f543228"
+        },
+        {
+          "operator": "acc://MusicCityNode.acme",
+          "partitions": [
+            {
+              "active": true,
+              "id": "Directory"
+            },
+            {
+              "active": true,
+              "id": "Yutu"
+            }
+          ],
+          "publicKey": "519029d4061cdce31fb1b5eec5aa8ff3ed9e3fd71d5d764e8e6ba559c9ba34ab",
+          "publicKeyHash": "44bb47ce0e6697f6d5061642afdda7637ed5b703b968369cc83f29603719987a"
+        },
+        {
+          "operator": "acc://ConsensusNetworks.acme",
+          "partitions": [
+            {
+              "active": true,
+              "id": "Directory"
+            },
+            {
+              "active": true,
+              "id": "Chandrayaan"
+            }
+          ],
+          "publicKey": "07c9a19aee16afacb3190c7f70b4652ec1b2b00af02661371b51077de309bd6e",
+          "publicKeyHash": "4f32232a81221c5af7536a85a38f7e4ff04f6c80869f4c776db8073443346a20"
+        },
+        {
+          "operator": "acc://defacto.acme",
+          "publicKey": "8b8dc3fa445b0050d50e7e40e27c35a3b180fb966648a68ba96c3e107a13871d",
+          "publicKeyHash": "526d1307b8d35967dcb54380db2f9ef4167c325d776d1cd680ff84484a340880"
+        },
+        {
+          "operator": "acc://tfa.acme",
+          "partitions": [
+            {
+              "active": true,
+              "id": "Directory"
+            },
+            {
+              "active": true,
+              "id": "Yutu"
+            }
+          ],
+          "publicKey": "4baf8f13e3bb8b5f19936d8f1fad2cad1c72905fdbd0dfff534422d625f9dc8c",
+          "publicKeyHash": "63196e1d85b1b8c4bf508faebee47a1b5586c93b7e2d02679bd7cb877c99496d"
+        },
+        {
+          "operator": "acc://CodeForj.acme",
+          "partitions": [
+            {
+              "active": true,
+              "id": "Directory"
+            },
+            {
+              "active": true,
+              "id": "Yutu"
+            }
+          ],
+          "publicKey": "60a6266a755d20ffd3e307dc7f941d3e6a5b6f85cfd2a5ab7bd5e58b6e81e2fb",
+          "publicKeyHash": "6623fffbde369d1da67bc8fe1d98fbc0563eb953ed9ceef60cc31dd656dd0074"
+        },
+        {
+          "operator": "acc://PrestigeIT.acme",
+          "partitions": [
+            {
+              "active": true,
+              "id": "Directory"
+            },
+            {
+              "active": true,
+              "id": "Chandrayaan"
+            }
+          ],
+          "publicKey": "e7d8e7cf867c586a323ab6b6c474395a71793e32d4c4cf1ec27dfbaa7e78811d",
+          "publicKeyHash": "6cdf2fbd07306221f01697bed4ad35460d94ecd0fd9844b39b94b132044d273f"
+        },
+        {
+          "operator": "acc://GOI.acme",
+          "publicKey": "1deb8cdcda4b28b056c24602bd7acd481bb4d767e7fe26dbf79978a298bf34d5",
+          "publicKeyHash": "72fb5c2c8f36a4fb7f112de551ef563a79bda33ca3eef39b2e7615442825bbbe"
+        },
+        {
+          "operator": "acc://defidevs.acme",
+          "partitions": [
+            {
+              "active": true,
+              "id": "Directory"
+            },
+            {
+              "active": true,
+              "id": "Chandrayaan"
+            }
+          ],
+          "publicKey": "177e78e77162aaaa813f56de0035fa232789d342573c84305da8fbf7026e5bf2",
+          "publicKeyHash": "735c3cb53c635beae0fdc00d141807ff961c80ee0d766abc62b7b73b102bd7b9"
+        },
+        {
+          "operator": "acc://Sphereon.acme",
+          "partitions": [
+            {
+              "active": true,
+              "id": "Directory"
+            },
+            {
+              "active": true,
+              "id": "Chandrayaan"
+            }
+          ],
+          "publicKey": "e7abb5b2571676492ab79b5eca6391a0de6ed5370bfb25105d20307a10eac979",
+          "publicKeyHash": "775ecf99a4f7c4b0a1dfd194b5c5424a55cbe5a0f53a3c8a2614d6f4809bfb91"
+        },
+        {
+          "operator": "acc://ACMEMining.acme",
+          "partitions": [
+            {
+              "active": true,
+              "id": "Directory"
+            },
+            {
+              "active": true,
+              "id": "Apollo"
+            }
+          ],
+          "publicKey": "ee1d2d51b39eabe6f50834d41a59f6325ce4143223b8ef36282776c32ec72224",
+          "publicKeyHash": "78b9c101439ffe5b84de236d850c4c265d2bf1b2cef62ef15f644c62e73620be"
+        },
+        {
+          "operator": "acc://Inveniam.acme",
+          "partitions": [
+            {
+              "active": true,
+              "id": "Directory"
+            },
+            {
+              "active": true,
+              "id": "Chandrayaan"
+            }
+          ],
+          "publicKey": "c5af71fd767bd216ca7bca9820a326a47c8965fc5e2e910b36441cad4e7a46a2",
+          "publicKeyHash": "7b3cba2bafa0e5004a03b96ca83d546574c9fdb4a324b06a33426dc625e591bd"
+        },
+        {
+          "operator": "acc://HighStakes.acme",
+          "partitions": [
+            {
+              "active": true,
+              "id": "Directory"
+            },
+            {
+              "active": true,
+              "id": "Yutu"
+            }
+          ],
+          "publicKey": "dd31e34e675678bed2da67b79b0c566db1f0f8ac2e458d38754d56db932b0c53",
+          "publicKeyHash": "7cd6f2097ff9fba822e1b90e7157aa2a6d447cb9a2609fb4086a1c19810620c5"
+        },
+        {
+          "operator": "acc://defidevs.acme",
+          "partitions": [
+            {
+              "active": true,
+              "id": "Directory"
+            },
+            {
+              "active": true,
+              "id": "Yutu"
+            }
+          ],
+          "publicKey": "29c406eacc33614548893425f217cee7971f05f010224cf959e03e39c9a5b74a",
+          "publicKeyHash": "8a93bab821470d5f2d55607d95f52c6b8ee070ca1db225c2d53ce0f8f1abce6e"
+        },
+        {
+          "operator": "acc://defidevs.acme",
+          "partitions": [
+            {
+              "active": true,
+              "id": "Directory"
+            },
+            {
+              "active": true,
+              "id": "Apollo"
+            }
+          ],
+          "publicKey": "a75af1c124a786a9abc989ffd70f1e3d7fdedc547a3347a02f0dd5a7bf18adec",
+          "publicKeyHash": "bc79dbf768f828beae676d6a0f76885b9371918bf08465e7a63b5ca53e27815b"
+        },
+        {
+          "operator": "acc://FederateThis.acme",
+          "partitions": [
+            {
+              "active": true,
+              "id": "Directory"
+            },
+            {
+              "active": true,
+              "id": "Apollo"
+            }
+          ],
+          "publicKey": "41d22356a8ff38c25570cfbdb1ba8fb3d448742ef27f7691dffc794ed858c3de",
+          "publicKeyHash": "d2de1608f6b0ce65706b32daad8e881d1b92afd6adc325c01d7f4d6a68f83b65"
+        },
+        {
+          "operator": "acc://DetroitLedgerTech.acme",
+          "partitions": [
+            {
+              "active": true,
+              "id": "Directory"
+            },
+            {
+              "active": true,
+              "id": "Yutu"
+            }
+          ],
+          "publicKey": "8ec3ddb93c0e5a748dc42d8ff2b5ef4c232546ce7723598a1c84d6ceaa97688a",
+          "publicKeyHash": "fd8e48c6fa0fd47516938f0c10be04cf184ac845117f1c6d2e44aa2170c306a9"
+        }
+      ],
+      "version": 69
+    },
+    "oracle": {
+      "price": 5000
+    },
+    "routing": {
+      "overrides": [
+        {
+          "account": "acc://staking.acme",
+          "partition": "Directory"
+        },
+        {
+          "account": "acc://a642a8674f46696cc47fdb6b65f9c87b2a19c5ea8123b3d2f0c13b6f33a9d5ef",
+          "partition": "Chandrayaan"
+        },
+        {
+          "account": "acc://ACME",
+          "partition": "Directory"
+        },
+        {
+          "account": "acc://bvn-Apollo.acme",
+          "partition": "Apollo"
+        },
+        {
+          "account": "acc://bvn-Chandrayaan.acme",
+          "partition": "Chandrayaan"
+        },
+        {
+          "account": "acc://bvn-Yutu.acme",
+          "partition": "Yutu"
+        },
+        {
+          "account": "acc://dn.acme",
+          "partition": "Directory"
+        }
+      ],
+      "routes": [
+        {
+          "length": 2,
+          "partition": "Apollo"
+        },
+        {
+          "length": 2,
+          "partition": "Yutu",
+          "value": 1
+        },
+        {
+          "length": 2,
+          "partition": "Chandrayaan",
+          "value": 2
+        },
+        {
+          "length": 3,
+          "partition": "Apollo",
+          "value": 6
+        },
+        {
+          "length": 4,
+          "partition": "Yutu",
+          "value": 14
+        },
+        {
+          "length": 4,
+          "partition": "Chandrayaan",
+          "value": 15
+        }
+      ]
+    }
+  }
+}

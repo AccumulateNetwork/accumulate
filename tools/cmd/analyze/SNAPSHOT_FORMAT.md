@@ -31,7 +31,8 @@ A version 2 snapshot file follows this structure:
 2. **Record Sections**:
    - Contains the actual data records as key-value pairs
    - Each record is stored as a `RecordEntry` with key, value, and optional receipt
-   - Multiple record sections can exist in a single snapshot file
+   - Multiple record sections (type 7) can exist in a single snapshot file
+   - These multiple sections are created by design for functional separation, not due to size limits
 
 3. **Record Index Sections**:
    - Contains fixed-width entries that index records by key hash
@@ -404,12 +405,14 @@ The `debug snap collect` command creates version 2 snapshots using the following
    - Set up the snapshot writer
 
 2. **Collect Records**:
-   - Open a record section using `OpenRaw(SectionTypeRecords)`
-   - Query the database for all records
+   - The `Batch.Collect` method creates separate type 7 sections for different record types:
+     - `collectAccounts` opens one type 7 section for all account records
+     - `collectMessages` opens another type 7 section for all message records
+   - This separation is by design for logical organization, not due to size constraints
    - For each record:
      - Create a `RecordEntry` with the appropriate key and value
      - Write the record to the section using `WriteValue()`
-   - Close the record section
+   - Close each record section after its specific record type is fully written
 
 3. **Build Record Index** (Optional):
    - Open an index section using `OpenIndex()`
@@ -472,6 +475,8 @@ When reading a version 2 snapshot file:
    - Create a `RecordReader` using `OpenRecords()`
    - Iterate through records using `Read()`
    - Process each record based on its key path
+   - Note that snapshot processing code (like `genesis.Extract` and `coredb.Restore`) is section-type agnostic
+   - Records are filtered based on their content type (Account vs Message/Transaction) rather than which section they came from
 
 3. **Use Record Index for Random Access** (Optional):
    - Open the index section using `OpenIndex()`
@@ -574,6 +579,35 @@ Version 2 snapshots organize data into sections that can be processed independen
 - Processing can be parallelized across sections
 - Avoid loading all records into memory simultaneously
 
+#### Multiple Type 7 (Record) Sections
+
+Multiple type 7 (record) sections in a snapshot file are a deliberate design feature, not a limitation:
+
+- **Functional Separation**: The snapshot collection process deliberately creates separate sections for different logical groups of records:
+  - One type 7 section for account records (created by `collectAccounts`)
+  - Another type 7 section for message records (created by `collectMessages`)
+
+- **No Hard Size Limits**: There are no explicit hard-coded maximum size limits for snapshot sections:
+  - The only theoretical size constraint is a 48-bit offset limit within a section (about 256 TB)
+  - This limit is practically unreachable in real-world scenarios
+
+- **Section-Agnostic Processing**: Code that processes snapshots doesn't care about section boundaries:
+  ```go
+  // From database.Restore
+  for i, s := range rd.Sections {
+      if s.Type() != snapshot.SectionTypeRecords {
+          continue
+      }
+      rd, err := rd.OpenRecords(i)
+      // Process each record section independently
+  }
+  ```
+
+- **Two-Pass Processing**: Functions like `genesis.Extract` use a two-pass approach:
+  - First pass processes only account records, filtering based on content
+  - Second pass processes only message/transaction records, using references from the first pass
+  - The snapshot reader is rewound between passes to process all sections again
+
 ## Combining Version 2 Snapshots
 
 When combining multiple version 2 snapshots, the following approach is recommended to maintain memory efficiency and data integrity:
@@ -615,7 +649,10 @@ When combining multiple version 2 snapshots, the following approach is recommend
 2. **Record Organization**:
    - Group records by type (Account, Chain, Transaction, etc.)
    - Sort records within each group for better organization
-   - Consider writing different record types to separate record sections
+   - Different record types are deliberately written to separate record sections:
+     - Account records in one type 7 section
+     - Message/transaction records in another type 7 section
+   - This separation is maintained regardless of data size
 
 3. **Error Handling**:
    - Implement robust validation for each record
@@ -981,6 +1018,41 @@ Here's a hexadecimal dump of a complete minimal snapshot file with one header se
 
 This example demonstrates the binary structure of a minimal valid snapshot file that can be read and processed by snapshot tools.
 
+## Record Sorting in Snapshots
+
+Understanding how records are sorted in snapshots is crucial for correctly processing and combining them. Different record types follow different sorting rules:
+
+### Account Records
+
+- **No Explicit Sorting**: Account records are **not** explicitly sorted during snapshot collection
+- **Order Preservation**: Accounts appear in the order they are returned by `batch.IterateAccounts()`
+- **Database Insertion Order**: The database preserves the insertion order of accounts during ingest
+- **Snapshot Combination**: When combining multiple snapshots, accounts from the first snapshot will appear before accounts from the second snapshot, and so on
+
+### Message Records
+
+- **Explicit Sorting**: Message records are explicitly sorted by their hash values
+- **Sort Order**: Messages are sorted in ascending order by hash (smaller hash values first)
+- **Sort Implementation**:
+  ```go
+  sort.Slice(hashes, func(i, j int) bool {
+      return bytes.Compare(hashes[i].Hash[:], hashes[j].Hash[:]) < 0
+  })
+  ```
+- **Deduplication**: Sorting enables efficient detection and elimination of duplicate messages
+- **Snapshot Combination**: When combining snapshots, all message hashes are collected and sorted together, ensuring consistent ordering regardless of input order
+
+### Record Index
+
+- **Sort Order**: Record index entries are sorted by key hash in descending order
+- **Purpose**: Enables efficient binary search for random access to records
+
+### Implications for Processing
+
+- **Deterministic Processing**: Message sorting ensures deterministic processing across different nodes
+- **Functional Separation**: The different sorting approaches reflect the functional separation between accounts and messages
+- **Reconstruction**: When a snapshot is loaded, the database will rebuild its internal structures regardless of the original ordering
+
 ## Snapshot Combining Algorithm
 
 Version 2 snapshots can be combined to create a unified view of the Accumulate state. This is particularly useful when working with snapshots from different partitions or time periods. The following algorithm describes the step-by-step process for combining snapshots, based on the implementation used by the `debug genesis ingest` command.
@@ -998,6 +1070,9 @@ The algorithm consists of these main phases:
 
 1. **Preparation**: Set up bucket files and validate input snapshots
 2. **Index Creation**: Create indices for all input snapshots for efficient record lookup
+3. **Record Processing**:
+   - Account records are processed in the order they appear in each input snapshot
+   - Message records are collected from all snapshots and then sorted by hash
 3. **Batch Processing**: Process accounts in batches, distributing records to bucket files
 4. **Bucket Sorting**: Sort records within each bucket in descending key order
 5. **Final Assembly**: Combine sorted buckets into the final snapshot with proper section structure
@@ -2349,6 +2424,22 @@ When creating a Genesis block by combining snapshots, special consideration is g
 #### Omitting the BPT Section
 
 In the Genesis block creation process (`debug genesis ingest`), the BPT section is typically omitted entirely. This is controlled by the `calculateBPT` flag, which is set to `false` by default in the Genesis creation code:
+
+```go
+const calculateBPT = false
+
+// Don't calculate BPT hashes since genesis doesn't want them
+db.SetObserver(testing.NullObserver{})
+```
+
+#### Database Structure Without BPT
+
+Even without calculating BPT hashes, the Genesis ingest process:
+
+1. Creates an in-memory database that maintains internal key-value structures
+2. Preserves the order of accounts as they are added from each input snapshot
+3. Allows iteration over accounts using the database's internal organization
+4. Collects and sorts message records by hash across all input snapshots
 
 ```go
 const calculateBPT = false

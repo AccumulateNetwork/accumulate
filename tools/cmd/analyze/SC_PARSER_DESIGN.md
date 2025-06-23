@@ -4,7 +4,7 @@ This document outlines the design of the memory-efficient snapshot parser implem
 
 ## Overview
 
-The snapshot parser reads snapshot files section by section, writing each section's data to a separate temporary file. This approach allows processing of very large snapshot files without loading the entire file into memory.
+The snapshot parser reads snapshot files section by section, writing each section's data to a separate temporary file. This approach allows processing of very large snapshot files without loading the entire file into memory. The parser can process multiple snapshots and combine them into a single output snapshot, maintaining the separation of account and message records in type 7 sections.
 
 ## Snapshot File Format
 
@@ -130,6 +130,63 @@ This structure aligns the first data section on a 64-byte boundary (192 = 3 × 6
 
 The reconstruction process must preserve this exact structure, including the padding, to maintain compatibility with the original snapshot format and ensure proper alignment.
 
+## Parsing Program Flow
+
+The snapshot parsing process follows this general flow:
+
+1. **Command Initialization**:
+   - Parse command line arguments
+   - Initialize the state structure
+   - Create temporary directory for section files
+
+2. **For Each Input Snapshot**:
+   - Open the snapshot file
+   - Read the main snapshot header
+   - Process each section:
+     - Read the section header
+     - Determine section type
+     - For type 7 (records) sections:
+       - Examine each record to determine if it's an account or message
+       - Get or create the appropriate section file (accounts or messages)
+       - Write the record to the section file
+       - Update record counts
+     - For other section types:
+       - Get or create the section file for this type
+       - Stream section data to the file
+       - Update section counts and sizes
+   - Close the snapshot file
+
+3. **Reconstruction**:
+   - Create the output snapshot file
+   - Write the main snapshot header
+   - Copy header data from the first input snapshot
+   - For each section in the combined state:
+     - Record the current file position as the section header position
+     - Write the section header (with placeholder values)
+     - Record the current file position as the section data start
+     - Stream section data from the temporary file
+     - Calculate the section size
+     - Seek back to the section header position
+     - Update the header with correct size and next section offset
+     - Seek forward to the end of the section data
+     - Add padding for alignment
+   - Close the output file
+
+4. **Validation (if single snapshot)**:
+   - Compare the original and reconstructed snapshots byte-by-byte
+   - Report any discrepancies
+
+5. **Cleanup**:
+   - Close all temporary files
+   - Remove the temporary directory
+   - Generate and print summary report
+
+This flow ensures that:
+- Each snapshot is processed efficiently
+- Section data is streamed to avoid excessive memory usage
+- Type 7 sections are properly separated into accounts and messages
+- The reconstructed snapshot maintains the correct structure
+
 ## File Organization
 
 The implementation is split across multiple files for modularity:
@@ -207,16 +264,15 @@ The current implementation:
 
 ### Command Line Changes
 
-The `sc` command will be updated to support multiple input files and a `--test-parse` flag:
+The `sc` command supports multiple input files with the following syntax:
 
 ```
-analyze sc <snap_file_1> <destination_snapfile> <snap_file_2> ... --test-parse
+analyze sc <destination_snapfile> <snap_file_1> [snap_file_2] [snap_file_3] ...
 ```
 
-When the `--test-parse` flag is present:
-- Each input snapshot is processed independently
-- The destination file parameter is ignored
-- For each input "x.snap", a reconstructed "x-parsed.snap" is created in the output directory
+The command behavior depends on the number of input snapshots:
+- When processing a single input snapshot, the command automatically validates that the reconstructed snapshot matches the original byte-for-byte
+- When processing multiple input snapshots, the command combines them into a single destination snapshot
 - A validation report is generated showing if reconstruction was successful
 
 ### New Functionality
@@ -307,8 +363,8 @@ This function will:
 5. **Multiple Section Instances**:
    - Some section types may appear multiple times in the file
    - Each instance must be tracked and processed separately
-   - Multiple sections of the same type are created when a section's data exceeds the maximum section size limit
-   - The snapshot writer automatically creates new sections when needed based on size
+   - Multiple sections of the same type are created by design for functional separation, not due to size limits
+   - For example, type 7 (record) sections are created separately for accounts and messages
 
 ### Example: Reconstructing dn.snap
 
@@ -341,24 +397,33 @@ This function will:
 - Perform a byte-by-byte comparison in chunks to handle large files efficiently
 - Report any discrepancies with detailed offset information
 
-#### 3. Test Parse Workflow
+#### 3. Simplified Workflow
 
-The `sc_Run` function will be updated to handle the test-parse workflow:
+The `sc_Run` function has been updated to handle both single-snapshot validation and multi-snapshot combination in a unified workflow:
 
 ```go
 func sc_Run(cmd *cobra.Command, args []string) error {
-    // Check for test-parse flag
-    testParse, _ := cmd.Flags().GetBool("test-parse")
+    // Parse command line arguments
+    destinationPath := args[0]
+    inputPaths := args[1:]
     
-    if testParse {
-        // For each input snapshot:
-        //   - Parse into sections
-        //   - Reconstruct to output file
-        //   - Validate reconstruction
-        //   - Report results
-    } else {
-        // Original functionality
+    // Process each input snapshot
+    for _, snapshotPath := range inputPaths {
+        // Parse the snapshot
+        // Write sections to temporary files
     }
+    
+    // Reconstruct the combined snapshot
+    err := sc_ReconstructSnapshot(combinedState, destinationPath)
+    
+    // If only one input snapshot was provided, validate the reconstruction
+    if len(inputPaths) == 1 {
+        match, err := sc_ValidateReconstruction(inputPaths[0], destinationPath)
+        // Report validation results
+    }
+    
+    // Generate and print the summary report
+    combinedState.sc_GenerateReport()
     
     return nil
 }
@@ -375,56 +440,121 @@ The reconstruction module will be designed with these principles:
 
 ## Implementation Plan
 
-1. Update command line argument handling to support multiple input files and the `--test-parse` flag
+1. Update command line argument handling to support multiple input files
 2. Create the `sc_reconstruct.go` file with reconstruction functionality
 3. Add validation functions to `sc.go`
-4. Update the `sc_Run` function to implement the test-parse workflow
+4. Update the `sc_Run` function to implement automatic validation for single snapshots
 5. Add reporting functions for validation results
 
 ## Multiple Sections of the Same Type
 
 ### Why Multiple Sections Exist
 
-The snapshot format allows multiple sections of the same type (e.g., multiple type 7 record sections) to exist in a single snapshot file. This is not an error or anomaly, but a deliberate design feature. Multiple sections of the same type are created when:
+The snapshot format allows multiple sections of the same type (e.g., multiple type 7 record sections) to exist in a single snapshot file. This is not an error or anomaly, but a deliberate design feature. Multiple sections of the same type are created primarily for functional separation of data:
 
-1. **Section Size Limits**: When a section's data exceeds the maximum size limit, the snapshot writer automatically:
-   - Closes the current section
-   - Opens a new section of the same type
-   - Continues writing records to the new section
+1. **Functional Separation**: The snapshot collection process deliberately creates separate sections for different logical groups of records:
+   - `collectAccounts` opens one type 7 section for all account records
+   - `collectMessages` opens another type 7 section for all message records
+   - This separation is by design, not due to size constraints
 
-2. **Data Organization**: Different groups of related records may be stored in separate sections even if they're the same type
+2. **No Hard Size Limits**: There are no explicit hard-coded maximum size limits for snapshot sections:
+   - The only theoretical size constraint is a 48-bit offset limit within a section (about 256 TB)
+   - This limit is practically unreachable in real-world scenarios
 
-### Handling During Reconstruction
+3. **Data Organization**: Different groups of related records are stored in separate sections for logical organization, even when they're the same type
 
-When reconstructing snapshots, it's critical to:
+### Handling During Reconstruction and Processing
 
-1. Preserve all instances of each section type in their original order
-2. Maintain the exact section structure from the original file
-3. Not attempt to combine or merge sections of the same type
-4. Process each section independently, even if they have the same type
+When reconstructing or processing snapshots, it's critical to understand:
+
+1. **Section Type Agnostic Processing**: Code that processes snapshots (like `genesis.Extract` and `coredb.Restore`) doesn't care about section boundaries or how many type 7 sections exist
+
+2. **Content-Based Filtering**: Records are filtered based on their content type (Account vs Message/Transaction) rather than which section they came from
+
+3. **Independent Section Processing**: Each section is processed independently, preserving the original order and structure:
+   ```go
+   // From database.Restore
+   for i, s := range rd.Sections {
+       if s.Type() != snapshot.SectionTypeRecords {
+           continue
+       }
+       rd, err := rd.OpenRecords(i)
+       // Process each record section independently
+   }
+   ```
+
+4. **No Section Merging**: The code doesn't attempt to combine or merge sections of the same type
+
+### Section Management
+
+The parser uses a section management approach that handles section creation and retrieval efficiently:
+
+1. **Section Retrieval and Creation**:
+   - Getting a section returns an open section if it exists
+   - If no section exists, a new section is opened automatically
+   - This approach simplifies section handling throughout the codebase
+
+2. **Section File Mapping**:
+   - Each section is mapped to a temporary file using a key based on section type
+   - For type 7 sections, separate keys are used for accounts and messages
+   - For other section types, a single key is used per type
+
+3. **Transparent Handling**:
+   - The section management is largely transparent to the caller
+   - The caller simply requests a section and writes data to it
+   - The system handles file creation, opening, and management behind the scenes
 
 ### Snapshot Combination Process
 
-When multiple snapshots are combined (e.g., using the "debug genesis ingest" command):
+The `sc` command now supports combining multiple snapshots into a single output snapshot. The process works as follows:
 
-1. Each snapshot is processed independently
-2. Records from all sections (including multiple sections of the same type) are read and added to the database
-3. The original section structure is not preserved in the database - records are organized by their keys
-4. When creating a new snapshot from the combined database:
-   - Records are organized by type
-   - New sections are created based on size limits, not based on which original snapshot the records came from
-   - The new snapshot will have its own section structure that may differ from any of the input snapshots
+1. **Transparent Multi-Snapshot Processing**:
+   - Each input snapshot is processed in sequence
+   - Sections are written to temporary files
+   - The process is largely transparent to whether one or multiple snapshots are being processed
 
-This means that when combining snapshots:
-- It's perfectly fine to combine all records of the same type from different snapshots
-- The section structure of the original snapshots doesn't need to be preserved
-- The new snapshot will have its own section structure based solely on the size of the data
+2. **Section Handling**:
+   - Type 7 sections (records) are separated into two categories:
+     - Account records are written to one type 7 section
+     - Message records are written to another type 7 section
+   - Other section types are combined as appropriate
 
-## Future Integration with URL Hash Handling
+3. **Reconstruction**:
+   - After all input snapshots are processed, a single output snapshot is reconstructed
+   - The reconstruction preserves the separation of type 7 sections for accounts and messages
+   - Other section types are combined while maintaining the correct structure
 
-The parser will continue to support the hybrid approach for URL hash handling:
-- Using KV database for fast lookups
-- Maintaining binary file format for iteration
-- Avoiding loading all URLs into memory at once
+4. **Automatic Validation**:
+   - When processing a single snapshot, the command automatically validates that the reconstructed snapshot matches the original
+   - This eliminates the need for the `--test-parse` flag
 
-This ensures that URL lookups remain efficient even with large datasets.
+5. **Memory Efficiency**:
+   - The entire process uses temporary files to stream data
+   - This avoids loading entire sections into memory
+   - Processing is efficient even with very large snapshots
+
+This approach ensures that:
+- Multiple snapshots can be combined efficiently
+- The functional separation of account and message records is maintained
+- Memory usage remains low even with large datasets
+
+## URL Hash Handling Integration
+
+The parser now integrates the improved URL hash handling approach:
+
+1. **Hybrid Approach**:
+   - Uses KV database for fast lookups
+   - Maintains binary file format for iteration
+   - Avoids loading all URLs into memory at once
+
+2. **Performance Benefits**:
+   - Lookups are primarily performed from the KV database (fast)
+   - Falls back to file-based lookup if needed
+   - Eliminates memory issues with large datasets
+
+3. **Implementation**:
+   - URLs are stored in both the KV database and binary file
+   - The memory-loading approach has been removed
+   - The binary format is maintained for improved efficiency and robustness
+
+This integration ensures that URL lookups remain efficient without loading all URLs into memory at once, which could cause the application to run out of memory with large datasets.
