@@ -1,6 +1,6 @@
 # Accumulate Snapshot Format (Version 2)
 
-This document provides a comprehensive specification of the Accumulate version 2 snapshot format, structure, and implementation details to guide the development of snapshot processing tools.
+This document provides a comprehensive specification of the Accumulate version 2 snapshot format and structure.
 
 ## Snapshot File Structure
 
@@ -26,7 +26,6 @@ A version 2 snapshot file follows this structure:
    - Always the first section in a snapshot file
    - Contains version information (must be 2), root hash, and system ledger information
    - Encoded as a length-prefixed binary value
-   - Defined by the `Header` struct in `pkg/database/snapshot/types_gen.go`
 
 2. **Record Sections**:
    - Contains the actual data records as key-value pairs
@@ -50,7 +49,7 @@ A version 2 snapshot file follows this structure:
 
 ## Binary Format Specification
 
-This section provides the detailed binary format specifications needed to implement snapshot file reading and writing.
+This section provides the detailed binary format specifications of the snapshot file format.
 
 ### Section Header Binary Format
 
@@ -188,7 +187,7 @@ Here's a hexadecimal representation of a minimal snapshot file with one header s
 
 Records in version 2 snapshots are stored as `RecordEntry` structures:
 
-```go
+```
 type RecordEntry struct {
 	Key     *record.Key     // Hierarchical key path
 	Value   []byte          // Binary encoded data
@@ -432,7 +431,7 @@ The `debug snap collect` command creates version 2 snapshots using the following
 
 ### Implementation Example
 
-```go
+```
 // Create a new snapshot file
 file, _ := os.Create("snapshot.dat")
 writer, _ := snapshot.Create(file)
@@ -489,7 +488,7 @@ When reading a version 2 snapshot file:
 
 ### Implementation Example
 
-```go
+```
 // Open the snapshot file
 file, _ := os.Open("snapshot.dat")
 reader, _ := snapshot.Open(file)
@@ -498,34 +497,12 @@ reader, _ := snapshot.Open(file)
 fmt.Printf("Snapshot version: %d\n", reader.Header.Version)
 fmt.Printf("Root hash: %x\n", reader.Header.RootHash)
 
-// Open a record section
-recordReader, _ := reader.OpenRecords(0)
 
-// Read and process records
-for {
-    record, err := recordReader.Read()
-    if err == io.EOF {
-        break
-    }
-    
-    // Process the record based on its key
-    keyParts := record.Key.Elements()
-    if len(keyParts) > 0 {
-        switch keyParts[0] {
-        case "Account":
-            // Process account record
-        case "Chain":
-            // Process chain record
-        case "Transaction":
-            // Process transaction record
-        }
-    }
-}
 ```
 
-## Memory Optimization for Version 2 Snapshots
+## Format Features for Large Dataset Support
 
-Version 2 snapshots implement several memory optimization techniques for processing large datasets:
+Version 2 snapshots include several features for efficient handling of large datasets:
 
 ### 1. Record Indexing
 
@@ -535,7 +512,7 @@ The `SectionTypeRecordIndex` section enables efficient random access to records:
 - **Organization**: Entries are sorted by key hash in descending order for binary search
 - **Usage**: Allows direct access to specific records without loading the entire snapshot
 
-```go
+```
 type RecordIndexEntry struct {
     Key     [32]byte // SHA-256 hash of the record key
     Section uint32   // Section number containing the record
@@ -556,7 +533,7 @@ Version 2 snapshots use a hybrid approach for URL handling:
 
 The `RecordReader` interface enables streaming record processing:
 
-```go
+```
 type RecordReader interface {
     io.Seeker
     Read() (*RecordEntry, error)
@@ -592,7 +569,7 @@ Multiple type 7 (record) sections in a snapshot file are a deliberate design fea
   - This limit is practically unreachable in real-world scenarios
 
 - **Section-Agnostic Processing**: Code that processes snapshots doesn't care about section boundaries:
-  ```go
+  ```
   // From database.Restore
   for i, s := range rd.Sections {
       if s.Type() != snapshot.SectionTypeRecords {
@@ -726,7 +703,7 @@ This section provides a step-by-step guide for implementing snapshot file readin
 
 #### 1. Create the File and Write the Header Section
 
-```go
+```
 // Open a file for writing
 file, err := os.Create("snapshot.dat")
 if err != nil {
@@ -764,7 +741,7 @@ file.Write([]byte{0x00})
 
 #### 2. Write a Records Section with One Record
 
-```go
+```
 // Write the records section header
 recordsType := uint32(7) // SectionTypeRecords
 recordsSize := uint64(35) // Size will be 35 bytes for this example
@@ -800,7 +777,7 @@ file.Write([]byte{0x00})
 
 #### 3. Write a Record Index Section
 
-```go
+```
 // Write the record index section header
 indexType := uint32(8) // SectionTypeRecordIndex
 indexSize := uint64(44) // Size will be 44 bytes for this example (one entry)
@@ -829,7 +806,7 @@ binary.Write(file, binary.LittleEndian, offset)
 
 #### 1. Open the File and Read the Header Section
 
-```go
+```
 // Open the file for reading
 file, err := os.Open("snapshot.dat")
 if err != nil {
@@ -895,7 +872,7 @@ if hasSystemLedger {
 
 #### 2. Read Records Sections
 
-```go
+```
 // Read the next section header
 binary.Read(file, binary.LittleEndian, &sectionType)
 binary.Read(file, binary.LittleEndian, &sectionSize)
@@ -965,7 +942,7 @@ for pos < len(recordsData) {
 
 #### 3. Read Record Index Section
 
-```go
+```
 // Read the next section header
 binary.Read(file, binary.LittleEndian, &sectionType)
 binary.Read(file, binary.LittleEndian, &sectionSize)
@@ -1034,7 +1011,7 @@ Understanding how records are sorted in snapshots is crucial for correctly proce
 - **Explicit Sorting**: Message records are explicitly sorted by their hash values
 - **Sort Order**: Messages are sorted in ascending order by hash (smaller hash values first)
 - **Sort Implementation**:
-  ```go
+  ```
   sort.Slice(hashes, func(i, j int) bool {
       return bytes.Compare(hashes[i].Hash[:], hashes[j].Hash[:]) < 0
   })
@@ -1079,7 +1056,7 @@ The algorithm consists of these main phases:
 
 #### 1. Preparation and Index Creation
 
-```go
+```
 // Constants for bucket organization and batch processing
 const (
     // Number of bucket files to use for sorting
@@ -1225,7 +1202,7 @@ func indexAllSnapshots(paths []string) ([]*SnapshotIndex, error) {
 
 #### 2. Group Accounts by Batch
 
-```go
+```
 // Account data with metadata
 type AccountData struct {
     Record        *snapshot.RecordEntry
@@ -1304,7 +1281,7 @@ func isAccountRecord(keyHash [32]byte, idx *SnapshotIndex) bool {
 
 #### 3. Process Each Batch
 
-```go
+```
 func processBatch(accountBatch [][32]byte, indices []*SnapshotIndex) error {
     // Create temporary storage for this batch
     batchData := make(map[[32]byte]*AccountData)
@@ -1421,7 +1398,7 @@ func extractUrlReferences(record *snapshot.RecordEntry) ([][32]byte, error) {
 
 #### 4. Write Batch to Bucket Files
 
-```go
+```
 // Global registry of bucket files
 var (
     accountBuckets [numBuckets]*os.File
@@ -1622,7 +1599,7 @@ func writeUrlToFile(file *os.File, url *snapshot.Url) error {
 
 #### 5. Sort and Merge Bucket Files
 
-```go
+```
 // After all batches are processed, sort each bucket and merge into final snapshot
 func sortAndMergeBuckets(outputPath string) error {
     // Create the output snapshot file
@@ -1960,7 +1937,7 @@ The snapshot combining algorithm uses a memory-efficient, file-backed bucket sor
 
 #### 6. Main Combining Function
 
-```go
+```
 func combineSnapshots(inputPaths []string, outputPath string) error {
     // Validate input
     if len(inputPaths) == 0 {
@@ -2123,7 +2100,7 @@ This section outlines the step-by-step approach to replace the current `snap_com
 
 #### Helper Functions
 
-```go
+```
 // Helper function to read a record from a specific location in a snapshot file
 func readRecordFromLocation(file *os.File, loc RecordLocation) *snapshot.RecordEntry {
     // Navigate to the appropriate section
@@ -2273,7 +2250,7 @@ When combining snapshots, different section types are handled as follows:
 
 #### 1. Prepare the Output Database
 
-```go
+```
 // Open or create the output database
 db := database.New(store, nil)
 ```
@@ -2282,7 +2259,7 @@ db := database.New(store, nil)
 
 For each snapshot file:
 
-```go
+```
 // Open the snapshot file
 file, err := os.Open(snapshotPath)
 if err != nil {
@@ -2304,7 +2281,7 @@ if header.Version != 2 {
 
 #### 3. First Pass: Extract Accounts
 
-```go
+```
 // Create a map to track processed accounts
 accounts := map[[32]byte]*AccountData{}
 
@@ -2357,7 +2334,7 @@ err := Restore(db, file, &RestoreOptions{
 
 #### 4. Collect Transaction Hashes
 
-```go
+```
 // Extract transaction hashes from account states
 hashes := map[[32]byte]bool{}
 for _, accountData := range accounts {
@@ -2374,7 +2351,7 @@ for _, accountData := range accounts {
 
 #### 5. Second Pass: Extract Transactions
 
-```go
+```
 // Reset file pointer to beginning
 file.Seek(0, io.SeekStart)
 
@@ -2401,7 +2378,7 @@ Repeat steps 2-5 for each input snapshot file.
 
 #### 7. Finalize the Combined Database
 
-```go
+```
 // Note: By default, we skip BPT calculation for Genesis block creation
 // const calculateBPT = false
 
@@ -2425,7 +2402,7 @@ When creating a Genesis block by combining snapshots, special consideration is g
 
 In the Genesis block creation process (`debug genesis ingest`), the BPT section is typically omitted entirely. This is controlled by the `calculateBPT` flag, which is set to `false` by default in the Genesis creation code:
 
-```go
+```
 const calculateBPT = false
 
 // Don't calculate BPT hashes since genesis doesn't want them
@@ -2441,7 +2418,7 @@ Even without calculating BPT hashes, the Genesis ingest process:
 3. Allows iteration over accounts using the database's internal organization
 4. Collects and sorts message records by hash across all input snapshots
 
-```go
+```
 const calculateBPT = false
 ```
 
@@ -2476,7 +2453,7 @@ Including a BPT section may be beneficial in non-Genesis snapshots when:
 
 To include a BPT section when combining snapshots, set the `calculateBPT` flag to `true` and provide a proper observer implementation:
 
-```go
+```
 if calculateBPT {
     // Set up a proper observer for BPT calculation
     db.SetObserver(&bpt.Observer{Store: store})
@@ -2504,7 +2481,7 @@ An important property of the snapshot combining algorithm is how it handles the 
 After examining the code, there are several factors that affect record ordering in snapshots:
 
 1. **Record Index Ordering**: The `Indexer.Write` method enforces that keys in the record index must be in **descending** order. The code specifically checks for this with:
-   ```go
+   ```
    // Keys must be in descending order
    c := bytes.Compare(i.last[:], e.Key[:])
    // ...
@@ -2678,150 +2655,16 @@ The key to memory-efficient snapshot parsing is to:
 
 ### Example: Custom Snapshot Parser in Go
 
-```go
+```
 // SectionHeader represents a snapshot section header
 type SectionHeader struct {
 	Type            uint16 // Section type (2 bytes)
 	Size            uint64 // Section size (8 bytes)
-	NextOffset      uint64 // Offset to next section (8 bytes)
-	HeaderOffset    int64  // Offset of this header in the file
-	ContentOffset   int64  // Offset of the section content (header + 64)
-}
 
-// readSectionHeader reads a section header from the current position in the file
-func readSectionHeader(file *os.File) (*SectionHeader, error) {
-	// Get current position
-	currentPos, err := file.Seek(0, io.SeekCurrent)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get current position: %w", err)
-	}
-	
-	// Read the 64-byte header
-	headerBytes := make([]byte, 64)
-	n, err := io.ReadFull(file, headerBytes)
-	if err != nil {
-		if err == io.EOF || err == io.ErrUnexpectedEOF {
-			// End of file reached
-			return nil, io.EOF
-		}
-		return nil, fmt.Errorf("failed to read section header: %w", err)
-	}
-	if n != 64 {
-		return nil, fmt.Errorf("incomplete section header: read %d bytes, expected 64", n)
-	}
-	
-	// Parse the header fields
-	header := &SectionHeader{
-		Type:           binary.BigEndian.Uint16(headerBytes[0:2]),
-		Size:           binary.BigEndian.Uint64(headerBytes[8:16]),
-		NextOffset:     binary.BigEndian.Uint64(headerBytes[16:24]),
-		HeaderOffset:   currentPos,
-		ContentOffset:  currentPos + 64,
-	}
-	
-	return header, nil
-}
-
-// parseSnapshot reads all sections from the snapshot file
-func parseSnapshot(filePath string) error {
-	// Open the snapshot file
-	file, err := os.Open(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to open snapshot file: %w", err)
-	}
-	defer file.Close()
-
-	// Read sections until EOF or until nextOffset is 0
-	var currentOffset int64 = 0
-	for {
-		// Seek to the current section header
-		_, err := file.Seek(currentOffset, io.SeekStart)
-		if err != nil {
-			return fmt.Errorf("failed to seek to section at offset %d: %w", currentOffset, err)
-		}
-
-		// Read section header (64 bytes)
-		header, err := readSectionHeader(file)
-		if err != nil {
-			if err == io.EOF {
-				// End of file reached
-				break
-			}
-			return fmt.Errorf("failed to read section header at offset %d: %w", currentOffset, err)
-		}
-
-		// Process the section based on its type
-		switch header.Type {
-		case 1: // SectionTypeHeader
-			// Read the header content (which follows the 64-byte section header)
-			headerContent := make([]byte, header.Size)
-			_, err = io.ReadFull(file, headerContent)
-			if err != nil {
-				return fmt.Errorf("failed to read header content: %w", err)
-			}
-			
-			// The header content should contain the format version as a uint32 in big-endian format
-			if len(headerContent) < 4 {
-				return fmt.Errorf("header content too small: %d bytes", len(headerContent))
-			}
-			
-			// Parse the format version (first 4 bytes of header content, big-endian)
-			formatVersion := binary.BigEndian.Uint32(headerContent[0:4])
-			fmt.Printf("Snapshot format version: %d\n", formatVersion)
-			
-		case 7: // SectionTypeRecords
-			// Process records section
-			fmt.Printf("Records section: %d bytes at offset %d\n", header.Size, header.ContentOffset)
-			
-			// For large sections, you might want to process the data in chunks
-			// rather than loading it all into memory at once
-			processRecordsSection(file, header)
-			
-		case 8: // SectionTypeRecordIndex
-			// Process record index section
-			fmt.Printf("Record index section: %d bytes at offset %d\n", header.Size, header.ContentOffset)
-			
-			// Process the record index entries
-			processRecordIndexSection(file, header)
-			
-		case 11: // SectionTypeBPT
-			// Process BPT section
-			fmt.Printf("BPT section: %d bytes at offset %d\n", header.Size, header.ContentOffset)
-			
-			// Process the BPT nodes
-			processBPTSection(file, header)
-			
-		default:
-			// Skip unknown section types
-			fmt.Printf("Skipping unknown section type %d: %d bytes at offset %d\n", 
-				header.Type, header.Size, header.ContentOffset)
-		}
-
-		// Move to the next section
-		if header.NextOffset == 0 {
-			// No more sections
-			break
-		}
-		currentOffset = int64(header.NextOffset)
-	}
-
-	return nil
-}
-```
-
-### URL Hash Handling for Memory Efficiency
-
-For efficient URL hash handling without loading all URLs into memory:
-
-1. Store URLs in both a key-value database for fast lookups and the binary file format for iteration
-2. Perform lookups primarily from the KV database (fast)
-3. Fall back to file-based lookup if needed
-4. Avoid memory-loading approaches that could cause memory issues with large datasets
-
-This hybrid approach maintains both performance and memory efficiency when working with large snapshots.
+URL hashes are used for efficient lookup of URLs in the snapshot format. The format supports storing URL hash to URL string mappings for lookups.
 
 ## Conclusion
 
-This document provides a comprehensive specification of the Accumulate version 2 snapshot format. It details the structure, record types, and implementation considerations for working with version 2 snapshots. By following these guidelines and referencing the provided code examples, developers can efficiently create, read, and combine snapshots while minimizing memory usage.
+This document provides a comprehensive specification of the Accumulate version 2 snapshot format. It details the structure, record types, and binary format for working with version 2 snapshots.
 
-The version 2 snapshot format offers significant improvements in memory efficiency through features like record indexing, streaming processing, and optimized URL hash handling. These features make it possible to work with large snapshots without excessive memory consumption, enabling scalable snapshot processing tools.
+The version 2 snapshot format includes features like record indexing and optimized URL hash handling to support efficient processing of large datasets.
