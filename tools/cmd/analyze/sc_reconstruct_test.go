@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/common"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -21,6 +22,13 @@ import (
 func TestScReconstruct(t *testing.T) {
 	// Path to the test snapshot file
 	sourceSnapshot := "/home/paul/work/acc1/dn.snap"
+
+	// Get source file size
+	sourceInfo, err := os.Stat(sourceSnapshot)
+	if err != nil {
+		t.Fatalf("Failed to get source file info: %v", err)
+	}
+	fmt.Printf("Source snapshot: %s (%d bytes)\n", sourceSnapshot, sourceInfo.Size())
 
 	// Create a temporary directory for the test output
 	tempDir, err := os.MkdirTemp("", "sc-reconstruct-test-*")
@@ -53,8 +61,16 @@ func TestScReconstruct(t *testing.T) {
 		if err != nil {
 			t.Errorf("Failed to get output file info: %v", err)
 		} else {
-			fmt.Printf("Successfully created reconstructed snapshot at %s (%d bytes)\n",
-				destSnapshot, fileInfo.Size())
+			fmt.Printf("Reconstructed snapshot: %s (%d bytes)\n", destSnapshot, fileInfo.Size())
+
+			// Print size comparison
+			sizeDiff := fileInfo.Size() - sourceInfo.Size()
+			if sizeDiff == 0 {
+				fmt.Println("File sizes match exactly!")
+			} else {
+				fmt.Printf("Size difference: %+d bytes (%.2f%%)\n", 
+					sizeDiff, float64(sizeDiff)*100/float64(sourceInfo.Size()))
+			}
 
 			// Basic validation: file should not be empty
 			if fileInfo.Size() == 0 {
@@ -64,6 +80,43 @@ func TestScReconstruct(t *testing.T) {
 	}
 
 	fmt.Println("Test completed successfully")
+}
+
+// TestPrintHexDump tests the printHexDump function with highlighted indexes
+func TestPrintHexDump(t *testing.T) {
+	// Create a RandHash instance
+	var rh common.RandHash
+
+	// Generate a 5KB buffer using RandHash
+	bufferSize := 5 * 1024 // 5KB
+	buffer := rh.GetRandBuff(bufferSize)
+
+	// Run 10 test cases
+	for i := 0; i < 10; i++ {
+		fmt.Printf("\n\nTest Case %d:\n", i+1)
+		fmt.Printf("-----------\n")
+
+		// Generate test case
+		startOffset, redIndex, indexes := generateTestCase(&rh, bufferSize)
+
+		// Print information about the test case
+		fmt.Printf("Buffer size: %d bytes\n", bufferSize)
+		fmt.Printf("Display offset: %d\n", startOffset)
+		fmt.Printf("Display range: %d to %d\n", startOffset, startOffset+255)
+		fmt.Printf("Red index (first in list): %d\n", redIndex)
+
+		// Find which indexes are within the visible range
+		visibleIndexes := make([]int, 0)
+		for _, idx := range indexes[1:] { // Skip the red index
+			if idx >= startOffset && idx < startOffset+256 {
+				visibleIndexes = append(visibleIndexes, idx)
+			}
+		}
+		fmt.Printf("Visible green indexes: %v\n\n", visibleIndexes)
+
+		// Call printHexDump with the indexes
+		printHexDump(buffer, startOffset, 256, indexes...)
+	}
 }
 
 // TestCompareHeaderEncoding compares different approaches to encoding the header section (section type 1)
@@ -82,13 +135,53 @@ func TestScReconstruct(t *testing.T) {
 // printHexDump prints a hexadecimal representation of data for debugging
 // offset is the starting offset for the address column
 // maxBytes is the maximum number of bytes to print (-1 for all)
-func printHexDump(data []byte, offset int, maxBytes int) {
+// indexes is an optional slice of indexes to highlight in the output
+//
+// The first index should be treated as a byte, and if it is in the range
+// of the data, (subtract the offset to determine if it is in the range for
+// the given data) the byte is highlighted red.
+//
+// If there is a second or more index, then highlight 64 bytes starting
+// at that index in green.
+//
+// If these colors overlap, then the red dominates.
+func printHexDump(data []byte, offset int, maxBytes int, indexes ...int) {
 	if maxBytes < 0 || maxBytes > len(data) {
 		maxBytes = len(data)
 	}
 
+	// ANSI color codes
+	const (
+		redColor   = "\033[31m" // Red for the first index
+		greenColor = "\033[32m" // Green for subsequent indexes (64-byte ranges)
+		resetColor = "\033[0m"  // Reset to default color
+	)
+
 	// Limit the data to the specified maxBytes
 	data = data[:maxBytes]
+
+	// Create a map to track which indexes should be highlighted and with what color
+	highlightMap := make(map[int]string)
+
+	// First index (if exists) is highlighted in red
+	if len(indexes) > 0 {
+		redIdx := indexes[0]
+		if redIdx >= offset && redIdx < offset+maxBytes {
+			highlightMap[redIdx] = redColor
+		}
+	}
+
+	// Subsequent indexes start 64-byte green ranges
+	for i := 1; i < len(indexes); i++ {
+		greenStartIdx := indexes[i]
+		for j := 0; j < 64; j++ {
+			currIdx := greenStartIdx + j
+			// Only add if within our display range and not already red
+			if currIdx >= offset && currIdx < offset+maxBytes && highlightMap[currIdx] != redColor {
+				highlightMap[currIdx] = greenColor
+			}
+		}
+	}
 
 	// Print 16 bytes per line
 	for i := 0; i < len(data); i += 16 {
@@ -103,7 +196,15 @@ func printHexDump(data []byte, offset int, maxBytes int) {
 
 		// Print hex representation
 		for j := 0; j < len(chunk); j++ {
-			fmt.Printf("%02x ", chunk[j])
+			globalIdx := offset + i + j
+			color, hasColor := highlightMap[globalIdx]
+
+			if hasColor {
+				fmt.Printf("%s%02x%s ", color, chunk[j], resetColor)
+			} else {
+				fmt.Printf("%02x ", chunk[j])
+			}
+
 			if j == 7 {
 				fmt.Print(" ") // Extra space after 8 bytes
 			}
@@ -120,10 +221,21 @@ func printHexDump(data []byte, offset int, maxBytes int) {
 		// Print ASCII representation
 		fmt.Print(" |")
 		for j := 0; j < len(chunk); j++ {
+			globalIdx := offset + i + j
+			color, hasColor := highlightMap[globalIdx]
+
 			if chunk[j] >= 32 && chunk[j] <= 126 { // Printable ASCII
-				fmt.Printf("%c", chunk[j])
-			} else {
-				fmt.Print(".")
+				if hasColor {
+					fmt.Printf("%s%c%s", color, chunk[j], resetColor)
+				} else {
+					fmt.Printf("%c", chunk[j])
+				}
+			} else { // Non-printable ASCII
+				if hasColor {
+					fmt.Printf("%s.%s", color, resetColor)
+				} else {
+					fmt.Print(".")
+				}
 			}
 		}
 		fmt.Println("|")
@@ -449,4 +561,63 @@ func TestCompareHeaderEncoding(t *testing.T) {
 				len(debugHeaderData), len(originalHeaderData))
 		}
 	}
+}
+
+// generateTestCase creates a test case for printHexDump according to specifications
+func generateTestCase(rh *common.RandHash, bufferSize int) (startOffset, redIndex int, indexes []int) {
+	// Pick a random offset within the 5KB buffer, leaving room for 256 bytes
+	startOffset = rh.GetIntN(bufferSize - 256)
+
+	// Pick a red index somewhere in the 256 bytes after the offset
+	redIndex = startOffset + rh.GetIntN(256)
+
+	// Generate 12 offsets that are outside the 256 bytes after the offset
+	outsideIndexes := make([]int, 0, 12)
+	for len(outsideIndexes) < 12 {
+		// Generate an index either before the start offset or after the end of the window
+		var idx int
+		if rh.GetIntN(2) == 0 && startOffset > 0 { // 50% chance, if possible
+			// Generate an index before the start offset
+			idx = rh.GetIntN(startOffset)
+		} else {
+			// Generate an index after the end of the window
+			idx = startOffset + 256 + rh.GetIntN(bufferSize-(startOffset+256))
+		}
+
+		// Check if this index is unique
+		isUnique := true
+		for _, existingIdx := range outsideIndexes {
+			if idx == existingIdx {
+				isUnique = false
+				break
+			}
+		}
+
+		if isUnique {
+			outsideIndexes = append(outsideIndexes, idx)
+		}
+	}
+
+	// Generate one index within the visible range (sometimes aligned to 64 bytes)
+	var visibleIndex int
+	if rh.GetIntN(2) == 0 { // 50% chance of alignment to 64 bytes
+		// Calculate how many 64-byte blocks fit in our window
+		numBlocks := 256 / 64
+		// Pick a random block
+		block := rh.GetIntN(numBlocks)
+		// Align to the start of that block
+		visibleIndex = startOffset + (block * 64)
+	} else {
+		// Just pick a random index in the visible range
+		visibleIndex = startOffset + rh.GetIntN(256)
+	}
+
+	// Replace one of the outside indexes with the visible index
+	replaceIdx := rh.GetIntN(len(outsideIndexes))
+	outsideIndexes[replaceIdx] = visibleIndex
+
+	// Combine the red index and the outside indexes (with one replaced)
+	indexes = append([]int{redIndex}, outsideIndexes...)
+
+	return startOffset, redIndex, indexes
 }
