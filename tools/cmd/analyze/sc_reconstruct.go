@@ -15,9 +15,6 @@ func sc_reconstruct(scState *sc_State) error {
 		return fmt.Errorf("failed to start reconstruction: %w", err)
 	}
 
-	// Ensure cleanup happens when we're done
-	defer sc_Cleanup(scState)
-
 	// Step 2: Write all sections to the output file
 	// The output file is now stored in scState.OutFile
 	err = sc_WriteSections(scState)
