@@ -33,14 +33,22 @@ func sc_Cleanup(scState *sc_State) error {
 	}
 
 	// Close all section files
-	for key, file := range scState.SectionFiles {
-		if file != nil {
-			if err := file.Close(); err != nil {
-				fmt.Printf("Warning: Error closing section file %s: %v\n", key, err)
+	if scState.SectionFiles != nil {
+		// Get all sections
+		sections := scState.SectionFiles.List()
+		
+		// Close each section file
+		for _, section := range sections {
+			if section.TmpFile != nil {
+				if err := section.TmpFile.Close(); err != nil {
+					fmt.Printf("Warning: Error closing section file %s: %v\n", section.Type, err)
+				}
 			}
 		}
+		
+		// Reset section files
+		scState.SectionFiles = NewSections()
 	}
-	scState.SectionFiles = make(map[string]*os.File)
 
 	// Look for hanging temporary files from past crashed executions
 	sc_CleanupHangingTempFiles()

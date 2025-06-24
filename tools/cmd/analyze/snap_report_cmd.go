@@ -489,13 +489,12 @@ func generateSnapshotReport(cmd *cobra.Command, args []string) error {
 
 	// Step 5b: Call snapshot reconstruction
 	fmt.Println("Starting snapshot reconstruction...")
-	
+
 	// Initialize sc_State for reconstruction
 	scState := &sc_State{
-		SnapshotPath:   args[0],
-		InputFiles:     []*os.File{file},
-		FormatVersion:  uint32(snapshotVersion),
-		SectionFiles:   make(map[string]*os.File),
+		SnapshotPath:  args[0],
+		InputFiles:    []*os.File{file},
+		FormatVersion: uint32(snapshotVersion),
 	}
 
 	// Create a temporary directory for section files if needed
@@ -511,7 +510,7 @@ func generateSnapshotReport(cmd *cobra.Command, args []string) error {
 	reconstructedPath := args[0] + ".reconstructed"
 
 	// Call the reconstruction function
-	err = sc_reconstruct(scState, reconstructedPath)
+	err = sc_reconstruct(scState)
 	if err != nil {
 		fmt.Printf("Warning: Snapshot reconstruction failed: %v\n", err)
 	} else {

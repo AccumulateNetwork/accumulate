@@ -16,13 +16,7 @@ func sc_recordError(scState *sc_State, code string, err error) error {
 	return err
 }
 
-// sc_sortSectionOffsetsByPosition sorts section offsets by their file position
-// Renamed to avoid redeclaration with other files
-func sc_sortSectionOffsetsByPosition(offsets []SectionOffset) {
-	sort.Slice(offsets, func(i, j int) bool {
-		return offsets[i].FileOffset < offsets[j].FileOffset
-	})
-}
+// sc_sortSectionOffsetsByPosition has been removed as part of the offset tracking cleanup
 
 // sc_parseSectionKey parses a section key into type and index
 // Renamed to avoid redeclaration with other files

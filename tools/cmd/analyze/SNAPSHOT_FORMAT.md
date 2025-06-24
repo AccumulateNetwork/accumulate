@@ -91,24 +91,47 @@ The Header section has the following binary layout:
 
 ```
 +--------+--------+--------+--------+--------+--------+--------+--------+--------+--------+
-| Length (varint)           | Header Data (Length bytes)                     ... |
+| Length (8 bytes, big-endian) | Header Data (Length bytes)                     ... |
 +--------+--------+--------+--------+--------+--------+--------+--------+--------+--------+
 ```
 
-The Header Data is a serialized `Header` struct with the following fields:
+The Header Data is a field-based encoding with the following structure:
 
 ```
 +--------+--------+--------+--------+--------+--------+--------+--------+--------+--------+
-| Version (varint)          | Root Hash Length (varint) | Root Hash (32 bytes)   ... |
-+--------+--------+--------+--------+--------+--------+--------+--------+--------+--------+
-| System Ledger Flag (1 byte) | System Ledger Data (if flag=1)               ... |
+| Field 1: Version (varint) | Field 2: Root Hash (32 bytes) | Field 3: SystemLedger    ... |
 +--------+--------+--------+--------+--------+--------+--------+--------+--------+--------+
 ```
 
-- **Version**: Must be 2 for version 2 snapshots
-- **Root Hash**: 32-byte SHA-256 hash
-- **System Ledger Flag**: 1 if system ledger data is present, 0 if not
-- **System Ledger Data**: Contains height (varint) and timestamp (varint) if present
+Where:
+- **Field 1 - Version**: The snapshot format version (must be 2), encoded as a varint
+- **Field 2 - Root Hash**: The 32-byte BPT root hash
+- **Field 3 - System Ledger**: The partition's system ledger state, which includes:
+  - The partition URL (e.g., "acc://dn.acme/ledger")
+  - Ledger state information (balances, sequence numbers, etc.)
+  - Other metadata specific to the system ledger
+
+The SystemLedger field is what contains the ASCII text (URLs) that may be visible when examining the raw binary data of a snapshot file.
+
+```
++--------+--------+--------+--------+--------+--------+--------+--------+--------+--------+
+| Field 1: Version (varint) | Field 2: Root Hash (32 bytes)                ... |
++--------+--------+--------+--------+--------+--------+--------+--------+--------+--------+
+| Field 3: System Ledger (serialized structure)                           ... |
++--------+--------+--------+--------+--------+--------+--------+--------+--------+--------+
+```
+
+The Header Data fields are encoded using a field-based format where each field has:
+- A field number (1, 2, or 3)
+- The field's value encoded according to its type
+
+Details of each field:
+- **Version (Field 1)**: Must be 2 for version 2 snapshots, encoded as a varint
+- **Root Hash (Field 2)**: 32-byte SHA-256 hash of the BPT root
+- **System Ledger (Field 3)**: A complex structure containing:
+  - Partition URL (e.g., "acc://dn.acme/ledger")
+  - Ledger state information (balances, sequence numbers, etc.)
+  - Other metadata specific to the system ledger
 
 ### Record Entry Binary Format
 
