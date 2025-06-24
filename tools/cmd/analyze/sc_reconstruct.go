@@ -6,13 +6,12 @@ import (
 
 // sc_reconstruct is the implementation of the snapshot reconstruction process
 // that will be assigned to the sc_ReconstructSnapshot function variable in sc.go
-func sc_reconstruct(scState *sc_State, outputPath string) error {
+func sc_reconstruct(scState *sc_State) error {
 	// Step 1: Start reconstruction and validate temporary files
 	// This ensures all section files are ready for reconstruction and opens the output file
-	err := sc_StartReconstruction(scState, outputPath)
+	err := sc_StartReconstruction(scState)
 	if err != nil {
-		// Make sure to clean up even on error
-		sc_Cleanup(scState)
+
 		return fmt.Errorf("failed to start reconstruction: %w", err)
 	}
 
@@ -38,8 +37,7 @@ func sc_reconstruct(scState *sc_State, outputPath string) error {
 
 	// Print summary
 	fmt.Printf("\nReconstruction completed successfully\n")
-	fmt.Printf("Output file: %s\n", outputPath)
-	fmt.Printf("Total sections: %d\n", len(scState.SectionFiles))
+	fmt.Printf("Total sections: %d\n", scState.SectionFiles.Count())
 
 	return nil
 }

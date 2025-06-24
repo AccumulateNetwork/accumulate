@@ -8,16 +8,6 @@ import (
 	"time"
 )
 
-// SectionOffset stores information about a section's position in the output file
-// This is a duplicate of the definition in sc_recon_sections.go for reference
-type SectionOffset struct {
-	SectionType    uint16
-	SectionIndex   int
-	FileOffset     uint64
-	SectionSize    uint64
-	NextSectionPos int64 // Position in the file where the next section offset needs to be updated
-}
-
 // ReconstructionStats tracks statistics about the reconstruction process
 type ReconstructionStats struct {
 	StartTime         time.Time
@@ -88,7 +78,7 @@ func sc_GenerateReconstructionReport(scState *sc_State, stats *ReconstructionSta
 	// Print a summary of the reconstruction process
 	fmt.Printf("\nReconstruction process summary:\n")
 	fmt.Printf("1. Parsed input snapshot\n")
-	fmt.Printf("2. Created %d temporary section files\n", len(scState.SectionFiles))
+	fmt.Printf("2. Created %d temporary section files\n", scState.SectionFiles.Count())
 	fmt.Printf("3. Wrote %d sections to output file\n", stats.TotalSections)
 	fmt.Printf("4. Updated section offsets\n")
 	fmt.Printf("5. Validated output against original snapshot\n")
@@ -159,7 +149,7 @@ func sc_ReconstructionReportTest() error {
 	// Create test scState
 	scState := &sc_State{
 		SnapshotPath: "/path/to/test.snap",
-		SectionFiles: make(map[string]*os.File),
+		SectionFiles: NewSections(),
 	}
 
 	// Collect statistics

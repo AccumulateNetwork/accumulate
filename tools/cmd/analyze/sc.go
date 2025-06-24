@@ -74,11 +74,12 @@ type SectionInfo struct {
 
 type sc_State struct {
 	// File paths and handles
-	SnapshotPath string              // Path to the input snapshot file
-	InputFiles   []*os.File          // List of input snapshot files
-	OutFile      *os.File            // The destination file
-	TempDir      string              // Directory for temporary files
-	SectionFiles map[string]*os.File // Map of section type and instance to temporary file
+	SnapshotPath string     // Path to the input snapshot file
+	InputFiles   []*os.File // List of input snapshot files
+	OutFile      *os.File   // The destination file
+	OutPath      string     // Path to the output file
+	TempDir      string     // Directory for temporary files
+	SectionFiles *Sections  // Ordered list of sections with their temporary files
 
 	// Snapshot metadata
 	FormatVersion uint32 // Detected snapshot format version
@@ -105,6 +106,8 @@ type sc_State struct {
 	ProcessingTime time.Duration    // Total processing time
 }
 
+// Section and Sections types are defined in sc_sections.go
+
 // Init initializes the sc_State by opening the snapshot file
 func (s *sc_State) Init(snapshotPath string) error {
 	// Open the snapshot file
@@ -126,7 +129,7 @@ func (s *sc_State) Init(snapshotPath string) error {
 	s.TempDir = tempDir
 
 	// Initialize maps and slices
-	s.SectionFiles = make(map[string]*os.File)
+	s.SectionFiles = NewSections()
 	s.SectionCounts = make(map[uint32]int)
 	s.SectionSizes = make(map[uint32]int64)
 	s.ErrorCounts = make(map[string]int)
@@ -140,8 +143,8 @@ func (s *sc_State) Init(snapshotPath string) error {
 		return fmt.Errorf("failed to create header section file: %w", err)
 	}
 
-	// Store the file handle in the map
-	s.SectionFiles["1_1"] = headerFile
+	// Store the file handle using Add method
+	s.SectionFiles.Add("1_1", headerFile)
 
 	// Initialize with format version 2
 	formatVersionBytes := make([]byte, 4)
@@ -192,6 +195,7 @@ records in type 7 sections.`,
 func init() {
 	// Register the sc command with the root command
 	rootCmd.AddCommand(sc_Cmd)
+
 }
 
 // Cleanup closes all open files and removes temporary files
@@ -206,9 +210,9 @@ func (s *sc_State) Cleanup() {
 	s.InputFiles = nil
 
 	// Close all section files
-	for _, file := range s.SectionFiles {
-		if file != nil {
-			file.Close()
+	for _, section := range s.SectionFiles.List() {
+		if section.TmpFile != nil {
+			section.TmpFile.Close()
 		}
 	}
 
@@ -263,21 +267,6 @@ func (s *sc_State) sc_GenerateReport() {
 	fmt.Println("====================================")
 }
 
-// sc_Run is the main entry point for the sc command
-// Function variables for reconstruction and validation
-// These will be replaced by the actual implementations in sc_reconstruct.go
-var sc_ReconstructSnapshot = func(scState *sc_State, outputPath string) error {
-	// This is just a stub that will be replaced
-	fmt.Printf("Reconstructing snapshot to %s (stub)\n", outputPath)
-	return nil
-}
-
-var sc_ValidateReconstruction = func(originalPath, reconstructedPath string) (bool, error) {
-	// This is just a stub that will be replaced
-	fmt.Printf("Validating reconstruction: %s vs %s (stub)\n", originalPath, reconstructedPath)
-	return true, nil
-}
-
 func sc_Run(cmd *cobra.Command, args []string) error {
 	// Create a new sc_State for this snapshot
 	scState := new(sc_State)
@@ -295,7 +284,7 @@ func sc_Run(cmd *cobra.Command, args []string) error {
 	scState.SectionCounts = make(map[uint32]int)
 	scState.SectionSizes = make(map[uint32]int64)
 	scState.ErrorCounts = make(map[string]int)
-	scState.SectionFiles = make(map[string]*os.File)
+	scState.SectionFiles = NewSections()
 	scState.OriginalSections = make([]SectionInfo, 0)
 
 	// Create a temporary directory for the combined state
@@ -355,45 +344,45 @@ func sc_Run(cmd *cobra.Command, args []string) error {
 
 		// For single snapshot processing, copy all section files to the combined state
 		// This ensures all sections are available during reconstruction
-		for key, file := range scState.SectionFiles {
-			// Seek to the beginning of the file to ensure it's ready for reading during reconstruction
-			_, err := file.Seek(0, io.SeekStart)
-			if err != nil {
-				fmt.Printf("Warning: Failed to seek to beginning of section file %s: %v\n", key, err)
+		for _, section := range scState.SectionFiles.List() {
+			if section.TmpFile == nil {
+				continue
 			}
-			scState.SectionFiles[key] = file
+			// Seek to the beginning of the file to ensure it's ready for reading during reconstruction
+			_, err := section.TmpFile.Seek(0, io.SeekStart)
+			if err != nil {
+				fmt.Printf("Warning: Failed to seek to beginning of section file %s: %v\n", section.Type, err)
+			}
+			// No need to reassign since we're working with the same Sections instance
 		}
 	}
 
 	// Merge the section counts and sizes into the combined state
-	for sectionType, count := range scState.SectionCounts {
-		scState.SectionCounts[sectionType] += count
+	for sectionType := range scState.SectionCounts {
+		scState.SectionCounts[sectionType] += 0
 	}
 
-	for sectionType, size := range scState.SectionSizes {
-		scState.SectionSizes[sectionType] += size
-	}
+	// Removed duplicate section adding code that was causing duplication
 
 	// Copy the section files from this state to the combined state
 	// For type 7 sections (records), we need to append to the existing files
-	for key, file := range scState.SectionFiles {
+	for _, section := range scState.SectionFiles.List() {
 		// Reset file position to beginning
-		_, err := file.Seek(0, io.SeekStart)
+		_, err := section.TmpFile.Seek(0, io.SeekStart)
 		if err != nil {
 			fmt.Printf("Error seeking to beginning of file: %v\n", err)
 			continue
 		}
 
 		// Check if this is a type 7 section
-		if strings.HasPrefix(key, "7_") {
+		if strings.HasPrefix(section.Type, "7_") {
 			// For type 7 sections, append to the existing file
 			var targetFile *os.File
-			var exists bool
 
 			// Determine if this is an account or message section
-			if key == "7_1" { // Accounts
-				targetFile, exists = scState.SectionFiles["7_1"]
-				if !exists {
+			if section.Type == "7_1" { // Accounts
+				targetFile = scState.SectionFiles.Get("7_1").TmpFile
+				if targetFile == nil {
 					// Create a new file for accounts
 					targetFile, err = sc_getOrCreateSectionFile(scState, 7, 1)
 					if err != nil {
@@ -401,9 +390,9 @@ func sc_Run(cmd *cobra.Command, args []string) error {
 						continue
 					}
 				}
-			} else if key == "7_2" { // Messages
-				targetFile, exists = scState.SectionFiles["7_2"]
-				if !exists {
+			} else if section.Type == "7_2" { // Messages
+				targetFile = scState.SectionFiles.Get("7_2").TmpFile
+				if targetFile == nil {
 					// Create a new file for messages
 					targetFile, err = sc_getOrCreateSectionFile(scState, 7, 2)
 					if err != nil {
@@ -413,12 +402,17 @@ func sc_Run(cmd *cobra.Command, args []string) error {
 				}
 			} else {
 				// Other type 7 sections
-				targetFile, exists = scState.SectionFiles[key]
-				if !exists {
+				sectionObj := scState.SectionFiles.Get(section.Type)
+				if sectionObj == nil {
+					targetFile = nil
+				} else {
+					targetFile = sectionObj.TmpFile
+				}
+				if targetFile == nil {
 					// Extract instance number from key
-					parts := strings.Split(key, "_")
+					parts := strings.Split(section.Type, "_")
 					if len(parts) != 2 {
-						fmt.Printf("Invalid section key: %s\n", key)
+						fmt.Printf("Invalid section key: %s\n", section.Type)
 						continue
 					}
 
@@ -438,23 +432,23 @@ func sc_Run(cmd *cobra.Command, args []string) error {
 			}
 
 			// Copy the contents of the file to the target file
-			_, err = io.Copy(targetFile, file)
+			_, err = io.Copy(targetFile, section.TmpFile)
 			if err != nil {
 				fmt.Printf("Error copying file contents: %v\n", err)
 				continue
 			}
 		} else {
 			// For non-type 7 sections, just copy the file if it doesn't exist
-			if _, exists := scState.SectionFiles[key]; !exists {
+			if sectionObj := scState.SectionFiles.Get(section.Type); sectionObj == nil {
 				// Create a new file in the combined state
-				targetFile, err := os.Create(filepath.Join(scState.TempDir, filepath.Base(file.Name())))
+				targetFile, err := os.Create(filepath.Join(scState.TempDir, filepath.Base(section.TmpFile.Name())))
 				if err != nil {
 					fmt.Printf("Error creating file: %v\n", err)
 					continue
 				}
 
 				// Copy the contents
-				_, err = io.Copy(targetFile, file)
+				_, err = io.Copy(targetFile, section.TmpFile)
 				if err != nil {
 					fmt.Printf("Error copying file contents: %v\n", err)
 					targetFile.Close()
@@ -462,7 +456,7 @@ func sc_Run(cmd *cobra.Command, args []string) error {
 				}
 
 				// Store the file in the combined state
-				scState.SectionFiles[key] = targetFile
+				scState.SectionFiles.Add(section.Type, targetFile)
 			}
 		}
 	}
@@ -480,25 +474,25 @@ func sc_Run(cmd *cobra.Command, args []string) error {
 
 	// Debug information about section files
 	fmt.Printf("\n=== TEMPORARY FILES ANALYSIS ===\n")
-	fmt.Printf("Number of temporary files: %d\n", len(scState.SectionFiles))
+	fmt.Printf("Number of temporary files: %d\n", scState.SectionFiles.Count())
 	var totalTmpFileSize int64
-	for key, file := range scState.SectionFiles {
+	for _, section := range scState.SectionFiles.List() {
 		// Get file size
-		stat, err := file.Stat()
+		fileStat, err := section.TmpFile.Stat()
 		if err != nil {
-			fmt.Printf("  Section file: %s (error getting size: %v)\n", key, err)
+			fmt.Printf("  Section file: %s (error getting size: %v)\n", section.Type, err)
 			continue
 		}
-		fileSize := stat.Size()
+		fileSize := fileStat.Size()
 		totalTmpFileSize += fileSize
-		fmt.Printf("  Section file: %s (size: %d bytes)\n", key, fileSize)
+		fmt.Printf("Section %s: %d bytes\n", section.Type, fileSize)
 	}
 	fmt.Printf("Total size of all temporary files: %d bytes\n", totalTmpFileSize)
 	fmt.Printf("=== END OF TEMPORARY FILES ANALYSIS ===\n")
 
 	// Reconstruct the snapshot
 	fmt.Printf("\nReconstructing snapshot...\n")
-	err = sc_ReconstructSnapshot(scState, destinationPath)
+	err = sc_reconstruct(scState)
 	if err != nil {
 		return fmt.Errorf("failed to reconstruct snapshot: %w", err)
 	}
@@ -506,7 +500,7 @@ func sc_Run(cmd *cobra.Command, args []string) error {
 	// If we're processing a single snapshot, validate the reconstruction
 	if len(inputSnapshots) == 1 {
 		fmt.Printf("\nValidating reconstruction...\n")
-		matches, err := sc_ValidateReconstruction(inputSnapshots[0], destinationPath)
+		matches, err := sc_ValidateReconstructionImpl(inputSnapshots[0], destinationPath, scState)
 		if err != nil {
 			return fmt.Errorf("failed to validate reconstruction: %w", err)
 		}
