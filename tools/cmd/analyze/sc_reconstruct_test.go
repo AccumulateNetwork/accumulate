@@ -68,7 +68,7 @@ func TestScReconstruct(t *testing.T) {
 			if sizeDiff == 0 {
 				fmt.Println("File sizes match exactly!")
 			} else {
-				fmt.Printf("Size difference: %+d bytes (%.2f%%)\n", 
+				fmt.Printf("Size difference: %+d bytes (%.2f%%)\n",
 					sizeDiff, float64(sizeDiff)*100/float64(sourceInfo.Size()))
 			}
 
@@ -117,132 +117,6 @@ func TestPrintHexDump(t *testing.T) {
 		// Call printHexDump with the indexes
 		printHexDump(buffer, startOffset, 256, indexes...)
 	}
-}
-
-// TestCompareHeaderEncoding compares different approaches to encoding the header section (section type 1)
-// This test helps identify differences between:
-// 1. The original snapshot file header section data
-// 2. Our reconstruction approach using encoding.NewWriter
-// 3. The debug snap collect approach using snapshot.Header.MarshalBinary
-//
-// The test also compares:
-// - Section headers (64-byte headers)
-// - Padding calculations for alignment
-// - Next section offset calculations
-//
-// This test is critical for ensuring our snapshot reconstruction process produces
-// a byte-for-byte identical header section compared to the original snapshot format.
-// printHexDump prints a hexadecimal representation of data for debugging
-// offset is the starting offset for the address column
-// maxBytes is the maximum number of bytes to print (-1 for all)
-// indexes is an optional slice of indexes to highlight in the output
-//
-// The first index should be treated as a byte, and if it is in the range
-// of the data, (subtract the offset to determine if it is in the range for
-// the given data) the byte is highlighted red.
-//
-// If there is a second or more index, then highlight 64 bytes starting
-// at that index in green.
-//
-// If these colors overlap, then the red dominates.
-func printHexDump(data []byte, offset int, maxBytes int, indexes ...int) {
-	if maxBytes < 0 || maxBytes > len(data) {
-		maxBytes = len(data)
-	}
-
-	// ANSI color codes
-	const (
-		redColor   = "\033[31m" // Red for the first index
-		greenColor = "\033[32m" // Green for subsequent indexes (64-byte ranges)
-		resetColor = "\033[0m"  // Reset to default color
-	)
-
-	// Limit the data to the specified maxBytes
-	data = data[:maxBytes]
-
-	// Create a map to track which indexes should be highlighted and with what color
-	highlightMap := make(map[int]string)
-
-	// First index (if exists) is highlighted in red
-	if len(indexes) > 0 {
-		redIdx := indexes[0]
-		if redIdx >= offset && redIdx < offset+maxBytes {
-			highlightMap[redIdx] = redColor
-		}
-	}
-
-	// Subsequent indexes start 64-byte green ranges
-	for i := 1; i < len(indexes); i++ {
-		greenStartIdx := indexes[i]
-		for j := 0; j < 64; j++ {
-			currIdx := greenStartIdx + j
-			// Only add if within our display range and not already red
-			if currIdx >= offset && currIdx < offset+maxBytes && highlightMap[currIdx] != redColor {
-				highlightMap[currIdx] = greenColor
-			}
-		}
-	}
-
-	// Print 16 bytes per line
-	for i := 0; i < len(data); i += 16 {
-		// Print the offset
-		fmt.Printf("%08x  ", offset+i)
-
-		// Print the hex values
-		chunk := data[i:]
-		if len(chunk) > 16 {
-			chunk = chunk[:16]
-		}
-
-		// Print hex representation
-		for j := 0; j < len(chunk); j++ {
-			globalIdx := offset + i + j
-			color, hasColor := highlightMap[globalIdx]
-
-			if hasColor {
-				fmt.Printf("%s%02x%s ", color, chunk[j], resetColor)
-			} else {
-				fmt.Printf("%02x ", chunk[j])
-			}
-
-			if j == 7 {
-				fmt.Print(" ") // Extra space after 8 bytes
-			}
-		}
-
-		// Pad if less than 16 bytes
-		for j := len(chunk); j < 16; j++ {
-			fmt.Print("   ")
-			if j == 7 {
-				fmt.Print(" ") // Extra space after 8 bytes
-			}
-		}
-
-		// Print ASCII representation
-		fmt.Print(" |")
-		for j := 0; j < len(chunk); j++ {
-			globalIdx := offset + i + j
-			color, hasColor := highlightMap[globalIdx]
-
-			if chunk[j] >= 32 && chunk[j] <= 126 { // Printable ASCII
-				if hasColor {
-					fmt.Printf("%s%c%s", color, chunk[j], resetColor)
-				} else {
-					fmt.Printf("%c", chunk[j])
-				}
-			} else { // Non-printable ASCII
-				if hasColor {
-					fmt.Printf("%s.%s", color, resetColor)
-				} else {
-					fmt.Print(".")
-				}
-			}
-		}
-		fmt.Println("|")
-	}
-
-	// Print total size
-	fmt.Printf("Total: %d bytes\n", len(data))
 }
 
 func TestCompareHeaderEncoding(t *testing.T) {

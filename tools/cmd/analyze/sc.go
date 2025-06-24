@@ -109,7 +109,14 @@ type sc_State struct {
 // Section and Sections types are defined in sc_sections.go
 
 // Init initializes the sc_State by opening the snapshot file
-func (s *sc_State) Init(snapshotPath string) error {
+func (scState *sc_State) Init(snapshotPath string) error {
+
+	// Create a temporary directory for the combined state
+	tmpDir, err := os.MkdirTemp("", "sc_combine_")
+	if err != nil {
+		return fmt.Errorf("failed to create temporary directory: %w", err)
+	}
+	scState.TempDir = tmpDir
 	// Open the snapshot file
 	file, err := os.Open(snapshotPath)
 	if err != nil {
@@ -117,7 +124,7 @@ func (s *sc_State) Init(snapshotPath string) error {
 	}
 
 	// Store the file handle
-	s.InputFiles = append(s.InputFiles, file)
+	scState.InputFiles = append(scState.InputFiles, file)
 
 	// Create a temporary directory for section files
 	tempDir, err := os.MkdirTemp("", "sc-sections-*")
@@ -126,25 +133,25 @@ func (s *sc_State) Init(snapshotPath string) error {
 		file.Close()
 		return fmt.Errorf("failed to create temporary directory: %w", err)
 	}
-	s.TempDir = tempDir
+	scState.TempDir = tempDir
 
 	// Initialize maps and slices
-	s.SectionFiles = NewSections()
-	s.SectionCounts = make(map[uint32]int)
-	s.SectionSizes = make(map[uint32]int64)
-	s.ErrorCounts = make(map[string]int)
-	s.OriginalSections = make([]SectionInfo, 0)
+	scState.SectionFiles = NewSections()
+	scState.SectionCounts = make(map[uint32]int)
+	scState.SectionSizes = make(map[uint32]int64)
+	scState.ErrorCounts = make(map[string]int)
+	scState.OriginalSections = make([]SectionInfo, 0)
 
 	// Create a special header section file (section 1) with format version
 	// This ensures we always have a header section, even if parsing fails
-	headerFileName := filepath.Join(s.TempDir, "section_1_1.tmp")
+	headerFileName := filepath.Join(scState.TempDir, "section_1_1.tmp")
 	headerFile, err := os.Create(headerFileName)
 	if err != nil {
 		return fmt.Errorf("failed to create header section file: %w", err)
 	}
 
 	// Store the file handle using Add method
-	s.SectionFiles.Add("1_1", headerFile)
+	scState.SectionFiles.Add("1_1", headerFile)
 
 	// Initialize with format version 2
 	formatVersionBytes := make([]byte, 4)
@@ -161,7 +168,7 @@ func (s *sc_State) Init(snapshotPath string) error {
 	}
 
 	// Set the format version in the state
-	s.FormatVersion = 2
+	scState.FormatVersion = 2
 
 	// Debug: Check the file size
 	fileInfo, err := headerFile.Stat()
@@ -171,7 +178,7 @@ func (s *sc_State) Init(snapshotPath string) error {
 	fmt.Printf("Initialized header section file with format version 2 (file size: %d bytes)\n", fileInfo.Size())
 
 	// Record start time
-	s.StartTime = time.Now()
+	scState.StartTime = time.Now()
 
 	return nil
 }
@@ -199,67 +206,67 @@ func init() {
 }
 
 // Cleanup closes all open files and removes temporary files
-func (s *sc_State) Cleanup() {
+func (scState *sc_State) Cleanup() {
 	// Close all input files if they're open
-	for _, file := range s.InputFiles {
+	for _, file := range scState.InputFiles {
 		if file != nil {
 			file.Close()
 		}
 	}
 	// Clear the slice
-	s.InputFiles = nil
+	scState.InputFiles = nil
 
 	// Close all section files
-	for _, section := range s.SectionFiles.List() {
+	for _, section := range scState.SectionFiles.List() {
 		if section.TmpFile != nil {
 			section.TmpFile.Close()
 		}
 	}
 
 	// Clear the section files map
-	s.SectionFiles = nil
+	scState.SectionFiles = nil
 
 	// Remove the temporary directory and all its contents
-	if s.TempDir != "" {
-		os.RemoveAll(s.TempDir)
-		s.TempDir = ""
+	if scState.TempDir != "" {
+		os.RemoveAll(scState.TempDir)
+		scState.TempDir = ""
 	}
 }
 
 // sc_GenerateReport generates a summary report of the processing
-func (s *sc_State) sc_GenerateReport() {
+func (scState *sc_State) sc_GenerateReport() {
 	// Calculate processing time
-	s.ProcessingTime = time.Since(s.StartTime)
+	scState.ProcessingTime = time.Since(scState.StartTime)
 
 	// Print report header
 	fmt.Println("\n===== Snapshot Processing Report =====")
 	// Print information about all input files
-	fmt.Printf("Input files: %d\n", len(s.InputFiles))
-	for i, file := range s.InputFiles {
+	fmt.Printf("Input files: %d\n", len(scState.InputFiles))
+	for i, file := range scState.InputFiles {
 		fmt.Printf("  [%d] %s\n", i+1, file.Name())
 	}
-	fmt.Printf("Processing time: %v\n", s.ProcessingTime)
+	fmt.Printf("Processing time: %v\n", scState.ProcessingTime)
 
 	// Print section statistics
 	fmt.Println("\nSection Statistics:")
-	fmt.Printf("Total sections: %d\n", s.TotalSections)
+	fmt.Printf("Total sections: %d\n", scState.TotalSections)
 
 	// Print section details
-	if len(s.SectionCounts) > 0 {
+	if len(scState.SectionCounts) > 0 {
 		fmt.Println("Section details:")
-		for sectionType, count := range s.SectionCounts {
-			sectionSize := s.SectionSizes[sectionType]
+		for sectionType, count := range scState.SectionCounts {
+			sectionSize := scState.SectionSizes[sectionType]
 			fmt.Printf("  Section type %d: %d records, %d bytes\n", sectionType, count, sectionSize)
 		}
 	}
 
 	// Print record statistics
-	fmt.Printf("\nTotal records: %d\n", s.TotalRecords)
+	fmt.Printf("\nTotal records: %d\n", scState.TotalRecords)
 
 	// Print error statistics if any
-	if len(s.ErrorCounts) > 0 {
+	if len(scState.ErrorCounts) > 0 {
 		fmt.Println("\nError Statistics:")
-		for errorType, count := range s.ErrorCounts {
+		for errorType, count := range scState.ErrorCounts {
 			fmt.Printf("  %s: %d occurrences\n", errorType, count)
 		}
 	}
@@ -270,16 +277,6 @@ func (s *sc_State) sc_GenerateReport() {
 func sc_Run(cmd *cobra.Command, args []string) error {
 	// Create a new sc_State for this snapshot
 	scState := new(sc_State)
-
-	// The first argument is always the destination snapshot
-	destinationPath := args[0]
-
-	// The remaining arguments are input snapshots
-	inputSnapshots := args[1:]
-
-	// Process all input snapshots and combine them
-	fmt.Printf("Processing %d input snapshots to create: %s\n", len(inputSnapshots), destinationPath)
-
 	// Create a combined state to hold all snapshot data
 	scState.SectionCounts = make(map[uint32]int)
 	scState.SectionSizes = make(map[uint32]int64)
@@ -287,15 +284,23 @@ func sc_Run(cmd *cobra.Command, args []string) error {
 	scState.SectionFiles = NewSections()
 	scState.OriginalSections = make([]SectionInfo, 0)
 
-	// Create a temporary directory for the combined state
-	tmpDir, err := os.MkdirTemp("", "sc_combine_")
-	if err != nil {
-		return fmt.Errorf("failed to create temporary directory: %w", err)
+	// The first argument is always the destination snapshot
+	destinationPath := args[0]
+
+	// Create destination snapfile
+	var err error
+	if scState.OutFile, err = os.Create(destinationPath); err != nil {
+		return fmt.Errorf("failed to create destination file: %w", err)
 	}
-	scState.TempDir = tmpDir
+
+	// The remaining arguments are input snapshots
+	inputSnapshots := args[1:]
+
+	// Process all input snapshots and combine them
+	fmt.Printf("Processing %d input snapshots to create: %s\n", len(inputSnapshots), destinationPath)
 
 	// Ensure cleanup of temporary files happens when we're done
-	defer scState.Cleanup()
+	defer sc_Cleanup(scState)
 
 	// Process each input snapshot file
 	for i, snapshotPath := range inputSnapshots {
@@ -494,7 +499,7 @@ func sc_Run(cmd *cobra.Command, args []string) error {
 	fmt.Printf("\nReconstructing snapshot...\n")
 	err = sc_reconstruct(scState)
 	if err != nil {
-		return fmt.Errorf("failed to reconstruct snapshot: %w", err)
+		fmt.Printf("failed to reconstruct snapshot: %v", err)
 	}
 
 	// If we're processing a single snapshot, validate the reconstruction
