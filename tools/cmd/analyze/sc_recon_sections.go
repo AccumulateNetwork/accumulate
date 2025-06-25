@@ -15,6 +15,13 @@ import (
 func sc_WriteSections(scState *sc_State) error {
 	fmt.Printf("Writing sections to output file...\n")
 
+	// Get the current file position (should be after the 64-byte file header)
+	filePos, err := scState.OutFile.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return fmt.Errorf("failed to get current file position: %w", err)
+	}
+	fmt.Printf("Starting file position: %d bytes\n", filePos)
+
 	// Get all sections
 	sections := scState.SectionFiles.List()
 	if len(sections) == 0 {
@@ -34,7 +41,7 @@ func sc_WriteSections(scState *sc_State) error {
 
 	// Step 1: Use snapshot.Open to read the snapshot file
 	// This properly handles the file header and section headers
-	_, err := firstSnapshotFile.Seek(0, io.SeekStart)
+	_, err = firstSnapshotFile.Seek(0, io.SeekStart)
 	if err != nil {
 		return fmt.Errorf("failed to seek to beginning of first snapshot file: %w", err)
 	}
@@ -247,8 +254,14 @@ func sc_WriteSections(scState *sc_State) error {
 			// Set the section size (8 bytes, big-endian)
 			binary.BigEndian.PutUint64(sectionHeaderBuf[8:16], uint64(tmpFileSize))
 			
-			// Calculate and set the next section offset (8 bytes, big-endian) - offset 16
-			nextSectionOffset := currentPos + 64 + tmpFileSize
+			// Get current file position to calculate next section offset
+			filePos, err := scState.OutFile.Seek(0, io.SeekCurrent)
+			if err != nil {
+				return fmt.Errorf("failed to get current file position for next section offset calculation: %w", err)
+			}
+			
+			// Calculate and set the next section offset (8 bytes, big-endian)
+			nextSectionOffset := filePos + 64 + tmpFileSize // 64 bytes for header + section data
 			if nextSectionOffset%64 != 0 {
 				padding := 64 - (nextSectionOffset % 64)
 				nextSectionOffset += padding
@@ -265,8 +278,11 @@ func sc_WriteSections(scState *sc_State) error {
 				return fmt.Errorf("failed to write BPT section header: %w", err)
 			}
 			
-			// Update current position
-			currentPos += 64 // Section header is 64 bytes
+			// Get current file position after writing the section header
+			currentPos, err = scState.OutFile.Seek(0, io.SeekCurrent)
+			if err != nil {
+				return fmt.Errorf("failed to get current file position after writing BPT section header: %w", err)
+			}
 			
 			// Seek to the beginning of the temporary file
 			_, err = section.TmpFile.Seek(0, io.SeekStart)
@@ -287,8 +303,11 @@ func sc_WriteSections(scState *sc_State) error {
 				return fmt.Errorf("failed to write section data for %s: %w", section.Type, err)
 			}
 			
-			// Update current position after writing data
-			currentPos += int64(bytesWritten)
+			// Get current file position after writing the section data
+			currentPos, err = scState.OutFile.Seek(0, io.SeekCurrent)
+			if err != nil {
+				return fmt.Errorf("failed to get current file position after writing BPT section data: %w", err)
+			}
 			
 			// Check if the correct number of bytes was written
 			if int64(bytesWritten) != tmpFileSize {
@@ -297,6 +316,12 @@ func sc_WriteSections(scState *sc_State) error {
 			}
 			
 			fmt.Printf("Successfully wrote %d bytes of data for BPT section %s\n", bytesWritten, section.Type)
+			
+			// Get current file position to check alignment
+			currentPos, err = scState.OutFile.Seek(0, io.SeekCurrent)
+			if err != nil {
+				return fmt.Errorf("failed to get current file position for padding calculation: %w", err)
+			}
 			
 			// Add padding to align to the next 64-byte boundary if needed
 			if currentPos%64 != 0 {
@@ -309,13 +334,24 @@ func sc_WriteSections(scState *sc_State) error {
 					return fmt.Errorf("failed to write alignment padding after BPT section %s: %w", section.Type, err)
 				}
 				
-				currentPos += int64(paddingSize)
+				// Update position after writing padding
+				currentPos, err = scState.OutFile.Seek(0, io.SeekCurrent)
+				if err != nil {
+					return fmt.Errorf("failed to get current file position after padding: %w", err)
+				}
+				
 				fmt.Printf("Added %d bytes of padding after BPT section %s to align to 64-byte boundary\n",
 					paddingSize, section.Type)
 			}
 			
 			// Skip the normal section processing
 			continue
+		}
+
+		// Get current file position to check alignment
+		currentPos, err = scState.OutFile.Seek(0, io.SeekCurrent)
+		if err != nil {
+			return fmt.Errorf("failed to get current file position for padding calculation: %w", err)
 		}
 
 		// Ensure we're at a 64-byte boundary for each section
@@ -329,7 +365,12 @@ func sc_WriteSections(scState *sc_State) error {
 				return fmt.Errorf("failed to write alignment padding: %w", err)
 			}
 
-			currentPos += int64(paddingSize)
+			// Update position after writing padding
+			currentPos, err = scState.OutFile.Seek(0, io.SeekCurrent)
+			if err != nil {
+				return fmt.Errorf("failed to get current file position after padding: %w", err)
+			}
+			
 			fmt.Printf("Added %d bytes of padding to align to 64-byte boundary\n", paddingSize)
 		}
 
@@ -368,9 +409,19 @@ func sc_WriteSections(scState *sc_State) error {
 		// Set the section size at bytes 8-15 (8-byte big-endian)
 		binary.BigEndian.PutUint64(sectionHeader[8:16], uint64(tmpFileSize))
 
+		// Get current file position to calculate next section offset
+		filePos, err := scState.OutFile.Seek(0, io.SeekCurrent)
+		if err != nil {
+			return fmt.Errorf("failed to get current file position for next section offset calculation: %w", err)
+		}
+		
 		// Calculate next section offset (current position + header size + data size + padding)
-		padding := (64 - ((currentPos + 64 + tmpFileSize) % 64)) % 64
-		nextOffset := currentPos + 64 + tmpFileSize + padding
+		nextSectionPos := filePos + 64 + tmpFileSize // 64 bytes for header + section data
+		padding := int64(0)
+		if nextSectionPos%64 != 0 {
+			padding = 64 - (nextSectionPos % 64)
+		}
+		nextOffset := nextSectionPos + padding
 
 		// Set the next section offset at bytes 16-23 (8-byte big-endian)
 		binary.BigEndian.PutUint64(sectionHeader[16:24], uint64(nextOffset))
@@ -387,7 +438,11 @@ func sc_WriteSections(scState *sc_State) error {
 			return fmt.Errorf("failed to write section header for %s: %w", section.Type, err)
 		}
 
-		currentPos += 64 // Section header is 64 bytes
+		// Get current file position after writing section header
+		currentPos, err = scState.OutFile.Seek(0, io.SeekCurrent)
+		if err != nil {
+			return fmt.Errorf("failed to get current file position after writing section header: %w", err)
+		}
 		fmt.Printf("Writing section %s, type: %d, size: %d bytes at offset %d\n",
 			section.Type, sectionType, tmpFileSize, sectionOffset)
 
@@ -422,8 +477,11 @@ func sc_WriteSections(scState *sc_State) error {
 			return fmt.Errorf("failed to write section data for %s: %w", section.Type, err)
 		}
 
-		// Update current position after writing data
-		currentPos += int64(bytesWritten)
+		// Get current file position after writing section data
+		currentPos, err = scState.OutFile.Seek(0, io.SeekCurrent)
+		if err != nil {
+			return fmt.Errorf("failed to get current file position after writing section data: %w", err)
+		}
 
 		// Check if the correct number of bytes was written
 		if int64(bytesWritten) != tmpFileSize {
@@ -452,22 +510,64 @@ func sc_WriteSections(scState *sc_State) error {
 
 	fmt.Printf("All sections written successfully\n")
 
+	// Check if we need to match the original file size exactly
+	if scState.OriginalFileSize > 0 {
+		// Get current file size
+		currentFileInfo, err := scState.OutFile.Stat()
+		if err != nil {
+			return fmt.Errorf("failed to get current file info: %w", err)
+		}
+		currentSize := currentFileInfo.Size()
+		
+		// If the sizes don't match, adjust the file size
+		if currentSize != scState.OriginalFileSize {
+			fmt.Printf("Adjusting file size to match original: %d bytes (current: %d bytes)\n", 
+				scState.OriginalFileSize, currentSize)
+			
+			if currentSize < scState.OriginalFileSize {
+				// Add padding to match original size
+				paddingSize := scState.OriginalFileSize - currentSize
+				padding := make([]byte, paddingSize)
+				
+				// Write padding
+				_, err = scState.OutFile.Write(padding)
+				if err != nil {
+					return fmt.Errorf("failed to write final padding: %w", err)
+				}
+				fmt.Printf("Added %d bytes of padding to match original file size\n", paddingSize)
+			} else if currentSize > scState.OriginalFileSize {
+				// Truncate file to match original size
+				err = scState.OutFile.Truncate(scState.OriginalFileSize)
+				if err != nil {
+					return fmt.Errorf("failed to truncate file to original size: %w", err)
+				}
+				fmt.Printf("Truncated file by %d bytes to match original file size\n", currentSize - scState.OriginalFileSize)
+			}
+		}
+	}
+	
 	// Print a summary of the reconstructed snapshot
-	printSnapshotSummary(scState.OutFile, currentPos)
-
+	printSnapshotSummary(scState.OutFile)
+	
 	return nil
 }
 
 // printSnapshotSummary prints a summary of the reconstructed snapshot
-func printSnapshotSummary(file *os.File, totalSize int64) {
+func printSnapshotSummary(file *os.File) error {
+	// Get file size
+	fileInfo, err := file.Stat()
+	if err != nil {
+		return fmt.Errorf("failed to get file info: %w", err)
+	}
+	totalSize := fileInfo.Size()
+	
 	fmt.Printf("\n=== Snapshot Reconstruction Summary ===\n")
 	fmt.Printf("Total snapshot size: %d bytes (%.2f MB)\n", totalSize, float64(totalSize)/1024/1024)
 
 	// Seek to the beginning of the file to read the header
-	_, err := file.Seek(0, io.SeekStart)
+	_, err = file.Seek(0, io.SeekStart)
 	if err != nil {
-		fmt.Printf("Error seeking to beginning of file: %v\n", err)
-		return
+		return fmt.Errorf("Error seeking to beginning of file: %w", err)
 	}
 
 	// Try to open the snapshot using the snapshot package
