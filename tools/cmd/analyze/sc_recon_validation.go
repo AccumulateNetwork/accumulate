@@ -58,12 +58,14 @@ func sc_ValidateReconstructionImpl(originalPath, reconstructedPath string, scSta
 	fmt.Printf("Reconstructed file size: %d bytes (%s)\n", reconstructedInfo.Size(), formatByteSize(reconstructedInfo.Size()))
 
 	// Compare file sizes
-	if originalInfo.Size() != reconstructedInfo.Size() {
-		return false, fmt.Errorf("file sizes do not match: original=%d, reconstructed=%d",
+	fileSizesMatch := originalInfo.Size() == reconstructedInfo.Size()
+	if !fileSizesMatch {
+		fmt.Printf("Warning: File sizes do not match: original=%d, reconstructed=%d\n", 
 			originalInfo.Size(), reconstructedInfo.Size())
+		fmt.Printf("Continuing with byte-by-byte comparison to find the first difference...\n")
+	} else {
+		fmt.Printf("File sizes match: %d bytes\n", originalInfo.Size())
 	}
-
-	fmt.Printf("File sizes match: %d bytes\n", originalInfo.Size())
 
 	// Compare file contents byte by byte
 	const bufferSize = 64 * 1024 // 64KB buffer
@@ -271,6 +273,11 @@ func sc_ValidateReconstructionImpl(originalPath, reconstructedPath string, scSta
 		if err1 == io.EOF || err2 == io.EOF {
 			break
 		}
+	}
+
+	if !fileSizesMatch {
+		return false, fmt.Errorf("file sizes do not match: original=%d, reconstructed=%d",
+			originalInfo.Size(), reconstructedInfo.Size())
 	}
 
 	fmt.Printf("Validation successful: files match byte-for-byte (%d bytes compared)\n", bytesCompared)
