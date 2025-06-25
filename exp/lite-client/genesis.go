@@ -50,12 +50,12 @@ func RetrieveGenesisAuthority(ctx context.Context, cl *client.Client) (*protocol
 		return nil, nil, errors.Wrap(err, "failed to get authority URL")
 	}
 
-	book, err := getKeyBook(ctx, cl, bookUrl)
+	book, err := GetKeyBook(ctx, cl, bookUrl)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to get key book")
 	}
 
-	page, err := getKeyPage(ctx, cl, bookUrl, 0)
+	page, err := GetKeyPage(ctx, cl, bookUrl, 0)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to get key page")
 	}

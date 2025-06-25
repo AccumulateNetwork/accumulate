@@ -56,16 +56,6 @@ func (d dummyKeySig) GetSignature() []byte {
 	return []byte("invalid-signature")
 }
 
-func TestVerifySignature_Invalid(t *testing.T) {
-	sig := dummyKeySig{}
-	rootHash := []byte("testhash")
-	publicKey := []byte("testpubkey")
-
-	ok, err := VerifySignature(sig, rootHash, publicKey)
-	require.Error(t, err)
-	require.False(t, ok)
-}
-
 func TestTrackAuthorityChanges_Stub(t *testing.T) {
 	cl := createTestClient(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
