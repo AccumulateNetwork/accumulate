@@ -1,9 +1,8 @@
 package liteclient
 
 import (
-	"crypto/ed25519"
-	"errors"
 	"fmt"
+	"errors"
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -33,37 +32,12 @@ func NewAuthoritySetFromAccount(account interface{}) (*AuthoritySet, error) {
 	}
 }
 
-// VerifySignatureAgainstAuthoritySet checks if a signature is valid for the given authority set.
-// It returns true if the number of valid signatures meets the authority threshold.
-func VerifySignatureAgainstAuthoritySet(
-	signature protocol.KeySignature,
-	hash []byte,
-	authSet *AuthoritySet,
-) (bool, error) {
-	validCount := 0
-	for _, pub := range authSet.Keys {
-		valid, err := verifyEd25519Signature(signature, hash, pub)
-		if err == nil && valid {
-			validCount++
-		}
-	}
-	if uint64(validCount) >= authSet.Threshold {
-		return true, nil
-	}
-	return false, fmt.Errorf("not enough valid signatures: got %d, need %d", validCount, authSet.Threshold)
-}
-
-// verifyEd25519Signature checks a KeySignature against a public key and hash using ed25519.
-func verifyEd25519Signature(signature protocol.KeySignature, hash []byte, publicKey []byte) (bool, error) {
-	sigBytes := signature.GetSignature()
-	if len(sigBytes) != ed25519.SignatureSize {
-		return false, fmt.Errorf("unexpected signature length: got %d, want %d", len(sigBytes), ed25519.SignatureSize)
-	}
-	if len(publicKey) != ed25519.PublicKeySize {
-		return false, fmt.Errorf("invalid public key length: got %d, want %d", len(publicKey), ed25519.PublicKeySize)
-	}
-	valid := ed25519.Verify(publicKey, hash, sigBytes)
-	return valid, nil
+// AuthorityManager defines the interface for managing authorities over time.
+type AuthorityManager interface {
+	// GetAuthorityAt returns the AuthoritySet at a given block index.
+	GetAuthorityAt(blockIndex uint64) (*AuthoritySet, error)
+	// RecordChange records an authority change at a specific block index.
+	RecordChange(blockIndex uint64, newAuth *AuthoritySet)
 }
 
 // AuthorityTracker maintains a history of authority changes across major blocks.
@@ -89,19 +63,4 @@ func (t *AuthorityTracker) GetAuthorityAt(blockIndex uint64) (*AuthoritySet, err
 // RecordChange records an authority change at a specific block index.
 func (t *AuthorityTracker) RecordChange(blockIndex uint64, newAuth *AuthoritySet) {
 	t.history[blockIndex] = newAuth
-}
-
-// VerifyBlockSignatureAgainstAuthority checks if the signature is valid for the authority at the given block index.
-// It returns true if the number of valid signatures meets the authority threshold.
-func VerifyBlockSignatureAgainstAuthority(
-	tracker *AuthorityTracker,
-	blockIndex uint64,
-	signature protocol.KeySignature,
-	rootHash []byte,
-) (bool, error) {
-	authSet, err := tracker.GetAuthorityAt(blockIndex)
-	if err != nil {
-		return false, fmt.Errorf("could not get authority: %w", err)
-	}
-	return VerifySignatureAgainstAuthoritySet(signature, rootHash, authSet)
 }

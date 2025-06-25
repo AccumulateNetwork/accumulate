@@ -51,9 +51,7 @@ func (s *SignerValidator) ExtractSignaturesFromEnvelope(block interface{}) ([]pr
 		return nil, fmt.Errorf("unsupported block type: %T", block)
 	}
 	var sigs []protocol.Signature
-	for _, sig := range env.Signatures {
-		sigs = append(sigs, sig)
-	}
+	sigs = append(sigs, env.Signatures...)
 	if len(sigs) == 0 {
 		return nil, fmt.Errorf("no protocol.Signature found in envelope")
 	}
