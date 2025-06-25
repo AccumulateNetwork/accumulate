@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	accurl "gitlab.com/accumulatenetwork/accumulate/pkg/url"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 func TestQueryMajorBlocksAndSequence(t *testing.T) {
@@ -46,14 +45,6 @@ func TestQueryNetworkGlobals(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, globals)
 	require.NotEmpty(t, globals.MajorBlockSchedule)
-}
-
-type dummyKeySig struct {
-	protocol.KeySignature
-}
-
-func (d dummyKeySig) GetSignature() []byte {
-	return []byte("invalid-signature")
 }
 
 func TestTrackAuthorityChanges_Stub(t *testing.T) {
