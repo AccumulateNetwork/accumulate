@@ -125,51 +125,36 @@ func sc_writeSectionFromFile(destFile *os.File, sourceFile *os.File, key string)
 // a byte-for-byte identical header section compared to the original snapshot format.
 // printHexDump prints a hexadecimal representation of data for debugging
 // offset is the starting offset for the address column
-// maxBytes is the maximum number of bytes to print (-1 for all)
-// indexes is an optional slice of indexes to highlight in the output
+// diffPos is the position of the differing byte (relative to the data slice)
+// indexes is an optional slice of indexes to highlight in the output (section headers)
 //
-// The first index should be treated as a byte, and if it is in the range
-// of the data, (subtract the offset to determine if it is in the range for
-// the given data) the byte is highlighted red.
-//
-// If there is a second or more index, then highlight 64 bytes starting
-// at that index in green.
-//
-// If these colors overlap, then the red dominates.
-func printHexDump(data []byte, offset int, maxBytes int, indexes ...int) {
-	if maxBytes < 0 || maxBytes > len(data) {
-		maxBytes = len(data)
-	}
-
+// The diffPos is highlighted in bright red background with white text.
+// Section headers (indexes) are highlighted in green.
+func printHexDump(data []byte, offset int, diffPos int, indexes ...int) {
 	// ANSI color codes
 	const (
-		redColor   = "\033[31m" // Red for the first index
-		greenColor = "\033[32m" // Green for subsequent indexes (64-byte ranges)
-		resetColor = "\033[0m"  // Reset to default color
+		diffColor  = "\033[97;41m" // White text on red background for the differing byte
+		greenColor = "\033[32m"    // Green for section headers (64-byte ranges)
+		resetColor = "\033[0m"     // Reset to default color
 	)
-
-	// Limit the data to the specified maxBytes
-	data = data[:maxBytes]
 
 	// Create a map to track which indexes should be highlighted and with what color
 	highlightMap := make(map[int]string)
 
-	// First index (if exists) is highlighted in red
-	if len(indexes) > 0 {
-		redIdx := indexes[0]
-		if redIdx >= offset && redIdx < offset+maxBytes {
-			highlightMap[redIdx] = redColor
-		}
+	// Mark the differing byte position with bright highlighting
+	if diffPos >= 0 && diffPos < len(data) {
+		highlightMap[offset+diffPos] = diffColor
 	}
 
-	// Subsequent indexes start 64-byte green ranges
-	for i := 1; i < len(indexes); i++ {
-		greenStartIdx := indexes[i]
-		for j := 0; j < 64; j++ {
-			currIdx := greenStartIdx + j
-			// Only add if within our display range and not already red
-			if currIdx >= offset && currIdx < offset+maxBytes && highlightMap[currIdx] != redColor {
-				highlightMap[currIdx] = greenColor
+	// Mark section headers with green (64 bytes each)
+	for _, sectionOffset := range indexes {
+		// For each section header, highlight all 64 bytes
+		for i := 0; i < 64; i++ {
+			byteOffset := sectionOffset + i
+			// Only highlight if within our display range and not already highlighted as diff
+			if byteOffset >= offset && byteOffset < offset+len(data) && 
+			   highlightMap[byteOffset] != diffColor {
+				highlightMap[byteOffset] = greenColor
 			}
 		}
 	}
