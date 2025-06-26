@@ -1,6 +1,67 @@
 # Accumulate Snapshot Format (Version 2)
 
-This document provides a comprehensive specification of the Accumulate version 2 snapshot format and structure.
+This document provides a comprehensive guide to working with Accumulate version 2 snapshots. The format is implemented using Go structs defined in the Accumulate codebase, with binary marshaling and unmarshaling operations handled automatically.
+
+## Working with Snapshots
+
+Developers should always use the provided structs and methods to work with snapshots rather than handling binary representations directly. The Accumulate codebase provides a complete set of tools for reading, writing, and manipulating snapshots.
+
+## Type Reference
+
+This section provides brief explanations of the types referenced in the snapshot structs.
+
+### Core Types
+
+- **record.Key**: A structured key used to identify records in the database. Defined in `pkg/types/record/key.go`.
+  ```go
+  type Key struct {
+      values []any   // The path components of the key
+      hash   *KeyHash // Cached hash of the key
+  }
+  ```
+
+- **merkle.Receipt**: A Merkle proof that proves a record's inclusion in the database. Defined in `pkg/database/merkle/types_gen.go`.
+  ```go
+  type Receipt struct {
+      // Fields omitted for brevity
+      // Contains a list of hashes that form a Merkle proof
+  }
+  ```
+
+### Protocol Types
+
+- **NetworkAccountUpdate**: Represents an update to a network account. Defined in `protocol/types_gen.go`.
+  ```go
+  type NetworkAccountUpdate struct {
+      fieldsSet []bool
+      Name      string          // Name of the network account
+      Body      TransactionBody // The update transaction body
+      extraData []byte
+  }
+  ```
+
+- **ExecutorVersion**: Represents the version of the executor. Defined in `protocol/version.go`.
+  ```go
+  type ExecutorVersion uint64
+  ```
+
+- **PartitionExecutorVersion**: Associates an executor version with a specific partition. Defined in `protocol/types_gen.go`.
+  ```go
+  type PartitionExecutorVersion struct {
+      fieldsSet []bool
+      Partition string          // Name of the partition
+      Version   ExecutorVersion // Version of the executor for this partition
+      extraData []byte
+  }
+  ```
+
+- **AnchorBody**: An interface for transaction bodies that contain partition anchors. Defined in `protocol/anchor.go`.
+  ```go
+  type AnchorBody interface {
+      TransactionBody
+      GetPartitionAnchor() *PartitionAnchor
+  }
+  ```
 
 ## Snapshot File Structure
 
@@ -85,126 +146,357 @@ Many values in the snapshot format are length-prefixed. The format is:
 - **Length**: Variable-length integer (varint) encoded using Protocol Buffers encoding
 - **Value**: Binary data of exactly `Length` bytes
 
-### Header Section Binary Format
+### Header Section
 
-The Header section has the following binary layout:
+The Header section contains the snapshot metadata, including:
 
-```
-+--------+--------+--------+--------+--------+--------+--------+--------+--------+--------+
-| Length (8 bytes, big-endian) | Header Data (Length bytes)                     ... |
-+--------+--------+--------+--------+--------+--------+--------+--------+--------+--------+
-```
+- **Version**: The snapshot format version (must be 2)
+- **Root Hash**: The 32-byte BPT root hash
+- **System Ledger**: The partition's system ledger state
 
-The Header Data is a field-based encoding with the following structure:
+Developers should use the `snapshot.Header` struct to work with header data rather than handling the binary format directly.
 
-```
-+--------+--------+--------+--------+--------+--------+--------+--------+--------+--------+
-| Field 1: Version (varint) | Field 2: Root Hash (32 bytes) | Field 3: SystemLedger    ... |
-+--------+--------+--------+--------+--------+--------+--------+--------+--------+--------+
-```
+### Record Entry Section
 
-Where:
-- **Field 1 - Version**: The snapshot format version (must be 2), encoded as a varint
-- **Field 2 - Root Hash**: The 32-byte BPT root hash
-- **Field 3 - System Ledger**: The partition's system ledger state, which includes:
-  - The partition URL (e.g., "acc://dn.acme/ledger")
-  - Ledger state information (balances, sequence numbers, etc.)
-  - Other metadata specific to the system ledger
+Record entries contain the actual data stored in the snapshot. Each record consists of:
 
-The SystemLedger field is what contains the ASCII text (URLs) that may be visible when examining the raw binary data of a snapshot file.
+- **Key**: A structured key that identifies the record
+- **Value**: The binary data associated with the key
+- **Receipt** (optional): A Merkle proof for the record
 
-```
-+--------+--------+--------+--------+--------+--------+--------+--------+--------+--------+
-| Field 1: Version (varint) | Field 2: Root Hash (32 bytes)                ... |
-+--------+--------+--------+--------+--------+--------+--------+--------+--------+--------+
-| Field 3: System Ledger (serialized structure)                           ... |
-+--------+--------+--------+--------+--------+--------+--------+--------+--------+--------+
-```
+Developers should use the `snapshot.RecordEntry` struct to work with record data rather than handling the binary format directly.
 
-The Header Data fields are encoded using a field-based format where each field has:
-- A field number (1, 2, or 3)
-- The field's value encoded according to its type
+### Record Keys
 
-Details of each field:
-- **Version (Field 1)**: Must be 2 for version 2 snapshots, encoded as a varint
-- **Root Hash (Field 2)**: 32-byte SHA-256 hash of the BPT root
-- **System Ledger (Field 3)**: A complex structure containing:
-  - Partition URL (e.g., "acc://dn.acme/ledger")
-  - Ledger state information (balances, sequence numbers, etc.)
-  - Other metadata specific to the system ledger
+Record keys in Accumulate snapshots use a structured format that represents the key's path components. Keys are represented by the `record.Key` struct, which contains:
 
-### Record Entry Binary Format
+- **Path**: An array of string elements that form the key path
 
-Each record in a Records section has the following binary format:
+Developers should use the `record.Key` struct to work with keys rather than handling the binary format directly.
 
-```
-+--------+--------+--------+--------+--------+--------+--------+--------+--------+--------+
-| Record Length (varint)    | Key Length (varint)      | Key Data (Key Length bytes) ... |
-+--------+--------+--------+--------+--------+--------+--------+--------+--------+--------+
-| Value Length (varint)     | Value Data (Value Length bytes)               ... |
-+--------+--------+--------+--------+--------+--------+--------+--------+--------+--------+
-| Receipt Flag (1 byte)     | Receipt Data (if flag=1)                     ... |
-+--------+--------+--------+--------+--------+--------+--------+--------+--------+--------+
+### Record Index Section
+
+The record index provides a way to quickly locate records in the snapshot without scanning through all records. Each index entry contains:
+
+- **Key Hash**: SHA-256 hash of the record key
+- **Section**: The section number containing the record
+- **Offset**: The byte offset within the section where the record starts
+
+Developers should use the `snapshot.RecordIndexEntry` struct to work with index entries rather than handling the binary format directly.
+
+## Working with Snapshot Files
+
+### Reader and Writer Overview
+
+The Accumulate snapshot package provides two primary structs for working with snapshot files:
+
+1. **snapshot.Reader**: For reading and parsing snapshot files
+2. **snapshot.Writer**: For creating and writing snapshot files
+
+These structs abstract away the complexity of the binary format and provide a clean API for working with snapshots.
+
+#### Reader Structure
+
+The `snapshot.Reader` struct provides access to the snapshot's contents:
+
+```go
+type Reader struct {
+    Sections []*sectionReader // All sections in the snapshot
+    Header   *Header         // The parsed snapshot header
+}
 ```
 
-### Key Binary Format
+Key methods:
+- `Open(typ ...SectionType) (ioutil.SectionReader, error)` - Opens the first section of the given type
+- `OpenIndex(i int) (*IndexReader, error)` - Opens a record index section
+- `OpenRecords(i int) (RecordReader, error)` - Opens a records section
+- `OpenBPT(i int) (RecordReader, error)` - Opens a BPT section
 
-A hierarchical key is encoded as follows:
+#### Writer Structure
 
-```
-+--------+--------+--------+--------+--------+--------+--------+--------+--------+--------+
-| Number of Elements (varint) | Element 1 Length (varint) | Element 1 Data      ... |
-+--------+--------+--------+--------+--------+--------+--------+--------+--------+--------+
-| Element 2 Length (varint)  | Element 2 Data           ... | ... more elements ... |
-+--------+--------+--------+--------+--------+--------+--------+--------+--------+--------+
-```
+The `snapshot.Writer` struct manages the creation of snapshot files:
 
-### Record Index Entry Binary Format
-
-Each entry in a Record Index section has a fixed size of 44 bytes:
-
-```
-+--------+--------+--------+--------+--------+--------+--------+--------+--------+--------+
-| Key Hash (32 bytes)                                                           ... |
-+--------+--------+--------+--------+--------+--------+--------+--------+--------+--------+
-| Section Number (4 bytes)  | Offset (8 bytes)                                    |
-+--------+--------+--------+--------+--------+--------+--------+--------+--------+--------+
+```go
+type Writer struct {
+    // Internal fields omitted
+}
 ```
 
-- **Key Hash**: 32-byte SHA-256 hash of the record key
-- **Section Number**: 4-byte unsigned integer in little-endian format
-- **Offset**: 8-byte unsigned integer in little-endian format
+Key methods:
+- `WriteHeader(header *Header) error` - Writes the snapshot header (must be called first)
+- `OpenRaw(typ SectionType) (*SectionWriter, error)` - Opens a new section for writing
 
-### Example: Complete Binary Representation
+### Reading a Snapshot
 
-Here's a hexadecimal representation of a minimal snapshot file with one header section and one record section containing a single record:
+To read a snapshot file, use the `snapshot.Open` function and the `Reader` struct:
 
+```go
+// Open a file
+file, err := os.Open("path/to/snapshot.snap")
+if err != nil {
+    // Handle error
+}
+defer file.Close()
+
+// Open the snapshot for reading
+reader, err := snapshot.Open(file)
+if err != nil {
+    // Handle error
+}
+
+// Access the header information
+fmt.Printf("Snapshot version: %d\n", reader.Header.Version)
+fmt.Printf("Root hash: %x\n", reader.Header.RootHash)
+
+// Read records from the first records section
+recordReader, err := reader.OpenRecords(0)
+if err != nil {
+    // Handle error
+}
+
+// Read records sequentially
+for {
+    record, err := recordReader.Read()
+    if err == io.EOF {
+        break
+    }
+    if err != nil {
+        // Handle error
+        break
+    }
+    
+    // Process the record
+    fmt.Printf("Key: %v, Value length: %d\n", record.Key, len(record.Value))
+}
 ```
-# Section 1: Header Section (64-byte header)
-00 01                       # Section type = 1 (Header) in big-endian
-00 00 00 00 00 00           # Reserved (6 bytes)
-00 00 00 00 00 00 00 10     # Section size = 16 bytes in big-endian
-00 00 00 00 00 00 00 40     # Next section offset = 64 (after this header)
-00 ... 00                   # Additional metadata (40 bytes)
 
-# Header content (16 bytes)
-00 00 00 02                 # Version = 2 in big-endian
-01 02 03 ... 1F 20          # Root hash (32 bytes)
+### Writing a Snapshot
 
-# Section 2: Records Section (64-byte header)
-00 07                       # Section type = 7 (Records) in big-endian
-00 00 00 00 00 00           # Reserved (6 bytes)
-00 00 00 00 00 00 00 30     # Section size = 48 bytes in big-endian
-00 00 00 00 00 00 00 00     # Next section offset = 0 (end of file)
-00 ... 00                   # Additional metadata (40 bytes)
+To create a new snapshot file, use the `snapshot.Create` function and the `Writer` struct:
 
-# Records section content
-# Record 1 (48 bytes)
-08 41 63 63 6F 75 6E 74     # Key part 1: "Account" (8 bytes)
-...
+```go
+// Create a file
+file, err := os.Create("path/to/snapshot.snap")
+if err != nil {
+    // Handle error
+}
+defer file.Close()
+
+// Create the snapshot writer
+writer, err := snapshot.Create(file)
+if err != nil {
+    // Handle error
+}
+
+// Write the header (must be done first)
+header := &snapshot.Header{
+    Version: snapshot.Version2,
+    RootHash: rootHash,  // Your calculated root hash
+    SystemLedger: systemLedger,  // Optional system ledger information
+}
+
+err = writer.WriteHeader(header)
+if err != nil {
+    // Handle error
+}
+
+// Open a records section for writing
+sectionWriter, err := writer.OpenRaw(snapshot.SectionTypeRecords)
+if err != nil {
+    // Handle error
+}
+
+// Write records to the section
+for _, record := range records {
+    err = sectionWriter.WriteValue(record)
+    if err != nil {
+        // Handle error
+        break
+    }
+}
+
+// Close the section when done
+err = sectionWriter.Close()
+if err != nil {
+    // Handle error
+}
 ```
 
-> Note: The actual binary representation uses 64-byte headers with big-endian encoding for multi-byte values.
+### Working with Specific Section Types
+
+#### Record Sections
+
+Record sections contain key-value pairs and are the most common section type in snapshots:
+
+```go
+// Open a records section
+recordReader, err := reader.OpenRecords(0) // 0 is the index of the section
+if err != nil {
+    // Handle error
+}
+
+// Read records sequentially
+for {
+    record, err := recordReader.Read()
+    if err == io.EOF {
+        break
+    }
+    if err != nil {
+        // Handle error
+        break
+    }
+    
+    // Process the record
+    fmt.Printf("Key: %v, Value: %x\n", record.Key, record.Value)
+}
+```
+
+#### Index Sections
+
+Index sections provide fast lookup of records by key hash:
+
+```go
+// Open an index section
+indexReader, err := reader.OpenIndex(0) // 0 is the index of the section
+if err != nil {
+    // Handle error
+}
+
+// Read index entries
+for i := 0; i < indexReader.Count; i++ {
+    entry, err := indexReader.Read(i)
+    if err != nil {
+        // Handle error
+        break
+    }
+    
+    // Process the index entry
+    fmt.Printf("Key hash: %x, Section: %d, Offset: %d\n", 
+        entry.KeyHash, entry.Section, entry.Offset)
+}
+```
+
+#### BPT Sections
+
+BPT sections contain Binary Patricia Tree entries:
+
+```go
+// Open a BPT section
+bptReader, err := reader.OpenBPT(0) // 0 is the index of the section
+if err != nil {
+    // Handle error
+}
+
+// Read BPT entries sequentially
+for {
+    entry, err := bptReader.Read()
+    if err == io.EOF {
+        break
+    }
+    if err != nil {
+        // Handle error
+        break
+    }
+    
+    // Process the BPT entry
+    fmt.Printf("Key: %v, Hash: %x\n", entry.Key, entry.Value)
+}
+```
+
+### Scanning Snapshot Sections
+
+To scan all sections in a snapshot and identify their types and sizes:
+
+```go
+// Open a snapshot file
+file, err := os.Open("path/to/snapshot.snap")
+if err != nil {
+    // Handle error
+}
+defer file.Close()
+
+// Open the snapshot
+reader, err := snapshot.Open(file)
+if err != nil {
+    // Handle error
+}
+
+// Print header information
+fmt.Printf("Snapshot version: %d\n", reader.Header.Version)
+fmt.Printf("Root hash: %x\n", reader.Header.RootHash)
+
+// Print system ledger information if present
+if reader.Header.SystemLedger != nil {
+    fmt.Printf("System ledger URL: %v\n", reader.Header.SystemLedger.Url)
+    fmt.Printf("System ledger index: %d\n", reader.Header.SystemLedger.Index)
+    fmt.Printf("System ledger timestamp: %v\n", reader.Header.SystemLedger.Timestamp)
+    fmt.Printf("System ledger executor version: %v\n", reader.Header.SystemLedger.ExecutorVersion)
+}
+
+// Print information about each section
+for i, section := range reader.Sections {
+    sectionType := section.Type()
+    sectionTypeName := getSectionTypeName(sectionType)
+    fmt.Printf("Section %d: Type=%d (%s), Size=%d, Offset=%d\n", 
+        i, sectionType, sectionTypeName, section.Size(), section.Offset())
+}
+
+// Helper function to get section type name
+func getSectionTypeName(sectionType snapshot.SectionType) string {
+    switch sectionType {
+    case snapshot.SectionTypeHeader:
+        return "Header"
+    case snapshot.SectionTypeSnapshot:
+        return "Snapshot"
+    case snapshot.SectionTypeRecords:
+        return "Records"
+    case snapshot.SectionTypeRecordIndex:
+        return "RecordIndex"
+    case snapshot.SectionTypeBPT:
+        return "BPT"
+    case snapshot.SectionTypeRawBPT:
+        return "RawBPT"
+    case snapshot.SectionTypeConsensus:
+        return "Consensus"
+    default:
+        return "Unknown"
+    }
+}
+```
+
+### URL Hash Handling
+
+The snapshot tool uses both the KV database for fast lookups and the binary file format for iteration when handling URLs:
+
+```go
+// Example of URL lookup using the hybrid approach
+func LookupURL(db *database.DB, hash [32]byte) (*url.URL, error) {
+    // First try to look up from the KV database (fast)
+    u, err := db.GetURL(hash)
+    if err == nil {
+        return u, nil
+    }
+    
+    // Fall back to file-based lookup if needed
+    reader, err := snapshot.OpenReader("path/to/snapshot.dat")
+    if err != nil {
+        return nil, err
+    }
+    defer reader.Close()
+    
+    // Iterate through records to find the URL
+    var foundURL *url.URL
+    err = reader.ReadRecords(func(entry *snapshot.RecordEntry) error {
+        // Check if this record contains a URL that matches the hash
+        // Implementation details omitted for brevity
+        return nil
+    })
+    
+    return foundURL, err
+}
+```
+
+This approach ensures that URL lookups are efficient without loading all URLs into memory at once, which could cause memory issues with large datasets.
 
 ## Record Structure
 
@@ -417,9 +709,1193 @@ The value field contains binary-encoded data specific to each record type. The e
      # Additional parameters follow...
      ```
 
+## Snapshot Struct Reference
+
+This section provides a comprehensive reference for all the key structs used in the Accumulate snapshot format. These structs are defined in `pkg/database/snapshot/types_gen.go` and other related files.
+
+### Section Types
+
+The `SectionType` constants define the different types of sections in a snapshot:
+
+```go
+const (
+	SectionTypeHeader         SectionType = 1
+	SectionTypeAccountsV1     SectionType = 2
+	SectionTypeTransactionsV1 SectionType = 3
+	SectionTypeSignaturesV1   SectionType = 4
+	SectionTypeGzTransactionsV1 SectionType = 5
+	SectionTypeSnapshot       SectionType = 6
+	SectionTypeRecords        SectionType = 7
+	SectionTypeRecordIndex    SectionType = 8
+	SectionTypeRawBPT         SectionType = 9
+	SectionTypeConsensus      SectionType = 10
+	SectionTypeBPT            SectionType = 11
+)
+```
+
+### Section Type to Struct Mapping
+
+Each section type in a snapshot file is written using specific Go structs. This mapping helps understand what data structures are used for each section:
+
+| Section Type | Value | Go Struct(s) Used | Description |
+|-------------|-------|-------------------|-------------|
+| `SectionTypeHeader` | 1 | `snapshot.Header` | Contains metadata about the snapshot including version, root hash, and system ledger information |
+| `SectionTypeAccountsV1` | 2 | `snapshot.Account` | Contains account data in v1 format (deprecated) |
+| `SectionTypeTransactionsV1` | 3 | `snapshot.Transaction` wrapped in `snapshot.txnSection` | Contains transaction data in v1 format (deprecated) |
+| `SectionTypeSignaturesV1` | 4 | `snapshot.Signature` wrapped in `snapshot.sigSection` | Contains signature data in v1 format (deprecated) |
+| `SectionTypeGzTransactionsV1` | 5 | `snapshot.Transaction` wrapped in `snapshot.txnSection` (gzipped) | Contains gzipped transaction data in v1 format (deprecated) |
+| `SectionTypeSnapshot` | 6 | Nested `snapshot.Header` and other sections | Contains a complete nested snapshot, used for multi-network snapshots |
+| `SectionTypeRecords` | 7 | `snapshot.RecordEntry` | Contains general records as key-value pairs with optional receipts |
+| `SectionTypeRecordIndex` | 8 | `snapshot.RecordIndexEntry` | Contains fixed-width entries that index records by key hash |
+| `SectionTypeRawBPT` | 9 | Raw 64-byte entries (32-byte key hash + 32-byte value) | Contains the BPT as raw key-value pairs (deprecated) |
+| `SectionTypeConsensus` | 10 | Implementation-specific format | Contains consensus parameters |
+| `SectionTypeBPT` | 11 | `snapshot.RecordEntry` | Contains the Binary Patricia Tree as records |
+
+### Key Struct Details
+
+#### Header Section (`SectionTypeHeader`)
+- Written using `snapshot.Header` struct
+- Contains version information (must be 2), root hash, and system ledger information
+- Always the first section in a snapshot file
+- Written via `Writer.WriteHeader(header *Header)`
+
+#### Records Section (`SectionTypeRecords`)
+- Written using `snapshot.RecordEntry` struct
+- Each record contains:
+  - `Key`: A `record.Key` pointer representing the hierarchical key path
+  - `Value`: Binary data as a byte slice
+  - `Receipt`: Optional Merkle proof as a `merkle.Receipt` pointer
+- Used for storing accounts, transactions, signatures, and other database records
+- Written via `SectionWriter.WriteValue(record)`
+
+#### Record Index Section (`SectionTypeRecordIndex`)
+- Written using `snapshot.RecordIndexEntry` struct
+- Each entry contains:
+  - `KeyHash`: 32-byte hash of the record key
+  - `Section`: Section number containing the record
+  - `Offset`: Byte offset within the section
+- Enables efficient random access to records without loading the entire snapshot
+- Entries are sorted by key hash in descending order
+
+#### BPT Section (`SectionTypeBPT`)
+- Written using `snapshot.RecordEntry` struct
+- Each entry represents a node in the Binary Patricia Tree
+- The key is the node's path in the BPT
+- The value contains the node's hash or data
+- Used for database structure and verification
+
+#### Raw BPT Section (`SectionTypeRawBPT`) - Deprecated
+- Written as raw 64-byte entries (not using a specific struct)
+- Each entry consists of a 32-byte key hash followed by a 32-byte value
+- Replaced by `SectionTypeBPT` in newer snapshots
+
+#### Transactions Section (`SectionTypeTransactionsV1`) - Deprecated
+- Written using `snapshot.Transaction` structs wrapped in a `snapshot.txnSection`
+- Contains transaction data including type, body, and header
+- Written via `Writer.WriteTransactions(txns, false)`
+
+#### Signatures Section (`SectionTypeSignaturesV1`) - Deprecated
+- Written using `snapshot.Signature` structs wrapped in a `snapshot.sigSection`
+- Contains signature data including signer, transaction hash, and signature data
+- Written via `Writer.CollectSignatures()`
+
+#### Gzipped Transactions Section (`SectionTypeGzTransactionsV1`) - Deprecated
+- Same as Transactions Section but with gzip compression
+- Written via `Writer.WriteTransactions(txns, true)`
+
+#### Consensus Section (`SectionTypeConsensus`)
+- Written in an implementation-specific format
+- Contains consensus parameters for the network
+- Format depends on the consensus engine implementation
+### Section Header
+
+The `SectionHeader` struct represents the header of a section in the snapshot file:
+
+```go
+type SectionHeader struct {
+	Type       SectionType
+	Size       int64
+	Next       int64
+	Compressed bool
+	Encrypted  bool
+	Metadata   []byte
+}
+```
+
+### Header
+
+The `Header` struct represents the snapshot header:
+
+```go
+type Header struct {
+	fieldsSet    []bool
+	Version      uint64                `json:"version,omitempty" validate:"required"`
+	RootHash     [32]byte              `json:"rootHash,omitempty" validate:"required"`
+	SystemLedger *protocol.SystemLedger `json:"systemLedger,omitempty" validate:"required"`
+	extraData    []byte
+}
+```
+
+The Header struct includes methods for:
+- Binary marshaling/unmarshaling: `MarshalBinary()`, `UnmarshalBinary()`
+- JSON marshaling/unmarshaling: `MarshalJSON()`, `UnmarshalJSON()`
+- Validation: `IsValid()`
+- Equality checking: `Equal()`
+- Copying: `Copy()`
+
+### RecordEntry
+
+The `RecordEntry` struct represents a record in the snapshot:
+
+```go
+type RecordEntry struct {
+	fieldsSet []bool
+	Key       *record.Key      `json:"key,omitempty" validate:"required"`
+	Value     []byte           `json:"value,omitempty" validate:"required"`
+	Receipt   *merkle.Receipt  `json:"receipt,omitempty"`
+	extraData []byte
+}
+```
+
+The RecordEntry struct includes methods for:
+- Binary marshaling/unmarshaling: `MarshalBinary()`, `UnmarshalBinary()`
+- JSON marshaling/unmarshaling: `MarshalJSON()`, `UnmarshalJSON()`
+- Validation: `IsValid()`
+- Equality checking: `Equal()`
+- Copying: `Copy()`
+
+### RecordIndexEntry
+
+The `RecordIndexEntry` struct represents an entry in the record index:
+
+```go
+type RecordIndexEntry struct {
+	fieldsSet []bool
+	KeyHash   [32]byte  `json:"keyHash,omitempty" validate:"required"`
+	Section   uint64    `json:"section,omitempty" validate:"required"`
+	Offset    uint64    `json:"offset,omitempty" validate:"required"`
+	extraData []byte
+}
+```
+
+The RecordIndexEntry struct includes methods for:
+- Binary marshaling/unmarshaling: `MarshalBinary()`, `UnmarshalBinary()`
+- JSON marshaling/unmarshaling: `MarshalJSON()`, `UnmarshalJSON()`
+- Validation: `IsValid()`
+- Equality checking: `Equal()`
+- Copying: `Copy()`
+
+### SystemLedger
+
+The `protocol.SystemLedger` struct represents the system ledger state:
+
+```go
+type SystemLedger struct {
+	fieldsSet         []bool
+	Url               *url.URL               `json:"url,omitempty" validate:"required"`
+	Index             uint64                 `json:"index,omitempty" validate:"required"`
+	Timestamp         time.Time              `json:"timestamp,omitempty" validate:"required"`
+	AcmeBurnt         big.Int                `json:"acmeBurnt,omitempty" validate:"required"`
+	PendingUpdates    []NetworkAccountUpdate `json:"pendingUpdates,omitempty" validate:"required"`
+	Anchor            AnchorBody             `json:"anchor,omitempty" validate:"required"`
+	ExecutorVersion   ExecutorVersion        `json:"executorVersion,omitempty"`
+	BvnExecutorVersions []*PartitionExecutorVersion `json:"bvnExecutorVersions,omitempty" validate:"required"`
+	extraData         []byte
+}
+```
+
+### Reader and Writer
+
+The `Reader` and `Writer` structs are used for reading and writing snapshot files:
+
+```go
+type Reader struct {
+	file   *os.File
+	header *Header
+	sections []SectionHeader
+	// Additional fields...
+}
+
+type Writer struct {
+	file   *os.File
+	header *Header
+	sections []SectionHeader
+	// Additional fields...
+}
+```
+
+### Using the Structs
+
+#### Example: Working with a Snapshot Header
+
+```go
+// Create a new header
+header := &snapshot.Header{
+    Version: 2,
+    RootHash: rootHash,
+    SystemLedger: systemLedger,
+}
+
+// Marshal the header to binary format
+binaryData, err := header.MarshalBinary()
+if err != nil {
+    // Handle error
+}
+
+// Unmarshal binary data back into a header
+var parsedHeader snapshot.Header
+err = parsedHeader.UnmarshalBinary(binaryData)
+if err != nil {
+    // Handle error
+}
+```
+
+#### Example: Reading a Record Entry
+
+```go
+// Read a record entry from binary data
+var entry snapshot.RecordEntry
+err := entry.UnmarshalBinary(binaryData)
+if err != nil {
+    // Handle error
+}
+
+// Access the record key and value
+keyPath := entry.Key.Path
+value := entry.Value
+```
+
+## Snapshot File Structure
+
+A version 2 snapshot file consists of multiple sections, each with a specific type and purpose. The file format uses a segmented approach where each section has a type identifier, size, and content.
+
+### Section Types in Version 2 Snapshots
+
+| Section Type | Value | Description |
+|-------------|-------|-------------|
+| `SectionTypeHeader` | 1 | Contains metadata about the snapshot |
+| `SectionTypeSnapshot` | 6 | Contains nested snapshots |
+| `SectionTypeRecords` | 7 | Contains records stored as (key, record) pairs |
+| `SectionTypeRecordIndex` | 8 | Indexes record keys, including offset and section number |
+| `SectionTypeRawBPT` | 9 | Contains the BPT as raw (key hash, value) pairs (deprecated in favor of SectionTypeBPT) |
+| `SectionTypeConsensus` | 10 | Contains consensus parameters |
+| `SectionTypeBPT` | 11 | Contains the Binary Patricia Tree as records |
+
+### File Format Structure
+
+A version 2 snapshot file follows this structure:
+
+1. **Header Section** (Required):
+   - Always the first section in a snapshot file
+   - Contains version information (must be 2), root hash, and system ledger information
+   - Encoded as a length-prefixed binary value
+
+2. **Record Sections**:
+   - Contains the actual data records as key-value pairs
+   - Each record is stored as a `RecordEntry` with key, value, and optional receipt
+   - Multiple record sections (type 7) can exist in a single snapshot file
+   - These multiple sections are created by design for functional separation, not due to size limits
+
+3. **Record Index Sections**:
+   - Contains fixed-width entries that index records by key hash
+   - Each entry includes the key hash, section number, and byte offset
+   - Enables efficient random access to records without loading the entire snapshot
+   - Entries are sorted by key hash in descending order
+
+4. **BPT Sections**:
+   - Contains Binary Patricia Tree nodes as records
+   - Each record includes the key path in the BPT and the node value/hash
+   - Used for database structure and verification
+
+5. **Consensus Parameter Sections**:
+   - Contains consensus parameters in an implementation-specific format
+
+## Binary Format Specification
+
+This section provides the detailed binary format specifications of the snapshot file format.
+
+### Section Header Binary Format
+
+Each section in a snapshot file begins with a 64-byte header with the following binary structure:
+
+```
++--------+--------+--------+--------+--------+--------+--------+--------+--------+--------+--------+--------+
+| Type (2 bytes)  | Reserved (6)   | Size (8 bytes)                                           |
++--------+--------+--------+--------+--------+--------+--------+--------+--------+--------+--------+--------+
+| Next Section Offset (8 bytes)                      | Additional Metadata (40 bytes)           |
++--------+--------+--------+--------+--------+--------+--------+--------+--------+--------+--------+--------+
+```
+
+- **Type**: 2-byte unsigned integer in **big-endian** format representing the section type
+- **Size**: 8-byte unsigned integer in **big-endian** format representing the section size in bytes
+- **Next Section Offset**: 8-byte unsigned integer in **big-endian** format pointing to the next section
+- **Additional Metadata**: 40 bytes of additional header information (reserved or used for specific section types)
+
+The section content immediately follows the 64-byte header and is exactly `Size` bytes long.
+
+> **IMPORTANT**: Note that the format uses big-endian encoding for all multi-byte values, not little-endian as previously documented.
+
+### Length-Prefixed Values
+
+Many values in the snapshot format are length-prefixed. The format is:
+
+```
++--------+--------+--------+--------+--------+--------+--------+--------+--------+--------+
+| Length (varint)           | Value (Length bytes)                            ... |
++--------+--------+--------+--------+--------+--------+--------+--------+--------+--------+
+```
+
+- **Length**: Variable-length integer (varint) encoded using Protocol Buffers encoding
+- **Value**: Binary data of exactly `Length` bytes
+
+### Header Section
+
+The Header section contains the snapshot metadata, including:
+
+- **Version**: The snapshot format version (must be 2)
+- **Root Hash**: The 32-byte BPT root hash
+- **System Ledger**: The partition's system ledger state
+
+Developers should use the `snapshot.Header` struct to work with header data rather than handling the binary format directly.
+
+### Record Entry Section
+
+Record entries contain the actual data stored in the snapshot. Each record consists of:
+
+- **Key**: A structured key that identifies the record
+- **Value**: The binary data associated with the key
+- **Receipt** (optional): A Merkle proof for the record
+
+Developers should use the `snapshot.RecordEntry` struct to work with record data rather than handling the binary format directly.
+
+### Record Keys
+
+Record keys in Accumulate snapshots use a structured format that represents the key's path components. Keys are represented by the `record.Key` struct, which contains:
+
+- **Path**: An array of string elements that form the key path
+
+Developers should use the `record.Key` struct to work with keys rather than handling the binary format directly.
+
+### Record Index Section
+
+The record index provides a way to quickly locate records in the snapshot without scanning through all records. Each index entry contains:
+
+- **Key Hash**: SHA-256 hash of the record key
+- **Section**: The section number containing the record
+- **Offset**: The byte offset within the section where the record starts
+
+Developers should use the `snapshot.RecordIndexEntry` struct to work with index entries rather than handling the binary format directly.
+
+## Working with Snapshot Files
+
+### Reader and Writer Overview
+
+The Accumulate snapshot package provides two primary structs for working with snapshot files:
+
+1. **snapshot.Reader**: For reading and parsing snapshot files
+2. **snapshot.Writer**: For creating and writing snapshot files
+
+These structs abstract away the complexity of the binary format and provide a clean API for working with snapshots.
+
+#### Reader Structure
+
+The `snapshot.Reader` struct provides access to the snapshot's contents:
+
+```go
+type Reader struct {
+    Sections []*sectionReader // All sections in the snapshot
+    Header   *Header         // The parsed snapshot header
+}
+```
+
+Key methods:
+- `Open(typ ...SectionType) (ioutil.SectionReader, error)` - Opens the first section of the given type
+- `OpenIndex(i int) (*IndexReader, error)` - Opens a record index section
+- `OpenRecords(i int) (RecordReader, error)` - Opens a records section
+- `OpenBPT(i int) (RecordReader, error)` - Opens a BPT section
+
+#### Writer Structure
+
+The `snapshot.Writer` struct manages the creation of snapshot files:
+
+```go
+type Writer struct {
+    // Internal fields omitted
+}
+```
+
+Key methods:
+- `WriteHeader(header *Header) error` - Writes the snapshot header (must be called first)
+- `OpenRaw(typ SectionType) (*SectionWriter, error)` - Opens a new section for writing
+
+### Reading a Snapshot
+
+To read a snapshot file, use the `snapshot.Open` function and the `Reader` struct:
+
+```go
+// Open a file
+file, err := os.Open("path/to/snapshot.snap")
+if err != nil {
+    // Handle error
+}
+defer file.Close()
+
+// Open the snapshot for reading
+reader, err := snapshot.Open(file)
+if err != nil {
+    // Handle error
+}
+
+// Access the header information
+fmt.Printf("Snapshot version: %d\n", reader.Header.Version)
+fmt.Printf("Root hash: %x\n", reader.Header.RootHash)
+
+// Read records from the first records section
+recordReader, err := reader.OpenRecords(0)
+if err != nil {
+    // Handle error
+}
+
+// Read records sequentially
+for {
+    record, err := recordReader.Read()
+    if err == io.EOF {
+        break
+    }
+    if err != nil {
+        // Handle error
+        break
+    }
+    
+    // Process the record
+    fmt.Printf("Key: %v, Value length: %d\n", record.Key, len(record.Value))
+}
+```
+
+### Writing a Snapshot
+
+To create a new snapshot file, use the `snapshot.Create` function and the `Writer` struct:
+
+```go
+// Create a file
+file, err := os.Create("path/to/snapshot.snap")
+if err != nil {
+    // Handle error
+}
+defer file.Close()
+
+// Create the snapshot writer
+writer, err := snapshot.Create(file)
+if err != nil {
+    // Handle error
+}
+
+// Write the header (must be done first)
+header := &snapshot.Header{
+    Version: snapshot.Version2,
+    RootHash: rootHash,  // Your calculated root hash
+    SystemLedger: systemLedger,  // Optional system ledger information
+}
+
+err = writer.WriteHeader(header)
+if err != nil {
+    // Handle error
+}
+
+// Open a records section for writing
+sectionWriter, err := writer.OpenRaw(snapshot.SectionTypeRecords)
+if err != nil {
+    // Handle error
+}
+
+// Write records to the section
+for _, record := range records {
+    err = sectionWriter.WriteValue(record)
+    if err != nil {
+        // Handle error
+        break
+    }
+}
+
+// Close the section when done
+err = sectionWriter.Close()
+if err != nil {
+    // Handle error
+}
+```
+
+### Working with Specific Section Types
+
+#### Record Sections
+
+Record sections contain key-value pairs and are the most common section type in snapshots:
+
+```go
+// Open a records section
+recordReader, err := reader.OpenRecords(0) // 0 is the index of the section
+if err != nil {
+    // Handle error
+}
+
+// Read records sequentially
+for {
+    record, err := recordReader.Read()
+    if err == io.EOF {
+        break
+    }
+    if err != nil {
+        // Handle error
+        break
+    }
+    
+    // Process the record
+    fmt.Printf("Key: %v, Value: %x\n", record.Key, record.Value)
+}
+```
+
+#### Index Sections
+
+Index sections provide fast lookup of records by key hash:
+
+```go
+// Open an index section
+indexReader, err := reader.OpenIndex(0) // 0 is the index of the section
+if err != nil {
+    // Handle error
+}
+
+// Read index entries
+for i := 0; i < indexReader.Count; i++ {
+    entry, err := indexReader.Read(i)
+    if err != nil {
+        // Handle error
+        break
+    }
+    
+    // Process the index entry
+    fmt.Printf("Key hash: %x, Section: %d, Offset: %d\n", 
+        entry.KeyHash, entry.Section, entry.Offset)
+}
+```
+
+#### BPT Sections
+
+BPT sections contain Binary Patricia Tree entries:
+
+```go
+// Open a BPT section
+bptReader, err := reader.OpenBPT(0) // 0 is the index of the section
+if err != nil {
+    // Handle error
+}
+
+// Read BPT entries sequentially
+for {
+    entry, err := bptReader.Read()
+    if err == io.EOF {
+        break
+    }
+    if err != nil {
+        // Handle error
+        break
+    }
+    
+    // Process the BPT entry
+    fmt.Printf("Key: %v, Hash: %x\n", entry.Key, entry.Value)
+}
+```
+
+### Scanning Snapshot Sections
+
+To scan all sections in a snapshot and identify their types and sizes:
+
+```go
+// Open a snapshot file
+file, err := os.Open("path/to/snapshot.snap")
+if err != nil {
+    // Handle error
+}
+defer file.Close()
+
+// Open the snapshot
+reader, err := snapshot.Open(file)
+if err != nil {
+    // Handle error
+}
+
+// Print header information
+fmt.Printf("Snapshot version: %d\n", reader.Header.Version)
+fmt.Printf("Root hash: %x\n", reader.Header.RootHash)
+
+// Print system ledger information if present
+if reader.Header.SystemLedger != nil {
+    fmt.Printf("System ledger URL: %v\n", reader.Header.SystemLedger.Url)
+    fmt.Printf("System ledger index: %d\n", reader.Header.SystemLedger.Index)
+    fmt.Printf("System ledger timestamp: %v\n", reader.Header.SystemLedger.Timestamp)
+    fmt.Printf("System ledger executor version: %v\n", reader.Header.SystemLedger.ExecutorVersion)
+}
+
+// Print information about each section
+for i, section := range reader.Sections {
+    sectionType := section.Type()
+    sectionTypeName := getSectionTypeName(sectionType)
+    fmt.Printf("Section %d: Type=%d (%s), Size=%d, Offset=%d\n", 
+        i, sectionType, sectionTypeName, section.Size(), section.Offset())
+}
+
+// Helper function to get section type name
+func getSectionTypeName(sectionType snapshot.SectionType) string {
+    switch sectionType {
+    case snapshot.SectionTypeHeader:
+        return "Header"
+    case snapshot.SectionTypeSnapshot:
+        return "Snapshot"
+    case snapshot.SectionTypeRecords:
+        return "Records"
+    case snapshot.SectionTypeRecordIndex:
+        return "RecordIndex"
+    case snapshot.SectionTypeBPT:
+        return "BPT"
+    case snapshot.SectionTypeRawBPT:
+        return "RawBPT"
+    case snapshot.SectionTypeConsensus:
+        return "Consensus"
+    default:
+        return "Unknown"
+    }
+}
+```
+
+### URL Hash Handling
+
+The snapshot tool uses both the KV database for fast lookups and the binary file format for iteration when handling URLs:
+
+```go
+// Example of URL lookup using the hybrid approach
+func LookupURL(db *database.DB, hash [32]byte) (*url.URL, error) {
+    // First try to look up from the KV database (fast)
+    u, err := db.GetURL(hash)
+    if err == nil {
+        return u, nil
+    }
+    
+    // Fall back to file-based lookup if needed
+    reader, err := snapshot.OpenReader("path/to/snapshot.dat")
+    if err != nil {
+        return nil, err
+    }
+    defer reader.Close()
+    
+    // Iterate through records to find the URL
+    var foundURL *url.URL
+    err = reader.ReadRecords(func(entry *snapshot.RecordEntry) error {
+        // Check if this record contains a URL that matches the hash
+        // Implementation details omitted for brevity
+        return nil
+    })
+    
+    return foundURL, err
+}
+```
+
+This approach ensures that URL lookups are efficient without loading all URLs into memory at once, which could cause memory issues with large datasets.
+
+## Record Structure
+
+Records in version 2 snapshots are stored as `RecordEntry` structures:
+
+```
+type RecordEntry struct {
+	Key     *record.Key     // Hierarchical key path
+	Value   []byte          // Binary encoded data
+	Receipt *merkle.Receipt // Optional Merkle proof
+}
+```
+
+### Key Format
+
+Keys are hierarchical paths represented by the `record.Key` type. Each key consists of a series of components that define the record type and location. The first component typically indicates the record category.
+
+#### Binary Encoding of Keys
+
+A key is encoded as a sequence of length-prefixed strings. The encoding follows this format:
+
+1. Number of elements (varint)
+2. For each element:
+   - Element length (varint)
+   - Element data (UTF-8 encoded string)
+
+**Example**: The key `Account/acc://example.acme/main` is encoded as:
+
+```
+03                           # 3 elements (varint)
+07 4163636F756E74            # Length=7, "Account"
+13 6163633A2F2F6578616D706C652E61636D65  # Length=19, "acc://example.acme"
+04 6D61696E                  # Length=4, "main"
+```
+
+### Value Binary Format
+
+The value field contains binary-encoded data specific to each record type. The encoding depends on the record type but generally follows these rules:
+
+1. Values are serialized using Protocol Buffer encoding or custom binary formats
+2. Complex structures are length-prefixed
+3. All integers are encoded in little-endian format unless specified otherwise
+
+**Example**: A simple account value might be encoded as:
+
+```
+01                           # Account type code (varint)
+08 0000000000000064          # Balance=100 (length-prefixed 8-byte integer)
+04 00000001                  # Nonce=1 (length-prefixed 4-byte integer)
+```
+
+### Record Types with Concrete Examples
+
+1. **Account Records**:
+   - **Format**: `Account/{url}/{chain-type}`
+   - **Examples**:
+     ```
+     Account/acc://dn.acme/ledger/Main
+     Account/acc://dn.acme/ledger/RootChain
+     ```
+   - **Value Content**: Serialized account data including type, balance, nonce, etc.
+   - **Location**: Written in `SectionTypeRecords` sections
+   - **Binary Key Example**:
+     ```
+     # Key: Account/acc://dn.acme/ledger/Main
+     03                           # 3 elements
+     07 4163636F756E74            # "Account"
+     14 6163633A2F2F646E2E61636D652F6C6564676572  # "acc://dn.acme/ledger"
+     04 4D61696E                  # "Main"
+     ```
+   - **Binary Value Example**:
+     ```
+     # Account type (TokenAccount)
+     01                           # Account type code
+     # Balance field
+     08 00E87648170000000000      # Balance=100000000000 (8-byte integer)
+     # Nonce field
+     04 01000000                  # Nonce=1 (4-byte integer)
+     # Additional fields follow...
+     ```
+
+2. **Chain Records**:
+   - **Format**: `Chain/{url}/{chain-type}/{element-type}/{element-id}`
+   - **Examples**:
+     ```
+     Chain/acc://dn.acme/ledger/Main
+     Chain/acc://dn.acme/ledger/RootChain/Index/Head
+     Chain/acc://dn.acme/ledger/RootChain/Index/Element/176685
+     ```
+   - **Value Content**: Chain state data including head, height, and entries
+   - **Location**: Written in `SectionTypeRecords` sections
+   - **Binary Key Example**:
+     ```
+     # Key: Chain/acc://dn.acme/ledger/RootChain/Index/Head
+     05                           # 5 elements
+     05 436861696E                # "Chain"
+     14 6163633A2F2F646E2E61636D652F6C6564676572  # "acc://dn.acme/ledger"
+     09 526F6F74436861696E        # "RootChain"
+     05 496E646578                # "Index"
+     04 48656164                  # "Head"
+     ```
+   - **Binary Value Example**:
+     ```
+     # Chain index head
+     08 CD020000 00000000         # Height=717 (8-byte integer)
+     20 7B5AC4...                 # Hash (32 bytes)
+     # Additional fields follow...
+     ```
+
+3. **Transaction Records**:
+   - **Format**: `Transaction/{hash}`
+   - **Examples**:
+     ```
+     Transaction/0123456789abcdef0123456789abcdef
+     ```
+   - **Value Content**: Transaction data including type, body, and header
+   - **Location**: Written in `SectionTypeRecords` sections
+   - **Binary Key Example**:
+     ```
+     # Key: Transaction/0123456789abcdef0123456789abcdef
+     02                           # 2 elements
+     0B 5472616E73616374696F6E    # "Transaction"
+     20 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef  # Hash (32 bytes hex)
+     ```
+   - **Binary Value Example**:
+     ```
+     # Transaction type
+     01                           # Transaction type code
+     # Header
+     20 7B5AC4...                 # Principal hash (32 bytes)
+     08 00E87648170000000000      # Fee (8-byte integer)
+     # Body (length-prefixed)
+     A4 ...                       # Transaction body data
+     ```
+
+4. **Message Records**:
+   - **Format**: `Message/{hash}/Main`
+   - **Examples**:
+     ```
+     Message/99ba5065aa3b13879dd877e902d91a0d5ce5be4036a50af98169ba855b292db0/Main
+     Message/bea05828b40be89ceab42cec819077d48513fe5a7c705f24a1c88cde680a83aa/Main
+     ```
+   - **Value Content**: Message data including sender, recipient, and content
+   - **Location**: Written in `SectionTypeRecords` sections
+   - **Binary Key Example**:
+     ```
+     # Key: Message/99ba5065aa3b13879dd877e902d91a0d5ce5be4036a50af98169ba855b292db0/Main
+     03                           # 3 elements
+     07 4D657373616765            # "Message"
+     20 99ba5065aa3b13879dd877e902d91a0d5ce5be4036a50af98169ba855b292db0  # Hash (32 bytes hex)
+     04 4D61696E                  # "Main"
+     ```
+   - **Binary Value Example**:
+     ```
+     # Message type
+     02                           # Message type code
+     # Sender URL (length-prefixed)
+     14 6163633A2F2F73656E6465722E61636D65  # "acc://sender.acme"
+     # Recipient URL (length-prefixed)
+     17 6163633A2F2F7265636970656E742E61636D65  # "acc://recipient.acme"
+     # Content (length-prefixed)
+     64 ...                       # Message content data
+     ```
+
+5. **Directory Records**:
+   - **Format**: `Directory/{url-prefix}`
+   - **Examples**:
+     ```
+     Directory/acc://example.acme
+     ```
+   - **Value Content**: Directory information for URL prefixes
+   - **Location**: Written in `SectionTypeRecords` sections
+   - **Binary Key Example**:
+     ```
+     # Key: Directory/acc://example.acme
+     02                           # 2 elements
+     09 4469726563746F7279        # "Directory"
+     11 6163633A2F2F6578616D706C652E61636D65  # "acc://example.acme"
+     ```
+   - **Binary Value Example**:
+     ```
+     # Directory entries count
+     04                           # 4 entries (varint)
+     # Entry 1 (length-prefixed)
+     16 6163633A2F2F6578616D706C652E61636D652F6D61696E  # "acc://example.acme/main"
+     # Additional entries follow...
+     ```
+
+6. **System Records**:
+   - **Format**: `System/{key}`
+   - **Examples**:
+     ```
+     System/Network
+     System/Globals
+     ```
+   - **Value Content**: System-level configuration and state data
+   - **Location**: Written in `SectionTypeRecords` sections
+   - **Binary Key Example**:
+     ```
+     # Key: System/Network
+     02                           # 2 elements
+     06 53797374656D              # "System"
+     07 4E6574776F726B            # "Network"
+     ```
+   - **Binary Value Example**:
+     ```
+     # Network parameters
+     01                           # Version (varint)
+     08 00E40B5402000000          # Network ID (8-byte integer)
+     # Additional parameters follow...
+     ```
+
+## Snapshot Struct Reference
+
+This section provides a comprehensive reference for all the key structs used in the Accumulate snapshot format. These structs are defined in `pkg/database/snapshot/types_gen.go` and other related files.
+
+### Section Types
+
+The `SectionType` constants define the different types of sections in a snapshot:
+
+```go
+const (
+SectionTypeHeader         SectionType = 1
+SectionTypeAccountsV1     SectionType = 2
+SectionTypeTransactionsV1 SectionType = 3
+SectionTypeSignaturesV1   SectionType = 4
+SectionTypeGzTransactionsV1 SectionType = 5
+SectionTypeSnapshot       SectionType = 6
+SectionTypeRecords        SectionType = 7
+SectionTypeRecordIndex    SectionType = 8
+SectionTypeRawBPT         SectionType = 9
+SectionTypeConsensus      SectionType = 10
+SectionTypeBPT            SectionType = 11
+)
+```
+
+### Section Type to Struct Mapping
+
+Each section type in a snapshot file is written using specific Go structs. This mapping helps understand what data structures are used for each section:
+
+| Section Type | Value | Go Struct(s) Used | Description |
+|-------------|-------|-------------------|-------------|
+| `SectionTypeHeader` | 1 | `snapshot.Header` | Contains metadata about the snapshot including version, root hash, and system ledger information |
+| `SectionTypeAccountsV1` | 2 | `snapshot.Account` | Contains account data in v1 format (deprecated) |
+| `SectionTypeTransactionsV1` | 3 | `snapshot.Transaction` wrapped in `snapshot.txnSection` | Contains transaction data in v1 format (deprecated) |
+| `SectionTypeSignaturesV1` | 4 | `snapshot.Signature` wrapped in `snapshot.sigSection` | Contains signature data in v1 format (deprecated) |
+| `SectionTypeGzTransactionsV1` | 5 | `snapshot.Transaction` wrapped in `snapshot.txnSection` (gzipped) | Contains gzipped transaction data in v1 format (deprecated) |
+| `SectionTypeSnapshot` | 6 | Nested `snapshot.Header` and other sections | Contains a complete nested snapshot, used for multi-network snapshots |
+| `SectionTypeRecords` | 7 | `snapshot.RecordEntry` | Contains general records as key-value pairs with optional receipts |
+| `SectionTypeRecordIndex` | 8 | `snapshot.RecordIndexEntry` | Contains fixed-width entries that index records by key hash |
+| `SectionTypeRawBPT` | 9 | Raw 64-byte entries (32-byte key hash + 32-byte value) | Contains the BPT as raw key-value pairs (deprecated) |
+| `SectionTypeConsensus` | 10 | Implementation-specific format | Contains consensus parameters |
+| `SectionTypeBPT` | 11 | `snapshot.RecordEntry` | Contains the Binary Patricia Tree as records |
+
+### Key Struct Details
+
+#### Header Section (`SectionTypeHeader`)
+- Written using `snapshot.Header` struct
+- Contains version information (must be 2), root hash, and system ledger information
+- Always the first section in a snapshot file
+- Written via `Writer.WriteHeader(header *Header)`
+
+#### Records Section (`SectionTypeRecords`)
+- Written using `snapshot.RecordEntry` struct
+- Each record contains:
+  - `Key`: A `record.Key` pointer representing the hierarchical key path
+  - `Value`: Binary data as a byte slice
+  - `Receipt`: Optional Merkle proof as a `merkle.Receipt` pointer
+- Used for storing accounts, transactions, signatures, and other database records
+- Written via `SectionWriter.WriteValue(record)`
+
+#### Record Index Section (`SectionTypeRecordIndex`)
+- Written using `snapshot.RecordIndexEntry` struct
+- Each entry contains:
+  - `KeyHash`: 32-byte hash of the record key
+  - `Section`: Section number containing the record
+  - `Offset`: Byte offset within the section
+- Enables efficient random access to records without loading the entire snapshot
+- Entries are sorted by key hash in descending order
+
+#### BPT Section (`SectionTypeBPT`)
+- Written using `snapshot.RecordEntry` struct
+- Each entry represents a node in the Binary Patricia Tree
+- The key is the nodes
+
+The `RecordEntry` struct represents a record in the snapshot:
+
+```go
+type RecordEntry struct {
+	fieldsSet []bool
+	Key       *record.Key      `json:"key,omitempty" validate:"required"`
+	Value     []byte           `json:"value,omitempty" validate:"required"`
+	Receipt   *merkle.Receipt  `json:"receipt,omitempty"`
+	extraData []byte
+}
+```
+
+The RecordEntry struct includes methods for:
+- Binary marshaling/unmarshaling: `MarshalBinary()`, `UnmarshalBinary()`
+- JSON marshaling/unmarshaling: `MarshalJSON()`, `UnmarshalJSON()`
+- Validation: `IsValid()`
+- Equality checking: `Equal()`
+- Copying: `Copy()`
+
+### RecordIndexEntry
+
+The `RecordIndexEntry` struct represents an entry in the record index:
+
+```go
+type RecordIndexEntry struct {
+	fieldsSet []bool
+	KeyHash   [32]byte  `json:"keyHash,omitempty" validate:"required"`
+	Section   uint64    `json:"section,omitempty" validate:"required"`
+	Offset    uint64    `json:"offset,omitempty" validate:"required"`
+	extraData []byte
+}
+```
+
+The RecordIndexEntry struct includes methods for:
+- Binary marshaling/unmarshaling: `MarshalBinary()`, `UnmarshalBinary()`
+- JSON marshaling/unmarshaling: `MarshalJSON()`, `UnmarshalJSON()`
+- Validation: `IsValid()`
+- Equality checking: `Equal()`
+- Copying: `Copy()`
+
+### SystemLedger
+
+The `protocol.SystemLedger` struct represents the system ledger state:
+
+```go
+type SystemLedger struct {
+	fieldsSet         []bool
+	Url               *url.URL               `json:"url,omitempty" validate:"required"`
+	Index             uint64                 `json:"index,omitempty" validate:"required"`
+	Timestamp         time.Time              `json:"timestamp,omitempty" validate:"required"`
+	AcmeBurnt         big.Int                `json:"acmeBurnt,omitempty" validate:"required"`
+	PendingUpdates    []NetworkAccountUpdate `json:"pendingUpdates,omitempty" validate:"required"`
+	Anchor            AnchorBody             `json:"anchor,omitempty" validate:"required"`
+	ExecutorVersion   ExecutorVersion        `json:"executorVersion,omitempty"`
+	BvnExecutorVersions []*PartitionExecutorVersion `json:"bvnExecutorVersions,omitempty" validate:"required"`
+	extraData         []byte
+}
+```
+
+### Reader and Writer
+
+The `Reader` and `Writer` structs are used for reading and writing snapshot files:
+
+```go
+type Reader struct {
+	file   *os.File
+	header *Header
+	sections []SectionHeader
+	// Additional fields...
+}
+
+type Writer struct {
+	file   *os.File
+	header *Header
+	sections []SectionHeader
+	// Additional fields...
+}
+```
+
+## Using Generated Structs for Snapshot Handling
+
+The Accumulate codebase provides generated structs in `pkg/database/snapshot/types_gen.go` that are essential for working with snapshot data. These structs handle the binary encoding and decoding of snapshot data, making it much easier to work with snapshots programmatically.
+
+### Binary Marshaling and Unmarshaling
+
+Each struct provides methods for binary marshaling and unmarshaling. These methods are essential for working with the binary snapshot format:
+
+#### MarshalBinary
+
+Converts a struct to its binary representation:
+
+```go
+func (v *Header) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Version == 0) {
+		writer.WriteUint(1, v.Version)
+	}
+	if !(v.RootHash == ([32]byte{})) {
+		writer.WriteHash(2, &v.RootHash)
+	}
+	if !(v.SystemLedger == nil) {
+		writer.WriteValue(3, v.SystemLedger.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_Header)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+```
+
+#### UnmarshalBinary
+
+Parses binary data into a struct:
+
+```go
+func (v *Header) UnmarshalBinary(data []byte) error {
+	if len(data) == 0 {
+		return io.EOF
+	}
+	if data[0] == encoding.EmptyObject {
+		*v = Header{}
+		return nil
+	}
+
+	reader := encoding.NewReader(data)
+
+	for {
+		field, err := reader.ReadField()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			return encoding.Error{E: err}
+		}
+
+		switch field.ID {
+		case 1:
+			v.Version, err = reader.ReadUint()
+		case 2:
+			err = reader.ReadHash(&v.RootHash)
+		case 3:
+			v.SystemLedger = new(protocol.SystemLedger)
+			err = reader.ReadValue(v.SystemLedger.UnmarshalBinary)
+		default:
+			err = reader.Skip(field.Len)
+		}
+
+		if err != nil {
+			return encoding.Error{E: err}
+		}
+	}
+
+	v.extraData = reader.ReadAll()
+	return nil
+}
+```
+
+### Example: Working with a Snapshot Header
+
+```go
+// Create a new header
+header := &snapshot.Header{
+    Version: 2,
+    RootHash: rootHash,
+    SystemLedger: systemLedger,
+}
+
+// Marshal the header to binary format
+binaryData, err := header.MarshalBinary()
+if err != nil {
+    // Handle error
+}
+
+// Unmarshal binary data back into a header
+var parsedHeader snapshot.Header
+err = parsedHeader.UnmarshalBinary(binaryData)
+if err != nil {
+    // Handle error
+}
+```
+
+### Example: Reading a Record Entry
+
+```go
+// Read a record entry from binary data
+var entry snapshot.RecordEntry
+err := entry.UnmarshalBinary(binaryData)
+if err != nil {
+    // Handle error
+}
+
+// Access the record key and value
+keyPath := entry.Key.Path
+value := entry.Value
+```
+
+### Integration with Reader and Writer
+
+These generated structs are used by the `snapshot.Reader` and `snapshot.Writer` to handle the reading and writing of snapshot files. Using these structs directly is essential when implementing custom snapshot processing logic.
+
 ## Snapshot Creation Process (Version 2)
 
-The `debug snap collect` command creates version 2 snapshots using the following process:
+The snapshot creation is implemented using the `snapshot.Writer` struct defined in `pkg/database/snapshot/format.go`. The `debug snap collect` command creates version 2 snapshots using the following process:
 
 1. **Initialize**:
    - Create a new snapshot file using `snapshot.Create()`
@@ -485,7 +1961,7 @@ recordSection.Close()
 
 ## Snapshot Reading Process (Version 2)
 
-When reading a version 2 snapshot file:
+The snapshot reading is implemented using the `snapshot.Reader` struct defined in `pkg/database/snapshot/format.go`. When reading a version 2 snapshot file:
 
 1. **Open and Verify**:
    - Open the snapshot file using `snapshot.Open()`
@@ -640,6 +2116,14 @@ When combining multiple version 2 snapshots, the following approach is recommend
    - Remove temporary database and files
 
 ### Implementation Considerations
+
+The implementation of URL hash handling in the snapshot tool uses both the KV database for fast lookups and the binary file format for iteration. This approach:
+
+1. Stores URLs in both the KV database and binary file
+2. Performs lookups primarily from the KV database (fast)
+3. Falls back to file-based lookup if needed
+4. Avoids loading all URLs into memory at once, which could cause memory issues with large datasets
+5. Maintains the binary format for improved efficiency and robustness
 
 1. **Memory Efficiency**:
    - Process one record at a time using streaming techniques
