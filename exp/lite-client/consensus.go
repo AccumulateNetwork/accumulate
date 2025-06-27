@@ -36,7 +36,7 @@ func (t *AuthorityTracker) GetEffectiveAuthority(height int64) (*protocol.KeyPag
 	// Convert AuthoritySet to KeyPage
 	page := &protocol.KeyPage{
 		AcceptThreshold: auth.Threshold,
-		Keys:           make([]*protocol.KeySpec, len(auth.Keys)),
+		Keys:            make([]*protocol.KeySpec, len(auth.Keys)),
 	}
 	for i, key := range auth.Keys {
 		page.Keys[i] = &protocol.KeySpec{PublicKeyHash: key}
@@ -51,7 +51,8 @@ func ValidateMajorBlockChain(blocks []*messaging.MakeMajorBlock, genesisAuthorit
 
 	// Initialize authority tracker
 	tracker := NewAuthorityTracker(genesisAuthority, blocks[0].MajorBlockIndex)
-	validator := &SignerValidator{}
+	// TODO: Replace with the actual implementation of chain.SignerValidator
+	// For now, we'll declare as the interface type, but you must provide a concrete implementation.
 
 	for i, block := range blocks {
 		blockIndex := block.MajorBlockIndex
@@ -74,12 +75,9 @@ func ValidateMajorBlockChain(blocks []*messaging.MakeMajorBlock, genesisAuthorit
 			return fmt.Errorf("authority set not found for block %d: %w", blockIndex, err)
 		}
 
-		// 3. Extract signatures from envelope (placeholder: MakeMajorBlock does not contain signatures directly)
-		// TODO: Replace 'block' with the correct envelope containing signatures for this major block
-		sigs, err := validator.ExtractSignaturesFromEnvelope(block)
-		if err != nil {
-			return fmt.Errorf("failed to extract signatures from block %d: %w", blockIndex, err)
-		}
+		// 3. Extract signatures from envelope
+		var sigs []protocol.Signature
+		// Example if you had an envelope: sigs = envelope.Signatures
 		if len(sigs) == 0 {
 			return fmt.Errorf("no signatures found in block %d", blockIndex)
 		}
@@ -96,7 +94,8 @@ func ValidateMajorBlockChain(blocks []*messaging.MakeMajorBlock, genesisAuthorit
 			if !ok {
 				continue // skip if not a KeySignature
 			}
-			okSig, err := VerifySignatureAgainstAuthoritySet(keySig, rootHash, authSet)
+			verifier := &Ed25519SignatureVerifier{}
+			okSig, err := verifier.VerifySignature(rootHash, keySig, authSet)
 			if okSig && err == nil {
 				validSigCount++
 			}

@@ -52,30 +52,22 @@ func verifyEd25519(pub, msg, sig []byte) bool {
 	return false // TODO: implement or use standard library
 }
 
+func FetchBlockSignatures(ctx context.Context, cl *client.Client, blockIndex uint64) ([]byte, error) {
+	// TODO: implement signature retrieval
+	return nil, nil
+}
+
 // ValidateBlockSignatures confirms that the given major block's root hash
 // was signed by the correct authority set at the time.
-func ValidateBlockSignatures(ctx context.Context, cl *client.Client, blockIndex uint64, authorities *AuthoritySet, rootHash []byte) (bool, error) {
-	blocks, err := QueryMajorBlocks(ctx, cl, blockIndex, 1)
-	if err != nil {
-		return false, fmt.Errorf("failed to query major block: %v", err)
-	}
-	if len(blocks) == 0 {
-		return false, fmt.Errorf("major block not found")
-	}
-	block := blocks[0]
-
-	sigsRaw, ok := block["signatures"]
-	if !ok {
-		return false, fmt.Errorf("no signatures found in block")
-	}
-	sigs, ok := sigsRaw.([]interface{})
-	if !ok {
-		return false, fmt.Errorf("invalid signatures format")
+// Now expects signatures and rootHash to be provided directly.
+func ValidateBlockSignatures(authorities *AuthoritySet, rootHash []byte, signatures []interface{}) (bool, error) {
+	if len(signatures) == 0 {
+		return false, fmt.Errorf("no signatures found in major block")
 	}
 
 	verifier := &Ed25519SignatureVerifier{}
 	validSignatures := 0
-	for _, sigIface := range sigs {
+	for _, sigIface := range signatures {
 		sigMap, ok := sigIface.(map[string]interface{})
 		if !ok {
 			continue

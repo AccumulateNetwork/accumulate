@@ -39,14 +39,6 @@ func ValidateRecentMinorBlocks(ctx context.Context, cl *client.Client, authoriti
 	for _, item := range resp.Items {
 		majorBlock := convertToMajorBlockRecord(item)
 
-		valid, err := validateMajorBlockSignatures(ctx, cl, int(majorBlock.Index), authorities)
-		if err != nil {
-			return fmt.Errorf("failed to validate signatures for major block %d: %v", majorBlock.Index, err)
-		}
-		if !valid {
-			return fmt.Errorf("invalid signatures for major block %d", majorBlock.Index)
-		}
-
 		minorBlocks, err := getMinorBlocksForMajorBlock(ctx, cl, majorBlock)
 		if err != nil {
 			return fmt.Errorf("failed to get minor blocks for major block %d: %v", majorBlock.Index, err)

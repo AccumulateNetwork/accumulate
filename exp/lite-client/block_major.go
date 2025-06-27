@@ -86,7 +86,14 @@ func convertToMajorBlockRecord(item interface{}) api.MajorBlockRecord {
 	return record
 }
 
-func validateMajorBlockSignatures(ctx context.Context, cl *client.Client, majorBlockIndex int, authorities *AuthoritySet) (bool, error) {
-	// Use the Ed25519SignatureVerifier to validate the major block signatures
-	return ValidateBlockSignatures(ctx, cl, uint64(majorBlockIndex), authorities, nil) // rootHash to be provided as needed
+func validateMajorBlockSignatures(block map[string]interface{}, authorities *AuthoritySet) (bool, error) {
+	rootHash, ok := block["rootHash"].([]byte)
+	if !ok {
+		return false, fmt.Errorf("failed to extract rootHash from block")
+	}
+	signatures, ok := block["signatures"].([]interface{})
+	if !ok {
+		return false, fmt.Errorf("failed to extract signatures from block")
+	}
+	return ValidateBlockSignatures(authorities, rootHash, signatures)
 }
