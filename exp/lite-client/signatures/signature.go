@@ -1,4 +1,4 @@
-package liteclient
+package signatures
 
 import (
 	"context"
@@ -57,10 +57,14 @@ func FetchBlockSignatures(ctx context.Context, cl *client.Client, blockIndex uin
 	return nil, nil
 }
 
+// SignatureValidationPlan describes the high-level plan for validating signatures on blocks.
+// These helpers may call lower-level logic in the blocks package.
+
 // ValidateBlockSignatures confirms that the given major block's root hash
 // was signed by the correct authority set at the time.
 // Now expects signatures and rootHash to be provided directly.
 func ValidateBlockSignatures(authorities *AuthoritySet, rootHash []byte, signatures []interface{}) (bool, error) {
+	// Real implementation: verifies signatures using Ed25519SignatureVerifier
 	if len(signatures) == 0 {
 		return false, fmt.Errorf("no signatures found in major block")
 	}
@@ -87,56 +91,14 @@ func ValidateBlockSignatures(authorities *AuthoritySet, rootHash []byte, signatu
 	return true, nil
 }
 
-// ValidateMinorBlockSignatures confirms that the given minor block's root hash
-// was signed by the correct authority set at the time.
-// Used to verify the authenticity of a minor block.
-func ValidateMinorBlockSignatures(ctx context.Context, cl *client.Client, minorBlock api.MinorBlockRecord, authorities *AuthoritySet) (bool, error) {
-	// Iterate over minorBlock.Entries to find SignatureSetRecords and extract signatures
-	if minorBlock.Entries == nil || len(minorBlock.Entries.Records) == 0 {
-		return false, fmt.Errorf("no entries found in minor block")
-	}
-
-	verifier := &Ed25519SignatureVerifier{}
-	validSignatures := 0
-	signatureFound := false
-
-	for _, entry := range minorBlock.Entries.Records {
-		if entry == nil || entry.Value == nil {
-			continue
-		}
-
-		// Attempt to cast entry.Value to *api.SignatureSetRecord
-		sigSet, ok := entry.Value.(*api.SignatureSetRecord)
-		if !ok || sigSet == nil || sigSet.Signatures == nil {
-			continue
-		}
-		signatureFound = true
-
-		// Iterate over MessageRecord signatures in the SignatureSetRecord
-		for _, msgRecord := range sigSet.Signatures.Records {
-			if msgRecord == nil || msgRecord.Message == nil {
-				continue
-			}
-
-			// Try to use the Message directly if it matches protocol.KeySignature
-			if keySig, ok := msgRecord.Message.(protocol.KeySignature); ok {
-				valid, _ := verifier.VerifySignature(nil, keySig, authorities)
-				if valid {
-					validSignatures++
-				}
-				continue
-			}
-		}
-	}
-
-	if !signatureFound {
-		return false, fmt.Errorf("no signature sets found in minor block entries")
-	}
-	if uint64(validSignatures) < authorities.Threshold {
-		return false, fmt.Errorf("insufficient valid signatures: got %d, need %d", validSignatures, authorities.Threshold)
-	}
-	return true, nil
+// ValidateMinorBlockSignatures is a stub for validating signatures on minor blocks.
+// Calls lower-level logic in blocks package when implemented.
+func ValidateMinorBlockSignatures(ctx context.Context, cl *client.Client, minorBlock interface{}, authorities *AuthoritySet) (bool, error) {
+	// TODO: Call blocks.ValidateMinorBlockSignatures or implement here
+	return false, fmt.Errorf("not implemented: ValidateMinorBlockSignatures")
 }
+
+// TODO: Add more signature validation helpers and stubs as needed.
 
 func MapToKeySignature(sigMap map[string]interface{}) (protocol.KeySignature, error) {
 	sig := new(protocol.ED25519Signature)

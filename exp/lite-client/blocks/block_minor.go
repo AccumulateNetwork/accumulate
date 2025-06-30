@@ -1,4 +1,4 @@
-package liteclient
+package blocks
 
 import (
 	"context"
@@ -7,10 +7,12 @@ import (
 
 	api "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
+
+	sigs "gitlab.com/accumulatenetwork/accumulate/exp/lite-client/signatures"
 )
 
 // Validate all minor blocks from the past 24h and their signatures.
-func ValidateRecentMinorBlocks(ctx context.Context, cl *client.Client, authorities *AuthoritySet) error {
+func ValidateRecentMinorBlocks(ctx context.Context, cl *client.Client, authorities *sigs.AuthoritySet) error {
 	oneDayAgo := time.Now().Add(-24 * time.Hour)
 
 	startBlock, err := findMajorBlockByTime(ctx, cl, oneDayAgo)
@@ -44,7 +46,11 @@ func ValidateRecentMinorBlocks(ctx context.Context, cl *client.Client, authoriti
 			return fmt.Errorf("failed to get minor blocks for major block %d: %v", majorBlock.Index, err)
 		}
 		for _, minorBlock := range minorBlocks {
-			valid, err := validateMinorBlockSignatures(ctx, cl, minorBlock, authorities)
+			// Lower-level validation helpers for minor blocks.
+			// These functions are called by signatures package orchestration.
+
+			// ValidateMinorBlockSignatures is a stub for signature validation on minor blocks.
+			valid, err := ValidateMinorBlockSignatures(&minorBlock, authorities)
 			if err != nil {
 				return fmt.Errorf("failed to validate signatures for minor block %d: %v", minorBlock.Index, err)
 			}
@@ -67,8 +73,8 @@ func getMinorBlocksForMajorBlock(ctx context.Context, cl *client.Client, majorBl
 // validateMinorBlockSignatures confirms that the given minor block's root hash
 // was signed by the correct authority set at the time.
 // Used to verify the authenticity of a minor block.
-func validateMinorBlockSignatures(ctx context.Context, cl *client.Client, minorBlock api.MinorBlockRecord, authorities *AuthoritySet) (bool, error) {
-	return ValidateMinorBlockSignatures(ctx, cl, minorBlock, authorities)
+func validateMinorBlockSignatures(ctx context.Context, cl *client.Client, minorBlock api.MinorBlockRecord, authorities *sigs.AuthoritySet) (bool, error) {
+	return sigs.ValidateMinorBlockSignatures(ctx, cl, minorBlock, authorities)
 }
 
 func verifyMinorBlockInMajor(minorBlock api.MinorBlockRecord, majorBlock api.MajorBlockRecord) bool {

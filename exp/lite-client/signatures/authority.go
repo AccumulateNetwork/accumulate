@@ -1,19 +1,21 @@
-package liteclient
+package signatures
 
 import (
-	"fmt"
 	"errors"
+	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// AuthoritySet holds one or more public keys and their signature threshold.
+// AuthoritySet represents the set of keys and threshold required to validate a block.
+// This is a data structure only; extraction helpers may use blocks package utilities.
 type AuthoritySet struct {
 	Keys      [][]byte
 	Threshold uint64
 }
 
-// NewAuthoritySetFromAccount extracts signing keys from a KeyPage/KeyBook/ADI.
+// NewAuthoritySetFromAccount extracts an AuthoritySet from a KeyPage or KeyBook account.
+// May use lower-level helpers from blocks package.
 func NewAuthoritySetFromAccount(account interface{}) (*AuthoritySet, error) {
 	switch acc := account.(type) {
 	case *protocol.KeyPage:
@@ -30,14 +32,6 @@ func NewAuthoritySetFromAccount(account interface{}) (*AuthoritySet, error) {
 	default:
 		return nil, fmt.Errorf("unsupported account type")
 	}
-}
-
-// AuthorityManager defines the interface for managing authorities over time.
-type AuthorityManager interface {
-	// GetAuthorityAt returns the AuthoritySet at a given block index.
-	GetAuthorityAt(blockIndex uint64) (*AuthoritySet, error)
-	// RecordChange records an authority change at a specific block index.
-	RecordChange(blockIndex uint64, newAuth *AuthoritySet)
 }
 
 // AuthorityTracker maintains a history of authority changes across major blocks.
@@ -63,4 +57,16 @@ func (t *AuthorityTracker) GetAuthorityAt(blockIndex uint64) (*AuthoritySet, err
 // RecordChange records an authority change at a specific block index.
 func (t *AuthorityTracker) RecordChange(blockIndex uint64, newAuth *AuthoritySet) {
 	t.history[blockIndex] = newAuth
+}
+
+// DetectAndApplyChanges scans block for authority/keybook/keypage changes and records them if found.
+func (t *AuthorityTracker) DetectAndApplyChanges(block *blocks.MajorBlockRecord) error {
+	newAuth, err := blocks.ExtractAuthorityChange(block)
+	if err != nil {
+		return err
+	}
+	if newAuth != nil {
+		t.RecordChange(block.Index, newAuth)
+	}
+	return nil
 }

@@ -1,4 +1,4 @@
-package liteclient
+package blocks
 
 import (
 	"context"
@@ -8,8 +8,11 @@ import (
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	accurl "gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"time"
 )
+
+// Use canonical types from pkg/api/v3
+type MajorBlockRecord = api.MajorBlockRecord
+type MinorBlockRecord = api.MinorBlockRecord
 
 func parseUrl(urlStr string) (*accurl.URL, error) {
 	return accurl.Parse(urlStr)
@@ -52,40 +55,4 @@ func getFirstAuthorityUrl(auth *protocol.AccountAuth) (string, error) {
 		return "", fmt.Errorf("no authorities found")
 	}
 	return auth.Authorities[0].Url.String(), nil
-}
-
-// Use canonical types from pkg/api/v3
-type MajorBlockRecord = api.MajorBlockRecord
-type MinorBlockRecord = api.MinorBlockRecord
-
-// getGenesisAuthorities retrieves the genesis authority set
-func getGenesisAuthorities(ctx context.Context, cl *client.Client) (*AuthoritySet, error) {
-	// TODO: Implement retrieval of genesis authority set
-	return &AuthoritySet{}, nil
-}
-
-// trackAuthorityChanges tracks authority set changes from genesis to present
-func trackAuthorityChanges(ctx context.Context, cl *client.Client) ([]*AuthoritySet, error) {
-	// TODO: Implement logic to track authority set changes
-	return []*AuthoritySet{}, nil
-}
-
-// validateAuthorityChange validates authority change transactions and signatures
-func validateAuthorityChange(ctx context.Context, cl *client.Client, prevSet *AuthoritySet, changeTx interface{}) (bool, error) {
-	// TODO: Implement validation of authority change signatures (2/3 threshold, etc.)
-	return true, nil
-}
-
-func findMajorBlockByTime(ctx context.Context, cl *client.Client, t time.Time) (int, error) {
-	// TODO: Implement logic to find the major block index closest to a timestamp
-	return 0, nil
-}
-
-// validateAuthorityChanges validates authority set changes from genesis to present
-func validateAuthorityChanges(ctx context.Context, cl *client.Client) error {
-	// TODO: Implement authority change validation loop
-	// 1. Start with genesis
-	// 2. Query major blocks in batches
-	// 3. For each block, check for authority change txs and validate signatures
-	return nil
 }

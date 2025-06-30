@@ -11,6 +11,12 @@ import (
 	accurl "gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
+type VerifiedAccount struct {
+	Url     string
+	Receipt *merkle.Receipt
+	Height  int64
+}
+
 func FetchProof(api *client.Client, ctx context.Context, account string) (*VerifiedAccount, error) {
 	// Parse account URL
 	u, err := accurl.Parse(account)
