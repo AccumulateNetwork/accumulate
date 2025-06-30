@@ -139,14 +139,16 @@ func sectionScan(scState *sc_State) error {
 	
 	fmt.Printf("\nHeader section extracted to: %s (%d bytes)\n", headerFilePath, headerSize)
 	
-	// Extract the next section (BPT section) to a temporary file
-	if len(snapshotReader.Sections) > 1 {
-		bptFilePath, bptSize, err := writeNextSectionToTempFile(snapshotReader, inFile, tmpDir, 1)
+	// Extract all remaining sections to temporary files
+	for i := 1; i < len(snapshotReader.Sections); i++ {
+		sectionFilePath, sectionSize, err := writeNextSectionToTempFile(snapshotReader, inFile, tmpDir, i)
 		if err != nil {
-			return fmt.Errorf("failed to write BPT section to temporary file: %w", err)
+			return fmt.Errorf("failed to write section %d to temporary file: %w", i, err)
 		}
 		
-		fmt.Printf("BPT section extracted to: %s (%d bytes)\n", bptFilePath, bptSize)
+		sectionType := snapshotReader.Sections[i].Type()
+		sectionTypeName := getSectionTypeName(sectionType)
+		fmt.Printf("Section %d (%s) extracted to: %s (%d bytes)\n", i, sectionTypeName, sectionFilePath, sectionSize)
 	}
 
 	return nil

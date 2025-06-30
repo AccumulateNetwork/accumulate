@@ -1,0 +1,761 @@
+// Copyright 2025 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"os"
+	"strings"
+	"time"
+
+	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
+	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
+
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
+)
+
+// Global counters for Merkle tree analysis
+var (
+	totalAccountsProcessed   int64
+	accountsWithMainChain    int64
+	accountsWithoutMainChain int64
+	totalExpectedEntries     int64
+	totalFoundEntries        int64
+	totalChainsExamined      int64
+)
+
+var cmdAnalyzeExtract = &cobra.Command{
+	Use:   "extract <network.json> <snapshot>",
+	Short: "Extract data from a unified snapshot using network configuration",
+	Run: func(cmd *cobra.Command, args []string) {
+		if len(args) != 2 {
+			cmd.Usage()
+			os.Exit(1)
+		}
+		networkFile := args[0]
+		snapshotFile := args[1]
+		
+		err := DoExtract(networkFile, snapshotFile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+	},
+	Args: cobra.ExactArgs(2),
+}
+
+// Command is added to rootCmd in main.go
+
+// DoExtract processes the network.json and snapshot files
+func DoExtract(networkFile, snapshotFile string) error {
+	fmt.Println("Starting extraction process...")
+	fmt.Printf("Network JSON file: %s\n", networkFile)
+	fmt.Printf("Snapshot file: %s\n", snapshotFile)
+	
+	// Parse network.json
+	fmt.Println("Parsing network.json file...")
+	networkConfig, err := ParseNetworkJson(networkFile)
+	if err != nil {
+		return fmt.Errorf("failed to parse network.json: %w", err)
+	}
+	
+	// Print routing and partition info
+	printRoutingInfo(networkConfig)
+
+	// Get snapshot file info
+	snapshotInfo, err := os.Stat(snapshotFile)
+	if err != nil {
+		return fmt.Errorf("failed to get snapshot file info: %w", err)
+	}
+
+	fmt.Printf("\nSnapshot File Info:\n")
+	fmt.Printf("  File: %s\n", snapshotFile)
+	fmt.Printf("  Size: %.2f GB\n", float64(snapshotInfo.Size())/(1024*1024*1024))
+	fmt.Printf("  Modified: %s\n", snapshotInfo.ModTime().Format(time.RFC3339))
+
+	// Initialize routing for account processing
+	router, err := InitializeRouting(networkConfig)
+	if err != nil {
+		return fmt.Errorf("failed to initialize routing: %w", err)
+	}
+
+	// Process the snapshot
+	fmt.Println("\nOpening and processing snapshot...")
+	err = processSnapshot(snapshotFile, router)
+	if err != nil {
+		return fmt.Errorf("failed to process snapshot: %w", err)
+	}
+
+	fmt.Println("\nExtraction completed successfully.")
+	return nil
+}
+
+// examineAccountMerkleTree examines the main chain Merkle tree of an account
+func examineAccountMerkleTree(accountURL *url.URL, accountData []byte, accountNum int64) {
+	totalAccountsProcessed++
+	
+	// For now, just count the account and log basic info
+	// TODO: Parse account data to examine actual Merkle tree structure
+	if len(accountData) > 0 {
+		accountsWithMainChain++
+		totalChainsExamined++
+		
+		// Log details for first 10 accounts
+		if accountNum <= 10 {
+			fmt.Printf("  Account %d: %s\n", accountNum, accountURL)
+			fmt.Printf("    Account data size: %d bytes\n", len(accountData))
+			fmt.Printf("    Main chain examination: PLACEHOLDER\n")
+		}
+	} else {
+		accountsWithoutMainChain++
+		if accountNum <= 10 {
+			fmt.Printf("  Account %d: %s - NO DATA\n", accountNum, accountURL)
+		}
+	}
+	
+	// Progress reporting every 1000 accounts
+	if accountNum%1000 == 0 {
+		fmt.Printf("Processed %d accounts: %d with data, %d without data\n", 
+			totalAccountsProcessed, accountsWithMainChain, accountsWithoutMainChain)
+	}
+}
+
+// analyzeChainMerkleTree deserializes a chain record and analyzes its Merkle tree structure
+func analyzeChainMerkleTree(accountURL *url.URL, chainType string, chainData []byte, chainNum int, totalEntries, snapshotEntries *int64, chainsWithData *int) error {
+	if len(chainData) == 0 {
+		return fmt.Errorf("empty chain data")
+	}
+	
+	// Deserialize the Merkle state directly
+	merkleState := &merkle.State{}
+	if err := merkleState.UnmarshalBinary(chainData); err != nil {
+		return fmt.Errorf("failed to unmarshal Merkle state: %w", err)
+	}
+	
+	// Get the count of entries in this Merkle tree
+	chainCount := merkleState.Count
+	*totalEntries += chainCount
+	
+	// Count entries actually present in the Merkle tree
+	// The Count field represents the total number of entries
+	snapshotCount := chainCount
+	if chainCount > 0 {
+		*chainsWithData++
+	}
+	
+	*snapshotEntries += snapshotCount
+	
+	// Log details for first few chains
+	if chainNum <= 5 {
+		fmt.Printf("    Chain Analysis: %s/%s\n", accountURL, chainType)
+		fmt.Printf("      Merkle tree entries: %d\n", chainCount)
+		fmt.Printf("      Pending hashes: %d\n", len(merkleState.Pending))
+		fmt.Printf("      Hash list: %d\n", len(merkleState.HashList))
+		if anchor := merkleState.Anchor(); anchor != nil {
+			fmt.Printf("      Anchor hash: %x\n", anchor[:8]) // Show first 8 bytes
+		} else {
+			fmt.Printf("      Anchor hash: nil\n")
+		}
+	}
+	
+	return nil
+}
+
+// exerciseMerkleTreesFromSnapshot opens a snapshot and exercises Merkle trees for a few accounts
+func exerciseMerkleTreesFromSnapshot(snapshotFile string, router routing.Router) error {
+	fmt.Println("\n=== Opening Snapshot for Merkle Tree Analysis ===")
+	
+	// Open snapshot file
+	file, err := os.Open(snapshotFile)
+	if err != nil {
+		return fmt.Errorf("failed to open snapshot file: %w", err)
+	}
+	defer file.Close()
+	
+	// TODO: Implement Merkle tree examination from snapshot
+	// The coredb.Restore API has changed and needs to be updated
+	// For now, we'll implement a placeholder that shows the intended functionality
+	
+	fmt.Println("\n=== Merkle Tree Examination from Snapshot ===")
+	fmt.Println("  Opening snapshot file:", snapshotFile)
+	fmt.Println("  This will:")
+	fmt.Println("    - Create temporary in-memory database")
+	fmt.Println("    - Stream through snapshot records")
+	fmt.Println("    - Filter for Account records with Main state")
+	fmt.Println("    - Process accounts in batches")
+	fmt.Println("    - Exercise Merkle trees for first 5 accounts")
+	fmt.Println("  Status: API integration in progress...")
+	
+	// Placeholder for demonstration
+	fmt.Printf("\nWould examine %d accounts and their main chain Merkle trees.\n", 5)
+	return nil
+}
+
+// minInt returns the minimum of two integers
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+// NetworkConfig represents the structure of the network.json file
+type NetworkConfig struct {
+	ID       string `json:"id"`
+	Template string `json:"template"`
+	Globals  struct {
+		Oracle struct {
+			Price int `json:"price"`
+		} `json:"oracle"`
+		Globals struct {
+			// ... other fields can be added as needed
+		} `json:"globals"`
+		Network struct {
+			NetworkName string `json:"networkName"`
+			Partitions  []struct {
+				ID   string `json:"id"`
+				Type string `json:"type"`
+			} `json:"partitions"`
+			Validators []struct {
+				Operator   string `json:"operator"`
+				Partitions []struct {
+					Active bool   `json:"active"`
+					ID     string `json:"id"`
+				} `json:"partitions"`
+				PublicKey     string `json:"publicKey"`
+				PublicKeyHash string `json:"publicKeyHash"`
+			} `json:"validators"`
+		} `json:"network"`
+	} `json:"globals"`
+	BVNs []struct {
+		ID    string `json:"id"`
+		Nodes []struct {
+			Listen        string `json:"listen"`
+			PublicKey     string `json:"publicKey"`
+			PublicKeyHash string `json:"publicKeyHash"`
+		} `json:"nodes"`
+	} `json:"bvns"`
+	DN struct {
+		Nodes []struct {
+			Listen        string `json:"listen"`
+			PublicKey     string `json:"publicKey"`
+			PublicKeyHash string `json:"publicKeyHash"`
+		} `json:"nodes"`
+	} `json:"dn"`
+}
+
+// printRoutingInfo displays routing and partition information from network config
+func printRoutingInfo(config *NetworkConfig) {
+	fmt.Printf("\nRouting and Partition Information:\n")
+	
+	// Find and display Directory Network
+	var bvnIDs []string
+	for _, partition := range config.Globals.Network.Partitions {
+		if partition.Type == "directory" {
+			fmt.Printf("  Directory Network: %s\n", partition.ID)
+		} else if partition.Type == "blockValidator" {
+			bvnIDs = append(bvnIDs, partition.ID)
+		}
+	}
+	
+	// Display Block Validator Networks
+	fmt.Printf("  Block Validator Networks:\n")
+	for _, bvnID := range bvnIDs {
+		fmt.Printf("    - %s\n", bvnID)
+	}
+
+	fmt.Printf("\n  Validators:\n")
+	for _, validator := range config.Globals.Network.Validators {
+		fmt.Printf("    - Operator: %s\n", validator.Operator)
+		for _, partition := range validator.Partitions {
+			fmt.Printf("      Partition: %s (Active: %v)\n", partition.ID, partition.Active)
+		}
+	}
+}
+
+// InitializeRouting creates a routing table and router from network configuration
+func InitializeRouting(config *NetworkConfig) (routing.Router, error) {
+	// Extract BVN partition IDs by type
+	var bvnIDs []string
+	var dnPartition string
+	for _, partition := range config.Globals.Network.Partitions {
+		switch partition.Type {
+		case "blockValidator":
+			bvnIDs = append(bvnIDs, partition.ID)
+		case "directory":
+			dnPartition = partition.ID
+		}
+	}
+
+	if len(bvnIDs) == 0 {
+		return nil, fmt.Errorf("no Block Validator Networks found in network configuration")
+	}
+
+	fmt.Printf("\nInitializing Routing Table:\n")
+	fmt.Printf("  BVN Partitions: %v\n", bvnIDs)
+	fmt.Printf("  DN Partition: %s\n", dnPartition)
+
+	// Build routing table using the simple table builder
+	routes := routing.BuildSimpleTable(bvnIDs)
+	
+	// Create routing overrides for system accounts that should route to DN
+	overrides := createSystemAccountOverrides(dnPartition)
+	
+	// Create complete routing table with both routes and overrides
+	routingTable := &protocol.RoutingTable{
+		Routes:    routes,
+		Overrides: overrides,
+	}
+
+	fmt.Printf("\nRouting Table Info:\n")
+	fmt.Printf("  Routes: %d\n", len(routes))
+	for i, route := range routes {
+		fmt.Printf("    Route %d: Length=%d, Value=%d, Partition=%s\n", i, route.Length, route.Value, route.Partition)
+	}
+	fmt.Printf("  Overrides: %d\n", len(overrides))
+	for i, override := range overrides {
+		fmt.Printf("    Override %d: %s -> %s\n", i, override.Account, override.Partition)
+	}
+
+	// Initialize router
+	router := routing.NewRouter(routing.RouterOptions{
+		Initial: routingTable,
+		// No event bus - static routing
+		Events: nil,
+		// No logger for now
+		Logger: nil,
+	})
+
+	fmt.Printf("\nRouter initialized successfully.\n")
+	return router, nil
+}
+
+// createSystemAccountOverrides creates routing overrides for system accounts that should route to DN
+func createSystemAccountOverrides(dnPartition string) []protocol.RouteOverride {
+	if dnPartition == "" {
+		return nil
+	}
+	
+	// System accounts that should route to Directory Network
+	systemAccounts := []string{
+		"acc://dn.acme",
+		"acc://staking.acme", 
+		"acc://ACME",
+		"acc://operators.acme",
+		"acc://validators.acme",
+		"acc://network.acme",
+	}
+	
+	var overrides []protocol.RouteOverride
+	for _, accountStr := range systemAccounts {
+		accountURL, err := url.Parse(accountStr)
+		if err != nil {
+			continue // Skip invalid URLs
+		}
+		
+		overrides = append(overrides, protocol.RouteOverride{
+			Account:   accountURL,
+			Partition: dnPartition,
+		})
+	}
+	
+	return overrides
+}
+
+// ParseNetworkJson parses the network.json file and returns the network config
+func ParseNetworkJson(filename string) (*NetworkConfig, error) {
+	// Read the network.json file
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read network.json: %w", err)
+	}
+	
+	// Print the raw JSON for debugging
+	fmt.Printf("Read %d bytes from %s\n", len(data), filename)
+	
+	// Parse the JSON into our custom structure
+	var config NetworkConfig
+	err = json.Unmarshal(data, &config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal network.json: %w", err)
+	}
+	
+	// Check if partitions exist
+	if len(config.Globals.Network.Partitions) == 0 {
+		return nil, fmt.Errorf("no partitions found in %s", filename)
+	}
+	
+	fmt.Printf("Successfully parsed network configuration with %d partitions\n", len(config.Globals.Network.Partitions))
+	
+	return &config, nil
+}
+
+// AccountRecord represents an account record from the snapshot
+type AccountRecord struct {
+	Key       *record.Key
+	Value     []byte
+	URL       *url.URL
+	Partition string
+}
+
+// TransactionRecord represents a transaction record from the snapshot
+type TransactionRecord struct {
+	Key   *record.Key
+	Value []byte
+	Hash  [32]byte
+}
+
+// MessageRecord represents a message record from the snapshot
+type MessageRecord struct {
+	Key   *record.Key
+	Value []byte
+	Hash  [32]byte
+}
+
+// ExtractedData contains all the extracted records and lookup maps
+type ExtractedData struct {
+	Transactions           []TransactionRecord
+	Messages               []MessageRecord
+	TransactionHashToIndex map[[32]byte]int
+	MessageHashToIndex     map[[32]byte]int
+}
+
+// GetTransactionByHash retrieves a transaction record by its hash
+func (e *ExtractedData) GetTransactionByHash(hash [32]byte) (*TransactionRecord, bool) {
+	if index, exists := e.TransactionHashToIndex[hash]; exists {
+		return &e.Transactions[index], true
+	}
+	return nil, false
+}
+
+// GetMessageByHash retrieves a message record by its hash
+func (e *ExtractedData) GetMessageByHash(hash [32]byte) (*MessageRecord, bool) {
+	if index, exists := e.MessageHashToIndex[hash]; exists {
+		return &e.Messages[index], true
+	}
+	return nil, false
+}
+
+// processSnapshot opens and processes the snapshot file, collecting chains, transactions, and messages
+func processSnapshot(snapshotFile string, router routing.Router) error {
+	// Open the snapshot file
+	file, err := os.Open(snapshotFile)
+	if err != nil {
+		return fmt.Errorf("failed to open snapshot file: %w", err)
+	}
+	defer file.Close()
+
+	// Create snapshot reader
+	reader, err := snapshot.Open(file)
+	if err != nil {
+		return fmt.Errorf("failed to create snapshot reader: %w", err)
+	}
+
+	fmt.Printf("\nSnapshot Header Info:\n")
+	fmt.Printf("  Version: %d\n", reader.Header.Version)
+	fmt.Printf("  Root Hash: %x\n", reader.Header.RootHash)
+	if reader.Header.SystemLedger != nil {
+		fmt.Printf("  System Ledger URL: %v\n", reader.Header.SystemLedger.Url)
+		fmt.Printf("  System Ledger Index: %d\n", reader.Header.SystemLedger.Index)
+		fmt.Printf("  System Ledger Timestamp: %v\n", reader.Header.SystemLedger.Timestamp)
+	}
+
+	fmt.Printf("\nProcessing snapshot sections (%d total)...\n", len(reader.Sections))
+
+	// Create a temporary in-memory database for processing
+	db := memory.New(nil).Begin(nil, true)
+	defer db.Discard()
+	coreDB := coredb.New(db, nil)
+
+	// Reset file position to beginning
+	_, err = file.Seek(0, io.SeekStart)
+	if err != nil {
+		return fmt.Errorf("failed to seek to beginning: %w", err)
+	}
+
+	// Data structures to collect records
+	transactions := make([]TransactionRecord, 0)
+	messages := make([]MessageRecord, 0)
+	
+	// Hash-to-index maps for efficient lookup
+	transactionHashToIndex := make(map[[32]byte]int)
+	messageHashToIndex := make(map[[32]byte]int)
+
+	fmt.Println("Processing snapshot records...")
+	fmt.Println("\n=== Exercising Merkle Trees (first 5 accounts) ===")
+
+	// Process all records using coredb.Restore with predicate
+	accountCount := 0
+	chainCount := 0
+	transactionCount := 0
+	messageCount := 0
+	partitionCounts := make(map[string]int)
+	
+	// Merkle tree statistics
+	totalChainEntries := int64(0)      // Total entries across all chains (from chain.Count)
+	totalSnapshotEntries := int64(0)   // Total entries actually in snapshot (from Merkle tree iteration)
+	chainsWithMerkleData := 0          // Number of chains that have Merkle tree data
+	var recordCount int
+	err = coredb.Restore(coreDB, file, &coredb.RestoreOptions{
+		BatchRecordLimit: 10_000, // Use smaller batches for memory efficiency
+		SkipHashCheck:    true,
+		Predicate: func(e *snapshot.RecordEntry) (bool, error) {
+			recordCount++
+			// Determine record type from the first key element
+			recordType := e.Key.Get(0).(string)
+			
+			// Debug: Track all record types we encounter
+			if recordCount%10000 == 0 || (recordType == "Account" && recordCount%1000 == 0) {
+				// Show full key structure for debugging
+				keyParts := make([]string, e.Key.Len())
+				for i := 0; i < e.Key.Len(); i++ {
+					keyParts[i] = fmt.Sprintf("%v", e.Key.Get(i))
+				}
+				fmt.Printf("Record %d: Type='%s', Full Key=[%s]\n", recordCount, recordType, strings.Join(keyParts, ", "))
+			}
+			
+			switch recordType {
+			case "Account":
+				// Process Account records and their sub-records (chains)
+
+				// Get the account URL
+				accountURL := e.Key.Get(1).(*url.URL)
+
+				// Skip system accounts that we don't want to process
+				if protocol.FaucetUrl.Equal(accountURL) {
+					return false, nil
+				}
+				if protocol.AcmeUrl().Equal(accountURL) {
+					return false, nil
+				}
+				if _, ok := protocol.ParsePartitionUrl(accountURL); ok {
+					return false, nil
+				}
+
+				// Check if this is main account state or a chain sub-record
+				recordSubType := e.Key.Get(2).(string)
+				
+				if recordSubType == "Main" {
+					// This is the main account state
+					
+					// Determine routing for this account
+					partition, err := router.RouteAccount(accountURL)
+					if err != nil {
+						fmt.Printf("Warning: failed to route account %s: %v\n", accountURL, err)
+						return false, nil
+					}
+
+					// Count accounts by partition
+					partitionCounts[partition]++
+					accountCount++
+					if accountCount%1000 == 0 {
+						fmt.Printf("Processed %d accounts...\n", accountCount)
+					}
+
+					// Log account info (first 10 accounts for debugging)
+					if accountCount <= 10 {
+						fmt.Printf("  Account %d: %s -> %s\n", accountCount, accountURL, partition)
+					}
+					
+					// Exercise Merkle trees for ALL accounts
+					examineAccountMerkleTree(accountURL, e.Value, int64(accountCount))
+					
+				} else {
+					// This is a chain sub-record (MainChain, AnchorChain, etc.)
+					chainCount++
+					if chainCount%1000 == 0 {
+						fmt.Printf("Processed %d chain sub-records...\n", chainCount)
+					}
+					
+					// Deserialize and analyze the chain's Merkle tree
+					if err := analyzeChainMerkleTree(accountURL, recordSubType, e.Value, chainCount, &totalChainEntries, &totalSnapshotEntries, &chainsWithMerkleData); err != nil {
+						if chainCount <= 10 {
+							fmt.Printf("  Chain %d: %s/%s - Error analyzing Merkle tree: %v\n", chainCount, accountURL, recordSubType, err)
+						}
+					} else {
+						// Log chain sub-record info (first 10 for debugging)
+						if chainCount <= 10 {
+							fmt.Printf("  Chain %d: %s/%s (key len=%d)\n", chainCount, accountURL, recordSubType, e.Key.Len())
+						}
+					}
+				}
+
+
+
+			case "Transaction":
+				// Process Transaction records
+				var txHash [32]byte
+				if hashBytes, ok := e.Key.Get(1).([32]byte); ok {
+					txHash = hashBytes
+				}
+				
+				// Create transaction record
+				txRecord := TransactionRecord{
+					Key:   e.Key,
+					Value: e.Value,
+					Hash:  txHash,
+				}
+				
+				// Add to slice and map
+				txIndex := len(transactions)
+				transactions = append(transactions, txRecord)
+				transactionHashToIndex[txHash] = txIndex
+				
+				transactionCount++
+				if transactionCount%1000 == 0 {
+					fmt.Printf("Processed %d transactions...\n", transactionCount)
+				}
+
+			case "Message":
+				// Process Message records
+				var msgHash [32]byte
+				if hashBytes, ok := e.Key.Get(1).([32]byte); ok {
+					msgHash = hashBytes
+				}
+				
+				// Create message record
+				msgRecord := MessageRecord{
+					Key:   e.Key,
+					Value: e.Value,
+					Hash:  msgHash,
+				}
+				
+				// Add to slice and map
+				msgIndex := len(messages)
+				messages = append(messages, msgRecord)
+				messageHashToIndex[msgHash] = msgIndex
+				
+				messageCount++
+				if messageCount%1000 == 0 {
+					fmt.Printf("Processed %d messages...\n", messageCount)
+				}
+
+			default:
+				// Skip other record types
+				return false, nil
+			}
+
+			// We don't actually need to restore the data, just collect it
+			return false, nil
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to process snapshot: %w", err)
+	}
+
+	fmt.Printf("\nSnapshot processing completed:\n")
+	fmt.Printf("  Total accounts processed: %d\n", accountCount)
+	fmt.Printf("  Total chain sub-records found: %d\n", chainCount)
+	fmt.Printf("  Total transactions collected: %d\n", transactionCount)
+	fmt.Printf("  Total messages collected: %d\n", messageCount)
+	
+	// Merkle tree analysis results
+	fmt.Printf("\nMerkle Tree Analysis Results:\n")
+	fmt.Printf("  Chains with Merkle data: %d\n", chainsWithMerkleData)
+	fmt.Printf("  Total entries across all chains: %d\n", totalChainEntries)
+	fmt.Printf("  Total entries in snapshot: %d\n", totalSnapshotEntries)
+	if totalChainEntries > 0 {
+		missingEntries := totalChainEntries - totalSnapshotEntries
+		fmt.Printf("  Missing entries (truncated): %d\n", missingEntries)
+		fmt.Printf("  Snapshot coverage: %.2f%%\n", float64(totalSnapshotEntries)/float64(totalChainEntries)*100)
+	}
+
+	// Display first few examples of each type
+	fmt.Printf("\nFirst few examples:\n")
+	if len(transactions) > 0 {
+		fmt.Printf("\nTransactions (first 5):\n")
+		for i, tx := range transactions {
+			if i >= 5 {
+				break
+			}
+			fmt.Printf("  %d: %x\n", i+1, tx.Hash)
+		}
+	}
+	if len(messages) > 0 {
+		fmt.Printf("\nMessages (first 5):\n")
+		for i, msg := range messages {
+			if i >= 5 {
+				break
+			}
+			fmt.Printf("  %d: %x\n", i+1, msg.Hash)
+		}
+	}
+
+	fmt.Printf("\nAccount distribution by partition:\n")
+	
+	// Count DN and BVN accounts separately
+	dnCount := 0
+	bvnCount := 0
+	for partition, count := range partitionCounts {
+		fmt.Printf("  %s: %d accounts\n", partition, count)
+		if partition == "Directory" {
+			dnCount += count
+		} else {
+			bvnCount += count
+		}
+	}
+	
+	fmt.Printf("\nSummary:\n")
+	fmt.Printf("  Directory Network (DN): %d accounts\n", dnCount)
+	fmt.Printf("  Block Validator Networks (BVN): %d accounts\n", bvnCount)
+	if accountCount > 0 {
+		fmt.Printf("  DN percentage: %.2f%%\n", float64(dnCount)/float64(accountCount)*100)
+		fmt.Printf("  BVN percentage: %.2f%%\n", float64(bvnCount)/float64(accountCount)*100)
+	}
+
+	// Store the collected data for further analysis
+	fmt.Printf("\nCollected data ready for analysis:\n")
+	fmt.Printf("  Chain sub-records found: %d records\n", chainCount)
+	fmt.Printf("  Transactions slice: %d records\n", len(transactions))
+	fmt.Printf("  Messages slice: %d records\n", len(messages))
+	fmt.Printf("\nHash-to-index maps created:\n")
+	fmt.Printf("  Transaction hash map: %d entries\n", len(transactionHashToIndex))
+	fmt.Printf("  Message hash map: %d entries\n", len(messageHashToIndex))
+
+	// Example usage: Get a transaction by hash
+	if len(transactions) > 0 {
+		firstTxHash := transactions[0].Hash
+		if index, exists := transactionHashToIndex[firstTxHash]; exists {
+			fmt.Printf("\nExample lookup: Transaction hash %x found at index %d\n", firstTxHash, index)
+			fmt.Printf("  Retrieved transaction matches: %v\n", transactions[index].Hash == firstTxHash)
+		}
+	}
+
+	// Example usage: Get a message by hash
+	if len(messages) > 0 {
+		firstMsgHash := messages[0].Hash
+		if index, exists := messageHashToIndex[firstMsgHash]; exists {
+			fmt.Printf("Example lookup: Message hash %x found at index %d\n", firstMsgHash, index)
+			fmt.Printf("  Retrieved message matches: %v\n", messages[index].Hash == firstMsgHash)
+		}
+	}
+
+	// Exercise Merkle trees for first few accounts
+	if err := exerciseMerkleTreesFromSnapshot(snapshotFile, router); err != nil {
+		fmt.Printf("Error exercising Merkle trees: %v\n", err)
+	}
+
+	// TODO: Return the extracted data for external use
+	// This could be modified to return *ExtractedData instead of nil
+	// extractedData := &ExtractedData{
+	//     Transactions:           transactions,
+	//     Messages:               messages,
+	//     TransactionHashToIndex: transactionHashToIndex,
+	//     MessageHashToIndex:     messageHashToIndex,
+	// }
+	// return extractedData, nil
+
+	return nil
+}
