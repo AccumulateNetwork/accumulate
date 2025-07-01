@@ -31,7 +31,6 @@ func TestDoExtract(t *testing.T) {
 	}
 	
 	// If we get here, the function succeeded
-	t.Log("DoExtract completed successfully")
 }
 
 // TestParseNetworkJson tests the parseNetworkJson function

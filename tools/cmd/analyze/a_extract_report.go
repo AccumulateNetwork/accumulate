@@ -45,8 +45,7 @@ type ExtractReport struct {
 	AnchorChainCount int64
 	OtherChainCount  int64
 
-	// DN partition statistics
-	DNStats *DNAccountStats
+	// TODO: Partition-specific statistics will be added later
 }
 
 // NewExtractReport creates a new extraction report with initialized values
@@ -88,8 +87,5 @@ func (r *ExtractReport) PrintReport() {
 		}
 	}
 
-	// Print DN partition statistics if available
-	if r.DNStats != nil {
-		r.DNStats.PrintDNStats()
-	}
+	// TODO: Partition-specific statistics printing will be added later
 }

@@ -16,54 +16,34 @@ package main
 import (
 	"fmt"
 	"io"
-	"os"
+	"sort"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 )
 
-// Load scans the snapshot file and loads up the transaction slice and map
+// Load scans the snapshot file and collects all records into a unified slice
+// Uses the pre-opened snapshot file and reader from ExtractState
 func Load(extractState *ExtractState) error {
-	// Open the snapshot file
-	file, err := os.Open(extractState.SnapshotFile)
-	if err != nil {
-		return fmt.Errorf("failed to open snapshot file: %w", err)
-	}
-	defer file.Close()
-
-	// Create snapshot reader to get header info
-	reader, err := snapshot.Open(file)
-	if err != nil {
-		return fmt.Errorf("failed to create snapshot reader: %w", err)
+	// Ensure snapshot is initialized
+	if extractState.SnapshotFileHandle == nil || extractState.SnapshotReader == nil {
+		return fmt.Errorf("snapshot not initialized - call InitializeSnapshot() first")
 	}
 
-	// Store snapshot header information
-	extractState.SnapshotHeader = &SnapshotHeader{
-		Version:  reader.Header.Version,
-		RootHash: reader.Header.RootHash,
-	}
-
-	// Store system ledger info if available
-	if reader.Header.SystemLedger != nil {
-		extractState.SnapshotHeader.SystemLedger.URL = reader.Header.SystemLedger.Url.String()
-		extractState.SnapshotHeader.SystemLedger.Index = reader.Header.SystemLedger.Index
-		extractState.SnapshotHeader.SystemLedger.Timestamp = reader.Header.SystemLedger.Timestamp.UnixNano()
-	}
+	// Use the pre-opened snapshot reader
+	reader := extractState.SnapshotReader
 
 	fmt.Printf("Loading snapshot data...\n")
 	fmt.Printf("  Snapshot Version: %d\n", reader.Header.Version)
 	fmt.Printf("  Root Hash: %x\n", reader.Header.RootHash)
 	fmt.Printf("  Sections: %d\n", len(reader.Sections))
 
-	// Reset file position to beginning for processing
-	_, err = file.Seek(0, io.SeekStart)
-	if err != nil {
-		return fmt.Errorf("failed to seek to beginning: %w", err)
-	}
-	// Process snapshot records to extract transactions and messages
+	// Process snapshot records to collect all records
 	// Using pure streaming approach - NO DATABASE ALLOCATION
 	recordCount := 0
+	accountCount := 0
 	transactionCount := 0
 	messageCount := 0
+	otherCount := 0
 
 	fmt.Printf("Processing snapshot sections...\n")
 
@@ -113,102 +93,104 @@ func Load(extractState *ExtractState) error {
 			
 			value := recordEntry.Value
 			
-			// Check if this looks like a transaction or message record
-			if len(keyBytes) >= 32 && len(value) > 0 {
-				// Create a hash from the key
-				var hash [32]byte
-				copy(hash[:], keyBytes[:32])
-				
-				// Determine record type based on key structure and value content
-				// This is a heuristic approach - in practice you'd need proper key parsing
-				isTransaction := false
-				isMessage := false
-				
-				// Simple heuristics for record type detection:
-				// - Check value size and structure patterns
-				// - Messages tend to be smaller and have different patterns
-				// - Transactions tend to be larger and have specific structures
-				if len(value) > 100 {
-					// Larger records are more likely to be transactions
-					// Check for transaction-like patterns in the value
-					if len(value) > 200 || (len(keyBytes) == 32 && value[0] != 0) {
-						isTransaction = true
-					}
-				} else if len(value) > 20 && len(value) <= 100 {
-					// Smaller records might be messages
-					// Additional heuristics could be added here
-					isMessage = true
-				}
-				
-				// If we can't determine the type, default to transaction for now
-				if !isTransaction && !isMessage {
-					isTransaction = true
-				}
-				
-				if isTransaction {
-					// Create transaction record
-					txRecord := TransactionRecord{
-						Key:   keyBytes,
-						Value: value,
-						Hash:  hash,
-					}
-					
-					// Add to transactions slice and map
-					index := len(extractState.Transactions)
-					extractState.Transactions = append(extractState.Transactions, txRecord)
-					extractState.TransactionHashToIndex[hash] = index
-					
-					transactionCount++
-					if transactionCount%1000 == 0 {
-						fmt.Printf("Processed %d transactions...\n", transactionCount)
-					}
-				}
-				
-				if isMessage {
-					// Create message record
-					msgRecord := MessageRecord{
-						Key:   keyBytes,
-						Value: value,
-						Hash:  hash,
-					}
-					
-					// Add to messages slice and map
-					index := len(extractState.Messages)
-					extractState.Messages = append(extractState.Messages, msgRecord)
-					extractState.MessageHashToIndex[hash] = index
-					
-					messageCount++
-					if messageCount%1000 == 0 {
-						fmt.Printf("Processed %d messages...\n", messageCount)
-					}
-				}
+			// Create a hash from the key for indexing
+			var keyHash [32]byte
+			if len(keyBytes) >= 32 {
+				copy(keyHash[:], keyBytes[:32])
+			} else {
+				// For shorter keys, use a simple hash
+				copy(keyHash[:], keyBytes)
 			}
+			
+			// Detect record type using heuristics
+			recordType := detectRecordType(recordEntry.Key)
+			
+			// Extract URL for account records
+			var url, partition string
+			if recordType == "account" {
+				accountURL, err := extractAccountURL(recordEntry.Key)
+				if err == nil && accountURL != nil {
+					url = accountURL.String()
+				}
+				partition = "" // Will be determined later using router
+				accountCount++
+			} else if recordType == "transaction" {
+				transactionCount++
+			} else if recordType == "message" {
+				messageCount++
+			} else {
+				otherCount++
+			}
+			
+			// Create unified record entry
+			record := RecordEntry{
+				Key:        keyBytes,
+				Value:      value,
+				KeyHash:    keyHash,
+				RecordType: recordType,
+				URL:        url,
+				Partition:  partition,
+			}
+			
+			// Add to unified records collection
+			index := len(extractState.Records)
+			extractState.Records = append(extractState.Records, record)
+			extractState.KeyHashToIndex[keyHash] = index
 
 			// Progress reporting
-			if recordCount%10000 == 0 {
-				fmt.Printf("  Processed %d records, found %d transactions, %d messages\n",
-					recordCount, transactionCount, messageCount)
+			if recordCount%100000 == 0 {
+				fmt.Printf("  Processed %d records (accounts: %d, transactions: %d, messages: %d, other: %d)\n",
+					recordCount, accountCount, transactionCount, messageCount, otherCount)
 			}
 		}
 	}
 
 	// Update report statistics
+	extractState.Report.AccountCount = int64(accountCount)
 	extractState.Report.TransactionCount = int64(transactionCount)
 	extractState.Report.MessageCount = int64(messageCount)
 
 	fmt.Printf("Snapshot loading complete:\n")
 	fmt.Printf("  Total records processed: %d\n", recordCount)
-	fmt.Printf("  Transactions loaded: %d\n", transactionCount)
-	fmt.Printf("  Messages loaded: %d\n", messageCount)
-	fmt.Printf("  Transaction hash map entries: %d\n", len(extractState.TransactionHashToIndex))
-	fmt.Printf("  Message hash map entries: %d\n", len(extractState.MessageHashToIndex))
+	fmt.Printf("  Accounts: %d\n", accountCount)
+	fmt.Printf("  Transactions: %d\n", transactionCount)
+	fmt.Printf("  Messages: %d\n", messageCount)
+	fmt.Printf("  Other records: %d\n", otherCount)
+	fmt.Printf("  Total records in collection: %d\n", len(extractState.Records))
+	fmt.Printf("  Key hash map entries: %d\n", len(extractState.KeyHashToIndex))
 
-	// Process DN partition accounts and their subchains
-	if len(extractState.Accounts) > 0 {
-		err := ProcessDNAccounts(extractState)
-		if err != nil {
-			fmt.Printf("Warning: DN account processing failed: %v\n", err)
+	// Sort records by key hash for proper snapshot ordering
+	fmt.Printf("\nSorting records by key hash...\n")
+	err := sortRecordsByKeyHash(extractState)
+	if err != nil {
+		return fmt.Errorf("failed to sort records: %w", err)
+	}
+	fmt.Printf("Records sorted successfully\n")
+
+	return nil
+}
+
+// sortRecordsByKeyHash sorts the Records slice by key hash and rebuilds the KeyHashToIndex map
+func sortRecordsByKeyHash(extractState *ExtractState) error {
+	if len(extractState.Records) == 0 {
+		return nil
+	}
+
+	// Sort the Records slice by key hash
+	sort.Slice(extractState.Records, func(i, j int) bool {
+		// Compare key hashes byte by byte
+		for k := 0; k < 32; k++ {
+			if extractState.Records[i].KeyHash[k] != extractState.Records[j].KeyHash[k] {
+				return extractState.Records[i].KeyHash[k] < extractState.Records[j].KeyHash[k]
+			}
 		}
+		return false // Equal hashes
+	})
+
+	// Rebuild the KeyHashToIndex map with new indices
+	extractState.KeyHashToIndex = make(map[[32]byte]int)
+	for i, record := range extractState.Records {
+		extractState.KeyHashToIndex[record.KeyHash] = i
 	}
 
 	return nil

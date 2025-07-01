@@ -14,10 +14,10 @@ import (
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	sv2 "gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // WritePartitionSnapshot writes a partition-specific snapshot by filtering accounts
@@ -25,14 +25,13 @@ func WritePartitionSnapshot(extractState *ExtractState, outputFile string, targe
 	fmt.Printf("Writing partition snapshot for: %s\n", targetPartition)
 	fmt.Printf("Output file: %s\n", outputFile)
 
-	// Statistics counters
-	accountCount := 0
-	transactionCount := 0
-	messageCount := 0
-	otherRecordCount := 0
-	mainChainCount := 0
-	anchorChainCount := 0
-	otherChainCount := 0
+	// Report routing table partitions
+	reportRoutingPartitions(extractState)
+
+	// Initialize counters for statistics
+	var accountCount, transactionCount, messageCount, otherRecordCount int
+	var mainChainCount, anchorChainCount, otherChainCount int
+	var totalProcessed, accountRecords, nonAccountRecords int
 	totalChainCount := 0
 	recordCount := 0
 
@@ -135,29 +134,44 @@ func WritePartitionSnapshot(extractState *ExtractState, outputFile string, targe
 				}
 				recordCount++
 
-				// Determine if we should include this record
+				// Initialize variables for this record
 				shouldInclude := false
 				recordType := "unknown"
+				totalProcessed++
 				
-				// For Directory partition, include ALL records and classify them properly
-				if targetPartition == "Directory" {
-					shouldInclude = true
-					// Classify the record type using our detection logic
-					recordType = detectRecordType(entry.Key)
-					// Debug output removed - counters working correctly
-					// Debug: print first few records of each type
-					if (transactionCount + messageCount + accountCount + otherRecordCount) < 10 {
-						keyBytes, _ := entry.Key.MarshalBinary()
-						maxLen := 100
-						if len(keyBytes) < maxLen {
-							maxLen = len(keyBytes)
-						}
-						fmt.Printf("DEBUG: Record type %s: %q\n", recordType, string(keyBytes)[:maxLen])
+				// Try to extract account URL from the record key
+				accountURL, err := extractAccountURL(entry.Key)
+				if err != nil {
+					// This is likely a message or transaction record, not an account
+					// For DN partition, include all non-account records
+					if targetPartition == "Directory" {
+						shouldInclude = true
+						nonAccountRecords++
+						recordType = detectRecordTypeFromKey(entry.Key)
 					}
 				} else {
-					// For other partitions, we would need partition-specific logic
-					shouldInclude = false
-					recordType = "unknown"
+					// This is an account record, check partition membership
+					accountRecords++
+					recordType = "account"
+					
+					// Debug: Print first few account URLs found
+					if accountRecords <= 5 {
+						fmt.Printf("DEBUG: Found account URL: %s\n", accountURL.String())
+					}
+					
+					// Type cast router with safety fallback
+					if router, ok := extractState.Router.(routing.Router); ok {
+						if belongsToPartition(accountURL, targetPartition, router) {
+							shouldInclude = true
+							// Debug: Print first few matching accounts
+							if accountRecords <= 5 {
+								fmt.Printf("DEBUG: Account %s belongs to partition %s\n", accountURL.String(), targetPartition)
+							}
+						}
+					} else {
+						// Fallback: include all accounts if router casting fails
+						shouldInclude = true
+					}
 				}
 
 				if shouldInclude {
@@ -206,19 +220,28 @@ func WritePartitionSnapshot(extractState *ExtractState, outputFile string, targe
 	}
 
 	// Print detailed statistics
-	totalRecords := accountCount + transactionCount + messageCount + otherRecordCount
-	fmt.Printf("\n=== Partition Snapshot Statistics for %s ===\n", targetPartition)
-	fmt.Printf("Total records written: %d\n", totalRecords)
-	fmt.Printf("  Accounts: %d\n", accountCount)
-	fmt.Printf("  Transactions: %d\n", transactionCount)
-	fmt.Printf("  Messages: %d\n", messageCount)
-	fmt.Printf("  Other records: %d\n", otherRecordCount)
+	fmt.Printf("\nPartition Snapshot Statistics for %s:\n", targetPartition)
+	fmt.Printf("  Total records processed: %d\n", totalProcessed)
+	fmt.Printf("  Account records found: %d\n", accountRecords)
+	fmt.Printf("  Non-account records found: %d\n", nonAccountRecords)
+	fmt.Printf("  Total records written: %d\n", recordCount)
+	fmt.Printf("  Record types:\n")
+	fmt.Printf("    Accounts: %d\n", accountCount)
+	fmt.Printf("    Transactions: %d\n", transactionCount)
+	fmt.Printf("    Messages: %d\n", messageCount)
+	fmt.Printf("    Other records: %d\n", otherRecordCount)
 	fmt.Printf("\nChain Statistics:\n")
 	fmt.Printf("  Total chains: %d\n", totalChainCount)
 	fmt.Printf("  Main chains: %d\n", mainChainCount)
 	fmt.Printf("  Anchor chains: %d\n", anchorChainCount)
 	fmt.Printf("  Other chains: %d\n", otherChainCount)
-	fmt.Printf("\nSuccessfully wrote partition snapshot: %s\n", outputFile)
+	// Get file size for reporting
+	fileInfo, err := file.Stat()
+	if err == nil {
+		fmt.Printf("\nSuccessfully wrote partition snapshot: %s (%.1f MB)\n", outputFile, float64(fileInfo.Size())/(1024*1024))
+	} else {
+		fmt.Printf("\nSuccessfully wrote partition snapshot: %s\n", outputFile)
+	}
 	return nil
 }
 
@@ -245,6 +268,8 @@ func extractAccountURL(key *record.Key) (*url.URL, error) {
 
 	// Convert to string and look for URL patterns
 	keyStr := string(keyBytes)
+	
+
 	
 	// Look for acc:// URLs which indicate account records
 	if strings.Contains(keyStr, "acc://") {
@@ -283,8 +308,14 @@ func belongsToPartition(accountURL *url.URL, targetPartition string, router rout
 		return belongsToPartitionHeuristic(accountURL, targetPartition)
 	}
 
-	// Check if the routed partition matches our target partition
-	return partition == targetPartition
+	// Debug: Print routing information for first few accounts
+	if accountURL.String() == "acc://system/ledger" || strings.Contains(accountURL.String(), "adi") {
+		fmt.Printf("DEBUG: Account %s routed to partition '%s', target is '%s', match: %v\n", 
+			accountURL.String(), partition, targetPartition, strings.EqualFold(partition, targetPartition))
+	}
+
+	// Check if the routed partition matches our target partition (case-insensitive)
+	return strings.EqualFold(partition, targetPartition)
 }
 
 // belongsToPartitionHeuristic is a fallback heuristic approach
@@ -293,16 +324,16 @@ func belongsToPartitionHeuristic(accountURL *url.URL, targetPartition string) bo
 		return false
 	}
 
-	// Heuristic: Check if the URL path contains elements that match the partition
+	// Heuristic: Check if the URL path contains elements that match the partition (case-insensitive)
 	pathElements := strings.Split(strings.Trim(accountURL.Path, "/"), "/")
 	for _, element := range pathElements {
-		if element == targetPartition {
+		if strings.EqualFold(element, targetPartition) {
 			return true
 		}
 	}
 
-	// Additional heuristic: Check hostname/authority for partition matching
-	if strings.Contains(accountURL.Authority, targetPartition) {
+	// Additional heuristic: Check hostname/authority for partition matching (case-insensitive)
+	if strings.Contains(strings.ToLower(accountURL.Authority), strings.ToLower(targetPartition)) {
 		return true
 	}
 
@@ -347,6 +378,98 @@ func writeAccountChains(collector *sv2.Collector, accountURL *url.URL, reader *s
 	
 	fmt.Printf("TODO: Write chains for account %s\n", accountURL.String())
 	return nil
+}
+
+// reportRoutingPartitions reports the partitions available in the routing table
+func reportRoutingPartitions(extractState *ExtractState) {
+	fmt.Println("\nRouting Table Analysis:")
+	
+	// Check if router is available
+	if extractState.Router == nil {
+		fmt.Println("  Router: Not initialized")
+		return
+	}
+	
+	// Try to cast router to routing.Router
+	router, ok := extractState.Router.(routing.Router)
+	if !ok {
+		fmt.Printf("  Router: Available but not routing.Router type (actual type: %T)\n", extractState.Router)
+		return
+	}
+	
+	fmt.Println("  Router: Successfully initialized")
+	
+	// Test routing with known partition names from network config
+	if extractState.NetworkConfig != nil && extractState.NetworkConfig.Globals.Network.Partitions != nil {
+		fmt.Printf("  Network Config Partitions: %d\n", len(extractState.NetworkConfig.Globals.Network.Partitions))
+		for i, partition := range extractState.NetworkConfig.Globals.Network.Partitions {
+			fmt.Printf("    %d: %s (Type: %s)\n", i+1, partition.ID, partition.Type)
+		}
+	}
+	
+	// Test routing with sample account URLs to discover partition mappings
+	fmt.Println("  Testing routing with sample URLs:")
+	testAccountRouting(router)
+	
+	// Test routing overrides if available
+	testRoutingOverrides(extractState)
+	
+	fmt.Println()
+}
+
+// testAccountRouting tests routing with various account URL patterns
+func testAccountRouting(router routing.Router) {
+	// Test common account URL patterns
+	testURLs := []string{
+		"acc://dn",
+		"acc://directory",
+		"acc://system",
+		"acc://system/ledger",
+		"acc://bvn-cyclops",
+		"acc://test.acme",
+		"acc://alice.acme",
+		"acc://bob.acme",
+		"acc://charlie.acme",
+		"acc://example.acme",
+	}
+	
+	partitionCounts := make(map[string]int)
+	
+	for _, urlStr := range testURLs {
+		accountURL, err := url.Parse(urlStr)
+		if err != nil {
+			fmt.Printf("    %s: Parse error: %v\n", urlStr, err)
+			continue
+		}
+		
+		partition, err := router.RouteAccount(accountURL)
+		if err != nil {
+			fmt.Printf("    %s: Route error: %v\n", urlStr, err)
+			continue
+		}
+		
+		fmt.Printf("    %s -> %s\n", urlStr, partition)
+		partitionCounts[partition]++
+	}
+	
+	// Summary of discovered partitions
+	if len(partitionCounts) > 0 {
+		fmt.Println("  Discovered partitions from routing:")
+		for partition, count := range partitionCounts {
+			fmt.Printf("    %s: %d test URLs routed here\n", partition, count)
+		}
+	}
+}
+
+// testRoutingOverrides tests if there are any routing overrides configured
+func testRoutingOverrides(extractState *ExtractState) {
+	// This would require access to the routing table's override map
+	// For now, we'll just report if we have network config with routing info
+	if extractState.NetworkConfig != nil {
+		fmt.Println("  Routing overrides: Checking network configuration...")
+		// Could examine network config for any routing-specific settings
+		fmt.Println("  Routing overrides: Not directly accessible from current interface")
+	}
 }
 
 // detectRecordTypeFromKey determines the type of record based on the key structure

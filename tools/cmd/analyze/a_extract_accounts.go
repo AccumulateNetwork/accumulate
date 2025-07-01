@@ -7,282 +7,286 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"strings"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
+	snapshotpkg "gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// DNAccountStats holds statistics for DN partition accounts
-type DNAccountStats struct {
-	TotalDNAccounts    int                    // Total accounts in DN partition
-	AccountsByADI      map[string]int         // Count of accounts per ADI
-	ChainsByType       map[string]int         // Count of chains by type
-	ChainsByADI        map[string]int         // Count of chains per ADI
-	TotalEntriesHeader int64                  // Total entries from chain headers
-	TotalEntriesFound  int64                  // Total entries found by traversing chains
-	ChainTypesByADI    map[string]map[string]int // Chain types per ADI
+// PartitionAccountStats holds statistics for account processing in a specific partition
+type PartitionAccountStats struct {
+	PartitionID    string
+	PartitionType  string
+	TotalAccounts  int64
+	TotalChains    int64
+	AccountsByType map[string]int64 // e.g., "LiteTokenAccount", "ADI", etc.
+	ChainsByType   map[string]int64 // e.g., "MainChain", "AnchorChain", etc.
+	ProcessingTime int64            // milliseconds
 }
 
-// NewDNAccountStats creates a new DNAccountStats instance
-func NewDNAccountStats() *DNAccountStats {
-	return &DNAccountStats{
-		AccountsByADI:   make(map[string]int),
-		ChainsByType:    make(map[string]int),
-		ChainsByADI:     make(map[string]int),
-		ChainTypesByADI: make(map[string]map[string]int),
+// NewPartitionAccountStats creates a new PartitionAccountStats instance
+func NewPartitionAccountStats(partitionID, partitionType string) *PartitionAccountStats {
+	return &PartitionAccountStats{
+		PartitionID:    partitionID,
+		PartitionType:  partitionType,
+		AccountsByType: make(map[string]int64),
+		ChainsByType:   make(map[string]int64),
 	}
 }
 
-// ProcessDNAccounts analyzes accounts and their subchains for DN partition processing
-func ProcessDNAccounts(extractState *ExtractState) error {
-	if extractState.Router == nil {
-		return fmt.Errorf("router not initialized")
+// ProcessPartitionAccounts processes accounts for a specific partition using streaming approach
+// This function uses the pre-opened snapshot file and section information from ExtractState
+// For v2 snapshots, accounts are stored as individual records in Records sections, not in dedicated Accounts sections
+func ProcessPartitionAccounts(extractState *ExtractState, partitionID string) (*PartitionAccountStats, error) {
+	fmt.Printf("Processing accounts for partition: %s\n", partitionID)
+
+	// Ensure snapshot is initialized
+	if extractState.SnapshotFileHandle == nil || extractState.SnapshotReader == nil {
+		return nil, fmt.Errorf("snapshot not initialized - call InitializeSnapshot() first")
 	}
 
-	fmt.Printf("Processing DN partition accounts...\n")
+	// Find the partition info
+	var targetPartition *PartitionInfo
+	for i, partition := range extractState.Partitions {
+		if partition.ID == partitionID {
+			targetPartition = &extractState.Partitions[i]
+			break
+		}
+	}
 
-	// Initialize DN stats
-	dnStats := NewDNAccountStats()
+	if targetPartition == nil {
+		return nil, fmt.Errorf("partition %s not found", partitionID)
+	}
 
-	// Process each account record
-	for i, account := range extractState.Accounts {
-		// Parse account URL
-		accountURL, err := url.Parse(account.URL)
-		if err != nil {
-			fmt.Printf("Warning: failed to parse account URL %s: %v\n", account.URL, err)
+	// Initialize statistics
+	stats := NewPartitionAccountStats(partitionID, targetPartition.Type)
+
+	// Use the pre-opened snapshot reader
+	reader := extractState.SnapshotReader
+
+	// In v2 snapshots, accounts are stored as records in Records sections
+	// We need to process all Records sections and filter for account records
+	var recordsSections []int
+	for i, section := range reader.Sections {
+		if section.Type() != snapshot.SectionTypeAccounts {
 			continue
 		}
+		recordsSections = append(recordsSections, i)
+	}
 
-		// Check if account routes to DN partition
-		// Note: This assumes the router has a RouteAccount method
-		// In practice, you'd need to cast the router to the appropriate type
-		isDNAccount, err := isAccountInDNPartition(extractState.Router, accountURL)
+	if len(recordsSections) == 0 {
+		return nil, fmt.Errorf("no Records sections found in snapshot")
+	}
+
+	fmt.Printf("Found %d Records sections to process for accounts...\n", len(recordsSections))
+
+	// Track unique accounts to avoid double-counting (since accounts are split into multiple records)
+	uniqueAccounts := make(map[string]bool)
+
+	// Process each Records section
+	for _, sectionIndex := range recordsSections {
+		fmt.Printf("Processing Records section %d for account data...\n", sectionIndex)
+
+		// Open record reader for this Records section
+		recordReader, err := reader.OpenRecords(sectionIndex)
 		if err != nil {
-			fmt.Printf("Warning: failed to route account %s: %v\n", account.URL, err)
-			continue
+			return nil, fmt.Errorf("failed to open records section %d: %v", sectionIndex, err)
 		}
 
-		if isDNAccount {
-			dnStats.TotalDNAccounts++
+		// Process each record in this Records section
+		recordCount := 0
+		accountRecordCount := 0
+		for {
+			record, err := recordReader.Read()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				return nil, fmt.Errorf("error reading record from section %d: %v", sectionIndex, err)
+			}
 
-			// Extract ADI from account URL
-			adi := extractADI(account.URL)
-			if adi != "" {
-				dnStats.AccountsByADI[adi]++
+			recordCount++
 
-				// Initialize chain type map for this ADI if not exists
-				if dnStats.ChainTypesByADI[adi] == nil {
-					dnStats.ChainTypesByADI[adi] = make(map[string]int)
+			// Debug: Check first few records
+			if recordCount <= 5 {
+				keyBytes, _ := record.Key.MarshalBinary()
+				keyStr := string(keyBytes)
+				fmt.Printf("  Record %d key: %q\n", recordCount, keyStr)
+			}
+
+			// Try to extract account URL from record value
+			accountURL, err := extractAccountURLFromValue(record)
+			if err != nil {
+				continue // Skip records that can't be parsed as accounts
+			}
+
+			accountRecordCount++
+
+			// Check if this account belongs to our target partition
+			belongs, err := accountBelongsToPartition(extractState, accountURL, partitionID)
+			if err != nil {
+				return nil, fmt.Errorf("error checking partition membership for %s: %v", accountURL, err)
+			}
+
+			if belongs {
+				// Use account URL string as unique key to avoid double-counting
+				accountKey := accountURL.String()
+				if !uniqueAccounts[accountKey] {
+					uniqueAccounts[accountKey] = true
+
+					// Update statistics for this account (only count once per unique account)
+					stats.TotalAccounts++
+					accountType := determinePartitionAccountType(accountURL)
+					stats.AccountsByType[accountType]++
+
+					// Determine chain types for this account
+					chainTypes := determineChainTypes(accountURL, record)
+					for _, chainType := range chainTypes {
+						stats.ChainsByType[chainType]++
+						stats.TotalChains++
+					}
 				}
 			}
-
-			// Process subchains for this account
-			err = processAccountSubchains(extractState, account, adi, dnStats)
-			if err != nil {
-				fmt.Printf("Warning: failed to process subchains for account %s: %v\n", account.URL, err)
-			}
-		}
-
-		// Progress reporting
-		if (i+1)%1000 == 0 {
-			fmt.Printf("Processed %d accounts, found %d DN accounts\n", i+1, dnStats.TotalDNAccounts)
+			
+			fmt.Printf("  Section %d: processed %d records, found %d account records\n", 
+				sectionIndex, recordCount, accountRecordCount)
 		}
 	}
 
-	// Store DN stats in extract state (add to Report or create new field)
-	extractState.Report.DNStats = dnStats
+	fmt.Printf("Partition %s processing complete: %d accounts, %d chains\n", 
+		partitionID, stats.TotalAccounts, stats.TotalChains)
 
-	fmt.Printf("DN partition processing complete:\n")
-	fmt.Printf("  Total DN accounts: %d\n", dnStats.TotalDNAccounts)
-	fmt.Printf("  Unique ADIs: %d\n", len(dnStats.AccountsByADI))
-	fmt.Printf("  Total chains: %d\n", getTotalChains(dnStats.ChainsByType))
-	fmt.Printf("  Total entries (header): %d\n", dnStats.TotalEntriesHeader)
-	fmt.Printf("  Total entries (found): %d\n", dnStats.TotalEntriesFound)
-
-	return nil
+	return stats, nil
 }
 
-// isAccountInDNPartition checks if an account routes to the DN partition
-func isAccountInDNPartition(router interface{}, accountURL *url.URL) (bool, error) {
-	// This is a placeholder implementation
-	// In practice, you'd need to cast the router to the appropriate type
-	// and call its RouteAccount method
-	
-	// For now, use simple heuristics based on account URL patterns
-	// that typically route to DN partition
+// extractAccountURLFromValue extracts account URL from record value
+// by unmarshaling the value as a snapshot.Account struct
+func extractAccountURLFromValue(record *snapshotpkg.RecordEntry) (*url.URL, error) {
+	// Unmarshal the record value as a protocol.Account
+	account, err := protocol.UnmarshalAccountFrom(io.NewSectionReader(bytes.NewReader(record.Value), 0, int64(len(record.Value))))
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal account: %v", err)
+	}
+	if account == nil {
+		return nil, fmt.Errorf("account is nil after unmarshaling")
+	}
+
+	// Extract the URL from the account
+	accountURL := account.GetUrl()
+	if accountURL == nil {
+		return nil, fmt.Errorf("account URL is nil")
+	}
+
+	return accountURL, nil
+}
+
+// accountBelongsToPartition checks if an account belongs to the specified partition
+func accountBelongsToPartition(extractState *ExtractState, accountURL *url.URL, partitionID string) (bool, error) {
+	if extractState.Router == nil {
+		return false, fmt.Errorf("router not available")
+	}
+
+	// Convert to Accumulate URL type
+	accURL, err := url.Parse(accountURL.String())
+	if err != nil {
+		return false, fmt.Errorf("failed to parse URL: %v", err)
+	}
+
+	// Cast router to proper type and use it to determine partition
+	router, ok := extractState.Router.(routing.Router)
+	if !ok {
+		return false, fmt.Errorf("router is not of expected type")
+	}
+
+	partition, err := router.RouteAccount(accURL)
+	if err != nil {
+		return false, fmt.Errorf("failed to route account: %v", err)
+	}
+
+	return partition == partitionID, nil
+}
+
+// determinePartitionAccountType determines the type of account from URL for partition processing
+func determinePartitionAccountType(accountURL *url.URL) string {
 	urlStr := accountURL.String()
-	
-	dnPatterns := []string{
-		"acc://dn",
-		"acc://directory",
-		"acc://operators",
-		"acc://network",
-		"acc://routing",
-		"acc://globals",
-		"acc://oracle",
-		"acc://ledger",
-		"acc://system",
-		"acc://protocol",
+
+	// Use URL patterns to determine account type
+	if strings.Contains(urlStr, "/ACME") {
+		return "LiteTokenAccount"
+	} else if strings.Contains(urlStr, "/data") {
+		return "DataAccount"
+	} else if strings.Contains(urlStr, "/key") {
+		return "KeyPage"
+	} else if strings.Contains(urlStr, "/book") {
+		return "KeyBook"
+	} else if !strings.Contains(urlStr, "/") {
+		return "ADI"
 	}
-	
-	for _, pattern := range dnPatterns {
-		if strings.HasPrefix(urlStr, pattern) {
-			return true, nil
-		}
-	}
-	
-	// TODO: Replace with actual router.RouteAccount() call
-	// Example:
-	// partition, err := router.RouteAccount(accountURL)
-	// if err != nil {
-	//     return false, err
-	// }
-	// return partition == "Directory", nil
-	
-	return false, nil
+
+	// Default fallback
+	return "UnknownAccount"
 }
 
-// extractADI extracts the ADI (Accumulate Digital Identifier) from an account URL
-func extractADI(accountURL string) string {
-	// Parse URL to extract ADI
-	// For acc://example.acme/path, the ADI would be "example.acme"
-	
-	// Remove protocol prefix
-	if strings.HasPrefix(accountURL, "acc://") {
-		accountURL = accountURL[6:]
-	}
-	
-	// Split by '/' and take the first part
-	parts := strings.Split(accountURL, "/")
-	if len(parts) > 0 {
-		return parts[0]
-	}
-	
-	return ""
-}
+// determinePartitionChainType determines the primary chain type for an account (simplified version)
+func determinePartitionChainType(accountURL *url.URL) string {
+	urlStr := accountURL.String()
 
-// processAccountSubchains processes subchains for a given account
-func processAccountSubchains(extractState *ExtractState, account AccountRecord, adi string, dnStats *DNAccountStats) error {
-	// Find all chains that belong to this account (same ADI)
-	accountADI := extractADI(account.URL)
-	if accountADI == "" {
-		return nil
-	}
-
-	// Look through all account records to find subchains
-	// In practice, you might have a separate chains collection or
-	// need to parse the account data to find its chains
-	
-	// For now, we'll simulate finding subchains by looking for related accounts
-	// This is a simplified approach - in reality you'd parse the account data
-	// to find its actual chain references
-	
-	chainCount := 0
-	for _, otherAccount := range extractState.Accounts {
-		otherADI := extractADI(otherAccount.URL)
-		
-		// Check if this is a subchain of our account (same ADI, different path)
-		if otherADI == accountADI && otherAccount.URL != account.URL {
-			// This looks like a subchain
-			chainType := determineDNChainType(otherAccount.URL)
-			
-			// Update statistics
-			dnStats.ChainsByType[chainType]++
-			dnStats.ChainsByADI[adi]++
-			dnStats.ChainTypesByADI[adi][chainType]++
-			
-			// Count entries (simplified - in practice you'd parse the chain data)
-			headerEntries, foundEntries := countChainEntries(otherAccount)
-			dnStats.TotalEntriesHeader += headerEntries
-			dnStats.TotalEntriesFound += foundEntries
-			
-			chainCount++
-		}
-	}
-	
-	return nil
-}
-
-// determineDNChainType determines the type of chain based on the URL for DN processing
-func determineDNChainType(chainURL string) string {
-	// Simple heuristics to determine chain type
-	// In practice, you'd parse the actual chain data
-	
-	if strings.Contains(chainURL, "/main") {
-		return "MainChain"
-	} else if strings.Contains(chainURL, "/anchor") {
+	// Check for specific chain type patterns
+	if strings.Contains(urlStr, "/anchor") {
 		return "AnchorChain"
-	} else if strings.Contains(chainURL, "/scratch") {
+	} else if strings.Contains(urlStr, "/scratch") {
 		return "ScratchChain"
-	} else if strings.Contains(chainURL, "/data") {
-		return "DataChain"
-	} else if strings.Contains(chainURL, "/index") {
-		return "IndexChain"
+	} else {
+		return "MainChain" // Default for most accounts
 	}
-	
-	return "UnknownChain"
 }
 
-// countChainEntries counts entries in a chain from header and by traversing
-func countChainEntries(chainAccount AccountRecord) (headerEntries int64, foundEntries int64) {
-	// This is a placeholder implementation
-	// In practice, you'd parse the chain data to:
-	// 1. Extract header information about entry count
-	// 2. Traverse the chain to count actual entries found
-	
-	// For now, return simulated counts
-	// TODO: Implement actual chain parsing and traversal
-	headerEntries = 10  // Placeholder - would come from chain header
-	foundEntries = 8    // Placeholder - would come from actual traversal
-	
-	return headerEntries, foundEntries
+// determineChainTypes determines the types of chains for an account
+func determineChainTypes(accountURL *url.URL, record *snapshotpkg.RecordEntry) []string {
+	urlStr := accountURL.String()
+	chainTypes := []string{}
+
+	// Most accounts have a main chain
+	chainTypes = append(chainTypes, "MainChain")
+
+	// Check for other chain types based on URL patterns
+	if strings.Contains(urlStr, "/anchor") {
+		chainTypes = append(chainTypes, "AnchorChain")
+	}
+	if strings.Contains(urlStr, "/scratch") {
+		chainTypes = append(chainTypes, "ScratchChain")
+	}
+
+	return chainTypes
 }
 
-// getTotalChains calculates total chains from chain type counts
-func getTotalChains(chainsByType map[string]int) int {
-	total := 0
-	for _, count := range chainsByType {
-		total += count
-	}
-	return total
-}
+// PrintPartitionStats prints detailed statistics for a partition
+func (stats *PartitionAccountStats) PrintPartitionStats() {
+	fmt.Printf("\n=== Partition %s (%s) Statistics ===\n", stats.PartitionID, stats.PartitionType)
+	fmt.Printf("Total Accounts: %d\n", stats.TotalAccounts)
+	fmt.Printf("Total Chains: %d\n", stats.TotalChains)
 
-// PrintDNStats prints detailed DN partition statistics
-func (stats *DNAccountStats) PrintDNStats() {
-	fmt.Printf("\nDN Partition Statistics:\n")
-	fmt.Printf("  Total DN Accounts: %d\n", stats.TotalDNAccounts)
-	fmt.Printf("  Unique ADIs: %d\n", len(stats.AccountsByADI))
-	
-	fmt.Printf("\n  Accounts by ADI:\n")
-	for adi, count := range stats.AccountsByADI {
-		fmt.Printf("    %s: %d accounts\n", adi, count)
-	}
-	
-	fmt.Printf("\n  Chains by Type:\n")
-	for chainType, count := range stats.ChainsByType {
-		fmt.Printf("    %s: %d chains\n", chainType, count)
-	}
-	
-	fmt.Printf("\n  Chains by ADI:\n")
-	for adi, count := range stats.ChainsByADI {
-		fmt.Printf("    %s: %d chains\n", adi, count)
-	}
-	
-	fmt.Printf("\n  Chain Types by ADI:\n")
-	for adi, chainTypes := range stats.ChainTypesByADI {
-		fmt.Printf("    %s:\n", adi)
-		for chainType, count := range chainTypes {
-			fmt.Printf("      %s: %d\n", chainType, count)
+	if len(stats.AccountsByType) > 0 {
+		fmt.Printf("\nAccounts by Type:\n")
+		for accountType, count := range stats.AccountsByType {
+			fmt.Printf("  %s: %d\n", accountType, count)
 		}
 	}
-	
-	fmt.Printf("\n  Entry Counts:\n")
-	fmt.Printf("    Total entries (from headers): %d\n", stats.TotalEntriesHeader)
-	fmt.Printf("    Total entries (found): %d\n", stats.TotalEntriesFound)
-	
-	if stats.TotalEntriesHeader > 0 {
-		completeness := float64(stats.TotalEntriesFound) / float64(stats.TotalEntriesHeader) * 100
-		fmt.Printf("    Completeness: %.2f%%\n", completeness)
+
+	if len(stats.ChainsByType) > 0 {
+		fmt.Printf("\nChains by Type:\n")
+		for chainType, count := range stats.ChainsByType {
+			fmt.Printf("  %s: %d\n", chainType, count)
+		}
+	}
+
+	if stats.ProcessingTime > 0 {
+		fmt.Printf("\nProcessing Time: %d ms\n", stats.ProcessingTime)
 	}
 }

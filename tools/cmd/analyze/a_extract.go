@@ -15,6 +15,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // DoExtract is the main entry point for the extraction process
@@ -57,10 +60,29 @@ func PrintRoutingInfo(config *NetworkConfig) {
 
 // InitializeRouting initializes the routing configuration
 func InitializeRouting(config *NetworkConfig) (interface{}, error) {
-	// In our simplified version, we'll just return a placeholder
-	// This would normally create a routing.Router and add partitions
 	fmt.Println("Initializing routing with", len(config.Globals.Network.Partitions), "partitions")
 	
-	// Return a simple placeholder
-	return "Router initialized", nil
+	// Create a routing table from the network configuration
+	routingTable := &protocol.RoutingTable{}
+	
+	// Add routes for each partition
+	for i, partition := range config.Globals.Network.Partitions {
+		// Create a route for this partition
+		// Use simple bit-based routing where each partition gets a range
+		route := protocol.Route{
+			Partition: partition.ID,
+			Length:    1, // Use 1-bit routing for simplicity
+			Value:     uint64(i),
+		}
+		routingTable.Routes = append(routingTable.Routes, route)
+		fmt.Printf("  Added route: %s (value=%d, length=%d)\n", partition.ID, route.Value, route.Length)
+	}
+	
+	// Create the router instance
+	router := routing.NewRouter(routing.RouterOptions{
+		Initial: routingTable,
+	})
+	
+	fmt.Println("Router successfully initialized with", len(routingTable.Routes), "routes")
+	return router, nil
 }

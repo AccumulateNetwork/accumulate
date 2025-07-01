@@ -14,6 +14,10 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
+
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
+	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
 )
 
 // AccountRecord represents an account record from the snapshot
@@ -49,6 +53,17 @@ type MessageRecord struct {
 	Hash  [32]byte // Message hash
 }
 
+// RecordEntry represents a unified record entry from the snapshot
+// This can be an account, transaction, message, or any other record type
+type RecordEntry struct {
+	Key       []byte   // Serialized key
+	Value     []byte   // Value data
+	KeyHash   [32]byte // Hash of the key for indexing
+	RecordType string  // Type of record ("account", "transaction", "message", "other")
+	URL       string   // Account URL (for account records)
+	Partition string   // Partition name (for account records)
+}
+
 // PartitionInfo contains information about a network partition
 type PartitionInfo struct {
 	ID   string // Partition ID
@@ -64,6 +79,22 @@ type SnapshotHeader struct {
 		Index     uint64 // System ledger index
 		Timestamp int64  // System ledger timestamp
 	}
+}
+
+// SnapshotSectionInfo contains information about a snapshot section
+type SnapshotSectionInfo struct {
+	Index       int                   // Section index in the snapshot
+	Type        snapshot.SectionType // Section type (Records, BPT, etc.)
+	Offset      int64                 // File offset to the beginning of this section
+	Size        int64                 // Size of the section in bytes
+	RecordCount int64                 // Number of records in this section (for record sections)
+	Description string                // Human-readable description of section content
+}
+
+// SectionTypeMap maps section types to their indices for quick lookup
+type SectionTypeMap struct {
+	BPTSections    []int // Indices of BPT sections (type 11) - to be skipped
+	OtherSections  []int // Indices of other sections (type 7, etc.) - messages/transactions
 }
 
 // ExtractState encapsulates all state for the snapshot extraction process.
@@ -82,15 +113,17 @@ type ExtractState struct {
 	// Partition information
 	Partitions []PartitionInfo // List of partitions from network.json
 
-	// Snapshot information
-	SnapshotHeader *SnapshotHeader // Header information from the snapshot file
+	// Snapshot file and section information
+	SnapshotFileHandle *os.File              // Open file handle to the snapshot file
+	SnapshotReader     *snapshot.Reader      // Snapshot reader for header access
+	SnapshotHeader     *SnapshotHeader       // Header information from the snapshot file
+	Sections           []SnapshotSectionInfo // Information about each section in the snapshot
+	SectionInfos       []SectionAnalysisInfo // Detailed section analysis with sizes and types
+	SectionTypeMap     *SectionTypeMap       // Quick lookup map for sections by type
 
-	// Collection data structures - using a streaming approach to minimize memory usage
-	Accounts               []AccountRecord     // Account records from the snapshot
-	Transactions           []TransactionRecord // Transaction records from the snapshot
-	Messages               []MessageRecord     // Message records from the snapshot
-	TransactionHashToIndex map[[32]byte]int    // Maps transaction hash to index in Transactions slice
-	MessageHashToIndex     map[[32]byte]int    // Maps message hash to index in Messages slice
+	// Unified record collection - using a streaming approach to minimize memory usage
+	Records        []RecordEntry       // All records (accounts, transactions, messages, etc.)
+	KeyHashToIndex map[[32]byte]int    // Maps record key hash to index in Records slice
 
 	// Report data
 	Report *ExtractReport // Statistics and analysis results
@@ -99,23 +132,163 @@ type ExtractState struct {
 // NewExtractState creates a new ExtractState with initialized fields
 func NewExtractState() *ExtractState {
 	return &ExtractState{
-		// Initialize collections
-		Accounts:               make([]AccountRecord, 0),
-		Transactions:           make([]TransactionRecord, 0),
-		Messages:               make([]MessageRecord, 0),
-		TransactionHashToIndex: make(map[[32]byte]int),
-		MessageHashToIndex:     make(map[[32]byte]int),
+		// Initialize unified record collections
+		Records:        make([]RecordEntry, 0),
+		KeyHashToIndex: make(map[[32]byte]int),
 
 		// Initialize partition information
 		Partitions: make([]PartitionInfo, 0),
+
+		// Initialize section information
+		Sections:       make([]SnapshotSectionInfo, 0),
+		SectionTypeMap: &SectionTypeMap{
+			BPTSections:    make([]int, 0),
+			OtherSections:  make([]int, 0),
+		},
 
 		// Initialize report
 		Report: NewExtractReport(),
 	}
 }
 
+// Close closes the snapshot file handle if it's open
+func (s *ExtractState) Close() error {
+	if s.SnapshotFileHandle != nil {
+		err := s.SnapshotFileHandle.Close()
+		s.SnapshotFileHandle = nil
+		s.SnapshotReader = nil
+		return err
+	}
+	return nil
+}
+
+// InitializeSnapshot opens the snapshot file and parses section headers
+func (s *ExtractState) InitializeSnapshot() error {
+	// Close any existing file handle
+	if err := s.Close(); err != nil {
+		return fmt.Errorf("failed to close existing snapshot file: %w", err)
+	}
+
+	// Open the snapshot file
+	file, err := os.Open(s.SnapshotFile)
+	if err != nil {
+		return fmt.Errorf("failed to open snapshot file: %w", err)
+	}
+	s.SnapshotFileHandle = file
+
+	// Create snapshot reader
+	reader, err := snapshot.Open(file)
+	if err != nil {
+		return fmt.Errorf("failed to create snapshot reader: %w", err)
+	}
+	s.SnapshotReader = reader
+
+	// Store snapshot header information
+	s.SnapshotHeader = &SnapshotHeader{
+		Version:  reader.Header.Version,
+		RootHash: reader.Header.RootHash,
+	}
+
+	// Store system ledger info if available
+	if reader.Header.SystemLedger != nil {
+		s.SnapshotHeader.SystemLedger.URL = reader.Header.SystemLedger.Url.String()
+		s.SnapshotHeader.SystemLedger.Index = reader.Header.SystemLedger.Index
+		s.SnapshotHeader.SystemLedger.Timestamp = reader.Header.SystemLedger.Timestamp.UnixNano()
+	}
+
+	fmt.Printf("Initialized snapshot file: %s\n", s.SnapshotFile)
+	fmt.Printf("  Snapshot Version: %d\n", reader.Header.Version)
+	fmt.Printf("  Root Hash: %x\n", reader.Header.RootHash)
+	fmt.Printf("  Sections: %d\n\n", len(reader.Sections))
+
+	// Scan and report section information
+	sectionInfos, err := ScanSnapshotSections(reader)
+	if err != nil {
+		return fmt.Errorf("failed to scan snapshot sections: %v", err)
+	}
+	s.SectionInfos = sectionInfos
+
+	// Parse section information and categorize by type
+	s.Sections = make([]SnapshotSectionInfo, len(reader.Sections))
+
+	return nil
+}
+
+// getSectionDescription returns a human-readable description for a section type
+func (s *ExtractState) getSectionDescription(sectionType snapshot.SectionType) string {
+	switch sectionType {
+	case snapshot.SectionTypeRecords:
+		return "accounts and records"
+	case snapshot.SectionTypeBPT:
+		return "BPT index (skip)"
+	default:
+		return "messages/transactions"
+	}
+}
+
+// GetRecordSections returns indices of record sections (type 7)
+func (s *ExtractState) GetRecordSections() []int {
+	var recordSections []int
+	for i, section := range s.SnapshotReader.Sections {
+		if section.Type() == snapshot.SectionTypeRecords {
+			recordSections = append(recordSections, i)
+		}
+	}
+	return recordSections
+}
+
+// GetOtherSections returns indices of non-record, non-BPT sections
+func (s *ExtractState) GetOtherSections() []int {
+	var otherSections []int
+	for i, section := range s.SnapshotReader.Sections {
+		if section.Type() != snapshot.SectionTypeRecords && section.Type() != snapshot.SectionTypeBPT {
+			otherSections = append(otherSections, i)
+		}
+	}
+	return otherSections
+}
+
+// ProcessRecordSectionsOnly processes only record sections, skipping BPT and other types
+func (s *ExtractState) ProcessRecordSectionsOnly(processor func(sectionIndex int, section *ioutil.Segment[snapshot.SectionType, *snapshot.SectionType]) error) error {
+	if s.SnapshotReader == nil {
+		return fmt.Errorf("snapshot not initialized")
+	}
+
+	for _, sectionIndex := range s.GetRecordSections() {
+		if sectionIndex >= len(s.SnapshotReader.Sections) {
+			continue
+		}
+		section := s.SnapshotReader.Sections[sectionIndex]
+		if err := processor(sectionIndex, section); err != nil {
+			return fmt.Errorf("error processing record section %d: %w", sectionIndex, err)
+		}
+	}
+	return nil
+}
+
+// ProcessOtherSectionsOnly processes only non-record, non-BPT sections (messages/transactions)
+func (s *ExtractState) ProcessOtherSectionsOnly(processor func(sectionIndex int, section *ioutil.Segment[snapshot.SectionType, *snapshot.SectionType]) error) error {
+	if s.SnapshotReader == nil {
+		return fmt.Errorf("snapshot not initialized")
+	}
+
+	for _, sectionIndex := range s.GetOtherSections() {
+		if sectionIndex >= len(s.SnapshotReader.Sections) {
+			continue
+		}
+		section := s.SnapshotReader.Sections[sectionIndex]
+		if err := processor(sectionIndex, section); err != nil {
+			return fmt.Errorf("error processing other section %d: %w", sectionIndex, err)
+		}
+	}
+	return nil
+}
+
 // Run executes the extraction process
 func (s *ExtractState) Run() error {
+	// Ensure cleanup on exit
+	defer s.Close()
+
 	// Parse network.json file
 	config, err := ParseNetworkJson(s.NetworkFile)
 	if err != nil {
@@ -148,6 +321,12 @@ func (s *ExtractState) Run() error {
 	// Store router in state
 	s.Router = router
 
+	// Initialize snapshot file and parse section headers
+	err = s.InitializeSnapshot()
+	if err != nil {
+		return fmt.Errorf("failed to initialize snapshot: %w", err)
+	}
+
 	// Load up the transaction slice/map and message slice/map
 	err = Load(s)
 	if err != nil {
@@ -160,58 +339,59 @@ func (s *ExtractState) Run() error {
 		return fmt.Errorf("failed to write partition snapshots: %w", err)
 	}
 
-	// Print report (comes last)
-	s.PrintReport()
-
 	return nil
-}
-
-// PrintReport prints a summary of the extraction process
-func (s *ExtractState) PrintReport() {
-	fmt.Println("\nSnapshot Extraction Summary:")
-	fmt.Printf("  Accounts processed: %d\n", len(s.Accounts))
-	fmt.Printf("  Transactions collected: %d\n", len(s.Transactions))
-	fmt.Printf("  Messages collected: %d\n", len(s.Messages))
-
-	// If report is available, print detailed report
-	if s.Report != nil {
-		// Update report counts from our collections
-		s.Report.AccountCount = int64(len(s.Accounts))
-		s.Report.TransactionCount = int64(len(s.Transactions))
-		s.Report.MessageCount = int64(len(s.Messages))
-		s.Report.PrintReport()
-	}
 }
 
 // writePartitionSnapshots writes partition-specific snapshots for DN partitions
 func (s *ExtractState) writePartitionSnapshots() error {
 	fmt.Println("\nWriting partition-specific snapshots...")
-	
+
 	// Create output directory if it doesn't exist
 	outputDir := "/tmp/partition-snapshots"
 	err := os.MkdirAll(outputDir, 0755)
 	if err != nil {
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
-	
-	// Find DN partitions and write snapshots for each
+
+	// Write snapshots for all partitions (both DN and BVN)
 	for _, partition := range s.Partitions {
-		if partition.Type == "directory" {
-			fmt.Printf("Writing snapshot for DN partition: %s\n", partition.ID)
-			
-			// Create output filename
-			outputFile := fmt.Sprintf("%s/%s-partition.snap", outputDir, partition.ID)
-			
-			// Write the partition snapshot
-			err := WritePartitionSnapshot(s, outputFile, partition.ID)
-			if err != nil {
-				return fmt.Errorf("failed to write snapshot for partition %s: %w", partition.ID, err)
-			}
-			
-			fmt.Printf("Successfully wrote partition snapshot: %s\n", outputFile)
+		// Process both directory (DN) and validator (BVN) partitions
+		if strings.EqualFold(partition.Type, "directory") {
+			fmt.Printf("Writing snapshot for DN partition: %s (type: %s)\n", partition.ID, partition.Type)
+		} else if strings.EqualFold(partition.Type, "validator") {
+			fmt.Printf("Writing snapshot for BVN partition: %s (type: %s)\n", partition.ID, partition.Type)
+		} else {
+			fmt.Printf("Writing snapshot for partition: %s (type: %s)\n", partition.ID, partition.Type)
+		}
+
+		// Process accounts for this partition first
+		fmt.Printf("Processing accounts for partition: %s\n", partition.ID)
+		stats, err := ProcessPartitionAccounts(s, partition.ID)
+		if err != nil {
+			return fmt.Errorf("failed to process accounts for partition %s: %w", partition.ID, err)
+		}
+
+		// Print account statistics
+		fmt.Printf("Partition %s account statistics:\n", partition.ID)
+		fmt.Printf("  Total accounts: %d\n", stats.TotalAccounts)
+		fmt.Printf("  Total chains: %d\n", stats.TotalChains)
+		for accountType, count := range stats.AccountsByType {
+			fmt.Printf("  %s accounts: %d\n", accountType, count)
+		}
+		for chainType, count := range stats.ChainsByType {
+			fmt.Printf("  %s chains: %d\n", chainType, count)
+		}
+
+		// Create output filename
+		outputFile := fmt.Sprintf("%s/%s-partition.snap", outputDir, partition.ID)
+
+		// Write the partition snapshot
+		err = WritePartitionSnapshot(s, outputFile, partition.ID)
+		if err != nil {
+			return fmt.Errorf("failed to write snapshot for partition %s: %w", partition.ID, err)
 		}
 	}
-	
+
 	fmt.Println("Partition snapshot writing completed.")
 	return nil
 }
