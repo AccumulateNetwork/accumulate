@@ -40,6 +40,13 @@ func (c *Collector) Close() error {
 	return c.wr.Close()
 }
 
+// WriteRecord writes a RecordEntry directly to the snapshot section.
+// This provides a simple way to write individual records without requiring
+// a database or complex collection options.
+func (c *Collector) WriteRecord(entry *RecordEntry) error {
+	return c.wr.WriteValue(entry)
+}
+
 func (c *Collector) Collect(r database.Record, opts CollectOptions) error {
 	if opts.Predicate == nil {
 		opts.Walk.Values = true
