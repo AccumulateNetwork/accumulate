@@ -91,26 +91,32 @@ func DoExtract(networkFile, snapshotFile string) error {
 		return fmt.Errorf("failed to initialize routing: %w", err)
 	}
 
+	// Create a report to collect statistics
+	report := NewExtractReport()
+
 	// Process the snapshot
 	fmt.Println("\nOpening and processing snapshot...")
-	err = processSnapshot(snapshotFile, router)
+	err = processSnapshot(snapshotFile, router, report)
 	if err != nil {
 		return fmt.Errorf("failed to process snapshot: %w", err)
 	}
+
+	// Print the report
+	report.PrintReport()
 
 	fmt.Println("\nExtraction completed successfully.")
 	return nil
 }
 
 // examineAccountMerkleTree examines the main chain Merkle tree of an account
-func examineAccountMerkleTree(accountURL *url.URL, accountData []byte, accountNum int64) {
-	totalAccountsProcessed++
+func examineAccountMerkleTree(accountURL *url.URL, accountData []byte, accountNum int64, report *ExtractReport) {
+	report.TotalAccountsProcessed++
 	
 	// For now, just count the account and log basic info
 	// TODO: Parse account data to examine actual Merkle tree structure
 	if len(accountData) > 0 {
-		accountsWithMainChain++
-		totalChainsExamined++
+		report.RecordAccountWithMainChain()
+		report.TotalChainsExamined++
 		
 		// Log details for first 10 accounts
 		if accountNum <= 10 {
@@ -119,7 +125,7 @@ func examineAccountMerkleTree(accountURL *url.URL, accountData []byte, accountNu
 			fmt.Printf("    Main chain examination: PLACEHOLDER\n")
 		}
 	} else {
-		accountsWithoutMainChain++
+		report.RecordAccountWithoutMainChain()
 		if accountNum <= 10 {
 			fmt.Printf("  Account %d: %s - NO DATA\n", accountNum, accountURL)
 		}
@@ -449,7 +455,7 @@ func (e *ExtractedData) GetMessageByHash(hash [32]byte) (*MessageRecord, bool) {
 }
 
 // processSnapshot opens and processes the snapshot file, collecting chains, transactions, and messages
-func processSnapshot(snapshotFile string, router routing.Router) error {
+func processSnapshot(snapshotFile string, router routing.Router, report *ExtractReport) error {
 	// Open the snapshot file
 	file, err := os.Open(snapshotFile)
 	if err != nil {
@@ -570,7 +576,7 @@ func processSnapshot(snapshotFile string, router routing.Router) error {
 					}
 					
 					// Exercise Merkle trees for ALL accounts
-					examineAccountMerkleTree(accountURL, e.Value, int64(accountCount))
+					examineAccountMerkleTree(accountURL, e.Value, int64(accountCount), report)
 					
 				} else {
 					// This is a chain sub-record (MainChain, AnchorChain, etc.)
