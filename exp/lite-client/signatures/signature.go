@@ -2,35 +2,32 @@ package signatures
 
 import (
 	"context"
+	"crypto/ed25519"
+	"encoding/base64"
+	"encoding/hex"
 	"fmt"
+	"strings"
 
-	api "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	// api "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// SignatureVerifier defines the interface for verifying signatures.
-type SignatureVerifier interface {
-	// VerifySignature checks if the signature is valid for the given data and authority set.
-	VerifySignature(data []byte, signature protocol.KeySignature, authorities *AuthoritySet) (bool, error)
-}
-
-// Ed25519SignatureVerifier implements SignatureVerifier for Ed25519 signatures.
+// Ed25519SignatureVerifier verifies Ed25519 signatures against an authority set.
 type Ed25519SignatureVerifier struct{}
 
 // VerifySignature checks if the signature is valid for the given data and authority set.
+// Returns true if the signature is valid for any key in the authority set.
 func (v *Ed25519SignatureVerifier) VerifySignature(data []byte, signature protocol.KeySignature, authorities *AuthoritySet) (bool, error) {
-	validCount := 0
 	for _, pub := range authorities.Keys {
-		valid, _ := VerifyEd25519Signature(signature, data, pub)
-		if valid {
-			validCount++
+		if len(pub) != ed25519.PublicKeySize {
+			continue
+		}
+		if ed25519.Verify(pub, data, signature.GetSignature()) {
+			return true, nil
 		}
 	}
-	if uint64(validCount) >= authorities.Threshold {
-		return true, nil
-	}
-	return false, fmt.Errorf("not enough valid signatures: got %d, need %d", validCount, authorities.Threshold)
+	return false, fmt.Errorf("signature not valid for any authority key")
 }
 
 // VerifyEd25519Signature checks a KeySignature against a public key and data using ed25519.
@@ -45,16 +42,14 @@ func VerifyEd25519Signature(signature protocol.KeySignature, data []byte, public
 	return verifyEd25519(publicKey, data, sigBytes), nil
 }
 
-// verifyEd25519 is a wrapper for ed25519.Verify. (Replace with direct call if "crypto/ed25519" is imported)
+// verifyEd25519 uses the standard library to verify an Ed25519 signature.
 func verifyEd25519(pub, msg, sig []byte) bool {
-	// import "crypto/ed25519" and use ed25519.Verify(pub, msg, sig)
-	// Here we just return false as a placeholder
-	return false // TODO: implement or use standard library
+	return ed25519.Verify(pub, msg, sig)
 }
 
+// FetchBlockSignatures is a stub for retrieving block signatures. Implement as needed.
 func FetchBlockSignatures(ctx context.Context, cl *client.Client, blockIndex uint64) ([]byte, error) {
-	// TODO: implement signature retrieval
-	return nil, nil
+	return nil, fmt.Errorf("FetchBlockSignatures not implemented")
 }
 
 // SignatureValidationPlan describes the high-level plan for validating signatures on blocks.
@@ -93,35 +88,56 @@ func ValidateBlockSignatures(authorities *AuthoritySet, rootHash []byte, signatu
 
 // ValidateMinorBlockSignatures is a stub for validating signatures on minor blocks.
 // Calls lower-level logic in blocks package when implemented.
+// ValidateMinorBlockSignatures is a stub for validating signatures on minor blocks.
 func ValidateMinorBlockSignatures(ctx context.Context, cl *client.Client, minorBlock interface{}, authorities *AuthoritySet) (bool, error) {
-	// TODO: Call blocks.ValidateMinorBlockSignatures or implement here
 	return false, fmt.Errorf("not implemented: ValidateMinorBlockSignatures")
 }
 
 // TODO: Add more signature validation helpers and stubs as needed.
 
+// MapToKeySignature converts a map[string]interface{} to a protocol.KeySignature.
+// Handles both []byte and string (base64 or hex) for publicKey and signature fields.
 func MapToKeySignature(sigMap map[string]interface{}) (protocol.KeySignature, error) {
 	sig := new(protocol.ED25519Signature)
 	var ok bool
 
-	// Extract and type assert each field
+	// Helper to decode string as base64, then hex if base64 fails
+	decodeString := func(s string, expectedLen int) ([]byte, error) {
+		b, err := base64.StdEncoding.DecodeString(s)
+		if err == nil && len(b) == expectedLen {
+			return b, nil
+		}
+		b, err = hex.DecodeString(strings.TrimPrefix(s, "0x"))
+		if err == nil && len(b) == expectedLen {
+			return b, nil
+		}
+		return nil, fmt.Errorf("invalid encoding or length for field (wanted %d bytes)", expectedLen)
+	}
+
+	// PublicKey
 	if sig.PublicKey, ok = sigMap["publicKey"].([]byte); !ok {
-		// Try string (base64 or hex), handle as needed
-		if _, ok := sigMap["publicKey"].(string); ok {
-			// decode from base64 or hex as appropriate
-			// sig.PublicKey = decode(s)
+		if s, ok := sigMap["publicKey"].(string); ok {
+			b, err := decodeString(s, ed25519.PublicKeySize)
+			if err != nil {
+				return nil, fmt.Errorf("invalid publicKey: %w", err)
+			}
+			sig.PublicKey = b
 		} else {
 			return nil, fmt.Errorf("missing or invalid publicKey")
 		}
 	}
+	// Signature
 	if sig.Signature, ok = sigMap["signature"].([]byte); !ok {
-		if _, ok := sigMap["signature"].(string); ok {
-			// sig.Signature = decode(s)
+		if s, ok := sigMap["signature"].(string); ok {
+			b, err := decodeString(s, ed25519.SignatureSize)
+			if err != nil {
+				return nil, fmt.Errorf("invalid signature: %w", err)
+			}
+			sig.Signature = b
 		} else {
 			return nil, fmt.Errorf("missing or invalid signature")
 		}
 	}
-	// Repeat for other fields, e.g. "signer", "signerVersion", "timestamp", etc.
-
+	// Optionally handle other fields (signer, version, timestamp) as needed
 	return sig, nil
 }

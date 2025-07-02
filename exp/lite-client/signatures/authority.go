@@ -12,6 +12,7 @@ import (
 type AuthoritySet struct {
 	Keys      [][]byte
 	Threshold uint64
+	Index     uint64
 }
 
 // NewAuthoritySetFromAccount extracts an AuthoritySet from a KeyPage or KeyBook account.
@@ -59,14 +60,14 @@ func (t *AuthorityTracker) RecordChange(blockIndex uint64, newAuth *AuthoritySet
 	t.history[blockIndex] = newAuth
 }
 
-// DetectAndApplyChanges scans block for authority/keybook/keypage changes and records them if found.
-func (t *AuthorityTracker) DetectAndApplyChanges(block *blocks.MajorBlockRecord) error {
-	newAuth, err := blocks.ExtractAuthorityChange(block)
-	if err != nil {
-		return err
-	}
-	if newAuth != nil {
-		t.RecordChange(block.Index, newAuth)
-	}
-	return nil
-}
+// // DetectAndApplyChanges scans block for authority/keybook/keypage changes and records them if found.
+// func (t *AuthorityTracker) DetectAndApplyChanges(block *blocks.MajorBlockRecord) error {
+// 	newAuth, err := blocks.ExtractAuthorityChange(block)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	if newAuth != nil {
+// 		t.RecordChange(block.Index, newAuth)
+// 	}
+// 	return nil
+// }
