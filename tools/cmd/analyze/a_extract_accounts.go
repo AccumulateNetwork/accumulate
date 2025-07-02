@@ -64,7 +64,7 @@ func extractAccountURLFromRecordValue(valueBytes []byte) (*url.URL, error) {
 
 	// Create a new account instance
 	var account protocol.Account
-	
+
 	// Use protocol.UnmarshalAccountFrom which handles the account type detection
 	account, err := protocol.UnmarshalAccountFrom(io.NewSectionReader(bytes.NewReader(valueBytes), 0, int64(len(valueBytes))))
 	if err != nil {

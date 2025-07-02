@@ -59,7 +59,7 @@ func PrintRoutingInfo(config *NetworkConfig) {
 }
 
 // InitializeRouting initializes the routing configuration
-func InitializeRouting(config *NetworkConfig) (interface{}, error) {
+func InitializeRouting(config *NetworkConfig) (routing.Router, error) {
 	fmt.Println("Initializing routing with", len(config.Globals.Network.Partitions), "partitions")
 	
 	// Create a routing table from the network configuration

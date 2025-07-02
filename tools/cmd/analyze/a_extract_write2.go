@@ -32,70 +32,51 @@ func extractMessageHash(key *record.Key) ([]byte, error) {
 }
 
 // extractAccountURL extracts the account URL from a record key
+// Only handles keys that start with "Account" followed by a URL
+// Returns an error for all other key formats
 func extractAccountURL(key *record.Key) (*url.URL, error) {
-	if key == nil {
-		return nil, fmt.Errorf("key is nil")
+	if key == nil || key.Len() < 2 {
+		return nil, fmt.Errorf("key is nil or too short")
 	}
 
-	// Check if this is an account record by examining the key structure
-	// Account records typically have a different structure than transaction/message records
-
-	// Try to get the account URL from the key if it's an account record
-	// This is a heuristic approach based on key structure analysis
-
-	// For now, let's assume that if the key can be converted to a meaningful URL,
-	// it's an account record. Otherwise, it's likely a transaction or message.
-
-	// Marshal the key to analyze its structure
-	keyBytes, err := key.MarshalBinary()
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal key: %w", err)
+	// Only handle keys that start with "Account"
+	if key.Get(0) != "Account" {
+		return nil, fmt.Errorf("key does not start with 'Account'")
 	}
 
-	// Convert to string and look for URL patterns
-	keyStr := string(keyBytes)
+	// Get the second element which should be the URL
+	secondVal := key.Get(1)
 
-	// Look for acc:// URLs which indicate account records
-	if strings.Contains(keyStr, "acc://") {
-		// Find the start of the URL
-		start := strings.Index(keyStr, "acc://")
-		if start >= 0 {
-			// Extract the URL portion
-			urlPart := keyStr[start:]
-			// Find the end of the URL (look for null byte or other delimiter)
-			if nullIndex := strings.Index(urlPart, "\x00"); nullIndex > 0 {
-				urlPart = urlPart[:nullIndex]
-			}
-			// Try to parse the URL using Accumulate's URL package
-			accountURL, err := url.Parse(urlPart)
-			if err == nil {
-				return accountURL, nil
-			}
-		}
+	// If it's already a URL object, return it
+	if urlVal, ok := secondVal.(*url.URL); ok {
+		return urlVal, nil
 	}
 
-	// If we can't find an acc:// URL, this is likely not an account record
-	return nil, fmt.Errorf("key does not contain account URL")
+	// If it's a string, parse it
+	if urlStr, ok := secondVal.(string); ok {
+		return url.Parse(urlStr)
+	}
+
+	// If the second element is neither a URL nor a string
+	return nil, fmt.Errorf("second element in key is not a URL or string")
 }
 
 // belongsToPartition determines if an account URL belongs to the specified DN partition
 // Uses the router interface to determine the correct partition for an account
 func belongsToPartition(accountURL *url.URL, targetPartition string, router routing.Router) bool {
-	if accountURL == nil || router == nil {
+
+	if accountURL == nil {
+		return false
+	}
+
+	if router == nil {
 		return false
 	}
 
 	// Use the router to determine which partition this account belongs to
 	partition, err := router.RouteAccount(accountURL)
 	if err != nil {
-		// If routing fails, fall back to heuristic approach
-		return belongsToPartitionHeuristic(accountURL, targetPartition)
-	}
-
-	// Debug: Print routing information for first few accounts
-	if accountURL.String() == "acc://system/ledger" || strings.Contains(accountURL.String(), "adi") {
-		fmt.Printf("DEBUG: Account %s routed to partition '%s', target is '%s', match: %v\n",
-			accountURL.String(), partition, targetPartition, strings.EqualFold(partition, targetPartition))
+		return false
 	}
 
 	// Check if the routed partition matches our target partition (case-insensitive)

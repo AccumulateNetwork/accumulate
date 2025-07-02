@@ -90,9 +90,9 @@ func Load(extractState *ExtractState) error {
 				fmt.Printf("Warning: failed to marshal key: %v\n", err)
 				continue
 			}
-			
+
 			value := recordEntry.Value
-			
+
 			// Create a hash from the key for indexing
 			var keyHash [32]byte
 			if len(keyBytes) >= 32 {
@@ -101,10 +101,10 @@ func Load(extractState *ExtractState) error {
 				// For shorter keys, use a simple hash
 				copy(keyHash[:], keyBytes)
 			}
-			
+
 			// Detect record type using heuristics
 			recordType := detectRecordType(recordEntry.Key)
-			
+
 			// Extract URL for account records
 			var url, partition string
 			if recordType == "account" {
@@ -121,17 +121,17 @@ func Load(extractState *ExtractState) error {
 			} else {
 				otherCount++
 			}
-			
+
 			// Create unified record entry
 			record := RecordEntry{
-				Key:        keyBytes,
-				Value:      value,
-				KeyHash:    keyHash,
-				Type: recordType,
-				URL:        url,
-				Partition:  partition,
+				Key:       keyBytes,
+				Value:     value,
+				KeyHash:   keyHash,
+				Type:      recordType,
+				URL:       url,
+				Partition: partition,
 			}
-			
+
 			// Add to unified records collection
 			index := len(extractState.Records)
 			extractState.Records = append(extractState.Records, record)

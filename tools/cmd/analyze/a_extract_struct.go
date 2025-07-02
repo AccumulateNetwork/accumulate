@@ -18,6 +18,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 )
 
 // AccountRecord represents an account record from the snapshot
@@ -116,7 +117,7 @@ type ExtractState struct {
 	NetworkConfig *NetworkConfig // Parsed network.json structure
 
 	// Routing information
-	Router interface{} // Generic interface to avoid import dependency
+	Router routing.Router // Router for partition membership checks
 
 	// Partition information
 	Partitions []PartitionInfo // List of partitions from network.json

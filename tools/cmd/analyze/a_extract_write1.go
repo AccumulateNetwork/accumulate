@@ -9,12 +9,10 @@ package main
 import (
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
-	recordpkg "gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	sv2 "gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
+	recordpkg "gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
@@ -40,20 +38,28 @@ func WritePartitionSnapshot(extractState *ExtractState, outputFile string, targe
 		recordsProcessed++
 
 		// Process account records
-		if record.Type == "account" && record.URL != "" {
-			// Parse the account URL using the Accumulate URL package
-			accountURL, err := url.Parse(record.URL)
+		if record.Type == "account" {
+			// Unmarshal the key
+			key := new(recordpkg.Key)
+			err := key.UnmarshalBinary(record.Key)
 			if err != nil {
+				// Skip records with invalid keys
 				continue
 			}
 
-			// Check if account belongs to target partition - use consistent case comparison
-			if router, ok := extractState.Router.(routing.Router); ok {
-				if belongsToPartition(accountURL, targetPartition, router) {
-					// Add account key hash to Bloom filter
-					bloomFilter.Add(record.KeyHash[:])
-					accountsAdded++
-				}
+			// Extract account URL from the key
+			accountURL, err := extractAccountURL(key)
+			if err != nil {
+				// Skip records where we can't extract the URL
+				// This includes KeyHash keys and other non-Account keys
+				continue
+			}
+
+			// Check if account belongs to target partition
+			if belongsToPartition(accountURL, targetPartition, extractState.Router) {
+				// Add key hash to Bloom filter
+				bloomFilter.Add(record.KeyHash[:])
+				accountsAdded++
 			}
 		} else if record.Type == "chain" {
 			// Extract account URL from chain URL
@@ -61,12 +67,10 @@ func WritePartitionSnapshot(extractState *ExtractState, outputFile string, targe
 				chainURL, err := url.Parse(record.URL)
 				if err == nil && chainURL.Authority != "" {
 					// Check if the account belongs to target partition - use consistent case comparison
-					if router, ok := extractState.Router.(routing.Router); ok {
-						if belongsToPartition(chainURL, targetPartition, router) {
-							// Add chain key hash to Bloom filter
-							bloomFilter.Add(record.KeyHash[:])
-							chainsProcessed++
-						}
+					if belongsToPartition(chainURL, targetPartition, extractState.Router) {
+						// Add chain key hash to Bloom filter
+						bloomFilter.Add(record.KeyHash[:])
+						chainsProcessed++
 					}
 				}
 			}
@@ -132,33 +136,21 @@ func WritePartitionSnapshot(extractState *ExtractState, outputFile string, targe
 	// Track record types for statistics
 	recordTypeStats := make(map[string]int)
 
-	// Special handling for DN partition - include all messages and transactions
-	// Use case-insensitive comparison for consistency
-	isDNPartition := strings.EqualFold(targetPartition, "directory") ||
-		strings.Contains(strings.ToLower(targetPartition), "dn")
-
 	// Second pass: Filter records based on Bloom filter membership
 	for _, record := range extractState.Records {
 		secondPassProcessed++
 
-		// Check if record should be included
-		includeRecord := false
+		if bloomFilter.Test(record.KeyHash[:]) {
 
-		// For DN partition, include all messages and transactions
-		if isDNPartition && (record.Type == "message" || record.Type == "transaction") {
-			includeRecord = true
-		} else {
-			// For all partitions, check Bloom filter for accounts and chains
-			includeRecord = bloomFilter.Test(record.KeyHash[:])
-		}
-
-		if includeRecord {
-			// Convert the byte array key to a proper *record.Key using KeyFromHash
-			var keyHash [32]byte
-			copy(keyHash[:], record.KeyHash[:])
+			// Create a new Key object from the original serialized key bytes
+			key := new(recordpkg.Key)
+			err := key.UnmarshalBinary(record.Key)
+			if err != nil {
+				return fmt.Errorf("unmarshal key: %w", err)
+			}
 
 			entry := &sv2.RecordEntry{
-				Key:   recordpkg.KeyFromHash(keyHash), // Use the record package's KeyFromHash function
+				Key:   key, // Use the unmarshaled key directly
 				Value: record.Value,
 			}
 
