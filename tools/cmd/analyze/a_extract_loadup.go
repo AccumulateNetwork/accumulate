@@ -127,7 +127,7 @@ func Load(extractState *ExtractState) error {
 				Key:        keyBytes,
 				Value:      value,
 				KeyHash:    keyHash,
-				RecordType: recordType,
+				Type: recordType,
 				URL:        url,
 				Partition:  partition,
 			}

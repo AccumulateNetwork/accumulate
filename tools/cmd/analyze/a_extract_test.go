@@ -9,6 +9,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
@@ -154,7 +155,7 @@ func testRouting(router routing.Router) {
 			fmt.Printf("    %s: ERROR routing: %v\n", accountStr, err)
 		} else {
 			fmt.Printf("    %s -> %s", accountStr, partition)
-			if partition == "Directory" {
+			if strings.EqualFold(partition, "Directory") {
 				fmt.Printf(" ✓ (DN)")
 				dnRoutedCount++
 			}
@@ -209,7 +210,7 @@ func analyzeRoutingTable(router routing.Router) {
 			continue
 		}
 		
-		if partition == "Directory" {
+		if strings.EqualFold(partition, "Directory") {
 			dnPatterns = append(dnPatterns, pattern)
 		} else {
 			bvnPatterns = append(bvnPatterns, pattern)

@@ -14,7 +14,7 @@ func (s *ExtractState) PrintMessageDetails() {
 	
 	messageCount := 0
 	for i, recordEntry := range s.Records {
-		if recordEntry.RecordType == "message" {
+		if recordEntry.Type == "message" {
 			messageCount++
 			fmt.Printf("\nMessage %d (Record Index: %d):\n", messageCount, i)
 			

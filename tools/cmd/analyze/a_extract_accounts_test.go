@@ -7,6 +7,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -72,7 +73,7 @@ func testDNPartitionProcessing(t *testing.T, extractState *ExtractState) {
 	// Find DN partition
 	var dnPartitionID string
 	for _, partition := range extractState.Partitions {
-		if partition.Type == "directory" {
+		if strings.EqualFold(partition.Type, "directory") {
 			dnPartitionID = partition.ID
 			break
 		}
@@ -149,7 +150,7 @@ func testBVNPartitionProcessing(t *testing.T, extractState *ExtractState) {
 	// Find a BVN partition
 	var bvnPartitionID string
 	for _, partition := range extractState.Partitions {
-		if partition.Type == "validator" {
+		if strings.EqualFold(partition.Type, "validator") {
 			bvnPartitionID = partition.ID
 			break
 		}
@@ -224,9 +225,9 @@ func comparePartitionStatistics(t *testing.T, extractState *ExtractState) {
 	// Find DN and BVN partitions
 	var dnPartitionID, bvnPartitionID string
 	for _, partition := range extractState.Partitions {
-		if partition.Type == "directory" && dnPartitionID == "" {
+		if strings.EqualFold(partition.Type, "directory") && dnPartitionID == "" {
 			dnPartitionID = partition.ID
-		} else if partition.Type == "validator" && bvnPartitionID == "" {
+		} else if strings.EqualFold(partition.Type, "validator") && bvnPartitionID == "" {
 			bvnPartitionID = partition.ID
 		}
 	}

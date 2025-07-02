@@ -119,7 +119,7 @@ func ProcessPartitionAccounts(extractState *ExtractState, partitionID string) (*
 		recordCount++
 
 		// Skip non-account records based on record type
-		if record.RecordType != "account" {
+		if record.Type != "account" {
 			continue
 		}
 
@@ -234,7 +234,7 @@ func accountBelongsToPartition(extractState *ExtractState, accountURL *url.URL, 
 		return false, fmt.Errorf("failed to route account: %v", err)
 	}
 
-	return partition == partitionID, nil
+	return strings.EqualFold(partition, partitionID), nil
 }
 
 // determinePartitionAccountType determines the type of account from URL for partition processing

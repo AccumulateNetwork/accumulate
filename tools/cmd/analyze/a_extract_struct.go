@@ -16,8 +16,8 @@ import (
 	"os"
 	"strings"
 
-	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 )
 
 // AccountRecord represents an account record from the snapshot
@@ -30,13 +30,15 @@ type AccountRecord struct {
 
 // ChainRecord represents a chain sub-record from an account
 type ChainRecord struct {
-	Key           []byte // Serialized key
-	Value         []byte // Value data
-	AccountURL    string // Account URL as string
-	ChainType     string // MainChain, AnchorChain, etc.
-	EntryCount    int64  // Number of entries in the chain
-	FoundEntries  int64  // Number of entries found in the snapshot
-	HasMerkleData bool   // Whether the chain has Merkle tree data
+	Key           []byte       // Serialized key
+	Value         []byte       // Value data
+	AccountURL    string       // Account URL as string
+	URL           string       // Chain URL as string
+	ChainType     string       // MainChain, AnchorChain, etc.
+	EntryCount    int64        // Number of entries in the chain
+	FoundEntries  int64        // Number of entries found in the snapshot
+	HasMerkleData bool         // Whether the chain has Merkle tree data
+	Entries       []ChainEntry // Chain entries
 }
 
 // TransactionRecord represents a transaction record from the snapshot
@@ -53,15 +55,21 @@ type MessageRecord struct {
 	Hash  [32]byte // Message hash
 }
 
+// ChainEntry represents an entry in a chain
+type ChainEntry struct {
+	Hash []byte // Entry hash
+}
+
 // RecordEntry represents a unified record entry from the snapshot
 // This can be an account, transaction, message, or any other record type
 type RecordEntry struct {
-	Key       []byte   // Serialized key
-	Value     []byte   // Value data
-	KeyHash   [32]byte // Hash of the key for indexing
-	RecordType string  // Type of record ("account", "transaction", "message", "other")
-	URL       string   // Account URL (for account records)
-	Partition string   // Partition name (for account records)
+	Key       []byte       // Serialized key
+	Value     []byte       // Value data
+	KeyHash   [32]byte     // Hash of the key for indexing
+	Type      string       // Type of record ("account", "chain", "transaction", "message", "other")
+	URL       string       // Account URL (for account records)
+	Partition string       // Partition name (for account records)
+	Chain     *ChainRecord // Chain record (for chain records)
 }
 
 // PartitionInfo contains information about a network partition
@@ -83,18 +91,18 @@ type SnapshotHeader struct {
 
 // SnapshotSectionInfo contains information about a snapshot section
 type SnapshotSectionInfo struct {
-	Index       int                   // Section index in the snapshot
+	Index       int                  // Section index in the snapshot
 	Type        snapshot.SectionType // Section type (Records, BPT, etc.)
-	Offset      int64                 // File offset to the beginning of this section
-	Size        int64                 // Size of the section in bytes
-	RecordCount int64                 // Number of records in this section (for record sections)
-	Description string                // Human-readable description of section content
+	Offset      int64                // File offset to the beginning of this section
+	Size        int64                // Size of the section in bytes
+	RecordCount int64                // Number of records in this section (for record sections)
+	Description string               // Human-readable description of section content
 }
 
 // SectionTypeMap maps section types to their indices for quick lookup
 type SectionTypeMap struct {
-	BPTSections    []int // Indices of BPT sections (type 11) - to be skipped
-	OtherSections  []int // Indices of other sections (type 7, etc.) - messages/transactions
+	BPTSections   []int // Indices of BPT sections (type 11) - to be skipped
+	OtherSections []int // Indices of other sections (type 7, etc.) - messages/transactions
 }
 
 // ExtractState encapsulates all state for the snapshot extraction process.
@@ -122,8 +130,14 @@ type ExtractState struct {
 	SectionTypeMap     *SectionTypeMap       // Quick lookup map for sections by type
 
 	// Unified record collection - using a streaming approach to minimize memory usage
-	Records        []RecordEntry       // All records (accounts, transactions, messages, etc.)
-	KeyHashToIndex map[[32]byte]int    // Maps record key hash to index in Records slice
+	Records        []RecordEntry    // All records (accounts, transactions, messages, etc.)
+	KeyHashToIndex map[[32]byte]int // Maps record key hash to index in Records slice
+
+	// Chain entry cache to avoid repeated extraction
+	ChainEntryCache *ChainEntryCache // Cache of chain entries by chain URL
+
+	// Bloom filters for partition filtering
+	BloomFilters map[string]*Bloom // Maps partition ID to bloom filter (legacy)
 
 	// Report data
 	Report *ExtractReport // Statistics and analysis results
@@ -136,14 +150,20 @@ func NewExtractState() *ExtractState {
 		Records:        make([]RecordEntry, 0),
 		KeyHashToIndex: make(map[[32]byte]int),
 
+		// Initialize chain entry cache
+		ChainEntryCache: NewChainEntryCache(),
+
+		// Initialize partition bloom filters
+		BloomFilters: make(map[string]*Bloom),
+
 		// Initialize partition information
 		Partitions: make([]PartitionInfo, 0),
 
 		// Initialize section information
-		Sections:       make([]SnapshotSectionInfo, 0),
+		Sections: make([]SnapshotSectionInfo, 0),
 		SectionTypeMap: &SectionTypeMap{
-			BPTSections:    make([]int, 0),
-			OtherSections:  make([]int, 0),
+			BPTSections:   make([]int, 0),
+			OtherSections: make([]int, 0),
 		},
 
 		// Initialize report
