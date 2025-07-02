@@ -13,8 +13,9 @@ import (
 	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	snapshotpkg "gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -40,16 +41,53 @@ func NewPartitionAccountStats(partitionID, partitionType string) *PartitionAccou
 	}
 }
 
-// ProcessPartitionAccounts processes accounts for a specific partition using streaming approach
-// This function uses the pre-opened snapshot file and section information from ExtractState
-// For v2 snapshots, accounts are stored as individual records in Records sections, not in dedicated Accounts sections
+// UnmarshalRecord unmarshals a binary record into a value implementing encoding.BinaryValue
+// This is a lightweight version of snapshot.readValue that works directly with binary data
+func UnmarshalRecord(data []byte, v encoding.BinaryValue) error {
+	if len(data) == 0 {
+		return fmt.Errorf("empty record data")
+	}
+
+	err := v.UnmarshalBinary(data)
+	if err != nil {
+		return errors.EncodingError.WithFormat("unmarshal: %w", err)
+	}
+	return nil
+}
+
+// extractAccountURLFromRecordValue extracts account URL from binary record value
+// using the UnmarshalRecord function to unmarshal the value as a protocol.Account
+func extractAccountURLFromRecordValue(valueBytes []byte) (*url.URL, error) {
+	if len(valueBytes) == 0 {
+		return nil, fmt.Errorf("empty record value")
+	}
+
+	// Create a new account instance
+	var account protocol.Account
+	
+	// Use protocol.UnmarshalAccountFrom which handles the account type detection
+	account, err := protocol.UnmarshalAccountFrom(io.NewSectionReader(bytes.NewReader(valueBytes), 0, int64(len(valueBytes))))
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal account: %v", err)
+	}
+	if account == nil {
+		return nil, fmt.Errorf("account is nil after unmarshaling")
+	}
+
+	// Extract the URL from the account
+	accountURL := account.GetUrl()
+	if accountURL == nil {
+		return nil, fmt.Errorf("account URL is nil")
+	}
+
+	return accountURL, nil
+}
+
+// ProcessPartitionAccounts processes accounts for a specific partition using in-memory records
+// This function uses the pre-loaded records from ExtractState instead of reading from the snapshot file
+// It uses UnmarshalRecord to unmarshal account data from binary record values
 func ProcessPartitionAccounts(extractState *ExtractState, partitionID string) (*PartitionAccountStats, error) {
 	fmt.Printf("Processing accounts for partition: %s\n", partitionID)
-
-	// Ensure snapshot is initialized
-	if extractState.SnapshotFileHandle == nil || extractState.SnapshotReader == nil {
-		return nil, fmt.Errorf("snapshot not initialized - call InitializeSnapshot() first")
-	}
 
 	// Find the partition info
 	var targetPartition *PartitionInfo
@@ -67,99 +105,86 @@ func ProcessPartitionAccounts(extractState *ExtractState, partitionID string) (*
 	// Initialize statistics
 	stats := NewPartitionAccountStats(partitionID, targetPartition.Type)
 
-	// Use the pre-opened snapshot reader
-	reader := extractState.SnapshotReader
-
-	// In v2 snapshots, accounts are stored as records in Records sections
-	// We need to process all Records sections and filter for account records
-	var recordsSections []int
-	for i, section := range reader.Sections {
-		if section.Type() != snapshot.SectionTypeAccounts {
-			continue
-		}
-		recordsSections = append(recordsSections, i)
-	}
-
-	if len(recordsSections) == 0 {
-		return nil, fmt.Errorf("no Records sections found in snapshot")
-	}
-
-	fmt.Printf("Found %d Records sections to process for accounts...\n", len(recordsSections))
-
 	// Track unique accounts to avoid double-counting (since accounts are split into multiple records)
 	uniqueAccounts := make(map[string]bool)
 
-	// Process each Records section
-	for _, sectionIndex := range recordsSections {
-		fmt.Printf("Processing Records section %d for account data...\n", sectionIndex)
+	fmt.Printf("Processing %d in-memory records for accounts...\n", len(extractState.Records))
 
-		// Open record reader for this Records section
-		recordReader, err := reader.OpenRecords(sectionIndex)
-		if err != nil {
-			return nil, fmt.Errorf("failed to open records section %d: %v", sectionIndex, err)
+	// Process records from in-memory collection
+	recordCount := 0
+	accountRecordCount := 0
+
+	// Iterate through all records in memory
+	for _, record := range extractState.Records {
+		recordCount++
+
+		// Skip non-account records based on record type
+		if record.RecordType != "account" {
+			continue
 		}
 
-		// Process each record in this Records section
-		recordCount := 0
-		accountRecordCount := 0
-		for {
-			record, err := recordReader.Read()
-			if err == io.EOF {
-				break
-			}
+		// Debug: Check first few records
+		if recordCount <= 5 {
+			fmt.Printf("  Record %d key: %q\n", recordCount, string(record.Key))
+		}
+
+		// Try to extract account URL from record value using UnmarshalRecord
+		var accountURL *url.URL
+		var err error
+
+		// If URL is already extracted during loading, use it
+		if record.URL != "" {
+			accountURL, err = url.Parse(record.URL)
 			if err != nil {
-				return nil, fmt.Errorf("error reading record from section %d: %v", sectionIndex, err)
+				// If parsing fails, try to extract from value
+				accountURL, err = extractAccountURLFromRecordValue(record.Value)
+				if err != nil {
+					continue // Skip records that can't be parsed as accounts
+				}
 			}
-
-			recordCount++
-
-			// Debug: Check first few records
-			if recordCount <= 5 {
-				keyBytes, _ := record.Key.MarshalBinary()
-				keyStr := string(keyBytes)
-				fmt.Printf("  Record %d key: %q\n", recordCount, keyStr)
-			}
-
-			// Try to extract account URL from record value
-			accountURL, err := extractAccountURLFromValue(record)
+		} else {
+			// Extract from value if URL wasn't pre-extracted
+			accountURL, err = extractAccountURLFromRecordValue(record.Value)
 			if err != nil {
 				continue // Skip records that can't be parsed as accounts
 			}
+		}
 
-			accountRecordCount++
+		accountRecordCount++
 
-			// Check if this account belongs to our target partition
-			belongs, err := accountBelongsToPartition(extractState, accountURL, partitionID)
-			if err != nil {
-				return nil, fmt.Errorf("error checking partition membership for %s: %v", accountURL, err)
-			}
+		// Check if this account belongs to our target partition
+		belongs, err := accountBelongsToPartition(extractState, accountURL, partitionID)
+		if err != nil {
+			return nil, fmt.Errorf("error checking partition membership for %s: %v", accountURL, err)
+		}
 
-			if belongs {
-				// Use account URL string as unique key to avoid double-counting
-				accountKey := accountURL.String()
-				if !uniqueAccounts[accountKey] {
-					uniqueAccounts[accountKey] = true
+		if belongs {
+			// Use account URL string as unique key to avoid double-counting
+			accountKey := accountURL.String()
+			if !uniqueAccounts[accountKey] {
+				uniqueAccounts[accountKey] = true
 
-					// Update statistics for this account (only count once per unique account)
-					stats.TotalAccounts++
-					accountType := determinePartitionAccountType(accountURL)
-					stats.AccountsByType[accountType]++
+				// Update statistics for this account (only count once per unique account)
+				stats.TotalAccounts++
+				accountType := determinePartitionAccountType(accountURL)
+				stats.AccountsByType[accountType]++
 
-					// Determine chain types for this account
-					chainTypes := determineChainTypes(accountURL, record)
-					for _, chainType := range chainTypes {
-						stats.ChainsByType[chainType]++
-						stats.TotalChains++
-					}
+				// Determine chain types for this account
+				chainTypes := determineChainTypesFromURL(accountURL)
+				for _, chainType := range chainTypes {
+					stats.ChainsByType[chainType]++
+					stats.TotalChains++
 				}
 			}
-			
-			fmt.Printf("  Section %d: processed %d records, found %d account records\n", 
-				sectionIndex, recordCount, accountRecordCount)
+		}
+
+		// Progress reporting
+		if recordCount%100000 == 0 {
+			fmt.Printf("  Processed %d records, found %d account records\n", recordCount, accountRecordCount)
 		}
 	}
 
-	fmt.Printf("Partition %s processing complete: %d accounts, %d chains\n", 
+	fmt.Printf("Partition %s processing complete: %d accounts, %d chains\n",
 		partitionID, stats.TotalAccounts, stats.TotalChains)
 
 	return stats, nil
@@ -249,6 +274,26 @@ func determinePartitionChainType(accountURL *url.URL) string {
 
 // determineChainTypes determines the types of chains for an account
 func determineChainTypes(accountURL *url.URL, record *snapshotpkg.RecordEntry) []string {
+	urlStr := accountURL.String()
+	chainTypes := []string{}
+
+	// Most accounts have a main chain
+	chainTypes = append(chainTypes, "MainChain")
+
+	// Check for other chain types based on URL patterns
+	if strings.Contains(urlStr, "/anchor") {
+		chainTypes = append(chainTypes, "AnchorChain")
+	}
+	if strings.Contains(urlStr, "/scratch") {
+		chainTypes = append(chainTypes, "ScratchChain")
+	}
+
+	return chainTypes
+}
+
+// determineChainTypesFromURL determines the types of chains for an account based only on URL
+// This version doesn't require the original record, just the account URL
+func determineChainTypesFromURL(accountURL *url.URL) []string {
 	urlStr := accountURL.String()
 	chainTypes := []string{}
 

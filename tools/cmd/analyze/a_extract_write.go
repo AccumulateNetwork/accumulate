@@ -59,7 +59,7 @@ func WritePartitionSnapshot(extractState *ExtractState, outputFile string, targe
 	if err != nil {
 		return fmt.Errorf("parse system ledger URL: %w", err)
 	}
-	
+
 	err = writer.WriteHeader(&sv2.Header{
 		Version:  sv2.Version2,
 		RootHash: extractState.SnapshotHeader.RootHash,
@@ -92,20 +92,20 @@ func WritePartitionSnapshot(extractState *ExtractState, outputFile string, targe
 	// Process each section in the original snapshot
 	for i, section := range reader.Sections {
 		sectionType := section.Type()
-		
+
 		// Skip BPT sections as requested
 		if sectionType == sv2.SectionTypeBPT || sectionType == sv2.SectionTypeRawBPT {
 			fmt.Printf("Skipping BPT section %d (type %v)\n", i, sectionType)
 			continue
 		}
-		
+
 		// Skip header section - already written
 		if sectionType == sv2.SectionTypeHeader {
 			continue
 		}
-		
+
 		fmt.Printf("Processing section %d (type %v)\n", i, sectionType)
-		
+
 		// Handle different section types
 		switch sectionType {
 		case sv2.SectionTypeRecords:
@@ -114,7 +114,7 @@ func WritePartitionSnapshot(extractState *ExtractState, outputFile string, targe
 			if err != nil {
 				return fmt.Errorf("open records section: %w", err)
 			}
-			
+
 			// Open the records section for reading
 			recordReader, err := reader.OpenRecords(i)
 			if err != nil {
@@ -138,13 +138,13 @@ func WritePartitionSnapshot(extractState *ExtractState, outputFile string, targe
 				shouldInclude := false
 				recordType := "unknown"
 				totalProcessed++
-				
+
 				// Try to extract account URL from the record key
 				accountURL, err := extractAccountURL(entry.Key)
 				if err != nil {
 					// This is likely a message or transaction record, not an account
-					// For DN partition, include all non-account records
-					if targetPartition == "Directory" {
+					// Include all non-account records for both DN and BVN partitions
+					if strings.EqualFold(targetPartition, "Directory") || strings.Contains(strings.ToLower(targetPartition), "bvn") {
 						shouldInclude = true
 						nonAccountRecords++
 						recordType = detectRecordTypeFromKey(entry.Key)
@@ -153,12 +153,12 @@ func WritePartitionSnapshot(extractState *ExtractState, outputFile string, targe
 					// This is an account record, check partition membership
 					accountRecords++
 					recordType = "account"
-					
+
 					// Debug: Print first few account URLs found
 					if accountRecords <= 5 {
 						fmt.Printf("DEBUG: Found account URL: %s\n", accountURL.String())
 					}
-					
+
 					// Type cast router with safety fallback
 					if router, ok := extractState.Router.(routing.Router); ok {
 						if belongsToPartition(accountURL, targetPartition, router) {
@@ -181,7 +181,7 @@ func WritePartitionSnapshot(extractState *ExtractState, outputFile string, targe
 						collector.Close()
 						return fmt.Errorf("failed to write record: %w", err)
 					}
-					
+
 					// Count the record by type
 					switch recordType {
 					case "transaction":
@@ -206,9 +206,9 @@ func WritePartitionSnapshot(extractState *ExtractState, outputFile string, targe
 					}
 				}
 			}
-			
+
 			collector.Close()
-			
+
 		default:
 			// For other section types, copy them as-is using raw section copying
 			// This handles sections like SectionTypeRecordIndex, SectionTypeConsensus, etc.
@@ -253,13 +253,13 @@ func extractAccountURL(key *record.Key) (*url.URL, error) {
 
 	// Check if this is an account record by examining the key structure
 	// Account records typically have a different structure than transaction/message records
-	
+
 	// Try to get the account URL from the key if it's an account record
 	// This is a heuristic approach based on key structure analysis
-	
+
 	// For now, let's assume that if the key can be converted to a meaningful URL,
 	// it's an account record. Otherwise, it's likely a transaction or message.
-	
+
 	// Marshal the key to analyze its structure
 	keyBytes, err := key.MarshalBinary()
 	if err != nil {
@@ -268,9 +268,7 @@ func extractAccountURL(key *record.Key) (*url.URL, error) {
 
 	// Convert to string and look for URL patterns
 	keyStr := string(keyBytes)
-	
 
-	
 	// Look for acc:// URLs which indicate account records
 	if strings.Contains(keyStr, "acc://") {
 		// Find the start of the URL
@@ -310,7 +308,7 @@ func belongsToPartition(accountURL *url.URL, targetPartition string, router rout
 
 	// Debug: Print routing information for first few accounts
 	if accountURL.String() == "acc://system/ledger" || strings.Contains(accountURL.String(), "adi") {
-		fmt.Printf("DEBUG: Account %s routed to partition '%s', target is '%s', match: %v\n", 
+		fmt.Printf("DEBUG: Account %s routed to partition '%s', target is '%s', match: %v\n",
 			accountURL.String(), partition, targetPartition, strings.EqualFold(partition, targetPartition))
 	}
 
@@ -349,20 +347,20 @@ func copySectionRaw(writer *sv2.Writer, reader *sv2.Reader, sectionIndex int, se
 		return fmt.Errorf("failed to open source section: %w", err)
 	}
 	// Note: ioutil.SectionReader doesn't have a Close method
-	
+
 	// Open the destination section for writing
 	destWriter, err := writer.OpenRaw(sectionType)
 	if err != nil {
 		return fmt.Errorf("failed to open destination section: %w", err)
 	}
 	defer destWriter.Close()
-	
+
 	// Copy the section data
 	_, err = io.Copy(destWriter, sourceReader)
 	if err != nil {
 		return fmt.Errorf("failed to copy section data: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -375,7 +373,7 @@ func writeAccountChains(collector *sv2.Collector, accountURL *url.URL, reader *s
 	// 2. Read chain records from the original snapshot
 	// 3. Write chain records to the output snapshot
 	// 4. Follow the same filtering logic as accounts
-	
+
 	fmt.Printf("TODO: Write chains for account %s\n", accountURL.String())
 	return nil
 }
@@ -383,22 +381,22 @@ func writeAccountChains(collector *sv2.Collector, accountURL *url.URL, reader *s
 // reportRoutingPartitions reports the partitions available in the routing table
 func reportRoutingPartitions(extractState *ExtractState) {
 	fmt.Println("\nRouting Table Analysis:")
-	
+
 	// Check if router is available
 	if extractState.Router == nil {
 		fmt.Println("  Router: Not initialized")
 		return
 	}
-	
+
 	// Try to cast router to routing.Router
 	router, ok := extractState.Router.(routing.Router)
 	if !ok {
 		fmt.Printf("  Router: Available but not routing.Router type (actual type: %T)\n", extractState.Router)
 		return
 	}
-	
+
 	fmt.Println("  Router: Successfully initialized")
-	
+
 	// Test routing with known partition names from network config
 	if extractState.NetworkConfig != nil && extractState.NetworkConfig.Globals.Network.Partitions != nil {
 		fmt.Printf("  Network Config Partitions: %d\n", len(extractState.NetworkConfig.Globals.Network.Partitions))
@@ -406,14 +404,14 @@ func reportRoutingPartitions(extractState *ExtractState) {
 			fmt.Printf("    %d: %s (Type: %s)\n", i+1, partition.ID, partition.Type)
 		}
 	}
-	
+
 	// Test routing with sample account URLs to discover partition mappings
 	fmt.Println("  Testing routing with sample URLs:")
 	testAccountRouting(router)
-	
+
 	// Test routing overrides if available
 	testRoutingOverrides(extractState)
-	
+
 	fmt.Println()
 }
 
@@ -432,26 +430,26 @@ func testAccountRouting(router routing.Router) {
 		"acc://charlie.acme",
 		"acc://example.acme",
 	}
-	
+
 	partitionCounts := make(map[string]int)
-	
+
 	for _, urlStr := range testURLs {
 		accountURL, err := url.Parse(urlStr)
 		if err != nil {
 			fmt.Printf("    %s: Parse error: %v\n", urlStr, err)
 			continue
 		}
-		
+
 		partition, err := router.RouteAccount(accountURL)
 		if err != nil {
 			fmt.Printf("    %s: Route error: %v\n", urlStr, err)
 			continue
 		}
-		
+
 		fmt.Printf("    %s -> %s\n", urlStr, partition)
 		partitionCounts[partition]++
 	}
-	
+
 	// Summary of discovered partitions
 	if len(partitionCounts) > 0 {
 		fmt.Println("  Discovered partitions from routing:")
@@ -489,12 +487,12 @@ func detectRecordTypeFromKey(key *record.Key) string {
 	keyStr := string(keyBytes)
 
 	// More specific detection for non-account records
-	if strings.Contains(keyStr, "transaction") || strings.Contains(keyStr, "txn") || 
-	   strings.Contains(keyStr, "Transaction") {
+	if strings.Contains(keyStr, "transaction") || strings.Contains(keyStr, "txn") ||
+		strings.Contains(keyStr, "Transaction") {
 		return "transaction"
 	}
 	if strings.Contains(keyStr, "message") || strings.Contains(keyStr, "msg") ||
-	   strings.Contains(keyStr, "Message") {
+		strings.Contains(keyStr, "Message") {
 		return "message"
 	}
 
