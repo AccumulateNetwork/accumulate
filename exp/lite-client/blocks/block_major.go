@@ -18,39 +18,55 @@ import (
 // QueryMajorBlocks retrieves a paginated slice of major blocks from the given partition.
 // Each block contains all fields returned by the node, including signatures and threshold data.
 // Use ExtractAuthoritySet to extract an AuthoritySet from a block for signature validation.
-func QueryMajorBlocks(ctx context.Context, cl *client.Client, startIndex uint64, count uint64) ([]map[string]interface{}, error) {
-	partitionUrl, err := parseUrl("acc://bvn0.acme")
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse partition URL: %v", err)
+// QueryMajorBlocks retrieves a paginated slice of major blocks from the given partition.
+// Set queryVersion to "v2" or "v3" to select the API version. Partition URL must be provided explicitly.
+// Each block contains all fields returned by the node, including signatures and threshold data.
+// Use ExtractAuthoritySet to extract an AuthoritySet from a block for signature validation.
+func QueryMajorBlocks(ctx context.Context, cl *client.Client, partitionUrl string, startIndex uint64, count uint64, queryVersion string) ([]map[string]interface{}, error) {
+	if queryVersion == "v2" {
+		return QueryMajorBlocksV2(ctx, cl, partitionUrl, startIndex, count)
+	} else if queryVersion == "v3" {
+		parsedUrl, err := parseUrl(partitionUrl)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse partition URL: %v", err)
+		}
+
+		query := createQueryMajorBlock(startIndex, &count, parsedUrl)
+		fmt.Printf("[v3] Querying for major blocks starting at %d (count: %d) on partition %s...\n", startIndex, count, partitionUrl)
+
+		// v3 Querier2 instance for v3 API usage
+		restQuerier := apiint.NewQuerier(apiint.QuerierParams{
+			Logger:    logging.NullLogger{},
+			Database:  database.OpenInMemory(logging.NullLogger{}),
+			Partition: partitionUrl,
+			Consensus: nil, // No real consensus service available
+		})
+		querier2 := api.Querier2{
+			Querier: restQuerier,
+		}
+
+		resp, err := executeQueryMajorBlock(ctx, parsedUrl, querier2, query)
+		if err != nil {
+			return nil, fmt.Errorf("failed to query major blocks (v3): %v", err)
+		}
+
+		fmt.Printf("[v3] Raw response from executeQueryMajorBlock: %+v\n", resp)
+		if resp != nil {
+			fmt.Printf("[v3] Raw response records: count=%d, records=%+v\n", len(resp.Records), resp.Records)
+		} else {
+			fmt.Println("[v3] Raw response is nil")
+		}
+
+		blocks, err := processMajorBlock(resp)
+		if err != nil {
+			return nil, fmt.Errorf("failed to process major blocks (v3): %v", err)
+		}
+
+		fmt.Printf("[v3] Retrieved %d major blocks\n", len(blocks))
+		return blocks, nil
+	} else {
+		return nil, fmt.Errorf("unsupported query version: %s", queryVersion)
 	}
-
-	query := createQueryMajorBlock(startIndex, &count, partitionUrl)
-	fmt.Printf("Querying for major blocks starting at %d (count: %d)...\n", startIndex, count)
-
-	// v3 Querier2 instance for future v3 API usage
-	// TODO: Fill in the actual QuerierParams values as needed for your application
-	restQuerier := apiint.NewQuerier(apiint.QuerierParams{
-		Logger:    logging.NullLogger{},
-		Database:  database.OpenInMemory(logging.NullLogger{}),
-		Partition: "acc://bvn0.acme",
-		Consensus: nil, // No real consensus service available
-	})
-	querier2 := api.Querier2{
-		Querier: restQuerier,
-	}
-
-	resp, err := executeQueryMajorBlock(ctx, partitionUrl, querier2, query)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query major blocks: %v", err)
-	}
-
-	blocks, err := processMajorBlock(resp)
-	if err != nil {
-		return nil, fmt.Errorf("failed to process major blocks: %v", err)
-	}
-
-	fmt.Printf("Retrieved %d major blocks\n", len(blocks))
-	return blocks, nil
 }
 
 func createQueryMajorBlock(startIndex uint64, count *uint64, partitionUrl *accurl.URL) api.BlockQuery {
@@ -63,33 +79,32 @@ func createQueryMajorBlock(startIndex uint64, count *uint64, partitionUrl *accur
 	return major_query
 }
 
-func executeQueryMajorBlock(ctx context.Context, url *accurl.URL, q api.Querier2, query api.BlockQuery) (*MajorBlockRecord, error) {
-	return q.QueryMajorBlock(ctx, url, &query)
+func executeQueryMajorBlock(ctx context.Context, url *accurl.URL, q api.Querier2, query api.BlockQuery) (*api.RecordRange[*api.MajorBlockRecord], error) {
+	return q.QueryMajorBlocks(ctx, url, &query)
 }
 
-func processMajorBlock(resp *MajorBlockRecord) ([]map[string]interface{}, error) {
-	if resp == nil {
-		return nil, fmt.Errorf("no major block record returned")
+func processMajorBlock(resp *api.RecordRange[*api.MajorBlockRecord]) ([]map[string]interface{}, error) {
+	if resp == nil || len(resp.Records) == 0 {
+		return nil, fmt.Errorf("no major block records returned")
 	}
 
-	// Marshal the MajorBlockRecord to JSON, then unmarshal to map[string]interface{}
-	bz, err := json.Marshal(resp)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal MajorBlockRecord: %v", err)
+	var blocks []map[string]interface{}
+	for _, mb := range resp.Records {
+		bz, err := json.Marshal(mb)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal MajorBlockRecord: %v", err)
+		}
+		raw := make(map[string]interface{})
+		if err := json.Unmarshal(bz, &raw); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal MajorBlockRecord: %v", err)
+		}
+		// For v3, the block index field is likely "index" (per struct definition)
+		if _, ok := raw["index"]; !ok {
+			return nil, fmt.Errorf("major block missing 'index' field")
+		}
+		fmt.Printf("Retrieved major block %v\n", raw["index"])
+		blocks = append(blocks, raw)
 	}
-
-	raw := make(map[string]interface{})
-	if err := json.Unmarshal(bz, &raw); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal MajorBlockRecord: %v", err)
-	}
-
-	// For v3, the block index field is likely "index" (per struct definition)
-	if _, ok := raw["index"]; !ok {
-		return nil, fmt.Errorf("major block missing 'index' field")
-	}
-	fmt.Printf("Retrieved major block %v\n", raw["index"])
-
-	blocks := []map[string]interface{}{raw}
 	return blocks, nil
 }
 
@@ -122,7 +137,7 @@ func FetchLatestMajorBlockRootHash(ctx context.Context, cl *client.Client) ([]by
 func ListMajorBlocks(ctx context.Context, cl *client.Client) ([]map[string]interface{}, error) {
 	// By default, fetch a reasonable number of recent major blocks (e.g., 20)
 	const defaultCount = 20
-	return QueryMajorBlocks(ctx, cl, 0, defaultCount)
+	return QueryMajorBlocks(ctx, cl, "", 0, defaultCount, "v3")
 }
 
 // ExtractAuthoritySet extracts the AuthoritySet (signatures and threshold) from a major block.
