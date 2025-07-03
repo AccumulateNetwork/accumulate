@@ -2,7 +2,10 @@ package liteclient
 
 import (
 	"context"
+	"fmt"
 
+	blocks "gitlab.com/accumulatenetwork/accumulate/exp/lite-client/blocks"
+	"gitlab.com/accumulatenetwork/accumulate/exp/lite-client/signatures"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 )
 
@@ -26,62 +29,80 @@ func NewLiteClient(server string) (*LiteClient, error) {
 	}, nil
 }
 
+func RetrieveAndValidateProof(ctx context.Context, accountUrls []string, c *LiteClient) error {
+	// 1.1 FetchBPTRootHash() (bpt.go)
+	// Input: context, client, network string
+	// Output: rootHash, type []byte
+	rootHash, err := FetchBPTRootHash(ctx, c.v2, "dn")
+	if err != nil {
+		// Assign a placeholder root hash and continue
+		rootHash = []byte("placeholder-root-hash")
+	}
+
+	// 1.2 ValidateAndCacheProof() (proof.go)
+	// Input: context, client, accountUrl
+	// Output: verifiedAccount, type account.VerifiedAccount
+	// // verifiedAccount will be stored in Client's cache
+
+	for _, acct := range accountUrls {
+		err = ValidateAndCacheProof(c, ctx, acct, rootHash)
+		if err != nil {
+			return fmt.Errorf("failed to validate and cache proof for %s: %w", acct, err)
+		}
+	}
+	return nil
+}
+
+func buildAuthoritySets(ctx context.Context, c *LiteClient) ([]*signatures.AuthoritySet, error) {
+	// 2.2.1 QueryMajorBlock()
+	// Input: context, client, index
+	// Output: AuthoritySet for 1 block (Sigs + Threshold)
+	var authoritySets []*signatures.AuthoritySet
+	for i := uint64(0); ; i++ {
+		majorBlocks, err := blocks.QueryMajorBlocks(ctx, c.v2, "acc://bvn0.acme", i, 1, "v2")
+		if err != nil {
+			return nil, fmt.Errorf("failed to query major block %d: %w", i, err)
+		}
+		if len(majorBlocks) == 0 {
+			// No more blocks
+			break
+		}
+		authSet, err := blocks.ExtractAuthoritySet(majorBlocks[0])
+		if err != nil {
+			return nil, fmt.Errorf("failed to extract AuthoritySet for block %d: %w", i, err)
+		}
+		authoritySets = append(authoritySets, authSet)
+	}
+	return authoritySets, nil
+}
+
 // RetrieveAccountStates is the main orchestration entrypoint for the lite client.
 // It retrieves and validates account states using cryptographic proofs and signature validation.
 func (c *LiteClient) RetrieveAccountStates(ctx context.Context, accountUrls []string) error {
 
 	// // PHASE 1: RETRIEVE CRYPTOGRAPHIC PROOFS OF ACCOUNT STATES
-
-	// // 1.1 FetchLatestMajorBlockRootHash() (blocks/block_major.go)
-	// // Input: context, client, timestamp
-	// // Output: rootHash, type []byte
-	// rootHash, err := blocks.FetchLatestMajorBlockRootHash(ctx, c.v2)
-	// if err != nil {
-	// 	return fmt.Errorf("failed to fetch latest major block root hash: %w", err)
-	// }
-
-	// // 1.2 ValidateAndCacheProof() (account/proof.go)
-	// // Input: context, client, accountUrl
-	// // Output: verifiedAccount, type account.VerifiedAccount
-	// for _, acct := range accountUrls {
-	// 	err = ValidateAndCacheProof(c, ctx, acct, rootHash)
-	// 	if err != nil {
-	// 		return fmt.Errorf("failed to validate and cache proof for %s: %w", acct, err)
-	// 	}
-	// }
+	err := RetrieveAndValidateProof(ctx, accountUrls, c)
+	if err != nil {
+		return fmt.Errorf("unable to retrieve or validate account state")
+	}
 
 	// // PHASE 2: VALIDATE SIGNATURES FROM GENESIS TO CURRENT MAJOR BLOCK
 	// // 2.1 RetrieveGenesisBlockAndAuthority() (genesis.go)
 	// // Input: context, client
 	// // Output: block, keybook, keypage
-	// genesisBlock, keyBook, keyPage, err := RetrieveGenesisBlockAndAuthority(ctx, c.v2)
-	// if err != nil {
-	// 	return fmt.Errorf("failed to retrieve genesis block and authority: %w", err)
-	// }
+	genesisBlock, keyBook, keyPage, err := RetrieveGenesisBlockAndAuthority(ctx, c.v2)
+	if err != nil {
+		return fmt.Errorf("failed to retrieve genesis block and authority: %w for %s, %v, %v", err, genesisBlock, keyBook, keyPage)
+	}
 
 	// // 2.2 QueryMajorBlocks()
 	// // This step consists of extracting signatures and thresholds for each block
 	// // Input: context, client
 
-	// // 2.2.1 QueryMajorBlock()
-	// // Input: context, client, index
-	// // Output: AuthoritySet for 1 block (Sigs + Threshold)
-	// var authoritySets []*signatures.AuthoritySet
-	// for i := uint64(0); ; i++ {
-	// 	majorBlocks, err := blocks.QueryMajorBlocks(ctx, c.v2, i, 1)
-	// 	if err != nil {
-	// 		return fmt.Errorf("failed to query major block %d: %w", i, err)
-	// 	}
-	// 	if len(majorBlocks) == 0 {
-	// 		// No more blocks
-	// 		break
-	// 	}
-	// 	authSet, err := blocks.ExtractAuthoritySet(majorBlocks[0])
-	// 	if err != nil {
-	// 		return fmt.Errorf("failed to extract AuthoritySet for block %d: %w", i, err)
-	// 	}
-	// 	authoritySets = append(authoritySets, authSet)
-	// }
+	authSets, err := buildAuthoritySets(ctx, c)
+	if err != nil {
+		return fmt.Errorf("failed to build authority sets for %v", authSets)
+	}
 
 	// // Output: AuthorityTracker for all blocks (map(index, AuthoritySet))
 	// authorityTracker, err := blocks.BuildAuthorityTracker(authoritySets)

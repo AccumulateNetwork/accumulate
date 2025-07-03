@@ -120,26 +120,6 @@ func validateMajorBlockSignatures(block map[string]interface{}, authorities *sig
 	return sigs.ValidateBlockSignatures(authorities, rootHash, signatures)
 }
 
-// FetchLatestMajorBlockRootHash fetches the latest major block and returns its root hash.
-func FetchLatestMajorBlockRootHash(ctx context.Context, cl *client.Client) ([]byte, error) {
-	blocks, err := ListMajorBlocks(ctx, cl)
-	if err != nil || len(blocks) == 0 {
-		return nil, fmt.Errorf("failed to list major blocks: %w", err)
-	}
-	latest := blocks[len(blocks)-1]
-	rootHash, ok := latest["rootHash"].([]byte)
-	if !ok {
-		return nil, fmt.Errorf("failed to extract rootHash from latest major block")
-	}
-	return rootHash, nil
-}
-
-func ListMajorBlocks(ctx context.Context, cl *client.Client) ([]map[string]interface{}, error) {
-	// By default, fetch a reasonable number of recent major blocks (e.g., 20)
-	const defaultCount = 20
-	return QueryMajorBlocks(ctx, cl, "", 0, defaultCount, "v3")
-}
-
 // ExtractAuthoritySet extracts the AuthoritySet (signatures and threshold) from a major block.
 func ExtractAuthoritySet(block map[string]interface{}) (*sigs.AuthoritySet, error) {
 	threshold, ok := block["threshold"].(float64)

@@ -32,7 +32,7 @@ func TestQueryMajorBlocks_Kermit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("QueryMajorBlocks (v3) failed: %v", err)
 	}
-	if recordRange == nil || len(recordRange) == 0 {
+	if len(recordRange) == 0 {
 		t.Fatalf("No major blocks returned from Kermit testnet (v3)")
 	}
 
@@ -77,7 +77,7 @@ func TestQueryMajorBlocksV2_Kermit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("QueryMajorBlocks (v2) failed: %v", err)
 	}
-	if recordRange == nil || len(recordRange) == 0 {
+	if len(recordRange) == 0 {
 		t.Fatalf("No major blocks returned from Kermit testnet (v2)")
 	}
 
