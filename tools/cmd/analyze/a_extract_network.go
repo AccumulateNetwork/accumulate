@@ -15,13 +15,38 @@ package main
 
 // NetworkConfig represents the network configuration from network.json
 type NetworkConfig struct {
+	// ID is the network identifier
+	ID string `json:"id"`
+	
 	// Globals contains network-wide configuration
 	Globals struct {
 		Network struct {
+			// NetworkName is the name of the network
+			NetworkName string `json:"networkName"`
+			
+			// Partitions defines the network partitions
 			Partitions []struct {
 				ID   string `json:"id"`
 				Type string `json:"type"`
 			} `json:"partitions"`
+			
+			// Validators defines the network validators
+			Validators []struct {
+				// Operator is the validator operator name
+				Operator string `json:"operator"`
+				
+				// PublicKey is the validator's public key (hex encoded)
+				PublicKey string `json:"publicKey"`
+				
+				// Partitions defines which partitions this validator is active for
+				Partitions []struct {
+					// ID is the partition ID
+					ID string `json:"id"`
+					
+					// Active indicates if the validator is active for this partition
+					Active bool `json:"active"`
+				} `json:"partitions"`
+			} `json:"validators"`
 		} `json:"network"`
 	} `json:"globals"`
 }

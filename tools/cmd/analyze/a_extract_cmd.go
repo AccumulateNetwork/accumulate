@@ -14,9 +14,16 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
+
+// cmdAnalyze is the root command for analysis tools
+var cmdAnalyze = &cobra.Command{
+	Use:   "analyze",
+	Short: "Analysis tools for Accumulate",
+}
 
 // cmdAnalyzeExtract is the cobra command for extracting data from a snapshot
 var cmdAnalyzeExtract = &cobra.Command{
@@ -35,6 +42,16 @@ var cmdAnalyzeExtract = &cobra.Command{
 		state.SnapshotFile = snapshotFile
 		state.NetworkFile = networkFile
 
+		// Get validator keys from command line
+		validatorKeys, _ := cmd.Flags().GetStringSlice("validator-keys")
+		if len(validatorKeys) > 0 {
+			// Trim whitespace from each key
+			for i, key := range validatorKeys {
+				validatorKeys[i] = strings.TrimSpace(key)
+			}
+			state.ValidatorKeys = validatorKeys
+		}
+
 		// Run the extraction
 		err := state.Run()
 		if err != nil {
@@ -45,7 +62,12 @@ var cmdAnalyzeExtract = &cobra.Command{
 	Args: cobra.ExactArgs(2),
 }
 
-// init adds flags to the command
+// init adds flags to the command and registers commands
 func init() {
+	// Add flags to the extract command
+	cmdAnalyzeExtract.Flags().StringSlice("validator-keys", nil, "Comma-separated list of validator public keys (hex encoded)")
 
+	// Register commands
+	cmdAnalyze.AddCommand(cmdAnalyzeExtract)
+	cmdAnalyze.AddCommand(InfoCommand())
 }

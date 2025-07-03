@@ -181,6 +181,13 @@ func WritePartitionSnapshot(extractState *ExtractState, outputFile string, targe
 		return fmt.Errorf("close records section: %w", err)
 	}
 
+	// Add consensus section to the partition snapshot
+	fmt.Printf("\nAdding consensus section to partition snapshot for %s...\n", targetPartition)
+	err = WriteConsensusSection(writer, extractState, targetPartition)
+	if err != nil {
+		return fmt.Errorf("write consensus section: %w", err)
+	}
+
 	// Print summary statistics
 	fmt.Printf("\nPartition Snapshot Statistics for %s:\n", targetPartition)
 	fmt.Printf("  Total records processed: %d\n", secondPassProcessed)

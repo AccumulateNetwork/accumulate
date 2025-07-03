@@ -17,8 +17,8 @@ import (
 	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 )
 
 // AccountRecord represents an account record from the snapshot
@@ -137,8 +137,8 @@ type ExtractState struct {
 	// Chain entry cache to avoid repeated extraction
 	ChainEntryCache *ChainEntryCache // Cache of chain entries by chain URL
 
-	// Bloom filters for partition filtering
-	BloomFilters map[string]*Bloom // Maps partition ID to bloom filter (legacy)
+	// Consensus section data
+	ValidatorKeys []string // Hex-encoded validator public keys from CLI
 
 	// Report data
 	Report *ExtractReport // Statistics and analysis results
@@ -153,9 +153,6 @@ func NewExtractState() *ExtractState {
 
 		// Initialize chain entry cache
 		ChainEntryCache: NewChainEntryCache(),
-
-		// Initialize partition bloom filters
-		BloomFilters: make(map[string]*Bloom),
 
 		// Initialize partition information
 		Partitions: make([]PartitionInfo, 0),
