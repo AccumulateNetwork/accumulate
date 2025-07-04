@@ -37,6 +37,7 @@ func init() {
 	// rootCmd.AddCommand(cmdAnalyzeSnapCombine) // Commented out - undefined reference
 	rootCmd.AddCommand(sc_Cmd)
 	rootCmd.AddCommand(cmdAnalyzeExtract) // Add the extract command
+	rootCmd.AddCommand(InfoCommand()) // Add the info command
 }
 
 func main() {
