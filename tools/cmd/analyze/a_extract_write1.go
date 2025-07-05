@@ -182,19 +182,10 @@ func WritePartitionSnapshot(extractState *ExtractState, outputFile string, targe
 	}
 
 	// Add consensus section to the partition snapshot
-	fmt.Printf("\nAdding JSON consensus section to partition snapshot for %s...\n", targetPartition)
-	
-	// Use JSON consensus writer since the node expects JSON format
-	err = WriteJSONConsensusSection(writer, extractState, targetPartition)
+	fmt.Printf("\nAdding consensus section to partition snapshot for %s...\n", targetPartition)
+	err = WriteConsensusSection(writer, extractState, targetPartition)
 	if err != nil {
-		fmt.Printf("Warning: JSON consensus writing method failed: %v\n", err)
-		fmt.Printf("Trying binary consensus writing method as fallback...\n")
-		
-		// If JSON fails, try binary as a fallback
-		err = WriteBinaryConsensusSection(writer, extractState, targetPartition)
-		if err != nil {
-			return fmt.Errorf("both consensus section writing methods failed: %w", err)
-		}
+		return fmt.Errorf("write consensus section: %w", err)
 	}
 
 	// Print summary statistics
@@ -210,17 +201,7 @@ func WritePartitionSnapshot(extractState *ExtractState, outputFile string, targe
 		fmt.Printf("  %s: %d\n", recordType, count)
 	}
 
-	// Consensus section has already been written above
 
-	// Add a final empty records section to properly finalize the snapshot file
-	finalSection, err := writer.OpenRaw(sv2.SectionTypeRecords)
-	if err != nil {
-		return fmt.Errorf("open final section: %w", err)
-	}
-	err = finalSection.Close()
-	if err != nil {
-		return fmt.Errorf("close final section: %w", err)
-	}
 
 	// Get file size for reporting
 	fileInfo, err := os.Stat(outputFile)
