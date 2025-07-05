@@ -1,3 +1,9 @@
+<!-- AI_DOCUMENT_TYPE: technical_design -->
+<!-- AI_PRIMARY_TOPICS: snapshot_reconstruction, streaming, memory_optimization -->
+<!-- AI_COMPLEXITY: high -->
+<!-- AI_SPLIT_RECOMMENDED: no -->
+<!-- AI_LAST_UPDATED: 2025-01-05 -->
+
 # Snapshot Reconstruction Design Document
 
 ## Current State Analysis

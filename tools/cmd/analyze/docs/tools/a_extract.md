@@ -1,3 +1,9 @@
+<!-- AI_DOCUMENT_TYPE: technical_design -->
+<!-- AI_PRIMARY_TOPICS: snapshot_extraction, refactoring, architecture -->
+<!-- AI_COMPLEXITY: high -->
+<!-- AI_SPLIT_RECOMMENDED: no -->
+<!-- AI_LAST_UPDATED: 2025-01-05 -->
+
 # Snapshot Extraction Refactoring Design
 
 ## Overview
