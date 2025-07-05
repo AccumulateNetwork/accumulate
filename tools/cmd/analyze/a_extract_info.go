@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -107,17 +108,28 @@ func displayConsensusSection(reader io.Reader) error {
 		return fmt.Errorf("read consensus section: %w", err)
 	}
 	
-	// Unmarshal the JSON data into a CometBFT GenesisDoc
-	var doc types.GenesisDoc
-	if err := json.Unmarshal(data, &doc); err != nil {
-		// If we can't unmarshal directly to GenesisDoc, print raw data and error details
-		fmt.Println("\n    Consensus Section Raw Data (failed to unmarshal):")
-		// Limit the output to a reasonable length
+	// First, print the raw JSON in a pretty format
+	fmt.Println("\n    Consensus Section Raw JSON:")
+	
+	// Try to pretty-print the JSON
+	var prettyJSON bytes.Buffer
+	err = json.Indent(&prettyJSON, data, "      ", "  ")
+	if err != nil {
+		// If we can't pretty-print, show the raw data
 		dataStr := string(data)
 		if len(dataStr) > 1000 {
 			dataStr = dataStr[:1000] + "... [truncated]"
 		}
 		fmt.Printf("      %s\n", dataStr)
+	} else {
+		// Print the pretty JSON
+		fmt.Printf("      %s\n", prettyJSON.String())
+	}
+	
+	// Now try to unmarshal the JSON data into a CometBFT GenesisDoc
+	var doc types.GenesisDoc
+	if err := json.Unmarshal(data, &doc); err != nil {
+		// If we can't unmarshal directly to GenesisDoc, print error details
 		return fmt.Errorf("unmarshal consensus data: %w", err)
 	}
 	

@@ -8,7 +8,9 @@ package genesis
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -52,18 +54,44 @@ func DocProvider(config *tm.Config) node.GenesisDocProvider {
 func ConvertSnapshotToJson(snap []byte) (*types.GenesisDoc, error) {
 	s, err := snapshot.Open(bytes.NewReader(snap))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to open snapshot: %w", err)
 	}
 
 	// Read the consensus section
 	rd, err := s.Open(snapshot.SectionTypeConsensus)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to open consensus section: %w", err)
 	}
-	p := new(cometbft.GenesisDoc)
-	err = p.UnmarshalBinaryFrom(rd)
+	
+	// Read the entire consensus section content
+	consensusData, err := io.ReadAll(rd)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to read consensus section: %w", err)
+	}
+	
+	// Log the consensus section content for debugging
+	fmt.Printf("DEBUG: Consensus section size: %d bytes\n", len(consensusData))
+	if len(consensusData) < 1000 {
+		fmt.Printf("DEBUG: Consensus section content: %s\n", string(consensusData))
+	} else {
+		fmt.Printf("DEBUG: Consensus section content (first 1000 bytes): %s...\n", string(consensusData[:1000]))
+	}
+	
+	p := new(cometbft.GenesisDoc)
+	
+	// First try to unmarshal as JSON
+	err = json.Unmarshal(consensusData, p)
+	if err != nil {
+		fmt.Printf("DEBUG: Failed to unmarshal consensus section as JSON: %v\n", err)
+		fmt.Printf("DEBUG: Falling back to binary unmarshaling\n")
+		
+		// Fall back to binary unmarshaling
+		err = p.UnmarshalBinary(consensusData)
+		if err != nil {
+			return nil, fmt.Errorf("failed to unmarshal consensus section (tried both JSON and binary): %w", err)
+		}
+	} else {
+		fmt.Printf("DEBUG: Successfully unmarshaled consensus section as JSON\n")
 	}
 
 	// Convert

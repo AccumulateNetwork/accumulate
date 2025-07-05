@@ -51,6 +51,12 @@ var cmdAnalyzeExtract = &cobra.Command{
 			}
 			state.ValidatorKeys = validatorKeys
 		}
+		
+		// Get partition snapshots directory from command line
+		partitionSnapshotsDir, _ := cmd.Flags().GetString("partition-snapshots")
+		if partitionSnapshotsDir != "" {
+			state.PartitionSnapshotsDir = partitionSnapshotsDir
+		}
 
 		// Run the extraction
 		err := state.Run()
@@ -66,6 +72,7 @@ var cmdAnalyzeExtract = &cobra.Command{
 func init() {
 	// Add flags to the extract command
 	cmdAnalyzeExtract.Flags().StringSlice("validator-keys", nil, "Comma-separated list of validator public keys (hex encoded)")
+	cmdAnalyzeExtract.Flags().String("partition-snapshots", "/tmp/partition-snapshots", "Directory to write partition-specific snapshots")
 
 	// Register commands
 	cmdAnalyze.AddCommand(cmdAnalyzeExtract)

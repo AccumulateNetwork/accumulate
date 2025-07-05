@@ -110,8 +110,9 @@ type SectionTypeMap struct {
 // NOTE: We are NOT using accessors. All fields are exported (capitalized) for direct access.
 type ExtractState struct {
 	// Input parameters
-	SnapshotFile string // Path to the snapshot file
-	NetworkFile  string // Path to the network.json file
+	SnapshotFile          string // Path to the snapshot file
+	NetworkFile           string // Path to the network.json file
+	PartitionSnapshotsDir string // Directory to write partition-specific snapshots
 
 	// Network configuration from network.json
 	NetworkConfig *NetworkConfig // Parsed network.json structure
@@ -365,7 +366,10 @@ func (s *ExtractState) writePartitionSnapshots() error {
 	fmt.Println("\nWriting partition-specific snapshots...")
 
 	// Create output directory if it doesn't exist
-	outputDir := "/tmp/partition-snapshots"
+	outputDir := s.PartitionSnapshotsDir
+	if outputDir == "" {
+		outputDir = "/tmp/partition-snapshots" // Default if not specified
+	}
 	err := os.MkdirAll(outputDir, 0755)
 	if err != nil {
 		return fmt.Errorf("failed to create output directory: %w", err)
