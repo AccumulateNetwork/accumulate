@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 
-	"github.com/cometbft/cometbft/types"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 )
@@ -108,7 +107,10 @@ func displayConsensusSection(reader io.Reader) error {
 		return fmt.Errorf("read consensus section: %w", err)
 	}
 	
-	// First, print the raw JSON in a pretty format
+	// Print basic information about the consensus section
+	fmt.Printf("\n    Consensus Section Size: %d bytes\n", len(data))
+	
+	// Print the raw JSON in a pretty format
 	fmt.Println("\n    Consensus Section Raw JSON:")
 	
 	// Try to pretty-print the JSON
@@ -117,78 +119,14 @@ func displayConsensusSection(reader io.Reader) error {
 	if err != nil {
 		// If we can't pretty-print, show the raw data
 		dataStr := string(data)
-		if len(dataStr) > 1000 {
-			dataStr = dataStr[:1000] + "... [truncated]"
+		if len(dataStr) > 2000 {
+			dataStr = dataStr[:2000] + "... [truncated]"
 		}
-		fmt.Printf("      %s\n", dataStr)
+		fmt.Printf("      Raw data (not valid JSON): %s\n", dataStr)
+		fmt.Printf("      JSON parsing error: %v\n", err)
 	} else {
 		// Print the pretty JSON
 		fmt.Printf("      %s\n", prettyJSON.String())
-	}
-	
-	// Now try to unmarshal the JSON data into a CometBFT GenesisDoc
-	var doc types.GenesisDoc
-	if err := json.Unmarshal(data, &doc); err != nil {
-		// If we can't unmarshal directly to GenesisDoc, print error details
-		return fmt.Errorf("unmarshal consensus data: %w", err)
-	}
-	
-	// Display the consensus information
-	fmt.Println("\n    Consensus Information:")
-	fmt.Printf("      Chain ID: %s\n", doc.ChainID)
-	if !doc.GenesisTime.IsZero() {
-		fmt.Printf("      Genesis Time: %s\n", doc.GenesisTime)
-	}
-	
-	// Display consensus parameters if available
-	if doc.ConsensusParams != nil {
-		fmt.Println("      Consensus Parameters:")
-		
-		// Block parameters
-		fmt.Printf("        Block Max Bytes: %d\n", doc.ConsensusParams.Block.MaxBytes)
-		fmt.Printf("        Block Max Gas: %d\n", doc.ConsensusParams.Block.MaxGas)
-		
-		// Evidence parameters
-		fmt.Printf("        Evidence Max Age Num Blocks: %d\n", doc.ConsensusParams.Evidence.MaxAgeNumBlocks)
-		fmt.Printf("        Evidence Max Age Duration: %s\n", doc.ConsensusParams.Evidence.MaxAgeDuration)
-	}
-	
-	// Display validator information
-	if len(doc.Validators) > 0 {
-		fmt.Printf("      Validators: %d\n", len(doc.Validators))
-		for i, val := range doc.Validators {
-			if i >= 5 { // Only show first 5 validators
-				break
-			}
-			
-			// Display validator information safely
-			name := val.Name
-			power := val.Power
-			
-			// Handle PubKey display
-			pubKeyType := "<unknown>"
-			pubKeyValue := "<unknown>"
-			if val.PubKey != nil {
-				pubKeyType = val.PubKey.Type()
-				
-				// Safely display truncated public key
-				pubKeyBytes := val.PubKey.Bytes()
-				if len(pubKeyBytes) >= 8 {
-					pubKeyValue = fmt.Sprintf("%X", pubKeyBytes[:8]) + "..."
-				} else if len(pubKeyBytes) > 0 {
-					pubKeyValue = fmt.Sprintf("%X", pubKeyBytes)
-				}
-			}
-			
-			fmt.Printf("        %d: %s (Power: %d, PubKey: %s/%s)\n", 
-				i+1, name, power, pubKeyType, pubKeyValue)
-		}
-		
-		if len(doc.Validators) > 5 {
-			fmt.Printf("        ... and %d more validators\n", len(doc.Validators)-5)
-		}
-	} else {
-		fmt.Println("      No validators defined")
 	}
 	
 	return nil

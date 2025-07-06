@@ -167,8 +167,9 @@ func reportRoutingPartitions(extractState *ExtractState) {
 	// Test routing with known partition names from network config
 	if extractState.NetworkConfig != nil && extractState.NetworkConfig.Globals.Network.Partitions != nil {
 		fmt.Printf("  Network Config Partitions: %d\n", len(extractState.NetworkConfig.Globals.Network.Partitions))
-		for i, partition := range extractState.NetworkConfig.Globals.Network.Partitions {
-			fmt.Printf("    %d: %s (Type: %s)\n", i+1, partition.ID, partition.Type)
+		for _, partition := range extractState.NetworkConfig.Globals.Network.Partitions {
+			fmt.Printf("  Partition: %s (Type: %s)\n", partition.ID, partition.Type)
+
 		}
 	}
 

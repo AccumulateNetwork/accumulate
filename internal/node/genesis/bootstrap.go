@@ -172,7 +172,7 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) error {
 			}
 
 			// Write it
-			b, err := doc.MarshalBinary()
+			b, err := json.Marshal(doc)
 			if err != nil {
 				return err
 			}

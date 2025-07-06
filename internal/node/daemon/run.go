@@ -645,11 +645,14 @@ func (d *Daemon) StartP2P() error {
 		return errors.UnknownError.Wrap(err)
 	}
 
+	// Load node keys and convert 32-byte seed to 64-byte ed25519 private key
+	privKeySeed := d.nodeKey.PrivKey.Bytes()
+	p2pKey := ed25519.NewKeyFromSeed(privKeySeed)
 	d.p2pnode, err = p2p.New(p2p.Options{
 		Network:        d.Config.Accumulate.Network.Id,
 		Listen:         d.Config.Accumulate.P2P.Listen,
 		BootstrapPeers: d.Config.Accumulate.P2P.BootstrapPeers,
-		Key:            ed25519.PrivateKey(d.nodeKey.PrivKey.Bytes()),
+		Key:            p2pKey,
 		DiscoveryMode:  dht.ModeServer,
 	})
 	if err != nil {

@@ -20,6 +20,17 @@ type NetworkConfig struct {
 	
 	// Globals contains network-wide configuration
 	Globals struct {
+		// Oracle contains oracle configuration
+		Oracle struct {
+			Price int `json:"price"`
+		} `json:"oracle"`
+		
+		// Globals contains the nested globals configuration
+		Globals struct {
+			// Add other fields as needed
+		} `json:"globals"`
+		
+		// Network contains the network configuration
 		Network struct {
 			// NetworkName is the name of the network
 			NetworkName string `json:"networkName"`

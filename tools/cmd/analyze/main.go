@@ -38,6 +38,9 @@ func init() {
 	rootCmd.AddCommand(sc_Cmd)
 	rootCmd.AddCommand(cmdAnalyzeExtract) // Add the extract command
 	rootCmd.AddCommand(InfoCommand()) // Add the info command
+	rootCmd.AddCommand(cmdGenerateKey) // Add the generate-key command
+	rootCmd.AddCommand(cmdUpdateKey) // Add the update command
+	rootCmd.AddCommand(cmdGenerateConsensusSection) // Add the generate-consensus-section command
 
 }
 

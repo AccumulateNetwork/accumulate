@@ -37,7 +37,7 @@ func (sk ED25519PrivateKey) Address() address.Address {
 }
 
 func (sk ED25519PrivateKey) Sign(message []byte) ([]byte, error) {
-	return ed25519.Sign(ed25519.PrivateKey(sk), message), nil
+	return ed25519.Sign(ed25519.NewKeyFromSeed(sk), message), nil
 }
 
 // signerShim is a shim so [Signer] can be used as a [signing.Signer].

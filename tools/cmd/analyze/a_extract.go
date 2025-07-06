@@ -46,6 +46,16 @@ func ParseNetworkJson(networkFile string) (*NetworkConfig, error) {
 		return nil, fmt.Errorf("failed to parse network.json: %w", err)
 	}
 
+	// Debug output
+	fmt.Printf("DEBUG: Parsed network config:\n")
+	fmt.Printf("  ID: %s\n", config.ID)
+	fmt.Printf("  Oracle Price: %d\n", config.Globals.Oracle.Price)
+	fmt.Printf("  Network Name: %s\n", config.Globals.Network.NetworkName)
+	fmt.Printf("  Partitions Count: %d\n", len(config.Globals.Network.Partitions))
+	for i, p := range config.Globals.Network.Partitions {
+		fmt.Printf("    %d: %s (%s)\n", i, p.ID, p.Type)
+	}
+
 	return &config, nil
 }
 
@@ -60,7 +70,7 @@ func PrintRoutingInfo(config *NetworkConfig) {
 
 // InitializeRouting initializes the routing configuration
 func InitializeRouting(config *NetworkConfig) (routing.Router, error) {
-	fmt.Println("Initializing routing with", len(config.Globals.Network.Partitions), "partitions")
+	fmt.Printf("Initializing routing with %d partitions\n", len(config.Globals.Network.Partitions))
 	
 	// Create a routing table from the network configuration
 	routingTable := &protocol.RoutingTable{}

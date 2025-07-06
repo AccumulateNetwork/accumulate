@@ -95,7 +95,7 @@ func (d *Daemon) startSummary() error {
 			Network:        d.Config.Accumulate.Network.Id,
 			Listen:         d.Config.Accumulate.P2P.Listen,
 			BootstrapPeers: d.Config.Accumulate.P2P.BootstrapPeers,
-			Key:            ed25519.PrivateKey(d.nodeKey.PrivKey.Bytes()),
+			Key:            ed25519.NewKeyFromSeed(d.nodeKey.PrivKey.Bytes()),
 			DiscoveryMode:  dht.ModeServer,
 		})
 		if err != nil {

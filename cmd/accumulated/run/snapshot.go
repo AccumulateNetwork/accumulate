@@ -8,6 +8,7 @@ package run
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"log/slog"
@@ -296,7 +297,7 @@ func (c *snapshotCollector) collectConsensusDoc(w *sv2.Writer, minorBlock uint64
 	doc := new(cometbft.GenesisDoc)
 	doc.Block = (*cometbft.Block)(block.Block)
 
-	b, err := doc.MarshalBinary()
+	b, err := json.Marshal(doc)
 	if err != nil {
 		return errors.UnknownError.WithFormat("marshal consensus doc: %w", err)
 	}

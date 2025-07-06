@@ -130,7 +130,7 @@ func TestValidateNetwork(t *testing.T) {
 		network = node.Config.Accumulate.Network.Id
 		key, err := tmp2p.LoadNodeKey(node.Config.NodeKeyFile())
 		require.NoError(t, err)
-		ed := ed25519.PrivateKey(key.PrivKey.Bytes())
+		ed := ed25519.NewKeyFromSeed(key.PrivKey.Bytes())
 		sk, _, err := crypto.KeyPairFromStdKey(&ed)
 		require.NoError(t, err)
 		id, err := peer.IDFromPrivateKey(sk)
