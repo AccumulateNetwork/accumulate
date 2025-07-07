@@ -645,9 +645,20 @@ func (d *Daemon) StartP2P() error {
 		return errors.UnknownError.Wrap(err)
 	}
 
-	// Load node keys and convert 32-byte seed to 64-byte ed25519 private key
-	privKeySeed := d.nodeKey.PrivKey.Bytes()
-	p2pKey := ed25519.NewKeyFromSeed(privKeySeed)
+	// Load node keys and extract seed for ed25519 key generation
+	privKeyBytes := d.nodeKey.PrivKey.Bytes()
+	var p2pKey ed25519.PrivateKey
+	
+	// Handle different Ed25519 private key formats
+	switch len(privKeyBytes) {
+	case ed25519.SeedSize: // 32 bytes - seed only
+		p2pKey = ed25519.NewKeyFromSeed(privKeyBytes)
+	case ed25519.PrivateKeySize: // 64 bytes - seed + public key
+		// Extract the first 32 bytes as the seed
+		p2pKey = ed25519.NewKeyFromSeed(privKeyBytes[:ed25519.SeedSize])
+	default:
+		return errors.UnknownError.WithFormat("invalid ed25519 private key length: want 32 or 64, got %d", len(privKeyBytes))
+	}
 	d.p2pnode, err = p2p.New(p2p.Options{
 		Network:        d.Config.Accumulate.Network.Id,
 		Listen:         d.Config.Accumulate.P2P.Listen,

@@ -57,17 +57,7 @@ var cmdGenKey = &cobra.Command{
 		h := sha256.Sum256(pubKey)
 		address := hex.EncodeToString(h[:20])
 
-		pvKey := struct {
-			Address string `json:"address"`
-			PubKey  struct {
-				Type  string `json:"type"`
-				Value string `json:"value"`
-			} `json:"pub_key"`
-			PrivKey struct {
-				Type  string `json:"type"`
-				Value string `json:"value"`
-			} `json:"priv_key"`
-		}{
+		pvKey := PrivValidatorKey{
 			Address: address,
 		}
 		pvKey.PubKey.Type = "tendermint/PubKeyEd25519"

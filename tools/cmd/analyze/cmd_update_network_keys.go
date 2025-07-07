@@ -29,67 +29,13 @@ func init() {
 	cmdUpdateNetworkKeys.MarkFlagRequired("artifacts")
 }
 
-type networkConfig struct {
-	// ID is the network identifier
-	ID string `json:"id"`
-	
-	// Template is the validator template configuration
-	Template string `json:"template,omitempty"`
-	
-	// Globals contains network-wide configuration
-	Globals struct {
-		// Oracle contains oracle configuration
-		Oracle struct {
-			Price int `json:"price"`
-		} `json:"oracle"`
-		
-		// Globals contains the nested globals configuration
-		Globals json.RawMessage `json:"globals,omitempty"`
-		
-		// Network contains the network configuration
-		Network struct {
-			// NetworkName is the name of the network
-			NetworkName string `json:"networkName"`
-			
-			// Partitions defines the network partitions
-			Partitions []struct {
-				ID   string `json:"id"`
-				Type string `json:"type"`
-			} `json:"partitions"`
-			
-			// Validators defines the network validators
-			Validators []struct {
-				// Operator is the validator operator name
-				Operator string `json:"operator"`
-				
-				// PublicKey is the validator's public key (base64 encoded)
-				PublicKey string `json:"publicKey"`
-				
-				// Partitions defines which partitions this validator is active for
-				Partitions []struct {
-					// ID is the partition ID
-					ID string `json:"id"`
-					
-					// Active indicates if the validator is active for this partition
-					Active bool `json:"active"`
-				} `json:"partitions"`
-			} `json:"validators"`
-		} `json:"network"`
-		
-		// Routing contains routing configuration (preserved as raw JSON)
-		Routing json.RawMessage `json:"routing,omitempty"`
-	} `json:"globals"`
-}
+// Using existing NetworkConfig struct from a_extract_network.go
 
 func updateNetworkKeys(cmd *cobra.Command, args []string) error {
-	// Read and parse the network config
-	data, err := ioutil.ReadFile(networkFile)
+	// Parse network configuration using existing function
+	netCfg, err := ParseNetworkJson(networkFile)
 	if err != nil {
-		return fmt.Errorf("read network file: %w", err)
-	}
-	var netCfg networkConfig
-	if err := json.Unmarshal(data, &netCfg); err != nil {
-		return fmt.Errorf("unmarshal network json: %w", err)
+		return fmt.Errorf("parse network config: %w", err)
 	}
 
 	// For each validator, update the publicKey from the corresponding key file
@@ -101,11 +47,7 @@ func updateNetworkKeys(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return fmt.Errorf("read key file for %s: %w", adiName, err)
 		}
-		var keyFile struct {
-			PubKey struct {
-				Value string `json:"value"`
-			} `json:"pub_key"`
-		}
+		var keyFile PrivValidatorKey
 		if err := json.Unmarshal(keyData, &keyFile); err != nil {
 			return fmt.Errorf("unmarshal key file for %s: %w", adiName, err)
 		}

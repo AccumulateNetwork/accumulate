@@ -21,61 +21,37 @@ import (
 )
 
 var cmdGenerateConsensusSection = &cobra.Command{
-	Use:   "generate-consensus-section",
+	Use:   "generate-consensus-section <network-config-file> <partition-id> <output-file>",
 	Short: "Generate CometBFT-compatible consensus section for a specific partition",
 	Long: `Generate a standalone consensus section JSON file for a specific partition.
 This creates a CometBFT GenesisDoc structure containing validators and configuration
-for the specified partition, which can be embedded in partition snapshots.`,
-	Args: cobra.NoArgs,
+for the specified partition, which can be embedded in partition snapshots.
+
+Arguments:
+  network-config-file  Path to network configuration JSON file
+  partition-id         Partition ID to generate consensus section for
+  output-file          Output file path for consensus section JSON`,
+	Args: cobra.ExactArgs(3),
 	RunE: generateConsensusSection,
 }
 
-var (
-	flagNetworkConfig string
-	flagPartition     string
-	flagOutput        string
-)
-
 func init() {
-	cmdGenerateConsensusSection.Flags().StringVar(&flagNetworkConfig, "network-config", "", "Path to network configuration JSON file")
-	cmdGenerateConsensusSection.Flags().StringVar(&flagPartition, "partition", "", "Partition ID to generate consensus section for")
-	cmdGenerateConsensusSection.Flags().StringVar(&flagOutput, "output", "", "Output file path for consensus section JSON")
-	
-	cmdGenerateConsensusSection.MarkFlagRequired("network-config")
-	cmdGenerateConsensusSection.MarkFlagRequired("partition")
-	cmdGenerateConsensusSection.MarkFlagRequired("output")
+	// No flags needed - using positional arguments
 }
 
 func generateConsensusSection(cmd *cobra.Command, args []string) error {
-	// Read network configuration
-	networkData, err := os.ReadFile(flagNetworkConfig)
+	// Parse positional arguments
+	flagNetworkConfig := args[0]
+	flagPartition := args[1]
+	flagOutput := args[2]
+	
+	// Parse network configuration using existing function
+	networkConfig, err := ParseNetworkJson(flagNetworkConfig)
 	if err != nil {
-		return fmt.Errorf("failed to read network config: %w", err)
-	}
-
-	// Parse network configuration (matches cyclops network JSON structure)
-	var networkConfig struct {
-		Globals struct {
-			Network struct {
-				Partitions []struct {
-					ID   string `json:"id"`
-					Type string `json:"type"`
-				} `json:"partitions"`
-				Validators []struct {
-					Operator   string `json:"operator"`
-					PublicKey  string `json:"publicKey"`
-					Partitions []struct {
-						ID     string `json:"id"`
-						Active bool   `json:"active"`
-					} `json:"partitions"`
-				} `json:"validators"`
-			} `json:"network"`
-		} `json:"globals"`
-	}
-
-	if err := json.Unmarshal(networkData, &networkConfig); err != nil {
 		return fmt.Errorf("failed to parse network config: %w", err)
 	}
+
+	fmt.Printf("Looking for partition: %q\n", flagPartition)
 
 	// Find the target partition
 	var targetPartition *struct {

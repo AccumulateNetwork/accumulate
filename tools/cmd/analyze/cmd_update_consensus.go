@@ -35,13 +35,7 @@ type Validator struct {
 	Name    string `json:"name"`
 }
 
-type ValidatorKey struct {
-	Address string `json:"address"`
-	PubKey  struct {
-		Type  string `json:"type"`
-		Value string `json:"value"`
-	} `json:"pub_key"`
-}
+
 
 func updateConsensusFiles(cmd *cobra.Command, args []string) error {
 	artifactsDir, _ := cmd.Flags().GetString("artifacts")
@@ -95,22 +89,22 @@ func updateConsensusFiles(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func readValidatorKey(path string) (*ValidatorKey, error) {
+func readValidatorKey(path string) (*PrivValidatorKey, error) {
 	data, err := ioutil.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
 
-	var key ValidatorKey
-	err = json.Unmarshal(data, &key)
+	var validatorKey PrivValidatorKey
+	err = json.Unmarshal(data, &validatorKey)
 	if err != nil {
 		return nil, err
 	}
 
-	return &key, nil
+	return &validatorKey, nil
 }
 
-func updateConsensusFile(path string, key *ValidatorKey, chainId string) error {
+func updateConsensusFile(path string, key *PrivValidatorKey, chainId string) error {
 	data, err := ioutil.ReadFile(path)
 	if err != nil {
 		return err
