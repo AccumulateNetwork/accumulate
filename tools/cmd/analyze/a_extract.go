@@ -39,6 +39,13 @@ func ParseNetworkJson(networkFile string) (*NetworkConfig, error) {
 		return nil, fmt.Errorf("failed to read network.json: %w", err)
 	}
 
+	// Debug: Print first 500 chars of JSON
+	maxLen := 500
+	if len(data) < maxLen {
+		maxLen = len(data)
+	}
+	fmt.Printf("DEBUG: JSON content (first %d chars): %s\n", maxLen, string(data[:maxLen]))
+
 	// Parse JSON
 	var config NetworkConfig
 	err = json.Unmarshal(data, &config)

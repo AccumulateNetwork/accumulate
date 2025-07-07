@@ -7,6 +7,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -88,7 +89,7 @@ func WriteConsensusSection(writer *sv2.Writer, extractState *ExtractState, targe
 			}
 
 			// Decode base64 validator key
-			keyBytes, err := hex.DecodeString(validator.PublicKey)
+			keyBytes, err := base64.StdEncoding.DecodeString(validator.PublicKey)
 			if err != nil {
 				fmt.Printf("Warning: Failed to decode validator key for node: %v\n", err)
 				continue

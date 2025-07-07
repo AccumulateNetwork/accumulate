@@ -7,15 +7,17 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/spf13/cobra"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	cometbft "github.com/cometbft/cometbft/types"
+	"github.com/cometbft/cometbft/types"
+	crypted25519 "github.com/cometbft/cometbft/crypto/ed25519"
+	stded25519 "crypto/ed25519"
 )
 
 var cmdGenerateConsensusSection = &cobra.Command{
@@ -51,22 +53,24 @@ func generateConsensusSection(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to read network config: %w", err)
 	}
 
-	// Parse network configuration
+	// Parse network configuration (matches cyclops network JSON structure)
 	var networkConfig struct {
-		Network struct {
-			Partitions []struct {
-				ID         string `json:"id"`
-				Type       string `json:"type"`
+		Globals struct {
+			Network struct {
+				Partitions []struct {
+					ID   string `json:"id"`
+					Type string `json:"type"`
+				} `json:"partitions"`
 				Validators []struct {
-					Operator  string `json:"operator"`
-					PublicKey string `json:"publicKey"`
+					Operator   string `json:"operator"`
+					PublicKey  string `json:"publicKey"`
+					Partitions []struct {
+						ID     string `json:"id"`
+						Active bool   `json:"active"`
+					} `json:"partitions"`
 				} `json:"validators"`
-			} `json:"partitions"`
-			Validators []struct {
-				Operator  string `json:"operator"`
-				PublicKey string `json:"publicKey"`
-			} `json:"validators"`
-		} `json:"network"`
+			} `json:"network"`
+		} `json:"globals"`
 	}
 
 	if err := json.Unmarshal(networkData, &networkConfig); err != nil {
@@ -75,17 +79,13 @@ func generateConsensusSection(cmd *cobra.Command, args []string) error {
 
 	// Find the target partition
 	var targetPartition *struct {
-		ID         string `json:"id"`
-		Type       string `json:"type"`
-		Validators []struct {
-			Operator  string `json:"operator"`
-			PublicKey string `json:"publicKey"`
-		} `json:"validators"`
+		ID   string `json:"id"`
+		Type string `json:"type"`
 	}
 
-	for i := range networkConfig.Network.Partitions {
-		if networkConfig.Network.Partitions[i].ID == flagPartition {
-			targetPartition = &networkConfig.Network.Partitions[i]
+	for i := range networkConfig.Globals.Network.Partitions {
+		if networkConfig.Globals.Network.Partitions[i].ID == flagPartition {
+			targetPartition = &networkConfig.Globals.Network.Partitions[i]
 			break
 		}
 	}
@@ -103,37 +103,49 @@ func generateConsensusSection(cmd *cobra.Command, args []string) error {
 		PublicKey string `json:"publicKey"`
 	}
 
-	// If partition has specific validators, use those
-	if len(targetPartition.Validators) > 0 {
-		activeValidators = targetPartition.Validators
-		fmt.Printf("Using partition-specific validators: %d\n", len(activeValidators))
-	} else {
-		// Otherwise, use all network validators (for Directory Network)
-		activeValidators = networkConfig.Network.Validators
-		fmt.Printf("Using all network validators: %d\n", len(activeValidators))
+	// Find validators that are assigned to this partition
+	for _, netValidator := range networkConfig.Globals.Network.Validators {
+		// Check if this validator is assigned to the target partition
+		for _, partition := range netValidator.Partitions {
+			if partition.ID == flagPartition && partition.Active {
+				activeValidators = append(activeValidators, struct {
+					Operator  string `json:"operator"`
+					PublicKey string `json:"publicKey"`
+				}{
+					Operator:  netValidator.Operator,
+					PublicKey: netValidator.PublicKey,
+				})
+				break
+			}
+		}
 	}
+	fmt.Printf("Found %d active validators for partition %s\n", len(activeValidators), flagPartition)
 
 	if len(activeValidators) == 0 {
 		return fmt.Errorf("no validators found for partition: %s", flagPartition)
 	}
 
 	// Create CometBFT validators
-	var cometValidators []cometbft.GenesisValidator
+	var cometValidators []types.GenesisValidator
 	for _, validator := range activeValidators {
 		if validator.PublicKey == "" {
 			return fmt.Errorf("validator %s missing public key", validator.Operator)
 		}
 
-		// Parse the public key
-		pubKeyBytes, err := encoding.ParsePublicKey(validator.PublicKey)
+		// Parse the public key (base64 string)
+		pubKeyBytes, err := base64.StdEncoding.DecodeString(validator.PublicKey)
 		if err != nil {
-			return fmt.Errorf("failed to parse public key for validator %s: %w", validator.Operator, err)
+			return fmt.Errorf("failed to decode public key for validator %s: %w", validator.Operator, err)
 		}
+		if len(pubKeyBytes) != stded25519.PublicKeySize {
+			return fmt.Errorf("invalid ed25519 public key length for validator %s", validator.Operator)
+		}
+		cometPubKey := crypted25519.PubKey(pubKeyBytes)
 
 		// Create CometBFT validator
-		cometValidator := cometbft.GenesisValidator{
-			Address: pubKeyBytes.Address(),
-			PubKey:  pubKeyBytes,
+		cometValidator := types.GenesisValidator{
+			Address: cometPubKey.Address(),
+			PubKey:  cometPubKey,
 			Power:   1, // Equal voting power for all validators
 			Name:    validator.Operator,
 		}
@@ -143,10 +155,10 @@ func generateConsensusSection(cmd *cobra.Command, args []string) error {
 	}
 
 	// Create consensus section (CometBFT GenesisDoc)
-	consensusSection := &cometbft.GenesisDoc{
+	consensusSection := &types.GenesisDoc{
 		ChainID:         fmt.Sprintf("cyclops.%s", flagPartition),
-		GenesisTime:     cometbft.DefaultGenesisDocFromMap(nil).GenesisTime, // Use default genesis time
-		ConsensusParams: cometbft.DefaultConsensusParams(),
+		GenesisTime:     time.Now().UTC(),
+		ConsensusParams: types.DefaultConsensusParams(),
 		Validators:      cometValidators,
 		AppHash:         nil,
 		AppState:        nil,

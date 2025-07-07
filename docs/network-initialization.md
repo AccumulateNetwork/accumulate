@@ -291,6 +291,364 @@ This structure ensures that each node has all the necessary configuration files 
 
 This directory structure ensures that each node has access to the genesis files it needs to initialize its state and participate in the network.
 
+## Network Initialization Process Overview
+
+### Fundamental Process
+
+The network initialization process follows these core steps:
+
+1. **Merge all databases together** - Collect snapshots from existing partitions
+2. **Generate a new genesis document** from the merged databases
+3. **On each node**:
+   - Reset Tendermint's state
+   - Copy over the new genesis document
+   - Reboot
+
+This process allows for network upgrades, migrations, and fresh network deployments using existing state data.
+
+### Network Configuration Structures
+
+The network configuration is defined by Go structs that marshal/unmarshal the `network.json` file. There are currently **two versions** in the codebase:
+
+#### 1. Authoritative NetworkConfig Struct
+**Location**: `tools/cmd/analyze/a_extract_network.go`
+
+```go
+type NetworkConfig struct {
+    ID string `json:"id"`
+    Globals struct {
+        Oracle struct {
+            Price int `json:"price"`
+        } `json:"oracle"`
+        
+        Globals struct {
+            // Add other fields as needed
+        } `json:"globals"`
+        
+        Network struct {
+            NetworkName string `json:"networkName"`
+            Partitions []struct {
+                ID   string `json:"id"`
+                Type string `json:"type"`
+            } `json:"partitions"`
+            
+            Validators []struct {
+                Operator string `json:"operator"`
+                PublicKey string `json:"publicKey"` // hex encoded
+                Partitions []struct {
+                    ID string `json:"id"`
+                    Active bool `json:"active"`
+                } `json:"partitions"`
+            } `json:"validators"`
+        } `json:"network"`
+    } `json:"globals"`
+}
+```
+
+#### 2. Enhanced networkConfig Struct (with field preservation)
+**Location**: `tools/cmd/analyze/cmd_update_network_keys.go`
+
+```go
+type networkConfig struct {
+    ID string `json:"id"`
+    Template string `json:"template,omitempty"`
+    Globals struct {
+        Oracle struct {
+            Price int `json:"price"`
+        } `json:"oracle"`
+        
+        Globals json.RawMessage `json:"globals,omitempty"`
+        
+        Network struct {
+            NetworkName string `json:"networkName"`
+            Partitions []struct {
+                ID   string `json:"id"`
+                Type string `json:"type"`
+            } `json:"partitions"`
+            
+            Validators []struct {
+                Operator string `json:"operator"`
+                PublicKey string `json:"publicKey"` // base64 encoded
+                Partitions []struct {
+                    ID string `json:"id"`
+                    Active bool `json:"active"`
+                } `json:"partitions"`
+            } `json:"validators"`
+        } `json:"network"`
+        
+        Routing json.RawMessage `json:"routing,omitempty"`
+    } `json:"globals"`
+}
+```
+
+**Important**: The second struct uses `json.RawMessage` for field preservation and includes additional fields (`template`, `routing`) that the first struct lacks. This inconsistency can cause data loss when marshaling/unmarshaling network configurations.
+
+## Debug Commands for Network Initialization
+
+### `debug snap collect`
+
+Collects a snapshot from a database with various control options.
+
+**Usage:**
+```bash
+debug snap collect <source> <destination>
+```
+
+**Example:**
+```bash
+debug snap collect badger:///path/to/accumulate.db /home/paul/work/acc1/unified.snap --indexed
+```
+
+**Source formats:**
+- `badger:///path/to/accumulate.db` - BadgerDB database
+- Other database formats supported
+
+**Key Flags:**
+- `--skip-system` - Skip system-specific data
+- `--skip-bpt` - Skip BPT (Binary Patricia Tree) data
+- `--indexed` - Create indexed snapshot
+
+**Purpose:** Extracts current state from a running node's database into a portable snapshot format.
+
+### `debug genesis ingest`
+
+Ingests multiple partition snapshots and produces a unified database suitable for genesis.
+
+**Usage:**
+```bash
+debug genesis ingest <output> <inputs...>
+```
+
+**Example:**
+```bash
+debug genesis ingest badger:///home/paul/work/acc1/combined.db bvn0.snap bvn1.snap bvn2.snap dn.snap
+```
+
+**Process:**
+1. Reads snapshots from the Directory Network (DN) and each Block Validator Network (BVN)
+2. Merges all partition data into a unified database
+3. Preserves main and scratch chains for user accounts and their transactions
+4. Strips system-specific data that shouldn't carry over to new network
+5. Optimizes the database structure for genesis initialization
+
+**Relevant Code:**
+- `tools/cmd/debug/genesis.go` - Command implementation
+- `internal/node/genesis/extract.go` - Core extraction logic
+
+### Complete Snapshot Collection Example
+
+```bash
+# Collect unified snapshot with logging
+debug snap collect badger:///home/paul/work/acc1/combined.db \
+  /home/paul/work/acc1/unified.snap \
+  --indexed &> /home/paul/work/acc1/unified.log
+```
+
+## Network Initialization Commands
+
+### `accumulated init network`
+
+Creates a new network starting with accounts from a unified snapshot.
+
+**Usage:**
+```bash
+accumulated init network <config-file> [options]
+```
+
+**Example:**
+```bash
+accumulated init genesis network.json \
+  -w dir-for-new-nodes \
+  --snapshot unified.snap
+```
+
+**Process:**
+1. Reads the network configuration file
+2. Creates node directories and configurations
+3. Generates or reuses validator keys
+4. Initializes each node with the unified snapshot
+5. Creates CometBFT configuration files
+6. Sets up proper genesis documents for each partition
+
+**Configuration Options:**
+- **LevelDB Usage**: Passing a template configuration will configure nodes to use LevelDB
+- **Healing Disabled**: Built-in healing is disabled as it's currently broken
+- **Snapshots Disabled**: Automatic snapshots are disabled due to reliability issues
+- **New Configuration Schema**: Automatically uses the latest configuration format
+
+**Post-Creation Notes:**
+- Nodes created later with AccMan or manual init commands need manual configuration updates
+- All new nodes automatically use the new configuration schema
+
+## Network Configuration Examples
+
+### Kermit Network Configuration
+
+Example of a complete network configuration for the "Kermit" test network:
+
+```json
+{
+    "id": "Kermit",
+    "globals": {
+        "executorVersion": "v2-vandenberg",
+        "oracle": {
+            "price": 500000
+        },
+        "globals": {
+            "feeSchedule": {
+                "createIdentitySliding": [
+                    400000
+                ],
+                "createSubIdentity": 10000,
+                "bareIdentityDiscount": 10000
+            },
+            "limits": {
+                "identityAccounts": 1000
+            }
+        },
+        "routing": {
+            "routes": [
+                {
+                    "length": 2,
+                    "partition": "Chico"
+                },
+                {
+                    "length": 2,
+                    "partition": "Harpo",
+                    "value": 1
+                },
+                {
+                    "length": 2,
+                    "partition": "Groucho",
+                    "value": 2
+                },
+                {
+                    "length": 3,
+                    "partition": "Chico",
+                    "value": 6
+                },
+                {
+                    "length": 4,
+                    "partition": "Harpo",
+                    "value": 14
+                },
+                {
+                    "length": 4,
+                    "partition": "Groucho",
+                    "value": 15
+                }
+            ]
+        }
+    },
+    "bvns": [
+        {
+            "id": "Chico",
+            "nodes": [
+                {
+                    "dnnType": "validator",
+                    "bvnnType": "validator",
+                    "basePort": 16591,
+                    "advertizeAddress": "kermit-bvn0.accumulate.defidevs.io"
+                }
+            ]
+        },
+        {
+            "id": "Harpo",
+            "nodes": [
+                {
+                    "dnnType": "validator",
+                    "bvnnType": "validator",
+                    "basePort": 16591,
+                    "advertizeAddress": "kermit-bvn1.accumulate.defidevs.io"
+                }
+            ]
+        },
+        {
+            "id": "Groucho",
+            "nodes": [
+                {
+                    "dnnType": "validator",
+                    "bvnnType": "validator",
+                    "basePort": 16591,
+                    "advertizeAddress": "kermit-bvn2.accumulate.defidevs.io"
+                }
+            ]
+        }
+    ]
+}
+```
+
+**Key Configuration Elements:**
+- **Network ID**: Unique identifier for the network
+- **Executor Version**: Specifies the execution engine version
+- **Oracle Price**: Sets the oracle price for the network
+- **Fee Schedule**: Defines transaction fees and costs
+- **Routing Configuration**: Defines how accounts are routed to partitions
+- **BVN Definitions**: Specifies Block Validator Networks and their nodes
+- **Node Configuration**: Defines validator types, ports, and addresses
+
+## Complete Network Initialization Workflow
+
+### Step 1: Collect Existing State
+
+```bash
+# Collect snapshots from existing nodes
+debug snap collect badger:///node1/accumulate.db node1.snap --skip-system
+debug snap collect badger:///node2/accumulate.db node2.snap --skip-system
+debug snap collect badger:///node3/accumulate.db node3.snap --skip-system
+```
+
+### Step 2: Create Unified Database
+
+```bash
+# Ingest all partition snapshots into unified database
+debug genesis ingest badger:///unified/combined.db \
+  bvn0.snap bvn1.snap bvn2.snap dn.snap
+```
+
+### Step 3: Generate Unified Snapshot
+
+```bash
+# Create final unified snapshot for network initialization
+debug snap collect badger:///unified/combined.db \
+  unified.snap --indexed
+```
+
+### Step 4: Initialize New Network
+
+```bash
+# Create new network with unified snapshot
+accumulated init network network.json \
+  -w new-network-nodes \
+  --snapshot unified.snap
+```
+
+### Step 5: Deploy to Nodes
+
+For each node in the new network:
+
+1. **Reset Tendermint State**:
+   ```bash
+   tendermint unsafe-reset-all --home /path/to/node/config
+   ```
+
+2. **Copy Genesis Documents**:
+   ```bash
+   cp new-network-nodes/node1/directory-genesis.snap /path/to/node/
+   cp new-network-nodes/node1/bvn-genesis.snap /path/to/node/
+   ```
+
+3. **Update Configuration**:
+   ```bash
+   cp new-network-nodes/node1/config/* /path/to/node/config/
+   cp new-network-nodes/node1/accumulate.toml /path/to/node/
+   ```
+
+4. **Reboot Node**:
+   ```bash
+   systemctl restart accumulate-node
+   ```
+
 ## Partition Snapshots and CometBFT Configuration
 
 ### Partition Snapshots
@@ -1011,15 +1369,55 @@ After starting the node, wait about 30 seconds for initialization, then verify t
    accumulated analyze snapshot snapshot.snap
    ```
 
-## References
+## See Also
 
-- Source Code:
-  - `cmd/accumulated/cmd_init_network.go`: Implementation of the `init genesis` command
-  - `internal/node/daemon/init.go`: Implementation of `BuildGenesisDocs`
-  - `internal/node/genesis/bootstrap.go`: Implementation of `genesis.Init` and snapshot unpacking
-  - `internal/node/genesis/extract.go`: Implementation of account extraction from snapshots
+### Related Documentation
+- [**network-json-structure.md**](network-json-structure.md) - Network configuration format and validation
+- [**consensus-creation-workflow.md**](consensus-creation-workflow.md) - Consensus section generation procedures
+- [**p2p-key-generation.md**](p2p-key-generation.md) - P2P key generation for network nodes
+- [**debug-app-reference.md**](debug-app-reference.md) - Debug commands for network operations
 
-- Related Documentation:
-  - [Accumulate Network Architecture](https://docs.accumulatenetwork.io/accumulate/architecture)
-  - [Partition Design](https://docs.accumulatenetwork.io/accumulate/architecture/partitions)
-  - [Genesis Process](https://docs.accumulatenetwork.io/accumulate/architecture/genesis)
+### Cyclops Validator Documentation
+- [**cyclops/cyclops-preparation.md**](cyclops/cyclops-preparation.md) - Cyclops validator preparation workflow
+- [**cyclops/cyclops-deployment.md**](cyclops/cyclops-deployment.md) - Cyclops validator deployment procedures
+- [**cyclops/cyclops-automation.md**](cyclops/cyclops-automation.md) - Complete automation system
+
+### Technical References
+- [**technical/snapshot-format.md**](technical/snapshot-format.md) - Snapshot file format specification
+- [**technical/genesis-format.md**](technical/genesis-format.md) - Genesis document format specification
+- [**technical/record-format.md**](technical/record-format.md) - Database record format specification
+
+### API Documentation
+- [**api/accumulated-daemon-commands.md**](api/accumulated-daemon-commands.md) - `accumulated` command reference
+- [**api/analyze-commands.md**](api/analyze-commands.md) - `analyze` tool command reference
+
+### Network References
+- [**network/accumulate-mainnet-reference.md**](network/accumulate-mainnet-reference.md) - Mainnet configuration examples
+- [**network/network-boot-procedures.md**](network/network-boot-procedures.md) - Network bootstrap procedures
+
+## Related Commands
+
+### Network Initialization
+- `accumulated init network` - See [api/accumulated-daemon-commands.md](api/accumulated-daemon-commands.md)
+- `debug genesis ingest` - See [debug-app-reference.md](debug-app-reference.md)
+- `debug snap collect` - See [debug-app-reference.md](debug-app-reference.md)
+
+### Consensus Management
+- `analyze generate-consensus-section` - See [consensus-creation-workflow.md](consensus-creation-workflow.md)
+- `analyze update-consensus` - See [api/analyze-commands.md](api/analyze-commands.md)
+
+### Network Analysis
+- `debug network scan` - See [debug-app-reference.md](debug-app-reference.md)
+- `debug network status` - See [debug-app-reference.md](debug-app-reference.md)
+
+## Source Code References
+
+- `cmd/accumulated/cmd_init_network.go`: Implementation of the `init genesis` command
+- `internal/node/daemon/init.go`: Implementation of `BuildGenesisDocs`
+- `internal/node/genesis/bootstrap.go`: Implementation of `genesis.Init` and snapshot unpacking
+- `internal/node/genesis/extract.go`: Implementation of account extraction from snapshots
+- `tools/cmd/debug/genesis.go`: Debug genesis ingest command implementation
+- `tools/cmd/analyze/cmd_generate_consensus.go`: Consensus section generation
+
+---
+*This document is part of the [Accumulate Network Documentation](README.md) - optimized for AI assistance and developer productivity.*

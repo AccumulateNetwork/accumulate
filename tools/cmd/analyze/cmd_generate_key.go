@@ -41,7 +41,10 @@ var cmdUpdateKey = &cobra.Command{
 	RunE:  updateKey,
 }
 
+
 func init() {
+	fmt.Println("[DEBUG] cmd_generate_key.go init() called")
+	rootCmd.AddCommand(cmdGenKey)
 	// No flags needed for these simple commands
 }
 
