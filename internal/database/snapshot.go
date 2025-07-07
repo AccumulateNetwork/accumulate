@@ -763,8 +763,12 @@ func Restore(db Beginner, file ioutil.SectionReader, opts *RestoreOptions) error
 	if err != nil {
 		return errors.UnknownError.WithFormat("get root hash: %w", err)
 	}
-	if rd.Header.RootHash != rh {
-		return errors.InvalidRecord.WithFormat("root hash does not match")
+	
+	// For genesis snapshots, allow zero root hash as valid
+	// This handles the case where BPT is built for the first time
+	zeroHash := [32]byte{}
+	if rd.Header.RootHash != rh && rd.Header.RootHash != zeroHash {
+		return errors.InvalidRecord.WithFormat("root hash does not match: expected %x, got %x", rd.Header.RootHash, rh)
 	}
 	return nil
 }

@@ -245,14 +245,14 @@ func (d *Daemon) Start(others ...*Daemon) (err error) {
 		return errors.UnknownError.Wrap(err)
 	}
 
-	switch d.Config.Accumulate.NetworkType {
+	switch d.Config.Accumulate.Describe.NetworkType {
 	case protocol.PartitionTypeDirectory,
 		protocol.PartitionTypeBlockValidator:
 		err = d.startValidator()
 	case protocol.PartitionTypeBlockSummary:
 		err = d.startSummary()
 	default:
-		return errors.InternalError.WithFormat("unknown partition type %v", d.Config.Accumulate.NetworkType)
+		return errors.InternalError.WithFormat("unknown partition type %v", d.Config.Accumulate.Describe.NetworkType)
 	}
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
@@ -429,7 +429,7 @@ func (d *Daemon) startApp(caughtUp <-chan struct{}) (types.Application, error) {
 	// the initial WillChangeGlobals event
 	no := false
 	conductor := &crosschain.Conductor{
-		Partition:    &protocol.PartitionInfo{ID: d.Config.Accumulate.PartitionId, Type: d.Config.Accumulate.NetworkType},
+		Partition:    &protocol.PartitionInfo{ID: d.Config.Accumulate.PartitionId, Type: d.Config.Accumulate.Describe.NetworkType},
 		ValidatorKey: execOpts.Key,
 		Database:     execOpts.Database,
 		Querier:      v3.Querier2{Querier: client},
@@ -557,7 +557,7 @@ func (d *Daemon) startServices(chGlobals <-chan *core.GlobalValues) error {
 		Local:            d.localTm,
 		Database:         d.db,
 		PartitionID:      d.Config.Accumulate.PartitionId,
-		PartitionType:    d.Config.Accumulate.NetworkType,
+		PartitionType:    d.Config.Accumulate.Describe.NetworkType,
 		EventBus:         d.eventBus,
 		NodeKeyHash:      sha256.Sum256(d.nodeKey.PubKey().Bytes()),
 		ValidatorKeyHash: sha256.Sum256(d.privVal.Key.PubKey.Bytes()),
@@ -729,7 +729,7 @@ func (d *Daemon) startMonitoringAndCleanup() {
 		color.HiMagenta("Syncing ....")
 		time.Sleep(time.Second * 1)
 	}
-	color.HiBlue(" %s node running at %s :", d.Config.Accumulate.NetworkType, d.Config.Accumulate.API.ListenAddress)
+	color.HiBlue(" %s node running at %s :", d.Config.Accumulate.Describe.NetworkType, d.Config.Accumulate.API.ListenAddress)
 
 	// Clean up once the node is stopped (mostly for tests)
 	go func() {

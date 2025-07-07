@@ -22,8 +22,11 @@ import (
 )
 
 func init() {
-	cmdMain.AddCommand(cmdSync, cmdRestoreSnapshot)
-	cmdSync.AddCommand(cmdSyncSnapshot)
+	cmdMain.AddCommand(cmdSync, cmdRestoreSnapshot, cmdDebugBpt)
+	cmdSync.AddCommand(
+		cmdSyncSnapshot,
+		cmdAddBptSection,
+	)
 }
 
 var cmdSync = &cobra.Command{

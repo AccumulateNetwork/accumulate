@@ -95,7 +95,18 @@ func (d *Daemon) startSummary() error {
 			Network:        d.Config.Accumulate.Network.Id,
 			Listen:         d.Config.Accumulate.P2P.Listen,
 			BootstrapPeers: d.Config.Accumulate.P2P.BootstrapPeers,
-			Key:            ed25519.NewKeyFromSeed(d.nodeKey.PrivKey.Bytes()),
+			Key:            func() ed25519.PrivateKey {
+				privKeyBytes := d.nodeKey.PrivKey.Bytes()
+				switch len(privKeyBytes) {
+				case ed25519.SeedSize: // 32 bytes - seed only
+					return ed25519.NewKeyFromSeed(privKeyBytes)
+				case ed25519.PrivateKeySize: // 64 bytes - seed + public key
+					return ed25519.NewKeyFromSeed(privKeyBytes[:ed25519.SeedSize])
+				default:
+					// Handle other lengths by taking first 32 bytes as seed
+					return ed25519.NewKeyFromSeed(privKeyBytes[:ed25519.SeedSize])
+				}
+			}(),
 			DiscoveryMode:  dht.ModeServer,
 		})
 		if err != nil {
