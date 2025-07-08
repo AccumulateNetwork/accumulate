@@ -112,8 +112,8 @@ func (p *Program) Start() (err error) {
 		// If both sub-nodes have the default instrumentation namespace,
 		// dynamically append the partition ID to it
 		if (a.Namespace == "tendermint" || a.Namespace == "cometbft") && (b.Namespace == "tendermint" || b.Namespace == "cometbft") {
-			a.Namespace += "_" + strings.ToLower(p.primary.Config.Accumulate.PartitionId)
-			b.Namespace += "_" + strings.ToLower(p.secondary.Config.Accumulate.PartitionId)
+			a.Namespace += "_" + strings.ToLower(p.primary.Config.Accumulate.Describe.PartitionId)
+			b.Namespace += "_" + strings.ToLower(p.secondary.Config.Accumulate.Describe.PartitionId)
 		}
 
 		// If both sub-nodes still have the same instrumentation namespace,

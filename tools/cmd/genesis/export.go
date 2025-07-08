@@ -69,7 +69,7 @@ func export(_ *cobra.Command, args []string) {
 	defer batch.Discard()
 
 	var ledger *protocol.SystemLedger
-	partUrl := config.NetworkUrl{URL: protocol.PartitionUrl(daemon.Config.Accumulate.PartitionId)}
+	partUrl := config.NetworkUrl{URL: protocol.PartitionUrl(daemon.Config.Accumulate.Describe.PartitionId)}
 	check(batch.Account(partUrl.Ledger()).Main().GetAs(&ledger))
 
 	genesisTx, err := batch.Account(partUrl.Ledger()).MainChain().Inner().Entry(0)
@@ -120,7 +120,7 @@ func export(_ *cobra.Command, args []string) {
 		},
 	})
 	check(err)
-	check(snapshot.CollectAnchors(w, batch, daemon.Config.Accumulate.PartitionUrl()))
+	check(snapshot.CollectAnchors(w, batch, daemon.Config.Accumulate.Describe.PartitionUrl()))
 
 	rootHash, err := batch.GetBptRootHash()
 	check(err)
@@ -128,14 +128,14 @@ func export(_ *cobra.Command, args []string) {
 	doc := new(types.GenesisDoc)
 	doc.InitialHeight = int64(ledger.Index) + 1
 	doc.GenesisTime = ledger.Timestamp
-	doc.ChainID = netID + "-" + daemon.Config.Accumulate.PartitionId
+	doc.ChainID = netID + "-" + daemon.Config.Accumulate.Describe.PartitionId
 	doc.ConsensusParams = oldDoc.ConsensusParams
 	doc.AppHash = rootHash[:]
 	doc.AppState, err = json.Marshal(buf.Bytes())
 	check(err)
 
 	for _, val := range globals.Network.Validators {
-		if !val.IsActiveOn(daemon.Config.Accumulate.PartitionId) {
+		if !val.IsActiveOn(daemon.Config.Accumulate.Describe.PartitionId) {
 			continue
 		}
 

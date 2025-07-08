@@ -309,7 +309,7 @@ func WriteNodeFiles(cfg *config.Config, privValKey, nodeKey []byte, genDoc []byt
 	}()
 
 	// Bootstrap node
-	if cfg.Accumulate.NetworkType == protocol.PartitionTypeBootstrap {
+	if cfg.Accumulate.Describe.NetworkType == protocol.PartitionTypeBootstrap {
 		cfg.NodeKey = "node_key.json"
 
 		err = os.MkdirAll(cfg.RootDir, nodeDirPerm)

@@ -36,7 +36,7 @@ import (
 func (d *Daemon) startCollector() error {
 	// Collect block summaries
 	_, err := bsn.StartCollector(bsn.CollectorOptions{
-		Partition: d.Config.Accumulate.PartitionId,
+		Partition: d.Config.Accumulate.Describe.PartitionId,
 		Database:  d.db,
 		Events:    d.eventBus,
 	})
@@ -45,7 +45,7 @@ func (d *Daemon) startCollector() error {
 	}
 
 	client := &message.Client{Transport: &message.RoutedTransport{
-		Network: d.Config.Accumulate.Network.Id,
+		Network: d.Config.Accumulate.Describe.Network.Id,
 		Dialer:  d.p2pnode.DialNetwork(),
 		Router:  routing.MessageRouter{Router: summaryRouter(d.Config.Accumulate.SummaryNetwork)},
 	}}
@@ -61,7 +61,7 @@ func (d *Daemon) startCollector() error {
 		}//*/
 
 		env, err := build.SignatureForMessage(e.Summary).
-			Url(protocol.PartitionUrl(d.Config.Accumulate.PartitionId)).
+			Url(protocol.PartitionUrl(d.Config.Accumulate.Describe.PartitionId)).
 			PrivateKey(d.privVal.Key.PrivKey.Bytes()).
 			Done()
 		if err != nil {
@@ -92,7 +92,7 @@ func (d *Daemon) startSummary() error {
 	var err error
 	if d.p2pnode == nil {
 		d.p2pnode, err = p2p.New(p2p.Options{
-			Network:        d.Config.Accumulate.Network.Id,
+			Network:        d.Config.Accumulate.Describe.Network.Id,
 			Listen:         d.Config.Accumulate.P2P.Listen,
 			BootstrapPeers: d.Config.Accumulate.P2P.BootstrapPeers,
 			Key:            func() ed25519.PrivateKey {
@@ -147,7 +147,7 @@ func (d *Daemon) startSummaryApp() (types.Application, error) {
 	}
 
 	exec, err := bsn.NewExecutor(bsn.ExecutorOptions{
-		PartitionID: d.Config.Accumulate.PartitionId,
+		PartitionID: d.Config.Accumulate.Describe.PartitionId,
 		Logger:      d.Logger,
 		Store:       store,
 		EventBus:    d.eventBus,
@@ -164,7 +164,7 @@ func (d *Daemon) startSummaryApp() (types.Application, error) {
 		Tracer:      d.tracer,
 		Snapshots:   &d.Config.Accumulate.Snapshots,
 		Genesis:     genesis.DocProvider(&d.Config.Config),
-		Partition:   d.Config.Accumulate.PartitionId,
+		Partition:   d.Config.Accumulate.Describe.PartitionId,
 		RootDir:     d.Config.RootDir,
 		AnalysisLog: d.Config.Accumulate.AnalysisLog,
 
@@ -179,8 +179,8 @@ func (d *Daemon) startSummaryServices() error {
 	nodeSvc := tm.NewConsensusService(tm.ConsensusServiceParams{
 		Logger:           d.Logger.With("module", "acc-rpc"),
 		Local:            d.localTm,
-		PartitionID:      d.Config.Accumulate.PartitionId,
-		PartitionType:    d.Config.Accumulate.NetworkType,
+		PartitionID:      d.Config.Accumulate.Describe.PartitionId,
+		PartitionType:    d.Config.Accumulate.Describe.NetworkType,
 		EventBus:         d.eventBus,
 		NodeKeyHash:      sha256.Sum256(d.nodeKey.PubKey().Bytes()),
 		ValidatorKeyHash: sha256.Sum256(d.privVal.Key.PubKey.Bytes()),
@@ -210,7 +210,7 @@ func (d *Daemon) startSummaryServices() error {
 	for _, s := range services {
 		d.p2pnode.RegisterService(&v3.ServiceAddress{
 			Type:     s.Type(),
-			Argument: d.Config.Accumulate.PartitionId,
+			Argument: d.Config.Accumulate.Describe.PartitionId,
 		}, messageHandler.Handle)
 	}
 

@@ -5,29 +5,51 @@ This is the comprehensive documentation hub for the Accumulate Network project, 
 ## 📚 Documentation Structure
 
 ### Core Documentation
-- [**network-initialization**](network-initialization.md) - Complete guide to network initialization and genesis creation
-- [**p2p-key-generation**](p2p-key-generation.md) - P2P key generation procedures
-- [**debug-app-reference**](debug-app-reference.md) - Complete debug application command reference
+- [**optimization-summary**](optimization-summary.md) - Documentation optimization and organization summary
+- [**documentation-organization-summary**](documentation-organization-summary.md) - Complete documentation organization status
 
-### Cyclops Validator System
-- [**cyclops-preparation**](cyclops/cyclops-preparation.md) - Cyclops validator preparation workflow
-- [**cyclops-deployment**](cyclops/cyclops-deployment.md) - Cyclops validator deployment procedures  
-- [**cyclops-launch**](cyclops/cyclops-launch.md) - Cyclops validator launch procedures
-- [**cyclops-automation**](cyclops/cyclops-automation.md) - Complete automation system documentation
-- [**cyclops-deployment-design**](cyclops/cyclops-deployment-design.md) - Cyclops deployment design and architecture
+### 🔄 Cyclops Validator System
+- [**Cyclops README**](cyclops/README.md) - Complete Cyclops validator system overview
+- [**Artifacts Deployment Guide**](cyclops/cyclops-artifacts-deployment-guide.md) - Complete artifacts-based deployment system
+- [**Deployment Scripts Reference**](cyclops/cyclops-deployment-scripts-reference.md) - Complete deployment automation scripts
+- [**Deployment Phases**](cyclops/cyclops-deployment-phases.md) - Detailed deployment phase documentation
+- [**TOML Configuration**](cyclops/cyclops-toml-configuration.md) - Configuration templates and generation
+- [**Preparation Guide**](cyclops/cyclops-preparation.md) - Pre-deployment preparation procedures
+- [**Deployment Guide**](cyclops/cyclops-deployment.md) - Step-by-step deployment procedures
+- [**Launch Guide**](cyclops/cyclops-launch.md) - Validator launch and startup procedures
+- [**Automation Guide**](cyclops/cyclops-automation.md) - Automated deployment workflows
+- [**Deployment Design**](cyclops/cyclops-deployment-design.md) - System architecture and design
+- [**3-Phase Automation**](cyclops/cyclops-3-phase-automation-design.md) - Automated deployment system design
+- [**Dual Node Workflow**](cyclops/cyclops-dual-node-deployment-workflow.md) - Dual node deployment procedures
+- [**Easy Deployment**](cyclops/cyclops-easy-deployment-guide.md) - Simplified deployment guide
+- [**Fixes Tracking**](cyclops/cyclops-fixes-tracking.md) - Known issues and fixes tracking
+- [**Network JSON Reference**](cyclops/cyclops-network-json-reference.md) - Network configuration reference
+- [**Node Startup Guide**](cyclops/cyclops-node-startup-and-bpt-guide.md) - Node startup and BPT procedures
+- [**Startup Troubleshooting**](cyclops/cyclops-node-startup-troubleshooting.md) - Startup troubleshooting guide
+- [**Snapshot Restoration**](cyclops/dual-snapshot-restoration-analysis.md) - Dual snapshot restoration analysis
+- [**Consensus Generation Fix**](cyclops/consensus-generation-fix.md) - Consensus generation fixes
+- [**Consensus Code Changes**](cyclops/consensus-code-changes.md) - Code changes for consensus
+- [**Phase 1 Backup Strategy**](cyclops/phase1-backup-strategy.md) - Phase 1 backup and recovery strategy
+- [**Mainnet Single Node Fix**](cyclops/fixing-mainnet-single-node.md) - Mainnet single node fixes
 
 ### Network Configuration
-- [**network-json-structure**](network-json-structure.md) - Network JSON structure and validation
-- [**consensus-creation-workflow**](consensus-creation-workflow.md) - Consensus section creation procedures
-- [**network-boot-procedures**](network-boot-procedures.md) - Network bootstrap procedures
+- [**network-initialization**](network/network-initialization.md) - Complete guide to network initialization and genesis creation
+- [**network-json-structure**](network/network-json-structure.md) - Network JSON structure and validation
+- [**consensus-creation-workflow**](network/consensus-creation-workflow.md) - Consensus section creation procedures
+- [**network-boot-procedures**](network/network-boot-procedures.md) - Network bootstrap procedures
 
 ### Technical References
+- [**bpt-restoration-design**](technical/bpt-restoration-design.md) - BPT restoration strategy and implementation design
+- [**p2p-key-generation**](technical/p2p-key-generation.md) - P2P key generation procedures
 - [**snapshot-format**](technical/snapshot-format.md) - Snapshot file format specification
+- [**snapshot-format-v2-corrected**](technical/snapshot-format-v2-corrected.md) - Corrected snapshot format v2 specification
 - [**genesis-format**](technical/genesis-format.md) - Genesis document format specification
 - [**record-format**](technical/record-format.md) - Database record format specification
-- [**extract-implementation**](technical/extract-implementation-status.md) - Extract command implementation status
+- [**extract-implementation-status**](technical/extract-implementation-status.md) - Extract command implementation status
+- [**sc-parser-design**](technical/sc-parser-design.md) - Snapshot Collection parser design
 
 ### API Documentation
+- [**debug-app-reference**](api/debug-app-reference.md) - Complete debug application command reference
 - [**analyze-commands**](api/analyze-commands.md) - Analyze tool command reference
 - [**accumulated-daemon-commands**](api/accumulated-daemon-commands.md) - Accumulated daemon command reference
 - [**command-implementation-map**](api/command-implementation-map.md) - Command to implementation mapping
@@ -35,6 +57,9 @@ This is the comprehensive documentation hub for the Accumulate Network project, 
 ### Network References
 - [**accumulate-mainnet-reference**](network/accumulate-mainnet-reference.md) - Mainnet configuration reference
 - [**accumulate-network-glossary**](network/accumulate-network-glossary.md) - Network terminology glossary
+- [**network-boot-procedures**](network/network-boot-procedures.md) - Network bootstrap procedures
+- [**network-boot-updated**](network/network-boot-updated.md) - Updated network boot procedures
+- [**network-boot**](network/network-boot.md) - Legacy network boot documentation
 
 ### Tools and Utilities
 - [**a-extract-tool**](tools/a-extract-tool.md) - A_Extract tool documentation

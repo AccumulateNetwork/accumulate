@@ -63,7 +63,7 @@ func resetConsensus(_ *cobra.Command, args []string) {
 	batch := db.Begin(false)
 	defer batch.Discard()
 	var ledger *protocol.SystemLedger
-	partUrl := protocol.PartitionUrl(daemon.Config.Accumulate.PartitionId)
+	partUrl := protocol.PartitionUrl(daemon.Config.Accumulate.Describe.PartitionId)
 	err = batch.Account(partUrl.JoinPath(protocol.Ledger)).Main().GetAs(&ledger)
 	checkf(err, "load ledger")
 
@@ -76,7 +76,7 @@ func resetConsensus(_ *cobra.Command, args []string) {
 	// Rebuild the validator list
 	genDoc.Validators = nil
 	for i, validator := range globals.Network.Validators {
-		if !validator.IsActiveOn(daemon.Config.Accumulate.PartitionId) {
+		if !validator.IsActiveOn(daemon.Config.Accumulate.Describe.PartitionId) {
 			continue
 		}
 

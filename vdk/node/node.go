@@ -38,7 +38,7 @@ func NewNode(workDir string, logWriter logger.LogWriter, nodeIndex int) (*Daemon
 		la := func(w io.Writer, format string, color bool) io.Writer {
 			config := logger.NodeWriterConfig{
 				Format:          logger.NodeLogFormat(format),
-				PartitionName:   c.Accumulate.PartitionId,
+				PartitionName:   c.Accumulate.Describe.PartitionId,
 				NodeIndex:       nodeIndex,
 				NodeName:        "node",
 				NodeNamePadding: 0,

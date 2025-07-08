@@ -318,16 +318,35 @@ func (app *Accumulator) InitChain(_ context.Context, req *abci.RequestInitChain)
 	app.logger.Info("Initializing")
 
 	// Initialize the database
-	var snap []byte
-	err = json.Unmarshal(req.AppStateBytes, &snap)
-	if err != nil {
-		return nil, fmt.Errorf("failed to init chain: %+v", err)
-	}
-	err = snapshot.FullRestore(app.Database, ioutil.NewBuffer(snap), app.logger, config.NetworkUrl{
-		URL: protocol.PartitionUrl(app.Partition),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to init chain: %+v", err)
+	if len(req.AppStateBytes) > 0 {
+		// Attempt to unmarshal embedded snapshot
+		var snap []byte
+		if err = json.Unmarshal(req.AppStateBytes, &snap); err != nil {
+			// If app_state is JSON object (not base64), skip snapshot restore
+			if len(req.AppStateBytes) > 0 && req.AppStateBytes[0] == '{' {
+				fmt.Println("INFO: No embedded genesis snapshot found; loading snapshot file genesis.snap")
+				// Load snapshot from file
+				genPath := filepath.Join(app.RootDir, "genesis.snap")
+				data, err2 := os.ReadFile(genPath)
+				if err2 != nil {
+					return nil, fmt.Errorf("failed to read genesis snapshot file %s: %v", genPath, err2)
+				}
+				if err2 = snapshot.FullRestore(app.Database, ioutil.NewBuffer(data), app.logger, config.NetworkUrl{
+					URL: protocol.PartitionUrl(app.Partition),
+				}); err2 != nil {
+					return nil, fmt.Errorf("failed to restore genesis snapshot from file: %v", err2)
+				}
+			} else {
+				return nil, fmt.Errorf("failed to init chain: %v", err)
+			}
+		} else {
+			// Restore embedded snapshot
+			if err = snapshot.FullRestore(app.Database, ioutil.NewBuffer(snap), app.logger, config.NetworkUrl{
+				URL: protocol.PartitionUrl(app.Partition),
+			}); err != nil {
+				return nil, fmt.Errorf("failed to init chain: %v", err)
+			}
+		}
 	}
 
 	var initVal []*execute.ValidatorUpdate

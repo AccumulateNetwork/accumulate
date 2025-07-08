@@ -28,6 +28,7 @@ type RestoreVisitor struct {
 
 	DisableWriteBatching bool
 	CompressChains       bool
+	skipBptCheck         bool
 }
 
 func Restore(db database.Beginner, file ioutil2.SectionReader, logger log.Logger) error {

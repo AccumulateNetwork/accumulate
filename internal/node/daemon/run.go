@@ -134,8 +134,8 @@ func New(cfg *config.Config, newWriter func(*config.Config) (io.Writer, error)) 
 			Labels: map[string]string{
 				"hostname":  hostname,
 				"process":   "accumulated",
-				"network":   cfg.Accumulate.Network.Id,
-				"partition": cfg.Accumulate.PartitionId,
+				"network":   cfg.Accumulate.Describe.Network.Id,
+				"partition": cfg.Accumulate.Describe.PartitionId,
 			},
 		})
 		if err != nil {
@@ -205,9 +205,9 @@ func (d *Daemon) StartSecondary(e *Daemon, others ...*Daemon) error {
 
 func (d *Daemon) Start(others ...*Daemon) (err error) {
 	d.local = map[string]tendermint.DispatcherClient{}
-	d.local[strings.ToLower(d.Config.Accumulate.PartitionId)] = d.localTm
+	d.local[strings.ToLower(d.Config.Accumulate.Describe.PartitionId)] = d.localTm
 	for _, e := range others {
-		part := strings.ToLower(e.Config.Accumulate.PartitionId)
+		part := strings.ToLower(e.Config.Accumulate.Describe.PartitionId)
 		if d.local[part] == nil {
 			d.local[part] = e.localTm
 		}
@@ -391,7 +391,7 @@ func (d *Daemon) loadKeys() error {
 func (d *Daemon) startApp(caughtUp <-chan struct{}) (types.Application, error) {
 	dialer := d.p2pnode.DialNetwork()
 	client := &message.Client{Transport: &message.RoutedTransport{
-		Network: d.Config.Accumulate.Network.Id,
+		Network: d.Config.Accumulate.Describe.Network.Id,
 		Dialer:  dialer,
 		Router:  routing.MessageRouter{Router: d.router},
 	}}
@@ -415,7 +415,7 @@ func (d *Daemon) startApp(caughtUp <-chan struct{}) (types.Application, error) {
 		// If we are not attached to a DN node, or direct dispatch is disabled,
 		// use the API dispatcher
 		execOpts.NewDispatcher = func() execute.Dispatcher {
-			return NewDispatcher(d.Config.Accumulate.Network.Id, d.router, dialer)
+			return NewDispatcher(d.Config.Accumulate.Describe.Network.Id, d.router, dialer)
 		}
 
 	} else {
@@ -429,7 +429,7 @@ func (d *Daemon) startApp(caughtUp <-chan struct{}) (types.Application, error) {
 	// the initial WillChangeGlobals event
 	no := false
 	conductor := &crosschain.Conductor{
-		Partition:    &protocol.PartitionInfo{ID: d.Config.Accumulate.PartitionId, Type: d.Config.Accumulate.Describe.NetworkType},
+		Partition:    &protocol.PartitionInfo{ID: d.Config.Accumulate.Describe.PartitionId, Type: d.Config.Accumulate.Describe.NetworkType},
 		ValidatorKey: execOpts.Key,
 		Database:     execOpts.Database,
 		Querier:      v3.Querier2{Querier: client},
@@ -468,7 +468,7 @@ func (d *Daemon) startApp(caughtUp <-chan struct{}) (types.Application, error) {
 		Database:    d.db,
 		Snapshots:   &d.Config.Accumulate.Snapshots,
 		Genesis:     genesis.DocProvider(&d.Config.Config),
-		Partition:   d.Config.Accumulate.PartitionId,
+		Partition:   d.Config.Accumulate.Describe.PartitionId,
 		RootDir:     d.Config.RootDir,
 		AnalysisLog: d.Config.Accumulate.AnalysisLog,
 
@@ -556,7 +556,7 @@ func (d *Daemon) startServices(chGlobals <-chan *core.GlobalValues) error {
 		Logger:           d.Logger.With("module", "acc-rpc"),
 		Local:            d.localTm,
 		Database:         d.db,
-		PartitionID:      d.Config.Accumulate.PartitionId,
+		PartitionID:      d.Config.Accumulate.Describe.PartitionId,
 		PartitionType:    d.Config.Accumulate.Describe.NetworkType,
 		EventBus:         d.eventBus,
 		NodeKeyHash:      sha256.Sum256(d.nodeKey.PubKey().Bytes()),
@@ -565,13 +565,13 @@ func (d *Daemon) startServices(chGlobals <-chan *core.GlobalValues) error {
 	netSvc := api.NewNetworkService(api.NetworkServiceParams{
 		Logger:    d.Logger.With("module", "acc-rpc"),
 		EventBus:  d.eventBus,
-		Partition: d.Config.Accumulate.PartitionId,
+		Partition: d.Config.Accumulate.Describe.PartitionId,
 		Database:  d.db,
 	})
 	querySvc := api.NewQuerier(api.QuerierParams{
 		Logger:    d.Logger.With("module", "acc-rpc"),
 		Database:  d.db,
-		Partition: d.Config.Accumulate.PartitionId,
+		Partition: d.Config.Accumulate.Describe.PartitionId,
 		Consensus: consensusSvc,
 	})
 	metricsSvc := api.NewMetricsService(api.MetricsServiceParams{
@@ -590,14 +590,14 @@ func (d *Daemon) startServices(chGlobals <-chan *core.GlobalValues) error {
 	eventSvc := api.NewEventService(api.EventServiceParams{
 		Logger:    d.Logger.With("module", "acc-rpc"),
 		Database:  d.db,
-		Partition: d.Config.Accumulate.PartitionId,
+		Partition: d.Config.Accumulate.Describe.PartitionId,
 		EventBus:  d.eventBus,
 	})
 	sequencerSvc := api.NewSequencer(api.SequencerParams{
 		Logger:       d.Logger.With("module", "acc-rpc"),
 		Database:     d.db,
 		EventBus:     d.eventBus,
-		Partition:    d.Config.Accumulate.PartitionId,
+		Partition:    d.Config.Accumulate.Describe.PartitionId,
 		Globals:      globals,
 		ValidatorKey: d.Key().Bytes(),
 	})
@@ -628,7 +628,7 @@ func (d *Daemon) startServices(chGlobals <-chan *core.GlobalValues) error {
 	for _, s := range services {
 		d.p2pnode.RegisterService(&v3.ServiceAddress{
 			Type:     s.Type(),
-			Argument: d.Config.Accumulate.PartitionId,
+			Argument: d.Config.Accumulate.Describe.PartitionId,
 		}, messageHandler.Handle)
 	}
 
@@ -646,6 +646,9 @@ func (d *Daemon) StartP2P() error {
 	}
 
 	// Load node keys and extract seed for ed25519 key generation
+	if d.nodeKey == nil || d.nodeKey.PrivKey == nil {
+		return errors.UnknownError.WithFormat("node key not loaded or private key is nil")
+	}
 	privKeyBytes := d.nodeKey.PrivKey.Bytes()
 	var p2pKey ed25519.PrivateKey
 	
@@ -660,7 +663,7 @@ func (d *Daemon) StartP2P() error {
 		return errors.UnknownError.WithFormat("invalid ed25519 private key length: want 32 or 64, got %d", len(privKeyBytes))
 	}
 	d.p2pnode, err = p2p.New(p2p.Options{
-		Network:        d.Config.Accumulate.Network.Id,
+		Network:        d.Config.Accumulate.Describe.Network.Id,
 		Listen:         d.Config.Accumulate.P2P.Listen,
 		BootstrapPeers: d.Config.Accumulate.P2P.BootstrapPeers,
 		Key:            p2pKey,

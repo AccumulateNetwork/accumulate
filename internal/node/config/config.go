@@ -124,9 +124,9 @@ var DefaultLogLevels = LogLevel{}.
 
 func Default(netName string, net protocol.PartitionType, _ NodeType, partitionId string) *Config {
 	c := new(Config)
-	c.Accumulate.Network.Id = netName
-	c.Accumulate.NetworkType = net
-	c.Accumulate.PartitionId = partitionId
+	c.Accumulate.Describe.Network.Id = netName
+	c.Accumulate.Describe.NetworkType = net
+	c.Accumulate.Describe.PartitionId = partitionId
 	c.Accumulate.API.TxMaxWaitTime = 10 * time.Minute
 	c.Accumulate.API.ConnectionLimit = 500
 	c.Accumulate.Storage.Type = BadgerStorage
@@ -153,7 +153,7 @@ type Config struct {
 }
 
 type Accumulate struct {
-	Describe              `toml:"describe" mapstructure:"describe"`
+	Describe Describe `toml:"describe" mapstructure:"describe"`
 	SummaryNetwork        string `toml:"summary-network" mapstructure:"summary-network"`
 	DisableDirectDispatch bool   `toml:"disable-direct-dispatch" mapstructure:"disable-direct-dispatch"`
 	MaxEnvelopesPerBlock  int    `toml:"max-envelopes-per-block" mapstructure:"max-envelopes-per-block"`

@@ -68,6 +68,11 @@ func CollectAnchors(w *Writer, batch *database.Batch, network config.NetworkUrl)
 
 // FullRestore restores the snapshot and rebuilds indices.
 func FullRestore(db database.Beginner, file ioutil2.SectionReader, logger log.Logger, network config.NetworkUrl) error {
+	return FullRestoreWithOptions(db, file, logger, network, nil)
+}
+
+// FullRestoreWithOptions restores the snapshot and rebuilds indices with options.
+func FullRestoreWithOptions(db database.Beginner, file ioutil2.SectionReader, logger log.Logger, network config.NetworkUrl, opts *database.RestoreOptions) error {
 	v, err := v2.GetVersion(file)
 	if err != nil {
 		return errors.UnknownError.WithFormat("check snapshot version: %w", err)
@@ -82,14 +87,22 @@ func FullRestore(db database.Beginner, file ioutil2.SectionReader, logger log.Lo
 		// Ok
 
 	case v2.Version2:
-		err = database.Restore(db, file, nil)
+		err = database.Restore(db, file, opts)
 		return errors.UnknownError.Wrap(err)
 
 	default:
 		return errors.BadRequest.WithFormat("invalid snapshot version %d", v)
 	}
 
-	err = Restore(db, file, logger)
+	// Use the provided options for restoration
+	if opts == nil {
+		err = Restore(db, file, logger)
+	} else {
+		// Create a visitor with options
+		v := NewRestoreVisitor(db, logger)
+		v.skipBptCheck = opts.SkipHashCheck
+		err = Visit(file, v)
+	}
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}

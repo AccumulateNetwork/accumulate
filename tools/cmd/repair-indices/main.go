@@ -39,7 +39,7 @@ func run(_ *cobra.Command, args []string) {
 	db, err := database.Open(daemon.Config, daemon.Logger)
 	check(err)
 
-	err = rebuildIndices(db, config.NetworkUrl{URL: protocol.PartitionUrl(daemon.Config.Accumulate.PartitionId)})
+	err = rebuildIndices(db, config.NetworkUrl{URL: protocol.PartitionUrl(daemon.Config.Accumulate.Describe.PartitionId)})
 	check(err)
 }
 

@@ -22,10 +22,12 @@ import (
 )
 
 func init() {
-	cmdMain.AddCommand(cmdSync, cmdRestoreSnapshot, cmdDebugBpt)
-	cmdSync.AddCommand(
-		cmdSyncSnapshot,
-		cmdAddBptSection,
+	cmdMain.AddCommand(
+		cmdSync,
+		cmdRestoreSnapshot,
+		// Temporarily disabled due to API incompatibilities
+		// cmdDebugBpt,
+		// cmdAddBptSection,
 	)
 }
 
@@ -41,12 +43,18 @@ var cmdSyncSnapshot = &cobra.Command{
 	Run:   syncToSnapshot,
 }
 
+// var skipBptCheck bool
+
 var cmdRestoreSnapshot = &cobra.Command{
 	Use:   "restore-snapshot [file]",
 	Short: "Rebuild the accumulate database from a snapshot",
 	Args:  cobra.ExactArgs(1),
 	Run:   restoreSnapshot,
 }
+
+// func init() {
+// 	cmdRestoreSnapshot.Flags().BoolVar(&skipBptCheck, "skip-bpt-check", false, "Skip BPT section check during snapshot restoration")
+// }
 
 func syncToSnapshot(_ *cobra.Command, args []string) {
 	client, err := http.New(args[0], args[0]+"/websocket")

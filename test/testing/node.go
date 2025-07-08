@@ -209,7 +209,7 @@ func CreateTestNet(t testing.TB, numBvns, numValidators, numFollowers int, withF
 			for _, cfg := range configs {
 				daemon, err := accumulated.Load(cfg.RootDir, func(c *config.Config) (io.Writer, error) { return logWriter(c.LogFormat) })
 				require.NoError(t, err)
-				partition := cfg.Accumulate.PartitionId
+				partition := cfg.Accumulate.Describe.PartitionId
 				daemon.Logger = daemon.Logger.With("test", t.Name(), "partition", partition, "node", cfg.Moniker)
 				daemons[partition] = append(daemons[partition], daemon)
 			}

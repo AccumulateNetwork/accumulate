@@ -127,7 +127,7 @@ func TestValidateNetwork(t *testing.T) {
 		// Load the node and derive its listening address
 		node, err := accumulated.Load(*validateNetwork, nil)
 		require.NoError(t, err)
-		network = node.Config.Accumulate.Network.Id
+		network = node.Config.Accumulate.Describe.Network.Id
 		key, err := tmp2p.LoadNodeKey(node.Config.NodeKeyFile())
 		require.NoError(t, err)
 		ed := ed25519.NewKeyFromSeed(key.PrivKey.Bytes())

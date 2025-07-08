@@ -145,7 +145,7 @@ func initDualNodeFromPeer(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	_, err = finalizeDnn(c.Accumulate.PartitionId)
+	_, err = finalizeDnn(c.Accumulate.Describe.PartitionId)
 	if err != nil {
 		return fmt.Errorf("error finalizing dnn configuration, %v", err)
 	}
@@ -160,15 +160,15 @@ func finalizeDnn(bvnId string) (*cfg.Config, error) {
 	}
 
 	//make sure we have a block validator type
-	if c.Accumulate.NetworkType != protocol.PartitionTypeDirectory {
-		return nil, fmt.Errorf("expecting directory but received %v", c.Accumulate.NetworkType)
+	if c.Accumulate.Describe.NetworkType != protocol.PartitionTypeDirectory {
+		return nil, fmt.Errorf("expecting directory but received %v", c.Accumulate.Describe.NetworkType)
 	}
 
 	if flagInit.NoEmptyBlocks {
 		c.Consensus.CreateEmptyBlocks = false
 	}
 
-	c.Instrumentation.Namespace += "_" + strings.ToLower(c.Accumulate.PartitionId)
+	c.Instrumentation.Namespace += "_" + strings.ToLower(c.Accumulate.Describe.PartitionId)
 
 	// if len(c.P2P.PersistentPeers) > 0 {
 	// 	c.P2P.BootstrapPeers = c.P2P.PersistentPeers
@@ -189,7 +189,7 @@ func finalizeBvnn() (*cfg.Config, error) {
 		return nil, fmt.Errorf("cannot load configuration file for node, %v", err)
 	}
 
-	if c.Accumulate.NetworkType != protocol.PartitionTypeBlockValidator {
+	if c.Accumulate.Describe.NetworkType != protocol.PartitionTypeBlockValidator {
 		return nil, fmt.Errorf("network partition of second node configuration must be a block validator. Please specify {network-name}.{bvn-partition-id} first parameter to init dual")
 	}
 
@@ -197,7 +197,7 @@ func finalizeBvnn() (*cfg.Config, error) {
 		c.Consensus.CreateEmptyBlocks = false
 	}
 
-	c.Instrumentation.Namespace += "_" + strings.ToLower(c.Accumulate.PartitionId)
+	c.Instrumentation.Namespace += "_" + strings.ToLower(c.Accumulate.Describe.PartitionId)
 
 	//in dual mode, the key between bvn and dn is shared.
 	//This will be cleaned up when init system is overhauled with AC-1263

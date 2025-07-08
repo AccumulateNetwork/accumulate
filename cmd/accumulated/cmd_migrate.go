@@ -165,14 +165,14 @@ func isDir(path string) string {
 
 func migrateCfg(cfg *run.Config, cvc *run.CoreValidatorConfiguration, dir string, old *config.Config) error {
 	// Shared values
-	cfg.Network = old.Accumulate.Network.Id
+	cfg.Network = old.Accumulate.Describe.Network.Id
 	cfg.P2P.Listen = addAddrs(cfg.P2P.Listen, old.Accumulate.P2P.Listen)
 	cfg.P2P.BootstrapPeers = addAddrs(cfg.P2P.BootstrapPeers, old.Accumulate.P2P.BootstrapPeers)
 	cfg.P2P.Key = &run.CometNodeKeyFile{Path: filepath.Join(dir, old.NodeKey)}
 	cvc.EnableHealing = &old.Accumulate.Healing.Enable
 
 	var offset int
-	if old.Accumulate.NetworkType == protocol.PartitionTypeBlockValidator {
+	if old.Accumulate.Describe.NetworkType == protocol.PartitionTypeBlockValidator {
 		offset = -config.PortOffsetBlockValidator
 	}
 	cvc.Listen = urlToListen("{tendermint} [p2p].laddr", old.P2P.ListenAddress, offset)
@@ -200,7 +200,7 @@ func migrateCfg(cfg *run.Config, cvc *run.CoreValidatorConfiguration, dir string
 			cvc.StorageType = run.Ptr(run.StorageTypeBadger)
 		} else {
 			cfg.Services = append(cfg.Services, &run.StorageService{
-				Name: old.Accumulate.PartitionId,
+				Name: old.Accumulate.Describe.PartitionId,
 				Storage: &run.BadgerStorage{
 					Path: filepath.Join(dir, old.Accumulate.Storage.Path),
 				},
@@ -244,7 +244,7 @@ func migrateCfg(cfg *run.Config, cvc *run.CoreValidatorConfiguration, dir string
 			return fmt.Errorf("snapshot schedule: %w", err)
 		}
 		cfg.Services = append(cfg.Services, &run.SnapshotService{
-			Partition:      old.Accumulate.PartitionId,
+			Partition:      old.Accumulate.Describe.PartitionId,
 			Directory:      old.Accumulate.Snapshots.Directory,
 			Schedule:       schedule,
 			RetainCount:    run.Ptr(uint64(old.Accumulate.Snapshots.RetainCount)),
@@ -253,9 +253,9 @@ func migrateCfg(cfg *run.Config, cvc *run.CoreValidatorConfiguration, dir string
 	}
 
 	// DN-/BVN-specific values
-	switch old.Accumulate.NetworkType {
+	switch old.Accumulate.Describe.NetworkType {
 	case protocol.PartitionTypeBlockValidator:
-		cvc.BVN = old.Accumulate.PartitionId
+		cvc.BVN = old.Accumulate.Describe.PartitionId
 		cvc.BvnGenesis = filepath.Join(dir, old.Genesis)
 		if len(old.P2P.PersistentPeers) == 0 {
 			break
@@ -282,7 +282,7 @@ func migrateCfg(cfg *run.Config, cvc *run.CoreValidatorConfiguration, dir string
 		}
 
 	default:
-		return fmt.Errorf("migration of [describe].type = '%v' not yet supported", old.Accumulate.NetworkType)
+		return fmt.Errorf("migration of [describe].type = '%v' not yet supported", old.Accumulate.Describe.NetworkType)
 	}
 
 	// TODO Check Tendermint parameters?

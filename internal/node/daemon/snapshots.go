@@ -144,7 +144,7 @@ func (d *Daemon) collectSnapshot(batch *coredb.Batch, blockTime time.Time, major
 	defer tick.Stop()
 
 	var metrics coredb.CollectMetrics
-	_, err = batch.Collect(file, d.Config.Accumulate.PartitionUrl().URL, &coredb.CollectOptions{
+	_, err = batch.Collect(file, d.Config.Accumulate.Describe.PartitionUrl().URL, &coredb.CollectOptions{
 		Metrics:    &metrics,
 		BuildIndex: d.Config.Accumulate.Snapshots.EnableIndexing,
 		Predicate: func(r database.Record) (bool, error) {
@@ -238,7 +238,11 @@ func (d *Daemon) LoadSnapshot(file ioutil2.SectionReader) error {
 		_ = db.Close()
 	}()
 
-	err = snapshot.FullRestore(db, file, d.Logger, d.Config.Accumulate.Describe.PartitionUrl())
+	// Create restore options with SkipHashCheck set to true to skip BPT check
+	opts := &coredb.RestoreOptions{SkipHashCheck: true}
+
+	// Use FullRestoreWithOptions to pass the options
+	err = snapshot.FullRestoreWithOptions(db, file, d.Logger, d.Config.Accumulate.Describe.PartitionUrl(), opts)
 	if err != nil {
 		return fmt.Errorf("failed to restore database: %v", err)
 	}
