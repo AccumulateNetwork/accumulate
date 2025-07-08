@@ -55,15 +55,7 @@
         "denominator": 3,
         "numerator": 2
       },
-      "validatorAcceptThreshold": {
-        "denominator": 3,
-        "numerator": 2
-      },
-      "values": {
-        "acmeSupply": 500000000000000,
-        "acmePrecision": 8,
-        "acmeIssuedSupply": 500000000000000
-      }
+      "acmeIssuedSupply": 500000000000000
     },
     "routing": {
       "routes": [
@@ -108,7 +100,7 @@
       "validators": [
         {
           "operator": "acc://defidevs.acme",
-          "publicKey": "yCVhlnfscukrTa+Y9TU2eVbf46nJqaPpA7NoXJw/8uE=",
+          "publicKey": "8bb3e508239b5432ebc633416f0407ed69e7b11c9f82072f72a18137f54eccfc",
           "partitions": [
             {
               "id": "Directory",

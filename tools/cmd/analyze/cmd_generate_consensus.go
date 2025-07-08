@@ -7,7 +7,7 @@
 package main
 
 import (
-	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -108,8 +108,8 @@ func generateConsensusSection(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("validator %s missing public key", validator.Operator)
 		}
 
-		// Parse the public key (base64 string)
-		pubKeyBytes, err := base64.StdEncoding.DecodeString(validator.PublicKey)
+		// Parse the public key (hex string)
+		pubKeyBytes, err := hex.DecodeString(validator.PublicKey)
 		if err != nil {
 			return fmt.Errorf("failed to decode public key for validator %s: %w", validator.Operator, err)
 		}

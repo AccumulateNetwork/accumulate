@@ -76,6 +76,7 @@ High-level deployment strategy and status overview
 
 #### **Network Configuration**
 - **[cyclops-network-json-reference.md](cyclops-network-json-reference.md)** - Network JSON structure
+- **[cyclops-routing-json-generation.md](cyclops-routing-json-generation.md)** - ✅ **NEW** Routing configuration generation
 - **[cyclops-network-reference.json](cyclops-network-reference.json)** - Reference configuration
 
 #### **Troubleshooting and Operations**

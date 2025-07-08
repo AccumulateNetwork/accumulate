@@ -1,6 +1,9 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -12,26 +15,23 @@ import (
 )
 
 var cmdUpdateNetworkKeys = &cobra.Command{
-	Use:   "update-network-keys --network <network.json> --artifacts <artifacts-dir>",
+	Use:   "update-network-keys <network.json> <artifacts-dir>",
 	Short: "Update network JSON with validator public keys from artifacts",
+	Args:  cobra.ExactArgs(2),
 	RunE:  updateNetworkKeys,
 }
 
-var (
-	networkFile  string
-	artifactsDir string
-)
-
 func init() {
-	cmdUpdateNetworkKeys.Flags().StringVar(&networkFile, "network", "", "Path to cyclops-network.json")
-	cmdUpdateNetworkKeys.Flags().StringVar(&artifactsDir, "artifacts", "./artifacts", "Directory containing validator key files")
-	cmdUpdateNetworkKeys.MarkFlagRequired("network")
-	cmdUpdateNetworkKeys.MarkFlagRequired("artifacts")
+	// No flags needed - using positional arguments
 }
 
 // Using existing NetworkConfig struct from a_extract_network.go
 
 func updateNetworkKeys(cmd *cobra.Command, args []string) error {
+	// Get arguments
+	networkFile := args[0]
+	artifactsDir := args[1]
+	
 	// Parse network configuration using existing function
 	netCfg, err := ParseNetworkJson(networkFile)
 	if err != nil {
@@ -51,7 +51,20 @@ func updateNetworkKeys(cmd *cobra.Command, args []string) error {
 		if err := json.Unmarshal(keyData, &keyFile); err != nil {
 			return fmt.Errorf("unmarshal key file for %s: %w", adiName, err)
 		}
-		netCfg.Globals.Network.Validators[i].PublicKey = keyFile.PubKey.Value
+		// Decode the public key from base64 (CometBFT format)
+		pubKeyBytes, err := base64.StdEncoding.DecodeString(keyFile.PubKey.Value)
+		if err != nil {
+			return fmt.Errorf("failed to decode public key for validator %s: %v", v.Operator, err)
+		}
+
+		// Set the public key (hex encoded)
+		netCfg.Globals.Network.Validators[i].PublicKey = hex.EncodeToString(pubKeyBytes)
+
+		// Compute SHA256 hash of the public key
+		hash := sha256.Sum256(pubKeyBytes)
+
+		// Update the validator's public key hash
+		netCfg.Globals.Network.Validators[i].PublicKeyHash = hex.EncodeToString(hash[:])
 		
 		// Add partitions information if not already present
 		if len(netCfg.Globals.Network.Validators[i].Partitions) == 0 {

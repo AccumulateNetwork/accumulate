@@ -40,6 +40,7 @@ This is the comprehensive documentation hub for the Accumulate Network project, 
 
 ### Technical References
 - [**bpt-restoration-design**](technical/bpt-restoration-design.md) - BPT restoration strategy and implementation design
+- [**snapshot-bpt-security-analysis**](technical/snapshot-bpt-security-analysis.md) - Comprehensive BPT security analysis and implementation strategy
 - [**p2p-key-generation**](technical/p2p-key-generation.md) - P2P key generation procedures
 - [**snapshot-format**](technical/snapshot-format.md) - Snapshot file format specification
 - [**snapshot-format-v2-corrected**](technical/snapshot-format-v2-corrected.md) - Corrected snapshot format v2 specification

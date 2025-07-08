@@ -12,14 +12,14 @@ import (
 )
 
 var cmdUpdateConsensus = &cobra.Command{
-	Use:   "update-consensus --artifacts <artifacts-dir>",
+	Use:   "update-consensus <artifacts-dir>",
 	Short: "Update consensus files with validator public keys from artifacts",
+	Args:  cobra.ExactArgs(1),
 	RunE:  updateConsensusFiles,
 }
 
 func init() {
-	cmdUpdateConsensus.Flags().String("artifacts", "", "Path to artifacts directory")
-	cmdUpdateConsensus.MarkFlagRequired("artifacts")
+	// No flags needed - using positional arguments
 }
 
 type ConsensusFile struct {
@@ -38,7 +38,8 @@ type Validator struct {
 
 
 func updateConsensusFiles(cmd *cobra.Command, args []string) error {
-	artifactsDir, _ := cmd.Flags().GetString("artifacts")
+	// Get artifacts directory from positional argument
+	artifactsDir := args[0]
 
 	// Read DN validator key
 	dnKeyPath := filepath.Join(artifactsDir, "priv_validator_key_defidevs-acme_dn.json")

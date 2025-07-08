@@ -83,24 +83,50 @@ Resource limits for various operations:
 
 #### 4. Routing Configuration
 
-The routing section defines how accounts are distributed across partitions:
+The routing section defines how accounts are distributed across partitions using a simplified routing table with critical system account overrides:
 
 ```json
 "routing": {
+  "overrides": [
+    {
+      "account": "acc://ACME",
+      "partition": "Directory"
+    },
+    {
+      "account": "acc://dn.acme",
+      "partition": "Directory"
+    },
+    {
+      "account": "acc://staking.acme",
+      "partition": "Directory"
+    },
+    {
+      "account": "acc://bvn-cyclops.acme",
+      "partition": "bvn-cyclops"
+    }
+  ],
   "routes": [
-    { "length": 2, "partition": "Directory" },
-    { "length": 2, "partition": "bvn-cyclops", "value": 1 },
-    { "length": 3, "partition": "Directory", "value": 6 },
-    { "length": 4, "partition": "bvn-cyclops", "value": 14 },
-    { "length": 4, "partition": "Directory", "value": 15 }
+    {
+      "length": 1,
+      "value": 0,
+      "partition": "bvn-cyclops"
+    }
   ]
 }
 ```
 
 **Routing Logic**:
-- 2-character identifiers: Directory (default), bvn-cyclops (value=1)
-- 3-character identifiers: Directory (value=6)
-- 4-character identifiers: bvn-cyclops (value=14), Directory (value=15)
+- **Default Route**: All accounts route to `bvn-cyclops` partition (1-bit routing, value=0)
+- **System Account Overrides**: Critical system accounts explicitly routed to Directory:
+  - `acc://ACME` - Root network account
+  - `acc://dn.acme` - Directory network account
+  - `acc://staking.acme` - Staking system account (critical)
+  - `acc://bvn-cyclops.acme` - BVN partition account (routes to self)
+
+**Design Rationale**:
+- **Simplified Routing**: Single default route reduces complexity and potential routing errors
+- **Override-Based**: System accounts use explicit overrides for guaranteed correct routing
+- **1-Bit Routing**: Minimal routing table size with maximum reliability
 
 #### 5. Network Topology
 
@@ -176,7 +202,16 @@ jq '.globals.network.validators[] | {operator, partitions: .partitions[].id}' cy
 ### Routing Validation
 ```bash
 # Check routing configuration
-jq '.globals.routing.routes[] | {length, partition, value}' cyclops-network.json
+jq '.globals.routing' cyclops-network.json
+
+# Verify routing overrides
+jq '.globals.routing.overrides[] | {account, partition}' cyclops-network.json
+
+# Verify default route
+jq '.globals.routing.routes[] | {length, value, partition}' cyclops-network.json
+
+# Count routing rules
+jq '.globals.routing | {routes: (.routes | length), overrides: (.overrides | length)}' cyclops-network.json
 ```
 
 ## Security Considerations

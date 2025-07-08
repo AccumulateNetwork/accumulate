@@ -11,12 +11,17 @@
 // that required 40GB for a 2GB snapshot).
 package main
 
+
+
 // NetworkConfig only needs json tags for unmarshaling, no other imports required
 
 // NetworkConfig represents the network configuration from network.json
 type NetworkConfig struct {
 	// ID is the network identifier
 	ID string `json:"id"`
+	
+	// Template contains the TOML template configuration
+	Template string `json:"template,omitempty"`
 	
 	// Globals contains network-wide configuration
 	Globals struct {
@@ -47,7 +52,10 @@ type NetworkConfig struct {
 				Operator string `json:"operator"`
 				
 				// PublicKey is the validator's public key (hex encoded)
-				PublicKey string `json:"publicKey"`
+				PublicKey string `json:"publicKey,omitempty"`
+				
+				// PublicKeyHash is the validator's public key hash (hex encoded)
+				PublicKeyHash string `json:"publicKeyHash"`
 				
 				// Partitions defines which partitions this validator is active for
 				Partitions []struct {
@@ -59,5 +67,16 @@ type NetworkConfig struct {
 				} `json:"partitions"`
 			} `json:"validators"`
 		} `json:"network"`
+		
+		// Routing contains the routing configuration
+		Routing interface{} `json:"routing,omitempty"`
 	} `json:"globals"`
+	
+	// BVNs contains BVN node configuration (may be null)
+	BVNs interface{} `json:"bvns,omitempty"`
+	
+	// DN contains Directory Node configuration
+	DN struct {
+		Nodes interface{} `json:"nodes,omitempty"`
+	} `json:"dn,omitempty"`
 }

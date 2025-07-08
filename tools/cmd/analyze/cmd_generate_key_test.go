@@ -264,14 +264,16 @@ func TestUpdateKeyCommand(t *testing.T) {
 					Type string `json:"type"`
 				} `json:"partitions"`
 				Validators []struct {
-					Operator   string `json:"operator"`
-					PublicKey  string `json:"publicKey"`
+					Operator      string `json:"operator"`
+					PublicKey     string `json:"publicKey,omitempty"`
+					PublicKeyHash string `json:"publicKeyHash"`
 					Partitions []struct {
 						ID     string `json:"id"`
 						Active bool   `json:"active"`
 					} `json:"partitions"`
 				} `json:"validators"`
 			} `json:"network"`
+			Routing interface{} `json:"routing,omitempty"`
 		}{
 			Oracle: struct {
 				Price int `json:"price"`
@@ -286,8 +288,9 @@ func TestUpdateKeyCommand(t *testing.T) {
 					Type string `json:"type"`
 				} `json:"partitions"`
 				Validators []struct {
-					Operator   string `json:"operator"`
-					PublicKey  string `json:"publicKey"`
+					Operator      string `json:"operator"`
+					PublicKey     string `json:"publicKey,omitempty"`
+					PublicKeyHash string `json:"publicKeyHash"`
 					Partitions []struct {
 						ID     string `json:"id"`
 						Active bool   `json:"active"`
@@ -302,8 +305,9 @@ func TestUpdateKeyCommand(t *testing.T) {
 					{ID: "Directory", Type: "directory"},
 				},
 				Validators: []struct {
-					Operator   string `json:"operator"`
-					PublicKey  string `json:"publicKey"`
+					Operator      string `json:"operator"`
+					PublicKey     string `json:"publicKey,omitempty"`
+					PublicKeyHash string `json:"publicKeyHash"`
 					Partitions []struct {
 						ID     string `json:"id"`
 						Active bool   `json:"active"`
@@ -441,14 +445,16 @@ func TestBadKeys(t *testing.T) {
 					Type string `json:"type"`
 				} `json:"partitions"`
 				Validators []struct {
-					Operator   string `json:"operator"`
-					PublicKey  string `json:"publicKey"`
+					Operator      string `json:"operator"`
+					PublicKey     string `json:"publicKey,omitempty"`
+					PublicKeyHash string `json:"publicKeyHash"`
 					Partitions []struct {
 						ID     string `json:"id"`
 						Active bool   `json:"active"`
 					} `json:"partitions"`
 				} `json:"validators"`
 			} `json:"network"`
+			Routing interface{} `json:"routing,omitempty"`
 		}{
 			Oracle: struct {
 				Price int `json:"price"`
@@ -463,8 +469,9 @@ func TestBadKeys(t *testing.T) {
 					Type string `json:"type"`
 				} `json:"partitions"`
 				Validators []struct {
-					Operator   string `json:"operator"`
-					PublicKey  string `json:"publicKey"`
+					Operator      string `json:"operator"`
+					PublicKey     string `json:"publicKey,omitempty"`
+					PublicKeyHash string `json:"publicKeyHash"`
 					Partitions []struct {
 						ID     string `json:"id"`
 						Active bool   `json:"active"`
@@ -479,8 +486,9 @@ func TestBadKeys(t *testing.T) {
 					{ID: "Directory", Type: "directory"},
 				},
 				Validators: []struct {
-					Operator   string `json:"operator"`
-					PublicKey  string `json:"publicKey"`
+					Operator      string `json:"operator"`
+					PublicKey     string `json:"publicKey,omitempty"`
+					PublicKeyHash string `json:"publicKeyHash"`
 					Partitions []struct {
 						ID     string `json:"id"`
 						Active bool   `json:"active"`

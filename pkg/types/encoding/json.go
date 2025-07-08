@@ -7,6 +7,7 @@
 package encoding
 
 import (
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -69,7 +70,28 @@ func BytesFromJSON(s *string) ([]byte, error) {
 	if s == nil {
 		return nil, nil
 	}
-	return hex.DecodeString(*s)
+	return bytesFromJSONWithFallback(*s)
+}
+
+// bytesFromJSONWithFallback tries multiple decoding methods to handle different key formats
+func bytesFromJSONWithFallback(s string) ([]byte, error) {
+	// Try hex decoding first (existing behavior)
+	if data, err := hex.DecodeString(s); err == nil {
+		return data, nil
+	}
+	
+	// Try base64 standard decoding (for network JSON keys)
+	if data, err := base64.StdEncoding.DecodeString(s); err == nil {
+		return data, nil
+	}
+	
+	// Try base64 URL decoding (alternative base64 format)
+	if data, err := base64.URLEncoding.DecodeString(s); err == nil {
+		return data, nil
+	}
+	
+	// If all methods fail, return the original hex decoding error for backward compatibility
+	return hex.DecodeString(s)
 }
 
 func ChainFromJSON(s *string) (*[32]byte, error) {
