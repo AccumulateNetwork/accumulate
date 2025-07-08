@@ -10,6 +10,9 @@ This is the comprehensive documentation hub for the Accumulate Network project, 
 
 ### 🔄 Cyclops Validator System
 - [**Cyclops README**](cyclops/README.md) - Complete Cyclops validator system overview
+- [**Deployment Scripts**](scripts/README.md) - **NEW**: All deployment scripts in organized directory
+- [**Development Deployment Plan**](cyclops/cyclops-development-deployment-plan.md) - **NEW**: 4-phase development deployment with isolated test environment
+- [**Phase 0: Environment Setup**](cyclops/phase0-environment-setup.md) - **NEW**: Isolated test environment with corruption prevention
 - [**Artifacts Deployment Guide**](cyclops/cyclops-artifacts-deployment-guide.md) - Complete artifacts-based deployment system
 - [**Deployment Scripts Reference**](cyclops/cyclops-deployment-scripts-reference.md) - Complete deployment automation scripts
 - [**Deployment Phases**](cyclops/cyclops-deployment-phases.md) - Detailed deployment phase documentation
@@ -17,11 +20,6 @@ This is the comprehensive documentation hub for the Accumulate Network project, 
 - [**Preparation Guide**](cyclops/cyclops-preparation.md) - Pre-deployment preparation procedures
 - [**Deployment Guide**](cyclops/cyclops-deployment.md) - Step-by-step deployment procedures
 - [**Launch Guide**](cyclops/cyclops-launch.md) - Validator launch and startup procedures
-- [**Automation Guide**](cyclops/cyclops-automation.md) - Automated deployment workflows
-- [**Deployment Design**](cyclops/cyclops-deployment-design.md) - System architecture and design
-- [**3-Phase Automation**](cyclops/cyclops-3-phase-automation-design.md) - Automated deployment system design
-- [**Dual Node Workflow**](cyclops/cyclops-dual-node-deployment-workflow.md) - Dual node deployment procedures
-- [**Easy Deployment**](cyclops/cyclops-easy-deployment-guide.md) - Simplified deployment guide
 - [**Fixes Tracking**](cyclops/cyclops-fixes-tracking.md) - Known issues and fixes tracking
 - [**Network JSON Reference**](cyclops/cyclops-network-json-reference.md) - Network configuration reference
 - [**Node Startup Guide**](cyclops/cyclops-node-startup-and-bpt-guide.md) - Node startup and BPT procedures

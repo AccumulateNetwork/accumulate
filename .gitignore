@@ -1,6 +1,8 @@
 # Binaries (mac, linux)
 accumulated
 accumulate
+analyze
+debg
 play-accumulate
 golangci-lint
 !*/
@@ -42,3 +44,31 @@ tmp
 #jj
 .newscripts
 accumulated-bpt-test
+
+# Large files (typically > 1MB)
+*.snap
+*.db
+*.sqlite
+*.sqlite3
+*.dump
+*.backup
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+*.rar
+*.7z
+*.iso
+*.img
+*.dmg
+*.pkg
+*.deb
+*.rpm
+*.msi
+*.bin
+*.dat
+*.raw
+*.core
+*.heap
+*.prof
+*.pprof

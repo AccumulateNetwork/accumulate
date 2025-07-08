@@ -88,11 +88,22 @@ func WriteConsensusSection(writer *sv2.Writer, extractState *ExtractState, targe
 				continue
 			}
 
-			// Decode base64 validator key
-			keyBytes, err := base64.StdEncoding.DecodeString(validator.PublicKey)
+			// Try to decode validator key - first as hex, then as base64
+			var keyBytes []byte
+			var err error
+			
+			// Try hex decoding first (network JSON typically uses hex format)
+			keyBytes, err = hex.DecodeString(validator.PublicKey)
 			if err != nil {
-				fmt.Printf("Warning: Failed to decode validator key for node: %v\n", err)
-				continue
+				// If hex fails, try base64 decoding (priv_validator_key.json uses base64)
+				keyBytes, err = base64.StdEncoding.DecodeString(validator.PublicKey)
+				if err != nil {
+					fmt.Printf("Warning: Failed to decode validator key for node (tried both hex and base64): %v\n", err)
+					continue
+				}
+				fmt.Printf("Debug: Decoded validator key as base64 (length: %d)\n", len(keyBytes))
+			} else {
+				fmt.Printf("Debug: Decoded validator key as hex (length: %d)\n", len(keyBytes))
 			}
 
 			if len(keyBytes) != 32 {

@@ -108,13 +108,21 @@ func generateConsensusSection(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("validator %s missing public key", validator.Operator)
 		}
 
-		// Parse the public key (hex string)
+		// Parse the public key (hex string) - handle both 32-byte and 64-byte formats
+		fmt.Printf("[DEBUG] Processing validator %s with public key: %s (length: %d chars)\n", validator.Operator, validator.PublicKey, len(validator.PublicKey))
 		pubKeyBytes, err := hex.DecodeString(validator.PublicKey)
 		if err != nil {
 			return fmt.Errorf("failed to decode public key for validator %s: %w", validator.Operator, err)
 		}
-		if len(pubKeyBytes) != stded25519.PublicKeySize {
-			return fmt.Errorf("invalid ed25519 public key length for validator %s", validator.Operator)
+		fmt.Printf("[DEBUG] Decoded to %d bytes\n", len(pubKeyBytes))
+		
+		// Handle both 32-byte (standard) and 64-byte (extended) key formats
+		if len(pubKeyBytes) == 64 {
+			// Take the first 32 bytes for 64-byte format
+			pubKeyBytes = pubKeyBytes[:32]
+			fmt.Printf("[DEBUG] Converted 64-byte key to 32-byte for validator %s\n", validator.Operator)
+		} else if len(pubKeyBytes) != stded25519.PublicKeySize {
+			return fmt.Errorf("invalid ed25519 public key length (%d bytes) for validator %s, expected 32 or 64 bytes", len(pubKeyBytes), validator.Operator)
 		}
 		cometPubKey := crypted25519.PubKey(pubKeyBytes)
 

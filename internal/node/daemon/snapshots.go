@@ -20,6 +20,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
@@ -238,11 +239,12 @@ func (d *Daemon) LoadSnapshot(file ioutil2.SectionReader) error {
 		_ = db.Close()
 	}()
 
-	// Create restore options with SkipHashCheck set to true to skip BPT check
-	opts := &coredb.RestoreOptions{SkipHashCheck: true}
+	// Set database observer for BPT rebuilding during restoration
+	// Note: BPT sections are skipped, but BPT is rebuilt from accounts which requires observer
+	db.SetObserver(execute.NewDatabaseObserver())
 
-	// Use FullRestoreWithOptions to pass the options
-	err = snapshot.FullRestoreWithOptions(db, file, d.Logger, d.Config.Accumulate.Describe.PartitionUrl(), opts)
+	// Use FullRestoreWithOptions - BPT sections are automatically skipped and rebuilt from accounts
+	err = snapshot.FullRestoreWithOptions(db, file, d.Logger, d.Config.Accumulate.Describe.PartitionUrl(), nil)
 	if err != nil {
 		return fmt.Errorf("failed to restore database: %v", err)
 	}
