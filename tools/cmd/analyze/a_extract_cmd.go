@@ -27,20 +27,22 @@ var cmdAnalyze = &cobra.Command{
 
 // cmdAnalyzeExtract is the cobra command for extracting data from a snapshot
 var cmdAnalyzeExtract = &cobra.Command{
-	Use:   "extract <network.json> <snapshot>",
+	Use:   "extract <snapshot> <network.json> <tendermint.toml> [<tendermint.toml>...]",
 	Short: "Extract data from a unified snapshot using network configuration",
 	Run: func(cmd *cobra.Command, args []string) {
-		if len(args) != 2 {
+		if len(args) < 3 {
 			cmd.Usage()
 			os.Exit(1)
 		}
-		networkFile := args[0]
-		snapshotFile := args[1]
+		snapshotFile := args[0]
+		networkFile := args[1]
+		tmConfigs := args[2:]
 
 		// Create a new ExtractState
 		state := NewExtractState()
 		state.SnapshotFile = snapshotFile
 		state.NetworkFile = networkFile
+		state.TmConfigFiles = tmConfigs
 
 		// Get validator keys from command line
 		validatorKeys, _ := cmd.Flags().GetStringSlice("validator-keys")
@@ -65,7 +67,7 @@ var cmdAnalyzeExtract = &cobra.Command{
 			os.Exit(1)
 		}
 	},
-	Args: cobra.ExactArgs(2),
+	Args: cobra.MinimumNArgs(3),
 }
 
 // init adds flags to the command and registers commands

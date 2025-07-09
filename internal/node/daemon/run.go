@@ -699,6 +699,8 @@ func (d *Daemon) startAPI() error {
 	}
 
 	d.apiServer = &http.Server{Handler: d.api, ReadHeaderTimeout: d.Config.Accumulate.API.ReadHeaderTimeout}
+	// Debug: log the API listen address
+	d.Logger.Info("API listen address", "address", d.Config.Accumulate.API.ListenAddress)
 	l, secure, err := listenHttpUrl(d.Config.Accumulate.API.ListenAddress)
 	if err != nil {
 		return errors.UnknownError.WithFormat("start JSON-RPC: %v", err)

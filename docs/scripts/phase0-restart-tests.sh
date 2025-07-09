@@ -13,7 +13,7 @@ NC='\033[0m' # No Color
 
 # Configuration
 TEST_ENV_DIR="/tmp/cyclops"
-ARTIFACTS_SOURCE_DIR="/home/paulsnow/accumulate-network/artifacts2"
+ARTIFACTS_SOURCE_DIR="$HOME/accumulate-network/artifacts2"
 ARTIFACTS_TARGET_DIR="$TEST_ENV_DIR/artifacts"
 
 # Logging functions
@@ -50,16 +50,19 @@ main() {
     # Copy artifacts by name
     local artifacts_dest="$ARTIFACTS_TARGET_DIR"
     local files_to_copy=(
-        "cyclops-genesis.snap"
+        "config.toml"
+        "accumulate.toml"
+        "tendermint.toml"
         "cyclops-network.json"
-        "priv_validator_key_defidevs-acme_dn.json"
-        "priv_validator_key_defidevs-acme_bvn0.json"
+        "node_key.json"
+        "priv_validator_key.json"
         "accumulated"
         "analyze"
-        "bvn1-genesis.snap"
-        "dn-genesis.snap"
+        "cyclops-genesis.snap"
         "Directory-partition.snap"
         "bvn-cyclops-partition.snap"
+        "Directory.toml"
+        "bvn-cyclops.toml"
     )
     
     log_info "Copying artifacts..."
@@ -71,23 +74,26 @@ main() {
             log_info "Skipped (not found): $file"
         fi
     done
-    
-    # Copy TOML configuration templates directory
-    if [ -d "$ARTIFACTS_SOURCE_DIR/toml" ]; then
-        cp -r "$ARTIFACTS_SOURCE_DIR/toml" "$artifacts_dest/"
-        log_success "Copied: toml/ directory with configuration templates"
-    else
-        log_info "Skipped (not found): toml/ directory"
+        
+    # Add default API listen address if missing
+    if ! grep -q listen-address "$artifacts_dest/accumulate.toml"; then
+        printf "\n[api]\nlisten-address = \"tcp://0.0.0.0:9900\"\n" >> "$artifacts_dest/accumulate.toml"
     fi
-    
-    # Set secure permissions on validator keys
-    log_info "Setting secure permissions on validator keys"
+
+    # Set secure permissions on all key files
+    log_info "Setting secure permissions on key files"
     for key_file in "$artifacts_dest/priv_validator_key_"*.json; do
         if [ -f "$key_file" ]; then
             chmod 600 "$key_file"
             log_success "Set 600 permissions: $(basename "$key_file")"
         fi
     done
+    
+    # Set permissions on node key
+    if [ -f "$artifacts_dest/node_key.json" ]; then
+        chmod 600 "$artifacts_dest/node_key.json"
+        log_success "Set 600 permissions: node_key.json"
+    fi
     
     # Set executable permissions on binaries
     for binary in "accumulated" "analyze"; do

@@ -1,7 +1,7 @@
 #!/bin/bash
-# Step 1: Generate validator key files for all ADIs in cyclops-network.json
-# For now, only generate keys for Directory (dn) and the first block validator network (bvn0)
-# To extend for more BVNs, update the script and network config parsing accordingly.
+# Step 1: Generate a single validator key file for cyclops-network.json
+# This single key will be used by both Directory Network (DN) and Block Validator Network (BVN)
+# Simplifies key management and eliminates confusion about which key to use.
 
 set -euo pipefail
 
@@ -25,17 +25,14 @@ ADIS=$(jq -r '.globals.network.validators[].operator' "$NETWORK_JSON")
 for adi in $ADIS; do
   adi_name=$(echo "$adi" | sed 's|acc://||; s|/|-|g; s|\.|-|g')
 
-  # Directory Network key
-  echo "Generating DN key for $adi -> $OUTPUT_DIR/priv_validator_key_${adi_name}_dn.json"
-  $ANALYZE_BIN gen-key "$adi" "$OUTPUT_DIR/tmp_dn_$adi_name"
-  mv "$OUTPUT_DIR/tmp_dn_$adi_name/priv_validator_key.json" "$OUTPUT_DIR/priv_validator_key_${adi_name}_dn.json"
-  rm -rf "$OUTPUT_DIR/tmp_dn_$adi_name"
-
-  # Block Validator Network 0 key
-  echo "Generating BVN0 key for $adi -> $OUTPUT_DIR/priv_validator_key_${adi_name}_bvn0.json"
-  $ANALYZE_BIN gen-key "$adi" "$OUTPUT_DIR/tmp_bvn0_$adi_name"
-  mv "$OUTPUT_DIR/tmp_bvn0_$adi_name/priv_validator_key.json" "$OUTPUT_DIR/priv_validator_key_${adi_name}_bvn0.json"
-  rm -rf "$OUTPUT_DIR/tmp_bvn0_$adi_name"
+  # Single validator key for both DN and BVN
+  echo "Generating single validator key for $adi -> $OUTPUT_DIR/priv_validator_key.json"
+  $ANALYZE_BIN gen-key "$adi" "$OUTPUT_DIR/tmp_$adi_name"
+  mv "$OUTPUT_DIR/tmp_$adi_name/priv_validator_key.json" "$OUTPUT_DIR/priv_validator_key.json"
+  rm -rf "$OUTPUT_DIR/tmp_$adi_name"
+  
+  echo "Single validator key generated for both DN and BVN networks."
+  break  # Only generate one key for the first ADI (since we're using single key architecture)
 done
 
-echo "All validator keys for DN and BVN0 generated."
+echo "Single validator key generated and ready for use by both DN and BVN."

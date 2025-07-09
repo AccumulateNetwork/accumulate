@@ -112,6 +112,7 @@ type ExtractState struct {
 	// Input parameters
 	SnapshotFile          string // Path to the snapshot file
 	NetworkFile           string // Path to the network.json file
+	TmConfigFiles        []string // Paths to per-partition Tendermint TOML config files
 	PartitionSnapshotsDir string // Directory to write partition-specific snapshots
 
 	// Network configuration from network.json

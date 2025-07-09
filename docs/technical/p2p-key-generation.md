@@ -1,13 +1,31 @@
 # Accumulate P2P Node Key Generation and Configuration
 
+**Status**: ✅ **UPDATED** - Clarifies role in three-file key architecture
+
 This document explains how to properly generate and configure P2P node keys for Accumulate nodes, which is essential for successful node startup and peer communication.
+
+## 🔑 Key Architecture Context
+
+Accumulate nodes use a **three-file key system**:
+1. **`cyclops-network.json`** - Network configuration with validator public keys
+2. **`priv_validator_key.json`** - Private validator key for consensus signing
+3. **`node_key.json`** - P2P networking key (**THIS DOCUMENT**)
 
 ## Overview
 
-Each Accumulate node requires a valid Ed25519 key pair for P2P communication. This key is used to:
-- Identify the node on the network
-- Secure peer-to-peer connections
-- Sign messages between nodes
+Each Accumulate node requires a valid Ed25519 key pair for P2P communication. This key is **separate and different** from the validator key used for consensus.
+
+### P2P Key Purpose
+- **Network Identity**: Identifies the node on the P2P network
+- **Peer Discovery**: Enables nodes to find and connect to each other
+- **Connection Security**: Secures peer-to-peer connections
+- **Bootstrap Process**: Essential for initial network connectivity
+
+### Critical Distinctions
+- **P2P Key ≠ Validator Key**: These serve completely different purposes
+- **Not in Network JSON**: P2P keys are managed per-node, not in network config
+- **Networking Only**: P2P keys are never used for consensus signing
+- **Node-Specific**: Each node has its own unique P2P key
 
 The key must be properly formatted and stored in the correct location for the node to start successfully.
 

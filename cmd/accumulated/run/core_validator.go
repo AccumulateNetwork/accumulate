@@ -7,6 +7,7 @@
 package run
 
 import (
+	"log/slog"
 	"path/filepath"
 
 	"github.com/multiformats/go-multiaddr"
@@ -93,10 +94,15 @@ func (c *CoreValidatorConfiguration) apply(_ *Instance, cfg *Config) error {
 			routerPart = c.BVN
 		}
 
+		// Debug: log the listen addresses being constructed
+		addr1 := listen(c.Listen, "", portDir+portAccAPI)
+		addr2 := listen(c.Listen, "", portBVN+portAccAPI)
+		slog.Info("HTTP service listen addresses", "addr1", addr1.String(), "addr2", addr2.String(), "original", c.Listen.String())
+
 		cfg.Services = append(cfg.Services, &HttpService{
 			HttpListener: HttpListener{Listen: []multiaddr.Multiaddr{
-				listen(c.Listen, "", portDir+portAccAPI),
-				listen(c.Listen, "", portBVN+portAccAPI),
+				addr1,
+				addr2,
 			}},
 			Router: ServiceReference[*RouterService](routerPart),
 		})

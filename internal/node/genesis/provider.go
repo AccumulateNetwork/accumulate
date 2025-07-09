@@ -100,11 +100,15 @@ func ConvertSnapshotToJson(snap []byte) (*types.GenesisDoc, error) {
 		return nil, err
 	}
 
+	// Use snapshot metadata for genesis document
+	genesisTime := s.Header.SystemLedger.Timestamp
+	initialHeight := int64(s.Header.SystemLedger.Index) + 1
+	consensusParams := (*types.ConsensusParams)(p.Params)
 	doc := &types.GenesisDoc{
-		GenesisTime:     s.Header.SystemLedger.Timestamp,
+		GenesisTime:     genesisTime,
 		ChainID:         p.ChainID,
-		InitialHeight:   int64(s.Header.SystemLedger.Index) + 1,
-		ConsensusParams: (*types.ConsensusParams)(p.Params),
+		InitialHeight:   initialHeight,
+		ConsensusParams: consensusParams,
 		Validators:      make([]types.GenesisValidator, len(p.Validators)),
 		AppHash:         s.Header.RootHash[:],
 		AppState:        jsonBytes,

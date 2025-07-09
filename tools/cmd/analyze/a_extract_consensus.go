@@ -11,6 +11,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"os"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/cometbft"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -139,7 +140,32 @@ func WriteConsensusSection(writer *sv2.Writer, extractState *ExtractState, targe
 		return fmt.Errorf("marshal accumulate genesis doc: %w", err)
 	}
 
-	// Write the consensus section
+	// Write consensus JSON to file for inspection
+	var consensusFileName string
+	if targetPartition == "dn" {
+		consensusFileName = "consensus_dn.json"
+	} else if targetPartition == "bvn-cyclops" {
+		consensusFileName = "consensus_bvn.json"
+	} else {
+		consensusFileName = fmt.Sprintf("consensus_%s.json", targetPartition)
+	}
+	
+	// Pretty print the JSON for better readability
+	var prettyJSON []byte
+	prettyJSON, err = json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		fmt.Printf("Warning: Failed to pretty print JSON for %s: %v\n", consensusFileName, err)
+		prettyJSON = jsonData // Fall back to compact JSON
+	}
+	
+	err = os.WriteFile(consensusFileName, prettyJSON, 0644)
+	if err != nil {
+		fmt.Printf("Warning: Failed to write consensus JSON file %s: %v\n", consensusFileName, err)
+	} else {
+		fmt.Printf("Wrote consensus data to %s for inspection\n", consensusFileName)
+	}
+
+	// Write the consensus section to snapshot
 	_, err = section.Write(jsonData)
 	if err != nil {
 		return fmt.Errorf("write consensus section: %w", err)

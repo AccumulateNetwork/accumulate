@@ -170,6 +170,29 @@ To prevent loss of the original configuration:
 2. **Backup Creation**: Scripts create timestamped backups before modifications
 3. **Validation**: Scripts verify structure integrity after updates
 
+## 🔑 Key Management Context
+
+### What's IN the Network JSON
+- **Validator Public Keys**: Used for consensus signing (Ed25519 public keys)
+- **Validator Addresses**: Derived from public keys for identification
+- **Operator Information**: Account operators for each validator
+- **Partition Assignments**: Which partitions each validator serves
+
+### What's NOT in the Network JSON
+- **Validator Private Keys**: Stored separately in `priv_validator_key.json`
+- **P2P Node Keys**: Stored separately in `node_key.json` for networking
+- **Node-Specific Configuration**: Each node manages its own keys
+
+### Key Architecture
+The network JSON is part of a **three-file key system**:
+1. **`cyclops-network.json`** - Validator public keys and network config (**THIS FILE**)
+2. **`priv_validator_key.json`** - Private validator key for consensus signing
+3. **`node_key.json`** - P2P networking key (separate from validator key)
+
+📚 **See**: [Key Management Guide](cyclops-key-management-guide.md) for complete architecture details
+
+---
+
 ## Usage in Deployment
 
 ### Phase 1 Preparation

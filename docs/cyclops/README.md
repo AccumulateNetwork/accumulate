@@ -74,6 +74,13 @@ High-level deployment strategy and status overview
 
 ### 🔧 **Technical Reference**
 
+#### **Key Management** 🔑
+- **[cyclops-key-management-guide.md](cyclops-key-management-guide.md)** - ✅ **NEW** Complete key architecture guide
+  - Three-file key system (network JSON, validator key, node key)
+  - Critical relationships and dependencies
+  - DevOps requirements and validation procedures
+  - Common issues and troubleshooting
+
 #### **Network Configuration**
 - **[cyclops-network-json-reference.md](cyclops-network-json-reference.md)** - Network JSON structure
 - **[cyclops-routing-json-generation.md](cyclops-routing-json-generation.md)** - ✅ **NEW** Routing configuration generation

@@ -1,12 +1,94 @@
 # Cyclops Node Startup Troubleshooting Guide
 
+**Status**: ✅ **UPDATED** - Includes key management troubleshooting
+
 ## Overview
-This document provides a step-by-step troubleshooting guide for resolving common Cyclops validator node startup issues. These steps were validated during actual deployment testing on 2025-07-07.
+This document provides a step-by-step troubleshooting guide for resolving common Cyclops validator node startup issues. These steps were validated during actual deployment testing and updated for the unified key architecture.
 
 ## Prerequisites
 - Cyclops network artifacts prepared (snapshots, keys, network config)
 - `accumulated` and `analyze` binaries available
 - Partition snapshots: `bvn-cyclops-partition.snap` and `Directory-partition.snap`
+- **Three-file key system**: `cyclops-network.json`, `priv_validator_key.json`, `node_key.json`
+
+---
+
+## 🔑 Key Management Issues (MOST COMMON)
+
+### Issue: Validator Key Mismatch
+**Error:**
+```
+ERROR Validator key does not match network configuration
+ERROR Failed to start consensus: validator key mismatch
+```
+
+**Root Cause:** Private validator key doesn't derive to the public key in network JSON.
+
+**Solution:**
+```bash
+# Validate key relationship
+analyze validate keys --network cyclops-network.json --validator priv_validator_key.json
+
+# If mismatch, regenerate validator key
+analyze generate key --type validator --match-network cyclops-network.json --output priv_validator_key.json
+```
+
+### Issue: Missing P2P Key
+**Error:**
+```
+ERROR P2P node failed to start: missing node key
+ERROR Failed to load node_key.json
+```
+
+**Root Cause:** Missing or corrupted `node_key.json` for P2P networking.
+
+**Solution:**
+```bash
+# Generate new P2P key
+analyze generate key --type node --output node_key.json
+
+# Verify format
+analyze validate key --file node_key.json --type node
+```
+
+### Issue: Dangling Old Key Files
+**Error:**
+```
+ERROR Multiple validator keys found
+ERROR Conflicting key files: priv_validator_key_dn.json, priv_validator_key_bvn.json
+```
+
+**Root Cause:** Old DN/BVN-specific key files still present.
+
+**Solution:**
+```bash
+# Remove old key files
+rm -f priv_validator_key_dn.json priv_validator_key_bvn*.json
+
+# Ensure only single validator key exists
+ls -la priv_validator_key.json  # Should be the only validator key file
+```
+
+### Issue: Key Permission Errors
+**Error:**
+```
+ERROR Failed to read validator key: permission denied
+ERROR Key file permissions too open
+```
+
+**Root Cause:** Incorrect file permissions on key files.
+
+**Solution:**
+```bash
+# Fix key file permissions
+chmod 600 priv_validator_key.json
+chmod 600 node_key.json
+
+# Verify permissions
+ls -la *key*.json  # Should show -rw-------
+```
+
+---
 
 ## Common Startup Issues and Solutions
 
