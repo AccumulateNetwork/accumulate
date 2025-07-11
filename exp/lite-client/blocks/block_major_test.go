@@ -42,15 +42,13 @@ func TestQueryMajorBlocks_Kermit(t *testing.T) {
 			t.Errorf("[v3] Block %d is nil", i)
 			continue
 		}
-		idx, hasIndex := block["index"]
-		if !hasIndex || idx == nil {
-			t.Errorf("[v3] Block %d missing 'index' field", i)
+		if block.MajorBlockIndex == 0 {
+			t.Errorf("[v3] Block %d missing or zero 'MajorBlockIndex' field", i)
 		}
-		timeVal, hasTime := block["time"]
-		if !hasTime || timeVal == nil {
-			t.Errorf("[v3] Block %d missing 'time' field", i)
+		if block.MajorBlockTime == nil {
+			t.Errorf("[v3] Block %d missing 'MajorBlockTime' field", i)
 		}
-		t.Logf("[v3] Block %d: index=%v time=%v", i, block["index"], block["time"])
+		t.Logf("[v3] Block %d: majorBlockIndex=%v majorBlockTime=%v", i, block.MajorBlockIndex, block.MajorBlockTime)
 	}
 }
 
@@ -87,14 +85,12 @@ func TestQueryMajorBlocksV2_Kermit(t *testing.T) {
 			t.Errorf("[v2] Block %d is nil", i)
 			continue
 		}
-		idx, hasIndex := block["majorBlockIndex"]
-		if !hasIndex || idx == nil {
-			t.Errorf("[v2] Block %d missing 'majorBlockIndex' field", i)
+		if block.MajorBlockIndex == 0 {
+			t.Errorf("[v2] Block %d missing or zero 'MajorBlockIndex' field", i)
 		}
-		timeVal, hasTime := block["majorBlockTime"]
-		if !hasTime || timeVal == nil {
-			t.Errorf("[v2] Block %d missing 'majorBlockTime' field", i)
+		if block.MajorBlockTime == nil {
+			t.Errorf("[v2] Block %d missing 'MajorBlockTime' field", i)
 		}
-		t.Logf("[v2] Block %d: majorBlockIndex=%v majorBlockTime=%v", i, block["majorBlockIndex"], block["majorBlockTime"])
+		t.Logf("[v2] Block %d: majorBlockIndex=%v majorBlockTime=%v", i, block.MajorBlockIndex, block.MajorBlockTime)
 	}
 }

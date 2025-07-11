@@ -44,7 +44,7 @@ func GetFirstAuthorityUrl(ctx context.Context, cl *client.Client, partitionUrl s
 
 // RetrieveGenesisBlock fetches the genesis major block from a specific partition.
 // Returns the raw block as a map[string]interface{}.
-func RetrieveGenesisBlockAndAuthority(ctx context.Context, cl *client.Client) (map[string]interface{}, *protocol.KeyBook, *protocol.KeyPage, error) {
+func RetrieveGenesisBlockAndAuthority(ctx context.Context, cl *client.Client) (*client.MajorQueryResponse, *protocol.KeyBook, *protocol.KeyPage, error) {
 	genesisBlock, err := blocks.QueryMajorBlocks(ctx, cl, genesisPartitionUrl, 0, 1, "v2")
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to query genesis block: %w", err)
@@ -55,13 +55,11 @@ func RetrieveGenesisBlockAndAuthority(ctx context.Context, cl *client.Client) (m
 	block := genesisBlock[0]
 
 	minorBlocks := 0
-	if mb, ok := block["minorBlocks"]; ok {
-		if mblist, ok := mb.([]interface{}); ok {
-			minorBlocks = len(mblist)
-		}
+	if block.MinorBlocks != nil {
+		minorBlocks = len(block.MinorBlocks)
 	}
 	fmt.Printf("Genesis Block:\n  Index: %v\n  Time: %v\n  MinorBlocks: %d\n",
-		block["majorBlockIndex"], block["majorBlockTime"], minorBlocks)
+		block.MajorBlockIndex, block.MajorBlockTime, minorBlocks)
 
 	bookUrl, err := GetFirstAuthorityUrl(ctx, cl, genesisPartitionUrl)
 	if err != nil {

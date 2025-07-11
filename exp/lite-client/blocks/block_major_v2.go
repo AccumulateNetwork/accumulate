@@ -10,8 +10,8 @@ import (
 )
 
 // QueryMajorBlocksV2 retrieves a paginated slice of major blocks using the v2 API.
-// Each block is returned as a map[string]interface{} for compatibility with downstream code.
-func QueryMajorBlocksV2(ctx context.Context, cl *client.Client, partitionUrl string, startIndex, count uint64) ([]map[string]interface{}, error) {
+// Each block is returned as a typed *client.MajorQueryResponse for structured access.
+func QueryMajorBlocksV2(ctx context.Context, cl *client.Client, partitionUrl string, startIndex, count uint64) ([]*client.MajorQueryResponse, error) {
 	parsedUrl, err := accurl.Parse(partitionUrl)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse partition URL: %v", err)
@@ -36,21 +36,18 @@ func QueryMajorBlocksV2(ctx context.Context, cl *client.Client, partitionUrl str
 		return nil, fmt.Errorf("no major block records returned (v2)")
 	}
 
-	var blocks []map[string]interface{}
-	for _, mb := range resp.Items {
-		bz, err := json.Marshal(mb)
+	// Unmarshal items into []*api.MajorQueryResponse
+	var blocks []*client.MajorQueryResponse
+	for _, item := range resp.Items {
+		data, err := json.Marshal(item)
 		if err != nil {
-			return nil, fmt.Errorf("failed to marshal MajorBlockRecord (v2): %v", err)
+			return nil, fmt.Errorf("failed to marshal major block item: %w", err)
 		}
-		raw := make(map[string]interface{})
-		if err := json.Unmarshal(bz, &raw); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal MajorBlockRecord (v2): %v", err)
+		var block client.MajorQueryResponse
+		if err := json.Unmarshal(data, &block); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal major block item: %w", err)
 		}
-		// v2 field name is likely "majorBlockIndex"
-		if _, ok := raw["majorBlockIndex"]; !ok {
-			return nil, fmt.Errorf("major block missing 'majorBlockIndex' field (v2)")
-		}
-		blocks = append(blocks, raw)
+		blocks = append(blocks, &block)
 	}
 	return blocks, nil
 }
