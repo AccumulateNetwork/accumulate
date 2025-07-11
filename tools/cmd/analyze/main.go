@@ -109,6 +109,7 @@ func init() {
 	rootCmd.AddCommand(cmdGenKey)
 	rootCmd.AddCommand(cmdUpdateNetworkKeys)
 	rootCmd.AddCommand(cmdUpdateConsensus)
+	rootCmd.AddCommand(cmdMerge) // Add the merge command
 }
 
 func main() {
