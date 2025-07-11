@@ -13,6 +13,7 @@ import (
 	"io"
 	"math"
 	"math/big"
+	"os"
 	"strings"
 	"time"
 
@@ -29,7 +30,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/leveldb"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/cometbft"
@@ -86,7 +87,19 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) error {
 		gg.Routing.AddOverride(protocol.PartitionUrl(partition.ID), partition.ID)
 	}
 
-	store := memory.New(nil)
+	tmp, err := os.MkdirTemp("", "accumulate-genesis-*")
+	if err != nil {
+		return errors.UnknownError.WithFormat("create temp dir: %w", err)
+	}
+	defer os.RemoveAll(tmp)
+
+	fmt.Println(tmp)
+	store, err := leveldb.Open(tmp)
+	if err != nil {
+		return errors.UnknownError.WithFormat("create temp db: %w", err)
+	}
+	defer store.Close()
+
 	b := &bootstrap{
 		InitOpts:    opts,
 		kvdb:        store,
@@ -102,7 +115,7 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) error {
 	b.router = routing.NewRouter(routing.RouterOptions{Initial: gg.Routing, Logger: b.Logger})
 
 	// Unpack snapshots
-	err := b.unpackSnapshots()
+	err = b.unpackSnapshots()
 	if err != nil {
 		return errors.UnknownError.WithFormat("unpack snapshots: %w", err)
 	}
