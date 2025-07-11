@@ -18,15 +18,32 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
+	"github.com/dustin/go-humanize"
 	"github.com/spf13/cobra"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
+
+// formatBytes formats a byte count as a human-readable string
+func formatBytes(bytes int64) string {
+	const unit = 1024
+	if bytes < unit {
+		return fmt.Sprintf("%d B", bytes)
+	}
+	div, exp := int64(unit), 0
+	for n := bytes / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+}
 
 // URLIssueType represents the type of issue detected in a URL
 type URLIssueType int
@@ -349,7 +366,6 @@ func generateSnapshotReport(cmd *cobra.Command, args []string) error {
 	}
 
 	snapshotPath := args[0]
-	fmt.Printf("Opening snapshot file: %s\n", snapshotPath)
 
 	// Open the snapshot file
 	file, err := os.Open(snapshotPath)
@@ -357,6 +373,33 @@ func generateSnapshotReport(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to open snapshot file: %w", err)
 	}
 	defer file.Close()
+
+	// Get file information for header
+	fileInfo, err := file.Stat()
+	if err != nil {
+		return fmt.Errorf("failed to get file info: %w", err)
+	}
+
+	// Print comprehensive header
+	fmt.Println()
+	fmt.Println("################################################################################")
+	fmt.Println("###                                                                          ###")
+	fmt.Println("###                  ACCUMULATE SNAPSHOT ANALYSIS REPORT                     ###")
+	fmt.Println("###                                                                          ###")
+	fmt.Println("################################################################################")
+	fmt.Println()
+	fmt.Printf("📊 Report Generated: %s\n", time.Now().Format("2006-01-02 15:04:05 MST"))
+	fmt.Printf("🔧 Analysis Tool: Accumulate Debug Analyzer\n")
+	fmt.Printf("⚡ Command: snap-report\n")
+	fmt.Println()
+	fmt.Println("📁 SNAPSHOT FILE INFORMATION")
+	fmt.Println("────────────────────────────────────────────────────────────────────────────────")
+	fmt.Printf("   Path: %s\n", snapshotPath)
+	fmt.Printf("   Name: %s\n", filepath.Base(snapshotPath))
+	fmt.Printf("   Size: %s (%s bytes)\n", formatBytes(fileInfo.Size()), humanize.Comma(fileInfo.Size()))
+	fmt.Printf("   Modified: %s\n", fileInfo.ModTime().Format("2006-01-02 15:04:05 MST"))
+	fmt.Printf("   Permissions: %s\n", fileInfo.Mode())
+	fmt.Println()
 
 	// Step 2: Determine the snapshot version
 	fmt.Println("Determining snapshot version...")
@@ -417,20 +460,29 @@ func generateSnapshotReport(cmd *cobra.Command, args []string) error {
 	accountURLIssues = make(map[string]URLIssue)
 
 	// Step 4: Process the snapshot data
-	fmt.Printf("Processing %d sections in the snapshot...\n", len(reader.Sections))
+	fmt.Println()
+	fmt.Println("🚀 SNAPSHOT PROCESSING")
+	fmt.Println("────────────────────────────────────────────────────────────────────────────────")
+	fmt.Printf("📊 Total Sections Found: %d\n", len(reader.Sections))
+	fmt.Println()
 
 	// Process each section
 	for i := 0; i < len(reader.Sections); i++ {
 		section := reader.Sections[i]
 
+		// Show section info for all sections
+		sectionTypeStr := section.Type().String()
+		fmt.Printf("Section %-2d: Type %-2d (%-8s)", i, int(section.Type()), sectionTypeStr)
+		
 		// Only process record sections
 		if section.Type() != snapshot.SectionTypeRecords {
-			fmt.Printf("Skipping non-record section %d\n", i)
+			fmt.Printf(" - SKIPPED (non-record section)\n")
 			continue
 		}
 
+		fmt.Printf(" - PROCESSING...\n")
+
 		// Open the record section
-		fmt.Printf("Processing record section %d...\n", i)
 		records, err := reader.OpenRecords(i)
 		if err != nil {
 			return fmt.Errorf("failed to open record section %d: %w", i, err)
@@ -438,8 +490,41 @@ func generateSnapshotReport(cmd *cobra.Command, args []string) error {
 
 		// Process each record
 		recordCount := 0
+		var lastEntry *snapshot.RecordEntry // Track previous record for debugging
 		for {
-			entry, err := records.Read()
+			// Read record with enhanced panic recovery
+			var entry *snapshot.RecordEntry
+			var err error
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						fmt.Printf("\n=== PANIC DETECTED ===\n")
+						fmt.Printf("Section: %d (Type: %s)\n", i, section.Type())
+						fmt.Printf("Record: %d\n", recordCount)
+						fmt.Printf("Panic: %v\n", r)
+						
+						// Log previous record if available
+						if lastEntry != nil {
+							fmt.Printf("Previous Record (Index %d):\n", recordCount-1)
+							fmt.Printf("  Key Length: %d\n", lastEntry.Key.Len())
+							if lastEntry.Key.Len() > 0 {
+								fmt.Printf("  Key[0]: %v\n", lastEntry.Key.Get(0))
+							}
+							if lastEntry.Value != nil {
+								fmt.Printf("  Value Length: %d bytes\n", len(lastEntry.Value))
+							}
+						} else {
+							fmt.Printf("No previous record (this was the first record)\n")
+						}
+						
+						fmt.Printf("=== CONTINUING PROCESSING ===\n\n")
+						
+						// Set error to EOF to break out of this section's loop
+						err = io.EOF
+					}
+				}()
+				entry, err = records.Read()
+			}()
 			if err != nil {
 				if err == io.EOF {
 					break
@@ -464,12 +549,11 @@ func generateSnapshotReport(cmd *cobra.Command, args []string) error {
 				}
 			}
 
+			// Track this entry as the last successfully processed record
+			lastEntry = entry
 			recordCount++
 
-			// Print progress every 10000 records
-			if recordCount%10000 == 0 {
-				fmt.Printf("Processed %d records...\n", recordCount)
-			}
+			// Progress tracking removed per user request
 
 			// Check if we've reached the maximum number of records to process
 			if maxRecords > 0 && recordCount >= maxRecords {
@@ -478,7 +562,7 @@ func generateSnapshotReport(cmd *cobra.Command, args []string) error {
 			}
 		}
 
-		fmt.Printf("Completed section %d: processed %d records\n", i, recordCount)
+
 	}
 
 	// Step 5: Commit the report
@@ -495,6 +579,7 @@ func generateSnapshotReport(cmd *cobra.Command, args []string) error {
 		SnapshotPath:  args[0],
 		InputFiles:    []*os.File{file},
 		FormatVersion: uint32(snapshotVersion),
+		SectionFiles:  NewSections(), // Initialize to prevent nil pointer dereference
 	}
 
 	// Create a temporary directory for section files if needed
