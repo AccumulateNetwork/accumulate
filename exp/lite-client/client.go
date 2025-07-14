@@ -103,26 +103,3 @@ func RetrieveAndValidateProof(ctx context.Context, accountUrls []string, c *Lite
 	}
 	return nil
 }
-
-func buildAuthoritySets(ctx context.Context, c *LiteClient) ([]*signatures.AuthoritySet, error) {
-	// 2.2.1 QueryMajorBlock()
-	// Input: context, client, index
-	// Output: AuthoritySet for 1 block (Sigs + Threshold)
-	var authoritySets []*signatures.AuthoritySet
-	for i := uint64(0); ; i++ {
-		majorBlocks, err := blocks.QueryMajorBlocks(ctx, c.v2, "acc://bvn0.acme", i, 1, "v2")
-		if err != nil {
-			return nil, fmt.Errorf("failed to query major block %d: %w", i, err)
-		}
-		if len(majorBlocks) == 0 {
-			// No more blocks
-			break
-		}
-		authSet, err := blocks.ExtractAuthoritySet(majorBlocks[0])
-		if err != nil {
-			return nil, fmt.Errorf("failed to extract AuthoritySet for block %d: %w", i, err)
-		}
-		authoritySets = append(authoritySets, authSet)
-	}
-	return authoritySets, nil
-}
