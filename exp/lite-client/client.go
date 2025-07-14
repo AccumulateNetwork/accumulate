@@ -3,18 +3,25 @@ package liteclient
 import (
 	"context"
 	"fmt"
+	"net/http"
 
-	blocks "gitlab.com/accumulatenetwork/accumulate/exp/lite-client/blocks"
-	"gitlab.com/accumulatenetwork/accumulate/exp/lite-client/signatures"
+	liteblocks "gitlab.com/accumulatenetwork/accumulate/exp/lite-client/blocks"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 )
 
+// QuerierValidator combines the v3 Querier and Validator interfaces.
+type QuerierValidator interface {
+	api.Querier
+	api.Validator
+}
+
 type LiteClient struct {
 	v2    *client.Client
-	v3    api.Querier
+	v3    QuerierValidator
 	cache map[string]VerifiedAccount
+	authorities liteblocks.AuthorityProvider
 }
 
 // NewLiteClient creates a new LiteClient for Phase 1 (account proof creation).
@@ -29,10 +36,13 @@ func NewLiteClient(server string) (*LiteClient, error) {
 
 	v3Client := jsonrpc.NewClient(server)
 
+	authorityProvider := liteblocks.NewGenesisAuthorityProvider(&http.Client{}, server)
+
 	return &LiteClient{
-		v2:    v2Client,
-		v3:    v3Client,
-		cache: make(map[string]VerifiedAccount),
+		v2:          v2Client,
+		v3:          v3Client,
+		cache:       make(map[string]VerifiedAccount),
+		authorities: authorityProvider,
 	}, nil
 }
 
@@ -46,37 +56,48 @@ func (c *LiteClient) RetrieveAccountStates(ctx context.Context, accountUrls []st
 		return fmt.Errorf("unable to retrieve or validate account state")
 	}
 
-	// // PHASE 2: VALIDATE SIGNATURES FROM GENESIS TO CURRENT MAJOR BLOCK
-	// // 2.1 RetrieveGenesisBlockAndAuthority() (genesis.go)
-	// // Input: context, client
-	// // Output: block, keybook, keypage
-	genesisBlock, keyBook, keyPage, err := RetrieveGenesisBlockAndAuthority(ctx, c.v2)
-	if err != nil {
-		return fmt.Errorf("failed to retrieve genesis block and authority: %w for %v, %v, %v", err, genesisBlock, keyBook, keyPage)
+	// PHASE 2: VALIDATE SIGNATURES FROM GENESIS TO CURRENT MAJOR BLOCK
+	//
+	// The goal of this phase is to independently verify every major block on the chain
+	// by querying its anchor message and validating its signatures using the v3 API.
+	//
+	// High-level steps:
+	// 1. Determine the partition URL for the major block chain (e.g., "acc://dn" or "acc://bvn0.acme").
+	// 2. Query the total number of major blocks (or iterate until no more blocks are found).
+	// 3. For each major block index from 0 (genesis) to the current/latest:
+	//    a. Construct the anchor message URL or hash for that major block.
+	//    b. Use blocks.QueryMessageRecord (from message.go) to fetch the MessageRecord for the anchor.
+	//    c. Use blocks.ValidateMessageRecord (from validate.go) to validate the signatures via the v3 Validator.
+	//    d. Record/report any validation failures immediately.
+	//
+	// Note: The v3 Validator will handle all authority set logic, so we do not need to track authority sets manually.
+	//
+	// Minimal implementation stub:
+	partitionUrl := "acc://dn" // or "acc://bvn0.acme" for a BVN
+	i := uint64(0)
+
+	for {
+		blocks, err := liteblocks.QueryMajorBlocksV3(ctx, c.v3, partitionUrl, i, 10)
+		if err != nil {
+			return fmt.Errorf("failed to query major blocks: %w", err)
+		}
+
+		if len(blocks) == 0 {
+			break // No more blocks
+		}
+
+				// Create a block validator with the authority provider.
+		validator := liteblocks.NewBlockValidator(c.authorities)
+
+		for _, block := range blocks {
+			err := liteblocks.ValidateMajorBlock(ctx, block, validator)
+			if err != nil {
+				return fmt.Errorf("validation failed for major block %d: %w", block.Index, err)
+			}
+		}
+
+		i += uint64(len(blocks))
 	}
-
-	// // 2.2 QueryMajorBlocks()
-	// // This step consists of extracting signatures and thresholds for each block
-	// // Input: context, client
-	authSets, err := buildAuthoritySets(ctx, c)
-	if err != nil {
-		return fmt.Errorf("failed to build authority sets for %v", authSets)
-	}
-
-	// // Output: AuthorityTracker for all blocks (map(index, AuthoritySet))
-	// authorityTracker, err := blocks.BuildAuthorityTracker(authoritySets)
-	// if err != nil {
-	// 	return fmt.Errorf("failed to build authority tracker: %w", err)
-	// }
-
-	// // 2.3 Fetch Authorities
-	// // This step consists of determining what are the correct authorities
-	// // at each block (height, index, timestamp?)
-	// // Output: AuthorityTracker for the valid authorities of the major blockchain
-	// // 2.4 ValidateFromGenesisToCurrent()
-	// // This step consists of checking, index by index both Authority Trackers
-	// // to see if they match. If they do, that means we can trust information given
-	// // by the node?
 
 	return nil
 }

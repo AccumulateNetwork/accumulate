@@ -3,7 +3,6 @@ package liteclient
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"fmt"
 
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
@@ -63,12 +62,6 @@ func VerifyProof(receipt *merkle.Receipt, expectedRoot []byte) bool {
 	return receipt.Validate(&merkle.ValidateOptions{
 		Relaxed: false,
 	})
-}
-
-// doSha computes the SHA-256 hash of the input.
-func doSha(data []byte) []byte {
-	h := sha256.Sum256(data)
-	return h[:]
 }
 
 // ValidateAndCacheProof fetches, verifies, and caches a proof for the given account using the provided LiteClient.

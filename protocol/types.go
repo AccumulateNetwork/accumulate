@@ -67,3 +67,13 @@ func NewValidator() (*validator.Validate, error) {
 	})
 	return v, err
 }
+
+// Hash returns the anchor's root chain anchor.
+func (a *BlockValidatorAnchor) Hash() [32]byte {
+	return a.RootChainAnchor
+}
+
+// GetTransactionHash returns the anchor's root chain anchor.
+func (a *BlockValidatorAnchor) GetTransactionHash() [32]byte {
+	return a.Hash()
+}

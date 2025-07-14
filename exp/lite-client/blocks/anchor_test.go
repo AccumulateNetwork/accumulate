@@ -11,12 +11,13 @@ import (
 	url "gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
-type fakeQuerier struct {
+// fakeQuerier mocks api.Querier for testing
+type fakeAnchorQuerier struct {
 	response interface{}
 	err      error
 }
 
-func (f *fakeQuerier) Query(ctx context.Context, u *url.URL, q api.Query) (api.Record, error) {
+func (f *fakeAnchorQuerier) Query(ctx context.Context, u *url.URL, q api.Query) (api.Record, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -26,11 +27,11 @@ func (f *fakeQuerier) Query(ctx context.Context, u *url.URL, q api.Query) (api.R
 	return nil, nil
 }
 
-func TestQueryMessageRecord_Success(t *testing.T) {
+func TestQueryAnchorRecord_Success(t *testing.T) {
 	ctx := context.Background()
-	want := &api.MessageRecord[messaging.Message]{}
-	fake := &fakeQuerier{response: want}
-	got, err := QueryMessageRecord(ctx, fake, &url.URL{})
+	want := &api.MessageRecord[*messaging.BlockAnchor]{}
+	fake := &fakeAnchorQuerier{response: want}
+	got, err := QueryAnchorRecord(ctx, fake, &url.URL{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -39,11 +40,11 @@ func TestQueryMessageRecord_Success(t *testing.T) {
 	}
 }
 
-func TestQueryMessageRecord_ClientError(t *testing.T) {
+func TestQueryAnchorRecord_ClientError(t *testing.T) {
 	ctx := context.Background()
 	sentinel := errors.New("client fail")
-	fake := &fakeQuerier{err: sentinel}
-	got, err := QueryMessageRecord(ctx, fake, &url.URL{})
+	fake := &fakeAnchorQuerier{err: sentinel}
+	got, err := QueryAnchorRecord(ctx, fake, &url.URL{})
 	if got != nil {
 		t.Errorf("expected nil record, got %v", got)
 	}
@@ -52,10 +53,10 @@ func TestQueryMessageRecord_ClientError(t *testing.T) {
 	}
 }
 
-func TestQueryMessageRecord_NotMessageRecord(t *testing.T) {
+func TestQueryAnchorRecord_NotAnchorRecord(t *testing.T) {
 	ctx := context.Background()
-	fake := &fakeQuerier{response: "not a MessageRecord"}
-	_, err := QueryMessageRecord(ctx, fake, &url.URL{})
+	fake := &fakeAnchorQuerier{response: "not a BlockAnchor record"}
+	_, err := QueryAnchorRecord(ctx, fake, &url.URL{})
 	if err == nil {
 		t.Fatalf("expected error, got nil")
 	}
