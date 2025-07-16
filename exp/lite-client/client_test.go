@@ -4,8 +4,6 @@ import (
 	"context"
 	"os"
 	"testing"
-
-	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 )
 
 func TestRetrieveAndValidateProof(t *testing.T) {
@@ -15,20 +13,14 @@ func TestRetrieveAndValidateProof(t *testing.T) {
 		kermitUrl = "https://kermit.accumulatenetwork.io"
 	}
 
-	cl, err := client.New(kermitUrl)
-	if err != nil {
-		t.Fatalf("Failed to create client: %v %v", err, cl)
-	}
-
+	liteClient, err := NewLiteClient(kermitUrl)
 	if err != nil {
 		t.Fatalf("Failed to initialize LiteClient: %v", err)
 	}
-	liteClient := &LiteClient{
-		v2:    cl,
-		cache: make(map[string]VerifiedAccount),
-	}
-	accounts := []string{"example-account"}
-	err = RetrieveAndValidateProof(context.Background(), accounts, liteClient)
+
+	// This account is known to exist on the testnet
+	accounts := []string{"acc://dn.acme/tokens"}
+	err = liteClient.RetrieveAccountStates(context.Background(), accounts)
 	if err != nil {
 		t.Logf("RetrieveAndValidateProof returned error: %v", err)
 	} else {
