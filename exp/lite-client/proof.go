@@ -23,18 +23,10 @@ func FetchProof(api *client.Client, ctx context.Context, account string) (*Verif
 		return nil, fmt.Errorf("invalid account URL: %w", err)
 	}
 
-	// GeneralQuery object is what is used to request data from an Accumulate Node
-	// It contains the account URL
 	req := &client.GeneralQuery{UrlQuery: client.UrlQuery{Url: u}}
-	// resp is a placeholder for a variable that will be filled with the response
-	// from the Accumulate node
+
 	var resp client.ChainQueryResponse
 
-	// Fetch proof receipt via v2 API
-	// ctx is the context for cancellation and timeouts
-	// "query" is the API endpoint to call
-	// req is the request object
-	// resp is a pointer to the object that must be populated
 	err = api.RequestAPIv2(ctx, "query", req, &resp)
 	if err != nil {
 		return nil, fmt.Errorf("query failed: %w", err)
