@@ -25,6 +25,7 @@ transport mechanisms for exchanging remote method calls.
 ### Other
 
 - [pkg.go.dev](https://pkg.go.dev/gitlab.com/accumulatenetwork/accumulate@v1.0.0-rc3.3.0.20221022212648-f9808866894c/pkg/api/v3)
+- [Query Types and Scope Reference](query-types-and-scope-reference.md) - Complete guide to all available query types and scope parameter usage
 
 ## Services
 

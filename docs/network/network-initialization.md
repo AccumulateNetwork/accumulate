@@ -1383,7 +1383,8 @@ After starting the node, wait about 30 seconds for initialization, then verify t
 - [**cyclops/cyclops-automation.md**](cyclops/cyclops-automation.md) - Complete automation system
 
 ### Technical References
-- [**technical/snapshot-format.md**](technical/snapshot-format.md) - Snapshot file format specification
+- [**technical/snapshot-format-overview.md**](technical/snapshot-format-overview.md) - Snapshot format introduction
+- [**technical/snapshot-format-operations.md**](technical/snapshot-format-operations.md) - Snapshot operations guide
 - [**technical/genesis-format.md**](technical/genesis-format.md) - Genesis document format specification
 - [**technical/record-format.md**](technical/record-format.md) - Database record format specification
 

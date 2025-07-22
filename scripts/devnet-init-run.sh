@@ -1,14 +1,16 @@
 #!/bin/bash
 
-go run ./cmd/accumulated \
-    init devnet \
-    -w .nodes \
+# Modern DevNet setup using the accumulated daemon
+# The old 'init devnet' command no longer exists
+# Use 'run devnet --init-only' instead
+
+echo "Initializing DevNet..."
+go run ./cmd/accumulated run devnet \
+    --init-only \
     --reset \
-    --faucet-seed ci \
-    --globals '{"executorVersion": "v2", "oracle": { "price": 50000000 } }' \
+    -w .nodes \
     "$@"
 
-go run ./cmd/accumulated \
-    run devnet \
-    -w .nodes \
-    --faucet-seed ci
+echo "Starting DevNet..."
+go run ./cmd/accumulated run devnet \
+    -w .nodes

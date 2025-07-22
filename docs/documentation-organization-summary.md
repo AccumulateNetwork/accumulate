@@ -62,8 +62,11 @@ docs/
 ├── technical/ (8 files)
 │   ├── bpt-restoration-design.md
 │   ├── p2p-key-generation.md
-│   ├── snapshot-format.md
-│   ├── snapshot-format-v2-corrected.md
+│   ├── snapshot-format-overview.md
+│   ├── snapshot-format-structures.md
+│   ├── snapshot-format-sections.md
+│   ├── snapshot-format-operations.md
+│   ├── snapshot-format-combining.md
 │   ├── genesis-format.md
 │   ├── record-format.md
 │   ├── extract-implementation-status.md
@@ -119,8 +122,11 @@ docs/
 ### **Technical References** (8 files)
 - `technical/bpt-restoration-design.md` - BPT restoration strategy and implementation design
 - `technical/p2p-key-generation.md` - P2P key generation procedures
-- `technical/snapshot-format.md` - Snapshot file format specification
-- `technical/snapshot-format-v2-corrected.md` - Corrected snapshot format v2 specification
+- `technical/snapshot-format-overview.md` - Snapshot format introduction and concepts
+- `technical/snapshot-format-structures.md` - Data structures and binary format reference
+- `technical/snapshot-format-sections.md` - Section types and organization
+- `technical/snapshot-format-operations.md` - Reading, writing, and processing snapshots
+- `technical/snapshot-format-combining.md` - Algorithms for combining multiple snapshots
 - `technical/genesis-format.md` - Genesis document format specification
 - `technical/record-format.md` - Database record format specification
 - `technical/extract-implementation-status.md` - Extract command implementation status

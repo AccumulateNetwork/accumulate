@@ -71,7 +71,13 @@ func assertInModuleRoot() {
 }
 
 func build(tool string) {
-	buildCmd := exec.Command("go", "build", "-tags=testnet", tool)
+	var buildCmd *exec.Cmd
+	// Use 'go install' for external packages with version syntax, 'go build' for local packages
+	if strings.Contains(tool, "@") {
+		buildCmd = exec.Command("go", "install", tool)
+	} else {
+		buildCmd = exec.Command("go", "build", "-tags=testnet", tool)
+	}
 	buildCmd.Stdout = os.Stdout
 	buildCmd.Stderr = os.Stdout
 	err := buildCmd.Run()

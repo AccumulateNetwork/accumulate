@@ -2,10 +2,13 @@
 
 This is the comprehensive documentation hub for the Accumulate Network project, optimized for AI assistance and developer productivity.
 
+This consolidated documentation provides comprehensive coverage of the Accumulate Network, from basic concepts to advanced implementation details. All documentation has been centralized here for better organization, maintainability, and AI processing efficiency.
+
 ## 📚 Documentation Structure
 
 ### Core Documentation
 - [**optimization-summary**](optimization-summary.md) - Documentation optimization and organization summary
+- [**documentation-consolidation-summary**](documentation-consolidation-summary.md) - Complete project summary and achievements
 - [**documentation-organization-summary**](documentation-organization-summary.md) - Complete documentation organization status
 
 ### 🔄 Cyclops Validator System
@@ -27,6 +30,7 @@ This is the comprehensive documentation hub for the Accumulate Network project, 
 - [**Snapshot Restoration**](cyclops/dual-snapshot-restoration-analysis.md) - Dual snapshot restoration analysis
 - [**Consensus Generation Fix**](cyclops/consensus-generation-fix.md) - Consensus generation fixes
 - [**Consensus Code Changes**](cyclops/consensus-code-changes.md) - Code changes for consensus
+- [**Cyclops Deployment Guide**](cyclops/cyclops-deployment-guide.md) - Automated Cyclops network deployment guide
 - [**Phase 1 Backup Strategy**](cyclops/phase1-backup-strategy.md) - Phase 1 backup and recovery strategy
 - [**Mainnet Single Node Fix**](cyclops/fixing-mainnet-single-node.md) - Mainnet single node fixes
 
@@ -40,18 +44,23 @@ This is the comprehensive documentation hub for the Accumulate Network project, 
 - [**bpt-restoration-design**](technical/bpt-restoration-design.md) - BPT restoration strategy and implementation design
 - [**snapshot-bpt-security-analysis**](technical/snapshot-bpt-security-analysis.md) - Comprehensive BPT security analysis and implementation strategy
 - [**p2p-key-generation**](technical/p2p-key-generation.md) - P2P key generation procedures
-- [**snapshot-format**](technical/snapshot-format.md) - Snapshot file format specification
-- [**snapshot-format-v2-corrected**](technical/snapshot-format-v2-corrected.md) - Corrected snapshot format v2 specification
+- [**snapshot-format-overview**](technical/snapshot-format-overview.md) - Snapshot format introduction and concepts
+- [**snapshot-format-structures**](technical/snapshot-format-structures.md) - Data structures and binary format reference
+- [**snapshot-format-sections**](technical/snapshot-format-sections.md) - Section types and organization
+- [**snapshot-format-operations**](technical/snapshot-format-operations.md) - Reading, writing, and processing snapshots
+- [**snapshot-format-combining**](technical/snapshot-format-combining.md) - Algorithms for combining multiple snapshots
 - [**genesis-format**](technical/genesis-format.md) - Genesis document format specification
 - [**record-format**](technical/record-format.md) - Database record format specification
 - [**extract-implementation-status**](technical/extract-implementation-status.md) - Extract command implementation status
 - [**sc-parser-design**](technical/sc-parser-design.md) - Snapshot Collection parser design
+- [**tendermint-abci-interface**](technical/tendermint-abci-interface.md) - Tendermint ABCI interface implementation
 
 ### API Documentation
-- [**debug-app-reference**](api/debug-app-reference.md) - Complete debug application command reference
-- [**analyze-commands**](api/analyze-commands.md) - Analyze tool command reference
-- [**accumulated-daemon-commands**](api/accumulated-daemon-commands.md) - Accumulated daemon command reference
-- [**command-implementation-map**](api/command-implementation-map.md) - Command to implementation mapping
+- [**api-interfaces-reference**](api/api-interfaces-reference.md) - Complete API interfaces and services reference
+- [**query-types-and-scope-reference**](api/query-types-and-scope-reference.md) - Complete guide to all query types and scope parameter usage
+- [**api-v3-readme**](api/api-v3-readme.md) - API v3 overview and service documentation
+- [**api-v2-readme**](api/api-v2-readme.md) - API v2 legacy documentation
+- [**accumulated-http-server**](api/accumulated-http-server.md) - HTTP server configuration and setup
 
 ### Network References
 - [**accumulate-mainnet-reference**](network/accumulate-mainnet-reference.md) - Mainnet configuration reference
@@ -62,7 +71,35 @@ This is the comprehensive documentation hub for the Accumulate Network project, 
 
 ### Tools and Utilities
 - [**a-extract-tool**](tools/a-extract-tool.md) - A_Extract tool documentation
+- [**analyze-docs-readme**](tools/analyze-docs-readme.md) - Analyze documentation hub and overview
+- [**analyze-documentation-complete**](tools/analyze-documentation-complete.md) - Analyze documentation completion status
+- [**analyze-extract-debug**](tools/analyze-extract-debug.md) - Analyze extract debug documentation
+- [**analyze-tool**](tools/analyze-tool.md) - Analyze tool documentation
+- [**debug-authority-validation**](tools/debug-authority-validation.md) - Debug authority validation
+- [**debug-lite-client**](tools/debug-lite-client.md) - Debug lite client documentation
+- [**debug-lite-client-test**](tools/debug-lite-client-test.md) - Debug lite client test documentation
+- [**debug-snapshot**](tools/debug-snapshot.md) - Debug snapshot documentation
+- [**debug-tool**](tools/debug-tool.md) - Debug tool documentation
+- [**factom-tool**](tools/factom-tool.md) - Factom tool documentation
+- [**light-client-design**](tools/light-client-design.md) - Light client design documentation
 - [**sc-design**](tools/sc-design.md) - Snapshot Collection design documentation
+- [**simulator-tool**](tools/simulator-tool.md) - Simulator tool documentation
+- [**staking-client-design**](tools/staking-client-design.md) - Staking client design documentation
+- [**tools-readme**](tools/tools-readme.md) - Tools overview and documentation
+
+### Testing Documentation
+- [**testing-index**](testing/testing-index.md) - Master index for all testing documentation
+- [**testing-readme**](testing/testing-readme.md) - Testing overview and quick start
+- [**ai-guidance**](testing/ai-guidance.md) - AI assistance guidance for testing
+- [**ci-cd**](testing/ci-cd.md) - Continuous integration and deployment testing
+- [**debugging**](testing/debugging.md) - Test debugging procedures and tools
+- [**e2e-tests**](testing/e2e-tests.md) - End-to-end testing documentation
+- [**performance-tests**](testing/performance-tests.md) - Performance and benchmark testing
+- [**simulator-tests**](testing/simulator-tests.md) - Simulator-based testing procedures
+- [**test-content**](testing/test-content.md) - Complete test content catalog
+- [**test-maintenance**](testing/test-maintenance.md) - Test maintenance and lifecycle management
+- [**testing**](testing/testing.md) - Comprehensive testing guide
+- [**unit-tests**](testing/unit-tests.md) - Unit testing documentation
 
 ## 🔗 Cross-References
 
@@ -75,7 +112,11 @@ This is the comprehensive documentation hub for the Accumulate Network project, 
 - [network-json-structure.md](network-json-structure.md) ← Configuration format
 
 #### Snapshot Management
-- [snapshot-format.md](technical/snapshot-format.md) ← Format specification
+- [snapshot-format-overview.md](technical/snapshot-format-overview.md) ← Format introduction
+- [snapshot-format-structures.md](technical/snapshot-format-structures.md) ← Data structures
+- [snapshot-format-sections.md](technical/snapshot-format-sections.md) ← Section organization
+- [snapshot-format-operations.md](technical/snapshot-format-operations.md) ← Operations guide
+- [snapshot-format-combining.md](technical/snapshot-format-combining.md) ← Combining algorithms
 - [a-extract-tool.md](tools/a-extract-tool.md) ← Extraction procedures
 - [debug-app-reference.md](debug-app-reference.md) ← Debug commands
 
@@ -114,7 +155,11 @@ This is the comprehensive documentation hub for the Accumulate Network project, 
 3. [extract-implementation-status.md](technical/extract-implementation-status.md) - Known issues
 
 #### **Working with snapshots**
-1. [snapshot-format.md](technical/snapshot-format.md) - Format details
+1. [snapshot-format-overview.md](technical/snapshot-format-overview.md) - Format introduction
+2. [snapshot-format-structures.md](technical/snapshot-format-structures.md) - Data structures
+3. [snapshot-format-sections.md](technical/snapshot-format-sections.md) - Section details
+4. [snapshot-format-operations.md](technical/snapshot-format-operations.md) - Operations
+5. [snapshot-format-combining.md](technical/snapshot-format-combining.md) - Combining
 2. [a-extract-tool.md](tools/a-extract-tool.md) - Extraction tools
 3. [debug-app-reference.md](debug-app-reference.md) - Debug snapshot commands
 

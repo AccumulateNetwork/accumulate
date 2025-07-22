@@ -812,7 +812,8 @@ This comprehensive reference covers all aspects of the Accumulate debug app, pro
 - [**cyclops/cyclops-automation.md**](cyclops/cyclops-automation.md) - Automated debug workflows
 
 ### Technical References
-- [**technical/snapshot-format.md**](technical/snapshot-format.md) - Snapshot format for debug snap commands
+- [**technical/snapshot-format-overview.md**](technical/snapshot-format-overview.md) - Snapshot format introduction
+- [**technical/snapshot-format-operations.md**](technical/snapshot-format-operations.md) - Snapshot operations for debug snap commands
 - [**technical/genesis-format.md**](technical/genesis-format.md) - Genesis format for debug genesis commands
 - [**technical/record-format.md**](technical/record-format.md) - Database record format for debug db commands
 
@@ -832,7 +833,7 @@ This comprehensive reference covers all aspects of the Accumulate debug app, pro
 
 ### Snapshot Operations
 - `debug snap collect` → See [network-initialization.md](network-initialization.md) for collection workflows
-- `debug snap rich-list` → See [technical/snapshot-format.md](technical/snapshot-format.md) for format details
+- `debug snap rich-list` → See [technical/snapshot-format-operations.md](technical/snapshot-format-operations.md) for operational details
 
 ### Genesis Operations
 - `debug genesis ingest` → See [network-initialization.md](network-initialization.md) for complete workflow
