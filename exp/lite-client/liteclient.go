@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	api "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc"
@@ -24,10 +25,9 @@ import (
 type LiteClient struct {
 	v2           *v2.Client
 	v3           api.Querier
-	cache        map[string]VerifiedAccount // account -> verified proof
-	transactions map[string][]Transaction   // account -> transactions
-	balances     map[string]BalanceResult   // account -> balance
-	mu           sync.RWMutex               // protects all maps
+	cache        map[string]VerifiedAccount // account -> verified proof (legacy)
+	unifiedCache *UnifiedCache              // comprehensive caching for all data types
+	mu           sync.RWMutex               // protects legacy maps
 }
 
 // NewLiteClient creates a new LiteClient instance with the specified server URL.
@@ -52,8 +52,7 @@ func NewLiteClient(server string) (*LiteClient, error) {
 		v2:           v2Client,
 		v3:           v3Client,
 		cache:        make(map[string]VerifiedAccount),
-		transactions: make(map[string][]Transaction),
-		balances:     make(map[string]BalanceResult),
+		unifiedCache: NewUnifiedCache(5 * time.Minute), // 5 minute default TTL
 	}, nil
 }
 
@@ -69,7 +68,11 @@ func (c *LiteClient) ValidateAndCacheProof(ctx context.Context, account string, 
 	if verified.Receipt == nil {
 		return fmt.Errorf("no receipt in fetched proof for account: %s", account)
 	}
-	if !VerifyProof(verified.Receipt, knownRoot) {
+	isValid, err := VerifyProof(verified.Receipt, account, knownRoot)
+	if err != nil {
+		return fmt.Errorf("proof verification error for account %s: %w", account, err)
+	}
+	if !isValid {
 		return fmt.Errorf("proof verification failed for account: %s", account)
 	}
 
@@ -126,14 +129,53 @@ func (c *LiteClient) retrieveAccountData(ctx context.Context, accountUrls []stri
 	defer c.mu.Unlock()
 
 	for _, url := range accountUrls {
-		balance, transactions, err := c.GetBalanceAndTransactions(ctx, url, 1000)
+		// Use universal API to get account data
+		accountData, err := c.GetAccountData(ctx, url)
 		if err != nil {
 			fmt.Printf("Warning: unable to retrieve account data for %s: %v\n", url, err)
 			continue
 		}
+		
+		// Only process token accounts for balance/transaction data
+		if !accountData.IsTokenAccount() {
+			fmt.Printf("Skipping non-token account: %s (type: %s)\n", url, accountData.TypeName)
+			continue
+		}
+		
+		// Get token balance
+		balanceInfo, err := c.GetTokenBalance(ctx, url)
+		if err != nil {
+			fmt.Printf("Warning: unable to get balance for %s: %v\n", url, err)
+			continue
+		}
+		
+		// For now, skip transaction retrieval as it's not implemented in universal API
+		// TODO: Implement transaction retrieval in universal API
+		transactions := []Transaction{} // Empty for now
 
-		c.transactions[url] = transactions
-		c.balances[url] = balance
+		// Store in unified cache
+		for _, tx := range transactions {
+			// Convert Transaction to CachedTransaction
+			cachedTx := &CachedTransaction{
+				TxID:      tx.TxID,
+				Type:      tx.Type,
+				Status:    tx.Status,
+				Timestamp: time.Unix(tx.Timestamp, 0),
+				Amount:    tx.Amount,
+				From:      tx.From,
+				To:        tx.To,
+				Account:   tx.Account,
+				Height:    uint64(tx.Height),
+				Data:      tx.Data,
+			}
+			c.unifiedCache.AddTransaction(url, cachedTx)
+		}
+		c.unifiedCache.StoreBalance(url, &TokenBalanceInfo{
+			AccountURL:  url,
+			Balance:     balanceInfo.Balance,
+			TokenURL:    balanceInfo.TokenURL,
+			AccountType: "token",
+		})
 	}
 
 	return nil

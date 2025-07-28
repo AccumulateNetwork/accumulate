@@ -54,7 +54,8 @@ func TestReceiptValidation(t *testing.T) {
 	}
 
 	// Test if proof.go can validate the receipt
-	isValid := VerifyProof(verifiedAccount.Receipt, nil)
+	// VerifyProof expects: (receipt, accountURL, expectedRoot)
+	isValid, _ := VerifyProof(verifiedAccount.Receipt, verifiedAccount.Url, nil)
 	fmt.Printf("\n=== Receipt Validation ===\n")
 	fmt.Printf("Receipt is valid: %v\n", isValid)
 
