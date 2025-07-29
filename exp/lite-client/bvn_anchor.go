@@ -67,7 +67,7 @@ func (hpg *HealingProofGenerator) queryRealBVNAnchorChain(ctx context.Context, a
 // Based on research findings: anchor transactions contain embedded receipts with complete proof chains
 func (hpg *HealingProofGenerator) buildBVNReceiptFromAnchorChain(bvnData map[string]interface{}, anchorPosition uint64, mainAnchor []byte) (*merkle.Receipt, error) {
 	fmt.Printf("\n--- Parsing BVN Anchor Chain Data ---\n")
-	
+
 	// Debug: Print the structure of BVN data
 	if jsonData, err := json.MarshalIndent(bvnData, "", "  "); err == nil {
 		fmt.Printf("BVN Data Structure:\n%s\n", string(jsonData))
@@ -92,14 +92,14 @@ func (hpg *HealingProofGenerator) buildBVNReceiptFromAnchorChain(bvnData map[str
 					if name, exists := chainMap["name"]; exists {
 						if name == "anchor" || name == "root" {
 							fmt.Printf("Found %s chain\n", name)
-							
+
 							// Look for entries or roots at the anchor position
 							if entries, exists := chainMap["entries"]; exists {
 								if receipt := hpg.extractReceiptFromChainEntries(entries, anchorPosition, mainAnchor); receipt != nil {
 									return receipt, nil
 								}
 							}
-							
+
 							if roots, exists := chainMap["roots"]; exists {
 								if receipt := hpg.extractReceiptFromRoots(roots, anchorPosition, mainAnchor); receipt != nil {
 									return receipt, nil
@@ -118,7 +118,7 @@ func (hpg *HealingProofGenerator) buildBVNReceiptFromAnchorChain(bvnData map[str
 // parseAnchorTransactions parses anchor transactions looking for embedded receipts
 func (hpg *HealingProofGenerator) parseAnchorTransactions(transactions interface{}, anchorPosition uint64, mainAnchor []byte) (*merkle.Receipt, error) {
 	fmt.Printf("Parsing anchor transactions for position %d\n", anchorPosition)
-	
+
 	// Handle different transaction data structures
 	if txArray, ok := transactions.([]interface{}); ok {
 		for i, tx := range txArray {
@@ -130,7 +130,7 @@ func (hpg *HealingProofGenerator) parseAnchorTransactions(transactions interface
 						if txType, exists := bodyMap["type"]; exists {
 							if txType == "blockValidatorAnchor" || txType == "directoryAnchor" {
 								fmt.Printf("Found %s transaction at index %d\n", txType, i)
-								
+
 								// Look for embedded receipts
 								if receipts, exists := bodyMap["receipts"]; exists {
 									if receipt := hpg.parseEmbeddedReceipts(receipts, mainAnchor); receipt != nil {
@@ -144,7 +144,7 @@ func (hpg *HealingProofGenerator) parseAnchorTransactions(transactions interface
 			}
 		}
 	}
-	
+
 	return nil, fmt.Errorf("no suitable anchor transactions found")
 }
 
@@ -171,20 +171,20 @@ func (hpg *HealingProofGenerator) buildReceiptFromRootChainData(rootReceiptMap m
 	start, _ := rootReceiptMap["start"].(string)
 	end, _ := rootReceiptMap["end"].(string)
 	anchor, _ := rootReceiptMap["anchor"].(string)
-	
+
 	if start == "" || end == "" || anchor == "" {
 		return nil
 	}
-	
+
 	// Decode hex strings
 	startHash, err1 := hex.DecodeString(start)
 	_, err2 := hex.DecodeString(end) // endHash not used but validate it
 	anchorHash, err3 := hex.DecodeString(anchor)
-	
+
 	if err1 != nil || err2 != nil || err3 != nil {
 		return nil
 	}
-	
+
 	// Build receipt entries
 	var entries []*merkle.ReceiptEntry
 	if entriesData, exists := rootReceiptMap["entries"]; exists {
@@ -204,7 +204,7 @@ func (hpg *HealingProofGenerator) buildReceiptFromRootChainData(rootReceiptMap m
 			}
 		}
 	}
-	
+
 	return &merkle.Receipt{
 		Start:   startHash,
 		Anchor:  anchorHash,

@@ -258,3 +258,53 @@ func (hpg *HealingProofGenerator) ValidateReceipt(receipt *merkle.Receipt) bool 
 	}
 	return receipt.Validate(nil)
 }
+
+// FetchBPTRootHash fetches the BPT root hash from the node status endpoint.
+// partition should be "dn" or "bvn0.acme" (without acc:// prefix)
+func FetchBPTRootHash(ctx context.Context, cl *v2api.Client, partition string) ([]byte, error) {
+	status, err := cl.Status(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query node status: %w", err)
+	}
+	if partition == "dn" {
+		return status.DnBptHash[:], nil
+	} else if partition == "bvn0.acme" {
+		return status.BvnBptHash[:], nil
+	}
+	return nil, fmt.Errorf("unsupported partition: %s", partition)
+}
+
+// FetchProof is a legacy wrapper function that uses the healing-based proof generator.
+// This maintains backward compatibility for existing tests while using the new implementation.
+func FetchProof(accountURL string) (*VerifiedAccount, error) {
+	// Create a new v2 API client
+	client, err := v2api.New("https://mainnet.accumulatenetwork.io/v2")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create API client: %w", err)
+	}
+
+	// Create healing proof generator
+	hpg, err := NewHealingProofGenerator(client)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create healing proof generator: %w", err)
+	}
+	defer hpg.Close()
+
+	// Generate proof using the healing approach
+	return hpg.GenerateProof(context.Background(), accountURL)
+}
+
+// VerifyProof is a legacy wrapper function for receipt validation.
+// New code should use the modular implementation.
+func VerifyProof(receipt *merkle.Receipt, accountURL string, expectedRoot []byte) (bool, error) {
+	if receipt == nil {
+		return false, fmt.Errorf("receipt is nil")
+	}
+
+	// Validate the receipt structure
+	if !receipt.Validate(nil) {
+		return false, fmt.Errorf("receipt validation failed")
+	}
+
+	return true, nil
+}

@@ -58,7 +58,7 @@ func (hpg *HealingProofGenerator) extractMainIndexRoot(accountData map[string]in
 					if name, exists := chainMap["name"]; exists {
 						if name == "main-index" {
 							// Found main-index chain
-							
+
 							// Extract the latest root from the main-index chain
 							if roots, exists := chainMap["roots"]; exists {
 								if rootsArray, ok := roots.([]interface{}); ok && len(rootsArray) > 0 {

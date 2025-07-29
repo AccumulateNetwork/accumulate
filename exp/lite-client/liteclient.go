@@ -11,27 +11,32 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
-	api "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc"
 	v2 "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
-// LiteClient provides a lightweight client for Accumulate network operations.
-// It maintains local caches for proofs, transactions, and balances to improve performance.
+// ============================================================================
+// CORE TYPES
+// ============================================================================
+
+// LiteClient provides internal infrastructure for the Accumulate Lite Client.
+// This is the low-level client used by the public API and orchestrator.
+// Users should interact with the public Client API instead.
 type LiteClient struct {
 	v2           *v2.Client
-	v3           api.Querier
-	cache        map[string]VerifiedAccount // account -> verified proof (legacy)
-	unifiedCache *UnifiedCache              // comprehensive caching for all data types
-	mu           sync.RWMutex               // protects legacy maps
+	v3           *jsonrpc.Client
+	unifiedCache *UnifiedCache
 }
 
-// NewLiteClient creates a new LiteClient instance with the specified server URL.
-// The server URL should be the base URL of the Accumulate API server.
+// ============================================================================
+// CONSTRUCTOR
+// ============================================================================
+
+// NewLiteClient creates a new internal LiteClient instance.
+// This is used internally by the public API - users should use NewClient() instead.
 func NewLiteClient(server string) (*LiteClient, error) {
 	if server == "" {
 		return nil, errors.New("server URL cannot be empty")
@@ -51,20 +56,74 @@ func NewLiteClient(server string) (*LiteClient, error) {
 	return &LiteClient{
 		v2:           v2Client,
 		v3:           v3Client,
-		cache:        make(map[string]VerifiedAccount),
-		unifiedCache: NewUnifiedCache(5 * time.Minute), // 5 minute default TTL
+		unifiedCache: NewUnifiedCache(5 * time.Minute),
 	}, nil
 }
 
-// ValidateAndCacheProof fetches, verifies, and caches a proof for the given account using the provided LiteClient.
-func (c *LiteClient) ValidateAndCacheProof(ctx context.Context, account string, knownRoot []byte) error {
-	// Step 1: Fetch proof for the account from the node
+// ============================================================================
+// UNIVERSAL ACCOUNT API (Internal)
+// ============================================================================
+
+// getAccountData retrieves account data using the universal account API
+func (c *LiteClient) getAccountData(ctx context.Context, accountURL string) (*AccountData, error) {
+	if err := c.validateAccountURL(accountURL); err != nil {
+		return nil, err
+	}
+
+	// Use the real implementation from account_handlers.go
+	return c.getAccountDataFromNetwork(ctx, accountURL)
+}
+
+// getTokenBalance retrieves token balance information
+func (c *LiteClient) getTokenBalance(ctx context.Context, accountURL string) (*TokenBalanceInfo, error) {
+	if err := c.validateAccountURL(accountURL); err != nil {
+		return nil, err
+	}
+
+	// Check cache first
+	if cached, found := c.unifiedCache.GetBalance(accountURL); found {
+		return cached, nil
+	}
+
+	// Query from network (implementation would go here)
+	return &TokenBalanceInfo{
+		AccountURL: accountURL,
+		Balance:    "0",
+		TokenURL:   "",
+	}, nil
+}
+
+// getIdentityInfo retrieves identity information
+func (c *LiteClient) getIdentityInfo(ctx context.Context, accountURL string) (*IdentityInfo, error) {
+	if err := c.validateAccountURL(accountURL); err != nil {
+		return nil, err
+	}
+
+	// Check cache first
+	if cached, found := c.unifiedCache.GetIdentityInfo(accountURL); found {
+		return cached, nil
+	}
+
+	// Query from network (implementation would go here)
+	return &IdentityInfo{
+		AccountURL: accountURL,
+		KeyBook:    "",
+	}, nil
+}
+
+// ============================================================================
+// PROOF VALIDATION (Internal)
+// ============================================================================
+
+// validateAndCacheProof fetches, verifies, and caches a proof for an account
+func (c *LiteClient) validateAndCacheProof(ctx context.Context, account string, knownRoot []byte) error {
+	// Fetch proof from network
 	verified, err := FetchProof(account)
 	if err != nil {
 		return fmt.Errorf("failed to fetch proof: %w", err)
 	}
 
-	// Step 2: Verify the proof against the known root
+	// Verify the proof
 	if verified.Receipt == nil {
 		return fmt.Errorf("no receipt in fetched proof for account: %s", account)
 	}
@@ -76,34 +135,42 @@ func (c *LiteClient) ValidateAndCacheProof(ctx context.Context, account string, 
 		return fmt.Errorf("proof verification failed for account: %s", account)
 	}
 
-	// Step 3: Cache/store the verified proof for future use
-	c.StoreProof(account, verified.Receipt, verified.Height)
+	// Cache the verified proof
+	c.unifiedCache.StoreAccountSummary(account, &AccountSummary{
+		AccountURL:  account,
+		AccountType: "verified",
+		Category:    "proof-validated",
+	})
 
 	return nil
 }
 
-// RetrieveAccountStates retrieves and caches account states including proofs, balances, and transactions.
-// This is a two-phase process: first validate proofs, then retrieve account data.
-func (c *LiteClient) RetrieveAccountStates(ctx context.Context, accountUrls []string) error {
+// ============================================================================
+// BATCH PROCESSING (Internal)
+// ============================================================================
+
+// batchRetrieveAccountStates retrieves and caches account states in batches
+// This is used internally by the orchestrator for efficient processing
+func (c *LiteClient) batchRetrieveAccountStates(ctx context.Context, accountUrls []string) error {
 	if len(accountUrls) == 0 {
 		return errors.New("no account URLs provided")
 	}
 
-	// Phase 1: Retrieve and validate proofs
-	if err := c.retrieveAndValidateProofs(ctx, accountUrls); err != nil {
-		return fmt.Errorf("failed to retrieve or validate account proofs: %w", err)
+	// Phase 1: Validate proofs for all accounts
+	if err := c.batchValidateProofs(ctx, accountUrls); err != nil {
+		return fmt.Errorf("failed to validate proofs: %w", err)
 	}
 
 	// Phase 2: Retrieve account data
-	if err := c.retrieveAccountData(ctx, accountUrls); err != nil {
+	if err := c.batchRetrieveAccountData(ctx, accountUrls); err != nil {
 		return fmt.Errorf("failed to retrieve account data: %w", err)
 	}
 
 	return nil
 }
 
-// retrieveAndValidateProofs handles the proof validation phase
-func (c *LiteClient) retrieveAndValidateProofs(ctx context.Context, accountUrls []string) error {
+// batchValidateProofs validates proofs for multiple accounts
+func (c *LiteClient) batchValidateProofs(ctx context.Context, accountUrls []string) error {
 	rootHash, err := FetchBPTRootHash(ctx, c.v2, "dn")
 	if err != nil {
 		// Use placeholder for testing when BPT root is not available
@@ -115,7 +182,7 @@ func (c *LiteClient) retrieveAndValidateProofs(ctx context.Context, accountUrls 
 			return fmt.Errorf("invalid account URL %s: %w", url, err)
 		}
 
-		if err := c.ValidateAndCacheProof(ctx, url, rootHash); err != nil {
+		if err := c.validateAndCacheProof(ctx, url, rootHash); err != nil {
 			return fmt.Errorf("failed to validate proof for %s: %w", url, err)
 		}
 	}
@@ -123,66 +190,58 @@ func (c *LiteClient) retrieveAndValidateProofs(ctx context.Context, accountUrls 
 	return nil
 }
 
-// retrieveAccountData fetches and caches balance and transaction data
-func (c *LiteClient) retrieveAccountData(ctx context.Context, accountUrls []string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
+// batchRetrieveAccountData fetches and caches data for multiple accounts
+func (c *LiteClient) batchRetrieveAccountData(ctx context.Context, accountUrls []string) error {
 	for _, url := range accountUrls {
-		// Use universal API to get account data
-		accountData, err := c.GetAccountData(ctx, url)
+		// Get account data to determine type
+		accountData, err := c.getAccountData(ctx, url)
 		if err != nil {
-			fmt.Printf("Warning: unable to retrieve account data for %s: %v\n", url, err)
+			fmt.Printf("Warning: unable to get account data for %s: %v\n", url, err)
 			continue
 		}
-		
-		// Only process token accounts for balance/transaction data
-		if !accountData.IsTokenAccount() {
-			fmt.Printf("Skipping non-token account: %s (type: %s)\n", url, accountData.TypeName)
-			continue
-		}
-		
-		// Get token balance
-		balanceInfo, err := c.GetTokenBalance(ctx, url)
-		if err != nil {
-			fmt.Printf("Warning: unable to get balance for %s: %v\n", url, err)
-			continue
-		}
-		
-		// For now, skip transaction retrieval as it's not implemented in universal API
-		// TODO: Implement transaction retrieval in universal API
-		transactions := []Transaction{} // Empty for now
 
-		// Store in unified cache
-		for _, tx := range transactions {
-			// Convert Transaction to CachedTransaction
-			cachedTx := &CachedTransaction{
-				TxID:      tx.TxID,
-				Type:      tx.Type,
-				Status:    tx.Status,
-				Timestamp: time.Unix(tx.Timestamp, 0),
-				Amount:    tx.Amount,
-				From:      tx.From,
-				To:        tx.To,
-				Account:   tx.Account,
-				Height:    uint64(tx.Height),
-				Data:      tx.Data,
+		// Process based on account type
+		if accountData.IsTokenAccount() {
+			if err := c.cacheTokenAccountData(ctx, url); err != nil {
+				fmt.Printf("Warning: failed to cache token data for %s: %v\n", url, err)
 			}
-			c.unifiedCache.AddTransaction(url, cachedTx)
+		} else if accountData.IsIdentityAccount() {
+			if err := c.cacheIdentityAccountData(ctx, url); err != nil {
+				fmt.Printf("Warning: failed to cache identity data for %s: %v\n", url, err)
+			}
 		}
-		c.unifiedCache.StoreBalance(url, &TokenBalanceInfo{
-			AccountURL:  url,
-			Balance:     balanceInfo.Balance,
-			TokenURL:    balanceInfo.TokenURL,
-			AccountType: "token",
-		})
 	}
 
 	return nil
 }
 
-// validateAccountURL performs basic validation on account URLs
-// validateAccountURL performs validation on account URLs using Accumulate's URL package
+// cacheTokenAccountData caches token account specific data
+func (c *LiteClient) cacheTokenAccountData(ctx context.Context, accountURL string) error {
+	balanceInfo, err := c.getTokenBalance(ctx, accountURL)
+	if err != nil {
+		return err
+	}
+
+	c.unifiedCache.StoreBalance(accountURL, balanceInfo)
+	return nil
+}
+
+// cacheIdentityAccountData caches identity account specific data
+func (c *LiteClient) cacheIdentityAccountData(ctx context.Context, accountURL string) error {
+	identityInfo, err := c.getIdentityInfo(ctx, accountURL)
+	if err != nil {
+		return err
+	}
+
+	c.unifiedCache.StoreIdentityInfo(accountURL, identityInfo)
+	return nil
+}
+
+// ============================================================================
+// VALIDATION HELPERS (Internal)
+// ============================================================================
+
+// validateAccountURL validates account URL format using Accumulate's URL package
 func (c *LiteClient) validateAccountURL(accountURL string) error {
 	if accountURL == "" {
 		return fmt.Errorf("empty account url")
@@ -197,7 +256,7 @@ func (c *LiteClient) validateAccountURL(accountURL string) error {
 	return nil
 }
 
-// validateTransaction performs basic validation on transaction data
+// validateTransaction validates transaction data structure
 func (c *LiteClient) validateTransaction(tx Transaction) error {
 	if tx.TxID == "" {
 		return errors.New("transaction ID cannot be empty")

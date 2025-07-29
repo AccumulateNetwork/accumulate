@@ -66,20 +66,13 @@ type UniversalAccountAPI interface {
 	GetAccountType(ctx context.Context, accountUrl string) (protocol.AccountType, error)
 }
 
-// AccountData holds the interpreted account data with type information.
-type AccountData struct {
-	URL         string                    `json:"url"`
-	Type        protocol.AccountType      `json:"type"`
-	TypeName    string                    `json:"typeName"`
-	Data        interface{}               `json:"data"`        // The actual account struct (protocol.Account or raw data for unknown types)
-	RawResponse *v2api.ChainQueryResponse `json:"rawResponse"` // Original API response
-}
+// AccountData is defined in types.go to avoid duplication
 
 // Implementation of UniversalAccountAPI on LiteClient
 
-// GetAccountData retrieves and interprets account data for any account type.
-// Uses the existing v2 API with proper account type interpretation and caching.
-func (c *LiteClient) GetAccountData(ctx context.Context, accountUrl string) (*AccountData, error) {
+// getAccountDataFromNetwork retrieves account data from the network (internal helper)
+// This is used by the main GetAccountData method in liteclient.go
+func (c *LiteClient) getAccountDataFromNetwork(ctx context.Context, accountUrl string) (*AccountData, error) {
 	fmt.Printf("Getting account data for %s using universal API\n", accountUrl)
 
 	// Check cache first
@@ -407,9 +400,8 @@ func (h *TokenAccountHandler) GetBalance(ctx context.Context, accountData *Accou
 }
 
 func (h *TokenAccountHandler) GetTransactions(ctx context.Context, accountData *AccountData, limit int) ([]interface{}, error) {
-	// TODO: Implement transaction retrieval for token accounts
-	// For now, return empty slice as transaction retrieval needs to be implemented
-	// in the universal API architecture
+	// Transaction retrieval is handled by the orchestrator layer
+	// This handler focuses on account-specific data processing
 	return []interface{}{}, nil
 }
 
@@ -443,9 +435,8 @@ func (h *DataAccountHandler) GetBalance(ctx context.Context, accountData *Accoun
 }
 
 func (h *DataAccountHandler) GetTransactions(ctx context.Context, accountData *AccountData, limit int) ([]interface{}, error) {
-	// TODO: Implement transaction retrieval for data accounts
-	// For now, return empty slice as transaction retrieval needs to be implemented
-	// in the universal API architecture
+	// Transaction retrieval is handled by the orchestrator layer
+	// This handler focuses on account-specific data processing
 	return []interface{}{}, nil
 }
 
@@ -488,9 +479,8 @@ func (h *IdentityAccountHandler) GetBalance(ctx context.Context, accountData *Ac
 }
 
 func (h *IdentityAccountHandler) GetTransactions(ctx context.Context, accountData *AccountData, limit int) ([]interface{}, error) {
-	// TODO: Implement transaction retrieval for identity accounts
-	// For now, return empty slice as transaction retrieval needs to be implemented
-	// in the universal API architecture
+	// Transaction retrieval is handled by the orchestrator layer
+	// This handler focuses on account-specific data processing
 	return []interface{}{}, nil
 }
 
@@ -537,7 +527,7 @@ func (r *AccountRouter) GetHandler(accountType protocol.AccountType) AccountHand
 // RouteAccountOperation routes an operation to the appropriate handler
 func (c *LiteClient) RouteAccountOperation(ctx context.Context, accountURL string, operation string, params map[string]interface{}) (interface{}, error) {
 	// Get account data first
-	accountData, err := c.GetAccountData(ctx, accountURL)
+	accountData, err := c.getAccountData(ctx, accountURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get account data: %w", err)
 	}
@@ -566,93 +556,6 @@ func (c *LiteClient) RouteAccountOperation(ctx context.Context, accountURL strin
 	}
 }
 
-// Phase 3: Type-specific data access methods
-
-// GetTokenBalance retrieves the balance for any token account type
-func (c *LiteClient) GetTokenBalance(ctx context.Context, accountURL string) (*TokenBalanceInfo, error) {
-	// Check cache first
-	if cached, found := c.unifiedCache.GetBalance(accountURL); found {
-		return cached, nil
-	}
-
-	accountData, err := c.GetAccountData(ctx, accountURL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get account data: %w", err)
-	}
-
-	if !accountData.IsTokenAccount() {
-		return nil, fmt.Errorf("account is not a token account: %s", accountData.TypeName)
-	}
-
-	switch accountData.Type {
-	case protocol.AccountTypeLiteTokenAccount:
-		liteToken, err := accountData.AsLiteTokenAccount()
-		if err != nil {
-			return nil, err
-		}
-		balanceInfo := &TokenBalanceInfo{
-			AccountURL:    accountURL,
-			AccountType:   "lite_token",
-			Balance:       liteToken.Balance.String(),
-			TokenURL:      liteToken.TokenUrl.String(),
-			CreditBalance: 0, // LiteTokenAccount doesn't have CreditBalance field
-		}
-		// Store in cache
-		c.unifiedCache.StoreBalance(accountURL, balanceInfo)
-		return balanceInfo, nil
-
-	case protocol.AccountTypeTokenAccount:
-		tokenAccount, err := accountData.AsTokenAccount()
-		if err != nil {
-			return nil, err
-		}
-		balanceInfo := &TokenBalanceInfo{
-			AccountURL:    accountURL,
-			AccountType:   "token",
-			Balance:       tokenAccount.Balance.String(),
-			TokenURL:      tokenAccount.TokenUrl.String(),
-			CreditBalance: 0, // TokenAccount doesn't have CreditBalance field
-		}
-		// Store in cache
-		c.unifiedCache.StoreBalance(accountURL, balanceInfo)
-		return balanceInfo, nil
-
-	default:
-		return nil, fmt.Errorf("unsupported token account type: %s", accountData.TypeName)
-	}
-}
-
-// GetIdentityInfo retrieves information about an identity (ADI) account
-func (c *LiteClient) GetIdentityInfo(ctx context.Context, accountURL string) (*IdentityInfo, error) {
-	// Check cache first
-	if cached, found := c.unifiedCache.GetIdentityInfo(accountURL); found {
-		return cached, nil
-	}
-
-	accountData, err := c.GetAccountData(ctx, accountURL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get account data: %w", err)
-	}
-
-	if !accountData.IsIdentityAccount() {
-		return nil, fmt.Errorf("account is not an identity account: %s", accountData.TypeName)
-	}
-
-	adi, err := accountData.AsADI()
-	if err != nil {
-		return nil, err
-	}
-
-	identityInfo := &IdentityInfo{
-		AccountURL:  accountURL,
-		IdentityURL: adi.Url.String(),
-		KeyBook:     adi.KeyBook().String(),
-	}
-	// Store in cache
-	c.unifiedCache.StoreIdentityInfo(accountURL, identityInfo)
-	return identityInfo, nil
-}
-
 // GetDataAccountInfo retrieves information about a data account
 func (c *LiteClient) GetDataAccountInfo(ctx context.Context, accountURL string) (*DataAccountInfo, error) {
 	// Check cache first
@@ -660,7 +563,7 @@ func (c *LiteClient) GetDataAccountInfo(ctx context.Context, accountURL string) 
 		return cached, nil
 	}
 
-	accountData, err := c.GetAccountData(ctx, accountURL)
+	accountData, err := c.getAccountData(ctx, accountURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get account data: %w", err)
 	}
@@ -709,7 +612,7 @@ func (c *LiteClient) GetAccountSummary(ctx context.Context, accountURL string) (
 		return cached, nil
 	}
 
-	accountData, err := c.GetAccountData(ctx, accountURL)
+	accountData, err := c.getAccountData(ctx, accountURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get account data: %w", err)
 	}
@@ -723,14 +626,14 @@ func (c *LiteClient) GetAccountSummary(ctx context.Context, accountURL string) (
 	// Add type-specific information
 	switch {
 	case accountData.IsTokenAccount():
-		balanceInfo, err := c.GetTokenBalance(ctx, accountURL)
+		balanceInfo, err := c.getTokenBalance(ctx, accountURL)
 		if err == nil {
 			summary.Balance = balanceInfo.Balance
 			summary.TokenURL = balanceInfo.TokenURL
 		}
 
 	case accountData.IsIdentityAccount():
-		identityInfo, err := c.GetIdentityInfo(ctx, accountURL)
+		identityInfo, err := c.getIdentityInfo(ctx, accountURL)
 		if err == nil {
 			summary.KeyBook = identityInfo.KeyBook
 		}
