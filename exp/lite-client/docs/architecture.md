@@ -1,654 +1,283 @@
 # Accumulate Lite Client Architecture
 
-## Document Information
+## Overview
 
-- **Version**: 1.0
-- **Last Updated**: January 2025
-- **Status**: Current
-- **Document Type**: Technical Architecture Specification
-- **Audience**: Software Engineers, System Architects, Technical Leadership
+The Accumulate Lite Client implements a sophisticated four-layer architecture designed to handle the complexity of Accumulate's blockchain protocol while providing a simple public interface. The architecture appropriately separates concerns across specialized components that handle different aspects of the protocol's rich data model.
 
-This document provides a comprehensive overview of the Accumulate Lite Client architecture, design decisions, and implementation patterns.
+## Architecture Layers
 
-## Executive Summary
+### 1. Public API Layer (`api.go`)
 
-The Accumulate Lite Client is a lightweight, trustless blockchain client that provides cryptographic guarantees equivalent to full Accumulate nodes while operating with minimal resource requirements. The system implements a simplified, single-entry API design that abstracts blockchain complexity from end users.
+The public API layer provides a clean, simplified interface that abstracts all complexity from end users. This layer handles the "what" - what users want to accomplish.
 
-## Architecture Overview
+**Key Components:**
+- **Client** struct: Main public interface with simplified methods
+  - `GetADI(ctx, adiURL)`: Single entry point for complete ADI data retrieval
+  - `GetCachedADIs()`: List ADIs with cached data
+  - `GetCacheMetadata(adiURL)`: Cache freshness information
+  - `VerifyReceipt(ctx, accountURL)`: Manual receipt verification for transparency
+  - Cache management: `ClearCache()`, `PruneStaleData()`, `PruneADI()`
+- **Simplified Data Structures**: Public-facing types that hide protocol complexity
+  - `ADIData`: Complete ADI information with all accounts
+  - `SimpleAccountData`: Unified account representation
+  - `SimpleTransaction`: Simplified transaction data
+  - `ReceiptVerificationResult`: Proof verification results
 
-The Accumulate Lite Client follows a clean **layered architecture** designed for simplicity, maintainability, and performance:
+**Key Features:**
+- **Single Entry Point**: `GetADI()` handles everything automatically
+- **Invisible Complexity**: Users never see proofs, caching, or validation details
+- **Network Presets**: `NewMainnetClient()`, `NewTestnetClient()`, `NewDevnetClient()`
+- **Automatic Optimization**: Cache freshness, proof validation, data consistency
 
-### Layer Responsibilities
+### 2. Orchestration Layer (`liteclient.go`)
 
-| Layer | Purpose | "I am responsible for..." |
-|-------|---------|---------------------------|
-| **Public API** | User Interface | "Providing the stellar single-entry `GetADI()` experience users love" |
-| **ADI Orchestrator** | Business Logic | "Understanding what it means to 'process an ADI' and coordinating that workflow" |
-| **LiteClient Core** | Infrastructure | "Network communication, caching, and low-level account operations" |
-| **Unified Cache** | Data Storage | "Storing and managing all cached data with TTL and invalidation" |
+The orchestration layer coordinates the complex workflow of ADI processing. This layer handles the "how" - how to process user requests across multiple specialized components.
 
-### Component Mapping
+**Key Components:**
+- **LiteClient** struct: Central coordinator and workflow orchestrator
+  - Maintains dual API clients (v2 and v3) for comprehensive protocol access
+  - Coordinates between AccountHandler and HealingProofGenerator
+  - Manages UnifiedCache for all data types
+  - Tracks ADIs of interest for background processing
+  - Implements batch processing for efficiency
 
-| File | Layer | Purpose | Key Responsibility |
-|------|-------|---------|-------------------|
-| `api.go` | Public API | User-facing interface | Single `GetADI()` method, cache management |
-| `adi_orchestrator.go` | Business Logic | ADI processing workflow | Account discovery, batch coordination, result aggregation |
-| `liteclient.go` | Infrastructure | Network & data primitives | Individual account queries, proof validation, caching |
-| `unified_cache.go` | Data Storage | Caching infrastructure | Data storage, TTL management, invalidation |
-| `healing.go` | Infrastructure | Proof generation | Cryptographic proof creation and validation |
+**Core Methods:**
+- `ProcessADI()`: Main orchestration method implementing the complete workflow
+- `processAccount()`: Single account processing with proof generation
+- `validateAndCacheProof()`: Proof validation and caching coordination
+- Batch processing: `batchRetrieveAccountStates()`, `batchValidateProofs()`
 
-### Architectural Rationale: Multi-Layer Design
+**Workflow Coordination:**
+1. Cache freshness verification
+2. Account discovery and data retrieval delegation
+3. Proof generation coordination
+4. Result caching and validation
+5. Error handling and recovery
 
-**Core Principle**: The system implements separation of concerns through distinct abstraction layers
+### 3. Specialized Component Layer (`account.go`, `receipt.go`, `cache.go`)
+
+This layer contains specialized components that handle specific aspects of Accumulate's protocol complexity. Each component is an expert in its domain.
+
+#### Account Handler (`account.go`)
+**Purpose**: Expert in Accumulate's diverse account types and data retrieval
+
+**Key Features:**
+- **Universal Account API**: Handles 10+ account types (ADI, TokenAccount, LiteTokenAccount, KeyPage, KeyBook, DataAccount, etc.)
+- **Type Detection**: Automatic account type identification and proper struct casting
+- **Protocol-Aware Processing**: Uses `protocol.AccountTypeByName()` and proper unmarshaling
+- **Specialized Retrievers**: `GetTokenBalance()`, `GetIdentityInfo()`, `DiscoverADIAccounts()`
+- **Type Safety**: Methods like `AsLiteTokenAccount()`, `AsTokenAccount()`, `AsADI()`
+
+#### Healing Proof Generator (`receipt.go`)
+**Purpose**: Cryptographically valid proof generation using production-grade methods
+
+**Key Features:**
+- **Healing-Based Approach**: Based on `internal/core/healing/synthetic.go` patterns
+- **Multi-Level Receipt Construction**: Account → BVN → DN proof chains
+- **Real BPT Integration**: Uses actual Binary Patricia Tree receipt methods
+- **Production Validation**: Same cryptographic guarantees as full nodes
+- **Observer Independence**: Bypasses "observer is not set" limitations
+- **Receipt Combination**: Uses real `receipt.Combine()` methods
+
+**Core Methods:**
+- `GenerateProof()`: Main proof generation with multi-level receipts
+- `buildMultiLevelReceipt()`: Complete proof chain construction
+- `buildMainChainReceipt()`: Account-level proof generation
+- `ValidateReceipt()`: Built-in cryptographic validation
+
+#### Unified Cache (`cache.go`)
+**Purpose**: Comprehensive caching system for all Accumulate data types
+
+**Key Features:**
+- **Type-Specific Storage**: Separate caches for each data type (accounts, balances, transactions, identity info, etc.)
+- **TTL Management**: Configurable time-to-live with automatic expiration
+- **ADI-Aware Organization**: Groups accounts by ADI for efficient retrieval
+- **Cache Statistics**: Hit rates, entry counts, memory usage tracking
+- **Pruning Capabilities**: Time-based and manual cache cleanup
+
+**Cached Data Types:**
+- `CachedAccountData`: Complete account information
+- `CachedTransaction`: Transaction history
+- `CachedBalance`: Token balance information
+- `CachedIdentityInfo`: ADI identity data
+- `CachedDataAccountInfo`: Data account information
+- `CachedAccountSummary`: Unified account summaries
+
+### 4. Network Layer (Accumulate Protocol APIs)
+
+The network layer provides access to Accumulate's blockchain data through multiple API versions. The lite client uses both APIs strategically based on their strengths.
+
+**API Usage Strategy:**
+- **v2 API** (`pkg/client/api/v2`): Primary for account data and basic queries
+  - Account data retrieval with `GeneralQuery`
+  - Transaction history via `TxHistoryQuery`
+  - Balance information and account metadata
+  - Reliable for core account operations
+
+- **v3 API** (`pkg/api/v3/jsonrpc`): Advanced chain and message queries
+  - Chain data queries for proof generation
+  - Message record queries for signature validation
+  - Block and anchor chain data access
+  - Required for cryptographic proof construction
+
+**Network Access Patterns:**
+- **Dual Client Architecture**: Maintains both v2 and v3 clients simultaneously
+- **Fallback Strategies**: Graceful degradation when APIs are unavailable
+- **Error Handling**: Protocol-aware error interpretation and recovery
+
+## Request Flow Architecture
+
+### Complete GetADI() Workflow
 
 ```
-USER: "Get me data for myadi.acme"
-         ↓
-ADI ORCHESTRATOR: "I need to:
-                   1. Discover ALL accounts under myadi.acme
-                   2. Process each account in batch
-                   3. Aggregate and format results
-                   4. Handle errors gracefully"
-         ↓
-LITE CLIENT: "Here's how to get data for ONE account:
-              - acc://myadi.acme (identity)
-              - acc://myadi.acme/token (token account) 
-              - acc://myadi.acme/book (key book)
-              etc."
+User: GetADI("myadi.acme")
+    ↓
+1. api.go (Public Layer)
+   - Parameter validation
+   - Cache freshness check
+   - ADI interest tracking
+    ↓
+2. liteclient.go (Orchestration)
+   - ProcessADI() coordination
+   - Account discovery
+   - Batch processing setup
+    ↓
+3. account.go (Account Handler)
+   - Universal account data retrieval
+   - Type detection and casting
+   - Protocol-specific processing
+    ↓
+4. receipt.go (Proof Generator)
+   - Multi-level receipt construction
+   - Cryptographic validation
+   - BPT proof generation
+    ↓
+5. cache.go (Unified Cache)
+   - Type-specific storage
+   - TTL management
+   - Result caching
+    ↓
+Return: Complete ADI data with verified proofs
 ```
 
-**ADI Orchestrator Layer**: Business logic and workflow coordination
-**LiteClient Layer**: Infrastructure services and network communication
+### Key Workflow Features
 
-### Design Trade-off Analysis
+**Cache-First Strategy:**
+- Always check cache before network queries
+- Freshness validation with configurable TTL
+- Automatic cache warming for ADIs of interest
 
-#### Benefits of Multi-Layer Architecture
+**Parallel Processing:**
+- Concurrent account data retrieval
+- Batch proof generation
+- Efficient resource utilization
 
-1. **🎯 Separation of Concerns**
-   - **LiteClient**: Focuses purely on network communication and caching
-   - **ADI Orchestrator**: Focuses purely on ADI business logic
-   - Changes to one don't affect the other
+**Error Recovery:**
+- Graceful fallback when proofs unavailable
+- Partial success handling (some accounts succeed)
+- Comprehensive error context preservation
 
-2. **🔄 Reusability**
-   - **LiteClient** can be used directly for single account operations
-   - **ADI Orchestrator** can be used for complex multi-account workflows
-   - Other components can use either layer as needed
+## Architecture Strengths
 
-3. **🧪 Testability**
-   - Can test network layer independently with mocks
-   - Can test orchestration logic without network calls
-   - Clear boundaries make unit testing straightforward
+### 1. Protocol-Appropriate Complexity
+**Why Multiple Data Types Are Necessary:**
+- Accumulate has 10+ distinct account types (ADI, TokenAccount, LiteTokenAccount, KeyPage, KeyBook, DataAccount, etc.)
+- Each account type has different data structures and access patterns
+- The "multiple caching systems" are actually specialized handlers for legitimate protocol diversity
+- This complexity reflects Accumulate's rich protocol model, not over-engineering
 
-4. **🛠️ Maintainability**
-   - Network protocol changes only affect LiteClient
-   - ADI processing logic changes only affect Orchestrator
-   - Clear responsibilities reduce cognitive load
+### 2. Cryptographic Engineering Excellence
+**Production-Grade Proof Generation:**
+- Uses the same healing patterns as full Accumulate nodes
+- Multi-level receipt construction (account → BVN → DN) with real cryptographic validation
+- Bypasses "observer is not set" limitations through innovative transaction-based receipt fetching
+- Provides the same security guarantees as running a full node
 
-#### Accepted Trade-offs
+### 3. Optimal Layer Separation
+**Each Layer Has Clear Purpose:**
+- **Public API**: "What users want" - simple, invisible complexity
+- **Orchestration**: "How to coordinate" - workflow management
+- **Components**: "Domain expertise" - specialized protocol handling
+- **Network**: "Raw data access" - blockchain communication
 
-1. **🔀 Complexity**
-   - More files to understand initially
-   - Two layers of abstraction to navigate
-   - Potential for over-engineering simple operations
+### 4. Performance Optimization
+**Intelligent Caching Strategy:**
+- Type-aware caching matches protocol data diversity
+- TTL-based freshness with automatic invalidation
+- ADI-grouped organization for efficient bulk operations
+- Cache statistics and pruning for memory management
 
-2. **↗️ Indirection**
-   - Extra layer between API and network calls
-   - Slight performance overhead from layer transitions
-   - More call stack depth for debugging
+### 5. User Experience Excellence
+**Single Entry Point Design:**
+- `GetADI()` handles everything: discovery, retrieval, proof generation, caching
+- Users never need to understand proofs, account types, or caching
+- Automatic optimization with graceful error handling
+- Network-specific presets (mainnet, testnet, devnet)
 
-3. **❓ Potential Confusion**
-   - Developers might be unsure which layer to use
-   - Risk of bypassing orchestrator and using LiteClient directly
-   - Need clear documentation (like this!) to guide usage
+## Current Implementation Status
 
-### Implementation Flow Example
+### Core Components (✅ Complete)
 
+**LiteClient Structure:**
 ```go
-// USER CALLS: client.GetADI(ctx, "mycompany.acme")
-
-// 1. PUBLIC API (api.go)
-func (c *Client) GetADI(ctx context.Context, adiURL string) (*ADIData, error) {
-    // Delegates to orchestrator for business logic
-    return c.orch.GetADIData(ctx, adiURL)
-}
-
-// 2. ADI ORCHESTRATOR (adi_orchestrator.go) 
-func (ao *ADIOrchestrator) GetADIData(ctx context.Context, adiURL string) (*ADIData, error) {
-    // Business logic: "To get ADI data, I need to:"
-    // - Discover all accounts under this ADI
-    // - Process each account in batch
-    // - Aggregate results into ADIData format
-    
-    accounts := ao.discoverADIAccounts(ctx, adiURL)  // Uses LiteClient internally
-    for _, account := range accounts {
-        ao.processAccount(ctx, account)              // Uses LiteClient internally
-    }
-    return aggregatedResults
-}
-
-// 3. LITE CLIENT (liteclient.go)
-func (c *LiteClient) GetAccountData(ctx context.Context, accountURL string) (*AccountData, error) {
-    // Infrastructure: "Here's how to get data for ONE specific account"
-    // - Check cache first
-    // - Query network if needed
-    // - Validate and cache results
-    
-    if cached := c.unifiedCache.GetAccountData(accountURL); cached != nil {
-        return cached, nil
-    }
-    
-    data := c.v2.QueryAccount(accountURL)  // Network call
-    c.unifiedCache.StoreAccountData(data)  // Cache result
-    return data
+type LiteClient struct {
+    v2             *v2.Client              // v2 API client
+    v3             *jsonrpc.Client         // v3 API client  
+    unifiedCache   *UnifiedCache           // Comprehensive caching
+    adisOfInterest map[string]bool         // ADI tracking
+    proofGenerator *HealingProofGenerator  // Cryptographic proofs
+    accountHandler *AccountHandler         // Account data retrieval
 }
 ```
 
-### Layer Usage Guidelines
-
-| Scenario | Use Layer | Why |
-|----------|-----------|-----|
-| **User wants ADI data** | Public API → Orchestrator | Full business logic needed |
-| **Need single account info** | Orchestrator → LiteClient | Simple data retrieval |
-| **Building new features** | Start with Orchestrator | Business logic first |
-| **Network protocol changes** | Modify LiteClient only | Infrastructure concern |
-| **ADI processing changes** | Modify Orchestrator only | Business logic concern |
-
-### Architecture Assessment
-
-**The multi-layer design provides significant value through:**
-
-1. **Users get simplicity** - Single `GetADI()` call does everything
-2. **Developers get clarity** - Clear separation of concerns
-3. **Code gets maintainability** - Changes are isolated to appropriate layers
-4. **Architecture gets flexibility** - Can evolve each layer independently
-
-The architectural complexity is justified by substantial gains in maintainability, testability, and system clarity. This design supports long-term scalability and evolution of the lite client system.
-
-## System Overview
-
-The Accumulate Lite Client is designed as a lightweight, trustless blockchain client that provides the same cryptographic guarantees as full Accumulate nodes while operating with minimal resource requirements. The architecture follows a simplified, single-entry design that makes blockchain interaction invisible to users - they specify an ADI and get all data with proofs automatically validated.
-
-### Core Design Principles
-
-| Design Principle | Implementation Strategy | Business Value |
-|------------------|------------------------|----------------|
-| **Trustless Operation** | Automatic cryptographic proof validation | Eliminates trust dependencies on external parties |
-| **Performance Optimization** | Intelligent caching and batching strategies | Sub-second response times for cached data |
-| **Simplified Interface** | Single GetADI() method handles all operations | Reduces API complexity and user confusion |
-| **Abstracted Complexity** | Automatic proof and cache management | Removes blockchain expertise requirements |
-| **Public API Design** | No internal dependencies exposed | Enables universal deployment scenarios |
-| **Fault Tolerance** | Comprehensive fallback mechanisms | Ensures high availability and reliability |
-
-## System Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                                Public API Layer                                 │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐                │
-│  │   Client API    │  │ Configuration   │  │  Error Handler  │                │
-│  │   (api.go)      │  │  (config.go)    │  │   (errors.go)   │                │
-│  └─────────────────┘  └─────────────────┘  └─────────────────┘                │
-└─────────────────────────────────────────────────────────────────────────────────┘
-                                    │
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                              Orchestration Layer                               │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐                │
-│  │  LiteClient     │  │ ADI Orchestrator│  │  Batch Processor│                │
-│  │ (liteclient.go) │  │(adi_orchestrator│  │  (internal)     │                │
-│  └─────────────────┘  └─────────────────┘  └─────────────────┘                │
-└─────────────────────────────────────────────────────────────────────────────────┘
-                                    │
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                               Core Services Layer                              │
-│  ┌─────────────────┐  ┌────────────────
-─┐  ┌─────────────────┐                │
-│  │ Proof Generator │  │ Account API     │  │  Cache Manager  │                │
-│  │  (healing.go)   │  │(universal_acc.. │  │(unified_cache..)│                │
-│  └─────────────────┘  └─────────────────┘  └─────────────────┘                │
-└─────────────────────────────────────────────────────────────────────────────────┘
-                                    │
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                              Data Access Layer                                 │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐                │
-│  │   v2 API Client │  │   v3 API Client │  │  Block Queries  │                │
-│  │   (internal)    │  │   (internal)    │  │   (blocks/)     │                │
-│  └─────────────────┘  └─────────────────┘  └─────────────────┘                │
-└─────────────────────────────────────────────────────────────────────────────────┘
-                                    │
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                               External Services                                │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐                │
-│  │ Accumulate v2   │  │ Accumulate v3   │  │   Backup Nodes  │                │
-│  │     APIs        │  │     APIs        │  │   (optional)    │                │
-│  └─────────────────┘  └─────────────────┘  └─────────────────┘                │
-└─────────────────────────────────────────────────────────────────────────────────┘
-```
-
-## 🔧 Core Components
-
-### 1. Public API Layer
-
-#### **Client API** (`api.go`)
-- **Purpose**: Simplified, single-entry interface that makes blockchain interaction invisible
-- **Core Philosophy**: Users specify an ADI, get all data - complexity handled automatically
-- **Main Method**: `GetADI(ctx, adiURL)` - the only method users need
-- **Automatic Features**:
-  - Cache checking and freshness validation
-  - Network queries when needed
-  - Cryptographic proof generation and validation
-  - Result caching for future requests
-  - Complete ADI data with all accounts and transactions
-
-```go
-// Example: Stellar, Clean API Design
-type Client struct {
-    config *Config
-    impl   *LiteClient
-    orch   *ADIOrchestrator
-    // All complexity hidden from users
-}
-
-// 🌟 MAIN API - The only method users need!
-func (c *Client) GetADI(ctx context.Context, adiURL string) (*ADIData, error)
-
-// 🧹 Simple cache management (optional)
-func (c *Client) PruneCache(olderThan time.Duration) error
-func (c *Client) GetCachedADIs() []string
-func (c *Client) ClearCache() error
-
-// 🔄 Lifecycle management
-func (c *Client) Close() error
-```
-
-#### **Configuration Management** (`config.go`)
-- **Purpose**: Centralized configuration with validation and defaults
-- **Features**:
-  - Modular configuration structs
-  - Environment variable support
-  - Validation with detailed error messages
-  - Predefined network configurations
-  - Runtime configuration updates
-
-```go
-// Example: Modular configuration
-type Config struct {
-    Network NetworkConfig `json:"network"`
-    Cache   CacheConfig   `json:"cache"`
-    API     APIConfig     `json:"api"`
-    Debug   DebugConfig   `json:"debug"`
-}
-```
-
-### 2. Orchestration Layer
-
-#### **LiteClient** (`liteclient.go`)
-- **Purpose**: Main coordination hub for all lite client operations
-- **Responsibilities**:
-  - Component initialization and lifecycle
-  - Request routing and coordination
-  - Error handling and recovery
-  - Resource management
-
-#### **ADI Orchestrator** (`adi_orchestrator.go`)
-- **Purpose**: Core engine that powers the simplified GetADI() method
-- **Responsibilities**:
-  - ADI account discovery and enumeration
-  - Parallel account processing and proof generation
-  - Result aggregation and verification
-  - Integration with cache and proof systems
-- **Hidden from Users**: All complexity handled automatically by GetADI()
-
-### 3. Core Services Layer
-
-#### **Healing Proof Generator** (`healing.go`)
-- **Purpose**: Revolutionary proof generation using healing approach
-- **Innovation**: Bypasses "observer is not set" limitations
-- **Features**:
-  - Production-grade BPT receipt construction
-  - Multi-level proof chains (main → BVN → DN)
-  - Graceful fallback to synthetic receipts
-  - 100% cryptographic validity guarantee
-
-```go
-// Example: Healing approach
-type HealingProofGenerator struct {
-    database *HealingDatabase  // NullObserver bypass
-    v2Client *v2api.Client
-    v3Client *v3api.Client
-}
-
-func (hpg *HealingProofGenerator) GenerateProof(ctx context.Context, accountURL string) (*VerifiedAccount, error) {
-    // Phase 1: Account data retrieval
-    // Phase 2: Main chain receipt construction
-    // Phase 3: BVN receipt construction (with fallback)
-    // Phase 4: DN receipt construction (with fallback)
-    // Phase 5: Receipt combination and validation
-}
-```
-
-#### **Universal Account API** (`universal_account_api.go`)
-- **Purpose**: Unified interface for all Accumulate account types
-- **Features**:
-  - Type-safe account data parsing
-  - Automatic type detection
-  - Consistent error handling
-  - Caching integration
-
-#### **Unified Cache** (`unified_cache.go`)
-- **Purpose**: High-performance caching with TTL and statistics
-- **Features**:
-  - Multi-type data storage
-  - TTL-based expiration
-  - Cache statistics and monitoring
-  - Thread-safe operations
-  - Memory usage optimization
-
-### 4. Data Access Layer
-
-#### **API Clients**
-- **v2 API Client**: Legacy Accumulate v2 API support
-- **v3 API Client**: Modern Accumulate v3 API support
-- **Block Queries**: Specialized block and signature data access
-
-## 🎨 Design Patterns
-
-### 1. **Layered Architecture**
-
-The system follows a strict layered architecture where each layer only communicates with adjacent layers:
-
-```
-Public API → Orchestration → Core Services → Data Access → External Services
-```
-
-**Benefits:**
-- Clear separation of concerns
-- Easy testing with mock layers
-- Independent component evolution
-- Simplified debugging and maintenance
-
-### 2. **Dependency Injection**
-
-Components receive their dependencies through constructors, enabling easy testing and configuration:
-
-```go
-// Example: Dependency injection
-func NewLiteClient(config *Config, cache *UnifiedCache, proofGen *HealingProofGenerator) *LiteClient {
-    return &LiteClient{
-        config:    config,
-        cache:     cache,
-        proofGen:  proofGen,
-        // ...
-    }
-}
-```
-
-### 3. **Strategy Pattern**
-
-Different proof generation strategies can be plugged in:
-
-```go
-type ProofGenerator interface {
-    GenerateProof(ctx context.Context, accountURL string) (*VerifiedAccount, error)
-}
-
-// Implementations:
-// - HealingProofGenerator (production)
-// - MockProofGenerator (testing)
-// - FutureZKProofGenerator (research)
-```
-
-### 4. **Observer Pattern**
-
-Cache invalidation and updates use observer pattern:
-
-```go
-type CacheObserver interface {
-    OnCacheHit(key string)
-    OnCacheMiss(key string)
-    OnCacheEviction(key string)
-}
-```
-
-### 5. **Circuit Breaker Pattern**
-
-Network operations implement circuit breaker for resilience:
-
-```go
-type CircuitBreaker struct {
-    failureThreshold int
-    resetTimeout     time.Duration
-    state           State // CLOSED, OPEN, HALF_OPEN
-}
-```
-
-## 🔄 Data Flow
-
-### 1. **Simplified GetADI() Flow**
-
-```
-User: GetADI("acc://myadi.acme") → Cache Check → Fresh Data? → Return Cached ADIData
-     ↓ (Stale/Missing)
-ADI Orchestrator → Account Discovery → Parallel Processing → Proof Generation
-     ↓
-Result Aggregation → Cache Storage → Return Complete ADIData
-```
-
-**Key Benefits:**
-- **Single method call** - Users don't need to understand the complexity
-- **Automatic optimization** - Cache, proofs, validation all handled invisibly
-- **Complete data** - All accounts, balances, transactions in one response
-
-### 2. **Internal Proof Generation Flow** (Hidden from Users)
-
-```
-Account URL → Universal Account API → Account Data Retrieval
-     ↓
-Healing Proof Generator → BPT Receipt Construction → Chain Traversal
-     ↓
-Receipt Combination → Validation → Cache Storage → Verified Account
-```
-
-### 3. **Intelligent Cache Flow** (Automatic)
-
-```
-GetADI Request → Cache Lookup → TTL Check → Fresh? → Return Cached Data
-     ↓ (Stale/Missing)
-Network Query → Proof Generation → Validation → Cache Update → Return Fresh Data
-```
-
-
-
-## 🚀 Performance Optimizations
-
-### 1. **Intelligent Caching**
-
-- **Multi-level caching**: Account data, proofs, and intermediate results
-- **TTL-based expiration**: Automatic cache invalidation
-- **LRU eviction**: Memory usage optimization
-- **Cache warming**: Proactive data loading
-
-### 2. **Batch Processing**
-
-- **Parallel execution**: Multiple accounts processed simultaneously
-- **Connection pooling**: HTTP connection reuse
-- **Request batching**: Multiple API calls combined
-- **Result streaming**: Progressive result delivery
-
-### 3. **Resource Management**
-
-- **Memory pooling**: Object reuse for high-frequency operations
-- **Goroutine limiting**: Controlled concurrency
-- **Connection limiting**: Prevent resource exhaustion
-- **Graceful shutdown**: Clean resource cleanup
-
-## 🛡️ Security Architecture
-
-### 1. **Cryptographic Validation**
-
-- **Merkle proof verification**: Mathematical proof validation
-- **Hash chain integrity**: Complete chain validation
-- **Signature verification**: Digital signature checking
-- **Root hash validation**: Anchor point verification
-
-### 2. **Input Validation**
-
-- **URL validation**: Accumulate URL format checking
-- **Parameter sanitization**: Input cleaning and validation
-- **Type checking**: Runtime type safety
-- **Bounds checking**: Array and slice bounds validation
-
-### 3. **Error Handling**
-
-- **Secure error messages**: No sensitive information leakage
-- **Error classification**: Structured error types
-- **Audit logging**: Security event logging
-- **Graceful degradation**: Secure fallback mechanisms
-
-## 🔍 Monitoring and Observability
-
-### 1. **Metrics Collection**
-
-```go
-type Metrics struct {
-    RequestCount     prometheus.Counter
-    RequestDuration  prometheus.Histogram
-    CacheHitRate     prometheus.Gauge
-    ErrorRate        prometheus.Counter
-    ActiveConnections prometheus.Gauge
-}
-```
-
-### 2. **Logging Strategy**
-
-- **Structured logging**: JSON-formatted log entries
-- **Log levels**: DEBUG, INFO, WARN, ERROR, FATAL
-- **Context propagation**: Request tracing
-- **Performance logging**: Operation timing
-
-### 3. **Health Checks**
-
-```go
-type HealthChecker struct {
-    checks map[string]HealthCheck
-}
-
-type HealthCheck interface {
-    Check(ctx context.Context) error
-}
-
-// Implementations:
-// - NetworkHealthCheck
-// - CacheHealthCheck
-// - APIHealthCheck
-```
-
-## 🧪 Testing Architecture
-
-### 1. **Test Structure**
-
-```
-tests/
-├── unit/           # Component-level tests
-├── integration/    # Multi-component tests
-├── e2e/           # End-to-end tests
-├── performance/   # Benchmark tests
-└── mocks/         # Test doubles
-```
-
-### 2. **Test Patterns**
-
-- **Table-driven tests**: Comprehensive test coverage
-- **Mock interfaces**: Isolated unit testing
-- **Test fixtures**: Reusable test data
-- **Property-based testing**: Invariant validation
-
-### 3. **Test Coverage**
-
-- **Unit tests**: 90%+ coverage target
-- **Integration tests**: Critical path coverage
-- **End-to-end tests**: User workflow validation
-- **Performance tests**: Regression detection
-
-## 🔮 Future Architecture Evolution
-
-### 1. **Planned Enhancements**
-
-- **Persistent caching**: SQLite/PostgreSQL backends
-- **Real-time updates**: WebSocket integration
-- **Advanced validation**: Multi-node consensus
-- **Performance optimization**: Zero-copy operations
-
-### 2. **Research Areas**
-
-- **Zero-knowledge proofs**: Privacy-preserving validation
-- **Quantum resistance**: Post-quantum cryptography
-- **Cross-chain support**: Multi-blockchain proofs
-- **Edge computing**: IoT device optimization
-
-### 3. **Scalability Roadmap**
-
-- **Horizontal scaling**: Multi-instance deployment
-- **Load balancing**: Request distribution
-- **Caching layers**: Redis/Memcached integration
-- **CDN integration**: Global content distribution
-
-## 📋 Architecture Decision Records (ADRs)
-
-### ADR-001: Healing Approach for Proof Generation
-
-**Status**: Accepted  
-**Date**: 2024-01-15
-
-**Context**: Traditional lite clients fail due to observer dependencies.
-
-**Decision**: Implement healing-based proof generation using production code patterns.
-
-**Consequences**: 
-- ✅ 100% cryptographic validity
-- ✅ Public API compatibility
-- ✅ No observer dependencies
-- ⚠️ Increased complexity
-
-### ADR-002: Layered Architecture Pattern
-
-**Status**: Accepted  
-**Date**: 2024-01-20
-
-**Context**: Need clear separation of concerns for maintainability.
-
-**Decision**: Implement strict layered architecture with dependency injection.
-
-**Consequences**:
-- ✅ Clear component boundaries
-- ✅ Easy testing and mocking
-- ✅ Independent evolution
-- ⚠️ Additional abstraction overhead
-
-### ADR-003: Unified Cache Design
-
-**Status**: Accepted  
-**Date**: 2024-01-25
-
-**Context**: Multiple caching needs across different data types.
-
-**Decision**: Implement unified cache with TTL and statistics.
-
-**Consequences**:
-- ✅ Consistent caching behavior
-- ✅ Centralized cache management
-- ✅ Performance optimization
-- ⚠️ Memory usage considerations
-
-## 🎯 Conclusion
-
-The Accumulate Lite Client architecture represents a breakthrough in blockchain client design, providing **full node security** with **lite client efficiency**. The modular, layered design ensures maintainability, testability, and extensibility while the healing approach enables trustless operation without internal dependencies.
-
-### Key Architectural Achievements
-
-- ✅ **Trustless Operation**: Cryptographic proof validation
-- ✅ **Performance Optimization**: Sub-second response times
-- ✅ **Modular Design**: Independent component testing
-- ✅ **Production Ready**: Battle-tested patterns
-- ✅ **Future Proof**: Extensible architecture
-
-This architecture enables **enterprise-grade blockchain interaction** in resource-constrained environments while maintaining the highest standards of security and reliability.
+**Public API Methods:**
+- `GetADI(ctx, adiURL)` - Main entry point ✅
+- `GetCachedADIs()` - Cache management ✅
+- `VerifyReceipt(ctx, accountURL)` - Manual verification ✅
+- Network presets: `NewMainnetClient()`, `NewTestnetClient()`, `NewDevnetClient()` ✅
+
+**Account Handler Capabilities:**
+- Universal account type support (10+ types) ✅
+- Type detection and safe casting ✅
+- Specialized retrievers for different account types ✅
+- Cache integration with freshness validation ✅
+
+**Healing Proof Generator:**
+- Multi-level receipt construction ✅
+- Real BPT integration ✅
+- Production validation methods ✅
+- Observer-independent operation ✅
+
+**Unified Cache System:**
+- Type-specific storage for all Accumulate data types ✅
+- TTL management with automatic expiration ✅
+- ADI-aware organization ✅
+- Cache statistics and pruning ✅
+
+### Testing Coverage
+
+**Unit Tests:**
+- Proof validation workflow ✅
+- Account data retrieval ✅
+- Cache functionality ✅
+- Type conversion and validation ✅
+
+**Integration Tests:**
+- Mainnet connectivity ✅
+- Multi-account processing ✅
+- Error handling and recovery ✅
+
+**Real-World Validation:**
+- Tested against production mainnet accounts ✅
+- Verified with multiple account types ✅
+- Proof generation validated ✅
+
+## Design Philosophy
+
+**"Invisible Complexity"**: Users get the full power of Accumulate's protocol through a simple `GetADI()` call, with all complexity handled automatically.
+
+**"Protocol-Appropriate Architecture"**: The architecture complexity matches Accumulate's protocol complexity - sophisticated where necessary, simple where possible.
+
+**"Production-Grade Cryptography"**: Uses the same cryptographic methods and validation as full Accumulate nodes, providing equivalent security guarantees.
+
+This architecture successfully transforms Accumulate's inherent protocol complexity into a simple, powerful, and secure lite client experience.

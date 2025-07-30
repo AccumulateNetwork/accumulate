@@ -611,6 +611,20 @@ func (c *UnifiedCache) GetADIAccounts(adiURL string) []*AccountData {
 	return accounts
 }
 
+// RemoveAccount removes all cached data for a specific account URL
+func (c *UnifiedCache) RemoveAccount(accountURL string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Remove from all cache maps
+	delete(c.accountData, accountURL)
+	delete(c.balances, accountURL)
+	delete(c.identityInfo, accountURL)
+	delete(c.dataAccountInfo, accountURL)
+	delete(c.accountSummaries, accountURL)
+	delete(c.transactions, accountURL)
+}
+
 // extractADIFromURL extracts the ADI portion from an account URL
 // For example: "acc://myadi.acme/token" -> "acc://myadi.acme"
 func extractADIFromURL(accountURL string) string {

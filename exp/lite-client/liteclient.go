@@ -10,59 +10,258 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc"
 	v2 "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// ============================================================================
-// CORE TYPES
-// ============================================================================
-
-// LiteClient provides internal infrastructure for the Accumulate Lite Client.
-// This is the low-level client used by the public API and orchestrator.
-// Users should interact with the public Client API instead.
+// LiteClient is the core internal client that orchestrates account data retrieval,
+// proof generation, and caching. This is the unified implementation that replaces
+// the previous separate LiteClient and ADIOrchestrator structs.
+//
+// The LiteClient coordinates the workflow:
+// 1. Receives GetADI() calls from the public API
+// 2. Uses AccountHandler to discover and retrieve account data
+// 3. Uses HealingProofGenerator to create cryptographic proofs
+// 4. Uses UnifiedCache to store and retrieve cached data
+// 5. Returns verified account information to the public API
 type LiteClient struct {
-	v2           *v2.Client
-	v3           *jsonrpc.Client
-	unifiedCache *UnifiedCache
+	v2             *v2.Client
+	v3             *jsonrpc.Client
+	unifiedCache   *UnifiedCache
+	adisOfInterest map[string]bool
+	proofGenerator *HealingProofGenerator
+	accountHandler *AccountHandler
 }
 
-// ============================================================================
-// CONSTRUCTOR
-// ============================================================================
+// VerifiedAccountInfo represents account data with cryptographic proof validation
+type VerifiedAccountInfo struct {
+	URL          string
+	Type         protocol.AccountType
+	Balance      string
+	Receipt      *merkle.Receipt
+	Height       int64
+	LastUpdated  time.Time
+	Transactions []*TransactionInfo
+}
 
-// NewLiteClient creates a new internal LiteClient instance.
-// This is used internally by the public API - users should use NewClient() instead.
-func NewLiteClient(server string) (*LiteClient, error) {
-	if server == "" {
-		return nil, errors.New("server URL cannot be empty")
+// TransactionInfo represents transaction data
+type TransactionInfo struct {
+	TxID      string
+	Type      string
+	Status    string
+	Timestamp time.Time
+	Amount    string
+	From      string
+	To        string
+}
+
+// NewLiteClient creates a new internal lite client with the unified architecture
+func NewLiteClient(serverURL string) (*LiteClient, error) {
+	if serverURL == "" {
+		return nil, fmt.Errorf("server URL cannot be empty")
 	}
 
-	// Normalize server URL
-	server = strings.TrimSuffix(server, "/")
-
-	v2Client, err := v2.New(server)
+	// Create v2 API client
+	v2Client, err := v2.New(serverURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create v2 client: %w", err)
 	}
 
-	// v3 API is served at /v3 endpoint
-	v3Client := jsonrpc.NewClient(server + "/v3")
+	// Create v3 API client
+	v3URL, err := convertToV3URL(serverURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert to v3 URL: %w", err)
+	}
 
-	return &LiteClient{
-		v2:           v2Client,
-		v3:           v3Client,
-		unifiedCache: NewUnifiedCache(5 * time.Minute),
-	}, nil
+	v3Client := jsonrpc.NewClient(v3URL)
+
+	// Create unified cache
+	cache := NewUnifiedCache(time.Minute)
+
+	// Create proof generator
+	proofGenerator, err := NewHealingProofGenerator(v2Client)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create healing proof generator")
+	}
+
+	// Create the LiteClient struct
+	lc := &LiteClient{
+		v2:             v2Client,
+		v3:             v3Client,
+		unifiedCache:   cache,
+		adisOfInterest: make(map[string]bool),
+		proofGenerator: proofGenerator,
+	}
+
+	// Initialize the account handler
+	lc.accountHandler = NewAccountHandler(lc)
+
+	return lc, nil
 }
 
-// ============================================================================
+// convertToV3URL converts a v2 API URL to v3 format
+func convertToV3URL(v2URL string) (string, error) {
+	parsed, err := url.Parse(v2URL)
+	if err != nil {
+		return "", fmt.Errorf("invalid URL: %w", err)
+	}
+
+	// Replace /v2 with /v3
+	v3Path := strings.Replace(parsed.Path, "/v2", "/v3", 1)
+	if v3Path == parsed.Path {
+		// If no /v2 found, append /v3
+		v3Path = strings.TrimSuffix(parsed.Path, "/") + "/v3"
+	}
+
+	parsed.Path = v3Path
+	return parsed.String(), nil
+}
+
+// ProcessADI is the main orchestration method that implements the GetADI workflow:
+// 1. Check cache for fresh data
+// 2. If cache miss, discover accounts directly
+// 3. Generate proofs using HealingProofGenerator
+// 4. Store results in UnifiedCache
+// 5. Return verified account information
+func (lc *LiteClient) ProcessADI(ctx context.Context, adiURL string) ([]*AccountData, error) {
+	// Step 1: Check cache first
+	cachedAccounts := lc.unifiedCache.GetADIAccounts(adiURL)
+	if len(cachedAccounts) > 0 {
+		// Return cached data directly (already in AccountData format)
+		return cachedAccounts, nil
+	}
+
+	// Step 2: Cache miss - discover accounts directly
+	accountURLs, err := lc.accountHandler.DiscoverADIAccounts(ctx, adiURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to discover accounts for ADI %s: %w", adiURL, err)
+	}
+
+	if len(accountURLs) == 0 {
+		return nil, fmt.Errorf("no accounts found for ADI: %s", adiURL)
+	}
+
+	// Step 3: Process each account
+	verifiedAccounts := make([]*AccountData, 0, len(accountURLs))
+	for _, accountURL := range accountURLs {
+		verifiedAccount, err := lc.processAccount(ctx, accountURL)
+		if err != nil {
+			// Log error but continue with other accounts
+			fmt.Printf("Warning: failed to process account %s: %v\n", accountURL, err)
+			continue
+		}
+		verifiedAccounts = append(verifiedAccounts, verifiedAccount)
+	}
+
+	if len(verifiedAccounts) == 0 {
+		return nil, fmt.Errorf("failed to process any accounts for ADI: %s", adiURL)
+	}
+
+	return verifiedAccounts, nil
+}
+
+// processAccount handles the complete workflow for a single account:
+// 1. Retrieve account data using AccountHandler
+// 2. Generate proof using HealingProofGenerator
+// 3. Store in cache using UnifiedCache
+func (lc *LiteClient) processAccount(ctx context.Context, accountURL string) (*AccountData, error) {
+	// Step 1: Retrieve account data
+	accountData, err := lc.accountHandler.GetAccountData(ctx, accountURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get account data: %w", err)
+	}
+
+	// Step 2: Generate cryptographic proof if not already present
+	if accountData.Receipt == nil {
+		verifiedAccount, err := lc.proofGenerator.GenerateProof(ctx, accountURL)
+		if err != nil {
+			// Log warning but continue without proof
+			fmt.Printf("Warning: failed to generate proof for %s: %v\n", accountURL, err)
+		} else {
+			// Extract the receipt from the VerifiedAccount
+			accountData.Receipt = verifiedAccount.Receipt
+			accountData.Height = verifiedAccount.Height
+		}
+	}
+
+	// Step 3: Update last processed time
+	accountData.LastUpdated = time.Now()
+
+	// Step 4: Cache is already handled by GetAccountData, no need to store again
+
+	return accountData, nil
+}
+
+// convertTransactions converts Transaction slice to TransactionInfo format
+func convertTransactions(transactions []*Transaction) []*TransactionInfo {
+	if transactions == nil {
+		return nil
+	}
+	result := make([]*TransactionInfo, len(transactions))
+	for i, tx := range transactions {
+		result[i] = &TransactionInfo{
+			TxID:      tx.TxID,
+			Type:      tx.Type,
+			Status:    tx.Status,
+			Timestamp: time.Unix(tx.Timestamp, 0),
+			Amount:    tx.Amount,
+			From:      tx.From,
+			To:        tx.To,
+		}
+	}
+	return result
+}
+
+// convertToCachedTransactions converts TransactionInfo to cached format
+func convertToCachedTransactions(txs []*TransactionInfo) []*CachedTransaction {
+	if txs == nil {
+		return nil
+	}
+	result := make([]*CachedTransaction, len(txs))
+	for i, tx := range txs {
+		result[i] = &CachedTransaction{
+			TxID:      tx.TxID,
+			Type:      tx.Type,
+			Status:    tx.Status,
+			Timestamp: tx.Timestamp,
+			Amount:    tx.Amount,
+			From:      tx.From,
+			To:        tx.To,
+		}
+	}
+	return result
+}
+
+// ADI Management Methods (called by public API)
+
+// AddADIOfInterest adds an ADI to the tracking list
+func (lc *LiteClient) AddADIOfInterest(adiURL string) {
+	lc.adisOfInterest[adiURL] = true
+}
+
+// RemoveADIOfInterest removes an ADI from the tracking list
+func (lc *LiteClient) RemoveADIOfInterest(adiURL string) {
+	delete(lc.adisOfInterest, adiURL)
+}
+
+// GetADIsOfInterest returns the list of tracked ADIs
+func (lc *LiteClient) GetADIsOfInterest() []string {
+	adis := make([]string, 0, len(lc.adisOfInterest))
+	for adi := range lc.adisOfInterest {
+		adis = append(adis, adi)
+	}
+	return adis
+}
+
+// ==============================================================================
 // UNIVERSAL ACCOUNT API (Internal)
-// ============================================================================
+// ==============================================================================
 
 // getAccountData retrieves account data using the universal account API
 func (c *LiteClient) getAccountData(ctx context.Context, accountURL string) (*AccountData, error) {
@@ -71,7 +270,7 @@ func (c *LiteClient) getAccountData(ctx context.Context, accountURL string) (*Ac
 	}
 
 	// Use the real implementation from account_handlers.go
-	return c.getAccountDataFromNetwork(ctx, accountURL)
+	return c.accountHandler.getAccountDataFromNetwork(ctx, accountURL)
 }
 
 // getTokenBalance retrieves token balance information
@@ -142,98 +341,6 @@ func (c *LiteClient) validateAndCacheProof(ctx context.Context, account string, 
 		Category:    "proof-validated",
 	})
 
-	return nil
-}
-
-// ============================================================================
-// BATCH PROCESSING (Internal)
-// ============================================================================
-
-// batchRetrieveAccountStates retrieves and caches account states in batches
-// This is used internally by the orchestrator for efficient processing
-func (c *LiteClient) batchRetrieveAccountStates(ctx context.Context, accountUrls []string) error {
-	if len(accountUrls) == 0 {
-		return errors.New("no account URLs provided")
-	}
-
-	// Phase 1: Validate proofs for all accounts
-	if err := c.batchValidateProofs(ctx, accountUrls); err != nil {
-		return fmt.Errorf("failed to validate proofs: %w", err)
-	}
-
-	// Phase 2: Retrieve account data
-	if err := c.batchRetrieveAccountData(ctx, accountUrls); err != nil {
-		return fmt.Errorf("failed to retrieve account data: %w", err)
-	}
-
-	return nil
-}
-
-// batchValidateProofs validates proofs for multiple accounts
-func (c *LiteClient) batchValidateProofs(ctx context.Context, accountUrls []string) error {
-	rootHash, err := FetchBPTRootHash(ctx, c.v2, "dn")
-	if err != nil {
-		// Use placeholder for testing when BPT root is not available
-		rootHash = []byte("placeholder-root-hash")
-	}
-
-	for _, url := range accountUrls {
-		if err := c.validateAccountURL(url); err != nil {
-			return fmt.Errorf("invalid account URL %s: %w", url, err)
-		}
-
-		if err := c.validateAndCacheProof(ctx, url, rootHash); err != nil {
-			return fmt.Errorf("failed to validate proof for %s: %w", url, err)
-		}
-	}
-
-	return nil
-}
-
-// batchRetrieveAccountData fetches and caches data for multiple accounts
-func (c *LiteClient) batchRetrieveAccountData(ctx context.Context, accountUrls []string) error {
-	for _, url := range accountUrls {
-		// Get account data to determine type
-		accountData, err := c.getAccountData(ctx, url)
-		if err != nil {
-			fmt.Printf("Warning: unable to get account data for %s: %v\n", url, err)
-			continue
-		}
-
-		// Process based on account type
-		if accountData.IsTokenAccount() {
-			if err := c.cacheTokenAccountData(ctx, url); err != nil {
-				fmt.Printf("Warning: failed to cache token data for %s: %v\n", url, err)
-			}
-		} else if accountData.IsIdentityAccount() {
-			if err := c.cacheIdentityAccountData(ctx, url); err != nil {
-				fmt.Printf("Warning: failed to cache identity data for %s: %v\n", url, err)
-			}
-		}
-	}
-
-	return nil
-}
-
-// cacheTokenAccountData caches token account specific data
-func (c *LiteClient) cacheTokenAccountData(ctx context.Context, accountURL string) error {
-	balanceInfo, err := c.getTokenBalance(ctx, accountURL)
-	if err != nil {
-		return err
-	}
-
-	c.unifiedCache.StoreBalance(accountURL, balanceInfo)
-	return nil
-}
-
-// cacheIdentityAccountData caches identity account specific data
-func (c *LiteClient) cacheIdentityAccountData(ctx context.Context, accountURL string) error {
-	identityInfo, err := c.getIdentityInfo(ctx, accountURL)
-	if err != nil {
-		return err
-	}
-
-	c.unifiedCache.StoreIdentityInfo(accountURL, identityInfo)
 	return nil
 }
 
