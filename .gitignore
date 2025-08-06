@@ -1,6 +1,8 @@
 # Binaries (mac, linux)
 accumulated
 accumulate
+analyze
+debug
 play-accumulate
 golangci-lint
 !*/
@@ -8,6 +10,9 @@ tools/cmd/gen-types/gen-types
 tools/cmd/gen-enum/gen-enum
 tools/cmd/gen-types/go_build*
 tools/cmd/gen-enum/go_build*
+
+# documenation we don't want to push to the repository
+localdocs/
 
 # Binaries and test data
 *.exe
@@ -41,3 +46,32 @@ tmp
 
 #jj
 .newscripts
+accumulated-bpt-test
+
+# Large files (typically > 1MB)
+*.snap
+*.db
+*.sqlite
+*.sqlite3
+*.dump
+*.backup
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+*.rar
+*.7z
+*.iso
+*.img
+*.dmg
+*.pkg
+*.deb
+*.rpm
+*.msi
+*.bin
+*.dat
+*.raw
+*.core
+*.heap
+*.prof
+*.pprof
