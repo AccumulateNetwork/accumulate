@@ -1,0 +1,5 @@
+- Preallocate ADIs
+  - governance.csv
+  - reserved.csv
+- Factom import
+  - objects-0.dat
