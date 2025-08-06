@@ -1,0 +1,118 @@
+{
+  "id": "cyclops",
+  "template": "[[configurations]]\n  type = \"coreValidator\"\n  enable-healing = false\n  enable-snapshots = false\n  storage-type = \"leveldb\"\n\n[storage]\n  type = \"leveldb\"\n  path = \"data/accumulate.db\"",
+  "globals": {
+    "oracle": {
+      "price": 5000
+    },
+    "globals": {
+      "majorBlockSchedule": "0 0 * * *",
+      "executorVersion": "v2baikonur",
+      "feeSchedule": {
+        "createIdentitySliding": [
+          4800000,
+          1200000,
+          350000,
+          90000,
+          25000,
+          7000,
+          1800
+        ],
+        "createSubIdentity": 2500,
+        "createTokenAccount": 10000,
+        "createDataAccount": 10000,
+        "createKeyPage": 10000,
+        "createKeyBook": 10000,
+        "sendTokens": 1000,
+        "addCredits": 1000,
+        "updateKeyPage": 1000,
+        "updateKey": 1000,
+        "writeData": 1000,
+        "writeDataTo": 1000,
+        "burnTokens": 1000,
+        "issueTokens": 1000,
+        "createToken": 50000,
+        "updateAccountAuth": 1000,
+        "syntheticDepositTokens": 1000,
+        "syntheticDepositCredits": 1000,
+        "syntheticBurnTokens": 1000,
+        "syntheticCreateIdentity": 25000,
+        "syntheticCreateTokenAccount": 10000,
+        "syntheticWriteData": 1000
+      },
+      "limits": {
+        "accountAuthorities": 20,
+        "bookPages": 20,
+        "dataEntryParts": 100,
+        "dataEntryPartsCompressed": 100,
+        "dataEntrySize": 100000,
+        "dataEntrySizeCompressed": 100000,
+        "identityAccounts": 1000,
+        "pageEntries": 100,
+        "pendingMajorBlocks": 28
+      },
+      "operatorAcceptThreshold": {
+        "denominator": 3,
+        "numerator": 2
+      },
+      "acmeIssuedSupply": 500000000000000
+    },
+    "routing": {
+      "routes": [
+        {
+          "length": 2,
+          "partition": "Directory"
+        },
+        {
+          "length": 2,
+          "partition": "bvn-cyclops",
+          "value": 1
+        },
+        {
+          "length": 3,
+          "partition": "Directory",
+          "value": 6
+        },
+        {
+          "length": 4,
+          "partition": "bvn-cyclops",
+          "value": 14
+        },
+        {
+          "length": 4,
+          "partition": "Directory",
+          "value": 15
+        }
+      ]
+    },
+    "network": {
+      "networkName": "cyclops",
+      "partitions": [
+        {
+          "id": "bvn-cyclops",
+          "type": "blockValidator"
+        },
+        {
+          "id": "Directory",
+          "type": "directory"
+        }
+      ],
+      "validators": [
+        {
+          "operator": "acc://defidevs.acme",
+          "publicKey": "8bb3e508239b5432ebc633416f0407ed69e7b11c9f82072f72a18137f54eccfc",
+          "partitions": [
+            {
+              "id": "Directory",
+              "active": true
+            },
+            {
+              "id": "bvn-cyclops",
+              "active": true
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

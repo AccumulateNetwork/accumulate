@@ -1,0 +1,30 @@
+# Kermit Testnet Configuration
+# Port Configuration Reference: docs/kermit/port-configuration.md
+# 
+# Port Formula: Final Port = BasePort(16591) + ServiceOffset + PartitionOffset(100)
+# BVN Services:
+#   - Accumulate API: 16695 (16591+4+100)
+#   - Tendermint RPC: 16692 (16591+1+100) 
+#   - P2P Network:    16693 (16591+2+100)
+#   - Prometheus:     16694 (16591+3+100)
+
+network = "Kermit"
+
+[[configurations]]
+  bvn = "Chico"
+  bvn-bootstrap-peers = []
+  bvn-genesis = "chico-genesis.snap"
+  dn-bootstrap-peers = ["/dns/kermit-bvn1.accumulate.defidevs.io/tcp/16591/p2p/12D3KooWSsiT3rtjGJhtu68emgp7zPJyH9MeFkmxtCdCK6T1Nvxd", "/dns/kermit-bvn2.accumulate.defidevs.io/tcp/16591/p2p/12D3KooWMqpLym3XSy3zQRRy2xudFTjjstoX97ZaW6pvLTUgwcYg"]
+  dn-genesis = "directory-genesis.snap"
+  listen = "/ip4/0.0.0.0/tcp/16591"
+  type = "coreValidator"
+  [configurations.validator-key]
+    address = "AS1xm6dh2xw6UUGTXW6qHvtTXJLB9ixkbqqL9wn3ma3rDzEu1JE6"
+    type = "raw"
+
+[logging]
+
+[p2p]
+  [p2p.key]
+    address = "AS12C5KYzB1oerP6eRyYvELpLzn5JxWRgD131EK3XnFaunhEHvGET"
+    type = "raw"
