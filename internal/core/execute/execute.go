@@ -61,17 +61,18 @@ func (v *ValidatorUpdate) Equal(u *ValidatorUpdate) bool {
 
 // Options are the options for constructing an [Executor]
 type Options struct {
-	Logger                 log.Logger         //
-	Database               database.Beginner  //
-	Key                    ed25519.PrivateKey // Private validator key
-	Router                 routing.Router     //
-	Describe               DescribeShim       // Network description
-	EventBus               *events.Bus        //
-	BackgroundTaskLauncher func(func())       // Background task launcher
-	NewDispatcher          func() Dispatcher  // Synthetic transaction dispatcher factory
-	Sequencer              private.Sequencer  // Synthetic and anchor sequence API service
-	Querier                api.Querier        // Query API service
-	EnableHealing          bool               //
+	Logger                      log.Logger         //
+	Database                    database.Beginner  //
+	Key                         ed25519.PrivateKey // Private validator key
+	Router                      routing.Router     //
+	Describe                    DescribeShim       // Network description
+	EventBus                    *events.Bus        //
+	BackgroundTaskLauncher      func(func())       // Background task launcher
+	NewDispatcher               func() Dispatcher  // Synthetic transaction dispatcher factory
+	Sequencer                   private.Sequencer  // Synthetic and anchor sequence API service
+	Querier                     api.Querier        // Query API service
+	EnableHealing               bool               //
+	EnableCrosschainCoordinator bool               // Enable Phase 1 CrosschainCoordinator for async synthetic transaction processing
 }
 
 // A Dispatcher dispatches synthetic transactions produced by the executor.
