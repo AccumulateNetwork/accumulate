@@ -1,11 +1,11 @@
 package e2e2
 
 import (
+	"testing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
-	"testing"
 )
 import ()
 
