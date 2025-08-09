@@ -20,6 +20,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain"
+	oldsim "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
@@ -32,7 +33,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
-	oldsim "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/simulator"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
