@@ -2,15 +2,62 @@ package crosschain
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
+
+// MessageType represents the type of cross-partition message
+type MessageType int
+
+const (
+	MessageTypeAnchor MessageType = iota
+	MessageTypeSynthetic
+	MessageTypeOther
+)
+
+// DestinationKey uniquely identifies a message type + destination combination
+type DestinationKey struct {
+	Type        MessageType
+	Destination string // URL string for efficient map key
+}
+
+// PendingTransmission tracks a transmission awaiting error feedback
+type PendingTransmission struct {
+	ID           string
+	Messages     []messaging.Message
+	Destination  *url.URL
+	DestKey      DestinationKey
+	Context      context.Context
+	AttemptNum   int
+	SubmittedAt  time.Time
+	RetryAfter   time.Time
+	Callback     chan error
+}
+
+// DestinationQueue manages transmission state for a specific destination+type combination
+type DestinationQueue struct {
+	Key            DestinationKey
+	IsBlocked      bool
+	BlockedSince   time.Time
+	PendingTx      map[string]*PendingTransmission
+	QueuedRequests []*SyntheticRequest
+	LastSuccess    time.Time
+	FailureCount   int64
+	SuccessCount   int64
+	RetryCount     int64
+	mu             sync.RWMutex
+}
 
 // CrossChainConductor handles async processing of cross-partition transactions
 type CrossChainConductor struct {
@@ -20,28 +67,92 @@ type CrossChainConductor struct {
 
 	// Async processing
 	syntheticChan chan *SyntheticRequest
+	retryChan     chan *PendingTransmission
 	stopChan      chan struct{}
 	wg            sync.WaitGroup
 
-	// Metrics (simple counters for Phase 1)
-	syntheticsSent   int64
-	syntheticsErrors int64
+	// Per-destination blocking and tracking
+	destinationQueues map[DestinationKey]*DestinationQueue
+	queuesMutex       sync.RWMutex
+	maxRetries        int
+	retryDelay        time.Duration
+	txIDCounter       int64
+
+	// Global metrics
+	syntheticsSent     int64
+	syntheticsErrors   int64
+	syntheticsRetried  int64
+	transmissionErrors int64
+	
+	// Recovery manager for missing transactions
+	recoveryManager   *RecoveryManager
 }
 
 // NewCrossChainConductor creates and starts the conductor
 func NewCrossChainConductor(dispatcher execute.Dispatcher, logger logging.OptionalLogger) *CrossChainConductor {
 	cc := &CrossChainConductor{
-		dispatcher:    dispatcher,
-		logger:        logging.OptionalLogger{L: logger.With("module", "crosschain-conductor")},
-		syntheticChan: make(chan *SyntheticRequest, 100), // Buffered channel for async processing
-		stopChan:      make(chan struct{}),
+		dispatcher:        dispatcher,
+		logger:            logging.OptionalLogger{L: logger.With("module", "crosschain-conductor")},
+		syntheticChan:     make(chan *SyntheticRequest, 100), // Buffered channel for async processing
+		retryChan:         make(chan *PendingTransmission, 50), // Retry queue
+		stopChan:          make(chan struct{}),
+		destinationQueues: make(map[DestinationKey]*DestinationQueue),
+		maxRetries:        3,              // Retry failed transmissions up to 3 times
+		retryDelay:        2 * time.Second, // Wait 2 seconds between retries
 	}
 
-	// Start async processor
-	cc.wg.Add(1)
+	// Start async processors
+	cc.wg.Add(3)
 	go cc.processSynthetics()
+	go cc.monitorTransmissionErrors()
+	go cc.processRetries()
 
 	return cc
+}
+
+// getMessageType determines the message type for blocking purposes
+func (cc *CrossChainConductor) getMessageType(messages []messaging.Message) MessageType {
+	// Check the first message to determine type - in practice, envelopes should be homogeneous
+	if len(messages) == 0 {
+		return MessageTypeOther
+	}
+	
+	switch messages[0].Type() {
+	case messaging.MessageTypeBlockAnchor:
+		return MessageTypeAnchor
+	case messaging.MessageTypeSynthetic, messaging.MessageTypeBadSynthetic:
+		return MessageTypeSynthetic
+	default:
+		return MessageTypeOther
+	}
+}
+
+// createDestinationKey creates a key for destination+type combination
+func (cc *CrossChainConductor) createDestinationKey(msgType MessageType, destination *url.URL) DestinationKey {
+	return DestinationKey{
+		Type:        msgType,
+		Destination: destination.String(),
+	}
+}
+
+// getOrCreateDestinationQueue gets or creates a destination queue
+func (cc *CrossChainConductor) getOrCreateDestinationQueue(key DestinationKey) *DestinationQueue {
+	cc.queuesMutex.Lock()
+	defer cc.queuesMutex.Unlock()
+	
+	queue, exists := cc.destinationQueues[key]
+	if !exists {
+		queue = &DestinationQueue{
+			Key:            key,
+			IsBlocked:      false,
+			PendingTx:      make(map[string]*PendingTransmission),
+			QueuedRequests: make([]*SyntheticRequest, 0),
+			LastSuccess:    time.Now(),
+		}
+		cc.destinationQueues[key] = queue
+		cc.logger.Debug("Created new destination queue", "type", key.Type, "destination", key.Destination)
+	}
+	return queue
 }
 
 // ProcessInbound processes inbound cross-partition messages through the conductor
@@ -123,33 +234,652 @@ func (cc *CrossChainConductor) processSynthetics() {
 	}
 }
 
-// processSyntheticRequest processes a single synthetic transaction request
+// generateTxID creates a unique transaction ID for tracking
+func (cc *CrossChainConductor) generateTxID() string {
+	id := atomic.AddInt64(&cc.txIDCounter, 1)
+	return fmt.Sprintf("ccc-%d-%d", time.Now().UnixNano(), id)
+}
+
+// processSyntheticRequest processes a single synthetic transaction request with per-destination blocking
 func (cc *CrossChainConductor) processSyntheticRequest(req *SyntheticRequest) {
-	// Phase 1: Direct pass-through to existing dispatcher (zero behavior change)
+	// Determine message type and destination key
+	msgType := cc.getMessageType(req.Messages)
+	destKey := cc.createDestinationKey(msgType, req.Destination)
+	
+	// Get the destination queue for this type+destination combination
+	queue := cc.getOrCreateDestinationQueue(destKey)
+	
+	queue.mu.Lock()
+	defer queue.mu.Unlock()
+	
+	// Check if this destination+type combination is currently blocked
+	if queue.IsBlocked {
+		// Queue the request for later processing
+		queue.QueuedRequests = append(queue.QueuedRequests, req)
+		cc.logger.Debug("Request queued - destination blocked", 
+			"type", msgType, "destination", req.Destination, 
+			"blocked_since", queue.BlockedSince, "queue_depth", len(queue.QueuedRequests))
+		return
+	}
+	
+	// Not blocked - process immediately
+	cc.processRequestImmediately(req, queue, destKey)
+}
+
+// processRequestImmediately processes a request without queueing
+func (cc *CrossChainConductor) processRequestImmediately(req *SyntheticRequest, queue *DestinationQueue, destKey DestinationKey) {
+	// Create pending transmission for error tracking
+	txID := cc.generateTxID()
+	pending := &PendingTransmission{
+		ID:          txID,
+		Messages:    req.Messages,
+		Destination: req.Destination,
+		DestKey:     destKey,
+		Context:     req.Context,
+		AttemptNum:  1,
+		SubmittedAt: time.Now(),
+		Callback:    req.ResponseChan,
+	}
+
+	// Store pending transmission in destination-specific queue
+	queue.PendingTx[txID] = pending
+
+	// Submit to dispatcher
 	env := &messaging.Envelope{Messages: req.Messages}
 	err := cc.dispatcher.Submit(req.Context, req.Destination, env)
 
-	// Update metrics
 	if err != nil {
+		// Immediate submission error - remove from pending and report
+		delete(queue.PendingTx, txID)
 		atomic.AddInt64(&cc.syntheticsErrors, 1)
-		cc.logger.Error("Synthetic transaction failed", "destination", req.Destination, "error", err)
-	} else {
-		atomic.AddInt64(&cc.syntheticsSent, 1)
-		cc.logger.Debug("Synthetic transaction sent", "destination", req.Destination, "messages", len(req.Messages))
+		queue.FailureCount++
+		
+		cc.logger.Error("Synthetic transaction submission failed", 
+			"destination", req.Destination, "error", err, "tx_id", txID, "type", destKey.Type)
+		req.ResponseChan <- err
+		return
 	}
 
-	// Send response back to caller
-	req.ResponseChan <- err
+	// Success - block this destination+type until we get transmission confirmation
+	queue.IsBlocked = true
+	queue.BlockedSince = time.Now()
+	
+	atomic.AddInt64(&cc.syntheticsSent, 1)
+	cc.logger.Debug("Synthetic transaction submitted - destination now blocked", 
+		"destination", req.Destination, "tx_id", txID, "type", destKey.Type)
+	
+	// Return success immediately - transmission monitoring will handle errors/retries
+	req.ResponseChan <- nil
+}
+
+// monitorTransmissionErrors monitors the dispatcher's error channel for transmission failures
+func (cc *CrossChainConductor) monitorTransmissionErrors() {
+	defer cc.wg.Done()
+	cc.logger.Info("Transmission error monitor started")
+
+	for {
+		select {
+		case <-cc.stopChan:
+			cc.logger.Info("Transmission error monitor stopping")
+			return
+
+		default:
+			// Call dispatcher.Send() and monitor the error channel
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			errorChan := cc.dispatcher.Send(ctx)
+
+			for err := range errorChan {
+				if err != nil {
+					atomic.AddInt64(&cc.transmissionErrors, 1)
+					cc.logger.Error("Transmission error detected", "error", err)
+					
+					// Handle transmission error - we'll need to implement error->transaction mapping
+					cc.handleTransmissionError(err)
+				}
+			}
+			cancel()
+			
+			// Brief pause before next monitoring cycle
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+}
+
+// handleTransmissionError processes transmission errors with per-destination handling
+func (cc *CrossChainConductor) handleTransmissionError(err error) {
+	// Process each destination queue to find and handle pending transmissions
+	cc.queuesMutex.RLock()
+	destinationQueues := make([]*DestinationQueue, 0, len(cc.destinationQueues))
+	for _, queue := range cc.destinationQueues {
+		destinationQueues = append(destinationQueues, queue)
+	}
+	cc.queuesMutex.RUnlock()
+
+	// Handle errors for each destination queue independently
+	for _, queue := range destinationQueues {
+		cc.handleQueueTransmissionError(queue, err)
+	}
+}
+
+// handleQueueTransmissionError handles transmission errors for a specific destination queue
+func (cc *CrossChainConductor) handleQueueTransmissionError(queue *DestinationQueue, err error) {
+	queue.mu.Lock()
+	defer queue.mu.Unlock()
+
+	// Find the oldest pending transmission in this queue to retry
+	var oldestTxID string
+	var oldestPending *PendingTransmission
+	var oldestTime time.Time = time.Now()
+
+	for txID, pending := range queue.PendingTx {
+		if pending.SubmittedAt.Before(oldestTime) {
+			oldestTime = pending.SubmittedAt
+			oldestTxID = txID
+			oldestPending = pending
+		}
+	}
+
+	if oldestPending == nil {
+		// No pending transactions in this queue
+		return
+	}
+
+	if oldestPending.AttemptNum >= cc.maxRetries {
+		// Max retries reached - fail the transaction and unblock the destination
+		cc.logger.Error("Transaction failed after max retries", 
+			"tx_id", oldestTxID, "attempts", oldestPending.AttemptNum, 
+			"type", queue.Key.Type, "destination", queue.Key.Destination)
+		
+		delete(queue.PendingTx, oldestTxID)
+		queue.FailureCount++
+		
+		// Unblock this destination+type and process queued requests
+		cc.unblockDestinationQueue(queue)
+		
+		// Notify the original caller of the failure (if callback still exists)
+		if oldestPending.Callback != nil {
+			select {
+			case oldestPending.Callback <- errors.InternalError.WithFormat("transmission failed after %d attempts: %v", oldestPending.AttemptNum, err):
+			default:
+				// Callback channel might be closed, that's okay
+			}
+		}
+		return
+	}
+
+	// Queue for retry - increment attempt but don't unblock yet
+	oldestPending.AttemptNum++
+	oldestPending.RetryAfter = time.Now().Add(cc.retryDelay)
+	queue.RetryCount++
+	
+	select {
+	case cc.retryChan <- oldestPending:
+		cc.logger.Info("Transaction queued for retry", 
+			"tx_id", oldestTxID, "attempt", oldestPending.AttemptNum, 
+			"type", queue.Key.Type, "destination", queue.Key.Destination)
+	default:
+		// Retry queue full - fail the transaction and unblock
+		cc.logger.Error("Retry queue full, failing transaction", 
+			"tx_id", oldestTxID, "type", queue.Key.Type, "destination", queue.Key.Destination)
+		
+		delete(queue.PendingTx, oldestTxID)
+		queue.FailureCount++
+		cc.unblockDestinationQueue(queue)
+		
+		if oldestPending.Callback != nil {
+			select {
+			case oldestPending.Callback <- errors.InternalError.With("retry queue full"):
+			default:
+				// Callback channel might be closed, that's okay
+			}
+		}
+	}
+}
+
+// unblockDestinationQueue unblocks a destination queue and processes any queued requests
+func (cc *CrossChainConductor) unblockDestinationQueue(queue *DestinationQueue) {
+	// This function assumes queue.mu is already locked by the caller
+	
+	queue.IsBlocked = false
+	queue.LastSuccess = time.Now() // Update success time even if this was a failure
+	
+	cc.logger.Debug("Unblocked destination queue", 
+		"type", queue.Key.Type, "destination", queue.Key.Destination, 
+		"queued_requests", len(queue.QueuedRequests))
+	
+	// Process the first queued request if any exist
+	if len(queue.QueuedRequests) > 0 {
+		nextReq := queue.QueuedRequests[0]
+		queue.QueuedRequests = queue.QueuedRequests[1:] // Remove first element
+		
+		// Process the next request immediately (this will re-block if submission succeeds)
+		cc.processRequestImmediately(nextReq, queue, queue.Key)
+	}
+}
+
+// handleSuccessfulTransmission handles successful transmission confirmation
+func (cc *CrossChainConductor) handleSuccessfulTransmission(txID string, destKey DestinationKey) {
+	queue := cc.getOrCreateDestinationQueue(destKey)
+	
+	queue.mu.Lock()
+	defer queue.mu.Unlock()
+	
+	// Remove the successful transmission
+	if pending, exists := queue.PendingTx[txID]; exists {
+		delete(queue.PendingTx, txID)
+		queue.SuccessCount++
+		
+		cc.logger.Debug("Transmission successful", 
+			"tx_id", txID, "type", destKey.Type, "destination", destKey.Destination)
+		
+		// Notify success via callback if it exists
+		if pending.Callback != nil {
+			select {
+			case pending.Callback <- nil: // nil = success
+			default:
+				// Callback channel might be closed, that's okay
+			}
+		}
+	}
+	
+	// Unblock this destination and process next queued request
+	cc.unblockDestinationQueue(queue)
+}
+
+// processRetries handles retry attempts for failed transmissions
+func (cc *CrossChainConductor) processRetries() {
+	defer cc.wg.Done()
+	cc.logger.Info("Retry processor started")
+
+	ticker := time.NewTicker(1 * time.Second) // Check for retries every second
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-cc.stopChan:
+			cc.logger.Info("Retry processor stopping")
+			// Fail all remaining retries
+			for {
+				select {
+				case pending := <-cc.retryChan:
+					pending.Callback <- errors.InternalError.With("conductor stopping")
+				default:
+					return
+				}
+			}
+
+		case pending := <-cc.retryChan:
+			// Check if it's time to retry
+			if time.Now().Before(pending.RetryAfter) {
+				// Not ready yet - put it back
+				select {
+				case cc.retryChan <- pending:
+				default:
+					// Queue full - fail the transaction
+					cc.logger.Error("Cannot requeue retry, failing transaction", "tx_id", pending.ID)
+					// Note: pending transaction will be handled by the queue cleanup logic
+					pending.Callback <- errors.InternalError.With("retry queue full")
+				}
+				continue
+			}
+
+			// Retry the transmission
+			cc.retryTransmission(pending)
+
+		case <-ticker.C:
+			// Periodic cleanup of old pending transactions
+			cc.cleanupOldTransmissions()
+		}
+	}
+}
+
+// retryTransmission attempts to retransmit a failed transaction with per-destination handling
+func (cc *CrossChainConductor) retryTransmission(pending *PendingTransmission) {
+	// Get the destination queue for this transmission
+	queue := cc.getOrCreateDestinationQueue(pending.DestKey)
+	
+	queue.mu.Lock()
+	defer queue.mu.Unlock()
+	
+	// Verify the pending transmission still exists in the queue
+	if _, exists := queue.PendingTx[pending.ID]; !exists {
+		cc.logger.Info("Retry attempted for non-existent transaction", 
+			"tx_id", pending.ID, "type", pending.DestKey.Type, "destination", pending.DestKey.Destination)
+		return
+	}
+
+	env := &messaging.Envelope{Messages: pending.Messages}
+	err := cc.dispatcher.Submit(pending.Context, pending.Destination, env)
+
+	if err != nil {
+		// Retry submission failed
+		cc.logger.Error("Retry submission failed", 
+			"tx_id", pending.ID, "attempt", pending.AttemptNum, "error", err, 
+			"type", pending.DestKey.Type, "destination", pending.DestKey.Destination)
+		
+		if pending.AttemptNum >= cc.maxRetries {
+			// Max retries reached - fail and unblock
+			delete(queue.PendingTx, pending.ID)
+			queue.FailureCount++
+			
+			cc.unblockDestinationQueue(queue)
+			
+			if pending.Callback != nil {
+				select {
+				case pending.Callback <- errors.InternalError.WithFormat("retry failed after %d attempts: %v", pending.AttemptNum, err):
+				default:
+					// Callback channel might be closed, that's okay
+				}
+			}
+		} else {
+			// Queue for another retry
+			pending.AttemptNum++
+			pending.RetryAfter = time.Now().Add(cc.retryDelay)
+			queue.RetryCount++
+			
+			select {
+			case cc.retryChan <- pending:
+				cc.logger.Debug("Transaction requeued for retry", 
+					"tx_id", pending.ID, "attempt", pending.AttemptNum, 
+					"type", pending.DestKey.Type, "destination", pending.DestKey.Destination)
+			default:
+				// Queue full - fail and unblock
+				delete(queue.PendingTx, pending.ID)
+				queue.FailureCount++
+				cc.unblockDestinationQueue(queue)
+				
+				if pending.Callback != nil {
+					select {
+					case pending.Callback <- errors.InternalError.With("retry queue full"):
+					default:
+						// Callback channel might be closed, that's okay
+					}
+				}
+			}
+		}
+		return
+	}
+
+	// Retry submission successful - destination remains blocked until transmission confirmation
+	atomic.AddInt64(&cc.syntheticsRetried, 1)
+	cc.logger.Info("Transaction retry submitted successfully", 
+		"tx_id", pending.ID, "attempt", pending.AttemptNum, 
+		"type", pending.DestKey.Type, "destination", pending.DestKey.Destination)
+	
+	// Update pending transmission timestamp
+	pending.SubmittedAt = time.Now()
+}
+
+// cleanupOldTransmissions removes transactions that have been pending too long across all destination queues
+func (cc *CrossChainConductor) cleanupOldTransmissions() {
+	cutoff := time.Now().Add(-5 * time.Minute) // Timeout after 5 minutes
+	
+	cc.queuesMutex.RLock()
+	destinationQueues := make([]*DestinationQueue, 0, len(cc.destinationQueues))
+	for _, queue := range cc.destinationQueues {
+		destinationQueues = append(destinationQueues, queue)
+	}
+	cc.queuesMutex.RUnlock()
+
+	// Clean up each destination queue independently
+	for _, queue := range destinationQueues {
+		cc.cleanupQueueTransmissions(queue, cutoff)
+	}
+}
+
+// cleanupQueueTransmissions cleans up old transmissions in a specific queue
+func (cc *CrossChainConductor) cleanupQueueTransmissions(queue *DestinationQueue, cutoff time.Time) {
+	queue.mu.Lock()
+	defer queue.mu.Unlock()
+
+	var staleTransmissions []*PendingTransmission
+	
+	// Find stale transmissions
+	for txID, pending := range queue.PendingTx {
+		if pending.SubmittedAt.Before(cutoff) {
+			staleTransmissions = append(staleTransmissions, pending)
+			delete(queue.PendingTx, txID)
+		}
+	}
+	
+	// If we removed transmissions, potentially unblock the queue
+	if len(staleTransmissions) > 0 {
+		cc.logger.Info("Cleaning up stale pending transmissions", 
+			"count", len(staleTransmissions), 
+			"type", queue.Key.Type, "destination", queue.Key.Destination)
+		
+		// Unblock the destination if it was blocked
+		if queue.IsBlocked {
+			cc.unblockDestinationQueue(queue)
+		}
+		
+		// Notify callbacks of timeout
+		for _, pending := range staleTransmissions {
+			if pending.Callback != nil {
+				select {
+				case pending.Callback <- errors.InternalError.With("transaction timeout"):
+				default:
+					// Callback channel might be closed, that's okay
+				}
+			}
+		}
+	}
 }
 
 // Stop gracefully stops the conductor
 func (cc *CrossChainConductor) Stop() {
 	close(cc.stopChan)
 	cc.wg.Wait()
+	
+	// Clean up any remaining pending transactions across all destination queues
+	cc.queuesMutex.Lock()
+	for _, queue := range cc.destinationQueues {
+		queue.mu.Lock()
+		
+		// Fail all pending transmissions
+		for txID, pending := range queue.PendingTx {
+			if pending.Callback != nil {
+				select {
+				case pending.Callback <- errors.InternalError.With("conductor stopped"):
+				default:
+					// Callback channel might be closed, that's okay
+				}
+			}
+			delete(queue.PendingTx, txID)
+		}
+		
+		// Fail all queued requests
+		for _, req := range queue.QueuedRequests {
+			if req.ResponseChan != nil {
+				select {
+				case req.ResponseChan <- errors.InternalError.With("conductor stopped"):
+				default:
+					// Channel might be closed, that's okay
+				}
+			}
+		}
+		queue.QueuedRequests = nil
+		
+		queue.mu.Unlock()
+	}
+	cc.queuesMutex.Unlock()
+	
 	cc.logger.Info("CrossChainConductor stopped")
 }
 
 // GetMetrics returns current processing metrics
-func (cc *CrossChainConductor) GetMetrics() (sent, errors int64) {
-	return atomic.LoadInt64(&cc.syntheticsSent), atomic.LoadInt64(&cc.syntheticsErrors)
+func (cc *CrossChainConductor) GetMetrics() (sent, errors, retried, transmissionErrors int64) {
+	return atomic.LoadInt64(&cc.syntheticsSent), 
+		   atomic.LoadInt64(&cc.syntheticsErrors), 
+		   atomic.LoadInt64(&cc.syntheticsRetried),
+		   atomic.LoadInt64(&cc.transmissionErrors)
+}
+
+// InitRecoveryManager initializes the recovery manager with database and client
+func (cc *CrossChainConductor) InitRecoveryManager(db database.Beginner, client api.Querier) {
+	if cc.recoveryManager != nil {
+		cc.logger.Warn("Recovery manager already initialized")
+		return
+	}
+	
+	cc.recoveryManager = NewRecoveryManager(cc, db, client)
+	cc.recoveryManager.Start()
+	cc.logger.Info("Recovery manager initialized and started")
+}
+
+// RequestMissingTransactions requests missing anchors or synthetic transactions
+func (cc *CrossChainConductor) RequestMissingTransactions(
+	msgType MessageType,
+	source, destination string,
+	fromNum, toNum uint64,
+) (*RecoveryResponse, error) {
+	if cc.recoveryManager == nil {
+		return nil, errors.NotReady.With("recovery manager not initialized")
+	}
+	
+	req := &RecoveryRequest{
+		Type:        msgType,
+		Source:      source,
+		Destination: destination,
+		FromNumber:  fromNum,
+		ToNumber:    toNum,
+		Requester:   destination,
+		Priority:    1,
+	}
+	
+	return cc.recoveryManager.RequestMissingTransactions(req)
+}
+
+// HandleRecoveryRequest processes an incoming recovery request from another partition
+func (cc *CrossChainConductor) HandleRecoveryRequest(req *RecoveryRequest) error {
+	if cc.recoveryManager == nil {
+		return errors.NotReady.With("recovery manager not initialized")
+	}
+	
+	cc.logger.Info("Received recovery request",
+		"type", cc.getMessageTypeName(req.Type),
+		"source", req.Source,
+		"destination", req.Destination,
+		"range", fmt.Sprintf("%d-%d", req.FromNumber, req.ToNumber),
+		"requester", req.Requester)
+	
+	// Process the recovery request asynchronously
+	go func() {
+		resp, err := cc.recoveryManager.RequestMissingTransactions(req)
+		if err != nil {
+			cc.logger.Error("Failed to process recovery request", "error", err)
+			return
+		}
+		
+		// Send recovered transactions to the requester
+		if len(resp.Transactions) > 0 {
+			err = cc.recoveryManager.ProvideRecoveredTransactions(resp.Transactions, req.Requester)
+			if err != nil {
+				cc.logger.Error("Failed to provide recovered transactions", "error", err)
+			} else {
+				cc.logger.Info("Provided recovered transactions",
+					"count", len(resp.Transactions),
+					"to", req.Requester)
+			}
+		}
+	}()
+	
+	return nil
+}
+
+// SubmitAnchor submits an anchor for transmission
+func (cc *CrossChainConductor) SubmitAnchor(req *AnchorRequest) error {
+	destKey := cc.createDestinationKey(MessageTypeAnchor, req.Destination)
+	
+	// Get or create destination queue
+	queue := cc.getOrCreateQueue(destKey)
+	
+	// Create synthetic request wrapper
+	synthReq := &SyntheticRequest{
+		Messages:    []messaging.Message{req.Anchor},
+		Destination: req.Destination,
+		SequenceNum: req.SequenceNum,
+	}
+	
+	// Queue or send based on blocking state
+	queue.mu.Lock()
+	if queue.IsBlocked {
+		queue.QueuedRequests = append(queue.QueuedRequests, synthReq)
+		queue.mu.Unlock()
+		cc.logger.Debug("Anchor queued (destination blocked)",
+			"destination", req.Destination.String(),
+			"sequence", req.SequenceNum)
+	} else {
+		queue.mu.Unlock()
+		// Send for immediate processing
+		select {
+		case cc.syntheticChan <- synthReq:
+			cc.logger.Debug("Anchor submitted for transmission",
+				"destination", req.Destination.String(),
+				"sequence", req.SequenceNum)
+		default:
+			cc.logger.Warn("Synthetic channel full, queueing anchor")
+			queue.mu.Lock()
+			queue.QueuedRequests = append(queue.QueuedRequests, synthReq)
+			queue.mu.Unlock()
+		}
+	}
+	
+	return nil
+}
+
+// CheckPartitionHealth checks and reports health of partition synchronization
+func (cc *CrossChainConductor) CheckPartitionHealth() map[string]interface{} {
+	health := make(map[string]interface{})
+	
+	cc.queuesMutex.RLock()
+	defer cc.queuesMutex.RUnlock()
+	
+	var totalQueued, totalPending, blockedQueues int
+	missingByDestination := make(map[string]int)
+	
+	for key, queue := range cc.destinationQueues {
+		queue.mu.RLock()
+		queued := len(queue.QueuedRequests)
+		pending := len(queue.PendingTx)
+		blocked := queue.IsBlocked
+		queue.mu.RUnlock()
+		
+		totalQueued += queued
+		totalPending += pending
+		if blocked {
+			blockedQueues++
+		}
+		
+		if queued > 10 || pending > 10 {
+			missingByDestination[key.Destination] = queued + pending
+		}
+	}
+	
+	health["total_queued"] = totalQueued
+	health["total_pending"] = totalPending
+	health["blocked_queues"] = blockedQueues
+	health["destinations_with_backlog"] = missingByDestination
+	
+	// Check recovery manager health if available
+	if cc.recoveryManager != nil {
+		cc.recoveryManager.mu.RLock()
+		activeRecovery := len(cc.recoveryManager.activeRecovery)
+		cc.recoveryManager.mu.RUnlock()
+		health["active_recovery_sessions"] = activeRecovery
+	}
+	
+	return health
+}
+
+// Helper function to get message type name
+func (cc *CrossChainConductor) getMessageTypeName(t MessageType) string {
+	switch t {
+	case MessageTypeAnchor:
+		return "anchor"
+	case MessageTypeSynthetic:
+		return "synthetic"
+	default:
+		return "unknown"
+	}
 }
