@@ -256,6 +256,7 @@ func (rm *RecoveryManager) recoverAnchors(req *RecoveryRequest, session *Recover
 			idx := seqNum - srcLedger.Delivered - 1
 			if idx < uint64(len(srcLedger.Pending)) {
 				// txid available at srcLedger.Pending[idx] but not used in simplified implementation
+				_ = srcLedger.Pending[idx]
 			}
 		}
 
@@ -350,19 +351,6 @@ func (rm *RecoveryManager) recoverSynthetics(req *RecoveryRequest, session *Reco
 	}, nil
 }
 
-// retrieveAnchor retrieves a specific anchor from the source partition
-func (rm *RecoveryManager) retrieveAnchor(ctx context.Context, source, destination string, seqNum uint64, txid *url.TxID) (*RecoveredTransaction, error) {
-	// Simplified implementation - CrossChainConductor handles recovery internally
-	// This is a placeholder that will be handled by the conductor's internal mechanisms
-	return nil, errors.NotReady.With("anchor recovery handled by CrossChainConductor")
-}
-
-// retrieveSynthetic retrieves a specific synthetic transaction from the source partition
-func (rm *RecoveryManager) retrieveSynthetic(ctx context.Context, source, destination string, seqNum uint64, txid *url.TxID) (*RecoveredTransaction, error) {
-	// Simplified implementation - CrossChainConductor handles recovery internally
-	// This is a placeholder that will be handled by the conductor's internal mechanisms
-	return nil, errors.NotReady.With("synthetic recovery handled by CrossChainConductor")
-}
 
 // periodicHealthCheck periodically checks for missing transactions
 func (rm *RecoveryManager) periodicHealthCheck() {
