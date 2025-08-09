@@ -733,7 +733,7 @@ func (cc *CrossChainConductor) GetMetrics() (sent, errors, retried, transmission
 // InitRecoveryManager initializes the recovery manager with database and client
 func (cc *CrossChainConductor) InitRecoveryManager(db database.Beginner, client api.Querier) {
 	if cc.recoveryManager != nil {
-		cc.logger.Warn("Recovery manager already initialized")
+		cc.logger.Info("Recovery manager already initialized")
 		return
 	}
 	
@@ -784,7 +784,7 @@ func (cc *CrossChainConductor) RequestMissingTransactionsWithBatchProof(
 	case MessageTypeSynthetic:
 		recoveryType = RecoveryTypeSynthetic
 	default:
-		return errors.BadRequest.Withf("unsupported message type for batch recovery: %d", msgType)
+		return errors.BadRequest.WithFormat("unsupported message type for batch recovery: %d", msgType)
 	}
 	
 	cc.logger.Info("Requesting batch proof recovery",
@@ -890,7 +890,7 @@ func (cc *CrossChainConductor) SubmitAnchor(req *AnchorRequest) error {
 	destKey := cc.createDestinationKey(MessageTypeAnchor, req.Destination)
 	
 	// Get or create destination queue
-	queue := cc.getOrCreateQueue(destKey)
+	queue := cc.getOrCreateDestinationQueue(destKey)
 	
 	// Create synthetic request wrapper
 	synthReq := &SyntheticRequest{
@@ -916,7 +916,7 @@ func (cc *CrossChainConductor) SubmitAnchor(req *AnchorRequest) error {
 				"destination", req.Destination.String(),
 				"sequence", req.SequenceNum)
 		default:
-			cc.logger.Warn("Synthetic channel full, queueing anchor")
+			cc.logger.Info("Synthetic channel full, queueing anchor")
 			queue.mu.Lock()
 			queue.QueuedRequests = append(queue.QueuedRequests, synthReq)
 			queue.mu.Unlock()
@@ -1056,7 +1056,7 @@ type BatchProofRecoveryManager struct {
 func NewBatchProofRecoveryManager(conductor *CrossChainConductor, logger logging.OptionalLogger) *BatchProofRecoveryManager {
 	return &BatchProofRecoveryManager{
 		conductor:      conductor,
-		logger:         logger.With("module", "batch-recovery"),
+		logger:         logging.OptionalLogger{L: logger.L.With("module", "batch-recovery")},
 		batchThreshold: 2,   // Use batch proof when >= 2 transactions
 		maxBatchSize:   100, // Maximum 100 transactions per batch
 	}
