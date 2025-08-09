@@ -105,7 +105,7 @@ type CrossChainConductor struct {
 func NewCrossChainConductor(dispatcher execute.Dispatcher, logger logging.OptionalLogger) *CrossChainConductor {
 	cc := &CrossChainConductor{
 		dispatcher:        dispatcher,
-		logger:            logging.OptionalLogger{L: logger.With("module", "crosschain-conductor")},
+		logger:            logger.With("module", "crosschain-conductor").(logging.OptionalLogger),
 		syntheticChan:     make(chan *SyntheticRequest, 100),   // Buffered channel for async processing
 		retryChan:         make(chan *PendingTransmission, 50), // Retry queue
 		stopChan:          make(chan struct{}),
@@ -1034,7 +1034,7 @@ type BatchProofRecoveryManager struct {
 func NewBatchProofRecoveryManager(conductor *CrossChainConductor, logger logging.OptionalLogger) *BatchProofRecoveryManager {
 	return &BatchProofRecoveryManager{
 		conductor:      conductor,
-		logger:         logging.OptionalLogger{L: logger.L.With("module", "batch-recovery")},
+		logger:         logger.With("module", "batch-recovery").(logging.OptionalLogger),
 		batchThreshold: 2,   // Use batch proof when >= 2 transactions
 		maxBatchSize:   100, // Maximum 100 transactions per batch
 	}

@@ -19,7 +19,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	// "gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging" // Not currently used
-	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	// "gitlab.com/accumulatenetwork/accumulate/pkg/url" // Not currently used
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -78,7 +78,7 @@ type RecoverySession struct {
 func NewRecoveryManager(conductor *CrossChainConductor, db database.Beginner, client api.Querier) *RecoveryManager {
 	return &RecoveryManager{
 		conductor:             conductor,
-		logger:                logging.OptionalLogger{L: conductor.logger.L.With("module", "recovery")},
+		logger:                conductor.logger.With("module", "recovery").(logging.OptionalLogger),
 		db:                    db,
 		client:                client,
 		recoveryQueue:         make(chan *RecoveryRequest, 100),

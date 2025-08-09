@@ -98,7 +98,7 @@ type ProofService struct {
 // NewProofService creates a new proof service
 func NewProofService(logger logging.OptionalLogger) *ProofService {
 	return &ProofService{
-		logger:         logging.OptionalLogger{L: logger.L.With("module", "proof-service")},
+		logger:         logger.With("module", "proof-service").(logging.OptionalLogger),
 		metrics:        &ProofMetrics{},
 		batchThreshold: 2,   // Use collection proofs for 2+ transactions
 		maxBatchSize:   100, // Maximum 100 transactions per collection

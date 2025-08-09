@@ -24,7 +24,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dustin/go-humanize"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -455,13 +454,13 @@ func (batch *Batch) collectBPT(w *snapshot.Writer, opts *CollectOptions) error {
 				// AI: Estimate progress based on key hash position
 				progress := estimateBPTProgress(currentHash)
 				// AI: Estimate total entries based on progress and current count
-				estimatedTotal := int64(float64(cnt) / progress)
+				_ = int64(float64(cnt) / progress) // estimatedTotal
 
 				// AI: Calculate elapsed time and estimate remaining time
 				elapsedTime := time.Since(startTime)
 				estimatedTotalTime := time.Duration(float64(elapsedTime) / progress)
 				estimatedRemainingTime := estimatedTotalTime - elapsedTime
-				estimatedCompletionTime := time.Now().Add(estimatedRemainingTime)
+				_ = time.Now().Add(estimatedRemainingTime) // estimatedCompletionTime
 
 				// AI: Sort account types for consistent output
 				types := make([]protocol.AccountType, 0, len(accountTypeCounters))
@@ -474,9 +473,9 @@ func (batch *Batch) collectBPT(w *snapshot.Writer, opts *CollectOptions) error {
 				// AI: Print counts for each account type with estimates of final counts
 				for _, t := range types {
 					count := accountTypeCounters[t]
-					percent := float64(count) / float64(totalEntries) * 100
+					_ = float64(count) / float64(totalEntries) * 100 // percent
 					// Estimate final count for this account type
-					estimatedFinalCount := int64(float64(count) / progress)
+					_ = int64(float64(count) / progress) // estimatedFinalCount
 				}
 
 			}
@@ -504,19 +503,17 @@ func (batch *Batch) collectBPT(w *snapshot.Writer, opts *CollectOptions) error {
 	// AI: Print counts for each account type with estimates of final counts
 	for _, t := range types {
 		count := accountTypeCounters[t]
-		percent := float64(count) / float64(totalEntries) * 100
+		_ = float64(count) / float64(totalEntries) * 100 // percent
 		// Estimate final count for this account type
-		estimatedFinalCount := int64(float64(count) / finalProgress)
-		_ = estimatedFinalCount // Keep calculation for potential future use
+		_ = int64(float64(count) / finalProgress) // estimatedFinalCount
 	}
 
 
 	// AI: Print unresolved count with estimate of final count
 	if unresolvedKeys > 0 {
-		percent := float64(unresolvedKeys) / float64(totalEntries) * 100
+		_ = float64(unresolvedKeys) / float64(totalEntries) * 100 // percent
 		// Estimate final count for unresolved keys
-		estimatedFinalUnresolved := int64(float64(unresolvedKeys) / finalProgress)
-		_ = estimatedFinalUnresolved // Keep calculation for potential future use
+		_ = int64(float64(unresolvedKeys) / finalProgress) // estimatedFinalUnresolved
 	}
 
 	// AI: Close the BPT section writer and return any errors.
