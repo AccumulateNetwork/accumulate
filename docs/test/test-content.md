@@ -12,7 +12,7 @@ test/
 ├── data/                   # Test data and benchmarks (10 items)
 ├── docs/                   # Test documentation (12 files)
 ├── e2e/                    # End-to-end integration tests (53 files)
-├── e2e2/                   # Additional E2E tests (5 files)
+├── e2e_v2/                   # Additional E2E tests (5 files)
 ├── encoding/               # Encoding/decoding tests (5 files)
 ├── harness/                # Test harness and utilities (5 files)
 ├── helpers/                # Test helper functions (1 file)

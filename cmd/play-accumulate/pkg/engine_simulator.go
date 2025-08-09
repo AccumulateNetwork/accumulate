@@ -204,7 +204,7 @@ func (s *SimEngine) waitForTransactionFlow(statusCheck func(*protocol.Transactio
 	for _, id := range synth {
 		// Wait for synthetic transactions to be delivered
 		id := id.Hash()
-		st, txn := s.waitForTransactionFlow((*protocol.TransactionStatus).Delivered, id[:]) //nolint:rangevarref
+		st, txn := s.waitForTransactionFlow((*protocol.TransactionStatus).Delivered, id[:])
 		statuses = append(statuses, st...)
 		transactions = append(transactions, txn...)
 	}

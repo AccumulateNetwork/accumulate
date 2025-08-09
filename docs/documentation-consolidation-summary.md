@@ -209,9 +209,9 @@ The following 10 files remain outside the `/docs` directory by design:
 - `CODE_OF_CONDUCT.md` - Community standards
 
 ### Test-Specific Files (4)
-- `test/e2e2/alice.md` - E2E test scenario
-- `test/e2e2/bob.md` - E2E test scenario
-- `test/e2e2/example_test.md` - E2E test example
+- `test/e2e_v2/alice.md` - E2E test scenario
+- `test/e2e_v2/bob.md` - E2E test scenario
+- `test/e2e_v2/example_test.md` - E2E test example
 - `test/testdata/index.md` - Test data index
 
 ### Data Files (2)
