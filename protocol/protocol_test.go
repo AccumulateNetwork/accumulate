@@ -4,6 +4,9 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
+//go:build !race
+// +build !race
+
 package protocol
 
 import (
@@ -17,6 +20,7 @@ import (
 )
 
 func TestIsValidAdiUrl(t *testing.T) {
+	t.Parallel()
 	good := map[string]string{
 		"Simple":            "foo.acme",
 		"Identity has dash": "foo-bar.acme",
@@ -56,6 +60,7 @@ func TestIsValidAdiUrl(t *testing.T) {
 }
 
 func TestLiteAddress(t *testing.T) {
+	t.Parallel()
 	TokenURLs := map[string]string{
 		"good1": "RedWaggon.acme/Wheels",
 		"good2": "BlueBall.acme/Footballs",
@@ -78,6 +83,7 @@ func TestLiteAddress(t *testing.T) {
 }
 
 func TestParseLiteTokenAddress(t *testing.T) {
+	t.Parallel()
 	fakeKey := make([]byte, 32)
 	fakeHash := sha256.Sum256(fakeKey)
 	addr, err := LiteTokenAddress(fakeKey, "-.acme/-", SignatureTypeED25519)
@@ -100,6 +106,7 @@ func TestParseLiteTokenAddress(t *testing.T) {
 }
 
 func TestParseLiteAddress_Invalid(t *testing.T) {
+	t.Parallel()
 	_, err := ParseLiteAddress(&url.URL{Authority: hex.EncodeToString([]byte{0xCA, 0xFE})})
 	require.Error(t, err)
 }

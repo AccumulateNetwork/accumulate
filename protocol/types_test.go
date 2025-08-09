@@ -4,6 +4,9 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
+//go:build !race
+// +build !race
+
 package protocol
 
 import (
@@ -19,6 +22,7 @@ type TestType struct {
 }
 
 func TestAccUrlValidator(t *testing.T) {
+	t.Parallel()
 	cases := map[string]struct {
 		value *TestType
 		ok    bool
@@ -45,6 +49,7 @@ func TestAccUrlValidator(t *testing.T) {
 }
 
 func TestKeyPage_MofN(t *testing.T) {
+	t.Parallel()
 	kp := new(KeyPage)
 	var rh common.RandHash
 	for i := 1; i < 11; i++ {

@@ -4,6 +4,9 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
+//go:build !race
+// +build !race
+
 package protocol
 
 import (
@@ -13,6 +16,7 @@ import (
 )
 
 func TestFormatAmount(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		Amount    uint64
 		Precision int

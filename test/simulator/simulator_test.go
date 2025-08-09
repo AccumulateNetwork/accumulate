@@ -139,10 +139,8 @@ func TestSimulator2(t *testing.T) {
 			AddCredits().To(lite).WithOracle(float64(ns.Oracle.Price)/AcmeOraclePrecision).Purchase(3).
 			SignWith(lite).Version(1).Timestamp(1).PrivateKey(liteKey))
 
-	for !Txn(st.TxID).Completes().Satisfied(&sim.Harness) {
-		// Wait for the transaction to complete
-		time.Sleep(10 * time.Millisecond)
-	}
+	// Use WaitForTransactionFlow for event-based waiting
+	sim.WaitForTransactionFlow(delivered, st.TxID[:])
 
 	// Send tokens
 	st = buildAndSubmit(t, ctx, C,
@@ -150,10 +148,8 @@ func TestSimulator2(t *testing.T) {
 			SendTokens(1, 0).To(other).
 			SignWith(lite).Version(1).Timestamp(2).PrivateKey(liteKey))
 
-	for !Txn(st.TxID).Completes().Satisfied(&sim.Harness) {
-		// Wait for the transaction to complete
-		time.Sleep(10 * time.Millisecond)
-	}
+	// Use WaitForTransactionFlow for event-based waiting
+	sim.WaitForTransactionFlow(delivered, st.TxID[:])
 }
 
 func buildAndSubmit(t testing.TB, ctx context.Context, svc api.Submitter, bld EnvelopeBuilder) *TransactionStatus {
