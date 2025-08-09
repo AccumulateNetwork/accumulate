@@ -14,6 +14,9 @@ import (
 	"time"
 
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
+	v3api "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	accurl "gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -26,6 +29,7 @@ const (
 // FaucetHelper provides continuous token funding for test accounts
 type FaucetHelper struct {
 	client      *client.Client
+	apiClient   *jsonrpc.Client
 	serverURL   string
 	running     bool
 	stopChan    chan struct{}
@@ -82,8 +86,11 @@ func NewFaucetHelper(serverURL string, config *FaucetConfig) (*FaucetHelper, err
 		}
 	}
 	
+	apiClient := jsonrpc.NewClient(serverURL + "/v3")
+	
 	return &FaucetHelper{
 		client:    c,
+		apiClient: apiClient,
 		serverURL: serverURL,
 		stopChan:  make(chan struct{}),
 		config:    *config,
@@ -155,6 +162,16 @@ func (fh *FaucetHelper) CreateFundedAccount(targetAmount int64) (*FundedAccount,
 	err = fh.FundAccountToTarget(account, targetAmount)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fund account: %v", err)
+	}
+	
+	// Wait a moment for the account to be created on the network
+	time.Sleep(2 * time.Second)
+	
+	// Add credits to the account for transaction fees
+	err = fh.AddCreditsToAccount(account, 100000000) // 100k credits
+	if err != nil {
+		log.Printf("⚠️  Failed to add credits to account %s: %v", account.URL, err)
+		// Don't fail completely, as credits might not be strictly required for all tests
 	}
 	
 	fh.stats.mu.Lock()
@@ -334,4 +351,52 @@ func (fh *FaucetHelper) requestFromFaucet(accountURL *accurl.URL) (int64, error)
 	fh.stats.mu.Unlock()
 	
 	return amount, nil
+}
+
+// AddCreditsToAccount adds credits to an account using ACME tokens
+func (fh *FaucetHelper) AddCreditsToAccount(account *FundedAccount, creditAmount int64) error {
+	// First, get the network status to find the oracle price
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	
+	ns, err := fh.apiClient.NetworkStatus(ctx, v3api.NetworkStatusOptions{Partition: protocol.Directory})
+	if err != nil {
+		return fmt.Errorf("failed to get network status: %v", err)
+	}
+	
+	// Calculate oracle price (this is the key fix!)
+	oracle := float64(ns.Oracle.Price) / protocol.AcmeOraclePrecision
+	
+	// If oracle price is zero (DevNet), we need to set a reasonable price
+	// In DevNet, we can set a small oracle price to enable credit purchases
+	if oracle == 0 {
+		oracle = 0.01 // Set 1 credit = 0.01 ACME (very cheap for testing)
+		log.Printf("⚠️  Oracle price is zero, using test price: %.4f ACME per credit", oracle)
+	}
+	
+	// Build add credits transaction with oracle price
+	// For lite accounts, we sign with the lite account itself, not .Main
+	var ts uint64
+	env, err := build.Transaction().For(account.URL).
+		AddCredits().To(account.URL).WithOracle(oracle).Purchase(float64(creditAmount)).
+		SignWith(account.URL).Version(1).Timestamp(&ts).PrivateKey(account.PrivateKey).
+		Done()
+	if err != nil {
+		return fmt.Errorf("failed to build add credits transaction: %v", err)
+	}
+	
+	// Submit transaction
+	subs, err := fh.apiClient.Submit(ctx, env, v3api.SubmitOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to submit add credits transaction: %v", err)
+	}
+	
+	for _, sub := range subs {
+		if err := sub.Status.AsError(); err != nil {
+			return fmt.Errorf("add credits transaction failed: %v", err)
+		}
+	}
+	
+	log.Printf("✅ Added %d credits to account %s (oracle: %.4f)", creditAmount, account.URL.String()[:20]+"...", oracle)
+	return nil
 }

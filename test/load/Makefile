@@ -1,5 +1,5 @@
 # Makefile for Accumulate Load Tests
-.PHONY: help faucet-test crosschain-test all clean
+.PHONY: help faucet-test crosschain-test spend-test all clean
 
 # Default target
 help:
@@ -7,6 +7,7 @@ help:
 	@echo "================================"
 	@echo "make faucet-test      - Run standalone faucet collection test"
 	@echo "make crosschain-test  - Run crosschain test with faucet helper"
+	@echo "make spend-test       - Run comprehensive collect & spend test"
 	@echo "make all             - Run all tests"
 	@echo "make clean           - Clean up test artifacts"
 	@echo ""
@@ -39,8 +40,16 @@ crosschain-test:
 	@echo ""
 	timeout $(TIMEOUT) go run crosschain_with_faucet.go faucet_helper.go
 
+# Run comprehensive collect & spend test
+spend-test:
+	@echo "💸 Running comprehensive collect & spend test..."
+	@echo "Server: $(SERVER_URL)"
+	@echo "Timeout: $(TIMEOUT)"
+	@echo ""
+	timeout $(TIMEOUT) go run collect_and_spend_test.go acme_spender.go faucet_helper.go
+
 # Run all tests
-all: faucet-test crosschain-test
+all: faucet-test crosschain-test spend-test
 
 # Clean up any test artifacts
 clean:
