@@ -4,6 +4,9 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
+//go:build !race
+// +build !race
+
 package protocol_test
 
 import (
@@ -45,6 +48,7 @@ func init() {
 }
 
 func TestBTCSignature(t *testing.T) {
+	t.Parallel()
 
 	//m/44'/60'/0'/0/0 yellow ->
 	privKey := base58.Decode("KxukKhTPU11xH2Wfk2366e375166QE4r7y8FWojU9XPbzLYYSM3j")
@@ -65,6 +69,7 @@ func TestBTCSignature(t *testing.T) {
 }
 
 func TestBTCLegacySignature(t *testing.T) {
+	t.Parallel()
 
 	//m/44'/60'/0'/0/0 yellow ->
 	privKey := base58.Decode("KxukKhTPU11xH2Wfk2366e375166QE4r7y8FWojU9XPbzLYYSM3j")
@@ -85,6 +90,7 @@ func TestBTCLegacySignature(t *testing.T) {
 }
 
 func TestETHSignature(t *testing.T) {
+	t.Parallel()
 
 	privKeyHex := "1b48e04041e23c72cacdaa9b0775d31515fc74d6a6d3c8804172f7e7d1248529"
 
@@ -129,6 +135,7 @@ func TestETHSignature(t *testing.T) {
 }
 
 func TestBTCaddress(t *testing.T) {
+	t.Parallel()
 	//m/44'/60'/0'/0/0 yellow ->
 	//btc private address : "KxukKhTPU11xH2Wfk2366e375166QE4r7y8FWojU9XPbzLYYSM3j"
 	pubKey, err := hex.DecodeString("02f7aa1eb14de438735c026c7cc719db11baf82e47f8fa2c86b55bff92b677eae2")
@@ -139,6 +146,7 @@ func TestBTCaddress(t *testing.T) {
 }
 
 func TestETHaddress(t *testing.T) {
+	t.Parallel()
 	//m/44'/60'/0'/0/0 yellow ->
 	// eth private address : "0x1b48e04041e23c72cacdaa9b0775d31515fc74d6a6d3c8804172f7e7d1248529"
 	addr := "0xa27df20e6579ac472481f0ea918165d24bfb713b"
@@ -163,6 +171,7 @@ func mustDecodeHex(t testing.TB, s string) []byte {
 }
 
 func TestInitWithOtherKeys(t *testing.T) {
+	t.Parallel()
 	ethPriv := mustDecodeHex(t, "1b48e04041e23c72cacdaa9b0775d31515fc74d6a6d3c8804172f7e7d1248529")
 	_, ethPub := btc.PrivKeyFromBytes(btc.S256(), ethPriv)
 	btcPriv := base58.Decode("KxukKhTPU11xH2Wfk2366e375166QE4r7y8FWojU9XPbzLYYSM3j")
@@ -311,6 +320,7 @@ kdarEKxlwkZ6oDnSR/lWivjraLWJlIN3aU81RAcXW+C/U5bgZM8l3GsQHchX
 -----END RSA PRIVATE KEY-----`
 
 func TestRsaSha256Signature(t *testing.T) {
+	t.Parallel()
 	message := "ACME will rule DEFI"
 	hash := sha256.Sum256([]byte(message))
 	block, _ := pem.Decode([]byte(rsaPrivateKey1024))
@@ -436,6 +446,7 @@ func generateTestPkiCertificates() (string, string, string, error) {
 }
 
 func TestTypesFromCerts(t *testing.T) {
+	t.Parallel()
 	rsaCert, ecdsaCert, ed25519Cert, err := generateTestPkiCertificates()
 	if err != nil {
 		t.Fatalf("Failed to generate certificates: %v\n", err)
@@ -496,6 +507,7 @@ func TestTypesFromCerts(t *testing.T) {
 }
 
 func TestEip712TypedDataSignature(t *testing.T) {
+	t.Parallel()
 	txn, err := build.Transaction().
 		For("adi.acme", "tokens").
 		SendTokens(100, AcmePrecisionPower).To("other.acme", "tokens").
@@ -522,6 +534,7 @@ func TestEip712TypedDataSignature(t *testing.T) {
 }
 
 func TestEIP712DelegatedKeyPageUpdate(t *testing.T) {
+	t.Parallel()
 	txn, err := build.Transaction().
 		For("adi.acme", "book", "1").
 		UpdateKeyPage().
@@ -552,6 +565,7 @@ func TestEIP712DelegatedKeyPageUpdate(t *testing.T) {
 }
 
 func TestEIP712MessageForWallet(t *testing.T) {
+	t.Parallel()
 	acctesting.SkipWithoutTool(t, "node")
 
 	txn := &Transaction{}

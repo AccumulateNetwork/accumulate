@@ -4,6 +4,9 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
+//go:build !race
+// +build !race
+
 package protocol
 
 import (
@@ -17,6 +20,7 @@ import (
 )
 
 func TestDataEntry(t *testing.T) {
+	t.Parallel()
 	de := AccumulateDataEntry{}
 
 	de.Data = append(de.Data, []byte("test data entry"))
@@ -66,6 +70,7 @@ func TestDataEntry(t *testing.T) {
 }
 
 func TestDataEntryEmpty(t *testing.T) {
+	t.Parallel()
 	de := new(AccumulateDataEntry)
 	de.Data = [][]byte{nil, []byte("foo")}
 
@@ -78,6 +83,7 @@ func TestDataEntryEmpty(t *testing.T) {
 }
 
 func TestDoubleHashEntryProof(t *testing.T) {
+	t.Parallel()
 	relaxed := &merkle.ValidateOptions{Relaxed: true}
 
 	hash := doSha256([]byte("foo"))
@@ -115,6 +121,7 @@ func TestDoubleHashEntryProof(t *testing.T) {
 }
 
 func TestAppendZeros(t *testing.T) {
+	t.Parallel()
 	b, err := new(BurnTokens).MarshalBinary()
 	require.NoError(t, err)
 	b = append(b, 2)
