@@ -47,6 +47,11 @@ func (b *Block) Process(envelope *messaging.Envelope) ([]*protocol.TransactionSt
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
+	// Route inbound cross-partition messages through crosschain conductor if enabled
+	if b.Executor.crosschainConductor != nil {
+		messages = b.Executor.crosschainConductor.ProcessInbound(b.Params().Context, messages)
+	}
+
 	// Make sure every transaction is signed
 	err = b.Executor.checkForUnsignedTransactions(messages)
 	if err != nil {

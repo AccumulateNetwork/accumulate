@@ -72,7 +72,7 @@ type Options struct {
 	Sequencer                   private.Sequencer  // Synthetic and anchor sequence API service
 	Querier                     api.Querier        // Query API service
 	EnableHealing               bool               //
-	EnableCrosschainCoordinator bool               // Enable Phase 1 CrosschainCoordinator for async synthetic transaction processing
+	EnableCrosschainCoordinator bool               // Enable Phase 1 CrossChainConductor for async synthetic transaction processing
 }
 
 // A Dispatcher dispatches synthetic transactions produced by the executor.
