@@ -215,7 +215,6 @@ func (rm *RecoveryManager) executeRecovery(req *RecoveryRequest) {
 
 // recoverAnchors recovers missing anchor transactions
 func (rm *RecoveryManager) recoverAnchors(req *RecoveryRequest, session *RecoverySession) (*RecoveryResponse, error) {
-	_ = context.Background() // ctx unused in simplified implementation
 	srcUrl := protocol.PartitionUrl(req.Source)
 	dstUrl := protocol.PartitionUrl(req.Destination)
 
@@ -256,7 +255,7 @@ func (rm *RecoveryManager) recoverAnchors(req *RecoveryRequest, session *Recover
 		if seqNum > srcLedger.Delivered && seqNum <= srcLedger.Received {
 			idx := seqNum - srcLedger.Delivered - 1
 			if idx < uint64(len(srcLedger.Pending)) {
-				_ = srcLedger.Pending[idx] // txid available but not used in simplified implementation
+				// txid available at srcLedger.Pending[idx] but not used in simplified implementation
 			}
 		}
 
@@ -285,7 +284,6 @@ func (rm *RecoveryManager) recoverAnchors(req *RecoveryRequest, session *Recover
 
 // recoverSynthetics recovers missing synthetic transactions
 func (rm *RecoveryManager) recoverSynthetics(req *RecoveryRequest, session *RecoverySession) (*RecoveryResponse, error) {
-	_ = context.Background() // ctx unused in simplified implementation
 	srcUrl := protocol.PartitionUrl(req.Source)
 	dstUrl := protocol.PartitionUrl(req.Destination)
 
@@ -442,7 +440,8 @@ func (rm *RecoveryManager) checkMissingAnchors(batch *database.Batch, src, dst *
 				Priority:    1,
 			}
 			go func() {
-				if _, err := rm.RequestMissingTransactions(req); err != nil {
+				_, err := rm.RequestMissingTransactions(req)
+				if err != nil {
 					rm.logger.Error("Failed to request missing transactions", "error", err, "source", req.Source)
 				}
 			}()
@@ -487,7 +486,8 @@ func (rm *RecoveryManager) checkMissingSynthetics(batch *database.Batch, src, ds
 				Priority:    1,
 			}
 			go func() {
-				if _, err := rm.RequestMissingTransactions(req); err != nil {
+				_, err := rm.RequestMissingTransactions(req)
+				if err != nil {
 					rm.logger.Error("Failed to request missing transactions", "error", err, "source", req.Source)
 				}
 			}()
