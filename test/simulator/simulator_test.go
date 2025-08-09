@@ -134,7 +134,7 @@ func TestSimulator2(t *testing.T) {
 	require.NoError(t, err)
 
 	// Buy credits
-	st := buildAndSubmit(t, ctx, C,
+	_ = buildAndSubmit(t, ctx, C,
 		build.Transaction().For(lite).
 			AddCredits().To(lite).WithOracle(float64(ns.Oracle.Price)/AcmeOraclePrecision).Purchase(3).
 			SignWith(lite).Version(1).Timestamp(1).PrivateKey(liteKey))
@@ -142,7 +142,7 @@ func TestSimulator2(t *testing.T) {
 	// Transaction will be processed by the ticker loop
 
 	// Send tokens
-	st = buildAndSubmit(t, ctx, C,
+	_ = buildAndSubmit(t, ctx, C,
 		build.Transaction().For(lite).
 			SendTokens(1, 0).To(other).
 			SignWith(lite).Version(1).Timestamp(2).PrivateKey(liteKey))
