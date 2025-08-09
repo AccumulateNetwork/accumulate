@@ -22,38 +22,38 @@ import (
 )
 
 type LiteAccount struct {
-	PrivateKey   ed25519.PrivateKey
-	TokenURL     *url.URL
-	IdentityURL  *url.URL
-	PublicKey    []byte
-	Partition    string
+	PrivateKey  ed25519.PrivateKey
+	TokenURL    *url.URL
+	IdentityURL *url.URL
+	PublicKey   []byte
+	Partition   string
 }
 
 type LoadTestStats struct {
-	TotalTransactions     int64
-	SuccessfulTxs         int64
-	FailedTxs            int64
-	CrossPartitionTxs     int64
-	SamePartitionTxs      int64
-	BVN1ToBVN2           int64
-	BVN1ToBVN3           int64
-	BVN2ToBVN1           int64
-	BVN2ToBVN3           int64
-	BVN3ToBVN1           int64
-	BVN3ToBVN2           int64
-	StartTime            time.Time
-	Duration             time.Duration
+	TotalTransactions int64
+	SuccessfulTxs     int64
+	FailedTxs         int64
+	CrossPartitionTxs int64
+	SamePartitionTxs  int64
+	BVN1ToBVN2        int64
+	BVN1ToBVN3        int64
+	BVN2ToBVN1        int64
+	BVN2ToBVN3        int64
+	BVN3ToBVN1        int64
+	BVN3ToBVN2        int64
+	StartTime         time.Time
+	Duration          time.Duration
 }
 
 func (s *LoadTestStats) IncrementTransaction(fromPartition, toPartition string, success bool) {
 	atomic.AddInt64(&s.TotalTransactions, 1)
-	
+
 	if success {
 		atomic.AddInt64(&s.SuccessfulTxs, 1)
-		
+
 		if fromPartition != toPartition {
 			atomic.AddInt64(&s.CrossPartitionTxs, 1)
-			
+
 			// Track specific partition-to-partition flows
 			switch fromPartition + "->" + toPartition {
 			case "BVN1->BVN2":
@@ -97,11 +97,11 @@ func (s *LoadTestStats) PrintResults() {
 	if success > 0 {
 		fmt.Printf("TPS: %.2f\n", float64(success)/s.Duration.Seconds())
 	}
-	
+
 	fmt.Printf("\n🌐 Cross-Partition Transaction Analysis:\n")
 	fmt.Printf("Cross-partition transactions: %d (%.1f%%)\n", crossPartition, float64(crossPartition)/float64(success)*100)
 	fmt.Printf("Same-partition transactions: %d (%.1f%%)\n", samePartition, float64(samePartition)/float64(success)*100)
-	
+
 	fmt.Printf("\n🔀 Detailed Cross-Partition Routing (via CrossChainConductor):\n")
 	fmt.Printf("BVN1 → BVN2: %d\n", atomic.LoadInt64(&s.BVN1ToBVN2))
 	fmt.Printf("BVN1 → BVN3: %d\n", atomic.LoadInt64(&s.BVN1ToBVN3))
@@ -109,7 +109,7 @@ func (s *LoadTestStats) PrintResults() {
 	fmt.Printf("BVN2 → BVN3: %d\n", atomic.LoadInt64(&s.BVN2ToBVN3))
 	fmt.Printf("BVN3 → BVN1: %d\n", atomic.LoadInt64(&s.BVN3ToBVN1))
 	fmt.Printf("BVN3 → BVN2: %d\n", atomic.LoadInt64(&s.BVN3ToBVN2))
-	
+
 	// CrossChainConductor validation
 	fmt.Printf("\n🎯 CrossChainConductor Validation:\n")
 	if crossPartition > 0 {
@@ -128,26 +128,26 @@ func createLiteAccount() (*LiteAccount, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	privateKey := ed25519.NewKeyFromSeed(seed)
 	publicKey := privateKey[32:]
-	
+
 	tokenURL, err := protocol.LiteTokenAddress(publicKey, protocol.ACME, protocol.SignatureTypeED25519)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	identityURL := tokenURL.Identity()
-	
+
 	// Determine which partition this account will be routed to
 	partition := getPartitionForAccount(tokenURL.String())
-	
+
 	return &LiteAccount{
-		PrivateKey:   privateKey,
-		TokenURL:     tokenURL,
-		IdentityURL:  identityURL,
-		PublicKey:    publicKey,
-		Partition:    partition,
+		PrivateKey:  privateKey,
+		TokenURL:    tokenURL,
+		IdentityURL: identityURL,
+		PublicKey:   publicKey,
+		Partition:   partition,
 	}, nil
 }
 
@@ -171,29 +171,29 @@ func fundAccount(tokenURL *url.URL) error {
 		return err
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != 200 {
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("faucet failed (status %d): %s", resp.StatusCode, string(body))
 	}
-	
+
 	return nil
 }
 
 func addCreditsToAccount(client *jsonrpc.Client, account *LiteAccount) error {
 	ctx := context.Background()
 	timestamp := uint64(time.Now().UnixMilli())
-	
+
 	ns, err := client.NetworkStatus(ctx, v3api.NetworkStatusOptions{Partition: "Directory"})
 	if err != nil {
 		return fmt.Errorf("failed to get network status: %v", err)
 	}
-	
+
 	oracle := float64(ns.Oracle.Price) / 1e8
 	if oracle == 0 {
 		oracle = 0.01
 	}
-	
+
 	env, err := build.Transaction().
 		For(account.TokenURL).
 		Body(&protocol.AddCredits{
@@ -203,29 +203,29 @@ func addCreditsToAccount(client *jsonrpc.Client, account *LiteAccount) error {
 		}).
 		SignWith(account.IdentityURL).Version(1).Timestamp(&timestamp).PrivateKey(account.PrivateKey).
 		Done()
-	
+
 	if err != nil {
 		return fmt.Errorf("build credits transaction failed: %v", err)
 	}
-	
+
 	subs, err := client.Submit(ctx, env, v3api.SubmitOptions{})
 	if err != nil {
 		return fmt.Errorf("submit credits transaction failed: %v", err)
 	}
-	
+
 	for i, sub := range subs {
 		if err := sub.Status.AsError(); err != nil {
 			return fmt.Errorf("credits result %d failed: %v", i, err)
 		}
 	}
-	
+
 	return nil
 }
 
 func sendTransaction(client *jsonrpc.Client, from, to *LiteAccount, amount int64, stats *LoadTestStats) error {
 	ctx := context.Background()
 	timestamp := uint64(time.Now().UnixMilli())
-	
+
 	env, err := build.Transaction().
 		For(from.TokenURL).
 		Body(&protocol.SendTokens{
@@ -263,7 +263,7 @@ func main() {
 	fmt.Println("🚀 CrossChainConductor Comprehensive Routing Load Test")
 	fmt.Printf("Testing extensive cross-partition transaction flows across 3 BVNs\n")
 	fmt.Printf("Focus: Validating anchor/synthetic transaction routing via CrossChainConductor\n\n")
-	
+
 	client := jsonrpc.NewClient("http://127.0.0.1:26660/v3")
 	stats := &LoadTestStats{StartTime: time.Now()}
 
@@ -271,7 +271,7 @@ func main() {
 	fmt.Println("📝 Creating lite accounts across all partitions...")
 	numAccounts := 30 // Higher number to ensure good cross-partition distribution
 	accounts := make([]*LiteAccount, numAccounts)
-	
+
 	for i := 0; i < numAccounts; i++ {
 		acc, err := createLiteAccount()
 		if err != nil {
@@ -327,11 +327,11 @@ func main() {
 	// Execute comprehensive cross-partition load test
 	fmt.Println("\n🔥 Starting comprehensive cross-partition load test...")
 	fmt.Printf("Target: Maximum cross-partition transaction distribution\n")
-	
+
 	var wg sync.WaitGroup
 	numTransactions := 150 // High volume test
 	concurrency := 15      // Higher concurrency
-	
+
 	stats.StartTime = time.Now()
 
 	// Execute transactions with strategic sender/receiver pairing for cross-partition routing
@@ -340,10 +340,10 @@ func main() {
 			wg.Add(1)
 			go func(txNum int) {
 				defer wg.Done()
-				
+
 				// Strategic account selection to maximize cross-partition transactions
 				fromIdx := txNum % len(accounts)
-				
+
 				// Find an account in a different partition
 				toIdx := fromIdx
 				attempts := 0
@@ -351,33 +351,33 @@ func main() {
 					toIdx = (fromIdx + 7 + attempts*3) % len(accounts) // Prime offsets for distribution
 					attempts++
 				}
-				
+
 				from := accounts[fromIdx]
 				to := accounts[toIdx]
-				
+
 				err := sendTransaction(client, from, to, 75000, stats) // 0.75 ACME
-				
+
 				crossPartitionIndicator := ""
 				if from.Partition != to.Partition {
 					crossPartitionIndicator = "🌐"
 				}
-				
+
 				if err != nil {
-					log.Printf("❌ Tx %d failed (%s→%s): %v", 
+					log.Printf("❌ Tx %d failed (%s→%s): %v",
 						txNum, from.Partition, to.Partition, err)
 				} else {
-					fmt.Printf("✅ Tx %d: %s→%s %s\n", 
+					fmt.Printf("✅ Tx %d: %s→%s %s\n",
 						txNum, from.Partition, to.Partition, crossPartitionIndicator)
 				}
 			}(batch + i)
 		}
-		
+
 		// Controlled pacing to maintain network stability
 		time.Sleep(400 * time.Millisecond)
 	}
 
 	wg.Wait()
-	
+
 	// Print comprehensive results
 	stats.PrintResults()
 }

@@ -27,15 +27,15 @@ func GetPooledClient(serverURL string) *jsonrpc.Client {
 		return client
 	}
 	clientMu.RUnlock()
-	
+
 	clientMu.Lock()
 	defer clientMu.Unlock()
-	
+
 	// Double-check after acquiring write lock
 	if client, exists := clientPool[serverURL]; exists {
 		return client
 	}
-	
+
 	// Create client with optimized transport
 	transport := &http.Transport{
 		MaxIdleConns:        100,
@@ -48,11 +48,11 @@ func GetPooledClient(serverURL string) *jsonrpc.Client {
 			KeepAlive: 30 * time.Second,
 		}).DialContext,
 	}
-	
+
 	client := jsonrpc.NewClient(serverURL)
 	client.Client.Transport = transport
 	client.Client.Timeout = 30 * time.Second
-	
+
 	clientPool[serverURL] = client
 	return client
 }
@@ -61,7 +61,7 @@ func GetPooledClient(serverURL string) *jsonrpc.Client {
 func QueryWithRetry(ctx context.Context, client *jsonrpc.Client, fn func() error) error {
 	var lastErr error
 	maxRetries := 3
-	
+
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		if attempt > 0 {
 			// Exponential backoff
@@ -72,20 +72,20 @@ func QueryWithRetry(ctx context.Context, client *jsonrpc.Client, fn func() error
 				return ctx.Err()
 			}
 		}
-		
+
 		err := fn()
 		if err == nil {
 			return nil
 		}
-		
+
 		// Check if error is retryable
 		if !IsRetryableError(err) {
 			return err
 		}
-		
+
 		lastErr = err
 	}
-	
+
 	return fmt.Errorf("max retries exceeded: %w", lastErr)
 }
 
@@ -94,12 +94,12 @@ func IsRetryableError(err error) bool {
 	if err == nil {
 		return false
 	}
-	
+
 	// Network timeout errors
 	if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 		return true
 	}
-	
+
 	// Connection errors that are typically transient
 	errStr := err.Error()
 	retryableStrings := []string{
@@ -111,13 +111,13 @@ func IsRetryableError(err error) bool {
 		"network is unreachable",
 		"timeout",
 	}
-	
+
 	for _, s := range retryableStrings {
 		if strings.Contains(errStr, s) {
 			return true
 		}
 	}
-	
+
 	return false
 }
 
@@ -133,7 +133,7 @@ func CreateContextWithTimeout(timeout time.Duration) (context.Context, context.C
 func SafeQuery(client *jsonrpc.Client, fn func(context.Context) error) error {
 	ctx, cancel := CreateContextWithTimeout(30 * time.Second)
 	defer cancel()
-	
+
 	return QueryWithRetry(ctx, client, func() error {
 		return fn(ctx)
 	})
@@ -143,7 +143,7 @@ func SafeQuery(client *jsonrpc.Client, fn func(context.Context) error) error {
 func CleanupClientPool() {
 	clientMu.Lock()
 	defer clientMu.Unlock()
-	
+
 	// Clear the pool
 	clientPool = make(map[string]*jsonrpc.Client)
 }

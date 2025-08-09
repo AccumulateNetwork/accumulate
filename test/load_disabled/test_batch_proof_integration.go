@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"time"
-	
+
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
 )
@@ -73,22 +73,22 @@ func NewMockCrossChainConductor() *MockCrossChainConductor {
 	cc := &MockCrossChainConductor{
 		logger: logger,
 	}
-	
+
 	cc.batchProofManager = NewBatchProofRecoveryManager(cc, logger)
 	cc.batchProofManager.Start()
-	
+
 	return cc
 }
 
 // BatchProofRecoveryManager for testing
 type BatchProofRecoveryManager struct {
-	conductor        *MockCrossChainConductor
-	logger           logging.OptionalLogger
-	batchThreshold   int
-	maxBatchSize     int
-	totalRequests    int64
-	batchRequests    int64
-	proofSavings     int64
+	conductor      *MockCrossChainConductor
+	logger         logging.OptionalLogger
+	batchThreshold int
+	maxBatchSize   int
+	totalRequests  int64
+	batchRequests  int64
+	proofSavings   int64
 }
 
 func NewBatchProofRecoveryManager(conductor *MockCrossChainConductor, logger logging.OptionalLogger) *BatchProofRecoveryManager {
@@ -109,11 +109,11 @@ func (brm *BatchProofRecoveryManager) RequestBatchRecovery(req *BatchRecoveryReq
 		"partition", req.PartitionID,
 		"type", req.Type,
 		"sequences", len(req.MissingSequences))
-	
+
 	// Simulate collection proof generation
 	go func() {
 		time.Sleep(10 * time.Millisecond)
-		
+
 		response := &BatchRecoveryResponse{
 			PartitionID:    req.PartitionID,
 			Type:           req.Type,
@@ -122,7 +122,7 @@ func (brm *BatchProofRecoveryManager) RequestBatchRecovery(req *BatchRecoveryReq
 			ProofGenerated: time.Now(),
 			Transactions:   make([]*RecoveredTransaction, len(req.MissingSequences)),
 		}
-		
+
 		// Create recovered transactions
 		for i, seq := range req.MissingSequences {
 			response.Transactions[i] = &RecoveredTransaction{
@@ -133,13 +133,13 @@ func (brm *BatchProofRecoveryManager) RequestBatchRecovery(req *BatchRecoveryReq
 				Data:        []byte(fmt.Sprintf("tx-data-%d", seq)),
 			}
 		}
-		
+
 		brm.totalRequests++
 		if len(req.MissingSequences) >= brm.batchThreshold {
 			brm.batchRequests++
 			brm.proofSavings += int64(response.ProofSavings)
 		}
-		
+
 		if req.Callback != nil {
 			req.Callback(response)
 		}
@@ -173,13 +173,13 @@ func (cc *MockCrossChainConductor) RequestMissingTransactionsWithBatchProof(
 	default:
 		return fmt.Errorf("unsupported message type: %d", msgType)
 	}
-	
+
 	cc.logger.Info("Requesting batch proof recovery",
 		"partition", partitionID,
 		"type", recoveryType.String(),
 		"sequences", len(missingSequences),
 		"chain", chainURL)
-	
+
 	// Create batch recovery request
 	req := &BatchRecoveryRequest{
 		PartitionID:      partitionID,
@@ -191,7 +191,7 @@ func (cc *MockCrossChainConductor) RequestMissingTransactionsWithBatchProof(
 			cc.handleBatchRecoveryResponse(response)
 		},
 	}
-	
+
 	// Send to batch proof manager
 	cc.batchProofManager.RequestBatchRecovery(req)
 	return nil
@@ -205,20 +205,20 @@ func (cc *MockCrossChainConductor) handleBatchRecoveryResponse(response *BatchRe
 			"error", response.Error)
 		return
 	}
-	
+
 	cc.logger.Info("Batch recovery successful",
 		"partition", response.PartitionID,
 		"type", response.Type,
 		"batch_size", response.BatchSize,
 		"proof_savings", response.ProofSavings,
 		"transactions", len(response.Transactions))
-	
+
 	fmt.Printf("✓ Batch recovery completed for partition %s\n", response.PartitionID)
 	fmt.Printf("  Type: %s\n", response.Type.String())
 	fmt.Printf("  Batch size: %d transactions\n", response.BatchSize)
 	fmt.Printf("  Individual proofs saved: %d\n", response.ProofSavings)
 	fmt.Printf("  Recovered transactions: %d\n", len(response.Transactions))
-	fmt.Printf("  Efficiency gain: %.1f%% reduction in proof operations\n", 
+	fmt.Printf("  Efficiency gain: %.1f%% reduction in proof operations\n",
 		float64(response.ProofSavings)/float64(response.BatchSize)*100)
 }
 
@@ -227,10 +227,10 @@ func main() {
 	fmt.Println("           CROSSCHAIN CONDUCTOR BATCH PROOF INTEGRATION TEST")
 	fmt.Println("================================================================================")
 	fmt.Println()
-	
+
 	// Create mock conductor with batch proof support
 	conductor := NewMockCrossChainConductor()
-	
+
 	// Test scenarios
 	scenarios := []struct {
 		name             string
@@ -240,76 +240,76 @@ func main() {
 		description      string
 	}{
 		{
-			"Anchor Recovery", 
-			"BVN0", 
+			"Anchor Recovery",
+			"BVN0",
 			MessageTypeAnchor,
 			[]uint64{100, 101, 102, 103, 104, 105, 106},
 			"Recovering missing anchor transactions using collection proof",
 		},
 		{
-			"Synthetic Recovery", 
-			"BVN1", 
+			"Synthetic Recovery",
+			"BVN1",
 			MessageTypeSynthetic,
 			[]uint64{200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219},
 			"Recovering large batch of synthetic transactions",
 		},
 		{
-			"Small Gap Recovery", 
-			"Directory", 
+			"Small Gap Recovery",
+			"Directory",
 			MessageTypeAnchor,
 			[]uint64{50, 51, 52},
 			"Small gap - uses individual proofs (below batch threshold)",
 		},
 	}
-	
+
 	// Process test scenarios
 	for i, scenario := range scenarios {
 		fmt.Printf("%d. %s\n", i+1, scenario.name)
 		fmt.Printf("   %s\n", scenario.description)
-		fmt.Printf("   Partition: %s | Type: %d | Sequences: %d\n", 
+		fmt.Printf("   Partition: %s | Type: %d | Sequences: %d\n",
 			scenario.partitionID, scenario.msgType, len(scenario.missingSequences))
-		
+
 		chainURL, _ := url.Parse(fmt.Sprintf("acc://%s/anchor-chain", scenario.partitionID))
-		
+
 		err := conductor.RequestMissingTransactionsWithBatchProof(
 			scenario.partitionID,
 			scenario.msgType,
 			scenario.missingSequences,
 			chainURL,
 		)
-		
+
 		if err != nil {
 			fmt.Printf("   ❌ Error: %v\n", err)
 		} else {
 			fmt.Printf("   📤 Request sent successfully\n")
 		}
-		
+
 		fmt.Println()
 	}
-	
+
 	// Wait for async processing
 	fmt.Println("Waiting for batch processing to complete...")
 	time.Sleep(100 * time.Millisecond)
-	
+
 	// Show metrics
 	fmt.Println("\n================================================================================")
 	fmt.Println("                              FINAL METRICS")
 	fmt.Println("================================================================================")
-	
+
 	metrics := conductor.batchProofManager.GetMetrics()
 	fmt.Printf("Total requests processed: %d\n", metrics["total_requests"])
 	fmt.Printf("Batch proof requests: %d\n", metrics["batch_requests"])
 	fmt.Printf("Individual proofs saved: %d\n", metrics["proof_savings"])
 	fmt.Printf("Batch threshold: %d transactions\n", metrics["batch_threshold"])
 	fmt.Printf("Maximum batch size: %d transactions\n", metrics["max_batch_size"])
-	
+
 	totalRequests := metrics["total_requests"].(int64)
 	proofSavings := metrics["proof_savings"].(int64)
 	if totalRequests > 0 {
 		efficiency := float64(proofSavings) / float64(totalRequests) * 100
 		fmt.Printf("Overall efficiency improvement: %.1f%%\n", efficiency)
 	}
-	
+
 	fmt.Println("\n✅ Integration test completed successfully!")
 	fmt.Println("   Collection proofs are now integrated with CrossChainConductor")
 	fmt.Println("   Batch recovery provides significant performance improvements")

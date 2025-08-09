@@ -22,36 +22,36 @@ import (
 )
 
 type LiteAccount struct {
-	PrivateKey   ed25519.PrivateKey
-	TokenURL     *url.URL
-	IdentityURL  *url.URL
-	PublicKey    []byte
-	Partition    string
+	PrivateKey  ed25519.PrivateKey
+	TokenURL    *url.URL
+	IdentityURL *url.URL
+	PublicKey   []byte
+	Partition   string
 }
 
 type ErrorRetryStats struct {
-	TotalTransactions      int64
-	SuccessfulTxs          int64
-	FailedTxs             int64
-	NetworkErrors         int64
-	RetryAttempts         int64
-	UltimateSuccesses     int64
-	UltimateFails         int64
-	StartTime             time.Time
-	Duration              time.Duration
+	TotalTransactions int64
+	SuccessfulTxs     int64
+	FailedTxs         int64
+	NetworkErrors     int64
+	RetryAttempts     int64
+	UltimateSuccesses int64
+	UltimateFails     int64
+	StartTime         time.Time
+	Duration          time.Duration
 }
 
 func (s *ErrorRetryStats) IncrementTransaction(success bool, hadNetworkError bool, hadRetries bool) {
 	atomic.AddInt64(&s.TotalTransactions, 1)
-	
+
 	if hadNetworkError {
 		atomic.AddInt64(&s.NetworkErrors, 1)
 	}
-	
+
 	if hadRetries {
 		atomic.AddInt64(&s.RetryAttempts, 1)
 	}
-	
+
 	if success {
 		atomic.AddInt64(&s.SuccessfulTxs, 1)
 		if hadNetworkError || hadRetries {
@@ -87,22 +87,22 @@ func (s *ErrorRetryStats) PrintResults() {
 	if success > 0 {
 		fmt.Printf("TPS: %.2f\n", float64(success)/s.Duration.Seconds())
 	}
-	
+
 	fmt.Printf("\n🔄 Error Handling & Retry Performance:\n")
 	fmt.Printf("Network errors encountered: %d (%.1f%%)\n", networkErrors, float64(networkErrors)/float64(total)*100)
 	fmt.Printf("Transactions requiring retries: %d\n", retries)
 	fmt.Printf("Ultimate successes after errors/retries: %d\n", ultimateSuccess)
 	fmt.Printf("Ultimate failures despite retries: %d\n", ultimateFails)
-	
+
 	if networkErrors > 0 {
 		recoveryRate := float64(ultimateSuccess) / float64(networkErrors) * 100
 		fmt.Printf("Error recovery rate: %.1f%%\n", recoveryRate)
 	}
-	
+
 	fmt.Printf("\n🎯 CrossChainConductor Resilience Validation:\n")
 	if ultimateSuccess > 0 {
 		fmt.Printf("✅ Error detection: WORKING\n")
-		fmt.Printf("✅ Retry mechanism: FUNCTIONAL\n") 
+		fmt.Printf("✅ Retry mechanism: FUNCTIONAL\n")
 		fmt.Printf("✅ Transmission resilience: VALIDATED\n")
 	}
 	if ultimateFails == 0 && networkErrors > 0 {
@@ -116,26 +116,26 @@ func createLiteAccount() (*LiteAccount, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	privateKey := ed25519.NewKeyFromSeed(seed)
 	publicKey := privateKey[32:]
-	
+
 	tokenURL, err := protocol.LiteTokenAddress(publicKey, protocol.ACME, protocol.SignatureTypeED25519)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	identityURL := tokenURL.Identity()
-	
+
 	// Determine partition
 	partition := getPartitionForAccount(tokenURL.String())
-	
+
 	return &LiteAccount{
-		PrivateKey:   privateKey,
-		TokenURL:     tokenURL,
-		IdentityURL:  identityURL,
-		PublicKey:    publicKey,
-		Partition:    partition,
+		PrivateKey:  privateKey,
+		TokenURL:    tokenURL,
+		IdentityURL: identityURL,
+		PublicKey:   publicKey,
+		Partition:   partition,
 	}, nil
 }
 
@@ -158,29 +158,29 @@ func fundAccount(tokenURL *url.URL) error {
 		return err
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != 200 {
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("faucet failed (status %d): %s", resp.StatusCode, string(body))
 	}
-	
+
 	return nil
 }
 
 func addCreditsToAccount(client *jsonrpc.Client, account *LiteAccount) error {
 	ctx := context.Background()
 	timestamp := uint64(time.Now().UnixMilli())
-	
+
 	ns, err := client.NetworkStatus(ctx, v3api.NetworkStatusOptions{Partition: "Directory"})
 	if err != nil {
 		return fmt.Errorf("failed to get network status: %v", err)
 	}
-	
+
 	oracle := float64(ns.Oracle.Price) / 1e8
 	if oracle == 0 {
 		oracle = 0.01
 	}
-	
+
 	env, err := build.Transaction().
 		For(account.TokenURL).
 		Body(&protocol.AddCredits{
@@ -190,22 +190,22 @@ func addCreditsToAccount(client *jsonrpc.Client, account *LiteAccount) error {
 		}).
 		SignWith(account.IdentityURL).Version(1).Timestamp(&timestamp).PrivateKey(account.PrivateKey).
 		Done()
-	
+
 	if err != nil {
 		return fmt.Errorf("build credits transaction failed: %v", err)
 	}
-	
+
 	subs, err := client.Submit(ctx, env, v3api.SubmitOptions{})
 	if err != nil {
 		return fmt.Errorf("submit credits transaction failed: %v", err)
 	}
-	
+
 	for i, sub := range subs {
 		if err := sub.Status.AsError(); err != nil {
 			return fmt.Errorf("credits result %d failed: %v", i, err)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -215,17 +215,17 @@ var networkIssueCounter int64
 func sendTransactionWithPotentialFailure(client *jsonrpc.Client, from, to *LiteAccount, amount int64, stats *ErrorRetryStats, forceError bool) error {
 	ctx := context.Background()
 	timestamp := uint64(time.Now().UnixMilli())
-	
+
 	// Simulate network issues for testing error handling
 	hadNetworkError := false
-	if forceError || (atomic.AddInt64(&networkIssueCounter, 1) % 7 == 0) { // Every 7th transaction has issues
+	if forceError || (atomic.AddInt64(&networkIssueCounter, 1)%7 == 0) { // Every 7th transaction has issues
 		hadNetworkError = true
 		// We'll simulate this by using a very short timeout
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, 1*time.Nanosecond) // Guaranteed to timeout
 		defer cancel()
 	}
-	
+
 	env, err := build.Transaction().
 		For(from.TokenURL).
 		Body(&protocol.SendTokens{
@@ -264,7 +264,7 @@ func sendTransactionWithPotentialFailure(client *jsonrpc.Client, from, to *LiteA
 func main() {
 	fmt.Println("🚀 CrossChainConductor Error Handling & Retry Test")
 	fmt.Printf("Testing transmission error detection and automatic retry capabilities\n\n")
-	
+
 	client := jsonrpc.NewClient("http://127.0.0.1:26660/v3")
 	stats := &ErrorRetryStats{StartTime: time.Now()}
 
@@ -272,7 +272,7 @@ func main() {
 	fmt.Println("📝 Creating lite accounts for error handling test...")
 	numAccounts := 20
 	accounts := make([]*LiteAccount, numAccounts)
-	
+
 	for i := 0; i < numAccounts; i++ {
 		acc, err := createLiteAccount()
 		if err != nil {
@@ -325,11 +325,11 @@ func main() {
 	// Execute error handling test
 	fmt.Println("\n🔥 Starting error handling and retry test...")
 	fmt.Printf("Simulating network issues to test CrossChainConductor error recovery\n")
-	
+
 	var wg sync.WaitGroup
 	numTransactions := 100 // High volume with deliberate errors
 	concurrency := 8
-	
+
 	stats.StartTime = time.Now()
 
 	// Execute transactions with simulated failures
@@ -338,53 +338,53 @@ func main() {
 			wg.Add(1)
 			go func(txNum int) {
 				defer wg.Done()
-				
+
 				fromIdx := txNum % len(accounts)
 				toIdx := (txNum + 11) % len(accounts) // Use prime offset
 				if fromIdx == toIdx {
 					toIdx = (toIdx + 1) % len(accounts)
 				}
-				
+
 				from := accounts[fromIdx]
 				to := accounts[toIdx]
-				
+
 				// Force error on some transactions to test retry logic
-				forceError := (txNum % 15 == 0) // Every 15th transaction gets forced error
-				
+				forceError := (txNum%15 == 0) // Every 15th transaction gets forced error
+
 				err := sendTransactionWithPotentialFailure(client, from, to, 50000, stats, forceError)
-				
+
 				crossPartitionIndicator := ""
 				if from.Partition != to.Partition {
 					crossPartitionIndicator = "🌐"
 				}
-				
+
 				errorIndicator := ""
 				if forceError {
 					errorIndicator = "⚡"
 				}
-				
+
 				if err != nil {
-					log.Printf("❌ Tx %d failed (%s→%s) %s%s: %v", 
+					log.Printf("❌ Tx %d failed (%s→%s) %s%s: %v",
 						txNum, from.Partition, to.Partition, crossPartitionIndicator, errorIndicator, err)
 				} else {
-					fmt.Printf("✅ Tx %d: %s→%s %s%s\n", 
+					fmt.Printf("✅ Tx %d: %s→%s %s%s\n",
 						txNum, from.Partition, to.Partition, crossPartitionIndicator, errorIndicator)
 				}
 			}(batch + i)
 		}
-		
+
 		// Controlled pacing
 		time.Sleep(300 * time.Millisecond)
 	}
 
 	wg.Wait()
-	
+
 	// Print comprehensive results
 	stats.PrintResults()
-	
+
 	fmt.Printf("\n🔧 Implementation Notes:\n")
 	fmt.Printf("- CrossChainConductor now tracks pending transmissions\n")
-	fmt.Printf("- Dispatcher.Send() error channel is monitored for failures\n") 
+	fmt.Printf("- Dispatcher.Send() error channel is monitored for failures\n")
 	fmt.Printf("- Failed transmissions are automatically retried (max 3 attempts)\n")
 	fmt.Printf("- Retry delays prevent network flooding during outages\n")
 	fmt.Printf("- Stale transmissions are cleaned up after 5 minutes\n")

@@ -95,4 +95,3 @@ func TestComputeLiteDataAccountIdFunction(t *testing.T) {
 	assert.NotNil(t, id)
 	assert.Len(t, id, 32)
 }
-

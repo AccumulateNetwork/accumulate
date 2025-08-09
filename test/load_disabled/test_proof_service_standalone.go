@@ -20,38 +20,38 @@ func main() {
 func runProofServiceTests() {
 	fmt.Println("Running ProofService Tests (Simulated)")
 	fmt.Println("─────────────────────────────────────────────────────────────────────────────")
-	
+
 	// Test 1: Individual Proof Creation
 	fmt.Println("\n✓ Test 1: Individual Proof Creation")
 	testIndividualProof()
-	
+
 	// Test 2: Collection Proof Creation
 	fmt.Println("\n✓ Test 2: Collection Proof Creation")
 	testCollectionProof()
-	
+
 	// Test 3: Batch Threshold
 	fmt.Println("\n✓ Test 3: Batch Threshold (2 transactions)")
 	testBatchThreshold()
-	
+
 	// Test 4: No Caching Verification
 	fmt.Println("\n✓ Test 4: NO CACHING Verification")
 	testNoCaching()
-	
+
 	// Test 5: Performance Comparison
 	fmt.Println("\n✓ Test 5: Performance Comparison")
 	testPerformanceComparison()
-	
+
 	fmt.Println("\n" + strings.Repeat("─", 77))
 	fmt.Println("All ProofService tests completed successfully!")
 }
 
 func testIndividualProof() {
 	start := time.Now()
-	
+
 	// Simulate individual proof creation
 	sequences := []uint64{5}
 	time.Sleep(1 * time.Millisecond) // Simulate proof generation
-	
+
 	fmt.Printf("  • Created individual proof for sequence %v\n", sequences)
 	fmt.Printf("  • Time: %v\n", time.Since(start))
 	fmt.Printf("  • Metrics: IndividualProofsCreated=1, CollectionProofsCreated=0\n")
@@ -59,11 +59,11 @@ func testIndividualProof() {
 
 func testCollectionProof() {
 	start := time.Now()
-	
+
 	// Simulate collection proof creation
 	sequences := []uint64{5, 6, 7, 8, 9}
 	time.Sleep(2 * time.Millisecond) // Simulate collection proof generation
-	
+
 	fmt.Printf("  • Created collection proof for %d sequences\n", len(sequences))
 	fmt.Printf("  • Time: %v\n", time.Since(start))
 	fmt.Printf("  • Proof savings: %d individual proofs eliminated\n", len(sequences)-1)
@@ -73,26 +73,26 @@ func testCollectionProof() {
 func testBatchThreshold() {
 	// Test with 1 sequence
 	fmt.Printf("  • 1 sequence: Using individual proof\n")
-	
+
 	// Test with 2 sequences (threshold)
 	fmt.Printf("  • 2 sequences: Using collection proof (threshold met)\n")
-	
+
 	// Test with 5 sequences
 	fmt.Printf("  • 5 sequences: Using collection proof\n")
-	
+
 	fmt.Printf("  • Batch threshold confirmed: 2 transactions\n")
 }
 
 func testNoCaching() {
 	validationCount := 0
-	
+
 	// Simulate validating the same proof 5 times
 	for i := 0; i < 5; i++ {
 		// Each validation actually runs (no cache)
 		validationCount++
 		time.Sleep(100 * time.Microsecond) // Simulate validation
 	}
-	
+
 	fmt.Printf("  • Validated same proof 5 times\n")
 	fmt.Printf("  • Validation attempts: %d (no caching)\n", validationCount)
 	fmt.Printf("  • All validations executed independently\n")
@@ -111,16 +111,16 @@ func testPerformanceComparison() {
 		{"Medium (25 txs)", 25, 25 * time.Millisecond, 3 * time.Millisecond},
 		{"Large (100 txs)", 100, 100 * time.Millisecond, 5 * time.Millisecond},
 	}
-	
+
 	totalSpeedup := 0.0
-	
+
 	for _, s := range scenarios {
 		speedup := float64(s.individual) / float64(s.collection)
 		totalSpeedup += speedup
-		
+
 		fmt.Printf("  • %s: %.1fx speedup\n", s.name, speedup)
 	}
-	
+
 	avgSpeedup := totalSpeedup / float64(len(scenarios))
 	fmt.Printf("  • Average speedup: %.1fx\n", avgSpeedup)
 	fmt.Printf("  • Memory reduction: ~95%% for large batches\n")
@@ -137,10 +137,10 @@ type ProofMetrics struct {
 	IndividualProofsCreated   int64
 	CollectionProofsCreated   int64
 	TransactionsInCollections int64
-	ProofsSaved              int64
-	ValidationAttempts       int64
-	ValidationSuccesses      int64
-	ValidationFailures       int64
+	ProofsSaved               int64
+	ValidationAttempts        int64
+	ValidationSuccesses       int64
+	ValidationFailures        int64
 }
 
 func (m ProofMetrics) Print() {

@@ -81,7 +81,7 @@ func NewImprovedClient(server string, config ClientConfig) *ImprovedClient {
 // QueryWithRetry performs a query with automatic retry logic
 func (c *ImprovedClient) QueryWithRetry(ctx context.Context, scope *url.URL, query api.Query) (api.Record, error) {
 	var lastErr error
-	
+
 	for attempt := 0; attempt <= c.maxRetries; attempt++ {
 		if attempt > 0 {
 			// Exponential backoff
@@ -92,28 +92,28 @@ func (c *ImprovedClient) QueryWithRetry(ctx context.Context, scope *url.URL, que
 				return nil, ctx.Err()
 			}
 		}
-		
+
 		resp, err := c.Client.Query(ctx, scope, query)
 		if err == nil {
 			return resp, nil
 		}
-		
+
 		// Check if error is retryable
 		if !isRetryableError(err) {
 			return nil, err
 		}
-		
+
 		lastErr = err
 		fmt.Printf("Request failed (attempt %d/%d): %v\n", attempt+1, c.maxRetries+1, err)
 	}
-	
+
 	return nil, fmt.Errorf("max retries exceeded: %w", lastErr)
 }
 
 // SubmitWithRetry performs a submit with automatic retry logic
 func (c *ImprovedClient) SubmitWithRetry(ctx context.Context, envelope *messaging.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
 	var lastErr error
-	
+
 	for attempt := 0; attempt <= c.maxRetries; attempt++ {
 		if attempt > 0 {
 			// Exponential backoff
@@ -124,21 +124,21 @@ func (c *ImprovedClient) SubmitWithRetry(ctx context.Context, envelope *messagin
 				return nil, ctx.Err()
 			}
 		}
-		
+
 		resp, err := c.Client.Submit(ctx, envelope, opts)
 		if err == nil {
 			return resp, nil
 		}
-		
+
 		// Check if error is retryable
 		if !isRetryableError(err) {
 			return nil, err
 		}
-		
+
 		lastErr = err
 		fmt.Printf("Submit failed (attempt %d/%d): %v\n", attempt+1, c.maxRetries+1, err)
 	}
-	
+
 	return nil, fmt.Errorf("max retries exceeded: %w", lastErr)
 }
 
@@ -148,19 +148,19 @@ func isRetryableError(err error) bool {
 	if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 		return true
 	}
-	
+
 	// Connection refused, connection reset
 	errStr := err.Error()
 	if strings.Contains(errStr, "connection refused") ||
-	   strings.Contains(errStr, "connection reset") ||
-	   strings.Contains(errStr, "EOF") ||
-	   strings.Contains(errStr, "broken pipe") {
+		strings.Contains(errStr, "connection reset") ||
+		strings.Contains(errStr, "EOF") ||
+		strings.Contains(errStr, "broken pipe") {
 		return true
 	}
-	
+
 	// Check for specific error types (simplified check)
 	// These error types might not be available in all versions
-	
+
 	return false
 }
 
@@ -195,15 +195,15 @@ func (cp *ClientPool) GetClient(serverURL string) *ImprovedClient {
 		return client
 	}
 	cp.mu.RUnlock()
-	
+
 	cp.mu.Lock()
 	defer cp.mu.Unlock()
-	
+
 	// Double-check after acquiring write lock
 	if client, exists := cp.clients[serverURL]; exists {
 		return client
 	}
-	
+
 	// Create new client with proper configuration
 	client := NewImprovedClient(serverURL, cp.config)
 	cp.clients[serverURL] = client
@@ -225,25 +225,25 @@ func (cp *ClientPool) HealthCheck(ctx context.Context) map[string]error {
 		clients[k] = v
 	}
 	cp.mu.RUnlock()
-	
+
 	results := make(map[string]error)
 	var wg sync.WaitGroup
 	var mu sync.Mutex
-	
+
 	for url, client := range clients {
 		wg.Add(1)
 		go func(url string, client *ImprovedClient) {
 			defer wg.Done()
-			
+
 			checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			defer cancel()
-			
+
 			_, err := client.Client.NodeInfo(checkCtx, api.NodeInfoOptions{})
-			
+
 			mu.Lock()
 			results[url] = err
 			mu.Unlock()
-			
+
 			if err != nil {
 				// Remove unhealthy client
 				cp.mu.Lock()
@@ -252,7 +252,7 @@ func (cp *ClientPool) HealthCheck(ctx context.Context) map[string]error {
 			}
 		}(url, client)
 	}
-	
+
 	wg.Wait()
 	return results
 }
@@ -261,7 +261,7 @@ func (cp *ClientPool) HealthCheck(ctx context.Context) map[string]error {
 func (cp *ClientPool) CloseAll() {
 	cp.mu.Lock()
 	defer cp.mu.Unlock()
-	
+
 	// Clear the client map
 	cp.clients = make(map[string]*ImprovedClient)
 }
@@ -270,23 +270,23 @@ func (cp *ClientPool) CloseAll() {
 func main() {
 	fmt.Println("Improved V3 Client Example")
 	fmt.Println("==========================")
-	
+
 	// Use the global pool
 	pool := GetGlobalPool()
-	
+
 	// Configure with better settings
 	config := DefaultClientConfig()
 	config.MaxIdleConnsPerHost = 20 // Higher for load testing
 	config.MaxRetries = 5
 	pool.SetConfig(config)
-	
+
 	// Get a client from the pool
 	client := pool.GetClient("http://127.0.0.1:26660/v3")
-	
+
 	// Create context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	
+
 	// Example: Query with automatic retry
 	fmt.Println("\nQuerying network status with retry logic...")
 	status, err := client.Client.NetworkStatus(ctx, api.NetworkStatusOptions{})
@@ -296,7 +296,7 @@ func main() {
 		fmt.Printf("Network status retrieved successfully\n")
 		fmt.Printf("Oracle Price: %.4f\n", float64(status.Oracle.Price)/1e8)
 	}
-	
+
 	// Health check all connections
 	fmt.Println("\nPerforming health check on all connections...")
 	results := pool.HealthCheck(ctx)
@@ -307,7 +307,7 @@ func main() {
 			fmt.Printf("  %s: HEALTHY\n", url)
 		}
 	}
-	
+
 	fmt.Println("\nConnection pool statistics:")
 	fmt.Printf("  Active connections: %d\n", len(pool.clients))
 	fmt.Printf("  Max idle connections: %d\n", config.MaxIdleConns)

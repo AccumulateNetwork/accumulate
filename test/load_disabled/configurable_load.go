@@ -41,31 +41,31 @@ var (
 // Metrics structure for tracking
 type Metrics struct {
 	// Transaction counts
-	TotalTransactions    int64
-	SuccessfulTx         int64
-	FailedTx             int64
-	DroppedTx            int64
-	RetriedTx            int64
-	
+	TotalTransactions int64
+	SuccessfulTx      int64
+	FailedTx          int64
+	DroppedTx         int64
+	RetriedTx         int64
+
 	// Token metrics
-	TokensSent           int64
-	TokensMinted         int64
-	CreditsUsed          int64
-	
+	TokensSent   int64
+	TokensMinted int64
+	CreditsUsed  int64
+
 	// Performance metrics
-	StartTime            time.Time
-	LastReportTime       time.Time
-	LastTxCount          int64
-	CurrentTPS           float64
-	PeakTPS              float64
-	AverageTPS           float64
-	
+	StartTime      time.Time
+	LastReportTime time.Time
+	LastTxCount    int64
+	CurrentTPS     float64
+	PeakTPS        float64
+	AverageTPS     float64
+
 	// Partition routing
-	CrossPartitionTx     int64
-	SamePartitionTx      int64
-	PartitionRoutes      map[string]int64
-	
-	mu                   sync.RWMutex
+	CrossPartitionTx int64
+	SamePartitionTx  int64
+	PartitionRoutes  map[string]int64
+
+	mu sync.RWMutex
 }
 
 // Account structure
@@ -87,18 +87,18 @@ var metrics = &Metrics{
 
 func main() {
 	flag.Parse()
-	
+
 	// Setup signal handling for graceful shutdown
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-	
+
 	// Create API client
 	client := jsonrpc.NewClient(*serverURL)
-	
+
 	fmt.Println("🚀 Configurable Load Test Runner")
 	fmt.Println("=" + strings.Repeat("=", 50))
 	fmt.Printf("Mode: %s\n", *mode)
-	
+
 	switch *mode {
 	case "fixed":
 		fmt.Printf("Transactions: %d\n", *txCount)
@@ -110,7 +110,7 @@ func main() {
 	default:
 		log.Fatal("Invalid mode. Use: fixed, continuous, or burst")
 	}
-	
+
 	fmt.Printf("Accounts: %d\n", *accounts)
 	fmt.Printf("Amount per TX: %d ACME\n", *txAmount)
 	fmt.Printf("Report interval: %v\n", *reportInterval)
@@ -118,22 +118,22 @@ func main() {
 		fmt.Printf("Drop rate: %.1f%%\n", *dropRate*100)
 	}
 	fmt.Println()
-	
+
 	// Create and fund accounts
 	testAccounts := setupAccounts(client, *accounts)
 	if len(testAccounts) < 2 {
 		log.Fatal("Need at least 2 accounts for testing")
 	}
-	
+
 	// Start metrics reporter
 	stopReporter := make(chan bool)
 	go metricsReporter(stopReporter)
-	
+
 	// Run the selected mode
 	stopTest := make(chan bool)
 	var wg sync.WaitGroup
 	done := make(chan bool)
-	
+
 	go func() {
 		switch *mode {
 		case "fixed":
@@ -148,7 +148,7 @@ func main() {
 		}
 		close(done)
 	}()
-	
+
 	// Wait for interrupt or completion
 	select {
 	case <-sigChan:
@@ -161,11 +161,11 @@ func main() {
 			close(stopTest)
 		}
 	}
-	
+
 	// Wait for all transactions to complete
 	wg.Wait()
 	close(stopReporter)
-	
+
 	// Print final report
 	printFinalReport()
 }
@@ -173,17 +173,17 @@ func main() {
 // setupAccounts creates and funds test accounts
 func setupAccounts(client *jsonrpc.Client, count int) []*Account {
 	fmt.Println("📝 Creating test accounts...")
-	
+
 	accounts := make([]*Account, 0, count)
 	partitionCounts := make(map[string]int)
-	
+
 	for i := 0; i < count*3 && len(accounts) < count; i++ {
 		acc, err := createAccount()
 		if err != nil {
 			log.Printf("Failed to create account: %v", err)
 			continue
 		}
-		
+
 		// Distribute accounts across partitions
 		if partitionCounts[acc.Partition] < (count/3)+1 {
 			accounts = append(accounts, acc)
@@ -193,20 +193,20 @@ func setupAccounts(client *jsonrpc.Client, count int) []*Account {
 			}
 		}
 	}
-	
+
 	fmt.Printf("Created %d accounts across %d partitions\n", len(accounts), len(partitionCounts))
 	for partition, count := range partitionCounts {
 		fmt.Printf("  %s: %d accounts\n", partition, count)
 	}
-	
+
 	// Fund accounts
 	fmt.Println("\n💰 Funding accounts...")
 	fundAccounts(accounts)
-	
+
 	// Add credits
 	fmt.Println("\n💳 Adding credits...")
 	addCreditsToAccounts(client, accounts)
-	
+
 	fmt.Println("\n✅ Accounts ready!")
 	return accounts
 }
@@ -218,15 +218,15 @@ func createAccount() (*Account, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	privateKey := ed25519.NewKeyFromSeed(seed)
 	publicKey := privateKey[32:]
-	
+
 	tokenURL, err := protocol.LiteTokenAddress(publicKey, protocol.ACME, protocol.SignatureTypeED25519)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return &Account{
 		PrivateKey:  privateKey,
 		TokenURL:    tokenURL,
@@ -261,17 +261,17 @@ func fundAccounts(accounts []*Account) {
 				continue
 			}
 			resp.Body.Close()
-			
+
 			if resp.StatusCode == 200 {
 				atomic.AddInt64(&acc.Balance, 10000000) // 10M ACME from faucet
 				atomic.AddInt64(&metrics.TokensMinted, 10000000)
 			}
-			
+
 			time.Sleep(50 * time.Millisecond)
 		}
 		time.Sleep(2 * time.Second)
 	}
-	
+
 	// Wait for accounts to be ready
 	time.Sleep(5 * time.Second)
 }
@@ -279,22 +279,22 @@ func fundAccounts(accounts []*Account) {
 // addCreditsToAccounts adds credits to all accounts
 func addCreditsToAccounts(client *jsonrpc.Client, accounts []*Account) {
 	ctx := context.Background()
-	
+
 	for i, acc := range accounts {
 		ns, err := client.NetworkStatus(ctx, v3api.NetworkStatusOptions{Partition: "Directory"})
 		if err != nil {
 			log.Printf("Failed to get network status: %v", err)
 			continue
 		}
-		
+
 		oracle := float64(ns.Oracle.Price) / 1e8
 		if oracle == 0 {
 			oracle = 0.01
 		}
-		
+
 		timestamp := uint64(time.Now().UnixMilli())
 		creditAmount := int64(1000000) // 10 ACME worth of credits
-		
+
 		env, err := build.Transaction().
 			For(acc.TokenURL).
 			Body(&protocol.AddCredits{
@@ -304,18 +304,18 @@ func addCreditsToAccounts(client *jsonrpc.Client, accounts []*Account) {
 			}).
 			SignWith(acc.TokenURL).Version(1).Timestamp(&timestamp).PrivateKey(acc.PrivateKey).
 			Done()
-		
+
 		if err != nil {
 			log.Printf("Failed to build credits transaction for account %d: %v", i, err)
 			continue
 		}
-		
+
 		subs, err := client.Submit(ctx, env, v3api.SubmitOptions{})
 		if err != nil {
 			log.Printf("Failed to submit credits transaction for account %d: %v", i, err)
 			continue
 		}
-		
+
 		success := true
 		for _, sub := range subs {
 			if err := sub.Status.AsError(); err != nil {
@@ -323,7 +323,7 @@ func addCreditsToAccounts(client *jsonrpc.Client, accounts []*Account) {
 				break
 			}
 		}
-		
+
 		if success {
 			atomic.StoreInt64(&acc.Credits, creditAmount)
 			atomic.AddInt64(&metrics.CreditsUsed, creditAmount)
@@ -332,25 +332,25 @@ func addCreditsToAccounts(client *jsonrpc.Client, accounts []*Account) {
 			}
 		}
 	}
-	
+
 	time.Sleep(3 * time.Second)
 }
 
 // runFixedMode runs a fixed number of transactions
 func runFixedMode(client *jsonrpc.Client, accounts []*Account, count int, wg *sync.WaitGroup) {
 	fmt.Printf("\n📤 Sending %d transactions...\n", count)
-	
+
 	// Launch all transactions
 	for i := 0; i < count; i++ {
 		wg.Add(1)
 		go func(txNum int) {
 			defer wg.Done()
-			
+
 			from := accounts[txNum%len(accounts)]
 			to := accounts[(txNum+1)%len(accounts)]
-			
+
 			err := sendTransaction(client, from, to, int64(*txAmount), txNum)
-			
+
 			if err != nil {
 				if *verbose {
 					log.Printf("TX %d failed: %v", txNum, err)
@@ -359,7 +359,7 @@ func runFixedMode(client *jsonrpc.Client, accounts []*Account, count int, wg *sy
 				fmt.Printf("✅ TX %d: %s→%s\n", txNum, from.Partition, to.Partition)
 			}
 		}(i)
-		
+
 		// Control rate
 		if i%10 == 0 {
 			time.Sleep(100 * time.Millisecond)
@@ -370,13 +370,13 @@ func runFixedMode(client *jsonrpc.Client, accounts []*Account, count int, wg *sy
 // runContinuousMode runs transactions continuously at target TPS
 func runContinuousMode(client *jsonrpc.Client, accounts []*Account, duration time.Duration, targetTPS int, stop chan bool, wg *sync.WaitGroup) {
 	fmt.Printf("\n♾️ Running continuous mode for %v at %d TPS...\n", duration, targetTPS)
-	
+
 	ticker := time.NewTicker(time.Second / time.Duration(targetTPS))
 	defer ticker.Stop()
-	
+
 	timeout := time.After(duration)
 	txNum := 0
-	
+
 	for {
 		select {
 		case <-stop:
@@ -389,12 +389,12 @@ func runContinuousMode(client *jsonrpc.Client, accounts []*Account, duration tim
 			wg.Add(1)
 			go func(num int) {
 				defer wg.Done()
-				
+
 				from := accounts[num%len(accounts)]
 				to := accounts[(num+1)%len(accounts)]
-				
+
 				err := sendTransaction(client, from, to, int64(*txAmount), num)
-				
+
 				if err == nil && *verbose {
 					fmt.Printf("✅ TX %d: %s→%s\n", num, from.Partition, to.Partition)
 				}
@@ -407,18 +407,18 @@ func runContinuousMode(client *jsonrpc.Client, accounts []*Account, duration tim
 // runBurstMode sends bursts of transactions
 func runBurstMode(client *jsonrpc.Client, accounts []*Account, burstSize int, wg *sync.WaitGroup) {
 	fmt.Printf("\n💥 Sending burst of %d transactions...\n", burstSize)
-	
+
 	// Send all transactions at once
 	for i := 0; i < burstSize; i++ {
 		wg.Add(1)
 		go func(txNum int) {
 			defer wg.Done()
-			
+
 			from := accounts[txNum%len(accounts)]
 			to := accounts[(txNum+1)%len(accounts)]
-			
+
 			err := sendTransaction(client, from, to, int64(*txAmount), txNum)
-			
+
 			if err == nil && *verbose {
 				fmt.Printf("✅ TX %d: %s→%s\n", txNum, from.Partition, to.Partition)
 			}
@@ -436,10 +436,10 @@ func sendTransaction(client *jsonrpc.Client, from, to *Account, amount int64, tx
 		}
 		return fmt.Errorf("simulated drop")
 	}
-	
+
 	ctx := context.Background()
 	timestamp := uint64(time.Now().UnixMilli())
-	
+
 	env, err := build.Transaction().
 		For(from.TokenURL).
 		Body(&protocol.SendTokens{
@@ -450,30 +450,30 @@ func sendTransaction(client *jsonrpc.Client, from, to *Account, amount int64, tx
 		}).
 		SignWith(from.TokenURL).Version(1).Timestamp(&timestamp).PrivateKey(from.PrivateKey).
 		Done()
-	
+
 	if err != nil {
 		atomic.AddInt64(&metrics.FailedTx, 1)
 		return err
 	}
-	
+
 	subs, err := client.Submit(ctx, env, v3api.SubmitOptions{})
 	if err != nil {
 		atomic.AddInt64(&metrics.FailedTx, 1)
 		return err
 	}
-	
+
 	for _, sub := range subs {
 		if err := sub.Status.AsError(); err != nil {
 			atomic.AddInt64(&metrics.FailedTx, 1)
 			return err
 		}
 	}
-	
+
 	// Update metrics
 	atomic.AddInt64(&metrics.TotalTransactions, 1)
 	atomic.AddInt64(&metrics.SuccessfulTx, 1)
 	atomic.AddInt64(&metrics.TokensSent, amount)
-	
+
 	// Track routing
 	route := fmt.Sprintf("%s→%s", from.Partition, to.Partition)
 	metrics.mu.Lock()
@@ -484,11 +484,11 @@ func sendTransaction(client *jsonrpc.Client, from, to *Account, amount int64, tx
 		atomic.AddInt64(&metrics.SamePartitionTx, 1)
 	}
 	metrics.mu.Unlock()
-	
+
 	// Update account balances
 	atomic.AddInt64(&from.Balance, -amount)
 	atomic.AddInt64(&to.Balance, amount)
-	
+
 	return nil
 }
 
@@ -502,7 +502,7 @@ func shouldDrop() bool {
 func metricsReporter(stop chan bool) {
 	ticker := time.NewTicker(*reportInterval)
 	defer ticker.Stop()
-	
+
 	for {
 		select {
 		case <-stop:
@@ -518,7 +518,7 @@ func printMetricsReport() {
 	now := time.Now()
 	duration := now.Sub(metrics.StartTime)
 	intervalDuration := now.Sub(metrics.LastReportTime)
-	
+
 	totalTx := atomic.LoadInt64(&metrics.TotalTransactions)
 	successTx := atomic.LoadInt64(&metrics.SuccessfulTx)
 	failedTx := atomic.LoadInt64(&metrics.FailedTx)
@@ -526,47 +526,47 @@ func printMetricsReport() {
 	tokensSent := atomic.LoadInt64(&metrics.TokensSent)
 	crossPartition := atomic.LoadInt64(&metrics.CrossPartitionTx)
 	samePartition := atomic.LoadInt64(&metrics.SamePartitionTx)
-	
+
 	// Calculate TPS
 	intervalTx := totalTx - metrics.LastTxCount
 	currentTPS := float64(intervalTx) / intervalDuration.Seconds()
 	averageTPS := float64(totalTx) / duration.Seconds()
-	
+
 	if currentTPS > metrics.PeakTPS {
 		metrics.PeakTPS = currentTPS
 	}
-	
+
 	fmt.Println("\n" + strings.Repeat("─", 60))
 	fmt.Printf("📊 Metrics Report at %s\n", now.Format("15:04:05"))
 	fmt.Println(strings.Repeat("─", 60))
-	
+
 	fmt.Printf("⏱️ Duration: %v\n", duration.Round(time.Second))
-	fmt.Printf("📈 Current TPS: %.2f | Average: %.2f | Peak: %.2f\n", 
+	fmt.Printf("📈 Current TPS: %.2f | Average: %.2f | Peak: %.2f\n",
 		currentTPS, averageTPS, metrics.PeakTPS)
-	
+
 	fmt.Printf("\n📊 Transactions:\n")
 	fmt.Printf("  Total: %d | Success: %d | Failed: %d", totalTx, successTx, failedTx)
 	if droppedTx > 0 {
 		fmt.Printf(" | Dropped: %d", droppedTx)
 	}
 	fmt.Println()
-	
+
 	if totalTx > 0 {
 		successRate := float64(successTx) / float64(totalTx) * 100
 		fmt.Printf("  Success Rate: %.1f%%\n", successRate)
 	}
-	
+
 	fmt.Printf("\n💰 Tokens:\n")
 	fmt.Printf("  Sent: %s ACME\n", formatACME(tokensSent))
 	fmt.Printf("  Minted: %s ACME\n", formatACME(atomic.LoadInt64(&metrics.TokensMinted)))
 	fmt.Printf("  Credits Used: %s\n", formatCredits(atomic.LoadInt64(&metrics.CreditsUsed)))
-	
+
 	fmt.Printf("\n🌐 Routing:\n")
-	fmt.Printf("  Cross-partition: %d (%.1f%%)\n", 
+	fmt.Printf("  Cross-partition: %d (%.1f%%)\n",
 		crossPartition, float64(crossPartition)/float64(totalTx)*100)
-	fmt.Printf("  Same-partition: %d (%.1f%%)\n", 
+	fmt.Printf("  Same-partition: %d (%.1f%%)\n",
 		samePartition, float64(samePartition)/float64(totalTx)*100)
-	
+
 	// Update for next interval
 	metrics.LastReportTime = now
 	metrics.LastTxCount = totalTx
@@ -578,7 +578,7 @@ func printFinalReport() {
 	fmt.Println("\n" + strings.Repeat("═", 60))
 	fmt.Println("🏁 Final Report")
 	fmt.Println(strings.Repeat("═", 60))
-	
+
 	duration := time.Since(metrics.StartTime)
 	totalTx := atomic.LoadInt64(&metrics.TotalTransactions)
 	successTx := atomic.LoadInt64(&metrics.SuccessfulTx)
@@ -589,7 +589,7 @@ func printFinalReport() {
 	creditsUsed := atomic.LoadInt64(&metrics.CreditsUsed)
 	crossPartition := atomic.LoadInt64(&metrics.CrossPartitionTx)
 	samePartition := atomic.LoadInt64(&metrics.SamePartitionTx)
-	
+
 	fmt.Printf("Total Duration: %v\n", duration.Round(time.Second))
 	fmt.Printf("Total Transactions: %d\n", totalTx)
 	fmt.Printf("  ✅ Successful: %d\n", successTx)
@@ -597,24 +597,24 @@ func printFinalReport() {
 	if droppedTx > 0 {
 		fmt.Printf("  💥 Dropped: %d\n", droppedTx)
 	}
-	
+
 	if totalTx > 0 {
 		fmt.Printf("\nSuccess Rate: %.2f%%\n", float64(successTx)/float64(totalTx)*100)
 		fmt.Printf("Average TPS: %.2f\n", float64(totalTx)/duration.Seconds())
 		fmt.Printf("Peak TPS: %.2f\n", metrics.PeakTPS)
 	}
-	
+
 	fmt.Printf("\n💰 Token Summary:\n")
 	fmt.Printf("  Total Sent: %s ACME\n", formatACME(tokensSent))
 	fmt.Printf("  Total Minted: %s ACME\n", formatACME(tokensMinted))
 	fmt.Printf("  Credits Used: %s\n", formatCredits(creditsUsed))
-	
+
 	fmt.Printf("\n🌐 Partition Routing:\n")
-	fmt.Printf("  Cross-partition: %d (%.1f%%)\n", 
+	fmt.Printf("  Cross-partition: %d (%.1f%%)\n",
 		crossPartition, float64(crossPartition)/float64(totalTx)*100)
-	fmt.Printf("  Same-partition: %d (%.1f%%)\n", 
+	fmt.Printf("  Same-partition: %d (%.1f%%)\n",
 		samePartition, float64(samePartition)/float64(totalTx)*100)
-	
+
 	fmt.Printf("\n📍 Route Distribution:\n")
 	metrics.mu.RLock()
 	for route, count := range metrics.PartitionRoutes {

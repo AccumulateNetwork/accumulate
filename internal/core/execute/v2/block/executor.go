@@ -30,15 +30,15 @@ type Executor struct {
 	ExecutorOptions
 	BlockTimers TimerSet
 
-	globals              *Globals
-	executors            map[protocol.TransactionType]chain.TransactionExecutor
-	messageExecutors     map[messaging.MessageType]ExecutorFactory2[messaging.MessageType, *MessageContext]
-	signatureExecutors   map[protocol.SignatureType]ExecutorFactory2[protocol.SignatureType, *SignatureContext]
-	logger               logging.OptionalLogger
-	db                   database.Beginner
-	isValidator          bool
-	isGenesis            bool
-	mainDispatcher       Dispatcher
+	globals             *Globals
+	executors           map[protocol.TransactionType]chain.TransactionExecutor
+	messageExecutors    map[messaging.MessageType]ExecutorFactory2[messaging.MessageType, *MessageContext]
+	signatureExecutors  map[protocol.SignatureType]ExecutorFactory2[protocol.SignatureType, *SignatureContext]
+	logger              logging.OptionalLogger
+	db                  database.Beginner
+	isValidator         bool
+	isGenesis           bool
+	mainDispatcher      Dispatcher
 	crosschainConductor *crosschain.CrossChainConductor
 }
 

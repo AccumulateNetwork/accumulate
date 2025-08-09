@@ -23,7 +23,7 @@ func main() {
 	fmt.Println()
 	fmt.Println("Starting demonstration...")
 	time.Sleep(2 * time.Second)
-	
+
 	demo := NewLagDemo()
 	demo.Run()
 }
@@ -31,50 +31,50 @@ func main() {
 type LagDemo struct {
 	partitions map[string]*PartitionInfo
 	mu         sync.RWMutex
-	
-	globalSeq  int64
-	startTime  time.Time
-	ctx        context.Context
-	cancel     context.CancelFunc
+
+	globalSeq int64
+	startTime time.Time
+	ctx       context.Context
+	cancel    context.CancelFunc
 }
 
 type PartitionInfo struct {
-	Name              string
-	IsHealthy         bool
-	IsPaused          bool  // Partition is paused (not processing)
-	
+	Name      string
+	IsHealthy bool
+	IsPaused  bool // Partition is paused (not processing)
+
 	// Sequences
-	LastSent          int64
-	LastProcessed     int64
-	Lag               int64
-	MaxLag            int64
-	
+	LastSent      int64
+	LastProcessed int64
+	Lag           int64
+	MaxLag        int64
+
 	// Timing
 	DownTime          time.Time
 	RecoveryStartTime time.Time
 	CatchUpDuration   time.Duration
-	
+
 	// Metrics
-	TotalSent         int64
-	TotalProcessed    int64
-	TotalDropped      int64
-	
+	TotalSent      int64
+	TotalProcessed int64
+	TotalDropped   int64
+
 	// Catch-up tracking
-	CatchUpRate       float64
-	CatchUpStartSeq   int64
-	CatchUpStartTime  time.Time
+	CatchUpRate      float64
+	CatchUpStartSeq  int64
+	CatchUpStartTime time.Time
 }
 
 func NewLagDemo() *LagDemo {
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
 	demo := &LagDemo{
 		partitions: make(map[string]*PartitionInfo),
 		startTime:  time.Now(),
 		ctx:        ctx,
 		cancel:     cancel,
 	}
-	
+
 	// Initialize partitions
 	for _, name := range []string{"BVN0", "BVN1", "BVN2", "Directory"} {
 		demo.partitions[name] = &PartitionInfo{
@@ -82,20 +82,20 @@ func NewLagDemo() *LagDemo {
 			IsHealthy: true,
 		}
 	}
-	
+
 	return demo
 }
 
 func (demo *LagDemo) Run() {
 	// Start transaction generator
 	go demo.generateTransactions()
-	
+
 	// Start partition processors
 	go demo.processPartitions()
-	
+
 	// Start failure simulator
 	go demo.simulateFailures()
-	
+
 	// Display loop
 	demo.displayLoop()
 }
@@ -103,24 +103,24 @@ func (demo *LagDemo) Run() {
 func (demo *LagDemo) generateTransactions() {
 	ticker := time.NewTicker(25 * time.Millisecond) // 40 tx/sec total
 	defer ticker.Stop()
-	
+
 	partitionNames := []string{"BVN0", "BVN1", "BVN2", "Directory"}
-	
+
 	for {
 		select {
 		case <-demo.ctx.Done():
 			return
 		case <-ticker.C:
 			seq := atomic.AddInt64(&demo.globalSeq, 1)
-			
+
 			// Send to each partition
 			for _, name := range partitionNames {
 				demo.mu.Lock()
 				partition := demo.partitions[name]
-				
+
 				partition.TotalSent++
 				partition.LastSent = seq
-				
+
 				if partition.IsPaused {
 					// Partition is down - transaction would be dropped
 					partition.TotalDropped++
@@ -132,7 +132,7 @@ func (demo *LagDemo) generateTransactions() {
 					// Partition is up - will be processed
 					partition.Lag = partition.LastSent - partition.LastProcessed
 				}
-				
+
 				demo.mu.Unlock()
 			}
 		}
@@ -142,23 +142,23 @@ func (demo *LagDemo) generateTransactions() {
 func (demo *LagDemo) processPartitions() {
 	ticker := time.NewTicker(50 * time.Millisecond)
 	defer ticker.Stop()
-	
+
 	for {
 		select {
 		case <-demo.ctx.Done():
 			return
 		case <-ticker.C:
 			demo.mu.Lock()
-			
+
 			for _, partition := range demo.partitions {
 				if !partition.IsPaused && partition.IsHealthy {
 					// Process transactions
 					toProcess := int64(1)
-					
+
 					// If catching up, process faster
 					if partition.Lag > 10 {
 						toProcess = int64(math.Min(10, float64(partition.Lag)))
-						
+
 						// Track catch-up rate
 						if partition.CatchUpStartTime.IsZero() {
 							partition.CatchUpStartTime = time.Now()
@@ -174,7 +174,7 @@ func (demo *LagDemo) processPartitions() {
 						partition.CatchUpDuration = time.Since(partition.CatchUpStartTime)
 						partition.CatchUpStartTime = time.Time{}
 					}
-					
+
 					// Process transactions
 					if partition.LastProcessed < partition.LastSent {
 						partition.LastProcessed = min(partition.LastProcessed+toProcess, partition.LastSent)
@@ -183,7 +183,7 @@ func (demo *LagDemo) processPartitions() {
 					}
 				}
 			}
-			
+
 			demo.mu.Unlock()
 		}
 	}
@@ -192,9 +192,9 @@ func (demo *LagDemo) processPartitions() {
 func (demo *LagDemo) simulateFailures() {
 	// Automated failure scenario
 	scenarios := []struct {
-		delay    time.Duration
-		action   func()
-		message  string
+		delay   time.Duration
+		action  func()
+		message string
 	}{
 		{
 			delay: 5 * time.Second,
@@ -248,7 +248,7 @@ func (demo *LagDemo) simulateFailures() {
 			message: "🚀 MASS RECOVERY - All BVNs coming back online",
 		},
 	}
-	
+
 	for _, scenario := range scenarios {
 		select {
 		case <-demo.ctx.Done():
@@ -263,7 +263,7 @@ func (demo *LagDemo) simulateFailures() {
 func (demo *LagDemo) pausePartition(name string) {
 	demo.mu.Lock()
 	defer demo.mu.Unlock()
-	
+
 	if partition, exists := demo.partitions[name]; exists {
 		partition.IsPaused = true
 		partition.IsHealthy = false
@@ -274,7 +274,7 @@ func (demo *LagDemo) pausePartition(name string) {
 func (demo *LagDemo) resumePartition(name string) {
 	demo.mu.Lock()
 	defer demo.mu.Unlock()
-	
+
 	if partition, exists := demo.partitions[name]; exists {
 		partition.IsPaused = false
 		partition.IsHealthy = true
@@ -286,10 +286,10 @@ func (demo *LagDemo) resumePartition(name string) {
 func (demo *LagDemo) displayLoop() {
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
-	
+
 	// Run for 60 seconds
 	timeout := time.After(60 * time.Second)
-	
+
 	for {
 		select {
 		case <-timeout:
@@ -305,7 +305,7 @@ func (demo *LagDemo) displayLoop() {
 func (demo *LagDemo) updateDisplay() {
 	// Clear screen
 	fmt.Print("\033[H\033[2J")
-	
+
 	// Header
 	fmt.Println("================================================================================")
 	fmt.Println("                LAG BUILD-UP AND CATCH-UP VISUALIZATION")
@@ -315,22 +315,22 @@ func (demo *LagDemo) updateDisplay() {
 		atomic.LoadInt64(&demo.globalSeq),
 		time.Now().Format("15:04:05"))
 	fmt.Println()
-	
+
 	// Partition table
 	fmt.Println("┌──────────┬─────────┬──────────┬───────────┬─────┬──────┬─────────────────────────┐")
 	fmt.Println("│ Partition│ Status  │   Sent   │ Processed │ Lag │ Max  │ Lag Visualization       │")
 	fmt.Println("├──────────┼─────────┼──────────┼───────────┼─────┼──────┼─────────────────────────┤")
-	
+
 	demo.mu.RLock()
 	defer demo.mu.RUnlock()
-	
+
 	totalLag := int64(0)
 	totalDropped := int64(0)
 	downCount := 0
-	
+
 	for _, name := range []string{"BVN0", "BVN1", "BVN2", "Directory"} {
 		p := demo.partitions[name]
-		
+
 		status := "🟢 UP   "
 		if p.IsPaused {
 			status = "🔴 DOWN "
@@ -338,10 +338,10 @@ func (demo *LagDemo) updateDisplay() {
 		} else if p.Lag > 10 {
 			status = "🟡 CATCH"
 		}
-		
+
 		// Create visual lag bar
 		lagBar := demo.createLagBar(p.Lag, 100)
-		
+
 		fmt.Printf("│ %-8s │ %s │ %8d │ %9d │ %3d │ %4d │ %s │\n",
 			p.Name,
 			status,
@@ -350,29 +350,29 @@ func (demo *LagDemo) updateDisplay() {
 			p.Lag,
 			p.MaxLag,
 			lagBar)
-		
+
 		totalLag += p.Lag
 		totalDropped += p.TotalDropped
 	}
-	
+
 	fmt.Println("└──────────┴─────────┴──────────┴───────────┴─────┴──────┴─────────────────────────┘")
-	
+
 	// Statistics
 	fmt.Println()
 	fmt.Println("📊 STATISTICS")
 	fmt.Println("────────────────────────────────────────────────────────────────────────────────")
 	fmt.Printf("  Total Lag: %d sequences | Dropped: %d transactions | Down: %d partitions\n",
 		totalLag, totalDropped, downCount)
-	
+
 	// Catch-up status
 	fmt.Println()
 	fmt.Println("🚀 CATCH-UP STATUS")
 	fmt.Println("────────────────────────────────────────────────────────────────────────────────")
-	
+
 	catchingUp := false
 	for _, name := range []string{"BVN0", "BVN1", "BVN2", "Directory"} {
 		p := demo.partitions[name]
-		
+
 		if !p.CatchUpStartTime.IsZero() {
 			catchingUp = true
 			elapsed := time.Since(p.CatchUpStartTime).Seconds()
@@ -381,32 +381,32 @@ func (demo *LagDemo) updateDisplay() {
 				caught := p.LastProcessed - p.CatchUpStartSeq
 				rate = float64(caught) / elapsed
 			}
-			
+
 			eta := "calculating..."
 			if rate > 0 {
 				remaining := float64(p.Lag) / rate
 				eta = fmt.Sprintf("%.1fs", remaining)
 			}
-			
+
 			fmt.Printf("  %s catching up: %d behind, Rate: %.1f tx/s, ETA: %s\n",
 				p.Name, p.Lag, rate, eta)
 		}
-		
+
 		if p.CatchUpRate > 0 && p.CatchUpStartTime.IsZero() {
 			fmt.Printf("  %s caught up: Rate was %.1f tx/s, Duration: %s\n",
 				p.Name, p.CatchUpRate, p.CatchUpDuration.Round(time.Millisecond))
 		}
-		
+
 		if p.IsPaused && !p.DownTime.IsZero() {
 			fmt.Printf("  %s has been down for %s (lag: %d, max: %d)\n",
 				p.Name, time.Since(p.DownTime).Round(time.Second), p.Lag, p.MaxLag)
 		}
 	}
-	
+
 	if !catchingUp && downCount == 0 && totalLag == 0 {
 		fmt.Println("  ✅ All partitions are in sync")
 	}
-	
+
 	// Instructions
 	fmt.Println()
 	fmt.Println("💡 WATCH FOR:")
@@ -421,15 +421,15 @@ func (demo *LagDemo) createLagBar(lag, max int64) string {
 	if lag <= 0 {
 		return "│                       │"
 	}
-	
+
 	barWidth := 23
 	fillRatio := float64(lag) / float64(max)
 	if fillRatio > 1 {
 		fillRatio = 1
 	}
-	
+
 	filled := int(fillRatio * float64(barWidth))
-	
+
 	// Color based on severity
 	bar := "│"
 	for i := 0; i < barWidth; i++ {
@@ -446,7 +446,7 @@ func (demo *LagDemo) createLagBar(lag, max int64) string {
 		}
 	}
 	bar += "│"
-	
+
 	return bar
 }
 
@@ -456,33 +456,33 @@ func (demo *LagDemo) printFinalReport() {
 	fmt.Println("                           DEMONSTRATION COMPLETE")
 	fmt.Println("================================================================================")
 	fmt.Println()
-	
+
 	demo.mu.RLock()
 	defer demo.mu.RUnlock()
-	
+
 	fmt.Println("📋 FINAL REPORT")
 	fmt.Println("────────────────────────────────────────────────────────────────────────────────")
-	
+
 	for _, name := range []string{"BVN0", "BVN1", "BVN2", "Directory"} {
 		p := demo.partitions[name]
-		
+
 		efficiency := float64(0)
 		if p.TotalSent > 0 {
 			efficiency = float64(p.TotalProcessed) / float64(p.TotalSent) * 100
 		}
-		
+
 		fmt.Printf("\n%s:\n", p.Name)
 		fmt.Printf("  Total Sent:      %d\n", p.TotalSent)
 		fmt.Printf("  Total Processed: %d\n", p.TotalProcessed)
 		fmt.Printf("  Total Dropped:   %d\n", p.TotalDropped)
 		fmt.Printf("  Max Lag:         %d sequences\n", p.MaxLag)
 		fmt.Printf("  Efficiency:      %.1f%%\n", efficiency)
-		
+
 		if p.CatchUpRate > 0 {
 			fmt.Printf("  Best Catch-up:   %.1f tx/s\n", p.CatchUpRate)
 		}
 	}
-	
+
 	fmt.Println()
 	fmt.Println("✅ KEY INSIGHTS:")
 	fmt.Println("  • Partitions accumulate lag when down")
