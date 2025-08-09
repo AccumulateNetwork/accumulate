@@ -29,7 +29,7 @@ linters:
   # Standard
   - asasalint     # Bugs (variadic functions taking any)
   - bidichk       # Check for questionable Unicode
-  - exportloopref # Smarter version of rangevarref?
+  # - exportloopref # Deprecated since Go 1.22 - loop variables are now properly scoped
   - goheader      # Enforce the copyright header
   - misspell      # Spelling
   - nakedret      # Not really sure what this one does
