@@ -4,7 +4,7 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package e2e2
+package e2e_v2
 
 import (
 	"go/ast"
@@ -74,7 +74,7 @@ func generateTest(t *testing.T, name, filename string) {
 	require.NoError(t, err)
 
 	f := &ast.File{
-		Name: &ast.Ident{Name: "e2e2"},
+		Name: &ast.Ident{Name: "e2e_v2"},
 		Decls: []ast.Decl{
 			&ast.GenDecl{
 				Tok: token.IMPORT,

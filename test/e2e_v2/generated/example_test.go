@@ -1,4 +1,4 @@
-package e2e2
+package e2e_v2
 
 import (
 	"testing"
@@ -7,7 +7,6 @@ import (
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
 )
-import ()
 
 func TestExample(t *testing.T) {
 	alice := build.

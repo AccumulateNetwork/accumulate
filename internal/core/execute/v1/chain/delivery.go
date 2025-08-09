@@ -56,7 +56,7 @@ func DeliveriesFromMessages(messages []messaging.Message) ([]*Delivery, error) {
 	for hash, i := range txnIndex {
 		delivery := deliveries[i]
 		if len(delivery.Signatures) == 0 {
-			return nil, errors.BadRequest.WithFormat("transaction %x has no signatures", hash[:4]) //nolint:rangevarref
+			return nil, errors.BadRequest.WithFormat("transaction %x has no signatures", hash[:4])
 		}
 		if delivery.Transaction == nil {
 			delivery.Transaction = new(protocol.Transaction)

@@ -54,7 +54,7 @@ func (x *Executor) ProduceSynthetic(batch *database.Batch, from *protocol.Transa
 			for _, sig := range body.Signatures {
 				sigId := sig.Destination.WithTxID(*(*[32]byte)(sig.Signature.Hash()))
 				for _, hash := range sig.Cause {
-					err = batch.Transaction(hash[:]).Produced().Add(tx.ID(), sigId) //nolint:rangevarref
+					err = batch.Transaction(hash[:]).Produced().Add(tx.ID(), sigId)
 					if err != nil {
 						return err
 					}

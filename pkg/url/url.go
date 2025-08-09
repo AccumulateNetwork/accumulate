@@ -316,7 +316,7 @@ func id(s string) [32]byte {
 func concatId(ids ...[32]byte) [32]byte {
 	digest := sha256.New()
 	for _, id := range ids {
-		digest.Write(id[:]) //nolint:rangevarref
+		digest.Write(id[:])
 	}
 	var result [32]byte
 	copy(result[:], digest.Sum(nil))
