@@ -39,7 +39,7 @@ func (pi *ProofIntegration) CreateSyntheticProofs(
 	if pi.conductor == nil || pi.conductor.proofService == nil {
 		return nil, errors.InternalError.With("proof service not initialized")
 	}
-	
+
 	// Convert to SyntheticTransaction format
 	syntheticTxs := make([]SyntheticTransaction, len(transactions))
 	for i, tx := range transactions {
@@ -50,7 +50,7 @@ func (pi *ProofIntegration) CreateSyntheticProofs(
 			Hash:        tx.Hash,
 		}
 	}
-	
+
 	// Use the conductor's method
 	return pi.conductor.CreateProofsForSyntheticTransactions(
 		ctx,
@@ -72,7 +72,7 @@ func (pi *ProofIntegration) ValidateProof(proof *protocol.AnnotatedReceipt) erro
 		}
 		return nil
 	}
-	
+
 	return pi.conductor.ValidateIncomingProof(proof)
 }
 
