@@ -75,3 +75,12 @@ accumulated-bpt-test
 *.heap
 *.prof
 *.pprof
+
+# CrossChainConductor test artifacts
+crosschain_conductor
+*.pid
+.devnet-test/
+test/load/test_results_*/
+test/load/*.json
+snapshot.urls
+*.urls
