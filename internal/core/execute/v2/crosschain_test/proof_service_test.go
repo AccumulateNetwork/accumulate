@@ -1,5 +1,5 @@
-//go:build !ci
-// +build !ci
+//go:build !testnet
+// +build !testnet
 
 // Copyright 2025 The Accumulate Authors
 //
