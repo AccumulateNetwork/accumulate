@@ -13,10 +13,10 @@ import (
 	"sync"
 	"time"
 
-	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	v3api "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
+	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	accurl "gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -28,19 +28,19 @@ const (
 
 // FaucetHelper provides continuous token funding for test accounts
 type FaucetHelper struct {
-	client      *client.Client
-	apiClient   *jsonrpc.Client
-	serverURL   string
-	running     bool
-	stopChan    chan struct{}
-	wg          sync.WaitGroup
-	mu          sync.RWMutex
-	
+	client    *client.Client
+	apiClient *jsonrpc.Client
+	serverURL string
+	running   bool
+	stopChan  chan struct{}
+	wg        sync.WaitGroup
+	mu        sync.RWMutex
+
 	// Statistics
-	stats       FaucetStats
-	
+	stats FaucetStats
+
 	// Configuration
-	config      FaucetConfig
+	config FaucetConfig
 }
 
 type FaucetConfig struct {
@@ -51,14 +51,14 @@ type FaucetConfig struct {
 }
 
 type FaucetStats struct {
-	mu                sync.RWMutex
-	StartTime         time.Time
-	TotalRequests     int64
-	SuccessfulReqs    int64
-	FailedReqs        int64
-	TotalACMEFunded   int64
-	AccountsCreated   int64
-	LastRequestTime   time.Time
+	mu              sync.RWMutex
+	StartTime       time.Time
+	TotalRequests   int64
+	SuccessfulReqs  int64
+	FailedReqs      int64
+	TotalACMEFunded int64
+	AccountsCreated int64
+	LastRequestTime time.Time
 }
 
 type FundedAccount struct {
@@ -75,7 +75,7 @@ func NewFaucetHelper(serverURL string, config *FaucetConfig) (*FaucetHelper, err
 	if err != nil {
 		return nil, fmt.Errorf("failed to create API client: %v", err)
 	}
-	
+
 	// Set default configuration if not provided
 	if config == nil {
 		config = &FaucetConfig{
@@ -85,9 +85,9 @@ func NewFaucetHelper(serverURL string, config *FaucetConfig) (*FaucetHelper, err
 			RetryDelay:        1 * time.Second,
 		}
 	}
-	
+
 	apiClient := jsonrpc.NewClient(serverURL + "/v3")
-	
+
 	return &FaucetHelper{
 		client:    c,
 		apiClient: apiClient,
@@ -109,10 +109,10 @@ func (fh *FaucetHelper) Start(ctx context.Context) {
 	}
 	fh.running = true
 	fh.mu.Unlock()
-	
-	log.Printf("🚰 Starting faucet helper with %d ACME per request, %v interval", 
+
+	log.Printf("🚰 Starting faucet helper with %d ACME per request, %v interval",
 		fh.config.ACMEPerRequest/1000000, fh.config.RequestInterval)
-	
+
 	// Start background funding process
 	for i := 0; i < fh.config.MaxConcurrentReqs; i++ {
 		fh.wg.Add(1)
@@ -129,11 +129,11 @@ func (fh *FaucetHelper) Stop() {
 	}
 	fh.running = false
 	fh.mu.Unlock()
-	
+
 	close(fh.stopChan)
 	fh.wg.Wait()
-	
-	log.Printf("🛑 Faucet helper stopped after funding %.2f ACME across %d accounts", 
+
+	log.Printf("🛑 Faucet helper stopped after funding %.2f ACME across %d accounts",
 		float64(fh.GetStats().TotalACMEFunded)/1000000, fh.GetStats().AccountsCreated)
 }
 
@@ -144,50 +144,50 @@ func (fh *FaucetHelper) CreateFundedAccount(targetAmount int64) (*FundedAccount,
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate key pair: %v", err)
 	}
-	
+
 	// Create lite token account URL
 	liteURL, err := protocol.LiteTokenAddress(pubKey, protocol.ACME, protocol.SignatureTypeED25519)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create lite address: %v", err)
 	}
-	
+
 	account := &FundedAccount{
 		URL:        liteURL,
 		PrivateKey: privKey,
 		PublicKey:  pubKey,
 		CreatedAt:  time.Now(),
 	}
-	
+
 	// Fund the account to the target amount
 	err = fh.FundAccountToTarget(account, targetAmount)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fund account: %v", err)
 	}
-	
+
 	// Wait a moment for the account to be created on the network
 	time.Sleep(2 * time.Second)
-	
+
 	// Add credits to the account for transaction fees
 	err = fh.AddCreditsToAccount(account, 100000000) // 100k credits
 	if err != nil {
 		log.Printf("⚠️  Failed to add credits to account %s: %v", account.URL, err)
 		// Don't fail completely, as credits might not be strictly required for all tests
 	}
-	
+
 	fh.stats.mu.Lock()
 	fh.stats.AccountsCreated++
 	fh.stats.mu.Unlock()
-	
+
 	return account, nil
 }
 
 // FundAccountToTarget funds an account until it reaches the target amount
 func (fh *FaucetHelper) FundAccountToTarget(account *FundedAccount, targetAmount int64) error {
 	requestsNeeded := (targetAmount + fh.config.ACMEPerRequest - 1) / fh.config.ACMEPerRequest
-	
-	log.Printf("💰 Funding account %s with %.2f ACME (%d requests)", 
+
+	log.Printf("💰 Funding account %s with %.2f ACME (%d requests)",
 		account.URL.String()[:20]+"...", float64(targetAmount)/1000000, requestsNeeded)
-	
+
 	for account.Balance < targetAmount {
 		amount, err := fh.requestFromFaucet(account.URL)
 		if err != nil {
@@ -195,13 +195,13 @@ func (fh *FaucetHelper) FundAccountToTarget(account *FundedAccount, targetAmount
 			time.Sleep(fh.config.RetryDelay)
 			continue
 		}
-		
+
 		account.Balance += amount
-		
+
 		// Short delay between requests to avoid overwhelming faucet
 		time.Sleep(500 * time.Millisecond)
 	}
-	
+
 	log.Printf("✅ Account funded: %.2f ACME", float64(account.Balance)/1000000)
 	return nil
 }
@@ -210,7 +210,7 @@ func (fh *FaucetHelper) FundAccountToTarget(account *FundedAccount, targetAmount
 func (fh *FaucetHelper) CreateMultipleFundedAccounts(count int, amountPerAccount int64) ([]*FundedAccount, error) {
 	accounts := make([]*FundedAccount, count)
 	errors := make([]error, count)
-	
+
 	var wg sync.WaitGroup
 	for i := 0; i < count; i++ {
 		wg.Add(1)
@@ -221,16 +221,16 @@ func (fh *FaucetHelper) CreateMultipleFundedAccounts(count int, amountPerAccount
 			errors[index] = err
 		}(i)
 	}
-	
+
 	wg.Wait()
-	
+
 	// Check for errors
 	for i, err := range errors {
 		if err != nil {
 			return nil, fmt.Errorf("failed to create account %d: %v", i, err)
 		}
 	}
-	
+
 	return accounts, nil
 }
 
@@ -245,18 +245,18 @@ func (fh *FaucetHelper) GetStats() FaucetStats {
 func (fh *FaucetHelper) PrintStats() {
 	stats := fh.GetStats()
 	elapsed := time.Since(stats.StartTime)
-	
+
 	fmt.Printf("\n🚰 Faucet Helper Statistics (Running: %v)\n", elapsed.Round(time.Second))
-	fmt.Printf("📡 Total Requests: %d (Success: %d, Failed: %d)\n", 
+	fmt.Printf("📡 Total Requests: %d (Success: %d, Failed: %d)\n",
 		stats.TotalRequests, stats.SuccessfulReqs, stats.FailedReqs)
 	fmt.Printf("💰 Total ACME Funded: %.2f ACME\n", float64(stats.TotalACMEFunded)/1000000)
 	fmt.Printf("🏦 Accounts Created: %d\n", stats.AccountsCreated)
-	
+
 	if stats.TotalRequests > 0 {
 		successRate := float64(stats.SuccessfulReqs) / float64(stats.TotalRequests) * 100
 		fmt.Printf("📊 Success Rate: %.1f%%\n", successRate)
 	}
-	
+
 	if elapsed.Seconds() > 0 {
 		rps := float64(stats.TotalRequests) / elapsed.Seconds()
 		aps := float64(stats.TotalACMEFunded) / 1000000 / elapsed.Seconds()
@@ -268,10 +268,10 @@ func (fh *FaucetHelper) PrintStats() {
 // fundingWorker runs continuous background funding
 func (fh *FaucetHelper) fundingWorker(ctx context.Context, workerID int) {
 	defer fh.wg.Done()
-	
+
 	ticker := time.NewTicker(fh.config.RequestInterval)
 	defer ticker.Stop()
-	
+
 	for {
 		select {
 		case <-fh.stopChan:
@@ -292,8 +292,8 @@ func (fh *FaucetHelper) createBackgroundFundedAccount(workerID int) {
 		log.Printf("Worker %d: Failed to create background account: %v", workerID, err)
 		return
 	}
-	
-	log.Printf("Worker %d: Created background account with %.2f ACME: %s", 
+
+	log.Printf("Worker %d: Created background account with %.2f ACME: %s",
 		workerID, float64(account.Balance)/1000000, account.URL.String()[:30]+"...")
 }
 
@@ -303,7 +303,7 @@ func (fh *FaucetHelper) requestFromFaucet(accountURL *accurl.URL) (int64, error)
 	fh.stats.TotalRequests++
 	fh.stats.LastRequestTime = time.Now()
 	fh.stats.mu.Unlock()
-	
+
 	// Make HTTP request to faucet
 	resp, err := http.Post(
 		fh.serverURL+FaucetEndpoint,
@@ -317,7 +317,7 @@ func (fh *FaucetHelper) requestFromFaucet(accountURL *accurl.URL) (int64, error)
 		return 0, fmt.Errorf("HTTP request failed: %v", err)
 	}
 	defer resp.Body.Close()
-	
+
 	// Read response
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -326,30 +326,30 @@ func (fh *FaucetHelper) requestFromFaucet(accountURL *accurl.URL) (int64, error)
 		fh.stats.mu.Unlock()
 		return 0, fmt.Errorf("failed to read response: %v", err)
 	}
-	
+
 	if resp.StatusCode != http.StatusOK {
 		fh.stats.mu.Lock()
 		fh.stats.FailedReqs++
 		fh.stats.mu.Unlock()
 		return 0, fmt.Errorf("faucet request failed (status %d): %s", resp.StatusCode, string(body))
 	}
-	
+
 	// Parse response if it's JSON, otherwise assume success
 	var faucetResp struct {
 		TransactionHash string `json:"txid"`
-		Amount         int64  `json:"amount"`
+		Amount          int64  `json:"amount"`
 	}
-	
+
 	amount := fh.config.ACMEPerRequest // Default amount
 	if json.Unmarshal(body, &faucetResp) == nil && faucetResp.Amount > 0 {
 		amount = faucetResp.Amount
 	}
-	
+
 	fh.stats.mu.Lock()
 	fh.stats.SuccessfulReqs++
 	fh.stats.TotalACMEFunded += amount
 	fh.stats.mu.Unlock()
-	
+
 	return amount, nil
 }
 
@@ -358,22 +358,22 @@ func (fh *FaucetHelper) AddCreditsToAccount(account *FundedAccount, creditAmount
 	// First, get the network status to find the oracle price
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	
+
 	ns, err := fh.apiClient.NetworkStatus(ctx, v3api.NetworkStatusOptions{Partition: protocol.Directory})
 	if err != nil {
 		return fmt.Errorf("failed to get network status: %v", err)
 	}
-	
+
 	// Calculate oracle price (this is the key fix!)
 	oracle := float64(ns.Oracle.Price) / protocol.AcmeOraclePrecision
-	
+
 	// If oracle price is zero (DevNet), we need to set a reasonable price
 	// In DevNet, we can set a small oracle price to enable credit purchases
 	if oracle == 0 {
 		oracle = 0.01 // Set 1 credit = 0.01 ACME (very cheap for testing)
 		log.Printf("⚠️  Oracle price is zero, using test price: %.4f ACME per credit", oracle)
 	}
-	
+
 	// Build add credits transaction with oracle price
 	// For lite accounts, we sign with the lite account itself, not .Main
 	var ts uint64
@@ -384,19 +384,19 @@ func (fh *FaucetHelper) AddCreditsToAccount(account *FundedAccount, creditAmount
 	if err != nil {
 		return fmt.Errorf("failed to build add credits transaction: %v", err)
 	}
-	
+
 	// Submit transaction
 	subs, err := fh.apiClient.Submit(ctx, env, v3api.SubmitOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to submit add credits transaction: %v", err)
 	}
-	
+
 	for _, sub := range subs {
 		if err := sub.Status.AsError(); err != nil {
 			return fmt.Errorf("add credits transaction failed: %v", err)
 		}
 	}
-	
+
 	log.Printf("✅ Added %d credits to account %s (oracle: %.4f)", creditAmount, account.URL.String()[:20]+"...", oracle)
 	return nil
 }

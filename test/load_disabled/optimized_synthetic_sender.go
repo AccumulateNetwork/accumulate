@@ -15,28 +15,28 @@ import (
 // OptimizedSyntheticSender demonstrates how to batch synthetic transactions by destination
 // using collection proofs instead of individual receipts
 type OptimizedSyntheticSender struct {
-	logger                logging.OptionalLogger
-	mainDispatcher        interface{} // Would be the actual dispatcher interface
-	globals               interface{} // Would be the actual globals interface
-	batchThreshold        int         // Use collection proof when >= this many txs to same destination
-	individualProofCount  int64       // Metrics
-	collectionProofCount  int64       // Metrics
+	logger               logging.OptionalLogger
+	mainDispatcher       interface{} // Would be the actual dispatcher interface
+	globals              interface{} // Would be the actual globals interface
+	batchThreshold       int         // Use collection proof when >= this many txs to same destination
+	individualProofCount int64       // Metrics
+	collectionProofCount int64       // Metrics
 	proofSavings         int64       // Number of individual proofs saved
 }
 
 // SyntheticTransactionBatch groups transactions by destination for efficient processing
 type SyntheticTransactionBatch struct {
-	Destination    *url.URL
-	Transactions   []*SyntheticTransactionInfo
-	UseCollection  bool // Whether to use collection proof for this batch
+	Destination   *url.URL
+	Transactions  []*SyntheticTransactionInfo
+	UseCollection bool // Whether to use collection proof for this batch
 }
 
 // SyntheticTransactionInfo contains all data needed for a synthetic transaction
 type SyntheticTransactionInfo struct {
-	Hash           []byte
-	SequenceIndex  int64  // Index in synthetic main chain  
-	Message        *messaging.SequencedMessage
-	KeySignature   protocol.KeySignature
+	Hash          []byte
+	SequenceIndex int64 // Index in synthetic main chain
+	Message       *messaging.SequencedMessage
+	KeySignature  protocol.KeySignature
 }
 
 func NewOptimizedSyntheticSender(logger logging.OptionalLogger) *OptimizedSyntheticSender {
@@ -53,8 +53,8 @@ func (s *OptimizedSyntheticSender) sendSyntheticTransactionsForBlockOptimized(
 	blockIndex uint64,
 	blockReceipt *protocol.PartitionAnchorReceipt,
 ) error {
-	s.logger.Info("Starting optimized synthetic transaction sending", 
-		"block", blockIndex, 
+	s.logger.Info("Starting optimized synthetic transaction sending",
+		"block", blockIndex,
 		"is_leader", isLeader)
 
 	// Step 1: Load all synthetic transactions for the block
@@ -70,12 +70,12 @@ func (s *OptimizedSyntheticSender) sendSyntheticTransactionsForBlockOptimized(
 
 	// Step 2: Group transactions by destination
 	batches := s.groupTransactionsByDestination(transactions)
-	
+
 	s.logger.Info("Grouped synthetic transactions by destination",
 		"total_transactions", len(transactions),
 		"destination_groups", len(batches))
 
-	// Step 3: Process each destination batch  
+	// Step 3: Process each destination batch
 	for destination, batch := range batches {
 		if !isLeader {
 			s.logger.Debug("Skipping batch (not leader)", "destination", destination, "count", len(batch.Transactions))
@@ -91,7 +91,7 @@ func (s *OptimizedSyntheticSender) sendSyntheticTransactionsForBlockOptimized(
 			// Continue with other batches instead of failing completely
 			continue
 		}
-		
+
 		s.logger.Info("Successfully sent synthetic batch",
 			"destination", destination,
 			"count", len(batch.Transactions),
@@ -100,7 +100,7 @@ func (s *OptimizedSyntheticSender) sendSyntheticTransactionsForBlockOptimized(
 
 	// Step 4: Log efficiency metrics
 	s.logEfficiencyMetrics()
-	
+
 	return nil
 }
 
@@ -161,21 +161,21 @@ func (s *OptimizedSyntheticSender) groupTransactionsByDestination(
 
 	for _, tx := range transactions {
 		dest := tx.Message.Destination.String()
-		
+
 		if batches[dest] == nil {
 			batches[dest] = &SyntheticTransactionBatch{
 				Destination:  tx.Message.Destination,
 				Transactions: make([]*SyntheticTransactionInfo, 0),
 			}
 		}
-		
+
 		batches[dest].Transactions = append(batches[dest].Transactions, tx)
 	}
 
 	// Determine which batches should use collection proofs
 	for dest, batch := range batches {
 		batch.UseCollection = len(batch.Transactions) >= s.batchThreshold
-		
+
 		s.logger.Debug("Destination batch analyzed",
 			"destination", dest,
 			"count", len(batch.Transactions),
@@ -224,7 +224,7 @@ func (s *OptimizedSyntheticSender) processBatchWithCollectionProof(
 		"end_idx", endIdx,
 		"span", endIdx-startIdx+1)
 
-	// Step 3: Generate collection proof using ReceiptList  
+	// Step 3: Generate collection proof using ReceiptList
 	// (This would use merkle.GetReceiptList in real implementation)
 	collectionProof, err := s.generateCollectionProof(synthMainChain, startIdx, endIdx)
 	if err != nil {
@@ -235,7 +235,7 @@ func (s *OptimizedSyntheticSender) processBatchWithCollectionProof(
 
 	// Step 4: Create messages with shared collection proof
 	messages := make([]messaging.Message, 0, len(batch.Transactions))
-	
+
 	for _, tx := range batch.Transactions {
 		// Create annotated receipt that references the collection proof
 		receipt := &protocol.AnnotatedReceipt{
@@ -243,21 +243,21 @@ func (s *OptimizedSyntheticSender) processBatchWithCollectionProof(
 				Account: protocol.DnUrl(),
 			},
 		}
-		
+
 		// The collection proof covers all transactions in the batch
 		// Individual transactions don't need their own receipts
 		receipt.Receipt = collectionProof
-		
+
 		// Use the collection proof directly for demonstration
 		receipt.Receipt = collectionProof
 
-		// Create synthetic message with shared proof  
+		// Create synthetic message with shared proof
 		synMsg := &messaging.BadSyntheticMessage{
 			Message:   tx.Message,
 			Proof:     receipt,
 			Signature: tx.KeySignature,
 		}
-		
+
 		messages = append(messages, synMsg)
 	}
 
@@ -294,7 +294,7 @@ func (s *OptimizedSyntheticSender) processBatchWithIndividualProofs(
 	for _, tx := range batch.Transactions {
 		// This follows the original logic from sendSyntheticTransactionsForBlock
 		// Generate individual receipt for each transaction
-		
+
 		// For demonstration, create a placeholder receipt
 		receipt := &protocol.AnnotatedReceipt{
 			Anchor: &protocol.AnchorMetadata{
@@ -344,11 +344,11 @@ func (s *OptimizedSyntheticSender) generateCollectionProof(
 func (s *OptimizedSyntheticSender) submitEnvelope(destination *url.URL, env *messaging.Envelope) error {
 	// In real implementation:
 	// return s.mainDispatcher.Submit(context.Background(), destination, env)
-	
+
 	s.logger.Debug("Submitted envelope",
 		"destination", destination,
 		"messages", len(env.Messages))
-	
+
 	return nil
 }
 
@@ -360,7 +360,7 @@ func (s *OptimizedSyntheticSender) logEfficiencyMetrics() {
 	}
 
 	collectionPercent := float64(s.collectionProofCount) / float64(totalBatches) * 100
-	
+
 	s.logger.Info("Synthetic transaction efficiency metrics",
 		"individual_proof_batches", s.individualProofCount,
 		"collection_proof_batches", s.collectionProofCount,
@@ -412,8 +412,8 @@ func main() {
 
 	// Simulate the optimized sending
 	err := sender.sendSyntheticTransactionsForBlockOptimized(
-		nil,  // batch (placeholder)
-		true, // isLeader
+		nil,   // batch (placeholder)
+		true,  // isLeader
 		12345, // blockIndex
 		nil,   // blockReceipt (placeholder)
 	)
@@ -444,7 +444,7 @@ func main() {
 	fmt.Println("   • Fallback to individual proofs when collection proof fails")
 	fmt.Println("   • Comprehensive metrics and logging")
 	fmt.Println("   • Drop-in replacement for existing synthetic sender")
-	
+
 	fmt.Println()
 	fmt.Println("✅ Optimized synthetic transaction sender ready for production!")
 }

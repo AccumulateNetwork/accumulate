@@ -12,36 +12,36 @@ import (
 
 // PartitionMonitor tracks lag and catch-up rates for each partition
 type PartitionMonitor struct {
-	partitions    map[string]*PartitionState
-	mu            sync.RWMutex
-	logger        logging.OptionalLogger
-	startTime     time.Time
-	
+	partitions map[string]*PartitionState
+	mu         sync.RWMutex
+	logger     logging.OptionalLogger
+	startTime  time.Time
+
 	// Global sequence counter
 	globalSequence int64
 }
 
 // PartitionState tracks the state of a single partition
 type PartitionState struct {
-	Name               string
-	IsHealthy          bool
-	LastSentSequence   int64    // Last sequence we tried to send
-	LastAckedSequence  int64    // Last sequence acknowledged by partition
-	LagAmount          int64    // How many sequences behind
-	DownSince          time.Time
-	RecoveredAt        time.Time
-	CatchUpStarted     time.Time
-	CatchUpRate        float64  // Sequences per second during catch-up
-	
+	Name              string
+	IsHealthy         bool
+	LastSentSequence  int64 // Last sequence we tried to send
+	LastAckedSequence int64 // Last sequence acknowledged by partition
+	LagAmount         int64 // How many sequences behind
+	DownSince         time.Time
+	RecoveredAt       time.Time
+	CatchUpStarted    time.Time
+	CatchUpRate       float64 // Sequences per second during catch-up
+
 	// Metrics
-	TotalSent          int64
-	TotalAcked         int64
-	TotalDropped       int64
-	ConsecutiveFails   int32
-	
+	TotalSent        int64
+	TotalAcked       int64
+	TotalDropped     int64
+	ConsecutiveFails int32
+
 	// Circuit breaker
-	CircuitOpen        bool
-	CircuitOpenTime    time.Time
+	CircuitOpen     bool
+	CircuitOpenTime time.Time
 }
 
 // VisualDashboard manages the display
@@ -56,21 +56,21 @@ type VisualDashboard struct {
 
 // SmartDispatcher simulates network with lag tracking
 type SmartDispatcher struct {
-	partitionHealth  map[string]bool
-	partitionQueues  map[string]*MessageQueue
-	mu               sync.RWMutex
-	networkLatency   time.Duration
-	
+	partitionHealth map[string]bool
+	partitionQueues map[string]*MessageQueue
+	mu              sync.RWMutex
+	networkLatency  time.Duration
+
 	// Metrics
-	totalSubmits     int64
-	totalSuccesses   int64
-	totalFailures    int64
+	totalSubmits   int64
+	totalSuccesses int64
+	totalFailures  int64
 }
 
 // MessageQueue simulates a partition's message queue
 type MessageQueue struct {
-	messages      []QueuedMessage
-	mu            sync.Mutex
+	messages       []QueuedMessage
+	mu             sync.Mutex
 	processingRate time.Duration // How fast the partition processes messages
 }
 
@@ -85,7 +85,7 @@ type SmartPartitionHandler struct {
 	monitor    *PartitionMonitor
 	dispatcher *SmartDispatcher
 	logger     logging.OptionalLogger
-	
+
 	// Configuration
 	maxRetries       int
 	retryDelay       time.Duration
@@ -111,15 +111,15 @@ func main() {
 	fmt.Println()
 	fmt.Println("Starting in 3 seconds...")
 	time.Sleep(3 * time.Second)
-	
+
 	// Initialize components
 	monitor := NewPartitionMonitor()
 	dispatcher := NewSmartDispatcher()
 	handler := NewSmartPartitionHandler(monitor, dispatcher)
-	
+
 	// Create dashboard
 	dashboard := NewVisualDashboard(monitor, dispatcher, handler)
-	
+
 	// Start the system
 	dashboard.Start()
 }
@@ -129,7 +129,7 @@ func NewPartitionMonitor() *PartitionMonitor {
 		partitions: make(map[string]*PartitionState),
 		startTime:  time.Now(),
 	}
-	
+
 	// Initialize partitions
 	partitionNames := []string{"BVN0", "BVN1", "BVN2", "Directory"}
 	for _, name := range partitionNames {
@@ -138,7 +138,7 @@ func NewPartitionMonitor() *PartitionMonitor {
 			IsHealthy: true,
 		}
 	}
-	
+
 	return pm
 }
 
@@ -148,7 +148,7 @@ func NewSmartDispatcher() *SmartDispatcher {
 		partitionQueues: make(map[string]*MessageQueue),
 		networkLatency:  5 * time.Millisecond,
 	}
-	
+
 	// Initialize all partitions as healthy
 	partitionNames := []string{"BVN0", "BVN1", "BVN2", "Directory"}
 	for _, name := range partitionNames {
@@ -157,7 +157,7 @@ func NewSmartDispatcher() *SmartDispatcher {
 			processingRate: 10 * time.Millisecond,
 		}
 	}
-	
+
 	return sd
 }
 
@@ -186,13 +186,13 @@ func NewVisualDashboard(monitor *PartitionMonitor, dispatcher *SmartDispatcher, 
 func (vd *VisualDashboard) Start() {
 	// Start transaction generators
 	vd.startTransactionGenerators()
-	
+
 	// Start partition processors
 	vd.startPartitionProcessors()
-	
+
 	// Start keyboard input handler
 	go vd.handleKeyboardInput()
-	
+
 	// Start display loop
 	vd.runDisplayLoop()
 }
@@ -200,12 +200,12 @@ func (vd *VisualDashboard) Start() {
 func (vd *VisualDashboard) startTransactionGenerators() {
 	// Generate transactions for each partition
 	partitions := []string{"BVN0", "BVN1", "BVN2", "Directory"}
-	
+
 	for _, partition := range partitions {
 		go func(p string) {
 			ticker := time.NewTicker(50 * time.Millisecond) // 20 tx/sec per partition
 			defer ticker.Stop()
-			
+
 			for {
 				select {
 				case <-vd.ctx.Done():
@@ -221,14 +221,14 @@ func (vd *VisualDashboard) startTransactionGenerators() {
 func (vd *VisualDashboard) sendTransaction(partition string) {
 	// Increment global sequence
 	sequence := atomic.AddInt64(&vd.monitor.globalSequence, 1)
-	
+
 	vd.monitor.mu.Lock()
 	state := vd.monitor.partitions[partition]
-	
+
 	// Update last sent sequence
 	state.LastSentSequence = sequence
 	state.TotalSent++
-	
+
 	// Check if partition is healthy
 	if !state.IsHealthy {
 		state.TotalDropped++
@@ -236,7 +236,7 @@ func (vd *VisualDashboard) sendTransaction(partition string) {
 		vd.monitor.mu.Unlock()
 		return
 	}
-	
+
 	// Check circuit breaker
 	if state.CircuitOpen {
 		// Check if we should try half-open
@@ -249,15 +249,15 @@ func (vd *VisualDashboard) sendTransaction(partition string) {
 			return
 		}
 	}
-	
+
 	vd.monitor.mu.Unlock()
-	
+
 	// Try to send through dispatcher
 	vd.dispatcher.mu.RLock()
 	healthy := vd.dispatcher.partitionHealth[partition]
 	queue := vd.dispatcher.partitionQueues[partition]
 	vd.dispatcher.mu.RUnlock()
-	
+
 	if healthy {
 		// Add to partition's queue
 		queue.mu.Lock()
@@ -266,10 +266,10 @@ func (vd *VisualDashboard) sendTransaction(partition string) {
 			Timestamp: time.Now(),
 		})
 		queue.mu.Unlock()
-		
+
 		atomic.AddInt64(&vd.dispatcher.totalSubmits, 1)
 		atomic.AddInt64(&vd.dispatcher.totalSuccesses, 1)
-		
+
 		// Reset consecutive failures
 		vd.monitor.mu.Lock()
 		state.ConsecutiveFails = 0
@@ -277,10 +277,10 @@ func (vd *VisualDashboard) sendTransaction(partition string) {
 	} else {
 		// Partition is down
 		atomic.AddInt64(&vd.dispatcher.totalFailures, 1)
-		
+
 		vd.monitor.mu.Lock()
 		state.ConsecutiveFails++
-		
+
 		// Open circuit if threshold reached
 		if state.ConsecutiveFails >= 3 && !state.CircuitOpen {
 			state.CircuitOpen = true
@@ -288,7 +288,7 @@ func (vd *VisualDashboard) sendTransaction(partition string) {
 			state.IsHealthy = false
 			state.DownSince = time.Now()
 		}
-		
+
 		state.LagAmount = sequence - state.LastAckedSequence
 		vd.monitor.mu.Unlock()
 	}
@@ -297,7 +297,7 @@ func (vd *VisualDashboard) sendTransaction(partition string) {
 func (vd *VisualDashboard) startPartitionProcessors() {
 	// Simulate each partition processing its queue
 	partitions := []string{"BVN0", "BVN1", "BVN2", "Directory"}
-	
+
 	for _, partition := range partitions {
 		go func(p string) {
 			for {
@@ -318,43 +318,43 @@ func (vd *VisualDashboard) processPartitionQueue(partition string) {
 	healthy := vd.dispatcher.partitionHealth[partition]
 	queue := vd.dispatcher.partitionQueues[partition]
 	vd.dispatcher.mu.RUnlock()
-	
+
 	if !healthy {
 		return
 	}
-	
+
 	// Process messages in queue
 	queue.mu.Lock()
 	if len(queue.messages) > 0 {
 		// Process batch of messages (simulate catch-up)
 		batchSize := 1
-		
+
 		vd.monitor.mu.RLock()
 		state := vd.monitor.partitions[partition]
 		isCatchingUp := state.LagAmount > 10
 		vd.monitor.mu.RUnlock()
-		
+
 		if isCatchingUp {
 			batchSize = 5 // Process faster during catch-up
 		}
-		
+
 		processed := 0
 		for i := 0; i < len(queue.messages) && processed < batchSize; i++ {
 			if !queue.messages[i].Processed {
 				queue.messages[i].Processed = true
-				
+
 				// Update acknowledged sequence
 				vd.monitor.mu.Lock()
 				state := vd.monitor.partitions[partition]
 				state.LastAckedSequence = queue.messages[i].Sequence
 				state.TotalAcked++
-				
+
 				// Update lag
 				state.LagAmount = state.LastSentSequence - state.LastAckedSequence
 				if state.LagAmount < 0 {
 					state.LagAmount = 0
 				}
-				
+
 				// Calculate catch-up rate
 				if isCatchingUp && state.CatchUpStarted.IsZero() {
 					state.CatchUpStarted = time.Now()
@@ -365,13 +365,13 @@ func (vd *VisualDashboard) processPartitionQueue(partition string) {
 					}
 					state.CatchUpStarted = time.Time{}
 				}
-				
+
 				vd.monitor.mu.Unlock()
-				
+
 				processed++
 			}
 		}
-		
+
 		// Clean up processed messages
 		newQueue := []QueuedMessage{}
 		for _, msg := range queue.messages {
@@ -387,7 +387,7 @@ func (vd *VisualDashboard) processPartitionQueue(partition string) {
 func (vd *VisualDashboard) runDisplayLoop() {
 	ticker := time.NewTicker(vd.refreshRate)
 	defer ticker.Stop()
-	
+
 	for {
 		select {
 		case <-vd.ctx.Done():
@@ -401,35 +401,35 @@ func (vd *VisualDashboard) runDisplayLoop() {
 func (vd *VisualDashboard) updateDisplay() {
 	// Clear screen
 	fmt.Print("\033[H\033[2J")
-	
+
 	// Header
 	fmt.Println("================================================================================")
 	fmt.Println("                    PARTITION LAG AND CATCH-UP MONITOR")
 	fmt.Println("================================================================================")
-	fmt.Printf("Running: %s | Global Sequence: %d\n", 
+	fmt.Printf("Running: %s | Global Sequence: %d\n",
 		time.Since(vd.monitor.startTime).Round(time.Second),
 		atomic.LoadInt64(&vd.monitor.globalSequence))
 	fmt.Println()
-	
+
 	// Partition status table
 	fmt.Println("┌─────────────┬──────────┬──────────┬──────────┬──────────┬─────────────────────┐")
 	fmt.Println("│ Partition   │ Status   │ Sent     │ Acked    │ Lag      │ Progress            │")
 	fmt.Println("├─────────────┼──────────┼──────────┼──────────┼──────────┼─────────────────────┤")
-	
+
 	vd.monitor.mu.RLock()
 	defer vd.monitor.mu.RUnlock()
-	
+
 	partitionOrder := []string{"BVN0", "BVN1", "BVN2", "Directory"}
 	for _, name := range partitionOrder {
 		state := vd.monitor.partitions[name]
-		
+
 		// Status icon
 		statusIcon := "🟢"
 		statusText := "HEALTHY"
 		if !state.IsHealthy || state.CircuitOpen {
 			statusIcon = "🔴"
 			statusText = "DOWN   "
-			
+
 			if state.CircuitOpen {
 				statusText = "CIRCUIT"
 			}
@@ -437,10 +437,10 @@ func (vd *VisualDashboard) updateDisplay() {
 			statusIcon = "🟡"
 			statusText = "LAGGING"
 		}
-		
+
 		// Progress bar for lag
 		progressBar := vd.createProgressBar(state.LagAmount, 100)
-		
+
 		fmt.Printf("│ %-11s │ %s %-7s │ %-8d │ %-8d │ %-8d │ %s │\n",
 			name,
 			statusIcon,
@@ -450,42 +450,42 @@ func (vd *VisualDashboard) updateDisplay() {
 			state.LagAmount,
 			progressBar)
 	}
-	
+
 	fmt.Println("└─────────────┴──────────┴──────────┴──────────┴──────────┴─────────────────────┘")
 	fmt.Println()
-	
+
 	// Catch-up status
 	fmt.Println("📊 CATCH-UP STATUS")
 	fmt.Println("────────────────────────────────────────────────────────────────────────────────")
-	
+
 	catchingUp := false
 	for _, name := range partitionOrder {
 		state := vd.monitor.partitions[name]
-		
+
 		if state.LagAmount > 10 && state.IsHealthy {
 			catchingUp = true
 			catchUpRate := "calculating..."
 			if state.CatchUpRate > 0 {
 				catchUpRate = fmt.Sprintf("%.1f tx/sec", state.CatchUpRate)
 			}
-			
+
 			eta := "unknown"
 			if state.CatchUpRate > 0 {
 				seconds := float64(state.LagAmount) / state.CatchUpRate
 				eta = fmt.Sprintf("%.1f seconds", seconds)
 			}
-			
+
 			fmt.Printf("  %s is catching up: %d behind, Rate: %s, ETA: %s\n",
 				name, state.LagAmount, catchUpRate, eta)
 		}
-		
+
 		if !state.IsHealthy && !state.DownSince.IsZero() {
 			downDuration := time.Since(state.DownSince).Round(time.Second)
 			fmt.Printf("  %s has been down for %s (accumulated lag: %d)\n",
 				name, downDuration, state.LagAmount)
 		}
 	}
-	
+
 	if !catchingUp {
 		hasDown := false
 		for _, name := range partitionOrder {
@@ -494,39 +494,39 @@ func (vd *VisualDashboard) updateDisplay() {
 				break
 			}
 		}
-		
+
 		if !hasDown {
 			fmt.Println("  ✅ All partitions are in sync")
 		}
 	}
-	
+
 	// Network statistics
 	fmt.Println()
 	fmt.Println("🌐 NETWORK STATISTICS")
 	fmt.Println("────────────────────────────────────────────────────────────────────────────────")
-	
+
 	totalSubmits := atomic.LoadInt64(&vd.dispatcher.totalSubmits)
 	totalSuccesses := atomic.LoadInt64(&vd.dispatcher.totalSuccesses)
 	totalFailures := atomic.LoadInt64(&vd.dispatcher.totalFailures)
-	
+
 	successRate := float64(0)
 	if totalSubmits > 0 {
 		successRate = float64(totalSuccesses) / float64(totalSubmits) * 100
 	}
-	
+
 	fmt.Printf("  Submits: %d | Successes: %d | Failures: %d | Success Rate: %.1f%%\n",
 		totalSubmits, totalSuccesses, totalFailures, successRate)
-	
+
 	// Calculate total dropped
 	totalDropped := int64(0)
 	for _, name := range partitionOrder {
 		totalDropped += vd.monitor.partitions[name].TotalDropped
 	}
-	
+
 	if totalDropped > 0 {
 		fmt.Printf("  ⚠️  Dropped Transactions: %d (will be recovered from ledger)\n", totalDropped)
 	}
-	
+
 	// Controls reminder
 	fmt.Println()
 	fmt.Println("🎮 CONTROLS")
@@ -539,13 +539,13 @@ func (vd *VisualDashboard) createProgressBar(current, max int64) string {
 	if current <= 0 {
 		return "                   "
 	}
-	
+
 	barLength := 19
 	filled := int(float64(current) / float64(max) * float64(barLength))
 	if filled > barLength {
 		filled = barLength
 	}
-	
+
 	bar := ""
 	for i := 0; i < filled; i++ {
 		bar += "█"
@@ -553,24 +553,24 @@ func (vd *VisualDashboard) createProgressBar(current, max int64) string {
 	for i := filled; i < barLength; i++ {
 		bar += "░"
 	}
-	
+
 	return bar
 }
 
 func (vd *VisualDashboard) handleKeyboardInput() {
 	// Note: In a real implementation, you'd use a proper keyboard input library
 	// For this demo, we'll simulate with automatic actions
-	
+
 	go func() {
 		time.Sleep(10 * time.Second)
 		vd.togglePartition("BVN1")
-		
+
 		time.Sleep(15 * time.Second)
 		vd.togglePartition("BVN1")
-		
+
 		time.Sleep(10 * time.Second)
 		vd.cascadeFailure()
-		
+
 		time.Sleep(15 * time.Second)
 		vd.recoverAll()
 	}()
@@ -581,10 +581,10 @@ func (vd *VisualDashboard) togglePartition(name string) {
 	current := vd.dispatcher.partitionHealth[name]
 	vd.dispatcher.partitionHealth[name] = !current
 	vd.dispatcher.mu.Unlock()
-	
+
 	vd.monitor.mu.Lock()
 	state := vd.monitor.partitions[name]
-	
+
 	if !current {
 		// Was down, now up
 		state.IsHealthy = true
@@ -607,13 +607,13 @@ func (vd *VisualDashboard) cascadeFailure() {
 		vd.dispatcher.mu.Lock()
 		vd.dispatcher.partitionHealth[p] = false
 		vd.dispatcher.mu.Unlock()
-		
+
 		vd.monitor.mu.Lock()
 		state := vd.monitor.partitions[p]
 		state.IsHealthy = false
 		state.DownSince = time.Now()
 		vd.monitor.mu.Unlock()
-		
+
 		time.Sleep(500 * time.Millisecond)
 	}
 	fmt.Println("\n💥 CASCADE FAILURE TRIGGERED")
@@ -625,7 +625,7 @@ func (vd *VisualDashboard) recoverAll() {
 		vd.dispatcher.mu.Lock()
 		vd.dispatcher.partitionHealth[p] = true
 		vd.dispatcher.mu.Unlock()
-		
+
 		vd.monitor.mu.Lock()
 		state := vd.monitor.partitions[p]
 		state.IsHealthy = true

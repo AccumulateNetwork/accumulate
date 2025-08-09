@@ -18,12 +18,12 @@ type PartitionHealthMonitor struct {
 	partitions map[string]*PartitionStatus
 	mu         sync.RWMutex
 	logger     logging.OptionalLogger
-	
+
 	// Configuration
 	healthCheckInterval   time.Duration
-	unhealthyThreshold    int           // Number of failures before marking unhealthy
+	unhealthyThreshold    int // Number of failures before marking unhealthy
 	recoveryCheckInterval time.Duration
-	maxQueueSize         int           // Maximum pending transactions per partition
+	maxQueueSize          int // Maximum pending transactions per partition
 }
 
 // PartitionStatus tracks the status of a single partition
@@ -33,20 +33,20 @@ type PartitionStatus struct {
 	LastHealthCheck  time.Time
 	LastSuccessful   time.Time
 	ConsecutiveFails int32
-	
+
 	// Circuit breaker state
 	CircuitState     CircuitState
 	CircuitOpenTime  time.Time
 	HalfOpenAttempts int32
-	
+
 	// Pending transactions while partition is down
-	PendingQueue     []*PendingTransaction
-	QueueMu          sync.Mutex
-	
+	PendingQueue []*PendingTransaction
+	QueueMu      sync.Mutex
+
 	// Recovery state
 	RecoveryInProgress bool
-	LastSequenceAck    uint64  // Last acknowledged sequence number
-	ExpectedSequence   uint64  // Next expected sequence number
+	LastSequenceAck    uint64 // Last acknowledged sequence number
+	ExpectedSequence   uint64 // Next expected sequence number
 }
 
 // PartitionState represents the health state of a partition
@@ -64,32 +64,32 @@ const (
 type CircuitState int
 
 const (
-	CircuitClosed CircuitState = iota  // Normal operation
-	CircuitOpen                        // Partition is down, rejecting requests
+	CircuitClosed   CircuitState = iota // Normal operation
+	CircuitOpen                         // Partition is down, rejecting requests
 	CircuitHalfOpen                     // Testing if partition recovered
 )
 
 // PendingTransaction holds transactions that couldn't be delivered
 type PendingTransaction struct {
-	ID           string
-	Type         MessageType
-	Message      messaging.Message
-	Destination  *url.URL
-	SequenceNum  uint64
-	Timestamp    time.Time
-	RetryCount   int
-	LastAttempt  time.Time
+	ID          string
+	Type        MessageType
+	Message     messaging.Message
+	Destination *url.URL
+	SequenceNum uint64
+	Timestamp   time.Time
+	RetryCount  int
+	LastAttempt time.Time
 }
 
 // NewPartitionHealthMonitor creates a new health monitor
 func NewPartitionHealthMonitor(logger logging.OptionalLogger) *PartitionHealthMonitor {
 	return &PartitionHealthMonitor{
 		partitions:            make(map[string]*PartitionStatus),
-		logger:               logger,
+		logger:                logger,
 		healthCheckInterval:   10 * time.Second,
-		unhealthyThreshold:   3,
+		unhealthyThreshold:    3,
 		recoveryCheckInterval: 30 * time.Second,
-		maxQueueSize:         1000,
+		maxQueueSize:          1000,
 	}
 }
 
@@ -99,7 +99,7 @@ func (phm *PartitionHealthMonitor) Start(partitionIDs []string) {
 	for _, id := range partitionIDs {
 		phm.registerPartition(id)
 	}
-	
+
 	// Start monitoring goroutines
 	go phm.healthCheckLoop()
 	go phm.recoveryCheckLoop()
@@ -110,7 +110,7 @@ func (phm *PartitionHealthMonitor) Start(partitionIDs []string) {
 func (phm *PartitionHealthMonitor) registerPartition(partitionID string) {
 	phm.mu.Lock()
 	defer phm.mu.Unlock()
-	
+
 	if _, exists := phm.partitions[partitionID]; !exists {
 		phm.partitions[partitionID] = &PartitionStatus{
 			ID:              partitionID,
@@ -128,16 +128,16 @@ func (phm *PartitionHealthMonitor) CanSendToPartition(partitionID string) (bool,
 	phm.mu.RLock()
 	status, exists := phm.partitions[partitionID]
 	phm.mu.RUnlock()
-	
+
 	if !exists {
 		return false, errors.NotFound.WithFormat("partition %s not registered", partitionID)
 	}
-	
+
 	// Check circuit breaker state
 	switch status.CircuitState {
 	case CircuitClosed:
 		return true, nil
-		
+
 	case CircuitOpen:
 		// Check if it's time to try half-open
 		if time.Since(status.CircuitOpenTime) > 30*time.Second {
@@ -145,7 +145,7 @@ func (phm *PartitionHealthMonitor) CanSendToPartition(partitionID string) (bool,
 			return true, nil // Allow one attempt
 		}
 		return false, errors.Unavailable.WithFormat("partition %s is down (circuit open)", partitionID)
-		
+
 	case CircuitHalfOpen:
 		// Allow limited attempts in half-open state
 		attempts := atomic.LoadInt32(&status.HalfOpenAttempts)
@@ -155,7 +155,7 @@ func (phm *PartitionHealthMonitor) CanSendToPartition(partitionID string) (bool,
 		}
 		return false, errors.Unavailable.WithFormat("partition %s is being tested (circuit half-open)", partitionID)
 	}
-	
+
 	return false, errors.InternalError.With("unknown circuit state")
 }
 
@@ -163,23 +163,23 @@ func (phm *PartitionHealthMonitor) CanSendToPartition(partitionID string) (bool,
 func (phm *PartitionHealthMonitor) RecordSuccess(partitionID string, sequenceNum uint64) {
 	phm.mu.Lock()
 	defer phm.mu.Unlock()
-	
+
 	status, exists := phm.partitions[partitionID]
 	if !exists {
 		return
 	}
-	
+
 	status.LastSuccessful = time.Now()
 	status.ConsecutiveFails = 0
 	status.LastSequenceAck = sequenceNum
-	
+
 	// Update circuit breaker
 	if status.CircuitState == CircuitHalfOpen {
 		// Partition recovered, close circuit
 		status.CircuitState = CircuitClosed
 		status.State = PartitionHealthy
 		phm.logger.Info("Partition recovered", "partition", partitionID)
-		
+
 		// Start draining pending queue
 		go phm.drainPendingQueue(partitionID)
 	}
@@ -189,22 +189,22 @@ func (phm *PartitionHealthMonitor) RecordSuccess(partitionID string, sequenceNum
 func (phm *PartitionHealthMonitor) RecordFailure(partitionID string, err error) {
 	phm.mu.Lock()
 	defer phm.mu.Unlock()
-	
+
 	status, exists := phm.partitions[partitionID]
 	if !exists {
 		return
 	}
-	
+
 	atomic.AddInt32(&status.ConsecutiveFails, 1)
 	fails := atomic.LoadInt32(&status.ConsecutiveFails)
-	
+
 	// Check if we should open the circuit
 	if fails >= int32(phm.unhealthyThreshold) {
 		if status.CircuitState != CircuitOpen {
 			status.CircuitState = CircuitOpen
 			status.CircuitOpenTime = time.Now()
 			status.State = PartitionDown
-			
+
 			phm.logger.Warn("Partition marked as down",
 				"partition", partitionID,
 				"consecutive_failures", fails,
@@ -213,7 +213,7 @@ func (phm *PartitionHealthMonitor) RecordFailure(partitionID string, err error) 
 	} else if fails > 1 {
 		status.State = PartitionDegraded
 	}
-	
+
 	// If in half-open state and failed, go back to open
 	if status.CircuitState == CircuitHalfOpen {
 		status.CircuitState = CircuitOpen
@@ -228,14 +228,14 @@ func (phm *PartitionHealthMonitor) QueueTransaction(partitionID string, tx *Pend
 	phm.mu.RLock()
 	status, exists := phm.partitions[partitionID]
 	phm.mu.RUnlock()
-	
+
 	if !exists {
 		return errors.NotFound.WithFormat("partition %s not found", partitionID)
 	}
-	
+
 	status.QueueMu.Lock()
 	defer status.QueueMu.Unlock()
-	
+
 	// Check queue size limit
 	if len(status.PendingQueue) >= phm.maxQueueSize {
 		// Queue is full, we must drop the transaction
@@ -245,13 +245,13 @@ func (phm *PartitionHealthMonitor) QueueTransaction(partitionID string, tx *Pend
 			"transaction", tx.ID)
 		return errors.Unavailable.With("partition queue is full")
 	}
-	
+
 	status.PendingQueue = append(status.PendingQueue, tx)
 	phm.logger.Info("Transaction queued for down partition",
 		"partition", partitionID,
 		"transaction", tx.ID,
 		"queue_size", len(status.PendingQueue))
-	
+
 	return nil
 }
 
@@ -260,36 +260,36 @@ func (phm *PartitionHealthMonitor) HandleOutOfOrderRequest(partitionID string, r
 	phm.mu.RLock()
 	status, exists := phm.partitions[partitionID]
 	phm.mu.RUnlock()
-	
+
 	if !exists {
 		return nil, errors.NotFound.WithFormat("partition %s not found", partitionID)
 	}
-	
+
 	phm.logger.Info("Partition requesting out-of-order transactions",
 		"partition", partitionID,
 		"requested_sequence", requestedSeq,
 		"last_ack", status.LastSequenceAck)
-	
+
 	// Mark partition as recovering
 	status.State = PartitionRecovering
 	status.RecoveryInProgress = true
-	
+
 	// Find transactions starting from requested sequence
 	status.QueueMu.Lock()
 	defer status.QueueMu.Unlock()
-	
+
 	var toSend []*PendingTransaction
 	for _, tx := range status.PendingQueue {
 		if tx.SequenceNum >= requestedSeq {
 			toSend = append(toSend, tx)
 		}
 	}
-	
+
 	phm.logger.Info("Providing catch-up transactions",
 		"partition", partitionID,
 		"count", len(toSend),
 		"from_sequence", requestedSeq)
-	
+
 	return toSend, nil
 }
 
@@ -297,7 +297,7 @@ func (phm *PartitionHealthMonitor) HandleOutOfOrderRequest(partitionID string, r
 func (phm *PartitionHealthMonitor) healthCheckLoop() {
 	ticker := time.NewTicker(phm.healthCheckInterval)
 	defer ticker.Stop()
-	
+
 	for range ticker.C {
 		phm.mu.RLock()
 		partitions := make([]*PartitionStatus, 0, len(phm.partitions))
@@ -305,7 +305,7 @@ func (phm *PartitionHealthMonitor) healthCheckLoop() {
 			partitions = append(partitions, status)
 		}
 		phm.mu.RUnlock()
-		
+
 		for _, status := range partitions {
 			go phm.checkPartitionHealth(status)
 		}
@@ -316,7 +316,7 @@ func (phm *PartitionHealthMonitor) healthCheckLoop() {
 func (phm *PartitionHealthMonitor) checkPartitionHealth(status *PartitionStatus) {
 	// This would make an actual health check call to the partition
 	// For now, we'll simulate based on state
-	
+
 	if status.State == PartitionDown {
 		// Try to ping the partition
 		if phm.pingPartition(status.ID) {
@@ -324,7 +324,7 @@ func (phm *PartitionHealthMonitor) checkPartitionHealth(status *PartitionStatus)
 			phm.transitionToHalfOpen(status.ID)
 		}
 	}
-	
+
 	status.LastHealthCheck = time.Now()
 }
 
@@ -339,12 +339,12 @@ func (phm *PartitionHealthMonitor) pingPartition(partitionID string) bool {
 func (phm *PartitionHealthMonitor) transitionToHalfOpen(partitionID string) {
 	phm.mu.Lock()
 	defer phm.mu.Unlock()
-	
+
 	status, exists := phm.partitions[partitionID]
 	if !exists {
 		return
 	}
-	
+
 	if status.CircuitState == CircuitOpen {
 		status.CircuitState = CircuitHalfOpen
 		status.HalfOpenAttempts = 0
@@ -356,7 +356,7 @@ func (phm *PartitionHealthMonitor) transitionToHalfOpen(partitionID string) {
 func (phm *PartitionHealthMonitor) recoveryCheckLoop() {
 	ticker := time.NewTicker(phm.recoveryCheckInterval)
 	defer ticker.Stop()
-	
+
 	for range ticker.C {
 		phm.mu.RLock()
 		for partitionID, status := range phm.partitions {
@@ -374,15 +374,15 @@ func (phm *PartitionHealthMonitor) attemptRecovery(partitionID string) {
 	status := phm.partitions[partitionID]
 	status.RecoveryInProgress = true
 	phm.mu.Unlock()
-	
+
 	defer func() {
 		phm.mu.Lock()
 		status.RecoveryInProgress = false
 		phm.mu.Unlock()
 	}()
-	
+
 	phm.logger.Info("Attempting partition recovery", "partition", partitionID)
-	
+
 	// Try to send pending transactions
 	err := phm.drainPendingQueue(partitionID)
 	if err == nil {
@@ -390,7 +390,7 @@ func (phm *PartitionHealthMonitor) attemptRecovery(partitionID string) {
 		status.State = PartitionHealthy
 		status.CircuitState = CircuitClosed
 		phm.mu.Unlock()
-		
+
 		phm.logger.Info("Partition recovery successful", "partition", partitionID)
 	} else {
 		phm.logger.Warn("Partition recovery failed", "partition", partitionID, "error", err)
@@ -402,26 +402,26 @@ func (phm *PartitionHealthMonitor) drainPendingQueue(partitionID string) error {
 	phm.mu.RLock()
 	status, exists := phm.partitions[partitionID]
 	phm.mu.RUnlock()
-	
+
 	if !exists {
 		return errors.NotFound.WithFormat("partition %s not found", partitionID)
 	}
-	
+
 	status.QueueMu.Lock()
 	queue := status.PendingQueue
 	status.PendingQueue = make([]*PendingTransaction, 0)
 	status.QueueMu.Unlock()
-	
+
 	phm.logger.Info("Draining pending queue",
 		"partition", partitionID,
 		"queue_size", len(queue))
-	
+
 	// Sort by sequence number to maintain order
 	// In production, implement proper sorting
-	
+
 	successCount := 0
 	failCount := 0
-	
+
 	for _, tx := range queue {
 		// Attempt to send transaction
 		// This would use the actual dispatcher
@@ -436,16 +436,16 @@ func (phm *PartitionHealthMonitor) drainPendingQueue(partitionID string) error {
 			successCount++
 		}
 	}
-	
+
 	phm.logger.Info("Queue drain complete",
 		"partition", partitionID,
 		"success", successCount,
 		"failed", failCount)
-	
+
 	if failCount > 0 {
 		return errors.InternalError.WithFormat("failed to send %d transactions", failCount)
 	}
-	
+
 	return nil
 }
 
@@ -460,7 +460,7 @@ func (phm *PartitionHealthMonitor) sendPendingTransaction(tx *PendingTransaction
 func (phm *PartitionHealthMonitor) circuitBreakerManager() {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
-	
+
 	for range ticker.C {
 		phm.mu.RLock()
 		for partitionID, status := range phm.partitions {
@@ -479,12 +479,12 @@ func (phm *PartitionHealthMonitor) circuitBreakerManager() {
 func (phm *PartitionHealthMonitor) GetPartitionStatus(partitionID string) (*PartitionStatus, error) {
 	phm.mu.RLock()
 	defer phm.mu.RUnlock()
-	
+
 	status, exists := phm.partitions[partitionID]
 	if !exists {
 		return nil, errors.NotFound.WithFormat("partition %s not found", partitionID)
 	}
-	
+
 	return status, nil
 }
 
@@ -492,12 +492,12 @@ func (phm *PartitionHealthMonitor) GetPartitionStatus(partitionID string) (*Part
 func (phm *PartitionHealthMonitor) GetAllPartitionStatuses() map[string]*PartitionStatus {
 	phm.mu.RLock()
 	defer phm.mu.RUnlock()
-	
+
 	result := make(map[string]*PartitionStatus)
 	for k, v := range phm.partitions {
 		result[k] = v
 	}
-	
+
 	return result
 }
 

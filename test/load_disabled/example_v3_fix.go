@@ -17,16 +17,16 @@ func main() {
 	fmt.Println("   V3 CONNECTION FIX EXAMPLE")
 	fmt.Println("========================================")
 	fmt.Println()
-	
+
 	// BEFORE: This pattern causes connection issues
 	fmt.Println("BAD PATTERN (causes connection exhaustion):")
 	fmt.Println("--------------------------------------------")
 	showBadPattern()
-	
+
 	fmt.Println("\nGOOD PATTERN (with connection pooling):")
 	fmt.Println("----------------------------------------")
 	showGoodPattern()
-	
+
 	fmt.Println("\nBEST PATTERN (with retry logic):")
 	fmt.Println("---------------------------------")
 	showBestPattern()
@@ -37,7 +37,7 @@ func showBadPattern() {
 	for i := 0; i < 3; i++ {
 		// This creates a new HTTP client each time!
 		client := jsonrpc.NewClient("http://127.0.0.1:26660/v3")
-		
+
 		ctx := context.Background()
 		resp, err := client.NodeInfo(ctx, api.NodeInfoOptions{})
 		if err != nil {
@@ -51,12 +51,12 @@ func showBadPattern() {
 func showGoodPattern() {
 	// GOOD: Use pooled client that reuses connections
 	client := GetPooledClient("http://127.0.0.1:26660/v3")
-	
+
 	for i := 0; i < 3; i++ {
 		ctx, cancel := CreateContextWithTimeout(30 * time.Second)
 		resp, err := client.NodeInfo(ctx, api.NodeInfoOptions{})
 		cancel()
-		
+
 		if err != nil {
 			fmt.Printf("  Request %d failed: %v\n", i+1, err)
 		} else {
@@ -68,16 +68,16 @@ func showGoodPattern() {
 func showBestPattern() {
 	// BEST: Use pooled client with retry logic
 	client := GetPooledClient("http://127.0.0.1:26660/v3")
-	
+
 	for i := 0; i < 3; i++ {
 		var resp *api.NodeInfo
-		
+
 		err := SafeQuery(client, func(ctx context.Context) error {
 			var err error
 			resp, err = client.NodeInfo(ctx, api.NodeInfoOptions{})
 			return err
 		})
-		
+
 		if err != nil {
 			fmt.Printf("  Request %d failed after retries: %v\n", i+1, err)
 		} else {
@@ -90,22 +90,22 @@ func showBestPattern() {
 func fixedRecoveryExample() {
 	fmt.Println("\nExample: Fixed Recovery Code")
 	fmt.Println("-----------------------------")
-	
+
 	// Use pooled client instead of creating new one
 	client := GetPooledClient("http://127.0.0.1:26660/v3")
 	Q := api.Querier2{Querier: client}
-	
+
 	// Query with proper timeout and retry
 	var ledger *protocol.AnchorLedger
 	err := SafeQuery(client, func(ctx context.Context) error {
 		partUrl := protocol.PartitionUrl("BVN1")
 		anchorUrl := partUrl.JoinPath(protocol.AnchorPool)
-		
+
 		resp, err := Q.QueryAccount(ctx, anchorUrl, nil)
 		if err != nil {
 			return err
 		}
-		
+
 		var ok bool
 		ledger, ok = resp.Account.(*protocol.AnchorLedger)
 		if !ok {
@@ -113,7 +113,7 @@ func fixedRecoveryExample() {
 		}
 		return nil
 	})
-	
+
 	if err != nil {
 		log.Printf("Failed to query ledger: %v", err)
 	} else {

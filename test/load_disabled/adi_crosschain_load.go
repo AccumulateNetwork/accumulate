@@ -23,24 +23,24 @@ import (
 )
 
 type ADIAccount struct {
-	PrivateKey    ed25519.PrivateKey
-	PublicKey     []byte
-	ADI           *url.URL
-	TokenAccount  *url.URL
-	KeyBookURL    *url.URL
-	KeyPageURL    *url.URL
-	Partition     string
+	PrivateKey   ed25519.PrivateKey
+	PublicKey    []byte
+	ADI          *url.URL
+	TokenAccount *url.URL
+	KeyBookURL   *url.URL
+	KeyPageURL   *url.URL
+	Partition    string
 }
 
 type LoadTestStats struct {
-	TotalTransactions     int64
-	SuccessfulTxs         int64
-	FailedTxs            int64
-	CrossPartitionTxs     int64
-	SamePartitionTxs      int64
-	StartTime            time.Time
-	Duration             time.Duration
-	mu                   sync.RWMutex
+	TotalTransactions int64
+	SuccessfulTxs     int64
+	FailedTxs         int64
+	CrossPartitionTxs int64
+	SamePartitionTxs  int64
+	StartTime         time.Time
+	Duration          time.Duration
+	mu                sync.RWMutex
 }
 
 func (s *LoadTestStats) IncrementSuccess(crossPartition bool) {
@@ -89,10 +89,10 @@ func createKeyPair() (ed25519.PrivateKey, []byte, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	
+
 	privateKey := ed25519.NewKeyFromSeed(seed)
 	publicKey := privateKey[32:]
-	
+
 	return privateKey, publicKey, nil
 }
 
@@ -106,12 +106,12 @@ func fundLiteAccount(tokenURL *url.URL) error {
 		return err
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != 200 {
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("faucet failed (status %d): %s", resp.StatusCode, string(body))
 	}
-	
+
 	return nil
 }
 
@@ -142,7 +142,7 @@ func createADI(client *jsonrpc.Client, adiName string, privateKey ed25519.Privat
 	if err != nil {
 		return nil, fmt.Errorf("failed to get network status: %v", err)
 	}
-	
+
 	oracle := float64(ns.Oracle.Price) / 1e8
 	if oracle == 0 {
 		oracle = 0.01
@@ -157,16 +157,16 @@ func createADI(client *jsonrpc.Client, adiName string, privateKey ed25519.Privat
 		}).
 		SignWith(liteIdentityURL).Version(1).Timestamp(&timestamp).PrivateKey(privateKey).
 		Done()
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("build credits transaction failed: %v", err)
 	}
-	
+
 	subs, err := client.Submit(ctx, env, v3api.SubmitOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("submit credits transaction failed: %v", err)
 	}
-	
+
 	for i, sub := range subs {
 		if err := sub.Status.AsError(); err != nil {
 			return nil, fmt.Errorf("credits result %d failed: %v", i, err)
@@ -305,7 +305,7 @@ func sendADITransaction(client *jsonrpc.Client, from, to *ADIAccount, amount int
 func main() {
 	fmt.Println("🚀 ADI CrossChainConductor Comprehensive Load Test")
 	fmt.Printf("Testing ADI token accounts across 3 BVNs with extensive cross-partition routing\n\n")
-	
+
 	client := jsonrpc.NewClient("http://127.0.0.1:26660/v3")
 	stats := &LoadTestStats{StartTime: time.Now()}
 
@@ -313,7 +313,7 @@ func main() {
 	fmt.Println("📝 Creating ADIs with token accounts...")
 	numADIs := 15 // More ADIs for better cross-partition distribution
 	adis := make([]*ADIAccount, numADIs)
-	
+
 	for i := 0; i < numADIs; i++ {
 		privateKey, publicKey, err := createKeyPair()
 		if err != nil {
@@ -325,10 +325,10 @@ func main() {
 		if err != nil {
 			log.Fatalf("Failed to create ADI %d (%s): %v", i, adiName, err)
 		}
-		
+
 		adis[i] = adi
 		fmt.Printf("✅ ADI %d: %s (Partition: %s)\n", i, adi.ADI.String(), adi.Partition)
-		
+
 		// Stagger ADI creation to avoid overwhelming the network
 		time.Sleep(1 * time.Second)
 	}
@@ -367,7 +367,7 @@ func main() {
 			}).
 			SignWith(liteIdentityURL).Version(1).Timestamp(&timestamp).PrivateKey(fundingKey).
 			Done()
-		
+
 		client.Submit(ctx, env, v3api.SubmitOptions{})
 		time.Sleep(2 * time.Second)
 
@@ -415,11 +415,11 @@ func main() {
 
 	// Execute high-volume load test with focus on cross-partition transactions
 	fmt.Println("\n🔥 Starting intensive cross-partition load test...")
-	
+
 	var wg sync.WaitGroup
 	numTransactions := 100 // High volume test
 	concurrency := 10      // Concurrent goroutines
-	
+
 	stats.StartTime = time.Now()
 
 	// Create transaction batches
@@ -428,41 +428,41 @@ func main() {
 			wg.Add(1)
 			go func(txNum int) {
 				defer wg.Done()
-				
+
 				// Select sender and receiver to maximize cross-partition probability
 				fromIdx := txNum % len(adis)
 				toIdx := (txNum + 7) % len(adis) // Use prime offset for better distribution
 				if fromIdx == toIdx {
 					toIdx = (toIdx + 1) % len(adis)
 				}
-				
+
 				from := adis[fromIdx]
 				to := adis[toIdx]
-				
+
 				err := sendADITransaction(client, from, to, 50000, stats) // 0.5 ACME
 				if err != nil {
-					log.Printf("❌ Transaction %d failed (%s->%s): %v", 
+					log.Printf("❌ Transaction %d failed (%s->%s): %v",
 						txNum, from.Partition, to.Partition, err)
 				} else {
 					crossPartitionIndicator := ""
 					if from.Partition != to.Partition {
 						crossPartitionIndicator = "🌐"
 					}
-					fmt.Printf("✅ Tx %d: %s->%s %s\n", 
+					fmt.Printf("✅ Tx %d: %s->%s %s\n",
 						txNum, from.Partition, to.Partition, crossPartitionIndicator)
 				}
 			}(batch + i)
 		}
-		
+
 		// Stagger batches to avoid overwhelming the network
 		time.Sleep(500 * time.Millisecond)
 	}
 
 	wg.Wait()
-	
+
 	// Print comprehensive results
 	stats.PrintResults()
-	
+
 	fmt.Printf("\n🎯 CrossChainConductor Performance Validation:\n")
 	if atomic.LoadInt64(&stats.CrossPartitionTxs) > 0 {
 		fmt.Printf("✅ Cross-partition routing: WORKING\n")

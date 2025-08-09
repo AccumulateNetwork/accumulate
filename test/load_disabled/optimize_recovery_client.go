@@ -27,14 +27,14 @@ func OptimizeRecoveryClient(client api.Querier) api.Querier {
 				KeepAlive: 30 * time.Second,
 			}).DialContext,
 		}
-		
+
 		// Apply optimizations
 		jrpcClient.Client.Transport = transport
 		jrpcClient.Client.Timeout = 30 * time.Second
-		
+
 		return jrpcClient
 	}
-	
+
 	// Return unchanged if not a jsonrpc.Client
 	return client
 }
@@ -43,7 +43,7 @@ func OptimizeRecoveryClient(client api.Querier) api.Querier {
 func NewOptimizedRecoveryManager(conductor *crosschain.CrossChainConductor, db database.Beginner, serverURL string) *crosschain.RecoveryManager {
 	// Use the pooled client
 	client := GetPooledClient(serverURL)
-	
+
 	// Create recovery manager with optimized client
 	return crosschain.NewRecoveryManager(conductor, db, client)
 }

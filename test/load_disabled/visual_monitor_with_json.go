@@ -34,22 +34,22 @@ type PartitionMetric struct {
 
 // NetworkMetric represents network-wide metrics
 type NetworkMetric struct {
-	TotalSubmits      int64   `json:"total_submits"`
-	TotalSuccesses    int64   `json:"total_successes"`
-	TotalFailures     int64   `json:"total_failures"`
-	SuccessRate       float64 `json:"success_rate"`
-	CollectionProofs  int64   `json:"collection_proofs"`
-	IndividualProofs  int64   `json:"individual_proofs"`
-	ProofSavings      int64   `json:"proof_savings"`
+	TotalSubmits     int64   `json:"total_submits"`
+	TotalSuccesses   int64   `json:"total_successes"`
+	TotalFailures    int64   `json:"total_failures"`
+	SuccessRate      float64 `json:"success_rate"`
+	CollectionProofs int64   `json:"collection_proofs"`
+	IndividualProofs int64   `json:"individual_proofs"`
+	ProofSavings     int64   `json:"proof_savings"`
 }
 
 // PerformanceMetric represents performance measurements
 type PerformanceMetric struct {
-	AverageLatency   float64 `json:"average_latency_ms"`
-	P95Latency       float64 `json:"p95_latency_ms"`
-	P99Latency       float64 `json:"p99_latency_ms"`
-	ThroughputTPS    float64 `json:"throughput_tps"`
-	ProofGenTimeAvg  float64 `json:"proof_gen_time_avg_ms"`
+	AverageLatency  float64 `json:"average_latency_ms"`
+	P95Latency      float64 `json:"p95_latency_ms"`
+	P99Latency      float64 `json:"p99_latency_ms"`
+	ThroughputTPS   float64 `json:"throughput_tps"`
+	ProofGenTimeAvg float64 `json:"proof_gen_time_avg_ms"`
 }
 
 // VisualMonitorWithJSON combines visual display with JSON logging
@@ -71,14 +71,14 @@ type VisualMonitorWithJSON struct {
 
 // PartitionInfo tracks partition state
 type PartitionInfo struct {
-	Name              string
-	Healthy           bool
-	LastSent          int64
-	LastAcknowledged  int64
-	Lag               int64
-	CatchUpRate       float64
-	ProofSavings      int64
-	LastUpdate        time.Time
+	Name             string
+	Healthy          bool
+	LastSent         int64
+	LastAcknowledged int64
+	Lag              int64
+	CatchUpRate      float64
+	ProofSavings     int64
+	LastUpdate       time.Time
 }
 
 func NewVisualMonitorWithJSON() (*VisualMonitorWithJSON, error) {
@@ -137,7 +137,7 @@ func (m *VisualMonitorWithJSON) Start() {
 	// Start background workers
 	go m.simulateTransactions()
 	go m.logMetrics()
-	
+
 	// Start visual display
 	m.displayLoop()
 }
@@ -148,7 +148,7 @@ func (m *VisualMonitorWithJSON) simulateTransactions() {
 
 	for range ticker.C {
 		sequence := atomic.AddInt64(&m.globalSequence, 1)
-		
+
 		// Simulate sending to all healthy partitions
 		m.mu.Lock()
 		for _, partition := range m.partitions {
@@ -156,7 +156,7 @@ func (m *VisualMonitorWithJSON) simulateTransactions() {
 				// Decide whether to use collection proof
 				batchSize := rand.Intn(10) + 1
 				useCollection := batchSize >= 2
-				
+
 				if useCollection {
 					atomic.AddInt64(&m.collectionProofs, 1)
 					savings := int64(batchSize - 1)
@@ -165,15 +165,15 @@ func (m *VisualMonitorWithJSON) simulateTransactions() {
 				} else {
 					atomic.AddInt64(&m.individualProofs, int64(batchSize))
 				}
-				
+
 				partition.LastSent = sequence
 				atomic.AddInt64(&m.totalSubmits, int64(batchSize))
-				
+
 				// Simulate acknowledgment with slight delay
 				if rand.Float64() > 0.1 { // 90% success rate
 					partition.LastAcknowledged = sequence - rand.Int63n(3)
 					atomic.AddInt64(&m.totalSuccesses, int64(batchSize))
-					
+
 					// Record latency
 					latency := float64(rand.Intn(50) + 10)
 					m.latencies = append(m.latencies, latency)
@@ -183,7 +183,7 @@ func (m *VisualMonitorWithJSON) simulateTransactions() {
 				} else {
 					atomic.AddInt64(&m.totalFailures, int64(batchSize))
 				}
-				
+
 				// Calculate lag and catch-up rate
 				partition.Lag = partition.LastSent - partition.LastAcknowledged
 				if partition.Lag > 0 {
@@ -204,12 +204,12 @@ func (m *VisualMonitorWithJSON) logMetrics() {
 
 	for range ticker.C {
 		snapshot := m.captureSnapshot()
-		
+
 		// Write to JSON file
 		if err := m.jsonEncoder.Encode(snapshot); err != nil {
 			log.Printf("Failed to write JSON metrics: %v", err)
 		}
-		
+
 		// Flush to ensure data is written
 		m.jsonFile.Sync()
 	}
@@ -240,7 +240,7 @@ func (m *VisualMonitorWithJSON) captureSnapshot() *MetricsSnapshot {
 			sum += l
 		}
 		avgLatency = sum / float64(len(m.latencies))
-		
+
 		// Simple percentile calculation (would use proper algorithm in production)
 		p95Latency = m.latencies[int(float64(len(m.latencies))*0.95)]
 		p99Latency = m.latencies[int(float64(len(m.latencies))*0.99)]
@@ -255,8 +255,8 @@ func (m *VisualMonitorWithJSON) captureSnapshot() *MetricsSnapshot {
 	}
 
 	return &MetricsSnapshot{
-		Timestamp: time.Now(),
-		Sequence:  m.globalSequence,
+		Timestamp:  time.Now(),
+		Sequence:   m.globalSequence,
 		Partitions: partitionMetrics,
 		Network: &NetworkMetric{
 			TotalSubmits:     m.totalSubmits,
@@ -289,7 +289,7 @@ func (m *VisualMonitorWithJSON) displayLoop() {
 func (m *VisualMonitorWithJSON) displayStatus() {
 	// Clear screen
 	fmt.Print("\033[H\033[2J")
-	
+
 	elapsed := time.Since(m.startTime)
 	fmt.Println("================================================================================")
 	fmt.Println("                    PARTITION LAG AND CATCH-UP MONITOR")
@@ -300,7 +300,7 @@ func (m *VisualMonitorWithJSON) displayStatus() {
 	fmt.Println("┌─────────────┬──────────┬──────────┬──────────┬──────────┬─────────────────────┐")
 	fmt.Println("│ Partition   │ Status   │ Sent     │ Acked    │ Lag      │ Proof Savings       │")
 	fmt.Println("├─────────────┼──────────┼──────────┼──────────┼──────────┼─────────────────────┤")
-	
+
 	m.mu.RLock()
 	for _, name := range []string{"BVN0", "BVN1", "BVN2", "Directory"} {
 		partition := m.partitions[name]
@@ -308,25 +308,25 @@ func (m *VisualMonitorWithJSON) displayStatus() {
 		if !partition.Healthy {
 			status = "🔴 DOWN"
 		}
-		
+
 		fmt.Printf("│ %-11s │ %-8s │ %-8d │ %-8d │ %-8d │ %-19d │\n",
-			partition.Name, status, partition.LastSent, partition.LastAcknowledged, 
+			partition.Name, status, partition.LastSent, partition.LastAcknowledged,
 			partition.Lag, partition.ProofSavings)
 	}
 	m.mu.RUnlock()
-	
+
 	fmt.Println("└─────────────┴──────────┴──────────┴──────────┴──────────┴─────────────────────┘")
 
 	// Display proof optimization metrics
 	fmt.Println("\n📊 COLLECTION PROOF METRICS")
 	fmt.Println("────────────────────────────────────────────────────────────────────────────────")
-	fmt.Printf("  Collection Proofs: %d | Individual Proofs: %d | Total Savings: %d\n", 
+	fmt.Printf("  Collection Proofs: %d | Individual Proofs: %d | Total Savings: %d\n",
 		m.collectionProofs, m.individualProofs, m.proofSavings)
-	
+
 	if m.collectionProofs > 0 || m.individualProofs > 0 {
 		collectionPercent := float64(m.collectionProofs) / float64(m.collectionProofs+m.individualProofs) * 100
 		efficiencyGain := float64(m.proofSavings) / float64(m.totalSubmits) * 100
-		fmt.Printf("  Collection Usage: %.1f%% | Efficiency Gain: %.1f%%\n", 
+		fmt.Printf("  Collection Usage: %.1f%% | Efficiency Gain: %.1f%%\n",
 			collectionPercent, efficiencyGain)
 	}
 
@@ -339,7 +339,7 @@ func (m *VisualMonitorWithJSON) displayStatus() {
 	}
 	fmt.Printf("  Submits: %d | Successes: %d | Failures: %d | Success Rate: %.1f%%\n",
 		m.totalSubmits, m.totalSuccesses, m.totalFailures, successRate)
-	
+
 	throughput := float64(m.totalSubmits) / elapsed.Seconds()
 	fmt.Printf("  Throughput: %.1f TPS | Runtime: %s\n", throughput, elapsed.Round(time.Second))
 
@@ -354,10 +354,10 @@ func (m *VisualMonitorWithJSON) Close() {
 	finalSnapshot := m.captureSnapshot()
 	finalSnapshot.Event = "monitor_stopped"
 	m.jsonEncoder.Encode(finalSnapshot)
-	
+
 	// Close JSON file
 	m.jsonFile.Close()
-	
+
 	fmt.Println("\n✅ Monitor stopped. JSON metrics saved to: monitor_metrics.json")
 	fmt.Println("   To analyze the metrics, run: cat monitor_metrics.json | jq .")
 }
@@ -368,6 +368,6 @@ func main() {
 		log.Fatalf("Failed to create monitor: %v", err)
 	}
 	defer monitor.Close()
-	
+
 	monitor.Start()
 }

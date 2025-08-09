@@ -34,48 +34,48 @@ func main() {
 	fmt.Println("Press Ctrl+C to stop the demo")
 	fmt.Println("================================================================================")
 	fmt.Println()
-	
+
 	// Initialize components
 	var logger logging.OptionalLogger
 	dispatcher := NewLiveDispatcher()
 	handler := NewSimplifiedPartitionHandler(dispatcher, logger)
-	
+
 	partitions := []string{"BVN0", "BVN1", "BVN2", "Directory"}
 	handler.Start(partitions)
-	
+
 	// Start all partitions as healthy
 	for _, p := range partitions {
 		dispatcher.SetPartitionHealth(p, true)
 	}
-	
+
 	// Metrics tracking
 	var (
-		totalSent     int64
-		totalFailed   int64
-		startTime     = time.Now()
+		totalSent   int64
+		totalFailed int64
+		startTime   = time.Now()
 	)
-	
+
 	// Create context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	
+
 	// Handle Ctrl+C
 	go func() {
 		<-make(chan struct{})
 		cancel()
 	}()
-	
+
 	// Start transaction senders
 	var wg sync.WaitGroup
 	for i := 0; i < 4; i++ {
 		wg.Add(1)
 		go func(workerID int) {
 			defer wg.Done()
-			
-			seqNum := uint64(workerID * 1000) // Avoid sequence conflicts
+
+			seqNum := uint64(workerID * 1000)                // Avoid sequence conflicts
 			ticker := time.NewTicker(250 * time.Millisecond) // 4 tx/sec per worker
 			defer ticker.Stop()
-			
+
 			for {
 				select {
 				case <-ctx.Done():
@@ -85,28 +85,28 @@ func main() {
 					partition := partitions[seqNum%uint64(len(partitions))]
 					dest := protocol.PartitionUrl(partition)
 					msg := &messaging.TransactionMessage{}
-					
+
 					err := handler.SubmitTransaction(ctx, msg, dest, seqNum)
 					if err != nil {
 						atomic.AddInt64(&totalFailed, 1)
 					} else {
 						atomic.AddInt64(&totalSent, 1)
 					}
-					
+
 					seqNum++
 				}
 			}
 		}(i)
 	}
-	
+
 	// Metrics reporter
 	go func() {
 		ticker := time.NewTicker(2 * time.Second)
 		defer ticker.Stop()
-		
+
 		lastSent := int64(0)
 		lastTime := time.Now()
-		
+
 		for {
 			select {
 			case <-ctx.Done():
@@ -116,20 +116,20 @@ func main() {
 				now := time.Now()
 				duration := now.Sub(lastTime).Seconds()
 				currentSent := atomic.LoadInt64(&totalSent)
-				
+
 				sentDelta := currentSent - lastSent
 				tps := float64(sentDelta) / duration
-				
+
 				// Get handler metrics
 				metrics := handler.GetMetrics()
 				handlerSent := metrics["total_sent"].(int64)
 				handlerFailed := metrics["total_failed"].(int64)
 				handlerDropped := metrics["total_dropped"].(int64)
 				healthyPartitions := metrics["partitions_healthy"].(int)
-				
+
 				// Get dispatcher stats
 				dispatcherStats := dispatcher.GetStats()
-				
+
 				// Clear screen and print header
 				fmt.Print("\033[H\033[2J") // Clear screen
 				fmt.Println("================================================================================")
@@ -137,7 +137,7 @@ func main() {
 				fmt.Println("================================================================================")
 				fmt.Printf("Running for: %s\n", time.Since(startTime).Round(time.Second))
 				fmt.Println()
-				
+
 				// Partition health status
 				fmt.Println("🔹 PARTITION STATUS")
 				fmt.Println("────────────────────────────────────────────────────────────────────────────────")
@@ -149,7 +149,7 @@ func main() {
 					}
 				}
 				fmt.Printf("\n  Healthy: %d/%d partitions\n", healthyPartitions, len(partitions))
-				
+
 				// Transaction metrics
 				fmt.Println("\n🔹 TRANSACTION METRICS")
 				fmt.Println("────────────────────────────────────────────────────────────────────────────────")
@@ -157,19 +157,19 @@ func main() {
 				fmt.Printf("  Total Sent:       %d\n", handlerSent)
 				fmt.Printf("  Total Failed:     %d\n", handlerFailed)
 				fmt.Printf("  Total Dropped:    %d (will be recovered from ledger)\n", handlerDropped)
-				
+
 				if total := handlerSent + handlerFailed + handlerDropped; total > 0 {
 					successRate := float64(handlerSent) / float64(total) * 100
 					fmt.Printf("  Success Rate:     %.1f%%\n", successRate)
 				}
-				
+
 				// Network simulation stats
 				fmt.Println("\n🔹 NETWORK SIMULATION")
 				fmt.Println("────────────────────────────────────────────────────────────────────────────────")
 				fmt.Printf("  Submit Attempts:  %d\n", dispatcherStats.Attempts)
 				fmt.Printf("  Network Success:  %d\n", dispatcherStats.Successes)
 				fmt.Printf("  Network Failures: %d\n", dispatcherStats.Failures)
-				
+
 				// Instructions
 				fmt.Println("\n🔹 CONTROL INSTRUCTIONS")
 				fmt.Println("────────────────────────────────────────────────────────────────────────────────")
@@ -179,51 +179,51 @@ func main() {
 				fmt.Println("    ./partition_manager.sh fail BVN2    # Simulate failure")
 				fmt.Println()
 				fmt.Println("  Press Ctrl+C to stop the demo")
-				
+
 				// Update for next iteration
 				lastSent = currentSent
 				lastTime = now
 			}
 		}
 	}()
-	
+
 	// Simulate some automatic failures for demo
 	go func() {
 		time.Sleep(10 * time.Second)
 		fmt.Println("\n🔥 AUTO-DEMO: Simulating BVN1 failure...")
 		dispatcher.SetPartitionHealth("BVN1", false)
-		
+
 		time.Sleep(15 * time.Second)
 		fmt.Println("\n🔧 AUTO-DEMO: Recovering BVN1...")
 		dispatcher.SetPartitionHealth("BVN1", true)
 		handler.HandleOutOfOrderSequence("BVN1", 100, 200) // Trigger recovery
-		
+
 		time.Sleep(10 * time.Second)
 		fmt.Println("\n💥 AUTO-DEMO: Cascading failure - BVN2 and Directory down...")
 		dispatcher.SetPartitionHealth("BVN2", false)
 		dispatcher.SetPartitionHealth("Directory", false)
-		
+
 		time.Sleep(15 * time.Second)
 		fmt.Println("\n🔄 AUTO-DEMO: Recovering all partitions...")
 		dispatcher.SetPartitionHealth("BVN2", true)
 		dispatcher.SetPartitionHealth("Directory", true)
 	}()
-	
+
 	// Wait for shutdown
 	wg.Wait()
-	
+
 	// Print final summary
 	fmt.Println("\n================================================================================")
 	fmt.Println("                              DEMO COMPLETE")
 	fmt.Println("================================================================================")
-	
+
 	metrics := handler.GetMetrics()
 	fmt.Printf("\nFinal Statistics:\n")
 	fmt.Printf("  Duration:         %s\n", time.Since(startTime).Round(time.Second))
 	fmt.Printf("  Total Sent:       %d\n", metrics["total_sent"])
 	fmt.Printf("  Total Failed:     %d\n", metrics["total_failed"])
 	fmt.Printf("  Total Dropped:    %d\n", metrics["total_dropped"])
-	
+
 	if dropped := metrics["total_dropped"].(int64); dropped > 0 {
 		fmt.Printf("\n✅ Successfully demonstrated partition failure handling!\n")
 		fmt.Printf("   %d transactions were dropped and would be recovered from ledger\n", dropped)
@@ -247,25 +247,25 @@ func NewLiveDispatcher() *LiveDispatcher {
 
 func (ld *LiveDispatcher) Submit(ctx context.Context, dest *url.URL, env *messaging.Envelope) error {
 	atomic.AddInt64(&ld.attempts, 1)
-	
+
 	partition := getPartition(dest)
-	
+
 	ld.mu.RLock()
 	healthy := ld.partitionHealth[partition]
 	ld.mu.RUnlock()
-	
+
 	// Simulate network delay
 	select {
 	case <-time.After(5 * time.Millisecond):
 	case <-ctx.Done():
 		return ctx.Err()
 	}
-	
+
 	if !healthy {
 		atomic.AddInt64(&ld.failures, 1)
 		return fmt.Errorf("partition %s is down", partition)
 	}
-	
+
 	atomic.AddInt64(&ld.successes, 1)
 	return nil
 }

@@ -16,21 +16,21 @@ import (
 
 // BatchProofRecoveryManager uses collection proofs for efficient batch recovery
 type BatchProofRecoveryManager struct {
-	conductor    *CrossChainConductor
-	logger       logging.OptionalLogger
-	client       interface{} // API client interface
-	db           interface{} // Database interface
-	
+	conductor *CrossChainConductor
+	logger    logging.OptionalLogger
+	client    interface{} // API client interface
+	db        interface{} // Database interface
+
 	// Batch configuration
-	batchThreshold   int           // Minimum transactions before using batch proof
-	maxBatchSize     int           // Maximum transactions per batch
-	proofTimeout     time.Duration // Timeout for proof generation
-	
+	batchThreshold int           // Minimum transactions before using batch proof
+	maxBatchSize   int           // Maximum transactions per batch
+	proofTimeout   time.Duration // Timeout for proof generation
+
 	// Active recovery sessions
-	activeRecovery   map[string]*BatchRecoverySession
-	recoveryQueue    chan *BatchRecoveryRequest
-	mu               sync.RWMutex
-	
+	activeRecovery map[string]*BatchRecoverySession
+	recoveryQueue  chan *BatchRecoveryRequest
+	mu             sync.RWMutex
+
 	// Metrics
 	totalRequests    int64
 	batchRequests    int64
@@ -50,21 +50,21 @@ type BatchRecoveryRequest struct {
 
 // BatchRecoveryResponse contains the batch proof and transactions
 type BatchRecoveryResponse struct {
-	PartitionID      string
-	Type             RecoveryType
-	
+	PartitionID string
+	Type        RecoveryType
+
 	// Collection proof data
-	CollectionProof  *merkle.ReceiptList  // Single proof for all transactions
-	TransactionHashes [][]byte              // Hashes in the collection proof
-	
+	CollectionProof   *merkle.ReceiptList // Single proof for all transactions
+	TransactionHashes [][]byte            // Hashes in the collection proof
+
 	// Transaction data (sent separately without individual proofs)
-	Transactions     []*RecoveredTransaction
-	
+	Transactions []*RecoveredTransaction
+
 	// Metadata
-	ProofGenerated   time.Time
-	BatchSize        int
-	ProofSavings     int  // How many individual proofs we avoided
-	Error            error
+	ProofGenerated time.Time
+	BatchSize      int
+	ProofSavings   int // How many individual proofs we avoided
+	Error          error
 }
 
 // RecoveredTransaction represents a recovered transaction without individual proof
@@ -78,11 +78,11 @@ type RecoveredTransaction struct {
 
 // BatchRecoverySession tracks an ongoing batch recovery
 type BatchRecoverySession struct {
-	PartitionID     string
-	Requests        []*BatchRecoveryRequest
-	StartTime       time.Time
-	LastUpdate      time.Time
-	Status          BatchRecoveryStatus
+	PartitionID string
+	Requests    []*BatchRecoveryRequest
+	StartTime   time.Time
+	LastUpdate  time.Time
+	Status      BatchRecoveryStatus
 }
 
 type BatchRecoveryStatus int
@@ -96,22 +96,22 @@ const (
 
 func NewBatchProofRecoveryManager(conductor *CrossChainConductor, logger logging.OptionalLogger) *BatchProofRecoveryManager {
 	return &BatchProofRecoveryManager{
-		conductor:       conductor,
-		logger:          logger.With("module", "batch-recovery"),
-		batchThreshold:  2,   // Use batch proof when >= 2 transactions
-		maxBatchSize:    100, // Maximum 100 transactions per batch
-		proofTimeout:    30 * time.Second,
-		activeRecovery:  make(map[string]*BatchRecoverySession),
-		recoveryQueue:   make(chan *BatchRecoveryRequest, 1000),
+		conductor:      conductor,
+		logger:         logger.With("module", "batch-recovery"),
+		batchThreshold: 2,   // Use batch proof when >= 2 transactions
+		maxBatchSize:   100, // Maximum 100 transactions per batch
+		proofTimeout:   30 * time.Second,
+		activeRecovery: make(map[string]*BatchRecoverySession),
+		recoveryQueue:  make(chan *BatchRecoveryRequest, 1000),
 	}
 }
 
 func (brm *BatchProofRecoveryManager) Start() {
 	brm.logger.Info("Starting batch proof recovery manager")
-	
+
 	// Start recovery processor
 	go brm.processRecoveryQueue()
-	
+
 	// Start batch optimizer
 	go brm.optimizeBatches()
 }
@@ -136,27 +136,27 @@ func (brm *BatchProofRecoveryManager) processRecoveryQueue() {
 func (brm *BatchProofRecoveryManager) handleRecoveryRequest(req *BatchRecoveryRequest) {
 	brm.mu.Lock()
 	defer brm.mu.Unlock()
-	
+
 	sessionKey := fmt.Sprintf("%s-%s", req.PartitionID, req.Type.String())
-	
+
 	// Check if we should use batch processing
 	if len(req.MissingSequences) >= brm.batchThreshold {
 		brm.logger.Info("Using batch proof for recovery",
 			"partition", req.PartitionID,
 			"sequences", len(req.MissingSequences),
 			"threshold", brm.batchThreshold)
-		
+
 		go brm.processBatchRecovery(req)
 		brm.batchRequests++
 	} else {
 		brm.logger.Info("Using individual proofs for recovery",
 			"partition", req.PartitionID,
 			"sequences", len(req.MissingSequences))
-		
+
 		go brm.processIndividualRecovery(req)
 		brm.individualProofs++
 	}
-	
+
 	brm.totalRequests++
 }
 
@@ -166,48 +166,48 @@ func (brm *BatchProofRecoveryManager) processBatchRecovery(req *BatchRecoveryReq
 		"partition", req.PartitionID,
 		"type", req.Type,
 		"count", len(req.MissingSequences))
-	
+
 	startTime := time.Now()
-	
+
 	// Sort sequences for efficient batch processing
 	sequences := make([]uint64, len(req.MissingSequences))
 	copy(sequences, req.MissingSequences)
 	sort.Slice(sequences, func(i, j int) bool {
 		return sequences[i] < sequences[j]
 	})
-	
+
 	// Process in batches if too many sequences
 	batchSize := min(len(sequences), brm.maxBatchSize)
-	
+
 	for i := 0; i < len(sequences); i += batchSize {
 		end := min(i+batchSize, len(sequences))
 		batch := sequences[i:end]
-		
+
 		response, err := brm.generateCollectionProof(req, batch)
 		if err != nil {
 			brm.logger.Error("Failed to generate collection proof",
 				"partition", req.PartitionID,
 				"batch", fmt.Sprintf("%d-%d", batch[0], batch[len(batch)-1]),
 				"error", err)
-			
+
 			// Fallback to individual proofs
 			brm.processIndividualRecoveryBatch(req, batch)
 			continue
 		}
-		
+
 		// Calculate proof savings
 		proofSavings := len(batch) - 1 // We made 1 proof instead of N proofs
 		brm.proofSavings += int64(proofSavings)
-		
+
 		response.ProofSavings = proofSavings
 		response.ProofGenerated = time.Now()
-		
+
 		brm.logger.Info("Generated collection proof",
 			"partition", req.PartitionID,
 			"batch_size", len(batch),
 			"proof_savings", proofSavings,
 			"generation_time", time.Since(startTime))
-		
+
 		// Send response
 		if req.Callback != nil {
 			req.Callback(response)
@@ -222,36 +222,36 @@ func (brm *BatchProofRecoveryManager) generateCollectionProof(req *BatchRecovery
 		Type:        req.Type,
 		BatchSize:   len(sequences),
 	}
-	
+
 	// Get the Merkle chain for the appropriate ledger
 	chain, err := brm.getChainForRecovery(req.PartitionID, req.Type)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get chain: %w", err)
 	}
-	
+
 	// Determine range for collection proof
 	startIdx := int64(sequences[0])
 	endIdx := int64(sequences[len(sequences)-1])
-	
+
 	brm.logger.Debug("Creating collection proof",
 		"partition", req.PartitionID,
 		"start_idx", startIdx,
 		"end_idx", endIdx,
 		"count", len(sequences))
-	
+
 	// Generate collection proof using ReceiptList
 	receiptList, err := merkle.GetReceiptList(chain, startIdx, endIdx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate ReceiptList: %w", err)
 	}
-	
+
 	response.CollectionProof = receiptList
 	response.TransactionHashes = make([][]byte, len(receiptList.Elements))
 	copy(response.TransactionHashes, receiptList.Elements)
-	
+
 	// Retrieve transaction data for each sequence
 	transactions := make([]*RecoveredTransaction, 0, len(sequences))
-	
+
 	for _, seq := range sequences {
 		tx, err := brm.getTransactionData(req.PartitionID, req.Type, seq)
 		if err != nil {
@@ -261,17 +261,17 @@ func (brm *BatchProofRecoveryManager) generateCollectionProof(req *BatchRecovery
 				"error", err)
 			continue
 		}
-		
+
 		transactions = append(transactions, tx)
 	}
-	
+
 	response.Transactions = transactions
-	
+
 	brm.logger.Info("Collection proof generated successfully",
 		"partition", req.PartitionID,
 		"proof_elements", len(response.TransactionHashes),
 		"transactions", len(transactions))
-	
+
 	return response, nil
 }
 
@@ -280,7 +280,7 @@ func (brm *BatchProofRecoveryManager) processIndividualRecovery(req *BatchRecove
 	brm.logger.Info("Processing individual recovery",
 		"partition", req.PartitionID,
 		"count", len(req.MissingSequences))
-	
+
 	// Process each transaction with its own proof
 	brm.processIndividualRecoveryBatch(req, req.MissingSequences)
 }
@@ -297,7 +297,7 @@ func (brm *BatchProofRecoveryManager) processIndividualRecoveryBatch(req *BatchR
 				"error", err)
 			continue
 		}
-		
+
 		// Send individual response
 		response := &BatchRecoveryResponse{
 			PartitionID:  req.PartitionID,
@@ -306,7 +306,7 @@ func (brm *BatchProofRecoveryManager) processIndividualRecoveryBatch(req *BatchR
 			BatchSize:    1,
 			ProofSavings: 0, // No savings with individual proofs
 		}
-		
+
 		if req.Callback != nil {
 			req.Callback(response)
 		}
@@ -317,26 +317,26 @@ func (brm *BatchProofRecoveryManager) processIndividualRecoveryBatch(req *BatchR
 func (brm *BatchProofRecoveryManager) optimizeBatches() {
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
-	
+
 	for range ticker.C {
 		brm.mu.Lock()
-		
+
 		// Look for sessions that can be batched together
 		for sessionKey, session := range brm.activeRecovery {
 			if session.Status == BatchRecoveryPending &&
 				time.Since(session.LastUpdate) > 50*time.Millisecond &&
 				len(session.Requests) >= brm.batchThreshold {
-				
+
 				brm.logger.Debug("Optimizing batch",
 					"session", sessionKey,
 					"requests", len(session.Requests))
-				
+
 				// Merge requests into optimized batches
 				go brm.processMergedBatch(session)
 				session.Status = BatchRecoveryGeneratingProof
 			}
 		}
-		
+
 		brm.mu.Unlock()
 	}
 }
@@ -344,31 +344,31 @@ func (brm *BatchProofRecoveryManager) optimizeBatches() {
 func (brm *BatchProofRecoveryManager) processMergedBatch(session *BatchRecoverySession) {
 	// Merge all sequences from the session requests
 	allSequences := make([]uint64, 0)
-	
+
 	for _, req := range session.Requests {
 		allSequences = append(allSequences, req.MissingSequences...)
 	}
-	
+
 	// Remove duplicates and sort
 	sequenceMap := make(map[uint64]bool)
 	for _, seq := range allSequences {
 		sequenceMap[seq] = true
 	}
-	
+
 	uniqueSequences := make([]uint64, 0, len(sequenceMap))
 	for seq := range sequenceMap {
 		uniqueSequences = append(uniqueSequences, seq)
 	}
-	
+
 	sort.Slice(uniqueSequences, func(i, j int) bool {
 		return uniqueSequences[i] < uniqueSequences[j]
 	})
-	
+
 	brm.logger.Info("Processing merged batch",
 		"partition", session.PartitionID,
 		"original_requests", len(session.Requests),
 		"unique_sequences", len(uniqueSequences))
-	
+
 	// Create merged request
 	mergedReq := &BatchRecoveryRequest{
 		PartitionID:      session.PartitionID,
@@ -385,10 +385,10 @@ func (brm *BatchProofRecoveryManager) processMergedBatch(session *BatchRecoveryS
 			}
 		},
 	}
-	
+
 	// Process the merged batch
 	brm.processBatchRecovery(mergedReq)
-	
+
 	// Clean up session
 	brm.mu.Lock()
 	sessionKey := fmt.Sprintf("%s-%s", session.PartitionID, session.Requests[0].Type.String())
@@ -402,11 +402,11 @@ func (brm *BatchProofRecoveryManager) getChainForRecovery(partitionID string, re
 	// This would return the appropriate Merkle chain based on the recovery type
 	// For anchors: return anchor chain
 	// For synthetic transactions: return synthetic chain
-	
+
 	brm.logger.Debug("Getting chain for recovery",
 		"partition", partitionID,
 		"type", recoveryType)
-	
+
 	// Placeholder - would implement actual chain retrieval
 	return nil, fmt.Errorf("chain retrieval not implemented")
 }
@@ -431,7 +431,7 @@ func (brm *BatchProofRecoveryManager) getTransactionWithProof(partitionID string
 func (brm *BatchProofRecoveryManager) GetMetrics() map[string]interface{} {
 	brm.mu.RLock()
 	defer brm.mu.RUnlock()
-	
+
 	return map[string]interface{}{
 		"total_requests":     brm.totalRequests,
 		"batch_requests":     brm.batchRequests,

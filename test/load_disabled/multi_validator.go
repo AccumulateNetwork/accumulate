@@ -55,7 +55,7 @@ func main() {
 	// Run load test with multi-validator coordination
 	fmt.Println("🔥 Starting multi-validator load test...")
 	start := time.Now()
-	
+
 	var wg sync.WaitGroup
 	var successful, failed int64
 	var mu sync.Mutex
@@ -65,11 +65,11 @@ func main() {
 		wg.Add(1)
 		go func(accountIndex int, acc *TestAccount) {
 			defer wg.Done()
-			
+
 			// Each account sends 4 transactions (20 total)
 			for j := 0; j < 4; j++ {
 				success := sendTransaction(client, acc, fmt.Sprintf("Multi-validator tx %d-%d", accountIndex, j))
-				
+
 				mu.Lock()
 				if success {
 					successful++
@@ -79,7 +79,7 @@ func main() {
 					fmt.Printf("❌ Transaction %d-%d failed\n", accountIndex, j)
 				}
 				mu.Unlock()
-				
+
 				// Small delay between transactions
 				time.Sleep(100 * time.Millisecond)
 			}
@@ -98,7 +98,7 @@ func main() {
 	fmt.Printf("Total transactions: %d\n", successful+failed)
 	fmt.Printf("Success rate: %.1f%%\n", float64(successful)/float64(successful+failed)*100)
 	fmt.Printf("TPS: %.2f\n", float64(successful+failed)/duration.Seconds())
-	
+
 	if successful == 20 && failed == 0 {
 		fmt.Println("🎉 Multi-validator CrossChainConductor test passed!")
 	} else {
@@ -161,7 +161,7 @@ func addCreditsToAccounts(client *api.Client, accounts []*TestAccount) bool {
 		body := &protocol.AddCredits{
 			Recipient: account.liteAddr,
 			Amount:    protocol.AcmePrecisionPower, // 1.0 ACME worth of credits
-			Oracle:    protocol.AcmeOraclePrice,   // Use oracle price
+			Oracle:    protocol.AcmeOraclePrice,    // Use oracle price
 		}
 
 		envelope := &messaging.Envelope{
