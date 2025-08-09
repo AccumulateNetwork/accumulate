@@ -1,3 +1,9 @@
+// Copyright 2025 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package crosschain
 
 import (
@@ -472,34 +478,6 @@ func (cc *CrossChainConductor) unblockDestinationQueue(queue *DestinationQueue) 
 	}
 }
 
-// handleSuccessfulTransmission handles successful transmission confirmation
-func (cc *CrossChainConductor) handleSuccessfulTransmission(txID string, destKey DestinationKey) {
-	queue := cc.getOrCreateDestinationQueue(destKey)
-
-	queue.mu.Lock()
-	defer queue.mu.Unlock()
-
-	// Remove the successful transmission
-	if pending, exists := queue.PendingTx[txID]; exists {
-		delete(queue.PendingTx, txID)
-		queue.SuccessCount++
-
-		cc.logger.Debug("Transmission successful",
-			"tx_id", txID, "type", destKey.Type, "destination", destKey.Destination)
-
-		// Notify success via callback if it exists
-		if pending.Callback != nil {
-			select {
-			case pending.Callback <- nil: // nil = success
-			default:
-				// Callback channel might be closed, that's okay
-			}
-		}
-	}
-
-	// Unblock this destination and process next queued request
-	cc.unblockDestinationQueue(queue)
-}
 
 // processRetries handles retry attempts for failed transmissions
 func (cc *CrossChainConductor) processRetries() {
