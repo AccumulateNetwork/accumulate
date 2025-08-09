@@ -20,8 +20,8 @@ import (
 	"strings"
 	"testing"
 
-	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
+	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
