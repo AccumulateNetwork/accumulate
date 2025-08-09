@@ -30,11 +30,11 @@ type mockSubmission struct {
 func (m *mockDispatcher) Submit(ctx context.Context, dest *url.URL, envelope *messaging.Envelope) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	
+
 	if m.submitError != nil {
 		return m.submitError
 	}
-	
+
 	m.submissions = append(m.submissions, mockSubmission{
 		dest:     dest,
 		envelope: envelope,
@@ -60,15 +60,15 @@ func (m *mockDispatcher) getSubmissions() []mockSubmission {
 func TestCrosschainCoordinator_SubmitSynthetic_Success(t *testing.T) {
 	dispatcher := &mockDispatcher{}
 	logger := logging.OptionalLogger{}
-	coordinator := NewCrosschainCoordinator(dispatcher, logger)
-	defer coordinator.Stop()
+	conductor := NewCrossChainConductor(dispatcher, logger)
+	defer conductor.Stop()
 
 	// Create test data
 	destURL, _ := url.Parse("acc://test-partition")
 	messages := []messaging.Message{}
 
 	// Submit synthetic transaction
-	err := coordinator.SubmitSynthetic(context.Background(), messages, destURL)
+	err := conductor.SubmitSynthetic(context.Background(), messages, destURL)
 	require.NoError(t, err)
 
 	// Verify submission was processed
@@ -82,15 +82,15 @@ func TestCrosschainCoordinator_SubmitSynthetic_Error(t *testing.T) {
 		submitError: errors.New("dispatcher error"),
 	}
 	logger := logging.OptionalLogger{}
-	coordinator := NewCrosschainCoordinator(dispatcher, logger)
-	defer coordinator.Stop()
+	conductor := NewCrossChainConductor(dispatcher, logger)
+	defer conductor.Stop()
 
 	// Create test data
 	destURL, _ := url.Parse("acc://test-partition")
 	messages := []messaging.Message{}
 
 	// Submit synthetic transaction should return error
-	err := coordinator.SubmitSynthetic(context.Background(), messages, destURL)
+	err := conductor.SubmitSynthetic(context.Background(), messages, destURL)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "dispatcher error")
 }
@@ -98,8 +98,8 @@ func TestCrosschainCoordinator_SubmitSynthetic_Error(t *testing.T) {
 func TestCrosschainCoordinator_ContextCancellation(t *testing.T) {
 	dispatcher := &mockDispatcher{}
 	logger := logging.OptionalLogger{}
-	coordinator := NewCrosschainCoordinator(dispatcher, logger)
-	defer coordinator.Stop()
+	conductor := NewCrossChainConductor(dispatcher, logger)
+	defer conductor.Stop()
 
 	// Create cancelled context
 	ctx, cancel := context.WithCancel(context.Background())
@@ -110,7 +110,7 @@ func TestCrosschainCoordinator_ContextCancellation(t *testing.T) {
 	messages := []messaging.Message{}
 
 	// Submit with cancelled context - may succeed or fail depending on timing
-	err := coordinator.SubmitSynthetic(ctx, messages, destURL)
+	err := conductor.SubmitSynthetic(ctx, messages, destURL)
 	if err != nil {
 		require.Contains(t, err.Error(), "context canceled")
 	}
@@ -119,8 +119,8 @@ func TestCrosschainCoordinator_ContextCancellation(t *testing.T) {
 func TestCrosschainCoordinator_AsyncProcessing(t *testing.T) {
 	dispatcher := &mockDispatcher{}
 	logger := logging.OptionalLogger{}
-	coordinator := NewCrosschainCoordinator(dispatcher, logger)
-	defer coordinator.Stop()
+	conductor := NewCrossChainConductor(dispatcher, logger)
+	defer conductor.Stop()
 
 	// Submit multiple transactions concurrently
 	var wg sync.WaitGroup
@@ -132,7 +132,7 @@ func TestCrosschainCoordinator_AsyncProcessing(t *testing.T) {
 			defer wg.Done()
 			destURL, _ := url.Parse("acc://test-partition")
 			messages := []messaging.Message{}
-			err := coordinator.SubmitSynthetic(context.Background(), messages, destURL)
+			err := conductor.SubmitSynthetic(context.Background(), messages, destURL)
 			require.NoError(t, err)
 		}(i)
 	}
@@ -147,14 +147,14 @@ func TestCrosschainCoordinator_AsyncProcessing(t *testing.T) {
 func TestCrosschainCoordinator_GracefulStop(t *testing.T) {
 	dispatcher := &mockDispatcher{}
 	logger := logging.OptionalLogger{}
-	coordinator := NewCrosschainCoordinator(dispatcher, logger)
+	conductor := NewCrossChainConductor(dispatcher, logger)
 
 	// Stop should complete without hanging
-	coordinator.Stop()
+	conductor.Stop()
 
 	// Subsequent submissions should fail
 	destURL, _ := url.Parse("acc://test-partition")
 	messages := []messaging.Message{}
-	err := coordinator.SubmitSynthetic(context.Background(), messages, destURL)
+	err := conductor.SubmitSynthetic(context.Background(), messages, destURL)
 	require.Error(t, err)
 }

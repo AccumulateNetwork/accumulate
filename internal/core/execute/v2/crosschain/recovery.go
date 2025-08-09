@@ -23,16 +23,16 @@ type RecoveryManager struct {
 	logger    logging.OptionalLogger
 	db        database.Beginner
 	client    api.Querier
-	
+
 	// Recovery state
-	recoveryQueue chan *RecoveryRequest
+	recoveryQueue  chan *RecoveryRequest
 	activeRecovery map[string]*RecoverySession
-	mu            sync.RWMutex
-	
+	mu             sync.RWMutex
+
 	// Configuration
 	maxConcurrentRecovery int
-	checkInterval        time.Duration
-	requestTimeout       time.Duration
+	checkInterval         time.Duration
+	requestTimeout        time.Duration
 }
 
 // RecoveryRequest represents a request for missing transactions
@@ -95,26 +95,26 @@ func (rm *RecoveryManager) RequestMissingTransactions(req *RecoveryRequest) (*Re
 	if req.FromNumber > req.ToNumber {
 		return nil, errors.BadRequest.WithFormat("invalid range: from %d > to %d", req.FromNumber, req.ToNumber)
 	}
-	
+
 	// Check if we're already recovering this range
 	sessionKey := rm.getSessionKey(req)
 	rm.mu.RLock()
 	if session, exists := rm.activeRecovery[sessionKey]; exists {
 		rm.mu.RUnlock()
-		rm.logger.Info("Recovery already in progress", 
-			"source", req.Source, 
+		rm.logger.Info("Recovery already in progress",
+			"source", req.Source,
 			"destination", req.Destination,
 			"progress", fmt.Sprintf("%.1f%%", session.Progress))
 		// Wait for existing recovery to complete
 		return rm.waitForSession(session, req)
 	}
 	rm.mu.RUnlock()
-	
+
 	// Create callback channel if not provided
 	if req.Callback == nil {
 		req.Callback = make(chan *RecoveryResponse, 1)
 	}
-	
+
 	// Queue the request
 	req.RequestedAt = time.Now()
 	select {
@@ -127,7 +127,7 @@ func (rm *RecoveryManager) RequestMissingTransactions(req *RecoveryRequest) (*Re
 	case <-time.After(10 * time.Second):
 		return nil, errors.NotReady.With("recovery queue is full")
 	}
-	
+
 	// Wait for response
 	select {
 	case resp := <-req.Callback:
@@ -144,14 +144,14 @@ func (rm *RecoveryManager) processRecoveryRequests() {
 		rm.mu.RLock()
 		activeCount := len(rm.activeRecovery)
 		rm.mu.RUnlock()
-		
+
 		if activeCount >= rm.maxConcurrentRecovery {
 			// Wait for a slot to open
 			time.Sleep(1 * time.Second)
 			rm.recoveryQueue <- req // Re-queue
 			continue
 		}
-		
+
 		// Start recovery session
 		go rm.executeRecovery(req)
 	}
@@ -166,23 +166,23 @@ func (rm *RecoveryManager) executeRecovery(req *RecoveryRequest) {
 		Status:     "starting",
 		LastUpdate: time.Now(),
 	}
-	
+
 	// Register session
 	rm.mu.Lock()
 	rm.activeRecovery[sessionKey] = session
 	rm.mu.Unlock()
-	
+
 	// Clean up session when done
 	defer func() {
 		rm.mu.Lock()
 		delete(rm.activeRecovery, sessionKey)
 		rm.mu.Unlock()
 	}()
-	
+
 	// Execute recovery based on type
 	var resp *RecoveryResponse
 	var err error
-	
+
 	switch req.Type {
 	case MessageTypeAnchor:
 		resp, err = rm.recoverAnchors(req, session)
@@ -191,7 +191,7 @@ func (rm *RecoveryManager) executeRecovery(req *RecoveryRequest) {
 	default:
 		err = errors.BadRequest.WithFormat("unsupported message type: %v", req.Type)
 	}
-	
+
 	// Send response
 	if err != nil {
 		resp = &RecoveryResponse{
@@ -199,7 +199,7 @@ func (rm *RecoveryManager) executeRecovery(req *RecoveryRequest) {
 			Error:   err,
 		}
 	}
-	
+
 	select {
 	case req.Callback <- resp:
 	case <-time.After(10 * time.Second):
@@ -212,40 +212,40 @@ func (rm *RecoveryManager) recoverAnchors(req *RecoveryRequest, session *Recover
 	ctx := context.Background()
 	srcUrl := protocol.PartitionUrl(req.Source)
 	dstUrl := protocol.PartitionUrl(req.Destination)
-	
+
 	rm.logger.Info("Starting anchor recovery",
 		"source", req.Source,
 		"destination", req.Destination,
 		"range", fmt.Sprintf("%d-%d", req.FromNumber, req.ToNumber))
-	
+
 	session.Status = "reading ledgers"
 	session.Total = int(req.ToNumber - req.FromNumber + 1)
-	
+
 	// Read the anchor ledger from destination
 	batch := rm.db.Begin(false)
 	defer batch.Discard()
-	
+
 	account := batch.Account(dstUrl.JoinPath(protocol.AnchorPool))
 	var ledger *protocol.AnchorLedger
 	err := account.Main().GetAs(&ledger)
 	if err != nil {
 		return nil, errors.InternalError.WithFormat("failed to read anchor ledger: %w", err)
 	}
-	
+
 	srcLedger := ledger.Anchor(srcUrl)
-	
+
 	// Collect missing anchors
 	var recovered []RecoveredTransaction
-	
+
 	for seqNum := req.FromNumber; seqNum <= req.ToNumber; seqNum++ {
 		session.Progress = float64(seqNum-req.FromNumber) / float64(session.Total) * 100
 		session.LastUpdate = time.Now()
-		
+
 		// Check if we already have this anchor
 		if seqNum <= srcLedger.Delivered {
 			continue
 		}
-		
+
 		// Try to get from pending list
 		var txid *url.TxID
 		if seqNum > srcLedger.Delivered && seqNum <= srcLedger.Received {
@@ -254,10 +254,10 @@ func (rm *RecoveryManager) recoverAnchors(req *RecoveryRequest, session *Recover
 				txid = srcLedger.Pending[idx]
 			}
 		}
-		
+
 		// Retrieve the anchor from source
 		session.Status = fmt.Sprintf("retrieving anchor %d", seqNum)
-		
+
 		anchor, err := rm.retrieveAnchor(ctx, req.Source, req.Destination, seqNum, txid)
 		if err != nil {
 			rm.logger.Info("Failed to retrieve anchor",
@@ -266,18 +266,18 @@ func (rm *RecoveryManager) recoverAnchors(req *RecoveryRequest, session *Recover
 				"error", err)
 			continue
 		}
-		
+
 		recovered = append(recovered, *anchor)
 		session.Recovered++
 	}
-	
+
 	session.Status = "completed"
 	rm.logger.Info("Anchor recovery completed",
 		"source", req.Source,
 		"destination", req.Destination,
 		"recovered", len(recovered),
 		"total", session.Total)
-	
+
 	return &RecoveryResponse{
 		Request:      req,
 		Transactions: recovered,
@@ -289,46 +289,46 @@ func (rm *RecoveryManager) recoverSynthetics(req *RecoveryRequest, session *Reco
 	ctx := context.Background()
 	srcUrl := protocol.PartitionUrl(req.Source)
 	dstUrl := protocol.PartitionUrl(req.Destination)
-	
+
 	rm.logger.Info("Starting synthetic recovery",
 		"source", req.Source,
 		"destination", req.Destination,
 		"range", fmt.Sprintf("%d-%d", req.FromNumber, req.ToNumber))
-	
+
 	session.Status = "reading ledgers"
 	session.Total = int(req.ToNumber - req.FromNumber + 1)
-	
+
 	// Read the synthetic ledger from destination
 	batch := rm.db.Begin(false)
 	defer batch.Discard()
-	
+
 	account := batch.Account(dstUrl.JoinPath(protocol.Synthetic))
 	var ledger *protocol.SyntheticLedger
 	err := account.Main().GetAs(&ledger)
 	if err != nil {
 		return nil, errors.InternalError.WithFormat("failed to read synthetic ledger: %w", err)
 	}
-	
+
 	srcLedger := ledger.Partition(srcUrl)
-	
+
 	// Collect missing synthetics
 	var recovered []RecoveredTransaction
-	
+
 	for seqNum := req.FromNumber; seqNum <= req.ToNumber; seqNum++ {
 		session.Progress = float64(seqNum-req.FromNumber) / float64(session.Total) * 100
 		session.LastUpdate = time.Now()
-		
+
 		// Check if we already have this synthetic
 		if seqNum <= srcLedger.Delivered {
 			continue
 		}
-		
+
 		// Try to get from pending list
 		txid, hasTxid := srcLedger.Get(seqNum)
-		
+
 		// Retrieve the synthetic from source
 		session.Status = fmt.Sprintf("retrieving synthetic %d", seqNum)
-		
+
 		synth, err := rm.retrieveSynthetic(ctx, req.Source, req.Destination, seqNum, txid)
 		if err != nil {
 			rm.logger.Info("Failed to retrieve synthetic",
@@ -337,21 +337,21 @@ func (rm *RecoveryManager) recoverSynthetics(req *RecoveryRequest, session *Reco
 				"error", err)
 			continue
 		}
-		
+
 		// Only add if we got a valid transaction
 		if synth != nil && hasTxid {
 			recovered = append(recovered, *synth)
 			session.Recovered++
 		}
 	}
-	
+
 	session.Status = "completed"
 	rm.logger.Info("Synthetic recovery completed",
 		"source", req.Source,
 		"destination", req.Destination,
 		"recovered", len(recovered),
 		"total", session.Total)
-	
+
 	return &RecoveryResponse{
 		Request:      req,
 		Transactions: recovered,
@@ -376,7 +376,7 @@ func (rm *RecoveryManager) retrieveSynthetic(ctx context.Context, source, destin
 func (rm *RecoveryManager) periodicHealthCheck() {
 	ticker := time.NewTicker(rm.checkInterval)
 	defer ticker.Stop()
-	
+
 	for range ticker.C {
 		rm.checkPartitionHealth()
 	}
@@ -387,24 +387,24 @@ func (rm *RecoveryManager) checkPartitionHealth() {
 	ctx := context.Background()
 	batch := rm.db.Begin(false)
 	defer batch.Discard()
-	
+
 	// Get network status
 	netInfo, err := rm.getNetworkInfo(ctx)
 	if err != nil {
 		rm.logger.Error("Failed to get network info", "error", err)
 		return
 	}
-	
+
 	// Check each partition pair
 	for _, srcPart := range netInfo.Partitions {
 		for _, dstPart := range netInfo.Partitions {
 			if srcPart.ID == dstPart.ID {
 				continue
 			}
-			
+
 			// Check anchors
 			rm.checkMissingAnchors(batch, srcPart, dstPart)
-			
+
 			// Check synthetics
 			rm.checkMissingSynthetics(batch, srcPart, dstPart)
 		}
@@ -415,7 +415,7 @@ func (rm *RecoveryManager) checkPartitionHealth() {
 func (rm *RecoveryManager) checkMissingAnchors(batch *database.Batch, src, dst *protocol.PartitionInfo) {
 	srcUrl := protocol.PartitionUrl(src.ID)
 	dstUrl := protocol.PartitionUrl(dst.ID)
-	
+
 	// Read destination anchor ledger
 	account := batch.Account(dstUrl.JoinPath(protocol.AnchorPool))
 	var ledger *protocol.AnchorLedger
@@ -423,9 +423,9 @@ func (rm *RecoveryManager) checkMissingAnchors(batch *database.Batch, src, dst *
 	if err != nil {
 		return
 	}
-	
+
 	srcLedger := ledger.Anchor(srcUrl)
-	
+
 	// Check for gaps
 	missing := srcLedger.Received - srcLedger.Delivered
 	if missing > 10 { // Threshold for concern
@@ -435,7 +435,7 @@ func (rm *RecoveryManager) checkMissingAnchors(batch *database.Batch, src, dst *
 			"missing", missing,
 			"delivered", srcLedger.Delivered,
 			"received", srcLedger.Received)
-		
+
 		// Trigger recovery if too many missing
 		if missing > 50 {
 			req := &RecoveryRequest{
@@ -456,7 +456,7 @@ func (rm *RecoveryManager) checkMissingAnchors(batch *database.Batch, src, dst *
 func (rm *RecoveryManager) checkMissingSynthetics(batch *database.Batch, src, dst *protocol.PartitionInfo) {
 	srcUrl := protocol.PartitionUrl(src.ID)
 	dstUrl := protocol.PartitionUrl(dst.ID)
-	
+
 	// Read destination synthetic ledger
 	account := batch.Account(dstUrl.JoinPath(protocol.Synthetic))
 	var ledger *protocol.SyntheticLedger
@@ -464,9 +464,9 @@ func (rm *RecoveryManager) checkMissingSynthetics(batch *database.Batch, src, ds
 	if err != nil {
 		return
 	}
-	
+
 	srcLedger := ledger.Partition(srcUrl)
-	
+
 	// Check for gaps
 	missing := srcLedger.Received - srcLedger.Delivered
 	if missing > 10 { // Threshold for concern
@@ -476,7 +476,7 @@ func (rm *RecoveryManager) checkMissingSynthetics(batch *database.Batch, src, ds
 			"missing", missing,
 			"delivered", srcLedger.Delivered,
 			"received", srcLedger.Received)
-		
+
 		// Trigger recovery if too many missing
 		if missing > 50 {
 			req := &RecoveryRequest{
@@ -514,9 +514,9 @@ func (rm *RecoveryManager) waitForSession(session *RecoverySession, req *Recover
 	// Poll session status
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
-	
+
 	timeout := time.After(rm.requestTimeout)
-	
+
 	for {
 		select {
 		case <-ticker.C:
@@ -527,7 +527,7 @@ func (rm *RecoveryManager) waitForSession(session *RecoverySession, req *Recover
 				return nil, errors.InternalError.With("recovery session completed but results unavailable")
 			}
 			rm.mu.RUnlock()
-			
+
 		case <-timeout:
 			return nil, errors.NotReady.With("timeout waiting for existing recovery session")
 		}
@@ -546,7 +546,7 @@ func (rm *RecoveryManager) getNetworkInfo(ctx context.Context) (*NetworkInfo, er
 		Status:     nil, // Placeholder
 		Partitions: make([]*protocol.PartitionInfo, 0),
 	}
-	
+
 	return netInfo, nil
 }
 

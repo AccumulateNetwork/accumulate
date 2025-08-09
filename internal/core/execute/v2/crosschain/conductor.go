@@ -35,15 +35,15 @@ type DestinationKey struct {
 
 // PendingTransmission tracks a transmission awaiting error feedback
 type PendingTransmission struct {
-	ID           string
-	Messages     []messaging.Message
-	Destination  *url.URL
-	DestKey      DestinationKey
-	Context      context.Context
-	AttemptNum   int
-	SubmittedAt  time.Time
-	RetryAfter   time.Time
-	Callback     chan error
+	ID          string
+	Messages    []messaging.Message
+	Destination *url.URL
+	DestKey     DestinationKey
+	Context     context.Context
+	AttemptNum  int
+	SubmittedAt time.Time
+	RetryAfter  time.Time
+	Callback    chan error
 }
 
 // DestinationQueue manages transmission state for a specific destination+type combination
@@ -84,13 +84,13 @@ type CrossChainConductor struct {
 	syntheticsErrors   int64
 	syntheticsRetried  int64
 	transmissionErrors int64
-	
-	// Recovery manager for missing transactions  
-	recoveryManager   *RecoveryManager
-	
+
+	// Recovery manager for missing transactions
+	recoveryManager *RecoveryManager
+
 	// Batch proof recovery manager for efficient collection proofs
 	batchProofManager *BatchProofRecoveryManager
-	
+
 	// Centralized proof service for construction and validation
 	proofService *ProofService
 }
@@ -100,18 +100,18 @@ func NewCrossChainConductor(dispatcher execute.Dispatcher, logger logging.Option
 	cc := &CrossChainConductor{
 		dispatcher:        dispatcher,
 		logger:            logging.OptionalLogger{L: logger.With("module", "crosschain-conductor")},
-		syntheticChan:     make(chan *SyntheticRequest, 100), // Buffered channel for async processing
+		syntheticChan:     make(chan *SyntheticRequest, 100),   // Buffered channel for async processing
 		retryChan:         make(chan *PendingTransmission, 50), // Retry queue
 		stopChan:          make(chan struct{}),
 		destinationQueues: make(map[DestinationKey]*DestinationQueue),
-		maxRetries:        3,              // Retry failed transmissions up to 3 times
+		maxRetries:        3,               // Retry failed transmissions up to 3 times
 		retryDelay:        2 * time.Second, // Wait 2 seconds between retries
 	}
-	
+
 	// Initialize centralized proof service (NO CACHING for easier testing)
 	cc.proofService = NewProofService(logger)
 	cc.proofService.SetDebugMode(true) // Enable debug mode for testing
-	
+
 	// Initialize batch proof recovery manager
 	cc.batchProofManager = NewBatchProofRecoveryManager(cc, logger)
 	cc.batchProofManager.Start()
@@ -131,7 +131,7 @@ func (cc *CrossChainConductor) getMessageType(messages []messaging.Message) Mess
 	if len(messages) == 0 {
 		return MessageTypeOther
 	}
-	
+
 	switch messages[0].Type() {
 	case messaging.MessageTypeBlockAnchor:
 		return MessageTypeAnchor
@@ -154,7 +154,7 @@ func (cc *CrossChainConductor) createDestinationKey(msgType MessageType, destina
 func (cc *CrossChainConductor) getOrCreateDestinationQueue(key DestinationKey) *DestinationQueue {
 	cc.queuesMutex.Lock()
 	defer cc.queuesMutex.Unlock()
-	
+
 	queue, exists := cc.destinationQueues[key]
 	if !exists {
 		queue = &DestinationQueue{
@@ -174,7 +174,7 @@ func (cc *CrossChainConductor) getOrCreateDestinationQueue(key DestinationKey) *
 func (cc *CrossChainConductor) ProcessInbound(ctx context.Context, messages []messaging.Message) []messaging.Message {
 	// Phase 1: Direct pass-through for all messages (zero behavior change)
 	// Future phases can add conductor logic here
-	
+
 	// Count and log cross-partition messages
 	var crossPartitionCount int
 	for _, msg := range messages {
@@ -182,11 +182,11 @@ func (cc *CrossChainConductor) ProcessInbound(ctx context.Context, messages []me
 			crossPartitionCount++
 		}
 	}
-	
+
 	if crossPartitionCount > 0 {
 		cc.logger.Debug("Processing inbound cross-partition messages", "count", crossPartitionCount, "total_messages", len(messages))
 	}
-	
+
 	// For now, return all messages unchanged
 	return messages
 }
@@ -260,23 +260,23 @@ func (cc *CrossChainConductor) processSyntheticRequest(req *SyntheticRequest) {
 	// Determine message type and destination key
 	msgType := cc.getMessageType(req.Messages)
 	destKey := cc.createDestinationKey(msgType, req.Destination)
-	
+
 	// Get the destination queue for this type+destination combination
 	queue := cc.getOrCreateDestinationQueue(destKey)
-	
+
 	queue.mu.Lock()
 	defer queue.mu.Unlock()
-	
+
 	// Check if this destination+type combination is currently blocked
 	if queue.IsBlocked {
 		// Queue the request for later processing
 		queue.QueuedRequests = append(queue.QueuedRequests, req)
-		cc.logger.Debug("Request queued - destination blocked", 
-			"type", msgType, "destination", req.Destination, 
+		cc.logger.Debug("Request queued - destination blocked",
+			"type", msgType, "destination", req.Destination,
 			"blocked_since", queue.BlockedSince, "queue_depth", len(queue.QueuedRequests))
 		return
 	}
-	
+
 	// Not blocked - process immediately
 	cc.processRequestImmediately(req, queue, destKey)
 }
@@ -308,8 +308,8 @@ func (cc *CrossChainConductor) processRequestImmediately(req *SyntheticRequest, 
 		delete(queue.PendingTx, txID)
 		atomic.AddInt64(&cc.syntheticsErrors, 1)
 		queue.FailureCount++
-		
-		cc.logger.Error("Synthetic transaction submission failed", 
+
+		cc.logger.Error("Synthetic transaction submission failed",
 			"destination", req.Destination, "error", err, "tx_id", txID, "type", destKey.Type)
 		req.ResponseChan <- err
 		return
@@ -318,11 +318,11 @@ func (cc *CrossChainConductor) processRequestImmediately(req *SyntheticRequest, 
 	// Success - block this destination+type until we get transmission confirmation
 	queue.IsBlocked = true
 	queue.BlockedSince = time.Now()
-	
+
 	atomic.AddInt64(&cc.syntheticsSent, 1)
-	cc.logger.Debug("Synthetic transaction submitted - destination now blocked", 
+	cc.logger.Debug("Synthetic transaction submitted - destination now blocked",
 		"destination", req.Destination, "tx_id", txID, "type", destKey.Type)
-	
+
 	// Return success immediately - transmission monitoring will handle errors/retries
 	req.ResponseChan <- nil
 }
@@ -347,13 +347,13 @@ func (cc *CrossChainConductor) monitorTransmissionErrors() {
 				if err != nil {
 					atomic.AddInt64(&cc.transmissionErrors, 1)
 					cc.logger.Error("Transmission error detected", "error", err)
-					
+
 					// Handle transmission error - we'll need to implement error->transaction mapping
 					cc.handleTransmissionError(err)
 				}
 			}
 			cancel()
-			
+
 			// Brief pause before next monitoring cycle
 			time.Sleep(100 * time.Millisecond)
 		}
@@ -401,16 +401,16 @@ func (cc *CrossChainConductor) handleQueueTransmissionError(queue *DestinationQu
 
 	if oldestPending.AttemptNum >= cc.maxRetries {
 		// Max retries reached - fail the transaction and unblock the destination
-		cc.logger.Error("Transaction failed after max retries", 
-			"tx_id", oldestTxID, "attempts", oldestPending.AttemptNum, 
+		cc.logger.Error("Transaction failed after max retries",
+			"tx_id", oldestTxID, "attempts", oldestPending.AttemptNum,
 			"type", queue.Key.Type, "destination", queue.Key.Destination)
-		
+
 		delete(queue.PendingTx, oldestTxID)
 		queue.FailureCount++
-		
+
 		// Unblock this destination+type and process queued requests
 		cc.unblockDestinationQueue(queue)
-		
+
 		// Notify the original caller of the failure (if callback still exists)
 		if oldestPending.Callback != nil {
 			select {
@@ -426,21 +426,21 @@ func (cc *CrossChainConductor) handleQueueTransmissionError(queue *DestinationQu
 	oldestPending.AttemptNum++
 	oldestPending.RetryAfter = time.Now().Add(cc.retryDelay)
 	queue.RetryCount++
-	
+
 	select {
 	case cc.retryChan <- oldestPending:
-		cc.logger.Info("Transaction queued for retry", 
-			"tx_id", oldestTxID, "attempt", oldestPending.AttemptNum, 
+		cc.logger.Info("Transaction queued for retry",
+			"tx_id", oldestTxID, "attempt", oldestPending.AttemptNum,
 			"type", queue.Key.Type, "destination", queue.Key.Destination)
 	default:
 		// Retry queue full - fail the transaction and unblock
-		cc.logger.Error("Retry queue full, failing transaction", 
+		cc.logger.Error("Retry queue full, failing transaction",
 			"tx_id", oldestTxID, "type", queue.Key.Type, "destination", queue.Key.Destination)
-		
+
 		delete(queue.PendingTx, oldestTxID)
 		queue.FailureCount++
 		cc.unblockDestinationQueue(queue)
-		
+
 		if oldestPending.Callback != nil {
 			select {
 			case oldestPending.Callback <- errors.InternalError.With("retry queue full"):
@@ -454,19 +454,19 @@ func (cc *CrossChainConductor) handleQueueTransmissionError(queue *DestinationQu
 // unblockDestinationQueue unblocks a destination queue and processes any queued requests
 func (cc *CrossChainConductor) unblockDestinationQueue(queue *DestinationQueue) {
 	// This function assumes queue.mu is already locked by the caller
-	
+
 	queue.IsBlocked = false
 	queue.LastSuccess = time.Now() // Update success time even if this was a failure
-	
-	cc.logger.Debug("Unblocked destination queue", 
-		"type", queue.Key.Type, "destination", queue.Key.Destination, 
+
+	cc.logger.Debug("Unblocked destination queue",
+		"type", queue.Key.Type, "destination", queue.Key.Destination,
 		"queued_requests", len(queue.QueuedRequests))
-	
+
 	// Process the first queued request if any exist
 	if len(queue.QueuedRequests) > 0 {
 		nextReq := queue.QueuedRequests[0]
 		queue.QueuedRequests = queue.QueuedRequests[1:] // Remove first element
-		
+
 		// Process the next request immediately (this will re-block if submission succeeds)
 		cc.processRequestImmediately(nextReq, queue, queue.Key)
 	}
@@ -475,18 +475,18 @@ func (cc *CrossChainConductor) unblockDestinationQueue(queue *DestinationQueue) 
 // handleSuccessfulTransmission handles successful transmission confirmation
 func (cc *CrossChainConductor) handleSuccessfulTransmission(txID string, destKey DestinationKey) {
 	queue := cc.getOrCreateDestinationQueue(destKey)
-	
+
 	queue.mu.Lock()
 	defer queue.mu.Unlock()
-	
+
 	// Remove the successful transmission
 	if pending, exists := queue.PendingTx[txID]; exists {
 		delete(queue.PendingTx, txID)
 		queue.SuccessCount++
-		
-		cc.logger.Debug("Transmission successful", 
+
+		cc.logger.Debug("Transmission successful",
 			"tx_id", txID, "type", destKey.Type, "destination", destKey.Destination)
-		
+
 		// Notify success via callback if it exists
 		if pending.Callback != nil {
 			select {
@@ -496,7 +496,7 @@ func (cc *CrossChainConductor) handleSuccessfulTransmission(txID string, destKey
 			}
 		}
 	}
-	
+
 	// Unblock this destination and process next queued request
 	cc.unblockDestinationQueue(queue)
 }
@@ -552,13 +552,13 @@ func (cc *CrossChainConductor) processRetries() {
 func (cc *CrossChainConductor) retryTransmission(pending *PendingTransmission) {
 	// Get the destination queue for this transmission
 	queue := cc.getOrCreateDestinationQueue(pending.DestKey)
-	
+
 	queue.mu.Lock()
 	defer queue.mu.Unlock()
-	
+
 	// Verify the pending transmission still exists in the queue
 	if _, exists := queue.PendingTx[pending.ID]; !exists {
-		cc.logger.Info("Retry attempted for non-existent transaction", 
+		cc.logger.Info("Retry attempted for non-existent transaction",
 			"tx_id", pending.ID, "type", pending.DestKey.Type, "destination", pending.DestKey.Destination)
 		return
 	}
@@ -568,17 +568,17 @@ func (cc *CrossChainConductor) retryTransmission(pending *PendingTransmission) {
 
 	if err != nil {
 		// Retry submission failed
-		cc.logger.Error("Retry submission failed", 
-			"tx_id", pending.ID, "attempt", pending.AttemptNum, "error", err, 
+		cc.logger.Error("Retry submission failed",
+			"tx_id", pending.ID, "attempt", pending.AttemptNum, "error", err,
 			"type", pending.DestKey.Type, "destination", pending.DestKey.Destination)
-		
+
 		if pending.AttemptNum >= cc.maxRetries {
 			// Max retries reached - fail and unblock
 			delete(queue.PendingTx, pending.ID)
 			queue.FailureCount++
-			
+
 			cc.unblockDestinationQueue(queue)
-			
+
 			if pending.Callback != nil {
 				select {
 				case pending.Callback <- errors.InternalError.WithFormat("retry failed after %d attempts: %v", pending.AttemptNum, err):
@@ -591,18 +591,18 @@ func (cc *CrossChainConductor) retryTransmission(pending *PendingTransmission) {
 			pending.AttemptNum++
 			pending.RetryAfter = time.Now().Add(cc.retryDelay)
 			queue.RetryCount++
-			
+
 			select {
 			case cc.retryChan <- pending:
-				cc.logger.Debug("Transaction requeued for retry", 
-					"tx_id", pending.ID, "attempt", pending.AttemptNum, 
+				cc.logger.Debug("Transaction requeued for retry",
+					"tx_id", pending.ID, "attempt", pending.AttemptNum,
 					"type", pending.DestKey.Type, "destination", pending.DestKey.Destination)
 			default:
 				// Queue full - fail and unblock
 				delete(queue.PendingTx, pending.ID)
 				queue.FailureCount++
 				cc.unblockDestinationQueue(queue)
-				
+
 				if pending.Callback != nil {
 					select {
 					case pending.Callback <- errors.InternalError.With("retry queue full"):
@@ -617,10 +617,10 @@ func (cc *CrossChainConductor) retryTransmission(pending *PendingTransmission) {
 
 	// Retry submission successful - destination remains blocked until transmission confirmation
 	atomic.AddInt64(&cc.syntheticsRetried, 1)
-	cc.logger.Info("Transaction retry submitted successfully", 
-		"tx_id", pending.ID, "attempt", pending.AttemptNum, 
+	cc.logger.Info("Transaction retry submitted successfully",
+		"tx_id", pending.ID, "attempt", pending.AttemptNum,
 		"type", pending.DestKey.Type, "destination", pending.DestKey.Destination)
-	
+
 	// Update pending transmission timestamp
 	pending.SubmittedAt = time.Now()
 }
@@ -628,7 +628,7 @@ func (cc *CrossChainConductor) retryTransmission(pending *PendingTransmission) {
 // cleanupOldTransmissions removes transactions that have been pending too long across all destination queues
 func (cc *CrossChainConductor) cleanupOldTransmissions() {
 	cutoff := time.Now().Add(-5 * time.Minute) // Timeout after 5 minutes
-	
+
 	cc.queuesMutex.RLock()
 	destinationQueues := make([]*DestinationQueue, 0, len(cc.destinationQueues))
 	for _, queue := range cc.destinationQueues {
@@ -648,7 +648,7 @@ func (cc *CrossChainConductor) cleanupQueueTransmissions(queue *DestinationQueue
 	defer queue.mu.Unlock()
 
 	var staleTransmissions []*PendingTransmission
-	
+
 	// Find stale transmissions
 	for txID, pending := range queue.PendingTx {
 		if pending.SubmittedAt.Before(cutoff) {
@@ -656,18 +656,18 @@ func (cc *CrossChainConductor) cleanupQueueTransmissions(queue *DestinationQueue
 			delete(queue.PendingTx, txID)
 		}
 	}
-	
+
 	// If we removed transmissions, potentially unblock the queue
 	if len(staleTransmissions) > 0 {
-		cc.logger.Info("Cleaning up stale pending transmissions", 
-			"count", len(staleTransmissions), 
+		cc.logger.Info("Cleaning up stale pending transmissions",
+			"count", len(staleTransmissions),
 			"type", queue.Key.Type, "destination", queue.Key.Destination)
-		
+
 		// Unblock the destination if it was blocked
 		if queue.IsBlocked {
 			cc.unblockDestinationQueue(queue)
 		}
-		
+
 		// Notify callbacks of timeout
 		for _, pending := range staleTransmissions {
 			if pending.Callback != nil {
@@ -685,12 +685,12 @@ func (cc *CrossChainConductor) cleanupQueueTransmissions(queue *DestinationQueue
 func (cc *CrossChainConductor) Stop() {
 	close(cc.stopChan)
 	cc.wg.Wait()
-	
+
 	// Clean up any remaining pending transactions across all destination queues
 	cc.queuesMutex.Lock()
 	for _, queue := range cc.destinationQueues {
 		queue.mu.Lock()
-		
+
 		// Fail all pending transmissions
 		for txID, pending := range queue.PendingTx {
 			if pending.Callback != nil {
@@ -702,7 +702,7 @@ func (cc *CrossChainConductor) Stop() {
 			}
 			delete(queue.PendingTx, txID)
 		}
-		
+
 		// Fail all queued requests
 		for _, req := range queue.QueuedRequests {
 			if req.ResponseChan != nil {
@@ -714,20 +714,20 @@ func (cc *CrossChainConductor) Stop() {
 			}
 		}
 		queue.QueuedRequests = nil
-		
+
 		queue.mu.Unlock()
 	}
 	cc.queuesMutex.Unlock()
-	
+
 	cc.logger.Info("CrossChainConductor stopped")
 }
 
 // GetMetrics returns current processing metrics
 func (cc *CrossChainConductor) GetMetrics() (sent, errors, retried, transmissionErrors int64) {
-	return atomic.LoadInt64(&cc.syntheticsSent), 
-		   atomic.LoadInt64(&cc.syntheticsErrors), 
-		   atomic.LoadInt64(&cc.syntheticsRetried),
-		   atomic.LoadInt64(&cc.transmissionErrors)
+	return atomic.LoadInt64(&cc.syntheticsSent),
+		atomic.LoadInt64(&cc.syntheticsErrors),
+		atomic.LoadInt64(&cc.syntheticsRetried),
+		atomic.LoadInt64(&cc.transmissionErrors)
 }
 
 // InitRecoveryManager initializes the recovery manager with database and client
@@ -736,7 +736,7 @@ func (cc *CrossChainConductor) InitRecoveryManager(db database.Beginner, client 
 		cc.logger.Info("Recovery manager already initialized")
 		return
 	}
-	
+
 	cc.recoveryManager = NewRecoveryManager(cc, db, client)
 	cc.recoveryManager.Start()
 	cc.logger.Info("Recovery manager initialized and started")
@@ -751,7 +751,7 @@ func (cc *CrossChainConductor) RequestMissingTransactions(
 	if cc.recoveryManager == nil {
 		return nil, errors.NotReady.With("recovery manager not initialized")
 	}
-	
+
 	req := &RecoveryRequest{
 		Type:        msgType,
 		Source:      source,
@@ -761,7 +761,7 @@ func (cc *CrossChainConductor) RequestMissingTransactions(
 		Requester:   destination,
 		Priority:    1,
 	}
-	
+
 	return cc.recoveryManager.RequestMissingTransactions(req)
 }
 
@@ -775,7 +775,7 @@ func (cc *CrossChainConductor) RequestMissingTransactionsWithBatchProof(
 	if cc.batchProofManager == nil {
 		return errors.NotReady.With("batch proof recovery manager not initialized")
 	}
-	
+
 	// Convert MessageType to RecoveryType
 	var recoveryType RecoveryType
 	switch msgType {
@@ -786,13 +786,13 @@ func (cc *CrossChainConductor) RequestMissingTransactionsWithBatchProof(
 	default:
 		return errors.BadRequest.WithFormat("unsupported message type for batch recovery: %d", msgType)
 	}
-	
+
 	cc.logger.Info("Requesting batch proof recovery",
 		"partition", partitionID,
 		"type", recoveryType.String(),
 		"sequences", len(missingSequences),
 		"chain", chainURL)
-	
+
 	// Create batch recovery request
 	req := &BatchRecoveryRequest{
 		PartitionID:      partitionID,
@@ -804,7 +804,7 @@ func (cc *CrossChainConductor) RequestMissingTransactionsWithBatchProof(
 			cc.handleBatchRecoveryResponse(response)
 		},
 	}
-	
+
 	// Send to batch proof manager
 	cc.batchProofManager.RequestBatchRecovery(req)
 	return nil
@@ -819,25 +819,25 @@ func (cc *CrossChainConductor) handleBatchRecoveryResponse(response *BatchRecove
 			"error", response.Error)
 		return
 	}
-	
+
 	cc.logger.Info("Batch recovery successful",
 		"partition", response.PartitionID,
 		"type", response.Type,
 		"batch_size", response.BatchSize,
 		"proof_savings", response.ProofSavings,
 		"transactions", len(response.Transactions))
-	
+
 	// Process recovered transactions
 	for _, tx := range response.Transactions {
 		cc.logger.Debug("Processing recovered transaction",
 			"sequence", tx.SequenceNum,
 			"hash", fmt.Sprintf("%x", tx.Hash[:8]),
 			"type", tx.Type)
-		
+
 		// Here you would submit the recovered transaction back to the destination partition
 		// This would integrate with the existing message processing pipeline
 	}
-	
+
 	// Log collection proof efficiency metrics
 	if response.CollectionProof != nil {
 		cc.logger.Info("Collection proof metrics",
@@ -853,14 +853,14 @@ func (cc *CrossChainConductor) HandleRecoveryRequest(req *RecoveryRequest) error
 	if cc.recoveryManager == nil {
 		return errors.NotReady.With("recovery manager not initialized")
 	}
-	
+
 	cc.logger.Info("Received recovery request",
 		"type", cc.getMessageTypeName(req.Type),
 		"source", req.Source,
 		"destination", req.Destination,
 		"range", fmt.Sprintf("%d-%d", req.FromNumber, req.ToNumber),
 		"requester", req.Requester)
-	
+
 	// Process the recovery request asynchronously
 	go func() {
 		resp, err := cc.recoveryManager.RequestMissingTransactions(req)
@@ -868,7 +868,7 @@ func (cc *CrossChainConductor) HandleRecoveryRequest(req *RecoveryRequest) error
 			cc.logger.Error("Failed to process recovery request", "error", err)
 			return
 		}
-		
+
 		// Send recovered transactions to the requester
 		if len(resp.Transactions) > 0 {
 			err = cc.recoveryManager.ProvideRecoveredTransactions(resp.Transactions, req.Requester)
@@ -881,24 +881,24 @@ func (cc *CrossChainConductor) HandleRecoveryRequest(req *RecoveryRequest) error
 			}
 		}
 	}()
-	
+
 	return nil
 }
 
 // SubmitAnchor submits an anchor for transmission
 func (cc *CrossChainConductor) SubmitAnchor(req *AnchorRequest) error {
 	destKey := cc.createDestinationKey(MessageTypeAnchor, req.Destination)
-	
+
 	// Get or create destination queue
 	queue := cc.getOrCreateDestinationQueue(destKey)
-	
+
 	// Create synthetic request wrapper
 	synthReq := &SyntheticRequest{
 		Messages:    []messaging.Message{req.Anchor},
 		Destination: req.Destination,
 		SequenceNum: req.SequenceNum,
 	}
-	
+
 	// Queue or send based on blocking state
 	queue.mu.Lock()
 	if queue.IsBlocked {
@@ -922,43 +922,43 @@ func (cc *CrossChainConductor) SubmitAnchor(req *AnchorRequest) error {
 			queue.mu.Unlock()
 		}
 	}
-	
+
 	return nil
 }
 
 // CheckPartitionHealth checks and reports health of partition synchronization
 func (cc *CrossChainConductor) CheckPartitionHealth() map[string]interface{} {
 	health := make(map[string]interface{})
-	
+
 	cc.queuesMutex.RLock()
 	defer cc.queuesMutex.RUnlock()
-	
+
 	var totalQueued, totalPending, blockedQueues int
 	missingByDestination := make(map[string]int)
-	
+
 	for key, queue := range cc.destinationQueues {
 		queue.mu.RLock()
 		queued := len(queue.QueuedRequests)
 		pending := len(queue.PendingTx)
 		blocked := queue.IsBlocked
 		queue.mu.RUnlock()
-		
+
 		totalQueued += queued
 		totalPending += pending
 		if blocked {
 			blockedQueues++
 		}
-		
+
 		if queued > 10 || pending > 10 {
 			missingByDestination[key.Destination] = queued + pending
 		}
 	}
-	
+
 	health["total_queued"] = totalQueued
 	health["total_pending"] = totalPending
 	health["blocked_queues"] = blockedQueues
 	health["destinations_with_backlog"] = missingByDestination
-	
+
 	// Check recovery manager health if available
 	if cc.recoveryManager != nil {
 		cc.recoveryManager.mu.RLock()
@@ -966,7 +966,7 @@ func (cc *CrossChainConductor) CheckPartitionHealth() map[string]interface{} {
 		cc.recoveryManager.mu.RUnlock()
 		health["active_recovery_sessions"] = activeRecovery
 	}
-	
+
 	return health
 }
 
@@ -1015,21 +1015,21 @@ type BatchRecoveryRequest struct {
 
 // BatchRecoveryResponse contains the batch proof and transactions
 type BatchRecoveryResponse struct {
-	PartitionID      string
-	Type             RecoveryType
-	
+	PartitionID string
+	Type        RecoveryType
+
 	// Collection proof data
-	CollectionProof  *merkle.ReceiptList  // Single proof for all transactions
-	TransactionHashes [][]byte              // Hashes in the collection proof
-	
+	CollectionProof   *merkle.ReceiptList // Single proof for all transactions
+	TransactionHashes [][]byte            // Hashes in the collection proof
+
 	// Transaction data (sent separately without individual proofs)
-	Transactions     []*RecoveredTransaction
-	
+	Transactions []*RecoveredTransaction
+
 	// Metadata
-	ProofGenerated   time.Time
-	BatchSize        int
-	ProofSavings     int  // How many individual proofs we avoided
-	Error            error
+	ProofGenerated time.Time
+	BatchSize      int
+	ProofSavings   int // How many individual proofs we avoided
+	Error          error
 }
 
 // RecoveredTransaction represents a recovered transaction without individual proof
@@ -1044,13 +1044,13 @@ type RecoveredTransaction struct {
 // BatchProofRecoveryManager placeholder for the collection proof functionality
 // This would contain the full implementation from batch_proof_recovery.go
 type BatchProofRecoveryManager struct {
-	conductor        *CrossChainConductor
-	logger           logging.OptionalLogger
-	batchThreshold   int
-	maxBatchSize     int
-	totalRequests    int64
-	batchRequests    int64
-	proofSavings     int64
+	conductor      *CrossChainConductor
+	logger         logging.OptionalLogger
+	batchThreshold int
+	maxBatchSize   int
+	totalRequests  int64
+	batchRequests  int64
+	proofSavings   int64
 }
 
 func NewBatchProofRecoveryManager(conductor *CrossChainConductor, logger logging.OptionalLogger) *BatchProofRecoveryManager {
@@ -1075,21 +1075,21 @@ func (brm *BatchProofRecoveryManager) RequestBatchRecovery(req *BatchRecoveryReq
 		"partition", req.PartitionID,
 		"type", req.Type,
 		"sequences", len(req.MissingSequences))
-	
+
 	// For now, simulate successful collection proof generation
 	// In full implementation, this would generate actual ReceiptList proofs
 	go func() {
 		time.Sleep(10 * time.Millisecond) // Simulate processing time
-		
+
 		response := &BatchRecoveryResponse{
-			PartitionID:   req.PartitionID,
-			Type:          req.Type,
-			BatchSize:     len(req.MissingSequences),
-			ProofSavings:  len(req.MissingSequences) - 1, // One proof instead of many
+			PartitionID:    req.PartitionID,
+			Type:           req.Type,
+			BatchSize:      len(req.MissingSequences),
+			ProofSavings:   len(req.MissingSequences) - 1, // One proof instead of many
 			ProofGenerated: time.Now(),
-			Transactions:  make([]*RecoveredTransaction, len(req.MissingSequences)),
+			Transactions:   make([]*RecoveredTransaction, len(req.MissingSequences)),
 		}
-		
+
 		// Create placeholder recovered transactions
 		for i, seq := range req.MissingSequences {
 			response.Transactions[i] = &RecoveredTransaction{
@@ -1100,13 +1100,13 @@ func (brm *BatchProofRecoveryManager) RequestBatchRecovery(req *BatchRecoveryReq
 				Data:        []byte(fmt.Sprintf("tx-data-%d", seq)),
 			}
 		}
-		
+
 		atomic.AddInt64(&brm.totalRequests, 1)
 		if len(req.MissingSequences) >= brm.batchThreshold {
 			atomic.AddInt64(&brm.batchRequests, 1)
 			atomic.AddInt64(&brm.proofSavings, int64(response.ProofSavings))
 		}
-		
+
 		if req.Callback != nil {
 			req.Callback(response)
 		}
@@ -1116,7 +1116,7 @@ func (brm *BatchProofRecoveryManager) RequestBatchRecovery(req *BatchRecoveryReq
 func (brm *BatchProofRecoveryManager) GetMetrics() map[string]interface{} {
 	return map[string]interface{}{
 		"total_requests":  atomic.LoadInt64(&brm.totalRequests),
-		"batch_requests":  atomic.LoadInt64(&brm.batchRequests),  
+		"batch_requests":  atomic.LoadInt64(&brm.batchRequests),
 		"proof_savings":   atomic.LoadInt64(&brm.proofSavings),
 		"batch_threshold": brm.batchThreshold,
 		"max_batch_size":  brm.maxBatchSize,
@@ -1134,7 +1134,7 @@ func (cc *CrossChainConductor) CreateProofsForSyntheticTransactions(
 	if cc.proofService == nil {
 		return nil, errors.InternalError.With("proof service not initialized")
 	}
-	
+
 	// Group transactions by destination for optimal batching
 	destinationGroups := make(map[string][]ProofRequest)
 	for _, tx := range transactions {
@@ -1148,7 +1148,7 @@ func (cc *CrossChainConductor) CreateProofsForSyntheticTransactions(
 			RootChain:   rootChain,
 		})
 	}
-	
+
 	// Create optimized proofs for each destination
 	var allProofs []*protocol.AnnotatedReceipt
 	for dest, requests := range destinationGroups {
@@ -1156,19 +1156,19 @@ func (cc *CrossChainConductor) CreateProofsForSyntheticTransactions(
 		if len(requests) >= cc.proofService.batchThreshold {
 			// Merge sequences for collection proof
 			mergedReq := cc.proofService.mergeSequences(requests)
-			
+
 			cc.logger.Info("Creating collection proof for synthetic transactions",
 				"destination", dest,
 				"count", len(requests),
 				"sequences", mergedReq.Sequences)
-			
+
 			// Create single collection proof for all transactions to this destination
 			resp, err := cc.proofService.CreateProof(ctx, mergedReq)
 			if err != nil {
 				cc.logger.Error("Failed to create collection proof, falling back to individual",
 					"destination", dest,
 					"error", err)
-				
+
 				// Fallback to individual proofs
 				for _, req := range requests {
 					resp, err := cc.proofService.CreateProof(ctx, req)
@@ -1182,7 +1182,7 @@ func (cc *CrossChainConductor) CreateProofsForSyntheticTransactions(
 				for range requests {
 					allProofs = append(allProofs, resp.Proof)
 				}
-				
+
 				cc.logger.Info("Collection proof created successfully",
 					"destination", dest,
 					"proof_savings", resp.ProofSavings)
@@ -1198,14 +1198,14 @@ func (cc *CrossChainConductor) CreateProofsForSyntheticTransactions(
 			}
 		}
 	}
-	
+
 	// Log metrics
 	metrics := cc.proofService.GetMetrics()
 	cc.logger.Debug("Proof generation metrics",
 		"individual_proofs", metrics.IndividualProofsCreated,
 		"collection_proofs", metrics.CollectionProofsCreated,
 		"proofs_saved", metrics.ProofsSaved)
-	
+
 	return allProofs, nil
 }
 
@@ -1214,7 +1214,7 @@ func (cc *CrossChainConductor) ValidateIncomingProof(proof *protocol.AnnotatedRe
 	if cc.proofService == nil {
 		return errors.InternalError.With("proof service not initialized")
 	}
-	
+
 	return cc.proofService.ValidateProof(proof)
 }
 
@@ -1223,7 +1223,7 @@ func (cc *CrossChainConductor) GetProofMetrics() ProofMetrics {
 	if cc.proofService == nil {
 		return ProofMetrics{}
 	}
-	
+
 	return cc.proofService.GetMetrics()
 }
 
