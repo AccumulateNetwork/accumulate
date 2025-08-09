@@ -87,7 +87,7 @@ func testBasicFailureHandling() {
 	fmt.Println("------------------------------")
 	
 	dispatcher := NewMockDispatcher()
-	logger := logging.NewNop()
+	logger := logging.NewTestLogger(nil, "error", false)
 	conductor := NewEnhancedCrossChainConductor(dispatcher, logger)
 	
 	partitions := []string{"BVN0", "BVN1", "BVN2", "Directory"}
@@ -136,8 +136,8 @@ func testCircuitBreaker() {
 	fmt.Println("Test 2: Circuit Breaker")
 	fmt.Println("-----------------------")
 	
-	dispatcher := NewMockDispatcher()
-	logger := logging.NewNop()
+	// dispatcher := NewMockDispatcher() // Not used in this test
+	logger := logging.NewTestLogger(nil, "error", false)
 	monitor := NewPartitionHealthMonitor(logger)
 	
 	partitions := []string{"BVN0", "BVN1", "BVN2"}
@@ -150,7 +150,7 @@ func testCircuitBreaker() {
 	}
 	
 	// Check if circuit is open
-	canSend, err := monitor.CanSendToPartition("BVN1")
+	canSend, _ := monitor.CanSendToPartition("BVN1")
 	if !canSend {
 		fmt.Printf("  ✅ Circuit breaker opened after failures\n")
 	} else {
@@ -182,7 +182,7 @@ func testPartitionRecovery() {
 	fmt.Println("--------------------------")
 	
 	dispatcher := NewMockDispatcher()
-	logger := logging.NewNop()
+	logger := logging.NewTestLogger(nil, "error", false)
 	conductor := NewEnhancedCrossChainConductor(dispatcher, logger)
 	
 	partitions := []string{"BVN0", "BVN1", "BVN2"}
@@ -233,7 +233,7 @@ func testOutOfOrderHandling() {
 	fmt.Println("--------------------------------------")
 	
 	dispatcher := NewMockDispatcher()
-	logger := logging.NewNop()
+	logger := logging.NewTestLogger(nil, "error", false)
 	conductor := NewEnhancedCrossChainConductor(dispatcher, logger)
 	
 	partitions := []string{"BVN0", "BVN1", "BVN2"}
@@ -265,7 +265,7 @@ func testQueueLimits() {
 	fmt.Println("Test 5: Queue Limits")
 	fmt.Println("--------------------")
 	
-	logger := logging.NewNop()
+	logger := logging.NewTestLogger(nil, "error", false)
 	monitor := NewPartitionHealthMonitor(logger)
 	monitor.maxQueueSize = 10 // Set small limit for testing
 	
@@ -319,7 +319,7 @@ func testPerformanceUnderFailure() {
 	fmt.Println("---------------------------------")
 	
 	dispatcher := NewMockDispatcher()
-	logger := logging.NewNop()
+	logger := logging.NewTestLogger(nil, "error", false)
 	conductor := NewEnhancedCrossChainConductor(dispatcher, logger)
 	
 	partitions := []string{"BVN0", "BVN1", "BVN2", "Directory"}
