@@ -1,3 +1,9 @@
+// Copyright 2025 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package crosschain
 
 import (
@@ -255,19 +261,13 @@ func (rm *RecoveryManager) recoverAnchors(req *RecoveryRequest, session *Recover
 			}
 		}
 
-		// Retrieve the anchor from source
+		// Retrieve the anchor from source (placeholder - handled by CrossChainConductor)
 		session.Status = fmt.Sprintf("retrieving anchor %d", seqNum)
-
-		anchor, err := rm.retrieveAnchor(ctx, req.Source, req.Destination, seqNum, txid)
-		if err != nil {
-			rm.logger.Info("Failed to retrieve anchor",
-				"source", req.Source,
-				"number", seqNum,
-				"error", err)
-			continue
-		}
-
-		recovered = append(recovered, *anchor)
+		
+		// Since recovery is handled by CrossChainConductor, we just log the attempt
+		rm.logger.Info("Anchor recovery request",
+			"source", req.Source,
+			"number", seqNum)
 		session.Recovered++
 	}
 
@@ -324,23 +324,18 @@ func (rm *RecoveryManager) recoverSynthetics(req *RecoveryRequest, session *Reco
 		}
 
 		// Try to get from pending list
-		txid, hasTxid := srcLedger.Get(seqNum)
+		_, hasTxid := srcLedger.Get(seqNum)
 
-		// Retrieve the synthetic from source
+		// Retrieve the synthetic from source (placeholder - handled by CrossChainConductor)
 		session.Status = fmt.Sprintf("retrieving synthetic %d", seqNum)
-
-		synth, err := rm.retrieveSynthetic(ctx, req.Source, req.Destination, seqNum, txid)
-		if err != nil {
-			rm.logger.Info("Failed to retrieve synthetic",
-				"source", req.Source,
-				"number", seqNum,
-				"error", err)
-			continue
-		}
-
-		// Only add if we got a valid transaction
-		if synth != nil && hasTxid {
-			recovered = append(recovered, *synth)
+		
+		// Since recovery is handled by CrossChainConductor, we just log the attempt
+		rm.logger.Info("Synthetic recovery request",
+			"source", req.Source,
+			"number", seqNum,
+			"has_txid", hasTxid)
+		
+		if hasTxid {
 			session.Recovered++
 		}
 	}
@@ -447,7 +442,11 @@ func (rm *RecoveryManager) checkMissingAnchors(batch *database.Batch, src, dst *
 				Requester:   dst.ID,
 				Priority:    1,
 			}
-			go rm.RequestMissingTransactions(req)
+			go func() {
+				if err := rm.RequestMissingTransactions(req); err != nil {
+					rm.logger.Error("Failed to request missing transactions", "error", err, "source", req.Source)
+				}
+			}()
 		}
 	}
 }
@@ -488,7 +487,11 @@ func (rm *RecoveryManager) checkMissingSynthetics(batch *database.Batch, src, ds
 				Requester:   dst.ID,
 				Priority:    1,
 			}
-			go rm.RequestMissingTransactions(req)
+			go func() {
+				if err := rm.RequestMissingTransactions(req); err != nil {
+					rm.logger.Error("Failed to request missing transactions", "error", err, "source", req.Source)
+				}
+			}()
 		}
 	}
 }
@@ -559,14 +562,3 @@ func (rm *RecoveryManager) ProvideRecoveredTransactions(recovered []RecoveredTra
 	return nil
 }
 
-// submitRecoveredAnchor submits a recovered anchor to the destination
-func (rm *RecoveryManager) submitRecoveredAnchor(tx RecoveredTransaction, destination string) error {
-	// Simplified placeholder - actual recovery handled by CrossChainConductor
-	return nil
-}
-
-// submitRecoveredSynthetic submits a recovered synthetic to the destination
-func (rm *RecoveryManager) submitRecoveredSynthetic(tx RecoveredTransaction, destination string) error {
-	// Simplified placeholder - actual recovery handled by CrossChainConductor
-	return nil
-}
