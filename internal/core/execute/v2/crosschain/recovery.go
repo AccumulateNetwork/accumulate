@@ -12,14 +12,10 @@ import (
 	"sync"
 	"time"
 
-	// "gitlab.com/accumulatenetwork/accumulate/internal/core/execute" // Not currently used
-	// "gitlab.com/accumulatenetwork/accumulate/internal/core/healing" // Removed to fix import cycle
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	// "gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging" // Not currently used
-	// "gitlab.com/accumulatenetwork/accumulate/pkg/url" // Not currently used
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -262,7 +258,7 @@ func (rm *RecoveryManager) recoverAnchors(req *RecoveryRequest, session *Recover
 
 		// Retrieve the anchor from source (placeholder - handled by CrossChainConductor)
 		session.Status = fmt.Sprintf("retrieving anchor %d", seqNum)
-		
+
 		// Since recovery is handled by CrossChainConductor, we just log the attempt
 		rm.logger.Info("Anchor recovery request",
 			"source", req.Source,
@@ -326,13 +322,13 @@ func (rm *RecoveryManager) recoverSynthetics(req *RecoveryRequest, session *Reco
 
 		// Retrieve the synthetic from source (placeholder - handled by CrossChainConductor)
 		session.Status = fmt.Sprintf("retrieving synthetic %d", seqNum)
-		
+
 		// Since recovery is handled by CrossChainConductor, we just log the attempt
 		rm.logger.Info("Synthetic recovery request",
 			"source", req.Source,
 			"number", seqNum,
 			"has_txid", hasTxid)
-		
+
 		if hasTxid {
 			session.Recovered++
 		}
@@ -350,7 +346,6 @@ func (rm *RecoveryManager) recoverSynthetics(req *RecoveryRequest, session *Reco
 		Transactions: recovered,
 	}, nil
 }
-
 
 // periodicHealthCheck periodically checks for missing transactions
 func (rm *RecoveryManager) periodicHealthCheck() {
@@ -548,4 +543,3 @@ func (rm *RecoveryManager) ProvideRecoveredTransactions(recovered []RecoveredTra
 		"destination", destination)
 	return nil
 }
-
