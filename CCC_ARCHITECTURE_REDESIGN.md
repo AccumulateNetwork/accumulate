@@ -195,20 +195,70 @@ type CollectionProof struct {
   - Individual proofs: 1000 txs × ~1KB proof = ~1MB just for proofs
   - Collection proof: 1 proof (~1KB) + 1000 hashes (32KB) + tx data = huge savings
 
-### Batching Strategy
+### Batching Strategy Options
+
+#### Option 1: Historical State Proofs (Simpler for CometBFT)
 ```go
-const MAX_BATCH_SIZE = 1000  // Can handle many more txs per batch
-// Size is dominated by transaction data, not proofs
-// Even 1000 transactions might only be ~500KB total
+// Use earlier state snapshots to limit batch size
+const MAX_BATCH_SIZE = 1000
+
+func CreateHistoricalBatch(startSeq, endSeq uint64) CollectionProof {
+    // Find a historical state that includes exactly MAX_BATCH_SIZE txs
+    // Create proof from that earlier state
+    // Self-contained proof that CometBFT can validate directly
+}
 ```
+**Pros:**
+- Self-contained proofs, simple for CometBFT validation
+- Each proof is independent and complete
+- No complex multi-message coordination
+
+**Cons:**
+- Need to maintain historical states
+- May not align perfectly with batch boundaries
+
+#### Option 2: Complete Proof + Transaction Batches (More Efficient)
+```go
+// Send complete proof once, then transaction batches
+type CompleteProof struct {
+    StateRoot    []byte
+    ProofPath    [][]byte  
+    CompleteHashList [][]byte  // ALL transaction hashes
+}
+
+type TransactionBatch struct {
+    ProofID      []byte  // References the complete proof
+    StartIndex   int     // Index in hash list
+    Transactions []Transaction
+}
+```
+**Pros:**
+- Most efficient - proof sent once
+- Can send unlimited transactions in batches
+- Minimal overhead
+
+**Cons:**
+- CometBFT must track proof-to-batch relationships
+- More complex validation logic
+- State management across multiple messages
+
+### Recommendation for Design
+**Start with Option 1 (Historical State Proofs)** because:
+1. CometBFT validation remains simple - each message is self-contained
+2. Avoids complex state tracking in consensus layer
+3. Can migrate to Option 2 later if needed
+4. 1000 txs per batch is sufficient for most catch-up scenarios
 
 ### Proof Validation
 ```go
 func ValidateCollectionProof(proof *CollectionProof) error {
-    // 1. Verify the SINGLE merkle proof against state root
+    // For Option 1: Simple, self-contained validation
+    // 1. Verify the merkle proof against historical state
     // 2. Verify transaction hashes match the list
     // 3. Process all transactions in the batch
-    // Much more efficient than validating individual proofs
+    
+    // For Option 2: Would require stateful validation
+    // tracking complete proofs and matching batches
 }
 ```
 
