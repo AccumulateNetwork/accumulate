@@ -99,12 +99,19 @@ func (ccc *CrossChainConductor) ValidateAnchor(anchor *BlockAnchor) error {
    - CCC validates sequence ordering
    - CCC validates signatures and proofs
    - CCC checks for duplicates
-4. If valid: CCC submits to CometBFT
-5. If invalid: CCC rejects immediately
-6. Regular transactions bypass CCC, go directly to CometBFT
+4. If valid and in sequence: CCC submits to CometBFT
+5. If out of sequence: 
+   - CCC rejects the transaction
+   - CCC queries for missing transaction set using list proofs
+6. If invalid: CCC rejects immediately
+7. Regular transactions bypass CCC, go directly to CometBFT
 ```
 
-This design ensures that the destination partition's API layer acts as the routing point, directing cross-partition messages through the CCC while allowing regular transactions to flow normally.
+**Key Design Decision: NO QUEUEING**
+- Out-of-sequence messages are rejected, not queued
+- CCC queries for complete missing sets using list proofs
+- This avoids the complexity of mixing missing transactions with existing ones
+- Receipt list proofs make this approach efficient
 
 ## Layer 2: Consensus Validation (Security)
 
