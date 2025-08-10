@@ -1,5 +1,8 @@
 # CCC Implementation Plan - Concrete Changes
 
+## Core Principle
+The CCC provides **efficiency optimization**, not security guarantees. All validation in the CCC is for resource protection - consensus MUST still validate everything since nodes can be compromised.
+
 ## 1. Outbound Interception (Sending Side)
 
 ### Current Flow (BAD):
