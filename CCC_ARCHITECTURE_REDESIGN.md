@@ -242,12 +242,28 @@ type TransactionBatch struct {
 - More complex validation logic
 - State management across multiple messages
 
-### Recommendation for Design
-**Start with Option 1 (Historical State Proofs)** because:
-1. CometBFT validation remains simple - each message is self-contained
-2. Avoids complex state tracking in consensus layer
-3. Can migrate to Option 2 later if needed
-4. 1000 txs per batch is sufficient for most catch-up scenarios
+### Selected Design: Option 1 with Async Healing
+**Using Historical State Proofs with separate envelopes:**
+1. Each healing transaction gets its own envelope
+2. CCC runs asynchronously from normal transaction flow
+3. CometBFT validation remains simple - each envelope is self-contained
+4. No interference with regular transaction processing
+
+```go
+// Each healing batch is a separate envelope
+type HealingEnvelope struct {
+    Type          string  // "healing"
+    CollectionProof CollectionProof
+    // Self-contained proof with ~1000 transactions
+}
+
+// CCC processes healing asynchronously
+func (ccc *CrossChainConductor) ProcessHealing() {
+    // Runs independently of normal transaction flow
+    // Submits healing envelopes at its own pace
+    // No blocking of regular transactions
+}
+```
 
 ### Proof Validation
 ```go

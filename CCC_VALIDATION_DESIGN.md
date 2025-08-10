@@ -115,7 +115,7 @@ func (ccc *CrossChainConductor) ValidateAnchor(anchor *BlockAnchor) error {
 
 ### Handling Large Catch-Up Gaps with Collection Proofs
 
-Collection proofs are extremely efficient because they use ONE merkle proof for many transactions:
+Collection proofs are extremely efficient because they use ONE merkle proof for many transactions. Each healing batch runs in its own envelope, asynchronously from normal transaction flow:
 
 ```go
 const MAX_BATCH_SIZE = 1000  // Can handle many transactions efficiently
@@ -125,6 +125,20 @@ type CollectionProof struct {
     StateProof    MerkleProof   // Single proof of source partition state
     TxHashList    []Hash        // List of tx hashes (32 bytes each)
     Transactions  []Transaction // Actual transaction data
+}
+
+// Healing runs asynchronously in separate envelopes
+type HealingProcess struct {
+    // Independent of normal transaction flow
+    AsyncProcessor  *CCC
+    HealingQueue    chan CollectionProof
+    
+    // Each healing batch gets its own envelope
+    SubmitHealing(proof CollectionProof) {
+        envelope := CreateHealingEnvelope(proof)
+        // Submit independently, doesn't block regular txs
+        ccc.submitToCometBFT(envelope)
+    }
 }
 ```
 

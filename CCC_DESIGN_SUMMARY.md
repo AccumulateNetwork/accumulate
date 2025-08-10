@@ -102,12 +102,13 @@ Else:
 
 The key design decision is that the destination partition's API continues to receive transactions normally, but anchor and synthetic transactions are routed through the CCC for validation before submission to consensus.
 
-### Collection Proof Strategy
-For catching up with missing transactions, we use historical state proofs:
+### Collection Proof Strategy (Healing)
+For catching up with missing transactions, we use historical state proofs in separate envelopes:
 - Create collection proofs from earlier chain states (e.g., 1000 txs ago)
-- Each proof is self-contained with its batch of transactions
-- Keeps CometBFT validation simple - no complex state tracking
-- Alternative approach (complete proof + batches) would be more efficient but requires CometBFT to handle stateful validation
+- Each healing batch gets its own envelope
+- CCC processes healing asynchronously from normal transactions
+- No blocking or interference with regular transaction flow
+- Keeps CometBFT validation simple - each envelope is self-contained
 
 ## Risk Mitigation
 - CCC failure only affects efficiency, not correctness
