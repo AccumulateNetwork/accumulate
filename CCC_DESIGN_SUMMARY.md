@@ -102,6 +102,13 @@ Else:
 
 The key design decision is that the destination partition's API continues to receive transactions normally, but anchor and synthetic transactions are routed through the CCC for validation before submission to consensus.
 
+### Collection Proof Strategy
+For catching up with missing transactions, we use historical state proofs:
+- Create collection proofs from earlier chain states (e.g., 1000 txs ago)
+- Each proof is self-contained with its batch of transactions
+- Keeps CometBFT validation simple - no complex state tracking
+- Alternative approach (complete proof + batches) would be more efficient but requires CometBFT to handle stateful validation
+
 ## Risk Mitigation
 - CCC failure only affects efficiency, not correctness
 - Consensus provides ultimate validation
