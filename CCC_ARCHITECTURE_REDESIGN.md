@@ -146,7 +146,69 @@ func (cc *CrossChainConductor) queryMissingTransactions(source string, expectedS
     // Query the source partition for the complete set of missing transactions
     // Use list proofs to efficiently validate the entire set
     // This avoids the overhead of mixing missing txs with ones we already have
-    go cc.fetchMissingSet(source, expectedSeq, receivedSeq-1)
+    
+    // IMPORTANT: Batch to avoid transaction size limits
+    gap := receivedSeq - expectedSeq
+    if gap > MAX_BATCH_SIZE {
+        // Split into multiple queries to respect transaction size limits
+        for batch := expectedSeq; batch < receivedSeq; batch += MAX_BATCH_SIZE {
+            end := batch + MAX_BATCH_SIZE - 1
+            if end >= receivedSeq {
+                end = receivedSeq - 1
+            }
+            go cc.fetchMissingBatch(source, batch, end)
+        }
+    } else {
+        go cc.fetchMissingSet(source, expectedSeq, receivedSeq-1)
+    }
+}
+```
+
+## Collection Proof Formatting
+
+### Structure
+Collection proofs are highly efficient - ONE merkle proof for many transactions:
+
+```go
+type CollectionProof struct {
+    // Single merkle state proof for the source partition
+    StateRoot      []byte    // Current state root of source partition
+    ProofPath      [][]byte  // Single merkle path to the transaction list
+    
+    // List of transaction hashes at this state
+    TxHashes       [][]byte  // Just the hashes (32 bytes each)
+    
+    // Actual transactions
+    Transactions   []Transaction  // The full transaction data
+    
+    // Sequence range
+    StartSequence  uint64
+    EndSequence    uint64
+}
+```
+
+### Size Efficiency
+- **Single Proof**: ONE merkle proof validates entire transaction set
+- **Hash List**: Small - just 32 bytes per transaction hash
+- **Massive Savings**: Collection proof for 1000 txs is barely larger than individual proof for 1 tx
+- **Example**: 
+  - Individual proofs: 1000 txs × ~1KB proof = ~1MB just for proofs
+  - Collection proof: 1 proof (~1KB) + 1000 hashes (32KB) + tx data = huge savings
+
+### Batching Strategy
+```go
+const MAX_BATCH_SIZE = 1000  // Can handle many more txs per batch
+// Size is dominated by transaction data, not proofs
+// Even 1000 transactions might only be ~500KB total
+```
+
+### Proof Validation
+```go
+func ValidateCollectionProof(proof *CollectionProof) error {
+    // 1. Verify the SINGLE merkle proof against state root
+    // 2. Verify transaction hashes match the list
+    // 3. Process all transactions in the batch
+    // Much more efficient than validating individual proofs
 }
 ```
 
