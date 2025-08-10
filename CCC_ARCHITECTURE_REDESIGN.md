@@ -278,6 +278,57 @@ func ValidateCollectionProof(proof *CollectionProof) error {
 }
 ```
 
+## Critical Implementation Requirement: Chain Access
+
+### Source CCC Needs
+The source CCC must have efficient access to chains of transactions organized by destination and type:
+```go
+// Source partition needs indexed access to:
+// - Synthetic transactions destined for each partition
+// - Anchor transactions destined for each partition
+type SourceIndex struct {
+    // Key: destination/type (e.g., "BVN1/synthetic", "DN/anchor")
+    // Value: Chain of transactions in sequence order
+    DestinationChains map[string]*TransactionChain
+}
+
+type TransactionChain struct {
+    // Efficient access to any historical state
+    GetTransactionsFrom(startSeq, endSeq uint64) []Transaction
+    GetStateAt(sequence uint64) StateProof
+}
+```
+
+### Destination CCC Needs
+The destination CCC must track what it has received from each source:
+```go
+// Destination partition needs indexed access to:
+// - What sequence number expected from each source/type
+type DestinationIndex struct {
+    // Key: source/type (e.g., "BVN0/synthetic", "BVN2/anchor")
+    // Value: Sequence tracking
+    SourceTracking map[string]*SequenceTracker
+}
+
+type SequenceTracker struct {
+    LastDelivered   uint64
+    ExpectedNext    uint64
+    // Quick lookup of what we've already processed
+}
+```
+
+### Database/Indexing Requirements
+This design heavily relies on:
+1. **Efficient chain indexing** by destination/type pairs
+2. **Historical state access** for creating collection proofs
+3. **Fast sequence number lookups** for validation
+4. **Partition-aware transaction routing** tables
+
+Without these indexes, the CCC cannot efficiently:
+- Create collection proofs for healing
+- Validate incoming sequence numbers
+- Query for missing transaction sets
+
 ## Benefits of This Design
 
 1. **Network Efficiency**: Invalid messages never leave the source partition (O(n²) → O(1) overhead)
