@@ -1,5 +1,8 @@
 # CCC Implementation Plan - Concrete Changes
 
+## Key Architecture Decision
+**The destination partition's API will route anchor and synthetic transactions through the CCC for validation before submission to CometBFT.** Regular transactions continue to flow directly to CometBFT.
+
 ## Core Principle
 The CCC provides **efficiency optimization**, not security guarantees. All validation in the CCC is for resource protection - consensus MUST still validate everything since nodes can be compromised.
 
@@ -98,35 +101,30 @@ func (s *Submitter) Submit(ctx context.Context, envelope *messaging.Envelope, op
 ```go
 // internal/api/v3/tm/submitter.go
 func (s *Submitter) Submit(ctx context.Context, envelope *messaging.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
-    // NEW: Pre-validate cross-partition messages
-    if s.ccc != nil && isCrossPartitionEnvelope(envelope) {
-        validity, err := s.ccc.ValidateInbound(ctx, envelope)
-        if err != nil {
-            return nil, errors.BadRequest.Wrap(err)
-        }
-        
-        switch validity {
-        case ValidationRejected:
-            // Sequence too old or invalid
-            return nil, errors.Delivered.With("message already processed")
-            
-        case ValidationQueued:
-            // Out of sequence but valid - queue it
-            return []*api.Submission{{
-                Status: &protocol.TransactionStatus{
-                    Code: protocol.ErrorCodePending,
-                    Pending: true,
-                },
-            }}, nil
-            
-        case ValidationAccepted:
-            // Continue with normal submission
-        }
+    // NEW: Route anchor and synthetic transactions through CCC
+    if s.ccc != nil && isAnchorOrSynthetic(envelope) {
+        // CCC handles validation and submission
+        return s.ccc.ProcessInbound(ctx, envelope, opts)
     }
     
-    // Original submission logic...
+    // Regular transactions continue directly to CometBFT
     data, _ := envelope.MarshalBinary()
     res, err := s.local.CheckTx(ctx, data)
+    // ... rest of normal submission
+}
+
+// Helper function to identify anchor/synthetic transactions
+func isAnchorOrSynthetic(envelope *messaging.Envelope) bool {
+    messages, _ := envelope.Normalize()
+    for _, msg := range messages {
+        switch msg.(type) {
+        case *messaging.SyntheticMessage:
+            return true
+        case *messaging.BlockAnchor:
+            return true
+        }
+    }
+    return false
 }
 ```
 

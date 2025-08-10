@@ -86,10 +86,19 @@ The CCC acts as a protective efficiency filter, NOT a security boundary. All sec
 Transaction → CCC.ValidateOutbound() → Network (if valid)
 ```
 
-### Receiving Side
+### Receiving Side (Destination Partition)
 ```
-Network → CCC.ValidateInbound() → CometBFT (if valid)
+API receives transaction
+    ↓
+If Anchor/Synthetic:
+    → Route to CCC for validation
+    → CCC validates sequence, proofs, signatures
+    → CCC submits to CometBFT (if valid)
+Else:
+    → Submit directly to CometBFT
 ```
+
+The key design decision is that the destination partition's API continues to receive transactions normally, but anchor and synthetic transactions are routed through the CCC for validation before submission to consensus.
 
 ## Risk Mitigation
 - CCC failure only affects efficiency, not correctness
