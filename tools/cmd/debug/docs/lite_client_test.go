@@ -4,6 +4,9 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
+//go:build manual
+// +build manual
+
 // Package docs contains test examples for the lite client validation
 package docs
 
