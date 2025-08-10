@@ -1,0 +1,357 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+	<testsuite tests="0" failures="0" time="0.000000" name="gitlab.com/accumulatenetwork/accumulate/internal/core" timestamp="2025-08-09T22:30:10-05:00">
+		<properties>
+			<property name="go.version" value="go1.24.4 linux/amd64"></property>
+		</properties>
+	</testsuite>
+	<testsuite tests="0" failures="0" time="0.000000" name="gitlab.com/accumulatenetwork/accumulate/internal/core/block/shared" timestamp="2025-08-09T22:30:10-05:00">
+		<properties>
+			<property name="go.version" value="go1.24.4 linux/amd64"></property>
+		</properties>
+	</testsuite>
+	<testsuite tests="0" failures="0" time="0.000000" name="gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain" timestamp="2025-08-09T22:30:10-05:00">
+		<properties>
+			<property name="go.version" value="go1.24.4 linux/amd64"></property>
+		</properties>
+	</testsuite>
+	<testsuite tests="0" failures="0" time="0.000000" name="gitlab.com/accumulatenetwork/accumulate/internal/core/events" timestamp="2025-08-09T22:30:10-05:00">
+		<properties>
+			<property name="go.version" value="go1.24.4 linux/amd64"></property>
+		</properties>
+	</testsuite>
+	<testsuite tests="0" failures="0" time="0.000000" name="gitlab.com/accumulatenetwork/accumulate/internal/core/execute" timestamp="2025-08-09T22:30:10-05:00">
+		<properties>
+			<property name="go.version" value="go1.24.4 linux/amd64"></property>
+		</properties>
+	</testsuite>
+	<testsuite tests="2" failures="0" time="0.015000" name="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/internal" timestamp="2025-08-09T22:30:10-05:00">
+		<properties>
+			<property name="go.version" value="go1.24.4 linux/amd64"></property>
+		</properties>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/internal" name="TestAccountState" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/internal" name="TestEvents" time="0.000000"></testcase>
+	</testsuite>
+	<testsuite tests="1" failures="0" time="0.457000" name="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi" timestamp="2025-08-09T22:30:10-05:00">
+		<properties>
+			<property name="go.version" value="go1.24.4 linux/amd64"></property>
+		</properties>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi" name="TestVersionSwitch" time="0.440000"></testcase>
+	</testsuite>
+	<testsuite tests="37" failures="0" time="1.164000" name="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block" timestamp="2025-08-09T22:30:10-05:00">
+		<properties>
+			<property name="go.version" value="go1.24.4 linux/amd64"></property>
+		</properties>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block" name="TestValidatorSignature" time="0.070000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block" name="TestTransactionIsReady/Unsigned" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block" name="TestTransactionIsReady/Ready" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block" name="TestTransactionIsReady/Multisig_Pending" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block" name="TestTransactionIsReady/Multisig_Ready" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block" name="TestTransactionIsReady/Multibook_Pending" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block" name="TestTransactionIsReady/Multibook_Ready" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block" name="TestTransactionIsReady/Disabled_Unsigned" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block" name="TestTransactionIsReady/Disabled_Single" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block" name="TestTransactionIsReady/Disabled_Pending" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block" name="TestTransactionIsReady/Disabled_Ready" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block" name="TestTransactionIsReady/Invalidated" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block" name="TestTransactionIsReady/Old_Ready" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block" name="TestTransactionIsReady" time="0.010000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block" name="TestAddAuthority/UpdateAccountAuthority.Add" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block" name="TestAddAuthority/UpdateKeyPage.Add_w/Owner" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block" name="TestAddAuthority/Create_Account" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block" name="TestAddAuthority" time="0.010000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block" name="TestCannotDisableAuthForAuthTxns/Ready" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block" name="TestCannotDisableAuthForAuthTxns" time="0.030000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block" name="TestValidateKeyForSynthTxns" time="0.030000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block" name="TestKeySignaturePartition" time="0.030000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block" name="TestDelegatedSignatureDepth" time="0.010000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block" name="TestDelegatedSignature_Local" time="0.020000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block" name="TestDelegatedSignature_LocalMultisig" time="0.030000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block" name="TestDelegatedSignature_Double" time="0.020000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block" name="TestDelegatedSignature_RemoteDelegate" time="0.030000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block" name="TestDelegatedSignature_RemoteDelegator" time="0.040000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block" name="TestDelegatedSignature_RemoteDelegateAndAuthority" time="0.040000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block" name="TestDelegatedSignature_DobuleRemote" time="0.040000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block" name="TestDelegatedSignature_Multisig" time="0.040000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block" name="TestExecutor_Query_ProveAccount" time="0.050000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block" name="TestRemoteSignatures_SignPending" time="0.110000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block" name="TestRemoteSignatures_SameBVN" time="0.110000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block" name="TestRemoteSignatures_Initiate" time="0.110000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block" name="TestRemoteSignatures_Singlesig" time="0.120000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block" name="TestStateSaveAndRestore" time="0.180000"></testcase>
+	</testsuite>
+	<testsuite tests="162" failures="0" time="0.219000" name="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" timestamp="2025-08-09T22:30:10-05:00">
+		<properties>
+			<property name="go.version" value="go1.24.4 linux/amd64"></property>
+		</properties>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestSynthTokenDeposit_Lite" time="0.000000">
+			<skipped message="=== RUN   TestSynthTokenDeposit_Lite&#xA;    synthetic_deposit_tokens_test.go:22: TODO Broken&#xA;--- SKIP: TestSynthTokenDeposit_Lite (0.00s)&#xA;"></skipped>
+		</testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzCreateTokenAccount/df878f101e069b898c2088c5469f96dc91c22d2d874fc23f031cc9945a714755/Adjusted" time="0.000000">
+			<skipped message="=== RUN   FuzzCreateTokenAccount/df878f101e069b898c2088c5469f96dc91c22d2d874fc23f031cc9945a714755/Adjusted&#xA;    fuzz_user_txn_test.go:63: &#xA;--- SKIP: FuzzCreateTokenAccount/df878f101e069b898c2088c5469f96dc91c22d2d874fc23f031cc9945a714755/Adjusted (0.00s)&#xA;"></skipped>
+		</testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzSendTokens/oom-69d2bf59ac009693967e409f01678e5cd409c8c7" time="0.000000">
+			<skipped message="=== RUN   FuzzSendTokens/oom-69d2bf59ac009693967e409f01678e5cd409c8c7&#xA;=== PAUSE FuzzSendTokens/oom-69d2bf59ac009693967e409f01678e5cd409c8c7&#xA;=== CONT  FuzzSendTokens/oom-69d2bf59ac009693967e409f01678e5cd409c8c7&#xA;    fuzz_user_txn_test.go:497: &#xA;--- SKIP: FuzzSendTokens/oom-69d2bf59ac009693967e409f01678e5cd409c8c7 (0.00s)&#xA;"></skipped>
+		</testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzCreateDataAccount/e7f7cb07b4531fd12d6f238d4117566ddd03ddf6ebbf096bfc4ff5adbb0cbf34/Adjusted" time="0.000000">
+			<skipped message="=== RUN   FuzzCreateDataAccount/e7f7cb07b4531fd12d6f238d4117566ddd03ddf6ebbf096bfc4ff5adbb0cbf34/Adjusted&#xA;    fuzz_user_txn_test.go:105: &#xA;--- SKIP: FuzzCreateDataAccount/e7f7cb07b4531fd12d6f238d4117566ddd03ddf6ebbf096bfc4ff5adbb0cbf34/Adjusted (0.00s)&#xA;"></skipped>
+		</testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzWriteData_Lite/2c2507695443717343fa66b2d0088c66835455603f4785e0be294026d188cec5" time="0.000000">
+			<skipped message="=== RUN   FuzzWriteData_Lite/2c2507695443717343fa66b2d0088c66835455603f4785e0be294026d188cec5&#xA;=== PAUSE FuzzWriteData_Lite/2c2507695443717343fa66b2d0088c66835455603f4785e0be294026d188cec5&#xA;=== CONT  FuzzWriteData_Lite/2c2507695443717343fa66b2d0088c66835455603f4785e0be294026d188cec5&#xA;    fuzz_user_txn_test.go:497: &#xA;--- SKIP: FuzzWriteData_Lite/2c2507695443717343fa66b2d0088c66835455603f4785e0be294026d188cec5 (0.00s)&#xA;"></skipped>
+		</testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzWriteData_Lite/e6917e99631cec1e126d317e127d800db22c3162c719164c7d25f2fce122f154" time="0.000000">
+			<skipped message="=== RUN   FuzzWriteData_Lite/e6917e99631cec1e126d317e127d800db22c3162c719164c7d25f2fce122f154&#xA;=== PAUSE FuzzWriteData_Lite/e6917e99631cec1e126d317e127d800db22c3162c719164c7d25f2fce122f154&#xA;=== CONT  FuzzWriteData_Lite/e6917e99631cec1e126d317e127d800db22c3162c719164c7d25f2fce122f154&#xA;    fuzz_user_txn_test.go:497: &#xA;--- SKIP: FuzzWriteData_Lite/e6917e99631cec1e126d317e127d800db22c3162c719164c7d25f2fce122f154 (0.00s)&#xA;"></skipped>
+		</testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzWriteData_Lite/seed#0" time="0.000000">
+			<skipped message="=== RUN   FuzzWriteData_Lite/seed#0&#xA;=== PAUSE FuzzWriteData_Lite/seed#0&#xA;=== CONT  FuzzWriteData_Lite/seed#0&#xA;    fuzz_user_txn_test.go:525: &#xA;--- SKIP: FuzzWriteData_Lite/seed#0 (0.00s)&#xA;"></skipped>
+		</testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzWriteData_Lite/seed#1" time="0.000000">
+			<skipped message="=== RUN   FuzzWriteData_Lite/seed#1&#xA;=== PAUSE FuzzWriteData_Lite/seed#1&#xA;=== CONT  FuzzWriteData_Lite/seed#1&#xA;    fuzz_user_txn_test.go:525: &#xA;--- SKIP: FuzzWriteData_Lite/seed#1 (0.00s)&#xA;"></skipped>
+		</testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzWriteDataTo/seed#0" time="0.000000">
+			<skipped message="=== RUN   FuzzWriteDataTo/seed#0&#xA;=== PAUSE FuzzWriteDataTo/seed#0&#xA;=== CONT  FuzzWriteDataTo/seed#0&#xA;    fuzz_user_txn_test.go:525: &#xA;--- SKIP: FuzzWriteDataTo/seed#0 (0.00s)&#xA;"></skipped>
+		</testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzWriteDataTo/62a765fa8f1bae5ecb4af67f36fa36b37bdcc042af088d976aba086415d87b33" time="0.000000">
+			<skipped message="=== RUN   FuzzWriteDataTo/62a765fa8f1bae5ecb4af67f36fa36b37bdcc042af088d976aba086415d87b33&#xA;=== PAUSE FuzzWriteDataTo/62a765fa8f1bae5ecb4af67f36fa36b37bdcc042af088d976aba086415d87b33&#xA;=== CONT  FuzzWriteDataTo/62a765fa8f1bae5ecb4af67f36fa36b37bdcc042af088d976aba086415d87b33&#xA;    fuzz_user_txn_test.go:525: &#xA;--- SKIP: FuzzWriteDataTo/62a765fa8f1bae5ecb4af67f36fa36b37bdcc042af088d976aba086415d87b33 (0.00s)&#xA;"></skipped>
+		</testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzWriteDataTo/seed#1" time="0.000000">
+			<skipped message="=== RUN   FuzzWriteDataTo/seed#1&#xA;=== PAUSE FuzzWriteDataTo/seed#1&#xA;=== CONT  FuzzWriteDataTo/seed#1&#xA;    fuzz_user_txn_test.go:525: &#xA;--- SKIP: FuzzWriteDataTo/seed#1 (0.00s)&#xA;"></skipped>
+		</testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzAcmeFaucet/df3c0b51f84ba6305a2b3284b8147f2af7cbe5d108bd4e32f9c98bd3208dbf0e" time="0.000000">
+			<skipped message="=== RUN   FuzzAcmeFaucet/df3c0b51f84ba6305a2b3284b8147f2af7cbe5d108bd4e32f9c98bd3208dbf0e&#xA;=== PAUSE FuzzAcmeFaucet/df3c0b51f84ba6305a2b3284b8147f2af7cbe5d108bd4e32f9c98bd3208dbf0e&#xA;=== CONT  FuzzAcmeFaucet/df3c0b51f84ba6305a2b3284b8147f2af7cbe5d108bd4e32f9c98bd3208dbf0e&#xA;    fuzz_user_txn_test.go:525: &#xA;--- SKIP: FuzzAcmeFaucet/df3c0b51f84ba6305a2b3284b8147f2af7cbe5d108bd4e32f9c98bd3208dbf0e (0.00s)&#xA;"></skipped>
+		</testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzCreateToken/slow-unit-bd3aeb65795d211d65809f6d2a64c7da8cfa984d" time="0.000000">
+			<skipped message="=== RUN   FuzzCreateToken/slow-unit-bd3aeb65795d211d65809f6d2a64c7da8cfa984d&#xA;=== PAUSE FuzzCreateToken/slow-unit-bd3aeb65795d211d65809f6d2a64c7da8cfa984d&#xA;=== CONT  FuzzCreateToken/slow-unit-bd3aeb65795d211d65809f6d2a64c7da8cfa984d&#xA;    fuzz_user_txn_test.go:497: &#xA;--- SKIP: FuzzCreateToken/slow-unit-bd3aeb65795d211d65809f6d2a64c7da8cfa984d (0.00s)&#xA;"></skipped>
+		</testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzCreateToken/slow-unit-80004c6cebf4e81482340b87fedadf014f141ffc" time="0.000000">
+			<skipped message="=== RUN   FuzzCreateToken/slow-unit-80004c6cebf4e81482340b87fedadf014f141ffc&#xA;=== PAUSE FuzzCreateToken/slow-unit-80004c6cebf4e81482340b87fedadf014f141ffc&#xA;=== CONT  FuzzCreateToken/slow-unit-80004c6cebf4e81482340b87fedadf014f141ffc&#xA;    fuzz_user_txn_test.go:497: &#xA;--- SKIP: FuzzCreateToken/slow-unit-80004c6cebf4e81482340b87fedadf014f141ffc (0.00s)&#xA;"></skipped>
+		</testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzCreateToken/oom-6b3f546e8f513c315a79c757ae3c9b444f0013f3" time="0.000000">
+			<skipped message="=== RUN   FuzzCreateToken/oom-6b3f546e8f513c315a79c757ae3c9b444f0013f3&#xA;=== PAUSE FuzzCreateToken/oom-6b3f546e8f513c315a79c757ae3c9b444f0013f3&#xA;=== CONT  FuzzCreateToken/oom-6b3f546e8f513c315a79c757ae3c9b444f0013f3&#xA;    fuzz_user_txn_test.go:497: &#xA;--- SKIP: FuzzCreateToken/oom-6b3f546e8f513c315a79c757ae3c9b444f0013f3 (0.00s)&#xA;"></skipped>
+		</testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzCreateToken/oom-c3bfc6fb80858b3d814fe3a241ad9bef8d25ba91" time="0.000000">
+			<skipped message="=== RUN   FuzzCreateToken/oom-c3bfc6fb80858b3d814fe3a241ad9bef8d25ba91&#xA;=== PAUSE FuzzCreateToken/oom-c3bfc6fb80858b3d814fe3a241ad9bef8d25ba91&#xA;=== CONT  FuzzCreateToken/oom-c3bfc6fb80858b3d814fe3a241ad9bef8d25ba91&#xA;    fuzz_user_txn_test.go:497: &#xA;--- SKIP: FuzzCreateToken/oom-c3bfc6fb80858b3d814fe3a241ad9bef8d25ba91 (0.00s)&#xA;"></skipped>
+		</testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzCreateToken/slow-unit-737383f2d76a3ad00e26ce0ef55f6e882c9c9417" time="0.000000">
+			<skipped message="=== RUN   FuzzCreateToken/slow-unit-737383f2d76a3ad00e26ce0ef55f6e882c9c9417&#xA;=== PAUSE FuzzCreateToken/slow-unit-737383f2d76a3ad00e26ce0ef55f6e882c9c9417&#xA;=== CONT  FuzzCreateToken/slow-unit-737383f2d76a3ad00e26ce0ef55f6e882c9c9417&#xA;    fuzz_user_txn_test.go:497: &#xA;--- SKIP: FuzzCreateToken/slow-unit-737383f2d76a3ad00e26ce0ef55f6e882c9c9417 (0.00s)&#xA;"></skipped>
+		</testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzCreateToken/oom-db148e290d1b4870f6e33f9676bc4026b465e9c5" time="0.000000">
+			<skipped message="=== RUN   FuzzCreateToken/oom-db148e290d1b4870f6e33f9676bc4026b465e9c5&#xA;=== PAUSE FuzzCreateToken/oom-db148e290d1b4870f6e33f9676bc4026b465e9c5&#xA;=== CONT  FuzzCreateToken/oom-db148e290d1b4870f6e33f9676bc4026b465e9c5&#xA;    fuzz_user_txn_test.go:497: &#xA;--- SKIP: FuzzCreateToken/oom-db148e290d1b4870f6e33f9676bc4026b465e9c5 (0.00s)&#xA;"></skipped>
+		</testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzCreateToken/slow-unit-a3c71e144e4af29ca10dd2ab6219b424896dfc34" time="0.000000">
+			<skipped message="=== RUN   FuzzCreateToken/slow-unit-a3c71e144e4af29ca10dd2ab6219b424896dfc34&#xA;=== PAUSE FuzzCreateToken/slow-unit-a3c71e144e4af29ca10dd2ab6219b424896dfc34&#xA;=== CONT  FuzzCreateToken/slow-unit-a3c71e144e4af29ca10dd2ab6219b424896dfc34&#xA;    fuzz_user_txn_test.go:497: &#xA;--- SKIP: FuzzCreateToken/slow-unit-a3c71e144e4af29ca10dd2ab6219b424896dfc34 (0.00s)&#xA;"></skipped>
+		</testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzCreateToken/9267eb73f799b96509eec07bfb70a70f1c6805c901861733fbfa64cb84a0a57c" time="0.000000">
+			<skipped message="=== RUN   FuzzCreateToken/9267eb73f799b96509eec07bfb70a70f1c6805c901861733fbfa64cb84a0a57c&#xA;=== PAUSE FuzzCreateToken/9267eb73f799b96509eec07bfb70a70f1c6805c901861733fbfa64cb84a0a57c&#xA;=== CONT  FuzzCreateToken/9267eb73f799b96509eec07bfb70a70f1c6805c901861733fbfa64cb84a0a57c&#xA;    fuzz_user_txn_test.go:525: &#xA;--- SKIP: FuzzCreateToken/9267eb73f799b96509eec07bfb70a70f1c6805c901861733fbfa64cb84a0a57c (0.00s)&#xA;"></skipped>
+		</testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzCreateToken/oom-09467469d90e1f8e1cbaa5fc2b4a89d49a62f228" time="0.000000">
+			<skipped message="=== RUN   FuzzCreateToken/oom-09467469d90e1f8e1cbaa5fc2b4a89d49a62f228&#xA;=== PAUSE FuzzCreateToken/oom-09467469d90e1f8e1cbaa5fc2b4a89d49a62f228&#xA;=== CONT  FuzzCreateToken/oom-09467469d90e1f8e1cbaa5fc2b4a89d49a62f228&#xA;    fuzz_user_txn_test.go:497: &#xA;--- SKIP: FuzzCreateToken/oom-09467469d90e1f8e1cbaa5fc2b4a89d49a62f228 (0.00s)&#xA;"></skipped>
+		</testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzCreateToken/oom-bb837fbff2083d462ac8047e29536d40801498da" time="0.000000">
+			<skipped message="=== RUN   FuzzCreateToken/oom-bb837fbff2083d462ac8047e29536d40801498da&#xA;=== PAUSE FuzzCreateToken/oom-bb837fbff2083d462ac8047e29536d40801498da&#xA;=== CONT  FuzzCreateToken/oom-bb837fbff2083d462ac8047e29536d40801498da&#xA;    fuzz_user_txn_test.go:497: &#xA;--- SKIP: FuzzCreateToken/oom-bb837fbff2083d462ac8047e29536d40801498da (0.00s)&#xA;"></skipped>
+		</testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzCreateToken/slow-unit-70291fc28e70b92912bdfd51d8117a15bd5c80f1" time="0.000000">
+			<skipped message="=== RUN   FuzzCreateToken/slow-unit-70291fc28e70b92912bdfd51d8117a15bd5c80f1&#xA;=== PAUSE FuzzCreateToken/slow-unit-70291fc28e70b92912bdfd51d8117a15bd5c80f1&#xA;=== CONT  FuzzCreateToken/slow-unit-70291fc28e70b92912bdfd51d8117a15bd5c80f1&#xA;    fuzz_user_txn_test.go:497: &#xA;--- SKIP: FuzzCreateToken/slow-unit-70291fc28e70b92912bdfd51d8117a15bd5c80f1 (0.00s)&#xA;"></skipped>
+		</testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzIssueTokens/e1995f4d99fdae79b86682b9869c158a2ffe6413af27239a9992673b4fe891c1" time="0.000000">
+			<skipped message="=== RUN   FuzzIssueTokens/e1995f4d99fdae79b86682b9869c158a2ffe6413af27239a9992673b4fe891c1&#xA;=== PAUSE FuzzIssueTokens/e1995f4d99fdae79b86682b9869c158a2ffe6413af27239a9992673b4fe891c1&#xA;=== CONT  FuzzIssueTokens/e1995f4d99fdae79b86682b9869c158a2ffe6413af27239a9992673b4fe891c1&#xA;    fuzz_user_txn_test.go:525: &#xA;--- SKIP: FuzzIssueTokens/e1995f4d99fdae79b86682b9869c158a2ffe6413af27239a9992673b4fe891c1 (0.00s)&#xA;"></skipped>
+		</testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzBurnTokens/slow-unit-a333676adee402243b135da9b2f8cd141e44d7b9" time="0.000000">
+			<skipped message="=== RUN   FuzzBurnTokens/slow-unit-a333676adee402243b135da9b2f8cd141e44d7b9&#xA;=== PAUSE FuzzBurnTokens/slow-unit-a333676adee402243b135da9b2f8cd141e44d7b9&#xA;=== CONT  FuzzBurnTokens/slow-unit-a333676adee402243b135da9b2f8cd141e44d7b9&#xA;    fuzz_user_txn_test.go:497: &#xA;--- SKIP: FuzzBurnTokens/slow-unit-a333676adee402243b135da9b2f8cd141e44d7b9 (0.00s)&#xA;"></skipped>
+		</testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzCreateKeyPage/slow-unit-d054842c5b1142eec0c58eb639925319ed8db275" time="0.000000">
+			<skipped message="=== RUN   FuzzCreateKeyPage/slow-unit-d054842c5b1142eec0c58eb639925319ed8db275&#xA;=== PAUSE FuzzCreateKeyPage/slow-unit-d054842c5b1142eec0c58eb639925319ed8db275&#xA;=== CONT  FuzzCreateKeyPage/slow-unit-d054842c5b1142eec0c58eb639925319ed8db275&#xA;    fuzz_user_txn_test.go:497: &#xA;--- SKIP: FuzzCreateKeyPage/slow-unit-d054842c5b1142eec0c58eb639925319ed8db275 (0.00s)&#xA;"></skipped>
+		</testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzCreateKeyPage/slow-unit-d94477dfe7da32f5710d799ca1da05fc9ba24210" time="0.000000">
+			<skipped message="=== RUN   FuzzCreateKeyPage/slow-unit-d94477dfe7da32f5710d799ca1da05fc9ba24210&#xA;=== PAUSE FuzzCreateKeyPage/slow-unit-d94477dfe7da32f5710d799ca1da05fc9ba24210&#xA;=== CONT  FuzzCreateKeyPage/slow-unit-d94477dfe7da32f5710d799ca1da05fc9ba24210&#xA;    fuzz_user_txn_test.go:497: &#xA;--- SKIP: FuzzCreateKeyPage/slow-unit-d94477dfe7da32f5710d799ca1da05fc9ba24210 (0.00s)&#xA;"></skipped>
+		</testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzCreateKeyPage/slow-unit-36909e3f5a438d10e41097feab458d0c8faf7494" time="0.000000">
+			<skipped message="=== RUN   FuzzCreateKeyPage/slow-unit-36909e3f5a438d10e41097feab458d0c8faf7494&#xA;=== PAUSE FuzzCreateKeyPage/slow-unit-36909e3f5a438d10e41097feab458d0c8faf7494&#xA;=== CONT  FuzzCreateKeyPage/slow-unit-36909e3f5a438d10e41097feab458d0c8faf7494&#xA;    fuzz_user_txn_test.go:497: &#xA;--- SKIP: FuzzCreateKeyPage/slow-unit-36909e3f5a438d10e41097feab458d0c8faf7494 (0.00s)&#xA;"></skipped>
+		</testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzCreateKeyPage/slow-unit-2cbc0e51c31f4757cff063722eed20aa9a77ea64" time="0.000000">
+			<skipped message="=== RUN   FuzzCreateKeyPage/slow-unit-2cbc0e51c31f4757cff063722eed20aa9a77ea64&#xA;=== PAUSE FuzzCreateKeyPage/slow-unit-2cbc0e51c31f4757cff063722eed20aa9a77ea64&#xA;=== CONT  FuzzCreateKeyPage/slow-unit-2cbc0e51c31f4757cff063722eed20aa9a77ea64&#xA;    fuzz_user_txn_test.go:497: &#xA;--- SKIP: FuzzCreateKeyPage/slow-unit-2cbc0e51c31f4757cff063722eed20aa9a77ea64 (0.00s)&#xA;"></skipped>
+		</testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzCreateKeyPage/slow-unit-fdeeddcf13b66c0c23ff7daeec5c3c6f01767237" time="0.000000">
+			<skipped message="=== RUN   FuzzCreateKeyPage/slow-unit-fdeeddcf13b66c0c23ff7daeec5c3c6f01767237&#xA;=== PAUSE FuzzCreateKeyPage/slow-unit-fdeeddcf13b66c0c23ff7daeec5c3c6f01767237&#xA;=== CONT  FuzzCreateKeyPage/slow-unit-fdeeddcf13b66c0c23ff7daeec5c3c6f01767237&#xA;    fuzz_user_txn_test.go:497: &#xA;--- SKIP: FuzzCreateKeyPage/slow-unit-fdeeddcf13b66c0c23ff7daeec5c3c6f01767237 (0.00s)&#xA;"></skipped>
+		</testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzCreateKeyPage/slow-unit-1aa583865e6936ad5b69e1a7290ad58ebc42751d" time="0.000000">
+			<skipped message="=== RUN   FuzzCreateKeyPage/slow-unit-1aa583865e6936ad5b69e1a7290ad58ebc42751d&#xA;=== PAUSE FuzzCreateKeyPage/slow-unit-1aa583865e6936ad5b69e1a7290ad58ebc42751d&#xA;=== CONT  FuzzCreateKeyPage/slow-unit-1aa583865e6936ad5b69e1a7290ad58ebc42751d&#xA;    fuzz_user_txn_test.go:497: &#xA;--- SKIP: FuzzCreateKeyPage/slow-unit-1aa583865e6936ad5b69e1a7290ad58ebc42751d (0.00s)&#xA;"></skipped>
+		</testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzCreateKeyBook/25e392cc3a191fcab5bb4cd21e6061ee192836b73decaa568fe4bef4b3d10cef" time="0.000000">
+			<skipped message="=== RUN   FuzzCreateKeyBook/25e392cc3a191fcab5bb4cd21e6061ee192836b73decaa568fe4bef4b3d10cef&#xA;=== PAUSE FuzzCreateKeyBook/25e392cc3a191fcab5bb4cd21e6061ee192836b73decaa568fe4bef4b3d10cef&#xA;=== CONT  FuzzCreateKeyBook/25e392cc3a191fcab5bb4cd21e6061ee192836b73decaa568fe4bef4b3d10cef&#xA;    fuzz_user_txn_test.go:525: &#xA;--- SKIP: FuzzCreateKeyBook/25e392cc3a191fcab5bb4cd21e6061ee192836b73decaa568fe4bef4b3d10cef (0.00s)&#xA;"></skipped>
+		</testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzCreateKeyBook/16aa1092698af46db8221d94d7b86063dbd75ac08cc9cd34ce905f717097b95e" time="0.000000">
+			<skipped message="=== RUN   FuzzCreateKeyBook/16aa1092698af46db8221d94d7b86063dbd75ac08cc9cd34ce905f717097b95e&#xA;=== PAUSE FuzzCreateKeyBook/16aa1092698af46db8221d94d7b86063dbd75ac08cc9cd34ce905f717097b95e&#xA;=== CONT  FuzzCreateKeyBook/16aa1092698af46db8221d94d7b86063dbd75ac08cc9cd34ce905f717097b95e&#xA;    fuzz_user_txn_test.go:525: &#xA;--- SKIP: FuzzCreateKeyBook/16aa1092698af46db8221d94d7b86063dbd75ac08cc9cd34ce905f717097b95e (0.00s)&#xA;"></skipped>
+		</testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzLockAccount/oom-f8fc905724e04551aa953c674525ca68eaab11b8" time="0.000000">
+			<skipped message="=== RUN   FuzzLockAccount/oom-f8fc905724e04551aa953c674525ca68eaab11b8&#xA;=== PAUSE FuzzLockAccount/oom-f8fc905724e04551aa953c674525ca68eaab11b8&#xA;=== CONT  FuzzLockAccount/oom-f8fc905724e04551aa953c674525ca68eaab11b8&#xA;    fuzz_user_txn_test.go:497: &#xA;--- SKIP: FuzzLockAccount/oom-f8fc905724e04551aa953c674525ca68eaab11b8 (0.00s)&#xA;"></skipped>
+		</testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestCreateAccountWithinNonAdi/createDataAccount" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestCreateAccountWithinNonAdi/createIdentity" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestCreateAccountWithinNonAdi/createKeyBook" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestCreateAccountWithinNonAdi/createDataAccount#01" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestCreateAccountWithinNonAdi/createTokenAccount" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestCreateAccountWithinNonAdi/createToken" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestCreateAccountWithinNonAdi" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestCreateAccountWithinOtherAdi/createDataAccount" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestCreateAccountWithinOtherAdi/createIdentity" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestCreateAccountWithinOtherAdi/createKeyBook" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestCreateAccountWithinOtherAdi/createDataAccount#01" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestCreateAccountWithinOtherAdi/createTokenAccount" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestCreateAccountWithinOtherAdi/createToken" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestCreateAccountWithinOtherAdi" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestLiteTokenTransactions" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestSyntheticCreateIdentity_MultiSlash" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestSyntheticCreateIdentity_MultiSlash_SubADI" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestUpdateAccountAuth_Duplicate" time="0.080000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestUpdateAccountAuth_Page" time="0.010000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestUpdateKeyPage_Priority/0" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestUpdateKeyPage_Priority/1" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestUpdateKeyPage_Priority/2" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestUpdateKeyPage_Priority" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestUpdateKeyPage_Duplicate/Add_a_hash_with_an_existing_hash_fails" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestUpdateKeyPage_Duplicate/Update_to_a_hash_with_an_existing_hash_fails" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestUpdateKeyPage_Duplicate/Add_a_delegate_with_an_existing_delegate_fails" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestUpdateKeyPage_Duplicate/Update_to_a_delegate_with_an_existing_delegate_fails" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestUpdateKeyPage_Duplicate/Add_a_hash_with_an_existing_delegate_and_hash_fails" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestUpdateKeyPage_Duplicate/Update_to_a_hash_with_an_existing_delegate_and_hash_fails" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestUpdateKeyPage_Duplicate/Add_a_delegate_with_an_existing_delegate_and_hash_fails" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestUpdateKeyPage_Duplicate/Update_to_a_delegate_with_an_existing_delegate_and_hash_fails" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestUpdateKeyPage_Duplicate/Add_both_with_an_existing_hash_fails" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestUpdateKeyPage_Duplicate/Update_to_both_with_an_existing_hash_fails" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestUpdateKeyPage_Duplicate/Add_both_with_an_existing_delegate_fails" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestUpdateKeyPage_Duplicate/Update_to_both_with_an_existing_delegate_fails" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestUpdateKeyPage_Duplicate/Add_both_with_an_existing_delegate_and_hash_fails" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestUpdateKeyPage_Duplicate/Update_to_both_with_an_existing_delegate_and_hash_fails" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestUpdateKeyPage_Duplicate" time="0.010000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestUpdateKeyPage_Update/Update_an_existing_hash_to_a_hash_succeeds" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestUpdateKeyPage_Update/Update_an_existing_delegate_(bob.acme)_to_a_delegate_(bob.acme)_succeeds" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestUpdateKeyPage_Update/Update_an_existing_delegate_(bob.acme)_and_hash_to_a_hash_succeeds" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestUpdateKeyPage_Update/Update_an_existing_delegate_(bob.acme)_and_hash_to_a_delegate_(bob.acme)_succeeds" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestUpdateKeyPage_Update/Update_an_existing_hash_to_both_(bob.acme)_succeeds" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestUpdateKeyPage_Update/Update_an_existing_delegate_(bob.acme)_to_both_(bob.acme)_succeeds" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestUpdateKeyPage_Update/Update_an_existing_delegate_(bob.acme)_and_hash_to_both_(bob.acme)_succeeds" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestUpdateKeyPage_Update/Update_an_existing_hash_to_a_hash_succeeds#01" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestUpdateKeyPage_Update/Update_an_existing_delegate_(bob.acme)_to_a_delegate_(charlie.acme)_succeeds" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestUpdateKeyPage_Update/Update_an_existing_delegate_(bob.acme)_and_hash_to_a_hash_succeeds#01" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestUpdateKeyPage_Update/Update_an_existing_delegate_(bob.acme)_and_hash_to_a_delegate_(charlie.acme)_succeeds" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestUpdateKeyPage_Update/Update_an_existing_hash_to_both_(charlie.acme)_succeeds" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestUpdateKeyPage_Update/Update_an_existing_delegate_(bob.acme)_to_both_(charlie.acme)_succeeds" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestUpdateKeyPage_Update/Update_an_existing_delegate_(bob.acme)_and_hash_to_both_(charlie.acme)_succeeds" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestUpdateKeyPage_Update" time="0.020000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestUpdateKeyPage_SelfDelegation_Add" time="0.010000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestUpdateKeyPage_SelfDelegation_Update" time="0.010000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestUpdateKeyPage_PageDelegate_Add" time="0.010000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestUpdateKeyPage_PageDelegate_Update" time="0.010000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="TestUpdateKey_Duplicate" time="0.020000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzCreateIdentity/b4cb83d7b64e70795a9bf5e3aed0cc015b524440b3e267fdb6bf3f2bad768c1a" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzCreateIdentity/seed#0" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzCreateIdentity" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzCreateTokenAccount/df878f101e069b898c2088c5469f96dc91c22d2d874fc23f031cc9945a714755" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzCreateTokenAccount/seed#0/Adjusted" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzCreateTokenAccount/seed#0" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzCreateTokenAccount" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzSendTokens/seed#0" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzSendTokens/632e324fc8d05229a57d64c9595dfaa0d417cf0359d34083463ab6cbe314a77f" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzSendTokens" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzCreateDataAccount/e7f7cb07b4531fd12d6f238d4117566ddd03ddf6ebbf096bfc4ff5adbb0cbf34" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzCreateDataAccount/seed#0/Adjusted" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzCreateDataAccount/seed#0" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzCreateDataAccount" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzWriteData/seed#0" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzWriteData/seed#1" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzWriteData" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzWriteData_Lite" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzWriteDataTo" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzAcmeFaucet/seed#0/Adjusted" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzAcmeFaucet/seed#0" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzAcmeFaucet" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzCreateToken/seed#0/Adjusted" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzCreateToken/seed#0" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzCreateToken" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzIssueTokens/seed#0" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzIssueTokens/oom-12869ce34baf6101bf74adb91d633d6a1a1cd545" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzIssueTokens/oom-2594627c4b829f2e748cd26a5a6adf2c669c9e87" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzIssueTokens/oom-c538b578f24a35d18e9027ef8af11d1c27708433" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzIssueTokens/oom-e38d2231bcc0203c4f8b7c085a59c76694cbf5bb" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzIssueTokens/slow-unit-b7f492ce77281de3555052b45fce37ea85dc2431" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzIssueTokens/slow-unit-c0f3679ca90455c441301460b96ef47037ae854b" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzIssueTokens" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzBurnTokens/seed#0" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzBurnTokens" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzCreateLiteTokenAccount/seed#0" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzCreateLiteTokenAccount" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzCreateKeyPage/seed#0" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzCreateKeyPage/slow-unit-edf1911ad4047bb7239c44674573c1f366e9fdf6" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzCreateKeyPage" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzCreateKeyBook/seed#0/Adjusted" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzCreateKeyBook/seed#0" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzCreateKeyBook" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzAddCredits/seed#0" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzAddCredits" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzUpdateKeyPage/seed#3" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzUpdateKeyPage/seed#0" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzUpdateKeyPage/seed#5" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzUpdateKeyPage/seed#6" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzUpdateKeyPage/seed#4" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzUpdateKeyPage/seed#2" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzUpdateKeyPage/seed#1" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzUpdateKeyPage" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzLockAccount/oom-f5441abe4747b48e9cf70404d107c24cfa81e370" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzLockAccount/oom-6ef247b26cb6a8f759ddeef345fb07e82222c697" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzLockAccount/slow-unit-9a4b1bd50309e481e96fecde8f0dff9043b8ce2c" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzLockAccount/slow-unit-a3e8a386e0b59c4bf121fd5fe050d73d03ed9a33" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzLockAccount/seed#0" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzLockAccount/oom-3869b30653a59efb4ace0568a594024abb579aa1" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzLockAccount/oom-9165157c3eb70c0facf15fbce2ac4aeaf86ad2da" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzLockAccount" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzUpdateAccountAuth/seed#3" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzUpdateAccountAuth/seed#0" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzUpdateAccountAuth/b8944896610358a2d7ad7c0a6090cc62995f2c09efbc808ac960e6ffa553a3df" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzUpdateAccountAuth/seed#2" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzUpdateAccountAuth/seed#1" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzUpdateAccountAuth/seed#4" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzUpdateAccountAuth" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzUpdateKey/seed#0" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain" name="FuzzUpdateKey" time="0.000000"></testcase>
+	</testsuite>
+	<testsuite tests="0" failures="0" time="0.000000" name="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/simulator" timestamp="2025-08-09T22:30:10-05:00">
+		<properties>
+			<property name="go.version" value="go1.24.4 linux/amd64"></property>
+		</properties>
+	</testsuite>
+	<testsuite tests="9" failures="0" time="0.204000" name="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block" timestamp="2025-08-09T22:30:10-05:00">
+		<properties>
+			<property name="go.version" value="go1.24.4 linux/amd64"></property>
+		</properties>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block" name="TestSyntheticAnchor/Case_1" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block" name="TestSyntheticAnchor/Case_2" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block" name="TestSyntheticAnchor/Case_3" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block" name="TestSyntheticAnchor/Case_4" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block" name="TestSyntheticAnchor" time="0.000000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block" name="TestDelegationPath/Case_1" time="0.090000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block" name="TestDelegationPath/Case_2" time="0.040000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block" name="TestDelegationPath/Case_3" time="0.050000"></testcase>
+		<testcase classname="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block" name="TestDelegationPath" time="0.190000"></testcase>
+	</testsuite>
+	<testsuite tests="0" failures="0" time="0.000000" name="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain" timestamp="2025-08-09T22:30:10-05:00">
+		<properties>
+			<property name="go.version" value="go1.24.4 linux/amd64"></property>
+		</properties>
+	</testsuite>
+	<testsuite tests="0" failures="0" time="0.000000" name="gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/crosschain" timestamp="2025-08-09T22:30:10-05:00">
+		<properties>
+			<property name="go.version" value="go1.24.4 linux/amd64"></property>
+		</properties>
+	</testsuite>
+	<testsuite tests="0" failures="0" time="0.000000" name="gitlab.com/accumulatenetwork/accumulate/internal/core/hash" timestamp="2025-08-09T22:30:10-05:00">
+		<properties>
+			<property name="go.version" value="go1.24.4 linux/amd64"></property>
+		</properties>
+	</testsuite>
+	<testsuite tests="0" failures="0" time="0.000000" name="gitlab.com/accumulatenetwork/accumulate/internal/core/healing" timestamp="2025-08-09T22:30:10-05:00">
+		<properties>
+			<property name="go.version" value="go1.24.4 linux/amd64"></property>
+		</properties>
+	</testsuite>
+</testsuites>

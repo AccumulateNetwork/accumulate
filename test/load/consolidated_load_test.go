@@ -249,4 +249,3 @@ func BenchmarkTransactionThroughput(b *testing.B) {
 		sim.MustSubmitAndExecuteBlock(env)
 	}
 }
-

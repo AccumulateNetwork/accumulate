@@ -478,7 +478,6 @@ func (cc *CrossChainConductor) unblockDestinationQueue(queue *DestinationQueue) 
 	}
 }
 
-
 // processRetries handles retry attempts for failed transmissions
 func (cc *CrossChainConductor) processRetries() {
 	defer cc.wg.Done()
