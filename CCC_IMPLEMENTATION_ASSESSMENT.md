@@ -1,21 +1,23 @@
 # CCC Implementation Assessment: Effort and Risk Analysis
 
 ## Executive Summary
-The Accumulate codebase has a **partially implemented CrossChainConductor** with approximately **40% of the design completed**. The foundation is solid but significant work remains for production readiness.
+The Accumulate codebase has a **partially implemented CrossChainConductor** with approximately **35% of the design completed**. The foundation is solid but significant work remains for production readiness.
+
+**CRITICAL FINDING**: Collection proofs are NOT functional - the code structure exists but passes `nil` for merkle state (proof_service.go line 303).
 
 ## Current State vs Design Requirements
 
-### ✅ What's Already Built (40%)
+### ✅ What's Already Built (35%)
 1. **Basic CCC Structure** - Async processing, per-destination queues
 2. **Recovery Infrastructure** - Healing mechanisms for missing transactions  
-3. **Collection Proof Framework** - ProofService with batching logic
+3. **Collection Proof Framework** - Structure exists but NOT FUNCTIONAL (passes nil merkle state)
 4. **Database Abstractions** - Chain access patterns exist
 5. **API Interfaces** - Clean dispatcher and submitter interfaces
 
-### ⚠️ What's Missing (60%)
+### ⚠️ What's Missing (65%)
 1. **API Routing Integration** - CCC not integrated with API layer
 2. **Chain Indexing by Destination/Type** - Critical for efficient operation
-3. **Production Collection Proofs** - Placeholder implementation
+3. **CRITICAL: Collection Proofs NOT WORKING** - Code passes nil for merkle state (line 303 proof_service.go)
 4. **Sequence Number Validation** - Not enforced at ingress
 5. **Historical State Access** - No efficient historical chain queries
 6. **Network Partition Handling** - No fault tolerance
