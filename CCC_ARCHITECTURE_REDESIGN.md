@@ -8,6 +8,9 @@ The CCC is currently positioned AFTER messages have been accepted by CometBFT, w
 
 ## Proposed Architecture
 
+### Important Note: Defense in Depth
+The CCC provides early validation for **efficiency**, not security. Consensus-level validation remains mandatory since nodes can be compromised. The CCC acts as a protective filter to reduce network overhead and centralize queue management, but is NOT a security boundary.
+
 ### Sending Side - CCC as Gatekeeper
 The CCC should intercept synthetic messages BEFORE they are sent over the network:
 
@@ -126,11 +129,14 @@ func (cc *CrossChainConductor) ValidateInbound(ctx context.Context, envelope *me
 
 ## Benefits of This Design
 
-1. **Network Efficiency**: Invalid messages never leave the source partition
+1. **Network Efficiency**: Invalid messages never leave the source partition (O(n²) → O(1) overhead)
 2. **Consensus Efficiency**: Invalid messages never enter CometBFT mempool
-3. **Early Rejection**: Problems detected and handled at the earliest possible point
-4. **Better DoS Protection**: Can rate-limit and validate before expensive consensus operations
-5. **Cleaner Architecture**: Clear separation between validation and execution
+3. **Queue Centralization**: Single queue point instead of every node maintaining queues (O(n) → O(1) memory)
+4. **Early Rejection**: Problems detected and handled at the earliest possible point
+5. **Better DoS Protection**: Can rate-limit and validate before expensive consensus operations
+6. **Cleaner Architecture**: Clear separation between validation and execution
+
+**Note**: These are efficiency benefits. Security still requires full consensus validation since nodes can be compromised.
 
 ## Migration Path
 
