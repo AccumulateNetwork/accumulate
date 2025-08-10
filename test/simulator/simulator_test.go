@@ -84,7 +84,7 @@ func TestSimulator2(t *testing.T) {
 	// Fund the LTA - no need to wait since the simulator uses a fake faucet
 	_, err := sim.S.Services().Faucet(ctx, lite, api.FaucetOptions{})
 	require.NoError(t, err)
-	
+
 	// Give the lite account credits directly so it can pay for transactions
 	CreditCredits(t, sim.DatabaseFor(lite), lite.RootIdentity(), 1e6)
 
