@@ -1,7 +1,13 @@
 # CCC Implementation Plan - Concrete Changes
 
-## Key Architecture Decision
-**The destination partition's API will route anchor and synthetic transactions through the CCC for validation before submission to CometBFT.** Regular transactions continue to flow directly to CometBFT.
+## Key Architecture Decisions
+
+1. **The destination partition's API will route anchor and synthetic transactions through the CCC for validation before submission to CometBFT.** Regular transactions continue to flow directly to CometBFT.
+
+2. **Chain Access is Critical**: The CCC requires efficient indexed access to:
+   - Source: Chains of transactions by destination/type (e.g., "BVN1/synthetic")
+   - Destination: Sequence tracking by source/type (e.g., "BVN0/anchor")
+   - This enables efficient healing and validation
 
 ## Core Principle
 The CCC provides **efficiency optimization**, not security guarantees. All validation in the CCC is for resource protection - consensus MUST still validate everything since nodes can be compromised.
