@@ -113,6 +113,38 @@ func (ccc *CrossChainConductor) ValidateAnchor(anchor *BlockAnchor) error {
 - This avoids the complexity of mixing missing transactions with existing ones
 - Receipt list proofs make this approach efficient
 
+### Handling Large Catch-Up Gaps with Collection Proofs
+
+Collection proofs are extremely efficient because they use ONE merkle proof for many transactions:
+
+```go
+const MAX_BATCH_SIZE = 1000  // Can handle many transactions efficiently
+
+type CollectionProof struct {
+    // ONE merkle proof for the entire batch
+    StateProof    MerkleProof   // Single proof of source partition state
+    TxHashList    []Hash        // List of tx hashes (32 bytes each)
+    Transactions  []Transaction // Actual transaction data
+}
+```
+
+**Why Collection Proofs are Small:**
+- **Single Merkle Proof**: ~1KB validates ALL transactions in the batch
+- **Hash List**: 1000 txs = only 32KB of hashes
+- **Comparison**: 
+  - Individual proofs: 1000 × 1KB = 1MB of proof data
+  - Collection proof: 1KB proof + 32KB hashes = 33KB overhead
+  - **97% reduction in proof overhead!**
+
+**Size Calculation Example:**
+```
+Collection proof for 1000 transactions:
+- Merkle proof: ~1 KB
+- Hash list: 1000 × 32 bytes = 32 KB  
+- Transaction data: 1000 × ~200 bytes = 200 KB
+- Total: ~233 KB (well under any transaction size limit)
+```
+
 ## Layer 2: Consensus Validation (Security)
 
 ### Purpose
