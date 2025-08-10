@@ -30,7 +30,6 @@ func init() {
 	cmd.PersistentFlags().Var((*MultiaddrSliceFlag)(&bootstrap), "bootstrap", "Set the bootstrap servers")
 }
 
-
 func main() {
 	_ = cmd.Execute()
 }
