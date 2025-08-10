@@ -9,13 +9,15 @@ Currently, invalid cross-partition messages:
 - Create O(n) memory overhead (every node maintains queues)
 - Enter consensus before validation
 - Waste computational resources network-wide
+- Complex queue management for out-of-order messages
 
 ## Solution: Two-Layer Validation Architecture
 
 ### Layer 1: CCC (Efficiency Filter)
-- **Purpose**: Reduce network overhead and centralize queue management
+- **Purpose**: Reduce network overhead and validate message ordering
 - **Security Level**: None - assumes nodes can be compromised
-- **Benefits**: O(n²) → O(1) network overhead, O(n) → O(1) memory usage
+- **Benefits**: O(n²) → O(1) network overhead, no queue complexity
+- **Key Design**: NO QUEUEING - use list proofs to query missing transaction sets
 
 ### Layer 2: Consensus (Security Boundary)
 - **Purpose**: Provide Byzantine fault tolerance and security
@@ -52,7 +54,7 @@ The CCC acts as a protective efficiency filter, NOT a security boundary. All sec
 
 ### Memory Efficiency
 - **Before**: Every node maintains message queues (O(n) memory)
-- **After**: Single CCC maintains queues (O(1) memory)
+- **After**: No queues needed - query for missing sets using list proofs
 
 ### Consensus Efficiency
 - **Before**: Invalid messages enter mempool and consensus

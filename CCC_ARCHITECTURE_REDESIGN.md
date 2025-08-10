@@ -100,14 +100,15 @@ The CCC needs to maintain:
 #### On Sending Side:
 - **Per-destination sequence tracking**: What sequence number should we send next?
 - **Destination readiness**: Is the destination ready for our next message?
-- **Outbound queue**: Messages waiting to be sent
+- **NO QUEUES**: Messages are sent immediately or rejected
 
 #### On Receiving Side:
 - **Per-source sequence tracking**: What sequence number do we expect next?
-- **Pending messages**: Out-of-sequence messages waiting for gaps to fill
+- **NO QUEUES**: Out-of-sequence messages are rejected
+- **Query mechanism**: When gaps detected, query for missing transaction sets using list proofs
 - **Proof validation cache**: Recently validated proofs to avoid re-validation
 
-### 4. Sequence Number Validation
+### 4. Sequence Number Validation (No Queueing)
 
 ```go
 func (cc *CrossChainConductor) ValidateInbound(ctx context.Context, envelope *messaging.Envelope) error {
@@ -125,18 +126,13 @@ func (cc *CrossChainConductor) ValidateInbound(ctx context.Context, envelope *me
                     seq.Number, cc.getDeliveredHeight(seq.Source))
             }
             
-            // Reject if too far ahead (prevent DoS)
-            if seq.Number > expected + MAX_SEQUENCE_GAP {
-                return errors.BadRequest.WithFormat(
-                    "sequence %d too far ahead (expected: %d)", 
-                    seq.Number, expected)
-            }
-            
-            // Queue if out of order but within acceptable range
+            // Reject if out of sequence - NO QUEUEING
             if seq.Number != expected {
-                cc.queueForLater(seq)
-                return errors.Pending.WithFormat(
-                    "sequence %d queued (expected: %d)", 
+                // Trigger query for missing transactions
+                cc.queryMissingTransactions(seq.Source, expected, seq.Number)
+                
+                return errors.BadRequest.WithFormat(
+                    "sequence %d out of order (expected: %d), querying for missing", 
                     seq.Number, expected)
             }
         }
@@ -144,16 +140,25 @@ func (cc *CrossChainConductor) ValidateInbound(ctx context.Context, envelope *me
     
     return nil // Message is valid and in sequence
 }
+
+// Query for missing transaction sets using list proofs
+func (cc *CrossChainConductor) queryMissingTransactions(source string, expectedSeq, receivedSeq uint64) {
+    // Query the source partition for the complete set of missing transactions
+    // Use list proofs to efficiently validate the entire set
+    // This avoids the overhead of mixing missing txs with ones we already have
+    go cc.fetchMissingSet(source, expectedSeq, receivedSeq-1)
+}
 ```
 
 ## Benefits of This Design
 
 1. **Network Efficiency**: Invalid messages never leave the source partition (O(n²) → O(1) overhead)
 2. **Consensus Efficiency**: Invalid messages never enter CometBFT mempool
-3. **Queue Centralization**: Single queue point instead of every node maintaining queues (O(n) → O(1) memory)
+3. **No Queue Complexity**: No message queues to manage - use list proofs to query missing sets
 4. **Early Rejection**: Problems detected and handled at the earliest possible point
 5. **Better DoS Protection**: Can rate-limit and validate before expensive consensus operations
 6. **Cleaner Architecture**: Clear separation between validation and execution
+7. **Efficient Recovery**: List proofs allow fetching complete missing sets without mixing with existing transactions
 
 **Note**: These are efficiency benefits. Security still requires full consensus validation since nodes can be compromised.
 
