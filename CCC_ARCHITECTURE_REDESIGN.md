@@ -29,18 +29,26 @@ dispatcher.Submit() [only if CCC approves]
 Network transmission
 ```
 
-### Receiving Side - CCC as Filter
-The CCC should intercept messages BEFORE they enter CometBFT:
+### Receiving Side - API Routes to CCC
+The destination partition's API routes anchor/synth transactions through CCC:
 
 ```
-API receives message
+API receives transaction
     ↓
-**CCC.ValidateInbound()**  ← NEW: Pre-consensus validation
-    - Verify sequence number is next expected
-    - Check if message is duplicate
-    - Validate proof/anchor if required
+Check transaction type
     ↓
-Submit to CometBFT [only if valid]
+If Anchor or Synthetic:
+    ↓
+    **Route to CCC.ValidateInbound()**
+        - Verify sequence number is next expected
+        - Check if message is duplicate  
+        - Validate proof/anchor signatures
+        - Validate merkle proofs
+    ↓
+    CCC submits to CometBFT [only if valid]
+Else:
+    ↓
+    Submit directly to CometBFT
     ↓
 CheckTx → DeliverTx → Block execution
 ```
@@ -58,20 +66,31 @@ dispatcher.Submit(ctx, dest, envelope)
 ccc.SubmitOutbound(ctx, dest, envelope)
 ```
 
-### 2. Add API-Level Interceptor
-Intercept at the Submitter level before CometBFT submission:
+### 2. API-Level Routing to CCC
+Route anchor and synthetic transactions through CCC at the API layer:
 
 ```go
 // In internal/api/v3/tm/submitter.go
 func (s *Submitter) Submit(ctx context.Context, envelope *messaging.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
-    // NEW: Check with CCC first
-    if isCrossPartition(envelope) {
-        if err := s.ccc.ValidateInbound(ctx, envelope); err != nil {
-            return nil, err // Reject before it hits CometBFT
-        }
+    // Check if this is an anchor or synthetic transaction
+    if isAnchorOrSynthetic(envelope) {
+        // Route to CCC for validation and submission
+        return s.ccc.ProcessInbound(ctx, envelope, opts)
     }
     
-    // Continue with normal submission...
+    // Regular transactions go directly to CometBFT
+    return s.submitToCometBFT(ctx, envelope, opts)
+}
+
+// CCC handles validation and submission
+func (ccc *CrossChainConductor) ProcessInbound(ctx context.Context, envelope *messaging.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
+    // Validate the anchor/synthetic transaction
+    if err := ccc.ValidateInbound(ctx, envelope); err != nil {
+        return nil, err // Reject invalid transactions
+    }
+    
+    // If valid, CCC submits to CometBFT
+    return ccc.submitToCometBFT(ctx, envelope, opts)
 }
 ```
 

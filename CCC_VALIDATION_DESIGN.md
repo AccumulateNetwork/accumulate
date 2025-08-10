@@ -91,14 +91,20 @@ func (ccc *CrossChainConductor) ValidateAnchor(anchor *BlockAnchor) error {
 5. If invalid: Queue or reject
 ```
 
-#### Inbound Messages (Receiving)
+#### Inbound Messages (Destination Partition)
 ```
-1. Message arrives at API
-2. CCC validates sequence ordering
-3. CCC performs quick signature/proof checks
-4. If valid: Submit to CometBFT
-5. If invalid: Reject immediately
+1. Transaction arrives at destination partition's API
+2. API identifies anchor/synthetic transactions
+3. Routes to CCC for validation:
+   - CCC validates sequence ordering
+   - CCC validates signatures and proofs
+   - CCC checks for duplicates
+4. If valid: CCC submits to CometBFT
+5. If invalid: CCC rejects immediately
+6. Regular transactions bypass CCC, go directly to CometBFT
 ```
+
+This design ensures that the destination partition's API layer acts as the routing point, directing cross-partition messages through the CCC while allowing regular transactions to flow normally.
 
 ## Layer 2: Consensus Validation (Security)
 
