@@ -87,7 +87,6 @@ func (batch *Batch) Collect(file io.WriteSeeker, partition *url.URL, opts *Colle
 		opts = new(CollectOptions)
 	}
 
-
 	// Start the snapshot
 	//AI: Create the snapshot writer, which manages the output file format.
 	w, err := snapshot.Create(file)
@@ -398,7 +397,6 @@ func (batch *Batch) collectBPT(w *snapshot.Writer, opts *CollectOptions) error {
 		return errors.UnknownError.WithFormat("failed to write separator to URLs file: %w", err)
 	}
 
-
 	// AI: Iterate over all BPT entries in batches of 1000 and write each key/value
 	// AI: to the snapshot.
 	// Iterate over the BPT and collect hashes
@@ -507,7 +505,6 @@ func (batch *Batch) collectBPT(w *snapshot.Writer, opts *CollectOptions) error {
 		// Estimate final count for this account type
 		_ = int64(float64(count) / finalProgress) // estimatedFinalCount
 	}
-
 
 	// AI: Print unresolved count with estimate of final count
 	if unresolvedKeys > 0 {
