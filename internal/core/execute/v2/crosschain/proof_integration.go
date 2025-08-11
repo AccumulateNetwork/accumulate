@@ -28,8 +28,46 @@ func NewProofIntegration(conductor *CrossChainConductor) *ProofIntegration {
 	}
 }
 
+// CreateSyntheticProofsWithPartitions creates optimized proofs for synthetic transactions
+// using the correct partition-specific sequence chains for each destination.
+// This method is designed to be called from the block package without import cycles.
+func (pi *ProofIntegration) CreateSyntheticProofsWithPartitions(
+	ctx context.Context,
+	batch *database.Batch,
+	sourcePartition *url.URL,
+	transactions []TransactionInfo,
+	rootChain *database.Chain,
+) ([]*protocol.AnnotatedReceipt, error) {
+	if pi.conductor == nil || pi.conductor.proofService == nil {
+		return nil, errors.InternalError.With("proof service not initialized")
+	}
+
+	// Convert to SyntheticTransaction format
+	syntheticTxs := make([]SyntheticTransaction, len(transactions))
+	for i, tx := range transactions {
+		syntheticTxs[i] = SyntheticTransaction{
+			Destination: tx.Destination,
+			SequenceNum: tx.SequenceNum,
+			ChainURL:    tx.ChainURL,
+			Hash:        tx.Hash,
+			Source:      sourcePartition,
+			Message:     nil, // Not needed for proof generation
+		}
+	}
+
+	// Use the conductor's new method with partition-specific chains
+	return pi.conductor.CreateProofsForSyntheticTransactionsWithPartitions(
+		ctx,
+		batch,
+		sourcePartition,
+		syntheticTxs,
+		rootChain,
+	)
+}
+
 // CreateSyntheticProofs creates optimized proofs for synthetic transactions
 // This method is designed to be called from the block package without import cycles
+// DEPRECATED: Use CreateSyntheticProofsWithPartitions for correct partition-specific chain handling
 func (pi *ProofIntegration) CreateSyntheticProofs(
 	ctx context.Context,
 	transactions []TransactionInfo,
@@ -43,10 +81,17 @@ func (pi *ProofIntegration) CreateSyntheticProofs(
 	// Convert to SyntheticTransaction format
 	syntheticTxs := make([]SyntheticTransaction, len(transactions))
 	for i, tx := range transactions {
-		syntheticTxs[i] = SyntheticTransaction(tx)
+		syntheticTxs[i] = SyntheticTransaction{
+			Destination: tx.Destination,
+			SequenceNum: tx.SequenceNum,
+			ChainURL:    tx.ChainURL,
+			Hash:        tx.Hash,
+			Source:      nil, // Source partition not available in deprecated method
+			Message:     nil, // Not needed for proof generation
+		}
 	}
 
-	// Use the conductor's method
+	// Use the conductor's method (deprecated path)
 	return pi.conductor.CreateProofsForSyntheticTransactions(
 		ctx,
 		syntheticTxs,

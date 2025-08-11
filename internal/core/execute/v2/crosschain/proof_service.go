@@ -28,6 +28,8 @@ const (
 	ProofTypeSynthetic ProofType = iota
 	ProofTypeAnchor
 	ProofTypeReceipt
+	// ProofTypeUnified handles both anchors and synthetic transactions
+	ProofTypeUnified
 )
 
 // ProofRequest represents a request to create a proof
@@ -156,9 +158,12 @@ func (ps *ProofService) CreateProof(ctx context.Context, req ProofRequest) (*Pro
 		return nil, errors.BadRequest.With("no sequences provided for proof")
 	}
 
-	// Decide whether to use collection proof
-	if len(req.Sequences) >= ps.batchThreshold {
-		return ps.createCollectionProof(ctx, req)
+	// For unified transport, always check collection proof eligibility
+	// This allows both anchors and synthetics to use collection proofs
+	if req.Type == ProofTypeUnified || req.Type == ProofTypeSynthetic || req.Type == ProofTypeAnchor {
+		if len(req.Sequences) >= ps.batchThreshold {
+			return ps.createCollectionProof(ctx, req)
+		}
 	}
 
 	return ps.createIndividualProof(ctx, req)
