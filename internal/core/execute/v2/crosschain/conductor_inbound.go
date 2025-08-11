@@ -83,7 +83,7 @@ func (cc *CrossChainConductor) validateInboundMessage(msg messaging.Message) (bo
 							if err := cc.sequenceTracker.RequestMissingMessages(
 								ctx,
 								m.Source.String(),
-								ConductorMessageTypeSynthetic,
+								MessageTypeSynthetic,
 								gapStart, gapEnd); err != nil {
 								cc.logger.Error("Failed to request missing synthetic transactions",
 									"source", m.Source,
@@ -137,7 +137,7 @@ func (cc *CrossChainConductor) validateInboundMessage(msg messaging.Message) (bo
 							if err := cc.sequenceTracker.RequestMissingMessages(
 								ctx,
 								src.String(),
-								ConductorMessageTypeAnchor,
+								MessageTypeAnchor,
 								gapStart, gapEnd); err != nil {
 								cc.logger.Error("Failed to request missing anchors",
 									"source", src,
@@ -171,7 +171,7 @@ func (cc *CrossChainConductor) isCrossPartitionMessage(msg messaging.Message) bo
 }
 
 // getMessageType determines the message type for blocking purposes
-func (cc *CrossChainConductor) getMessageType(messages []messaging.Message) ConductorMessageType {
+func (cc *CrossChainConductor) getMessageType(messages []messaging.Message) MessageType {
 	// Check the first message to determine type - in practice, envelopes should be homogeneous
 	if len(messages) == 0 {
 		return ConductorMessageTypeOther
@@ -179,9 +179,9 @@ func (cc *CrossChainConductor) getMessageType(messages []messaging.Message) Cond
 
 	switch messages[0].Type() {
 	case messaging.MessageTypeBlockAnchor:
-		return ConductorMessageTypeAnchor
+		return MessageTypeAnchor
 	case messaging.MessageTypeSynthetic, messaging.MessageTypeBadSynthetic:
-		return ConductorMessageTypeSynthetic
+		return MessageTypeSynthetic
 	default:
 		return ConductorMessageTypeOther
 	}

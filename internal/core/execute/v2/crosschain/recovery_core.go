@@ -37,7 +37,7 @@ type RecoveryManager struct {
 
 // RecoveryRequest represents a request for missing transactions
 type RecoveryRequest struct {
-	Type        ConductorMessageType
+	Type        MessageType
 	Source      string
 	Destination string
 	FromNumber  uint64
@@ -184,9 +184,9 @@ func (rm *RecoveryManager) ProcessRecoveryRequest(req *RecoveryRequest) (*Recove
 
 	// Execute recovery based on type
 	switch req.Type {
-	case ConductorMessageTypeAnchor:
+	case MessageTypeAnchor:
 		return rm.recoverAnchors(req, session)
-	case ConductorMessageTypeSynthetic:
+	case MessageTypeSynthetic:
 		return rm.recoverSynthetics(req, session)
 	default:
 		return nil, errors.BadRequest.WithFormat("unsupported recovery type: %v", req.Type)
@@ -216,11 +216,11 @@ func (rm *RecoveryManager) getSessionKey(req *RecoveryRequest) string {
 }
 
 // messageTypeName returns a human-readable name for the message type
-func (rm *RecoveryManager) messageTypeName(t ConductorMessageType) string {
+func (rm *RecoveryManager) messageTypeName(t MessageType) string {
 	switch t {
-	case ConductorMessageTypeAnchor:
+	case MessageTypeAnchor:
 		return "anchor"
-	case ConductorMessageTypeSynthetic:
+	case MessageTypeSynthetic:
 		return "synthetic"
 	default:
 		return "unknown"
