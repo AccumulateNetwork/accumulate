@@ -97,11 +97,11 @@ func (cc *CrossChainConductor) GetProofMetrics() ProofMetrics {
 }
 
 // getMessageTypeName returns a human-readable name for the message type
-func (cc *CrossChainConductor) getMessageTypeName(t ConductorMessageType) string {
+func (cc *CrossChainConductor) getMessageTypeName(t MessageType) string {
 	switch t {
-	case ConductorMessageTypeAnchor:
+	case MessageTypeAnchor:
 		return "anchor"
-	case ConductorMessageTypeSynthetic:
+	case MessageTypeSynthetic:
 		return "synthetic"
 	case ConductorMessageTypeOther:
 		return "other"

@@ -254,7 +254,7 @@ func (cc *CrossChainConductor) SendCrossChainMessages(
 }
 
 // createDestinationKey creates a key for destination+type combination
-func (cc *CrossChainConductor) createDestinationKey(msgType ConductorMessageType, destination *url.URL) DestinationKey {
+func (cc *CrossChainConductor) createDestinationKey(msgType MessageType, destination *url.URL) DestinationKey {
 	return DestinationKey{
 		Type:        msgType,
 		Destination: destination.String(),

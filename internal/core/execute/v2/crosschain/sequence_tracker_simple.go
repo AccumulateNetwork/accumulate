@@ -221,13 +221,13 @@ func (st *SimpleSequenceTracker) ValidateAndTrackAnchor(msg *messaging.BlockAnch
 
 // ProcessCollectionProofMessages handles messages from a collection proof
 // Collection proofs might include extras we don't need - just skip them
-func (st *SimpleSequenceTracker) ProcessCollectionProofMessages(source string, sequences []uint64, msgType ConductorMessageType) {
+func (st *SimpleSequenceTracker) ProcessCollectionProofMessages(source string, sequences []uint64, msgType MessageType) {
 	state := st.getOrCreateState(source)
 	
 	state.mu.Lock()
 	defer state.mu.Unlock()
 	
-	if msgType == ConductorMessageTypeSynthetic {
+	if msgType == MessageTypeSynthetic {
 		for _, seq := range sequences {
 			// Skip if already processed
 			if seq <= state.LastSyntheticDelivered {
@@ -240,7 +240,7 @@ func (st *SimpleSequenceTracker) ProcessCollectionProofMessages(source string, s
 				st.checkGapClosure(state.SyntheticGaps, seq)
 			}
 		}
-	} else if msgType == ConductorMessageTypeAnchor {
+	} else if msgType == MessageTypeAnchor {
 		for _, seq := range sequences {
 			// Skip if already processed
 			if seq <= state.LastAnchorDelivered {
@@ -271,7 +271,7 @@ func (st *SimpleSequenceTracker) checkGapClosure(gaps map[uint64]*SimpleSequence
 }
 
 // RequestMissingMessages immediately triggers recovery for detected gaps
-func (st *SimpleSequenceTracker) RequestMissingMessages(ctx context.Context, source string, msgType ConductorMessageType, gapStart, gapEnd uint64) error {
+func (st *SimpleSequenceTracker) RequestMissingMessages(ctx context.Context, source string, msgType MessageType, gapStart, gapEnd uint64) error {
 	// Use the conductor's recovery manager immediately - no waiting
 	if st.conductor.recoveryManager == nil {
 		// If no recovery manager, try batch proof manager

@@ -191,7 +191,7 @@ func (cc *CrossChainConductor) retryTransmission(pending *PendingTransmission) {
 
 // RequestMissingTransactions requests missing anchors or synthetic transactions
 func (cc *CrossChainConductor) RequestMissingTransactions(
-	msgType ConductorMessageType,
+	msgType MessageType,
 	source, destination string,
 	fromNum, toNum uint64,
 ) (*RecoveryResponse, error) {
@@ -213,7 +213,7 @@ func (cc *CrossChainConductor) RequestMissingTransactions(
 }
 
 // RequestBatchProofRecovery requests missing messages using collection proofs (simplified interface)
-func (cc *CrossChainConductor) RequestBatchProofRecovery(source string, msgType ConductorMessageType, gapStart, gapEnd uint64) error {
+func (cc *CrossChainConductor) RequestBatchProofRecovery(source string, msgType MessageType, gapStart, gapEnd uint64) error {
 	if cc.batchProofManager == nil {
 		// Fallback to regular recovery manager if batch proof manager not available
 		if cc.recoveryManager != nil {
@@ -241,9 +241,9 @@ func (cc *CrossChainConductor) RequestBatchProofRecovery(source string, msgType 
 	// Determine chain URL based on message type
 	var chainURL *url.URL
 	switch msgType {
-	case ConductorMessageTypeSynthetic:
+	case MessageTypeSynthetic:
 		chainURL = protocol.PartitionUrl(source).JoinPath(protocol.Synthetic)
-	case ConductorMessageTypeAnchor:
+	case MessageTypeAnchor:
 		chainURL = protocol.PartitionUrl(source).JoinPath(protocol.AnchorPool)
 	default:
 		return errors.BadRequest.WithFormat("unsupported message type: %d", msgType)
@@ -255,7 +255,7 @@ func (cc *CrossChainConductor) RequestBatchProofRecovery(source string, msgType 
 // RequestMissingTransactionsWithBatchProof requests missing transactions using collection proofs for efficiency
 func (cc *CrossChainConductor) RequestMissingTransactionsWithBatchProof(
 	partitionID string,
-	msgType ConductorMessageType,
+	msgType MessageType,
 	missingSequences []uint64,
 	chainURL *url.URL,
 ) error {
@@ -266,9 +266,9 @@ func (cc *CrossChainConductor) RequestMissingTransactionsWithBatchProof(
 	// Convert MessageType to RecoveryType
 	var recoveryType RecoveryType
 	switch msgType {
-	case ConductorMessageTypeAnchor:
+	case MessageTypeAnchor:
 		recoveryType = RecoveryTypeAnchor
-	case ConductorMessageTypeSynthetic:
+	case MessageTypeSynthetic:
 		recoveryType = RecoveryTypeSynthetic
 	default:
 		return errors.BadRequest.WithFormat("unsupported message type for batch recovery: %d", msgType)

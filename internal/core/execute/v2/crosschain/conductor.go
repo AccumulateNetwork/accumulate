@@ -19,19 +19,18 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// ConductorMessageType represents the type of cross-partition message
-// Note: This is different from the unified transport's MessageType
-type ConductorMessageType int
+// MessageType is imported from unified_transport.go - we use the same type system
 
+// Legacy constants for compatibility - mapped to unified MessageType
 const (
-	ConductorMessageTypeAnchor ConductorMessageType = iota
-	ConductorMessageTypeSynthetic
-	ConductorMessageTypeOther
+	ConductorMessageTypeAnchor    = MessageTypeAnchor
+	ConductorMessageTypeSynthetic = MessageTypeSynthetic
+	ConductorMessageTypeOther     = MessageTypeBlockSummary // Map "Other" to BlockSummary for now
 )
 
 // DestinationKey uniquely identifies a message type + destination combination
 type DestinationKey struct {
-	Type        ConductorMessageType
+	Type        MessageType
 	Destination string // URL string for efficient map key
 }
 
