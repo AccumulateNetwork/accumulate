@@ -112,10 +112,6 @@ func (rm *RecoveryManager) recoverAnchors(req *RecoveryRequest, session *Recover
 	batch := rm.db.Begin(false)
 	defer batch.Discard()
 
-	// Get the anchor ledger for the source partition
-	// sourceUrl := protocol.PartitionUrl(req.Source)
-	// anchorLedger := batch.Account(sourceUrl.JoinPath(protocol.AnchorPool)) // TODO: Use this
-
 	// Retrieve anchors in the requested range
 	recovered := make([]RecoveredTransaction, 0)
 	
@@ -169,9 +165,7 @@ func (rm *RecoveryManager) recoverSynthetics(req *RecoveryRequest, session *Reco
 	sourceUrl := protocol.PartitionUrl(req.Source)
 	synthLedger := batch.Account(sourceUrl.JoinPath(protocol.Synthetic))
 
-	// Query the synthetic transaction chain
-	// We need to get the specific sequence chain for the destination
-	// destUrl := protocol.PartitionUrl(req.Destination) // TODO: Use this
+	// Query the synthetic transaction chain for the destination
 	sequenceChain, err := synthLedger.SyntheticSequenceChain(req.Destination).Get()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("failed to get sequence chain: %w", err)
@@ -238,16 +232,22 @@ func (rm *RecoveryManager) recoverSynthetics(req *RecoveryRequest, session *Reco
 
 // getNetworkInfo retrieves current network partition information
 func (rm *RecoveryManager) getNetworkInfo(ctx context.Context) (*NetworkInfo, error) {
-	// TODO: NetworkStatus API doesn't exist yet
+	// Note: NetworkStatus API not implemented yet, using stub
+	// Future implementation would query actual network status:
 	// req := &api.NetworkStatusRequest{}
 	// resp, err := rm.client.NetworkStatus(ctx, req)
-	// if err != nil {
-	// 	return nil, errors.UnknownError.WithFormat("failed to get network status: %w", err)
-	// }
 
 	info := &NetworkInfo{
 		Partitions: make(map[string]*PartitionInfo),
 		UpdatedAt:  time.Now(),
+	}
+	
+	// Add stub partition info for basic functionality
+	info.Partitions["Directory"] = &PartitionInfo{
+		ID:              "Directory", 
+		Type:            "directory",
+		IsHealthy:       true,
+		LastHealthCheck: time.Now(),
 	}
 
 	// Convert network status to our internal format
