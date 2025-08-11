@@ -9,6 +9,8 @@ package crosschain
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -72,6 +74,7 @@ type CrossChainConductor struct {
 	// Infrastructure
 	dispatcher execute.Dispatcher
 	logger     logging.OptionalLogger
+	Describe   execute.DescribeShim // Partition description
 
 	// Async processing
 	syntheticChan chan *SyntheticRequest
@@ -106,6 +109,9 @@ type CrossChainConductor struct {
 	
 	// Block integration for the block executor
 	blockIntegration *BlockIntegration
+	
+	// Sequence tracker for gap detection (simplified, no buffering)
+	sequenceTracker *SimpleSequenceTracker
 }
 
 // NewCrossChainConductor creates and starts the conductor
@@ -131,6 +137,9 @@ func NewCrossChainConductor(dispatcher execute.Dispatcher, logger logging.Option
 	
 	// Initialize block integration
 	cc.blockIntegration = NewBlockIntegration(cc)
+	
+	// Initialize simplified sequence tracker (no buffering, immediate recovery)
+	cc.sequenceTracker = NewSimpleSequenceTracker(cc, cc.logger)
 
 	// Initialize batch proof recovery manager
 	cc.batchProofManager = NewBatchProofRecoveryManager(cc, logger)
@@ -192,23 +201,135 @@ func (cc *CrossChainConductor) getOrCreateDestinationQueue(key DestinationKey) *
 
 // ProcessInbound processes inbound cross-partition messages through the conductor
 func (cc *CrossChainConductor) ProcessInbound(ctx context.Context, messages []messaging.Message) []messaging.Message {
-	// Phase 1: Direct pass-through for all messages (zero behavior change)
-	// Future phases can add conductor logic here
-
-	// Count and log cross-partition messages
-	var crossPartitionCount int
+	// Filter and validate inbound messages
+	validMessages := make([]messaging.Message, 0, len(messages))
+	
 	for _, msg := range messages {
-		if cc.isCrossPartitionMessage(msg) {
-			crossPartitionCount++
+		// Skip non-crosschain messages
+		if !cc.isCrossPartitionMessage(msg) {
+			validMessages = append(validMessages, msg)
+			continue
+		}
+		
+		// Validate crosschain messages
+		if valid, reason := cc.validateInboundMessage(msg); valid {
+			validMessages = append(validMessages, msg)
+		} else {
+			cc.logger.Info("Rejected inbound crosschain message",
+				"type", msg.Type(),
+				"hash", logging.AsHex(msg.Hash()),
+				"reason", reason)
+			// Track rejected messages
+			atomic.AddInt64(&cc.syntheticsErrors, 1)
 		}
 	}
-
-	if crossPartitionCount > 0 {
-		cc.logger.Debug("Processing inbound cross-partition messages", "count", crossPartitionCount, "total_messages", len(messages))
+	
+	if len(validMessages) < len(messages) {
+		cc.logger.Info("Filtered inbound messages",
+			"received", len(messages),
+			"valid", len(validMessages),
+			"rejected", len(messages)-len(validMessages))
 	}
+	
+	return validMessages
+}
 
-	// For now, return all messages unchanged
-	return messages
+// validateInboundMessage validates sequence order and message integrity
+func (cc *CrossChainConductor) validateInboundMessage(msg messaging.Message) (bool, string) {
+	ctx := context.Background()
+	
+	switch m := msg.(type) {
+	case *messaging.SequencedMessage:
+		// Use simplified sequence tracker for validation (no buffering)
+		valid, reason, requestRecovery := cc.sequenceTracker.ValidateAndTrackSynthetic(m)
+		
+		// Request missing messages immediately if gap detected
+		if requestRecovery {
+			// Extract gap info from reason (format: "out of order, gap detected [X-Y], dropping message Z")
+			if strings.Contains(reason, "gap detected") {
+				parts := strings.Split(reason, "[")
+				if len(parts) > 1 {
+					gapRange := strings.Split(strings.Split(parts[1], "]")[0], "-")
+					if len(gapRange) == 2 {
+						gapStart, _ := strconv.ParseUint(gapRange[0], 10, 64)
+						gapEnd, _ := strconv.ParseUint(gapRange[1], 10, 64)
+						go func() {
+							if err := cc.sequenceTracker.RequestMissingMessages(
+								ctx,
+								m.Source.String(),
+								ConductorMessageTypeSynthetic,
+								gapStart, gapEnd); err != nil {
+								cc.logger.Error("Failed to request missing synthetic transactions",
+									"source", m.Source,
+									"gap", fmt.Sprintf("[%d-%d]", gapStart, gapEnd),
+									"error", err)
+							}
+						}()
+					}
+				}
+			}
+		}
+		
+		return valid, reason
+		
+	case *messaging.BlockAnchor:
+		// Anchors must have valid signature
+		if m.Signature == nil {
+			return false, "missing anchor signature"
+		}
+		
+		// Extract anchor sequence - we need to examine the anchor body
+		var sequence uint64
+		var source *url.URL
+		
+		// Check what type of anchor this is - we need to unwrap the message
+		switch anchor := m.Anchor.(type) {
+		case *messaging.SequencedMessage:
+			// This is a sequenced anchor message
+			source = anchor.Source
+			sequence = anchor.Number
+		default:
+			// For other anchor types, try to extract partition info
+			// For now, accept if we can't determine sequence
+			return true, ""
+		}
+		
+		// Use simplified sequence tracker for anchor validation
+		valid, reason, requestRecovery := cc.sequenceTracker.ValidateAndTrackAnchor(m, source, sequence)
+		
+		// Request missing anchors immediately if gap detected
+		if requestRecovery {
+			// Extract gap info from reason (format: "anchor out of order, gap detected [X-Y], dropping anchor Z")
+			if strings.Contains(reason, "gap detected") {
+				parts := strings.Split(reason, "[")
+				if len(parts) > 1 {
+					gapRange := strings.Split(strings.Split(parts[1], "]")[0], "-")
+					if len(gapRange) == 2 {
+						gapStart, _ := strconv.ParseUint(gapRange[0], 10, 64)
+						gapEnd, _ := strconv.ParseUint(gapRange[1], 10, 64)
+						go func(src *url.URL) {
+							if err := cc.sequenceTracker.RequestMissingMessages(
+								ctx,
+								src.String(),
+								ConductorMessageTypeAnchor,
+								gapStart, gapEnd); err != nil {
+								cc.logger.Error("Failed to request missing anchors",
+									"source", src,
+									"gap", fmt.Sprintf("[%d-%d]", gapStart, gapEnd),
+									"error", err)
+							}
+						}(source)
+					}
+				}
+			}
+		}
+		
+		return valid, reason
+		
+	default:
+		// Unknown crosschain message type
+		return false, "unknown crosschain message type"
+	}
 }
 
 // isCrossPartitionMessage determines if a message is a cross-partition anchor or synthetic transaction
@@ -754,6 +875,46 @@ func (cc *CrossChainConductor) RequestMissingTransactions(
 	}
 
 	return cc.recoveryManager.RequestMissingTransactions(req)
+}
+
+// RequestBatchProofRecovery requests missing messages using collection proofs (simplified interface)
+func (cc *CrossChainConductor) RequestBatchProofRecovery(source string, msgType ConductorMessageType, gapStart, gapEnd uint64) error {
+	if cc.batchProofManager == nil {
+		// Fallback to regular recovery manager if batch proof manager not available
+		if cc.recoveryManager != nil {
+			req := &RecoveryRequest{
+				Type:        msgType,
+				Source:      source,
+				Destination: cc.Describe.PartitionUrl().String(),
+				FromNumber:  gapStart,
+				ToNumber:    gapEnd,
+				Requester:   cc.Describe.PartitionUrl().String(),
+				RequestedAt: time.Now(),
+			}
+			_, err := cc.recoveryManager.RequestMissingTransactions(req)
+			return err
+		}
+		return errors.NotReady.With("no recovery mechanism available")
+	}
+
+	// Convert to batch proof request
+	missingSeqs := make([]uint64, 0, gapEnd-gapStart+1)
+	for seq := gapStart; seq <= gapEnd; seq++ {
+		missingSeqs = append(missingSeqs, seq)
+	}
+
+	// Determine chain URL based on message type
+	var chainURL *url.URL
+	switch msgType {
+	case ConductorMessageTypeSynthetic:
+		chainURL = protocol.PartitionUrl(source).JoinPath(protocol.Synthetic)
+	case ConductorMessageTypeAnchor:
+		chainURL = protocol.PartitionUrl(source).JoinPath(protocol.AnchorPool)
+	default:
+		return errors.BadRequest.WithFormat("unsupported message type: %d", msgType)
+	}
+
+	return cc.RequestMissingTransactionsWithBatchProof(source, msgType, missingSeqs, chainURL)
 }
 
 // RequestMissingTransactionsWithBatchProof requests missing transactions using collection proofs for efficiency

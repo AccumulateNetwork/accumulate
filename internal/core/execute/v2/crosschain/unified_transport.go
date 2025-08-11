@@ -8,7 +8,6 @@ package crosschain
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"sync"
 	"time"
@@ -399,8 +398,21 @@ func ConvertAnchorToUnified(
 		msgType = MessageTypeBlockSummary
 	}
 	
-	// Wrap the anchor in a BlockAnchor message
-	blockAnchor := &messaging.BlockAnchor{Anchor: anchor}
+	// Wrap the anchor in a SequencedMessage first, then BlockAnchor
+	// The anchor needs to be wrapped properly as a message
+	seqMsg := &messaging.SequencedMessage{
+		Source:      source,
+		Destination: destination,
+		Number:      sequence,
+		// The Message field would need the actual transaction message
+		// For now, we'll leave this as a TODO since we need proper anchor wrapping
+	}
+	
+	// Create the BlockAnchor with the sequenced message
+	blockAnchor := &messaging.BlockAnchor{
+		Anchor: seqMsg,
+		// Signature will be added later in the flow
+	}
 	
 	return &UnifiedMessage{
 		Type:        msgType,
