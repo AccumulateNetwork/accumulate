@@ -186,22 +186,12 @@ func (ps *ProofService) CreateBatchProofs(ctx context.Context, requests []ProofR
 			merged := ps.mergeSequences(batch.Requests)
 			resp, err := ps.createCollectionProof(ctx, merged)
 			if err != nil {
-				// Fallback to individual proofs
-				ps.logger.Info("Collection proof failed, falling back to individual",
-					"destination", batch.Destination,
-					"error", err)
-				for _, req := range batch.Requests {
-					resp, err := ps.createIndividualProof(ctx, req)
-					if err != nil {
-						return nil, err
-					}
-					responses = append(responses, resp)
-				}
-			} else {
-				// Add the collection proof response for each request
-				for range batch.Requests {
-					responses = append(responses, resp)
-				}
+				// Collection proof failure is a hard error - no fallback
+				return nil, errors.UnknownError.WithFormat("collection proof failed: %w", err)
+			}
+			// Add the collection proof response for each request
+			for range batch.Requests {
+				responses = append(responses, resp)
 			}
 		} else {
 			// Process individually
