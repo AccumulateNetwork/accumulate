@@ -39,7 +39,7 @@ type RecoveryManager struct {
 
 // RecoveryRequest represents a request for missing transactions
 type RecoveryRequest struct {
-	Type        MessageType
+	Type        ConductorMessageType
 	Source      string
 	Destination string
 	FromNumber  uint64
@@ -186,9 +186,9 @@ func (rm *RecoveryManager) executeRecovery(req *RecoveryRequest) {
 	var err error
 
 	switch req.Type {
-	case MessageTypeAnchor:
+	case ConductorMessageTypeAnchor:
 		resp, err = rm.recoverAnchors(req, session)
-	case MessageTypeSynthetic:
+	case ConductorMessageTypeSynthetic:
 		resp, err = rm.recoverSynthetics(req, session)
 	default:
 		err = errors.BadRequest.WithFormat("unsupported message type: %v", req.Type)
@@ -414,7 +414,7 @@ func (rm *RecoveryManager) checkMissingAnchors(batch *database.Batch, src, dst *
 		// Trigger recovery if too many missing
 		if missing > 50 {
 			req := &RecoveryRequest{
-				Type:        MessageTypeAnchor,
+				Type:        ConductorMessageTypeAnchor,
 				Source:      src.ID,
 				Destination: dst.ID,
 				FromNumber:  srcLedger.Delivered + 1,
@@ -460,7 +460,7 @@ func (rm *RecoveryManager) checkMissingSynthetics(batch *database.Batch, src, ds
 		// Trigger recovery if too many missing
 		if missing > 50 {
 			req := &RecoveryRequest{
-				Type:        MessageTypeSynthetic,
+				Type:        ConductorMessageTypeSynthetic,
 				Source:      src.ID,
 				Destination: dst.ID,
 				FromNumber:  srcLedger.Delivered + 1,
@@ -484,11 +484,11 @@ func (rm *RecoveryManager) getSessionKey(req *RecoveryRequest) string {
 	return fmt.Sprintf("%v:%s->%s:%d-%d", req.Type, req.Source, req.Destination, req.FromNumber, req.ToNumber)
 }
 
-func (rm *RecoveryManager) messageTypeName(t MessageType) string {
+func (rm *RecoveryManager) messageTypeName(t ConductorMessageType) string {
 	switch t {
-	case MessageTypeAnchor:
+	case ConductorMessageTypeAnchor:
 		return "anchor"
-	case MessageTypeSynthetic:
+	case ConductorMessageTypeSynthetic:
 		return "synthetic"
 	default:
 		return "unknown"

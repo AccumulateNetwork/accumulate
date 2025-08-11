@@ -24,18 +24,19 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// MessageType represents the type of cross-partition message
-type MessageType int
+// ConductorMessageType represents the type of cross-partition message
+// Note: This is different from the unified transport's MessageType
+type ConductorMessageType int
 
 const (
-	MessageTypeAnchor MessageType = iota
-	MessageTypeSynthetic
-	MessageTypeOther
+	ConductorMessageTypeAnchor ConductorMessageType = iota
+	ConductorMessageTypeSynthetic
+	ConductorMessageTypeOther
 )
 
 // DestinationKey uniquely identifies a message type + destination combination
 type DestinationKey struct {
-	Type        MessageType
+	Type        ConductorMessageType
 	Destination string // URL string for efficient map key
 }
 
@@ -99,6 +100,12 @@ type CrossChainConductor struct {
 
 	// Centralized proof service for construction and validation
 	proofService *ProofService
+	
+	// Unified transport for all crosschain messages
+	unifiedTransport *UnifiedTransport
+	
+	// Block integration for the block executor
+	blockIntegration *BlockIntegration
 }
 
 // NewCrossChainConductor creates and starts the conductor
@@ -117,6 +124,13 @@ func NewCrossChainConductor(dispatcher execute.Dispatcher, logger logging.Option
 	// Initialize centralized proof service (NO CACHING for easier testing)
 	cc.proofService = NewProofService(logger)
 	cc.proofService.SetDebugMode(true) // Enable debug mode for testing
+	
+	// Initialize unified transport
+	cc.unifiedTransport = NewUnifiedTransport(cc.proofService, cc, logger)
+	cc.unifiedTransport.SetDebugMode(true) // Enable debug mode for testing
+	
+	// Initialize block integration
+	cc.blockIntegration = NewBlockIntegration(cc)
 
 	// Initialize batch proof recovery manager
 	cc.batchProofManager = NewBatchProofRecoveryManager(cc, logger)
@@ -132,24 +146,24 @@ func NewCrossChainConductor(dispatcher execute.Dispatcher, logger logging.Option
 }
 
 // getMessageType determines the message type for blocking purposes
-func (cc *CrossChainConductor) getMessageType(messages []messaging.Message) MessageType {
+func (cc *CrossChainConductor) getMessageType(messages []messaging.Message) ConductorMessageType {
 	// Check the first message to determine type - in practice, envelopes should be homogeneous
 	if len(messages) == 0 {
-		return MessageTypeOther
+		return ConductorMessageTypeOther
 	}
 
 	switch messages[0].Type() {
 	case messaging.MessageTypeBlockAnchor:
-		return MessageTypeAnchor
+		return ConductorMessageTypeAnchor
 	case messaging.MessageTypeSynthetic, messaging.MessageTypeBadSynthetic:
-		return MessageTypeSynthetic
+		return ConductorMessageTypeSynthetic
 	default:
-		return MessageTypeOther
+		return ConductorMessageTypeOther
 	}
 }
 
 // createDestinationKey creates a key for destination+type combination
-func (cc *CrossChainConductor) createDestinationKey(msgType MessageType, destination *url.URL) DestinationKey {
+func (cc *CrossChainConductor) createDestinationKey(msgType ConductorMessageType, destination *url.URL) DestinationKey {
 	return DestinationKey{
 		Type:        msgType,
 		Destination: destination.String(),
@@ -721,7 +735,7 @@ func (cc *CrossChainConductor) InitRecoveryManager(db database.Beginner, client 
 
 // RequestMissingTransactions requests missing anchors or synthetic transactions
 func (cc *CrossChainConductor) RequestMissingTransactions(
-	msgType MessageType,
+	msgType ConductorMessageType,
 	source, destination string,
 	fromNum, toNum uint64,
 ) (*RecoveryResponse, error) {
@@ -745,7 +759,7 @@ func (cc *CrossChainConductor) RequestMissingTransactions(
 // RequestMissingTransactionsWithBatchProof requests missing transactions using collection proofs for efficiency
 func (cc *CrossChainConductor) RequestMissingTransactionsWithBatchProof(
 	partitionID string,
-	msgType MessageType,
+	msgType ConductorMessageType,
 	missingSequences []uint64,
 	chainURL *url.URL,
 ) error {
@@ -756,9 +770,9 @@ func (cc *CrossChainConductor) RequestMissingTransactionsWithBatchProof(
 	// Convert MessageType to RecoveryType
 	var recoveryType RecoveryType
 	switch msgType {
-	case MessageTypeAnchor:
+	case ConductorMessageTypeAnchor:
 		recoveryType = RecoveryTypeAnchor
-	case MessageTypeSynthetic:
+	case ConductorMessageTypeSynthetic:
 		recoveryType = RecoveryTypeSynthetic
 	default:
 		return errors.BadRequest.WithFormat("unsupported message type for batch recovery: %d", msgType)
@@ -864,7 +878,7 @@ func (cc *CrossChainConductor) HandleRecoveryRequest(req *RecoveryRequest) error
 
 // SubmitAnchor submits an anchor for transmission
 func (cc *CrossChainConductor) SubmitAnchor(req *AnchorRequest) error {
-	destKey := cc.createDestinationKey(MessageTypeAnchor, req.Destination)
+	destKey := cc.createDestinationKey(ConductorMessageTypeAnchor, req.Destination)
 
 	// Get or create destination queue
 	queue := cc.getOrCreateDestinationQueue(destKey)
@@ -948,11 +962,11 @@ func (cc *CrossChainConductor) CheckPartitionHealth() map[string]interface{} {
 }
 
 // Helper function to get message type name
-func (cc *CrossChainConductor) getMessageTypeName(t MessageType) string {
+func (cc *CrossChainConductor) getMessageTypeName(t ConductorMessageType) string {
 	switch t {
-	case MessageTypeAnchor:
+	case ConductorMessageTypeAnchor:
 		return "anchor"
-	case MessageTypeSynthetic:
+	case ConductorMessageTypeSynthetic:
 		return "synthetic"
 	default:
 		return "unknown"
@@ -1100,8 +1114,134 @@ func (brm *BatchProofRecoveryManager) GetMetrics() map[string]interface{} {
 	}
 }
 
+// CreateProofsForSyntheticTransactionsWithPartitions creates optimized proofs for synthetic transactions
+// using the correct partition-specific sequence chains for each destination.
+func (cc *CrossChainConductor) CreateProofsForSyntheticTransactionsWithPartitions(
+	ctx context.Context,
+	batch *database.Batch,
+	sourcePartition *url.URL,
+	transactions []SyntheticTransaction,
+	rootChain *database.Chain,
+) ([]*protocol.AnnotatedReceipt, error) {
+	if cc.proofService == nil {
+		return nil, errors.InternalError.With("proof service not initialized")
+	}
+
+	// Group transactions by destination for optimal batching
+	type destGroup struct {
+		partition string
+		requests  []ProofRequest
+	}
+	destinationGroups := make(map[string]*destGroup)
+	
+	for _, tx := range transactions {
+		dest := tx.Destination.String()
+		
+		// Parse destination partition
+		destPartition, ok := protocol.ParsePartitionUrl(tx.Destination)
+		if !ok {
+			return nil, errors.InternalError.WithFormat("invalid destination partition: %v", tx.Destination)
+		}
+		
+		if destinationGroups[dest] == nil {
+			destinationGroups[dest] = &destGroup{
+				partition: destPartition,
+				requests:  []ProofRequest{},
+			}
+		}
+		
+		// We'll set the chain later when we have it
+		destinationGroups[dest].requests = append(destinationGroups[dest].requests, ProofRequest{
+			Type:        ProofTypeSynthetic,
+			Destination: tx.Destination,
+			Sequences:   []uint64{tx.SequenceNum},
+			ChainURL:    tx.ChainURL,
+			SourceChain: nil, // Will be set below
+			RootChain:   rootChain,
+		})
+	}
+
+	// Get the synthetic ledger account
+	syntheticAccount := batch.Account(sourcePartition.JoinPath(protocol.Synthetic))
+	
+	// Create optimized proofs for each destination
+	var allProofs []*protocol.AnnotatedReceipt
+	for dest, group := range destinationGroups {
+		// Get the partition-specific sequence chain for this destination
+		sequenceChain, err := syntheticAccount.SyntheticSequenceChain(group.partition).Get()
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("failed to get sequence chain for partition %s: %w", group.partition, err)
+		}
+		
+		// Update all requests with the correct chain
+		for i := range group.requests {
+			group.requests[i].SourceChain = sequenceChain
+		}
+		
+		// Check if we should use collection proof
+		if len(group.requests) >= cc.proofService.batchThreshold {
+			// Merge sequences for collection proof
+			mergedReq := cc.proofService.mergeSequences(group.requests)
+			
+			cc.logger.Info("Creating collection proof for synthetic transactions",
+				"destination", dest,
+				"partition", group.partition,
+				"count", len(group.requests),
+				"sequences", mergedReq.Sequences)
+			
+			// Create single collection proof for all transactions to this destination
+			resp, err := cc.proofService.CreateProof(ctx, mergedReq)
+			if err != nil {
+				cc.logger.Error("Failed to create collection proof, falling back to individual",
+					"destination", dest,
+					"error", err)
+				
+				// Fallback to individual proofs
+				for _, req := range group.requests {
+					resp, err := cc.proofService.CreateProof(ctx, req)
+					if err != nil {
+						return nil, errors.UnknownError.WithFormat("failed to create proof: %w", err)
+					}
+					allProofs = append(allProofs, resp.Proof)
+				}
+			} else {
+				// Use the same collection proof for all transactions in this group
+				for range group.requests {
+					allProofs = append(allProofs, resp.Proof)
+				}
+				
+				cc.logger.Info("Collection proof created successfully",
+					"destination", dest,
+					"partition", group.partition,
+					"proof_savings", resp.ProofSavings)
+			}
+		} else {
+			// Create individual proofs for small batches
+			for _, req := range group.requests {
+				resp, err := cc.proofService.CreateProof(ctx, req)
+				if err != nil {
+					return nil, errors.UnknownError.WithFormat("failed to create proof: %w", err)
+				}
+				allProofs = append(allProofs, resp.Proof)
+			}
+		}
+	}
+
+	// Log metrics
+	metrics := cc.proofService.GetMetrics()
+	cc.logger.Debug("Proof generation metrics",
+		"individual_proofs", metrics.IndividualProofsCreated,
+		"collection_proofs", metrics.CollectionProofsCreated,
+		"proofs_saved", metrics.ProofsSaved)
+
+	return allProofs, nil
+}
+
 // CreateProofsForSyntheticTransactions creates optimized proofs for synthetic transactions
 // This is the central entry point for all synthetic proof creation
+// NOTE: The synthChain parameter should be the partition-specific sequence chain for the destination,
+// not the main synthetic chain. This ensures proofs are created from the correct source partition's chain.
+// DEPRECATED: Use CreateProofsForSyntheticTransactionsWithPartitions for correct partition-specific chain handling
 func (cc *CrossChainConductor) CreateProofsForSyntheticTransactions(
 	ctx context.Context,
 	transactions []SyntheticTransaction,
@@ -1121,7 +1261,7 @@ func (cc *CrossChainConductor) CreateProofsForSyntheticTransactions(
 			Destination: tx.Destination,
 			Sequences:   []uint64{tx.SequenceNum},
 			ChainURL:    tx.ChainURL,
-			SourceChain: synthChain,
+			SourceChain: synthChain, // This should be the partition-specific chain
 			RootChain:   rootChain,
 		})
 	}
@@ -1210,4 +1350,38 @@ type SyntheticTransaction struct {
 	SequenceNum uint64
 	ChainURL    *url.URL
 	Hash        []byte
+	Source      *url.URL
+	Message     messaging.Message
+}
+
+// SendCrossChainMessages sends messages using the unified transport layer
+// This method supports both anchors and synthetic transactions with collection proofs
+func (cc *CrossChainConductor) SendCrossChainMessages(
+	ctx context.Context,
+	messages []CrossChainMessage,
+) error {
+	if cc.unifiedTransport == nil {
+		return errors.InternalError.With("unified transport not initialized")
+	}
+	
+	// Send through unified transport with automatic batching and collection proofs
+	err := cc.unifiedTransport.Send(ctx, messages)
+	if err != nil {
+		return errors.UnknownError.WithFormat("unified transport send failed: %w", err)
+	}
+	
+	// Log transport metrics
+	metrics := cc.unifiedTransport.GetMetrics()
+	cc.logger.Info("Unified transport metrics",
+		"synthetics_sent", metrics.SyntheticsSent,
+		"anchors_sent", metrics.AnchorsSent,
+		"collection_proofs", metrics.CollectionProofsUsed,
+		"individual_proofs", metrics.IndividualProofsUsed)
+	
+	return nil
+}
+
+// GetBlockIntegration returns the block integration helper for the block executor
+func (cc *CrossChainConductor) GetBlockIntegration() *BlockIntegration {
+	return cc.blockIntegration
 }
