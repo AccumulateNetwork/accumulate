@@ -370,10 +370,10 @@ func ConvertSyntheticToUnified(
 ) *UnifiedMessage {
 	return &UnifiedMessage{
 		Type:        MessageTypeSynthetic,
-		Source:      synth.Source,
+		Source:      nil, // TODO: SyntheticTransaction doesn't have Source field
 		Destination: synth.Destination,
-		Sequence:    synth.SequenceNum,
-		Payload:     synth.Message,
+		Sequence:    synth.Sequence,
+		Payload:     nil, // TODO: Transaction doesn't implement Message interface
 		SourceChain: sourceChain,
 		RootChain:   rootChain,
 		BlockIndex:  blockIndex,

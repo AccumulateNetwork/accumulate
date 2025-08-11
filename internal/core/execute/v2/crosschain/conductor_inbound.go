@@ -24,6 +24,13 @@ func (cc *CrossChainConductor) ProcessInbound(ctx context.Context, messages []me
 	validMessages := make([]messaging.Message, 0, len(messages))
 	
 	for _, msg := range messages {
+		// Check for recovery requests first
+		if recoveryReq, ok := msg.(*messaging.RecoveryRequest); ok {
+			// Handle recovery request in background
+			go cc.handleRecoveryRequest(ctx, recoveryReq)
+			continue // Don't add to valid messages
+		}
+		
 		// Skip non-crosschain messages
 		if !cc.isCrossPartitionMessage(msg) {
 			validMessages = append(validMessages, msg)
@@ -178,4 +185,22 @@ func (cc *CrossChainConductor) getMessageType(messages []messaging.Message) Cond
 	default:
 		return ConductorMessageTypeOther
 	}
+}
+
+// handleRecoveryRequest processes incoming recovery requests from other partitions
+func (cc *CrossChainConductor) handleRecoveryRequest(ctx context.Context, req *messaging.RecoveryRequest) {
+	cc.logger.Info("Received recovery request",
+		"from", req.DestinationPartition,
+		"type", req.MessageType,
+		"last_seq", req.LastKnownSequence)
+
+	// TODO: Implement actual recovery logic
+	// This would:
+	// 1. Query the appropriate chain storage for messages from LastKnownSequence+1 to current
+	// 2. Send those messages back to the requesting partition
+	// 3. Use existing transport mechanisms (dispatcher) to send
+	
+	// For now, just log that we received it
+	cc.logger.Debug("Recovery request handling not yet implemented",
+		"from", req.DestinationPartition)
 }

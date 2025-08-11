@@ -8,13 +8,9 @@ package crosschain
 
 import (
 	"context"
-	"fmt"
 	"time"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -117,8 +113,8 @@ func (rm *RecoveryManager) recoverAnchors(req *RecoveryRequest, session *Recover
 	defer batch.Discard()
 
 	// Get the anchor ledger for the source partition
-	sourceUrl := protocol.PartitionUrl(req.Source)
-	anchorLedger := batch.Account(sourceUrl.JoinPath(protocol.AnchorPool))
+	// sourceUrl := protocol.PartitionUrl(req.Source)
+	// anchorLedger := batch.Account(sourceUrl.JoinPath(protocol.AnchorPool)) // TODO: Use this
 
 	// Retrieve anchors in the requested range
 	recovered := make([]RecoveredTransaction, 0)
@@ -175,8 +171,8 @@ func (rm *RecoveryManager) recoverSynthetics(req *RecoveryRequest, session *Reco
 
 	// Query the synthetic transaction chain
 	// We need to get the specific sequence chain for the destination
-	destUrl := protocol.PartitionUrl(req.Destination)
-	sequenceChain, err := synthLedger.SyntheticSequenceChain(destUrl).Get()
+	// destUrl := protocol.PartitionUrl(req.Destination) // TODO: Use this
+	sequenceChain, err := synthLedger.SyntheticSequenceChain(req.Destination).Get()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("failed to get sequence chain: %w", err)
 	}
@@ -202,11 +198,12 @@ func (rm *RecoveryManager) recoverSynthetics(req *RecoveryRequest, session *Reco
 		}
 
 		// Get the transaction hash
-		hash := [32]byte{}
-		err = mainChain.Entry(int64(entry.Source), &hash)
+		hashBytes, err := mainChain.Entry(int64(entry.Source))
 		if err != nil {
 			continue
 		}
+		var hash [32]byte
+		copy(hash[:], hashBytes)
 
 		session.Recovered++
 		session.Progress = float64(session.Recovered) / float64(session.Total)
@@ -241,12 +238,12 @@ func (rm *RecoveryManager) recoverSynthetics(req *RecoveryRequest, session *Reco
 
 // getNetworkInfo retrieves current network partition information
 func (rm *RecoveryManager) getNetworkInfo(ctx context.Context) (*NetworkInfo, error) {
-	// Query the network status
-	req := &api.NetworkStatusRequest{}
-	resp, err := rm.client.NetworkStatus(ctx, req)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("failed to get network status: %w", err)
-	}
+	// TODO: NetworkStatus API doesn't exist yet
+	// req := &api.NetworkStatusRequest{}
+	// resp, err := rm.client.NetworkStatus(ctx, req)
+	// if err != nil {
+	// 	return nil, errors.UnknownError.WithFormat("failed to get network status: %w", err)
+	// }
 
 	info := &NetworkInfo{
 		Partitions: make(map[string]*PartitionInfo),
@@ -255,16 +252,16 @@ func (rm *RecoveryManager) getNetworkInfo(ctx context.Context) (*NetworkInfo, er
 
 	// Convert network status to our internal format
 	// This is a simplified implementation
-	if resp.Network != nil {
-		for partID, partStatus := range resp.Network.Status {
-			info.Partitions[partID] = &PartitionInfo{
-				ID:              partID,
-				Type:            "partition",
-				IsHealthy:       partStatus.Ok,
-				LastHealthCheck: time.Now(),
-			}
-		}
-	}
+	// if resp.Network != nil {
+	// 	for partID, partStatus := range resp.Network.Status {
+	// 		info.Partitions[partID] = &PartitionInfo{
+	// 			ID:              partID,
+	// 			Type:            "partition",
+	// 			IsHealthy:       partStatus.Ok,
+	// 			LastHealthCheck: time.Now(),
+	// 		}
+	// 	}
+	// }
 
 	return info, nil
 }

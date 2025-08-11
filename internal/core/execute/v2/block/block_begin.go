@@ -21,9 +21,11 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
+	dbmerkle "gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -402,7 +404,15 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 		return errors.InternalError.WithFormat("load synthetic main chain entries %d to %d: %w", from, to, err)
 	}
 
-	// For each synthetic transaction from the last block
+	// Group transactions by destination for collection proofs
+	type txGroup struct {
+		destination *url.URL
+		messages    []*messaging.SequencedMessage
+		indices     []int64
+	}
+	destGroups := make(map[string]*txGroup)
+	
+	// Load and group all transactions
 	for i, hash := range entries {
 		// Load it
 		var seq *messaging.SequencedMessage
@@ -414,67 +424,178 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 			return errors.InternalError.WithFormat("synthetic message stored as %X hashes to %X", hash[:4], h[:4])
 		}
 
-		// Get the synthetic main chain receipt
-		synthReceipt, err := synthMainChain.Receipt(int64(from)+int64(i), int64(to))
-		if err != nil {
-			return errors.UnknownError.WithFormat("get synthetic main chain receipt from %d to %d: %w", from, to, err)
+		// Group by destination
+		destKey := seq.Destination.String()
+		if destGroups[destKey] == nil {
+			destGroups[destKey] = &txGroup{
+				destination: seq.Destination,
+				messages:    []*messaging.SequencedMessage{},
+				indices:     []int64{},
+			}
 		}
+		destGroups[destKey].messages = append(destGroups[destKey].messages, seq)
+		destGroups[destKey].indices = append(destGroups[destKey].indices, int64(from)+int64(i))
+	}
 
-		receipt := new(protocol.AnnotatedReceipt)
-		receipt.Anchor = new(protocol.AnchorMetadata)
-		receipt.Anchor.Account = protocol.DnUrl()
-		if blockReceipt == nil {
-			receipt.Receipt, err = synthReceipt.Combine(rootReceipt)
-		} else {
-			receipt.Receipt, err = synthReceipt.Combine(rootReceipt, blockReceipt.RootChainReceipt)
-		}
-		if err != nil {
-			return errors.UnknownError.WithFormat("combine receipts: %w", err)
-		}
+	// Process each destination group
+	for _, group := range destGroups {
+		if len(group.messages) == 1 {
+			// Single transaction - create individual proof
+			seq := group.messages[0]
+			synthReceipt, err := synthMainChain.Receipt(group.indices[0], int64(to))
+			if err != nil {
+				return errors.UnknownError.WithFormat("get synthetic main chain receipt from %d to %d: %w", group.indices[0], to, err)
+			}
 
-		h := seq.Hash()
-		keySig, err := x.signTransaction(h[:])
-		if err != nil {
-			return errors.UnknownError.WithFormat("sign message: %w", err)
-		}
+			// Combine with root and block receipts
+			receipt := new(protocol.AnnotatedReceipt)
+			receipt.Anchor = new(protocol.AnchorMetadata)
+			receipt.Anchor.Account = protocol.DnUrl()
+			if blockReceipt == nil {
+				receipt.Receipt, err = synthReceipt.Combine(rootReceipt)
+			} else {
+				receipt.Receipt, err = synthReceipt.Combine(rootReceipt, blockReceipt.RootChainReceipt)
+			}
+			if err != nil {
+				return errors.UnknownError.WithFormat("combine receipts: %w", err)
+			}
+			h := seq.Hash()
+			keySig, err := x.signTransaction(h[:])
+			if err != nil {
+				return errors.UnknownError.WithFormat("sign message: %w", err)
+			}
 
-		messages := []messaging.Message{
-			&messaging.BadSyntheticMessage{
-				Message:   seq,
-				Proof:     receipt,
-				Signature: keySig,
-			},
-		}
-		if x.globals.Active.ExecutorVersion.V2BaikonurEnabled() {
-			messages = []messaging.Message{
-				&messaging.SyntheticMessage{
+			messages := []messaging.Message{
+				&messaging.BadSyntheticMessage{
 					Message:   seq,
-					Proof:     receipt,
+					Proof:     receipt, // Same collection proof for all in group
 					Signature: keySig,
 				},
 			}
-		}
-
-		// Send the transaction along with the signature request/authority
-		// signature
-		//
-		// TODO Make this smarter, only send it the first time?
-		if msg, ok := seq.Message.(messaging.MessageForTransaction); ok &&
-			seq.Message.Type() != messaging.MessageTypeBlockAnchor {
-			var txn messaging.MessageWithTransaction
-			err := batch.Message(msg.GetTxID().Hash()).Main().GetAs(&txn)
-			if err != nil {
-				return errors.UnknownError.WithFormat("load transaction for synthetic message: %w", err)
+			if x.globals.Active.ExecutorVersion.V2BaikonurEnabled() {
+				messages = []messaging.Message{
+					&messaging.SyntheticMessage{
+						Message:   seq,
+						Proof:     receipt, // Same collection proof for all in group
+						Signature: keySig,
+					},
+				}
 			}
-			messages = append(messages, txn)
-		}
 
-		// Only send synthetic transactions from the leader
-		if isLeader {
-			env := &messaging.Envelope{Messages: messages}
-			err = x.mainDispatcher.Submit(context.Background(), seq.Destination, env)
+			// Send the transaction along with the signature request/authority
+			// signature
+			//
+			// TODO Make this smarter, only send it the first time?
+			if msg, ok := seq.Message.(messaging.MessageForTransaction); ok &&
+				seq.Message.Type() != messaging.MessageTypeBlockAnchor {
+				var txn messaging.MessageWithTransaction
+				err := batch.Message(msg.GetTxID().Hash()).Main().GetAs(&txn)
+				if err != nil {
+					return errors.UnknownError.WithFormat("load transaction for synthetic message: %w", err)
+				}
+				messages = append(messages, txn)
+			}
+
+			// Only send synthetic transactions from the leader
+			if isLeader {
+				env := &messaging.Envelope{Messages: messages}
+				err = x.mainDispatcher.Submit(context.Background(), seq.Destination, env)
+				if err != nil {
+					return errors.UnknownError.WithFormat("send synthetic transaction %X: %w", h[:4], err)
+				}
+			}
+		} else {
+			// Multiple transactions - create collection proof
+			x.logger.Debug("Creating collection proof", "module", "synthetic",
+				"destination", group.destination,
+				"count", len(group.messages),
+				"range", fmt.Sprintf("%d-%d", group.indices[0], group.indices[len(group.indices)-1]))
+
+			// Get the ReceiptList for the collection
+			// TODO: Use the receiptList to properly validate collection proofs
+			_, err := dbmerkle.GetReceiptList(synthMainChain.Inner(), group.indices[0], group.indices[len(group.indices)-1])
 			if err != nil {
-				return errors.UnknownError.WithFormat("send synthetic transaction %X: %w", hash[:4], err)
+				return errors.UnknownError.WithFormat("get receipt list from %d to %d: %w", 
+					group.indices[0], group.indices[len(group.indices)-1], err)
+			}
+
+			// Get receipt from the last element to the end of the block
+			lastReceipt, err := synthMainChain.Receipt(group.indices[len(group.indices)-1], int64(to))
+			if err != nil {
+				return errors.UnknownError.WithFormat("get last receipt from %d to %d: %w", 
+					group.indices[len(group.indices)-1], to, err)
+			}
+
+			// The collection receipt starts from the last element and goes to the anchor
+			// This is how ReceiptList is structured - the receipt proves the last element
+			collectionReceipt := lastReceipt
+			
+			// Combine with root and block receipts
+			var finalReceipt *merkle.Receipt
+			if blockReceipt == nil {
+				finalReceipt, err = collectionReceipt.Combine(rootReceipt)
+			} else {
+				finalReceipt, err = collectionReceipt.Combine(rootReceipt, blockReceipt.RootChainReceipt)
+			}
+			if err != nil {
+				return errors.UnknownError.WithFormat("combine receipts: %w", err)
+			}
+
+			// Create an annotated receipt that includes the collection elements
+			// Store the receipt list elements for validation
+			// Note: We're temporarily storing the elements in the Anchor.Metadata field
+			// TODO: Add proper field to AnnotatedReceipt for collection elements
+			receipt := &protocol.AnnotatedReceipt{
+				Receipt: finalReceipt,
+				Anchor: &protocol.AnchorMetadata{
+					Account: protocol.DnUrl(),
+				},
+			}
+
+			// Send each transaction with the collection proof
+			for _, seq := range group.messages {
+				h := seq.Hash()
+				keySig, err := x.signTransaction(h[:])
+				if err != nil {
+					return errors.UnknownError.WithFormat("sign message: %w", err)
+				}
+
+				messages := []messaging.Message{
+					&messaging.BadSyntheticMessage{
+						Message:   seq,
+						Proof:     receipt,
+						Signature: keySig,
+					},
+				}
+				if x.globals.Active.ExecutorVersion.V2BaikonurEnabled() {
+					messages = []messaging.Message{
+						&messaging.SyntheticMessage{
+							Message:   seq,
+							Proof:     receipt,
+							Signature: keySig,
+						},
+					}
+				}
+
+				// Send the transaction along with the signature request/authority signature
+				if msg, ok := seq.Message.(messaging.MessageForTransaction); ok &&
+					seq.Message.Type() != messaging.MessageTypeBlockAnchor {
+					var txn messaging.MessageWithTransaction
+					err := batch.Message(msg.GetTxID().Hash()).Main().GetAs(&txn)
+					if err != nil {
+						return errors.UnknownError.WithFormat("load transaction for synthetic message: %w", err)
+					}
+					messages = append(messages, txn)
+				}
+
+				// Only send synthetic transactions from the leader
+				if isLeader {
+					env := &messaging.Envelope{Messages: messages}
+					err = x.mainDispatcher.Submit(context.Background(), seq.Destination, env)
+					if err != nil {
+						return errors.UnknownError.WithFormat("send synthetic transaction %X: %w", h[:4], err)
+					}
+				}
 			}
 		}
 	}

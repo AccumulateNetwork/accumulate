@@ -16,6 +16,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // SimpleSequenceGap represents a gap in sequence numbers
@@ -130,6 +131,9 @@ func (st *SimpleSequenceTracker) ValidateAndTrackSynthetic(msg *messaging.Sequen
 				"gap_size", gapSize,
 				"received", msg.Number,
 				"dropped", true)
+			
+			// Send recovery request immediately
+			go st.SendRecoveryRequest(source, "synthetic", state.LastSyntheticDelivered)
 		}
 		
 		// Drop the out-of-order message
@@ -357,4 +361,33 @@ func (st *SimpleSequenceTracker) GetStatistics() map[string]interface{} {
 	}
 	
 	return stats
+}
+
+// SendRecoveryRequest sends a recovery request for missing messages
+func (st *SimpleSequenceTracker) SendRecoveryRequest(source string, messageType string, lastKnownSeq uint64) {
+	st.logger.Info("Sending recovery request",
+		"to", source,
+		"type", messageType,
+		"last_seq", lastKnownSeq)
+
+	// Create recovery request
+	req := &messaging.RecoveryRequest{
+		SourcePartition:      source,
+		DestinationPartition: st.conductor.Describe.PartitionId,
+		MessageType:          messageType,
+		LastKnownSequence:    lastKnownSeq,
+	}
+
+	// Send via dispatcher
+	envelope := &messaging.Envelope{
+		Messages: []messaging.Message{req},
+	}
+
+	sourceURL := protocol.PartitionUrl(source)
+	err := st.conductor.dispatcher.Submit(context.Background(), sourceURL, envelope)
+	if err != nil {
+		st.logger.Error("Failed to send recovery request",
+			"to", source,
+			"error", err)
+	}
 }

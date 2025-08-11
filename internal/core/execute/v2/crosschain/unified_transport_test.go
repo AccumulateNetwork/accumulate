@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -47,20 +46,20 @@ func TestUnifiedTransportMixedMessages(t *testing.T) {
 	logger := (*logging.TestLogger)(nil)
 	dispatcher := &unifiedMockDispatcher{}
 	conductor := NewCrossChainConductor(dispatcher, logger)
-	
+
 	// Create test database
 	store := storage.OpenInMemory(nil)
 	defer store.Close()
 	db := database.OpenInMemory(store, logger.With("test", "db"))
 	batch := db.Begin(true)
 	defer batch.Discard()
-	
+
 	// Create test chains
 	sourceChain, err := batch.Account(protocol.PartitionUrl("source").WithTxID([32]byte{1})).MainChain().Get()
 	require.NoError(t, err)
 	rootChain, err := batch.Account(protocol.PartitionUrl("source")).RootChain().Get()
 	require.NoError(t, err)
-	
+
 	// Create mixed messages (synthetics and anchors)
 	messages := []CrossChainMessage{
 		// Synthetic transaction 1
@@ -126,19 +125,19 @@ func TestUnifiedTransportMixedMessages(t *testing.T) {
 			BlockIndex:  101,
 		},
 	}
-	
+
 	// Send through unified transport
 	err = conductor.SendCrossChainMessages(context.Background(), messages)
 	require.NoError(t, err)
-	
+
 	// Verify metrics
 	transportMetrics := conductor.unifiedTransport.GetMetrics()
 	require.Equal(t, int64(2), transportMetrics.SyntheticsSent)
 	require.Equal(t, int64(2), transportMetrics.AnchorsSent)
-	
+
 	// Since we have 4 messages to the same destination, they should use a collection proof
 	require.GreaterOrEqual(t, transportMetrics.CollectionProofsUsed, int64(1))
-	
+
 	t.Logf("Transport metrics: synthetics=%d, anchors=%d, collection_proofs=%d",
 		transportMetrics.SyntheticsSent, transportMetrics.AnchorsSent, transportMetrics.CollectionProofsUsed)
 }
@@ -149,20 +148,20 @@ func TestUnifiedTransportBatching(t *testing.T) {
 	logger := (*logging.TestLogger)(nil)
 	dispatcher := &unifiedMockDispatcher{}
 	conductor := NewCrossChainConductor(dispatcher, logger)
-	
+
 	// Create test database
 	store := storage.OpenInMemory(nil)
 	defer store.Close()
 	db := database.OpenInMemory(store, logger.With("test", "db"))
 	batch := db.Begin(true)
 	defer batch.Discard()
-	
+
 	// Create test chains
 	sourceChain, err := batch.Account(protocol.PartitionUrl("source").WithTxID([32]byte{1})).MainChain().Get()
 	require.NoError(t, err)
 	rootChain, err := batch.Account(protocol.PartitionUrl("source")).RootChain().Get()
 	require.NoError(t, err)
-	
+
 	// Create messages to different destinations
 	messages := []CrossChainMessage{
 		// To destination1 (3 messages - should use collection proof)
@@ -217,17 +216,17 @@ func TestUnifiedTransportBatching(t *testing.T) {
 			RootChain:   rootChain,
 		},
 	}
-	
+
 	// Send through unified transport
 	err = conductor.SendCrossChainMessages(context.Background(), messages)
 	require.NoError(t, err)
-	
+
 	// Verify batching metrics
 	transportMetrics := conductor.unifiedTransport.GetMetrics()
-	require.Equal(t, int64(2), transportMetrics.BatchesCreated) // 2 destinations
+	require.Equal(t, int64(2), transportMetrics.BatchesCreated)                // 2 destinations
 	require.GreaterOrEqual(t, transportMetrics.CollectionProofsUsed, int64(1)) // destination1 batch
 	require.GreaterOrEqual(t, transportMetrics.IndividualProofsUsed, int64(1)) // destination2 single
-	
+
 	t.Logf("Batching: %d batches created, %d collection proofs, %d individual proofs",
 		transportMetrics.BatchesCreated, transportMetrics.CollectionProofsUsed, transportMetrics.IndividualProofsUsed)
 }
@@ -238,23 +237,23 @@ func TestUnifiedTransportCollectionProofThreshold(t *testing.T) {
 	logger := (*logging.TestLogger)(nil)
 	dispatcher := &unifiedMockDispatcher{}
 	conductor := NewCrossChainConductor(dispatcher, logger)
-	
+
 	// Create test database
 	store := storage.OpenInMemory(nil)
 	defer store.Close()
 	db := database.OpenInMemory(store, logger.With("test", "db"))
 	batch := db.Begin(true)
 	defer batch.Discard()
-	
+
 	// Create test chains
 	sourceChain, err := batch.Account(protocol.PartitionUrl("source").WithTxID([32]byte{1})).MainChain().Get()
 	require.NoError(t, err)
 	rootChain, err := batch.Account(protocol.PartitionUrl("source")).RootChain().Get()
 	require.NoError(t, err)
-	
+
 	testCases := []struct {
-		name          string
-		messageCount  int
+		name             string
+		messageCount     int
 		expectCollection bool
 	}{
 		{"Single message", 1, false},
@@ -262,12 +261,12 @@ func TestUnifiedTransportCollectionProofThreshold(t *testing.T) {
 		{"Five messages", 5, true},
 		{"Fifty messages", 50, true},
 	}
-	
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Create new conductor for each test
 			conductor := NewCrossChainConductor(dispatcher, logger)
-			
+
 			// Create messages
 			messages := make([]CrossChainMessage, tc.messageCount)
 			for i := 0; i < tc.messageCount; i++ {
@@ -285,11 +284,11 @@ func TestUnifiedTransportCollectionProofThreshold(t *testing.T) {
 					RootChain:   rootChain,
 				}
 			}
-			
+
 			// Send messages
 			err := conductor.SendCrossChainMessages(context.Background(), messages)
 			require.NoError(t, err)
-			
+
 			// Check metrics
 			metrics := conductor.unifiedTransport.GetMetrics()
 			if tc.expectCollection {
@@ -311,19 +310,19 @@ func TestUnifiedTransportWithRealProofs(t *testing.T) {
 	logger := (*logging.TestLogger)(nil)
 	dispatcher := &unifiedMockDispatcher{}
 	conductor := NewCrossChainConductor(dispatcher, logger)
-	
+
 	// Create test database
 	store := storage.OpenInMemory(nil)
 	defer store.Close()
 	db := database.OpenInMemory(store, logger.With("test", "db"))
 	batch := db.Begin(true)
 	defer batch.Discard()
-	
+
 	// Create and populate source chain with entries
 	sourceAccount := protocol.PartitionUrl("source").WithTxID([32]byte{1})
 	sourceChain, err := batch.Account(sourceAccount).MainChain().Get()
 	require.NoError(t, err)
-	
+
 	// Add entries to the chain for proof generation
 	for i := uint64(1); i <= 10; i++ {
 		entry := make([]byte, 32)
@@ -331,10 +330,10 @@ func TestUnifiedTransportWithRealProofs(t *testing.T) {
 		err = sourceChain.AddEntry(entry, false)
 		require.NoError(t, err)
 	}
-	
+
 	rootChain, err := batch.Account(protocol.PartitionUrl("source")).RootChain().Get()
 	require.NoError(t, err)
-	
+
 	// Create messages that reference actual chain entries
 	messages := []CrossChainMessage{
 		&UnifiedMessage{
@@ -376,17 +375,17 @@ func TestUnifiedTransportWithRealProofs(t *testing.T) {
 			RootChain:   rootChain,
 		},
 	}
-	
+
 	// Send through unified transport
 	err = conductor.SendCrossChainMessages(context.Background(), messages)
 	require.NoError(t, err)
-	
+
 	// Verify proof generation
 	proofMetrics := conductor.proofService.GetMetrics()
 	require.GreaterOrEqual(t, proofMetrics.CollectionProofsCreated, int64(1))
 	require.Equal(t, int64(3), proofMetrics.TransactionsInCollections)
 	require.Equal(t, int64(2), proofMetrics.ProofsSaved) // 3 messages with 1 proof = 2 proofs saved
-	
+
 	t.Logf("Proof metrics: collection_proofs=%d, transactions_in_collections=%d, proofs_saved=%d",
 		proofMetrics.CollectionProofsCreated, proofMetrics.TransactionsInCollections, proofMetrics.ProofsSaved)
 }
