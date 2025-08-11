@@ -103,7 +103,7 @@ func New(config *Config) (*Client, error) {
 // NewMainnet creates a client connected to the Accumulate mainnet.
 func NewMainnet() (*Client, error) {
 	return New(&Config{
-		Endpoint: "https://mainnet.accumulate.defidevs.io/v3",
+		Endpoint: "https://mainnet.accumulatenetwork.io/v3",
 		Network:  NetworkMainnet,
 	})
 }
