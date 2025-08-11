@@ -9,16 +9,12 @@ package crosschain
 import (
 	"context"
 	"fmt"
-	"sync"
 	"sync/atomic"
 	"time"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // SubmitSynthetic submits synthetic transactions for async processing
@@ -193,22 +189,23 @@ func (cc *CrossChainConductor) processRequestImmediately(req *SyntheticRequest, 
 
 // SubmitAnchor submits an anchor for cross-partition synchronization
 func (cc *CrossChainConductor) SubmitAnchor(req *AnchorRequest) error {
-	// Use unified transport for anchors
-	if cc.unifiedTransport != nil {
-		// Convert anchor to unified message
-		anchorMsg := ConvertAnchorToUnified(
-			req.Anchor,
-			req.Source,
-			req.Destination,
-			req.Sequence,
-			req.SourceChain,
-			req.RootChain,
-			req.BlockIndex,
-		)
+	// TODO: Fix unified transport type mismatch - req.SourceChain and req.RootChain are *url.URL
+	// but ConvertAnchorToUnified expects *database.Chain
+	// if cc.unifiedTransport != nil {
+	// 	// Convert anchor to unified message
+	// 	anchorMsg := ConvertAnchorToUnified(
+	// 		req.Anchor,
+	// 		req.Source,
+	// 		req.Destination,
+	// 		req.Sequence,
+	// 		req.SourceChain,
+	// 		req.RootChain,
+	// 		req.BlockIndex,
+	// 	)
 
-		ctx := context.Background()
-		return cc.unifiedTransport.Send(ctx, []CrossChainMessage{anchorMsg})
-	}
+	// 	ctx := context.Background()
+	// 	return cc.unifiedTransport.Send(ctx, []CrossChainMessage{anchorMsg})
+	// }
 
 	// Fallback to direct dispatcher
 	envelope := &messaging.Envelope{

@@ -10,10 +10,7 @@ import (
 	"context"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -25,57 +22,10 @@ func (cc *CrossChainConductor) CreateProofsForSyntheticTransactionsWithPartition
 	transactions []*protocol.Transaction,
 	partitionMap map[string][]*protocol.Transaction,
 ) ([]*protocol.AnnotatedReceipt, error) {
-	if cc.proofService == nil {
-		return nil, errors.InternalError.With("proof service not initialized")
-	}
-
-	receipts := make([]*protocol.AnnotatedReceipt, 0)
-
-	// Process each partition's transactions
-	for partition, txns := range partitionMap {
-		if len(txns) == 0 {
-			continue
-		}
-
-		cc.logger.Debug("Creating proofs for partition",
-			"partition", partition,
-			"transaction_count", len(txns))
-
-		// Determine proof type based on transaction count
-		proofType := ProofTypeIndividual
-		if len(txns) >= 2 { // Hard-coded threshold of 2+
-			proofType = ProofTypeCollection
-		}
-
-		// Create proof request
-		req := &ProofRequest{
-			Type:         proofType,
-			Transactions: txns,
-			Destination:  partition,
-		}
-
-		// Generate proof
-		resp, err := cc.proofService.CreateProof(ctx, batch, req)
-		if err != nil {
-			// Collection proof failure is a hard error - no fallback
-			return nil, errors.UnknownError.WithFormat("failed to create %s proof for partition %s: %w",
-				proofType, partition, err)
-		}
-
-		// Add receipts
-		receipts = append(receipts, resp.Receipts...)
-
-		// Log metrics
-		if proofType == ProofTypeCollection {
-			cc.logger.Info("Created collection proof",
-				"partition", partition,
-				"transactions", len(txns),
-				"proof_size", resp.ProofSize,
-				"savings", resp.ProofSavings)
-		}
-	}
-
-	return receipts, nil
+	// TODO: This method needs to be properly implemented with correct types
+	// The ProofService doesn't have ProofTypeIndividual or ProofTypeCollection constants
+	// and the ProofRequest/ProofResponse types don't match what's being used here
+	return nil, errors.InternalError.With("CreateProofsForSyntheticTransactionsWithPartitions not implemented")
 }
 
 // CreateProofsForSyntheticTransactions creates proofs for synthetic transactions
@@ -93,11 +43,12 @@ func (cc *CrossChainConductor) CreateProofsForSyntheticTransactions(
 	partitionMap := make(map[string][]*protocol.Transaction)
 	for _, tx := range transactions {
 		// Extract destination from transaction
-		// This is simplified - actual implementation would need proper destination extraction
+		// TODO: Implement proper destination extraction from transaction
 		dest := "unknown"
-		if synth, ok := tx.Body.(*protocol.SyntheticCreateIdentity); ok {
-			dest = synth.Url.String()
-		}
+		// if synth, ok := tx.Body.(*protocol.SyntheticCreateIdentity); ok {
+		// 	// SyntheticCreateIdentity doesn't have a Url field
+		// 	dest = "unknown" 
+		// }
 		// Add more transaction type handling as needed
 
 		partitionMap[dest] = append(partitionMap[dest], tx)
@@ -113,26 +64,14 @@ func (cc *CrossChainConductor) ValidateIncomingProof(proof *protocol.AnnotatedRe
 		return errors.InternalError.With("proof service not initialized")
 	}
 
-	// Create validation request
-	req := &ProofValidationRequest{
-		Receipt: proof,
-		// Add more validation parameters as needed
-	}
-
 	// Validate the proof
-	resp, err := cc.proofService.ValidateProof(context.Background(), req)
+	err := cc.proofService.ValidateProof(proof)
 	if err != nil {
 		return errors.UnknownError.WithFormat("proof validation failed: %w", err)
 	}
 
-	if !resp.IsValid {
-		return errors.BadRequest.WithFormat("invalid proof: %s", resp.Reason)
-	}
-
 	// Log successful validation
-	cc.logger.Debug("Validated incoming proof",
-		"type", resp.ProofType,
-		"elements", resp.ElementCount)
+	cc.logger.Debug("Validated incoming proof")
 
 	return nil
 }

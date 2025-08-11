@@ -7,7 +7,6 @@
 package crosschain
 
 import (
-	"context"
 	"fmt"
 	"sync/atomic"
 	"time"
@@ -140,7 +139,7 @@ func (cc *CrossChainConductor) retryTransmission(pending *PendingTransmission) {
 
 	// Submit messages again
 	envelope := &messaging.Envelope{Messages: pending.Messages}
-	_, err := cc.dispatcher.Submit(pending.Context, pending.Destination, envelope)
+	err := cc.dispatcher.Submit(pending.Context, pending.Destination, envelope)
 
 	if err != nil {
 		cc.logger.Error("Retry failed",
@@ -165,7 +164,7 @@ func (cc *CrossChainConductor) retryTransmission(pending *PendingTransmission) {
 			// Send final error
 			if pending.Callback != nil {
 				select {
-				case pending.Callback <- errors.MaxRetries.WithFormat("max retries reached: %w", err):
+				case pending.Callback <- errors.InternalError.WithFormat("max retries reached: %w", err):
 				default:
 				}
 			}
