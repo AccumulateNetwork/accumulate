@@ -36,8 +36,8 @@ import (
 //	    "params": {
 //	      "scope": "acc://dn.acme/network",
 //	      "query": {
-//	        "type": "transaction-hash",
-//	        "hash": "0123456789abcdef..."
+//	        "type": "message-hash",
+//	        "hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 //	      }
 //	    },
 //	    "id": 1
