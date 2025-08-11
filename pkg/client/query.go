@@ -234,10 +234,32 @@ func (c *Client) GetDirectory(ctx context.Context, accountURL string, start uint
 	}
 
 	// Type assert to RecordRange
-	dirRecord, ok := record.(*v3.RecordRange[*v3.AccountRecord])
+	dirRecord, ok := record.(*v3.RecordRange[v3.Record])
 	if !ok {
+		// Try the account-specific version
+		dirRecord2, ok2 := record.(*v3.RecordRange[*v3.AccountRecord])
+		if ok2 {
+			// Convert to the more general type
+			result := &v3.RecordRange[*v3.AccountRecord]{
+				Start:   dirRecord2.Start,
+				Total:   dirRecord2.Total,
+				Records: dirRecord2.Records,
+			}
+			return result, nil
+		}
 		return nil, fmt.Errorf("unexpected record type: %T", record)
 	}
+	
+	// Convert to account records
+	result := &v3.RecordRange[*v3.AccountRecord]{
+		Start: dirRecord.Start,
+		Total: dirRecord.Total,
+	}
+	for _, r := range dirRecord.Records {
+		if acc, ok := r.(*v3.AccountRecord); ok {
+			result.Records = append(result.Records, acc)
+		}
+	}
 
-	return dirRecord, nil
+	return result, nil
 }
