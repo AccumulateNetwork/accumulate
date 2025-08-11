@@ -234,9 +234,6 @@ func (rm *RecoveryManager) waitForSession(session *RecoverySession, req *Recover
 		"source", req.Source,
 		"destination", req.Destination)
 
-	// Create a response channel to wait on
-	// respChan := make(chan *RecoveryResponse, 1) // TODO: Use this channel
-
 	// Poll the session status
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
