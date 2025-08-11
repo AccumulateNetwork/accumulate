@@ -165,7 +165,7 @@ func (c *Client) GetMetrics(ctx context.Context, partition string) (*v3.Metrics,
 //	    "jsonrpc": "2.0",
 //	    "method": "find-service",
 //	    "params": {
-//	      "service": {"type": 1}
+//	      "service": {"type": "query"}
 //	    },
 //	    "id": 1
 //	  }'
