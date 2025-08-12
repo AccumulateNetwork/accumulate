@@ -8,6 +8,7 @@ package p2p
 
 import (
 	"context"
+	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -33,9 +34,19 @@ func NewClient(opts Options) (*ClientNode, error) {
 		return nil, errors.BadRequest.With("missing network")
 	}
 
+	// Apply mainnet fix for incorrect peer addresses
+	FixMainnetBootstrap(&opts)
+
 	node, err := New(opts)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("initialize node: %w", err)
+	}
+
+	// Manually connect to mainnet peers with correct addresses
+	if opts.Network == "MainNet" {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		_ = node.ConnectToMainnetPeers(ctx)
+		cancel()
 	}
 
 	return NewClientWith(node)
