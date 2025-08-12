@@ -15,6 +15,9 @@ import (
 
 var BootstrapServers = func() []multiaddr.Multiaddr {
 	s := []string{
+		// Use actual mainnet nodes with correct peer IDs
+		"/dns/apollo-mainnet.accumulate.defidevs.io/tcp/16593/p2p/12D3KooWPs19932secARrxoRR5J8ZtBMt2vqwyHH1Q9p8thYP7cn",
+		// Keep original bootstrap as fallback (may have issues with old QUIC)
 		"/dns/bootstrap.accumulate.defidevs.io/tcp/16593/p2p/12D3KooWGJTh4aeF7bFnwo9sAYRujCkuVU1Cq8wNeTNGpFgZgXdg",
 	}
 	addrs := make([]multiaddr.Multiaddr, len(s))
