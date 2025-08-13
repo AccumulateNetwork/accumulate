@@ -19,6 +19,14 @@ import (
 
 // SubmitSynthetic submits synthetic transactions for async processing
 func (cc *CrossChainConductor) SubmitSynthetic(ctx context.Context, messages []messaging.Message, destination *url.URL) error {
+	// Check if paused - if so, drop the request
+	if cc.IsPaused() {
+		cc.logger.Debug("CCC is paused, dropping outbound synthetic transaction",
+			"destination", destination,
+			"message_count", len(messages))
+		return nil // Return success to avoid blocking
+	}
+	
 	responseChan := make(chan error, 1)
 	req := &SyntheticRequest{
 		Messages:     messages,
@@ -80,6 +88,19 @@ func (cc *CrossChainConductor) generateTxID() string {
 
 // processSyntheticRequest processes a single synthetic transaction request
 func (cc *CrossChainConductor) processSyntheticRequest(req *SyntheticRequest) {
+	// Check pause state before processing
+	if cc.IsPaused() {
+		cc.logger.Debug("CCC is paused, dropping queued synthetic request",
+			"destination", req.Destination)
+		if req.ResponseChan != nil {
+			select {
+			case req.ResponseChan <- nil: // Return success to avoid blocking
+			default:
+			}
+		}
+		return
+	}
+	
 	msgType := cc.getMessageType(req.Messages)
 	destKey := cc.createDestinationKey(msgType, req.Destination)
 	queue := cc.getOrCreateDestinationQueue(destKey)
@@ -189,6 +210,15 @@ func (cc *CrossChainConductor) processRequestImmediately(req *SyntheticRequest, 
 
 // SubmitAnchor submits an anchor for cross-partition synchronization
 func (cc *CrossChainConductor) SubmitAnchor(req *AnchorRequest) error {
+	// Check if paused - if so, drop the request
+	if cc.IsPaused() {
+		cc.logger.Debug("CCC is paused, dropping outbound anchor",
+			"source", req.Source,
+			"destination", req.Destination,
+			"sequence", req.Sequence)
+		return nil // Return success to avoid blocking
+	}
+	
 	// Use unified transport if available
 	if cc.unifiedTransport != nil {
 		// Create a unified message for the anchor

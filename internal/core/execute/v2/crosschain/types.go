@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -37,8 +38,12 @@ func (t RecoveryType) String() string {
 
 // CollectionProof represents a collection proof for multiple transactions
 type CollectionProof struct {
-	Elements [][]byte
-	// Add more fields as needed
+	Elements      [][]byte
+	Receipt       *merkle.Receipt
+	MessageCount  int
+	MessageHashes [][32]byte
+	StartSequence uint64
+	EndSequence   uint64
 }
 
 // RecoveredTransaction represents a transaction recovered through the recovery process
