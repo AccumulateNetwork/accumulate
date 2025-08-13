@@ -31,6 +31,10 @@ tmp
 *.log
 *.swp
 *.out
+*.pid
+coverage.html
+*_test_results.json
+*_coverage.out
 
 # macOS
 .DS_Store
@@ -40,6 +44,7 @@ tmp
 .nodes*
 .factom*
 .genesis
+.devnet-test*
 .vagrant
 .terraform
 .terraform.lock.hcl
