@@ -438,13 +438,15 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 	}
 
 	// Process each destination group
+	const useCollectionProofs = true
+	
 	for _, group := range destGroups {
-		if len(group.messages) == 1 {
-			// Single transaction - create individual proof
-			seq := group.messages[0]
-			synthReceipt, err := synthMainChain.Receipt(group.indices[0], int64(to))
+		if !useCollectionProofs || len(group.messages) == 1 {
+			// Process each message individually
+			for idx, seq := range group.messages {
+			synthReceipt, err := synthMainChain.Receipt(group.indices[idx], int64(to))
 			if err != nil {
-				return errors.UnknownError.WithFormat("get synthetic main chain receipt from %d to %d: %w", group.indices[0], to, err)
+				return errors.UnknownError.WithFormat("get synthetic main chain receipt from %d to %d: %w", group.indices[idx], to, err)
 			}
 
 			// Combine with root and block receipts
@@ -468,7 +470,7 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 			messages := []messaging.Message{
 				&messaging.BadSyntheticMessage{
 					Message:   seq,
-					Proof:     receipt, // Same collection proof for all in group
+					Proof:     receipt,
 					Signature: keySig,
 				},
 			}
@@ -476,7 +478,7 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 				messages = []messaging.Message{
 					&messaging.SyntheticMessage{
 						Message:   seq,
-						Proof:     receipt, // Same collection proof for all in group
+						Proof:     receipt,
 						Signature: keySig,
 					},
 				}
@@ -504,7 +506,12 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 					return errors.UnknownError.WithFormat("send synthetic transaction %X: %w", h[:4], err)
 				}
 			}
-		} else {
+		}
+			continue // Handled individual messages
+		}
+		
+		// Collection proof code for multiple messages:
+		if len(group.messages) > 1 {
 			// Multiple transactions - create collection proof
 			x.logger.Debug("Creating collection proof", "module", "synthetic",
 				"destination", group.destination,

@@ -74,12 +74,16 @@ type CrossChainConductor struct {
 	stopChan      chan struct{}
 	wg            sync.WaitGroup
 
-	// Per-destination blocking and tracking
+	// Per-destination blocking and tracking (legacy - being replaced by destinationStates)
 	destinationQueues map[DestinationKey]*DestinationQueue
 	queuesMutex       sync.RWMutex
 	maxRetries        int
 	retryDelay        time.Duration
 	txIDCounter       int64
+
+	// NEW: Simple index-based tracking per destination for gap recovery
+	destinationStates map[string]*DestinationSendState
+	statesMutex       sync.RWMutex
 
 	// Global metrics
 	syntheticsSent     int64
@@ -129,14 +133,15 @@ type AnchorRequest struct {
 // NewCrossChainConductor creates and starts the conductor
 func NewCrossChainConductor(dispatcher execute.Dispatcher, logger logging.OptionalLogger) *CrossChainConductor {
 	cc := &CrossChainConductor{
-		dispatcher:        dispatcher,
-		logger:            logger.With("module", "crosschain-conductor").(logging.OptionalLogger),
-		syntheticChan:     make(chan *SyntheticRequest, 100),   // Buffered channel for async processing
-		retryChan:         make(chan *PendingTransmission, 50), // Retry queue
-		stopChan:          make(chan struct{}),
-		destinationQueues: make(map[DestinationKey]*DestinationQueue),
-		maxRetries:        3,               // Retry failed transmissions up to 3 times
-		retryDelay:        2 * time.Second, // Wait 2 seconds between retries
+		dispatcher:         dispatcher,
+		logger:             logger.With("module", "crosschain-conductor").(logging.OptionalLogger),
+		syntheticChan:      make(chan *SyntheticRequest, 100),   // Buffered channel for async processing
+		retryChan:          make(chan *PendingTransmission, 50), // Retry queue
+		stopChan:           make(chan struct{}),
+		destinationQueues:  make(map[DestinationKey]*DestinationQueue),
+		destinationStates:  make(map[string]*DestinationSendState), // NEW: Index-based tracking
+		maxRetries:         3,               // Retry failed transmissions up to 3 times
+		retryDelay:         2 * time.Second, // Wait 2 seconds between retries
 	}
 
 	// Initialize centralized proof service (NO CACHING for easier testing)

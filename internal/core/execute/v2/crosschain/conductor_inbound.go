@@ -20,6 +20,18 @@ import (
 
 // ProcessInbound processes inbound cross-partition messages through the conductor
 func (cc *CrossChainConductor) ProcessInbound(ctx context.Context, messages []messaging.Message) []messaging.Message {
+	// Check if paused - if so, drop all crosschain messages
+	if cc.IsPaused() {
+		cc.logger.Debug("CCC is paused, filtering crosschain messages")
+		nonCrosschain := make([]messaging.Message, 0, len(messages))
+		for _, msg := range messages {
+			if !cc.isCrossPartitionMessage(msg) {
+				nonCrosschain = append(nonCrosschain, msg)
+			}
+		}
+		return nonCrosschain
+	}
+	
 	// Filter and validate inbound messages
 	validMessages := make([]messaging.Message, 0, len(messages))
 	
@@ -194,13 +206,15 @@ func (cc *CrossChainConductor) handleRecoveryRequest(ctx context.Context, req *m
 		"type", req.MessageType,
 		"last_seq", req.LastKnownSequence)
 
-	// TODO: Implement actual recovery logic
-	// This would:
-	// 1. Query the appropriate chain storage for messages from LastKnownSequence+1 to current
-	// 2. Send those messages back to the requesting partition
-	// 3. Use existing transport mechanisms (dispatcher) to send
-	
-	// For now, just log that we received it
-	cc.logger.Debug("Recovery request handling not yet implemented",
-		"from", req.DestinationPartition)
+	// Use the gap recovery handler which resets the send index.
+	// The simple index-based recovery works as follows:
+	// 1. Reset our SentTxIndex to req.LastKnownSequence
+	// 2. Next batch send will include everything from that point forward
+	// 3. No special recovery logic needed - normal send path handles it
+	err := cc.HandleGapRequest(ctx, req)
+	if err != nil {
+		cc.logger.Error("Failed to handle gap request",
+			"from", req.DestinationPartition,
+			"error", err)
+	}
 }
