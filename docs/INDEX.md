@@ -1,5 +1,10 @@
 # Accumulate Documentation Index
 
+## 🤖 AI-Optimized Documentation
+- [AI Context Document](AI_CONTEXT.md) - Comprehensive project context for AI systems
+- [AI Metadata](AI_METADATA.json) - Structured metadata in JSON format
+- [AI Semantic Guide](AI_SEMANTIC_GUIDE.md) - Semantic markers and patterns for AI understanding
+
 ## Quick Links
 - [README](../README.md) - Project overview
 - [CONTRIBUTING](../CONTRIBUTING.md) - Contribution guidelines
