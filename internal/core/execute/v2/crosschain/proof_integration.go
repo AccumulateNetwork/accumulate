@@ -15,6 +15,15 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+// TransactionInfo represents transaction information for proof generation
+// This is a simplified version for integration purposes
+type TransactionInfo struct {
+	Transaction *protocol.Transaction
+	Hash        [32]byte
+	Sequence    uint64
+	Destination *url.URL
+}
+
 // ProofIntegration provides methods for integrating ProofService with the executor
 // without creating import cycles
 type ProofIntegration struct {
@@ -28,8 +37,53 @@ func NewProofIntegration(conductor *CrossChainConductor) *ProofIntegration {
 	}
 }
 
+// CreateSyntheticProofsWithPartitions creates optimized proofs for synthetic transactions
+// using the correct partition-specific sequence chains for each destination.
+// This method is designed to be called from the block package without import cycles.
+func (pi *ProofIntegration) CreateSyntheticProofsWithPartitions(
+	ctx context.Context,
+	batch *database.Batch,
+	sourcePartition *url.URL,
+	transactions []TransactionInfo,
+	rootChain *database.Chain,
+) ([]*protocol.AnnotatedReceipt, error) {
+	if pi.conductor == nil || pi.conductor.proofService == nil {
+		return nil, errors.InternalError.With("proof service not initialized")
+	}
+
+	// Convert TransactionInfo to ProofRequest format
+	sequences := make([]uint64, len(transactions))
+	for i, tx := range transactions {
+		sequences[i] = tx.Sequence
+	}
+	
+	// Create a unified proof request for all transactions
+	req := ProofRequest{
+		Type:        ProofTypeUnified,
+		Destination: sourcePartition,
+		Sequences:   sequences,
+		ChainURL:    sourcePartition,
+		SourceChain: rootChain,
+		RootChain:   rootChain,
+		BlockIndex:  0, // Will be set by caller if needed
+	}
+	
+	// Create proof using the centralized service
+	resp, err := pi.conductor.proofService.CreateProof(ctx, req)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("failed to create proof: %w", err)
+	}
+	
+	if resp.Proof != nil {
+		return []*protocol.AnnotatedReceipt{resp.Proof}, nil
+	}
+	
+	return []*protocol.AnnotatedReceipt{}, nil
+}
+
 // CreateSyntheticProofs creates optimized proofs for synthetic transactions
 // This method is designed to be called from the block package without import cycles
+// DEPRECATED: Use CreateSyntheticProofsWithPartitions for correct partition-specific chain handling
 func (pi *ProofIntegration) CreateSyntheticProofs(
 	ctx context.Context,
 	transactions []TransactionInfo,
@@ -40,19 +94,34 @@ func (pi *ProofIntegration) CreateSyntheticProofs(
 		return nil, errors.InternalError.With("proof service not initialized")
 	}
 
-	// Convert to SyntheticTransaction format
-	syntheticTxs := make([]SyntheticTransaction, len(transactions))
+	// Convert TransactionInfo to ProofRequest format
+	sequences := make([]uint64, len(transactions))
 	for i, tx := range transactions {
-		syntheticTxs[i] = SyntheticTransaction(tx)
+		sequences[i] = tx.Sequence
 	}
-
-	// Use the conductor's method
-	return pi.conductor.CreateProofsForSyntheticTransactions(
-		ctx,
-		syntheticTxs,
-		synthChain,
-		rootChain,
-	)
+	
+	// Create a synthetic proof request for all transactions
+	req := ProofRequest{
+		Type:        ProofTypeSynthetic,
+		Destination: nil, // Will be derived from transactions
+		Sequences:   sequences,
+		ChainURL:    nil, // Will be derived from synthChain
+		SourceChain: synthChain,
+		RootChain:   rootChain,
+		BlockIndex:  0, // Will be set by caller if needed
+	}
+	
+	// Create proof using the centralized service
+	resp, err := pi.conductor.proofService.CreateProof(ctx, req)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("failed to create synthetic proof: %w", err)
+	}
+	
+	if resp.Proof != nil {
+		return []*protocol.AnnotatedReceipt{resp.Proof}, nil
+	}
+	
+	return []*protocol.AnnotatedReceipt{}, nil
 }
 
 // ValidateProof validates a proof using the centralized service
@@ -71,14 +140,6 @@ func (pi *ProofIntegration) ValidateProof(proof *protocol.AnnotatedReceipt) erro
 	return pi.conductor.ValidateIncomingProof(proof)
 }
 
-// TransactionInfo contains information about a transaction needing a proof
-// This avoids importing types from other packages
-type TransactionInfo struct {
-	Destination *url.URL
-	SequenceNum uint64
-	ChainURL    *url.URL
-	Hash        []byte
-}
 
 // GetProofService returns the underlying proof service for testing
 func (pi *ProofIntegration) GetProofService() *ProofService {
