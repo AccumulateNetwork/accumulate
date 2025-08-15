@@ -437,6 +437,240 @@ top -p $(pgrep -d, accumulated)
 ./devnet_config.sh start 2 3 1
 ```
 
+## Web Dashboard Integration
+
+### Overview
+
+The DevNet includes an integrated web-based dashboard that provides real-time monitoring and control capabilities for all network partitions and cross-chain communications. The dashboard serves as a comprehensive visualization and testing tool for developers working with the DevNet.
+
+### Dashboard Architecture
+
+The dashboard is implemented as a Go web server that integrates seamlessly with the DevNet lifecycle:
+
+```
+┌─────────────────────────────────────────────────────┐
+│                 DevNet Process                      │
+├─────────────────────────────────────────────────────┤
+│  ┌─────────────────┐    ┌──────────────────────────┐ │
+│  │   Partition     │    │     Web Dashboard        │ │
+│  │   Nodes         │◄───┤     (Go HTTP Server)     │ │
+│  │   DN, BVN1-N    │    │     Port: 8080           │ │
+│  └─────────────────┘    └──────────────────────────┘ │
+└─────────────────────────────────────────────────────┘
+                              │
+                              ▼
+                     Browser Interface
+                    http://localhost:8080
+```
+
+### Core Dashboard Features
+
+#### 1. Partition Status Monitoring
+- **Real-time Block Heights**: Live display of current block height for each partition (DN, BVN1, BVN2, etc.)
+- **Partition Health**: Visual indicators showing partition status (active, paused, error)
+- **Validator Information**: Display of validator count and base port for each partition
+- **Auto-refresh**: Updates every 2 seconds for real-time monitoring
+
+#### 2. CrossChain Conductor (CCC) Monitoring
+The dashboard provides comprehensive monitoring of cross-chain message flow:
+
+**Anchor Exchange Tracking**:
+- **DN ↔ BVN Communications**: Monitors bidirectional anchor exchange between Directory Network and each Block Validator Network
+- **Source Heights**: Displays the latest anchor produced by source partition
+- **Destination Heights**: Shows the latest anchor received by destination partition
+- **Gap Analysis**: Real-time calculation and display of height differences (gaps)
+- **Status Indicators**: Visual status showing normal, behind, or critical gap states
+
+**Important**: BVNs do not exchange anchors with other BVNs - all anchor communication flows through the DN as the central hub.
+
+#### 3. Partition Control Interface
+**Pause/Resume Functionality**:
+- **Individual Partition Control**: Ability to pause/resume CrossChain Conductor on specific partitions
+- **Testing Support**: Enables controlled testing of gap recovery mechanisms
+- **Visual State Management**: Clear indication of paused vs. active partitions
+- **Gap Recovery Testing**: Allows partitions to fall behind, then resume to test catch-up mechanisms
+
+#### 4. Responsive Design Requirements
+The dashboard must provide optimal viewing across different screen sizes and orientations:
+
+**Vertical Scaling**:
+- Partition cards stack vertically on narrow screens
+- Crosschain table becomes scrollable on small heights
+- Maintains readability at minimum 320px width
+- Supports unlimited vertical content expansion
+
+**Horizontal Scaling**:
+- Partition cards arrange in responsive grid (1-4 columns based on screen width)
+- Crosschain table expands to use full available width
+- Content centers within maximum container width (1400px)
+- Supports ultra-wide displays without content stretching
+
+**Responsive Breakpoints**:
+- Mobile: 320px-768px (single column layout)
+- Tablet: 768px-1024px (dual column layout)
+- Desktop: 1024px-1400px (triple/quad column layout)
+- Ultra-wide: >1400px (quad+ column with centered container)
+
+#### 5. Technical Implementation Requirements
+
+**Data Collection**:
+```go
+type PartitionInfo struct {
+    ID             string `json:"id"`           // DN, BVN1, BVN2, etc.
+    Height         uint64 `json:"height"`       // Current block height
+    Type           string `json:"type"`         // "directory" or "bvn"
+    IsPaused       bool   `json:"isPaused"`     // CCC pause state
+    BasePort       int    `json:"basePort"`     // API endpoint port
+    ValidatorCount int    `json:"validatorCount"` // Number of validators
+}
+
+type CrosschainInfo struct {
+    Source       string `json:"source"`       // Source partition ID
+    Destination  string `json:"destination"`  // Destination partition ID
+    Type         string `json:"type"`         // Always "anchor"
+    SourceHeight uint64 `json:"sourceHeight"` // Anchors produced
+    DestHeight   uint64 `json:"destHeight"`   // Anchors received
+}
+```
+
+**API Endpoints**:
+- `GET /`: Dashboard HTML interface
+- `GET /api/data`: JSON data feed for partition and crosschain status
+- `POST /api/pause`: Pause/resume control for individual partitions
+
+**Query Mechanism**:
+- Queries partition ledgers via JSON-RPC v3: `acc://{partition}/ledger`
+- Queries anchor pools via: `acc://{source}/anchors/{destination}`
+- Supports multiple API ports for partition discovery
+- Graceful handling of partition startup/shutdown states
+
+### Integration with DevNet Lifecycle
+
+**Automatic Launch**:
+- Dashboard automatically starts when DevNet is launched
+- Runs on configurable port (default: 8080)
+- Auto-opens browser tab pointing to dashboard
+- Integrated process management with DevNet cleanup
+
+**Development Workflow**:
+1. Developer runs: `go run ./cmd/accumulated run devnet`
+2. DevNet initializes all partitions
+3. Dashboard server starts automatically
+4. Browser opens to `http://localhost:8080`
+5. Developer sees real-time partition status and crosschain flow
+6. Developer can pause/resume partitions for testing
+7. Dashboard updates in real-time as network processes transactions
+
+### Gap Recovery Testing Workflow
+
+The dashboard enables comprehensive testing of the CrossChain Conductor's gap recovery mechanism:
+
+1. **Normal Operation**: All partitions show synchronized anchor heights
+2. **Induce Gap**: Pause CCC on target partition (e.g., BVN1)
+3. **Monitor Gap Growth**: Watch DN→BVN1 destination height lag behind source
+4. **Resume Operation**: Unpause CCC on BVN1
+5. **Observe Recovery**: Monitor rapid catch-up as gap closes
+6. **Validate Success**: Confirm heights re-synchronize
+
+### Dashboard CSS Architecture
+
+**Responsive Grid System**:
+```css
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+}
+
+@media (max-width: 768px) {
+    .grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (min-width: 1400px) {
+    .container {
+        max-width: 1400px;
+        margin: 0 auto;
+    }
+}
+```
+
+**Visual Design Principles**:
+- Modern glass-morphism aesthetic with backdrop blur effects
+- Blue gradient background for professional appearance
+- Card-based layout for partition information
+- Color-coded status indicators (green=OK, orange=behind, red=critical)
+- Hover effects and smooth transitions for interactivity
+
+### Performance and Scalability
+
+**Update Frequency**: 2-second polling interval balances responsiveness with resource usage
+**Concurrent Access**: Supports multiple browser sessions viewing same dashboard
+**Memory Efficiency**: Minimal state storage, data refreshed on each request
+**Network Efficiency**: Lightweight JSON payloads, client-side rendering
+
+## Load Generator Integration
+
+### Overview
+
+The DevNet includes an integrated load generator that creates continuous transaction activity for testing and visualization purposes. This allows developers to observe network behavior under load and verify transaction processing, consensus, and cross-chain message flow.
+
+### Load Generator Architecture
+
+The load generator runs as a separate process that interacts with the DevNet through its API endpoints:
+
+```
+┌─────────────────────────────────────────────────────┐
+│                 DevNet Ecosystem                     │
+├─────────────────────────────────────────────────────┤
+│  ┌──────────────┐    ┌─────────────┐    ┌─────────┐│
+│  │   DevNet     │◄───┤    Load     │───►│Dashboard││
+│  │   Nodes      │    │  Generator  │    │ Monitor ││
+│  │              │    │             │    │         ││
+│  └──────────────┘    └─────────────┘    └─────────┘│
+└─────────────────────────────────────────────────────┘
+```
+
+### Core Load Generation Features
+
+#### 1. Continuous Transaction Generation
+- **Faucet Operations**: Continuous creation of lite accounts and faucet requests
+- **Token Transfers**: Automated ACME token transfers between accounts
+- **ADI Operations**: Identity creation and management transactions
+- **Data Transactions**: Simulated data entry operations
+
+#### 2. Load Patterns
+- **Steady Load**: Constant rate of transactions per second
+- **Burst Load**: Periodic spikes in transaction volume
+- **Ramp Load**: Gradually increasing transaction rate
+- **Chaos Load**: Random variations in transaction patterns
+
+#### 3. Partition Distribution
+- Transactions distributed across all BVNs
+- Cross-partition operations to test anchor flow
+- Balanced load to prevent single partition bottlenecks
+
+### Integration with DevNet
+
+**Automatic Launch Options**:
+- Load generator can be launched with DevNet via flag
+- Configurable transaction rate and patterns
+- Graceful shutdown with DevNet termination
+
+**Manual Operation**:
+- Can be started/stopped independently
+- Useful for targeted testing scenarios
+- Multiple instances for stress testing
+
+### Monitoring and Metrics
+
+Load generator activity is visible through:
+- Dashboard transaction counters
+- Block height progression
+- Anchor exchange rates
+- Network throughput metrics
+
 ## Summary
 
 The DevNet design provides a comprehensive, flexible, and powerful testing environment for Accumulate development:

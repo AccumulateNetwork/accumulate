@@ -10,6 +10,13 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 DEVNET_DIR="$ROOT_DIR/.devnet-test"
 DEVNET_PORT="27004"
 LOG_FILE="$SCRIPT_DIR/devnet_manager.log"
+DASHBOARD_PORT="8080"
+DASHBOARD_PID_FILE="$SCRIPT_DIR/dashboard.pid"
+
+# Default configuration
+DEFAULT_BVNS=4
+DEFAULT_VALIDATORS=3
+DEFAULT_FOLLOWERS=0
 
 # Colors for output
 RED='\033[0;31m'
@@ -38,6 +45,16 @@ warn() {
 # Function to kill devnet processes
 kill_devnet() {
     log "🔪 Killing existing devnet processes..."
+    
+    # Kill dashboard if running
+    if [ -f "$DASHBOARD_PID_FILE" ]; then
+        local dashboard_pid=$(cat "$DASHBOARD_PID_FILE")
+        if kill -0 $dashboard_pid 2>/dev/null; then
+            kill $dashboard_pid 2>/dev/null || true
+            log "Killed dashboard process (PID: $dashboard_pid)"
+        fi
+        rm -f "$DASHBOARD_PID_FILE"
+    fi
     
     # Kill by process name
     if pgrep -f "accumulated.*devnet" > /dev/null; then
@@ -89,13 +106,82 @@ compile_accumulate() {
     fi
 }
 
+# Function to start dashboard
+start_dashboard() {
+    log "🖥️  Starting dashboard server..."
+    
+    # Check if dashboard is already running
+    if lsof -ti:$DASHBOARD_PORT >/dev/null 2>&1; then
+        log "Dashboard already running on port $DASHBOARD_PORT"
+        return 0
+    fi
+    
+    # Compile dashboard server (use the simpler dashboard.go)
+    cd "$SCRIPT_DIR/dashboard"
+    if go build -o dashboard dashboard.go; then
+        # Start dashboard in background
+        DASHBOARD_PORT=$DASHBOARD_PORT nohup ./dashboard > "$SCRIPT_DIR/dashboard.log" 2>&1 &
+        local dashboard_pid=$!
+        echo $dashboard_pid > "$DASHBOARD_PID_FILE"
+        
+        log "📊 Dashboard started with PID: $dashboard_pid"
+        log "🌐 Dashboard URL: http://localhost:$DASHBOARD_PORT"
+        
+        # Auto-open browser after a short delay
+        (sleep 2 && xdg-open "http://localhost:$DASHBOARD_PORT" 2>/dev/null || open "http://localhost:$DASHBOARD_PORT" 2>/dev/null || true) &
+        
+        # Wait a moment to ensure it started
+        sleep 1
+        if kill -0 $dashboard_pid 2>/dev/null; then
+            success "✅ Dashboard is running at http://localhost:$DASHBOARD_PORT"
+        else
+            warn "⚠️  Dashboard failed to start - check $SCRIPT_DIR/dashboard.log"
+        fi
+    else
+        warn "⚠️  Failed to compile dashboard server"
+    fi
+}
+
 # Function to start devnet
 start_devnet() {
     log "🚀 Starting fresh devnet..."
     cd "$ROOT_DIR"
     
+    # Parse configuration options
+    local bvns=$DEFAULT_BVNS
+    local validators=$DEFAULT_VALIDATORS
+    local followers=$DEFAULT_FOLLOWERS
+    
+    # Parse command line args for start command
+    shift # Remove 'start' command
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --bvns)
+                bvns="$2"
+                shift 2
+                ;;
+            --validators)
+                validators="$2"
+                shift 2
+                ;;
+            --followers)
+                followers="$2"
+                shift 2
+                ;;
+            *)
+                shift
+                ;;
+        esac
+    done
+    
+    log "📝 Configuration: BVNs=$bvns, Validators=$validators, Followers=$followers"
+    
+    # Build the devnet command
+    local devnet_cmd="go run ./cmd/accumulated run devnet -w .devnet-test --port 27000"
+    devnet_cmd="$devnet_cmd --bvns $bvns --validators $validators --followers $followers"
+    
     # Start devnet in background
-    nohup go run ./cmd/accumulated run devnet -w .devnet-test --port 27000 > "$SCRIPT_DIR/devnet.log" 2>&1 &
+    nohup $devnet_cmd > "$SCRIPT_DIR/devnet.log" 2>&1 &
     local devnet_pid=$!
     echo $devnet_pid > "$SCRIPT_DIR/devnet.pid"
     
@@ -110,6 +196,10 @@ start_devnet() {
     while [ $retries -lt $max_retries ]; do
         if curl -s "http://127.0.0.1:$DEVNET_PORT/v3/describe" > /dev/null 2>&1; then
             success "✅ Devnet is ready and responding on port $DEVNET_PORT"
+            
+            # Start dashboard after devnet is ready
+            start_dashboard
+            
             return 0
         fi
         
@@ -182,8 +272,7 @@ restart_all() {
     kill_devnet
     clean_devnet_data
     compile_accumulate
-    start_devnet
-    run_tests
+    start_devnet "$@"
     success "🎉 Full restart completed successfully!"
 }
 
@@ -200,7 +289,7 @@ case "${1:-restart}" in
         compile_accumulate
         ;;
     "start")
-        start_devnet
+        start_devnet "$@"
         ;;
     "test")
         run_tests
