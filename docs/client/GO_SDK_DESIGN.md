@@ -736,3 +736,720 @@ Based on the current codebase analysis:
 4. **Code Generation**: Many types are generated from YAML files (queries.yml, types.yml, etc.)
 5. **Network Routing**: Complex routing logic exists for cross-partition communication
 6. **Recent Features**: CrossChain Conductor, improved snapshot syncing, light client design
+
+## Current Implementation Assessment
+
+### Package Completion Status (as of January 2025)
+
+The Go client package (`pkg/client`) has been partially implemented with the following status:
+
+#### ✅ Completed (40%)
+- **Core Structure**: Client initialization, configuration, network presets
+- **Basic Queries**: GetAccount, GetTransaction, GetChainEntry, GetDataEntry, GetDirectory
+- **Network Info**: GetNodeInfo, GetNetworkStatus, GetConsensusStatus, GetMetrics
+- **Service Discovery**: FindService, ListSnapshots
+- **Multiple Networks**: Support for mainnet, testnet, local, devnet
+- **Error Handling**: Basic error wrapping and formatting
+- **Documentation**: Package doc.go with examples
+
+#### ❌ Missing (60%)
+- **Block Queries**: GetBlock, QueryMinorBlocks, QueryMajorBlocks
+- **Transaction History**: GetPending, QueryTxHistory, transaction search
+- **Transaction Submission**: Submit, Validate, transaction building helpers
+- **Event System**: Subscribe, event streaming, WebSocket support
+- **Faucet**: Testnet token requests
+- **Advanced Queries**: Pagination, filtering, bulk operations
+- **Chain Navigation**: Chain height, efficient iteration
+- **Reliability**: Retry logic, connection pooling, circuit breakers
+- **Type Safety**: Typed errors, better type assertions
+- **V2 API Compatibility**: Legacy method support
+
+### Sample Applications Review
+
+Three sample applications demonstrate current capabilities:
+
+1. **account_explorer**: Shows hierarchical account traversal
+2. **network_monitor**: Real-time network status with web UI
+3. **data_reader**: Data account content retrieval
+
+These examples work well but are limited by missing API features.
+
+## Staged Implementation Plan for Protocol Explorer
+
+### Stage 1: Critical Block & Transaction Features (Weeks 1-2)
+**Priority: CRITICAL** - Core explorer functionality
+
+#### 1.1 Block Query Implementation
+```go
+// Add to client.go
+func (c *Client) GetBlock(ctx context.Context, partition string, number uint64) (*v3.BlockRecord, error)
+func (c *Client) GetMinorBlock(ctx context.Context, partition string, index uint64) (*v3.MinorBlockRecord, error)
+func (c *Client) GetMajorBlock(ctx context.Context, partition string, index uint64) (*v3.MajorBlockRecord, error)
+func (c *Client) GetBlockRange(ctx context.Context, partition string, start, end uint64) ([]*v3.BlockRecord, error)
+```
+
+#### 1.2 Transaction History & Search
+```go
+// Add to query.go
+func (c *Client) GetTransactionHistory(ctx context.Context, account *url.URL, start, count uint64) (*v3.TransactionHistoryRecord, error)
+func (c *Client) GetPendingTransactions(ctx context.Context, account *url.URL) ([]*v3.PendingTransaction, error)
+func (c *Client) SearchTransactions(ctx context.Context, query *v3.TransactionSearchQuery) (*v3.SearchResults, error)
+func (c *Client) GetTransactionsByBlock(ctx context.Context, partition string, blockNumber uint64) ([]*v3.MessageRecord, error)
+```
+
+#### 1.3 Chain Navigation
+```go
+// Add to query.go
+func (c *Client) GetChainHeight(ctx context.Context, account *url.URL, chain string) (uint64, error)
+func (c *Client) GetChainRange(ctx context.Context, account *url.URL, chain string, start, count uint64) ([]*v3.ChainEntry, error)
+func (c *Client) IterateChain(ctx context.Context, account *url.URL, chain string, fn ChainIteratorFunc) error
+```
+
+**Deliverables**: Basic block explorer, transaction history viewer
+
+### Stage 2: Transaction Submission & Validation (Week 3)
+**Priority: HIGH** - Enable interactive features
+
+#### 2.1 Transaction Building
+```go
+// Add submit.go
+func (c *Client) NewTransactionBuilder() *TransactionBuilder
+func (c *Client) Submit(ctx context.Context, envelope *messaging.Envelope, opts ...SubmitOption) (*v3.Submission, error)
+func (c *Client) SubmitTransaction(ctx context.Context, tx messaging.Transaction, signer Signer) (*v3.Submission, error)
+func (c *Client) Validate(ctx context.Context, envelope *messaging.Envelope) (*v3.Validation, error)
+```
+
+#### 2.2 Faucet Integration
+```go
+// Add to client.go
+func (c *Client) Faucet(ctx context.Context, account *url.URL, amount uint64) (*v3.Submission, error)
+func (c *Client) FaucetWithOptions(ctx context.Context, opts *v3.FaucetOptions) (*v3.Submission, error)
+```
+
+**Deliverables**: Transaction submission UI, faucet integration
+
+### Stage 3: Real-time Features (Week 4)
+**Priority: HIGH** - Live updates for explorer
+
+#### 3.1 Event Subscription
+```go
+// Add events.go
+func (c *Client) Subscribe(ctx context.Context, opts v3.SubscribeOptions) (<-chan v3.Event, error)
+func (c *Client) SubscribeToAccount(ctx context.Context, account *url.URL) (<-chan v3.AccountEvent, error)
+func (c *Client) SubscribeToBlocks(ctx context.Context, partition string) (<-chan v3.BlockEvent, error)
+func (c *Client) SubscribeToTransactions(ctx context.Context) (<-chan v3.TransactionEvent, error)
+```
+
+#### 3.2 WebSocket Transport
+```go
+// Add to transport layer
+type WebSocketTransport struct {
+    conn *websocket.Conn
+    // Implement streaming support
+}
+```
+
+**Deliverables**: Real-time transaction feed, live block updates
+
+### Stage 4: Reliability & Performance (Weeks 5-6)
+**Priority: MEDIUM** - Production readiness
+
+#### 4.1 Connection Management
+```go
+// Add reliability.go
+type ConnectionPool struct {
+    maxConns int
+    conns    chan Transport
+}
+
+type RetryPolicy struct {
+    MaxAttempts  int
+    InitialDelay time.Duration
+    MaxDelay     time.Duration
+    Multiplier   float64
+}
+
+type CircuitBreaker struct {
+    threshold int
+    timeout   time.Duration
+}
+```
+
+#### 4.2 Error Handling
+```go
+// Add errors.go
+type ClientError struct {
+    Code    ErrorCode
+    Message string
+    Cause   error
+}
+
+type ErrorCode int
+const (
+    ErrNetwork ErrorCode = iota
+    ErrTimeout
+    ErrNotFound
+    ErrValidation
+    ErrRateLimit
+)
+```
+
+#### 4.3 Caching Layer
+```go
+// Add cache.go
+type Cache interface {
+    Get(key string) (interface{}, bool)
+    Set(key string, value interface{}, ttl time.Duration)
+    Delete(key string)
+}
+```
+
+**Deliverables**: Resilient client with retry/fallback, performance improvements
+
+### Stage 5: Advanced Queries (Week 7)
+**Priority: MEDIUM** - Enhanced explorer features
+
+#### 5.1 Pagination Support
+```go
+// Add pagination.go
+type PageRequest struct {
+    Cursor string
+    Limit  int
+    Order  SortOrder
+}
+
+func (c *Client) GetAccountsPaginated(ctx context.Context, req PageRequest) (*PageResponse[*v3.AccountRecord], error)
+```
+
+#### 5.2 Batch Operations
+```go
+// Add batch.go
+func (c *Client) BatchQuery(ctx context.Context, queries []v3.Query) ([]v3.Record, error)
+func (c *Client) BatchSubmit(ctx context.Context, txs []messaging.Transaction) ([]*v3.Submission, error)
+```
+
+#### 5.3 Analytics Queries
+```go
+// Add analytics.go
+func (c *Client) GetNetworkStats(ctx context.Context, duration time.Duration) (*NetworkStatistics, error)
+func (c *Client) GetAccountActivity(ctx context.Context, account *url.URL, period time.Duration) (*AccountActivity, error)
+func (c *Client) GetTokenMetrics(ctx context.Context, token *url.URL) (*TokenMetrics, error)
+```
+
+**Deliverables**: Advanced search, analytics dashboard
+
+### Stage 6: V2 API Compatibility (Week 8)
+**Priority: LOW** - Legacy support
+
+#### 6.1 V2 Method Wrappers
+```go
+// Add v2_compat.go
+func (c *Client) QueryV2(ctx context.Context, query v2.GeneralQuery) (*v2.Response, error)
+func (c *Client) ExecuteV2(ctx context.Context, tx v2.TxRequest) (*v2.TxResponse, error)
+// ... additional V2 methods
+```
+
+**Deliverables**: Full backward compatibility
+
+## Success Metrics
+
+### Stage 1 Success Criteria
+- [ ] Can query any block by number
+- [ ] Can retrieve transaction history for accounts
+- [ ] Can navigate chains efficiently
+- [ ] All tests passing
+
+### Stage 2 Success Criteria
+- [ ] Can submit transactions programmatically
+- [ ] Can validate transactions before submission
+- [ ] Faucet integration working on testnet
+- [ ] Transaction builder covers all transaction types
+
+### Stage 3 Success Criteria
+- [ ] Real-time updates working via WebSocket
+- [ ] Can subscribe to specific events
+- [ ] Event delivery is reliable and ordered
+- [ ] Minimal latency for updates
+
+### Stage 4 Success Criteria
+- [ ] 99.9% uptime under normal conditions
+- [ ] Automatic recovery from network failures
+- [ ] Response times < 100ms for cached queries
+- [ ] Connection pooling reduces overhead by 50%
+
+### Stage 5 Success Criteria
+- [ ] Can handle result sets > 10,000 items
+- [ ] Batch operations 5x faster than sequential
+- [ ] Analytics queries complete in < 1 second
+- [ ] Memory usage remains constant with pagination
+
+### Stage 6 Success Criteria
+- [ ] All V2 methods implemented
+- [ ] Existing V2 code can migrate with minimal changes
+- [ ] Performance parity with native V2 client
+
+## Comprehensive Testing Plan
+
+### Current Test Coverage (Baseline)
+
+#### Existing Tests
+```go
+// pkg/client/client_test.go - Basic tests
+- TestClientConstructors (✅ Implemented)
+- TestClientGetAccount_Devnet (✅ Implemented - requires devnet)
+- TestClientGetAccount_InvalidURL (❌ Missing)
+- TestClientTimeout (❌ Missing)
+```
+
+#### Existing Examples (Manual Testing)
+```go
+// pkg/client/examples/ - Working examples
+- account_explorer - Manual test for account traversal
+- network_monitor - Manual test for network status
+- data_reader - Manual test for data retrieval
+```
+
+#### Test Infrastructure Needed
+```go
+// pkg/client/testing/mock.go - Create mock infrastructure
+type MockTransport struct {
+    responses map[string]interface{}
+    errors    map[string]error
+    calls     []string
+}
+
+// pkg/client/testing/fixtures.go - Test data
+var TestAccounts = map[string]*protocol.Account{...}
+var TestTransactions = map[string]*messaging.Transaction{...}
+var TestBlocks = map[string]*v3.BlockRecord{...}
+```
+
+### Stage 1 Testing: Block & Transaction Features (Weeks 1-2)
+
+#### New Unit Tests Required
+```go
+// pkg/client/query_test.go
+func TestGetBlock(t *testing.T)
+func TestGetMinorBlock(t *testing.T)
+func TestGetMajorBlock(t *testing.T)
+func TestGetBlockRange(t *testing.T)
+func TestGetBlockRange_Pagination(t *testing.T)
+func TestGetTransactionHistory(t *testing.T)
+func TestGetPendingTransactions(t *testing.T)
+func TestSearchTransactions(t *testing.T)
+func TestGetTransactionsByBlock(t *testing.T)
+func TestGetChainHeight(t *testing.T)
+func TestGetChainRange(t *testing.T)
+func TestIterateChain(t *testing.T)
+```
+
+#### Integration Tests
+```go
+// pkg/client/integration/block_test.go
+func TestBlockQueries_Integration(t *testing.T) {
+    // Skip if no devnet
+    // Query real blocks
+    // Verify block structure
+    // Test block navigation
+}
+
+func TestTransactionHistory_Integration(t *testing.T) {
+    // Query known account history
+    // Verify transaction ordering
+    // Test pagination
+}
+```
+
+#### Performance Benchmarks
+```go
+// pkg/client/bench_test.go
+func BenchmarkGetBlock(b *testing.B)
+func BenchmarkGetTransactionHistory(b *testing.B)
+func BenchmarkChainIteration(b *testing.B)
+```
+
+#### Test Coverage Goals
+- Unit test coverage: >80%
+- All error paths tested
+- Mock transport for offline testing
+- Integration tests against devnet
+
+### Stage 2 Testing: Transaction Submission (Week 3)
+
+#### New Unit Tests Required
+```go
+// pkg/client/submit_test.go
+func TestSubmit(t *testing.T)
+func TestSubmitTransaction(t *testing.T)
+func TestValidate(t *testing.T)
+func TestTransactionBuilder(t *testing.T)
+func TestFaucet(t *testing.T)
+
+// Transaction builder tests
+func TestBuildSendTokens(t *testing.T)
+func TestBuildCreateIdentity(t *testing.T)
+func TestBuildCreateDataAccount(t *testing.T)
+func TestBuildWriteData(t *testing.T)
+```
+
+#### Integration Tests
+```go
+// pkg/client/integration/submit_test.go
+func TestSubmitTransaction_Integration(t *testing.T) {
+    // Create test account
+    // Submit real transaction
+    // Wait for confirmation
+    // Verify state change
+}
+
+func TestFaucet_Integration(t *testing.T) {
+    // Only on testnet
+    // Request tokens
+    // Verify balance increase
+}
+```
+
+#### Validation Tests
+```go
+// pkg/client/validation_test.go
+func TestValidateTransaction_Valid(t *testing.T)
+func TestValidateTransaction_InvalidSignature(t *testing.T)
+func TestValidateTransaction_InsufficientBalance(t *testing.T)
+func TestValidateTransaction_InvalidNonce(t *testing.T)
+```
+
+#### Test Coverage Goals
+- All transaction types covered
+- Signature validation tested
+- Error conditions tested (insufficient balance, invalid nonce, etc.)
+- Faucet tested on testnet only
+
+### Stage 3 Testing: Real-time Features (Week 4)
+
+#### New Unit Tests Required
+```go
+// pkg/client/events_test.go
+func TestSubscribe(t *testing.T)
+func TestSubscribeToAccount(t *testing.T)
+func TestSubscribeToBlocks(t *testing.T)
+func TestSubscribeToTransactions(t *testing.T)
+func TestEventDelivery(t *testing.T)
+func TestEventReconnection(t *testing.T)
+```
+
+#### WebSocket Tests
+```go
+// pkg/client/websocket_test.go
+func TestWebSocketConnect(t *testing.T)
+func TestWebSocketReconnect(t *testing.T)
+func TestWebSocketHeartbeat(t *testing.T)
+func TestWebSocketMessageOrdering(t *testing.T)
+func TestWebSocketBackpressure(t *testing.T)
+```
+
+#### Integration Tests
+```go
+// pkg/client/integration/events_test.go
+func TestRealTimeEvents_Integration(t *testing.T) {
+    // Subscribe to events
+    // Submit transaction
+    // Verify event received
+    // Test event ordering
+}
+
+func TestWebSocketStability_Integration(t *testing.T) {
+    // Long-running connection test
+    // Network disruption simulation
+    // Verify reconnection
+}
+```
+
+#### Load Tests
+```go
+// pkg/client/load/events_test.go
+func TestEventLoad(t *testing.T) {
+    // Subscribe to 1000+ events
+    // Measure latency
+    // Test memory usage
+    // Verify no event loss
+}
+```
+
+#### Test Coverage Goals
+- WebSocket connection stability
+- Event delivery guarantees
+- Reconnection logic tested
+- Performance under load
+
+### Stage 4 Testing: Reliability & Performance (Weeks 5-6)
+
+#### Reliability Tests
+```go
+// pkg/client/reliability_test.go
+func TestRetryPolicy(t *testing.T)
+func TestCircuitBreaker(t *testing.T)
+func TestConnectionPool(t *testing.T)
+func TestFailover(t *testing.T)
+func TestTimeout(t *testing.T)
+```
+
+#### Error Handling Tests
+```go
+// pkg/client/errors_test.go
+func TestErrorTypes(t *testing.T)
+func TestErrorWrapping(t *testing.T)
+func TestErrorRecovery(t *testing.T)
+func TestPartialFailure(t *testing.T)
+```
+
+#### Cache Tests
+```go
+// pkg/client/cache_test.go
+func TestCacheHit(t *testing.T)
+func TestCacheMiss(t *testing.T)
+func TestCacheExpiration(t *testing.T)
+func TestCacheInvalidation(t *testing.T)
+func TestCacheConcurrency(t *testing.T)
+```
+
+#### Chaos Engineering Tests
+```go
+// pkg/client/chaos/chaos_test.go
+func TestNetworkPartition(t *testing.T)
+func TestHighLatency(t *testing.T)
+func TestPacketLoss(t *testing.T)
+func TestServerOverload(t *testing.T)
+```
+
+#### Performance Benchmarks
+```go
+// pkg/client/bench/performance_test.go
+func BenchmarkWithRetry(b *testing.B)
+func BenchmarkWithCache(b *testing.B)
+func BenchmarkConnectionPool(b *testing.B)
+func BenchmarkConcurrentRequests(b *testing.B)
+```
+
+#### Test Coverage Goals
+- 99.9% uptime in chaos tests
+- <100ms response time with cache
+- Automatic recovery from all failure modes
+- No memory leaks under load
+
+### Stage 5 Testing: Advanced Queries (Week 7)
+
+#### Pagination Tests
+```go
+// pkg/client/pagination_test.go
+func TestPaginationCursor(t *testing.T)
+func TestPaginationLimit(t *testing.T)
+func TestPaginationConsistency(t *testing.T)
+func TestPaginationPerformance(t *testing.T)
+```
+
+#### Batch Operation Tests
+```go
+// pkg/client/batch_test.go
+func TestBatchQuery(t *testing.T)
+func TestBatchSubmit(t *testing.T)
+func TestBatchPartialFailure(t *testing.T)
+func TestBatchPerformance(t *testing.T)
+```
+
+#### Analytics Tests
+```go
+// pkg/client/analytics_test.go
+func TestNetworkStats(t *testing.T)
+func TestAccountActivity(t *testing.T)
+func TestTokenMetrics(t *testing.T)
+func TestAggregation(t *testing.T)
+```
+
+#### Scale Tests
+```go
+// pkg/client/scale/scale_test.go
+func TestLargeResultSet(t *testing.T) {
+    // Query 10,000+ items
+    // Verify memory usage
+    // Test pagination efficiency
+}
+
+func TestConcurrentBatch(t *testing.T) {
+    // 100 concurrent batch operations
+    // Measure throughput
+    // Verify correctness
+}
+```
+
+#### Test Coverage Goals
+- Handle 10,000+ item result sets
+- Batch operations 5x faster than sequential
+- Memory usage constant with pagination
+- Analytics queries <1 second
+
+### Stage 6 Testing: V2 API Compatibility (Week 8)
+
+#### Compatibility Tests
+```go
+// pkg/client/v2_compat_test.go
+func TestV2Query(t *testing.T)
+func TestV2Execute(t *testing.T)
+func TestV2ToV3Migration(t *testing.T)
+func TestV2Fallback(t *testing.T)
+```
+
+#### Migration Tests
+```go
+// pkg/client/migration/migration_test.go
+func TestMigrateV2Code(t *testing.T) {
+    // Test existing V2 code works
+    // Verify same results
+    // Performance comparison
+}
+```
+
+#### Regression Tests
+```go
+// pkg/client/regression/v2_test.go
+// Run all V2 API tests against new wrapper
+```
+
+#### Test Coverage Goals
+- 100% V2 API compatibility
+- No breaking changes
+- Performance parity
+
+## Test Automation & CI/CD
+
+### Continuous Integration Pipeline
+```yaml
+# .gitlab-ci.yml additions
+test-client:
+  stage: test
+  script:
+    - go test -v -race -cover ./pkg/client/...
+    - go test -v -tags=integration ./pkg/client/integration/...
+    
+benchmark-client:
+  stage: test
+  script:
+    - go test -bench=. -benchmem ./pkg/client/bench/...
+    
+test-client-devnet:
+  stage: test
+  services:
+    - accumulate-devnet
+  script:
+    - DEVNET_ENDPOINT=http://accumulate-devnet:8080/v3 go test -v ./pkg/client/...
+```
+
+### Test Environments
+```go
+// pkg/client/testing/env.go
+type TestEnvironment struct {
+    Network  string // "mock", "devnet", "testnet"
+    Endpoint string
+    Fixtures map[string]interface{}
+}
+
+func SetupTestEnvironment(t *testing.T) *TestEnvironment
+func (e *TestEnvironment) Cleanup()
+```
+
+### Test Data Management
+```go
+// pkg/client/testing/fixtures/
+accounts.json       // Test account data
+transactions.json   // Test transaction data
+blocks.json        // Test block data
+events.json        // Test event data
+```
+
+### Code Coverage Requirements
+
+| Stage | Unit Coverage | Integration Coverage | Overall |
+|-------|--------------|---------------------|---------|
+| Current | 20% | 0% | 20% |
+| Stage 1 | 80% | 50% | 70% |
+| Stage 2 | 85% | 60% | 75% |
+| Stage 3 | 85% | 70% | 80% |
+| Stage 4 | 90% | 75% | 85% |
+| Stage 5 | 90% | 80% | 87% |
+| Stage 6 | 95% | 85% | 92% |
+
+### Test Documentation
+```markdown
+# pkg/client/TESTING.md
+
+## Running Tests
+
+### Unit Tests
+go test ./pkg/client/...
+
+### Integration Tests
+DEVNET_ENDPOINT=http://localhost:8080/v3 go test -tags=integration ./pkg/client/...
+
+### Benchmarks
+go test -bench=. ./pkg/client/bench/...
+
+### Coverage Report
+go test -cover -coverprofile=coverage.out ./pkg/client/...
+go tool cover -html=coverage.out
+
+### Load Tests
+go test -tags=load -timeout=30m ./pkg/client/load/...
+```
+
+## Test Review Checklist
+
+### For Each Stage
+- [ ] All new functions have unit tests
+- [ ] Error paths are tested
+- [ ] Integration tests pass on devnet
+- [ ] Benchmarks show acceptable performance
+- [ ] No race conditions detected
+- [ ] Code coverage meets target
+- [ ] Documentation updated
+- [ ] Examples updated and tested
+
+## Documentation Plan
+
+### API Documentation
+- Comprehensive godoc for all public methods
+- Usage examples for each method
+- Migration guides from V2/V3 raw APIs
+- Troubleshooting guide
+
+### Tutorials
+1. "Building a Block Explorer"
+2. "Real-time Transaction Monitoring"
+3. "Submitting Transactions"
+4. "Working with Data Accounts"
+5. "Network Analytics"
+
+### Reference Implementation
+Complete protocol explorer demonstrating all features:
+- Block browsing with transaction details
+- Account exploration with balances
+- Transaction history and search
+- Real-time activity feed
+- Network statistics dashboard
+
+## Risk Mitigation
+
+### Technical Risks
+- **WebSocket complexity**: Use proven libraries, extensive testing
+- **API changes**: Version detection, graceful degradation
+- **Performance**: Caching, connection pooling, batch operations
+- **Reliability**: Retry logic, circuit breakers, health checks
+
+### Schedule Risks
+- **Scope creep**: Strict stage boundaries, MVP focus
+- **Dependencies**: Mock unavailable APIs, parallel development
+- **Testing delays**: Automated testing, CI/CD pipeline
+
+## Conclusion
+
+This staged plan addresses the 60% gap in functionality needed for a complete protocol explorer. The implementation is prioritized by criticality, with Stage 1-3 providing the essential features needed for a functional explorer, while Stages 4-6 add production readiness and advanced capabilities.
+
+Total estimated timeline: 8 weeks for full implementation with a functional explorer available after Stage 3 (4 weeks).

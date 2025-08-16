@@ -1,0 +1,773 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>client: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">gitlab.com/accumulatenetwork/accumulate/pkg/client/client.go (88.5%)</option>
+				
+				<option value="file1">gitlab.com/accumulatenetwork/accumulate/pkg/client/network.go (8.6%)</option>
+				
+				<option value="file2">gitlab.com/accumulatenetwork/accumulate/pkg/client/query.go (0.0%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">// Copyright 2025 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
+// Package client provides a high-level, unified Go SDK for interacting with
+// Accumulate networks. It wraps the underlying API implementations and provides
+// a simple, idiomatic interface for all Accumulate operations.
+package client
+
+import (
+        "context"
+        "fmt"
+        "time"
+
+        v3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+        "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc"
+        "gitlab.com/accumulatenetwork/accumulate/pkg/url"
+)
+
+// Client is the main Accumulate client that provides access to all API operations.
+type Client struct {
+        // config holds the client configuration
+        config *Config
+
+        // v3Client is the underlying V3 API client
+        v3Client v3.Querier
+
+        // Additional service interfaces
+        nodeService     v3.NodeService
+        networkService  v3.NetworkService
+        submitter       v3.Submitter
+        validator       v3.Validator
+        faucet          v3.Faucet
+        eventService    v3.EventService
+}
+
+// Config holds the configuration for the client.
+type Config struct {
+        // Endpoint is the network endpoint to connect to
+        Endpoint string
+
+        // Network identifies the network type
+        Network NetworkType
+
+        // Timeout for requests (default: 15s)
+        Timeout time.Duration
+
+        // Debug enables debug logging
+        Debug bool
+}
+
+// NetworkType identifies the type of network.
+type NetworkType string
+
+const (
+        // NetworkMainnet is the Accumulate mainnet
+        NetworkMainnet NetworkType = "mainnet"
+
+        // NetworkTestnet is the Accumulate testnet (Kermit)
+        NetworkTestnet NetworkType = "testnet"
+
+        // NetworkLocal is a local development network
+        NetworkLocal NetworkType = "local"
+
+        // NetworkDevnet is a development network
+        NetworkDevnet NetworkType = "devnet"
+
+        // NetworkCustom is a custom network
+        NetworkCustom NetworkType = "custom"
+)
+
+// New creates a new Accumulate client with the given configuration.
+func New(config *Config) (*Client, error) <span class="cov8" title="1">{
+        if config.Endpoint == "" </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("endpoint is required")
+        }</span>
+
+        <span class="cov8" title="1">if config.Timeout == 0 </span><span class="cov8" title="1">{
+                config.Timeout = 15 * time.Second
+        }</span>
+
+        // Create the underlying JSON-RPC client
+        <span class="cov8" title="1">jrpcClient := jsonrpc.NewClient(config.Endpoint)
+        jrpcClient.Client.Timeout = config.Timeout
+        jrpcClient.Debug = config.Debug
+
+        client := &amp;Client{
+                config:         config,
+                v3Client:       jrpcClient,
+                nodeService:    jrpcClient,
+                networkService: jrpcClient,
+                submitter:      jrpcClient,
+                validator:      jrpcClient,
+                faucet:         jrpcClient,
+                // Note: eventService would require WebSocket client
+        }
+
+        return client, nil</span>
+}
+
+// NewMainnet creates a client connected to the Accumulate mainnet.
+func NewMainnet() (*Client, error) <span class="cov8" title="1">{
+        return New(&amp;Config{
+                Endpoint: "https://mainnet.accumulatenetwork.io/v3",
+                Network:  NetworkMainnet,
+        })
+}</span>
+
+// NewTestnet creates a client connected to the Accumulate testnet (Kermit).
+func NewTestnet() (*Client, error) <span class="cov8" title="1">{
+        return New(&amp;Config{
+                Endpoint: "https://kermit.accumulatenetwork.io/v3",
+                Network:  NetworkTestnet,
+        })
+}</span>
+
+// NewLocal creates a client connected to a local network.
+func NewLocal(endpoint string) (*Client, error) <span class="cov8" title="1">{
+        if endpoint == "" </span><span class="cov8" title="1">{
+                endpoint = "http://localhost:8080/v3"
+        }</span>
+        <span class="cov8" title="1">return New(&amp;Config{
+                Endpoint: endpoint,
+                Network:  NetworkLocal,
+        })</span>
+}
+
+// NewDevnet creates a client connected to a devnet.
+func NewDevnet(endpoint string) (*Client, error) <span class="cov8" title="1">{
+        return New(&amp;Config{
+                Endpoint: endpoint,
+                Network:  NetworkDevnet,
+        })
+}</span>
+
+// GetAccount queries an account by its URL.
+//
+// Example:
+//
+//        account, err := client.GetAccount(ctx, "acc://mytoken.acme")
+//        if err != nil {
+//            return err
+//        }
+//        fmt.Printf("Account: %+v\n", account)
+//
+// Curl equivalent:
+//
+//        curl -X POST http://localhost:8080/v3 \
+//          -H "Content-Type: application/json" \
+//          -d '{
+//            "jsonrpc": "2.0",
+//            "method": "query",
+//            "params": {
+//              "scope": "acc://mytoken.acme",
+//              "query": {}
+//            },
+//            "id": 1
+//          }'
+func (c *Client) GetAccount(ctx context.Context, accountURL string) (*v3.AccountRecord, error) <span class="cov8" title="1">{
+        u, err := url.Parse(accountURL)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("invalid account URL: %w", err)
+        }</span>
+
+        // Use DefaultQuery to get the account
+        <span class="cov8" title="1">query := &amp;v3.DefaultQuery{}
+        
+        record, err := c.v3Client.Query(ctx, u, query)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to query account: %w", err)
+        }</span>
+
+        // Type assert to AccountRecord
+        <span class="cov8" title="1">accountRecord, ok := record.(*v3.AccountRecord)
+        if !ok </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("unexpected record type: %T", record)
+        }</span>
+
+        <span class="cov8" title="1">return accountRecord, nil</span>
+}</pre>
+		
+		<pre class="file" id="file1" style="display: none">// Copyright 2025 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
+package client
+
+import (
+        "context"
+        "fmt"
+
+        v3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+)
+
+// GetNodeInfo returns information about the network node.
+//
+// Example:
+//
+//        info, err := client.GetNodeInfo(ctx)
+//        if err != nil {
+//            return err
+//        }
+//        fmt.Printf("Node: %s, Network: %s\n", info.PeerID, info.Network)
+//
+// Curl equivalent:
+//
+//        curl -X POST http://localhost:8080/v3 \
+//          -H "Content-Type: application/json" \
+//          -d '{
+//            "jsonrpc": "2.0",
+//            "method": "node-info",
+//            "params": {},
+//            "id": 1
+//          }'
+func (c *Client) GetNodeInfo(ctx context.Context) (*v3.NodeInfo, error) <span class="cov8" title="1">{
+        info, err := c.nodeService.NodeInfo(ctx, v3.NodeInfoOptions{})
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to get node info: %w", err)
+        }</span>
+        <span class="cov8" title="1">return info, nil</span>
+}
+
+// GetNetworkStatus returns the status of the network.
+//
+// Example:
+//
+//        status, err := client.GetNetworkStatus(ctx)
+//        if err != nil {
+//            return err
+//        }
+//        fmt.Printf("Network: %s, Oracle: %v\n", status.Network, status.Oracle)
+//
+// Curl equivalent:
+//
+//        curl -X POST http://localhost:8080/v3 \
+//          -H "Content-Type: application/json" \
+//          -d '{
+//            "jsonrpc": "2.0",
+//            "method": "network-status",
+//            "params": {},
+//            "id": 1
+//          }'
+func (c *Client) GetNetworkStatus(ctx context.Context) (*v3.NetworkStatus, error) <span class="cov0" title="0">{
+        status, err := c.networkService.NetworkStatus(ctx, v3.NetworkStatusOptions{})
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to get network status: %w", err)
+        }</span>
+        <span class="cov0" title="0">return status, nil</span>
+}
+
+// GetConsensusStatus returns the status of the consensus node.
+// This method is only available on validator nodes.
+//
+// Example:
+//
+//        status, err := client.GetConsensusStatus(ctx)
+//        if err != nil {
+//            return err
+//        }
+//        fmt.Printf("Consensus OK: %v, Validator: %v\n", status.Ok, status.ValidatorKeyHash)
+//
+// Curl equivalent:
+//
+//        curl -X POST http://localhost:8080/v3 \
+//          -H "Content-Type: application/json" \
+//          -d '{
+//            "jsonrpc": "2.0",
+//            "method": "consensus-status",
+//            "params": {},
+//            "id": 1
+//          }'
+func (c *Client) GetConsensusStatus(ctx context.Context) (*v3.ConsensusStatus, error) <span class="cov0" title="0">{
+        // Check if we have a consensus service
+        consensusService, ok := c.v3Client.(v3.ConsensusService)
+        if !ok </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("consensus service not available")
+        }</span>
+
+        <span class="cov0" title="0">status, err := consensusService.ConsensusStatus(ctx, v3.ConsensusStatusOptions{})
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to get consensus status: %w", err)
+        }</span>
+        <span class="cov0" title="0">return status, nil</span>
+}
+
+// GetMetrics returns network metrics such as transactions per second.
+//
+// Example:
+//
+//        metrics, err := client.GetMetrics(ctx, "Directory")
+//        if err != nil {
+//            return err
+//        }
+//        fmt.Printf("TPS: %v\n", metrics.TPS)
+//
+// Curl equivalent:
+//
+//        curl -X POST http://localhost:8080/v3 \
+//          -H "Content-Type: application/json" \
+//          -d '{
+//            "jsonrpc": "2.0",
+//            "method": "metrics",
+//            "params": {
+//              "partition": "Directory",
+//              "duration": "1h"
+//            },
+//            "id": 1
+//          }'
+func (c *Client) GetMetrics(ctx context.Context, partition string) (*v3.Metrics, error) <span class="cov0" title="0">{
+        // Check if we have a metrics service
+        metricsService, ok := c.v3Client.(v3.MetricsService)
+        if !ok </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("metrics service not available")
+        }</span>
+
+        <span class="cov0" title="0">opts := v3.MetricsOptions{
+                Partition: partition,
+        }
+
+        metrics, err := metricsService.Metrics(ctx, opts)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to get metrics: %w", err)
+        }</span>
+        <span class="cov0" title="0">return metrics, nil</span>
+}
+
+// FindService searches for nodes that provide the given service.
+//
+// Example:
+//
+//        nodes, err := client.FindService(ctx, &amp;v3.ServiceAddress{Type: v3.ServiceTypeQuery})
+//        if err != nil {
+//            return err
+//        }
+//        for _, node := range nodes {
+//            fmt.Printf("Node: %s at %s\n", node.PeerID, node.Address)
+//        }
+//
+// Curl equivalent:
+//
+//        curl -X POST http://localhost:8080/v3 \
+//          -H "Content-Type: application/json" \
+//          -d '{
+//            "jsonrpc": "2.0",
+//            "method": "find-service",
+//            "params": {
+//              "service": {"type": "query"}
+//            },
+//            "id": 1
+//          }'
+func (c *Client) FindService(ctx context.Context, service *v3.ServiceAddress) ([]*v3.FindServiceResult, error) <span class="cov0" title="0">{
+        opts := v3.FindServiceOptions{
+                Service: service,
+        }
+
+        results, err := c.nodeService.FindService(ctx, opts)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to find service: %w", err)
+        }</span>
+        <span class="cov0" title="0">return results, nil</span>
+}
+
+// ListSnapshots returns the list of available snapshots.
+//
+// Example:
+//
+//        snapshots, err := client.ListSnapshots(ctx)
+//        if err != nil {
+//            return err
+//        }
+//        for _, snap := range snapshots {
+//            fmt.Printf("Snapshot: %s at height %d\n", snap.Name, snap.Height)
+//        }
+//
+// Curl equivalent:
+//
+//        curl -X POST http://localhost:8080/v3 \
+//          -H "Content-Type: application/json" \
+//          -d '{
+//            "jsonrpc": "2.0",
+//            "method": "list-snapshots",
+//            "params": {},
+//            "id": 1
+//          }'
+func (c *Client) ListSnapshots(ctx context.Context) ([]*v3.SnapshotInfo, error) <span class="cov0" title="0">{
+        // Check if we have a snapshot service
+        snapshotService, ok := c.v3Client.(v3.SnapshotService)
+        if !ok </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("snapshot service not available")
+        }</span>
+
+        <span class="cov0" title="0">snapshots, err := snapshotService.ListSnapshots(ctx, v3.ListSnapshotsOptions{})
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to list snapshots: %w", err)
+        }</span>
+        <span class="cov0" title="0">return snapshots, nil</span>
+}</pre>
+		
+		<pre class="file" id="file2" style="display: none">// Copyright 2025 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
+package client
+
+import (
+        "context"
+        "encoding/hex"
+        "fmt"
+
+        v3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+        "gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+        "gitlab.com/accumulatenetwork/accumulate/pkg/url"
+)
+
+// GetTransaction queries a transaction by its ID.
+//
+// Example:
+//
+//        tx, err := client.GetTransaction(ctx, "0123456789abcdef...")
+//        if err != nil {
+//            return err
+//        }
+//        fmt.Printf("Transaction: %+v\n", tx)
+//
+// Curl equivalent:
+//
+//        curl -X POST http://localhost:8080/v3 \
+//          -H "Content-Type: application/json" \
+//          -d '{
+//            "jsonrpc": "2.0",
+//            "method": "query",
+//            "params": {
+//              "scope": "acc://dn.acme/network",
+//              "query": {
+//                "type": "message-hash",
+//                "hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+//              }
+//            },
+//            "id": 1
+//          }'
+func (c *Client) GetTransaction(ctx context.Context, txIDHex string) (*v3.MessageRecord[messaging.Message], error) <span class="cov0" title="0">{
+        // Parse transaction ID from hex
+        txID, err := hex.DecodeString(txIDHex)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("invalid transaction ID: %w", err)
+        }</span>
+
+        // Convert to [32]byte hash
+        <span class="cov0" title="0">if len(txID) != 32 </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("transaction ID must be 32 bytes, got %d", len(txID))
+        }</span>
+        <span class="cov0" title="0">var hash [32]byte
+        copy(hash[:], txID)
+
+        // Use MessageHashSearchQuery to find the transaction
+        query := &amp;v3.MessageHashSearchQuery{
+                Hash: hash,
+        }
+
+        // Query against the network scope
+        networkScope, err := url.Parse("acc://dn.acme/network")
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to parse network URL: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">record, err := c.v3Client.Query(ctx, networkScope, query)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to query transaction: %w", err)
+        }</span>
+
+        // Type assert to MessageRecord
+        <span class="cov0" title="0">txRecord, ok := record.(*v3.MessageRecord[messaging.Message])
+        if !ok </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("unexpected record type: %T", record)
+        }</span>
+
+        <span class="cov0" title="0">return txRecord, nil</span>
+}
+
+// GetChainEntry queries a specific entry from an account's chain.
+//
+// Example:
+//
+//        entry, err := client.GetChainEntry(ctx, "acc://mytoken.acme", "main", 0)
+//        if err != nil {
+//            return err
+//        }
+//        fmt.Printf("Chain entry: %+v\n", entry)
+//
+// Curl equivalent:
+//
+//        curl -X POST http://localhost:8080/v3 \
+//          -H "Content-Type: application/json" \
+//          -d '{
+//            "jsonrpc": "2.0",
+//            "method": "query",
+//            "params": {
+//              "scope": "acc://mytoken.acme",
+//              "query": {
+//                "type": "chain",
+//                "name": "main",
+//                "index": 0
+//              }
+//            },
+//            "id": 1
+//          }'
+func (c *Client) GetChainEntry(ctx context.Context, accountURL string, chainName string, index uint64) (*v3.ChainEntryRecord[v3.Record], error) <span class="cov0" title="0">{
+        u, err := url.Parse(accountURL)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("invalid account URL: %w", err)
+        }</span>
+
+        // Use ChainQuery to get the chain entry
+        <span class="cov0" title="0">query := &amp;v3.ChainQuery{
+                Name:  chainName,
+                Index: &amp;index,
+        }
+
+        record, err := c.v3Client.Query(ctx, u, query)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to query chain entry: %w", err)
+        }</span>
+
+        // Type assert to ChainEntryRecord
+        <span class="cov0" title="0">chainRecord, ok := record.(*v3.ChainEntryRecord[v3.Record])
+        if !ok </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("unexpected record type: %T", record)
+        }</span>
+
+        <span class="cov0" title="0">return chainRecord, nil</span>
+}
+
+// GetDataEntry queries a specific entry from an account's data chain.
+//
+// Example:
+//
+//        entry, err := client.GetDataEntry(ctx, "acc://mydata.acme", 0)
+//        if err != nil {
+//            return err
+//        }
+//        fmt.Printf("Data entry: %+v\n", entry)
+//
+// Curl equivalent:
+//
+//        curl -X POST http://localhost:8080/v3 \
+//          -H "Content-Type: application/json" \
+//          -d '{
+//            "jsonrpc": "2.0",
+//            "method": "query",
+//            "params": {
+//              "scope": "acc://mydata.acme",
+//              "query": {
+//                "type": "data",
+//                "index": 0
+//              }
+//            },
+//            "id": 1
+//          }'
+func (c *Client) GetDataEntry(ctx context.Context, accountURL string, index uint64) (*v3.ChainEntryRecord[v3.Record], error) <span class="cov0" title="0">{
+        u, err := url.Parse(accountURL)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("invalid account URL: %w", err)
+        }</span>
+
+        // Use DataQuery to get the data entry
+        <span class="cov0" title="0">query := &amp;v3.DataQuery{
+                Index: &amp;index,
+        }
+
+        record, err := c.v3Client.Query(ctx, u, query)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to query data entry: %w", err)
+        }</span>
+
+        // Type assert to ChainEntryRecord (data entries are returned as chain entries)
+        <span class="cov0" title="0">dataRecord, ok := record.(*v3.ChainEntryRecord[v3.Record])
+        if !ok </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("unexpected record type: %T", record)
+        }</span>
+
+        <span class="cov0" title="0">return dataRecord, nil</span>
+}
+
+// GetDirectory queries the directory entries of an account.
+//
+// Example:
+//
+//        entries, err := client.GetDirectory(ctx, "acc://myadi.acme", 0, 10)
+//        if err != nil {
+//            return err
+//        }
+//        fmt.Printf("Directory entries: %+v\n", entries)
+//
+// Curl equivalent:
+//
+//        curl -X POST http://localhost:8080/v3 \
+//          -H "Content-Type: application/json" \
+//          -d '{
+//            "jsonrpc": "2.0",
+//            "method": "query",
+//            "params": {
+//              "scope": "acc://myadi.acme",
+//              "query": {
+//                "type": "directory",
+//                "range": {
+//                  "start": 0,
+//                  "count": 10
+//                }
+//              }
+//            },
+//            "id": 1
+//          }'
+func (c *Client) GetDirectory(ctx context.Context, accountURL string, start uint64, count uint64) (*v3.RecordRange[*v3.AccountRecord], error) <span class="cov0" title="0">{
+        u, err := url.Parse(accountURL)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("invalid account URL: %w", err)
+        }</span>
+
+        // Use DirectoryQuery to get the directory
+        <span class="cov0" title="0">query := &amp;v3.DirectoryQuery{
+                Range: &amp;v3.RangeOptions{
+                        Start: start,
+                        Count: &amp;count,
+                },
+        }
+
+        record, err := c.v3Client.Query(ctx, u, query)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to query directory: %w", err)
+        }</span>
+
+        // Type assert to RecordRange
+        <span class="cov0" title="0">dirRecord, ok := record.(*v3.RecordRange[v3.Record])
+        if !ok </span><span class="cov0" title="0">{
+                // Try the account-specific version
+                dirRecord2, ok2 := record.(*v3.RecordRange[*v3.AccountRecord])
+                if ok2 </span><span class="cov0" title="0">{
+                        // Convert to the more general type
+                        result := &amp;v3.RecordRange[*v3.AccountRecord]{
+                                Start:   dirRecord2.Start,
+                                Total:   dirRecord2.Total,
+                                Records: dirRecord2.Records,
+                        }
+                        return result, nil
+                }</span>
+                <span class="cov0" title="0">return nil, fmt.Errorf("unexpected record type: %T", record)</span>
+        }
+        
+        // Convert to account records
+        <span class="cov0" title="0">result := &amp;v3.RecordRange[*v3.AccountRecord]{
+                Start: dirRecord.Start,
+                Total: dirRecord.Total,
+        }
+        for _, r := range dirRecord.Records </span><span class="cov0" title="0">{
+                if acc, ok := r.(*v3.AccountRecord); ok </span><span class="cov0" title="0">{
+                        result.Records = append(result.Records, acc)
+                }</span>
+        }
+
+        <span class="cov0" title="0">return result, nil</span>
+}</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>
