@@ -90,3 +90,7 @@ test/load/test_results_*/
 test/load/*.json
 snapshot.urls
 *.urls
+# Compiled binaries
+pkg/client/examples/network_monitor/network_monitor
+network_monitor
+*.exe
