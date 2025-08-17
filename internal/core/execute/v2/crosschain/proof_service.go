@@ -96,17 +96,19 @@ type ProofService struct {
 	debugMode bool
 
 	// Configuration
-	batchThreshold int // Minimum transactions for collection proof (default: 2)
-	maxBatchSize   int // Maximum transactions per collection proof
+	forceCollectionProofs bool // Always use collection proofs when true
+	batchThreshold        int  // Minimum sequences for collection proof
+	maxBatchSize          int  // Maximum transactions per collection proof
 }
 
 // NewProofService creates a new proof service
 func NewProofService(logger logging.OptionalLogger) *ProofService {
 	return &ProofService{
-		logger:         logger.With("module", "proof-service").(logging.OptionalLogger),
-		metrics:        &ProofMetrics{},
-		batchThreshold: 2,   // Use collection proofs for 2+ transactions
-		maxBatchSize:   100, // Maximum 100 transactions per collection
+		logger:                logger.With("module", "proof-service").(logging.OptionalLogger),
+		metrics:               &ProofMetrics{},
+		forceCollectionProofs: true, // Always use collection proofs by default
+		batchThreshold:        2,    // Use collection proofs for 2+ sequences
+		maxBatchSize:          100,  // Maximum 100 transactions per collection
 	}
 }
 
@@ -161,6 +163,11 @@ func (ps *ProofService) CreateProof(ctx context.Context, req ProofRequest) (*Pro
 		return nil, errors.BadRequest.With("no sequences provided for proof")
 	}
 
+	// Always use collection proof when forced by config
+	if ps.forceCollectionProofs {
+		return ps.createCollectionProof(ctx, req)
+	}
+
 	// For unified transport, always check collection proof eligibility
 	// This allows both anchors and synthetics to use collection proofs
 	if req.Type == ProofTypeUnified || req.Type == ProofTypeSynthetic || req.Type == ProofTypeAnchor {
@@ -184,7 +191,7 @@ func (ps *ProofService) CreateBatchProofs(ctx context.Context, requests []ProofR
 	// Process each batch
 	responses := make([]*ProofResponse, 0, len(requests))
 	for _, batch := range batches {
-		if batch.UseCollection {
+		if batch.UseCollection || ps.forceCollectionProofs {
 			// Merge sequences for collection proof
 			merged := ps.mergeSequences(batch.Requests)
 			resp, err := ps.createCollectionProof(ctx, merged)
@@ -429,8 +436,8 @@ func (ps *ProofService) OptimizeForDestinations(requests []ProofRequest) []Proof
 			totalSequences += len(req.Sequences)
 		}
 
-		// Use collection proof if we have enough sequences
-		batch.UseCollection = totalSequences >= ps.batchThreshold
+		// Always use collection proof
+		batch.UseCollection = true
 
 		if ps.debugMode {
 			ps.logger.Debug("Batch created",
@@ -446,8 +453,13 @@ func (ps *ProofService) OptimizeForDestinations(requests []ProofRequest) []Proof
 	return batches
 }
 
-// mergeSequences merges sequences from multiple requests
+// mergeSequences is the internal version of MergeSequences
 func (ps *ProofService) mergeSequences(requests []ProofRequest) ProofRequest {
+	return ps.MergeSequences(requests)
+}
+
+// MergeSequences merges sequences from multiple requests
+func (ps *ProofService) MergeSequences(requests []ProofRequest) ProofRequest {
 	if len(requests) == 0 {
 		return ProofRequest{}
 	}

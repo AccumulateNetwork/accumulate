@@ -139,3 +139,11 @@ func (m *BatchProofRecoveryManager) processRequests() {
 		}
 	}
 }
+
+// ConductorConfig contains configuration for the CrossChainConductor
+type ConductorConfig struct {
+	// ForceCollectionProofs ensures all transactions use collection proofs (no fallback)
+	ForceCollectionProofs bool
+	// CollectionMaxBatchSize is the maximum number of transactions per collection proof
+	CollectionMaxBatchSize int
+}
