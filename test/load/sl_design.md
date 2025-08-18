@@ -46,14 +46,17 @@ A modular load testing framework for Accumulate devnet that verifies transaction
 ## Configuration System
 
 ### Command-Line Flags
-The test accepts three primary configuration flags with sensible defaults:
+The test uses a SINGLE test function (`TestStreamlinedLoad`) controlled entirely by command-line flags:
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `-txs` | 1000 | Total number of transactions to send |
 | `-k` | 10 | Number of sender (K) accounts |
 | `-a` | 10 | Number of receiver (A) accounts |
+| `-tps` | 0 | Target transactions per second (0 = unlimited) |
 | `-batch-delay` | 0ms | Delay after every 1000 transactions (0 = no delay) |
+| `-timeout` | auto | Settlement timeout (auto-calculated based on txs) |
+| `-verbose` | false | Enable verbose logging for debugging |
 
 ### Automatic Calculations
 All other parameters are automatically calculated based on the flags:
@@ -87,33 +90,37 @@ All other parameters are automatically calculated based on the flags:
 
 #### Default (1000 txs, 10k, 10a)
 ```bash
-go test -v ./test/load -run TestStreamlinedLoad
+go test -v -run TestStreamlinedLoad
 # Sends 1000 txs using 10 senders to 10 receivers
-# Each sender: 100 txs, needs 1 ACME + credits
-# Total funding: ~25 ACME
+# No rate limiting, runs at maximum speed
+```
+
+#### Rate Limited (5000 txs at 100 TPS)
+```bash
+go test -v -run TestStreamlinedLoad -txs=5000 -tps=100
+# Sends 5000 txs at 100 TPS (takes ~50 seconds)
+# Prevents overwhelming the network
 ```
 
 #### High Volume (20000 txs, 10k, 5a)
 ```bash
-go test -v ./test/load -run TestStreamlinedLoad -txs=20000 -k=10 -a=5
-# Sends 20000 txs using 10 senders to 5 receivers
+go test -v -run TestStreamlinedLoad -txs=20000 -k=10 -a=5 -tps=200
+# Sends 20000 txs using 10 senders to 5 receivers at 200 TPS
 # Each sender: 2000 txs, needs 2.5 ACME + credits
-# Total funding: ~40 ACME
 ```
 
 #### Many Accounts (5000 txs, 50k, 20a)
 ```bash
-go test -v ./test/load -run TestStreamlinedLoad -txs=5000 -k=50 -a=20
+go test -v -run TestStreamlinedLoad -txs=5000 -k=50 -a=20
 # Sends 5000 txs using 50 senders to 20 receivers
-# Each sender: 100 txs, needs 1 ACME + credits
-# Total funding: ~70 ACME
+# Tests account scaling
 ```
 
-#### With Throttling (10000 txs with delays)
+#### Debug Mode (100 txs with verbose output)
 ```bash
-go test -v ./test/load -run TestStreamlinedLoad -txs=10000 -batch-delay=100ms
-# Sends 10000 txs with 100ms delay after every 1000 txs
-# Reduces peak TPS to avoid overwhelming the network
+go test -v -run TestStreamlinedLoad -txs=100 -verbose
+# Sends 100 txs with detailed logging
+# Useful for troubleshooting issues
 ```
 
 ## Test Flow Specification
