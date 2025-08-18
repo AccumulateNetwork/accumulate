@@ -95,10 +95,11 @@ type ProofService struct {
 	metrics   *ProofMetrics
 	debugMode bool
 
-	// Configuration
-	forceCollectionProofs bool // Always use collection proofs when true
-	batchThreshold        int  // Minimum sequences for collection proof
-	maxBatchSize          int  // Maximum transactions per collection proof
+	// Configuration (collection proofs are ALWAYS used - no options to disable)
+	// These fields are kept for compatibility but effectively unused:
+	forceCollectionProofs bool // Always true - collection proofs are mandatory
+	batchThreshold        int  // Ignored - even single transactions use collection proofs
+	maxBatchSize          int  // Maximum transactions per collection proof (still enforced)
 }
 
 // NewProofService creates a new proof service
@@ -163,20 +164,10 @@ func (ps *ProofService) CreateProof(ctx context.Context, req ProofRequest) (*Pro
 		return nil, errors.BadRequest.With("no sequences provided for proof")
 	}
 
-	// Always use collection proof when forced by config
-	if ps.forceCollectionProofs {
-		return ps.createCollectionProof(ctx, req)
-	}
-
-	// For unified transport, always check collection proof eligibility
-	// This allows both anchors and synthetics to use collection proofs
-	if req.Type == ProofTypeUnified || req.Type == ProofTypeSynthetic || req.Type == ProofTypeAnchor {
-		if len(req.Sequences) >= ps.batchThreshold {
-			return ps.createCollectionProof(ctx, req)
-		}
-	}
-
-	return ps.createIndividualProof(ctx, req)
+	// ALWAYS use collection proofs - no threshold checks, no exceptions
+	// Collection proofs are mandatory for all proof types
+	// Even single transactions use collection proofs for consistency and security
+	return ps.createCollectionProof(ctx, req)
 }
 
 // CreateBatchProofs creates proofs for multiple requests, optimizing by destination
@@ -191,87 +182,28 @@ func (ps *ProofService) CreateBatchProofs(ctx context.Context, requests []ProofR
 	// Process each batch
 	responses := make([]*ProofResponse, 0, len(requests))
 	for _, batch := range batches {
-		if batch.UseCollection || ps.forceCollectionProofs {
-			// Merge sequences for collection proof
-			merged := ps.mergeSequences(batch.Requests)
-			resp, err := ps.createCollectionProof(ctx, merged)
-			if err != nil {
-				// Collection proof failure is a hard error - no fallback
-				return nil, errors.UnknownError.WithFormat("collection proof failed: %w", err)
-			}
-			// Add the collection proof response for each request
-			for range batch.Requests {
-				responses = append(responses, resp)
-			}
-		} else {
-			// Process individually
-			for _, req := range batch.Requests {
-				resp, err := ps.createIndividualProof(ctx, req)
-				if err != nil {
-					return nil, err
-				}
-				responses = append(responses, resp)
-			}
+		// ALWAYS use collection proofs - no individual proof path
+		// Merge sequences for collection proof
+		merged := ps.mergeSequences(batch.Requests)
+		resp, err := ps.createCollectionProof(ctx, merged)
+		if err != nil {
+			// Collection proof failure is a hard error - no fallback
+			return nil, errors.UnknownError.WithFormat("collection proof required but failed: %w", err)
+		}
+		// Add the collection proof response for each request
+		for range batch.Requests {
+			responses = append(responses, resp)
 		}
 	}
 
 	return responses, nil
 }
 
-// createIndividualProof creates a single traditional proof
+// createIndividualProof is DEPRECATED and non-functional
+// This method exists only to prevent breaking API changes
+// It will always return an error as collection proofs are mandatory
 func (ps *ProofService) createIndividualProof(ctx context.Context, req ProofRequest) (*ProofResponse, error) {
-	if ps.debugMode {
-		ps.logger.Debug("Creating individual proof",
-			"sequence", req.Sequences[0])
-	}
-
-	// Get the receipt from source chain
-	if req.SourceChain == nil {
-		atomic.AddInt64(&ps.metrics.ProofGenErrors, 1)
-		return nil, errors.BadRequest.With("source chain not provided")
-	}
-
-	sourceReceipt, err := req.SourceChain.Receipt(int64(req.Sequences[0]), req.SourceChain.Height()-1)
-	if err != nil {
-		atomic.AddInt64(&ps.metrics.ProofGenErrors, 1)
-		return nil, errors.UnknownError.WithFormat("failed to create source receipt: %w", err)
-	}
-
-	// Combine with root chain if provided
-	var finalReceipt *merkle.Receipt
-	if req.RootChain != nil {
-		rootReceipt, err := req.RootChain.Receipt(req.SourceChain.Height()-1, req.RootChain.Height()-1)
-		if err != nil {
-			atomic.AddInt64(&ps.metrics.ProofGenErrors, 1)
-			return nil, errors.UnknownError.WithFormat("failed to create root receipt: %w", err)
-		}
-
-		finalReceipt, err = sourceReceipt.Combine(rootReceipt)
-		if err != nil {
-			atomic.AddInt64(&ps.metrics.ProofGenErrors, 1)
-			return nil, errors.UnknownError.WithFormat("failed to combine receipts: %w", err)
-		}
-	} else {
-		finalReceipt = sourceReceipt
-	}
-
-	// Create annotated receipt
-	annotated := &protocol.AnnotatedReceipt{
-		Receipt: finalReceipt,
-		Anchor: &protocol.AnchorMetadata{
-			Account: req.ChainURL,
-		},
-	}
-
-	atomic.AddInt64(&ps.metrics.IndividualProofsCreated, 1)
-
-	return &ProofResponse{
-		Proof:        annotated,
-		ProofType:    req.Type,
-		Sequences:    req.Sequences,
-		IsCollection: false,
-		ProofSavings: 0,
-	}, nil
+	return nil, errors.NotAllowed.With("individual proofs are disabled - collection proofs are mandatory for all transactions")
 }
 
 // createCollectionProof creates a collection proof for multiple sequences
@@ -509,8 +441,8 @@ func (ps *ProofService) CreateProofForMessages(ctx context.Context, messages []m
 		}
 	}
 	
-	// Create collection proof if eligible
-	if sameSource && len(messages) >= ps.batchThreshold {
+	// ALWAYS create collection proof - no threshold check
+	if sameSource {
 		// Extract message hashes
 		hashes := make([][32]byte, len(messages))
 		var startSeq, endSeq uint64
@@ -538,11 +470,9 @@ func (ps *ProofService) CreateProofForMessages(ctx context.Context, messages []m
 		}, nil
 	}
 	
-	// Create individual proof
-	atomic.AddInt64(&ps.metrics.IndividualProofsCreated, 1)
-	return &protocol.AnnotatedReceipt{
-		Receipt: &merkle.Receipt{}, // Mock receipt for testing
-	}, nil
+	// If messages are not from the same source, still use collection proof
+	// Collection proofs are MANDATORY - no exceptions
+	return nil, errors.BadRequest.With("cannot create proof for messages from different sources")
 }
 
 // ValidateProofForMessage validates a proof against a message (simplified API for tests)

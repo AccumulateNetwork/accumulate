@@ -87,10 +87,11 @@ func TestCollectionProofCreation(t *testing.T) {
 			},
 		}
 
-		// Should create separate proofs, not a collection
+		// Should reject messages from different sources (collection proofs require same source)
 		proof, err := ps.CreateProofForMessages(context.Background(), messages)
-		require.NoError(t, err, "Should create proof")
-		require.NotNil(t, proof, "Proof should not be nil")
+		require.Error(t, err, "Should reject messages from different sources")
+		require.Nil(t, proof, "Proof should be nil on error")
+		require.Contains(t, err.Error(), "different sources")
 	})
 
 	t.Run("ProofValidation", func(t *testing.T) {

@@ -145,7 +145,8 @@ func TestBatchRecoveryWithCollectionProofs(t *testing.T) {
 		ps := cc.proofService
 		ps.ResetMetrics()
 
-		// Individual recovery: 50 separate proofs
+		// Since we ALWAYS use collection proofs now, test that single messages still use collection proofs
+		// Test 50 single-message collection proofs (less efficient but still using collection)
 		for i := 0; i < 50; i++ {
 			msg := &messaging.SequencedMessage{
 				Source:  protocol.DnUrl().JoinPath("part1"),
@@ -154,11 +155,11 @@ func TestBatchRecoveryWithCollectionProofs(t *testing.T) {
 			}
 			ps.CreateProofForMessages(context.Background(), []messaging.Message{msg})
 		}
-		individualMetrics := ps.GetMetrics()
+		singleMetrics := ps.GetMetrics()
 
 		ps.ResetMetrics()
 
-		// Batch recovery: 1 collection proof for 50 messages
+		// Batch recovery: 1 collection proof for 50 messages (most efficient)
 		messages := make([]messaging.Message, 50)
 		for i := range messages {
 			messages[i] = &messaging.SequencedMessage{
@@ -170,9 +171,10 @@ func TestBatchRecoveryWithCollectionProofs(t *testing.T) {
 		ps.CreateProofForMessages(context.Background(), messages)
 		batchMetrics := ps.GetMetrics()
 
-		// Verify efficiency gain
-		require.Equal(t, int64(50), individualMetrics.IndividualProofsCreated, "Should create 50 individual proofs")
-		require.Equal(t, int64(1), batchMetrics.CollectionProofsCreated, "Should create 1 collection proof")
+		// Verify efficiency gain - both use collection proofs but batch is more efficient
+		require.Equal(t, int64(0), singleMetrics.IndividualProofsCreated, "No individual proofs should be created")
+		require.Equal(t, int64(50), singleMetrics.CollectionProofsCreated, "Should create 50 collection proofs for single messages")
+		require.Equal(t, int64(1), batchMetrics.CollectionProofsCreated, "Should create 1 collection proof for batch")
 		require.Equal(t, int64(50), batchMetrics.TransactionsInCollections, "Collection should contain 50 transactions")
 	})
 }
@@ -208,9 +210,9 @@ func TestProactiveHealthMonitoring(t *testing.T) {
 		
 		// Get initial metrics
 		metrics := ps.GetMetrics()
-		initialProofs := metrics.IndividualProofsCreated
+		initialCollectionProofs := metrics.CollectionProofsCreated
 		
-		// Create a proof
+		// Create a proof (will be a collection proof even for single message)
 		msg := &messaging.SequencedMessage{
 			Source:  protocol.DnUrl().JoinPath("part1"),
 			Number:  1,
@@ -218,9 +220,10 @@ func TestProactiveHealthMonitoring(t *testing.T) {
 		}
 		ps.CreateProofForMessages(context.Background(), []messaging.Message{msg})
 		
-		// Verify metrics updated
+		// Verify metrics updated - collection proofs should increase
 		newMetrics := ps.GetMetrics()
-		require.Greater(t, newMetrics.IndividualProofsCreated, initialProofs, "Should track proof creation")
+		require.Greater(t, newMetrics.CollectionProofsCreated, initialCollectionProofs, "Should track collection proof creation")
+		require.Equal(t, int64(0), newMetrics.IndividualProofsCreated, "No individual proofs should be created")
 	})
 }
 

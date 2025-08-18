@@ -17,7 +17,7 @@ import (
 )
 
 func TestConductor_ConfigForceCollectionProofs(t *testing.T) {
-	dispatcher := &mockDispatcher{}
+	dispatcher := &MockDispatcher{}
 	var logger logging.OptionalLogger
 	conductor := NewCrossChainConductor(dispatcher, logger)
 	defer conductor.Stop()
@@ -28,7 +28,7 @@ func TestConductor_ConfigForceCollectionProofs(t *testing.T) {
 }
 
 func TestConductor_ProofServiceAlwaysUsesCollection(t *testing.T) {
-	dispatcher := &mockDispatcher{}
+	dispatcher := &MockDispatcher{}
 	var logger logging.OptionalLogger
 	conductor := NewCrossChainConductor(dispatcher, logger)
 	defer conductor.Stop()
@@ -51,7 +51,7 @@ func TestConductor_ProofServiceAlwaysUsesCollection(t *testing.T) {
 }
 
 func TestBatchProofRecoveryManager_NoThreshold(t *testing.T) {
-	dispatcher := &mockDispatcher{}
+	dispatcher := &MockDispatcher{}
 	var logger logging.OptionalLogger
 	conductor := NewCrossChainConductor(dispatcher, logger)
 	defer conductor.Stop()
@@ -67,7 +67,7 @@ func TestBatchProofRecoveryManager_NoThreshold(t *testing.T) {
 }
 
 func TestBatchProofRecoveryManager_GetStats(t *testing.T) {
-	dispatcher := &mockDispatcher{}
+	dispatcher := &MockDispatcher{}
 	var logger logging.OptionalLogger
 	conductor := NewCrossChainConductor(dispatcher, logger)
 	defer conductor.Stop()
@@ -80,7 +80,7 @@ func TestBatchProofRecoveryManager_GetStats(t *testing.T) {
 }
 
 func TestConductor_ProofServiceIntegration(t *testing.T) {
-	dispatcher := &mockDispatcher{}
+	dispatcher := &MockDispatcher{}
 	var logger logging.OptionalLogger
 	conductor := NewCrossChainConductor(dispatcher, logger)
 	defer conductor.Stop()
@@ -167,7 +167,8 @@ func TestProofType_Values(t *testing.T) {
 
 func TestMessageType_Values(t *testing.T) {
 	// Verify MessageType constants
-	assert.Equal(t, MessageType(0), MessageTypeAnchor)
-	assert.Equal(t, MessageType(1), MessageTypeSynthetic)
-	assert.Equal(t, MessageType(2), MessageTypeOther)
+	assert.Equal(t, MessageType(0), MessageTypeSynthetic)
+	assert.Equal(t, MessageType(1), MessageTypeAnchor)
+	assert.Equal(t, MessageType(2), MessageTypeDirectoryAnchor)
+	assert.Equal(t, MessageType(3), MessageTypeBlockSummary)
 }

@@ -276,7 +276,13 @@ func (st *SimpleSequenceTracker) RequestMissingMessages(ctx context.Context, sou
 	if st.conductor.recoveryManager == nil {
 		// If no recovery manager, try batch proof manager
 		if st.conductor.batchProofManager != nil {
-			return st.conductor.RequestBatchProofRecovery(source, msgType, gapStart, gapEnd)
+			// For batch proof recovery, we need to convert to the appropriate format
+			missingSequences := make([]uint64, 0, gapEnd-gapStart+1)
+			for seq := gapStart; seq <= gapEnd; seq++ {
+				missingSequences = append(missingSequences, seq)
+			}
+			sourceURL, _ := url.Parse(source)
+			return st.conductor.RequestMissingTransactionsWithBatchProof(source, msgType, missingSequences, sourceURL)
 		}
 		return errors.InternalError.With("no recovery mechanism available")
 	}

@@ -210,7 +210,7 @@ func (rm *RecoveryManager) recoverSynthetics(req *RecoveryRequest, session *Reco
 
 		// Create recovered transaction entry
 		recovered = append(recovered, RecoveredTransaction{
-			Hash:        hash,
+			Hash:        hash[:],
 			SequenceNum: seq,
 			Type:        "synthetic",
 			// Data would be populated from actual transaction

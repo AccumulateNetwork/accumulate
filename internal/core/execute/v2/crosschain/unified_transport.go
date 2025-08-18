@@ -97,9 +97,9 @@ type UnifiedTransport struct {
 	metrics      *TransportMetrics
 	debugMode    bool
 	
-	// Configuration
-	batchThreshold int // Minimum messages for collection proof
-	maxBatchSize   int // Maximum messages per batch
+	// Configuration (collection proofs are ALWAYS used)
+	batchThreshold int // IGNORED - even single messages use collection proofs
+	maxBatchSize   int // Maximum messages per batch (still enforced)
 	
 	// Dependencies
 	batch     *database.Batch
@@ -199,8 +199,9 @@ func (ut *UnifiedTransport) processBatch(ctx context.Context, destination string
 		return nil
 	}
 	
-	// Determine proof strategy based on batch size
-	useCollection := len(messages) >= ut.batchThreshold && len(messages) <= ut.maxBatchSize
+	// ALWAYS use collection proofs - no exceptions
+	// Even for single transactions, we use collection proofs for consistency
+	useCollection := true // Force collection proofs always
 	
 	if ut.debugMode {
 		ut.logger.Debug("Processing batch",
@@ -213,25 +214,20 @@ func (ut *UnifiedTransport) processBatch(ctx context.Context, destination string
 	var proof *ProofResponse
 	var err error
 	
-	if useCollection {
-		proof, err = ut.createCollectionProof(ctx, messages)
-		if err != nil {
-			// Fallback to individual proofs
-			ut.logger.Info("Collection proof failed, using individual proofs",
-				"destination", destination,
-				"error", err)
-			return ut.createIndividualProofs(ctx, messages)
-		}
-		
-		ut.metrics.mu.Lock()
-		ut.metrics.CollectionProofsUsed++
-		ut.metrics.mu.Unlock()
-	} else {
-		err = ut.createIndividualProofs(ctx, messages)
-		if err != nil {
-			return err
-		}
+	// ALWAYS use collection proofs - no fallback to individual proofs
+	proof, err = ut.createCollectionProof(ctx, messages)
+	if err != nil {
+		// Collection proof failure is a hard error - no fallback
+		ut.logger.Error("Collection proof creation failed - no fallback",
+			"destination", destination,
+			"message_count", len(messages),
+			"error", err)
+		return errors.UnknownError.WithFormat("collection proof required but failed: %w", err)
 	}
+	
+	ut.metrics.mu.Lock()
+	ut.metrics.CollectionProofsUsed++
+	ut.metrics.mu.Unlock()
 	
 	// Send the messages with their proofs
 	// This would integrate with the existing message routing system
@@ -267,28 +263,11 @@ func (ut *UnifiedTransport) createCollectionProof(ctx context.Context, messages 
 	return ut.proofService.CreateProof(ctx, req)
 }
 
-// createIndividualProofs creates separate proofs for each message
+// createIndividualProofs is DEPRECATED and non-functional
+// This method exists only to prevent breaking API changes
+// It will always return an error as collection proofs are mandatory
 func (ut *UnifiedTransport) createIndividualProofs(ctx context.Context, messages []CrossChainMessage) error {
-	for _, msg := range messages {
-		req := ProofRequest{
-			Type:        ProofTypeUnified,
-			Destination: msg.GetDestination(),
-			Sequences:   []uint64{msg.GetSequence()},
-			SourceChain: msg.GetSourceChain(),
-			RootChain:   msg.GetRootChain(),
-		}
-		
-		_, err := ut.proofService.CreateProof(ctx, req)
-		if err != nil {
-			return errors.UnknownError.WithFormat("create proof for sequence %d: %w", msg.GetSequence(), err)
-		}
-		
-		ut.metrics.mu.Lock()
-		ut.metrics.IndividualProofsUsed++
-		ut.metrics.mu.Unlock()
-	}
-	
-	return nil
+	return errors.NotAllowed.With("individual proofs are disabled - collection proofs are mandatory for all transactions")
 }
 
 // routeMessages sends messages to their destination with attached proofs
@@ -384,7 +363,7 @@ func ConvertSyntheticToUnified(
 		Type:        MessageTypeSynthetic,
 		Source:      nil, // SyntheticTransaction source derived from chain context
 		Destination: synth.Destination,
-		Sequence:    synth.Sequence,
+		Sequence:    synth.SequenceNum,
 		Payload:     nil, // Transaction wrapped in message envelope by caller
 		SourceChain: sourceChain,
 		RootChain:   rootChain,
