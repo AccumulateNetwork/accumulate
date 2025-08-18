@@ -1,9 +1,9 @@
 # Accumulate Documentation Index
 
 ## 🤖 AI-Optimized Documentation
-- [AI Context Document](AI_CONTEXT.md) - Comprehensive project context for AI systems
-- [AI Metadata](AI_METADATA.json) - Structured metadata in JSON format
-- [AI Semantic Guide](AI_SEMANTIC_GUIDE.md) - Semantic markers and patterns for AI understanding
+- [AI Context Document](ai-context/AI_CONTEXT.md) - Comprehensive project context for AI systems
+- [AI Metadata](ai-context/AI_METADATA.json) - Structured metadata in JSON format
+- [AI Semantic Guide](ai-context/AI_SEMANTIC_GUIDE.md) - Semantic markers and patterns for AI understanding
 
 ## Quick Links
 - [README](../README.md) - Project overview
@@ -105,8 +105,9 @@
 
 ## Recent Updates
 
-- [Release Notes v1.5.0](RELEASE_NOTES_v1.5.0.md)
-- [Release Summary](RELEASE_SUMMARY.md)
+- [Release Notes v1.5.0](release/RELEASE_NOTES_v1.5.0.md)
+- [Release Summary](release/RELEASE_SUMMARY.md)
+- [Client SDK Improvements](client-sdk-improvements/README.md) - SDK architecture analysis and optimization plan
 
 ## Search Documentation
 
