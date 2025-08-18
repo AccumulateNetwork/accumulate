@@ -39,12 +39,12 @@ func TestDestinationKeyWithMessageType(t *testing.T) {
 		Type:        MessageTypeAnchor,
 		Destination: "bvn-example",
 	}
-	
+
 	key2 := DestinationKey{
 		Type:        ConductorMessageTypeAnchor, // Legacy constant
 		Destination: "bvn-example",
 	}
-	
+
 	// Both should be equal since they use the same underlying type
 	require.Equal(t, key1, key2)
 	require.Equal(t, key1.Type, key2.Type)

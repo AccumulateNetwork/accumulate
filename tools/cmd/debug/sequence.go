@@ -1,6 +1,3 @@
-//go:build ignore
-// +build ignore
-
 // Copyright 2025 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
@@ -28,14 +25,21 @@ import (
 var cmdSequence = &cobra.Command{
 	Use:   "sequence [server]",
 	Short: "Debug synthetic and anchor sequencing",
+	Long: `Debug synthetic and anchor sequencing.
+	
+Note: On mainnet with limited nodes, this command may timeout during peer discovery.
+Use --skip-scan to skip network scanning if you know the network topology.`,
 	Args:  cobra.ExactArgs(1),
 	Run:   sequence,
 }
+
+var skipNetworkScan bool
 
 func init() {
 	cmd.AddCommand(cmdSequence)
 	cmdSequence.Flags().BoolVarP(&verbose, "verbose", "v", false, "More verbose output")
 	cmdSequence.Flags().StringVar(&only, "only", "", "Only scan anchors or synthetic transactions")
+	cmdSequence.Flags().BoolVar(&skipNetworkScan, "skip-scan", false, "Skip network scanning (useful for limited networks)")
 	healerFlags(cmdSequence)
 }
 

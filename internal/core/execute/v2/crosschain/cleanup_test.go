@@ -17,19 +17,19 @@ import (
 
 func TestRecoveryManagerGetNetworkInfo(t *testing.T) {
 	t.Parallel()
-	
+
 	// Test that the stubbed NetworkInfo function works
 	rm := &RecoveryManager{
 		logger: logging.OptionalLogger{},
 	}
-	
+
 	ctx := context.Background()
 	info, err := rm.getNetworkInfo(ctx)
-	
+
 	require.NoError(t, err)
 	require.NotNil(t, info)
 	require.NotEmpty(t, info.Partitions)
-	
+
 	// Verify stub data is present
 	dir, exists := info.Partitions["Directory"]
 	require.True(t, exists)
@@ -41,15 +41,15 @@ func TestRecoveryManagerGetNetworkInfo(t *testing.T) {
 
 func TestTODOItemsRemoved(t *testing.T) {
 	t.Parallel()
-	
+
 	// This test verifies we haven't left dangling TODO comments
 	// that would cause compilation issues. If this compiles and runs,
 	// the basic cleanup was successful.
-	
+
 	// Test that types we consolidated work
 	var msgType MessageType = MessageTypeAnchor
 	require.Equal(t, ConductorMessageTypeAnchor, msgType)
-	
+
 	// Test destination key creation
 	key := DestinationKey{
 		Type:        MessageTypeSynthetic,

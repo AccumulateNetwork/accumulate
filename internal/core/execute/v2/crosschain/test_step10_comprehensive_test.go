@@ -1,14 +1,19 @@
-// Step 10: Comprehensive testing to reach 50% coverage
+// Copyright 2025 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package crosschain
 
 import (
 	"context"
-	"testing"
-	"time"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"testing"
+	"time"
 )
 
 // MockMessage for testing
@@ -30,7 +35,7 @@ func (m *MockMessage) GetOrigin() *url.URL {
 }
 
 func (m *MockMessage) GetDestination() *url.URL {
-	u, _ := url.Parse("acc://dest.acme") 
+	u, _ := url.Parse("acc://dest.acme")
 	return u
 }
 
@@ -47,10 +52,10 @@ func (m *MockMessage) Hash() [32]byte {
 func TestStep10BlockIntegration(t *testing.T) {
 	logger := logging.OptionalLogger{}
 	dispatcher := &MockDispatcher{}
-	
+
 	conductor := NewCrossChainConductor(dispatcher, logger)
 	defer conductor.Stop()
-	
+
 	// Test block integration component
 	blockIntegration := conductor.GetBlockIntegration()
 	require.NotNil(t, blockIntegration)
@@ -59,10 +64,10 @@ func TestStep10BlockIntegration(t *testing.T) {
 func TestStep10SequenceTracker(t *testing.T) {
 	logger := logging.OptionalLogger{}
 	dispatcher := &MockDispatcher{}
-	
+
 	conductor := NewCrossChainConductor(dispatcher, logger)
 	defer conductor.Stop()
-	
+
 	// Test sequence tracker exists (may be nil initially)
 	if conductor.sequenceTracker != nil {
 		stats := conductor.sequenceTracker.GetStatistics()
@@ -73,14 +78,14 @@ func TestStep10SequenceTracker(t *testing.T) {
 func TestStep10ProofServiceOperations(t *testing.T) {
 	logger := logging.OptionalLogger{}
 	dispatcher := &MockDispatcher{}
-	
+
 	conductor := NewCrossChainConductor(dispatcher, logger)
 	defer conductor.Stop()
-	
+
 	// Test proof service operations
 	proofService := conductor.proofService
 	require.NotNil(t, proofService)
-	
+
 	// Test GetMetrics works
 	metrics := proofService.GetMetrics()
 	require.GreaterOrEqual(t, metrics.IndividualProofsCreated, int64(0))
@@ -89,18 +94,18 @@ func TestStep10ProofServiceOperations(t *testing.T) {
 func TestStep10MultipleDestinations(t *testing.T) {
 	logger := logging.OptionalLogger{}
 	dispatcher := &MockDispatcher{}
-	
+
 	conductor := NewCrossChainConductor(dispatcher, logger)
 	defer conductor.Stop()
-	
+
 	ctx := context.Background()
-	
+
 	// Test multiple destinations
 	destinations := []string{"acc://dest1.acme", "acc://dest2.acme", "acc://dest3.acme"}
 	for _, destStr := range destinations {
 		destination, err := url.Parse(destStr)
 		require.NoError(t, err)
-		
+
 		var emptyMessages []messaging.Message
 		err = conductor.SubmitSynthetic(ctx, emptyMessages, destination)
 		require.NoError(t, err)
@@ -110,12 +115,12 @@ func TestStep10MultipleDestinations(t *testing.T) {
 func TestStep10MessageValidationBasic(t *testing.T) {
 	logger := logging.OptionalLogger{}
 	dispatcher := &MockDispatcher{}
-	
+
 	conductor := NewCrossChainConductor(dispatcher, logger)
 	defer conductor.Stop()
-	
+
 	ctx := context.Background()
-	
+
 	// Test message validation with empty list instead of complex mock
 	result := conductor.ProcessInbound(ctx, []messaging.Message{})
 	require.NotNil(t, result)
@@ -125,14 +130,14 @@ func TestStep10MessageValidationBasic(t *testing.T) {
 func TestStep10ConductorLifecycle(t *testing.T) {
 	logger := logging.OptionalLogger{}
 	dispatcher := &MockDispatcher{}
-	
+
 	// Test conductor lifecycle
 	conductor := NewCrossChainConductor(dispatcher, logger)
 	require.NotNil(t, conductor)
-	
+
 	// Give it a moment to start up
 	time.Sleep(10 * time.Millisecond)
-	
+
 	// Test stop once
 	conductor.Stop()
 }

@@ -34,7 +34,7 @@ import (
 )
 
 const localHost = "/ip4/127.0.0.1"
-const devNetDefaultHost = "/ip4/127.0.1.1"
+const devNetDefaultHost = "/ip4/127.0.0.1"
 
 var devnetAsset = regexp.MustCompile(`^` +
 	`(` + `bootstrap` + //                Bootstrap node

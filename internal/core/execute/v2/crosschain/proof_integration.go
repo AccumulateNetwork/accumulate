@@ -56,7 +56,7 @@ func (pi *ProofIntegration) CreateSyntheticProofsWithPartitions(
 	for i, tx := range transactions {
 		sequences[i] = tx.Sequence
 	}
-	
+
 	// Create a unified proof request for all transactions
 	req := ProofRequest{
 		Type:        ProofTypeUnified,
@@ -67,17 +67,17 @@ func (pi *ProofIntegration) CreateSyntheticProofsWithPartitions(
 		RootChain:   rootChain,
 		BlockIndex:  0, // Will be set by caller if needed
 	}
-	
+
 	// Create proof using the centralized service
 	resp, err := pi.conductor.proofService.CreateProof(ctx, req)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("failed to create proof: %w", err)
 	}
-	
+
 	if resp.Proof != nil {
 		return []*protocol.AnnotatedReceipt{resp.Proof}, nil
 	}
-	
+
 	return []*protocol.AnnotatedReceipt{}, nil
 }
 
@@ -99,7 +99,7 @@ func (pi *ProofIntegration) CreateSyntheticProofs(
 	for i, tx := range transactions {
 		sequences[i] = tx.Sequence
 	}
-	
+
 	// Create a synthetic proof request for all transactions
 	req := ProofRequest{
 		Type:        ProofTypeSynthetic,
@@ -110,17 +110,17 @@ func (pi *ProofIntegration) CreateSyntheticProofs(
 		RootChain:   rootChain,
 		BlockIndex:  0, // Will be set by caller if needed
 	}
-	
+
 	// Create proof using the centralized service
 	resp, err := pi.conductor.proofService.CreateProof(ctx, req)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("failed to create synthetic proof: %w", err)
 	}
-	
+
 	if resp.Proof != nil {
 		return []*protocol.AnnotatedReceipt{resp.Proof}, nil
 	}
-	
+
 	return []*protocol.AnnotatedReceipt{}, nil
 }
 
@@ -139,7 +139,6 @@ func (pi *ProofIntegration) ValidateProof(proof *protocol.AnnotatedReceipt) erro
 
 	return pi.conductor.ValidateIncomingProof(proof)
 }
-
 
 // GetProofService returns the underlying proof service for testing
 func (pi *ProofIntegration) GetProofService() *ProofService {

@@ -302,7 +302,7 @@ type LatencyMode int
 
 const (
 	FastMode LatencyMode = iota    // Only submission latency
-	LatencyMode                     // Full end-to-end tracking
+	FullLatencyMode                 // Full end-to-end tracking
 	HybridMode                      // Sample percentage
 )
 

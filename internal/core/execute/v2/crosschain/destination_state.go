@@ -203,18 +203,18 @@ func (d *DestinationSendState) GetMetrics() map[string]interface{} {
 	defer d.mu.RUnlock()
 
 	return map[string]interface{}{
-		"destination":        d.Destination.String(),
-		"sent_tx_index":      d.SentTxIndex,
-		"current_tx_index":   d.CurrentTxIndex,
-		"gap_size":           d.GetGapSize(),
-		"total_sent":         d.TotalSent,
-		"total_failed":       d.TotalFailed,
-		"total_gap_resets":   d.TotalGapResets,
-		"largest_gap_reset":  d.LargestGapReset,
-		"failure_count":      d.FailureCount,
-		"queue_size":         len(d.MessageQueue),
-		"last_send_time":     d.LastSendTime,
-		"last_send_attempt":  d.LastSendAttempt,
-		"send_in_progress":   d.SendInProgress,
+		"destination":       d.Destination.String(),
+		"sent_tx_index":     d.SentTxIndex,
+		"current_tx_index":  d.CurrentTxIndex,
+		"gap_size":          d.GetGapSize(),
+		"total_sent":        d.TotalSent,
+		"total_failed":      d.TotalFailed,
+		"total_gap_resets":  d.TotalGapResets,
+		"largest_gap_reset": d.LargestGapReset,
+		"failure_count":     d.FailureCount,
+		"queue_size":        len(d.MessageQueue),
+		"last_send_time":    d.LastSendTime,
+		"last_send_attempt": d.LastSendAttempt,
+		"send_in_progress":  d.SendInProgress,
 	}
 }
