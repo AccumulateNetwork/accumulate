@@ -40,7 +40,7 @@ func TestClientGetAccount_Devnet(t *testing.T) {
 		}
 		require.NotNil(t, account)
 		require.NotNil(t, account.Account)
-		
+
 		// Verify it's the correct account
 		require.Equal(t, "acc://ACME", account.Account.GetUrl().String())
 	})

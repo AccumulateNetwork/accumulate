@@ -33,7 +33,7 @@ func TestMainnetConnectivity(t *testing.T) {
 		fmt.Printf("❌ Mainnet connection failed: %v\n", err)
 		t.Logf("Mainnet connection failed: %v", err)
 	} else {
-		fmt.Printf("✅ Mainnet connected! Network: %v, Directory Height: %d\n", 
+		fmt.Printf("✅ Mainnet connected! Network: %v, Directory Height: %d\n",
 			status.Network, status.DirectoryHeight)
 		t.Logf("Mainnet connected successfully")
 	}

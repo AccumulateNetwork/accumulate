@@ -28,7 +28,7 @@ func TestProofService_AlwaysUsesCollectionProofs(t *testing.T) {
 
 	// This should always use collection proof now
 	resp, err := ps.CreateProof(context.Background(), req)
-	
+
 	// We expect an error because we don't have real chain data
 	// but the important thing is it tried to create a collection proof
 	require.Error(t, err)
@@ -37,7 +37,7 @@ func TestProofService_AlwaysUsesCollectionProofs(t *testing.T) {
 	// Test with multiple sequences
 	req.Sequences = []uint64{1, 2, 3}
 	resp, err = ps.CreateProof(context.Background(), req)
-	
+
 	// Same expectation - error due to missing chain data
 	require.Error(t, err)
 	require.Nil(t, resp)

@@ -37,24 +37,40 @@ go test -v -run TestStreamlinedLoad -args -txs 100000 -tps 50 -k 40 -a 40 -timeo
 
 ### Devnet Configuration
 
+**IMPORTANT: Always use the devnet_config.sh script to start devnet properly:**
+
+```bash
+# From project root:
+./test/load/devnet_config.sh standard   # Standard setup (2 BVNs, 3 validators, 1 follower)
+./test/load/devnet_config.sh quick      # Minimal setup (2 BVNs, 1 validator)
+./test/load/devnet_config.sh large      # Large setup (3 BVNs, 3 validators, 2 followers)
+
+# Other commands:
+./test/load/devnet_config.sh stop       # Stop running devnet
+./test/load/devnet_config.sh status     # Check devnet status
+./test/load/devnet_config.sh clean      # Stop and clean devnet data
+```
+
+The script ensures:
+- Proper cleanup of any existing devnet processes
+- Correct port allocation and configuration
+- Uses current local codebase (via go run)
+- Waits for all partitions to be ready before returning
+
 The devnet runs locally with:
 - Base IP: 127.0.0.1 (fixed from original 127.0.1.1)
 - API endpoint: http://127.0.0.1:26660/v3
-- Multiple nodes on ports 26656-26660
+- Multiple nodes on ports 26656-26700
 - Smart discovery system automatically finds endpoints
 
 ### Important Commands
 
 Check devnet status:
 ```bash
+./test/load/devnet_config.sh status     # Best way to check status
 ps aux | grep accumulated
 ss -tlnp | grep 266
 curl -s http://127.0.0.1:26660/metrics
-```
-
-Run devnet:
-```bash
-go run ./cmd/accumulated run devnet -w .devnet
 ```
 
 ### Key Files

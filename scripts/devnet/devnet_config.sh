@@ -111,7 +111,15 @@ start_configured_devnet() {
     cd "$ROOT_DIR"
     
     # Build the command
-    local cmd="go run ./cmd/accumulated run devnet"
+    # Check if accumulated binary exists, otherwise build it
+    if [ -f "$ROOT_DIR/accumulated" ]; then
+        local cmd="$ROOT_DIR/accumulated run devnet"
+        info "Using existing accumulated binary"
+    else
+        info "Building accumulated binary..."
+        (cd "$ROOT_DIR" && go build -o accumulated ./cmd/accumulated)
+        local cmd="$ROOT_DIR/accumulated run devnet"
+    fi
     cmd="$cmd -w $DEVNET_DIR"
     cmd="$cmd --port $BASE_PORT"
     cmd="$cmd --bvns $bvns"
@@ -131,6 +139,9 @@ start_configured_devnet() {
     
     # Wait for DevNet to be ready
     wait_for_devnet
+    
+    # Export port information for test code
+    export_port_info $bvns $validators $followers
 }
 
 # Function to wait for DevNet to be ready
@@ -186,6 +197,99 @@ check_all_partitions() {
     fi
     
     return 1
+}
+
+# Function to export port information for test code
+export_port_info() {
+    local bvns=$1
+    local validators=$2
+    local followers=$3
+    
+    local discovery_file="$SCRIPT_DIR/devnet_ports.json"
+    local env_file="$SCRIPT_DIR/devnet.env"
+    
+    info "📝 Exporting port information for test code..."
+    
+    # Calculate port assignments
+    local api_port=$((BASE_PORT + 4))
+    local metrics_port=$((BASE_PORT + 60))
+    
+    # Create JSON discovery file with port mappings
+    cat > "$discovery_file" <<EOF
+{
+  "created_at": "$(date -Iseconds)",
+  "base_port": $BASE_PORT,
+  "api": {
+    "primary": "http://127.0.0.1:$api_port/v3",
+    "port": $api_port
+  },
+  "metrics": {
+    "endpoint": "http://127.0.0.1:$metrics_port/metrics",
+    "port": $metrics_port
+  },
+  "network": {
+    "bvns": $bvns,
+    "validators_per_partition": $validators,
+    "followers_per_partition": $followers,
+    "total_nodes": $((4 + (bvns * 4)))
+  },
+  "partitions": {
+    "directory": {
+      "api": "http://127.0.0.1:$api_port/v3",
+      "rpc": "http://127.0.0.1:$((BASE_PORT + 1))",
+      "p2p": $BASE_PORT,
+      "nodes": $((validators + followers))
+    },
+EOF
+    
+    # Add BVN partition information
+    for ((i=0; i<bvns; i++)); do
+        local bvn_base=$((BASE_PORT + 100 * (i + 1)))
+        if [ $i -gt 0 ]; then
+            echo "," >> "$discovery_file"
+        fi
+        cat >> "$discovery_file" <<EOF
+    "bvn$i": {
+      "api": "http://127.0.0.1:$((bvn_base + 4))/v3",
+      "rpc": "http://127.0.0.1:$((bvn_base + 1))",
+      "p2p": $bvn_base,
+      "nodes": $((validators + followers))
+    }
+EOF
+    done
+    
+    # Close JSON
+    cat >> "$discovery_file" <<EOF
+  }
+}
+EOF
+    
+    # Create environment file for shell scripts
+    cat > "$env_file" <<EOF
+# DevNet Environment Configuration
+# Generated: $(date)
+export DEVNET_BASE_PORT=$BASE_PORT
+export DEVNET_API_PORT=$api_port
+export DEVNET_API_ENDPOINT="http://127.0.0.1:$api_port/v3"
+export DEVNET_METRICS_PORT=$metrics_port
+export DEVNET_METRICS_ENDPOINT="http://127.0.0.1:$metrics_port/metrics"
+export DEVNET_BVNS=$bvns
+export DEVNET_VALIDATORS=$validators
+export DEVNET_FOLLOWERS=$followers
+export DEVNET_WORK_DIR="$DEVNET_DIR"
+export DEVNET_DISCOVERY_FILE="$discovery_file"
+EOF
+    
+    # Also export to current shell
+    export DEVNET_BASE_PORT=$BASE_PORT
+    export DEVNET_API_PORT=$api_port
+    export DEVNET_API_ENDPOINT="http://127.0.0.1:$api_port/v3"
+    export DEVNET_DISCOVERY_FILE="$discovery_file"
+    
+    success "✅ Port information exported to:"
+    info "  JSON: $discovery_file"
+    info "  ENV:  $env_file"
+    info "  Primary API: http://127.0.0.1:$api_port/v3"
 }
 
 # Function to show DevNet status

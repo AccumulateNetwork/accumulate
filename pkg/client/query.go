@@ -249,7 +249,7 @@ func (c *Client) GetDirectory(ctx context.Context, accountURL string, start uint
 		}
 		return nil, fmt.Errorf("unexpected record type: %T", record)
 	}
-	
+
 	// Convert to account records
 	result := &v3.RecordRange[*v3.AccountRecord]{
 		Start: dirRecord.Start,

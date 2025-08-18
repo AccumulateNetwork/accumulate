@@ -564,7 +564,7 @@ type RecoveredTransaction struct {
 type BatchProofRecoveryManager struct {
 	conductor      *CrossChainConductor
 	logger         logging.OptionalLogger
-	batchThreshold int
+	// batchThreshold int // Reserved for future use
 	maxBatchSize   int
 	totalRequests  int64
 	batchRequests  int64

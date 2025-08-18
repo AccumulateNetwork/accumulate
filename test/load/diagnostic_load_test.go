@@ -1,3 +1,9 @@
+// Copyright 2025 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package load_test
 
 import (
@@ -57,10 +63,10 @@ func TestDiagnosticLoad(t *testing.T) {
 	// Create accounts
 	t.Log("Creating test accounts...")
 	type Account struct {
-		Key  ed25519.PrivateKey
-		URL  *url.URL
+		Key ed25519.PrivateKey
+		URL *url.URL
 	}
-	
+
 	senders := make([]Account, numSenders)
 	for i := range senders {
 		seed := sha256.Sum256([]byte(fmt.Sprintf("diag sender %d", i+1)))
@@ -81,10 +87,10 @@ func TestDiagnosticLoad(t *testing.T) {
 	t.Log("Funding sender accounts...")
 	for _, sender := range senders {
 		for j := 0; j < 20; j++ { // 200 ACME per sender
-			client.Faucet(ctx, sender.URL, api.FaucetOptions{})
+			_, _ = client.Faucet(ctx, sender.URL, api.FaucetOptions{})
 		}
 	}
-	
+
 	t.Log("Waiting for funding to settle...")
 	time.Sleep(10 * time.Second)
 
@@ -95,7 +101,7 @@ func TestDiagnosticLoad(t *testing.T) {
 		t.Fatalf("Failed to get oracle: %v", err)
 	}
 	oracle := status.Oracle.Price
-	
+
 	for _, sender := range senders {
 		env, _ := build.Transaction().
 			For(sender.URL).
@@ -106,9 +112,9 @@ func TestDiagnosticLoad(t *testing.T) {
 			}).
 			SignWith(sender.URL).Version(1).Timestamp(uint64(time.Now().UnixNano())).PrivateKey(sender.Key).
 			Done()
-		client.Submit(ctx, env, api.SubmitOptions{})
+		_, _ = client.Submit(ctx, env, api.SubmitOptions{})
 	}
-	
+
 	time.Sleep(5 * time.Second)
 
 	// Record initial sender balances
@@ -126,19 +132,19 @@ func TestDiagnosticLoad(t *testing.T) {
 
 	// Run tests at different load levels
 	results := make([]struct {
-		Level            string
-		Submitted        int64
-		SubmitFailed     int64
-		ReceiverSettled  float64
-		SenderDebited    float64
-		TPS              float64
-		SettlementRate   float64
-		DebitRate        float64
+		Level           string
+		Submitted       int64
+		SubmitFailed    int64
+		ReceiverSettled float64
+		SenderDebited   float64
+		TPS             float64
+		SettlementRate  float64
+		DebitRate       float64
 	}, 0)
 
 	for _, level := range loadLevels {
 		t.Logf("\n=== Testing %s: %s ===", level.name, level.description)
-		
+
 		// Reset receiver accounts by sending any balance back
 		for _, receiver := range receivers {
 			record, _ := client.Query(ctx, receiver, &api.DefaultQuery{})
@@ -153,19 +159,19 @@ func TestDiagnosticLoad(t *testing.T) {
 							SendTokens(&tokenAccount.Balance, 0).To(senders[0].URL).
 							SignWith(receiver).Version(1).Timestamp(uint64(time.Now().UnixNano())).PrivateKey(key).
 							Done()
-						client.Submit(ctx, env, api.SubmitOptions{})
+						_, _ = client.Submit(ctx, env, api.SubmitOptions{})
 					}
 				}
 			}
 		}
-		
+
 		time.Sleep(3 * time.Second)
-		
+
 		// Submit transactions with specified pattern
 		startTime := time.Now()
 		successCount := int64(0)
 		failCount := int64(0)
-		
+
 		for batch := 0; batch*level.batchSize < level.numTxs; batch++ {
 			var wg sync.WaitGroup
 			batchStart := batch * level.batchSize
@@ -173,26 +179,26 @@ func TestDiagnosticLoad(t *testing.T) {
 			if batchEnd > level.numTxs {
 				batchEnd = level.numTxs
 			}
-			
+
 			for i := batchStart; i < batchEnd; i++ {
 				wg.Add(1)
 				go func(txNum int) {
 					defer wg.Done()
-					
+
 					sender := senders[txNum%numSenders]
 					receiver := receivers[txNum%numReceivers]
-					
+
 					env, err := build.Transaction().
 						For(sender.URL).
 						SendTokens(big.NewInt(int64(txAmount)), 0).To(receiver).
 						SignWith(sender.URL).Version(1).Timestamp(uint64(time.Now().UnixNano())).PrivateKey(sender.Key).
 						Done()
-					
+
 					if err != nil {
 						atomic.AddInt64(&failCount, 1)
 						return
 					}
-					
+
 					_, err = client.Submit(ctx, env, api.SubmitOptions{})
 					if err != nil {
 						atomic.AddInt64(&failCount, 1)
@@ -201,24 +207,24 @@ func TestDiagnosticLoad(t *testing.T) {
 					}
 				}(i)
 			}
-			
+
 			wg.Wait()
-			
+
 			if level.delayMs > 0 && batch*level.batchSize < level.numTxs {
 				time.Sleep(time.Duration(level.delayMs) * time.Millisecond)
 			}
 		}
-		
+
 		duration := time.Since(startTime)
 		tps := float64(successCount) / duration.Seconds()
-		
+
 		t.Logf("Submission complete: %d succeeded, %d failed in %v (%.2f TPS)",
 			successCount, failCount, duration, tps)
-		
+
 		// Wait for settlement
 		t.Log("Waiting for settlement...")
 		time.Sleep(15 * time.Second)
-		
+
 		// Check receiver balances
 		totalReceived := float64(0)
 		for _, receiver := range receivers {
@@ -233,7 +239,7 @@ func TestDiagnosticLoad(t *testing.T) {
 				}
 			}
 		}
-		
+
 		// Check sender balances
 		totalDebited := float64(0)
 		for _, sender := range senders {
@@ -254,25 +260,25 @@ func TestDiagnosticLoad(t *testing.T) {
 				}
 			}
 		}
-		
+
 		expectedTotal := float64(level.numTxs) * 0.001
 		settlementRate := (totalReceived / expectedTotal) * 100
 		debitRate := (totalDebited / expectedTotal) * 100
-		
+
 		t.Logf("Results for %s:", level.name)
 		t.Logf("  Receivers got: %.4f ACME (%.1f%% of expected)", totalReceived, settlementRate)
 		t.Logf("  Senders debited: %.4f ACME (%.1f%% of expected)", totalDebited, debitRate)
-		t.Logf("  Discrepancy: %.4f ACME lost", totalDebited - totalReceived)
-		
+		t.Logf("  Discrepancy: %.4f ACME lost", totalDebited-totalReceived)
+
 		results = append(results, struct {
-			Level            string
-			Submitted        int64
-			SubmitFailed     int64
-			ReceiverSettled  float64
-			SenderDebited    float64
-			TPS              float64
-			SettlementRate   float64
-			DebitRate        float64
+			Level           string
+			Submitted       int64
+			SubmitFailed    int64
+			ReceiverSettled float64
+			SenderDebited   float64
+			TPS             float64
+			SettlementRate  float64
+			DebitRate       float64
 		}{
 			Level:           level.name,
 			Submitted:       successCount,
@@ -283,7 +289,7 @@ func TestDiagnosticLoad(t *testing.T) {
 			SettlementRate:  settlementRate,
 			DebitRate:       debitRate,
 		})
-		
+
 		// Update initial balances for next test
 		for _, sender := range senders {
 			record, err := client.Query(ctx, sender.URL, &api.DefaultQuery{})
@@ -295,11 +301,11 @@ func TestDiagnosticLoad(t *testing.T) {
 				}
 			}
 		}
-		
+
 		// Pause between tests
 		time.Sleep(5 * time.Second)
 	}
-	
+
 	// Summary report
 	t.Log("\n=== DIAGNOSTIC SUMMARY ===")
 	t.Log("Load Level       | TPS    | Submit | Settled | Debited | Status")
@@ -311,11 +317,11 @@ func TestDiagnosticLoad(t *testing.T) {
 		} else if r.DebitRate < 90 {
 			status = "⚠️ PARTIAL"
 		}
-		
+
 		t.Logf("%-16s | %6.0f | %5d  | %6.1f%% | %6.1f%% | %s",
 			r.Level, r.TPS, r.Submitted, r.SettlementRate, r.DebitRate, status)
 	}
-	
+
 	t.Log("\nConclusions:")
 	t.Log("- Low load (< 100 TPS): Transactions are properly debited and settled")
 	t.Log("- Medium load (100-1000 TPS): Some transactions accepted but not executed")

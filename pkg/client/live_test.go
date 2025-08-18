@@ -4,6 +4,7 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
+//go:build integration
 // +build integration
 
 package client_test
@@ -33,7 +34,7 @@ func TestLiveMainnet(t *testing.T) {
 		require.NotNil(t, account)
 		require.NotNil(t, account.Account)
 		require.Equal(t, "acc://ACME", account.Account.GetUrl().String())
-		
+
 		// ACME is a token issuer
 		require.Equal(t, "tokenIssuer", account.Account.Type().String())
 		t.Logf("Successfully queried ACME token: %+v", account.Account)

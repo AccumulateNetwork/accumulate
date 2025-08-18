@@ -214,7 +214,7 @@ func TestProofResponse_Structure(t *testing.T) {
 
 func TestProofBatch_Structure(t *testing.T) {
 	dest, _ := url.Parse("acc://partition1")
-	
+
 	batch := ProofBatch{
 		Destination:   dest,
 		Requests:      []ProofRequest{},

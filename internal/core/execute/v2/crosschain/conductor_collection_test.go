@@ -35,7 +35,7 @@ func TestConductor_ProofServiceAlwaysUsesCollection(t *testing.T) {
 
 	// Verify proof service is configured for collection proofs
 	assert.NotNil(t, conductor.proofService)
-	
+
 	// Create proof request
 	dest, _ := url.Parse("acc://partition1")
 	req := ProofRequest{
@@ -73,7 +73,7 @@ func TestBatchProofRecoveryManager_GetStats(t *testing.T) {
 	defer conductor.Stop()
 
 	brm := conductor.batchProofManager
-	
+
 	// Verify the manager exists and has correct configuration
 	assert.NotNil(t, brm)
 	assert.Equal(t, 100, brm.maxBatchSize)

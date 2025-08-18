@@ -1,6 +1,8 @@
 // Copyright 2025 The Accumulate Authors
 //
-// Simple 100k transaction load test at 50 TPS
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -33,10 +35,10 @@ func TestSimple100K(t *testing.T) {
 	// DEFAULTS - Use test flags to override at runtime
 	// Example: go test -v -run TestSimple100K -args -txs 50000 -tps 100 -senders 20 -receivers 20
 	const (
-		numSenders   = 40      // DEFAULT: Number of sender accounts
-		numReceivers = 40      // DEFAULT: Number of receiver accounts  
-		totalTxs     = 50000   // DEFAULT: Total transactions to send (stress test)
-		targetTPS    = 3000     // DEFAULT: Target transactions per second
+		numSenders   = 40                 // DEFAULT: Number of sender accounts
+		numReceivers = 40                 // DEFAULT: Number of receiver accounts
+		totalTxs     = 50000              // DEFAULT: Total transactions to send (stress test)
+		targetTPS    = 3000               // DEFAULT: Target transactions per second
 		txAmount     = int64(0.001 * 1e8) // DEFAULT: 0.001 ACME per tx
 	)
 
@@ -78,34 +80,34 @@ func TestSimple100K(t *testing.T) {
 	// Fund senders via faucet
 	t.Log("Funding sender accounts...")
 	fundingStart := time.Now()
-	
+
 	var wg sync.WaitGroup
 	for i, sender := range senders {
 		wg.Add(1)
 		go func(idx int, acc Account) {
 			defer wg.Done()
-			
+
 			// Each sender needs enough for their share of transactions
 			// Plus some extra for credits
 			txPerSender := totalTxs / numSenders
 			if idx < totalTxs%numSenders {
 				txPerSender++
 			}
-			
+
 			// Request 10 ACME per 2500 transactions
 			faucetCalls := (txPerSender / 2500) + 2 // +2 for buffer
 			if faucetCalls < 5 {
 				faucetCalls = 5 // Minimum 50 ACME
 			}
-			
+
 			for j := 0; j < faucetCalls; j++ {
-				client.Faucet(ctx, acc.URL, api.FaucetOptions{})
+				_, _ = client.Faucet(ctx, acc.URL, api.FaucetOptions{})
 				time.Sleep(200 * time.Millisecond) // Slightly slower for stability
 			}
 		}(i, sender)
 	}
 	wg.Wait()
-	
+
 	t.Logf("Funding completed in %.1f seconds", time.Since(fundingStart).Seconds())
 
 	// Wait for balances to settle
@@ -131,8 +133,8 @@ func TestSimple100K(t *testing.T) {
 			}).
 			SignWith(sender.URL).Version(1).Timestamp(uint64(time.Now().UnixNano())).PrivateKey(sender.Key).
 			Done()
-		
-		client.Submit(ctx, env, api.SubmitOptions{})
+
+		_, _ = client.Submit(ctx, env, api.SubmitOptions{})
 	}
 
 	time.Sleep(10 * time.Second)
@@ -140,13 +142,13 @@ func TestSimple100K(t *testing.T) {
 	// Start load test
 	t.Log("=== STARTING LOAD TEST ===")
 	testStart := time.Now()
-	
+
 	var successCount int32
 	var failCount int32
-	
+
 	// Create rate limiter for target TPS
 	limiter := rate.NewLimiter(rate.Limit(targetTPS), 1)
-	
+
 	// Distribute transactions among senders
 	txChan := make(chan int, totalTxs)
 	for i := 0; i < totalTxs; i++ {
@@ -160,42 +162,42 @@ func TestSimple100K(t *testing.T) {
 		sendWg.Add(1)
 		go func(idx int) {
 			defer sendWg.Done()
-			
+
 			sender := senders[idx]
-			
+
 			for txNum := range txChan {
 				// Rate limit
-				limiter.Wait(ctx)
-				
+				_ = limiter.Wait(ctx)
+
 				// Select receiver round-robin
 				receiverIdx := txNum % numReceivers
 				receiver := receivers[receiverIdx]
-				
+
 				// Build and send transaction
 				env, err := build.Transaction().
 					For(sender.URL).
 					SendTokens(big.NewInt(txAmount), 0).To(receiver.URL).
 					SignWith(sender.URL).Version(1).Timestamp(uint64(time.Now().UnixNano())).PrivateKey(sender.Key).
 					Done()
-				
+
 				if err != nil {
 					atomic.AddInt32(&failCount, 1)
 					continue
 				}
-				
+
 				_, err = client.Submit(ctx, env, api.SubmitOptions{})
 				if err != nil {
 					atomic.AddInt32(&failCount, 1)
 				} else {
 					atomic.AddInt32(&successCount, 1)
 				}
-				
+
 				// Progress update every 5000 transactions
 				total := atomic.LoadInt32(&successCount) + atomic.LoadInt32(&failCount)
 				if total%5000 == 0 {
 					elapsed := time.Since(testStart).Seconds()
 					currentTPS := float64(total) / elapsed
-					t.Logf("Progress: %d/%d (%.1f%%) - TPS: %.1f", 
+					t.Logf("Progress: %d/%d (%.1f%%) - TPS: %.1f",
 						total, totalTxs, float64(total)/float64(totalTxs)*100, currentTPS)
 				}
 			}
@@ -229,12 +231,12 @@ func TestSimple100K(t *testing.T) {
 		if err != nil {
 			continue
 		}
-		
+
 		if accRecord, ok := record.(*api.AccountRecord); ok {
 			if tokenAccount, ok := accRecord.Account.(*protocol.LiteTokenAccount); ok {
 				balance := &tokenAccount.Balance
 				totalReceived += balance.Int64()
-				
+
 				if i < 10 { // Show first 10 balances
 					balanceACME := float64(balance.Int64()) / 1e8
 					t.Logf("Receiver %d balance: %.4f ACME", i, balanceACME)
@@ -246,9 +248,9 @@ func TestSimple100K(t *testing.T) {
 	expectedReceived := int64(successCount) * txAmount
 	receivedACME := float64(totalReceived) / 1e8
 	expectedACME := float64(expectedReceived) / 1e8
-	
+
 	t.Logf("Total received: %.4f ACME (expected: %.4f ACME)", receivedACME, expectedACME)
-	
+
 	// Success criteria
 	if actualTPS >= float64(targetTPS)*0.8 { // 80% of target TPS
 		t.Logf("✅ Test PASSED - Achieved %.1f%% of target TPS", actualTPS/float64(targetTPS)*100)

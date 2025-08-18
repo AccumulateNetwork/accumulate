@@ -29,17 +29,17 @@ type FundingConfig struct {
 // DefaultFundingConfig returns default funding configuration
 func DefaultFundingConfig() FundingConfig {
 	return FundingConfig{
-		TargetBalance: 100,               // 100 ACME
-		CreditAmount:  1000,              // 1000 credits
-		MaxAttempts:   5,                 // Try faucet up to 5 times
-		RetryDelay:    2 * time.Second,   // Wait 2 seconds between attempts
+		TargetBalance: 100,             // 100 ACME
+		CreditAmount:  1000,            // 1000 credits
+		MaxAttempts:   5,               // Try faucet up to 5 times
+		RetryDelay:    2 * time.Second, // Wait 2 seconds between attempts
 	}
 }
 
 // FundAccounts funds the given accounts with ACME tokens via faucet
 func FundAccounts(ctx context.Context, client *jsonrpc.Client, accounts []TestAccount, config FundingConfig) error {
 	targetBalanceFixed := big.NewInt(config.TargetBalance * 1e8)
-	
+
 	for i, account := range accounts {
 		// Check current balance
 		currentBalance := big.NewInt(0)
@@ -52,36 +52,36 @@ func FundAccounts(ctx context.Context, client *jsonrpc.Client, accounts []TestAc
 				}
 			}
 		}
-		
+
 		// Check if we need to fund
 		if currentBalance.Cmp(targetBalanceFixed) >= 0 {
 			balanceFloat := new(big.Float).Quo(new(big.Float).SetInt(currentBalance), big.NewFloat(1e8))
 			fmt.Printf("Account %d already has sufficient balance: %s ACME\n", i+1, balanceFloat.String())
 			continue
 		}
-		
+
 		// Try to fund via faucet
 		funded := false
 		for attempt := 1; attempt <= config.MaxAttempts; attempt++ {
 			fmt.Printf("Funding account %d (attempt %d/%d)...\n", i+1, attempt, config.MaxAttempts)
-			
+
 			submission, err := client.Faucet(ctx, account.LiteURL, api.FaucetOptions{})
 			if err != nil {
 				fmt.Printf("Faucet error: %v\n", err)
 				time.Sleep(config.RetryDelay)
 				continue
 			}
-			
+
 			if submission.Status != nil && submission.Status.Error != nil {
 				fmt.Printf("Faucet returned error: %v\n", submission.Status.Error)
 				time.Sleep(config.RetryDelay)
 				continue
 			}
-			
+
 			funded = true
 			fmt.Printf("Faucet successful for account %d\n", i+1)
 			time.Sleep(config.RetryDelay) // Wait for transaction to process
-			
+
 			// Check balance again
 			record, err := client.Query(ctx, account.LiteURL, &api.DefaultQuery{})
 			if err == nil {
@@ -95,12 +95,12 @@ func FundAccounts(ctx context.Context, client *jsonrpc.Client, accounts []TestAc
 				}
 			}
 		}
-		
+
 		if !funded {
 			return fmt.Errorf("failed to fund account %d after %d attempts", i+1, config.MaxAttempts)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -113,11 +113,11 @@ func AddCredits(ctx context.Context, client *jsonrpc.Client, accounts []TestAcco
 			Body(&protocol.AddCredits{
 				Recipient: account.LiteURL,
 				Amount:    *big.NewInt(creditAmount * 1e8), // Convert to fixed point
-				Oracle:    1e8, // 1 credit per ACME
+				Oracle:    1e8,                             // 1 credit per ACME
 			}).
 			SignWith(account.LiteIdentity).Version(1).Timestamp(uint64(time.Now().Unix())).PrivateKey(account.Key).
 			Done()
-		
+
 		if err != nil {
 			return fmt.Errorf("failed to build add credits transaction for account %d: %w", i+1, err)
 		}
@@ -128,7 +128,7 @@ func AddCredits(ctx context.Context, client *jsonrpc.Client, accounts []TestAcco
 			fmt.Printf("Warning: Failed to add credits to account %d: %v\n", i+1, err)
 			continue
 		}
-		
+
 		for _, sub := range submissions {
 			if sub.Status != nil && sub.Status.Error != nil {
 				fmt.Printf("Warning: Add credits error for account %d: %v\n", i+1, sub.Status.Error)
@@ -136,10 +136,10 @@ func AddCredits(ctx context.Context, client *jsonrpc.Client, accounts []TestAcco
 				fmt.Printf("Added %d credits to account %d\n", creditAmount, i+1)
 			}
 		}
-		
+
 		time.Sleep(500 * time.Millisecond)
 	}
-	
+
 	return nil
 }
 
@@ -148,26 +148,26 @@ func FundAndPrepareAccounts(ctx context.Context, endpoint string, accounts []Tes
 	// Create client
 	client := jsonrpc.NewClient(endpoint)
 	client.Client.Timeout = 30 * time.Second
-	
+
 	// Fund accounts
 	fmt.Println("Funding accounts with ACME...")
 	if err := FundAccounts(ctx, client, accounts, config); err != nil {
 		return fmt.Errorf("failed to fund accounts: %w", err)
 	}
-	
+
 	// Wait for funding to settle
 	fmt.Println("Waiting for funding to process...")
 	time.Sleep(3 * time.Second)
-	
+
 	// Add credits
 	fmt.Println("Adding credits to accounts...")
 	if err := AddCredits(ctx, client, accounts, config.CreditAmount); err != nil {
 		return fmt.Errorf("failed to add credits: %w", err)
 	}
-	
+
 	// Wait for credits to process
 	fmt.Println("Waiting for credits to process...")
 	time.Sleep(3 * time.Second)
-	
+
 	return nil
 }

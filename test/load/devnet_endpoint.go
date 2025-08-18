@@ -29,10 +29,10 @@ func FindDevnetEndpoint() (string, error) {
 
 	// Try to find accumulated process and its ports
 	accumulatedPorts := findAccumulatedPorts()
-	
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	
+
 	// First try ports from the actual process
 	if len(accumulatedPorts) > 0 {
 		for _, port := range accumulatedPorts {
@@ -46,7 +46,7 @@ func FindDevnetEndpoint() (string, error) {
 	// Fallback to common devnet ports
 	commonPorts := []int{
 		26660, // BVN0
-		26760, // BVN1  
+		26760, // BVN1
 		26860, // BVN2
 		26960, // DN
 		8080,  // Default local port
@@ -65,7 +65,7 @@ func FindDevnetEndpoint() (string, error) {
 		if alreadyChecked {
 			continue
 		}
-		
+
 		endpoint := fmt.Sprintf("http://localhost:%d/v3", port)
 		if testEndpoint(ctx, endpoint) {
 			return endpoint, nil
@@ -93,12 +93,12 @@ func findAccumulatedPorts() []int {
 	if err != nil {
 		return nil
 	}
-	
+
 	pid := strings.TrimSpace(string(output))
 	if pid == "" {
 		return nil
 	}
-	
+
 	// Use lsof to find listening ports for this PID
 	cmd = exec.Command("lsof", "-Pan", "-p", pid, "-i")
 	output, err = cmd.Output()
@@ -110,7 +110,7 @@ func findAccumulatedPorts() []int {
 			return nil
 		}
 	}
-	
+
 	// Parse the output to find listening ports
 	ports := make(map[int]bool)
 	lines := strings.Split(string(output), "\n")
@@ -133,13 +133,13 @@ func findAccumulatedPorts() []int {
 			}
 		}
 	}
-	
+
 	// Convert map to slice
 	var result []int
 	for port := range ports {
 		result = append(result, port)
 	}
-	
+
 	// Sort ports for consistent ordering
 	sort.Ints(result)
 	return result

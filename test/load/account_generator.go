@@ -27,20 +27,20 @@ type TestAccount struct {
 // GenerateTestAccounts generates a set of test accounts with deterministic keys
 func GenerateTestAccounts(prefix string, count int) []TestAccount {
 	accounts := make([]TestAccount, count)
-	
+
 	for i := range accounts {
 		// Generate deterministic key from seed
 		seed := fmt.Sprintf("%s%d test seed", prefix, i+1)
 		hash := sha256.Sum256([]byte(seed))
 		accounts[i].Key = ed25519.NewKeyFromSeed(hash[:])
-		
+
 		// Generate lite URLs
 		pubKeyHash := sha256.Sum256(accounts[i].Key.Public().(ed25519.PublicKey))
 		accounts[i].LiteIdentity = protocol.LiteAuthorityForKey(pubKeyHash[:20], protocol.SignatureTypeED25519)
 		accounts[i].LiteURL = accounts[i].LiteIdentity.JoinPath("ACME")
 		accounts[i].Balance = big.NewInt(0)
 	}
-	
+
 	return accounts
 }
 

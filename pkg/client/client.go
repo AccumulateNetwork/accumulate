@@ -28,12 +28,12 @@ type Client struct {
 	v3Client v3.Querier
 
 	// Additional service interfaces
-	nodeService     v3.NodeService
-	networkService  v3.NetworkService
-	submitter       v3.Submitter
-	validator       v3.Validator
-	faucet          v3.Faucet
-	eventService    v3.EventService
+	nodeService    v3.NodeService
+	networkService v3.NetworkService
+	submitter      v3.Submitter
+	validator      v3.Validator
+	faucet         v3.Faucet
+	// eventService   v3.EventService // Reserved for future use
 }
 
 // Config holds the configuration for the client.
@@ -166,7 +166,7 @@ func (c *Client) GetAccount(ctx context.Context, accountURL string) (*v3.Account
 
 	// Use DefaultQuery to get the account
 	query := &v3.DefaultQuery{}
-	
+
 	record, err := c.v3Client.Query(ctx, u, query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query account: %w", err)

@@ -9,7 +9,7 @@ package api
 import (
 	"fmt"
 	"os"
-	
+
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -19,16 +19,16 @@ import (
 // DebugGetDnHeight is a debug version to trace what's happening
 func (s *NetworkService) DebugGetDnHeight(batch *database.Batch) (uint64, error) {
 	debug := os.Getenv("DEBUG_DN_HEIGHT") != ""
-	
+
 	if debug {
 		fmt.Printf("[DEBUG] getDnHeight called with partition: %s\n", s.partition)
 	}
-	
+
 	anchorPoolUrl := protocol.PartitionUrl(s.partition).JoinPath(protocol.AnchorPool)
 	if debug {
 		fmt.Printf("[DEBUG] Looking for anchors at: %s\n", anchorPoolUrl)
 	}
-	
+
 	c := batch.Account(anchorPoolUrl).MainChain()
 	head, err := c.Head().Get()
 	if err != nil {
@@ -37,11 +37,11 @@ func (s *NetworkService) DebugGetDnHeight(batch *database.Batch) (uint64, error)
 		}
 		return 0, errors.UnknownError.WithFormat("load anchor ledger main chain head: %w", err)
 	}
-	
+
 	if debug {
 		fmt.Printf("[DEBUG] Main chain has %d entries\n", head.Count)
 	}
-	
+
 	foundCount := 0
 	for i := head.Count - 1; i >= 0 && i >= head.Count-100; i-- { // Check last 100 entries
 		entry, err := c.Entry(i)
@@ -64,14 +64,14 @@ func (s *NetworkService) DebugGetDnHeight(batch *database.Batch) (uint64, error)
 		if msg.Transaction == nil || msg.Transaction.Body == nil {
 			continue
 		}
-		
+
 		// Check what type of transaction this is
 		bodyType := msg.Transaction.Body.Type()
 		if debug && foundCount < 5 {
 			fmt.Printf("[DEBUG] Entry %d: Transaction type = %v\n", i, bodyType)
 			foundCount++
 		}
-		
+
 		body, ok := msg.Transaction.Body.(*protocol.DirectoryAnchor)
 		if ok {
 			if debug {
@@ -80,7 +80,7 @@ func (s *NetworkService) DebugGetDnHeight(batch *database.Batch) (uint64, error)
 			return body.MinorBlockIndex, nil
 		}
 	}
-	
+
 	if debug {
 		fmt.Printf("[DEBUG] ❌ No DirectoryAnchor found in last 100 entries\n")
 		fmt.Printf("[DEBUG] This means:\n")
@@ -88,6 +88,6 @@ func (s *NetworkService) DebugGetDnHeight(batch *database.Batch) (uint64, error)
 		fmt.Printf("[DEBUG]   - Or DirectoryAnchors are stored differently\n")
 		fmt.Printf("[DEBUG]   - Or the chain is not being updated\n")
 	}
-	
+
 	return 0, nil
 }

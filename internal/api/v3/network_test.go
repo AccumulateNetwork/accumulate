@@ -58,7 +58,7 @@ func (s *NetworkServiceTestSuite) TestDnHeight() {
 	if testing.Short() {
 		s.T().Skip("skipping consensus simulation test in short mode")
 	}
-	
+
 	sim := NewSimWith(s.T(), s.sim)
 	for _, p := range sim.Partitions() {
 		sim.StepUntil(

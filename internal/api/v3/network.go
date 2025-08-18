@@ -99,7 +99,7 @@ func (s *NetworkService) NetworkStatus(ctx context.Context, _ api.NetworkStatusO
 func (s *NetworkService) getDnHeight(batch *database.Batch) (uint64, error) {
 	// DirectoryAnchors are sent FROM the DN TO the BVNs, so they're stored in BVN anchor pools
 	// We need to search in a BVN's anchor pool, not the DN's anchor pool
-	
+
 	// Get network configuration to find BVN partitions
 	values := s.values.Load()
 	if values == nil || values.Network == nil {
@@ -107,7 +107,7 @@ func (s *NetworkService) getDnHeight(batch *database.Batch) (uint64, error) {
 		// This might work if we're already on a BVN
 		return s.searchForDirectoryAnchor(batch, s.partition)
 	}
-	
+
 	// Find the first BVN partition
 	var bvnPartition string
 	for _, p := range values.Network.Partitions {
@@ -116,12 +116,12 @@ func (s *NetworkService) getDnHeight(batch *database.Batch) (uint64, error) {
 			break
 		}
 	}
-	
+
 	if bvnPartition == "" {
 		// No BVN found, try current partition as fallback
 		return s.searchForDirectoryAnchor(batch, s.partition)
 	}
-	
+
 	// Search in the BVN's anchor pool for DirectoryAnchors
 	return s.searchForDirectoryAnchor(batch, bvnPartition)
 }
