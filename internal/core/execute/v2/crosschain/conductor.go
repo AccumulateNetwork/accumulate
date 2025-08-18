@@ -107,13 +107,13 @@ type CrossChainConductor struct {
 
 	// Centralized proof service for construction and validation
 	proofService *ProofService
-	
+
 	// Unified transport for all crosschain messages
 	unifiedTransport *UnifiedTransport
-	
+
 	// Block integration for the block executor
 	blockIntegration *BlockIntegration
-	
+
 	// Sequence tracker for gap detection (simplified, no buffering)
 	sequenceTracker *SimpleSequenceTracker
 }
@@ -145,28 +145,28 @@ func NewCrossChainConductor(dispatcher execute.Dispatcher, logger logging.Option
 			ForceCollectionProofs:  true, // Always use collection proofs
 			CollectionMaxBatchSize: 100,  // Maximum 100 transactions per collection
 		},
-		dispatcher:         dispatcher,
-		logger:             logger.With("module", "crosschain-conductor").(logging.OptionalLogger),
-		syntheticChan:      make(chan *SyntheticRequest, 100),   // Buffered channel for async processing
-		retryChan:          make(chan *PendingTransmission, 50), // Retry queue
-		stopChan:           make(chan struct{}),
-		destinationQueues:  make(map[DestinationKey]*DestinationQueue),
-		destinationStates:  make(map[string]*DestinationSendState), // NEW: Index-based tracking
-		maxRetries:         3,               // Retry failed transmissions up to 3 times
-		retryDelay:         2 * time.Second, // Wait 2 seconds between retries
+		dispatcher:        dispatcher,
+		logger:            logger.With("module", "crosschain-conductor").(logging.OptionalLogger),
+		syntheticChan:     make(chan *SyntheticRequest, 100),   // Buffered channel for async processing
+		retryChan:         make(chan *PendingTransmission, 50), // Retry queue
+		stopChan:          make(chan struct{}),
+		destinationQueues: make(map[DestinationKey]*DestinationQueue),
+		destinationStates: make(map[string]*DestinationSendState), // NEW: Index-based tracking
+		maxRetries:        3,                                      // Retry failed transmissions up to 3 times
+		retryDelay:        2 * time.Second,                        // Wait 2 seconds between retries
 	}
 
 	// Initialize centralized proof service (NO CACHING for easier testing)
 	cc.proofService = NewProofService(logger)
 	cc.proofService.SetDebugMode(true) // Enable debug mode for testing
-	
+
 	// Initialize unified transport
 	cc.unifiedTransport = NewUnifiedTransport(cc.proofService, cc, logger)
 	cc.unifiedTransport.SetDebugMode(true) // Enable debug mode for testing
-	
+
 	// Initialize block integration
 	cc.blockIntegration = NewBlockIntegration(cc)
-	
+
 	// Initialize simplified sequence tracker (no buffering, immediate recovery)
 	cc.sequenceTracker = NewSimpleSequenceTracker(cc, cc.logger)
 
@@ -477,18 +477,18 @@ func (cc *CrossChainConductor) CheckPartitionHealth() map[string]interface{} {
 
 	// Queue-specific metrics
 	queues := map[string]interface{}{
-		"total_queued": totalQueued,
-		"total_pending": totalPending,
-		"blocked_queues": blockedQueues,
+		"total_queued":              totalQueued,
+		"total_pending":             totalPending,
+		"blocked_queues":            blockedQueues,
 		"destinations_with_backlog": missingByDestination,
 	}
 	health["queues"] = queues
 
 	// Global metrics
 	global := map[string]interface{}{
-		"synthetics_sent": atomic.LoadInt64(&cc.syntheticsSent),
-		"synthetics_errors": atomic.LoadInt64(&cc.syntheticsErrors),
-		"synthetics_retried": atomic.LoadInt64(&cc.syntheticsRetried),
+		"synthetics_sent":     atomic.LoadInt64(&cc.syntheticsSent),
+		"synthetics_errors":   atomic.LoadInt64(&cc.syntheticsErrors),
+		"synthetics_retried":  atomic.LoadInt64(&cc.syntheticsRetried),
 		"transmission_errors": atomic.LoadInt64(&cc.transmissionErrors),
 	}
 	health["global"] = global
@@ -520,7 +520,7 @@ func (cc *CrossChainConductor) getMessageTypeName(t MessageType) string {
 	case MessageTypeDirectoryAnchor:
 		return "directory"
 	case MessageTypeBlockSummary:
-		return "other"  // For backwards compatibility with tests
+		return "other" // For backwards compatibility with tests
 	default:
 		return "unknown"
 	}
@@ -588,13 +588,13 @@ type RecoveredTransaction struct {
 // BatchProofRecoveryManager placeholder for the collection proof functionality
 // This would contain the full implementation from batch_proof_recovery.go
 type BatchProofRecoveryManager struct {
-	conductor      *CrossChainConductor
-	logger         logging.OptionalLogger
+	conductor *CrossChainConductor
+	logger    logging.OptionalLogger
 	// batchThreshold int // Reserved for future use
-	maxBatchSize   int
-	totalRequests  int64
-	batchRequests  int64
-	proofSavings   int64
+	maxBatchSize  int
+	totalRequests int64
+	batchRequests int64
+	proofSavings  int64
 }
 
 func NewBatchProofRecoveryManager(conductor *CrossChainConductor, logger logging.OptionalLogger) *BatchProofRecoveryManager {
@@ -772,11 +772,11 @@ func (cc *CrossChainConductor) createDestinationKey(msgType MessageType, dest *u
 func (cc *CrossChainConductor) getOrCreateDestinationQueue(key DestinationKey) *DestinationQueue {
 	cc.queuesMutex.Lock()
 	defer cc.queuesMutex.Unlock()
-	
+
 	if queue, exists := cc.destinationQueues[key]; exists {
 		return queue
 	}
-	
+
 	queue := &DestinationQueue{
 		Key:       key,
 		PendingTx: make(map[string]*PendingTransmission),
@@ -805,10 +805,10 @@ func (cc *CrossChainConductor) unblockDestinationQueue(queue *DestinationQueue) 
 	if queue == nil {
 		return
 	}
-	
+
 	queue.mu.Lock()
 	defer queue.mu.Unlock()
-	
+
 	queue.IsBlocked = false
 	queue.BlockedSince = time.Time{}
 }
@@ -818,18 +818,18 @@ func (cc *CrossChainConductor) RequestBatchProofRecovery(source string, msgType 
 	if cc.batchProofManager == nil {
 		return errors.NotReady.With("batch proof manager not initialized")
 	}
-	
+
 	// Convert to missing sequences
 	missingSequences := make([]uint64, 0, gapEnd-gapStart+1)
 	for seq := gapStart; seq <= gapEnd; seq++ {
 		missingSequences = append(missingSequences, seq)
 	}
-	
+
 	sourceURL, err := url.Parse(source)
 	if err != nil {
 		return errors.BadRequest.WithFormat("invalid source URL: %w", err)
 	}
-	
+
 	return cc.RequestMissingTransactionsWithBatchProof(source, msgType, missingSequences, sourceURL)
 }
 
@@ -838,7 +838,7 @@ func (cc *CrossChainConductor) SendCrossChainMessages(ctx context.Context, messa
 	if cc.unifiedTransport == nil {
 		return errors.NotReady.With("unified transport not initialized")
 	}
-	
+
 	return cc.unifiedTransport.Send(ctx, messages)
 }
 
@@ -847,10 +847,10 @@ func (cc *CrossChainConductor) handleTransmissionError(err error) {
 	if err == nil {
 		return
 	}
-	
+
 	// Increment error counter
 	atomic.AddInt64(&cc.transmissionErrors, 1)
-	
+
 	// Log the error
 	cc.logger.Error("Transmission error occurred", "error", err)
 }
@@ -861,16 +861,16 @@ func (cc *CrossChainConductor) SubmitSynthetic(ctx context.Context, messages []m
 		// Empty messages is not an error
 		return nil
 	}
-	
+
 	// Create synthetic request
 	req := &SyntheticRequest{
-		Messages:    messages,
-		Destination: destination,
-		Context:     ctx,
-		SubmittedAt: time.Now(),
+		Messages:     messages,
+		Destination:  destination,
+		Context:      ctx,
+		SubmittedAt:  time.Now(),
 		ResponseChan: make(chan error, 1),
 	}
-	
+
 	// Submit for processing
 	select {
 	case cc.syntheticChan <- req:

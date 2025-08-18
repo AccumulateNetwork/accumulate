@@ -34,7 +34,6 @@ const (
 	ProofTypeUnified
 )
 
-
 // ProofRequest represents a request to create a proof
 type ProofRequest struct {
 	Type        ProofType
@@ -199,12 +198,6 @@ func (ps *ProofService) CreateBatchProofs(ctx context.Context, requests []ProofR
 	return responses, nil
 }
 
-// createIndividualProof is DEPRECATED and non-functional
-// This method exists only to prevent breaking API changes
-// It will always return an error as collection proofs are mandatory
-func (ps *ProofService) createIndividualProof(ctx context.Context, req ProofRequest) (*ProofResponse, error) {
-	return nil, errors.NotAllowed.With("individual proofs are disabled - collection proofs are mandatory for all transactions")
-}
 
 // createCollectionProof creates a collection proof for multiple sequences
 func (ps *ProofService) createCollectionProof(ctx context.Context, req ProofRequest) (*ProofResponse, error) {
@@ -426,7 +419,7 @@ func (ps *ProofService) CreateProofForMessages(ctx context.Context, messages []m
 	if len(messages) == 0 {
 		return nil, errors.BadRequest.With("no messages provided")
 	}
-	
+
 	// Check if all messages are from the same source
 	var source string
 	sameSource := true
@@ -440,7 +433,7 @@ func (ps *ProofService) CreateProofForMessages(ctx context.Context, messages []m
 			}
 		}
 	}
-	
+
 	// ALWAYS create collection proof - no threshold check
 	if sameSource {
 		// Extract message hashes
@@ -457,10 +450,10 @@ func (ps *ProofService) CreateProofForMessages(ctx context.Context, messages []m
 				}
 			}
 		}
-		
+
 		atomic.AddInt64(&ps.metrics.CollectionProofsCreated, 1)
 		atomic.AddInt64(&ps.metrics.TransactionsInCollections, int64(len(messages)))
-		
+
 		return &CollectionProof{
 			Receipt:       &merkle.Receipt{}, // Mock receipt for testing
 			MessageCount:  len(messages),
@@ -469,7 +462,7 @@ func (ps *ProofService) CreateProofForMessages(ctx context.Context, messages []m
 			EndSequence:   endSeq,
 		}, nil
 	}
-	
+
 	// If messages are not from the same source, still use collection proof
 	// Collection proofs are MANDATORY - no exceptions
 	return nil, errors.BadRequest.With("cannot create proof for messages from different sources")
@@ -478,7 +471,7 @@ func (ps *ProofService) CreateProofForMessages(ctx context.Context, messages []m
 // ValidateProofForMessage validates a proof against a message (simplified API for tests)
 func (ps *ProofService) ValidateProofForMessage(ctx context.Context, msg messaging.Message, proof interface{}) (bool, error) {
 	atomic.AddInt64(&ps.metrics.ValidationAttempts, 1)
-	
+
 	// Check if it's a collection proof
 	if collProof, ok := proof.(*CollectionProof); ok {
 		// Validate message is part of the collection
@@ -492,7 +485,7 @@ func (ps *ProofService) ValidateProofForMessage(ctx context.Context, msg messagi
 		atomic.AddInt64(&ps.metrics.ValidationFailures, 1)
 		return false, nil
 	}
-	
+
 	// For individual proofs, always return true for now
 	atomic.AddInt64(&ps.metrics.ValidationSuccesses, 1)
 	return true, nil
@@ -501,7 +494,7 @@ func (ps *ProofService) ValidateProofForMessage(ctx context.Context, msg messagi
 // BatchMessagesByDestination groups messages by their destination
 func (ps *ProofService) BatchMessagesByDestination(messages []messaging.Message) map[string][]messaging.Message {
 	batches := make(map[string][]messaging.Message)
-	
+
 	for _, msg := range messages {
 		var dest string
 		if seq, ok := msg.(*messaging.SequencedMessage); ok {
@@ -509,21 +502,21 @@ func (ps *ProofService) BatchMessagesByDestination(messages []messaging.Message)
 		} else {
 			dest = "unknown"
 		}
-		
+
 		batches[dest] = append(batches[dest], msg)
 	}
-	
+
 	return batches
 }
 
 // OptimizeBatches splits messages into optimal batch sizes
 func (ps *ProofService) OptimizeBatches(messages []messaging.Message) [][]messaging.Message {
 	const maxBatchSize = 50
-	
+
 	if len(messages) <= maxBatchSize {
 		return [][]messaging.Message{messages}
 	}
-	
+
 	var batches [][]messaging.Message
 	for i := 0; i < len(messages); i += maxBatchSize {
 		end := i + maxBatchSize
@@ -532,6 +525,6 @@ func (ps *ProofService) OptimizeBatches(messages []messaging.Message) [][]messag
 		}
 		batches = append(batches, messages[i:end])
 	}
-	
+
 	return batches
 }

@@ -44,7 +44,7 @@ func (bi *BlockIntegration) SendAnchor(
 	if bi.conductor == nil || bi.conductor.unifiedTransport == nil {
 		return errors.InternalError.With("unified transport not initialized")
 	}
-	
+
 	// Convert the anchor to a unified message
 	unifiedMsg := ConvertAnchorToUnified(
 		anchor,
@@ -55,7 +55,7 @@ func (bi *BlockIntegration) SendAnchor(
 		rootChain,
 		blockIndex,
 	)
-	
+
 	// Send through unified transport
 	return bi.conductor.unifiedTransport.Send(ctx, []CrossChainMessage{unifiedMsg})
 }
@@ -74,7 +74,7 @@ func (bi *BlockIntegration) SendSynthetic(
 	if bi.conductor == nil || bi.conductor.unifiedTransport == nil {
 		return errors.InternalError.With("unified transport not initialized")
 	}
-	
+
 	// Create unified message
 	unifiedMsg := &UnifiedMessage{
 		Type:        MessageTypeSynthetic,
@@ -86,7 +86,7 @@ func (bi *BlockIntegration) SendSynthetic(
 		RootChain:   rootChain,
 		BlockIndex:  blockIndex,
 	}
-	
+
 	// Send through unified transport
 	return bi.conductor.unifiedTransport.Send(ctx, []CrossChainMessage{unifiedMsg})
 }
@@ -101,11 +101,11 @@ func (bi *BlockIntegration) SendBatch(
 	if bi.conductor == nil || bi.conductor.unifiedTransport == nil {
 		return errors.InternalError.With("unified transport not initialized")
 	}
-	
+
 	if len(messages) == 0 {
 		return nil
 	}
-	
+
 	// Send all messages through unified transport
 	// The transport will automatically batch by destination and create collection proofs
 	return bi.conductor.unifiedTransport.Send(ctx, messages)
@@ -218,12 +218,12 @@ func (bs *BatchedSender) Send(ctx context.Context) error {
 	if len(bs.messages) == 0 {
 		return nil
 	}
-	
+
 	err := bs.integration.SendBatch(ctx, bs.messages)
 	if err != nil {
 		return err
 	}
-	
+
 	// Clear the batch after successful send
 	bs.messages = bs.messages[:0]
 	return nil
@@ -248,7 +248,7 @@ func (bi *BlockIntegration) PrepareBlockMessages(ctx context.Context, messages [
 // CollectBlockProofs collects proofs for messages in a block
 func (bi *BlockIntegration) CollectBlockProofs(ctx context.Context, messages []messaging.Message) []interface{} {
 	proofs := make([]interface{}, 0)
-	
+
 	// Group messages by destination for collection proof optimization
 	destGroups := make(map[string][]messaging.Message)
 	for _, msg := range messages {
@@ -257,30 +257,30 @@ func (bi *BlockIntegration) CollectBlockProofs(ctx context.Context, messages []m
 			destGroups[destKey] = append(destGroups[destKey], msg)
 		}
 	}
-	
+
 	// For each destination group, create collection proofs if beneficial
 	for dest, group := range destGroups {
 		if len(group) > 1 {
 			// Create collection proof for multiple messages to same destination
-			bi.conductor.logger.Debug("Creating collection proof", 
+			bi.conductor.logger.Debug("Creating collection proof",
 				"destination", dest,
 				"message_count", len(group))
 		}
 		// Actual proof creation would happen here via proof service
 	}
-	
+
 	return proofs
 }
 
 // FinalizeBlock finalizes a block with the given height and time
 func (bi *BlockIntegration) FinalizeBlock(ctx context.Context, blockHeight uint64, blockTime uint64) error {
-	bi.conductor.logger.Debug("Finalizing block", 
+	bi.conductor.logger.Debug("Finalizing block",
 		"height", blockHeight,
 		"time", blockTime)
-	
+
 	// Cleanup old pending transmissions
 	bi.conductor.cleanupOldTransmissions()
-	
+
 	return nil
 }
 
@@ -289,17 +289,17 @@ func (bi *BlockIntegration) HandleBlockBoundary(ctx context.Context, oldHeight u
 	bi.conductor.logger.Debug("Handling block boundary",
 		"old_height", oldHeight,
 		"new_height", newHeight)
-	
+
 	// Could trigger batch proof creation here
 	// Could check for missing sequences here
-	
+
 	return nil
 }
 
 // GroupMessagesBySource groups messages by their source partition
 func (bi *BlockIntegration) GroupMessagesBySource(messages []messaging.Message) map[string][]messaging.Message {
 	groups := make(map[string][]messaging.Message)
-	
+
 	for _, msg := range messages {
 		var source string
 		switch m := msg.(type) {
@@ -312,10 +312,10 @@ func (bi *BlockIntegration) GroupMessagesBySource(messages []messaging.Message) 
 		default:
 			source = "unknown"
 		}
-		
+
 		groups[source] = append(groups[source], msg)
 	}
-	
+
 	return groups
 }
 
@@ -324,31 +324,31 @@ func (bi *BlockIntegration) SortMessagesBySequence(messages []messaging.Message)
 	// Create a copy to avoid modifying the original
 	sorted := make([]messaging.Message, len(messages))
 	copy(sorted, messages)
-	
+
 	sort.Slice(sorted, func(i, j int) bool {
 		seqI, okI := sorted[i].(*messaging.SequencedMessage)
 		seqJ, okJ := sorted[j].(*messaging.SequencedMessage)
-		
+
 		if !okI || !okJ {
 			return false
 		}
-		
+
 		return seqI.Number < seqJ.Number
 	})
-	
+
 	return sorted
 }
 
 // CollectAnchors extracts anchor messages from a message list
 func (bi *BlockIntegration) CollectAnchors(messages []messaging.Message) []*messaging.BlockAnchor {
 	anchors := make([]*messaging.BlockAnchor, 0)
-	
+
 	for _, msg := range messages {
 		if anchor, ok := msg.(*messaging.BlockAnchor); ok {
 			anchors = append(anchors, anchor)
 		}
 	}
-	
+
 	return anchors
 }
 
@@ -358,12 +358,12 @@ func (bi *BlockIntegration) ValidateAnchor(anchor *messaging.BlockAnchor) bool {
 	if anchor.Signature == nil {
 		return false
 	}
-	
+
 	// Must have anchor body
 	if anchor.Anchor == nil {
 		return false
 	}
-	
+
 	// Additional validation could be added here
 	return true
 }
@@ -371,7 +371,7 @@ func (bi *BlockIntegration) ValidateAnchor(anchor *messaging.BlockAnchor) bool {
 // DetectMissingSequences detects gaps in message sequences
 func (bi *BlockIntegration) DetectMissingSequences(messages []messaging.Message, source *url.URL) []uint64 {
 	sequences := make([]uint64, 0)
-	
+
 	// Collect all sequences from this source
 	for _, msg := range messages {
 		if seq, ok := msg.(*messaging.SequencedMessage); ok {
@@ -380,28 +380,28 @@ func (bi *BlockIntegration) DetectMissingSequences(messages []messaging.Message,
 			}
 		}
 	}
-	
+
 	if len(sequences) == 0 {
 		return nil
 	}
-	
+
 	// Sort sequences
 	sort.Slice(sequences, func(i, j int) bool {
 		return sequences[i] < sequences[j]
 	})
-	
+
 	// Find gaps
 	missing := make([]uint64, 0)
 	for i := 1; i < len(sequences); i++ {
 		prev := sequences[i-1]
 		curr := sequences[i]
-		
+
 		// If gap detected
 		for seq := prev + 1; seq < curr; seq++ {
 			missing = append(missing, seq)
 		}
 	}
-	
+
 	return missing
 }
 
@@ -410,20 +410,20 @@ func (bi *BlockIntegration) TriggerRecovery(ctx context.Context, source *url.URL
 	if len(missingSeqs) == 0 {
 		return nil
 	}
-	
+
 	bi.conductor.logger.Info("Triggering recovery for missing sequences",
 		"source", source,
 		"missing", missingSeqs)
-	
+
 	// Would trigger actual recovery through sequence tracker
 	if bi.conductor.sequenceTracker != nil {
 		// Request recovery for the range
 		minSeq := missingSeqs[0]
 		maxSeq := missingSeqs[len(missingSeqs)-1]
-		
+
 		return bi.conductor.sequenceTracker.RequestMissingMessages(
 			ctx, source.String(), MessageTypeSynthetic, minSeq, maxSeq)
 	}
-	
+
 	return nil
 }

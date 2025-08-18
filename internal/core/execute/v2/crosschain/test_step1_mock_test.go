@@ -1,4 +1,9 @@
-// Step 1: Create a working MockDispatcher
+// Copyright 2025 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package crosschain
 
 import (
@@ -9,9 +14,9 @@ import (
 
 // MockDispatcher implements execute.Dispatcher for testing
 type MockDispatcher struct {
-	submitted []MockSubmission
+	submitted   []MockSubmission
 	submitCalls int
-	submitFunc func(ctx context.Context, dest *url.URL, env *messaging.Envelope) error
+	submitFunc  func(ctx context.Context, dest *url.URL, env *messaging.Envelope) error
 }
 
 type MockSubmission struct {

@@ -16,7 +16,7 @@ func (cc *CrossChainConductor) Pause() {
 	// No-op
 }
 
-// Resume does nothing in production builds  
+// Resume does nothing in production builds
 func (cc *CrossChainConductor) Resume() {
 	// No-op
 }

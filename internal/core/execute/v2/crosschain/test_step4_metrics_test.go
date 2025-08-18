@@ -1,19 +1,24 @@
-// Step 4: Test Metrics functionality
+// Copyright 2025 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package crosschain
 
 import (
-	"testing"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"testing"
 )
 
 func TestStep4ConductorMetrics(t *testing.T) {
 	logger := logging.OptionalLogger{}
 	dispatcher := &MockDispatcher{}
-	
+
 	conductor := NewCrossChainConductor(dispatcher, logger)
 	defer conductor.Stop()
-	
+
 	// Test GetMetrics method
 	sent, errors, retried, transmissionErrors := conductor.GetMetrics()
 	require.GreaterOrEqual(t, sent, int64(0))
@@ -25,10 +30,10 @@ func TestStep4ConductorMetrics(t *testing.T) {
 func TestStep4PartitionHealth(t *testing.T) {
 	logger := logging.OptionalLogger{}
 	dispatcher := &MockDispatcher{}
-	
+
 	conductor := NewCrossChainConductor(dispatcher, logger)
 	defer conductor.Stop()
-	
+
 	// Test CheckPartitionHealth method
 	health := conductor.CheckPartitionHealth()
 	require.NotNil(t, health)
@@ -38,10 +43,10 @@ func TestStep4PartitionHealth(t *testing.T) {
 func TestStep4ProofMetrics(t *testing.T) {
 	logger := logging.OptionalLogger{}
 	dispatcher := &MockDispatcher{}
-	
+
 	conductor := NewCrossChainConductor(dispatcher, logger)
 	defer conductor.Stop()
-	
+
 	// Test GetProofMetrics method
 	metrics := conductor.GetProofMetrics()
 	require.GreaterOrEqual(t, metrics.IndividualProofsCreated, int64(0))

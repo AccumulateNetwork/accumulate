@@ -10,7 +10,6 @@ import (
 	"context"
 	"fmt"
 	"sync/atomic"
-	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -38,25 +37,31 @@ func (cc *CrossChainConductor) HandleGapRequest(ctx context.Context, req *messag
 		return errors.BadRequest.WithFormat("invalid destination URL: %w", err)
 	}
 	state := cc.getOrCreateDestinationState(destURL)
-	
+
 	// Reset the send index for gap recovery
 	if state.ResetForGapRecovery(req.LastKnownSequence) {
 		cc.logger.Info("Reset send index for gap recovery",
 			"destination", req.DestinationPartition,
 			"reset_to", req.LastKnownSequence,
 			"gap_size", state.GetGapSize())
-		
+
 		// Trigger immediate batch send to fill the gap
-		go cc.sendBatchToDestination(ctx, destURL)
-		
+		go func() {
+			if err := cc.sendBatchToDestination(ctx, destURL); err != nil {
+				cc.logger.Error("Failed to send batch after gap recovery",
+					"destination", req.DestinationPartition,
+					"error", err)
+			}
+		}()
+
 		return nil
 	}
-	
+
 	cc.logger.Debug("Gap request ignored - already at or past requested sequence",
 		"destination", req.DestinationPartition,
 		"requested", req.LastKnownSequence,
 		"current", state.SentTxIndex)
-	
+
 	return nil
 }
 
@@ -70,13 +75,13 @@ func (cc *CrossChainConductor) sendBatchToDestination(ctx context.Context, dest 
 	if state == nil {
 		return errors.NotFound.WithFormat("destination state not found: %v", dest)
 	}
-	
+
 	// Try to mark send in progress
 	if !state.StartSend() {
 		cc.logger.Debug("Send already in progress for destination", "dest", dest)
 		return nil
 	}
-	
+
 	// Get the range to send
 	start, end := state.GetSendRange()
 	if start == 0 && end == 0 {
@@ -84,19 +89,19 @@ func (cc *CrossChainConductor) sendBatchToDestination(ctx context.Context, dest 
 		cc.logger.Debug("Nothing to send to destination", "dest", dest)
 		return nil
 	}
-	
+
 	cc.logger.Info("Sending batch to destination",
 		"dest", dest,
 		"range", fmt.Sprintf("[%d-%d]", start, end),
 		"count", end-start+1)
-	
+
 	// Collect messages in the range
 	messages := state.CollectMessages(start, end)
 	if len(messages) == 0 {
 		state.MarkSendFailure()
 		return errors.NotFound.With("no messages found in range")
 	}
-	
+
 	// Create collection proof for the batch
 	proof, err := cc.proofService.CreateProofForMessages(ctx, messages)
 	if err != nil {
@@ -104,13 +109,13 @@ func (cc *CrossChainConductor) sendBatchToDestination(ctx context.Context, dest 
 		atomic.AddInt64(&cc.syntheticsErrors, 1)
 		return errors.UnknownError.WithFormat("failed to create collection proof: %w", err)
 	}
-	
+
 	// Send the batch with collection proof
 	envelope := &messaging.Envelope{
 		Messages: messages,
 		// Proof would be attached here in real implementation
 	}
-	
+
 	err = cc.dispatcher.Submit(ctx, dest, envelope)
 	if err != nil {
 		// Send failed - SentTxIndex remains unchanged
@@ -118,55 +123,55 @@ func (cc *CrossChainConductor) sendBatchToDestination(ctx context.Context, dest 
 		state.MarkSendFailure()
 		atomic.AddInt64(&cc.syntheticsErrors, 1)
 		atomic.AddInt64(&cc.transmissionErrors, 1)
-		
+
 		cc.logger.Error("Failed to send batch",
 			"dest", dest,
 			"range", fmt.Sprintf("[%d-%d]", start, end),
 			"error", err)
-		
+
 		return err
 	}
-	
+
 	// Success! Advance SentTxIndex
 	state.MarkSendSuccess(end)
 	atomic.AddInt64(&cc.syntheticsSent, int64(len(messages)))
-	
+
 	cc.logger.Info("Successfully sent batch",
 		"dest", dest,
 		"range", fmt.Sprintf("[%d-%d]", start, end),
 		"count", len(messages),
 		"proof", proof != nil)
-	
+
 	return nil
 }
 
 // getOrCreateDestinationState gets or creates state for a destination
 func (cc *CrossChainConductor) getOrCreateDestinationState(dest *url.URL) *DestinationSendState {
 	key := dest.String()
-	
+
 	// Try read lock first
 	cc.statesMutex.RLock()
 	state, exists := cc.destinationStates[key]
 	cc.statesMutex.RUnlock()
-	
+
 	if exists {
 		return state
 	}
-	
+
 	// Need to create - use write lock
 	cc.statesMutex.Lock()
 	defer cc.statesMutex.Unlock()
-	
+
 	// Double-check after acquiring write lock
 	state, exists = cc.destinationStates[key]
 	if exists {
 		return state
 	}
-	
+
 	// Create new state
 	state = NewDestinationSendState(dest)
 	cc.destinationStates[key] = state
-	
+
 	cc.logger.Debug("Created destination state", "dest", dest)
 	return state
 }
@@ -183,57 +188,23 @@ func (cc *CrossChainConductor) getDestinationState(key string) *DestinationSendS
 func (cc *CrossChainConductor) QueueMessageForDestination(dest *url.URL, seq uint64, msg messaging.Message) {
 	state := cc.getOrCreateDestinationState(dest)
 	state.QueueMessage(seq, msg)
-	
+
 	cc.logger.Debug("Queued message for destination",
 		"dest", dest,
 		"seq", seq,
 		"gap_size", state.GetGapSize())
 }
 
-// processPendingBatches periodically sends batches to destinations with pending messages
-func (cc *CrossChainConductor) processPendingBatches() {
-	ticker := time.NewTicker(100 * time.Millisecond) // Check every 100ms
-	defer ticker.Stop()
-	
-	for {
-		select {
-		case <-cc.stopChan:
-			return
-		case <-ticker.C:
-			cc.sendPendingBatches()
-		}
-	}
-}
-
-// sendPendingBatches sends batches to all destinations with pending messages
-func (cc *CrossChainConductor) sendPendingBatches() {
-	cc.statesMutex.RLock()
-	destinations := make([]*DestinationSendState, 0, len(cc.destinationStates))
-	for _, state := range cc.destinationStates {
-		if state.HasPendingMessages() {
-			destinations = append(destinations, state)
-		}
-	}
-	cc.statesMutex.RUnlock()
-	
-	// Send to each destination with pending messages
-	ctx := context.Background()
-	for _, state := range destinations {
-		if state.HasPendingMessages() {
-			go cc.sendBatchToDestination(ctx, state.Destination)
-		}
-	}
-}
 
 // GetDestinationMetrics returns metrics for all destinations
 func (cc *CrossChainConductor) GetDestinationMetrics() []map[string]interface{} {
 	cc.statesMutex.RLock()
 	defer cc.statesMutex.RUnlock()
-	
+
 	metrics := make([]map[string]interface{}, 0, len(cc.destinationStates))
 	for _, state := range cc.destinationStates {
 		metrics = append(metrics, state.GetMetrics())
 	}
-	
+
 	return metrics
 }

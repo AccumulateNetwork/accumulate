@@ -43,7 +43,7 @@ func TestBlockIntegration(t *testing.T) {
 
 		// Process through block integration
 		prepared := bi.PrepareBlockMessages(context.Background(), messages)
-		
+
 		// Should return all messages (validation happens in ProcessInbound)
 		require.Len(t, prepared, 3, "All messages should be prepared")
 	})
@@ -65,7 +65,7 @@ func TestBlockIntegration(t *testing.T) {
 
 		// Collect proofs for the block
 		proofs := bi.CollectBlockProofs(context.Background(), synthetics)
-		
+
 		// For now, this returns empty since proof creation needs more setup
 		require.NotNil(t, proofs, "Should return proof collection (even if empty)")
 	})
@@ -74,7 +74,7 @@ func TestBlockIntegration(t *testing.T) {
 		// Test block finalization
 		blockHeight := uint64(100)
 		blockTime := uint64(1234567890)
-		
+
 		err := bi.FinalizeBlock(context.Background(), blockHeight, blockTime)
 		require.NoError(t, err, "Block finalization should succeed")
 	})
@@ -83,7 +83,7 @@ func TestBlockIntegration(t *testing.T) {
 		// Test handling of block boundaries
 		oldHeight := uint64(100)
 		newHeight := uint64(101)
-		
+
 		err := bi.HandleBlockBoundary(context.Background(), oldHeight, newHeight)
 		require.NoError(t, err, "Block boundary handling should succeed")
 	})
@@ -120,15 +120,15 @@ func TestBlockIntegrationWithMessages(t *testing.T) {
 
 		// Group messages by source
 		grouped := bi.GroupMessagesBySource(messages)
-		
+
 		// Should have 2 groups (part1 and part2)
 		require.Len(t, grouped, 2, "Should have 2 source groups")
-		
+
 		// Check part1 has 2 messages
 		part1Key := protocol.DnUrl().JoinPath("part1").String()
 		require.Contains(t, grouped, part1Key, "Should have part1 group")
 		require.Len(t, grouped[part1Key], 2, "Part1 should have 2 messages")
-		
+
 		// Check part2 has 1 message
 		part2Key := protocol.DnUrl().JoinPath("part2").String()
 		require.Contains(t, grouped, part2Key, "Should have part2 group")
@@ -157,10 +157,10 @@ func TestBlockIntegrationWithMessages(t *testing.T) {
 
 		// Sort messages by sequence
 		sorted := bi.SortMessagesBySequence(messages)
-		
+
 		// Should be in order 1, 2, 3
 		require.Len(t, sorted, 3, "Should have all messages")
-		
+
 		// Check ordering
 		for i, msg := range sorted {
 			if seq, ok := msg.(*messaging.SequencedMessage); ok {
@@ -200,7 +200,7 @@ func TestBlockIntegrationAnchors(t *testing.T) {
 
 		// Collect anchors for the block
 		collected := bi.CollectAnchors(anchors)
-		
+
 		// Should have collected all anchors
 		require.Len(t, collected, 2, "Should collect all anchors")
 	})
@@ -209,9 +209,9 @@ func TestBlockIntegrationAnchors(t *testing.T) {
 		// Create valid anchor
 		validAnchor := &messaging.BlockAnchor{
 			Signature: &protocol.ED25519Signature{
-				Signer:          protocol.DnUrl().JoinPath("part1"),
-				Signature:       make([]byte, 64), // Mock signature
-				PublicKey:       make([]byte, 32), // Mock public key
+				Signer:    protocol.DnUrl().JoinPath("part1"),
+				Signature: make([]byte, 64), // Mock signature
+				PublicKey: make([]byte, 32), // Mock public key
 			},
 			Anchor: &messaging.SequencedMessage{
 				Source: protocol.DnUrl().JoinPath("part1"),
@@ -263,7 +263,7 @@ func TestBlockIntegrationRecovery(t *testing.T) {
 
 		// Detect missing sequences
 		missing := bi.DetectMissingSequences(messages, protocol.DnUrl().JoinPath("part1"))
-		
+
 		// Should detect sequence 2 is missing
 		require.Len(t, missing, 1, "Should detect 1 missing sequence")
 		require.Equal(t, uint64(2), missing[0], "Should detect sequence 2 is missing")
@@ -273,7 +273,7 @@ func TestBlockIntegrationRecovery(t *testing.T) {
 		// Test triggering recovery for missing messages
 		source := protocol.DnUrl().JoinPath("part1")
 		missingSeqs := []uint64{2, 3, 4}
-		
+
 		err := bi.TriggerRecovery(context.Background(), source, missingSeqs)
 		require.NoError(t, err, "Recovery trigger should succeed")
 	})

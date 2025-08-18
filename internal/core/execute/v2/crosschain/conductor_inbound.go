@@ -31,10 +31,10 @@ func (cc *CrossChainConductor) ProcessInbound(ctx context.Context, messages []me
 		}
 		return nonCrosschain
 	}
-	
+
 	// Filter and validate inbound messages
 	validMessages := make([]messaging.Message, 0, len(messages))
-	
+
 	for _, msg := range messages {
 		// Check for recovery requests first
 		if recoveryReq, ok := msg.(*messaging.RecoveryRequest); ok {
@@ -42,13 +42,13 @@ func (cc *CrossChainConductor) ProcessInbound(ctx context.Context, messages []me
 			go cc.handleRecoveryRequest(ctx, recoveryReq)
 			continue // Don't add to valid messages
 		}
-		
+
 		// Skip non-crosschain messages
 		if !cc.isCrossPartitionMessage(msg) {
 			validMessages = append(validMessages, msg)
 			continue
 		}
-		
+
 		// Validate crosschain messages
 		if valid, reason := cc.validateInboundMessage(msg); valid {
 			validMessages = append(validMessages, msg)
@@ -61,26 +61,26 @@ func (cc *CrossChainConductor) ProcessInbound(ctx context.Context, messages []me
 			atomic.AddInt64(&cc.syntheticsErrors, 1)
 		}
 	}
-	
+
 	if len(validMessages) < len(messages) {
 		cc.logger.Info("Filtered inbound messages",
 			"received", len(messages),
 			"valid", len(validMessages),
 			"rejected", len(messages)-len(validMessages))
 	}
-	
+
 	return validMessages
 }
 
 // validateInboundMessage validates sequence order and message integrity
 func (cc *CrossChainConductor) validateInboundMessage(msg messaging.Message) (bool, string) {
 	ctx := context.Background()
-	
+
 	switch m := msg.(type) {
 	case *messaging.SequencedMessage:
 		// Use simplified sequence tracker for validation (no buffering)
 		valid, reason, requestRecovery := cc.sequenceTracker.ValidateAndTrackSynthetic(m)
-		
+
 		// Request missing messages immediately if gap detected
 		if requestRecovery {
 			// Extract gap info from reason (format: "out of order, gap detected [X-Y], dropping message Z")
@@ -107,19 +107,19 @@ func (cc *CrossChainConductor) validateInboundMessage(msg messaging.Message) (bo
 				}
 			}
 		}
-		
+
 		return valid, reason
-		
+
 	case *messaging.BlockAnchor:
 		// Anchors must have valid signature
 		if m.Signature == nil {
 			return false, "missing anchor signature"
 		}
-		
+
 		// Extract anchor sequence - we need to examine the anchor body
 		var sequence uint64
 		var source *url.URL
-		
+
 		// Check what type of anchor this is - we need to unwrap the message
 		switch anchor := m.Anchor.(type) {
 		case *messaging.SequencedMessage:
@@ -131,10 +131,10 @@ func (cc *CrossChainConductor) validateInboundMessage(msg messaging.Message) (bo
 			// For now, accept if we can't determine sequence
 			return true, ""
 		}
-		
+
 		// Use simplified sequence tracker for anchor validation
 		valid, reason, requestRecovery := cc.sequenceTracker.ValidateAndTrackAnchor(m, source, sequence)
-		
+
 		// Request missing anchors immediately if gap detected
 		if requestRecovery {
 			// Extract gap info from reason (format: "anchor out of order, gap detected [X-Y], dropping anchor Z")
@@ -161,9 +161,9 @@ func (cc *CrossChainConductor) validateInboundMessage(msg messaging.Message) (bo
 				}
 			}
 		}
-		
+
 		return valid, reason
-		
+
 	default:
 		// Unknown crosschain message type
 		return false, "unknown crosschain message type"

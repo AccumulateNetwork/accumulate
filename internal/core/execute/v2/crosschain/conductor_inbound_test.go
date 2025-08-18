@@ -37,7 +37,7 @@ func TestProcessInbound(t *testing.T) {
 
 		messages := []messaging.Message{txn}
 		result := cc.ProcessInbound(ctx, messages)
-		
+
 		require.Len(t, result, 1)
 		require.Equal(t, txn, result[0])
 	})
@@ -59,7 +59,7 @@ func TestProcessInbound(t *testing.T) {
 
 		messages := []messaging.Message{seq}
 		result := cc.ProcessInbound(ctx, messages)
-		
+
 		// Should be validated and passed through
 		require.Len(t, result, 1)
 	})
@@ -75,7 +75,7 @@ func TestProcessInbound(t *testing.T) {
 
 		messages := []messaging.Message{recovery}
 		result := cc.ProcessInbound(ctx, messages)
-		
+
 		// Recovery requests should be handled and not passed through
 		require.Len(t, result, 0)
 	})
@@ -96,7 +96,7 @@ func TestProcessInbound(t *testing.T) {
 
 		messages := []messaging.Message{anchor}
 		result := cc.ProcessInbound(ctx, messages)
-		
+
 		// Should be validated and passed through
 		require.Len(t, result, 1)
 	})
@@ -110,14 +110,14 @@ func TestProcessInbound(t *testing.T) {
 				},
 			},
 		}
-		
+
 		seq := &messaging.SequencedMessage{
 			Source:      protocol.DnUrl(),
 			Destination: protocol.AcmeUrl(),
 			Number:      1,
 			Message:     txn,
 		}
-		
+
 		recovery := &messaging.RecoveryRequest{
 			SourcePartition:      "BVN0",
 			DestinationPartition: "BVN1",
@@ -127,7 +127,7 @@ func TestProcessInbound(t *testing.T) {
 
 		messages := []messaging.Message{txn, seq, recovery}
 		result := cc.ProcessInbound(ctx, messages)
-		
+
 		// Should have 2 messages (txn and seq), recovery handled separately
 		require.Len(t, result, 2)
 		require.Equal(t, txn, result[0])
@@ -333,7 +333,7 @@ func TestGetMessageType(t *testing.T) {
 			expected: MessageTypeBlockSummary,
 		},
 		{
-			name: "Empty messages",
+			name:     "Empty messages",
 			messages: []messaging.Message{},
 			expected: MessageTypeBlockSummary,
 		},

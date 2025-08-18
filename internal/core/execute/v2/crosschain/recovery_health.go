@@ -196,12 +196,12 @@ func (rm *RecoveryManager) GetHealthStatus() map[string]interface{} {
 	sessions := make([]map[string]interface{}, 0, len(rm.activeRecovery))
 	for key, session := range rm.activeRecovery {
 		sessions = append(sessions, map[string]interface{}{
-			"key":      key,
-			"status":   session.Status,
-			"progress": session.Progress,
+			"key":       key,
+			"status":    session.Status,
+			"progress":  session.Progress,
 			"recovered": session.Recovered,
-			"total":    session.Total,
-			"duration": time.Since(session.StartedAt).String(),
+			"total":     session.Total,
+			"duration":  time.Since(session.StartedAt).String(),
 		})
 	}
 	status["sessions"] = sessions

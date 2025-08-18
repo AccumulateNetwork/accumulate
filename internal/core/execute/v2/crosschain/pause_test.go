@@ -19,23 +19,23 @@ import (
 func TestPauseMechanism(t *testing.T) {
 	// Create a minimal conductor for testing
 	cc := &CrossChainConductor{}
-	
+
 	// Test initial state
 	require.False(t, cc.IsPaused(), "Should not be paused initially")
-	
+
 	// Test pause
 	cc.Pause()
 	require.True(t, cc.IsPaused(), "Should be paused after Pause()")
-	
+
 	// Test resume
 	cc.Resume()
 	require.False(t, cc.IsPaused(), "Should not be paused after Resume()")
-	
+
 	// Test multiple pause/resume
 	cc.Pause()
 	cc.Pause() // Should be idempotent
 	require.True(t, cc.IsPaused(), "Should remain paused")
-	
+
 	cc.Resume()
 	cc.Resume() // Should be idempotent
 	require.False(t, cc.IsPaused(), "Should remain resumed")

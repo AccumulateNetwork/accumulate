@@ -30,11 +30,11 @@ func TestPauseResumeInbound(t *testing.T) {
 
 	// Create test messages
 	syntheticMsg := &messaging.SequencedMessage{
-		Source:    protocol.DnUrl().JoinPath("part1"),
-		Number:    1,
-		Message:   &messaging.TransactionMessage{},
+		Source:  protocol.DnUrl().JoinPath("part1"),
+		Number:  1,
+		Message: &messaging.TransactionMessage{},
 	}
-	
+
 	anchorMsg := &messaging.BlockAnchor{
 		Signature: &protocol.ED25519Signature{},
 		Anchor: &messaging.SequencedMessage{
@@ -42,7 +42,7 @@ func TestPauseResumeInbound(t *testing.T) {
 			Number: 1,
 		},
 	}
-	
+
 	normalMsg := &messaging.TransactionMessage{}
 
 	t.Run("Normal operation allows messages", func(t *testing.T) {
@@ -57,10 +57,10 @@ func TestPauseResumeInbound(t *testing.T) {
 	t.Run("Paused state drops crosschain messages", func(t *testing.T) {
 		cc.Pause()
 		require.True(t, cc.IsPaused(), "CCC should be paused")
-		
+
 		messages := []messaging.Message{syntheticMsg, anchorMsg, normalMsg}
 		result := cc.ProcessInbound(context.Background(), messages)
-		
+
 		// Only non-crosschain messages should pass through
 		require.Len(t, result, 1, "Only non-crosschain messages should pass when paused")
 		require.Equal(t, normalMsg, result[0], "Normal message should pass through")
@@ -69,7 +69,7 @@ func TestPauseResumeInbound(t *testing.T) {
 	t.Run("Resume restores normal operation", func(t *testing.T) {
 		cc.Resume()
 		require.False(t, cc.IsPaused(), "CCC should not be paused")
-		
+
 		messages := []messaging.Message{syntheticMsg, anchorMsg, normalMsg}
 		result := cc.ProcessInbound(context.Background(), messages)
 		require.Len(t, result, 3, "All messages should pass through after resume")
@@ -93,10 +93,10 @@ func TestPauseResumeOutbound(t *testing.T) {
 		dispatcher.submitCalls = 0
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
-		
+
 		err := cc.SubmitSynthetic(ctx, messages, dest)
 		require.NoError(t, err)
-		
+
 		// Wait for async processing
 		time.Sleep(100 * time.Millisecond)
 		require.Greater(t, dispatcher.submitCalls, 0, "Message should be sent when not paused")
@@ -105,13 +105,13 @@ func TestPauseResumeOutbound(t *testing.T) {
 	t.Run("Paused state drops outbound synthetic", func(t *testing.T) {
 		cc.Pause()
 		dispatcher.submitCalls = 0
-		
+
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
-		
+
 		err := cc.SubmitSynthetic(ctx, messages, dest)
 		require.NoError(t, err, "Should return success even when paused")
-		
+
 		// Wait to ensure no async processing happens
 		time.Sleep(100 * time.Millisecond)
 		require.Equal(t, 0, dispatcher.submitCalls, "No messages should be sent when paused")
@@ -123,11 +123,11 @@ func TestPauseResumeOutbound(t *testing.T) {
 			Destination: protocol.DnUrl().JoinPath("part2"),
 			Sequence:    1,
 		}
-		
+
 		dispatcher.submitCalls = 0
 		err := cc.SubmitAnchor(anchorReq)
 		require.NoError(t, err, "Should return success even when paused")
-		
+
 		// Wait to ensure no processing happens
 		time.Sleep(100 * time.Millisecond)
 		require.Equal(t, 0, dispatcher.submitCalls, "No anchors should be sent when paused")
@@ -136,13 +136,13 @@ func TestPauseResumeOutbound(t *testing.T) {
 	t.Run("Resume restores outbound operation", func(t *testing.T) {
 		cc.Resume()
 		dispatcher.submitCalls = 0
-		
+
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
-		
+
 		err := cc.SubmitSynthetic(ctx, messages, dest)
 		require.NoError(t, err)
-		
+
 		// Wait for async processing
 		time.Sleep(100 * time.Millisecond)
 		require.Greater(t, dispatcher.submitCalls, 0, "Messages should be sent after resume")
@@ -167,7 +167,7 @@ func TestPauseResumeConcurrency(t *testing.T) {
 		go func(id int) {
 			dest := protocol.DnUrl().JoinPath("part" + strconv.Itoa(id))
 			messages := []messaging.Message{&messaging.TransactionMessage{}}
-			
+
 			for j := 0; j < 10; j++ {
 				ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 				cc.SubmitSynthetic(ctx, messages, dest)
@@ -230,7 +230,7 @@ func TestPauseQueuedRequests(t *testing.T) {
 	// Submit another message while paused - should be dropped immediately
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
-	
+
 	err := cc.SubmitSynthetic(ctx, messages, dest)
 	require.NoError(t, err, "Should return immediately when paused")
 
@@ -239,15 +239,15 @@ func TestPauseQueuedRequests(t *testing.T) {
 
 	// Resume and verify normal operation
 	cc.Resume()
-	
+
 	// Submit a final message to verify resume worked
 	dispatcher.submitFunc = func(ctx context.Context, dest *url.URL, env *messaging.Envelope) error {
 		return nil
 	}
-	
+
 	ctx2, cancel2 := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel2()
-	
+
 	err = cc.SubmitSynthetic(ctx2, messages, dest)
 	require.NoError(t, err, "Should work after resume")
 }

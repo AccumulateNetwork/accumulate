@@ -74,7 +74,7 @@ func TestBlockIntegrationAccess(t *testing.T) {
 	t.Parallel()
 
 	conductor := &CrossChainConductor{}
-	
+
 	// Should return nil when not initialized
 	// NOTE: GetBlockIntegration method doesn't exist - test disabled
 	// blockIntegration := conductor.GetBlockIntegration()

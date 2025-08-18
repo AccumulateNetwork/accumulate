@@ -38,7 +38,7 @@ type CrossChainMessage interface {
 	GetType() MessageType
 	GetPayload() messaging.Message
 	GetSource() *url.URL
-	
+
 	// Chain references for proof construction
 	GetSourceChain() *database.Chain
 	GetRootChain() *database.Chain
@@ -53,41 +53,41 @@ type UnifiedMessage struct {
 	Payload     messaging.Message
 	SourceChain *database.Chain
 	RootChain   *database.Chain
-	
+
 	// Additional metadata
-	BlockIndex  uint64
-	Metadata    interface{}
+	BlockIndex uint64
+	Metadata   interface{}
 }
 
-func (m *UnifiedMessage) GetDestination() *url.URL     { return m.Destination }
-func (m *UnifiedMessage) GetSequence() uint64           { return m.Sequence }
-func (m *UnifiedMessage) GetType() MessageType          { return m.Type }
-func (m *UnifiedMessage) GetPayload() messaging.Message { return m.Payload }
-func (m *UnifiedMessage) GetSource() *url.URL           { return m.Source }
+func (m *UnifiedMessage) GetDestination() *url.URL        { return m.Destination }
+func (m *UnifiedMessage) GetSequence() uint64             { return m.Sequence }
+func (m *UnifiedMessage) GetType() MessageType            { return m.Type }
+func (m *UnifiedMessage) GetPayload() messaging.Message   { return m.Payload }
+func (m *UnifiedMessage) GetSource() *url.URL             { return m.Source }
 func (m *UnifiedMessage) GetSourceChain() *database.Chain { return m.SourceChain }
 func (m *UnifiedMessage) GetRootChain() *database.Chain   { return m.RootChain }
 
 // TransportMetrics tracks unified transport operations
 type TransportMetrics struct {
 	mu sync.RWMutex
-	
+
 	// Message counts by type
 	SyntheticsSent int64
 	AnchorsSent    int64
-	
+
 	// Batching metrics
-	BatchesCreated      int64
-	MessagesPerBatch    []int
+	BatchesCreated       int64
+	MessagesPerBatch     []int
 	CollectionProofsUsed int64
 	IndividualProofsUsed int64
-	
+
 	// Performance metrics
 	TotalSendTime     time.Duration
 	TotalBatchingTime time.Duration
-	
+
 	// Error tracking
-	SendErrors    int64
-	BatchErrors   int64
+	SendErrors  int64
+	BatchErrors int64
 }
 
 // UnifiedTransport provides a single transport layer for all crosschain messages
@@ -96,13 +96,12 @@ type UnifiedTransport struct {
 	logger       logging.OptionalLogger
 	metrics      *TransportMetrics
 	debugMode    bool
-	
+
 	// Configuration (collection proofs are ALWAYS used)
 	batchThreshold int // IGNORED - even single messages use collection proofs
 	maxBatchSize   int // Maximum messages per batch (still enforced)
-	
+
 	// Dependencies
-	batch     *database.Batch
 	conductor *CrossChainConductor
 }
 
@@ -117,7 +116,7 @@ func NewUnifiedTransport(
 		conductor:      conductor,
 		logger:         logger,
 		metrics:        &TransportMetrics{},
-		batchThreshold: 2,  // Same as ProofService default
+		batchThreshold: 2,   // Same as ProofService default
 		maxBatchSize:   100, // Reasonable limit for batch size
 	}
 }
@@ -127,26 +126,26 @@ func (ut *UnifiedTransport) Send(ctx context.Context, messages []CrossChainMessa
 	if len(messages) == 0 {
 		return nil
 	}
-	
+
 	start := time.Now()
 	defer func() {
 		ut.metrics.mu.Lock()
 		ut.metrics.TotalSendTime += time.Since(start)
 		ut.metrics.mu.Unlock()
 	}()
-	
+
 	if ut.debugMode {
 		ut.logger.Debug("UnifiedTransport.Send",
 			"message_count", len(messages),
 			"first_type", messages[0].GetType())
 	}
-	
+
 	// Update metrics by type
 	ut.updateMessageMetrics(messages)
-	
+
 	// Group messages by destination for optimal batching
 	batches := ut.createBatches(messages)
-	
+
 	// Process each batch with appropriate proof strategy
 	for dest, batch := range batches {
 		if err := ut.processBatch(ctx, dest, batch); err != nil {
@@ -156,7 +155,7 @@ func (ut *UnifiedTransport) Send(ctx context.Context, messages []CrossChainMessa
 			return errors.UnknownError.WithFormat("failed to process batch for %s: %w", dest, err)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -168,14 +167,14 @@ func (ut *UnifiedTransport) createBatches(messages []CrossChainMessage) map[stri
 		ut.metrics.TotalBatchingTime += time.Since(batchStart)
 		ut.metrics.mu.Unlock()
 	}()
-	
+
 	batches := make(map[string][]CrossChainMessage)
-	
+
 	for _, msg := range messages {
 		dest := msg.GetDestination().String()
 		batches[dest] = append(batches[dest], msg)
 	}
-	
+
 	// Track batch sizes
 	ut.metrics.mu.Lock()
 	ut.metrics.BatchesCreated += int64(len(batches))
@@ -183,13 +182,13 @@ func (ut *UnifiedTransport) createBatches(messages []CrossChainMessage) map[stri
 		ut.metrics.MessagesPerBatch = append(ut.metrics.MessagesPerBatch, len(batch))
 	}
 	ut.metrics.mu.Unlock()
-	
+
 	if ut.debugMode {
 		ut.logger.Debug("Created batches",
 			"batch_count", len(batches),
 			"destinations", ut.getBatchDestinations(batches))
 	}
-	
+
 	return batches
 }
 
@@ -198,22 +197,22 @@ func (ut *UnifiedTransport) processBatch(ctx context.Context, destination string
 	if len(messages) == 0 {
 		return nil
 	}
-	
+
 	// ALWAYS use collection proofs - no exceptions
 	// Even for single transactions, we use collection proofs for consistency
 	useCollection := true // Force collection proofs always
-	
+
 	if ut.debugMode {
 		ut.logger.Debug("Processing batch",
 			"destination", destination,
 			"message_count", len(messages),
 			"use_collection", useCollection)
 	}
-	
+
 	// Create proof(s) for the batch
 	var proof *ProofResponse
 	var err error
-	
+
 	// ALWAYS use collection proofs - no fallback to individual proofs
 	proof, err = ut.createCollectionProof(ctx, messages)
 	if err != nil {
@@ -224,11 +223,11 @@ func (ut *UnifiedTransport) processBatch(ctx context.Context, destination string
 			"error", err)
 		return errors.UnknownError.WithFormat("collection proof required but failed: %w", err)
 	}
-	
+
 	ut.metrics.mu.Lock()
 	ut.metrics.CollectionProofsUsed++
 	ut.metrics.mu.Unlock()
-	
+
 	// Send the messages with their proofs
 	// This would integrate with the existing message routing system
 	return ut.routeMessages(messages, proof)
@@ -239,7 +238,7 @@ func (ut *UnifiedTransport) createCollectionProof(ctx context.Context, messages 
 	if len(messages) == 0 {
 		return nil, errors.BadRequest.With("no messages for collection proof")
 	}
-	
+
 	// Extract sequences and ensure they're sorted
 	sequences := make([]uint64, len(messages))
 	for i, msg := range messages {
@@ -248,10 +247,10 @@ func (ut *UnifiedTransport) createCollectionProof(ctx context.Context, messages 
 	sort.Slice(sequences, func(i, j int) bool {
 		return sequences[i] < sequences[j]
 	})
-	
+
 	// Use the first message's chain references (they should all be the same for a batch)
 	firstMsg := messages[0]
-	
+
 	req := ProofRequest{
 		Type:        ProofTypeUnified,
 		Destination: firstMsg.GetDestination(),
@@ -259,16 +258,10 @@ func (ut *UnifiedTransport) createCollectionProof(ctx context.Context, messages 
 		SourceChain: firstMsg.GetSourceChain(),
 		RootChain:   firstMsg.GetRootChain(),
 	}
-	
+
 	return ut.proofService.CreateProof(ctx, req)
 }
 
-// createIndividualProofs is DEPRECATED and non-functional
-// This method exists only to prevent breaking API changes
-// It will always return an error as collection proofs are mandatory
-func (ut *UnifiedTransport) createIndividualProofs(ctx context.Context, messages []CrossChainMessage) error {
-	return errors.NotAllowed.With("individual proofs are disabled - collection proofs are mandatory for all transactions")
-}
 
 // routeMessages sends messages to their destination with attached proofs
 func (ut *UnifiedTransport) routeMessages(messages []CrossChainMessage, proof *ProofResponse) error {
@@ -280,12 +273,12 @@ func (ut *UnifiedTransport) routeMessages(messages []CrossChainMessage, proof *P
 			"has_proof", proof != nil,
 			"is_collection", proof != nil && proof.IsCollection)
 	}
-	
+
 	// Simulate message routing - in production this would:
 	// 1. Attach proofs to messages
-	// 2. Send via the network dispatcher  
+	// 2. Send via the network dispatcher
 	// 3. Handle acknowledgments
-	
+
 	// Log message routing simulation
 	if ut.debugMode && len(messages) > 0 {
 		dest := "unknown"
@@ -296,7 +289,7 @@ func (ut *UnifiedTransport) routeMessages(messages []CrossChainMessage, proof *P
 			"destination", dest,
 			"message_count", len(messages))
 	}
-	
+
 	// For now, return success to allow testing
 	// Real implementation would dispatch to the network layer
 	return nil
@@ -306,7 +299,7 @@ func (ut *UnifiedTransport) routeMessages(messages []CrossChainMessage, proof *P
 func (ut *UnifiedTransport) updateMessageMetrics(messages []CrossChainMessage) {
 	ut.metrics.mu.Lock()
 	defer ut.metrics.mu.Unlock()
-	
+
 	for _, msg := range messages {
 		switch msg.GetType() {
 		case MessageTypeSynthetic:
@@ -331,7 +324,7 @@ func (ut *UnifiedTransport) getBatchDestinations(batches map[string][]CrossChain
 func (ut *UnifiedTransport) GetMetrics() TransportMetrics {
 	ut.metrics.mu.RLock()
 	defer ut.metrics.mu.RUnlock()
-	
+
 	// Return a copy to avoid race conditions
 	return TransportMetrics{
 		SyntheticsSent:       ut.metrics.SyntheticsSent,
@@ -388,7 +381,7 @@ func ConvertAnchorToUnified(
 	} else if _, ok := anchor.(*protocol.BlockValidatorAnchor); ok {
 		msgType = MessageTypeBlockSummary
 	}
-	
+
 	// Wrap the anchor in a SequencedMessage first, then BlockAnchor
 	// The anchor needs to be wrapped properly as a message
 	seqMsg := &messaging.SequencedMessage{
@@ -397,13 +390,13 @@ func ConvertAnchorToUnified(
 		Number:      sequence,
 		// Message field set by caller with actual transaction content
 	}
-	
+
 	// Create the BlockAnchor with the sequenced message
 	blockAnchor := &messaging.BlockAnchor{
 		Anchor: seqMsg,
 		// Signature will be added later in the flow
 	}
-	
+
 	return &UnifiedMessage{
 		Type:        msgType,
 		Source:      source,

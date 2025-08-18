@@ -114,12 +114,12 @@ func (rm *RecoveryManager) recoverAnchors(req *RecoveryRequest, session *Recover
 
 	// Retrieve anchors in the requested range
 	recovered := make([]RecoveredTransaction, 0)
-	
+
 	for seq := req.FromNumber; seq <= req.ToNumber; seq++ {
 		// Get anchor at sequence number
 		// This is a simplified implementation - actual implementation would need
 		// to properly retrieve anchors from the chain
-		
+
 		session.Recovered++
 		session.Progress = float64(session.Recovered) / float64(session.Total)
 		session.LastUpdate = time.Now()
@@ -172,7 +172,7 @@ func (rm *RecoveryManager) recoverSynthetics(req *RecoveryRequest, session *Reco
 	}
 
 	recovered := make([]RecoveredTransaction, 0)
-	
+
 	// Retrieve transactions in the requested range
 	for seq := req.FromNumber; seq <= req.ToNumber; seq++ {
 		// Get the index entry for this sequence
@@ -241,10 +241,10 @@ func (rm *RecoveryManager) getNetworkInfo(ctx context.Context) (*NetworkInfo, er
 		Partitions: make(map[string]*PartitionInfo),
 		UpdatedAt:  time.Now(),
 	}
-	
+
 	// Add stub partition info for basic functionality
 	info.Partitions["Directory"] = &PartitionInfo{
-		ID:              "Directory", 
+		ID:              "Directory",
 		Type:            "directory",
 		IsHealthy:       true,
 		LastHealthCheck: time.Now(),

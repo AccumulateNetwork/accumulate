@@ -65,7 +65,7 @@ func TestCollectionProofCreation(t *testing.T) {
 		proof, err := ps.CreateProofForMessages(context.Background(), messages)
 		require.NoError(t, err, "Should create collection proof")
 		require.NotNil(t, proof, "Collection proof should not be nil")
-		
+
 		// Verify it's a collection proof
 		collProof, ok := proof.(*CollectionProof)
 		require.True(t, ok, "Should be a collection proof")
@@ -178,10 +178,10 @@ func TestCollectionProofBatching(t *testing.T) {
 
 		// Batch messages
 		batches := ps.BatchMessagesByDestination(append(part1Msgs, part2Msgs...))
-		
+
 		// Should have 2 batches
 		require.Len(t, batches, 2, "Should have 2 batches")
-		
+
 		// Each batch should have 2 messages
 		for _, batch := range batches {
 			require.Len(t, batch, 2, "Each batch should have 2 messages")
@@ -201,7 +201,7 @@ func TestCollectionProofBatching(t *testing.T) {
 
 		// Determine optimal batch size
 		batches := ps.OptimizeBatches(messages)
-		
+
 		// Should create reasonably sized batches
 		for _, batch := range batches {
 			require.LessOrEqual(t, len(batch), 50, "Batch size should not exceed 50")
