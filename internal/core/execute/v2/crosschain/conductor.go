@@ -142,8 +142,8 @@ type AnchorRequest struct {
 func NewCrossChainConductor(dispatcher execute.Dispatcher, logger logging.OptionalLogger) *CrossChainConductor {
 	cc := &CrossChainConductor{
 		config: ConductorConfig{
-			ForceCollectionProofs:  true, // Always use collection proofs
-			CollectionMaxBatchSize: 100,  // Maximum 100 transactions per collection
+			ForceCollectionProofs:  true,                      // Always use collection proofs
+			CollectionMaxBatchSize: MaxCollectionProofBatchSize, // Maximum transactions per collection
 		},
 		dispatcher:        dispatcher,
 		logger:            logger.With("module", "crosschain-conductor").(logging.OptionalLogger),
@@ -601,7 +601,7 @@ func NewBatchProofRecoveryManager(conductor *CrossChainConductor, logger logging
 	return &BatchProofRecoveryManager{
 		conductor:    conductor,
 		logger:       logger.With("module", "batch-recovery").(logging.OptionalLogger),
-		maxBatchSize: 100, // Maximum 100 transactions per batch
+		maxBatchSize: MaxCollectionProofBatchSize, // Maximum transactions per batch
 	}
 }
 

@@ -108,7 +108,7 @@ func NewProofService(logger logging.OptionalLogger) *ProofService {
 		metrics:               &ProofMetrics{},
 		forceCollectionProofs: true, // Always use collection proofs by default
 		batchThreshold:        2,    // Use collection proofs for 2+ sequences
-		maxBatchSize:          100,  // Maximum 100 transactions per collection
+		maxBatchSize:          MaxCollectionProofBatchSize, // Maximum transactions per collection
 	}
 }
 

@@ -4,12 +4,12 @@
 package load_test
 
 import (
-	"context"
 	"crypto/ed25519"
 	"math/big"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc"
+	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
@@ -17,13 +17,14 @@ var testCtx *LoadTestContext
 
 type LoadTestContext struct {
 	Client      *jsonrpc.Client
-	Context     context.Context
+	ClientV2    *client.Client  // Add v2 client for critical ops
 	Seed        [32]byte
 	FundingAcct LiteAccount
 	KAccounts   []LiteAccount
 	AAccounts   []LiteAccount
 	Oracle      uint64
 	Config      LoadConfig
+	AAccountsReceived map[string]int64 // Track actual sent amounts to A accounts
 }
 
 type LiteAccount struct {
@@ -78,16 +79,19 @@ const (
 	// Debug mode toggle
 	DEBUG_MODE = true // Set to false for production
 	
-	// Debug mode configuration
-	DEBUG_FUNDING_ACME    = 200 * 1e8         // 200 ACME total for funding account (supports 10 senders x 5 ACME each + credits)
-	DEBUG_CREDITS_AMOUNT  = 0.5 * 1e8         // 0.5 ACME worth of credits per account
-	DEBUG_SETTLEMENT_WAIT = 15 * time.Second  // 15 seconds for settlement
-	DEBUG_FAUCET_RETRIES  = 20                // 20 retries for faucet verification
+	// Settlement configuration
+	SETTLEMENT_WAIT = 15 * time.Second  // Base settlement wait time
+	FAUCET_RETRIES  = 30                // Retries for faucet verification
 	
-	// Production mode configuration
-	PROD_FUNDING_MULTIPLIER = 1.2             // 20% buffer for funding
+	// Debug mode values
+	DEBUG_SETTLEMENT_WAIT = 10 * time.Second
+	DEBUG_FAUCET_RETRIES  = 20
+	DEBUG_FUNDING_ACME    = 1000 * 1e8 // 1000 ACME for debug
+	
+	// Production mode values
 	PROD_SETTLEMENT_WAIT    = 30 * time.Second
 	PROD_FAUCET_RETRIES     = 30
+	PROD_FUNDING_MULTIPLIER = 1.2 // 20% buffer
 	
 	// Common timeouts
 	DefaultTimeout = 30 * time.Second

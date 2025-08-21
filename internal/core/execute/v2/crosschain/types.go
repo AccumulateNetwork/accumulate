@@ -10,6 +10,9 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
 )
 
+// MaxCollectionProofBatchSize is the maximum number of transactions that can be included in a single collection proof
+const MaxCollectionProofBatchSize = 1000
+
 // CollectionProof represents a collection proof for multiple transactions
 type CollectionProof struct {
 	Elements      [][]byte

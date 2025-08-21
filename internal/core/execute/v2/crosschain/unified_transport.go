@@ -117,7 +117,7 @@ func NewUnifiedTransport(
 		logger:         logger,
 		metrics:        &TransportMetrics{},
 		batchThreshold: 2,   // Same as ProofService default
-		maxBatchSize:   100, // Reasonable limit for batch size
+		maxBatchSize:   MaxCollectionProofBatchSize, // Limit for batch size
 	}
 }
 

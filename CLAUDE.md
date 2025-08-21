@@ -1,6 +1,45 @@
 # Claude Code Memory - Accumulate Project
 
+## CRITICAL: P2P Reliability Fix In Progress
+
+### Current Implementation Plan
+**FOLLOW THIS**: `/docs/reliability-improvements/p2p-protocol/unified-approach.md`
+
+### Implementation Rules
+1. **MINIMAL CHANGES ONLY** - The plan is to fix bugs, not redesign
+2. **NO NEW ARCHITECTURES** - Use existing peer database and structures
+3. **FOLLOW THE STEPS** - Don't skip ahead or add complexity
+
+### Current Priority Order
+1. ⬜ Fix pruning bug in `/pkg/api/v3/p2p/peerdb/db.go`
+2. ⬜ Add auto-pruning on startup in `/internal/node/daemon/run.go`
+3. ⬜ Track consecutive failures in tracker
+4. ⬜ (Optional) HTTP failover
+
+### What NOT to Do
+- ❌ Don't create connection pooling systems
+- ❌ Don't redesign peer management
+- ❌ Don't add complex scoring algorithms
+- ❌ Don't refactor existing code
+- ❌ Don't create new abstractions
+
+### Success Metrics
+- Peer count < 100 (currently ~500)
+- Connection success rate > 70% (currently 0.6%)
+- Changes < 100 lines of code total
+
+### If Asked About P2P Issues
+Direct to: `/docs/reliability-improvements/p2p-protocol/unified-approach.md`
+This is THE plan. Don't create alternatives.
+
+### If Asked About Client SDK Issues
+Direct to: `/docs/reliability-improvements/client-sdk/`
+These are separate from P2P protocol fixes.
+
 ## Load Testing
+
+### IMPORTANT: Never Scale Down Load Tests
+**DO NOT run smaller tests when asked to run a specific load test.** If requested to run a test with specific parameters (e.g., 100k transactions at 500 TPS), run exactly that test. Do not scale it down to "verify it works" first. Run the exact test requested.
 
 ### Available Load Tests with Flags
 
@@ -86,3 +125,4 @@ curl -s http://127.0.0.1:26660/metrics
 - Lower TPS provides better stability and success rates
 - Tests automatically handle funding via faucet
 - Tests verify real transactions on actual devnet (not mocked)
+- **If tests fail with "funding account did not receive expected balance" or similar errors, this is NOT a devnet issue. Do not restart the devnet.**
