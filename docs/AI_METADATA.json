@@ -1,0 +1,154 @@
+{
+  "project": {
+    "name": "Accumulate",
+    "type": "blockchain_protocol",
+    "language": "go",
+    "version": "1.5.0",
+    "repository": "gitlab.com/accumulatenetwork/accumulate"
+  },
+  "architecture": {
+    "style": "multi_partition_blockchain",
+    "components": [
+      {
+        "name": "Directory Network",
+        "abbreviation": "DN",
+        "purpose": "identity_and_routing",
+        "location": "internal/core/execute/v2/chain"
+      },
+      {
+        "name": "Block Validator Network",
+        "abbreviation": "BVN",
+        "purpose": "transaction_processing",
+        "location": "internal/core/execute/v2/block"
+      },
+      {
+        "name": "CrossChain Conductor",
+        "abbreviation": "CCC",
+        "purpose": "inter_partition_messaging",
+        "location": "internal/core/execute/v2/crosschain"
+      }
+    ]
+  },
+  "key_features": {
+    "gap_recovery": {
+      "type": "index_based",
+      "complexity": "O(1)",
+      "location": "internal/core/execute/v2/crosschain/conductor_gap_recovery.go"
+    },
+    "message_batching": {
+      "type": "collection_proofs",
+      "benefit": "reduced_network_overhead",
+      "location": "internal/core/execute/v2/crosschain/proof_service.go"
+    },
+    "consensus": {
+      "type": "tendermint",
+      "library": "github.com/tendermint/tendermint"
+    }
+  },
+  "api": {
+    "versions": ["v2", "v3"],
+    "protocol": "json_rpc_2.0",
+    "endpoints": {
+      "mainnet": "https://mainnet.accumulatenetwork.io",
+      "testnet": "https://testnet.accumulatenetwork.io",
+      "local": "http://localhost:26660"
+    },
+    "key_methods": [
+      "query",
+      "submit",
+      "metrics",
+      "status"
+    ]
+  },
+  "testing": {
+    "framework": "go_test",
+    "categories": [
+      "unit",
+      "integration",
+      "load",
+      "simulation"
+    ],
+    "coverage_target": 80,
+    "test_locations": {
+      "unit": "*_test.go",
+      "integration": "test/e2e_v2/",
+      "load": "scripts/devnet/",
+      "simulation": "test/simulator/"
+    }
+  },
+  "development": {
+    "build_command": "go build ./cmd/accumulated",
+    "test_command": "go test ./...",
+    "lint_command": "golangci-lint run",
+    "local_network": "./scripts/devnet/devnet_config.sh start"
+  },
+  "documentation": {
+    "main_index": "docs/INDEX.md",
+    "categories": [
+      "api",
+      "design",
+      "testing",
+      "deployment",
+      "tools"
+    ],
+    "ai_optimized": true,
+    "cross_referenced": true
+  },
+  "dependencies": {
+    "critical": [
+      "github.com/tendermint/tendermint",
+      "gitlab.com/accumulatenetwork/core"
+    ],
+    "testing": [
+      "github.com/stretchr/testify"
+    ],
+    "monitoring": [
+      "github.com/prometheus/client_golang"
+    ]
+  },
+  "performance": {
+    "memory_per_validator": "200-300MB",
+    "cpu_per_validator": "0.5_cores",
+    "tps_capacity": "1000+",
+    "latency_p99": "500ms"
+  },
+  "security": {
+    "encryption": "ed25519",
+    "key_management": "hierarchical",
+    "network_security": "tls_required",
+    "audit_status": "pending"
+  },
+  "deployment": {
+    "networks": {
+      "mainnet": "cyclops",
+      "testnet": "kermit",
+      "local": "devnet"
+    },
+    "container": "docker_supported",
+    "orchestration": "kubernetes_ready"
+  },
+  "code_patterns": {
+    "error_handling": "errors.Wrap",
+    "logging": "structured_logging",
+    "state_management": "mutex_protected",
+    "message_passing": "channel_based"
+  },
+  "ai_hints": {
+    "focus_areas": [
+      "gap_recovery_mechanism",
+      "state_consistency",
+      "message_ordering",
+      "performance_optimization"
+    ],
+    "avoid": [
+      "modifying_consensus",
+      "changing_protocol_versions",
+      "altering_key_algorithms"
+    ],
+    "test_first": [
+      "crosschain_messaging",
+      "gap_recovery",
+      "state_changes"
+    ]
+  }
+}

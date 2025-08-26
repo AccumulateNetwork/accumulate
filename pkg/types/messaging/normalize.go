@@ -120,7 +120,7 @@ func (e *Envelope) Normalize() ([]Message, error) {
 		}
 	}
 	for hash := range unsigned {
-		return nil, errors.BadRequest.WithFormat("transaction %X is not signed", hash[:4]) //nolint:rangevarref
+		return nil, errors.BadRequest.WithFormat("transaction %X is not signed", hash[:4])
 	}
 
 	return messages, nil

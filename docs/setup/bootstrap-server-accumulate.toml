@@ -1,0 +1,87 @@
+# Bootstrap Server Configuration for Accumulate
+# This configuration should be used for running a bootstrap node that helps
+# other nodes discover peers on the network.
+#
+# IMPORTANT: This file should be placed at /etc/accumulate/accumulate.toml
+# on the bootstrap server (e.g., accumulate-p2p-bootstrap in us-east-2)
+
+# Network identifier - must match the network being bootstrapped
+network = "MainNet"
+
+# Bootstrap node configuration
+[[configurations]]
+  # Node type - bootstrap nodes help with peer discovery
+  type = "bootstrap"
+  
+  # Listen address - bind to all interfaces on the standard P2P port
+  # This allows nodes to connect from anywhere
+  listen = "/ip4/0.0.0.0/tcp/16593"
+  
+  # Bootstrap peers - for a bootstrap node, this can be empty or include
+  # other known bootstrap nodes for redundancy
+  dn-bootstrap-peers = []
+  bvn-bootstrap-peers = []
+  
+  # No genesis files needed for bootstrap nodes
+  dn-genesis = ""
+  bvn-genesis = ""
+
+# P2P Configuration
+[p2p]
+  # Discovery mode - bootstrap nodes should run in server mode
+  discovery-mode = "server"
+  
+  # Enable peer exchange to help nodes discover each other
+  enable-peer-exchange = true
+  
+  # P2P key - this determines the node's peer ID
+  # IMPORTANT: This must match the peer ID in the bootstrap address
+  # For bootstrap.accumulate.defidevs.io with peer ID 12D3KooWGJTh4aeF7bFnwo9sAYRujCkuVU1Cq8wNeTNGpFgZgXdg
+  # the corresponding private key must be configured here
+  [p2p.key]
+    # Use the actual private key that generates the expected peer ID
+    # This is just an example format - replace with actual key
+    type = "raw"
+    address = "YOUR_PRIVATE_KEY_HERE"
+  
+  # External address - the address that other nodes will use to connect
+  # This should be the public IP or DNS name of the bootstrap server
+  external-address = "/dns/bootstrap.accumulate.defidevs.io/tcp/16593"
+  
+  # Listen addresses for P2P connections
+  listen = [
+    "/ip4/0.0.0.0/tcp/16593",      # TCP connections
+    "/ip4/0.0.0.0/udp/16593/quic"   # QUIC connections
+  ]
+  
+  # Bootstrap peers - empty for the primary bootstrap node
+  bootstrap-peers = []
+
+# Logging configuration
+[logging]
+  level = "info"
+  format = "json"
+  
+  # Enable debug logging for P2P to troubleshoot connection issues
+  [logging.modules]
+    p2p = "debug"
+    dht = "debug"
+
+# Storage configuration - minimal for bootstrap nodes
+[storage]
+  type = "memory"  # Bootstrap nodes don't need persistent storage
+
+# API configuration - bootstrap nodes typically don't serve API requests
+[api]
+  enabled = false
+
+# Consensus configuration - bootstrap nodes don't participate in consensus
+[consensus]
+  enabled = false
+
+# Note: After updating this configuration on the bootstrap server:
+# 1. Stop the current accumulated process
+# 2. Clear any existing data directories if needed
+# 3. Start accumulated with: accumulated run --config /etc/accumulate/accumulate.toml
+# 4. Verify the peer ID matches what's expected
+# 5. Test connectivity from other nodes

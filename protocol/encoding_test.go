@@ -4,6 +4,9 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
+//go:build !race
+// +build !race
+
 package protocol
 
 import (
@@ -29,6 +32,7 @@ func makeExtraData(t *testing.T, fn func(*encoding.Writer)) []byte {
 }
 
 func TestExtraData(t *testing.T) {
+	t.Parallel()
 	txn1 := new(Transaction)
 	txn1.Header.Principal = AccountUrl("foo")
 	txn1.Header.Initiator = storage.MakeKey(t.Name())

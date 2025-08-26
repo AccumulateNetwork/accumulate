@@ -10,9 +10,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/user"
-	"path/filepath"
-	"time"
 
 	"github.com/spf13/cobra"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
@@ -21,19 +18,7 @@ import (
 )
 
 var (
-	outputJSON        bool
-	healContinuous    bool
-	cachedScan        string
-	verbose           bool
-	pretend           bool
-	debug             bool
-	waitForTxn        bool
-	peerDb            string
-	lightDb           string
-	only              string
-	pprof             string
-	healSinceDuration time.Duration
-	bootstrap         = accumulate.BootstrapServers
+	bootstrap = accumulate.BootstrapServers
 )
 
 var cmd = &cobra.Command{
@@ -44,16 +29,6 @@ var cmd = &cobra.Command{
 func init() {
 	cmd.PersistentFlags().Var((*MultiaddrSliceFlag)(&bootstrap), "bootstrap", "Set the bootstrap servers")
 }
-
-var currentUser = func() *user.User {
-	u, err := user.Current()
-	if err != nil {
-		panic(err)
-	}
-	return u
-}()
-
-var cacheDir = filepath.Join(currentUser.HomeDir, ".accumulate", "cache")
 
 func main() {
 	_ = cmd.Execute()

@@ -128,7 +128,7 @@ func (h *healer) setup(ctx context.Context, network string) {
 	ni, err := h.C1.NodeInfo(ctx, api.NodeInfoOptions{})
 	check(err)
 
-	node, err := p2p.New(p2p.Options{
+	opts := p2p.Options{
 		Network:           ni.Network,
 		BootstrapPeers:    bootstrap,
 		PeerDatabase:      peerDb,
@@ -137,9 +137,23 @@ func (h *healer) setup(ctx context.Context, network string) {
 		// Use the peer tracker, but don't update it between reboots
 		PeerScanFrequency:    -1,
 		PeerPersistFrequency: -1,
-	})
+	}
+	
+	// Apply mainnet fixes if needed
+	if strings.EqualFold(ni.Network, "MainNet") {
+		p2p.FixMainnetBootstrap(&opts)
+	}
+	
+	node, err := p2p.New(opts)
 	checkf(err, "start p2p node")
 	go func() { <-ctx.Done(); _ = node.Close() }()
+	
+	// Manually connect to mainnet peers with correct addresses
+	if strings.EqualFold(ni.Network, "MainNet") {
+		connectCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		_ = node.ConnectToMainnetPeers(connectCtx)
+		cancel()
+	}
 
 	fmt.Fprintf(os.Stderr, "We are %v\n", node.ID())
 
@@ -150,9 +164,16 @@ func (h *healer) setup(ctx context.Context, network string) {
 	})
 	check(err)
 
-	ok := <-h.router.(*routing.RouterInstance).Ready()
-	if !ok {
-		fatalf("railed to initialize router")
+	// Wait for router with timeout
+	routerReady := h.router.(*routing.RouterInstance).Ready()
+	select {
+	case ok := <-routerReady:
+		if !ok {
+			fatalf("failed to initialize router")
+		}
+	case <-time.After(30 * time.Second):
+		fmt.Fprintf(os.Stderr, "Warning: Router initialization timed out after 30 seconds\n")
+		fmt.Fprintf(os.Stderr, "Continuing with partial connectivity...\n")
 	}
 
 	// The client must be initialized before we load the network status since

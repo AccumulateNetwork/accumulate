@@ -106,6 +106,19 @@ type RecordUpdate struct {
 	extraData []byte
 }
 
+type RecoveryRequest struct {
+	fieldsSet []bool
+	// SourcePartition is the partition that is being asked to send messages.
+	SourcePartition string `json:"sourcePartition,omitempty" form:"sourcePartition" query:"sourcePartition" validate:"required"`
+	// DestinationPartition is the partition that is requesting messages.
+	DestinationPartition string `json:"destinationPartition,omitempty" form:"destinationPartition" query:"destinationPartition" validate:"required"`
+	// MessageType is the type of messages to recover (anchor or synthetic).
+	MessageType string `json:"messageType,omitempty" form:"messageType" query:"messageType" validate:"required"`
+	// LastKnownSequence is the last sequence number the destination has received.
+	LastKnownSequence uint64 `json:"lastKnownSequence,omitempty" form:"lastKnownSequence" query:"lastKnownSequence" validate:"required"`
+	extraData         []byte
+}
+
 type SequencedMessage struct {
 	fieldsSet []bool
 	Message   Message `json:"message,omitempty" form:"message" query:"message" validate:"required"`
@@ -174,6 +187,8 @@ func (*DidUpdateExecutorVersion) Type() MessageType { return MessageTypeDidUpdat
 func (*MakeMajorBlock) Type() MessageType { return MessageTypeMakeMajorBlock }
 
 func (*NetworkUpdate) Type() MessageType { return MessageTypeNetworkUpdate }
+
+func (*RecoveryRequest) Type() MessageType { return MessageTypeRecoveryRequest }
 
 func (*SequencedMessage) Type() MessageType { return MessageTypeSequenced }
 
@@ -383,6 +398,23 @@ func (v *RecordUpdate) Copy() *RecordUpdate {
 }
 
 func (v *RecordUpdate) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *RecoveryRequest) Copy() *RecoveryRequest {
+	u := new(RecoveryRequest)
+
+	u.SourcePartition = v.SourcePartition
+	u.DestinationPartition = v.DestinationPartition
+	u.MessageType = v.MessageType
+	u.LastKnownSequence = v.LastKnownSequence
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *RecoveryRequest) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *SequencedMessage) Copy() *SequencedMessage {
 	u := new(SequencedMessage)
@@ -699,6 +731,23 @@ func (v *RecordUpdate) Equal(u *RecordUpdate) bool {
 		return false
 	}
 	if !(bytes.Equal(v.Value, u.Value)) {
+		return false
+	}
+
+	return true
+}
+
+func (v *RecoveryRequest) Equal(u *RecoveryRequest) bool {
+	if !(v.SourcePartition == u.SourcePartition) {
+		return false
+	}
+	if !(v.DestinationPartition == u.DestinationPartition) {
+		return false
+	}
+	if !(v.MessageType == u.MessageType) {
+		return false
+	}
+	if !(v.LastKnownSequence == u.LastKnownSequence) {
 		return false
 	}
 
@@ -1422,6 +1471,81 @@ func (v *RecordUpdate) IsValid() error {
 		errs = append(errs, "field Value is missing")
 	} else if len(v.Value) == 0 {
 		errs = append(errs, "field Value is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_RecoveryRequest = []string{
+	1: "Type",
+	2: "SourcePartition",
+	3: "DestinationPartition",
+	4: "MessageType",
+	5: "LastKnownSequence",
+}
+
+func (v *RecoveryRequest) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(len(v.SourcePartition) == 0) {
+		writer.WriteString(2, v.SourcePartition)
+	}
+	if !(len(v.DestinationPartition) == 0) {
+		writer.WriteString(3, v.DestinationPartition)
+	}
+	if !(len(v.MessageType) == 0) {
+		writer.WriteString(4, v.MessageType)
+	}
+	if !(v.LastKnownSequence == 0) {
+		writer.WriteUint(5, v.LastKnownSequence)
+	}
+
+	_, _, err := writer.Reset(fieldNames_RecoveryRequest)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *RecoveryRequest) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field SourcePartition is missing")
+	} else if len(v.SourcePartition) == 0 {
+		errs = append(errs, "field SourcePartition is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field DestinationPartition is missing")
+	} else if len(v.DestinationPartition) == 0 {
+		errs = append(errs, "field DestinationPartition is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field MessageType is missing")
+	} else if len(v.MessageType) == 0 {
+		errs = append(errs, "field MessageType is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field LastKnownSequence is missing")
+	} else if v.LastKnownSequence == 0 {
+		errs = append(errs, "field LastKnownSequence is not set")
 	}
 
 	switch len(errs) {
@@ -2181,6 +2305,50 @@ func (v *RecordUpdate) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *RecoveryRequest) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *RecoveryRequest) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType MessageType
+	if x := new(MessageType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *RecoveryRequest) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadString(2); ok {
+		v.SourcePartition = x
+	}
+	if x, ok := reader.ReadString(3); ok {
+		v.DestinationPartition = x
+	}
+	if x, ok := reader.ReadString(4); ok {
+		v.MessageType = x
+	}
+	if x, ok := reader.ReadUint(5); ok {
+		v.LastKnownSequence = x
+	}
+
+	seen, err := reader.Reset(fieldNames_RecoveryRequest)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *SequencedMessage) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -2488,6 +2656,14 @@ func init() {
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("sourcePartition", "string"),
+		encoding.NewTypeField("destinationPartition", "string"),
+		encoding.NewTypeField("messageType", "string"),
+		encoding.NewTypeField("lastKnownSequence", "uint64"),
+	}, "RecoveryRequest", "recoveryRequest")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
 		encoding.NewTypeField("message", "Message"),
 		encoding.NewTypeField("source", "string"),
 		encoding.NewTypeField("destination", "string"),
@@ -2725,6 +2901,32 @@ func (v *RecordUpdate) MarshalJSON() ([]byte, error) {
 	}
 	if !(len(v.Value) == 0) {
 		u.Value = encoding.BytesToJSON(v.Value)
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *RecoveryRequest) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type                 MessageType `json:"type"`
+		SourcePartition      string      `json:"sourcePartition,omitempty"`
+		DestinationPartition string      `json:"destinationPartition,omitempty"`
+		MessageType          string      `json:"messageType,omitempty"`
+		LastKnownSequence    uint64      `json:"lastKnownSequence,omitempty"`
+		ExtraData            *string     `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.SourcePartition) == 0) {
+		u.SourcePartition = v.SourcePartition
+	}
+	if !(len(v.DestinationPartition) == 0) {
+		u.DestinationPartition = v.DestinationPartition
+	}
+	if !(len(v.MessageType) == 0) {
+		u.MessageType = v.MessageType
+	}
+	if !(v.LastKnownSequence == 0) {
+		u.LastKnownSequence = v.LastKnownSequence
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -3147,6 +3349,38 @@ func (v *RecordUpdate) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Value = x
 	}
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *RecoveryRequest) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type                 MessageType `json:"type"`
+		SourcePartition      string      `json:"sourcePartition,omitempty"`
+		DestinationPartition string      `json:"destinationPartition,omitempty"`
+		MessageType          string      `json:"messageType,omitempty"`
+		LastKnownSequence    uint64      `json:"lastKnownSequence,omitempty"`
+		ExtraData            *string     `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.SourcePartition = v.SourcePartition
+	u.DestinationPartition = v.DestinationPartition
+	u.MessageType = v.MessageType
+	u.LastKnownSequence = v.LastKnownSequence
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.SourcePartition = u.SourcePartition
+	v.DestinationPartition = u.DestinationPartition
+	v.MessageType = u.MessageType
+	v.LastKnownSequence = u.LastKnownSequence
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err

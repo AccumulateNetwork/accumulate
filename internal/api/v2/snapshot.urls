@@ -1,0 +1,15 @@
+# ACCOUNT TYPE            URL
+--------------------------------------------------------------------------------
+dataAccount               acc://bvn-BVN2.acme/evidence
+anchorLedger              acc://bvn-BVN2.acme/anchors
+dataAccount               acc://bvn-BVN2.acme/oracle
+dataAccount               acc://bvn-BVN2.acme/votes
+syntheticLedger           acc://bvn-BVN2.acme/synthetic
+systemLedger              acc://bvn-BVN2.acme/ledger
+identity                  acc://bvn-BVN2.acme
+blockLedger               acc://bvn-BVN2.acme/ledger/1
+dataAccount               acc://bvn-BVN2.acme/globals
+dataAccount               acc://bvn-BVN2.acme/routing
+keyBook                   acc://bvn-BVN2.acme/operators
+keyPage                   acc://bvn-BVN2.acme/operators/1
+dataAccount               acc://bvn-BVN2.acme/network

@@ -578,10 +578,22 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 			}
 		}
 
-		err = dispatcher.Submit(ctx, dest, &messaging.Envelope{Messages: []messaging.Message{msg}})
-		if err != nil {
-			x.logger.Error("Failed to dispatch transaction", "error", err, "from", partition.Url)
-			continue
+		// Route through crosschain conductor if enabled, otherwise use direct dispatcher
+		if x.crosschainConductor != nil {
+			// Use crosschain conductor for coordinated routing
+			err = x.crosschainConductor.SubmitSynthetic(ctx, []messaging.Message{msg}, dest)
+			if err != nil {
+				x.logger.Error("Failed to dispatch transaction via crosschain conductor", "error", err, "from", partition.Url)
+				continue
+			}
+			x.logger.Debug("Transaction routed via crosschain conductor", "dest", dest, "from", partition.Url, "is_anchor", anchor)
+		} else {
+			// Use direct dispatcher (legacy behavior)
+			err = dispatcher.Submit(ctx, dest, &messaging.Envelope{Messages: []messaging.Message{msg}})
+			if err != nil {
+				x.logger.Error("Failed to dispatch transaction", "error", err, "from", partition.Url)
+				continue
+			}
 		}
 	}
 }

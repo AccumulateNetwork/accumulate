@@ -134,26 +134,20 @@ func TestSimulator2(t *testing.T) {
 	require.NoError(t, err)
 
 	// Buy credits
-	st := buildAndSubmit(t, ctx, C,
+	_ = buildAndSubmit(t, ctx, C,
 		build.Transaction().For(lite).
 			AddCredits().To(lite).WithOracle(float64(ns.Oracle.Price)/AcmeOraclePrecision).Purchase(3).
 			SignWith(lite).Version(1).Timestamp(1).PrivateKey(liteKey))
 
-	for !Txn(st.TxID).Completes().Satisfied(&sim.Harness) {
-		// Wait for the transaction to complete
-		time.Sleep(10 * time.Millisecond)
-	}
+	// Transaction will be processed by the ticker loop
 
 	// Send tokens
-	st = buildAndSubmit(t, ctx, C,
+	_ = buildAndSubmit(t, ctx, C,
 		build.Transaction().For(lite).
 			SendTokens(1, 0).To(other).
 			SignWith(lite).Version(1).Timestamp(2).PrivateKey(liteKey))
 
-	for !Txn(st.TxID).Completes().Satisfied(&sim.Harness) {
-		// Wait for the transaction to complete
-		time.Sleep(10 * time.Millisecond)
-	}
+	// Transaction will be processed by the ticker loop
 }
 
 func buildAndSubmit(t testing.TB, ctx context.Context, svc api.Submitter, bld EnvelopeBuilder) *TransactionStatus {

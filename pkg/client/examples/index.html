@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Accumulate SDK Examples Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 3em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+        .subtitle {
+            text-align: center;
+            font-size: 1.2em;
+            opacity: 0.9;
+            margin-bottom: 50px;
+        }
+        .apps-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin-bottom: 50px;
+        }
+        .app-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            cursor: pointer;
+            text-decoration: none;
+            color: inherit;
+            display: block;
+        }
+        .app-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+        }
+        .app-icon {
+            font-size: 3em;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .app-title {
+            font-size: 1.5em;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        .app-description {
+            opacity: 0.9;
+            line-height: 1.6;
+            margin-bottom: 20px;
+        }
+        .app-features {
+            list-style: none;
+            font-size: 0.9em;
+            opacity: 0.8;
+        }
+        .app-features li {
+            padding: 5px 0;
+            padding-left: 20px;
+            position: relative;
+        }
+        .app-features li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+        }
+        .app-status {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            margin-top: 15px;
+        }
+        .status-online {
+            background: rgba(74, 222, 128, 0.2);
+            border: 1px solid rgba(74, 222, 128, 0.5);
+        }
+        .status-offline {
+            background: rgba(248, 113, 113, 0.2);
+            border: 1px solid rgba(248, 113, 113, 0.5);
+        }
+        .instructions {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            padding: 30px;
+            margin-top: 40px;
+        }
+        .instructions h2 {
+            margin-bottom: 20px;
+        }
+        .code-block {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 20px;
+            border-radius: 10px;
+            font-family: 'Courier New', monospace;
+            margin: 15px 0;
+            overflow-x: auto;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 60px;
+            opacity: 0.7;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Accumulate SDK Examples</h1>
+        <p class="subtitle">Interactive web interfaces for exploring the Accumulate blockchain</p>
+        
+        <div class="apps-grid">
+            <a href="http://localhost:8080" class="app-card" target="_blank">
+                <div class="app-icon">🌐</div>
+                <h2 class="app-title">Network Monitor</h2>
+                <p class="app-description">
+                    Real-time dashboard displaying network status, metrics, and node information
+                </p>
+                <ul class="app-features">
+                    <li>Live network statistics</li>
+                    <li>Partition metrics & TPS</li>
+                    <li>Node information</li>
+                    <li>Auto-refresh every 5 seconds</li>
+                </ul>
+                <span class="app-status status-online" id="status-8080">Port 8080</span>
+            </a>
+            
+            <a href="http://localhost:8081" class="app-card" target="_blank">
+                <div class="app-icon">💰</div>
+                <h2 class="app-title">Balance Checker</h2>
+                <p class="app-description">
+                    Check ACME token balances for multiple accounts with formatted display
+                </p>
+                <ul class="app-features">
+                    <li>Multi-account support</li>
+                    <li>Token issuer statistics</li>
+                    <li>Quick account presets</li>
+                    <li>Real-time balance updates</li>
+                </ul>
+                <span class="app-status status-online" id="status-8081">Port 8081</span>
+            </a>
+            
+            <a href="#" class="app-card" style="opacity: 0.6; cursor: not-allowed;">
+                <div class="app-icon">📁</div>
+                <h2 class="app-title">Account Explorer</h2>
+                <p class="app-description">
+                    Explore Accumulate accounts and their properties (Web UI coming soon)
+                </p>
+                <ul class="app-features">
+                    <li>Account hierarchy exploration</li>
+                    <li>Sub-account discovery</li>
+                    <li>Property inspection</li>
+                    <li>JSON export</li>
+                </ul>
+                <span class="app-status status-offline">CLI Only</span>
+            </a>
+            
+            <a href="#" class="app-card" style="opacity: 0.6; cursor: not-allowed;">
+                <div class="app-icon">📄</div>
+                <h2 class="app-title">Data Reader</h2>
+                <p class="app-description">
+                    Read and display data from Accumulate data accounts (Web UI coming soon)
+                </p>
+                <ul class="app-features">
+                    <li>Multiple format support</li>
+                    <li>Entry navigation</li>
+                    <li>Format auto-detection</li>
+                    <li>Hex/Text/JSON display</li>
+                </ul>
+                <span class="app-status status-offline">CLI Only</span>
+            </a>
+        </div>
+        
+        <div class="instructions">
+            <h2>🚀 Quick Start</h2>
+            <p>To launch all web UIs simultaneously:</p>
+            <div class="code-block">
+                ./launch_all.sh
+            </div>
+            
+            <p>Or launch individual applications:</p>
+            <div class="code-block">
+                # Network Monitor<br>
+                cd network_monitor && go run . -web -port 8080<br><br>
+                
+                # Balance Checker<br>
+                cd balance_checker && go run . -web -port 8081<br><br>
+                
+                # CLI-only tools (no web UI yet)<br>
+                cd account_explorer && go run . -url acc://ACME<br>
+                cd data_reader && go run . -url acc://dn.acme/network
+            </div>
+            
+            <h2 style="margin-top: 30px;">📖 Documentation</h2>
+            <p>For detailed documentation and CLI usage, see the <a href="https://github.com/AccumulateNetwork/accumulate" target="_blank" style="color: #4ade80;">README.md</a> in each example directory.</p>
+        </div>
+        
+        <div class="footer">
+            <p>Built with the Accumulate Go SDK | © 2025 The Accumulate Authors</p>
+        </div>
+    </div>
+    
+    <script>
+        // Check if services are running
+        async function checkServices() {
+            const ports = [8080, 8081];
+            for (const port of ports) {
+                try {
+                    const response = await fetch(`http://localhost:${port}/`, { 
+                        method: 'HEAD',
+                        mode: 'no-cors'
+                    });
+                    document.getElementById(`status-${port}`).className = 'app-status status-online';
+                    document.getElementById(`status-${port}`).textContent = `✓ Running on ${port}`;
+                } catch (e) {
+                    document.getElementById(`status-${port}`).className = 'app-status status-offline';
+                    document.getElementById(`status-${port}`).textContent = `✗ Not running`;
+                }
+            }
+        }
+        
+        // Check on load and periodically
+        checkServices();
+        setInterval(checkServices, 5000);
+    </script>
+</body>
+</html>

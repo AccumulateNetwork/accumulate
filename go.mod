@@ -86,6 +86,7 @@ require (
 	go.opentelemetry.io/otel/sdk/log v0.3.0
 	go.opentelemetry.io/otel/sdk/metric v1.27.0
 	go.opentelemetry.io/otel/trace v1.29.0
+	golang.org/x/time v0.6.0
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.3.0
 )
 

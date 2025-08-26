@@ -1,13 +1,19 @@
 # Binaries (mac, linux)
 accumulated
 accumulate
+analyze
+debug
 play-accumulate
 golangci-lint
+simulator
 !*/
 tools/cmd/gen-types/gen-types
 tools/cmd/gen-enum/gen-enum
 tools/cmd/gen-types/go_build*
 tools/cmd/gen-enum/go_build*
+
+# documenation we don't want to push to the repository
+localdocs/
 
 # Binaries and test data
 *.exe
@@ -25,6 +31,10 @@ tmp
 *.log
 *.swp
 *.out
+*.pid
+coverage.html
+*_test_results.json
+*_coverage.out
 
 # macOS
 .DS_Store
@@ -34,6 +44,7 @@ tmp
 .nodes*
 .factom*
 .genesis
+.devnet-test*
 .vagrant
 .terraform
 .terraform.lock.hcl

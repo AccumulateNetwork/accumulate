@@ -1,0 +1,17 @@
+diff --git a/internal/api/v3/network.go b/internal/api/v3/network.go
+index 1234567..abcdefg 100644
+--- a/internal/api/v3/network.go
++++ b/internal/api/v3/network.go
+@@ -97,7 +97,11 @@ func (s *NetworkService) NetworkStatus(ctx context.Context, _ api.NetworkStatus
+ }
+ 
+ func (s *NetworkService) getDnHeight(batch *database.Batch) (uint64, error) {
+-	c := batch.Account(protocol.PartitionUrl(s.partition).JoinPath(protocol.AnchorPool)).MainChain()
++	// FIX: Always query the Directory partition for DN height, not the local partition
++	// The bug was using s.partition which could be "Cyclops" or another BVN,
++	// but DirectoryAnchor transactions are only in the Directory partition's anchor pool
++	dnPartition := protocol.Directory
++	c := batch.Account(protocol.PartitionUrl(dnPartition).JoinPath(protocol.AnchorPool)).MainChain()
+ 	head, err := c.Head().Get()
+ 	if err != nil {
+ 		return 0, errors.UnknownError.WithFormat("load anchor ledger main chain head: %w", err)

@@ -396,14 +396,15 @@ func (d *Daemon) startApp(caughtUp <-chan struct{}) (types.Application, error) {
 		Router:  routing.MessageRouter{Router: d.router},
 	}}
 	execOpts := execute.Options{
-		Logger:        d.Logger,
-		Database:      d.db,
-		Key:           d.Key().Bytes(),
-		Router:        d.router,
-		EventBus:      d.eventBus,
-		Sequencer:     client.Private(),
-		Querier:       client,
-		EnableHealing: d.Config.Accumulate.Healing.Enable,
+		Logger:                      d.Logger,
+		Database:                    d.db,
+		Key:                         d.Key().Bytes(),
+		Router:                      d.router,
+		EventBus:                    d.eventBus,
+		Sequencer:                   client.Private(),
+		Querier:                     client,
+		EnableHealing:               d.Config.Accumulate.Healing.Enable,
+		EnableCrosschainCoordinator: true, // Enable Phase 1 crosschain conductor for routing anchor/synthetic transactions
 		Describe: execute.DescribeShim{
 			NetworkType: d.Config.Accumulate.Describe.NetworkType,
 			PartitionId: d.Config.Accumulate.Describe.PartitionId,

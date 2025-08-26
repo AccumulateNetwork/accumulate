@@ -1,11 +1,11 @@
 linters-settings:
-  custom:
-    noprint:
-      type: module
-    nodebug:
-      type: module
-    rangevarref:
-      type: module
+  # custom:
+  #   noprint:
+  #     type: module
+  #   nodebug:
+  #     type: module
+  #   rangevarref: # Deprecated since Go 1.22 - loop variables are now properly scoped
+  #     type: module
 
   goheader:
     values:
@@ -21,15 +21,15 @@ linters-settings:
 linters:
   disable-all: true
   enable:
-  # Custom
-  - noprint # Use forbidigo instead?
-  - nodebug
-  - rangevarref
+  # Custom - temporarily disabled due to plugin issues
+  # - noprint # Use forbidigo instead?
+  # - nodebug
+  # - rangevarref # Deprecated since Go 1.22 - loop variables are now properly scoped
 
   # Standard
   - asasalint     # Bugs (variadic functions taking any)
   - bidichk       # Check for questionable Unicode
-  - exportloopref # Smarter version of rangevarref?
+  # - exportloopref # Deprecated since Go 1.22 - loop variables are now properly scoped
   - goheader      # Enforce the copyright header
   - misspell      # Spelling
   - nakedret      # Not really sure what this one does
@@ -62,7 +62,7 @@ issues:
     linters:
     - noprint
 
-  - path: ^test/e2e2/generated
+  - path: ^test/e2e_v2/generated
     linters:
     - goheader
 

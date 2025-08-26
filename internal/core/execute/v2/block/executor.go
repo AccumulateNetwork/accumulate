@@ -14,6 +14,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/crosschain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -29,15 +30,16 @@ type Executor struct {
 	ExecutorOptions
 	BlockTimers TimerSet
 
-	globals            *Globals
-	executors          map[protocol.TransactionType]chain.TransactionExecutor
-	messageExecutors   map[messaging.MessageType]ExecutorFactory2[messaging.MessageType, *MessageContext]
-	signatureExecutors map[protocol.SignatureType]ExecutorFactory2[protocol.SignatureType, *SignatureContext]
-	logger             logging.OptionalLogger
-	db                 database.Beginner
-	isValidator        bool
-	isGenesis          bool
-	mainDispatcher     Dispatcher
+	globals             *Globals
+	executors           map[protocol.TransactionType]chain.TransactionExecutor
+	messageExecutors    map[messaging.MessageType]ExecutorFactory2[messaging.MessageType, *MessageContext]
+	signatureExecutors  map[protocol.SignatureType]ExecutorFactory2[protocol.SignatureType, *SignatureContext]
+	logger              logging.OptionalLogger
+	db                  database.Beginner
+	isValidator         bool
+	isGenesis           bool
+	mainDispatcher      Dispatcher
+	crosschainConductor *crosschain.CrossChainConductor
 }
 
 type ExecutorOptions = execute.Options
@@ -112,6 +114,12 @@ func NewExecutor(opts ExecutorOptions) (*Executor, error) {
 
 	if opts.Logger != nil {
 		m.logger.L = opts.Logger.With("module", "executor")
+	}
+
+	// Initialize crosschain conductor if enabled
+	if opts.EnableCrosschainCoordinator {
+		m.crosschainConductor = crosschain.NewCrossChainConductor(m.mainDispatcher, m.logger)
+		m.logger.Info("CrossChainConductor enabled for routing anchor and synthetic transactions")
 	}
 
 	for _, x := range txnX {

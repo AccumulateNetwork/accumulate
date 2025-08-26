@@ -1,0 +1,16 @@
+# ACCOUNT TYPE            URL
+--------------------------------------------------------------------------------
+dataAccount               acc://dn.acme/votes
+keyBook                   acc://dn.acme/operators
+keyPage                   acc://dn.acme/operators/1
+dataAccount               acc://dn.acme/network
+identity                  acc://dn.acme
+tokenIssuer               acc://ACME
+dataAccount               acc://dn.acme/evidence
+systemLedger              acc://dn.acme/ledger
+dataAccount               acc://dn.acme/globals
+syntheticLedger           acc://dn.acme/synthetic
+dataAccount               acc://dn.acme/oracle
+anchorLedger              acc://dn.acme/anchors
+blockLedger               acc://dn.acme/ledger/1
+dataAccount               acc://dn.acme/routing

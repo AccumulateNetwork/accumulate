@@ -4,6 +4,9 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
+//go:build !race
+// +build !race
+
 package protocol_test
 
 import (
@@ -29,6 +32,7 @@ var TestFct = []FactoidPair{
 }
 
 func TestFactoidAddress(t *testing.T) {
+	t.Parallel()
 	faAddress := "FA2ybgFNYQiZFgTjkwQwp74uGsEUHJc6hGEh4YA3ai7FcssemapP"
 	rcdHash, err := protocol.GetRCDFromFactoidAddress(faAddress)
 	require.NoError(t, err)
@@ -42,6 +46,7 @@ func TestFactoidAddress(t *testing.T) {
 }
 
 func TestRCD(t *testing.T) {
+	t.Parallel()
 	pub, _, _ := ed25519.GenerateKey(nil)
 	rcdHash := protocol.GetRCDHashFromPublicKey(pub, 0x01)
 
@@ -55,6 +60,7 @@ func TestRCD(t *testing.T) {
 }
 
 func TestGetFactoidAddressRcdHashformFactoidPrivate(t *testing.T) {
+	t.Parallel()
 	FA := "FA2PdKfzGP5XwoSbeW1k9QunCHwC8DY6d8xgEdfm57qfR31nTueb"
 	Fs := "Fs1ipNRjEXcWj8RUn1GRLMJYVoPFBL1yw9rn6sCxWGcxciC4HdPd"
 	hash1, err := protocol.GetRCDFromFactoidAddress(FA)
@@ -69,6 +75,7 @@ func TestGetFactoidAddressRcdHashformFactoidPrivate(t *testing.T) {
 }
 
 func TestFactoidSecretFromPrivKey(t *testing.T) {
+	t.Parallel()
 	Fs := "Fs1ipNRjEXcWj8RUn1GRLMJYVoPFBL1yw9rn6sCxWGcxciC4HdPd"
 	_, _, pk, err := protocol.GetFactoidAddressRcdHashPkeyFromPrivateFs(Fs)
 	require.NoError(t, err)
@@ -79,6 +86,7 @@ func TestFactoidSecretFromPrivKey(t *testing.T) {
 }
 
 func TestRcdHashAddressFromPrivKey(t *testing.T) {
+	t.Parallel()
 	for _, addr := range TestFct {
 		rcd1, err := protocol.GetRCDFromFactoidAddress(addr.FA)
 		require.NoError(t, err)

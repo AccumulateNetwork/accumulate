@@ -11,7 +11,10 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
+	"time"
 
 	tmconfig "github.com/cometbft/cometbft/config"
 	"github.com/fatih/color"
@@ -38,10 +41,13 @@ var flagRunDevnet = struct {
 	NumValidators int
 	NumFollowers  int
 	BasePort      int
+	DashboardPort int
+	NoDashboard   bool
 	Globals       network.GlobalValues
 	Logging       run.Logging
 	SoftReset     bool
 }{
+	DashboardPort: 8080,
 	Globals: network.GlobalValues{
 		ExecutorVersion: protocol.ExecutorVersionLatest,
 	},
@@ -64,6 +70,8 @@ func init() {
 	cmdRunDevnet.Flags().IntVarP(&flagRunDevnet.NumValidators, "validators", "v", 2, "Number of validator nodes per partition to configure")
 	cmdRunDevnet.Flags().IntVarP(&flagRunDevnet.NumFollowers, "followers", "f", 1, "Number of follower nodes per partition to configure")
 	cmdRunDevnet.Flags().IntVar(&flagRunDevnet.BasePort, "port", 26656, "Base port to use for listeners")
+	cmdRunDevnet.Flags().IntVar(&flagRunDevnet.DashboardPort, "dashboard-port", 8080, "Port for the web dashboard")
+	cmdRunDevnet.Flags().BoolVar(&flagRunDevnet.NoDashboard, "no-dashboard", false, "Disable the web dashboard")
 	cmdRunDevnet.Flags().StringVar(&flagRunDevnet.Database, "database", "", "The type of database to use")
 	cmdRunDevnet.Flags().Var(cmdutil.JsonFlagOf(&flagRunDevnet.Globals), "globals", "Override the default global values")
 	cmdRunDevnet.Flags().Var(cmdutil.JsonFlagOf(&flagRunDevnet.Logging), "logging", "Override the default logger configuration")
@@ -93,6 +101,20 @@ func runDevNet(cmd *cobra.Command, _ []string) {
 	}
 
 	cfg := initDevNet(cmd)
+	
+	// Start the dashboard server if not disabled
+	var dashboardCmd *exec.Cmd
+	if !flagRunDevnet.NoDashboard {
+		dashboardCmd = startDashboard()
+		if dashboardCmd != nil {
+			defer func() {
+				if dashboardCmd.Process != nil {
+					dashboardCmd.Process.Kill()
+				}
+			}()
+		}
+	}
+
 	runCfg(cfg, func(s run.Service) bool {
 		sub, ok := s.(*run.SubnodeService)
 		if !ok {
@@ -105,6 +127,68 @@ func runDevNet(cmd *cobra.Command, _ []string) {
 		}
 		return true
 	})
+}
+
+func startDashboard() *exec.Cmd {
+	// Find the dashboard directory
+	dashboardDir := filepath.Join("scripts", "devnet", "dashboard")
+	if _, err := os.Stat(filepath.Join(dashboardDir, "dashboard.go")); err != nil {
+		color.HiRed("Warning: Dashboard not found at %s", dashboardDir)
+		return nil
+	}
+
+	// Set environment variables for the dashboard
+	env := append(os.Environ(),
+		fmt.Sprintf("DASHBOARD_PORT=%d", flagRunDevnet.DashboardPort),
+	)
+
+	// Start the dashboard server
+	cmd := exec.Command("go", "run", "dashboard.go")
+	cmd.Dir = dashboardDir
+	cmd.Env = env
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Start(); err != nil {
+		color.HiRed("Failed to start dashboard: %v", err)
+		return nil
+	}
+
+	// Give the dashboard a moment to start
+	time.Sleep(1 * time.Second)
+
+	color.HiGreen("Dashboard started on http://localhost:%d", flagRunDevnet.DashboardPort)
+
+	// Auto-open browser
+	go func() {
+		time.Sleep(2 * time.Second)
+		dashboardURL := fmt.Sprintf("http://localhost:%d", flagRunDevnet.DashboardPort)
+		
+		// Try different browser opening commands based on OS
+		var browserCmd *exec.Cmd
+		switch {
+		case commandExists("xdg-open"): // Linux
+			browserCmd = exec.Command("xdg-open", dashboardURL)
+		case commandExists("open"): // macOS
+			browserCmd = exec.Command("open", dashboardURL)
+		case commandExists("cmd"): // Windows
+			browserCmd = exec.Command("cmd", "/c", "start", dashboardURL)
+		default:
+			color.HiYellow("Please open %s in your browser", dashboardURL)
+			return
+		}
+
+		if err := browserCmd.Start(); err != nil {
+			color.HiYellow("Please open %s in your browser", dashboardURL)
+		}
+	}()
+
+	return cmd
+}
+
+func commandExists(cmd string) bool {
+	_, err := exec.LookPath(cmd)
+	return err == nil
 }
 
 var nodeIdLen int
