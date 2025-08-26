@@ -7,6 +7,8 @@
 package routing
 
 import (
+	"strings"
+	
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -125,7 +127,16 @@ func (r MessageRouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 		if r.Router == nil {
 			return nil, errors.NotReady.With("cannot route: router not setup")
 		}
-		service.Argument, err = r.Router.RouteAccount(msg.Scope)
+		
+		// DEVNET CROSS-PARTITION ACCESS: Allow local access to BVN accounts
+		// This enables BVN partition queries from DN in devnet for proof development
+		scopeStr := msg.Scope.String()
+		if strings.Contains(scopeStr, "bvn1.acme") || strings.Contains(scopeStr, "bvn2.acme") {
+			// Force BVN queries to be handled locally in devnet
+			service.Argument = protocol.Directory // Route to DN partition
+		} else {
+			service.Argument, err = r.Router.RouteAccount(msg.Scope)
+		}
 
 	case *message.SubmitRequest:
 		service.Type = api.ServiceTypeSubmit

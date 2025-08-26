@@ -112,6 +112,8 @@ func (s *Querier) getLastBlockTime(ctx context.Context, batch *database.Batch) *
 }
 
 func (s *Querier) query(ctx context.Context, batch *database.Batch, scope *url.URL, query api.Query) (api.Record, error) {
+	// Note: Proof queries temporarily removed due to type generation complexity
+	
 	switch query := query.(type) {
 	case *api.DefaultQuery:
 		if txid, err := scope.AsTxID(); err == nil {

@@ -10,6 +10,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	v3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -59,10 +60,14 @@ func (q *Querier) start(inst *Instance) error {
 		return err
 	}
 
+	// Create database with observer enabled for cryptographic proofs
+	db := database.New(store, (*logging.Slogger)(inst.logger))
+	db.SetObserver(execute.NewDatabaseObserver())
+
 	impl := api.NewQuerier(api.QuerierParams{
 		Logger:    (*logging.Slogger)(inst.logger).With("module", "api"),
 		Partition: q.Partition,
-		Database:  database.New(store, (*logging.Slogger)(inst.logger)),
+		Database:  db,
 		Consensus: consensus,
 	})
 	registerRpcService(inst, impl.Type().AddressFor(q.Partition), message.Querier{Querier: impl})
@@ -93,10 +98,14 @@ func (n *NetworkService) start(inst *Instance) error {
 		return err
 	}
 
+	// Create database with observer enabled for cryptographic proofs
+	db := database.New(store, (*logging.Slogger)(inst.logger))
+	db.SetObserver(execute.NewDatabaseObserver())
+
 	impl := api.NewNetworkService(api.NetworkServiceParams{
 		Logger:    (*logging.Slogger)(inst.logger).With("module", "api"),
 		Partition: n.Partition,
-		Database:  database.New(store, (*logging.Slogger)(inst.logger)),
+		Database:  db,
 		EventBus:  events,
 	})
 	registerRpcService(inst, impl.Type().AddressFor(n.Partition), message.NetworkService{NetworkService: impl})
@@ -160,10 +169,14 @@ func (e *EventsService) start(inst *Instance) error {
 		return err
 	}
 
+	// Create database with observer enabled for cryptographic proofs
+	db := database.New(store, (*logging.Slogger)(inst.logger))
+	db.SetObserver(execute.NewDatabaseObserver())
+
 	impl := api.NewEventService(api.EventServiceParams{
 		Logger:    (*logging.Slogger)(inst.logger).With("module", "api"),
 		Partition: e.Partition,
-		Database:  database.New(store, (*logging.Slogger)(inst.logger)),
+		Database:  db,
 		EventBus:  events,
 	})
 	registerRpcService(inst, impl.Type().AddressFor(e.Partition), message.EventService{EventService: impl})

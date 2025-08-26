@@ -45,7 +45,8 @@ import (
 	tmapi "gitlab.com/accumulatenetwork/accumulate/internal/api/v3/tm"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
-	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
+	executor "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
@@ -437,8 +438,11 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 		Dialer:  dialer,
 		Router:  routing.MessageRouter{Router: router},
 	}}
+	// Create database with observer enabled for cryptographic proofs
 	db := database.New(store, d.logger)
-	execOpts := execute.Options{
+	db.SetObserver(execute.NewDatabaseObserver())
+	
+	execOpts := executor.Options{
 		Logger:        d.logger.With("module", "executor"),
 		Database:      db,
 		Key:           d.privVal.Key.PrivKey.Bytes(),
@@ -447,7 +451,7 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 		Sequencer:     client.Private(),
 		Querier:       client,
 		EnableHealing: *c.EnableHealing,
-		Describe: execute.DescribeShim{
+		Describe: executor.DescribeShim{
 			NetworkType: c.Partition.Type,
 			PartitionId: c.Partition.ID,
 		},
@@ -470,13 +474,13 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 		!*c.EnableDirectDispatch {
 		// If we are not attached to a DN node, or direct dispatch is disabled,
 		// use the API dispatcher
-		execOpts.NewDispatcher = func() execute.Dispatcher {
+		execOpts.NewDispatcher = func() executor.Dispatcher {
 			return accumulated.NewDispatcher(inst.config.Network, router, dialer)
 		}
 
 	} else {
 		// Otherwise, use the Tendermint dispatcher
-		execOpts.NewDispatcher = func() execute.Dispatcher {
+		execOpts.NewDispatcher = func() executor.Dispatcher {
 			return tmlib.NewDispatcher(router, clients)
 		}
 	}
@@ -509,7 +513,7 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 		return nil, errors.UnknownError.WithFormat("start conductor: %v", err)
 	}
 
-	exec, err := execute.NewExecutor(execOpts)
+	exec, err := executor.NewExecutor(execOpts)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("initialize chain executor: %w", err)
 	}
@@ -547,7 +551,11 @@ func (c *CoreConsensusApp) register(inst *Instance, d *tendermint, node *tmnode.
 	svcImpl := tmapi.NewConsensusService(tmapi.ConsensusServiceParams{
 		Logger:           d.logger.With("module", "api"),
 		Local:            local,
-		Database:         database.New(store, d.logger),
+		Database:         func() *database.Database {
+			db := database.New(store, d.logger)
+			db.SetObserver(execute.NewDatabaseObserver())
+			return db
+		}(),
 		PartitionID:      c.Partition.ID,
 		PartitionType:    c.Partition.Type,
 		EventBus:         d.eventBus,
@@ -585,7 +593,11 @@ func (c *CoreConsensusApp) register(inst *Instance, d *tendermint, node *tmnode.
 	// Register the sequencer
 	seqImpl := api.NewSequencer(api.SequencerParams{
 		Logger:       d.logger.With("module", "api"),
-		Database:     database.New(store, d.logger),
+		Database:     func() *database.Database {
+			db := database.New(store, d.logger)
+			db.SetObserver(execute.NewDatabaseObserver())
+			return db
+		}(),
 		EventBus:     d.eventBus,
 		Globals:      <-d.globals,
 		Partition:    c.Partition.ID,

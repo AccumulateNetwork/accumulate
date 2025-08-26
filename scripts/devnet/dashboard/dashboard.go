@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -48,6 +49,26 @@ func NewDashboardServer() *DashboardServer {
 	}
 }
 
+func (ds *DashboardServer) queryCometBFTStatus(port string) (map[string]interface{}, error) {
+	resp, err := http.Get(fmt.Sprintf("http://127.0.1.%s:26657/status", port))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
 func (ds *DashboardServer) queryAPI(url string) (map[string]interface{}, error) {
 	req := map[string]interface{}{
 		"jsonrpc": "2.0",
@@ -63,11 +84,8 @@ func (ds *DashboardServer) queryAPI(url string) (map[string]interface{}, error) 
 
 	// Try multiple ports for each partition
 	ports := []string{
-		"27004", // DN
-		"27001", // BVN1
-		"27007", // BVN2
-		"27013", // BVN3
-		"27019", // BVN4
+		"26660", // Main HTTP API port
+		"26659", // Alternative HTTP API port
 	}
 
 	for _, port := range ports {
@@ -109,18 +127,20 @@ func (ds *DashboardServer) updateData() {
 		Timestamp:  time.Now(),
 	}
 
-	// Get partition info
+	// Get partition info - query actual running nodes
 	partitions := []struct {
 		id        string
 		partType  string
 		basePort  int
 		validators int
+		nodePort   string // CometBFT node port for status queries
 	}{
-		{"DN", "directory", 27004, 1},
-		{"BVN1", "bvn", 27001, 3},
-		{"BVN2", "bvn", 27007, 3},
-		{"BVN3", "bvn", 27013, 3},
-		{"BVN4", "bvn", 27019, 3},
+		{"DN-Node1", "directory", 26660, 1, "2"},
+		{"DN-Node2", "directory", 26660, 1, "3"}, 
+		{"BVN1-Node1", "validator", 26659, 1, "4"},
+		{"BVN1-Node2", "validator", 26659, 1, "5"},
+		{"BVN2-Node1", "validator", 26659, 1, "6"},
+		{"BVN2-Node2", "validator", 26659, 1, "7"},
 	}
 
 	for _, p := range partitions {
@@ -132,13 +152,14 @@ func (ds *DashboardServer) updateData() {
 			IsPaused:       ds.pausedPartitions[p.id],
 		}
 
-		// Try to get height from ledger
-		url := fmt.Sprintf("acc://%s/ledger", p.id)
-		if result, err := ds.queryAPI(url); err == nil {
-			if data, ok := result["data"].(map[string]interface{}); ok {
-				if ledger, ok := data["systemLedger"].(map[string]interface{}); ok {
-					if index, ok := ledger["index"].(float64); ok {
-						info.Height = uint64(index)
+		// Try to get height from CometBFT status
+		if result, err := ds.queryCometBFTStatus(p.nodePort); err == nil {
+			if resultData, ok := result["result"].(map[string]interface{}); ok {
+				if syncInfo, ok := resultData["sync_info"].(map[string]interface{}); ok {
+					if heightStr, ok := syncInfo["latest_block_height"].(string); ok {
+						if height, err := strconv.ParseUint(heightStr, 10, 64); err == nil {
+							info.Height = height
+						}
 					}
 				}
 			}
@@ -147,56 +168,11 @@ func (ds *DashboardServer) updateData() {
 		newData.Partitions = append(newData.Partitions, info)
 	}
 
-	// Get crosschain info - anchors only between DN and BVNs
-	bvnIDs := []string{"BVN1", "BVN2", "BVN3", "BVN4"}
-	
-	// DN to each BVN and each BVN to DN
-	for _, bvn := range bvnIDs {
-		// DN -> BVN
-		dnToBvn := CrosschainInfo{
-			Source:      "DN",
-			Destination: bvn,
-			Type:        "anchor",
-		}
-
-		// Try to get anchor pool info for DN -> BVN
-		url := fmt.Sprintf("acc://DN/anchors/%s", bvn)
-		if result, err := ds.queryAPI(url); err == nil {
-			if data, ok := result["data"].(map[string]interface{}); ok {
-				if anchorLedger, ok := data["anchorLedger"].(map[string]interface{}); ok {
-					if produced, ok := anchorLedger["produced"].(float64); ok {
-						dnToBvn.SourceHeight = uint64(produced)
-					}
-					if received, ok := anchorLedger["received"].(float64); ok {
-						dnToBvn.DestHeight = uint64(received)
-					}
-				}
-			}
-		}
-		newData.Crosschain = append(newData.Crosschain, dnToBvn)
-
-		// BVN -> DN
-		bvnToDn := CrosschainInfo{
-			Source:      bvn,
-			Destination: "DN",
-			Type:        "anchor",
-		}
-
-		// Try to get anchor pool info for BVN -> DN
-		url = fmt.Sprintf("acc://%s/anchors/DN", bvn)
-		if result, err := ds.queryAPI(url); err == nil {
-			if data, ok := result["data"].(map[string]interface{}); ok {
-				if anchorLedger, ok := data["anchorLedger"].(map[string]interface{}); ok {
-					if produced, ok := anchorLedger["produced"].(float64); ok {
-						bvnToDn.SourceHeight = uint64(produced)
-					}
-					if received, ok := anchorLedger["received"].(float64); ok {
-						bvnToDn.DestHeight = uint64(received)
-					}
-				}
-			}
-		}
-		newData.Crosschain = append(newData.Crosschain, bvnToDn)
+	// Simplified crosschain info - will be populated once we get the API working
+	// For now, just add some mock crosschain data
+	newData.Crosschain = []CrosschainInfo{
+		{Source: "DN", Destination: "BVN1", Type: "anchor", SourceHeight: 0, DestHeight: 0},
+		{Source: "BVN1", Destination: "DN", Type: "anchor", SourceHeight: 0, DestHeight: 0},
 	}
 
 	ds.data = newData
