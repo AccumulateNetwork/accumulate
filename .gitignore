@@ -74,37 +74,7 @@ accumulated-bpt-test
 # CrossChainConductor test artifacts
 crosschain_conductor
 *.pid
-.devnet-test/
-test/load/test_results_*/
-test/load/*.json
-snapshot.urls
 *.urls
+
 # Compiled binaries
-pkg/client/examples/network_monitor/network_monitor
 network_monitor
-*.exe
-
-# Devnet runtime files
-.devnet/
-.devnet-test/
-test/load/devnet.env
-test/load/devnet.pid
-test/load/devnet_config.log
-test/load/devnet_ports.json
-test/load/*.log
-test/load/sl-load/
-test/load/verify_real_txs
-
-# Documentation work files
-docs/_archive/
-docs/_backup_go_files/
-AI_OPTIMIZED_DOCS.md
-DOCUMENTATION_IMPROVEMENTS.md
-docs/AI_INDEX.md
-docs/CLEANUP_GO_FILES.md
-docs/GO_FILES_ANALYSIS.md
-docs/ORGANIZATION_COMPLETE.md
-docs/REORGANIZATION_PLAN.md
-docs/reorganize_docs.sh
-gitlab_ci_issues.md
-gitlab_ci_status.md
