@@ -245,6 +245,9 @@ const SignatureTypeEcdsaSha256 SignatureType = 15
 // SignatureTypeTypedData implements EIP-712 sign typed data specification.
 const SignatureTypeTypedData SignatureType = 16
 
+// SignatureTypeLXRMining implements LXR memory-hard proof-of-work for anti-spam protection.
+const SignatureTypeLXRMining SignatureType = 17
+
 // TransactionMaxUser is the highest number reserved for user transactions.
 const TransactionMaxUser TransactionMax = 48
 
@@ -1172,7 +1175,7 @@ func (v SignatureType) GetEnumValue() uint64 { return uint64(v) }
 func (v *SignatureType) SetEnumValue(id uint64) bool {
 	u := SignatureType(id)
 	switch u {
-	case SignatureTypeUnknown, SignatureTypeLegacyED25519, SignatureTypeED25519, SignatureTypeRCD1, SignatureTypeReceipt, SignatureTypePartition, SignatureTypeSet, SignatureTypeRemote, SignatureTypeBTC, SignatureTypeBTCLegacy, SignatureTypeETH, SignatureTypeDelegated, SignatureTypeInternal, SignatureTypeAuthority, SignatureTypeRsaSha256, SignatureTypeEcdsaSha256, SignatureTypeTypedData:
+	case SignatureTypeUnknown, SignatureTypeLegacyED25519, SignatureTypeED25519, SignatureTypeRCD1, SignatureTypeReceipt, SignatureTypePartition, SignatureTypeSet, SignatureTypeRemote, SignatureTypeBTC, SignatureTypeBTCLegacy, SignatureTypeETH, SignatureTypeDelegated, SignatureTypeInternal, SignatureTypeAuthority, SignatureTypeRsaSha256, SignatureTypeEcdsaSha256, SignatureTypeTypedData, SignatureTypeLXRMining:
 		*v = u
 		return true
 	}
@@ -1216,6 +1219,8 @@ func (v SignatureType) String() string {
 		return "ecdsaSha256"
 	case SignatureTypeTypedData:
 		return "typedData"
+	case SignatureTypeLXRMining:
+		return "lxrmining"
 	}
 	return fmt.Sprintf("SignatureType:%d", v)
 }
@@ -1259,6 +1264,8 @@ func SignatureTypeByName(name string) (SignatureType, bool) {
 		return SignatureTypeEcdsaSha256, true
 	case "typeddata":
 		return SignatureTypeTypedData, true
+	case "lxrmining":
+		return SignatureTypeLXRMining, true
 	}
 	return 0, false
 }

@@ -259,6 +259,57 @@ TypedDataSignature:
       type: bigint
       pointer: true
 
+LXRMiningSignature:
+  union: { type: signature }
+  description: uses LXR memory-hard proof-of-work for anti-spam protection
+  fields:
+    - name: PublicKey
+      type: bytes
+    - name: Signature
+      type: bytes
+    - name: Signer
+      type: url
+      pointer: true
+    - name: SignerVersion
+      type: uint
+    - name: Timestamp
+      type: uint
+      optional: true
+    - name: Vote
+      type: VoteType
+      marshal-as: enum
+      optional: true
+    - name: TransactionHash
+      type: hash
+      optional: true
+    - name: Memo
+      type: string
+      optional: true
+    - name: Data
+      type: bytes
+      optional: true
+    - name: Nonce
+      description: is the nonce value found during mining
+      type: uint
+    - name: Difficulty
+      description: is the difficulty target that was met
+      type: uint
+    - name: WorkProof
+      description: is the proof-of-work hash result
+      type: hash
+    - name: TableSize
+      description: is the size of the LXR hash table used (power of 2)
+      type: uint
+      optional: true
+    - name: TableSeed
+      description: is the seed used to generate the LXR hash table
+      type: uint
+      optional: true
+    - name: Passes
+      description: is the number of passes through the LXR hash table
+      type: uint
+      optional: true
+
 ReceiptSignature:
   union: { type: signature }
   fields:

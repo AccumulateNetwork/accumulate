@@ -1071,6 +1071,8 @@ func NewSignature(typ SignatureType) (Signature, error) {
 		return new(EcdsaSha256Signature), nil
 	case SignatureTypeInternal:
 		return new(InternalSignature), nil
+	case SignatureTypeLXRMining:
+		return new(LXRMiningSignature), nil
 	case SignatureTypeLegacyED25519:
 		return new(LegacyED25519Signature), nil
 	case SignatureTypePartition:
@@ -1145,6 +1147,12 @@ func EqualSignature(a, b Signature) bool {
 		}
 		b, ok := b.(*InternalSignature)
 		return ok && a.Equal(b)
+	case *LXRMiningSignature:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*LXRMiningSignature)
+		return ok && a.Equal(b)
 	case *LegacyED25519Signature:
 		if a == nil {
 			return b == nil
@@ -1215,6 +1223,8 @@ func CopySignature(v Signature) Signature {
 	case *EcdsaSha256Signature:
 		return v.Copy()
 	case *InternalSignature:
+		return v.Copy()
+	case *LXRMiningSignature:
 		return v.Copy()
 	case *LegacyED25519Signature:
 		return v.Copy()

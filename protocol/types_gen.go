@@ -508,6 +508,33 @@ type KeySpecParams struct {
 	extraData []byte
 }
 
+// LXRMiningSignature uses LXR memory-hard proof-of-work for anti-spam protection.
+type LXRMiningSignature struct {
+	fieldsSet       []bool
+	PublicKey       []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
+	Signature       []byte   `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
+	Signer          *url.URL `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
+	SignerVersion   uint64   `json:"signerVersion,omitempty" form:"signerVersion" query:"signerVersion" validate:"required"`
+	Timestamp       uint64   `json:"timestamp,omitempty" form:"timestamp" query:"timestamp"`
+	Vote            VoteType `json:"vote,omitempty" form:"vote" query:"vote"`
+	TransactionHash [32]byte `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash"`
+	Memo            string   `json:"memo,omitempty" form:"memo" query:"memo"`
+	Data            []byte   `json:"data,omitempty" form:"data" query:"data"`
+	// Nonce is the nonce value found during mining.
+	Nonce uint64 `json:"nonce,omitempty" form:"nonce" query:"nonce" validate:"required"`
+	// Difficulty is the difficulty target that was met.
+	Difficulty uint64 `json:"difficulty,omitempty" form:"difficulty" query:"difficulty" validate:"required"`
+	// WorkProof is the proof-of-work hash result.
+	WorkProof [32]byte `json:"workProof,omitempty" form:"workProof" query:"workProof" validate:"required"`
+	// TableSize is the size of the LXR hash table used (power of 2).
+	TableSize uint64 `json:"tableSize,omitempty" form:"tableSize" query:"tableSize"`
+	// TableSeed is the seed used to generate the LXR hash table.
+	TableSeed uint64 `json:"tableSeed,omitempty" form:"tableSeed" query:"tableSeed"`
+	// Passes is the number of passes through the LXR hash table.
+	Passes    uint64 `json:"passes,omitempty" form:"passes" query:"passes"`
+	extraData []byte
+}
+
 type LegacyED25519Signature struct {
 	fieldsSet       []bool
 	Timestamp       uint64   `json:"timestamp,omitempty" form:"timestamp" query:"timestamp" validate:"required"`
@@ -1219,6 +1246,8 @@ func (*IssueTokens) Type() TransactionType { return TransactionTypeIssueTokens }
 func (*KeyBook) Type() AccountType { return AccountTypeKeyBook }
 
 func (*KeyPage) Type() AccountType { return AccountTypeKeyPage }
+
+func (*LXRMiningSignature) Type() SignatureType { return SignatureTypeLXRMining }
 
 func (*LegacyED25519Signature) Type() SignatureType { return SignatureTypeLegacyED25519 }
 
@@ -2384,6 +2413,36 @@ func (v *KeySpecParams) Copy() *KeySpecParams {
 }
 
 func (v *KeySpecParams) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *LXRMiningSignature) Copy() *LXRMiningSignature {
+	u := new(LXRMiningSignature)
+
+	u.PublicKey = encoding.BytesCopy(v.PublicKey)
+	u.Signature = encoding.BytesCopy(v.Signature)
+	if v.Signer != nil {
+		u.Signer = v.Signer
+	}
+	u.SignerVersion = v.SignerVersion
+	u.Timestamp = v.Timestamp
+	u.Vote = v.Vote
+	u.TransactionHash = v.TransactionHash
+	u.Memo = v.Memo
+	u.Data = encoding.BytesCopy(v.Data)
+	u.Nonce = v.Nonce
+	u.Difficulty = v.Difficulty
+	u.WorkProof = v.WorkProof
+	u.TableSize = v.TableSize
+	u.TableSeed = v.TableSeed
+	u.Passes = v.Passes
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *LXRMiningSignature) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *LegacyED25519Signature) Copy() *LegacyED25519Signature {
 	u := new(LegacyED25519Signature)
@@ -4846,6 +4905,61 @@ func (v *KeySpecParams) Equal(u *KeySpecParams) bool {
 	case v.Delegate == nil || u.Delegate == nil:
 		return false
 	case !((v.Delegate).Equal(u.Delegate)):
+		return false
+	}
+
+	return true
+}
+
+func (v *LXRMiningSignature) Equal(u *LXRMiningSignature) bool {
+	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
+		return false
+	}
+	if !(bytes.Equal(v.Signature, u.Signature)) {
+		return false
+	}
+	switch {
+	case v.Signer == u.Signer:
+		// equal
+	case v.Signer == nil || u.Signer == nil:
+		return false
+	case !((v.Signer).Equal(u.Signer)):
+		return false
+	}
+	if !(v.SignerVersion == u.SignerVersion) {
+		return false
+	}
+	if !(v.Timestamp == u.Timestamp) {
+		return false
+	}
+	if !(v.Vote == u.Vote) {
+		return false
+	}
+	if !(v.TransactionHash == u.TransactionHash) {
+		return false
+	}
+	if !(v.Memo == u.Memo) {
+		return false
+	}
+	if !(bytes.Equal(v.Data, u.Data)) {
+		return false
+	}
+	if !(v.Nonce == u.Nonce) {
+		return false
+	}
+	if !(v.Difficulty == u.Difficulty) {
+		return false
+	}
+	if !(v.WorkProof == u.WorkProof) {
+		return false
+	}
+	if !(v.TableSize == u.TableSize) {
+		return false
+	}
+	if !(v.TableSeed == u.TableSeed) {
+		return false
+	}
+	if !(v.Passes == u.Passes) {
 		return false
 	}
 
@@ -9516,6 +9630,140 @@ func (v *KeySpecParams) IsValid() error {
 		errs = append(errs, "field KeyHash is missing")
 	} else if len(v.KeyHash) == 0 {
 		errs = append(errs, "field KeyHash is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_LXRMiningSignature = []string{
+	1:  "Type",
+	2:  "PublicKey",
+	3:  "Signature",
+	4:  "Signer",
+	5:  "SignerVersion",
+	6:  "Timestamp",
+	7:  "Vote",
+	8:  "TransactionHash",
+	9:  "Memo",
+	10: "Data",
+	11: "Nonce",
+	12: "Difficulty",
+	13: "WorkProof",
+	14: "TableSize",
+	15: "TableSeed",
+	16: "Passes",
+}
+
+func (v *LXRMiningSignature) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(len(v.PublicKey) == 0) {
+		writer.WriteBytes(2, v.PublicKey)
+	}
+	if !(len(v.Signature) == 0) {
+		writer.WriteBytes(3, v.Signature)
+	}
+	if !(v.Signer == nil) {
+		writer.WriteUrl(4, v.Signer)
+	}
+	if !(v.SignerVersion == 0) {
+		writer.WriteUint(5, v.SignerVersion)
+	}
+	if !(v.Timestamp == 0) {
+		writer.WriteUint(6, v.Timestamp)
+	}
+	if !(v.Vote == 0) {
+		writer.WriteEnum(7, v.Vote)
+	}
+	if !(v.TransactionHash == ([32]byte{})) {
+		writer.WriteHash(8, &v.TransactionHash)
+	}
+	if !(len(v.Memo) == 0) {
+		writer.WriteString(9, v.Memo)
+	}
+	if !(len(v.Data) == 0) {
+		writer.WriteBytes(10, v.Data)
+	}
+	if !(v.Nonce == 0) {
+		writer.WriteUint(11, v.Nonce)
+	}
+	if !(v.Difficulty == 0) {
+		writer.WriteUint(12, v.Difficulty)
+	}
+	if !(v.WorkProof == ([32]byte{})) {
+		writer.WriteHash(13, &v.WorkProof)
+	}
+	if !(v.TableSize == 0) {
+		writer.WriteUint(14, v.TableSize)
+	}
+	if !(v.TableSeed == 0) {
+		writer.WriteUint(15, v.TableSeed)
+	}
+	if !(v.Passes == 0) {
+		writer.WriteUint(16, v.Passes)
+	}
+
+	_, _, err := writer.Reset(fieldNames_LXRMiningSignature)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *LXRMiningSignature) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field PublicKey is missing")
+	} else if len(v.PublicKey) == 0 {
+		errs = append(errs, "field PublicKey is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Signature is missing")
+	} else if len(v.Signature) == 0 {
+		errs = append(errs, "field Signature is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Signer is missing")
+	} else if v.Signer == nil {
+		errs = append(errs, "field Signer is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field SignerVersion is missing")
+	} else if v.SignerVersion == 0 {
+		errs = append(errs, "field SignerVersion is not set")
+	}
+	if len(v.fieldsSet) > 10 && !v.fieldsSet[10] {
+		errs = append(errs, "field Nonce is missing")
+	} else if v.Nonce == 0 {
+		errs = append(errs, "field Nonce is not set")
+	}
+	if len(v.fieldsSet) > 11 && !v.fieldsSet[11] {
+		errs = append(errs, "field Difficulty is missing")
+	} else if v.Difficulty == 0 {
+		errs = append(errs, "field Difficulty is not set")
+	}
+	if len(v.fieldsSet) > 12 && !v.fieldsSet[12] {
+		errs = append(errs, "field WorkProof is missing")
+	} else if v.WorkProof == ([32]byte{}) {
+		errs = append(errs, "field WorkProof is not set")
 	}
 
 	switch len(errs) {
@@ -15974,6 +16222,83 @@ func (v *KeySpecParams) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *LXRMiningSignature) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *LXRMiningSignature) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType SignatureType
+	if x := new(SignatureType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *LXRMiningSignature) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadBytes(2); ok {
+		v.PublicKey = x
+	}
+	if x, ok := reader.ReadBytes(3); ok {
+		v.Signature = x
+	}
+	if x, ok := reader.ReadUrl(4); ok {
+		v.Signer = x
+	}
+	if x, ok := reader.ReadUint(5); ok {
+		v.SignerVersion = x
+	}
+	if x, ok := reader.ReadUint(6); ok {
+		v.Timestamp = x
+	}
+	if x := new(VoteType); reader.ReadEnum(7, x) {
+		v.Vote = *x
+	}
+	if x, ok := reader.ReadHash(8); ok {
+		v.TransactionHash = *x
+	}
+	if x, ok := reader.ReadString(9); ok {
+		v.Memo = x
+	}
+	if x, ok := reader.ReadBytes(10); ok {
+		v.Data = x
+	}
+	if x, ok := reader.ReadUint(11); ok {
+		v.Nonce = x
+	}
+	if x, ok := reader.ReadUint(12); ok {
+		v.Difficulty = x
+	}
+	if x, ok := reader.ReadHash(13); ok {
+		v.WorkProof = *x
+	}
+	if x, ok := reader.ReadUint(14); ok {
+		v.TableSize = x
+	}
+	if x, ok := reader.ReadUint(15); ok {
+		v.TableSeed = x
+	}
+	if x, ok := reader.ReadUint(16); ok {
+		v.Passes = x
+	}
+
+	seen, err := reader.Reset(fieldNames_LXRMiningSignature)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *LegacyED25519Signature) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -19080,6 +19405,25 @@ func init() {
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("publicKey", "bytes"),
+		encoding.NewTypeField("signature", "bytes"),
+		encoding.NewTypeField("signer", "string"),
+		encoding.NewTypeField("signerVersion", "uint64"),
+		encoding.NewTypeField("timestamp", "uint64"),
+		encoding.NewTypeField("vote", "string"),
+		encoding.NewTypeField("transactionHash", "bytes32"),
+		encoding.NewTypeField("memo", "string"),
+		encoding.NewTypeField("data", "bytes"),
+		encoding.NewTypeField("nonce", "uint64"),
+		encoding.NewTypeField("difficulty", "uint64"),
+		encoding.NewTypeField("workProof", "bytes32"),
+		encoding.NewTypeField("tableSize", "uint64"),
+		encoding.NewTypeField("tableSeed", "uint64"),
+		encoding.NewTypeField("passes", "uint64"),
+	}, "LXRMiningSignature", "lxrminingSignature")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
 		encoding.NewTypeField("timestamp", "uint64"),
 		encoding.NewTypeField("publicKey", "bytes"),
 		encoding.NewTypeField("signature", "bytes"),
@@ -20687,6 +21031,76 @@ func (v *KeySpecParams) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.Delegate == nil) {
 		u.Delegate = v.Delegate
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *LXRMiningSignature) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type            SignatureType `json:"type"`
+		PublicKey       *string       `json:"publicKey,omitempty"`
+		Signature       *string       `json:"signature,omitempty"`
+		Signer          *url.URL      `json:"signer,omitempty"`
+		SignerVersion   uint64        `json:"signerVersion,omitempty"`
+		Timestamp       uint64        `json:"timestamp,omitempty"`
+		Vote            VoteType      `json:"vote,omitempty"`
+		TransactionHash *string       `json:"transactionHash,omitempty"`
+		Memo            string        `json:"memo,omitempty"`
+		Data            *string       `json:"data,omitempty"`
+		Nonce           uint64        `json:"nonce,omitempty"`
+		Difficulty      uint64        `json:"difficulty,omitempty"`
+		WorkProof       *string       `json:"workProof,omitempty"`
+		TableSize       uint64        `json:"tableSize,omitempty"`
+		TableSeed       uint64        `json:"tableSeed,omitempty"`
+		Passes          uint64        `json:"passes,omitempty"`
+		ExtraData       *string       `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.PublicKey) == 0) {
+		u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	}
+	if !(len(v.Signature) == 0) {
+		u.Signature = encoding.BytesToJSON(v.Signature)
+	}
+	if !(v.Signer == nil) {
+		u.Signer = v.Signer
+	}
+	if !(v.SignerVersion == 0) {
+		u.SignerVersion = v.SignerVersion
+	}
+	if !(v.Timestamp == 0) {
+		u.Timestamp = v.Timestamp
+	}
+	if !(v.Vote == 0) {
+		u.Vote = v.Vote
+	}
+	if !(v.TransactionHash == ([32]byte{})) {
+		u.TransactionHash = encoding.ChainToJSON(&v.TransactionHash)
+	}
+	if !(len(v.Memo) == 0) {
+		u.Memo = v.Memo
+	}
+	if !(len(v.Data) == 0) {
+		u.Data = encoding.BytesToJSON(v.Data)
+	}
+	if !(v.Nonce == 0) {
+		u.Nonce = v.Nonce
+	}
+	if !(v.Difficulty == 0) {
+		u.Difficulty = v.Difficulty
+	}
+	if !(v.WorkProof == ([32]byte{})) {
+		u.WorkProof = encoding.ChainToJSON(&v.WorkProof)
+	}
+	if !(v.TableSize == 0) {
+		u.TableSize = v.TableSize
+	}
+	if !(v.TableSeed == 0) {
+		u.TableSeed = v.TableSeed
+	}
+	if !(v.Passes == 0) {
+		u.Passes = v.Passes
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -23675,6 +24089,91 @@ func (v *KeySpecParams) UnmarshalJSON(data []byte) error {
 		v.KeyHash = x
 	}
 	v.Delegate = u.Delegate
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *LXRMiningSignature) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type            SignatureType `json:"type"`
+		PublicKey       *string       `json:"publicKey,omitempty"`
+		Signature       *string       `json:"signature,omitempty"`
+		Signer          *url.URL      `json:"signer,omitempty"`
+		SignerVersion   uint64        `json:"signerVersion,omitempty"`
+		Timestamp       uint64        `json:"timestamp,omitempty"`
+		Vote            VoteType      `json:"vote,omitempty"`
+		TransactionHash *string       `json:"transactionHash,omitempty"`
+		Memo            string        `json:"memo,omitempty"`
+		Data            *string       `json:"data,omitempty"`
+		Nonce           uint64        `json:"nonce,omitempty"`
+		Difficulty      uint64        `json:"difficulty,omitempty"`
+		WorkProof       *string       `json:"workProof,omitempty"`
+		TableSize       uint64        `json:"tableSize,omitempty"`
+		TableSeed       uint64        `json:"tableSeed,omitempty"`
+		Passes          uint64        `json:"passes,omitempty"`
+		ExtraData       *string       `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	u.Signature = encoding.BytesToJSON(v.Signature)
+	u.Signer = v.Signer
+	u.SignerVersion = v.SignerVersion
+	u.Timestamp = v.Timestamp
+	u.Vote = v.Vote
+	u.TransactionHash = encoding.ChainToJSON(&v.TransactionHash)
+	u.Memo = v.Memo
+	u.Data = encoding.BytesToJSON(v.Data)
+	u.Nonce = v.Nonce
+	u.Difficulty = v.Difficulty
+	u.WorkProof = encoding.ChainToJSON(&v.WorkProof)
+	u.TableSize = v.TableSize
+	u.TableSeed = v.TableSeed
+	u.Passes = v.Passes
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	if x, err := encoding.BytesFromJSON(u.PublicKey); err != nil {
+		return fmt.Errorf("error decoding PublicKey: %w", err)
+	} else {
+		v.PublicKey = x
+	}
+	if x, err := encoding.BytesFromJSON(u.Signature); err != nil {
+		return fmt.Errorf("error decoding Signature: %w", err)
+	} else {
+		v.Signature = x
+	}
+	v.Signer = u.Signer
+	v.SignerVersion = u.SignerVersion
+	v.Timestamp = u.Timestamp
+	v.Vote = u.Vote
+	if x, err := encoding.ChainFromJSON(u.TransactionHash); err != nil {
+		return fmt.Errorf("error decoding TransactionHash: %w", err)
+	} else {
+		v.TransactionHash = *x
+	}
+	v.Memo = u.Memo
+	if x, err := encoding.BytesFromJSON(u.Data); err != nil {
+		return fmt.Errorf("error decoding Data: %w", err)
+	} else {
+		v.Data = x
+	}
+	v.Nonce = u.Nonce
+	v.Difficulty = u.Difficulty
+	if x, err := encoding.ChainFromJSON(u.WorkProof); err != nil {
+		return fmt.Errorf("error decoding WorkProof: %w", err)
+	} else {
+		v.WorkProof = *x
+	}
+	v.TableSize = u.TableSize
+	v.TableSeed = u.TableSeed
+	v.Passes = u.Passes
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err

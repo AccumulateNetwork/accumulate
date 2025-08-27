@@ -120,6 +120,9 @@ SignatureType:
   TypedData:
     value: 16
     description: implements EIP-712 sign typed data specification
+  LXRMining:
+    value: 17
+    description: implements LXR memory-hard proof-of-work for anti-spam protection
 
 KeyPageOperationType:
   Unknown:

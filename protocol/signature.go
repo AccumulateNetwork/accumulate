@@ -99,7 +99,8 @@ func PublicKeyHash(key []byte, typ SignatureType) ([]byte, error) {
 	case SignatureTypeED25519,
 		SignatureTypeLegacyED25519,
 		SignatureTypeRsaSha256,
-		SignatureTypeEcdsaSha256:
+		SignatureTypeEcdsaSha256,
+		SignatureTypeLXRMining:
 		return doSha256(key), nil
 
 	case SignatureTypeRCD1:
