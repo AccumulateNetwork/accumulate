@@ -1,0 +1,39 @@
+{
+  "created_at": "2025-08-26T12:20:33-05:00",
+  "base_port": 26656,
+  "api": {
+    "primary": "http://127.0.0.1:26660/v3",
+    "port": 26660
+  },
+  "metrics": {
+    "endpoint": "http://127.0.0.1:26716/metrics",
+    "port": 26716
+  },
+  "network": {
+    "bvns": 2,
+    "validators_per_partition": 3,
+    "followers_per_partition": 1,
+    "total_nodes": 12
+  },
+  "partitions": {
+    "directory": {
+      "api": "http://127.0.0.1:26660/v3",
+      "rpc": "http://127.0.0.1:26657",
+      "p2p": 26656,
+      "nodes": 4
+    },
+    "bvn0": {
+      "api": "http://127.0.0.1:26760/v3",
+      "rpc": "http://127.0.0.1:26757",
+      "p2p": 26756,
+      "nodes": 4
+    }
+,
+    "bvn1": {
+      "api": "http://127.0.0.1:26860/v3",
+      "rpc": "http://127.0.0.1:26857",
+      "p2p": 26856,
+      "nodes": 4
+    }
+  }
+}
