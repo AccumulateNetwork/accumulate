@@ -1,5 +1,37 @@
 # Claude Code Memory - Accumulate Project
 
+## Current Working Branch: 3664-api-support-for-cryptographic-proof-system-in-lite-client
+
+## Issue Tracking Rules
+
+### Issues Repository
+- **IMPORTANT**: Issues are tracked in a separate repository: `AccumulateNetwork/issues`
+- This is NOT the same as GitLab issues on the main repository
+- Always check the issues repository for full context and requirements
+
+### Issue References
+- Branch naming format: `{issue-number}-{description}`
+- Current issue: #3664 - API Support for Cryptographic Proof System in Lite Client
+- Reference issues in commits: `#3664` format
+
+### Working with Issues Repository
+- Check `AccumulateNetwork/issues` repository for:
+  - Full issue descriptions and requirements
+  - Related issues and dependencies
+  - Status updates and discussions
+  - Test requirements and acceptance criteria
+
+### Commit Message Format
+- Include issue reference in commit messages: `fix(#3664): description`
+- Use conventional commits: `type(#issue): description`
+  - Types: feat, fix, docs, style, refactor, test, chore
+
+### Branch Management
+- Create feature branches from main with issue number
+- Keep branch names descriptive but concise
+- Delete branches after merge
+- Push regularly to track progress
+
 ## CRITICAL: P2P Reliability Fix In Progress
 
 ### Current Implementation Plan
