@@ -47,6 +47,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
+	coreExecute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -268,6 +269,11 @@ func (d *Daemon) startValidator() (err error) {
 	if err != nil {
 		return errors.UnknownError.WithFormat("open database: %w", err)
 	}
+	
+	// Set observer for proof generation
+	// This is needed for StateReceipt() to work when generating proofs
+	d.db.SetObserver(coreExecute.NewDatabaseObserver())
+	
 	defer func() {
 		if err != nil {
 			_ = d.db.Close()
