@@ -528,7 +528,7 @@ func (batch *Batch) collectBPT(w *snapshot.Writer, opts *CollectOptions) error {
 	}
 	// AI: Calculate total elapsed time
 	totalElapsedTime := time.Since(startTime)
-	slog.Info("Collected BPT", 
+	slog.Info("Collected BPT",
 		"count", humanize.Comma(int64(cnt)),
 		"elapsed", totalElapsedTime.Round(time.Second))
 

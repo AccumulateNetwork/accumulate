@@ -38,6 +38,8 @@ func NewAccount(typ AccountType) (Account, error) {
 		return new(LiteIdentity), nil
 	case AccountTypeLiteTokenAccount:
 		return new(LiteTokenAccount), nil
+	case AccountTypeMiningAuthority:
+		return new(MiningAuthority), nil
 	case AccountTypeSyntheticLedger:
 		return new(SyntheticLedger), nil
 	case AccountTypeSystemLedger:
@@ -114,6 +116,12 @@ func EqualAccount(a, b Account) bool {
 		}
 		b, ok := b.(*LiteTokenAccount)
 		return ok && a.Equal(b)
+	case *MiningAuthority:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*MiningAuthority)
+		return ok && a.Equal(b)
 	case *SyntheticLedger:
 		if a == nil {
 			return b == nil
@@ -174,6 +182,8 @@ func CopyAccount(v Account) Account {
 	case *LiteIdentity:
 		return v.Copy()
 	case *LiteTokenAccount:
+		return v.Copy()
+	case *MiningAuthority:
 		return v.Copy()
 	case *SyntheticLedger:
 		return v.Copy()
@@ -388,6 +398,8 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(CreateKeyPage), nil
 	case TransactionTypeCreateLiteTokenAccount:
 		return new(CreateLiteTokenAccount), nil
+	case TransactionTypeCreateMiningAuthority:
+		return new(CreateMiningAuthority), nil
 	case TransactionTypeCreateToken:
 		return new(CreateToken), nil
 	case TransactionTypeCreateTokenAccount:
@@ -507,6 +519,12 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 			return b == nil
 		}
 		b, ok := b.(*CreateLiteTokenAccount)
+		return ok && a.Equal(b)
+	case *CreateMiningAuthority:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*CreateMiningAuthority)
 		return ok && a.Equal(b)
 	case *CreateToken:
 		if a == nil {
@@ -668,6 +686,8 @@ func CopyTransactionBody(v TransactionBody) TransactionBody {
 	case *CreateKeyPage:
 		return v.Copy()
 	case *CreateLiteTokenAccount:
+		return v.Copy()
+	case *CreateMiningAuthority:
 		return v.Copy()
 	case *CreateToken:
 		return v.Copy()

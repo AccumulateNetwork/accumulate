@@ -20,6 +20,15 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
+// Architecture Note:
+// The LXR mining configuration (TableSize, Passes, etc.) is stored in the MiningAuthority
+// account, not in the signature itself. The signature only contains the proof results
+// (Nonce, Difficulty, WorkProof). Verification should be performed at the executor level
+// where the MiningAuthority can be fetched from the database to get the configuration.
+//
+// The methods here use default values for basic validation, but proper validation
+// should fetch the MiningAuthority and use its configuration parameters.
+
 // Constants for LXR mining
 const (
 	// DefaultTableBits is the default size of memory table in bits (2^bits = size)
@@ -209,16 +218,10 @@ func (s *LXRMiningSignature) VerifyMining(msg Signable) bool {
 		return false
 	}
 	
-	// Get LXR instance with same configuration
-	tableSize := s.TableSize
-	if tableSize == 0 {
-		tableSize = DefaultTableBits
-	}
-	passes := s.Passes
-	if passes == 0 {
-		passes = DefaultPasses
-	}
-	lxr := getLXRInstance(tableSize, DefaultLoops, passes)
+	// Get LXR instance with default configuration
+	// The actual configuration should be validated at a higher level
+	// where the MiningAuthority can be fetched from the database
+	lxr := getLXRInstance(DefaultTableBits, DefaultLoops, DefaultPasses)
 	
 	// Recalculate the proof of work
 	_, pow := lxr.LxrPoWHash(msgHash[:], s.Nonce)
@@ -237,17 +240,11 @@ func (s *LXRMiningSignature) Mine(msg Signable, targetDifficulty uint64) error {
 	s.Difficulty = targetDifficulty
 	msgHash := msg.Hash()
 	
-	// Set default table configuration if not set
-	if s.TableSize == 0 {
-		s.TableSize = DefaultTableBits
-	}
-	if s.Passes == 0 {
-		s.Passes = DefaultPasses
-	}
-	// TableSeed is no longer used with the real LXR algorithm
-	
-	// Get LXR instance
-	lxr := getLXRInstance(s.TableSize, DefaultLoops, s.Passes)
+	// Get LXR instance with specified configuration
+	// These would typically come from the MiningAuthority
+	tableSize := DefaultTableBits
+	passes := DefaultPasses
+	lxr := getLXRInstance(tableSize, DefaultLoops, passes)
 	
 	// Try different nonces until we find one that meets difficulty
 	for nonce := uint64(0); nonce < MaxMiningAttempts; nonce++ {

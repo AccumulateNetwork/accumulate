@@ -136,6 +136,43 @@ DataAccount:
       marshal-as: union
       optional: true
 
+MiningAuthority:
+  union: { type: account }
+  description: manages LXR proof-of-work mining requirements for anti-spam protection
+  fields:
+    - name: Url
+      type: url
+      pointer: true
+    - type: AccountAuth
+      marshal-as: reference
+    - name: Enabled
+      description: indicates if mining is currently active
+      type: bool
+    - name: Difficulty
+      description: is the minimum difficulty required for proof-of-work
+      type: uint
+    - name: TableSize
+      description: is the size of the LXR hash table (as power of 2, e.g., 30 = 1GB)
+      type: uint
+    - name: TableSeed
+      description: is the seed used to generate the LXR hash table
+      type: uint
+    - name: Passes
+      description: is the number of passes through the LXR hash table
+      type: uint
+    - name: AuthorizedMiners
+      description: is a list of identity URLs authorized to mine (empty = open mining)
+      type: url
+      pointer: true
+      repeatable: true
+      optional: true
+    - name: Statistics
+      description: tracks mining statistics and metrics
+      type: MiningStatistics
+      marshal-as: reference
+      pointer: true
+      optional: true
+
 TokenIssuer:
   union: { type: account }
   fields:

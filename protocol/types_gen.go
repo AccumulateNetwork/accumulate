@@ -271,6 +271,25 @@ type CreateLiteTokenAccount struct {
 	extraData []byte
 }
 
+// CreateMiningAuthority creates a mining authority that manages proof-of-work requirements.
+type CreateMiningAuthority struct {
+	fieldsSet []bool
+	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	// Difficulty is the initial minimum difficulty required for proof-of-work.
+	Difficulty uint64 `json:"difficulty,omitempty" form:"difficulty" query:"difficulty" validate:"required"`
+	// TableSize is the size of the LXR hash table (as power of 2, e.g., 30 = 1GB).
+	TableSize uint64 `json:"tableSize,omitempty" form:"tableSize" query:"tableSize" validate:"required"`
+	// TableSeed is the seed used to generate the LXR hash table.
+	TableSeed uint64 `json:"tableSeed,omitempty" form:"tableSeed" query:"tableSeed" validate:"required"`
+	// Passes is the number of passes through the LXR hash table.
+	Passes uint64 `json:"passes,omitempty" form:"passes" query:"passes" validate:"required"`
+	// AuthorizedMiners is an initial list of identity URLs authorized to mine (empty = open mining).
+	AuthorizedMiners []*url.URL `json:"authorizedMiners,omitempty" form:"authorizedMiners" query:"authorizedMiners"`
+	// Authorities is a list of authorities to add to the authority set.
+	Authorities []*url.URL `json:"authorities,omitempty" form:"authorities" query:"authorities"`
+	extraData   []byte
+}
+
 type CreateToken struct {
 	fieldsSet   []bool
 	Url         *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
@@ -526,12 +545,6 @@ type LXRMiningSignature struct {
 	Difficulty uint64 `json:"difficulty,omitempty" form:"difficulty" query:"difficulty" validate:"required"`
 	// WorkProof is the proof-of-work hash result.
 	WorkProof [32]byte `json:"workProof,omitempty" form:"workProof" query:"workProof" validate:"required"`
-	// TableSize is the size of the LXR hash table used (power of 2).
-	TableSize uint64 `json:"tableSize,omitempty" form:"tableSize" query:"tableSize"`
-	// TableSeed is the seed used to generate the LXR hash table.
-	TableSeed uint64 `json:"tableSeed,omitempty" form:"tableSeed" query:"tableSeed"`
-	// Passes is the number of passes through the LXR hash table.
-	Passes    uint64 `json:"passes,omitempty" form:"passes" query:"passes"`
 	extraData []byte
 }
 
@@ -587,6 +600,42 @@ type MetricsRequest struct {
 
 type MetricsResponse struct {
 	Value interface{} `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+}
+
+// MiningAuthority manages LXR proof-of-work mining requirements for anti-spam protection.
+type MiningAuthority struct {
+	fieldsSet []bool
+	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	AccountAuth
+	// Enabled indicates if mining is currently active.
+	Enabled bool `json:"enabled,omitempty" form:"enabled" query:"enabled" validate:"required"`
+	// Difficulty is the minimum difficulty required for proof-of-work.
+	Difficulty uint64 `json:"difficulty,omitempty" form:"difficulty" query:"difficulty" validate:"required"`
+	// TableSize is the size of the LXR hash table (as power of 2, e.g., 30 = 1GB).
+	TableSize uint64 `json:"tableSize,omitempty" form:"tableSize" query:"tableSize" validate:"required"`
+	// TableSeed is the seed used to generate the LXR hash table.
+	TableSeed uint64 `json:"tableSeed,omitempty" form:"tableSeed" query:"tableSeed" validate:"required"`
+	// Passes is the number of passes through the LXR hash table.
+	Passes uint64 `json:"passes,omitempty" form:"passes" query:"passes" validate:"required"`
+	// AuthorizedMiners is a list of identity URLs authorized to mine (empty = open mining).
+	AuthorizedMiners []*url.URL `json:"authorizedMiners,omitempty" form:"authorizedMiners" query:"authorizedMiners"`
+	// Statistics tracks mining statistics and metrics.
+	Statistics *MiningStatistics `json:"statistics,omitempty" form:"statistics" query:"statistics"`
+	extraData  []byte
+}
+
+// MiningStatistics tracks proof-of-work mining statistics and metrics.
+type MiningStatistics struct {
+	fieldsSet []bool
+	// TotalTransactions is the total number of mined transactions.
+	TotalTransactions uint64 `json:"totalTransactions,omitempty" form:"totalTransactions" query:"totalTransactions" validate:"required"`
+	// TotalWorkDone is the cumulative work (sum of difficulties) performed.
+	TotalWorkDone *big.Int `json:"totalWorkDone,omitempty" form:"totalWorkDone" query:"totalWorkDone" validate:"required"`
+	// LastMiningTime is the timestamp of the last successful mining operation.
+	LastMiningTime uint64 `json:"lastMiningTime,omitempty" form:"lastMiningTime" query:"lastMiningTime"`
+	// AverageDifficulty is the average difficulty of recent mining operations.
+	AverageDifficulty uint64 `json:"averageDifficulty,omitempty" form:"averageDifficulty" query:"averageDifficulty"`
+	extraData         []byte
 }
 
 type NetworkAccountUpdate struct {
@@ -1209,6 +1258,8 @@ func (*CreateKeyPage) Type() TransactionType { return TransactionTypeCreateKeyPa
 
 func (*CreateLiteTokenAccount) Type() TransactionType { return TransactionTypeCreateLiteTokenAccount }
 
+func (*CreateMiningAuthority) Type() TransactionType { return TransactionTypeCreateMiningAuthority }
+
 func (*CreateToken) Type() TransactionType { return TransactionTypeCreateToken }
 
 func (*CreateTokenAccount) Type() TransactionType { return TransactionTypeCreateTokenAccount }
@@ -1258,6 +1309,8 @@ func (*LiteIdentity) Type() AccountType { return AccountTypeLiteIdentity }
 func (*LiteTokenAccount) Type() AccountType { return AccountTypeLiteTokenAccount }
 
 func (*LockAccount) Type() TransactionType { return TransactionTypeLockAccount }
+
+func (*MiningAuthority) Type() AccountType { return AccountTypeMiningAuthority }
 
 func (*NetworkMaintenance) Type() TransactionType { return TransactionTypeNetworkMaintenance }
 
@@ -1907,6 +1960,40 @@ func (v *CreateLiteTokenAccount) Copy() *CreateLiteTokenAccount {
 
 func (v *CreateLiteTokenAccount) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *CreateMiningAuthority) Copy() *CreateMiningAuthority {
+	u := new(CreateMiningAuthority)
+
+	if v.Url != nil {
+		u.Url = v.Url
+	}
+	u.Difficulty = v.Difficulty
+	u.TableSize = v.TableSize
+	u.TableSeed = v.TableSeed
+	u.Passes = v.Passes
+	u.AuthorizedMiners = make([]*url.URL, len(v.AuthorizedMiners))
+	for i, v := range v.AuthorizedMiners {
+		v := v
+		if v != nil {
+			u.AuthorizedMiners[i] = v
+		}
+	}
+	u.Authorities = make([]*url.URL, len(v.Authorities))
+	for i, v := range v.Authorities {
+		v := v
+		if v != nil {
+			u.Authorities[i] = v
+		}
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *CreateMiningAuthority) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *CreateToken) Copy() *CreateToken {
 	u := new(CreateToken)
 
@@ -2431,9 +2518,6 @@ func (v *LXRMiningSignature) Copy() *LXRMiningSignature {
 	u.Nonce = v.Nonce
 	u.Difficulty = v.Difficulty
 	u.WorkProof = v.WorkProof
-	u.TableSize = v.TableSize
-	u.TableSeed = v.TableSeed
-	u.Passes = v.Passes
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -2549,6 +2633,57 @@ func (v *MetricsRequest) Copy() *MetricsRequest {
 }
 
 func (v *MetricsRequest) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *MiningAuthority) Copy() *MiningAuthority {
+	u := new(MiningAuthority)
+
+	if v.Url != nil {
+		u.Url = v.Url
+	}
+	u.AccountAuth = *v.AccountAuth.Copy()
+	u.Enabled = v.Enabled
+	u.Difficulty = v.Difficulty
+	u.TableSize = v.TableSize
+	u.TableSeed = v.TableSeed
+	u.Passes = v.Passes
+	u.AuthorizedMiners = make([]*url.URL, len(v.AuthorizedMiners))
+	for i, v := range v.AuthorizedMiners {
+		v := v
+		if v != nil {
+			u.AuthorizedMiners[i] = v
+		}
+	}
+	if v.Statistics != nil {
+		u.Statistics = (v.Statistics).Copy()
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *MiningAuthority) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *MiningStatistics) Copy() *MiningStatistics {
+	u := new(MiningStatistics)
+
+	u.TotalTransactions = v.TotalTransactions
+	if v.TotalWorkDone != nil {
+		u.TotalWorkDone = encoding.BigintCopy(v.TotalWorkDone)
+	}
+	u.LastMiningTime = v.LastMiningTime
+	u.AverageDifficulty = v.AverageDifficulty
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *MiningStatistics) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *NetworkAccountUpdate) Copy() *NetworkAccountUpdate {
 	u := new(NetworkAccountUpdate)
@@ -4364,6 +4499,47 @@ func (v *CreateLiteTokenAccount) Equal(u *CreateLiteTokenAccount) bool {
 	return true
 }
 
+func (v *CreateMiningAuthority) Equal(u *CreateMiningAuthority) bool {
+	switch {
+	case v.Url == u.Url:
+		// equal
+	case v.Url == nil || u.Url == nil:
+		return false
+	case !((v.Url).Equal(u.Url)):
+		return false
+	}
+	if !(v.Difficulty == u.Difficulty) {
+		return false
+	}
+	if !(v.TableSize == u.TableSize) {
+		return false
+	}
+	if !(v.TableSeed == u.TableSeed) {
+		return false
+	}
+	if !(v.Passes == u.Passes) {
+		return false
+	}
+	if len(v.AuthorizedMiners) != len(u.AuthorizedMiners) {
+		return false
+	}
+	for i := range v.AuthorizedMiners {
+		if !((v.AuthorizedMiners[i]).Equal(u.AuthorizedMiners[i])) {
+			return false
+		}
+	}
+	if len(v.Authorities) != len(u.Authorities) {
+		return false
+	}
+	for i := range v.Authorities {
+		if !((v.Authorities[i]).Equal(u.Authorities[i])) {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (v *CreateToken) Equal(u *CreateToken) bool {
 	switch {
 	case v.Url == u.Url:
@@ -4953,15 +5129,6 @@ func (v *LXRMiningSignature) Equal(u *LXRMiningSignature) bool {
 	if !(v.WorkProof == u.WorkProof) {
 		return false
 	}
-	if !(v.TableSize == u.TableSize) {
-		return false
-	}
-	if !(v.TableSeed == u.TableSeed) {
-		return false
-	}
-	if !(v.Passes == u.Passes) {
-		return false
-	}
 
 	return true
 }
@@ -5069,6 +5236,75 @@ func (v *MetricsRequest) Equal(u *MetricsRequest) bool {
 		return false
 	}
 	if !(v.Duration == u.Duration) {
+		return false
+	}
+
+	return true
+}
+
+func (v *MiningAuthority) Equal(u *MiningAuthority) bool {
+	switch {
+	case v.Url == u.Url:
+		// equal
+	case v.Url == nil || u.Url == nil:
+		return false
+	case !((v.Url).Equal(u.Url)):
+		return false
+	}
+	if !v.AccountAuth.Equal(&u.AccountAuth) {
+		return false
+	}
+	if !(v.Enabled == u.Enabled) {
+		return false
+	}
+	if !(v.Difficulty == u.Difficulty) {
+		return false
+	}
+	if !(v.TableSize == u.TableSize) {
+		return false
+	}
+	if !(v.TableSeed == u.TableSeed) {
+		return false
+	}
+	if !(v.Passes == u.Passes) {
+		return false
+	}
+	if len(v.AuthorizedMiners) != len(u.AuthorizedMiners) {
+		return false
+	}
+	for i := range v.AuthorizedMiners {
+		if !((v.AuthorizedMiners[i]).Equal(u.AuthorizedMiners[i])) {
+			return false
+		}
+	}
+	switch {
+	case v.Statistics == u.Statistics:
+		// equal
+	case v.Statistics == nil || u.Statistics == nil:
+		return false
+	case !((v.Statistics).Equal(u.Statistics)):
+		return false
+	}
+
+	return true
+}
+
+func (v *MiningStatistics) Equal(u *MiningStatistics) bool {
+	if !(v.TotalTransactions == u.TotalTransactions) {
+		return false
+	}
+	switch {
+	case v.TotalWorkDone == u.TotalWorkDone:
+		// equal
+	case v.TotalWorkDone == nil || u.TotalWorkDone == nil:
+		return false
+	case !((v.TotalWorkDone).Cmp(u.TotalWorkDone) == 0):
+		return false
+	}
+	if !(v.LastMiningTime == u.LastMiningTime) {
+		return false
+	}
+	if !(v.AverageDifficulty == u.AverageDifficulty) {
 		return false
 	}
 
@@ -8094,6 +8330,102 @@ func (v *CreateLiteTokenAccount) IsValid() error {
 	}
 }
 
+var fieldNames_CreateMiningAuthority = []string{
+	1: "Type",
+	2: "Url",
+	3: "Difficulty",
+	4: "TableSize",
+	5: "TableSeed",
+	6: "Passes",
+	7: "AuthorizedMiners",
+	8: "Authorities",
+}
+
+func (v *CreateMiningAuthority) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Url == nil) {
+		writer.WriteUrl(2, v.Url)
+	}
+	if !(v.Difficulty == 0) {
+		writer.WriteUint(3, v.Difficulty)
+	}
+	if !(v.TableSize == 0) {
+		writer.WriteUint(4, v.TableSize)
+	}
+	if !(v.TableSeed == 0) {
+		writer.WriteUint(5, v.TableSeed)
+	}
+	if !(v.Passes == 0) {
+		writer.WriteUint(6, v.Passes)
+	}
+	if !(len(v.AuthorizedMiners) == 0) {
+		for _, v := range v.AuthorizedMiners {
+			writer.WriteUrl(7, v)
+		}
+	}
+	if !(len(v.Authorities) == 0) {
+		for _, v := range v.Authorities {
+			writer.WriteUrl(8, v)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_CreateMiningAuthority)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *CreateMiningAuthority) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Url is missing")
+	} else if v.Url == nil {
+		errs = append(errs, "field Url is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Difficulty is missing")
+	} else if v.Difficulty == 0 {
+		errs = append(errs, "field Difficulty is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field TableSize is missing")
+	} else if v.TableSize == 0 {
+		errs = append(errs, "field TableSize is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field TableSeed is missing")
+	} else if v.TableSeed == 0 {
+		errs = append(errs, "field TableSeed is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field Passes is missing")
+	} else if v.Passes == 0 {
+		errs = append(errs, "field Passes is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_CreateToken = []string{
 	1: "Type",
 	2: "Url",
@@ -9656,9 +9988,6 @@ var fieldNames_LXRMiningSignature = []string{
 	11: "Nonce",
 	12: "Difficulty",
 	13: "WorkProof",
-	14: "TableSize",
-	15: "TableSeed",
-	16: "Passes",
 }
 
 func (v *LXRMiningSignature) MarshalBinary() ([]byte, error) {
@@ -9705,15 +10034,6 @@ func (v *LXRMiningSignature) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.WorkProof == ([32]byte{})) {
 		writer.WriteHash(13, &v.WorkProof)
-	}
-	if !(v.TableSize == 0) {
-		writer.WriteUint(14, v.TableSize)
-	}
-	if !(v.TableSeed == 0) {
-		writer.WriteUint(15, v.TableSeed)
-	}
-	if !(v.Passes == 0) {
-		writer.WriteUint(16, v.Passes)
 	}
 
 	_, _, err := writer.Reset(fieldNames_LXRMiningSignature)
@@ -10145,6 +10465,174 @@ func (v *MetricsRequest) IsValid() error {
 		errs = append(errs, "field Duration is missing")
 	} else if v.Duration == 0 {
 		errs = append(errs, "field Duration is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_MiningAuthority = []string{
+	1:  "Type",
+	2:  "Url",
+	3:  "AccountAuth",
+	4:  "Enabled",
+	5:  "Difficulty",
+	6:  "TableSize",
+	7:  "TableSeed",
+	8:  "Passes",
+	9:  "AuthorizedMiners",
+	10: "Statistics",
+}
+
+func (v *MiningAuthority) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Url == nil) {
+		writer.WriteUrl(2, v.Url)
+	}
+	writer.WriteValue(3, v.AccountAuth.MarshalBinary)
+	if !(!v.Enabled) {
+		writer.WriteBool(4, v.Enabled)
+	}
+	if !(v.Difficulty == 0) {
+		writer.WriteUint(5, v.Difficulty)
+	}
+	if !(v.TableSize == 0) {
+		writer.WriteUint(6, v.TableSize)
+	}
+	if !(v.TableSeed == 0) {
+		writer.WriteUint(7, v.TableSeed)
+	}
+	if !(v.Passes == 0) {
+		writer.WriteUint(8, v.Passes)
+	}
+	if !(len(v.AuthorizedMiners) == 0) {
+		for _, v := range v.AuthorizedMiners {
+			writer.WriteUrl(9, v)
+		}
+	}
+	if !(v.Statistics == nil) {
+		writer.WriteValue(10, v.Statistics.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_MiningAuthority)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *MiningAuthority) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Url is missing")
+	} else if v.Url == nil {
+		errs = append(errs, "field Url is not set")
+	}
+	if err := v.AccountAuth.IsValid(); err != nil {
+		errs = append(errs, err.Error())
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Enabled is missing")
+	} else if !v.Enabled {
+		errs = append(errs, "field Enabled is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Difficulty is missing")
+	} else if v.Difficulty == 0 {
+		errs = append(errs, "field Difficulty is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field TableSize is missing")
+	} else if v.TableSize == 0 {
+		errs = append(errs, "field TableSize is not set")
+	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+		errs = append(errs, "field TableSeed is missing")
+	} else if v.TableSeed == 0 {
+		errs = append(errs, "field TableSeed is not set")
+	}
+	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
+		errs = append(errs, "field Passes is missing")
+	} else if v.Passes == 0 {
+		errs = append(errs, "field Passes is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_MiningStatistics = []string{
+	1: "TotalTransactions",
+	2: "TotalWorkDone",
+	3: "LastMiningTime",
+	4: "AverageDifficulty",
+}
+
+func (v *MiningStatistics) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.TotalTransactions == 0) {
+		writer.WriteUint(1, v.TotalTransactions)
+	}
+	if !(v.TotalWorkDone == nil) {
+		writer.WriteBigInt(2, v.TotalWorkDone)
+	}
+	if !(v.LastMiningTime == 0) {
+		writer.WriteUint(3, v.LastMiningTime)
+	}
+	if !(v.AverageDifficulty == 0) {
+		writer.WriteUint(4, v.AverageDifficulty)
+	}
+
+	_, _, err := writer.Reset(fieldNames_MiningStatistics)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *MiningStatistics) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field TotalTransactions is missing")
+	} else if v.TotalTransactions == 0 {
+		errs = append(errs, "field TotalTransactions is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field TotalWorkDone is missing")
+	} else if v.TotalWorkDone == nil {
+		errs = append(errs, "field TotalWorkDone is not set")
 	}
 
 	switch len(errs) {
@@ -15248,6 +15736,67 @@ func (v *CreateLiteTokenAccount) UnmarshalFieldsFrom(reader *encoding.Reader) er
 	return nil
 }
 
+func (v *CreateMiningAuthority) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *CreateMiningAuthority) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *CreateMiningAuthority) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadUrl(2); ok {
+		v.Url = x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.Difficulty = x
+	}
+	if x, ok := reader.ReadUint(4); ok {
+		v.TableSize = x
+	}
+	if x, ok := reader.ReadUint(5); ok {
+		v.TableSeed = x
+	}
+	if x, ok := reader.ReadUint(6); ok {
+		v.Passes = x
+	}
+	for {
+		if x, ok := reader.ReadUrl(7); ok {
+			v.AuthorizedMiners = append(v.AuthorizedMiners, x)
+		} else {
+			break
+		}
+	}
+	for {
+		if x, ok := reader.ReadUrl(8); ok {
+			v.Authorities = append(v.Authorities, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_CreateMiningAuthority)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *CreateToken) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -16277,15 +16826,6 @@ func (v *LXRMiningSignature) UnmarshalFieldsFrom(reader *encoding.Reader) error 
 	if x, ok := reader.ReadHash(13); ok {
 		v.WorkProof = *x
 	}
-	if x, ok := reader.ReadUint(14); ok {
-		v.TableSize = x
-	}
-	if x, ok := reader.ReadUint(15); ok {
-		v.TableSeed = x
-	}
-	if x, ok := reader.ReadUint(16); ok {
-		v.Passes = x
-	}
 
 	seen, err := reader.Reset(fieldNames_LXRMiningSignature)
 	if err != nil {
@@ -16522,6 +17062,99 @@ func (v *MetricsRequest) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_MetricsRequest)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *MiningAuthority) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *MiningAuthority) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType AccountType
+	if x := new(AccountType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *MiningAuthority) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadUrl(2); ok {
+		v.Url = x
+	}
+	reader.ReadValue(3, v.AccountAuth.UnmarshalBinaryFrom)
+	if x, ok := reader.ReadBool(4); ok {
+		v.Enabled = x
+	}
+	if x, ok := reader.ReadUint(5); ok {
+		v.Difficulty = x
+	}
+	if x, ok := reader.ReadUint(6); ok {
+		v.TableSize = x
+	}
+	if x, ok := reader.ReadUint(7); ok {
+		v.TableSeed = x
+	}
+	if x, ok := reader.ReadUint(8); ok {
+		v.Passes = x
+	}
+	for {
+		if x, ok := reader.ReadUrl(9); ok {
+			v.AuthorizedMiners = append(v.AuthorizedMiners, x)
+		} else {
+			break
+		}
+	}
+	if x := new(MiningStatistics); reader.ReadValue(10, x.UnmarshalBinaryFrom) {
+		v.Statistics = x
+	}
+
+	seen, err := reader.Reset(fieldNames_MiningAuthority)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *MiningStatistics) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *MiningStatistics) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUint(1); ok {
+		v.TotalTransactions = x
+	}
+	if x, ok := reader.ReadBigInt(2); ok {
+		v.TotalWorkDone = x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.LastMiningTime = x
+	}
+	if x, ok := reader.ReadUint(4); ok {
+		v.AverageDifficulty = x
+	}
+
+	seen, err := reader.Reset(fieldNames_MiningStatistics)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -19217,6 +19850,17 @@ func init() {
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("type", "string"),
 		encoding.NewTypeField("url", "string"),
+		encoding.NewTypeField("difficulty", "uint64"),
+		encoding.NewTypeField("tableSize", "uint64"),
+		encoding.NewTypeField("tableSeed", "uint64"),
+		encoding.NewTypeField("passes", "uint64"),
+		encoding.NewTypeField("authorizedMiners", "string[]"),
+		encoding.NewTypeField("authorities", "string[]"),
+	}, "CreateMiningAuthority", "createMiningAuthority")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("url", "string"),
 		encoding.NewTypeField("symbol", "string"),
 		encoding.NewTypeField("precision", "uint64"),
 		encoding.NewTypeField("properties", "string"),
@@ -19417,9 +20061,6 @@ func init() {
 		encoding.NewTypeField("nonce", "uint64"),
 		encoding.NewTypeField("difficulty", "uint64"),
 		encoding.NewTypeField("workProof", "bytes32"),
-		encoding.NewTypeField("tableSize", "uint64"),
-		encoding.NewTypeField("tableSeed", "uint64"),
-		encoding.NewTypeField("passes", "uint64"),
 	}, "LXRMiningSignature", "lxrminingSignature")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -19466,6 +20107,26 @@ func init() {
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("value", "Any"),
 	}, "MetricsResponse", "metricsResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("url", "string"),
+		encoding.NewTypeField("authorities", "AuthorityEntry[]"),
+		encoding.NewTypeField("enabled", "bool"),
+		encoding.NewTypeField("difficulty", "uint64"),
+		encoding.NewTypeField("tableSize", "uint64"),
+		encoding.NewTypeField("tableSeed", "uint64"),
+		encoding.NewTypeField("passes", "uint64"),
+		encoding.NewTypeField("authorizedMiners", "string[]"),
+		encoding.NewTypeField("statistics", "MiningStatistics"),
+	}, "MiningAuthority", "miningAuthority")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("totalTransactions", "uint64"),
+		encoding.NewTypeField("totalWorkDone", "uint256"),
+		encoding.NewTypeField("lastMiningTime", "uint64"),
+		encoding.NewTypeField("averageDifficulty", "uint64"),
+	}, "MiningStatistics", "miningStatistics")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("name", "string"),
@@ -20471,6 +21132,44 @@ func (v *CreateLiteTokenAccount) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *CreateMiningAuthority) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type             TransactionType             `json:"type"`
+		Url              *url.URL                    `json:"url,omitempty"`
+		Difficulty       uint64                      `json:"difficulty,omitempty"`
+		TableSize        uint64                      `json:"tableSize,omitempty"`
+		TableSeed        uint64                      `json:"tableSeed,omitempty"`
+		Passes           uint64                      `json:"passes,omitempty"`
+		AuthorizedMiners encoding.JsonList[*url.URL] `json:"authorizedMiners,omitempty"`
+		Authorities      encoding.JsonList[*url.URL] `json:"authorities,omitempty"`
+		ExtraData        *string                     `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.Url == nil) {
+		u.Url = v.Url
+	}
+	if !(v.Difficulty == 0) {
+		u.Difficulty = v.Difficulty
+	}
+	if !(v.TableSize == 0) {
+		u.TableSize = v.TableSize
+	}
+	if !(v.TableSeed == 0) {
+		u.TableSeed = v.TableSeed
+	}
+	if !(v.Passes == 0) {
+		u.Passes = v.Passes
+	}
+	if !(len(v.AuthorizedMiners) == 0) {
+		u.AuthorizedMiners = v.AuthorizedMiners
+	}
+	if !(len(v.Authorities) == 0) {
+		u.Authorities = v.Authorities
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
 func (v *CreateToken) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type        TransactionType             `json:"type"`
@@ -21051,9 +21750,6 @@ func (v *LXRMiningSignature) MarshalJSON() ([]byte, error) {
 		Nonce           uint64        `json:"nonce,omitempty"`
 		Difficulty      uint64        `json:"difficulty,omitempty"`
 		WorkProof       *string       `json:"workProof,omitempty"`
-		TableSize       uint64        `json:"tableSize,omitempty"`
-		TableSeed       uint64        `json:"tableSeed,omitempty"`
-		Passes          uint64        `json:"passes,omitempty"`
 		ExtraData       *string       `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -21092,15 +21788,6 @@ func (v *LXRMiningSignature) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.WorkProof == ([32]byte{})) {
 		u.WorkProof = encoding.ChainToJSON(&v.WorkProof)
-	}
-	if !(v.TableSize == 0) {
-		u.TableSize = v.TableSize
-	}
-	if !(v.TableSeed == 0) {
-		u.TableSeed = v.TableSeed
-	}
-	if !(v.Passes == 0) {
-		u.Passes = v.Passes
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -21243,6 +21930,76 @@ func (v *MetricsResponse) MarshalJSON() ([]byte, error) {
 	if !(v.Value == nil) {
 		u.Value = encoding.AnyToJSON(v.Value)
 	}
+	return json.Marshal(&u)
+}
+
+func (v *MiningAuthority) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type             AccountType                       `json:"type"`
+		Url              *url.URL                          `json:"url,omitempty"`
+		Authorities      encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
+		Enabled          bool                              `json:"enabled,omitempty"`
+		Difficulty       uint64                            `json:"difficulty,omitempty"`
+		TableSize        uint64                            `json:"tableSize,omitempty"`
+		TableSeed        uint64                            `json:"tableSeed,omitempty"`
+		Passes           uint64                            `json:"passes,omitempty"`
+		AuthorizedMiners encoding.JsonList[*url.URL]       `json:"authorizedMiners,omitempty"`
+		Statistics       *MiningStatistics                 `json:"statistics,omitempty"`
+		ExtraData        *string                           `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.Url == nil) {
+		u.Url = v.Url
+	}
+	if !(len(v.AccountAuth.Authorities) == 0) {
+		u.Authorities = v.AccountAuth.Authorities
+	}
+	if !(!v.Enabled) {
+		u.Enabled = v.Enabled
+	}
+	if !(v.Difficulty == 0) {
+		u.Difficulty = v.Difficulty
+	}
+	if !(v.TableSize == 0) {
+		u.TableSize = v.TableSize
+	}
+	if !(v.TableSeed == 0) {
+		u.TableSeed = v.TableSeed
+	}
+	if !(v.Passes == 0) {
+		u.Passes = v.Passes
+	}
+	if !(len(v.AuthorizedMiners) == 0) {
+		u.AuthorizedMiners = v.AuthorizedMiners
+	}
+	if !(v.Statistics == nil) {
+		u.Statistics = v.Statistics
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *MiningStatistics) MarshalJSON() ([]byte, error) {
+	u := struct {
+		TotalTransactions uint64  `json:"totalTransactions,omitempty"`
+		TotalWorkDone     *string `json:"totalWorkDone,omitempty"`
+		LastMiningTime    uint64  `json:"lastMiningTime,omitempty"`
+		AverageDifficulty uint64  `json:"averageDifficulty,omitempty"`
+		ExtraData         *string `json:"$epilogue,omitempty"`
+	}{}
+	if !(v.TotalTransactions == 0) {
+		u.TotalTransactions = v.TotalTransactions
+	}
+	if !(v.TotalWorkDone == nil) {
+		u.TotalWorkDone = encoding.BigintToJSON(v.TotalWorkDone)
+	}
+	if !(v.LastMiningTime == 0) {
+		u.LastMiningTime = v.LastMiningTime
+	}
+	if !(v.AverageDifficulty == 0) {
+		u.AverageDifficulty = v.AverageDifficulty
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
@@ -23288,6 +24045,47 @@ func (v *CreateLiteTokenAccount) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *CreateMiningAuthority) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type             TransactionType             `json:"type"`
+		Url              *url.URL                    `json:"url,omitempty"`
+		Difficulty       uint64                      `json:"difficulty,omitempty"`
+		TableSize        uint64                      `json:"tableSize,omitempty"`
+		TableSeed        uint64                      `json:"tableSeed,omitempty"`
+		Passes           uint64                      `json:"passes,omitempty"`
+		AuthorizedMiners encoding.JsonList[*url.URL] `json:"authorizedMiners,omitempty"`
+		Authorities      encoding.JsonList[*url.URL] `json:"authorities,omitempty"`
+		ExtraData        *string                     `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Url = v.Url
+	u.Difficulty = v.Difficulty
+	u.TableSize = v.TableSize
+	u.TableSeed = v.TableSeed
+	u.Passes = v.Passes
+	u.AuthorizedMiners = v.AuthorizedMiners
+	u.Authorities = v.Authorities
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Url = u.Url
+	v.Difficulty = u.Difficulty
+	v.TableSize = u.TableSize
+	v.TableSeed = u.TableSeed
+	v.Passes = u.Passes
+	v.AuthorizedMiners = u.AuthorizedMiners
+	v.Authorities = u.Authorities
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (v *CreateToken) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type        TransactionType             `json:"type"`
@@ -24111,9 +24909,6 @@ func (v *LXRMiningSignature) UnmarshalJSON(data []byte) error {
 		Nonce           uint64        `json:"nonce,omitempty"`
 		Difficulty      uint64        `json:"difficulty,omitempty"`
 		WorkProof       *string       `json:"workProof,omitempty"`
-		TableSize       uint64        `json:"tableSize,omitempty"`
-		TableSeed       uint64        `json:"tableSeed,omitempty"`
-		Passes          uint64        `json:"passes,omitempty"`
 		ExtraData       *string       `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -24129,9 +24924,6 @@ func (v *LXRMiningSignature) UnmarshalJSON(data []byte) error {
 	u.Nonce = v.Nonce
 	u.Difficulty = v.Difficulty
 	u.WorkProof = encoding.ChainToJSON(&v.WorkProof)
-	u.TableSize = v.TableSize
-	u.TableSeed = v.TableSeed
-	u.Passes = v.Passes
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -24171,9 +24963,6 @@ func (v *LXRMiningSignature) UnmarshalJSON(data []byte) error {
 	} else {
 		v.WorkProof = *x
 	}
-	v.TableSize = u.TableSize
-	v.TableSeed = u.TableSeed
-	v.Passes = u.Passes
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err
@@ -24383,6 +25172,86 @@ func (v *MetricsResponse) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("error decoding Value: %w", err)
 	} else {
 		v.Value = x
+	}
+	return nil
+}
+
+func (v *MiningAuthority) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type             AccountType                       `json:"type"`
+		Url              *url.URL                          `json:"url,omitempty"`
+		Authorities      encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
+		Enabled          bool                              `json:"enabled,omitempty"`
+		Difficulty       uint64                            `json:"difficulty,omitempty"`
+		TableSize        uint64                            `json:"tableSize,omitempty"`
+		TableSeed        uint64                            `json:"tableSeed,omitempty"`
+		Passes           uint64                            `json:"passes,omitempty"`
+		AuthorizedMiners encoding.JsonList[*url.URL]       `json:"authorizedMiners,omitempty"`
+		Statistics       *MiningStatistics                 `json:"statistics,omitempty"`
+		ExtraData        *string                           `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Url = v.Url
+	u.Authorities = v.AccountAuth.Authorities
+	u.Enabled = v.Enabled
+	u.Difficulty = v.Difficulty
+	u.TableSize = v.TableSize
+	u.TableSeed = v.TableSeed
+	u.Passes = v.Passes
+	u.AuthorizedMiners = v.AuthorizedMiners
+	u.Statistics = v.Statistics
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Url = u.Url
+	v.AccountAuth.Authorities = u.Authorities
+	v.Enabled = u.Enabled
+	v.Difficulty = u.Difficulty
+	v.TableSize = u.TableSize
+	v.TableSeed = u.TableSeed
+	v.Passes = u.Passes
+	v.AuthorizedMiners = u.AuthorizedMiners
+	v.Statistics = u.Statistics
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *MiningStatistics) UnmarshalJSON(data []byte) error {
+	u := struct {
+		TotalTransactions uint64  `json:"totalTransactions,omitempty"`
+		TotalWorkDone     *string `json:"totalWorkDone,omitempty"`
+		LastMiningTime    uint64  `json:"lastMiningTime,omitempty"`
+		AverageDifficulty uint64  `json:"averageDifficulty,omitempty"`
+		ExtraData         *string `json:"$epilogue,omitempty"`
+	}{}
+	u.TotalTransactions = v.TotalTransactions
+	u.TotalWorkDone = encoding.BigintToJSON(v.TotalWorkDone)
+	u.LastMiningTime = v.LastMiningTime
+	u.AverageDifficulty = v.AverageDifficulty
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	v.TotalTransactions = u.TotalTransactions
+	if u.TotalWorkDone != nil {
+		if x, err := encoding.BigintFromJSON(u.TotalWorkDone); err != nil {
+			return fmt.Errorf("error decoding TotalWorkDone: %w", err)
+		} else {
+			v.TotalWorkDone = x
+		}
+	}
+	v.LastMiningTime = u.LastMiningTime
+	v.AverageDifficulty = u.AverageDifficulty
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
 	}
 	return nil
 }

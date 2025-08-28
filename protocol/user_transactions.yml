@@ -190,6 +190,38 @@ CreateKeyBook:
       repeatable: true
       optional: true
 
+CreateMiningAuthority:
+  union: { type: transaction }
+  description: creates a mining authority that manages proof-of-work requirements
+  fields:
+    - name: Url
+      type: url
+      pointer: true
+    - name: Difficulty
+      description: is the initial minimum difficulty required for proof-of-work
+      type: uint
+    - name: TableSize
+      description: is the size of the LXR hash table (as power of 2, e.g., 30 = 1GB)
+      type: uint
+    - name: TableSeed
+      description: is the seed used to generate the LXR hash table
+      type: uint
+    - name: Passes
+      description: is the number of passes through the LXR hash table
+      type: uint
+    - name: AuthorizedMiners
+      description: is an initial list of identity URLs authorized to mine (empty = open mining)
+      type: url
+      pointer: true
+      repeatable: true
+      optional: true
+    - name: Authorities
+      description: is a list of authorities to add to the authority set
+      type: url
+      pointer: true
+      repeatable: true
+      optional: true
+
 AddCredits:
   union: { type: transaction }
   fields:

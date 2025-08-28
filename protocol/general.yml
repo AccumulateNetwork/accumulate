@@ -173,6 +173,25 @@ KeySpec:
       type: url
       pointer: true
 
+MiningStatistics:
+  description: tracks proof-of-work mining statistics and metrics
+  fields:
+    - name: TotalTransactions
+      description: is the total number of mined transactions
+      type: uint
+    - name: TotalWorkDone
+      description: is the cumulative work (sum of difficulties) performed
+      type: bigint
+      pointer: true
+    - name: LastMiningTime
+      description: is the timestamp of the last successful mining operation
+      type: uint
+      optional: true
+    - name: AverageDifficulty
+      description: is the average difficulty of recent mining operations
+      type: uint
+      optional: true
+
 NetworkGlobals:
   fields:
     - name: OperatorAcceptThreshold

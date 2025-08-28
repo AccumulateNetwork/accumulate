@@ -251,6 +251,9 @@ TransactionType:
   UpdateKey:
     value: 0x16
     description: update key for existing keys
+  CreateMiningAuthority:
+    value: 0x17
+    description: creates a mining authority that manages proof-of-work requirements
   NetworkMaintenance:
     value: 0x2E
     description: executes network maintenance operations
@@ -343,6 +346,9 @@ AccountType:
   SyntheticLedger:
     value: 16
     description: is a ledger that tracks the status of produced and received synthetic transactions
+  MiningAuthority:
+    value: 17
+    description: manages proof-of-work mining requirements for anti-spam protection
 
 AllowedTransactionBit:
   UpdateKeyPage:

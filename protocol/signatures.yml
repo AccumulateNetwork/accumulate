@@ -297,18 +297,6 @@ LXRMiningSignature:
     - name: WorkProof
       description: is the proof-of-work hash result
       type: hash
-    - name: TableSize
-      description: is the size of the LXR hash table used (power of 2)
-      type: uint
-      optional: true
-    - name: TableSeed
-      description: is the seed used to generate the LXR hash table
-      type: uint
-      optional: true
-    - name: Passes
-      description: is the number of passes through the LXR hash table
-      type: uint
-      optional: true
 
 ReceiptSignature:
   union: { type: signature }

@@ -1,4 +1,4 @@
-// Copyright 2024 The Accumulate Authors
+// Copyright 2025 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -73,6 +73,9 @@ const AccountTypeLiteIdentity AccountType = 15
 
 // AccountTypeSyntheticLedger is a ledger that tracks the status of produced and received synthetic transactions.
 const AccountTypeSyntheticLedger AccountType = 16
+
+// AccountTypeMiningAuthority manages proof-of-work mining requirements for anti-spam protection.
+const AccountTypeMiningAuthority AccountType = 17
 
 // AllowedTransactionBitUpdateKeyPage is the offset of the UpdateKeyPage bit.
 const AllowedTransactionBitUpdateKeyPage AllowedTransactionBit = 1
@@ -320,6 +323,9 @@ const TransactionTypeUpdateAccountAuth TransactionType = 21
 // TransactionTypeUpdateKey update key for existing keys.
 const TransactionTypeUpdateKey TransactionType = 22
 
+// TransactionTypeCreateMiningAuthority creates a mining authority that manages proof-of-work requirements.
+const TransactionTypeCreateMiningAuthority TransactionType = 23
+
 // TransactionTypeNetworkMaintenance executes network maintenance operations.
 const TransactionTypeNetworkMaintenance TransactionType = 46
 
@@ -447,7 +453,7 @@ func (v AccountType) GetEnumValue() uint64 { return uint64(v) }
 func (v *AccountType) SetEnumValue(id uint64) bool {
 	u := AccountType(id)
 	switch u {
-	case AccountTypeUnknown, AccountTypeAnchorLedger, AccountTypeIdentity, AccountTypeTokenIssuer, AccountTypeTokenAccount, AccountTypeLiteTokenAccount, AccountTypeBlockLedger, AccountTypeKeyPage, AccountTypeKeyBook, AccountTypeDataAccount, AccountTypeLiteDataAccount, AccountTypeUnknownSigner, AccountTypeSystemLedger, AccountTypeLiteIdentity, AccountTypeSyntheticLedger:
+	case AccountTypeUnknown, AccountTypeAnchorLedger, AccountTypeIdentity, AccountTypeTokenIssuer, AccountTypeTokenAccount, AccountTypeLiteTokenAccount, AccountTypeBlockLedger, AccountTypeKeyPage, AccountTypeKeyBook, AccountTypeDataAccount, AccountTypeLiteDataAccount, AccountTypeUnknownSigner, AccountTypeSystemLedger, AccountTypeLiteIdentity, AccountTypeSyntheticLedger, AccountTypeMiningAuthority:
 		*v = u
 		return true
 	}
@@ -487,6 +493,8 @@ func (v AccountType) String() string {
 		return "liteIdentity"
 	case AccountTypeSyntheticLedger:
 		return "syntheticLedger"
+	case AccountTypeMiningAuthority:
+		return "miningAuthority"
 	}
 	return fmt.Sprintf("AccountType:%d", v)
 }
@@ -526,6 +534,8 @@ func AccountTypeByName(name string) (AccountType, bool) {
 		return AccountTypeLiteIdentity, true
 	case "syntheticledger":
 		return AccountTypeSyntheticLedger, true
+	case "miningauthority":
+		return AccountTypeMiningAuthority, true
 	}
 	return 0, false
 }
@@ -1359,7 +1369,7 @@ func (v TransactionType) GetEnumValue() uint64 { return uint64(v) }
 func (v *TransactionType) SetEnumValue(id uint64) bool {
 	u := TransactionType(id)
 	switch u {
-	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateLiteTokenAccount, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeLockAccount, TransactionTypeBurnCredits, TransactionTypeTransferCredits, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeNetworkMaintenance, TransactionTypeActivateProtocolVersion, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeSystemGenesis, TransactionTypeDirectoryAnchor, TransactionTypeBlockValidatorAnchor, TransactionTypeSystemWriteData:
+	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateLiteTokenAccount, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeLockAccount, TransactionTypeBurnCredits, TransactionTypeTransferCredits, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeCreateMiningAuthority, TransactionTypeNetworkMaintenance, TransactionTypeActivateProtocolVersion, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeSystemGenesis, TransactionTypeDirectoryAnchor, TransactionTypeBlockValidatorAnchor, TransactionTypeSystemWriteData:
 		*v = u
 		return true
 	}
@@ -1411,6 +1421,8 @@ func (v TransactionType) String() string {
 		return "updateAccountAuth"
 	case TransactionTypeUpdateKey:
 		return "updateKey"
+	case TransactionTypeCreateMiningAuthority:
+		return "createMiningAuthority"
 	case TransactionTypeNetworkMaintenance:
 		return "networkMaintenance"
 	case TransactionTypeActivateProtocolVersion:
@@ -1486,6 +1498,8 @@ func TransactionTypeByName(name string) (TransactionType, bool) {
 		return TransactionTypeUpdateAccountAuth, true
 	case "updatekey":
 		return TransactionTypeUpdateKey, true
+	case "createminingauthority":
+		return TransactionTypeCreateMiningAuthority, true
 	case "networkmaintenance":
 		return TransactionTypeNetworkMaintenance, true
 	case "activateprotocolversion":
