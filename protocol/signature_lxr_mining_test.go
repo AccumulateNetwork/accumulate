@@ -362,7 +362,7 @@ func BenchmarkLXRMining(b *testing.B) {
 				Timestamp:     uint64(time.Now().Unix()),
 				TableSize:     16, // Small table for benchmark
 			}
-			sig.Mine(txn, 10)
+			_ = sig.Mine(txn, 10)
 		}
 	})
 
@@ -375,7 +375,7 @@ func BenchmarkLXRMining(b *testing.B) {
 				Timestamp:     uint64(time.Now().Unix()),
 				TableSize:     16, // Small table for benchmark
 			}
-			sig.Mine(txn, 100)
+			_ = sig.Mine(txn, 100)
 		}
 	})
 }

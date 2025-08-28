@@ -218,7 +218,7 @@ func (s *LXRMiningSignature) VerifyMining(msg Signable) bool {
 	if passes == 0 {
 		passes = DefaultPasses
 	}
-	lxr := getLXRInstance(uint64(tableSize), DefaultLoops, uint64(passes))
+	lxr := getLXRInstance(tableSize, DefaultLoops, passes)
 	
 	// Recalculate the proof of work
 	_, pow := lxr.LxrPoWHash(msgHash[:], s.Nonce)
@@ -227,14 +227,6 @@ func (s *LXRMiningSignature) VerifyMining(msg Signable) bool {
 	return checkLXRDifficulty(pow, s.Difficulty)
 }
 
-// bytesEqual compares two byte slices for equality using constant-time comparison
-// to prevent timing attacks
-func bytesEqual(a, b []byte) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	return subtle.ConstantTimeCompare(a, b) == 1
-}
 
 // Mine performs proof-of-work mining to find a valid nonce
 func (s *LXRMiningSignature) Mine(msg Signable, targetDifficulty uint64) error {
@@ -255,7 +247,7 @@ func (s *LXRMiningSignature) Mine(msg Signable, targetDifficulty uint64) error {
 	// TableSeed is no longer used with the real LXR algorithm
 	
 	// Get LXR instance
-	lxr := getLXRInstance(uint64(s.TableSize), DefaultLoops, uint64(s.Passes))
+	lxr := getLXRInstance(s.TableSize, DefaultLoops, s.Passes)
 	
 	// Try different nonces until we find one that meets difficulty
 	for nonce := uint64(0); nonce < MaxMiningAttempts; nonce++ {
@@ -345,13 +337,6 @@ func checkLXRDifficulty(pow uint64, targetDifficulty uint64) bool {
 	return nonFFPortion >= threshold
 }
 
-// min returns the minimum of two integers
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
 
 // SignLXRMining signs the work proof with the private key
 func SignLXRMining(sig *LXRMiningSignature, privKey ed25519.PrivateKey) error {
