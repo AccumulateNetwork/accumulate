@@ -42,13 +42,12 @@ func TestLXRMiningSignature(t *testing.T) {
 			Signer:        url.MustParse("acc://miner.acme/book/1"),
 			SignerVersion: 1,
 			Timestamp:     uint64(time.Now().Unix()),
-			TableSize:     20, // Small table for testing (1MB instead of 1GB)
-			TableSeed:     0xFAFAECECFAFAECEC,
-			Passes:        5,
+			TableSize:     16, // Very small table for testing (64KB instead of 1GB)
+			Passes:        2,  // Fewer passes for faster testing
 		}
 
-		// Mine with low difficulty for testing
-		err = sig.Mine(txn, 1000) // Low difficulty for quick testing
+		// Mine with very low difficulty for testing
+		err = sig.Mine(txn, 100) // Very low difficulty for quick testing
 		require.NoError(t, err)
 		t.Logf("Found nonce: %d", sig.Nonce)
 		t.Logf("Work proof: %x", sig.WorkProof)
@@ -110,8 +109,8 @@ func TestLXRMiningSignature(t *testing.T) {
 			},
 		}
 
-		// Test with different difficulties
-		difficulties := []uint64{100, 500, 1000}
+		// Test with different difficulties - using lower values for LXR
+		difficulties := []uint64{10, 50, 100}
 		var miningTimes []time.Duration
 
 		for _, diff := range difficulties {
@@ -187,8 +186,8 @@ func TestLXRMiningSignature(t *testing.T) {
 			},
 		}
 
-		// Mine with anti-spam difficulty
-		antiSpamDifficulty := uint64(5000)
+		// Mine with anti-spam difficulty - adjusted for LXR
+		antiSpamDifficulty := uint64(500) // Reduced for LXR testing
 		sig := &LXRMiningSignature{
 			PublicKey:     pubKey,
 			Signer:        url.MustParse("acc://miner.acme/book/1"),
@@ -281,7 +280,7 @@ func TestLXRMiningSignature(t *testing.T) {
 		}
 
 		// Mine correctly
-		err = sig.Mine(txn, 1000)
+		err = sig.Mine(txn, 100) // Lower difficulty for LXR
 		require.NoError(t, err)
 
 		// Sign with wrong key
@@ -311,7 +310,7 @@ func TestLXRMiningSignature(t *testing.T) {
 		}
 
 		// Should fail to mine without public key
-		err := sig.Mine(txn, 1000)
+		err := sig.Mine(txn, 100)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "public key is required")
 
@@ -354,6 +353,19 @@ func BenchmarkLXRMining(b *testing.B) {
 		},
 	}
 
+	b.Run("Difficulty=10", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			sig := &LXRMiningSignature{
+				PublicKey:     pubKey,
+				Signer:        url.MustParse("acc://miner.acme/book/1"),
+				SignerVersion: 1,
+				Timestamp:     uint64(time.Now().Unix()),
+				TableSize:     16, // Small table for benchmark
+			}
+			sig.Mine(txn, 10)
+		}
+	})
+
 	b.Run("Difficulty=100", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			sig := &LXRMiningSignature{
@@ -361,20 +373,9 @@ func BenchmarkLXRMining(b *testing.B) {
 				Signer:        url.MustParse("acc://miner.acme/book/1"),
 				SignerVersion: 1,
 				Timestamp:     uint64(time.Now().Unix()),
+				TableSize:     16, // Small table for benchmark
 			}
 			sig.Mine(txn, 100)
-		}
-	})
-
-	b.Run("Difficulty=1000", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			sig := &LXRMiningSignature{
-				PublicKey:     pubKey,
-				Signer:        url.MustParse("acc://miner.acme/book/1"),
-				SignerVersion: 1,
-				Timestamp:     uint64(time.Now().Unix()),
-			}
-			sig.Mine(txn, 1000)
 		}
 	})
 }

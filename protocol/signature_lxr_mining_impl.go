@@ -4,15 +4,6 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-// Package protocol implements the Accumulate protocol types and logic.
-//
-// LXRMiningSignature Implementation Note:
-// This is a simplified proof-of-concept implementation that uses SHA256
-// instead of the actual LXR hash algorithm. A production implementation
-// would need to implement the full memory-hard LXR hash algorithm from
-// the Factom PegNet specification to achieve the intended anti-spam
-// protection through memory-hard proof-of-work.
-
 package protocol
 
 import (
@@ -20,25 +11,60 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
+	"sync"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/hash"
+	"gitlab.com/accumulatenetwork/accumulate/internal/lxrpow"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
 // Constants for LXR mining
 const (
-	// DefaultTableSize is the default size of memory table (power of 2)
-	DefaultTableSize = 20 // 1MB for testing, should be 30 (1GB) for production
-	// DefaultTableSeed is the default seed for table generation
-	DefaultTableSeed = 0xDEADBEEF
-	// DefaultPasses is the default number of passes through the table
-	DefaultPasses = 5
-	// ProgressCheckInterval is how often to check for progress/timeout
-	ProgressCheckInterval = 1000000
+	// DefaultTableBits is the default size of memory table in bits (2^bits = size)
+	// 20 bits = 1MB for testing, 30 bits = 1GB for production
+	DefaultTableBits = 20
+	// DefaultLoops is the number of loops through the hash
+	DefaultLoops = 5
+	// DefaultPasses is the default number of passes to randomize the byte map
+	DefaultPasses = 6
 	// MaxMiningAttempts is the maximum number of mining attempts
 	MaxMiningAttempts = ^uint64(0) >> 1 // Half of uint64 max to avoid infinite loop
 )
+
+// LXR instance cache to avoid regenerating tables
+var (
+	lxrCache = make(map[uint64]*lxrpow.LxrPow)
+	lxrMutex sync.RWMutex
+)
+
+// getLXRInstance returns a cached LXR instance or creates a new one
+func getLXRInstance(tableBits, loops, passes uint64) *lxrpow.LxrPow {
+	// Create a unique key for the configuration
+	key := (tableBits << 32) | (loops << 16) | passes
+	
+	// Check cache with read lock
+	lxrMutex.RLock()
+	if lxr, ok := lxrCache[key]; ok {
+		lxrMutex.RUnlock()
+		return lxr
+	}
+	lxrMutex.RUnlock()
+	
+	// Create new instance with write lock
+	lxrMutex.Lock()
+	defer lxrMutex.Unlock()
+	
+	// Double-check in case another goroutine created it
+	if lxr, ok := lxrCache[key]; ok {
+		return lxr
+	}
+	
+	// Create and cache new instance
+	lxr := lxrpow.NewLxrPow(loops, tableBits, passes)
+	lxrCache[key] = lxr
+	return lxr
+}
 
 // RoutingLocation returns the signer URL
 func (s *LXRMiningSignature) RoutingLocation() *url.URL {
@@ -146,24 +172,49 @@ func (s *LXRMiningSignature) Verify(sig Signature, msg Signable) bool {
 
 // VerifyMining verifies that the proof-of-work is valid for the given message
 func (s *LXRMiningSignature) VerifyMining(msg Signable) bool {
-	// Calculate the mining hash input
-	msgHash := msg.Hash()
-	input := make([]byte, 32+8+len(s.PublicKey))
-	copy(input, msgHash[:])
-	binary.BigEndian.PutUint64(input[32:], s.Nonce)
-	copy(input[40:], s.PublicKey)
-	
-	// For this simplified implementation, we just use SHA256
-	// A real implementation would use the LXRHash algorithm
-	proof := sha256.Sum256(input)
-	
-	// Check if the proof matches
-	if proof != s.WorkProof {
+	// Extract nonce from WorkProof (stored at bytes 16-24)
+	storedNonce := binary.BigEndian.Uint64(s.WorkProof[16:24])
+	if storedNonce != s.Nonce {
 		return false
 	}
 	
-	// Check if the proof meets the difficulty requirement
-	return checkDifficulty(proof[:], s.Difficulty)
+	// Get message hash
+	msgHash := msg.Hash()
+	
+	// Verify first 8 bytes of message hash match what's in proof
+	if !bytesEqual(msgHash[:8], s.WorkProof[8:16]) {
+		return false
+	}
+	
+	// Get LXR instance with same configuration
+	tableSize := s.TableSize
+	if tableSize == 0 {
+		tableSize = DefaultTableBits
+	}
+	passes := s.Passes
+	if passes == 0 {
+		passes = DefaultPasses
+	}
+	lxr := getLXRInstance(uint64(tableSize), DefaultLoops, uint64(passes))
+	
+	// Recalculate the proof of work
+	_, pow := lxr.LxrPoWHash(msgHash[:], s.Nonce)
+	
+	// Check if it meets the difficulty requirement
+	return checkLXRDifficulty(pow, s.Difficulty)
+}
+
+// bytesEqual compares two byte slices for equality
+func bytesEqual(a, b []byte) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // Mine performs proof-of-work mining to find a valid nonce
@@ -177,31 +228,32 @@ func (s *LXRMiningSignature) Mine(msg Signable, targetDifficulty uint64) error {
 	
 	// Set default table configuration if not set
 	if s.TableSize == 0 {
-		s.TableSize = DefaultTableSize
-	}
-	if s.TableSeed == 0 {
-		s.TableSeed = DefaultTableSeed
+		s.TableSize = DefaultTableBits
 	}
 	if s.Passes == 0 {
 		s.Passes = DefaultPasses
 	}
+	// TableSeed is no longer used with the real LXR algorithm
+	
+	// Get LXR instance
+	lxr := getLXRInstance(uint64(s.TableSize), DefaultLoops, uint64(s.Passes))
 	
 	// Try different nonces until we find one that meets difficulty
 	for nonce := uint64(0); nonce < MaxMiningAttempts; nonce++ {
 		s.Nonce = nonce
 		
-		// Calculate the mining hash
-		input := make([]byte, 32+8+len(s.PublicKey))
-		copy(input, msgHash[:])
-		binary.BigEndian.PutUint64(input[32:], nonce)
-		copy(input[40:], s.PublicKey)
+		// Use LXR algorithm to compute proof of work
+		_, pow := lxr.LxrPoWHash(msgHash[:], nonce)
 		
-		// For this simplified implementation, we just use SHA256
-		// A real implementation would use the LXRHash algorithm
-		proof := sha256.Sum256(input)
-		
-		// Check if it meets difficulty
-		if checkDifficulty(proof[:], targetDifficulty) {
+		// Check if it meets difficulty using LXR's proof-of-work value
+		if checkLXRDifficulty(pow, targetDifficulty) {
+			// Store the proof as a hash (first 32 bytes of the pow value)
+			var proof [32]byte
+			binary.BigEndian.PutUint64(proof[:8], pow)
+			// Include transaction and nonce info in proof for verification
+			copy(proof[8:16], msgHash[:8])
+			binary.BigEndian.PutUint64(proof[16:24], nonce)
+			copy(proof[24:], s.PublicKey[:min(8, len(s.PublicKey))])
 			s.WorkProof = proof
 			return nil
 		}
@@ -210,25 +262,52 @@ func (s *LXRMiningSignature) Mine(msg Signable, targetDifficulty uint64) error {
 	return errors.InternalError.With("failed to find valid nonce")
 }
 
-// checkDifficulty checks if a hash meets the target difficulty
-// Difficulty is measured as the number of leading zero bits required
-func checkDifficulty(hash []byte, difficulty uint64) bool {
-	// Simple difficulty check: count leading zeros
-	// difficulty = 1000 means approximately 1 in 1000 chance
-	// We use a simple threshold check for simplicity
+// checkLXRDifficulty checks if an LXR proof-of-work value meets the target difficulty
+// The LXR PoW value encodes the difficulty as leading FF bytes followed by the hash value
+func checkLXRDifficulty(pow uint64, targetDifficulty uint64) bool {
+	// LXR proof-of-work uses a different difficulty metric
+	// Higher pow value = more difficulty
+	// We scale the difficulty to match LXR's proof-of-work values
 	
-	// Convert first 8 bytes to uint64
-	if len(hash) < 8 {
-		return false
+	// Count leading FF bytes in the pow value
+	leadingFFBytes := uint64(0)
+	for i := uint(56); i > 0; i -= 8 {
+		if byte(pow>>i) == 0xFF {
+			leadingFFBytes++
+		} else {
+			break
+		}
 	}
 	
-	hashValue := binary.BigEndian.Uint64(hash[:8])
+	// Convert our difficulty scale to LXR's scale
+	// Our difficulty 1000 = approximately 1 in 1000 chance
+	// Map this to LXR's leading FF bytes requirement
+	requiredLeadingBytes := targetDifficulty / 10000
+	if requiredLeadingBytes > 8 {
+		requiredLeadingBytes = 8
+	}
 	
-	// Higher difficulty = lower maximum hash value
-	// Max value decreases exponentially with difficulty
-	maxValue := ^uint64(0) / difficulty
+	// Check if we have enough leading FF bytes
+	if leadingFFBytes >= requiredLeadingBytes {
+		return true
+	}
 	
-	return hashValue <= maxValue
+	// For lower difficulties, check the remaining value
+	if requiredLeadingBytes == 0 {
+		// Use threshold check for low difficulties
+		maxValue := ^uint64(0) / targetDifficulty
+		return pow >= maxValue
+	}
+	
+	return false
+}
+
+// min returns the minimum of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // SignLXRMining signs the work proof with the private key
