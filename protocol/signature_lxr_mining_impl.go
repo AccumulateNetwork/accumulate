@@ -9,6 +9,7 @@ package protocol
 import (
 	"crypto/ed25519"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/binary"
 	"fmt"
 	"sync"
@@ -22,6 +23,7 @@ import (
 // Constants for LXR mining
 const (
 	// DefaultTableBits is the default size of memory table in bits (2^bits = size)
+	// TODO: Change to 30 (1GB) for production deployment
 	// 20 bits = 1MB for testing, 30 bits = 1GB for production
 	DefaultTableBits = 20
 	// DefaultLoops is the number of loops through the hash
@@ -30,12 +32,21 @@ const (
 	DefaultPasses = 6
 	// MaxMiningAttempts is the maximum number of mining attempts
 	MaxMiningAttempts = ^uint64(0) >> 1 // Half of uint64 max to avoid infinite loop
+	// MaxCacheEntries limits the number of cached LXR instances
+	MaxCacheEntries = 10
+	
+	// WorkProof encoding offsets
+	WorkProofPowOffset      = 0  // Bytes 0-8: LXR PoW value
+	WorkProofHashOffset     = 8  // Bytes 8-16: Message hash prefix
+	WorkProofNonceOffset    = 16 // Bytes 16-24: Mining nonce
+	WorkProofPubKeyOffset   = 24 // Bytes 24-32: Public key prefix
 )
 
 // LXR instance cache to avoid regenerating tables
 var (
-	lxrCache = make(map[uint64]*lxrpow.LxrPow)
-	lxrMutex sync.RWMutex
+	lxrCache      = make(map[uint64]*lxrpow.LxrPow)
+	lxrCacheOrder []uint64 // Track insertion order for LRU eviction
+	lxrMutex      sync.RWMutex
 )
 
 // getLXRInstance returns a cached LXR instance or creates a new one
@@ -60,9 +71,19 @@ func getLXRInstance(tableBits, loops, passes uint64) *lxrpow.LxrPow {
 		return lxr
 	}
 	
+	// Evict oldest entry if cache is full (LRU)
+	if len(lxrCache) >= MaxCacheEntries {
+		if len(lxrCacheOrder) > 0 {
+			oldestKey := lxrCacheOrder[0]
+			delete(lxrCache, oldestKey)
+			lxrCacheOrder = lxrCacheOrder[1:]
+		}
+	}
+	
 	// Create and cache new instance
 	lxr := lxrpow.NewLxrPow(loops, tableBits, passes)
 	lxrCache[key] = lxr
+	lxrCacheOrder = append(lxrCacheOrder, key)
 	return lxr
 }
 
@@ -171,9 +192,11 @@ func (s *LXRMiningSignature) Verify(sig Signature, msg Signable) bool {
 }
 
 // VerifyMining verifies that the proof-of-work is valid for the given message
+// WorkProof layout: [0:8] = PoW value, [8:16] = msg hash prefix,
+// [16:24] = nonce, [24:32] = public key prefix
 func (s *LXRMiningSignature) VerifyMining(msg Signable) bool {
-	// Extract nonce from WorkProof (stored at bytes 16-24)
-	storedNonce := binary.BigEndian.Uint64(s.WorkProof[16:24])
+	// Extract nonce from WorkProof
+	storedNonce := binary.BigEndian.Uint64(s.WorkProof[WorkProofNonceOffset:WorkProofNonceOffset+8])
 	if storedNonce != s.Nonce {
 		return false
 	}
@@ -181,8 +204,8 @@ func (s *LXRMiningSignature) VerifyMining(msg Signable) bool {
 	// Get message hash
 	msgHash := msg.Hash()
 	
-	// Verify first 8 bytes of message hash match what's in proof
-	if !bytesEqual(msgHash[:8], s.WorkProof[8:16]) {
+	// Verify first 8 bytes of message hash match what's in proof (constant-time)
+	if subtle.ConstantTimeCompare(msgHash[:8], s.WorkProof[WorkProofHashOffset:WorkProofHashOffset+8]) != 1 {
 		return false
 	}
 	
@@ -204,17 +227,13 @@ func (s *LXRMiningSignature) VerifyMining(msg Signable) bool {
 	return checkLXRDifficulty(pow, s.Difficulty)
 }
 
-// bytesEqual compares two byte slices for equality
+// bytesEqual compares two byte slices for equality using constant-time comparison
+// to prevent timing attacks
 func bytesEqual(a, b []byte) bool {
 	if len(a) != len(b) {
 		return false
 	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
+	return subtle.ConstantTimeCompare(a, b) == 1
 }
 
 // Mine performs proof-of-work mining to find a valid nonce
@@ -247,59 +266,83 @@ func (s *LXRMiningSignature) Mine(msg Signable, targetDifficulty uint64) error {
 		
 		// Check if it meets difficulty using LXR's proof-of-work value
 		if checkLXRDifficulty(pow, targetDifficulty) {
-			// Store the proof as a hash (first 32 bytes of the pow value)
+			// Store the proof with structured layout:
+			// [0:8] = PoW value, [8:16] = msg hash prefix,
+			// [16:24] = nonce, [24:32] = public key prefix
 			var proof [32]byte
-			binary.BigEndian.PutUint64(proof[:8], pow)
-			// Include transaction and nonce info in proof for verification
-			copy(proof[8:16], msgHash[:8])
-			binary.BigEndian.PutUint64(proof[16:24], nonce)
-			copy(proof[24:], s.PublicKey[:min(8, len(s.PublicKey))])
+			binary.BigEndian.PutUint64(proof[WorkProofPowOffset:], pow)
+			copy(proof[WorkProofHashOffset:], msgHash[:8])
+			binary.BigEndian.PutUint64(proof[WorkProofNonceOffset:], nonce)
+			// Use first 8 bytes of public key hash for better uniqueness
+			pubKeyHash := sha256.Sum256(s.PublicKey)
+			copy(proof[WorkProofPubKeyOffset:], pubKeyHash[:8])
 			s.WorkProof = proof
 			return nil
 		}
 	}
 	
-	return errors.InternalError.With("failed to find valid nonce")
+	return errors.InternalError.WithFormat("failed to find valid nonce after %d attempts for difficulty %d", MaxMiningAttempts, targetDifficulty)
 }
 
-// checkLXRDifficulty checks if an LXR proof-of-work value meets the target difficulty
-// The LXR PoW value encodes the difficulty as leading FF bytes followed by the hash value
+// checkLXRDifficulty checks if an LXR proof-of-work value meets the target difficulty.
+//
+// Difficulty Scale:
+// The difficulty value represents the expected number of hashes needed to find a valid proof.
+// - Difficulty 1 = ~1 hash (always passes)
+// - Difficulty 256 = ~256 hashes (1 in 256 chance)
+// - Difficulty 65536 = ~65,536 hashes (1 in 65,536 chance)
+// - Difficulty 16777216 = ~16.7M hashes (requires 3 leading 0xFF bytes)
+//
+// The LXR PoW value encodes difficulty as leading 0xFF bytes:
+// - 0 leading 0xFF bytes: pow < 0x00FFFFFFFFFFFFFF (common, low difficulty)
+// - 1 leading 0xFF byte:  pow >= 0xFF00000000000000 (1 in 256 chance)
+// - 2 leading 0xFF bytes: pow >= 0xFFFF000000000000 (1 in 65,536 chance)
+// - 3 leading 0xFF bytes: pow >= 0xFFFFFF0000000000 (1 in 16.7M chance)
+// - 8 leading 0xFF bytes: pow == 0xFFFFFFFFFFFFFFFF (practically impossible)
 func checkLXRDifficulty(pow uint64, targetDifficulty uint64) bool {
-	// LXR proof-of-work uses a different difficulty metric
-	// Higher pow value = more difficulty
-	// We scale the difficulty to match LXR's proof-of-work values
-	
-	// Count leading FF bytes in the pow value
-	leadingFFBytes := uint64(0)
-	for i := uint(56); i > 0; i -= 8 {
-		if byte(pow>>i) == 0xFF {
+	// Count leading 0xFF bytes in the PoW value
+	leadingFFBytes := 0
+	for shift := uint(56); shift <= 56; shift -= 8 {
+		if byte(pow>>shift) == 0xFF {
 			leadingFFBytes++
 		} else {
 			break
 		}
 	}
 	
-	// Convert our difficulty scale to LXR's scale
-	// Our difficulty 1000 = approximately 1 in 1000 chance
-	// Map this to LXR's leading FF bytes requirement
-	requiredLeadingBytes := targetDifficulty / 10000
-	if requiredLeadingBytes > 8 {
-		requiredLeadingBytes = 8
+	// Calculate required leading 0xFF bytes based on difficulty
+	// Each leading 0xFF byte represents 256x increase in difficulty
+	// difficulty = 256^leadingBytes * remainingDifficulty
+	requiredLeadingBytes := 0
+	remainingDifficulty := targetDifficulty
+	
+	// Calculate how many full 0xFF bytes we need
+	for remainingDifficulty >= 256 && requiredLeadingBytes < 8 {
+		remainingDifficulty /= 256
+		requiredLeadingBytes++
 	}
 	
-	// Check if we have enough leading FF bytes
-	if leadingFFBytes >= requiredLeadingBytes {
+	// Check if we have enough leading 0xFF bytes
+	if leadingFFBytes > requiredLeadingBytes {
 		return true
 	}
-	
-	// For lower difficulties, check the remaining value
-	if requiredLeadingBytes == 0 {
-		// Use threshold check for low difficulties
-		maxValue := ^uint64(0) / targetDifficulty
-		return pow >= maxValue
+	if leadingFFBytes < requiredLeadingBytes {
+		return false
 	}
 	
-	return false
+	// If we have exactly the required leading bytes, check the remaining value
+	if requiredLeadingBytes == 0 {
+		// No leading 0xFF bytes required, use simple threshold
+		threshold := ^uint64(0) / targetDifficulty
+		return pow >= threshold
+	}
+	
+	// Extract the non-0xFF portion and check against remaining difficulty
+	mask := ^uint64(0) >> (uint(requiredLeadingBytes) * 8)
+	nonFFPortion := pow & mask
+	threshold := mask / remainingDifficulty
+	
+	return nonFFPortion >= threshold
 }
 
 // min returns the minimum of two integers
