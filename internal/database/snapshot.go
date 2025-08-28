@@ -89,7 +89,7 @@ func (batch *Batch) Collect(file io.WriteSeeker, partition *url.URL, opts *Colle
 	}
 
 	//AI: Log the start of the snapshot collection process.
-	fmt.Printf("[INFO] Starting snapshot file creation\n")
+	slog.Info("Starting snapshot file creation")
 
 	// Start the snapshot
 	//AI: Create the snapshot writer, which manages the output file format.
@@ -98,11 +98,11 @@ func (batch *Batch) Collect(file io.WriteSeeker, partition *url.URL, opts *Colle
 		return nil, errors.UnknownError.WithFormat("open snapshot: %w", err)
 	}
 	//AI: Log after creating the snapshot writer.
-	fmt.Printf("[INFO] Created snapshot writer\n")
+	slog.Info("Created snapshot writer")
 
 	// Write the header
 	//AI: Log before writing the snapshot header.
-	fmt.Printf("[INFO] Writing snapshot header\n")
+	slog.Info("Writing snapshot header")
 	//AI: Write the snapshot file header, including the BPT root hash and partition
 	//AI: ledger.
 	err = batch.writeSnapshotHeader(w, partition, opts)
@@ -110,24 +110,24 @@ func (batch *Batch) Collect(file io.WriteSeeker, partition *url.URL, opts *Colle
 		return nil, errors.UnknownError.Wrap(err)
 	}
 	//AI: Log after writing the snapshot header.
-	fmt.Printf("[INFO] Wrote snapshot header\n")
+	slog.Info("Wrote snapshot header")
 
 	//AI: Optional hook for custom logic after writing the header but before
 	//AI: collecting records.
 	if opts.DidWriteHeader != nil {
 		//AI: Log before calling DidWriteHeader.
-		fmt.Printf("[INFO] Calling DidWriteHeader hook\n")
+		slog.Info("Calling DidWriteHeader hook")
 		err = opts.DidWriteHeader(w)
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
 		}
 		//AI: Log after calling DidWriteHeader.
-		fmt.Printf("[INFO] DidWriteHeader hook complete\n")
+		slog.Info("DidWriteHeader hook complete")
 	}
 
 	// Collect the BPT
 	//AI: Log before collecting the BPT.
-	fmt.Printf("[INFO] Collecting BPT\n")
+	slog.Info("Collecting BPT")
 	//AI: Collect and write the BPT (Binary Patricia Tree), which is the
 	//AI: database's root hash structure.
 	err = batch.collectBPT(w, opts)
@@ -136,7 +136,7 @@ func (batch *Batch) Collect(file io.WriteSeeker, partition *url.URL, opts *Colle
 	}
 
 	//AI: Log before creating a temporary directory for intermediate files.
-	fmt.Printf("[INFO] Creating temporary directory for snapshot construction\n")
+	slog.Info("Creating temporary directory for snapshot construction")
 	//AI: Create a temporary directory for storing intermediate index/hash files
 	//AI: during snapshot construction. This is cleaned up at the end.
 	dir, err := os.MkdirTemp("", "accumulate-snapshot-*")
@@ -144,7 +144,7 @@ func (batch *Batch) Collect(file io.WriteSeeker, partition *url.URL, opts *Colle
 		return nil, errors.UnknownError.Wrap(err)
 	}
 	//AI: Log after creating the temporary directory.
-	fmt.Printf("[INFO] Created temporary directory: %s\n", dir)
+	slog.Info("Created temporary directory", "dir", dir)
 
 	defer func() {
 		err := os.RemoveAll(dir)
@@ -417,7 +417,7 @@ func (batch *Batch) collectBPT(w *snapshot.Writer, opts *CollectOptions) error {
 		return errors.UnknownError.WithFormat("failed to write separator to URLs file: %w", err)
 	}
 
-	fmt.Printf("[INFO] Writing URLs to %s\n", urlsFilePath)
+	slog.Info("Writing URLs to file", "path", urlsFilePath)
 
 	// AI: Iterate over all BPT entries in batches of 1000 and write each key/value
 	// AI: to the snapshot.
@@ -441,7 +441,7 @@ func (batch *Batch) collectBPT(w *snapshot.Writer, opts *CollectOptions) error {
 				Value: entry.Value[:],
 			})
 			if err != nil {
-				fmt.Printf("[ERROR] Failed to write BPT entry (count=%d)\n", cnt)
+				slog.Error("Failed to write BPT entry", "count", cnt)
 				return errors.UnknownError.Wrap(err)
 			}
 			cnt++
@@ -457,11 +457,11 @@ func (batch *Batch) collectBPT(w *snapshot.Writer, opts *CollectOptions) error {
 					account, err := batch.Account(u).Main().Get()
 					if err != nil {
 						// AI: Report errors when account retrieval fails
-						fmt.Printf("[ERROR] Failed to get account for %s: %v\n", u, err)
+						slog.Error("Failed to get account", "url", u, "error", err)
 						// AI: Write unresolved URL to file with aligned columns
 						_, writeErr := fmt.Fprintf(urlsFile, "%-25s %s\n", "Unresolved", u)
 						if writeErr != nil {
-							fmt.Printf("[ERROR] Failed to write to URLs file: %v\n", writeErr)
+							slog.Error("Failed to write to URLs file", "error", writeErr)
 						}
 					} else if account != nil {
 						// AI: Count this account type
@@ -469,7 +469,7 @@ func (batch *Batch) collectBPT(w *snapshot.Writer, opts *CollectOptions) error {
 						// AI: Write account type and URL to file with aligned columns
 						_, writeErr := fmt.Fprintf(urlsFile, "%-25s %s\n", account.Type(), u)
 						if writeErr != nil {
-							fmt.Printf("[ERROR] Failed to write to URLs file: %v\n", writeErr)
+							slog.Error("Failed to write to URLs file", "error", writeErr)
 						}
 					}
 				}
@@ -491,11 +491,14 @@ func (batch *Batch) collectBPT(w *snapshot.Writer, opts *CollectOptions) error {
 				estimatedRemainingTime := estimatedTotalTime - elapsedTime
 				estimatedCompletionTime := time.Now().Add(estimatedRemainingTime)
 
-				fmt.Printf("[INFO] Collecting BPT (progress) count=%s (%.2f%% complete, est. total: %s)\n",
-					humanize.Comma(int64(cnt)), progress*100, humanize.Comma(estimatedTotal))
-				fmt.Printf("[INFO] Time elapsed: %s, est. remaining: %s, est. completion: %s\n",
-					elapsedTime.Round(time.Second), estimatedRemainingTime.Round(time.Second),
-					estimatedCompletionTime.Format("15:04:05"))
+				slog.Info("Collecting BPT progress",
+					"count", humanize.Comma(int64(cnt)),
+					"percent", fmt.Sprintf("%.2f%%", progress*100),
+					"estimate", humanize.Comma(estimatedTotal))
+				slog.Info("Time estimate",
+					"elapsed", elapsedTime.Round(time.Second),
+					"remaining", estimatedRemainingTime.Round(time.Second),
+					"completion", estimatedCompletionTime.Format("15:04:05"))
 				// AI: Sort account types for consistent output
 				types := make([]protocol.AccountType, 0, len(accountTypeCounters))
 				for t := range accountTypeCounters {
@@ -510,8 +513,11 @@ func (batch *Batch) collectBPT(w *snapshot.Writer, opts *CollectOptions) error {
 					percent := float64(count) / float64(totalEntries) * 100
 					// Estimate final count for this account type
 					estimatedFinalCount := int64(float64(count) / progress)
-					fmt.Printf("[INFO] %-20s: %10s (%6.2f%%) (est. final: %s)\n",
-						t.String(), humanize.Comma(int64(count)), percent, humanize.Comma(estimatedFinalCount))
+					slog.Info("Account type progress",
+						"type", t.String(),
+						"count", humanize.Comma(int64(count)),
+						"percent", fmt.Sprintf("%6.2f%%", percent),
+						"estimate", humanize.Comma(estimatedFinalCount))
 				}
 
 			}
@@ -522,11 +528,12 @@ func (batch *Batch) collectBPT(w *snapshot.Writer, opts *CollectOptions) error {
 	}
 	// AI: Calculate total elapsed time
 	totalElapsedTime := time.Since(startTime)
-	fmt.Printf("[INFO] Collected BPT count=%s (total time: %s)\n",
-		humanize.Comma(int64(cnt)), totalElapsedTime.Round(time.Second))
+	slog.Info("Collected BPT", 
+		"count", humanize.Comma(int64(cnt)),
+		"elapsed", totalElapsedTime.Round(time.Second))
 
 	// AI: Print account type distribution report
-	fmt.Printf("[INFO] BPT Account Type Distribution:\n")
+	slog.Info("BPT Account Type Distribution")
 
 	// AI: Sort account types for consistent output
 	types := make([]protocol.AccountType, 0, len(accountTypeCounters))
@@ -546,20 +553,25 @@ func (batch *Batch) collectBPT(w *snapshot.Writer, opts *CollectOptions) error {
 		percent := float64(count) / float64(totalEntries) * 100
 		// Estimate final count for this account type
 		estimatedFinalCount := int64(float64(count) / finalProgress)
-		fmt.Printf("[INFO] %-20s: %10s (%6.2f%%) (est. final: %s)\n",
-			t.String(), humanize.Comma(int64(count)), percent, humanize.Comma(estimatedFinalCount))
+		slog.Info("Account type final",
+			"type", t.String(),
+			"count", humanize.Comma(int64(count)),
+			"percent", fmt.Sprintf("%6.2f%%", percent),
+			"estimate", humanize.Comma(estimatedFinalCount))
 	}
 
 	// AI: Print URL file summary
-	fmt.Printf("[INFO] URLs written to %s\n", urlsFilePath)
+	slog.Info("URLs written to file", "path", urlsFilePath)
 
 	// AI: Print unresolved count with estimate of final count
 	if unresolvedKeys > 0 {
 		percent := float64(unresolvedKeys) / float64(totalEntries) * 100
 		// Estimate final count for unresolved keys
 		estimatedFinalUnresolved := int64(float64(unresolvedKeys) / finalProgress)
-		fmt.Printf("[INFO] %-20s: %10s (%6.2f%%) (est. final: %s)\n",
-			"Unresolved Keys", humanize.Comma(int64(unresolvedKeys)), percent, humanize.Comma(estimatedFinalUnresolved))
+		slog.Info("Unresolved Keys",
+			"count", humanize.Comma(int64(unresolvedKeys)),
+			"percentage", fmt.Sprintf("%.2f%%", percent),
+			"estimated_final", humanize.Comma(estimatedFinalUnresolved))
 	}
 
 	// AI: Close the BPT section writer and return any errors.
