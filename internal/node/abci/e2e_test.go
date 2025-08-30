@@ -40,6 +40,9 @@ type Tx = messaging.Envelope
 func init() { acctesting.EnableDebugFeatures() }
 
 func TestCreateLiteAccount(t *testing.T) {
+	if !protocol.IsTestNet {
+		t.Skip("Faucet")
+	}
 	n := simulator.NewFakeNodeV1(t, nil)
 
 	const N, M = 11, 1
@@ -108,6 +111,9 @@ func testLiteTx(n *simulator.FakeNode, N, M int, credits float64) (string, map[*
 }
 
 func TestFaucet(t *testing.T) {
+	if !protocol.IsTestNet {
+		t.Skip("Faucet")
+	}
 	n := simulator.NewFakeNodeV1(t, nil)
 
 	alice := generateKey()

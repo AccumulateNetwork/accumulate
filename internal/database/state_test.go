@@ -30,6 +30,10 @@ func init() { acctesting.EnableDebugFeatures() }
 var delivered = (*protocol.TransactionStatus).Delivered
 
 func TestState(t *testing.T) {
+	if !protocol.IsTestNet {
+		t.Skip("Faucet")
+	}
+
 	// Create some state
 	sim := simulator.New(t, 1)
 	sim.InitFromGenesisWith(&core.GlobalValues{ExecutorVersion: protocol.ExecutorVersionV1})
