@@ -35,6 +35,3 @@ MessageType:
   DidUpdateExecutorVersion:
     value: 12
     description: notifies the DN that a BVN updated the executor version
-  RecoveryRequest:
-    value: 13
-    description: requests missing messages to fill gaps

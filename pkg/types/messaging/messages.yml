@@ -185,22 +185,6 @@ DidUpdateExecutorVersion:
       type: protocol.ExecutorVersion
       marshal-as: enum
 
-RecoveryRequest:
-  union: { type: message }
-  fields:
-    - name: SourcePartition
-      description: is the partition that is being asked to send messages
-      type: string
-    - name: DestinationPartition
-      description: is the partition that is requesting messages
-      type: string
-    - name: MessageType
-      description: is the type of messages to recover (anchor or synthetic)
-      type: string
-    - name: LastKnownSequence
-      description: is the last sequence number the destination has received
-      type: uint
-
 # Components
 
 RecordUpdate:

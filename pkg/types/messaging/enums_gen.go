@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -50,9 +50,6 @@ const MessageTypeMakeMajorBlock MessageType = 11
 // MessageTypeDidUpdateExecutorVersion notifies the DN that a BVN updated the executor version.
 const MessageTypeDidUpdateExecutorVersion MessageType = 12
 
-// MessageTypeRecoveryRequest requests missing messages to fill gaps.
-const MessageTypeRecoveryRequest MessageType = 13
-
 // GetEnumValue returns the value of the Message Type
 func (v MessageType) GetEnumValue() uint64 { return uint64(v) }
 
@@ -60,7 +57,7 @@ func (v MessageType) GetEnumValue() uint64 { return uint64(v) }
 func (v *MessageType) SetEnumValue(id uint64) bool {
 	u := MessageType(id)
 	switch u {
-	case MessageTypeTransaction, MessageTypeSignature, MessageTypeBadSynthetic, MessageTypeBlockAnchor, MessageTypeSequenced, MessageTypeSignatureRequest, MessageTypeCreditPayment, MessageTypeBlockSummary, MessageTypeSynthetic, MessageTypeNetworkUpdate, MessageTypeMakeMajorBlock, MessageTypeDidUpdateExecutorVersion, MessageTypeRecoveryRequest:
+	case MessageTypeTransaction, MessageTypeSignature, MessageTypeBadSynthetic, MessageTypeBlockAnchor, MessageTypeSequenced, MessageTypeSignatureRequest, MessageTypeCreditPayment, MessageTypeBlockSummary, MessageTypeSynthetic, MessageTypeNetworkUpdate, MessageTypeMakeMajorBlock, MessageTypeDidUpdateExecutorVersion:
 		*v = u
 		return true
 	}
@@ -94,8 +91,6 @@ func (v MessageType) String() string {
 		return "makeMajorBlock"
 	case MessageTypeDidUpdateExecutorVersion:
 		return "didUpdateExecutorVersion"
-	case MessageTypeRecoveryRequest:
-		return "recoveryRequest"
 	}
 	return fmt.Sprintf("MessageType:%d", v)
 }
@@ -127,8 +122,6 @@ func MessageTypeByName(name string) (MessageType, bool) {
 		return MessageTypeMakeMajorBlock, true
 	case "didupdateexecutorversion":
 		return MessageTypeDidUpdateExecutorVersion, true
-	case "recoveryrequest":
-		return MessageTypeRecoveryRequest, true
 	}
 	return 0, false
 }

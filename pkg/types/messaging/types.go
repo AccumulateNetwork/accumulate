@@ -50,10 +50,6 @@ func UnwrapAs[T any](msg Message) (T, bool) {
 	}
 }
 
-// RecoveryRequest Message interface implementation
-func (m *RecoveryRequest) ID() *url.TxID { return nil }
-func (m *RecoveryRequest) Hash() [32]byte { return encoding.Hash(m) }
-
 func (m *TransactionMessage) ID() *url.TxID { return m.Transaction.ID() }
 
 func (m *SequencedMessage) ID() *url.TxID {

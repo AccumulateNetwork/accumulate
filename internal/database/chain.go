@@ -93,11 +93,6 @@ func (c *Chain) CurrentState() *merkle.State {
 	return c.head
 }
 
-// Inner returns the underlying MerkleManager for proof operations.
-func (c *Chain) Inner() *MerkleManager {
-	return c.merkle
-}
-
 // HeightOf returns the height of the given entry in the chain.
 func (c *Chain) HeightOf(hash []byte) (int64, error) {
 	return c.merkle.IndexOf(hash)

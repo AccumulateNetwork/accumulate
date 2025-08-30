@@ -97,12 +97,43 @@ func (s *NetworkService) NetworkStatus(ctx context.Context, _ api.NetworkStatusO
 }
 
 func (s *NetworkService) getDnHeight(batch *database.Batch) (uint64, error) {
-	c := batch.Account(protocol.PartitionUrl(s.partition).JoinPath(protocol.AnchorPool)).MainChain()
+	// DirectoryAnchors are sent FROM the DN TO the BVNs, so they're stored in BVN anchor pools
+	// We need to search in a BVN's anchor pool, not the DN's anchor pool
+	
+	// Get network configuration to find BVN partitions
+	values := s.values.Load()
+	if values == nil || values.Network == nil {
+		// Fallback: try to find DirectoryAnchors in current partition
+		// This might work if we're already on a BVN
+		return s.searchForDirectoryAnchor(batch, s.partition)
+	}
+	
+	// Find the first BVN partition
+	var bvnPartition string
+	for _, p := range values.Network.Partitions {
+		if p.Type == protocol.PartitionTypeBlockValidator {
+			bvnPartition = p.ID
+			break
+		}
+	}
+	
+	if bvnPartition == "" {
+		// No BVN found, try current partition as fallback
+		return s.searchForDirectoryAnchor(batch, s.partition)
+	}
+	
+	// Search in the BVN's anchor pool for DirectoryAnchors
+	return s.searchForDirectoryAnchor(batch, bvnPartition)
+}
+
+func (s *NetworkService) searchForDirectoryAnchor(batch *database.Batch, partition string) (uint64, error) {
+	c := batch.Account(protocol.PartitionUrl(partition).JoinPath(protocol.AnchorPool)).MainChain()
 	head, err := c.Head().Get()
 	if err != nil {
 		return 0, errors.UnknownError.WithFormat("load anchor ledger main chain head: %w", err)
 	}
 
+	// Search backwards through the chain for the most recent DirectoryAnchor
 	for i := head.Count - 1; i >= 0; i-- {
 		entry, err := c.Entry(i)
 		if err != nil {

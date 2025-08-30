@@ -4,9 +4,6 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-//go:build manual
-// +build manual
-
 // Package docs contains test examples for the lite client validation
 package docs
 
@@ -44,6 +41,11 @@ import (
 // To run this test manually:
 // Run: go test -v -run TestQueryMajorBlock
 func TestQueryMajorBlock(t *testing.T) {
+	// Skip this test in short mode as it requires external network connectivity
+	if testing.Short() {
+		t.Skip("skipping test that requires external network connectivity")
+	}
+
 	// This test demonstrates how to use the lite client API to query major blocks
 	// from the Accumulate network.
 
