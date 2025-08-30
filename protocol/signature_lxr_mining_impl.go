@@ -28,6 +28,17 @@ import (
 //
 // The methods here use default values for basic validation, but proper validation
 // should fetch the MiningAuthority and use its configuration parameters.
+//
+// Replay Protection:
+// The mining proof incorporates multiple elements to prevent replay attacks:
+// 1. Timestamp - Must be set and is XORed into the mining input
+// 2. SignerVersion - Changes when keys are updated, invalidating old proofs
+// 3. Message Hash - Ties the proof to a specific transaction
+// 4. Public Key Hash - Ensures proof is tied to specific signer
+//
+// The combination of timestamp + signer version makes each proof unique even for
+// identical transactions, preventing replay attacks while maintaining the ability
+// to verify the proof later.
 
 // Constants for LXR mining
 const (
@@ -218,13 +229,20 @@ func (s *LXRMiningSignature) VerifyMining(msg Signable) bool {
 		return false
 	}
 	
+	// Recreate the same mining input used during mining (includes replay protection)
+	miningInput := make([]byte, 32)
+	copy(miningInput, msgHash)
+	// XOR in timestamp and signer version for uniqueness
+	binary.BigEndian.PutUint64(miningInput[0:8], binary.BigEndian.Uint64(miningInput[0:8])^s.Timestamp)
+	binary.BigEndian.PutUint64(miningInput[8:16], binary.BigEndian.Uint64(miningInput[8:16])^s.SignerVersion)
+	
 	// Get LXR instance with default configuration
 	// The actual configuration should be validated at a higher level
 	// where the MiningAuthority can be fetched from the database
 	lxr := getLXRInstance(DefaultTableBits, DefaultLoops, DefaultPasses)
 	
-	// Recalculate the proof of work
-	_, pow := lxr.LxrPoWHash(msgHash[:], s.Nonce)
+	// Recalculate the proof of work with the unique mining input
+	_, pow := lxr.LxrPoWHash(miningInput, s.Nonce)
 	
 	// Check if it meets the difficulty requirement
 	return checkLXRDifficulty(pow, s.Difficulty)
@@ -237,8 +255,21 @@ func (s *LXRMiningSignature) Mine(msg Signable, targetDifficulty uint64) error {
 		return errors.BadRequest.With("public key is required for mining")
 	}
 	
+	// Ensure timestamp is set for replay protection
+	if s.Timestamp == 0 {
+		return errors.BadRequest.With("timestamp is required for mining")
+	}
+	
 	s.Difficulty = targetDifficulty
-	msgHash := msg.Hash()
+	
+	// Create mining input that includes message hash, timestamp, and signer version
+	// for replay protection. This ensures the proof is unique to this specific
+	// signature attempt.
+	miningInput := make([]byte, 32)
+	copy(miningInput, msg.Hash())
+	// XOR in timestamp and signer version for uniqueness
+	binary.BigEndian.PutUint64(miningInput[0:8], binary.BigEndian.Uint64(miningInput[0:8])^s.Timestamp)
+	binary.BigEndian.PutUint64(miningInput[8:16], binary.BigEndian.Uint64(miningInput[8:16])^s.SignerVersion)
 	
 	// Get LXR instance with specified configuration
 	// These would typically come from the MiningAuthority
@@ -250,17 +281,17 @@ func (s *LXRMiningSignature) Mine(msg Signable, targetDifficulty uint64) error {
 	for nonce := uint64(0); nonce < MaxMiningAttempts; nonce++ {
 		s.Nonce = nonce
 		
-		// Use LXR algorithm to compute proof of work
-		_, pow := lxr.LxrPoWHash(msgHash[:], nonce)
+		// Use LXR algorithm to compute proof of work with the unique mining input
+		_, pow := lxr.LxrPoWHash(miningInput, nonce)
 		
 		// Check if it meets difficulty using LXR's proof-of-work value
 		if checkLXRDifficulty(pow, targetDifficulty) {
 			// Store the proof with structured layout:
-			// [0:8] = PoW value, [8:16] = msg hash prefix,
+			// [0:8] = PoW value, [8:16] = msg hash prefix (original, not mining input),
 			// [16:24] = nonce, [24:32] = public key prefix
 			var proof [32]byte
 			binary.BigEndian.PutUint64(proof[WorkProofPowOffset:], pow)
-			copy(proof[WorkProofHashOffset:], msgHash[:8])
+			copy(proof[WorkProofHashOffset:], msg.Hash()[:8]) // Store original message hash
 			binary.BigEndian.PutUint64(proof[WorkProofNonceOffset:], nonce)
 			// Use first 8 bytes of public key hash for better uniqueness
 			pubKeyHash := sha256.Sum256(s.PublicKey)
