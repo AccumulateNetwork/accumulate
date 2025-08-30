@@ -12,6 +12,7 @@ import (
 	"math/big"
 	"net"
 	"os"
+	"runtime"
 	"testing"
 	"time"
 
@@ -68,6 +69,10 @@ func TestSimulator(t *testing.T) {
 
 // TestSimulator2 tests the simulator asynchronously
 func TestSimulator2(t *testing.T) {
+	if runtime.GOOS == "darwin" {
+		t.Skip("Network binding test skipped on macOS - IP addresses 127.0.1.x not available")
+	}
+	
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 

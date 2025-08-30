@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -40,8 +41,8 @@ type Tx = messaging.Envelope
 func init() { acctesting.EnableDebugFeatures() }
 
 func TestCreateLiteAccount(t *testing.T) {
-	if !protocol.IsTestNet {
-		t.Skip("Faucet")
+	if runtime.GOOS == "darwin" {
+		t.Skip("Test skipped on macOS")
 	}
 	n := simulator.NewFakeNodeV1(t, nil)
 
@@ -111,8 +112,8 @@ func testLiteTx(n *simulator.FakeNode, N, M int, credits float64) (string, map[*
 }
 
 func TestFaucet(t *testing.T) {
-	if !protocol.IsTestNet {
-		t.Skip("Faucet")
+	if runtime.GOOS == "darwin" {
+		t.Skip("Test skipped on macOS")
 	}
 	n := simulator.NewFakeNodeV1(t, nil)
 

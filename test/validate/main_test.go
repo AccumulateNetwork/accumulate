@@ -14,6 +14,7 @@ import (
 	"math/big"
 	"net"
 	"os"
+	"runtime"
 	"testing"
 	"time"
 
@@ -57,6 +58,10 @@ func TestValidate(t *testing.T) {
 // v2 over P2P.
 func TestValidateAPI(t *testing.T) {
 	acctesting.SkipCI(t, "Not sufficiently reliable yet")
+	
+	if runtime.GOOS == "darwin" {
+		t.Skip("Network binding test skipped on macOS - IP addresses 127.0.1.x not available")
+	}
 
 	net := simulator.NewLocalNetwork(t.Name(), 3, 1, net.ParseIP("127.0.1.1"), 12345)
 

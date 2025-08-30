@@ -9,6 +9,7 @@ package p2p_test
 import (
 	"context"
 	"net"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -19,6 +20,10 @@ import (
 
 func TestSim(t *testing.T) {
 	acctesting.SkipCI(t, "Connections fail in CI")
+	
+	if runtime.GOOS == "darwin" {
+		t.Skip("Network binding test skipped on macOS - IP addresses 127.0.1.x not available")
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)

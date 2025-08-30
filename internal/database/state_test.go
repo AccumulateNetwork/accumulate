@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -30,8 +31,8 @@ func init() { acctesting.EnableDebugFeatures() }
 var delivered = (*protocol.TransactionStatus).Delivered
 
 func TestState(t *testing.T) {
-	if !protocol.IsTestNet {
-		t.Skip("Faucet")
+	if runtime.GOOS == "darwin" {
+		t.Skip("Test skipped on macOS")
 	}
 
 	// Create some state
