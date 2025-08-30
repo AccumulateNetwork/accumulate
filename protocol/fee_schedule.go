@@ -177,6 +177,8 @@ func (s *FeeSchedule) ComputeTransactionFee(tx *Transaction) (Fee, error) {
 
 	case *CreateKeyBook:
 		fee = FeeCreateKeyPage + FeeData*Fee(count-1)
+	case *CreateMiningAuthority:
+		fee = FeeCreateAccount + FeeData*Fee(count-1)
 	case *CreateKeyPage:
 		fee = FeeCreateKeyPage + FeeCreateKeyPageExtra*Fee(len(body.Keys)-1) + FeeData*Fee(count-1)
 

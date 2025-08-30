@@ -231,7 +231,7 @@ func (s *LXRMiningSignature) VerifyMining(msg Signable) bool {
 	
 	// Recreate the same mining input used during mining (includes replay protection)
 	miningInput := make([]byte, 32)
-	copy(miningInput, msgHash)
+	copy(miningInput, msgHash[:])
 	// XOR in timestamp and signer version for uniqueness
 	binary.BigEndian.PutUint64(miningInput[0:8], binary.BigEndian.Uint64(miningInput[0:8])^s.Timestamp)
 	binary.BigEndian.PutUint64(miningInput[8:16], binary.BigEndian.Uint64(miningInput[8:16])^s.SignerVersion)
@@ -265,16 +265,17 @@ func (s *LXRMiningSignature) Mine(msg Signable, targetDifficulty uint64) error {
 	// Create mining input that includes message hash, timestamp, and signer version
 	// for replay protection. This ensures the proof is unique to this specific
 	// signature attempt.
+	msgHash := msg.Hash()
 	miningInput := make([]byte, 32)
-	copy(miningInput, msg.Hash())
+	copy(miningInput, msgHash[:])
 	// XOR in timestamp and signer version for uniqueness
 	binary.BigEndian.PutUint64(miningInput[0:8], binary.BigEndian.Uint64(miningInput[0:8])^s.Timestamp)
 	binary.BigEndian.PutUint64(miningInput[8:16], binary.BigEndian.Uint64(miningInput[8:16])^s.SignerVersion)
 	
 	// Get LXR instance with specified configuration
 	// These would typically come from the MiningAuthority
-	tableSize := DefaultTableBits
-	passes := DefaultPasses
+	tableSize := uint64(DefaultTableBits)
+	passes := uint64(DefaultPasses)
 	lxr := getLXRInstance(tableSize, DefaultLoops, passes)
 	
 	// Try different nonces until we find one that meets difficulty
@@ -291,7 +292,7 @@ func (s *LXRMiningSignature) Mine(msg Signable, targetDifficulty uint64) error {
 			// [16:24] = nonce, [24:32] = public key prefix
 			var proof [32]byte
 			binary.BigEndian.PutUint64(proof[WorkProofPowOffset:], pow)
-			copy(proof[WorkProofHashOffset:], msg.Hash()[:8]) // Store original message hash
+			copy(proof[WorkProofHashOffset:], msgHash[:8]) // Store original message hash
 			binary.BigEndian.PutUint64(proof[WorkProofNonceOffset:], nonce)
 			// Use first 8 bytes of public key hash for better uniqueness
 			pubKeyHash := sha256.Sum256(s.PublicKey)

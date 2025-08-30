@@ -120,7 +120,7 @@ func (h *Handler) handle(s message.StreamOf[*Message], ctx context.Context, canc
 		// Is the message for an existing stream?
 		s, ok := streams[req.ID]
 		if ok {
-			err = s.Write(req.Message)
+			err = s.Write(req.WebSocketMessage)
 			if err != nil {
 				if !errors.Is(err, io.EOF) {
 					slog.Info("Failed to write to stream", "id", req.ID, "error", err, "module", "api")
@@ -159,7 +159,7 @@ func (h *Handler) handle(s message.StreamOf[*Message], ctx context.Context, canc
 					return
 				}
 
-				outgoing <- &Message{ID: req.ID, Message: msg}
+				outgoing <- &Message{ID: req.ID, WebSocketMessage: msg}
 			}
 		}()
 
@@ -174,7 +174,7 @@ func (h *Handler) handle(s message.StreamOf[*Message], ctx context.Context, canc
 			h.inner.Handle(q)
 		}()
 
-		err = p.Write(req.Message)
+		err = p.Write(req.WebSocketMessage)
 		if err != nil {
 			if !errors.Is(err, io.EOF) {
 				slog.Info("Failed to write to stream", "id", req.ID, "error", err, "module", "api")

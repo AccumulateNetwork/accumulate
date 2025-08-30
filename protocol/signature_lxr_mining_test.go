@@ -42,8 +42,6 @@ func TestLXRMiningSignature(t *testing.T) {
 			Signer:        url.MustParse("acc://miner.acme/book/1"),
 			SignerVersion: 1,
 			Timestamp:     uint64(time.Now().Unix()),
-			TableSize:     16, // Very small table for testing (64KB instead of 1GB)
-			Passes:        2,  // Fewer passes for faster testing
 		}
 
 		// Mine with very low difficulty for testing
@@ -360,7 +358,6 @@ func BenchmarkLXRMining(b *testing.B) {
 				Signer:        url.MustParse("acc://miner.acme/book/1"),
 				SignerVersion: 1,
 				Timestamp:     uint64(time.Now().Unix()),
-				TableSize:     16, // Small table for benchmark
 			}
 			_ = sig.Mine(txn, 10)
 		}
@@ -373,7 +370,6 @@ func BenchmarkLXRMining(b *testing.B) {
 				Signer:        url.MustParse("acc://miner.acme/book/1"),
 				SignerVersion: 1,
 				Timestamp:     uint64(time.Now().Unix()),
-				TableSize:     16, // Small table for benchmark
 			}
 			_ = sig.Mine(txn, 100)
 		}
