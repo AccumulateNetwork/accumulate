@@ -77,16 +77,25 @@ fi
 
 # Wait for network to be ready
 print_status "info" "Waiting for network to initialize..."
-sleep 15
+sleep 30
 
-# Check if network is responsive
-if curl -s --max-time 5 "$SERVER_URL/v3" > /dev/null; then
-    print_status "pass" "Network is responsive"
-else
-    print_status "fail" "Network not responding"
-    ./devnet stop
-    exit 1
-fi
+# Try multiple times to check if network is responsive
+for i in {1..6}; do
+    print_status "info" "Checking network connectivity (attempt $i/6)..."
+    if curl -s --max-time 10 "$SERVER_URL/v3" > /dev/null; then
+        print_status "pass" "Network is responsive"
+        break
+    elif [ $i -eq 6 ]; then
+        print_status "fail" "Network not responding after 6 attempts"
+        print_status "info" "Checking DevNet status for debugging..."
+        ./devnet status
+        ./devnet stop
+        exit 1
+    else
+        print_status "warn" "Network not ready yet, waiting 10 seconds..."
+        sleep 10
+    fi
+done
 
 # Step 4: Create CCC Integration Test
 print_status "info" "Starting CCC functionality test..."
