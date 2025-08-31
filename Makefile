@@ -1,7 +1,7 @@
 all: build
 
 # Go handles build caching, so Go targets should always be marked phony.
-.PHONY: all build docker docker-push http http-docker http-docker-push faucet-docker faucet-docker-push healing healing-docker healing-docker-push
+.PHONY: all build docker docker-push http http-docker http-docker-push faucet-docker faucet-docker-push healing healing-docker healing-docker-push tdd-validate tdd-coverage tdd-mocks test test-coverage
 
 GIT_DESCRIBE = $(shell git fetch --tags -q ; git describe --dirty)
 GIT_COMMIT = $(shell git rev-parse HEAD)
@@ -51,3 +51,22 @@ sim-docker:
 
 sim-docker-push: sim-docker
 	docker push "$(IMAGE)/simulator"
+
+# TDD validation targets
+tdd-validate:
+	@./scripts/tdd/tdd_validate.sh
+
+tdd-coverage:
+	@./scripts/tdd/verify_coverage.sh
+
+tdd-mocks:
+	@./scripts/tdd/detect_mocks.sh
+
+# Standard testing targets
+test:
+	go test ./...
+
+test-coverage:
+	go test -coverprofile=coverage.out ./...
+	go tool cover -html=coverage.out -o coverage.html
+	@echo "Coverage report generated: coverage.html"

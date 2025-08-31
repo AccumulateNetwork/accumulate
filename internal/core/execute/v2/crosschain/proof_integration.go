@@ -43,7 +43,13 @@ func (pi *ProofIntegration) CreateSyntheticProofs(
 	// Convert to SyntheticTransaction format
 	syntheticTxs := make([]SyntheticTransaction, len(transactions))
 	for i, tx := range transactions {
-		syntheticTxs[i] = SyntheticTransaction(tx)
+		syntheticTxs[i] = SyntheticTransaction{
+			Destination: tx.Destination,
+			SequenceNum: tx.SequenceNum,
+			Sequence:    tx.SequenceNum, // Set both fields for compatibility
+			ChainURL:    tx.ChainURL,
+			Hash:        tx.Hash,
+		}
 	}
 
 	// Use the conductor's method

@@ -20,15 +20,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// MessageType identifies the type of crosschain message
-type MessageType int
-
-const (
-	MessageTypeSynthetic MessageType = iota
-	MessageTypeAnchor
-	MessageTypeDirectoryAnchor
-	MessageTypeBlockSummary
-)
 
 // CrossChainMessage represents any message that crosses partition boundaries
 type CrossChainMessage interface {

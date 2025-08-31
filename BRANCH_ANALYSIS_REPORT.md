@@ -130,7 +130,7 @@ Analysis of active branches in the Accumulate repository to identify branches re
 
 ## Issues Repository Update Needed
 
-The issues repository at `/home/paul/go/src/gitlab.com/AccumulateNetwork/issues` needs to be updated to reflect:
+The issues repository at `/home/paul/go/src/gitlab.com/AccumulateNetwork/tracking_repo` needs to be updated to reflect:
 
 1. **Branch Status Changes**: Mark completed branches as closed
 2. **Work Progress**: Update issue status for completed work

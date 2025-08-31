@@ -161,3 +161,8 @@ func (c *Chain) AddEntry(entry []byte, unique bool) error {
 func (c *Chain) Receipt(from, to int64) (*merkle.Receipt, error) {
 	return c.merkle.Receipt(from, to)
 }
+
+// Inner returns the underlying MerkleManager for proof operations
+func (c *Chain) Inner() *MerkleManager {
+	return c.merkle
+}

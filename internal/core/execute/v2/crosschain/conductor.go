@@ -16,6 +16,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -30,6 +31,8 @@ type MessageType int
 const (
 	MessageTypeAnchor MessageType = iota
 	MessageTypeSynthetic
+	MessageTypeDirectoryAnchor
+	MessageTypeBlockSummary
 	MessageTypeOther
 )
 
@@ -66,19 +69,21 @@ type DestinationQueue struct {
 	mu             sync.RWMutex
 }
 
-// CrossChainConductor handles async processing of cross-partition transactions
+// CrossChainConductor handles cross-partition message coordination using collection proofs
 type CrossChainConductor struct {
 	// Infrastructure
 	dispatcher execute.Dispatcher
 	logger     logging.OptionalLogger
+	describe   *config.Describe
+	db         database.Beginner
 
-	// Async processing
+	// Async processing (keep for compatibility)
 	syntheticChan chan *SyntheticRequest
 	retryChan     chan *PendingTransmission
 	stopChan      chan struct{}
 	wg            sync.WaitGroup
 
-	// Per-destination blocking and tracking
+	// Per-destination blocking and tracking (keep for compatibility)
 	destinationQueues map[DestinationKey]*DestinationQueue
 	queuesMutex       sync.RWMutex
 	maxRetries        int
@@ -102,10 +107,12 @@ type CrossChainConductor struct {
 }
 
 // NewCrossChainConductor creates and starts the conductor
-func NewCrossChainConductor(dispatcher execute.Dispatcher, logger logging.OptionalLogger) *CrossChainConductor {
+func NewCrossChainConductor(dispatcher execute.Dispatcher, logger logging.OptionalLogger, describe *config.Describe, db database.Beginner) *CrossChainConductor {
 	cc := &CrossChainConductor{
 		dispatcher:        dispatcher,
 		logger:            logger.With("module", "crosschain-conductor").(logging.OptionalLogger),
+		describe:          describe,
+		db:               db,
 		syntheticChan:     make(chan *SyntheticRequest, 100),   // Buffered channel for async processing
 		retryChan:         make(chan *PendingTransmission, 50), // Retry queue
 		stopChan:          make(chan struct{}),
@@ -730,7 +737,7 @@ func (cc *CrossChainConductor) RequestMissingTransactions(
 	}
 
 	req := &RecoveryRequest{
-		Type:        msgType,
+		MessageType: msgType,
 		Source:      source,
 		Destination: destination,
 		FromNumber:  fromNum,
@@ -832,7 +839,7 @@ func (cc *CrossChainConductor) HandleRecoveryRequest(req *RecoveryRequest) error
 	}
 
 	cc.logger.Info("Received recovery request",
-		"type", cc.getMessageTypeName(req.Type),
+		"type", cc.getMessageTypeName(req.MessageType),
 		"source", req.Source,
 		"destination", req.Destination,
 		"range", fmt.Sprintf("%d-%d", req.FromNumber, req.ToNumber),
@@ -1208,6 +1215,47 @@ func (cc *CrossChainConductor) GetProofMetrics() ProofMetrics {
 type SyntheticTransaction struct {
 	Destination *url.URL
 	SequenceNum uint64
+	Sequence    uint64 // Alias for SequenceNum for compatibility
 	ChainURL    *url.URL
 	Hash        []byte
+}
+
+// Describe returns the partition description
+func (cc *CrossChainConductor) Describe() *config.Describe {
+	return cc.describe
+}
+
+// RequestBatchProofRecovery requests batch proof recovery for missing transactions
+func (cc *CrossChainConductor) RequestBatchProofRecovery(source string, msgType MessageType, gapStart, gapEnd uint64) error {
+	if cc.batchProofManager == nil {
+		cc.logger.Info("Batch proof manager not initialized")
+		return errors.InternalError.With("batch proof manager not initialized")
+	}
+
+	cc.logger.Info("Requesting batch proof recovery",
+		"source", source,
+		"type", cc.getMessageTypeName(msgType),
+		"gap_start", gapStart,
+		"gap_end", gapEnd)
+
+	var sequences []uint64
+	for seq := gapStart; seq <= gapEnd; seq++ {
+		sequences = append(sequences, seq)
+	}
+
+	sourceURL, err := url.Parse(source)
+	if err != nil {
+		return errors.BadRequest.WithFormat("invalid source URL: %w", err)
+	}
+
+	req := &BatchRecoveryRequest{
+		PartitionID:      source,
+		Type:             RecoveryType(msgType),
+		MissingSequences: sequences,
+		ChainURL:         sourceURL,
+		RequestTime:      time.Now(),
+	}
+
+	cc.batchProofManager.RequestBatchRecovery(req)
+	return nil
 }

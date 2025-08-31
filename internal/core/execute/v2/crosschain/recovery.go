@@ -39,7 +39,7 @@ type RecoveryManager struct {
 
 // RecoveryRequest represents a request for missing transactions
 type RecoveryRequest struct {
-	Type        MessageType
+	MessageType MessageType
 	Source      string
 	Destination string
 	FromNumber  uint64
@@ -49,6 +49,8 @@ type RecoveryRequest struct {
 	RequestedAt time.Time
 	Callback    chan *RecoveryResponse
 }
+
+// RecoveryRequest is NOT a messaging.Message - it's a direct CCC API call
 
 // RecoveryResponse contains recovered transactions
 type RecoveryResponse struct {
@@ -122,7 +124,7 @@ func (rm *RecoveryManager) RequestMissingTransactions(req *RecoveryRequest) (*Re
 	select {
 	case rm.recoveryQueue <- req:
 		rm.logger.Info("Recovery request queued",
-			"type", rm.messageTypeName(req.Type),
+			"type", rm.messageTypeName(req.MessageType),
 			"source", req.Source,
 			"destination", req.Destination,
 			"range", fmt.Sprintf("%d-%d", req.FromNumber, req.ToNumber))
@@ -185,13 +187,13 @@ func (rm *RecoveryManager) executeRecovery(req *RecoveryRequest) {
 	var resp *RecoveryResponse
 	var err error
 
-	switch req.Type {
+	switch req.MessageType {
 	case MessageTypeAnchor:
 		resp, err = rm.recoverAnchors(req, session)
 	case MessageTypeSynthetic:
 		resp, err = rm.recoverSynthetics(req, session)
 	default:
-		err = errors.BadRequest.WithFormat("unsupported message type: %v", req.Type)
+		err = errors.BadRequest.WithFormat("unsupported message type: %v", req.MessageType)
 	}
 
 	// Send response
@@ -414,7 +416,7 @@ func (rm *RecoveryManager) checkMissingAnchors(batch *database.Batch, src, dst *
 		// Trigger recovery if too many missing
 		if missing > 50 {
 			req := &RecoveryRequest{
-				Type:        MessageTypeAnchor,
+				MessageType:        MessageTypeAnchor,
 				Source:      src.ID,
 				Destination: dst.ID,
 				FromNumber:  srcLedger.Delivered + 1,
@@ -460,7 +462,7 @@ func (rm *RecoveryManager) checkMissingSynthetics(batch *database.Batch, src, ds
 		// Trigger recovery if too many missing
 		if missing > 50 {
 			req := &RecoveryRequest{
-				Type:        MessageTypeSynthetic,
+				MessageType:        MessageTypeSynthetic,
 				Source:      src.ID,
 				Destination: dst.ID,
 				FromNumber:  srcLedger.Delivered + 1,
@@ -481,7 +483,7 @@ func (rm *RecoveryManager) checkMissingSynthetics(batch *database.Batch, src, ds
 // Helper methods
 
 func (rm *RecoveryManager) getSessionKey(req *RecoveryRequest) string {
-	return fmt.Sprintf("%v:%s->%s:%d-%d", req.Type, req.Source, req.Destination, req.FromNumber, req.ToNumber)
+	return fmt.Sprintf("%v:%s->%s:%d-%d", req.MessageType, req.Source, req.Destination, req.FromNumber, req.ToNumber)
 }
 
 func (rm *RecoveryManager) messageTypeName(t MessageType) string {

@@ -28,6 +28,7 @@ const (
 	ProofTypeSynthetic ProofType = iota
 	ProofTypeAnchor
 	ProofTypeReceipt
+	ProofTypeUnified
 )
 
 // ProofRequest represents a request to create a proof
@@ -300,7 +301,7 @@ func (ps *ProofService) createCollectionProof(ctx context.Context, req ProofRequ
 	// Create collection proof using GetReceiptList
 	// Access the merkle state through the Chain's internal methods
 	// This is a simplified placeholder - actual implementation would need proper Chain method
-	receiptList, err := merkle.GetReceiptList(nil, startIdx, endIdx) // TODO: Get merkle state properly
+	receiptList, err := merkle.GetReceiptList(req.SourceChain.Inner(), startIdx, endIdx)
 	if err != nil {
 		atomic.AddInt64(&ps.metrics.ProofGenErrors, 1)
 		return nil, errors.UnknownError.WithFormat("failed to create receipt list: %w", err)

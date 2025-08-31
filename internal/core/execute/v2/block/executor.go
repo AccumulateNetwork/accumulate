@@ -18,6 +18,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -118,7 +119,12 @@ func NewExecutor(opts ExecutorOptions) (*Executor, error) {
 
 	// Initialize crosschain conductor if enabled
 	if opts.EnableCrosschainCoordinator {
-		m.crosschainConductor = crosschain.NewCrossChainConductor(m.mainDispatcher, m.logger)
+		// Convert DescribeShim to config.Describe for crosschain conductor
+		describe := &config.Describe{
+			NetworkType: opts.Describe.NetworkType,
+			PartitionId: opts.Describe.PartitionId,
+		}
+		m.crosschainConductor = crosschain.NewCrossChainConductor(m.mainDispatcher, m.logger, describe, opts.Database)
 		m.logger.Info("CrossChainConductor enabled for routing anchor and synthetic transactions")
 	}
 
