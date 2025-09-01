@@ -17,13 +17,18 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
+
+// RecoveryRequest represents a simple gap recovery request
+type RecoveryRequest struct {
+	Requester  string // Which partition is requesting
+	FromNumber uint64 // Starting sequence number needed
+}
 
 // MessageType represents the type of cross-partition message
 type MessageType int
@@ -96,8 +101,10 @@ type CrossChainConductor struct {
 	syntheticsRetried  int64
 	transmissionErrors int64
 
-	// Recovery manager for missing transactions
-	recoveryManager *RecoveryManager
+	// Simple destination send state tracking
+	destinations   map[string]*DestinationSendState
+	destinationsMu sync.RWMutex
+
 
 	// Batch proof recovery manager for efficient collection proofs
 	batchProofManager *BatchProofRecoveryManager
@@ -117,6 +124,7 @@ func NewCrossChainConductor(dispatcher execute.Dispatcher, logger logging.Option
 		retryChan:         make(chan *PendingTransmission, 50), // Retry queue
 		stopChan:          make(chan struct{}),
 		destinationQueues: make(map[DestinationKey]*DestinationQueue),
+		destinations:      make(map[string]*DestinationSendState),
 		maxRetries:        3,               // Retry failed transmissions up to 3 times
 		retryDelay:        2 * time.Second, // Wait 2 seconds between retries
 	}
@@ -714,40 +722,7 @@ func (cc *CrossChainConductor) GetMetrics() (sent, errors, retried, transmission
 		atomic.LoadInt64(&cc.transmissionErrors)
 }
 
-// InitRecoveryManager initializes the recovery manager with database and client
-func (cc *CrossChainConductor) InitRecoveryManager(db database.Beginner, client api.Querier) {
-	if cc.recoveryManager != nil {
-		cc.logger.Info("Recovery manager already initialized")
-		return
-	}
 
-	cc.recoveryManager = NewRecoveryManager(cc, db, client)
-	cc.recoveryManager.Start()
-	cc.logger.Info("Recovery manager initialized and started")
-}
-
-// RequestMissingTransactions requests missing anchors or synthetic transactions
-func (cc *CrossChainConductor) RequestMissingTransactions(
-	msgType MessageType,
-	source, destination string,
-	fromNum, toNum uint64,
-) (*RecoveryResponse, error) {
-	if cc.recoveryManager == nil {
-		return nil, errors.NotReady.With("recovery manager not initialized")
-	}
-
-	req := &RecoveryRequest{
-		MessageType: msgType,
-		Source:      source,
-		Destination: destination,
-		FromNumber:  fromNum,
-		ToNumber:    toNum,
-		Requester:   destination,
-		Priority:    1,
-	}
-
-	return cc.recoveryManager.RequestMissingTransactions(req)
-}
 
 // RequestMissingTransactionsWithBatchProof requests missing transactions using collection proofs for efficiency
 func (cc *CrossChainConductor) RequestMissingTransactionsWithBatchProof(
@@ -832,52 +807,42 @@ func (cc *CrossChainConductor) handleBatchRecoveryResponse(response *BatchRecove
 	}
 }
 
-// TODO: simplify - this should just adjust send height, not complex recovery processing
-// TODO: no recovery or caching of txs - just manage where we start the list of txs  
-// TODO: req.Requester wants txs from req.FromNumber, so adjust send height to FromNumber-1
-// TODO: KISS - keep it simple stupid!
-// HandleRecoveryRequest processes an incoming recovery request from another partition
+// HandleRecoveryRequest processes gap recovery by adjusting send height
+// Simple implementation: requester wants transactions from FromNumber onwards,
+// so we reset our send position to FromNumber-1 for that destination
 func (cc *CrossChainConductor) HandleRecoveryRequest(req *RecoveryRequest) error {
-	if cc.recoveryManager == nil {
-		return errors.NotReady.With("recovery manager not initialized")
+	cc.logger.Info("Gap recovery request", "requester", req.Requester, "fromNumber", req.FromNumber)
+
+	// Parse requester as destination URL
+	requesterURL, err := url.Parse(req.Requester)
+	if err != nil {
+		return fmt.Errorf("invalid requester URL %s: %v", req.Requester, err)
 	}
 
-	// TODO: simplify - just log the height request, not all this metadata
-	cc.logger.Info("Received recovery request",
-		"type", cc.getMessageTypeName(req.MessageType),
-		"source", req.Source,
-		"destination", req.Destination,
-		"range", fmt.Sprintf("%d-%d", req.FromNumber, req.ToNumber),
-		"requester", req.Requester)
-
-	// TODO: simplify - don't need async processing for simple height adjustment
-	// Process the recovery request asynchronously
-	// TODO: simplify - this whole async recovery process is overkill
-	// TODO: simple version: just adjust send height to req.FromNumber-1 for req.Requester
-	// TODO: KISS - keep it simple stupid!
-	go func() {
-		// TODO: simplify - don't need complex RequestMissingTransactions
-		resp, err := cc.recoveryManager.RequestMissingTransactions(req)
-		if err != nil {
-			cc.logger.Error("Failed to process recovery request", "error", err)
-			return
+	// Get or create destination state
+	cc.destinationsMu.Lock()
+	destState, exists := cc.destinations[requesterURL.String()]
+	if !exists {
+		destState = &DestinationSendState{
+			Destination: requesterURL,
+			SentTxIndex: 0,
+			CurrentTxIndex: 0,
 		}
+		cc.destinations[requesterURL.String()] = destState
+	}
 
-		// TODO: simplify - don't need "recovered transactions" concept
-		// TODO: just need: adjust send height and trigger resend
-		// Send recovered transactions to the requester
-		if len(resp.Transactions) > 0 {
-			// TODO: simplify - this should just adjust send height, not process transactions
-			err = cc.recoveryManager.ProvideRecoveredTransactions(resp.Transactions, req.Requester)
-			if err != nil {
-				cc.logger.Error("Failed to provide recovered transactions", "error", err)
-			} else {
-				cc.logger.Info("Provided recovered transactions",
-					"count", len(resp.Transactions),
-					"to", req.Requester)
-			}
-		}
-	}()
+	// Reset send position to FromNumber-1 so next batch starts at FromNumber
+	if req.FromNumber > 0 {
+		destState.SentTxIndex = req.FromNumber - 1
+	} else {
+		destState.SentTxIndex = 0
+	}
+	cc.destinationsMu.Unlock()
+
+	cc.logger.Info("Adjusted send position for gap recovery", 
+		"destination", req.Requester,
+		"newSentIndex", destState.SentTxIndex,
+		"willResendFrom", destState.SentTxIndex+1)
 
 	return nil
 }
@@ -956,13 +921,7 @@ func (cc *CrossChainConductor) CheckPartitionHealth() map[string]interface{} {
 	health["blocked_queues"] = blockedQueues
 	health["destinations_with_backlog"] = missingByDestination
 
-	// Check recovery manager health if available
-	if cc.recoveryManager != nil {
-		cc.recoveryManager.mu.RLock()
-		activeRecovery := len(cc.recoveryManager.activeRecovery)
-		cc.recoveryManager.mu.RUnlock()
-		health["active_recovery_sessions"] = activeRecovery
-	}
+	// Simple recovery: no active sessions to track
 
 	return health
 }

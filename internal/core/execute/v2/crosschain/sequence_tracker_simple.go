@@ -272,29 +272,17 @@ func (st *SimpleSequenceTracker) checkGapClosure(gaps map[uint64]*SimpleSequence
 // RequestMissingMessages immediately triggers recovery for detected gaps
 func (st *SimpleSequenceTracker) RequestMissingMessages(ctx context.Context, source string, msgType MessageType, gapStart, gapEnd uint64) error {
 	// Use the conductor's recovery manager immediately - no waiting
-	if st.conductor.recoveryManager == nil {
-		// If no recovery manager, try batch proof manager
-		if st.conductor.batchProofManager != nil {
-			return st.conductor.RequestBatchProofRecovery(source, msgType, gapStart, gapEnd)
-		}
-		return errors.InternalError.With("no recovery mechanism available")
-	}
-	
-	// Create recovery request for the gap
+	// Simple gap recovery: ask the source partition to resend from gapStart
 	req := &RecoveryRequest{
-		MessageType:        msgType,
-		Source:      source,
-		Destination: st.conductor.Describe().PartitionUrl().String(),
-		FromNumber:  gapStart,
-		ToNumber:    gapEnd,
 		Requester:   st.conductor.Describe().PartitionUrl().String(),
-		RequestedAt: time.Now(),
+		FromNumber:  gapStart,
 	}
 	
-	// Submit recovery request immediately
-	_, err := st.conductor.recoveryManager.RequestMissingTransactions(req)
+	// For now, just log the gap - in a real system, this would send the request to the source
+	// The source partition would call HandleRecoveryRequest when it receives this
+	err := st.conductor.HandleRecoveryRequest(req)
 	if err != nil {
-		return errors.UnknownError.WithFormat("failed to request missing messages: %w", err)
+		return errors.UnknownError.WithFormat("failed to handle gap recovery: %w", err)
 	}
 	
 	st.logger.Info("Requested missing messages immediately",
@@ -381,30 +369,21 @@ func (st *SimpleSequenceTracker) SendRecoveryRequest(source string, messageType 
 		"type", messageType,
 		"last_seq", lastKnownSeq)
 
-	// Create recovery request
+	// Simple gap recovery: ask the source partition to resend from lastKnownSeq+1  
 	req := &RecoveryRequest{
-		MessageType: convertStringToMessageType(messageType),
-		Source:      source,
-		Destination: st.conductor.Describe().PartitionId,
-		FromNumber:  lastKnownSeq + 1,
-		ToNumber:    lastKnownSeq + 100, // Request next 100 sequences
 		Requester:   st.conductor.Describe().PartitionId,
-		Priority:    1,
-		RequestedAt: time.Now(),
+		FromNumber:  lastKnownSeq + 1,
 	}
 
-	// Send recovery request directly via CCC API (not as CometBFT message)
-	// TODO: Implement direct CCC node-to-node API call
-	// For now, use the recovery manager directly
-	if st.conductor.recoveryManager != nil {
-		_, err := st.conductor.recoveryManager.RequestMissingTransactions(req)
-		if err != nil {
-			st.logger.Error("Failed to send recovery request",
-				"to", source,
-				"error", err)
-		}
+	// For now, just log the gap healing request - in a real system, this would send to source
+	err := st.conductor.HandleRecoveryRequest(req)
+	if err != nil {
+		st.logger.Error("Failed to handle gap healing request",
+			"to", source,
+			"error", err)
 	} else {
-		st.logger.Info("Recovery manager not available for gap healing request",
-			"to", source)
+		st.logger.Info("Processed gap healing request",
+			"to", source,
+			"fromSeq", lastKnownSeq + 1)
 	}
 }
