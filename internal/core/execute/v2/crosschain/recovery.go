@@ -19,6 +19,9 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+// TODO: simplify - this is way too complex for simple height adjustment
+// TODO: no recovery or caching of txs - just manage where we start the list of txs
+// TODO: KISS - keep it simple stupid!
 // RecoveryManager handles recovery of missing anchors and synthetic transactions
 type RecoveryManager struct {
 	conductor *CrossChainConductor
@@ -26,28 +29,34 @@ type RecoveryManager struct {
 	db        database.Beginner
 	client    api.Querier
 
+	// TODO: simplify - most of this recovery state is overkill
 	// Recovery state
-	recoveryQueue  chan *RecoveryRequest
-	activeRecovery map[string]*RecoverySession
-	mu             sync.RWMutex
+	recoveryQueue  chan *RecoveryRequest   // TODO: simplify - probably don't need async queue
+	activeRecovery map[string]*RecoverySession // TODO: simplify - no caching/session tracking needed
+	mu             sync.RWMutex           // TODO: simplify - reduce locking complexity
 
+
+	// TODO: simplify - these configs are overkill for simple height adjustment
 	// Configuration
-	maxConcurrentRecovery int
-	checkInterval         time.Duration
-	requestTimeout        time.Duration
+	maxConcurrentRecovery int       // TODO: simplify - don't need concurrent recovery
+	checkInterval         time.Duration // TODO: simplify - don't need periodic checks
+	requestTimeout        time.Duration // TODO: simplify - don't need timeouts for internal calls
 }
 
+// TODO: simplify - this is overkill for height request
+// TODO: just need: destination, fromHeight - that's it!
+// TODO: KISS - keep it simple stupid!
 // RecoveryRequest represents a request for missing transactions
 type RecoveryRequest struct {
-	MessageType MessageType
-	Source      string
-	Destination string
-	FromNumber  uint64
-	ToNumber    uint64
-	Requester   string // Which partition is requesting
-	Priority    int    // Higher priority requests are processed first
-	RequestedAt time.Time
-	Callback    chan *RecoveryResponse
+	MessageType MessageType  // TODO: simplify - probably don't need message type
+	Source      string       // TODO: simplify - might not need source
+	Destination string       // TODO: simplify - might not need destination
+	FromNumber  uint64       // KEEP: this is the height we need!
+	ToNumber    uint64       // TODO: simplify - don't need end range, just send from FromNumber onwards
+	Requester   string       // KEEP: who is requesting (destination partition)
+	Priority    int          // TODO: simplify - don't need priority for simple height adjustment
+	RequestedAt time.Time    // TODO: simplify - don't need timestamps for internal calls
+	Callback    chan *RecoveryResponse // TODO: simplify - don't need async callbacks
 }
 
 // RecoveryRequest is NOT a messaging.Message - it's a direct CCC API call
@@ -61,15 +70,18 @@ type RecoveryResponse struct {
 
 // Note: RecoveredTransaction is defined in conductor.go
 
+// TODO: simplify - get rid of recovery sessions entirely
+// TODO: no recovery or caching of txs - just manage where we start the list of txs
+// TODO: KISS - keep it simple stupid!
 // RecoverySession tracks an active recovery operation
 type RecoverySession struct {
-	Request    *RecoveryRequest
-	StartedAt  time.Time
-	Status     string
-	Progress   float64
-	Recovered  int
-	Total      int
-	LastUpdate time.Time
+	Request    *RecoveryRequest  // TODO: simplify - don't need session tracking
+	StartedAt  time.Time        // TODO: simplify - don't need timing
+	Status     string           // TODO: simplify - don't need status tracking
+	Progress   float64          // TODO: simplify - don't need progress tracking  
+	Recovered  int              // TODO: simplify - don't need recovery counts
+	Total      int              // TODO: simplify - don't need totals
+	LastUpdate time.Time        // TODO: simplify - don't need update tracking
 }
 
 // NewRecoveryManager creates a new recovery manager
@@ -87,12 +99,17 @@ func NewRecoveryManager(conductor *CrossChainConductor, db database.Beginner, cl
 	}
 }
 
+// TODO: simplify - async processing is overkill for simple height adjustment
+// TODO: KISS - keep it simple stupid!
 // Start begins the recovery manager
 func (rm *RecoveryManager) Start() {
-	go rm.processRecoveryRequests()
-	go rm.periodicHealthCheck()
+	go rm.processRecoveryRequests()  // TODO: simplify - don't need async queue processing
+	go rm.periodicHealthCheck()      // TODO: simplify - don't need periodic health checks
 }
 
+// TODO: simplify - this whole function is complex overkill
+// TODO: no recovery or caching of txs - just manage where we start the list of txs
+// TODO: KISS - keep it simple stupid!
 // RequestMissingTransactions requests missing anchors or synthetic transactions
 func (rm *RecoveryManager) RequestMissingTransactions(req *RecoveryRequest) (*RecoveryResponse, error) {
 	// Validate request
@@ -537,9 +554,14 @@ func (rm *RecoveryManager) getNetworkInfo(ctx context.Context) (*NetworkInfo, er
 	return netInfo, nil
 }
 
+// TODO: simplify - get rid of "recovered transactions" concept entirely  
+// TODO: just manage where we start the list of txs
+// TODO: destination requests height X, we adjust our send position to X-1, done
+// TODO: KISS - keep it simple stupid!
 // ProvideRecoveredTransactions provides recovered transactions to requesting partition
 func (rm *RecoveryManager) ProvideRecoveredTransactions(recovered []RecoveredTransaction, destination string) error {
-	// Simplified placeholder - actual recovery handled by CrossChainConductor
+	// TODO: simplify - this placeholder should just adjust send height and trigger resend
+	// TODO: no recovery or caching of txs - just reset send position
 	rm.logger.Info("Providing recovered transactions",
 		"count", len(recovered),
 		"destination", destination)

@@ -832,12 +832,17 @@ func (cc *CrossChainConductor) handleBatchRecoveryResponse(response *BatchRecove
 	}
 }
 
+// TODO: simplify - this should just adjust send height, not complex recovery processing
+// TODO: no recovery or caching of txs - just manage where we start the list of txs  
+// TODO: req.Requester wants txs from req.FromNumber, so adjust send height to FromNumber-1
+// TODO: KISS - keep it simple stupid!
 // HandleRecoveryRequest processes an incoming recovery request from another partition
 func (cc *CrossChainConductor) HandleRecoveryRequest(req *RecoveryRequest) error {
 	if cc.recoveryManager == nil {
 		return errors.NotReady.With("recovery manager not initialized")
 	}
 
+	// TODO: simplify - just log the height request, not all this metadata
 	cc.logger.Info("Received recovery request",
 		"type", cc.getMessageTypeName(req.MessageType),
 		"source", req.Source,
@@ -845,16 +850,24 @@ func (cc *CrossChainConductor) HandleRecoveryRequest(req *RecoveryRequest) error
 		"range", fmt.Sprintf("%d-%d", req.FromNumber, req.ToNumber),
 		"requester", req.Requester)
 
+	// TODO: simplify - don't need async processing for simple height adjustment
 	// Process the recovery request asynchronously
+	// TODO: simplify - this whole async recovery process is overkill
+	// TODO: simple version: just adjust send height to req.FromNumber-1 for req.Requester
+	// TODO: KISS - keep it simple stupid!
 	go func() {
+		// TODO: simplify - don't need complex RequestMissingTransactions
 		resp, err := cc.recoveryManager.RequestMissingTransactions(req)
 		if err != nil {
 			cc.logger.Error("Failed to process recovery request", "error", err)
 			return
 		}
 
+		// TODO: simplify - don't need "recovered transactions" concept
+		// TODO: just need: adjust send height and trigger resend
 		// Send recovered transactions to the requester
 		if len(resp.Transactions) > 0 {
+			// TODO: simplify - this should just adjust send height, not process transactions
 			err = cc.recoveryManager.ProvideRecoveredTransactions(resp.Transactions, req.Requester)
 			if err != nil {
 				cc.logger.Error("Failed to provide recovered transactions", "error", err)
