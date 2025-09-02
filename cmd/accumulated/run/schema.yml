@@ -264,6 +264,9 @@ Configuration:
         - name: StorageType
           type: '*StorageType'
           optional: true
+        - name: DropsPerMinute
+          type: '*int'
+          optional: true
 
 Service:
   class: union

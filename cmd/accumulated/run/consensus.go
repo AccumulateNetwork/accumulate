@@ -438,12 +438,22 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 		Router:  routing.MessageRouter{Router: router},
 	}}
 	db := database.New(store, d.logger)
+	// Extract DropsPerMinute from devnet configuration if present
+	dropsPerMinute := 0
+	for _, cfg := range inst.config.Configurations {
+		if devCfg, ok := cfg.(*DevnetConfiguration); ok && devCfg.DropsPerMinute != nil {
+			dropsPerMinute = int(*devCfg.DropsPerMinute)
+			break
+		}
+	}
+
 	execOpts := execute.Options{
 		Logger:        d.logger.With("module", "executor"),
 		Database:      db,
 		Key:           d.privVal.Key.PrivKey.Bytes(),
 		Router:        router,
 		EventBus:      d.eventBus,
+		DropsPerMinute: dropsPerMinute,
 		Sequencer:     client.Private(),
 		Querier:       client,
 		EnableHealing: *c.EnableHealing,

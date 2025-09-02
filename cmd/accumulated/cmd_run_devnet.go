@@ -41,6 +41,7 @@ var flagRunDevnet = struct {
 	Globals       network.GlobalValues
 	Logging       run.Logging
 	SoftReset     bool
+	DropsPerMinute int
 }{
 	Globals: network.GlobalValues{
 		ExecutorVersion: protocol.ExecutorVersionLatest,
@@ -68,6 +69,7 @@ func init() {
 	cmdRunDevnet.Flags().Var(cmdutil.JsonFlagOf(&flagRunDevnet.Globals), "globals", "Override the default global values")
 	cmdRunDevnet.Flags().Var(cmdutil.JsonFlagOf(&flagRunDevnet.Logging), "logging", "Override the default logger configuration")
 	cmdRunDevnet.Flags().BoolVar(&flagRunDevnet.SoftReset, "soft-reset", false, "Reset only if necessary")
+	cmdRunDevnet.Flags().IntVar(&flagRunDevnet.DropsPerMinute, "dpm", 0, "Enable recovery testing with drops per minute (0=disabled, requires testnet build)")
 
 	setRunFlags(cmdRunDevnet)
 

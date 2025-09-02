@@ -397,12 +397,13 @@ func (v *CoreValidatorMode) UnmarshalJSON(b []byte) error {
 }
 
 type DevnetConfiguration struct {
-	Listen      Multiaddr
-	Bvns        uint64
-	Validators  uint64
-	Followers   uint64
-	Globals     *network.GlobalValues
-	StorageType *StorageType
+	Listen         Multiaddr
+	Bvns           uint64
+	Validators     uint64
+	Followers      uint64
+	Globals        *network.GlobalValues
+	StorageType    *StorageType
+	DropsPerMinute *int64
 }
 
 func (DevnetConfiguration) Type() ConfigurationType { return ConfigurationTypeDevnet }

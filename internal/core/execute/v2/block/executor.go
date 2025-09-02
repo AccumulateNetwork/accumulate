@@ -124,7 +124,7 @@ func NewExecutor(opts ExecutorOptions) (*Executor, error) {
 			NetworkType: opts.Describe.NetworkType,
 			PartitionId: opts.Describe.PartitionId,
 		}
-		m.crosschainConductor = crosschain.NewCrossChainConductor(m.mainDispatcher, m.logger, describe, opts.Database)
+		m.crosschainConductor = crosschain.NewCrossChainConductorWithRecoveryTesting(m.mainDispatcher, m.logger, describe, opts.Database, opts.DropsPerMinute)
 		m.logger.Info("CrossChainConductor enabled for routing anchor and synthetic transactions")
 	}
 
