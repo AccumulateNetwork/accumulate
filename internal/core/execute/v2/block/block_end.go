@@ -597,35 +597,22 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 		}
 	}
 	
-	// Send all batched messages for collection proof optimization
+	// Send all batched messages using crosschain conductor for collection proof optimization
 	for destKey, batch := range messageBatches {
-		// Route through crosschain conductor if enabled, otherwise use direct dispatcher
-		if x.crosschainConductor != nil {
-			// Use crosschain conductor for coordinated routing with collection proofs
-			err := x.crosschainConductor.SubmitSynthetic(ctx, batch.Messages, batch.Dest)
-			if err != nil {
-				x.logger.Error("Failed to dispatch batched transactions via crosschain conductor", 
-					"error", err, 
-					"from", partition.Url, 
-					"dest", destKey,
-					"batch_size", len(batch.Messages))
-				continue
-			}
-			x.logger.Debug("Batched transactions routed via crosschain conductor", 
-				"dest", destKey, 
+		err := x.crosschainConductor.SubmitSynthetic(ctx, batch.Messages, batch.Dest)
+		if err != nil {
+			x.logger.Error("Failed to dispatch batched transactions via crosschain conductor", 
+				"error", err, 
 				"from", partition.Url, 
-				"batch_size", len(batch.Messages),
-				"is_anchor", anchor)
-		} else {
-			// Use direct dispatcher (legacy behavior) - send individually for compatibility
-			for _, msg := range batch.Messages {
-				err := dispatcher.Submit(ctx, batch.Dest, &messaging.Envelope{Messages: []messaging.Message{msg}})
-				if err != nil {
-					x.logger.Error("Failed to dispatch transaction", "error", err, "from", partition.Url)
-					continue
-				}
-			}
+				"dest", destKey,
+				"batch_size", len(batch.Messages))
+			continue
 		}
+		x.logger.Debug("Batched transactions routed via crosschain conductor", 
+			"dest", destKey, 
+			"from", partition.Url, 
+			"batch_size", len(batch.Messages),
+			"is_anchor", anchor)
 	}
 }
 
