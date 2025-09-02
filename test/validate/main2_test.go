@@ -24,6 +24,9 @@ import (
 
 // TestValidate runs the validation test suite against the simulator.
 func TestValidate2(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
 	suite.Run(t, new(Validation2TestSuite))
 }
 

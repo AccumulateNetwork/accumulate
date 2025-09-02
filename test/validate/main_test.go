@@ -48,14 +48,24 @@ func init() {
 	acctesting.EnableDebugFeatures()
 }
 
+func TestMain(m *testing.M) {
+	os.Exit(m.Run())
+}
+
 // TestValidate runs the validation test suite against the simulator.
 func TestValidate(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
 	suite.Run(t, new(ValidationTestSuite))
 }
 
 // TestValidateAPI runs the validation test suite against the simulator via API
 // v2 over P2P.
 func TestValidateAPI(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
 	acctesting.SkipCI(t, "Not sufficiently reliable yet")
 
 	net := simulator.NewLocalNetwork(t.Name(), 3, 1, net.ParseIP("127.0.1.1"), 12345)

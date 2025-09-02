@@ -33,6 +33,9 @@ func init() {
 }
 
 func TestSimulator(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping long-running simulator test in short mode")
+	}
 	alice := url.MustParse("alice")
 	bob := url.MustParse("bob")
 	aliceKey := acctesting.GenerateKey(alice)
@@ -68,6 +71,9 @@ func TestSimulator(t *testing.T) {
 
 // TestSimulator2 tests the simulator asynchronously
 func TestSimulator2(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping long-running simulator test in short mode")
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
@@ -164,6 +170,9 @@ func buildAndSubmit(t testing.TB, ctx context.Context, svc api.Submitter, bld En
 }
 
 func TestSimulatorFaucet(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping long-running simulator test in short mode")
+	}
 	lite := acctesting.GenerateKey(t.Name(), "Lite")
 	liteUrl := acctesting.AcmeLiteAddressStdPriv(lite)
 

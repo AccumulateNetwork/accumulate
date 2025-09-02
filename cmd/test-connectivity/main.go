@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	fmt.Println("=== Accumulate Network Connectivity Test ===\n")
+	fmt.Println("=== Accumulate Network Connectivity Test ===")
 
 	// Test Mainnet
 	fmt.Println("1. MAINNET (https://mainnet.accumulatenetwork.io/v3)")
