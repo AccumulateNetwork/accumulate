@@ -101,20 +101,38 @@ type CrossChainConductor struct {
 	syntheticsRetried  int64
 	transmissionErrors int64
 
-	// Simple destination send state tracking
+	// Destination send state tracking
+	// NOTE: This is separate from destinationQueues because it tracks different concerns:
+	// - destinationQueues: Per-message-type transmission state and blocking
+	// - destinations: Simple index-based gap recovery state per destination
+	// Both are needed for the complete healing mechanism.
 	destinations   map[string]*DestinationSendState
 	destinationsMu sync.RWMutex
 
 
-	// Batch proof recovery manager for efficient collection proofs
-	batchProofManager *BatchProofRecoveryManager
+	// Batch proof recovery manager removed - was fake implementation
 
 	// Centralized proof service for construction and validation
 	proofService *ProofService
+
+	// Sequence tracker for gap detection and healing
+	sequenceTracker *SimpleSequenceTracker
+
+	// Recovery testing (ONLY active with faucet + test flag - NEVER in production)
+	// This provides safe testing of the healing mechanism by randomly dropping messages
+	// and verifying gap detection, recovery requests, and healing work correctly.
+	// See docs/testing/RECOVERY_TESTING.md for complete documentation.
+	recoveryTestConfig *RecoveryTestConfig
 }
 
 // NewCrossChainConductor creates and starts the conductor
 func NewCrossChainConductor(dispatcher execute.Dispatcher, logger logging.OptionalLogger, describe *config.Describe, db database.Beginner) *CrossChainConductor {
+	return NewCrossChainConductorWithRecoveryTesting(dispatcher, logger, describe, db, 0)
+}
+
+// NewCrossChainConductorWithRecoveryTesting creates conductor with optional recovery testing
+// dropsPerMinute: 0 = disabled, >0 = enable testing with that many drops per minute
+func NewCrossChainConductorWithRecoveryTesting(dispatcher execute.Dispatcher, logger logging.OptionalLogger, describe *config.Describe, db database.Beginner, dropsPerMinute int) *CrossChainConductor {
 	cc := &CrossChainConductor{
 		dispatcher:        dispatcher,
 		logger:            logger.With("module", "crosschain-conductor").(logging.OptionalLogger),
@@ -133,9 +151,11 @@ func NewCrossChainConductor(dispatcher execute.Dispatcher, logger logging.Option
 	cc.proofService = NewProofService(logger)
 	cc.proofService.SetDebugMode(true) // Enable debug mode for testing
 
-	// Initialize batch proof recovery manager
-	cc.batchProofManager = NewBatchProofRecoveryManager(cc, logger)
-	cc.batchProofManager.Start()
+	// Initialize sequence tracker for gap detection and recovery
+	cc.sequenceTracker = NewSimpleSequenceTracker(cc, logger)
+
+	// Initialize recovery testing (ONLY if faucet exists and --dpm > 0)
+	cc.recoveryTestConfig = NewRecoveryTestConfig(logger, describe, dropsPerMinute)
 
 	// Start async processors
 	cc.wg.Add(3)
@@ -191,25 +211,118 @@ func (cc *CrossChainConductor) getOrCreateDestinationQueue(key DestinationKey) *
 	return queue
 }
 
-// ProcessInbound processes inbound cross-partition messages through the conductor
+// ProcessInbound processes inbound cross-partition messages and detects gaps
+// This is the receiving side of the healing mechanism that:
+// 1. Tracks sequence heights for anchor and synthetic chains from each source partition
+// 2. Detects gaps in sequence numbers
+// 3. Sends recovery requests to source partitions for missing entries
+// 4. Filters out gap messages to let source partitions resend
+//
+// IMPORTANT: Anchors and synthetics are tracked separately because:
+// - Synthetic transactions: Temporary data, can be pruned after processing
+// - Anchor transactions: Permanent data, required for cryptographic proofs
+// This separation is essential for proper data lifecycle and storage management.
 func (cc *CrossChainConductor) ProcessInbound(ctx context.Context, messages []messaging.Message) []messaging.Message {
-	// Phase 1: Direct pass-through for all messages (zero behavior change)
-	// Future phases can add conductor logic here
+	if cc.sequenceTracker == nil {
+		cc.logger.Debug("Sequence tracker not initialized - passing messages through")
+		return messages
+	}
 
-	// Count and log cross-partition messages
-	var crossPartitionCount int
+	var validMessages []messaging.Message
+	var gapsDetected int
+
 	for _, msg := range messages {
-		if cc.isCrossPartitionMessage(msg) {
-			crossPartitionCount++
+		if !cc.isCrossPartitionMessage(msg) {
+			// Non-crosschain messages pass through unchanged
+			validMessages = append(validMessages, msg)
+			continue
+		}
+
+		// Handle crosschain messages with gap detection
+		switch msg.Type() {
+		case messaging.MessageTypeSynthetic, messaging.MessageTypeBadSynthetic:
+			var seqMsg *messaging.SequencedMessage
+			
+			// Handle both SyntheticMessage and BadSyntheticMessage
+			if synthMsg, ok := msg.(*messaging.SyntheticMessage); ok {
+				if sm, ok := synthMsg.Message.(*messaging.SequencedMessage); ok {
+					seqMsg = sm
+				}
+			} else if badSynthMsg, ok := msg.(*messaging.BadSyntheticMessage); ok {
+				if sm, ok := badSynthMsg.Message.(*messaging.SequencedMessage); ok {
+					seqMsg = sm
+				}
+			}
+			
+			if seqMsg != nil {
+				valid, reason, requestRecovery := cc.sequenceTracker.ValidateAndTrackSynthetic(seqMsg)
+				if requestRecovery {
+					gapsDetected++
+					cc.logger.Info("Gap detected in synthetic messages", 
+						"source", seqMsg.Source,
+						"sequence", seqMsg.Number,
+						"reason", reason)
+					// Notify recovery testing that recovery was triggered
+					if cc.recoveryTestConfig != nil {
+						cc.recoveryTestConfig.OnRecoveryTriggered()
+					}
+				}
+				if valid {
+					validMessages = append(validMessages, msg)
+				} else {
+					cc.logger.Debug("Filtering out synthetic message", 
+						"sequence", seqMsg.Number, "reason", reason)
+				}
+			} else {
+				// Synthetic without sequenced message - pass through
+				validMessages = append(validMessages, msg)
+			}
+
+		case messaging.MessageTypeBlockAnchor:
+			if anchorMsg, ok := msg.(*messaging.BlockAnchor); ok {
+				if seqMsg, ok := anchorMsg.Anchor.(*messaging.SequencedMessage); ok {
+					// Extract source and sequence for anchor validation
+					valid, reason, requestRecovery := cc.sequenceTracker.ValidateAndTrackAnchor(anchorMsg, seqMsg.Source, seqMsg.Number)
+					if requestRecovery {
+						gapsDetected++
+						cc.logger.Info("Gap detected in anchor messages",
+							"source", seqMsg.Source,
+							"sequence", seqMsg.Number,
+							"reason", reason)
+						// Notify recovery testing that recovery was triggered
+						if cc.recoveryTestConfig != nil {
+							cc.recoveryTestConfig.OnRecoveryTriggered()
+						}
+					}
+					if valid {
+						validMessages = append(validMessages, msg)
+					} else {
+						cc.logger.Debug("Filtering out anchor message",
+							"sequence", seqMsg.Number, "reason", reason)
+					}
+				} else {
+					// Anchor without sequenced message - pass through
+					validMessages = append(validMessages, msg)
+				}
+			}
+
+		default:
+			// Other message types pass through unchanged
+			validMessages = append(validMessages, msg)
 		}
 	}
 
-	if crossPartitionCount > 0 {
-		cc.logger.Debug("Processing inbound cross-partition messages", "count", crossPartitionCount, "total_messages", len(messages))
+	if gapsDetected > 0 {
+		cc.logger.Info("Processed inbound messages with gap detection",
+			"total_messages", len(messages),
+			"valid_messages", len(validMessages),
+			"gaps_detected", gapsDetected,
+			"filtered_out", len(messages)-len(validMessages))
 	}
 
-	// For now, return all messages unchanged
-	return messages
+	// Return only valid messages - gap messages are filtered out
+	// Source partitions will resend the missing messages
+	return validMessages
 }
 
 // isCrossPartitionMessage determines if a message is a cross-partition anchor or synthetic transaction
@@ -320,8 +433,26 @@ func (cc *CrossChainConductor) processRequestImmediately(req *SyntheticRequest, 
 	// Store pending transmission in destination-specific queue
 	queue.PendingTx[txID] = pending
 
-	// Submit to dispatcher
+	// Submit to dispatcher (with optional recovery testing)
 	env := &messaging.Envelope{Messages: req.Messages}
+	
+	// RECOVERY TESTING: Drop messages randomly to test recovery mechanism
+	// SECURITY: Only active with faucet + ACC_TEST_RECOVERY=true flag
+	if cc.recoveryTestConfig != nil && len(env.Messages) > 0 {
+		if cc.recoveryTestConfig.ShouldDropMessage(env.Messages[0]) {
+			// Simulate network failure - don't submit to dispatcher
+			// This will trigger retry logic and eventual recovery
+			err := errors.UnknownError.With("RECOVERY TEST: Simulated network failure")
+			delete(queue.PendingTx, txID)
+			atomic.AddInt64(&cc.syntheticsErrors, 1)
+			queue.FailureCount++
+			cc.logger.Error("RECOVERY TEST: Simulated message drop",
+				"destination", req.Destination, "tx_id", txID, "type", destKey.Type)
+			req.ResponseChan <- err
+			return
+		}
+	}
+	
 	err := cc.dispatcher.Submit(req.Context, req.Destination, env)
 
 	if err != nil {
@@ -556,7 +687,24 @@ func (cc *CrossChainConductor) retryTransmission(pending *PendingTransmission) {
 	}
 
 	env := &messaging.Envelope{Messages: pending.Messages}
-	err := cc.dispatcher.Submit(pending.Context, pending.Destination, env)
+	
+	var err error
+	
+	// RECOVERY TESTING: Drop retry attempts randomly to test recovery mechanism
+	// SECURITY: Only active with faucet + ACC_TEST_RECOVERY=true flag
+	if cc.recoveryTestConfig != nil && len(env.Messages) > 0 {
+		if cc.recoveryTestConfig.ShouldDropMessage(env.Messages[0]) {
+			// Simulate retry failure
+			err = errors.UnknownError.With("RECOVERY TEST: Simulated retry failure")
+			cc.logger.Error("RECOVERY TEST: Simulated retry drop",
+				"tx_id", pending.ID, "attempt", pending.AttemptNum, 
+				"type", pending.DestKey.Type, "destination", pending.DestKey.Destination)
+		} else {
+			err = cc.dispatcher.Submit(pending.Context, pending.Destination, env)
+		}
+	} else {
+		err = cc.dispatcher.Submit(pending.Context, pending.Destination, env)
+	}
 
 	if err != nil {
 		// Retry submission failed
@@ -724,88 +872,10 @@ func (cc *CrossChainConductor) GetMetrics() (sent, errors, retried, transmission
 
 
 
-// RequestMissingTransactionsWithBatchProof requests missing transactions using collection proofs for efficiency
-func (cc *CrossChainConductor) RequestMissingTransactionsWithBatchProof(
-	partitionID string,
-	msgType MessageType,
-	missingSequences []uint64,
-	chainURL *url.URL,
-) error {
-	if cc.batchProofManager == nil {
-		return errors.NotReady.With("batch proof recovery manager not initialized")
-	}
+// RequestMissingTransactionsWithBatchProof removed - was using fake BatchProofRecoveryManager
+// Real implementation should be added when proper batch recovery is implemented
 
-	// Convert MessageType to RecoveryType
-	var recoveryType RecoveryType
-	switch msgType {
-	case MessageTypeAnchor:
-		recoveryType = RecoveryTypeAnchor
-	case MessageTypeSynthetic:
-		recoveryType = RecoveryTypeSynthetic
-	default:
-		return errors.BadRequest.WithFormat("unsupported message type for batch recovery: %d", msgType)
-	}
-
-	cc.logger.Info("Requesting batch proof recovery",
-		"partition", partitionID,
-		"type", recoveryType.String(),
-		"sequences", len(missingSequences),
-		"chain", chainURL)
-
-	// Create batch recovery request
-	req := &BatchRecoveryRequest{
-		PartitionID:      partitionID,
-		Type:             recoveryType,
-		MissingSequences: missingSequences,
-		ChainURL:         chainURL,
-		RequestTime:      time.Now(),
-		Callback: func(response *BatchRecoveryResponse) {
-			cc.handleBatchRecoveryResponse(response)
-		},
-	}
-
-	// Send to batch proof manager
-	cc.batchProofManager.RequestBatchRecovery(req)
-	return nil
-}
-
-// handleBatchRecoveryResponse processes the response from batch proof recovery
-func (cc *CrossChainConductor) handleBatchRecoveryResponse(response *BatchRecoveryResponse) {
-	if response.Error != nil {
-		cc.logger.Error("Batch recovery failed",
-			"partition", response.PartitionID,
-			"type", response.Type,
-			"error", response.Error)
-		return
-	}
-
-	cc.logger.Info("Batch recovery successful",
-		"partition", response.PartitionID,
-		"type", response.Type,
-		"batch_size", response.BatchSize,
-		"proof_savings", response.ProofSavings,
-		"transactions", len(response.Transactions))
-
-	// Process recovered transactions
-	for _, tx := range response.Transactions {
-		cc.logger.Debug("Processing recovered transaction",
-			"sequence", tx.SequenceNum,
-			"hash", fmt.Sprintf("%x", tx.Hash[:8]),
-			"type", tx.Type)
-
-		// Here you would submit the recovered transaction back to the destination partition
-		// This would integrate with the existing message processing pipeline
-	}
-
-	// Log collection proof efficiency metrics
-	if response.CollectionProof != nil {
-		cc.logger.Info("Collection proof metrics",
-			"partition", response.PartitionID,
-			"proof_elements", len(response.CollectionProof.Elements),
-			"individual_proofs_saved", response.ProofSavings,
-			"generation_time", response.ProofGenerated.Sub(time.Now().Add(-time.Since(response.ProofGenerated))))
-	}
-}
+// handleBatchRecoveryResponse removed - was processing fake recovery data
 
 // HandleRecoveryRequest processes gap recovery by adjusting send height
 // Simple implementation: requester wants transactions from FromNumber onwards,
@@ -997,87 +1067,8 @@ type RecoveredTransaction struct {
 	Data        []byte
 }
 
-// BatchProofRecoveryManager placeholder for the collection proof functionality
-// This would contain the full implementation from batch_proof_recovery.go
-type BatchProofRecoveryManager struct {
-	conductor      *CrossChainConductor
-	logger         logging.OptionalLogger
-	batchThreshold int
-	maxBatchSize   int
-	totalRequests  int64
-	batchRequests  int64
-	proofSavings   int64
-}
-
-func NewBatchProofRecoveryManager(conductor *CrossChainConductor, logger logging.OptionalLogger) *BatchProofRecoveryManager {
-	return &BatchProofRecoveryManager{
-		conductor:      conductor,
-		logger:         logger.With("module", "batch-recovery").(logging.OptionalLogger),
-		batchThreshold: 2,   // Use batch proof when >= 2 transactions
-		maxBatchSize:   100, // Maximum 100 transactions per batch
-	}
-}
-
-func (brm *BatchProofRecoveryManager) Start() {
-	brm.logger.Info("Batch proof recovery manager started")
-}
-
-func (brm *BatchProofRecoveryManager) Stop() {
-	brm.logger.Info("Batch proof recovery manager stopped")
-}
-
-func (brm *BatchProofRecoveryManager) RequestBatchRecovery(req *BatchRecoveryRequest) {
-	brm.logger.Info("Processing batch recovery request",
-		"partition", req.PartitionID,
-		"type", req.Type,
-		"sequences", len(req.MissingSequences))
-
-	// For now, simulate successful collection proof generation
-	// In full implementation, this would generate actual ReceiptList proofs
-	go func() {
-		time.Sleep(10 * time.Millisecond) // Simulate processing time
-
-		response := &BatchRecoveryResponse{
-			PartitionID:    req.PartitionID,
-			Type:           req.Type,
-			BatchSize:      len(req.MissingSequences),
-			ProofSavings:   len(req.MissingSequences) - 1, // One proof instead of many
-			ProofGenerated: time.Now(),
-			Transactions:   make([]*RecoveredTransaction, len(req.MissingSequences)),
-		}
-
-		// Create placeholder recovered transactions
-		for i, seq := range req.MissingSequences {
-			response.Transactions[i] = &RecoveredTransaction{
-				Hash:        []byte(fmt.Sprintf("hash-%d", seq)),
-				SequenceNum: seq,
-				Timestamp:   time.Now(),
-				Type:        req.Type.String(),
-				Data:        []byte(fmt.Sprintf("tx-data-%d", seq)),
-			}
-		}
-
-		atomic.AddInt64(&brm.totalRequests, 1)
-		if len(req.MissingSequences) >= brm.batchThreshold {
-			atomic.AddInt64(&brm.batchRequests, 1)
-			atomic.AddInt64(&brm.proofSavings, int64(response.ProofSavings))
-		}
-
-		if req.Callback != nil {
-			req.Callback(response)
-		}
-	}()
-}
-
-func (brm *BatchProofRecoveryManager) GetMetrics() map[string]interface{} {
-	return map[string]interface{}{
-		"total_requests":  atomic.LoadInt64(&brm.totalRequests),
-		"batch_requests":  atomic.LoadInt64(&brm.batchRequests),
-		"proof_savings":   atomic.LoadInt64(&brm.proofSavings),
-		"batch_threshold": brm.batchThreshold,
-		"max_batch_size":  brm.maxBatchSize,
-	}
-}
+// BatchProofRecoveryManager removed - was placeholder with fake data
+// Real implementation should be added when needed
 
 // CreateProofsForSyntheticTransactions creates optimized proofs for synthetic transactions
 // This is the central entry point for all synthetic proof creation
@@ -1105,54 +1096,31 @@ func (cc *CrossChainConductor) CreateProofsForSyntheticTransactions(
 		})
 	}
 
-	// Create optimized proofs for each destination
+	// Create collection proofs for each destination
 	var allProofs []*protocol.AnnotatedReceipt
 	for dest, requests := range destinationGroups {
-		// Check if we should use collection proof
-		if len(requests) >= cc.proofService.batchThreshold {
-			// Merge sequences for collection proof
-			mergedReq := cc.proofService.mergeSequences(requests)
+		// Always use collection proof for crosschain operations
+		mergedReq := cc.proofService.mergeSequences(requests)
 
-			cc.logger.Info("Creating collection proof for synthetic transactions",
-				"destination", dest,
-				"count", len(requests),
-				"sequences", mergedReq.Sequences)
+		cc.logger.Info("Creating collection proof for synthetic transactions",
+			"destination", dest,
+			"count", len(requests),
+			"sequences", mergedReq.Sequences)
 
-			// Create single collection proof for all transactions to this destination
-			resp, err := cc.proofService.CreateProof(ctx, mergedReq)
-			if err != nil {
-				cc.logger.Error("Failed to create collection proof, falling back to individual",
-					"destination", dest,
-					"error", err)
-
-				// Fallback to individual proofs
-				for _, req := range requests {
-					resp, err := cc.proofService.CreateProof(ctx, req)
-					if err != nil {
-						return nil, errors.UnknownError.WithFormat("failed to create proof: %w", err)
-					}
-					allProofs = append(allProofs, resp.Proof)
-				}
-			} else {
-				// Use the same collection proof for all transactions in this group
-				for range requests {
-					allProofs = append(allProofs, resp.Proof)
-				}
-
-				cc.logger.Info("Collection proof created successfully",
-					"destination", dest,
-					"proof_savings", resp.ProofSavings)
-			}
-		} else {
-			// Create individual proofs for small batches
-			for _, req := range requests {
-				resp, err := cc.proofService.CreateProof(ctx, req)
-				if err != nil {
-					return nil, errors.UnknownError.WithFormat("failed to create proof: %w", err)
-				}
-				allProofs = append(allProofs, resp.Proof)
-			}
+		// Create single collection proof for all transactions to this destination
+		resp, err := cc.proofService.CreateProof(ctx, mergedReq)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("failed to create collection proof for %s: %w", dest, err)
 		}
+		
+		// Use the same collection proof for all transactions in this group
+		for range requests {
+			allProofs = append(allProofs, resp.Proof)
+		}
+
+		cc.logger.Info("Collection proof created successfully",
+			"destination", dest,
+			"proof_savings", resp.ProofSavings)
 	}
 
 	// Log metrics
@@ -1183,6 +1151,19 @@ func (cc *CrossChainConductor) GetProofMetrics() ProofMetrics {
 	return cc.proofService.GetMetrics()
 }
 
+// GetRecoveryTestMetrics returns recovery testing metrics
+// SECURITY: Only returns data if testing is enabled (faucet + flag)
+func (cc *CrossChainConductor) GetRecoveryTestMetrics() map[string]interface{} {
+	if cc.recoveryTestConfig == nil {
+		return map[string]interface{}{
+			"enabled": false,
+			"reason":  "recovery testing not initialized",
+		}
+	}
+	
+	return cc.recoveryTestConfig.GetMetrics()
+}
+
 // SyntheticTransaction represents a synthetic transaction needing a proof
 type SyntheticTransaction struct {
 	Destination *url.URL
@@ -1197,37 +1178,5 @@ func (cc *CrossChainConductor) Describe() *config.Describe {
 	return cc.describe
 }
 
-// RequestBatchProofRecovery requests batch proof recovery for missing transactions
-func (cc *CrossChainConductor) RequestBatchProofRecovery(source string, msgType MessageType, gapStart, gapEnd uint64) error {
-	if cc.batchProofManager == nil {
-		cc.logger.Info("Batch proof manager not initialized")
-		return errors.InternalError.With("batch proof manager not initialized")
-	}
-
-	cc.logger.Info("Requesting batch proof recovery",
-		"source", source,
-		"type", cc.getMessageTypeName(msgType),
-		"gap_start", gapStart,
-		"gap_end", gapEnd)
-
-	var sequences []uint64
-	for seq := gapStart; seq <= gapEnd; seq++ {
-		sequences = append(sequences, seq)
-	}
-
-	sourceURL, err := url.Parse(source)
-	if err != nil {
-		return errors.BadRequest.WithFormat("invalid source URL: %w", err)
-	}
-
-	req := &BatchRecoveryRequest{
-		PartitionID:      source,
-		Type:             RecoveryType(msgType),
-		MissingSequences: sequences,
-		ChainURL:         sourceURL,
-		RequestTime:      time.Now(),
-	}
-
-	cc.batchProofManager.RequestBatchRecovery(req)
-	return nil
-}
+// RequestBatchProofRecovery removed - was using fake BatchProofRecoveryManager
+// Real implementation should be added when proper batch recovery is implemented

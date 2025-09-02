@@ -27,12 +27,18 @@ type SimpleSequenceGap struct {
 }
 
 // SimplePartitionState tracks sequence state for a single source partition
+// 
+// IMPORTANT: Anchors and synthetic transactions are tracked separately because:
+// - Synthetic transactions: Once processed, they can be pruned/discarded (temporary data)
+// - Anchor transactions: Required for cryptographic proofs, must be kept permanently
+// 
+// This separation is critical for proper data lifecycle management and storage efficiency.
 type SimplePartitionState struct {
-	// Synthetic transaction tracking
+	// Synthetic transaction tracking (can be pruned after processing)
 	LastSyntheticDelivered uint64
 	SyntheticGaps         map[uint64]*SimpleSequenceGap // Key is start of gap
 	
-	// Anchor tracking  
+	// Anchor tracking (permanent, required for cryptographic proofs)
 	LastAnchorDelivered uint64
 	AnchorGaps         map[uint64]*SimpleSequenceGap
 	

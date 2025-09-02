@@ -57,10 +57,10 @@ type ProofResponse struct {
 }
 
 // ProofBatch groups requests by destination for optimization
+// All crosschain batches use collection proofs
 type ProofBatch struct {
-	Destination   *url.URL
-	Requests      []ProofRequest
-	UseCollection bool
+	Destination *url.URL
+	Requests    []ProofRequest
 }
 
 // ProofMetrics tracks proof operations for testing and monitoring
@@ -86,23 +86,22 @@ type ProofMetrics struct {
 }
 
 // ProofService centralizes all proof construction and validation
+// All crosschain operations use collection proofs - no thresholds needed
 type ProofService struct {
 	logger    logging.OptionalLogger
 	metrics   *ProofMetrics
 	debugMode bool
 
 	// Configuration
-	batchThreshold int // Minimum transactions for collection proof (default: 2)
-	maxBatchSize   int // Maximum transactions per collection proof
+	maxBatchSize int // Maximum transactions per collection proof
 }
 
 // NewProofService creates a new proof service
 func NewProofService(logger logging.OptionalLogger) *ProofService {
 	return &ProofService{
-		logger:         logger.With("module", "proof-service").(logging.OptionalLogger),
-		metrics:        &ProofMetrics{},
-		batchThreshold: 2,   // Use collection proofs for 2+ transactions
-		maxBatchSize:   100, // Maximum 100 transactions per collection
+		logger:       logger.With("module", "proof-service").(logging.OptionalLogger),
+		metrics:      &ProofMetrics{},
+		maxBatchSize: 100, // Maximum 100 transactions per collection
 	}
 }
 
@@ -157,15 +156,19 @@ func (ps *ProofService) CreateProof(ctx context.Context, req ProofRequest) (*Pro
 		return nil, errors.BadRequest.With("no sequences provided for proof")
 	}
 
-	// Decide whether to use collection proof
-	if len(req.Sequences) >= ps.batchThreshold {
-		return ps.createCollectionProof(ctx, req)
+	// For crosschain operations, always use collection proofs
+	// For API/other use cases, allow individual proofs if explicitly requested with single sequence
+	if len(req.Sequences) == 1 {
+		// This supports API use cases that need individual proofs
+		return ps.createIndividualProof(ctx, req)
 	}
-
-	return ps.createIndividualProof(ctx, req)
+	
+	// Multiple sequences always use collection proof
+	return ps.createCollectionProof(ctx, req)
 }
 
 // CreateBatchProofs creates proofs for multiple requests, optimizing by destination
+// This automatically uses collection proofs when beneficial and is the recommended API for batch operations
 func (ps *ProofService) CreateBatchProofs(ctx context.Context, requests []ProofRequest) ([]*ProofResponse, error) {
 	if ps.debugMode {
 		ps.logger.Debug("Creating batch proofs", "requests", len(requests))
@@ -177,44 +180,54 @@ func (ps *ProofService) CreateBatchProofs(ctx context.Context, requests []ProofR
 	// Process each batch
 	responses := make([]*ProofResponse, 0, len(requests))
 	for _, batch := range batches {
-		if batch.UseCollection {
-			// Merge sequences for collection proof
-			merged := ps.mergeSequences(batch.Requests)
-			resp, err := ps.createCollectionProof(ctx, merged)
-			if err != nil {
-				// Fallback to individual proofs
-				ps.logger.Info("Collection proof failed, falling back to individual",
-					"destination", batch.Destination,
-					"error", err)
-				for _, req := range batch.Requests {
-					resp, err := ps.createIndividualProof(ctx, req)
-					if err != nil {
-						return nil, err
-					}
-					responses = append(responses, resp)
-				}
-			} else {
-				// Add the collection proof response for each request
-				for range batch.Requests {
-					responses = append(responses, resp)
-				}
-			}
-		} else {
-			// Process individually
-			for _, req := range batch.Requests {
-				resp, err := ps.createIndividualProof(ctx, req)
-				if err != nil {
-					return nil, err
-				}
-				responses = append(responses, resp)
-			}
+		// Always use collection proof for crosschain operations
+		merged := ps.mergeSequences(batch.Requests)
+		resp, err := ps.createCollectionProof(ctx, merged)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("failed to create collection proof for %s: %w", batch.Destination, err)
+		}
+		
+		// Add the collection proof response for each request
+		for range batch.Requests {
+			responses = append(responses, resp)
 		}
 	}
 
 	return responses, nil
 }
 
+// CreateCollectionProofForAPI creates a collection proof for multiple sequences going to the same destination
+// This is a convenience method for API users who want to explicitly request collection proofs
+func (ps *ProofService) CreateCollectionProofForAPI(ctx context.Context, sequences []uint64, destination *url.URL, sourceChain *database.Chain, rootChain *database.Chain) (*ProofResponse, error) {
+	req := ProofRequest{
+		Type:        ProofTypeUnified,
+		Destination: destination,
+		Sequences:   sequences,
+		SourceChain: sourceChain,
+		RootChain:   rootChain,
+	}
+	
+	// Always use collection proof for this API
+	return ps.createCollectionProof(ctx, req)
+}
+
+// CreateIndividualProofForAPI creates an individual proof for a single sequence
+// This is a convenience method for API users who want to explicitly request individual proofs
+func (ps *ProofService) CreateIndividualProofForAPI(ctx context.Context, sequence uint64, destination *url.URL, sourceChain *database.Chain, rootChain *database.Chain) (*ProofResponse, error) {
+	req := ProofRequest{
+		Type:        ProofTypeUnified,
+		Destination: destination,
+		Sequences:   []uint64{sequence},
+		SourceChain: sourceChain,
+		RootChain:   rootChain,
+	}
+	
+	// Always use individual proof for this API
+	return ps.createIndividualProof(ctx, req)
+}
+
 // createIndividualProof creates a single traditional proof
+// This is needed for API compatibility even though crosschain operations use collection proofs
 func (ps *ProofService) createIndividualProof(ctx context.Context, req ProofRequest) (*ProofResponse, error) {
 	if ps.debugMode {
 		ps.logger.Debug("Creating individual proof",
@@ -299,8 +312,6 @@ func (ps *ProofService) createCollectionProof(ctx context.Context, req ProofRequ
 	endIdx := int64(sequences[len(sequences)-1])
 
 	// Create collection proof using GetReceiptList
-	// Access the merkle state through the Chain's internal methods
-	// This is a simplified placeholder - actual implementation would need proper Chain method
 	receiptList, err := merkle.GetReceiptList(req.SourceChain.Inner(), startIdx, endIdx)
 	if err != nil {
 		atomic.AddInt64(&ps.metrics.ProofGenErrors, 1)
@@ -345,17 +356,21 @@ func (ps *ProofService) ValidateProof(proof *protocol.AnnotatedReceipt) error {
 
 	atomic.AddInt64(&ps.metrics.ValidationAttempts, 1)
 
+	// Validate basic structure first
+	if proof == nil || proof.Receipt == nil {
+		if ps.debugMode {
+			ps.logger.Debug("Validating proof - basic validation failed",
+				"proof_nil", proof == nil)
+		}
+		atomic.AddInt64(&ps.metrics.ValidationFailures, 1)
+		atomic.AddInt64(&ps.metrics.ValidationErrors, 1)
+		return errors.BadRequest.With("missing proof or receipt")
+	}
+
 	if ps.debugMode {
 		ps.logger.Debug("Validating proof",
 			"has_receipt", proof.Receipt != nil,
 			"has_anchor", proof.Anchor != nil)
-	}
-
-	// Validate basic structure
-	if proof == nil || proof.Receipt == nil {
-		atomic.AddInt64(&ps.metrics.ValidationFailures, 1)
-		atomic.AddInt64(&ps.metrics.ValidationErrors, 1)
-		return errors.BadRequest.With("missing proof or receipt")
 	}
 
 	// Validate the receipt (no caching - always fresh validation)
@@ -427,21 +442,15 @@ func (ps *ProofService) OptimizeForDestinations(requests []ProofRequest) []Proof
 			batch.Destination, _ = url.Parse(dest)
 		}
 
-		// Calculate total sequences for this destination
-		totalSequences := 0
-		for _, req := range reqs {
-			totalSequences += len(req.Sequences)
-		}
-
-		// Use collection proof if we have enough sequences
-		batch.UseCollection = totalSequences >= ps.batchThreshold
-
 		if ps.debugMode {
+			totalSequences := 0
+			for _, req := range reqs {
+				totalSequences += len(req.Sequences)
+			}
 			ps.logger.Debug("Batch created",
 				"destination", dest,
 				"requests", len(reqs),
-				"total_sequences", totalSequences,
-				"use_collection", batch.UseCollection)
+				"total_sequences", totalSequences)
 		}
 
 		batches = append(batches, batch)

@@ -88,9 +88,8 @@ type UnifiedTransport struct {
 	metrics      *TransportMetrics
 	debugMode    bool
 	
-	// Configuration
-	batchThreshold int // Minimum messages for collection proof
-	maxBatchSize   int // Maximum messages per batch
+	// Configuration  
+	maxBatchSize int // Maximum messages per batch
 	
 	// Dependencies
 	batch     *database.Batch
@@ -104,12 +103,11 @@ func NewUnifiedTransport(
 	logger logging.OptionalLogger,
 ) *UnifiedTransport {
 	return &UnifiedTransport{
-		proofService:   proofService,
-		conductor:      conductor,
-		logger:         logger,
-		metrics:        &TransportMetrics{},
-		batchThreshold: 2,  // Same as ProofService default
-		maxBatchSize:   100, // Reasonable limit for batch size
+		proofService: proofService,
+		conductor:    conductor,
+		logger:       logger,
+		metrics:      &TransportMetrics{},
+		maxBatchSize: 100, // Reasonable limit for batch size
 	}
 }
 
@@ -190,39 +188,21 @@ func (ut *UnifiedTransport) processBatch(ctx context.Context, destination string
 		return nil
 	}
 	
-	// Determine proof strategy based on batch size
-	useCollection := len(messages) >= ut.batchThreshold && len(messages) <= ut.maxBatchSize
-	
 	if ut.debugMode {
 		ut.logger.Debug("Processing batch",
 			"destination", destination,
-			"message_count", len(messages),
-			"use_collection", useCollection)
+			"message_count", len(messages))
 	}
 	
-	// Create proof(s) for the batch
-	var proof *ProofResponse
-	var err error
-	
-	if useCollection {
-		proof, err = ut.createCollectionProof(ctx, messages)
-		if err != nil {
-			// Fallback to individual proofs
-			ut.logger.Info("Collection proof failed, using individual proofs",
-				"destination", destination,
-				"error", err)
-			return ut.createIndividualProofs(ctx, messages)
-		}
-		
-		ut.metrics.mu.Lock()
-		ut.metrics.CollectionProofsUsed++
-		ut.metrics.mu.Unlock()
-	} else {
-		err = ut.createIndividualProofs(ctx, messages)
-		if err != nil {
-			return err
-		}
+	// Always use collection proof for crosschain operations
+	proof, err := ut.createCollectionProof(ctx, messages)
+	if err != nil {
+		return errors.UnknownError.WithFormat("failed to create collection proof for %s: %w", destination, err)
 	}
+	
+	ut.metrics.mu.Lock()
+	ut.metrics.CollectionProofsUsed++
+	ut.metrics.mu.Unlock()
 	
 	// Send the messages with their proofs
 	// This would integrate with the existing message routing system
@@ -259,6 +239,7 @@ func (ut *UnifiedTransport) createCollectionProof(ctx context.Context, messages 
 }
 
 // createIndividualProofs creates separate proofs for each message
+// This is kept for API compatibility even though crosschain operations use collection proofs
 func (ut *UnifiedTransport) createIndividualProofs(ctx context.Context, messages []CrossChainMessage) error {
 	for _, msg := range messages {
 		req := ProofRequest{
