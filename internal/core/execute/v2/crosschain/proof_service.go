@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -71,6 +72,12 @@ type ProofMetrics struct {
 	TransactionsInCollections int64
 	ProofsSaved               int64
 
+	// Collection proof batch size statistics
+	CollectionProofBatchSizeMin     int64   // Minimum transactions per collection proof
+	CollectionProofBatchSizeMax     int64   // Maximum transactions per collection proof
+	CollectionProofBatchSizeAverage float64 // Running average transactions per collection proof
+	CollectionProofBatchSizeTotal   int64   // Total batch size for average calculation
+
 	// Validation metrics
 	ValidationAttempts  int64
 	ValidationSuccesses int64
@@ -91,6 +98,7 @@ type ProofService struct {
 	logger    logging.OptionalLogger
 	metrics   *ProofMetrics
 	debugMode bool
+	metricsMu sync.RWMutex // Protects running average calculations
 
 	// Configuration
 	maxBatchSize int // Maximum transactions per collection proof
@@ -115,24 +123,34 @@ func (ps *ProofService) SetDebugMode(enabled bool) {
 
 // ResetMetrics clears all metrics (useful for testing)
 func (ps *ProofService) ResetMetrics() {
+	ps.metricsMu.Lock()
+	defer ps.metricsMu.Unlock()
+	
 	ps.metrics = &ProofMetrics{}
 	if ps.debugMode {
-		ps.logger.Debug("Metrics reset")
+		ps.logger.Debug("Metrics reset - batch size statistics cleared")
 	}
 }
 
 // GetMetrics returns current metrics
 func (ps *ProofService) GetMetrics() ProofMetrics {
+	ps.metricsMu.RLock()
+	defer ps.metricsMu.RUnlock()
+	
 	return ProofMetrics{
-		IndividualProofsCreated:   atomic.LoadInt64(&ps.metrics.IndividualProofsCreated),
-		CollectionProofsCreated:   atomic.LoadInt64(&ps.metrics.CollectionProofsCreated),
-		TransactionsInCollections: atomic.LoadInt64(&ps.metrics.TransactionsInCollections),
-		ProofsSaved:               atomic.LoadInt64(&ps.metrics.ProofsSaved),
-		ValidationAttempts:        atomic.LoadInt64(&ps.metrics.ValidationAttempts),
-		ValidationSuccesses:       atomic.LoadInt64(&ps.metrics.ValidationSuccesses),
-		ValidationFailures:        atomic.LoadInt64(&ps.metrics.ValidationFailures),
-		ProofGenErrors:            atomic.LoadInt64(&ps.metrics.ProofGenErrors),
-		ValidationErrors:          atomic.LoadInt64(&ps.metrics.ValidationErrors),
+		IndividualProofsCreated:         atomic.LoadInt64(&ps.metrics.IndividualProofsCreated),
+		CollectionProofsCreated:         atomic.LoadInt64(&ps.metrics.CollectionProofsCreated),
+		TransactionsInCollections:       atomic.LoadInt64(&ps.metrics.TransactionsInCollections),
+		ProofsSaved:                     atomic.LoadInt64(&ps.metrics.ProofsSaved),
+		CollectionProofBatchSizeMin:     ps.metrics.CollectionProofBatchSizeMin,
+		CollectionProofBatchSizeMax:     ps.metrics.CollectionProofBatchSizeMax,
+		CollectionProofBatchSizeAverage: ps.metrics.CollectionProofBatchSizeAverage,
+		CollectionProofBatchSizeTotal:   ps.metrics.CollectionProofBatchSizeTotal,
+		ValidationAttempts:              atomic.LoadInt64(&ps.metrics.ValidationAttempts),
+		ValidationSuccesses:             atomic.LoadInt64(&ps.metrics.ValidationSuccesses),
+		ValidationFailures:              atomic.LoadInt64(&ps.metrics.ValidationFailures),
+		ProofGenErrors:                  atomic.LoadInt64(&ps.metrics.ProofGenErrors),
+		ValidationErrors:                atomic.LoadInt64(&ps.metrics.ValidationErrors),
 	}
 }
 
@@ -326,16 +344,29 @@ func (ps *ProofService) createCollectionProof(ctx context.Context, req ProofRequ
 		},
 	}
 
-	// Update metrics
+	// Update metrics with batch size tracking
+	batchSize := int64(len(sequences))
 	proofSavings := len(sequences) - 1
 	atomic.AddInt64(&ps.metrics.CollectionProofsCreated, 1)
-	atomic.AddInt64(&ps.metrics.TransactionsInCollections, int64(len(sequences)))
+	atomic.AddInt64(&ps.metrics.TransactionsInCollections, batchSize)
 	atomic.AddInt64(&ps.metrics.ProofsSaved, int64(proofSavings))
+	
+	// Update batch size statistics with thread safety
+	ps.updateBatchSizeStats(batchSize)
 
 	if ps.debugMode {
+		// Get current batch size stats for logging
+		ps.metricsMu.RLock()
+		batchMin := ps.metrics.CollectionProofBatchSizeMin
+		batchMax := ps.metrics.CollectionProofBatchSizeMax
+		batchAvg := ps.metrics.CollectionProofBatchSizeAverage
+		ps.metricsMu.RUnlock()
+		
 		ps.logger.Info("Collection proof created",
 			"sequences", len(sequences),
-			"proof_savings", proofSavings)
+			"proof_savings", proofSavings,
+			"batch_size", batchSize,
+			"batch_stats", fmt.Sprintf("min=%d, max=%d, avg=%.2f", batchMin, batchMax, batchAvg))
 	}
 
 	return &ProofResponse{
@@ -480,6 +511,29 @@ func (ps *ProofService) mergeSequences(requests []ProofRequest) ProofRequest {
 	})
 
 	return merged
+}
+
+// updateBatchSizeStats updates the batch size statistics with thread safety
+func (ps *ProofService) updateBatchSizeStats(batchSize int64) {
+	ps.metricsMu.Lock()
+	defer ps.metricsMu.Unlock()
+	
+	// Update min (initialize to first value if not set)
+	if ps.metrics.CollectionProofBatchSizeMin == 0 || batchSize < ps.metrics.CollectionProofBatchSizeMin {
+		ps.metrics.CollectionProofBatchSizeMin = batchSize
+	}
+	
+	// Update max
+	if batchSize > ps.metrics.CollectionProofBatchSizeMax {
+		ps.metrics.CollectionProofBatchSizeMax = batchSize
+	}
+	
+	// Update running average
+	ps.metrics.CollectionProofBatchSizeTotal += batchSize
+	collectionProofCount := atomic.LoadInt64(&ps.metrics.CollectionProofsCreated)
+	if collectionProofCount > 0 {
+		ps.metrics.CollectionProofBatchSizeAverage = float64(ps.metrics.CollectionProofBatchSizeTotal) / float64(collectionProofCount)
+	}
 }
 
 // min returns the minimum of two integers

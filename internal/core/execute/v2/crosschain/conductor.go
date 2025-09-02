@@ -1164,12 +1164,16 @@ func (cc *CrossChainConductor) CreateProofsForSyntheticTransactions(
 			"proof_savings", resp.ProofSavings)
 	}
 
-	// Log metrics
+	// Log metrics with collection proof batch size statistics
 	metrics := cc.proofService.GetMetrics()
-	cc.logger.Debug("Proof generation metrics",
+	cc.logger.Info("[HEALING-DEBUG] Proof generation metrics with batch statistics",
 		"individual_proofs", metrics.IndividualProofsCreated,
 		"collection_proofs", metrics.CollectionProofsCreated,
-		"proofs_saved", metrics.ProofsSaved)
+		"proofs_saved", metrics.ProofsSaved,
+		"total_transactions_in_collections", metrics.TransactionsInCollections,
+		"batch_size_min", metrics.CollectionProofBatchSizeMin,
+		"batch_size_max", metrics.CollectionProofBatchSizeMax,
+		"batch_size_avg", fmt.Sprintf("%.2f", metrics.CollectionProofBatchSizeAverage))
 
 	return allProofs, nil
 }
