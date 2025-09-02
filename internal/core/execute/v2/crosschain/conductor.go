@@ -223,8 +223,11 @@ func (cc *CrossChainConductor) getOrCreateDestinationQueue(key DestinationKey) *
 // - Anchor transactions: Permanent data, required for cryptographic proofs
 // This separation is essential for proper data lifecycle and storage management.
 func (cc *CrossChainConductor) ProcessInbound(ctx context.Context, messages []messaging.Message) []messaging.Message {
+	cc.logger.Debug("[HEALING-DEBUG] ProcessInbound called",
+		"message_count", len(messages),
+		"recovery_testing_enabled", cc.recoveryTestConfig != nil && cc.recoveryTestConfig.IsEnabled())
 	if cc.sequenceTracker == nil {
-		cc.logger.Debug("Sequence tracker not initialized - passing messages through")
+		cc.logger.Error("[HEALING-DEBUG] Sequence tracker not initialized - passing messages through - THIS IS A BUG")
 		return messages
 	}
 
@@ -256,9 +259,15 @@ func (cc *CrossChainConductor) ProcessInbound(ctx context.Context, messages []me
 			
 			if seqMsg != nil {
 				valid, reason, requestRecovery := cc.sequenceTracker.ValidateAndTrackSynthetic(seqMsg)
+				cc.logger.Debug("[HEALING-DEBUG] Synthetic message validation",
+					"source", seqMsg.Source,
+					"sequence", seqMsg.Number,
+					"valid", valid,
+					"reason", reason,
+					"request_recovery", requestRecovery)
 				if requestRecovery {
 					gapsDetected++
-					cc.logger.Info("Gap detected in synthetic messages", 
+					cc.logger.Error("[HEALING-DEBUG] Gap detected in synthetic messages - RECOVERY NEEDED", 
 						"source", seqMsg.Source,
 						"sequence", seqMsg.Number,
 						"reason", reason)
@@ -269,9 +278,11 @@ func (cc *CrossChainConductor) ProcessInbound(ctx context.Context, messages []me
 				}
 				if valid {
 					validMessages = append(validMessages, msg)
+					cc.logger.Debug("[HEALING-DEBUG] Accepting synthetic message", 
+						"sequence", seqMsg.Number, "source", seqMsg.Source)
 				} else {
-					cc.logger.Debug("Filtering out synthetic message", 
-						"sequence", seqMsg.Number, "reason", reason)
+					cc.logger.Info("[HEALING-DEBUG] Filtering out synthetic message", 
+						"sequence", seqMsg.Number, "reason", reason, "source", seqMsg.Source)
 				}
 			} else {
 				// Synthetic without sequenced message - pass through
@@ -283,9 +294,15 @@ func (cc *CrossChainConductor) ProcessInbound(ctx context.Context, messages []me
 				if seqMsg, ok := anchorMsg.Anchor.(*messaging.SequencedMessage); ok {
 					// Extract source and sequence for anchor validation
 					valid, reason, requestRecovery := cc.sequenceTracker.ValidateAndTrackAnchor(anchorMsg, seqMsg.Source, seqMsg.Number)
+					cc.logger.Debug("[HEALING-DEBUG] Anchor message validation",
+						"source", seqMsg.Source,
+						"sequence", seqMsg.Number,
+						"valid", valid,
+						"reason", reason,
+						"request_recovery", requestRecovery)
 					if requestRecovery {
 						gapsDetected++
-						cc.logger.Info("Gap detected in anchor messages",
+						cc.logger.Error("[HEALING-DEBUG] Gap detected in anchor messages - RECOVERY NEEDED",
 							"source", seqMsg.Source,
 							"sequence", seqMsg.Number,
 							"reason", reason)
@@ -296,9 +313,11 @@ func (cc *CrossChainConductor) ProcessInbound(ctx context.Context, messages []me
 					}
 					if valid {
 						validMessages = append(validMessages, msg)
+						cc.logger.Debug("[HEALING-DEBUG] Accepting anchor message", 
+							"sequence", seqMsg.Number, "source", seqMsg.Source)
 					} else {
-						cc.logger.Debug("Filtering out anchor message",
-							"sequence", seqMsg.Number, "reason", reason)
+						cc.logger.Info("[HEALING-DEBUG] Filtering out anchor message",
+							"sequence", seqMsg.Number, "reason", reason, "source", seqMsg.Source)
 					}
 				} else {
 					// Anchor without sequenced message - pass through
@@ -313,11 +332,15 @@ func (cc *CrossChainConductor) ProcessInbound(ctx context.Context, messages []me
 	}
 
 	if gapsDetected > 0 {
-		cc.logger.Info("Processed inbound messages with gap detection",
+		cc.logger.Error("[HEALING-DEBUG] Processed inbound messages with gap detection - GAPS FOUND!",
 			"total_messages", len(messages),
 			"valid_messages", len(validMessages),
 			"gaps_detected", gapsDetected,
 			"filtered_out", len(messages)-len(validMessages))
+	} else {
+		cc.logger.Debug("[HEALING-DEBUG] Processed inbound messages - no gaps",
+			"total_messages", len(messages),
+			"valid_messages", len(validMessages))
 	}
 
 	// Return only valid messages - gap messages are filtered out
@@ -446,8 +469,9 @@ func (cc *CrossChainConductor) processRequestImmediately(req *SyntheticRequest, 
 			delete(queue.PendingTx, txID)
 			atomic.AddInt64(&cc.syntheticsErrors, 1)
 			queue.FailureCount++
-			cc.logger.Error("RECOVERY TEST: Simulated message drop",
-				"destination", req.Destination, "tx_id", txID, "type", destKey.Type)
+			cc.logger.Error("[HEALING-DEBUG] RECOVERY TEST: Simulated message drop - EXPECTING GAP DETECTION",
+				"destination", req.Destination, "tx_id", txID, "type", destKey.Type,
+				"message_type", env.Messages[0].Type())
 			req.ResponseChan <- err
 			return
 		}
@@ -881,7 +905,10 @@ func (cc *CrossChainConductor) GetMetrics() (sent, errors, retried, transmission
 // Simple implementation: requester wants transactions from FromNumber onwards,
 // so we reset our send position to FromNumber-1 for that destination
 func (cc *CrossChainConductor) HandleRecoveryRequest(req *RecoveryRequest) error {
-	cc.logger.Info("Gap recovery request", "requester", req.Requester, "fromNumber", req.FromNumber)
+	cc.logger.Error("[HEALING-DEBUG] HandleRecoveryRequest called - PROCESSING RECOVERY REQUEST",
+		"requester", req.Requester,
+		"fromNumber", req.FromNumber,
+		"action", "reset_send_position")
 
 	// Parse requester as destination URL
 	requesterURL, err := url.Parse(req.Requester)
@@ -909,10 +936,11 @@ func (cc *CrossChainConductor) HandleRecoveryRequest(req *RecoveryRequest) error
 	}
 	cc.destinationsMu.Unlock()
 
-	cc.logger.Info("Adjusted send position for gap recovery", 
+	cc.logger.Error("[HEALING-DEBUG] Adjusted send position for gap recovery - READY TO RESEND", 
 		"destination", req.Requester,
 		"newSentIndex", destState.SentTxIndex,
-		"willResendFrom", destState.SentTxIndex+1)
+		"willResendFrom", destState.SentTxIndex+1,
+		"recovery_complete", "ready_for_next_batch")
 
 	return nil
 }

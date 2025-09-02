@@ -76,9 +76,10 @@ func NewRecoveryTestConfig(logger logging.OptionalLogger, describe *config.Descr
 	// BOTH conditions met - safe to enable testing
 	rtc.enabled = true
 	
-	rtc.logger.Info("Recovery testing ENABLED - faucet + drops per minute detected",
+	rtc.logger.Error("[HEALING-DEBUG] Recovery testing ENABLED - faucet + drops per minute detected",
 		"drops_per_minute", rtc.dropsPerMinute,
-		"WARNING", "This should NEVER happen in production")
+		"WARNING", "This should NEVER happen in production",
+		"expected_behavior", "messages will be randomly dropped to test healing")
 	
 	return rtc
 }
@@ -143,10 +144,11 @@ func (rtc *RecoveryTestConfig) ShouldDropMessage(msg messaging.Message) bool {
 			atomic.AddInt64(&rtc.syntheticsDropped, 1)
 		}
 		
-		rtc.logger.Info("RECOVERY TEST: Dropping message to test recovery mechanism",
+		rtc.logger.Error("[HEALING-DEBUG] RECOVERY TEST: Dropping message to test recovery mechanism - SHOULD TRIGGER GAP DETECTION",
 			"message_type", msg.Type(),
 			"total_dropped", atomic.LoadInt64(&rtc.totalDropped),
-			"drops_this_minute", atomic.LoadInt64(&rtc.dropsThisMinute))
+			"drops_this_minute", atomic.LoadInt64(&rtc.dropsThisMinute),
+			"expected", "receiver should detect gap and request recovery")
 		
 		return true
 	}
@@ -161,9 +163,10 @@ func (rtc *RecoveryTestConfig) OnRecoveryTriggered() {
 	}
 	
 	atomic.AddInt64(&rtc.recoveryTriggered, 1)
-	rtc.logger.Info("RECOVERY TEST: Recovery mechanism triggered",
+	rtc.logger.Error("[HEALING-DEBUG] RECOVERY TEST: Recovery mechanism triggered - HEALING WORKING",
 		"total_recovery_events", atomic.LoadInt64(&rtc.recoveryTriggered),
-		"total_drops_caused", atomic.LoadInt64(&rtc.totalDropped))
+		"total_drops_caused", atomic.LoadInt64(&rtc.totalDropped),
+		"status", "gap detection is working correctly")
 }
 
 // GetMetrics returns recovery testing metrics

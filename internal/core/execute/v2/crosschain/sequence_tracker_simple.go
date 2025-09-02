@@ -75,6 +75,8 @@ func NewSimpleSequenceTracker(conductor *CrossChainConductor, logger logging.Opt
 // ValidateAndTrackSynthetic validates a synthetic transaction's sequence
 // Returns: valid, reason, should_request_recovery
 func (st *SimpleSequenceTracker) ValidateAndTrackSynthetic(msg *messaging.SequencedMessage) (valid bool, reason string, requestRecovery bool) {
+	st.logger.Debug("[HEALING-DEBUG] ValidateAndTrackSynthetic called",
+		"source", msg.Source, "sequence", msg.Number)
 	if msg.Number == 0 {
 		return false, "missing sequence number", false
 	}
@@ -86,6 +88,12 @@ func (st *SimpleSequenceTracker) ValidateAndTrackSynthetic(msg *messaging.Sequen
 	defer state.mu.Unlock()
 	
 	expectedNext := state.LastSyntheticDelivered + 1
+	st.logger.Debug("[HEALING-DEBUG] Synthetic sequence check",
+		"source", source,
+		"received_seq", msg.Number,
+		"last_delivered", state.LastSyntheticDelivered,
+		"expected_next", expectedNext,
+		"total_gaps", len(state.SyntheticGaps))
 	
 	// Check for duplicate or old message
 	if msg.Number <= state.LastSyntheticDelivered {
@@ -99,6 +107,8 @@ func (st *SimpleSequenceTracker) ValidateAndTrackSynthetic(msg *messaging.Sequen
 	// Perfect sequence - accept it
 	if msg.Number == expectedNext {
 		state.LastSyntheticDelivered = msg.Number
+		st.logger.Debug("[HEALING-DEBUG] Perfect synthetic sequence - accepting",
+			"source", source, "sequence", msg.Number)
 		
 		// Check if this closes any gaps
 		st.checkGapClosure(state.SyntheticGaps, msg.Number)
@@ -129,16 +139,20 @@ func (st *SimpleSequenceTracker) ValidateAndTrackSynthetic(msg *messaging.Sequen
 			state.TotalGapsDetected++
 			shouldRequest = true
 			
-			st.logger.Info("Sequence gap detected in synthetic transactions",
+			st.logger.Error("[HEALING-DEBUG] NEW synthetic gap detected - SENDING RECOVERY REQUEST",
 				"source", source,
 				"gap_start", gapStart,
 				"gap_end", gapEnd,
 				"gap_size", gapSize,
 				"received", msg.Number,
-				"dropped", true)
+				"last_delivered", state.LastSyntheticDelivered,
+				"total_gaps_now", len(state.SyntheticGaps)+1)
 			
 			// Send recovery request immediately
 			go st.SendRecoveryRequest(source, "synthetic", state.LastSyntheticDelivered)
+		} else {
+			st.logger.Debug("[HEALING-DEBUG] Gap already known, not sending duplicate recovery request",
+				"source", source, "gap_start", gapStart)
 		}
 		
 		// Drop the out-of-order message
@@ -370,10 +384,11 @@ func convertStringToMessageType(messageType string) MessageType {
 
 // SendRecoveryRequest sends a recovery request for missing messages
 func (st *SimpleSequenceTracker) SendRecoveryRequest(source string, messageType string, lastKnownSeq uint64) {
-	st.logger.Info("Sending recovery request",
+	st.logger.Error("[HEALING-DEBUG] SendRecoveryRequest called - INITIATING RECOVERY",
 		"to", source,
 		"type", messageType,
-		"last_seq", lastKnownSeq)
+		"last_seq", lastKnownSeq,
+		"recovery_from_seq", lastKnownSeq+1)
 
 	// Simple gap recovery: ask the source partition to resend from lastKnownSeq+1  
 	req := &RecoveryRequest{
@@ -384,12 +399,13 @@ func (st *SimpleSequenceTracker) SendRecoveryRequest(source string, messageType 
 	// For now, just log the gap healing request - in a real system, this would send to source
 	err := st.conductor.HandleRecoveryRequest(req)
 	if err != nil {
-		st.logger.Error("Failed to handle gap healing request",
+		st.logger.Error("[HEALING-DEBUG] Failed to handle gap healing request - RECOVERY FAILED",
 			"to", source,
-			"error", err)
+			"error", err,
+			"recovery_from_seq", lastKnownSeq + 1)
 	} else {
-		st.logger.Info("Processed gap healing request",
+		st.logger.Error("[HEALING-DEBUG] Processed gap healing request - RECOVERY INITIATED",
 			"to", source,
-			"fromSeq", lastKnownSeq + 1)
+			"recovery_from_seq", lastKnownSeq + 1)
 	}
 }
