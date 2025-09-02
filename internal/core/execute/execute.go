@@ -72,7 +72,6 @@ type Options struct {
 	Sequencer                   private.Sequencer  // Synthetic and anchor sequence API service
 	Querier                     api.Querier        // Query API service
 	EnableHealing               bool               //
-	EnableCrosschainCoordinator bool               // Enable Phase 1 CrossChainConductor for async synthetic transaction processing
 	DropsPerMinute              int                // Enable recovery testing with drops per minute (0=disabled, requires testnet build)
 }
 
