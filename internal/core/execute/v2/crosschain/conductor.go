@@ -440,6 +440,19 @@ func (cc *CrossChainConductor) processSyntheticRequest(req *SyntheticRequest) {
 
 // processRequestImmediately processes a request without queueing
 func (cc *CrossChainConductor) processRequestImmediately(req *SyntheticRequest, queue *DestinationQueue, destKey DestinationKey) {
+	// Log batching information for collection proof optimization
+	messageCount := len(req.Messages)
+	if messageCount > 1 {
+		cc.logger.Info("[HEALING-DEBUG] Processing batched messages for collection proof optimization",
+			"destination", req.Destination,
+			"batch_size", messageCount,
+			"type", destKey.Type)
+	} else {
+		cc.logger.Debug("[HEALING-DEBUG] Processing single message",
+			"destination", req.Destination,
+			"type", destKey.Type)
+	}
+
 	// Create pending transmission for error tracking
 	txID := cc.generateTxID()
 	pending := &PendingTransmission{
@@ -469,9 +482,9 @@ func (cc *CrossChainConductor) processRequestImmediately(req *SyntheticRequest, 
 			delete(queue.PendingTx, txID)
 			atomic.AddInt64(&cc.syntheticsErrors, 1)
 			queue.FailureCount++
-			cc.logger.Error("[HEALING-DEBUG] RECOVERY TEST: Simulated message drop - EXPECTING GAP DETECTION",
+			cc.logger.Error("[HEALING-DEBUG] RECOVERY TEST: Simulated message batch drop - EXPECTING GAP DETECTION",
 				"destination", req.Destination, "tx_id", txID, "type", destKey.Type,
-				"message_type", env.Messages[0].Type())
+				"message_type", env.Messages[0].Type(), "batch_size", len(env.Messages))
 			req.ResponseChan <- err
 			return
 		}

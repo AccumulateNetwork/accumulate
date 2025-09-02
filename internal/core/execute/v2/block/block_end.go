@@ -489,6 +489,13 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 
 	// For each pending synthetic transaction
 	dest := x.Describe.NodeUrl()
+	
+	// Batch messages by destination for collection proof optimization
+	type MessageBatch struct {
+		Messages []messaging.Message
+		Dest     *url.URL
+	}
+	messageBatches := make(map[string]*MessageBatch) // Key: destination URL string
 	for i, txid := range partition.Pending {
 		// If we know the ID we must have a local copy (so we don't need to
 		// fetch it)
@@ -578,21 +585,45 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 			}
 		}
 
+		// Add to batch for this destination (for collection proof optimization)
+		destKey := dest.String()
+		if batch, exists := messageBatches[destKey]; exists {
+			batch.Messages = append(batch.Messages, msg)
+		} else {
+			messageBatches[destKey] = &MessageBatch{
+				Messages: []messaging.Message{msg},
+				Dest:     dest,
+			}
+		}
+	}
+	
+	// Send all batched messages for collection proof optimization
+	for destKey, batch := range messageBatches {
 		// Route through crosschain conductor if enabled, otherwise use direct dispatcher
 		if x.crosschainConductor != nil {
-			// Use crosschain conductor for coordinated routing
-			err = x.crosschainConductor.SubmitSynthetic(ctx, []messaging.Message{msg}, dest)
+			// Use crosschain conductor for coordinated routing with collection proofs
+			err := x.crosschainConductor.SubmitSynthetic(ctx, batch.Messages, batch.Dest)
 			if err != nil {
-				x.logger.Error("Failed to dispatch transaction via crosschain conductor", "error", err, "from", partition.Url)
+				x.logger.Error("Failed to dispatch batched transactions via crosschain conductor", 
+					"error", err, 
+					"from", partition.Url, 
+					"dest", destKey,
+					"batch_size", len(batch.Messages))
 				continue
 			}
-			x.logger.Debug("Transaction routed via crosschain conductor", "dest", dest, "from", partition.Url, "is_anchor", anchor)
+			x.logger.Debug("Batched transactions routed via crosschain conductor", 
+				"dest", destKey, 
+				"from", partition.Url, 
+				"batch_size", len(batch.Messages),
+				"is_anchor", anchor)
 		} else {
-			// Use direct dispatcher (legacy behavior)
-			err = dispatcher.Submit(ctx, dest, &messaging.Envelope{Messages: []messaging.Message{msg}})
-			if err != nil {
-				x.logger.Error("Failed to dispatch transaction", "error", err, "from", partition.Url)
-				continue
+			// Use direct dispatcher (legacy behavior) - send individually for compatibility
+			for _, msg := range batch.Messages {
+				err := dispatcher.Submit(ctx, batch.Dest, &messaging.Envelope{Messages: []messaging.Message{msg}})
+				if err != nil {
+					x.logger.Error("Failed to dispatch transaction", "error", err, "from", partition.Url)
+					continue
+				}
 			}
 		}
 	}
