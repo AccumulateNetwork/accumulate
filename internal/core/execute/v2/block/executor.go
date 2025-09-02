@@ -117,13 +117,15 @@ func NewExecutor(opts ExecutorOptions) (*Executor, error) {
 		m.logger.L = opts.Logger.With("module", "executor")
 	}
 
-	// Always initialize crosschain conductor (no legacy path)
-	describe := &config.Describe{
-		NetworkType: opts.Describe.NetworkType,
-		PartitionId: opts.Describe.PartitionId,
+	// Initialize crosschain conductor conditionally for now to avoid breaking block production
+	if opts.EnableCrosschainCoordinator {
+		describe := &config.Describe{
+			NetworkType: opts.Describe.NetworkType,
+			PartitionId: opts.Describe.PartitionId,
+		}
+		m.crosschainConductor = crosschain.NewCrossChainConductorWithRecoveryTesting(m.mainDispatcher, m.logger, describe, opts.Database, opts.DropsPerMinute)
+		m.logger.Info("CrossChainConductor initialized for routing anchor and synthetic transactions")
 	}
-	m.crosschainConductor = crosschain.NewCrossChainConductorWithRecoveryTesting(m.mainDispatcher, m.logger, describe, opts.Database, opts.DropsPerMinute)
-	m.logger.Info("CrossChainConductor initialized for routing anchor and synthetic transactions")
 
 	for _, x := range txnX {
 		if _, ok := m.executors[x.Type()]; ok {
