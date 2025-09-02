@@ -404,7 +404,7 @@ func (d *Daemon) startApp(caughtUp <-chan struct{}) (types.Application, error) {
 		Sequencer:                   client.Private(),
 		Querier:                     client,
 		EnableHealing:               d.Config.Accumulate.Healing.Enable,
-		EnableCrosschainCoordinator: false, // Temporarily disable while debugging block production issues
+		EnableCrosschainCoordinator: true, // Must be enabled for crosschain transaction processing
 		Describe: execute.DescribeShim{
 			NetworkType: d.Config.Accumulate.Describe.NetworkType,
 			PartitionId: d.Config.Accumulate.Describe.PartitionId,
