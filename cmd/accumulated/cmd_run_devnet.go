@@ -47,9 +47,11 @@ var flagRunDevnet = struct {
 		ExecutorVersion: protocol.ExecutorVersionLatest,
 	},
 	Logging: run.Logging{
-		Format: "plain",
+		Format: "plain",  // Human-readable by default
 		Rules: []*run.LoggingRule{
 			{Level: slog.LevelInfo},
+			{Level: slog.LevelInfo, Modules: []string{"devnet", "devnet.conductor", "devnet.orchestrator", "devnet.partition"}},
+			{Level: slog.LevelDebug, Modules: []string{"devnet.recovery", "devnet.metrics"}},
 			{Level: slog.LevelError, Modules: []string{"badger", "accumulate", "run", "anchoring"}},
 			{Level: slog.LevelError, Modules: []string{"p2p", "abci-client", "pubsub", "txindex", "consensus", "mempool", "blocksync", "rpc-server", "evidence", "statesync", "pex", "proxy", "events", "state"}},
 		},
@@ -93,6 +95,9 @@ func runDevNet(cmd *cobra.Command, _ []string) {
 	if flagRun.Debug {
 		testing.EnableDebugFeatures()
 	}
+
+	// Automatically configure devnet environment and logging
+	configureDevNetEnvironment()
 
 	cfg := initDevNet(cmd)
 	runCfg(cfg, func(s run.Service) bool {
@@ -144,6 +149,42 @@ func newNodeWriter(w io.Writer, format, partition string, node int, color bool) 
 
 	default:
 		return w
+	}
+}
+
+// configureDevNetEnvironment automatically sets up the environment for devnet
+func configureDevNetEnvironment() {
+	// Set environment variables for devnet detection
+	os.Setenv("ACCUMULATE_DEVNET", "true")
+	
+	// Configure network name based on flags
+	networkName := fmt.Sprintf("DevNet-%d-%d-%d", 
+		flagRunDevnet.NumBvns, 
+		flagRunDevnet.NumValidators, 
+		flagRunDevnet.NumFollowers)
+	os.Setenv("ACCUMULATE_NETWORK", networkName)
+	
+	// Automatically configure devnet-optimized logging
+	configureDevNetLogging()
+}
+
+// configureDevNetLogging sets up automatic logging for devnet
+func configureDevNetLogging() {
+	// Override the default logging configuration for devnet
+	flagRunDevnet.Logging.Format = "plain"  // Always plain for devnet (grep-friendly)
+	
+	// Set debug level if environment asks for it
+	defaultLevel := slog.LevelInfo
+	if os.Getenv("DEVNET_DEBUG") == "true" || flagRun.Debug {
+		defaultLevel = slog.LevelDebug
+	}
+	
+	// Devnet-optimized logging rules
+	flagRunDevnet.Logging.Rules = []*run.LoggingRule{
+		{Level: defaultLevel},  // Default level
+		{Level: slog.LevelInfo, Modules: []string{"devnet", "devnet.conductor", "devnet.orchestrator", "devnet.partition"}},
+		{Level: slog.LevelDebug, Modules: []string{"devnet.recovery", "devnet.metrics"}},
+		{Level: slog.LevelError, Modules: []string{"badger", "p2p", "consensus", "mempool", "blocksync"}},
 	}
 }
 

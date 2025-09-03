@@ -14,3 +14,4 @@ All tracking in: `~/go/src/gitlab.com/AccumulateNetwork/tracking_repo/`
 - Complete issues after merge to main or other open branches
 
 Reference: `~/go/src/gitlab.com/AccumulateNetwork/tracking_repo/CLAUDE.md`
+- the devnet is a test platform built by the AccumulateNetwork/Devnet repository on gitlab.com  We run commands like devnet start 3684-crosschain-healing --dpm 5

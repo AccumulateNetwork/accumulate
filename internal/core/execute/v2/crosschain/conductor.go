@@ -9,6 +9,9 @@ package crosschain
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -79,8 +82,10 @@ type CrossChainConductor struct {
 	// Infrastructure
 	dispatcher execute.Dispatcher
 	logger     logging.OptionalLogger
+	devLogger  *logging.DevNetLogger
 	describe   *config.Describe
 	db         database.Beginner
+	isDevNet   bool
 
 	// Async processing (keep for compatibility)
 	syntheticChan chan *SyntheticRequest
@@ -133,11 +138,17 @@ func NewCrossChainConductor(dispatcher execute.Dispatcher, logger logging.Option
 // NewCrossChainConductorWithRecoveryTesting creates conductor with optional recovery testing
 // dropsPerMinute: 0 = disabled, >0 = enable testing with that many drops per minute
 func NewCrossChainConductorWithRecoveryTesting(dispatcher execute.Dispatcher, logger logging.OptionalLogger, describe *config.Describe, db database.Beginner, dropsPerMinute int) *CrossChainConductor {
+	// Check if running in devnet mode
+	isDevNet := isDevNetMode()
+	partition := getPartitionName(describe)
+	nodeID := getNodeID()
+
 	cc := &CrossChainConductor{
 		dispatcher:        dispatcher,
 		logger:            logger.With("module", "crosschain-conductor").(logging.OptionalLogger),
 		describe:          describe,
 		db:               db,
+		isDevNet:          isDevNet,
 		syntheticChan:     make(chan *SyntheticRequest, 100),   // Buffered channel for async processing
 		retryChan:         make(chan *PendingTransmission, 50), // Retry queue
 		stopChan:          make(chan struct{}),
@@ -145,6 +156,19 @@ func NewCrossChainConductorWithRecoveryTesting(dispatcher execute.Dispatcher, lo
 		destinations:      make(map[string]*DestinationSendState),
 		maxRetries:        3,               // Retry failed transmissions up to 3 times
 		retryDelay:        2 * time.Second, // Wait 2 seconds between retries
+	}
+
+	// Initialize DevNet logger if in devnet mode
+	if isDevNet && logger.L != nil {
+		// Try to get slog.Logger from the OptionalLogger
+		if slogger, ok := logger.L.(*logging.Slogger); ok {
+			cc.devLogger = logging.NewDevNetLogger((*slog.Logger)(slogger), partition, nodeID, true)
+			cc.devLogger.Info("CrossChain Conductor initialized in DevNet mode",
+				"partition", partition,
+				"node", nodeID,
+				"drops_per_minute", dropsPerMinute,
+			)
+		}
 	}
 
 	// Initialize centralized proof service (NO CACHING for easier testing)
@@ -164,6 +188,51 @@ func NewCrossChainConductorWithRecoveryTesting(dispatcher execute.Dispatcher, lo
 	go cc.processRetries()
 
 	return cc
+}
+
+// Helper functions for devnet detection and context
+func isDevNetMode() bool {
+	// Check environment variables that indicate devnet mode
+	if os.Getenv("ACCUMULATE_DEVNET") == "true" {
+		return true
+	}
+	if strings.Contains(os.Getenv("ACCUMULATE_NETWORK"), "DevNet") {
+		return true
+	}
+	// Check for common devnet indicators
+	if os.Getenv("BASE_PORT") != "" || os.Getenv("DEVNET_DIR") != "" {
+		return true
+	}
+	return false
+}
+
+func getPartitionName(describe *config.Describe) string {
+	if describe != nil && describe.PartitionId != "" {
+		return describe.PartitionId
+	}
+	if describe != nil && describe.Network.Id != "" {
+		return describe.Network.Id
+	}
+	return "unknown"
+}
+
+func getNodeID() int {
+	// Try to extract node ID from process arguments or environment
+	if nodeStr := os.Getenv("NODE_ID"); nodeStr != "" {
+		if id := parseNodeID(nodeStr); id >= 0 {
+			return id
+		}
+	}
+	// Default fallback
+	return 0
+}
+
+func parseNodeID(nodeStr string) int {
+	// Simple parsing - in real devnet, this would be more sophisticated
+	if len(nodeStr) > 0 {
+		return int(nodeStr[len(nodeStr)-1]) - '0'
+	}
+	return 0
 }
 
 // getMessageType determines the message type for blocking purposes
@@ -362,6 +431,15 @@ func (cc *CrossChainConductor) isCrossPartitionMessage(msg messaging.Message) bo
 
 // SubmitSynthetic submits synthetic transactions for async processing
 func (cc *CrossChainConductor) SubmitSynthetic(ctx context.Context, messages []messaging.Message, destination *url.URL) error {
+	// DevNet logging for message submission
+	if cc.devLogger != nil {
+		msgType := "synthetic"
+		if len(messages) > 0 {
+			msgType = fmt.Sprintf("%T", messages[0])
+		}
+		cc.devLogger.ConductorMessage(ctx, nil, destination, 0, msgType)
+	}
+
 	responseChan := make(chan error, 1)
 	req := &SyntheticRequest{
 		Messages:     messages,
@@ -373,7 +451,15 @@ func (cc *CrossChainConductor) SubmitSynthetic(ctx context.Context, messages []m
 	select {
 	case cc.syntheticChan <- req:
 		// Wait for async processing to complete
-		return <-responseChan
+		err := <-responseChan
+		
+		// DevNet logging for transmission result
+		if cc.devLogger != nil {
+			cc.devLogger.CrossChainTransmission(ctx, destination, len(messages), err == nil, 
+				func() string { if err != nil { return err.Error() }; return "" }())
+		}
+		
+		return err
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-cc.stopChan:
@@ -903,10 +989,18 @@ func (cc *CrossChainConductor) GetMetrics() (sent, errors, retried, transmission
 // Simple implementation: requester wants transactions from FromNumber onwards,
 // so we reset our send position to FromNumber-1 for that destination
 func (cc *CrossChainConductor) HandleRecoveryRequest(req *RecoveryRequest) error {
+	startTime := time.Now()
+	
 	cc.logger.Error("[HEALING-DEBUG] HandleRecoveryRequest called - PROCESSING RECOVERY REQUEST",
 		"requester", req.Requester,
 		"fromNumber", req.FromNumber,
 		"action", "reset_send_position")
+
+	// DevNet logging for gap detection
+	if cc.devLogger != nil {
+		requesterURL, _ := url.Parse(req.Requester)
+		cc.devLogger.GapDetected(context.Background(), requesterURL, req.FromNumber, 0, req.FromNumber)
+	}
 
 	// Parse requester as destination URL
 	requesterURL, err := url.Parse(req.Requester)
@@ -926,6 +1020,12 @@ func (cc *CrossChainConductor) HandleRecoveryRequest(req *RecoveryRequest) error
 		cc.destinations[requesterURL.String()] = destState
 	}
 
+	// Calculate gap size for logging
+	gapSize := uint64(0)
+	if destState.SentTxIndex >= req.FromNumber {
+		gapSize = destState.SentTxIndex - req.FromNumber + 1
+	}
+
 	// Reset send position to FromNumber-1 so next batch starts at FromNumber
 	if req.FromNumber > 0 {
 		destState.SentTxIndex = req.FromNumber - 1
@@ -939,6 +1039,12 @@ func (cc *CrossChainConductor) HandleRecoveryRequest(req *RecoveryRequest) error
 		"newSentIndex", destState.SentTxIndex,
 		"willResendFrom", destState.SentTxIndex+1,
 		"recovery_complete", "ready_for_next_batch")
+
+	// DevNet logging for gap recovery completion
+	if cc.devLogger != nil {
+		duration := time.Since(startTime)
+		cc.devLogger.GapRecovered(context.Background(), requesterURL, gapSize, duration)
+	}
 
 	return nil
 }

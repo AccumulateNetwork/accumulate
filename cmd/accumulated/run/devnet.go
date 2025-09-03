@@ -7,6 +7,7 @@
 package run
 
 import (
+	"context"
 	"crypto/ed25519"
 	"fmt"
 	"io/fs"
@@ -62,6 +63,16 @@ func (d *DevnetConfiguration) reset(inst *Instance) error {
 }
 
 func (d *DevnetConfiguration) apply(inst *Instance, cfg *Config) error {
+	// Initialize DevNet logger for orchestration
+	var devLogger *logging.DevNetLogger
+	if inst.logger != nil {
+		devLogger = logging.NewDevNetLogger(inst.logger, cfg.Network, 0, true)
+		
+		// Set DevNet environment variable for components to detect devnet mode
+		os.Setenv("ACCUMULATE_DEVNET", "true")
+		os.Setenv("ACCUMULATE_NETWORK", cfg.Network)
+	}
+
 	// Validate
 	if cfg.Network == "" {
 		return errors.BadRequest.With("must specify the network")
@@ -82,6 +93,13 @@ func (d *DevnetConfiguration) apply(inst *Instance, cfg *Config) error {
 	setDefaultVal(&d.Validators, 2)
 	setDefaultVal(&d.Listen, multiaddr.StringCast("/tcp/26656"))
 	setDefaultPtr(&d.StorageType, StorageTypeBadger)
+
+	// Log DevNet topology initialization
+	if devLogger != nil {
+		totalNodes := (int(d.Validators) + int(d.Followers)) * (1 + int(d.Bvns))
+		portRange := fmt.Sprintf("%d-%d", 26656, 26656+totalNodes*4)
+		devLogger.NetworkTopology(int(d.Bvns), int(d.Validators), int(d.Followers), portRange)
+	}
 
 	// Prepare nodes
 	perPart := int(d.Validators) + int(d.Followers)
@@ -362,9 +380,34 @@ type nodeOpts struct {
 }
 
 func (n nodeOpts) apply(inst *Instance, root *Config) error {
-	cfg, sub, err := n.DevNet.addSubNode(inst, root, fmt.Sprintf("bvn%d-%d", n.BVN, n.Node))
+	nodeName := fmt.Sprintf("bvn%d-%d", n.BVN, n.Node)
+	cfg, sub, err := n.DevNet.addSubNode(inst, root, nodeName)
 	if err != nil {
 		return err
+	}
+
+	// DevNet logging for node startup
+	if inst.logger != nil {
+		devLogger := logging.NewDevNetLogger(inst.logger, fmt.Sprintf("BVN%d", n.BVN), n.Node, true)
+		
+		listenAddr := listen(n.DevNet.Listen, devNetDefaultHost, n.IP).String()
+		nodeType := "validator"
+		if !n.IsVal {
+			nodeType = "follower"
+		}
+		
+		// Set node ID environment variable for this node
+		os.Setenv("NODE_ID", fmt.Sprintf("%d", n.Node))
+		
+		devLogger.NodeStartup(nodeType, listenAddr, "initializing")
+		
+		devLogger.PartitionActivity(context.Background(), "node_configuration", map[string]interface{}{
+			"node_name": nodeName,
+			"bvn_id":    n.BVN,
+			"node_id":   n.Node,
+			"is_validator": n.IsVal,
+			"listen_ip": n.IP,
+		})
 	}
 
 	cfg.P2P.Key = rawPrivKeyFrom(n.NodeKey)

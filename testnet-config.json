@@ -1,0 +1,68 @@
+{
+  "network": {
+    "id": "research-testnet"
+  },
+  "bvns": 5,
+  "validators": 3,
+  "followers": 1,
+  "partitions": [
+    {
+      "id": "Directory",
+      "type": "directory",
+      "validators": [
+        {"name": "directory-0", "listen": [":16592", ":16593"]},
+        {"name": "directory-1", "listen": [":16594", ":16595"]},
+        {"name": "directory-2", "listen": [":16596", ":16597"]}
+      ]
+    },
+    {
+      "id": "BVN0",
+      "type": "block-validator",
+      "validators": [
+        {"name": "bvn0-0", "listen": [":16692", ":16693"]},
+        {"name": "bvn0-1", "listen": [":16694", ":16695"]},
+        {"name": "bvn0-2", "listen": [":16696", ":16697"]}
+      ]
+    },
+    {
+      "id": "BVN1", 
+      "type": "block-validator",
+      "validators": [
+        {"name": "bvn1-0", "listen": [":16792", ":16793"]},
+        {"name": "bvn1-1", "listen": [":16794", ":16795"]},
+        {"name": "bvn1-2", "listen": [":16796", ":16797"]}
+      ]
+    },
+    {
+      "id": "BVN2",
+      "type": "block-validator", 
+      "validators": [
+        {"name": "bvn2-0", "listen": [":16892", ":16893"]},
+        {"name": "bvn2-1", "listen": [":16894", ":16895"]},
+        {"name": "bvn2-2", "listen": [":16896", ":16897"]}
+      ]
+    },
+    {
+      "id": "BVN3",
+      "type": "block-validator",
+      "validators": [
+        {"name": "bvn3-0", "listen": [":16992", ":16993"]},
+        {"name": "bvn3-1", "listen": [":16994", ":16995"]},
+        {"name": "bvn3-2", "listen": [":16996", ":16997"]}
+      ]
+    },
+    {
+      "id": "BVN4",
+      "type": "block-validator",
+      "validators": [
+        {"name": "bvn4-0", "listen": [":17092", ":17093"]},
+        {"name": "bvn4-1", "listen": [":17094", ":17095"]},
+        {"name": "bvn4-2", "listen": [":17096", ":17097"]}
+      ]
+    }
+  ],
+  "globals": {
+    "routing": "identity",
+    "validator-acceptance-rate": {"numerator": 1, "denominator": 1}
+  }
+}
