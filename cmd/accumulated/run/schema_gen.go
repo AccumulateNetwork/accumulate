@@ -518,14 +518,6 @@ func init() {
 				}).
 					ResolveElemTo(&deferredTypes, "StorageType"),
 			},
-			{
-				Name:     "DropsPerMinute",
-				Optional: true,
-				Type: &schema.PointerType{
-					TypeBase: schema.TypeBase{},
-					Elem:     &schema.SimpleType{Type: schema.SimpleTypeInt},
-				},
-			},
 		},
 	}).SetGoType()
 

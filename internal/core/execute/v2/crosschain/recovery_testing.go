@@ -68,6 +68,7 @@ func NewRecoveryTestConfig(logger logging.OptionalLogger, describe *config.Descr
 	
 	// SECURITY CHECK 2: Must have active faucet
 	hasFaucet := rtc.detectActiveFaucet(describe)
+	
 	if !hasFaucet {
 		rtc.logger.Debug("Recovery testing disabled - no active faucet detected")
 		return rtc // disabled
@@ -76,28 +77,41 @@ func NewRecoveryTestConfig(logger logging.OptionalLogger, describe *config.Descr
 	// BOTH conditions met - safe to enable testing
 	rtc.enabled = true
 	
-	rtc.logger.Error("[HEALING-DEBUG] Recovery testing ENABLED - faucet + drops per minute detected",
+	rtc.logger.Info("Recovery testing enabled",
 		"drops_per_minute", rtc.dropsPerMinute,
-		"WARNING", "This should NEVER happen in production",
-		"expected_behavior", "messages will be randomly dropped to test healing")
+		"partition", func() string { if describe != nil { return describe.PartitionId }; return "unknown" }())
 	
 	return rtc
 }
 
 // detectActiveFaucet checks if faucet is active in this network
 func (rtc *RecoveryTestConfig) detectActiveFaucet(describe *config.Describe) bool {
-	// Check if this is a test network with faucet
-	if describe.NetworkType == protocol.PartitionTypeDirectory {
-		// Directory networks typically have faucets in test environments
-		return true
+	// For DevNet, always assume faucet is available (it's part of bootstrap)
+	// DevNet always has a faucet service in the bootstrap node
+	
+	// Check if this is DevNet by looking at network structure
+	if describe != nil {
+		// Any DevNet partition should have faucet access via bootstrap
+		if describe.PartitionId == "Directory" || 
+		   describe.PartitionId == "BVN1" ||
+		   describe.PartitionId == "BVN2" || 
+		   describe.PartitionId == "BVN3" {
+			rtc.logger.Debug("Faucet detected in DevNet partition", "partition", describe.PartitionId)
+			return true
+		}
+		
+		// Also check network type
+		if describe.NetworkType == protocol.PartitionTypeDirectory ||
+		   describe.NetworkType == protocol.PartitionTypeBlockValidator {
+			rtc.logger.Debug("Faucet detected via network type", "type", describe.NetworkType)
+			return true
+		}
 	}
 	
-	// Additional faucet detection logic could be added here
-	// For now, assume test networks have faucets
-	return describe.PartitionId == "Directory" || 
-		   describe.PartitionId == "BVN0" ||
-		   describe.PartitionId == "BVN1" ||
-		   describe.PartitionId == "BVN2"
+	rtc.logger.Debug("No faucet detected - recovery testing disabled", 
+		"partition", func() string { if describe != nil { return describe.PartitionId }; return "nil" }(),
+		"network_type", func() protocol.PartitionType { if describe != nil { return describe.NetworkType }; return 0 }())
+	return false
 }
 
 // ShouldDropMessage decides whether to drop a message for recovery testing

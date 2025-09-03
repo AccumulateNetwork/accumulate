@@ -164,6 +164,9 @@ func configureDevNetEnvironment() {
 		flagRunDevnet.NumFollowers)
 	os.Setenv("ACCUMULATE_NETWORK", networkName)
 	
+	// DIRECT DPM propagation via environment variable - NO persistence, NO configuration complexity  
+	os.Setenv("ACCUMULATE_DPM", fmt.Sprintf("%d", flagRunDevnet.DropsPerMinute))
+	
 	// Automatically configure devnet-optimized logging
 	configureDevNetLogging()
 }
@@ -187,6 +190,9 @@ func configureDevNetLogging() {
 		{Level: slog.LevelError, Modules: []string{"badger", "p2p", "consensus", "mempool", "blocksync"}},
 	}
 }
+
+// Global variable for direct DPM propagation (runtime-only, never persisted)
+var globalDevNetDPM int
 
 type plainNodeWriter struct {
 	s string

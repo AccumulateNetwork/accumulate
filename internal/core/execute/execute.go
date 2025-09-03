@@ -71,9 +71,8 @@ type Options struct {
 	NewDispatcher               func() Dispatcher  // Synthetic transaction dispatcher factory
 	Sequencer                   private.Sequencer  // Synthetic and anchor sequence API service
 	Querier                     api.Querier        // Query API service
-	EnableHealing               bool               //
-	EnableCrosschainCoordinator bool               // Enable crosschain conductor (temporary flag while debugging)
-	DropsPerMinute              int                // Enable recovery testing with drops per minute (0=disabled, requires testnet build)
+	EnableHealing  bool // 
+	DropsPerMinute int  // Enable recovery testing with drops per minute (0=disabled, requires testnet build)
 }
 
 // A Dispatcher dispatches synthetic transactions produced by the executor.

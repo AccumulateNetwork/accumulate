@@ -401,9 +401,8 @@ type DevnetConfiguration struct {
 	Bvns           uint64
 	Validators     uint64
 	Followers      uint64
-	Globals        *network.GlobalValues
-	StorageType    *StorageType
-	DropsPerMinute *int64
+	Globals     *network.GlobalValues
+	StorageType *StorageType
 }
 
 func (DevnetConfiguration) Type() ConfigurationType { return ConfigurationTypeDevnet }

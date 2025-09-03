@@ -15,6 +15,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	types "github.com/cometbft/cometbft/abci/types"
@@ -438,13 +439,22 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 		Router:  routing.MessageRouter{Router: router},
 	}}
 	db := database.New(store, d.logger)
-	// Extract DropsPerMinute from devnet configuration if present
-	dropsPerMinute := 0
-	for _, cfg := range inst.config.Configurations {
-		if devCfg, ok := cfg.(*DevnetConfiguration); ok && devCfg.DropsPerMinute != nil {
-			dropsPerMinute = int(*devCfg.DropsPerMinute)
-			break
+	
+	// DIRECT DPM access - NO configuration lookup, NO persistence
+	dropsPerMinute := func() int {
+		// Direct environment variable access - bypasses all configuration complexity
+		if dpm := os.Getenv("ACCUMULATE_DPM"); dpm != "" {
+			if val, err := strconv.Atoi(dpm); err == nil {
+				return val
+			}
 		}
+		return 0
+	}()
+	
+	if dropsPerMinute > 0 {
+		d.logger.Info("Recovery testing enabled via environment variable", 
+			"dpm", dropsPerMinute,
+			"partition", c.Partition.ID)
 	}
 
 	execOpts := execute.Options{

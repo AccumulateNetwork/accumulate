@@ -115,10 +115,8 @@ func applyDevNetFlags(cmd *cobra.Command, cfg *run.Config, dev *run.DevnetConfig
 	applyDevNetFlag(cmd, "validators", &dev.Validators, uint64(flagRunDevnet.NumValidators), onlyChanged)
 	applyDevNetFlag(cmd, "followers", &dev.Followers, uint64(flagRunDevnet.NumFollowers), onlyChanged)
 	applyDevNetFlag(cmd, "globals", &dev.Globals, &flagRunDevnet.Globals, onlyChanged)
-	if flagRunDevnet.DropsPerMinute > 0 {
-		dpm := int64(flagRunDevnet.DropsPerMinute)
-		applyDevNetFlag(cmd, "dpm", &dev.DropsPerMinute, &dpm, onlyChanged)
-	}
+	// DPM is NOT persisted - it's a runtime-only testing flag
+	// NO configuration storage for DPM - passed directly via global variable
 }
 
 func applyDevNetFlag[V any](cmd *cobra.Command, name string, ptr *V, value V, onlyChanged bool) {

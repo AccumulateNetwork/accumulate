@@ -10,7 +10,7 @@ The Recovery Testing Framework provides a safe mechanism to test the crosschain 
 
 ### Security Requirement 1: DPM Flag
 ```bash
-./accumulated --dpm 3  # 3 drops per minute
+./accumulated run devnet --dpm 3  # 3 drops per minute
 ```
 Must be explicitly set as command line argument with value > 0.
 
@@ -22,18 +22,38 @@ The system automatically detects if a faucet is active in the network configurat
 ## How It Works
 
 ### 1. Initialization
-When `CrossChainConductor` starts:
-```go
-// Only initializes if BOTH faucet + test flag present
-cc.recoveryTestConfig = NewRecoveryTestConfig(logger, describe)
+The devnet command automatically configures recovery testing:
+```bash
+# DevNet sets environment variable based on --dpm flag
+./accumulated run devnet --dpm 5  # Sets ACCUMULATE_DPM=5
+
+# CrossChain Conductor reads environment variable directly 
+dropsPerMinute := os.Getenv("ACCUMULATE_DPM")  // Gets "5"
+cc.recoveryTestConfig = NewRecoveryTestConfig(logger, describe, dropsPerMinute)
 ```
+
+**Architecture:**
+- **Runtime-only**: DPM never persisted to configuration files
+- **Environment-based**: Direct propagation via ACCUMULATE_DPM environment variable  
+- **Process-wide**: All partitions inherit the same DPM setting
+- **No reboot survival**: DPM flag must be specified on every start (by design)
 
 ### 2. Message Dropping
 During normal crosschain message transmission:
-- **5% of messages** are randomly dropped (configurable)
+- **Time-based dropping** at specified rate (e.g., --dpm 5 = 5 drops per minute)
 - **Only crosschain messages** (anchors/synthetics) are eligible
-- **Rate limited** to max 100 drops per hour
+- **Rate limited** to exact drops per minute target
+- **Minimum interval** between drops to achieve target rate
 - **Clear logging** marks all drops as "RECOVERY TEST"
+
+#### Drop Rate Calculation
+```go
+// For --dpm 5 (5 drops per minute):
+minDropInterval := time.Minute / 5  // = 12 seconds between drops
+if time.Since(lastDrop) >= minDropInterval {
+    // Drop this message
+}
+```
 
 ### 3. Gap Detection
 When dropped messages create gaps:
@@ -47,7 +67,54 @@ Source partitions respond to recovery requests:
 - Resend all missing messages
 - Complete healing cycle verified
 
-## Configuration
+## Configuration Examples
+
+### Basic Recovery Testing
+```bash
+# Start DevNet with 5 message drops per minute
+./accumulated run devnet --dpm 5 --bvns 3 --validators 2
+
+# Start DevNet with minimal setup and recovery testing  
+./accumulated run devnet --dpm 3 --bvns 2 --validators 1
+
+# Disable recovery testing (default)
+./accumulated run devnet --dpm 0  # or omit --dpm entirely
+```
+
+### Advanced Usage
+```bash
+# High frequency testing (10 drops per minute = every 6 seconds)
+./accumulated run devnet --dpm 10
+
+# Low frequency testing (1 drop per minute = every 60 seconds)  
+./accumulated run devnet --dpm 1
+
+# Debug mode with recovery testing
+./accumulated run devnet --dpm 5 --debug
+```
+
+## Architecture
+
+### Simplified DPM Propagation
+The recovery testing system uses a simplified architecture for flag propagation:
+
+```
+CLI Flag (--dpm 5) → Environment Variable (ACCUMULATE_DPM=5) → All Partitions
+```
+
+**Benefits:**
+- **Runtime-only**: No configuration file persistence
+- **Process-wide**: All partitions inherit the same DMP setting  
+- **Simple**: Direct environment variable access
+- **Safe**: Must be specified on every start (never survives reboot)
+
+### Key Components
+1. **DevNet Command**: Sets `ACCUMULATE_DPM` environment variable
+2. **Consensus Module**: Reads environment variable directly
+3. **CrossChain Conductor**: Always enabled, gets DPM value from execute options
+4. **Recovery Testing**: Activates when DPM > 0 AND faucet detected
+
+## Implementation Details
 
 ### Command Line Arguments
 
