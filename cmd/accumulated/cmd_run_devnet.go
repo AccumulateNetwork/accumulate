@@ -164,7 +164,7 @@ func configureDevNetEnvironment() {
 		flagRunDevnet.NumFollowers)
 	os.Setenv("ACCUMULATE_NETWORK", networkName)
 	
-	// DIRECT DPM propagation via environment variable - NO persistence, NO configuration complexity  
+	// Pass DPM via environment variable for multi-partition access
 	os.Setenv("ACCUMULATE_DPM", fmt.Sprintf("%d", flagRunDevnet.DropsPerMinute))
 	
 	// Automatically configure devnet-optimized logging
@@ -191,8 +191,13 @@ func configureDevNetLogging() {
 	}
 }
 
-// Global variable for direct DPM propagation (runtime-only, never persisted)
+// Global variable for direct DPM access (simple approach)
 var globalDevNetDPM int
+
+// GetGlobalDPM returns the DPM value set by devnet command
+func GetGlobalDPM() int {
+	return globalDevNetDPM
+}
 
 type plainNodeWriter struct {
 	s string

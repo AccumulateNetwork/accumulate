@@ -440,9 +440,9 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 	}}
 	db := database.New(store, d.logger)
 	
-	// DIRECT DPM access - NO configuration lookup, NO persistence
+	// Use the DPM value from the devnet command directly  
 	dropsPerMinute := func() int {
-		// Direct environment variable access - bypasses all configuration complexity
+		// Access via environment variable set by devnet command
 		if dpm := os.Getenv("ACCUMULATE_DPM"); dpm != "" {
 			if val, err := strconv.Atoi(dpm); err == nil {
 				return val
