@@ -79,30 +79,65 @@ func run2(cmd *cobra.Command, args []string) {
 }
 
 func runCfg(c *run.Config, predicate func(run.Service) bool) {
+	// Add extensive logging at the start
+	fmt.Printf("runCfg starting with %d services\n", len(c.Services))
+	for idx, svc := range c.Services {
+		fmt.Printf("Service %d: Type=%v\n", idx, svc.Type())
+	}
+
 	if flagMain.Debug {
+		fmt.Println("Enabling debug features")
 		logging.EnableDebugFeatures()
 	}
 	if flagMain.Pprof != "" {
 		s := new(http.Server)
 		s.Addr = flagMain.Pprof
 		s.ReadHeaderTimeout = time.Minute
+		fmt.Printf("Starting pprof server at %s\n", flagMain.Pprof)
 		go func() { check(s.ListenAndServe()) }() //nolint:gosec
 	}
 
+	fmt.Println("Creating context for main process")
 	ctx := cmdutil.ContextForMainProcess(context.Background())
+
+	fmt.Println("Creating new run instance")
 	i, err := run.New(ctx, c)
 	check(err)
+	fmt.Println("Run instance created successfully")
 
 	if flagMain.Reset {
+		fmt.Println("Resetting...")
 		check(i.Reset())
 	}
 
 	if flagMain.InitOnly {
+		fmt.Println("Init only mode, returning")
 		return
 	}
 
-	check(i.StartFiltered(predicate))
+	fmt.Println("Starting services with filter")
+	fmt.Printf("Predicate function: %v\n", predicate != nil)
+	fmt.Println("About to call i.StartFiltered...")
+	err = i.StartFiltered(predicate)
+	fmt.Printf("i.StartFiltered returned, err: %v\n", err)
+	check(err)
+	fmt.Println("Services started successfully")
 	color.HiBlue("\n----- Running -----\n\n")
+	fmt.Println("After printing Running message")
+
+	// Add heartbeat logging
+	fmt.Println("Starting heartbeat goroutine...")
+	go func() {
+		fmt.Println("[Heartbeat] Goroutine started")
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			fmt.Printf("[Heartbeat] Services still running at %v\n", time.Now().Format("15:04:05"))
+		}
+	}()
+	fmt.Println("Heartbeat goroutine launched")
+
+	fmt.Println("Waiting for Done signal...")
 	<-i.Done()
 	color.HiBlack("\n----- Stopping -----\n\n")
 	i.Stop()
