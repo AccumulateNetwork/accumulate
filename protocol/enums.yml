@@ -29,9 +29,13 @@ ExecutorVersion:
     value: 8
     label: v2-jiuquan
     description: enables the Jiuquan release
+  V2LXRMining:
+    value: 9
+    label: v2-lxr-mining
+    description: enables LXR memory-hard proof-of-work mining for anti-spam protection
 
   VNext:
-    value: 9
+    value: 10
     description: is a placeholder for testing. DO NOT USE
 
 PartitionType:

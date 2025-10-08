@@ -214,6 +214,7 @@ func setupSim(t *testing.T, net *accumulated.NetworkInit) (*simulator.Simulator,
 		Submitter: sim.Services(),
 		Querier:   sim.Services(),
 		Events:    sim.Services(),
+		Amount:    25000, // 25,000 ACME to support large credit purchases and test operations
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { faucetSvc.Stop() })

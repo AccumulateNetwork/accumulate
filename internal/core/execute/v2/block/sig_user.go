@@ -40,6 +40,12 @@ func init() {
 		protocol.SignatureTypeEcdsaSha256,
 		protocol.SignatureTypeTypedData,
 	)
+
+	// LXR Mining: Memory-hard proof-of-work signatures
+	registerConditionalExec[UserSignature](&signatureExecutors,
+		func(ctx *SignatureContext) bool { return ctx.GetActiveGlobals().ExecutorVersion.V2LXRMiningEnabled() },
+		protocol.SignatureTypeLXRMining,
+	)
 }
 
 // UserSignature processes user signatures.

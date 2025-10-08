@@ -11,7 +11,7 @@ type ExecutorVersion uint64
 
 // ExecutorVersionLatest is the latest version of the executor.
 // ExecutorVersionLatest is intended primarily for testing.
-const ExecutorVersionLatest = ExecutorVersionV2Jiuquan
+const ExecutorVersionLatest = ExecutorVersionV2LXRMining
 
 func init() {
 	// Verify that ExecutorVersionLatest has been updated, so that tests can
@@ -56,4 +56,9 @@ func (v ExecutorVersion) V2VandenbergEnabled() bool {
 // V2JiuquanEnabled checks if the version is at least V2 Jiuquan.
 func (v ExecutorVersion) V2JiuquanEnabled() bool {
 	return v >= ExecutorVersionV2Jiuquan
+}
+
+// V2LXRMiningEnabled checks if the version is at least V2 LXR Mining.
+func (v ExecutorVersion) V2LXRMiningEnabled() bool {
+	return v >= ExecutorVersionV2LXRMining
 }
