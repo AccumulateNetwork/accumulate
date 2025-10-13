@@ -173,11 +173,11 @@ KeySpec:
       type: url
       pointer: true
     - name: MiningDifficulty
-      description: is the mining difficulty target for this key entry (optional for mining keys)
-      type: bytes  
+      description: is the mining difficulty target hash for this key entry. Used by third-party apps to set custom mining difficulty per miner. nil means mining disabled for this key.
+      type: bytes
       optional: true
     - name: MiningExpiry
-      description: is the block height when mining permission expires (optional)
+      description: is the block height when mining permission expires for this key entry. Zero means no expiry. Used for time-limited mining access control.
       type: uvarint
       optional: true
 
