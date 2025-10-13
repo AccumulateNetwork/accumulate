@@ -498,7 +498,11 @@ type KeySpec struct {
 	PublicKeyHash []byte   `json:"publicKeyHash,omitempty" form:"publicKeyHash" query:"publicKeyHash" validate:"required"`
 	LastUsedOn    uint64   `json:"lastUsedOn,omitempty" form:"lastUsedOn" query:"lastUsedOn" validate:"required"`
 	Delegate      *url.URL `json:"delegate,omitempty" form:"delegate" query:"delegate" validate:"required"`
-	extraData     []byte
+	// MiningDifficulty is the mining difficulty target for this key entry (optional for mining keys).
+	MiningDifficulty []byte `json:"miningDifficulty,omitempty" form:"miningDifficulty" query:"miningDifficulty"`
+	// MiningExpiry is the block height when mining permission expires (optional).
+	MiningExpiry uint64 `json:"miningExpiry,omitempty" form:"miningExpiry" query:"miningExpiry"`
+	extraData    []byte
 }
 
 type KeySpecParams struct {
@@ -2358,6 +2362,8 @@ func (v *KeySpec) Copy() *KeySpec {
 	if v.Delegate != nil {
 		u.Delegate = v.Delegate
 	}
+	u.MiningDifficulty = encoding.BytesCopy(v.MiningDifficulty)
+	u.MiningExpiry = v.MiningExpiry
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -4830,6 +4836,12 @@ func (v *KeySpec) Equal(u *KeySpec) bool {
 	case v.Delegate == nil || u.Delegate == nil:
 		return false
 	case !((v.Delegate).Equal(u.Delegate)):
+		return false
+	}
+	if !(bytes.Equal(v.MiningDifficulty, u.MiningDifficulty)) {
+		return false
+	}
+	if !(v.MiningExpiry == u.MiningExpiry) {
 		return false
 	}
 
@@ -9424,6 +9436,8 @@ var fieldNames_KeySpec = []string{
 	1: "PublicKeyHash",
 	2: "LastUsedOn",
 	3: "Delegate",
+	4: "MiningDifficulty",
+	5: "MiningExpiry",
 }
 
 func (v *KeySpec) MarshalBinary() ([]byte, error) {
@@ -9442,6 +9456,12 @@ func (v *KeySpec) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.Delegate == nil) {
 		writer.WriteUrl(3, v.Delegate)
+	}
+	if !(len(v.MiningDifficulty) == 0) {
+		writer.WriteBytes(4, v.MiningDifficulty)
+	}
+	if !(v.MiningExpiry == 0) {
+		writer.WriteUint(5, v.MiningExpiry)
 	}
 
 	_, _, err := writer.Reset(fieldNames_KeySpec)
@@ -15935,6 +15955,12 @@ func (v *KeySpec) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUrl(3); ok {
 		v.Delegate = x
 	}
+	if x, ok := reader.ReadBytes(4); ok {
+		v.MiningDifficulty = x
+	}
+	if x, ok := reader.ReadUint(5); ok {
+		v.MiningExpiry = x
+	}
 
 	seen, err := reader.Reset(fieldNames_KeySpec)
 	if err != nil {
@@ -19071,6 +19097,8 @@ func init() {
 		encoding.NewTypeField("publicKeyHash", "bytes"),
 		encoding.NewTypeField("lastUsedOn", "uint64"),
 		encoding.NewTypeField("delegate", "string"),
+		encoding.NewTypeField("miningDifficulty", "bytes"),
+		encoding.NewTypeField("miningExpiry", "uint64"),
 	}, "KeySpec", "keySpec")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -20656,11 +20684,13 @@ func (v *KeyPage) MarshalJSON() ([]byte, error) {
 
 func (v *KeySpec) MarshalJSON() ([]byte, error) {
 	u := struct {
-		PublicKeyHash *string  `json:"publicKeyHash,omitempty"`
-		PublicKey     *string  `json:"publicKey,omitempty"`
-		LastUsedOn    uint64   `json:"lastUsedOn,omitempty"`
-		Delegate      *url.URL `json:"delegate,omitempty"`
-		ExtraData     *string  `json:"$epilogue,omitempty"`
+		PublicKeyHash    *string  `json:"publicKeyHash,omitempty"`
+		PublicKey        *string  `json:"publicKey,omitempty"`
+		LastUsedOn       uint64   `json:"lastUsedOn,omitempty"`
+		Delegate         *url.URL `json:"delegate,omitempty"`
+		MiningDifficulty *string  `json:"miningDifficulty,omitempty"`
+		MiningExpiry     uint64   `json:"miningExpiry,omitempty"`
+		ExtraData        *string  `json:"$epilogue,omitempty"`
 	}{}
 	if !(len(v.PublicKeyHash) == 0) {
 		u.PublicKeyHash = encoding.BytesToJSON(v.PublicKeyHash)
@@ -20671,6 +20701,12 @@ func (v *KeySpec) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.Delegate == nil) {
 		u.Delegate = v.Delegate
+	}
+	if !(len(v.MiningDifficulty) == 0) {
+		u.MiningDifficulty = encoding.BytesToJSON(v.MiningDifficulty)
+	}
+	if !(v.MiningExpiry == 0) {
+		u.MiningExpiry = v.MiningExpiry
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -23621,16 +23657,20 @@ func (v *KeyPage) UnmarshalJSON(data []byte) error {
 
 func (v *KeySpec) UnmarshalJSON(data []byte) error {
 	u := struct {
-		PublicKeyHash *string  `json:"publicKeyHash,omitempty"`
-		PublicKey     *string  `json:"publicKey,omitempty"`
-		LastUsedOn    uint64   `json:"lastUsedOn,omitempty"`
-		Delegate      *url.URL `json:"delegate,omitempty"`
-		ExtraData     *string  `json:"$epilogue,omitempty"`
+		PublicKeyHash    *string  `json:"publicKeyHash,omitempty"`
+		PublicKey        *string  `json:"publicKey,omitempty"`
+		LastUsedOn       uint64   `json:"lastUsedOn,omitempty"`
+		Delegate         *url.URL `json:"delegate,omitempty"`
+		MiningDifficulty *string  `json:"miningDifficulty,omitempty"`
+		MiningExpiry     uint64   `json:"miningExpiry,omitempty"`
+		ExtraData        *string  `json:"$epilogue,omitempty"`
 	}{}
 	u.PublicKeyHash = encoding.BytesToJSON(v.PublicKeyHash)
 	u.PublicKey = encoding.BytesToJSON(v.PublicKeyHash)
 	u.LastUsedOn = v.LastUsedOn
 	u.Delegate = v.Delegate
+	u.MiningDifficulty = encoding.BytesToJSON(v.MiningDifficulty)
+	u.MiningExpiry = v.MiningExpiry
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -23650,6 +23690,12 @@ func (v *KeySpec) UnmarshalJSON(data []byte) error {
 	}
 	v.LastUsedOn = u.LastUsedOn
 	v.Delegate = u.Delegate
+	if x, err := encoding.BytesFromJSON(u.MiningDifficulty); err != nil {
+		return fmt.Errorf("error decoding MiningDifficulty: %w", err)
+	} else {
+		v.MiningDifficulty = x
+	}
+	v.MiningExpiry = u.MiningExpiry
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err
