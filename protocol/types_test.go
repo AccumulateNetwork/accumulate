@@ -58,3 +58,125 @@ func TestKeyPage_MofN(t *testing.T) {
 		}
 	}
 }
+
+func TestKeySpec_MiningFields(t *testing.T) {
+	t.Run("Basic", func(t *testing.T) {
+		// Test KeySpec with mining fields
+		key := &KeySpec{
+			PublicKeyHash:    []byte("test-public-key-hash"),
+			LastUsedOn:       12345,
+			MiningDifficulty: []byte("mining-difficulty-32-bytes-test"),
+			MiningExpiry:     67890,
+		}
+
+		// Test Copy method
+		copied := key.Copy()
+		require.Equal(t, key.PublicKeyHash, copied.PublicKeyHash)
+		require.Equal(t, key.LastUsedOn, copied.LastUsedOn)
+		require.Equal(t, key.MiningDifficulty, copied.MiningDifficulty)
+		require.Equal(t, key.MiningExpiry, copied.MiningExpiry)
+
+		// Test Equal method
+		require.True(t, key.Equal(copied))
+
+		// Test modification breaks equality
+		copied.MiningExpiry = 99999
+		require.False(t, key.Equal(copied))
+	})
+
+	t.Run("OptionalFields", func(t *testing.T) {
+		// Test KeySpec with only required fields (no mining fields)
+		key := &KeySpec{
+			PublicKeyHash: []byte("test-public-key-hash"),
+			LastUsedOn:    12345,
+		}
+
+		// Test Copy method with nil mining fields
+		copied := key.Copy()
+		require.Equal(t, key.PublicKeyHash, copied.PublicKeyHash)
+		require.Equal(t, key.LastUsedOn, copied.LastUsedOn)
+		require.Nil(t, copied.MiningDifficulty)
+		require.Equal(t, uint64(0), copied.MiningExpiry)
+
+		// Test Equal method with nil fields
+		require.True(t, key.Equal(copied))
+	})
+
+	t.Run("Marshaling", func(t *testing.T) {
+		// Test binary marshaling/unmarshaling with mining fields
+		original := &KeySpec{
+			PublicKeyHash:    []byte("test-public-key-hash"),
+			LastUsedOn:       12345,
+			MiningDifficulty: []byte("mining-difficulty-32-bytes-test"),
+			MiningExpiry:     67890,
+		}
+
+		// Binary marshaling
+		data, err := original.MarshalBinary()
+		require.NoError(t, err)
+
+		// Binary unmarshaling
+		decoded := new(KeySpec)
+		err = decoded.UnmarshalBinary(data)
+		require.NoError(t, err)
+
+		// Verify fields
+		require.Equal(t, original.PublicKeyHash, decoded.PublicKeyHash)
+		require.Equal(t, original.LastUsedOn, decoded.LastUsedOn)
+		require.Equal(t, original.MiningDifficulty, decoded.MiningDifficulty)
+		require.Equal(t, original.MiningExpiry, decoded.MiningExpiry)
+		require.True(t, original.Equal(decoded))
+	})
+
+	t.Run("JSONMarshaling", func(t *testing.T) {
+		// Test JSON marshaling/unmarshaling with mining fields
+		original := &KeySpec{
+			PublicKeyHash:    []byte("test-public-key-hash"),
+			LastUsedOn:       12345,
+			MiningDifficulty: []byte("mining-difficulty-32-bytes-test"),
+			MiningExpiry:     67890,
+		}
+
+		// JSON marshaling
+		jsonData, err := original.MarshalJSON()
+		require.NoError(t, err)
+
+		// JSON unmarshaling
+		decoded := new(KeySpec)
+		err = decoded.UnmarshalJSON(jsonData)
+		require.NoError(t, err)
+
+		// Verify fields
+		require.Equal(t, original.PublicKeyHash, decoded.PublicKeyHash)
+		require.Equal(t, original.LastUsedOn, decoded.LastUsedOn)
+		require.Equal(t, original.MiningDifficulty, decoded.MiningDifficulty)
+		require.Equal(t, original.MiningExpiry, decoded.MiningExpiry)
+		require.True(t, original.Equal(decoded))
+	})
+
+	t.Run("BackwardCompatibility", func(t *testing.T) {
+		// Test that KeySpec without mining fields still works
+		original := &KeySpec{
+			PublicKeyHash: []byte("test-public-key-hash"),
+			LastUsedOn:    12345,
+		}
+
+		// Binary marshaling
+		data, err := original.MarshalBinary()
+		require.NoError(t, err)
+
+		// Binary unmarshaling
+		decoded := new(KeySpec)
+		err = decoded.UnmarshalBinary(data)
+		require.NoError(t, err)
+
+		// Verify required fields
+		require.Equal(t, original.PublicKeyHash, decoded.PublicKeyHash)
+		require.Equal(t, original.LastUsedOn, decoded.LastUsedOn)
+		
+		// Verify optional mining fields have zero values
+		require.Nil(t, decoded.MiningDifficulty)
+		require.Equal(t, uint64(0), decoded.MiningExpiry)
+		require.True(t, original.Equal(decoded))
+	})
+}

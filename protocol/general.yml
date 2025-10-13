@@ -172,6 +172,14 @@ KeySpec:
     - name: Delegate
       type: url
       pointer: true
+    - name: MiningDifficulty
+      description: is the mining difficulty target for this key entry (optional for mining keys)
+      type: bytes  
+      optional: true
+    - name: MiningExpiry
+      description: is the block height when mining permission expires (optional)
+      type: uvarint
+      optional: true
 
 NetworkGlobals:
   fields:
