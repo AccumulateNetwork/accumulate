@@ -655,6 +655,35 @@ func (d *Daemon) StartP2P() error {
 	if err != nil {
 		return errors.UnknownError.WithFormat("initialize P2P: %w", err)
 	}
+
+	// Start P2P peer database pruning
+	// This prevents stale peers from accumulating indefinitely
+	if tracker := d.p2pnode.Tracker(); tracker != nil {
+		if pt, ok := tracker.(interface{ DB() interface{ prune() } }); ok {
+			db := pt.DB()
+
+			// Initial aggressive prune on startup
+			db.prune()
+			d.Logger.Info("Initial P2P peer pruning completed")
+
+			// Start periodic pruning (every hour)
+			go func() {
+				ticker := time.NewTicker(1 * time.Hour)
+				defer ticker.Stop()
+
+				for {
+					select {
+					case <-ticker.C:
+						db.prune()
+						d.Logger.Debug("Periodic P2P peer pruning completed")
+					case <-d.done:
+						return
+					}
+				}
+			}()
+		}
+	}
+
 	return nil
 }
 
