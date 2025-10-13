@@ -82,7 +82,7 @@ func TestLXRMiningSignature(t *testing.T) {
 			Signer:        url.MustParse("acc://miner.acme/book/1"),
 			SignerVersion: 1,
 			Timestamp:     uint64(time.Now().Unix()),
-			Nonce:         12345,      // Random nonce
+			Nonce:         12345, // Random nonce
 			Difficulty:    1000,
 			WorkProof:     [32]byte{}, // Invalid proof
 		}

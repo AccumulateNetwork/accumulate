@@ -58,7 +58,7 @@ func TestValidate(t *testing.T) {
 // v2 over P2P.
 func TestValidateAPI(t *testing.T) {
 	acctesting.SkipCI(t, "Not sufficiently reliable yet")
-	
+
 	if runtime.GOOS == "darwin" {
 		t.Skip("Network binding test skipped on macOS - IP addresses 127.0.1.x not available")
 	}

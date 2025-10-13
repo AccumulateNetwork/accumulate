@@ -54,12 +54,12 @@ const (
 	MaxMiningAttempts = ^uint64(0) >> 1 // Half of uint64 max to avoid infinite loop
 	// MaxCacheEntries limits the number of cached LXR instances
 	MaxCacheEntries = 10
-	
+
 	// WorkProof encoding offsets
-	WorkProofPowOffset      = 0  // Bytes 0-8: LXR PoW value
-	WorkProofHashOffset     = 8  // Bytes 8-16: Message hash prefix
-	WorkProofNonceOffset    = 16 // Bytes 16-24: Mining nonce
-	WorkProofPubKeyOffset   = 24 // Bytes 24-32: Public key prefix
+	WorkProofPowOffset    = 0  // Bytes 0-8: LXR PoW value
+	WorkProofHashOffset   = 8  // Bytes 8-16: Message hash prefix
+	WorkProofNonceOffset  = 16 // Bytes 16-24: Mining nonce
+	WorkProofPubKeyOffset = 24 // Bytes 24-32: Public key prefix
 )
 
 // LXR instance cache to avoid regenerating tables
@@ -73,7 +73,7 @@ var (
 func getLXRInstance(tableBits, loops, passes uint64) *lxrpow.LxrPow {
 	// Create a unique key for the configuration
 	key := (tableBits << 32) | (loops << 16) | passes
-	
+
 	// Check cache with read lock
 	lxrMutex.RLock()
 	if lxr, ok := lxrCache[key]; ok {
@@ -81,16 +81,16 @@ func getLXRInstance(tableBits, loops, passes uint64) *lxrpow.LxrPow {
 		return lxr
 	}
 	lxrMutex.RUnlock()
-	
+
 	// Create new instance with write lock
 	lxrMutex.Lock()
 	defer lxrMutex.Unlock()
-	
+
 	// Double-check in case another goroutine created it
 	if lxr, ok := lxrCache[key]; ok {
 		return lxr
 	}
-	
+
 	// Evict oldest entry if cache is full (LRU)
 	if len(lxrCache) >= MaxCacheEntries {
 		if len(lxrCacheOrder) > 0 {
@@ -99,7 +99,7 @@ func getLXRInstance(tableBits, loops, passes uint64) *lxrpow.LxrPow {
 			lxrCacheOrder = lxrCacheOrder[1:]
 		}
 	}
-	
+
 	// Create and cache new instance
 	lxr := lxrpow.NewLxrPow(loops, tableBits, passes)
 	lxrCache[key] = lxr
@@ -145,8 +145,8 @@ func (s *LXRMiningSignature) Initiator() (hash.Hasher, error) {
 	if len(s.PublicKey) == 0 || s.Signer == nil || s.SignerVersion == 0 || s.Timestamp == 0 {
 		return nil, ErrCannotInitiate
 	}
-	
-	// Create the initiator hash  
+
+	// Create the initiator hash
 	hasher := make(hash.Hasher, 0, 4)
 	hasher.AddBytes(s.PublicKey)
 	hasher.AddUrl(s.Signer)
@@ -191,22 +191,22 @@ func (s *LXRMiningSignature) Verify(sig Signature, msg Signable) bool {
 	if !ok {
 		return false
 	}
-	
+
 	// First verify the mining proof
 	if !s.VerifyMining(msg) {
 		return false
 	}
-	
+
 	// Then verify the cryptographic signature
 	// The signature should be over the work proof
 	if len(lxrSig.PublicKey) != ed25519.PublicKeySize {
 		return false
 	}
-	
+
 	if len(lxrSig.Signature) != ed25519.SignatureSize {
 		return false
 	}
-	
+
 	// Verify signature of the work proof
 	return ed25519.Verify(lxrSig.PublicKey, lxrSig.WorkProof[:], lxrSig.Signature)
 }
@@ -216,52 +216,51 @@ func (s *LXRMiningSignature) Verify(sig Signature, msg Signable) bool {
 // [16:24] = nonce, [24:32] = public key prefix
 func (s *LXRMiningSignature) VerifyMining(msg Signable) bool {
 	// Extract nonce from WorkProof
-	storedNonce := binary.BigEndian.Uint64(s.WorkProof[WorkProofNonceOffset:WorkProofNonceOffset+8])
+	storedNonce := binary.BigEndian.Uint64(s.WorkProof[WorkProofNonceOffset : WorkProofNonceOffset+8])
 	if storedNonce != s.Nonce {
 		return false
 	}
-	
+
 	// Get message hash
 	msgHash := msg.Hash()
-	
+
 	// Verify first 8 bytes of message hash match what's in proof (constant-time)
 	if subtle.ConstantTimeCompare(msgHash[:8], s.WorkProof[WorkProofHashOffset:WorkProofHashOffset+8]) != 1 {
 		return false
 	}
-	
+
 	// Recreate the same mining input used during mining (includes replay protection)
 	miningInput := make([]byte, 32)
 	copy(miningInput, msgHash[:])
 	// XOR in timestamp and signer version for uniqueness
 	binary.BigEndian.PutUint64(miningInput[0:8], binary.BigEndian.Uint64(miningInput[0:8])^s.Timestamp)
 	binary.BigEndian.PutUint64(miningInput[8:16], binary.BigEndian.Uint64(miningInput[8:16])^s.SignerVersion)
-	
+
 	// Get LXR instance with default configuration
 	// The actual configuration should be validated at a higher level
 	// where the MiningAuthority can be fetched from the database
 	lxr := getLXRInstance(DefaultTableBits, DefaultLoops, DefaultPasses)
-	
+
 	// Recalculate the proof of work with the unique mining input
 	_, pow := lxr.LxrPoWHash(miningInput, s.Nonce)
-	
+
 	// Check if it meets the difficulty requirement
 	return checkLXRDifficulty(pow, s.Difficulty)
 }
-
 
 // Mine performs proof-of-work mining to find a valid nonce
 func (s *LXRMiningSignature) Mine(msg Signable, targetDifficulty uint64) error {
 	if s.PublicKey == nil {
 		return errors.BadRequest.With("public key is required for mining")
 	}
-	
+
 	// Ensure timestamp is set for replay protection
 	if s.Timestamp == 0 {
 		return errors.BadRequest.With("timestamp is required for mining")
 	}
-	
+
 	s.Difficulty = targetDifficulty
-	
+
 	// Create mining input that includes message hash, timestamp, and signer version
 	// for replay protection. This ensures the proof is unique to this specific
 	// signature attempt.
@@ -271,20 +270,20 @@ func (s *LXRMiningSignature) Mine(msg Signable, targetDifficulty uint64) error {
 	// XOR in timestamp and signer version for uniqueness
 	binary.BigEndian.PutUint64(miningInput[0:8], binary.BigEndian.Uint64(miningInput[0:8])^s.Timestamp)
 	binary.BigEndian.PutUint64(miningInput[8:16], binary.BigEndian.Uint64(miningInput[8:16])^s.SignerVersion)
-	
+
 	// Get LXR instance with specified configuration
 	// These would typically come from the MiningAuthority
 	tableSize := uint64(DefaultTableBits)
 	passes := uint64(DefaultPasses)
 	lxr := getLXRInstance(tableSize, DefaultLoops, passes)
-	
+
 	// Try different nonces until we find one that meets difficulty
 	for nonce := uint64(0); nonce < MaxMiningAttempts; nonce++ {
 		s.Nonce = nonce
-		
+
 		// Use LXR algorithm to compute proof of work with the unique mining input
 		_, pow := lxr.LxrPoWHash(miningInput, nonce)
-		
+
 		// Check if it meets difficulty using LXR's proof-of-work value
 		if checkLXRDifficulty(pow, targetDifficulty) {
 			// Store the proof with structured layout:
@@ -301,7 +300,7 @@ func (s *LXRMiningSignature) Mine(msg Signable, targetDifficulty uint64) error {
 			return nil
 		}
 	}
-	
+
 	return errors.InternalError.WithFormat("failed to find valid nonce after %d attempts for difficulty %d", MaxMiningAttempts, targetDifficulty)
 }
 
@@ -330,19 +329,19 @@ func checkLXRDifficulty(pow uint64, targetDifficulty uint64) bool {
 			break
 		}
 	}
-	
+
 	// Calculate required leading 0xFF bytes based on difficulty
 	// Each leading 0xFF byte represents 256x increase in difficulty
 	// difficulty = 256^leadingBytes * remainingDifficulty
 	requiredLeadingBytes := 0
 	remainingDifficulty := targetDifficulty
-	
+
 	// Calculate how many full 0xFF bytes we need
 	for remainingDifficulty >= 256 && requiredLeadingBytes < 8 {
 		remainingDifficulty /= 256
 		requiredLeadingBytes++
 	}
-	
+
 	// Check if we have enough leading 0xFF bytes
 	if leadingFFBytes > requiredLeadingBytes {
 		return true
@@ -350,29 +349,28 @@ func checkLXRDifficulty(pow uint64, targetDifficulty uint64) bool {
 	if leadingFFBytes < requiredLeadingBytes {
 		return false
 	}
-	
+
 	// If we have exactly the required leading bytes, check the remaining value
 	if requiredLeadingBytes == 0 {
 		// No leading 0xFF bytes required, use simple threshold
 		threshold := ^uint64(0) / targetDifficulty
 		return pow >= threshold
 	}
-	
+
 	// Extract the non-0xFF portion and check against remaining difficulty
 	mask := ^uint64(0) >> (uint(requiredLeadingBytes) * 8)
 	nonFFPortion := pow & mask
 	threshold := mask / remainingDifficulty
-	
+
 	return nonFFPortion >= threshold
 }
-
 
 // SignLXRMining signs the work proof with the private key
 func SignLXRMining(sig *LXRMiningSignature, privKey ed25519.PrivateKey) error {
 	if len(privKey) != ed25519.PrivateKeySize {
 		return fmt.Errorf("invalid private key size")
 	}
-	
+
 	// Sign the work proof
 	sig.Signature = ed25519.Sign(privKey, sig.WorkProof[:])
 	return nil

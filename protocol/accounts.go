@@ -57,11 +57,11 @@ func (a *TokenIssuer) StripUrl()      { a.Url = a.Url.StripExtras() }
 func (a *SyntheticLedger) StripUrl()  { a.Url = a.Url.StripExtras() }
 func (a *MiningAuthority) StripUrl()  { a.Url = a.Url.StripExtras() }
 
-func (a *ADI) GetAuth() *AccountAuth          { return &a.AccountAuth }
-func (a *DataAccount) GetAuth() *AccountAuth  { return &a.AccountAuth }
-func (a *KeyBook) GetAuth() *AccountAuth      { return &a.AccountAuth }
-func (a *TokenAccount) GetAuth() *AccountAuth { return &a.AccountAuth }
-func (a *TokenIssuer) GetAuth() *AccountAuth  { return &a.AccountAuth }
+func (a *ADI) GetAuth() *AccountAuth             { return &a.AccountAuth }
+func (a *DataAccount) GetAuth() *AccountAuth     { return &a.AccountAuth }
+func (a *KeyBook) GetAuth() *AccountAuth         { return &a.AccountAuth }
+func (a *TokenAccount) GetAuth() *AccountAuth    { return &a.AccountAuth }
+func (a *TokenIssuer) GetAuth() *AccountAuth     { return &a.AccountAuth }
 func (a *MiningAuthority) GetAuth() *AccountAuth { return &a.AccountAuth }
 
 // KeyBook is a backwards compatibility shim for the API
