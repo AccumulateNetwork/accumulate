@@ -155,6 +155,32 @@ func (c *ConsensusService) start(inst *Instance) error {
 			d.config.Instrumentation.Namespace = c.MetricsNamespace
 		}
 
+		// CRITICAL FIX: Always process bootstrap peers from configuration
+		// Even when loading existing tendermint.toml, we need to update persistent_peers
+		// from the current bootstrap peers configuration
+		if len(c.BootstrapPeers) > 0 {
+			inst.logger.Info("Updating persistent peers from bootstrap configuration",
+				"count", len(c.BootstrapPeers))
+
+			d.config.P2P.PersistentPeers = ""
+			for i, peer := range c.BootstrapPeers {
+				id, err := cmtPeerAddress(peer)
+				if err != nil {
+					return errors.UnknownError.WithFormat("bootstrap peer %d: %w", i, err)
+				}
+				if i > 0 {
+					d.config.P2P.PersistentPeers += ","
+				}
+				d.config.P2P.PersistentPeers += id
+			}
+
+			inst.logger.Info("Persistent peers configured",
+				"peers", d.config.P2P.PersistentPeers)
+
+			// Write updated config back to file
+			tmcfg.WriteConfigFile(inst.path(c.NodeDir, "config", "tendermint.toml"), d.config)
+		}
+
 	case errors.Is(err, fs.ErrNotExist):
 		d.config.NodeKey = ""
 		d.config.PrivValidatorKey = ""
@@ -253,16 +279,52 @@ func convertNodeKey(inst *Instance) (*tmp2p.NodeKey, error) {
 	var key PrivateKey
 	if inst.config.P2P != nil {
 		key = inst.config.P2P.Key
+		inst.logger.Info("P2P config found", "has_key", key != nil, "key_type", fmt.Sprintf("%T", key))
+
+		// Log the key details for debugging
+		if key != nil {
+			switch k := key.(type) {
+			case *RawPrivateKey:
+				inst.logger.Info("P2P key is RawPrivateKey", "address", k.Address)
+			case *CometNodeKeyFile:
+				inst.logger.Info("P2P key is CometNodeKeyFile", "path", k.Path)
+			case *TransientPrivateKey:
+				inst.logger.Info("P2P key is TransientPrivateKey")
+			case *PrivateKeySeed:
+				inst.logger.Info("P2P key is PrivateKeySeed")
+			default:
+				inst.logger.Info("P2P key is unknown type")
+			}
+		}
+	} else {
+		inst.logger.Info("No P2P config - will fail")
 	}
-	key2, err := convertKeyToComet(inst, key)
+
+	key2, err := convertKeyToComet(inst, key, true) // Allow transient keys for P2P
 	if err != nil {
+		inst.logger.Error("Failed to convert key to CometBFT format", "error", err)
 		return nil, err
 	}
-	return &tmp2p.NodeKey{PrivKey: key2}, nil
+
+	nodeKey := &tmp2p.NodeKey{PrivKey: key2}
+	nodeID := nodeKey.ID()
+	inst.logger.Info("Node P2P identity generated",
+		"node_id", string(nodeID),
+		"node_id_short", string(nodeID)[:8]+"...",
+		"pubkey", fmt.Sprintf("%X", nodeKey.PubKey().Bytes()))
+
+	return nodeKey, nil
 }
 
 func (c *ConsensusService) loadPrivVal(inst *Instance, config *tmcfg.Config, key PrivateKey) (*tmpv.FilePV, error) {
-	key2, err := convertKeyToComet(inst, key)
+	// Allow transient keys for followers (voting_power=0 since key not in genesis)
+	allowTransient := false
+	if _, ok := key.(*TransientPrivateKey); ok {
+		inst.logger.Info("Using TransientPrivateKey for follower mode")
+		allowTransient = true
+	}
+
+	key2, err := convertKeyToComet(inst, key, allowTransient)
 	if err != nil {
 		return nil, err
 	}
@@ -287,12 +349,16 @@ func (c *ConsensusService) loadPrivVal(inst *Instance, config *tmcfg.Config, key
 	return pv, err
 }
 
-func convertKeyToComet(inst *Instance, key PrivateKey) (tmcrypto.PrivKey, error) {
+func convertKeyToComet(inst *Instance, key PrivateKey, allowTransient bool) (tmcrypto.PrivKey, error) {
 	switch key.(type) {
 	case nil:
 		return nil, errors.BadRequest.With("key is nil")
 	case *TransientPrivateKey:
-		return nil, errors.BadRequest.With("key is transient")
+		if !allowTransient {
+			return nil, errors.BadRequest.With("key is transient")
+		}
+		// For P2P keys, transient keys are allowed (generates new identity each startup)
+		inst.logger.Info("Allowing transient key for P2P (follower mode)")
 	}
 
 	addr, err := key.get(inst)

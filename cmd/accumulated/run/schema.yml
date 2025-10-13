@@ -183,6 +183,8 @@ Configuration:
           value: 2
         Devnet:
           value: 3
+        Follower:
+          value: 4
 
   members:
     - name: CoreValidatorConfiguration
@@ -253,6 +255,40 @@ Configuration:
           optional: true
         - name: Globals
           type: '*network.GlobalValues'
+        - name: StorageType
+          type: '*StorageType'
+          optional: true
+
+    - name: FollowerConfiguration
+      class: composite
+      pointer: true
+      fields:
+        - name: Mode
+          type: CoreValidatorMode
+        - name: Listen
+          type: Multiaddr
+        - name: BVN
+          type: string
+        - name: DnGenesis
+          type: string
+        - name: BvnGenesis
+          type: string
+        - name: DnBootstrapPeers
+          type: '[]Multiaddr'
+        - name: BvnBootstrapPeers
+          type: '[]Multiaddr'
+        - name: EnableHealing
+          type: '*bool'
+          optional: true
+        - name: EnableDirectDispatch
+          type: '*bool'
+          optional: true
+        - name: EnableSnapshots
+          type: '*bool'
+          optional: true
+        - name: MaxEnvelopesPerBlock
+          type: '*uint'
+          optional: true
         - name: StorageType
           type: '*StorageType'
           optional: true
