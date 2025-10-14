@@ -290,9 +290,9 @@ func (r rawBptReader) ReadAt(offset int64) (*RecordEntry, error) {
 // AI: writing records to that section. This struct ensures the snapshot is
 // AI: well-formed and sections are written in a controlled order.
 type Writer struct {
-	wr          *rawWriter      // AI: underlying writer for the snapshot file
-	wroteHeader bool            // AI: true if the header section has been written
-	sections    int             // AI: counter for assigning unique section numbers
+	wr          *rawWriter // AI: underlying writer for the snapshot file
+	wroteHeader bool       // AI: true if the header section has been written
+	sections    int        // AI: counter for assigning unique section numbers
 }
 
 func (w *Writer) WriteHeader(header *Header) error {
