@@ -25,6 +25,7 @@ tmp
 *.log
 *.swp
 *.out
+snapshot.urls
 
 # macOS
 .DS_Store
