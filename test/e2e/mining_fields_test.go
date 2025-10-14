@@ -22,7 +22,7 @@ import (
 func TestMiningFields_BasicPersistence(t *testing.T) {
 	alice := AccountUrl("alice")
 	aliceKey := acctesting.GenerateKey(alice)
-	
+
 	// Initialize simulator
 	sim := NewSim(t,
 		simulator.SimpleNetwork(t.Name(), 3, 3),

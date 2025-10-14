@@ -40,7 +40,7 @@ func TestMiningE2E_ThirdPartyAppWorkflow(t *testing.T) {
 	)
 
 	t.Log("=== Phase 1: Setup App and Users ===")
-	
+
 	// Create mining app identity
 	MakeIdentity(t, sim.DatabaseFor(app), app, appKey[32:])
 
@@ -64,7 +64,7 @@ func TestMiningE2E_ThirdPartyAppWorkflow(t *testing.T) {
 	// App enables mining for Alice (premium tier - easier difficulty)
 	premiumDifficulty := make([]byte, 32)
 	copy(premiumDifficulty[:4], []byte{0x00, 0x00, 0x0F, 0xFF}) // Easier target
-	premiumExpiry := uint64(time.Now().Unix() + 30*24*3600) // 30 days
+	premiumExpiry := uint64(time.Now().Unix() + 30*24*3600)     // 30 days
 
 	UpdateAccount(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), func(page *KeyPage) {
 		page.Keys[0].MiningDifficulty = premiumDifficulty
@@ -74,7 +74,7 @@ func TestMiningE2E_ThirdPartyAppWorkflow(t *testing.T) {
 	// App enables mining for Bob (standard tier - harder difficulty)
 	standardDifficulty := make([]byte, 32)
 	copy(standardDifficulty[:4], []byte{0x00, 0x00, 0x00, 0xFF}) // Harder target
-	standardExpiry := uint64(time.Now().Unix() + 7*24*3600) // 7 days
+	standardExpiry := uint64(time.Now().Unix() + 7*24*3600)      // 7 days
 
 	UpdateAccount(t, sim.DatabaseFor(bob), bob.JoinPath("book", "1"), func(page *KeyPage) {
 		page.Keys[0].MiningDifficulty = standardDifficulty
@@ -121,7 +121,7 @@ func TestMiningE2E_ThirdPartyAppWorkflow(t *testing.T) {
 	// App decides to disable mining for Bob (perhaps subscription expired)
 	UpdateAccount(t, sim.DatabaseFor(bob), bob.JoinPath("book", "1"), func(page *KeyPage) {
 		page.Keys[0].MiningDifficulty = nil // Disable mining
-		page.Keys[0].MiningExpiry = 0 // Reset expiry
+		page.Keys[0].MiningExpiry = 0       // Reset expiry
 	})
 
 	// Verify Bob's mining is disabled
@@ -217,24 +217,24 @@ func TestMiningE2E_MultiTierMiningApp(t *testing.T) {
 		{
 			Name:       "Free",
 			Difficulty: func() []byte { d := make([]byte, 32); copy(d[:4], []byte{0x00, 0x00, 0x00, 0x0F}); return d }(), // Hardest
-			Duration:   3, // 3 days
+			Duration:   3,                                                                                                // 3 days
 		},
 		{
 			Name:       "Premium",
 			Difficulty: func() []byte { d := make([]byte, 32); copy(d[:4], []byte{0x00, 0x00, 0x0F, 0xFF}); return d }(), // Medium
-			Duration:   30, // 30 days
+			Duration:   30,                                                                                               // 30 days
 		},
 		{
 			Name:       "Enterprise",
 			Difficulty: func() []byte { d := make([]byte, 32); copy(d[:4], []byte{0x00, 0x0F, 0xFF, 0xFF}); return d }(), // Easiest
-			Duration:   0, // No expiry
+			Duration:   0,                                                                                                // No expiry
 		},
 	}
 
 	// Create users for each tier
 	users := make(map[string]*url.URL)
 	userKeys := make(map[string][]byte)
-	
+
 	for _, tier := range tiers {
 		userName := fmt.Sprintf("user-%s", tier.Name)
 		userUrl := AccountUrl(userName)
@@ -286,8 +286,8 @@ func TestMiningE2E_MultiTierMiningApp(t *testing.T) {
 	for _, tier := range tiers {
 		userUrl := users[tier.Name]
 		page := GetAccount[*KeyPage](t, sim.DatabaseFor(userUrl), userUrl.JoinPath("book", "1"))
-		
-		require.Equal(t, tier.Difficulty, page.Keys[0].MiningDifficulty, 
+
+		require.Equal(t, tier.Difficulty, page.Keys[0].MiningDifficulty,
 			"User %s should have %s tier difficulty", userUrl, tier.Name)
 
 		if tier.Duration == 0 {
