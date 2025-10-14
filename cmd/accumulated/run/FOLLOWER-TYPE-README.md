@@ -115,10 +115,16 @@ Verified with:
 - ✅ TransientPrivateKey accepted
 - ✅ No panics or crashes
 
+## Deployment Guide
+
+For complete follower deployment instructions, see:
+- **[Follower Deployment Guide](../../../docs/operations/deploying-follower.md)** - Step-by-step setup
+- **[Bootstrap Peers](../../../docs/operations/bootstrap-peers.md)** - Network peer configuration
+- **[convert-node-id Tool](../../../tools/cmd/convert-node-id/README.md)** - Peer ID conversion
+
 ## Future Improvements
 
-1. Add proper bootstrap peer configuration
-2. Implement fast-sync/state-sync for catchup
-3. Add follower-specific metrics
-4. Document follower-specific configuration options
+1. Implement fast-sync/state-sync for faster catchup
+2. Add follower-specific metrics and monitoring
+3. Automatic peer discovery mechanisms
 
