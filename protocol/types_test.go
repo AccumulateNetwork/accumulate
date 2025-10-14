@@ -173,7 +173,7 @@ func TestKeySpec_MiningFields(t *testing.T) {
 		// Verify required fields
 		require.Equal(t, original.PublicKeyHash, decoded.PublicKeyHash)
 		require.Equal(t, original.LastUsedOn, decoded.LastUsedOn)
-		
+
 		// Verify optional mining fields have zero values
 		require.Nil(t, decoded.MiningDifficulty)
 		require.Equal(t, uint64(0), decoded.MiningExpiry)
