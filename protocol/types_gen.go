@@ -517,9 +517,9 @@ type KeySpec struct {
 	PublicKeyHash []byte   `json:"publicKeyHash,omitempty" form:"publicKeyHash" query:"publicKeyHash" validate:"required"`
 	LastUsedOn    uint64   `json:"lastUsedOn,omitempty" form:"lastUsedOn" query:"lastUsedOn" validate:"required"`
 	Delegate      *url.URL `json:"delegate,omitempty" form:"delegate" query:"delegate" validate:"required"`
-	// MiningDifficulty is the mining difficulty target hash for this key entry. Used by third-party apps to set custom mining difficulty per miner. nil means mining disabled for this key.
+	// MiningDifficulty is the mining difficulty target hash for this key entry. Used by third-party apps to set custom mining difficulty per miner. nil means mining disabled for this key..
 	MiningDifficulty []byte `json:"miningDifficulty,omitempty" form:"miningDifficulty" query:"miningDifficulty"`
-	// MiningExpiry is the block height when mining permission expires for this key entry. Zero means no expiry. Used for time-limited mining access control.
+	// MiningExpiry is the block height when mining permission expires for this key entry. Zero means no expiry. Used for time-limited mining access control..
 	MiningExpiry uint64 `json:"miningExpiry,omitempty" form:"miningExpiry" query:"miningExpiry"`
 	extraData    []byte
 }
