@@ -24,30 +24,34 @@ const Version1 = 1
 // ErrSkip is returned by SectionVisitor.VisitSection to skip a section.
 var ErrSkip = stderrs.New("skip")
 
-//AI: The following visitor interfaces enable flexible, modular processing of snapshot file sections.
-//AI: By defining a separate interface for each section type, callers can implement only the handlers they need.
-//AI: This design supports extensibility and separation of concerns, as new section types or logic can be added
-//AI: without modifying the core snapshot iteration code. The visitor pattern is ideal for traversing complex,
-//AI: heterogeneous data structures like snapshots, where different actions may be required for each section type.
-//AI:
-//AI: SectionVisitor allows handling of any section, regardless of type.
+// AI: The following visitor interfaces enable flexible, modular processing of snapshot file sections.
+// AI: By defining a separate interface for each section type, callers can implement only the handlers they need.
+// AI: This design supports extensibility and separation of concerns, as new section types or logic can be added
+// AI: without modifying the core snapshot iteration code. The visitor pattern is ideal for traversing complex,
+// AI: heterogeneous data structures like snapshots, where different actions may be required for each section type.
+// AI:
+// AI: SectionVisitor allows handling of any section, regardless of type.
 type SectionVisitor interface{ VisitSection(*ReaderSection) error }
-//AI: HeaderVisitor allows handling of the snapshot header section.
+
+// AI: HeaderVisitor allows handling of the snapshot header section.
 type HeaderVisitor interface{ VisitHeader(*Header) error }
-//AI: AccountVisitor allows handling of each account section, providing the account and its index.
+
+// AI: AccountVisitor allows handling of each account section, providing the account and its index.
 type AccountVisitor interface{ VisitAccount(*Account, int) error }
-//AI: TransactionVisitor allows handling of each transaction section, providing the transaction and its index.
+
+// AI: TransactionVisitor allows handling of each transaction section, providing the transaction and its index.
 type TransactionVisitor interface{ VisitTransaction(*Transaction, int) error }
-//AI: SignatureVisitor allows handling of each signature section, providing the signature and its index.
+
+// AI: SignatureVisitor allows handling of each signature section, providing the signature and its index.
 type SignatureVisitor interface{ VisitSignature(*Signature, int) error }
 
-//AI: Open reads a snapshot file, validates its version, and returns both the parsed header and a reader for iterating through the snapshot's sections.
-//AI:
-//AI: Summary:
-//AI:   - Input: A SectionReader representing the snapshot file.
-//AI:   - Output: The parsed snapshot header, a reader for further sections, and an error (if any).
-//AI:   - Key responsibilities: Version validation, file pointer reset, header section validation, and robust error reporting.
-//AI:   - The function ensures only compatible snapshot files are processed, protecting downstream logic from version mismatches.
+// AI: Open reads a snapshot file, validates its version, and returns both the parsed header and a reader for iterating through the snapshot's sections.
+// AI:
+// AI: Summary:
+// AI:   - Input: A SectionReader representing the snapshot file.
+// AI:   - Output: The parsed snapshot header, a reader for further sections, and an error (if any).
+// AI:   - Key responsibilities: Version validation, file pointer reset, header section validation, and robust error reporting.
+// AI:   - The function ensures only compatible snapshot files are processed, protecting downstream logic from version mismatches.
 func Open(file ioutil2.SectionReader) (*Header, *Reader, error) {
 	//AI: Step 1: Get the snapshot version.
 	//AI: Calls snapshot.GetVersion(file) to read the version from the snapshot file.
@@ -99,16 +103,16 @@ func Open(file ioutil2.SectionReader) (*Header, *Reader, error) {
 	return header, r, nil
 }
 
-//AI: Create initializes a new snapshot file for writing, writes the header as the first section,
-//AI: and returns a Writer for appending additional sections.
-//AI:
-//AI: Summary:
-//AI:   - Input: An io.WriteSeeker for the target file, and a pointer to a Header struct.
-//AI:   - Output: A Writer for the snapshot file and an error (if any).
-//AI:   - Key responsibilities: Open a new file, write the SectionTypeHeader as the first section,
-//AI:     serialize the header, and ensure the file is ready for further section writes.
-//AI:   - The function enforces the protocol that the header must be the first section, ensuring
-//AI:     all readers can deterministically parse the snapshot structure.
+// AI: Create initializes a new snapshot file for writing, writes the header as the first section,
+// AI: and returns a Writer for appending additional sections.
+// AI:
+// AI: Summary:
+// AI:   - Input: An io.WriteSeeker for the target file, and a pointer to a Header struct.
+// AI:   - Output: A Writer for the snapshot file and an error (if any).
+// AI:   - Key responsibilities: Open a new file, write the SectionTypeHeader as the first section,
+// AI:     serialize the header, and ensure the file is ready for further section writes.
+// AI:   - The function enforces the protocol that the header must be the first section, ensuring
+// AI:     all readers can deterministically parse the snapshot structure.
 func Create(file io.WriteSeeker, header *Header) (*Writer, error) {
 	//AI: Step 1: Initialize the writer for the snapshot file.
 	wr := NewWriter(file)
@@ -137,16 +141,16 @@ func Create(file io.WriteSeeker, header *Header) (*Writer, error) {
 	return wr, nil
 }
 
-//AI: Visit iterates through all sections of a snapshot file, invoking the appropriate visitor callbacks
-//AI: for the header, accounts, transactions, signatures, or general sections as encountered.
-//AI:
-//AI: Summary:
-//AI:   - Input: A SectionReader representing the snapshot file, and a visitor implementing one or more visitor interfaces.
-//AI:   - Output: An error if any occurs during reading or visiting; otherwise, nil.
-//AI:   - Key responsibilities: Open and validate the snapshot, dispatch visitor methods for each section,
-//AI:     handle version checking, and robustly handle errors and end-of-file conditions.
-//AI:   - The function enables flexible processing of snapshot files by allowing callers to provide custom logic
-//AI:     for any or all section types via the visitor pattern.
+// AI: Visit iterates through all sections of a snapshot file, invoking the appropriate visitor callbacks
+// AI: for the header, accounts, transactions, signatures, or general sections as encountered.
+// AI:
+// AI: Summary:
+// AI:   - Input: A SectionReader representing the snapshot file, and a visitor implementing one or more visitor interfaces.
+// AI:   - Output: An error if any occurs during reading or visiting; otherwise, nil.
+// AI:   - Key responsibilities: Open and validate the snapshot, dispatch visitor methods for each section,
+// AI:     handle version checking, and robustly handle errors and end-of-file conditions.
+// AI:   - The function enables flexible processing of snapshot files by allowing callers to provide custom logic
+// AI:     for any or all section types via the visitor pattern.
 func Visit(file ioutil2.SectionReader, visitor interface{}) error {
 	//AI: Step 1: Extract any implemented visitor interfaces from the visitor argument.
 	vSection, _ := visitor.(SectionVisitor)
