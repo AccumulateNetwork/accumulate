@@ -33,6 +33,7 @@ import (
 )
 
 func TestQuerier(t *testing.T) {
+	skipOnAndroid(t, "known goroutine deadlocks in logging")
 	suite.Run(t, new(QuerierTestSuite))
 }
 

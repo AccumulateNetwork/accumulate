@@ -33,6 +33,8 @@ func init() {
 }
 
 func TestSequencer(t *testing.T) {
+	skipOnAndroid(t, "known goroutine deadlocks in logging")
+
 	logger := acctesting.NewTestLogger(t)
 	net := simulator.NewSimpleNetwork(t.Name(), 2, 1)
 	sim := NewSim(t,
