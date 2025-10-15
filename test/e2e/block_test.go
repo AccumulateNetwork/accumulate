@@ -52,6 +52,7 @@ func updateAccountOld[T Account](sim *oldsim.Simulator, accountUrl *url.URL, fn 
 }
 
 func TestSendTokensToBadRecipient(t *testing.T) {
+	skipOnAndroid(t, "block tests timeout due to simulator constraints")
 	var timestamp uint64
 
 	// Initialize
