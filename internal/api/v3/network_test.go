@@ -8,6 +8,8 @@ package api_test
 
 import (
 	"context"
+	"os"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -19,6 +21,29 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
+
+// skipOnAndroid skips tests that are known to be problematic on Android/Termux
+func skipOnAndroid(t *testing.T, reason string) {
+	if runtime.GOOS == "android" || isTermux() {
+		t.Skipf("Skipping on Android/Termux: %s", reason)
+	}
+}
+
+// isTermux detects if we're running in Termux environment
+func isTermux() bool {
+	// Check for Termux-specific environment variables
+	if os.Getenv("TERMUX_VERSION") != "" {
+		return true
+	}
+	if os.Getenv("PREFIX") == "/data/data/com.termux/files/usr" {
+		return true
+	}
+	// Check if we're in the Termux directory structure
+	if _, err := os.Stat("/data/data/com.termux/files/usr"); err == nil {
+		return true
+	}
+	return false
+}
 
 func TestNetworkService(t *testing.T) {
 	skipOnAndroid(t, "known goroutine deadlocks in logging")
