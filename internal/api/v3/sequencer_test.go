@@ -1,4 +1,4 @@
-// Copyright 2026 The Accumulate Authors
+// Copyright 2025 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -17,7 +17,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -34,6 +33,9 @@ func init() {
 }
 
 func TestSequencer(t *testing.T) {
+	skipOnAndroid(t, "known goroutine deadlocks in logging")
+
+	logger := acctesting.NewTestLogger(t)
 	net := simulator.NewSimpleNetwork(t.Name(), 2, 1)
 	sim := NewSim(t,
 		simulator.WithNetwork(net),
@@ -68,9 +70,9 @@ func TestSequencer(t *testing.T) {
 		Txn(st.TxID).Produced().Succeeds())
 
 	svc := dut.NewSequencer(dut.SequencerParams{
-		Logger:       logging.Nop{},
+		Logger:       logger,
 		Database:     sim.DatabaseFor(alice),
-		EventBus:     events.NewBus(logging.Nop{}),
+		EventBus:     events.NewBus(logger),
 		Globals:      g,
 		Partition:    "BVN0",
 		ValidatorKey: net.Bvns[0].Nodes[0].PrivValKey,
