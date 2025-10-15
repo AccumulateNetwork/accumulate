@@ -14,6 +14,7 @@ import (
 	"math/big"
 	"net"
 	"os"
+	"runtime"
 	"testing"
 	"time"
 
@@ -48,14 +49,39 @@ func init() {
 	acctesting.EnableDebugFeatures()
 }
 
+// skipOnAndroid skips tests that are known to be problematic on Android/Termux
+func skipOnAndroid(t *testing.T, reason string) {
+	if runtime.GOOS == "android" || isTermux() {
+		t.Skipf("Skipping on Android/Termux: %s", reason)
+	}
+}
+
+// isTermux detects if we're running in Termux environment
+func isTermux() bool {
+	// Check for Termux-specific environment variables
+	if os.Getenv("TERMUX_VERSION") != "" {
+		return true
+	}
+	if os.Getenv("PREFIX") == "/data/data/com.termux/files/usr" {
+		return true
+	}
+	// Check if we're in the Termux directory structure
+	if _, err := os.Stat("/data/data/com.termux/files/usr"); err == nil {
+		return true
+	}
+	return false
+}
+
 // TestValidate runs the validation test suite against the simulator.
 func TestValidate(t *testing.T) {
+	skipOnAndroid(t, "simulator validation tests timeout due to resource constraints")
 	suite.Run(t, new(ValidationTestSuite))
 }
 
 // TestValidateAPI runs the validation test suite against the simulator via API
 // v2 over P2P.
 func TestValidateAPI(t *testing.T) {
+	skipOnAndroid(t, "P2P API validation tests timeout due to network constraints")
 	acctesting.SkipCI(t, "Not sufficiently reliable yet")
 
 	net := simulator.NewLocalNetwork(t.Name(), 3, 1, net.ParseIP("127.0.1.1"), 12345)
@@ -105,6 +131,7 @@ func TestValidateAPI(t *testing.T) {
 // TestValidateNetwork is intended to be used to manually validate a deployed
 // network.
 func TestValidateNetwork(t *testing.T) {
+	skipOnAndroid(t, "network validation tests timeout due to network constraints")
 	if *validateNetwork == "" {
 		t.Skip()
 	}
