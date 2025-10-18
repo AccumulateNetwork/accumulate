@@ -52,11 +52,17 @@ func TestMiningTransaction_BasicValidation(t *testing.T) {
 		blockHash := make([]byte, 32)
 		copy(blockHash, []byte("test-block-hash-32-bytes-long-12"))
 
+		// Create easy baseline target (all 0xFF bytes = maximum difficulty)
+		baselineTarget := make([]byte, 32)
+		for i := range baselineTarget {
+			baselineTarget[i] = 0xFF
+		}
+
 		miningTx := &MiningTransaction{
 			BoundNonce:      boundNonce,
 			TransactionData: transactionData,
 			BlockHash:       blockHash,
-			BaselineTarget:  uint64(0xFFFFFFFFFFFFFFFF), // Very easy target for testing
+			BaselineTarget:  baselineTarget, // Very easy target for testing
 			MinerADI:        minerADI,
 			Timestamp:       uint64(time.Now().Unix()),
 			EpochNumber:     1,
@@ -77,11 +83,17 @@ func TestMiningTransaction_BasicValidation(t *testing.T) {
 		// Create mining transaction with invalid bound nonce
 		invalidBoundNonce := []byte("invalid-nonce-wrong-format")
 
+		// Create easy baseline target
+		baselineTarget := make([]byte, 32)
+		for i := range baselineTarget {
+			baselineTarget[i] = 0xFF
+		}
+
 		miningTx := &MiningTransaction{
 			BoundNonce:      invalidBoundNonce,
 			TransactionData: []byte("test-data"),
 			BlockHash:       make([]byte, 32),
-			BaselineTarget:  uint64(0xFFFFFFFFFFFFFFFF),
+			BaselineTarget:  baselineTarget,
 			MinerADI:        alice,
 			Timestamp:       uint64(time.Now().Unix()),
 			EpochNumber:     1,
@@ -100,11 +112,17 @@ func TestMiningTransaction_BasicValidation(t *testing.T) {
 	// Test 3: Missing required fields
 	t.Run("MissingRequiredFields", func(t *testing.T) {
 		// Test missing BoundNonce
+		// Create easy baseline target
+		baselineTarget := make([]byte, 32)
+		for i := range baselineTarget {
+			baselineTarget[i] = 0xFF
+		}
+
 		miningTx := &MiningTransaction{
 			// BoundNonce missing
 			TransactionData: []byte("test-data"),
 			BlockHash:       make([]byte, 32),
-			BaselineTarget:  uint64(0xFFFFFFFFFFFFFFFF),
+			BaselineTarget:  baselineTarget,
 			MinerADI:        alice,
 			Timestamp:       uint64(time.Now().Unix()),
 			EpochNumber:     1,
@@ -150,11 +168,17 @@ func TestMiningTransaction_ProofOfWork(t *testing.T) {
 		transactionData := []byte("test-data")
 		blockHash := make([]byte, 32)
 
+		// Create easy baseline target
+		baselineTarget := make([]byte, 32)
+		for i := range baselineTarget {
+			baselineTarget[i] = 0xFF
+		}
+
 		miningTx := &MiningTransaction{
 			BoundNonce:      boundNonce,
 			TransactionData: transactionData,
 			BlockHash:       blockHash,
-			BaselineTarget:  uint64(0xFFFFFFFFFFFFFFFF), // Very easy target
+			BaselineTarget:  baselineTarget, // Very easy target
 			MinerADI:        minerADI,
 			Timestamp:       uint64(time.Now().Unix()),
 			EpochNumber:     1,
@@ -179,11 +203,15 @@ func TestMiningTransaction_ProofOfWork(t *testing.T) {
 		copy(nonce, []byte{0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}) // Large nonce
 		boundNonce := append(nonce, minerADIHash[:]...)
 
+		// Create impossible baseline target (all zeros = minimum difficulty)
+		baselineTarget := make([]byte, 32)
+		// Leave all bytes as 0x00 for impossible target
+
 		miningTx := &MiningTransaction{
 			BoundNonce:      boundNonce,
 			TransactionData: []byte("test-data"),
 			BlockHash:       make([]byte, 32),
-			BaselineTarget:  1, // Impossible target - hash must be 0
+			BaselineTarget:  baselineTarget, // Impossible target - hash must be 0
 			MinerADI:        minerADI,
 			Timestamp:       uint64(time.Now().Unix()),
 			EpochNumber:     1,
@@ -227,11 +255,17 @@ func TestMiningTransaction_TransactionBodyConsensus(t *testing.T) {
 		transactionBody := []byte("test-transaction-body")
 		transactionHash := sha256.Sum256(transactionBody)
 
+		// Create easy baseline target
+		baselineTarget := make([]byte, 32)
+		for i := range baselineTarget {
+			baselineTarget[i] = 0xFF
+		}
+
 		miningTx := &MiningTransaction{
 			BoundNonce:               boundNonce,
 			TransactionData:          []byte("test-data"),
 			BlockHash:                make([]byte, 32),
-			BaselineTarget:           uint64(0xFFFFFFFFFFFFFFFF),
+			BaselineTarget:           baselineTarget,
 			MinerADI:                 minerADI,
 			Timestamp:                uint64(time.Now().Unix()),
 			EpochNumber:              1,
@@ -260,11 +294,17 @@ func TestMiningTransaction_TransactionBodyConsensus(t *testing.T) {
 		transactionBody := []byte("test-transaction-body")
 		wrongHash := []byte("wrong-hash-wrong-hash-wrong-hash")
 
+		// Create easy baseline target
+		baselineTarget := make([]byte, 32)
+		for i := range baselineTarget {
+			baselineTarget[i] = 0xFF
+		}
+
 		miningTx := &MiningTransaction{
 			BoundNonce:               boundNonce,
 			TransactionData:          []byte("test-data"),
 			BlockHash:                make([]byte, 32),
-			BaselineTarget:           uint64(0xFFFFFFFFFFFFFFFF),
+			BaselineTarget:           baselineTarget,
 			MinerADI:                 minerADI,
 			Timestamp:                uint64(time.Now().Unix()),
 			EpochNumber:              1,
@@ -309,11 +349,17 @@ func TestMiningTransaction_BoundNonceValidation(t *testing.T) {
 		copy(nonce, []byte("test-nonce-12345"))
 		boundNonce := append(nonce, minerADIHash[:]...)
 
+		// Create easy baseline target
+		baselineTarget := make([]byte, 32)
+		for i := range baselineTarget {
+			baselineTarget[i] = 0xFF
+		}
+
 		miningTx := &MiningTransaction{
 			BoundNonce:      boundNonce,
 			TransactionData: []byte("test-data"),
 			BlockHash:       make([]byte, 32),
-			BaselineTarget:  uint64(0xFFFFFFFFFFFFFFFF),
+			BaselineTarget:  baselineTarget,
 			MinerADI:        minerADI,
 			Timestamp:       uint64(time.Now().Unix()),
 			EpochNumber:     1,
@@ -339,11 +385,17 @@ func TestMiningTransaction_BoundNonceValidation(t *testing.T) {
 		// Use wrong ADI hash in bound nonce
 		boundNonce := append(nonce, wrongADIHash[:]...)
 
+		// Create easy baseline target
+		baselineTarget := make([]byte, 32)
+		for i := range baselineTarget {
+			baselineTarget[i] = 0xFF
+		}
+
 		miningTx := &MiningTransaction{
 			BoundNonce:      boundNonce,
 			TransactionData: []byte("test-data"),
 			BlockHash:       make([]byte, 32),
-			BaselineTarget:  uint64(0xFFFFFFFFFFFFFFFF),
+			BaselineTarget:  baselineTarget,
 			MinerADI:        minerADI, // Correct ADI, but bound nonce has wrong hash
 			Timestamp:       uint64(time.Now().Unix()),
 			EpochNumber:     1,
@@ -363,11 +415,17 @@ func TestMiningTransaction_BoundNonceValidation(t *testing.T) {
 		// Create bound nonce that's less than 32 bytes
 		shortBoundNonce := []byte("too-short")
 
+		// Create easy baseline target
+		baselineTarget := make([]byte, 32)
+		for i := range baselineTarget {
+			baselineTarget[i] = 0xFF
+		}
+
 		miningTx := &MiningTransaction{
 			BoundNonce:      shortBoundNonce,
 			TransactionData: []byte("test-data"),
 			BlockHash:       make([]byte, 32),
-			BaselineTarget:  uint64(0xFFFFFFFFFFFFFFFF),
+			BaselineTarget:  baselineTarget,
 			MinerADI:        alice,
 			Timestamp:       uint64(time.Now().Unix()),
 			EpochNumber:     1,

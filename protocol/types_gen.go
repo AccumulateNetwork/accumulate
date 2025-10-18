@@ -785,8 +785,8 @@ type MiningTransaction struct {
 	TransactionData []byte `json:"transactionData,omitempty" form:"transactionData" query:"transactionData" validate:"required"`
 	// BlockHash is the Directory Network anchor hash for this mining epoch
 	BlockHash []byte `json:"blockHash,omitempty" form:"blockHash" query:"blockHash" validate:"required"`
-	// BaselineTarget is the hard difficulty threshold for this mining submission
-	BaselineTarget uint64 `json:"baselineTarget,omitempty" form:"baselineTarget" query:"baselineTarget" validate:"required"`
+	// BaselineTarget is the hard difficulty threshold (32-byte target hash)
+	BaselineTarget []byte `json:"baselineTarget,omitempty" form:"baselineTarget" query:"baselineTarget" validate:"required"`
 	// MinerADI is the miner's ADI URL for payment and identification
 	MinerADI *url.URL `json:"minerADI,omitempty" form:"minerADI" query:"minerADI" validate:"required"`
 	// Timestamp is the submission timestamp for this mining attempt

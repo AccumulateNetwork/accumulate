@@ -281,8 +281,8 @@ MiningTransaction:
       description: is the Directory Network anchor hash for this mining epoch
       type: bytes
     - name: BaselineTarget
-      description: is the hard difficulty threshold for this mining submission
-      type: uvarint
+      description: is the hard difficulty threshold (32-byte target hash)
+      type: bytes
     - name: MinerADI
       description: is the miner's ADI URL for payment and identification
       type: url
