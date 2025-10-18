@@ -15,15 +15,19 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/libp2p/go-libp2p/core/peer"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
+	errors2 "gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/p2p"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"io"
 	"math/big"
 	"strings"
 	"time"
-
-	errors2 "gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
 type ADI struct {
@@ -566,6 +570,29 @@ type MetricsResponse struct {
 	Value interface{} `json:"value,omitempty" form:"value" query:"value" validate:"required"`
 }
 
+type MiningTransaction struct {
+	fieldsSet []bool
+	// BoundNonce is the nonce bound to the miner's ADI (nonce + SHA256(miner_ADI)).
+	BoundNonce []byte `json:"boundNonce,omitempty" form:"boundNonce" query:"boundNonce" validate:"required"`
+	// TransactionData is the data being mined (transaction body or other data).
+	TransactionData []byte `json:"transactionData,omitempty" form:"transactionData" query:"transactionData" validate:"required"`
+	// BlockHash is the Directory Network anchor hash for this mining epoch.
+	BlockHash []byte `json:"blockHash,omitempty" form:"blockHash" query:"blockHash" validate:"required"`
+	// BaselineTarget is the hard difficulty threshold for this mining submission.
+	BaselineTarget uint64 `json:"baselineTarget,omitempty" form:"baselineTarget" query:"baselineTarget" validate:"required"`
+	// MinerADI is the miner's ADI URL for payment and identification.
+	MinerADI *url.URL `json:"minerADI,omitempty" form:"minerADI" query:"minerADI" validate:"required"`
+	// Timestamp is the submission timestamp for this mining attempt.
+	Timestamp uint64 `json:"timestamp,omitempty" form:"timestamp" query:"timestamp" validate:"required"`
+	// EpochNumber is the current mining epoch number.
+	EpochNumber uint64 `json:"epochNumber,omitempty" form:"epochNumber" query:"epochNumber" validate:"required"`
+	// CandidateTransactionHash is the hash of the transaction being mined (optional).
+	CandidateTransactionHash []byte `json:"candidateTransactionHash,omitempty" form:"candidateTransactionHash" query:"candidateTransactionHash"`
+	// TransactionBody is the actual transaction body being mined (optional).
+	TransactionBody []byte `json:"transactionBody,omitempty" form:"transactionBody" query:"transactionBody"`
+	extraData       []byte
+}
+
 type NetworkAccountUpdate struct {
 	fieldsSet []bool
 	Name      string          `json:"name,omitempty" form:"name" query:"name" validate:"required"`
@@ -747,6 +774,29 @@ type RemoteSignature struct {
 type RemoteTransaction struct {
 	fieldsSet []bool
 	Hash      [32]byte `json:"hash,omitempty" form:"hash" query:"hash"`
+	extraData []byte
+}
+
+type MiningTransaction struct {
+	fieldsSet []bool
+	// BoundNonce is the nonce bound to the miner's ADI (nonce + SHA256(miner_ADI))
+	BoundNonce []byte `json:"boundNonce,omitempty" form:"boundNonce" query:"boundNonce" validate:"required"`
+	// TransactionData is the data being mined (transaction body or other data)
+	TransactionData []byte `json:"transactionData,omitempty" form:"transactionData" query:"transactionData" validate:"required"`
+	// BlockHash is the Directory Network anchor hash for this mining epoch
+	BlockHash []byte `json:"blockHash,omitempty" form:"blockHash" query:"blockHash" validate:"required"`
+	// BaselineTarget is the hard difficulty threshold for this mining submission
+	BaselineTarget uint64 `json:"baselineTarget,omitempty" form:"baselineTarget" query:"baselineTarget" validate:"required"`
+	// MinerADI is the miner's ADI URL for payment and identification
+	MinerADI *url.URL `json:"minerADI,omitempty" form:"minerADI" query:"minerADI" validate:"required"`
+	// Timestamp is the submission timestamp for this mining attempt
+	Timestamp uint64 `json:"timestamp,omitempty" form:"timestamp" query:"timestamp" validate:"required"`
+	// EpochNumber is the current mining epoch number
+	EpochNumber uint64 `json:"epochNumber,omitempty" form:"epochNumber" query:"epochNumber" validate:"required"`
+	// CandidateTransactionHash is the hash of the transaction being mined (optional)
+	CandidateTransactionHash []byte `json:"candidateTransactionHash,omitempty" form:"candidateTransactionHash" query:"candidateTransactionHash"`
+	// TransactionBody is the actual transaction body being mined (optional)
+	TransactionBody []byte `json:"transactionBody,omitempty" form:"transactionBody" query:"transactionBody"`
 	extraData []byte
 }
 
@@ -1234,6 +1284,8 @@ func (*LiteTokenAccount) Type() AccountType { return AccountTypeLiteTokenAccount
 
 func (*LockAccount) Type() TransactionType { return TransactionTypeLockAccount }
 
+func (*MiningTransaction) Type() TransactionType { return TransactionTypeMining }
+
 func (*NetworkMaintenance) Type() TransactionType { return TransactionTypeNetworkMaintenance }
 
 func (*PartitionSignature) Type() SignatureType { return SignatureTypePartition }
@@ -1249,6 +1301,8 @@ func (*ReceiptSignature) Type() SignatureType { return SignatureTypeReceipt }
 func (*RemoteSignature) Type() SignatureType { return SignatureTypeRemote }
 
 func (*RemoteTransaction) Type() TransactionType { return TransactionTypeRemote }
+
+func (*MiningTransaction) Type() TransactionType { return TransactionTypeMining }
 
 func (*RemoveAccountAuthorityOperation) Type() AccountAuthOperationType {
 	return AccountAuthOperationTypeRemoveAuthority
@@ -2496,6 +2550,30 @@ func (v *MetricsRequest) Copy() *MetricsRequest {
 }
 
 func (v *MetricsRequest) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *MiningTransaction) Copy() *MiningTransaction {
+	u := new(MiningTransaction)
+
+	u.BoundNonce = encoding.BytesCopy(v.BoundNonce)
+	u.TransactionData = encoding.BytesCopy(v.TransactionData)
+	u.BlockHash = encoding.BytesCopy(v.BlockHash)
+	u.BaselineTarget = v.BaselineTarget
+	if v.MinerADI != nil {
+		u.MinerADI = v.MinerADI
+	}
+	u.Timestamp = v.Timestamp
+	u.EpochNumber = v.EpochNumber
+	u.CandidateTransactionHash = encoding.BytesCopy(v.CandidateTransactionHash)
+	u.TransactionBody = encoding.BytesCopy(v.TransactionBody)
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *MiningTransaction) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *NetworkAccountUpdate) Copy() *NetworkAccountUpdate {
 	u := new(NetworkAccountUpdate)
@@ -4967,6 +5045,43 @@ func (v *MetricsRequest) Equal(u *MetricsRequest) bool {
 		return false
 	}
 	if !(v.Duration == u.Duration) {
+		return false
+	}
+
+	return true
+}
+
+func (v *MiningTransaction) Equal(u *MiningTransaction) bool {
+	if !(bytes.Equal(v.BoundNonce, u.BoundNonce)) {
+		return false
+	}
+	if !(bytes.Equal(v.TransactionData, u.TransactionData)) {
+		return false
+	}
+	if !(bytes.Equal(v.BlockHash, u.BlockHash)) {
+		return false
+	}
+	if !(v.BaselineTarget == u.BaselineTarget) {
+		return false
+	}
+	switch {
+	case v.MinerADI == u.MinerADI:
+		// equal
+	case v.MinerADI == nil || u.MinerADI == nil:
+		return false
+	case !((v.MinerADI).Equal(u.MinerADI)):
+		return false
+	}
+	if !(v.Timestamp == u.Timestamp) {
+		return false
+	}
+	if !(v.EpochNumber == u.EpochNumber) {
+		return false
+	}
+	if !(bytes.Equal(v.CandidateTransactionHash, u.CandidateTransactionHash)) {
+		return false
+	}
+	if !(bytes.Equal(v.TransactionBody, u.TransactionBody)) {
 		return false
 	}
 
@@ -9917,6 +10032,116 @@ func (v *MetricsRequest) IsValid() error {
 		errs = append(errs, "field Duration is missing")
 	} else if v.Duration == 0 {
 		errs = append(errs, "field Duration is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_MiningTransaction = []string{
+	1:  "Type",
+	2:  "BoundNonce",
+	3:  "TransactionData",
+	4:  "BlockHash",
+	5:  "BaselineTarget",
+	6:  "MinerADI",
+	7:  "Timestamp",
+	8:  "EpochNumber",
+	9:  "CandidateTransactionHash",
+	10: "TransactionBody",
+}
+
+func (v *MiningTransaction) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(len(v.BoundNonce) == 0) {
+		writer.WriteBytes(2, v.BoundNonce)
+	}
+	if !(len(v.TransactionData) == 0) {
+		writer.WriteBytes(3, v.TransactionData)
+	}
+	if !(len(v.BlockHash) == 0) {
+		writer.WriteBytes(4, v.BlockHash)
+	}
+	if !(v.BaselineTarget == 0) {
+		writer.WriteUint(5, v.BaselineTarget)
+	}
+	if !(v.MinerADI == nil) {
+		writer.WriteUrl(6, v.MinerADI)
+	}
+	if !(v.Timestamp == 0) {
+		writer.WriteUint(7, v.Timestamp)
+	}
+	if !(v.EpochNumber == 0) {
+		writer.WriteUint(8, v.EpochNumber)
+	}
+	if !(len(v.CandidateTransactionHash) == 0) {
+		writer.WriteBytes(9, v.CandidateTransactionHash)
+	}
+	if !(len(v.TransactionBody) == 0) {
+		writer.WriteBytes(10, v.TransactionBody)
+	}
+
+	_, _, err := writer.Reset(fieldNames_MiningTransaction)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *MiningTransaction) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field BoundNonce is missing")
+	} else if len(v.BoundNonce) == 0 {
+		errs = append(errs, "field BoundNonce is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field TransactionData is missing")
+	} else if len(v.TransactionData) == 0 {
+		errs = append(errs, "field TransactionData is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field BlockHash is missing")
+	} else if len(v.BlockHash) == 0 {
+		errs = append(errs, "field BlockHash is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field BaselineTarget is missing")
+	} else if v.BaselineTarget == 0 {
+		errs = append(errs, "field BaselineTarget is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field MinerADI is missing")
+	} else if v.MinerADI == nil {
+		errs = append(errs, "field MinerADI is not set")
+	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+		errs = append(errs, "field Timestamp is missing")
+	} else if v.Timestamp == 0 {
+		errs = append(errs, "field Timestamp is not set")
+	}
+	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
+		errs = append(errs, "field EpochNumber is missing")
+	} else if v.EpochNumber == 0 {
+		errs = append(errs, "field EpochNumber is not set")
 	}
 
 	switch len(errs) {
@@ -16234,6 +16459,65 @@ func (v *MetricsRequest) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *MiningTransaction) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *MiningTransaction) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *MiningTransaction) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadBytes(2); ok {
+		v.BoundNonce = x
+	}
+	if x, ok := reader.ReadBytes(3); ok {
+		v.TransactionData = x
+	}
+	if x, ok := reader.ReadBytes(4); ok {
+		v.BlockHash = x
+	}
+	if x, ok := reader.ReadUint(5); ok {
+		v.BaselineTarget = x
+	}
+	if x, ok := reader.ReadUrl(6); ok {
+		v.MinerADI = x
+	}
+	if x, ok := reader.ReadUint(7); ok {
+		v.Timestamp = x
+	}
+	if x, ok := reader.ReadUint(8); ok {
+		v.EpochNumber = x
+	}
+	if x, ok := reader.ReadBytes(9); ok {
+		v.CandidateTransactionHash = x
+	}
+	if x, ok := reader.ReadBytes(10); ok {
+		v.TransactionBody = x
+	}
+
+	seen, err := reader.Reset(fieldNames_MiningTransaction)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *NetworkAccountUpdate) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -19152,6 +19436,19 @@ func init() {
 	}, "MetricsResponse", "metricsResponse")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("boundNonce", "bytes"),
+		encoding.NewTypeField("transactionData", "bytes"),
+		encoding.NewTypeField("blockHash", "bytes"),
+		encoding.NewTypeField("baselineTarget", "uint64"),
+		encoding.NewTypeField("minerADI", "string"),
+		encoding.NewTypeField("timestamp", "uint64"),
+		encoding.NewTypeField("epochNumber", "uint64"),
+		encoding.NewTypeField("candidateTransactionHash", "bytes"),
+		encoding.NewTypeField("transactionBody", "bytes"),
+	}, "MiningTransaction", "miningTransaction")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("name", "string"),
 		encoding.NewTypeField("body", "TransactionBody"),
 	}, "NetworkAccountUpdate", "networkAccountUpdate")
@@ -20865,6 +21162,52 @@ func (v *MetricsResponse) MarshalJSON() ([]byte, error) {
 	if !(v.Value == nil) {
 		u.Value = encoding.AnyToJSON(v.Value)
 	}
+	return json.Marshal(&u)
+}
+
+func (v *MiningTransaction) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type                     TransactionType `json:"type"`
+		BoundNonce               *string         `json:"boundNonce,omitempty"`
+		TransactionData          *string         `json:"transactionData,omitempty"`
+		BlockHash                *string         `json:"blockHash,omitempty"`
+		BaselineTarget           uint64          `json:"baselineTarget,omitempty"`
+		MinerADI                 *url.URL        `json:"minerADI,omitempty"`
+		Timestamp                uint64          `json:"timestamp,omitempty"`
+		EpochNumber              uint64          `json:"epochNumber,omitempty"`
+		CandidateTransactionHash *string         `json:"candidateTransactionHash,omitempty"`
+		TransactionBody          *string         `json:"transactionBody,omitempty"`
+		ExtraData                *string         `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.BoundNonce) == 0) {
+		u.BoundNonce = encoding.BytesToJSON(v.BoundNonce)
+	}
+	if !(len(v.TransactionData) == 0) {
+		u.TransactionData = encoding.BytesToJSON(v.TransactionData)
+	}
+	if !(len(v.BlockHash) == 0) {
+		u.BlockHash = encoding.BytesToJSON(v.BlockHash)
+	}
+	if !(v.BaselineTarget == 0) {
+		u.BaselineTarget = v.BaselineTarget
+	}
+	if !(v.MinerADI == nil) {
+		u.MinerADI = v.MinerADI
+	}
+	if !(v.Timestamp == 0) {
+		u.Timestamp = v.Timestamp
+	}
+	if !(v.EpochNumber == 0) {
+		u.EpochNumber = v.EpochNumber
+	}
+	if !(len(v.CandidateTransactionHash) == 0) {
+		u.CandidateTransactionHash = encoding.BytesToJSON(v.CandidateTransactionHash)
+	}
+	if !(len(v.TransactionBody) == 0) {
+		u.TransactionBody = encoding.BytesToJSON(v.TransactionBody)
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
@@ -23930,6 +24273,73 @@ func (v *MetricsResponse) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("error decoding Value: %w", err)
 	} else {
 		v.Value = x
+	}
+	return nil
+}
+
+func (v *MiningTransaction) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type                     TransactionType `json:"type"`
+		BoundNonce               *string         `json:"boundNonce,omitempty"`
+		TransactionData          *string         `json:"transactionData,omitempty"`
+		BlockHash                *string         `json:"blockHash,omitempty"`
+		BaselineTarget           uint64          `json:"baselineTarget,omitempty"`
+		MinerADI                 *url.URL        `json:"minerADI,omitempty"`
+		Timestamp                uint64          `json:"timestamp,omitempty"`
+		EpochNumber              uint64          `json:"epochNumber,omitempty"`
+		CandidateTransactionHash *string         `json:"candidateTransactionHash,omitempty"`
+		TransactionBody          *string         `json:"transactionBody,omitempty"`
+		ExtraData                *string         `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.BoundNonce = encoding.BytesToJSON(v.BoundNonce)
+	u.TransactionData = encoding.BytesToJSON(v.TransactionData)
+	u.BlockHash = encoding.BytesToJSON(v.BlockHash)
+	u.BaselineTarget = v.BaselineTarget
+	u.MinerADI = v.MinerADI
+	u.Timestamp = v.Timestamp
+	u.EpochNumber = v.EpochNumber
+	u.CandidateTransactionHash = encoding.BytesToJSON(v.CandidateTransactionHash)
+	u.TransactionBody = encoding.BytesToJSON(v.TransactionBody)
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	if x, err := encoding.BytesFromJSON(u.BoundNonce); err != nil {
+		return fmt.Errorf("error decoding BoundNonce: %w", err)
+	} else {
+		v.BoundNonce = x
+	}
+	if x, err := encoding.BytesFromJSON(u.TransactionData); err != nil {
+		return fmt.Errorf("error decoding TransactionData: %w", err)
+	} else {
+		v.TransactionData = x
+	}
+	if x, err := encoding.BytesFromJSON(u.BlockHash); err != nil {
+		return fmt.Errorf("error decoding BlockHash: %w", err)
+	} else {
+		v.BlockHash = x
+	}
+	v.BaselineTarget = u.BaselineTarget
+	v.MinerADI = u.MinerADI
+	v.Timestamp = u.Timestamp
+	v.EpochNumber = u.EpochNumber
+	if x, err := encoding.BytesFromJSON(u.CandidateTransactionHash); err != nil {
+		return fmt.Errorf("error decoding CandidateTransactionHash: %w", err)
+	} else {
+		v.CandidateTransactionHash = x
+	}
+	if x, err := encoding.BytesFromJSON(u.TransactionBody); err != nil {
+		return fmt.Errorf("error decoding TransactionBody: %w", err)
+	} else {
+		v.TransactionBody = x
+	}
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
 	}
 	return nil
 }

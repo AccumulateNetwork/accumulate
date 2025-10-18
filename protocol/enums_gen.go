@@ -101,21 +101,6 @@ const DataEntryTypeAccumulate DataEntryType = 2
 // DataEntryTypeDoubleHash .
 const DataEntryTypeDoubleHash DataEntryType = 3
 
-// ErrorCodeOK indicates the request succeeded.
-const ErrorCodeOK ErrorCode = 0
-
-// ErrorCodeEncodingError indicates something could not be decoded or encoded.
-const ErrorCodeEncodingError ErrorCode = 1
-
-// ErrorCodeFailed indicates the request failed.
-const ErrorCodeFailed ErrorCode = 2
-
-// ErrorCodeDidPanic indicates the request failed due to a fatal error.
-const ErrorCodeDidPanic ErrorCode = 3
-
-// ErrorCodeUnknownError indicates the request failed due to an unknown error.
-const ErrorCodeUnknownError ErrorCode = 4
-
 // ExecutorVersionV1 is the first version of the executor system.
 const ExecutorVersionV1 ExecutorVersion = 1
 
@@ -316,6 +301,9 @@ const TransactionTypeUpdateAccountAuth TransactionType = 21
 
 // TransactionTypeUpdateKey update key for existing keys.
 const TransactionTypeUpdateKey TransactionType = 22
+
+// TransactionTypeMining submits a mining proof-of-work for validation and reward.
+const TransactionTypeMining TransactionType = 23
 
 // TransactionTypeNetworkMaintenance executes network maintenance operations.
 const TransactionTypeNetworkMaintenance TransactionType = 46
@@ -727,75 +715,6 @@ func (v *DataEntryType) UnmarshalJSON(data []byte) error {
 	*v, ok = DataEntryTypeByName(s)
 	if !ok || strings.ContainsRune(v.String(), ':') {
 		return fmt.Errorf("invalid Data Entry Type %q", s)
-	}
-	return nil
-}
-
-// GetEnumValue returns the value of the Error Code
-func (v ErrorCode) GetEnumValue() uint64 { return uint64(v) }
-
-// SetEnumValue sets the value. SetEnumValue returns false if the value is invalid.
-func (v *ErrorCode) SetEnumValue(id uint64) bool {
-	u := ErrorCode(id)
-	switch u {
-	case ErrorCodeOK, ErrorCodeEncodingError, ErrorCodeFailed, ErrorCodeDidPanic, ErrorCodeUnknownError:
-		*v = u
-		return true
-	}
-	return false
-}
-
-// String returns the name of the Error Code.
-func (v ErrorCode) String() string {
-	switch v {
-	case ErrorCodeOK:
-		return "ok"
-	case ErrorCodeEncodingError:
-		return "encodingError"
-	case ErrorCodeFailed:
-		return "failed"
-	case ErrorCodeDidPanic:
-		return "didPanic"
-	case ErrorCodeUnknownError:
-		return "unknownError"
-	}
-	return fmt.Sprintf("ErrorCode:%d", v)
-}
-
-// ErrorCodeByName returns the named Error Code.
-func ErrorCodeByName(name string) (ErrorCode, bool) {
-	switch strings.ToLower(name) {
-	case "ok":
-		return ErrorCodeOK, true
-	case "encodingerror":
-		return ErrorCodeEncodingError, true
-	case "failed":
-		return ErrorCodeFailed, true
-	case "didpanic":
-		return ErrorCodeDidPanic, true
-	case "unknownerror":
-		return ErrorCodeUnknownError, true
-	}
-	return 0, false
-}
-
-// MarshalJSON marshals the Error Code to JSON as a string.
-func (v ErrorCode) MarshalJSON() ([]byte, error) {
-	return json.Marshal(v.String())
-}
-
-// UnmarshalJSON unmarshals the Error Code from JSON as a string.
-func (v *ErrorCode) UnmarshalJSON(data []byte) error {
-	var s string
-	err := json.Unmarshal(data, &s)
-	if err != nil {
-		return err
-	}
-
-	var ok bool
-	*v, ok = ErrorCodeByName(s)
-	if !ok || strings.ContainsRune(v.String(), ':') {
-		return fmt.Errorf("invalid Error Code %q", s)
 	}
 	return nil
 }
@@ -1352,7 +1271,7 @@ func (v TransactionType) GetEnumValue() uint64 { return uint64(v) }
 func (v *TransactionType) SetEnumValue(id uint64) bool {
 	u := TransactionType(id)
 	switch u {
-	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateLiteTokenAccount, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeLockAccount, TransactionTypeBurnCredits, TransactionTypeTransferCredits, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeNetworkMaintenance, TransactionTypeActivateProtocolVersion, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeSystemGenesis, TransactionTypeDirectoryAnchor, TransactionTypeBlockValidatorAnchor, TransactionTypeSystemWriteData:
+	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateLiteTokenAccount, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeLockAccount, TransactionTypeBurnCredits, TransactionTypeTransferCredits, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeMining, TransactionTypeNetworkMaintenance, TransactionTypeActivateProtocolVersion, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeSystemGenesis, TransactionTypeDirectoryAnchor, TransactionTypeBlockValidatorAnchor, TransactionTypeSystemWriteData:
 		*v = u
 		return true
 	}
@@ -1404,6 +1323,8 @@ func (v TransactionType) String() string {
 		return "updateAccountAuth"
 	case TransactionTypeUpdateKey:
 		return "updateKey"
+	case TransactionTypeMining:
+		return "mining"
 	case TransactionTypeNetworkMaintenance:
 		return "networkMaintenance"
 	case TransactionTypeActivateProtocolVersion:
@@ -1479,6 +1400,8 @@ func TransactionTypeByName(name string) (TransactionType, bool) {
 		return TransactionTypeUpdateAccountAuth, true
 	case "updatekey":
 		return TransactionTypeUpdateKey, true
+	case "mining":
+		return TransactionTypeMining, true
 	case "networkmaintenance":
 		return TransactionTypeNetworkMaintenance, true
 	case "activateprotocolversion":

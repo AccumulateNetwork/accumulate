@@ -248,6 +248,9 @@ TransactionType:
   UpdateKey:
     value: 0x16
     description: update key for existing keys
+  Mining:
+    value: 0x17
+    description: submits a mining proof-of-work for validation and reward
   NetworkMaintenance:
     value: 0x2E
     description: executes network maintenance operations
