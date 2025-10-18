@@ -1,3 +1,6 @@
 [submodule "test/testdata/sdk"]
 	path = test/testdata/sdk
 	url = ../sdk/test-data.git
+[submodule "aip"]
+	path = aip
+	url = https://gitlab.com/accumulatenetwork/governance/aip.git
