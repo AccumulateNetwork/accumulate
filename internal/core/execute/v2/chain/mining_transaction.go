@@ -41,8 +41,11 @@ func (MiningTransaction) check(st *StateManager, tx *Delivery) (*protocol.Mining
 	if len(body.BlockHash) == 0 {
 		return nil, errors.BadRequest.WithFormat("block hash is required")
 	}
-	if body.BaselineTarget == 0 {
+	if len(body.BaselineTarget) == 0 {
 		return nil, errors.BadRequest.WithFormat("baseline target is required")
+	}
+	if len(body.BaselineTarget) != 32 {
+		return nil, errors.BadRequest.WithFormat("baseline target must be 32 bytes")
 	}
 	if body.MinerADI == nil {
 		return nil, errors.BadRequest.WithFormat("miner ADI is required")
@@ -52,6 +55,17 @@ func (MiningTransaction) check(st *StateManager, tx *Delivery) (*protocol.Mining
 	}
 	if body.EpochNumber == 0 {
 		return nil, errors.BadRequest.WithFormat("epoch number is required")
+	}
+
+	// Validate timestamp is within reasonable bounds (not too far in past/future)
+	// This prevents timestamp manipulation attacks while allowing for network latency
+	const maxTimestampSkew = 300 // 5 minutes in seconds
+	currentTime := uint64(st.BlockTimestamp().Unix())
+	if body.Timestamp > currentTime+maxTimestampSkew {
+		return nil, errors.BadRequest.WithFormat("timestamp too far in future: %d > %d", body.Timestamp, currentTime+maxTimestampSkew)
+	}
+	if body.Timestamp < currentTime-maxTimestampSkew {
+		return nil, errors.BadRequest.WithFormat("timestamp too far in past: %d < %d", body.Timestamp, currentTime-maxTimestampSkew)
 	}
 
 	// Validate bound nonce format (should be nonce + SHA256(miner_ADI))
@@ -128,7 +142,8 @@ func (x MiningTransaction) validateBoundNonce(body *protocol.MiningTransaction) 
 // validateProofOfWork computes LXRHash and checks against baseline difficulty
 func (x MiningTransaction) validateProofOfWork(body *protocol.MiningTransaction) error {
 	// Prepare data for LXRHash: bound_nonce + transaction_data + block_hash
-	var hashInput []byte
+	totalLen := len(body.BoundNonce) + len(body.TransactionData) + len(body.BlockHash)
+	hashInput := make([]byte, 0, totalLen)
 	hashInput = append(hashInput, body.BoundNonce...)
 	hashInput = append(hashInput, body.TransactionData...)
 	hashInput = append(hashInput, body.BlockHash...)
@@ -142,11 +157,11 @@ func (x MiningTransaction) validateProofOfWork(body *protocol.MiningTransaction)
 	hashValue := new(big.Int).SetBytes(computedHash[:])
 	
 	// Convert baseline target to big.Int
-	baselineTarget := new(big.Int).SetUint64(body.BaselineTarget)
+	baselineTarget := new(big.Int).SetBytes(body.BaselineTarget)
 
 	// Check if computed_hash < baseline_target
 	if hashValue.Cmp(baselineTarget) >= 0 {
-		return errors.BadRequest.WithFormat("proof-of-work does not meet baseline difficulty: hash %v >= target %v", hashValue, baselineTarget)
+		return errors.BadRequest.WithFormat("proof-of-work does not meet baseline difficulty: hash %x >= target %x", computedHash, body.BaselineTarget)
 	}
 
 	return nil
