@@ -28,6 +28,9 @@ type TransactionMax uint64
 // VoteType specifies how the user wants to vote on a proposal (e.g. transaction, initiative, etc)
 type VoteType uint64
 
+// EpochStatus represents the status of a mining epoch.
+type EpochStatus uint64
+
 type TransactionBody interface {
 	encoding.UnionValue
 	Type() TransactionType

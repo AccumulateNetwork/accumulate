@@ -301,3 +301,63 @@ MiningTransaction:
       description: is the actual transaction body being mined (optional)
       type: bytes
       optional: true
+
+CreateMiningTokenAccount:
+  union: { type: transaction }
+  fields:
+    - name: Url
+      description: is the URL of the mining token account to create
+      type: url
+      pointer: true
+    - name: TokenUrl
+      description: is the URL of the token this account will hold
+      type: url
+      pointer: true
+    - name: MinerADI
+      description: is the owner's ADI URL
+      type: url
+      pointer: true
+    - name: AutoParticipate
+      description: enables automatic participation in new epochs
+      type: bool
+      optional: true
+    - name: MaxCreditsPerEpoch
+      description: is the spending limit per epoch for mining operations
+      type: uvarint
+      optional: true
+    - name: Authorities
+      description: is a list of authorities to add to the authority set
+      type: url
+      pointer: true
+      repeatable: true
+      optional: true
+
+CreateMinedIssuanceAccount:
+  union: { type: transaction }
+  fields:
+    - name: Url
+      description: is the URL of the mined issuance account to create
+      type: url
+      pointer: true
+    - name: TokenUrl
+      description: is the URL of the token being issued through mining
+      type: url
+      pointer: true
+    - name: TotalRewardPool
+      description: is the total pool of tokens available for mining rewards
+      type: bigint
+    - name: RewardsPerWinner
+      description: is the reward amount per mining winner
+      type: bigint
+    - name: TopNSize
+      description: is the number of winners per epoch
+      type: uvarint
+    - name: SubmissionWindow
+      description: is the number of blocks for mining submissions
+      type: uvarint
+    - name: Authorities
+      description: is a list of authorities to add to the authority set
+      type: url
+      pointer: true
+      repeatable: true
+      optional: true

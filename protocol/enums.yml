@@ -251,6 +251,12 @@ TransactionType:
   Mining:
     value: 0x17
     description: submits a mining proof-of-work for validation and reward
+  CreateMiningTokenAccount:
+    value: 0x18
+    description: creates a mining token account for participating in mining operations
+  CreateMinedIssuanceAccount:
+    value: 0x19
+    description: creates a mined issuance account for managing mining epochs and rewards
   NetworkMaintenance:
     value: 0x2E
     description: executes network maintenance operations
@@ -343,6 +349,12 @@ AccountType:
   SyntheticLedger:
     value: 16
     description: is a ledger that tracks the status of produced and received synthetic transactions
+  MiningTokenAccount:
+    value: 17
+    description: is a token account used for mining operations and rewards
+  MinedIssuanceAccount:
+    value: 18
+    description: is an account that manages mining epochs and token issuance through mining
 
 AllowedTransactionBit:
   UpdateKeyPage:
@@ -376,3 +388,17 @@ BookType:
   Operator:
     value: 0x02
     description: Operator key book
+
+EpochStatus:
+  Active:
+    value: 1
+    description: epoch is currently accepting submissions
+  Finalizing:
+    value: 2
+    description: epoch submission window closed, finalizing results
+  Completed:
+    value: 3
+    description: epoch completed with rewards distributed
+  Cancelled:
+    value: 4
+    description: epoch was cancelled due to error or network issue

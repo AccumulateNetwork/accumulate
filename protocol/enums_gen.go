@@ -74,6 +74,12 @@ const AccountTypeLiteIdentity AccountType = 15
 // AccountTypeSyntheticLedger is a ledger that tracks the status of produced and received synthetic transactions.
 const AccountTypeSyntheticLedger AccountType = 16
 
+// AccountTypeMiningTokenAccount is a token account used for mining operations and rewards.
+const AccountTypeMiningTokenAccount AccountType = 17
+
+// AccountTypeMinedIssuanceAccount is an account that manages mining epochs and token issuance through mining.
+const AccountTypeMinedIssuanceAccount AccountType = 18
+
 // AllowedTransactionBitUpdateKeyPage is the offset of the UpdateKeyPage bit.
 const AllowedTransactionBitUpdateKeyPage AllowedTransactionBit = 1
 
@@ -305,6 +311,12 @@ const TransactionTypeUpdateKey TransactionType = 22
 // TransactionTypeMining submits a mining proof-of-work for validation and reward.
 const TransactionTypeMining TransactionType = 23
 
+// TransactionTypeCreateMiningTokenAccount creates a mining token account for participating in mining operations.
+const TransactionTypeCreateMiningTokenAccount TransactionType = 24
+
+// TransactionTypeCreateMinedIssuanceAccount creates a mined issuance account for managing mining epochs and rewards.
+const TransactionTypeCreateMinedIssuanceAccount TransactionType = 25
+
 // TransactionTypeNetworkMaintenance executes network maintenance operations.
 const TransactionTypeNetworkMaintenance TransactionType = 46
 
@@ -355,6 +367,18 @@ const VoteTypeAbstain VoteType = 2
 
 // VoteTypeSuggest put forth a proposal.
 const VoteTypeSuggest VoteType = 3
+
+// EpochStatusActive epoch is currently accepting submissions.
+const EpochStatusActive EpochStatus = 1
+
+// EpochStatusFinalizing epoch submission window closed, finalizing results.
+const EpochStatusFinalizing EpochStatus = 2
+
+// EpochStatusCompleted epoch completed with rewards distributed.
+const EpochStatusCompleted EpochStatus = 3
+
+// EpochStatusCancelled epoch was cancelled due to error or network issue.
+const EpochStatusCancelled EpochStatus = 4
 
 // GetEnumValue returns the value of the Account Auth Operation Type
 func (v AccountAuthOperationType) GetEnumValue() uint64 { return uint64(v) }
@@ -1271,7 +1295,7 @@ func (v TransactionType) GetEnumValue() uint64 { return uint64(v) }
 func (v *TransactionType) SetEnumValue(id uint64) bool {
 	u := TransactionType(id)
 	switch u {
-	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateLiteTokenAccount, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeLockAccount, TransactionTypeBurnCredits, TransactionTypeTransferCredits, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeMining, TransactionTypeNetworkMaintenance, TransactionTypeActivateProtocolVersion, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeSystemGenesis, TransactionTypeDirectoryAnchor, TransactionTypeBlockValidatorAnchor, TransactionTypeSystemWriteData:
+	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateLiteTokenAccount, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeLockAccount, TransactionTypeBurnCredits, TransactionTypeTransferCredits, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeMining, TransactionTypeCreateMiningTokenAccount, TransactionTypeCreateMinedIssuanceAccount, TransactionTypeNetworkMaintenance, TransactionTypeActivateProtocolVersion, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeSystemGenesis, TransactionTypeDirectoryAnchor, TransactionTypeBlockValidatorAnchor, TransactionTypeSystemWriteData:
 		*v = u
 		return true
 	}
@@ -1325,6 +1349,10 @@ func (v TransactionType) String() string {
 		return "updateKey"
 	case TransactionTypeMining:
 		return "mining"
+	case TransactionTypeCreateMiningTokenAccount:
+		return "createMiningTokenAccount"
+	case TransactionTypeCreateMinedIssuanceAccount:
+		return "createMinedIssuanceAccount"
 	case TransactionTypeNetworkMaintenance:
 		return "networkMaintenance"
 	case TransactionTypeActivateProtocolVersion:
@@ -1402,6 +1430,10 @@ func TransactionTypeByName(name string) (TransactionType, bool) {
 		return TransactionTypeUpdateKey, true
 	case "mining":
 		return TransactionTypeMining, true
+	case "createminingtokenaccount":
+		return TransactionTypeCreateMiningTokenAccount, true
+	case "createminedissuanceaccount":
+		return TransactionTypeCreateMinedIssuanceAccount, true
 	case "networkmaintenance":
 		return TransactionTypeNetworkMaintenance, true
 	case "activateprotocolversion":
@@ -1516,6 +1548,71 @@ func (v *VoteType) UnmarshalJSON(data []byte) error {
 	*v, ok = VoteTypeByName(s)
 	if !ok || strings.ContainsRune(v.String(), ':') {
 		return fmt.Errorf("invalid Vote Type %q", s)
+	}
+	return nil
+}
+
+// GetEnumValue returns the value of the Epoch Status
+func (v EpochStatus) GetEnumValue() uint64 { return uint64(v) }
+
+// SetEnumValue sets the value. SetEnumValue returns false if the value is invalid.
+func (v *EpochStatus) SetEnumValue(id uint64) bool {
+	u := EpochStatus(id)
+	switch u {
+	case EpochStatusActive, EpochStatusFinalizing, EpochStatusCompleted, EpochStatusCancelled:
+		*v = u
+		return true
+	}
+	return false
+}
+
+// String returns the name of the Epoch Status.
+func (v EpochStatus) String() string {
+	switch v {
+	case EpochStatusActive:
+		return "active"
+	case EpochStatusFinalizing:
+		return "finalizing"
+	case EpochStatusCompleted:
+		return "completed"
+	case EpochStatusCancelled:
+		return "cancelled"
+	}
+	return fmt.Sprintf("EpochStatus:%d", v)
+}
+
+// EpochStatusByName returns the named Epoch Status.
+func EpochStatusByName(name string) (EpochStatus, bool) {
+	switch strings.ToLower(name) {
+	case "active":
+		return EpochStatusActive, true
+	case "finalizing":
+		return EpochStatusFinalizing, true
+	case "completed":
+		return EpochStatusCompleted, true
+	case "cancelled":
+		return EpochStatusCancelled, true
+	}
+	return 0, false
+}
+
+// MarshalJSON marshals the Epoch Status to JSON as a string.
+func (v EpochStatus) MarshalJSON() ([]byte, error) {
+	return json.Marshal(v.String())
+}
+
+// UnmarshalJSON unmarshals the Epoch Status from JSON as a string.
+func (v *EpochStatus) UnmarshalJSON(data []byte) error {
+	var s string
+	err := json.Unmarshal(data, &s)
+	if err != nil {
+		return err
+	}
+
+	var ok bool
+	*v, ok = EpochStatusByName(s)
+	if !ok || strings.ContainsRune(v.String(), ':') {
+		return fmt.Errorf("invalid Epoch Status %q", s)
 	}
 	return nil
 }

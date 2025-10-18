@@ -15,19 +15,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/libp2p/go-libp2p/core/peer"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
-	errors2 "gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/p2p"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"io"
 	"math/big"
 	"strings"
 	"time"
+
+	errors2 "gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
 type ADI struct {
@@ -294,6 +290,42 @@ type CreateTokenAccount struct {
 	// Authorities is a list of authorities to add to the authority set.
 	Authorities []*url.URL        `json:"authorities,omitempty" form:"authorities" query:"authorities"`
 	Proof       *TokenIssuerProof `json:"proof,omitempty" form:"proof" query:"proof"`
+	extraData   []byte
+}
+
+type CreateMiningTokenAccount struct {
+	fieldsSet []bool
+	// Url is the URL of the mining token account to create.
+	Url *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	// TokenUrl is the URL of the token this account will hold.
+	TokenUrl *url.URL `json:"tokenUrl,omitempty" form:"tokenUrl" query:"tokenUrl" validate:"required"`
+	// MinerADI is the owner's ADI URL.
+	MinerADI *url.URL `json:"minerADI,omitempty" form:"minerADI" query:"minerADI" validate:"required"`
+	// AutoParticipate enables automatic participation in new epochs.
+	AutoParticipate *bool `json:"autoParticipate,omitempty" form:"autoParticipate" query:"autoParticipate"`
+	// MaxCreditsPerEpoch is the spending limit per epoch for mining operations.
+	MaxCreditsPerEpoch *uint64 `json:"maxCreditsPerEpoch,omitempty" form:"maxCreditsPerEpoch" query:"maxCreditsPerEpoch"`
+	// Authorities is a list of authorities to add to the authority set.
+	Authorities []*url.URL `json:"authorities,omitempty" form:"authorities" query:"authorities"`
+	extraData   []byte
+}
+
+type CreateMinedIssuanceAccount struct {
+	fieldsSet []bool
+	// Url is the URL of the mined issuance account to create.
+	Url *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	// TokenUrl is the URL of the token being issued through mining.
+	TokenUrl *url.URL `json:"tokenUrl,omitempty" form:"tokenUrl" query:"tokenUrl" validate:"required"`
+	// TotalRewardPool is the total pool of tokens available for mining rewards.
+	TotalRewardPool big.Int `json:"totalRewardPool,omitempty" form:"totalRewardPool" query:"totalRewardPool" validate:"required"`
+	// RewardsPerWinner is the reward amount per mining winner.
+	RewardsPerWinner big.Int `json:"rewardsPerWinner,omitempty" form:"rewardsPerWinner" query:"rewardsPerWinner" validate:"required"`
+	// TopNSize is the number of winners per epoch.
+	TopNSize uint64 `json:"topNSize,omitempty" form:"topNSize" query:"topNSize" validate:"required"`
+	// SubmissionWindow is the number of blocks for mining submissions.
+	SubmissionWindow uint64 `json:"submissionWindow,omitempty" form:"submissionWindow" query:"submissionWindow" validate:"required"`
+	// Authorities is a list of authorities to add to the authority set.
+	Authorities []*url.URL `json:"authorities,omitempty" form:"authorities" query:"authorities"`
 	extraData   []byte
 }
 
@@ -570,29 +602,6 @@ type MetricsResponse struct {
 	Value interface{} `json:"value,omitempty" form:"value" query:"value" validate:"required"`
 }
 
-type MiningTransaction struct {
-	fieldsSet []bool
-	// BoundNonce is the nonce bound to the miner's ADI (nonce + SHA256(miner_ADI)).
-	BoundNonce []byte `json:"boundNonce,omitempty" form:"boundNonce" query:"boundNonce" validate:"required"`
-	// TransactionData is the data being mined (transaction body or other data).
-	TransactionData []byte `json:"transactionData,omitempty" form:"transactionData" query:"transactionData" validate:"required"`
-	// BlockHash is the Directory Network anchor hash for this mining epoch.
-	BlockHash []byte `json:"blockHash,omitempty" form:"blockHash" query:"blockHash" validate:"required"`
-	// BaselineTarget is the hard difficulty threshold for this mining submission.
-	BaselineTarget uint64 `json:"baselineTarget,omitempty" form:"baselineTarget" query:"baselineTarget" validate:"required"`
-	// MinerADI is the miner's ADI URL for payment and identification.
-	MinerADI *url.URL `json:"minerADI,omitempty" form:"minerADI" query:"minerADI" validate:"required"`
-	// Timestamp is the submission timestamp for this mining attempt.
-	Timestamp uint64 `json:"timestamp,omitempty" form:"timestamp" query:"timestamp" validate:"required"`
-	// EpochNumber is the current mining epoch number.
-	EpochNumber uint64 `json:"epochNumber,omitempty" form:"epochNumber" query:"epochNumber" validate:"required"`
-	// CandidateTransactionHash is the hash of the transaction being mined (optional).
-	CandidateTransactionHash []byte `json:"candidateTransactionHash,omitempty" form:"candidateTransactionHash" query:"candidateTransactionHash"`
-	// TransactionBody is the actual transaction body being mined (optional).
-	TransactionBody []byte `json:"transactionBody,omitempty" form:"transactionBody" query:"transactionBody"`
-	extraData       []byte
-}
-
 type NetworkAccountUpdate struct {
 	fieldsSet []bool
 	Name      string          `json:"name,omitempty" form:"name" query:"name" validate:"required"`
@@ -797,7 +806,7 @@ type MiningTransaction struct {
 	CandidateTransactionHash []byte `json:"candidateTransactionHash,omitempty" form:"candidateTransactionHash" query:"candidateTransactionHash"`
 	// TransactionBody is the actual transaction body being mined (optional)
 	TransactionBody []byte `json:"transactionBody,omitempty" form:"transactionBody" query:"transactionBody"`
-	extraData []byte
+	extraData       []byte
 }
 
 type RemoveAccountAuthorityOperation struct {
@@ -1113,6 +1122,97 @@ type UnknownAccount struct {
 	extraData []byte
 }
 
+type MiningTokenAccount struct {
+	fieldsSet []bool
+	// Standard Account Fields
+	Url      *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	TokenUrl *url.URL `json:"tokenUrl,omitempty" form:"tokenUrl" query:"tokenUrl" validate:"required"`
+	Balance  big.Int  `json:"balance,omitempty" form:"balance" query:"balance" validate:"required"`
+
+	// Mining-Specific Fields
+	MinerADI         *url.URL `json:"minerADI,omitempty" form:"minerADI" query:"minerADI" validate:"required"`
+	ActiveEpoch      uint64   `json:"activeEpoch,omitempty" form:"activeEpoch" query:"activeEpoch" validate:"required"`
+	TotalSubmissions uint64   `json:"totalSubmissions,omitempty" form:"totalSubmissions" query:"totalSubmissions" validate:"required"`
+	TotalRewards     big.Int  `json:"totalRewards,omitempty" form:"totalRewards" query:"totalRewards" validate:"required"`
+
+	// Mining Configuration
+	AutoParticipate    bool   `json:"autoParticipate,omitempty" form:"autoParticipate" query:"autoParticipate" validate:"required"`
+	MaxCreditsPerEpoch uint64 `json:"maxCreditsPerEpoch,omitempty" form:"maxCreditsPerEpoch" query:"maxCreditsPerEpoch" validate:"required"`
+	extraData          []byte
+}
+
+type MinedIssuanceAccount struct {
+	fieldsSet []bool
+	// Standard Account Fields
+	Url      *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	TokenUrl *url.URL `json:"tokenUrl,omitempty" form:"tokenUrl" query:"tokenUrl" validate:"required"`
+
+	// Mining Epoch Management
+	CurrentEpoch *MiningEpoch   `json:"currentEpoch,omitempty" form:"currentEpoch" query:"currentEpoch"`
+	EpochHistory []*MiningEpoch `json:"epochHistory,omitempty" form:"epochHistory" query:"epochHistory"`
+
+	// Reward Pool Management
+	TotalRewardPool  big.Int `json:"totalRewardPool,omitempty" form:"totalRewardPool" query:"totalRewardPool" validate:"required"`
+	RewardsPerWinner big.Int `json:"rewardsPerWinner,omitempty" form:"rewardsPerWinner" query:"rewardsPerWinner" validate:"required"`
+
+	// Priority Queue Configuration
+	TopNSize         uint64 `json:"topNSize,omitempty" form:"topNSize" query:"topNSize" validate:"required"`
+	SubmissionWindow uint64 `json:"submissionWindow,omitempty" form:"submissionWindow" query:"submissionWindow" validate:"required"`
+
+	// Statistics
+	TotalEpochs         uint64 `json:"totalEpochs,omitempty" form:"totalEpochs" query:"totalEpochs" validate:"required"`
+	TotalMinersRewarded uint64 `json:"totalMinersRewarded,omitempty" form:"totalMinersRewarded" query:"totalMinersRewarded" validate:"required"`
+	extraData           []byte
+}
+
+type MiningEpoch struct {
+	fieldsSet []bool
+	// Epoch Identification
+	EpochNumber    uint64 `json:"epochNumber,omitempty" form:"epochNumber" query:"epochNumber" validate:"required"`
+	StartBlock     uint64 `json:"startBlock,omitempty" form:"startBlock" query:"startBlock" validate:"required"`
+	EndBlock       uint64 `json:"endBlock,omitempty" form:"endBlock" query:"endBlock" validate:"required"`
+	BaselineTarget []byte `json:"baselineTarget,omitempty" form:"baselineTarget" query:"baselineTarget" validate:"required"`
+	DNAnchorHash   []byte `json:"dnAnchorHash,omitempty" form:"dnAnchorHash" query:"dnAnchorHash" validate:"required"`
+
+	// Submission Tracking
+	Submissions []*MiningSubmission `json:"submissions,omitempty" form:"submissions" query:"submissions"`
+	TopNWinners []*MiningSubmission `json:"topNWinners,omitempty" form:"topNWinners" query:"topNWinners"`
+
+	// Epoch Statistics
+	TotalSubmissions uint64 `json:"totalSubmissions,omitempty" form:"totalSubmissions" query:"totalSubmissions" validate:"required"`
+	ValidSubmissions uint64 `json:"validSubmissions,omitempty" form:"validSubmissions" query:"validSubmissions" validate:"required"`
+	AverageHashTime  uint64 `json:"averageHashTime,omitempty" form:"averageHashTime" query:"averageHashTime" validate:"required"`
+
+	// Reward Distribution
+	RewardPerWinner    big.Int `json:"rewardPerWinner,omitempty" form:"rewardPerWinner" query:"rewardPerWinner" validate:"required"`
+	TotalRewardsIssued big.Int `json:"totalRewardsIssued,omitempty" form:"totalRewardsIssued" query:"totalRewardsIssued" validate:"required"`
+
+	// Status
+	Status    EpochStatus `json:"status,omitempty" form:"status" query:"status" validate:"required"`
+	extraData []byte
+}
+
+type MiningSubmission struct {
+	fieldsSet []bool
+	// Submission Identity
+	MinerADI       *url.URL `json:"minerADI,omitempty" form:"minerADI" query:"minerADI" validate:"required"`
+	SubmissionHash []byte   `json:"submissionHash,omitempty" form:"submissionHash" query:"submissionHash" validate:"required"`
+	BoundNonce     []byte   `json:"boundNonce,omitempty" form:"boundNonce" query:"boundNonce" validate:"required"`
+
+	// Mining Data
+	TransactionData []byte `json:"transactionData,omitempty" form:"transactionData" query:"transactionData" validate:"required"`
+	Timestamp       uint64 `json:"timestamp,omitempty" form:"timestamp" query:"timestamp" validate:"required"`
+
+	// Validation Results
+	IsValid bool   `json:"isValid,omitempty" form:"isValid" query:"isValid" validate:"required"`
+	Rank    uint64 `json:"rank,omitempty" form:"rank" query:"rank" validate:"required"`
+
+	// Rewards
+	RewardAmount *big.Int `json:"rewardAmount,omitempty" form:"rewardAmount" query:"rewardAmount"`
+	RewardPaid   bool     `json:"rewardPaid,omitempty" form:"rewardPaid" query:"rewardPaid" validate:"required"`
+	extraData    []byte
+}
+
 type UnknownSigner struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
@@ -1301,8 +1401,6 @@ func (*ReceiptSignature) Type() SignatureType { return SignatureTypeReceipt }
 func (*RemoteSignature) Type() SignatureType { return SignatureTypeRemote }
 
 func (*RemoteTransaction) Type() TransactionType { return TransactionTypeRemote }
-
-func (*MiningTransaction) Type() TransactionType { return TransactionTypeMining }
 
 func (*RemoveAccountAuthorityOperation) Type() AccountAuthOperationType {
 	return AccountAuthOperationTypeRemoveAuthority
@@ -2557,7 +2655,7 @@ func (v *MiningTransaction) Copy() *MiningTransaction {
 	u.BoundNonce = encoding.BytesCopy(v.BoundNonce)
 	u.TransactionData = encoding.BytesCopy(v.TransactionData)
 	u.BlockHash = encoding.BytesCopy(v.BlockHash)
-	u.BaselineTarget = v.BaselineTarget
+	u.BaselineTarget = encoding.BytesCopy(v.BaselineTarget)
 	if v.MinerADI != nil {
 		u.MinerADI = v.MinerADI
 	}
@@ -5061,7 +5159,7 @@ func (v *MiningTransaction) Equal(u *MiningTransaction) bool {
 	if !(bytes.Equal(v.BlockHash, u.BlockHash)) {
 		return false
 	}
-	if !(v.BaselineTarget == u.BaselineTarget) {
+	if !bytes.Equal(v.BaselineTarget, u.BaselineTarget) {
 		return false
 	}
 	switch {
@@ -10075,8 +10173,8 @@ func (v *MiningTransaction) MarshalBinary() ([]byte, error) {
 	if !(len(v.BlockHash) == 0) {
 		writer.WriteBytes(4, v.BlockHash)
 	}
-	if !(v.BaselineTarget == 0) {
-		writer.WriteUint(5, v.BaselineTarget)
+	if !(len(v.BaselineTarget) == 0) {
+		writer.WriteBytes(5, v.BaselineTarget)
 	}
 	if !(v.MinerADI == nil) {
 		writer.WriteUrl(6, v.MinerADI)
@@ -10125,7 +10223,7 @@ func (v *MiningTransaction) IsValid() error {
 	}
 	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field BaselineTarget is missing")
-	} else if v.BaselineTarget == 0 {
+	} else if len(v.BaselineTarget) == 0 {
 		errs = append(errs, "field BaselineTarget is not set")
 	}
 	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
@@ -16487,7 +16585,7 @@ func (v *MiningTransaction) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadBytes(4); ok {
 		v.BlockHash = x
 	}
-	if x, ok := reader.ReadUint(5); ok {
+	if x, ok := reader.ReadBytes(5); ok {
 		v.BaselineTarget = x
 	}
 	if x, ok := reader.ReadUrl(6); ok {
@@ -21171,7 +21269,7 @@ func (v *MiningTransaction) MarshalJSON() ([]byte, error) {
 		BoundNonce               *string         `json:"boundNonce,omitempty"`
 		TransactionData          *string         `json:"transactionData,omitempty"`
 		BlockHash                *string         `json:"blockHash,omitempty"`
-		BaselineTarget           uint64          `json:"baselineTarget,omitempty"`
+		BaselineTarget           *string         `json:"baselineTarget,omitempty"`
 		MinerADI                 *url.URL        `json:"minerADI,omitempty"`
 		Timestamp                uint64          `json:"timestamp,omitempty"`
 		EpochNumber              uint64          `json:"epochNumber,omitempty"`
@@ -21189,8 +21287,8 @@ func (v *MiningTransaction) MarshalJSON() ([]byte, error) {
 	if !(len(v.BlockHash) == 0) {
 		u.BlockHash = encoding.BytesToJSON(v.BlockHash)
 	}
-	if !(v.BaselineTarget == 0) {
-		u.BaselineTarget = v.BaselineTarget
+	if !(len(v.BaselineTarget) == 0) {
+		u.BaselineTarget = encoding.BytesToJSON(v.BaselineTarget)
 	}
 	if !(v.MinerADI == nil) {
 		u.MinerADI = v.MinerADI
@@ -24283,7 +24381,7 @@ func (v *MiningTransaction) UnmarshalJSON(data []byte) error {
 		BoundNonce               *string         `json:"boundNonce,omitempty"`
 		TransactionData          *string         `json:"transactionData,omitempty"`
 		BlockHash                *string         `json:"blockHash,omitempty"`
-		BaselineTarget           uint64          `json:"baselineTarget,omitempty"`
+		BaselineTarget           *string         `json:"baselineTarget,omitempty"`
 		MinerADI                 *url.URL        `json:"minerADI,omitempty"`
 		Timestamp                uint64          `json:"timestamp,omitempty"`
 		EpochNumber              uint64          `json:"epochNumber,omitempty"`
@@ -24295,7 +24393,7 @@ func (v *MiningTransaction) UnmarshalJSON(data []byte) error {
 	u.BoundNonce = encoding.BytesToJSON(v.BoundNonce)
 	u.TransactionData = encoding.BytesToJSON(v.TransactionData)
 	u.BlockHash = encoding.BytesToJSON(v.BlockHash)
-	u.BaselineTarget = v.BaselineTarget
+	u.BaselineTarget = encoding.BytesToJSON(v.BaselineTarget)
 	u.MinerADI = v.MinerADI
 	u.Timestamp = v.Timestamp
 	u.EpochNumber = v.EpochNumber
@@ -24323,7 +24421,7 @@ func (v *MiningTransaction) UnmarshalJSON(data []byte) error {
 	} else {
 		v.BlockHash = x
 	}
-	v.BaselineTarget = u.BaselineTarget
+	v.BaselineTarget, _ = encoding.BytesFromJSON(u.BaselineTarget)
 	v.MinerADI = u.MinerADI
 	v.Timestamp = u.Timestamp
 	v.EpochNumber = u.EpochNumber
