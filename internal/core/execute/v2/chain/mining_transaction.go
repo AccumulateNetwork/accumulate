@@ -126,7 +126,7 @@ func (x MiningTransaction) validateBoundNonce(body *protocol.MiningTransaction) 
 	}
 
 	expectedADIHash := body.BoundNonce[len(body.BoundNonce)-32:]
-	
+
 	// Compute SHA256(miner_ADI)
 	minerADIBytes := []byte(body.MinerADI.String())
 	actualADIHash := sha256.Sum256(minerADIBytes)
@@ -155,7 +155,7 @@ func (x MiningTransaction) validateProofOfWork(body *protocol.MiningTransaction)
 
 	// Convert hash to big.Int for comparison
 	hashValue := new(big.Int).SetBytes(computedHash[:])
-	
+
 	// Convert baseline target to big.Int
 	baselineTarget := new(big.Int).SetBytes(body.BaselineTarget)
 
@@ -174,7 +174,7 @@ func (x MiningTransaction) validateBlockHash(st *StateManager, body *protocol.Mi
 	// 1. Get current DN anchor hash from state
 	// 2. Verify it matches body.BlockHash
 	// 3. Ensure the epoch number is correct
-	
+
 	// For now, accept any block hash (placeholder implementation)
 	if len(body.BlockHash) != 32 {
 		return errors.BadRequest.WithFormat("block hash must be 32 bytes")

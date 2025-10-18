@@ -1,0 +1,201 @@
+# Mining account types for LXR mining implementation
+
+MiningTokenAccount:
+  union: { type: account }
+  fields:
+    # Standard Account Fields
+    - name: Url
+      type: url
+      pointer: true
+    - name: TokenUrl
+      description: is the URL of the token this account holds
+      type: url
+      pointer: true
+    - name: Balance
+      description: is the current token balance
+      type: bigint
+    
+    # Mining-Specific Fields
+    - name: MinerADI
+      description: is the owner's ADI URL
+      type: url
+      pointer: true
+    - name: ActiveEpoch
+      description: is the current participating epoch number
+      type: uvarint
+    - name: TotalSubmissions
+      description: is the lifetime mining submissions count
+      type: uvarint
+    - name: TotalRewards
+      description: is the lifetime rewards earned
+      type: bigint
+    
+    # Mining Configuration
+    - name: AutoParticipate
+      description: enables automatic participation in new epochs
+      type: bool
+    - name: MaxCreditsPerEpoch
+      description: is the spending limit per epoch for mining operations
+      type: uvarint
+
+MinedIssuanceAccount:
+  union: { type: account }
+  fields:
+    # Standard Account Fields
+    - name: Url
+      type: url
+      pointer: true
+    - name: TokenUrl
+      description: is the URL of the token being issued through mining
+      type: url
+      pointer: true
+    
+    # Mining Epoch Management
+    - name: CurrentEpoch
+      description: is the current active mining epoch
+      type: MiningEpoch
+      marshal-as: reference
+      pointer: true
+      optional: true
+    - name: EpochHistory
+      description: is the history of completed mining epochs
+      type: MiningEpoch
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+    
+    # Reward Pool Management
+    - name: TotalRewardPool
+      description: is the total pool of tokens available for mining rewards
+      type: bigint
+    - name: RewardsPerWinner
+      description: is the reward amount per mining winner
+      type: bigint
+    
+    # Priority Queue Configuration
+    - name: TopNSize
+      description: is the number of winners per epoch
+      type: uvarint
+    - name: SubmissionWindow
+      description: is the number of blocks for mining submissions
+      type: uvarint
+    
+    # Statistics
+    - name: TotalEpochs
+      description: is the total number of epochs completed
+      type: uvarint
+    - name: TotalMinersRewarded
+      description: is the total number of miners rewarded across all epochs
+      type: uvarint
+
+MiningEpoch:
+  fields:
+    # Epoch Identification
+    - name: EpochNumber
+      description: is the sequential epoch number
+      type: uvarint
+    - name: StartBlock
+      description: is the block height when this epoch started
+      type: uvarint
+    - name: EndBlock
+      description: is the block height when this epoch ends
+      type: uvarint
+    - name: BaselineTarget
+      description: is the hard difficulty threshold (32-byte target hash)
+      type: bytes
+    - name: DNAnchorHash
+      description: is the Directory Network anchor hash for this epoch
+      type: bytes
+    
+    # Submission Tracking
+    - name: Submissions
+      description: are all mining submissions for this epoch
+      type: MiningSubmission
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+    - name: TopNWinners
+      description: are the top N winning mining submissions
+      type: MiningSubmission
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+    
+    # Epoch Statistics
+    - name: TotalSubmissions
+      description: is the total number of submissions received
+      type: uvarint
+    - name: ValidSubmissions
+      description: is the number of valid submissions
+      type: uvarint
+    - name: AverageHashTime
+      description: is the average time to find valid hash (nanoseconds)
+      type: uvarint
+    
+    # Reward Distribution
+    - name: RewardPerWinner
+      description: is the reward amount per winner for this epoch
+      type: bigint
+    - name: TotalRewardsIssued
+      description: is the total rewards issued for this epoch
+      type: bigint
+    
+    # Status
+    - name: Status
+      description: is the current status of this epoch
+      type: EpochStatus
+      marshal-as: enum
+
+MiningSubmission:
+  fields:
+    # Submission Identity
+    - name: MinerADI
+      description: is the submitting miner's ADI
+      type: url
+      pointer: true
+    - name: SubmissionHash
+      description: is the computed hash for this submission
+      type: bytes
+    - name: BoundNonce
+      description: is the bound nonce used for this submission
+      type: bytes
+    
+    # Mining Data
+    - name: TransactionData
+      description: is the data that was mined
+      type: bytes
+    - name: Timestamp
+      description: is the submission timestamp
+      type: uvarint
+    
+    # Validation Results
+    - name: IsValid
+      description: indicates if this submission passed validation
+      type: bool
+    - name: Rank
+      description: is the ranking among valid submissions (0 = best)
+      type: uvarint
+    
+    # Rewards
+    - name: RewardAmount
+      description: is the reward amount for this submission
+      type: bigint
+      optional: true
+    - name: RewardPaid
+      description: indicates if the reward has been paid
+      type: bool
+
+# Enums for mining account types
+EpochStatus:
+  Active:
+    value: 1
+    description: epoch is currently accepting submissions
+  Finalizing:
+    value: 2
+    description: epoch submission window closed, finalizing results
+  Completed:
+    value: 3
+    description: epoch completed with rewards distributed
+  Cancelled:
+    value: 4
+    description: epoch was cancelled due to error or network issue
