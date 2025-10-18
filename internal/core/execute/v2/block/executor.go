@@ -59,6 +59,7 @@ func NewExecutor(opts ExecutorOptions) (*Executor, error) {
 		chain.CreateTokenAccount{},
 		chain.IssueTokens{},
 		chain.LockAccount{},
+		chain.MiningTransaction{},
 		chain.SendTokens{},
 		chain.TransferCredits{},
 		chain.UpdateAccountAuth{},
