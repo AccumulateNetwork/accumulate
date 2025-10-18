@@ -267,3 +267,37 @@ RemoteTransaction:
     - name: Hash
       type: hash
       optional: true
+
+MiningTransaction:
+  union: { type: transaction }
+  fields:
+    - name: BoundNonce
+      description: is the nonce bound to the miner's ADI (nonce + SHA256(miner_ADI))
+      type: bytes
+    - name: TransactionData
+      description: is the data being mined (transaction body or other data)
+      type: bytes
+    - name: BlockHash
+      description: is the Directory Network anchor hash for this mining epoch
+      type: bytes
+    - name: BaselineTarget
+      description: is the hard difficulty threshold for this mining submission
+      type: uvarint
+    - name: MinerADI
+      description: is the miner's ADI URL for payment and identification
+      type: url
+      pointer: true
+    - name: Timestamp
+      description: is the submission timestamp for this mining attempt
+      type: uvarint
+    - name: EpochNumber
+      description: is the current mining epoch number
+      type: uvarint
+    - name: CandidateTransactionHash
+      description: is the hash of the transaction being mined (optional)
+      type: bytes
+      optional: true
+    - name: TransactionBody
+      description: is the actual transaction body being mined (optional)
+      type: bytes
+      optional: true
