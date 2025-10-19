@@ -11,12 +11,29 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"math/big"
+	"sync"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 type MiningTransaction struct{}
+
+var (
+	// Global mining validator instance
+	globalMiningValidator *MiningValidator
+	miningValidatorMutex  sync.Once
+)
+
+// GetMiningValidator returns the global mining validator instance
+func GetMiningValidator() *MiningValidator {
+	miningValidatorMutex.Do(func() {
+		config := DefaultMiningValidatorConfig()
+		globalMiningValidator = NewMiningValidator(config)
+	})
+	return globalMiningValidator
+}
 
 func (MiningTransaction) Type() protocol.TransactionType { return protocol.TransactionTypeMining }
 
@@ -82,40 +99,34 @@ func (x MiningTransaction) Execute(st *StateManager, tx *Delivery) (protocol.Tra
 		return nil, err
 	}
 
-	// Validate bound nonce - verify it includes SHA256(miner_ADI)
-	err = x.validateBoundNonce(body)
+	// Get the global mining validator instance
+	validator := GetMiningValidator()
+	
+	// Submit to mining validator for validation and priority queue management
+	validationResult, err := validator.ValidateAndSubmit(body)
 	if err != nil {
-		return nil, err
+		return nil, errors.UnknownError.WithFormat("mining validation failed: %w", err)
 	}
-
-	// Validate mining proof-of-work using LXRHash
-	err = x.validateProofOfWork(body)
-	if err != nil {
-		return nil, err
+	
+	// Create transaction result with mining validation details
+	result := &MiningTransactionResult{
+		SubmissionHash: validationResult.SubmissionHash,
+		IsAccepted:     validationResult.IsAccepted,
+		ComputedHash:   validationResult.ComputedHash,
+		CurrentRank:    validationResult.CurrentRank,
+		Message:        validationResult.Message,
+		ErrorMessage:   validationResult.ErrorMessage,
+		EpochNumber:    validationResult.EpochNumber,
+		MinerADI:       validationResult.MinerADI,
 	}
-
-	// Validate block hash matches current Directory Network anchor
-	err = x.validateBlockHash(st, body)
-	if err != nil {
-		return nil, err
+	
+	// If the submission was not accepted, still return success but with details
+	// This allows miners to see why their submission wasn't accepted
+	if !validationResult.IsAccepted && validationResult.ErrorMessage != "" {
+		result.Message = fmt.Sprintf("Submission rejected: %s", validationResult.ErrorMessage)
 	}
-
-	// Validate transaction body consensus (if present)
-	if len(body.TransactionBody) > 0 || len(body.CandidateTransactionHash) > 0 {
-		err = x.validateTransactionBody(body)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	// Mining transaction validation passed
-	// In the full implementation, this would:
-	// 1. Add to mining submission queue
-	// 2. Trigger mining validator component
-	// 3. Generate synthetic transactions for rewards
-	// For now, we just validate and accept
-
-	return &protocol.TransactionResult{}, nil
+	
+	return result, nil
 }
 
 // validateBoundNonce verifies that bound_nonce = nonce + SHA256(miner_ADI)
@@ -200,4 +211,21 @@ func (x MiningTransaction) validateTransactionBody(body *protocol.MiningTransact
 	// 3. Handle conflicting submissions
 
 	return nil
+}
+
+// MiningTransactionResult represents the result of a mining transaction execution
+type MiningTransactionResult struct {
+	SubmissionHash []byte   `json:"submissionHash"`
+	IsAccepted     bool     `json:"isAccepted"`
+	ComputedHash   []byte   `json:"computedHash,omitempty"`
+	CurrentRank    uint64   `json:"currentRank,omitempty"`
+	Message        string   `json:"message,omitempty"`
+	ErrorMessage   string   `json:"errorMessage,omitempty"`
+	EpochNumber    uint64   `json:"epochNumber"`
+	MinerADI       *url.URL `json:"minerADI"`
+}
+
+// Type implements protocol.TransactionResult
+func (r *MiningTransactionResult) Type() protocol.TransactionType {
+	return protocol.TransactionTypeMining
 }
