@@ -6,9 +6,7 @@ import (
 	"sort"
 	"sync"
 
-	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // MiningSubmission represents a validated mining submission with metadata

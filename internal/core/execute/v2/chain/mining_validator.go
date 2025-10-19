@@ -188,7 +188,8 @@ func (mv *MiningValidator) ValidateAndSubmit(miningTx *protocol.MiningTransactio
 	// Handle transaction body consensus if enabled
 	if mv.config.EnableConsensusTracking && len(miningTx.TransactionBody) > 0 {
 		mv.updateTransactionBodyConsensus(miningTx.TransactionBody)
-		submission.TransactionBodyHash = sha256.Sum256(miningTx.TransactionBody)[:]
+		bodyHashArray := sha256.Sum256(miningTx.TransactionBody)
+		submission.TransactionBodyHash = bodyHashArray[:]
 	}
 	
 	// Store valid submission
@@ -269,7 +270,7 @@ func (mv *MiningValidator) generateSubmissionHash(miningTx *protocol.MiningTrans
 	h.Write(miningTx.BoundNonce)
 	h.Write(miningTx.TransactionData)
 	h.Write(miningTx.BlockHash)
-	h.Write(miningTx.MinerADI.Bytes())
+	h.Write([]byte(miningTx.MinerADI.String()))
 	return h.Sum(nil)
 }
 
