@@ -8,7 +8,6 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // SyntheticMiningTransaction represents a synthetic transaction for mining rewards
@@ -164,7 +163,8 @@ func (rd *MiningRewardDistributor) CalculateRewards(
 		return nil, nil
 	}
 	
-	payouts := make([]*RewardPayout, 0, len(winners))
+	// Note: payouts variable not used due to switch statement
+	_ = make([]*RewardPayout, 0, len(winners))
 	
 	switch rd.strategy {
 	case EqualDistribution:
@@ -322,8 +322,8 @@ func (mv *MiningValidator) getMinerTokenAccount(minerADI *url.URL) (*url.URL, er
 // generateSyntheticTransactionHash creates a unique hash for a synthetic transaction
 func (mv *MiningValidator) generateSyntheticTransactionHash(syntheticTx *SyntheticMiningTransaction) []byte {
 	h := sha256.New()
-	h.Write(syntheticTx.Source.Bytes())
-	h.Write(syntheticTx.Destination.Bytes())
+	h.Write([]byte(syntheticTx.Source.String()))
+	h.Write([]byte(syntheticTx.Destination.String()))
 	h.Write(syntheticTx.Amount.Bytes())
 	h.Write(syntheticTx.SubmissionHash)
 	h.Write([]byte(fmt.Sprintf("%d", syntheticTx.EpochNumber)))
