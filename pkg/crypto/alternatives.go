@@ -78,7 +78,8 @@ func FromECDSAPub(pub *ecdsa.PublicKey) []byte {
 	if pub == nil || pub.X == nil || pub.Y == nil {
 		return nil
 	}
-	return elliptic.Marshal(S256(), pub.X, pub.Y)
+	// Use the curve from the key, don't assume S256()
+	return elliptic.Marshal(pub.Curve, pub.X, pub.Y)
 }
 
 // UnmarshalPubkey converts bytes to a secp256k1 public key.
@@ -252,4 +253,34 @@ func (privKey *BTCPrivKey) Sign(hash []byte) (*BTCSignature, error) {
 // Replaces pubkey comparison functions
 func IsEqual(a, b *ecdsa.PublicKey) bool {
 	return a.X.Cmp(b.X) == 0 && a.Y.Cmp(b.Y) == 0
+}
+
+// SerializeCompressed returns the 33-byte compressed format of the public key
+func SerializeCompressed(pubKey *ecdsa.PublicKey) []byte {
+	if pubKey == nil || pubKey.X == nil || pubKey.Y == nil {
+		return nil
+	}
+
+	compressed := make([]byte, 33)
+	xBytes := pubKey.X.Bytes()
+	copy(compressed[33-len(xBytes):33], xBytes)
+
+	// Set compression flag based on y coordinate parity
+	if pubKey.Y.Bit(0) == 1 {
+		compressed[0] = 0x03
+	} else {
+		compressed[0] = 0x02
+	}
+
+	return compressed
+}
+
+// SerializeUncompressed returns the uncompressed format of the public key
+func SerializeUncompressed(pubKey *ecdsa.PublicKey) []byte {
+	return FromECDSAPub(pubKey)
+}
+
+// Serialize returns the private key as bytes
+func SerializePrivateKey(privKey *ecdsa.PrivateKey) []byte {
+	return FromECDSA(privKey)
 }
