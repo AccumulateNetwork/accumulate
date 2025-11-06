@@ -58,8 +58,6 @@ var knownDatabases = map[string]string{
 	"2025-10-11-bvn0-clean-current":  "/media/paul/Expansion/databases/2025-10-11-bvn0-clean-current/accumulate.db",
 	"2025-10-13-bootstrap-230000":    "/media/paul/Expansion/databases/2025-10-13-bootstrap-230000/accumulate.db",
 	"2025-10-13-bootstrap-230546":    "/media/paul/Expansion/databases/2025-10-13-bootstrap-230546/accumulate.db",
-	"2025-10-13-bvn":                 "/media/paul/Expansion/databases/2025-10-13-bvn/accumulate.db",
-	"2025-10-13-dn":                  "/media/paul/Expansion/databases/2025-10-13-dn/accumulate.db",
 }
 
 // getDatabaseSearchOrder returns the priority order of databases to try for a given account URL
