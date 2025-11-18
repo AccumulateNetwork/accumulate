@@ -1236,5 +1236,286 @@ func GetAllTools() []map[string]interface{} {
 				"required": []string{"url", "chain_name"},
 			},
 		},
+
+		// Follower Node Management Tools (Docker-based)
+		{
+			"name":        "accumulate_init_follower",
+			"description": "Initialize a follower node from database snapshots (DN and BVN) for Docker deployment",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"dn_database": map[string]interface{}{
+						"type":        "string",
+						"description": "Path to Directory Network database snapshot (e.g., '/media/paul/Expansion/databases/2025-10-13-dn')",
+					},
+					"bvn_database": map[string]interface{}{
+						"type":        "string",
+						"description": "Path to Block Validation Network database snapshot (e.g., '/media/paul/Expansion/databases/2025-10-13-bvn')",
+					},
+					"work_dir": map[string]interface{}{
+						"type":        "string",
+						"description": "Working directory for follower configuration and data",
+					},
+					"container_name": map[string]interface{}{
+						"type":        "string",
+						"description": "Docker container name (default: 'accumulate-follower')",
+					},
+					"network": map[string]interface{}{
+						"type":        "string",
+						"description": "Accumulate network name (default: 'MainNet')",
+					},
+					"bvn_name": map[string]interface{}{
+						"type":        "string",
+						"description": "BVN partition name (default: 'Cyclops')",
+					},
+					"dn_bootstrap_peers": map[string]interface{}{
+						"type":        "array",
+						"description": "Directory Network bootstrap peers (multiaddr format)",
+						"items": map[string]interface{}{
+							"type": "string",
+						},
+					},
+					"bvn_bootstrap_peers": map[string]interface{}{
+						"type":        "array",
+						"description": "BVN bootstrap peers (multiaddr format)",
+						"items": map[string]interface{}{
+							"type": "string",
+						},
+					},
+					"dn_genesis_snap": map[string]interface{}{
+						"type":        "string",
+						"description": "Path to DN genesis snapshot file (optional, e.g., '/home/paul/.accumulate/dn-genesis.snap')",
+					},
+					"bvn_genesis_snap": map[string]interface{}{
+						"type":        "string",
+						"description": "Path to BVN genesis snapshot file (optional, e.g., '/home/paul/.accumulate/bvn1-genesis.snap')",
+					},
+				},
+				"required": []string{"dn_database", "bvn_database", "work_dir"},
+			},
+		},
+		{
+			"name":        "accumulate_restore_from_snapshots",
+			"description": "Restore follower node from .snap files (DN and BVN) - creates node directories ready for deployment",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"dn_snapshot": map[string]interface{}{
+						"type":        "string",
+						"description": "Path to Directory Network .snap file (e.g., '/tmp/current-snapshots/directory-current.snap')",
+					},
+					"bvn_snapshot": map[string]interface{}{
+						"type":        "string",
+						"description": "Path to Block Validation Network .snap file (e.g., '/tmp/current-snapshots/cyclops-current.snap')",
+					},
+					"work_dir": map[string]interface{}{
+						"type":        "string",
+						"description": "Working directory for restored node (will contain dnn/, bvnn/, accumulate.toml)",
+					},
+					"network": map[string]interface{}{
+						"type":        "string",
+						"description": "Accumulate network name (default: 'MainNet')",
+					},
+					"bvn_name": map[string]interface{}{
+						"type":        "string",
+						"description": "BVN partition name (default: 'Cyclops')",
+					},
+					"port_offset": map[string]interface{}{
+						"type":        "number",
+						"description": "Port offset from base 16591 (default: 0). DN will use base+offset, BVN will use base+offset+100",
+					},
+					"ports": map[string]interface{}{
+						"type":        "object",
+						"description": "Explicit port configuration (overrides port_offset if provided)",
+						"properties": map[string]interface{}{
+							"dn_listen": map[string]interface{}{
+								"type":        "number",
+								"description": "DN Tendermint RPC listen port (e.g., 52000)",
+							},
+							"dn_api": map[string]interface{}{
+								"type":        "number",
+								"description": "DN Accumulate API port (e.g., 52001)",
+							},
+							"dn_p2p": map[string]interface{}{
+								"type":        "number",
+								"description": "DN Tendermint P2P port (e.g., 52002)",
+							},
+							"bvn_listen": map[string]interface{}{
+								"type":        "number",
+								"description": "BVN Tendermint RPC listen port (e.g., 52100)",
+							},
+							"bvn_api": map[string]interface{}{
+								"type":        "number",
+								"description": "BVN Accumulate API port (e.g., 52101)",
+							},
+							"bvn_p2p": map[string]interface{}{
+								"type":        "number",
+								"description": "BVN Tendermint P2P port (e.g., 52102)",
+							},
+						},
+					},
+				},
+				"required": []string{"dn_snapshot", "bvn_snapshot", "work_dir"},
+			},
+		},
+		{
+			"name":        "accumulate_run_follower",
+			"description": "Start a follower node in Docker container (must be initialized first with accumulate_init_follower)",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"work_dir": map[string]interface{}{
+						"type":        "string",
+						"description": "Working directory containing initialized follower configuration",
+					},
+					"container_name": map[string]interface{}{
+						"type":        "string",
+						"description": "Docker container name (default: 'accumulate-follower')",
+					},
+					"docker_image": map[string]interface{}{
+						"type":        "string",
+						"description": "Docker image to use (default: 'registry.gitlab.com/accumulatenetwork/accumulate:latest')",
+					},
+				},
+				"required": []string{"work_dir"},
+			},
+		},
+		{
+			"name":        "accumulate_follower_status",
+			"description": "Get the status of a running follower Docker container",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"container_name": map[string]interface{}{
+						"type":        "string",
+						"description": "Docker container name (default: 'accumulate-follower')",
+					},
+				},
+			},
+		},
+		{
+			"name":        "accumulate_stop_follower",
+			"description": "Stop a running follower Docker container",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"container_name": map[string]interface{}{
+						"type":        "string",
+						"description": "Docker container name (default: 'accumulate-follower')",
+					},
+				},
+			},
+		},
+		{
+			"name":        "accumulate_remove_follower",
+			"description": "Stop and remove a follower Docker container",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"container_name": map[string]interface{}{
+						"type":        "string",
+						"description": "Docker container name (default: 'accumulate-follower')",
+					},
+				},
+			},
+		},
+
+		// Accman Deployment Artifact Tools
+		{
+			"name":        "accumulate_prepare_accman_artifacts",
+			"description": "Prepare all artifacts needed for accman follower deployment (complete node archives with CometBFT + Accumulate data, metadata, deployment script)",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"dn_node_dir": map[string]interface{}{
+						"type":        "string",
+						"description": "Path to complete DN node directory (must contain config/ and data/ with CometBFT + Accumulate data, e.g., '/home/paul/.accumulate/node1/dnn')",
+					},
+					"bvn_node_dir": map[string]interface{}{
+						"type":        "string",
+						"description": "Path to complete BVN node directory (must contain config/ and data/ with CometBFT + Accumulate data, e.g., '/home/paul/.accumulate/node1/bvnn')",
+					},
+					"output_dir": map[string]interface{}{
+						"type":        "string",
+						"description": "Directory to store generated artifacts",
+					},
+					"network": map[string]interface{}{
+						"type":        "string",
+						"description": "Target network: 'mainnet' or 'testnet' (default: 'mainnet')",
+					},
+					"partition": map[string]interface{}{
+						"type":        "string",
+						"description": "Partition type: 'dn', 'bvn', or 'dual' (default: 'dual')",
+					},
+					"dn_bootstrap_peers": map[string]interface{}{
+						"type":        "array",
+						"description": "Directory Network bootstrap peers (multiaddr format)",
+						"items": map[string]interface{}{
+							"type": "string",
+						},
+					},
+					"bvn_bootstrap_peers": map[string]interface{}{
+						"type":        "array",
+						"description": "BVN bootstrap peers (multiaddr format)",
+						"items": map[string]interface{}{
+							"type": "string",
+						},
+					},
+				},
+				"required": []string{"dn_node_dir", "bvn_node_dir", "output_dir"},
+			},
+		},
+		{
+			"name":        "accumulate_create_node_archive",
+			"description": "Create a tar.gz archive from a complete Accumulate node directory (includes CometBFT config/ and data/ with both consensus and application data)",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"node_dir": map[string]interface{}{
+						"type":        "string",
+						"description": "Complete node directory to archive (must contain config/ and data/)",
+					},
+					"output_file": map[string]interface{}{
+						"type":        "string",
+						"description": "Output tar.gz file path",
+					},
+					"node_type": map[string]interface{}{
+						"type":        "string",
+						"description": "Node type label (e.g., 'DN', 'BVN')",
+					},
+				},
+				"required": []string{"node_dir", "output_file"},
+			},
+		},
+		{
+			"name":        "accumulate_get_bootstrap_peers",
+			"description": "Get bootstrap peer information for mainnet or testnet",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"network": map[string]interface{}{
+						"type":        "string",
+						"description": "Network name: 'mainnet' or 'testnet' (default: 'mainnet')",
+					},
+				},
+			},
+		},
+		{
+			"name":        "accumulate_get_genesis_files",
+			"description": "Get standard genesis snapshot file locations for follower deployment",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"network": map[string]interface{}{
+						"type":        "string",
+						"description": "Network name: 'mainnet' or 'testnet' (default: 'mainnet')",
+					},
+					"bvn": map[string]interface{}{
+						"type":        "string",
+						"description": "BVN partition number for BVN genesis file (e.g., '1', '2', '3', '4', default: '1')",
+					},
+				},
+			},
+		},
 	}
 }
