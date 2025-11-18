@@ -635,8 +635,12 @@ func netDir(networkType protocol.PartitionType) string {
 		return "bvnn"
 	case protocol.PartitionTypeBlockSummary:
 		return "bsnn"
+	case protocol.PartitionTypeBootstrap:
+		fatalf("Cannot initialize a follower for Bootstrap partition type.\nBootstrap nodes are used for network coordination, not for follower deployment.\nPlease specify a Directory or Block Validator partition.")
+	case 0:
+		fatalf("Network partition type is not set (PartitionType:0).\nThis usually indicates a protocol incompatibility between your accumulated binary and the network peer.\nPossible solutions:\n  1. Verify your accumulated binary version matches the network version\n  2. Use --skip-version-check flag if versions are compatible but reported differently\n  3. Use the MCP tools for deployment (see FOLLOWER_DOCKER_GUIDE.md)\n  4. Initialize from database snapshots instead of network peer")
 	}
-	fatalf("Unsupported network type %v", networkType)
+	fatalf("Unsupported network type: %v.\nValid partition types: Directory (1), BlockValidator (2), BlockSummary (3).\nReceived: %d", networkType, networkType)
 	return ""
 }
 
