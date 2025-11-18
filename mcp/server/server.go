@@ -291,6 +291,30 @@ func (s *Server) executeTool(name string, args map[string]interface{}) (map[stri
 	case "accumulate_db_query_chain":
 		return s.dbQueryChain(args)
 
+	// Follower Node Management (Docker-based)
+	case "accumulate_init_follower":
+		return s.initFollower(args)
+	case "accumulate_restore_from_snapshots":
+		return s.restoreFromSnapshots(args)
+	case "accumulate_run_follower":
+		return s.runFollower(args)
+	case "accumulate_follower_status":
+		return s.getFollowerStatus(args)
+	case "accumulate_stop_follower":
+		return s.stopFollower(args)
+	case "accumulate_remove_follower":
+		return s.removeFollower(args)
+
+	// Accman Deployment Artifacts
+	case "accumulate_prepare_accman_artifacts":
+		return s.prepareAccmanArtifacts(args)
+	case "accumulate_create_node_archive":
+		return s.createNodeArchive(args)
+	case "accumulate_get_bootstrap_peers":
+		return s.getBootstrapPeers(args)
+	case "accumulate_get_genesis_files":
+		return s.getGenesisFiles(args)
+
 	default:
 		return nil, fmt.Errorf("unknown tool: %s", name)
 	}
