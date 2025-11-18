@@ -15,6 +15,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	types "github.com/cometbft/cometbft/abci/types"
@@ -369,6 +370,17 @@ func cmtPeerAddress(addr multiaddr.Multiaddr) (string, error) {
 		return "", errors.BadRequest.With("missing port")
 	}
 
+	// Convert libp2p port to CometBFT P2P port
+	// libp2p uses port offset +2 (16593, 16693), CometBFT uses offset +0 (16591, 16691)
+	portNum, err := strconv.Atoi(port)
+	if err != nil {
+		return "", errors.BadRequest.WithFormat("invalid port %q: %w", port, err)
+	}
+	cmtPort := portNum - 2
+	if cmtPort < 1 || cmtPort > 65535 {
+		return "", errors.BadRequest.WithFormat("adjusted port %d out of valid range", cmtPort)
+	}
+
 	var hash []byte
 	switch pub.Code {
 	case multihash.IDENTITY:
@@ -386,7 +398,7 @@ func cmtPeerAddress(addr multiaddr.Multiaddr) (string, error) {
 	default:
 		return "", errors.BadRequest.WithFormat("unsupported multihash type %v", pub.Name)
 	}
-	return tmp2p.IDAddressString(tmp2p.ID(hex.EncodeToString(hash)), fmt.Sprintf("%s:%s", host, port)), nil
+	return tmp2p.IDAddressString(tmp2p.ID(hex.EncodeToString(hash)), fmt.Sprintf("%s:%d", host, cmtPort)), nil
 }
 
 func (c *CoreConsensusApp) partition() *protocol.PartitionInfo { return c.Partition }

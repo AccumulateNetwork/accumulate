@@ -15,15 +15,19 @@ type Config struct {
 
 	// Server is the API server URL (derived from Network if not custom)
 	Server string
+
+	// DockerImage is the Docker image to use for follower deployment
+	DockerImage string
 }
 
 // DefaultConfig returns the default configuration
 func DefaultConfig() *Config {
 	home, _ := os.UserHomeDir()
 	return &Config{
-		WalletDir: filepath.Join(home, ".accumulate", "wallet"),
-		Network:   "mainnet",
-		Server:    "https://mainnet.accumulatenetwork.io/v3",
+		WalletDir:   filepath.Join(home, ".accumulate", "wallet"),
+		Network:     "mainnet",
+		Server:      "https://mainnet.accumulatenetwork.io/v3",
+		DockerImage: "registry.gitlab.com/accumulatenetwork/accumulate:v1.4.0",
 	}
 }
 
@@ -44,6 +48,10 @@ func LoadConfig() *Config {
 	if server := os.Getenv("ACCUMULATE_SERVER"); server != "" {
 		cfg.Server = server
 		cfg.Network = "custom"
+	}
+
+	if dockerImage := os.Getenv("ACCUMULATE_DOCKER_IMAGE"); dockerImage != "" {
+		cfg.DockerImage = dockerImage
 	}
 
 	return cfg
