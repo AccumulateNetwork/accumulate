@@ -5,7 +5,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
+	"github.com/cometbft/cometbft/p2p"
+	"github.com/cometbft/cometbft/privval"
+	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -149,9 +153,19 @@ func restorePartition(snapshotPath, nodeDir, network, partitionID string,
 	cfg.RPC.ListenAddress = fmt.Sprintf("tcp://0.0.0.0:%d", listenPort)
 	cfg.Accumulate.API.ListenAddress = fmt.Sprintf("http://0.0.0.0:%d", apiPort)
 
+	// Configure bootstrap peers for network connectivity
+	if err := configureBootstrapPeers(cfg, network, partitionType); err != nil {
+		return fmt.Errorf("failed to configure bootstrap peers: %w", err)
+	}
+
 	// Write both accumulate.toml and tendermint.toml
 	if err := config.Store(cfg); err != nil {
 		return fmt.Errorf("failed to write config files: %w", err)
+	}
+
+	// Generate node keys (node_key.json and priv_validator_key.json)
+	if err := generateNodeKeys(configDir); err != nil {
+		return fmt.Errorf("failed to generate node keys: %w", err)
 	}
 
 	// Run restore-snapshot command
@@ -171,11 +185,94 @@ func restorePartition(snapshotPath, nodeDir, network, partitionID string,
 func createDualNodeConfig(configPath, network, bvnName string,
 	dnListen, dnAPI, dnP2P, bvnListen, bvnAPI, bvnP2P uint64) error {
 
-	// TODO: Implement dual-node config generation
-	// This will create the accumulate.toml with [[configurations]] sections
-	// for both DN and BVN partitions
+	// Create a dual-node configuration file that references both partition directories
+	// This config is used when running with "accumulated run-dual"
+	config := fmt.Sprintf(`# Dual-node follower configuration for %s
+network = %q
 
-	// For now, return nil as the partition-specific configs are already created
+# Directory Network Configuration
+[[configurations]]
+  type = "follower"
+  partition = "Directory"
+  storage-type = "badger"
+
+  [configurations.p2p]
+    listen = "tcp://0.0.0.0:%d"
+
+  [configurations.rpc]
+    listen = "tcp://0.0.0.0:%d"
+
+  [configurations.accumulate]
+    [configurations.accumulate.api]
+      listen = "http://0.0.0.0:%d"
+
+# Block Validator Network Configuration
+[[configurations]]
+  type = "follower"
+  partition = %q
+  storage-type = "badger"
+
+  [configurations.p2p]
+    listen = "tcp://0.0.0.0:%d"
+
+  [configurations.rpc]
+    listen = "tcp://0.0.0.0:%d"
+
+  [configurations.accumulate]
+    [configurations.accumulate.api]
+      listen = "http://0.0.0.0:%d"
+
+[logging]
+  format = "plain"
+  [[logging.rules]]
+    level = "info"
+`, network, network, dnP2P, dnListen, dnAPI, bvnName, bvnP2P, bvnListen, bvnAPI)
+
+	return os.WriteFile(configPath, []byte(config), 0644)
+}
+
+// generateNodeKeys generates Tendermint node keys (node_key.json and priv_validator_key.json)
+func generateNodeKeys(configDir string) error {
+	// Generate node_key.json
+	nodeKeyPath := filepath.Join(configDir, "node_key.json")
+	if _, err := os.Stat(nodeKeyPath); os.IsNotExist(err) {
+		// Use CometBFT's p2p package to load or generate node key
+		if _, err := p2p.LoadOrGenNodeKey(nodeKeyPath); err != nil {
+			return fmt.Errorf("failed to generate node key: %w", err)
+		}
+	}
+
+	// Generate priv_validator_key.json
+	privValKeyPath := filepath.Join(configDir, "priv_validator_key.json")
+	if _, err := os.Stat(privValKeyPath); os.IsNotExist(err) {
+		privValKey := privval.GenFilePV(privValKeyPath, filepath.Join(configDir, "priv_validator_state.json"))
+		privValKey.Save()
+	}
+
+	return nil
+}
+
+// configureBootstrapPeers sets up bootstrap peers for network connectivity
+func configureBootstrapPeers(cfg *config.Config, network string, partitionType protocol.PartitionType) error {
+	// MainNet bootstrap peers (using known seed nodes)
+	if strings.ToLower(network) == "mainnet" {
+		var peerAddr string
+		if partitionType == protocol.PartitionTypeDirectory {
+			// DN bootstrap peers
+			peerAddr = "/ip4/23.22.212.106/tcp/16591/p2p/12D3KooWGJTh7Cp1Lqc9eCPLVSsNzJ9A8JXJzEQPmRmkCjpZLXSp"
+		} else {
+			// BVN bootstrap peers
+			peerAddr = "/ip4/23.22.212.106/tcp/16691/p2p/12D3KooWHBeB8BJMZD2x4LhMEvKJRMZZTVRJYZo5QzP3aJFpEjKy"
+		}
+
+		// Parse multiaddr and add to bootstrap peers
+		ma, err := multiaddr.NewMultiaddr(peerAddr)
+		if err != nil {
+			return fmt.Errorf("failed to parse bootstrap peer address: %w", err)
+		}
+		cfg.Accumulate.P2P.BootstrapPeers = []multiaddr.Multiaddr{ma}
+	}
+	// For other networks, bootstrap peers should be provided via config
 	return nil
 }
 
