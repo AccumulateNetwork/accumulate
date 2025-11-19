@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  # Torrent server for hosting blockchain snapshots
+  torrent-server:
+    image: linuxserver/transmission:latest
+    container_name: accumulate-torrent-server
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=UTC
+      - USER=admin
+      - PASS=changeme123
+      - PEERPORT=51413
+    volumes:
+      - ./torrent-config:/config
+      - ./torrents:/watch
+      - /media/paul/Expansion/accumulate-blockchain/bvn0-production/compressed:/downloads
+    ports:
+      - "9091:9091"      # Web UI
+      - "51413:51413"    # Torrent peer port
+      - "51413:51413/udp"
+    restart: unless-stopped
+    networks:
+      - accumulate-net
+
+  # Alternative: qBittorrent with better API
+  torrent-server-qbit:
+    image: linuxserver/qbittorrent:latest
+    container_name: accumulate-qbittorrent
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=UTC
+      - WEBUI_PORT=8080
+    volumes:
+      - ./qbit-config:/config
+      - /media/paul/Expansion/accumulate-blockchain/bvn0-production/compressed:/downloads
+    ports:
+      - "8080:8080"      # Web UI
+      - "6881:6881"      # Torrent peer port
+      - "6881:6881/udp"
+    restart: unless-stopped
+    profiles:
+      - qbit
+    networks:
+      - accumulate-net
+
+networks:
+  accumulate-net:
+    driver: bridge
