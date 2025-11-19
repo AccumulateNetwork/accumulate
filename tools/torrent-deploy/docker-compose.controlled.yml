@@ -1,0 +1,33 @@
+version: '3.8'
+
+# Controlled torrent server - only seeds specified Accumulate volumes
+services:
+  torrent-server:
+    build:
+      context: ../..
+      dockerfile: tools/torrent-deploy/Dockerfile.torrent-server
+    image: accumulate-torrent-server:latest
+    container_name: accumulate-torrent-server
+    restart: unless-stopped
+    volumes:
+      # Mount directory containing volumes .tar.gz
+      - /media/paul/Expansion/accumulate-blockchain/bvn0-production/compressed:/volumes:ro
+      # Torrent data and .torrent files
+      - ./torrent-data:/data
+    ports:
+      - "51413:51413/tcp"
+      - "51413:51413/udp"
+    environment:
+      - VOLUMES_FILE=/volumes/BVN0_CLEAN_20241011.tar.gz
+    command: [
+      "-file", "/volumes/BVN0_CLEAN_20241011.tar.gz",
+      "-data", "/data",
+      "-port", "51413",
+      "-seed-only", "true"
+    ]
+    networks:
+      - torrent-net
+
+networks:
+  torrent-net:
+    driver: bridge

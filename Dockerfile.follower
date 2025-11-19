@@ -1,0 +1,13 @@
+FROM alpine:latest
+
+# Install required dependencies
+RUN apk add --no-cache ca-certificates
+
+# Copy the accumulated binary
+COPY accumulated-static /usr/local/bin/accumulated
+
+# Set executable permissions
+RUN chmod +x /usr/local/bin/accumulated
+
+# Set the entrypoint
+ENTRYPOINT ["/usr/local/bin/accumulated"]
