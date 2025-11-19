@@ -41,3 +41,7 @@ tmp
 
 #jj
 .newscripts
+
+# Compiled binaries
+tools/follower-monitor/follower-monitor
+tools/torrent-deploy/cmd/torrent-server/torrent-server
