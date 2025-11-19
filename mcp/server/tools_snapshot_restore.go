@@ -168,10 +168,9 @@ func restorePartition(snapshotPath, nodeDir, network, partitionID string,
 		return fmt.Errorf("failed to generate node keys: %w", err)
 	}
 
-	// Run restore-snapshot command
-	cmd := exec.Command("accumulated", "restore-snapshot", snapshotPath)
-	cmd.Dir = nodeDir
-	cmd.Env = append(os.Environ(), fmt.Sprintf("ACC_WORKDIR=%s", nodeDir))
+	// Run restore-snapshot command with --work-dir flag
+	cmd := exec.Command("accumulated", "restore-snapshot", snapshotPath, "--work-dir", nodeDir)
+	cmd.Env = os.Environ()
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
