@@ -87,6 +87,8 @@ func New(ctx context.Context, cfg *Config) (*Instance, error) {
 
 func (i *Instance) Done() <-chan struct{} { return i.context.Done() }
 
+func (i *Instance) P2P() *p2p.Node { return i.p2p }
+
 func (inst *Instance) Reset() error {
 	for _, c := range inst.config.Configurations {
 		c, ok := c.(resetable)

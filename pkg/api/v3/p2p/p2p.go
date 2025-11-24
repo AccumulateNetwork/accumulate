@@ -179,6 +179,8 @@ func New(opts Options) (_ *Node, err error) {
 
 func (n *Node) ID() peer.ID { return n.host.ID() }
 
+func (n *Node) Host() host.Host { return n.host }
+
 func (n *Node) Services() *nodeService { return (*nodeService)(n) }
 
 // Addresses lists the node's addresses.

@@ -352,6 +352,40 @@ func (s *Server) getBootstrapPeers(args map[string]interface{}) (map[string]inte
 	}, nil
 }
 
+// compareBootstrapPeers compares live bootstrap server data with hardcoded values
+func (s *Server) compareBootstrapPeers(args map[string]interface{}) (map[string]interface{}, error) {
+	network, _ := args["network"].(string)
+	if network == "" {
+		network = "mainnet"
+	}
+
+	client := NewBootstrapClient()
+
+	// Compare DN peers
+	dnComparison, err := client.CompareWithHardcoded(network, "dn")
+	if err != nil {
+		return nil, fmt.Errorf("failed to compare DN peers: %w", err)
+	}
+
+	// Compare BVN peers
+	bvnComparison, err := client.CompareWithHardcoded(network, "bvn")
+	if err != nil {
+		return nil, fmt.Errorf("failed to compare BVN peers: %w", err)
+	}
+
+	return map[string]interface{}{
+		"network":        network,
+		"dn_comparison":  dnComparison,
+		"bvn_comparison": bvnComparison,
+		"summary": map[string]interface{}{
+			"dn_peers_match":  dnComparison["peers_match"],
+			"bvn_peers_match": bvnComparison["peers_match"],
+			"dn_source":       dnComparison["source"],
+			"bvn_source":      bvnComparison["source"],
+		},
+	}, nil
+}
+
 // Helper functions
 
 func validateNodeDirectory(nodeDir, nodeType string) error {
@@ -421,22 +455,24 @@ func createNodeArchive(nodeDir, outputFile, nodeType string) error {
 }
 
 func getDefaultBootstrapPeers(network, partition string) []interface{} {
-	// Default bootstrap peers for mainnet and testnet
+	// Current bootstrap peers for mainnet
+	// Cyclops is the main validator - more peers will be added as they register with bootstrap server
 	peers := map[string]map[string][]interface{}{
 		"mainnet": {
 			"dn": {
-				"/ip4/23.22.212.106/tcp/16591/p2p/QmRaefUdifL9K45hxBeSNMaTAF8n6DPpX1VMgk3QSCmkmD",
+				"/dns/bootstrap.accumulate.defidevs.io/tcp/16593/p2p/12D3KooWDgqY8C7deYWzgTQ7qauanMkvn47TPLtrT1TfzETQW3Gx",
 			},
 			"bvn": {
-				"/ip4/23.22.212.106/tcp/16691/p2p/QmRaefUdifL9K45hxBeSNMaTAF8n6DPpX1VMgk3QSCmkmD",
+				// Cyclops is the block validator for mainnet
+				"/dns/bootstrap.accumulate.defidevs.io/tcp/16693/p2p/12D3KooWDgqY8C7deYWzgTQ7qauanMkvn47TPLtrT1TfzETQW3Gx",
 			},
 		},
 		"testnet": {
 			"dn": {
-				"/ip4/testnet.accumulate.defidevs.io/tcp/16591/p2p/QmTestNodeID",
+				"/dns/testnet.accumulate.defidevs.io/tcp/16593/p2p/12D3KooWTestNodeID",
 			},
 			"bvn": {
-				"/ip4/testnet.accumulate.defidevs.io/tcp/16691/p2p/QmTestNodeID",
+				"/dns/testnet.accumulate.defidevs.io/tcp/16693/p2p/12D3KooWTestNodeID",
 			},
 		},
 	}

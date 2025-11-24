@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/cometbft/cometbft/libs/log"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
@@ -253,6 +254,8 @@ func (v *RestoreVisitor) refreshBatch() error {
 		}
 	}
 	v.batch = v.db.Begin(true)
+	// Set observer to enable account modifications
+	v.batch.SetObserver(execute.NewDatabaseObserver())
 	return nil
 }
 

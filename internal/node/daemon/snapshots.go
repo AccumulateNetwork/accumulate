@@ -20,6 +20,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
@@ -237,6 +238,9 @@ func (d *Daemon) LoadSnapshot(file ioutil2.SectionReader) error {
 	defer func() {
 		_ = db.Close()
 	}()
+
+	// Set observer on database so all batches inherit it
+	db.SetObserver(execute.NewDatabaseObserver())
 
 	err = snapshot.FullRestore(db, file, d.Logger, d.Config.Accumulate.Describe.PartitionUrl())
 	if err != nil {

@@ -20,6 +20,7 @@ import (
 const (
 	MainnetEndpoint = "https://mainnet.accumulatenetwork.io/v3"
 	TestnetEndpoint = "https://testnet.accumulatenetwork.io/v3"
+	DevnetEndpoint  = "http://127.0.0.1:26660/v2"
 )
 
 // Client wraps the Accumulate SDK jsonrpc.Client
@@ -38,7 +39,7 @@ func NewClient(network string) (*Client, error) {
 	endpoint := getEndpoint(network)
 
 	// Validate endpoint is a valid URL for custom endpoints
-	if network != "mainnet" && network != "testnet" {
+	if network != "mainnet" && network != "testnet" && network != "devnet" {
 		if _, err := url.Parse(endpoint); err != nil {
 			return nil, fmt.Errorf("invalid network URL: %w", err)
 		}
@@ -65,6 +66,8 @@ func getEndpoint(network string) string {
 		return MainnetEndpoint
 	case "testnet":
 		return TestnetEndpoint
+	case "devnet":
+		return DevnetEndpoint
 	default:
 		return network
 	}
