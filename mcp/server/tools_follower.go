@@ -44,6 +44,9 @@ func (s *Server) initFollower(args map[string]interface{}) (map[string]interface
 		bvnName = "Cyclops"
 	}
 
+	// Auto-discover peers option
+	autoDiscoverPeers, _ := args["auto_discover_peers"].(bool)
+
 	// Genesis snap files (optional - will use defaults if not provided)
 	dnGenesisSnap, _ := args["dn_genesis_snap"].(string)
 	bvnGenesisSnap, _ := args["bvn_genesis_snap"].(string)
@@ -52,12 +55,53 @@ func (s *Server) initFollower(args map[string]interface{}) (map[string]interface
 	dnBootstrapPeers, _ := args["dn_bootstrap_peers"].([]interface{})
 	bvnBootstrapPeers, _ := args["bvn_bootstrap_peers"].([]interface{})
 
-	// Default bootstrap peers if not provided
+	// Track peer source for result
+	var peerSource string
+
+	// Try dynamic peer discovery if auto_discover_peers is true or peers not provided
+	if autoDiscoverPeers || (len(dnBootstrapPeers) == 0 && len(bvnBootstrapPeers) == 0) {
+		networkName := "mainnet"
+		if strings.Contains(strings.ToLower(network), "test") {
+			networkName = "testnet"
+		}
+
+		client := NewBootstrapClient()
+
+		// Try to get DN peers
+		if len(dnBootstrapPeers) == 0 {
+			dnPeers, source, err := client.GetBootstrapPeersWithFallback(networkName, "dn")
+			if err == nil && len(dnPeers) > 0 {
+				for _, p := range dnPeers {
+					dnBootstrapPeers = append(dnBootstrapPeers, p)
+				}
+				peerSource = source
+			}
+		}
+
+		// Try to get BVN peers
+		if len(bvnBootstrapPeers) == 0 {
+			bvnPeers, source, err := client.GetBootstrapPeersWithFallback(networkName, "bvn")
+			if err == nil && len(bvnPeers) > 0 {
+				for _, p := range bvnPeers {
+					bvnBootstrapPeers = append(bvnBootstrapPeers, p)
+				}
+				if peerSource == "" {
+					peerSource = source
+				}
+			}
+		}
+	}
+
+	// Default bootstrap peers if still not available
 	if len(dnBootstrapPeers) == 0 {
-		dnBootstrapPeers = []interface{}{"/ip4/23.22.212.106/tcp/16591/p2p/QmRaefUdifL9K45hxBeSNMaTAF8n6DPpX1VMgk3QSCmkmD"}
+		dnBootstrapPeers = getDefaultBootstrapPeers("mainnet", "dn")
+		peerSource = "hardcoded defaults"
 	}
 	if len(bvnBootstrapPeers) == 0 {
-		bvnBootstrapPeers = []interface{}{"/ip4/23.22.212.106/tcp/16691/p2p/QmRaefUdifL9K45hxBeSNMaTAF8n6DPpX1VMgk3QSCmkmD"}
+		bvnBootstrapPeers = getDefaultBootstrapPeers("mainnet", "bvn")
+		if peerSource == "" {
+			peerSource = "hardcoded defaults"
+		}
 	}
 
 	// Create work directory if it doesn't exist
@@ -105,6 +149,11 @@ func (s *Server) initFollower(args map[string]interface{}) (map[string]interface
 		"bvn_path":       bvnnPath,
 		"config_path":    configPath,
 		"container_name": containerName,
+		"network":        network,
+		"bvn_name":       bvnName,
+		"peer_source":    peerSource,
+		"dn_peers_count": len(dnBootstrapPeers),
+		"bvn_peers_count": len(bvnBootstrapPeers),
 		"next_steps":     "Use accumulate_run_follower to start the follower node in Docker",
 	}
 
