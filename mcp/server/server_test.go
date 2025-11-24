@@ -114,9 +114,9 @@ func TestHandleRequest_ListTools(t *testing.T) {
 		t.Fatal("expected tools to be an array")
 	}
 
-	// Should have 41 tools (7 wallet + 33 network + 1 batch)
-	if len(tools) != 41 {
-		t.Errorf("expected 41 tools, got %d", len(tools))
+	// Should have 63 tools (all categories combined)
+	if len(tools) != 63 {
+		t.Errorf("expected 63 tools, got %d", len(tools))
 	}
 
 	// Check that each tool has required fields
@@ -331,8 +331,8 @@ func TestExecuteTool_AllToolsRegistered(t *testing.T) {
 func TestGetAllTools_Count(t *testing.T) {
 	tools := GetAllTools()
 
-	if len(tools) != 41 {
-		t.Errorf("expected 41 tools from GetAllTools(), got %d", len(tools))
+	if len(tools) != 63 {
+		t.Errorf("expected 63 tools from GetAllTools(), got %d", len(tools))
 	}
 }
 

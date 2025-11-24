@@ -71,6 +71,10 @@ func (s *Server) HandleRequest(request map[string]interface{}) map[string]interf
 		return s.handleListResources(id)
 	case "resources/read":
 		return s.handleReadResource(id, request)
+	case "prompts/list":
+		return s.handleListPrompts(id)
+	case "prompts/get":
+		return s.handleGetPrompt(id, request)
 	default:
 		return s.errorResponse(request, -32601, fmt.Sprintf("Method not found: %s", method))
 	}
@@ -90,6 +94,7 @@ func (s *Server) handleInitialize(id interface{}, request map[string]interface{}
 			"capabilities": map[string]interface{}{
 				"tools":     map[string]interface{}{},
 				"resources": map[string]interface{}{},
+				"prompts":   map[string]interface{}{},
 			},
 		},
 	}
@@ -102,6 +107,71 @@ func (s *Server) handleListTools(id interface{}) map[string]interface{} {
 		"id":      id,
 		"result": map[string]interface{}{
 			"tools": GetAllTools(),
+		},
+	}
+}
+
+// handleListPrompts returns the list of available prompts
+func (s *Server) handleListPrompts(id interface{}) map[string]interface{} {
+	return map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      id,
+		"result": map[string]interface{}{
+			"prompts": GetAllPrompts(),
+		},
+	}
+}
+
+// handleGetPrompt returns a specific prompt with arguments applied
+func (s *Server) handleGetPrompt(id interface{}, request map[string]interface{}) map[string]interface{} {
+	params, ok := request["params"].(map[string]interface{})
+	if !ok {
+		return s.errorResponse(request, -32602, "Invalid params")
+	}
+
+	promptName, ok := params["name"].(string)
+	if !ok {
+		return s.errorResponse(request, -32602, "Missing prompt name")
+	}
+
+	// Extract arguments
+	args := make(map[string]string)
+	if argsParam, ok := params["arguments"].(map[string]interface{}); ok {
+		for k, v := range argsParam {
+			if str, ok := v.(string); ok {
+				args[k] = str
+			} else {
+				args[k] = fmt.Sprintf("%v", v)
+			}
+		}
+	}
+
+	// Validate required arguments
+	if err := ValidatePromptArguments(promptName, args); err != nil {
+		return s.errorResponse(request, -32602, fmt.Sprintf("Invalid arguments: %v", err))
+	}
+
+	// Generate template
+	template, err := GetPromptTemplate(promptName, args)
+	if err != nil {
+		return s.errorResponse(request, -32602, fmt.Sprintf("Failed to get prompt: %v", err))
+	}
+
+	// Return prompt result with messages array
+	return map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      id,
+		"result": map[string]interface{}{
+			"description": fmt.Sprintf("Generated prompt: %s", promptName),
+			"messages": []map[string]interface{}{
+				{
+					"role": "user",
+					"content": map[string]interface{}{
+						"type": "text",
+						"text": template,
+					},
+				},
+			},
 		},
 	}
 }
@@ -312,8 +382,14 @@ func (s *Server) executeTool(name string, args map[string]interface{}) (map[stri
 		return s.createNodeArchive(args)
 	case "accumulate_get_bootstrap_peers":
 		return s.getBootstrapPeers(args)
+	case "accumulate_compare_bootstrap_peers":
+		return s.compareBootstrapPeers(args)
 	case "accumulate_get_genesis_files":
 		return s.getGenesisFiles(args)
+
+	// Build Tools
+	case "accumulate_build_binary":
+		return s.buildBinary(args)
 
 	default:
 		return nil, fmt.Errorf("unknown tool: %s", name)

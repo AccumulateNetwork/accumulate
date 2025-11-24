@@ -10,6 +10,7 @@ import (
 	"io"
 
 	"github.com/cometbft/cometbft/libs/log"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
@@ -96,6 +97,9 @@ func FullRestore(db database.Beginner, file ioutil2.SectionReader, logger log.Lo
 
 	batch := db.Begin(true)
 	defer batch.Discard()
+
+	// Set observer to enable account modifications
+	batch.SetObserver(execute.NewDatabaseObserver())
 
 	// Rebuild the synthetic transaction index index
 	record := batch.Account(network.Synthetic())

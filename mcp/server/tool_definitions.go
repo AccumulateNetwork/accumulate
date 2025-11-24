@@ -1501,6 +1501,19 @@ func GetAllTools() []map[string]interface{} {
 			},
 		},
 		{
+			"name":        "accumulate_compare_bootstrap_peers",
+			"description": "Compare bootstrap peers from live query against hardcoded values to verify configuration accuracy",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"network": map[string]interface{}{
+						"type":        "string",
+						"description": "Network name: 'mainnet' or 'testnet' (default: 'mainnet')",
+					},
+				},
+			},
+		},
+		{
 			"name":        "accumulate_get_genesis_files",
 			"description": "Get standard genesis snapshot file locations for follower deployment",
 			"inputSchema": map[string]interface{}{
@@ -1513,6 +1526,34 @@ func GetAllTools() []map[string]interface{} {
 					"bvn": map[string]interface{}{
 						"type":        "string",
 						"description": "BVN partition number for BVN genesis file (e.g., '1', '2', '3', '4', default: '1')",
+					},
+				},
+			},
+		},
+
+		// Build Tools
+		{
+			"name":        "accumulate_build_binary",
+			"description": "Build the accumulated binary from source in the accumulate repository. Supports building from current checkout, specific branch, version tag, or commit hash.",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"repo_path": map[string]interface{}{
+						"type":        "string",
+						"description": "Path to accumulate repository (optional, defaults to ../.. relative to MCP server location)",
+					},
+					"ref": map[string]interface{}{
+						"type":        "string",
+						"description": "Git reference to build: branch name, tag (e.g., 'v1.2.3'), or commit hash. If not specified, builds current checkout.",
+					},
+					"output_path": map[string]interface{}{
+						"type":        "string",
+						"description": "Output path for the binary (optional, defaults to /tmp/accumulated-<ref>)",
+					},
+					"clean": map[string]interface{}{
+						"type":        "boolean",
+						"description": "Run 'go clean' before building (default: false)",
+						"default":     false,
 					},
 				},
 			},
