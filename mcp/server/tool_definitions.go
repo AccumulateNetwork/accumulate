@@ -1240,7 +1240,7 @@ func GetAllTools() []map[string]interface{} {
 		// Follower Node Management Tools (Docker-based)
 		{
 			"name":        "accumulate_init_follower",
-			"description": "Initialize a follower node from database snapshots (DN and BVN) for Docker deployment",
+			"description": "Initialize a follower node from database snapshots (DN and BVN) for Docker deployment. Supports automatic peer discovery from bootstrap server.",
 			"inputSchema": map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
@@ -1268,16 +1268,21 @@ func GetAllTools() []map[string]interface{} {
 						"type":        "string",
 						"description": "BVN partition name (default: 'Cyclops')",
 					},
+					"auto_discover_peers": map[string]interface{}{
+						"type":        "boolean",
+						"description": "Automatically discover bootstrap peers from network (default: true if peers not provided)",
+						"default":     true,
+					},
 					"dn_bootstrap_peers": map[string]interface{}{
 						"type":        "array",
-						"description": "Directory Network bootstrap peers (multiaddr format)",
+						"description": "Directory Network bootstrap peers (multiaddr format). If not provided, auto-discovery is attempted.",
 						"items": map[string]interface{}{
 							"type": "string",
 						},
 					},
 					"bvn_bootstrap_peers": map[string]interface{}{
 						"type":        "array",
-						"description": "BVN bootstrap peers (multiaddr format)",
+						"description": "BVN bootstrap peers (multiaddr format). If not provided, auto-discovery is attempted.",
 						"items": map[string]interface{}{
 							"type": "string",
 						},
@@ -1554,6 +1559,83 @@ func GetAllTools() []map[string]interface{} {
 						"type":        "boolean",
 						"description": "Run 'go clean' before building (default: false)",
 						"default":     false,
+					},
+				},
+			},
+		},
+
+		// Bootstrap Server Monitoring
+		{
+			"name":        "accumulate_query_bootstrap_server",
+			"description": "Query the Accumulate network bootstrap server for health status, peer information, and network connectivity. This provides comprehensive monitoring of the libp2p DHT bootstrap server including connected peers, external addresses, and operational status.",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"server_url": map[string]interface{}{
+						"type":        "string",
+						"description": "Bootstrap server URL (default: 'http://bootstrap.accumulate.defidevs.io:8080')",
+					},
+				},
+			},
+		},
+
+		// Deployment Prerequisites and Monitoring Tools
+		{
+			"name":        "accumulate_validate_prerequisites",
+			"description": "Validate all system prerequisites for follower deployment including disk space, memory, Docker, ports, and network connectivity",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"work_dir": map[string]interface{}{
+						"type":        "string",
+						"description": "Target working directory for follower deployment (used for disk space check)",
+					},
+					"network": map[string]interface{}{
+						"type":        "string",
+						"description": "Network to validate against: 'mainnet' or 'testnet' (default: 'mainnet')",
+						"default":     "mainnet",
+					},
+				},
+			},
+		},
+		{
+			"name":        "accumulate_get_sync_progress",
+			"description": "Get detailed sync progress for a running follower including block heights, sync percentage, ETA, and peer count",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"container_name": map[string]interface{}{
+						"type":        "string",
+						"description": "Docker container name (default: 'accumulate-follower')",
+					},
+					"include_rate": map[string]interface{}{
+						"type":        "boolean",
+						"description": "Calculate sync rate (blocks/minute) - adds ~10 second delay (default: false)",
+						"default":     false,
+					},
+				},
+			},
+		},
+		{
+			"name":        "accumulate_analyze_logs",
+			"description": "Analyze follower container logs for errors, warnings, and patterns with actionable recommendations",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"container_name": map[string]interface{}{
+						"type":        "string",
+						"description": "Docker container name (default: 'accumulate-follower')",
+					},
+					"lines": map[string]interface{}{
+						"type":        "number",
+						"description": "Number of recent log lines to analyze (default: 500)",
+						"default":     500,
+					},
+					"filter": map[string]interface{}{
+						"type":        "string",
+						"description": "Filter results: 'all', 'error', 'warning', 'critical' (default: 'all')",
+						"enum":        []string{"all", "error", "warning", "critical"},
+						"default":     "all",
 					},
 				},
 			},

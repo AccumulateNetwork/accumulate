@@ -391,6 +391,18 @@ func (s *Server) executeTool(name string, args map[string]interface{}) (map[stri
 	case "accumulate_build_binary":
 		return s.buildBinary(args)
 
+	// Bootstrap Server Monitoring
+	case "accumulate_query_bootstrap_server":
+		return s.getBootstrapServerStatus(args)
+
+	// Deployment Prerequisites and Monitoring
+	case "accumulate_validate_prerequisites":
+		return s.validatePrerequisites(args)
+	case "accumulate_get_sync_progress":
+		return s.getSyncProgress(args)
+	case "accumulate_analyze_logs":
+		return s.analyzeLogs(args)
+
 	default:
 		return nil, fmt.Errorf("unknown tool: %s", name)
 	}
