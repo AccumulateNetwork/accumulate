@@ -148,6 +148,64 @@ func GetAllPrompts() []PromptDefinition {
 				},
 			},
 		},
+		{
+			Name:        "prepare-mainnet-follower",
+			Description: "Complete pre-deployment preparation for mainnet follower including prerequisites validation and snapshot verification",
+			Arguments: []PromptArgument{
+				{
+					Name:        "work_dir",
+					Description: "Target working directory for follower deployment",
+					Required:    true,
+				},
+				{
+					Name:        "bvn",
+					Description: "BVN to follow: Cyclops, Apollo, Yutu, or Chandrayaan (default: Cyclops)",
+					Required:    false,
+				},
+				{
+					Name:        "dn_database",
+					Description: "Path to DN database snapshot (if already available)",
+					Required:    false,
+				},
+				{
+					Name:        "bvn_database",
+					Description: "Path to BVN database snapshot (if already available)",
+					Required:    false,
+				},
+			},
+		},
+		{
+			Name:        "recovery-from-failure",
+			Description: "Diagnose and recover from follower node failure with guided steps",
+			Arguments: []PromptArgument{
+				{
+					Name:        "container_name",
+					Description: "Docker container name (default: accumulate-follower)",
+					Required:    false,
+				},
+				{
+					Name:        "failure_type",
+					Description: "Type of failure: crashed, sync_stalled, no_peers, db_corruption, unknown",
+					Required:    false,
+				},
+				{
+					Name:        "work_dir",
+					Description: "Follower working directory",
+					Required:    false,
+				},
+			},
+		},
+		{
+			Name:        "mainnet-sync-status",
+			Description: "Quick comparison of local follower sync status against mainnet",
+			Arguments: []PromptArgument{
+				{
+					Name:        "container_name",
+					Description: "Docker container name (default: accumulate-follower)",
+					Required:    false,
+				},
+			},
+		},
 	}
 }
 
@@ -174,6 +232,12 @@ func GetPromptTemplate(name string, args map[string]string) (string, error) {
 		return generateQuickNodeStatusTemplate(args, getArg), nil
 	case "organize-documentation":
 		return generateOrganizeDocumentationTemplate(args, getArg), nil
+	case "prepare-mainnet-follower":
+		return generatePrepareMainnetFollowerTemplate(args, getArg), nil
+	case "recovery-from-failure":
+		return generateRecoveryFromFailureTemplate(args, getArg), nil
+	case "mainnet-sync-status":
+		return generateMainnetSyncStatusTemplate(args, getArg), nil
 	default:
 		return "", fmt.Errorf("unknown prompt: %s", name)
 	}
@@ -344,85 +408,109 @@ func generateMonitorFollowerHealthTemplate(args map[string]string, getArg func(s
 	endpoint := getArg("endpoint", "mainnet")
 
 	var b strings.Builder
-	b.WriteString("Monitor Accumulate follower health\n\n")
-	b.WriteString("**Quick Health Check:**\n\n")
+	b.WriteString("# Monitor Accumulate Follower Health\n\n")
 
-	b.WriteString("Step 1: Check process status\n")
+	b.WriteString("## Step 1: Check Container Status\n\n")
 	b.WriteString("Use `accumulate_follower_status`:\n")
 	b.WriteString("```json\n")
 	b.WriteString("{\n")
 	b.WriteString(fmt.Sprintf(`  "work_dir": "%s"`+"\n", workDir))
 	b.WriteString("}\n```\n\n")
 
-	b.WriteString("**Process Health:**\n")
-	b.WriteString("- [ ] Running: YES/NO\n")
-	b.WriteString("- [ ] PID: [number]\n")
-	b.WriteString("- [ ] Uptime: [duration]\n\n")
+	b.WriteString("**Expected Output:**\n")
+	b.WriteString("- `running`: true/false\n")
+	b.WriteString("- `container_id`: [ID if running]\n")
+	b.WriteString("- `uptime`: [duration]\n\n")
 
-	b.WriteString("Step 2: Get node information\n")
-	b.WriteString("Use `accumulate_node_info`:\n")
+	b.WriteString("---\n\n")
+
+	b.WriteString("## Step 2: Get Sync Progress (NEW)\n\n")
+	b.WriteString("Use `accumulate_get_sync_progress` for comprehensive sync status:\n")
+	b.WriteString("```json\n")
+	b.WriteString("{\n")
+	b.WriteString(`  "include_rate": true`+"\n")
+	b.WriteString("}\n```\n\n")
+
+	b.WriteString("**Key Metrics:**\n")
+	b.WriteString("| Metric | Healthy | Warning | Critical |\n")
+	b.WriteString("|--------|---------|---------|----------|\n")
+	b.WriteString("| `sync_percentage` | > 99% | 90-99% | < 90% |\n")
+	b.WriteString("| `blocks_behind` | < 100 | 100-1000 | > 1000 |\n")
+	b.WriteString("| `peer_count` | 3+ | 1-2 | 0 |\n")
+	b.WriteString("| `sync_rate_blocks` | > 50/min | 10-50/min | < 10/min |\n\n")
+
+	b.WriteString("---\n\n")
+
+	b.WriteString("## Step 3: Analyze Logs (NEW)\n\n")
+	b.WriteString("Use `accumulate_analyze_logs` for error detection:\n")
+	b.WriteString("```json\n")
+	b.WriteString("{\n")
+	b.WriteString(`  "lines": 500,`+"\n")
+	b.WriteString(`  "filter": "all"`+"\n")
+	b.WriteString("}\n```\n\n")
+
+	b.WriteString("**Health Assessment:**\n")
+	b.WriteString("| Log Status | Meaning |\n")
+	b.WriteString("|------------|--------|\n")
+	b.WriteString("| `healthy` | No significant issues |\n")
+	b.WriteString("| `degraded` | Errors present, may need attention |\n")
+	b.WriteString("| `critical` | Immediate action required |\n\n")
+
+	b.WriteString("**Key Patterns to Watch:**\n")
+	b.WriteString("- `panic`: Application crash\n")
+	b.WriteString("- `database`: Storage issues\n")
+	b.WriteString("- `connection`: Network problems\n")
+	b.WriteString("- `peers`: Peer discovery failures\n\n")
+
+	b.WriteString("---\n\n")
+
+	b.WriteString("## Step 4: Compare with Network\n\n")
+	b.WriteString("Use `accumulate_network_status` for reference:\n")
 	b.WriteString("```json\n")
 	b.WriteString("{\n")
 	b.WriteString(fmt.Sprintf(`  "network": "%s"`+"\n", endpoint))
 	b.WriteString("}\n```\n\n")
 
-	b.WriteString("**Node Metrics:**\n")
-	b.WriteString("- Current Block: [height]\n")
-	b.WriteString("- Peer Count: [count]\n")
-	b.WriteString("- Sync Status: [syncing/synced/behind]\n")
-	b.WriteString("- Last Block Time: [timestamp]\n\n")
+	b.WriteString("Compare your follower's height with the network height.\n\n")
 
-	b.WriteString("Step 3: Get network status (for comparison)\n")
-	b.WriteString("Use `accumulate_network_status`:\n")
-	b.WriteString("```json\n")
-	b.WriteString("{\n")
-	b.WriteString(`  "network": "mainnet"`+"\n")
-	b.WriteString("}\n```\n\n")
+	b.WriteString("---\n\n")
 
-	b.WriteString("**Network Comparison:**\n")
-	b.WriteString("- Network Height: [height]\n")
-	b.WriteString("- Follower Height: [height from step 2]\n")
-	b.WriteString("- Blocks Behind: [difference]\n")
-	b.WriteString("- Catch-up Rate: [blocks/minute if syncing]\n\n")
+	b.WriteString("## Health Status Summary\n\n")
 
-	b.WriteString("**Health Status Summary:**\n\n")
-	b.WriteString("✅ **HEALTHY** if:\n")
-	b.WriteString("- Process running\n")
-	b.WriteString("- Peers ≥ 3\n")
-	b.WriteString("- Blocks behind < 100 OR syncing actively\n")
-	b.WriteString("- No critical errors in logs\n\n")
+	b.WriteString("### HEALTHY\n")
+	b.WriteString("- Container running\n")
+	b.WriteString("- Sync percentage > 99%\n")
+	b.WriteString("- Peers >= 3\n")
+	b.WriteString("- Log status: `healthy`\n")
+	b.WriteString("- **Action:** Continue monitoring\n\n")
 
-	b.WriteString("⚠️ **WARNING** if:\n")
-	b.WriteString("- Peers < 3 but > 0\n")
-	b.WriteString("- Blocks behind 100-1000\n")
-	b.WriteString("- Slow catch-up rate\n\n")
+	b.WriteString("### WARNING\n")
+	b.WriteString("- Sync percentage 90-99%\n")
+	b.WriteString("- Peers 1-2\n")
+	b.WriteString("- Log status: `degraded`\n")
+	b.WriteString("- **Action:** Monitor closely, check again in 15 min\n\n")
 
-	b.WriteString("❌ **UNHEALTHY** if:\n")
-	b.WriteString("- Process not running\n")
+	b.WriteString("### CRITICAL\n")
+	b.WriteString("- Container stopped\n")
 	b.WriteString("- Peers = 0\n")
-	b.WriteString("- Blocks behind > 1000 and not catching up\n")
-	b.WriteString("- Critical errors in logs\n\n")
+	b.WriteString("- Sync stalled\n")
+	b.WriteString("- Log status: `critical`\n")
+	b.WriteString("- **Action:** Use `recovery-from-failure` prompt\n\n")
 
-	b.WriteString("**Recommended Actions:**\n\n")
-	b.WriteString("If HEALTHY:\n")
-	b.WriteString("  ✅ Continue monitoring\n")
-	b.WriteString("  ✅ Check again in 15-30 minutes\n\n")
+	b.WriteString("---\n\n")
 
-	b.WriteString("If WARNING:\n")
-	b.WriteString("  ⚠️ Investigate peer connections\n")
-	b.WriteString("  ⚠️ Check network connectivity\n")
-	b.WriteString("  ⚠️ Monitor for 10-15 minutes\n")
-	b.WriteString("  ⚠️ If persists, use `troubleshoot-follower-sync`\n\n")
+	b.WriteString("## Quick Actions\n\n")
+	b.WriteString("| Status | Action |\n")
+	b.WriteString("|--------|--------|\n")
+	b.WriteString("| HEALTHY | Check again in 30 minutes |\n")
+	b.WriteString("| WARNING | Use `troubleshoot-follower-sync` |\n")
+	b.WriteString("| CRITICAL | Use `recovery-from-failure` |\n\n")
 
-	b.WriteString("If UNHEALTHY:\n")
-	b.WriteString("  ❌ Use `troubleshoot-follower-sync` prompt immediately\n")
-	b.WriteString("  ❌ Review recent logs\n")
-	b.WriteString("  ❌ Consider restart if stuck\n\n")
-
-	b.WriteString("**Related Prompts:**\n")
-	b.WriteString("- `troubleshoot-follower-sync` - If issues detected\n")
-	b.WriteString("- `deploy-follower-node` - Initial deployment\n")
-	b.WriteString("- `quick-node-status` - Even faster check\n")
+	b.WriteString("## Related Prompts\n\n")
+	b.WriteString("- `quick-node-status` - Fast status check\n")
+	b.WriteString("- `mainnet-sync-status` - Sync comparison\n")
+	b.WriteString("- `troubleshoot-follower-sync` - Diagnose issues\n")
+	b.WriteString("- `recovery-from-failure` - Recovery procedures\n")
 
 	return b.String()
 }
@@ -432,223 +520,217 @@ func generateTroubleshootFollowerSyncTemplate(args map[string]string, getArg fun
 	symptom := getArg("symptom", "general")
 
 	var b strings.Builder
-	b.WriteString("Troubleshoot Accumulate Follower Sync Issues\n")
-	b.WriteString(fmt.Sprintf("Symptom: %s\n\n", symptom))
+	b.WriteString("# Troubleshoot Accumulate Follower Sync Issues\n\n")
+	if symptom != "general" {
+		b.WriteString(fmt.Sprintf("**Reported Symptom:** %s\n\n", symptom))
+	}
 
-	b.WriteString("**Diagnostic Steps:**\n\n")
+	b.WriteString("---\n\n")
 
-	b.WriteString("**1. Process Check**\n")
-	b.WriteString("Use `accumulate_follower_status`\n")
-	b.WriteString("- Is process running? YES/NO\n")
-	b.WriteString("- If NO → Process crashed or not started\n")
-	b.WriteString("- If YES → Continue diagnostics\n\n")
+	b.WriteString("## Step 1: Automated Diagnostics\n\n")
+	b.WriteString("Run these tools to gather diagnostic information:\n\n")
 
-	b.WriteString("**2. Peer Connection Check**\n")
-	b.WriteString("Use `accumulate_node_info`\n")
-	b.WriteString("- Peer count: [number]\n")
-	b.WriteString("- If 0 peers → Network connectivity issue\n")
-	b.WriteString("- If 1-2 peers → Degraded but may work\n")
-	b.WriteString("- If 3+ peers → Peers OK\n\n")
+	b.WriteString("### 1.1 Container Status\n")
+	b.WriteString("```json\n")
+	b.WriteString("accumulate_follower_status {\n")
+	b.WriteString(fmt.Sprintf(`  "work_dir": "%s"`+"\n", workDir))
+	b.WriteString("}\n```\n\n")
 
-	b.WriteString("**3. Block Height Check**\n")
-	b.WriteString("Use `accumulate_node_info` + `accumulate_network_status`\n")
-	b.WriteString("- Local height: [number]\n")
-	b.WriteString("- Network height: [number]\n")
-	b.WriteString("- Behind by: [difference]\n")
-	b.WriteString("- If not advancing → Sync stalled\n\n")
+	b.WriteString("### 1.2 Sync Progress (NEW)\n")
+	b.WriteString("```json\n")
+	b.WriteString("accumulate_get_sync_progress {\n")
+	b.WriteString(`  "include_rate": true`+"\n")
+	b.WriteString("}\n```\n\n")
 
-	b.WriteString("**4. Log Review**\n")
-	b.WriteString("Check recent logs for:\n")
-	b.WriteString("- Database errors\n")
-	b.WriteString("- Network errors\n")
-	b.WriteString("- Consensus errors\n")
-	b.WriteString("- Panic/crash messages\n\n")
+	b.WriteString("**Interpretation:**\n")
+	b.WriteString("| Field | Healthy | Problem |\n")
+	b.WriteString("|-------|---------|--------|\n")
+	b.WriteString("| `status` | syncing/synced | stalled/stopped |\n")
+	b.WriteString("| `peer_count` | 3+ | 0-2 |\n")
+	b.WriteString("| `blocks_behind` | Decreasing | Static/increasing |\n")
+	b.WriteString("| `sync_rate_blocks` | > 10/min | < 10/min |\n\n")
 
-	b.WriteString("**Issue-Specific Troubleshooting:**\n\n")
+	b.WriteString("### 1.3 Log Analysis (NEW)\n")
+	b.WriteString("```json\n")
+	b.WriteString("accumulate_analyze_logs {\n")
+	b.WriteString(`  "lines": 1000,`+"\n")
+	b.WriteString(`  "filter": "all"`+"\n")
+	b.WriteString("}\n```\n\n")
 
-	b.WriteString("### SYMPTOM: no_peers (Peer count = 0)\n\n")
-	b.WriteString("**Likely Causes:**\n")
+	b.WriteString("**Key Patterns:**\n")
+	b.WriteString("| Pattern | Meaning | Severity |\n")
+	b.WriteString("|---------|---------|----------|\n")
+	b.WriteString("| `panic` | Application crash | Critical |\n")
+	b.WriteString("| `database` | Storage error | Error |\n")
+	b.WriteString("| `connection` | Network issue | Error |\n")
+	b.WriteString("| `peers` | Peer discovery | Warning |\n")
+	b.WriteString("| `timeout` | Operation timeout | Error |\n\n")
+
+	b.WriteString("### 1.4 Prerequisites Check (if needed)\n")
+	b.WriteString("```json\n")
+	b.WriteString("accumulate_validate_prerequisites {\n")
+	b.WriteString(fmt.Sprintf(`  "work_dir": "%s",`+"\n", workDir))
+	b.WriteString(`  "network": "mainnet"`+"\n")
+	b.WriteString("}\n```\n\n")
+
+	b.WriteString("---\n\n")
+
+	b.WriteString("## Step 2: Identify Issue Category\n\n")
+	b.WriteString("Based on diagnostics, identify the primary issue:\n\n")
+
+	b.WriteString("| Diagnostic Result | Issue Category | Go to Section |\n")
+	b.WriteString("|------------------|----------------|---------------|\n")
+	b.WriteString("| Container stopped | **Crashed** | Section A |\n")
+	b.WriteString("| peer_count = 0 | **No Peers** | Section B |\n")
+	b.WriteString("| status = stalled | **Sync Stalled** | Section C |\n")
+	b.WriteString("| sync_rate < 10/min | **Slow Sync** | Section D |\n")
+	b.WriteString("| database errors | **DB Issues** | Section E |\n\n")
+
+	b.WriteString("---\n\n")
+
+	b.WriteString("## Section A: Container Crashed\n\n")
+	b.WriteString("**Symptoms:**\n")
+	b.WriteString("- `accumulate_follower_status`: container not running\n")
+	b.WriteString("- `accumulate_analyze_logs`: shows `panic` or `fatal`\n\n")
+
+	b.WriteString("**Common Causes:**\n")
+	b.WriteString("1. Out of memory (OOM)\n")
+	b.WriteString("2. Disk full\n")
+	b.WriteString("3. Database corruption\n")
+	b.WriteString("4. Software bug\n\n")
+
+	b.WriteString("**Resolution:**\n")
+	b.WriteString("1. Check log analysis `recommendations` field\n")
+	b.WriteString("2. Check system resources:\n")
+	b.WriteString("   ```bash\n")
+	b.WriteString("   free -h  # Memory\n")
+	b.WriteString(fmt.Sprintf("   df -h %s  # Disk\n", workDir))
+	b.WriteString("   ```\n")
+	b.WriteString("3. If OOM: increase memory or add swap\n")
+	b.WriteString("4. If disk full: free space\n")
+	b.WriteString("5. Restart:\n")
+	b.WriteString("   ```json\n")
+	b.WriteString("   accumulate_run_follower {\n")
+	b.WriteString(fmt.Sprintf(`     "work_dir": "%s"`+"\n", workDir))
+	b.WriteString("   }\n")
+	b.WriteString("   ```\n\n")
+
+	b.WriteString("---\n\n")
+
+	b.WriteString("## Section B: No Peers\n\n")
+	b.WriteString("**Symptoms:**\n")
+	b.WriteString("- `accumulate_get_sync_progress`: peer_count = 0\n")
+	b.WriteString("- `accumulate_analyze_logs`: connection errors\n\n")
+
+	b.WriteString("**Common Causes:**\n")
 	b.WriteString("1. Firewall blocking ports\n")
-	b.WriteString("2. Incorrect peer URL\n")
-	b.WriteString("3. Network connectivity\n")
-	b.WriteString("4. Peer is down\n\n")
+	b.WriteString("2. Network connectivity\n")
+	b.WriteString("3. Bootstrap server unreachable\n")
+	b.WriteString("4. Invalid peer configuration\n\n")
 
-	b.WriteString("**Resolution Steps:**\n\n")
-	b.WriteString("A. Verify network connectivity\n")
-	b.WriteString("   ```bash\n")
-	b.WriteString("   # Check if peer URL is reachable\n")
-	b.WriteString("   telnet mainnet.accumulate.defidevs.io 16691\n")
+	b.WriteString("**Resolution:**\n")
+	b.WriteString("1. Check bootstrap server:\n")
+	b.WriteString("   ```json\n")
+	b.WriteString("   accumulate_query_bootstrap_server {}\n")
 	b.WriteString("   ```\n")
-	b.WriteString("   If fails → Network/firewall issue\n\n")
-
-	b.WriteString("B. Check firewall rules\n")
-	b.WriteString("   - Ports 16591-16593 must be open\n")
-	b.WriteString("   - Both inbound and outbound\n")
-	b.WriteString("   - Check: `sudo ufw status` or `iptables -L`\n\n")
-
-	b.WriteString("C. Try alternative peer\n")
-	b.WriteString("   - Use `accumulate_init_follower` with different peer_url\n")
-	b.WriteString("   - Mainnet peers:\n")
-	b.WriteString("     - tcp://mainnet.accumulate.defidevs.io:16691\n\n")
-
-	b.WriteString("D. Verify configuration\n")
-	b.WriteString(fmt.Sprintf("   - Check %s/accumulated.toml\n", workDir))
-	b.WriteString("   - Verify peer settings correct\n\n")
-
-	b.WriteString("**Fix:**\n")
-	b.WriteString("If firewall issue:\n")
-	b.WriteString("  ```bash\n")
-	b.WriteString("  sudo ufw allow 16591:16593/tcp\n")
-	b.WriteString("  ```\n\n")
-
-	b.WriteString("If bad peer:\n")
-	b.WriteString("  - Re-run init with good peer URL\n")
-	b.WriteString("  - Use deploy-follower-node prompt with new peer\n\n")
+	b.WriteString("2. Verify firewall allows ports 16591-16593, 16691-16693:\n")
+	b.WriteString("   ```bash\n")
+	b.WriteString("   sudo ufw status\n")
+	b.WriteString("   # Or\n")
+	b.WriteString("   sudo ufw allow 16591:16693/tcp\n")
+	b.WriteString("   ```\n")
+	b.WriteString("3. Re-initialize with auto peer discovery:\n")
+	b.WriteString("   ```json\n")
+	b.WriteString("   accumulate_init_follower {\n")
+	b.WriteString(fmt.Sprintf(`     "work_dir": "%s",`+"\n", workDir))
+	b.WriteString(`     "auto_discover_peers": true`+"\n")
+	b.WriteString("   }\n")
+	b.WriteString("   ```\n\n")
 
 	b.WriteString("---\n\n")
 
-	b.WriteString("### SYMPTOM: not_syncing (Has peers but blocks not advancing)\n\n")
-	b.WriteString("**Likely Causes:**\n")
-	b.WriteString("1. Database corruption\n")
-	b.WriteString("2. Old/incompatible snapshot\n")
-	b.WriteString("3. Configuration mismatch\n")
-	b.WriteString("4. Disk space full\n\n")
+	b.WriteString("## Section C: Sync Stalled\n\n")
+	b.WriteString("**Symptoms:**\n")
+	b.WriteString("- `accumulate_get_sync_progress`: status = stalled\n")
+	b.WriteString("- blocks_behind not decreasing over time\n")
+	b.WriteString("- peer_count may be > 0\n\n")
 
-	b.WriteString("**Resolution Steps:**\n\n")
-	b.WriteString("A. Check disk space\n")
-	b.WriteString("   ```bash\n")
-	b.WriteString(fmt.Sprintf("   df -h %s\n", workDir))
+	b.WriteString("**Common Causes:**\n")
+	b.WriteString("1. Corrupted block data\n")
+	b.WriteString("2. Incompatible snapshot\n")
+	b.WriteString("3. Network partition\n\n")
+
+	b.WriteString("**Resolution:**\n")
+	b.WriteString("1. Restart the follower:\n")
+	b.WriteString("   ```json\n")
+	b.WriteString("   accumulate_stop_follower {}\n")
+	b.WriteString("   // Wait 10 seconds\n")
+	b.WriteString("   accumulate_run_follower {\n")
+	b.WriteString(fmt.Sprintf(`     "work_dir": "%s"`+"\n", workDir))
+	b.WriteString("   }\n")
 	b.WriteString("   ```\n")
-	b.WriteString("   If <10% free → Disk full\n\n")
-
-	b.WriteString("B. Check database health\n")
-	b.WriteString("   - Look for \"database\" errors in logs\n")
-	b.WriteString(fmt.Sprintf("   - Check %s/dnn and /bvnn intact\n\n", workDir))
-
-	b.WriteString("C. Verify snapshot compatibility\n")
-	b.WriteString("   - Snapshots should be < 1 month old\n")
-	b.WriteString("   - Must match network (mainnet vs testnet)\n\n")
-
-	b.WriteString("D. Check configuration\n")
-	b.WriteString("   - Review accumulated.toml\n")
-	b.WriteString("   - Verify network settings match\n\n")
-
-	b.WriteString("**Fix:**\n")
-	b.WriteString("If disk full:\n")
-	b.WriteString("  - Free up space\n")
-	b.WriteString("  - Consider larger volume\n\n")
-
-	b.WriteString("If database issue:\n")
-	b.WriteString("  - May need to re-deploy with fresh snapshots\n")
-	b.WriteString("  - Use deploy-follower-node with recent snapshots\n\n")
-
-	b.WriteString("If config issue:\n")
-	b.WriteString("  - Restore from backup or re-init\n\n")
+	b.WriteString("2. Monitor for 10 minutes\n")
+	b.WriteString("3. If still stalled, consider re-deploy with fresh snapshots\n\n")
 
 	b.WriteString("---\n\n")
 
-	b.WriteString("### SYMPTOM: slow_sync (Syncing but very slow)\n\n")
-	b.WriteString("**Likely Causes:**\n")
-	b.WriteString("1. Limited peers (1-2 instead of 3+)\n")
+	b.WriteString("## Section D: Slow Sync\n\n")
+	b.WriteString("**Symptoms:**\n")
+	b.WriteString("- `accumulate_get_sync_progress`: sync_rate < 10 blocks/min\n")
+	b.WriteString("- Syncing but ETA is very long\n\n")
+
+	b.WriteString("**Common Causes:**\n")
+	b.WriteString("1. Limited peer connections\n")
 	b.WriteString("2. Slow storage (HDD vs SSD)\n")
-	b.WriteString("3. Network bandwidth limited\n")
-	b.WriteString("4. CPU/memory constrained\n\n")
+	b.WriteString("3. Resource constraints\n")
+	b.WriteString("4. Network bandwidth\n\n")
 
-	b.WriteString("**Resolution Steps:**\n\n")
-	b.WriteString("A. Check resources\n")
-	b.WriteString("   ```bash\n")
-	b.WriteString("   htop  # Check CPU/memory\n")
-	b.WriteString("   iostat -x 1  # Check disk I/O\n")
-	b.WriteString("   ```\n\n")
-
-	b.WriteString("B. Verify peer count\n")
-	b.WriteString("   - Need 3+ peers for optimal sync\n")
-	b.WriteString("   - If <3, may need better peer URLs\n\n")
-
-	b.WriteString("C. Check network bandwidth\n")
-	b.WriteString("   - Syncing requires sustained download\n")
-	b.WriteString("   - Monitor with `iftop` or similar\n\n")
-
-	b.WriteString("**Fix:**\n")
-	b.WriteString("If resource constrained:\n")
-	b.WriteString("  - Upgrade to SSD storage\n")
-	b.WriteString("  - Increase memory allocation\n")
-	b.WriteString("  - Use less loaded system\n\n")
-
-	b.WriteString("If peer limited:\n")
-	b.WriteString("  - Add more peer URLs to config\n")
-	b.WriteString("  - Ensure ports not rate-limited\n\n")
+	b.WriteString("**Resolution:**\n")
+	b.WriteString("1. Check prerequisites:\n")
+	b.WriteString("   ```json\n")
+	b.WriteString("   accumulate_validate_prerequisites {\n")
+	b.WriteString(fmt.Sprintf(`     "work_dir": "%s"`+"\n", workDir))
+	b.WriteString("   }\n")
+	b.WriteString("   ```\n")
+	b.WriteString("2. If CPU/memory warnings, upgrade resources\n")
+	b.WriteString("3. If disk I/O slow, use SSD\n")
+	b.WriteString("4. If few peers, check network/firewall\n\n")
 
 	b.WriteString("---\n\n")
 
-	b.WriteString("### SYMPTOM: crashed (Process died)\n\n")
-	b.WriteString("**Likely Causes:**\n")
-	b.WriteString("1. Out of memory\n")
-	b.WriteString("2. Database corruption\n")
-	b.WriteString("3. Bug/panic in code\n")
-	b.WriteString("4. Disk full\n\n")
+	b.WriteString("## Section E: Database Issues\n\n")
+	b.WriteString("**Symptoms:**\n")
+	b.WriteString("- `accumulate_analyze_logs`: database errors in patterns\n")
+	b.WriteString("- Repeated crashes with DB-related messages\n\n")
 
-	b.WriteString("**Resolution Steps:**\n\n")
-	b.WriteString("A. Check crash logs\n")
-	b.WriteString("   - Review accumulated.log\n")
-	b.WriteString("   - Look for \"panic\" or \"fatal\"\n")
-	b.WriteString("   - Note exact error message\n\n")
-
-	b.WriteString("B. Check system resources\n")
-	b.WriteString("   ```bash\n")
-	b.WriteString("   dmesg | grep -i killed  # OOM killer?\n")
-	b.WriteString("   df -h  # Disk space?\n")
-	b.WriteString("   free -h  # Memory available?\n")
-	b.WriteString("   ```\n\n")
-
-	b.WriteString("C. Try restart\n")
-	b.WriteString("   - Use `accumulate_run_follower`\n")
-	b.WriteString("   - Monitor if crashes again\n\n")
-
-	b.WriteString("**Fix:**\n")
-	b.WriteString("If OOM:\n")
-	b.WriteString("  - Increase system memory\n")
-	b.WriteString("  - Add swap space\n")
-	b.WriteString("  - Reduce other processes\n\n")
-
-	b.WriteString("If database corruption:\n")
-	b.WriteString("  - Re-deploy with fresh snapshots\n\n")
-
-	b.WriteString("If persistent crash:\n")
-	b.WriteString("  - Report bug with logs\n")
-	b.WriteString("  - Try older/newer binary version\n\n")
+	b.WriteString("**Resolution:**\n")
+	b.WriteString("1. This usually requires a fresh deployment\n")
+	b.WriteString("2. Stop and remove follower:\n")
+	b.WriteString("   ```json\n")
+	b.WriteString("   accumulate_remove_follower {}\n")
+	b.WriteString("   ```\n")
+	b.WriteString("3. Clear work directory\n")
+	b.WriteString("4. Re-deploy with fresh snapshots using `deploy-follower-node`\n\n")
 
 	b.WriteString("---\n\n")
 
-	b.WriteString("**General Recovery Procedure:**\n\n")
-	b.WriteString("1. Stop follower\n")
-	b.WriteString("2. Backup current state\n")
-	b.WriteString("3. Review all diagnostics above\n")
-	b.WriteString("4. Apply specific fix\n")
-	b.WriteString("5. Restart follower\n")
-	b.WriteString("6. Monitor for 10-15 minutes\n")
-	b.WriteString("7. If still failing → escalate or re-deploy\n\n")
+	b.WriteString("## Post-Resolution Verification\n\n")
+	b.WriteString("After applying fixes, verify recovery:\n\n")
+	b.WriteString("```json\n")
+	b.WriteString("accumulate_get_sync_progress { \"include_rate\": true }\n")
+	b.WriteString("```\n\n")
 
-	b.WriteString("**When to Re-deploy:**\n\n")
-	b.WriteString("Consider fresh deployment if:\n")
-	b.WriteString("- Database corruption confirmed\n")
-	b.WriteString("- Snapshots > 1 month old\n")
-	b.WriteString("- Configuration completely broken\n")
-	b.WriteString("- Multiple fixes attempted without success\n\n")
+	b.WriteString("**Success Criteria:**\n")
+	b.WriteString("- status: `syncing` or `synced`\n")
+	b.WriteString("- peer_count: 3+\n")
+	b.WriteString("- sync_rate: > 10 blocks/min (if syncing)\n")
+	b.WriteString("- blocks_behind: Decreasing\n\n")
 
-	b.WriteString("Use `deploy-follower-node` with fresh snapshots\n\n")
-
-	b.WriteString("**Prevention:**\n\n")
-	b.WriteString("- Monitor regularly with `monitor-follower-health`\n")
-	b.WriteString("- Keep snapshots recent (< 2 weeks)\n")
-	b.WriteString("- Ensure adequate resources\n")
-	b.WriteString("- Regular backups\n")
-	b.WriteString("- Update to latest stable version\n\n")
-
-	b.WriteString("**Related Prompts:**\n")
-	b.WriteString("- `monitor-follower-health` - Regular monitoring\n")
+	b.WriteString("## Related Prompts\n\n")
+	b.WriteString("- `recovery-from-failure` - Guided recovery\n")
+	b.WriteString("- `monitor-follower-health` - Ongoing monitoring\n")
 	b.WriteString("- `deploy-follower-node` - Fresh deployment\n")
-	b.WriteString("- `backup-follower` - Create backup before major changes\n")
+	b.WriteString("- `mainnet-sync-status` - Quick sync check\n")
 
 	return b.String()
 }
@@ -961,6 +1043,378 @@ func generateOrganizeDocumentationTemplate(args map[string]string, getArg func(s
 	b.WriteString("- lowercase-with-hyphens.md\n")
 	b.WriteString("- YYYY-MM-DD-description.md (for archives)\n")
 	b.WriteString("- Descriptive, clear names\n\n")
+
+	return b.String()
+}
+
+func generatePrepareMainnetFollowerTemplate(args map[string]string, getArg func(string, string) string) string {
+	workDir := args["work_dir"]
+	bvn := getArg("bvn", "Cyclops")
+	dnDatabase := getArg("dn_database", "")
+	bvnDatabase := getArg("bvn_database", "")
+
+	var b strings.Builder
+	b.WriteString("# Prepare Mainnet Follower Deployment\n\n")
+	b.WriteString(fmt.Sprintf("**Target Directory:** `%s`\n", workDir))
+	b.WriteString(fmt.Sprintf("**BVN Partition:** %s\n\n", bvn))
+
+	b.WriteString("---\n\n")
+
+	b.WriteString("## Phase 1: System Prerequisites\n\n")
+	b.WriteString("Run `accumulate_validate_prerequisites` to verify system requirements:\n\n")
+	b.WriteString("```json\n")
+	b.WriteString("{\n")
+	b.WriteString(fmt.Sprintf(`  "work_dir": "%s",`+"\n", workDir))
+	b.WriteString(`  "network": "mainnet"`+"\n")
+	b.WriteString("}\n```\n\n")
+
+	b.WriteString("### Required Checks\n\n")
+	b.WriteString("| Requirement | Minimum | Recommended | Check |\n")
+	b.WriteString("|-------------|---------|-------------|-------|\n")
+	b.WriteString("| Disk Space | 50 GB | 100+ GB | `df -h` |\n")
+	b.WriteString("| Memory | 4 GB | 8+ GB | `free -h` |\n")
+	b.WriteString("| CPU Cores | 2 | 4+ | `nproc` |\n")
+	b.WriteString("| Docker | Installed | Running | `docker info` |\n")
+	b.WriteString("| Ports | 16591-16593, 16691-16693 | Available | Tool checks |\n")
+	b.WriteString("| Network | Bootstrap reachable | Low latency | Tool checks |\n\n")
+
+	b.WriteString("### If Prerequisites Fail\n\n")
+	b.WriteString("**Disk space insufficient:**\n")
+	b.WriteString("- Free up space: `sudo apt clean`, remove old logs\n")
+	b.WriteString("- Use a different directory on a larger volume\n\n")
+
+	b.WriteString("**Docker not running:**\n")
+	b.WriteString("```bash\n")
+	b.WriteString("sudo systemctl start docker\n")
+	b.WriteString("sudo systemctl enable docker\n")
+	b.WriteString("```\n\n")
+
+	b.WriteString("**Ports in use:**\n")
+	b.WriteString("```bash\n")
+	b.WriteString("sudo lsof -i :16591  # Find what's using the port\n")
+	b.WriteString("```\n\n")
+
+	b.WriteString("---\n\n")
+
+	b.WriteString("## Phase 2: Network Connectivity\n\n")
+	b.WriteString("Query the bootstrap server to verify network access:\n\n")
+	b.WriteString("```json\n")
+	b.WriteString("accumulate_query_bootstrap_server {}\n")
+	b.WriteString("```\n\n")
+
+	b.WriteString("### Expected Response\n")
+	b.WriteString("- `overall_status`: `healthy`\n")
+	b.WriteString("- `health.peer_count`: > 0\n")
+	b.WriteString("- `health.conn_count`: > 0\n\n")
+
+	b.WriteString("### If Bootstrap Unreachable\n")
+	b.WriteString("1. Check firewall allows outbound connections\n")
+	b.WriteString("2. Verify DNS resolution: `nslookup bootstrap.accumulate.defidevs.io`\n")
+	b.WriteString("3. Test connectivity: `curl http://bootstrap.accumulate.defidevs.io:8080/health`\n\n")
+
+	b.WriteString("---\n\n")
+
+	b.WriteString("## Phase 3: Database Snapshots\n\n")
+
+	if dnDatabase != "" && bvnDatabase != "" {
+		b.WriteString("**Snapshots Provided:**\n")
+		b.WriteString(fmt.Sprintf("- DN: `%s`\n", dnDatabase))
+		b.WriteString(fmt.Sprintf("- BVN: `%s`\n\n", bvnDatabase))
+
+		b.WriteString("### Verify Snapshot Integrity\n\n")
+		b.WriteString("Check that snapshots are valid:\n")
+		b.WriteString("```bash\n")
+		b.WriteString(fmt.Sprintf("ls -la %s/data/accumulate.db/\n", dnDatabase))
+		b.WriteString(fmt.Sprintf("ls -la %s/data/accumulate.db/\n", bvnDatabase))
+		b.WriteString("```\n\n")
+	} else {
+		b.WriteString("### Snapshot Sources\n\n")
+		b.WriteString("Database snapshots can be obtained from:\n\n")
+		b.WriteString("1. **Existing node backup** - Copy from a running node\n")
+		b.WriteString("2. **Network archive** - Download from snapshot archive service\n")
+		b.WriteString("3. **Fresh sync** - Start from genesis (takes longest)\n\n")
+
+		b.WriteString("### Snapshot Requirements\n\n")
+		b.WriteString("| Component | Description | Approximate Size |\n")
+		b.WriteString("|-----------|-------------|------------------|\n")
+		b.WriteString("| DN Database | Directory Network state | ~5-10 GB |\n")
+		b.WriteString(fmt.Sprintf("| %s Database | BVN partition state | ~10-20 GB |\n\n", bvn))
+
+		b.WriteString("### Snapshot Age Considerations\n\n")
+		b.WriteString("| Age | Sync Time | Recommendation |\n")
+		b.WriteString("|-----|-----------|----------------|\n")
+		b.WriteString("| < 1 day | Minutes | Excellent |\n")
+		b.WriteString("| 1-7 days | Hours | Good |\n")
+		b.WriteString("| 1-4 weeks | 12-24 hours | Acceptable |\n")
+		b.WriteString("| > 1 month | Days | Consider fresher snapshot |\n\n")
+	}
+
+	b.WriteString("---\n\n")
+
+	b.WriteString("## Phase 4: Ready for Deployment\n\n")
+	b.WriteString("Once all prerequisites pass, proceed with deployment:\n\n")
+	b.WriteString("```\n")
+	b.WriteString("Use prompt: deploy-follower-node\n")
+	b.WriteString("  dn_database: [path to DN snapshot]\n")
+	b.WriteString("  bvn_database: [path to BVN snapshot]\n")
+	b.WriteString(fmt.Sprintf("  work_dir: %s\n", workDir))
+	b.WriteString("```\n\n")
+
+	b.WriteString("---\n\n")
+
+	b.WriteString("## Preparation Checklist\n\n")
+	b.WriteString("- [ ] Prerequisites validated (all checks pass)\n")
+	b.WriteString("- [ ] Bootstrap server reachable\n")
+	b.WriteString("- [ ] DN database snapshot available\n")
+	b.WriteString(fmt.Sprintf("- [ ] %s database snapshot available\n", bvn))
+	b.WriteString("- [ ] Snapshot integrity verified\n")
+	b.WriteString(fmt.Sprintf("- [ ] Work directory ready: `%s`\n\n", workDir))
+
+	b.WriteString("## Next Steps\n\n")
+	b.WriteString("- `deploy-follower-node` - Full deployment workflow\n")
+	b.WriteString("- `monitor-follower-health` - Post-deployment monitoring\n")
+
+	return b.String()
+}
+
+func generateRecoveryFromFailureTemplate(args map[string]string, getArg func(string, string) string) string {
+	containerName := getArg("container_name", "accumulate-follower")
+	failureType := getArg("failure_type", "unknown")
+	workDir := getArg("work_dir", "")
+
+	var b strings.Builder
+	b.WriteString("# Follower Recovery Guide\n\n")
+	b.WriteString(fmt.Sprintf("**Container:** `%s`\n", containerName))
+	if failureType != "unknown" {
+		b.WriteString(fmt.Sprintf("**Reported Failure:** %s\n", failureType))
+	}
+	b.WriteString("\n---\n\n")
+
+	b.WriteString("## Step 1: Diagnose the Issue\n\n")
+
+	b.WriteString("### Check Container Status\n")
+	b.WriteString("```json\n")
+	b.WriteString("accumulate_follower_status {\n")
+	b.WriteString(fmt.Sprintf(`  "container_name": "%s"`+"\n", containerName))
+	b.WriteString("}\n```\n\n")
+
+	b.WriteString("### Analyze Logs\n")
+	b.WriteString("```json\n")
+	b.WriteString("accumulate_analyze_logs {\n")
+	b.WriteString(fmt.Sprintf(`  "container_name": "%s",`+"\n", containerName))
+	b.WriteString(`  "lines": 1000,`+"\n")
+	b.WriteString(`  "filter": "all"`+"\n")
+	b.WriteString("}\n```\n\n")
+
+	b.WriteString("### Check Sync Progress\n")
+	b.WriteString("```json\n")
+	b.WriteString("accumulate_get_sync_progress {\n")
+	b.WriteString(fmt.Sprintf(`  "container_name": "%s"`+"\n", containerName))
+	b.WriteString("}\n```\n\n")
+
+	b.WriteString("---\n\n")
+
+	b.WriteString("## Step 2: Identify Failure Type\n\n")
+	b.WriteString("Based on diagnostics, identify which failure type matches:\n\n")
+
+	b.WriteString("### Type A: Container Crashed\n")
+	b.WriteString("**Symptoms:**\n")
+	b.WriteString("- Container status: `stopped` or `not_found`\n")
+	b.WriteString("- Log analysis shows: `panic`, `fatal`, or `critical` errors\n\n")
+
+	b.WriteString("**Recovery Steps:**\n")
+	b.WriteString("1. Review the crash logs for root cause\n")
+	b.WriteString("2. If OOM (out of memory):\n")
+	b.WriteString("   - Increase system memory or add swap\n")
+	b.WriteString("   - Reduce other workloads\n")
+	b.WriteString("3. If disk full:\n")
+	b.WriteString("   - Free up disk space\n")
+	if workDir != "" {
+		b.WriteString(fmt.Sprintf("   - Check: `df -h %s`\n", workDir))
+	}
+	b.WriteString("4. Restart the container:\n")
+	b.WriteString("   ```json\n")
+	b.WriteString("   accumulate_run_follower {\n")
+	if workDir != "" {
+		b.WriteString(fmt.Sprintf(`     "work_dir": "%s"`+"\n", workDir))
+	} else {
+		b.WriteString(`     "work_dir": "/path/to/work_dir"`+"\n")
+	}
+	b.WriteString("   }\n")
+	b.WriteString("   ```\n\n")
+
+	b.WriteString("### Type B: Sync Stalled\n")
+	b.WriteString("**Symptoms:**\n")
+	b.WriteString("- Container status: `running`\n")
+	b.WriteString("- Sync progress: `stalled` or blocks_behind not decreasing\n")
+	b.WriteString("- Peer count: 0 or very low\n\n")
+
+	b.WriteString("**Recovery Steps:**\n")
+	b.WriteString("1. Check network connectivity:\n")
+	b.WriteString("   ```json\n")
+	b.WriteString("   accumulate_query_bootstrap_server {}\n")
+	b.WriteString("   ```\n")
+	b.WriteString("2. Verify firewall allows ports 16591-16593, 16691-16693\n")
+	b.WriteString("3. Restart the follower:\n")
+	b.WriteString("   ```json\n")
+	b.WriteString(fmt.Sprintf("   accumulate_stop_follower { \"container_name\": \"%s\" }\n", containerName))
+	b.WriteString("   // Wait 10 seconds\n")
+	b.WriteString("   accumulate_run_follower { ... }\n")
+	b.WriteString("   ```\n")
+	b.WriteString("4. If persists, re-initialize with fresh peers:\n")
+	b.WriteString("   - Use `accumulate_init_follower` with `auto_discover_peers: true`\n\n")
+
+	b.WriteString("### Type C: No Peers\n")
+	b.WriteString("**Symptoms:**\n")
+	b.WriteString("- Peer count: 0\n")
+	b.WriteString("- Log shows connection failures\n\n")
+
+	b.WriteString("**Recovery Steps:**\n")
+	b.WriteString("1. Verify bootstrap server is healthy\n")
+	b.WriteString("2. Check firewall configuration\n")
+	b.WriteString("3. Test port connectivity:\n")
+	b.WriteString("   ```bash\n")
+	b.WriteString("   nc -zv bootstrap.accumulate.defidevs.io 16593\n")
+	b.WriteString("   ```\n")
+	b.WriteString("4. Re-initialize with updated peers\n\n")
+
+	b.WriteString("### Type D: Database Corruption\n")
+	b.WriteString("**Symptoms:**\n")
+	b.WriteString("- Log shows database errors\n")
+	b.WriteString("- Repeated crashes on startup\n")
+	b.WriteString("- Badger errors in logs\n\n")
+
+	b.WriteString("**Recovery Steps:**\n")
+	b.WriteString("1. Stop the container\n")
+	b.WriteString("2. **Backup current state** (if any data is valuable)\n")
+	b.WriteString("3. Re-deploy from fresh snapshots:\n")
+	b.WriteString("   - Remove old data\n")
+	b.WriteString("   - Run `accumulate_init_follower` with fresh snapshots\n")
+	b.WriteString("   - Start follower\n\n")
+
+	b.WriteString("---\n\n")
+
+	b.WriteString("## Step 3: Verify Recovery\n\n")
+	b.WriteString("After applying recovery steps:\n\n")
+
+	b.WriteString("1. **Check container is running:**\n")
+	b.WriteString("   ```json\n")
+	b.WriteString(fmt.Sprintf("   accumulate_follower_status { \"container_name\": \"%s\" }\n", containerName))
+	b.WriteString("   ```\n\n")
+
+	b.WriteString("2. **Verify sync is progressing:**\n")
+	b.WriteString("   ```json\n")
+	b.WriteString("   accumulate_get_sync_progress { \"include_rate\": true }\n")
+	b.WriteString("   ```\n\n")
+
+	b.WriteString("3. **Monitor for 5-10 minutes:**\n")
+	b.WriteString("   - Sync percentage should increase\n")
+	b.WriteString("   - Peer count should be 3+\n")
+	b.WriteString("   - No new critical errors\n\n")
+
+	b.WriteString("---\n\n")
+
+	b.WriteString("## When to Re-Deploy\n\n")
+	b.WriteString("Consider full re-deployment if:\n")
+	b.WriteString("- Database corruption confirmed\n")
+	b.WriteString("- Multiple recovery attempts failed\n")
+	b.WriteString("- Snapshots are very old (> 1 month)\n")
+	b.WriteString("- Configuration is completely broken\n\n")
+
+	b.WriteString("**Re-deployment steps:**\n")
+	b.WriteString("1. `accumulate_remove_follower` - Remove old container\n")
+	b.WriteString("2. Delete old work directory contents\n")
+	b.WriteString("3. `prepare-mainnet-follower` - Prepare fresh deployment\n")
+	b.WriteString("4. `deploy-follower-node` - Deploy from scratch\n\n")
+
+	b.WriteString("## Related Prompts\n\n")
+	b.WriteString("- `troubleshoot-follower-sync` - Detailed sync troubleshooting\n")
+	b.WriteString("- `monitor-follower-health` - Ongoing monitoring\n")
+	b.WriteString("- `deploy-follower-node` - Fresh deployment\n")
+
+	return b.String()
+}
+
+func generateMainnetSyncStatusTemplate(args map[string]string, getArg func(string, string) string) string {
+	containerName := getArg("container_name", "accumulate-follower")
+
+	var b strings.Builder
+	b.WriteString("# Mainnet Sync Status\n\n")
+
+	b.WriteString("## Quick Status Check\n\n")
+	b.WriteString("Run these tools in sequence for a complete status view:\n\n")
+
+	b.WriteString("### 1. Container Status\n")
+	b.WriteString("```json\n")
+	b.WriteString("accumulate_follower_status {\n")
+	b.WriteString(fmt.Sprintf(`  "container_name": "%s"`+"\n", containerName))
+	b.WriteString("}\n```\n\n")
+
+	b.WriteString("### 2. Sync Progress\n")
+	b.WriteString("```json\n")
+	b.WriteString("accumulate_get_sync_progress {\n")
+	b.WriteString(fmt.Sprintf(`  "container_name": "%s",`+"\n", containerName))
+	b.WriteString(`  "include_rate": true`+"\n")
+	b.WriteString("}\n```\n\n")
+
+	b.WriteString("### 3. Network Comparison\n")
+	b.WriteString("```json\n")
+	b.WriteString("accumulate_network_status {\n")
+	b.WriteString(`  "network": "mainnet"`+"\n")
+	b.WriteString("}\n```\n\n")
+
+	b.WriteString("---\n\n")
+
+	b.WriteString("## Status Interpretation\n\n")
+
+	b.WriteString("### Sync Status Values\n\n")
+	b.WriteString("| Status | Meaning | Action |\n")
+	b.WriteString("|--------|---------|--------|\n")
+	b.WriteString("| `synced` | Fully caught up | Monitor periodically |\n")
+	b.WriteString("| `syncing` | Catching up to network | Wait, monitor progress |\n")
+	b.WriteString("| `stalled` | Not making progress | Investigate (see below) |\n")
+	b.WriteString("| `stopped` | Container not running | Restart follower |\n")
+	b.WriteString("| `not_found` | Container missing | Re-deploy |\n\n")
+
+	b.WriteString("### Health Indicators\n\n")
+	b.WriteString("| Metric | Healthy | Warning | Critical |\n")
+	b.WriteString("|--------|---------|---------|----------|\n")
+	b.WriteString("| Blocks Behind | < 100 | 100-1000 | > 1000 |\n")
+	b.WriteString("| Peer Count | 3+ | 1-2 | 0 |\n")
+	b.WriteString("| Sync Rate | > 50/min | 10-50/min | < 10/min |\n")
+	b.WriteString("| Sync % | > 99% | 90-99% | < 90% |\n\n")
+
+	b.WriteString("---\n\n")
+
+	b.WriteString("## Quick Reference Output\n\n")
+	b.WriteString("Expected output format from `accumulate_get_sync_progress`:\n\n")
+	b.WriteString("```\n")
+	b.WriteString("{\n")
+	b.WriteString("  \"status\": \"syncing\",\n")
+	b.WriteString("  \"local_height\": 15234123,\n")
+	b.WriteString("  \"network_height\": 15234567,\n")
+	b.WriteString("  \"blocks_behind\": 444,\n")
+	b.WriteString("  \"sync_percentage\": 99.97,\n")
+	b.WriteString("  \"estimated_eta\": \"3 minutes\",\n")
+	b.WriteString("  \"sync_rate_blocks\": 150.0,\n")
+	b.WriteString("  \"peer_count\": 5,\n")
+	b.WriteString("  \"container_status\": \"running\"\n")
+	b.WriteString("}\n```\n\n")
+
+	b.WriteString("---\n\n")
+
+	b.WriteString("## If Issues Detected\n\n")
+	b.WriteString("| Issue | Prompt to Use |\n")
+	b.WriteString("|-------|---------------|\n")
+	b.WriteString("| Sync stalled | `troubleshoot-follower-sync` |\n")
+	b.WriteString("| Container stopped | `recovery-from-failure` |\n")
+	b.WriteString("| No peers | `troubleshoot-follower-sync` |\n")
+	b.WriteString("| Falling behind | `monitor-follower-health` |\n\n")
+
+	b.WriteString("## Related Prompts\n\n")
+	b.WriteString("- `monitor-follower-health` - Detailed health monitoring\n")
+	b.WriteString("- `quick-node-status` - Even faster check\n")
+	b.WriteString("- `troubleshoot-follower-sync` - If issues found\n")
 
 	return b.String()
 }
