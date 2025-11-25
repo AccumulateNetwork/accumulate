@@ -1,12 +1,38 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
+	"time"
 )
+
+// validGitRefPattern validates git refs to prevent command injection
+// Allows: alphanumeric, dots, hyphens, underscores, forward slashes
+// Examples: main, v1.4.0, feature/my-branch, HEAD~1
+var validGitRefPattern = regexp.MustCompile(`^[a-zA-Z0-9._\-/~^]+$`)
+
+// validateGitRef checks if a git ref is safe to use in commands
+func validateGitRef(ref string) error {
+	if ref == "" {
+		return fmt.Errorf("git ref cannot be empty")
+	}
+	if len(ref) > 256 {
+		return fmt.Errorf("git ref too long (max 256 characters)")
+	}
+	if !validGitRefPattern.MatchString(ref) {
+		return fmt.Errorf("invalid git ref: contains disallowed characters (allowed: alphanumeric, . - _ / ~ ^)")
+	}
+	// Prevent path traversal
+	if strings.Contains(ref, "..") {
+		return fmt.Errorf("invalid git ref: contains '..'")
+	}
+	return nil
+}
 
 // buildBinary builds the accumulated binary from source
 func (s *Server) buildBinary(args map[string]interface{}) (map[string]interface{}, error) {
@@ -46,6 +72,11 @@ func (s *Server) buildBinary(args map[string]interface{}) (map[string]interface{
 		ref = strings.TrimSpace(string(output))
 	}
 
+	// Validate the ref to prevent command injection
+	if err := validateGitRef(ref); err != nil {
+		return nil, fmt.Errorf("invalid ref parameter: %w", err)
+	}
+
 	// Check if we need to checkout a different ref
 	needsCheckout := false
 	if refArg, ok := args["ref"].(string); ok && refArg != "" {
@@ -63,7 +94,7 @@ func (s *Server) buildBinary(args map[string]interface{}) (map[string]interface{
 		}
 		originalRef = strings.TrimSpace(string(output))
 
-		// Checkout the requested ref
+		// Checkout the requested ref (already validated above)
 		cmd = exec.Command("git", "checkout", ref)
 		cmd.Dir = absRepoPath
 		output, err = cmd.CombinedOutput()
@@ -105,14 +136,21 @@ func (s *Server) buildBinary(args map[string]interface{}) (map[string]interface{
 		}
 	}
 
-	// Build the binary
+	// Build the binary with timeout (10 minutes max)
 	// Change to cmd/accumulated directory and build
 	buildDir := filepath.Join(absRepoPath, "cmd", "accumulated")
-	cmd := exec.Command("go", "build", "-o", absOutputPath, ".")
+	buildTimeout := 10 * time.Minute
+	ctx, cancel := context.WithTimeout(context.Background(), buildTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "go", "build", "-o", absOutputPath, ".")
 	cmd.Dir = buildDir
 	cmd.Env = os.Environ() // Inherit environment
 
 	output, err := cmd.CombinedOutput()
+	if ctx.Err() == context.DeadlineExceeded {
+		return nil, fmt.Errorf("build timed out after %v", buildTimeout)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to build binary: %w\nOutput: %s", err, string(output))
 	}
