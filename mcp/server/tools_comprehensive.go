@@ -16,11 +16,6 @@ func (s *Server) queryChain(args map[string]interface{}) (map[string]interface{}
 		return nil, fmt.Errorf("missing required parameter: url")
 	}
 
-	network := "mainnet"
-	if n, ok := args["network"].(string); ok {
-		network = n
-	}
-
 	// Build query parameters
 	params := make(map[string]interface{})
 	if name, ok := args["chain_name"].(string); ok {
@@ -42,41 +37,33 @@ func (s *Server) queryChain(args map[string]interface{}) (map[string]interface{}
 		params["expand"] = expand
 	}
 
-	c, err := client.NewClient(network)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create client: %w", err)
-	}
-	defer c.Close()
+	helper := NewClientHelper(s.state)
+	network := helper.GetNetwork(args)
 
-	ctx := context.Background()
-	record, err := c.QueryChain(ctx, url, params)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query chain: %w", err)
-	}
+	return helper.WithClientRetry(network, nil, func(ctx context.Context, c *client.Client) (map[string]interface{}, error) {
+		record, err := c.QueryChain(ctx, url, params)
+		if err != nil {
+			return nil, fmt.Errorf("failed to query chain: %w", err)
+		}
 
-	// Convert record to map[string]interface{}
-	// The MCP protocol wrapping is done by handleCallTool, so just return the raw data
-	var result map[string]interface{}
-	recordBytes, err := json.Marshal(record)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal record: %w", err)
-	}
-	if err := json.Unmarshal(recordBytes, &result); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal record: %w", err)
-	}
+		// Convert record to map[string]interface{}
+		var result map[string]interface{}
+		recordBytes, err := json.Marshal(record)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal record: %w", err)
+		}
+		if err := json.Unmarshal(recordBytes, &result); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal record: %w", err)
+		}
 
-	return result, nil
+		return result, nil
+	})
 }
 
 func (s *Server) queryData(args map[string]interface{}) (map[string]interface{}, error) {
 	url, ok := args["url"].(string)
 	if !ok {
 		return nil, fmt.Errorf("missing required parameter: url")
-	}
-
-	network := "mainnet"
-	if n, ok := args["network"].(string); ok {
-		network = n
 	}
 
 	params := make(map[string]interface{})
@@ -93,41 +80,33 @@ func (s *Server) queryData(args map[string]interface{}) (map[string]interface{},
 		params["count"] = count
 	}
 
-	c, err := client.NewClient(network)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create client: %w", err)
-	}
-	defer c.Close()
+	helper := NewClientHelper(s.state)
+	network := helper.GetNetwork(args)
 
-	ctx := context.Background()
-	record, err := c.QueryData(ctx, url, params)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query data: %w", err)
-	}
+	return helper.WithClientRetry(network, nil, func(ctx context.Context, c *client.Client) (map[string]interface{}, error) {
+		record, err := c.QueryData(ctx, url, params)
+		if err != nil {
+			return nil, fmt.Errorf("failed to query data: %w", err)
+		}
 
-	// Convert record to map[string]interface{}
-	// The MCP protocol wrapping is done by handleCallTool, so just return the raw data
-	var result map[string]interface{}
-	recordBytes, err := json.Marshal(record)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal record: %w", err)
-	}
-	if err := json.Unmarshal(recordBytes, &result); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal record: %w", err)
-	}
+		// Convert record to map[string]interface{}
+		var result map[string]interface{}
+		recordBytes, err := json.Marshal(record)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal record: %w", err)
+		}
+		if err := json.Unmarshal(recordBytes, &result); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal record: %w", err)
+		}
 
-	return result, nil
+		return result, nil
+	})
 }
 
 func (s *Server) queryDirectory(args map[string]interface{}) (map[string]interface{}, error) {
 	url, ok := args["url"].(string)
 	if !ok {
 		return nil, fmt.Errorf("missing required parameter: url")
-	}
-
-	network := "mainnet"
-	if n, ok := args["network"].(string); ok {
-		network = n
 	}
 
 	params := make(map[string]interface{})
@@ -141,41 +120,33 @@ func (s *Server) queryDirectory(args map[string]interface{}) (map[string]interfa
 		params["expand"] = expand
 	}
 
-	c, err := client.NewClient(network)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create client: %w", err)
-	}
-	defer c.Close()
+	helper := NewClientHelper(s.state)
+	network := helper.GetNetwork(args)
 
-	ctx := context.Background()
-	record, err := c.QueryDirectory(ctx, url, params)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query directory: %w", err)
-	}
+	return helper.WithClientRetry(network, nil, func(ctx context.Context, c *client.Client) (map[string]interface{}, error) {
+		record, err := c.QueryDirectory(ctx, url, params)
+		if err != nil {
+			return nil, fmt.Errorf("failed to query directory: %w", err)
+		}
 
-	// Convert record to map[string]interface{}
-	// The MCP protocol wrapping is done by handleCallTool, so just return the raw data
-	var result map[string]interface{}
-	recordBytes, err := json.Marshal(record)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal record: %w", err)
-	}
-	if err := json.Unmarshal(recordBytes, &result); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal record: %w", err)
-	}
+		// Convert record to map[string]interface{}
+		var result map[string]interface{}
+		recordBytes, err := json.Marshal(record)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal record: %w", err)
+		}
+		if err := json.Unmarshal(recordBytes, &result); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal record: %w", err)
+		}
 
-	return result, nil
+		return result, nil
+	})
 }
 
 func (s *Server) queryPending(args map[string]interface{}) (map[string]interface{}, error) {
 	url, ok := args["url"].(string)
 	if !ok {
 		return nil, fmt.Errorf("missing required parameter: url")
-	}
-
-	network := "mainnet"
-	if n, ok := args["network"].(string); ok {
-		network = n
 	}
 
 	params := make(map[string]interface{})
@@ -186,30 +157,27 @@ func (s *Server) queryPending(args map[string]interface{}) (map[string]interface
 		params["count"] = count
 	}
 
-	c, err := client.NewClient(network)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create client: %w", err)
-	}
-	defer c.Close()
+	helper := NewClientHelper(s.state)
+	network := helper.GetNetwork(args)
 
-	ctx := context.Background()
-	record, err := c.QueryPending(ctx, url, params)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query pending: %w", err)
-	}
+	return helper.WithClientRetry(network, nil, func(ctx context.Context, c *client.Client) (map[string]interface{}, error) {
+		record, err := c.QueryPending(ctx, url, params)
+		if err != nil {
+			return nil, fmt.Errorf("failed to query pending: %w", err)
+		}
 
-	// Convert record to map[string]interface{}
-	// The MCP protocol wrapping is done by handleCallTool, so just return the raw data
-	var result map[string]interface{}
-	recordBytes, err := json.Marshal(record)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal record: %w", err)
-	}
-	if err := json.Unmarshal(recordBytes, &result); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal record: %w", err)
-	}
+		// Convert record to map[string]interface{}
+		var result map[string]interface{}
+		recordBytes, err := json.Marshal(record)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal record: %w", err)
+		}
+		if err := json.Unmarshal(recordBytes, &result); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal record: %w", err)
+		}
 
-	return result, nil
+		return result, nil
+	})
 }
 
 func (s *Server) queryMinorBlock(args map[string]interface{}) (map[string]interface{}, error) {
