@@ -36,9 +36,22 @@ type PrerequisiteCheck struct {
 // validatePrerequisites validates all system prerequisites for follower deployment
 func (s *Server) validatePrerequisites(args map[string]interface{}) (map[string]interface{}, error) {
 	workDir, _ := args["work_dir"].(string)
+
+	// Validate work_dir if provided
+	if workDir != "" {
+		var err error
+		workDir, err = ValidatePath(workDir, "")
+		if err != nil {
+			return nil, fmt.Errorf("invalid work_dir path: %w", err)
+		}
+	}
+
 	network, _ := args["network"].(string)
 	if network == "" {
 		network = "mainnet"
+	}
+	if err := ValidateNetworkName(network); err != nil {
+		return nil, fmt.Errorf("invalid network: %w", err)
 	}
 
 	result := &PrerequisitesResult{

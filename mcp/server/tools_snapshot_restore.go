@@ -33,23 +33,38 @@ func (s *Server) restoreFromSnapshots(args map[string]interface{}) (map[string]i
 		return nil, fmt.Errorf("missing required parameter: work_dir")
 	}
 
-	// Verify snapshot files exist
-	if _, err := os.Stat(dnSnapshot); err != nil {
-		return nil, fmt.Errorf("DN snapshot file not found: %s", dnSnapshot)
-	}
-	if _, err := os.Stat(bvnSnapshot); err != nil {
-		return nil, fmt.Errorf("BVN snapshot file not found: %s", bvnSnapshot)
+	// Validate and resolve paths to prevent directory traversal attacks
+	var err error
+	dnSnapshot, err = ValidateFilePath(dnSnapshot, "")
+	if err != nil {
+		return nil, fmt.Errorf("invalid dn_snapshot path: %w", err)
 	}
 
-	// Optional parameters
+	bvnSnapshot, err = ValidateFilePath(bvnSnapshot, "")
+	if err != nil {
+		return nil, fmt.Errorf("invalid bvn_snapshot path: %w", err)
+	}
+
+	workDir, err = ValidatePath(workDir, "")
+	if err != nil {
+		return nil, fmt.Errorf("invalid work_dir path: %w", err)
+	}
+
+	// Optional parameters with validation
 	network, _ := args["network"].(string)
 	if network == "" {
 		network = "MainNet"
+	}
+	if err := ValidateNetworkName(network); err != nil {
+		return nil, fmt.Errorf("invalid network: %w", err)
 	}
 
 	bvnName, _ := args["bvn_name"].(string)
 	if bvnName == "" {
 		bvnName = "Cyclops"
+	}
+	if err := ValidateNetworkName(bvnName); err != nil {
+		return nil, fmt.Errorf("invalid bvn_name: %w", err)
 	}
 
 	// Port configuration - support both methods

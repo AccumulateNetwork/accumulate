@@ -163,6 +163,28 @@ func ValidateMultiaddr(addr string) error {
 	return nil
 }
 
+// validDockerImagePattern matches valid Docker image names
+// Examples: nginx, nginx:latest, registry.gitlab.com/org/repo:v1.0, localhost:5000/image
+var validDockerImagePattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._\-/:]*[a-zA-Z0-9]$`)
+
+// ValidateDockerImage validates a Docker image name
+func ValidateDockerImage(image string) error {
+	if image == "" {
+		return fmt.Errorf("docker image cannot be empty")
+	}
+	if len(image) > 256 {
+		return fmt.Errorf("docker image name too long (max 256 characters)")
+	}
+	if !validDockerImagePattern.MatchString(image) {
+		return fmt.Errorf("invalid docker image name: must contain only alphanumeric, dots, hyphens, colons, slashes")
+	}
+	// Check for path traversal attempts
+	if strings.Contains(image, "..") {
+		return fmt.Errorf("invalid docker image name: contains '..'")
+	}
+	return nil
+}
+
 // ShellEscape escapes a string for safe use in shell scripts
 func ShellEscape(s string) string {
 	// Use single quotes and escape any single quotes within

@@ -37,6 +37,11 @@ func (s *Server) getSyncProgress(args map[string]interface{}) (map[string]interf
 		containerName = "accumulate-follower"
 	}
 
+	// Validate container name to prevent command injection
+	if err := ValidateContainerName(containerName); err != nil {
+		return nil, fmt.Errorf("invalid container_name: %w", err)
+	}
+
 	includeRate, _ := args["include_rate"].(bool)
 
 	result := &SyncProgressResult{

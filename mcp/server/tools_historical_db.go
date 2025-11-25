@@ -79,10 +79,19 @@ func resolveDatabase(dbName string, accountURL string) (string, error) {
 	// If database explicitly specified, use it
 	if dbName != "" {
 		if path, ok := knownDatabases[dbName]; ok {
-			return path, nil
+			// Known databases are trusted, validate path exists
+			absPath, err := ValidateDirectoryPath(path, "")
+			if err != nil {
+				return "", fmt.Errorf("known database path invalid: %w", err)
+			}
+			return absPath, nil
 		}
-		// Assume it's a direct path
-		return dbName, nil
+		// User-provided path - validate to prevent directory traversal
+		absPath, err := ValidateDirectoryPath(dbName, "")
+		if err != nil {
+			return "", fmt.Errorf("invalid database path: %w", err)
+		}
+		return absPath, nil
 	}
 
 	// Auto-routing: try databases in priority order

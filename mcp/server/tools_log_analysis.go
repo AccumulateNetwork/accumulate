@@ -50,10 +50,20 @@ func (s *Server) analyzeLogs(args map[string]interface{}) (map[string]interface{
 		containerName = "accumulate-follower"
 	}
 
+	// Validate container name to prevent command injection
+	if err := ValidateContainerName(containerName); err != nil {
+		return nil, fmt.Errorf("invalid container_name: %w", err)
+	}
+
 	linesFloat, _ := args["lines"].(float64)
 	lines := int(linesFloat)
 	if lines == 0 {
 		lines = 500
+	}
+
+	// Validate lines parameter (prevent excessive resource usage)
+	if lines > 10000 {
+		lines = 10000
 	}
 
 	filter, _ := args["filter"].(string)
@@ -80,8 +90,12 @@ func (s *Server) analyzeLogs(args map[string]interface{}) (map[string]interface{
 		return structToMap(result)
 	}
 
-	// Get container logs
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	// Get container logs with configurable timeout
+	timeout := s.state.Config.LogAnalysisTimeout
+	if timeout == 0 {
+		timeout = 30 * time.Second // Fallback default
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "docker", "logs", "--tail", fmt.Sprintf("%d", lines), containerName)
