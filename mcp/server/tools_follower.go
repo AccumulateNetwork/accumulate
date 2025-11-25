@@ -28,20 +28,46 @@ func (s *Server) initFollower(args map[string]interface{}) (map[string]interface
 		return nil, fmt.Errorf("missing required parameter: work_dir")
 	}
 
-	// Optional parameters
+	// Validate paths to prevent directory traversal
+	var err error
+	dnDatabase, err = ValidateDirectoryPath(dnDatabase, "")
+	if err != nil {
+		return nil, fmt.Errorf("invalid dn_database path: %w", err)
+	}
+
+	bvnDatabase, err = ValidateDirectoryPath(bvnDatabase, "")
+	if err != nil {
+		return nil, fmt.Errorf("invalid bvn_database path: %w", err)
+	}
+
+	workDir, err = ValidatePath(workDir, "")
+	if err != nil {
+		return nil, fmt.Errorf("invalid work_dir path: %w", err)
+	}
+
+	// Optional parameters with validation
 	containerName, _ := args["container_name"].(string)
 	if containerName == "" {
 		containerName = "accumulate-follower"
+	}
+	if err := ValidateContainerName(containerName); err != nil {
+		return nil, fmt.Errorf("invalid container_name: %w", err)
 	}
 
 	network, _ := args["network"].(string)
 	if network == "" {
 		network = "MainNet"
 	}
+	if err := ValidateNetworkName(network); err != nil {
+		return nil, fmt.Errorf("invalid network: %w", err)
+	}
 
 	bvnName, _ := args["bvn_name"].(string)
 	if bvnName == "" {
 		bvnName = "Cyclops"
+	}
+	if err := ValidateNetworkName(bvnName); err != nil {
+		return nil, fmt.Errorf("invalid bvn_name: %w", err)
 	}
 
 	// Auto-discover peers option
@@ -50,6 +76,20 @@ func (s *Server) initFollower(args map[string]interface{}) (map[string]interface
 	// Genesis snap files (optional - will use defaults if not provided)
 	dnGenesisSnap, _ := args["dn_genesis_snap"].(string)
 	bvnGenesisSnap, _ := args["bvn_genesis_snap"].(string)
+
+	// Validate genesis snap paths if provided
+	if dnGenesisSnap != "" {
+		dnGenesisSnap, err = ValidateFilePath(dnGenesisSnap, "")
+		if err != nil {
+			return nil, fmt.Errorf("invalid dn_genesis_snap path: %w", err)
+		}
+	}
+	if bvnGenesisSnap != "" {
+		bvnGenesisSnap, err = ValidateFilePath(bvnGenesisSnap, "")
+		if err != nil {
+			return nil, fmt.Errorf("invalid bvn_genesis_snap path: %w", err)
+		}
+	}
 
 	// Bootstrap peers
 	dnBootstrapPeers, _ := args["dn_bootstrap_peers"].([]interface{})
@@ -174,10 +214,20 @@ func (s *Server) runFollower(args map[string]interface{}) (map[string]interface{
 		return nil, fmt.Errorf("missing required parameter: work_dir")
 	}
 
-	// Optional parameters
+	// Validate work directory path
+	var err error
+	workDir, err = ValidateDirectoryPath(workDir, "")
+	if err != nil {
+		return nil, fmt.Errorf("invalid work_dir path: %w", err)
+	}
+
+	// Optional parameters with validation
 	containerName, _ := args["container_name"].(string)
 	if containerName == "" {
 		containerName = "accumulate-follower"
+	}
+	if err := ValidateContainerName(containerName); err != nil {
+		return nil, fmt.Errorf("invalid container_name: %w", err)
 	}
 
 	dockerImage, _ := args["docker_image"].(string)
@@ -188,6 +238,10 @@ func (s *Server) runFollower(args map[string]interface{}) (map[string]interface{
 			// Fallback if config not set
 			dockerImage = "registry.gitlab.com/accumulatenetwork/accumulate:v1.4.0"
 		}
+	}
+	// Validate docker image name (basic validation - alphanumeric, dots, hyphens, colons, slashes)
+	if err := ValidateDockerImage(dockerImage); err != nil {
+		return nil, fmt.Errorf("invalid docker_image: %w", err)
 	}
 
 	// Validate work directory exists and has required subdirectories
@@ -269,6 +323,9 @@ func (s *Server) getFollowerStatus(args map[string]interface{}) (map[string]inte
 	if containerName == "" {
 		containerName = "accumulate-follower"
 	}
+	if err := ValidateContainerName(containerName); err != nil {
+		return nil, fmt.Errorf("invalid container_name: %w", err)
+	}
 
 	// Check if container exists
 	exists, err := containerExists(containerName)
@@ -324,6 +381,9 @@ func (s *Server) stopFollower(args map[string]interface{}) (map[string]interface
 	if containerName == "" {
 		containerName = "accumulate-follower"
 	}
+	if err := ValidateContainerName(containerName); err != nil {
+		return nil, fmt.Errorf("invalid container_name: %w", err)
+	}
 
 	cmd := exec.Command("docker", "stop", containerName)
 	output, err := cmd.CombinedOutput()
@@ -343,6 +403,9 @@ func (s *Server) removeFollower(args map[string]interface{}) (map[string]interfa
 	containerName, _ := args["container_name"].(string)
 	if containerName == "" {
 		containerName = "accumulate-follower"
+	}
+	if err := ValidateContainerName(containerName); err != nil {
+		return nil, fmt.Errorf("invalid container_name: %w", err)
 	}
 
 	// Stop container first if running

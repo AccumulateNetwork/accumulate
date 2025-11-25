@@ -100,6 +100,11 @@ type BootstrapPeerInfo struct {
 // Note: The "bootstrap server" (bootstrap.accumulate.defidevs.io) is a libp2p DHT server,
 // not a CometBFT node. To get network peer info, we query apollo-mainnet (the validator).
 func (c *BootstrapClient) QueryBootstrapPeers(network string, partition string) ([]BootstrapPeerInfo, error) {
+	// Validate network name to prevent injection
+	if err := ValidateNetworkName(network); err != nil {
+		return nil, fmt.Errorf("invalid network: %w", err)
+	}
+
 	// Determine validator endpoint based on network and partition
 	// We query the actual validator (apollo-mainnet) not the bootstrap server
 	var baseURL string
@@ -121,7 +126,7 @@ func (c *BootstrapClient) QueryBootstrapPeers(network string, partition string) 
 			tmPort = 16692
 		}
 	default:
-		return nil, fmt.Errorf("unsupported network: %s", network)
+		return nil, fmt.Errorf("unsupported network: %s (must be 'mainnet' or 'testnet')", network)
 	}
 
 	// Query the /net_info endpoint
@@ -166,6 +171,12 @@ func (c *BootstrapClient) QueryBootstrapPeers(network string, partition string) 
 
 		multiaddr := fmt.Sprintf("/dns/%s/tcp/%d/p2p/%s", baseURL, p2pPort, peer.NodeInfo.ID)
 
+		// Validate the generated multiaddr before adding
+		if err := ValidateMultiaddr(multiaddr); err != nil {
+			// Skip invalid peers but continue processing
+			continue
+		}
+
 		peers = append(peers, BootstrapPeerInfo{
 			NodeID:     peer.NodeInfo.ID,
 			ListenAddr: listenAddr,
@@ -185,16 +196,11 @@ func (c *BootstrapClient) GetBootstrapPeersWithFallback(network string, partitio
 	if err != nil {
 		// Fall back to hardcoded values
 		hardcoded := getDefaultBootstrapPeers(network, partition)
-		var result []string
-		for _, p := range hardcoded {
-			if s, ok := p.(string); ok {
-				result = append(result, s)
-			}
-		}
+		result := validateAndFilterMultiaddrs(hardcoded)
 		return result, "hardcoded (bootstrap server unreachable: " + err.Error() + ")", nil
 	}
 
-	// Extract multiaddrs from peers
+	// Extract multiaddrs from peers (already validated in QueryBootstrapPeers)
 	var multiaddrs []string
 	for _, peer := range peers {
 		multiaddrs = append(multiaddrs, peer.Multiaddr)
@@ -203,34 +209,37 @@ func (c *BootstrapClient) GetBootstrapPeersWithFallback(network string, partitio
 	if len(multiaddrs) == 0 {
 		// No peers found, fall back to hardcoded
 		hardcoded := getDefaultBootstrapPeers(network, partition)
-		var result []string
-		for _, p := range hardcoded {
-			if s, ok := p.(string); ok {
-				result = append(result, s)
-			}
-		}
+		result := validateAndFilterMultiaddrs(hardcoded)
 		return result, "hardcoded (no peers found on bootstrap server)", nil
 	}
 
 	return multiaddrs, "queried from bootstrap server", nil
 }
 
+// validateAndFilterMultiaddrs validates and filters multiaddr strings from interface slice
+func validateAndFilterMultiaddrs(addrs []interface{}) []string {
+	var result []string
+	for _, p := range addrs {
+		if s, ok := p.(string); ok {
+			if err := ValidateMultiaddr(s); err == nil {
+				result = append(result, s)
+			}
+		}
+	}
+	return result
+}
+
 // CompareWithHardcoded compares bootstrap server results with hardcoded values
 func (c *BootstrapClient) CompareWithHardcoded(network string, partition string) (map[string]interface{}, error) {
-	// Get bootstrap server peers
+	// Get bootstrap server peers (already validated)
 	bootstrapPeers, source, err := c.GetBootstrapPeersWithFallback(network, partition)
 	if err != nil {
 		return nil, err
 	}
 
-	// Get hardcoded peers
+	// Get hardcoded peers (validate them)
 	hardcodedRaw := getDefaultBootstrapPeers(network, partition)
-	var hardcodedPeers []string
-	for _, p := range hardcodedRaw {
-		if s, ok := p.(string); ok {
-			hardcodedPeers = append(hardcodedPeers, s)
-		}
-	}
+	hardcodedPeers := validateAndFilterMultiaddrs(hardcodedRaw)
 
 	// Compare
 	matching := []string{}
@@ -289,4 +298,121 @@ func ExtractNodeIDFromMultiaddr(multiaddr string) string {
 		return parts[1]
 	}
 	return ""
+}
+
+// BootstrapServerInfo represents the response from /info endpoint
+type BootstrapServerInfo struct {
+	PeerID            string         `json:"peer_id"`
+	ListenAddresses   []string       `json:"listen_addresses"`
+	ExternalAddresses []string       `json:"external_addresses"`
+	DHT               DHTInfo        `json:"dht"`
+	Connections       ConnectionInfo `json:"connections"`
+	UptimeSeconds     int64          `json:"uptime_seconds"`
+}
+
+// DHTInfo contains DHT statistics
+type DHTInfo struct {
+	Mode             string `json:"mode"`
+	RoutingTableSize int    `json:"routing_table_size"`
+}
+
+// ConnectionInfo contains connection statistics
+type ConnectionInfo struct {
+	Total    int `json:"total"`
+	Inbound  int `json:"inbound"`
+	Outbound int `json:"outbound"`
+}
+
+// BootstrapServerHealth represents the response from /health endpoint
+type BootstrapServerHealth struct {
+	Status      string `json:"status"`
+	PeerCount   int    `json:"peer_count"`
+	ConnCount   int    `json:"conn_count"`
+	UptimeHours int64  `json:"uptime_hours"`
+	Reason      string `json:"reason,omitempty"`
+}
+
+// BootstrapPeer represents a single peer from /peers endpoint
+type BootstrapPeer struct {
+	PeerID    string   `json:"peer_id"`
+	Addresses []string `json:"addresses"`
+}
+
+// BootstrapPeersResponse represents the response from /peers endpoint
+type BootstrapPeersResponse struct {
+	Count int             `json:"count"`
+	Peers []BootstrapPeer `json:"peers"`
+}
+
+// QueryBootstrapServerInfo queries the bootstrap server's /info endpoint
+func (c *BootstrapClient) QueryBootstrapServerInfo(serverURL string) (*BootstrapServerInfo, error) {
+	if serverURL == "" {
+		serverURL = "http://bootstrap.accumulate.defidevs.io:8080"
+	}
+
+	url := fmt.Sprintf("%s/info", serverURL)
+	resp, err := c.httpClient.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query bootstrap server at %s: %w", url, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("bootstrap server returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var info BootstrapServerInfo
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	return &info, nil
+}
+
+// QueryBootstrapServerHealth queries the bootstrap server's /health endpoint
+func (c *BootstrapClient) QueryBootstrapServerHealth(serverURL string) (*BootstrapServerHealth, error) {
+	if serverURL == "" {
+		serverURL = "http://bootstrap.accumulate.defidevs.io:8080"
+	}
+
+	url := fmt.Sprintf("%s/health", serverURL)
+	resp, err := c.httpClient.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query bootstrap server at %s: %w", url, err)
+	}
+	defer resp.Body.Close()
+
+	var health BootstrapServerHealth
+	if err := json.NewDecoder(resp.Body).Decode(&health); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	return &health, nil
+}
+
+// QueryBootstrapServerPeers queries the bootstrap server's /peers endpoint
+func (c *BootstrapClient) QueryBootstrapServerPeers(serverURL string) (*BootstrapPeersResponse, error) {
+	if serverURL == "" {
+		serverURL = "http://bootstrap.accumulate.defidevs.io:8080"
+	}
+
+	url := fmt.Sprintf("%s/peers", serverURL)
+	resp, err := c.httpClient.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query bootstrap server at %s: %w", url, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("bootstrap server returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var peers BootstrapPeersResponse
+	if err := json.NewDecoder(resp.Body).Decode(&peers); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	return &peers, nil
 }
