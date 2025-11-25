@@ -28,6 +28,23 @@ func (s *Server) prepareAccmanArtifacts(args map[string]interface{}) (map[string
 		return nil, fmt.Errorf("missing required parameter: output_dir")
 	}
 
+	// Validate paths to prevent directory traversal
+	var err error
+	dnNodeDir, err = ValidateDirectoryPath(dnNodeDir, "")
+	if err != nil {
+		return nil, fmt.Errorf("invalid dn_node_dir: %w", err)
+	}
+
+	bvnNodeDir, err = ValidateDirectoryPath(bvnNodeDir, "")
+	if err != nil {
+		return nil, fmt.Errorf("invalid bvn_node_dir: %w", err)
+	}
+
+	outputDir, err = ValidatePath(outputDir, "")
+	if err != nil {
+		return nil, fmt.Errorf("invalid output_dir: %w", err)
+	}
+
 	// Validate node directories have required structure
 	if err := validateNodeDirectory(dnNodeDir, "DN"); err != nil {
 		return nil, err
@@ -36,15 +53,22 @@ func (s *Server) prepareAccmanArtifacts(args map[string]interface{}) (map[string
 		return nil, err
 	}
 
-	// Optional parameters
+	// Optional parameters with validation
 	network, _ := args["network"].(string)
 	if network == "" {
 		network = "mainnet"
+	}
+	if err := ValidateNetworkName(network); err != nil {
+		return nil, fmt.Errorf("invalid network: %w", err)
 	}
 
 	partition, _ := args["partition"].(string)
 	if partition == "" {
 		partition = "dual"
+	}
+	// Validate partition (simple alphanumeric check)
+	if err := ValidateNetworkName(partition); err != nil {
+		return nil, fmt.Errorf("invalid partition: %w", err)
 	}
 
 	// Bootstrap peers (use defaults if not provided)
@@ -107,16 +131,27 @@ func (s *Server) prepareAccmanArtifacts(args map[string]interface{}) (map[string
 		return nil, fmt.Errorf("failed to write metadata: %w", err)
 	}
 
-	// Step 3: Create accman deployment command
+	// Step 3: Create accman deployment command (with escaped values)
+	// Note: partition and network are already validated above
 	deployCommand := fmt.Sprintf(`accman-mcp deploy_follower \
   --partition %s \
   --dn-snapshot %s \
   --bvn-snapshot %s \
   --use-volume \
-  --network %s`, partition, dnArchive, bvnArchive, network)
+  --network %s`, ShellEscape(partition), ShellEscape(dnArchive), ShellEscape(bvnArchive), ShellEscape(network))
 
 	// Step 4: Create deployment script
+	// All values used in commands are either:
+	// - Validated via ValidateNetworkName (network, partition)
+	// - Generated internally (archive paths with validated base paths)
 	scriptPath := filepath.Join(outputDir, fmt.Sprintf("deploy-%s.sh", timestamp))
+
+	// Use shell-escaped values for command arguments
+	escapedPartition := ShellEscape(partition)
+	escapedNetwork := ShellEscape(network)
+	escapedDnArchive := ShellEscape(dnArchive)
+	escapedBvnArchive := ShellEscape(bvnArchive)
+
 	scriptContent := fmt.Sprintf(`#!/bin/bash
 # Accumulate Follower Deployment Script
 # Generated: %s
@@ -178,10 +213,10 @@ echo "  curl http://localhost:52101/status | jq '.result.sync_info'"
 		partition,
 		filepath.Base(dnArchive),
 		filepath.Base(bvnArchive),
-		partition,
-		dnArchive,
-		bvnArchive,
-		network,
+		escapedPartition,
+		escapedDnArchive,
+		escapedBvnArchive,
+		escapedNetwork,
 		partition,
 	)
 
@@ -197,8 +232,8 @@ echo "  curl http://localhost:52101/status | jq '.result.sync_info'"
 echo "=== Verifying Deployment Artifacts ==="
 echo ""
 
-DN_ARCHIVE="%s"
-BVN_ARCHIVE="%s"
+DN_ARCHIVE=%s
+BVN_ARCHIVE=%s
 
 # Check DN archive
 echo "Checking DN archive..."
@@ -254,7 +289,7 @@ fi
 
 echo ""
 echo "=== Verification Complete ==="
-`, dnArchive, bvnArchive)
+`, escapedDnArchive, escapedBvnArchive)
 
 	if err := os.WriteFile(verifyPath, []byte(verifyContent), 0755); err != nil {
 		return nil, fmt.Errorf("failed to write verification script: %w", err)
