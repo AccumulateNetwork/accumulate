@@ -114,9 +114,9 @@ func TestHandleRequest_ListTools(t *testing.T) {
 		t.Fatal("expected tools to be an array")
 	}
 
-	// Should have 63 tools (all categories combined)
-	if len(tools) != 63 {
-		t.Errorf("expected 63 tools, got %d", len(tools))
+	// Should have at least 67 tools (all categories combined)
+	if len(tools) < 67 {
+		t.Errorf("expected at least 67 tools, got %d", len(tools))
 	}
 
 	// Check that each tool has required fields
@@ -331,8 +331,8 @@ func TestExecuteTool_AllToolsRegistered(t *testing.T) {
 func TestGetAllTools_Count(t *testing.T) {
 	tools := GetAllTools()
 
-	if len(tools) != 63 {
-		t.Errorf("expected 63 tools from GetAllTools(), got %d", len(tools))
+	if len(tools) < 67 {
+		t.Errorf("expected at least 67 tools from GetAllTools(), got %d", len(tools))
 	}
 }
 

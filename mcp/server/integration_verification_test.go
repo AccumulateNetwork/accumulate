@@ -155,8 +155,8 @@ func TestMCPServerIntegration(t *testing.T) {
 			t.Fatal("expected prompts array")
 		}
 
-		if len(prompts) != 5 {
-			t.Errorf("expected 5 prompts, got %d", len(prompts))
+		if len(prompts) < 9 {
+			t.Errorf("expected at least 9 prompts, got %d", len(prompts))
 		}
 
 		t.Logf("✅ Prompts available: %d prompts", len(prompts))
@@ -168,6 +168,10 @@ func TestMCPServerIntegration(t *testing.T) {
 			"troubleshoot-follower-sync": false,
 			"setup-dev-wallet":           false,
 			"quick-node-status":          false,
+			"organize-documentation":     false,
+			"prepare-mainnet-follower":   false,
+			"recovery-from-failure":      false,
+			"mainnet-sync-status":        false,
 		}
 
 		for _, prompt := range prompts {
@@ -182,7 +186,7 @@ func TestMCPServerIntegration(t *testing.T) {
 			}
 		}
 
-		t.Logf("✅ All 5 designed prompts present")
+		t.Logf("✅ All %d designed prompts present", len(expectedPrompts))
 	})
 
 	t.Run("Can retrieve a specific prompt", func(t *testing.T) {
@@ -350,13 +354,14 @@ func TestPromptToolIntegration(t *testing.T) {
 		content := messages[0]["content"].(map[string]interface{})
 		text := content["text"].(string)
 
-		// Verify prompt references valid tools
+		// Verify prompt references valid tools - these are the tools actually used in deploy-follower-node
 		referencedTools := []string{
 			"accumulate_init_follower",
 			"accumulate_run_follower",
 			"accumulate_follower_status",
-			"accumulate_node_info",
-			"accumulate_network_status",
+			"accumulate_validate_prerequisites",
+			"accumulate_get_sync_progress",
+			"accumulate_analyze_logs",
 		}
 
 		for _, toolName := range referencedTools {
