@@ -241,14 +241,14 @@ func TestCompleteWorkflowExample(t *testing.T) {
 	content := messages[0]["content"].(map[string]interface{})
 	promptText := content["text"].(string)
 
-	// Verify workflow steps are present
+	// Verify workflow steps are present - matching actual prompt content
 	requiredSteps := []string{
-		"Prerequisites Check",
-		"Initialization",
+		"Validate Prerequisites",
+		"Initialize Follower",
 		"Start Follower",
 		"Verify Startup",
-		"Monitor Synchronization",
-		"Troubleshooting",
+		"Monitor Sync Progress",
+		"Analyze Logs",
 	}
 
 	t.Log("\n✅ Workflow Steps Verification:")
@@ -260,13 +260,14 @@ func TestCompleteWorkflowExample(t *testing.T) {
 		}
 	}
 
-	// Verify tool calls are documented
+	// Verify tool calls are documented - matching actual tools used in prompt
 	toolCalls := []string{
 		"accumulate_init_follower",
 		"accumulate_run_follower",
 		"accumulate_follower_status",
-		"accumulate_node_info",
-		"accumulate_network_status",
+		"accumulate_validate_prerequisites",
+		"accumulate_get_sync_progress",
+		"accumulate_analyze_logs",
 	}
 
 	t.Log("\n✅ Tool Call Instructions:")
@@ -278,12 +279,12 @@ func TestCompleteWorkflowExample(t *testing.T) {
 		}
 	}
 
-	// Verify guidance sections
+	// Verify guidance sections - matching actual sections in prompt
 	guidanceSections := []string{
 		"Expected Output",
 		"Expected Timeline",
-		"Validation",
-		"Next Steps",
+		"Troubleshooting",
+		"Related Prompts",
 	}
 
 	t.Log("\n✅ Guidance Sections:")

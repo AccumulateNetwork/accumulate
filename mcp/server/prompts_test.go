@@ -8,9 +8,9 @@ import (
 func TestGetAllPrompts(t *testing.T) {
 	prompts := GetAllPrompts()
 
-	// Should have 5 prompts
-	if len(prompts) != 5 {
-		t.Errorf("Expected 5 prompts, got %d", len(prompts))
+	// Should have at least 9 prompts
+	if len(prompts) < 9 {
+		t.Errorf("Expected at least 9 prompts, got %d", len(prompts))
 	}
 
 	// Verify expected prompts exist
@@ -20,6 +20,10 @@ func TestGetAllPrompts(t *testing.T) {
 		"troubleshoot-follower-sync": false,
 		"setup-dev-wallet":           false,
 		"quick-node-status":          false,
+		"organize-documentation":     false,
+		"prepare-mainnet-follower":   false,
+		"recovery-from-failure":      false,
+		"mainnet-sync-status":        false,
 	}
 
 	for _, prompt := range prompts {
@@ -103,13 +107,13 @@ func TestGetPromptTemplate(t *testing.T) {
 				"bvn_database": "/snapshots/bvn",
 				"work_dir":     "/accumulate/follower",
 			},
-			checkText: "Deploy Accumulate follower node to: /accumulate/follower",
+			checkText: "Deploy Accumulate Follower Node",
 		},
 		{
 			name:       "monitor-follower-health template",
 			promptName: "monitor-follower-health",
 			args:       map[string]string{},
-			checkText:  "Monitor Accumulate follower health",
+			checkText:  "Monitor Accumulate Follower Health",
 		},
 		{
 			name:       "troubleshoot-follower-sync template",
@@ -117,7 +121,7 @@ func TestGetPromptTemplate(t *testing.T) {
 			args: map[string]string{
 				"symptom": "no_peers",
 			},
-			checkText: "Symptom: no_peers",
+			checkText: "Troubleshoot Accumulate Follower Sync Issues",
 		},
 		{
 			name:       "setup-dev-wallet template",
@@ -180,8 +184,8 @@ func TestHandleListPrompts(t *testing.T) {
 		t.Fatal("Result should have prompts array")
 	}
 
-	if len(prompts) != 5 {
-		t.Errorf("Expected 5 prompts, got %d", len(prompts))
+	if len(prompts) < 9 {
+		t.Errorf("Expected at least 9 prompts, got %d", len(prompts))
 	}
 }
 

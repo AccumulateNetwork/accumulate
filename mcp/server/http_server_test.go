@@ -225,13 +225,14 @@ func TestHTTPServer_CORS(t *testing.T) {
 	body, _ := json.Marshal(request)
 	req := httptest.NewRequest("POST", "/mcp", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", "http://localhost:3000") // Set Origin header to trigger CORS response
 	w := httptest.NewRecorder()
 
 	httpSrv.ServeHTTP(w, req)
 
 	resp := w.Result()
 
-	// Check CORS headers
+	// Check CORS headers - only set when Origin header is present
 	if resp.Header.Get("Access-Control-Allow-Origin") == "" {
 		t.Error("Expected Access-Control-Allow-Origin header")
 	}
