@@ -79,7 +79,7 @@ type ClientHelper struct {
 func NewClientHelper(state *State) *ClientHelper {
 	return &ClientHelper{
 		state: state,
-		cfg:   LoadConfig(),
+		cfg:   state.Config,
 	}
 }
 

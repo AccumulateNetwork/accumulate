@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math/big"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -18,9 +19,9 @@ import (
 )
 
 const (
-	MainnetEndpoint = "https://mainnet.accumulatenetwork.io/v3"
-	TestnetEndpoint = "https://testnet.accumulatenetwork.io/v3"
-	DevnetEndpoint  = "http://127.0.0.1:26660/v2"
+	MainnetEndpoint        = "https://mainnet.accumulatenetwork.io/v3"
+	TestnetEndpoint        = "https://testnet.accumulatenetwork.io/v3"
+	DefaultDevnetEndpoint  = "http://127.0.0.1:26660/v2"
 )
 
 // Client wraps the Accumulate SDK jsonrpc.Client
@@ -67,7 +68,11 @@ func getEndpoint(network string) string {
 	case "testnet":
 		return TestnetEndpoint
 	case "devnet":
-		return DevnetEndpoint
+		// Allow override via environment variable for remote devnets
+		if endpoint := os.Getenv("ACCUMULATE_DEVNET_ENDPOINT"); endpoint != "" {
+			return endpoint
+		}
+		return DefaultDevnetEndpoint
 	default:
 		return network
 	}
