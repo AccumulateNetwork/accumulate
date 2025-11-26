@@ -7,7 +7,9 @@
 package accumulated
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -16,6 +18,9 @@ import (
 	"sort"
 	"time"
 
+	"github.com/cometbft/cometbft/crypto"
+	"github.com/cometbft/cometbft/crypto/ed25519"
+	cmttypes "github.com/cometbft/cometbft/types"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
@@ -27,7 +32,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
+	sv2 "gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/cometbft"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 var (
@@ -230,6 +238,169 @@ func (d *Daemon) collectSnapshot(batch *coredb.Batch, blockTime time.Time, major
 }
 
 func (d *Daemon) LoadSnapshot(file ioutil2.SectionReader) error {
+	fmt.Println("=== STARTING SNAPSHOT RESTORE ===")
+	if d.Logger != nil {
+		d.Logger.Info("=== STARTING SNAPSHOT RESTORE ===")
+	}
+
+	// First, extract the consensus section from the snapshot
+	fmt.Println("Opening snapshot to extract consensus state")
+	if d.Logger != nil {
+		d.Logger.Info("Opening snapshot to extract consensus state")
+	}
+	_, err := file.Seek(0, io.SeekStart)
+	if err != nil {
+		return fmt.Errorf("failed to seek to start: %v", err)
+	}
+
+	rd, err := sv2.Open(file)
+	if err != nil {
+		return fmt.Errorf("failed to open snapshot: %v", err)
+	}
+
+	fmt.Printf("Snapshot opened successfully - version: %d, sections: %d\n", rd.Header.Version, len(rd.Sections))
+	fmt.Printf("Snapshot RootHash: %x\n", rd.Header.RootHash)
+
+	// Look for the consensus section
+	var consensusDoc *cometbft.GenesisDoc
+	for i, section := range rd.Sections {
+		fmt.Printf("Processing snapshot section %d: type=%v, size=%d\n", i, section.Type(), section.Size())
+
+		if section.Type() != sv2.SectionTypeConsensus {
+			continue
+		}
+
+		fmt.Printf("*** FOUND CONSENSUS SECTION *** index=%d, size=%d\n", i, section.Size())
+
+		consensusDoc = new(cometbft.GenesisDoc)
+		r, err := section.Open()
+		if err != nil {
+			return fmt.Errorf("failed to open consensus section: %v", err)
+		}
+
+		// Read the raw bytes for debugging
+		rawBytes, err := io.ReadAll(r)
+		if err != nil {
+			return fmt.Errorf("failed to read consensus section: %v", err)
+		}
+		fmt.Printf("Read %d bytes from consensus section\n", len(rawBytes))
+
+		// Try to unmarshal
+		err = consensusDoc.UnmarshalBinary(rawBytes)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal consensus doc: %v", err)
+		}
+
+		fmt.Printf("Unmarshaled consensus doc: ChainID=%s, Params=%v, Validators=%v, Block=%v\n",
+			consensusDoc.ChainID, consensusDoc.Params, consensusDoc.Validators, consensusDoc.Block)
+
+		// Even if Block is nil, we still have ChainID which is valuable
+		if consensusDoc.Block == nil && consensusDoc.ChainID == "" {
+			fmt.Println("Consensus doc has no useful data - skipping")
+			consensusDoc = nil
+			continue
+		}
+
+		// If we have a chain ID but no block, we'll create a minimal genesis
+		if consensusDoc.Block == nil {
+			fmt.Println("WARNING: Consensus doc has ChainID but no Block data")
+			fmt.Println("Will create minimal genesis with ChainID only")
+		} else {
+			fmt.Printf("Consensus doc unmarshaled successfully - chain_id=%s, height=%d, time=%v\n",
+				consensusDoc.Block.ChainID, consensusDoc.Block.Height, consensusDoc.Block.Time)
+		}
+		break
+	}
+
+	if consensusDoc == nil {
+		fmt.Println("No consensus section found in snapshot - CometBFT will use existing genesis or create new state")
+	} else {
+		// Write the genesis doc to CometBFT's genesis.json file
+		genesisPath := filepath.Join(d.Config.RootDir, "config", "genesis.json")
+		fmt.Printf("Writing CometBFT genesis document to: %s\n", genesisPath)
+
+		// Convert validators from snapshot format to CometBFT format
+		var validators []cmttypes.GenesisValidator
+		for i, v := range consensusDoc.Validators {
+			fmt.Printf("Converting validator %d: Type=%v, Power=%d, Name=%s, PubKeyLen=%d\n",
+				i, v.Type, v.Power, v.Name, len(v.PubKey))
+
+			// Convert public key based on type
+			var pubKey crypto.PubKey
+			switch v.Type {
+			case protocol.SignatureTypeED25519:
+				if len(v.PubKey) != ed25519.PubKeySize {
+					fmt.Printf("WARNING: Invalid ED25519 public key length: %d (expected %d)\n", len(v.PubKey), ed25519.PubKeySize)
+					continue
+				}
+				var pk ed25519.PubKey
+				copy(pk[:], v.PubKey)
+				pubKey = pk
+			default:
+				fmt.Printf("WARNING: Unsupported signature type: %v\n", v.Type)
+				continue
+			}
+
+			validators = append(validators, cmttypes.GenesisValidator{
+				Address: v.Address,
+				PubKey:  pubKey,
+				Power:   v.Power,
+				Name:    v.Name,
+			})
+		}
+		fmt.Printf("Converted %d validators from snapshot\n", len(validators))
+
+		// Convert cometbft.GenesisDoc to CometBFT's types.GenesisDoc
+		var tmGenesisDoc *cmttypes.GenesisDoc
+		if consensusDoc.Block != nil {
+			tmGenesisDoc = &cmttypes.GenesisDoc{
+				ChainID:         consensusDoc.Block.ChainID,
+				GenesisTime:     consensusDoc.Block.Time,
+				InitialHeight:   consensusDoc.Block.Height,
+				ConsensusParams: cmttypes.DefaultConsensusParams(),
+				AppHash:         rd.Header.RootHash[:],
+				Validators:      validators,
+			}
+		} else {
+			// No block data, create minimal genesis with just ChainID
+			tmGenesisDoc = &cmttypes.GenesisDoc{
+				ChainID:         consensusDoc.ChainID,
+				GenesisTime:     time.Now().UTC(),
+				InitialHeight:   1,
+				ConsensusParams: cmttypes.DefaultConsensusParams(),
+				AppHash:         rd.Header.RootHash[:],
+				Validators:      validators,
+			}
+			fmt.Printf("Creating minimal genesis with ChainID=%s (no block data in snapshot)\n", consensusDoc.ChainID)
+		}
+
+		// Marshal and write to file
+		genesisJSON, err := json.MarshalIndent(tmGenesisDoc, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to marshal genesis doc: %v", err)
+		}
+
+		err = os.MkdirAll(filepath.Dir(genesisPath), 0755)
+		if err != nil {
+			return fmt.Errorf("failed to create config directory: %v", err)
+		}
+
+		err = os.WriteFile(genesisPath, genesisJSON, 0644)
+		if err != nil {
+			return fmt.Errorf("failed to write genesis.json: %v", err)
+		}
+
+		fmt.Printf("Genesis document written successfully - chain_id=%s, height=%d, time=%v\n",
+			tmGenesisDoc.ChainID, tmGenesisDoc.InitialHeight, tmGenesisDoc.GenesisTime)
+	}
+
+	// Reset file pointer for database restore
+	fmt.Println("Restoring Accumulate database from snapshot")
+	_, err = file.Seek(0, io.SeekStart)
+	if err != nil {
+		return fmt.Errorf("failed to seek to start for database restore: %v", err)
+	}
+
 	db, err := coredb.Open(d.Config, d.Logger)
 	if err != nil {
 		return fmt.Errorf("failed to open database: %v", err)
@@ -242,10 +413,13 @@ func (d *Daemon) LoadSnapshot(file ioutil2.SectionReader) error {
 	// Set observer on database so all batches inherit it
 	db.SetObserver(execute.NewDatabaseObserver())
 
+	fmt.Println("Starting FullRestore")
 	err = snapshot.FullRestore(db, file, d.Logger, d.Config.Accumulate.Describe.PartitionUrl())
 	if err != nil {
 		return fmt.Errorf("failed to restore database: %v", err)
 	}
+
+	fmt.Println("=== SNAPSHOT RESTORE COMPLETE ===")
 	return nil
 }
 
