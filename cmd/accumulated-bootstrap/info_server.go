@@ -51,6 +51,18 @@ type HealthStatus struct {
 	Reason string `json:"reason,omitempty"`
 }
 
+// PeerInfo contains information about a connected peer
+type PeerInfo struct {
+	PeerID    string   `json:"peer_id"`
+	Addresses []string `json:"addresses"`
+}
+
+// PeersResponse contains the list of connected peers
+type PeersResponse struct {
+	Count int        `json:"count"`
+	Peers []PeerInfo `json:"peers"`
+}
+
 // InfoServer serves bootstrap server information on HTTP
 type InfoServer struct {
 	host      host.Host
@@ -71,6 +83,7 @@ func NewInfoServer(h host.Host, listen multiaddr.Multiaddr, external []multiaddr
 	mux := http.NewServeMux()
 	mux.HandleFunc("/info", s.handleInfo)
 	mux.HandleFunc("/health", s.handleHealth)
+	mux.HandleFunc("/peers", s.handlePeers)
 
 	s.server = &http.Server{
 		Handler:           mux,
@@ -187,6 +200,49 @@ func (s *InfoServer) handleHealth(w http.ResponseWriter, r *http.Request) {
 	encoder.SetIndent("", "  ")
 	if err := encoder.Encode(healthDetails); err != nil {
 		slog.Error("Failed to encode health response", "error", err)
+	}
+}
+
+// handlePeers serves the list of connected peers
+func (s *InfoServer) handlePeers(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get list of connected peers
+	peers := s.host.Network().Peers()
+
+	// Build peer info list
+	peerInfos := make([]PeerInfo, 0, len(peers))
+	for _, peerID := range peers {
+		// Get addresses for this peer
+		addrs := s.host.Peerstore().Addrs(peerID)
+		addrStrs := make([]string, 0, len(addrs))
+		for _, addr := range addrs {
+			// Build full multiaddr with peer ID
+			fullAddr := addr.String() + "/p2p/" + peerID.String()
+			addrStrs = append(addrStrs, fullAddr)
+		}
+
+		peerInfos = append(peerInfos, PeerInfo{
+			PeerID:    peerID.String(),
+			Addresses: addrStrs,
+		})
+	}
+
+	response := PeersResponse{
+		Count: len(peerInfos),
+		Peers: peerInfos,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	encoder := json.NewEncoder(w)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(response); err != nil {
+		slog.Error("Failed to encode peers response", "error", err)
 	}
 }
 
