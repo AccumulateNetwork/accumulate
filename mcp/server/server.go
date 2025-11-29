@@ -361,6 +361,10 @@ func (s *Server) executeTool(name string, args map[string]interface{}) (map[stri
 	case "accumulate_db_query_chain":
 		return s.dbQueryChain(args)
 
+	// Snapshot Validation
+	case "accumulate_validate_snapshot":
+		return s.validateSnapshotTool(args)
+
 	// Follower Node Management (Docker-based)
 	case "accumulate_init_follower":
 		return s.initFollower(args)

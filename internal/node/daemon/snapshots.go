@@ -7,7 +7,6 @@
 package accumulated
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
@@ -18,8 +17,12 @@ import (
 	"sort"
 	"time"
 
+	cmtcfg "github.com/cometbft/cometbft/config"
 	"github.com/cometbft/cometbft/crypto"
 	"github.com/cometbft/cometbft/crypto/ed25519"
+	cmtstore "github.com/cometbft/cometbft/proto/tendermint/store"
+	sm "github.com/cometbft/cometbft/state"
+	"github.com/cometbft/cometbft/store"
 	cmttypes "github.com/cometbft/cometbft/types"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -333,8 +336,9 @@ func (d *Daemon) LoadSnapshot(file ioutil2.SectionReader) error {
 					fmt.Printf("WARNING: Invalid ED25519 public key length: %d (expected %d)\n", len(v.PubKey), ed25519.PubKeySize)
 					continue
 				}
-				var pk ed25519.PubKey
-				copy(pk[:], v.PubKey)
+				// ed25519.PubKey is a []byte, not an array, so we need to make a copy
+				pk := make(ed25519.PubKey, ed25519.PubKeySize)
+				copy(pk, v.PubKey)
 				pubKey = pk
 			default:
 				fmt.Printf("WARNING: Unsupported signature type: %v\n", v.Type)
@@ -374,24 +378,107 @@ func (d *Daemon) LoadSnapshot(file ioutil2.SectionReader) error {
 			fmt.Printf("Creating minimal genesis with ChainID=%s (no block data in snapshot)\n", consensusDoc.ChainID)
 		}
 
-		// Marshal and write to file
-		genesisJSON, err := json.MarshalIndent(tmGenesisDoc, "", "  ")
-		if err != nil {
-			return fmt.Errorf("failed to marshal genesis doc: %v", err)
-		}
-
+		// Ensure config directory exists
 		err = os.MkdirAll(filepath.Dir(genesisPath), 0755)
 		if err != nil {
 			return fmt.Errorf("failed to create config directory: %v", err)
 		}
 
-		err = os.WriteFile(genesisPath, genesisJSON, 0644)
+		// Use CometBFT's SaveAs which uses the proper JSON serialization
+		// (cmtjson.MarshalIndent) that encodes int64 values as strings
+		err = tmGenesisDoc.SaveAs(genesisPath)
 		if err != nil {
 			return fmt.Errorf("failed to write genesis.json: %v", err)
 		}
 
 		fmt.Printf("Genesis document written successfully - chain_id=%s, height=%d, time=%v\n",
 			tmGenesisDoc.ChainID, tmGenesisDoc.InitialHeight, tmGenesisDoc.GenesisTime)
+
+		// Initialize CometBFT's state.db with state derived from genesis
+		// This is critical for snapshot restore to work - without this, CometBFT
+		// will fail because the state has nil validators after the handshake.
+		fmt.Println("Initializing CometBFT state.db from genesis")
+
+		stateDBPath := filepath.Join(d.Config.RootDir, "data", "state.db")
+		fmt.Printf("Opening state.db at: %s\n", stateDBPath)
+
+		// Use CometBFT's DB provider to open state.db
+		stateDB, err := cmtcfg.DefaultDBProvider(&cmtcfg.DBContext{
+			ID:     "state",
+			Config: &d.Config.Config,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to open state.db: %v", err)
+		}
+		defer stateDB.Close()
+
+		// Create state store and make genesis state
+		stateStore := sm.NewStore(stateDB, sm.StoreOptions{
+			DiscardABCIResponses: false,
+		})
+
+		// Validate and complete the genesis doc
+		err = tmGenesisDoc.ValidateAndComplete()
+		if err != nil {
+			return fmt.Errorf("failed to validate genesis doc: %v", err)
+		}
+
+		// Create initial state from genesis
+		state, err := sm.MakeGenesisState(tmGenesisDoc)
+		if err != nil {
+			return fmt.Errorf("failed to make genesis state: %v", err)
+		}
+
+		// Keep CometBFT state at height 0 (genesis state).
+		// CometBFT will skip reconstructLastCommit when LastBlockHeight=0.
+		// The ABCI handshake will see the app at height 1 and synchronize.
+		// We set the initial AppHash to match the snapshot's root hash.
+		state.InitialHeight = 1
+		state.AppHash = tmGenesisDoc.AppHash
+
+		// Save state to state.db
+		err = stateStore.Save(state)
+		if err != nil {
+			return fmt.Errorf("failed to save state to state.db: %v", err)
+		}
+
+		fmt.Printf("CometBFT state initialized - height=%d, validators=%d, appHash=%X\n",
+			state.LastBlockHeight, state.Validators.Size(), state.AppHash)
+
+		// Initialize CometBFT's blockstore.db to match state height
+		// This is required because CometBFT's blocksync reactor requires state.LastBlockHeight == blockstore.Height()
+		fmt.Println("Initializing CometBFT blockstore.db")
+
+		blockstoreDB, err := cmtcfg.DefaultDBProvider(&cmtcfg.DBContext{
+			ID:     "blockstore",
+			Config: &d.Config.Config,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to open blockstore.db: %v", err)
+		}
+		defer blockstoreDB.Close()
+
+		// Note: we don't need a BlockStore instance since we're not saving blocks
+		// We only need to save the BlockStoreState directly
+
+		// Save BlockStoreState at height 0 (matching state height 0)
+		// No SeenCommit is needed when height is 0
+		_ = store.NewBlockStore(blockstoreDB) // Create BlockStore to initialize DB schema
+		bss := cmtstore.BlockStoreState{
+			Base:   0,
+			Height: 0,
+		}
+		store.SaveBlockStoreState(&bss, blockstoreDB)
+
+		fmt.Printf("CometBFT blockstore initialized - base=%d, height=%d\n", bss.Base, bss.Height)
+
+		// Create priv_validator_state.json (required by CometBFT for non-validators)
+		privValStateFile := filepath.Join(d.Config.Config.BaseConfig.DBDir(), "priv_validator_state.json")
+		privValState := []byte(`{"height":"0","round":0,"step":0}`)
+		if err := os.WriteFile(privValStateFile, privValState, 0600); err != nil {
+			return fmt.Errorf("failed to create priv_validator_state.json: %v", err)
+		}
+		fmt.Println("Created priv_validator_state.json")
 	}
 
 	// Reset file pointer for database restore

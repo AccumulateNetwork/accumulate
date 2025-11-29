@@ -113,17 +113,20 @@ User Snapshots → MCP Tool (restore) → Node Directories → Accman (Docker) �
 - [x] Port configuration design
 - [x] Implementation clarity assessment
 - [x] Integration pattern definition
+- [x] MCP tool implementation (`accumulate_restore_from_snapshots`)
+- [x] MCP validation tool (`accumulate_validate_snapshot`)
+- [x] CLI commands (`validate-snapshot`, `restore-genesis`)
+- [x] Core snapshot restore fixes (CometBFT state initialization)
+- [x] Pre-restore validation
 
 ### In Progress 🔄
 
-- [ ] MCP tool implementation
 - [ ] Accman integration
-- [ ] End-to-end testing
+- [ ] End-to-end testing with Docker
 
 ### Pending ⏳
 
 - [ ] Production deployment
-- [ ] User documentation
 - [ ] Performance optimization
 - [ ] Future enhancements (snapshot distribution, etc.)
 
@@ -179,10 +182,12 @@ User Snapshots → MCP Tool (restore) → Node Directories → Accman (Docker) �
 ### Code Locations
 
 **Accumulate Repository**:
-- MCP Tool: `mcp/server/tools_snapshot_restore.go` (to be created)
-- Tool Definition: `mcp/server/tool_definitions.go`
-- Restore Command: `cmd/accumulated/cmd_sync.go` (existing)
-- Export Tool: `tools/cmd/export-snapshot/` (existing)
+- MCP Tool: `mcp/server/tools_snapshot_restore.go`
+- MCP Validation: `mcp/server/tools_snapshot_restore.go` (validateSnapshot function)
+- Tool Definitions: `mcp/server/tool_definitions.go`
+- CLI Commands: `cmd/accumulated/cmd_snapshot.go` (validate-snapshot, restore-genesis)
+- Core Restore: `internal/node/daemon/snapshots.go` (LoadSnapshot)
+- Legacy Restore: `cmd/accumulated/cmd_sync.go` (restore-snapshot)
 
 **Accman Repository**:
 - Integration: `pkg/accman/deploy/snapshot.go` (to be created)
@@ -202,19 +207,20 @@ User Snapshots → MCP Tool (restore) → Node Directories → Accman (Docker) �
 
 **Target**: Production-ready in 2 weeks
 
-## Critical Questions Still Open
+## Resolved Questions
 
-1. **Tendermint Config** (Medium Priority)
-   - How does restore-snapshot handle config/tendermint.toml?
-   - Action: Research during implementation Day 1
+1. **Tendermint Config** (Resolved)
+   - `config.Store()` writes both `accumulate.toml` and `config.toml` (tendermint)
+   - CometBFT's WriteConfigFile handles tendermint config
 
-2. **MCP HTTP Endpoint** (Low Priority)
-   - What host:port for MCP server?
-   - Action: Document default (e.g., localhost:3000)
+2. **MCP HTTP Endpoint** (Resolved)
+   - Default: `http://localhost:8080`
+   - Configurable via MCP server startup
 
-3. **Error Handling** (Low Priority)
-   - Validation checks, error messages
-   - Action: Define during implementation
+3. **Error Handling** (Resolved)
+   - Pre-validation checks both snapshots before restore
+   - Clear error messages with specific issues
+   - Validation results include issues and warnings arrays
 
 ## Success Criteria
 
@@ -237,6 +243,6 @@ User Snapshots → MCP Tool (restore) → Node Directories → Accman (Docker) �
 
 ---
 
-**Document Version**: 1.0
-**Last Updated**: 2025-11-18
-**Status**: Ready for Implementation
+**Document Version**: 2.0
+**Last Updated**: 2025-11-29
+**Status**: Implementation Complete

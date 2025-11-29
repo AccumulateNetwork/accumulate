@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,6 +12,8 @@ import (
 	"github.com/cometbft/cometbft/privval"
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/cometbft"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -94,6 +97,39 @@ func (s *Server) restoreFromSnapshots(args map[string]interface{}) (map[string]i
 		bvnListenPort = basePort + 100
 		bvnAPIPort = basePort + 101
 		bvnP2PPort = basePort + 102
+	}
+
+	// Pre-validation: Check both snapshots before attempting restore
+	dnValidation, err := validateSnapshot(dnSnapshot)
+	if err != nil {
+		return nil, fmt.Errorf("failed to validate DN snapshot: %w", err)
+	}
+	if !dnValidation.Valid {
+		return map[string]interface{}{
+			"status":  "error",
+			"message": "DN snapshot validation failed",
+			"details": map[string]interface{}{
+				"snapshot": dnSnapshot,
+				"issues":   dnValidation.Issues,
+				"warnings": dnValidation.Warnings,
+			},
+		}, nil
+	}
+
+	bvnValidation, err := validateSnapshot(bvnSnapshot)
+	if err != nil {
+		return nil, fmt.Errorf("failed to validate BVN snapshot: %w", err)
+	}
+	if !bvnValidation.Valid {
+		return map[string]interface{}{
+			"status":  "error",
+			"message": "BVN snapshot validation failed",
+			"details": map[string]interface{}{
+				"snapshot": bvnSnapshot,
+				"issues":   bvnValidation.Issues,
+				"warnings": bvnValidation.Warnings,
+			},
+		}, nil
 	}
 
 	// Create work directory
@@ -301,4 +337,155 @@ func parsePort(v interface{}) (uint64, error) {
 	default:
 		return 0, fmt.Errorf("invalid port type: %T", v)
 	}
+}
+
+// SnapshotValidationResult contains the results of snapshot validation
+type SnapshotValidationResult struct {
+	Valid          bool     `json:"valid"`
+	Version        uint64   `json:"version"`
+	RootHash       string   `json:"root_hash,omitempty"`
+	Partition      string   `json:"partition,omitempty"`
+	BlockIndex     uint64   `json:"block_index,omitempty"`
+	HasConsensus   bool     `json:"has_consensus"`
+	HasRecords     bool     `json:"has_records"`
+	HasBPT         bool     `json:"has_bpt"`
+	ChainID        string   `json:"chain_id,omitempty"`
+	ValidatorCount int      `json:"validator_count,omitempty"`
+	Issues         []string `json:"issues,omitempty"`
+	Warnings       []string `json:"warnings,omitempty"`
+}
+
+// validateSnapshot validates a snapshot file for restore compatibility
+func validateSnapshot(snapshotPath string) (*SnapshotValidationResult, error) {
+	f, err := os.Open(snapshotPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open snapshot: %w", err)
+	}
+	defer f.Close()
+
+	result := &SnapshotValidationResult{
+		Valid: true,
+	}
+
+	// Try to open as v2 snapshot
+	rd, err := snapshot.Open(f)
+	if err != nil {
+		result.Valid = false
+		result.Issues = append(result.Issues, fmt.Sprintf("Cannot open snapshot: %v", err))
+		return result, nil
+	}
+
+	// Check version
+	result.Version = rd.Header.Version
+	if rd.Header.Version != snapshot.Version2 {
+		result.Valid = false
+		result.Issues = append(result.Issues, fmt.Sprintf("Unsupported version: got %d, want %d", rd.Header.Version, snapshot.Version2))
+	}
+
+	// Check root hash
+	if len(rd.Header.RootHash) == 0 {
+		result.Valid = false
+		result.Issues = append(result.Issues, "Missing root hash in header")
+	} else {
+		result.RootHash = fmt.Sprintf("%x", rd.Header.RootHash)
+	}
+
+	// Check system ledger info
+	if rd.Header.SystemLedger != nil {
+		result.Partition = rd.Header.SystemLedger.Url.Authority
+		result.BlockIndex = rd.Header.SystemLedger.Index
+	} else {
+		result.Warnings = append(result.Warnings, "No system ledger info in header")
+	}
+
+	// Check sections
+	for _, s := range rd.Sections {
+		switch s.Type() {
+		case snapshot.SectionTypeConsensus:
+			result.HasConsensus = true
+		case snapshot.SectionTypeRecords:
+			result.HasRecords = true
+		case snapshot.SectionTypeBPT, snapshot.SectionTypeRawBPT:
+			result.HasBPT = true
+		}
+	}
+
+	if !result.HasRecords {
+		result.Valid = false
+		result.Issues = append(result.Issues, "Missing records section")
+	}
+	if !result.HasBPT {
+		result.Warnings = append(result.Warnings, "Missing BPT section (may affect verification)")
+	}
+
+	// Check consensus section in detail
+	if !result.HasConsensus {
+		result.Valid = false
+		result.Issues = append(result.Issues, "Missing consensus section - cannot create genesis.json")
+	} else {
+		consensusReader, err := rd.Open(snapshot.SectionTypeConsensus)
+		if err != nil {
+			result.Valid = false
+			result.Issues = append(result.Issues, fmt.Sprintf("Cannot open consensus section: %v", err))
+		} else {
+			rawBytes, err := io.ReadAll(consensusReader)
+			if err != nil {
+				result.Valid = false
+				result.Issues = append(result.Issues, fmt.Sprintf("Cannot read consensus section: %v", err))
+			} else {
+				consensusDoc := new(cometbft.GenesisDoc)
+				err = consensusDoc.UnmarshalBinary(rawBytes)
+				if err != nil {
+					result.Valid = false
+					result.Issues = append(result.Issues, fmt.Sprintf("Cannot unmarshal consensus doc: %v", err))
+				} else {
+					result.ChainID = consensusDoc.ChainID
+					result.ValidatorCount = len(consensusDoc.Validators)
+					if consensusDoc.Block == nil {
+						result.Warnings = append(result.Warnings, "No block data in consensus section (will create minimal genesis)")
+					}
+					if result.ValidatorCount == 0 {
+						result.Warnings = append(result.Warnings, "No validators in consensus section")
+					}
+				}
+			}
+		}
+	}
+
+	return result, nil
+}
+
+// validateSnapshotTool is the MCP tool handler for snapshot validation
+func (s *Server) validateSnapshotTool(args map[string]interface{}) (map[string]interface{}, error) {
+	snapshotPath, ok := args["snapshot_path"].(string)
+	if !ok || snapshotPath == "" {
+		return nil, fmt.Errorf("missing required parameter: snapshot_path")
+	}
+
+	// Validate path
+	snapshotPath, err := ValidateFilePath(snapshotPath, "")
+	if err != nil {
+		return nil, fmt.Errorf("invalid snapshot_path: %w", err)
+	}
+
+	result, err := validateSnapshot(snapshotPath)
+	if err != nil {
+		return nil, err
+	}
+
+	return map[string]interface{}{
+		"path":            snapshotPath,
+		"valid":           result.Valid,
+		"version":         result.Version,
+		"root_hash":       result.RootHash,
+		"partition":       result.Partition,
+		"block_index":     result.BlockIndex,
+		"has_consensus":   result.HasConsensus,
+		"has_records":     result.HasRecords,
+		"has_bpt":         result.HasBPT,
+		"chain_id":        result.ChainID,
+		"validator_count": result.ValidatorCount,
+		"issues":          result.Issues,
+		"warnings":        result.Warnings,
+	}, nil
 }
