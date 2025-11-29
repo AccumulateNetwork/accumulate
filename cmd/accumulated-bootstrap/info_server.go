@@ -19,6 +19,7 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
 )
 
@@ -63,6 +64,18 @@ type PeersResponse struct {
 	Peers []PeerInfo `json:"peers"`
 }
 
+// ConnectRequest contains a peer address to connect to
+type ConnectRequest struct {
+	Address string `json:"address"`
+}
+
+// ConnectResponse contains the result of a connection attempt
+type ConnectResponse struct {
+	Success bool   `json:"success"`
+	PeerID  string `json:"peer_id,omitempty"`
+	Error   string `json:"error,omitempty"`
+}
+
 // InfoServer serves bootstrap server information on HTTP
 type InfoServer struct {
 	host      host.Host
@@ -84,6 +97,7 @@ func NewInfoServer(h host.Host, listen multiaddr.Multiaddr, external []multiaddr
 	mux.HandleFunc("/info", s.handleInfo)
 	mux.HandleFunc("/health", s.handleHealth)
 	mux.HandleFunc("/peers", s.handlePeers)
+	mux.HandleFunc("/connect", s.handleConnect)
 
 	s.server = &http.Server{
 		Handler:           mux,
@@ -244,6 +258,86 @@ func (s *InfoServer) handlePeers(w http.ResponseWriter, r *http.Request) {
 	if err := encoder.Encode(response); err != nil {
 		slog.Error("Failed to encode peers response", "error", err)
 	}
+}
+
+// handleConnect attempts to connect to a peer
+func (s *InfoServer) handleConnect(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Parse request body
+	var req ConnectRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ConnectResponse{
+			Success: false,
+			Error:   "invalid request body: " + err.Error(),
+		})
+		return
+	}
+
+	if req.Address == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ConnectResponse{
+			Success: false,
+			Error:   "address is required",
+		})
+		return
+	}
+
+	// Parse the multiaddr
+	addr, err := multiaddr.NewMultiaddr(req.Address)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ConnectResponse{
+			Success: false,
+			Error:   "invalid multiaddr: " + err.Error(),
+		})
+		return
+	}
+
+	// Extract peer info from multiaddr
+	peerInfo, err := peer.AddrInfoFromP2pAddr(addr)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ConnectResponse{
+			Success: false,
+			Error:   "could not extract peer info: " + err.Error(),
+		})
+		return
+	}
+
+	// Attempt to connect
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	slog.Info("Attempting to connect to peer", "peer_id", peerInfo.ID, "addrs", peerInfo.Addrs)
+
+	if err := s.host.Connect(ctx, *peerInfo); err != nil {
+		slog.Error("Failed to connect to peer", "peer_id", peerInfo.ID, "error", err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(ConnectResponse{
+			Success: false,
+			PeerID:  peerInfo.ID.String(),
+			Error:   "connection failed: " + err.Error(),
+		})
+		return
+	}
+
+	slog.Info("Successfully connected to peer", "peer_id", peerInfo.ID)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(ConnectResponse{
+		Success: true,
+		PeerID:  peerInfo.ID.String(),
+	})
 }
 
 // Shutdown gracefully shuts down the info server

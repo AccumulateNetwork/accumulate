@@ -1300,8 +1300,22 @@ func GetAllTools() []map[string]interface{} {
 			},
 		},
 		{
+			"name":        "accumulate_validate_snapshot",
+			"description": "Validate a snapshot file for restore compatibility - checks version, sections, consensus data, and root hash",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"snapshot_path": map[string]interface{}{
+						"type":        "string",
+						"description": "Path to the .snap file to validate",
+					},
+				},
+				"required": []string{"snapshot_path"},
+			},
+		},
+		{
 			"name":        "accumulate_restore_from_snapshots",
-			"description": "Restore follower node from .snap files (DN and BVN) - creates node directories ready for deployment",
+			"description": "Restore follower node from .snap files (DN and BVN) - validates snapshots first, then creates node directories ready for deployment",
 			"inputSchema": map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
