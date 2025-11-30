@@ -355,16 +355,22 @@ func (d *Daemon) LoadSnapshot(file ioutil2.SectionReader) error {
 		fmt.Printf("Converted %d validators from snapshot\n", len(validators))
 
 		// Convert cometbft.GenesisDoc to CometBFT's types.GenesisDoc
+		// Note: We use InitialHeight=1 instead of the snapshot's block height.
+		// This allows CometBFT to initialize properly and sync from peers.
+		// The app state from the snapshot will be loaded, and CometBFT will
+		// catch up with the network through block sync.
 		var tmGenesisDoc *cmttypes.GenesisDoc
 		if consensusDoc.Block != nil {
 			tmGenesisDoc = &cmttypes.GenesisDoc{
 				ChainID:         consensusDoc.Block.ChainID,
 				GenesisTime:     consensusDoc.Block.Time,
-				InitialHeight:   consensusDoc.Block.Height,
+				InitialHeight:   1, // Use 1 for follower sync compatibility
 				ConsensusParams: cmttypes.DefaultConsensusParams(),
 				AppHash:         rd.Header.RootHash[:],
 				Validators:      validators,
 			}
+			fmt.Printf("Note: Using InitialHeight=1 (snapshot height was %d) for CometBFT sync compatibility\n",
+				consensusDoc.Block.Height)
 		} else {
 			// No block data, create minimal genesis with just ChainID
 			tmGenesisDoc = &cmttypes.GenesisDoc{
