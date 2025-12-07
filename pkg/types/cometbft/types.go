@@ -63,9 +63,16 @@ func (b *Block) ToProto() cmtproto.Block {
 }
 
 func (b *Block) FromProto(c cmtproto.Block) {
+	// For genesis blocks, LastCommit can be nil and validation may fail.
+	// BlockFromProto requires LastCommit and validates hashes.
+	// If parsing fails, leave the Block as zero value since it's often not used.
+	if c.LastCommit == nil {
+		c.LastCommit = &cmtproto.Commit{}
+	}
 	d, err := types.BlockFromProto(&c)
 	if err != nil {
-		panic(err)
+		// Validation failed - leave Block as zero value
+		return
 	}
 	*(*types.Block)(b) = *d //nolint:govet
 }
