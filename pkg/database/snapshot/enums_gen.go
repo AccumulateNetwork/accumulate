@@ -47,6 +47,15 @@ const SectionTypeConsensus SectionType = 10
 // SectionTypeBPT contains the BPT, as records.
 const SectionTypeBPT SectionType = 11
 
+// SectionTypeCometStateDB contains archived CometBFT state.db.
+const SectionTypeCometStateDB SectionType = 12
+
+// SectionTypeCometBlockstoreDB contains archived CometBFT blockstore.db.
+const SectionTypeCometBlockstoreDB SectionType = 13
+
+// SectionTypeAccumulateDB contains archived Accumulate database.
+const SectionTypeAccumulateDB SectionType = 14
+
 // GetEnumValue returns the value of the Section Type
 func (v SectionType) GetEnumValue() uint64 { return uint64(v) }
 
@@ -54,7 +63,7 @@ func (v SectionType) GetEnumValue() uint64 { return uint64(v) }
 func (v *SectionType) SetEnumValue(id uint64) bool {
 	u := SectionType(id)
 	switch u {
-	case SectionTypeHeader, SectionTypeAccountsV1, SectionTypeTransactionsV1, SectionTypeSignaturesV1, SectionTypeGzTransactionsV1, SectionTypeSnapshot, SectionTypeRecords, SectionTypeRecordIndex, SectionTypeRawBPT, SectionTypeConsensus, SectionTypeBPT:
+	case SectionTypeHeader, SectionTypeAccountsV1, SectionTypeTransactionsV1, SectionTypeSignaturesV1, SectionTypeGzTransactionsV1, SectionTypeSnapshot, SectionTypeRecords, SectionTypeRecordIndex, SectionTypeRawBPT, SectionTypeConsensus, SectionTypeBPT, SectionTypeCometStateDB, SectionTypeCometBlockstoreDB, SectionTypeAccumulateDB:
 		*v = u
 		return true
 	}
@@ -86,6 +95,12 @@ func (v SectionType) String() string {
 		return "consensus"
 	case SectionTypeBPT:
 		return "bpt"
+	case SectionTypeCometStateDB:
+		return "cometStateDB"
+	case SectionTypeCometBlockstoreDB:
+		return "cometBlockstoreDB"
+	case SectionTypeAccumulateDB:
+		return "accumulateDB"
 	}
 	return fmt.Sprintf("SectionType:%d", v)
 }
@@ -115,6 +130,12 @@ func SectionTypeByName(name string) (SectionType, bool) {
 		return SectionTypeConsensus, true
 	case "bpt":
 		return SectionTypeBPT, true
+	case "cometstatedb":
+		return SectionTypeCometStateDB, true
+	case "cometblockstoredb":
+		return SectionTypeCometBlockstoreDB, true
+	case "accumulatedb":
+		return SectionTypeAccumulateDB, true
 	}
 	return 0, false
 }

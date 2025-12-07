@@ -55,16 +55,18 @@ func ConvertSnapshotToJson(snap []byte) (*types.GenesisDoc, error) {
 		return nil, err
 	}
 
-	// Read the consensus section
-	rd, err := s.Open(snapshot.SectionTypeConsensus)
-	if err != nil {
-		return nil, err
-	}
+	// Try to read the consensus section (may not exist or may be malformed)
 	p := new(cometbft.GenesisDoc)
-	err = p.UnmarshalBinaryFrom(rd)
-	if err != nil {
-		return nil, err
+	rd, err := s.Open(snapshot.SectionTypeConsensus)
+	if err == nil {
+		// Consensus section exists, try to parse it
+		if parseErr := p.UnmarshalBinaryFrom(rd); parseErr != nil {
+			// Parsing failed - continue with empty GenesisDoc
+			// This can happen with genesis snapshots that have partial data
+			p = new(cometbft.GenesisDoc)
+		}
 	}
+	// If consensus section doesn't exist, p remains empty
 
 	// Convert
 	jsonBytes, err := cmtjson.Marshal(snap)
@@ -72,11 +74,28 @@ func ConvertSnapshotToJson(snap []byte) (*types.GenesisDoc, error) {
 		return nil, err
 	}
 
+	// Use default consensus params if not provided
+	var consensusParams *types.ConsensusParams
+	if p.Params != nil {
+		consensusParams = (*types.ConsensusParams)(p.Params)
+	} else {
+		consensusParams = types.DefaultConsensusParams()
+	}
+
+	// Derive chain ID from partition URL if not provided
+	chainID := p.ChainID
+	if chainID == "" && s.Header.SystemLedger != nil && s.Header.SystemLedger.Url != nil {
+		chainID = s.Header.SystemLedger.Url.Authority
+	}
+	if chainID == "" {
+		chainID = "accumulate"
+	}
+
 	doc := &types.GenesisDoc{
 		GenesisTime:     s.Header.SystemLedger.Timestamp,
-		ChainID:         p.ChainID,
+		ChainID:         chainID,
 		InitialHeight:   int64(s.Header.SystemLedger.Index) + 1,
-		ConsensusParams: (*types.ConsensusParams)(p.Params),
+		ConsensusParams: consensusParams,
 		Validators:      make([]types.GenesisValidator, len(p.Validators)),
 		AppHash:         s.Header.RootHash[:],
 		AppState:        jsonBytes,

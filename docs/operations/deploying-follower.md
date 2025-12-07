@@ -241,6 +241,59 @@ curl -s http://localhost:16592/net_info | jq '.result.peers[] | {
 
 ---
 
+## Automated Deployment Tools
+
+For simplified deployment and monitoring, use the provided tools:
+
+### deploy-follower
+
+Automates follower deployment from snapshots:
+
+```bash
+cd tools/deploy-follower
+go build -o deploy-follower
+
+./deploy-follower \
+  --work-dir /path/to/follower-data \
+  --dn-snapshot /path/to/directory.snap \
+  --bvn-snapshot /path/to/cyclops.snap \
+  --accumulated /path/to/accumulated \
+  --network mainnet \
+  --bvn Cyclops \
+  --start
+```
+
+This tool:
+- Creates the required directory structure
+- Initializes partitions from snapshots
+- Generates configuration files
+- Creates start/stop scripts
+
+See [deploy-follower README](../../tools/deploy-follower/README.md) for full documentation.
+
+### follower-monitor
+
+Web-based dashboard for monitoring and controlling followers:
+
+```bash
+cd tools/follower-monitor
+go build -o follower-monitor
+
+./follower-monitor --work-dir /path/to/follower-data
+```
+
+Features:
+- Real-time sync status monitoring
+- Progress tracking against mainnet
+- Live log viewing with filtering
+- Start/stop control via web UI
+
+Default: http://localhost:9999 (bound to localhost for security)
+
+See [follower-monitor README](../../tools/follower-monitor/README.md) for full documentation.
+
+---
+
 ## Source Build (Alternative to Docker)
 
 ### 1. Build from Source
@@ -796,4 +849,4 @@ A: Validators sign blocks (consensus), followers just observe. Followers have vo
 
 ---
 
-*Last Updated: 2025-10-13*
+*Last Updated: 2025-12-07*
