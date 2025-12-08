@@ -1,0 +1,86 @@
+version: "1.0"
+topic: "node-management"
+last_updated: "2025-12-02"
+
+documentation:
+  primary:
+    - path: "mcp/server/tools_node_management.go"
+      description: "MCP tools for node management (graceful stop, LevelDB recovery)"
+      authority: "implementation"
+      topics: ["graceful-shutdown", "leveldb-recovery", "sigterm", "sigkill"]
+
+lessons_learned:
+  - id: "LESSON-NODE-001"
+    title: "LevelDB corruption from SIGKILL (pkill -9)"
+    problem: "Node crashed with CONSENSUS FAILURE due to LevelDB corruption after using pkill -9"
+    error_message: "leveldb/table: corruption on data-block (pos=1612593): checksum mismatch, want=0x6e30caef got=0xbd1d854 [file=264079.ldb]"
+    root_cause: |
+      Using `pkill -9 accumulated` (SIGKILL) kills the process immediately without
+      allowing it to flush pending writes or close databases cleanly. LevelDB uses
+      write-ahead logging (WAL) and when killed mid-write, can leave:
+      - Partial data blocks with invalid checksums
+      - Incomplete compaction operations
+      - Unsynchronized manifest files
+
+      The corruption typically appears in blockstore.db when CometBFT is writing
+      block data during consensus operations.
+    solution_status: "RESOLVED"
+    required_fix: "Use SIGTERM first, wait for graceful shutdown, then SIGKILL only if timeout exceeded"
+    workaround: |
+      1. Run `leveldb.RecoverFile()` on the corrupted database
+      2. Run full compaction: `db.CompactRange(util.Range{Start: nil, Limit: nil})`
+      3. For large databases (~11GB), compaction may take 15-20 minutes
+      4. Use MCP tool: accumulate_recover_leveldb
+    affected_files:
+      - "mcp/server/tools_node_management.go"
+      - "blockstore.db"
+      - "accumulate.db"
+    mcp_tools:
+      - "accumulate_stop_node_graceful"
+      - "accumulate_recover_leveldb"
+
+  - id: "LESSON-NODE-002"
+    title: "Recovery statistics for ~11GB LevelDB database"
+    problem: "Need to know expected recovery time for large databases"
+    error_message: ""
+    root_cause: "LevelDB recovery with compaction rewrites all data to remove corrupted blocks"
+    solution_status: "RESOLVED"
+    required_fix: ""
+    workaround: |
+      Observed recovery on ~11GB blockstore.db (6257 files):
+      - RecoverFile: < 1 second
+      - Compaction: ~19.5 minutes (1170 seconds)
+      - Peak disk usage during compaction: ~19GB (1.8x original size)
+      - Final compacted size: ~10.4GB (5153 files, ~17% reduction)
+    affected_files:
+      - "blockstore.db"
+
+decisions:
+  - id: "DECISION-NODE-001"
+    title: "Always use graceful shutdown for Accumulate nodes"
+    decision: "Send SIGTERM first and wait for graceful shutdown before using SIGKILL"
+    rationale: |
+      LevelDB requires clean shutdown to maintain data integrity. SIGTERM allows the node to:
+      - Flush pending writes to disk
+      - Close LevelDB cleanly (sync WAL, update manifest)
+      - Complete any in-progress compactions
+
+      SIGKILL should only be used as a last resort after graceful shutdown timeout.
+    values:
+      graceful_timeout_seconds: 30
+      sigterm_signal: 15
+      sigkill_signal: 9
+    DO_NOT:
+      - "Do not use pkill -9 or SIGKILL as the first option"
+      - "Do not kill nodes during heavy write operations without timeout"
+    affected_files:
+      - "mcp/server/tools_node_management.go"
+      - "scripts that stop nodes"
+
+current_status:
+  working:
+    - "accumulate_stop_node_graceful tool - sends SIGTERM first, SIGKILL after timeout"
+    - "accumulate_recover_leveldb tool - recovers corrupted LevelDB with compaction"
+    - "Recovery tested on 11GB blockstore.db successfully"
+  not_working: []
+  blockers: []
