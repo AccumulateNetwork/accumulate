@@ -1,0 +1,263 @@
+# Snapshot Restore Knowledge Base
+# Knowledge for creating and restoring Accumulate snapshots
+
+version: "1.0"
+last_updated: "2025-11-30"
+topic: "snapshot-restore"
+
+documentation:
+  primary:
+    - path: "docs/operations/snapshot-restore-complete-analysis.md"
+      description: "Complete analysis of snapshot format, CometBFT requirements, and restore process"
+      authority: "definitive"
+      topics:
+        - snapshot-format
+        - cometbft-state-sync
+        - commit-signatures
+        - offline-restore
+
+  reference:
+    - path: "cmd/create-snap/main.go"
+      description: "Snapshot creation tool source"
+      authority: "implementation"
+      topics:
+        - snapshot-creation
+        - bpt-extraction
+
+    - path: "internal/node/daemon/snapshots.go"
+      description: "Snapshot restore implementation"
+      authority: "implementation"
+      topics:
+        - restore-process
+        - cometbft-initialization
+
+    - path: "internal/database/snapshot/full.go"
+      description: "Full snapshot format handling"
+      authority: "implementation"
+      topics:
+        - snapshot-format
+        - sections
+
+lessons_learned:
+  - id: "LESSON-001"
+    date: "2025-11-30"
+    resolved_date: "2025-11-30"
+    title: "CometBFT requires valid commit signatures for non-genesis start"
+    problem: |
+      When restoring a snapshot at a non-genesis height (e.g., 10,641,161),
+      CometBFT panics because it cannot verify the commit signatures.
+    error_message: "panic: failed to reconstruct vote set from commit: failed to verify vote with ChainID MainNet.Directory and PubKey PubKeyEd25519{...}: invalid signature"
+    root_cause: |
+      CometBFT's state sync architecture assumes commits come from Light Client RPC peers.
+      Our offline restore scenario has no peers, so the snapshot must be self-contained.
+      The Accumulate snapshot format previously included header, consensus params, validators,
+      BPT, and records - but NOT the CometBFT commit signatures.
+    solution_status: "RESOLVED"
+    solution: |
+      The fix was already implemented in the codebase:
+      1. pkg/types/cometbft/schema.yml has Commit field (lines 35-37)
+      2. cmd/create-snap/main.go extracts commit when -blockstore flag is used (lines 177-217)
+      3. internal/node/daemon/snapshots.go uses real commit when present (lines 530-543)
+
+      CRITICAL: When creating snapshots, you MUST use the -blockstore flag:
+        create-snap -db /path/to/accumulate.db -blockstore /path/to/blockstore.db -output snapshot.snap
+
+      Without -blockstore, the snapshot will NOT contain commit signatures and restore will fail!
+    verification: |
+      Tested 2025-11-30: Follower started successfully from snapshots created with -blockstore flag.
+      Output showed: "Found real commit in snapshot - deserializing"
+      No panic occurred. Both DN and BVN initialized at their respective heights.
+    affected_files:
+      - "pkg/types/cometbft/schema.yml"
+      - "cmd/create-snap/main.go"
+      - "internal/node/daemon/snapshots.go"
+      - "internal/database/snapshot/full.go"
+
+  - id: "LESSON-002"
+    date: "2025-11-30"
+    title: "Raw database copies are unreliable"
+    problem: |
+      Directly copying accumulate.db from a validator backup results in
+      inconsistent state. The restored node shows appHeight=0 and tries
+      to replay from block 2.
+    error_message: "appHeight=0, starting replay from block 2"
+    root_cause: |
+      Database engines (LevelDB, Badger) use write-ahead logs and may have
+      data in memory that hasn't been flushed to disk. A raw file copy
+      doesn't capture this transient state.
+    solution_status: "UNDERSTOOD"
+    correct_approach: |
+      Always use proper snapshot tools:
+      1. create-snap for creating portable snapshots
+      2. restore-snapshot for restoring
+      Never directly copy .db directories between systems
+    affected_files:
+      - "cmd/create-snap/main.go"
+      - "cmd/accumulated/cmd_snapshot.go"
+
+  - id: "LESSON-003"
+    date: "2025-11-30"
+    title: "Snapshot format version 2 has 5 sections"
+    problem: |
+      Understanding the snapshot format is essential for debugging restore issues.
+    error_message: "N/A"
+    root_cause: "Documentation purposes"
+    solution_status: "DOCUMENTED"
+    correct_approach: |
+      Snapshot version 2 sections:
+      - Section 0: Header (metadata)
+      - Section 1: Consensus (genesis params, validators, block header)
+      - Section 2: BPT (Binary Patricia Tree - Merkle proofs)
+      - Section 3: Records (all account records and state)
+      - Section 4: Additional data
+
+      Key missing data: CometBFT commit signatures (required for non-genesis restore)
+    affected_files:
+      - "internal/database/snapshot/full.go"
+      - "pkg/types/cometbft/schema.yml"
+
+decisions:
+  - id: "DECISION-001"
+    date: "2025-11-30"
+    title: "Snapshot source data for testing"
+    decision: |
+      The November 17, 2025 validator backup is the authoritative source
+      for all snapshot testing and development.
+    rationale: |
+      This is a complete backup with verified data at known heights.
+    values:
+      backup_location: "/media/paul/Expansion/databases/validator_backup_20251117/extracted/"
+      dn_path: "dnn/"
+      bvn_path: "bvnn/"
+      dn_height: 10641161
+      bvn_height: 10639083
+      dn_app_hash: "5C59946BDCA1EED7382E935730B183096DC0D57485298232378864D261758C06"
+      bvn_app_hash: "E1D930B82FA252A6F42FAFDF921A21684A12D1F7E4244D6C049D458AF23265E3"
+    DO_NOT:
+      - "Do not use different height values for testing"
+      - "Do not use different app hashes"
+    affected_files:
+      - "cmd/create-snap/main.go"
+      - "docs/operations/snapshot-restore-complete-analysis.md"
+
+  - id: "DECISION-002"
+    date: "2025-11-30"
+    updated: "2025-11-30"
+    title: "Snapshots CAN include commit signatures with -blockstore flag"
+    decision: |
+      Snapshot format now supports commit signatures when created with -blockstore flag.
+      This enables offline restore at non-genesis heights.
+    rationale: |
+      The -blockstore flag extracts commit from the validator's blockstore.db
+      and serializes it as protobuf into the Commit field of the consensus section.
+    values:
+      consensus_section_includes:
+        - chain_id
+        - consensus_params
+        - validators
+        - block_header_partial
+        - commit_signatures (when -blockstore flag used)
+      required_flags:
+        - "-blockstore /path/to/blockstore.db"
+    DO_NOT:
+      - "Do not create production snapshots without the -blockstore flag"
+      - "Do not expect old snapshots (without commits) to work for offline restore"
+    affected_files:
+      - "pkg/types/cometbft/schema.yml"
+      - "cmd/create-snap/main.go"
+      - "internal/node/daemon/snapshots.go"
+
+  - id: "LESSON-004"
+    date: "2025-11-30"
+    resolved_date: "2025-11-30"
+    title: "State version App must be set to 2 for mainnet"
+    problem: |
+      Follower restored from snapshot shows: "wrong Block.Header.Version. Expected {11 0}, got {11 2}"
+      Blocks from peers are rejected due to version mismatch.
+    error_message: "wrong Block.Header.Version. Expected {11 0}, got {11 2}"
+    root_cause: |
+      CometBFT's MakeGenesisState uses InitStateVersion which has App=0.
+      But mainnet blocks have App=2. The state.Version.Consensus.App must be set to 2.
+    solution_status: "RESOLVED"
+    solution: |
+      Added state.Version.Consensus.App = 2 after MakeGenesisState in restore-snapshot.
+      See internal/node/daemon/snapshots.go lines 463-467.
+    affected_files:
+      - "internal/node/daemon/snapshots.go"
+
+  - id: "LESSON-005"
+    date: "2025-11-30"
+    resolved_date: "2025-11-30"
+    title: "LastBlockID mismatch prevents block sync"
+    problem: |
+      After fixing version, follower shows: "wrong Block.Header.LastBlockID"
+      Expected: AppHash, Got: Actual block hash from blockchain
+    error_message: "wrong Block.Header.LastBlockID.  Expected 5C59...:1:5C59..., got A465...:1:2B0FE..."
+    root_cause: |
+      The restore-snapshot code sets state.LastBlockID = AppHash. But the actual blocks
+      on the network have LastBlockID pointing to the real block hash at that height,
+      which is different from the AppHash.
+    solution_status: "RESOLVED"
+    solution: |
+      Added LastBlockID field to cometbft schema:
+      1. pkg/types/cometbft/schema.yml - Added LastBlockID bytes field
+      2. cmd/create-snap/main.go - Extract LastBlockID from commit.BlockID
+      3. internal/node/daemon/snapshots.go - Use real LastBlockID from snapshot
+    verification: |
+      Tested 2025-11-30: Node started successfully with correct LastBlockID.
+      Output showed: "Using real LastBlockID from snapshot: A465..."
+    affected_files:
+      - "cmd/create-snap/main.go"
+      - "internal/node/daemon/snapshots.go"
+      - "pkg/types/cometbft/schema.yml"
+
+  - id: "LESSON-006"
+    date: "2025-11-30"
+    title: "LastResultsHash mismatch prevents block sync"
+    problem: |
+      After fixing LastBlockID, follower shows: "wrong Block.Header.LastResultsHash"
+      Expected: empty, Got: Hash from blockchain
+    error_message: "wrong Block.Header.LastResultsHash.  Expected , got F3E978B5E5CFBA3838CE0EC313DF40EEA1602D4B4E64F5FDF23720A02FF20895"
+    root_cause: |
+      CometBFT state.LastResultsHash is empty after restore but the network blocks
+      have a non-empty LastResultsHash from ABCI execution results of the previous block.
+    solution_status: "UNRESOLVED"
+    required_fix: |
+      The snapshot needs to include LastResultsHash from the blockstore:
+      1. Extract LastResultsHash from block header during snapshot creation
+      2. Store it in the consensus section
+      3. Set state.LastResultsHash during restore
+    workaround: |
+      No workaround currently. The follower starts but cannot sync blocks.
+    affected_files:
+      - "cmd/create-snap/main.go"
+      - "internal/node/daemon/snapshots.go"
+      - "pkg/types/cometbft/schema.yml"
+
+current_status:
+  working:
+    - "Snapshot creation from validator database (create-snap)"
+    - "BPT extraction and serialization"
+    - "Records extraction and serialization"
+    - "Genesis file generation from snapshots"
+    - "CometBFT state.db initialization"
+    - "Commit signature extraction and restoration (with -blockstore flag)"
+    - "Node startup at non-genesis height (no panic)"
+
+  not_working:
+    - "Block sync after restore (LastBlockID mismatch)"
+    - "Offline restore without actual block header"
+
+  blockers:
+    - description: "Snapshot format missing LastBlockID (actual block hash)"
+      severity: "critical"
+      owner: "snapshot-format"
+      details: "state.LastBlockID is set to AppHash, but network expects real block hash"
+
+  resolved:
+    - description: "CometBFT commit signature panic - RESOLVED"
+      resolution_date: "2025-11-30"
+      solution: "Use -blockstore flag when creating snapshots"
+    - description: "Block version App mismatch - RESOLVED"
+      resolution_date: "2025-11-30"
+      solution: "Set state.Version.Consensus.App = 2 in restore-snapshot"

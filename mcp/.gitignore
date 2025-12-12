@@ -1,0 +1,16 @@
+# Built binaries
+mcp-server
+
+# Devnet data
+.devnet/
+
+# Test artifacts
+*.log
+
+# IDE
+.idea/
+.vscode/
+
+# Archive binaries
+archive/tools/*/fullscan
+archive/tools/*/report-browser

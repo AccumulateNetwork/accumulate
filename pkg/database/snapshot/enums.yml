@@ -32,3 +32,12 @@ SectionType:
   BPT:
     description: contains the BPT, as records
     value: 11
+  CometStateDB:
+    description: contains archived CometBFT state.db
+    value: 12
+  CometBlockstoreDB:
+    description: contains archived CometBFT blockstore.db
+    value: 13
+  AccumulateDB:
+    description: contains archived Accumulate database
+    value: 14

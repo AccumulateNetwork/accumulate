@@ -11,7 +11,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -35,7 +34,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	cfg "gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
+	v3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/proxy"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -50,7 +52,7 @@ var cmdInitNode = &cobra.Command{
 	Use:   "node <partition.network name> or <peer url>",
 	Short: "Initialize a node using the partition.network name and --seed or via a peer URL",
 	Run: func(cmd *cobra.Command, args []string) {
-		out, err := initNode(cmd, args)
+		out, err := initNode(cmd, args, 0)
 		printOutput(cmd, out, err)
 	},
 	Args: cobra.ExactArgs(1),
@@ -171,8 +173,8 @@ func networkReset() {
 			continue
 		}
 
-		fmt.Printf("Deleting %s\n", dir)
-		err = os.Remove(dir)
+		fmt.Fprintf(os.Stderr, "Deleting %s\n", dir)
+		err = os.RemoveAll(dir)
 		check(err)
 	}
 }
@@ -184,7 +186,7 @@ func nodeReset(dir string) bool {
 	for _, ent := range ent {
 		if ent.Name() == "priv_validator_key.json" {
 			file := filepath.Join(dir, ent.Name())
-			fmt.Printf("Deleting %s\n", file)
+			fmt.Fprintf(os.Stderr, "Deleting %s\n", file)
 			err := os.Remove(file)
 			check(err)
 			continue
@@ -218,7 +220,7 @@ func bootstrapReset(dir string) bool {
 		switch ent.Name() {
 		case "node_key.json", "accumulate.toml":
 			file := filepath.Join(dir, ent.Name())
-			fmt.Printf("Deleting %s\n", file)
+			fmt.Fprintf(os.Stderr, "Deleting %s\n", file)
 			err := os.Remove(file)
 			check(err)
 			continue
@@ -272,6 +274,7 @@ func initNodeFromSeedProxy(cmd *cobra.Command, args []string) (int, *cfg.Config,
 	}
 
 	config := cfg.Default(networkName, resp.Type, getNodeTypeFromFlag(), partitionName)
+	config.SetRoot(filepath.Join(flagMain.WorkDir, netDir(resp.Type)))
 
 	var lastHealthyTmPeer *rpchttp.HTTP
 	var lastHealthyAccPeer *client.Client
@@ -381,39 +384,72 @@ func initNodeFromSeedProxy(cmd *cobra.Command, args []string) (int, *cfg.Config,
 	return int(resp.BasePort), config, genDoc, nil
 }
 
-func initNodeFromPeer(cmd *cobra.Command, args []string) (int, *cfg.Config, *types.GenesisDoc, error) {
+// initNodeFromPeer builds a node configuration from an existing/peer node. If
+// partitionType is zero, initNodeFromPeer will ask the node what it's partition
+// type is.
+func initNodeFromPeer(cmd *cobra.Command, args []string, partitionType protocol.PartitionType) (int, *cfg.Config, *types.GenesisDoc, error) {
 	netAddr, netPort, err := resolveAddrWithPort(args[0])
 	if err != nil {
 		return 0, nil, nil, fmt.Errorf("invalid peer url %v", err)
 	}
 
-	accClient, err := client.New(fmt.Sprintf("http://%s:%d", netAddr, netPort+int(cfg.PortOffsetAccumulateApi)))
-	if err != nil {
-		return 0, nil, nil, fmt.Errorf("failed to create API client for %s, %v", args[0], err)
-	}
-
-	saddr := fmt.Sprintf("tcp://%s:%d", netAddr, netPort+int(cfg.PortOffsetTendermintRpc))
-	tmClient, err := rpchttp.New(saddr, saddr+"/websocket")
+	accClient := jsonrpc.NewClient(fmt.Sprintf("http://%s:%d/v3", netAddr, netPort+int(cfg.PortOffsetAccumulateApi)))
+	tmRPC := fmt.Sprintf("tcp://%s:%d", netAddr, netPort+int(cfg.PortOffsetTendermintRpc))
+	tmClient, err := rpchttp.New(tmRPC, tmRPC+"/websocket")
 	if err != nil {
 		return 0, nil, nil, fmt.Errorf("failed to create Tendermint client for %s, %v", args[0], err)
 	}
 
-	version, err := getVersion(accClient)
+	ni, err := accClient.NodeInfo(cmd.Context(), v3.NodeInfoOptions{})
 	if err != nil {
 		return 0, nil, nil, err
 	}
 
-	err = versionCheck(version, args[0])
+	err = versionCheck(&api.VersionResponse{
+		Version:        ni.Version,
+		Commit:         ni.Commit,
+		VersionIsKnown: ni.Commit != "",
+	}, args[0])
 	if err != nil {
 		return 0, nil, nil, err
 	}
 
-	description, err := accClient.Describe(context.Background())
-	if err != nil {
-		return 0, nil, nil, fmt.Errorf("failed to get description from %s, %v", args[0], err)
+	var partitionID string
+outer:
+	switch partitionType {
+	case 0:
+		// If the caller is not asking for a specific partition type, retrieve
+		// it and the partition ID from the node.
+		cs, err := accClient.ConsensusStatus(cmd.Context(), v3.ConsensusStatusOptions{
+			NodeID: ni.PeerID.String(),
+		})
+		if err != nil {
+			return 0, nil, nil, fmt.Errorf("failed to get description from %s, %v", args[0], err)
+		}
+		partitionType, partitionID = cs.PartitionType, cs.PartitionID
+
+	case protocol.PartitionTypeDirectory:
+		// The partition ID for a directory partition is always "Directory".
+		partitionID = protocol.Directory
+
+	case protocol.PartitionTypeBlockValidator:
+		// Scan the node's list of services for a non-directory consensus node
+		// and use that.
+		for _, svc := range ni.Services {
+			if svc.Type != v3.ServiceTypeConsensus && !strings.EqualFold(svc.Argument, protocol.Directory) {
+				continue
+			}
+			partitionID = svc.Argument
+			break outer
+		}
+
+		return 0, nil, nil, fmt.Errorf("this node does not have a BVN")
+
+	default:
+		return 0, nil, nil, fmt.Errorf("unsupported partition type %v", partitionType)
 	}
 
-	if description.NetworkType == protocol.PartitionTypeBlockValidator {
+	if partitionType == protocol.PartitionTypeBlockValidator {
 		netPort -= config.PortOffsetBlockValidator
 	}
 
@@ -427,7 +463,8 @@ func initNodeFromPeer(cmd *cobra.Command, args []string) (int, *cfg.Config, *typ
 		return 0, nil, nil, fmt.Errorf("failed to get status of %s, %v", args[0], err)
 	}
 
-	config := cfg.Default(description.Network.Id, description.NetworkType, getNodeTypeFromFlag(), description.PartitionId)
+	config := cfg.Default(ni.Network, partitionType, getNodeTypeFromFlag(), partitionID)
+	config.SetRoot(filepath.Join(flagMain.WorkDir, netDir(partitionType)))
 	config.P2P.PersistentPeers = fmt.Sprintf("%s@%s:%d", status.NodeInfo.DefaultNodeID, netAddr, netPort+int(cfg.PortOffsetTendermintP2P))
 
 	// //otherwise make the best out of what we have to establish our bootstrap peers
@@ -464,9 +501,19 @@ func initNodeFromPeer(cmd *cobra.Command, args []string) (int, *cfg.Config, *typ
 	// 	config.P2P.BootstrapPeers += "," + u.String()
 	// }
 
+	// Check for snapshots
+	err = selectSnapshot(cmd.Context(), config, accClient, v3.ListSnapshotsOptions{
+		NodeID:    ni.PeerID.String(),
+		Partition: partitionID,
+	}, tmRPC, true)
+	if err != nil {
+		return 0, nil, nil, err
+	}
+
 	config.Accumulate.Describe = cfg.Describe{
-		NetworkType: description.NetworkType, PartitionId: description.PartitionId,
-		Network: cfg.Network{Id: description.Network.Id}}
+		NetworkType: partitionType,
+		PartitionId: partitionID,
+		Network:     cfg.Network{Id: ni.Network}}
 	return netPort, config, genDoc, nil
 }
 
@@ -515,7 +562,7 @@ func getGenesis(server string, tmClient *rpchttp.HTTP) (*types.GenesisDoc, error
 	return doc, nil
 }
 
-func initNode(cmd *cobra.Command, args []string) (string, error) {
+func initNode(cmd *cobra.Command, args []string, partitionType protocol.PartitionType) (string, error) {
 	if !cmd.Flag("work-dir").Changed {
 		return cmd.UsageString(), fmt.Errorf("Error: --work-dir flag is required\n\n")
 	}
@@ -530,7 +577,7 @@ func initNode(cmd *cobra.Command, args []string) (string, error) {
 			return "", fmt.Errorf("failed to configure node from seed proxy, %v", err)
 		}
 	} else {
-		basePort, config, genDoc, err = initNodeFromPeer(cmd, args)
+		basePort, config, genDoc, err = initNodeFromPeer(cmd, args, partitionType)
 		if err != nil {
 			return "", fmt.Errorf("failed to configure node from peer, %v", err)
 		}
@@ -593,8 +640,6 @@ func initNode(cmd *cobra.Command, args []string) (string, error) {
 		networkReset()
 	}
 
-	netDir := netDir(config.Accumulate.Describe.NetworkType)
-	config.SetRoot(filepath.Join(flagMain.WorkDir, netDir))
 	accumulated.ConfigureNodePorts(&accumulated.NodeInit{
 		AdvertizeAddress: listenUrl.Hostname(),
 		ListenAddress:    listenUrl.Hostname(),
