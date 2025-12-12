@@ -52,6 +52,10 @@ func init() {
 }
 
 func runDualNode(cmd *cobra.Command, args []string) (string, error) {
+	// === DEBUG LOGGING ===
+	slog.Info("=== RUN-DUAL DEBUG START ===")
+	slog.Info("Arguments received", "arg0", args[0], "arg1", args[1])
+
 	if flagRun.PprofListen != "" {
 		s := new(http.Server)
 		s.Addr = flagRun.PprofListen
@@ -60,11 +64,36 @@ func runDualNode(cmd *cobra.Command, args []string) (string, error) {
 	}
 
 	// Detect new-style configuration
+	configPath := filepath.Join(args[0], "..", "accumulate.toml")
+	slog.Info("Checking for new-style config", "path", configPath)
+
 	c := new(run.Config)
-	if c.LoadFrom(filepath.Join(args[0], "..", "accumulate.toml")) == nil {
+	loadErr := c.LoadFrom(configPath)
+	if loadErr == nil {
+		slog.Info("✅ NEW-STYLE CONFIG DETECTED - using runCfg()")
+		slog.Info("Config loaded successfully", "network", c.Network, "configurations_count", len(c.Configurations))
+		if len(c.Configurations) > 0 {
+			// Cast to CoreValidatorConfiguration to access fields
+			if coreVal, ok := c.Configurations[0].(*run.CoreValidatorConfiguration); ok {
+				slog.Info("First configuration",
+					"type", c.Configurations[0].Type(),
+					"bvn", coreVal.BVN,
+					"listen", coreVal.Listen,
+					"mode", coreVal.Mode)
+			} else {
+				slog.Info("First configuration", "type", c.Configurations[0].Type())
+			}
+		}
 		runCfg(c, nil)
 		return "run complete", nil
 	}
+
+	slog.Info("❌ NEW-STYLE CONFIG NOT FOUND - falling back to OLD-STYLE (NewProgram)", "error", loadErr)
+	slog.Info("Will attempt to load from subdirectories",
+		"primary_dir", args[0],
+		"secondary_dir", args[1],
+		"expected_primary_config", filepath.Join(args[0], "config", "accumulate.toml"),
+		"expected_secondary_config", filepath.Join(args[1], "config", "accumulate.toml"))
 
 	prog := NewProgram(cmd, func(cmd *cobra.Command) (string, error) {
 		return args[0], nil

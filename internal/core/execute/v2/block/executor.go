@@ -181,7 +181,22 @@ func (x *Executor) LastBlock() (*execute.BlockParams, [32]byte, error) {
 		return nil, [32]byte{}, errors.FatalError.WithFormat("load root index chain: %w", err)
 	}
 	if c.Height() == 0 {
-		return nil, [32]byte{}, errors.NotFound
+		// Fallback: try to read the SystemLedger directly
+		// This handles backup databases where the root chain index is empty
+		ledger := batch.Account(x.Describe.NodeUrl(protocol.Ledger))
+		var ledgerState *protocol.SystemLedger
+		err := ledger.Main().GetAs(&ledgerState)
+		if err != nil {
+			return nil, [32]byte{}, errors.NotFound
+		}
+		if ledgerState.Index == 0 {
+			return nil, [32]byte{}, errors.NotFound
+		}
+		b := new(execute.BlockParams)
+		b.Index = ledgerState.Index
+		b.Time = ledgerState.Timestamp
+		h, err := batch.GetBptRootHash()
+		return b, h, err
 	}
 
 	entry := new(protocol.IndexEntry)

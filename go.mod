@@ -61,6 +61,7 @@ require (
 	github.com/libp2p/go-libp2p v0.33.1
 	github.com/libp2p/go-libp2p-kad-dht v0.25.2
 	github.com/libp2p/go-libp2p-pubsub v0.10.0
+	github.com/manifoldco/promptui v0.9.0
 	github.com/mattn/go-shellwords v1.0.12
 	github.com/mr-tron/base58 v1.2.0
 	github.com/multiformats/go-multiaddr v0.12.2

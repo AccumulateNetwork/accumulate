@@ -1,0 +1,647 @@
+# Follower Deployment Knowledge Base
+# This file provides authoritative information for AI assistants working on follower deployment
+
+version: "1.1"
+last_updated: "2025-12-01"
+topic: "follower-deployment"
+
+# Section 0: Quick Reference
+# Essential information for rapid context building
+quick_reference:
+  what_is_follower: |
+    A non-validating node that syncs blockchain state and provides API access.
+    Does NOT participate in consensus, does NOT require staking.
+
+  system_requirements:
+    cpu: "4+ cores"
+    ram: "16GB minimum, 32GB recommended"
+    disk: "500GB+ SSD (NVMe recommended)"
+    disk_breakdown:
+      dn: "~100GB"
+      bvn: "~150GB per BVN"
+      growth: "~10-20GB/month"
+    software:
+      - "Go 1.21+"
+      - "Linux (Ubuntu 22.04 recommended)"
+      - "Docker (optional)"
+
+  build_commands:
+    accumulated: "go build -o accumulated ./cmd/accumulated"
+    create_snap: "go build -o create-snap ./cmd/create-snap"
+    follower_monitor: "go build -o follower-monitor ./tools/follower-monitor"
+
+  ports:
+    # Complete port table - AUTHORITATIVE
+    dn_cometbft_p2p: 16591
+    dn_cometbft_rpc: 16592
+    dn_libp2p: 16593
+    dn_prometheus: 26660
+    dn_api: 16595
+    bvn_cometbft_p2p: 16691
+    bvn_cometbft_rpc: 16692
+    bvn_libp2p: 16693
+    bvn_prometheus: 16694
+    bvn_api: 16695
+
+  verification_commands:
+    check_peers: "curl -s http://localhost:16592/net_info | jq '.result.n_peers'"
+    check_sync: "curl -s http://localhost:16592/status | jq '.result.sync_info'"
+    check_api: "curl -s http://localhost:16595/v2 -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"status\"}'"
+
+  two_p2p_networks:
+    libp2p:
+      purpose: "Accumulate protocol peer discovery"
+      config_file: "accumulate.toml"
+      address_format: "/dns/HOST/tcp/PORT/p2p/PEER_ID"
+    cometbft:
+      purpose: "Consensus and block sync"
+      config_file: "tendermint.toml"
+      address_format: "NODE_ID@HOST:PORT"
+    important: "BOTH must be configured for follower to sync"
+
+# Section 1: Authoritative Documentation
+# These are the CANONICAL sources of truth for this topic
+documentation:
+  primary:
+    - path: "docs/deployment/follower/snapshot-deployment-guide.md"
+      description: "Complete step-by-step deployment guide with all configurations"
+      authority: "definitive"
+      topics:
+        - deployment-steps
+        - configuration
+        - build-instructions
+        - system-requirements
+        - troubleshooting
+        - ports
+        - systemd-service
+
+  reference:
+    - path: "tools/follower-monitor/main.go"
+      description: "Follower monitoring tool source code"
+      authority: "implementation"
+      topics:
+        - monitoring
+        - ports
+        - api-endpoints
+
+    - path: "cmd/create-snap/main.go"
+      description: "Snapshot creation tool source code"
+      authority: "implementation"
+      topics:
+        - snapshot-creation
+        - database-types
+
+    - path: "cmd/accumulated/cmd_snapshot.go"
+      description: "Restore-genesis command implementation"
+      authority: "implementation"
+      topics:
+        - snapshot-restore
+
+  archived:
+    - path: "docs/archive/operations/2025-12-01-snapshot-restore-complete-analysis.md"
+      description: "Historical analysis of snapshot restore process (archived)"
+      authority: "historical"
+      topics:
+        - snapshot-format
+        - cometbft-state-sync
+        - commit-signatures
+
+# Section 2: Lessons Learned
+# Problems we've encountered and their solutions - AI MUST check these before making changes
+lessons_learned:
+  - id: "LESSON-001"
+    date: "2025-11-30"
+    title: "Snapshot format missing CometBFT commit signatures"
+    problem: |
+      Snapshots created from validator databases do not include CometBFT commit signatures.
+      When restoring at non-genesis heights, CometBFT requires valid commit signatures to
+      start, but our snapshot format only includes: header, consensus params, validators,
+      BPT, and records - NOT the commit signatures.
+    error_message: "panic: failed to reconstruct vote set from commit: failed to verify vote"
+    root_cause: |
+      CometBFT's state sync architecture assumes commits come from Light Client RPC peers.
+      Our offline restore scenario has no peers, so the snapshot must be self-contained.
+    solution_status: "RESOLVED"
+    resolution: |
+      Code is complete. The snapshot format supports commit signatures:
+      1. pkg/types/cometbft/schema.yml - Commit field added to GenesisDoc
+      2. cmd/create-snap/main.go - Requires -blockstore to extract commit data
+      3. internal/node/daemon/snapshots.go - Handles commit restoration
+
+      The -blockstore parameter is REQUIRED. The tool will not run without it.
+      This ensures all snapshots include the commit data needed for offline restore.
+
+      Snapshot creation command:
+        ./create-snap -db /path/to/accumulate.db \
+                      -blockstore /path/to/data/blockstore.db \
+                      -output snapshot.snap \
+                      -partition Directory -genesis
+    affected_files:
+      - "pkg/types/cometbft/schema.yml"
+      - "cmd/create-snap/main.go"
+      - "internal/node/daemon/snapshots.go"
+
+  - id: "LESSON-002"
+    date: "2025-11-30"
+    title: "Port confusion between CometBFT defaults and Accumulate scheme"
+    problem: |
+      CometBFT defaults to ports 26656 (P2P) and 26657 (RPC). It's easy to assume
+      these are the correct ports, but Accumulate uses a different scheme based on 16591.
+      This leads to configuration errors that cause "bind: address already in use" errors.
+    error_message: "failed to listen on 127.0.0.1:26657: bind: address already in use"
+    root_cause: |
+      The port offset system is defined in internal/node/config/config.go but it's not
+      immediately obvious when looking at tendermint.toml which uses the CometBFT defaults.
+    solution_status: "UNDERSTOOD"
+    correct_approach: |
+      ALWAYS consult docs/deployment/follower/snapshot-deployment-guide.md for port values.
+      The correct port table is:
+        | Service       | DN Port | BVN Port |
+        |---------------|---------|----------|
+        | CometBFT P2P  | 16591   | 16691    |
+        | CometBFT RPC  | 16592   | 16692    |
+        | Accumulate P2P| 16593   | 16693    |
+        | Prometheus    | 26660   | 16694    |
+
+      NEVER use 26656, 26657, 26756, or 26757 for Accumulate mainnet followers.
+    affected_files:
+      - "internal/node/config/config.go"
+      - "docs/deployment/follower/snapshot-deployment-guide.md"
+
+  - id: "LESSON-003"
+    date: "2025-12-01"
+    title: "Remote database copies are unreliable; local copies are fine"
+    problem: |
+      Copying accumulate.db from AWS/remote sources results in inconsistent state.
+      Network transfers may be incomplete, and the source database may not be properly
+      quiesced before copying.
+    error_message: "appHeight=0, starting replay from block 2"
+    root_cause: |
+      When copying databases over the network (especially from AWS):
+      - Network interruptions can cause incomplete transfers
+      - Source database may have uncommitted data in memory
+      - No guarantee the source was properly shut down before copy
+
+      LOCAL disk-to-disk copies (cp -r) are reliable because:
+      - Files are already consistent on disk
+      - No network transfer issues
+      - Atomic file system operations
+    solution_status: "UNDERSTOOD"
+    correct_approach: |
+      For REMOTE sources (AWS, etc.):
+      1. Use create-snap tool on the source to create portable snapshots
+      2. Transfer the .snap file (single file, verifiable)
+      3. Use restore-snapshot or restore-genesis command to restore
+
+      For LOCAL sources (disk-to-disk):
+      1. Direct cp -r of database directories is fine
+      2. Ensure source node is stopped before copying
+      3. Local copies preserve database consistency
+    affected_files:
+      - "cmd/create-snap/main.go"
+      - "cmd/accumulated/cmd_snapshot.go"
+      - "internal/node/daemon/snapshots.go"
+
+  - id: "LESSON-005"
+    date: "2025-12-01"
+    title: "Database type flag (-type) must match source database format"
+    problem: |
+      The create-snap tool requires specifying the source database format.
+      Using the wrong -type flag results in corrupted or unreadable snapshots.
+    error_message: "Various database read errors, or silent data corruption"
+    root_cause: |
+      Accumulate supports multiple database backends:
+      - BadgerDB: Used by older AWS production validators
+      - LevelDB: Default for newer installations
+
+      The database format is transparent at runtime but must be specified for
+      direct database operations like snapshot creation.
+    solution_status: "UNDERSTOOD"
+    correct_approach: |
+      1. Identify your source database format by checking the file structure:
+         - BadgerDB: Contains .vlog and .sst files
+         - LevelDB: Contains .ldb files
+
+      2. Use the correct -type flag:
+         - BadgerDB: -type badger
+         - LevelDB: -type leveldb
+
+      The Dec 1, 2025 AWS validator backup uses BadgerDB.
+    affected_files:
+      - "cmd/create-snap/main.go"
+
+  - id: "LESSON-006"
+    date: "2025-12-01"
+    title: "run-dual command argument parsing is sensitive to line continuations"
+    problem: |
+      The run-dual command fails with "accepts 2 arg(s), received 4" or similar errors
+      when using backslash line continuations in bash. This is extremely confusing because
+      the command looks correct but parses incorrectly.
+    error_message: "Error: accepts 2 arg(s), received 4"
+    root_cause: |
+      When using backslash line continuations with the run-dual command, the shell may
+      not properly join the lines, resulting in extra arguments being passed to the command.
+      The run-dual command expects exactly 2 positional arguments (dnn path and bvnn path)
+      and is sensitive to how those arguments are parsed.
+    solution_status: "UNDERSTOOD"
+    correct_approach: |
+      ALWAYS use a single-line command format for run-dual:
+
+      CORRECT (single line):
+        ./accumulated run-dual /path/to/dnn /path/to/bvnn
+
+      CORRECT (with flags at end):
+        ./accumulated run-dual /path/to/dnn /path/to/bvnn --truncate
+
+      WRONG (backslash continuations):
+        ./accumulated run-dual \
+          -w /path/to/workdir \
+          /path/to/dnn \
+          /path/to/bvnn
+
+      For systemd service files, put ExecStart on one line (systemd handles this fine).
+    affected_files:
+      - "cmd/accumulated/cmd_run.go"
+      - "docs/deployment/follower/snapshot-deployment-guide.md"
+
+  - id: "LESSON-007"
+    date: "2025-12-01"
+    title: "lastBlock is null during initial CometBFT sync - this is NORMAL"
+    problem: |
+      After starting a restored follower, the Accumulate API shows lastBlock: null.
+      This looks like an error but is actually normal startup behavior.
+    error_message: "lastBlock: null in API status response"
+    root_cause: |
+      When a follower starts, CometBFT must catch up with the network by downloading blocks
+      from persistent_peers. Until CometBFT has caught up, the Accumulate layer cannot
+      report a valid lastBlock. The bvnHeight field may show progress even while lastBlock
+      is null because the Accumulate layer is processing downloaded blocks.
+
+      This phase can last from 30 seconds to several hours depending on how far behind
+      the snapshot is and network latency.
+    solution_status: "UNDERSTOOD"
+    correct_approach: |
+      1. Check CometBFT sync status first:
+         curl -s http://localhost:16692/status | jq '.result.sync_info.catching_up'
+         - Returns: true (syncing) or false (caught up)
+
+      2. Check Accumulate-layer progress:
+         curl -s http://localhost:16695/v2 -d '{"jsonrpc":"2.0","id":1,"method":"status"}' | jq '.result.bvnHeight'
+         - Shows Accumulate layer progress even when lastBlock is null
+
+      3. Wait for catching_up to become false before expecting valid lastBlock values.
+
+      Do NOT restart the node or assume something is broken when lastBlock is null during
+      the first few minutes after startup.
+    affected_files:
+      - "docs/deployment/follower/snapshot-deployment-guide.md"
+
+  - id: "LESSON-008"
+    date: "2025-12-01"
+    title: "Port discovery with ss -tlnp is essential for troubleshooting"
+    problem: |
+      Documentation may not always reflect actual port usage. When testing API endpoints,
+      the expected ports may not work.
+    root_cause: |
+      Port configuration depends on the node configuration and may vary from documentation.
+      Additionally, dual-node setups (run-dual) use different port offsets than single-node.
+    solution_status: "UNDERSTOOD"
+    correct_approach: |
+      ALWAYS verify actual listening ports before testing:
+        ss -tlnp | grep accumulated
+
+      This shows all ports the accumulated process is actually listening on.
+      Then test each port to identify which is which:
+        curl -s http://localhost:PORT/v2 -d '{"jsonrpc":"2.0","id":1,"method":"status"}'
+
+      The API ports (JSON-RPC) will respond to the status request.
+    affected_files:
+      - "docs/deployment/follower/snapshot-deployment-guide.md"
+
+  - id: "LESSON-004"
+    date: "2025-12-01"
+    title: "libp2p vs CometBFT peer systems - MANUAL CONFIG REQUIRED"
+    problem: |
+      Accumulate has TWO separate P2P networks that must both be configured:
+      1. libp2p - for Accumulate protocol peer discovery (accumulate.toml)
+      2. CometBFT - for consensus and block sync (tendermint.toml)
+
+      Configuring only libp2p bootstrap peers in accumulate.toml results in 0 consensus
+      peers and the follower will NOT sync blocks, even though libp2p connectivity works.
+    error_message: "n_peers: 0 in CometBFT status, even with libp2p peers connected"
+    root_cause: |
+      The accumulate.toml [p2p] section configures libp2p which is separate from CometBFT.
+      CometBFT's peer discovery is configured in tendermint.toml [p2p] persistent_peers.
+      These are completely independent P2P networks with different address formats.
+
+      IMPORTANT CLARIFICATION:
+      The restore-genesis command only configures libp2p bootstrap peers in accumulate.toml.
+      It does NOT auto-configure CometBFT persistent_peers in tendermint.toml.
+      The cmtPeerAddress() function in consensus.go only populates persistent_peers when
+      creating a NEW tendermint.toml, not when loading an existing one.
+    solution_status: "REQUIRES MANUAL CONFIG after restore-genesis"
+    correct_approach: |
+      After running restore-genesis, you MUST verify and manually set persistent_peers:
+
+      1. Check current config:
+         grep persistent_peers $WORK_DIR/dnn/config/tendermint.toml
+         grep persistent_peers $WORK_DIR/bvnn/config/tendermint.toml
+
+      2. If empty, add manually:
+         # DN config
+         sed -i 's/persistent_peers = ""/persistent_peers = "3029240e829e58e399bc7b6115bb6bc947cc24c7@apollo-mainnet.accumulate.defidevs.io:16591"/' \
+           $WORK_DIR/dnn/config/tendermint.toml
+
+         # BVN config
+         sed -i 's/persistent_peers = ""/persistent_peers = "3029240e829e58e399bc7b6115bb6bc947cc24c7@apollo-mainnet.accumulate.defidevs.io:16691"/' \
+           $WORK_DIR/bvnn/config/tendermint.toml
+
+      For mainnet:
+      - DN persistent_peers: 3029240e829e58e399bc7b6115bb6bc947cc24c7@apollo-mainnet.accumulate.defidevs.io:16591
+      - BVN persistent_peers: 3029240e829e58e399bc7b6115bb6bc947cc24c7@apollo-mainnet.accumulate.defidevs.io:16691
+
+      FUTURE IMPROVEMENT: See GitLab issue #3692 - Bootstrap server should provide CometBFT addresses
+    affected_files:
+      - "cmd/accumulated/run/consensus.go"
+      - "tendermint.toml"
+      - "accumulate.toml"
+
+# Section 3: Decisions (MUST NOT be changed without explicit approval)
+# These are fixed architectural/configuration decisions
+decisions:
+  - id: "DECISION-001"
+    date: "2025-11-30"
+    title: "Follower port configuration"
+    decision: |
+      Follower nodes use offset ports from 16591, not default CometBFT ports.
+      ALL ports must be in the 16xxx range. The port scheme is defined in
+      internal/node/config/config.go with offsets:
+        - PortOffsetDirectory = 0 (DN base)
+        - PortOffsetBlockValidator = 100 (BVN = DN + 100)
+        - PortOffsetTendermintP2P = 0
+        - PortOffsetTendermintRpc = 1
+        - PortOffsetAccumulateP2P = 2
+        - PortOffsetPrometheus = 3
+        - PortOffsetAccumulateApi = 4
+    rationale: |
+      Allows running follower alongside other services. Matches mainnet validator configuration.
+      Source: docs/deployment/follower/snapshot-deployment-guide.md
+    values:
+      # Directory Network (DN)
+      dn_cometbft_p2p_port: 16591    # CometBFT P2P (consensus)
+      dn_cometbft_rpc_port: 16592    # CometBFT RPC (tendermint.toml [rpc] laddr)
+      dn_accumulate_p2p_port: 16593  # Accumulate libp2p (accumulate.toml [p2p] listen)
+      dn_prometheus_port: 26660       # Prometheus metrics
+      dn_accumulate_api_port: 16595  # Accumulate JSON-RPC API
+      # Block Validator Network (BVN) - DN + 100
+      bvn_cometbft_p2p_port: 16691   # CometBFT P2P (consensus)
+      bvn_cometbft_rpc_port: 16692   # CometBFT RPC (tendermint.toml [rpc] laddr)
+      bvn_accumulate_p2p_port: 16693 # Accumulate libp2p (accumulate.toml [p2p] listen)
+      bvn_prometheus_port: 16694      # Prometheus metrics
+      bvn_accumulate_api_port: 16695 # Accumulate JSON-RPC API
+      # Monitoring
+      monitor_port: 8080
+      # Port calculation: base (16591) + offset
+      # P2P=+0, RPC=+1, libp2p=+2, Prometheus=+3, API=+4
+    config_files:
+      tendermint_toml:
+        rpc_laddr: "tcp://127.0.0.1:PORT"   # CometBFT RPC
+        p2p_laddr: "tcp://0.0.0.0:PORT"     # CometBFT P2P
+        prometheus_listen_addr: ":PORT"     # Prometheus
+      accumulate_toml:
+        listen_address: "http://0.0.0.0:PORT"  # API
+        p2p_listen: "/ip4/0.0.0.0/tcp/PORT"    # libp2p
+    DO_NOT:
+      - "Do not use ports 26656/26657 (default CometBFT) - they are NOT for Accumulate mainnet"
+      - "Do not use ports 26756/26757 - wrong scheme"
+      - "Do not mix 26xxx and 16xxx ports"
+      - "Do not confuse CometBFT RPC with Accumulate API (they share the same port)"
+    affected_files:
+      - "tools/follower-monitor/main.go"
+      - "docs/deployment/follower/*"
+      - "internal/node/config/config.go"
+      - "internal/node/config/enums_gen.go"
+
+  - id: "DECISION-002"
+    date: "2025-11-30"
+    title: "Peer discovery and bootstrap configuration"
+    decision: |
+      Followers must be configured with both libp2p bootstrap peers AND CometBFT persistent peers.
+      These are TWO SEPARATE P2P systems that serve different purposes:
+
+      1. libp2p Bootstrap Peers (accumulate.toml [p2p] bootstrap-peers):
+         - Used for Accumulate protocol peer discovery
+         - Format: /dns/HOSTNAME/tcp/PORT/p2p/PEER_ID
+         - Example: /dns/bootstrap.accumulate.defidevs.io/tcp/16593/p2p/12D3KooWDgqY8C7deYWzgTQ7qauanMkvn47TPLtrT1TfzETQW3Gx
+
+      2. CometBFT Persistent Peers (tendermint.toml [p2p] persistent_peers):
+         - Used for CometBFT consensus and block sync
+         - Format: NODE_ID@IP_OR_HOSTNAME:PORT
+         - DN Example: 3029240e829e58e399bc7b6115bb6bc947cc24c7@apollo-mainnet.accumulate.defidevs.io:16591
+         - BVN Example: 3029240e829e58e399bc7b6115bb6bc947cc24c7@apollo-mainnet.accumulate.defidevs.io:16691
+
+      Without CometBFT persistent_peers configured, the follower will have 0 consensus peers
+      and will NOT sync blocks, even if libp2p peers are connected.
+    rationale: |
+      CometBFT uses its own P2P network separate from Accumulate's libp2p network.
+      Both must be configured for a follower to function properly.
+    values:
+      # Mainnet Bootstrap Server
+      bootstrap_hostname: "bootstrap.accumulate.defidevs.io"
+      bootstrap_libp2p_peer_id: "12D3KooWDgqY8C7deYWzgTQ7qauanMkvn47TPLtrT1TfzETQW3Gx"
+
+      # Apollo Mainnet Validator (primary peer)
+      apollo_hostname: "apollo-mainnet.accumulate.defidevs.io"
+      apollo_ip: "23.22.212.106"
+      apollo_cometbft_node_id: "3029240e829e58e399bc7b6115bb6bc947cc24c7"
+
+      # DN Peer Configuration
+      dn_libp2p_bootstrap: "/dns/bootstrap.accumulate.defidevs.io/tcp/16593/p2p/12D3KooWDgqY8C7deYWzgTQ7qauanMkvn47TPLtrT1TfzETQW3Gx"
+      dn_cometbft_persistent_peers: "3029240e829e58e399bc7b6115bb6bc947cc24c7@apollo-mainnet.accumulate.defidevs.io:16591"
+
+      # BVN Peer Configuration (Cyclops)
+      bvn_libp2p_bootstrap: "/dns/bootstrap.accumulate.defidevs.io/tcp/16693/p2p/12D3KooWDgqY8C7deYWzgTQ7qauanMkvn47TPLtrT1TfzETQW3Gx"
+      bvn_cometbft_persistent_peers: "3029240e829e58e399bc7b6115bb6bc947cc24c7@apollo-mainnet.accumulate.defidevs.io:16691"
+    config_files:
+      accumulate_toml:
+        # libp2p bootstrap peers - for Accumulate peer discovery
+        p2p_bootstrap_peers: "[\"BOOTSTRAP_MULTIADDR\"]"
+      tendermint_toml:
+        # CometBFT persistent peers - for consensus/block sync
+        persistent_peers: "NODE_ID@HOST:PORT"
+    DO_NOT:
+      - "Do not assume libp2p peers are enough - CometBFT needs its own peers"
+      - "Do not confuse libp2p multiaddrs with CometBFT node ID format"
+      - "Do not use the same port for DN and BVN persistent peers (DN=16591, BVN=16691)"
+    affected_files:
+      - "tendermint.toml"
+      - "accumulate.toml"
+
+  - id: "DECISION-003"
+    date: "2025-12-01"
+    title: "Snapshot source data"
+    decision: |
+      The Dec 1, 2025 validator backup is the current authoritative source for snapshot creation.
+      This backup was created from a properly quiesced AWS validator and transferred to local storage.
+    values:
+      current_backup: "2025-12-01-aws-validator-node"
+      backup_location: "/media/paul/Expansion/databases/2025-12-01-aws-validator-node/"
+    retired_backups:
+      - name: "validator_backup_20251117"
+        reason: "Superseded by Dec 1 backup with more recent state"
+    DO_NOT:
+      - "Do not use retired backups for new snapshot creation"
+      - "Do not copy databases directly from AWS - use proper quiesce and transfer"
+
+  - id: "DECISION-004"
+    date: "2025-12-01"
+    title: "Snapshot creation requirements for CometBFT and Accumulate"
+    decision: |
+      Snapshots MUST include specific data to satisfy both CometBFT consensus requirements
+      and Accumulate protocol requirements. This is non-negotiable for offline restore.
+
+      COMETBFT REQUIREMENTS:
+      1. Commit signatures at snapshot height (from blockstore.db)
+         - CometBFT validates commit signatures when reconstructing the vote set
+         - Without valid signatures: "panic: failed to reconstruct vote set from commit"
+
+      2. LastBlockID (from blockstore.db)
+         - The BlockID of the last committed block
+         - Required for state.LastBlockID initialization
+
+      3. LastResultsHash (from block H+1's header in blockstore.db)
+         - Hash of ABCI results from block H
+         - Required for block validation when syncing
+
+      4. Validator set with public keys (from NetworkDefinition in DN database)
+         - Required for genesis.json creation
+         - For BVN snapshots, must read from DN database
+
+      5. state.db data (raw archive OR synthesized from snapshot)
+         - CometBFT state including LastBlockHeight, InitialHeight, validators
+         - App version must be 2 for mainnet blocks
+
+      ACCUMULATE PROTOCOL REQUIREMENTS:
+      1. accumulate.db with complete account state
+         - All accounts, chains, and pending transactions
+         - BPT (Binary Patricia Tree) for state verification
+
+      2. System ledger with block height and timestamp
+         - Determines the snapshot point in the chain
+
+      3. NetworkDefinition (for validator information)
+         - Stored in DN at acc://dn.acme/network
+         - Contains validator public keys and partition assignments
+
+    values:
+      required_databases:
+        - name: "accumulate.db"
+          purpose: "Accumulate protocol state (accounts, chains, BPT)"
+          location: "data/accumulate.db"
+
+        - name: "blockstore.db"
+          purpose: "CometBFT block storage (commits, LastBlockID, LastResultsHash)"
+          location: "data/blockstore.db"
+
+        - name: "state.db"
+          purpose: "CometBFT consensus state (height, validators, app hash)"
+          location: "data/state.db"
+
+      snapshot_sections:
+        - type: "SectionTypeConsensus"
+          contains: "ChainID, validators, consensus params, block height/time, commit, LastBlockID, LastResultsHash"
+
+        - type: "SectionTypeRecords"
+          contains: "Accumulate account and chain data"
+
+        - type: "SectionTypeBPT"
+          contains: "Binary Patricia Tree for state verification"
+
+        - type: "SectionTypeCometStateDB"
+          contains: "Raw state.db archive (gzip-compressed tar)"
+
+        - type: "SectionTypeCometBlockstoreDB"
+          contains: "Raw blockstore.db archive (gzip-compressed tar)"
+
+        - type: "SectionTypeAccumulateDB"
+          contains: "Raw accumulate.db archive (gzip-compressed tar)"
+
+    commands:
+      create_dn_snapshot: |
+        ./create-snap \
+          -db /path/to/dnn/data/accumulate.db \
+          -blockstore /path/to/dnn/data/blockstore.db \
+          -statedb /path/to/dnn/data/state.db \
+          -output dn.snap \
+          -partition Directory \
+          -genesis
+
+      create_bvn_snapshot: |
+        ./create-snap \
+          -db /path/to/bvnn/data/accumulate.db \
+          -blockstore /path/to/bvnn/data/blockstore.db \
+          -statedb /path/to/bvnn/data/state.db \
+          -dn-db /path/to/dnn/data/accumulate.db \
+          -output bvn.snap \
+          -partition Cyclops \
+          -genesis
+
+      restore_snapshot: |
+        accumulated --work-dir /path/to/node restore-genesis /path/to/snapshot.snap
+
+    DO_NOT:
+      - "Do not create snapshots without blockstore.db - commit data is required"
+      - "Do not create BVN snapshots without DN database - validator info will be missing"
+      - "Do not use restore-snapshot command - use restore-genesis instead"
+      - "Do not put --work-dir flag after subcommand - it's a global flag"
+
+    affected_files:
+      - "cmd/create-snap/main.go"
+      - "cmd/accumulated/cmd_snapshot.go"
+      - "internal/node/daemon/snapshots.go"
+      - "pkg/database/snapshot/enums.yml"
+      - "pkg/types/cometbft/schema.yml"
+
+# Section 4: Current Status
+# What's working, what's not
+current_status:
+  working:
+    - "Snapshot creation with commit data (create-snap tool)"
+    - "MCP tool: accumulate_create_snapshot (wraps create-snap)"
+    - "MCP tool: accumulate_restore_from_snapshots (uses restore-genesis)"
+    - "MCP tool: accumulate_validate_snapshot"
+    - "Follower monitor tool (port 8080)"
+    - "Genesis file generation from snapshots"
+    - "Initial state.db setup"
+    - "CometBFT commit signature handling in restore code"
+    - "Raw database archive extraction (state.db, blockstore.db, accumulate.db)"
+
+  not_working:
+    - "State sync from snapshots without network peers (by design - CometBFT limitation)"
+
+  blockers: []
+
+  notes:
+    - "The create-snap tool REQUIRES -blockstore and -statedb parameters"
+    - "BVN snapshots REQUIRE -dn-db parameter for NetworkDefinition"
+    - "All snapshots include raw database archives for exact state reproduction"
+    - "restore-genesis is the preferred restore command (creates default config if needed)"
+    - "restore-snapshot requires pre-existing configuration - avoid using it"
+
+  ai_operational_guidelines:
+    - id: "AI-001"
+      title: "Redirect long-running command output to log files"
+      description: |
+        When running commands that produce large amounts of output (like create-snap,
+        accumulated, or any long-running process), ALWAYS redirect output to a log file.
+        Large console output can crash the AI context.
+
+        CORRECT:
+          ./create-snap ... > /tmp/create-snap.log 2>&1
+          ./accumulated run-dual ... > /tmp/follower.log 2>&1 &
+
+        WRONG:
+          ./create-snap ...
+          ./accumulated run-dual ...
+
+        After running, use tail -20 or grep to check specific parts of the log.
