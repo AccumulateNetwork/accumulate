@@ -528,6 +528,13 @@ func (d *Daemon) startConsensus(app types.Application, caughtUp chan<- struct{})
 	// Signal once the node is caught up
 	if caughtUp != nil {
 		go func() {
+			// Maximum allowed time drift between block time and real time
+			// to consider the node caught up. This catches the case where
+			// CometBFT reports catching_up=false (height matches peers) but
+			// the block time is significantly behind (e.g., after DB repair).
+			// With ~1 second block times, 10 seconds provides adequate margin.
+			const maxBlockTimeDrift = 10 * time.Second
+
 			t := time.NewTicker(time.Second)
 			defer t.Stop()
 			for range t.C {
@@ -536,10 +543,26 @@ func (d *Daemon) startConsensus(app types.Application, caughtUp chan<- struct{})
 					slog.Error("Querying consensus status", "error", err)
 					continue
 				}
-				if !st.SyncInfo.CatchingUp {
-					close(caughtUp)
-					return
+
+				// Check both CometBFT's catching_up flag AND block time freshness.
+				// After a database repair, CometBFT may report catching_up=false
+				// because the height matches peers, but the block time can be
+				// significantly behind real time, indicating we're still syncing.
+				if st.SyncInfo.CatchingUp {
+					continue
 				}
+
+				blockAge := time.Since(st.SyncInfo.LatestBlockTime)
+				if blockAge > maxBlockTimeDrift {
+					slog.Debug("Node reports caught up but block time is stale",
+						"block_time", st.SyncInfo.LatestBlockTime,
+						"block_age", blockAge,
+						"max_drift", maxBlockTimeDrift)
+					continue
+				}
+
+				close(caughtUp)
+				return
 			}
 		}()
 	}
