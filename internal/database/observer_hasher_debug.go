@@ -6,7 +6,7 @@
 
 //go:build debug
 
-package internal
+package database
 
 import (
 	"fmt"

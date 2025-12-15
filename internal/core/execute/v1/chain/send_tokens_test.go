@@ -23,7 +23,6 @@ func init() { acctesting.EnableDebugFeatures() }
 func TestLiteTokenTransactions(t *testing.T) {
 	tokenUrl := protocol.AcmeUrl().String()
 	db := database.OpenInMemory(nil)
-	db.SetObserver(acctesting.NullObserver{})
 
 	_, privKey, _ := ed25519.GenerateKey(nil)
 	_, destPrivKey, _ := ed25519.GenerateKey(nil)

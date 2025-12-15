@@ -15,7 +15,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -31,8 +30,7 @@ func BenchmarkCollect(b *testing.B) {
 	// db, err := database.OpenBadger(b.TempDir(), nil)
 	// require.NoError(b, err)
 	db := database.OpenInMemory(nil)
-	db.SetObserver(execute.NewDatabaseObserver())
-	batch := db.Begin(true)
+		batch := db.Begin(true)
 	defer batch.Discard()
 	for i := 0; i < b.N; i++ {
 		v := &ADI{Url: protocol.AccountUrl(fmt.Sprintf("a-%d", i)), AccountAuth: AccountAuth{Authorities: []AuthorityEntry{{Url: protocol.AccountUrl("foo")}}}}
@@ -93,8 +91,7 @@ func TestSnapshot(t *testing.T) {
 
 	// Restore the snapshot
 	db := database.OpenInMemory(nil)
-	db.SetObserver(execute.NewDatabaseObserver())
-	require.NoError(t, database.Restore(db, ioutil.NewBuffer(buf.Bytes()), nil))
+		require.NoError(t, database.Restore(db, ioutil.NewBuffer(buf.Bytes()), nil))
 
 	// Verify
 	account := GetAccount[*TokenAccount](t, db, bob.JoinPath("tokens"))
@@ -141,8 +138,7 @@ func TestSnapshotRestore(t *testing.T) {
 
 	// Restore the snapshot **restoring each record in a separate batch**
 	db := database.OpenInMemory(nil)
-	db.SetObserver(execute.NewDatabaseObserver())
-	require.NoError(t, database.Restore(db, ioutil.NewBuffer(buf.Bytes()), &database.RestoreOptions{BatchRecordLimit: 1}))
+		require.NoError(t, database.Restore(db, ioutil.NewBuffer(buf.Bytes()), &database.RestoreOptions{BatchRecordLimit: 1}))
 
 	// Verify
 	account := GetAccount[*TokenAccount](t, db, bob.JoinPath("tokens"))
@@ -271,8 +267,7 @@ func TestPreservationOfOldTransactions(t *testing.T) {
 	// Store it in a database
 	txn := env.Transaction[0]
 	db := database.OpenInMemory(nil)
-	db.SetObserver(execute.NewDatabaseObserver())
-	batch := db.Begin(true)
+		batch := db.Begin(true)
 	defer batch.Discard()
 	require.NoError(t, batch.Transaction(txn.GetHash()).Main().Put(&database.SigOrTxn{Transaction: txn}))
 	require.NoError(t, batch.Account(txn.Header.Principal).MainChain().Inner().AddEntry(txn.GetHash(), false))
@@ -286,8 +281,7 @@ func TestPreservationOfOldTransactions(t *testing.T) {
 
 	// Restore the snapshot
 	db = database.OpenInMemory(nil)
-	db.SetObserver(execute.NewDatabaseObserver())
-	require.NoError(t, database.Restore(db, buf, nil))
+		require.NoError(t, database.Restore(db, buf, nil))
 
 	// Verify the transaction still exists
 	batch = db.Begin(false)

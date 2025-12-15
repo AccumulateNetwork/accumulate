@@ -12,7 +12,6 @@ import (
 	"io"
 
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
@@ -25,7 +24,6 @@ import (
 
 type Checkpoint struct {
 	snap       *snapshot.Reader
-	observer   coredb.Observer
 	db         *coredb.Batch
 	bptSection snapshot.RecordReader
 	bptOffsets map[[32]byte]int64
@@ -50,7 +48,6 @@ func load(snapData ioutil.SectionReader, stateHash [32]byte) (*Checkpoint, error
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("init store: %w", err)
 	}
-	c.observer = execute.NewDatabaseObserver()
 	c.db = coredb.NewBatch("snapshot", store, false, nil)
 
 	// Open the BPT section
@@ -132,7 +129,7 @@ func (v *accountMain) check() error {
 	}
 
 	// Calculate the account's state hash and verify it against the BPT entry
-	hasher, err := v.observer.DidChangeAccount(v.db, v.account)
+	hasher, err := coredb.NewDatabaseObserver().DidChangeAccount(v.db, v.account)
 	if err != nil {
 		return errors.InternalError.WithFormat("construct state hash: %w", err)
 	}
