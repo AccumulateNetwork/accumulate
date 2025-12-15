@@ -8,6 +8,7 @@ This directory contains technical documentation for the Accumulate blockchain pr
 
 | Document | Description | Location |
 |----------|-------------|----------|
+| [AppHash](./apphash.md) | AppHash computation and CometBFT ABCI interface | `docs/apphash.md` |
 | [Receipts](./receipts.md) | Merkle receipt architecture, user API, and test references | `docs/receipts.md` |
 | [SMT/BPT](../internal/database/smt/README.md) | Stateful Merkle Trees and Binary Patricia Trees | `internal/database/smt/` |
 
