@@ -28,6 +28,7 @@ type RestoreVisitor struct {
 
 	DisableWriteBatching bool
 	CompressChains       bool
+	SkipHashVerification bool
 }
 
 func Restore(db database.Beginner, file ioutil2.SectionReader, logger log.Logger) error {
@@ -182,9 +183,11 @@ func (v *RestoreVisitor) VisitAccount(acct *Account, i int) error {
 	// DO NOT reuse the existing record - it may have changed
 	record := v.batch.Account(acct.Url)
 
-	err = record.VerifyHash(acct.Hash[:])
-	if err != nil {
-		return errors.UnknownError.WithFormat("restore %v: %w", acct.Url, err)
+	if !v.SkipHashVerification {
+		err = record.VerifyHash(acct.Hash[:])
+		if err != nil {
+			return errors.UnknownError.WithFormat("restore %v: %w", acct.Url, err)
+		}
 	}
 	return nil
 }

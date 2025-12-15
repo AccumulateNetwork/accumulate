@@ -12,7 +12,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
@@ -107,8 +106,6 @@ func NewExecutor(opts ExecutorOptions) (*Executor, error) {
 	m.db = opts.Database
 	m.mainDispatcher = opts.NewDispatcher()
 	m.isGenesis = false
-
-	m.db.SetObserver(internal.NewDatabaseObserver())
 
 	if opts.Logger != nil {
 		m.logger.L = opts.Logger.With("module", "executor")

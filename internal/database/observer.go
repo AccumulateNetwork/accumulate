@@ -4,23 +4,24 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package internal
+package database
 
 import (
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 type databaseObserver struct{}
 
-var _ database.Observer = databaseObserver{}
+var _ Observer = databaseObserver{}
 
 type observedAccount struct {
-	*database.Account
-	batch *database.Batch
+	*Account
+	batch *Batch
 }
 
-func NewDatabaseObserver() database.Observer {
+// NewDatabaseObserver returns the production observer that computes real
+// account state hashes for the BPT.
+func NewDatabaseObserver() Observer {
 	return databaseObserver{}
 }
 

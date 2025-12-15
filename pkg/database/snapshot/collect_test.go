@@ -35,7 +35,6 @@ func TestCollect(t *testing.T) {
 	db, err := coredb.OpenBadger(filepath.Join(dir, "test.db"), logger)
 	require.NoError(t, err)
 	defer db.Close()
-	db.SetObserver(acctesting.NullObserver{})
 	fillDB(t, db, 1, 10)
 
 	// Collect a snapshot
@@ -65,7 +64,6 @@ func BenchmarkCollect(b *testing.B) {
 		db, err := coredb.OpenBadger(filepath.Join(dir, "test.db"), logger)
 		require.NoError(b, err)
 		defer db.Close()
-		db.SetObserver(acctesting.NullObserver{})
 
 		// Set up a bunch of accounts
 		fillDB(b, db, N, M)
