@@ -541,7 +541,9 @@ type LiteTokenAccount struct {
 	Balance   big.Int  `json:"balance,omitempty" form:"balance" query:"balance" validate:"required"`
 	// LockHeight is the major block height after which the balance can be transferred out of this account.
 	LockHeight uint64 `json:"lockHeight,omitempty" form:"lockHeight" query:"lockHeight" validate:"required"`
-	extraData  []byte
+	// Delegate is an authority (KeyBook) that has exclusive signing rights over this account when set.
+	Delegate  *url.URL `json:"delegate,omitempty" form:"delegate" query:"delegate"`
+	extraData []byte
 }
 
 type LockAccount struct {
@@ -802,6 +804,14 @@ type SendTokens struct {
 	Hash      [32]byte          `json:"hash,omitempty" form:"hash" query:"hash"`
 	Meta      json.RawMessage   `json:"meta,omitempty" form:"meta" query:"meta"`
 	To        []*TokenRecipient `json:"to,omitempty" form:"to" query:"to" validate:"required"`
+	extraData []byte
+}
+
+// SetLiteAccountDelegate sets or clears the delegate authority on a lite token account.
+type SetLiteAccountDelegate struct {
+	fieldsSet []bool
+	// Delegate is the authority (KeyBook) to delegate signing rights to, or nil to clear delegation.
+	Delegate  *url.URL `json:"delegate,omitempty" form:"delegate" query:"delegate"`
 	extraData []byte
 }
 
@@ -1255,6 +1265,8 @@ func (*RemoveKeyOperation) Type() KeyPageOperationType { return KeyPageOperation
 func (*RsaSha256Signature) Type() SignatureType { return SignatureTypeRsaSha256 }
 
 func (*SendTokens) Type() TransactionType { return TransactionTypeSendTokens }
+
+func (*SetLiteAccountDelegate) Type() TransactionType { return TransactionTypeSetLiteAccountDelegate }
 
 func (*SetRejectThresholdKeyPageOperation) Type() KeyPageOperationType {
 	return KeyPageOperationTypeSetRejectThreshold
@@ -2452,6 +2464,9 @@ func (v *LiteTokenAccount) Copy() *LiteTokenAccount {
 	}
 	u.Balance = *encoding.BigintCopy(&v.Balance)
 	u.LockHeight = v.LockHeight
+	if v.Delegate != nil {
+		u.Delegate = v.Delegate
+	}
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -2979,6 +2994,22 @@ func (v *SendTokens) Copy() *SendTokens {
 }
 
 func (v *SendTokens) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *SetLiteAccountDelegate) Copy() *SetLiteAccountDelegate {
+	u := new(SetLiteAccountDelegate)
+
+	if v.Delegate != nil {
+		u.Delegate = v.Delegate
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *SetLiteAccountDelegate) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *SetRejectThresholdKeyPageOperation) Copy() *SetRejectThresholdKeyPageOperation {
 	u := new(SetRejectThresholdKeyPageOperation)
@@ -4938,6 +4969,14 @@ func (v *LiteTokenAccount) Equal(u *LiteTokenAccount) bool {
 	if !(v.LockHeight == u.LockHeight) {
 		return false
 	}
+	switch {
+	case v.Delegate == u.Delegate:
+		// equal
+	case v.Delegate == nil || u.Delegate == nil:
+		return false
+	case !((v.Delegate).Equal(u.Delegate)):
+		return false
+	}
 
 	return true
 }
@@ -5453,6 +5492,19 @@ func (v *SendTokens) Equal(u *SendTokens) bool {
 		if !((v.To[i]).Equal(u.To[i])) {
 			return false
 		}
+	}
+
+	return true
+}
+
+func (v *SetLiteAccountDelegate) Equal(u *SetLiteAccountDelegate) bool {
+	switch {
+	case v.Delegate == u.Delegate:
+		// equal
+	case v.Delegate == nil || u.Delegate == nil:
+		return false
+	case !((v.Delegate).Equal(u.Delegate)):
+		return false
 	}
 
 	return true
@@ -9740,6 +9792,7 @@ var fieldNames_LiteTokenAccount = []string{
 	3: "TokenUrl",
 	4: "Balance",
 	5: "LockHeight",
+	6: "Delegate",
 }
 
 func (v *LiteTokenAccount) MarshalBinary() ([]byte, error) {
@@ -9762,6 +9815,9 @@ func (v *LiteTokenAccount) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.LockHeight == 0) {
 		writer.WriteUint(5, v.LockHeight)
+	}
+	if !(v.Delegate == nil) {
+		writer.WriteUrl(6, v.Delegate)
 	}
 
 	_, _, err := writer.Reset(fieldNames_LiteTokenAccount)
@@ -11501,6 +11557,49 @@ func (v *SendTokens) IsValid() error {
 		errs = append(errs, "field To is missing")
 	} else if len(v.To) == 0 {
 		errs = append(errs, "field To is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_SetLiteAccountDelegate = []string{
+	1: "Type",
+	2: "Delegate",
+}
+
+func (v *SetLiteAccountDelegate) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Delegate == nil) {
+		writer.WriteUrl(2, v.Delegate)
+	}
+
+	_, _, err := writer.Reset(fieldNames_SetLiteAccountDelegate)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *SetLiteAccountDelegate) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
 	}
 
 	switch len(errs) {
@@ -16134,6 +16233,9 @@ func (v *LiteTokenAccount) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadUint(5); ok {
 		v.LockHeight = x
 	}
+	if x, ok := reader.ReadUrl(6); ok {
+		v.Delegate = x
+	}
 
 	seen, err := reader.Reset(fieldNames_LiteTokenAccount)
 	if err != nil {
@@ -17130,6 +17232,41 @@ func (v *SendTokens) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_SendTokens)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *SetLiteAccountDelegate) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *SetLiteAccountDelegate) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *SetLiteAccountDelegate) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadUrl(2); ok {
+		v.Delegate = x
+	}
+
+	seen, err := reader.Reset(fieldNames_SetLiteAccountDelegate)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -19107,6 +19244,7 @@ func init() {
 		encoding.NewTypeField("tokenUrl", "string"),
 		encoding.NewTypeField("balance", "uint256"),
 		encoding.NewTypeField("lockHeight", "uint64"),
+		encoding.NewTypeField("delegate", "string"),
 	}, "LiteTokenAccount", "liteTokenAccount")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -19292,6 +19430,11 @@ func init() {
 		encoding.NewTypeField("meta", "string"),
 		encoding.NewTypeField("to", "TokenRecipient[]"),
 	}, "SendTokens", "sendTokens")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("delegate", "string"),
+	}, "SetLiteAccountDelegate", "setLiteAccountDelegate")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("type", "string"),
@@ -20773,6 +20916,7 @@ func (v *LiteTokenAccount) MarshalJSON() ([]byte, error) {
 		TokenUrl   *url.URL    `json:"tokenUrl,omitempty"`
 		Balance    *string     `json:"balance,omitempty"`
 		LockHeight uint64      `json:"lockHeight,omitempty"`
+		Delegate   *url.URL    `json:"delegate,omitempty"`
 		ExtraData  *string     `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -20787,6 +20931,9 @@ func (v *LiteTokenAccount) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.LockHeight == 0) {
 		u.LockHeight = v.LockHeight
+	}
+	if !(v.Delegate == nil) {
+		u.Delegate = v.Delegate
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -21220,6 +21367,20 @@ func (v *SendTokens) MarshalJSON() ([]byte, error) {
 	}
 	if !(len(v.To) == 0) {
 		u.To = v.To
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *SetLiteAccountDelegate) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      TransactionType `json:"type"`
+		Delegate  *url.URL        `json:"delegate,omitempty"`
+		ExtraData *string         `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.Delegate == nil) {
+		u.Delegate = v.Delegate
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -23794,6 +23955,7 @@ func (v *LiteTokenAccount) UnmarshalJSON(data []byte) error {
 		TokenUrl   *url.URL    `json:"tokenUrl,omitempty"`
 		Balance    *string     `json:"balance,omitempty"`
 		LockHeight uint64      `json:"lockHeight,omitempty"`
+		Delegate   *url.URL    `json:"delegate,omitempty"`
 		ExtraData  *string     `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -23801,6 +23963,7 @@ func (v *LiteTokenAccount) UnmarshalJSON(data []byte) error {
 	u.TokenUrl = v.TokenUrl
 	u.Balance = encoding.BigintToJSON(&v.Balance)
 	u.LockHeight = v.LockHeight
+	u.Delegate = v.Delegate
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -23816,6 +23979,7 @@ func (v *LiteTokenAccount) UnmarshalJSON(data []byte) error {
 		v.Balance = *x
 	}
 	v.LockHeight = u.LockHeight
+	v.Delegate = u.Delegate
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err
@@ -24442,6 +24606,29 @@ func (v *SendTokens) UnmarshalJSON(data []byte) error {
 	}
 	v.Meta = u.Meta
 	v.To = u.To
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *SetLiteAccountDelegate) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      TransactionType `json:"type"`
+		Delegate  *url.URL        `json:"delegate,omitempty"`
+		ExtraData *string         `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Delegate = v.Delegate
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Delegate = u.Delegate
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err
