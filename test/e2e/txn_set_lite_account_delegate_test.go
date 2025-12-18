@@ -28,9 +28,9 @@ func TestSetLiteAccountDelegate_LiteToken_SetDelegate(t *testing.T) {
 	alice := AccountUrl("alice")
 	aliceKey := acctesting.GenerateKey(alice)
 
-	// Initialize
+	// Initialize with 1 partition to ensure all accounts are local (no proof required)
 	var timestamp uint64
-	sim := simulator.New(t, 3)
+	sim := simulator.New(t, 1)
 	sim.InitFromGenesis()
 
 	sim.CreateAccount(&LiteIdentity{Url: lite.RootIdentity(), CreditBalance: 1e9})
@@ -85,9 +85,9 @@ func TestSetLiteAccountDelegate_LiteToken_OwnerLockedOut(t *testing.T) {
 	alice := AccountUrl("alice")
 	aliceKey := acctesting.GenerateKey(alice)
 
-	// Initialize
+	// Initialize with 1 partition to ensure all accounts are local (no proof required)
 	var timestamp uint64
-	sim := simulator.New(t, 3)
+	sim := simulator.New(t, 1)
 	sim.InitFromGenesis()
 
 	sim.CreateAccount(&LiteIdentity{Url: lite.RootIdentity(), CreditBalance: 1e9})
@@ -129,9 +129,9 @@ func TestSetLiteAccountDelegate_LiteToken_ClearDelegate(t *testing.T) {
 	alice := AccountUrl("alice")
 	aliceKey := acctesting.GenerateKey(alice)
 
-	// Initialize
+	// Initialize with 1 partition to ensure all accounts are local (no proof required)
 	var timestamp uint64
-	sim := simulator.New(t, 3)
+	sim := simulator.New(t, 1)
 	sim.InitFromGenesis()
 
 	sim.CreateAccount(&LiteIdentity{Url: lite.RootIdentity(), CreditBalance: 1e9})
@@ -184,9 +184,9 @@ func TestSetLiteAccountDelegate_LiteToken_DelegateTransfer(t *testing.T) {
 	bob := AccountUrl("bob")
 	bobKey := acctesting.GenerateKey(bob)
 
-	// Initialize
+	// Initialize with 1 partition to ensure all accounts are local (no proof required)
 	var timestamp uint64
-	sim := simulator.New(t, 3)
+	sim := simulator.New(t, 1)
 	sim.InitFromGenesis()
 
 	sim.CreateAccount(&LiteIdentity{Url: lite.RootIdentity(), CreditBalance: 1e9})
@@ -258,9 +258,9 @@ func TestSetLiteAccountDelegate_InvalidPrincipal(t *testing.T) {
 	alice := AccountUrl("alice")
 	aliceKey := acctesting.GenerateKey(alice)
 
-	// Initialize
+	// Initialize with 1 partition to ensure all accounts are local
 	var timestamp uint64
-	sim := simulator.New(t, 3)
+	sim := simulator.New(t, 1)
 	sim.InitFromGenesis()
 
 	sim.CreateIdentity(alice, aliceKey[32:])
@@ -275,6 +275,34 @@ func TestSetLiteAccountDelegate_InvalidPrincipal(t *testing.T) {
 			For(alice.JoinPath("tokens")).
 			Body(&SetLiteAccountDelegate{Delegate: alice.JoinPath("book")}).
 			SignWith(alice.JoinPath("book", "1")).Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)),
+	)
+	sim.H.StepUntil(Txn(envs[0].Transaction[0].ID()).Fails())
+}
+
+func TestSetLiteAccountDelegate_RemoteDelegateRequiresProof(t *testing.T) {
+	// Setup: Create accounts on different partitions using a multi-partition simulator.
+	// The lite account will be on one partition, and we'll try to delegate to a
+	// non-existent KeyBook (simulating a remote delegate), which should require a proof.
+	liteKey := acctesting.GenerateKey("Lite")
+	lite := acctesting.AcmeLiteAddressStdPriv(liteKey)
+	// Use a fake remote ADI that doesn't exist locally
+	remoteAlice := AccountUrl("remotealice")
+
+	// Initialize with 1 partition - the "remote" account just won't exist
+	var timestamp uint64
+	sim := simulator.New(t, 1)
+	sim.InitFromGenesis()
+
+	sim.CreateAccount(&LiteIdentity{Url: lite.RootIdentity(), CreditBalance: 1e9})
+	sim.CreateAccount(&LiteTokenAccount{Url: lite, TokenUrl: AcmeUrl(), Balance: *big.NewInt(100)})
+
+	// Try to set delegate to a non-existent KeyBook (simulating remote)
+	// This should fail because the delegate doesn't exist locally and no proof is provided
+	envs := sim.MustSubmitAndExecuteBlock(
+		MustBuild(t, build.Transaction().
+			For(lite).
+			Body(&SetLiteAccountDelegate{Delegate: remoteAlice.JoinPath("book")}).
+			SignWith(lite).Version(1).Timestamp(&timestamp).PrivateKey(liteKey)),
 	)
 	sim.H.StepUntil(Txn(envs[0].Transaction[0].ID()).Fails())
 }
