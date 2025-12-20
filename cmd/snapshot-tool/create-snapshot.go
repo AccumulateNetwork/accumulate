@@ -3,18 +3,16 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 
-	"github.com/cometbft/cometbft/libs/log"
+	cometLog "github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/badger"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/leveldb"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -22,61 +20,54 @@ func createSnapshot() {
 	var (
 		dataDir     string
 		outputFile  string
-		network     string
 		partition   string
 		storageType string
 	)
 
 	flag.StringVar(&dataDir, "data", "", "Database data directory (e.g., .../dnn/data)")
 	flag.StringVar(&outputFile, "output", "", "Output snapshot file")
-	flag.StringVar(&network, "network", "MainNet", "Network name")
 	flag.StringVar(&partition, "partition", "", "Partition ID (Directory or Cyclops)")
 	flag.StringVar(&storageType, "storage", "levelDB", "Storage type (badger or levelDB)")
 	flag.Parse()
 
 	if dataDir == "" || outputFile == "" || partition == "" {
-		fmt.Fprintf(os.Stderr, "Usage: create-snapshot -data <data-dir> -output <file> -partition <id> [-network <name>] [-storage <type>]\n")
+		fmt.Fprintf(os.Stderr, "Usage: create-snapshot -data <data-dir> -output <file> -partition <id> [-storage <type>]\n")
 		fmt.Fprintf(os.Stderr, "Example: create-snapshot -data /path/to/dnn/data -output dir.snap -partition Directory\n")
 		os.Exit(1)
 	}
 
 	// Create logger
-	logger, err := logging.NewConsoleWriter("plain")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to create logger: %v\n", err)
-		os.Exit(1)
-	}
-	tmLogger := log.NewTMLogger(logger)
+	slogLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+	logger := (*logging.Slogger)(slogLogger)
+	cometLogger := cometLog.NewNopLogger()
 
-	// Open key-value store directly
+	// Open database
 	fmt.Printf("Opening %s database at %s...\n", storageType, dataDir)
-	var store keyvalue.Beginner
+	dbPath := filepath.Join(dataDir, "accumulate.db")
+	var db *database.Database
+	var err error
 	switch storageType {
 	case "badger":
-		store, err = badger.New(filepath.Join(dataDir, "accumulate.db"), tmLogger)
+		db, err = database.OpenBadger(dbPath, cometLogger)
 	case "levelDB":
-		store, err = leveldb.OpenLevelDB(filepath.Join(dataDir, "accumulate.db"), tmLogger, false)
+		db, err = database.OpenLevelDB(dbPath, logger)
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown storage type: %s\n", storageType)
 		os.Exit(1)
 	}
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to open store: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Failed to open database: %v\n", err)
 		os.Exit(1)
 	}
-	defer store.Close()
+	defer db.Close()
 
-	// Create database wrapper
-	db := database.New(store, tmLogger)
+	// Set observer
 	db.SetObserver(execute.NewDatabaseObserver())
 
 	// Create partition URL
-	partitionURL := protocol.PartitionUrl(partition)
-	networkURL, err := url.Parse(fmt.Sprintf("acc://%s.acme", network))
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to parse network URL: %v\n", err)
-		os.Exit(1)
-	}
+	partitionURL := config.NetworkUrl{URL: protocol.PartitionUrl(partition)}
 
 	// Create output file
 	fmt.Printf("Creating snapshot file: %s\n", outputFile)
@@ -92,12 +83,11 @@ func createSnapshot() {
 	batch := db.Begin(false)
 	defer batch.Discard()
 
-	partitionURL.URL = networkURL
-	err = snapshot.FullCollect(batch, file, partitionURL, tmLogger, false)
+	err = snapshot.FullCollect(batch, file, partitionURL, cometLogger, false)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to collect snapshot: %v\n", err)
 		os.Exit(1)
 	}
 
-	fmt.Printf("✓ Snapshot successfully created: %s\n", outputFile)
+	fmt.Printf("Snapshot successfully created: %s\n", outputFile)
 }
