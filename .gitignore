@@ -35,8 +35,8 @@ tools/cmd/gen-enum/go_build*
 /accumulate-dual-data/
 /accumulate-dual-test/
 /*.snap
-/snapshot.urls
-/cmd/create-snap/snapshot.urls
+**/snapshot.urls
+/snapshot-tool
 
 # Binaries and test data
 *.exe
