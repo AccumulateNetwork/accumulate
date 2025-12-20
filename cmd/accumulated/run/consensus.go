@@ -120,6 +120,15 @@ func (c *ConsensusService) start(inst *Instance) error {
 		inst.shutdown()
 	})
 
+	// Create and register halt controller for this partition
+	haltController := NewHaltController(
+		c.App.partition().ID,
+		inst.shutdown,
+		inst.logger.With("module", "halt", "partition", c.App.partition().ID),
+	)
+	events.SubscribeSync(d.eventBus, haltController.OnDidCommitBlock)
+	inst.RegisterHaltController(haltController)
+
 	// Make the node directories
 	err := os.MkdirAll(inst.path(c.NodeDir, "config"), 0700)
 	if err != nil {
