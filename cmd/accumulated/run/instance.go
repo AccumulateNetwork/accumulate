@@ -38,6 +38,13 @@ type Instance struct {
 	logger   *slog.Logger
 	p2p      *p2p.Node
 	services ioc.Registry
+
+	// parentInstance is set for subnodes to allow registering halt controllers
+	// on the parent instance (where the HTTP service runs)
+	parentInstance *Instance
+
+	haltControllersMu sync.RWMutex
+	haltControllers   map[string]*HaltController
 }
 
 const minDiskSpace = 0.05
@@ -301,4 +308,53 @@ func (i *Instance) checkDiskSpace() {
 
 		time.Sleep(10 * time.Minute)
 	}
+}
+
+// RegisterHaltController registers a halt controller for a partition.
+// If this instance has a parent (i.e., it's a subnode), the controller is
+// registered on the parent instance so the HTTP handler can access it.
+func (i *Instance) RegisterHaltController(hc *HaltController) {
+	target := i
+	if i.parentInstance != nil {
+		target = i.parentInstance
+	}
+	target.haltControllersMu.Lock()
+	defer target.haltControllersMu.Unlock()
+	if target.haltControllers == nil {
+		target.haltControllers = make(map[string]*HaltController)
+	}
+	target.haltControllers[hc.Partition()] = hc
+}
+
+// RequestHaltAll requests halt for all registered partitions.
+func (i *Instance) RequestHaltAll() {
+	i.haltControllersMu.RLock()
+	defer i.haltControllersMu.RUnlock()
+	for _, hc := range i.haltControllers {
+		hc.RequestHalt()
+	}
+}
+
+// CancelHaltAll cancels halt for all registered partitions.
+func (i *Instance) CancelHaltAll() {
+	i.haltControllersMu.RLock()
+	defer i.haltControllersMu.RUnlock()
+	for _, hc := range i.haltControllers {
+		hc.CancelHalt()
+	}
+}
+
+// GetHaltStatus returns the halt status for all partitions.
+func (i *Instance) GetHaltStatus() HaltStatus {
+	i.haltControllersMu.RLock()
+	defer i.haltControllersMu.RUnlock()
+
+	status := HaltStatus{}
+	for _, hc := range i.haltControllers {
+		if hc.IsHaltPending() {
+			status.Pending = true
+			status.Partitions = append(status.Partitions, hc.Partition())
+		}
+	}
+	return status
 }
