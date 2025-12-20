@@ -41,6 +41,11 @@ LiteTokenAccount:
     - name: LockHeight
       description: is the major block height after which the balance can be transferred out of this account
       type: uint
+    - name: Delegate
+      description: is an authority (KeyBook) that has exclusive signing rights over this account when set
+      type: url
+      pointer: true
+      optional: true
 
 LiteDataAccount:
   union: { type: account, value: LiteDataAccount }

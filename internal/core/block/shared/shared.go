@@ -26,11 +26,23 @@ func GetAccountAuthoritySet(account protocol.Account) (*protocol.AccountAuth, *u
 		}, nil, nil
 
 	case *protocol.LiteTokenAccount:
+		// If a delegate is set, it has exclusive authority
+		if account.Delegate != nil {
+			return &protocol.AccountAuth{
+				Authorities: []protocol.AuthorityEntry{
+					{Url: account.Delegate},
+				},
+			}, nil, nil
+		}
 		return &protocol.AccountAuth{
 			Authorities: []protocol.AuthorityEntry{
 				{Url: account.Url.RootIdentity()},
 			},
 		}, nil, nil
+
+	case *protocol.LiteDataAccount:
+		// LiteDataAccounts have no authorities (permissionless)
+		return &protocol.AccountAuth{}, nil, nil
 
 	case protocol.FullAccount:
 		return account.GetAuth(), nil, nil

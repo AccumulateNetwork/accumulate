@@ -332,6 +332,18 @@ TokenIssuerProof:
       marshal-as: reference
       pointer: true
 
+KeyBookProof:
+  description: proves the existence of a KeyBook on a remote partition
+  fields:
+    - name: KeyBook
+      type: KeyBook
+      marshal-as: reference
+      pointer: true
+    - name: Receipt
+      type: merkle.Receipt
+      marshal-as: reference
+      pointer: true
+
 AnnotatedReceipt:
   description: is a [merkle.Receipt] annotated with the account and chain it originates from
   fields:
