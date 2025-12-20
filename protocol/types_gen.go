@@ -475,6 +475,14 @@ type KeyBook struct {
 	extraData []byte
 }
 
+// KeyBookProof proves the existence of a KeyBook on a remote partition.
+type KeyBookProof struct {
+	fieldsSet []bool
+	KeyBook   *KeyBook        `json:"keyBook,omitempty" form:"keyBook" query:"keyBook" validate:"required"`
+	Receipt   *merkle.Receipt `json:"receipt,omitempty" form:"receipt" query:"receipt" validate:"required"`
+	extraData []byte
+}
+
 type KeyPage struct {
 	fieldsSet     []bool
 	Url           *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
@@ -541,7 +549,9 @@ type LiteTokenAccount struct {
 	Balance   big.Int  `json:"balance,omitempty" form:"balance" query:"balance" validate:"required"`
 	// LockHeight is the major block height after which the balance can be transferred out of this account.
 	LockHeight uint64 `json:"lockHeight,omitempty" form:"lockHeight" query:"lockHeight" validate:"required"`
-	extraData  []byte
+	// Delegate is an authority (KeyBook) that has exclusive signing rights over this account when set.
+	Delegate  *url.URL `json:"delegate,omitempty" form:"delegate" query:"delegate"`
+	extraData []byte
 }
 
 type LockAccount struct {
@@ -802,6 +812,16 @@ type SendTokens struct {
 	Hash      [32]byte          `json:"hash,omitempty" form:"hash" query:"hash"`
 	Meta      json.RawMessage   `json:"meta,omitempty" form:"meta" query:"meta"`
 	To        []*TokenRecipient `json:"to,omitempty" form:"to" query:"to" validate:"required"`
+	extraData []byte
+}
+
+// SetLiteAccountDelegate sets or clears the delegate authority on a lite token account.
+type SetLiteAccountDelegate struct {
+	fieldsSet []bool
+	// Delegate is the authority (KeyBook) to delegate signing rights to, or nil to clear delegation.
+	Delegate *url.URL `json:"delegate,omitempty" form:"delegate" query:"delegate"`
+	// Proof is a proof of existence for the delegate KeyBook, required when the delegate is on a remote partition.
+	Proof     *KeyBookProof `json:"proof,omitempty" form:"proof" query:"proof"`
 	extraData []byte
 }
 
@@ -1255,6 +1275,8 @@ func (*RemoveKeyOperation) Type() KeyPageOperationType { return KeyPageOperation
 func (*RsaSha256Signature) Type() SignatureType { return SignatureTypeRsaSha256 }
 
 func (*SendTokens) Type() TransactionType { return TransactionTypeSendTokens }
+
+func (*SetLiteAccountDelegate) Type() TransactionType { return TransactionTypeSetLiteAccountDelegate }
 
 func (*SetRejectThresholdKeyPageOperation) Type() KeyPageOperationType {
 	return KeyPageOperationTypeSetRejectThreshold
@@ -2317,6 +2339,25 @@ func (v *KeyBook) Copy() *KeyBook {
 
 func (v *KeyBook) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *KeyBookProof) Copy() *KeyBookProof {
+	u := new(KeyBookProof)
+
+	if v.KeyBook != nil {
+		u.KeyBook = (v.KeyBook).Copy()
+	}
+	if v.Receipt != nil {
+		u.Receipt = (v.Receipt).Copy()
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *KeyBookProof) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *KeyPage) Copy() *KeyPage {
 	u := new(KeyPage)
 
@@ -2452,6 +2493,9 @@ func (v *LiteTokenAccount) Copy() *LiteTokenAccount {
 	}
 	u.Balance = *encoding.BigintCopy(&v.Balance)
 	u.LockHeight = v.LockHeight
+	if v.Delegate != nil {
+		u.Delegate = v.Delegate
+	}
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -2979,6 +3023,25 @@ func (v *SendTokens) Copy() *SendTokens {
 }
 
 func (v *SendTokens) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *SetLiteAccountDelegate) Copy() *SetLiteAccountDelegate {
+	u := new(SetLiteAccountDelegate)
+
+	if v.Delegate != nil {
+		u.Delegate = v.Delegate
+	}
+	if v.Proof != nil {
+		u.Proof = (v.Proof).Copy()
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *SetLiteAccountDelegate) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *SetRejectThresholdKeyPageOperation) Copy() *SetRejectThresholdKeyPageOperation {
 	u := new(SetRejectThresholdKeyPageOperation)
@@ -4770,6 +4833,27 @@ func (v *KeyBook) Equal(u *KeyBook) bool {
 	return true
 }
 
+func (v *KeyBookProof) Equal(u *KeyBookProof) bool {
+	switch {
+	case v.KeyBook == u.KeyBook:
+		// equal
+	case v.KeyBook == nil || u.KeyBook == nil:
+		return false
+	case !((v.KeyBook).Equal(u.KeyBook)):
+		return false
+	}
+	switch {
+	case v.Receipt == u.Receipt:
+		// equal
+	case v.Receipt == nil || u.Receipt == nil:
+		return false
+	case !((v.Receipt).Equal(u.Receipt)):
+		return false
+	}
+
+	return true
+}
+
 func (v *KeyPage) Equal(u *KeyPage) bool {
 	switch {
 	case v.Url == u.Url:
@@ -4936,6 +5020,14 @@ func (v *LiteTokenAccount) Equal(u *LiteTokenAccount) bool {
 		return false
 	}
 	if !(v.LockHeight == u.LockHeight) {
+		return false
+	}
+	switch {
+	case v.Delegate == u.Delegate:
+		// equal
+	case v.Delegate == nil || u.Delegate == nil:
+		return false
+	case !((v.Delegate).Equal(u.Delegate)):
 		return false
 	}
 
@@ -5453,6 +5545,27 @@ func (v *SendTokens) Equal(u *SendTokens) bool {
 		if !((v.To[i]).Equal(u.To[i])) {
 			return false
 		}
+	}
+
+	return true
+}
+
+func (v *SetLiteAccountDelegate) Equal(u *SetLiteAccountDelegate) bool {
+	switch {
+	case v.Delegate == u.Delegate:
+		// equal
+	case v.Delegate == nil || u.Delegate == nil:
+		return false
+	case !((v.Delegate).Equal(u.Delegate)):
+		return false
+	}
+	switch {
+	case v.Proof == u.Proof:
+		// equal
+	case v.Proof == nil || u.Proof == nil:
+		return false
+	case !((v.Proof).Equal(u.Proof)):
+		return false
 	}
 
 	return true
@@ -9303,6 +9416,58 @@ func (v *KeyBook) IsValid() error {
 	}
 }
 
+var fieldNames_KeyBookProof = []string{
+	1: "KeyBook",
+	2: "Receipt",
+}
+
+func (v *KeyBookProof) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.KeyBook == nil) {
+		writer.WriteValue(1, v.KeyBook.MarshalBinary)
+	}
+	if !(v.Receipt == nil) {
+		writer.WriteValue(2, v.Receipt.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_KeyBookProof)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *KeyBookProof) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field KeyBook is missing")
+	} else if v.KeyBook == nil {
+		errs = append(errs, "field KeyBook is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Receipt is missing")
+	} else if v.Receipt == nil {
+		errs = append(errs, "field Receipt is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_KeyPage = []string{
 	1:  "Type",
 	2:  "Url",
@@ -9740,6 +9905,7 @@ var fieldNames_LiteTokenAccount = []string{
 	3: "TokenUrl",
 	4: "Balance",
 	5: "LockHeight",
+	6: "Delegate",
 }
 
 func (v *LiteTokenAccount) MarshalBinary() ([]byte, error) {
@@ -9762,6 +9928,9 @@ func (v *LiteTokenAccount) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.LockHeight == 0) {
 		writer.WriteUint(5, v.LockHeight)
+	}
+	if !(v.Delegate == nil) {
+		writer.WriteUrl(6, v.Delegate)
 	}
 
 	_, _, err := writer.Reset(fieldNames_LiteTokenAccount)
@@ -11501,6 +11670,53 @@ func (v *SendTokens) IsValid() error {
 		errs = append(errs, "field To is missing")
 	} else if len(v.To) == 0 {
 		errs = append(errs, "field To is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_SetLiteAccountDelegate = []string{
+	1: "Type",
+	2: "Delegate",
+	3: "Proof",
+}
+
+func (v *SetLiteAccountDelegate) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Delegate == nil) {
+		writer.WriteUrl(2, v.Delegate)
+	}
+	if !(v.Proof == nil) {
+		writer.WriteValue(3, v.Proof.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_SetLiteAccountDelegate)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *SetLiteAccountDelegate) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
 	}
 
 	switch len(errs) {
@@ -15856,6 +16072,32 @@ func (v *KeyBook) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
+func (v *KeyBookProof) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *KeyBookProof) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x := new(KeyBook); reader.ReadValue(1, x.UnmarshalBinaryFrom) {
+		v.KeyBook = x
+	}
+	if x := new(merkle.Receipt); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+		v.Receipt = x
+	}
+
+	seen, err := reader.Reset(fieldNames_KeyBookProof)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *KeyPage) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -16133,6 +16375,9 @@ func (v *LiteTokenAccount) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	}
 	if x, ok := reader.ReadUint(5); ok {
 		v.LockHeight = x
+	}
+	if x, ok := reader.ReadUrl(6); ok {
+		v.Delegate = x
 	}
 
 	seen, err := reader.Reset(fieldNames_LiteTokenAccount)
@@ -17130,6 +17375,44 @@ func (v *SendTokens) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_SendTokens)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *SetLiteAccountDelegate) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *SetLiteAccountDelegate) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *SetLiteAccountDelegate) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadUrl(2); ok {
+		v.Delegate = x
+	}
+	if x := new(KeyBookProof); reader.ReadValue(3, x.UnmarshalBinaryFrom) {
+		v.Proof = x
+	}
+
+	seen, err := reader.Reset(fieldNames_SetLiteAccountDelegate)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -19054,6 +19337,11 @@ func init() {
 	}, "KeyBook", "keyBook")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("keyBook", "KeyBook"),
+		encoding.NewTypeField("receipt", "merkle.Receipt"),
+	}, "KeyBookProof", "keyBookProof")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("type", "string"),
 		encoding.NewTypeField("keyBook", "string"),
 		encoding.NewTypeField("url", "string"),
@@ -19107,6 +19395,7 @@ func init() {
 		encoding.NewTypeField("tokenUrl", "string"),
 		encoding.NewTypeField("balance", "uint256"),
 		encoding.NewTypeField("lockHeight", "uint64"),
+		encoding.NewTypeField("delegate", "string"),
 	}, "LiteTokenAccount", "liteTokenAccount")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -19292,6 +19581,12 @@ func init() {
 		encoding.NewTypeField("meta", "string"),
 		encoding.NewTypeField("to", "TokenRecipient[]"),
 	}, "SendTokens", "sendTokens")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("delegate", "string"),
+		encoding.NewTypeField("proof", "KeyBookProof"),
+	}, "SetLiteAccountDelegate", "setLiteAccountDelegate")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("type", "string"),
@@ -20773,6 +21068,7 @@ func (v *LiteTokenAccount) MarshalJSON() ([]byte, error) {
 		TokenUrl   *url.URL    `json:"tokenUrl,omitempty"`
 		Balance    *string     `json:"balance,omitempty"`
 		LockHeight uint64      `json:"lockHeight,omitempty"`
+		Delegate   *url.URL    `json:"delegate,omitempty"`
 		ExtraData  *string     `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -20787,6 +21083,9 @@ func (v *LiteTokenAccount) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.LockHeight == 0) {
 		u.LockHeight = v.LockHeight
+	}
+	if !(v.Delegate == nil) {
+		u.Delegate = v.Delegate
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -21220,6 +21519,24 @@ func (v *SendTokens) MarshalJSON() ([]byte, error) {
 	}
 	if !(len(v.To) == 0) {
 		u.To = v.To
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *SetLiteAccountDelegate) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      TransactionType `json:"type"`
+		Delegate  *url.URL        `json:"delegate,omitempty"`
+		Proof     *KeyBookProof   `json:"proof,omitempty"`
+		ExtraData *string         `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.Delegate == nil) {
+		u.Delegate = v.Delegate
+	}
+	if !(v.Proof == nil) {
+		u.Proof = v.Proof
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -23794,6 +24111,7 @@ func (v *LiteTokenAccount) UnmarshalJSON(data []byte) error {
 		TokenUrl   *url.URL    `json:"tokenUrl,omitempty"`
 		Balance    *string     `json:"balance,omitempty"`
 		LockHeight uint64      `json:"lockHeight,omitempty"`
+		Delegate   *url.URL    `json:"delegate,omitempty"`
 		ExtraData  *string     `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -23801,6 +24119,7 @@ func (v *LiteTokenAccount) UnmarshalJSON(data []byte) error {
 	u.TokenUrl = v.TokenUrl
 	u.Balance = encoding.BigintToJSON(&v.Balance)
 	u.LockHeight = v.LockHeight
+	u.Delegate = v.Delegate
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -23816,6 +24135,7 @@ func (v *LiteTokenAccount) UnmarshalJSON(data []byte) error {
 		v.Balance = *x
 	}
 	v.LockHeight = u.LockHeight
+	v.Delegate = u.Delegate
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err
@@ -24442,6 +24762,32 @@ func (v *SendTokens) UnmarshalJSON(data []byte) error {
 	}
 	v.Meta = u.Meta
 	v.To = u.To
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *SetLiteAccountDelegate) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      TransactionType `json:"type"`
+		Delegate  *url.URL        `json:"delegate,omitempty"`
+		Proof     *KeyBookProof   `json:"proof,omitempty"`
+		ExtraData *string         `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Delegate = v.Delegate
+	u.Proof = v.Proof
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Delegate = u.Delegate
+	v.Proof = u.Proof
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err

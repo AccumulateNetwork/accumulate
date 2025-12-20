@@ -320,10 +320,14 @@ func (s *SignatureContext) signerCanSignTransaction(batch *database.Batch, txn *
 func (x *TransactionContext) signerCanSignTransaction(txn *protocol.Transaction, signer protocol.Signer) error {
 	switch signer := signer.(type) {
 	case *protocol.LiteIdentity:
-		// A lite token account is only allowed to sign for itself
+		// A lite identity can only sign for itself, unless a delegate is set
 		if !signer.Url.Equal(txn.Header.Principal.RootIdentity()) {
 			return errors.Unauthorized.WithFormat("%v is not authorized to sign transactions for %v", signer.Url, txn.Header.Principal)
 		}
+		// Note: If a delegate is set on the principal, the lite identity is locked out.
+		// This is checked via GetAccountAuthoritySet which returns the delegate as the authority.
+		// The signature will be rejected at the authority level since the lite identity
+		// won't match the delegate authority.
 		return nil
 
 	case *protocol.KeyPage:

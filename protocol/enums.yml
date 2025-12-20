@@ -248,6 +248,9 @@ TransactionType:
   UpdateKey:
     value: 0x16
     description: update key for existing keys
+  SetLiteAccountDelegate:
+    value: 0x17
+    description: sets or clears the delegate authority on a lite token account
   NetworkMaintenance:
     value: 0x2E
     description: executes network maintenance operations
