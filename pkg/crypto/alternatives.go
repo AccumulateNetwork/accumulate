@@ -6,21 +6,25 @@
 
 // Package crypto provides ARM64-compatible alternatives to btcec/v2 and ethereum/go-ethereum/crypto
 // to resolve compilation issues on Android/Termux and other ARM64 platforms.
+// Uses decred's pure-Go secp256k1 implementation which is ARM64 compatible.
 package crypto
 
 import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
-	"crypto/sha256"
 	"errors"
 	"fmt"
 	"math/big"
+
+	"github.com/decred/dcrd/dcrec/secp256k1/v4"
+	"golang.org/x/crypto/sha3"
 )
 
-// ARM64-compatible elliptic curve implementation
+// S256 returns the secp256k1 curve used by Bitcoin and Ethereum.
+// Uses decred's pure-Go implementation which is ARM64 compatible.
 func S256() elliptic.Curve {
-	return elliptic.P256()
+	return secp256k1.S256()
 }
 
 // FromECDSA exports a private key into a binary dump.
@@ -173,9 +177,13 @@ func VerifySignature(pubkey, hash, signature []byte) bool {
 
 // PubkeyToAddress returns the Ethereum address of a public key
 // Replaces ethereum/go-ethereum/crypto.PubkeyToAddress
+// Uses Keccak256 as per Ethereum specification
 func PubkeyToAddress(p ecdsa.PublicKey) [20]byte {
 	pubBytes := FromECDSAPub(&p)
-	hash := sha256.Sum256(pubBytes[1:]) // Skip the 0x04 prefix
+	// Ethereum uses Keccak256 of the uncompressed public key (without 0x04 prefix)
+	h := sha3.NewLegacyKeccak256()
+	h.Write(pubBytes[1:]) // Skip the 0x04 prefix
+	hash := h.Sum(nil)
 	var addr [20]byte
 	copy(addr[:], hash[12:]) // Take last 20 bytes
 	return addr
@@ -188,23 +196,98 @@ type BTCPrivKey struct {
 
 // BTCPrivKeyFromBytes creates a private key from bytes
 // Replaces btcec.PrivKeyFromBytes
+// Handles WIF-decoded keys (37/38 bytes) by extracting the 32-byte key portion,
+// and raw 32-byte keys directly
 func BTCPrivKeyFromBytes(curve elliptic.Curve, pk []byte) (*ecdsa.PrivateKey, *ecdsa.PublicKey) {
-	privKey, err := toECDSA(pk, false)
+	var keyBytes []byte
+	switch len(pk) {
+	case 32:
+		// Raw 32-byte private key
+		keyBytes = pk
+	case 33:
+		// 32-byte key with compression flag
+		keyBytes = pk[:32]
+	case 37:
+		// WIF uncompressed: 1 byte version + 32 bytes key + 4 bytes checksum
+		keyBytes = pk[1:33]
+	case 38:
+		// WIF compressed: 1 byte version + 32 bytes key + 1 byte flag + 4 bytes checksum
+		keyBytes = pk[1:33]
+	default:
+		// For other lengths, try to extract 32 bytes after version byte if long enough
+		if len(pk) > 33 {
+			keyBytes = pk[1:33]
+		} else if len(pk) > 32 {
+			keyBytes = pk[:32]
+		} else {
+			keyBytes = pk
+		}
+	}
+
+	privKey, err := toECDSA(keyBytes, false)
 	if err != nil || privKey == nil {
 		return nil, nil
 	}
+	// Override the curve to use the provided one
+	privKey.PublicKey.Curve = curve
+	privKey.PublicKey.X, privKey.PublicKey.Y = curve.ScalarBaseMult(keyBytes)
 	return privKey, &privKey.PublicKey
 }
 
-// ParseSignature parses a signature from bytes
+// ParseSignature parses a DER-encoded signature from bytes
 // Replaces btcec.ParseSignature
 func ParseSignature(sig []byte) (*BTCSignature, error) {
-	if len(sig) < 64 {
+	if len(sig) < 8 {
 		return nil, errors.New("signature too short")
 	}
 
-	r := new(big.Int).SetBytes(sig[:32])
-	s := new(big.Int).SetBytes(sig[32:64])
+	// DER format: 0x30 [total-length] 0x02 [R-length] [R] 0x02 [S-length] [S]
+	if sig[0] != 0x30 {
+		return nil, errors.New("invalid DER signature: missing SEQUENCE tag")
+	}
+
+	totalLen := int(sig[1])
+	if len(sig) < totalLen+2 {
+		return nil, errors.New("invalid DER signature: length mismatch")
+	}
+
+	idx := 2
+	if sig[idx] != 0x02 {
+		return nil, errors.New("invalid DER signature: missing INTEGER tag for R")
+	}
+	idx++
+
+	rLen := int(sig[idx])
+	idx++
+	if idx+rLen > len(sig) {
+		return nil, errors.New("invalid DER signature: R length exceeds data")
+	}
+
+	rBytes := sig[idx : idx+rLen]
+	// Skip leading zero if present (used for positive numbers with high bit set)
+	if rBytes[0] == 0x00 && len(rBytes) > 1 {
+		rBytes = rBytes[1:]
+	}
+	r := new(big.Int).SetBytes(rBytes)
+	idx += rLen
+
+	if idx >= len(sig) || sig[idx] != 0x02 {
+		return nil, errors.New("invalid DER signature: missing INTEGER tag for S")
+	}
+	idx++
+
+	sLen := int(sig[idx])
+	idx++
+	if idx+sLen > len(sig) {
+		return nil, errors.New("invalid DER signature: S length exceeds data")
+	}
+
+	sBytes := sig[idx : idx+sLen]
+	// Skip leading zero if present
+	if sBytes[0] == 0x00 && len(sBytes) > 1 {
+		sBytes = sBytes[1:]
+	}
+	s := new(big.Int).SetBytes(sBytes)
 
 	return &BTCSignature{R: r, S: s}, nil
 }
@@ -224,13 +307,35 @@ type BTCSignature struct {
 }
 
 // Serialize returns the signature in DER format
+// DER format: 0x30 [total-length] 0x02 [R-length] [R] 0x02 [S-length] [S]
 func (sig *BTCSignature) Serialize() []byte {
-	result := make([]byte, 64)
 	rBytes := sig.R.Bytes()
 	sBytes := sig.S.Bytes()
 
-	copy(result[32-len(rBytes):32], rBytes)
-	copy(result[64-len(sBytes):64], sBytes)
+	// Add leading zero if high bit is set (to keep number positive in DER)
+	if len(rBytes) > 0 && rBytes[0]&0x80 != 0 {
+		rBytes = append([]byte{0x00}, rBytes...)
+	}
+	if len(sBytes) > 0 && sBytes[0]&0x80 != 0 {
+		sBytes = append([]byte{0x00}, sBytes...)
+	}
+
+	// Calculate total length
+	totalLen := 2 + len(rBytes) + 2 + len(sBytes) // 2 for each INTEGER tag+length
+
+	result := make([]byte, 2+totalLen)
+	result[0] = 0x30 // SEQUENCE tag
+	result[1] = byte(totalLen)
+
+	idx := 2
+	result[idx] = 0x02 // INTEGER tag for R
+	result[idx+1] = byte(len(rBytes))
+	copy(result[idx+2:], rBytes)
+	idx += 2 + len(rBytes)
+
+	result[idx] = 0x02 // INTEGER tag for S
+	result[idx+1] = byte(len(sBytes))
+	copy(result[idx+2:], sBytes)
 
 	return result
 }
