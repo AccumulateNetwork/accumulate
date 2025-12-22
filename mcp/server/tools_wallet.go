@@ -1,189 +1,208 @@
-// Copyright 2025 The Accumulate Authors
-//
-// Use of this source code is governed by an MIT-style
-// license that can be found in the LICENSE file or at
-// https://opensource.org/licenses/MIT.
-
 package server
 
 import (
-	"encoding/hex"
+	"context"
 	"fmt"
 )
 
-// registerWalletTools registers wallet/key management tools
-func (s *Server) registerWalletTools() {
-	s.RegisterTool(
-		Tool{
-			Name:        "generate_key",
-			Description: "Generate a new ED25519 signing key pair",
-			InputSchema: JSONSchema{
-				Type:       "object",
-				Properties: map[string]JSONSchema{},
+// walletInit initializes a new wallet
+func (s *Server) walletInit(args map[string]interface{}) (map[string]interface{}, error) {
+	password, _ := args["password"].(string)
+	noPassword, _ := args["no_password"].(bool)
+
+	if s.wallet == nil {
+		return nil, fmt.Errorf("wallet client not initialized")
+	}
+
+	ctx := context.Background()
+	err := s.wallet.InitWallet(ctx, password, noPassword)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize wallet: %w", err)
+	}
+
+	return map[string]interface{}{
+		"content": []map[string]interface{}{
+			{
+				"type": "text",
+				"text": fmt.Sprintf("✓ Wallet initialized successfully at %s", s.state.GetWalletDir()),
 			},
 		},
-		s.handleGenerateKey,
-	)
+	}, nil
+}
 
-	s.RegisterTool(
-		Tool{
-			Name:        "import_key",
-			Description: "Import an existing ED25519 private key",
-			InputSchema: JSONSchema{
-				Type: "object",
-				Properties: map[string]JSONSchema{
-					"private_key": {Type: "string"},
+// vaultOpen opens and unlocks a vault
+func (s *Server) vaultOpen(args map[string]interface{}) (map[string]interface{}, error) {
+	vaultName, ok := args["vault"].(string)
+	if !ok || vaultName == "" {
+		vaultName = "default"
+	}
+
+	password, _ := args["password"].(string)
+
+	if s.wallet == nil {
+		return nil, fmt.Errorf("wallet client not initialized")
+	}
+
+	ctx := context.Background()
+	token, err := s.wallet.OpenVault(ctx, vaultName, password)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open vault: %w", err)
+	}
+
+	// Update state
+	s.state.SetActiveVault(vaultName, token)
+
+	return map[string]interface{}{
+		"content": []map[string]interface{}{
+			{
+				"type": "text",
+				"text": fmt.Sprintf("✓ Vault '%s' unlocked successfully", vaultName),
+			},
+		},
+	}, nil
+}
+
+// vaultLock locks the current vault
+func (s *Server) vaultLock(args map[string]interface{}) (map[string]interface{}, error) {
+	if s.state.IsVaultLocked() {
+		return map[string]interface{}{
+			"content": []map[string]interface{}{
+				{
+					"type": "text",
+					"text": "Vault is already locked",
 				},
-				Required: []string{"private_key"},
+			},
+		}, nil
+	}
+
+	vaultName := s.state.GetActiveVault()
+	s.state.LockVault()
+
+	return map[string]interface{}{
+		"content": []map[string]interface{}{
+			{
+				"type": "text",
+				"text": fmt.Sprintf("✓ Vault '%s' locked successfully", vaultName),
 			},
 		},
-		s.handleImportKey,
-	)
+	}, nil
+}
 
-	s.RegisterTool(
-		Tool{
-			Name:        "list_keys",
-			Description: "List all keys currently in memory",
-			InputSchema: JSONSchema{
-				Type:       "object",
-				Properties: map[string]JSONSchema{},
+// walletGenerateKey generates a new key in the wallet
+func (s *Server) walletGenerateKey(args map[string]interface{}) (map[string]interface{}, error) {
+	if s.state.IsVaultLocked() {
+		return nil, fmt.Errorf("vault is locked - please unlock vault first")
+	}
+
+	keyName, ok := args["key_name"].(string)
+	if !ok || keyName == "" {
+		return nil, fmt.Errorf("key_name is required")
+	}
+
+	if s.wallet == nil {
+		return nil, fmt.Errorf("wallet client not initialized")
+	}
+
+	ctx := context.Background()
+	publicKey, liteAccount, err := s.wallet.GenerateKey(ctx, s.state.GetVaultToken(), keyName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate key: %w", err)
+	}
+
+	return map[string]interface{}{
+		"content": []map[string]interface{}{
+			{
+				"type": "text",
+				"text": fmt.Sprintf("✓ Key '%s' generated successfully\n\nPublic Key: %s\nLite Account: %s",
+					keyName, publicKey, liteAccount),
 			},
 		},
-		s.handleListKeys,
-	)
+	}, nil
+}
 
-	s.RegisterTool(
-		Tool{
-			Name:        "get_lite_address",
-			Description: "Compute lite token account address from a public key",
-			InputSchema: JSONSchema{
-				Type: "object",
-				Properties: map[string]JSONSchema{
-					"public_key": {Type: "string"},
-					"token_url":  {Type: "string"},
+// walletListKeys lists all keys in the wallet
+func (s *Server) walletListKeys(args map[string]interface{}) (map[string]interface{}, error) {
+	if s.state.IsVaultLocked() {
+		return nil, fmt.Errorf("vault is locked - please unlock vault first")
+	}
+
+	if s.wallet == nil {
+		return nil, fmt.Errorf("wallet client not initialized")
+	}
+
+	ctx := context.Background()
+	keys, err := s.wallet.ListKeys(ctx, s.state.GetVaultToken())
+	if err != nil {
+		return nil, fmt.Errorf("failed to list keys: %w", err)
+	}
+
+	if len(keys) == 0 {
+		return map[string]interface{}{
+			"content": []map[string]interface{}{
+				{
+					"type": "text",
+					"text": "No keys found in wallet",
 				},
-				Required: []string{"public_key"},
+			},
+		}, nil
+	}
+
+	// Format keys for display
+	result := fmt.Sprintf("Keys in wallet (%d):\n\n", len(keys))
+	for i, key := range keys {
+		result += fmt.Sprintf("%d. %s\n", i+1, key.Name)
+		result += fmt.Sprintf("   Public Key: %s\n", key.PublicKey)
+		result += fmt.Sprintf("   Lite Account: %s\n\n", key.LiteAccount)
+	}
+
+	return map[string]interface{}{
+		"content": []map[string]interface{}{
+			{
+				"type": "text",
+				"text": result,
 			},
 		},
-		s.handleGetLiteAddress,
-	)
+	}, nil
+}
 
-	s.RegisterTool(
-		Tool{
-			Name:        "get_lite_identity",
-			Description: "Compute lite identity URL from a public key",
-			InputSchema: JSONSchema{
-				Type: "object",
-				Properties: map[string]JSONSchema{
-					"public_key": {Type: "string"},
-				},
-				Required: []string{"public_key"},
+// walletSetNetwork sets the network for the wallet
+func (s *Server) walletSetNetwork(args map[string]interface{}) (map[string]interface{}, error) {
+	network, ok := args["network"].(string)
+	if !ok || network == "" {
+		return nil, fmt.Errorf("network is required (mainnet, testnet, devnet, or custom URL)")
+	}
+
+	s.state.SetNetwork(network)
+
+	return map[string]interface{}{
+		"content": []map[string]interface{}{
+			{
+				"type": "text",
+				"text": fmt.Sprintf("✓ Network set to '%s'\nServer: %s",
+					s.state.GetNetwork(), s.state.GetServer()),
 			},
 		},
-		s.handleGetLiteIdentity,
-	)
+	}, nil
 }
 
-func (s *Server) handleGenerateKey(args map[string]any) (ToolCallResult, error) {
-	pubKey, pubKeyHash, err := s.keys.GenerateKey()
-	if err != nil {
-		return ToolCallResult{}, fmt.Errorf("generate key: %w", err)
+// walletGetStatus gets the current wallet status
+func (s *Server) walletGetStatus(args map[string]interface{}) (map[string]interface{}, error) {
+	status := fmt.Sprintf("Wallet Status:\n\n")
+	status += fmt.Sprintf("Directory: %s\n", s.state.GetWalletDir())
+	status += fmt.Sprintf("Network: %s\n", s.state.GetNetwork())
+	status += fmt.Sprintf("Server: %s\n", s.state.GetServer())
+	status += fmt.Sprintf("Vault Locked: %t\n", s.state.IsVaultLocked())
+
+	if !s.state.IsVaultLocked() {
+		status += fmt.Sprintf("Active Vault: %s\n", s.state.GetActiveVault())
 	}
 
-	liteAddr, _ := LiteAddress(pubKey, "acc://ACME")
-	liteId := LiteIdentity(pubKey)
-
-	result := map[string]any{
-		"public_key":      hex.EncodeToString(pubKey),
-		"public_key_hash": hex.EncodeToString(pubKeyHash),
-		"lite_identity":   liteId.String(),
-		"lite_acme":       liteAddr.String(),
-	}
-
-	return marshalResult(result)
-}
-
-func (s *Server) handleImportKey(args map[string]any) (ToolCallResult, error) {
-	privateKeyHex, ok := args["private_key"].(string)
-	if !ok || privateKeyHex == "" {
-		return ToolCallResult{}, fmt.Errorf("private_key is required")
-	}
-
-	pubKey, pubKeyHash, err := s.keys.ImportKey(privateKeyHex)
-	if err != nil {
-		return ToolCallResult{}, err
-	}
-
-	liteAddr, _ := LiteAddress(pubKey, "acc://ACME")
-	liteId := LiteIdentity(pubKey)
-
-	result := map[string]any{
-		"public_key":      hex.EncodeToString(pubKey),
-		"public_key_hash": hex.EncodeToString(pubKeyHash),
-		"lite_identity":   liteId.String(),
-		"lite_acme":       liteAddr.String(),
-		"imported":        true,
-	}
-
-	return marshalResult(result)
-}
-
-func (s *Server) handleListKeys(args map[string]any) (ToolCallResult, error) {
-	keys := s.keys.ListKeys()
-
-	result := map[string]any{
-		"count": len(keys),
-		"keys":  keys,
-	}
-
-	return marshalResult(result)
-}
-
-func (s *Server) handleGetLiteAddress(args map[string]any) (ToolCallResult, error) {
-	pubKeyHex, ok := args["public_key"].(string)
-	if !ok || pubKeyHex == "" {
-		return ToolCallResult{}, fmt.Errorf("public_key is required")
-	}
-
-	pubKey, err := hex.DecodeString(pubKeyHex)
-	if err != nil {
-		return ToolCallResult{}, fmt.Errorf("invalid public key hex: %w", err)
-	}
-
-	tokenURL := "acc://ACME"
-	if t, ok := args["token_url"].(string); ok && t != "" {
-		tokenURL = t
-	}
-
-	liteAddr, err := LiteAddress(pubKey, tokenURL)
-	if err != nil {
-		return ToolCallResult{}, err
-	}
-
-	result := map[string]any{
-		"lite_address": liteAddr.String(),
-		"token_url":    tokenURL,
-	}
-
-	return marshalResult(result)
-}
-
-func (s *Server) handleGetLiteIdentity(args map[string]any) (ToolCallResult, error) {
-	pubKeyHex, ok := args["public_key"].(string)
-	if !ok || pubKeyHex == "" {
-		return ToolCallResult{}, fmt.Errorf("public_key is required")
-	}
-
-	pubKey, err := hex.DecodeString(pubKeyHex)
-	if err != nil {
-		return ToolCallResult{}, fmt.Errorf("invalid public key hex: %w", err)
-	}
-
-	liteId := LiteIdentity(pubKey)
-
-	result := map[string]any{
-		"lite_identity": liteId.String(),
-	}
-
-	return marshalResult(result)
+	return map[string]interface{}{
+		"content": []map[string]interface{}{
+			{
+				"type": "text",
+				"text": status,
+			},
+		},
+	}, nil
 }

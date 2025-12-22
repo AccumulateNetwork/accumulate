@@ -1,218 +1,194 @@
-// Copyright 2025 The Accumulate Authors
-//
-// Use of this source code is governed by an MIT-style
-// license that can be found in the LICENSE file or at
-// https://opensource.org/licenses/MIT.
-
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
-// Resource describes an MCP resource
-type Resource struct {
-	URI         string `json:"uri"`
-	Name        string `json:"name"`
-	Description string `json:"description,omitempty"`
-	MimeType    string `json:"mimeType,omitempty"`
-}
-
-// ResourceHandler is a function that handles a resource read
-type ResourceHandler func() (ResourceContent, error)
-
-// ResourceContent is the content of a resource
-type ResourceContent struct {
-	URI      string `json:"uri"`
-	MimeType string `json:"mimeType,omitempty"`
-	Text     string `json:"text,omitempty"`
-}
-
-// ResourcesListResult is returned from resources/list
-type ResourcesListResult struct {
-	Resources []Resource `json:"resources"`
-}
-
-// ResourceReadParams is the params for resources/read
-type ResourceReadParams struct {
-	URI string `json:"uri"`
-}
-
-// ResourceReadResult is returned from resources/read
-type ResourceReadResult struct {
-	Contents []ResourceContent `json:"contents"`
-}
-
-// ResourcesCapability describes the resources capability
-type ResourcesCapability struct {
-	ListChanged bool `json:"listChanged,omitempty"`
-}
-
-// RegisterResource registers a resource with its handler
-func (s *Server) RegisterResource(resource Resource, handler ResourceHandler) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.resources == nil {
-		s.resources = make(map[string]Resource)
-		s.resourceHandlers = make(map[string]ResourceHandler)
-	}
-	s.resources[resource.URI] = resource
-	s.resourceHandlers[resource.URI] = handler
-}
-
-// handleResourcesList handles resources/list
-func (s *Server) handleResourcesList() (any, *JSONRPCError) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	resources := make([]Resource, 0, len(s.resources))
-	for _, resource := range s.resources {
-		resources = append(resources, resource)
+// handleListResources returns the list of available resources
+func (s *Server) handleListResources(id interface{}) map[string]interface{} {
+	resources := []map[string]interface{}{
+		{
+			"uri":         "wallet://config",
+			"name":        "Wallet Configuration",
+			"description": "Current wallet and network configuration",
+			"mimeType":    "application/json",
+		},
+		{
+			"uri":         "wallet://state",
+			"name":        "Wallet State",
+			"description": "Current wallet state including vault status",
+			"mimeType":    "application/json",
+		},
+		{
+			"uri":         "wallet://keys",
+			"name":        "Wallet Keys",
+			"description": "List of keys in the wallet (requires unlocked vault)",
+			"mimeType":    "application/json",
+		},
 	}
 
-	return ResourcesListResult{Resources: resources}, nil
+	return map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      id,
+		"result": map[string]interface{}{
+			"resources": resources,
+		},
+	}
 }
 
-// handleResourcesRead handles resources/read
-func (s *Server) handleResourcesRead(params json.RawMessage) (any, *JSONRPCError) {
-	var readParams ResourceReadParams
-	if err := json.Unmarshal(params, &readParams); err != nil {
-		return nil, &JSONRPCError{
-			Code:    InvalidParams,
-			Message: "Invalid params",
-			Data:    err.Error(),
-		}
-	}
-
-	s.mu.RLock()
-	handler, ok := s.resourceHandlers[readParams.URI]
-	s.mu.RUnlock()
-
+// handleReadResource reads a specific resource
+func (s *Server) handleReadResource(id interface{}, request map[string]interface{}) map[string]interface{} {
+	params, ok := request["params"].(map[string]interface{})
 	if !ok {
-		return nil, &JSONRPCError{
-			Code:    InvalidParams,
-			Message: "Resource not found",
-			Data:    readParams.URI,
+		return s.errorResponse(request, -32602, "Invalid params")
+	}
+
+	uri, ok := params["uri"].(string)
+	if !ok {
+		return s.errorResponse(request, -32602, "Missing resource URI")
+	}
+
+	content, mimeType, err := s.readResource(uri)
+	if err != nil {
+		return map[string]interface{}{
+			"jsonrpc": "2.0",
+			"id":      id,
+			"error": map[string]interface{}{
+				"code":    -32603,
+				"message": fmt.Sprintf("Failed to read resource: %v", err),
+			},
 		}
 	}
 
-	content, err := handler()
-	if err != nil {
-		return NewErrorResult(err), nil
-	}
-
-	return ResourceReadResult{Contents: []ResourceContent{content}}, nil
-}
-
-// registerResources registers the available resources
-func (s *Server) registerResources() {
-	s.RegisterResource(
-		Resource{
-			URI:         "accumulate://protocol/transaction-types",
-			Name:        "Transaction Types",
-			Description: "List of all supported transaction types in the Accumulate protocol",
-			MimeType:    "application/json",
+	return map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      id,
+		"result": map[string]interface{}{
+			"contents": []map[string]interface{}{
+				{
+					"uri":      uri,
+					"mimeType": mimeType,
+					"text":     content,
+				},
+			},
 		},
-		s.handleTransactionTypesResource,
-	)
-
-	s.RegisterResource(
-		Resource{
-			URI:         "accumulate://protocol/account-types",
-			Name:        "Account Types",
-			Description: "List of all supported account types in the Accumulate protocol",
-			MimeType:    "application/json",
-		},
-		s.handleAccountTypesResource,
-	)
-
-	s.RegisterResource(
-		Resource{
-			URI:         "accumulate://protocol/signature-types",
-			Name:        "Signature Types",
-			Description: "List of all supported signature types in the Accumulate protocol",
-			MimeType:    "application/json",
-		},
-		s.handleSignatureTypesResource,
-	)
+	}
 }
 
-func (s *Server) handleTransactionTypesResource() (ResourceContent, error) {
-	types := []map[string]any{
-		{"name": "SendTokens", "description": "Transfer tokens between accounts"},
-		{"name": "AddCredits", "description": "Convert ACME tokens to credits"},
-		{"name": "BurnTokens", "description": "Burn tokens from a token account"},
-		{"name": "CreateIdentity", "description": "Create a new ADI (Accumulate Digital Identifier)"},
-		{"name": "CreateTokenAccount", "description": "Create a token account under an ADI"},
-		{"name": "CreateDataAccount", "description": "Create a data account under an ADI"},
-		{"name": "WriteData", "description": "Write data to a data account"},
-		{"name": "CreateKeyBook", "description": "Create a key book for authorization"},
-		{"name": "CreateKeyPage", "description": "Create a key page in a key book"},
-		{"name": "UpdateKeyPage", "description": "Add, remove, or update keys in a key page"},
-		{"name": "CreateToken", "description": "Create a new token issuer"},
-		{"name": "IssueTokens", "description": "Issue tokens from a token issuer"},
-		{"name": "LockAccount", "description": "Lock an account to prevent modifications"},
-		{"name": "UpdateAccountAuth", "description": "Update the authorization rules for an account"},
-		{"name": "BurnCredits", "description": "Burn credits from an account"},
+// readResource reads the content of a resource
+func (s *Server) readResource(uri string) (string, string, error) {
+	switch {
+	case uri == "wallet://config":
+		return s.getConfigResource()
+	case uri == "wallet://state":
+		return s.getStateResource()
+	case uri == "wallet://keys":
+		return s.getKeysResource()
+	default:
+		return "", "", fmt.Errorf("unknown resource: %s", uri)
 	}
-
-	data, err := json.MarshalIndent(types, "", "  ")
-	if err != nil {
-		return ResourceContent{}, fmt.Errorf("marshal: %w", err)
-	}
-
-	return ResourceContent{
-		URI:      "accumulate://protocol/transaction-types",
-		MimeType: "application/json",
-		Text:     string(data),
-	}, nil
 }
 
-func (s *Server) handleAccountTypesResource() (ResourceContent, error) {
-	types := []map[string]any{
-		{"name": "LiteTokenAccount", "description": "Lightweight token account derived from a public key"},
-		{"name": "LiteIdentity", "description": "Lightweight identity derived from a public key"},
-		{"name": "LiteDataAccount", "description": "Lightweight data account for storing data"},
-		{"name": "ADI", "description": "Accumulate Digital Identifier - a named identity"},
-		{"name": "TokenAccount", "description": "Token account under an ADI"},
-		{"name": "DataAccount", "description": "Data account under an ADI for storing data"},
-		{"name": "KeyBook", "description": "Key book for managing authorization"},
-		{"name": "KeyPage", "description": "Key page containing authorized keys"},
-		{"name": "TokenIssuer", "description": "Token issuer for creating custom tokens"},
+// getConfigResource returns the wallet configuration
+func (s *Server) getConfigResource() (string, string, error) {
+	config := map[string]interface{}{
+		"walletDir": s.state.GetWalletDir(),
+		"network":   s.state.GetNetwork(),
+		"server":    s.state.GetServer(),
 	}
 
-	data, err := json.MarshalIndent(types, "", "  ")
+	data, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
-		return ResourceContent{}, fmt.Errorf("marshal: %w", err)
+		return "", "", err
 	}
 
-	return ResourceContent{
-		URI:      "accumulate://protocol/account-types",
-		MimeType: "application/json",
-		Text:     string(data),
-	}, nil
+	return string(data), "application/json", nil
 }
 
-func (s *Server) handleSignatureTypesResource() (ResourceContent, error) {
-	types := []map[string]any{
-		{"name": "ED25519", "description": "Standard ED25519 signature"},
-		{"name": "RCD1", "description": "Factom RCD1 signature type"},
-		{"name": "BTC", "description": "Bitcoin-compatible ECDSA signature"},
-		{"name": "BTCLegacy", "description": "Legacy Bitcoin ECDSA signature"},
-		{"name": "ETH", "description": "Ethereum-compatible ECDSA signature"},
-		{"name": "Delegated", "description": "Signature delegated to another authority"},
-		{"name": "Authority", "description": "Authority signature (multi-sig threshold)"},
+// getStateResource returns the wallet state
+func (s *Server) getStateResource() (string, string, error) {
+	state := map[string]interface{}{
+		"walletDir":   s.state.GetWalletDir(),
+		"network":     s.state.GetNetwork(),
+		"server":      s.state.GetServer(),
+		"vaultLocked": s.state.IsVaultLocked(),
+		"activeVault": s.state.GetActiveVault(),
 	}
 
-	data, err := json.MarshalIndent(types, "", "  ")
+	data, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
-		return ResourceContent{}, fmt.Errorf("marshal: %w", err)
+		return "", "", err
 	}
 
-	return ResourceContent{
-		URI:      "accumulate://protocol/signature-types",
-		MimeType: "application/json",
-		Text:     string(data),
-	}, nil
+	return string(data), "application/json", nil
+}
+
+// getKeysResource returns the list of keys in the wallet
+func (s *Server) getKeysResource() (string, string, error) {
+	if s.state.IsVaultLocked() {
+		return "", "", fmt.Errorf("vault is locked - please unlock vault first")
+	}
+
+	if s.wallet == nil {
+		return "", "", fmt.Errorf("wallet client not initialized")
+	}
+
+	ctx := context.Background()
+	keys, err := s.wallet.ListKeys(ctx, s.state.GetVaultToken())
+	if err != nil {
+		return "", "", fmt.Errorf("failed to list keys: %w", err)
+	}
+
+	// Convert to simple format
+	keyList := make([]map[string]interface{}, len(keys))
+	for i, key := range keys {
+		keyList[i] = map[string]interface{}{
+			"name":        key.Name,
+			"publicKey":   key.PublicKey,
+			"liteAccount": key.LiteAccount,
+		}
+	}
+
+	result := map[string]interface{}{
+		"keys":  keyList,
+		"count": len(keys),
+	}
+
+	data, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		return "", "", err
+	}
+
+	return string(data), "application/json", nil
+}
+
+// Helper function to check if URI matches a pattern
+func matchURI(uri, pattern string) (map[string]string, bool) {
+	// Simple pattern matching for URIs like wallet://account/{url}
+	if !strings.Contains(pattern, "{") {
+		return nil, uri == pattern
+	}
+
+	// Extract variable parts
+	params := make(map[string]string)
+	uriParts := strings.Split(uri, "/")
+	patternParts := strings.Split(pattern, "/")
+
+	if len(uriParts) != len(patternParts) {
+		return nil, false
+	}
+
+	for i := range uriParts {
+		if strings.HasPrefix(patternParts[i], "{") && strings.HasSuffix(patternParts[i], "}") {
+			paramName := strings.Trim(patternParts[i], "{}")
+			params[paramName] = uriParts[i]
+		} else if uriParts[i] != patternParts[i] {
+			return nil, false
+		}
+	}
+
+	return params, true
 }

@@ -1,162 +1,229 @@
-# Accumulate MCP Server
+# mcp-accumulate
 
-A Model Context Protocol (MCP) server that provides full access to the Accumulate blockchain protocol. This server enables AI assistants like Claude to interact with the Accumulate network, query accounts, search the blockchain, and build/submit transactions.
+MCP (Model Context Protocol) server for the Accumulate blockchain protocol. This server enables AI assistants like Claude to interact with Accumulate accounts, manage wallets, query transactions, and perform blockchain operations.
 
 ## Features
 
-- **38 Tools** for comprehensive Accumulate protocol access
-- **3 Resources** for protocol documentation
-- **Key Management** for transaction signing
-- **Full Transaction Building** capabilities
+### 🆕 Wallet Integration (v0.2.0)
+- **Stateful Configuration**: Persistent wallet and network settings via environment variables
+- **Wallet Management**: Initialize wallets, generate keys, manage vaults
+- **MCP Resources**: Query wallet state, configuration, and keys
+- **Network Selection**: Seamless switching between mainnet, testnet, and devnet
+- **Secure Key Storage**: Keys stored in wallet, integrated with `ccli`
+
+### Core Capabilities (40 MCP Tools)
+- **Wallet Tools (7)**: Init wallet, manage vaults, generate/list keys, set network
+- **Account Queries (11)**: Query accounts, chains, data, directories, and pending transactions
+- **Transaction Operations (22)**: Create ADIs, send tokens, manage data/token accounts, key management
+- **Block Queries**: Query major and minor blocks by partition
+- **Network Status**: Node info, network globals, consensus status, and metrics
+- **Advanced Search**: Search by public key, key hash, or anchor
+- **Testnet Support**: Faucet integration for testnet tokens
+- Written in Go for native performance (~9MB binary)
+- **Full SDK Integration**: Uses official Accumulate v1.4.2 SDK with typed queries and protocol types
 
 ## Installation
 
 ```bash
-cd mcp
-go build -o mcp-server ./cmd/mcp-server
+go build -o mcp-accumulate
 ```
 
-## Usage
+## Usage with Claude Desktop
 
-### Basic Usage
+Add this configuration to your Claude Desktop config file:
 
-```bash
-./mcp-server
-```
+**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+**Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+**Linux**: `~/.config/Claude/claude_desktop_config.json`
 
-### With Custom Endpoint
-
-```bash
-./mcp-server -endpoint https://mainnet.accumulatenetwork.io/v3
-```
-
-### With Logging
-
-```bash
-./mcp-server -log /tmp/mcp-server.log
-```
-
-## Claude Desktop Configuration
-
-Add to your `~/.config/claude/mcp.json`:
-
+### Basic Configuration (Mainnet)
 ```json
 {
   "mcpServers": {
     "accumulate": {
-      "command": "/path/to/mcp-server",
-      "args": ["-endpoint", "https://mainnet.accumulatenetwork.io/v3"]
+      "command": "/path/to/mcp-accumulate"
     }
   }
 }
 ```
 
-For testnet/devnet:
-
+### With Wallet Configuration (Recommended)
 ```json
 {
   "mcpServers": {
-    "accumulate-devnet": {
-      "command": "/path/to/mcp-server",
-      "args": ["-endpoint", "http://127.0.0.1:26660/v3"]
+    "accumulate": {
+      "command": "/path/to/mcp-accumulate",
+      "env": {
+        "ACCUMULATE_NETWORK": "devnet",
+        "ACCUMULATE_WALLET_DIR": "/home/user/.accumulate/devnet-wallet"
+      }
     }
   }
 }
 ```
 
+### Environment Variables
+- `ACCUMULATE_NETWORK`: Network to use (`mainnet`, `testnet`, `devnet`)
+- `ACCUMULATE_WALLET_DIR`: Path to wallet directory (default: `~/.accumulate/wallet`)
+- `ACCUMULATE_SERVER`: Custom RPC server URL (overrides network setting)
+
+## MCP Resources
+
+The server exposes 3 MCP resources for querying wallet state:
+
+### `wallet://config`
+Current wallet and network configuration.
+
+### `wallet://state`
+Runtime wallet state including vault lock status and active vault.
+
+### `wallet://keys`
+List of keys in the wallet (requires unlocked vault).
+
 ## Available Tools
 
-### Wallet Management (5 tools)
-- `generate_key` - Generate a new ED25519 signing key pair
-- `import_key` - Import an existing ED25519 private key
-- `list_keys` - List all keys currently in memory
-- `get_lite_address` - Compute lite token account address from a public key
-- `get_lite_identity` - Compute lite identity URL from a public key
+### Wallet Management Tools
 
-### Network Information (6 tools)
-- `network_status` - Get current network status, oracle price, and globals
-- `node_info` - Get information about the connected node
-- `consensus_status` - Get consensus status of a partition
-- `metrics` - Get node metrics
-- `find_service` - Find services on the network
-- `list_snapshots` - List available snapshots for a partition
+#### `wallet_init`
+Initialize a new Accumulate wallet.
 
-### Query Tools (7 tools)
-- `query_account` - Query an account by URL
-- `query_transaction` - Query a transaction by hash/txid
-- `query_directory` - List entries in an identity/directory
-- `query_chain` - Query a specific chain on an account
-- `query_data` - Query data entries from a data account
-- `query_block` - Query block information
-- `query_pending` - Query pending transactions
+#### `wallet_vault_open`
+Open and unlock a vault in the wallet.
 
-### Search Tools (5 tools)
-- `search_public_key` - Search accounts by public key
-- `search_public_key_hash` - Search accounts by public key hash
-- `search_delegate` - Search delegation relationships
-- `search_anchor` - Search for an anchor by hash
-- `search_message_hash` - Search for a message by hash
+#### `wallet_vault_lock`
+Lock the currently opened vault.
 
-### Transaction Submission (3 tools)
-- `submit` - Submit a signed transaction envelope
-- `validate` - Validate a transaction without submitting
-- `faucet` - Request test tokens (testnet only)
+#### `wallet_generate_key`
+Generate a new key pair in the wallet (requires unlocked vault).
 
-### Transaction Building (12 tools)
-- `send_tokens` - Send tokens between accounts
-- `add_credits` - Convert ACME to credits
-- `create_identity` - Create a new ADI
-- `create_token_account` - Create a token account
-- `create_data_account` - Create a data account
-- `write_data` - Write data to a data account
-- `create_key_book` - Create a key book
-- `create_key_page` - Create a key page
-- `update_key_page` - Add, remove, or update keys
-- `create_token` - Create a token issuer
-- `issue_tokens` - Issue tokens from a token issuer
-- `burn_tokens` - Burn tokens
+#### `wallet_list_keys`
+List all keys in the wallet (requires unlocked vault).
 
-## Available Resources
+#### `wallet_set_network`
+Set the network for wallet operations (mainnet, testnet, devnet, or custom URL).
 
-- `accumulate://protocol/transaction-types` - List of supported transaction types
-- `accumulate://protocol/account-types` - List of supported account types
-- `accumulate://protocol/signature-types` - List of supported signature types
+#### `wallet_get_status`
+Get current wallet and network status.
 
-## Testing
+### Network Query Tools
 
-### Unit Tests
+#### accumulate_query_account
+
+Query an Accumulate account by URL to get account details, balance, and state.
+
+**Parameters:**
+- `url` (required): The Accumulate account URL (e.g., `acc://example.acme/tokens`)
+- `network` (optional): Network to query (`mainnet`, `testnet`, or custom RPC endpoint)
+
+**Example:**
+```
+Query account acc://paul.acme/tokens on mainnet
+```
+
+### accumulate_query_tx
+
+Query a transaction by hash to get transaction details and status.
+
+**Parameters:**
+- `txid` (required): The transaction ID/hash to query
+- `network` (optional): Network to query (`mainnet`, `testnet`, or custom RPC endpoint)
+
+**Example:**
+```
+Query transaction abc123... on mainnet
+```
+
+### accumulate_create_lite_account
+
+Create a new Accumulate lite account URL from a public key. Lite accounts are deterministically derived from public keys.
+
+**Parameters:**
+- `public_key` (required): Public key in hex format
+
+**Example:**
+```
+Create lite account from public key 0x1234abcd...
+```
+
+### accumulate_send_tokens
+
+Prepare a token transfer transaction to send ACME tokens.
+
+**Parameters:**
+- `from` (required): Source account URL
+- `to` (required): Destination account URL
+- `amount` (required): Amount of ACME tokens to send
+- `private_key` (required): Private key of the source account
+- `network` (optional): Network to use (`mainnet`, `testnet`, or custom RPC endpoint)
+
+**Example:**
+```
+Send 10 ACME from acc://alice.acme/tokens to acc://bob.acme/tokens
+```
+
+## Development
+
+### Build
+
+```bash
+go build -o mcp-accumulate
+```
+
+### Run directly
+
+```bash
+go run main.go
+```
+
+### Test
 
 ```bash
 go test ./...
 ```
 
-### Integration Tests
+## Architecture
 
-Integration tests run against a live Accumulate network. By default they use a local devnet at `http://127.0.0.1:26660/v3`.
+This MCP server consists of:
 
-```bash
-# Start a local devnet first
-accumulated run devnet -w .devnet -b 1 -v 1 -f 0
+- `main.go`: Entry point that sets up stdio-based JSON-RPC communication
+- `server/server.go`: MCP server implementation with protocol handlers
+- `server/tools.go`: Tool implementations for Accumulate operations
+- `client/client.go`: Accumulate API client with transaction signing support
 
-# Run integration tests
-go test -tags=integration ./...
+The server uses the official Accumulate SDK (v1.4.2) with full type safety and proper protocol integration. Key features:
 
-# Use a different endpoint
-ACCUMULATE_ENDPOINT=https://testnet.accumulatenetwork.io/v3 go test -tags=integration ./...
-```
+- **SDK-Based Client**: Uses `pkg/api/v3/jsonrpc` for all API calls
+- **Typed Queries**: All queries use proper SDK structs (`api.DefaultQuery`, `api.ChainQuery`, etc.)
+- **Protocol Types**: Transactions built with `protocol.Transaction` and proper signing
+- **Correct URL Handling**: Uses `pkg/url` for Accumulate URL parsing
+- **ED25519 Signing**: Proper transaction signing with `protocol.ED25519Signature`
+- **Lite Accounts**: Correct derivation using `protocol.LiteAuthorityForKey()`
 
-Integration tests cover:
-- Network status and node info queries
-- Account queries (ACME token, lite accounts)
-- Faucet requests (devnet/testnet only)
-- Key generation and management
-- Transaction building (SendTokens, AddCredits, WriteData)
-- Chain and block queries
+## Network Endpoints
 
-## Protocol
+- **Mainnet**: `https://mainnet.accumulatenetwork.io/v3`
+- **Testnet**: `https://testnet.accumulatenetwork.io/v3`
+- **Custom**: Provide any RPC endpoint URL
 
-This server implements the Model Context Protocol (MCP) version 2024-11-05. It communicates over stdio using JSON-RPC 2.0.
+## SDK Integration
+
+**Recently Completed**: Full rewrite to use official Accumulate SDK (v1.4.2)
+
+All client code has been rewritten to properly integrate with the Accumulate SDK:
+- Replaced custom JSON-RPC with `jsonrpc.Client` from SDK
+- Using typed query/record structs instead of `map[string]interface{}`
+- Proper transaction signing with protocol types
+- Correct lite account derivation using SDK functions
+
+See `SDK_REWRITE_SUMMARY.md` for complete details of what changed.
+
+## Features
+
+- **Full Transaction Signing**: ED25519 signature support using protocol types
+- **SDK-Based Queries**: All queries use official SDK typed structs
+- **Lite Account Support**: Generate lite account URLs using `protocol.LiteAuthorityForKey()`
+- **Network Flexibility**: Support for mainnet, testnet, and custom endpoints
 
 ## License
 
-MIT License - see LICENSE file in the Accumulate repository.
+MIT
