@@ -33,8 +33,7 @@ func TestSnapshotPartialHistory(t *testing.T) {
 
 	// Create a chain with 300 entries
 	db := database.OpenInMemory(nil)
-	db.SetObserver(acctesting.NullObserver{})
-	batch := db.Begin(true)
+		batch := db.Begin(true)
 	defer batch.Discard()
 
 	foo := protocol.AccountUrl("foo")
@@ -68,8 +67,7 @@ func TestSnapshotPartialHistory(t *testing.T) {
 	// Restore the snapshot to a new database
 	store := memory.New(nil)
 	db = database.New(store, nil)
-	db.SetObserver(acctesting.NullObserver{})
-	require.NoError(t, snapshot.Restore(db, buf, nil))
+		require.NoError(t, snapshot.Restore(db, buf, nil))
 
 	// Verify the account chain
 	key := record.NewKey("Account", foo, "MainChain")
@@ -91,8 +89,7 @@ func TestSnapshotFullHistory(t *testing.T) {
 	// Create a chain with 300 entries
 	for n := 1; n < 300; n++ {
 		db := database.OpenInMemory(nil)
-		db.SetObserver(acctesting.NullObserver{})
-		batch := db.Begin(true)
+				batch := db.Begin(true)
 		defer batch.Discard()
 
 		foo := protocol.AccountUrl("foo")
@@ -123,8 +120,7 @@ func TestSnapshotFullHistory(t *testing.T) {
 		// Restore the snapshot to a new database
 		store := memory.New(nil)
 		db = database.New(store, nil)
-		db.SetObserver(acctesting.NullObserver{})
-		require.NoError(t, snapshot.Restore(db, buf, nil))
+				require.NoError(t, snapshot.Restore(db, buf, nil))
 
 		// Verify the account chain
 		key := record.NewKey("Account", foo, "MainChain")

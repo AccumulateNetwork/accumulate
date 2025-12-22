@@ -6,20 +6,19 @@
 
 //go:build debug
 
-package internal
+package database
 
 import (
 	"crypto/sha256"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/hash"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-func (databaseObserver) DidChangeAccount(batch *database.Batch, account *database.Account) (hash.Hasher, error) {
+func (databaseObserver) DidChangeAccount(batch *Batch, account *Account) (hash.Hasher, error) {
 	a := observedAccount{account, batch}
 	hasher, err := a.hashState()
 

@@ -14,7 +14,6 @@ import (
 	"sort"
 
 	cometLog "github.com/cometbft/cometbft/libs/log"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"log/slog"
@@ -64,9 +63,6 @@ func main() {
 		os.Exit(1)
 	}
 	defer db.Close()
-
-	// Set observer
-	db.SetObserver(execute.NewDatabaseObserver())
 
 	// Open a read batch
 	batch := db.Begin(false)

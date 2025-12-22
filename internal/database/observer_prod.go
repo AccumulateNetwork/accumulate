@@ -6,11 +6,10 @@
 
 //go:build !debug
 
-package internal
+package database
 
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/hash"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
@@ -18,7 +17,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-func (databaseObserver) DidChangeAccount(batch *database.Batch, account *database.Account) (hash.Hasher, error) {
+func (databaseObserver) DidChangeAccount(batch *Batch, account *Account) (hash.Hasher, error) {
 	a := observedAccount{account, batch}
 	hasher, err := a.hashState()
 	return hasher, errors.UnknownError.Wrap(err)
