@@ -139,13 +139,8 @@ func FromPrivateKeyBytes(priv []byte, typ protocol.SignatureType) (*PrivateKey, 
 
 	case protocol.SignatureTypeBTC:
 		_, pk := altcrypto.BTCPrivKeyFromBytes(altcrypto.S256(), priv)
-		// Use compressed format - first 33 bytes with compression flag
-		pubBytes := altcrypto.FromECDSAPub(pk)
-		if len(pubBytes) >= 33 {
-			pub = pubBytes[:33] // Compressed approximation
-		} else {
-			pub = pubBytes
-		}
+		// Use compressed format (33 bytes: 0x02/0x03 prefix + 32 bytes X coordinate)
+		pub = altcrypto.SerializeCompressed(pk)
 
 	case protocol.SignatureTypeRsaSha256:
 		sk, err := x509.ParsePKCS1PrivateKey(priv)

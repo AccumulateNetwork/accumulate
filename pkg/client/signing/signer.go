@@ -10,7 +10,7 @@ import (
 	"crypto/x509"
 	"fmt"
 
-	btc "github.com/btcsuite/btcd/btcec"
+	altcrypto "gitlab.com/accumulatenetwork/accumulate/pkg/crypto"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -33,16 +33,16 @@ func (k PrivateKey) SetPublicKey(sig protocol.Signature) error {
 		sig.PublicKey = k[32:]
 
 	case *protocol.BTCSignature:
-		_, pubKey := btc.PrivKeyFromBytes(btc.S256(), k)
-		sig.PublicKey = pubKey.SerializeCompressed()
+		_, pubKey := altcrypto.BTCPrivKeyFromBytes(altcrypto.S256(), k)
+		sig.PublicKey = altcrypto.SerializeCompressed(pubKey)
 
 	case *protocol.BTCLegacySignature:
-		_, pubKey := btc.PrivKeyFromBytes(btc.S256(), k)
-		sig.PublicKey = pubKey.SerializeUncompressed()
+		_, pubKey := altcrypto.BTCPrivKeyFromBytes(altcrypto.S256(), k)
+		sig.PublicKey = altcrypto.SerializeUncompressed(pubKey)
 
 	case *protocol.ETHSignature:
-		_, pubKey := btc.PrivKeyFromBytes(btc.S256(), k)
-		sig.PublicKey = pubKey.SerializeUncompressed()
+		_, pubKey := altcrypto.BTCPrivKeyFromBytes(altcrypto.S256(), k)
+		sig.PublicKey = altcrypto.SerializeUncompressed(pubKey)
 
 	case *protocol.RsaSha256Signature:
 		privKey, err := x509.ParsePKCS1PrivateKey(k)
