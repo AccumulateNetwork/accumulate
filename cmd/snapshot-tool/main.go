@@ -12,7 +12,6 @@ import (
 	"os"
 
 	"github.com/cometbft/cometbft/libs/log"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -59,9 +58,6 @@ func mainOld() {
 		os.Exit(1)
 	}
 	defer db.Close()
-
-	// Set observer
-	db.SetObserver(execute.NewDatabaseObserver())
 
 	// Create output file
 	fmt.Printf("Creating snapshot file: %s\n", outputFile)

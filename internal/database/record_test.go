@@ -12,12 +12,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
 func TestMerkleRecord(t *testing.T) {
 	db := database.OpenInMemory(nil)
-	db.SetObserver(acctesting.NullObserver{})
 	batch := db.Begin(true)
 	defer batch.Discard()
 

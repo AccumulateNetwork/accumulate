@@ -12,7 +12,6 @@ import (
 	"os"
 
 	cometLog "github.com/cometbft/cometbft/libs/log"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
@@ -54,8 +53,6 @@ func main() {
 		os.Exit(1)
 	}
 	defer db.Close()
-
-	db.SetObserver(execute.NewDatabaseObserver())
 
 	// Get initial root hash
 	batch := db.Begin(true)
