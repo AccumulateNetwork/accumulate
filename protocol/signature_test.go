@@ -44,7 +44,6 @@ func init() {
 }
 
 func TestBTCSignature(t *testing.T) {
-
 	//m/44'/60'/0'/0/0 yellow ->
 	privKey := base58.Decode("KxukKhTPU11xH2Wfk2366e375166QE4r7y8FWojU9XPbzLYYSM3j")
 
@@ -64,7 +63,6 @@ func TestBTCSignature(t *testing.T) {
 }
 
 func TestBTCLegacySignature(t *testing.T) {
-
 	//m/44'/60'/0'/0/0 yellow ->
 	privKey := base58.Decode("KxukKhTPU11xH2Wfk2366e375166QE4r7y8FWojU9XPbzLYYSM3j")
 
@@ -84,7 +82,6 @@ func TestBTCLegacySignature(t *testing.T) {
 }
 
 func TestETHSignature(t *testing.T) {
-
 	privKeyHex := "1b48e04041e23c72cacdaa9b0775d31515fc74d6a6d3c8804172f7e7d1248529"
 
 	message := "ACME will rule DEFI"
