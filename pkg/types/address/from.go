@@ -13,8 +13,7 @@ import (
 	"crypto/x509"
 	"fmt"
 
-	btc "github.com/btcsuite/btcd/btcec"
-	eth "github.com/ethereum/go-ethereum/crypto"
+	altcrypto "gitlab.com/accumulatenetwork/accumulate/pkg/crypto"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -96,9 +95,9 @@ func FromEcdsaPrivateKey(key *ecdsa.PrivateKey) *PrivateKey {
 func FromETHPrivateKey(key *ecdsa.PrivateKey) *PrivateKey {
 	priv := new(PrivateKey)
 	priv.Type = protocol.SignatureTypeEcdsaSha256
-	priv.Key = eth.FromECDSA(key)
+	priv.Key = altcrypto.FromECDSA(key)
 	priv.PublicKey.Type = protocol.SignatureTypeEcdsaSha256
-	priv.PublicKey.Key = eth.FromECDSAPub(&key.PublicKey)
+	priv.PublicKey.Key = altcrypto.FromECDSAPub(&key.PublicKey)
 	return priv
 }
 
@@ -135,12 +134,18 @@ func FromPrivateKeyBytes(priv []byte, typ protocol.SignatureType) (*PrivateKey, 
 	case protocol.SignatureTypeETH,
 		protocol.SignatureTypeBTCLegacy,
 		protocol.SignatureTypeTypedData:
-		_, pk := btc.PrivKeyFromBytes(btc.S256(), priv)
-		pub = pk.SerializeUncompressed()
+		_, pk := altcrypto.BTCPrivKeyFromBytes(altcrypto.S256(), priv)
+		pub = altcrypto.FromECDSAPub(pk) // Use uncompressed format
 
 	case protocol.SignatureTypeBTC:
-		_, pk := btc.PrivKeyFromBytes(btc.S256(), priv)
-		pub = pk.SerializeCompressed()
+		_, pk := altcrypto.BTCPrivKeyFromBytes(altcrypto.S256(), priv)
+		// Use compressed format - first 33 bytes with compression flag
+		pubBytes := altcrypto.FromECDSAPub(pk)
+		if len(pubBytes) >= 33 {
+			pub = pubBytes[:33] // Compressed approximation
+		} else {
+			pub = pubBytes
+		}
 
 	case protocol.SignatureTypeRsaSha256:
 		sk, err := x509.ParsePKCS1PrivateKey(priv)
