@@ -71,6 +71,15 @@ func (b *Block) FromProto(c cmtproto.Block) {
 	}
 	d, err := types.BlockFromProto(&c)
 	if err != nil {
+		// For snapshot consensus sections, we may have minimal blocks
+		// that don't pass CometBFT's strict validation. In this case,
+		// we can still extract the essential header fields.
+		if c.Header.ChainID != "" {
+			b.Header.ChainID = c.Header.ChainID
+			b.Header.Height = c.Header.Height
+			b.Header.Time = c.Header.Time
+			return
+		}
 		// Validation failed - leave Block as zero value
 		return
 	}

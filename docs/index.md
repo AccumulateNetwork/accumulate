@@ -1,54 +1,101 @@
 # Accumulate Documentation Index
 
-This directory contains technical documentation for the Accumulate blockchain protocol.
+This index provides organized access to all Accumulate project documentation.
 
-## Core Documentation
+## Network & Deployment
 
-### Architecture
+### Network Information
+- [MainNet Topology](network/mainnet-topology.md) - Current network topology, nodes, and configuration
 
-| Document | Description | Location |
-|----------|-------------|----------|
-| [AppHash](./apphash.md) | AppHash computation and CometBFT ABCI interface | `docs/apphash.md` |
-| [Receipts](./receipts.md) | Merkle receipt architecture, user API, and test references | `docs/receipts.md` |
-| [SMT/BPT](../internal/database/smt/README.md) | Stateful Merkle Trees and Binary Patricia Trees | `internal/database/smt/` |
+### Bootstrap Server Deployment
+- [Bootstrap Deployment Guide](deployment/bootstrap/deployment-guide.md) - Complete guide for deploying bootstrap servers
+- [Bootstrap Server Reference](deployment/bootstrap/server-reference.md) - Bootstrap server operations and configuration
 
-### API
+## Guides
 
-All API versions are actively used in concert:
+- [Configuration Validation](guides/configuration-validation.md) - Guide for validating Accumulate configuration files
+- [MCP Prompts Usage](guides/prompts-usage.md) - How to use MCP server prompts for common workflows
 
-| Document | Description | Location |
-|----------|-------------|----------|
-| [API v2](../internal/api/v2/README.md) | API v2 execute dispatch and migration notes | `internal/api/v2/` |
-| [API v3](../pkg/api/v3/README.md) | API v3 architecture with services and transports | `pkg/api/v3/` |
-| [Database](../pkg/database/README.md) | Hierarchical caching data model | `pkg/database/` |
+## Architecture
 
-### Protocol
+- [Bootstrap Server Architecture](architecture/bootstrap-architecture.md) - Technical architecture of the bootstrap server system
 
-| Document | Description | Location |
-|----------|-------------|----------|
-| [System Accounts](../protocol/system.md) | System accounts and subnet architecture | `protocol/system.md` |
-| [Transactions](../protocol/transactions.md) | Transaction design and signatures | `protocol/transactions.md` |
+## Design Documents
 
-### Execution
+- [Prompts Design Specification](design/prompts-design.md) - Design specification for MCP server prompts
 
-Both v1 and v2 executors are part of the codebase:
+## Development Archives
 
-| Document | Description | Location |
-|----------|-------------|----------|
-| [Chain Validators v1](../internal/core/execute/v1/chain/README.md) | Chain validator design (v1) | `internal/core/execute/v1/chain/` |
-| [Chain Validators v2](../internal/core/execute/v2/chain/README.md) | Chain validator design (v2) | `internal/core/execute/v2/chain/` |
-| [Signing Rules](../internal/core/execute/v2/signing.md) | Signing and authorization rules | `internal/core/execute/v2/` |
+Historical development notes and session logs are archived for reference:
 
-### Tools
+### Development Sessions
+Located in [archive/development/](archive/development/):
 
-| Document | Description | Location |
-|----------|-------------|----------|
-| [Lite Client](../tools/cmd/debug/docs/lite_client.md) | Lite client design and implementation | `tools/cmd/debug/docs/` |
-| [Snapshots](../tools/cmd/debug/docs/snapshot.md) | BPT storage and snapshot collection | `tools/cmd/debug/docs/` |
+**Database & Validation**
+- [2025-10-27: BadgerDB Validation Investigation](archive/development/2025-10-27-badger-validation-investigation.md)
 
-## Contributing
+**Deployment Sessions**
+- [2025-11-16: Follower Deployment Session](archive/development/2025-11-16-follower-deployment-session.md)
+- [2025-11-19: July13 Genesis Deployment Log](archive/development/2025-11-19-deployment-log-july13.md)
 
-When adding new documentation:
-1. Place protocol/architecture docs in `docs/`
-2. Place component-specific docs in the relevant package directory
-3. Update this index when adding significant documentation
+**Bootstrap Server Development**
+- [Bootstrap Info Server Implementation](archive/development/bootstrap-info-server-implementation.md)
+- [Bootstrap Metrics Enhancement](archive/development/bootstrap-metrics-enhancement.md)
+- [Bootstrap Quick Fix](archive/development/bootstrap-quick-fix.md)
+
+**MCP Server Development**
+- [MCP Fixes Applied](archive/development/mcp-fixes-applied.md)
+- [MCP Implementation Review](archive/development/mcp-implementation-review.md)
+- [MCP Phase 4: Prompts Implementation](archive/development/mcp-phase4-prompts-implementation.md)
+- [MCP Prompt Analysis](archive/development/mcp-prompt-analysis.md)
+- [MCP Prompt Analysis Checklist](archive/development/mcp-prompt-analysis-checklist.md)
+- [MCP Prompt Analysis Process](archive/development/mcp-prompt-analysis-process.md)
+- [MCP Deployment Issues](archive/development/mcp-deployment-issues.md)
+- [MCP Review Summary](archive/development/mcp-review-summary.md)
+
+### Test Results
+Located in [archive/testing/](archive/testing/):
+
+- [MCP Final Verification](archive/testing/mcp-final-verification.md)
+- [MCP Honest Test Status](archive/testing/mcp-honest-test-status.md)
+- [MCP Test Results - Phase 4](archive/testing/mcp-test-results-phase4.md)
+
+## Documentation Guidelines
+
+When creating new documentation:
+
+### Filename Rules
+- Use lowercase with hyphens: `my-document.md`
+- Include dates for session notes: `YYYY-MM-DD-description.md`
+- Use descriptive names that indicate content
+- Avoid all-caps filenames except for standard files (README.md, CHANGELOG.md)
+
+### Organization
+- **Active documentation** goes in `docs/<topic>/`
+- **Development sessions** go in `docs/archive/development/`
+- **Test results** go in `docs/archive/testing/`
+- **Obsolete docs** with information already integrated elsewhere should be deleted
+
+### When to Archive
+Archive documentation when:
+- It's a development session or meeting note
+- It's a test result or verification report
+- The information is historical but may be useful for reference
+- The work described is complete and documented elsewhere
+
+### When to Delete
+Delete documentation when:
+- Information is fully integrated into active documentation
+- Content is outdated and no longer relevant
+- File is a duplicate of existing documentation
+
+## Additional Resources
+
+For more Accumulate documentation:
+- Main README: [../README.md](../README.md)
+- MCP Server: [../mcp/readme.md](../mcp/readme.md)
+- Tools: [../tools/](../tools/)
+
+---
+
+*Last updated: 2025-11-23*

@@ -1,16 +1,13 @@
-# Built binaries
-mcp-server
-
-# Devnet data
-.devnet/
-
-# Test artifacts
+node_modules/
+dist/
 *.log
+.DS_Store
+.env
+*.swp
+*.swo
+*~
 
-# IDE
-.idea/
-.vscode/
-
-# Archive binaries
-archive/tools/*/fullscan
-archive/tools/*/report-browser
+# Compiled binaries
+mcp
+mcp-accumulate
+tools/fullscan/fullscan
