@@ -116,6 +116,9 @@ func (s *ConsensusService) ConsensusStatus(ctx context.Context, opts api.Consens
 		return nil, errors.InternalError.WithFormat("invalid block hash returned from Tendermint")
 	}
 
+	// Expose whether the node is catching up to the network
+	res.CatchingUp = status.SyncInfo.CatchingUp
+
 	if !boolOpt(opts.IncludePeers, true) {
 		return res, nil
 	}
