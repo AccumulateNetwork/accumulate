@@ -571,10 +571,11 @@ func (d *Daemon) startServices(chGlobals <-chan *core.GlobalValues) error {
 		ValidatorKeyHash: sha256.Sum256(d.privVal.Key.PubKey.Bytes()),
 	})
 	netSvc := api.NewNetworkService(api.NetworkServiceParams{
-		Logger:    d.Logger.With("module", "acc-rpc"),
-		EventBus:  d.eventBus,
-		Partition: d.Config.Accumulate.PartitionId,
-		Database:  d.db,
+		Logger:     d.Logger.With("module", "acc-rpc"),
+		EventBus:   d.eventBus,
+		Partition:  d.Config.Accumulate.PartitionId,
+		Database:   d.db,
+		NodeStatus: d.localTm,
 	})
 	querySvc := api.NewQuerier(api.QuerierParams{
 		Logger:    d.Logger.With("module", "acc-rpc"),

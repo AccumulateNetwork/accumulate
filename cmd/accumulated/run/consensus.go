@@ -109,8 +109,9 @@ func (c *ConsensusService) prestart(inst *Instance) error {
 }
 
 func (c *ConsensusService) start(inst *Instance) error {
-	// Defaults
-	setDefaultVal(&c.MetricsNamespace, fmt.Sprintf("consensus_%s", c.App.partition().ID))
+	// Note: MetricsNamespace is intentionally NOT set by default.
+	// If MetricsNamespace is empty, Prometheus metrics will be disabled.
+	// This prevents duplicate registration panics when running multiple tests.
 
 	d := new(tendermint)
 	d.logger = (*logging.Slogger)(inst.logger)

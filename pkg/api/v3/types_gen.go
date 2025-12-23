@@ -126,8 +126,10 @@ type ConsensusStatus struct {
 	ValidatorKeyHash [32]byte               `json:"validatorKeyHash,omitempty" form:"validatorKeyHash" query:"validatorKeyHash" validate:"required"`
 	PartitionID      string                 `json:"partitionID,omitempty" form:"partitionID" query:"partitionID" validate:"required"`
 	PartitionType    protocol.PartitionType `json:"partitionType,omitempty" form:"partitionType" query:"partitionType" validate:"required"`
-	Peers            []*ConsensusPeerInfo   `json:"peers,omitempty" form:"peers" query:"peers" validate:"required"`
-	extraData        []byte
+	// CatchingUp indicates whether the node is still catching up to the network.
+	CatchingUp bool                 `json:"catchingUp,omitempty" form:"catchingUp" query:"catchingUp"`
+	Peers      []*ConsensusPeerInfo `json:"peers,omitempty" form:"peers" query:"peers" validate:"required"`
+	extraData  []byte
 }
 
 type ConsensusStatusOptions struct {
@@ -314,7 +316,11 @@ type NetworkStatus struct {
 	MajorBlockHeight uint64 `json:"majorBlockHeight,omitempty" form:"majorBlockHeight" query:"majorBlockHeight" validate:"required"`
 	// BvnExecutorVersions is the active executor version of each BVN.
 	BvnExecutorVersions []*protocol.PartitionExecutorVersion `json:"bvnExecutorVersions,omitempty" form:"bvnExecutorVersions" query:"bvnExecutorVersions" validate:"required"`
-	extraData           []byte
+	// LastBlockTime is the timestamp of the last block, for detecting stale data.
+	LastBlockTime *time.Time `json:"lastBlockTime,omitempty" form:"lastBlockTime" query:"lastBlockTime"`
+	// CatchingUp indicates whether the node is still catching up to the network.
+	CatchingUp *bool `json:"catchingUp,omitempty" form:"catchingUp" query:"catchingUp"`
+	extraData  []byte
 }
 
 type NetworkStatusOptions struct {
@@ -756,6 +762,7 @@ func (v *ConsensusStatus) Copy() *ConsensusStatus {
 	u.ValidatorKeyHash = v.ValidatorKeyHash
 	u.PartitionID = v.PartitionID
 	u.PartitionType = v.PartitionType
+	u.CatchingUp = v.CatchingUp
 	u.Peers = make([]*ConsensusPeerInfo, len(v.Peers))
 	for i, v := range v.Peers {
 		v := v
@@ -1242,6 +1249,14 @@ func (v *NetworkStatus) Copy() *NetworkStatus {
 		if v != nil {
 			u.BvnExecutorVersions[i] = (v).Copy()
 		}
+	}
+	if v.LastBlockTime != nil {
+		u.LastBlockTime = new(time.Time)
+		*u.LastBlockTime = *v.LastBlockTime
+	}
+	if v.CatchingUp != nil {
+		u.CatchingUp = new(bool)
+		*u.CatchingUp = *v.CatchingUp
 	}
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
@@ -1898,6 +1913,9 @@ func (v *ConsensusStatus) Equal(u *ConsensusStatus) bool {
 	if !(v.PartitionType == u.PartitionType) {
 		return false
 	}
+	if !(v.CatchingUp == u.CatchingUp) {
+		return false
+	}
 	if len(v.Peers) != len(u.Peers) {
 		return false
 	}
@@ -2415,6 +2433,22 @@ func (v *NetworkStatus) Equal(u *NetworkStatus) bool {
 		if !((v.BvnExecutorVersions[i]).Equal(u.BvnExecutorVersions[i])) {
 			return false
 		}
+	}
+	switch {
+	case v.LastBlockTime == u.LastBlockTime:
+		// equal
+	case v.LastBlockTime == nil || u.LastBlockTime == nil:
+		return false
+	case !((*v.LastBlockTime).Equal(*u.LastBlockTime)):
+		return false
+	}
+	switch {
+	case v.CatchingUp == u.CatchingUp:
+		// equal
+	case v.CatchingUp == nil || u.CatchingUp == nil:
+		return false
+	case !(*v.CatchingUp == *u.CatchingUp):
+		return false
 	}
 
 	return true
@@ -3326,15 +3360,16 @@ func (v *ConsensusPeerInfo) IsValid() error {
 }
 
 var fieldNames_ConsensusStatus = []string{
-	1: "Ok",
-	2: "LastBlock",
-	3: "Version",
-	4: "Commit",
-	5: "NodeKeyHash",
-	6: "ValidatorKeyHash",
-	7: "PartitionID",
-	8: "PartitionType",
-	9: "Peers",
+	1:  "Ok",
+	2:  "LastBlock",
+	3:  "Version",
+	4:  "Commit",
+	5:  "NodeKeyHash",
+	6:  "ValidatorKeyHash",
+	7:  "PartitionID",
+	8:  "PartitionType",
+	9:  "CatchingUp",
+	10: "Peers",
 }
 
 func (v *ConsensusStatus) MarshalBinary() ([]byte, error) {
@@ -3369,9 +3404,12 @@ func (v *ConsensusStatus) MarshalBinary() ([]byte, error) {
 	if !(v.PartitionType == 0) {
 		writer.WriteEnum(8, v.PartitionType)
 	}
+	if !(!v.CatchingUp) {
+		writer.WriteBool(9, v.CatchingUp)
+	}
 	if !(len(v.Peers) == 0) {
 		for _, v := range v.Peers {
-			writer.WriteValue(9, v.MarshalBinary)
+			writer.WriteValue(10, v.MarshalBinary)
 		}
 	}
 
@@ -3426,7 +3464,7 @@ func (v *ConsensusStatus) IsValid() error {
 	} else if v.PartitionType == 0 {
 		errs = append(errs, "field PartitionType is not set")
 	}
-	if len(v.fieldsSet) > 8 && !v.fieldsSet[8] {
+	if len(v.fieldsSet) > 9 && !v.fieldsSet[9] {
 		errs = append(errs, "field Peers is missing")
 	} else if len(v.Peers) == 0 {
 		errs = append(errs, "field Peers is not set")
@@ -4722,14 +4760,16 @@ func (v *MinorBlockRecord) IsValid() error {
 }
 
 var fieldNames_NetworkStatus = []string{
-	1: "Oracle",
-	2: "Globals",
-	3: "Network",
-	4: "Routing",
-	5: "ExecutorVersion",
-	6: "DirectoryHeight",
-	7: "MajorBlockHeight",
-	8: "BvnExecutorVersions",
+	1:  "Oracle",
+	2:  "Globals",
+	3:  "Network",
+	4:  "Routing",
+	5:  "ExecutorVersion",
+	6:  "DirectoryHeight",
+	7:  "MajorBlockHeight",
+	8:  "BvnExecutorVersions",
+	9:  "LastBlockTime",
+	10: "CatchingUp",
 }
 
 func (v *NetworkStatus) MarshalBinary() ([]byte, error) {
@@ -4765,6 +4805,12 @@ func (v *NetworkStatus) MarshalBinary() ([]byte, error) {
 		for _, v := range v.BvnExecutorVersions {
 			writer.WriteValue(8, v.MarshalBinary)
 		}
+	}
+	if !(v.LastBlockTime == nil) {
+		writer.WriteTime(9, *v.LastBlockTime)
+	}
+	if !(v.CatchingUp == nil) {
+		writer.WriteBool(10, *v.CatchingUp)
 	}
 
 	_, _, err := writer.Reset(fieldNames_NetworkStatus)
@@ -6230,8 +6276,11 @@ func (v *ConsensusStatus) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(protocol.PartitionType); reader.ReadEnum(8, x) {
 		v.PartitionType = *x
 	}
+	if x, ok := reader.ReadBool(9); ok {
+		v.CatchingUp = x
+	}
 	for {
-		if x := new(ConsensusPeerInfo); reader.ReadValue(9, x.UnmarshalBinaryFrom) {
+		if x := new(ConsensusPeerInfo); reader.ReadValue(10, x.UnmarshalBinaryFrom) {
 			v.Peers = append(v.Peers, x)
 		} else {
 			break
@@ -7068,6 +7117,12 @@ func (v *NetworkStatus) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
+	if x, ok := reader.ReadTime(9); ok {
+		v.LastBlockTime = &x
+	}
+	if x, ok := reader.ReadBool(10); ok {
+		v.CatchingUp = &x
+	}
 
 	seen, err := reader.Reset(fieldNames_NetworkStatus)
 	if err != nil {
@@ -7774,6 +7829,7 @@ func init() {
 		encoding.NewTypeField("validatorKeyHash", "bytes32"),
 		encoding.NewTypeField("partitionID", "string"),
 		encoding.NewTypeField("partitionType", "string"),
+		encoding.NewTypeField("catchingUp", "bool"),
 		encoding.NewTypeField("peers", "ConsensusPeerInfo[]"),
 	}, "ConsensusStatus", "consensusStatus")
 
@@ -7925,6 +7981,8 @@ func init() {
 		encoding.NewTypeField("directoryHeight", "uint64"),
 		encoding.NewTypeField("majorBlockHeight", "uint64"),
 		encoding.NewTypeField("bvnExecutorVersions", "protocol.PartitionExecutorVersion[]"),
+		encoding.NewTypeField("lastBlockTime", "string"),
+		encoding.NewTypeField("catchingUp", "bool"),
 	}, "NetworkStatus", "networkStatus")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -8275,6 +8333,7 @@ func (v *ConsensusStatus) MarshalJSON() ([]byte, error) {
 		ValidatorKeyHash *string                               `json:"validatorKeyHash,omitempty"`
 		PartitionID      string                                `json:"partitionID,omitempty"`
 		PartitionType    protocol.PartitionType                `json:"partitionType,omitempty"`
+		CatchingUp       bool                                  `json:"catchingUp,omitempty"`
 		Peers            encoding.JsonList[*ConsensusPeerInfo] `json:"peers,omitempty"`
 		ExtraData        *string                               `json:"$epilogue,omitempty"`
 	}{}
@@ -8301,6 +8360,9 @@ func (v *ConsensusStatus) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.PartitionType == 0) {
 		u.PartitionType = v.PartitionType
+	}
+	if !(!v.CatchingUp) {
+		u.CatchingUp = v.CatchingUp
 	}
 	if !(len(v.Peers) == 0) {
 		u.Peers = v.Peers
@@ -8685,6 +8747,8 @@ func (v *NetworkStatus) MarshalJSON() ([]byte, error) {
 		DirectoryHeight     uint64                                                `json:"directoryHeight,omitempty"`
 		MajorBlockHeight    uint64                                                `json:"majorBlockHeight,omitempty"`
 		BvnExecutorVersions encoding.JsonList[*protocol.PartitionExecutorVersion] `json:"bvnExecutorVersions,omitempty"`
+		LastBlockTime       *time.Time                                            `json:"lastBlockTime,omitempty"`
+		CatchingUp          *bool                                                 `json:"catchingUp,omitempty"`
 		ExtraData           *string                                               `json:"$epilogue,omitempty"`
 	}{}
 	if !(v.Oracle == nil) {
@@ -8710,6 +8774,12 @@ func (v *NetworkStatus) MarshalJSON() ([]byte, error) {
 	}
 	if !(len(v.BvnExecutorVersions) == 0) {
 		u.BvnExecutorVersions = v.BvnExecutorVersions
+	}
+	if !(v.LastBlockTime == nil) {
+		u.LastBlockTime = v.LastBlockTime
+	}
+	if !(v.CatchingUp == nil) {
+		u.CatchingUp = v.CatchingUp
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -9215,6 +9285,7 @@ func (v *ConsensusStatus) UnmarshalJSON(data []byte) error {
 		ValidatorKeyHash *string                               `json:"validatorKeyHash,omitempty"`
 		PartitionID      string                                `json:"partitionID,omitempty"`
 		PartitionType    protocol.PartitionType                `json:"partitionType,omitempty"`
+		CatchingUp       bool                                  `json:"catchingUp,omitempty"`
 		Peers            encoding.JsonList[*ConsensusPeerInfo] `json:"peers,omitempty"`
 		ExtraData        *string                               `json:"$epilogue,omitempty"`
 	}{}
@@ -9226,6 +9297,7 @@ func (v *ConsensusStatus) UnmarshalJSON(data []byte) error {
 	u.ValidatorKeyHash = encoding.ChainToJSON(&v.ValidatorKeyHash)
 	u.PartitionID = v.PartitionID
 	u.PartitionType = v.PartitionType
+	u.CatchingUp = v.CatchingUp
 	u.Peers = v.Peers
 	err := json.Unmarshal(data, &u)
 	if err != nil {
@@ -9247,6 +9319,7 @@ func (v *ConsensusStatus) UnmarshalJSON(data []byte) error {
 	}
 	v.PartitionID = u.PartitionID
 	v.PartitionType = u.PartitionType
+	v.CatchingUp = u.CatchingUp
 	v.Peers = u.Peers
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
@@ -9762,6 +9835,8 @@ func (v *NetworkStatus) UnmarshalJSON(data []byte) error {
 		DirectoryHeight     uint64                                                `json:"directoryHeight,omitempty"`
 		MajorBlockHeight    uint64                                                `json:"majorBlockHeight,omitempty"`
 		BvnExecutorVersions encoding.JsonList[*protocol.PartitionExecutorVersion] `json:"bvnExecutorVersions,omitempty"`
+		LastBlockTime       *time.Time                                            `json:"lastBlockTime,omitempty"`
+		CatchingUp          *bool                                                 `json:"catchingUp,omitempty"`
 		ExtraData           *string                                               `json:"$epilogue,omitempty"`
 	}{}
 	u.Oracle = v.Oracle
@@ -9772,6 +9847,8 @@ func (v *NetworkStatus) UnmarshalJSON(data []byte) error {
 	u.DirectoryHeight = v.DirectoryHeight
 	u.MajorBlockHeight = v.MajorBlockHeight
 	u.BvnExecutorVersions = v.BvnExecutorVersions
+	u.LastBlockTime = v.LastBlockTime
+	u.CatchingUp = v.CatchingUp
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -9784,6 +9861,8 @@ func (v *NetworkStatus) UnmarshalJSON(data []byte) error {
 	v.DirectoryHeight = u.DirectoryHeight
 	v.MajorBlockHeight = u.MajorBlockHeight
 	v.BvnExecutorVersions = u.BvnExecutorVersions
+	v.LastBlockTime = u.LastBlockTime
+	v.CatchingUp = u.CatchingUp
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err

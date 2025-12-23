@@ -376,12 +376,12 @@ func (n nodeOpts) apply(inst *Instance, root *Config) error {
 			ValidatorKey: rawPrivKeyFrom(n.PrivVal),
 			StorageType:  n.DevNet.StorageType,
 		},
-		ID:               protocol.Directory,
-		Type:             protocol.PartitionTypeDirectory,
-		Dir:              "dnn",
-		Genesis:          filepath.Join("..", "dn-genesis.snap"),
-		BootstrapPeers:   n.DnBootstrap,
-		MetricsNamespace: fmt.Sprintf("consensus_directory_%d", n.IP),
+		ID:             protocol.Directory,
+		Type:           protocol.PartitionTypeDirectory,
+		Dir:            "dnn",
+		Genesis:        filepath.Join("..", "dn-genesis.snap"),
+		BootstrapPeers: n.DnBootstrap,
+		// MetricsNamespace is intentionally not set to avoid Prometheus duplicate registration panics in tests
 	}
 	err = opts.apply(cfg)
 	if err != nil {
@@ -392,7 +392,7 @@ func (n nodeOpts) apply(inst *Instance, root *Config) error {
 	opts.Type = protocol.PartitionTypeBlockValidator
 	opts.Dir = "bvnn"
 	opts.Genesis = filepath.Join("..", fmt.Sprintf("bvn%d-genesis.snap", n.BVN))
-	opts.MetricsNamespace = fmt.Sprintf("consensus_bvn%d_%d", n.BVN, n.IP)
+	// MetricsNamespace is intentionally not set to avoid Prometheus duplicate registration panics in tests
 	opts.BootstrapPeers = n.BvnBootstrap
 	err = opts.apply(cfg)
 	if err != nil {
