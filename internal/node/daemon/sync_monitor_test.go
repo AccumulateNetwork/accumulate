@@ -77,7 +77,7 @@ func TestSyncMonitor_FullySynced(t *testing.T) {
 	assert.Equal(t, 0, m.StaleCount())
 }
 
-func TestSyncMonitor_StaleButMakingProgress(t *testing.T) {
+func TestSyncMonitor_StaleButMakingFastProgress(t *testing.T) {
 	status := &mockStatusProvider{
 		status: &SyncStatus{
 			CatchingUp:        false,
@@ -89,18 +89,41 @@ func TestSyncMonitor_StaleButMakingProgress(t *testing.T) {
 
 	m := NewSyncMonitor(status, dialer, "peer1@localhost:26656")
 
-	// First check - stale but first time seeing this height
+	// Prime the monitor with initial state
+	m.lastHeight = 90
+	m.lastCheckTime = time.Now().Add(-1 * time.Second) // 1 second ago
+	m.staleCount = 5                                    // already stale
+
+	// Check with height 100 - that's 10 blocks in 1 second = 10 bl/sec (fast sync)
 	result, err := m.Check(context.Background())
 	require.NoError(t, err)
-	// First check won't show progress since lastHeight was 0
 	assert.Equal(t, CheckResultStaleProgress, result)
+	assert.Equal(t, 0, m.StaleCount(), "should reset stale count when fast syncing")
+}
 
-	// Second check with increased height - making progress
-	status.status.LatestBlockHeight = 101
-	result, err = m.Check(context.Background())
+func TestSyncMonitor_StaleButMakingSlowProgress(t *testing.T) {
+	status := &mockStatusProvider{
+		status: &SyncStatus{
+			CatchingUp:        false,
+			LatestBlockHeight: 100,
+			LatestBlockTime:   time.Now().Add(-1 * time.Minute), // stale
+		},
+	}
+	dialer := &mockPeerDialer{}
+
+	m := NewSyncMonitor(status, dialer, "peer1@localhost:26656")
+	m.MinFastSyncRate = 5 // 5 blocks/sec minimum for "fast sync"
+
+	// Prime the monitor with initial state
+	m.lastHeight = 99
+	m.lastCheckTime = time.Now().Add(-1 * time.Second) // 1 second ago
+	m.staleCount = 2                                    // already stale
+
+	// Check with height 100 - that's 1 block in 1 second = 1 bl/sec (slow, just following)
+	result, err := m.Check(context.Background())
 	require.NoError(t, err)
-	assert.Equal(t, CheckResultStaleProgress, result)
-	assert.Equal(t, 0, m.StaleCount(), "should reset stale count when making progress")
+	assert.Equal(t, CheckResultStaleWarning, result)
+	assert.Equal(t, 3, m.StaleCount(), "should NOT reset stale count when making slow progress")
 }
 
 func TestSyncMonitor_StaleAndStuck_Warning(t *testing.T) {
@@ -117,12 +140,11 @@ func TestSyncMonitor_StaleAndStuck_Warning(t *testing.T) {
 	m.WarnThreshold = 3
 	m.ReconnectThreshold = 5
 
-	// First check sets lastHeight, but since height > 0 (lastHeight), it shows progress
-	result, _ := m.Check(context.Background())
-	assert.Equal(t, CheckResultStaleProgress, result)
-	assert.Equal(t, 0, m.StaleCount())
+	// Prime state - node is at height 100, not making any progress
+	m.lastHeight = 100
+	m.lastCheckTime = time.Now().Add(-1 * time.Second)
 
-	// Now subsequent checks with same height are stuck
+	// Now checks with same height are stuck (no progress)
 	for i := 0; i < 3; i++ {
 		result, err := m.Check(context.Background())
 		require.NoError(t, err)
@@ -147,8 +169,9 @@ func TestSyncMonitor_StaleAndStuck_Reconnect(t *testing.T) {
 	m.WarnThreshold = 2
 	m.ReconnectThreshold = 4
 
-	// First check sets lastHeight
-	m.Check(context.Background())
+	// Prime state - node is at height 100, not making any progress
+	m.lastHeight = 100
+	m.lastCheckTime = time.Now().Add(-1 * time.Second)
 
 	// Simulate being stuck for reconnect threshold
 	for i := 0; i < 4; i++ {
@@ -194,8 +217,9 @@ func TestSyncMonitor_NoPersistentPeers(t *testing.T) {
 	m := NewSyncMonitor(status, dialer, "")
 	m.ReconnectThreshold = 2
 
-	// First check
-	m.Check(context.Background())
+	// Prime state - node is at height 100, not making any progress
+	m.lastHeight = 100
+	m.lastCheckTime = time.Now().Add(-1 * time.Second)
 
 	// Trigger reconnect threshold
 	m.Check(context.Background())
@@ -219,8 +243,9 @@ func TestSyncMonitor_DialError(t *testing.T) {
 	m := NewSyncMonitor(status, dialer, "peer1@localhost:26656")
 	m.ReconnectThreshold = 2
 
-	// First check
-	m.Check(context.Background())
+	// Prime state - node is at height 100, not making any progress
+	m.lastHeight = 100
+	m.lastCheckTime = time.Now().Add(-1 * time.Second)
 
 	// Trigger reconnect - should not panic on dial error
 	m.Check(context.Background())
@@ -268,6 +293,8 @@ func TestSyncMonitor_Reset(t *testing.T) {
 	m := NewSyncMonitor(status, dialer, "peer1@localhost:26656")
 
 	// Build up some state
+	m.lastHeight = 100
+	m.lastCheckTime = time.Now().Add(-1 * time.Second)
 	m.Check(context.Background())
 	m.Check(context.Background())
 	assert.Greater(t, m.StaleCount(), 0)
@@ -275,4 +302,6 @@ func TestSyncMonitor_Reset(t *testing.T) {
 	// Reset
 	m.Reset()
 	assert.Equal(t, 0, m.StaleCount())
+	assert.Equal(t, int64(0), m.lastHeight)
+	assert.True(t, m.lastCheckTime.IsZero())
 }

@@ -34,29 +34,32 @@ type PeerDialer interface {
 
 // SyncMonitor monitors the node's sync state and attempts recovery when stuck
 type SyncMonitor struct {
-	statusProvider StatusProvider
-	peerDialer     PeerDialer
+	statusProvider  StatusProvider
+	peerDialer      PeerDialer
 	persistentPeers string
 
 	// Configuration
-	MaxBlockTimeDrift   time.Duration
-	ReconnectThreshold  int // consecutive stale checks before reconnecting
-	WarnThreshold       int // consecutive stale checks before warning
+	MaxBlockTimeDrift  time.Duration
+	ReconnectThreshold int // consecutive stale checks before reconnecting
+	WarnThreshold      int // consecutive stale checks before warning
+	MinFastSyncRate    int // minimum blocks/sec to count as "fast sync" vs "following"
 
 	// State
-	staleCount int
-	lastHeight int64
+	staleCount    int
+	lastHeight    int64
+	lastCheckTime time.Time
 }
 
 // NewSyncMonitor creates a new sync monitor
 func NewSyncMonitor(status StatusProvider, dialer PeerDialer, persistentPeers string) *SyncMonitor {
 	return &SyncMonitor{
 		statusProvider:     status,
-		peerDialer:        dialer,
-		persistentPeers:   persistentPeers,
-		MaxBlockTimeDrift: 10 * time.Second,
+		peerDialer:         dialer,
+		persistentPeers:    persistentPeers,
+		MaxBlockTimeDrift:  10 * time.Second,
 		ReconnectThreshold: 30,
 		WarnThreshold:      10,
+		MinFastSyncRate:    5, // blocks/sec; production rate is ~1 bl/sec
 	}
 }
 
@@ -97,18 +100,45 @@ func (m *SyncMonitor) Check(ctx context.Context) (CheckResult, error) {
 	// Block time is stale
 	m.staleCount++
 
-	// Check if we're making progress
-	makingProgress := currentHeight > m.lastHeight
-	m.lastHeight = currentHeight
+	// Check if we're making progress and at what rate
+	heightDelta := currentHeight - m.lastHeight
+	now := time.Now()
+	timeDelta := now.Sub(m.lastCheckTime)
 
-	if makingProgress {
-		slog.Debug("Node reports caught up but block time is stale (making progress)",
+	// Calculate progress rate (blocks per second)
+	var progressRate float64
+	if timeDelta > 0 && m.lastHeight > 0 {
+		progressRate = float64(heightDelta) / timeDelta.Seconds()
+	}
+
+	// Update tracking state
+	m.lastHeight = currentHeight
+	m.lastCheckTime = now
+
+	// Only consider it "real progress" if we're syncing faster than production rate
+	// Production rate is ~1 bl/sec, fast sync should be much faster
+	fastSyncing := progressRate >= float64(m.MinFastSyncRate)
+
+	if heightDelta > 0 && fastSyncing {
+		slog.Debug("Node reports caught up but block time is stale (fast syncing)",
 			"block_time", st.LatestBlockTime,
 			"block_age", blockAge,
 			"height", currentHeight,
+			"progress_rate", progressRate,
 			"stale_count", m.staleCount)
 		m.staleCount = 0
 		return CheckResultStaleProgress, nil
+	}
+
+	// Making slow progress (just following) or no progress - don't reset stale count
+	if heightDelta > 0 {
+		slog.Debug("Node reports caught up but block time is stale (slow progress, not fast syncing)",
+			"block_time", st.LatestBlockTime,
+			"block_age", blockAge,
+			"height", currentHeight,
+			"progress_rate", progressRate,
+			"min_fast_sync_rate", m.MinFastSyncRate,
+			"stale_count", m.staleCount)
 	}
 
 	// Not making progress - problematic case
@@ -168,6 +198,7 @@ func (m *SyncMonitor) StaleCount() int {
 func (m *SyncMonitor) Reset() {
 	m.staleCount = 0
 	m.lastHeight = 0
+	m.lastCheckTime = time.Time{}
 }
 
 // daemonStatusProvider adapts the CometBFT local client to StatusProvider
