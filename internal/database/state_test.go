@@ -11,37 +11,30 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
+	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
 func init() { acctesting.EnableDebugFeatures() }
 
-var delivered = (*protocol.TransactionStatus).Delivered
-
 func TestState(t *testing.T) {
 	// Create some state
 	sim := simulator.New(t, 1)
-	sim.InitFromGenesisWith(&core.GlobalValues{ExecutorVersion: protocol.ExecutorVersionV1})
+	sim.InitFromGenesis()
 	alice := acctesting.GenerateTmKey(t.Name(), "Alice")
 	aliceUrl := acctesting.AcmeLiteAddressTmPriv(alice)
-	env :=
-		MustBuild(t, build.Transaction().
-			For(protocol.FaucetUrl).
-			Body(&protocol.AcmeFaucet{Url: aliceUrl}).
-			SignWith(protocol.FaucetUrl).Version(1).Timestamp(time.Now().UnixNano()).Signer(protocol.Faucet.Signer()))
-	sim.MustSubmitAndExecuteBlock(env)
-	sim.WaitForTransactionFlow(delivered, env.Transaction[0].GetHash())
+
+	// Create lite token account directly (V2 executor doesn't support faucet)
+	batch := sim.PartitionFor(aliceUrl).Database.Begin(true)
+	require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, tmed25519.PrivKey(alice), protocol.AcmeFaucetAmount, 1e9))
+	require.NoError(t, batch.Commit())
 
 	sim.ExecuteBlocks(10)
 
