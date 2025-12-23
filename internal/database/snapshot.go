@@ -387,37 +387,25 @@ func (batch *Batch) collectBPT(w *snapshot.Writer, opts *CollectOptions) error {
 	// AI: Record start time for estimating completion time
 	startTime := time.Now()
 
-	// AI: Create a file for writing URLs
-	// Get the current working directory
-	cwd, err := os.Getwd()
-	if err != nil {
-		return errors.UnknownError.WithFormat("failed to get current working directory: %w", err)
+	// AI: Optionally create a file for writing URLs (only if SNAPSHOT_URLS_PATH is set)
+	var urlsFile *os.File
+	var urlsFilePath string
+	if urlsFileName := os.Getenv("SNAPSHOT_URLS_PATH"); urlsFileName != "" {
+		cwd, err := os.Getwd()
+		if err == nil {
+			urlsFilePath = filepath.Join(cwd, urlsFileName)
+			urlsFile, err = os.Create(urlsFilePath)
+			if err != nil {
+				fmt.Printf("[WARN] Failed to create URLs file: %v\n", err)
+			} else {
+				defer urlsFile.Close()
+				// Write header with aligned columns
+				fmt.Fprintf(urlsFile, "%-25s %s\n", "# ACCOUNT TYPE", "URL")
+				fmt.Fprintf(urlsFile, "%s\n", strings.Repeat("-", 80))
+				fmt.Printf("[INFO] Writing URLs to %s\n", urlsFilePath)
+			}
+		}
 	}
-
-	// Create a file with .urls extension in the current directory
-	// Use SNAPSHOT_URLS_PATH environment variable if set, otherwise use default name
-	urlsFileName := os.Getenv("SNAPSHOT_URLS_PATH")
-	if urlsFileName == "" {
-		urlsFileName = "snapshot.urls"
-	}
-	urlsFilePath := filepath.Join(cwd, urlsFileName)
-	urlsFile, err := os.Create(urlsFilePath)
-	if err != nil {
-		return errors.UnknownError.WithFormat("failed to create URLs file: %w", err)
-	}
-	defer urlsFile.Close()
-
-	// Write header with aligned columns
-	_, err = fmt.Fprintf(urlsFile, "%-25s %s\n", "# ACCOUNT TYPE", "URL")
-	if err != nil {
-		return errors.UnknownError.WithFormat("failed to write header to URLs file: %w", err)
-	}
-	_, err = fmt.Fprintf(urlsFile, "%s\n", strings.Repeat("-", 80))
-	if err != nil {
-		return errors.UnknownError.WithFormat("failed to write separator to URLs file: %w", err)
-	}
-
-	fmt.Printf("[INFO] Writing URLs to %s\n", urlsFilePath)
 
 	// AI: Iterate over all BPT entries in batches of 1000 and write each key/value
 	// AI: to the snapshot.
@@ -458,18 +446,16 @@ func (batch *Batch) collectBPT(w *snapshot.Writer, opts *CollectOptions) error {
 					if err != nil {
 						// AI: Report errors when account retrieval fails
 						fmt.Printf("[ERROR] Failed to get account for %s: %v\n", u, err)
-						// AI: Write unresolved URL to file with aligned columns
-						_, writeErr := fmt.Fprintf(urlsFile, "%-25s %s\n", "Unresolved", u)
-						if writeErr != nil {
-							fmt.Printf("[ERROR] Failed to write to URLs file: %v\n", writeErr)
+						// AI: Write unresolved URL to file with aligned columns (if file is open)
+						if urlsFile != nil {
+							fmt.Fprintf(urlsFile, "%-25s %s\n", "Unresolved", u)
 						}
 					} else if account != nil {
 						// AI: Count this account type
 						accountTypeCounters[account.Type()]++
-						// AI: Write account type and URL to file with aligned columns
-						_, writeErr := fmt.Fprintf(urlsFile, "%-25s %s\n", account.Type(), u)
-						if writeErr != nil {
-							fmt.Printf("[ERROR] Failed to write to URLs file: %v\n", writeErr)
+						// AI: Write account type and URL to file with aligned columns (if file is open)
+						if urlsFile != nil {
+							fmt.Fprintf(urlsFile, "%-25s %s\n", account.Type(), u)
 						}
 					}
 				}
@@ -550,8 +536,10 @@ func (batch *Batch) collectBPT(w *snapshot.Writer, opts *CollectOptions) error {
 			t.String(), humanize.Comma(int64(count)), percent, humanize.Comma(estimatedFinalCount))
 	}
 
-	// AI: Print URL file summary
-	fmt.Printf("[INFO] URLs written to %s\n", urlsFilePath)
+	// AI: Print URL file summary (only if file was created)
+	if urlsFilePath != "" {
+		fmt.Printf("[INFO] URLs written to %s\n", urlsFilePath)
+	}
 
 	// AI: Print unresolved count with estimate of final count
 	if unresolvedKeys > 0 {
