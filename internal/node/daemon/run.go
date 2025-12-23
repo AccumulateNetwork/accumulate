@@ -528,15 +528,23 @@ func (d *Daemon) startConsensus(app types.Application, caughtUp chan<- struct{})
 	// Signal once the node is caught up
 	if caughtUp != nil {
 		go func() {
+			// Create a sync monitor to detect stuck sync and attempt recovery
+			monitor := NewSyncMonitor(
+				&daemonStatusProvider{d.localTm},
+				&daemonPeerDialer{d.node.Node.Switch()},
+				d.Config.P2P.PersistentPeers,
+			)
+
 			t := time.NewTicker(time.Second)
 			defer t.Stop()
 			for range t.C {
-				st, err := d.localTm.Status(context.Background())
+				result, err := monitor.Check(context.Background())
 				if err != nil {
 					slog.Error("Querying consensus status", "error", err)
 					continue
 				}
-				if !st.SyncInfo.CatchingUp {
+
+				if result == CheckResultSynced {
 					close(caughtUp)
 					return
 				}
