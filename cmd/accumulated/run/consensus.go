@@ -143,6 +143,8 @@ func (c *ConsensusService) start(inst *Instance) error {
 	// Load CometBFT config
 	d.config = tmcfg.DefaultConfig()
 	d.config.SetRoot(inst.path(c.NodeDir))
+	// Disable Prometheus by default to prevent duplicate registration panics in tests
+	d.config.Instrumentation.Prometheus = false
 	_, err = os.Stat(inst.path(c.NodeDir, "config", "tendermint.toml"))
 	switch {
 	case err == nil:
@@ -161,8 +163,11 @@ func (c *ConsensusService) start(inst *Instance) error {
 			return err
 		}
 
-		if d.config.Instrumentation.Prometheus {
+		// Only enable Prometheus if explicitly configured with a namespace
+		if c.MetricsNamespace != "" && d.config.Instrumentation.Prometheus {
 			d.config.Instrumentation.Namespace = c.MetricsNamespace
+		} else {
+			d.config.Instrumentation.Prometheus = false
 		}
 
 		// CRITICAL FIX: Always process bootstrap peers from configuration
@@ -197,9 +202,13 @@ func (c *ConsensusService) start(inst *Instance) error {
 		d.config.Genesis = filepath.Join("..", c.Genesis)
 		d.config.Mempool.MaxTxBytes = 4194304
 
-		d.config.Instrumentation.Prometheus = true
-		d.config.Instrumentation.PrometheusListenAddr = listenHostPort(c.Listen, defaultHost, portMetrics)
-		d.config.Instrumentation.Namespace = c.MetricsNamespace
+		// Only enable Prometheus metrics if a metrics namespace is explicitly configured
+		// This prevents duplicate registration panics when running multiple tests
+		if c.MetricsNamespace != "" {
+			d.config.Instrumentation.Prometheus = true
+			d.config.Instrumentation.PrometheusListenAddr = listenHostPort(c.Listen, defaultHost, portMetrics)
+			d.config.Instrumentation.Namespace = c.MetricsNamespace
+		}
 
 		d.config.P2P.ListenAddress = listenUrl(c.Listen, defaultHost, useTCP{}, portCmtP2P)
 		d.config.RPC.ListenAddress = listenUrl(c.Listen, defaultHost, useTCP{}, portCmtRPC)
