@@ -4,6 +4,13 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
+//go:build txbuild
+// +build txbuild
+
+// This file contains transaction building tools that require additional
+// Server infrastructure (RegisterTool, KeyManager integration) that is
+// not yet implemented. Excluded from default build until integrated.
+
 package server
 
 import (

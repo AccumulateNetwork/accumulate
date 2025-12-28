@@ -72,6 +72,10 @@ type ToolsCapability struct {
 	ListChanged bool `json:"listChanged,omitempty"`
 }
 
+type ResourcesCapability struct {
+	ListChanged bool `json:"listChanged,omitempty"`
+}
+
 type Tool struct {
 	Name        string     `json:"name"`
 	Description string     `json:"description"`
@@ -124,3 +128,6 @@ func NewTextResult(text string) ToolCallResult {
 		Content: []ContentBlock{NewTextContent(text)},
 	}
 }
+
+// ToolHandler is a function that handles a tool call
+type ToolHandler func(args map[string]any) (ToolCallResult, error)
