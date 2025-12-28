@@ -407,6 +407,10 @@ func (s *Server) executeTool(name string, args map[string]interface{}) (map[stri
 	case "accumulate_analyze_logs":
 		return s.analyzeLogs(args)
 
+	// Database Conversion
+	case "accumulate_db_convert":
+		return s.convertDatabase(args)
+
 	default:
 		return nil, fmt.Errorf("unknown tool: %s", name)
 	}

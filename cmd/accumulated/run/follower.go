@@ -18,7 +18,7 @@ import (
 
 func (c *FollowerConfiguration) apply(inst *Instance, cfg *Config) error {
 	// Set follower defaults
-	setDefaultPtr(&c.StorageType, StorageTypeBadger)
+	setDefaultPtr(&c.StorageType, StorageTypeLevelDB)
 
 	// Debug: log bootstrap peers
 	inst.logger.Info("Follower configuration loaded",
