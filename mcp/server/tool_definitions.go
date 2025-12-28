@@ -1654,5 +1654,35 @@ func GetAllTools() []map[string]interface{} {
 				},
 			},
 		},
+
+		// Database Conversion Tools
+		{
+			"name":        "accumulate_db_convert",
+			"description": "Convert a database from one format to another (e.g., badger to leveldb). Use this to migrate follower or validator databases between storage backends.",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"source_path": map[string]interface{}{
+						"type":        "string",
+						"description": "Path to the source database (e.g., /path/to/accumulate.db)",
+					},
+					"dest_path": map[string]interface{}{
+						"type":        "string",
+						"description": "Path for the destination database (must not exist)",
+					},
+					"source_type": map[string]interface{}{
+						"type":        "string",
+						"description": "Source database type",
+						"enum":        []string{"badger", "leveldb"},
+					},
+					"dest_type": map[string]interface{}{
+						"type":        "string",
+						"description": "Destination database type",
+						"enum":        []string{"badger", "leveldb"},
+					},
+				},
+				"required": []string{"source_path", "dest_path", "source_type", "dest_type"},
+			},
+		},
 	}
 }
