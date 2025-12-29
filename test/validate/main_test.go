@@ -452,6 +452,106 @@ func (s *ValidationTestSuite) TestMain() {
 
 	s.Len(QueryAccountAs[*KeyPage](s.Harness, adi.JoinPath("book", "3")).Keys, 2)
 
+	// =========================================================================
+	// Transaction Whitelist Tests
+	// =========================================================================
+
+	s.TB.Log("Attempting to set whitelist on key page 2 using itself fails")
+	st = s.BuildAndSubmit(
+		build.Transaction().For(adi, "book", "2").
+			UpdateKeyPage().SetAllowedTransactions().For(TransactionTypeWriteData).FinishOperation().
+			SignWith(adi, "book", "2").Version(4).Timestamp(&s.nonce).PrivateKey(key20))[1]
+	_ = s.ErrorIs(st.AsError(), errors.Unauthorized) &&
+		s.EqualError(st.AsError(), "acc://test.acme/book/2 cannot modify its own allowed operations")
+
+	s.Nil(QueryAccountAs[*KeyPage](s.Harness, adi.JoinPath("book", "2")).TransactionWhitelist)
+
+	s.TB.Log("Set whitelist on key page 2 using page 1 - only WriteData allowed")
+	st = s.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(adi, "book", "2").
+			UpdateKeyPage().SetAllowedTransactions().For(TransactionTypeWriteData).FinishOperation().
+			SignWith(adi, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(key10))
+	s.StepUntil(
+		Txn(st.TxID).Succeeds())
+
+	s.NotNil(QueryAccountAs[*KeyPage](s.Harness, adi.JoinPath("book", "2")).TransactionWhitelist)
+
+	s.TB.Log("Attempting to update key page 3 using page 2 with whitelist fails (UpdateKeyPage not whitelisted)")
+	st = s.BuildAndSubmit(
+		build.Transaction().For(adi, "book", "3").
+			UpdateKeyPage().Add().Entry().Key(acctesting.GenerateKey(adi, 3, 2), SignatureTypeED25519).FinishEntry().FinishOperation().
+			SignWith(adi, "book", "2").Version(4).Timestamp(&s.nonce).PrivateKey(key20))[1]
+
+	s.EqualError(st.AsError(), "acc://test.acme/book/2 is only authorized for whitelisted transactions, not updateKeyPage")
+
+	s.TB.Log("Clear whitelist on key page 2 using page 1")
+	st = s.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(adi, "book", "2").
+			UpdateKeyPage().SetAllowedTransactions().FinishOperation().
+			SignWith(adi, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(key10))
+	s.StepUntil(
+		Txn(st.TxID).Succeeds())
+
+	s.Nil(QueryAccountAs[*KeyPage](s.Harness, adi.JoinPath("book", "2")).TransactionWhitelist)
+
+	s.TB.Log("Setting blacklist first and then whitelist fails (mutual exclusivity)")
+	st = s.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(adi, "book", "2").
+			UpdateKeyPage().UpdateAllowed().Deny(TransactionTypeUpdateKeyPage).FinishOperation().
+			SignWith(adi, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(key10))
+	s.StepUntil(
+		Txn(st.TxID).Succeeds())
+
+	s.NotNil(QueryAccountAs[*KeyPage](s.Harness, adi.JoinPath("book", "2")).TransactionBlacklist)
+
+	st = s.BuildAndSubmit(
+		build.Transaction().For(adi, "book", "2").
+			UpdateKeyPage().SetAllowedTransactions().For(TransactionTypeWriteData).FinishOperation().
+			SignWith(adi, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(key10))[1]
+
+	s.EqualError(st.AsError(), "cannot set whitelist when blacklist is set")
+
+	s.TB.Log("Clear blacklist on key page 2")
+	st = s.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(adi, "book", "2").
+			UpdateKeyPage().UpdateAllowed().Allow(TransactionTypeUpdateKeyPage).FinishOperation().
+			SignWith(adi, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(key10))
+	s.StepUntil(
+		Txn(st.TxID).Succeeds())
+
+	s.Nil(QueryAccountAs[*KeyPage](s.Harness, adi.JoinPath("book", "2")).TransactionBlacklist)
+
+	s.TB.Log("Setting whitelist first and then blacklist fails (mutual exclusivity)")
+	st = s.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(adi, "book", "2").
+			UpdateKeyPage().SetAllowedTransactions().For(TransactionTypeWriteData).FinishOperation().
+			SignWith(adi, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(key10))
+	s.StepUntil(
+		Txn(st.TxID).Succeeds())
+
+	s.NotNil(QueryAccountAs[*KeyPage](s.Harness, adi.JoinPath("book", "2")).TransactionWhitelist)
+
+	st = s.BuildAndSubmit(
+		build.Transaction().For(adi, "book", "2").
+			UpdateKeyPage().UpdateAllowed().Deny(TransactionTypeUpdateAccountAuth).FinishOperation().
+			SignWith(adi, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(key10))[1]
+
+	s.EqualError(st.AsError(), "cannot modify blacklist when whitelist is set")
+
+	s.TB.Log("Clear whitelist on key page 2 to restore normal operation")
+	st = s.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(adi, "book", "2").
+			UpdateKeyPage().SetAllowedTransactions().FinishOperation().
+			SignWith(adi, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(key10))
+	s.StepUntil(
+		Txn(st.TxID).Succeeds())
+
+	s.Nil(QueryAccountAs[*KeyPage](s.Harness, adi.JoinPath("book", "2")).TransactionWhitelist)
+
+	// =========================================================================
+	// End Transaction Whitelist Tests
+	// =========================================================================
+
 	s.TB.Log("Add keys to page 2")
 	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(adi, "book", "2").

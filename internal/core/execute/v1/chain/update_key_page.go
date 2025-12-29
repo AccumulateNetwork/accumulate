@@ -200,6 +200,11 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, book *protocol.Key
 		return page.SetThreshold(op.Threshold)
 
 	case *protocol.UpdateAllowedKeyPageOperation:
+		// UpdateAllowed modifies the blacklist - cannot be used if whitelist is set
+		if page.TransactionWhitelist != nil {
+			return fmt.Errorf("cannot modify blacklist when whitelist is set")
+		}
+
 		if page.TransactionBlacklist == nil {
 			page.TransactionBlacklist = new(protocol.AllowedTransactions)
 		}
@@ -222,6 +227,30 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, book *protocol.Key
 
 		if *page.TransactionBlacklist == 0 {
 			page.TransactionBlacklist = nil
+		}
+		return nil
+
+	case *protocol.SetAllowedTransactionsKeyPageOperation:
+		// Handle whitelist: nil/empty clears it, otherwise sets it (mutually exclusive with blacklist)
+		if len(op.Transactions) == 0 {
+			// Clear the whitelist
+			page.TransactionWhitelist = nil
+			return nil
+		}
+
+		// Cannot set whitelist if blacklist is set
+		if page.TransactionBlacklist != nil {
+			return fmt.Errorf("cannot set whitelist when blacklist is set")
+		}
+
+		// Build the whitelist
+		page.TransactionWhitelist = new(protocol.AllowedTransactions)
+		for _, txn := range op.Transactions {
+			bit, ok := txn.AllowedTransactionBit()
+			if !ok {
+				return fmt.Errorf("transaction type %v cannot be whitelisted", txn)
+			}
+			page.TransactionWhitelist.Set(bit)
 		}
 		return nil
 

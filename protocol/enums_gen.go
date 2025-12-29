@@ -80,6 +80,9 @@ const AllowedTransactionBitUpdateKeyPage AllowedTransactionBit = 1
 // AllowedTransactionBitUpdateAccountAuth is the offset of the UpdateAccountAuth bit.
 const AllowedTransactionBitUpdateAccountAuth AllowedTransactionBit = 2
 
+// AllowedTransactionBitWriteData is the offset of the WriteData bit.
+const AllowedTransactionBitWriteData AllowedTransactionBit = 3
+
 // BookTypeNormal is a normal key book.
 const BookTypeNormal BookType = 0
 
@@ -169,6 +172,9 @@ const KeyPageOperationTypeSetRejectThreshold KeyPageOperationType = 6
 
 // KeyPageOperationTypeSetResponseThreshold sets the response threshold.
 const KeyPageOperationTypeSetResponseThreshold KeyPageOperationType = 7
+
+// KeyPageOperationTypeSetAllowedTransactions sets the transaction whitelist (allowed transactions only).
+const KeyPageOperationTypeSetAllowedTransactions KeyPageOperationType = 8
 
 // NetworkMaintenanceOperationTypeUnknown is used when the operation type is not known.
 const NetworkMaintenanceOperationTypeUnknown NetworkMaintenanceOperationType = 0
@@ -561,7 +567,7 @@ func (v AllowedTransactionBit) GetEnumValue() uint64 { return uint64(v) }
 func (v *AllowedTransactionBit) SetEnumValue(id uint64) bool {
 	u := AllowedTransactionBit(id)
 	switch u {
-	case AllowedTransactionBitUpdateKeyPage, AllowedTransactionBitUpdateAccountAuth:
+	case AllowedTransactionBitUpdateKeyPage, AllowedTransactionBitUpdateAccountAuth, AllowedTransactionBitWriteData:
 		*v = u
 		return true
 	}
@@ -575,6 +581,8 @@ func (v AllowedTransactionBit) String() string {
 		return "updateKeyPage"
 	case AllowedTransactionBitUpdateAccountAuth:
 		return "updateAccountAuth"
+	case AllowedTransactionBitWriteData:
+		return "writeData"
 	}
 	return fmt.Sprintf("AllowedTransactionBit:%d", v)
 }
@@ -586,6 +594,8 @@ func AllowedTransactionBitByName(name string) (AllowedTransactionBit, bool) {
 		return AllowedTransactionBitUpdateKeyPage, true
 	case "updateaccountauth":
 		return AllowedTransactionBitUpdateAccountAuth, true
+	case "writedata":
+		return AllowedTransactionBitWriteData, true
 	}
 	return 0, false
 }
@@ -916,7 +926,7 @@ func (v KeyPageOperationType) GetEnumValue() uint64 { return uint64(v) }
 func (v *KeyPageOperationType) SetEnumValue(id uint64) bool {
 	u := KeyPageOperationType(id)
 	switch u {
-	case KeyPageOperationTypeUnknown, KeyPageOperationTypeUpdate, KeyPageOperationTypeRemove, KeyPageOperationTypeAdd, KeyPageOperationTypeSetThreshold, KeyPageOperationTypeUpdateAllowed, KeyPageOperationTypeSetRejectThreshold, KeyPageOperationTypeSetResponseThreshold:
+	case KeyPageOperationTypeUnknown, KeyPageOperationTypeUpdate, KeyPageOperationTypeRemove, KeyPageOperationTypeAdd, KeyPageOperationTypeSetThreshold, KeyPageOperationTypeUpdateAllowed, KeyPageOperationTypeSetRejectThreshold, KeyPageOperationTypeSetResponseThreshold, KeyPageOperationTypeSetAllowedTransactions:
 		*v = u
 		return true
 	}
@@ -942,6 +952,8 @@ func (v KeyPageOperationType) String() string {
 		return "setRejectThreshold"
 	case KeyPageOperationTypeSetResponseThreshold:
 		return "setResponseThreshold"
+	case KeyPageOperationTypeSetAllowedTransactions:
+		return "setAllowedTransactions"
 	}
 	return fmt.Sprintf("KeyPageOperationType:%d", v)
 }
@@ -965,6 +977,8 @@ func KeyPageOperationTypeByName(name string) (KeyPageOperationType, bool) {
 		return KeyPageOperationTypeSetRejectThreshold, true
 	case "setresponsethreshold":
 		return KeyPageOperationTypeSetResponseThreshold, true
+	case "setallowedtransactions":
+		return KeyPageOperationTypeSetAllowedTransactions, true
 	}
 	return 0, false
 }

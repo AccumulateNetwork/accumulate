@@ -524,6 +524,13 @@ func (x *Executor) SignerIsAuthorized(batch *database.Batch, transaction *protoc
 			return errors.Unauthorized.WithFormat("page %s is not authorized to sign %v", signer.Url, transaction.Body.Type())
 		}
 
+		// Check whitelist: if set, only whitelisted transactions are allowed
+		if signer.TransactionWhitelist != nil {
+			if !ok || !signer.TransactionWhitelist.IsSet(bit) {
+				return errors.Unauthorized.WithFormat("page %s is only authorized for whitelisted transactions, not %v", signer.Url, transaction.Body.Type())
+			}
+		}
+
 		if !checkAuthz {
 			return nil
 		}
