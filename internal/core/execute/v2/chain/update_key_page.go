@@ -50,7 +50,8 @@ func (UpdateKeyPage) SignerCanSign(delegate AuthDelegate, batch *database.Batch,
 	}
 	for _, op := range body.Operation {
 		switch op.Type() {
-		case protocol.KeyPageOperationTypeUpdateAllowed:
+		case protocol.KeyPageOperationTypeUpdateAllowed,
+			protocol.KeyPageOperationTypeSetAllowedTransactions:
 			if signerPageIdx == principalPageIdx {
 				return false, errors.Unauthorized.WithFormat("%v cannot modify its own allowed operations", transaction.Header.Principal)
 			}
@@ -154,6 +155,16 @@ func (UpdateKeyPage) checkOperation(st *StateManager, tx *Delivery, op protocol.
 	case *protocol.SetRejectThresholdKeyPageOperation,
 		*protocol.SetResponseThresholdKeyPageOperation:
 		// No validation required
+		return nil
+
+	case *protocol.SetAllowedTransactionsKeyPageOperation:
+		// Validate that all transaction types can be whitelisted
+		for _, txn := range op.Transactions {
+			_, ok := txn.AllowedTransactionBit()
+			if !ok {
+				return errors.BadRequest.WithFormat("transaction type %v cannot be whitelisted", txn)
+			}
+		}
 		return nil
 
 	case *protocol.AddKeyOperation:
@@ -285,6 +296,11 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, book *protocol.Key
 		return nil
 
 	case *protocol.UpdateAllowedKeyPageOperation:
+		// UpdateAllowed modifies the blacklist - cannot be used if whitelist is set
+		if page.TransactionWhitelist != nil {
+			return errors.BadRequest.With("cannot modify blacklist when whitelist is set")
+		}
+
 		if page.TransactionBlacklist == nil {
 			page.TransactionBlacklist = new(protocol.AllowedTransactions)
 		}
@@ -307,6 +323,30 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, book *protocol.Key
 
 		if *page.TransactionBlacklist == 0 {
 			page.TransactionBlacklist = nil
+		}
+		return nil
+
+	case *protocol.SetAllowedTransactionsKeyPageOperation:
+		// Handle whitelist: nil/empty clears it, otherwise sets it (mutually exclusive with blacklist)
+		if len(op.Transactions) == 0 {
+			// Clear the whitelist
+			page.TransactionWhitelist = nil
+			return nil
+		}
+
+		// Cannot set whitelist if blacklist is set
+		if page.TransactionBlacklist != nil {
+			return errors.BadRequest.With("cannot set whitelist when blacklist is set")
+		}
+
+		// Build the whitelist
+		page.TransactionWhitelist = new(protocol.AllowedTransactions)
+		for _, txn := range op.Transactions {
+			bit, ok := txn.AllowedTransactionBit()
+			if !ok {
+				return errors.InternalError.WithFormat("transaction type %v cannot be whitelisted", txn)
+			}
+			page.TransactionWhitelist.Set(bit)
 		}
 		return nil
 

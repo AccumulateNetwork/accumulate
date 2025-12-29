@@ -150,6 +150,9 @@ KeyPageOperationType:
   SetResponseThreshold:
     value: 7
     description: sets the response threshold
+  SetAllowedTransactions:
+    value: 8
+    description: sets the transaction whitelist (allowed transactions only)
 
 AccountAuthOperationType:
   Unknown:
@@ -355,6 +358,9 @@ AllowedTransactionBit:
   UpdateAccountAuth:
     value: 2
     description: is the offset of the UpdateAccountAuth bit
+  WriteData:
+    value: 3
+    description: is the offset of the WriteData bit
 
 VoteType:
   Accept:

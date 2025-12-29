@@ -498,6 +498,8 @@ type KeyPage struct {
 	Version              uint64               `json:"version,omitempty" form:"version" query:"version" validate:"required"`
 	Keys                 []*KeySpec           `json:"keys,omitempty" form:"keys" query:"keys" validate:"required"`
 	TransactionBlacklist *AllowedTransactions `json:"transactionBlacklist,omitempty" form:"transactionBlacklist" query:"transactionBlacklist"`
+	// TransactionWhitelist If set, this page can ONLY authorize transactions of these types. Mutually exclusive with TransactionBlacklist..
+	TransactionWhitelist *AllowedTransactions `json:"transactionWhitelist,omitempty" form:"transactionWhitelist" query:"transactionWhitelist"`
 	extraData            []byte
 }
 
@@ -813,6 +815,13 @@ type SendTokens struct {
 	Meta      json.RawMessage   `json:"meta,omitempty" form:"meta" query:"meta"`
 	To        []*TokenRecipient `json:"to,omitempty" form:"to" query:"to" validate:"required"`
 	extraData []byte
+}
+
+type SetAllowedTransactionsKeyPageOperation struct {
+	fieldsSet []bool
+	// Transactions The allowed transaction types. If nil/empty, the whitelist is cleared..
+	Transactions []TransactionType `json:"transactions,omitempty" form:"transactions" query:"transactions"`
+	extraData    []byte
 }
 
 // SetLiteAccountDelegate sets or clears the delegate authority on a lite token account.
@@ -1275,6 +1284,10 @@ func (*RemoveKeyOperation) Type() KeyPageOperationType { return KeyPageOperation
 func (*RsaSha256Signature) Type() SignatureType { return SignatureTypeRsaSha256 }
 
 func (*SendTokens) Type() TransactionType { return TransactionTypeSendTokens }
+
+func (*SetAllowedTransactionsKeyPageOperation) Type() KeyPageOperationType {
+	return KeyPageOperationTypeSetAllowedTransactions
+}
 
 func (*SetLiteAccountDelegate) Type() TransactionType { return TransactionTypeSetLiteAccountDelegate }
 
@@ -2381,6 +2394,10 @@ func (v *KeyPage) Copy() *KeyPage {
 		u.TransactionBlacklist = new(AllowedTransactions)
 		*u.TransactionBlacklist = *v.TransactionBlacklist
 	}
+	if v.TransactionWhitelist != nil {
+		u.TransactionWhitelist = new(AllowedTransactions)
+		*u.TransactionWhitelist = *v.TransactionWhitelist
+	}
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -3023,6 +3040,24 @@ func (v *SendTokens) Copy() *SendTokens {
 }
 
 func (v *SendTokens) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *SetAllowedTransactionsKeyPageOperation) Copy() *SetAllowedTransactionsKeyPageOperation {
+	u := new(SetAllowedTransactionsKeyPageOperation)
+
+	u.Transactions = make([]TransactionType, len(v.Transactions))
+	for i, v := range v.Transactions {
+		v := v
+		u.Transactions[i] = v
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *SetAllowedTransactionsKeyPageOperation) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *SetLiteAccountDelegate) Copy() *SetLiteAccountDelegate {
 	u := new(SetLiteAccountDelegate)
@@ -4897,6 +4932,14 @@ func (v *KeyPage) Equal(u *KeyPage) bool {
 	case !(*v.TransactionBlacklist == *u.TransactionBlacklist):
 		return false
 	}
+	switch {
+	case v.TransactionWhitelist == u.TransactionWhitelist:
+		// equal
+	case v.TransactionWhitelist == nil || u.TransactionWhitelist == nil:
+		return false
+	case !(*v.TransactionWhitelist == *u.TransactionWhitelist):
+		return false
+	}
 
 	return true
 }
@@ -5543,6 +5586,19 @@ func (v *SendTokens) Equal(u *SendTokens) bool {
 	}
 	for i := range v.To {
 		if !((v.To[i]).Equal(u.To[i])) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (v *SetAllowedTransactionsKeyPageOperation) Equal(u *SetAllowedTransactionsKeyPageOperation) bool {
+	if len(v.Transactions) != len(u.Transactions) {
+		return false
+	}
+	for i := range v.Transactions {
+		if !(v.Transactions[i] == u.Transactions[i]) {
 			return false
 		}
 	}
@@ -9785,6 +9841,7 @@ var fieldNames_KeyPage = []string{
 	8:  "Version",
 	9:  "Keys",
 	10: "TransactionBlacklist",
+	11: "TransactionWhitelist",
 }
 
 func (v *KeyPage) MarshalBinary() ([]byte, error) {
@@ -9826,6 +9883,9 @@ func (v *KeyPage) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.TransactionBlacklist == nil) {
 		writer.WriteEnum(10, *v.TransactionBlacklist)
+	}
+	if !(v.TransactionWhitelist == nil) {
+		writer.WriteEnum(11, *v.TransactionWhitelist)
 	}
 
 	_, _, err := writer.Reset(fieldNames_KeyPage)
@@ -12180,6 +12240,51 @@ func (v *SendTokens) IsValid() error {
 		errs = append(errs, "field To is missing")
 	} else if len(v.To) == 0 {
 		errs = append(errs, "field To is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_SetAllowedTransactionsKeyPageOperation = []string{
+	1: "Type",
+	2: "Transactions",
+}
+
+func (v *SetAllowedTransactionsKeyPageOperation) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(len(v.Transactions) == 0) {
+		for _, v := range v.Transactions {
+			writer.WriteEnum(2, v)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_SetAllowedTransactionsKeyPageOperation)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *SetAllowedTransactionsKeyPageOperation) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
 	}
 
 	switch len(errs) {
@@ -16892,6 +16997,9 @@ func (v *KeyPage) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x := new(AllowedTransactions); reader.ReadEnum(10, x) {
 		v.TransactionBlacklist = x
 	}
+	if x := new(AllowedTransactions); reader.ReadEnum(11, x) {
+		v.TransactionWhitelist = x
+	}
 
 	seen, err := reader.Reset(fieldNames_KeyPage)
 	if err != nil {
@@ -18119,6 +18227,45 @@ func (v *SendTokens) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_SendTokens)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *SetAllowedTransactionsKeyPageOperation) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *SetAllowedTransactionsKeyPageOperation) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType KeyPageOperationType
+	if x := new(KeyPageOperationType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *SetAllowedTransactionsKeyPageOperation) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	for {
+		if x := new(TransactionType); reader.ReadEnum(2, x) {
+			v.Transactions = append(v.Transactions, *x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_SetAllowedTransactionsKeyPageOperation)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -20097,6 +20244,7 @@ func init() {
 		encoding.NewTypeField("version", "uint64"),
 		encoding.NewTypeField("keys", "KeySpec[]"),
 		encoding.NewTypeField("transactionBlacklist", "string"),
+		encoding.NewTypeField("transactionWhitelist", "string"),
 	}, "KeyPage", "keyPage")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -20325,6 +20473,11 @@ func init() {
 		encoding.NewTypeField("meta", "string"),
 		encoding.NewTypeField("to", "TokenRecipient[]"),
 	}, "SendTokens", "sendTokens")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("transactions", "string[]"),
+	}, "SetAllowedTransactionsKeyPageOperation", "setAllowedTransactionsKeyPageOperation")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("type", "string"),
@@ -21655,6 +21808,7 @@ func (v *KeyPage) MarshalJSON() ([]byte, error) {
 		Version              uint64                      `json:"version,omitempty"`
 		Keys                 encoding.JsonList[*KeySpec] `json:"keys,omitempty"`
 		TransactionBlacklist *AllowedTransactions        `json:"transactionBlacklist,omitempty"`
+		TransactionWhitelist *AllowedTransactions        `json:"transactionWhitelist,omitempty"`
 		ExtraData            *string                     `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -21688,6 +21842,9 @@ func (v *KeyPage) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.TransactionBlacklist == nil) {
 		u.TransactionBlacklist = v.TransactionBlacklist
+	}
+	if !(v.TransactionWhitelist == nil) {
+		u.TransactionWhitelist = v.TransactionWhitelist
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -22263,6 +22420,20 @@ func (v *SendTokens) MarshalJSON() ([]byte, error) {
 	}
 	if !(len(v.To) == 0) {
 		u.To = v.To
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *SetAllowedTransactionsKeyPageOperation) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type         KeyPageOperationType               `json:"type"`
+		Transactions encoding.JsonList[TransactionType] `json:"transactions,omitempty"`
+		ExtraData    *string                            `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.Transactions) == 0) {
+		u.Transactions = v.Transactions
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -24639,6 +24810,7 @@ func (v *KeyPage) UnmarshalJSON(data []byte) error {
 		Version              uint64                      `json:"version,omitempty"`
 		Keys                 encoding.JsonList[*KeySpec] `json:"keys,omitempty"`
 		TransactionBlacklist *AllowedTransactions        `json:"transactionBlacklist,omitempty"`
+		TransactionWhitelist *AllowedTransactions        `json:"transactionWhitelist,omitempty"`
 		ExtraData            *string                     `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -24653,6 +24825,7 @@ func (v *KeyPage) UnmarshalJSON(data []byte) error {
 	u.Version = v.Version
 	u.Keys = v.Keys
 	u.TransactionBlacklist = v.TransactionBlacklist
+	u.TransactionWhitelist = v.TransactionWhitelist
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -24673,6 +24846,7 @@ func (v *KeyPage) UnmarshalJSON(data []byte) error {
 	v.Version = u.Version
 	v.Keys = u.Keys
 	v.TransactionBlacklist = u.TransactionBlacklist
+	v.TransactionWhitelist = u.TransactionWhitelist
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err
@@ -25506,6 +25680,29 @@ func (v *SendTokens) UnmarshalJSON(data []byte) error {
 	}
 	v.Meta = u.Meta
 	v.To = u.To
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *SetAllowedTransactionsKeyPageOperation) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type         KeyPageOperationType               `json:"type"`
+		Transactions encoding.JsonList[TransactionType] `json:"transactions,omitempty"`
+		ExtraData    *string                            `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Transactions = v.Transactions
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Transactions = u.Transactions
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err

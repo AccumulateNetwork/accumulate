@@ -103,3 +103,18 @@ func (b UpdateAllowedKeyPageOperationBuilder) FinishOperation() UpdateKeyPageBui
 	b.b.body.Operation = append(b.b.body.Operation, &b.op)
 	return b.b
 }
+
+type SetAllowedTransactionsKeyPageOperationBuilder struct {
+	b  UpdateKeyPageBuilder
+	op protocol.SetAllowedTransactionsKeyPageOperation
+}
+
+func (b SetAllowedTransactionsKeyPageOperationBuilder) For(typ protocol.TransactionType) SetAllowedTransactionsKeyPageOperationBuilder {
+	b.op.Transactions = append(b.op.Transactions, typ)
+	return b
+}
+
+func (b SetAllowedTransactionsKeyPageOperationBuilder) FinishOperation() UpdateKeyPageBuilder {
+	b.b.body.Operation = append(b.b.body.Operation, &b.op)
+	return b.b
+}

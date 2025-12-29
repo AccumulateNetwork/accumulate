@@ -336,6 +336,13 @@ func (x *TransactionContext) signerCanSignTransaction(txn *protocol.Transaction,
 		if ok && signer.TransactionBlacklist.IsSet(bit) {
 			return errors.Unauthorized.WithFormat("%s is not authorized to sign %v", signer.Url, txn.Body.Type())
 		}
+
+		// Check whitelist: if set, only whitelisted transactions are allowed
+		if signer.TransactionWhitelist != nil {
+			if !ok || !signer.TransactionWhitelist.IsSet(bit) {
+				return errors.Unauthorized.WithFormat("%s is only authorized for whitelisted transactions, not %v", signer.Url, txn.Body.Type())
+			}
+		}
 		return nil
 
 	default:
