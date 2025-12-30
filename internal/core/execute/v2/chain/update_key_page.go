@@ -163,6 +163,16 @@ func (UpdateKeyPage) checkOperation(st *StateManager, tx *Delivery, op protocol.
 			return errors.NotAllowed.WithFormat("SetAllowedTransactions requires protocol version %v or later", protocol.ExecutorVersionV2Tanegashima)
 		}
 
+		// Prevent setting whitelist on page 1 to avoid lockout
+		// Page 1 is the highest priority and must always be able to manage the key book
+		_, pageIndex, ok := protocol.ParseKeyPageUrl(tx.Transaction.Header.Principal)
+		if !ok {
+			return errors.BadRequest.WithFormat("invalid principal: not a key page URL")
+		}
+		if pageIndex == 1 && len(op.Transactions) > 0 {
+			return errors.BadRequest.With("cannot set transaction whitelist on the first page of a key book")
+		}
+
 		// Validate that all transaction types can be whitelisted
 		for _, txn := range op.Transactions {
 			_, ok := txn.AllowedTransactionBit()
@@ -210,6 +220,16 @@ func (UpdateKeyPage) checkOperation(st *StateManager, tx *Delivery, op protocol.
 		return nil
 
 	case *protocol.UpdateAllowedKeyPageOperation:
+		// Prevent setting blacklist on page 1 to avoid lockout
+		// Page 1 is the highest priority and must always be able to manage the key book
+		_, pageIndex, ok := protocol.ParseKeyPageUrl(tx.Transaction.Header.Principal)
+		if !ok {
+			return errors.BadRequest.WithFormat("invalid principal: not a key page URL")
+		}
+		if pageIndex == 1 && len(op.Deny) > 0 {
+			return errors.BadRequest.With("cannot deny transactions on the first page of a key book")
+		}
+
 		for _, txn := range op.Allow {
 			_, ok := txn.AllowedTransactionBit()
 			if !ok {

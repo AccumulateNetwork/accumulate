@@ -549,6 +549,48 @@ func (s *ValidationTestSuite) TestMain() {
 	s.Nil(QueryAccountAs[*KeyPage](s.Harness, adi.JoinPath("book", "2")).TransactionWhitelist)
 
 	// =========================================================================
+	// Page 1 Protection Tests - Prevent lockout by restricting whitelists/blacklists on page 1
+	// =========================================================================
+
+	s.TB.Log("Attempting to set whitelist on page 1 fails (prevents lockout)")
+	st = s.BuildAndSubmit(
+		build.Transaction().For(adi, "book", "1").
+			UpdateKeyPage().SetAllowedTransactions().For(TransactionTypeWriteData).FinishOperation().
+			SignWith(adi, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(key10))[1]
+
+	s.EqualError(st.AsError(), "cannot set transaction whitelist on the first page of a key book")
+	s.Nil(QueryAccountAs[*KeyPage](s.Harness, adi.JoinPath("book", "1")).TransactionWhitelist)
+
+	s.TB.Log("Attempting to deny transactions on page 1 fails (prevents lockout)")
+	st = s.BuildAndSubmit(
+		build.Transaction().For(adi, "book", "1").
+			UpdateKeyPage().UpdateAllowed().Deny(TransactionTypeUpdateKeyPage).FinishOperation().
+			SignWith(adi, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(key10))[1]
+
+	s.EqualError(st.AsError(), "cannot deny transactions on the first page of a key book")
+	s.Nil(QueryAccountAs[*KeyPage](s.Harness, adi.JoinPath("book", "1")).TransactionBlacklist)
+
+	s.TB.Log("Allowing transactions on page 1 succeeds (no-op but valid)")
+	st = s.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(adi, "book", "1").
+			UpdateKeyPage().UpdateAllowed().Allow(TransactionTypeSendTokens).FinishOperation().
+			SignWith(adi, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(key10))
+	s.StepUntil(
+		Txn(st.TxID).Succeeds())
+
+	s.Nil(QueryAccountAs[*KeyPage](s.Harness, adi.JoinPath("book", "1")).TransactionBlacklist)
+
+	s.TB.Log("Clearing whitelist on page 1 succeeds (no-op but valid)")
+	st = s.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(adi, "book", "1").
+			UpdateKeyPage().SetAllowedTransactions().FinishOperation().
+			SignWith(adi, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(key10))
+	s.StepUntil(
+		Txn(st.TxID).Succeeds())
+
+	s.Nil(QueryAccountAs[*KeyPage](s.Harness, adi.JoinPath("book", "1")).TransactionWhitelist)
+
+	// =========================================================================
 	// End Transaction Whitelist Tests
 	// =========================================================================
 
