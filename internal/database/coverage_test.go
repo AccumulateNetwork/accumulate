@@ -632,10 +632,8 @@ func TestChainEntries(t *testing.T) {
 	chain, err := batch.Account(account).MainChain().Get()
 	require.NoError(t, err)
 
-	var addedEntries [][]byte
 	for i := 0; i < 5; i++ {
 		entry := randomHash()
-		addedEntries = append(addedEntries, entry[:])
 		require.NoError(t, chain.AddEntry(entry[:], false))
 	}
 
