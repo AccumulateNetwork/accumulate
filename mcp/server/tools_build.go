@@ -184,12 +184,12 @@ func (s *Server) buildBinary(args map[string]interface{}) (map[string]interface{
 	}
 
 	return map[string]interface{}{
-		"success":     true,
-		"binary_path": absOutputPath,
-		"ref":         ref,
-		"commit":      commit,
-		"size_bytes":  info.Size(),
-		"version":     version,
+		"success":      true,
+		"binary_path":  absOutputPath,
+		"ref":          ref,
+		"commit":       commit,
+		"size_bytes":   info.Size(),
+		"version":      version,
 		"build_output": string(output),
 	}, nil
 }

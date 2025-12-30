@@ -103,7 +103,7 @@ func TestIterateAccounts_PageSize(t *testing.T) {
 	srv := NewServer()
 
 	testCases := []struct {
-		pageSize int
+		pageSize    int
 		maxExpected int
 	}{
 		{1, 1},

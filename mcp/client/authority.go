@@ -263,7 +263,7 @@ func (c *Client) CreateKeyBook(ctx context.Context, keybookURL, signerURL string
 
 	// Create transaction
 	body := &protocol.CreateKeyBook{
-		Url: keybookUrl,
+		Url:           keybookUrl,
 		PublicKeyHash: keyHashBytes,
 	}
 

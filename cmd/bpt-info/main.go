@@ -10,13 +10,13 @@ import (
 	"crypto/sha256"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"sort"
 
 	cometLog "github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"log/slog"
 )
 
 func main() {
