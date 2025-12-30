@@ -140,8 +140,11 @@ const ExecutorVersionV2Vandenberg ExecutorVersion = 7
 // ExecutorVersionV2Jiuquan enables the Jiuquan release.
 const ExecutorVersionV2Jiuquan ExecutorVersion = 8
 
+// ExecutorVersionV2Tanegashima enables lite account delegation and transaction whitelists.
+const ExecutorVersionV2Tanegashima ExecutorVersion = 9
+
 // ExecutorVersionVNext is a placeholder for testing. DO NOT USE.
-const ExecutorVersionVNext ExecutorVersion = 9
+const ExecutorVersionVNext ExecutorVersion = 10
 
 // KeyPageOperationTypeUnknown is used when the key page operation is not known.
 const KeyPageOperationTypeUnknown KeyPageOperationType = 0
@@ -810,7 +813,7 @@ func (v ExecutorVersion) GetEnumValue() uint64 { return uint64(v) }
 func (v *ExecutorVersion) SetEnumValue(id uint64) bool {
 	u := ExecutorVersion(id)
 	switch u {
-	case ExecutorVersionV1, ExecutorVersionV1SignatureAnchoring, ExecutorVersionV1DoubleHashEntries, ExecutorVersionV1Halt, ExecutorVersionV2, ExecutorVersionV2Baikonur, ExecutorVersionV2Vandenberg, ExecutorVersionV2Jiuquan, ExecutorVersionVNext:
+	case ExecutorVersionV1, ExecutorVersionV1SignatureAnchoring, ExecutorVersionV1DoubleHashEntries, ExecutorVersionV1Halt, ExecutorVersionV2, ExecutorVersionV2Baikonur, ExecutorVersionV2Vandenberg, ExecutorVersionV2Jiuquan, ExecutorVersionV2Tanegashima, ExecutorVersionVNext:
 		*v = u
 		return true
 	}
@@ -836,6 +839,8 @@ func (v ExecutorVersion) String() string {
 		return "v2-vandenberg"
 	case ExecutorVersionV2Jiuquan:
 		return "v2-jiuquan"
+	case ExecutorVersionV2Tanegashima:
+		return "v2-tanegashima"
 	case ExecutorVersionVNext:
 		return "vnext"
 	}
@@ -873,6 +878,10 @@ func ExecutorVersionByName(name string) (ExecutorVersion, bool) {
 		return ExecutorVersionV2Jiuquan, true
 	case "v2-jiuquan":
 		return ExecutorVersionV2Jiuquan, true
+	case "v2tanegashima":
+		return ExecutorVersionV2Tanegashima, true
+	case "v2-tanegashima":
+		return ExecutorVersionV2Tanegashima, true
 	case "vnext":
 		return ExecutorVersionVNext, true
 	}
