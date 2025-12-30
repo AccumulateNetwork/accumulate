@@ -69,11 +69,7 @@ func (a *PeerAddressStatus) prune() bool {
 
 	// Prune if not seen in 7 days
 	age := a.Last.SinceSuccess()
-	if age > 7*24*time.Hour {
-		return true
-	}
-
-	return false
+	return age > 7*24*time.Hour
 }
 
 func (n *PeerNetworkStatus) prune() bool {
@@ -89,11 +85,7 @@ func (a *PeerServiceStatus) prune() bool {
 
 	// Prune if not seen in 7 days
 	age := a.Last.SinceSuccess()
-	if age > 7*24*time.Hour {
-		return true
-	}
-
-	return false
+	return age > 7*24*time.Hour
 }
 
 func (db *DB) StoreFile(file string) error {
