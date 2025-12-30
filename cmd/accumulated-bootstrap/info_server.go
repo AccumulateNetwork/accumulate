@@ -345,6 +345,7 @@ func (s *InfoServer) Shutdown(ctx context.Context) error {
 	return s.server.Shutdown(ctx)
 }
 
+//nolint:unused
 // _multiaddrToStrings converts multiaddrs to strings (unused, kept for reference)
 func _multiaddrToStrings(addrs []multiaddr.Multiaddr) []string {
 	result := make([]string, len(addrs))
