@@ -1311,7 +1311,7 @@ func TestStateReceipt_ConsistencyAfterMultipleTransactions(t *testing.T) {
 		st := sim.BuildAndSubmitTxnSuccessfully(
 			build.Transaction().For(alice, "tokens").
 				SendTokens(1000, 0).To(bob, "tokens").
-				SignWith(alice, "book", "1").Version(1).Timestamp(int64(i+1)).PrivateKey(aliceKey))
+				SignWith(alice, "book", "1").Version(1).Timestamp(int64(i + 1)).PrivateKey(aliceKey))
 		sim.StepUntil(Txn(st.TxID).Succeeds())
 	}
 
