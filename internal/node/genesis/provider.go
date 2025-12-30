@@ -8,6 +8,7 @@ package genesis
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -39,22 +40,83 @@ func DocProvider(config *tm.Config) node.GenesisDocProvider {
 	}
 
 	return func() (*types.GenesisDoc, error) {
-		// Open the snapshot
-		all, err := os.ReadFile(config.GenesisFile())
+		snapshotPath := config.GenesisFile()
+
+		// Check for cached genesis metadata to avoid re-reading snapshot headers
+		cachePath := snapshotPath + ".genesis-cache.json"
+		if cached, err := loadCachedGenesis(cachePath); err == nil {
+			return cached, nil
+		}
+
+		// Open the snapshot file for reading (uses seeking, not full read)
+		doc, err := ReadGenesisFromSnapshot(snapshotPath)
 		if err != nil {
 			return nil, err
 		}
 
-		return ConvertSnapshotToJson(all)
+		// Cache the genesis metadata for future restarts
+		_ = saveGenesisCache(cachePath, doc) // Ignore errors, caching is optional
+
+		return doc, nil
 	}
 }
 
+// ReadGenesisFromSnapshot reads genesis metadata from a snapshot file using
+// file seeking. This only reads the header and consensus sections (~KB),
+// not the full snapshot (~GB).
+func ReadGenesisFromSnapshot(path string) (*types.GenesisDoc, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("open snapshot: %w", err)
+	}
+	defer f.Close()
+
+	s, err := snapshot.Open(f)
+	if err != nil {
+		return nil, fmt.Errorf("parse snapshot: %w", err)
+	}
+
+	return buildGenesisDoc(s)
+}
+
+// loadCachedGenesis loads genesis metadata from a cache file.
+func loadCachedGenesis(path string) (*types.GenesisDoc, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	var doc types.GenesisDoc
+	if err := json.Unmarshal(data, &doc); err != nil {
+		return nil, err
+	}
+
+	return &doc, nil
+}
+
+// saveGenesisCache saves genesis metadata to a cache file.
+func saveGenesisCache(path string, doc *types.GenesisDoc) error {
+	data, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0644)
+}
+
+// ConvertSnapshotToJson converts snapshot bytes to a CometBFT genesis document.
+// Deprecated: Use ReadGenesisFromSnapshot for file-based reading which avoids
+// loading the full snapshot into memory.
 func ConvertSnapshotToJson(snap []byte) (*types.GenesisDoc, error) {
 	s, err := snapshot.Open(bytes.NewReader(snap))
 	if err != nil {
 		return nil, err
 	}
+	return buildGenesisDoc(s)
+}
 
+// buildGenesisDoc extracts genesis metadata from an opened snapshot.
+// This only reads the header and consensus sections.
+func buildGenesisDoc(s *snapshot.Reader) (*types.GenesisDoc, error) {
 	// Try to read the consensus section (may not exist or may be malformed)
 	p := new(cometbft.GenesisDoc)
 	rd, err := s.Open(snapshot.SectionTypeConsensus)
