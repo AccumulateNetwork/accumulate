@@ -9,7 +9,6 @@ package api
 import (
 	"context"
 	"sync/atomic"
-	"time"
 
 	"github.com/cometbft/cometbft/libs/log"
 	coretypes "github.com/cometbft/cometbft/rpc/core/types"
