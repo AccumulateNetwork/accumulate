@@ -298,11 +298,11 @@ echo "=== Verification Complete ==="
 	return map[string]interface{}{
 		"status": "success",
 		"artifacts": map[string]interface{}{
-			"dn_archive":           dnArchive,
-			"bvn_archive":          bvnArchive,
-			"metadata_file":        metadataPath,
-			"deployment_script":    scriptPath,
-			"verification_script":  verifyPath,
+			"dn_archive":          dnArchive,
+			"bvn_archive":         bvnArchive,
+			"metadata_file":       metadataPath,
+			"deployment_script":   scriptPath,
+			"verification_script": verifyPath,
 		},
 		"metadata": metadata,
 		"deployment": map[string]interface{}{
@@ -355,13 +355,13 @@ func (s *Server) createNodeArchive(args map[string]interface{}) (map[string]inte
 	}
 
 	return map[string]interface{}{
-		"status":      "success",
-		"archive":     outputFile,
-		"source":      nodeDir,
-		"node_type":   nodeType,
-		"size_bytes":  info.Size(),
-		"size_human":  formatBytes(info.Size()),
-		"created_at":  info.ModTime().Format(time.RFC3339),
+		"status":     "success",
+		"archive":    outputFile,
+		"source":     nodeDir,
+		"node_type":  nodeType,
+		"size_bytes": info.Size(),
+		"size_human": formatBytes(info.Size()),
+		"created_at": info.ModTime().Format(time.RFC3339),
 		"structure": map[string]interface{}{
 			"includes": []string{
 				"config/ - CometBFT configuration",

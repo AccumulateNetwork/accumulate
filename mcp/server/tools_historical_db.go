@@ -46,18 +46,18 @@ var knownDatabases = map[string]string{
 	"2025-10-22-dn":   "/media/paul/Expansion/databases/2025-10-22-dn/accumulate.db",
 
 	// Staking databases
-	"2025-09-07-staking-original":    "/media/paul/Expansion/databases/2025-09-07-staking-original/accumulate.db",
+	"2025-09-07-staking-original":     "/media/paul/Expansion/databases/2025-09-07-staking-original/accumulate.db",
 	"2025-09-07-staking-post-genesis": "/media/paul/Expansion/databases/2025-09-07-staking-post-genesis/accumulate.db",
-	"2025-10-24-staking-current":     "/media/paul/Expansion/databases/2025-10-24-staking-current/accumulate.db",
+	"2025-10-24-staking-current":      "/media/paul/Expansion/databases/2025-10-24-staking-current/accumulate.db",
 
 	// Other databases
-	"2025-09-13-bvn0-repaired":       "/media/paul/Expansion/databases/2025-09-13-bvn0-repaired/accumulate.db",
-	"2025-09-16-database-analysis":   "/media/paul/Expansion/databases/2025-09-16-database-analysis/accumulate.db",
-	"2025-10-01-aws-mainnet-bvn0":    "/media/paul/Expansion/databases/2025-10-01-aws-mainnet-bvn0/accumulate.db",
-	"2025-10-11-bvn0-clean":          "/media/paul/Expansion/databases/2025-10-11-bvn0-clean/accumulate.db",
-	"2025-10-11-bvn0-clean-current":  "/media/paul/Expansion/databases/2025-10-11-bvn0-clean-current/accumulate.db",
-	"2025-10-13-bootstrap-230000":    "/media/paul/Expansion/databases/2025-10-13-bootstrap-230000/accumulate.db",
-	"2025-10-13-bootstrap-230546":    "/media/paul/Expansion/databases/2025-10-13-bootstrap-230546/accumulate.db",
+	"2025-09-13-bvn0-repaired":      "/media/paul/Expansion/databases/2025-09-13-bvn0-repaired/accumulate.db",
+	"2025-09-16-database-analysis":  "/media/paul/Expansion/databases/2025-09-16-database-analysis/accumulate.db",
+	"2025-10-01-aws-mainnet-bvn0":   "/media/paul/Expansion/databases/2025-10-01-aws-mainnet-bvn0/accumulate.db",
+	"2025-10-11-bvn0-clean":         "/media/paul/Expansion/databases/2025-10-11-bvn0-clean/accumulate.db",
+	"2025-10-11-bvn0-clean-current": "/media/paul/Expansion/databases/2025-10-11-bvn0-clean-current/accumulate.db",
+	"2025-10-13-bootstrap-230000":   "/media/paul/Expansion/databases/2025-10-13-bootstrap-230000/accumulate.db",
+	"2025-10-13-bootstrap-230546":   "/media/paul/Expansion/databases/2025-10-13-bootstrap-230546/accumulate.db",
 }
 
 // getDatabaseSearchOrder returns the priority order of databases to try for a given account URL

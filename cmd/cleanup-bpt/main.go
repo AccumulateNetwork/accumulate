@@ -18,9 +18,9 @@ import (
 
 func main() {
 	var (
-		dbPath  string
-		dbType  string
-		dryRun  bool
+		dbPath string
+		dbType string
+		dryRun bool
 	)
 
 	flag.StringVar(&dbPath, "db", "", "Path to database directory")

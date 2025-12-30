@@ -20,8 +20,8 @@ func (s *Server) getBootstrapServerStatus(args map[string]interface{}) (map[stri
 	peers, peersErr := client.QueryBootstrapServerPeers(serverURL)
 
 	result := map[string]interface{}{
-		"server_url":  serverURL,
-		"query_time":  time.Now().Format(time.RFC3339),
+		"server_url": serverURL,
+		"query_time": time.Now().Format(time.RFC3339),
 	}
 
 	// Add info data

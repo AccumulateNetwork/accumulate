@@ -14,10 +14,9 @@ import (
 	"testing"
 	"time"
 
+	"gitlab.com/accumulatenetwork/accumulate/mcp/client"
 	accurl "gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-
-	"gitlab.com/accumulatenetwork/accumulate/mcp/client"
 )
 
 // hashTo32Bytes converts a []byte hash to a [32]byte array

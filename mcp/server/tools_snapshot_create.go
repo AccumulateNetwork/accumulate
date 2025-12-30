@@ -196,12 +196,12 @@ func (s *Server) createSnapshotFromNodeBackup(args map[string]interface{}) (map[
 		"status":  "success",
 		"message": "Snapshot created successfully",
 		"details": map[string]interface{}{
-			"output_path":    outputPath,
-			"size_bytes":     fileInfo.Size(),
-			"size_mb":        fmt.Sprintf("%.2f", float64(fileInfo.Size())/(1024*1024)),
-			"partition":      partition,
-			"genesis_mode":   genesis,
-			"db_type":        dbType,
+			"output_path":  outputPath,
+			"size_bytes":   fileInfo.Size(),
+			"size_mb":      fmt.Sprintf("%.2f", float64(fileInfo.Size())/(1024*1024)),
+			"partition":    partition,
+			"genesis_mode": genesis,
+			"db_type":      dbType,
 			"includes": []string{
 				"Consensus section with validators and commit signatures",
 				"LastBlockID for CometBFT state initialization",

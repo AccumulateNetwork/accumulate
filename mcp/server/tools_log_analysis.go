@@ -12,19 +12,19 @@ import (
 
 // LogAnalysisResult contains structured log analysis results
 type LogAnalysisResult struct {
-	ContainerName   string            `json:"container_name"`
-	LinesAnalyzed   int               `json:"lines_analyzed"`
-	ErrorCount      int               `json:"error_count"`
-	WarningCount    int               `json:"warning_count"`
-	CriticalCount   int               `json:"critical_count"`
-	ErrorSummary    map[string]int    `json:"error_summary"`    // Error type -> count
-	RecentErrors    []LogEntry        `json:"recent_errors"`    // Last N errors
-	RecentWarnings  []LogEntry        `json:"recent_warnings"`  // Last N warnings
-	Patterns        []PatternMatch    `json:"patterns"`         // Detected patterns
+	ContainerName    string            `json:"container_name"`
+	LinesAnalyzed    int               `json:"lines_analyzed"`
+	ErrorCount       int               `json:"error_count"`
+	WarningCount     int               `json:"warning_count"`
+	CriticalCount    int               `json:"critical_count"`
+	ErrorSummary     map[string]int    `json:"error_summary"`   // Error type -> count
+	RecentErrors     []LogEntry        `json:"recent_errors"`   // Last N errors
+	RecentWarnings   []LogEntry        `json:"recent_warnings"` // Last N warnings
+	Patterns         []PatternMatch    `json:"patterns"`        // Detected patterns
 	HealthIndicators map[string]string `json:"health_indicators"`
-	Recommendations []string          `json:"recommendations"`
-	Status          string            `json:"status"` // healthy, degraded, critical
-	Message         string            `json:"message"`
+	Recommendations  []string          `json:"recommendations"`
+	Status           string            `json:"status"` // healthy, degraded, critical
+	Message          string            `json:"message"`
 }
 
 // LogEntry represents a single log entry
