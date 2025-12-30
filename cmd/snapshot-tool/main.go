@@ -18,7 +18,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 )
 
-func mainOld() {
+func _mainOld() // Unused, kept for reference {
 	var (
 		workDir    string
 		outputFile string

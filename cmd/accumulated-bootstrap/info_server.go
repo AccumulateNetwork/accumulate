@@ -272,7 +272,7 @@ func (s *InfoServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(ConnectResponse{
+		_ = json.NewEncoder(w).Encode(ConnectResponse{
 			Success: false,
 			Error:   "invalid request body: " + err.Error(),
 		})
@@ -282,7 +282,7 @@ func (s *InfoServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 	if req.Address == "" {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(ConnectResponse{
+		_ = json.NewEncoder(w).Encode(ConnectResponse{
 			Success: false,
 			Error:   "address is required",
 		})
@@ -294,7 +294,7 @@ func (s *InfoServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(ConnectResponse{
+		_ = json.NewEncoder(w).Encode(ConnectResponse{
 			Success: false,
 			Error:   "invalid multiaddr: " + err.Error(),
 		})
@@ -306,7 +306,7 @@ func (s *InfoServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(ConnectResponse{
+		_ = json.NewEncoder(w).Encode(ConnectResponse{
 			Success: false,
 			Error:   "could not extract peer info: " + err.Error(),
 		})
@@ -323,7 +323,7 @@ func (s *InfoServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 		slog.Error("Failed to connect to peer", "peer_id", peerInfo.ID, "error", err)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(ConnectResponse{
+		_ = json.NewEncoder(w).Encode(ConnectResponse{
 			Success: false,
 			PeerID:  peerInfo.ID.String(),
 			Error:   "connection failed: " + err.Error(),
@@ -334,7 +334,7 @@ func (s *InfoServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 	slog.Info("Successfully connected to peer", "peer_id", peerInfo.ID)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(ConnectResponse{
+	_ = json.NewEncoder(w).Encode(ConnectResponse{
 		Success: true,
 		PeerID:  peerInfo.ID.String(),
 	})
@@ -345,8 +345,8 @@ func (s *InfoServer) Shutdown(ctx context.Context) error {
 	return s.server.Shutdown(ctx)
 }
 
-// multiaddrToStrings converts multiaddrs to strings
-func multiaddrToStrings(addrs []multiaddr.Multiaddr) []string {
+// _multiaddrToStrings converts multiaddrs to strings (unused, kept for reference)
+func _multiaddrToStrings(addrs []multiaddr.Multiaddr) []string {
 	result := make([]string, len(addrs))
 	for i, addr := range addrs {
 		result[i] = addr.String()

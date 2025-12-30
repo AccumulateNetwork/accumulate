@@ -112,7 +112,7 @@ func (s *NetworkService) NetworkStatus(ctx context.Context, _ api.NetworkStatusO
 			s.logger.Error("Failed to get node status for staleness detection", "error", err)
 		} else {
 			t := status.SyncInfo.LatestBlockTime
-			res.LastBlockTime = (*time.Time)(&t)
+			res.LastBlockTime = &t
 			catchingUp := status.SyncInfo.CatchingUp
 			res.CatchingUp = &catchingUp
 		}

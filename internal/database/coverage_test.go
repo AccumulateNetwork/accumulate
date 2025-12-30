@@ -21,7 +21,7 @@ import (
 
 func randomHash() [32]byte {
 	var buf [32]byte
-	rand.Read(buf[:])
+	_, _ = rand.Read(buf[:])
 	return sha256.Sum256(buf[:])
 }
 

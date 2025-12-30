@@ -109,18 +109,18 @@ func (h *HttpService) start(inst *Instance) error {
 			switch r.Method {
 			case http.MethodPost:
 				haltInst.RequestHaltAll()
-				json.NewEncoder(w).Encode(HaltResponse{
+				_ = json.NewEncoder(w).Encode(HaltResponse{
 					Status:  "scheduled",
 					Message: "Node will halt after next major block",
 				})
 			case http.MethodDelete:
 				haltInst.CancelHaltAll()
-				json.NewEncoder(w).Encode(HaltResponse{
+				_ = json.NewEncoder(w).Encode(HaltResponse{
 					Status:  "cancelled",
 					Message: "Halt request cancelled",
 				})
 			case http.MethodGet:
-				json.NewEncoder(w).Encode(haltInst.GetHaltStatus())
+				_ = json.NewEncoder(w).Encode(haltInst.GetHaltStatus())
 			default:
 				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			}
@@ -140,7 +140,7 @@ func (h *HttpService) start(inst *Instance) error {
 		}
 
 		if err == nil {
-			err := json.NewEncoder(w).Encode(res)
+			err := _ = json.NewEncoder(w).Encode(res)
 			if err != nil {
 				slog.ErrorContext(r.Context(), "Failed to encode response", "error", err)
 			}
@@ -150,7 +150,7 @@ func (h *HttpService) start(inst *Instance) error {
 		err2 := errors.UnknownError.Wrap(err).(*errors.Error)
 		w.WriteHeader(int(err2.Code))
 
-		err = json.NewEncoder(w).Encode(err2)
+		err = _ = json.NewEncoder(w).Encode(err2)
 		if err != nil {
 			slog.ErrorContext(r.Context(), "Failed to encode response", "error", err)
 		}
