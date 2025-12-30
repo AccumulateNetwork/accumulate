@@ -158,6 +158,11 @@ func (UpdateKeyPage) checkOperation(st *StateManager, tx *Delivery, op protocol.
 		return nil
 
 	case *protocol.SetAllowedTransactionsKeyPageOperation:
+		// Version guard: SetAllowedTransactions requires V2Tanegashima
+		if !st.Globals.ExecutorVersion.V2TanegashimaEnabled() {
+			return errors.NotAllowed.WithFormat("SetAllowedTransactions requires protocol version %v or later", protocol.ExecutorVersionV2Tanegashima)
+		}
+
 		// Validate that all transaction types can be whitelisted
 		for _, txn := range op.Transactions {
 			_, ok := txn.AllowedTransactionBit()
