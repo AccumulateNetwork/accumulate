@@ -15,9 +15,11 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 
+	dbm "github.com/cometbft/cometbft-db"
 	types "github.com/cometbft/cometbft/abci/types"
 	tmcfg "github.com/cometbft/cometbft/config"
 	tmcrypto "github.com/cometbft/cometbft/crypto"
@@ -73,12 +75,13 @@ var (
 )
 
 type tendermint struct {
-	config   *tmcfg.Config
-	privVal  *tmpv.FilePV
-	nodeKey  *tmp2p.NodeKey
-	logger   log.Logger
-	eventBus *events.Bus
-	globals  chan *network.GlobalValues
+	config       *tmcfg.Config
+	privVal      *tmpv.FilePV
+	nodeKey      *tmp2p.NodeKey
+	logger       log.Logger
+	eventBus     *events.Bus
+	globals      chan *network.GlobalValues
+	snapshotPath string // Path to genesis snapshot for ABCI InitChain
 }
 
 var _ prestarter = (*ConsensusService)(nil)
@@ -255,6 +258,11 @@ func (c *ConsensusService) start(inst *Instance) error {
 		return errors.UnknownError.WithFormat("load node key: %w", err)
 	}
 
+	// Set the snapshot path for ABCI InitChain (only for snapshot files, not JSON)
+	if filepath.Ext(c.Genesis) != ".json" {
+		d.snapshotPath = inst.path(c.Genesis)
+	}
+
 	// Start the application
 	app, err := c.App.start(inst, d)
 	if err != nil {
@@ -268,7 +276,7 @@ func (c *ConsensusService) start(inst *Instance) error {
 		d.nodeKey,
 		proxy.NewLocalClientCreator(app),
 		c.genesisDocProvider(inst),
-		tmcfg.DefaultDBProvider,
+		clearCachedGenesisDBProvider(d.logger),
 		tmnode.DefaultMetricsProvider(d.config.Instrumentation),
 		d.logger,
 	)
@@ -612,15 +620,16 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 	}
 
 	app := abci.NewAccumulator(abci.AccumulatorOptions{
-		ID:        inst.id,
-		Address:   d.privVal.Key.PubKey.Address(),
-		Executor:  exec,
-		Logger:    d.logger.With("module", "abci"),
-		EventBus:  d.eventBus,
-		Database:  db,
-		Genesis:   genesis.DocProvider(d.config),
-		Partition: c.Partition.ID,
-		RootDir:   d.config.RootDir,
+		ID:           inst.id,
+		Address:      d.privVal.Key.PubKey.Address(),
+		Executor:     exec,
+		Logger:       d.logger.With("module", "abci"),
+		EventBus:     d.eventBus,
+		Database:     db,
+		Genesis:      genesis.DocProvider(d.config),
+		Partition:    c.Partition.ID,
+		RootDir:      d.config.RootDir,
+		SnapshotPath: d.snapshotPath,
 
 		MaxEnvelopesPerBlock: int(*c.MaxEnvelopesPerBlock),
 	})
@@ -633,9 +642,26 @@ func (c *CoreConsensusApp) register(inst *Instance, d *tendermint, node *tmnode.
 		return err
 	}
 
+	// Clear the AppState from the genesis doc to free ~2GB of memory.
+	// This is safe because InitChain (which needs AppState) has already run
+	// during node.Start(), or will load the snapshot from disk (for new nodes).
+	// Both Environment #1 (from startRPC) and Environment #2 (from local.New)
+	// share the same GenesisDoc pointer, so this clears AppState for both.
+	// Note: Environment #1's genChunks are already created with the full AppState
+	// but we can't easily clear those (~7GB). This at least frees the raw AppState.
+	if genDoc := node.GenesisDoc(); genDoc != nil && len(genDoc.AppState) > 0 {
+		d.logger.Info("Clearing genesis AppState to free memory", "size", len(genDoc.AppState))
+		genDoc.AppState = nil
+	}
+
 	// Register the tendermint node
-	local := local.New(node)
-	err = coreConsensusProvidesClient.Register(inst.services, c, local)
+	localClient := local.New(node)
+
+	// Clear the genesis cache to free ~10GB of memory. This must be done
+	// after local.New() which triggers ConfigureRPC() and InitGenesisChunks().
+	clearGenesisCache(localClient, d.logger)
+
+	err = coreConsensusProvidesClient.Register(inst.services, c, localClient)
 	if err != nil {
 		return err
 	}
@@ -643,7 +669,7 @@ func (c *CoreConsensusApp) register(inst *Instance, d *tendermint, node *tmnode.
 	// Register the consensus service
 	svcImpl := tmapi.NewConsensusService(tmapi.ConsensusServiceParams{
 		Logger:           d.logger.With("module", "api"),
-		Local:            local,
+		Local:            localClient,
 		Database:         database.New(store, d.logger),
 		PartitionID:      c.Partition.ID,
 		PartitionType:    c.Partition.Type,
@@ -660,7 +686,7 @@ func (c *CoreConsensusApp) register(inst *Instance, d *tendermint, node *tmnode.
 	// Register the submitter
 	subImpl := tmapi.NewSubmitter(tmapi.SubmitterParams{
 		Logger: d.logger.With("module", "api"),
-		Local:  local,
+		Local:  localClient,
 	})
 	registerRpcService(inst, subImpl.Type().AddressFor(c.Partition.ID), message.Submitter{Submitter: subImpl})
 	err = consensusProvidesSubmitter.Register(inst.services, c, subImpl)
@@ -671,7 +697,7 @@ func (c *CoreConsensusApp) register(inst *Instance, d *tendermint, node *tmnode.
 	// Register the validator
 	valImpl := tmapi.NewValidator(tmapi.ValidatorParams{
 		Logger: d.logger.With("module", "api"),
-		Local:  local,
+		Local:  localClient,
 	})
 	registerRpcService(inst, valImpl.Type().AddressFor(c.Partition.ID), message.Validator{Validator: valImpl})
 	err = consensusProvidesValidator.Register(inst.services, c, valImpl)
@@ -696,4 +722,77 @@ func (c *CoreConsensusApp) register(inst *Instance, d *tendermint, node *tmnode.
 
 	inst.logger.Info(color.HiBlueString("Running"), "partition", c.Partition.ID, "module", "run", "service", "consensus")
 	return nil
+}
+
+// clearCachedGenesisDBProvider wraps CometBFT's DefaultDBProvider to delete
+// the cached genesis document from the state database. CometBFT caches the full
+// genesis (including the 2.68GB AppState) to the database on first run and
+// loads it on every subsequent start. By deleting this cached copy, we force
+// CometBFT to call our genesisDocProvider which returns null AppState.
+func clearCachedGenesisDBProvider(logger log.Logger) tmcfg.DBProvider {
+	return func(ctx *tmcfg.DBContext) (dbm.DB, error) {
+		logger.Info("DBProvider called", "id", ctx.ID)
+		db, err := tmcfg.DefaultDBProvider(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		// Only clear from the state database
+		if ctx.ID == "state" {
+			genesisDocKey := []byte("genesisDoc")
+			has, err := db.Has(genesisDocKey)
+			if err != nil {
+				logger.Error("Failed to check for cached genesis", "error", err)
+			} else if has {
+				logger.Info("Deleting cached genesis from state database to free memory")
+				if err := db.Delete(genesisDocKey); err != nil {
+					logger.Error("Failed to delete cached genesis", "error", err)
+				} else {
+					logger.Info("Successfully deleted cached genesis from state database")
+				}
+			} else {
+				logger.Info("No cached genesis found in state database")
+			}
+		}
+
+		return db, nil
+	}
+}
+
+// clearGenesisCache clears the cached genesis data from CometBFT's RPC
+// environment to free ~10GB of memory. The genesis data is only needed during
+// initialization and for the rarely-used genesis RPC endpoints.
+func clearGenesisCache(localClient *local.Local, logger log.Logger) {
+	// Use reflection with unsafe to access and clear private fields in Local.env
+	localVal := reflect.ValueOf(localClient).Elem()
+	envField := localVal.FieldByName("env")
+	if !envField.IsValid() {
+		logger.Error("Failed to clear genesis cache: env field not found")
+		return
+	}
+
+	// Get the Environment pointer using unsafe to bypass unexported restrictions
+	envPtrVal := reflect.NewAt(envField.Type(), envField.Addr().UnsafePointer()).Elem()
+	if envPtrVal.IsNil() {
+		return
+	}
+
+	env := envPtrVal.Elem()
+
+	// Clear genChunks ([]string) - use unsafe to set unexported field
+	genChunksField := env.FieldByName("genChunks")
+	if genChunksField.IsValid() {
+		// Create a settable version using unsafe
+		genChunksPtr := reflect.NewAt(genChunksField.Type(), genChunksField.Addr().UnsafePointer()).Elem()
+		genChunksPtr.Set(reflect.Zero(genChunksField.Type()))
+		logger.Info("Cleared genesis chunks cache")
+	}
+
+	// Clear GenDoc (*types.GenesisDoc) - use unsafe to set unexported field
+	genDocField := env.FieldByName("GenDoc")
+	if genDocField.IsValid() {
+		genDocPtr := reflect.NewAt(genDocField.Type(), genDocField.Addr().UnsafePointer()).Elem()
+		genDocPtr.Set(reflect.Zero(genDocField.Type()))
+		logger.Info("Cleared genesis doc cache")
+	}
 }

@@ -68,11 +68,10 @@ func ConvertSnapshotToJson(snap []byte) (*types.GenesisDoc, error) {
 	}
 	// If consensus section doesn't exist, p remains empty
 
-	// Convert
-	jsonBytes, err := cmtjson.Marshal(snap)
-	if err != nil {
-		return nil, err
-	}
+	// Don't embed the full snapshot in AppState - it wastes ~10GB of memory.
+	// The ABCI app will load the snapshot directly from disk when needed.
+	// We store null as a marker that the snapshot should be loaded from disk.
+	jsonBytes := []byte("null")
 
 	// Use default consensus params if not provided
 	var consensusParams *types.ConsensusParams
