@@ -67,7 +67,6 @@ func main() {
 	// Iterate through BPT and find orphaned entries
 	orphanedCount := 0
 	validCount := 0
-	var orphanedKeys []string
 
 	it := batch.IterateAccounts()
 	for it.Next() {
@@ -79,7 +78,6 @@ func main() {
 		if err != nil {
 			if errors.Is(err, errors.NotFound) {
 				orphanedCount++
-				orphanedKeys = append(orphanedKeys, u.String())
 				if orphanedCount <= 20 {
 					fmt.Printf("  Orphaned: %s\n", u)
 				}
