@@ -38,6 +38,7 @@ func init() {
 	cmdGenesis.AddCommand(cmdGenesisIngest)
 }
 
+//nolint:unused
 const _calculateBPT = false // Unused, kept for potential future use
 
 func ingestForGenesis(cmd *cobra.Command, args []string) {

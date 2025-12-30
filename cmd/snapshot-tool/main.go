@@ -18,6 +18,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 )
 
+//nolint:unused
 func _mainOld() { // Unused, kept for reference
 	var (
 		workDir    string
