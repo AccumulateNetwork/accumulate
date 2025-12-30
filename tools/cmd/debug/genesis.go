@@ -38,7 +38,7 @@ func init() {
 	cmdGenesis.AddCommand(cmdGenesisIngest)
 }
 
-const calculateBPT = false
+const _calculateBPT = false // Unused, kept for potential future use
 
 func ingestForGenesis(cmd *cobra.Command, args []string) {
 	// Timer for progress
