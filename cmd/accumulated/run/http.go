@@ -140,7 +140,7 @@ func (h *HttpService) start(inst *Instance) error {
 		}
 
 		if err == nil {
-			err := _ = json.NewEncoder(w).Encode(res)
+			err := json.NewEncoder(w).Encode(res)
 			if err != nil {
 				slog.ErrorContext(r.Context(), "Failed to encode response", "error", err)
 			}
@@ -150,7 +150,7 @@ func (h *HttpService) start(inst *Instance) error {
 		err2 := errors.UnknownError.Wrap(err).(*errors.Error)
 		w.WriteHeader(int(err2.Code))
 
-		err = _ = json.NewEncoder(w).Encode(err2)
+		err = json.NewEncoder(w).Encode(err2)
 		if err != nil {
 			slog.ErrorContext(r.Context(), "Failed to encode response", "error", err)
 		}
