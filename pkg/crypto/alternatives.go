@@ -83,12 +83,18 @@ func FromECDSAPub(pub *ecdsa.PublicKey) []byte {
 		return nil
 	}
 	// Use the curve from the key, don't assume S256()
+	// Note: elliptic.Marshal is deprecated for ECDH curves but secp256k1 is not
+	// in the standard library's crypto/ecdh, so we must use this approach.
+	//nolint:staticcheck
 	return elliptic.Marshal(pub.Curve, pub.X, pub.Y)
 }
 
 // UnmarshalPubkey converts bytes to a secp256k1 public key.
 // Replaces ethereum/go-ethereum/crypto.UnmarshalPubkey
 func UnmarshalPubkey(pub []byte) (*ecdsa.PublicKey, error) {
+	// Note: elliptic.Unmarshal is deprecated for ECDH curves but secp256k1 is not
+	// in the standard library's crypto/ecdh, so we must use this approach.
+	//nolint:staticcheck
 	x, y := elliptic.Unmarshal(S256(), pub)
 	if x == nil {
 		return nil, errors.New("invalid secp256k1 public key")
