@@ -200,6 +200,15 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, book *protocol.Key
 		return page.SetThreshold(op.Threshold)
 
 	case *protocol.UpdateAllowedKeyPageOperation:
+		// Prevent setting blacklist on page 1 to avoid lockout
+		_, pageIndex, ok := protocol.ParseKeyPageUrl(page.Url)
+		if !ok {
+			return errors.BadRequest.WithFormat("invalid principal: not a key page URL")
+		}
+		if pageIndex == 1 && len(op.Deny) > 0 {
+			return errors.BadRequest.With("cannot deny transactions on the first page of a key book")
+		}
+
 		// UpdateAllowed modifies the blacklist - cannot be used if whitelist is set
 		if page.TransactionWhitelist != nil {
 			return fmt.Errorf("cannot modify blacklist when whitelist is set")
@@ -231,6 +240,15 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, book *protocol.Key
 		return nil
 
 	case *protocol.SetAllowedTransactionsKeyPageOperation:
+		// Prevent setting whitelist on page 1 to avoid lockout
+		_, pageIndex, ok := protocol.ParseKeyPageUrl(page.Url)
+		if !ok {
+			return errors.BadRequest.WithFormat("invalid principal: not a key page URL")
+		}
+		if pageIndex == 1 && len(op.Transactions) > 0 {
+			return errors.BadRequest.With("cannot set transaction whitelist on the first page of a key book")
+		}
+
 		// Handle whitelist: nil/empty clears it, otherwise sets it (mutually exclusive with blacklist)
 		if len(op.Transactions) == 0 {
 			// Clear the whitelist
