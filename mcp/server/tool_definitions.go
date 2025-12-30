@@ -45,7 +45,7 @@ func GetAllTools() []map[string]interface{} {
 			"name":        "wallet_vault_lock",
 			"description": "Lock the currently opened vault",
 			"inputSchema": map[string]interface{}{
-				"type": "object",
+				"type":       "object",
 				"properties": map[string]interface{}{},
 			},
 		},
@@ -67,7 +67,7 @@ func GetAllTools() []map[string]interface{} {
 			"name":        "wallet_list_keys",
 			"description": "List all keys in the wallet (requires unlocked vault)",
 			"inputSchema": map[string]interface{}{
-				"type": "object",
+				"type":       "object",
 				"properties": map[string]interface{}{},
 			},
 		},
@@ -89,7 +89,7 @@ func GetAllTools() []map[string]interface{} {
 			"name":        "wallet_get_status",
 			"description": "Get current wallet and network status",
 			"inputSchema": map[string]interface{}{
-				"type": "object",
+				"type":       "object",
 				"properties": map[string]interface{}{},
 			},
 		},

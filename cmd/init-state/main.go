@@ -14,9 +14,9 @@ import (
 	"os"
 	"path/filepath"
 
+	dbm "github.com/cometbft/cometbft-db"
 	sm "github.com/cometbft/cometbft/state"
 	cmttypes "github.com/cometbft/cometbft/types"
-	dbm "github.com/cometbft/cometbft-db"
 )
 
 func main() {

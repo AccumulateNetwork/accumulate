@@ -92,7 +92,7 @@ func TestSyncMonitor_StaleButMakingFastProgress(t *testing.T) {
 	// Prime the monitor with initial state
 	m.lastHeight = 90
 	m.lastCheckTime = time.Now().Add(-1 * time.Second) // 1 second ago
-	m.staleCount = 5                                    // already stale
+	m.staleCount = 5                                   // already stale
 
 	// Check with height 100 - that's 10 blocks in 1 second = 10 bl/sec (fast sync)
 	result, err := m.Check(context.Background())
@@ -117,7 +117,7 @@ func TestSyncMonitor_StaleButMakingSlowProgress(t *testing.T) {
 	// Prime the monitor with initial state
 	m.lastHeight = 99
 	m.lastCheckTime = time.Now().Add(-1 * time.Second) // 1 second ago
-	m.staleCount = 2                                    // already stale
+	m.staleCount = 2                                   // already stale
 
 	// Check with height 100 - that's 1 block in 1 second = 1 bl/sec (slow, just following)
 	result, err := m.Check(context.Background())

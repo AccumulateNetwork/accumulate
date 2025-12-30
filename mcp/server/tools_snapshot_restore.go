@@ -163,14 +163,14 @@ func (s *Server) restoreFromSnapshots(args map[string]interface{}) (map[string]i
 		"status":  "success",
 		"message": "Follower node restored successfully from snapshots",
 		"details": map[string]interface{}{
-			"work_dir":   workDir,
-			"dn_dir":     dnnPath,
-			"bvn_dir":    bvnnPath,
-			"config":     configPath,
-			"network":    network,
-			"bvn_name":   bvnName,
-			"dn_ports":   fmt.Sprintf("%d-%d-%d", dnListenPort, dnAPIPort, dnP2PPort),
-			"bvn_ports":  fmt.Sprintf("%d-%d-%d", bvnListenPort, bvnAPIPort, bvnP2PPort),
+			"work_dir":  workDir,
+			"dn_dir":    dnnPath,
+			"bvn_dir":   bvnnPath,
+			"config":    configPath,
+			"network":   network,
+			"bvn_name":  bvnName,
+			"dn_ports":  fmt.Sprintf("%d-%d-%d", dnListenPort, dnAPIPort, dnP2PPort),
+			"bvn_ports": fmt.Sprintf("%d-%d-%d", bvnListenPort, bvnAPIPort, bvnP2PPort),
 		},
 	}, nil
 }

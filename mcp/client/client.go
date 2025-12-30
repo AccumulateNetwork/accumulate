@@ -19,9 +19,9 @@ import (
 )
 
 const (
-	MainnetEndpoint        = "https://mainnet.accumulatenetwork.io/v3"
-	TestnetEndpoint        = "https://testnet.accumulatenetwork.io/v3"
-	DefaultDevnetEndpoint  = "http://127.0.0.1:26660/v2"
+	MainnetEndpoint       = "https://mainnet.accumulatenetwork.io/v3"
+	TestnetEndpoint       = "https://testnet.accumulatenetwork.io/v3"
+	DefaultDevnetEndpoint = "http://127.0.0.1:26660/v2"
 )
 
 // Client wraps the Accumulate SDK jsonrpc.Client

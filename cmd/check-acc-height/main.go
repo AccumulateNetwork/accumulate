@@ -35,7 +35,7 @@ func main() {
 	// Try dn.acme/ledger first
 	ledgerUrl, _ := url.Parse("dn.acme/ledger")
 	ledger := batch.Account(ledgerUrl)
-	
+
 	var ledgerState *protocol.SystemLedger
 	err = ledger.Main().GetAs(&ledgerState)
 	if err != nil {
