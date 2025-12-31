@@ -22,7 +22,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
 // Client is a light client instance.
@@ -162,7 +161,6 @@ func OpenDB(store keyvalue.Beginner, prefix *record.Key, writable bool) *DB {
 	db := new(DB)
 	kvb := store.Begin(prefix, writable)
 	db.Batch = database.NewBatch("", kvb, writable, nil)
-	db.Batch.SetObserver(testing.NullObserver{}) // Ignore the BPT
 	db.index = new(IndexDB)
 	db.index.parent = db
 	db.index.key = record.NewKey("Light", "Index")

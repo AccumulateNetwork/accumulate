@@ -22,7 +22,14 @@ import (
 )
 
 func (k *RawPrivateKey) get(inst *Instance) (address.Address, error) {
-	return address.Parse(k.Address)
+	inst.logger.Info("Loading RawPrivateKey", "address", k.Address)
+	addr, err := address.Parse(k.Address)
+	if err != nil {
+		inst.logger.Error("Failed to parse RawPrivateKey address", "address", k.Address, "error", err)
+		return nil, err
+	}
+	inst.logger.Info("RawPrivateKey loaded successfully", "address", k.Address)
+	return addr, nil
 }
 
 func (k *TransientPrivateKey) get(inst *Instance) (address.Address, error) {
