@@ -78,18 +78,24 @@ type ConnectResponse struct {
 
 // InfoServer serves bootstrap server information on HTTP
 type InfoServer struct {
-	host      host.Host
-	server    *http.Server
-	startTime time.Time
-	external  []multiaddr.Multiaddr
+	host        host.Host
+	server      *http.Server
+	startTime   time.Time
+	external    []multiaddr.Multiaddr
+	metrics     *MetricsCollector
+	partitions  *PartitionTracker
+	connections *ConnectionManager
 }
 
 // NewInfoServer creates a new info server
 func NewInfoServer(h host.Host, listen multiaddr.Multiaddr, external []multiaddr.Multiaddr) (*InfoServer, error) {
+	metrics := NewMetricsCollector(h)
 	s := &InfoServer{
-		host:      h,
-		startTime: time.Now(),
-		external:  external,
+		host:       h,
+		startTime:  time.Now(),
+		external:   external,
+		metrics:    metrics,
+		partitions: NewPartitionTracker(h, metrics),
 	}
 
 	// Create HTTP server
@@ -97,7 +103,12 @@ func NewInfoServer(h host.Host, listen multiaddr.Multiaddr, external []multiaddr
 	mux.HandleFunc("/info", s.handleInfo)
 	mux.HandleFunc("/health", s.handleHealth)
 	mux.HandleFunc("/peers", s.handlePeers)
+	mux.HandleFunc("/peers/", s.handlePeersByPartition)
+	mux.HandleFunc("/partitions", s.handlePartitions)
 	mux.HandleFunc("/connect", s.handleConnect)
+	mux.HandleFunc("/stats", s.handleStats)
+	mux.HandleFunc("/connections", s.handleConnections)
+	mux.HandleFunc("/debug/dht", s.handleDebugDHT)
 
 	s.server = &http.Server{
 		Handler:           mux,
@@ -180,41 +191,120 @@ func (s *InfoServer) handleHealth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	start := time.Now()
+	defer func() {
+		status := http.StatusOK
+		s.metrics.RecordHTTPRequest("/health", status, time.Since(start))
+	}()
+
 	// Check if we have any connections or peers
 	peers := s.host.Network().Peers()
 	conns := s.host.Network().Conns()
 
-	status := HealthStatus{
-		Status: "healthy",
+	// Gather connection statistics
+	inbound := 0
+	outbound := 0
+	for _, conn := range conns {
+		if conn.Stat().Direction == network.DirInbound {
+			inbound++
+		} else {
+			outbound++
+		}
 	}
 
-	// Consider unhealthy if no peers after 5 minutes
-	if len(peers) == 0 && time.Since(s.startTime) > 5*time.Minute {
-		status.Status = "unhealthy"
-		status.Reason = "no peers in DHT routing table after 5 minutes"
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusServiceUnavailable)
-	} else {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
+	// Determine health status and any issues
+	issues := make([]string, 0)
+	status := "healthy"
+	httpStatus := http.StatusOK
+
+	uptime := time.Since(s.startTime)
+
+	// Check for no peers after startup grace period
+	if len(peers) == 0 && uptime > 5*time.Minute {
+		status = "degraded"
+		issues = append(issues, "no peers in DHT routing table after 5 minutes")
 	}
 
-	// Include some basic stats in health check
+	// Check for no connections after startup
+	if len(conns) == 0 && uptime > 2*time.Minute {
+		status = "degraded"
+		issues = append(issues, "no active connections after 2 minutes")
+	}
+
+	// Check for imbalanced connections (all inbound or all outbound)
+	if len(conns) > 5 && (inbound == 0 || outbound == 0) {
+		issues = append(issues, "connection direction imbalance")
+	}
+
+	// Set HTTP status based on health
+	if status == "unhealthy" {
+		httpStatus = http.StatusServiceUnavailable
+	} else if status == "degraded" {
+		httpStatus = http.StatusOK // Still return 200 for degraded to avoid alerting
+	}
+
+	// Build detailed health response
 	healthDetails := map[string]interface{}{
-		"status":       status.Status,
-		"peer_count":   len(peers),
-		"conn_count":   len(conns),
-		"uptime_hours": int64(time.Since(s.startTime).Hours()),
+		"status": status,
+		"checks": map[string]interface{}{
+			"peers": map[string]interface{}{
+				"count":  len(peers),
+				"status": boolToStatus(len(peers) > 0 || uptime < 5*time.Minute),
+			},
+			"connections": map[string]interface{}{
+				"total":    len(conns),
+				"inbound":  inbound,
+				"outbound": outbound,
+				"status":   boolToStatus(len(conns) > 0 || uptime < 2*time.Minute),
+			},
+			"dht": map[string]interface{}{
+				"routing_table_size": len(peers),
+				"status":             boolToStatus(len(peers) > 0 || uptime < 5*time.Minute),
+			},
+		},
+		"uptime": map[string]interface{}{
+			"seconds": int64(uptime.Seconds()),
+			"hours":   uptime.Hours(),
+			"human":   formatDuration(uptime),
+		},
+		"server_start_time": s.startTime.Format(time.RFC3339),
 	}
-	if status.Reason != "" {
-		healthDetails["reason"] = status.Reason
+
+	if len(issues) > 0 {
+		healthDetails["issues"] = issues
 	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(httpStatus)
 
 	encoder := json.NewEncoder(w)
 	encoder.SetIndent("", "  ")
 	if err := encoder.Encode(healthDetails); err != nil {
 		slog.Error("Failed to encode health response", "error", err)
 	}
+}
+
+// boolToStatus converts a boolean to "pass" or "warn" status
+func boolToStatus(ok bool) string {
+	if ok {
+		return "pass"
+	}
+	return "warn"
+}
+
+// formatDuration formats a duration in a human-readable way
+func formatDuration(d time.Duration) string {
+	days := int(d.Hours() / 24)
+	hours := int(d.Hours()) % 24
+	minutes := int(d.Minutes()) % 60
+
+	if days > 0 {
+		return fmt.Sprintf("%dd %dh %dm", days, hours, minutes)
+	}
+	if hours > 0 {
+		return fmt.Sprintf("%dh %dm", hours, minutes)
+	}
+	return fmt.Sprintf("%dm", minutes)
 }
 
 // handlePeers serves the list of connected peers
@@ -342,7 +432,33 @@ func (s *InfoServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 
 // Shutdown gracefully shuts down the info server
 func (s *InfoServer) Shutdown(ctx context.Context) error {
+	if s.partitions != nil {
+		s.partitions.Stop()
+	}
+	if s.metrics != nil {
+		s.metrics.Stop()
+	}
 	return s.server.Shutdown(ctx)
+}
+
+// Metrics returns the metrics collector for external use
+func (s *InfoServer) Metrics() *MetricsCollector {
+	return s.metrics
+}
+
+// Partitions returns the partition tracker for external use
+func (s *InfoServer) Partitions() *PartitionTracker {
+	return s.partitions
+}
+
+// SetConnectionManager sets the connection manager
+func (s *InfoServer) SetConnectionManager(cm *ConnectionManager) {
+	s.connections = cm
+}
+
+// Connections returns the connection manager for external use
+func (s *InfoServer) Connections() *ConnectionManager {
+	return s.connections
 }
 
 // multiaddrToStrings converts multiaddrs to strings
@@ -530,4 +646,276 @@ func listenMultiaddr(addr multiaddr.Multiaddr) (net.Listener, error) {
 	}
 
 	return net.Listen("tcp", ip+":"+port)
+}
+
+// handleStats serves detailed statistics
+func (s *InfoServer) handleStats(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	start := time.Now()
+	defer func() {
+		s.metrics.RecordHTTPRequest("/stats", http.StatusOK, time.Since(start))
+	}()
+
+	stats := s.metrics.GetStats()
+	stats["uptime_seconds"] = int64(time.Since(s.startTime).Seconds())
+	stats["uptime_hours"] = time.Since(s.startTime).Hours()
+	stats["server_start_time"] = s.startTime.Format(time.RFC3339)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	encoder := json.NewEncoder(w)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(stats); err != nil {
+		slog.Error("Failed to encode stats response", "error", err)
+	}
+}
+
+// handlePeersByPartition serves peers filtered by partition
+func (s *InfoServer) handlePeersByPartition(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Extract partition from path: /peers/{partition}
+	path := strings.TrimPrefix(r.URL.Path, "/peers/")
+	partition := strings.ToLower(strings.TrimSpace(path))
+
+	if partition == "" {
+		http.Error(w, "Partition name required", http.StatusBadRequest)
+		return
+	}
+
+	start := time.Now()
+	defer func() {
+		s.metrics.RecordHTTPRequest("/peers/"+partition, http.StatusOK, time.Since(start))
+	}()
+
+	// Get peers from partition tracker
+	partitionPeers := s.partitions.GetPeersByPartition(partition)
+
+	// Build response with detailed peer info
+	peerInfos := make([]map[string]interface{}, 0, len(partitionPeers))
+	for _, info := range partitionPeers {
+		addrStrs := make([]string, 0, len(info.Addresses))
+		for _, addr := range info.Addresses {
+			fullAddr := addr.String() + "/p2p/" + info.PeerID.String()
+			addrStrs = append(addrStrs, fullAddr)
+		}
+
+		peerInfos = append(peerInfos, map[string]interface{}{
+			"peer_id":    info.PeerID.String(),
+			"addresses":  addrStrs,
+			"score":      info.Score,
+			"first_seen": info.FirstSeen.Format(time.RFC3339),
+			"last_seen":  info.LastSeen.Format(time.RFC3339),
+		})
+	}
+
+	// If no peers found in tracker, fall back to all connected peers
+	if len(peerInfos) == 0 {
+		peers := s.host.Network().Peers()
+		for _, peerID := range peers {
+			addrs := s.host.Peerstore().Addrs(peerID)
+			addrStrs := make([]string, 0, len(addrs))
+			for _, addr := range addrs {
+				fullAddr := addr.String() + "/p2p/" + peerID.String()
+				addrStrs = append(addrStrs, fullAddr)
+			}
+
+			peerInfos = append(peerInfos, map[string]interface{}{
+				"peer_id":   peerID.String(),
+				"addresses": addrStrs,
+				"note":      "partition not yet determined",
+			})
+		}
+	}
+
+	response := map[string]interface{}{
+		"partition": partition,
+		"count":     len(peerInfos),
+		"peers":     peerInfos,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	encoder := json.NewEncoder(w)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(response); err != nil {
+		slog.Error("Failed to encode peers by partition response", "error", err)
+	}
+}
+
+// handlePartitions lists known partitions and their peer counts
+func (s *InfoServer) handlePartitions(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	start := time.Now()
+	defer func() {
+		s.metrics.RecordHTTPRequest("/partitions", http.StatusOK, time.Since(start))
+	}()
+
+	// Get partition stats from partition tracker
+	partitionStats := s.partitions.GetPartitionStats()
+
+	// Build response with detailed partition info
+	partitions := make(map[string]interface{})
+	for name, stats := range partitionStats {
+		partitions[name] = map[string]interface{}{
+			"total_peers":     stats.TotalPeers,
+			"connected_peers": stats.ConnectedPeers,
+			"average_score":   stats.AverageScore,
+		}
+	}
+
+	// Ensure known partitions are present even if empty
+	if _, ok := partitions[PartitionDN]; !ok {
+		partitions[PartitionDN] = map[string]interface{}{
+			"total_peers":     0,
+			"connected_peers": 0,
+			"average_score":   0.0,
+		}
+	}
+	if _, ok := partitions[PartitionCyclops]; !ok {
+		partitions[PartitionCyclops] = map[string]interface{}{
+			"total_peers":     0,
+			"connected_peers": 0,
+			"average_score":   0.0,
+		}
+	}
+
+	response := map[string]interface{}{
+		"partitions":            partitions,
+		"total_connected_peers": len(s.host.Network().Peers()),
+		"total_tracked_peers":   len(s.partitions.GetAllPeers()),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	encoder := json.NewEncoder(w)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(response); err != nil {
+		slog.Error("Failed to encode partitions response", "error", err)
+	}
+}
+
+// handleDebugDHT provides debugging information about the DHT routing table
+func (s *InfoServer) handleDebugDHT(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	start := time.Now()
+	defer func() {
+		s.metrics.RecordHTTPRequest("/debug/dht", http.StatusOK, time.Since(start))
+	}()
+
+	peers := s.host.Network().Peers()
+	conns := s.host.Network().Conns()
+
+	// Gather detailed peer information
+	peerDetails := make([]map[string]interface{}, 0, len(peers))
+	for _, peerID := range peers {
+		addrs := s.host.Peerstore().Addrs(peerID)
+		protocols, _ := s.host.Peerstore().GetProtocols(peerID)
+
+		// Check if connected
+		connected := false
+		var connDirection string
+		for _, conn := range conns {
+			if conn.RemotePeer() == peerID {
+				connected = true
+				if conn.Stat().Direction == network.DirInbound {
+					connDirection = "inbound"
+				} else {
+					connDirection = "outbound"
+				}
+				break
+			}
+		}
+
+		peerDetails = append(peerDetails, map[string]interface{}{
+			"peer_id":    peerID.String(),
+			"addresses":  multiaddrToStrings(addrs),
+			"protocols":  protocols,
+			"connected":  connected,
+			"direction":  connDirection,
+		})
+	}
+
+	response := map[string]interface{}{
+		"self_peer_id":       s.host.ID().String(),
+		"routing_table_size": len(peers),
+		"connection_count":   len(conns),
+		"peers":              peerDetails,
+		"listen_addresses":   filterLocalAddresses(s.host.Addrs()),
+		"external_addresses": buildExternalAddresses(s.host, s.external),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	encoder := json.NewEncoder(w)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(response); err != nil {
+		slog.Error("Failed to encode debug DHT response", "error", err)
+	}
+}
+
+// handleConnections provides connection management statistics
+func (s *InfoServer) handleConnections(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	start := time.Now()
+	defer func() {
+		s.metrics.RecordHTTPRequest("/connections", http.StatusOK, time.Since(start))
+	}()
+
+	var response map[string]interface{}
+
+	if s.connections != nil {
+		response = s.connections.GetConnectionStats()
+	} else {
+		// Fallback if connection manager not set
+		conns := s.host.Network().Conns()
+		inbound := 0
+		outbound := 0
+		for _, conn := range conns {
+			if conn.Stat().Direction == network.DirInbound {
+				inbound++
+			} else {
+				outbound++
+			}
+		}
+		response = map[string]interface{}{
+			"total":        len(conns),
+			"inbound":      inbound,
+			"outbound":     outbound,
+			"unique_peers": len(s.host.Network().Peers()),
+			"note":         "connection manager not enabled",
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	encoder := json.NewEncoder(w)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(response); err != nil {
+		slog.Error("Failed to encode connections response", "error", err)
+	}
 }
