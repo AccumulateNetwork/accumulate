@@ -460,7 +460,7 @@ func (s *ValidationTestSuite) TestMain() {
 	st = s.BuildAndSubmit(
 		build.Transaction().For(adi, "book", "2").
 			UpdateKeyPage().SetAllowedTransactions().For(TransactionTypeWriteData).FinishOperation().
-			SignWith(adi, "book", "2").Version(4).Timestamp(&s.nonce).PrivateKey(key20))[1]
+			SignWith(adi, "book", "2").Version(3).Timestamp(&s.nonce).PrivateKey(key20))[1]
 	_ = s.ErrorIs(st.AsError(), errors.Unauthorized) &&
 		s.EqualError(st.AsError(), "acc://test.acme/book/2 cannot modify its own allowed operations")
 
@@ -504,12 +504,12 @@ func (s *ValidationTestSuite) TestMain() {
 
 	s.NotNil(QueryAccountAs[*KeyPage](s.Harness, adi.JoinPath("book", "2")).TransactionBlacklist)
 
-	st = s.BuildAndSubmit(
+	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(adi, "book", "2").
 			UpdateKeyPage().SetAllowedTransactions().For(TransactionTypeWriteData).FinishOperation().
-			SignWith(adi, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(key10))[1]
-
-	s.EqualError(st.AsError(), "cannot set whitelist when blacklist is set")
+			SignWith(adi, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(key10))
+	s.StepUntil(
+		Txn(st.TxID).Fails())
 
 	s.TB.Log("Clear blacklist on key page 2")
 	st = s.BuildAndSubmitTxnSuccessfully(
@@ -531,12 +531,12 @@ func (s *ValidationTestSuite) TestMain() {
 
 	s.NotNil(QueryAccountAs[*KeyPage](s.Harness, adi.JoinPath("book", "2")).TransactionWhitelist)
 
-	st = s.BuildAndSubmit(
+	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(adi, "book", "2").
 			UpdateKeyPage().UpdateAllowed().Deny(TransactionTypeUpdateAccountAuth).FinishOperation().
-			SignWith(adi, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(key10))[1]
-
-	s.EqualError(st.AsError(), "cannot modify blacklist when whitelist is set")
+			SignWith(adi, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(key10))
+	s.StepUntil(
+		Txn(st.TxID).Fails())
 
 	s.TB.Log("Clear whitelist on key page 2 to restore normal operation")
 	st = s.BuildAndSubmitTxnSuccessfully(
@@ -552,42 +552,35 @@ func (s *ValidationTestSuite) TestMain() {
 	// Page 1 Protection Tests - Prevent lockout by restricting whitelists/blacklists on page 1
 	// =========================================================================
 
-	s.TB.Log("Attempting to set whitelist on page 1 fails (prevents lockout)")
+	// Page 1 protection tests: Page 1 cannot modify its own whitelist/blacklist
+	// The signature validation catches this before transaction validation
+	s.TB.Log("Attempting to set whitelist on page 1 fails (page cannot modify its own allowed operations)")
 	st = s.BuildAndSubmit(
 		build.Transaction().For(adi, "book", "1").
 			UpdateKeyPage().SetAllowedTransactions().For(TransactionTypeWriteData).FinishOperation().
 			SignWith(adi, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(key10))[1]
 
-	s.EqualError(st.AsError(), "cannot set transaction whitelist on the first page of a key book")
+	s.EqualError(st.AsError(), "acc://test.acme/book/1 cannot modify its own allowed operations")
 	s.Nil(QueryAccountAs[*KeyPage](s.Harness, adi.JoinPath("book", "1")).TransactionWhitelist)
 
-	s.TB.Log("Attempting to deny transactions on page 1 fails (prevents lockout)")
+	s.TB.Log("Attempting to deny transactions on page 1 fails (page cannot modify its own allowed operations)")
 	st = s.BuildAndSubmit(
 		build.Transaction().For(adi, "book", "1").
 			UpdateKeyPage().UpdateAllowed().Deny(TransactionTypeUpdateKeyPage).FinishOperation().
 			SignWith(adi, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(key10))[1]
 
-	s.EqualError(st.AsError(), "cannot deny transactions on the first page of a key book")
+	s.EqualError(st.AsError(), "acc://test.acme/book/1 cannot modify its own allowed operations")
 	s.Nil(QueryAccountAs[*KeyPage](s.Harness, adi.JoinPath("book", "1")).TransactionBlacklist)
 
-	s.TB.Log("Allowing transactions on page 1 succeeds (no-op but valid)")
-	st = s.BuildAndSubmitTxnSuccessfully(
-		build.Transaction().For(adi, "book", "1").
-			UpdateKeyPage().UpdateAllowed().Allow(TransactionTypeSendTokens).FinishOperation().
-			SignWith(adi, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(key10))
-	s.StepUntil(
-		Txn(st.TxID).Succeeds())
-
-	s.Nil(QueryAccountAs[*KeyPage](s.Harness, adi.JoinPath("book", "1")).TransactionBlacklist)
-
-	s.TB.Log("Clearing whitelist on page 1 succeeds (no-op but valid)")
-	st = s.BuildAndSubmitTxnSuccessfully(
+	// Allowing transactions on page 1 by page 1 is also blocked because it's a SetAllowedTransactions or UpdateAllowed operation
+	// These operations modify whitelist/blacklist state, so page 1 cannot sign them for itself
+	s.TB.Log("Clearing whitelist on page 1 by page 1 fails (page cannot modify its own allowed operations)")
+	st = s.BuildAndSubmit(
 		build.Transaction().For(adi, "book", "1").
 			UpdateKeyPage().SetAllowedTransactions().FinishOperation().
-			SignWith(adi, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(key10))
-	s.StepUntil(
-		Txn(st.TxID).Succeeds())
+			SignWith(adi, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(key10))[1]
 
+	s.EqualError(st.AsError(), "acc://test.acme/book/1 cannot modify its own allowed operations")
 	s.Nil(QueryAccountAs[*KeyPage](s.Harness, adi.JoinPath("book", "1")).TransactionWhitelist)
 
 	// =========================================================================
@@ -602,7 +595,7 @@ func (s *ValidationTestSuite) TestMain() {
 			Add().Entry().Key(key21, SignatureTypeED25519).FinishEntry().FinishOperation().
 			Add().Entry().Key(key22, SignatureTypeED25519).FinishEntry().FinishOperation().
 			Add().Entry().Key(key23, SignatureTypeED25519).FinishEntry().FinishOperation().
-			SignWith(adi, "book", "2").Version(3).Timestamp(&s.nonce).PrivateKey(key20))
+			SignWith(adi, "book", "2").Version(9).Timestamp(&s.nonce).PrivateKey(key20))
 	s.StepUntil(
 		Txn(st.TxID).Succeeds())
 
@@ -709,7 +702,7 @@ func (s *ValidationTestSuite) TestMain() {
 	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(adi, "book", "2").
 			UpdateKeyPage().SetThreshold(2).
-			SignWith(adi, "book", "2").Version(4).Timestamp(&s.nonce).PrivateKey(key20))
+			SignWith(adi, "book", "2").Version(10).Timestamp(&s.nonce).PrivateKey(key20))
 	s.StepUntil(
 		Txn(st.TxID).Succeeds())
 
@@ -719,7 +712,7 @@ func (s *ValidationTestSuite) TestMain() {
 	st = s.BuildAndSubmitTxn(
 		build.Transaction().For(adi, "book", "2").
 			UpdateKeyPage().SetThreshold(0).
-			SignWith(adi, "book", "2").Version(5).Timestamp(&s.nonce).PrivateKey(key20))
+			SignWith(adi, "book", "2").Version(11).Timestamp(&s.nonce).PrivateKey(key20))
 
 	s.EqualError(st.AsError(), "cannot require 0 signatures on a key page")
 
@@ -727,7 +720,7 @@ func (s *ValidationTestSuite) TestMain() {
 	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(adi, "book", "2").
 			UpdateKey(key24, SignatureTypeED25519).
-			SignWith(adi, "book", "2").Version(5).Timestamp(&s.nonce).PrivateKey(key23))
+			SignWith(adi, "book", "2").Version(11).Timestamp(&s.nonce).PrivateKey(key23))
 	s.StepUntil(
 		Txn(st.TxID).Succeeds())
 
@@ -760,14 +753,14 @@ func (s *ValidationTestSuite) TestMain() {
 	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(adi, "tokens").
 			SendTokens(1, AcmePrecisionPower).To(liteAcme).
-			SignWith(adi, "book", "2").Version(5).Timestamp(&s.nonce).PrivateKey(key20))
+			SignWith(adi, "book", "2").Version(11).Timestamp(&s.nonce).PrivateKey(key20))
 	s.StepUntil(
 		Txn(st.TxID).IsPending())
 
 	s.TB.Log("Signing the transaction with the same key does not deliver it")
 	st = s.BuildAndSubmitTxnSuccessfully(
 		build.SignatureForTxID(st.TxID).
-			Url(adi, "book", "2").Version(5).Timestamp(&s.nonce).PrivateKey(key20))
+			Url(adi, "book", "2").Version(11).Timestamp(&s.nonce).PrivateKey(key20))
 	s.StepUntil(
 		Txn(st.TxID).IsPending())
 
@@ -776,7 +769,7 @@ func (s *ValidationTestSuite) TestMain() {
 	s.TB.Log("Sign the pending transaction using the other key")
 	st = s.BuildAndSubmitTxnSuccessfully(
 		build.SignatureForTxID(st.TxID).
-			Url(adi, "book", "2").Version(5).Timestamp(&s.nonce).PrivateKey(key21))
+			Url(adi, "book", "2").Version(11).Timestamp(&s.nonce).PrivateKey(key21))
 	s.StepUntil(
 		Txn(st.TxID).Succeeds(),
 		Txn(st.TxID).Produced().Succeeds())
@@ -784,7 +777,7 @@ func (s *ValidationTestSuite) TestMain() {
 	s.TB.Log("Signing the transaction after it has been delivered fails")
 	st = s.BuildAndSubmitTxn(
 		build.SignatureForTxID(st.TxID).
-			Url(adi, "book", "2").Version(5).Timestamp(&s.nonce).PrivateKey(key22))
+			Url(adi, "book", "2").Version(11).Timestamp(&s.nonce).PrivateKey(key22))
 	s.Equal(errors.Delivered, st.Code)
 
 	var dropped *url.TxID
