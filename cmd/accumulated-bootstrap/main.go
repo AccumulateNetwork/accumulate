@@ -11,6 +11,7 @@ import (
 	"time"
 
 	dht "github.com/libp2p/go-libp2p-kad-dht"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/spf13/cobra"
 	. "gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run"
@@ -83,25 +84,69 @@ func run(*cobra.Command, []string) {
 	inst, err := Start(ctx, cfg)
 	Check(err)
 
+	var infoServer *InfoServer
+	var discovery *ActiveDiscovery
+	var connManager *ConnectionManager
+
 	// Start info server on port 8080 if configured
 	if flag.InfoListen != nil {
-		infoServer, err := NewInfoServer(inst.P2P().Host(), flag.InfoListen, flag.External)
+		infoServer, err = NewInfoServer(inst.P2P().Host(), flag.InfoListen, flag.External)
 		if err != nil {
 			inst.Stop()
 			Checkf(err, "failed to start info server")
 		}
 
-		// Register shutdown handler via internal method access
-		// Note: cleanup is a private method, so we'll handle shutdown differently
-		defer func() {
-			if infoServer != nil {
-				shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				defer cancel()
-				_ = infoServer.Shutdown(shutdownCtx)
+		// Start connection manager
+		connManager = NewConnectionManager(
+			inst.P2P().Host(),
+			infoServer.Partitions(),
+			infoServer.Metrics(),
+			DefaultConnectionConfig(),
+		)
+		connManager.Start()
+
+		// Register connection manager with info server
+		infoServer.SetConnectionManager(connManager)
+
+		// Start active peer discovery
+		discovery = NewActiveDiscovery(
+			inst.P2P().Host(),
+			inst.P2P().DHT(),
+			infoServer.Partitions(),
+			infoServer.Metrics(),
+			DefaultDiscoveryConfig(),
+		)
+
+		// Set bootstrap peers for discovery to connect to
+		if len(flag.Peers) > 0 {
+			bootstrapPeers := make([]peer.AddrInfo, 0, len(flag.Peers))
+			for _, addr := range flag.Peers {
+				peerInfo, err := peer.AddrInfoFromP2pAddr(addr)
+				if err == nil {
+					bootstrapPeers = append(bootstrapPeers, *peerInfo)
+				}
 			}
-		}()
+			discovery.SetBootstrapPeers(bootstrapPeers)
+		}
+
+		discovery.Start()
 	}
 
+	// Wait for shutdown signal
 	<-inst.Done()
+
+	// Clean shutdown
+	if discovery != nil {
+		discovery.Stop()
+	}
+	if connManager != nil {
+		connManager.Stop()
+	}
+	if infoServer != nil {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = infoServer.Shutdown(shutdownCtx)
+	}
+
 	inst.Stop()
 }
