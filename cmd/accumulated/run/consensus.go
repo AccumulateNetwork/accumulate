@@ -175,9 +175,7 @@ func (c *ConsensusService) start(inst *Instance) error {
 			d.config.Instrumentation.Prometheus = false
 		}
 
-		// CRITICAL FIX: Always process bootstrap peers from configuration
-		// Even when loading existing tendermint.toml, we need to update persistent_peers
-		// from the current bootstrap peers configuration
+		// Process bootstrap peers from configuration if provided
 		if len(c.BootstrapPeers) > 0 {
 			inst.logger.Info("Updating persistent peers from bootstrap configuration",
 				"count", len(c.BootstrapPeers))
@@ -196,18 +194,29 @@ func (c *ConsensusService) start(inst *Instance) error {
 
 			inst.logger.Info("Persistent peers configured",
 				"peers", d.config.P2P.PersistentPeers)
-
-			// P2P connection optimizations for stable block sync
-			d.config.P2P.MaxNumOutboundPeers = 20
-			d.config.P2P.UnconditionalPeerIDs = d.config.P2P.PersistentPeers
-			d.config.P2P.SendRate = 20480000
-			d.config.P2P.RecvRate = 20480000
-			d.config.P2P.FlushThrottleTimeout = 50 * time.Millisecond
-			d.config.P2P.PersistentPeersMaxDialPeriod = 30 * time.Second
-
-			// Write updated config back to file
-			tmcfg.WriteConfigFile(inst.path(c.NodeDir, "config", "tendermint.toml"), d.config)
 		}
+
+		// P2P connection optimizations for stable block sync
+		// Always apply these optimizations for better sync performance
+		d.config.P2P.MaxNumOutboundPeers = 20
+		if d.config.P2P.PersistentPeers != "" {
+			// Extract node IDs from persistent peers (format: id@ip:port,id@ip:port,...)
+			// UnconditionalPeerIDs only takes node IDs, not full addresses
+			var ids []string
+			for _, peer := range strings.Split(d.config.P2P.PersistentPeers, ",") {
+				if idx := strings.Index(peer, "@"); idx > 0 {
+					ids = append(ids, peer[:idx])
+				}
+			}
+			d.config.P2P.UnconditionalPeerIDs = strings.Join(ids, ",")
+		}
+		d.config.P2P.SendRate = 20480000
+		d.config.P2P.RecvRate = 20480000
+		d.config.P2P.FlushThrottleTimeout = 50 * time.Millisecond
+		d.config.P2P.PersistentPeersMaxDialPeriod = 30 * time.Second
+
+		// Write updated config back to file
+		tmcfg.WriteConfigFile(inst.path(c.NodeDir, "config", "tendermint.toml"), d.config)
 
 	case errors.Is(err, fs.ErrNotExist):
 		d.config.NodeKey = ""
@@ -251,7 +260,16 @@ func (c *ConsensusService) start(inst *Instance) error {
 
 		// Unconditional peers - never disconnect from bootstrap peers
 		// This prevents the disconnect/reconnect cycle during sync
-		d.config.P2P.UnconditionalPeerIDs = d.config.P2P.PersistentPeers
+		// Extract node IDs from persistent peers (format: id@ip:port,id@ip:port,...)
+		if d.config.P2P.PersistentPeers != "" {
+			var ids []string
+			for _, peer := range strings.Split(d.config.P2P.PersistentPeers, ",") {
+				if idx := strings.Index(peer, "@"); idx > 0 {
+					ids = append(ids, peer[:idx])
+				}
+			}
+			d.config.P2P.UnconditionalPeerIDs = strings.Join(ids, ",")
+		}
 
 		// Increase bandwidth limits for fast sync (default 5MB/s)
 		d.config.P2P.SendRate = 20480000  // 20 MB/s
