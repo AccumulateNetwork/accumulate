@@ -41,7 +41,7 @@ func TestMigrateOld(t *testing.T) {
 			[logging]
 
 			[p2p]
-			bootstrap-peers = ["/dns/bootstrap.accumulate.defidevs.io/tcp/16593/p2p/12D3KooWDgqY8C7deYWzgTQ7qauanMkvn47TPLtrT1TfzETQW3Gx"]
+			bootstrap-peers = ["/dns/bootstrap.accumulate.defidevs.io/tcp/16593/p2p/12D3KooWGJTh4aeF7bFnwo9sAYRujCkuVU1Cq8wNeTNGpFgZgXdg"]
 			listen = ["/ip4/127.0.2.1/tcp/16693", "/ip4/127.0.2.1/udp/16693/quic", "/ip4/127.0.2.1/tcp/16593", "/ip4/127.0.2.1/udp/16593/quic"]
 
 			[p2p.key]
@@ -65,7 +65,7 @@ func TestMigrateOld(t *testing.T) {
 				id = "Fozzie"
 
 				[p2p]
-				bootstrap-peers = ["/dns/bootstrap.accumulate.defidevs.io/tcp/16593/p2p/12D3KooWDgqY8C7deYWzgTQ7qauanMkvn47TPLtrT1TfzETQW3Gx"]
+				bootstrap-peers = ["/dns/bootstrap.accumulate.defidevs.io/tcp/16593/p2p/12D3KooWGJTh4aeF7bFnwo9sAYRujCkuVU1Cq8wNeTNGpFgZgXdg"]
 				listen = ["/ip4/127.0.2.1/tcp/16693", "/ip4/127.0.2.1/udp/16693/quic"]
 
 				[snapshots]
@@ -99,7 +99,7 @@ func TestMigrateOld(t *testing.T) {
 				id = "Fozzie"
 
 				[p2p]
-				bootstrap-peers = ["/dns/bootstrap.accumulate.defidevs.io/tcp/16593/p2p/12D3KooWDgqY8C7deYWzgTQ7qauanMkvn47TPLtrT1TfzETQW3Gx"]
+				bootstrap-peers = ["/dns/bootstrap.accumulate.defidevs.io/tcp/16593/p2p/12D3KooWGJTh4aeF7bFnwo9sAYRujCkuVU1Cq8wNeTNGpFgZgXdg"]
 				listen = ["/ip4/127.0.2.1/tcp/16593", "/ip4/127.0.2.1/udp/16593/quic"]
 
 				[snapshots]

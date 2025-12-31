@@ -18,7 +18,6 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
-	"time"
 
 	dbm "github.com/cometbft/cometbft-db"
 	types "github.com/cometbft/cometbft/abci/types"
@@ -175,7 +174,9 @@ func (c *ConsensusService) start(inst *Instance) error {
 			d.config.Instrumentation.Prometheus = false
 		}
 
-		// Process bootstrap peers from configuration if provided
+		// CRITICAL FIX: Always process bootstrap peers from configuration
+		// Even when loading existing tendermint.toml, we need to update persistent_peers
+		// from the current bootstrap peers configuration
 		if len(c.BootstrapPeers) > 0 {
 			inst.logger.Info("Updating persistent peers from bootstrap configuration",
 				"count", len(c.BootstrapPeers))
@@ -194,29 +195,10 @@ func (c *ConsensusService) start(inst *Instance) error {
 
 			inst.logger.Info("Persistent peers configured",
 				"peers", d.config.P2P.PersistentPeers)
-		}
 
-		// P2P connection optimizations for stable block sync
-		// Always apply these optimizations for better sync performance
-		d.config.P2P.MaxNumOutboundPeers = 20
-		if d.config.P2P.PersistentPeers != "" {
-			// Extract node IDs from persistent peers (format: id@ip:port,id@ip:port,...)
-			// UnconditionalPeerIDs only takes node IDs, not full addresses
-			var ids []string
-			for _, peer := range strings.Split(d.config.P2P.PersistentPeers, ",") {
-				if idx := strings.Index(peer, "@"); idx > 0 {
-					ids = append(ids, peer[:idx])
-				}
-			}
-			d.config.P2P.UnconditionalPeerIDs = strings.Join(ids, ",")
+			// Write updated config back to file
+			tmcfg.WriteConfigFile(inst.path(c.NodeDir, "config", "tendermint.toml"), d.config)
 		}
-		d.config.P2P.SendRate = 20480000
-		d.config.P2P.RecvRate = 20480000
-		d.config.P2P.FlushThrottleTimeout = 50 * time.Millisecond
-		d.config.P2P.PersistentPeersMaxDialPeriod = 30 * time.Second
-
-		// Write updated config back to file
-		tmcfg.WriteConfigFile(inst.path(c.NodeDir, "config", "tendermint.toml"), d.config)
 
 	case errors.Is(err, fs.ErrNotExist):
 		d.config.NodeKey = ""
@@ -253,33 +235,6 @@ func (c *ConsensusService) start(inst *Instance) error {
 
 		// Set whether unroutable addresses are allowed
 		d.config.P2P.AddrBookStrict = !isPrivate(c.Listen)
-
-		// P2P connection optimizations for stable block sync
-		// Increase outbound peers for better block sync source diversity
-		d.config.P2P.MaxNumOutboundPeers = 20 // default 10
-
-		// Unconditional peers - never disconnect from bootstrap peers
-		// This prevents the disconnect/reconnect cycle during sync
-		// Extract node IDs from persistent peers (format: id@ip:port,id@ip:port,...)
-		if d.config.P2P.PersistentPeers != "" {
-			var ids []string
-			for _, peer := range strings.Split(d.config.P2P.PersistentPeers, ",") {
-				if idx := strings.Index(peer, "@"); idx > 0 {
-					ids = append(ids, peer[:idx])
-				}
-			}
-			d.config.P2P.UnconditionalPeerIDs = strings.Join(ids, ",")
-		}
-
-		// Increase bandwidth limits for fast sync (default 5MB/s)
-		d.config.P2P.SendRate = 20480000  // 20 MB/s
-		d.config.P2P.RecvRate = 20480000  // 20 MB/s
-
-		// Reduce flush throttle for more responsive connections
-		d.config.P2P.FlushThrottleTimeout = 50 * time.Millisecond // default 100ms
-
-		// Longer dial period for persistent peers to reduce reconnection churn
-		d.config.P2P.PersistentPeersMaxDialPeriod = 30 * time.Second // default 0 (exponential)
 
 		tmcfg.WriteConfigFile(inst.path(c.NodeDir, "config", "tendermint.toml"), d.config)
 
@@ -706,29 +661,6 @@ func (c *CoreConsensusApp) register(inst *Instance, d *tendermint, node *tmnode.
 	// after local.New() which triggers ConfigureRPC() and InitGenesisChunks().
 	clearGenesisCache(localClient, d.logger)
 
-	// Start sync monitor to detect and recover from stuck sync (CometBFT bug workaround)
-	go func() {
-		monitor := accumulated.NewSyncMonitor(
-			&consensusStatusProvider{localClient},
-			node.Switch(),
-			d.config.P2P.PersistentPeers,
-		)
-
-		t := time.NewTicker(time.Second)
-		defer t.Stop()
-		for {
-			select {
-			case <-inst.context.Done():
-				return
-			case <-t.C:
-				_, err := monitor.Check(inst.context)
-				if err != nil {
-					slog.ErrorContext(inst.context, "Sync monitor check failed", "error", err)
-				}
-			}
-		}
-	}()
-
 	err = coreConsensusProvidesClient.Register(inst.services, c, localClient)
 	if err != nil {
 		return err
@@ -863,21 +795,4 @@ func clearGenesisCache(localClient *local.Local, logger log.Logger) {
 		genDocPtr.Set(reflect.Zero(genDocField.Type()))
 		logger.Info("Cleared genesis doc cache")
 	}
-}
-
-// consensusStatusProvider adapts the CometBFT local client to the StatusProvider interface
-type consensusStatusProvider struct {
-	client *local.Local
-}
-
-func (p *consensusStatusProvider) Status(ctx context.Context) (*accumulated.SyncStatus, error) {
-	st, err := p.client.Status(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return &accumulated.SyncStatus{
-		CatchingUp:        st.SyncInfo.CatchingUp,
-		LatestBlockHeight: st.SyncInfo.LatestBlockHeight,
-		LatestBlockTime:   st.SyncInfo.LatestBlockTime,
-	}, nil
 }
