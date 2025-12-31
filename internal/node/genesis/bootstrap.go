@@ -22,7 +22,6 @@ import (
 	tmtypes "github.com/cometbft/cometbft/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain"
 	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -96,8 +95,6 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) error {
 		acmeIssued:  new(big.Int),
 		partition:   config.NetworkUrl{URL: protocol.PartitionUrl(opts.PartitionId)},
 	}
-	b.db.SetObserver(execute.NewDatabaseObserver())
-
 	// Create the router
 	b.router = routing.NewRouter(routing.RouterOptions{Initial: gg.Routing, Logger: b.Logger})
 

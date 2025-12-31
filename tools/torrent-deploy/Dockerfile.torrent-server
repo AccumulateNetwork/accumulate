@@ -1,0 +1,30 @@
+FROM golang:1.22 as build
+
+WORKDIR /build
+COPY tools/torrent-deploy/cmd/torrent-server/ .
+
+# Download dependencies
+RUN go mod download
+
+# Build torrent server
+RUN CGO_ENABLED=0 go build -o torrent-server .
+
+FROM alpine:3
+
+# Install ca-certificates for HTTPS trackers
+RUN apk add --no-cache ca-certificates
+
+WORKDIR /app
+
+# Copy binary
+COPY --from=build /build/torrent-server /app/
+
+# Create data directory
+RUN mkdir -p /data /volumes
+
+# Expose BitTorrent port
+EXPOSE 51413/tcp
+EXPOSE 51413/udp
+
+ENTRYPOINT ["/app/torrent-server"]
+CMD ["-file", "/volumes/BVN0_CLEAN_20241011.tar.gz", "-data", "/data", "-port", "51413"]

@@ -17,10 +17,17 @@ maintaining security.
 
 ### Commands
 
-- `cmd/accumulated` initializes and runs node daemons.
+- `cmd/accumulated` initializes and runs node daemons (validators and followers).
 - `cmd/accumulated-bootstrap` runs a libp2p bootstrap node.
 - `cmd/accumulated-faucet` runs a token faucet.
 - `cmd/accumulated-http` runs an HTTP API node.
+
+### Running a Follower Node
+
+To deploy a follower node that tracks the Accumulate blockchain without participating in consensus, see:
+- **[Follower Deployment Guide](docs/operations/deploying-follower.md)** - Complete setup instructions
+- **[Bootstrap Peers](docs/operations/bootstrap-peers.md)** - Network peer configuration
+- **[Follower Configuration](cmd/accumulated/run/FOLLOWER-TYPE-README.md)** - Technical details
 
 ### SDK
 
@@ -73,6 +80,7 @@ and not guaranteed to be stable.
 These tools were not designed to be used externally and may change without
 notice. Use at your own risk.
 
+- `tools/cmd/convert-node-id` converts CometBFT node IDs to libp2p peer IDs (required for follower deployment).
 - `tools/cmd/debug` is a collection of debugging utilities.
 - `tools/cmd/explore` is an experimental database explorer.
 - `tools/cmd/factom` converts Factom database dumps to snapshots for genesis.
