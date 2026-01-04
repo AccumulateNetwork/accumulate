@@ -185,6 +185,10 @@ func entryIsAccepted(st *StateManager, entry protocol.DataEntry) bool {
 	case *protocol.DoubleHashDataEntry:
 		// Double hash entries are not accepted before v1-doubleHashEntries
 		return true
+
+	case *protocol.EthereumDataEntry:
+		// Ethereum entries require V2Tanegashima or later
+		return st.Globals.ExecutorVersion.V2TanegashimaEnabled()
 	}
 
 	return false

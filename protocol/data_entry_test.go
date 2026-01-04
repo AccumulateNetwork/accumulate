@@ -153,3 +153,84 @@ func marshalHash(v encoding.BinaryMarshaler) []byte {
 	}
 	return doSha256(b)
 }
+
+func TestEthereumDataEntry(t *testing.T) {
+	// Sample raw Ethereum transaction bytes (RLP-encoded, including signature)
+	// This is a simple transfer transaction for testing
+	rawTx := []byte{
+		0xf8, 0x6c, 0x80, 0x85, 0x04, 0xa8, 0x17, 0xc8, 0x00,
+		0x82, 0x52, 0x08, 0x94, 0x35, 0x35, 0x35, 0x35, 0x35,
+		0x35, 0x35, 0x35, 0x35, 0x35, 0x35, 0x35, 0x35, 0x35,
+		0x35, 0x35, 0x35, 0x35, 0x35, 0x35, 0x88, 0x0d, 0xe0,
+		0xb6, 0xb3, 0xa7, 0x64, 0x00, 0x00, 0x80, 0x1c, 0xa0,
+		0x88, 0xff, 0x6c, 0xf0, 0xfe, 0xfd, 0x94, 0xdb, 0x46,
+		0x11, 0x11, 0xf5, 0xcd, 0xa9, 0x28, 0xbc, 0xb4, 0xa9,
+		0x3a, 0x59, 0x28, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88,
+		0x88, 0x88, 0x88, 0x88, 0x88, 0xa0, 0x42, 0xeb, 0xd7,
+		0xb7, 0xfc, 0xde, 0xd2, 0x11, 0x11, 0x11, 0x11, 0x11,
+		0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11,
+		0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11,
+	}
+
+	entry := &EthereumDataEntry{RawTx: rawTx}
+
+	// Test Hash() returns Keccak256 hash
+	hash := entry.Hash()
+	require.Len(t, hash, 32, "Hash should be 32 bytes (Keccak256)")
+
+	// Test GetData() returns the raw transaction bytes
+	data := entry.GetData()
+	require.Len(t, data, 1, "GetData should return single-element slice")
+	require.Equal(t, rawTx, data[0], "GetData should return the raw transaction bytes")
+
+	// Test Type() returns correct type
+	require.Equal(t, DataEntryTypeEthereum, entry.Type())
+
+	// Test marshaling/unmarshaling
+	marshalled, err := entry.MarshalBinary()
+	require.NoError(t, err)
+
+	entry2 := new(EthereumDataEntry)
+	require.NoError(t, entry2.UnmarshalBinary(marshalled))
+	require.True(t, entry.Equal(entry2), "Unmarshaled entry should equal original")
+}
+
+func TestEthereumDataEntryCost(t *testing.T) {
+	// Small transaction
+	entry := &EthereumDataEntry{RawTx: make([]byte, 100)}
+	cost, err := DataEntryCost(entry)
+	require.NoError(t, err)
+	require.Equal(t, FeeData.AsUInt64(), cost, "Cost for small entry should be 1 unit")
+
+	// Larger transaction (300 bytes)
+	entry = &EthereumDataEntry{RawTx: make([]byte, 300)}
+	cost, err = DataEntryCost(entry)
+	require.NoError(t, err)
+	require.Equal(t, 2*FeeData.AsUInt64(), cost, "Cost for 300 byte entry should be 2 units")
+}
+
+func TestEthereumDataEntryEmpty(t *testing.T) {
+	entry := &EthereumDataEntry{RawTx: nil}
+
+	marshalled, err := entry.MarshalBinary()
+	require.NoError(t, err)
+
+	entry2 := new(EthereumDataEntry)
+	require.NoError(t, entry2.UnmarshalBinary(marshalled))
+	require.True(t, entry.Equal(entry2))
+}
+
+func TestEthereumDataEntryJSON(t *testing.T) {
+	rawTx := []byte{0x01, 0x02, 0x03, 0x04, 0x05}
+	entry := &EthereumDataEntry{RawTx: rawTx}
+
+	// Test JSON marshaling
+	jsonBytes, err := entry.MarshalJSON()
+	require.NoError(t, err)
+	require.Contains(t, string(jsonBytes), "ethereum")
+
+	// Test JSON unmarshaling
+	entry2 := new(EthereumDataEntry)
+	require.NoError(t, entry2.UnmarshalJSON(jsonBytes))
+	require.True(t, entry.Equal(entry2))
+}

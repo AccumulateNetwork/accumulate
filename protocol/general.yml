@@ -112,6 +112,14 @@ FactomDataEntryWrapper:
     - type: FactomDataEntry
       marshal-as: reference
 
+EthereumDataEntry:
+  description: stores a raw Ethereum transaction with embedded signature for AccEVM integration
+  union: { type: dataEntry }
+  fields:
+    - name: RawTx
+      description: is the RLP-encoded Ethereum transaction bytes including signature
+      type: bytes
+
 FactomDataEntry:
   non-binary: true
   fields:

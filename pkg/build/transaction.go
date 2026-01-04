@@ -260,6 +260,11 @@ func (b WriteDataBuilder) DoubleHash(data ...any) WriteDataBuilder {
 	return b.Entry(&protocol.DoubleHashDataEntry{Data: parts})
 }
 
+// Ethereum creates an EthereumDataEntry with the given raw transaction bytes.
+func (b WriteDataBuilder) Ethereum(rawTx []byte) WriteDataBuilder {
+	return b.Entry(&protocol.EthereumDataEntry{RawTx: rawTx})
+}
+
 func (b WriteDataBuilder) Scratch() WriteDataBuilder {
 	b.body.Scratch = true
 	return b
