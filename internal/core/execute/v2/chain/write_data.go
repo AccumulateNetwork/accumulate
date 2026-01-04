@@ -187,8 +187,8 @@ func entryIsAccepted(st *StateManager, entry protocol.DataEntry) bool {
 		return true
 
 	case *protocol.EthereumDataEntry:
-		// Ethereum entries require V2Tanegashima or later
-		return st.Globals.ExecutorVersion.V2TanegashimaEnabled()
+		// Ethereum entries require V2Jiuquan or later
+		return st.Globals.ExecutorVersion.V2JiuquanEnabled()
 	}
 
 	return false
