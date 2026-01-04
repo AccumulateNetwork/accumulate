@@ -406,6 +406,20 @@ type EthereumDataEntry struct {
 	extraData []byte
 }
 
+// EthereumDataSignature validates an embedded Ethereum signature in EthereumDataEntry for self-authenticating writes.
+type EthereumDataSignature struct {
+	fieldsSet []bool
+	// Signer is the lite account URL derived from the Ethereum address (computed during verification).
+	Signer          *url.URL `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
+	SignerVersion   uint64   `json:"signerVersion,omitempty" form:"signerVersion" query:"signerVersion" validate:"required"`
+	Timestamp       uint64   `json:"timestamp,omitempty" form:"timestamp" query:"timestamp"`
+	Vote            VoteType `json:"vote,omitempty" form:"vote" query:"vote"`
+	TransactionHash [32]byte `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash"`
+	// ExpectedChainId is the expected Ethereum chain ID for cross-chain replay protection.
+	ExpectedChainId uint64 `json:"expectedChainId,omitempty" form:"expectedChainId" query:"expectedChainId"`
+	extraData       []byte
+}
+
 type ExpireOptions struct {
 	fieldsSet []bool
 	AtTime    *time.Time `json:"atTime,omitempty" form:"atTime" query:"atTime"`
@@ -1248,6 +1262,8 @@ func (*EnableAccountAuthOperation) Type() AccountAuthOperationType {
 }
 
 func (*EthereumDataEntry) Type() DataEntryType { return DataEntryTypeEthereum }
+
+func (*EthereumDataSignature) Type() SignatureType { return SignatureTypeEthereumData }
 
 func (*FactomDataEntryWrapper) Type() DataEntryType { return DataEntryTypeFactom }
 
@@ -2215,6 +2231,27 @@ func (v *EthereumDataEntry) Copy() *EthereumDataEntry {
 }
 
 func (v *EthereumDataEntry) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *EthereumDataSignature) Copy() *EthereumDataSignature {
+	u := new(EthereumDataSignature)
+
+	if v.Signer != nil {
+		u.Signer = v.Signer
+	}
+	u.SignerVersion = v.SignerVersion
+	u.Timestamp = v.Timestamp
+	u.Vote = v.Vote
+	u.TransactionHash = v.TransactionHash
+	u.ExpectedChainId = v.ExpectedChainId
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *EthereumDataSignature) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *ExpireOptions) Copy() *ExpireOptions {
 	u := new(ExpireOptions)
@@ -4745,6 +4782,34 @@ func (v *EnableAccountAuthOperation) Equal(u *EnableAccountAuthOperation) bool {
 
 func (v *EthereumDataEntry) Equal(u *EthereumDataEntry) bool {
 	if !(bytes.Equal(v.RawTx, u.RawTx)) {
+		return false
+	}
+
+	return true
+}
+
+func (v *EthereumDataSignature) Equal(u *EthereumDataSignature) bool {
+	switch {
+	case v.Signer == u.Signer:
+		// equal
+	case v.Signer == nil || u.Signer == nil:
+		return false
+	case !((v.Signer).Equal(u.Signer)):
+		return false
+	}
+	if !(v.SignerVersion == u.SignerVersion) {
+		return false
+	}
+	if !(v.Timestamp == u.Timestamp) {
+		return false
+	}
+	if !(v.Vote == u.Vote) {
+		return false
+	}
+	if !(v.TransactionHash == u.TransactionHash) {
+		return false
+	}
+	if !(v.ExpectedChainId == u.ExpectedChainId) {
 		return false
 	}
 
@@ -9342,6 +9407,85 @@ func (v *EthereumDataEntry) IsValid() error {
 		errs = append(errs, "field RawTx is missing")
 	} else if len(v.RawTx) == 0 {
 		errs = append(errs, "field RawTx is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_EthereumDataSignature = []string{
+	1: "Type",
+	2: "Signer",
+	3: "SignerVersion",
+	4: "Timestamp",
+	5: "Vote",
+	6: "TransactionHash",
+	7: "ExpectedChainId",
+}
+
+func (v *EthereumDataSignature) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Signer == nil) {
+		writer.WriteUrl(2, v.Signer)
+	}
+	if !(v.SignerVersion == 0) {
+		writer.WriteUint(3, v.SignerVersion)
+	}
+	if !(v.Timestamp == 0) {
+		writer.WriteUint(4, v.Timestamp)
+	}
+	if !(v.Vote == 0) {
+		writer.WriteEnum(5, v.Vote)
+	}
+	if !(v.TransactionHash == ([32]byte{})) {
+		writer.WriteHash(6, &v.TransactionHash)
+	}
+	if !(v.ExpectedChainId == 0) {
+		writer.WriteUint(7, v.ExpectedChainId)
+	}
+
+	_, _, err := writer.Reset(fieldNames_EthereumDataSignature)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *EthereumDataSignature) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Signer is missing")
+	} else if v.Signer == nil {
+		errs = append(errs, "field Signer is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field SignerVersion is missing")
+	} else if v.SignerVersion == 0 {
+		errs = append(errs, "field SignerVersion is not set")
 	}
 
 	switch len(errs) {
@@ -16776,6 +16920,56 @@ func (v *EthereumDataEntry) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
+func (v *EthereumDataSignature) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *EthereumDataSignature) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType SignatureType
+	if x := new(SignatureType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *EthereumDataSignature) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadUrl(2); ok {
+		v.Signer = x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.SignerVersion = x
+	}
+	if x, ok := reader.ReadUint(4); ok {
+		v.Timestamp = x
+	}
+	if x := new(VoteType); reader.ReadEnum(5, x) {
+		v.Vote = *x
+	}
+	if x, ok := reader.ReadHash(6); ok {
+		v.TransactionHash = *x
+	}
+	if x, ok := reader.ReadUint(7); ok {
+		v.ExpectedChainId = x
+	}
+
+	seen, err := reader.Reset(fieldNames_EthereumDataSignature)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *ExpireOptions) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -20304,6 +20498,16 @@ func init() {
 	}, "EthereumDataEntry", "ethereumDataEntry")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("signer", "string"),
+		encoding.NewTypeField("signerVersion", "uint64"),
+		encoding.NewTypeField("timestamp", "uint64"),
+		encoding.NewTypeField("vote", "string"),
+		encoding.NewTypeField("transactionHash", "bytes32"),
+		encoding.NewTypeField("expectedChainId", "uint64"),
+	}, "EthereumDataSignature", "ethereumDataSignature")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("atTime", "string"),
 	}, "ExpireOptions", "expireOptions")
 
@@ -21803,6 +22007,40 @@ func (v *EthereumDataEntry) MarshalJSON() ([]byte, error) {
 	u.Type = v.Type()
 	if !(len(v.RawTx) == 0) {
 		u.RawTx = encoding.BytesToJSON(v.RawTx)
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *EthereumDataSignature) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type            SignatureType `json:"type"`
+		Signer          *url.URL      `json:"signer,omitempty"`
+		SignerVersion   uint64        `json:"signerVersion,omitempty"`
+		Timestamp       uint64        `json:"timestamp,omitempty"`
+		Vote            VoteType      `json:"vote,omitempty"`
+		TransactionHash *string       `json:"transactionHash,omitempty"`
+		ExpectedChainId uint64        `json:"expectedChainId,omitempty"`
+		ExtraData       *string       `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.Signer == nil) {
+		u.Signer = v.Signer
+	}
+	if !(v.SignerVersion == 0) {
+		u.SignerVersion = v.SignerVersion
+	}
+	if !(v.Timestamp == 0) {
+		u.Timestamp = v.Timestamp
+	}
+	if !(v.Vote == 0) {
+		u.Vote = v.Vote
+	}
+	if !(v.TransactionHash == ([32]byte{})) {
+		u.TransactionHash = encoding.ChainToJSON(&v.TransactionHash)
+	}
+	if !(v.ExpectedChainId == 0) {
+		u.ExpectedChainId = v.ExpectedChainId
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -24755,6 +24993,48 @@ func (v *EthereumDataEntry) UnmarshalJSON(data []byte) error {
 	} else {
 		v.RawTx = x
 	}
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *EthereumDataSignature) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type            SignatureType `json:"type"`
+		Signer          *url.URL      `json:"signer,omitempty"`
+		SignerVersion   uint64        `json:"signerVersion,omitempty"`
+		Timestamp       uint64        `json:"timestamp,omitempty"`
+		Vote            VoteType      `json:"vote,omitempty"`
+		TransactionHash *string       `json:"transactionHash,omitempty"`
+		ExpectedChainId uint64        `json:"expectedChainId,omitempty"`
+		ExtraData       *string       `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Signer = v.Signer
+	u.SignerVersion = v.SignerVersion
+	u.Timestamp = v.Timestamp
+	u.Vote = v.Vote
+	u.TransactionHash = encoding.ChainToJSON(&v.TransactionHash)
+	u.ExpectedChainId = v.ExpectedChainId
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Signer = u.Signer
+	v.SignerVersion = u.SignerVersion
+	v.Timestamp = u.Timestamp
+	v.Vote = u.Vote
+	if x, err := encoding.ChainFromJSON(u.TransactionHash); err != nil {
+		return fmt.Errorf("error decoding TransactionHash: %w", err)
+	} else {
+		v.TransactionHash = *x
+	}
+	v.ExpectedChainId = u.ExpectedChainId
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err
