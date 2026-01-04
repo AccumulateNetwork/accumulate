@@ -16,9 +16,9 @@ import (
 )
 
 func init() {
-	// EthereumDataSignature requires V2Tanegashima
+	// EthereumDataSignature requires V2Jiuquan (the version after Vandenberg)
 	registerConditionalExec[EthereumDataSignatureExecutor](&signatureExecutors,
-		func(ctx *SignatureContext) bool { return ctx.GetActiveGlobals().ExecutorVersion.V2TanegashimaEnabled() },
+		func(ctx *SignatureContext) bool { return ctx.GetActiveGlobals().ExecutorVersion.V2JiuquanEnabled() },
 		protocol.SignatureTypeEthereumData,
 	)
 }
