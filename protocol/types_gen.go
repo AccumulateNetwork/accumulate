@@ -398,6 +398,14 @@ type EnableAccountAuthOperation struct {
 	extraData []byte
 }
 
+// EthereumDataEntry stores a raw Ethereum transaction with embedded signature for AccEVM integration.
+type EthereumDataEntry struct {
+	fieldsSet []bool
+	// RawTx is the RLP-encoded Ethereum transaction bytes including signature.
+	RawTx     []byte `json:"rawTx,omitempty" form:"rawTx" query:"rawTx" validate:"required"`
+	extraData []byte
+}
+
 type ExpireOptions struct {
 	fieldsSet []bool
 	AtTime    *time.Time `json:"atTime,omitempty" form:"atTime" query:"atTime"`
@@ -1238,6 +1246,8 @@ func (*EmptyResult) Type() TransactionType { return TransactionTypeUnknown }
 func (*EnableAccountAuthOperation) Type() AccountAuthOperationType {
 	return AccountAuthOperationTypeEnable
 }
+
+func (*EthereumDataEntry) Type() DataEntryType { return DataEntryTypeEthereum }
 
 func (*FactomDataEntryWrapper) Type() DataEntryType { return DataEntryTypeFactom }
 
@@ -2191,6 +2201,20 @@ func (v *EnableAccountAuthOperation) Copy() *EnableAccountAuthOperation {
 }
 
 func (v *EnableAccountAuthOperation) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *EthereumDataEntry) Copy() *EthereumDataEntry {
+	u := new(EthereumDataEntry)
+
+	u.RawTx = encoding.BytesCopy(v.RawTx)
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *EthereumDataEntry) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *ExpireOptions) Copy() *ExpireOptions {
 	u := new(ExpireOptions)
@@ -4713,6 +4737,14 @@ func (v *EnableAccountAuthOperation) Equal(u *EnableAccountAuthOperation) bool {
 	case v.Authority == nil || u.Authority == nil:
 		return false
 	case !((v.Authority).Equal(u.Authority)):
+		return false
+	}
+
+	return true
+}
+
+func (v *EthereumDataEntry) Equal(u *EthereumDataEntry) bool {
+	if !(bytes.Equal(v.RawTx, u.RawTx)) {
 		return false
 	}
 
@@ -9256,6 +9288,60 @@ func (v *EnableAccountAuthOperation) IsValid() error {
 		errs = append(errs, "field Authority is missing")
 	} else if v.Authority == nil {
 		errs = append(errs, "field Authority is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_EthereumDataEntry = []string{
+	1: "Type",
+	2: "RawTx",
+}
+
+func (v *EthereumDataEntry) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(len(v.RawTx) == 0) {
+		writer.WriteBytes(2, v.RawTx)
+	}
+
+	_, _, err := writer.Reset(fieldNames_EthereumDataEntry)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *EthereumDataEntry) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field RawTx is missing")
+	} else if len(v.RawTx) == 0 {
+		errs = append(errs, "field RawTx is not set")
 	}
 
 	switch len(errs) {
@@ -16655,6 +16741,41 @@ func (v *EnableAccountAuthOperation) UnmarshalFieldsFrom(reader *encoding.Reader
 	return nil
 }
 
+func (v *EthereumDataEntry) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *EthereumDataEntry) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType DataEntryType
+	if x := new(DataEntryType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *EthereumDataEntry) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadBytes(2); ok {
+		v.RawTx = x
+	}
+
+	seen, err := reader.Reset(fieldNames_EthereumDataEntry)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *ExpireOptions) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -20178,6 +20299,11 @@ func init() {
 	}, "EnableAccountAuthOperation", "enableAccountAuthOperation")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("rawTx", "bytes"),
+	}, "EthereumDataEntry", "ethereumDataEntry")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("atTime", "string"),
 	}, "ExpireOptions", "expireOptions")
 
@@ -21663,6 +21789,20 @@ func (v *EnableAccountAuthOperation) MarshalJSON() ([]byte, error) {
 	u.Type = v.Type()
 	if !(v.Authority == nil) {
 		u.Authority = v.Authority
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *EthereumDataEntry) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      DataEntryType `json:"type"`
+		RawTx     *string       `json:"rawTx,omitempty"`
+		ExtraData *string       `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.RawTx) == 0) {
+		u.RawTx = encoding.BytesToJSON(v.RawTx)
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -24588,6 +24728,33 @@ func (v *EnableAccountAuthOperation) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Authority = u.Authority
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *EthereumDataEntry) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      DataEntryType `json:"type"`
+		RawTx     *string       `json:"rawTx,omitempty"`
+		ExtraData *string       `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.RawTx = encoding.BytesToJSON(v.RawTx)
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	if x, err := encoding.BytesFromJSON(u.RawTx); err != nil {
+		return fmt.Errorf("error decoding RawTx: %w", err)
+	} else {
+		v.RawTx = x
+	}
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err

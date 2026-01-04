@@ -59,6 +59,9 @@ DataEntryType:
     value: 2
   DoubleHash:
     value: 3
+  Ethereum:
+    value: 4
+    description: stores raw Ethereum transaction data with embedded signature
 
 ObjectType:
   Unknown:

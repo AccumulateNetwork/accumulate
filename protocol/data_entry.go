@@ -12,6 +12,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/hash"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
+	"golang.org/x/crypto/sha3"
 )
 
 type DataEntryType uint64
@@ -51,6 +52,19 @@ func (e *DoubleHashDataEntry) Hash() []byte {
 
 func (e *DoubleHashDataEntry) GetData() [][]byte {
 	return e.Data
+}
+
+// Hash returns the Keccak256 hash of the raw Ethereum transaction bytes.
+// This matches Ethereum's transaction hashing convention.
+func (e *EthereumDataEntry) Hash() []byte {
+	h := sha3.NewLegacyKeccak256()
+	h.Write(e.RawTx)
+	return h.Sum(nil)
+}
+
+// GetData returns the raw Ethereum transaction bytes as a single-element slice.
+func (e *EthereumDataEntry) GetData() [][]byte {
+	return [][]byte{e.RawTx}
 }
 
 // CheckDataEntrySize is the marshaled size minus the implicit type header,
