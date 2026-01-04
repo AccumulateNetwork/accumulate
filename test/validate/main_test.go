@@ -209,6 +209,7 @@ func setupSim(t *testing.T, net *accumulated.NetworkInit) (*simulator.Simulator,
 		Submitter: sim.Services(),
 		Querier:   sim.Services(),
 		Events:    sim.Services(),
+		Amount:    20000, // 20k ACME per faucet call (enough for Purchase(1e6) at mainnet oracle)
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { faucetSvc.Stop() })
