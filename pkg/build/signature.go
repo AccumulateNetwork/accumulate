@@ -136,6 +136,60 @@ func (b SignatureBuilder) PrivateKey(key any) SignatureBuilder {
 	return b
 }
 
+// EthereumData creates an EthereumDataSignature for self-authenticating writes.
+// The signature is extracted from the EthereumDataEntry in the transaction body,
+// so no private key is required. The expectedChainID is used for cross-chain
+// replay protection (use 0 to skip chain ID verification).
+func (b SignatureBuilder) EthereumData(expectedChainID uint64) SignatureBuilder {
+	if b.transaction == nil {
+		b.errorf(errors.BadRequest, "EthereumDataSignature requires a transaction")
+		return b
+	}
+
+	// Verify the transaction is a WriteData with EthereumDataEntry
+	writeData, ok := b.transaction.Body.(*protocol.WriteData)
+	if !ok {
+		b.errorf(errors.BadRequest, "EthereumDataSignature requires a WriteData transaction")
+		return b
+	}
+
+	entry, ok := writeData.Entry.(*protocol.EthereumDataEntry)
+	if !ok {
+		b.errorf(errors.BadRequest, "EthereumDataSignature requires an EthereumDataEntry")
+		return b
+	}
+
+	// Derive signer from the embedded Ethereum signature
+	signerUrl, err := protocol.VerifyEthereumDataSignature(entry, expectedChainID)
+	if err != nil {
+		b.errorf(errors.BadRequest, "failed to verify embedded Ethereum signature: %v", err)
+		return b
+	}
+
+	// Create the signature
+	sig, err := b.signer.
+		SetUrl(signerUrl).
+		SetTimestampToNow().
+		PrepareEthereumDataSignature(expectedChainID)
+	if err != nil {
+		b.errorf(errors.UnknownError, "prepare EthereumDataSignature: %w", err)
+		return b
+	}
+
+	// Set initiator if needed
+	if b.transaction.Header.Initiator == [32]byte{} && !b.noInit {
+		b.transaction.Header.Initiator = *(*[32]byte)(sig.Metadata().Hash())
+	}
+
+	sig.TransactionHash = *(*[32]byte)(b.transaction.GetHash())
+	b.signatures = append(b.signatures, sig)
+
+	// Reset the signer fields
+	b.signer = signing.Builder{}
+	b.noInit = false
+	return b
+}
+
 func (b SignatureBuilder) Done() (*messaging.Envelope, error) {
 	b = b.sign()
 	if !b.ok() {
