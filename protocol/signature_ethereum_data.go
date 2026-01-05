@@ -17,19 +17,24 @@ import (
 	"golang.org/x/crypto/sha3"
 )
 
+// Maximum size for individual RLP elements to prevent DoS attacks
+const maxRLPElementSize = 1 << 20 // 1MB
+
 // EthereumTxData represents the parsed data from a raw Ethereum transaction
 type EthereumTxData struct {
-	Nonce    uint64
-	GasPrice *big.Int
-	GasLimit uint64
-	To       []byte // 20 bytes, nil for contract creation
-	Value    *big.Int
-	Data     []byte
-	V        *big.Int
-	R        *big.Int
-	S        *big.Int
-	ChainID  *big.Int
-	TxType   uint8 // 0 = legacy, 1 = EIP-2930, 2 = EIP-1559
+	Nonce                uint64
+	GasPrice             *big.Int // Also used as maxFeePerGas for EIP-1559
+	MaxPriorityFeePerGas *big.Int // EIP-1559 only
+	GasLimit             uint64
+	To                   []byte // 20 bytes, nil for contract creation
+	Value                *big.Int
+	Data                 []byte
+	AccessList           []byte // Raw RLP-encoded access list for EIP-2930/1559
+	V                    *big.Int
+	R                    *big.Int
+	S                    *big.Int
+	ChainID              *big.Int
+	TxType               uint8 // 0 = legacy, 1 = EIP-2930, 2 = EIP-1559
 }
 
 // ParseEthereumTx parses a raw RLP-encoded Ethereum transaction.
@@ -93,7 +98,7 @@ func parseLegacyTx(rawTx []byte) (*EthereumTxData, error) {
 
 // parseEIP2930Tx parses an EIP-2930 transaction (without the type byte)
 func parseEIP2930Tx(rawTx []byte) (*EthereumTxData, error) {
-	decoded, err := decodeRLPList(rawTx)
+	decoded, rawItems, err := decodeRLPListWithRaw(rawTx)
 	if err != nil {
 		return nil, errors.BadRequest.WithFormat("failed to decode EIP-2930 tx: %w", err)
 	}
@@ -111,7 +116,7 @@ func parseEIP2930Tx(rawTx []byte) (*EthereumTxData, error) {
 	tx.To = decoded[4]
 	tx.Value = new(big.Int).SetBytes(decoded[5])
 	tx.Data = decoded[6]
-	// decoded[7] is accessList, skip for signature verification
+	tx.AccessList = rawItems[7] // Store raw RLP-encoded access list
 	tx.V = new(big.Int).SetBytes(decoded[8])
 	tx.R = new(big.Int).SetBytes(decoded[9])
 	tx.S = new(big.Int).SetBytes(decoded[10])
@@ -121,7 +126,7 @@ func parseEIP2930Tx(rawTx []byte) (*EthereumTxData, error) {
 
 // parseEIP1559Tx parses an EIP-1559 transaction (without the type byte)
 func parseEIP1559Tx(rawTx []byte) (*EthereumTxData, error) {
-	decoded, err := decodeRLPList(rawTx)
+	decoded, rawItems, err := decodeRLPListWithRaw(rawTx)
 	if err != nil {
 		return nil, errors.BadRequest.WithFormat("failed to decode EIP-1559 tx: %w", err)
 	}
@@ -134,13 +139,13 @@ func parseEIP1559Tx(rawTx []byte) (*EthereumTxData, error) {
 
 	tx.ChainID = new(big.Int).SetBytes(decoded[0])
 	tx.Nonce = bytesToUint64(decoded[1])
-	// decoded[2] is maxPriorityFeePerGas
+	tx.MaxPriorityFeePerGas = new(big.Int).SetBytes(decoded[2])
 	tx.GasPrice = new(big.Int).SetBytes(decoded[3]) // maxFeePerGas
 	tx.GasLimit = bytesToUint64(decoded[4])
 	tx.To = decoded[5]
 	tx.Value = new(big.Int).SetBytes(decoded[6])
 	tx.Data = decoded[7]
-	// decoded[8] is accessList, skip for signature verification
+	tx.AccessList = rawItems[8] // Store raw RLP-encoded access list
 	tx.V = new(big.Int).SetBytes(decoded[9])
 	tx.R = new(big.Int).SetBytes(decoded[10])
 	tx.S = new(big.Int).SetBytes(decoded[11])
@@ -190,7 +195,11 @@ func (tx *EthereumTxData) RecoverSigner(rawTx []byte) ([]byte, error) {
 	}
 
 	// Derive Ethereum address from public key
-	return pubkeyToAddress(pubkey), nil
+	addr, err := pubkeyToAddress(pubkey)
+	if err != nil {
+		return nil, errors.BadRequest.WithFormat("failed to derive address: %w", err)
+	}
+	return addr, nil
 }
 
 // signingHash computes the hash that was signed for this transaction
@@ -205,10 +214,10 @@ func (tx *EthereumTxData) signingHash(rawTx []byte) []byte {
 			// EIP-155: encode [nonce, gasprice, gaslimit, to, value, data, chainid, 0, 0]
 			unsignedTx := encodeRLPList([][]byte{
 				uint64ToBytes(tx.Nonce),
-				tx.GasPrice.Bytes(),
+				bigIntToBytes(tx.GasPrice),
 				uint64ToBytes(tx.GasLimit),
 				tx.To,
-				tx.Value.Bytes(),
+				bigIntToBytes(tx.Value),
 				tx.Data,
 				tx.ChainID.Bytes(),
 				{},
@@ -219,22 +228,58 @@ func (tx *EthereumTxData) signingHash(rawTx []byte) []byte {
 			// Pre-EIP-155: encode [nonce, gasprice, gaslimit, to, value, data]
 			unsignedTx := encodeRLPList([][]byte{
 				uint64ToBytes(tx.Nonce),
-				tx.GasPrice.Bytes(),
+				bigIntToBytes(tx.GasPrice),
 				uint64ToBytes(tx.GasLimit),
 				tx.To,
-				tx.Value.Bytes(),
+				bigIntToBytes(tx.Value),
 				tx.Data,
 			})
 			h.Write(unsignedTx)
 		}
-	case 1, 2:
-		// For typed transactions, we need to reconstruct the unsigned payload
-		// This is complex - for now, fall back to hashing the raw tx
-		// A full implementation would strip the signature and re-encode
-		h.Write(rawTx)
+
+	case 1:
+		// EIP-2930: hash 0x01 || RLP([chainId, nonce, gasPrice, gasLimit, to, value, data, accessList])
+		unsignedPayload := encodeRLPListRaw([][]byte{
+			tx.ChainID.Bytes(),
+			uint64ToBytes(tx.Nonce),
+			bigIntToBytes(tx.GasPrice),
+			uint64ToBytes(tx.GasLimit),
+			tx.To,
+			bigIntToBytes(tx.Value),
+			tx.Data,
+		}, [][]byte{
+			tx.AccessList, // Include raw access list without re-encoding
+		})
+		h.Write([]byte{0x01})
+		h.Write(unsignedPayload)
+
+	case 2:
+		// EIP-1559: hash 0x02 || RLP([chainId, nonce, maxPriorityFeePerGas, maxFeePerGas, gasLimit, to, value, data, accessList])
+		unsignedPayload := encodeRLPListRaw([][]byte{
+			tx.ChainID.Bytes(),
+			uint64ToBytes(tx.Nonce),
+			bigIntToBytes(tx.MaxPriorityFeePerGas),
+			bigIntToBytes(tx.GasPrice), // maxFeePerGas
+			uint64ToBytes(tx.GasLimit),
+			tx.To,
+			bigIntToBytes(tx.Value),
+			tx.Data,
+		}, [][]byte{
+			tx.AccessList, // Include raw access list without re-encoding
+		})
+		h.Write([]byte{0x02})
+		h.Write(unsignedPayload)
 	}
 
 	return h.Sum(nil)
+}
+
+// bigIntToBytes converts a big.Int to bytes, returning empty slice for nil or zero
+func bigIntToBytes(n *big.Int) []byte {
+	if n == nil || n.Sign() == 0 {
+		return []byte{}
+	}
+	return n.Bytes()
 }
 
 // ecrecover recovers the public key from a signature
@@ -298,9 +343,9 @@ func recoverPubkey(hash []byte, r, s *big.Int, recID byte) ([]byte, error) {
 }
 
 // pubkeyToAddress converts a public key to an Ethereum address
-func pubkeyToAddress(pubkey []byte) []byte {
+func pubkeyToAddress(pubkey []byte) ([]byte, error) {
 	if len(pubkey) == 0 {
-		return nil
+		return nil, errors.BadRequest.With("empty public key")
 	}
 
 	// If compressed (33 bytes), decompress first
@@ -308,11 +353,13 @@ func pubkeyToAddress(pubkey []byte) []byte {
 	if len(pubkey) == 33 {
 		pub, err := altcrypto.DecompressPubkey(pubkey)
 		if err != nil {
-			return nil
+			return nil, errors.BadRequest.WithFormat("failed to decompress public key: %w", err)
 		}
 		uncompressed = altcrypto.FromECDSAPub(pub)
-	} else {
+	} else if len(pubkey) == 65 {
 		uncompressed = pubkey
+	} else {
+		return nil, errors.BadRequest.WithFormat("invalid public key length: %d (expected 33 or 65)", len(pubkey))
 	}
 
 	// Skip the 0x04 prefix if present
@@ -324,108 +371,141 @@ func pubkeyToAddress(pubkey []byte) []byte {
 	h := sha3.NewLegacyKeccak256()
 	h.Write(uncompressed)
 	hash := h.Sum(nil)
-	return hash[12:] // Last 20 bytes
+	return hash[12:], nil // Last 20 bytes
 }
 
 // RLP decoding helpers
 
 func decodeRLPList(data []byte) ([][]byte, error) {
+	items, _, err := decodeRLPListWithRaw(data)
+	return items, err
+}
+
+// decodeRLPListWithRaw decodes an RLP list and returns both decoded items and raw RLP-encoded items.
+// This is needed for EIP-2930/1559 where we need the raw access list encoding for the signing hash.
+func decodeRLPListWithRaw(data []byte) ([][]byte, [][]byte, error) {
 	if len(data) == 0 {
-		return nil, errors.BadRequest.With("empty RLP data")
+		return nil, nil, errors.BadRequest.With("empty RLP data")
 	}
 
 	prefix := data[0]
 	if prefix < 0xc0 {
-		return nil, errors.BadRequest.With("not an RLP list")
+		return nil, nil, errors.BadRequest.With("not an RLP list")
 	}
 
 	var listData []byte
-	var offset int
 
 	if prefix <= 0xf7 {
 		// Short list (0-55 bytes)
 		listLen := int(prefix - 0xc0)
 		if len(data) < 1+listLen {
-			return nil, errors.BadRequest.With("RLP list too short")
+			return nil, nil, errors.BadRequest.With("RLP list too short")
 		}
 		listData = data[1 : 1+listLen]
-		offset = 1
 	} else {
 		// Long list
 		lenOfLen := int(prefix - 0xf7)
 		if len(data) < 1+lenOfLen {
-			return nil, errors.BadRequest.With("RLP list length too short")
+			return nil, nil, errors.BadRequest.With("RLP list length too short")
 		}
-		listLen := bytesToUint64(data[1 : 1+lenOfLen])
+		listLen, err := bytesToUint64Safe(data[1 : 1+lenOfLen])
+		if err != nil {
+			return nil, nil, err
+		}
+		if listLen > maxRLPElementSize {
+			return nil, nil, errors.BadRequest.WithFormat("RLP list too large: %d > %d", listLen, maxRLPElementSize)
+		}
 		if len(data) < 1+lenOfLen+int(listLen) {
-			return nil, errors.BadRequest.With("RLP list data too short")
+			return nil, nil, errors.BadRequest.With("RLP list data too short")
 		}
 		listData = data[1+lenOfLen : 1+lenOfLen+int(listLen)]
-		offset = 1 + lenOfLen
 	}
 
-	_ = offset // Unused but kept for clarity
-
-	// Decode items
+	// Decode items, keeping track of raw encoding
 	var items [][]byte
+	var rawItems [][]byte
 	for len(listData) > 0 {
-		item, consumed, err := decodeRLPItem(listData)
+		item, rawItem, consumed, err := decodeRLPItemWithRaw(listData)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		items = append(items, item)
+		rawItems = append(rawItems, rawItem)
 		listData = listData[consumed:]
 	}
 
-	return items, nil
+	return items, rawItems, nil
 }
 
 func decodeRLPItem(data []byte) ([]byte, int, error) {
+	item, _, consumed, err := decodeRLPItemWithRaw(data)
+	return item, consumed, err
+}
+
+// decodeRLPItemWithRaw decodes an RLP item and returns the decoded content,
+// the raw RLP-encoded bytes (including prefix), and bytes consumed.
+func decodeRLPItemWithRaw(data []byte) ([]byte, []byte, int, error) {
 	if len(data) == 0 {
-		return nil, 0, errors.BadRequest.With("empty RLP item")
+		return nil, nil, 0, errors.BadRequest.With("empty RLP item")
 	}
 
 	prefix := data[0]
 
 	if prefix < 0x80 {
 		// Single byte
-		return data[:1], 1, nil
+		return data[:1], data[:1], 1, nil
 	} else if prefix <= 0xb7 {
 		// Short string (0-55 bytes)
 		strLen := int(prefix - 0x80)
 		if len(data) < 1+strLen {
-			return nil, 0, errors.BadRequest.With("RLP string too short")
+			return nil, nil, 0, errors.BadRequest.With("RLP string too short")
 		}
-		return data[1 : 1+strLen], 1 + strLen, nil
+		totalLen := 1 + strLen
+		return data[1 : 1+strLen], data[:totalLen], totalLen, nil
 	} else if prefix <= 0xbf {
 		// Long string
 		lenOfLen := int(prefix - 0xb7)
 		if len(data) < 1+lenOfLen {
-			return nil, 0, errors.BadRequest.With("RLP string length too short")
+			return nil, nil, 0, errors.BadRequest.With("RLP string length too short")
 		}
-		strLen := bytesToUint64(data[1 : 1+lenOfLen])
-		if len(data) < 1+lenOfLen+int(strLen) {
-			return nil, 0, errors.BadRequest.With("RLP string data too short")
+		strLen, err := bytesToUint64Safe(data[1 : 1+lenOfLen])
+		if err != nil {
+			return nil, nil, 0, err
 		}
-		return data[1+lenOfLen : 1+lenOfLen+int(strLen)], 1 + lenOfLen + int(strLen), nil
+		if strLen > maxRLPElementSize {
+			return nil, nil, 0, errors.BadRequest.WithFormat("RLP string too large: %d > %d", strLen, maxRLPElementSize)
+		}
+		totalLen := 1 + lenOfLen + int(strLen)
+		if len(data) < totalLen {
+			return nil, nil, 0, errors.BadRequest.With("RLP string data too short")
+		}
+		return data[1+lenOfLen : totalLen], data[:totalLen], totalLen, nil
 	} else if prefix <= 0xf7 {
-		// Short list - return the whole list as a single item
+		// Short list - return the whole list as a single item (content only for item, full for raw)
 		listLen := int(prefix - 0xc0)
-		if len(data) < 1+listLen {
-			return nil, 0, errors.BadRequest.With("RLP list too short")
+		totalLen := 1 + listLen
+		if len(data) < totalLen {
+			return nil, nil, 0, errors.BadRequest.With("RLP list too short")
 		}
-		return data[1 : 1+listLen], 1 + listLen, nil
+		return data[1:totalLen], data[:totalLen], totalLen, nil
 	} else {
 		// Long list
 		lenOfLen := int(prefix - 0xf7)
 		if len(data) < 1+lenOfLen {
-			return nil, 0, errors.BadRequest.With("RLP list length too short")
+			return nil, nil, 0, errors.BadRequest.With("RLP list length too short")
 		}
-		listLen := bytesToUint64(data[1 : 1+lenOfLen])
-		if len(data) < 1+lenOfLen+int(listLen) {
-			return nil, 0, errors.BadRequest.With("RLP list data too short")
+		listLen, err := bytesToUint64Safe(data[1 : 1+lenOfLen])
+		if err != nil {
+			return nil, nil, 0, err
 		}
-		return data[1+lenOfLen : 1+lenOfLen+int(listLen)], 1 + lenOfLen + int(listLen), nil
+		if listLen > maxRLPElementSize {
+			return nil, nil, 0, errors.BadRequest.WithFormat("RLP list too large: %d > %d", listLen, maxRLPElementSize)
+		}
+		totalLen := 1 + lenOfLen + int(listLen)
+		if len(data) < totalLen {
+			return nil, nil, 0, errors.BadRequest.With("RLP list data too short")
+		}
+		return data[1+lenOfLen : totalLen], data[:totalLen], totalLen, nil
 	}
 }
 
@@ -435,6 +515,18 @@ func bytesToUint64(b []byte) uint64 {
 		result = result<<8 | uint64(v)
 	}
 	return result
+}
+
+// bytesToUint64Safe converts bytes to uint64 with overflow checking
+func bytesToUint64Safe(b []byte) (uint64, error) {
+	if len(b) > 8 {
+		return 0, errors.BadRequest.WithFormat("RLP length field too large: %d bytes", len(b))
+	}
+	var result uint64
+	for _, v := range b {
+		result = result<<8 | uint64(v)
+	}
+	return result, nil
 }
 
 func uint64ToBytes(n uint64) []byte {
@@ -455,6 +547,26 @@ func encodeRLPList(items [][]byte) []byte {
 	var content []byte
 	for _, item := range items {
 		content = append(content, encodeRLPString(item)...)
+	}
+
+	if len(content) <= 55 {
+		return append([]byte{byte(0xc0 + len(content))}, content...)
+	}
+
+	lenBytes := uint64ToBytes(uint64(len(content)))
+	return append(append([]byte{byte(0xf7 + len(lenBytes))}, lenBytes...), content...)
+}
+
+// encodeRLPListRaw encodes a list where some items need RLP string encoding
+// and others are already RLP-encoded (like access lists).
+func encodeRLPListRaw(items [][]byte, rawItems [][]byte) []byte {
+	var content []byte
+	for _, item := range items {
+		content = append(content, encodeRLPString(item)...)
+	}
+	// Append raw items without re-encoding
+	for _, raw := range rawItems {
+		content = append(content, raw...)
 	}
 
 	if len(content) <= 55 {
@@ -526,13 +638,16 @@ func (s *EthereumDataSignature) Initiator() (hash.Hasher, error) {
 	return hasher, nil
 }
 
-// Verify validates the embedded Ethereum signature against the transaction body
-// This is the core of the self-authenticating write mechanism
+// Verify validates the embedded Ethereum signature against the transaction body.
+// For EthereumDataSignature, this method returns false because verification
+// requires access to the transaction body (EthereumDataEntry) which is not
+// available through the Signable interface. Use VerifyEthereumDataSignature
+// instead, which is called by the executor during transaction validation.
 func (s *EthereumDataSignature) Verify(sig Signature, msg Signable) bool {
-	// For EthereumDataSignature, verification happens during transaction validation
-	// by extracting and validating the signature from the EthereumDataEntry
-	// The actual verification is done by VerifyEthereumDataSignature
-	return true // Placeholder - actual verification happens in executor
+	// EthereumDataSignature cannot be verified through this interface because
+	// the signature is embedded in the EthereumDataEntry, not in the signature itself.
+	// Verification must happen via VerifyEthereumDataSignature which takes the entry.
+	return false
 }
 
 // VerifyEthereumDataSignature validates an EthereumDataSignature against an EthereumDataEntry.
@@ -551,7 +666,11 @@ func VerifyEthereumDataSignature(entry *EthereumDataEntry, expectedChainID uint6
 	}
 
 	// Verify chain ID if specified
-	if expectedChainID != 0 && ethTx.ChainID != nil {
+	if expectedChainID != 0 {
+		if ethTx.ChainID == nil || ethTx.ChainID.Sign() == 0 {
+			// Pre-EIP-155 transactions don't have chain ID - reject if chain ID is required
+			return nil, errors.BadRequest.WithFormat("chain ID required but transaction has no chain ID (pre-EIP-155)")
+		}
 		if ethTx.ChainID.Uint64() != expectedChainID {
 			return nil, errors.BadRequest.WithFormat("chain ID mismatch: expected %d, got %d",
 				expectedChainID, ethTx.ChainID.Uint64())
