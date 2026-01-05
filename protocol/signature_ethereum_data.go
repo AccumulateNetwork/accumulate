@@ -9,6 +9,7 @@ package protocol
 import (
 	"math/big"
 
+	"github.com/decred/dcrd/dcrec/secp256k1/v4/ecdsa"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/hash"
 	altcrypto "gitlab.com/accumulatenetwork/accumulate/pkg/crypto"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -245,40 +246,55 @@ func ecrecover(hash, sig []byte) ([]byte, error) {
 		return nil, errors.BadRequest.With("invalid hash length")
 	}
 
-	// Extract v
+	// Extract recovery ID from v
 	v := sig[64]
-
-	// Use secp256k1 recovery
-	// The altcrypto package doesn't have a direct ecrecover, so we'll verify differently
-	// For now, we use a simplified approach
-
-	// Build the signature for verification
-	sigRS := make([]byte, 64)
-	copy(sigRS[:32], sig[:32])
-	copy(sigRS[32:], sig[32:64])
-
-	// Try both recovery IDs
-	for _, recID := range []byte{0, 1} {
-		if recID != v && recID != v-27 {
-			continue
-		}
-		pubkey, err := recoverPubkey(hash, sigRS, recID)
-		if err == nil && pubkey != nil {
-			return pubkey, nil
-		}
+	var recID byte
+	if v >= 27 {
+		recID = v - 27
+	} else {
+		recID = v
 	}
 
-	return nil, errors.BadRequest.With("failed to recover public key")
+	// Ensure recID is 0 or 1
+	if recID > 1 {
+		return nil, errors.BadRequest.WithFormat("invalid recovery id: %d", recID)
+	}
+
+	// Build compact signature format for decred: [R || S || recovery_flag]
+	// The recovery flag encodes whether the public key is compressed and the recovery ID
+	compactSig := make([]byte, 65)
+	copy(compactSig[:32], sig[:32]) // R
+	copy(compactSig[32:64], sig[32:64]) // S
+	// Recovery flag: 27 + recID for uncompressed, 31 + recID for compressed
+	// We want uncompressed for Ethereum address derivation
+	compactSig[64] = 27 + recID
+
+	// Use decred's RecoverCompact to recover the public key
+	pubKey, _, err := ecdsa.RecoverCompact(compactSig, hash)
+	if err != nil {
+		return nil, errors.BadRequest.WithFormat("failed to recover public key: %w", err)
+	}
+
+	// Return the uncompressed public key (65 bytes: 0x04 + X + Y)
+	return pubKey.SerializeUncompressed(), nil
 }
 
 // recoverPubkey attempts to recover the public key with a specific recovery ID
-func recoverPubkey(hash, sig []byte, recID byte) ([]byte, error) {
-	// This is a simplified implementation
-	// A full implementation would use the secp256k1 curve recovery
+func recoverPubkey(hash []byte, r, s *big.Int, recID byte) ([]byte, error) {
+	// Build 65-byte compact signature
+	sig := make([]byte, 65)
+	rBytes := r.Bytes()
+	sBytes := s.Bytes()
+	copy(sig[32-len(rBytes):32], rBytes)
+	copy(sig[64-len(sBytes):64], sBytes)
+	sig[64] = 27 + recID
 
-	// For now, we'll use the existing crypto package to verify
-	// and return the compressed pubkey if successful
-	return nil, errors.BadRequest.With("pubkey recovery not implemented")
+	pubKey, _, err := ecdsa.RecoverCompact(sig, hash)
+	if err != nil {
+		return nil, errors.BadRequest.WithFormat("failed to recover public key: %w", err)
+	}
+
+	return pubKey.SerializeUncompressed(), nil
 }
 
 // pubkeyToAddress converts a public key to an Ethereum address
