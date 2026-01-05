@@ -15,10 +15,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	altcrypto "gitlab.com/accumulatenetwork/accumulate/pkg/crypto"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
-	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
+	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 	"golang.org/x/crypto/sha3"
 )
@@ -125,23 +125,24 @@ func encodeRLPString(s []byte) []byte {
 }
 
 func TestWriteData_EthereumEntry(t *testing.T) {
-	t.Skip("EthereumDataEntry requires V2Jiuquan which is not enabled in tests yet")
-
 	var timestamp uint64
 
-	// Initialize
-	sim := simulator.New(t, 3)
-	sim.InitFromGenesis()
+	// Initialize with V2Jiuquan to enable EthereumDataEntry
+	sim := NewSim(t,
+		simulator.SimpleNetwork(t.Name(), 3, 3),
+		simulator.GenesisWithVersion(GenesisTime, ExecutorVersionV2Jiuquan),
+	)
 
 	// Setup accounts
-	alice := url.MustParse("alice")
+	alice := AccountUrl("alice")
 	aliceKey := acctesting.GenerateKey(alice)
-	sim.CreateIdentity(alice, aliceKey[32:])
-	updateAccount(sim, alice.JoinPath("book", "1"), func(page *KeyPage) { page.CreditBalance = 1e9 })
-	sim.CreateAccount(&DataAccount{Url: alice.JoinPath("data")})
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
+	MakeAccount(t, sim.DatabaseFor(alice), &DataAccount{Url: alice.JoinPath("data")})
 
-	// Create an Ethereum private key
-	ethPrivKey, err := altcrypto.ToECDSA(acctesting.GenerateKey("eth-key"))
+	// Create an Ethereum private key (take first 32 bytes as private key)
+	ethKeyBytes := acctesting.GenerateKey("eth-key")[:32]
+	ethPrivKey, err := altcrypto.ToECDSA(ethKeyBytes)
 	require.NoError(t, err)
 
 	// Create a recipient address (just use some bytes)
@@ -153,19 +154,19 @@ func TestWriteData_EthereumEntry(t *testing.T) {
 
 	// Write data with EthereumDataEntry using a regular signature
 	entry := &EthereumDataEntry{RawTx: rawTx}
-	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
-		MustBuild(t, build.Transaction().
-			For(alice.JoinPath("data")).
+	st := sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(alice.JoinPath("data")).
 			Body(&WriteData{Entry: entry}).
-			SignWith(alice.JoinPath("book", "1")).Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)),
-	)...)
+			SignWith(alice.JoinPath("book", "1")).Version(1).Timestamp(&timestamp).PrivateKey(aliceKey))
+
+	sim.StepUntil(
+		Txn(st.TxID).Succeeds())
 
 	// Check the result - verify the entry was written
-	_ = sim.PartitionFor(alice).View(func(batch *database.Batch) error {
+	View(t, sim.DatabaseFor(alice), func(batch *database.Batch) {
 		data := batch.Account(alice.JoinPath("data")).Data()
 		entryHash, err := data.Entry().Get(0)
 		require.NoError(t, err)
 		require.Equal(t, entry.Hash(), entryHash[:])
-		return nil
 	})
 }
