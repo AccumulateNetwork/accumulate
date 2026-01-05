@@ -42,6 +42,9 @@ type ethereumDataSigContext struct {
 	// entry is the EthereumDataEntry from the transaction body
 	entry *protocol.EthereumDataEntry
 
+	// ethTxHash is the hash of the Ethereum transaction (for replay protection)
+	ethTxHash [32]byte
+
 	// isInitiator is true if the submitted signature is the transaction initiator
 	isInitiator bool
 
@@ -79,6 +82,20 @@ func (x EthereumDataSignatureExecutor) check(batch *database.Batch, ctx *ethereu
 	signerUrl, err := protocol.VerifyEthereumDataSignature(ctx.entry, ctx.sig.ExpectedChainId)
 	if err != nil {
 		return errors.Unauthenticated.WithFormat("invalid embedded Ethereum signature: %w", err)
+	}
+
+	// Check for replay attack - the Ethereum transaction hash must not have been used before
+	ctx.ethTxHash = *(*[32]byte)(ctx.entry.Hash())
+	signerIdentity := signerUrl.RootIdentity()
+	usedHashes := batch.Account(signerIdentity).EthereumTxHashes()
+	_, err = usedHashes.Find(ctx.ethTxHash)
+	if err == nil {
+		// Hash was found - this is a replay attack
+		return errors.BadRequest.WithFormat("ethereum transaction already used (replay attack prevention)")
+	}
+	// Only errors.NotFound is expected; other errors are actual problems
+	if !errors.Is(err, errors.NotFound) {
+		return errors.UnknownError.WithFormat("check ethereum tx hash: %w", err)
 	}
 
 	// The signature's signer must match the derived signer
@@ -253,6 +270,14 @@ func (EthereumDataSignatureExecutor) process(batch *database.Batch, ctx *ethereu
 	err := batch.Account(ctx.signer.GetUrl()).Main().Put(ctx.signer)
 	if err != nil {
 		return errors.UnknownError.WithFormat("store signer: %w", err)
+	}
+
+	// Record the Ethereum transaction hash to prevent replay attacks
+	signerIdentity := ctx.sig.Signer.RootIdentity()
+	usedHashes := batch.Account(signerIdentity).EthereumTxHashes()
+	err = usedHashes.Add(ctx.ethTxHash)
+	if err != nil {
+		return errors.UnknownError.WithFormat("record ethereum tx hash: %w", err)
 	}
 
 	// Add to the signature set and chain

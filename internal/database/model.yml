@@ -254,6 +254,11 @@
       type: index
       dataType: hash
       collection: set
+    - name: EthereumTxHashes
+      description: tracks used Ethereum transaction hashes to prevent replay attacks
+      type: index
+      dataType: hash
+      collection: set
     - name: Data
       type: entity
       attributes:
