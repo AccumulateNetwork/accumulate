@@ -264,7 +264,7 @@ func (n *Node) listenP2P(ctx context.Context, opts ListenOptions, nodes *[]*p2p.
 	addr2 := n.network.Listen().Scheme("udp").PartitionType(n.partition.Type).AccumulateP2P().Multiaddr()
 
 	p2p, err := p2p.New(p2p.Options{
-		Network:       "Simulator",
+		Network:       n.partition.sim.networkId,
 		Listen:        []multiaddr.Multiaddr{addr1, addr2},
 		Key:           n.nodeKey,
 		DiscoveryMode: dht.ModeServer,

@@ -101,6 +101,7 @@ func (f *simFactory) Build() *Simulator {
 	// Initialize
 	s := new(Simulator)
 	s.deterministic = f.deterministic
+	s.networkId = f.network.Id
 	s.logger = f.getLogger()
 	s.router = f.getRouter()
 	s.hub = f.getHub()
