@@ -302,7 +302,7 @@ func (f *simFactory) getServices() *services.Network {
 		return f.services
 	}
 
-	f.services = services.NewNetwork(f.getRouter())
+	f.services = services.NewNetwork(f.network.Id, f.getRouter())
 	return f.services
 }
 

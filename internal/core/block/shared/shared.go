@@ -45,6 +45,15 @@ func GetAccountAuthoritySet(account protocol.Account) (*protocol.AccountAuth, *u
 		return &protocol.AccountAuth{}, nil, nil
 
 	case protocol.FullAccount:
+		// If the account has its own authorities, use them
+		if len(account.GetAuth().Authorities) > 0 {
+			return account.GetAuth(), nil, nil
+		}
+		// Otherwise, inherit from parent identity
+		if !account.GetUrl().IsRootIdentity() {
+			return nil, account.GetUrl().Identity(), nil
+		}
+		// Root identity with no authorities
 		return account.GetAuth(), nil, nil
 
 	case *protocol.KeyPage:
