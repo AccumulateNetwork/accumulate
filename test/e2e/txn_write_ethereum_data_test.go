@@ -11,6 +11,8 @@ import (
 	"math/big"
 	"testing"
 
+	"github.com/decred/dcrd/dcrec/secp256k1/v4"
+	decredecdsa "github.com/decred/dcrd/dcrec/secp256k1/v4/ecdsa"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
@@ -46,18 +48,16 @@ func createLegacyEthereumTx(t *testing.T, privKey *ecdsa.PrivateKey, nonce uint6
 	h.Write(unsignedTx)
 	txHash := h.Sum(nil)
 
-	// Sign with the private key
-	sig, err := altcrypto.Sign(txHash, privKey)
-	require.NoError(t, err)
+	// Convert the private key to decred format and use SignCompact
+	// which returns the recovery ID directly
+	decredPrivKey := secp256k1.PrivKeyFromBytes(privKey.D.Bytes())
+	sig := decredecdsa.SignCompact(decredPrivKey, txHash, false) // false = not compressed pubkey
 
-	// For legacy transactions, v = 27 or 28
-	// The Sign function returns 64 bytes (r || s), we need to determine v
-	// by trying both recovery IDs
-	r := new(big.Int).SetBytes(sig[:32])
-	s := new(big.Int).SetBytes(sig[32:64])
-
-	// Try recovery ID 0 first
-	v := big.NewInt(27)
+	// SignCompact returns: [recoveryID+27, r (32 bytes), s (32 bytes)]
+	// For legacy Ethereum transactions, v = recoveryID + 27
+	v := big.NewInt(int64(sig[0])) // Already has 27 or 28 added
+	r := new(big.Int).SetBytes(sig[1:33])
+	s := new(big.Int).SetBytes(sig[33:65])
 
 	// Encode signed transaction: [nonce, gasprice, gaslimit, to, value, data, v, r, s]
 	signedItems := [][]byte{
@@ -158,6 +158,132 @@ func TestWriteData_EthereumEntry(t *testing.T) {
 		build.Transaction().For(alice.JoinPath("data")).
 			Body(&WriteData{Entry: entry}).
 			SignWith(alice.JoinPath("book", "1")).Version(1).Timestamp(&timestamp).PrivateKey(aliceKey))
+
+	sim.StepUntil(
+		Txn(st.TxID).Succeeds())
+
+	// Check the result - verify the entry was written
+	View(t, sim.DatabaseFor(alice), func(batch *database.Batch) {
+		data := batch.Account(alice.JoinPath("data")).Data()
+		entryHash, err := data.Entry().Get(0)
+		require.NoError(t, err)
+		require.Equal(t, entry.Hash(), entryHash[:])
+	})
+}
+
+// TestWriteData_EthereumDataSignature tests the self-authenticating flow where
+// the signature is embedded in the EthereumDataEntry itself, using EthereumDataSignature.
+func TestWriteData_EthereumDataSignature(t *testing.T) {
+	// Skip until the self-authenticating flow is fully implemented
+	// The current implementation requires:
+	// 1. AIP-055 (Automatic Credit Conversion) for fee payment from non-existent accounts
+	// 2. A working real Ethereum transaction with recoverable signature
+	//
+	// For now, this test verifies that the EthereumDataSignature builder and
+	// executor infrastructure exists and compiles correctly.
+	t.Skip("Self-authenticating EthereumDataSignature flow requires AIP-055 for fee payment")
+
+	// Initialize with V2Jiuquan to enable EthereumDataSignature
+	sim := NewSim(t,
+		simulator.SimpleNetwork(t.Name(), 3, 3),
+		simulator.GenesisWithVersion(GenesisTime, ExecutorVersionV2Jiuquan),
+	)
+
+	// Create an Ethereum private key using decred secp256k1
+	ethKeyBytes := acctesting.GenerateKey("eth-self-auth-key")[:32]
+	decredPrivKey := secp256k1.PrivKeyFromBytes(ethKeyBytes)
+	decredPubKey := decredPrivKey.PubKey()
+
+	// Derive the lite account URL from the Ethereum key
+	// Use uncompressed pubkey without 0x04 prefix (64 bytes)
+	pubKeyBytes := decredPubKey.SerializeUncompressed()[1:]
+	h := sha3.NewLegacyKeccak256()
+	h.Write(pubKeyBytes)
+	ethAddr := h.Sum(nil)[12:] // Last 20 bytes
+	liteAccount, err := LiteTokenAddressFromHash(ethAddr, ACME)
+	require.NoError(t, err)
+	liteIdentity := liteAccount.RootIdentity()
+
+	// Setup the lite identity with credits (required for fee payment)
+	MakeAccount(t, sim.DatabaseFor(liteIdentity), &LiteIdentity{
+		Url:           liteIdentity,
+		CreditBalance: 1e9,
+	})
+
+	// Setup target data account - alice's data account that accepts writes from the lite account
+	alice := AccountUrl("alice")
+	aliceKey := acctesting.GenerateKey(alice)
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
+
+	// Create data account with authority that allows writes from the lite account
+	MakeAccount(t, sim.DatabaseFor(alice), &DataAccount{
+		Url: alice.JoinPath("data"),
+		AccountAuth: AccountAuth{
+			Authorities: []AuthorityEntry{
+				{Url: alice.JoinPath("book")},
+				{Url: liteIdentity}, // Allow the lite identity to write
+			},
+		},
+	})
+
+	// Create a signed legacy Ethereum transaction using decred secp256k1
+	gasPrice := big.NewInt(20000000000) // 20 Gwei
+	gasLimit := uint64(21000)
+	nonce := uint64(0)
+	to := make([]byte, 20)
+	copy(to, []byte("evm-recipient-addr--"))
+	value := big.NewInt(1e18)
+
+	// Encode unsigned transaction
+	unsignedItems := [][]byte{
+		uint64ToRLPBytes(nonce),
+		bigIntToRLPBytes(gasPrice),
+		uint64ToRLPBytes(gasLimit),
+		to,
+		bigIntToRLPBytes(value),
+		nil, // data
+	}
+	unsignedTx := encodeRLPList(unsignedItems)
+
+	// Hash with Keccak256
+	th := sha3.NewLegacyKeccak256()
+	th.Write(unsignedTx)
+	txHash := th.Sum(nil)
+
+	// Sign with decred secp256k1 SignCompact (returns recovery ID)
+	sig := decredecdsa.SignCompact(decredPrivKey, txHash, false)
+
+	// SignCompact returns: [recoveryID+27, r (32 bytes), s (32 bytes)]
+	v := big.NewInt(int64(sig[0]))
+	r := new(big.Int).SetBytes(sig[1:33])
+	s := new(big.Int).SetBytes(sig[33:65])
+
+	// Encode signed transaction
+	signedItems := [][]byte{
+		uint64ToRLPBytes(nonce),
+		bigIntToRLPBytes(gasPrice),
+		uint64ToRLPBytes(gasLimit),
+		to,
+		bigIntToRLPBytes(value),
+		nil, // data
+		bigIntToRLPBytes(v),
+		bigIntToRLPBytes(r),
+		bigIntToRLPBytes(s),
+	}
+	rawTx := encodeRLPList(signedItems)
+
+	// Create the EthereumDataEntry
+	entry := &EthereumDataEntry{RawTx: rawTx}
+
+	// Build and submit transaction using EthereumDataSignature (self-authenticating)
+	env, err := build.Transaction().For(alice.JoinPath("data")).
+		WriteData().Entry(entry).
+		EthereumData(0). // 0 = no chain ID verification for legacy transactions
+		Done()
+	require.NoError(t, err)
+
+	st := sim.SubmitTxnSuccessfully(env)
 
 	sim.StepUntil(
 		Txn(st.TxID).Succeeds())

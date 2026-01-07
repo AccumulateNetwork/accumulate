@@ -167,8 +167,14 @@ func (b SignatureBuilder) EthereumData(expectedChainID uint64) SignatureBuilder 
 	}
 
 	// Create the signature
+	// Version defaults to 1 for lite accounts, but can be overridden via Version()
+	version := b.signer.Version
+	if version == 0 {
+		version = 1 // Lite accounts start at version 1
+	}
 	sig, err := b.signer.
 		SetUrl(signerUrl).
+		SetVersion(version).
 		SetTimestampToNow().
 		PrepareEthereumDataSignature(expectedChainID)
 	if err != nil {
