@@ -15,7 +15,7 @@ import (
 
 var BootstrapServers = func() []multiaddr.Multiaddr {
 	s := []string{
-		"/dns/bootstrap.accumulate.defidevs.io/tcp/16593/p2p/12D3KooWGJTh4aeF7bFnwo9sAYRujCkuVU1Cq8wNeTNGpFgZgXdg",
+		"/dns/bootstrap.accumulate.defidevs.io/tcp/16593/p2p/12D3KooWDgqY8C7deYWzgTQ7qauanMkvn47TPLtrT1TfzETQW3Gx",
 	}
 	addrs := make([]multiaddr.Multiaddr, len(s))
 	for i, s := range s {
