@@ -283,6 +283,8 @@ func bigIntToBytes(n *big.Int) []byte {
 }
 
 // ecrecover recovers the public key from a signature
+// Input sig format: [R (32 bytes) || S (32 bytes) || V (1 byte)]
+// where V is the recovery ID (0 or 1)
 func ecrecover(hash, sig []byte) ([]byte, error) {
 	if len(sig) != 65 {
 		return nil, errors.BadRequest.With("invalid signature length")
@@ -291,7 +293,7 @@ func ecrecover(hash, sig []byte) ([]byte, error) {
 		return nil, errors.BadRequest.With("invalid hash length")
 	}
 
-	// Extract recovery ID from v
+	// Extract recovery ID from v (last byte)
 	v := sig[64]
 	var recID byte
 	if v >= 27 {
@@ -305,14 +307,13 @@ func ecrecover(hash, sig []byte) ([]byte, error) {
 		return nil, errors.BadRequest.WithFormat("invalid recovery id: %d", recID)
 	}
 
-	// Build compact signature format for decred: [R || S || recovery_flag]
-	// The recovery flag encodes whether the public key is compressed and the recovery ID
-	compactSig := make([]byte, 65)
-	copy(compactSig[:32], sig[:32]) // R
-	copy(compactSig[32:64], sig[32:64]) // S
-	// Recovery flag: 27 + recID for uncompressed, 31 + recID for compressed
+	// Build compact signature format for decred: [recovery_code (1 byte) || R (32 bytes) || S (32 bytes)]
+	// The recovery code is: 27 + recID for uncompressed, 31 + recID for compressed
 	// We want uncompressed for Ethereum address derivation
-	compactSig[64] = 27 + recID
+	compactSig := make([]byte, 65)
+	compactSig[0] = 27 + recID          // Recovery code at first byte
+	copy(compactSig[1:33], sig[:32])    // R
+	copy(compactSig[33:65], sig[32:64]) // S
 
 	// Use decred's RecoverCompact to recover the public key
 	pubKey, _, err := ecdsa.RecoverCompact(compactSig, hash)
@@ -325,14 +326,15 @@ func ecrecover(hash, sig []byte) ([]byte, error) {
 }
 
 // recoverPubkey attempts to recover the public key with a specific recovery ID
+// Decred compact format: [recovery_code (1 byte) || R (32 bytes) || S (32 bytes)]
 func recoverPubkey(hash []byte, r, s *big.Int, recID byte) ([]byte, error) {
-	// Build 65-byte compact signature
+	// Build 65-byte compact signature for decred
 	sig := make([]byte, 65)
+	sig[0] = 27 + recID // Recovery code at first byte (27 = uncompressed)
 	rBytes := r.Bytes()
 	sBytes := s.Bytes()
-	copy(sig[32-len(rBytes):32], rBytes)
-	copy(sig[64-len(sBytes):64], sBytes)
-	sig[64] = 27 + recID
+	copy(sig[1+32-len(rBytes):33], rBytes) // R starts at position 1
+	copy(sig[33+32-len(sBytes):65], sBytes) // S starts at position 33
 
 	pubKey, _, err := ecdsa.RecoverCompact(sig, hash)
 	if err != nil {
