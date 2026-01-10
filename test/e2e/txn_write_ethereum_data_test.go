@@ -171,6 +171,97 @@ func TestWriteData_EthereumEntry(t *testing.T) {
 	})
 }
 
+// TestWriteData_EthereumEntry_OfficialTestVectors tests writing official Ethereum
+// test vectors through the Accumulate simulator to verify end-to-end processing.
+func TestWriteData_EthereumEntry_OfficialTestVectors(t *testing.T) {
+	var timestamp uint64
+
+	// Initialize with V2Jiuquan to enable EthereumDataEntry
+	sim := NewSim(t,
+		simulator.SimpleNetwork(t.Name(), 3, 3),
+		simulator.GenesisWithVersion(GenesisTime, ExecutorVersionV2Jiuquan),
+	)
+
+	// Setup accounts
+	alice := AccountUrl("alice")
+	aliceKey := acctesting.GenerateKey(alice)
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
+	MakeAccount(t, sim.DatabaseFor(alice), &DataAccount{Url: alice.JoinPath("data")})
+
+	// Test vectors from official Ethereum test suites
+	testCases := []struct {
+		name           string
+		rawTxHex       string
+		expectedSender string // Ethereum address in hex (without 0x prefix)
+	}{
+		{
+			// ethereumj test vector
+			// Private key: sha3("cow") = c85ef7d79691fe79573b1a7064c19c1a9819ebdbd1faaab1a8ec92344438aaf4
+			name:           "ethereumj_cow_key",
+			rawTxHex:       "f86b8085e8d4a510008227109413978aee95f38490e9769c39b2773ed763d9cd5f872386f26fc10000801ba0eab47c1a49bf2fe5d40e01d313900e19ca485867d462fe06e139e3a536c6d4f4a014a569d327dcda4b29f74f93c0e9729d2f49ad726e703f9cd90dbb0fbf6649f1",
+			expectedSender: "cd2a3d9f938e13cd947ec05abc7fe734df8dd826",
+		},
+		{
+			// Real mainnet transaction from Etherscan (EIP-155 with chain ID 1)
+			name:     "etherscan_mainnet",
+			rawTxHex: "f86c0a85046c7cfe0083016dea94d1310c1e038bc12865d3d3997275b3e4737c6302880b503be34d9fe80080269fc7eaaa9c21f59adf8ad43ed66cf5ef9ee1c317bd4d32cd65401e7aaca47cfaa0387d79c65b90be6260d09dcfb780f29dd8133b9b1ceb20b83b7e442b4bfc30cb",
+			// Note: We verify parsing and storage succeed; sender verification done in protocol tests
+			expectedSender: "",
+		},
+		{
+			// ethereum.org documentation example
+			name:           "ethereum_org_docs",
+			rawTxHex:       "f88380018203339407a565b7ed7d7a678680a4c162885bedbb695fe080a44401a6e4000000000000000000000000000000000000000000000000000000000000001226a0223a7c9bcf5531c99be5ea7082183816eb20cfe0bbc322e97cc5c7f71ab8b20ea02aadee6b34b45bb15bc42d9c09de4a6754e7000908da72d48cc7704971491663",
+			expectedSender: "",
+		},
+	}
+
+	for i, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Decode hex to bytes
+			rawTx := hexToBytes(t, tc.rawTxHex)
+
+			// Create EthereumDataEntry with official test vector
+			entry := &EthereumDataEntry{RawTx: rawTx}
+
+			// Verify we can parse the transaction
+			parsedTx, err := ParseEthereumTx(rawTx)
+			require.NoError(t, err, "should parse official test vector")
+			require.NotNil(t, parsedTx)
+
+			// Write data with EthereumDataEntry using a regular Accumulate signature
+			st := sim.BuildAndSubmitTxnSuccessfully(
+				build.Transaction().For(alice.JoinPath("data")).
+					Body(&WriteData{Entry: entry}).
+					SignWith(alice.JoinPath("book", "1")).Version(1).Timestamp(&timestamp).PrivateKey(aliceKey))
+
+			sim.StepUntil(
+				Txn(st.TxID).Succeeds())
+
+			// Verify the entry was written correctly
+			View(t, sim.DatabaseFor(alice), func(batch *database.Batch) {
+				data := batch.Account(alice.JoinPath("data")).Data()
+				entryHash, err := data.Entry().Get(i)
+				require.NoError(t, err)
+				require.Equal(t, entry.Hash(), entryHash[:], "stored entry hash should match")
+			})
+
+			// If we have an expected sender, verify signature recovery
+			if tc.expectedSender != "" {
+				signerUrl, err := VerifyEthereumDataSignature(entry, 0)
+				require.NoError(t, err, "should verify signature")
+
+				// Extract address from lite account URL
+				liteKey, _, err := ParseLiteTokenAddress(signerUrl)
+				require.NoError(t, err)
+				recoveredAddr := bytesToHex(liteKey)
+				require.Equal(t, tc.expectedSender, recoveredAddr, "recovered sender should match expected")
+			}
+		})
+	}
+}
+
 // TestWriteData_EthereumDataSignature tests the self-authenticating flow where
 // the signature is embedded in the EthereumDataEntry itself, using EthereumDataSignature.
 func TestWriteData_EthereumDataSignature(t *testing.T) {
@@ -295,4 +386,46 @@ func TestWriteData_EthereumDataSignature(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, entry.Hash(), entryHash[:])
 	})
+}
+
+// hexToBytes converts a hex string to bytes
+func hexToBytes(t *testing.T, hex string) []byte {
+	t.Helper()
+	// Remove 0x prefix if present
+	if len(hex) >= 2 && hex[:2] == "0x" {
+		hex = hex[2:]
+	}
+	if len(hex)%2 != 0 {
+		t.Fatalf("invalid hex string length: %d", len(hex))
+	}
+	result := make([]byte, len(hex)/2)
+	for i := 0; i < len(hex); i += 2 {
+		var b byte
+		for j := 0; j < 2; j++ {
+			c := hex[i+j]
+			switch {
+			case c >= '0' && c <= '9':
+				b = b*16 + (c - '0')
+			case c >= 'a' && c <= 'f':
+				b = b*16 + (c - 'a' + 10)
+			case c >= 'A' && c <= 'F':
+				b = b*16 + (c - 'A' + 10)
+			default:
+				t.Fatalf("invalid hex character: %c", c)
+			}
+		}
+		result[i/2] = b
+	}
+	return result
+}
+
+// bytesToHex converts bytes to a hex string
+func bytesToHex(b []byte) string {
+	const hexChars = "0123456789abcdef"
+	result := make([]byte, len(b)*2)
+	for i, v := range b {
+		result[i*2] = hexChars[v>>4]
+		result[i*2+1] = hexChars[v&0x0f]
+	}
+	return string(result)
 }
