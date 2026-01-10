@@ -54,12 +54,12 @@ func TestParseEthereumTx_Legacy(t *testing.T) {
 func TestRLPDecoding(t *testing.T) {
 	// Test empty string
 	data := []byte{0x80}
-	items, err := decodeRLPList(data)
+	_, err := decodeRLPList(data)
 	require.Error(t, err, "should fail for non-list")
 
 	// Test short list
 	data = []byte{0xc2, 0x80, 0x80} // List of two empty strings
-	items, err = decodeRLPList(data)
+	items, err := decodeRLPList(data)
 	require.NoError(t, err)
 	require.Len(t, items, 2)
 
