@@ -325,25 +325,6 @@ func ecrecover(hash, sig []byte) ([]byte, error) {
 	return pubKey.SerializeUncompressed(), nil
 }
 
-// recoverPubkey attempts to recover the public key with a specific recovery ID
-// Decred compact format: [recovery_code (1 byte) || R (32 bytes) || S (32 bytes)]
-func recoverPubkey(hash []byte, r, s *big.Int, recID byte) ([]byte, error) {
-	// Build 65-byte compact signature for decred
-	sig := make([]byte, 65)
-	sig[0] = 27 + recID // Recovery code at first byte (27 = uncompressed)
-	rBytes := r.Bytes()
-	sBytes := s.Bytes()
-	copy(sig[1+32-len(rBytes):33], rBytes) // R starts at position 1
-	copy(sig[33+32-len(sBytes):65], sBytes) // S starts at position 33
-
-	pubKey, _, err := ecdsa.RecoverCompact(sig, hash)
-	if err != nil {
-		return nil, errors.BadRequest.WithFormat("failed to recover public key: %w", err)
-	}
-
-	return pubKey.SerializeUncompressed(), nil
-}
-
 // pubkeyToAddress converts a public key to an Ethereum address
 func pubkeyToAddress(pubkey []byte) ([]byte, error) {
 	if len(pubkey) == 0 {
