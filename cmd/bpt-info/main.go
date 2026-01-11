@@ -10,28 +10,35 @@ import (
 	"crypto/sha256"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"sort"
 
 	cometLog "github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"log/slog"
+	cmdutil "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 )
 
 func main() {
 	var (
-		dbPath     string
-		dbType     string
-		verbose    bool
-		printFirst int
+		dbPath      string
+		dbType      string
+		verbose     bool
+		printFirst  int
+		showVersion bool
 	)
 
 	flag.StringVar(&dbPath, "db", "", "Path to database directory")
 	flag.StringVar(&dbType, "type", "leveldb", "Database type: badger or leveldb")
 	flag.BoolVar(&verbose, "verbose", false, "Print detailed BPT entry information")
 	flag.IntVar(&printFirst, "print-first", 0, "Print first N entries sorted by key hash")
+	flag.BoolVar(&showVersion, "version", false, "Print version information and exit")
 	flag.Parse()
+
+	if showVersion {
+		cmdutil.PrintVersion()
+	}
 
 	if dbPath == "" {
 		fmt.Fprintf(os.Stderr, "Usage: %s -db <database-path> [-type leveldb|badger] [-verbose] [-print-first N]\n", os.Args[0])

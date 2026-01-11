@@ -5,11 +5,14 @@ import (
 	"os"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	cmdutil "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 func main() {
+	cmdutil.CheckVersion()
+
 	if len(os.Args) < 2 {
 		fmt.Println("Usage: db-block-height <path-to-accumulate.db>")
 		os.Exit(1)

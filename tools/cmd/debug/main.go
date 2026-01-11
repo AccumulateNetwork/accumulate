@@ -42,6 +42,9 @@ var cmd = &cobra.Command{
 }
 
 func init() {
+	cmd.AddCommand(VersionCmd())
+	AddVersionFlag(cmd)
+
 	cmd.PersistentFlags().Var((*MultiaddrSliceFlag)(&bootstrap), "bootstrap", "Set the bootstrap servers")
 }
 

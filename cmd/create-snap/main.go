@@ -21,6 +21,7 @@ import (
 	"github.com/cometbft/cometbft/version"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	cmdutil "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/cometbft"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -28,11 +29,12 @@ import (
 
 func main() {
 	var (
-		dbPath     string
-		dnDbPath   string
-		outputFile string
-		partition  string
-		dbType     string
+		dbPath      string
+		dnDbPath    string
+		outputFile  string
+		partition   string
+		dbType      string
+		showVersion bool
 	)
 
 	flag.StringVar(&dbPath, "db", "", "Path to database directory (e.g., /path/to/accumulate.db)")
@@ -40,7 +42,12 @@ func main() {
 	flag.StringVar(&outputFile, "output", "", "Output .snap file path")
 	flag.StringVar(&partition, "partition", "", "Partition name: Directory, Apollo, Yutu, Cyclops, or custom BVN name")
 	flag.StringVar(&dbType, "type", "leveldb", "Database type: badger or leveldb")
+	flag.BoolVar(&showVersion, "version", false, "Print version information and exit")
 	flag.Parse()
+
+	if showVersion {
+		cmdutil.PrintVersion()
+	}
 
 	if dbPath == "" || outputFile == "" || partition == "" {
 		fmt.Fprintf(os.Stderr, "Usage: %s -db <database-path> -output <snap-file> -partition <partition-name> [-dn-db <dn-database-path>]\n", os.Args[0])

@@ -41,6 +41,8 @@ var flag = struct {
 }
 
 func init() {
+	cmd.AddCommand(VersionCmd())
+
 	cmd.Flags().Var(&flag.Key, "key", "The node key - not required but highly recommended. The value can be a key or a file containing a key. The key must be hex, base64, or an Accumulate secret key address.")
 	cmd.Flags().VarP((*MultiaddrSliceFlag)(&flag.Listen), "listen", "l", "Listening address")
 	cmd.Flags().Var((*MultiaddrSliceFlag)(&flag.PromListen), "prom-listen", "Prometheus listening address(es) (default /ip4/0.0.0.0/tcp/8081/http)")
@@ -48,14 +50,17 @@ func init() {
 	cmd.Flags().VarP((*MultiaddrSliceFlag)(&flag.Peers), "peer", "p", "Peers to connect to")
 	cmd.Flags().Var((*MultiaddrSliceFlag)(&flag.External), "external", "External address(es) to advertize")
 
-	cmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
-		if !cmd.Flag("prom-listen").Changed {
+	cmd.PersistentPreRun = func(c *cobra.Command, args []string) {
+		root := c.Root()
+		if f := root.Flag("prom-listen"); f != nil && !f.Changed {
 			flag.PromListen = []multiaddr.Multiaddr{multiaddr.StringCast("/ip4/0.0.0.0/tcp/8081/http")}
 		}
-		if !cmd.Flag("info-listen").Changed {
+		if f := root.Flag("info-listen"); f != nil && !f.Changed {
 			flag.InfoListen = multiaddr.StringCast("/ip4/0.0.0.0/tcp/8080/http")
 		}
 	}
+
+	AddVersionFlag(cmd)
 }
 
 func run(*cobra.Command, []string) {

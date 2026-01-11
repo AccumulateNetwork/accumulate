@@ -7,9 +7,12 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multihash"
+	cmdutil "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 )
 
 func main() {
+	cmdutil.CheckVersion()
+
 	if len(os.Args) < 2 {
 		fmt.Println("Usage: convert-node-id <cometbft-node-id>")
 		os.Exit(1)

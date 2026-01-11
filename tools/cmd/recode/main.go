@@ -17,6 +17,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	cmdutil "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 )
 
 func main() {
@@ -34,6 +35,9 @@ var flag = struct {
 }{}
 
 func init() {
+	cmd.AddCommand(cmdutil.VersionCmd())
+	cmdutil.AddVersionFlag(cmd)
+
 	cmd.PersistentFlags().BoolVarP(&flag.Write, "write", "w", false, "Write the changes")
 }
 

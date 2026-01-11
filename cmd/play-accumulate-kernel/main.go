@@ -20,6 +20,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/play-accumulate/pkg"
+	cmdutil "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 	"gitlab.com/accumulatenetwork/accumulate/test/testing"
 	. "gitlab.com/ethan.reesor/vscode-notebooks/go-playbooks/pkg/kernel"
 	"gitlab.com/ethan.reesor/vscode-notebooks/yaegi/interp"
@@ -35,6 +36,11 @@ var cmd = &cobra.Command{
 	Use:  "play-accumulate-kernel [socket file]",
 	Args: cobra.ExactArgs(1),
 	Run:  run,
+}
+
+func init() {
+	cmd.AddCommand(cmdutil.VersionCmd())
+	cmdutil.AddVersionFlag(cmd)
 }
 
 func check(err error) {

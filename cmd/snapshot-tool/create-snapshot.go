@@ -12,6 +12,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
+	cmdutil "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -21,13 +22,19 @@ func createSnapshot() {
 		outputFile  string
 		partition   string
 		storageType string
+		showVersion bool
 	)
 
 	flag.StringVar(&dataDir, "data", "", "Database data directory (e.g., .../dnn/data)")
 	flag.StringVar(&outputFile, "output", "", "Output snapshot file")
 	flag.StringVar(&partition, "partition", "", "Partition ID (Directory or Cyclops)")
 	flag.StringVar(&storageType, "storage", "levelDB", "Storage type (badger or levelDB)")
+	flag.BoolVar(&showVersion, "version", false, "Print version information and exit")
 	flag.Parse()
+
+	if showVersion {
+		cmdutil.PrintVersion()
+	}
 
 	if dataDir == "" || outputFile == "" || partition == "" {
 		fmt.Fprintf(os.Stderr, "Usage: create-snapshot -data <data-dir> -output <file> -partition <id> [-storage <type>]\n")

@@ -13,6 +13,7 @@ import (
 
 	"github.com/dgraph-io/badger"
 	"github.com/spf13/cobra"
+	cmdutil "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
@@ -20,6 +21,11 @@ var cmd = &cobra.Command{
 	Use: "dbRepair",
 	Short: "utilities to use a reference db to repair or synchronize a target db.\n" +
 		"As short hand, the reference is 'good' and the target is 'bad'",
+}
+
+func init() {
+	cmd.AddCommand(cmdutil.VersionCmd())
+	cmdutil.AddVersionFlag(cmd)
 }
 
 var cmdBuildTestDBs = &cobra.Command{

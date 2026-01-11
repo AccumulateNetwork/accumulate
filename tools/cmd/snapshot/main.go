@@ -11,11 +11,17 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	cmdutil "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 )
 
 var cmd = &cobra.Command{
 	Use:   "snapshot",
 	Short: "Snapshot utilities",
+}
+
+func init() {
+	cmd.AddCommand(cmdutil.VersionCmd())
+	cmdutil.AddVersionFlag(cmd)
 }
 
 func main() {

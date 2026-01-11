@@ -7,9 +7,12 @@ import (
 
 	dbm "github.com/cometbft/cometbft-db"
 	sm "github.com/cometbft/cometbft/state"
+	cmdutil "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 )
 
 func main() {
+	cmdutil.CheckVersion()
+
 	if len(os.Args) < 2 {
 		fmt.Println("Usage: check-state <path-to-data>")
 		os.Exit(1)
