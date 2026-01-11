@@ -8,12 +8,15 @@ import (
 	"os"
 	"path/filepath"
 
+	dbm "github.com/cometbft/cometbft-db"
 	sm "github.com/cometbft/cometbft/state"
 	cmttypes "github.com/cometbft/cometbft/types"
-	dbm "github.com/cometbft/cometbft-db"
+	cmdutil "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 )
 
 func main() {
+	cmdutil.CheckVersion()
+
 	if len(os.Args) != 2 {
 		fmt.Fprintf(os.Stderr, "Usage: %s <node-dir>\n", os.Args[0])
 		os.Exit(1)

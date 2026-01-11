@@ -16,6 +16,7 @@ import (
 	cometLog "github.com/cometbft/cometbft/libs/log"
 	"github.com/spf13/cobra"
 	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
+	cmdutil "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -27,6 +28,11 @@ var cmdExport = &cobra.Command{
 	Short: "Export a genesis snapshot from an Accumulate database",
 	Args:  cobra.ExactArgs(3),
 	Run:   runExport,
+}
+
+func init() {
+	cmdExport.AddCommand(cmdutil.VersionCmd())
+	cmdutil.AddVersionFlag(cmdExport)
 }
 
 func main() {

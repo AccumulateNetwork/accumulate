@@ -13,20 +13,27 @@ import (
 
 	cometLog "github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	cmdutil "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 func main() {
 	var (
-		dbPath  string
-		dbType  string
-		dryRun  bool
+		dbPath      string
+		dbType      string
+		dryRun      bool
+		showVersion bool
 	)
 
 	flag.StringVar(&dbPath, "db", "", "Path to database directory")
 	flag.StringVar(&dbType, "type", "badger", "Database type: badger or leveldb")
 	flag.BoolVar(&dryRun, "dry-run", true, "Only report orphaned entries, don't delete")
+	flag.BoolVar(&showVersion, "version", false, "Print version information and exit")
 	flag.Parse()
+
+	if showVersion {
+		cmdutil.PrintVersion()
+	}
 
 	if dbPath == "" {
 		fmt.Fprintf(os.Stderr, "Usage: %s -db <database-path> [-type badger|leveldb] [-dry-run=false]\n", os.Args[0])

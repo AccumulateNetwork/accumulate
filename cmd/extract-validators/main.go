@@ -8,6 +8,7 @@ import (
 
 	dbm "github.com/cometbft/cometbft-db"
 	sm "github.com/cometbft/cometbft/state"
+	cmdutil "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 )
 
 type GenesisValidator struct {
@@ -18,6 +19,8 @@ type GenesisValidator struct {
 }
 
 func main() {
+	cmdutil.CheckVersion()
+
 	if len(os.Args) < 2 {
 		fmt.Println("Usage: extract-validators <path-to-data>")
 		os.Exit(1)

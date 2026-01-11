@@ -4,10 +4,13 @@ import (
 	"fmt"
 	"os"
 
+	cmdutil "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 )
 
 func main() {
+	cmdutil.CheckVersion()
+
 	if len(os.Args) < 2 {
 		fmt.Println("Usage: snapshot-info <snapshot-file>")
 		os.Exit(1)

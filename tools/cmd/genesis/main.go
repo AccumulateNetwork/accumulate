@@ -11,11 +11,17 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	cmdutil "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 )
 
 var cmd = &cobra.Command{
 	Use:   "genesis",
 	Short: "Genesis utilities",
+}
+
+func init() {
+	cmd.AddCommand(cmdutil.VersionCmd())
+	cmdutil.AddVersionFlag(cmd)
 }
 
 var flags = struct {

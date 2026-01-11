@@ -6,11 +6,14 @@ import (
 	"io"
 	"os"
 
+	cmdutil "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/cometbft"
 )
 
 func main() {
+	cmdutil.CheckVersion()
+
 	if len(os.Args) < 2 {
 		fmt.Println("Usage: debug-consensus <snapshot-file>")
 		os.Exit(1)

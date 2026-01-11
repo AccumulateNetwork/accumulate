@@ -29,6 +29,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
+	cmdutil "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
 )
@@ -37,6 +38,11 @@ var cmd = &cobra.Command{
 	Use:   "simulator",
 	Short: "Accumulate network simulator",
 	Run:   run,
+}
+
+func init() {
+	cmd.AddCommand(cmdutil.VersionCmd())
+	cmdutil.AddVersionFlag(cmd)
 }
 
 var flag = struct {

@@ -13,6 +13,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/play-accumulate/pkg"
+	cmdutil "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	testing "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
@@ -29,6 +30,9 @@ var Command = &cobra.Command{
 }
 
 func init() {
+	Command.AddCommand(cmdutil.VersionCmd())
+	cmdutil.AddVersionFlag(Command)
+
 	Command.Flags().StringVarP(&Flag.Network, "network", "n", "", "Run the test against a network")
 	Command.Flags().IntVarP(&Flag.BvnCount, "bvns", "b", 3, "Number of BVNs to simulate")
 }

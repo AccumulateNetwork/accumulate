@@ -10,12 +10,15 @@ import (
 	"os"
 
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
+	cmdutil "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/cometbft"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 func main() {
+	cmdutil.CheckVersion()
+
 	if len(os.Args) < 3 {
 		fmt.Println("Usage: repair-snapshot <input-snapshot> <output-snapshot>")
 		fmt.Println("\nRepairs Dec 1 2025 snapshots with malformed consensus sections.")

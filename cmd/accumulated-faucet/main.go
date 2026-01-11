@@ -52,6 +52,8 @@ var cu = func() *user.User {
 }()
 
 func init() {
+	cmd.AddCommand(VersionCmd())
+
 	flag.Key.Value = &TransientPrivateKey{}
 
 	if cu != nil {
@@ -67,14 +69,17 @@ func init() {
 	cmd.Flags().StringVar(&flag.PeerDatabase, "peer-db", flag.PeerDatabase, "Track peers using a persistent database.")
 	cmd.Flags().Var((*LogLevelFlag)(&flag.LogLevel), "log-level", "Log level")
 
-	cmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
-		if !cmd.Flag("peer").Changed {
+	cmd.PersistentPreRun = func(c *cobra.Command, args []string) {
+		root := c.Root()
+		if f := root.Flag("peer"); f != nil && !f.Changed {
 			flag.Peers = accumulate.BootstrapServers
 		}
 	}
 
 	_ = cmd.MarkFlagRequired("account")
 	_ = cmd.MarkFlagRequired("key")
+
+	AddVersionFlag(cmd)
 }
 
 func run(_ *cobra.Command, args []string) {
