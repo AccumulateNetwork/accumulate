@@ -45,13 +45,18 @@ func VersionCmd() *cobra.Command {
 	return cmd
 }
 
-// FormatVersion returns the formatted version string.
-func FormatVersion() string {
-	var name = "MainNet"
+// FormatVersion returns the formatted version string with an optional prefix.
+// If prefix is provided, output is "{prefix} {network} {version}".
+// Otherwise, output is "{network} {version}".
+func FormatVersion(prefix ...string) string {
+	var network = "MainNet"
 	if protocol.IsTestNet {
-		name = "TestNet"
+		network = "TestNet"
 	}
-	return fmt.Sprintf("%s %s\n%s\n", name, accumulate.Version, accumulate.Commit)
+	if len(prefix) > 0 && prefix[0] != "" {
+		return fmt.Sprintf("%s %s %s\n%s\n", prefix[0], network, accumulate.Version, accumulate.Commit)
+	}
+	return fmt.Sprintf("%s %s\n%s\n", network, accumulate.Version, accumulate.Commit)
 }
 
 // WriteVersion writes version information to the given writer.

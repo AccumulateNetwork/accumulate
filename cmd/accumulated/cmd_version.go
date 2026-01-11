@@ -12,12 +12,13 @@ import (
 
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	cmdutil "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 )
 
 var cmdVersion = &cobra.Command{
-	Use: "version",
-	Run: showVersion,
+	Use:   "version",
+	Short: "Print version information",
+	Run:   showVersion,
 }
 
 var flagVersion struct {
@@ -44,10 +45,5 @@ func showVersion(*cobra.Command, []string) {
 		return
 	}
 
-	var name = "MainNet"
-	if protocol.IsTestNet {
-		name = "TestNet"
-	}
-	fmt.Printf("%s %s %s\n", cmdMain.Short, name, accumulate.Version)
-	fmt.Println(accumulate.Commit)
+	fmt.Print(cmdutil.FormatVersion(cmdMain.Short))
 }

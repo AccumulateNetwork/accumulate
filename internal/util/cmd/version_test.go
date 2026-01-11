@@ -17,24 +17,53 @@ import (
 )
 
 func TestFormatVersion(t *testing.T) {
-	result := FormatVersion()
+	t.Run("without prefix", func(t *testing.T) {
+		result := FormatVersion()
 
-	// Should contain version
-	require.Contains(t, result, accumulate.Version)
+		// Should contain version
+		require.Contains(t, result, accumulate.Version)
 
-	// Should contain commit
-	require.Contains(t, result, accumulate.Commit)
+		// Should contain commit
+		require.Contains(t, result, accumulate.Commit)
 
-	// Should contain network name (MainNet or TestNet)
-	require.True(t, strings.Contains(result, "MainNet") || strings.Contains(result, "TestNet"),
-		"version should contain MainNet or TestNet")
+		// Should contain network name (MainNet or TestNet)
+		require.True(t, strings.Contains(result, "MainNet") || strings.Contains(result, "TestNet"),
+			"version should contain MainNet or TestNet")
 
-	// Should end with newline
-	require.True(t, strings.HasSuffix(result, "\n"), "version should end with newline")
+		// Should end with newline
+		require.True(t, strings.HasSuffix(result, "\n"), "version should end with newline")
 
-	// Should have two lines
-	lines := strings.Split(strings.TrimSuffix(result, "\n"), "\n")
-	require.Len(t, lines, 2, "version should have two lines")
+		// Should have two lines
+		lines := strings.Split(strings.TrimSuffix(result, "\n"), "\n")
+		require.Len(t, lines, 2, "version should have two lines")
+	})
+
+	t.Run("with prefix", func(t *testing.T) {
+		result := FormatVersion("My App")
+
+		// Should contain prefix
+		require.Contains(t, result, "My App")
+
+		// Should contain version
+		require.Contains(t, result, accumulate.Version)
+
+		// Should contain commit
+		require.Contains(t, result, accumulate.Commit)
+
+		// First line should start with prefix
+		lines := strings.Split(strings.TrimSuffix(result, "\n"), "\n")
+		require.Len(t, lines, 2, "version should have two lines")
+		require.True(t, strings.HasPrefix(lines[0], "My App "),
+			"first line should start with prefix")
+	})
+
+	t.Run("with empty prefix", func(t *testing.T) {
+		result := FormatVersion("")
+		resultNoPrefix := FormatVersion()
+
+		// Empty prefix should be same as no prefix
+		require.Equal(t, resultNoPrefix, result)
+	})
 }
 
 func TestWriteVersion(t *testing.T) {
