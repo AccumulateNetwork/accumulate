@@ -8,6 +8,7 @@ package cmdutil
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -34,12 +35,7 @@ func VersionCmd() *cobra.Command {
 				return
 			}
 
-			var name = "MainNet"
-			if protocol.IsTestNet {
-				name = "TestNet"
-			}
-			fmt.Printf("%s %s\n", name, accumulate.Version)
-			fmt.Println(accumulate.Commit)
+			fmt.Print(FormatVersion())
 		},
 	}
 
@@ -49,15 +45,40 @@ func VersionCmd() *cobra.Command {
 	return cmd
 }
 
+// FormatVersion returns the formatted version string.
+func FormatVersion() string {
+	var name = "MainNet"
+	if protocol.IsTestNet {
+		name = "TestNet"
+	}
+	return fmt.Sprintf("%s %s\n%s\n", name, accumulate.Version, accumulate.Commit)
+}
+
+// WriteVersion writes version information to the given writer.
+func WriteVersion(w io.Writer) {
+	fmt.Fprint(w, FormatVersion())
+}
+
 // AddVersionFlag adds a --version flag to a cobra command that prints version
 // information and exits. This should be called in init() after creating the
 // root command.
 func AddVersionFlag(cmd *cobra.Command) {
 	// Check os.Args early before cobra parses, since cobra validates required
 	// args before running PersistentPreRun
-	for _, arg := range os.Args[1:] {
+	if hasVersionFlag(os.Args[1:]) {
+		PrintVersion()
+	}
+
+	// Also add the flag so it appears in help
+	cmd.PersistentFlags().Bool("version", false, "Print version information and exit")
+}
+
+// hasVersionFlag checks if the given args contain --version or -version flag
+// before any non-flag arguments or -- separator.
+func hasVersionFlag(args []string) bool {
+	for _, arg := range args {
 		if arg == "--version" || arg == "-version" {
-			PrintVersion()
+			return true
 		}
 		// Stop at first non-flag argument
 		if len(arg) == 0 || arg[0] != '-' {
@@ -68,20 +89,13 @@ func AddVersionFlag(cmd *cobra.Command) {
 			break
 		}
 	}
-
-	// Also add the flag so it appears in help
-	cmd.PersistentFlags().Bool("version", false, "Print version information and exit")
+	return false
 }
 
 // PrintVersion prints version information and exits.
 // Use this for non-cobra binaries with standard flag package.
 func PrintVersion() {
-	var name = "MainNet"
-	if protocol.IsTestNet {
-		name = "TestNet"
-	}
-	fmt.Printf("%s %s\n", name, accumulate.Version)
-	fmt.Println(accumulate.Commit)
+	fmt.Print(FormatVersion())
 	os.Exit(0)
 }
 
@@ -89,7 +103,15 @@ func PrintVersion() {
 // if found. Use this at the start of main() for simple binaries that don't use
 // cobra or the flag package.
 func CheckVersion() {
-	if len(os.Args) >= 2 && (os.Args[1] == "--version" || os.Args[1] == "version" || os.Args[1] == "-version") {
+	if isVersionArg(os.Args) {
 		PrintVersion()
 	}
+}
+
+// isVersionArg checks if the first argument is a version request.
+func isVersionArg(args []string) bool {
+	if len(args) < 2 {
+		return false
+	}
+	return args[1] == "--version" || args[1] == "version" || args[1] == "-version"
 }
