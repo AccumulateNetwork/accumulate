@@ -91,3 +91,31 @@ SyntheticForwardTransaction:
       marshal-as: reference
       pointer: true
       optional: true
+
+SyntheticLockedDeposit:
+  union: { type: transaction }
+  description: deposits tokens locked by a hash until preimage is revealed
+  embeddings:
+    - SyntheticOrigin
+  fields:
+    - name: Token
+      description: the token type being deposited
+      type: url
+      pointer: true
+    - name: Amount
+      description: the amount of tokens locked
+      type: bigint
+    - name: Sender
+      description: the original sender to refund on expiration
+      type: url
+      pointer: true
+    - name: Hash
+      description: the SHA-256 hash that must be unlocked with preimage
+      type: hash
+    - name: Expiration
+      description: when the lock expires and tokens are refunded
+      type: time
+      pointer: true
+    - name: IsIssuer
+      description: true if sender was the token issuer (affects refund type)
+      type: bool

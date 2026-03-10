@@ -251,6 +251,9 @@ TransactionType:
   SetLiteAccountDelegate:
     value: 0x17
     description: sets or clears the delegate authority on a lite token account
+  ReleaseLockedOperation:
+    value: 0x18
+    description: releases a locked deposit by revealing the hash preimage
   NetworkMaintenance:
     value: 0x2E
     description: executes network maintenance operations
@@ -281,6 +284,9 @@ TransactionType:
   SyntheticForwardTransaction:
     value: 0x36
     description: forwards a transaction from one partition to another
+  SyntheticLockedDeposit:
+    value: 0x37
+    description: deposits locked tokens requiring preimage revelation to unlock
 
   ##### SYSTEM TRANSACTIONS #####
   SystemGenesis:

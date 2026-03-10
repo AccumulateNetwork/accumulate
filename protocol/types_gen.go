@@ -427,6 +427,16 @@ type FeeSchedule struct {
 	extraData            []byte
 }
 
+// HashLockOptions specifies conditions for a hash-locked operation.
+type HashLockOptions struct {
+	fieldsSet []bool
+	// Hash SHA-256 hash of the secret preimage (32 bytes).
+	Hash [32]byte `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"`
+	// Expiration absolute time when the lock expires and tokens are refunded.
+	Expiration *time.Time `json:"expiration,omitempty" form:"expiration" query:"expiration" validate:"required"`
+	extraData  []byte
+}
+
 type HoldUntilOptions struct {
 	fieldsSet  []bool
 	MinorBlock uint64 `json:"minorBlock,omitempty" form:"minorBlock" query:"minorBlock"`
@@ -741,6 +751,30 @@ type ReceiptSignature struct {
 	extraData       []byte
 }
 
+// ReleaseLockedOperation releases a locked deposit by revealing the hash preimage.
+type ReleaseLockedOperation struct {
+	fieldsSet []bool
+	// LockedTxID the transaction ID of the SyntheticLockedDeposit to release.
+	LockedTxID *url.TxID `json:"lockedTxID,omitempty" form:"lockedTxID" query:"lockedTxID" validate:"required"`
+	// Preimage the secret value that SHA-256 hashes to the locked hash.
+	Preimage  []byte `json:"preimage,omitempty" form:"preimage" query:"preimage" validate:"required"`
+	extraData []byte
+}
+
+// ReleaseLockedOperationResult result of releasing a locked deposit, includes preimage for cross-chain extraction.
+type ReleaseLockedOperationResult struct {
+	fieldsSet []bool
+	// Preimage the revealed preimage.
+	Preimage []byte `json:"preimage,omitempty" form:"preimage" query:"preimage" validate:"required"`
+	// Hash the hash that was unlocked.
+	Hash [32]byte `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"`
+	// Amount the amount of tokens released.
+	Amount big.Int `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	// Token the token type released.
+	Token     *url.URL `json:"token,omitempty" form:"token" query:"token" validate:"required"`
+	extraData []byte
+}
+
 // RemoteSignature is used when forwarding a signature from one partition to another.
 type RemoteSignature struct {
 	fieldsSet   []bool
@@ -904,6 +938,25 @@ type SyntheticLedger struct {
 	extraData []byte
 }
 
+// SyntheticLockedDeposit deposits tokens locked by a hash until preimage is revealed.
+type SyntheticLockedDeposit struct {
+	fieldsSet []bool
+	SyntheticOrigin
+	// Token the token type being deposited.
+	Token *url.URL `json:"token,omitempty" form:"token" query:"token" validate:"required"`
+	// Amount the amount of tokens locked.
+	Amount big.Int `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	// Sender the original sender to refund on expiration.
+	Sender *url.URL `json:"sender,omitempty" form:"sender" query:"sender" validate:"required"`
+	// Hash the SHA-256 hash that must be unlocked with preimage.
+	Hash [32]byte `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"`
+	// Expiration when the lock expires and tokens are refunded.
+	Expiration *time.Time `json:"expiration,omitempty" form:"expiration" query:"expiration" validate:"required"`
+	// IsIssuer true if sender was the token issuer (affects refund type).
+	IsIssuer  bool `json:"isIssuer,omitempty" form:"isIssuer" query:"isIssuer" validate:"required"`
+	extraData []byte
+}
+
 type SyntheticOrigin struct {
 	fieldsSet []bool
 	// Cause is the ID of the transaction that produced this transaction.
@@ -1007,6 +1060,8 @@ type TransactionHeader struct {
 	Expire *ExpireOptions `json:"expire,omitempty" form:"expire" query:"expire"`
 	// HoldUntil holds the transaction as pending until the condition(s) are met.
 	HoldUntil *HoldUntilOptions `json:"holdUntil,omitempty" form:"holdUntil" query:"holdUntil"`
+	// HashLock locks the synthetic output until preimage is revealed or expiration.
+	HashLock *HashLockOptions `json:"hashLock,omitempty" form:"hashLock" query:"hashLock"`
 	// Authorities is a list of additional authorities that must approve the transaction.
 	Authorities []*url.URL `json:"authorities,omitempty" form:"authorities" query:"authorities"`
 	extraData   []byte
@@ -1262,6 +1317,12 @@ func (*RCD1Signature) Type() SignatureType { return SignatureTypeRCD1 }
 
 func (*ReceiptSignature) Type() SignatureType { return SignatureTypeReceipt }
 
+func (*ReleaseLockedOperation) Type() TransactionType { return TransactionTypeReleaseLockedOperation }
+
+func (*ReleaseLockedOperationResult) Type() TransactionType {
+	return TransactionTypeReleaseLockedOperation
+}
+
 func (*RemoteSignature) Type() SignatureType { return SignatureTypeRemote }
 
 func (*RemoteTransaction) Type() TransactionType { return TransactionTypeRemote }
@@ -1305,6 +1366,8 @@ func (*SyntheticForwardTransaction) Type() TransactionType {
 }
 
 func (*SyntheticLedger) Type() AccountType { return AccountTypeSyntheticLedger }
+
+func (*SyntheticLockedDeposit) Type() TransactionType { return TransactionTypeSyntheticLockedDeposit }
 
 func (*SyntheticWriteData) Type() TransactionType { return TransactionTypeSyntheticWriteData }
 
@@ -2246,6 +2309,24 @@ func (v *FeeSchedule) Copy() *FeeSchedule {
 
 func (v *FeeSchedule) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *HashLockOptions) Copy() *HashLockOptions {
+	u := new(HashLockOptions)
+
+	u.Hash = v.Hash
+	if v.Expiration != nil {
+		u.Expiration = new(time.Time)
+		*u.Expiration = *v.Expiration
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *HashLockOptions) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *HoldUntilOptions) Copy() *HoldUntilOptions {
 	u := new(HoldUntilOptions)
 
@@ -2854,6 +2935,42 @@ func (v *ReceiptSignature) Copy() *ReceiptSignature {
 
 func (v *ReceiptSignature) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *ReleaseLockedOperation) Copy() *ReleaseLockedOperation {
+	u := new(ReleaseLockedOperation)
+
+	if v.LockedTxID != nil {
+		u.LockedTxID = v.LockedTxID
+	}
+	u.Preimage = encoding.BytesCopy(v.Preimage)
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *ReleaseLockedOperation) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *ReleaseLockedOperationResult) Copy() *ReleaseLockedOperationResult {
+	u := new(ReleaseLockedOperationResult)
+
+	u.Preimage = encoding.BytesCopy(v.Preimage)
+	u.Hash = v.Hash
+	u.Amount = *encoding.BigintCopy(&v.Amount)
+	if v.Token != nil {
+		u.Token = v.Token
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *ReleaseLockedOperationResult) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *RemoteSignature) Copy() *RemoteSignature {
 	u := new(RemoteSignature)
 
@@ -3233,6 +3350,33 @@ func (v *SyntheticLedger) Copy() *SyntheticLedger {
 
 func (v *SyntheticLedger) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *SyntheticLockedDeposit) Copy() *SyntheticLockedDeposit {
+	u := new(SyntheticLockedDeposit)
+
+	u.SyntheticOrigin = *v.SyntheticOrigin.Copy()
+	if v.Token != nil {
+		u.Token = v.Token
+	}
+	u.Amount = *encoding.BigintCopy(&v.Amount)
+	if v.Sender != nil {
+		u.Sender = v.Sender
+	}
+	u.Hash = v.Hash
+	if v.Expiration != nil {
+		u.Expiration = new(time.Time)
+		*u.Expiration = *v.Expiration
+	}
+	u.IsIssuer = v.IsIssuer
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *SyntheticLockedDeposit) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *SyntheticOrigin) Copy() *SyntheticOrigin {
 	u := new(SyntheticOrigin)
 
@@ -3450,6 +3594,9 @@ func (v *TransactionHeader) Copy() *TransactionHeader {
 	}
 	if v.HoldUntil != nil {
 		u.HoldUntil = (v.HoldUntil).Copy()
+	}
+	if v.HashLock != nil {
+		u.HashLock = (v.HashLock).Copy()
 	}
 	u.Authorities = make([]*url.URL, len(v.Authorities))
 	for i, v := range v.Authorities {
@@ -4743,6 +4890,22 @@ func (v *FeeSchedule) Equal(u *FeeSchedule) bool {
 	return true
 }
 
+func (v *HashLockOptions) Equal(u *HashLockOptions) bool {
+	if !(v.Hash == u.Hash) {
+		return false
+	}
+	switch {
+	case v.Expiration == u.Expiration:
+		// equal
+	case v.Expiration == nil || u.Expiration == nil:
+		return false
+	case !((*v.Expiration).Equal(*u.Expiration)):
+		return false
+	}
+
+	return true
+}
+
 func (v *HoldUntilOptions) Equal(u *HoldUntilOptions) bool {
 	if !(v.MinorBlock == u.MinorBlock) {
 		return false
@@ -5390,6 +5553,44 @@ func (v *ReceiptSignature) Equal(u *ReceiptSignature) bool {
 	return true
 }
 
+func (v *ReleaseLockedOperation) Equal(u *ReleaseLockedOperation) bool {
+	switch {
+	case v.LockedTxID == u.LockedTxID:
+		// equal
+	case v.LockedTxID == nil || u.LockedTxID == nil:
+		return false
+	case !((v.LockedTxID).Equal(u.LockedTxID)):
+		return false
+	}
+	if !(bytes.Equal(v.Preimage, u.Preimage)) {
+		return false
+	}
+
+	return true
+}
+
+func (v *ReleaseLockedOperationResult) Equal(u *ReleaseLockedOperationResult) bool {
+	if !(bytes.Equal(v.Preimage, u.Preimage)) {
+		return false
+	}
+	if !(v.Hash == u.Hash) {
+		return false
+	}
+	if !((&v.Amount).Cmp(&u.Amount) == 0) {
+		return false
+	}
+	switch {
+	case v.Token == u.Token:
+		// equal
+	case v.Token == nil || u.Token == nil:
+		return false
+	case !((v.Token).Equal(u.Token)):
+		return false
+	}
+
+	return true
+}
+
 func (v *RemoteSignature) Equal(u *RemoteSignature) bool {
 	switch {
 	case v.Destination == u.Destination:
@@ -5749,6 +5950,47 @@ func (v *SyntheticLedger) Equal(u *SyntheticLedger) bool {
 	return true
 }
 
+func (v *SyntheticLockedDeposit) Equal(u *SyntheticLockedDeposit) bool {
+	if !v.SyntheticOrigin.Equal(&u.SyntheticOrigin) {
+		return false
+	}
+	switch {
+	case v.Token == u.Token:
+		// equal
+	case v.Token == nil || u.Token == nil:
+		return false
+	case !((v.Token).Equal(u.Token)):
+		return false
+	}
+	if !((&v.Amount).Cmp(&u.Amount) == 0) {
+		return false
+	}
+	switch {
+	case v.Sender == u.Sender:
+		// equal
+	case v.Sender == nil || u.Sender == nil:
+		return false
+	case !((v.Sender).Equal(u.Sender)):
+		return false
+	}
+	if !(v.Hash == u.Hash) {
+		return false
+	}
+	switch {
+	case v.Expiration == u.Expiration:
+		// equal
+	case v.Expiration == nil || u.Expiration == nil:
+		return false
+	case !((*v.Expiration).Equal(*u.Expiration)):
+		return false
+	}
+	if !(v.IsIssuer == u.IsIssuer) {
+		return false
+	}
+
+	return true
+}
+
 func (v *SyntheticOrigin) Equal(u *SyntheticOrigin) bool {
 	switch {
 	case v.Cause == u.Cause:
@@ -5995,6 +6237,14 @@ func (v *TransactionHeader) Equal(u *TransactionHeader) bool {
 	case v.HoldUntil == nil || u.HoldUntil == nil:
 		return false
 	case !((v.HoldUntil).Equal(u.HoldUntil)):
+		return false
+	}
+	switch {
+	case v.HashLock == u.HashLock:
+		// equal
+	case v.HashLock == nil || u.HashLock == nil:
+		return false
+	case !((v.HashLock).Equal(u.HashLock)):
 		return false
 	}
 	if len(v.Authorities) != len(u.Authorities) {
@@ -9374,6 +9624,64 @@ func (v *FeeSchedule) IsValid() error {
 	}
 }
 
+var fieldNames_HashLockOptions = []string{
+	1: "Hash",
+	2: "Expiration",
+}
+
+func (v *HashLockOptions) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Hash == ([32]byte{})) {
+		writer.WriteHash(1, &v.Hash)
+	}
+	if !(v.Expiration == nil) {
+		writer.WriteTime(2, *v.Expiration)
+	}
+
+	_, _, err := writer.Reset(fieldNames_HashLockOptions)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *HashLockOptions) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Hash is missing")
+	} else if v.Hash == ([32]byte{}) {
+		errs = append(errs, "field Hash is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Expiration is missing")
+	} else if v.Expiration == nil {
+		errs = append(errs, "field Expiration is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_HoldUntilOptions = []string{
 	1: "MinorBlock",
 }
@@ -11609,6 +11917,150 @@ func (v *ReceiptSignature) IsValid() error {
 	}
 }
 
+var fieldNames_ReleaseLockedOperation = []string{
+	1: "Type",
+	2: "LockedTxID",
+	3: "Preimage",
+}
+
+func (v *ReleaseLockedOperation) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.LockedTxID == nil) {
+		writer.WriteTxid(2, v.LockedTxID)
+	}
+	if !(len(v.Preimage) == 0) {
+		writer.WriteBytes(3, v.Preimage)
+	}
+
+	_, _, err := writer.Reset(fieldNames_ReleaseLockedOperation)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *ReleaseLockedOperation) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field LockedTxID is missing")
+	} else if v.LockedTxID == nil {
+		errs = append(errs, "field LockedTxID is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Preimage is missing")
+	} else if len(v.Preimage) == 0 {
+		errs = append(errs, "field Preimage is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_ReleaseLockedOperationResult = []string{
+	1: "Type",
+	2: "Preimage",
+	3: "Hash",
+	4: "Amount",
+	5: "Token",
+}
+
+func (v *ReleaseLockedOperationResult) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(len(v.Preimage) == 0) {
+		writer.WriteBytes(2, v.Preimage)
+	}
+	if !(v.Hash == ([32]byte{})) {
+		writer.WriteHash(3, &v.Hash)
+	}
+	if !((v.Amount).Cmp(new(big.Int)) == 0) {
+		writer.WriteBigInt(4, &v.Amount)
+	}
+	if !(v.Token == nil) {
+		writer.WriteUrl(5, v.Token)
+	}
+
+	_, _, err := writer.Reset(fieldNames_ReleaseLockedOperationResult)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *ReleaseLockedOperationResult) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Preimage is missing")
+	} else if len(v.Preimage) == 0 {
+		errs = append(errs, "field Preimage is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Hash is missing")
+	} else if v.Hash == ([32]byte{}) {
+		errs = append(errs, "field Hash is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Amount is missing")
+	} else if (v.Amount).Cmp(new(big.Int)) == 0 {
+		errs = append(errs, "field Amount is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Token is missing")
+	} else if v.Token == nil {
+		errs = append(errs, "field Token is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_RemoteSignature = []string{
 	1: "Type",
 	2: "Destination",
@@ -12906,6 +13358,110 @@ func (v *SyntheticLedger) IsValid() error {
 	}
 }
 
+var fieldNames_SyntheticLockedDeposit = []string{
+	1: "Type",
+	2: "SyntheticOrigin",
+	3: "Token",
+	4: "Amount",
+	5: "Sender",
+	6: "Hash",
+	7: "Expiration",
+	8: "IsIssuer",
+}
+
+func (v *SyntheticLockedDeposit) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	writer.WriteValue(2, v.SyntheticOrigin.MarshalBinary)
+	if !(v.Token == nil) {
+		writer.WriteUrl(3, v.Token)
+	}
+	if !((v.Amount).Cmp(new(big.Int)) == 0) {
+		writer.WriteBigInt(4, &v.Amount)
+	}
+	if !(v.Sender == nil) {
+		writer.WriteUrl(5, v.Sender)
+	}
+	if !(v.Hash == ([32]byte{})) {
+		writer.WriteHash(6, &v.Hash)
+	}
+	if !(v.Expiration == nil) {
+		writer.WriteTime(7, *v.Expiration)
+	}
+	if !(!v.IsIssuer) {
+		writer.WriteBool(8, v.IsIssuer)
+	}
+
+	_, _, err := writer.Reset(fieldNames_SyntheticLockedDeposit)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *SyntheticLockedDeposit) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if err := v.SyntheticOrigin.IsValid(); err != nil {
+		errs = append(errs, err.Error())
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Token is missing")
+	} else if v.Token == nil {
+		errs = append(errs, "field Token is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Amount is missing")
+	} else if (v.Amount).Cmp(new(big.Int)) == 0 {
+		errs = append(errs, "field Amount is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Sender is missing")
+	} else if v.Sender == nil {
+		errs = append(errs, "field Sender is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field Hash is missing")
+	} else if v.Hash == ([32]byte{}) {
+		errs = append(errs, "field Hash is not set")
+	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+		errs = append(errs, "field Expiration is missing")
+	} else if v.Expiration == nil {
+		errs = append(errs, "field Expiration is not set")
+	}
+	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
+		errs = append(errs, "field IsIssuer is missing")
+	} else if !v.IsIssuer {
+		errs = append(errs, "field IsIssuer is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_SyntheticOrigin = []string{
 	1: "Cause",
 	3: "Initiator",
@@ -13617,7 +14173,8 @@ var fieldNames_TransactionHeader = []string{
 	4: "Metadata",
 	5: "Expire",
 	6: "HoldUntil",
-	7: "Authorities",
+	7: "HashLock",
+	8: "Authorities",
 }
 
 func (v *TransactionHeader) MarshalBinary() ([]byte, error) {
@@ -13648,9 +14205,12 @@ func (v *TransactionHeader) MarshalBinary() ([]byte, error) {
 	if !(v.HoldUntil == nil) {
 		writer.WriteValue(6, v.HoldUntil.MarshalBinary)
 	}
+	if !(v.HashLock == nil) {
+		writer.WriteValue(7, v.HashLock.MarshalBinary)
+	}
 	if !(len(v.Authorities) == 0) {
 		for _, v := range v.Authorities {
-			writer.WriteUrl(7, v)
+			writer.WriteUrl(8, v)
 		}
 	}
 
@@ -16633,6 +17193,32 @@ func (v *FeeSchedule) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *HashLockOptions) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *HashLockOptions) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadHash(1); ok {
+		v.Hash = *x
+	}
+	if x, ok := reader.ReadTime(2); ok {
+		v.Expiration = &x
+	}
+
+	seen, err := reader.Reset(fieldNames_HashLockOptions)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *HoldUntilOptions) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -17783,6 +18369,88 @@ func (v *ReceiptSignature) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
+func (v *ReleaseLockedOperation) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *ReleaseLockedOperation) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *ReleaseLockedOperation) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadTxid(2); ok {
+		v.LockedTxID = x
+	}
+	if x, ok := reader.ReadBytes(3); ok {
+		v.Preimage = x
+	}
+
+	seen, err := reader.Reset(fieldNames_ReleaseLockedOperation)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *ReleaseLockedOperationResult) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *ReleaseLockedOperationResult) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *ReleaseLockedOperationResult) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadBytes(2); ok {
+		v.Preimage = x
+	}
+	if x, ok := reader.ReadHash(3); ok {
+		v.Hash = *x
+	}
+	if x, ok := reader.ReadBigInt(4); ok {
+		v.Amount = *x
+	}
+	if x, ok := reader.ReadUrl(5); ok {
+		v.Token = x
+	}
+
+	seen, err := reader.Reset(fieldNames_ReleaseLockedOperationResult)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *RemoteSignature) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -18584,6 +19252,57 @@ func (v *SyntheticLedger) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
+func (v *SyntheticLockedDeposit) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *SyntheticLockedDeposit) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *SyntheticLockedDeposit) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	reader.ReadValue(2, v.SyntheticOrigin.UnmarshalBinaryFrom)
+	if x, ok := reader.ReadUrl(3); ok {
+		v.Token = x
+	}
+	if x, ok := reader.ReadBigInt(4); ok {
+		v.Amount = *x
+	}
+	if x, ok := reader.ReadUrl(5); ok {
+		v.Sender = x
+	}
+	if x, ok := reader.ReadHash(6); ok {
+		v.Hash = *x
+	}
+	if x, ok := reader.ReadTime(7); ok {
+		v.Expiration = &x
+	}
+	if x, ok := reader.ReadBool(8); ok {
+		v.IsIssuer = x
+	}
+
+	seen, err := reader.Reset(fieldNames_SyntheticLockedDeposit)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *SyntheticOrigin) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -18998,8 +19717,11 @@ func (v *TransactionHeader) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(HoldUntilOptions); reader.ReadValue(6, x.UnmarshalBinaryFrom) {
 		v.HoldUntil = x
 	}
+	if x := new(HashLockOptions); reader.ReadValue(7, x.UnmarshalBinaryFrom) {
+		v.HashLock = x
+	}
 	for {
-		if x, ok := reader.ReadUrl(7); ok {
+		if x, ok := reader.ReadUrl(8); ok {
 			v.Authorities = append(v.Authorities, x)
 		} else {
 			break
@@ -20048,6 +20770,11 @@ func init() {
 	}, "FeeSchedule", "feeSchedule")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("hash", "bytes32"),
+		encoding.NewTypeField("expiration", "string"),
+	}, "HashLockOptions", "hashLockOptions")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("minorBlock", "uint64"),
 	}, "HoldUntilOptions", "holdUntilOptions")
 
@@ -20270,6 +20997,20 @@ func init() {
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("lockedTxID", "string"),
+		encoding.NewTypeField("preimage", "bytes"),
+	}, "ReleaseLockedOperation", "releaseLockedOperation")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("preimage", "bytes"),
+		encoding.NewTypeField("hash", "bytes32"),
+		encoding.NewTypeField("amount", "uint256"),
+		encoding.NewTypeField("token", "string"),
+	}, "ReleaseLockedOperationResult", "releaseLockedOperationResult")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
 		encoding.NewTypeField("destination", "string"),
 		encoding.NewTypeField("signature", "Signature"),
 		encoding.NewTypeField("cause", "bytes32[]"),
@@ -20415,6 +21156,21 @@ func init() {
 	}, "SyntheticLedger", "syntheticLedger")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("cause", "string"),
+		encoding.NewTypeField("source", "string"),
+		encoding.NewTypeField("initiator", "string"),
+		encoding.NewTypeField("feeRefund", "uint64"),
+		encoding.NewTypeField("index", "uint64"),
+		encoding.NewTypeField("token", "string"),
+		encoding.NewTypeField("amount", "uint256"),
+		encoding.NewTypeField("sender", "string"),
+		encoding.NewTypeField("hash", "bytes32"),
+		encoding.NewTypeField("expiration", "string"),
+		encoding.NewTypeField("isIssuer", "bool"),
+	}, "SyntheticLockedDeposit", "syntheticLockedDeposit")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("cause", "string"),
 		encoding.NewTypeField("source", "string"),
 		encoding.NewTypeField("initiator", "string"),
@@ -20498,6 +21254,7 @@ func init() {
 		encoding.NewTypeField("metadata", "bytes"),
 		encoding.NewTypeField("expire", "ExpireOptions"),
 		encoding.NewTypeField("holdUntil", "HoldUntilOptions"),
+		encoding.NewTypeField("hashLock", "HashLockOptions"),
 		encoding.NewTypeField("authorities", "string[]"),
 	}, "TransactionHeader", "transactionHeader")
 
@@ -21575,6 +22332,22 @@ func (v *FeeSchedule) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *HashLockOptions) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Hash       *string    `json:"hash,omitempty"`
+		Expiration *time.Time `json:"expiration,omitempty"`
+		ExtraData  *string    `json:"$epilogue,omitempty"`
+	}{}
+	if !(v.Hash == ([32]byte{})) {
+		u.Hash = encoding.ChainToJSON(&v.Hash)
+	}
+	if !(v.Expiration == nil) {
+		u.Expiration = v.Expiration
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
 func (v *InternalSignature) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type            SignatureType `json:"type"`
@@ -22117,6 +22890,50 @@ func (v *ReceiptSignature) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *ReleaseLockedOperation) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type       TransactionType `json:"type"`
+		LockedTxID *url.TxID       `json:"lockedTxID,omitempty"`
+		Preimage   *string         `json:"preimage,omitempty"`
+		ExtraData  *string         `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.LockedTxID == nil) {
+		u.LockedTxID = v.LockedTxID
+	}
+	if !(len(v.Preimage) == 0) {
+		u.Preimage = encoding.BytesToJSON(v.Preimage)
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *ReleaseLockedOperationResult) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      TransactionType `json:"type"`
+		Preimage  *string         `json:"preimage,omitempty"`
+		Hash      *string         `json:"hash,omitempty"`
+		Amount    *string         `json:"amount,omitempty"`
+		Token     *url.URL        `json:"token,omitempty"`
+		ExtraData *string         `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.Preimage) == 0) {
+		u.Preimage = encoding.BytesToJSON(v.Preimage)
+	}
+	if !(v.Hash == ([32]byte{})) {
+		u.Hash = encoding.ChainToJSON(&v.Hash)
+	}
+	if !((v.Amount).Cmp(new(big.Int)) == 0) {
+		u.Amount = encoding.BigintToJSON(&v.Amount)
+	}
+	if !(v.Token == nil) {
+		u.Token = v.Token
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
 func (v *RemoteSignature) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type        SignatureType                          `json:"type"`
@@ -22554,6 +23371,60 @@ func (v *SyntheticLedger) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *SyntheticLockedDeposit) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type       TransactionType `json:"type"`
+		Cause      *url.TxID       `json:"cause,omitempty"`
+		Source     *url.URL        `json:"source,omitempty"`
+		Initiator  *url.URL        `json:"initiator,omitempty"`
+		FeeRefund  uint64          `json:"feeRefund,omitempty"`
+		Index      uint64          `json:"index,omitempty"`
+		Token      *url.URL        `json:"token,omitempty"`
+		Amount     *string         `json:"amount,omitempty"`
+		Sender     *url.URL        `json:"sender,omitempty"`
+		Hash       *string         `json:"hash,omitempty"`
+		Expiration *time.Time      `json:"expiration,omitempty"`
+		IsIssuer   bool            `json:"isIssuer,omitempty"`
+		ExtraData  *string         `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.SyntheticOrigin.Cause == nil) {
+		u.Cause = v.SyntheticOrigin.Cause
+	}
+	if !(v.SyntheticOrigin.Source() == nil) {
+		u.Source = v.SyntheticOrigin.Source()
+	}
+	if !(v.SyntheticOrigin.Initiator == nil) {
+		u.Initiator = v.SyntheticOrigin.Initiator
+	}
+	if !(v.SyntheticOrigin.FeeRefund == 0) {
+		u.FeeRefund = v.SyntheticOrigin.FeeRefund
+	}
+	if !(v.SyntheticOrigin.Index == 0) {
+		u.Index = v.SyntheticOrigin.Index
+	}
+	if !(v.Token == nil) {
+		u.Token = v.Token
+	}
+	if !((v.Amount).Cmp(new(big.Int)) == 0) {
+		u.Amount = encoding.BigintToJSON(&v.Amount)
+	}
+	if !(v.Sender == nil) {
+		u.Sender = v.Sender
+	}
+	if !(v.Hash == ([32]byte{})) {
+		u.Hash = encoding.ChainToJSON(&v.Hash)
+	}
+	if !(v.Expiration == nil) {
+		u.Expiration = v.Expiration
+	}
+	if !(!v.IsIssuer) {
+		u.IsIssuer = v.IsIssuer
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
 func (v *SyntheticWriteData) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type      TransactionType                        `json:"type"`
@@ -22762,6 +23633,7 @@ func (v *TransactionHeader) MarshalJSON() ([]byte, error) {
 		Metadata    *string                     `json:"metadata,omitempty"`
 		Expire      *ExpireOptions              `json:"expire,omitempty"`
 		HoldUntil   *HoldUntilOptions           `json:"holdUntil,omitempty"`
+		HashLock    *HashLockOptions            `json:"hashLock,omitempty"`
 		Authorities encoding.JsonList[*url.URL] `json:"authorities,omitempty"`
 		ExtraData   *string                     `json:"$epilogue,omitempty"`
 	}{}
@@ -22782,6 +23654,9 @@ func (v *TransactionHeader) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.HoldUntil == nil) {
 		u.HoldUntil = v.HoldUntil
+	}
+	if !(v.HashLock == nil) {
+		u.HashLock = v.HashLock
 	}
 	if !(len(v.Authorities) == 0) {
 		u.Authorities = v.Authorities
@@ -24526,6 +25401,31 @@ func (v *FeeSchedule) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *HashLockOptions) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Hash       *string    `json:"hash,omitempty"`
+		Expiration *time.Time `json:"expiration,omitempty"`
+		ExtraData  *string    `json:"$epilogue,omitempty"`
+	}{}
+	u.Hash = encoding.ChainToJSON(&v.Hash)
+	u.Expiration = v.Expiration
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if x, err := encoding.ChainFromJSON(u.Hash); err != nil {
+		return fmt.Errorf("error decoding Hash: %w", err)
+	} else {
+		v.Hash = *x
+	}
+	v.Expiration = u.Expiration
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (v *InternalSignature) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type            SignatureType `json:"type"`
@@ -25281,6 +26181,80 @@ func (v *ReceiptSignature) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *ReleaseLockedOperation) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type       TransactionType `json:"type"`
+		LockedTxID *url.TxID       `json:"lockedTxID,omitempty"`
+		Preimage   *string         `json:"preimage,omitempty"`
+		ExtraData  *string         `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.LockedTxID = v.LockedTxID
+	u.Preimage = encoding.BytesToJSON(v.Preimage)
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.LockedTxID = u.LockedTxID
+	if x, err := encoding.BytesFromJSON(u.Preimage); err != nil {
+		return fmt.Errorf("error decoding Preimage: %w", err)
+	} else {
+		v.Preimage = x
+	}
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *ReleaseLockedOperationResult) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      TransactionType `json:"type"`
+		Preimage  *string         `json:"preimage,omitempty"`
+		Hash      *string         `json:"hash,omitempty"`
+		Amount    *string         `json:"amount,omitempty"`
+		Token     *url.URL        `json:"token,omitempty"`
+		ExtraData *string         `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Preimage = encoding.BytesToJSON(v.Preimage)
+	u.Hash = encoding.ChainToJSON(&v.Hash)
+	u.Amount = encoding.BigintToJSON(&v.Amount)
+	u.Token = v.Token
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	if x, err := encoding.BytesFromJSON(u.Preimage); err != nil {
+		return fmt.Errorf("error decoding Preimage: %w", err)
+	} else {
+		v.Preimage = x
+	}
+	if x, err := encoding.ChainFromJSON(u.Hash); err != nil {
+		return fmt.Errorf("error decoding Hash: %w", err)
+	} else {
+		v.Hash = *x
+	}
+	if x, err := encoding.BigintFromJSON(u.Amount); err != nil {
+		return fmt.Errorf("error decoding Amount: %w", err)
+	} else {
+		v.Amount = *x
+	}
+	v.Token = u.Token
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (v *RemoteSignature) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type        SignatureType                          `json:"type"`
@@ -25889,6 +26863,66 @@ func (v *SyntheticLedger) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *SyntheticLockedDeposit) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type       TransactionType `json:"type"`
+		Cause      *url.TxID       `json:"cause,omitempty"`
+		Source     *url.URL        `json:"source,omitempty"`
+		Initiator  *url.URL        `json:"initiator,omitempty"`
+		FeeRefund  uint64          `json:"feeRefund,omitempty"`
+		Index      uint64          `json:"index,omitempty"`
+		Token      *url.URL        `json:"token,omitempty"`
+		Amount     *string         `json:"amount,omitempty"`
+		Sender     *url.URL        `json:"sender,omitempty"`
+		Hash       *string         `json:"hash,omitempty"`
+		Expiration *time.Time      `json:"expiration,omitempty"`
+		IsIssuer   bool            `json:"isIssuer,omitempty"`
+		ExtraData  *string         `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Cause = v.SyntheticOrigin.Cause
+	u.Source = v.SyntheticOrigin.Source()
+	u.Initiator = v.SyntheticOrigin.Initiator
+	u.FeeRefund = v.SyntheticOrigin.FeeRefund
+	u.Index = v.SyntheticOrigin.Index
+	u.Token = v.Token
+	u.Amount = encoding.BigintToJSON(&v.Amount)
+	u.Sender = v.Sender
+	u.Hash = encoding.ChainToJSON(&v.Hash)
+	u.Expiration = v.Expiration
+	u.IsIssuer = v.IsIssuer
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.SyntheticOrigin.Cause = u.Cause
+	v.SyntheticOrigin.Initiator = u.Initiator
+	v.SyntheticOrigin.FeeRefund = u.FeeRefund
+	v.SyntheticOrigin.Index = u.Index
+	v.Token = u.Token
+	if x, err := encoding.BigintFromJSON(u.Amount); err != nil {
+		return fmt.Errorf("error decoding Amount: %w", err)
+	} else {
+		v.Amount = *x
+	}
+	v.Sender = u.Sender
+	if x, err := encoding.ChainFromJSON(u.Hash); err != nil {
+		return fmt.Errorf("error decoding Hash: %w", err)
+	} else {
+		v.Hash = *x
+	}
+	v.Expiration = u.Expiration
+	v.IsIssuer = u.IsIssuer
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (v *SyntheticWriteData) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type      TransactionType                        `json:"type"`
@@ -26174,6 +27208,7 @@ func (v *TransactionHeader) UnmarshalJSON(data []byte) error {
 		Metadata    *string                     `json:"metadata,omitempty"`
 		Expire      *ExpireOptions              `json:"expire,omitempty"`
 		HoldUntil   *HoldUntilOptions           `json:"holdUntil,omitempty"`
+		HashLock    *HashLockOptions            `json:"hashLock,omitempty"`
 		Authorities encoding.JsonList[*url.URL] `json:"authorities,omitempty"`
 		ExtraData   *string                     `json:"$epilogue,omitempty"`
 	}{}
@@ -26183,6 +27218,7 @@ func (v *TransactionHeader) UnmarshalJSON(data []byte) error {
 	u.Metadata = encoding.BytesToJSON(v.Metadata)
 	u.Expire = v.Expire
 	u.HoldUntil = v.HoldUntil
+	u.HashLock = v.HashLock
 	u.Authorities = v.Authorities
 	err := json.Unmarshal(data, &u)
 	if err != nil {
@@ -26202,6 +27238,7 @@ func (v *TransactionHeader) UnmarshalJSON(data []byte) error {
 	}
 	v.Expire = u.Expire
 	v.HoldUntil = u.HoldUntil
+	v.HashLock = u.HashLock
 	v.Authorities = u.Authorities
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {

@@ -320,6 +320,9 @@ const TransactionTypeUpdateKey TransactionType = 22
 // TransactionTypeSetLiteAccountDelegate sets or clears the delegate authority on a lite token account.
 const TransactionTypeSetLiteAccountDelegate TransactionType = 23
 
+// TransactionTypeReleaseLockedOperation releases a locked deposit by revealing the hash preimage.
+const TransactionTypeReleaseLockedOperation TransactionType = 24
+
 // TransactionTypeNetworkMaintenance executes network maintenance operations.
 const TransactionTypeNetworkMaintenance TransactionType = 46
 
@@ -346,6 +349,9 @@ const TransactionTypeSyntheticBurnTokens TransactionType = 53
 
 // TransactionTypeSyntheticForwardTransaction forwards a transaction from one partition to another.
 const TransactionTypeSyntheticForwardTransaction TransactionType = 54
+
+// TransactionTypeSyntheticLockedDeposit deposits locked tokens requiring preimage revelation to unlock.
+const TransactionTypeSyntheticLockedDeposit TransactionType = 55
 
 // TransactionTypeSystemGenesis initializes system chains.
 const TransactionTypeSystemGenesis TransactionType = 96
@@ -1355,7 +1361,7 @@ func (v TransactionType) GetEnumValue() uint64 { return uint64(v) }
 func (v *TransactionType) SetEnumValue(id uint64) bool {
 	u := TransactionType(id)
 	switch u {
-	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateLiteTokenAccount, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeLockAccount, TransactionTypeBurnCredits, TransactionTypeTransferCredits, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeSetLiteAccountDelegate, TransactionTypeNetworkMaintenance, TransactionTypeActivateProtocolVersion, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeSystemGenesis, TransactionTypeDirectoryAnchor, TransactionTypeBlockValidatorAnchor, TransactionTypeSystemWriteData:
+	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateLiteTokenAccount, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeLockAccount, TransactionTypeBurnCredits, TransactionTypeTransferCredits, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeSetLiteAccountDelegate, TransactionTypeReleaseLockedOperation, TransactionTypeNetworkMaintenance, TransactionTypeActivateProtocolVersion, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeSyntheticLockedDeposit, TransactionTypeSystemGenesis, TransactionTypeDirectoryAnchor, TransactionTypeBlockValidatorAnchor, TransactionTypeSystemWriteData:
 		*v = u
 		return true
 	}
@@ -1409,6 +1415,8 @@ func (v TransactionType) String() string {
 		return "updateKey"
 	case TransactionTypeSetLiteAccountDelegate:
 		return "setLiteAccountDelegate"
+	case TransactionTypeReleaseLockedOperation:
+		return "releaseLockedOperation"
 	case TransactionTypeNetworkMaintenance:
 		return "networkMaintenance"
 	case TransactionTypeActivateProtocolVersion:
@@ -1427,6 +1435,8 @@ func (v TransactionType) String() string {
 		return "syntheticBurnTokens"
 	case TransactionTypeSyntheticForwardTransaction:
 		return "syntheticForwardTransaction"
+	case TransactionTypeSyntheticLockedDeposit:
+		return "syntheticLockedDeposit"
 	case TransactionTypeSystemGenesis:
 		return "systemGenesis"
 	case TransactionTypeDirectoryAnchor:
@@ -1486,6 +1496,8 @@ func TransactionTypeByName(name string) (TransactionType, bool) {
 		return TransactionTypeUpdateKey, true
 	case "setliteaccountdelegate":
 		return TransactionTypeSetLiteAccountDelegate, true
+	case "releaselockedoperation":
+		return TransactionTypeReleaseLockedOperation, true
 	case "networkmaintenance":
 		return TransactionTypeNetworkMaintenance, true
 	case "activateprotocolversion":
@@ -1506,6 +1518,8 @@ func TransactionTypeByName(name string) (TransactionType, bool) {
 		return TransactionTypeSyntheticBurnTokens, true
 	case "syntheticforwardtransaction":
 		return TransactionTypeSyntheticForwardTransaction, true
+	case "syntheticlockeddeposit":
+		return TransactionTypeSyntheticLockedDeposit, true
 	case "systemgenesis":
 		return TransactionTypeSystemGenesis, true
 	case "directoryanchor":
