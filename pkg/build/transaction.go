@@ -7,9 +7,11 @@
 package build
 
 import (
+	"crypto/sha256"
 	"math/big"
 	"time"
 
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -752,5 +754,50 @@ func (b LockAccountBuilder) Done() (*protocol.Transaction, error) {
 }
 
 func (b LockAccountBuilder) SignWith(signer any, path ...string) SignatureBuilder {
+	return b.FinishTransaction().SignWith(signer, path...)
+}
+
+// HashLock sets a hashlock on the transaction for HTLC (Hashed Time-Locked Contract) operations.
+// When present on token transfers, this causes the system to produce locked synthetic transactions
+// instead of direct deposits.
+func (b TransactionBuilder) HashLock(hash [32]byte, expiration time.Time) TransactionBuilder {
+	b.t.Header.HashLock = &protocol.HashLockOptions{
+		Hash:       hash,
+		Expiration: &expiration,
+	}
+	return b
+}
+
+// HashLockFromPreimage computes the SHA-256 hash of the preimage and sets it as the hashlock.
+func (b TransactionBuilder) HashLockFromPreimage(preimage []byte, expiration time.Time) TransactionBuilder {
+	hash := sha256.Sum256(preimage)
+	return b.HashLock(hash, expiration)
+}
+
+type ReleaseLockedOperationBuilder struct {
+	t    TransactionBuilder
+	body protocol.ReleaseLockedOperation
+}
+
+func (b TransactionBuilder) ReleaseLockedOperation(lockedTxID *url.TxID) ReleaseLockedOperationBuilder {
+	c := ReleaseLockedOperationBuilder{t: b}
+	c.body.LockedTxID = lockedTxID
+	return c
+}
+
+func (b ReleaseLockedOperationBuilder) WithPreimage(preimage []byte) ReleaseLockedOperationBuilder {
+	b.body.Preimage = preimage
+	return b
+}
+
+func (b ReleaseLockedOperationBuilder) FinishTransaction() TransactionBuilder {
+	return b.t.Body(&b.body)
+}
+
+func (b ReleaseLockedOperationBuilder) Done() (*protocol.Transaction, error) {
+	return b.FinishTransaction().Done()
+}
+
+func (b ReleaseLockedOperationBuilder) SignWith(signer any, path ...string) SignatureBuilder {
 	return b.FinishTransaction().SignWith(signer, path...)
 }

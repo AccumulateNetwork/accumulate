@@ -66,9 +66,11 @@ func NewExecutor(opts ExecutorOptions) (*Executor, error) {
 		chain.UpdateKeyPage{},
 		chain.WriteData{},
 		chain.WriteDataTo{},
+		chain.ReleaseLockedOperation{},
 
 		// Synthetic
 		chain.SyntheticBurnTokens{},
+		chain.SyntheticLockedDeposit{},
 		chain.SyntheticCreateIdentity{},
 		chain.SyntheticDepositCredits{},
 		chain.SyntheticDepositTokens{},
