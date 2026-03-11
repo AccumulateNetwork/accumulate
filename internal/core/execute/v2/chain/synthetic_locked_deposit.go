@@ -9,7 +9,9 @@ package chain
 import (
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -96,10 +98,58 @@ func (x SyntheticLockedDeposit) Execute(st *StateManager, tx *Delivery) (protoco
 		return nil, fmt.Errorf("token URL does not match lite token account URL")
 	}
 
-	// The locked deposit is stored as a pending transaction.
+	// Register for automatic refund at expiration
+	err = x.registerForExpiration(st, tx, body)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("register for expiration: %w", err)
+	}
+
+	// The locked deposit is recorded with a result tracking release status.
 	// Tokens will be credited when ReleaseLockedOperation is executed with the correct preimage.
-	// The transaction remains in pending state until released or expired.
-	return nil, nil
+	// The result's ReleaseTxID will be set when released.
+	result := &protocol.SyntheticLockedDepositResult{
+		ReleaseTxID: nil, // Not yet released
+	}
+	return result, nil
+}
+
+// registerForExpiration schedules the locked deposit for automatic refund at expiration.
+// This uses the same major block event system used for pending transaction expiration.
+func (SyntheticLockedDeposit) registerForExpiration(st *StateManager, tx *Delivery, body *protocol.SyntheticLockedDeposit) error {
+	// Load the anchor ledger to get current major block info
+	var anchorLedger *protocol.AnchorLedger
+	err := st.batch.Account(st.AnchorPool()).Main().GetAs(&anchorLedger)
+	if err != nil {
+		return errors.UnknownError.WithFormat("load anchor ledger: %w", err)
+	}
+
+	currentMajor := anchorLedger.MajorBlockIndex
+	currentMajorTime := anchorLedger.MajorBlockTime
+
+	// Parse the major block schedule
+	schedule, err := core.Cron.Parse(st.Globals.Globals.MajorBlockSchedule)
+	if err != nil {
+		// If parsing fails, default to next major block
+		return st.recordExpiration(tx.Transaction.ID(), currentMajor+1)
+	}
+
+	// Calculate which major block the expiration falls on
+	// Major blocks occur according to the cron schedule (typically every 12 hours)
+	var count uint64 = 1
+	max := st.Globals.Globals.Limits.PendingMajorBlocks
+	if max == 0 {
+		max = 14 // Default to 2 weeks worth
+	}
+
+	// Starting from the last major block time, count how many major blocks until expiration
+	now := currentMajorTime
+	for count < max && body.Expiration.After(schedule.Next(now)) {
+		now = schedule.Next(now)
+		count++
+	}
+
+	expirationMajor := currentMajor + count
+	return st.recordExpiration(tx.Transaction.ID(), expirationMajor)
 }
 
 func (x SyntheticLockedDeposit) DidFail(state *ProcessTransactionState, transaction *protocol.Transaction) error {
@@ -125,3 +175,9 @@ func (x SyntheticLockedDeposit) DidFail(state *ProcessTransactionState, transact
 	return nil
 }
 
+// recordExpiration is a helper that adds a transaction to the expiration queue
+// for a given major block. This is added to stateCache.
+func (c *stateCache) recordExpiration(txid *url.TxID, majorBlock uint64) error {
+	ledger := c.batch.Account(c.NodeUrl(protocol.Ledger))
+	return ledger.Events().Major().Pending(majorBlock).Add(txid)
+}

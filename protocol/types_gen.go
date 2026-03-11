@@ -963,6 +963,14 @@ type SyntheticLockedDeposit struct {
 	extraData []byte
 }
 
+// SyntheticLockedDepositResult result of a synthetic locked deposit, tracks release status.
+type SyntheticLockedDepositResult struct {
+	fieldsSet []bool
+	// ReleaseTxID the transaction ID of the ReleaseLockedOperation that released this deposit, nil if not yet released.
+	ReleaseTxID *url.TxID `json:"releaseTxID,omitempty" form:"releaseTxID" query:"releaseTxID"`
+	extraData   []byte
+}
+
 type SyntheticOrigin struct {
 	fieldsSet []bool
 	// Cause is the ID of the transaction that produced this transaction.
@@ -1374,6 +1382,10 @@ func (*SyntheticForwardTransaction) Type() TransactionType {
 func (*SyntheticLedger) Type() AccountType { return AccountTypeSyntheticLedger }
 
 func (*SyntheticLockedDeposit) Type() TransactionType { return TransactionTypeSyntheticLockedDeposit }
+
+func (*SyntheticLockedDepositResult) Type() TransactionType {
+	return TransactionTypeSyntheticLockedDeposit
+}
 
 func (*SyntheticWriteData) Type() TransactionType { return TransactionTypeSyntheticWriteData }
 
@@ -3385,6 +3397,22 @@ func (v *SyntheticLockedDeposit) Copy() *SyntheticLockedDeposit {
 }
 
 func (v *SyntheticLockedDeposit) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *SyntheticLockedDepositResult) Copy() *SyntheticLockedDepositResult {
+	u := new(SyntheticLockedDepositResult)
+
+	if v.ReleaseTxID != nil {
+		u.ReleaseTxID = v.ReleaseTxID
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *SyntheticLockedDepositResult) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *SyntheticOrigin) Copy() *SyntheticOrigin {
 	u := new(SyntheticOrigin)
@@ -6003,6 +6031,19 @@ func (v *SyntheticLockedDeposit) Equal(u *SyntheticLockedDeposit) bool {
 		return false
 	}
 	if !(v.IsIssuer == u.IsIssuer) {
+		return false
+	}
+
+	return true
+}
+
+func (v *SyntheticLockedDepositResult) Equal(u *SyntheticLockedDepositResult) bool {
+	switch {
+	case v.ReleaseTxID == u.ReleaseTxID:
+		// equal
+	case v.ReleaseTxID == nil || u.ReleaseTxID == nil:
+		return false
+	case !((v.ReleaseTxID).Equal(u.ReleaseTxID)):
 		return false
 	}
 
@@ -13507,6 +13548,55 @@ func (v *SyntheticLockedDeposit) IsValid() error {
 	}
 }
 
+var fieldNames_SyntheticLockedDepositResult = []string{
+	1: "Type",
+	2: "ReleaseTxID",
+}
+
+func (v *SyntheticLockedDepositResult) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.ReleaseTxID == nil) {
+		writer.WriteTxid(2, v.ReleaseTxID)
+	}
+
+	_, _, err := writer.Reset(fieldNames_SyntheticLockedDepositResult)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *SyntheticLockedDepositResult) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_SyntheticOrigin = []string{
 	1: "Cause",
 	3: "Initiator",
@@ -19357,6 +19447,41 @@ func (v *SyntheticLockedDeposit) UnmarshalFieldsFrom(reader *encoding.Reader) er
 	return nil
 }
 
+func (v *SyntheticLockedDepositResult) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *SyntheticLockedDepositResult) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *SyntheticLockedDepositResult) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadTxid(2); ok {
+		v.ReleaseTxID = x
+	}
+
+	seen, err := reader.Reset(fieldNames_SyntheticLockedDepositResult)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *SyntheticOrigin) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -21226,6 +21351,11 @@ func init() {
 		encoding.NewTypeField("expiration", "string"),
 		encoding.NewTypeField("isIssuer", "bool"),
 	}, "SyntheticLockedDeposit", "syntheticLockedDeposit")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("releaseTxID", "string"),
+	}, "SyntheticLockedDepositResult", "syntheticLockedDepositResult")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("cause", "string"),
@@ -23489,6 +23619,20 @@ func (v *SyntheticLockedDeposit) MarshalJSON() ([]byte, error) {
 	}
 	if !(!v.IsIssuer) {
 		u.IsIssuer = v.IsIssuer
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *SyntheticLockedDepositResult) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type        TransactionType `json:"type"`
+		ReleaseTxID *url.TxID       `json:"releaseTxID,omitempty"`
+		ExtraData   *string         `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.ReleaseTxID == nil) {
+		u.ReleaseTxID = v.ReleaseTxID
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -26994,6 +27138,29 @@ func (v *SyntheticLockedDeposit) UnmarshalJSON(data []byte) error {
 	}
 	v.Expiration = u.Expiration
 	v.IsIssuer = u.IsIssuer
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *SyntheticLockedDepositResult) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type        TransactionType `json:"type"`
+		ReleaseTxID *url.TxID       `json:"releaseTxID,omitempty"`
+		ExtraData   *string         `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.ReleaseTxID = v.ReleaseTxID
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.ReleaseTxID = u.ReleaseTxID
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err

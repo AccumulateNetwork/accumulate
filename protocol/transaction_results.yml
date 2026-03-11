@@ -44,3 +44,13 @@ ReleaseLockedOperationResult:
       description: the token type released
       type: url
       pointer: true
+
+SyntheticLockedDepositResult:
+  union: { type: result }
+  description: result of a synthetic locked deposit, tracks release status
+  fields:
+    - name: ReleaseTxID
+      description: the transaction ID of the ReleaseLockedOperation that released this deposit, nil if not yet released
+      type: txid
+      pointer: true
+      optional: true

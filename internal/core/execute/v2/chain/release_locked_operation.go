@@ -11,72 +11,143 @@ import (
 	"crypto/sha256"
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"golang.org/x/crypto/ripemd160"
+	"golang.org/x/crypto/ripemd160" //nolint:staticcheck
 )
 
 type ReleaseLockedOperation struct{}
+
+var _ PrincipalValidator = (*ReleaseLockedOperation)(nil)
+var _ SignerValidator = (*ReleaseLockedOperation)(nil)
 
 func (ReleaseLockedOperation) Type() protocol.TransactionType {
 	return protocol.TransactionTypeReleaseLockedOperation
 }
 
+func (ReleaseLockedOperation) AllowMissingPrincipal(transaction *protocol.Transaction) bool {
+	// Can create lite token accounts like SyntheticLockedDeposit
+	key, _, _ := protocol.ParseLiteTokenAddress(transaction.Header.Principal)
+	return key != nil
+}
+
+func (ReleaseLockedOperation) AuthorityIsAccepted(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, sig *protocol.AuthoritySignature) (fallback bool, err error) {
+	// For lite accounts, authorization comes from the lite identity
+	key, _, _ := protocol.ParseLiteTokenAddress(transaction.Header.Principal)
+	if key == nil {
+		// Not a lite account, fall back to normal authorization
+		return true, nil
+	}
+
+	// For lite accounts, any valid signature from the lite identity is sufficient
+	return false, nil
+}
+
+func (ReleaseLockedOperation) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction) (ready, fallback bool, err error) {
+	// For lite accounts where the principal doesn't exist yet, check if we have a valid signature
+	key, _, _ := protocol.ParseLiteTokenAddress(transaction.Header.Principal)
+	if key == nil {
+		// Not a lite account, fall back to normal authorization
+		return false, true, nil
+	}
+
+	// Check if the lite identity exists and has signed
+	liteIdUrl := transaction.Header.Principal.RootIdentity()
+	var liteId *protocol.LiteIdentity
+	err = batch.Account(liteIdUrl).Main().GetAs(&liteId)
+	if err != nil {
+		return false, false, errors.NotFound.WithFormat("lite identity not found: %w", err)
+	}
+
+	// The transaction is ready if it's been signed by the lite identity
+	// (The signature validation happens elsewhere, we just check here that we can proceed)
+	return true, false, nil
+}
+
 func (x ReleaseLockedOperation) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
-	_, _, err := x.check(st, tx)
+	// Validate only performs basic checks on the transaction body.
+	// Database-dependent checks are done in Execute.
+	_, err := x.validateBody(tx)
 	return nil, err
 }
 
-func (ReleaseLockedOperation) check(st *StateManager, tx *Delivery) (*protocol.ReleaseLockedOperation, *protocol.SyntheticLockedDeposit, error) {
+func (ReleaseLockedOperation) validateBody(tx *Delivery) (*protocol.ReleaseLockedOperation, error) {
 	body, ok := tx.Transaction.Body.(*protocol.ReleaseLockedOperation)
 	if !ok {
-		return nil, nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.ReleaseLockedOperation), tx.Transaction.Body)
+		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.ReleaseLockedOperation), tx.Transaction.Body)
 	}
 
 	if body.LockedTxID == nil {
-		return nil, nil, errors.BadRequest.With("locked transaction ID is required")
+		return nil, errors.BadRequest.With("locked transaction ID is required")
 	}
 
 	if len(body.Preimage) == 0 {
-		return nil, nil, errors.BadRequest.With("preimage is required")
+		return nil, errors.BadRequest.With("preimage is required")
 	}
 
 	if len(body.Preimage) > 256 {
-		return nil, nil, errors.BadRequest.With("preimage too large (max 256 bytes)")
+		return nil, errors.BadRequest.With("preimage too large (max 256 bytes)")
+	}
+
+	return body, nil
+}
+
+func (ReleaseLockedOperation) check(st *StateManager, tx *Delivery) (*protocol.ReleaseLockedOperation, *protocol.SyntheticLockedDeposit, *protocol.TransactionStatus, error) {
+	body, ok := tx.Transaction.Body.(*protocol.ReleaseLockedOperation)
+	if !ok {
+		return nil, nil, nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.ReleaseLockedOperation), tx.Transaction.Body)
+	}
+
+	if body.LockedTxID == nil {
+		return nil, nil, nil, errors.BadRequest.With("locked transaction ID is required")
+	}
+
+	if len(body.Preimage) == 0 {
+		return nil, nil, nil, errors.BadRequest.With("preimage is required")
+	}
+
+	if len(body.Preimage) > 256 {
+		return nil, nil, nil, errors.BadRequest.With("preimage too large (max 256 bytes)")
 	}
 
 	// Load the locked deposit transaction status
 	txStatus, err := st.batch.Transaction(body.LockedTxID.HashSlice()).Status().Get()
 	if err != nil {
-		return nil, nil, errors.NotFound.WithFormat("locked transaction not found: %w", err)
+		return nil, nil, nil, errors.NotFound.WithFormat("locked transaction not found: %w", err)
 	}
 
-	if !txStatus.Pending() {
-		return nil, nil, errors.BadRequest.With("locked transaction is not pending")
+	// Check if already released by examining the result
+	if txStatus.Result != nil {
+		if result, ok := txStatus.Result.(*protocol.SyntheticLockedDepositResult); ok {
+			if result.ReleaseTxID != nil {
+				return nil, nil, nil, errors.BadRequest.With("locked deposit has already been released")
+			}
+		}
 	}
 
 	// Load the locked deposit transaction body
 	var lockedMsg messaging.MessageWithTransaction
 	err = st.batch.Message(body.LockedTxID.Hash()).Main().GetAs(&lockedMsg)
 	if err != nil {
-		return nil, nil, errors.NotFound.WithFormat("load locked transaction: %w", err)
+		return nil, nil, nil, errors.NotFound.WithFormat("load locked transaction: %w", err)
 	}
 
 	lockedTx := lockedMsg.GetTransaction()
 	if lockedTx == nil {
-		return nil, nil, errors.NotFound.With("locked transaction body is nil")
+		return nil, nil, nil, errors.NotFound.With("locked transaction body is nil")
 	}
 
 	lockedBody, ok := lockedTx.Body.(*protocol.SyntheticLockedDeposit)
 	if !ok {
-		return nil, nil, errors.BadRequest.WithFormat("referenced transaction is not a locked deposit: got %T", lockedTx.Body)
+		return nil, nil, nil, errors.BadRequest.WithFormat("referenced transaction is not a locked deposit: got %T", lockedTx.Body)
 	}
 
 	// Verify principal matches locked deposit destination
 	if !tx.Transaction.Header.Principal.Equal(lockedTx.Header.Principal) {
-		return nil, nil, errors.Unauthorized.With("release must be signed by locked deposit recipient")
+		return nil, nil, nil, errors.Unauthorized.With("release must be signed by locked deposit recipient")
 	}
 
 	// Verify preimage using the correct hash algorithm
@@ -95,29 +166,29 @@ func (ReleaseLockedOperation) check(st *StateManager, tx *Delivery) (*protocol.R
 		h2.Write(h1[:])
 		computedHash = h2.Sum(nil)
 	default:
-		return nil, nil, errors.BadRequest.WithFormat("unsupported hash algorithm: %v", lockedBody.HashAlgorithm)
+		return nil, nil, nil, errors.BadRequest.WithFormat("unsupported hash algorithm: %v", lockedBody.HashAlgorithm)
 	}
 
 	if !bytes.Equal(computedHash, lockedBody.Hash) {
-		return nil, nil, errors.Unauthenticated.With("preimage does not match hash")
+		return nil, nil, nil, errors.Unauthenticated.With("preimage does not match hash")
 	}
 
 	// Check expiration using the system ledger timestamp
 	var ledger *protocol.SystemLedger
 	err = st.LoadUrlAs(st.NodeUrl(protocol.Ledger), &ledger)
 	if err != nil {
-		return nil, nil, errors.UnknownError.WithFormat("load system ledger: %w", err)
+		return nil, nil, nil, errors.UnknownError.WithFormat("load system ledger: %w", err)
 	}
 
 	if lockedBody.Expiration != nil && ledger.Timestamp.After(*lockedBody.Expiration) {
-		return nil, nil, errors.Expired.With("locked deposit has expired")
+		return nil, nil, nil, errors.Expired.With("locked deposit has expired")
 	}
 
-	return body, lockedBody, nil
+	return body, lockedBody, txStatus, nil
 }
 
 func (x ReleaseLockedOperation) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
-	body, lockedBody, err := x.check(st, tx)
+	body, lockedBody, lockedTxStatus, err := x.check(st, tx)
 	if err != nil {
 		return nil, err
 	}
@@ -191,16 +262,25 @@ func (x ReleaseLockedOperation) Execute(st *StateManager, tx *Delivery) (protoco
 	if !account.CreditTokens(&lockedBody.Amount) {
 		return nil, fmt.Errorf("unable to add deposit balance to account")
 	}
-	err = st.Update(account)
-	if err != nil {
-		return nil, fmt.Errorf("failed to update %v: %v", account.GetUrl(), err)
+
+	// Create or update the account depending on whether it existed
+	if st.Origin != nil {
+		err = st.Update(account)
+		if err != nil {
+			return nil, fmt.Errorf("failed to update %v: %v", account.GetUrl(), err)
+		}
+	} else {
+		err = st.Create(account)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create %v: %v", account.GetUrl(), err)
+		}
 	}
 
-	// Mark the locked deposit as delivered by updating its status
-	err = st.batch.Transaction(body.LockedTxID.HashSlice()).Status().Put(&protocol.TransactionStatus{
-		TxID: body.LockedTxID,
-		Code: errors.Delivered,
-	})
+	// Mark the locked deposit as released by updating its result
+	lockedTxStatus.Result = &protocol.SyntheticLockedDepositResult{
+		ReleaseTxID: tx.Transaction.ID(),
+	}
+	err = st.batch.Transaction(body.LockedTxID.HashSlice()).Status().Put(lockedTxStatus)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("update locked tx status: %w", err)
 	}

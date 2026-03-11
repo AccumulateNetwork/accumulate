@@ -781,6 +781,20 @@ func (b TransactionBuilder) HashLockSHA256FromPreimage(preimage []byte, expirati
 	return b.HashLockSHA256(hash, expiration)
 }
 
+// HashLockSHA256D sets a double SHA-256 hashlock (32 bytes, compatible with Bitcoin block hashing).
+// SHA256D = SHA256(SHA256(preimage))
+func (b TransactionBuilder) HashLockSHA256D(hash [32]byte, expiration time.Time) TransactionBuilder {
+	return b.HashLock(protocol.HashAlgorithmSHA256D, hash[:], expiration)
+}
+
+// HashLockSHA256DFromPreimage computes the double SHA-256 hash of the preimage and sets it as the hashlock.
+// SHA256D = SHA256(SHA256(preimage))
+func (b TransactionBuilder) HashLockSHA256DFromPreimage(preimage []byte, expiration time.Time) TransactionBuilder {
+	h1 := sha256.Sum256(preimage)
+	h2 := sha256.Sum256(h1[:])
+	return b.HashLockSHA256D(h2, expiration)
+}
+
 // HashLockHASH160 sets a HASH160 hashlock (20 bytes, compatible with Bitcoin OP_HASH160).
 // HASH160 = RIPEMD160(SHA256(preimage))
 func (b TransactionBuilder) HashLockHASH160(hash [20]byte, expiration time.Time) TransactionBuilder {
