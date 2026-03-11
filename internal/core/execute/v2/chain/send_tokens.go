@@ -43,8 +43,21 @@ func (SendTokens) check(st *StateManager, tx *Delivery) (*protocol.SendTokens, e
 	// Validate hashlock if present
 	if tx.Transaction.Header.HashLock != nil {
 		lock := tx.Transaction.Header.HashLock
-		if lock.Hash == ([32]byte{}) {
+		if len(lock.Hash) == 0 {
 			return nil, errors.BadRequest.With("hashlock hash cannot be empty")
+		}
+		// Validate hash length based on algorithm
+		switch lock.HashAlgorithm {
+		case protocol.HashAlgorithmSHA256, protocol.HashAlgorithmSHA256D:
+			if len(lock.Hash) != 32 {
+				return nil, errors.BadRequest.WithFormat("hashlock hash must be 32 bytes for %v, got %d", lock.HashAlgorithm, len(lock.Hash))
+			}
+		case protocol.HashAlgorithmHASH160:
+			if len(lock.Hash) != 20 {
+				return nil, errors.BadRequest.WithFormat("hashlock hash must be 20 bytes for HASH160, got %d", len(lock.Hash))
+			}
+		default:
+			return nil, errors.BadRequest.WithFormat("unsupported hashlock algorithm: %v", lock.HashAlgorithm)
 		}
 		if lock.Expiration == nil {
 			return nil, errors.BadRequest.With("hashlock expiration is required")
@@ -101,6 +114,7 @@ func (x SendTokens) Execute(st *StateManager, tx *Delivery) (protocol.Transactio
 			locked.Token = account.GetTokenUrl()
 			locked.Amount = to.Amount
 			locked.Sender = tx.Transaction.Header.Principal
+			locked.HashAlgorithm = tx.Transaction.Header.HashLock.HashAlgorithm
 			locked.Hash = tx.Transaction.Header.HashLock.Hash
 			locked.Expiration = tx.Transaction.Header.HashLock.Expiration
 			// Check if sender is token issuer

@@ -109,9 +109,13 @@ SyntheticLockedDeposit:
       description: the original sender to refund on expiration
       type: url
       pointer: true
+    - name: HashAlgorithm
+      description: the hash algorithm used (SHA256, SHA256D, HASH160)
+      type: HashAlgorithm
+      marshal-as: enum
     - name: Hash
-      description: the SHA-256 hash that must be unlocked with preimage
-      type: hash
+      description: hash that must be unlocked with preimage (length depends on algorithm)
+      type: bytes
     - name: Expiration
       description: when the lock expires and tokens are refunded
       type: time

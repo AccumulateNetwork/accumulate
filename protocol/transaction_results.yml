@@ -30,9 +30,13 @@ ReleaseLockedOperationResult:
     - name: Preimage
       description: the revealed preimage
       type: bytes
+    - name: HashAlgorithm
+      description: the hash algorithm used
+      type: HashAlgorithm
+      marshal-as: enum
     - name: Hash
       description: the hash that was unlocked
-      type: hash
+      type: bytes
     - name: Amount
       description: the amount of tokens released
       type: bigint

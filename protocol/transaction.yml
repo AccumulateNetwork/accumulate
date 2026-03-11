@@ -72,9 +72,13 @@ ExpireOptions:
 HashLockOptions:
   description: specifies conditions for a hash-locked operation
   fields:
+    - name: HashAlgorithm
+      description: the hash algorithm used (SHA256, SHA256D, HASH160)
+      type: HashAlgorithm
+      marshal-as: enum
     - name: Hash
-      description: SHA-256 hash of the secret preimage (32 bytes)
-      type: hash
+      description: hash of the secret preimage (length depends on algorithm)
+      type: bytes
     - name: Expiration
       description: absolute time when the lock expires and tokens are refunded
       type: time

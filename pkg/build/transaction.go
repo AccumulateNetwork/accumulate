@@ -13,6 +13,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"golang.org/x/crypto/ripemd160" //nolint:staticcheck
 )
 
 type TransactionBuilder struct {
@@ -760,18 +761,41 @@ func (b LockAccountBuilder) SignWith(signer any, path ...string) SignatureBuilde
 // HashLock sets a hashlock on the transaction for HTLC (Hashed Time-Locked Contract) operations.
 // When present on token transfers, this causes the system to produce locked synthetic transactions
 // instead of direct deposits.
-func (b TransactionBuilder) HashLock(hash [32]byte, expiration time.Time) TransactionBuilder {
+func (b TransactionBuilder) HashLock(algorithm protocol.HashAlgorithm, hash []byte, expiration time.Time) TransactionBuilder {
 	b.t.Header.HashLock = &protocol.HashLockOptions{
-		Hash:       hash,
-		Expiration: &expiration,
+		HashAlgorithm: algorithm,
+		Hash:          hash,
+		Expiration:    &expiration,
 	}
 	return b
 }
 
-// HashLockFromPreimage computes the SHA-256 hash of the preimage and sets it as the hashlock.
-func (b TransactionBuilder) HashLockFromPreimage(preimage []byte, expiration time.Time) TransactionBuilder {
+// HashLockSHA256 sets a SHA-256 hashlock (32 bytes, compatible with Ethereum and Bitcoin OP_SHA256).
+func (b TransactionBuilder) HashLockSHA256(hash [32]byte, expiration time.Time) TransactionBuilder {
+	return b.HashLock(protocol.HashAlgorithmSHA256, hash[:], expiration)
+}
+
+// HashLockSHA256FromPreimage computes the SHA-256 hash of the preimage and sets it as the hashlock.
+func (b TransactionBuilder) HashLockSHA256FromPreimage(preimage []byte, expiration time.Time) TransactionBuilder {
 	hash := sha256.Sum256(preimage)
-	return b.HashLock(hash, expiration)
+	return b.HashLockSHA256(hash, expiration)
+}
+
+// HashLockHASH160 sets a HASH160 hashlock (20 bytes, compatible with Bitcoin OP_HASH160).
+// HASH160 = RIPEMD160(SHA256(preimage))
+func (b TransactionBuilder) HashLockHASH160(hash [20]byte, expiration time.Time) TransactionBuilder {
+	return b.HashLock(protocol.HashAlgorithmHASH160, hash[:], expiration)
+}
+
+// HashLockHASH160FromPreimage computes HASH160 of the preimage and sets it as the hashlock.
+// HASH160 = RIPEMD160(SHA256(preimage))
+func (b TransactionBuilder) HashLockHASH160FromPreimage(preimage []byte, expiration time.Time) TransactionBuilder {
+	h1 := sha256.Sum256(preimage)
+	h2 := ripemd160.New()
+	h2.Write(h1[:])
+	var hash [20]byte
+	copy(hash[:], h2.Sum(nil))
+	return b.HashLockHASH160(hash, expiration)
 }
 
 type ReleaseLockedOperationBuilder struct {

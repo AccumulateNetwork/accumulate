@@ -382,3 +382,17 @@ BookType:
   Operator:
     value: 0x02
     description: Operator key book
+
+HashAlgorithm:
+  Unknown:
+    value: 0
+    description: is used when the hash algorithm is not known
+  SHA256:
+    value: 1
+    description: SHA-256, 32 bytes output (Ethereum, Bitcoin OP_SHA256)
+  SHA256D:
+    value: 2
+    description: double SHA-256, 32 bytes output (Bitcoin block hashing)
+  HASH160:
+    value: 3
+    description: RIPEMD160(SHA256(x)), 20 bytes output (Bitcoin OP_HASH160, addresses)

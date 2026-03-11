@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -142,6 +142,18 @@ const ExecutorVersionV2Jiuquan ExecutorVersion = 8
 
 // ExecutorVersionVNext is a placeholder for testing. DO NOT USE.
 const ExecutorVersionVNext ExecutorVersion = 9
+
+// HashAlgorithmUnknown is used when the hash algorithm is not known.
+const HashAlgorithmUnknown HashAlgorithm = 0
+
+// HashAlgorithmSHA256 SHA-256, 32 bytes output (Ethereum, Bitcoin OP_SHA256).
+const HashAlgorithmSHA256 HashAlgorithm = 1
+
+// HashAlgorithmSHA256D double SHA-256, 32 bytes output (Bitcoin block hashing).
+const HashAlgorithmSHA256D HashAlgorithm = 2
+
+// HashAlgorithmHASH160 RIPEMD160(SHA256(x)), 20 bytes output (Bitcoin OP_HASH160, addresses).
+const HashAlgorithmHASH160 HashAlgorithm = 3
 
 // KeyPageOperationTypeUnknown is used when the key page operation is not known.
 const KeyPageOperationTypeUnknown KeyPageOperationType = 0
@@ -902,6 +914,71 @@ func (v *ExecutorVersion) UnmarshalJSON(data []byte) error {
 	*v, ok = ExecutorVersionByName(s)
 	if !ok || strings.ContainsRune(v.String(), ':') {
 		return fmt.Errorf("invalid Executor Version %q", s)
+	}
+	return nil
+}
+
+// GetEnumValue returns the value of the Hash Algorithm
+func (v HashAlgorithm) GetEnumValue() uint64 { return uint64(v) }
+
+// SetEnumValue sets the value. SetEnumValue returns false if the value is invalid.
+func (v *HashAlgorithm) SetEnumValue(id uint64) bool {
+	u := HashAlgorithm(id)
+	switch u {
+	case HashAlgorithmUnknown, HashAlgorithmSHA256, HashAlgorithmSHA256D, HashAlgorithmHASH160:
+		*v = u
+		return true
+	}
+	return false
+}
+
+// String returns the name of the Hash Algorithm.
+func (v HashAlgorithm) String() string {
+	switch v {
+	case HashAlgorithmUnknown:
+		return "unknown"
+	case HashAlgorithmSHA256:
+		return "sha256"
+	case HashAlgorithmSHA256D:
+		return "sha256D"
+	case HashAlgorithmHASH160:
+		return "hash160"
+	}
+	return fmt.Sprintf("HashAlgorithm:%d", v)
+}
+
+// HashAlgorithmByName returns the named Hash Algorithm.
+func HashAlgorithmByName(name string) (HashAlgorithm, bool) {
+	switch strings.ToLower(name) {
+	case "unknown":
+		return HashAlgorithmUnknown, true
+	case "sha256":
+		return HashAlgorithmSHA256, true
+	case "sha256d":
+		return HashAlgorithmSHA256D, true
+	case "hash160":
+		return HashAlgorithmHASH160, true
+	}
+	return 0, false
+}
+
+// MarshalJSON marshals the Hash Algorithm to JSON as a string.
+func (v HashAlgorithm) MarshalJSON() ([]byte, error) {
+	return json.Marshal(v.String())
+}
+
+// UnmarshalJSON unmarshals the Hash Algorithm from JSON as a string.
+func (v *HashAlgorithm) UnmarshalJSON(data []byte) error {
+	var s string
+	err := json.Unmarshal(data, &s)
+	if err != nil {
+		return err
+	}
+
+	var ok bool
+	*v, ok = HashAlgorithmByName(s)
+	if !ok || strings.ContainsRune(v.String(), ':') {
+		return fmt.Errorf("invalid Hash Algorithm %q", s)
 	}
 	return nil
 }

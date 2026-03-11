@@ -7,6 +7,7 @@
 package chain
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"fmt"
 
@@ -14,6 +15,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"golang.org/x/crypto/ripemd160"
 )
 
 type ReleaseLockedOperation struct{}
@@ -77,9 +79,26 @@ func (ReleaseLockedOperation) check(st *StateManager, tx *Delivery) (*protocol.R
 		return nil, nil, errors.Unauthorized.With("release must be signed by locked deposit recipient")
 	}
 
-	// Verify preimage
-	hash := sha256.Sum256(body.Preimage)
-	if hash != lockedBody.Hash {
+	// Verify preimage using the correct hash algorithm
+	var computedHash []byte
+	switch lockedBody.HashAlgorithm {
+	case protocol.HashAlgorithmSHA256:
+		h := sha256.Sum256(body.Preimage)
+		computedHash = h[:]
+	case protocol.HashAlgorithmSHA256D:
+		h1 := sha256.Sum256(body.Preimage)
+		h2 := sha256.Sum256(h1[:])
+		computedHash = h2[:]
+	case protocol.HashAlgorithmHASH160:
+		h1 := sha256.Sum256(body.Preimage)
+		h2 := ripemd160.New()
+		h2.Write(h1[:])
+		computedHash = h2.Sum(nil)
+	default:
+		return nil, nil, errors.BadRequest.WithFormat("unsupported hash algorithm: %v", lockedBody.HashAlgorithm)
+	}
+
+	if !bytes.Equal(computedHash, lockedBody.Hash) {
 		return nil, nil, errors.Unauthenticated.With("preimage does not match hash")
 	}
 
@@ -188,10 +207,11 @@ func (x ReleaseLockedOperation) Execute(st *StateManager, tx *Delivery) (protoco
 
 	// Return result with preimage for cross-chain extraction
 	result := &protocol.ReleaseLockedOperationResult{
-		Preimage: body.Preimage,
-		Hash:     lockedBody.Hash,
-		Amount:   lockedBody.Amount,
-		Token:    lockedBody.Token,
+		Preimage:      body.Preimage,
+		HashAlgorithm: lockedBody.HashAlgorithm,
+		Hash:          lockedBody.Hash,
+		Amount:        lockedBody.Amount,
+		Token:         lockedBody.Token,
 	}
 	return result, nil
 }

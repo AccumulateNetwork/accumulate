@@ -43,8 +43,22 @@ func (SyntheticLockedDeposit) check(st *StateManager, tx *Delivery) (*protocol.S
 		return nil, fmt.Errorf("amount can't be a negative value")
 	}
 
-	if body.Hash == ([32]byte{}) {
+	if len(body.Hash) == 0 {
 		return nil, errors.BadRequest.With("hash cannot be empty")
+	}
+
+	// Validate hash length based on algorithm
+	switch body.HashAlgorithm {
+	case protocol.HashAlgorithmSHA256, protocol.HashAlgorithmSHA256D:
+		if len(body.Hash) != 32 {
+			return nil, errors.BadRequest.WithFormat("hash must be 32 bytes for %v, got %d", body.HashAlgorithm, len(body.Hash))
+		}
+	case protocol.HashAlgorithmHASH160:
+		if len(body.Hash) != 20 {
+			return nil, errors.BadRequest.WithFormat("hash must be 20 bytes for HASH160, got %d", len(body.Hash))
+		}
+	default:
+		return nil, errors.BadRequest.WithFormat("unsupported hash algorithm: %v", body.HashAlgorithm)
 	}
 
 	if body.Expiration == nil {
