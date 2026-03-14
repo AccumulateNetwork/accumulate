@@ -20,9 +20,8 @@ import (
 )
 
 type DB struct {
-	LastScan  *time.Time                            `json:"lastScan,omitempty" form:"lastScan" query:"lastScan" validate:"required"`
-	Peers     *AtomicSlice[*PeerStatus, PeerStatus] `json:"peers,omitempty" form:"peers" query:"peers" validate:"required"`
-	PeerInfos *AtomicSlice[*PeerStatus, PeerStatus] `json:"peerInfos,omitempty" form:"peerInfos" query:"peerInfos" validate:"required"`
+	LastScan *time.Time                            `json:"lastScan,omitempty" form:"lastScan" query:"lastScan" validate:"required"`
+	Peers    *AtomicSlice[*PeerStatus, PeerStatus] `json:"peers,omitempty" form:"peers" query:"peers" validate:"required"`
 }
 
 type LastStatus struct {
@@ -61,9 +60,6 @@ func (v *DB) Copy() *DB {
 	}
 	if v.Peers != nil {
 		u.Peers = (v.Peers).Copy()
-	}
-	if v.PeerInfos != nil {
-		u.PeerInfos = (v.PeerInfos).Copy()
 	}
 
 	return u
@@ -160,14 +156,6 @@ func (v *DB) Equal(u *DB) bool {
 	case v.Peers == nil || u.Peers == nil:
 		return false
 	case !((v.Peers).Equal(u.Peers)):
-		return false
-	}
-	switch {
-	case v.PeerInfos == u.PeerInfos:
-		// equal
-	case v.PeerInfos == nil || u.PeerInfos == nil:
-		return false
-	case !((v.PeerInfos).Equal(u.PeerInfos)):
 		return false
 	}
 
@@ -272,7 +260,6 @@ func init() {
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("lastScan", "string"),
 		encoding.NewTypeField("peers", "AtomicSlice[*PeerStatus, PeerStatus]"),
-		encoding.NewTypeField("peerInfos", "AtomicSlice[*PeerStatus, PeerStatus]"),
 	}, "DB", "db")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
