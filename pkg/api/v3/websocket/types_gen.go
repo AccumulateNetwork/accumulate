@@ -22,11 +22,11 @@ import (
 )
 
 type Message struct {
-	fieldsSet []bool
-	ID        uint64          `json:"id,omitempty" form:"id" query:"id" validate:"required"`
-	Status    StreamStatus    `json:"status,omitempty" form:"status" query:"status" validate:"required"`
-	Message   message.Message `json:"message,omitempty" form:"message" query:"message"`
-	extraData []byte
+	fieldsSet        []bool
+	ID               uint64          `json:"id,omitempty" form:"id" query:"id" validate:"required"`
+	Status           StreamStatus    `json:"status,omitempty" form:"status" query:"status" validate:"required"`
+	WebSocketMessage message.Message `json:"webSocketMessage,omitempty" form:"webSocketMessage" query:"webSocketMessage"`
+	extraData        []byte
 }
 
 func (v *Message) Copy() *Message {
@@ -34,8 +34,8 @@ func (v *Message) Copy() *Message {
 
 	u.ID = v.ID
 	u.Status = v.Status
-	if v.Message != nil {
-		u.Message = message.Copy(v.Message)
+	if v.WebSocketMessage != nil {
+		u.WebSocketMessage = message.Copy(v.WebSocketMessage)
 	}
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
@@ -54,7 +54,7 @@ func (v *Message) Equal(u *Message) bool {
 	if !(v.Status == u.Status) {
 		return false
 	}
-	if !(message.Equal(v.Message, u.Message)) {
+	if !(message.Equal(v.WebSocketMessage, u.WebSocketMessage)) {
 		return false
 	}
 
@@ -64,7 +64,7 @@ func (v *Message) Equal(u *Message) bool {
 var fieldNames_Message = []string{
 	1: "ID",
 	2: "Status",
-	3: "Message",
+	3: "WebSocketMessage",
 }
 
 func (v *Message) MarshalBinary() ([]byte, error) {
@@ -81,8 +81,8 @@ func (v *Message) MarshalBinary() ([]byte, error) {
 	if !(v.Status == 0) {
 		writer.WriteEnum(2, v.Status)
 	}
-	if !(message.Equal(v.Message, nil)) {
-		writer.WriteValue(3, v.Message.MarshalBinary)
+	if !(message.Equal(v.WebSocketMessage, nil)) {
+		writer.WriteValue(3, v.WebSocketMessage.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_Message)
@@ -133,7 +133,7 @@ func (v *Message) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader.ReadValue(3, func(r io.Reader) error {
 		x, err := message.UnmarshalFrom(r)
 		if err == nil {
-			v.Message = x
+			v.WebSocketMessage = x
 		}
 		return err
 	})
@@ -155,17 +155,17 @@ func init() {
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("id", "uint64"),
 		encoding.NewTypeField("status", "string"),
-		encoding.NewTypeField("message", "message.Message"),
+		encoding.NewTypeField("webSocketMessage", "message.Message"),
 	}, "Message", "message")
 
 }
 
 func (v *Message) MarshalJSON() ([]byte, error) {
 	u := struct {
-		ID        uint64                                       `json:"id,omitempty"`
-		Status    StreamStatus                                 `json:"status,omitempty"`
-		Message   *encoding.JsonUnmarshalWith[message.Message] `json:"message,omitempty"`
-		ExtraData *string                                      `json:"$epilogue,omitempty"`
+		ID               uint64                                       `json:"id,omitempty"`
+		Status           StreamStatus                                 `json:"status,omitempty"`
+		WebSocketMessage *encoding.JsonUnmarshalWith[message.Message] `json:"webSocketMessage,omitempty"`
+		ExtraData        *string                                      `json:"$epilogue,omitempty"`
 	}{}
 	if !(v.ID == 0) {
 		u.ID = v.ID
@@ -173,8 +173,8 @@ func (v *Message) MarshalJSON() ([]byte, error) {
 	if !(v.Status == 0) {
 		u.Status = v.Status
 	}
-	if !(message.Equal(v.Message, nil)) {
-		u.Message = &encoding.JsonUnmarshalWith[message.Message]{Value: v.Message, Func: message.UnmarshalJSON}
+	if !(message.Equal(v.WebSocketMessage, nil)) {
+		u.WebSocketMessage = &encoding.JsonUnmarshalWith[message.Message]{Value: v.WebSocketMessage, Func: message.UnmarshalJSON}
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -182,22 +182,22 @@ func (v *Message) MarshalJSON() ([]byte, error) {
 
 func (v *Message) UnmarshalJSON(data []byte) error {
 	u := struct {
-		ID        uint64                                       `json:"id,omitempty"`
-		Status    StreamStatus                                 `json:"status,omitempty"`
-		Message   *encoding.JsonUnmarshalWith[message.Message] `json:"message,omitempty"`
-		ExtraData *string                                      `json:"$epilogue,omitempty"`
+		ID               uint64                                       `json:"id,omitempty"`
+		Status           StreamStatus                                 `json:"status,omitempty"`
+		WebSocketMessage *encoding.JsonUnmarshalWith[message.Message] `json:"webSocketMessage,omitempty"`
+		ExtraData        *string                                      `json:"$epilogue,omitempty"`
 	}{}
 	u.ID = v.ID
 	u.Status = v.Status
-	u.Message = &encoding.JsonUnmarshalWith[message.Message]{Value: v.Message, Func: message.UnmarshalJSON}
+	u.WebSocketMessage = &encoding.JsonUnmarshalWith[message.Message]{Value: v.WebSocketMessage, Func: message.UnmarshalJSON}
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
 	}
 	v.ID = u.ID
 	v.Status = u.Status
-	if u.Message != nil {
-		v.Message = u.Message.Value
+	if u.WebSocketMessage != nil {
+		v.WebSocketMessage = u.WebSocketMessage.Value
 	}
 
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
