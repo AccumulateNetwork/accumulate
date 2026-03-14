@@ -39,8 +39,6 @@ func init() {
 	cmdGenesis.AddCommand(cmdGenesisIngest)
 }
 
-const calculateBPT = false
-
 func ingestForGenesis(cmd *cobra.Command, args []string) {
 	// Timer for progress
 	tick := time.NewTicker(time.Second / 2)
