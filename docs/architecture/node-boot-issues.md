@@ -1,8 +1,9 @@
 # Node Boot Issues Research
 
-**Issue**: Multi-node network deployment problems
+**Issue**: #3722
+**Related**: #3718 (CometBFT Analysis)
 **Date**: March 2026
-**Status**: Research
+**Status**: Research - to be resolved with CometBFT replacement
 
 ---
 

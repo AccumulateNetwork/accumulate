@@ -584,4 +584,6 @@ For light clients verifying proofs:
 
 ### Accumulate Issues
 - Issue #3718: CometBFT Analysis
+- Issue #3722: Node Boot Issues (to be resolved with CometBFT replacement)
 - Issue #3634: Remove Expensive Merkle Indices
+- [Node Boot Issues Research](node-boot-issues.md) - Multi-node deployment problems
