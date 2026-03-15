@@ -1,4 +1,4 @@
-// Copyright 2024 CometBFT Authors
+// Copyright 2026 CometBFT Authors
 //
 // Source: https://github.com/cometbft/cometbft/blob/v0.38.0-rc3/rpc/client/http/http.go
 //
