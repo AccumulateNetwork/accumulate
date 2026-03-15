@@ -458,14 +458,19 @@ Wallet → Compute Partition → Direct to BVN → Process → Return to Wallet
    }
    ```
 
-3. **Fallback**
-   - If direct call fails, fall back to any-node routing
-   - Refresh routing table on persistent failures
+3. **Fallback: Routing Requests**
+   - If local routing fails (no table, stale, etc.)
+   - Make lightweight routing request:
+     ```
+     GET /v3/route?account=acc://foo.acme
+     → { "partition": "BVN2", "endpoints": [...] }
+     ```
+   - Then direct call to returned partition
+   - Only full proxy as last resort
 
-### Directory Service
+### API Endpoints
 
-Could expose routing info via API:
-
+**1. Full Routing Table (for caching)**
 ```
 GET /v3/network/routing
 {
@@ -480,6 +485,68 @@ GET /v3/network/routing
 ```
 
 Wallets cache this and refresh periodically.
+
+**2. Routing Request (lightweight fallback)**
+```
+GET /v3/route?account=acc://foo.acme/tokens
+{
+  "account": "acc://foo.acme/tokens",
+  "partition": "BVN2",
+  "endpoints": [
+    "https://bvn2-node1.accumulate.network",
+    "https://bvn2-node2.accumulate.network"
+  ]
+}
+```
+
+Used when:
+- Wallet doesn't have routing table cached
+- Routing table may be stale
+- Quick one-off without full table download
+
+### Redirect Pattern (Simplest)
+
+Instead of proxying, nodes return redirect information:
+
+```
+1. Wallet → Any Node (may be wrong partition)
+
+2. If wrong partition, node responds:
+   {
+     "error": "wrong_partition",
+     "redirect": {
+       "partition": "BVN2",
+       "endpoints": ["https://bvn2.example.com", ...]
+     }
+   }
+
+3. Wallet resubmits → BVN2 directly
+
+4. Wallet caches: acc://foo.acme → BVN2 for future
+```
+
+**Benefits:**
+- No proxying overhead on nodes
+- Wallet learns correct routing over time
+- Works without pre-cached routing table
+- Simple protocol addition
+
+**Wallet builds routing cache organically:**
+- First request to new account → redirect → learn
+- Subsequent requests → direct (cached)
+- Cache eviction on errors → re-learn
+
+### Fallback Hierarchy
+
+```
+1. Local cache hit → direct call
+   ↓ miss
+2. Any node → redirect response → resubmit direct → cache
+   ↓ redirect fails
+3. Any node → full proxy (last resort, legacy support)
+```
+
+This minimizes latency while ensuring requests always succeed.
 
 ### Light Client Integration
 
