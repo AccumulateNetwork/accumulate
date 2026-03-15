@@ -370,6 +370,127 @@ DirectoryChain: [url_hash, url_hash, BlockMarker{...}, url_hash, ...]
 
 ---
 
+---
+
+## Part 8: Wallet-Side Routing Optimization
+
+### Current API Flow
+
+```
+Wallet → Any Node → RouteAccount() → Forward to BVN → Process → Return → Node → Wallet
+```
+
+Every API call:
+1. Wallet sends to any node
+2. Node computes partition via `RouteTree`
+3. Node forwards request to correct BVN
+4. BVN processes request
+5. BVN returns result to node
+6. Node forwards result to wallet
+
+**Issues:**
+- Extra hop adds latency
+- Node does proxy work (load)
+- Wallet has no visibility into network topology
+
+### Routing Is Deterministic
+
+The routing algorithm is simple and deterministic:
+
+```go
+func (r *RouteTree) Route(u *url.URL) (string, error) {
+    // Check overrides first
+    s, ok := r.overrides[u.IdentityAccountID32()]
+    if ok {
+        return s, nil
+    }
+    // Route by URL routing number
+    return r.RouteNr(u.Routing())
+}
+```
+
+`url.Routing()` is computed from the URL itself. The prefix tree maps routing numbers to partition IDs.
+
+### Proposed: Wallet Routing Directory
+
+Wallets maintain a local routing directory:
+
+```
+Wallet Routing Directory:
+├── Routing Table (prefix tree)
+├── Partition Endpoints (BVN URLs)
+├── Override Map (special accounts)
+└── Version/Timestamp
+```
+
+**Optimized flow:**
+```
+Wallet → Compute Partition → Direct to BVN → Process → Return to Wallet
+```
+
+### Benefits
+
+| Aspect | Current | With Wallet Routing |
+|--------|---------|---------------------|
+| Latency | 2 hops | 1 hop |
+| Node load | Proxying | None |
+| Failover | Node handles | Wallet controls |
+| Caching | Node-side | Wallet-side |
+
+### Implementation
+
+1. **Routing Table Distribution**
+   - Publish routing table via DN
+   - Wallets fetch periodically or on version change
+   - Include partition endpoint URLs
+
+2. **Wallet SDK**
+   ```go
+   type WalletRouter struct {
+       table     *RoutingTable
+       endpoints map[string][]string  // partition → URLs
+   }
+
+   func (w *WalletRouter) Submit(tx *Transaction) (*Result, error) {
+       partition := w.Route(tx.Principal)
+       endpoint := w.SelectEndpoint(partition)
+       return w.client.Submit(endpoint, tx)
+   }
+   ```
+
+3. **Fallback**
+   - If direct call fails, fall back to any-node routing
+   - Refresh routing table on persistent failures
+
+### Directory Service
+
+Could expose routing info via API:
+
+```
+GET /v3/network/routing
+{
+  "version": 42,
+  "table": { ... },
+  "partitions": {
+    "BVN0": ["https://bvn0-node1.accumulate.network", ...],
+    "BVN1": ["https://bvn1-node1.accumulate.network", ...],
+    "Directory": ["https://dn-node1.accumulate.network", ...]
+  }
+}
+```
+
+Wallets cache this and refresh periodically.
+
+### Light Client Integration
+
+For light clients verifying proofs:
+- Know which partition holds account
+- Direct query to that partition
+- Verify proof against DN anchor
+- No proxy needed
+
+---
+
 ## References
 
 - [DAG Meets BFT](https://decentralizedthoughts.github.io/2022-06-28-DAG-meets-BFT/)
