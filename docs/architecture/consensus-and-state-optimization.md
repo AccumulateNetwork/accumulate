@@ -56,7 +56,7 @@ CometBFT's blockstore is 100% redundant because Accumulate's BPT is authoritativ
 
 ### Snapshot Unreliability
 
-CometBFT snapshots fail due to hash mismatch after restore (`internal/node/abci/snapshot.go:153`):
+CometBFT snapshots fail due to CometBFT's internal state hash not matching after restore (`internal/node/abci/snapshot.go:153`). Accumulate's BPT is consistent - the mismatch is in CometBFT's bookkeeping, not Accumulate's state:
 
 ```go
 if !bytes.Equal(root[:], bptHash) {
@@ -64,6 +64,8 @@ if !bytes.Equal(root[:], bptHash) {
     return &abci.ResponseApplySnapshotChunk{Result: REJECT_SNAPSHOT}, nil
 }
 ```
+
+This is another argument for eliminating CometBFT's state storage entirely - Accumulate's BPT is authoritative and reliable, while CometBFT's parallel state tracking creates synchronization issues.
 
 Without reliable snapshots:
 - Cannot enable `RetainHeight` pruning
@@ -130,7 +132,7 @@ Layer 4: Full Archival (Optional)
 
 | Algorithm | Throughput | Latency | Notes |
 |-----------|------------|---------|-------|
-| CometBFT | ~10k TPS | 1-6s | Current |
+| CometBFT | 200-500 TPS | 1-6s | Current (observed) |
 | Bullshark | 100-130k TPS | 2-3s | DAG-based |
 | Mysticeti | 200k TPS | 0.5s | Uncertified DAG |
 | Shoal++ | 75k TPS | 1.7s | Improved Bullshark |
@@ -141,7 +143,16 @@ Layer 4: Full Archival (Optional)
 DAG-based consensus separates data availability from ordering:
 - Validators broadcast transactions to DAG structure
 - Separate consensus layer orders DAG vertices
-- Parallelism enables 10-25x throughput
+- Parallelism enables 200-500x throughput improvement over current CometBFT
+
+### Implementation Approach
+
+Build custom implementation in Go rather than adapting existing Rust code:
+- Bullshark consensus is ~200 lines on top of DAG layer
+- Full Narwhal (DAG + consensus) is ~10k lines - not prohibitive
+- Papers provide clear algorithms; archived Narwhal code as reference
+- Clean codebase we fully own, no fork maintenance burden
+- Native Go integrates cleanly with existing Accumulate code
 
 ### Accumulate's Parallelism
 
@@ -316,16 +327,20 @@ DirectoryChain: [url_hash, url_hash, BlockMarker{...}, url_hash, ...]
    - Modify BPT hash computation
    - Migrate existing directories
 
-3. **Fix snapshot hash mismatch**
-   - Investigate BPT computation determinism
-   - Enable `RetainHeight` pruning
+3. **Work around CometBFT snapshot issues**
+   - CometBFT's state hash mismatch is their bug, not ours
+   - Consider resetting CometBFT state on snapshot restore
+   - Enable `RetainHeight` pruning once snapshots work
 
 ### Long-Term
 
-1. **Replace CometBFT ordering**
-   - Evaluate DAG-based consensus (Bullshark/Mysticeti)
-   - Build minimal ordering layer
-   - Eliminate blockstore entirely
+1. **Replace CometBFT with custom DAG consensus**
+   - Build from scratch in Go using Bullshark/Narwhal papers as reference
+   - Use archived Narwhal code (Rust) as implementation reference
+   - ~10k lines for production-ready implementation
+   - Clean build we fully own and understand
+   - Integrates naturally with BPT and anchor system
+   - Eliminates blockstore entirely
 
 2. **Major Block Proof System**
    - Operator signature chain
@@ -365,10 +380,8 @@ DirectoryChain: [url_hash, url_hash, BlockMarker{...}, url_hash, ...]
 
 | Current | With DAG Consensus |
 |---------|-------------------|
-| ~10k TPS per partition | 100k+ TPS per partition |
+| 200-500 TPS per partition | 100k+ TPS per partition |
 | Consensus bottleneck | Hardware bottleneck |
-
----
 
 ---
 
@@ -560,9 +573,15 @@ For light clients verifying proofs:
 
 ## References
 
-- [DAG Meets BFT](https://decentralizedthoughts.github.io/2022-06-28-DAG-meets-BFT/)
-- [Bullshark Paper](https://arxiv.org/pdf/2201.05677)
-- [Mysticeti Paper](https://arxiv.org/pdf/2310.14821)
-- [Shoal++ Paper](https://www.usenix.org/system/files/nsdi25-arun.pdf)
+### DAG Consensus Papers & Code
+- [DAG Meets BFT](https://decentralizedthoughts.github.io/2022-06-28-DAG-meets-BFT/) - Conceptual overview
+- [Narwhal and Tusk Paper](https://arxiv.org/pdf/2105.11827) - DAG mempool + async consensus
+- [Bullshark Paper](https://arxiv.org/pdf/2201.05677) - Partially synchronous DAG BFT
+- [Mysticeti Paper](https://arxiv.org/pdf/2310.14821) - Uncertified DAG (lower latency)
+- [Shoal++ Paper](https://www.usenix.org/system/files/nsdi25-arun.pdf) - Pipelining improvements
+- [Narwhal Reference Implementation](https://github.com/PaulSnow/narwhal-reference) - Archived Rust code
+- Local: [dag-consensus-refs/](dag-consensus-refs/) - Papers and implementation notes
+
+### Accumulate Issues
 - Issue #3718: CometBFT Analysis
 - Issue #3634: Remove Expensive Merkle Indices
