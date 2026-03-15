@@ -14,6 +14,22 @@ Replace CometBFT with custom DAG-based consensus (Bullshark-style) built in Go. 
 - Data duplication (eliminate blockstore.db)
 - Snapshot failures (BPT-centric sync)
 
+## Algorithm Decision: Bullshark ✓
+
+| Metric | Bullshark | Mysticeti |
+|--------|-----------|-----------|
+| Throughput | 100k+ TPS | 200k TPS |
+| Latency | 2-3s | 0.4-0.5s |
+| Core algorithm | ~270 lines | ~4k lines |
+| Full impl | ~3k lines | ~15k+ lines |
+
+**Decision**: Bullshark. Throughput matters, latency does not.
+
+Mysticeti's sub-second latency requires complex synchronization for missing blocks, "blame" mechanisms, and commit finalization state machines. Not worth 5x complexity.
+
+**Primary reference**: [Narwhal/Bullshark](https://github.com/PaulSnow/narwhal-reference) (Apache 2.0)
+**Secondary reference**: [Sui/Mysticeti](https://github.com/PaulSnow/sui-consensus-reference) (if sub-second latency needed later)
+
 ---
 
 ## Architecture
