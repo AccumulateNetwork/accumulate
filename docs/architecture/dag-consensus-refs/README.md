@@ -9,9 +9,31 @@
 | Mysticeti | Uncertified DAG (lower latency) | [arxiv:2310.14821](https://arxiv.org/pdf/2310.14821) |
 | Shoal++ | Pipelining improvements | [NSDI'25](https://www.usenix.org/system/files/nsdi25-arun.pdf) |
 
-## Reference Implementation
+## Reference Implementations
 
-[github.com/PaulSnow/narwhal-reference](https://github.com/PaulSnow/narwhal-reference) - MystenLabs Narwhal (Rust, archived)
+| Repo | Algorithm | Status | Lines |
+|------|-----------|--------|-------|
+| [github.com/PaulSnow/narwhal-reference](https://github.com/PaulSnow/narwhal-reference) | Bullshark | Archived | ~35k |
+| [github.com/PaulSnow/sui-consensus-reference](https://github.com/PaulSnow/sui-consensus-reference) | Mysticeti | Production | ~38k |
+
+Both Apache 2.0 licensed. Narwhal is simpler (good starting point), Sui/Mysticeti is production (sub-second latency).
+
+### Decision: Bullshark
+
+**Rationale**: Throughput matters, latency does not.
+
+| Metric | Bullshark | Mysticeti |
+|--------|-----------|-----------|
+| Throughput | 100k+ TPS | 200k TPS |
+| Latency | 2-3s | 0.4-0.5s |
+| Core algorithm | ~270 lines | ~4k lines |
+| Full implementation | ~3k lines | ~15k+ lines |
+| Complexity | Simple | Complex state machines |
+
+Mysticeti's sub-second latency requires complex block synchronization, missing block fetching, and "blame" mechanisms. Not worth 5x implementation complexity when latency isn't a priority.
+
+**Primary reference**: [narwhal-reference](https://github.com/PaulSnow/narwhal-reference) (Bullshark)
+**Secondary reference**: [sui-consensus-reference](https://github.com/PaulSnow/sui-consensus-reference) (Mysticeti, for future optimization if needed)
 
 ### Code Breakdown (~35k lines total)
 
