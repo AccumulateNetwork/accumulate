@@ -371,8 +371,11 @@ func (n *Node) processBullshark() {
 			// Process certificate through Bullshark
 			outputs := n.bullshark.ProcessCertificate(cert)
 
-			// Send committed certificates and collect batch digests for pruning
-			var batchDigests []types.BatchDigest
+			// Send committed certificates to the executor
+			// NOTE: Batch pruning is handled by the executor (main.go) after reading
+			// batches from workers. We must NOT prune here because the committed
+			// channel is buffered - pruning before the executor reads would cause
+			// "Missing batch for certificate" errors.
 			for _, output := range outputs {
 				n.certificatesCommitted.Add(1)
 				select {
@@ -380,17 +383,6 @@ func (n *Node) processBullshark() {
 				default:
 					slog.Warn("Committed channel full, dropping certificate",
 						"digest", output.Certificate.Digest().String())
-				}
-				// Collect batch digests from committed certificate for pruning
-				for digest := range output.Certificate.Header.Payload {
-					batchDigests = append(batchDigests, digest)
-				}
-			}
-
-			// Prune committed batches from workers to free memory
-			if len(batchDigests) > 0 {
-				for _, w := range n.workers {
-					w.PruneBatches(batchDigests)
 				}
 			}
 

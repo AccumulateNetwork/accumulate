@@ -40,14 +40,14 @@ services:
       - --seed=0000000000000000000000000000000000000000000000000000000000000001
       - --listen=/ip4/0.0.0.0/tcp/9000
       - --validators=${VALIDATORS:-4cb5abf6ad79fbf5abbccafcc269d85cd2651ed4b885b5869f241aedf0a5ba29,7422b9887598068e32c4448a949adb290d0f4e35b9e01b0ee5f1a1e600fe2674,f381626e41e7027ea431bfe3009e94bdd25a746beec468948d6c3c7c5dc9a54b,fd50b8e3b144ea244fbf7737f550bc8dd0c2650bbc1aada833ca17ff8dbf329b,fde4fba030ad002f7c2f7d4c331f49d13fb0ec747eceebec634f1ff4cbca9def,b4c92afb3ba57f3ab959ffe6d319c98484a2155a0f4c65b2c37011ffd197b075,3ee2a8a7283cb2fd728943daa127ef09e483071a8b4bc699ba4522f09b14cfde}
-      - --block-interval=1s
-      - --tx-rate=4300
+      - --block-interval=3s
+      - --tx-rate=1430
       - --warmup=8s
-      # Node1 bootstrap, same warmup as others to sync start
+      - --pprof-port=6160
       - --log-level=info
-      # Node1 waits for others to connect
     ports:
       - "9001:9000"
+      - "6160:6160"
 
   node2:
     <<: *common
@@ -60,8 +60,8 @@ services:
       - --listen=/ip4/0.0.0.0/tcp/9000
       - --peers=/dns4/node1/tcp/9000/p2p/12D3KooWEyoppNCUx8Yx66oV9fJnriXwCcXwDDUA2kj6vnc6iDEp
       - --validators=${VALIDATORS:-4cb5abf6ad79fbf5abbccafcc269d85cd2651ed4b885b5869f241aedf0a5ba29,7422b9887598068e32c4448a949adb290d0f4e35b9e01b0ee5f1a1e600fe2674,f381626e41e7027ea431bfe3009e94bdd25a746beec468948d6c3c7c5dc9a54b,fd50b8e3b144ea244fbf7737f550bc8dd0c2650bbc1aada833ca17ff8dbf329b,fde4fba030ad002f7c2f7d4c331f49d13fb0ec747eceebec634f1ff4cbca9def,b4c92afb3ba57f3ab959ffe6d319c98484a2155a0f4c65b2c37011ffd197b075,3ee2a8a7283cb2fd728943daa127ef09e483071a8b4bc699ba4522f09b14cfde}
-      - --block-interval=1s
-      - --tx-rate=4300
+      - --block-interval=3s
+      - --tx-rate=1430
       - --log-level=info
     ports:
       - "9002:9000"
@@ -77,8 +77,8 @@ services:
       - --listen=/ip4/0.0.0.0/tcp/9000
       - --peers=/dns4/node1/tcp/9000/p2p/12D3KooWEyoppNCUx8Yx66oV9fJnriXwCcXwDDUA2kj6vnc6iDEp
       - --validators=${VALIDATORS:-4cb5abf6ad79fbf5abbccafcc269d85cd2651ed4b885b5869f241aedf0a5ba29,7422b9887598068e32c4448a949adb290d0f4e35b9e01b0ee5f1a1e600fe2674,f381626e41e7027ea431bfe3009e94bdd25a746beec468948d6c3c7c5dc9a54b,fd50b8e3b144ea244fbf7737f550bc8dd0c2650bbc1aada833ca17ff8dbf329b,fde4fba030ad002f7c2f7d4c331f49d13fb0ec747eceebec634f1ff4cbca9def,b4c92afb3ba57f3ab959ffe6d319c98484a2155a0f4c65b2c37011ffd197b075,3ee2a8a7283cb2fd728943daa127ef09e483071a8b4bc699ba4522f09b14cfde}
-      - --block-interval=1s
-      - --tx-rate=4300
+      - --block-interval=3s
+      - --tx-rate=1430
       - --log-level=info
     ports:
       - "9003:9000"
@@ -94,8 +94,8 @@ services:
       - --listen=/ip4/0.0.0.0/tcp/9000
       - --peers=/dns4/node1/tcp/9000/p2p/12D3KooWEyoppNCUx8Yx66oV9fJnriXwCcXwDDUA2kj6vnc6iDEp
       - --validators=${VALIDATORS:-4cb5abf6ad79fbf5abbccafcc269d85cd2651ed4b885b5869f241aedf0a5ba29,7422b9887598068e32c4448a949adb290d0f4e35b9e01b0ee5f1a1e600fe2674,f381626e41e7027ea431bfe3009e94bdd25a746beec468948d6c3c7c5dc9a54b,fd50b8e3b144ea244fbf7737f550bc8dd0c2650bbc1aada833ca17ff8dbf329b,fde4fba030ad002f7c2f7d4c331f49d13fb0ec747eceebec634f1ff4cbca9def,b4c92afb3ba57f3ab959ffe6d319c98484a2155a0f4c65b2c37011ffd197b075,3ee2a8a7283cb2fd728943daa127ef09e483071a8b4bc699ba4522f09b14cfde}
-      - --block-interval=1s
-      - --tx-rate=4300
+      - --block-interval=3s
+      - --tx-rate=1430
       - --log-level=info
     ports:
       - "9004:9000"
@@ -111,8 +111,8 @@ services:
       - --listen=/ip4/0.0.0.0/tcp/9000
       - --peers=/dns4/node1/tcp/9000/p2p/12D3KooWEyoppNCUx8Yx66oV9fJnriXwCcXwDDUA2kj6vnc6iDEp
       - --validators=${VALIDATORS:-4cb5abf6ad79fbf5abbccafcc269d85cd2651ed4b885b5869f241aedf0a5ba29,7422b9887598068e32c4448a949adb290d0f4e35b9e01b0ee5f1a1e600fe2674,f381626e41e7027ea431bfe3009e94bdd25a746beec468948d6c3c7c5dc9a54b,fd50b8e3b144ea244fbf7737f550bc8dd0c2650bbc1aada833ca17ff8dbf329b,fde4fba030ad002f7c2f7d4c331f49d13fb0ec747eceebec634f1ff4cbca9def,b4c92afb3ba57f3ab959ffe6d319c98484a2155a0f4c65b2c37011ffd197b075,3ee2a8a7283cb2fd728943daa127ef09e483071a8b4bc699ba4522f09b14cfde}
-      - --block-interval=1s
-      - --tx-rate=4300
+      - --block-interval=3s
+      - --tx-rate=1430
       - --log-level=info
     ports:
       - "9005:9000"
@@ -128,8 +128,8 @@ services:
       - --listen=/ip4/0.0.0.0/tcp/9000
       - --peers=/dns4/node1/tcp/9000/p2p/12D3KooWEyoppNCUx8Yx66oV9fJnriXwCcXwDDUA2kj6vnc6iDEp
       - --validators=${VALIDATORS:-4cb5abf6ad79fbf5abbccafcc269d85cd2651ed4b885b5869f241aedf0a5ba29,7422b9887598068e32c4448a949adb290d0f4e35b9e01b0ee5f1a1e600fe2674,f381626e41e7027ea431bfe3009e94bdd25a746beec468948d6c3c7c5dc9a54b,fd50b8e3b144ea244fbf7737f550bc8dd0c2650bbc1aada833ca17ff8dbf329b,fde4fba030ad002f7c2f7d4c331f49d13fb0ec747eceebec634f1ff4cbca9def,b4c92afb3ba57f3ab959ffe6d319c98484a2155a0f4c65b2c37011ffd197b075,3ee2a8a7283cb2fd728943daa127ef09e483071a8b4bc699ba4522f09b14cfde}
-      - --block-interval=1s
-      - --tx-rate=4300
+      - --block-interval=3s
+      - --tx-rate=1430
       - --log-level=info
     ports:
       - "9006:9000"
@@ -145,8 +145,8 @@ services:
       - --listen=/ip4/0.0.0.0/tcp/9000
       - --peers=/dns4/node1/tcp/9000/p2p/12D3KooWEyoppNCUx8Yx66oV9fJnriXwCcXwDDUA2kj6vnc6iDEp
       - --validators=${VALIDATORS:-4cb5abf6ad79fbf5abbccafcc269d85cd2651ed4b885b5869f241aedf0a5ba29,7422b9887598068e32c4448a949adb290d0f4e35b9e01b0ee5f1a1e600fe2674,f381626e41e7027ea431bfe3009e94bdd25a746beec468948d6c3c7c5dc9a54b,fd50b8e3b144ea244fbf7737f550bc8dd0c2650bbc1aada833ca17ff8dbf329b,fde4fba030ad002f7c2f7d4c331f49d13fb0ec747eceebec634f1ff4cbca9def,b4c92afb3ba57f3ab959ffe6d319c98484a2155a0f4c65b2c37011ffd197b075,3ee2a8a7283cb2fd728943daa127ef09e483071a8b4bc699ba4522f09b14cfde}
-      - --block-interval=1s
-      - --tx-rate=4300
+      - --block-interval=3s
+      - --tx-rate=1430
       - --log-level=info
     ports:
       - "9007:9000"
