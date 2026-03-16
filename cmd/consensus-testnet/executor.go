@@ -33,7 +33,7 @@ type Executor struct {
 	pendingTxns    []Transaction
 	pendingHashes  [][32]byte
 	stateHash      [32]byte
-	txnNonces      map[string]uint64 // sender pubkey -> last nonce
+	seenNonces     map[string]map[uint64]bool // sender pubkey -> set of seen nonces
 	processedCount uint64
 
 	// Disk storage
@@ -97,7 +97,7 @@ func NewExecutor(config ExecutorConfig) (*Executor, error) {
 		pendingTxns:   nil,
 		pendingHashes: nil,
 		stateHash:     genesis.StateHash,
-		txnNonces:     make(map[string]uint64),
+		seenNonces:    make(map[string]map[uint64]bool),
 		blockInterval: config.BlockInterval,
 		txRate:        config.TxRate,
 		blockFile:     blockFile,
@@ -274,17 +274,23 @@ func (e *Executor) ProcessTransaction(data []byte) error {
 		return nil
 	}
 
-	// Check nonce (simple replay protection)
+	// Check nonce (replay protection using set of seen nonces)
+	// DAG consensus doesn't guarantee FIFO ordering, so we track all seen
+	// nonces rather than requiring strictly increasing nonces.
 	senderKey := string(tx.Sender())
-	lastNonce := e.txnNonces[senderKey]
+	seen := e.seenNonces[senderKey]
+	if seen == nil {
+		seen = make(map[uint64]bool)
+		e.seenNonces[senderKey] = seen
+	}
 
 	// Process based on type
 	switch t := tx.(type) {
 	case *DataTx:
-		if t.Nonce <= lastNonce && lastNonce > 0 {
-			return nil // Replay
+		if seen[t.Nonce] {
+			return nil // Already seen this exact nonce
 		}
-		e.txnNonces[senderKey] = t.Nonce
+		seen[t.Nonce] = true
 		e.pendingTxns = append(e.pendingTxns, tx)
 		e.pendingHashes = append(e.pendingHashes, tx.Hash())
 		e.processedCount++
@@ -295,10 +301,10 @@ func (e *Executor) ProcessTransaction(data []byte) error {
 			slog.Debug("Non-validator tried to set block time")
 			return nil
 		}
-		if t.Nonce <= lastNonce && lastNonce > 0 {
-			return nil
+		if seen[t.Nonce] {
+			return nil // Already seen this exact nonce
 		}
-		e.txnNonces[senderKey] = t.Nonce
+		seen[t.Nonce] = true
 
 		// Apply the change
 		oldInterval := e.blockInterval
@@ -325,10 +331,10 @@ func (e *Executor) ProcessTransaction(data []byte) error {
 			slog.Debug("Non-validator tried to set tx rate")
 			return nil
 		}
-		if t.Nonce <= lastNonce && lastNonce > 0 {
-			return nil
+		if seen[t.Nonce] {
+			return nil // Already seen this exact nonce
 		}
-		e.txnNonces[senderKey] = t.Nonce
+		seen[t.Nonce] = true
 
 		oldRate := e.txRate
 		e.txRate = t.TxPerSecond
