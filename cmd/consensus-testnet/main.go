@@ -17,6 +17,8 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"strings"
@@ -47,8 +49,20 @@ func main() {
 		validators    = flag.String("validators", "", "Comma-separated list of validator public keys (hex)")
 		logLevel      = flag.String("log-level", "info", "Log level: debug, info, warn, error")
 		warmup        = flag.Duration("warmup", 8*time.Second, "Warmup period before starting consensus")
+		pprofPort     = flag.Int("pprof-port", 0, "Port for pprof HTTP server (0 = disabled)")
 	)
 	flag.Parse()
+
+	// Start pprof server if enabled
+	if *pprofPort > 0 {
+		go func() {
+			addr := fmt.Sprintf(":%d", *pprofPort)
+			slog.Info("Starting pprof server", "addr", addr)
+			if err := http.ListenAndServe(addr, nil); err != nil {
+				slog.Error("pprof server failed", "error", err)
+			}
+		}()
+	}
 
 	// Set up logging
 	var level slog.Level
