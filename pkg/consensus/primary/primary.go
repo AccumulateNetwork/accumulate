@@ -119,6 +119,9 @@ type Primary struct {
 	// Maps header digest to the round it was for (enables round-based cleanup)
 	votedHeaders map[types.HeaderDigest]types.Round
 
+	// pendingCerts buffers certificates that cannot be inserted due to missing parents
+	pendingCerts *PendingCertificates
+
 	// Channel to signal new certificates (for Bullshark)
 	newCerts   chan *types.Certificate
 	newCertsMu sync.Mutex
@@ -136,9 +139,15 @@ type Primary struct {
 	votesSent           atomic.Uint64
 }
 
+// DefaultPendingCertsGCDepth is the gc_depth for sizing the pending certificates buffer.
+const DefaultPendingCertsGCDepth = 10
+
 // New creates a new Primary with the given configuration.
 func New(config Config, committee *types.Committee, g *gossip.GossipLayer, d *dag.DAG, workers []*worker.Worker) *Primary {
 	config.applyDefaults()
+
+	// Calculate pending certs buffer size: gc_depth × committee_size × 2
+	pendingCertsMaxSize := DefaultPendingCertsGCDepth * committee.Len() * 2
 
 	return &Primary{
 		config:       config,
@@ -152,6 +161,7 @@ func New(config Config, committee *types.Committee, g *gossip.GossipLayer, d *da
 		ourHeaders:   make(map[types.HeaderDigest]*types.Header),
 		ourCerts:     make(map[types.Round]*types.Certificate),
 		votedHeaders: make(map[types.HeaderDigest]types.Round),
+		pendingCerts: NewPendingCertificates(pendingCertsMaxSize),
 		newCerts:     make(chan *types.Certificate, config.NewCertsChannelSize),
 	}
 }
@@ -210,6 +220,8 @@ func (p *Primary) Start(ctx context.Context) error {
 
 		case <-ticker.C:
 			p.tryAdvanceRound()
+			// Periodically prune old pending certificates
+			p.prunePendingCerts()
 		}
 	}
 }
