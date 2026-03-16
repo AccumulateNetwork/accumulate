@@ -61,29 +61,32 @@ func (b *Bullshark) orderLeaders(leader *types.Certificate) []*types.Certificate
 	var leaders []*types.Certificate
 	current := leader
 
-	for current != nil && current.Round() > b.lastCommitRound {
-		// Prepend to get oldest first.
-		leaders = append([]*types.Certificate{current}, leaders...)
+	// Add the initial leader first.
+	if current != nil && current.Round() > b.lastCommitRound {
+		leaders = append(leaders, current)
+	}
 
-		// Find previous leader (2 rounds back, since leaders are at even rounds).
-		prevRound := current.Round() - 2
-		if prevRound <= b.lastCommitRound || prevRound < 2 {
-			break
-		}
-
+	// Traverse backwards through leader rounds (even rounds, 2 apart).
+	prevRound := leader.Round() - 2
+	for prevRound > b.lastCommitRound && prevRound >= 2 {
 		prevLeader := b.electLeader(prevRound)
 		if prevLeader == nil {
-			// Previous leader didn't produce a certificate.
-			break
+			// Leader missing, skip to earlier round.
+			prevRound -= 2
+			continue
 		}
 
 		// Check if current leader references the previous leader.
 		if !b.dag.IsAncestor(prevLeader, current) {
-			// No link to previous leader, stop here.
-			break
+			// Not linked, skip to earlier round.
+			prevRound -= 2
+			continue
 		}
 
+		// Found a linked leader, prepend it and continue from there.
+		leaders = append([]*types.Certificate{prevLeader}, leaders...)
 		current = prevLeader
+		prevRound -= 2
 	}
 
 	return leaders
