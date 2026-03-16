@@ -16,19 +16,22 @@ import (
 // createHeaderLocked creates a header for the current round.
 // Must be called with p.mu held.
 func (p *Primary) createHeaderLocked() (*types.Header, error) {
-	// 1. Collect available batch digests from workers
+	// 1. FIRST: Check parent certificates exist
+	// We check parents before consuming batches to avoid losing batches
+	// if the parent check fails (e.g., not enough parents in round-1).
+	parents, err := p.getParentCertsLocked()
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. THEN: Collect available batch digests from workers
+	// Now that we know parents exist, it's safe to consume batches.
 	payload := make(map[types.BatchDigest]types.WorkerID)
 	for _, w := range p.workers {
 		// Use ConsumeAvailableBatches to get and clear available batches
 		for _, digest := range w.ConsumeAvailableBatches() {
 			payload[digest] = w.ID()
 		}
-	}
-
-	// 2. Get parent certificates from round-1
-	parents, err := p.getParentCertsLocked()
-	if err != nil {
-		return nil, err
 	}
 
 	// 3. Build header
