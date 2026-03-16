@@ -23,6 +23,7 @@ const (
 	DefaultHeaderChannelSize      = 100
 	DefaultVoteChannelSize        = 1000
 	DefaultCertificateChannelSize = 100
+	DefaultCertSyncChannelSize    = 100
 )
 
 // GossipLayer provides reliable broadcast for consensus messages.
@@ -35,10 +36,12 @@ type GossipLayer struct {
 	partition string
 
 	// Channels for received messages
-	batches chan *types.Batch
-	headers chan *types.Header
-	votes   chan *types.Vote
-	certs   chan *types.Certificate
+	batches      chan *types.Batch
+	headers      chan *types.Header
+	votes        chan *types.Vote
+	certs        chan *types.Certificate
+	syncRequests chan *CertSyncRequest
+	syncResponses chan *CertSyncResponse
 
 	// Lifecycle management
 	ctx    context.Context
@@ -65,6 +68,10 @@ type GossipLayerOptions struct {
 	// CertificateChannelSize is the buffer size for the certificate channel.
 	// Defaults to DefaultCertificateChannelSize.
 	CertificateChannelSize int
+
+	// CertSyncChannelSize is the buffer size for the cert sync channels.
+	// Defaults to DefaultCertSyncChannelSize.
+	CertSyncChannelSize int
 }
 
 // NewGossipLayer creates a new GossipLayer for the given partition.
@@ -102,16 +109,21 @@ func NewGossipLayerWithOptions(h host.Host, ps *pubsub.PubSub, partition string,
 	if opts.CertificateChannelSize <= 0 {
 		opts.CertificateChannelSize = DefaultCertificateChannelSize
 	}
+	if opts.CertSyncChannelSize <= 0 {
+		opts.CertSyncChannelSize = DefaultCertSyncChannelSize
+	}
 
 	return &GossipLayer{
-		host:      h,
-		pubsub:    ps,
-		topics:    tm,
-		partition: partition,
-		batches:   make(chan *types.Batch, opts.BatchChannelSize),
-		headers:   make(chan *types.Header, opts.HeaderChannelSize),
-		votes:     make(chan *types.Vote, opts.VoteChannelSize),
-		certs:     make(chan *types.Certificate, opts.CertificateChannelSize),
+		host:          h,
+		pubsub:        ps,
+		topics:        tm,
+		partition:     partition,
+		batches:       make(chan *types.Batch, opts.BatchChannelSize),
+		headers:       make(chan *types.Header, opts.HeaderChannelSize),
+		votes:         make(chan *types.Vote, opts.VoteChannelSize),
+		certs:         make(chan *types.Certificate, opts.CertificateChannelSize),
+		syncRequests:  make(chan *CertSyncRequest, opts.CertSyncChannelSize),
+		syncResponses: make(chan *CertSyncResponse, opts.CertSyncChannelSize),
 	}, nil
 }
 
@@ -136,11 +148,12 @@ func (g *GossipLayer) Start(ctx context.Context) error {
 	}
 
 	// Start message handlers
-	g.wg.Add(4)
+	g.wg.Add(5)
 	go g.handleSubscription(TopicBatches, g.handleBatchMessage)
 	go g.handleSubscription(TopicHeaders, g.handleHeaderMessage)
 	go g.handleSubscription(TopicVotes, g.handleVoteMessage)
 	go g.handleSubscription(TopicCerts, g.handleCertMessage)
+	go g.handleSubscription(TopicCertSync, g.handleCertSyncMessage)
 
 	return nil
 }
@@ -166,6 +179,8 @@ func (g *GossipLayer) Close() error {
 	close(g.headers)
 	close(g.votes)
 	close(g.certs)
+	close(g.syncRequests)
+	close(g.syncResponses)
 
 	// Close topics
 	return g.topics.Close()
@@ -349,4 +364,97 @@ func (g *GossipLayer) handleCertMessage(data []byte) {
 		slog.Warn("Certificate channel full, dropping message",
 			"partition", g.partition)
 	}
+}
+
+// handleCertSyncMessage deserializes and routes cert sync messages.
+// Cert sync messages can be either requests or responses, distinguished by
+// the first byte: 0x01 = request, 0x02 = response.
+func (g *GossipLayer) handleCertSyncMessage(data []byte) {
+	if len(data) < 1 {
+		slog.Debug("Empty cert sync message",
+			"partition", g.partition)
+		return
+	}
+
+	msgType := data[0]
+	payload := data[1:]
+
+	switch msgType {
+	case 0x01: // Request
+		req, err := UnmarshalCertSyncRequest(payload)
+		if err != nil {
+			slog.Debug("Invalid cert sync request",
+				"error", err,
+				"partition", g.partition)
+			return
+		}
+
+		select {
+		case g.syncRequests <- req:
+		default:
+			slog.Warn("Cert sync request channel full, dropping message",
+				"partition", g.partition)
+		}
+
+	case 0x02: // Response
+		resp, err := UnmarshalCertSyncResponse(payload)
+		if err != nil {
+			slog.Debug("Invalid cert sync response",
+				"error", err,
+				"partition", g.partition)
+			return
+		}
+
+		select {
+		case g.syncResponses <- resp:
+		default:
+			slog.Warn("Cert sync response channel full, dropping message",
+				"partition", g.partition)
+		}
+
+	default:
+		slog.Debug("Unknown cert sync message type",
+			"type", msgType,
+			"partition", g.partition)
+	}
+}
+
+// BroadcastSyncRequest publishes a certificate sync request to the network.
+func (g *GossipLayer) BroadcastSyncRequest(ctx context.Context, req *CertSyncRequest) error {
+	payload, err := req.Marshal()
+	if err != nil {
+		return fmt.Errorf("marshal sync request: %w", err)
+	}
+
+	// Prepend message type byte
+	data := make([]byte, 1+len(payload))
+	data[0] = 0x01 // Request type
+	copy(data[1:], payload)
+
+	return g.publish(ctx, TopicCertSync, data)
+}
+
+// BroadcastSyncResponse publishes a certificate sync response to the network.
+func (g *GossipLayer) BroadcastSyncResponse(ctx context.Context, resp *CertSyncResponse) error {
+	payload, err := resp.Marshal()
+	if err != nil {
+		return fmt.Errorf("marshal sync response: %w", err)
+	}
+
+	// Prepend message type byte
+	data := make([]byte, 1+len(payload))
+	data[0] = 0x02 // Response type
+	copy(data[1:], payload)
+
+	return g.publish(ctx, TopicCertSync, data)
+}
+
+// SubscribeSyncRequests returns a channel that receives sync requests from other nodes.
+func (g *GossipLayer) SubscribeSyncRequests() <-chan *CertSyncRequest {
+	return g.syncRequests
+}
+
+// SubscribeSyncResponses returns a channel that receives sync responses from other nodes.
+func (g *GossipLayer) SubscribeSyncResponses() <-chan *CertSyncResponse {
+	return g.syncResponses
 }
