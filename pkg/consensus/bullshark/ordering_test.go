@@ -361,7 +361,7 @@ func TestNoDuplicateCommits(t *testing.T) {
 	_ = r2
 }
 
-func TestOrderDag_RespectsLastCommitRound(t *testing.T) {
+func TestOrderDag_CommitsAllAncestors(t *testing.T) {
 	h := newTestHelper(t, 4)
 	bs := New(h.committee, h.dag)
 
@@ -372,23 +372,46 @@ func TestOrderDag_RespectsLastCommitRound(t *testing.T) {
 	r4 := h.insertRound(4, r3)
 
 	// First commit through round 2.
+	var round2Outputs []ConsensusOutput
 	for _, cert := range r3 {
-		bs.ProcessCertificate(cert)
+		out := bs.ProcessCertificate(cert)
+		round2Outputs = append(round2Outputs, out...)
 	}
 
 	require.Equal(t, types.Round(2), bs.LastCommitRound())
 
+	// Count how many round-2 certs were committed (should be 1 = leader)
+	round2Committed := 0
+	for _, o := range round2Outputs {
+		if o.Certificate.Round() == 2 {
+			round2Committed++
+		}
+	}
+	require.Equal(t, 1, round2Committed, "Only leader should be committed from round 2")
+
 	// Now process round 5 to commit round 4.
+	// This should also commit the remaining round-2 non-leader certs
+	// that are now ancestors via round 3 -> round 2.
 	r5 := h.insertRound(5, r4)
+	var round4Outputs []ConsensusOutput
 	for _, cert := range r5 {
 		out := bs.ProcessCertificate(cert)
-		// Outputs should only be from rounds 3 and 4.
-		for _, o := range out {
-			require.True(t, o.Certificate.Round() > 2)
-		}
+		round4Outputs = append(round4Outputs, out...)
 	}
 
 	require.Equal(t, types.Round(4), bs.LastCommitRound())
+
+	// Count round-2 certs committed in second batch (should be 3 = non-leaders)
+	round2CommittedSecond := 0
+	for _, o := range round4Outputs {
+		if o.Certificate.Round() == 2 {
+			round2CommittedSecond++
+		}
+	}
+	require.Equal(t, 3, round2CommittedSecond, "Remaining round-2 non-leaders should be committed")
+
+	// Total round-2 committed = 4 (all validators)
+	require.Equal(t, 4, round2Committed+round2CommittedSecond)
 
 	// Avoid unused variable warnings.
 	_ = r0

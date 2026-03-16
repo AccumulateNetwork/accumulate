@@ -93,14 +93,14 @@ func (b *Bullshark) orderLeaders(leader *types.Certificate) []*types.Certificate
 }
 
 // orderDag flattens the sub-dag referenced by a leader.
-// Returns all certificates reachable from the leader down to lastCommitRound+1,
+// Returns all certificates reachable from the leader that haven't been committed,
 // in deterministic order (by round ascending, then by author).
 func (b *Bullshark) orderDag(leader *types.Certificate) []*types.Certificate {
-	// We want certificates from lastCommitRound+1 to leader's round.
-	minRound := b.lastCommitRound + 1
-
 	// Get all ancestors including the leader itself.
-	ancestors := b.dag.GetAncestors(leader, minRound)
+	// We use minRound=0 to get ALL ancestors, then filter out committed ones.
+	// This is necessary because non-leader certificates from earlier rounds
+	// may not have been committed yet, even if the leader for that round was.
+	ancestors := b.dag.GetAncestors(leader, 0)
 	if len(ancestors) == 0 {
 		return nil
 	}

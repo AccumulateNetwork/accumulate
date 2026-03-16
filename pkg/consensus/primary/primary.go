@@ -313,6 +313,12 @@ func (p *Primary) PublicKey() ed25519.PublicKey {
 // tryCreateAndBroadcastHeader attempts to create a header for the current round
 // and broadcast it for vote collection.
 func (p *Primary) tryCreateAndBroadcastHeader() {
+	// Wait for additional parent certificates before creating header.
+	// This helps ensure late-arriving certificates are included as parents,
+	// which is critical for commit rate: if a leader's certificate isn't
+	// referenced by any header, it can never be committed.
+	p.waitForAllParents()
+
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
