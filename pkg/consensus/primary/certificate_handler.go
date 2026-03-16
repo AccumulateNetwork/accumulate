@@ -57,6 +57,11 @@ func (p *Primary) insertCertificateAndProcessPending(cert *types.Certificate) {
 						"round", cert.Round(),
 						"author", hexEncode(cert.Author()),
 						"missingParents", len(missingParents))
+
+					// Request missing certificates via sync protocol
+					if p.certSyncer != nil {
+						p.certSyncer.RequestMissing(missingParents)
+					}
 				}
 			}
 			return
