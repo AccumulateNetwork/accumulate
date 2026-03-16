@@ -8,6 +8,7 @@ package primary
 
 import (
 	"log/slog"
+	"strings"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
@@ -27,6 +28,14 @@ func (p *Primary) OnCertificateReceived(cert *types.Certificate) {
 		return
 	}
 
+	// Try to insert and process any newly-unblocked certificates
+	p.insertCertificateAndProcessPending(cert)
+}
+
+// insertCertificateAndProcessPending attempts to insert a certificate into the DAG.
+// If insertion fails due to missing parents, the certificate is buffered.
+// If insertion succeeds, any pending certificates waiting for this one are processed.
+func (p *Primary) insertCertificateAndProcessPending(cert *types.Certificate) {
 	// Insert into DAG (validates parents exist)
 	var err error
 	if cert.Round() == 0 {
@@ -34,7 +43,26 @@ func (p *Primary) OnCertificateReceived(cert *types.Certificate) {
 	} else {
 		err = p.dag.Insert(cert)
 	}
+
 	if err != nil {
+		// Check if this is a "parent not found" error
+		if strings.Contains(err.Error(), "parent certificate not found in DAG") {
+			// Find which parents are missing
+			missingParents := p.findMissingParents(cert)
+			if len(missingParents) > 0 {
+				// Buffer the certificate
+				if p.pendingCerts.Add(cert, missingParents) {
+					slog.Info("Buffering certificate with missing parents",
+						"digest", cert.Digest().String(),
+						"round", cert.Round(),
+						"author", hexEncode(cert.Author()),
+						"missingParents", len(missingParents))
+				}
+			}
+			return
+		}
+
+		// Some other error (e.g., already exists)
 		slog.Debug("Failed to insert certificate into DAG",
 			"error", err,
 			"digest", cert.Digest().String())
@@ -49,8 +77,72 @@ func (p *Primary) OnCertificateReceived(cert *types.Certificate) {
 	// Signal for Bullshark
 	p.signalNewCertificate(cert)
 
+	// Check if any pending certificates can now be inserted
+	p.processPendingForParent(cert.Digest())
+
 	// Maybe we can advance round now
 	p.tryAdvanceRound()
+}
+
+// findMissingParents returns the parent digests that are not present in the DAG.
+func (p *Primary) findMissingParents(cert *types.Certificate) []types.CertificateDigest {
+	var missing []types.CertificateDigest
+	for _, parentDigest := range cert.Parents() {
+		if !p.dag.Contains(parentDigest) {
+			missing = append(missing, parentDigest)
+		}
+	}
+	return missing
+}
+
+// processPendingForParent checks if any pending certificates can now be inserted
+// after a parent certificate became available. This is recursive - if inserting
+// a previously-pending certificate succeeds, it may unblock more certificates.
+func (p *Primary) processPendingForParent(parentDigest types.CertificateDigest) {
+	// Get certificates that were waiting for this parent
+	readyCerts := p.pendingCerts.OnParentAvailable(parentDigest)
+
+	for _, cert := range readyCerts {
+		slog.Debug("Retrying previously-pending certificate",
+			"digest", cert.Digest().String(),
+			"round", cert.Round())
+
+		// Try to insert (may fail if there are other missing parents that
+		// weren't tracked, or succeed and trigger more processing)
+		var err error
+		if cert.Round() == 0 {
+			err = p.dag.InsertGenesis(cert)
+		} else {
+			err = p.dag.Insert(cert)
+		}
+
+		if err != nil {
+			// Check if still missing parents
+			if strings.Contains(err.Error(), "parent certificate not found in DAG") {
+				missingParents := p.findMissingParents(cert)
+				if len(missingParents) > 0 {
+					// Re-buffer with updated missing parents
+					p.pendingCerts.Add(cert, missingParents)
+				}
+			} else {
+				slog.Debug("Failed to insert previously-pending certificate",
+					"error", err,
+					"digest", cert.Digest().String())
+			}
+			continue
+		}
+
+		slog.Info("Inserted previously-pending certificate",
+			"digest", cert.Digest().String(),
+			"round", cert.Round(),
+			"author", hexEncode(cert.Author()))
+
+		// Signal for Bullshark
+		p.signalNewCertificate(cert)
+
+		// Recursively process any certificates waiting for this one
+		p.processPendingForParent(cert.Digest())
+	}
 }
 
 // tryAdvanceRound attempts to advance to the next round if we have enough certificates.
@@ -160,4 +252,28 @@ func (p *Primary) OurHeadersCount() int {
 	defer p.mu.Unlock()
 
 	return len(p.ourHeaders)
+}
+
+// prunePendingCerts removes old pending certificates that can no longer be inserted.
+func (p *Primary) prunePendingCerts() {
+	p.mu.Lock()
+	currentRound := p.currentRound
+	p.mu.Unlock()
+
+	pruned := p.pendingCerts.Prune(currentRound, DefaultPendingCertsGCDepth)
+	if pruned > 0 {
+		slog.Debug("Pruned old pending certificates",
+			"count", pruned,
+			"currentRound", currentRound)
+	}
+}
+
+// PendingCertsCount returns the number of certificates waiting for missing parents.
+func (p *Primary) PendingCertsCount() int {
+	return p.pendingCerts.Size()
+}
+
+// PendingCertsMetrics returns metrics about the pending certificates buffer.
+func (p *Primary) PendingCertsMetrics() (buffered, inserted, pruned uint64) {
+	return p.pendingCerts.Metrics()
 }
