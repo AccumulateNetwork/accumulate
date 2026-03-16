@@ -10,20 +10,33 @@ package dag
 
 import (
 	"crypto/ed25519"
-	"encoding/hex"
 	"errors"
 	"sync"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 )
 
+// authorKey is a fixed-size array for author public key map keys.
+// Using [32]byte instead of string saves 32 bytes per entry.
+type authorKey [32]byte
+
+// toAuthorKey converts an ed25519 public key to an authorKey.
+func toAuthorKey(author ed25519.PublicKey) authorKey {
+	var key authorKey
+	copy(key[:], author)
+	return key
+}
+
 // DAG stores certificates organized by round.
 // It provides thread-safe access to the certificate graph.
 type DAG struct {
 	mu sync.RWMutex
 	// rounds maps round numbers to certificates by author.
-	// Key is hex-encoded author public key.
-	rounds map[types.Round]map[string]*types.Certificate
+	// Uses fixed-size [32]byte key instead of hex string for memory efficiency.
+	rounds map[types.Round]map[authorKey]*types.Certificate
+	// digestIndex provides O(1) lookup by certificate digest.
+	// This eliminates linear scans in ancestor traversals.
+	digestIndex map[types.CertificateDigest]*types.Certificate
 	// gcDepth is the number of rounds to keep after the last commit.
 	gcDepth types.Round
 	// lastCommitRound is the most recently committed round.
@@ -37,8 +50,9 @@ type DAG struct {
 // after garbage collection.
 func NewDAG(gcDepth types.Round) *DAG {
 	return &DAG{
-		rounds:  make(map[types.Round]map[string]*types.Certificate),
-		gcDepth: gcDepth,
+		rounds:      make(map[types.Round]map[authorKey]*types.Certificate),
+		digestIndex: make(map[types.CertificateDigest]*types.Certificate),
+		gcDepth:     gcDepth,
 	}
 }
 
@@ -55,48 +69,20 @@ func (d *DAG) Insert(cert *types.Certificate) error {
 	defer d.mu.Unlock()
 
 	round := cert.Round()
-	authorKey := hex.EncodeToString(cert.Author())
+	key := toAuthorKey(cert.Author())
 
 	// Check if certificate already exists
 	if roundMap, ok := d.rounds[round]; ok {
-		if _, exists := roundMap[authorKey]; exists {
+		if _, exists := roundMap[key]; exists {
 			return errors.New("certificate already exists for this author and round")
 		}
 	}
 
 	// Validate parents exist (skip for round 0 which has no parents)
 	if round > 0 && len(cert.Parents()) > 0 {
-		parentRound := round - 1
 		for _, parentDigest := range cert.Parents() {
-			found := false
-			if parentMap, ok := d.rounds[parentRound]; ok {
-				for _, parentCert := range parentMap {
-					if parentCert.Digest() == parentDigest {
-						found = true
-						break
-					}
-				}
-			}
-			if !found {
-				// Also check if the parent is in an earlier round (edge case)
-				for r := parentRound; r >= 0 && r >= d.lastCommitRound-d.gcDepth; r-- {
-					if parentMap, ok := d.rounds[r]; ok {
-						for _, parentCert := range parentMap {
-							if parentCert.Digest() == parentDigest {
-								found = true
-								break
-							}
-						}
-					}
-					if found {
-						break
-					}
-					if r == 0 {
-						break
-					}
-				}
-			}
-			if !found {
+			// Use digest index for O(1) lookup
+			if _, found := d.digestIndex[parentDigest]; !found {
 				return errors.New("parent certificate not found in DAG")
 			}
 		}
@@ -104,11 +90,14 @@ func (d *DAG) Insert(cert *types.Certificate) error {
 
 	// Create round map if needed
 	if _, ok := d.rounds[round]; !ok {
-		d.rounds[round] = make(map[string]*types.Certificate)
+		d.rounds[round] = make(map[authorKey]*types.Certificate)
 	}
 
 	// Insert certificate
-	d.rounds[round][authorKey] = cert
+	d.rounds[round][key] = cert
+
+	// Add to digest index for O(1) lookups
+	d.digestIndex[cert.Digest()] = cert
 
 	// Update latest round
 	if round > d.latestRound {
@@ -131,22 +120,25 @@ func (d *DAG) InsertGenesis(cert *types.Certificate) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	authorKey := hex.EncodeToString(cert.Author())
+	key := toAuthorKey(cert.Author())
 
 	// Check if certificate already exists
 	if roundMap, ok := d.rounds[0]; ok {
-		if _, exists := roundMap[authorKey]; exists {
+		if _, exists := roundMap[key]; exists {
 			return errors.New("certificate already exists for this author and round")
 		}
 	}
 
 	// Create round map if needed
 	if _, ok := d.rounds[0]; !ok {
-		d.rounds[0] = make(map[string]*types.Certificate)
+		d.rounds[0] = make(map[authorKey]*types.Certificate)
 	}
 
 	// Insert certificate
-	d.rounds[0][authorKey] = cert
+	d.rounds[0][key] = cert
+
+	// Add to digest index
+	d.digestIndex[cert.Digest()] = cert
 
 	return nil
 }
@@ -157,30 +149,22 @@ func (d *DAG) Get(round types.Round, author ed25519.PublicKey) *types.Certificat
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 
-	authorKey := hex.EncodeToString(author)
+	key := toAuthorKey(author)
 
 	if roundMap, ok := d.rounds[round]; ok {
-		return roundMap[authorKey]
+		return roundMap[key]
 	}
 
 	return nil
 }
 
 // GetByDigest retrieves a certificate by its digest.
-// This is a linear search and should be used sparingly.
+// Uses O(1) digest index lookup instead of linear scan.
 func (d *DAG) GetByDigest(digest types.CertificateDigest) *types.Certificate {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 
-	for _, roundMap := range d.rounds {
-		for _, cert := range roundMap {
-			if cert.Digest() == digest {
-				return cert
-			}
-		}
-	}
-
-	return nil
+	return d.digestIndex[digest]
 }
 
 // GetRound retrieves all certificates for a given round.
@@ -262,6 +246,10 @@ func (d *DAG) GarbageCollect(commitRound types.Round) {
 
 	for round := range d.rounds {
 		if round < cutoff {
+			// Remove certificates from digest index before deleting round
+			for _, cert := range d.rounds[round] {
+				delete(d.digestIndex, cert.Digest())
+			}
 			delete(d.rounds, round)
 		}
 	}
@@ -321,6 +309,7 @@ func (d *DAG) Rounds() []types.Round {
 
 // GetParents returns the parent certificates of a given certificate.
 // Returns nil for certificates with no parents (round 0).
+// Uses O(1) digest index lookup for each parent.
 func (d *DAG) GetParents(cert *types.Certificate) []*types.Certificate {
 	if cert == nil || len(cert.Parents()) == 0 {
 		return nil
@@ -332,14 +321,8 @@ func (d *DAG) GetParents(cert *types.Certificate) []*types.Certificate {
 	parents := make([]*types.Certificate, 0, len(cert.Parents()))
 
 	for _, parentDigest := range cert.Parents() {
-		// Search for parent in all rounds (usually just the previous round)
-		for _, roundMap := range d.rounds {
-			for _, parentCert := range roundMap {
-				if parentCert.Digest() == parentDigest {
-					parents = append(parents, parentCert)
-					break
-				}
-			}
+		if parentCert, ok := d.digestIndex[parentDigest]; ok {
+			parents = append(parents, parentCert)
 		}
 	}
 

@@ -18,12 +18,13 @@ import (
 )
 
 // Default channel buffer sizes for message channels.
+// Sized for high throughput (~30k+ TPS) to avoid dropped messages.
 const (
 	DefaultBatchChannelSize       = 1000
-	DefaultHeaderChannelSize      = 100
+	DefaultHeaderChannelSize      = 500  // Increased from 100 for high throughput
 	DefaultVoteChannelSize        = 1000
-	DefaultCertificateChannelSize = 100
-	DefaultCertSyncChannelSize    = 100
+	DefaultCertificateChannelSize = 1000 // Increased from 100 for high throughput
+	DefaultCertSyncChannelSize    = 200  // Increased from 100 for high throughput
 )
 
 // GossipLayer provides reliable broadcast for consensus messages.
