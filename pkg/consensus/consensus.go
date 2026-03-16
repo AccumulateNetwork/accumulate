@@ -32,7 +32,7 @@ import (
 const (
 	DefaultNumWorkers       = 1
 	DefaultDAGGCDepth       = 50
-	DefaultCommitBufferSize = 1000
+	DefaultCommitBufferSize = 5000 // Increased from 1000 for high throughput
 )
 
 // ErrNodeClosed is returned when operations are attempted on a closed node.
@@ -371,7 +371,8 @@ func (n *Node) processBullshark() {
 			// Process certificate through Bullshark
 			outputs := n.bullshark.ProcessCertificate(cert)
 
-			// Send committed certificates
+			// Send committed certificates and collect batch digests for pruning
+			var batchDigests []types.BatchDigest
 			for _, output := range outputs {
 				n.certificatesCommitted.Add(1)
 				select {
@@ -379,6 +380,17 @@ func (n *Node) processBullshark() {
 				default:
 					slog.Warn("Committed channel full, dropping certificate",
 						"digest", output.Certificate.Digest().String())
+				}
+				// Collect batch digests from committed certificate for pruning
+				for digest := range output.Certificate.Header.Payload {
+					batchDigests = append(batchDigests, digest)
+				}
+			}
+
+			// Prune committed batches from workers to free memory
+			if len(batchDigests) > 0 {
+				for _, w := range n.workers {
+					w.PruneBatches(batchDigests)
 				}
 			}
 
