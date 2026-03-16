@@ -25,10 +25,11 @@ import (
 
 // Default configuration values.
 const (
-	DefaultBatchSize      = 500                    // max transactions per batch
-	DefaultBatchTimeout   = 100 * time.Millisecond // max time to wait for full batch
-	DefaultMaxBatchBytes  = 500 * 1024             // 500KB max batch size
-	DefaultMaxPendingSize = 10 * 1024 * 1024       // 10MB max pending transactions
+	DefaultBatchSize       = 500                    // max transactions per batch
+	DefaultBatchTimeout    = 100 * time.Millisecond // max time to wait for full batch
+	DefaultMaxBatchBytes   = 500 * 1024             // 500KB max batch size
+	DefaultMaxPendingSize  = 10 * 1024 * 1024       // 10MB max pending transactions
+	DefaultMaxStoredBatches = 10000                 // max batches stored before eviction
 )
 
 // ErrWorkerClosed is returned when operations are attempted on a closed worker.
@@ -65,6 +66,12 @@ type Config struct {
 	// When exceeded, Submit will return ErrBackpressure.
 	// Defaults to DefaultMaxPendingSize.
 	MaxPendingSize int
+
+	// MaxStoredBatches is the maximum number of batches to store.
+	// When exceeded, random batches are evicted to make room.
+	// This prevents unbounded memory growth from gossip batches.
+	// Defaults to DefaultMaxStoredBatches.
+	MaxStoredBatches int
 }
 
 // applyDefaults fills in default values for unset configuration fields.
@@ -80,6 +87,9 @@ func (c *Config) applyDefaults() {
 	}
 	if c.MaxPendingSize <= 0 {
 		c.MaxPendingSize = DefaultMaxPendingSize
+	}
+	if c.MaxStoredBatches <= 0 {
+		c.MaxStoredBatches = DefaultMaxStoredBatches
 	}
 }
 
@@ -282,6 +292,25 @@ func (w *Worker) StoreBatch(batch *types.Batch) error {
 
 	// Only store if we don't already have it
 	if _, exists := w.batches[digest]; !exists {
+		// Evict random batches if we're at the limit
+		// This prevents unbounded memory growth from gossip batches
+		if len(w.batches) >= w.config.MaxStoredBatches {
+			evictCount := len(w.batches) / 10 // Evict 10%
+			if evictCount < 1 {
+				evictCount = 1
+			}
+			evicted := 0
+			for d := range w.batches {
+				delete(w.batches, d)
+				evicted++
+				if evicted >= evictCount {
+					break
+				}
+			}
+			slog.Debug("Evicted batches due to storage limit",
+				"evicted", evicted,
+				"remaining", len(w.batches))
+		}
 		w.batches[digest] = batch
 	}
 
