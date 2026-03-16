@@ -20,10 +20,11 @@ import (
 // Topic name patterns for consensus messages.
 // The %s placeholder is replaced with the partition ID.
 const (
-	TopicBatches = "acc/%s/consensus/batches"
-	TopicHeaders = "acc/%s/consensus/headers"
-	TopicVotes   = "acc/%s/consensus/votes"
-	TopicCerts   = "acc/%s/consensus/certs"
+	TopicBatches  = "acc/%s/consensus/batches"
+	TopicHeaders  = "acc/%s/consensus/headers"
+	TopicVotes    = "acc/%s/consensus/votes"
+	TopicCerts    = "acc/%s/consensus/certs"
+	TopicCertSync = "acc/%s/consensus/cert-sync"
 )
 
 // topicNames returns the list of all topic patterns.
@@ -33,6 +34,7 @@ func topicNames() []string {
 		TopicHeaders,
 		TopicVotes,
 		TopicCerts,
+		TopicCertSync,
 	}
 }
 
