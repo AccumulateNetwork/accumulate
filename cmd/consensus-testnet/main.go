@@ -178,9 +178,10 @@ func main() {
 
 	// Create consensus node
 	nodeConfig := consensus.NodeConfig{
-		Partition:    *partition,
-		KeyPair:      privKey,
-		NumWorkers:   1,
+		Partition:        *partition,
+		KeyPair:          privKey,
+		NumWorkers:       1,
+		CommitBufferSize: 10000, // Large buffer for high throughput
 	}
 	node, err := consensus.NewNode(nodeConfig, committee, host, ps)
 	if err != nil {
@@ -341,7 +342,9 @@ func main() {
 	// Wait for shutdown signal
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	<-sigCh
+	slog.Info("Waiting for shutdown signal...")
+	sig := <-sigCh
+	slog.Info("Received signal", "signal", sig)
 
 	slog.Info("Shutting down...")
 	cancel()
