@@ -28,10 +28,13 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker"
 )
 
 func main() {
@@ -219,6 +222,19 @@ func main() {
 		time.Sleep(*warmup)
 	}
 
+	// Create protocol handler for batch fetching
+	batchStore := newMultiWorkerStore(node.Workers())
+	protoHandler, err := gossip.NewProtocolHandler(host, batchStore, nil)
+	if err != nil {
+		slog.Error("Failed to create protocol handler", "error", err)
+		os.Exit(1)
+	}
+	if err := protoHandler.RegisterHandlers(); err != nil {
+		slog.Error("Failed to register protocol handlers", "error", err)
+		os.Exit(1)
+	}
+	defer protoHandler.UnregisterHandlers()
+
 	// Start everything
 	if err := node.Start(ctx); err != nil {
 		slog.Error("Failed to start consensus node", "error", err)
@@ -242,10 +258,23 @@ func main() {
 					digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
 					for digest := range cert.Header.Payload {
 						digests = append(digests, digest)
+						found := false
 						for _, w := range workers {
 							if batch, err := w.GetBatch(digest); err == nil && batch != nil {
 								batches[digest] = batch
+								found = true
 								break
+							}
+						}
+						if !found {
+							// Fetch from peers using the protocol handler
+							batch := fetchBatchFromPeers(ctx, protoHandler, host, digest)
+							if batch != nil {
+								batches[digest] = batch
+								// Store in first worker for future lookups
+								if len(workers) > 0 {
+									workers[0].StoreBatch(batch)
+								}
 							}
 						}
 					}
@@ -359,4 +388,63 @@ func main() {
 	latestBlock := executor.GetLatestBlock()
 	latestHash := latestBlock.Hash()
 	fmt.Printf("Latest block: height=%d, hash=%s\n", latestBlock.Height, hex.EncodeToString(latestHash[:]))
+}
+
+// multiWorkerStore combines multiple workers into a single batch store.
+// It searches all workers for a batch and stores to all workers.
+type multiWorkerStore struct {
+	workers []*worker.Worker
+}
+
+func newMultiWorkerStore(workers []*worker.Worker) *multiWorkerStore {
+	return &multiWorkerStore{workers: workers}
+}
+
+func (s *multiWorkerStore) GetBatch(digest types.BatchDigest) (*types.Batch, error) {
+	for _, w := range s.workers {
+		if batch, err := w.GetBatch(digest); err == nil && batch != nil {
+			return batch, nil
+		}
+	}
+	return nil, nil
+}
+
+func (s *multiWorkerStore) StoreBatch(batch *types.Batch) error {
+	// Store in first worker
+	if len(s.workers) > 0 {
+		return s.workers[0].StoreBatch(batch)
+	}
+	return nil
+}
+
+// fetchBatchFromPeers tries to fetch a batch from connected peers.
+// Returns nil if the batch cannot be fetched from any peer.
+func fetchBatchFromPeers(ctx context.Context, handler *gossip.ProtocolHandler, h host.Host, digest types.BatchDigest) *types.Batch {
+	peers := h.Network().Peers()
+	if len(peers) == 0 {
+		return nil
+	}
+
+	// Try each peer with a short timeout
+	fetchCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	for _, peerID := range peers {
+		batch, err := handler.FetchBatch(fetchCtx, peerID, digest)
+		if err != nil {
+			slog.Debug("Failed to fetch batch from peer",
+				"peer", peerID.String()[:16],
+				"digest", digest.String()[:16],
+				"error", err)
+			continue
+		}
+		if batch != nil {
+			slog.Debug("Fetched batch from peer",
+				"peer", peerID.String()[:16],
+				"digest", digest.String()[:16],
+				"txns", len(batch.Transactions))
+			return batch
+		}
+	}
+	return nil
 }
