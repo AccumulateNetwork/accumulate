@@ -14,6 +14,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"errors"
+	"fmt"
 	"log/slog"
 	"sync"
 	"sync/atomic"
@@ -122,6 +123,9 @@ type Primary struct {
 	// pendingCerts buffers certificates that cannot be inserted due to missing parents
 	pendingCerts *PendingCertificates
 
+	// certSyncer handles requesting missing certificates from peers
+	certSyncer *CertSyncer
+
 	// Channel to signal new certificates (for Bullshark)
 	newCerts   chan *types.Certificate
 	newCertsMu sync.Mutex
@@ -148,8 +152,9 @@ func New(config Config, committee *types.Committee, g *gossip.GossipLayer, d *da
 
 	// Calculate pending certs buffer size: gc_depth × committee_size × 2
 	pendingCertsMaxSize := DefaultPendingCertsGCDepth * committee.Len() * 2
+	pendingCerts := NewPendingCertificates(pendingCertsMaxSize)
 
-	return &Primary{
+	p := &Primary{
 		config:       config,
 		committee:    committee,
 		gossip:       g,
@@ -161,9 +166,21 @@ func New(config Config, committee *types.Committee, g *gossip.GossipLayer, d *da
 		ourHeaders:   make(map[types.HeaderDigest]*types.Header),
 		ourCerts:     make(map[types.Round]*types.Certificate),
 		votedHeaders: make(map[types.HeaderDigest]types.Round),
-		pendingCerts: NewPendingCertificates(pendingCertsMaxSize),
+		pendingCerts: pendingCerts,
 		newCerts:     make(chan *types.Certificate, config.NewCertsChannelSize),
 	}
+
+	// Initialize CertSyncer if gossip is available
+	if g != nil {
+		syncerConfig := CertSyncerConfig{
+			PublicKey: config.KeyPair.Public().(ed25519.PublicKey),
+		}
+		p.certSyncer = NewCertSyncer(syncerConfig, d, g, pendingCerts)
+		// Set callback to process received certificates
+		p.certSyncer.SetCertReceivedCallback(p.OnCertificateReceived)
+	}
+
+	return p
 }
 
 // Start begins the primary's main loop, processing headers, votes, and certificates.
@@ -174,6 +191,13 @@ func (p *Primary) Start(ctx context.Context) error {
 	}
 
 	p.ctx, p.cancel = context.WithCancel(ctx)
+
+	// Start CertSyncer if available
+	if p.certSyncer != nil {
+		if err := p.certSyncer.Start(ctx); err != nil {
+			return fmt.Errorf("start cert syncer: %w", err)
+		}
+	}
 
 	// Subscribe to gossip channels (if gossip layer is available)
 	var headers <-chan *types.Header
@@ -230,6 +254,11 @@ func (p *Primary) Start(ctx context.Context) error {
 func (p *Primary) Stop() {
 	if p.closed.Swap(true) {
 		return // Already closed
+	}
+
+	// Stop CertSyncer first
+	if p.certSyncer != nil {
+		p.certSyncer.Stop()
 	}
 
 	if p.cancel != nil {
