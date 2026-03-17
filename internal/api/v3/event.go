@@ -11,7 +11,6 @@ import (
 	"runtime/debug"
 	"sync"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
@@ -37,7 +36,7 @@ type EventService struct {
 var _ api.EventService = (*EventService)(nil)
 
 type EventServiceParams struct {
-	Logger    log.Logger
+	Logger    logging.Logger
 	Database  database.Beginner
 	Partition string
 	EventBus  *events.Bus

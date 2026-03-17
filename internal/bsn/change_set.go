@@ -7,14 +7,14 @@
 package bsn
 
 import (
-	"github.com/cometbft/cometbft/libs/log"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 // New
-func NewChangeSet(store keyvalue.Beginner, logger log.Logger) *ChangeSet {
+func NewChangeSet(store keyvalue.Beginner, logger logging.Logger) *ChangeSet {
 	c := new(ChangeSet)
 	c.kvstore = store.Begin(nil, true)
 	c.store = keyvalue.RecordStore{Store: c.kvstore}

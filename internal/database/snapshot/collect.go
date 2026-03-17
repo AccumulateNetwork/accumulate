@@ -10,7 +10,6 @@ import (
 	"compress/gzip"
 	"io"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -19,7 +18,7 @@ import (
 )
 
 type CollectOptions struct {
-	Logger           log.Logger
+	Logger           logging.Logger
 	VisitAccount     func(acct *Account) error
 	VisitTransaction func(txn *Transaction) error
 	VisitSignature   func(sig *Signature) error

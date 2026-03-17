@@ -10,15 +10,15 @@ import (
 	"bytes"
 	"io"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/bpt"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 )
 
-func newBPT(parent record.Record, logger log.Logger, store record.Store, key *record.Key, name string) *bpt.BPT {
+func newBPT(parent record.Record, logger logging.Logger, store record.Store, key *record.Key, name string) *bpt.BPT {
 	return bpt.New(parent, logger, store, key)
 }
 

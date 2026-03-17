@@ -72,11 +72,11 @@ func restoreSnapshot(filename, badgerPath, partitionID string) (uint64, []byte) 
 	defer f.Close()
 
 	// Open database
-	db, err := database.OpenBadger(badgerPath, logger)
+	db, err := database.OpenBadger(badgerPath, logging.FromCometBFT(logger))
 	check(err)
 
 	// Restore
-	err = snapshot.Restore(db, f, logger)
+	err = snapshot.Restore(db, f, logging.FromCometBFT(logger))
 	check(err)
 
 	// Get height and hash

@@ -10,7 +10,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cometbft/cometbft/libs/log"
 	coretypes "github.com/cometbft/cometbft/rpc/core/types"
 	"github.com/cometbft/cometbft/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -33,7 +32,7 @@ type Submitter struct {
 var _ api.Submitter = (*Submitter)(nil)
 
 type SubmitterParams struct {
-	Logger log.Logger
+	Logger logging.Logger
 	Local  SubmitClient
 }
 

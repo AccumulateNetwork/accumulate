@@ -13,7 +13,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 )
 
@@ -23,7 +22,7 @@ type Bus struct {
 	logger      logging.OptionalLogger
 }
 
-func NewBus(logger log.Logger) *Bus {
+func NewBus(logger logging.Logger) *Bus {
 	b := new(Bus)
 	b.mu = new(sync.Mutex)
 	b.logger.L = logger

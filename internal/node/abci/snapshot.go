@@ -21,6 +21,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/exp/torrent"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	sv1 "gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	sv2 "gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -138,7 +139,7 @@ func (app *Accumulator) ApplySnapshotChunk(_ context.Context, req *abci.RequestA
 		return nil, e2
 	}
 
-	err = sv1.FullRestore(app.Database, buf, app.logger, config.NetworkUrl{
+	err = sv1.FullRestore(app.Database, buf, logging.FromCometBFT(app.logger), config.NetworkUrl{
 		URL: protocol.PartitionUrl(app.Partition),
 	})
 	if err != nil {

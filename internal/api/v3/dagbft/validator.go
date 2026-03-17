@@ -9,7 +9,6 @@ package dagbft
 import (
 	"context"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -27,7 +26,7 @@ var _ api.Validator = (*Validator)(nil)
 
 // ValidatorParams contains parameters for creating a Validator.
 type ValidatorParams struct {
-	Logger   log.Logger
+	Logger   logging.Logger
 	Executor execute.Executor
 }
 

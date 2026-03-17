@@ -10,7 +10,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -27,7 +26,7 @@ type MetricsService struct {
 var _ api.MetricsService = (*MetricsService)(nil)
 
 type MetricsServiceParams struct {
-	Logger  log.Logger
+	Logger  logging.Logger
 	Node    api.ConsensusService
 	Querier api.Querier
 }

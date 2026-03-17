@@ -13,7 +13,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus"
@@ -35,7 +34,7 @@ var _ api.Submitter = (*Submitter)(nil)
 
 // SubmitterParams contains parameters for creating a Submitter.
 type SubmitterParams struct {
-	Logger log.Logger
+	Logger logging.Logger
 	Node   *consensus.Node
 }
 

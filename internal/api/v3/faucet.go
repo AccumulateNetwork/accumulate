@@ -9,7 +9,6 @@ package api
 import (
 	"context"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
@@ -44,7 +43,7 @@ type Faucet struct {
 
 // FaucetParams are the parameters for a [Faucet].
 type FaucetParams struct {
-	Logger    log.Logger
+	Logger    logging.Logger
 	Account   *url.URL
 	Key       build.Signer
 	Submitter api.Submitter

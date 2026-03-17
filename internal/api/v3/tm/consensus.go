@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cometbft/cometbft/libs/log"
 	coretypes "github.com/cometbft/cometbft/rpc/core/types"
 	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
@@ -43,7 +42,7 @@ type ConsensusService struct {
 var _ api.ConsensusService = (*ConsensusService)(nil)
 
 type ConsensusServiceParams struct {
-	Logger           log.Logger
+	Logger           logging.Logger
 	Local            NodeStatusClient
 	Database         database.Viewer
 	PartitionID      string
