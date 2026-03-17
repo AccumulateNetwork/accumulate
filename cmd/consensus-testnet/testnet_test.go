@@ -10,6 +10,8 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"runtime"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -17,6 +19,19 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// forceGC runs the garbage collector and waits for finalizers
+func forceGC() {
+	runtime.GC()
+	runtime.GC()
+}
+
+// getAllocatedMemory returns the currently allocated heap memory
+func getAllocatedMemory() uint64 {
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	return m.Alloc
+}
 
 func TestDataTx_MarshalUnmarshal(t *testing.T) {
 	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
@@ -229,6 +244,202 @@ func TestGenesisBlock(t *testing.T) {
 	assert.Equal(t, uint64(0), genesis.Height)
 	assert.Equal(t, [32]byte{}, genesis.PrevHash)
 	assert.Equal(t, uint32(0), genesis.TxnCount)
+}
+
+// TestSingleNodeBlockProduction_ADI tests that a single node produces blocks with ADI-based identity.
+// This is part of DAG-BFT Deploy Step 2: verifying single node block production.
+func TestSingleNodeBlockProduction_ADI(t *testing.T) {
+	const blockInterval = 500 * time.Millisecond // Faster for testing
+	const testDuration = 10 * time.Second
+	const minExpectedBlocks = 15 // At least 15 blocks in 10 seconds with 500ms interval
+
+	ctx, cancel := context.WithTimeout(context.Background(), testDuration+5*time.Second)
+	defer cancel()
+
+	// Generate validator key
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+
+	// Create executor with single validator
+	executor, err := NewExecutor(ExecutorConfig{
+		Validators:    []ed25519.PublicKey{pub},
+		BlockInterval: blockInterval,
+		TxRate:        10,
+		DataDir:       "/tmp/consensus-testnet-single-adi",
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { executor.Cleanup() })
+
+	// Track blocks produced and state hashes
+	var blocksProduced atomic.Int32
+	var stateHashes sync.Map // height -> stateHash
+
+	executor.SetOnBlockProduced(func(b *Block) {
+		blocksProduced.Add(1)
+		stateHashes.Store(b.Height, b.StateHash)
+	})
+
+	// Submit some transactions to ensure state changes
+	go func() {
+		nonce := uint64(0)
+		ticker := time.NewTicker(100 * time.Millisecond)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				nonce++
+				tx := NewDataTx(pub, []byte("test-data"), nonce)
+				tx.Sign(priv)
+				executor.ProcessTransaction(tx.Marshal())
+			}
+		}
+	}()
+
+	// Start block production
+	executor.Start(ctx)
+
+	// Let it run for the test duration
+	time.Sleep(testDuration)
+	executor.Stop()
+
+	// Verify acceptance criteria
+	finalBlockCount := blocksProduced.Load()
+	t.Logf("Blocks produced: %d (expected >= %d)", finalBlockCount, minExpectedBlocks)
+
+	// 1. Blocks produced at configured interval (within tolerance)
+	assert.GreaterOrEqual(t, finalBlockCount, int32(minExpectedBlocks),
+		"Should have produced at least %d blocks in %v with %v interval",
+		minExpectedBlocks, testDuration, blockInterval)
+
+	// 2. Logs show block height increasing
+	latestBlock := executor.GetLatestBlock()
+	assert.Greater(t, latestBlock.Height, uint64(0), "Block height should be greater than 0")
+	t.Logf("Latest block height: %d", latestBlock.Height)
+
+	// 3. State hash changes each block (when transactions are included)
+	// Collect all unique state hashes
+	uniqueHashes := make(map[[32]byte]bool)
+	stateHashes.Range(func(key, value interface{}) bool {
+		hash := value.([32]byte)
+		uniqueHashes[hash] = true
+		return true
+	})
+	// With transactions being submitted, we should see state hash changes
+	t.Logf("Unique state hashes: %d", len(uniqueHashes))
+	assert.Greater(t, len(uniqueHashes), 1, "State hash should change as transactions are processed")
+
+	// Verify processed transactions
+	processedCount := executor.GetProcessedCount()
+	t.Logf("Processed transactions: %d", processedCount)
+	assert.Greater(t, processedCount, uint64(0), "Should have processed some transactions")
+}
+
+// TestSingleNodeBlockProduction_MemoryStability tests that a single node doesn't leak memory
+// over multiple block production cycles. This is part of DAG-BFT Deploy Step 2.
+func TestSingleNodeBlockProduction_MemoryStability(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping memory stability test in short mode")
+	}
+
+	const blockInterval = 100 * time.Millisecond
+	const testDuration = 30 * time.Second // Shorter than 5 minutes for CI
+	const memoryGrowthThreshold = 50 * 1024 * 1024 // 50MB growth allowed
+
+	ctx, cancel := context.WithTimeout(context.Background(), testDuration+10*time.Second)
+	defer cancel()
+
+	// Generate validator key
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+
+	// Create executor
+	executor, err := NewExecutor(ExecutorConfig{
+		Validators:    []ed25519.PublicKey{pub},
+		BlockInterval: blockInterval,
+		TxRate:        100,
+		DataDir:       "/tmp/consensus-testnet-memory",
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { executor.Cleanup() })
+
+	// Force GC and get baseline memory
+	forceGC()
+	baselineMemory := getAllocatedMemory()
+	t.Logf("Baseline memory: %d bytes", baselineMemory)
+
+	// Submit transactions at a steady rate
+	var submitted atomic.Uint64
+	go func() {
+		payload := make([]byte, 256)
+		rand.Read(payload)
+		ticker := time.NewTicker(10 * time.Millisecond)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				nonce := submitted.Add(1)
+				tx := NewDataTx(pub, payload, nonce)
+				tx.Sign(priv)
+				executor.ProcessTransaction(tx.Marshal())
+			}
+		}
+	}()
+
+	// Start block production
+	executor.Start(ctx)
+
+	// Sample memory periodically
+	var memSamples []uint64
+	sampleTicker := time.NewTicker(5 * time.Second)
+	defer sampleTicker.Stop()
+
+	testTimer := time.NewTimer(testDuration)
+	defer testTimer.Stop()
+
+	for {
+		select {
+		case <-testTimer.C:
+			goto done
+		case <-sampleTicker.C:
+			forceGC()
+			currentMem := getAllocatedMemory()
+			memSamples = append(memSamples, currentMem)
+			t.Logf("Memory sample: %d bytes (blocks: %d, processed: %d)",
+				currentMem, executor.GetBlockCount(), executor.GetProcessedCount())
+		}
+	}
+
+done:
+	executor.Stop()
+
+	// Force final GC and get final memory
+	forceGC()
+	finalMemory := getAllocatedMemory()
+	memoryGrowth := int64(finalMemory) - int64(baselineMemory)
+
+	t.Logf("Final memory: %d bytes", finalMemory)
+	t.Logf("Memory growth: %d bytes", memoryGrowth)
+	t.Logf("Blocks produced: %d", executor.GetBlockCount())
+	t.Logf("Transactions submitted: %d", submitted.Load())
+	t.Logf("Transactions processed: %d", executor.GetProcessedCount())
+
+	// Check that memory growth is within acceptable bounds
+	// Note: Some growth is expected due to test framework overhead
+	assert.Less(t, memoryGrowth, int64(memoryGrowthThreshold),
+		"Memory growth should be less than %d bytes, got %d bytes",
+		memoryGrowthThreshold, memoryGrowth)
+
+	// Verify the system was actually doing work
+	assert.Greater(t, executor.GetBlockCount(), uint64(100),
+		"Should have produced significant number of blocks")
+	assert.Greater(t, executor.GetProcessedCount(), uint64(100),
+		"Should have processed significant number of transactions")
 }
 
 func TestComputeTxnsHash(t *testing.T) {
