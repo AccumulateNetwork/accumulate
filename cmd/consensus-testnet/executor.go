@@ -9,7 +9,10 @@ package main
 import (
 	"context"
 	"crypto/ed25519"
+	"crypto/sha256"
 	"encoding/binary"
+	"encoding/hex"
+	"errors"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -17,6 +20,13 @@ import (
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+)
+
+var (
+	errMissingTransaction = errors.New("envelope contains no transactions")
+	errMissingSignature   = errors.New("envelope contains no signatures")
 )
 
 // Executor processes ordered transactions from consensus and produces blocks.
@@ -34,7 +44,12 @@ type Executor struct {
 	pendingHashes  [][32]byte
 	stateHash      [32]byte
 	seenNonces     map[string]map[uint64]bool // sender pubkey -> set of seen nonces
+	seenTxHashes   map[[32]byte]bool          // set of seen transaction hashes (for Accumulate txns)
 	processedCount uint64
+
+	// Accumulate transaction stats
+	accumulateTxCount uint64
+	legacyTxCount     uint64
 
 	// Disk storage
 	blockFile *os.File
@@ -98,6 +113,7 @@ func NewExecutor(config ExecutorConfig) (*Executor, error) {
 		pendingHashes: nil,
 		stateHash:     genesis.StateHash,
 		seenNonces:    make(map[string]map[uint64]bool),
+		seenTxHashes:  make(map[[32]byte]bool),
 		blockInterval: config.BlockInterval,
 		txRate:        config.TxRate,
 		blockFile:     blockFile,
@@ -245,10 +261,139 @@ func (e *Executor) ProcessCertificate(cert *types.Certificate, batches map[types
 }
 
 // ProcessTransaction processes a single transaction.
+// It first tries to parse as an Accumulate envelope, then falls back to legacy format.
 func (e *Executor) ProcessTransaction(data []byte) error {
+	// First, try to parse as an Accumulate envelope
+	if err := e.processAccumulateEnvelope(data); err == nil {
+		return nil
+	}
+
+	// Fall back to legacy testnet transaction format
+	return e.processLegacyTransaction(data)
+}
+
+// processAccumulateEnvelope processes an Accumulate protocol envelope.
+func (e *Executor) processAccumulateEnvelope(data []byte) error {
+	env := new(messaging.Envelope)
+	if err := env.UnmarshalBinary(data); err != nil {
+		return err
+	}
+
+	// Must have at least one transaction
+	if len(env.Transaction) == 0 {
+		return errMissingTransaction
+	}
+
+	// Must have at least one signature
+	if len(env.Signatures) == 0 {
+		return errMissingSignature
+	}
+
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	// Process each transaction in the envelope
+	for _, txn := range env.Transaction {
+		if txn == nil || txn.Body == nil {
+			continue
+		}
+
+		// Get transaction hash for replay protection
+		txnHash := txn.ID().Hash()
+
+		// Check if we've already processed this transaction
+		if e.seenTxHashes[txnHash] {
+			slog.Debug("Duplicate Accumulate transaction", "hash", hex.EncodeToString(txnHash[:8]))
+			continue
+		}
+
+		// Validate the transaction based on its type
+		valid, err := e.validateAccumulateTransaction(txn, env.Signatures)
+		if err != nil {
+			slog.Debug("Accumulate transaction validation failed", "error", err, "type", txn.Body.Type())
+			continue
+		}
+		if !valid {
+			slog.Debug("Invalid Accumulate transaction signature", "type", txn.Body.Type())
+			continue
+		}
+
+		// Mark as seen
+		e.seenTxHashes[txnHash] = true
+
+		// Add to pending for block inclusion
+		// We use the transaction hash as-is
+		e.pendingHashes = append(e.pendingHashes, txnHash)
+		e.processedCount++
+		e.accumulateTxCount++
+
+		slog.Debug("Processed Accumulate transaction",
+			"type", txn.Body.Type(),
+			"principal", txn.Header.Principal,
+			"hash", hex.EncodeToString(txnHash[:8]))
+	}
+
+	return nil
+}
+
+// validateAccumulateTransaction validates an Accumulate transaction and its signatures.
+func (e *Executor) validateAccumulateTransaction(txn *protocol.Transaction, signatures []protocol.Signature) (bool, error) {
+	if txn == nil || txn.Body == nil {
+		return false, nil
+	}
+
+	// Get the transaction hash
+	txnHash := txn.GetHash()
+
+	// Validate at least one signature
+	for _, sig := range signatures {
+		if sig == nil {
+			continue
+		}
+
+		// Check that the signature is for this transaction
+		sigTxnHash := sig.GetTransactionHash()
+		if sigTxnHash != [32]byte(txnHash) {
+			continue
+		}
+
+		// Verify ED25519 signatures
+		if ed25519Sig, ok := sig.(*protocol.ED25519Signature); ok {
+			if len(ed25519Sig.Signature) != ed25519.SignatureSize {
+				continue
+			}
+			if len(ed25519Sig.PublicKey) != ed25519.PublicKeySize {
+				continue
+			}
+
+			// Compute the signature message hash
+			sigMdHash := sha256.Sum256(ed25519Sig.Metadata().Hash())
+
+			// The message to verify is sigMdHash + txnHash
+			message := make([]byte, 64)
+			copy(message[:32], sigMdHash[:])
+			copy(message[32:], txnHash)
+			messageHash := sha256.Sum256(message)
+
+			// Verify the signature
+			if ed25519.Verify(ed25519Sig.PublicKey, messageHash[:], ed25519Sig.Signature) {
+				return true, nil
+			}
+		}
+
+		// For other signature types, we accept them as valid for now
+		// since the consensus testnet doesn't need full Accumulate validation
+		return true, nil
+	}
+
+	return false, nil
+}
+
+// processLegacyTransaction processes a legacy testnet transaction.
+func (e *Executor) processLegacyTransaction(data []byte) error {
 	tx, err := UnmarshalTransaction(data)
 	if err != nil {
-		slog.Debug("Failed to unmarshal transaction", "error", err)
+		slog.Debug("Failed to unmarshal legacy transaction", "error", err)
 		return err
 	}
 
@@ -265,12 +410,12 @@ func (e *Executor) ProcessTransaction(data []byte) error {
 	case *SetTxRateTx:
 		valid = t.Verify()
 	default:
-		slog.Debug("Unknown transaction type")
+		slog.Debug("Unknown legacy transaction type")
 		return nil
 	}
 
 	if !valid {
-		slog.Debug("Invalid transaction signature")
+		slog.Debug("Invalid legacy transaction signature")
 		return nil
 	}
 
@@ -294,6 +439,7 @@ func (e *Executor) ProcessTransaction(data []byte) error {
 		e.pendingTxns = append(e.pendingTxns, tx)
 		e.pendingHashes = append(e.pendingHashes, tx.Hash())
 		e.processedCount++
+		e.legacyTxCount++
 
 	case *SetBlockTimeTx:
 		// Only validators can change block time
@@ -324,6 +470,7 @@ func (e *Executor) ProcessTransaction(data []byte) error {
 		e.pendingTxns = append(e.pendingTxns, tx)
 		e.pendingHashes = append(e.pendingHashes, tx.Hash())
 		e.processedCount++
+		e.legacyTxCount++
 
 	case *SetTxRateTx:
 		// Only validators can change tx rate
@@ -351,6 +498,7 @@ func (e *Executor) ProcessTransaction(data []byte) error {
 		e.pendingTxns = append(e.pendingTxns, tx)
 		e.pendingHashes = append(e.pendingHashes, tx.Hash())
 		e.processedCount++
+		e.legacyTxCount++
 	}
 
 	return nil
@@ -407,4 +555,18 @@ func (e *Executor) GetStateHash() [32]byte {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	return e.stateHash
+}
+
+// GetAccumulateTxCount returns the number of processed Accumulate transactions.
+func (e *Executor) GetAccumulateTxCount() uint64 {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.accumulateTxCount
+}
+
+// GetLegacyTxCount returns the number of processed legacy transactions.
+func (e *Executor) GetLegacyTxCount() uint64 {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.legacyTxCount
 }

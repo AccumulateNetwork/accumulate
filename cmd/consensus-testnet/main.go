@@ -49,7 +49,7 @@ func main() {
 		partition     = flag.String("partition", "testnet", "Partition name")
 		blockInterval = flag.Duration("block-interval", 3*time.Second, "Block production interval")
 		txRate        = flag.Uint("tx-rate", 100, "Transactions per second to generate")
-		txSize        = flag.Uint("tx-size", 256, "Size of each transaction payload in bytes")
+		_             = flag.Uint("tx-size", 256, "Size of each transaction payload in bytes (deprecated, now uses Accumulate transactions)")
 		validators    = flag.String("validators", "", "Comma-separated list of validator public keys (hex)")
 		logLevel      = flag.String("log-level", "info", "Log level: debug, info, warn, error")
 		warmup        = flag.Duration("warmup", 8*time.Second, "Warmup period before starting consensus")
@@ -336,7 +336,6 @@ func main() {
 	}()
 
 	// Transaction generators - use multiple goroutines to hit target rate
-	var nonce atomic.Uint64
 	var submitted atomic.Uint64
 	var dropped atomic.Uint64
 	txGenDone := make(chan struct{})
@@ -347,6 +346,15 @@ func main() {
 		ratePerGenerator = 1
 	}
 
+	// Create Accumulate transaction generator
+	accTxGen, err := NewAccumulateTransactionGenerator(privKey)
+	if err != nil {
+		slog.Error("Failed to create Accumulate transaction generator", "error", err)
+		os.Exit(1)
+	}
+	slog.Info("Accumulate transaction generator initialized",
+		"lite_account", accTxGen.GetLiteTokenAccount().String())
+
 	var genWg sync.WaitGroup
 	for g := 0; g < numGenerators; g++ {
 		genWg.Add(1)
@@ -355,18 +363,28 @@ func main() {
 			ticker := time.NewTicker(time.Second / time.Duration(ratePerGenerator))
 			defer ticker.Stop()
 
-			payload := make([]byte, *txSize)
-			rand.Read(payload)
-
 			for {
 				select {
 				case <-ctx.Done():
 					return
 				case <-ticker.C:
-					tx := NewDataTx(pubKey, payload, nonce.Add(1))
-					tx.Sign(privKey)
+					// Generate a valid Accumulate SendTokens transaction
+					env, err := accTxGen.GenerateSelfSendTokens(1)
+					if err != nil {
+						slog.Debug("Failed to generate Accumulate transaction", "error", err)
+						dropped.Add(1)
+						continue
+					}
 
-					if err := node.SubmitTransaction(tx.Marshal()); err != nil {
+					// Marshal the envelope for submission
+					envData, err := env.MarshalBinary()
+					if err != nil {
+						slog.Debug("Failed to marshal envelope", "error", err)
+						dropped.Add(1)
+						continue
+					}
+
+					if err := node.SubmitTransaction(envData); err != nil {
 						dropped.Add(1)
 					} else {
 						submitted.Add(1)
@@ -402,6 +420,7 @@ func main() {
 					"submitted", currSubmitted,
 					"dropped", currDropped,
 					"processed", currProcessed,
+					"accumulate_txs", executor.GetAccumulateTxCount(),
 					"sub/s", (currSubmitted-lastSubmitted)/10,
 					"drop/s", (currDropped-lastDropped)/10,
 					"tps", (currProcessed-lastProcessed)/10,
@@ -431,6 +450,8 @@ func main() {
 	fmt.Printf("\n=== Final Statistics ===\n")
 	fmt.Printf("Blocks produced: %d\n", executor.GetBlockCount())
 	fmt.Printf("Transactions processed: %d\n", executor.GetProcessedCount())
+	fmt.Printf("  - Accumulate transactions: %d\n", executor.GetAccumulateTxCount())
+	fmt.Printf("  - Legacy transactions: %d\n", executor.GetLegacyTxCount())
 	stateHash := executor.GetStateHash()
 	fmt.Printf("Final state hash: %s\n", hex.EncodeToString(stateHash[:]))
 	latestBlock := executor.GetLatestBlock()
