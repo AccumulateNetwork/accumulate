@@ -69,6 +69,11 @@ type Service struct {
 	// Block production state
 	lastBlockIndex uint64
 	lastBlockTime  time.Time
+
+	// State hash verification
+	stateHashTracker *types.StateHashTracker
+	halted           bool
+	haltReason       error
 }
 
 // NewService creates a new DAG-BFT service.
@@ -84,11 +89,15 @@ func NewService(config ServiceConfig) (*Service, error) {
 	}
 
 	s := &Service{
-		config:   config,
-		adapter:  config.Adapter,
-		eventBus: config.EventBus,
+		config:           config,
+		adapter:          config.Adapter,
+		eventBus:         config.EventBus,
+		stateHashTracker: types.NewStateHashTracker(100), // Track last 100 rounds
 	}
 	s.logger.L = config.Logger
+
+	// Register divergence callback
+	s.stateHashTracker.OnDivergence(s.onStateDivergence)
 
 	return s, nil
 }
@@ -310,7 +319,12 @@ func (s *Service) blockProductionLoop() {
 // processCommittedCertificate processes a committed certificate and produces a block.
 func (s *Service) processCommittedCertificate(cert *types.Certificate) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+
+	// Check if halted due to state divergence
+	if s.halted {
+		s.mu.Unlock()
+		return fmt.Errorf("consensus halted due to state divergence: %w", s.haltReason)
+	}
 
 	// Get batches from workers - the Payload map contains batch digests
 	batches := make(map[types.BatchDigest]*types.Batch)
@@ -343,14 +357,24 @@ func (s *Service) processCommittedCertificate(cert *types.Certificate) error {
 		Batches:     batches,
 	}
 
+	s.mu.Unlock()
+
 	hash, err := s.adapter.ProduceBlock(s.ctx, params)
 	if err != nil {
 		return fmt.Errorf("produce block: %w", err)
 	}
 
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	// Update state
 	s.lastBlockIndex = blockIndex
 	s.lastBlockTime = blockTime
+
+	// Record state hash for consistency verification
+	stateHash := s.adapter.StateHash()
+	cert.SetStateHash(types.StateHash(stateHash))
+	s.RecordStateHash(cert.Header.Round, blockIndex, types.StateHash(stateHash))
 
 	// Prune batches from workers now that they've been processed
 	for _, w := range s.node.Workers() {
@@ -370,6 +394,7 @@ func (s *Service) processCommittedCertificate(cert *types.Certificate) error {
 		"index", blockIndex,
 		"round", cert.Header.Round,
 		"hash", fmt.Sprintf("%x", hash[:8]),
+		"stateHash", fmt.Sprintf("%x", stateHash[:8]),
 		"batches", len(batches))
 
 	return nil
@@ -386,6 +411,9 @@ type Status struct {
 	ValidatorCount   int
 	TxSubmitted      uint64
 	CertsCommitted   uint64
+	// State verification status
+	StateHalted      bool
+	StateHaltReason  string
 }
 
 // Status returns the current status of the service.
@@ -398,6 +426,11 @@ func (s *Service) Status() Status {
 		Partition:       s.config.Partition.ID,
 		LastBlockIndex:  s.lastBlockIndex,
 		LastBlockTime:   s.lastBlockTime,
+		StateHalted:     s.halted,
+	}
+
+	if s.haltReason != nil {
+		status.StateHaltReason = s.haltReason.Error()
 	}
 
 	if s.node != nil {
@@ -415,3 +448,194 @@ func (s *Service) Status() Status {
 
 // For genesis loading - use existing infrastructure
 var _ = genesis.DocProvider
+
+// onStateDivergence is called when state divergence is detected.
+// It halts the service to prevent further state corruption.
+func (s *Service) onStateDivergence(err *types.StateDivergenceError) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.halted {
+		return // Already halted
+	}
+
+	s.halted = true
+	s.haltReason = err
+
+	slog.Error("STATE DIVERGENCE DETECTED - HALTING CONSENSUS",
+		"round", err.Round,
+		"blockIndex", err.BlockIndex,
+		"expectedHash", err.ExpectedHash.String(),
+		"actualHash", err.ActualHash.String(),
+		"conflictAuthor", fmt.Sprintf("%x", err.ConflictAuthor[:8]))
+
+	// Emit divergence event
+	if s.eventBus != nil {
+		event := events.StateDivergenceDetected{
+			Round:        uint64(err.Round),
+			BlockIndex:   err.BlockIndex,
+			ExpectedHash: err.ExpectedHash,
+			ActualHash:   err.ActualHash,
+		}
+		if pubErr := s.eventBus.Publish(event); pubErr != nil {
+			s.logger.Error("Failed to publish state divergence event", "error", pubErr)
+		}
+	}
+}
+
+// IsHalted returns whether the service has been halted due to state divergence.
+func (s *Service) IsHalted() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.halted
+}
+
+// HaltReason returns the reason for halting, if halted.
+func (s *Service) HaltReason() error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.haltReason
+}
+
+// RecordStateHash records the local state hash for a round after block execution.
+// This is called by the block production loop after successfully producing a block.
+func (s *Service) RecordStateHash(round types.Round, blockIndex uint64, stateHash types.StateHash) {
+	if s.stateHashTracker == nil {
+		return
+	}
+
+	s.stateHashTracker.RecordLocalHash(round, stateHash)
+
+	// Periodically prune old state hashes
+	s.stateHashTracker.Prune(round)
+}
+
+// VerifyRemoteStateHash verifies a state hash received from another validator.
+// Returns an error if divergence is detected.
+func (s *Service) VerifyRemoteStateHash(msg *types.StateHashMessage) error {
+	if s.stateHashTracker == nil {
+		return nil
+	}
+
+	// Verify signature
+	if err := msg.Verify(); err != nil {
+		return fmt.Errorf("invalid state hash message: %w", err)
+	}
+
+	// Record and check for divergence
+	if divergence := s.stateHashTracker.RecordRemoteHash(msg.Round, msg.Author, msg.StateHash); divergence != nil {
+		return divergence
+	}
+
+	return nil
+}
+
+// StateConsistencyStatus returns the current state consistency status.
+type StateConsistencyStatus struct {
+	// Halted indicates whether the service has been halted due to divergence.
+	Halted bool
+	// HaltReason contains the divergence error if halted.
+	HaltReason error
+	// LastVerifiedRound is the last round where state was verified consistent.
+	LastVerifiedRound types.Round
+	// TrackedRounds is the number of rounds being tracked.
+	TrackedRounds int
+}
+
+// StateConsistency returns the current state consistency status.
+func (s *Service) StateConsistency() StateConsistencyStatus {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	status := StateConsistencyStatus{
+		Halted:     s.halted,
+		HaltReason: s.haltReason,
+	}
+
+	// Find last verified round
+	if s.stateHashTracker != nil {
+		// This is a simplified check; a production implementation would track more
+		currentRound := s.CurrentRound()
+		for r := currentRound; r > 0 && r > currentRound-10; r-- {
+			if s.stateHashTracker.CheckConsistency(r) {
+				status.LastVerifiedRound = r
+				break
+			}
+		}
+	}
+
+	return status
+}
+
+// RequestStateSync initiates a state sync to recover from state divergence.
+// This should be called after the service has been halted due to divergence.
+// The caller should provide peers to sync from.
+func (s *Service) RequestStateSync(ctx context.Context, targetHeight uint64) error {
+	s.mu.Lock()
+	if !s.halted {
+		s.mu.Unlock()
+		return fmt.Errorf("cannot request state sync when not halted")
+	}
+	s.mu.Unlock()
+
+	s.logger.Info("Initiating state sync for recovery",
+		"targetHeight", targetHeight)
+
+	// State sync would be performed via the snapshot.StateSync component
+	// which handles discovering snapshots from peers, downloading, and restoring.
+	// The actual sync is coordinated externally by the node operator or automation.
+
+	return nil
+}
+
+// ResumeAfterSync resumes consensus after successful state sync.
+// This resets the halted state and allows block production to continue.
+func (s *Service) ResumeAfterSync(newHeight uint64, newStateHash types.StateHash) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if !s.halted {
+		return fmt.Errorf("service is not halted")
+	}
+
+	s.logger.Info("Resuming after state sync",
+		"newHeight", newHeight,
+		"newStateHash", newStateHash.String())
+
+	// Reset halt state
+	s.halted = false
+	s.haltReason = nil
+
+	// Update block index
+	s.lastBlockIndex = newHeight
+
+	// Record the new state hash
+	if s.stateHashTracker != nil {
+		s.stateHashTracker.RecordLocalHash(s.CurrentRound(), newStateHash)
+	}
+
+	return nil
+}
+
+// GetStateHashForRound returns the recorded state hash for a given round.
+func (s *Service) GetStateHashForRound(round types.Round) (types.StateHash, bool) {
+	if s.stateHashTracker == nil {
+		return types.StateHash{}, false
+	}
+	return s.stateHashTracker.GetLocalHash(round)
+}
+
+// BroadcastStateHash creates and would broadcast a state hash message.
+// This is called periodically to enable cross-validator state verification.
+func (s *Service) BroadcastStateHash(round types.Round, blockIndex uint64, stateHash types.StateHash) (*types.StateHashMessage, error) {
+	pubKey := s.config.NodeConfig.KeyPair.Public().(ed25519.PublicKey)
+
+	msg := types.NewStateHashMessage(round, s.committee.Epoch, blockIndex, stateHash, pubKey)
+	if err := msg.Sign(s.config.NodeConfig.KeyPair); err != nil {
+		return nil, fmt.Errorf("failed to sign state hash message: %w", err)
+	}
+
+	// In a production implementation, this message would be gossiped to peers
+	// via the gossip layer. For now, we return the message for the caller to handle.
+	return msg, nil
+}
