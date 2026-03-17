@@ -24,7 +24,7 @@ const (
 	DefaultHeaderChannelSize      = 500  // Increased from 100 for high throughput
 	DefaultVoteChannelSize        = 1000
 	DefaultCertificateChannelSize = 1000 // Increased from 100 for high throughput
-	DefaultCertSyncChannelSize    = 200  // Increased from 100 for high throughput
+	DefaultCertSyncChannelSize    = 500  // Increased from 200 to handle sustained load
 )
 
 // GossipLayer provides reliable broadcast for consensus messages.

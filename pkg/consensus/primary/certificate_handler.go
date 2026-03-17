@@ -79,6 +79,11 @@ func (p *Primary) insertCertificateAndProcessPending(cert *types.Certificate) {
 		"round", cert.Round(),
 		"author", hexEncode(cert.Author()))
 
+	// Clear from in-flight sync tracking (cert may have arrived via normal gossip)
+	if p.certSyncer != nil {
+		p.certSyncer.ClearInFlight(cert.Digest())
+	}
+
 	// Signal for Bullshark
 	p.signalNewCertificate(cert)
 
@@ -128,6 +133,11 @@ func (p *Primary) processPendingForParent(parentDigest types.CertificateDigest) 
 				if len(missingParents) > 0 {
 					// Re-buffer with updated missing parents
 					p.pendingCerts.Add(cert, missingParents)
+
+					// Re-request the missing parents - critical for recovery
+					if p.certSyncer != nil {
+						p.certSyncer.RequestMissing(missingParents)
+					}
 				}
 			} else {
 				slog.Debug("Failed to insert previously-pending certificate",
@@ -141,6 +151,11 @@ func (p *Primary) processPendingForParent(parentDigest types.CertificateDigest) 
 			"digest", cert.Digest().String(),
 			"round", cert.Round(),
 			"author", hexEncode(cert.Author()))
+
+		// Clear from in-flight sync tracking
+		if p.certSyncer != nil {
+			p.certSyncer.ClearInFlight(cert.Digest())
+		}
 
 		// Signal for Bullshark
 		p.signalNewCertificate(cert)
