@@ -220,3 +220,143 @@ func (c *Committee) QuorumCount() int {
 func ValidatorsEqual(a, b ed25519.PublicKey) bool {
 	return bytes.Equal(a, b)
 }
+
+// ValidatorUpdateType indicates the type of validator change.
+type ValidatorUpdateType int
+
+const (
+	// ValidatorUpdateAdd indicates a new validator is being added.
+	ValidatorUpdateAdd ValidatorUpdateType = iota + 1
+	// ValidatorUpdateRemove indicates a validator is being removed.
+	ValidatorUpdateRemove
+	// ValidatorUpdateStake indicates a validator's stake is changing.
+	ValidatorUpdateStake
+)
+
+// ValidatorUpdate represents a change to the validator set.
+type ValidatorUpdate struct {
+	// PublicKey is the ed25519 public key of the validator.
+	PublicKey ed25519.PublicKey
+	// Type is the type of update (add, remove, or stake change).
+	Type ValidatorUpdateType
+	// NewStake is the new stake value (used for Add and Stake updates).
+	NewStake uint64
+}
+
+// UpdateValidators creates a new Committee by applying the given updates to the current committee.
+// The new committee will have an incremented epoch.
+// This method does not modify the original committee.
+func (c *Committee) UpdateValidators(updates []ValidatorUpdate) *Committee {
+	if len(updates) == 0 {
+		return c.Clone()
+	}
+
+	// Build a map of current validators for efficient lookup and modification
+	validatorMap := make(map[string]ValidatorInfo, len(c.Validators))
+	for _, v := range c.Validators {
+		validatorMap[string(v.PublicKey)] = v
+	}
+
+	// Apply updates
+	for _, update := range updates {
+		keyStr := string(update.PublicKey)
+		switch update.Type {
+		case ValidatorUpdateAdd:
+			// Add new validator
+			validatorMap[keyStr] = ValidatorInfo{
+				PublicKey: update.PublicKey,
+				Stake:     update.NewStake,
+			}
+		case ValidatorUpdateRemove:
+			// Remove validator
+			delete(validatorMap, keyStr)
+		case ValidatorUpdateStake:
+			// Update stake for existing validator
+			if v, exists := validatorMap[keyStr]; exists {
+				v.Stake = update.NewStake
+				validatorMap[keyStr] = v
+			}
+		}
+	}
+
+	// Convert map back to slice
+	newValidators := make([]ValidatorInfo, 0, len(validatorMap))
+	for _, v := range validatorMap {
+		// Deep copy the public key
+		pubKey := make(ed25519.PublicKey, len(v.PublicKey))
+		copy(pubKey, v.PublicKey)
+		newValidators = append(newValidators, ValidatorInfo{
+			PublicKey: pubKey,
+			Stake:     v.Stake,
+		})
+	}
+
+	// Sort validators by public key for deterministic ordering
+	sortValidatorsByKey(newValidators)
+
+	return &Committee{
+		Validators: newValidators,
+		Epoch:      c.Epoch + 1,
+	}
+}
+
+// sortValidatorsByKey sorts validators by their public key bytes for deterministic ordering.
+func sortValidatorsByKey(validators []ValidatorInfo) {
+	for i := 0; i < len(validators); i++ {
+		for j := i + 1; j < len(validators); j++ {
+			if bytes.Compare(validators[i].PublicKey, validators[j].PublicKey) > 0 {
+				validators[i], validators[j] = validators[j], validators[i]
+			}
+		}
+	}
+}
+
+// DiffWith computes the set of updates needed to transform this committee into the target committee.
+// This is useful for determining what changes occurred between epochs.
+func (c *Committee) DiffWith(target *Committee) []ValidatorUpdate {
+	if target == nil {
+		return nil
+	}
+
+	var updates []ValidatorUpdate
+
+	// Build map of target validators
+	targetMap := make(map[string]ValidatorInfo, len(target.Validators))
+	for _, v := range target.Validators {
+		targetMap[string(v.PublicKey)] = v
+	}
+
+	// Check current validators against target
+	for _, v := range c.Validators {
+		keyStr := string(v.PublicKey)
+		if targetV, exists := targetMap[keyStr]; exists {
+			// Validator exists in both - check for stake change
+			if v.Stake != targetV.Stake {
+				updates = append(updates, ValidatorUpdate{
+					PublicKey: v.PublicKey,
+					Type:      ValidatorUpdateStake,
+					NewStake:  targetV.Stake,
+				})
+			}
+			// Remove from targetMap so we can find additions later
+			delete(targetMap, keyStr)
+		} else {
+			// Validator removed
+			updates = append(updates, ValidatorUpdate{
+				PublicKey: v.PublicKey,
+				Type:      ValidatorUpdateRemove,
+			})
+		}
+	}
+
+	// Remaining entries in targetMap are additions
+	for _, v := range targetMap {
+		updates = append(updates, ValidatorUpdate{
+			PublicKey: v.PublicKey,
+			Type:      ValidatorUpdateAdd,
+			NewStake:  v.Stake,
+		})
+	}
+
+	return updates
+}
