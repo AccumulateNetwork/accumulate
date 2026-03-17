@@ -1,10 +1,11 @@
 # Consensus Testnet
 
-A standalone testnet for testing the DAG-based Bullshark consensus implementation.
+A standalone testnet for testing the DAG-based Bullshark consensus implementation
+with a 7-node BFT network (f=2 fault tolerance).
 
 ## Overview
 
-This testnet runs multiple consensus nodes that:
+This testnet runs 7 ADI-controlled validator nodes that:
 1. Generate transactions at a configurable rate
 2. Order transactions via Bullshark DAG consensus
 3. Produce blocks at regular intervals
@@ -67,19 +68,21 @@ tx := NewSetTxRateTx(validatorPubKey, 200, nonce)
 tx.Sign(validatorPrivKey)
 ```
 
-## Validator Keys (7-node testnet)
+## Validator ADI Identities
 
-Generated from deterministic seeds for reproducibility:
+Each validator node is controlled by an ADI (Accumulate Digital Identity):
 
-| Node | Seed | Public Key |
-|------|------|------------|
-| 1 | `...01` | `4cb5abf6ad79fbf5abbccafcc269d85cd2651ed4b885b5869f241aedf0a5ba29` |
-| 2 | `...02` | `7422b9887598068e32c4448a949adb290d0f4e35b9e01b0ee5f1a1e600fe2674` |
-| 3 | `...03` | `f381626e41e7027ea431bfe3009e94bdd25a746beec468948d6c3c7c5dc9a54b` |
-| 4 | `...04` | `fd50b8e3b144ea244fbf7737f550bc8dd0c2650bbc1aada833ca17ff8dbf329b` |
-| 5 | `...05` | `fde4fba030ad002f7c2f7d4c331f49d13fb0ec747eceebec634f1ff4cbca9def` |
-| 6 | `...06` | `b4c92afb3ba57f3ab959ffe6d319c98484a2155a0f4c65b2c37011ffd197b075` |
-| 7 | `...07` | `3ee2a8a7283cb2fd728943daa127ef09e483071a8b4bc699ba4522f09b14cfde` |
+| Node | ADI Identity | Public Key |
+|------|--------------|------------|
+| 1 | `acc://validator-1.acme` | `4cb5abf6ad79fbf5abbccafcc269d85cd2651ed4b885b5869f241aedf0a5ba29` |
+| 2 | `acc://validator-2.acme` | `7422b9887598068e32c4448a949adb290d0f4e35b9e01b0ee5f1a1e600fe2674` |
+| 3 | `acc://validator-3.acme` | `f381626e41e7027ea431bfe3009e94bdd25a746beec468948d6c3c7c5dc9a54b` |
+| 4 | `acc://validator-4.acme` | `fd50b8e3b144ea244fbf7737f550bc8dd0c2650bbc1aada833ca17ff8dbf329b` |
+| 5 | `acc://validator-5.acme` | `fde4fba030ad002f7c2f7d4c331f49d13fb0ec747eceebec634f1ff4cbca9def` |
+| 6 | `acc://validator-6.acme` | `b4c92afb3ba57f3ab959ffe6d319c98484a2155a0f4c65b2c37011ffd197b075` |
+| 7 | `acc://validator-7.acme` | `3ee2a8a7283cb2fd728943daa127ef09e483071a8b4bc699ba4522f09b14cfde` |
+
+Keys are generated from deterministic seeds (`0x01` through `0x07`) for reproducibility.
 
 ## Generate Keys
 
@@ -150,8 +153,22 @@ go build -o consensus-testnet ./cmd/consensus-testnet
 
 ## BFT Properties
 
-With 7 nodes (f=2), the network can tolerate:
-- Up to 2 Byzantine (malicious) nodes
-- Up to 2 crashed nodes
+With 7 ADI-controlled validator nodes (n=7, f=2), the network provides:
 
-Quorum requires 5 nodes (2f+1 = 5).
+### Fault Tolerance
+- Up to 2 Byzantine (malicious) nodes can be tolerated
+- Up to 2 crashed nodes can be tolerated
+- Network continues to make progress with 5+ honest nodes
+
+### Quorum Requirements
+- Quorum requires 5 nodes (2f+1 = 5)
+- All 7 nodes participate in consensus
+- State hashes must match across honest nodes
+- Blocks produced every 3 seconds (configurable)
+
+### Verification
+To verify the 7-node network is working correctly:
+1. All 7 nodes should connect and log peer connections
+2. Status logs should show matching state hashes across nodes
+3. Blocks should be produced consistently every 3 seconds
+4. The `round` field in status logs should advance together
