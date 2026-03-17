@@ -29,13 +29,19 @@ const (
 	DefaultSyncDeduplicationInterval = 5 * time.Second
 
 	// DefaultSyncRetryTimeout is the time to wait before retrying a request.
-	DefaultSyncRetryTimeout = 10 * time.Second
+	// Increased from 10s to 30s to handle network congestion under sustained load.
+	DefaultSyncRetryTimeout = 30 * time.Second
 
 	// DefaultSyncMaxRetries is the maximum number of retry attempts.
-	DefaultSyncMaxRetries = 3
+	// Increased from 3 to 10 to be more persistent under sustained load.
+	DefaultSyncMaxRetries = 10
 
 	// DefaultSyncJitterMax is the maximum random jitter added to requests.
 	DefaultSyncJitterMax = 100 * time.Millisecond
+
+	// DefaultSyncPendingRescanInterval is how often to rescan pending certificates
+	// and re-request their missing parents. This ensures recovery from dropped sync responses.
+	DefaultSyncPendingRescanInterval = 15 * time.Second
 )
 
 // CertSyncerConfig holds configuration for the CertSyncer.
@@ -54,6 +60,10 @@ type CertSyncerConfig struct {
 
 	// JitterMax is the maximum random jitter added to batch requests.
 	JitterMax time.Duration
+
+	// PendingRescanInterval is how often to rescan pending certificates and
+	// re-request their missing parents. Set to 0 to disable.
+	PendingRescanInterval time.Duration
 
 	// PublicKey is this node's public key for identifying ourselves in requests.
 	PublicKey ed25519.PublicKey
@@ -75,6 +85,9 @@ func (c *CertSyncerConfig) applyDefaults() {
 	}
 	if c.JitterMax <= 0 {
 		c.JitterMax = DefaultSyncJitterMax
+	}
+	if c.PendingRescanInterval <= 0 {
+		c.PendingRescanInterval = DefaultSyncPendingRescanInterval
 	}
 }
 
@@ -155,6 +168,12 @@ func (s *CertSyncer) Start(ctx context.Context) error {
 	// Start retry loop
 	s.wg.Add(1)
 	go s.retryLoop()
+
+	// Start pending rescan loop if configured
+	if s.config.PendingRescanInterval > 0 {
+		s.wg.Add(1)
+		go s.pendingRescanLoop()
+	}
 
 	slog.Info("CertSyncer started")
 	return nil
@@ -487,6 +506,79 @@ func (s *CertSyncer) checkRetries() {
 			"count", len(toRetry))
 		s.RequestMissing(toRetry)
 	}
+}
+
+// pendingRescanLoop periodically scans pending certificates and re-requests
+// their missing parents. This ensures recovery from dropped sync responses
+// or situations where requests never got a response.
+func (s *CertSyncer) pendingRescanLoop() {
+	defer s.wg.Done()
+
+	ticker := time.NewTicker(s.config.PendingRescanInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-s.ctx.Done():
+			return
+
+		case <-ticker.C:
+			s.rescanPendingCertificates()
+		}
+	}
+}
+
+// rescanPendingCertificates checks all pending certificates and re-requests
+// any missing parents that are not currently being actively synced.
+func (s *CertSyncer) rescanPendingCertificates() {
+	if s.pending == nil {
+		return
+	}
+
+	// Get all missing parent digests from pending certificates
+	allMissing := s.pending.GetAllMissingParents()
+	if len(allMissing) == 0 {
+		return
+	}
+
+	// Filter to digests not in DAG and not recently requested
+	var toRequest []types.CertificateDigest
+	now := time.Now()
+
+	s.inFlightMu.Lock()
+	for _, digest := range allMissing {
+		// Skip if we have it
+		if s.dag.Contains(digest) {
+			continue
+		}
+
+		// Check if actively being requested
+		if req, exists := s.inFlight[digest]; exists {
+			// Only skip if recently requested
+			if now.Sub(req.sentAt) < s.config.DeduplicationInterval {
+				continue
+			}
+		}
+
+		toRequest = append(toRequest, digest)
+	}
+	s.inFlightMu.Unlock()
+
+	if len(toRequest) > 0 {
+		slog.Info("Re-requesting missing certificates from pending rescan",
+			"count", len(toRequest),
+			"totalPending", s.pending.Size())
+		s.RequestMissing(toRequest)
+	}
+}
+
+// ClearInFlight removes a digest from the in-flight tracking.
+// This should be called when a certificate is received via normal gossip
+// (not through sync) to prevent stale in-flight entries.
+func (s *CertSyncer) ClearInFlight(digest types.CertificateDigest) {
+	s.inFlightMu.Lock()
+	delete(s.inFlight, digest)
+	s.inFlightMu.Unlock()
 }
 
 // Metrics returns syncer metrics.

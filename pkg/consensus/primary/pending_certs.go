@@ -219,3 +219,26 @@ func (p *PendingCertificates) MissingParents(digest types.CertificateDigest) []t
 	}
 	return parents
 }
+
+// GetAllMissingParents returns all unique missing parent digests across all
+// pending certificates. This is used by the cert syncer to periodically
+// re-request missing certificates that may have been lost.
+func (p *PendingCertificates) GetAllMissingParents() []types.CertificateDigest {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	// Collect unique missing parents
+	seen := make(map[types.CertificateDigest]struct{})
+	var result []types.CertificateDigest
+
+	for _, entry := range p.pending {
+		for parent := range entry.missingParents {
+			if _, exists := seen[parent]; !exists {
+				seen[parent] = struct{}{}
+				result = append(result, parent)
+			}
+		}
+	}
+
+	return result
+}
