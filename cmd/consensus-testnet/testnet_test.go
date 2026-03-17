@@ -96,17 +96,18 @@ func TestBlock_MarshalUnmarshal(t *testing.T) {
 func TestExecutor_ProcessTransaction(t *testing.T) {
 	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
 
-	executor := NewExecutor(ExecutorConfig{
+	executor, err := NewExecutor(ExecutorConfig{
 		Validators:    []ed25519.PublicKey{pub},
 		BlockInterval: 1 * time.Second,
 		TxRate:        100,
 	})
+	require.NoError(t, err)
 
 	// Process a data transaction
 	tx := NewDataTx(pub, []byte("test data"), 1)
 	tx.Sign(priv)
 
-	err := executor.ProcessTransaction(tx.Marshal())
+	err = executor.ProcessTransaction(tx.Marshal())
 	require.NoError(t, err)
 
 	assert.Equal(t, uint64(1), executor.GetProcessedCount())
@@ -115,11 +116,12 @@ func TestExecutor_ProcessTransaction(t *testing.T) {
 func TestExecutor_SetBlockTime(t *testing.T) {
 	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
 
-	executor := NewExecutor(ExecutorConfig{
+	executor, err := NewExecutor(ExecutorConfig{
 		Validators:    []ed25519.PublicKey{pub},
 		BlockInterval: 1 * time.Second,
 		TxRate:        100,
 	})
+	require.NoError(t, err)
 
 	assert.Equal(t, 1*time.Second, executor.GetBlockInterval())
 
@@ -127,7 +129,7 @@ func TestExecutor_SetBlockTime(t *testing.T) {
 	tx := NewSetBlockTimeTx(pub, 5*time.Second, 1)
 	tx.Sign(priv)
 
-	err := executor.ProcessTransaction(tx.Marshal())
+	err = executor.ProcessTransaction(tx.Marshal())
 	require.NoError(t, err)
 
 	assert.Equal(t, 5*time.Second, executor.GetBlockInterval())
@@ -138,17 +140,18 @@ func TestExecutor_SetBlockTime_NonValidator(t *testing.T) {
 	validatorPub, _, _ := ed25519.GenerateKey(rand.Reader)
 	userPub, userPriv, _ := ed25519.GenerateKey(rand.Reader)
 
-	executor := NewExecutor(ExecutorConfig{
+	executor, err := NewExecutor(ExecutorConfig{
 		Validators:    []ed25519.PublicKey{validatorPub},
 		BlockInterval: 1 * time.Second,
 		TxRate:        100,
 	})
+	require.NoError(t, err)
 
 	// Non-validator tries to change block time
 	tx := NewSetBlockTimeTx(userPub, 10*time.Second, 1)
 	tx.Sign(userPriv)
 
-	err := executor.ProcessTransaction(tx.Marshal())
+	err = executor.ProcessTransaction(tx.Marshal())
 	require.NoError(t, err) // No error, but change is rejected
 
 	// Block time should be unchanged
@@ -159,11 +162,12 @@ func TestExecutor_SetBlockTime_NonValidator(t *testing.T) {
 func TestExecutor_BlockProduction(t *testing.T) {
 	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
 
-	executor := NewExecutor(ExecutorConfig{
+	executor, err := NewExecutor(ExecutorConfig{
 		Validators:    []ed25519.PublicKey{pub},
 		BlockInterval: 100 * time.Millisecond,
 		TxRate:        100,
 	})
+	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -186,22 +190,23 @@ func TestExecutor_BlockProduction(t *testing.T) {
 
 	// Should have produced at least a few blocks
 	assert.Greater(t, blocksProduced.Load(), int32(0))
-	assert.Greater(t, executor.GetBlockCount(), 1) // genesis + at least one
+	assert.Greater(t, executor.GetBlockCount(), uint64(1)) // genesis + at least one
 }
 
 func TestExecutor_ReplayProtection(t *testing.T) {
 	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
 
-	executor := NewExecutor(ExecutorConfig{
+	executor, err := NewExecutor(ExecutorConfig{
 		Validators:    []ed25519.PublicKey{pub},
 		BlockInterval: 1 * time.Second,
 		TxRate:        100,
 	})
+	require.NoError(t, err)
 
 	// Submit transaction with nonce 1
 	tx1 := NewDataTx(pub, []byte("first"), 1)
 	tx1.Sign(priv)
-	err := executor.ProcessTransaction(tx1.Marshal())
+	err = executor.ProcessTransaction(tx1.Marshal())
 	require.NoError(t, err)
 	assert.Equal(t, uint64(1), executor.GetProcessedCount())
 
