@@ -9,8 +9,8 @@ package database
 import (
 	"bytes"
 	"io"
+	"log/slog"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/bpt"
@@ -18,7 +18,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 )
 
-func newBPT(parent record.Record, logger log.Logger, store record.Store, key *record.Key, name string) *bpt.BPT {
+func newBPT(parent record.Record, logger *slog.Logger, store record.Store, key *record.Key, name string) *bpt.BPT {
 	return bpt.New(parent, logger, store, key)
 }
 

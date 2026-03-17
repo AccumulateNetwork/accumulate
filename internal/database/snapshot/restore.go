@@ -7,9 +7,9 @@
 package snapshot
 
 import (
+	"log/slog"
 	"time"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
@@ -30,12 +30,12 @@ type RestoreVisitor struct {
 	CompressChains       bool
 }
 
-func Restore(db database.Beginner, file ioutil2.SectionReader, logger log.Logger) error {
+func Restore(db database.Beginner, file ioutil2.SectionReader, logger *slog.Logger) error {
 	v := NewRestoreVisitor(db, logger)
 	return Visit(file, v)
 }
 
-func NewRestoreVisitor(db database.Beginner, logger log.Logger) *RestoreVisitor {
+func NewRestoreVisitor(db database.Beginner, logger *slog.Logger) *RestoreVisitor {
 	v := new(RestoreVisitor)
 	v.logger.L = logger
 	v.db = db

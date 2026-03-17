@@ -7,9 +7,9 @@
 package merkle
 
 import (
+	"log/slog"
 	"sort"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
@@ -19,7 +19,7 @@ import (
 // NewChainIndex constructs a new ChainIndex data model object. ChainIndex
 // supports appending keys in ascending order, e.g. as the chain grows. It does
 // not allow adding keys that would sort before or between existing items.
-func NewChainIndex(logger log.Logger, store database.Store, key *record.Key) *ChainIndex {
+func NewChainIndex(logger *slog.Logger, store database.Store, key *record.Key) *ChainIndex {
 	x := new(ChainIndex)
 	x.logger.Set(logger)
 	x.store = store

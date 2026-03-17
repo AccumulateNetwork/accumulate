@@ -9,8 +9,8 @@ package database
 import (
 	"fmt"
 	"io"
+	"log/slog"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/hash"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
@@ -26,13 +26,13 @@ const markPower = 8
 // Database is an Accumulate database.
 type Database struct {
 	store       keyvalue.Beginner
-	logger      log.Logger
+	logger      *slog.Logger
 	nextBatchId int64
 	observer    Observer
 }
 
 // New creates a new database using the given key-value store.
-func New(store keyvalue.Beginner, logger log.Logger) *Database {
+func New(store keyvalue.Beginner, logger *slog.Logger) *Database {
 	d := new(Database)
 	d.store = store
 	d.observer = unsetObserver{}
@@ -44,12 +44,12 @@ func New(store keyvalue.Beginner, logger log.Logger) *Database {
 	return d
 }
 
-func OpenInMemory(logger log.Logger) *Database {
+func OpenInMemory(logger *slog.Logger) *Database {
 	store := memory.New(nil)
 	return New(store, logger)
 }
 
-func OpenBadger(filepath string, logger log.Logger) (*Database, error) {
+func OpenBadger(filepath string, logger *slog.Logger) (*Database, error) {
 	store, err := badger.New(filepath)
 	if err != nil {
 		return nil, err
@@ -57,7 +57,7 @@ func OpenBadger(filepath string, logger log.Logger) (*Database, error) {
 	return New(store, logger), nil
 }
 
-func OpenLevelDB(filepath string, logger log.Logger) (*Database, error) {
+func OpenLevelDB(filepath string, logger *slog.Logger) (*Database, error) {
 	store, err := leveldb.Open(filepath)
 	if err != nil {
 		return nil, err
@@ -66,7 +66,7 @@ func OpenLevelDB(filepath string, logger log.Logger) (*Database, error) {
 }
 
 // Open opens a key-value store and creates a new database with it.
-func Open(cfg *config.Config, logger log.Logger) (*Database, error) {
+func Open(cfg *config.Config, logger *slog.Logger) (*Database, error) {
 	switch cfg.Accumulate.Storage.Type {
 	case config.MemoryStorage:
 		return OpenInMemory(logger), nil

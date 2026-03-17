@@ -8,12 +8,11 @@ package logging
 
 import (
 	stdlog "log"
+	"log/slog"
 	"runtime/debug"
-
-	"github.com/cometbft/cometbft/libs/log"
 )
 
-func Recover(logger log.Logger, message string, values ...interface{}) {
+func Recover(logger *slog.Logger, message string, values ...interface{}) {
 	defer func() {
 		if recover() != nil {
 			println("Panicked while recovering from a panic") //nolint:noprint

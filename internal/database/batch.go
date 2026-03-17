@@ -11,7 +11,6 @@ import (
 	"log/slog"
 	"sync/atomic"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
@@ -57,7 +56,7 @@ func (d *Database) Begin(writable bool) *Batch {
 	return b
 }
 
-func NewBatch(id string, store keyvalue.Store, writable bool, logger log.Logger) *Batch {
+func NewBatch(id string, store keyvalue.Store, writable bool, logger *slog.Logger) *Batch {
 	b := new(Batch)
 	b.id = id
 	b.writable = writable

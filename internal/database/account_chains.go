@@ -8,9 +8,9 @@ package database
 
 import (
 	"encoding"
+	"log/slog"
 	"strings"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	merkle2 "gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
@@ -31,7 +31,7 @@ type Chain2 struct {
 	index   *Chain2
 }
 
-func newChain2(parent record.Record, _ log.Logger, _ record.Store, key *record.Key, namefmt string) *Chain2 {
+func newChain2(parent record.Record, _ *slog.Logger, _ record.Store, key *record.Key, namefmt string) *Chain2 {
 	var account *Account
 	switch parent := parent.(type) {
 	case *Account:

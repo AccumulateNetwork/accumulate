@@ -9,11 +9,11 @@ package events
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"runtime/debug"
 	"strings"
 	"sync"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 )
 
@@ -23,7 +23,7 @@ type Bus struct {
 	logger      logging.OptionalLogger
 }
 
-func NewBus(logger log.Logger) *Bus {
+func NewBus(logger *slog.Logger) *Bus {
 	b := new(Bus)
 	b.mu = new(sync.Mutex)
 	b.logger.L = logger
@@ -97,7 +97,7 @@ func SubscribeAsync[T Event](b *Bus, sub func(T)) {
 		}
 
 		go func() {
-			defer logging.Recover(b.logger, "Subscriber panicked")
+			defer logging.Recover(b.logger.L, "Subscriber panicked")
 			sub(et)
 		}()
 		return nil

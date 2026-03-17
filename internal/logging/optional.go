@@ -6,20 +6,13 @@
 
 package logging
 
-import "github.com/cometbft/cometbft/libs/log"
+import "log/slog"
 
 type OptionalLogger struct {
-	L log.Logger
+	L *slog.Logger
 }
 
-func (l *OptionalLogger) Set(m log.Logger, keyVals ...interface{}) {
-	for {
-		l, ok := m.(OptionalLogger)
-		if !ok {
-			break
-		}
-		m = l.L
-	}
+func (l *OptionalLogger) Set(m *slog.Logger, keyVals ...interface{}) {
 	if m != nil {
 		l.L = m.With(keyVals...)
 	}
@@ -46,9 +39,9 @@ func (l OptionalLogger) Error(msg string, keyVals ...interface{}) {
 	l.L.Error(msg, keyVals...)
 }
 
-func (l OptionalLogger) With(keyVals ...interface{}) log.Logger {
+func (l OptionalLogger) With(keyVals ...interface{}) *slog.Logger {
 	if l.L == nil {
-		return l
+		return nil
 	}
-	return OptionalLogger{l.L.With(keyVals...)}
+	return l.L.With(keyVals...)
 }
