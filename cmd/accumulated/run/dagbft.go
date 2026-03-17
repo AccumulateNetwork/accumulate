@@ -10,18 +10,12 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/sha256"
-	"fmt"
 	"log/slog"
-	"os"
 	"time"
 
-	"github.com/libp2p/go-libp2p"
-	pubsub "github.com/libp2p/go-libp2p-pubsub"
-	"github.com/libp2p/go-libp2p/core/crypto"
-	"github.com/libp2p/go-libp2p/core/host"
-	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/multiformats/go-multiaddr"
+	"github.com/fatih/color"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain"
@@ -29,12 +23,13 @@ import (
 	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
-	v3api "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/dagbft"
+	v3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/adapter"
+	dagconfig "gitlab.com/accumulatenetwork/accumulate/pkg/consensus/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -42,288 +37,137 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// dagbftState holds the DAG-BFT node state.
-type dagbftState struct {
-	node      *consensus.Node
-	committee *types.Committee
-	privKey   ed25519.PrivateKey
-	eventBus  *events.Bus
-	globals   chan *network.GlobalValues
-	logger    *logging.Slogger
-	host      host.Host
-	pubsub    *pubsub.PubSub
-}
-
-// DAGBFTConsensusService represents a consensus service using DAG-BFT.
-type DAGBFTConsensusService struct {
-	// NodeDir is the directory for node data.
-	NodeDir string
-
-	// ValidatorKey is the validator's private key.
-	ValidatorKey PrivateKey
-
-	// Genesis is the path to the genesis file.
-	Genesis string
-
-	// Listen is the address to listen on.
-	Listen Multiaddr
-
-	// BootstrapPeers are the initial peers to connect to.
-	BootstrapPeers []Multiaddr
-
-	// MetricsNamespace is the namespace for metrics.
-	MetricsNamespace string
-
-	// NumWorkers is the number of DAG-BFT workers.
-	NumWorkers int
-
-	// DAGGCDepth is the garbage collection depth for the DAG.
-	DAGGCDepth int
-
-	// App is the consensus application.
-	App ConsensusApp
-}
-
+// DAG-BFT service IOC providers
 var (
-	dagbftProvidesEventBus = ioc.Provides[*events.Bus](func(c *DAGBFTConsensusService) string { return c.App.partition().ID })
+	dagbftProvidesEventBus  = ioc.Provides[*events.Bus](func(s *DAGBFTService) string { return s.Partition.ID })
+	dagbftProvidesService   = ioc.Provides[v3.ConsensusService](func(s *DAGBFTService) string { return s.Partition.ID })
+	dagbftProvidesSubmitter = ioc.Provides[v3.Submitter](func(s *DAGBFTService) string { return s.Partition.ID })
+	dagbftProvidesValidator = ioc.Provides[v3.Validator](func(s *DAGBFTService) string { return s.Partition.ID })
+	dagbftProvidesSequencer = ioc.Provides[private.Sequencer](func(s *DAGBFTService) string { return s.Partition.ID })
+	dagbftProvidesRouter    = ioc.Provides[routing.Router](func(s *DAGBFTService) string { return s.Partition.ID })
+
+	dagbftNeedsStorage = ioc.Needs[keyvalue.Beginner](func(s *DAGBFTService) string { return s.Partition.ID })
 )
 
-func (c *DAGBFTConsensusService) Type() ServiceType { return ServiceTypeConsensus }
+// DAGBFTService wraps DAG-BFT consensus for the accumulated binary.
+// It replaces the CometBFT-based ConsensusService with DAG-based consensus.
+type DAGBFTService struct {
+	// Configuration
+	NodeDir      string         `json:"nodeDir,omitempty" form:"nodeDir" query:"nodeDir" validate:"required"`
+	ValidatorKey PrivateKey     `json:"validatorKey,omitempty" form:"validatorKey" query:"validatorKey" validate:"required"`
+	Genesis      string         `json:"genesis,omitempty" form:"genesis" query:"genesis" validate:"required"`
+	Partition    *protocol.PartitionInfo `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
 
-func (c *DAGBFTConsensusService) Requires() []ioc.Requirement {
-	return c.App.Requires()
+	// DAG-BFT specific configuration
+	NumWorkers       *int `json:"numWorkers,omitempty" form:"numWorkers" query:"numWorkers"`
+	DAGGCDepth       *int `json:"dagGCDepth,omitempty" form:"dagGCDepth" query:"dagGCDepth"`
+	CommitBufferSize *int `json:"commitBufferSize,omitempty" form:"commitBufferSize" query:"commitBufferSize"`
+
+	// Executor options
+	EnableHealing        *bool `json:"enableHealing,omitempty" form:"enableHealing" query:"enableHealing"`
+	EnableDirectDispatch *bool `json:"enableDirectDispatch,omitempty" form:"enableDirectDispatch" query:"enableDirectDispatch"`
+	MaxEnvelopesPerBlock *uint `json:"maxEnvelopesPerBlock,omitempty" form:"maxEnvelopesPerBlock" query:"maxEnvelopesPerBlock"`
+
+	// Runtime state (transient)
+	service  *dagbft.Service
+	eventBus *events.Bus
+	globals  chan *network.GlobalValues
 }
 
-func (c *DAGBFTConsensusService) Provides() []ioc.Provided {
-	return append(c.App.Provides(),
-		dagbftProvidesEventBus.Provided(c),
-	)
+// Type returns the service type for DAG-BFT.
+func (s *DAGBFTService) Type() ServiceType {
+	// Use a new service type for DAG-BFT
+	return ServiceTypeConsensus
 }
 
-func (c *DAGBFTConsensusService) prestart(inst *Instance) error {
-	return c.App.prestart(inst)
-}
-
-func (c *DAGBFTConsensusService) start(inst *Instance) error {
-	// Set defaults
-	setDefaultVal(&c.MetricsNamespace, fmt.Sprintf("dagbft_%s", c.App.partition().ID))
-	if c.NumWorkers <= 0 {
-		c.NumWorkers = consensus.DefaultNumWorkers
+// Requires returns the IOC requirements for DAG-BFT.
+func (s *DAGBFTService) Requires() []ioc.Requirement {
+	return []ioc.Requirement{
+		dagbftNeedsStorage.Requirement(s),
 	}
-	if c.DAGGCDepth <= 0 {
-		c.DAGGCDepth = consensus.DefaultDAGGCDepth
+}
+
+// Provides returns the IOC provisions for DAG-BFT.
+func (s *DAGBFTService) Provides() []ioc.Provided {
+	return []ioc.Provided{
+		dagbftProvidesEventBus.Provided(s),
+		dagbftProvidesService.Provided(s),
+		dagbftProvidesSubmitter.Provided(s),
+		dagbftProvidesValidator.Provided(s),
+		dagbftProvidesSequencer.Provided(s),
+		dagbftProvidesRouter.Provided(s),
 	}
+}
 
-	d := new(dagbftState)
-	d.logger = (*logging.Slogger)(inst.logger)
-	d.eventBus = events.NewBus(d.logger.With("module", "events"))
+// Verify validates the DAG-BFT configuration.
+func (s *DAGBFTService) Verify() error {
+	if s.Partition == nil {
+		return errors.BadRequest.With("partition is required")
+	}
+	if s.ValidatorKey == nil {
+		return errors.BadRequest.With("validator key is required")
+	}
+	return nil
+}
 
-	events.SubscribeAsync(d.eventBus, func(e events.FatalError) {
+// prestart performs pre-start initialization.
+func (s *DAGBFTService) prestart(inst *Instance) error {
+	// Nothing to do in prestart for DAG-BFT
+	return nil
+}
+
+// start initializes and starts the DAG-BFT service.
+func (s *DAGBFTService) start(inst *Instance) error {
+	// Apply defaults
+	setDefaultPtr(&s.EnableHealing, false)
+	setDefaultPtr(&s.EnableDirectDispatch, true)
+	setDefaultPtr(&s.MaxEnvelopesPerBlock, 100)
+	setDefaultPtr(&s.NumWorkers, dagconfig.DefaultNumWorkers)
+	setDefaultPtr(&s.DAGGCDepth, dagconfig.DefaultDAGGCDepth)
+	setDefaultPtr(&s.CommitBufferSize, dagconfig.DefaultCommitBufferSize)
+
+	// Get the logger
+	logger := (*logging.Slogger)(inst.logger)
+
+	// Create event bus
+	s.eventBus = events.NewBus(logger.With("module", "events"))
+
+	// Subscribe to fatal errors
+	events.SubscribeAsync(s.eventBus, func(e events.FatalError) {
 		slog.ErrorContext(inst.context, "Shutting down due to a fatal error", "error", e.Err)
 		inst.shutdown()
 	})
 
-	// Make the node directories
-	err := os.MkdirAll(inst.path(c.NodeDir, "config"), 0700)
+	// Get the storage
+	store, err := dagbftNeedsStorage.Get(inst.services, s)
 	if err != nil {
-		return err
-	}
-	err = os.MkdirAll(inst.path(c.NodeDir, "data"), 0700)
-	if err != nil {
-		return err
+		return errors.UnknownError.WithFormat("get storage: %w", err)
 	}
 
-	// Load validator key
-	if c.ValidatorKey == nil {
-		return errors.BadRequest.With("validator key is required")
-	}
-	keyAddr, err := c.ValidatorKey.get(inst)
+	// Get the validator key
+	validatorKeyAddr, err := s.ValidatorKey.get(inst)
 	if err != nil {
-		return errors.UnknownError.WithFormat("load validator key: %w", err)
+		return errors.UnknownError.WithFormat("get validator key: %w", err)
 	}
-	sk, ok := keyAddr.GetPrivateKey()
+	validatorKey, ok := validatorKeyAddr.GetPrivateKey()
 	if !ok {
 		return errors.BadRequest.With("validator key is not a private key")
 	}
-	if len(sk) != ed25519.PrivateKeySize {
-		return errors.BadRequest.With("validator key must be ed25519")
-	}
-	d.privKey = ed25519.PrivateKey(sk)
-
-	// Load committee from genesis
-	committee, err := c.loadCommitteeFromGenesis(inst)
-	if err != nil {
-		return errors.UnknownError.WithFormat("load committee from genesis: %w", err)
-	}
-	d.committee = committee
-
-	// Create libp2p host for DAG-BFT consensus
-	d.host, d.pubsub, err = c.createLibp2pHost(inst.context, d.privKey)
-	if err != nil {
-		return errors.UnknownError.WithFormat("create libp2p host: %w", err)
+	if len(validatorKey) != ed25519.PrivateKeySize {
+		return errors.BadRequest.WithFormat("validator key has wrong size: %d", len(validatorKey))
 	}
 
-	// Connect to bootstrap peers
-	for _, peerAddr := range c.BootstrapPeers {
-		peerInfo, err := peer.AddrInfoFromP2pAddr(peerAddr)
-		if err != nil {
-			slog.Warn("Invalid bootstrap peer address", "addr", peerAddr, "error", err)
-			continue
-		}
-		if err := d.host.Connect(inst.context, *peerInfo); err != nil {
-			slog.Warn("Failed to connect to bootstrap peer", "peer", peerInfo.ID, "error", err)
-		} else {
-			slog.Info("Connected to bootstrap peer", "peer", peerInfo.ID)
-		}
-	}
-
-	// Create DAG-BFT node configuration
-	nodeConfig := consensus.NodeConfig{
-		Partition:        c.App.partition().ID,
-		KeyPair:          d.privKey,
-		NumWorkers:       c.NumWorkers,
-		DAGGCDepth:       types.Round(c.DAGGCDepth),
-		CommitBufferSize: consensus.DefaultCommitBufferSize,
-	}
-
-	// Create consensus node
-	d.node, err = consensus.NewNode(nodeConfig, committee, d.host, d.pubsub)
-	if err != nil {
-		return errors.UnknownError.WithFormat("create DAG-BFT node: %w", err)
-	}
-
-	// Register event bus
-	err = dagbftProvidesEventBus.Register(inst.services, c, d.eventBus)
-	if err != nil {
-		return err
-	}
-
-	// Start application and executor
-	err = c.startDAGBFTApp(inst, d)
-	if err != nil {
-		return err
-	}
-
-	// Start consensus node
-	if err := d.node.Start(inst.context); err != nil {
-		return errors.UnknownError.WithFormat("start DAG-BFT node: %w", err)
-	}
-
-	inst.cleanup("dagbft node", func(context.Context) error {
-		d.node.Stop()
-		return d.host.Close()
-	})
-
-	slog.Info("DAG-BFT consensus started",
-		"partition", c.App.partition().ID,
-		"validators", len(committee.Validators),
-		"numWorkers", c.NumWorkers)
-
-	return nil
-}
-
-// createLibp2pHost creates a libp2p host and pubsub for DAG-BFT.
-func (c *DAGBFTConsensusService) createLibp2pHost(ctx context.Context, privKey ed25519.PrivateKey) (host.Host, *pubsub.PubSub, error) {
-	// Convert ed25519 key to libp2p format
-	libp2pKey, _, err := crypto.KeyPairFromStdKey(&privKey)
-	if err != nil {
-		return nil, nil, fmt.Errorf("convert key: %w", err)
-	}
-
-	// Determine listen address
-	var listenAddrs []multiaddr.Multiaddr
-	if c.Listen != nil {
-		listenAddrs = append(listenAddrs, c.Listen)
-	} else {
-		defaultAddr, _ := multiaddr.NewMultiaddr("/ip4/0.0.0.0/tcp/9000")
-		listenAddrs = append(listenAddrs, defaultAddr)
-	}
-
-	// Create host
-	h, err := libp2p.New(
-		libp2p.Identity(libp2pKey),
-		libp2p.ListenAddrs(listenAddrs...),
-		libp2p.EnableRelay(),
-	)
-	if err != nil {
-		return nil, nil, fmt.Errorf("create host: %w", err)
-	}
-
-	// Create pubsub
-	ps, err := pubsub.NewGossipSub(ctx, h)
-	if err != nil {
-		h.Close()
-		return nil, nil, fmt.Errorf("create pubsub: %w", err)
-	}
-
-	slog.Info("DAG-BFT libp2p host created",
-		"id", h.ID(),
-		"addrs", h.Addrs())
-
-	return h, ps, nil
-}
-
-// loadCommitteeFromGenesis loads the validator committee from the genesis file.
-func (c *DAGBFTConsensusService) loadCommitteeFromGenesis(inst *Instance) (*types.Committee, error) {
-	path := inst.path(c.Genesis)
-
-	// Read genesis snapshot or JSON
-	all, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("read genesis: %w", err)
-	}
-
-	// Convert to CometBFT genesis doc to extract validators
-	genDoc, err := genesis.ConvertSnapshotToJson(all)
-	if err != nil {
-		return nil, fmt.Errorf("parse genesis: %w", err)
-	}
-
-	// Extract validators
-	var validators []types.ValidatorInfo
-	for _, val := range genDoc.Validators {
-		pubKeyBytes := val.PubKey.Bytes()
-		if len(pubKeyBytes) != ed25519.PublicKeySize {
-			continue
-		}
-		validators = append(validators, types.ValidatorInfo{
-			PublicKey: pubKeyBytes,
-			Stake:     uint64(val.Power),
-		})
-	}
-
-	if len(validators) == 0 {
-		return nil, fmt.Errorf("no validators found in genesis")
-	}
-
-	return types.NewCommittee(validators, 1), nil
-}
-
-// startDAGBFTApp initializes and starts the application layer for DAG-BFT.
-func (c *DAGBFTConsensusService) startDAGBFTApp(inst *Instance, d *dagbftState) error {
-	app, ok := c.App.(*CoreConsensusApp)
-	if !ok {
-		return errors.BadRequest.WithFormat("unsupported app type for DAG-BFT: %T", c.App)
-	}
-
-	setDefaultPtr(&app.EnableHealing, false)
-	setDefaultPtr(&app.EnableDirectDispatch, true)
-	setDefaultPtr(&app.MaxEnvelopesPerBlock, 100)
-
-	store, err := coreConsensusNeedsStorage.Get(inst.services, app)
-	if err != nil {
-		return err
-	}
-
+	// Create router
 	router := routing.NewRouter(routing.RouterOptions{
-		Events: d.eventBus,
-		Logger: d.logger,
+		Events: s.eventBus,
+		Logger: logger,
 	})
-	err = coreConsensusProvidesRouter.Register(inst.services, app, router)
+	err = dagbftProvidesRouter.Register(inst.services, s, router)
 	if err != nil {
-		return err
+		return errors.UnknownError.WithFormat("register router: %w", err)
 	}
 
+	// Create client for cross-chain
 	dialer := inst.p2p.DialNetwork()
 	client := &message.Client{Transport: &message.RoutedTransport{
 		Network: inst.config.Network,
@@ -331,213 +175,201 @@ func (c *DAGBFTConsensusService) startDAGBFTApp(inst *Instance, d *dagbftState) 
 		Router:  routing.MessageRouter{Router: router},
 	}}
 
-	db := database.New(store, d.logger)
+	// Create database
+	db := database.New(store, logger)
+
+	// Create executor options
 	execOpts := execute.Options{
-		Logger:        d.logger.With("module", "executor"),
+		Logger:        logger.With("module", "executor"),
 		Database:      db,
-		Key:           d.privKey,
+		Key:           validatorKey,
 		Router:        router,
-		EventBus:      d.eventBus,
+		EventBus:      s.eventBus,
 		Sequencer:     client.Private(),
 		Querier:       client,
-		EnableHealing: *app.EnableHealing,
+		EnableHealing: *s.EnableHealing,
 		Describe: execute.DescribeShim{
-			NetworkType: app.Partition.Type,
-			PartitionId: app.Partition.ID,
+			NetworkType: s.Partition.Type,
+			PartitionId: s.Partition.ID,
 		},
 	}
 
-	// Set up dispatcher
-	execOpts.NewDispatcher = func() execute.Dispatcher {
-		return accumulated.NewDispatcher(inst.config.Network, router, dialer)
+	// Configure dispatcher
+	if *s.EnableDirectDispatch {
+		execOpts.NewDispatcher = func() execute.Dispatcher {
+			return accumulated.NewDispatcher(inst.config.Network, router, dialer)
+		}
+	} else {
+		execOpts.NewDispatcher = func() execute.Dispatcher {
+			return accumulated.NewDispatcher(inst.config.Network, router, dialer)
+		}
 	}
 
-	// Setup globals
-	d.globals = make(chan *network.GlobalValues, 1)
-	events.SubscribeSync(d.eventBus, func(e events.WillChangeGlobals) error {
+	// Setup globals channel
+	s.globals = make(chan *network.GlobalValues, 1)
+	events.SubscribeSync(s.eventBus, func(e events.WillChangeGlobals) error {
 		select {
-		case d.globals <- e.New:
+		case s.globals <- e.New:
 		default:
 		}
 		return nil
 	})
 
-	// Create conductor
+	// Start conductor for cross-chain communication
 	conductor := &crosschain.Conductor{
-		Partition:           app.Partition,
+		Partition:           s.Partition,
 		ValidatorKey:        execOpts.Key,
 		Database:            execOpts.Database,
-		Querier:             v3api.Querier2{Querier: client},
+		Querier:             v3.Querier2{Querier: client},
 		Dispatcher:          execOpts.NewDispatcher(),
 		RunTask:             execOpts.BackgroundTaskLauncher,
 		EnableAnchorHealing: Ptr(false),
 	}
-	err = conductor.Start(d.eventBus)
+	err = conductor.Start(s.eventBus)
 	if err != nil {
-		return errors.UnknownError.WithFormat("start conductor: %v", err)
+		return errors.UnknownError.WithFormat("start conductor: %w", err)
 	}
 
+	// Create executor
 	exec, err := execute.NewExecutor(execOpts)
 	if err != nil {
-		return errors.UnknownError.WithFormat("initialize chain executor: %w", err)
+		return errors.UnknownError.WithFormat("create executor: %w", err)
 	}
 
-	// Create executor bridge for DAG-BFT
-	bridge, err := adapter.NewExecutorBridge(exec)
+	// Create executor adapter
+	executorBridge, err := adapter.NewExecutorBridge(exec)
 	if err != nil {
 		return errors.UnknownError.WithFormat("create executor bridge: %w", err)
 	}
 
-	// Start block production loop
-	go c.runBlockProducer(inst.context, d, bridge, app)
+	// Build DAG-BFT configuration
+	dagCfg := dagconfig.DefaultConfig()
+	dagCfg.Consensus.NumWorkers = *s.NumWorkers
+	dagCfg.Consensus.DAGGCDepth = *s.DAGGCDepth
+	dagCfg.Consensus.CommitBufferSize = *s.CommitBufferSize
 
-	// Register API services
-	err = c.registerDAGBFTServices(inst, d, app, store, db)
+	// Create the DAG-BFT node configuration
+	nodeConfig := consensus.NodeConfig{
+		Partition:        s.Partition.ID,
+		KeyPair:          validatorKey,
+		NumWorkers:       *s.NumWorkers,
+		DAGGCDepth:       types.Round(*s.DAGGCDepth),
+		CommitBufferSize: *s.CommitBufferSize,
+	}
+
+	// Create the service
+	s.service, err = dagbft.NewService(dagbft.ServiceConfig{
+		Partition:   s.Partition,
+		NodeConfig:  nodeConfig,
+		Adapter:     executorBridge,
+		EventBus:    s.eventBus,
+		Logger:      logger.With("module", "dagbft"),
+		Genesis:     inst.path(s.Genesis),
+	})
+	if err != nil {
+		return errors.UnknownError.WithFormat("create DAG-BFT service: %w", err)
+	}
+
+	// Start the service
+	err = s.service.Start(inst.context)
+	if err != nil {
+		return errors.UnknownError.WithFormat("start DAG-BFT service: %w", err)
+	}
+
+	// Register cleanup
+	inst.cleanup("dagbft service", func(ctx context.Context) error {
+		return s.service.Stop()
+	})
+
+	// Register event bus
+	err = dagbftProvidesEventBus.Register(inst.services, s, s.eventBus)
+	if err != nil {
+		return errors.UnknownError.WithFormat("register event bus: %w", err)
+	}
+
+	// Register consensus API services
+	err = s.registerAPIServices(inst, store, validatorKey)
 	if err != nil {
 		return err
 	}
 
+	inst.logger.Info(color.HiBlueString("Running DAG-BFT"), "partition", s.Partition.ID, "module", "run", "service", "dagbft")
 	return nil
 }
 
-// runBlockProducer processes committed certificates and produces blocks.
-func (c *DAGBFTConsensusService) runBlockProducer(ctx context.Context, d *dagbftState, bridge *adapter.ExecutorBridge, app *CoreConsensusApp) {
-	committed := d.node.Committed()
-	workers := d.node.Workers()
-	pubKey := d.node.PublicKey()
+// registerAPIServices registers the API services for DAG-BFT.
+func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Beginner, validatorKey []byte) error {
+	logger := (*logging.Slogger)(inst.logger)
+	db := database.New(store, logger)
 
-	var blockIndex uint64
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-
-		case cert, ok := <-committed:
-			if !ok {
-				return
-			}
-			if cert == nil {
-				continue
-			}
-
-			// Collect batches for this certificate
-			batches := make(map[types.BatchDigest]*types.Batch)
-			digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
-			for digest := range cert.Header.Payload {
-				digests = append(digests, digest)
-				for _, w := range workers {
-					if batch, err := w.GetBatch(digest); err == nil && batch != nil {
-						batches[digest] = batch
-						break
-					}
-				}
-			}
-
-			// Produce block
-			blockIndex++
-			isLeader := cert.Header.Author.Equal(pubKey)
-
-			params := adapter.BlockParams{
-				Index:       blockIndex,
-				Time:        time.Now(),
-				IsLeader:    isLeader,
-				LeaderRound: cert.Header.Round,
-				Certificate: cert,
-				Batches:     batches,
-			}
-
-			hash, err := bridge.ProduceBlock(ctx, params)
-			if err != nil {
-				slog.Error("Failed to produce block",
-					"error", err,
-					"block", blockIndex,
-					"round", cert.Header.Round)
-				continue
-			}
-
-			slog.Debug("Block produced",
-				"block", blockIndex,
-				"round", cert.Header.Round,
-				"hash", fmt.Sprintf("%x", hash[:8]))
-
-			// Prune committed batches
-			for _, w := range workers {
-				w.PruneBatches(digests)
-			}
-		}
-	}
-}
-
-// registerDAGBFTServices registers API services for the DAG-BFT node.
-func (c *DAGBFTConsensusService) registerDAGBFTServices(inst *Instance, d *dagbftState, app *CoreConsensusApp, store keyvalue.Beginner, db *database.Database) error {
-	// Create a DAG-BFT specific consensus service
-	svcImpl := &dagbftConsensusServiceImpl{
-		partition:     app.Partition.ID,
-		partitionType: app.Partition.Type,
-		eventBus:      d.eventBus,
-		node:          d.node,
-		nodeKeyHash:   sha256.Sum256(d.privKey.Public().(ed25519.PublicKey)),
-		validatorKey:  sha256.Sum256(d.privKey.Public().(ed25519.PublicKey)),
-	}
-
-	err := consensusProvidesService.Register(inst.services, app, svcImpl)
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-
-	// Register sequencer
-	seqImpl := api.NewSequencer(api.SequencerParams{
-		Logger:       d.logger.With("module", "api"),
-		Database:     database.New(store, d.logger),
-		EventBus:     d.eventBus,
-		Globals:      <-d.globals,
-		Partition:    app.Partition.ID,
-		ValidatorKey: d.privKey,
+	// Create consensus service
+	consensusSvc := dagbft.NewConsensusAPIService(dagbft.ConsensusAPIServiceParams{
+		Logger:           logger.With("module", "api"),
+		Service:          s.service,
+		Database:         db,
+		PartitionID:      s.Partition.ID,
+		PartitionType:    s.Partition.Type,
+		EventBus:         s.eventBus,
+		NodeKeyHash:      sha256.Sum256(validatorKey[32:]), // Public key portion
+		ValidatorKeyHash: sha256.Sum256(validatorKey[32:]),
 	})
-	registerRpcService(inst, seqImpl.Type().AddressFor(app.Partition.ID), message.Sequencer{Sequencer: seqImpl})
-	err = coreConsensusProvidesSequencer.Register(inst.services, app, seqImpl)
+	registerRpcService(inst, consensusSvc.Type().AddressFor(s.Partition.ID), message.ConsensusService{ConsensusService: consensusSvc})
+	err := dagbftProvidesService.Register(inst.services, s, consensusSvc)
 	if err != nil {
-		return errors.UnknownError.Wrap(err)
+		return errors.UnknownError.WithFormat("register consensus service: %w", err)
 	}
 
-	slog.Info("DAG-BFT services registered",
-		"partition", app.Partition.ID,
-		"module", "run",
-		"service", "dagbft-consensus")
+	// Create submitter service
+	submitterSvc := dagbft.NewSubmitterService(dagbft.SubmitterServiceParams{
+		Logger:  logger.With("module", "api"),
+		Service: s.service,
+	})
+	registerRpcService(inst, submitterSvc.Type().AddressFor(s.Partition.ID), message.Submitter{Submitter: submitterSvc})
+	err = dagbftProvidesSubmitter.Register(inst.services, s, submitterSvc)
+	if err != nil {
+		return errors.UnknownError.WithFormat("register submitter service: %w", err)
+	}
+
+	// Create validator service
+	validatorSvc := dagbft.NewValidatorService(dagbft.ValidatorServiceParams{
+		Logger:  logger.With("module", "api"),
+		Service: s.service,
+	})
+	registerRpcService(inst, validatorSvc.Type().AddressFor(s.Partition.ID), message.Validator{Validator: validatorSvc})
+	err = dagbftProvidesValidator.Register(inst.services, s, validatorSvc)
+	if err != nil {
+		return errors.UnknownError.WithFormat("register validator service: %w", err)
+	}
+
+	// Wait for globals to be available
+	var globals *network.GlobalValues
+	select {
+	case globals = <-s.globals:
+	case <-time.After(5 * time.Second):
+		// Use a default if globals aren't available yet
+		globals = new(network.GlobalValues)
+	}
+
+	// Create sequencer service
+	sequencerSvc := api.NewSequencer(api.SequencerParams{
+		Logger:       logger.With("module", "api"),
+		Database:     db,
+		EventBus:     s.eventBus,
+		Globals:      globals,
+		Partition:    s.Partition.ID,
+		ValidatorKey: validatorKey,
+	})
+	registerRpcService(inst, sequencerSvc.Type().AddressFor(s.Partition.ID), message.Sequencer{Sequencer: sequencerSvc})
+	err = dagbftProvidesSequencer.Register(inst.services, s, sequencerSvc)
+	if err != nil {
+		return errors.UnknownError.WithFormat("register sequencer service: %w", err)
+	}
 
 	return nil
 }
 
-// dagbftConsensusServiceImpl implements v3api.ConsensusService for DAG-BFT.
-type dagbftConsensusServiceImpl struct {
-	partition     string
-	partitionType protocol.PartitionType
-	eventBus      *events.Bus
-	node          *consensus.Node
-	nodeKeyHash   [32]byte
-	validatorKey  [32]byte
-}
-
-// Ensure dagbftConsensusServiceImpl implements the required interface.
-var _ v3api.ConsensusService = (*dagbftConsensusServiceImpl)(nil)
-
-func (s *dagbftConsensusServiceImpl) Type() v3api.ServiceType {
-	return v3api.ServiceTypeConsensus
-}
-
-func (s *dagbftConsensusServiceImpl) ConsensusStatus(ctx context.Context, opts v3api.ConsensusStatusOptions) (*v3api.ConsensusStatus, error) {
-	lastBlock := &v3api.LastBlock{
-		Height: int64(s.node.LastCommitRound()),
-		Time:   time.Now(),
-	}
-
-	return &v3api.ConsensusStatus{
-		Ok:               true,
-		LastBlock:        lastBlock,
-		NodeKeyHash:      s.nodeKeyHash,
-		ValidatorKeyHash: s.validatorKey,
-		PartitionID:      s.partition,
-		PartitionType:    s.partitionType,
-	}, nil
-}
+// Ensure DAGBFTService implements the required interfaces
+var (
+	_ Service    = (*DAGBFTService)(nil)
+	_ prestarter = (*DAGBFTService)(nil)
+)
