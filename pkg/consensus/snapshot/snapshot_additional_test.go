@@ -768,7 +768,7 @@ func TestRestorer_WithStateRestorer(t *testing.T) {
 	committee := createTestCommittee(4)
 
 	stateRestored := false
-	mockRestorer := &mockStateRestorer{
+	mockRestorer := &mockStateRestorerFunc{
 		restoreFunc: func(ctx context.Context, height uint64, stateHash [32]byte) error {
 			stateRestored = true
 			return nil
@@ -791,7 +791,7 @@ func TestRestorer_WithStateRestorer(t *testing.T) {
 func TestRestorer_StateRestorerError(t *testing.T) {
 	committee := createTestCommittee(4)
 
-	mockRestorer := &mockStateRestorer{
+	mockRestorer := &mockStateRestorerFunc{
 		restoreFunc: func(ctx context.Context, height uint64, stateHash [32]byte) error {
 			return errors.New("state restore failed")
 		},
@@ -809,11 +809,11 @@ func TestRestorer_StateRestorerError(t *testing.T) {
 	assert.Error(t, err)
 }
 
-type mockStateRestorer struct {
+type mockStateRestorerFunc struct {
 	restoreFunc func(ctx context.Context, height uint64, stateHash [32]byte) error
 }
 
-func (m *mockStateRestorer) RestoreState(ctx context.Context, height uint64, stateHash [32]byte) error {
+func (m *mockStateRestorerFunc) RestoreState(ctx context.Context, height uint64, stateHash [32]byte) error {
 	if m.restoreFunc != nil {
 		return m.restoreFunc(ctx, height, stateHash)
 	}
@@ -1110,7 +1110,7 @@ func TestRestoreWithOptions_StateRestorerWithOptions(t *testing.T) {
 	committee := createTestCommittee(4)
 
 	stateRestored := false
-	mockRestorer := &mockStateRestorer{
+	mockRestorer := &mockStateRestorerFunc{
 		restoreFunc: func(ctx context.Context, height uint64, stateHash [32]byte) error {
 			stateRestored = true
 			return nil
@@ -1139,7 +1139,7 @@ func TestRestoreWithOptions_StateRestorerWithOptions(t *testing.T) {
 func TestRestoreWithOptions_StateRestorerError(t *testing.T) {
 	committee := createTestCommittee(4)
 
-	mockRestorer := &mockStateRestorer{
+	mockRestorer := &mockStateRestorerFunc{
 		restoreFunc: func(ctx context.Context, height uint64, stateHash [32]byte) error {
 			return errors.New("restore failed")
 		},
