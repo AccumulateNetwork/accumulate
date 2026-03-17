@@ -183,7 +183,7 @@ func (s *ValidationTestSuite) SetupSuite() {
 
 func setupSim(t *testing.T, net *accumulated.NetworkInit) (*simulator.Simulator, api.Faucet) {
 	// Set up the simulator and harness
-	logger := logging.AsSlogLogger(acctesting.NewTestLogger(t))
+	logger := acctesting.NewTestSlogger(t)
 	sim, err := simulator.New(
 		simulator.WithLogger(logger),
 		simulator.WithNetwork(net),
@@ -921,7 +921,7 @@ func (s *ValidationTestSuite) TestFaucets() {
 		Txn(st.TxID).Succeeds())
 
 	// Set up a new faucet
-	logger := logging.AsSlogLogger(logging.ConsoleLoggerForTest(s.T(), "info"))
+	logger := logging.NewTestSlogger(s.T(), "info", true)
 	peg := pegnet.JoinPath("peg")
 	faucetSvc, err := v3impl.NewFaucet(context.Background(), v3impl.FaucetParams{
 		Logger:    logger,

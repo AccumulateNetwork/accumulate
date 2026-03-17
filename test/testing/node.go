@@ -107,6 +107,11 @@ func NewTestLogger(t testing.TB) log.Logger {
 	return logger
 }
 
+// NewTestSlogger returns a *slog.Logger for testing.
+func NewTestSlogger(t testing.TB) *slog.Logger {
+	return logging.NewTestSlogger(t, DefaultLogLevels, LogConsole)
+}
+
 var DefaultLogLevels = config.LogLevel{}.
 	Parse(config.DefaultLogLevels).
 	SetModule("restore", "error").
