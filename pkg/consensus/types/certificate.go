@@ -28,6 +28,19 @@ func (d CertificateDigest) String() string {
 	return hexEncode(d[:])
 }
 
+// StateHash is a 32-byte hash representing the state after executing a certificate's transactions.
+type StateHash [32]byte
+
+// IsZero returns true if the state hash is all zeros.
+func (h StateHash) IsZero() bool {
+	return h == StateHash{}
+}
+
+// String returns a hex-encoded string representation of the state hash.
+func (h StateHash) String() string {
+	return hexEncode(h[:])
+}
+
 // Certificate represents a certified header with signatures from 2f+1 validators.
 // A certificate proves that a quorum of validators have seen and validated the header.
 type Certificate struct {
@@ -39,6 +52,11 @@ type Certificate struct {
 	// SignedAuthorities contains the indices of validators who signed.
 	// This allows efficient lookup in the committee.
 	SignedAuthorities []uint16
+
+	// StateHash is the state hash after executing this certificate's transactions.
+	// This field is populated after execution and used for state consistency verification.
+	// It is NOT part of the certificate digest since it's computed post-execution.
+	StateHash StateHash
 }
 
 // NewCertificate creates a new certificate from a header and collected signatures.
@@ -48,6 +66,22 @@ func NewCertificate(header Header, signatures [][]byte, signedAuthorities []uint
 		Signatures:        signatures,
 		SignedAuthorities: signedAuthorities,
 	}
+}
+
+// SetStateHash sets the state hash after execution.
+// This should be called after the certificate's transactions have been executed.
+func (c *Certificate) SetStateHash(hash StateHash) {
+	c.StateHash = hash
+}
+
+// GetStateHash returns the state hash, or zero if not set.
+func (c *Certificate) GetStateHash() StateHash {
+	return c.StateHash
+}
+
+// HasStateHash returns true if a state hash has been set.
+func (c *Certificate) HasStateHash() bool {
+	return !c.StateHash.IsZero()
 }
 
 // Digest returns the certificate digest, which is the same as the header digest.
@@ -189,6 +223,9 @@ func (c *Certificate) Marshal() ([]byte, error) {
 	// Add space for authorities
 	size += 4 + len(c.SignedAuthorities)*2
 
+	// Add space for state hash (32 bytes)
+	size += 32
+
 	data := make([]byte, size)
 	offset := 0
 
@@ -217,6 +254,10 @@ func (c *Certificate) Marshal() ([]byte, error) {
 		binary.BigEndian.PutUint16(data[offset:], auth)
 		offset += 2
 	}
+
+	// State hash (always write, even if zero)
+	copy(data[offset:], c.StateHash[:])
+	offset += 32
 
 	return data[:offset], nil
 }
@@ -307,6 +348,13 @@ func UnmarshalCertificate(data []byte) (*Certificate, error) {
 		offset += 2
 	}
 
+	// State hash (optional - only present in newer format)
+	var stateHash StateHash
+	if offset+32 <= len(data) {
+		copy(stateHash[:], data[offset:offset+32])
+		offset += 32
+	}
+
 	if offset != len(data) {
 		return nil, errors.New("certificate data has trailing bytes")
 	}
@@ -315,6 +363,7 @@ func UnmarshalCertificate(data []byte) (*Certificate, error) {
 		Header:            *header,
 		Signatures:        signatures,
 		SignedAuthorities: authorities,
+		StateHash:         stateHash,
 	}, nil
 }
 
@@ -335,6 +384,7 @@ func (c *Certificate) Clone() *Certificate {
 		Header:            *header,
 		Signatures:        signatures,
 		SignedAuthorities: authorities,
+		StateHash:         c.StateHash,
 	}
 }
 
