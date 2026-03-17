@@ -39,6 +39,17 @@ var ErrWorkerClosed = errors.New("worker is closed")
 // due to memory limits being reached.
 var ErrBackpressure = errors.New("worker backpressure: pending transactions exceed limit")
 
+// ErrValidationFailed is returned when a transaction fails pre-batch validation.
+var ErrValidationFailed = errors.New("transaction validation failed")
+
+// TransactionValidator validates transactions before they are added to a batch.
+// This is equivalent to CometBFT's CheckTx.
+type TransactionValidator interface {
+	// ValidateTransaction validates a transaction before batching.
+	// Returns nil if valid, or an error describing why the transaction is invalid.
+	ValidateTransaction(tx []byte) error
+}
+
 // Config holds the configuration for a Worker.
 type Config struct {
 	// ID is the unique identifier for this worker (0-255).
@@ -72,6 +83,10 @@ type Config struct {
 	// This prevents unbounded memory growth from gossip batches.
 	// Defaults to DefaultMaxStoredBatches.
 	MaxStoredBatches int
+
+	// Validator validates transactions before they are added to a batch.
+	// If nil, no validation is performed (not recommended for production).
+	Validator TransactionValidator
 }
 
 // applyDefaults fills in default values for unset configuration fields.
@@ -107,8 +122,9 @@ type BatchStore interface {
 // Worker collects transactions and creates batches for the consensus layer.
 // It implements the "data availability" layer in the Narwhal/Bullshark architecture.
 type Worker struct {
-	config Config
-	gossip *gossip.GossipLayer
+	config    Config
+	gossip    *gossip.GossipLayer
+	validator TransactionValidator
 
 	// Pending transactions
 	mu          sync.Mutex
@@ -132,9 +148,11 @@ type Worker struct {
 	closed      atomic.Bool
 
 	// Metrics
-	batchesCreated atomic.Uint64
-	txnsProcessed  atomic.Uint64
-	txnsReceived   atomic.Uint64
+	batchesCreated   atomic.Uint64
+	txnsProcessed    atomic.Uint64
+	txnsReceived     atomic.Uint64
+	txnsValidated    atomic.Uint64
+	txnsRejected     atomic.Uint64
 
 	// Trigger channel for immediate batch creation
 	triggerBatch chan struct{}
@@ -147,6 +165,7 @@ func New(config Config, g *gossip.GossipLayer) *Worker {
 	return &Worker{
 		config:           config,
 		gossip:           g,
+		validator:        config.Validator,
 		pending:          make([][]byte, 0, config.BatchSize),
 		batches:          make(map[types.BatchDigest]*types.Batch),
 		availableBatches: make([]types.BatchDigest, 0),
@@ -157,6 +176,7 @@ func New(config Config, g *gossip.GossipLayer) *Worker {
 // Submit adds a transaction to the pending batch.
 // Returns ErrBackpressure if the worker cannot accept more transactions.
 // Returns ErrWorkerClosed if the worker has been closed.
+// Returns ErrValidationFailed (wrapped) if the transaction fails validation.
 func (w *Worker) Submit(tx []byte) error {
 	if w.closed.Load() {
 		return ErrWorkerClosed
@@ -164,6 +184,20 @@ func (w *Worker) Submit(tx []byte) error {
 
 	if len(tx) == 0 {
 		return errors.New("transaction is empty")
+	}
+
+	w.txnsReceived.Add(1)
+
+	// Validate transaction before adding to pending batch (CheckTx equivalent)
+	if w.validator != nil {
+		if err := w.validator.ValidateTransaction(tx); err != nil {
+			w.txnsRejected.Add(1)
+			slog.Debug("Transaction validation failed",
+				"error", err,
+				"workerID", w.config.ID)
+			return fmt.Errorf("%w: %v", ErrValidationFailed, err)
+		}
+		w.txnsValidated.Add(1)
 	}
 
 	w.mu.Lock()
@@ -180,8 +214,6 @@ func (w *Worker) Submit(tx []byte) error {
 
 	w.pending = append(w.pending, txCopy)
 	w.pendingSize += len(txCopy)
-
-	w.txnsReceived.Add(1)
 
 	// Check if we should create a batch immediately
 	shouldTrigger := len(w.pending) >= w.config.BatchSize || w.pendingSize >= w.config.MaxBatchBytes
@@ -380,6 +412,11 @@ func (w *Worker) BatchCount() int {
 // Metrics returns the worker's metrics.
 func (w *Worker) Metrics() (batchesCreated, txnsProcessed, txnsReceived uint64) {
 	return w.batchesCreated.Load(), w.txnsProcessed.Load(), w.txnsReceived.Load()
+}
+
+// ValidationMetrics returns the worker's validation metrics.
+func (w *Worker) ValidationMetrics() (validated, rejected uint64) {
+	return w.txnsValidated.Load(), w.txnsRejected.Load()
 }
 
 // ID returns the worker's ID.
