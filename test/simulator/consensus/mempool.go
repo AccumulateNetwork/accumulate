@@ -8,10 +8,10 @@ package consensus
 
 import (
 	"crypto/sha256"
+	"log/slog"
 	"sort"
 	"sync"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -32,7 +32,7 @@ type mpEntry struct {
 	env   *messaging.Envelope
 }
 
-func newMempool(logger log.Logger) *mempool {
+func newMempool(logger *slog.Logger) *mempool {
 	m := new(mempool)
 	m.logger.Set(logger)
 	m.pool = map[[32]byte]*mpEntry{}

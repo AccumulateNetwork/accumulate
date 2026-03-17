@@ -7,11 +7,12 @@
 package run
 
 import (
+	"log/slog"
+
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	v3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
@@ -60,9 +61,9 @@ func (q *Querier) start(inst *Instance) error {
 	}
 
 	impl := api.NewQuerier(api.QuerierParams{
-		Logger:    (*logging.Slogger)(inst.logger).With("module", "api"),
+		Logger:    inst.logger.With(slog.String("module", "api")),
 		Partition: q.Partition,
-		Database:  database.New(store, (*logging.Slogger)(inst.logger)),
+		Database:  database.New(store, inst.logger),
 		Consensus: consensus,
 	})
 	registerRpcService(inst, impl.Type().AddressFor(q.Partition), message.Querier{Querier: impl})
@@ -94,9 +95,9 @@ func (n *NetworkService) start(inst *Instance) error {
 	}
 
 	impl := api.NewNetworkService(api.NetworkServiceParams{
-		Logger:    (*logging.Slogger)(inst.logger).With("module", "api"),
+		Logger:    inst.logger.With(slog.String("module", "api")),
 		Partition: n.Partition,
-		Database:  database.New(store, (*logging.Slogger)(inst.logger)),
+		Database:  database.New(store, inst.logger),
 		EventBus:  events,
 	})
 	registerRpcService(inst, impl.Type().AddressFor(n.Partition), message.NetworkService{NetworkService: impl})
@@ -128,7 +129,7 @@ func (m *MetricsService) start(inst *Instance) error {
 	}
 
 	impl := api.NewMetricsService(api.MetricsServiceParams{
-		Logger:  (*logging.Slogger)(inst.logger).With("module", "api"),
+		Logger:  inst.logger.With(slog.String("module", "api")),
 		Node:    consensus,
 		Querier: querier,
 	})
@@ -161,9 +162,9 @@ func (e *EventsService) start(inst *Instance) error {
 	}
 
 	impl := api.NewEventService(api.EventServiceParams{
-		Logger:    (*logging.Slogger)(inst.logger).With("module", "api"),
+		Logger:    inst.logger.With(slog.String("module", "api")),
 		Partition: e.Partition,
-		Database:  database.New(store, (*logging.Slogger)(inst.logger)),
+		Database:  database.New(store, inst.logger),
 		EventBus:  events,
 	})
 	registerRpcService(inst, impl.Type().AddressFor(e.Partition), message.EventService{EventService: impl})

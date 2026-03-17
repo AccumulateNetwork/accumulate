@@ -25,6 +25,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
@@ -268,7 +269,7 @@ func buildGenesis(network *accumulated.NetworkInit) map[string][]byte {
 		})
 	}
 
-	genDocs, err := accumulated.BuildGenesisDocs(network, network.Globals, time.Now(), newLogger(), factomAddresses, snapshots)
+	genDocs, err := accumulated.BuildGenesisDocs(network, network.Globals, time.Now(), logging.AsSlogLogger(newLogger()), factomAddresses, snapshots)
 	checkf(err, "build genesis documents")
 	return genDocs
 }

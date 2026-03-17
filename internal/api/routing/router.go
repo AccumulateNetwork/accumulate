@@ -7,9 +7,9 @@
 package routing
 
 import (
+	"log/slog"
 	"sync"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -37,7 +37,7 @@ type RouterInstance struct {
 type RouterOptions struct {
 	Initial *protocol.RoutingTable
 	Events  *events.Bus
-	Logger  log.Logger
+	Logger  *slog.Logger
 }
 
 // NewRouter constructs a new router. If an initial routing table is provided,

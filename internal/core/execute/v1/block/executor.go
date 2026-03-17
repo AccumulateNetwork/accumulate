@@ -109,7 +109,7 @@ func NewGenesisExecutor(db *database.Database, logger *slog.Logger, network *con
 			Describe: execute.DescribeShim{NetworkType: network.NetworkType, PartitionId: network.PartitionId},
 			Logger:   logger,
 			Router:   router,
-			EventBus: events.NewBus(logging.AsCometLogger(logger)),
+			EventBus: events.NewBus(logger),
 		},
 		true,
 		chain.SystemWriteData{},

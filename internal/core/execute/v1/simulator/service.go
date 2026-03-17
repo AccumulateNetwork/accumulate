@@ -16,7 +16,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	apiimpl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -128,14 +127,14 @@ type partService struct {
 func newExecService(x *ExecEntry, logger *slog.Logger) *partService {
 	s := new(partService)
 	s.x = x
-	cometLogger := logging.AsCometLogger(logger)
+	slogger := logger.With("module", "acc-rpc")
 	s.query = apiimpl.NewQuerier(apiimpl.QuerierParams{
-		Logger:    cometLogger.With("module", "acc-rpc"),
+		Logger:    slogger,
 		Database:  x,
 		Partition: x.Partition.Id,
 	})
 	s.private = apiimpl.NewSequencer(apiimpl.SequencerParams{
-		Logger:       cometLogger.With("module", "acc-rpc"),
+		Logger:       slogger,
 		Database:     x,
 		EventBus:     x.Executor.EventBus,
 		Partition:    x.Partition.Id,

@@ -169,7 +169,7 @@ func run(*cobra.Command, []string) {
 
 	opts = append(opts,
 		simulator.WithNetwork(net),
-		simulator.WithLogger(logger),
+		simulator.WithLogger(logging.AsSlogLogger(logger)),
 	)
 	sim, err := simulator.New(opts...)
 	check(err)

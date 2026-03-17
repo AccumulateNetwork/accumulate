@@ -10,8 +10,8 @@ package abci
 
 import (
 	"crypto/sha256"
+	"log/slog"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -21,24 +21,24 @@ import (
 
 type executeFunc func(*messaging.Envelope) ([]*protocol.TransactionStatus, error)
 
-func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]messaging.Message, []*protocol.TransactionStatus, []byte, error) {
+func executeTransactions(logger *slog.Logger, execute executeFunc, raw []byte) ([]messaging.Message, []*protocol.TransactionStatus, []byte, error) {
 	hash := sha256.Sum256(raw)
 	envelope := new(messaging.Envelope)
 	err := envelope.UnmarshalBinary(raw)
 	if err != nil {
-		logger.Info("Failed to unmarshal", "tx", logging.AsHex(hash), "error", err)
+		logger.Info("Failed to unmarshal", slog.Any("tx", logging.AsHex(hash)), slog.Any("error", err))
 		return nil, nil, nil, errors.UnknownError.WithFormat("decoding envelopes: %w", err)
 	}
 
 	deliveries, err := envelope.Normalize()
 	if err != nil {
-		logger.Info("Failed to normalize envelope", "tx", logging.AsHex(hash), "error", err)
+		logger.Info("Failed to normalize envelope", slog.Any("tx", logging.AsHex(hash)), slog.Any("error", err))
 		return nil, nil, nil, errors.UnknownError.Wrap(err)
 	}
 
 	results, err := execute(envelope)
 	if err != nil {
-		logger.Info("Failed to execute messages", "tx", logging.AsHex(hash), "error", err)
+		logger.Info("Failed to execute messages", slog.Any("tx", logging.AsHex(hash)), slog.Any("error", err))
 		return nil, nil, nil, errors.UnknownError.Wrap(err)
 	}
 	for _, r := range results {
@@ -53,7 +53,7 @@ func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]
 	// batch
 	rset, err := (&protocol.TransactionResultSet{Results: results}).MarshalBinary()
 	if err != nil {
-		logger.Error("Unable to encode result", "error", err)
+		logger.Error("Unable to encode result", slog.Any("error", err))
 		return deliveries, results, nil, nil
 	}
 

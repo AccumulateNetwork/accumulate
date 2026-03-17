@@ -94,7 +94,7 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 	}
 	if opts.OpenDB == nil {
 		opts.OpenDB = func(_ string, _ int, logger *slog.Logger) *database.Database {
-			return database.OpenInMemory(logging.AsCometLogger(logger))
+			return database.OpenInMemory(logger)
 		}
 	}
 	sim.opts = opts
@@ -124,11 +124,11 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 		sim.Partitions = append(sim.Partitions, partition)
 	}
 
-	mainEventBus := events.NewBus(logging.AsCometLogger(sim.Logger.With("partition", protocol.Directory)))
+	mainEventBus := events.NewBus(sim.Logger.With("partition", protocol.Directory))
 	events.SubscribeSync(mainEventBus, sim.willChangeGlobals)
 	sim.router = &router{sim, routing.NewRouter(routing.RouterOptions{
 		Events: mainEventBus,
-		Logger: logging.AsCometLogger(sim.Logger),
+		Logger: sim.Logger,
 	})}
 
 	// Initialize each executor
@@ -173,7 +173,7 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 			bvnInit.Nodes[0],
 			network,
 			opts.OpenDB(bvn.Id, 0, logger),
-			events.NewBus(logging.AsCometLogger(logger)),
+			events.NewBus(logger),
 		)
 		sim.Executors[bvn.Id] = x
 	}
@@ -304,12 +304,12 @@ func (s *Simulator) InitFromGenesisWith(values *core.GlobalValues) {
 	// The simulator only runs one DNN so set the threshold low
 	values.Globals.ValidatorAcceptThreshold.Set(1, 1000)
 
-	genDocs, err := accumulated.BuildGenesisDocs(s.netInit, values, GenesisTime, logging.AsCometLogger(s.Logger), s.opts.FactomAddresses, nil)
+	genDocs, err := accumulated.BuildGenesisDocs(s.netInit, values, GenesisTime, s.Logger, s.opts.FactomAddresses, nil)
 	require.NoError(s, err)
 
 	// Execute bootstrap after the entire network is known
 	for _, x := range s.Executors {
-		require.NoError(s, snapshot.FullRestore(x.Database, ioutil2.NewBuffer(genDocs[x.Partition.Id]), logging.AsCometLogger(x.Executor.Logger), x.Executor.Describe.PartitionUrl()))
+		require.NoError(s, snapshot.FullRestore(x.Database, ioutil2.NewBuffer(genDocs[x.Partition.Id]), x.Executor.Logger, x.Executor.Describe.PartitionUrl()))
 		require.NoError(s, x.Executor.Init(x.Database))
 	}
 }
@@ -591,7 +591,7 @@ func (x *ExecEntry) init(sim *Simulator, logger *slog.Logger, partition *config.
 	x.service = newExecService(x, logger)
 
 	jrpc, err := api.NewJrpc(api.Options{
-		Logger:        logging.AsCometLogger(logger),
+		Logger:        logger,
 		TxMaxWaitTime: time.Hour,
 		LocalV3:       x.service,
 		Querier:       sim.Services(),

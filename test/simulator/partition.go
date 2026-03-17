@@ -9,10 +9,10 @@ package simulator
 import (
 	"bytes"
 	"io"
+	"log/slog"
 	"sort"
 	"sync"
 
-	"github.com/cometbft/cometbft/libs/log"
 	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
@@ -25,7 +25,7 @@ import (
 type Partition struct {
 	protocol.PartitionInfo
 	sim        *Simulator
-	logger     log.Logger
+	logger     *slog.Logger
 	mu         *sync.Mutex
 	nodes      []*Node
 	submitHook SubmitHookFunc

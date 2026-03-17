@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
-	"github.com/cometbft/cometbft/libs/log"
 	"github.com/julienschmidt/httprouter"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/spf13/cobra"
@@ -233,7 +232,7 @@ func (q *Querier) Query(ctx context.Context, scope *url.URL, query v3.Query) (v3
 	return q.parts[part].Query(ctx, scope, query)
 }
 
-func serve(server *http.Server, l net.Listener, wg *sync.WaitGroup, logger log.Logger) {
+func serve(server *http.Server, l net.Listener, wg *sync.WaitGroup, logger *slog.Logger) {
 	wg.Add(1)
 	fmt.Printf("Listening on %v\n", l.Addr())
 

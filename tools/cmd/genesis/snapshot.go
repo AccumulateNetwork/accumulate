@@ -136,13 +136,13 @@ func addToSnapshot(filename string, files []string, process func(string, int, *d
 	check(err)
 	defer func() { _ = os.RemoveAll(dbdir) }()
 
-	db, err := database.OpenBadger(dbdir, logging.NullLogger{})
+	db, err := database.OpenBadger(dbdir, nil)
 	checkf(err, "output database")
 	defer db.Close()
 
 	f, err := os.Open(filename)
 	if err == nil {
-		check(snapshot.Restore(db, f, logger))
+		check(snapshot.Restore(db, f, logging.AsSlogLogger(logger)))
 		check(f.Close())
 	} else if errors.Is(err, fs.ErrNotExist) {
 		// Ok

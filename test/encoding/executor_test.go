@@ -17,6 +17,7 @@ import (
 	"github.com/ulikunitz/xz"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -47,7 +48,7 @@ func TestExecutorConsistency(t *testing.T) {
 
 	// Start the simulator
 	sim, err := simulator.New(
-		simulator.WithLogger(acctesting.NewTestLogger(t)),
+		simulator.WithLogger(logging.AsSlogLogger(acctesting.NewTestLogger(t))),
 		simulator.WithNetwork(testData.Network),
 		simulator.SnapshotMap(testData.Genesis),
 		simulator.DropDispatchedMessages(),

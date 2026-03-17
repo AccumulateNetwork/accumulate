@@ -7,9 +7,9 @@
 package api
 
 import (
+	"log/slog"
 	"time"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -35,7 +35,7 @@ type V3 interface {
 }
 
 type Options struct {
-	Logger        log.Logger
+	Logger        *slog.Logger
 	Describe      *config.Describe
 	TxMaxWaitTime time.Duration
 	LocalV3       V3

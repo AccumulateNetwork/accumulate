@@ -8,12 +8,12 @@ package run
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	v3impl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
@@ -90,7 +90,7 @@ func (f *FaucetService) start(inst *Instance) error {
 		}
 
 		impl, err := v3impl.NewFaucet(inst.context, v3impl.FaucetParams{
-			Logger:    (*logging.Slogger)(inst.logger.With("module", "faucet")),
+			Logger:    inst.logger.With(slog.String("module", "faucet")),
 			Account:   f.Account,
 			Key:       build.ED25519PrivateKey(sk),
 			Submitter: client,

@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -36,7 +37,7 @@ func run(_ *cobra.Command, args []string) {
 	daemon, err := accumulated.Load(args[0], nil)
 	check(err)
 
-	db, err := database.Open(daemon.Config, daemon.Logger)
+	db, err := database.Open(daemon.Config, logging.AsSlogLogger(daemon.Logger))
 	check(err)
 
 	err = rebuildIndices(db, config.NetworkUrl{URL: protocol.PartitionUrl(daemon.Config.Accumulate.PartitionId)})

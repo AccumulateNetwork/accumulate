@@ -9,22 +9,20 @@ package cmdutil
 import (
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 
-	"github.com/cometbft/cometbft/libs/log"
-	"github.com/rs/zerolog"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 )
 
-func NewConsoleLogger(levels string) log.Logger {
-	lw, err := logging.NewConsoleWriter("plain")
+func NewConsoleLogger(levels string) *slog.Logger {
+	c, err := logging.ParseSlogLevel(levels)
 	Check(err)
-	ll, lw, err := logging.ParseLogLevel(levels, lw)
+	w := logging.ConsoleSlogWriter(os.Stderr, true)
+	handler, err := logging.NewSlogHandler(c, w)
 	Check(err)
-	logger, err := logging.NewTendermintLogger(zerolog.New(lw), ll, false)
-	Check(err)
-	return logger
+	return slog.New(handler)
 }
 
 type LogLevelFlag []*run.LoggingRule

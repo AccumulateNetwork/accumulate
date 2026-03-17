@@ -9,10 +9,10 @@ package api
 import (
 	"bytes"
 	"context"
+	"log/slog"
 	"strings"
 	"time"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -38,7 +38,7 @@ type Querier struct {
 var _ api.Querier = (*Querier)(nil)
 
 type QuerierParams struct {
-	Logger    log.Logger
+	Logger    *slog.Logger
 	Database  database.Viewer
 	Partition string
 	Consensus api.ConsensusService

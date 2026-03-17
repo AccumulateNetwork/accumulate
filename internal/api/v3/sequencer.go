@@ -8,10 +8,10 @@ package api
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 	"sync/atomic"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
@@ -40,7 +40,7 @@ type Sequencer struct {
 var _ private.Sequencer = (*Sequencer)(nil)
 
 type SequencerParams struct {
-	Logger       log.Logger
+	Logger       *slog.Logger
 	Database     database.Viewer
 	EventBus     *events.Bus
 	Globals      *core.GlobalValues

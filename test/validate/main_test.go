@@ -11,6 +11,7 @@ import (
 	"crypto/ed25519"
 	"flag"
 	"fmt"
+	"log/slog"
 	"math/big"
 	"net"
 	"os"
@@ -182,7 +183,7 @@ func (s *ValidationTestSuite) SetupSuite() {
 
 func setupSim(t *testing.T, net *accumulated.NetworkInit) (*simulator.Simulator, api.Faucet) {
 	// Set up the simulator and harness
-	logger := acctesting.NewTestLogger(t)
+	logger := logging.AsSlogLogger(acctesting.NewTestLogger(t))
 	sim, err := simulator.New(
 		simulator.WithLogger(logger),
 		simulator.WithNetwork(net),
@@ -203,7 +204,7 @@ func setupSim(t *testing.T, net *accumulated.NetworkInit) (*simulator.Simulator,
 	MakeAccount(t, sim.DatabaseFor(faucet), &TokenAccount{Url: faucet.JoinPath("tokens"), TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e14)})
 
 	faucetSvc, err := v3impl.NewFaucet(context.Background(), v3impl.FaucetParams{
-		Logger:    logger.With("module", "faucet"),
+		Logger:    logger.With(slog.String("module", "faucet")),
 		Account:   faucet.JoinPath("tokens"),
 		Key:       build.ED25519PrivateKey(faucetKey),
 		Submitter: sim.Services(),
@@ -920,7 +921,7 @@ func (s *ValidationTestSuite) TestFaucets() {
 		Txn(st.TxID).Succeeds())
 
 	// Set up a new faucet
-	logger := logging.ConsoleLoggerForTest(s.T(), "info")
+	logger := logging.AsSlogLogger(logging.ConsoleLoggerForTest(s.T(), "info"))
 	peg := pegnet.JoinPath("peg")
 	faucetSvc, err := v3impl.NewFaucet(context.Background(), v3impl.FaucetParams{
 		Logger:    logger,

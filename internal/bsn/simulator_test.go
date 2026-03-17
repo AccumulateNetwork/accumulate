@@ -7,9 +7,9 @@
 package bsn_test
 
 import (
+	"log/slog"
 	"testing"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/bsn"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
@@ -43,7 +43,7 @@ func simpleNetwork(name string, bvnCount, nodeCount int) simulator.Option {
 }
 
 func captureBsnStore(db **memory.Database) simulator.Option {
-	return simulator.WithDatabase(func(partition *PartitionInfo, node int, logger log.Logger) keyvalue.Beginner {
+	return simulator.WithDatabase(func(partition *PartitionInfo, node int, logger *slog.Logger) keyvalue.Beginner {
 		if partition.Type == PartitionTypeBlockSummary && node == 0 {
 			*db = memory.New(nil)
 			return *db

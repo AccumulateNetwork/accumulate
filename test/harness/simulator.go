@@ -18,6 +18,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -35,7 +36,7 @@ var GenesisTime = time.Date(2022, 7, 1, 0, 0, 0, 0, time.UTC)
 func NewSim(tb testing.TB, opts ...simulator.Option) *Sim {
 	opts = append(opts,
 		simulator.WithRecordings(Recordings(tb)),
-		simulator.WithLogger(acctesting.NewTestLogger(tb)),
+		simulator.WithLogger(logging.NewTestSlogger(tb, acctesting.DefaultLogLevels, acctesting.LogConsole)),
 	)
 	s, err := simulator.New(opts...)
 	require.NoError(tb, err)

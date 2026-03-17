@@ -12,12 +12,12 @@ import (
 	"fmt"
 	"io"
 	stdlog "log"
+	"log/slog"
 	"mime"
 	"net/http"
 	"os"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
-	"github.com/cometbft/cometbft/libs/log"
 	"github.com/go-playground/validator/v10"
 	"github.com/julienschmidt/httprouter"
 	"gitlab.com/accumulatenetwork/accumulate"
@@ -29,7 +29,7 @@ type JrpcMethods struct {
 	Options
 	methods  jsonrpc2.MethodMap
 	validate *validator.Validate
-	logger   log.Logger
+	logger   *slog.Logger
 }
 
 func NewJrpc(opts Options) (*JrpcMethods, error) {
@@ -38,7 +38,7 @@ func NewJrpc(opts Options) (*JrpcMethods, error) {
 	m.Options = opts
 
 	if opts.Logger != nil {
-		m.logger = opts.Logger.With("module", "jrpc")
+		m.logger = opts.Logger.With(slog.String("module", "jrpc"))
 	}
 
 	m.validate, err = protocol.NewValidator()
@@ -50,7 +50,7 @@ func NewJrpc(opts Options) (*JrpcMethods, error) {
 	return m, nil
 }
 
-func (m *JrpcMethods) logError(msg string, keyVals ...interface{}) {
+func (m *JrpcMethods) logError(msg string, keyVals ...any) {
 	if m.logger != nil {
 		m.logger.Error(msg, keyVals...)
 	}

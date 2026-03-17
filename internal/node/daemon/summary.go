@@ -10,6 +10,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/sha256"
+	"log/slog"
 
 	"github.com/cometbft/cometbft/abci/types"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
@@ -17,6 +18,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3/tm"
 	"gitlab.com/accumulatenetwork/accumulate/internal/bsn"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
@@ -137,7 +139,7 @@ func (d *Daemon) startSummaryApp() (types.Application, error) {
 
 	exec, err := bsn.NewExecutor(bsn.ExecutorOptions{
 		PartitionID: d.Config.Accumulate.PartitionId,
-		Logger:      d.Logger,
+		Logger:      logging.AsSlogLogger(d.Logger),
 		Store:       store,
 		EventBus:    d.eventBus,
 	})
@@ -148,7 +150,7 @@ func (d *Daemon) startSummaryApp() (types.Application, error) {
 	app := abci.NewAccumulator(abci.AccumulatorOptions{
 		Address:     d.Key().PubKey().Address(),
 		Executor:    exec,
-		Logger:      d.Logger,
+		Logger:      logging.AsSlogLogger(d.Logger),
 		EventBus:    d.eventBus,
 		Tracer:      d.tracer,
 		Snapshots:   &d.Config.Accumulate.Snapshots,
@@ -165,8 +167,9 @@ func (d *Daemon) startSummaryApp() (types.Application, error) {
 
 func (d *Daemon) startSummaryServices() error {
 	// Initialize all the services
+	slogger := logging.AsSlogLogger(d.Logger).With(slog.String("module", "acc-rpc"))
 	nodeSvc := tm.NewConsensusService(tm.ConsensusServiceParams{
-		Logger:           d.Logger.With("module", "acc-rpc"),
+		Logger:           slogger,
 		Local:            d.localTm,
 		PartitionID:      d.Config.Accumulate.PartitionId,
 		PartitionType:    d.Config.Accumulate.NetworkType,
@@ -175,11 +178,11 @@ func (d *Daemon) startSummaryServices() error {
 		ValidatorKeyHash: sha256.Sum256(d.privVal.Key.PubKey.Bytes()),
 	})
 	submitSvc := tm.NewSubmitter(tm.SubmitterParams{
-		Logger: d.Logger.With("module", "acc-rpc"),
+		Logger: slogger,
 		Local:  d.localTm,
 	})
 	validateSvc := tm.NewValidator(tm.ValidatorParams{
-		Logger: d.Logger.With("module", "acc-rpc"),
+		Logger: slogger,
 		Local:  d.localTm,
 	})
 	messageHandler, err := message.NewHandler(

@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	dut "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
@@ -31,7 +32,7 @@ type NetworkServiceTestSuite struct {
 
 func (s *NetworkServiceTestSuite) ServiceFor(partition string) api.NetworkService {
 	return dut.NewNetworkService(dut.NetworkServiceParams{
-		Logger:    acctesting.NewTestLogger(s.T()),
+		Logger:    logging.AsSlogLogger(acctesting.NewTestLogger(s.T())),
 		Database:  s.sim.Database(partition),
 		EventBus:  s.sim.EventBus(partition),
 		Partition: partition,
@@ -46,7 +47,7 @@ func (s *NetworkServiceTestSuite) SetupSuite() {
 
 	var err error
 	s.sim, err = simulator.New(
-		simulator.WithLogger(acctesting.NewTestLogger(s.T())),
+		simulator.WithLogger(logging.AsSlogLogger(acctesting.NewTestLogger(s.T()))),
 		simulator.SimpleNetwork(s.T().Name(), 3, 3),
 		simulator.GenesisWith(GenesisTime, g),
 	)

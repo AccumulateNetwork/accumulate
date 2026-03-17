@@ -22,6 +22,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
@@ -91,7 +92,7 @@ func TestState(t *testing.T) {
 
 func TestVersion(t *testing.T) {
 	logger := acctesting.NewTestLogger(t)
-	db := database.OpenInMemory(logger)
+	db := database.OpenInMemory(logging.AsSlogLogger(logger))
 	db.SetObserver(acctesting.NullObserver{})
 
 	foo := protocol.AccountUrl("foo")

@@ -9,8 +9,8 @@ package faucet
 import (
 	"context"
 	"crypto/ed25519"
+	"log/slog"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"github.com/multiformats/go-multiaddr"
 	v3impl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
@@ -24,7 +24,7 @@ type Options struct {
 	Network string
 	Peers   []multiaddr.Multiaddr
 	Listen  []multiaddr.Multiaddr
-	Logger  log.Logger
+	Logger  *slog.Logger
 }
 
 func StartLite(ctx context.Context, opts Options) (*p2p.Node, error) {
@@ -51,7 +51,7 @@ func StartLite(ctx context.Context, opts Options) (*p2p.Node, error) {
 
 	// Create the faucet service
 	faucetSvc, err := v3impl.NewFaucet(context.Background(), v3impl.FaucetParams{
-		Logger:    opts.Logger.With("module", "faucet"),
+		Logger:    opts.Logger.With(slog.String("module", "faucet")),
 		Account:   faucet,
 		Key:       build.ED25519PrivateKey(opts.Key),
 		Submitter: client,

@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/api/v3/tm"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
@@ -25,7 +26,7 @@ import (
 )
 
 func TestConsensusStatus(t *testing.T) {
-	logger := acctesting.NewTestLogger(t)
+	logger := logging.AsSlogLogger(acctesting.NewTestLogger(t))
 	net := simulator.NewSimpleNetwork(t.Name(), 1, 1)
 	sim, err := simulator.New(
 		simulator.WithLogger(logger),

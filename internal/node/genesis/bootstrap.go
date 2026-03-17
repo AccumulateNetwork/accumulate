@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"math"
 	"math/big"
 	"strings"
@@ -18,7 +19,6 @@ import (
 
 	"github.com/cometbft/cometbft/abci/types"
 	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
-	"github.com/cometbft/cometbft/libs/log"
 	tmtypes "github.com/cometbft/cometbft/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
@@ -26,7 +26,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain"
 	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
@@ -41,7 +40,7 @@ import (
 )
 
 type InitOpts struct {
-	Logger log.Logger
+	Logger *slog.Logger
 
 	NetworkID      string
 	PartitionId    string
@@ -91,7 +90,7 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) error {
 	b := &bootstrap{
 		InitOpts:    opts,
 		kvdb:        store,
-		db:          coredb.New(store, opts.Logger.With("module", "database")),
+		db:          coredb.New(store, opts.Logger.With(slog.String("module", "database"))),
 		dataRecords: make([]DataRecord, 0),
 		records:     make([]protocol.Account, 0),
 		acmeIssued:  new(big.Int),
@@ -100,7 +99,7 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) error {
 	b.db.SetObserver(execute.NewDatabaseObserver())
 
 	// Create the router
-	b.router = routing.NewRouter(routing.RouterOptions{Initial: gg.Routing, Logger: b.Logger})
+	b.router = routing.NewRouter(routing.RouterOptions{Initial: gg.Routing, Logger: opts.Logger})
 
 	// Unpack snapshots
 	err := b.unpackSnapshots()
@@ -108,7 +107,7 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) error {
 		return errors.UnknownError.WithFormat("unpack snapshots: %w", err)
 	}
 
-	exec, err := block.NewGenesisExecutor(b.db, logging.AsSlogLogger(opts.Logger), &config.Describe{
+	exec, err := block.NewGenesisExecutor(b.db, opts.Logger, &config.Describe{
 		NetworkType: opts.NetworkType,
 		PartitionId: opts.PartitionId,
 	}, gg, b.router)

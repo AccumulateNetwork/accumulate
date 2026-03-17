@@ -11,17 +11,18 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"math/big"
 	"os"
 	"sort"
 	"strings"
 	"testing"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
@@ -44,13 +45,13 @@ func TestGenerateDbTestdata(t *testing.T) {
 	aliceKey := acctesting.GenerateKey(alice)
 	bobKey := acctesting.GenerateKey(bob)
 
-	logger := acctesting.NewTestLogger(t)
+	logger := logging.AsSlogLogger(acctesting.NewTestLogger(t))
 	store := memory.New(nil)
 	db := database.New(store, logger)
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.WithDatabase(func(partition *protocol.PartitionInfo, _ int, logger log.Logger) keyvalue.Beginner {
+		simulator.WithDatabase(func(partition *protocol.PartitionInfo, _ int, logger *slog.Logger) keyvalue.Beginner {
 			if strings.EqualFold(partition.ID, protocol.Directory) {
 				return memory.New(nil)
 			}
@@ -117,7 +118,7 @@ func TestDbEncoding(t *testing.T) {
 	require.NoError(t, err)
 	var entries []memory.Entry
 	require.NoError(t, json.Unmarshal(b, &entries))
-	logger := acctesting.NewTestLogger(t)
+	logger := logging.AsSlogLogger(acctesting.NewTestLogger(t))
 	store := memory.New(nil)
 	require.NoError(t, store.Import(entries))
 

@@ -22,6 +22,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
@@ -229,7 +230,7 @@ func (d *Daemon) collectSnapshot(batch *coredb.Batch, blockTime time.Time, major
 }
 
 func (d *Daemon) LoadSnapshot(file ioutil2.SectionReader) error {
-	db, err := coredb.Open(d.Config, d.Logger)
+	db, err := coredb.Open(d.Config, logging.AsSlogLogger(d.Logger))
 	if err != nil {
 		return fmt.Errorf("failed to open database: %v", err)
 	}
@@ -238,7 +239,7 @@ func (d *Daemon) LoadSnapshot(file ioutil2.SectionReader) error {
 		_ = db.Close()
 	}()
 
-	err = snapshot.FullRestore(db, file, d.Logger, d.Config.Accumulate.Describe.PartitionUrl())
+	err = snapshot.FullRestore(db, file, logging.AsSlogLogger(d.Logger), d.Config.Accumulate.Describe.PartitionUrl())
 	if err != nil {
 		return fmt.Errorf("failed to restore database: %v", err)
 	}

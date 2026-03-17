@@ -13,7 +13,6 @@ import (
 	"math/big"
 	"sync"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
@@ -58,7 +57,7 @@ type simFactory struct {
 	interceptDispatchedMessages DispatchInterceptor
 
 	// State
-	logger           log.Logger
+	logger           *slog.Logger
 	taskQueue        *taskQueue
 	router           *Router
 	hub              consensus.Hub
@@ -77,7 +76,7 @@ type networkFactory struct {
 	nodes []*accumulated.NodeInit
 
 	// State
-	logger log.Logger
+	logger *slog.Logger
 }
 
 type nodeFactory struct {
@@ -88,7 +87,7 @@ type nodeFactory struct {
 	network *accumulated.NodeInit
 
 	// State
-	logger     log.Logger
+	logger     *slog.Logger
 	_nodeKey   []byte
 	peerID     peer.ID
 	store      keyvalue.Beginner
@@ -242,16 +241,16 @@ func (f *nodeFactory) initCollector(s *Simulator) {
 	})
 }
 
-func (f *simFactory) getLogger() log.Logger {
+func (f *simFactory) getLogger() *slog.Logger {
 	if f.logger != nil {
 		return f.logger
 	}
 
-	f.logger = (*logging.Slogger)(slog.Default()).With("module", "sim")
+	f.logger = slog.Default().With(slog.String("module", "sim"))
 	return f.logger
 }
 
-func (f *networkFactory) getLogger() log.Logger {
+func (f *networkFactory) getLogger() *slog.Logger {
 	if f.logger != nil {
 		return f.logger
 	}
@@ -260,7 +259,7 @@ func (f *networkFactory) getLogger() log.Logger {
 	return f.logger
 }
 
-func (f *nodeFactory) getLogger() log.Logger {
+func (f *nodeFactory) getLogger() *slog.Logger {
 	if f.logger != nil {
 		return f.logger
 	}
@@ -515,10 +514,12 @@ func (f *nodeFactory) makeSummaryApp() *consensus.Node {
 }
 
 func (f *nodeFactory) makeCoreApp() *consensus.Node {
+	slogger := f.getLogger().With(slog.String("module", "acc-rpc"))
+
 	// Register a querier service
 	f.registerSvc(api.ServiceTypeQuery, message.Querier{
 		Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{
-			Logger:    f.getLogger().With("module", "acc-rpc"),
+			Logger:    slogger,
 			Database:  f.getDatabase(),
 			Partition: f.networkFactory.id,
 		}),
@@ -527,7 +528,7 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 	// Register an event service
 	f.registerSvc(api.ServiceTypeEvent, message.EventService{
 		EventService: apiimpl.NewEventService(apiimpl.EventServiceParams{
-			Logger:    f.getLogger().With("module", "acc-rpc"),
+			Logger:    slogger,
 			Database:  f.getDatabase(),
 			Partition: f.networkFactory.id,
 			EventBus:  f.getEventBus(),
@@ -537,7 +538,7 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 	// Register a network service
 	f.registerSvc(api.ServiceTypeNetwork, message.NetworkService{
 		NetworkService: apiimpl.NewNetworkService(apiimpl.NetworkServiceParams{
-			Logger:    f.getLogger().With("module", "acc-rpc"),
+			Logger:    slogger,
 			Database:  f.getDatabase(),
 			Partition: f.networkFactory.id,
 			EventBus:  f.getEventBus(),
@@ -547,7 +548,7 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 	// Register a sequencer service
 	f.registerSvc(private.ServiceTypeSequencer, &message.Sequencer{
 		Sequencer: apiimpl.NewSequencer(apiimpl.SequencerParams{
-			Logger:       f.getLogger().With("module", "acc-rpc"),
+			Logger:       slogger,
 			Database:     f.getDatabase(),
 			EventBus:     f.getEventBus(),
 			Partition:    f.networkFactory.id,
@@ -557,7 +558,7 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 
 	// Set up the executor options
 	execOpts := block.ExecutorOptions{
-		Logger:        logging.AsSlogLogger(f.getLogger()),
+		Logger:        f.getLogger(),
 		Database:      f.getDatabase(),
 		Key:           f.network.PrivValKey,
 		Router:        f.getRouter(),

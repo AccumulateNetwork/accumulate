@@ -35,7 +35,7 @@ func (c *ChangeSet) newPartition(key partitionKey) *database.Batch {
 	}
 
 	s := c.kvstore.Begin(record.NewKey(key.ID+"·"), true)
-	b := database.NewBatch(key.ID, s, true, c.logger)
+	b := database.NewBatch(key.ID, s, true, c.logger.L)
 	b.SetObserver(execute.NewDatabaseObserver())
 	return b
 }

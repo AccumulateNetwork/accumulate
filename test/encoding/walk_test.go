@@ -7,11 +7,11 @@
 package encoding
 
 import (
+	"log/slog"
 	"math/big"
 	"strings"
 	"testing"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/bsn"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
@@ -19,6 +19,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
@@ -146,11 +147,11 @@ func TestWalkAndReplay(t *testing.T) {
 	sim.StepN(100)
 
 	// Restore snapshot into BSN database
-	logger := acctesting.NewTestLogger(t)
+	logger := logging.AsSlogLogger(acctesting.NewTestLogger(t))
 	store := memory.New(nil)
-	bsndb := bsn.NewChangeSet(store, logger.With("module", "database"))
+	bsndb := bsn.NewChangeSet(store, logger.With(slog.String("module", "database")))
 	for _, part := range sim.Partitions() {
-		err := snapshot.Restore(bsndb.Partition(part.ID), ioutil2.NewBuffer(genesis[part.ID]), logger.With("module", "snapshot"))
+		err := snapshot.Restore(bsndb.Partition(part.ID), ioutil2.NewBuffer(genesis[part.ID]), logger.With(slog.String("module", "snapshot")))
 		require.NoError(t, err)
 	}
 	require.NoError(t, bsndb.Commit())
@@ -205,14 +206,14 @@ func TestWalkAndReplay(t *testing.T) {
 		}
 	}
 
-	bsndb = bsn.NewChangeSet(store, logger.With("module", "database"))
+	bsndb = bsn.NewChangeSet(store, logger.With(slog.String("module", "database")))
 	p, err := sim.Router().RouteAccount(lite2)
 	require.NoError(t, err)
 	require.NotZero(t, GetAccount[*protocol.LiteTokenAccount](t, bsndb.Partition(p), lite2).Balance)
 }
 
 type partitionBeginner struct {
-	logger    log.Logger
+	logger    *slog.Logger
 	store     keyvalue.Beginner
 	partition string
 }

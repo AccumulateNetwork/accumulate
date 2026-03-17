@@ -8,9 +8,9 @@ package api
 
 import (
 	"context"
+	"log/slog"
 	"sync/atomic"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -32,7 +32,7 @@ type NetworkService struct {
 var _ api.NetworkService = (*NetworkService)(nil)
 
 type NetworkServiceParams struct {
-	Logger    log.Logger
+	Logger    *slog.Logger
 	EventBus  *events.Bus
 	Partition string
 	Database  database.Viewer

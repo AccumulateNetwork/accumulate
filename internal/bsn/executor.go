@@ -9,9 +9,9 @@ package bsn
 import (
 	"crypto/ed25519"
 	"io"
+	"log/slog"
 	"strings"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
@@ -41,7 +41,7 @@ type Executor struct {
 
 type ExecutorOptions struct {
 	PartitionID string
-	Logger      log.Logger
+	Logger      *slog.Logger
 	Store       keyvalue.Beginner
 	EventBus    *events.Bus
 }
@@ -97,7 +97,7 @@ func (x *Executor) LastBlock() (*execute.BlockParams, [32]byte, error) {
 	return p, [32]byte{}, nil
 }
 
-func LoadSnapshot(file ioutil2.SectionReader, store keyvalue.Beginner, logger log.Logger) error {
+func LoadSnapshot(file ioutil2.SectionReader, store keyvalue.Beginner, logger *slog.Logger) error {
 	header, rd, err := snapshot.Open(file)
 	if err != nil {
 		return errors.UnknownError.WithFormat("open snapshot: %w", err)
@@ -208,7 +208,7 @@ func (x *Executor) Init(validators []*execute.ValidatorUpdate) (additional []*ex
 }
 
 type partitionBeginner struct {
-	logger    log.Logger
+	logger    *slog.Logger
 	store     keyvalue.Beginner
 	partition string
 }

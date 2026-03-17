@@ -11,7 +11,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/http"
 )
 
@@ -45,7 +44,7 @@ func (r *RouterService) create(inst *Instance) (routing.Router, error) {
 		Node:    inst.p2p,
 		Network: inst.config.Network,
 		Events:  events,
-		Logger:  (*logging.Slogger)(inst.logger),
+		Logger:  inst.logger,
 	}
 
 	if len(r.PeerMap) > 0 {
