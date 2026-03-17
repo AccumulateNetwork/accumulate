@@ -32,7 +32,10 @@ const (
 	DefaultWarmupPeriod     = 8 * time.Second
 
 	// Network defaults
-	DefaultListenPort = 9000
+	DefaultListenPort        = 9000
+	DefaultMaxInbound        = 200
+	DefaultMaxOutbound       = 200
+	DefaultConnectionTimeout = 10 * time.Second
 )
 
 // Config is the configuration for a DAG-BFT consensus node.
@@ -114,6 +117,15 @@ type NetworkConfig struct {
 	// ExternalAddr is the external address to advertise to peers.
 	// If empty, the listen address is used.
 	ExternalAddr string `toml:"external_addr"`
+
+	// MaxInbound is the maximum number of inbound connections.
+	MaxInbound int `toml:"max_inbound"`
+
+	// MaxOutbound is the maximum number of outbound connections.
+	MaxOutbound int `toml:"max_outbound"`
+
+	// ConnectionTimeout is the timeout for establishing connections.
+	ConnectionTimeout time.Duration `toml:"connection_timeout"`
 }
 
 // LoggingConfig contains logging settings.
@@ -146,7 +158,10 @@ func DefaultConfig() *Config {
 			WarmupPeriod:     DefaultWarmupPeriod,
 		},
 		Network: NetworkConfig{
-			ListenAddr: fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", DefaultListenPort),
+			ListenAddr:        fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", DefaultListenPort),
+			MaxInbound:        DefaultMaxInbound,
+			MaxOutbound:       DefaultMaxOutbound,
+			ConnectionTimeout: DefaultConnectionTimeout,
 		},
 		Logging: LoggingConfig{
 			Level:  "info",
@@ -237,6 +252,15 @@ func (c *Config) ApplyDefaults() {
 	// Network defaults
 	if c.Network.ListenAddr == "" {
 		c.Network.ListenAddr = defaults.Network.ListenAddr
+	}
+	if c.Network.MaxInbound <= 0 {
+		c.Network.MaxInbound = defaults.Network.MaxInbound
+	}
+	if c.Network.MaxOutbound <= 0 {
+		c.Network.MaxOutbound = defaults.Network.MaxOutbound
+	}
+	if c.Network.ConnectionTimeout <= 0 {
+		c.Network.ConnectionTimeout = defaults.Network.ConnectionTimeout
 	}
 
 	// Logging defaults
