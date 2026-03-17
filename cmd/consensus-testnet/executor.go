@@ -7,6 +7,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"crypto/sha256"
@@ -16,6 +17,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 
@@ -150,9 +152,13 @@ func (e *Executor) SetOnParamChanged(fn func(string, any)) {
 	e.onParamChanged = fn
 }
 
-// Start begins the block production loop.
+// Start initializes the executor.
+// Block production is now tied to certificate commits in ProcessCertificate,
+// not a timer, to ensure deterministic state across all nodes.
 func (e *Executor) Start(ctx context.Context) {
-	go e.blockProductionLoop(ctx)
+	slog.Info("Executor started - blocks produced on certificate commits")
+	// Note: blockProductionLoop is not started. Blocks are produced
+	// deterministically when ProcessCertificate is called.
 }
 
 // Stop halts block production.
@@ -244,10 +250,24 @@ func (e *Executor) produceBlock() *Block {
 	return block
 }
 
-// ProcessCertificate processes transactions from a committed certificate.
+// ProcessCertificate processes transactions from a committed certificate and produces a block.
+// Digests are sorted to ensure deterministic ordering across all nodes.
+// Block is produced immediately after processing to ensure all nodes produce blocks at the same
+// logical point (certificate commit), achieving deterministic state across the network.
 func (e *Executor) ProcessCertificate(cert *types.Certificate, batches map[types.BatchDigest]*types.Batch) {
-	// Extract all transactions from the certificate's batches
+	// Collect and sort digests for deterministic processing order
+	// Go map iteration is non-deterministic, so we must sort to ensure
+	// all nodes process transactions in the same order.
+	digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
 	for digest := range cert.Header.Payload {
+		digests = append(digests, digest)
+	}
+	sort.Slice(digests, func(i, j int) bool {
+		return bytes.Compare(digests[i][:], digests[j][:]) < 0
+	})
+
+	// Extract all transactions from the certificate's batches in sorted order
+	for _, digest := range digests {
 		batch, ok := batches[digest]
 		if !ok {
 			slog.Warn("Missing batch for certificate", "digest", digest)
@@ -258,6 +278,10 @@ func (e *Executor) ProcessCertificate(cert *types.Certificate, batches map[types
 			e.ProcessTransaction(txData)
 		}
 	}
+
+	// Produce a block immediately - this ensures all nodes produce blocks at the same
+	// logical point (when processing the committed certificate), achieving deterministic state.
+	e.produceBlock()
 }
 
 // ProcessTransaction processes a single transaction.
