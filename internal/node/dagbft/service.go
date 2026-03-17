@@ -69,6 +69,9 @@ type Service struct {
 	// Block production state
 	lastBlockIndex uint64
 	lastBlockTime  time.Time
+
+	// Validator synchronization
+	validatorUpdateHeight uint64 // Height at which validator update was detected
 }
 
 // NewService creates a new DAG-BFT service.
@@ -130,6 +133,9 @@ func (s *Service) Start(ctx context.Context) error {
 	if err := s.node.Start(s.ctx); err != nil {
 		return errors.UnknownError.WithFormat("start consensus node: %w", err)
 	}
+
+	// Register for validator set changes from the adapter
+	s.adapter.OnValidatorSetChange(s.onValidatorSetChange)
 
 	// Start block production loop
 	s.wg.Add(1)
@@ -418,3 +424,73 @@ func (s *Service) Status() Status {
 
 // For genesis loading - use existing infrastructure
 var _ = genesis.DocProvider
+
+// onValidatorSetChange is called when the adapter detects a validator set change.
+// It updates the consensus node's committee to reflect the new validator set.
+func (s *Service) onValidatorSetChange(validators []adapter.ValidatorInfo) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.node == nil {
+		slog.Warn("Validator set change received but node not started")
+		return
+	}
+
+	// Convert adapter validators to committee validators
+	committeeValidators := make([]types.ValidatorInfo, len(validators))
+	for i, v := range validators {
+		committeeValidators[i] = types.ValidatorInfo{
+			PublicKey: v.PublicKey[:],
+			Stake:     v.Stake,
+		}
+	}
+
+	// Create new committee with incremented epoch
+	newEpoch := s.committee.Epoch + 1
+	newCommittee := types.NewCommittee(committeeValidators, newEpoch)
+
+	slog.Info("Validator set changed, updating committee",
+		"partition", s.config.Partition.ID,
+		"oldEpoch", s.committee.Epoch,
+		"newEpoch", newEpoch,
+		"oldValidators", s.committee.Len(),
+		"newValidators", len(validators),
+		"atHeight", s.lastBlockIndex)
+
+	// Track when the update was detected
+	s.validatorUpdateHeight = s.lastBlockIndex
+
+	// Update the local committee reference
+	s.committee = newCommittee
+
+	// Propagate to consensus node (updates Primary and Bullshark)
+	s.node.UpdateCommittee(newCommittee)
+}
+
+// UpdateCommittee allows external callers to update the committee.
+// This can be used during testing or for manual committee updates.
+func (s *Service) UpdateCommittee(committee *types.Committee) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.node == nil {
+		slog.Warn("UpdateCommittee called but node not started")
+		return
+	}
+
+	slog.Info("Updating committee",
+		"partition", s.config.Partition.ID,
+		"oldEpoch", s.committee.Epoch,
+		"newEpoch", committee.Epoch,
+		"validators", committee.Len())
+
+	s.committee = committee
+	s.node.UpdateCommittee(committee)
+}
+
+// ValidatorUpdateHeight returns the block height at which the last validator update was detected.
+func (s *Service) ValidatorUpdateHeight() uint64 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.validatorUpdateHeight
+}
