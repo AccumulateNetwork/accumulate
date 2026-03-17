@@ -504,3 +504,30 @@ func (n *Node) WaitForCommits(ctx context.Context, count uint64) error {
 		}
 	}
 }
+
+// UpdateCommittee updates the committee across all consensus components.
+// This is called when the validator set changes at a block boundary.
+// All nodes must call this at the same height to maintain consensus.
+func (n *Node) UpdateCommittee(committee *types.Committee) {
+	if committee == nil {
+		slog.Warn("UpdateCommittee called with nil committee")
+		return
+	}
+
+	n.mu.Lock()
+	oldCommittee := n.committee
+	n.committee = committee
+	n.mu.Unlock()
+
+	slog.Info("Updating committee",
+		"oldEpoch", oldCommittee.Epoch,
+		"newEpoch", committee.Epoch,
+		"oldValidators", oldCommittee.Len(),
+		"newValidators", committee.Len())
+
+	// Update Primary's committee
+	n.primary.UpdateCommittee(committee)
+
+	// Update Bullshark's committee
+	n.bullshark.UpdateCommittee(committee)
+}
