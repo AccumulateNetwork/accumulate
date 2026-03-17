@@ -237,7 +237,11 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	}
 
 	// Create executor adapter
-	executorBridge, err := adapter.NewExecutorBridge(exec)
+	executorBridge, err := adapter.NewExecutorBridge(adapter.ExecutorBridgeConfig{
+		Executor:    exec,
+		PartitionID: s.Partition.ID,
+		EventBus:    s.eventBus,
+	})
 	if err != nil {
 		return errors.UnknownError.WithFormat("create executor bridge: %w", err)
 	}
