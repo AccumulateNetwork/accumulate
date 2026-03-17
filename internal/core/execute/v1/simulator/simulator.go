@@ -13,11 +13,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"sync"
 	"time"
 
-	"github.com/cometbft/cometbft/libs/log"
-	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
@@ -48,13 +47,13 @@ var GenesisTime = time.Date(2022, 7, 1, 0, 0, 0, 0, time.UTC)
 type SimulatorOptions struct {
 	BvnCount        int
 	LogLevels       string
-	OpenDB          func(partition string, nodeIndex int, logger log.Logger) *database.Database
+	OpenDB          func(partition string, nodeIndex int, logger *slog.Logger) *database.Database
 	FactomAddresses func() (io.Reader, error)
 }
 
 type Simulator struct {
 	tb
-	Logger     log.Logger
+	Logger     *slog.Logger
 	Partitions []config.Partition
 	Executors  map[string]*ExecEntry
 
@@ -64,18 +63,8 @@ type Simulator struct {
 	routingOverrides map[[32]byte]string
 }
 
-func (s *Simulator) newLogger(opts SimulatorOptions) log.Logger {
-	if !acctesting.LogConsole {
-		return logging.NewTestLogger(s, "plain", opts.LogLevels, false)
-	}
-
-	w, err := logging.NewConsoleWriter("plain")
-	require.NoError(s, err)
-	level, writer, err := logging.ParseLogLevel(opts.LogLevels, w)
-	require.NoError(s, err)
-	logger, err := logging.NewTendermintLogger(zerolog.New(writer), level, false)
-	require.NoError(s, err)
-	return logger
+func (s *Simulator) newLogger(opts SimulatorOptions) *slog.Logger {
+	return logging.NewTestSlogger(s, opts.LogLevels, acctesting.LogConsole)
 }
 
 func New(t TB, bvnCount int) *Simulator {
@@ -104,8 +93,8 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 		opts.LogLevels = acctesting.DefaultLogLevels
 	}
 	if opts.OpenDB == nil {
-		opts.OpenDB = func(_ string, _ int, logger log.Logger) *database.Database {
-			return database.OpenInMemory(logger)
+		opts.OpenDB = func(_ string, _ int, logger *slog.Logger) *database.Database {
+			return database.OpenInMemory(logging.AsCometLogger(logger))
 		}
 	}
 	sim.opts = opts
@@ -135,11 +124,11 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 		sim.Partitions = append(sim.Partitions, partition)
 	}
 
-	mainEventBus := events.NewBus(sim.Logger.With("partition", protocol.Directory))
+	mainEventBus := events.NewBus(logging.AsCometLogger(sim.Logger.With("partition", protocol.Directory)))
 	events.SubscribeSync(mainEventBus, sim.willChangeGlobals)
 	sim.router = &router{sim, routing.NewRouter(routing.RouterOptions{
 		Events: mainEventBus,
-		Logger: sim.Logger,
+		Logger: logging.AsCometLogger(sim.Logger),
 	})}
 
 	// Initialize each executor
@@ -184,7 +173,7 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 			bvnInit.Nodes[0],
 			network,
 			opts.OpenDB(bvn.Id, 0, logger),
-			events.NewBus(logger),
+			events.NewBus(logging.AsCometLogger(logger)),
 		)
 		sim.Executors[bvn.Id] = x
 	}
@@ -315,12 +304,12 @@ func (s *Simulator) InitFromGenesisWith(values *core.GlobalValues) {
 	// The simulator only runs one DNN so set the threshold low
 	values.Globals.ValidatorAcceptThreshold.Set(1, 1000)
 
-	genDocs, err := accumulated.BuildGenesisDocs(s.netInit, values, GenesisTime, s.Logger, s.opts.FactomAddresses, nil)
+	genDocs, err := accumulated.BuildGenesisDocs(s.netInit, values, GenesisTime, logging.AsCometLogger(s.Logger), s.opts.FactomAddresses, nil)
 	require.NoError(s, err)
 
 	// Execute bootstrap after the entire network is known
 	for _, x := range s.Executors {
-		require.NoError(s, snapshot.FullRestore(x.Database, ioutil2.NewBuffer(genDocs[x.Partition.Id]), x.Executor.Logger, x.Executor.Describe.PartitionUrl()))
+		require.NoError(s, snapshot.FullRestore(x.Database, ioutil2.NewBuffer(genDocs[x.Partition.Id]), logging.AsCometLogger(x.Executor.Logger), x.Executor.Describe.PartitionUrl()))
 		require.NoError(s, x.Executor.Init(x.Database))
 	}
 }
@@ -573,7 +562,7 @@ type ExecEntry struct {
 }
 
 // init initializes the partition.
-func (x *ExecEntry) init(sim *Simulator, logger log.Logger, partition *config.Partition, init *accumulated.NodeInit, network config.Describe, db *database.Database, eventBus *events.Bus) {
+func (x *ExecEntry) init(sim *Simulator, logger *slog.Logger, partition *config.Partition, init *accumulated.NodeInit, network config.Describe, db *database.Database, eventBus *events.Bus) {
 	x.blockTime = GenesisTime
 	x.nodeKey = init.DnNodeKey
 	x.Validators = [][]byte{init.PrivValKey[32:]}
@@ -602,7 +591,7 @@ func (x *ExecEntry) init(sim *Simulator, logger log.Logger, partition *config.Pa
 	x.service = newExecService(x, logger)
 
 	jrpc, err := api.NewJrpc(api.Options{
-		Logger:        logger,
+		Logger:        logging.AsCometLogger(logger),
 		TxMaxWaitTime: time.Hour,
 		LocalV3:       x.service,
 		Querier:       sim.Services(),

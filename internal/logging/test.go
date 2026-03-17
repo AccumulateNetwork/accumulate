@@ -9,6 +9,8 @@ package logging
 import (
 	"encoding/json"
 	"io"
+	"log/slog"
+	"os"
 	"reflect"
 	"strings"
 
@@ -64,6 +66,22 @@ func NewTestLogger(t TB, format, level string, trace bool) log.Logger {
 	logger, err := NewTendermintLogger(zerolog.New(writer), level, trace)
 	require.NoError(t, err)
 	return logger.With("test", t.Name())
+}
+
+// NewTestSlogger creates a *slog.Logger for testing. If console logging is
+// disabled, it returns a no-op logger. Otherwise it logs to stderr with
+// the console format.
+func NewTestSlogger(t TB, levels string, console bool) *slog.Logger {
+	if !console {
+		return slog.New(slog.NewTextHandler(io.Discard, nil))
+	}
+
+	c, err := ParseSlogLevel(levels)
+	require.NoError(t, err)
+	w := ConsoleSlogWriter(os.Stderr, true)
+	handler, err := NewSlogHandler(c, w)
+	require.NoError(t, err)
+	return slog.New(handler).With("test", t.Name())
 }
 
 func ConsoleLoggerForTest(t TB, levels string) log.Logger {

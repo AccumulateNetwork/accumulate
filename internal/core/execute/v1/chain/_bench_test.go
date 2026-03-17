@@ -7,12 +7,12 @@
 package chain_test
 
 import (
+	"log/slog"
 	"math/big"
 	"path/filepath"
 	"testing"
 
 	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
-	"github.com/cometbft/cometbft/libs/log"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -28,12 +28,12 @@ import (
 
 func BenchmarkExecuteSendTokens(b *testing.B) {
 	testCases := map[string]struct {
-		NewStorage func(log.Logger) storage.KeyValueStore
+		NewStorage func(*slog.Logger) storage.KeyValueStore
 	}{
-		"Memory": {NewStorage: func(logger log.Logger) storage.KeyValueStore {
+		"Memory": {NewStorage: func(logger *slog.Logger) storage.KeyValueStore {
 			return memory.New(logger)
 		}},
-		"Badger": {NewStorage: func(logger log.Logger) storage.KeyValueStore {
+		"Badger": {NewStorage: func(logger *slog.Logger) storage.KeyValueStore {
 			db, err := badger.New(filepath.Join(b.TempDir(), "badger.db"), logger)
 			require.NoError(b, err)
 			return db
@@ -42,7 +42,7 @@ func BenchmarkExecuteSendTokens(b *testing.B) {
 
 	for name, tc := range testCases {
 		b.Run(name, func(b *testing.B) {
-			logger := logging.NewTestLogger(b, "plain", "disabled", false)
+			logger := logging.NewTestSlogger(b, "disabled", false)
 			store := tc.NewStorage(logger)
 			db := database.New(store, acctesting.NullObserver{}, logger)
 

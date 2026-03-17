@@ -24,7 +24,7 @@ import (
 
 type stateCache struct {
 	execute.DescribeShim
-	logger logging.OptionalLogger
+	logger logging.OptionalSlogger
 	txType protocol.TransactionType
 	txHash [32]byte
 

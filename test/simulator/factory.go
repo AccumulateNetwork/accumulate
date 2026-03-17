@@ -557,7 +557,7 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 
 	// Set up the executor options
 	execOpts := block.ExecutorOptions{
-		Logger:        f.getLogger(),
+		Logger:        logging.AsSlogLogger(f.getLogger()),
 		Database:      f.getDatabase(),
 		Key:           f.network.PrivValKey,
 		Router:        f.getRouter(),

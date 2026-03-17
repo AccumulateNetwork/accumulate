@@ -39,9 +39,87 @@ func (s *Slogger) With(keyvals ...interface{}) log.Logger {
 	return (*Slogger)(l)
 }
 
+// AsCometLogger converts a *slog.Logger to a log.Logger (cometbft interface).
+// Returns nil if the input is nil.
+func AsCometLogger(l *slog.Logger) log.Logger {
+	if l == nil {
+		return nil
+	}
+	return (*Slogger)(l)
+}
+
+// AsSlogLogger attempts to convert a log.Logger to *slog.Logger.
+// If the logger is a *Slogger wrapper, it extracts the underlying *slog.Logger.
+// Returns nil if the input is nil or not a *Slogger.
+func AsSlogLogger(l log.Logger) *slog.Logger {
+	if l == nil {
+		return nil
+	}
+	if s, ok := l.(*Slogger); ok {
+		return (*slog.Logger)(s)
+	}
+	return nil
+}
+
 type SlogConfig struct {
 	DefaultLevel slog.Level
 	ModuleLevels map[string]slog.Level
+}
+
+// ParseSlogLevel parses a log level string in the format "level" or
+// "module=level;module=level;..." and returns an SlogConfig.
+func ParseSlogLevel(s string) (SlogConfig, error) {
+	c := SlogConfig{
+		DefaultLevel: slog.LevelInfo,
+		ModuleLevels: map[string]slog.Level{},
+	}
+
+	if s == "" {
+		return c, nil
+	}
+
+	if !strings.Contains(s, "=") {
+		level, err := parseSlogLevelString(s)
+		if err != nil {
+			return c, err
+		}
+		c.DefaultLevel = level
+		return c, nil
+	}
+
+	modules := strings.FieldsFunc(s, func(r rune) bool { return r == ';' })
+	for _, module := range modules {
+		parts := strings.Split(module, "=")
+		level, err := parseSlogLevelString(parts[len(parts)-1])
+		if err != nil {
+			return c, err
+		}
+
+		if len(parts) == 1 || parts[0] == "*" {
+			c.DefaultLevel = level
+		} else {
+			c.ModuleLevels[strings.ToLower(parts[0])] = level
+		}
+	}
+
+	return c, nil
+}
+
+func parseSlogLevelString(s string) (slog.Level, error) {
+	switch strings.ToLower(s) {
+	case "debug", "trace":
+		return slog.LevelDebug, nil
+	case "info":
+		return slog.LevelInfo, nil
+	case "warn", "warning":
+		return slog.LevelWarn, nil
+	case "error":
+		return slog.LevelError, nil
+	case "disabled", "none":
+		return slog.LevelError + 10, nil // Effectively disables logging
+	default:
+		return 0, fmt.Errorf("unknown log level: %s", s)
+	}
 }
 
 func NewSlogHandler(c SlogConfig, out io.Writer) (slog.Handler, error) {

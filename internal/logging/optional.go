@@ -45,3 +45,42 @@ func (l OptionalLogger) With(keyVals ...interface{}) *slog.Logger {
 	}
 	return l.L.With(keyVals...)
 }
+
+// OptionalSlogger wraps a *slog.Logger and provides nil-safe logging methods.
+type OptionalSlogger struct {
+	L *slog.Logger
+}
+
+func (l *OptionalSlogger) Set(m *slog.Logger, keyVals ...interface{}) {
+	if m != nil {
+		l.L = m.With(keyVals...)
+	}
+}
+
+func (l OptionalSlogger) Debug(msg string, keyVals ...interface{}) {
+	if l.L == nil {
+		return
+	}
+	l.L.Debug(msg, keyVals...)
+}
+
+func (l OptionalSlogger) Info(msg string, keyVals ...interface{}) {
+	if l.L == nil {
+		return
+	}
+	l.L.Info(msg, keyVals...)
+}
+
+func (l OptionalSlogger) Error(msg string, keyVals ...interface{}) {
+	if l.L == nil {
+		return
+	}
+	l.L.Error(msg, keyVals...)
+}
+
+func (l OptionalSlogger) With(keyVals ...interface{}) *slog.Logger {
+	if l.L == nil {
+		return nil
+	}
+	return l.L.With(keyVals...)
+}
