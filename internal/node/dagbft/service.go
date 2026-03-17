@@ -113,6 +113,9 @@ func (s *Service) Start(ctx context.Context) error {
 
 	// Create consensus node (without libp2p for now - can be added later)
 	nodeConfig := s.config.NodeConfig
+	// Set up pre-batch transaction validation using the adapter
+	// This is equivalent to CometBFT's CheckTx
+	nodeConfig.WorkerConfig.Validator = s.adapter
 	s.node, err = consensus.NewNode(nodeConfig, committee, nil, nil)
 	if err != nil {
 		return errors.UnknownError.WithFormat("create consensus node: %w", err)

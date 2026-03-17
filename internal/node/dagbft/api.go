@@ -8,6 +8,7 @@ package dagbft
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
 
 	"github.com/cometbft/cometbft/libs/log"
@@ -17,6 +18,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -166,8 +168,18 @@ func (s *SubmitterService) Submit(ctx context.Context, envelope *messaging.Envel
 		return nil, errors.EncodingError.WithFormat("marshal: %w", err)
 	}
 
-	// Submit to consensus
+	// Submit to consensus (includes pre-batch validation)
 	if err := s.service.SubmitTransaction(b); err != nil {
+		// Check if this is a validation error
+		if stderrors.Is(err, worker.ErrValidationFailed) {
+			return []*api.Submission{{
+				Success: false,
+				Message: fmt.Sprintf("Transaction validation failed: %v", err),
+			}}, nil
+		}
+		if stderrors.Is(err, worker.ErrBackpressure) {
+			return nil, errors.NotReady.WithFormat("submit: %w", err)
+		}
 		return nil, errors.InternalError.WithFormat("submit: %w", err)
 	}
 
