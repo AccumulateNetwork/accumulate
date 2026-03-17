@@ -174,3 +174,15 @@ func (b *Bullshark) MarkCommitted(cert *types.Certificate) {
 		b.lastCommitted[authorKey] = cert.Round()
 	}
 }
+
+// SetLastCommittedForAuthor sets the last committed round for an author.
+// This is used during crash recovery to restore per-author commit state.
+// The authorHex parameter should be a hex-encoded public key.
+func (b *Bullshark) SetLastCommittedForAuthor(authorHex string, round types.Round) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if lastRound, ok := b.lastCommitted[authorHex]; !ok || round > lastRound {
+		b.lastCommitted[authorHex] = round
+	}
+}
