@@ -1,0 +1,417 @@
+// Copyright 2026 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
+// Package dagbft provides a node service wrapper for DAG-BFT consensus.
+// It integrates the DAG-based consensus with the accumulated binary.
+package dagbft
+
+import (
+	"context"
+	"crypto/ed25519"
+	"fmt"
+	"log/slog"
+	"os"
+	"sync"
+	"time"
+
+	"github.com/cometbft/cometbft/libs/log"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/adapter"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+)
+
+// ServiceConfig holds the configuration for a DAG-BFT service.
+type ServiceConfig struct {
+	// Partition is the network partition info.
+	Partition *protocol.PartitionInfo
+
+	// NodeConfig is the consensus node configuration.
+	NodeConfig consensus.NodeConfig
+
+	// Adapter bridges consensus to the executor.
+	Adapter adapter.ConsensusAdapter
+
+	// EventBus is the event bus for publishing events.
+	EventBus *events.Bus
+
+	// Logger is the logger to use.
+	Logger log.Logger
+
+	// Genesis is the path to the genesis file/snapshot.
+	Genesis string
+}
+
+// Service wraps the DAG-BFT consensus node for integration with accumulated.
+type Service struct {
+	config    ServiceConfig
+	node      *consensus.Node
+	adapter   adapter.ConsensusAdapter
+	eventBus  *events.Bus
+	logger    logging.OptionalLogger
+	committee *types.Committee
+
+	// Lifecycle management
+	ctx      context.Context
+	cancel   context.CancelFunc
+	wg       sync.WaitGroup
+	mu       sync.RWMutex
+	running  bool
+	stopping bool
+
+	// Block production state
+	lastBlockIndex uint64
+	lastBlockTime  time.Time
+}
+
+// NewService creates a new DAG-BFT service.
+func NewService(config ServiceConfig) (*Service, error) {
+	if config.Partition == nil {
+		return nil, errors.BadRequest.With("partition is required")
+	}
+	if config.Adapter == nil {
+		return nil, errors.BadRequest.With("adapter is required")
+	}
+	if config.EventBus == nil {
+		return nil, errors.BadRequest.With("event bus is required")
+	}
+
+	s := &Service{
+		config:   config,
+		adapter:  config.Adapter,
+		eventBus: config.EventBus,
+	}
+	s.logger.L = config.Logger
+
+	return s, nil
+}
+
+// Start initializes and starts the DAG-BFT service.
+func (s *Service) Start(ctx context.Context) error {
+	s.mu.Lock()
+	if s.running {
+		s.mu.Unlock()
+		return errors.BadRequest.With("service already running")
+	}
+	s.ctx, s.cancel = context.WithCancel(ctx)
+	s.running = true
+	s.mu.Unlock()
+
+	// Initialize committee from genesis
+	committee, err := s.initializeCommittee()
+	if err != nil {
+		return errors.UnknownError.WithFormat("initialize committee: %w", err)
+	}
+	s.committee = committee
+
+	// Create consensus node (without libp2p for now - can be added later)
+	nodeConfig := s.config.NodeConfig
+	s.node, err = consensus.NewNode(nodeConfig, committee, nil, nil)
+	if err != nil {
+		return errors.UnknownError.WithFormat("create consensus node: %w", err)
+	}
+
+	// Initialize genesis if needed
+	if err := s.initializeGenesis(); err != nil {
+		return errors.UnknownError.WithFormat("initialize genesis: %w", err)
+	}
+
+	// Start consensus node
+	if err := s.node.Start(s.ctx); err != nil {
+		return errors.UnknownError.WithFormat("start consensus node: %w", err)
+	}
+
+	// Start block production loop
+	s.wg.Add(1)
+	go s.blockProductionLoop()
+
+	s.logger.Info("DAG-BFT service started",
+		"partition", s.config.Partition.ID,
+		"validators", len(committee.Validators))
+
+	return nil
+}
+
+// Stop gracefully stops the DAG-BFT service.
+func (s *Service) Stop() error {
+	s.mu.Lock()
+	if !s.running || s.stopping {
+		s.mu.Unlock()
+		return nil
+	}
+	s.stopping = true
+	s.mu.Unlock()
+
+	s.logger.Info("Stopping DAG-BFT service", "partition", s.config.Partition.ID)
+
+	// Cancel context
+	if s.cancel != nil {
+		s.cancel()
+	}
+
+	// Stop consensus node
+	if s.node != nil {
+		s.node.Stop()
+	}
+
+	// Wait for goroutines
+	s.wg.Wait()
+
+	s.mu.Lock()
+	s.running = false
+	s.stopping = false
+	s.mu.Unlock()
+
+	s.logger.Info("DAG-BFT service stopped", "partition", s.config.Partition.ID)
+	return nil
+}
+
+// IsRunning returns whether the service is running.
+func (s *Service) IsRunning() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.running && !s.stopping
+}
+
+// Node returns the underlying consensus node.
+func (s *Service) Node() *consensus.Node {
+	return s.node
+}
+
+// Committee returns the current committee.
+func (s *Service) Committee() *types.Committee {
+	return s.committee
+}
+
+// CurrentRound returns the current consensus round.
+func (s *Service) CurrentRound() types.Round {
+	if s.node == nil {
+		return 0
+	}
+	return s.node.CurrentRound()
+}
+
+// LastCommitRound returns the last committed leader round.
+func (s *Service) LastCommitRound() types.Round {
+	if s.node == nil {
+		return 0
+	}
+	return s.node.LastCommitRound()
+}
+
+// SubmitTransaction submits a transaction to the consensus node.
+func (s *Service) SubmitTransaction(tx []byte) error {
+	if s.node == nil {
+		return errors.BadRequest.With("node not started")
+	}
+	return s.node.SubmitTransaction(tx)
+}
+
+// initializeCommittee creates the initial committee from genesis.
+func (s *Service) initializeCommittee() (*types.Committee, error) {
+	// For now, create a single-validator committee using our own key
+	pubKey := s.config.NodeConfig.KeyPair.Public().(ed25519.PublicKey)
+
+	validators := []types.ValidatorInfo{
+		{
+			PublicKey: pubKey,
+			Stake:     1,
+		},
+	}
+
+	// Check for validator info from adapter
+	adapterValidators := s.adapter.Validators()
+	if len(adapterValidators) > 0 {
+		validators = make([]types.ValidatorInfo, len(adapterValidators))
+		for i, v := range adapterValidators {
+			validators[i] = types.ValidatorInfo{
+				PublicKey: v.PublicKey[:],
+				Stake:     v.Stake,
+			}
+		}
+	}
+
+	committee := types.NewCommittee(validators, 0)
+	return committee, nil
+}
+
+// initializeGenesis initializes the DAG with genesis certificates.
+func (s *Service) initializeGenesis() error {
+	// Check if we have genesis state already
+	lastIndex, _, err := s.adapter.LastBlock()
+	if err != nil {
+		return err
+	}
+
+	if lastIndex > 0 {
+		// Already have state, skip genesis initialization
+		s.lastBlockIndex = lastIndex
+		return nil
+	}
+
+	// Load genesis doc if provided
+	if s.config.Genesis != "" {
+		if _, err := os.Stat(s.config.Genesis); err == nil {
+			s.logger.Info("Loading genesis", "path", s.config.Genesis)
+			// Genesis loading would happen here - for now we just note it
+			// The actual genesis initialization happens via the executor
+		}
+	}
+
+	// For a single-validator setup, insert genesis certificates
+	keys := []ed25519.PrivateKey{s.config.NodeConfig.KeyPair}
+	if err := s.node.InsertGenesisForAll(keys); err != nil {
+		return fmt.Errorf("insert genesis certificates: %w", err)
+	}
+
+	return nil
+}
+
+// blockProductionLoop processes committed certificates and produces blocks.
+func (s *Service) blockProductionLoop() {
+	defer s.wg.Done()
+
+	committed := s.node.Committed()
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-s.ctx.Done():
+			return
+
+		case cert, ok := <-committed:
+			if !ok {
+				return
+			}
+			if cert == nil {
+				continue
+			}
+
+			if err := s.processCommittedCertificate(cert); err != nil {
+				slog.Error("Failed to process committed certificate",
+					"error", err,
+					"round", cert.Header.Round)
+			}
+
+		case <-ticker.C:
+			// Periodic check - could be used for timeouts or health checks
+		}
+	}
+}
+
+// processCommittedCertificate processes a committed certificate and produces a block.
+func (s *Service) processCommittedCertificate(cert *types.Certificate) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Get batches from workers - the Payload map contains batch digests
+	batches := make(map[types.BatchDigest]*types.Batch)
+	committedDigests := make([]types.BatchDigest, 0)
+	for digest := range cert.Header.Payload {
+		for _, w := range s.node.Workers() {
+			batch, err := w.GetBatch(digest)
+			if err == nil && batch != nil {
+				batches[digest] = batch
+				committedDigests = append(committedDigests, digest)
+				break
+			}
+		}
+	}
+
+	// Check if this validator is the leader
+	pubKey := s.config.NodeConfig.KeyPair.Public().(ed25519.PublicKey)
+	isLeader := types.ValidatorsEqual(cert.Header.Author, pubKey)
+
+	// Produce block
+	blockIndex := s.lastBlockIndex + 1
+	blockTime := time.Now()
+
+	params := adapter.BlockParams{
+		Index:       blockIndex,
+		Time:        blockTime,
+		IsLeader:    isLeader,
+		LeaderRound: cert.Header.Round,
+		Certificate: cert,
+		Batches:     batches,
+	}
+
+	hash, err := s.adapter.ProduceBlock(s.ctx, params)
+	if err != nil {
+		return fmt.Errorf("produce block: %w", err)
+	}
+
+	// Update state
+	s.lastBlockIndex = blockIndex
+	s.lastBlockTime = blockTime
+
+	// Prune batches from workers now that they've been processed
+	for _, w := range s.node.Workers() {
+		w.PruneBatches(committedDigests)
+	}
+
+	// Emit block event
+	event := events.DidCommitBlock{
+		Index: blockIndex,
+		Time:  blockTime,
+	}
+	if err := s.eventBus.Publish(event); err != nil {
+		s.logger.Error("Failed to publish block event", "error", err)
+	}
+
+	s.logger.Debug("Produced block",
+		"index", blockIndex,
+		"round", cert.Header.Round,
+		"hash", fmt.Sprintf("%x", hash[:8]),
+		"batches", len(batches))
+
+	return nil
+}
+
+// Status returns the current status of the DAG-BFT service.
+type Status struct {
+	Running          bool
+	Partition        string
+	CurrentRound     types.Round
+	LastCommitRound  types.Round
+	LastBlockIndex   uint64
+	LastBlockTime    time.Time
+	ValidatorCount   int
+	TxSubmitted      uint64
+	CertsCommitted   uint64
+}
+
+// Status returns the current status of the service.
+func (s *Service) Status() Status {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	status := Status{
+		Running:         s.running && !s.stopping,
+		Partition:       s.config.Partition.ID,
+		LastBlockIndex:  s.lastBlockIndex,
+		LastBlockTime:   s.lastBlockTime,
+	}
+
+	if s.node != nil {
+		status.CurrentRound = s.node.CurrentRound()
+		status.LastCommitRound = s.node.LastCommitRound()
+		status.TxSubmitted, status.CertsCommitted = s.node.Metrics()
+	}
+
+	if s.committee != nil {
+		status.ValidatorCount = s.committee.Len()
+	}
+
+	return status
+}
+
+// For genesis loading - use existing infrastructure
+var _ = genesis.DocProvider
