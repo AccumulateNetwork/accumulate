@@ -11,13 +11,13 @@ import (
 	"math"
 	"strings"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
-func NewChain(logger log.Logger, store record.Store, key *record.Key, markPower int64, typ ChainType, namefmt string) *Chain {
+func NewChain(logger logging.Logger, store record.Store, key *record.Key, markPower int64, typ ChainType, namefmt string) *Chain {
 	c := new(Chain)
 	c.logger.L = logger
 	c.store = store

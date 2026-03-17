@@ -10,7 +10,7 @@ import (
 	"context"
 	"crypto/ed25519"
 
-	"github.com/cometbft/cometbft/libs/log"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"github.com/multiformats/go-multiaddr"
 	v3impl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
@@ -24,7 +24,7 @@ type Options struct {
 	Network string
 	Peers   []multiaddr.Multiaddr
 	Listen  []multiaddr.Multiaddr
-	Logger  log.Logger
+	Logger  logging.Logger
 }
 
 func StartLite(ctx context.Context, opts Options) (*p2p.Node, error) {

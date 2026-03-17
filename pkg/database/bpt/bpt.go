@@ -7,8 +7,8 @@
 package bpt
 
 import (
-	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
@@ -19,7 +19,7 @@ type KeyValuePair struct {
 }
 
 // New returns a new BPT.
-func New(_ database.Record, logger log.Logger, store database.Store, key *database.Key) *BPT {
+func New(_ database.Record, logger logging.Logger, store database.Store, key *database.Key) *BPT {
 	b := new(BPT)
 	b.logger.Set(logger)
 	b.store = store

@@ -13,7 +13,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"github.com/julienschmidt/httprouter"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
@@ -42,7 +41,7 @@ type Handler struct {
 
 // Options are the options for a [Handler].
 type Options struct {
-	Logger    log.Logger
+	Logger    logging.Logger
 	Node      *p2p.Node
 	Router    routing.Router
 	NetworkId string
@@ -132,7 +131,7 @@ func NewHandler(opts Options) (*Handler, error) {
 
 	// JSON-RPC API v2
 	v2, err := v2.NewJrpc(v2.Options{
-		Logger:        opts.Logger,
+		Logger:        logging.CometBFTLogger(opts.Logger),
 		Describe:      opts.Network,
 		TxMaxWaitTime: opts.MaxWait,
 		LocalV3:       selfClient,

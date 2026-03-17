@@ -9,7 +9,6 @@ package tm
 import (
 	"context"
 
-	"github.com/cometbft/cometbft/libs/log"
 	coretypes "github.com/cometbft/cometbft/rpc/core/types"
 	"github.com/cometbft/cometbft/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -30,7 +29,7 @@ type Validator struct {
 var _ api.Validator = (*Validator)(nil)
 
 type ValidatorParams struct {
-	Logger log.Logger
+	Logger logging.Logger
 	Local  ValidateClient
 }
 

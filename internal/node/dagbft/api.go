@@ -11,7 +11,6 @@ import (
 	stderrors "errors"
 	"fmt"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -40,7 +39,7 @@ var _ api.ConsensusService = (*ConsensusAPIService)(nil)
 
 // ConsensusAPIServiceParams holds the parameters for creating a ConsensusAPIService.
 type ConsensusAPIServiceParams struct {
-	Logger           log.Logger
+	Logger           logging.Logger
 	Service          *Service
 	Database         database.Viewer
 	PartitionID      string
@@ -137,7 +136,7 @@ var _ api.Submitter = (*SubmitterService)(nil)
 
 // SubmitterServiceParams holds the parameters for creating a SubmitterService.
 type SubmitterServiceParams struct {
-	Logger  log.Logger
+	Logger  logging.Logger
 	Service *Service
 }
 
@@ -200,7 +199,7 @@ var _ api.Validator = (*ValidatorService)(nil)
 
 // ValidatorServiceParams holds the parameters for creating a ValidatorService.
 type ValidatorServiceParams struct {
-	Logger  log.Logger
+	Logger  logging.Logger
 	Service *Service
 }
 

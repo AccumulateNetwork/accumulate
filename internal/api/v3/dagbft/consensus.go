@@ -11,7 +11,6 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -39,7 +38,7 @@ var _ api.ConsensusService = (*ConsensusService)(nil)
 
 // ConsensusServiceParams contains parameters for creating a ConsensusService.
 type ConsensusServiceParams struct {
-	Logger           log.Logger
+	Logger           logging.Logger
 	Node             *consensus.Node
 	Database         database.Viewer
 	PartitionID      string

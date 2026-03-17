@@ -7,7 +7,7 @@
 package indexing
 
 import (
-	"github.com/cometbft/cometbft/libs/log"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -17,7 +17,7 @@ import (
 // NewLog constructs a new Log data model object. Log supports appending keys in
 // ascending order, e.g. as the chain grows. It does not allow adding keys that
 // would sort before or between existing items.
-func NewLog[V any](logger log.Logger, store database.Store, key *record.Key, blockSize uint64) *Log[V] {
+func NewLog[V any](logger logging.Logger, store database.Store, key *record.Key, blockSize uint64) *Log[V] {
 	if blockSize == 0 {
 		panic("block size must be specified")
 	}
