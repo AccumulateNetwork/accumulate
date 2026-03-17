@@ -22,6 +22,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/bullshark"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/dag"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/primary"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
@@ -396,6 +397,7 @@ func (n *Node) processBullshark() {
 
 // InsertGenesisForAll inserts genesis certificates for all validators.
 // This is used for bootstrapping the DAG.
+// Deprecated: Use InitGenesis instead for proper genesis initialization.
 func (n *Node) InsertGenesisForAll(keys []ed25519.PrivateKey) error {
 	n.mu.Lock()
 	defer n.mu.Unlock()
@@ -419,7 +421,8 @@ func (n *Node) InsertGenesisForAll(keys []ed25519.PrivateKey) error {
 			authors[j] = uint16(j)
 		}
 
-		cert := types.NewCertificate(*header, sigs, authors)
+		clonedHeader := header.Clone()
+		cert := types.NewCertificate(*clonedHeader, sigs, authors)
 
 		// Insert into DAG
 		if err := n.dag.InsertGenesis(cert); err != nil {
@@ -429,6 +432,39 @@ func (n *Node) InsertGenesisForAll(keys []ed25519.PrivateKey) error {
 
 	// Set primary to round 1 since genesis is done
 	n.primary.SetRound(1)
+
+	return nil
+}
+
+// InitGenesis initializes the DAG with genesis certificates from the given
+// validators. Each validator provides a private key and stake. All validators
+// sign all genesis certificates to establish initial consensus.
+// After genesis, the node starts at round 1.
+func (n *Node) InitGenesis(validators []genesis.ValidatorInfo) error {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
+	// Initialize genesis
+	result, err := genesis.InitGenesis(validators)
+	if err != nil {
+		return fmt.Errorf("init genesis: %w", err)
+	}
+
+	// Bootstrap the DAG with genesis certificates
+	if err := genesis.BootstrapDAG(n.dag, result.Committee, result.GenesisCerts); err != nil {
+		return fmt.Errorf("bootstrap DAG: %w", err)
+	}
+
+	// Update committee to match genesis committee
+	n.committee = result.Committee
+
+	// Set primary to round 1 since genesis is done
+	n.primary.SetRound(result.InitialRound)
+
+	slog.Info("Genesis initialized",
+		"validators", len(validators),
+		"epoch", result.Committee.Epoch,
+		"initialRound", result.InitialRound)
 
 	return nil
 }
