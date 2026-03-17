@@ -215,15 +215,112 @@ func (p *Primary) SetEpoch(epoch uint64) {
 }
 
 // UpdateCommittee updates the committee (for epoch transitions).
+// This method handles epoch transitions by updating the committee and epoch,
+// recalculating dependent values, and ensuring certificate validity across epochs.
 func (p *Primary) UpdateCommittee(committee *types.Committee) {
 	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	oldEpoch := p.currentEpoch
+	oldCommittee := p.committee
+
+	// Update committee and epoch
 	p.committee = committee
 	p.currentEpoch = committee.Epoch
-	p.mu.Unlock()
 
+	// Log the transition
 	slog.Info("Updated committee",
-		"epoch", committee.Epoch,
+		"oldEpoch", oldEpoch,
+		"newEpoch", committee.Epoch,
 		"validators", len(committee.Validators))
+
+	// If this is an epoch transition, perform additional cleanup
+	if committee.Epoch > oldEpoch {
+		// Compute and log validator changes
+		if oldCommittee != nil {
+			diff := oldCommittee.DiffWith(committee)
+			for _, update := range diff {
+				switch update.Type {
+				case types.ValidatorUpdateAdd:
+					slog.Info("Validator added",
+						"pubkey", hexEncode(update.PublicKey),
+						"stake", update.NewStake)
+				case types.ValidatorUpdateRemove:
+					slog.Info("Validator removed",
+						"pubkey", hexEncode(update.PublicKey))
+				case types.ValidatorUpdateStake:
+					slog.Info("Validator stake changed",
+						"pubkey", hexEncode(update.PublicKey),
+						"newStake", update.NewStake)
+				}
+			}
+		}
+	}
+}
+
+// TransitionEpoch performs a complete epoch transition with the given validator updates.
+// This creates a new committee by applying the updates and sets it as the current committee.
+// The round is optionally reset based on the resetRound parameter.
+func (p *Primary) TransitionEpoch(updates []types.ValidatorUpdate, resetRound bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	oldEpoch := p.currentEpoch
+	oldRound := p.currentRound
+
+	// Create new committee by applying updates
+	newCommittee := p.committee.UpdateValidators(updates)
+
+	// Validate the new committee
+	if err := newCommittee.Validate(); err != nil {
+		slog.Error("Invalid committee after epoch transition",
+			"error", err,
+			"epoch", newCommittee.Epoch)
+		return
+	}
+
+	// Update committee and epoch
+	p.committee = newCommittee
+	p.currentEpoch = newCommittee.Epoch
+
+	// Optionally reset round for new epoch
+	if resetRound {
+		p.currentRound = 0
+		p.lastRoundAdvance = time.Time{}
+	}
+
+	slog.Info("Completed epoch transition",
+		"oldEpoch", oldEpoch,
+		"newEpoch", newCommittee.Epoch,
+		"oldRound", oldRound,
+		"currentRound", p.currentRound,
+		"validators", len(newCommittee.Validators),
+		"totalStake", newCommittee.TotalStake(),
+		"quorumThreshold", newCommittee.QuorumThreshold())
+
+	// Log individual updates
+	for _, update := range updates {
+		switch update.Type {
+		case types.ValidatorUpdateAdd:
+			slog.Info("Validator added",
+				"pubkey", hexEncode(update.PublicKey),
+				"stake", update.NewStake)
+		case types.ValidatorUpdateRemove:
+			slog.Info("Validator removed",
+				"pubkey", hexEncode(update.PublicKey))
+		case types.ValidatorUpdateStake:
+			slog.Info("Validator stake changed",
+				"pubkey", hexEncode(update.PublicKey),
+				"newStake", update.NewStake)
+		}
+	}
+}
+
+// Committee returns the current committee (thread-safe).
+func (p *Primary) Committee() *types.Committee {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.committee
 }
 
 // GetOurCertificate returns our certificate for the given round, if any.

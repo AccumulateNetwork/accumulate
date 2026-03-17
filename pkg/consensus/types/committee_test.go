@@ -261,3 +261,201 @@ func TestCommittee_ConcurrentAccess(t *testing.T) {
 
 	wg.Wait()
 }
+
+func TestCommittee_UpdateValidators(t *testing.T) {
+	t.Run("add validator", func(t *testing.T) {
+		validators := makeValidators(t, 3)
+		committee := types.NewCommittee(validators, 1)
+
+		newPub, _, _ := ed25519.GenerateKey(nil)
+		updates := []types.ValidatorUpdate{
+			{
+				PublicKey: newPub,
+				Type:      types.ValidatorUpdateAdd,
+				NewStake:  200,
+			},
+		}
+
+		newCommittee := committee.UpdateValidators(updates)
+
+		assert.Equal(t, 4, newCommittee.Len())
+		assert.Equal(t, uint64(2), newCommittee.Epoch) // Epoch incremented
+		assert.True(t, newCommittee.ContainsValidator(newPub))
+		assert.Equal(t, uint64(200), newCommittee.StakeOf(newPub))
+	})
+
+	t.Run("remove validator", func(t *testing.T) {
+		validators := makeValidators(t, 4)
+		committee := types.NewCommittee(validators, 1)
+
+		updates := []types.ValidatorUpdate{
+			{
+				PublicKey: validators[1].PublicKey,
+				Type:      types.ValidatorUpdateRemove,
+			},
+		}
+
+		newCommittee := committee.UpdateValidators(updates)
+
+		assert.Equal(t, 3, newCommittee.Len())
+		assert.Equal(t, uint64(2), newCommittee.Epoch)
+		assert.False(t, newCommittee.ContainsValidator(validators[1].PublicKey))
+		// Others still present
+		assert.True(t, newCommittee.ContainsValidator(validators[0].PublicKey))
+		assert.True(t, newCommittee.ContainsValidator(validators[2].PublicKey))
+		assert.True(t, newCommittee.ContainsValidator(validators[3].PublicKey))
+	})
+
+	t.Run("update stake", func(t *testing.T) {
+		validators := makeValidators(t, 3)
+		committee := types.NewCommittee(validators, 1)
+
+		originalStake := validators[0].Stake
+		newStake := uint64(500)
+
+		updates := []types.ValidatorUpdate{
+			{
+				PublicKey: validators[0].PublicKey,
+				Type:      types.ValidatorUpdateStake,
+				NewStake:  newStake,
+			},
+		}
+
+		newCommittee := committee.UpdateValidators(updates)
+
+		assert.Equal(t, 3, newCommittee.Len())
+		assert.Equal(t, newStake, newCommittee.StakeOf(validators[0].PublicKey))
+		// Original committee unchanged
+		assert.Equal(t, originalStake, committee.StakeOf(validators[0].PublicKey))
+	})
+
+	t.Run("multiple updates", func(t *testing.T) {
+		validators := makeValidators(t, 4)
+		committee := types.NewCommittee(validators, 1)
+
+		newPub, _, _ := ed25519.GenerateKey(nil)
+		updates := []types.ValidatorUpdate{
+			{
+				PublicKey: newPub,
+				Type:      types.ValidatorUpdateAdd,
+				NewStake:  150,
+			},
+			{
+				PublicKey: validators[0].PublicKey,
+				Type:      types.ValidatorUpdateRemove,
+			},
+			{
+				PublicKey: validators[2].PublicKey,
+				Type:      types.ValidatorUpdateStake,
+				NewStake:  300,
+			},
+		}
+
+		newCommittee := committee.UpdateValidators(updates)
+
+		assert.Equal(t, 4, newCommittee.Len()) // 4 - 1 + 1 = 4
+		assert.Equal(t, uint64(2), newCommittee.Epoch)
+		assert.True(t, newCommittee.ContainsValidator(newPub))
+		assert.False(t, newCommittee.ContainsValidator(validators[0].PublicKey))
+		assert.Equal(t, uint64(300), newCommittee.StakeOf(validators[2].PublicKey))
+	})
+
+	t.Run("empty updates returns clone", func(t *testing.T) {
+		validators := makeValidators(t, 3)
+		committee := types.NewCommittee(validators, 1)
+
+		newCommittee := committee.UpdateValidators(nil)
+
+		assert.Equal(t, committee.Len(), newCommittee.Len())
+		assert.Equal(t, committee.Epoch, newCommittee.Epoch)
+	})
+
+	t.Run("stake update on non-existent validator is no-op", func(t *testing.T) {
+		validators := makeValidators(t, 3)
+		committee := types.NewCommittee(validators, 1)
+
+		unknownPub, _, _ := ed25519.GenerateKey(nil)
+		updates := []types.ValidatorUpdate{
+			{
+				PublicKey: unknownPub,
+				Type:      types.ValidatorUpdateStake,
+				NewStake:  500,
+			},
+		}
+
+		newCommittee := committee.UpdateValidators(updates)
+
+		// Validator not added, so stake should be 0
+		assert.Equal(t, uint64(0), newCommittee.StakeOf(unknownPub))
+		assert.Equal(t, 3, newCommittee.Len())
+	})
+}
+
+func TestCommittee_DiffWith(t *testing.T) {
+	t.Run("no changes", func(t *testing.T) {
+		validators := makeValidators(t, 4)
+		committee1 := types.NewCommittee(validators, 1)
+		committee2 := types.NewCommittee(validators, 2)
+
+		diff := committee1.DiffWith(committee2)
+		assert.Empty(t, diff)
+	})
+
+	t.Run("validator added", func(t *testing.T) {
+		validators := makeValidators(t, 3)
+		committee1 := types.NewCommittee(validators, 1)
+
+		newPub, _, _ := ed25519.GenerateKey(nil)
+		extendedValidators := append(validators, types.ValidatorInfo{
+			PublicKey: newPub,
+			Stake:     100,
+		})
+		committee2 := types.NewCommittee(extendedValidators, 2)
+
+		diff := committee1.DiffWith(committee2)
+
+		require.Len(t, diff, 1)
+		assert.Equal(t, types.ValidatorUpdateAdd, diff[0].Type)
+		assert.Equal(t, newPub, ed25519.PublicKey(diff[0].PublicKey))
+	})
+
+	t.Run("validator removed", func(t *testing.T) {
+		validators := makeValidators(t, 4)
+		committee1 := types.NewCommittee(validators, 1)
+		committee2 := types.NewCommittee(validators[:3], 2)
+
+		diff := committee1.DiffWith(committee2)
+
+		require.Len(t, diff, 1)
+		assert.Equal(t, types.ValidatorUpdateRemove, diff[0].Type)
+		assert.Equal(t, validators[3].PublicKey, ed25519.PublicKey(diff[0].PublicKey))
+	})
+
+	t.Run("stake changed", func(t *testing.T) {
+		validators := makeValidators(t, 3)
+		committee1 := types.NewCommittee(validators, 1)
+
+		// Create committee2 with different stake for first validator
+		validators2 := make([]types.ValidatorInfo, len(validators))
+		copy(validators2, validators)
+		validators2[0] = types.ValidatorInfo{
+			PublicKey: validators[0].PublicKey,
+			Stake:     500,
+		}
+		committee2 := types.NewCommittee(validators2, 2)
+
+		diff := committee1.DiffWith(committee2)
+
+		require.Len(t, diff, 1)
+		assert.Equal(t, types.ValidatorUpdateStake, diff[0].Type)
+		assert.Equal(t, uint64(500), diff[0].NewStake)
+	})
+
+	t.Run("nil target", func(t *testing.T) {
+		validators := makeValidators(t, 3)
+		committee1 := types.NewCommittee(validators, 1)
+
+		diff := committee1.DiffWith(nil)
+		assert.Nil(t, diff)
+	})
+}
