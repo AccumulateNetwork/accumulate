@@ -439,7 +439,7 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 	}}
 	db := database.New(store, d.logger)
 	execOpts := execute.Options{
-		Logger:        d.logger.With("module", "executor"),
+		Logger:        logging.AsSlogLogger(d.logger.With("module", "executor")),
 		Database:      db,
 		Key:           d.privVal.Key.PrivKey.Bytes(),
 		Router:        router,

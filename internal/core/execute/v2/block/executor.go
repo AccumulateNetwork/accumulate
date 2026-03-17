@@ -33,7 +33,7 @@ type Executor struct {
 	executors          map[protocol.TransactionType]chain.TransactionExecutor
 	messageExecutors   map[messaging.MessageType]ExecutorFactory2[messaging.MessageType, *MessageContext]
 	signatureExecutors map[protocol.SignatureType]ExecutorFactory2[protocol.SignatureType, *SignatureContext]
-	logger             logging.OptionalLogger
+	logger             logging.OptionalSlogger
 	db                 database.Beginner
 	isValidator        bool
 	isGenesis          bool
@@ -111,7 +111,7 @@ func NewExecutor(opts ExecutorOptions) (*Executor, error) {
 	m.db.SetObserver(internal.NewDatabaseObserver())
 
 	if opts.Logger != nil {
-		m.logger.L = opts.Logger.With("module", "executor")
+		m.logger.Set(opts.Logger, "module", "executor")
 	}
 
 	for _, x := range txnX {

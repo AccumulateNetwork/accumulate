@@ -7,7 +7,8 @@
 package chain
 
 import (
-	"github.com/cometbft/cometbft/libs/log"
+	"log/slog"
+
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -27,7 +28,7 @@ type StateManager struct {
 // NewStateManager creates a new state manager and loads the transaction's
 // origin. If the origin is not found, NewStateManager returns a valid state
 // manager along with a not-found error.
-func NewStateManager(net execute.DescribeShim, globals *core.GlobalValues, authDelegate AuthDelegate, batch *database.Batch, principal protocol.Account, transaction *protocol.Transaction, logger log.Logger) *StateManager {
+func NewStateManager(net execute.DescribeShim, globals *core.GlobalValues, authDelegate AuthDelegate, batch *database.Batch, principal protocol.Account, transaction *protocol.Transaction, logger *slog.Logger) *StateManager {
 	txid := *(*[32]byte)(transaction.GetHash())
 	m := new(StateManager)
 	m.AuthDelegate = authDelegate
@@ -41,7 +42,7 @@ func NewStateManager(net execute.DescribeShim, globals *core.GlobalValues, authD
 // NewStatelessManager creates a new state manager and does *not* hold a
 // reference to any state such as the transaction's principal or the current
 // network variables.
-func NewStatelessManager(net execute.DescribeShim, globals *core.GlobalValues, transaction *protocol.Transaction, logger log.Logger) *StateManager {
+func NewStatelessManager(net execute.DescribeShim, globals *core.GlobalValues, transaction *protocol.Transaction, logger *slog.Logger) *StateManager {
 	txid := *(*[32]byte)(transaction.GetHash())
 	m := new(StateManager)
 	m.OriginUrl = transaction.Header.Principal

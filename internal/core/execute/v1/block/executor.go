@@ -8,8 +8,8 @@ package block
 
 import (
 	"crypto/ed25519"
+	"log/slog"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
@@ -30,7 +30,7 @@ type Executor struct {
 
 	globals        *Globals
 	executors      map[protocol.TransactionType]chain.TransactionExecutor
-	logger         logging.OptionalLogger
+	logger         logging.OptionalSlogger
 	db             database.Beginner
 	isValidator    bool
 	isGenesis      bool
@@ -102,14 +102,14 @@ func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 
 // NewGenesisExecutor creates a transaction executor that can be used to set up
 // the genesis state.
-func NewGenesisExecutor(db *database.Database, logger log.Logger, network *config.Describe, globals *core.GlobalValues, router routing.Router) (*Executor, error) {
+func NewGenesisExecutor(db *database.Database, logger *slog.Logger, network *config.Describe, globals *core.GlobalValues, router routing.Router) (*Executor, error) {
 	exec, err := newExecutor(
 		ExecutorOptions{
 			Database: db,
 			Describe: execute.DescribeShim{NetworkType: network.NetworkType, PartitionId: network.PartitionId},
 			Logger:   logger,
 			Router:   router,
-			EventBus: events.NewBus(logger),
+			EventBus: events.NewBus(logging.AsCometLogger(logger)),
 		},
 		true,
 		chain.SystemWriteData{},
@@ -143,7 +143,7 @@ func newExecutor(opts ExecutorOptions, isGenesis bool, executors ...chain.Transa
 	m.db.SetObserver(internal.NewDatabaseObserver())
 
 	if opts.Logger != nil {
-		m.logger.L = opts.Logger.With("module", "executor")
+		m.logger.Set(opts.Logger, "module", "executor")
 	}
 
 	for _, x := range executors {

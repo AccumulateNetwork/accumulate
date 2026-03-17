@@ -396,7 +396,7 @@ func (d *Daemon) startApp(caughtUp <-chan struct{}) (types.Application, error) {
 		Router:  routing.MessageRouter{Router: d.router},
 	}}
 	execOpts := execute.Options{
-		Logger:        d.Logger,
+		Logger:        logging.AsSlogLogger(d.Logger),
 		Database:      d.db,
 		Key:           d.Key().Bytes(),
 		Router:        d.router,
