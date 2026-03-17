@@ -12,33 +12,54 @@ import (
 	"log/slog"
 	"sync"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 )
 
 // ExecutorBridge bridges the DAG-BFT consensus to the Accumulate Executor.
 // It implements the ConsensusAdapter interface.
 type ExecutorBridge struct {
-	executor execute.Executor
+	executor    execute.Executor
+	partitionID string
 
 	mu                     sync.RWMutex
 	lastBlockIndex         uint64
 	lastBlockHash          [32]byte
+	validators             []ValidatorInfo
 	validatorChangeHandler func(validators []ValidatorInfo)
 }
 
-// NewExecutorBridge creates a new ExecutorBridge.
-func NewExecutorBridge(executor execute.Executor) (*ExecutorBridge, error) {
-	if executor == nil {
+// ExecutorBridgeConfig holds configuration for creating an ExecutorBridge.
+type ExecutorBridgeConfig struct {
+	// Executor is the Accumulate executor.
+	Executor execute.Executor
+
+	// PartitionID is the partition this bridge operates on.
+	PartitionID string
+
+	// EventBus is used to subscribe to global value changes.
+	EventBus *events.Bus
+}
+
+// NewExecutorBridge creates a new ExecutorBridge with the given configuration.
+func NewExecutorBridge(config ExecutorBridgeConfig) (*ExecutorBridge, error) {
+	if config.Executor == nil {
 		return nil, fmt.Errorf("executor is nil")
+	}
+	if config.PartitionID == "" {
+		return nil, fmt.Errorf("partition ID is required")
 	}
 
 	bridge := &ExecutorBridge{
-		executor: executor,
+		executor:    config.Executor,
+		partitionID: config.PartitionID,
+		validators:  make([]ValidatorInfo, 0),
 	}
 
 	// Get initial state
-	params, hash, err := executor.LastBlock()
+	params, hash, err := config.Executor.LastBlock()
 	if err != nil {
 		return nil, fmt.Errorf("get last block: %w", err)
 	}
@@ -47,7 +68,91 @@ func NewExecutorBridge(executor execute.Executor) (*ExecutorBridge, error) {
 	}
 	bridge.lastBlockHash = hash
 
+	// Subscribe to global value changes if event bus is provided
+	if config.EventBus != nil {
+		events.SubscribeSync(config.EventBus, func(e events.WillChangeGlobals) error {
+			bridge.updateValidatorsFromGlobals(e.New)
+			return nil
+		})
+	}
+
 	return bridge, nil
+}
+
+// updateValidatorsFromGlobals extracts validators from global values and updates the stored set.
+func (b *ExecutorBridge) updateValidatorsFromGlobals(globals *network.GlobalValues) {
+	if globals == nil || globals.Network == nil {
+		return
+	}
+
+	validators := make([]ValidatorInfo, 0)
+	for _, v := range globals.Network.Validators {
+		if !v.IsActiveOn(b.partitionID) {
+			continue
+		}
+
+		if len(v.PublicKey) != 32 {
+			slog.Warn("Validator has invalid public key size",
+				"expected", 32,
+				"actual", len(v.PublicKey))
+			continue
+		}
+
+		var pubKey [32]byte
+		copy(pubKey[:], v.PublicKey)
+
+		validators = append(validators, ValidatorInfo{
+			PublicKey: pubKey,
+			Stake:     1, // Default stake
+			Active:    true,
+		})
+	}
+
+	b.mu.Lock()
+	oldValidators := b.validators
+	b.validators = validators
+	handler := b.validatorChangeHandler
+	b.mu.Unlock()
+
+	// Notify handler if validators changed
+	if handler != nil && !validatorSetsEqual(oldValidators, validators) {
+		slog.Info("Validator set changed",
+			"partition", b.partitionID,
+			"oldCount", len(oldValidators),
+			"newCount", len(validators))
+		handler(validators)
+	}
+}
+
+// validatorSetsEqual compares two validator sets for equality.
+func validatorSetsEqual(a, b []ValidatorInfo) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].PublicKey != b[i].PublicKey ||
+			a[i].Stake != b[i].Stake ||
+			a[i].Active != b[i].Active {
+			return false
+		}
+	}
+	return true
+}
+
+// SetValidators explicitly sets the validator set.
+// This can be used for initial setup or testing.
+func (b *ExecutorBridge) SetValidators(validators []ValidatorInfo) {
+	b.mu.Lock()
+	oldValidators := b.validators
+	b.validators = make([]ValidatorInfo, len(validators))
+	copy(b.validators, validators)
+	handler := b.validatorChangeHandler
+	b.mu.Unlock()
+
+	// Notify handler if validators changed
+	if handler != nil && !validatorSetsEqual(oldValidators, validators) {
+		handler(validators)
+	}
 }
 
 // ProduceBlock processes a committed certificate and produces a block.
@@ -190,13 +295,19 @@ func (b *ExecutorBridge) StateHash() [32]byte {
 	return b.lastBlockHash
 }
 
-// Validators returns the current validator set.
-// Note: This requires access to the protocol's validator set,
-// which would need to be provided separately.
+// Validators returns the current validator set for this partition.
 func (b *ExecutorBridge) Validators() []ValidatorInfo {
-	// TODO: Implement by querying the protocol's validator set
-	// This requires access to the database/network state
-	return nil
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	if len(b.validators) == 0 {
+		return nil
+	}
+
+	// Return a copy to prevent modification
+	result := make([]ValidatorInfo, len(b.validators))
+	copy(result, b.validators)
+	return result
 }
 
 // OnValidatorSetChange registers a callback for validator set changes.
