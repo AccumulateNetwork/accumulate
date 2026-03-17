@@ -388,7 +388,13 @@ func createTestCertificates(committee *types.Committee, count int) []*types.Cert
 			authorities = append(authorities, uint16(j))
 		}
 
-		certs[i] = types.NewCertificate(*header, sigs, authorities)
+		// Create certificate using header pointer methods to avoid copying the lock
+		cert := &types.Certificate{
+			Header:            *header.Clone(),
+			Signatures:        sigs,
+			SignedAuthorities: authorities,
+		}
+		certs[i] = cert
 	}
 
 	return certs

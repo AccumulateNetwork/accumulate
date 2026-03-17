@@ -44,11 +44,13 @@ type MockHost struct {
 
 // NewMockHost creates a new mock host with the given peer ID.
 func NewMockHost(id peer.ID) *MockHost {
-	return &MockHost{
+	h := &MockHost{
 		id:          id,
 		handlers:    make(map[protocol.ID]network.StreamHandler),
 		connections: make(map[peer.ID]*MockConn),
 	}
+	h.network = &MockNetworkAdapter{host: h}
+	return h
 }
 
 // ID returns the host's peer ID.
