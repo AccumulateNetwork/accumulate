@@ -8,9 +8,9 @@ package pkg
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
-	"github.com/rs/zerolog"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
@@ -34,14 +34,17 @@ func (s *Session) UseSimulator(bvnCount int) {
 	if err != nil {
 		s.Abort(err)
 	}
-	level, writer, err := logging.ParseLogLevel(config.DefaultLogLevels, w)
+	_, writer, err := logging.ParseLogLevel(config.DefaultLogLevels, w)
 	if err != nil {
 		s.Abort(err)
 	}
-	logger, err := logging.NewTendermintLogger(zerolog.New(writer), level, false)
+	handler, err := logging.NewSlogHandler(logging.SlogConfig{
+		DefaultLevel: slog.LevelInfo,
+	}, writer)
 	if err != nil {
 		s.Abort(err)
 	}
+	logger := slog.New(handler)
 
 	sim, err := simulator.New(
 		simulator.WithLogger(logger),

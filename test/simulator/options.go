@@ -9,13 +9,13 @@ package simulator
 import (
 	"fmt"
 	"io"
+	"log/slog"
 	"math/big"
 	"net"
 	"os"
 	"path/filepath"
 	"time"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -38,15 +38,15 @@ type Option interface {
 	apply(*simFactory) error
 }
 
-type OpenDatabaseFunc = func(partition *protocol.PartitionInfo, node int, logger log.Logger) keyvalue.Beginner
-type SnapshotFunc = func(partition string, network *accumulated.NetworkInit, logger log.Logger) (ioutil2.SectionReader, error)
+type OpenDatabaseFunc = func(partition *protocol.PartitionInfo, node int, logger *slog.Logger) keyvalue.Beginner
+type SnapshotFunc = func(partition string, network *accumulated.NetworkInit, logger *slog.Logger) (ioutil2.SectionReader, error)
 type RecordingFunc = func(partition string, node int) (io.WriteSeeker, error)
 
 type optionFunc func(*simFactory) error
 
 func (fn optionFunc) apply(f *simFactory) error { return fn(f) }
 
-func WithLogger(logger log.Logger) Option {
+func WithLogger(logger *slog.Logger) Option {
 	return optionFunc(func(f *simFactory) error {
 		f.logger = logger
 		return nil
@@ -201,13 +201,13 @@ func NewLocalNetwork(name string, bvnCount, nodeCount int, baseIP net.IP, basePo
 // Deprecated: This is a no-op
 func MemoryDatabase(*simFactory) error { return nil }
 
-func MemoryDbOpener(partition *protocol.PartitionInfo, node int, logger log.Logger) keyvalue.Beginner {
+func MemoryDbOpener(partition *protocol.PartitionInfo, node int, logger *slog.Logger) keyvalue.Beginner {
 	return memory.New(nil)
 }
 
 func BadgerDbOpener(dir string, onErr func(error)) OpenDatabaseFunc {
 	dbs := map[string]keyvalue.Beginner{}
-	return func(partition *protocol.PartitionInfo, node int, logger log.Logger) keyvalue.Beginner {
+	return func(partition *protocol.PartitionInfo, node int, logger *slog.Logger) keyvalue.Beginner {
 		file := fmt.Sprintf("%s-%d.db", partition.ID, node)
 		if db, ok := dbs[file]; ok {
 			return db
@@ -231,7 +231,7 @@ func BadgerDbOpener(dir string, onErr func(error)) OpenDatabaseFunc {
 }
 
 func OverlayDatabase(a, b OpenDatabaseFunc) Option {
-	return WithDatabase(func(partition *protocol.PartitionInfo, node int, logger log.Logger) keyvalue.Beginner {
+	return WithDatabase(func(partition *protocol.PartitionInfo, node int, logger *slog.Logger) keyvalue.Beginner {
 		return overlay.Open(
 			a(partition, node, logger),
 			b(partition, node, logger),
@@ -244,13 +244,13 @@ func BadgerDatabaseFromDirectory(dir string, onErr func(error)) Option {
 }
 
 func SnapshotFromDirectory(dir string) Option {
-	return WithSnapshot(func(partition string, network *accumulated.NetworkInit, logger log.Logger) (ioutil2.SectionReader, error) {
+	return WithSnapshot(func(partition string, network *accumulated.NetworkInit, logger *slog.Logger) (ioutil2.SectionReader, error) {
 		return os.Open(filepath.Join(dir, fmt.Sprintf("%s.snapshot", partition)))
 	})
 }
 
 func SnapshotMap(snapshots map[string][]byte) Option {
-	return WithSnapshot(func(partition string, _ *accumulated.NetworkInit, _ log.Logger) (ioutil2.SectionReader, error) {
+	return WithSnapshot(func(partition string, _ *accumulated.NetworkInit, _ *slog.Logger) (ioutil2.SectionReader, error) {
 		return ioutil2.NewBuffer(snapshots[partition]), nil
 	})
 }
@@ -305,7 +305,7 @@ func (g genesis) apply(opts *simFactory) error {
 	}
 
 	var genDocs map[string][]byte
-	opts.snapshot = func(partition string, net *accumulated.NetworkInit, logger log.Logger) (ioutil2.SectionReader, error) {
+	opts.snapshot = func(partition string, net *accumulated.NetworkInit, logger *slog.Logger) (ioutil2.SectionReader, error) {
 		if genDocs != nil {
 			return ioutil2.NewBuffer(genDocs[partition]), nil
 		}

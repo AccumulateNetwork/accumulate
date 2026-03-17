@@ -9,8 +9,8 @@ package simulator
 import (
 	"context"
 	"crypto/sha256"
+	"log/slog"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -27,7 +27,7 @@ type Node struct {
 	id         int
 	network    *accumulated.NodeInit
 	partition  *Partition
-	logger     log.Logger
+	logger     *slog.Logger
 	eventBus   *events.Bus
 	nodeKey    []byte
 	privValKey []byte

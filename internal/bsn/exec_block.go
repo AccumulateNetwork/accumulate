@@ -33,7 +33,7 @@ func (x *Executor) Begin(params execute.BlockParams) (execute.Block, error) {
 	b := new(Block)
 	b.executor = x
 	b.params = &params
-	b.batch = NewChangeSet(x.store, x.logger)
+	b.batch = NewChangeSet(x.store, x.logger.L)
 	return b, nil
 }
 

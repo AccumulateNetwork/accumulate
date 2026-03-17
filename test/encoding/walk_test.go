@@ -7,11 +7,11 @@
 package encoding
 
 import (
+	"log/slog"
 	"math/big"
 	"strings"
 	"testing"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/bsn"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
@@ -212,7 +212,7 @@ func TestWalkAndReplay(t *testing.T) {
 }
 
 type partitionBeginner struct {
-	logger    log.Logger
+	logger    *slog.Logger
 	store     keyvalue.Beginner
 	partition string
 }

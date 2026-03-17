@@ -9,8 +9,8 @@ package simulator
 import (
 	"context"
 	"crypto/sha256"
+	"log/slog"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/require"
@@ -124,7 +124,7 @@ type partService struct {
 }
 
 // newExecService returns a new partService for the given partition.
-func newExecService(x *ExecEntry, logger log.Logger) *partService {
+func newExecService(x *ExecEntry, logger *slog.Logger) *partService {
 	s := new(partService)
 	s.x = x
 	s.query = apiimpl.NewQuerier(apiimpl.QuerierParams{

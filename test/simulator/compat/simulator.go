@@ -7,11 +7,11 @@
 package simulator
 
 import (
+	"log/slog"
 	"os"
 	"testing"
 	"time"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
@@ -100,7 +100,7 @@ func (s *Simulator) InitFromGenesisWith(values *core.GlobalValues) {
 }
 
 func (s *Simulator) InitFromSnapshot(filename func(string) string) {
-	s.Init(simulator.WithSnapshot(func(partition string, _ *accumulated.NetworkInit, _ log.Logger) (ioutil2.SectionReader, error) {
+	s.Init(simulator.WithSnapshot(func(partition string, _ *accumulated.NetworkInit, _ *slog.Logger) (ioutil2.SectionReader, error) {
 		return os.Open(filename(partition))
 	}))
 }

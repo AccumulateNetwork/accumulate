@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"math/big"
 	"net"
 	"net/http"
@@ -21,7 +22,6 @@ import (
 	"time"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
-	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
@@ -162,10 +162,13 @@ func run(*cobra.Command, []string) {
 
 	logw, err := logging.NewConsoleWriter(flag.LogFormat)
 	check(err)
-	level, writer, err := logging.ParseLogLevel(flag.Log, logw)
+	_, writer, err := logging.ParseLogLevel(flag.Log, logw)
 	checkf(err, "--log")
-	logger, err := logging.NewTendermintLogger(zerolog.New(writer), level, false)
+	handler, err := logging.NewSlogHandler(logging.SlogConfig{
+		DefaultLevel: slog.LevelInfo,
+	}, writer)
 	check(err)
+	logger := slog.New(handler)
 
 	opts = append(opts,
 		simulator.WithNetwork(net),

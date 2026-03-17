@@ -27,7 +27,6 @@ import (
 	"github.com/cometbft/cometbft/abci/types"
 	tmcfg "github.com/cometbft/cometbft/config"
 	"github.com/cometbft/cometbft/crypto"
-	tmlog "github.com/cometbft/cometbft/libs/log"
 	service2 "github.com/cometbft/cometbft/libs/service"
 	tmnode "github.com/cometbft/cometbft/node"
 	tmp2p "github.com/cometbft/cometbft/p2p"
@@ -70,7 +69,7 @@ import (
 
 type Daemon struct {
 	Config *config.Config
-	Logger tmlog.Logger
+	Logger *slog.Logger
 
 	done             chan struct{}
 	db               *database.Database
@@ -176,10 +175,14 @@ func New(cfg *config.Config, newWriter func(*config.Config) (io.Writer, error)) 
 		}))
 	}
 
-	daemon.Logger, err = logging.NewTendermintLogger(zerolog.New(logWriter), logLevel, false)
+	// Create slog handler from the zerolog writer
+	handler, err := logging.NewSlogHandler(logging.SlogConfig{
+		DefaultLevel: logging.ZerologLevelStringToSlog(logLevel),
+	}, logWriter)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("initialize logger: %v", err)
 	}
+	daemon.Logger = slog.New(handler)
 
 	daemon.eventBus = events.NewBus(daemon.Logger.With("module", "events"))
 	return &daemon, nil
@@ -487,7 +490,7 @@ func (d *Daemon) startConsensus(app types.Application, caughtUp chan<- struct{})
 		genesis.DocProvider(&d.Config.Config),
 		tmcfg.DefaultDBProvider,
 		tmnode.DefaultMetricsProvider(d.Config.Instrumentation),
-		d.Logger,
+		(*logging.Slogger)(d.Logger),
 	)
 	if err != nil {
 		return errors.UnknownError.WithFormat("initialize consensus: %v", err)

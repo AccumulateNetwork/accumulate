@@ -111,7 +111,7 @@ func NewExecutor(opts ExecutorOptions) (*Executor, error) {
 	m.db.SetObserver(internal.NewDatabaseObserver())
 
 	if opts.Logger != nil {
-		m.logger.L = opts.Logger.With("module", "executor")
+		m.logger.Set(opts.Logger.With("module", "executor"))
 	}
 
 	for _, x := range txnX {

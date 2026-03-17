@@ -23,7 +23,6 @@ import (
 	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
 	"github.com/cometbft/cometbft/crypto/tmhash"
 	cmtjson "github.com/cometbft/cometbft/libs/json"
-	"github.com/cometbft/cometbft/libs/log"
 	tmnode "github.com/cometbft/cometbft/node"
 	tmp2p "github.com/cometbft/cometbft/p2p"
 	tmpv "github.com/cometbft/cometbft/privval"
@@ -75,7 +74,7 @@ type tendermint struct {
 	config   *tmcfg.Config
 	privVal  *tmpv.FilePV
 	nodeKey  *tmp2p.NodeKey
-	logger   log.Logger
+	logger   *slog.Logger
 	eventBus *events.Bus
 	globals  chan *network.GlobalValues
 }
@@ -112,7 +111,7 @@ func (c *ConsensusService) start(inst *Instance) error {
 	setDefaultVal(&c.MetricsNamespace, fmt.Sprintf("consensus_%s", c.App.partition().ID))
 
 	d := new(tendermint)
-	d.logger = (*logging.Slogger)(inst.logger)
+	d.logger = inst.logger
 	d.eventBus = events.NewBus(d.logger.With("module", "events"))
 
 	events.SubscribeAsync(d.eventBus, func(e events.FatalError) {
@@ -224,7 +223,7 @@ func (c *ConsensusService) start(inst *Instance) error {
 		c.genesisDocProvider(inst),
 		tmcfg.DefaultDBProvider,
 		tmnode.DefaultMetricsProvider(d.config.Instrumentation),
-		d.logger,
+		(*logging.Slogger)(d.logger),
 	)
 	if err != nil {
 		return errors.UnknownError.WithFormat("initialize consensus: %w", err)

@@ -8,9 +8,9 @@ package api
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -27,14 +27,14 @@ type MetricsService struct {
 var _ api.MetricsService = (*MetricsService)(nil)
 
 type MetricsServiceParams struct {
-	Logger  log.Logger
+	Logger  *slog.Logger
 	Node    api.ConsensusService
 	Querier api.Querier
 }
 
 func NewMetricsService(params MetricsServiceParams) *MetricsService {
 	s := new(MetricsService)
-	s.logger.L = params.Logger
+	s.logger.Set(params.Logger)
 	s.node = params.Node
 	s.querier.Querier = params.Querier
 	return s

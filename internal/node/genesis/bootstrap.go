@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"math"
 	"math/big"
 	"strings"
@@ -18,7 +19,6 @@ import (
 
 	"github.com/cometbft/cometbft/abci/types"
 	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
-	"github.com/cometbft/cometbft/libs/log"
 	tmtypes "github.com/cometbft/cometbft/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
@@ -40,7 +40,7 @@ import (
 )
 
 type InitOpts struct {
-	Logger log.Logger
+	Logger *slog.Logger
 
 	NetworkID      string
 	PartitionId    string
@@ -87,10 +87,14 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) error {
 	}
 
 	store := memory.New(nil)
+	var loggerForDb *slog.Logger
+	if opts.Logger != nil {
+		loggerForDb = opts.Logger.With("module", "database")
+	}
 	b := &bootstrap{
 		InitOpts:    opts,
 		kvdb:        store,
-		db:          coredb.New(store, opts.Logger.With("module", "database")),
+		db:          coredb.New(store, loggerForDb),
 		dataRecords: make([]DataRecord, 0),
 		records:     make([]protocol.Account, 0),
 		acmeIssued:  new(big.Int),

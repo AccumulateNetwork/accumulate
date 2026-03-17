@@ -8,12 +8,12 @@ package http
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"strings"
 	"sync/atomic"
 	"time"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"github.com/julienschmidt/httprouter"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
@@ -42,7 +42,7 @@ type Handler struct {
 
 // Options are the options for a [Handler].
 type Options struct {
-	Logger    log.Logger
+	Logger    *slog.Logger
 	Node      *p2p.Node
 	Router    routing.Router
 	NetworkId string

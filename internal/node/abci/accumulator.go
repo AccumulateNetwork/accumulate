@@ -12,6 +12,7 @@ import (
 	_ "crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime/debug"
@@ -21,7 +22,6 @@ import (
 
 	abci "github.com/cometbft/cometbft/abci/types"
 	"github.com/cometbft/cometbft/crypto"
-	"github.com/cometbft/cometbft/libs/log"
 	"github.com/cometbft/cometbft/node"
 	protocrypto "github.com/cometbft/cometbft/proto/tendermint/crypto"
 	"github.com/cometbft/cometbft/version"
@@ -49,7 +49,7 @@ import (
 type Accumulator struct {
 	abci.BaseApplication
 	AccumulatorOptions
-	logger log.Logger
+	logger *slog.Logger
 
 	snapshots      snapshotManager
 	block          execute.Block
@@ -75,7 +75,7 @@ type AccumulatorOptions struct {
 	Tracer               trace.Tracer
 	Executor             execute.Executor
 	EventBus             *events.Bus
-	Logger               log.Logger
+	Logger               *slog.Logger
 	Snapshots            *config.Snapshots
 	Database             coredb.Beginner
 	Address              crypto.Address // This is the address of this node, and is used to determine if the node is the leader

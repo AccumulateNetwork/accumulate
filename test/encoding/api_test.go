@@ -11,12 +11,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 	"testing"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
-	"github.com/cometbft/cometbft/libs/log"
 	"github.com/sergi/go-diff/diffmatchpatch"
 	"github.com/stretchr/testify/require"
 	"github.com/ulikunitz/xz"
@@ -55,7 +55,7 @@ func TestAPIv2Consistency(t *testing.T) {
 	// Start the simulator (do not specify a snapshot option)
 	sim, err := simulator.New(
 		simulator.WithLogger(acctesting.NewTestLogger(t)),
-		simulator.WithDatabase(func(partition *protocol.PartitionInfo, node int, logger log.Logger) keyvalue.Beginner {
+		simulator.WithDatabase(func(partition *protocol.PartitionInfo, node int, logger *slog.Logger) keyvalue.Beginner {
 			mem := memory.New(nil)
 			require.NoError(t, json.Unmarshal(testData.State[partition.ID], mem)) //nolint:staticcheck // FIXME
 			return mem

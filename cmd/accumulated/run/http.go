@@ -19,7 +19,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/exp/apiutil"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	nodehttp "gitlab.com/accumulatenetwork/accumulate/internal/node/http"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -70,7 +69,7 @@ func (h *HttpService) start(inst *Instance) error {
 	}
 
 	apiOpts := nodehttp.Options{
-		Logger:    (*logging.Slogger)(inst.logger).With("module", "http"),
+		Logger:    inst.logger.With("module", "http"),
 		Node:      inst.p2p,
 		Router:    router,
 		MaxWait:   DefaultHTTPMaxWait,

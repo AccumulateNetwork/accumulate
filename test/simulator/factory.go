@@ -13,7 +13,6 @@ import (
 	"math/big"
 	"sync"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
@@ -58,7 +57,7 @@ type simFactory struct {
 	interceptDispatchedMessages DispatchInterceptor
 
 	// State
-	logger           log.Logger
+	logger           *slog.Logger
 	taskQueue        *taskQueue
 	router           *Router
 	hub              consensus.Hub
@@ -77,7 +76,7 @@ type networkFactory struct {
 	nodes []*accumulated.NodeInit
 
 	// State
-	logger log.Logger
+	logger *slog.Logger
 }
 
 type nodeFactory struct {
@@ -88,7 +87,7 @@ type nodeFactory struct {
 	network *accumulated.NodeInit
 
 	// State
-	logger     log.Logger
+	logger     *slog.Logger
 	_nodeKey   []byte
 	peerID     peer.ID
 	store      keyvalue.Beginner
@@ -242,16 +241,16 @@ func (f *nodeFactory) initCollector(s *Simulator) {
 	})
 }
 
-func (f *simFactory) getLogger() log.Logger {
+func (f *simFactory) getLogger() *slog.Logger {
 	if f.logger != nil {
 		return f.logger
 	}
 
-	f.logger = (*logging.Slogger)(slog.Default()).With("module", "sim")
+	f.logger = slog.Default().With("module", "sim")
 	return f.logger
 }
 
-func (f *networkFactory) getLogger() log.Logger {
+func (f *networkFactory) getLogger() *slog.Logger {
 	if f.logger != nil {
 		return f.logger
 	}
@@ -260,7 +259,7 @@ func (f *networkFactory) getLogger() log.Logger {
 	return f.logger
 }
 
-func (f *nodeFactory) getLogger() log.Logger {
+func (f *nodeFactory) getLogger() *slog.Logger {
 	if f.logger != nil {
 		return f.logger
 	}

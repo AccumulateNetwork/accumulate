@@ -44,6 +44,22 @@ type SlogConfig struct {
 	ModuleLevels map[string]slog.Level
 }
 
+// ZerologLevelStringToSlog converts a zerolog level string to a slog.Level.
+func ZerologLevelStringToSlog(level string) slog.Level {
+	switch level {
+	case "trace", "debug":
+		return slog.LevelDebug
+	case "info":
+		return slog.LevelInfo
+	case "warn", "warning":
+		return slog.LevelWarn
+	case "error", "fatal", "panic":
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
+	}
+}
+
 func NewSlogHandler(c SlogConfig, out io.Writer) (slog.Handler, error) {
 	opts := &slog.HandlerOptions{
 		Level: c.DefaultLevel,

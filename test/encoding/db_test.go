@@ -11,13 +11,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"math/big"
 	"os"
 	"sort"
 	"strings"
 	"testing"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -50,7 +50,7 @@ func TestGenerateDbTestdata(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.WithDatabase(func(partition *protocol.PartitionInfo, _ int, logger log.Logger) keyvalue.Beginner {
+		simulator.WithDatabase(func(partition *protocol.PartitionInfo, _ int, logger *slog.Logger) keyvalue.Beginner {
 			if strings.EqualFold(partition.ID, protocol.Directory) {
 				return memory.New(nil)
 			}

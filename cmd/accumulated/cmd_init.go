@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
 	"net"
 	"net/url"
 	"os"
@@ -24,10 +25,8 @@ import (
 	"strings"
 
 	cmtjson "github.com/cometbft/cometbft/libs/json"
-	"github.com/cometbft/cometbft/libs/log"
 	rpchttp "github.com/cometbft/cometbft/rpc/client/http"
 	"github.com/cometbft/cometbft/types"
-	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
@@ -640,7 +639,7 @@ func netDir(networkType protocol.PartitionType) string {
 	return ""
 }
 
-func newLogger() log.Logger {
+func newLogger() *slog.Logger {
 	levels := cfg.DefaultLogLevels
 	if flagInit.LogLevels != "" {
 		levels = flagInit.LogLevels
@@ -648,11 +647,14 @@ func newLogger() log.Logger {
 
 	writer, err := logging.NewConsoleWriter("plain")
 	check(err)
-	level, writer, err := logging.ParseLogLevel(levels, writer)
+	_, writer, err = logging.ParseLogLevel(levels, writer)
 	check(err)
-	logger, err := logging.NewTendermintLogger(zerolog.New(writer), level, false)
+
+	handler, err := logging.NewSlogHandler(logging.SlogConfig{
+		DefaultLevel: slog.LevelInfo,
+	}, writer)
 	check(err)
-	return logger
+	return slog.New(handler)
 }
 
 func resolveIp(addr string) (string, error) {

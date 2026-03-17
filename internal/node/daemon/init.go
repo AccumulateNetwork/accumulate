@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
@@ -20,7 +21,6 @@ import (
 	"github.com/cometbft/cometbft/crypto/ed25519"
 	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
 	tmjson "github.com/cometbft/cometbft/libs/json"
-	"github.com/cometbft/cometbft/libs/log"
 	tmos "github.com/cometbft/cometbft/libs/os"
 	"github.com/cometbft/cometbft/p2p"
 	"github.com/cometbft/cometbft/privval"
@@ -196,7 +196,7 @@ func ConfigureNodePorts(node *NodeInit, cfg *config.Config, part protocol.Partit
 	cfg.Accumulate.API.ListenAddress = node.Listen().Scheme("http").PartitionType(part).AccumulateAPI().String()
 }
 
-func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time time.Time, logger log.Logger, factomAddresses func() (io.Reader, error), snapshots []func(*core.GlobalValues) (ioutil2.SectionReader, error)) (map[string][]byte, error) {
+func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time time.Time, logger *slog.Logger, factomAddresses func() (io.Reader, error), snapshots []func(*core.GlobalValues) (ioutil2.SectionReader, error)) (map[string][]byte, error) {
 	if globals == nil {
 		globals = new(core.GlobalValues)
 	}
@@ -259,12 +259,16 @@ func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time tim
 			netType = protocol.PartitionTypeDirectory
 		}
 		snapBuf := new(ioutil2.Buffer)
+		var loggerForInit *slog.Logger
+		if logger != nil {
+			loggerForInit = logger.With("partition", id)
+		}
 		err = genesis.Init(snapBuf, genesis.InitOpts{
 			NetworkID:       network.Id,
 			PartitionId:     id,
 			NetworkType:     netType,
 			GenesisTime:     time,
-			Logger:          logger.With("partition", id),
+			Logger:          loggerForInit,
 			GenesisGlobals:  globals,
 			OperatorKeys:    operators,
 			FactomAddresses: factomAddresses,

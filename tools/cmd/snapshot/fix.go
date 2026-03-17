@@ -9,11 +9,11 @@ package main
 import (
 	"errors"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
@@ -61,10 +61,13 @@ func restoreSnapshot(filename, badgerPath, partitionID string) (uint64, []byte) 
 	// Logger
 	writer, err := logging.NewConsoleWriter("plain")
 	check(err)
-	level, writer, err := logging.ParseLogLevel(config.DefaultLogLevels, writer)
+	_, writer, err = logging.ParseLogLevel(config.DefaultLogLevels, writer)
 	check(err)
-	logger, err := logging.NewTendermintLogger(zerolog.New(writer), level, false)
+	handler, err := logging.NewSlogHandler(logging.SlogConfig{
+		DefaultLevel: slog.LevelInfo,
+	}, writer)
 	check(err)
+	logger := slog.New(handler)
 
 	// Open snapshot
 	f, err := os.Open(filename)

@@ -12,7 +12,6 @@ import (
 	"runtime/debug"
 	"time"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -28,7 +27,7 @@ type RouterOptions struct {
 	Node    *p2p.Node
 	Network string
 	Events  *events.Bus
-	Logger  log.Logger
+	Logger  *slog.Logger
 	Dialer  message.Dialer
 }
 

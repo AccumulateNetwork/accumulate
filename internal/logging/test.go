@@ -9,6 +9,7 @@ package logging
 import (
 	"encoding/json"
 	"io"
+	"log/slog"
 	"reflect"
 	"strings"
 
@@ -74,6 +75,32 @@ func ConsoleLoggerForTest(t TB, levels string) log.Logger {
 	logger, err := NewTendermintLogger(zerolog.New(writer), level, false)
 	require.NoError(t, err)
 	return logger
+}
+
+// ConsoleSloggerForTest creates a *slog.Logger for testing with console output
+func ConsoleSloggerForTest(t TB, levels string) *slog.Logger {
+	w, err := NewConsoleWriter("plain")
+	require.NoError(t, err)
+	_, writer, err := ParseLogLevel(levels, w)
+	require.NoError(t, err)
+	handler, err := NewSlogHandler(SlogConfig{
+		DefaultLevel: ZerologLevelStringToSlog(levels),
+	}, writer)
+	require.NoError(t, err)
+	return slog.New(handler)
+}
+
+// NewTestSlogger creates a *slog.Logger for testing
+func NewTestSlogger(t TB, format, levels string) *slog.Logger {
+	writer, _ := TestLogWriter(t)(format)
+	_, writer, err := ParseLogLevel(levels, writer)
+	require.NoError(t, err)
+
+	handler, err := NewSlogHandler(SlogConfig{
+		DefaultLevel: slog.LevelDebug,
+	}, writer)
+	require.NoError(t, err)
+	return slog.New(handler).With("test", t.Name())
 }
 
 func ExcludeMessages(messages ...string) zerolog.HookFunc {

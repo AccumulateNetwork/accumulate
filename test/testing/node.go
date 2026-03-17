@@ -17,8 +17,6 @@ import (
 	"time"
 
 	"github.com/cometbft/cometbft/crypto/ed25519"
-	"github.com/cometbft/cometbft/libs/log"
-	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
@@ -74,37 +72,22 @@ func ConfigureSlog(c logging.SlogConfig) {
 	slog.SetDefault(slog.New(h))
 }
 
-func NewTestLogger(t testing.TB) log.Logger {
+// NewTestLogger returns a cometbft log.Logger for testing.
+// For *slog.Logger, use NewTestSlogger instead.
+func NewTestLogger(t testing.TB) *slog.Logger {
+	return NewTestSlogger(t)
+}
+
+// NewTestSlogger returns a *slog.Logger for testing
+func NewTestSlogger(t testing.TB) *slog.Logger {
 	if !LogConsole {
-		return logging.NewTestLogger(t, "plain", DefaultLogLevels, false)
+		return logging.NewTestSlogger(t, "plain", DefaultLogLevels)
 	}
 
-	var w io.Writer = &zerolog.ConsoleWriter{
-		Out:        os.Stderr,
-		TimeFormat: time.RFC3339,
-		// PartsExclude: []string{"time"},
-		FormatLevel: func(i interface{}) string {
-			if ll, ok := i.(string); ok {
-				return strings.ToUpper(ll)
-			}
-			return "????"
-		},
-	}
-
-	level, w, err := logging.ParseLogLevel(DefaultLogLevels, w)
+	out := logging.ConsoleSlogWriter(os.Stderr, true)
+	handler, err := logging.NewSlogHandler(DefaultSlogConfig(), out)
 	require.NoError(t, err)
-
-	// w = logging.FilterWriter{
-	// 	Out: w,
-	// 	Predicate: func(level zerolog.Level, event map[string]interface{}) bool {
-	// 		n, ok := event["node"].(float64)
-	// 		return ok && n == 0
-	// 	},
-	// }
-
-	logger, err := logging.NewTendermintLogger(zerolog.New(w), level, false)
-	require.NoError(t, err)
-	return logger
+	return slog.New(handler).With("test", t.Name())
 }
 
 var DefaultLogLevels = config.LogLevel{}.
@@ -158,19 +141,22 @@ func CreateTestNet(t testing.TB, numBvns, numValidators, numFollowers int, withF
 		},
 	})
 
-	var initLogger log.Logger
+	var initLogger *slog.Logger
 	var logWriter func(format string) (io.Writer, error)
 	if LogConsole {
 		logWriter = logging.NewConsoleWriter
 		w, err := logging.NewConsoleWriter("plain")
 		require.NoError(t, err)
-		level, writer, err := logging.ParseLogLevel(DefaultLogLevels, w)
+		_, writer, err := logging.ParseLogLevel(DefaultLogLevels, w)
 		require.NoError(t, err)
-		initLogger, err = logging.NewTendermintLogger(zerolog.New(writer), level, false)
+		handler, err := logging.NewSlogHandler(logging.SlogConfig{
+			DefaultLevel: slog.LevelDebug,
+		}, writer)
 		require.NoError(t, err)
+		initLogger = slog.New(handler)
 	} else {
 		logWriter = logging.TestLogWriter(t)
-		initLogger = logging.NewTestLogger(t, "plain", DefaultLogLevels, false)
+		initLogger = logging.NewTestSlogger(t, "plain", DefaultLogLevels)
 	}
 
 	// Disable the sliding fee schedule

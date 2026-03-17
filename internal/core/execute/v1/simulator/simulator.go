@@ -13,11 +13,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"sync"
 	"time"
 
-	"github.com/cometbft/cometbft/libs/log"
-	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
@@ -48,13 +47,13 @@ var GenesisTime = time.Date(2022, 7, 1, 0, 0, 0, 0, time.UTC)
 type SimulatorOptions struct {
 	BvnCount        int
 	LogLevels       string
-	OpenDB          func(partition string, nodeIndex int, logger log.Logger) *database.Database
+	OpenDB          func(partition string, nodeIndex int, logger *slog.Logger) *database.Database
 	FactomAddresses func() (io.Reader, error)
 }
 
 type Simulator struct {
 	tb
-	Logger     log.Logger
+	Logger     *slog.Logger
 	Partitions []config.Partition
 	Executors  map[string]*ExecEntry
 
@@ -64,18 +63,20 @@ type Simulator struct {
 	routingOverrides map[[32]byte]string
 }
 
-func (s *Simulator) newLogger(opts SimulatorOptions) log.Logger {
+func (s *Simulator) newLogger(opts SimulatorOptions) *slog.Logger {
 	if !acctesting.LogConsole {
-		return logging.NewTestLogger(s, "plain", opts.LogLevels, false)
+		return logging.NewTestSlogger(s, "plain", opts.LogLevels)
 	}
 
 	w, err := logging.NewConsoleWriter("plain")
 	require.NoError(s, err)
-	level, writer, err := logging.ParseLogLevel(opts.LogLevels, w)
+	_, writer, err := logging.ParseLogLevel(opts.LogLevels, w)
 	require.NoError(s, err)
-	logger, err := logging.NewTendermintLogger(zerolog.New(writer), level, false)
+	handler, err := logging.NewSlogHandler(logging.SlogConfig{
+		DefaultLevel: slog.LevelDebug,
+	}, writer)
 	require.NoError(s, err)
-	return logger
+	return slog.New(handler)
 }
 
 func New(t TB, bvnCount int) *Simulator {
@@ -104,7 +105,7 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 		opts.LogLevels = acctesting.DefaultLogLevels
 	}
 	if opts.OpenDB == nil {
-		opts.OpenDB = func(_ string, _ int, logger log.Logger) *database.Database {
+		opts.OpenDB = func(_ string, _ int, logger *slog.Logger) *database.Database {
 			return database.OpenInMemory(logger)
 		}
 	}
@@ -573,7 +574,7 @@ type ExecEntry struct {
 }
 
 // init initializes the partition.
-func (x *ExecEntry) init(sim *Simulator, logger log.Logger, partition *config.Partition, init *accumulated.NodeInit, network config.Describe, db *database.Database, eventBus *events.Bus) {
+func (x *ExecEntry) init(sim *Simulator, logger *slog.Logger, partition *config.Partition, init *accumulated.NodeInit, network config.Describe, db *database.Database, eventBus *events.Bus) {
 	x.blockTime = GenesisTime
 	x.nodeKey = init.DnNodeKey
 	x.Validators = [][]byte{init.PrivValKey[32:]}

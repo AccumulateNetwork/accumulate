@@ -27,6 +27,18 @@ func NewConsoleLogger(levels string) log.Logger {
 	return logger
 }
 
+func NewConsoleSlogger(levels string) *slog.Logger {
+	lw, err := logging.NewConsoleWriter("plain")
+	Check(err)
+	_, lw, err = logging.ParseLogLevel(levels, lw)
+	Check(err)
+	handler, err := logging.NewSlogHandler(logging.SlogConfig{
+		DefaultLevel: logging.ZerologLevelStringToSlog(levels),
+	}, lw)
+	Check(err)
+	return slog.New(handler)
+}
+
 type LogLevelFlag []*run.LoggingRule
 
 func (ll LogLevelFlag) Type() string { return "log-levels" }

@@ -15,7 +15,7 @@ import (
 func (x *Executor) Validate(envelope *messaging.Envelope, recheck bool) ([]*protocol.TransactionStatus, error) {
 	b := new(Block)
 	b.executor = x
-	b.batch = NewChangeSet(x.store, x.logger)
+	b.batch = NewChangeSet(x.store, x.logger.L)
 	defer b.batch.Discard()
 
 	d := new(bundle)

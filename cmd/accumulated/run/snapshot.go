@@ -24,7 +24,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
 	sv1 "gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
@@ -83,7 +82,7 @@ func (s *SnapshotService) start(inst *Instance) error {
 	c.directory = inst.path(s.Directory)
 	c.logger = inst.logger
 	c.schedule = s.Schedule
-	c.db = coredb.New(store, (*logging.Slogger)(inst.logger))
+	c.db = coredb.New(store, inst.logger)
 	c.index = *s.EnableIndexing
 	c.events = bus
 	c.consensus = consensus

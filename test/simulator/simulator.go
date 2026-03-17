@@ -8,9 +8,9 @@ package simulator
 
 import (
 	"io"
+	"log/slog"
 	"math/big"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
@@ -25,7 +25,7 @@ import (
 
 type Simulator struct {
 	deterministic bool
-	logger        log.Logger
+	logger        *slog.Logger
 	router        *Router
 	services      *services.Network
 	tasks         *taskQueue
@@ -39,7 +39,7 @@ func New(opts ...Option) (*Simulator, error) {
 	o := &simFactory{
 		network:  NewSimpleNetwork("Sim", 3, 3),
 		storeOpt: MemoryDbOpener,
-		snapshot: func(string, *accumulated.NetworkInit, log.Logger) (ioutil2.SectionReader, error) {
+		snapshot: func(string, *accumulated.NetworkInit, *slog.Logger) (ioutil2.SectionReader, error) {
 			return new(ioutil2.Buffer), nil
 		},
 		abci: noABCI,

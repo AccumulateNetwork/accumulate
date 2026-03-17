@@ -920,7 +920,7 @@ func (s *ValidationTestSuite) TestFaucets() {
 		Txn(st.TxID).Succeeds())
 
 	// Set up a new faucet
-	logger := logging.ConsoleLoggerForTest(s.T(), "info")
+	logger := logging.ConsoleSloggerForTest(s.T(), "info")
 	peg := pegnet.JoinPath("peg")
 	faucetSvc, err := v3impl.NewFaucet(context.Background(), v3impl.FaucetParams{
 		Logger:    logger,

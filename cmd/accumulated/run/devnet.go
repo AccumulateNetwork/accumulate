@@ -24,7 +24,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/exp/faucet"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/address"
@@ -261,7 +260,7 @@ func (d *DevnetConfiguration) buildGenesis(inst *Instance, cfg *Config, nodes []
 			PartitionId:     part.ID,
 			NetworkType:     part.Type,
 			GenesisTime:     time.Now(),
-			Logger:          (*logging.Slogger)(inst.logger).With("partition", part.ID),
+			Logger:          inst.logger.With("partition", part.ID),
 			GenesisGlobals:  v,
 			OperatorKeys:    [][]byte{mainPubKey},
 			ConsensusParams: tmtypes.DefaultConsensusParams(),

@@ -10,10 +10,9 @@ import (
 	"encoding/csv"
 	"io"
 	"io/fs"
+	"log/slog"
 	"os"
 
-	"github.com/cometbft/cometbft/libs/log"
-	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
@@ -56,7 +55,7 @@ func init() {
 
 func addPrimary(_ *cobra.Command, args []string) {
 	operators := protocol.DnUrl().JoinPath(protocol.Operators)
-	addToSnapshot(args[0], args[1:], func(file string, row int, b *database.Batch, u *url.URL, _ []string, logger log.Logger) {
+	addToSnapshot(args[0], args[1:], func(file string, row int, b *database.Batch, u *url.URL, _ []string, logger *slog.Logger) {
 		if !isValidIdentity(file, row, b, u, logger) {
 			return
 		}
@@ -85,7 +84,7 @@ func addPrimary(_ *cobra.Command, args []string) {
 }
 
 func addReserved(_ *cobra.Command, args []string) {
-	addToSnapshot(args[0], args[1:], func(file string, row int, b *database.Batch, u *url.URL, record []string, logger log.Logger) {
+	addToSnapshot(args[0], args[1:], func(file string, row int, b *database.Batch, u *url.URL, record []string, logger *slog.Logger) {
 		if !isValidIdentity(file, row, b, u, logger) {
 			return
 		}
@@ -114,7 +113,7 @@ func addReserved(_ *cobra.Command, args []string) {
 	})
 }
 
-func addToSnapshot(filename string, files []string, process func(string, int, *database.Batch, *url.URL, []string, log.Logger)) {
+func addToSnapshot(filename string, files []string, process func(string, int, *database.Batch, *url.URL, []string, *slog.Logger)) {
 	if flags.UrlCol <= 0 {
 		flags.UrlCol = 0
 	} else {
@@ -129,14 +128,19 @@ func addToSnapshot(filename string, files []string, process func(string, int, *d
 
 	logWriter, err := logging.NewConsoleWriter("plain")
 	check(err)
-	logger, err := logging.NewTendermintLogger(zerolog.New(logWriter), flags.LogLevel, false)
+	_, logWriter, err = logging.ParseLogLevel(flags.LogLevel, logWriter)
 	check(err)
+	handler, err := logging.NewSlogHandler(logging.SlogConfig{
+		DefaultLevel: slog.LevelInfo,
+	}, logWriter)
+	check(err)
+	logger := slog.New(handler)
 
 	dbdir, err := os.MkdirTemp("", "badger-*.db")
 	check(err)
 	defer func() { _ = os.RemoveAll(dbdir) }()
 
-	db, err := database.OpenBadger(dbdir, logging.NullLogger{})
+	db, err := database.OpenBadger(dbdir, nil) // nil logger is fine for temp db
 	checkf(err, "output database")
 	defer db.Close()
 
@@ -202,7 +206,7 @@ func addToSnapshot(filename string, files []string, process func(string, int, *d
 	}))
 }
 
-func isValidIdentity(file string, row int, b *database.Batch, u *url.URL, logger log.Logger) bool {
+func isValidIdentity(file string, row int, b *database.Batch, u *url.URL, logger *slog.Logger) bool {
 	err := protocol.IsValidAdiUrl(u, false)
 	if err != nil {
 		logger.Info("Invalid ADI URL", "file", file, "row", row, "url", u, "error", err)
