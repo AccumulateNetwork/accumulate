@@ -9,8 +9,8 @@ package snapshot
 import (
 	"io"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	v2 "gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
@@ -20,7 +20,7 @@ import (
 
 // FullCollect collects a snapshot including additional records required for a
 // fully-functioning node.
-func FullCollect(batch *database.Batch, file io.WriteSeeker, network config.NetworkUrl, logger log.Logger, preserve bool) error {
+func FullCollect(batch *database.Batch, file io.WriteSeeker, network config.NetworkUrl, logger logging.Logger, preserve bool) error {
 	var ledger *protocol.SystemLedger
 	err := batch.Account(network.Ledger()).Main().GetAs(&ledger)
 	if err != nil {
@@ -67,7 +67,7 @@ func CollectAnchors(w *Writer, batch *database.Batch, network config.NetworkUrl)
 }
 
 // FullRestore restores the snapshot and rebuilds indices.
-func FullRestore(db database.Beginner, file ioutil2.SectionReader, logger log.Logger, network config.NetworkUrl) error {
+func FullRestore(db database.Beginner, file ioutil2.SectionReader, logger logging.Logger, network config.NetworkUrl) error {
 	v, err := v2.GetVersion(file)
 	if err != nil {
 		return errors.UnknownError.WithFormat("check snapshot version: %w", err)

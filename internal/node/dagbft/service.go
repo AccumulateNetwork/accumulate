@@ -17,7 +17,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
@@ -43,7 +42,7 @@ type ServiceConfig struct {
 	EventBus *events.Bus
 
 	// Logger is the logger to use.
-	Logger log.Logger
+	Logger logging.Logger
 
 	// Genesis is the path to the genesis file/snapshot.
 	Genesis string

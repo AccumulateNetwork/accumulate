@@ -6,11 +6,14 @@
 
 package logging
 
-import "github.com/cometbft/cometbft/libs/log"
-
+// NullLogger implements our Logger interface and discards all log messages.
+// To get a cometbft/libs/log.Logger that discards messages, use
+// CometBFTLogger(NullLogger{}) or use the cometNop type.
 type NullLogger struct{}
 
 func (NullLogger) Debug(msg string, keyVals ...interface{}) {}
 func (NullLogger) Info(msg string, keyVals ...interface{})  {}
 func (NullLogger) Error(msg string, keyVals ...interface{}) {}
-func (l NullLogger) With(keyVals ...interface{}) log.Logger { return l }
+
+// With returns the same NullLogger.
+func (l NullLogger) With(keyVals ...interface{}) Logger { return l }

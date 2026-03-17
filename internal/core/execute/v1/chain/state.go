@@ -9,7 +9,7 @@ package chain
 import (
 	"fmt"
 
-	"github.com/cometbft/cometbft/libs/log"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -26,7 +26,7 @@ type StateManager struct {
 	OriginUrl *url.URL
 }
 
-func LoadStateManager(net execute.DescribeShim, globals *core.GlobalValues, batch *database.Batch, principal protocol.Account, transaction *protocol.Transaction, status *protocol.TransactionStatus, logger log.Logger) (*StateManager, error) {
+func LoadStateManager(net execute.DescribeShim, globals *core.GlobalValues, batch *database.Batch, principal protocol.Account, transaction *protocol.Transaction, status *protocol.TransactionStatus, logger logging.Logger) (*StateManager, error) {
 	if !transaction.Body.Type().IsUser() {
 		// Don't check the signer
 		return NewStateManager(net, globals, batch, principal, transaction, logger), nil
@@ -60,7 +60,7 @@ func LoadStateManager(net execute.DescribeShim, globals *core.GlobalValues, batc
 // NewStateManager creates a new state manager and loads the transaction's
 // origin. If the origin is not found, NewStateManager returns a valid state
 // manager along with a not-found error.
-func NewStateManager(net execute.DescribeShim, globals *core.GlobalValues, batch *database.Batch, principal protocol.Account, transaction *protocol.Transaction, logger log.Logger) *StateManager {
+func NewStateManager(net execute.DescribeShim, globals *core.GlobalValues, batch *database.Batch, principal protocol.Account, transaction *protocol.Transaction, logger logging.Logger) *StateManager {
 	txid := *(*[32]byte)(transaction.GetHash())
 	m := new(StateManager)
 	m.OriginUrl = transaction.Header.Principal

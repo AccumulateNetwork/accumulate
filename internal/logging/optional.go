@@ -6,19 +6,19 @@
 
 package logging
 
-import "github.com/cometbft/cometbft/libs/log"
-
+// OptionalLogger wraps a Logger and provides nil-safe logging methods.
 type OptionalLogger struct {
-	L log.Logger
+	L Logger
 }
 
-func (l *OptionalLogger) Set(m log.Logger, keyVals ...interface{}) {
+// Set sets the logger, unwrapping any nested OptionalLoggers.
+func (l *OptionalLogger) Set(m Logger, keyVals ...interface{}) {
 	for {
-		l, ok := m.(OptionalLogger)
+		opt, ok := m.(OptionalLogger)
 		if !ok {
 			break
 		}
-		m = l.L
+		m = opt.L
 	}
 	if m != nil {
 		l.L = m.With(keyVals...)
@@ -46,7 +46,7 @@ func (l OptionalLogger) Error(msg string, keyVals ...interface{}) {
 	l.L.Error(msg, keyVals...)
 }
 
-func (l OptionalLogger) With(keyVals ...interface{}) log.Logger {
+func (l OptionalLogger) With(keyVals ...interface{}) Logger {
 	if l.L == nil {
 		return l
 	}

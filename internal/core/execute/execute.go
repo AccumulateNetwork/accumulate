@@ -13,7 +13,6 @@ import (
 	"time"
 
 	abcitypes "github.com/cometbft/cometbft/abci/types"
-	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
@@ -61,7 +60,7 @@ func (v *ValidatorUpdate) Equal(u *ValidatorUpdate) bool {
 
 // Options are the options for constructing an [Executor]
 type Options struct {
-	Logger                 log.Logger         //
+	Logger                 logging.Logger     //
 	Database               database.Beginner  //
 	Key                    ed25519.PrivateKey // Private validator key
 	Router                 routing.Router     //
