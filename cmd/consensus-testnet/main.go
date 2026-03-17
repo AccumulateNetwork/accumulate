@@ -34,12 +34,16 @@ import (
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
 func main() {
 	// Parse flags
 	var (
 		seed          = flag.String("seed", "", "Hex-encoded 32-byte seed for key generation")
+		signingKey    = flag.String("signing-key", "", "Hex-encoded ed25519 private key (64 bytes) or path to key file")
+		validatorADI  = flag.String("validator", "", "Validator ADI URL (e.g., acc://validator-1.acme)")
+		keyPageFlag   = flag.String("key-page", "", "Key page URL for ADI-based signing (e.g., acc://validator-1.acme/book/1)")
 		listenAddr    = flag.String("listen", "/ip4/0.0.0.0/tcp/9000", "Multiaddr to listen on")
 		peersFlag     = flag.String("peers", "", "Comma-separated list of peer multiaddrs")
 		partition     = flag.String("partition", "testnet", "Partition name")
@@ -78,9 +82,19 @@ func main() {
 	}
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: level})))
 
-	// Generate or load key
+	// Generate or load key and create signer
 	var privKey ed25519.PrivateKey
-	if *seed != "" {
+	var signer types.Signer
+
+	// Check for signing key first (ADI mode)
+	if *signingKey != "" {
+		keyBytes, err := loadSigningKey(*signingKey)
+		if err != nil {
+			slog.Error("Failed to load signing key", "error", err)
+			os.Exit(1)
+		}
+		privKey = keyBytes
+	} else if *seed != "" {
 		seedBytes, err := hex.DecodeString(*seed)
 		if err != nil || len(seedBytes) != 32 {
 			slog.Error("Invalid seed: must be 64 hex characters (32 bytes)")
@@ -92,6 +106,51 @@ func main() {
 		slog.Warn("No seed provided, generated random key",
 			"pubkey", hex.EncodeToString(privKey.Public().(ed25519.PublicKey)))
 	}
+
+	// Create signer based on ADI or raw key mode
+	if *keyPageFlag != "" || *validatorADI != "" {
+		// ADI-based signing mode
+		var keyPageURL *url.URL
+		var err error
+
+		if *keyPageFlag != "" {
+			keyPageURL, err = url.Parse(*keyPageFlag)
+			if err != nil {
+				slog.Error("Invalid key page URL", "error", err)
+				os.Exit(1)
+			}
+		} else {
+			// Construct default key page from validator ADI
+			keyPageURL, err = url.Parse(*validatorADI + "/book/1")
+			if err != nil {
+				slog.Error("Invalid validator ADI URL", "error", err)
+				os.Exit(1)
+			}
+		}
+
+		signer, err = types.NewADISigner(keyPageURL, privKey)
+		if err != nil {
+			slog.Error("Failed to create ADI signer", "error", err)
+			os.Exit(1)
+		}
+
+		slog.Info("Using ADI-based validator identity",
+			"validator", signer.ValidatorID(),
+			"key_page", keyPageURL.String(),
+			"pubkey", hex.EncodeToString(signer.PublicKey()[:8])+"...")
+	} else {
+		// Raw key signing mode (legacy)
+		var err error
+		signer, err = types.NewRawKeySigner(privKey)
+		if err != nil {
+			slog.Error("Failed to create raw key signer", "error", err)
+			os.Exit(1)
+		}
+
+		slog.Info("Using raw key validator identity",
+			"validator", signer.ValidatorID()[:32]+"...")
+	}
+
 	pubKey := privKey.Public().(ed25519.PublicKey)
 
 	// Parse validator list
@@ -123,6 +182,7 @@ func main() {
 	}
 
 	slog.Info("Starting consensus testnet node",
+		"validator_id", signer.ValidatorID(),
 		"pubkey", hex.EncodeToString(pubKey),
 		"listen", *listenAddr,
 		"validators", len(validatorKeys),
@@ -376,4 +436,36 @@ func main() {
 	latestBlock := executor.GetLatestBlock()
 	latestHash := latestBlock.Hash()
 	fmt.Printf("Latest block: height=%d, hash=%s\n", latestBlock.Height, hex.EncodeToString(latestHash[:]))
+}
+
+// loadSigningKey loads an ed25519 private key from either a hex string or a file path.
+// If the input is 128 hex characters (64 bytes), it's treated as a hex-encoded private key.
+// Otherwise, it's treated as a file path containing the hex-encoded key.
+func loadSigningKey(keyOrPath string) (ed25519.PrivateKey, error) {
+	// Try to decode as hex first
+	if len(keyOrPath) == 128 {
+		keyBytes, err := hex.DecodeString(keyOrPath)
+		if err == nil && len(keyBytes) == ed25519.PrivateKeySize {
+			return keyBytes, nil
+		}
+	}
+
+	// Try to read as file
+	data, err := os.ReadFile(keyOrPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read key file: %w", err)
+	}
+
+	// Trim whitespace and decode
+	keyHex := strings.TrimSpace(string(data))
+	keyBytes, err := hex.DecodeString(keyHex)
+	if err != nil {
+		return nil, fmt.Errorf("invalid hex in key file: %w", err)
+	}
+
+	if len(keyBytes) != ed25519.PrivateKeySize {
+		return nil, fmt.Errorf("invalid key size: expected %d bytes, got %d", ed25519.PrivateKeySize, len(keyBytes))
+	}
+
+	return keyBytes, nil
 }
