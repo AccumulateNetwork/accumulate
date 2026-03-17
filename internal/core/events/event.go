@@ -16,10 +16,11 @@ type Event interface {
 	IsEvent()
 }
 
-func (DidCommitBlock) IsEvent()    {}
-func (DidSaveSnapshot) IsEvent()   {}
-func (WillChangeGlobals) IsEvent() {}
-func (FatalError) IsEvent()        {}
+func (DidCommitBlock) IsEvent()          {}
+func (DidSaveSnapshot) IsEvent()         {}
+func (WillChangeGlobals) IsEvent()       {}
+func (FatalError) IsEvent()              {}
+func (StateDivergenceDetected) IsEvent() {}
 
 type DidCommitBlock struct {
 	Init  bool
@@ -42,3 +43,16 @@ type FatalError struct {
 
 func (e FatalError) Error() string { return e.Err.Error() }
 func (e FatalError) Unwrap() error { return e.Err }
+
+// StateDivergenceDetected is emitted when state hash mismatch is detected
+// between validators, indicating potential consensus failure or state corruption.
+type StateDivergenceDetected struct {
+	// Round is the consensus round where divergence was detected.
+	Round uint64
+	// BlockIndex is the block index where divergence occurred.
+	BlockIndex uint64
+	// ExpectedHash is the local (expected) state hash.
+	ExpectedHash [32]byte
+	// ActualHash is the conflicting state hash received from another validator.
+	ActualHash [32]byte
+}
