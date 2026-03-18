@@ -17,6 +17,8 @@ import (
 	"sync"
 	"time"
 
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	"github.com/libp2p/go-libp2p/core/host"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
@@ -46,6 +48,14 @@ type ServiceConfig struct {
 
 	// Genesis is the path to the genesis file/snapshot.
 	Genesis string
+
+	// Host is the libp2p host for GossipSub networking.
+	// If nil, gossip is disabled and the node operates in local-only mode.
+	Host host.Host
+
+	// PubSub is the GossipSub instance for broadcasting consensus messages.
+	// If nil, gossip is disabled and the node operates in local-only mode.
+	PubSub *pubsub.PubSub
 }
 
 // Service wraps the DAG-BFT consensus node for integration with accumulated.
@@ -122,12 +132,12 @@ func (s *Service) Start(ctx context.Context) error {
 	}
 	s.committee = committee
 
-	// Create consensus node (without libp2p for now - can be added later)
+	// Create consensus node with optional GossipSub networking
 	nodeConfig := s.config.NodeConfig
 	// Set up pre-batch transaction validation using the adapter
 	// This is equivalent to CometBFT's CheckTx
 	nodeConfig.WorkerConfig.Validator = s.adapter
-	s.node, err = consensus.NewNode(nodeConfig, committee, nil, nil)
+	s.node, err = consensus.NewNode(nodeConfig, committee, s.config.Host, s.config.PubSub)
 	if err != nil {
 		return errors.UnknownError.WithFormat("create consensus node: %w", err)
 	}

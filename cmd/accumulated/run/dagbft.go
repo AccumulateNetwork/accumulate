@@ -14,6 +14,11 @@ import (
 	"time"
 
 	"github.com/fatih/color"
+	"github.com/libp2p/go-libp2p"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
@@ -53,9 +58,9 @@ var (
 // It replaces the CometBFT-based ConsensusService with DAG-based consensus.
 type DAGBFTService struct {
 	// Configuration
-	NodeDir      string         `json:"nodeDir,omitempty" form:"nodeDir" query:"nodeDir" validate:"required"`
-	ValidatorKey PrivateKey     `json:"validatorKey,omitempty" form:"validatorKey" query:"validatorKey" validate:"required"`
-	Genesis      string         `json:"genesis,omitempty" form:"genesis" query:"genesis" validate:"required"`
+	NodeDir      string                  `json:"nodeDir,omitempty" form:"nodeDir" query:"nodeDir" validate:"required"`
+	ValidatorKey PrivateKey              `json:"validatorKey,omitempty" form:"validatorKey" query:"validatorKey" validate:"required"`
+	Genesis      string                  `json:"genesis,omitempty" form:"genesis" query:"genesis" validate:"required"`
 	Partition    *protocol.PartitionInfo `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
 
 	// DAG-BFT specific configuration
@@ -63,15 +68,21 @@ type DAGBFTService struct {
 	DAGGCDepth       *int `json:"dagGCDepth,omitempty" form:"dagGCDepth" query:"dagGCDepth"`
 	CommitBufferSize *int `json:"commitBufferSize,omitempty" form:"commitBufferSize" query:"commitBufferSize"`
 
+	// GossipSub networking configuration
+	GossipListen []multiaddr.Multiaddr `json:"gossipListen,omitempty" form:"gossipListen" query:"gossipListen"`
+	GossipPeers  []multiaddr.Multiaddr `json:"gossipPeers,omitempty" form:"gossipPeers" query:"gossipPeers"`
+
 	// Executor options
 	EnableHealing        *bool `json:"enableHealing,omitempty" form:"enableHealing" query:"enableHealing"`
 	EnableDirectDispatch *bool `json:"enableDirectDispatch,omitempty" form:"enableDirectDispatch" query:"enableDirectDispatch"`
 	MaxEnvelopesPerBlock *uint `json:"maxEnvelopesPerBlock,omitempty" form:"maxEnvelopesPerBlock" query:"maxEnvelopesPerBlock"`
 
 	// Runtime state (transient)
-	service  *dagbft.Service
-	eventBus *events.Bus
-	globals  chan *network.GlobalValues
+	service    *dagbft.Service
+	eventBus   *events.Bus
+	globals    chan *network.GlobalValues
+	gossipHost host.Host
+	gossipPS   *pubsub.PubSub
 }
 
 // Type returns the service type for DAG-BFT.
@@ -126,8 +137,8 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	setDefaultPtr(&s.DAGGCDepth, dagconfig.DefaultDAGGCDepth)
 	setDefaultPtr(&s.CommitBufferSize, dagconfig.DefaultCommitBufferSize)
 
-	// Get the logger
-	logger := (*logging.Slogger)(inst.logger)
+	// Get the logger - use SlogLogger for logging.Logger interface
+	logger := logging.NewSlogLogger(inst.logger)
 
 	// Create event bus
 	s.eventBus = events.NewBus(logger.With("module", "events"))
@@ -261,14 +272,51 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		CommitBufferSize: *s.CommitBufferSize,
 	}
 
+	// Create GossipSub networking if listen addresses are configured
+	if len(s.GossipListen) > 0 {
+		// Convert validator key to libp2p key
+		libp2pKey, err := crypto.UnmarshalEd25519PrivateKey(validatorKey)
+		if err != nil {
+			return errors.UnknownError.WithFormat("convert validator key to libp2p key: %w", err)
+		}
+
+		// Create libp2p host
+		s.gossipHost, err = libp2p.New(
+			libp2p.Identity(libp2pKey),
+			libp2p.ListenAddrs(s.GossipListen...),
+		)
+		if err != nil {
+			return errors.UnknownError.WithFormat("create libp2p host for GossipSub: %w", err)
+		}
+
+		// Create GossipSub
+		s.gossipPS, err = pubsub.NewGossipSub(inst.context, s.gossipHost)
+		if err != nil {
+			s.gossipHost.Close()
+			return errors.UnknownError.WithFormat("create GossipSub: %w", err)
+		}
+
+		logger.Info("GossipSub enabled",
+			"host_id", s.gossipHost.ID().String(),
+			"listen", s.GossipListen,
+			"peers", len(s.GossipPeers))
+
+		// Register cleanup for GossipSub host
+		inst.cleanup("dagbft gossip host", func(ctx context.Context) error {
+			return s.gossipHost.Close()
+		})
+	}
+
 	// Create the service
 	s.service, err = dagbft.NewService(dagbft.ServiceConfig{
-		Partition:   s.Partition,
-		NodeConfig:  nodeConfig,
-		Adapter:     executorBridge,
-		EventBus:    s.eventBus,
-		Logger:      logger.With("module", "dagbft"),
-		Genesis:     inst.path(s.Genesis),
+		Partition:  s.Partition,
+		NodeConfig: nodeConfig,
+		Adapter:    executorBridge,
+		EventBus:   s.eventBus,
+		Logger:     logger.With("module", "dagbft"),
+		Genesis:    inst.path(s.Genesis),
+		Host:       s.gossipHost,
+		PubSub:     s.gossipPS,
 	})
 	if err != nil {
 		return errors.UnknownError.WithFormat("create DAG-BFT service: %w", err)
@@ -303,7 +351,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 
 // registerAPIServices registers the API services for DAG-BFT.
 func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Beginner, validatorKey []byte) error {
-	logger := (*logging.Slogger)(inst.logger)
+	logger := logging.NewSlogLogger(inst.logger)
 	db := database.New(store, logger)
 
 	// Create consensus service
