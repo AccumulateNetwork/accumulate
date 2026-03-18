@@ -455,10 +455,10 @@ func TestCleanupOldHeaders(t *testing.T) {
 		header := types.NewHeader(v.pub, r, 1, nil, nil)
 		require.NoError(t, header.Sign(v.priv))
 
-		p.mu.Lock()
+		p.pendingMu.Lock()
 		p.ourHeaders[header.Digest()] = header
 		p.pendingVotes[header.Digest()] = nil
-		p.mu.Unlock()
+		p.pendingMu.Unlock()
 	}
 
 	require.Equal(t, 10, p.OurHeadersCount())
@@ -471,12 +471,12 @@ func TestCleanupOldHeaders(t *testing.T) {
 
 	// Old headers should be cleaned up
 	// Only headers from rounds 8+ should remain (within 2 rounds of current)
-	p.mu.Lock()
+	p.pendingMu.Lock()
 	remaining := len(p.ourHeaders)
 	for _, h := range p.ourHeaders {
 		require.GreaterOrEqual(t, h.Round, types.Round(8))
 	}
-	p.mu.Unlock()
+	p.pendingMu.Unlock()
 
 	require.LessOrEqual(t, remaining, 3) // rounds 8, 9, (possibly 10)
 }
