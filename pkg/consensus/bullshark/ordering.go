@@ -8,7 +8,6 @@ package bullshark
 
 import (
 	"bytes"
-	"encoding/hex"
 	"sort"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
@@ -36,8 +35,8 @@ func (b *Bullshark) commitLeaderChain(leader *types.Certificate) []ConsensusOutp
 
 		for _, cert := range subdag {
 			// Skip if already committed.
-			authorKey := hex.EncodeToString(cert.Author())
-			if lastRound, ok := b.lastCommitted[authorKey]; ok && cert.Round() <= lastRound {
+			key := toAuthorKey(cert.Author())
+			if lastRound, ok := b.lastCommitted[key]; ok && cert.Round() <= lastRound {
 				continue
 			}
 
@@ -47,7 +46,7 @@ func (b *Bullshark) commitLeaderChain(leader *types.Certificate) []ConsensusOutp
 			committedCerts = append(committedCerts, cert)
 
 			// Mark as committed.
-			b.lastCommitted[authorKey] = cert.Round()
+			b.lastCommitted[key] = cert.Round()
 		}
 
 		// Update last commit round after processing each leader.
@@ -119,8 +118,8 @@ func (b *Bullshark) orderDag(leader *types.Certificate) []*types.Certificate {
 	// Filter out already committed certificates.
 	var filtered []*types.Certificate
 	for _, cert := range ancestors {
-		authorKey := hex.EncodeToString(cert.Author())
-		if lastRound, ok := b.lastCommitted[authorKey]; ok && cert.Round() <= lastRound {
+		key := toAuthorKey(cert.Author())
+		if lastRound, ok := b.lastCommitted[key]; ok && cert.Round() <= lastRound {
 			continue
 		}
 		filtered = append(filtered, cert)
