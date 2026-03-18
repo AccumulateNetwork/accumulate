@@ -181,7 +181,7 @@ func New(cfg *config.Config, newWriter func(*config.Config) (io.Writer, error)) 
 		return nil, errors.UnknownError.WithFormat("initialize logger: %v", err)
 	}
 
-	daemon.eventBus = events.NewBus(daemon.Logger.With("module", "events"))
+	daemon.eventBus = events.NewBus(logging.FromCometBFT(daemon.Logger).With("module", "events"))
 	return &daemon, nil
 }
 
@@ -264,7 +264,7 @@ func (d *Daemon) Start(others ...*Daemon) (err error) {
 
 func (d *Daemon) startValidator() (err error) {
 	// Start the database
-	d.db, err = database.Open(d.Config, d.Logger)
+	d.db, err = database.Open(d.Config, logging.FromCometBFT(d.Logger))
 	if err != nil {
 		return errors.UnknownError.WithFormat("open database: %w", err)
 	}
@@ -396,7 +396,7 @@ func (d *Daemon) startApp(caughtUp <-chan struct{}) (types.Application, error) {
 		Router:  routing.MessageRouter{Router: d.router},
 	}}
 	execOpts := execute.Options{
-		Logger:        d.Logger,
+		Logger:        logging.FromCometBFT(d.Logger),
 		Database:      d.db,
 		Key:           d.Key().Bytes(),
 		Router:        d.router,
@@ -552,8 +552,9 @@ func (d *Daemon) startServices(chGlobals <-chan *core.GlobalValues) error {
 	globals := <-chGlobals
 
 	// Initialize all the services
+	rpcLogger := logging.FromCometBFT(d.Logger).With("module", "acc-rpc")
 	consensusSvc := tm.NewConsensusService(tm.ConsensusServiceParams{
-		Logger:           d.Logger.With("module", "acc-rpc"),
+		Logger:           rpcLogger,
 		Local:            d.localTm,
 		Database:         d.db,
 		PartitionID:      d.Config.Accumulate.PartitionId,
@@ -563,38 +564,38 @@ func (d *Daemon) startServices(chGlobals <-chan *core.GlobalValues) error {
 		ValidatorKeyHash: sha256.Sum256(d.privVal.Key.PubKey.Bytes()),
 	})
 	netSvc := api.NewNetworkService(api.NetworkServiceParams{
-		Logger:    d.Logger.With("module", "acc-rpc"),
+		Logger:    rpcLogger,
 		EventBus:  d.eventBus,
 		Partition: d.Config.Accumulate.PartitionId,
 		Database:  d.db,
 	})
 	querySvc := api.NewQuerier(api.QuerierParams{
-		Logger:    d.Logger.With("module", "acc-rpc"),
+		Logger:    rpcLogger,
 		Database:  d.db,
 		Partition: d.Config.Accumulate.PartitionId,
 		Consensus: consensusSvc,
 	})
 	metricsSvc := api.NewMetricsService(api.MetricsServiceParams{
-		Logger:  d.Logger.With("module", "acc-rpc"),
+		Logger:  rpcLogger,
 		Node:    consensusSvc,
 		Querier: querySvc,
 	})
 	submitSvc := tm.NewSubmitter(tm.SubmitterParams{
-		Logger: d.Logger.With("module", "acc-rpc"),
+		Logger: rpcLogger,
 		Local:  d.localTm,
 	})
 	validateSvc := tm.NewValidator(tm.ValidatorParams{
-		Logger: d.Logger.With("module", "acc-rpc"),
+		Logger: rpcLogger,
 		Local:  d.localTm,
 	})
 	eventSvc := api.NewEventService(api.EventServiceParams{
-		Logger:    d.Logger.With("module", "acc-rpc"),
+		Logger:    rpcLogger,
 		Database:  d.db,
 		Partition: d.Config.Accumulate.PartitionId,
 		EventBus:  d.eventBus,
 	})
 	sequencerSvc := api.NewSequencer(api.SequencerParams{
-		Logger:       d.Logger.With("module", "acc-rpc"),
+		Logger:       rpcLogger,
 		Database:     d.db,
 		EventBus:     d.eventBus,
 		Partition:    d.Config.Accumulate.PartitionId,
@@ -661,7 +662,7 @@ func (d *Daemon) StartP2P() error {
 func (d *Daemon) startAPI() error {
 	d.router = routing.NewRouter(routing.RouterOptions{
 		Events: d.eventBus,
-		Logger: d.Logger,
+		Logger: logging.FromCometBFT(d.Logger),
 	})
 
 	// Setup the p2p node
@@ -671,7 +672,7 @@ func (d *Daemon) startAPI() error {
 	}
 
 	d.api, err = nodeapi.NewHandler(nodeapi.Options{
-		Logger:  d.Logger.With("module", "acc-rpc"),
+		Logger:  logging.FromCometBFT(d.Logger).With("module", "acc-rpc"),
 		Node:    d.p2pnode,
 		Router:  d.router,
 		Network: &d.Config.Accumulate.Describe,
