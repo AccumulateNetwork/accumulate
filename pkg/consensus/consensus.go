@@ -154,24 +154,12 @@ func NewNode(config NodeConfig, committee *types.Committee, h host.Host, ps *pub
 	// Create Bullshark
 	bs := bullshark.New(committee, d)
 
-	// Wire up batch pruning callback: when certificates commit, prune their batches
-	// from worker storage to prevent unbounded memory growth.
-	bs.SetOnCommit(func(certs []*types.Certificate) {
-		// Collect all batch digests from committed certificates
-		var digests []types.BatchDigest
-		for _, cert := range certs {
-			for digest := range cert.Header.Payload {
-				digests = append(digests, digest)
-			}
-		}
-
-		// Prune batches from all workers
-		if len(digests) > 0 {
-			for _, w := range workers {
-				w.PruneBatches(digests)
-			}
-		}
-	})
+	// NOTE: We intentionally do NOT set an onCommit callback here for batch pruning.
+	// Batch pruning must happen AFTER the executor reads the batches from the committed
+	// channel. Since the committed channel is buffered, pruning in onCommit would cause
+	// a race condition where batches are pruned before the executor can read them.
+	// The executor (or main.go) is responsible for calling w.PruneBatches() after
+	// reading batch data from ProcessCertificate().
 
 	return &Node{
 		config:    config,

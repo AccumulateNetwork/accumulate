@@ -18,6 +18,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 )
 
 // forceGC runs the garbage collector and waits for finalizers
@@ -200,10 +202,17 @@ func TestExecutor_BlockProduction(t *testing.T) {
 	}
 
 	executor.Start(ctx)
-	time.Sleep(500 * time.Millisecond)
+
+	// Blocks are now produced via ProcessCertificate, not on a timer.
+	// Simulate certificate commits by calling ProcessCertificate directly.
+	// Create a mock certificate with empty payload (batches already processed above).
+	mockCert := &types.Certificate{}
+	executor.ProcessCertificate(mockCert, nil)
+
+	time.Sleep(100 * time.Millisecond)
 	executor.Stop()
 
-	// Should have produced at least a few blocks
+	// Should have produced at least one block via ProcessCertificate
 	assert.Greater(t, blocksProduced.Load(), int32(0))
 	assert.Greater(t, executor.GetBlockCount(), uint64(1)) // genesis + at least one
 }
@@ -248,6 +257,8 @@ func TestGenesisBlock(t *testing.T) {
 
 // TestSingleNodeBlockProduction_ADI tests that a single node produces blocks with ADI-based identity.
 // This is part of DAG-BFT Deploy Step 2: verifying single node block production.
+// The test uses a full consensus node with Bullshark to verify that certificates commit
+// and trigger block production.
 func TestSingleNodeBlockProduction_ADI(t *testing.T) {
 	const blockInterval = 500 * time.Millisecond // Faster for testing
 	const testDuration = 10 * time.Second
@@ -258,6 +269,27 @@ func TestSingleNodeBlockProduction_ADI(t *testing.T) {
 
 	// Generate validator key
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+
+	// Create committee with single validator
+	validators := []types.ValidatorInfo{{
+		PublicKey: pub,
+		Stake:     100,
+	}}
+	committee := types.NewCommittee(validators, 1)
+
+	// Create consensus node (without libp2p for single node test)
+	nodeCfg := consensus.NodeConfig{
+		Partition:        "testnet",
+		KeyPair:          priv,
+		NumWorkers:       1,
+		CommitBufferSize: 10000,
+	}
+	node, err := consensus.NewNode(nodeCfg, committee, nil, nil)
+	require.NoError(t, err)
+
+	// Initialize genesis for single validator
+	err = node.InsertGenesisForAll([]ed25519.PrivateKey{priv})
 	require.NoError(t, err)
 
 	// Create executor with single validator
@@ -279,12 +311,62 @@ func TestSingleNodeBlockProduction_ADI(t *testing.T) {
 		stateHashes.Store(b.Height, b.StateHash)
 	})
 
-	// Submit some transactions to ensure state changes
+	// Start the consensus node
+	err = node.Start(ctx)
+	require.NoError(t, err)
+	t.Cleanup(func() { node.Stop() })
+
+	// Start executor (in certificate-commit mode, this just logs a message)
+	executor.Start(ctx)
+	t.Cleanup(func() { executor.Stop() })
+
+	// Process committed certificates and produce blocks
+	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
-		nonce := uint64(0)
+		defer wg.Done()
+		committed := node.Committed()
+		workers := node.Workers()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case cert, ok := <-committed:
+				if !ok {
+					return
+				}
+				if cert != nil {
+					// Get batches for this certificate from workers
+					batches := make(map[types.BatchDigest]*types.Batch)
+					digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
+					for digest := range cert.Header.Payload {
+						digests = append(digests, digest)
+						for _, w := range workers {
+							if batch, err := w.GetBatch(digest); err == nil && batch != nil {
+								batches[digest] = batch
+								break
+							}
+						}
+					}
+					executor.ProcessCertificate(cert, batches)
+
+					// Prune committed batches from workers to free memory
+					for _, w := range workers {
+						w.PruneBatches(digests)
+					}
+				}
+			}
+		}
+	}()
+
+	// Submit transactions to drive consensus
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
 		ticker := time.NewTicker(100 * time.Millisecond)
 		defer ticker.Stop()
 
+		nonce := uint64(0)
 		for {
 			select {
 			case <-ctx.Done():
@@ -293,17 +375,15 @@ func TestSingleNodeBlockProduction_ADI(t *testing.T) {
 				nonce++
 				tx := NewDataTx(pub, []byte("test-data"), nonce)
 				tx.Sign(priv)
-				executor.ProcessTransaction(tx.Marshal())
+				_ = node.SubmitTransaction(tx.Marshal())
 			}
 		}
 	}()
 
-	// Start block production
-	executor.Start(ctx)
-
 	// Let it run for the test duration
 	time.Sleep(testDuration)
-	executor.Stop()
+	cancel()
+	wg.Wait()
 
 	// Verify acceptance criteria
 	finalBlockCount := blocksProduced.Load()
