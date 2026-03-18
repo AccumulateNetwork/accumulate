@@ -95,28 +95,30 @@ func (c *Config) applyDefaults() {
 // Primary creates headers, collects votes, and produces certificates for DAG consensus.
 // It implements the "header proposal" layer in the Narwhal/Bullshark architecture.
 type Primary struct {
-	config    Config
-	committee *types.Committee
-	gossip    *gossip.GossipLayer
-	dag       *dag.DAG
-	workers   []*worker.Worker
+	config  Config
+	gossip  *gossip.GossipLayer
+	dag     *dag.DAG
+	workers []*worker.Worker
 
-	// Current round state (protected by mu)
-	mu               sync.Mutex
+	// Committee (protected by committeeMu - read-heavy, writes rare during epoch transitions)
+	committeeMu sync.RWMutex
+	committee   *types.Committee
+
+	// Current round state (protected by roundMu)
+	roundMu          sync.Mutex
 	currentRound     types.Round
 	currentEpoch     uint64
 	lastRoundAdvance time.Time
 
-	// Vote collection for our headers (protected by mu)
+	// Vote collection and certificate tracking (protected by pendingMu)
+	pendingMu sync.Mutex
+	// Vote collection for our headers
 	pendingVotes map[types.HeaderDigest][]*types.Vote
-
-	// Our created headers (needed to build certificates, protected by mu)
+	// Our created headers (needed to build certificates)
 	ourHeaders map[types.HeaderDigest]*types.Header
-
-	// Certificates we've created (protected by mu)
+	// Certificates we've created
 	ourCerts map[types.Round]*types.Certificate
-
-	// Set of headers we've already voted on (to avoid duplicate votes, protected by mu)
+	// Set of headers we've already voted on (to avoid duplicate votes)
 	// Maps header digest to the round it was for (enables round-based cleanup)
 	votedHeaders map[types.HeaderDigest]types.Round
 
@@ -281,15 +283,15 @@ func (p *Primary) Stop() {
 
 // CurrentRound returns the current consensus round.
 func (p *Primary) CurrentRound() types.Round {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	p.roundMu.Lock()
+	defer p.roundMu.Unlock()
 	return p.currentRound
 }
 
 // CurrentEpoch returns the current consensus epoch.
 func (p *Primary) CurrentEpoch() uint64 {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	p.roundMu.Lock()
+	defer p.roundMu.Unlock()
 	return p.currentEpoch
 }
 
@@ -313,22 +315,30 @@ func (p *Primary) PublicKey() ed25519.PublicKey {
 // tryCreateAndBroadcastHeader attempts to create a header for the current round
 // and broadcast it for vote collection.
 func (p *Primary) tryCreateAndBroadcastHeader() {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	// Get current round (needs roundMu)
+	p.roundMu.Lock()
+	currentRound := p.currentRound
+	currentEpoch := p.currentEpoch
+	p.roundMu.Unlock()
+
+	// Check pending state and create header (needs pendingMu)
+	p.pendingMu.Lock()
 
 	// Check if we already have a header for this round
 	for _, h := range p.ourHeaders {
-		if h.Round == p.currentRound {
+		if h.Round == currentRound {
+			p.pendingMu.Unlock()
 			return // Already have a header for this round
 		}
 	}
 
-	// Create header
-	header, err := p.createHeaderLocked()
+	// Create header (needs roundMu for createHeaderLocked, but we already have the round)
+	header, err := p.createHeaderLockedWithRound(currentRound, currentEpoch)
 	if err != nil {
+		p.pendingMu.Unlock()
 		slog.Debug("Cannot create header",
 			"error", err,
-			"round", p.currentRound)
+			"round", currentRound)
 		return
 	}
 
@@ -358,6 +368,8 @@ func (p *Primary) tryCreateAndBroadcastHeader() {
 		p.tryCreateCertificateLocked(digest)
 	}
 
+	p.pendingMu.Unlock()
+
 	// Broadcast header (outside lock)
 	go func() {
 		if p.gossip == nil {
@@ -373,24 +385,30 @@ func (p *Primary) tryCreateAndBroadcastHeader() {
 
 // cleanupOldHeaders removes headers, votes, and certificates for old rounds.
 func (p *Primary) cleanupOldHeaders() {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	// Get current round
+	p.roundMu.Lock()
+	currentRound := p.currentRound
+	p.roundMu.Unlock()
 
 	// Headers/votes only needed for active vote collection (2 rounds)
-	headerCutoff := p.currentRound
+	headerCutoff := currentRound
 	if headerCutoff > 2 {
-		headerCutoff = p.currentRound - 2
+		headerCutoff = currentRound - 2
 	} else {
 		headerCutoff = 0
 	}
 
 	// Certs and voted headers can be kept longer (10 rounds)
-	certCutoff := p.currentRound
+	certCutoff := currentRound
 	if certCutoff > 10 {
-		certCutoff = p.currentRound - 10
+		certCutoff = currentRound - 10
 	} else {
 		certCutoff = 0
 	}
+
+	// Clean pending state
+	p.pendingMu.Lock()
+	defer p.pendingMu.Unlock()
 
 	// Clean pending headers and votes (short retention)
 	for digest, header := range p.ourHeaders {
