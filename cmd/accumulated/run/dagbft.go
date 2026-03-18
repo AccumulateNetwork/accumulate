@@ -126,8 +126,8 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	setDefaultPtr(&s.DAGGCDepth, dagconfig.DefaultDAGGCDepth)
 	setDefaultPtr(&s.CommitBufferSize, dagconfig.DefaultCommitBufferSize)
 
-	// Get the logger
-	logger := (*logging.Slogger)(inst.logger)
+	// Get the logger - use SlogLogger for logging.Logger interface
+	logger := logging.NewSlogLogger(inst.logger)
 
 	// Create event bus
 	s.eventBus = events.NewBus(logger.With("module", "events"))
@@ -303,7 +303,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 
 // registerAPIServices registers the API services for DAG-BFT.
 func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Beginner, validatorKey []byte) error {
-	logger := (*logging.Slogger)(inst.logger)
+	logger := logging.NewSlogLogger(inst.logger)
 	db := database.New(store, logger)
 
 	// Create consensus service

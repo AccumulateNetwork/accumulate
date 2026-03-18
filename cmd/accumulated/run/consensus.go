@@ -113,7 +113,7 @@ func (c *ConsensusService) start(inst *Instance) error {
 
 	d := new(tendermint)
 	d.logger = (*logging.Slogger)(inst.logger)
-	d.eventBus = events.NewBus(d.logger.With("module", "events"))
+	d.eventBus = events.NewBus(logging.FromCometBFT(d.logger.With("module", "events")))
 
 	events.SubscribeAsync(d.eventBus, func(e events.FatalError) {
 		slog.ErrorContext(inst.context, "Shutting down due to a fatal error", "error", e.Err)
@@ -424,7 +424,7 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 
 	router := routing.NewRouter(routing.RouterOptions{
 		Events: d.eventBus,
-		Logger: d.logger,
+		Logger: logging.FromCometBFT(d.logger),
 	})
 	err = coreConsensusProvidesRouter.Register(inst.services, c, router)
 	if err != nil {
@@ -437,9 +437,10 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 		Dialer:  dialer,
 		Router:  routing.MessageRouter{Router: router},
 	}}
-	db := database.New(store, d.logger)
+	logger := logging.FromCometBFT(d.logger)
+	db := database.New(store, logger)
 	execOpts := execute.Options{
-		Logger:        d.logger.With("module", "executor"),
+		Logger:        logger.With("module", "executor"),
 		Database:      db,
 		Key:           d.privVal.Key.PrivKey.Bytes(),
 		Router:        router,
@@ -536,6 +537,9 @@ func (c *CoreConsensusApp) register(inst *Instance, d *tendermint, node *tmnode.
 		return err
 	}
 
+	// Convert cometbft logger to internal logger for components that need it
+	logger := logging.FromCometBFT(d.logger)
+
 	// Register the tendermint node
 	local := local.New(node)
 	err = coreConsensusProvidesClient.Register(inst.services, c, local)
@@ -545,9 +549,9 @@ func (c *CoreConsensusApp) register(inst *Instance, d *tendermint, node *tmnode.
 
 	// Register the consensus service
 	svcImpl := tmapi.NewConsensusService(tmapi.ConsensusServiceParams{
-		Logger:           d.logger.With("module", "api"),
+		Logger:           logger.With("module", "api"),
 		Local:            local,
-		Database:         database.New(store, d.logger),
+		Database:         database.New(store, logger),
 		PartitionID:      c.Partition.ID,
 		PartitionType:    c.Partition.Type,
 		EventBus:         d.eventBus,
@@ -562,7 +566,7 @@ func (c *CoreConsensusApp) register(inst *Instance, d *tendermint, node *tmnode.
 
 	// Register the submitter
 	subImpl := tmapi.NewSubmitter(tmapi.SubmitterParams{
-		Logger: d.logger.With("module", "api"),
+		Logger: logger.With("module", "api"),
 		Local:  local,
 	})
 	registerRpcService(inst, subImpl.Type().AddressFor(c.Partition.ID), message.Submitter{Submitter: subImpl})
@@ -573,7 +577,7 @@ func (c *CoreConsensusApp) register(inst *Instance, d *tendermint, node *tmnode.
 
 	// Register the validator
 	valImpl := tmapi.NewValidator(tmapi.ValidatorParams{
-		Logger: d.logger.With("module", "api"),
+		Logger: logger.With("module", "api"),
 		Local:  local,
 	})
 	registerRpcService(inst, valImpl.Type().AddressFor(c.Partition.ID), message.Validator{Validator: valImpl})
@@ -584,8 +588,8 @@ func (c *CoreConsensusApp) register(inst *Instance, d *tendermint, node *tmnode.
 
 	// Register the sequencer
 	seqImpl := api.NewSequencer(api.SequencerParams{
-		Logger:       d.logger.With("module", "api"),
-		Database:     database.New(store, d.logger),
+		Logger:       logger.With("module", "api"),
+		Database:     database.New(store, logger),
 		EventBus:     d.eventBus,
 		Globals:      <-d.globals,
 		Partition:    c.Partition.ID,

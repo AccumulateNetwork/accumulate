@@ -769,3 +769,57 @@ func TestWorker_BatchContentsCorrect(t *testing.T) {
 
 	cancel()
 }
+
+func TestWorker_StoreBatch_Eviction(t *testing.T) {
+	// Test that batches are evicted when MaxStoredBatches limit is reached
+	w := worker.New(worker.Config{
+		ID:               0,
+		Partition:        "test",
+		MaxStoredBatches: 10, // Small limit for testing
+	}, nil)
+
+	// Store batches up to the limit
+	for i := 0; i < 10; i++ {
+		batch := types.NewBatch([][]byte{[]byte(fmt.Sprintf("tx-%d", i))})
+		err := w.StoreBatch(batch)
+		require.NoError(t, err)
+	}
+
+	assert.Equal(t, 10, w.BatchCount())
+
+	// Store one more batch - should trigger eviction of 10% (1 batch)
+	batch := types.NewBatch([][]byte{[]byte("tx-overflow")})
+	err := w.StoreBatch(batch)
+	require.NoError(t, err)
+
+	// Should have 10 batches (9 original + 1 new, after evicting 1)
+	assert.Equal(t, 10, w.BatchCount())
+}
+
+func TestWorker_StoreBatch_EvictionAtScale(t *testing.T) {
+	// Test eviction with a larger batch count
+	w := worker.New(worker.Config{
+		ID:               0,
+		Partition:        "test",
+		MaxStoredBatches: 100, // Larger limit
+	}, nil)
+
+	// Store batches up to the limit
+	for i := 0; i < 100; i++ {
+		batch := types.NewBatch([][]byte{[]byte(fmt.Sprintf("tx-%d", i))})
+		err := w.StoreBatch(batch)
+		require.NoError(t, err)
+	}
+
+	assert.Equal(t, 100, w.BatchCount())
+
+	// Store 10 more batches - should trigger evictions each time
+	for i := 0; i < 10; i++ {
+		batch := types.NewBatch([][]byte{[]byte(fmt.Sprintf("overflow-%d", i))})
+		err := w.StoreBatch(batch)
+		require.NoError(t, err)
+	}
+
+	// Should still be at or below the limit (evictions happen on each store)
+	assert.LessOrEqual(t, w.BatchCount(), 100)
+}
