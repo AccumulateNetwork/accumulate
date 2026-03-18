@@ -18,15 +18,16 @@ import (
 // It returns an ordered list of certificates to commit, with the oldest first.
 func (b *Bullshark) commitLeaderChain(leader *types.Certificate) []ConsensusOutput {
 	b.mu.Lock()
-	defer b.mu.Unlock()
 
 	// Find all uncommitted leaders linked to this one.
 	leaders := b.orderLeaders(leader)
 	if len(leaders) == 0 {
+		b.mu.Unlock()
 		return nil
 	}
 
 	var outputs []ConsensusOutput
+	var committedCerts []*types.Certificate
 
 	// Process each leader, oldest first.
 	for _, l := range leaders {
@@ -43,6 +44,7 @@ func (b *Bullshark) commitLeaderChain(leader *types.Certificate) []ConsensusOutp
 			outputs = append(outputs, ConsensusOutput{
 				Certificate: cert,
 			})
+			committedCerts = append(committedCerts, cert)
 
 			// Mark as committed.
 			b.lastCommitted[authorKey] = cert.Round()
@@ -50,6 +52,15 @@ func (b *Bullshark) commitLeaderChain(leader *types.Certificate) []ConsensusOutp
 
 		// Update last commit round after processing each leader.
 		b.lastCommitRound = l.Round()
+	}
+
+	// Capture callback before unlocking.
+	onCommit := b.onCommit
+	b.mu.Unlock()
+
+	// Call the commit callback outside the lock to avoid potential deadlocks.
+	if onCommit != nil && len(committedCerts) > 0 {
+		onCommit(committedCerts)
 	}
 
 	return outputs

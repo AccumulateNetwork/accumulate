@@ -154,6 +154,25 @@ func NewNode(config NodeConfig, committee *types.Committee, h host.Host, ps *pub
 	// Create Bullshark
 	bs := bullshark.New(committee, d)
 
+	// Wire up batch pruning callback: when certificates commit, prune their batches
+	// from worker storage to prevent unbounded memory growth.
+	bs.SetOnCommit(func(certs []*types.Certificate) {
+		// Collect all batch digests from committed certificates
+		var digests []types.BatchDigest
+		for _, cert := range certs {
+			for digest := range cert.Header.Payload {
+				digests = append(digests, digest)
+			}
+		}
+
+		// Prune batches from all workers
+		if len(digests) > 0 {
+			for _, w := range workers {
+				w.PruneBatches(digests)
+			}
+		}
+	})
+
 	return &Node{
 		config:    config,
 		committee: committee,
