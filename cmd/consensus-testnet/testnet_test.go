@@ -18,6 +18,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/genesis"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 )
 
 // forceGC runs the garbage collector and waits for finalizers
@@ -246,12 +249,15 @@ func TestGenesisBlock(t *testing.T) {
 	assert.Equal(t, uint32(0), genesis.TxnCount)
 }
 
-// TestSingleNodeBlockProduction_ADI tests that a single node produces blocks with ADI-based identity.
+// TestSingleNodeBlockProduction_ADI tests that a single node produces blocks with full consensus flow.
 // This is part of DAG-BFT Deploy Step 2: verifying single node block production.
+// The test uses a complete consensus node to validate that:
+// 1. Transactions are submitted to the consensus node
+// 2. Consensus produces certificates and commits them
+// 3. Committed certificates trigger block production
 func TestSingleNodeBlockProduction_ADI(t *testing.T) {
-	const blockInterval = 500 * time.Millisecond // Faster for testing
 	const testDuration = 10 * time.Second
-	const minExpectedBlocks = 15 // At least 15 blocks in 10 seconds with 500ms interval
+	const minExpectedBlocks = 5 // With single node consensus, expect fewer blocks
 
 	ctx, cancel := context.WithTimeout(context.Background(), testDuration+5*time.Second)
 	defer cancel()
@@ -260,29 +266,88 @@ func TestSingleNodeBlockProduction_ADI(t *testing.T) {
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 
-	// Create executor with single validator
+	// Create committee with single validator
+	committee := types.NewCommittee([]types.ValidatorInfo{
+		{PublicKey: pub, Stake: 100},
+	}, 1)
+
+	// Create consensus node (no libp2p for single node test)
+	nodeCfg := consensus.NodeConfig{
+		Partition:  "test",
+		KeyPair:    priv,
+		NumWorkers: 1,
+	}
+	node, err := consensus.NewNode(nodeCfg, committee, nil, nil)
+	require.NoError(t, err)
+
+	// Initialize genesis
+	err = node.InitGenesis([]genesis.ValidatorInfo{
+		{PublicKey: pub, PrivateKey: priv, Stake: 100},
+	})
+	require.NoError(t, err)
+
+	// Create executor
 	executor, err := NewExecutor(ExecutorConfig{
-		Validators:    []ed25519.PublicKey{pub},
-		BlockInterval: blockInterval,
-		TxRate:        10,
-		DataDir:       "/tmp/consensus-testnet-single-adi",
+		Validators: []ed25519.PublicKey{pub},
+		TxRate:     100,
+		DataDir:    "/tmp/consensus-testnet-single-adi",
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { executor.Cleanup() })
 
 	// Track blocks produced and state hashes
 	var blocksProduced atomic.Int32
-	var stateHashes sync.Map // height -> stateHash
+	var stateHashes sync.Map
 
 	executor.SetOnBlockProduced(func(b *Block) {
 		blocksProduced.Add(1)
 		stateHashes.Store(b.Height, b.StateHash)
 	})
 
-	// Submit some transactions to ensure state changes
+	// Start executor
+	executor.Start(ctx)
+
+	// Start consensus node
+	err = node.Start(ctx)
+	require.NoError(t, err)
+
+	// Process committed certificates in background
+	go func() {
+		committed := node.Committed()
+		workers := node.Workers()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case cert := <-committed:
+				if cert == nil {
+					continue
+				}
+				// Get batches for this certificate from workers
+				batches := make(map[types.BatchDigest]*types.Batch)
+				digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
+				for digest := range cert.Header.Payload {
+					digests = append(digests, digest)
+					for _, w := range workers {
+						if batch, err := w.GetBatch(digest); err == nil && batch != nil {
+							batches[digest] = batch
+							break
+						}
+					}
+				}
+				executor.ProcessCertificate(cert, batches)
+				// Prune batches after processing
+				for _, w := range workers {
+					w.PruneBatches(digests)
+				}
+			}
+		}
+	}()
+
+	// Submit transactions through the consensus node
 	go func() {
 		nonce := uint64(0)
-		ticker := time.NewTicker(100 * time.Millisecond)
+		ticker := time.NewTicker(50 * time.Millisecond) // Fast for single node
 		defer ticker.Stop()
 
 		for {
@@ -293,26 +358,27 @@ func TestSingleNodeBlockProduction_ADI(t *testing.T) {
 				nonce++
 				tx := NewDataTx(pub, []byte("test-data"), nonce)
 				tx.Sign(priv)
-				executor.ProcessTransaction(tx.Marshal())
+				_ = node.SubmitTransaction(tx.Marshal())
 			}
 		}
 	}()
 
-	// Start block production
-	executor.Start(ctx)
-
 	// Let it run for the test duration
 	time.Sleep(testDuration)
+	node.Stop()
 	executor.Stop()
 
 	// Verify acceptance criteria
 	finalBlockCount := blocksProduced.Load()
 	t.Logf("Blocks produced: %d (expected >= %d)", finalBlockCount, minExpectedBlocks)
+	t.Logf("Current round: %d", node.CurrentRound())
+	t.Logf("Last commit round: %d", node.LastCommitRound())
+	txSubmitted, certsCommitted := node.Metrics()
+	t.Logf("Transactions submitted: %d, Certificates committed: %d", txSubmitted, certsCommitted)
 
-	// 1. Blocks produced at configured interval (within tolerance)
+	// 1. Blocks produced from consensus commits
 	assert.GreaterOrEqual(t, finalBlockCount, int32(minExpectedBlocks),
-		"Should have produced at least %d blocks in %v with %v interval",
-		minExpectedBlocks, testDuration, blockInterval)
+		"Should have produced at least %d blocks in %v", minExpectedBlocks, testDuration)
 
 	// 2. Logs show block height increasing
 	latestBlock := executor.GetLatestBlock()
@@ -320,14 +386,12 @@ func TestSingleNodeBlockProduction_ADI(t *testing.T) {
 	t.Logf("Latest block height: %d", latestBlock.Height)
 
 	// 3. State hash changes each block (when transactions are included)
-	// Collect all unique state hashes
 	uniqueHashes := make(map[[32]byte]bool)
 	stateHashes.Range(func(key, value interface{}) bool {
 		hash := value.([32]byte)
 		uniqueHashes[hash] = true
 		return true
 	})
-	// With transactions being submitted, we should see state hash changes
 	t.Logf("Unique state hashes: %d", len(uniqueHashes))
 	assert.Greater(t, len(uniqueHashes), 1, "State hash should change as transactions are processed")
 
@@ -344,8 +408,7 @@ func TestSingleNodeBlockProduction_MemoryStability(t *testing.T) {
 		t.Skip("skipping memory stability test in short mode")
 	}
 
-	const blockInterval = 100 * time.Millisecond
-	const testDuration = 30 * time.Second // Shorter than 5 minutes for CI
+	const testDuration = 30 * time.Second
 	const memoryGrowthThreshold = 50 * 1024 * 1024 // 50MB growth allowed
 
 	ctx, cancel := context.WithTimeout(context.Background(), testDuration+10*time.Second)
@@ -355,15 +418,70 @@ func TestSingleNodeBlockProduction_MemoryStability(t *testing.T) {
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 
+	// Create committee with single validator
+	committee := types.NewCommittee([]types.ValidatorInfo{
+		{PublicKey: pub, Stake: 100},
+	}, 1)
+
+	// Create consensus node
+	nodeCfg := consensus.NodeConfig{
+		Partition:  "test-memory",
+		KeyPair:    priv,
+		NumWorkers: 1,
+	}
+	node, err := consensus.NewNode(nodeCfg, committee, nil, nil)
+	require.NoError(t, err)
+
+	// Initialize genesis
+	err = node.InitGenesis([]genesis.ValidatorInfo{
+		{PublicKey: pub, PrivateKey: priv, Stake: 100},
+	})
+	require.NoError(t, err)
+
 	// Create executor
 	executor, err := NewExecutor(ExecutorConfig{
-		Validators:    []ed25519.PublicKey{pub},
-		BlockInterval: blockInterval,
-		TxRate:        100,
-		DataDir:       "/tmp/consensus-testnet-memory",
+		Validators: []ed25519.PublicKey{pub},
+		TxRate:     100,
+		DataDir:    "/tmp/consensus-testnet-memory",
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { executor.Cleanup() })
+
+	// Start executor and consensus node
+	executor.Start(ctx)
+	err = node.Start(ctx)
+	require.NoError(t, err)
+
+	// Process committed certificates in background
+	go func() {
+		committed := node.Committed()
+		workers := node.Workers()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case cert := <-committed:
+				if cert == nil {
+					continue
+				}
+				batches := make(map[types.BatchDigest]*types.Batch)
+				digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
+				for digest := range cert.Header.Payload {
+					digests = append(digests, digest)
+					for _, w := range workers {
+						if batch, err := w.GetBatch(digest); err == nil && batch != nil {
+							batches[digest] = batch
+							break
+						}
+					}
+				}
+				executor.ProcessCertificate(cert, batches)
+				for _, w := range workers {
+					w.PruneBatches(digests)
+				}
+			}
+		}
+	}()
 
 	// Force GC and get baseline memory
 	forceGC()
@@ -386,13 +504,10 @@ func TestSingleNodeBlockProduction_MemoryStability(t *testing.T) {
 				nonce := submitted.Add(1)
 				tx := NewDataTx(pub, payload, nonce)
 				tx.Sign(priv)
-				executor.ProcessTransaction(tx.Marshal())
+				_ = node.SubmitTransaction(tx.Marshal())
 			}
 		}
 	}()
-
-	// Start block production
-	executor.Start(ctx)
 
 	// Sample memory periodically
 	var memSamples []uint64
@@ -416,6 +531,7 @@ func TestSingleNodeBlockProduction_MemoryStability(t *testing.T) {
 	}
 
 done:
+	node.Stop()
 	executor.Stop()
 
 	// Force final GC and get final memory
