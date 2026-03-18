@@ -14,12 +14,19 @@ import (
 )
 
 // createHeaderLocked creates a header for the current round.
-// Must be called with p.mu held.
+// Must be called with p.roundMu held.
 func (p *Primary) createHeaderLocked() (*types.Header, error) {
+	// p.roundMu must be held by caller
+	return p.createHeaderLockedWithRound(p.currentRound, p.currentEpoch)
+}
+
+// createHeaderLockedWithRound creates a header for the specified round.
+// Does not require any lock to be held (caller passes in the round/epoch values).
+func (p *Primary) createHeaderLockedWithRound(round types.Round, epoch uint64) (*types.Header, error) {
 	// 1. FIRST: Check parent certificates exist
 	// We check parents before consuming batches to avoid losing batches
 	// if the parent check fails (e.g., not enough parents in round-1).
-	parents, err := p.getParentCertsLocked()
+	parents, err := p.getParentCertsForRound(round)
 	if err != nil {
 		return nil, err
 	}
@@ -36,7 +43,7 @@ func (p *Primary) createHeaderLocked() (*types.Header, error) {
 
 	// 3. Build header
 	pubKey := p.config.KeyPair.Public().(ed25519.PublicKey)
-	header := types.NewHeader(pubKey, p.currentRound, p.currentEpoch, payload, parents)
+	header := types.NewHeader(pubKey, round, epoch, payload, parents)
 
 	// 4. Sign
 	if err := header.Sign(p.config.KeyPair); err != nil {
@@ -47,14 +54,25 @@ func (p *Primary) createHeaderLocked() (*types.Header, error) {
 }
 
 // getParentCertsLocked retrieves 2f+1 parent certificates from round-1.
-// Must be called with p.mu held.
+// Must be called with p.roundMu held.
 func (p *Primary) getParentCertsLocked() ([]types.CertificateDigest, error) {
-	if p.currentRound == 0 {
+	// p.roundMu must be held by caller
+	return p.getParentCertsForRound(p.currentRound)
+}
+
+// getParentCertsForRound retrieves 2f+1 parent certificates from round-1.
+// Does not require any lock to be held (uses committeeMu internally for committee access).
+func (p *Primary) getParentCertsForRound(round types.Round) ([]types.CertificateDigest, error) {
+	if round == 0 {
 		return nil, nil // genesis round has no parents
 	}
 
-	certs := p.dag.GetRound(p.currentRound - 1)
+	certs := p.dag.GetRound(round - 1)
+
+	// Get quorum count (needs committeeMu for reading committee)
+	p.committeeMu.RLock()
 	quorumCount := p.committee.QuorumCount()
+	p.committeeMu.RUnlock()
 
 	if len(certs) < quorumCount {
 		return nil, fmt.Errorf("%w: have %d, need %d",
@@ -74,16 +92,16 @@ func (p *Primary) getParentCertsLocked() ([]types.CertificateDigest, error) {
 // CreateHeader creates a header for the current round (thread-safe).
 // Returns an error if not enough parent certificates are available.
 func (p *Primary) CreateHeader() (*types.Header, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	p.roundMu.Lock()
+	defer p.roundMu.Unlock()
 
 	return p.createHeaderLocked()
 }
 
 // GetParentCerts returns the parent certificate digests for the current round.
 func (p *Primary) GetParentCerts() ([]types.CertificateDigest, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	p.roundMu.Lock()
+	defer p.roundMu.Unlock()
 
 	return p.getParentCertsLocked()
 }
