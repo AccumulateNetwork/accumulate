@@ -41,6 +41,11 @@ type Bullshark struct {
 	// lastCommitted tracks the last committed round for each author.
 	// Key is the hex-encoded author public key.
 	lastCommitted map[string]types.Round
+
+	// onCommit is called when certificates are committed.
+	// This callback is used to notify external components (e.g., workers)
+	// that batches associated with these certificates can be pruned.
+	onCommit func(certificates []*types.Certificate)
 }
 
 // New creates a new Bullshark consensus instance.
@@ -185,4 +190,14 @@ func (b *Bullshark) SetLastCommittedForAuthor(authorHex string, round types.Roun
 	if lastRound, ok := b.lastCommitted[authorHex]; !ok || round > lastRound {
 		b.lastCommitted[authorHex] = round
 	}
+}
+
+// SetOnCommit sets the callback function that is invoked when certificates
+// are committed. This is used to notify external components (e.g., workers)
+// that batches associated with these certificates can be pruned from memory.
+// The callback receives the list of committed certificates.
+func (b *Bullshark) SetOnCommit(fn func([]*types.Certificate)) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.onCommit = fn
 }
