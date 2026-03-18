@@ -11,12 +11,35 @@
 package bullshark
 
 import (
+	"crypto/ed25519"
 	"encoding/hex"
 	"sync"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/dag"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 )
+
+// authorKey is a fixed-size array for author public key map keys.
+// Using [32]byte instead of hex string saves memory and avoids encoding overhead.
+type authorKey [32]byte
+
+// toAuthorKey converts an ed25519 public key to an authorKey.
+func toAuthorKey(author ed25519.PublicKey) authorKey {
+	var key authorKey
+	copy(key[:], author)
+	return key
+}
+
+// authorKeyFromHex converts a hex-encoded public key string to an authorKey.
+func authorKeyFromHex(hexStr string) (authorKey, error) {
+	var key authorKey
+	b, err := hex.DecodeString(hexStr)
+	if err != nil {
+		return key, err
+	}
+	copy(key[:], b)
+	return key, nil
+}
 
 // ConsensusOutput represents a certificate that has been ordered by consensus.
 // The Certificate field contains the certificate to be committed.
@@ -39,8 +62,8 @@ type Bullshark struct {
 	// lastCommitRound is the most recently committed leader round.
 	lastCommitRound types.Round
 	// lastCommitted tracks the last committed round for each author.
-	// Key is the hex-encoded author public key.
-	lastCommitted map[string]types.Round
+	// Uses [32]byte key instead of hex string for memory efficiency.
+	lastCommitted map[authorKey]types.Round
 }
 
 // New creates a new Bullshark consensus instance.
@@ -48,16 +71,19 @@ func New(committee *types.Committee, d *dag.DAG) *Bullshark {
 	return &Bullshark{
 		committee:     committee,
 		dag:           d,
-		lastCommitted: make(map[string]types.Round),
+		lastCommitted: make(map[authorKey]types.Round),
 	}
 }
 
 // NewWithState creates a new Bullshark instance with existing state.
 // This is used for crash recovery or catching up.
+// The lastCommitted map uses hex-encoded author keys for JSON compatibility.
 func NewWithState(committee *types.Committee, d *dag.DAG, lastCommitRound types.Round, lastCommitted map[string]types.Round) *Bullshark {
-	committed := make(map[string]types.Round)
+	committed := make(map[authorKey]types.Round)
 	for k, v := range lastCommitted {
-		committed[k] = v
+		if key, err := authorKeyFromHex(k); err == nil {
+			committed[key] = v
+		}
 	}
 	return &Bullshark{
 		committee:       committee,
@@ -131,14 +157,14 @@ func (b *Bullshark) LastCommitRound() types.Round {
 }
 
 // GetLastCommitted returns a copy of the lastCommitted map.
-// This is useful for state persistence or debugging.
+// The keys are hex-encoded author public keys for JSON compatibility.
 func (b *Bullshark) GetLastCommitted() map[string]types.Round {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
 	result := make(map[string]types.Round, len(b.lastCommitted))
 	for k, v := range b.lastCommitted {
-		result[k] = v
+		result[hex.EncodeToString(k[:])] = v
 	}
 	return result
 }
@@ -169,9 +195,9 @@ func (b *Bullshark) MarkCommitted(cert *types.Certificate) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	authorKey := hex.EncodeToString(cert.Author())
-	if lastRound, ok := b.lastCommitted[authorKey]; !ok || cert.Round() > lastRound {
-		b.lastCommitted[authorKey] = cert.Round()
+	key := toAuthorKey(cert.Author())
+	if lastRound, ok := b.lastCommitted[key]; !ok || cert.Round() > lastRound {
+		b.lastCommitted[key] = cert.Round()
 	}
 }
 
@@ -179,10 +205,15 @@ func (b *Bullshark) MarkCommitted(cert *types.Certificate) {
 // This is used during crash recovery to restore per-author commit state.
 // The authorHex parameter should be a hex-encoded public key.
 func (b *Bullshark) SetLastCommittedForAuthor(authorHex string, round types.Round) {
+	key, err := authorKeyFromHex(authorHex)
+	if err != nil {
+		return
+	}
+
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	if lastRound, ok := b.lastCommitted[authorHex]; !ok || round > lastRound {
-		b.lastCommitted[authorHex] = round
+	if lastRound, ok := b.lastCommitted[key]; !ok || round > lastRound {
+		b.lastCommitted[key] = round
 	}
 }
