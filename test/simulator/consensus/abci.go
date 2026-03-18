@@ -90,13 +90,22 @@ func (a *AbciApp) Execute(req *ExecuteRequest) (*ExecuteResponse, error) {
 	var req2 types.RequestFinalizeBlock
 	req2.Height = int64(req.Params.Index)
 	req2.Time = req.Params.Time
-	req2.Misbehavior = req.Params.Evidence
+
+	// Type assert Evidence from any to []types.Misbehavior
+	if req.Params.Evidence != nil {
+		if ev, ok := req.Params.Evidence.([]types.Misbehavior); ok {
+			req2.Misbehavior = ev
+		}
+	}
 
 	if req.Params.IsLeader {
 		req2.ProposerAddress = a.Address
 	}
+	// Type assert CommitInfo from any to *types.CommitInfo
 	if req.Params.CommitInfo != nil {
-		req2.DecidedLastCommit = *req.Params.CommitInfo
+		if ci, ok := req.Params.CommitInfo.(*types.CommitInfo); ok {
+			req2.DecidedLastCommit = *ci
+		}
 	}
 
 	var err error
