@@ -25,6 +25,7 @@ import (
 	v2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 	cmdutil "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
@@ -74,7 +75,7 @@ func serveApiFromDatabases(cmd *cobra.Command, args []string) {
 	databases := map[string]*coredb.Database{}
 	for _, arg := range args {
 		// Open database
-		db, err := coredb.OpenBadger(arg, logger)
+		db, err := coredb.OpenBadger(arg, logging.FromCometBFT(logger))
 		Check(err)
 		defer db.Close()
 
@@ -100,7 +101,7 @@ func serveApiFromDatabases(cmd *cobra.Command, args []string) {
 			return batch.Account(u).Main().GetAs(target)
 		}))
 	}
-	router := routing.NewRouter(routing.RouterOptions{Initial: g.Routing, Logger: logger})
+	router := routing.NewRouter(routing.RouterOptions{Initial: g.Routing, Logger: logging.FromCometBFT(logger)})
 
 	// Make a querier for each partition
 	Q := &Querier{
@@ -114,7 +115,7 @@ func serveApiFromDatabases(cmd *cobra.Command, args []string) {
 		}
 
 		Q.parts[part.ID] = api.NewQuerier(api.QuerierParams{
-			Logger:    logger,
+			Logger:    logging.FromCometBFT(logger),
 			Database:  db,
 			Partition: part.ID,
 		})
