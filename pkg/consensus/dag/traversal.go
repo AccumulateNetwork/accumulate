@@ -71,15 +71,9 @@ func (d *DAG) isAncestorLocked(ancestor, descendant *types.Certificate) bool {
 }
 
 // getByDigestLocked retrieves a certificate by digest without locking.
+// Uses O(1) lookup via the digest index.
 func (d *DAG) getByDigestLocked(digest types.CertificateDigest) *types.Certificate {
-	for _, roundMap := range d.rounds {
-		for _, cert := range roundMap {
-			if cert.Digest() == digest {
-				return cert
-			}
-		}
-	}
-	return nil
+	return d.digestIndex[digest]
 }
 
 // GetAncestors returns all certificates reachable from cert down to minRound.
