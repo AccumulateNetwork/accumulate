@@ -30,8 +30,19 @@ func (p *Primary) OnVoteReceived(vote *types.Vote) {
 		return
 	}
 
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	// Check voter is in committee (uses committeeMu)
+	p.committeeMu.RLock()
+	inCommittee := p.committee.ContainsValidator(vote.Author)
+	p.committeeMu.RUnlock()
+
+	if !inCommittee {
+		slog.Debug("Vote from unknown validator",
+			"author", hexEncode(vote.Author))
+		return
+	}
+
+	p.pendingMu.Lock()
+	defer p.pendingMu.Unlock()
 
 	// Check vote is for a header we created
 	header, ok := p.ourHeaders[vote.HeaderDigest]
@@ -56,13 +67,6 @@ func (p *Primary) OnVoteReceived(vote *types.Vote) {
 		return
 	}
 
-	// Check voter is in committee
-	if !p.committee.ContainsValidator(vote.Author) {
-		slog.Debug("Vote from unknown validator",
-			"author", hexEncode(vote.Author))
-		return
-	}
-
 	// Add vote (avoid duplicates)
 	votes := p.pendingVotes[vote.HeaderDigest]
 	for _, v := range votes {
@@ -82,7 +86,7 @@ func (p *Primary) OnVoteReceived(vote *types.Vote) {
 }
 
 // tryCreateCertificateLocked attempts to create a certificate from collected votes.
-// Must be called with p.mu held.
+// Must be called with p.pendingMu held.
 func (p *Primary) tryCreateCertificateLocked(headerDigest types.HeaderDigest) {
 	votes := p.pendingVotes[headerDigest]
 	header := p.ourHeaders[headerDigest]
@@ -91,22 +95,26 @@ func (p *Primary) tryCreateCertificateLocked(headerDigest types.HeaderDigest) {
 		return
 	}
 
-	// Calculate total stake from votes
+	// Calculate total stake from votes (needs committeeMu for reading stake)
+	p.committeeMu.RLock()
 	var totalStake uint64
 	for _, v := range votes {
 		totalStake += p.committee.StakeOf(v.Author)
 	}
+	hasQuorum := p.committee.HasQuorum(totalStake)
+	quorumThreshold := p.committee.QuorumThreshold()
+	p.committeeMu.RUnlock()
 
 	// Need 2f+1 stake
-	if !p.committee.HasQuorum(totalStake) {
+	if !hasQuorum {
 		slog.Debug("Not enough stake for certificate",
 			"headerDigest", headerDigest.String(),
 			"totalStake", totalStake,
-			"threshold", p.committee.QuorumThreshold())
+			"threshold", quorumThreshold)
 		return
 	}
 
-	// Create certificate
+	// Create certificate (needs committeeMu for finding validators)
 	cert := p.createCertificateFromVotes(header, votes)
 	if cert == nil {
 		return
@@ -156,6 +164,7 @@ func (p *Primary) tryCreateCertificateLocked(headerDigest types.HeaderDigest) {
 }
 
 // createCertificateFromVotes creates a certificate from the header and collected votes.
+// Uses committeeMu internally for finding validators.
 func (p *Primary) createCertificateFromVotes(header *types.Header, votes []*types.Vote) *types.Certificate {
 	if len(votes) == 0 {
 		return nil
@@ -164,6 +173,7 @@ func (p *Primary) createCertificateFromVotes(header *types.Header, votes []*type
 	sigs := make([][]byte, len(votes))
 	authors := make([]uint16, len(votes))
 
+	p.committeeMu.RLock()
 	for i, v := range votes {
 		sigs[i] = make([]byte, len(v.Signature))
 		copy(sigs[i], v.Signature)
@@ -175,6 +185,7 @@ func (p *Primary) createCertificateFromVotes(header *types.Header, votes []*type
 		}
 		authors[i] = idx
 	}
+	p.committeeMu.RUnlock()
 
 	// Clone the header to avoid sharing state
 	headerClone := header.Clone()
@@ -197,8 +208,12 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 		return
 	}
 
-	// Check author is in committee
-	if !p.committee.ContainsValidator(header.Author) {
+	// Check author is in committee (uses committeeMu)
+	p.committeeMu.RLock()
+	inCommittee := p.committee.ContainsValidator(header.Author)
+	p.committeeMu.RUnlock()
+
+	if !inCommittee {
 		slog.Debug("Header from unknown validator",
 			"author", hexEncode(header.Author))
 		return
@@ -210,44 +225,46 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 		return
 	}
 
-	p.mu.Lock()
+	// Check epoch and round (uses roundMu)
+	p.roundMu.Lock()
+	currentEpoch := p.currentEpoch
+	currentRound := p.currentRound
+	p.roundMu.Unlock()
 
 	// Check epoch matches
-	if header.Epoch != p.currentEpoch {
-		p.mu.Unlock()
+	if header.Epoch != currentEpoch {
 		slog.Debug("Header epoch mismatch",
 			"headerEpoch", header.Epoch,
-			"currentEpoch", p.currentEpoch)
+			"currentEpoch", currentEpoch)
 		return
 	}
 
 	// Check round is acceptable (not too old, not too far ahead)
-	minRound := p.currentRound
+	minRound := currentRound
 	if minRound > 1 {
-		minRound = p.currentRound - 1
+		minRound = currentRound - 1
 	} else {
 		minRound = 0
 	}
-	maxRound := p.currentRound + 1
+	maxRound := currentRound + 1
 
 	if header.Round < minRound || header.Round > maxRound {
-		p.mu.Unlock()
 		slog.Debug("Header round out of range",
 			"headerRound", header.Round,
-			"currentRound", p.currentRound,
+			"currentRound", currentRound,
 			"minRound", minRound,
 			"maxRound", maxRound)
 		return
 	}
 
-	// Check if we already voted on this header
+	// Check if we already voted on this header (uses pendingMu)
 	headerDigest := header.Digest()
+	p.pendingMu.Lock()
 	if _, voted := p.votedHeaders[headerDigest]; voted {
-		p.mu.Unlock()
+		p.pendingMu.Unlock()
 		return
 	}
-
-	p.mu.Unlock()
+	p.pendingMu.Unlock()
 
 	// Check we have all parent certificates
 	for _, parentDigest := range header.Parents {
@@ -268,9 +285,9 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 	}
 
 	// Mark as voted (store round for cleanup)
-	p.mu.Lock()
+	p.pendingMu.Lock()
 	p.votedHeaders[headerDigest] = header.Round
-	p.mu.Unlock()
+	p.pendingMu.Unlock()
 
 	p.votesSent.Add(1)
 
