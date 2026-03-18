@@ -16,6 +16,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3/tm"
 	"gitlab.com/accumulatenetwork/accumulate/internal/bsn"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
@@ -137,7 +138,7 @@ func (d *Daemon) startSummaryApp() (types.Application, error) {
 
 	exec, err := bsn.NewExecutor(bsn.ExecutorOptions{
 		PartitionID: d.Config.Accumulate.PartitionId,
-		Logger:      d.Logger,
+		Logger:      logging.FromCometBFT(d.Logger),
 		Store:       store,
 		EventBus:    d.eventBus,
 	})
@@ -165,8 +166,9 @@ func (d *Daemon) startSummaryApp() (types.Application, error) {
 
 func (d *Daemon) startSummaryServices() error {
 	// Initialize all the services
+	rpcLogger := logging.FromCometBFT(d.Logger).With("module", "acc-rpc")
 	nodeSvc := tm.NewConsensusService(tm.ConsensusServiceParams{
-		Logger:           d.Logger.With("module", "acc-rpc"),
+		Logger:           rpcLogger,
 		Local:            d.localTm,
 		PartitionID:      d.Config.Accumulate.PartitionId,
 		PartitionType:    d.Config.Accumulate.NetworkType,
@@ -175,11 +177,11 @@ func (d *Daemon) startSummaryServices() error {
 		ValidatorKeyHash: sha256.Sum256(d.privVal.Key.PubKey.Bytes()),
 	})
 	submitSvc := tm.NewSubmitter(tm.SubmitterParams{
-		Logger: d.Logger.With("module", "acc-rpc"),
+		Logger: rpcLogger,
 		Local:  d.localTm,
 	})
 	validateSvc := tm.NewValidator(tm.ValidatorParams{
-		Logger: d.Logger.With("module", "acc-rpc"),
+		Logger: rpcLogger,
 		Local:  d.localTm,
 	})
 	messageHandler, err := message.NewHandler(
