@@ -20,10 +20,10 @@ const (
 	DefaultCommitBufferSize = 5000
 
 	// Batching defaults
-	DefaultBatchSize       = 500
-	DefaultBatchTimeout    = 100 * time.Millisecond
-	DefaultMaxBatchBytes   = 500 * 1024 // 500KB
-	DefaultMaxPendingSize  = 10 * 1024 * 1024 // 10MB
+	DefaultBatchSize        = 500
+	DefaultBatchTimeout     = 100 * time.Millisecond
+	DefaultMaxBatchBytes    = 500 * 1024      // 500KB
+	DefaultMaxPendingSize   = 10 * 1024 * 1024 // 10MB
 	DefaultMaxStoredBatches = 10000
 
 	// Timing defaults
@@ -36,6 +36,14 @@ const (
 	DefaultMaxInbound        = 200
 	DefaultMaxOutbound       = 200
 	DefaultConnectionTimeout = 10 * time.Second
+
+	// Channel buffer defaults - sized for high throughput (~30k+ TPS)
+	DefaultCertificateBufferSize = 1000 // Buffer for new certificates channel
+	DefaultBatchBufferSize       = 1000 // Buffer for batch gossip channel
+	DefaultHeaderBufferSize      = 500  // Buffer for header gossip channel
+	DefaultVoteBufferSize        = 1000 // Buffer for vote gossip channel
+	DefaultCertSyncBufferSize    = 500  // Buffer for certificate sync channels
+	DefaultEnvelopeBufferSize    = 500  // Buffer for inter-partition dispatch
 )
 
 // Config is the configuration for a DAG-BFT consensus node.
@@ -69,6 +77,38 @@ type ConsensusConfig struct {
 	// CommitBufferSize is the buffer size for committed certificates.
 	// Should be large enough to handle bursts of commits.
 	CommitBufferSize int `toml:"commit_buffer_size"`
+
+	// ChannelBuffers contains buffer sizes for internal channels.
+	// Larger buffers improve throughput but use more memory.
+	ChannelBuffers ChannelBufferConfig `toml:"channel_buffers"`
+}
+
+// ChannelBufferConfig contains buffer sizes for consensus channels.
+// These buffers help absorb bursts and prevent backpressure under high load.
+type ChannelBufferConfig struct {
+	// CertificateBufferSize is the buffer for the new certificates channel.
+	// Used by Primary to signal certificates to Bullshark.
+	CertificateBufferSize int `toml:"certificate_buffer_size"`
+
+	// BatchBufferSize is the buffer for batch gossip channels.
+	// Used by workers to receive batches from other nodes.
+	BatchBufferSize int `toml:"batch_buffer_size"`
+
+	// HeaderBufferSize is the buffer for header gossip channels.
+	// Used by Primary to receive headers from other validators.
+	HeaderBufferSize int `toml:"header_buffer_size"`
+
+	// VoteBufferSize is the buffer for vote gossip channels.
+	// Used by Primary to collect votes for certificate creation.
+	VoteBufferSize int `toml:"vote_buffer_size"`
+
+	// CertSyncBufferSize is the buffer for certificate sync channels.
+	// Used by CertSyncer for requesting missing certificates.
+	CertSyncBufferSize int `toml:"cert_sync_buffer_size"`
+
+	// EnvelopeBufferSize is the buffer for inter-partition dispatch.
+	// Used by Dispatcher for cross-partition message routing.
+	EnvelopeBufferSize int `toml:"envelope_buffer_size"`
 }
 
 // BatchingConfig contains batch creation settings.
@@ -137,6 +177,18 @@ type LoggingConfig struct {
 	Format string `toml:"format"`
 }
 
+// DefaultChannelBufferConfig returns a ChannelBufferConfig with default values.
+func DefaultChannelBufferConfig() ChannelBufferConfig {
+	return ChannelBufferConfig{
+		CertificateBufferSize: DefaultCertificateBufferSize,
+		BatchBufferSize:       DefaultBatchBufferSize,
+		HeaderBufferSize:      DefaultHeaderBufferSize,
+		VoteBufferSize:        DefaultVoteBufferSize,
+		CertSyncBufferSize:    DefaultCertSyncBufferSize,
+		EnvelopeBufferSize:    DefaultEnvelopeBufferSize,
+	}
+}
+
 // DefaultConfig returns a Config with default values.
 func DefaultConfig() *Config {
 	return &Config{
@@ -144,6 +196,7 @@ func DefaultConfig() *Config {
 			NumWorkers:       DefaultNumWorkers,
 			DAGGCDepth:       DefaultDAGGCDepth,
 			CommitBufferSize: DefaultCommitBufferSize,
+			ChannelBuffers:   DefaultChannelBufferConfig(),
 		},
 		Batching: BatchingConfig{
 			BatchSize:        DefaultBatchSize,
@@ -182,6 +235,11 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("commit_buffer_size must be at least 100")
 	}
 
+	// Validate channel buffer sizes
+	if err := c.Consensus.ChannelBuffers.Validate(); err != nil {
+		return fmt.Errorf("channel_buffers: %w", err)
+	}
+
 	if c.Batching.BatchSize < 1 {
 		return fmt.Errorf("batch_size must be at least 1")
 	}
@@ -206,6 +264,51 @@ func (c *Config) Validate() error {
 	return nil
 }
 
+// Validate validates channel buffer configuration.
+func (c *ChannelBufferConfig) Validate() error {
+	if c.CertificateBufferSize < 10 {
+		return fmt.Errorf("certificate_buffer_size must be at least 10")
+	}
+	if c.BatchBufferSize < 10 {
+		return fmt.Errorf("batch_buffer_size must be at least 10")
+	}
+	if c.HeaderBufferSize < 10 {
+		return fmt.Errorf("header_buffer_size must be at least 10")
+	}
+	if c.VoteBufferSize < 10 {
+		return fmt.Errorf("vote_buffer_size must be at least 10")
+	}
+	if c.CertSyncBufferSize < 10 {
+		return fmt.Errorf("cert_sync_buffer_size must be at least 10")
+	}
+	if c.EnvelopeBufferSize < 10 {
+		return fmt.Errorf("envelope_buffer_size must be at least 10")
+	}
+	return nil
+}
+
+// ApplyDefaults fills in default values for any unset channel buffer fields.
+func (c *ChannelBufferConfig) ApplyDefaults() {
+	if c.CertificateBufferSize <= 0 {
+		c.CertificateBufferSize = DefaultCertificateBufferSize
+	}
+	if c.BatchBufferSize <= 0 {
+		c.BatchBufferSize = DefaultBatchBufferSize
+	}
+	if c.HeaderBufferSize <= 0 {
+		c.HeaderBufferSize = DefaultHeaderBufferSize
+	}
+	if c.VoteBufferSize <= 0 {
+		c.VoteBufferSize = DefaultVoteBufferSize
+	}
+	if c.CertSyncBufferSize <= 0 {
+		c.CertSyncBufferSize = DefaultCertSyncBufferSize
+	}
+	if c.EnvelopeBufferSize <= 0 {
+		c.EnvelopeBufferSize = DefaultEnvelopeBufferSize
+	}
+}
+
 // ApplyDefaults fills in default values for any unset fields.
 func (c *Config) ApplyDefaults() {
 	defaults := DefaultConfig()
@@ -220,6 +323,9 @@ func (c *Config) ApplyDefaults() {
 	if c.Consensus.CommitBufferSize <= 0 {
 		c.Consensus.CommitBufferSize = defaults.Consensus.CommitBufferSize
 	}
+
+	// Channel buffer defaults
+	c.Consensus.ChannelBuffers.ApplyDefaults()
 
 	// Batching defaults
 	if c.Batching.BatchSize <= 0 {
