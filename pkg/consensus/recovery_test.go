@@ -74,8 +74,9 @@ func TestRecoveryManager_WithCheckpoint(t *testing.T) {
 	store := persist.NewStore(tmpDir)
 
 	// Create and save checkpoint
+	// Use valid 64-character hex string (32 bytes when decoded)
 	lastCommitted := map[string]types.Round{
-		"abc123": 5,
+		"0000000000000000000000000000000000000000000000000000000000000001": 5,
 	}
 	checkpoint := persist.NewCheckpoint("test", 10, 1, 8, lastCommitted)
 	if err := store.Save(checkpoint); err != nil {
