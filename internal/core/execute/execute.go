@@ -12,7 +12,6 @@ import (
 	"crypto/ed25519"
 	"time"
 
-	abcitypes "github.com/cometbft/cometbft/abci/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
@@ -91,8 +90,8 @@ type BlockParams struct {
 	IsLeader   bool
 	Index      uint64
 	Time       time.Time
-	CommitInfo *abcitypes.CommitInfo
-	Evidence   []abcitypes.Misbehavior
+	CommitInfo any // nil for DAG-BFT, *abcitypes.CommitInfo for CometBFT
+	Evidence   any // nil for DAG-BFT, []abcitypes.Misbehavior for CometBFT
 }
 
 // A Block is the context in which messages are processed.
