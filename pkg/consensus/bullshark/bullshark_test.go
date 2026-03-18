@@ -161,9 +161,12 @@ func TestNew(t *testing.T) {
 func TestNewWithState(t *testing.T) {
 	h := newTestHelper(t, 4)
 
+	// Use valid 64-character hex strings (32 bytes when decoded)
+	key1 := "0000000000000000000000000000000000000000000000000000000000000001"
+	key2 := "0000000000000000000000000000000000000000000000000000000000000002"
 	lastCommitted := map[string]types.Round{
-		"abc": 4,
-		"def": 6,
+		key1: 4,
+		key2: 6,
 	}
 
 	bs := NewWithState(h.committee, h.dag, 6, lastCommitted)
