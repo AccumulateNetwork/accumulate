@@ -167,11 +167,25 @@ func (p *Primary) processPendingForParent(parentDigest types.CertificateDigest) 
 
 // tryAdvanceRound attempts to advance to the next round if we have enough certificates.
 func (p *Primary) tryAdvanceRound() {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	// Get current round and committee for quorum check
+	p.roundMu.Lock()
+	currentRound := p.currentRound
+	p.roundMu.Unlock()
+
+	p.committeeMu.RLock()
+	committee := p.committee
+	p.committeeMu.RUnlock()
 
 	// Can advance when we have 2f+1 certificates in current round
-	if !p.dag.HasQuorum(p.currentRound, p.committee) {
+	if !p.dag.HasQuorum(currentRound, committee) {
+		return
+	}
+
+	// Now take roundMu to update round state
+	p.roundMu.Lock()
+	// Re-check current round in case it changed
+	if p.currentRound != currentRound {
+		p.roundMu.Unlock()
 		return
 	}
 
@@ -181,6 +195,7 @@ func (p *Primary) tryAdvanceRound() {
 		elapsed := now.Sub(p.lastRoundAdvance)
 		if elapsed < p.config.MinRoundInterval {
 			// Too soon, wait for the ticker to try again
+			p.roundMu.Unlock()
 			return
 		}
 	}
@@ -188,10 +203,11 @@ func (p *Primary) tryAdvanceRound() {
 	oldRound := p.currentRound
 	p.currentRound++
 	p.lastRoundAdvance = now
+	p.roundMu.Unlock()
 
 	slog.Info("Advanced to new round",
 		"oldRound", oldRound,
-		"newRound", p.currentRound)
+		"newRound", oldRound+1)
 
 	// Clean up old headers
 	go p.cleanupOldHeaders()
@@ -203,38 +219,40 @@ func (p *Primary) tryAdvanceRound() {
 // AdvanceRound forcibly advances to the next round.
 // This is useful for testing or when manual round advancement is needed.
 func (p *Primary) AdvanceRound() {
-	p.mu.Lock()
+	p.roundMu.Lock()
 	oldRound := p.currentRound
 	p.currentRound++
-	p.mu.Unlock()
+	newRound := p.currentRound
+	p.roundMu.Unlock()
 
 	slog.Info("Forcibly advanced to new round",
 		"oldRound", oldRound,
-		"newRound", p.currentRound)
+		"newRound", newRound)
 
 	p.tryCreateAndBroadcastHeader()
 }
 
 // SetRound sets the current round (useful for testing or sync).
 func (p *Primary) SetRound(round types.Round) {
-	p.mu.Lock()
+	p.roundMu.Lock()
 	p.currentRound = round
-	p.mu.Unlock()
+	p.roundMu.Unlock()
 }
 
 // SetEpoch sets the current epoch (useful for committee changes).
 func (p *Primary) SetEpoch(epoch uint64) {
-	p.mu.Lock()
+	p.roundMu.Lock()
 	p.currentEpoch = epoch
-	p.mu.Unlock()
+	p.roundMu.Unlock()
 }
 
 // UpdateCommittee updates the committee (for epoch transitions).
 // This method handles epoch transitions by updating the committee and epoch,
 // recalculating dependent values, and ensuring certificate validity across epochs.
 func (p *Primary) UpdateCommittee(committee *types.Committee) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	// Lock both committee and round mutexes (always in same order to avoid deadlock)
+	p.committeeMu.Lock()
+	p.roundMu.Lock()
 
 	oldEpoch := p.currentEpoch
 	oldCommittee := p.committee
@@ -242,6 +260,9 @@ func (p *Primary) UpdateCommittee(committee *types.Committee) {
 	// Update committee and epoch
 	p.committee = committee
 	p.currentEpoch = committee.Epoch
+
+	p.roundMu.Unlock()
+	p.committeeMu.Unlock()
 
 	// Log the transition
 	slog.Info("Updated committee",
@@ -277,8 +298,9 @@ func (p *Primary) UpdateCommittee(committee *types.Committee) {
 // This creates a new committee by applying the updates and sets it as the current committee.
 // The round is optionally reset based on the resetRound parameter.
 func (p *Primary) TransitionEpoch(updates []types.ValidatorUpdate, resetRound bool) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	// Lock both committee and round mutexes (always in same order to avoid deadlock)
+	p.committeeMu.Lock()
+	p.roundMu.Lock()
 
 	oldEpoch := p.currentEpoch
 	oldRound := p.currentRound
@@ -288,6 +310,8 @@ func (p *Primary) TransitionEpoch(updates []types.ValidatorUpdate, resetRound bo
 
 	// Validate the new committee
 	if err := newCommittee.Validate(); err != nil {
+		p.roundMu.Unlock()
+		p.committeeMu.Unlock()
 		slog.Error("Invalid committee after epoch transition",
 			"error", err,
 			"epoch", newCommittee.Epoch)
@@ -304,11 +328,15 @@ func (p *Primary) TransitionEpoch(updates []types.ValidatorUpdate, resetRound bo
 		p.lastRoundAdvance = time.Time{}
 	}
 
+	currentRound := p.currentRound
+	p.roundMu.Unlock()
+	p.committeeMu.Unlock()
+
 	slog.Info("Completed epoch transition",
 		"oldEpoch", oldEpoch,
 		"newEpoch", newCommittee.Epoch,
 		"oldRound", oldRound,
-		"currentRound", p.currentRound,
+		"currentRound", currentRound,
 		"validators", len(newCommittee.Validators),
 		"totalStake", newCommittee.TotalStake(),
 		"quorumThreshold", newCommittee.QuorumThreshold())
@@ -333,23 +361,23 @@ func (p *Primary) TransitionEpoch(updates []types.ValidatorUpdate, resetRound bo
 
 // Committee returns the current committee (thread-safe).
 func (p *Primary) Committee() *types.Committee {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	p.committeeMu.RLock()
+	defer p.committeeMu.RUnlock()
 	return p.committee
 }
 
 // GetOurCertificate returns our certificate for the given round, if any.
 func (p *Primary) GetOurCertificate(round types.Round) *types.Certificate {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	p.pendingMu.Lock()
+	defer p.pendingMu.Unlock()
 
 	return p.ourCerts[round]
 }
 
 // HasCertificateForRound returns true if we have created a certificate for the round.
 func (p *Primary) HasCertificateForRound(round types.Round) bool {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	p.pendingMu.Lock()
+	defer p.pendingMu.Unlock()
 
 	_, ok := p.ourCerts[round]
 	return ok
@@ -357,25 +385,25 @@ func (p *Primary) HasCertificateForRound(round types.Round) bool {
 
 // PendingVoteCount returns the number of pending votes for a header.
 func (p *Primary) PendingVoteCount(headerDigest types.HeaderDigest) int {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	p.pendingMu.Lock()
+	defer p.pendingMu.Unlock()
 
 	return len(p.pendingVotes[headerDigest])
 }
 
 // OurHeadersCount returns the number of headers we're collecting votes for.
 func (p *Primary) OurHeadersCount() int {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	p.pendingMu.Lock()
+	defer p.pendingMu.Unlock()
 
 	return len(p.ourHeaders)
 }
 
 // prunePendingCerts removes old pending certificates that can no longer be inserted.
 func (p *Primary) prunePendingCerts() {
-	p.mu.Lock()
+	p.roundMu.Lock()
 	currentRound := p.currentRound
-	p.mu.Unlock()
+	p.roundMu.Unlock()
 
 	pruned := p.pendingCerts.Prune(currentRound, DefaultPendingCertsGCDepth)
 	if pruned > 0 {

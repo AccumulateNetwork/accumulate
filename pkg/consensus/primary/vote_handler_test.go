@@ -38,10 +38,10 @@ func TestOnVoteReceivedValid(t *testing.T) {
 
 	// Register header as ours
 	digest := header.Digest()
-	p.mu.Lock()
+	p.pendingMu.Lock()
 	p.ourHeaders[digest] = header
 	p.pendingVotes[digest] = nil
-	p.mu.Unlock()
+	p.pendingMu.Unlock()
 
 	// Create vote from validator 1
 	vote := types.NewVote(digest, 0, 1, validators[1].pub)
@@ -75,10 +75,10 @@ func TestOnVoteReceivedDuplicate(t *testing.T) {
 	require.NoError(t, header.Sign(validators[0].priv))
 
 	digest := header.Digest()
-	p.mu.Lock()
+	p.pendingMu.Lock()
 	p.ourHeaders[digest] = header
 	p.pendingVotes[digest] = nil
-	p.mu.Unlock()
+	p.pendingMu.Unlock()
 
 	// Create vote from validator 1
 	vote := types.NewVote(digest, 0, 1, validators[1].pub)
@@ -140,10 +140,10 @@ func TestOnVoteReceivedInvalidSignature(t *testing.T) {
 	require.NoError(t, header.Sign(validators[0].priv))
 
 	digest := header.Digest()
-	p.mu.Lock()
+	p.pendingMu.Lock()
 	p.ourHeaders[digest] = header
 	p.pendingVotes[digest] = nil
-	p.mu.Unlock()
+	p.pendingMu.Unlock()
 
 	// Create vote with bad signature
 	vote := types.NewVote(digest, 0, 1, validators[1].pub)
@@ -176,10 +176,10 @@ func TestOnVoteReceivedWrongRound(t *testing.T) {
 	require.NoError(t, header.Sign(validators[0].priv))
 
 	digest := header.Digest()
-	p.mu.Lock()
+	p.pendingMu.Lock()
 	p.ourHeaders[digest] = header
 	p.pendingVotes[digest] = nil
-	p.mu.Unlock()
+	p.pendingMu.Unlock()
 
 	// Create vote for wrong round
 	vote := types.NewVote(digest, 5, 1, validators[1].pub) // round 5 doesn't match
@@ -212,10 +212,10 @@ func TestOnVoteReceivedWrongEpoch(t *testing.T) {
 	require.NoError(t, header.Sign(validators[0].priv))
 
 	digest := header.Digest()
-	p.mu.Lock()
+	p.pendingMu.Lock()
 	p.ourHeaders[digest] = header
 	p.pendingVotes[digest] = nil
-	p.mu.Unlock()
+	p.pendingMu.Unlock()
 
 	// Create vote for wrong epoch
 	vote := types.NewVote(digest, 0, 99, validators[1].pub) // epoch 99 doesn't match
@@ -247,10 +247,10 @@ func TestOnVoteReceivedUnknownValidator(t *testing.T) {
 	require.NoError(t, header.Sign(v1.priv))
 
 	digest := header.Digest()
-	p.mu.Lock()
+	p.pendingMu.Lock()
 	p.ourHeaders[digest] = header
 	p.pendingVotes[digest] = nil
-	p.mu.Unlock()
+	p.pendingMu.Unlock()
 
 	// Create vote from unknown validator
 	vote := types.NewVote(digest, 0, 1, v2.pub)
@@ -304,9 +304,9 @@ func TestOnHeaderReceivedValid(t *testing.T) {
 	p.OnHeaderReceived(header)
 
 	// Check that we marked it as voted
-	p.mu.Lock()
+	p.pendingMu.Lock()
 	_, voted := p.votedHeaders[header.Digest()]
-	p.mu.Unlock()
+	p.pendingMu.Unlock()
 
 	require.True(t, voted)
 }
@@ -332,9 +332,9 @@ func TestOnHeaderReceivedOwnHeader(t *testing.T) {
 	p.OnHeaderReceived(header)
 
 	// Should not vote on our own header
-	p.mu.Lock()
+	p.pendingMu.Lock()
 	_, voted := p.votedHeaders[header.Digest()]
-	p.mu.Unlock()
+	p.pendingMu.Unlock()
 
 	require.False(t, voted)
 }
@@ -362,9 +362,9 @@ func TestOnHeaderReceivedInvalidSignature(t *testing.T) {
 	p.OnHeaderReceived(header)
 
 	// Should not vote
-	p.mu.Lock()
+	p.pendingMu.Lock()
 	_, voted := p.votedHeaders[header.Digest()]
-	p.mu.Unlock()
+	p.pendingMu.Unlock()
 
 	require.False(t, voted)
 }
@@ -392,9 +392,9 @@ func TestOnHeaderReceivedWrongEpoch(t *testing.T) {
 	p.OnHeaderReceived(header)
 
 	// Should not vote
-	p.mu.Lock()
+	p.pendingMu.Lock()
 	_, voted := p.votedHeaders[header.Digest()]
-	p.mu.Unlock()
+	p.pendingMu.Unlock()
 
 	require.False(t, voted)
 }
@@ -421,9 +421,9 @@ func TestOnHeaderReceivedUnknownValidator(t *testing.T) {
 	p.OnHeaderReceived(header)
 
 	// Should not vote
-	p.mu.Lock()
+	p.pendingMu.Lock()
 	_, voted := p.votedHeaders[header.Digest()]
-	p.mu.Unlock()
+	p.pendingMu.Unlock()
 
 	require.False(t, voted)
 }
@@ -452,9 +452,9 @@ func TestOnHeaderReceivedOldRound(t *testing.T) {
 	p.OnHeaderReceived(header)
 
 	// Should not vote on old header
-	p.mu.Lock()
+	p.pendingMu.Lock()
 	_, voted := p.votedHeaders[header.Digest()]
-	p.mu.Unlock()
+	p.pendingMu.Unlock()
 
 	require.False(t, voted)
 }
@@ -482,9 +482,9 @@ func TestOnHeaderReceivedFutureRound(t *testing.T) {
 	p.OnHeaderReceived(header)
 
 	// Should not vote on future header
-	p.mu.Lock()
+	p.pendingMu.Lock()
 	_, voted := p.votedHeaders[header.Digest()]
-	p.mu.Unlock()
+	p.pendingMu.Unlock()
 
 	require.False(t, voted)
 }
@@ -516,9 +516,9 @@ func TestOnHeaderReceivedMissingParent(t *testing.T) {
 	p.OnHeaderReceived(header)
 
 	// Should not vote - missing parent
-	p.mu.Lock()
+	p.pendingMu.Lock()
 	_, voted := p.votedHeaders[header.Digest()]
-	p.mu.Unlock()
+	p.pendingMu.Unlock()
 
 	require.False(t, voted)
 }
@@ -555,9 +555,9 @@ func TestOnHeaderReceivedWithParents(t *testing.T) {
 	p.OnHeaderReceived(header)
 
 	// Should vote - all parents exist
-	p.mu.Lock()
+	p.pendingMu.Lock()
 	_, voted := p.votedHeaders[header.Digest()]
-	p.mu.Unlock()
+	p.pendingMu.Unlock()
 
 	require.True(t, voted)
 }
@@ -632,10 +632,10 @@ func TestCertificateCreationWithQuorum(t *testing.T) {
 	require.NoError(t, header.Sign(validators[0].priv))
 
 	digest := header.Digest()
-	p.mu.Lock()
+	p.pendingMu.Lock()
 	p.ourHeaders[digest] = header
 	p.pendingVotes[digest] = nil
-	p.mu.Unlock()
+	p.pendingMu.Unlock()
 
 	// Send votes from all validators (including ourselves)
 	for _, v := range validators {
@@ -679,10 +679,10 @@ func TestCertificateCreationNotEnoughVotes(t *testing.T) {
 	require.NoError(t, header.Sign(validators[0].priv))
 
 	digest := header.Digest()
-	p.mu.Lock()
+	p.pendingMu.Lock()
 	p.ourHeaders[digest] = header
 	p.pendingVotes[digest] = nil
-	p.mu.Unlock()
+	p.pendingMu.Unlock()
 
 	// Only send one vote - not enough for quorum
 	vote := types.NewVote(digest, 0, 1, validators[1].pub)

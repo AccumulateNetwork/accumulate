@@ -328,10 +328,10 @@ func TestPrimaryOurHeadersTracking(t *testing.T) {
 	header := types.NewHeader(v.pub, 0, 1, nil, nil)
 	require.NoError(t, header.Sign(v.priv))
 
-	p.mu.Lock()
+	p.pendingMu.Lock()
 	p.ourHeaders[header.Digest()] = header
 	p.pendingVotes[header.Digest()] = nil
-	p.mu.Unlock()
+	p.pendingMu.Unlock()
 
 	require.Equal(t, 1, p.OurHeadersCount())
 	require.Equal(t, 0, p.PendingVoteCount(header.Digest()))
@@ -358,9 +358,9 @@ func TestPrimaryHasCertificateForRound(t *testing.T) {
 
 	cert := types.NewCertificate(*header, nil, nil)
 
-	p.mu.Lock()
+	p.pendingMu.Lock()
 	p.ourCerts[0] = cert
-	p.mu.Unlock()
+	p.pendingMu.Unlock()
 
 	require.True(t, p.HasCertificateForRound(0))
 	require.False(t, p.HasCertificateForRound(1))
