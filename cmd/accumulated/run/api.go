@@ -59,10 +59,11 @@ func (q *Querier) start(inst *Instance) error {
 		return err
 	}
 
+	logger := logging.NewSlogLogger(inst.logger)
 	impl := api.NewQuerier(api.QuerierParams{
-		Logger:    (*logging.Slogger)(inst.logger).With("module", "api"),
+		Logger:    logger.With("module", "api"),
 		Partition: q.Partition,
-		Database:  database.New(store, (*logging.Slogger)(inst.logger)),
+		Database:  database.New(store, logger),
 		Consensus: consensus,
 	})
 	registerRpcService(inst, impl.Type().AddressFor(q.Partition), message.Querier{Querier: impl})
@@ -93,10 +94,11 @@ func (n *NetworkService) start(inst *Instance) error {
 		return err
 	}
 
+	logger := logging.NewSlogLogger(inst.logger)
 	impl := api.NewNetworkService(api.NetworkServiceParams{
-		Logger:    (*logging.Slogger)(inst.logger).With("module", "api"),
+		Logger:    logger.With("module", "api"),
 		Partition: n.Partition,
-		Database:  database.New(store, (*logging.Slogger)(inst.logger)),
+		Database:  database.New(store, logger),
 		EventBus:  events,
 	})
 	registerRpcService(inst, impl.Type().AddressFor(n.Partition), message.NetworkService{NetworkService: impl})
@@ -127,8 +129,9 @@ func (m *MetricsService) start(inst *Instance) error {
 		return err
 	}
 
+	logger := logging.NewSlogLogger(inst.logger)
 	impl := api.NewMetricsService(api.MetricsServiceParams{
-		Logger:  (*logging.Slogger)(inst.logger).With("module", "api"),
+		Logger:  logger.With("module", "api"),
 		Node:    consensus,
 		Querier: querier,
 	})
@@ -160,10 +163,11 @@ func (e *EventsService) start(inst *Instance) error {
 		return err
 	}
 
+	logger := logging.NewSlogLogger(inst.logger)
 	impl := api.NewEventService(api.EventServiceParams{
-		Logger:    (*logging.Slogger)(inst.logger).With("module", "api"),
+		Logger:    logger.With("module", "api"),
 		Partition: e.Partition,
-		Database:  database.New(store, (*logging.Slogger)(inst.logger)),
+		Database:  database.New(store, logger),
 		EventBus:  events,
 	})
 	registerRpcService(inst, impl.Type().AddressFor(e.Partition), message.EventService{EventService: impl})

@@ -269,6 +269,11 @@ func (f *nodeFactory) getLogger() log.Logger {
 	return f.logger
 }
 
+// accLogger returns the logger as logging.Logger for internal components.
+func (f *nodeFactory) accLogger() logging.Logger {
+	return logging.FromCometBFT(f.getLogger())
+}
+
 func (f *simFactory) getTaskQueue() *taskQueue {
 	if f.taskQueue != nil {
 		return f.taskQueue
@@ -435,7 +440,7 @@ func (f *nodeFactory) getDatabase() *database.Database {
 		return f.database
 	}
 
-	f.database = database.New(f.getStore(), f.getLogger())
+	f.database = database.New(f.getStore(), f.accLogger())
 	return f.database
 }
 
@@ -444,7 +449,7 @@ func (f *nodeFactory) getEventBus() *events.Bus {
 		return f.eventBus
 	}
 
-	f.eventBus = events.NewBus(f.getLogger())
+	f.eventBus = events.NewBus(f.accLogger())
 	return f.eventBus
 }
 
@@ -497,7 +502,7 @@ type appFunc = func(*nodeFactory) *consensus.Node
 func (f *nodeFactory) makeSummaryApp() *consensus.Node {
 	exec, err := bsn.NewExecutor(bsn.ExecutorOptions{
 		PartitionID: f.networkFactory.id,
-		Logger:      f.getLogger(),
+		Logger:      f.accLogger(),
 		Store:       f.getStore(),
 		EventBus:    f.getEventBus(),
 	})
@@ -507,7 +512,7 @@ func (f *nodeFactory) makeSummaryApp() *consensus.Node {
 
 	// Create the app interface
 	abci := f.abci(f, exec, func(file ioutil.SectionReader) error {
-		return bsn.LoadSnapshot(file, f.getStore(), f.getLogger())
+		return bsn.LoadSnapshot(file, f.getStore(), f.accLogger())
 	})
 
 	// Create the consensus node
@@ -518,7 +523,7 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 	// Register a querier service
 	f.registerSvc(api.ServiceTypeQuery, message.Querier{
 		Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{
-			Logger:    f.getLogger().With("module", "acc-rpc"),
+			Logger:    f.accLogger().With("module", "acc-rpc"),
 			Database:  f.getDatabase(),
 			Partition: f.networkFactory.id,
 		}),
@@ -527,7 +532,7 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 	// Register an event service
 	f.registerSvc(api.ServiceTypeEvent, message.EventService{
 		EventService: apiimpl.NewEventService(apiimpl.EventServiceParams{
-			Logger:    f.getLogger().With("module", "acc-rpc"),
+			Logger:    f.accLogger().With("module", "acc-rpc"),
 			Database:  f.getDatabase(),
 			Partition: f.networkFactory.id,
 			EventBus:  f.getEventBus(),
@@ -537,7 +542,7 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 	// Register a network service
 	f.registerSvc(api.ServiceTypeNetwork, message.NetworkService{
 		NetworkService: apiimpl.NewNetworkService(apiimpl.NetworkServiceParams{
-			Logger:    f.getLogger().With("module", "acc-rpc"),
+			Logger:    f.accLogger().With("module", "acc-rpc"),
 			Database:  f.getDatabase(),
 			Partition: f.networkFactory.id,
 			EventBus:  f.getEventBus(),
@@ -547,7 +552,7 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 	// Register a sequencer service
 	f.registerSvc(private.ServiceTypeSequencer, &message.Sequencer{
 		Sequencer: apiimpl.NewSequencer(apiimpl.SequencerParams{
-			Logger:       f.getLogger().With("module", "acc-rpc"),
+			Logger:       f.accLogger().With("module", "acc-rpc"),
 			Database:     f.getDatabase(),
 			EventBus:     f.getEventBus(),
 			Partition:    f.networkFactory.id,
@@ -557,7 +562,7 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 
 	// Set up the executor options
 	execOpts := block.ExecutorOptions{
-		Logger:        f.getLogger(),
+		Logger:        f.accLogger(),
 		Database:      f.getDatabase(),
 		Key:           f.network.PrivValKey,
 		Router:        f.getRouter(),
@@ -608,7 +613,7 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 
 	// Create the app interface
 	abci := f.abci(f, exec, func(file ioutil.SectionReader) error {
-		return snapshot.FullRestore(execOpts.Database, file, f.getLogger(), execOpts.Describe.PartitionUrl())
+		return snapshot.FullRestore(execOpts.Database, file, f.accLogger(), execOpts.Describe.PartitionUrl())
 	})
 
 	// Create the consensus node
