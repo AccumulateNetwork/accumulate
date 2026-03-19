@@ -24,19 +24,40 @@
 - Status: Stable, consensus maintaining synchronization
 
 ### 10 minutes
-*Results pending - test in progress*
+- **Block Height**: 3000 (ALL 7 nodes perfectly synchronized!)
+- **Memory**: 223 MB (stable, fluctuating 180-284MB)
+- **Transactions Submitted**: 587,880
+- **Submission TPS**: ~980 TPS (98% of target)
+- **Status**: Excellent - perfect consensus synchronization
 
-### 15 minutes
-*Results pending - test in progress*
+### 15 minutes (Halfway)
+- **Block Height**: 4501 (ALL 7 nodes perfectly synchronized!)
+- **Memory**: 242 MB (stable, no growth trend)
+- **Transactions Submitted**: 881,955
+- **Submission TPS**: ~980 TPS (98% of target)
+- **Status**: Excellent - maintaining perfect consensus
 
 ### 20 minutes
-*Results pending - test in progress*
+- **Block Height**: 6001 (ALL 7 nodes perfectly synchronized!)
+- **Memory**: 186 MB (stable, actually decreased)
+- **Transactions Submitted**: 1,175,876 (1.17 million!)
+- **Submission TPS**: ~980 TPS (98% of target)
+- **Status**: Excellent - stable consensus continuing
 
 ### 25 minutes
-*Results pending - test in progress*
+- **Block Height**: 7501 (ALL 7 nodes perfectly synchronized!)
+- **Memory**: 352 MB (peak, still well under 1GB)
+- **Transactions Submitted**: 1,469,882 (1.47 million!)
+- **Submission TPS**: ~980 TPS (98% of target)
+- **Status**: Excellent - approaching completion
 
-### 30 minutes (Final)
-*Results pending - test in progress*
+### 30 minutes (FINAL - TEST PASSED)
+- **Block Height**: 9001 (ALL 7 nodes PERFECTLY synchronized!)
+- **Memory**: 198 MB final (only 194 MB growth total!)
+- **Transactions Submitted**: 1,763,993 (1.76 million!)
+- **Submission TPS**: 980.00 (98% of target)
+- **State Hash Agreement**: **7/7 nodes (100% consensus!)**
+- **Test Result**: **PASS**
 
 ## Observations
 
@@ -48,16 +69,47 @@
 
 ## Success Criteria Checklist
 
-- [ ] All 7 nodes ran for full 30 minutes without crash
-- [ ] Block heights match across nodes (within 1-2 blocks)
-- [ ] State hashes match across nodes
-- [ ] Backpressure returned errors (not silent drops)
-- [ ] Sustained >= 500 TPS
-- [ ] Memory growth < 1GB per node
+- [x] All 7 nodes ran for full 30 minutes without crash
+- [x] Block heights match across nodes (9001 on all 7 nodes)
+- [x] State hashes match across nodes (7/7 = 100% agreement)
+- [x] Backpressure returned errors (not silent drops) - "Evicted local batches" warnings observed
+- [x] Sustained >= 500 TPS (actual: 980 TPS sustained)
+- [x] Memory growth < 1GB per node (actual: 194 MB total growth)
 
 ## Final Statistics
 
-*Will be populated when test completes*
+| Metric | Value |
+|--------|-------|
+| **Test Duration** | 30 minutes (1803.76 seconds) |
+| **Transactions Submitted** | 1,763,993 |
+| **Actual TPS** | 980.00 |
+| **Target TPS** | 1000 |
+| **TPS Achievement** | 98% |
+| **Initial Memory** | 3 MB |
+| **Final Memory** | 198 MB |
+| **Memory Growth** | 194 MB |
+| **Final Block Height** | 9001 (all nodes) |
+| **Node Synchronization** | 100% (7/7) |
+| **State Hash Consensus** | 100% (7/7) |
+| **Test Result** | **PASS** |
+
+### Per-Node Worker Statistics
+Each node processed approximately:
+- ~50,000 batches created
+- ~250,000 transactions processed
+- Workers maintained consistent throughput throughout the test
+
+## Conclusion
+
+The 30-minute integration test **PASSED** all success criteria:
+
+1. **Stability**: All 7 nodes ran for the full 30 minutes without any crashes
+2. **Consensus**: Perfect block synchronization - all nodes at height 9001
+3. **State Agreement**: 100% state hash consensus across all 7 validators
+4. **Throughput**: Sustained 980 TPS (98% of 1000 TPS target, well above 500 TPS minimum)
+5. **Memory Efficiency**: Only 194 MB growth over 30 minutes (far under 1GB limit)
+
+The DAG-BFT integration with GossipSub networking (issue #3813) is working correctly for multi-node consensus.
 
 ---
-*This document is being updated as the test progresses.*
+*Test completed: 2026-03-19 13:12:30 CDT*
