@@ -204,9 +204,7 @@ func (e *Executor) produceBlock() *Block {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	if len(e.pendingTxns) == 0 {
-		// Still produce empty blocks to maintain chain
-	}
+	// Note: empty blocks are still produced to maintain chain continuity
 
 	prevHash := e.latestBlock.Hash()
 
