@@ -733,7 +733,7 @@ func TestSnapshot_Pruning(t *testing.T) {
 	// Test latest snapshot retrieval
 	latest := store.Latest()
 	if latest == nil {
-		t.Error("Latest snapshot should exist")
+		t.Fatal("Latest snapshot should exist")
 	}
 	if latest.Height != 100 {
 		t.Errorf("Latest snapshot height should be 100, got %d", latest.Height)

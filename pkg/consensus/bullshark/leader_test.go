@@ -333,11 +333,9 @@ func TestHasSupport_IndirectAncestor(t *testing.T) {
 	}
 
 	// Round 3.
-	var r3 []*types.Certificate
 	for i := range h.keys {
 		cert := h.createCert(i, 3, r2)
 		require.NoError(t, d.Insert(cert))
-		r3 = append(r3, cert)
 	}
 
 	// The leader at round 2 should be an ancestor of round 3 certs.
