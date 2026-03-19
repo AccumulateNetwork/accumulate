@@ -116,30 +116,26 @@ func TestRun(t *testing.T) {
 		},
 		P2P: &P2P{
 			// BootstrapPeers: accumulate.BootstrapServers,
-			Key: &CometNodeKeyFile{Path: "node-1/dnn/config/node_key.json"},
+			Key: &PrivateKeySeed{Seed: record.NewKey("test-node")},
 		},
 		Services: []Service{
-			&ConsensusService{
+			&DAGBFTService{
 				NodeDir: "node-1/dnn",
 				Genesis: "node-1/dn-genesis.snap",
-				App: &CoreConsensusApp{
-					EnableHealing: Ptr(true),
-					Partition: &protocol.PartitionInfo{
-						ID:   protocol.Directory,
-						Type: protocol.PartitionTypeDirectory,
-					},
+				Partition: &protocol.PartitionInfo{
+					ID:   protocol.Directory,
+					Type: protocol.PartitionTypeDirectory,
 				},
+				EnableHealing: Ptr(true),
 			},
-			&ConsensusService{
+			&DAGBFTService{
 				NodeDir: "node-1/bvnn",
 				Genesis: "node-1/bvn-genesis.snap",
-				App: &CoreConsensusApp{
-					EnableHealing: Ptr(true),
-					Partition: &protocol.PartitionInfo{
-						ID:   "BVN1",
-						Type: protocol.PartitionTypeBlockValidator,
-					},
+				Partition: &protocol.PartitionInfo{
+					ID:   "BVN1",
+					Type: protocol.PartitionTypeBlockValidator,
 				},
+				EnableHealing: Ptr(true),
 			},
 			&StorageService{
 				Name: "directory",
