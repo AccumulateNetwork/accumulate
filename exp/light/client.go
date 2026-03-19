@@ -9,7 +9,6 @@ package light
 import (
 	"io"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -81,15 +80,6 @@ func RouterFromStore() ClientOption {
 		}
 
 		c.router = routing.NewRouter(routing.RouterOptions{Initial: g.Routing})
-		return nil
-	}
-}
-
-// Logger sets the logger.
-//
-// Deprecated: Unused - using slog instead.
-func Logger(logger log.Logger, keyVals ...any) ClientOption {
-	return func(c *Client) error {
 		return nil
 	}
 }
