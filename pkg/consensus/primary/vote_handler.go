@@ -187,10 +187,7 @@ func (p *Primary) createCertificateFromVotes(header *types.Header, votes []*type
 	}
 	p.committeeMu.RUnlock()
 
-	// Clone the header to avoid sharing state
-	headerClone := header.Clone()
-
-	return types.NewCertificate(*headerClone, sigs, authors)
+	return types.NewCertificate(header, sigs, authors)
 }
 
 // OnHeaderReceived handles an incoming header from another validator.

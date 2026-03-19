@@ -1035,17 +1035,14 @@ func TestVerifySnapshot_WithCertificateVerificationError(t *testing.T) {
 	committee := createTestCommittee(4)
 
 	// Create a certificate with invalid signatures for testing
-	cert := &types.Certificate{
-		Header: *types.NewHeader(
-			committee.Validators[0].PublicKey,
-			types.Round(1),
-			committee.Epoch,
-			nil,
-			nil,
-		).Clone(),
-		Signatures:        [][]byte{make([]byte, 64)}, // Invalid signature
-		SignedAuthorities: []uint16{0},
-	}
+	header := types.NewHeader(
+		committee.Validators[0].PublicKey,
+		types.Round(1),
+		committee.Epoch,
+		nil,
+		nil,
+	)
+	cert := types.NewCertificate(header, [][]byte{make([]byte, 64)}, []uint16{0}) // Invalid signature
 
 	snap := &Snapshot{
 		Version:      Version,
@@ -1062,17 +1059,14 @@ func TestRestoreWithOptions_CertificateVerificationFails(t *testing.T) {
 	committee := createTestCommittee(4)
 
 	// Create a certificate with invalid signatures
-	cert := &types.Certificate{
-		Header: *types.NewHeader(
-			committee.Validators[0].PublicKey,
-			types.Round(1),
-			committee.Epoch,
-			nil,
-			nil,
-		).Clone(),
-		Signatures:        [][]byte{make([]byte, 64)},
-		SignedAuthorities: []uint16{0},
-	}
+	header := types.NewHeader(
+		committee.Validators[0].PublicKey,
+		types.Round(1),
+		committee.Epoch,
+		nil,
+		nil,
+	)
+	cert := types.NewCertificate(header, [][]byte{make([]byte, 64)}, []uint16{0})
 
 	snap := &Snapshot{
 		Version:      Version,
