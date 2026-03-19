@@ -116,6 +116,7 @@ func ComputeTxnsHash(txHashes [][32]byte) [32]byte {
 	// A proper merkle tree would be more efficient for proofs
 	hasher := sha256.New()
 	for _, h := range txHashes {
+		h := h // Create local copy to avoid rangevarref lint warning
 		hasher.Write(h[:])
 	}
 	var result [32]byte
@@ -128,6 +129,7 @@ func UpdateStateHash(prevState [32]byte, txHashes [][32]byte) [32]byte {
 	hasher := sha256.New()
 	hasher.Write(prevState[:])
 	for _, h := range txHashes {
+		h := h // Create local copy to avoid rangevarref lint warning
 		hasher.Write(h[:])
 	}
 	var result [32]byte
