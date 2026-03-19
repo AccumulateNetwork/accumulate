@@ -1,12 +1,12 @@
 {
   "project": "dagbft-integration",
-  "tmux_session": "orchestrator",
-  "num_workers": 5,
+  "tmux_session": "dagbft-orchestrator",
+  "num_workers": 4,
   "cycle_interval": 60,
   "max_retries": 3,
   "stall_timeout": 600,
   "wall_clock_timeout": 7200,
-  "stagger_delay": 10,
+  "stagger_delay": 15,
   "repos": {
     "accumulate": {
       "path": "/home/paul/go/src/gitlab.com/AccumulateNetwork/accumulate",
@@ -24,32 +24,42 @@
   ],
   "project_context": {
     "language": "go",
-    "build_command": "go build ./...",
+    "build_command": "go build ./cmd/accumulated > /tmp/build.log 2>&1",
     "test_command": "go test ./internal/node/dagbft/... ./pkg/consensus/... -v -short -timeout 5m > /tmp/test.log 2>&1",
-    "lint_command": "golangci-lint run ./pkg/consensus/... ./cmd/consensus-testnet/... > /tmp/lint.log 2>&1 || true",
+    "lint_command": "golangci-lint run ./cmd/accumulated/... ./internal/node/dagbft/... > /tmp/lint.log 2>&1 || true",
     "safety_rules": [
       "**NEVER reset blockchain data** - see CLAUDE.md",
       "**Redirect command output to log files** - long output crashes context",
       "**Test changes with go build before committing**",
-      "**Run go build ./... to verify full build**"
+      "**Run go build ./cmd/accumulated to verify build after changes**",
+      "**Do NOT delete files until imports are updated**"
     ],
     "key_files": [
       "CLAUDE.md",
       "cmd/accumulated/run/dagbft.go",
-      "internal/node/dagbft/service.go",
-      "pkg/consensus/consensus.go",
-      "pkg/consensus/types/certificate.go",
-      "pkg/consensus/types/header.go",
-      "pkg/api/v3/p2p/p2p.go"
+      "cmd/accumulated/run/core_validator.go",
+      "cmd/accumulated/run/consensus.go",
+      "cmd/accumulated/run/types.go",
+      "internal/node/dagbft/service.go"
     ]
   },
+  "epics": [
+    {
+      "number": 3824,
+      "title": "Remove CometBFT and make DAG-BFT the default consensus",
+      "description": "Epic issue that tracks the complete removal of CometBFT from accumulated. Sub-issues must be completed in order due to dependencies.",
+      "sub_issues": [3825, 3826, 3827, 3828, 3829, 3830],
+      "status": "in_progress"
+    }
+  ],
   "issues": [
     {
       "number": 3813,
       "title": "Wire GossipSub into accumulated integration",
       "priority": 1,
       "wave": 1,
-      "description": "Wire GossipSub networking into the DAG-BFT service in accumulated. Currently service.go passes nil,nil to consensus.NewNode() for host and pubsub, which disables multi-node networking. Fix: 1) Add Host() method to p2p.Node, 2) Create GossipSub in dagbft.go, 3) Pass to ServiceConfig, 4) Pass to consensus.NewNode in service.go",
+      "depends_on": [],
+      "description": "Wire GossipSub networking into the DAG-BFT service in accumulated.",
       "status": "completed",
       "assigned_worker": null,
       "pipeline_stage": 4
@@ -57,8 +67,9 @@
     {
       "number": 3815,
       "title": "Implement BPT sync recovery",
-      "priority": 2,
-      "wave": 2,
+      "priority": 3,
+      "wave": 4,
+      "depends_on": [3830],
       "description": "Implement BPT (Binary Patricia Trie) sync for state recovery when nodes diverge or fall behind. This is needed for robustness but not blocking the integration test.",
       "status": "pending",
       "assigned_worker": null,
@@ -67,66 +78,118 @@
     {
       "number": 3818,
       "title": "Fix SA1026 json.Marshal in persist.go",
-      "priority": 1,
-      "wave": 1,
-      "description": "Fix staticcheck SA1026: json.Marshal on unsupported map type in persist.go:248.",
       "status": "completed",
-      "assigned_worker": null,
       "pipeline_stage": 4
     },
     {
       "number": 3819,
       "title": "Fix copylocks in Certificate/Header",
-      "priority": 1,
-      "wave": 1,
-      "description": "Fix govet copylocks warnings: NewCertificate passes Header by value but Header contains sync.RWMutex.",
       "status": "completed",
-      "assigned_worker": null,
       "pipeline_stage": 4
     },
     {
       "number": 3820,
       "title": "Migrate exp/light logger",
-      "priority": 2,
-      "wave": 2,
-      "description": "Update exp/light package to use logging.FromCometBFT() wrapper.",
       "status": "completed",
-      "assigned_worker": null,
       "pipeline_stage": 4
     },
     {
       "number": 3821,
       "title": "Fix rangevarref lint warnings",
-      "priority": 1,
-      "wave": 1,
-      "description": "Fix rangevarref warnings: Taking address of range variable is unsafe.",
       "status": "completed",
-      "assigned_worker": null,
       "pipeline_stage": 4
     },
     {
       "number": 3822,
       "title": "Fix ineffassign lint warnings",
-      "priority": 1,
-      "wave": 1,
-      "description": "Fix ineffassign warnings in height_test.go and snapshot_test.go.",
       "status": "completed",
-      "assigned_worker": null,
       "pipeline_stage": 4
     },
     {
       "number": 3823,
-      "title": "Run 7 accumulated validators with DAG-BFT for 30 minutes",
+      "title": "Run 7 accumulated validators with DAG-BFT",
       "priority": 1,
       "wave": 3,
       "status": "pending",
       "assigned_worker": null,
       "pipeline_stage": 0,
-      "blocked_by": [3813],
+      "depends_on": [3830],
       "execution_task": true,
       "requires_tmux": true,
       "min_runtime_minutes": 30,
-      "description": "## THIS IS NOT A CONSENSUS-TESTNET TEST\n\n**DO NOT** run cmd/consensus-testnet tests. That was already done and tests only the consensus layer in isolation.\n\n**THIS TASK** validates the full accumulated integration with DAG-BFT:\n- accumulated binary (not consensus-testnet)\n- DAGBFTService in cmd/accumulated/run/dagbft.go\n- internal/node/dagbft/service.go\n- GossipSub wiring from issue #3813\n\n## WHAT YOU MUST RUN\n\n7 `accumulated` validator nodes where EACH validator runs:\n- 1 BVN (Block Validator Network) partition\n- 1 DN (Directory Network) partition\n\nThis means 7 validators = 14 total partitions (7 BVNs + 7 DNs), all using DAG-BFT consensus instead of CometBFT.\n\n## WHY THIS IS DIFFERENT\n\nThe consensus-testnet only tests pkg/consensus in isolation. This task tests:\n- Full accumulated binary startup\n- DAGBFTService integration with the executor\n- Cross-partition anchoring via DN\n- Real Accumulate transaction processing (not test transactions)\n- BPT state management\n- The GossipSub wiring done in #3813\n\n## STEPS\n\n1. Configure 7 accumulated nodes with DAG-BFT enabled\n2. Each node runs both BVN and DN partitions\n3. Start all 7 validators\n4. Submit real Accumulate transactions for 30 minutes\n5. Verify BPT roots match across all validators\n6. Document results\n\n## SUCCESS CRITERIA\n\n- [ ] 7 accumulated validators running (not consensus-testnet)\n- [ ] Each validator runs BVN + DN partitions\n- [ ] DAG-BFT consensus (not CometBFT)\n- [ ] 30 minutes runtime without crash\n- [ ] BPT roots match across validators\n- [ ] Cross-partition anchoring works"
+      "description": "Run 7 accumulated validator nodes (each with BVN + DN) using DAG-BFT consensus for 30 minutes."
+    },
+    {
+      "number": 3825,
+      "title": "Enable DAG-BFT in core_validator.go",
+      "priority": 1,
+      "wave": 2,
+      "status": "pending",
+      "assigned_worker": null,
+      "pipeline_stage": 0,
+      "depends_on": [3813],
+      "epic": 3824,
+      "description": "Modify core_validator.go to create DAGBFTService instead of ConsensusService. This is the critical first step to enable DAG-BFT in accumulated."
+    },
+    {
+      "number": 3826,
+      "title": "Remove ConsensusService from types.go",
+      "priority": 1,
+      "wave": 2,
+      "status": "pending",
+      "assigned_worker": null,
+      "pipeline_stage": 0,
+      "depends_on": [3825],
+      "epic": 3824,
+      "description": "Remove ConsensusService and CoreConsensusApp type registrations from types.go after core_validator.go is updated."
+    },
+    {
+      "number": 3827,
+      "title": "Delete internal/node/abci package",
+      "priority": 1,
+      "wave": 2,
+      "status": "pending",
+      "assigned_worker": null,
+      "pipeline_stage": 0,
+      "depends_on": [3826],
+      "epic": 3824,
+      "description": "Delete the internal/node/abci/ package (CometBFT ABCI interface). First update all imports, then delete."
+    },
+    {
+      "number": 3828,
+      "title": "Delete internal/api/v3/tm package",
+      "priority": 1,
+      "wave": 2,
+      "status": "pending",
+      "assigned_worker": null,
+      "pipeline_stage": 0,
+      "depends_on": [3826],
+      "epic": 3824,
+      "description": "Delete the internal/api/v3/tm/ package (CometBFT API implementations). DAG-BFT equivalents exist in internal/node/dagbft/api.go."
+    },
+    {
+      "number": 3829,
+      "title": "Delete exp/tendermint package",
+      "priority": 1,
+      "wave": 2,
+      "status": "pending",
+      "assigned_worker": null,
+      "pipeline_stage": 0,
+      "depends_on": [3826],
+      "epic": 3824,
+      "description": "Delete the exp/tendermint/ package (Tendermint/CometBFT utilities). First update all imports, then delete."
+    },
+    {
+      "number": 3830,
+      "title": "Remove CometBFT from go.mod and clean up",
+      "priority": 1,
+      "wave": 2,
+      "status": "pending",
+      "assigned_worker": null,
+      "pipeline_stage": 0,
+      "depends_on": [3827, 3828, 3829],
+      "epic": 3824,
+      "description": "Final cleanup: delete consensus.go, update logging, remove CometBFT from go.mod, verify full build."
     }
   ]
 }

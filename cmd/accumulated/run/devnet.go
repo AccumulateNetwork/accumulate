@@ -16,7 +16,6 @@ import (
 	"strings"
 	"time"
 
-	tmtypes "github.com/cometbft/cometbft/types"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -264,7 +263,7 @@ func (d *DevnetConfiguration) buildGenesis(inst *Instance, cfg *Config, nodes []
 			Logger:          (*logging.Slogger)(inst.logger).With("partition", part.ID),
 			GenesisGlobals:  v,
 			OperatorKeys:    [][]byte{mainPubKey},
-			ConsensusParams: tmtypes.DefaultConsensusParams(),
+			ConsensusParams: nil, // Not needed for DAG-BFT
 			Snapshots: []func(*core.GlobalValues) (ioutil.SectionReader, error){
 				func(*core.GlobalValues) (ioutil.SectionReader, error) { return ioutil.NewBuffer(faucetSnapshot), nil },
 			},

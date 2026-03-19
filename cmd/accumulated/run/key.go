@@ -9,17 +9,24 @@ package run
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/json"
 	"fmt"
 	"os"
 
-	"github.com/cometbft/cometbft/crypto"
-	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
-	cmtjson "github.com/cometbft/cometbft/libs/json"
-	tmp2p "github.com/cometbft/cometbft/p2p"
-	"github.com/cometbft/cometbft/privval"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/address"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
+
+// cometKeyJSON represents the JSON structure of CometBFT key files
+// (priv_validator_key.json and node_key.json)
+type cometKeyJSON struct {
+	PrivKey cometKeyData `json:"priv_key"`
+}
+
+type cometKeyData struct {
+	Type  string `json:"type"`
+	Value []byte `json:"value"` // base64-decoded by encoding/json
+}
 
 func (k *RawPrivateKey) get(inst *Instance) (address.Address, error) {
 	return address.Parse(k.Address)
@@ -73,13 +80,13 @@ func (k *CometPrivValFile) get(inst *Instance) (address.Address, error) {
 		return nil, err
 	}
 
-	var pvKey privval.FilePVKey
-	err = cmtjson.Unmarshal(b, &pvKey)
+	var keyFile cometKeyJSON
+	err = json.Unmarshal(b, &keyFile)
 	if err != nil {
 		return nil, err
 	}
 
-	return convertCometKey(pvKey.PrivKey, &k.key)
+	return convertCometKeyData(keyFile.PrivKey, &k.key)
 }
 
 func (k *CometNodeKeyFile) get(inst *Instance) (address.Address, error) {
@@ -87,25 +94,36 @@ func (k *CometNodeKeyFile) get(inst *Instance) (address.Address, error) {
 		return k.key, nil
 	}
 
-	nk, err := tmp2p.LoadNodeKey(inst.path(k.Path))
+	b, err := os.ReadFile(inst.path(k.Path))
 	if err != nil {
 		return nil, err
 	}
-	return convertCometKey(nk.PrivKey, &k.key)
+
+	var keyFile cometKeyJSON
+	err = json.Unmarshal(b, &keyFile)
+	if err != nil {
+		return nil, err
+	}
+
+	return convertCometKeyData(keyFile.PrivKey, &k.key)
 }
 
-func convertCometKey(key crypto.PrivKey, ptr *address.Address) (address.Address, error) {
-	switch sk := key.(type) {
-	case tmed25519.PrivKey:
+func convertCometKeyData(key cometKeyData, ptr *address.Address) (address.Address, error) {
+	switch key.Type {
+	case "tendermint/PrivKeyEd25519":
+		if len(key.Value) != ed25519.PrivateKeySize {
+			return nil, fmt.Errorf("invalid ed25519 key size: %d", len(key.Value))
+		}
+		sk := ed25519.PrivateKey(key.Value)
 		*ptr = &address.PrivateKey{
 			PublicKey: address.PublicKey{
 				Type: protocol.SignatureTypeED25519,
-				Key:  sk[32:],
+				Key:  sk.Public().(ed25519.PublicKey),
 			},
 			Key: sk,
 		}
 	default:
-		return nil, fmt.Errorf("comet key type %v not supported", key.Type())
+		return nil, fmt.Errorf("comet key type %q not supported", key.Type)
 	}
 	return *ptr, nil
 }
