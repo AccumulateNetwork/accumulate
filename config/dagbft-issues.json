@@ -1,0 +1,84 @@
+{
+  "project": "dagbft-integration",
+  "tmux_session": "dagbft",
+  "num_workers": 2,
+  "cycle_interval": 60,
+  "max_retries": 3,
+  "stall_timeout": 600,
+  "wall_clock_timeout": 3600,
+  "stagger_delay": 10,
+  "repos": {
+    "accumulate": {
+      "path": "/home/paul/go/src/gitlab.com/AccumulateNetwork/accumulate",
+      "platform": "gitlab",
+      "default_branch": "dagbft-integration",
+      "branch_prefix": "issue/dagbft-",
+      "worktree_base": "/home/paul/worktrees/accumulate-dagbft"
+    }
+  },
+  "pipeline": [
+    "research",
+    "implement",
+    "validate",
+    "review"
+  ],
+  "project_context": {
+    "language": "go",
+    "build_command": "go build ./cmd/accumulated ./cmd/consensus-testnet",
+    "test_command": "go test ./internal/node/dagbft/... ./pkg/consensus/... -v -short -timeout 5m > /tmp/test.log 2>&1",
+    "safety_rules": [
+      "**NEVER reset blockchain data** - see CLAUDE.md",
+      "**Redirect command output to log files** - long output crashes context",
+      "**Test changes with go build before committing**"
+    ],
+    "key_files": [
+      "CLAUDE.md",
+      "cmd/accumulated/run/dagbft.go",
+      "internal/node/dagbft/service.go",
+      "pkg/consensus/node.go",
+      "pkg/consensus/gossip/gossip.go"
+    ]
+  },
+  "issues": [
+    {
+      "number": 3813,
+      "title": "Wire GossipSub into accumulated integration",
+      "priority": 1,
+      "wave": 1,
+      "description": "Wire GossipSub into accumulated integration. The DAG-BFT consensus works in consensus-testnet but the accumulated integration passes nil for host and pubsub. Fix internal/node/dagbft/service.go:130 to pass real libp2p host and GossipSub.",
+      "status": "in_progress",
+      "assigned_worker": 1,
+      "pipeline_stage": 1
+    },
+    {
+      "number": 3815,
+      "title": "Implement BPT sync recovery",
+      "priority": 2,
+      "wave": 2,
+      "description": "Implement BPT-level sync recovery algorithm: 1) Request missing BPT entries from neighbors, 2) Background BPT walk to fill gaps, 3) Validation passes until all nodes valid, 4) Fill missing chain entries.",
+      "status": "in_progress",
+      "assigned_worker": 2,
+      "pipeline_stage": 1
+    },
+    {
+      "number": 3816,
+      "title": "Backpressure improvements for high load",
+      "priority": 2,
+      "wave": 2,
+      "description": "Review and test backpressure improvements: batch count check in Submit(), eviction in createAndBroadcastBatch(), reduced MaxStoredBatches. Changes already implemented, needs review and tests.",
+      "status": "in_progress",
+      "assigned_worker": 3,
+      "pipeline_stage": 1
+    },
+    {
+      "number": 3817,
+      "title": "Complete accumulated integration (tracking)",
+      "priority": 3,
+      "wave": 3,
+      "description": "Tracking issue for DAG-BFT integration. Update status as other issues complete.",
+      "status": "in_progress",
+      "assigned_worker": 4,
+      "pipeline_stage": 1
+    }
+  ]
+}
