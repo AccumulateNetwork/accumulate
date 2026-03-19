@@ -105,8 +105,7 @@ func (c *Committee) GetValidator(index uint16) *ValidatorInfo {
 func (c *Committee) FindValidator(key ed25519.PublicKey) (uint16, bool) {
 	c.mu.RLock()
 	if c.indexByKey != nil {
-		keyStr := string(key)
-		idx, ok := c.indexByKey[keyStr]
+		idx, ok := c.indexByKey[string(key)]
 		c.mu.RUnlock()
 		return idx, ok
 	}
@@ -123,8 +122,7 @@ func (c *Committee) FindValidator(key ed25519.PublicKey) (uint16, bool) {
 		}
 	}
 
-	keyStr := string(key)
-	idx, ok := c.indexByKey[keyStr]
+	idx, ok := c.indexByKey[string(key)]
 	return idx, ok
 }
 

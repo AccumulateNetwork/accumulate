@@ -265,7 +265,6 @@ func TestProtocolHandler_DAGSync(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create and store multiple certificates across rounds
-	var expectedCerts []*types.Certificate
 	for round := types.Round(1); round <= 5; round++ {
 		for i := 0; i < 3; i++ {
 			pub, priv, err := ed25519.GenerateKey(rand.Reader)
@@ -278,7 +277,6 @@ func TestProtocolHandler_DAGSync(t *testing.T) {
 			cert := types.NewCertificate(*header, [][]byte{header.Signature}, []uint16{0})
 			err = dagStore.StoreCertificate(cert)
 			require.NoError(t, err)
-			expectedCerts = append(expectedCerts, cert)
 		}
 	}
 

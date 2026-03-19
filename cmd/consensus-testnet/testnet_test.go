@@ -531,6 +531,7 @@ func TestSingleNodeBlockProduction_MemoryStability(t *testing.T) {
 	}
 
 done:
+	_ = memSamples // Samples logged during collection; slice kept for potential future analysis
 	node.Stop()
 	executor.Stop()
 
