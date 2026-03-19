@@ -66,6 +66,7 @@ func (r *CertSyncRequest) Marshal() ([]byte, error) {
 	offset += 4
 
 	for _, digest := range r.Digests {
+		digest := digest // Create local copy to avoid rangevarref lint warning
 		copy(data[offset:], digest[:])
 		offset += 32
 	}
@@ -176,6 +177,7 @@ func (r *CertSyncResponse) Marshal() ([]byte, error) {
 	offset += 4
 
 	for _, digest := range r.Missing {
+		digest := digest // Create local copy to avoid rangevarref lint warning
 		copy(data[offset:], digest[:])
 		offset += 32
 	}
