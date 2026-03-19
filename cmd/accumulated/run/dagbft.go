@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/fatih/color"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
@@ -261,15 +262,40 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		CommitBufferSize: *s.CommitBufferSize,
 	}
 
+	// Create GossipSub for DAG-BFT certificate/batch dissemination
+	// This enables multi-node consensus networking via libp2p
+	var ps *pubsub.PubSub
+	if inst.p2p != nil {
+		h := inst.p2p.Host()
+		if h != nil {
+			ps, err = pubsub.NewGossipSub(inst.context, h,
+				pubsub.WithPeerExchange(true),
+				pubsub.WithFloodPublish(true),
+			)
+			if err != nil {
+				return errors.UnknownError.WithFormat("create gossipsub: %w", err)
+			}
+			slog.Info("Created GossipSub for DAG-BFT networking", "partition", s.Partition.ID)
+		}
+	}
+
 	// Create the service
-	s.service, err = dagbft.NewService(dagbft.ServiceConfig{
-		Partition:   s.Partition,
-		NodeConfig:  nodeConfig,
-		Adapter:     executorBridge,
-		EventBus:    s.eventBus,
-		Logger:      logging.FromCometBFT(logger.With("module", "dagbft")),
-		Genesis:     inst.path(s.Genesis),
-	})
+	svcConfig := dagbft.ServiceConfig{
+		Partition:  s.Partition,
+		NodeConfig: nodeConfig,
+		Adapter:    executorBridge,
+		EventBus:   s.eventBus,
+		Logger:     logging.FromCometBFT(logger.With("module", "dagbft")),
+		Genesis:    inst.path(s.Genesis),
+	}
+
+	// Wire in libp2p networking if available
+	if inst.p2p != nil && ps != nil {
+		svcConfig.Host = inst.p2p.Host()
+		svcConfig.PubSub = ps
+	}
+
+	s.service, err = dagbft.NewService(svcConfig)
 	if err != nil {
 		return errors.UnknownError.WithFormat("create DAG-BFT service: %w", err)
 	}

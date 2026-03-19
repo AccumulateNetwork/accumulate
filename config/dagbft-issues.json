@@ -37,12 +37,33 @@
       "CLAUDE.md",
       "cmd/accumulated/run/dagbft.go",
       "internal/node/dagbft/service.go",
-      "pkg/consensus/node.go",
+      "pkg/consensus/consensus.go",
       "pkg/consensus/types/certificate.go",
-      "pkg/consensus/types/header.go"
+      "pkg/consensus/types/header.go",
+      "pkg/api/v3/p2p/p2p.go"
     ]
   },
   "issues": [
+    {
+      "number": 3813,
+      "title": "Wire GossipSub into accumulated integration",
+      "priority": 1,
+      "wave": 1,
+      "description": "Wire GossipSub networking into the DAG-BFT service in accumulated. Currently service.go passes nil,nil to consensus.NewNode() for host and pubsub, which disables multi-node networking. Fix: 1) Add Host() method to p2p.Node, 2) Create GossipSub in dagbft.go, 3) Pass to ServiceConfig, 4) Pass to consensus.NewNode in service.go",
+      "status": "in_progress",
+      "assigned_worker": null,
+      "pipeline_stage": 2
+    },
+    {
+      "number": 3815,
+      "title": "Implement BPT sync recovery",
+      "priority": 2,
+      "wave": 2,
+      "description": "Implement BPT (Binary Patricia Trie) sync for state recovery when nodes diverge or fall behind. This is needed for robustness but not blocking the integration test.",
+      "status": "pending",
+      "assigned_worker": null,
+      "pipeline_stage": 0
+    },
     {
       "number": 3818,
       "title": "Fix SA1026 json.Marshal in persist.go",
@@ -101,7 +122,7 @@
       "status": "pending",
       "assigned_worker": null,
       "pipeline_stage": 0,
-      "blocked_by": [3818, 3819, 3820, 3821, 3822],
+      "blocked_by": [3813],
       "execution_task": true,
       "requires_tmux": true,
       "min_runtime_minutes": 30,
