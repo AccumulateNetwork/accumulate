@@ -48,61 +48,64 @@
       "title": "Fix SA1026 json.Marshal in persist.go",
       "priority": 1,
       "wave": 1,
-      "description": "Fix staticcheck SA1026: json.Marshal on unsupported map type in persist.go:248. The Certificate type contains Header.Payload which is a map with custom key types. Options: 1) Custom MarshalJSON for Certificate, 2) Convert map to serializable format, 3) Use different serialization.",
-      "status": "in_progress",
-      "assigned_worker": 1,
-      "pipeline_stage": 3
+      "description": "Fix staticcheck SA1026: json.Marshal on unsupported map type in persist.go:248.",
+      "status": "completed",
+      "assigned_worker": null,
+      "pipeline_stage": 4
     },
     {
       "number": 3819,
       "title": "Fix copylocks in Certificate/Header",
       "priority": 1,
       "wave": 1,
-      "description": "Fix govet copylocks warnings: NewCertificate passes Header by value but Header contains sync.RWMutex. Change NewCertificate to take *Header instead of Header. Affects: certificate.go, and many test files calling NewCertificate(*header, ...).",
-      "status": "in_progress",
-      "assigned_worker": 2,
-      "pipeline_stage": 2
+      "description": "Fix govet copylocks warnings: NewCertificate passes Header by value but Header contains sync.RWMutex.",
+      "status": "completed",
+      "assigned_worker": null,
+      "pipeline_stage": 4
     },
     {
       "number": 3820,
       "title": "Migrate exp/light logger",
       "priority": 2,
       "wave": 2,
-      "description": "Update exp/light package to use logging.FromCometBFT() wrapper instead of CometBFT logger directly. Low priority cleanup.",
+      "description": "Update exp/light package to use logging.FromCometBFT() wrapper.",
       "status": "completed",
-      "assigned_worker": 5,
-      "pipeline_stage": 3
+      "assigned_worker": null,
+      "pipeline_stage": 4
     },
     {
       "number": 3821,
       "title": "Fix rangevarref lint warnings",
       "priority": 1,
       "wave": 1,
-      "description": "Fix rangevarref warnings: Taking address of range variable is unsafe. Affected files: cert_sync.go:69,179, block.go:119,131, integration_test.go:535, stress_test.go:501, bullshark.go:172, header.go:147,164,240,257. Fix by creating a local copy before taking address.",
-      "status": "in_progress",
-      "assigned_worker": 3,
-      "pipeline_stage": 2
+      "description": "Fix rangevarref warnings: Taking address of range variable is unsafe.",
+      "status": "completed",
+      "assigned_worker": null,
+      "pipeline_stage": 4
     },
     {
       "number": 3822,
       "title": "Fix ineffassign lint warnings",
       "priority": 1,
       "wave": 1,
-      "description": "Fix ineffassign warnings: height_test.go:152 (min not used), snapshot_test.go:440 (allCerts not used). Either use the variables or use blank identifier.",
+      "description": "Fix ineffassign warnings in height_test.go and snapshot_test.go.",
       "status": "completed",
-      "assigned_worker": 4,
-      "pipeline_stage": 3
+      "assigned_worker": null,
+      "pipeline_stage": 4
     },
     {
       "number": 3823,
-      "title": "DAG-BFT 7-node integration test under load",
+      "title": "EXECUTE 7-node integration test (30 min, 1000 TPS)",
       "priority": 1,
       "wave": 3,
-      "description": "Run 7 accumulated nodes with DAG-BFT consensus under 1000 TPS load for 30 minutes. Success criteria: all nodes stay in sync, no crashes/OOM, backpressure rejects (not drops), 500+ TPS sustained, stable memory, BPT roots match. Depends on #3818, #3819, #3821, #3822 completing first.",
       "status": "pending",
       "assigned_worker": null,
       "pipeline_stage": 0,
-      "blocked_by": [3818, 3819, 3821, 3822]
+      "blocked_by": [3818, 3819, 3820, 3821, 3822],
+      "execution_task": true,
+      "requires_tmux": true,
+      "min_runtime_minutes": 30,
+      "description": "**THIS IS AN EXECUTION TASK, NOT A CODE-WRITING TASK.**\n\nYou must ACTUALLY RUN a 30-minute integration test, not just write test code.\n\n## REQUIRED STEPS:\n\n### 1. Merge dagbft-integration into this branch\n```bash\ncd /home/paul/worktrees/accumulate-dagbft/issue-3823\ngit fetch origin\ngit merge origin/dagbft-integration\ngo build ./...  # MUST PASS\n```\n\n### 2. Start 7 nodes in tmux session 'dagbft-test'\nCreate tmux session with 7 windows, one node per window. Each node must:\n- Use DAG-BFT consensus (not CometBFT)\n- Connect to the other 6 nodes via GossipSub\n- Log to /tmp/node-N.log\n\n### 3. Run load generator at 1000 TPS for 30 ACTUAL MINUTES\n- Submit mixed transactions (transfers, creates, data entries)\n- Log backpressure events (ErrBackpressure count)\n- Sample memory every 30 seconds\n\n### 4. After 30 minutes, collect results:\n- Block heights from all 7 nodes (must match within 1-2)\n- BPT/state roots from all 7 nodes (must match)\n- Total transactions submitted vs committed\n- Memory usage start vs end\n- Any crashes or errors\n\n### 5. Create results document\nWrite docs-dev/results/issue-3823-results.md with ACTUAL DATA from the test run.\n\n## SUCCESS CRITERIA (must verify with real data):\n- [ ] All 7 nodes ran for full 30 minutes without crash\n- [ ] Block heights match across nodes\n- [ ] BPT roots match across nodes\n- [ ] Backpressure returned errors (not silent drops)\n- [ ] Sustained >= 500 TPS\n- [ ] Memory growth < 1GB per node\n\n## DO NOT mark complete unless you have:\n1. Actually run the test for 30 minutes\n2. Collected real metrics from the running nodes\n3. Documented results with actual numbers"
     }
   ]
 }
