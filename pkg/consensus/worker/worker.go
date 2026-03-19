@@ -29,14 +29,14 @@ const (
 	DefaultBatchTimeout    = 100 * time.Millisecond // max time to wait for full batch
 	DefaultMaxBatchBytes   = 500 * 1024             // 500KB max batch size
 	DefaultMaxPendingSize  = 10 * 1024 * 1024       // 10MB max pending transactions
-	DefaultMaxStoredBatches = 10000                 // max batches stored before eviction
+	DefaultMaxStoredBatches = 1000                  // max batches stored before eviction (reduced for memory safety)
 )
 
 // ErrWorkerClosed is returned when operations are attempted on a closed worker.
 var ErrWorkerClosed = errors.New("worker is closed")
 
 // ErrBackpressure is returned when the worker cannot accept more transactions
-// due to memory limits being reached.
+// due to memory limits being reached (pending queue full or too many uncommitted batches).
 var ErrBackpressure = errors.New("worker backpressure: pending transactions exceed limit")
 
 // ErrValidationFailed is returned when a transaction fails pre-batch validation.
@@ -200,9 +200,17 @@ func (w *Worker) Submit(tx []byte) error {
 		w.txnsValidated.Add(1)
 	}
 
+	// Check batch count backpressure first (no lock needed, just read)
+	w.batchMu.RLock()
+	batchCount := len(w.batches)
+	w.batchMu.RUnlock()
+	if batchCount >= w.config.MaxStoredBatches {
+		return ErrBackpressure
+	}
+
 	w.mu.Lock()
 
-	// Check backpressure
+	// Check pending size backpressure
 	if w.pendingSize+len(tx) > w.config.MaxPendingSize {
 		w.mu.Unlock()
 		return ErrBackpressure
@@ -467,9 +475,26 @@ func (w *Worker) createAndBroadcastBatch() {
 		return
 	}
 
-	// Store locally first
+	// Store locally first (with eviction to prevent unbounded growth)
 	digest := batch.Digest()
 	w.batchMu.Lock()
+	if len(w.batches) >= w.config.MaxStoredBatches {
+		evictCount := len(w.batches) / 10 // Evict 10%
+		if evictCount < 1 {
+			evictCount = 1
+		}
+		evicted := 0
+		for d := range w.batches {
+			delete(w.batches, d)
+			evicted++
+			if evicted >= evictCount {
+				break
+			}
+		}
+		slog.Warn("Evicted local batches due to storage limit (consensus not keeping up)",
+			"evicted", evicted,
+			"remaining", len(w.batches))
+	}
 	w.batches[digest] = batch
 	w.batchMu.Unlock()
 

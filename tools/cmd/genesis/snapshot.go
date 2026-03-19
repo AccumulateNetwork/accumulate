@@ -142,7 +142,7 @@ func addToSnapshot(filename string, files []string, process func(string, int, *d
 
 	f, err := os.Open(filename)
 	if err == nil {
-		check(snapshot.Restore(db, f, logger))
+		check(snapshot.Restore(db, f, logging.FromCometBFT(logger)))
 		check(f.Close())
 	} else if errors.Is(err, fs.ErrNotExist) {
 		// Ok
