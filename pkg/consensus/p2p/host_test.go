@@ -7,6 +7,7 @@
 package p2p
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -141,7 +142,7 @@ func TestMockHost_Connect(t *testing.T) {
 	host2 := testutil.NewMockHost(peer.ID("host-2"))
 
 	// Connect host1 to host2
-	err := host1.Connect(nil, peer.AddrInfo{ID: host2.ID()})
+	err := host1.Connect(context.Background(), peer.AddrInfo{ID: host2.ID()})
 	require.NoError(t, err)
 
 	// Should have connection
@@ -176,7 +177,7 @@ func TestMockHost_Close(t *testing.T) {
 	host := testutil.NewMockHost(peer.ID("test-host"))
 
 	// Connect to another peer first
-	err := host.Connect(nil, peer.AddrInfo{ID: peer.ID("other")})
+	err := host.Connect(context.Background(), peer.AddrInfo{ID: peer.ID("other")})
 	require.NoError(t, err)
 
 	// Close the host
@@ -184,7 +185,7 @@ func TestMockHost_Close(t *testing.T) {
 	require.NoError(t, err)
 
 	// Should not be able to connect after close
-	err = host.Connect(nil, peer.AddrInfo{ID: peer.ID("another")})
+	err = host.Connect(context.Background(), peer.AddrInfo{ID: peer.ID("another")})
 	assert.Error(t, err)
 }
 
@@ -193,20 +194,20 @@ func TestMockHost_NewStream(t *testing.T) {
 
 	// Connect to a peer
 	peer2 := peer.ID("peer-2")
-	err := host.Connect(nil, peer.AddrInfo{ID: peer2})
+	err := host.Connect(context.Background(), peer.AddrInfo{ID: peer2})
 	require.NoError(t, err)
 
 	// Create a stream
-	stream, err := host.NewStream(nil, peer2, "test-protocol")
+	stream, err := host.NewStream(context.Background(), peer2, "test-protocol")
 	require.NoError(t, err)
 	assert.NotNil(t, stream)
 
 	// Try to create stream to unconnected peer
-	_, err = host.NewStream(nil, peer.ID("unconnected"), "test-protocol")
+	_, err = host.NewStream(context.Background(), peer.ID("unconnected"), "test-protocol")
 	assert.Error(t, err)
 
 	// No protocol specified
-	_, err = host.NewStream(nil, peer2)
+	_, err = host.NewStream(context.Background(), peer2)
 	assert.Error(t, err)
 }
 
@@ -215,11 +216,11 @@ func TestMockStream_ReadWrite(t *testing.T) {
 	peer2 := peer.ID("peer-2")
 
 	// Connect
-	err := host.Connect(nil, peer.AddrInfo{ID: peer2})
+	err := host.Connect(context.Background(), peer.AddrInfo{ID: peer2})
 	require.NoError(t, err)
 
 	// Create stream
-	stream, err := host.NewStream(nil, peer2, "test-protocol")
+	stream, err := host.NewStream(context.Background(), peer2, "test-protocol")
 	require.NoError(t, err)
 
 	mockStream := stream.(*testutil.MockStream)
@@ -248,10 +249,10 @@ func TestMockStream_Close(t *testing.T) {
 	host := testutil.NewMockHost(peer.ID("test-host"))
 	peer2 := peer.ID("peer-2")
 
-	err := host.Connect(nil, peer.AddrInfo{ID: peer2})
+	err := host.Connect(context.Background(), peer.AddrInfo{ID: peer2})
 	require.NoError(t, err)
 
-	stream, err := host.NewStream(nil, peer2, "test-protocol")
+	stream, err := host.NewStream(context.Background(), peer2, "test-protocol")
 	require.NoError(t, err)
 
 	mockStream := stream.(*testutil.MockStream)
@@ -272,10 +273,10 @@ func TestMockStream_Reset(t *testing.T) {
 	host := testutil.NewMockHost(peer.ID("test-host"))
 	peer2 := peer.ID("peer-2")
 
-	err := host.Connect(nil, peer.AddrInfo{ID: peer2})
+	err := host.Connect(context.Background(), peer.AddrInfo{ID: peer2})
 	require.NoError(t, err)
 
-	stream, err := host.NewStream(nil, peer2, "test-protocol")
+	stream, err := host.NewStream(context.Background(), peer2, "test-protocol")
 	require.NoError(t, err)
 
 	mockStream := stream.(*testutil.MockStream)
@@ -295,10 +296,10 @@ func TestMockStream_Protocol(t *testing.T) {
 	host := testutil.NewMockHost(peer.ID("test-host"))
 	peer2 := peer.ID("peer-2")
 
-	err := host.Connect(nil, peer.AddrInfo{ID: peer2})
+	err := host.Connect(context.Background(), peer.AddrInfo{ID: peer2})
 	require.NoError(t, err)
 
-	stream, err := host.NewStream(nil, peer2, "test-protocol")
+	stream, err := host.NewStream(context.Background(), peer2, "test-protocol")
 	require.NoError(t, err)
 
 	mockStream := stream.(*testutil.MockStream)
@@ -316,10 +317,10 @@ func TestMockStream_Deadlines(t *testing.T) {
 	host := testutil.NewMockHost(peer.ID("test-host"))
 	peer2 := peer.ID("peer-2")
 
-	err := host.Connect(nil, peer.AddrInfo{ID: peer2})
+	err := host.Connect(context.Background(), peer.AddrInfo{ID: peer2})
 	require.NoError(t, err)
 
-	stream, err := host.NewStream(nil, peer2, "test-protocol")
+	stream, err := host.NewStream(context.Background(), peer2, "test-protocol")
 	require.NoError(t, err)
 
 	mockStream := stream.(*testutil.MockStream)
@@ -340,7 +341,7 @@ func TestMockConn_BasicOperations(t *testing.T) {
 	host := testutil.NewMockHost(peer.ID("test-host"))
 	peer2 := peer.ID("peer-2")
 
-	err := host.Connect(nil, peer.AddrInfo{ID: peer2})
+	err := host.Connect(context.Background(), peer.AddrInfo{ID: peer2})
 	require.NoError(t, err)
 
 	conns := host.GetConnections()
@@ -363,14 +364,14 @@ func TestMockConn_NewStream(t *testing.T) {
 	host := testutil.NewMockHost(peer.ID("test-host"))
 	peer2 := peer.ID("peer-2")
 
-	err := host.Connect(nil, peer.AddrInfo{ID: peer2})
+	err := host.Connect(context.Background(), peer.AddrInfo{ID: peer2})
 	require.NoError(t, err)
 
 	conns := host.GetConnections()
 	conn := conns[peer2]
 
 	// Create stream on connection
-	stream, err := conn.NewStream(nil)
+	stream, err := conn.NewStream(context.Background())
 	require.NoError(t, err)
 	assert.NotNil(t, stream)
 
@@ -383,7 +384,7 @@ func TestMockConn_NewStream_Closed(t *testing.T) {
 	host := testutil.NewMockHost(peer.ID("test-host"))
 	peer2 := peer.ID("peer-2")
 
-	err := host.Connect(nil, peer.AddrInfo{ID: peer2})
+	err := host.Connect(context.Background(), peer.AddrInfo{ID: peer2})
 	require.NoError(t, err)
 
 	conns := host.GetConnections()
@@ -394,6 +395,6 @@ func TestMockConn_NewStream_Closed(t *testing.T) {
 	require.NoError(t, err)
 
 	// Creating stream on closed connection should fail
-	_, err = conn.NewStream(nil)
+	_, err = conn.NewStream(context.Background())
 	assert.Error(t, err)
 }
