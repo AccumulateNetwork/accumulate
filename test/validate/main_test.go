@@ -182,9 +182,9 @@ func (s *ValidationTestSuite) SetupSuite() {
 
 func setupSim(t *testing.T, net *accumulated.NetworkInit) (*simulator.Simulator, api.Faucet) {
 	// Set up the simulator and harness
-	logger := acctesting.NewTestLogger(t)
+	cometLogger := acctesting.NewTestLogger(t)
 	sim, err := simulator.New(
-		simulator.WithLogger(logger),
+		simulator.WithLogger(cometLogger),
 		simulator.WithNetwork(net),
 		simulator.Genesis(GenesisTime),
 
@@ -203,7 +203,7 @@ func setupSim(t *testing.T, net *accumulated.NetworkInit) (*simulator.Simulator,
 	MakeAccount(t, sim.DatabaseFor(faucet), &TokenAccount{Url: faucet.JoinPath("tokens"), TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e14)})
 
 	faucetSvc, err := v3impl.NewFaucet(context.Background(), v3impl.FaucetParams{
-		Logger:    logger.With("module", "faucet"),
+		Logger:    logging.FromCometBFT(cometLogger.With("module", "faucet")),
 		Account:   faucet.JoinPath("tokens"),
 		Key:       build.ED25519PrivateKey(faucetKey),
 		Submitter: sim.Services(),

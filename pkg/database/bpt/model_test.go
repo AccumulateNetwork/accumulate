@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/exp/lxrand"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/common"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
@@ -388,7 +389,7 @@ func TestDelete(t *testing.T) {
 }
 
 func newBPT(parent database.Record, logger log.Logger, store database.Store, key *record.Key, name string) *BPT {
-	return New(parent, logger, store, key)
+	return New(parent, logging.FromCometBFT(logger), store, key)
 }
 
 func (c *ChangeSet) Begin() *ChangeSet {
