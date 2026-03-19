@@ -50,9 +50,9 @@
       "priority": 1,
       "wave": 1,
       "description": "Wire GossipSub networking into the DAG-BFT service in accumulated. Currently service.go passes nil,nil to consensus.NewNode() for host and pubsub, which disables multi-node networking. Fix: 1) Add Host() method to p2p.Node, 2) Create GossipSub in dagbft.go, 3) Pass to ServiceConfig, 4) Pass to consensus.NewNode in service.go",
-      "status": "in_progress",
+      "status": "completed",
       "assigned_worker": null,
-      "pipeline_stage": 2
+      "pipeline_stage": 4
     },
     {
       "number": 3815,
