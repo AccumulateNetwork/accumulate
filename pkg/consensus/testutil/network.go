@@ -54,14 +54,13 @@ type TestNode struct {
 type NetworkOption func(*networkConfig)
 
 type networkConfig struct {
-	stakes          []uint64
-	numWorkers      int
-	workerConfig    worker.Config
-	partition       string
-	useGossip       bool
-	meshWaitTime    time.Duration
-	batchSize       int
-	batchTimeout    time.Duration
+	stakes       []uint64
+	numWorkers   int
+	partition    string
+	useGossip    bool
+	meshWaitTime time.Duration
+	batchSize    int
+	batchTimeout time.Duration
 }
 
 // WithStakes sets custom stake distribution for validators.

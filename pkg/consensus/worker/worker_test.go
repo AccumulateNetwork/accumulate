@@ -143,7 +143,7 @@ func TestWorker_BatchCreation_OnSizeLimit(t *testing.T) {
 
 	// Start worker in background
 	go func() {
-		w.Start(ctx)
+		_ = w.Start(ctx)
 	}()
 
 	// Give worker time to start
@@ -191,7 +191,7 @@ func TestWorker_BatchCreation_OnTimeout(t *testing.T) {
 
 	// Start worker in background
 	go func() {
-		w.Start(ctx)
+		_ = w.Start(ctx)
 	}()
 
 	// Give worker time to start
@@ -229,7 +229,7 @@ func TestWorker_BatchCreation_OnByteSizeLimit(t *testing.T) {
 
 	// Start worker in background
 	go func() {
-		w.Start(ctx)
+		_ = w.Start(ctx)
 	}()
 
 	// Give worker time to start
@@ -331,19 +331,19 @@ func TestWorker_AvailableBatches(t *testing.T) {
 
 	// Start worker
 	go func() {
-		w.Start(ctx)
+		_ = w.Start(ctx)
 	}()
 	time.Sleep(50 * time.Millisecond)
 
 	// Create first batch
 	for i := 0; i < 3; i++ {
-		w.Submit([]byte("batch1"))
+		_ = w.Submit([]byte("batch1"))
 	}
 	time.Sleep(100 * time.Millisecond)
 
 	// Create second batch
 	for i := 0; i < 3; i++ {
-		w.Submit([]byte("batch2"))
+		_ = w.Submit([]byte("batch2"))
 	}
 	time.Sleep(100 * time.Millisecond)
 
@@ -373,7 +373,7 @@ func TestWorker_PruneBatches(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		// Each batch has unique content to ensure unique digests
 		batch := types.NewBatch([][]byte{[]byte(fmt.Sprintf("tx-%d", i))})
-		w.StoreBatch(batch)
+		_ = w.StoreBatch(batch)
 		digests = append(digests, batch.Digest())
 	}
 
@@ -404,7 +404,7 @@ func TestWorker_Close(t *testing.T) {
 	// Start in background
 	done := make(chan struct{})
 	go func() {
-		w.Start(ctx)
+		_ = w.Start(ctx)
 		close(done)
 	}()
 
@@ -443,7 +443,7 @@ func TestWorker_ConcurrentSubmit(t *testing.T) {
 	defer cancel()
 
 	go func() {
-		w.Start(ctx)
+		_ = w.Start(ctx)
 	}()
 	time.Sleep(50 * time.Millisecond)
 
@@ -457,7 +457,7 @@ func TestWorker_ConcurrentSubmit(t *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 			for j := 0; j < txnsPerGoroutine; j++ {
-				w.Submit([]byte("tx"))
+				_ = w.Submit([]byte("tx"))
 			}
 		}(i)
 	}
@@ -482,9 +482,9 @@ func TestWorker_BatchDigests(t *testing.T) {
 	batch2 := types.NewBatch([][]byte{[]byte("tx2")})
 	batch3 := types.NewBatch([][]byte{[]byte("tx3")})
 
-	w.StoreBatch(batch1)
-	w.StoreBatch(batch2)
-	w.StoreBatch(batch3)
+	_ = w.StoreBatch(batch1)
+	_ = w.StoreBatch(batch2)
+	_ = w.StoreBatch(batch3)
 
 	digests := w.BatchDigests()
 	assert.Len(t, digests, 3)
@@ -602,8 +602,8 @@ func TestWorker_WithGossip_BroadcastBatch(t *testing.T) {
 	}, gl2)
 
 	// Start both workers
-	go func() { w1.Start(ctx) }()
-	go func() { w2.Start(ctx) }()
+	go func() { _ = w1.Start(ctx) }()
+	go func() { _ = w2.Start(ctx) }()
 	time.Sleep(100 * time.Millisecond)
 
 	// Submit transactions to worker 1
@@ -660,7 +660,7 @@ func TestWorker_WithGossip_ReceiveIncomingBatches(t *testing.T) {
 		Partition: "test",
 	}, gl2)
 
-	go func() { w2.Start(ctx) }()
+	go func() { _ = w2.Start(ctx) }()
 	time.Sleep(100 * time.Millisecond)
 
 	// Broadcast batch directly from gossip layer 1 (simulating another worker)
@@ -699,20 +699,20 @@ func TestWorker_FinalBatchOnClose(t *testing.T) {
 	// Start worker
 	done := make(chan struct{})
 	go func() {
-		w.Start(ctx)
+		_ = w.Start(ctx)
 		close(done)
 	}()
 	time.Sleep(50 * time.Millisecond)
 
 	// Submit some transactions (less than batch size)
 	for i := 0; i < 5; i++ {
-		w.Submit([]byte("pending-tx"))
+		_ = w.Submit([]byte("pending-tx"))
 	}
 
 	assert.Equal(t, 5, w.PendingCount())
 
 	// Close the worker
-	w.Close()
+	_ = w.Close()
 	cancel()
 
 	<-done
@@ -733,7 +733,7 @@ func TestWorker_BatchContentsCorrect(t *testing.T) {
 		BatchTimeout: 10 * time.Second,
 	}, nil)
 
-	go func() { w.Start(ctx) }()
+	go func() { _ = w.Start(ctx) }()
 	time.Sleep(50 * time.Millisecond)
 
 	// Submit specific transactions

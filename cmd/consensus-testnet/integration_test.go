@@ -115,7 +115,7 @@ func TestConsensusTestnet_TwoNodeCommunication(t *testing.T) {
 		})
 		require.NoError(t, err)
 		executors[i] = exec
-		t.Cleanup(func() { exec.Cleanup() })
+		t.Cleanup(func() { _ = exec.Cleanup() })
 
 		nodeCfg := consensus.NodeConfig{
 			Partition:        "testnet",
@@ -206,7 +206,7 @@ func TestConsensusTestnet_TwoNodeCommunication(t *testing.T) {
 			defer ticker.Stop()
 
 			payload := make([]byte, 128)
-			rand.Read(payload)
+			_, _ = rand.Read(payload)
 
 			for {
 				select {
@@ -408,7 +408,7 @@ func TestConsensusTestnet_BasicConsensus(t *testing.T) {
 		})
 		require.NoError(t, err)
 		executors[i] = exec
-		t.Cleanup(func() { exec.Cleanup() })
+		t.Cleanup(func() { _ = exec.Cleanup() })
 
 		nodeCfg := consensus.NodeConfig{
 			Partition:        "testnet",
@@ -488,7 +488,7 @@ func TestConsensusTestnet_BasicConsensus(t *testing.T) {
 			defer ticker.Stop()
 
 			payload := make([]byte, 128)
-			rand.Read(payload)
+			_, _ = rand.Read(payload)
 
 			for {
 				select {
@@ -644,7 +644,7 @@ func TestConsensusTestnet_Throughput(t *testing.T) {
 		})
 		require.NoError(t, err)
 		executors[i] = exec
-		t.Cleanup(func() { exec.Cleanup() })
+		t.Cleanup(func() { _ = exec.Cleanup() })
 
 		nodeCfg := consensus.NodeConfig{
 			Partition:        "testnet",
@@ -728,7 +728,7 @@ func TestConsensusTestnet_Throughput(t *testing.T) {
 				defer ticker.Stop()
 
 				payload := make([]byte, 256)
-				rand.Read(payload)
+				_, _ = rand.Read(payload)
 
 				for {
 					select {
@@ -889,7 +889,7 @@ func TestConsensusTestnet_NodeRestart(t *testing.T) {
 		})
 		require.NoError(t, err)
 		executors[i] = exec
-		t.Cleanup(func() { exec.Cleanup() })
+		t.Cleanup(func() { _ = exec.Cleanup() })
 
 		nodeCfg := consensus.NodeConfig{
 			Partition:        "testnet",
@@ -972,7 +972,7 @@ func TestConsensusTestnet_NodeRestart(t *testing.T) {
 			defer ticker.Stop()
 
 			payload := make([]byte, 128)
-			rand.Read(payload)
+			_, _ = rand.Read(payload)
 
 			for {
 				select {
@@ -1040,7 +1040,7 @@ func TestConsensusTestnet_NodeRestart(t *testing.T) {
 		DataDir:       fmt.Sprintf("/tmp/consensus-testnet-restart-%d-new", nodeToRestart),
 	})
 	require.NoError(t, err)
-	t.Cleanup(func() { newExec.Cleanup() })
+	t.Cleanup(func() { _ = newExec.Cleanup() })
 
 	// Create new pubsub for the restarted node (need to rejoin topics)
 	newNetw := swarmt.GenSwarm(t)

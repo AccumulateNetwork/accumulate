@@ -122,7 +122,7 @@ func TestStress_MultiNodeNetworkUnderLoad(t *testing.T) {
 		})
 		require.NoError(t, err)
 		executors[i] = exec
-		t.Cleanup(func() { exec.Cleanup() })
+		t.Cleanup(func() { _ = exec.Cleanup() })
 
 		nodeCfg := consensus.NodeConfig{
 			Partition:        "stresstest",
@@ -209,7 +209,7 @@ func TestStress_MultiNodeNetworkUnderLoad(t *testing.T) {
 				defer ticker.Stop()
 
 				payload := make([]byte, 256)
-				rand.Read(payload)
+				_, _ = rand.Read(payload)
 
 				for {
 					select {
@@ -340,7 +340,7 @@ func TestStress_MultiNodeNetworkUnderLoad(t *testing.T) {
 		DataDir:       fmt.Sprintf("/tmp/consensus-stress-test-%d-new", nodeToKill),
 	})
 	require.NoError(t, err)
-	t.Cleanup(func() { newExec.Cleanup() })
+	t.Cleanup(func() { _ = newExec.Cleanup() })
 
 	// Create new network connection
 	newNetw := swarmt.GenSwarm(t)
@@ -646,7 +646,7 @@ func TestStress_MemoryStability(t *testing.T) {
 		})
 		require.NoError(t, err)
 		executors[i] = exec
-		t.Cleanup(func() { exec.Cleanup() })
+		t.Cleanup(func() { _ = exec.Cleanup() })
 
 		nodeCfg := consensus.NodeConfig{
 			Partition:        "memtest",
@@ -729,7 +729,7 @@ func TestStress_MemoryStability(t *testing.T) {
 				defer ticker.Stop()
 
 				payload := make([]byte, 256)
-				rand.Read(payload)
+				_, _ = rand.Read(payload)
 
 				for {
 					select {
@@ -913,7 +913,7 @@ func TestStress_ConsensusStallDetection(t *testing.T) {
 		})
 		require.NoError(t, err)
 		executors[i] = exec
-		t.Cleanup(func() { exec.Cleanup() })
+		t.Cleanup(func() { _ = exec.Cleanup() })
 
 		nodeCfg := consensus.NodeConfig{
 			Partition:        "stalltest",
@@ -996,7 +996,7 @@ func TestStress_ConsensusStallDetection(t *testing.T) {
 				defer ticker.Stop()
 
 				payload := make([]byte, 256)
-				rand.Read(payload)
+				_, _ = rand.Read(payload)
 
 				for {
 					select {

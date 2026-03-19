@@ -28,7 +28,7 @@ func TestCertSyncRequest_MarshalUnmarshal(t *testing.T) {
 
 	digests := make([]types.CertificateDigest, 3)
 	for i := range digests {
-		rand.Read(digests[i][:])
+		_, _ = rand.Read(digests[i][:])
 	}
 
 	req := &gossip.CertSyncRequest{
@@ -63,7 +63,7 @@ func TestCertSyncResponse_MarshalUnmarshal(t *testing.T) {
 
 	missing := make([]types.CertificateDigest, 2)
 	for i := range missing {
-		rand.Read(missing[i][:])
+		_, _ = rand.Read(missing[i][:])
 	}
 
 	resp := &gossip.CertSyncResponse{
@@ -186,7 +186,7 @@ func TestGossipLayer_BroadcastAndReceiveSyncRequest(t *testing.T) {
 	require.NoError(t, err)
 
 	var digest types.CertificateDigest
-	rand.Read(digest[:])
+	_, _ = rand.Read(digest[:])
 
 	req := &gossip.CertSyncRequest{
 		Digests:   []types.CertificateDigest{digest},

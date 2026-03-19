@@ -268,7 +268,7 @@ func (e *Executor) ProcessCertificate(cert *types.Certificate, batches map[types
 		}
 
 		for _, txData := range batch.Transactions {
-			e.ProcessTransaction(txData)
+			_ = e.ProcessTransaction(txData)
 		}
 	}
 	// Blocks are produced by the timer-based blockProductionLoop

@@ -27,7 +27,7 @@ func TestCertSyncRequest_MarshalUnmarshal(t *testing.T) {
 	// Create digests
 	digests := make([]types.CertificateDigest, 3)
 	for i := range digests {
-		rand.Read(digests[i][:])
+		_, _ = rand.Read(digests[i][:])
 	}
 
 	req := &gossip.CertSyncRequest{
@@ -64,7 +64,7 @@ func TestCertSyncResponse_MarshalUnmarshal(t *testing.T) {
 	// Create missing digests
 	missing := make([]types.CertificateDigest, 2)
 	for i := range missing {
-		rand.Read(missing[i][:])
+		_, _ = rand.Read(missing[i][:])
 	}
 
 	resp := &gossip.CertSyncResponse{
@@ -100,7 +100,7 @@ func TestCertSyncer_RequestBatching(t *testing.T) {
 		JitterMax:             5 * time.Millisecond,
 	}
 	config.PublicKey = make([]byte, 32)
-	rand.Read(config.PublicKey)
+	_, _ = rand.Read(config.PublicKey)
 
 	pending := NewPendingCertificates(100)
 
@@ -109,7 +109,7 @@ func TestCertSyncer_RequestBatching(t *testing.T) {
 	// Request multiple digests
 	digests := make([]types.CertificateDigest, 5)
 	for i := range digests {
-		rand.Read(digests[i][:])
+		_, _ = rand.Read(digests[i][:])
 	}
 
 	// Add digests
@@ -131,14 +131,14 @@ func TestCertSyncer_Deduplication(t *testing.T) {
 		JitterMax:             5 * time.Millisecond,
 	}
 	config.PublicKey = make([]byte, 32)
-	rand.Read(config.PublicKey)
+	_, _ = rand.Read(config.PublicKey)
 
 	pending := NewPendingCertificates(100)
 	syncer := NewCertSyncer(config, d, nil, pending)
 
 	// Create a digest
 	var digest types.CertificateDigest
-	rand.Read(digest[:])
+	_, _ = rand.Read(digest[:])
 
 	// Request it multiple times
 	syncer.RequestMissing([]types.CertificateDigest{digest})
@@ -175,7 +175,7 @@ func TestCertSyncer_DAGContainsSkip(t *testing.T) {
 		JitterMax:             5 * time.Millisecond,
 	}
 	config.PublicKey = make([]byte, 32)
-	rand.Read(config.PublicKey)
+	_, _ = rand.Read(config.PublicKey)
 
 	pending := NewPendingCertificates(100)
 	syncer := NewCertSyncer(config, d, nil, pending)
@@ -202,7 +202,7 @@ func TestCertSyncer_Lifecycle(t *testing.T) {
 		JitterMax:             5 * time.Millisecond,
 	}
 	config.PublicKey = make([]byte, 32)
-	rand.Read(config.PublicKey)
+	_, _ = rand.Read(config.PublicKey)
 
 	pending := NewPendingCertificates(100)
 	syncer := NewCertSyncer(config, d, nil, pending)
@@ -213,7 +213,7 @@ func TestCertSyncer_Lifecycle(t *testing.T) {
 
 	// Request some certificates
 	var digest types.CertificateDigest
-	rand.Read(digest[:])
+	_, _ = rand.Read(digest[:])
 	syncer.RequestMissing([]types.CertificateDigest{digest})
 
 	time.Sleep(50 * time.Millisecond)
@@ -239,7 +239,7 @@ func TestCertSyncer_MaxRetries(t *testing.T) {
 		JitterMax:             1 * time.Millisecond,
 	}
 	config.PublicKey = make([]byte, 32)
-	rand.Read(config.PublicKey)
+	_, _ = rand.Read(config.PublicKey)
 
 	pending := NewPendingCertificates(100)
 	syncer := NewCertSyncer(config, d, nil, pending)
@@ -253,7 +253,7 @@ func TestCertSyncer_MaxRetries(t *testing.T) {
 
 	// Request a digest
 	var digest types.CertificateDigest
-	rand.Read(digest[:])
+	_, _ = rand.Read(digest[:])
 	syncer.RequestMissing([]types.CertificateDigest{digest})
 
 	// Wait for max retries to be exhausted
@@ -288,7 +288,7 @@ func TestCertSyncer_HandleSyncRequest(t *testing.T) {
 
 	// Create a sync request
 	var missingDigest types.CertificateDigest
-	rand.Read(missingDigest[:])
+	_, _ = rand.Read(missingDigest[:])
 
 	req := &gossip.CertSyncRequest{
 		Digests:   []types.CertificateDigest{cert.Digest(), missingDigest},
@@ -304,7 +304,7 @@ func TestCertSyncer_CertReceivedCallback(t *testing.T) {
 
 	config := CertSyncerConfig{}
 	config.PublicKey = make([]byte, 32)
-	rand.Read(config.PublicKey)
+	_, _ = rand.Read(config.PublicKey)
 	config.applyDefaults()
 
 	pending := NewPendingCertificates(100)

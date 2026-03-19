@@ -65,9 +65,9 @@ func TestHeightTracker_RecordDuplicateRound(t *testing.T) {
 func TestHeightTracker_HeightForRound(t *testing.T) {
 	tracker := adapter.NewHeightTracker(0)
 
-	tracker.RecordBlock(types.Round(2))
-	tracker.RecordBlock(types.Round(4))
-	tracker.RecordBlock(types.Round(8))
+	_, _ = tracker.RecordBlock(types.Round(2))
+	_, _ = tracker.RecordBlock(types.Round(4))
+	_, _ = tracker.RecordBlock(types.Round(8))
 
 	// Check valid rounds
 	height, ok := tracker.HeightForRound(types.Round(2))
@@ -90,9 +90,9 @@ func TestHeightTracker_HeightForRound(t *testing.T) {
 func TestHeightTracker_RoundForHeight(t *testing.T) {
 	tracker := adapter.NewHeightTracker(0)
 
-	tracker.RecordBlock(types.Round(2))
-	tracker.RecordBlock(types.Round(4))
-	tracker.RecordBlock(types.Round(8))
+	_, _ = tracker.RecordBlock(types.Round(2))
+	_, _ = tracker.RecordBlock(types.Round(4))
+	_, _ = tracker.RecordBlock(types.Round(8))
 
 	// Check valid heights
 	round, ok := tracker.RoundForHeight(1)
@@ -115,11 +115,11 @@ func TestHeightTracker_RoundForHeight(t *testing.T) {
 func TestHeightTracker_RoundRange(t *testing.T) {
 	tracker := adapter.NewHeightTracker(0)
 
-	tracker.RecordBlock(types.Round(2))
-	tracker.RecordBlock(types.Round(4))
-	tracker.RecordBlock(types.Round(6))
-	tracker.RecordBlock(types.Round(8))
-	tracker.RecordBlock(types.Round(10))
+	_, _ = tracker.RecordBlock(types.Round(2))
+	_, _ = tracker.RecordBlock(types.Round(4))
+	_, _ = tracker.RecordBlock(types.Round(6))
+	_, _ = tracker.RecordBlock(types.Round(8))
+	_, _ = tracker.RecordBlock(types.Round(10))
 
 	// Get range [2, 4]
 	rounds := tracker.RoundRange(2, 4)
@@ -153,9 +153,9 @@ func TestHeightTracker_HeightRange(t *testing.T) {
 	assert.False(t, ok)
 
 	// Add some blocks
-	tracker.RecordBlock(types.Round(2))
-	tracker.RecordBlock(types.Round(4))
-	tracker.RecordBlock(types.Round(6))
+	_, _ = tracker.RecordBlock(types.Round(2))
+	_, _ = tracker.RecordBlock(types.Round(4))
+	_, _ = tracker.RecordBlock(types.Round(6))
 
 	minH, maxH, ok := tracker.HeightRange()
 	assert.True(t, ok)
@@ -166,8 +166,8 @@ func TestHeightTracker_HeightRange(t *testing.T) {
 func TestHeightTracker_HasRound(t *testing.T) {
 	tracker := adapter.NewHeightTracker(0)
 
-	tracker.RecordBlock(types.Round(2))
-	tracker.RecordBlock(types.Round(4))
+	_, _ = tracker.RecordBlock(types.Round(2))
+	_, _ = tracker.RecordBlock(types.Round(4))
 
 	assert.True(t, tracker.HasRound(types.Round(2)))
 	assert.True(t, tracker.HasRound(types.Round(4)))
@@ -178,8 +178,8 @@ func TestHeightTracker_HasRound(t *testing.T) {
 func TestHeightTracker_HasHeight(t *testing.T) {
 	tracker := adapter.NewHeightTracker(0)
 
-	tracker.RecordBlock(types.Round(2))
-	tracker.RecordBlock(types.Round(4))
+	_, _ = tracker.RecordBlock(types.Round(2))
+	_, _ = tracker.RecordBlock(types.Round(4))
 
 	assert.True(t, tracker.HasHeight(1))
 	assert.True(t, tracker.HasHeight(2))
@@ -190,9 +190,9 @@ func TestHeightTracker_HasHeight(t *testing.T) {
 func TestHeightTracker_CommittedRounds(t *testing.T) {
 	tracker := adapter.NewHeightTracker(0)
 
-	tracker.RecordBlock(types.Round(2))
-	tracker.RecordBlock(types.Round(6))
-	tracker.RecordBlock(types.Round(4))
+	_, _ = tracker.RecordBlock(types.Round(2))
+	_, _ = tracker.RecordBlock(types.Round(6))
+	_, _ = tracker.RecordBlock(types.Round(4))
 
 	rounds := tracker.CommittedRounds()
 	assert.Len(t, rounds, 3)
@@ -207,19 +207,19 @@ func TestHeightTracker_BlockCount(t *testing.T) {
 
 	assert.Equal(t, 0, tracker.BlockCount())
 
-	tracker.RecordBlock(types.Round(2))
+	_, _ = tracker.RecordBlock(types.Round(2))
 	assert.Equal(t, 1, tracker.BlockCount())
 
-	tracker.RecordBlock(types.Round(4))
+	_, _ = tracker.RecordBlock(types.Round(4))
 	assert.Equal(t, 2, tracker.BlockCount())
 }
 
 func TestHeightTracker_Reset(t *testing.T) {
 	tracker := adapter.NewHeightTracker(0)
 
-	tracker.RecordBlock(types.Round(2))
-	tracker.RecordBlock(types.Round(4))
-	tracker.RecordBlock(types.Round(6))
+	_, _ = tracker.RecordBlock(types.Round(2))
+	_, _ = tracker.RecordBlock(types.Round(4))
+	_, _ = tracker.RecordBlock(types.Round(6))
 
 	assert.Equal(t, uint64(3), tracker.CurrentHeight())
 	assert.Equal(t, 3, tracker.BlockCount())
@@ -286,9 +286,9 @@ func TestHeightTracker_RestoreDuplicateHeight(t *testing.T) {
 func TestHeightTracker_Snapshot(t *testing.T) {
 	tracker := adapter.NewHeightTracker(0)
 
-	tracker.RecordBlock(types.Round(2))
-	tracker.RecordBlock(types.Round(4))
-	tracker.RecordBlock(types.Round(8))
+	_, _ = tracker.RecordBlock(types.Round(2))
+	_, _ = tracker.RecordBlock(types.Round(4))
+	_, _ = tracker.RecordBlock(types.Round(8))
 
 	snapshot := tracker.Snapshot()
 	assert.Len(t, snapshot, 3)
@@ -305,9 +305,9 @@ func TestHeightTracker_Snapshot(t *testing.T) {
 func TestHeightTracker_SnapshotAndRestore(t *testing.T) {
 	tracker1 := adapter.NewHeightTracker(0)
 
-	tracker1.RecordBlock(types.Round(2))
-	tracker1.RecordBlock(types.Round(4))
-	tracker1.RecordBlock(types.Round(8))
+	_, _ = tracker1.RecordBlock(types.Round(2))
+	_, _ = tracker1.RecordBlock(types.Round(4))
+	_, _ = tracker1.RecordBlock(types.Round(8))
 
 	snapshot := tracker1.Snapshot()
 
@@ -346,7 +346,7 @@ func TestHeightTracker_ConcurrentAccess(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for round := range rounds {
-				tracker.RecordBlock(round)
+				_, _ = tracker.RecordBlock(round)
 			}
 		}()
 	}

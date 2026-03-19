@@ -163,7 +163,7 @@ func TestRecoverFromCheckpoint(t *testing.T) {
 
 	store := persist.NewStore(tmpDir)
 	checkpoint := persist.NewCheckpoint("test", 15, 2, 12, nil)
-	store.Save(checkpoint)
+	_ = store.Save(checkpoint)
 
 	node, _ := NewNode(NodeConfig{
 		Partition: "test",
@@ -195,7 +195,7 @@ func TestNewNodeWithRecovery(t *testing.T) {
 
 	store := persist.NewStore(tmpDir)
 	checkpoint := persist.NewCheckpoint("test", 20, 3, 18, nil)
-	store.Save(checkpoint)
+	_ = store.Save(checkpoint)
 
 	node, result, err := NewNodeWithRecovery(NodeConfig{
 		Partition: "test",
@@ -235,7 +235,7 @@ func TestShutdownAndRecovery_Integration(t *testing.T) {
 	}, committee, nil, nil)
 
 	ctx := context.Background()
-	node1.Start(ctx)
+	_ = node1.Start(ctx)
 
 	// Advance round
 	node1.primary.SetRound(10)
@@ -345,7 +345,7 @@ func TestRecoverAndStart(t *testing.T) {
 
 	store := persist.NewStore(tmpDir)
 	checkpoint := persist.NewCheckpoint("test", 5, 1, 4, nil)
-	store.Save(checkpoint)
+	_ = store.Save(checkpoint)
 
 	node, _ := NewNode(NodeConfig{
 		Partition: "test",
@@ -369,7 +369,7 @@ func TestRecoverAndStart(t *testing.T) {
 
 	// Node should accept transactions
 	tx := make([]byte, 32)
-	rand.Read(tx)
+	_, _ = rand.Read(tx)
 	if err := node.SubmitTransaction(tx); err != nil {
 		t.Errorf("node should accept transactions after recovery: %v", err)
 	}
@@ -500,7 +500,7 @@ func TestRestartRecovery(t *testing.T) {
 
 	// Verify: Node can accept transactions (rejoined consensus)
 	tx := make([]byte, 32)
-	rand.Read(tx)
+	_, _ = rand.Read(tx)
 	if err := node2.SubmitTransaction(tx); err != nil {
 		t.Errorf("recovered node should accept transactions: %v", err)
 	}
@@ -609,7 +609,7 @@ func TestCrashRecovery(t *testing.T) {
 
 	// Verify: Node can accept transactions after crash recovery
 	tx := make([]byte, 32)
-	rand.Read(tx)
+	_, _ = rand.Read(tx)
 	if err := node2.SubmitTransaction(tx); err != nil {
 		t.Errorf("crash-recovered node should accept transactions: %v", err)
 	}
@@ -748,7 +748,7 @@ func TestMissedRoundsRecovery(t *testing.T) {
 
 	// Verify: Node can participate in consensus after catching up
 	tx := make([]byte, 32)
-	rand.Read(tx)
+	_, _ = rand.Read(tx)
 	if err := node1Recovered.SubmitTransaction(tx); err != nil {
 		t.Errorf("recovered node should accept transactions after catching up: %v", err)
 	}

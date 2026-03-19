@@ -44,7 +44,7 @@ func TestNewNode(t *testing.T) {
 		require.NotNil(t, node)
 
 		assert.Equal(t, "test", node.Partition())
-		assert.Equal(t, pub, ed25519.PublicKey(node.PublicKey()))
+		assert.Equal(t, pub, node.PublicKey())
 		assert.NotNil(t, node.DAG())
 		assert.NotNil(t, node.Primary())
 		assert.NotNil(t, node.Bullshark())

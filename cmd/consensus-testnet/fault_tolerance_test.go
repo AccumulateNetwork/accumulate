@@ -378,7 +378,7 @@ func TestConsensusTestnet_FaultTolerance_Recovery(t *testing.T) {
 			DataDir:       fmt.Sprintf("/tmp/consensus-testnet-recovery-%d-new", nodeIdx),
 		})
 		require.NoError(t, err)
-		t.Cleanup(func() { newExec.Cleanup() })
+		t.Cleanup(func() { _ = newExec.Cleanup() })
 		recoveredExecutors[recIdx] = newExec
 
 		// Create new network host
@@ -573,7 +573,7 @@ func setupConsensusNodes(t *testing.T, _ context.Context, keys []ed25519.Private
 		})
 		require.NoError(t, err)
 		executors[i] = exec
-		t.Cleanup(func() { exec.Cleanup() })
+		t.Cleanup(func() { _ = exec.Cleanup() })
 
 		nodeCfg := consensus.NodeConfig{
 			Partition:        "testnet",
@@ -650,7 +650,7 @@ func startTransactionSubmitter(ctx context.Context, wg *sync.WaitGroup, node *co
 		defer ticker.Stop()
 
 		payload := make([]byte, 128)
-		rand.Read(payload)
+		_, _ = rand.Read(payload)
 
 		for {
 			select {

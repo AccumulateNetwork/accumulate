@@ -303,7 +303,7 @@ func TestGossipLayer_BroadcastAndReceiveVote(t *testing.T) {
 	require.NoError(t, err)
 
 	var headerDigest types.HeaderDigest
-	rand.Read(headerDigest[:])
+	_, _ = rand.Read(headerDigest[:])
 
 	vote := types.NewVote(headerDigest, 5, 1, pub)
 	err = vote.Sign(priv)
