@@ -1,7 +1,7 @@
 {
   "project": "dagbft-integration",
-  "tmux_session": "dagbft",
-  "num_workers": 2,
+  "tmux_session": "orchestrator",
+  "num_workers": 4,
   "cycle_interval": 60,
   "max_retries": 3,
   "stall_timeout": 600,
@@ -24,61 +24,74 @@
   ],
   "project_context": {
     "language": "go",
-    "build_command": "go build ./cmd/accumulated ./cmd/consensus-testnet",
+    "build_command": "go build ./...",
     "test_command": "go test ./internal/node/dagbft/... ./pkg/consensus/... -v -short -timeout 5m > /tmp/test.log 2>&1",
+    "lint_command": "golangci-lint run ./pkg/consensus/... ./cmd/consensus-testnet/... > /tmp/lint.log 2>&1 || true",
     "safety_rules": [
       "**NEVER reset blockchain data** - see CLAUDE.md",
       "**Redirect command output to log files** - long output crashes context",
-      "**Test changes with go build before committing**"
+      "**Test changes with go build before committing**",
+      "**Run go build ./... to verify full build**"
     ],
     "key_files": [
       "CLAUDE.md",
       "cmd/accumulated/run/dagbft.go",
       "internal/node/dagbft/service.go",
       "pkg/consensus/node.go",
-      "pkg/consensus/gossip/gossip.go"
+      "pkg/consensus/types/certificate.go",
+      "pkg/consensus/types/header.go"
     ]
   },
   "issues": [
     {
-      "number": 3813,
-      "title": "Wire GossipSub into accumulated integration",
+      "number": 3818,
+      "title": "Fix SA1026 json.Marshal in persist.go",
       "priority": 1,
       "wave": 1,
-      "description": "Wire GossipSub into accumulated integration. The DAG-BFT consensus works in consensus-testnet but the accumulated integration passes nil for host and pubsub. Fix internal/node/dagbft/service.go:130 to pass real libp2p host and GossipSub.",
-      "status": "completed",
-      "assigned_worker": 1,
-      "pipeline_stage": 3
+      "description": "Fix staticcheck SA1026: json.Marshal on unsupported map type in persist.go:248. The Certificate type contains Header.Payload which is a map with custom key types. Options: 1) Custom MarshalJSON for Certificate, 2) Convert map to serializable format, 3) Use different serialization.",
+      "status": "pending",
+      "assigned_worker": null,
+      "pipeline_stage": 0
     },
     {
-      "number": 3815,
-      "title": "Implement BPT sync recovery",
+      "number": 3819,
+      "title": "Fix copylocks in Certificate/Header",
+      "priority": 1,
+      "wave": 1,
+      "description": "Fix govet copylocks warnings: NewCertificate passes Header by value but Header contains sync.RWMutex. Change NewCertificate to take *Header instead of Header. Affects: certificate.go, and many test files calling NewCertificate(*header, ...).",
+      "status": "pending",
+      "assigned_worker": null,
+      "pipeline_stage": 0
+    },
+    {
+      "number": 3820,
+      "title": "Migrate exp/light logger",
       "priority": 2,
       "wave": 2,
-      "description": "Implement BPT-level sync recovery algorithm: 1) Request missing BPT entries from neighbors, 2) Background BPT walk to fill gaps, 3) Validation passes until all nodes valid, 4) Fill missing chain entries.",
-      "status": "completed",
-      "assigned_worker": 2,
-      "pipeline_stage": 3
+      "description": "Update exp/light package to use logging.FromCometBFT() wrapper instead of CometBFT logger directly. Low priority cleanup.",
+      "status": "pending",
+      "assigned_worker": null,
+      "pipeline_stage": 0
     },
     {
-      "number": 3816,
-      "title": "Backpressure improvements for high load",
-      "priority": 2,
-      "wave": 2,
-      "description": "Review and test backpressure improvements: batch count check in Submit(), eviction in createAndBroadcastBatch(), reduced MaxStoredBatches. Changes already implemented, needs review and tests.",
-      "status": "completed",
-      "assigned_worker": 3,
-      "pipeline_stage": 3
+      "number": 3821,
+      "title": "Fix rangevarref lint warnings",
+      "priority": 1,
+      "wave": 1,
+      "description": "Fix rangevarref warnings: Taking address of range variable is unsafe. Affected files: cert_sync.go:69,179, block.go:119,131, integration_test.go:535, stress_test.go:501, bullshark.go:172, header.go:147,164,240,257. Fix by creating a local copy before taking address.",
+      "status": "pending",
+      "assigned_worker": null,
+      "pipeline_stage": 0
     },
     {
-      "number": 3817,
-      "title": "Complete accumulated integration (tracking)",
-      "priority": 3,
-      "wave": 3,
-      "description": "Tracking issue for DAG-BFT integration. Update status as other issues complete.",
-      "status": "completed",
-      "assigned_worker": 4,
-      "pipeline_stage": 3
+      "number": 3822,
+      "title": "Fix ineffassign lint warnings",
+      "priority": 1,
+      "wave": 1,
+      "description": "Fix ineffassign warnings: height_test.go:152 (min not used), snapshot_test.go:440 (allCerts not used). Either use the variables or use blank identifier.",
+      "status": "pending",
+      "assigned_worker": null,
+      "pipeline_stage": 0
     }
   ]
 }
