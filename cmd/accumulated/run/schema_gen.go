@@ -9,6 +9,8 @@ import (
 
 	peer "github.com/libp2p/go-libp2p/core/peer"
 	multiaddr "github.com/multiformats/go-multiaddr"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/dagbft"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/address"
 	encoding "gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
@@ -26,12 +28,9 @@ var (
 	sConfig                     schema.Methods[*Config, *Config, *schema.CompositeType]
 	sConfiguration              schema.UnionMethods[Configuration, ConfigurationType]
 	sConfigurationType          schema.EnumMethods[ConfigurationType]
-	sConsensusApp               schema.UnionMethods[ConsensusApp, ConsensusAppType]
-	sConsensusAppType           schema.EnumMethods[ConsensusAppType]
-	sConsensusService           schema.Methods[*ConsensusService, *ConsensusService, *schema.CompositeType]
-	sCoreConsensusApp           schema.Methods[*CoreConsensusApp, *CoreConsensusApp, *schema.CompositeType]
 	sCoreValidatorConfiguration schema.Methods[*CoreValidatorConfiguration, *CoreValidatorConfiguration, *schema.CompositeType]
 	sCoreValidatorMode          schema.EnumMethods[CoreValidatorMode]
+	sDAGBFTService              schema.Methods[*DAGBFTService, *DAGBFTService, *schema.CompositeType]
 	sDevnetConfiguration        schema.Methods[*DevnetConfiguration, *DevnetConfiguration, *schema.CompositeType]
 	sEventsService              schema.Methods[*EventsService, *EventsService, *schema.CompositeType]
 	sExpBlockDBStorage          schema.Methods[*ExpBlockDBStorage, *ExpBlockDBStorage, *schema.CompositeType]
@@ -266,117 +265,6 @@ func init() {
 			},
 		}).SetGoType()
 
-	sConsensusApp = schema.WithUnionMethods[ConsensusApp, ConsensusAppType](
-		&schema.UnionType{
-			TypeBase: schema.TypeBase{
-				Name: "ConsensusApp",
-			},
-			Discriminator: (&schema.UnionDiscriminator{
-				Field: "Type",
-			}).
-				ResolveTypeTo(&deferredTypes, "ConsensusAppType").
-				ResolveEnumTo(&deferredTypes, "ConsensusAppType"),
-			Members: []*schema.UnionMember{
-				{
-					Discriminator: "core",
-					Type: (&schema.PointerType{
-						TypeBase: schema.TypeBase{},
-					}).
-						ResolveElemTo(&deferredTypes, "CoreConsensusApp"),
-				},
-			},
-		}).SetGoType()
-
-	sConsensusAppType = schema.WithEnumMethods[ConsensusAppType](
-		&schema.EnumType{
-			TypeBase: schema.TypeBase{
-				Name: "ConsensusAppType",
-			},
-			Underlying: &schema.SimpleType{Type: schema.SimpleTypeInt},
-			Values: map[string]*schema.EnumValue{
-				"Core": {
-					Name:  "Core",
-					Value: 1,
-				},
-			},
-		}).SetGoType()
-
-	sConsensusService = schema.WithMethods[*ConsensusService, *ConsensusService](&schema.CompositeType{
-		TypeBase: schema.TypeBase{
-			Name: "ConsensusService",
-		},
-		Fields: []*schema.Field{
-			{
-				Name: "NodeDir",
-				Type: &schema.SimpleType{Type: schema.SimpleTypeString},
-			},
-			(&schema.Field{
-				Name: "ValidatorKey",
-			}).ResolveTo(&deferredTypes, "PrivateKey"),
-			{
-				Name: "Genesis",
-				Type: &schema.SimpleType{Type: schema.SimpleTypeString},
-			},
-			(&schema.Field{
-				Name: "Listen",
-			}).ResolveTo(&deferredTypes, "Multiaddr"),
-			{
-				Name: "BootstrapPeers",
-				Type: (&schema.ArrayType{
-					TypeBase: schema.TypeBase{},
-				}).
-					ResolveElemTo(&deferredTypes, "Multiaddr"),
-			},
-			{
-				Name:     "MetricsNamespace",
-				Optional: true,
-				Type:     &schema.SimpleType{Type: schema.SimpleTypeString},
-			},
-			(&schema.Field{
-				Name: "App",
-			}).ResolveTo(&deferredTypes, "ConsensusApp"),
-		},
-	}).SetGoType()
-
-	sCoreConsensusApp = schema.WithMethods[*CoreConsensusApp, *CoreConsensusApp](&schema.CompositeType{
-		TypeBase: schema.TypeBase{
-			Name: "CoreConsensusApp",
-		},
-		Fields: []*schema.Field{
-			{
-				Name: "Partition",
-				Type: &schema.PointerType{
-					TypeBase: schema.TypeBase{},
-					Elem:     schema.TypeReferenceFor[protocol.PartitionInfo](),
-				},
-			},
-			{
-				Name:     "EnableHealing",
-				Optional: true,
-				Type: &schema.PointerType{
-					TypeBase: schema.TypeBase{},
-					Elem:     &schema.SimpleType{Type: schema.SimpleTypeBool},
-				},
-			},
-			{
-				Name:     "EnableDirectDispatch",
-				Optional: true,
-				Type: &schema.PointerType{
-					TypeBase: schema.TypeBase{},
-					Elem:     &schema.SimpleType{Type: schema.SimpleTypeBool},
-				},
-			},
-			{
-				Name:     "MaxEnvelopesPerBlock",
-				Optional: true,
-				Type: &schema.PointerType{
-					TypeBase: schema.TypeBase{},
-					Elem:     &schema.SimpleType{Type: schema.SimpleTypeUint},
-				},
-			},
-		},
-	}).SetGoType()
-
 	sCoreValidatorConfiguration = schema.WithMethods[*CoreValidatorConfiguration, *CoreValidatorConfiguration](&schema.CompositeType{
 		TypeBase: schema.TypeBase{
 			Name: "CoreValidatorConfiguration",
@@ -481,6 +369,97 @@ func init() {
 				},
 			},
 		}).SetGoType()
+
+	sDAGBFTService = schema.WithMethods[*DAGBFTService, *DAGBFTService](&schema.CompositeType{
+		TypeBase: schema.TypeBase{
+			Name: "DAGBFTService",
+		},
+		Fields: []*schema.Field{
+			{
+				Name:     "NodeDir",
+				Optional: true,
+				Type:     &schema.SimpleType{Type: schema.SimpleTypeString},
+			},
+			(&schema.Field{
+				Name: "ValidatorKey",
+			}).ResolveTo(&deferredTypes, "PrivateKey"),
+			{
+				Name: "Genesis",
+				Type: &schema.SimpleType{Type: schema.SimpleTypeString},
+			},
+			{
+				Name: "Partition",
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     schema.TypeReferenceFor[protocol.PartitionInfo](),
+				},
+			},
+			{
+				Name:     "NumWorkers",
+				Optional: true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     &schema.SimpleType{Type: schema.SimpleTypeInt},
+				},
+			},
+			{
+				Name:     "DAGGCDepth",
+				Optional: true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     &schema.SimpleType{Type: schema.SimpleTypeInt},
+				},
+			},
+			{
+				Name:     "CommitBufferSize",
+				Optional: true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     &schema.SimpleType{Type: schema.SimpleTypeInt},
+				},
+			},
+			{
+				Name:     "EnableHealing",
+				Optional: true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     &schema.SimpleType{Type: schema.SimpleTypeBool},
+				},
+			},
+			{
+				Name:     "EnableDirectDispatch",
+				Optional: true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     &schema.SimpleType{Type: schema.SimpleTypeBool},
+				},
+			},
+			{
+				Name:     "MaxEnvelopesPerBlock",
+				Optional: true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     schema.TypeReferenceFor[uint64](),
+				},
+			},
+		},
+		Transients: []*schema.Field{
+			{
+				Name: "service",
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     schema.TypeReferenceFor[dagbft.Service](),
+				},
+			},
+			{
+				Name: "eventBus",
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     schema.TypeReferenceFor[events.Bus](),
+				},
+			},
+		},
+	}).SetGoType()
 
 	sDevnetConfiguration = schema.WithMethods[*DevnetConfiguration, *DevnetConfiguration](&schema.CompositeType{
 		TypeBase: schema.TypeBase{
@@ -1166,11 +1145,11 @@ func init() {
 						ResolveElemTo(&deferredTypes, "StorageService"),
 				},
 				{
-					Discriminator: "consensus",
+					Discriminator: "dagbft",
 					Type: (&schema.PointerType{
 						TypeBase: schema.TypeBase{},
 					}).
-						ResolveElemTo(&deferredTypes, "ConsensusService"),
+						ResolveElemTo(&deferredTypes, "DAGBFTService"),
 				},
 				{
 					Discriminator: "querier",
@@ -1245,8 +1224,8 @@ func init() {
 			},
 			Underlying: &schema.SimpleType{Type: schema.SimpleTypeInt},
 			Values: map[string]*schema.EnumValue{
-				"Consensus": {
-					Name:  "Consensus",
+				"DAGBFT": {
+					Name:  "DAGBFT",
 					Value: 2,
 				},
 				"Events": {
@@ -1550,12 +1529,9 @@ func init() {
 		sConfig.Type,
 		sConfiguration.Type,
 		sConfigurationType.Type,
-		sConsensusApp.Type,
-		sConsensusAppType.Type,
-		sConsensusService.Type,
-		sCoreConsensusApp.Type,
 		sCoreValidatorConfiguration.Type,
 		sCoreValidatorMode.Type,
+		sDAGBFTService.Type,
 		sDevnetConfiguration.Type,
 		sEventsService.Type,
 		sExpBlockDBStorage.Type,

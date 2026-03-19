@@ -276,7 +276,7 @@ Service:
       values:
         Storage:
           value: 1
-        Consensus:
+        DAGBFT:
           value: 2
         Querier:
           value: 3
@@ -308,53 +308,44 @@ Service:
         - name: Storage
           type: Storage
 
-    - name: ConsensusService
+    - name: DAGBFTService
       class: composite
       pointer: true
+      transients:
+        - name: service
+          type: '*dagbft.Service'
+          marshal-as: none
+        - name: eventBus
+          type: '*events.Bus'
+          marshal-as: none
       fields:
         - name: NodeDir
           type: string
+          optional: true
         - name: ValidatorKey
           type: PrivateKey
         - name: Genesis
           type: string
-        - name: Listen
-          type: Multiaddr
-        - name: BootstrapPeers
-          type: '[]Multiaddr'
-        - name: MetricsNamespace
-          type: string
+        - name: Partition
+          type: '*protocol.PartitionInfo'
+        - name: NumWorkers
+          type: '*int'
           optional: true
-        - name: App
-          type:
-            name: ConsensusApp
-            class: union
-            discriminator:
-              field: Type
-              type:
-                name: ConsensusAppType
-                class: enum
-                underlying: int
-                values:
-                  Core:
-                    value: 1
-            members:
-              - name: CoreConsensusApp
-                class: composite
-                pointer: true
-                fields:
-                  - name: Partition
-                    type: '*protocol.PartitionInfo'
-                  - name: EnableHealing
-                    type: '*bool'
-                    optional: true
-                  - name: EnableDirectDispatch
-                    type: '*bool'
-                    optional: true
-                  - name: MaxEnvelopesPerBlock
-                    type: '*uint'
-                    optional: true
-
+        - name: DAGGCDepth
+          type: '*int'
+          optional: true
+        - name: CommitBufferSize
+          type: '*int'
+          optional: true
+        - name: EnableHealing
+          type: '*bool'
+          optional: true
+        - name: EnableDirectDispatch
+          type: '*bool'
+          optional: true
+        - name: MaxEnvelopesPerBlock
+          type: '*uint64'
+          optional: true
 
     - name: Querier
       class: composite
