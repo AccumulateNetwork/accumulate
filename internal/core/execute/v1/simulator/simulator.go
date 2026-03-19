@@ -105,7 +105,7 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 	}
 	if opts.OpenDB == nil {
 		opts.OpenDB = func(_ string, _ int, logger log.Logger) *database.Database {
-			return database.OpenInMemory(logger)
+			return database.OpenInMemory(logging.FromCometBFT(logger))
 		}
 	}
 	sim.opts = opts
@@ -135,11 +135,11 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 		sim.Partitions = append(sim.Partitions, partition)
 	}
 
-	mainEventBus := events.NewBus(sim.Logger.With("partition", protocol.Directory))
+	mainEventBus := events.NewBus(logging.FromCometBFT(sim.Logger.With("partition", protocol.Directory)))
 	events.SubscribeSync(mainEventBus, sim.willChangeGlobals)
 	sim.router = &router{sim, routing.NewRouter(routing.RouterOptions{
 		Events: mainEventBus,
-		Logger: sim.Logger,
+		Logger: logging.FromCometBFT(sim.Logger),
 	})}
 
 	// Initialize each executor
@@ -184,7 +184,7 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 			bvnInit.Nodes[0],
 			network,
 			opts.OpenDB(bvn.Id, 0, logger),
-			events.NewBus(logger),
+			events.NewBus(logging.FromCometBFT(logger)),
 		)
 		sim.Executors[bvn.Id] = x
 	}
@@ -583,7 +583,7 @@ func (x *ExecEntry) init(sim *Simulator, logger log.Logger, partition *config.Pa
 
 	// Initialize the executor
 	execOpts := block.ExecutorOptions{
-		Logger:        logger,
+		Logger:        logging.FromCometBFT(logger),
 		Database:      x,
 		Key:           init.PrivValKey,
 		Describe:      execute.DescribeShim{NetworkType: network.NetworkType, PartitionId: network.PartitionId},

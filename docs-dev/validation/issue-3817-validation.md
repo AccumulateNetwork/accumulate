@@ -50,12 +50,33 @@ The research document correctly identified logger interface incompatibilities be
 
 4. **test/validate/main_test.go:206** - Changed `Logger: logger.With("module", "faucet")` to `Logger: logging.FromCometBFT(cometLogger.With("module", "faucet"))`
 
+### Additional Files Fixed During Review Stage
+
+The following files had logger interface mismatches that were caught and fixed during the review stage:
+
+5. **internal/core/execute/v1/simulator/service.go:131,136** - Added `logging.FromCometBFT()` wrapper and import
+
+6. **internal/core/execute/v1/simulator/simulator.go:108,138,142,187,586** - Added `logging.FromCometBFT()` wrappers for database, events, and executor options
+
+7. **test/simulator/router.go:38** - Added `logging.FromCometBFT()` wrapper
+
+8. **tools/cmd/genesis/export.go:65,89** - Added `logging.FromCometBFT()` wrappers for database and snapshot operations
+
+9. **tools/cmd/genesis/snapshot.go:145** - Added `logging.FromCometBFT()` wrapper for snapshot restore
+
+10. **tools/cmd/repair-indices/main.go:39** - Added `logging.FromCometBFT()` wrapper and import
+
 ## Build Verification
 
 ```
 go build ./cmd/accumulated ./cmd/consensus-testnet
 ```
 **Result:** PASS (no errors)
+
+```
+go build ./...
+```
+**Result:** PASS (after review stage fixes - see review document)
 
 ## Test Verification
 

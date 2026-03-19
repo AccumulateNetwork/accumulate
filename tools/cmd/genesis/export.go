@@ -62,7 +62,7 @@ func export(_ *cobra.Command, args []string) {
 	oldDoc, err := types.GenesisDocFromFile(daemon.Config.GenesisFile())
 	check(err)
 
-	db, err := database.Open(daemon.Config, daemon.Logger)
+	db, err := database.Open(daemon.Config, logging.FromCometBFT(daemon.Logger))
 	check(err)
 
 	batch := db.Begin(false)
@@ -86,7 +86,7 @@ func export(_ *cobra.Command, args []string) {
 
 	buf := new(ioutil2.Buffer)
 	w, err := snapshot.Collect(batch, header, buf, snapshot.CollectOptions{
-		Logger: daemon.Logger.With("module", "snapshot"),
+		Logger: logging.FromCometBFT(daemon.Logger.With("module", "snapshot")),
 		VisitAccount: func(acct *snapshot.Account) error {
 			factom := factom[acct.Url.AccountID32()]
 			if factom == nil {
