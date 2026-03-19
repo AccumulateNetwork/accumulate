@@ -127,9 +127,7 @@ func createGenesisCertificate(
 		authorities[i] = uint16(i)
 	}
 
-	// Clone header to avoid copying the mutex
-	clonedHeader := header.Clone()
-	cert := types.NewCertificate(*clonedHeader, signatures, authorities)
+	cert := types.NewCertificate(header, signatures, authorities)
 
 	// Verify the certificate is valid
 	if err := cert.Verify(committee); err != nil {

@@ -59,7 +59,7 @@ func TestCertSyncResponse_MarshalUnmarshal(t *testing.T) {
 	err = header.Sign(priv)
 	require.NoError(t, err)
 
-	cert := types.NewCertificate(*header, [][]byte{header.Signature}, []uint16{0})
+	cert := types.NewCertificate(header, [][]byte{header.Signature}, []uint16{0})
 
 	// Create missing digests
 	missing := make([]types.CertificateDigest, 2)
@@ -163,7 +163,7 @@ func TestCertSyncer_DAGContainsSkip(t *testing.T) {
 	err = header.Sign(priv)
 	require.NoError(t, err)
 
-	cert := types.NewCertificate(*header, [][]byte{header.Signature}, []uint16{0})
+	cert := types.NewCertificate(header, [][]byte{header.Signature}, []uint16{0})
 	err = d.InsertGenesis(cert)
 	require.NoError(t, err)
 
@@ -274,7 +274,7 @@ func TestCertSyncer_HandleSyncRequest(t *testing.T) {
 	err = header.Sign(priv)
 	require.NoError(t, err)
 
-	cert := types.NewCertificate(*header, [][]byte{header.Signature}, []uint16{0})
+	cert := types.NewCertificate(header, [][]byte{header.Signature}, []uint16{0})
 	err = d.InsertGenesis(cert)
 	require.NoError(t, err)
 
@@ -324,7 +324,7 @@ func TestCertSyncer_CertReceivedCallback(t *testing.T) {
 	err = header.Sign(priv)
 	require.NoError(t, err)
 
-	cert := types.NewCertificate(*header, [][]byte{header.Signature}, []uint16{0})
+	cert := types.NewCertificate(header, [][]byte{header.Signature}, []uint16{0})
 
 	// Simulate receiving a sync response
 	resp := &gossip.CertSyncResponse{
