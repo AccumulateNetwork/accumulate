@@ -358,6 +358,14 @@ func UnmarshalHeader(data []byte) (*Header, error) {
 
 // Clone creates a deep copy of the header.
 func (h *Header) Clone() *Header {
+	cloned := h.copyFields()
+	return &cloned
+}
+
+// copyFields returns a copy of the header's serializable fields as a value.
+// This avoids copying the mutex by constructing a new Header with only the
+// exported fields. The returned Header has fresh mutex/cache fields.
+func (h *Header) copyFields() Header {
 	payload := make(map[BatchDigest]WorkerID, len(h.Payload))
 	for k, v := range h.Payload {
 		payload[k] = v
@@ -372,7 +380,7 @@ func (h *Header) Clone() *Header {
 	signature := make([]byte, len(h.Signature))
 	copy(signature, h.Signature)
 
-	return &Header{
+	return Header{
 		Author:    author,
 		Round:     h.Round,
 		Epoch:     h.Epoch,
