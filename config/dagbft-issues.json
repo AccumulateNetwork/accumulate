@@ -1,11 +1,11 @@
 {
   "project": "dagbft-integration",
   "tmux_session": "orchestrator",
-  "num_workers": 4,
+  "num_workers": 5,
   "cycle_interval": 60,
   "max_retries": 3,
   "stall_timeout": 600,
-  "wall_clock_timeout": 3600,
+  "wall_clock_timeout": 7200,
   "stagger_delay": 10,
   "repos": {
     "accumulate": {
@@ -49,9 +49,9 @@
       "priority": 1,
       "wave": 1,
       "description": "Fix staticcheck SA1026: json.Marshal on unsupported map type in persist.go:248. The Certificate type contains Header.Payload which is a map with custom key types. Options: 1) Custom MarshalJSON for Certificate, 2) Convert map to serializable format, 3) Use different serialization.",
-      "status": "pending",
-      "assigned_worker": null,
-      "pipeline_stage": 0
+      "status": "in_progress",
+      "assigned_worker": 1,
+      "pipeline_stage": 3
     },
     {
       "number": 3819,
@@ -59,9 +59,9 @@
       "priority": 1,
       "wave": 1,
       "description": "Fix govet copylocks warnings: NewCertificate passes Header by value but Header contains sync.RWMutex. Change NewCertificate to take *Header instead of Header. Affects: certificate.go, and many test files calling NewCertificate(*header, ...).",
-      "status": "pending",
-      "assigned_worker": null,
-      "pipeline_stage": 0
+      "status": "in_progress",
+      "assigned_worker": 2,
+      "pipeline_stage": 2
     },
     {
       "number": 3820,
@@ -69,9 +69,9 @@
       "priority": 2,
       "wave": 2,
       "description": "Update exp/light package to use logging.FromCometBFT() wrapper instead of CometBFT logger directly. Low priority cleanup.",
-      "status": "pending",
-      "assigned_worker": null,
-      "pipeline_stage": 0
+      "status": "completed",
+      "assigned_worker": 5,
+      "pipeline_stage": 3
     },
     {
       "number": 3821,
@@ -79,9 +79,9 @@
       "priority": 1,
       "wave": 1,
       "description": "Fix rangevarref warnings: Taking address of range variable is unsafe. Affected files: cert_sync.go:69,179, block.go:119,131, integration_test.go:535, stress_test.go:501, bullshark.go:172, header.go:147,164,240,257. Fix by creating a local copy before taking address.",
-      "status": "pending",
-      "assigned_worker": null,
-      "pipeline_stage": 0
+      "status": "in_progress",
+      "assigned_worker": 3,
+      "pipeline_stage": 2
     },
     {
       "number": 3822,
@@ -89,9 +89,20 @@
       "priority": 1,
       "wave": 1,
       "description": "Fix ineffassign warnings: height_test.go:152 (min not used), snapshot_test.go:440 (allCerts not used). Either use the variables or use blank identifier.",
+      "status": "completed",
+      "assigned_worker": 4,
+      "pipeline_stage": 3
+    },
+    {
+      "number": 3823,
+      "title": "DAG-BFT 7-node integration test under load",
+      "priority": 1,
+      "wave": 3,
+      "description": "Run 7 accumulated nodes with DAG-BFT consensus under 1000 TPS load for 30 minutes. Success criteria: all nodes stay in sync, no crashes/OOM, backpressure rejects (not drops), 500+ TPS sustained, stable memory, BPT roots match. Depends on #3818, #3819, #3821, #3822 completing first.",
       "status": "pending",
       "assigned_worker": null,
-      "pipeline_stage": 0
+      "pipeline_stage": 0,
+      "blocked_by": [3818, 3819, 3821, 3822]
     }
   ]
 }
