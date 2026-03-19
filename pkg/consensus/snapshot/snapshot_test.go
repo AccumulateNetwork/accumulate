@@ -430,11 +430,6 @@ func TestSnapshot_CreateAndRestore(t *testing.T) {
 		}
 	}
 
-	// Build up certificates for multiple rounds (simulating 100 blocks)
-	// We use simplified certificates without proper parent references for testing
-	allCerts := make([]*types.Certificate, 0)
-	allCerts = append(allCerts, genesisCerts...)
-
 	// Create snapshot at height 100
 	stateHash := [32]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
 	params := CreateSnapshotParams{
