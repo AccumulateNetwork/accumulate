@@ -10,6 +10,7 @@
 package persist
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -244,16 +245,20 @@ func (s *StateSnapshot) ToCheckpoint() *Checkpoint {
 			if cert == nil {
 				continue
 			}
-			// Serialize certificate data
-			data, err := json.Marshal(cert)
+			// Serialize certificate using binary marshaling, then base64 encode
+			// for JSON storage. We use binary marshaling because Certificate
+			// contains Header.Payload which has a non-string map key type
+			// (BatchDigest) that json.Marshal doesn't support.
+			data, err := cert.Marshal()
 			if err != nil {
 				continue // Skip on error
 			}
+			encoded := base64.StdEncoding.EncodeToString(data)
 			cp.Certificates = append(cp.Certificates, CertificateData{
 				Digest: cert.Digest().String(),
 				Round:  cert.Round(),
 				Author: fmt.Sprintf("%x", cert.Author()),
-				Data:   data,
+				Data:   json.RawMessage(`"` + encoded + `"`),
 			})
 		}
 	}
