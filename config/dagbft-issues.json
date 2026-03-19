@@ -116,17 +116,17 @@
     },
     {
       "number": 3823,
-      "title": "EXECUTE 7-node integration test (30 min, 1000 TPS)",
+      "title": "Run 7 accumulated validators with DAG-BFT for 30 minutes",
       "priority": 1,
       "wave": 3,
-      "status": "completed",
+      "status": "pending",
       "assigned_worker": null,
-      "pipeline_stage": 4,
+      "pipeline_stage": 0,
       "blocked_by": [3813],
       "execution_task": true,
       "requires_tmux": true,
       "min_runtime_minutes": 30,
-      "description": "**THIS IS AN EXECUTION TASK, NOT A CODE-WRITING TASK.**\n\nYou must ACTUALLY RUN a 30-minute integration test, not just write test code.\n\n## REQUIRED STEPS:\n\n### 1. Merge dagbft-integration into this branch\n```bash\ncd /home/paul/worktrees/accumulate-dagbft/issue-3823\ngit fetch origin\ngit merge origin/dagbft-integration\ngo build ./...  # MUST PASS\n```\n\n### 2. Start 7 nodes in tmux session 'dagbft-test'\nCreate tmux session with 7 windows, one node per window. Each node must:\n- Use DAG-BFT consensus (not CometBFT)\n- Connect to the other 6 nodes via GossipSub\n- Log to /tmp/node-N.log\n\n### 3. Run load generator at 1000 TPS for 30 ACTUAL MINUTES\n- Submit mixed transactions (transfers, creates, data entries)\n- Log backpressure events (ErrBackpressure count)\n- Sample memory every 30 seconds\n\n### 4. After 30 minutes, collect results:\n- Block heights from all 7 nodes (must match within 1-2)\n- BPT/state roots from all 7 nodes (must match)\n- Total transactions submitted vs committed\n- Memory usage start vs end\n- Any crashes or errors\n\n### 5. Create results document\nWrite docs-dev/results/issue-3823-results.md with ACTUAL DATA from the test run.\n\n## SUCCESS CRITERIA (must verify with real data):\n- [ ] All 7 nodes ran for full 30 minutes without crash\n- [ ] Block heights match across nodes\n- [ ] BPT roots match across nodes\n- [ ] Backpressure returned errors (not silent drops)\n- [ ] Sustained >= 500 TPS\n- [ ] Memory growth < 1GB per node\n\n## DO NOT mark complete unless you have:\n1. Actually run the test for 30 minutes\n2. Collected real metrics from the running nodes\n3. Documented results with actual numbers"
+      "description": "## THIS IS NOT A CONSENSUS-TESTNET TEST\n\n**DO NOT** run cmd/consensus-testnet tests. That was already done and tests only the consensus layer in isolation.\n\n**THIS TASK** validates the full accumulated integration with DAG-BFT:\n- accumulated binary (not consensus-testnet)\n- DAGBFTService in cmd/accumulated/run/dagbft.go\n- internal/node/dagbft/service.go\n- GossipSub wiring from issue #3813\n\n## WHAT YOU MUST RUN\n\n7 `accumulated` validator nodes where EACH validator runs:\n- 1 BVN (Block Validator Network) partition\n- 1 DN (Directory Network) partition\n\nThis means 7 validators = 14 total partitions (7 BVNs + 7 DNs), all using DAG-BFT consensus instead of CometBFT.\n\n## WHY THIS IS DIFFERENT\n\nThe consensus-testnet only tests pkg/consensus in isolation. This task tests:\n- Full accumulated binary startup\n- DAGBFTService integration with the executor\n- Cross-partition anchoring via DN\n- Real Accumulate transaction processing (not test transactions)\n- BPT state management\n- The GossipSub wiring done in #3813\n\n## STEPS\n\n1. Configure 7 accumulated nodes with DAG-BFT enabled\n2. Each node runs both BVN and DN partitions\n3. Start all 7 validators\n4. Submit real Accumulate transactions for 30 minutes\n5. Verify BPT roots match across all validators\n6. Document results\n\n## SUCCESS CRITERIA\n\n- [ ] 7 accumulated validators running (not consensus-testnet)\n- [ ] Each validator runs BVN + DN partitions\n- [ ] DAG-BFT consensus (not CometBFT)\n- [ ] 30 minutes runtime without crash\n- [ ] BPT roots match across validators\n- [ ] Cross-partition anchoring works"
     }
   ]
 }
