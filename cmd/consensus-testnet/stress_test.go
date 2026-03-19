@@ -498,6 +498,7 @@ func TestStress_MultiNodeNetworkUnderLoad(t *testing.T) {
 	// Count matching state hashes
 	hashCounts := make(map[string]int)
 	for _, h := range stateHashes {
+		h := h // Create local copy to avoid rangevarref lint warning
 		hashCounts[hex.EncodeToString(h[:])]++
 	}
 	maxMatchingNodes := 0

@@ -144,6 +144,7 @@ func (h *Header) marshalForDigest() []byte {
 	})
 
 	for _, k := range payloadKeys {
+		k := k // Create local copy to avoid rangevarref lint warning
 		copy(data[offset:], k[:])
 		offset += 32
 		data[offset] = byte(h.Payload[k])
@@ -161,6 +162,7 @@ func (h *Header) marshalForDigest() []byte {
 	})
 
 	for _, p := range sortedParents {
+		p := p // Create local copy to avoid rangevarref lint warning
 		copy(data[offset:], p[:])
 		offset += 32
 	}
@@ -237,6 +239,7 @@ func (h *Header) Marshal() ([]byte, error) {
 	})
 
 	for _, k := range payloadKeys {
+		k := k // Create local copy to avoid rangevarref lint warning
 		copy(data[offset:], k[:])
 		offset += 32
 		data[offset] = byte(h.Payload[k])
@@ -254,6 +257,7 @@ func (h *Header) Marshal() ([]byte, error) {
 	})
 
 	for _, p := range sortedParents {
+		p := p // Create local copy to avoid rangevarref lint warning
 		copy(data[offset:], p[:])
 		offset += 32
 	}

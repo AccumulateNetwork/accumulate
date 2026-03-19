@@ -169,6 +169,7 @@ func (b *Bullshark) GetLastCommitted() map[string]types.Round {
 
 	result := make(map[string]types.Round, len(b.lastCommitted))
 	for k, v := range b.lastCommitted {
+		k := k // Create local copy to avoid rangevarref lint warning
 		result[hex.EncodeToString(k[:])] = v
 	}
 	return result
