@@ -179,6 +179,10 @@ func New(opts Options) (_ *Node, err error) {
 
 func (n *Node) ID() peer.ID { return n.host.ID() }
 
+// Host returns the underlying libp2p host.
+// This can be used to create additional protocols (e.g., GossipSub) on the same host.
+func (n *Node) Host() host.Host { return n.host }
+
 func (n *Node) Services() *nodeService { return (*nodeService)(n) }
 
 // Addresses lists the node's addresses.
