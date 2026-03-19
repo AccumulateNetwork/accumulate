@@ -59,7 +59,7 @@ func TestCertSyncResponse_MarshalUnmarshal(t *testing.T) {
 	err = header.Sign(priv)
 	require.NoError(t, err)
 
-	cert := types.NewCertificate(*header, [][]byte{header.Signature}, []uint16{0})
+	cert := types.NewCertificate(header, [][]byte{header.Signature}, []uint16{0})
 
 	missing := make([]types.CertificateDigest, 2)
 	for i := range missing {
@@ -254,7 +254,7 @@ func TestGossipLayer_BroadcastAndReceiveSyncResponse(t *testing.T) {
 	err = header.Sign(priv)
 	require.NoError(t, err)
 
-	cert := types.NewCertificate(*header, [][]byte{header.Signature}, []uint16{0})
+	cert := types.NewCertificate(header, [][]byte{header.Signature}, []uint16{0})
 
 	resp := &gossip.CertSyncResponse{
 		Certificates: []*types.Certificate{cert},
