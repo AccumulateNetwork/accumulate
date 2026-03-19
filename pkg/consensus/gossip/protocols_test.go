@@ -188,7 +188,7 @@ func TestProtocolHandler_BatchFetch(t *testing.T) {
 
 	t.Run("fetch non-existent batch", func(t *testing.T) {
 		var nonExistent types.BatchDigest
-		rand.Read(nonExistent[:])
+		_, _ = rand.Read(nonExistent[:])
 
 		fetched, err := client.FetchBatch(ctx, ptn.hosts[0].ID(), nonExistent)
 		require.NoError(t, err)
@@ -237,7 +237,7 @@ func TestProtocolHandler_CertFetch(t *testing.T) {
 
 	t.Run("fetch non-existent certificate", func(t *testing.T) {
 		randomPub := make([]byte, 32)
-		rand.Read(randomPub)
+		_, _ = rand.Read(randomPub)
 
 		fetched, err := client.FetchCertificate(ctx, ptn.hosts[0].ID(), 999, randomPub)
 		require.NoError(t, err)
@@ -305,7 +305,7 @@ func TestProtocolHandler_DAGSync(t *testing.T) {
 
 func TestBatchRequest_Marshal(t *testing.T) {
 	var digest types.BatchDigest
-	rand.Read(digest[:])
+	_, _ = rand.Read(digest[:])
 
 	req := &gossip.BatchRequest{Digest: digest}
 	data := req.Marshal()
@@ -332,7 +332,7 @@ func TestBatchRequest_UnmarshalErrors(t *testing.T) {
 
 func TestCertRequest_Marshal(t *testing.T) {
 	author := make([]byte, 32)
-	rand.Read(author)
+	_, _ = rand.Read(author)
 
 	req := &gossip.CertRequest{
 		Round:  42,

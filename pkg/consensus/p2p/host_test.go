@@ -282,7 +282,7 @@ func TestMockStream_Reset(t *testing.T) {
 	mockStream := stream.(*testutil.MockStream)
 
 	// Write some data
-	mockStream.Write([]byte("test"))
+	_, _ = mockStream.Write([]byte("test"))
 
 	// Reset the stream
 	err = mockStream.Reset()

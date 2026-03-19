@@ -34,7 +34,7 @@ func TestCreateHeaderGenesisRound(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, header)
 
-	require.Equal(t, v.pub, ed25519.PublicKey(header.Author))
+	require.Equal(t, v.pub, header.Author)
 	require.Equal(t, types.Round(0), header.Round)
 	require.Equal(t, uint64(1), header.Epoch)
 	require.Empty(t, header.Parents)
@@ -222,7 +222,7 @@ func TestCreateHeaderSignatureValid(t *testing.T) {
 	require.NoError(t, header.Verify())
 
 	// Verify signed by correct key
-	require.Equal(t, v.pub, ed25519.PublicKey(header.Author))
+	require.Equal(t, v.pub, header.Author)
 }
 
 func TestCreateHeaderDifferentEpochs(t *testing.T) {

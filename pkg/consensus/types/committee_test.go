@@ -416,7 +416,7 @@ func TestCommittee_DiffWith(t *testing.T) {
 
 		require.Len(t, diff, 1)
 		assert.Equal(t, types.ValidatorUpdateAdd, diff[0].Type)
-		assert.Equal(t, newPub, ed25519.PublicKey(diff[0].PublicKey))
+		assert.Equal(t, newPub, diff[0].PublicKey)
 	})
 
 	t.Run("validator removed", func(t *testing.T) {
@@ -428,7 +428,7 @@ func TestCommittee_DiffWith(t *testing.T) {
 
 		require.Len(t, diff, 1)
 		assert.Equal(t, types.ValidatorUpdateRemove, diff[0].Type)
-		assert.Equal(t, validators[3].PublicKey, ed25519.PublicKey(diff[0].PublicKey))
+		assert.Equal(t, validators[3].PublicKey, diff[0].PublicKey)
 	})
 
 	t.Run("stake changed", func(t *testing.T) {

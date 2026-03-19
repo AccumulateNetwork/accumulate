@@ -79,7 +79,7 @@ func (t *TopicManager) JoinAll(ctx context.Context) error {
 		topic, err := t.pubsub.Join(topicName)
 		if err != nil {
 			// Clean up any topics we already joined
-			t.closeLockedNoWait()
+			_ = t.closeLockedNoWait()
 			return fmt.Errorf("join topic %s: %w", topicName, err)
 		}
 		t.topics[pattern] = topic
@@ -88,7 +88,7 @@ func (t *TopicManager) JoinAll(ctx context.Context) error {
 		sub, err := topic.Subscribe()
 		if err != nil {
 			// Clean up
-			t.closeLockedNoWait()
+			_ = t.closeLockedNoWait()
 			return fmt.Errorf("subscribe to topic %s: %w", topicName, err)
 		}
 		t.subs[pattern] = sub
