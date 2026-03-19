@@ -149,7 +149,7 @@ func TestHeightTracker_HeightRange(t *testing.T) {
 	tracker := adapter.NewHeightTracker(0)
 
 	// Empty tracker
-	min, max, ok := tracker.HeightRange()
+	_, _, ok := tracker.HeightRange()
 	assert.False(t, ok)
 
 	// Add some blocks
@@ -157,10 +157,10 @@ func TestHeightTracker_HeightRange(t *testing.T) {
 	tracker.RecordBlock(types.Round(4))
 	tracker.RecordBlock(types.Round(6))
 
-	min, max, ok = tracker.HeightRange()
+	minH, maxH, ok := tracker.HeightRange()
 	assert.True(t, ok)
-	assert.Equal(t, uint64(1), min)
-	assert.Equal(t, uint64(3), max)
+	assert.Equal(t, uint64(1), minH)
+	assert.Equal(t, uint64(3), maxH)
 }
 
 func TestHeightTracker_HasRound(t *testing.T) {
