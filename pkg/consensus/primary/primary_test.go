@@ -69,7 +69,7 @@ func createGenesisCertificates(t *testing.T, validators []*testValidator, commit
 			authors[j] = uint16(j)
 		}
 
-		cert := types.NewCertificate(*header, sigs, authors)
+		cert := types.NewCertificate(header, sigs, authors)
 		require.NoError(t, d.InsertGenesis(cert))
 		certs[i] = cert
 	}
@@ -215,7 +215,7 @@ func TestPrimaryNewCertificates(t *testing.T) {
 	header := types.NewHeader(v.pub, 0, 1, nil, nil)
 	require.NoError(t, header.Sign(v.priv))
 
-	cert := types.NewCertificate(*header, nil, nil)
+	cert := types.NewCertificate(header, nil, nil)
 
 	p.signalNewCertificate(cert)
 
@@ -356,7 +356,7 @@ func TestPrimaryHasCertificateForRound(t *testing.T) {
 	header := types.NewHeader(v.pub, 0, 1, nil, nil)
 	require.NoError(t, header.Sign(v.priv))
 
-	cert := types.NewCertificate(*header, nil, nil)
+	cert := types.NewCertificate(header, nil, nil)
 
 	p.pendingMu.Lock()
 	p.ourCerts[0] = cert

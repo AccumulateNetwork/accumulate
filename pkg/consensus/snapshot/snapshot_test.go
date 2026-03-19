@@ -388,12 +388,8 @@ func createTestCertificates(committee *types.Committee, count int) []*types.Cert
 			authorities = append(authorities, uint16(j))
 		}
 
-		// Create certificate using header pointer methods to avoid copying the lock
-		cert := &types.Certificate{
-			Header:            *header.Clone(),
-			Signatures:        sigs,
-			SignedAuthorities: authorities,
-		}
+		// Create certificate using NewCertificate to avoid copying the lock
+		cert := types.NewCertificate(header, sigs, authorities)
 		certs[i] = cert
 	}
 
@@ -427,7 +423,7 @@ func TestSnapshot_CreateAndRestore(t *testing.T) {
 			nil,
 			nil,
 		)
-		genesisCerts[i] = types.NewCertificate(*header, nil, nil)
+		genesisCerts[i] = types.NewCertificate(header, nil, nil)
 		err := d.InsertGenesis(genesisCerts[i])
 		if err != nil {
 			t.Fatalf("Failed to insert genesis certificate: %v", err)
