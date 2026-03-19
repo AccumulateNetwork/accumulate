@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	dut "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
@@ -54,7 +55,7 @@ func (s *QuerierTestSuite) QuerierFor(u *url.URL) api.Querier2 {
 	part, err := s.sim.Router().RouteAccount(u)
 	s.Require().NoError(err)
 	q := dut.NewQuerier(dut.QuerierParams{
-		Logger:    acctesting.NewTestLogger(s.T()),
+		Logger:    logging.Nop{},
 		Database:  s.sim.Database(part),
 		Partition: part,
 	})

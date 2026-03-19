@@ -70,7 +70,7 @@ func (h *HttpService) start(inst *Instance) error {
 	}
 
 	apiOpts := nodehttp.Options{
-		Logger:    (*logging.Slogger)(inst.logger).With("module", "http"),
+		Logger:    logging.FromCometBFT((*logging.Slogger)(inst.logger).With("module", "http")),
 		Node:      inst.p2p,
 		Router:    router,
 		MaxWait:   DefaultHTTPMaxWait,

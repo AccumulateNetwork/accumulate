@@ -10,8 +10,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -34,7 +34,7 @@ type ChainIndex[T any] struct {
 	parent record.Record
 }
 
-func newChainIndex[T any](parent record.Record, logger log.Logger, store record.Store, key *record.Key, name string) *ChainIndex[T] {
+func newChainIndex[T any](parent record.Record, logger logging.Logger, store record.Store, key *record.Key, name string) *ChainIndex[T] {
 	return &ChainIndex[T]{merkle.NewChainIndex(logger, store, key), parent}
 }
 

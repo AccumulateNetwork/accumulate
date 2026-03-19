@@ -21,6 +21,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
@@ -44,7 +45,8 @@ func TestGenerateDbTestdata(t *testing.T) {
 	aliceKey := acctesting.GenerateKey(alice)
 	bobKey := acctesting.GenerateKey(bob)
 
-	logger := acctesting.NewTestLogger(t)
+	cometLogger := acctesting.NewTestLogger(t)
+	logger := logging.FromCometBFT(cometLogger)
 	store := memory.New(nil)
 	db := database.New(store, logger)
 
@@ -107,7 +109,7 @@ func TestGenerateDbTestdata(t *testing.T) {
 	batch := db.Begin(false)
 	defer batch.Discard()
 	_, err = snapshot.Collect(batch, new(snapshot.Header), f, snapshot.CollectOptions{
-		Logger: logger,
+		Logger: logging.FromCometBFT(cometLogger),
 	})
 	require.NoError(t, err)
 }
@@ -117,7 +119,8 @@ func TestDbEncoding(t *testing.T) {
 	require.NoError(t, err)
 	var entries []memory.Entry
 	require.NoError(t, json.Unmarshal(b, &entries))
-	logger := acctesting.NewTestLogger(t)
+	cometLogger := acctesting.NewTestLogger(t)
+	logger := logging.FromCometBFT(cometLogger)
 	store := memory.New(nil)
 	require.NoError(t, store.Import(entries))
 

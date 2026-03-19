@@ -14,6 +14,7 @@ import (
 
 	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
@@ -37,18 +38,19 @@ type RouterOptions struct {
 // determine the initial routing table.
 func InitRouter(opts RouterOptions) (routing.Router, error) {
 	// Use the event bus if provided
+	logger := logging.FromCometBFT(opts.Logger)
 	if opts.Events != nil {
 		return routing.NewRouter(routing.RouterOptions{
 			Events: opts.Events,
-			Logger: opts.Logger,
+			Logger: logger,
 		}), nil
 	}
 
 	// Create a new event bus and fetch the routing table asynchronously
-	opts.Events = events.NewBus(opts.Logger)
+	opts.Events = events.NewBus(logger)
 	router := routing.NewRouter(routing.RouterOptions{
 		Events: opts.Events,
-		Logger: opts.Logger,
+		Logger: logger,
 	})
 	go initRouter(opts)
 

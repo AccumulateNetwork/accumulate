@@ -17,6 +17,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -33,7 +34,6 @@ func init() {
 }
 
 func TestSequencer(t *testing.T) {
-	logger := acctesting.NewTestLogger(t)
 	net := simulator.NewSimpleNetwork(t.Name(), 2, 1)
 	sim := NewSim(t,
 		simulator.WithNetwork(net),
@@ -68,9 +68,9 @@ func TestSequencer(t *testing.T) {
 		Txn(st.TxID).Produced().Succeeds())
 
 	svc := dut.NewSequencer(dut.SequencerParams{
-		Logger:       logger,
+		Logger:       logging.Nop{},
 		Database:     sim.DatabaseFor(alice),
-		EventBus:     events.NewBus(logger),
+		EventBus:     events.NewBus(logging.Nop{}),
 		Globals:      g,
 		Partition:    "BVN0",
 		ValidatorKey: net.Bvns[0].Nodes[0].PrivValKey,

@@ -90,7 +90,7 @@ func (f *FaucetService) start(inst *Instance) error {
 		}
 
 		impl, err := v3impl.NewFaucet(inst.context, v3impl.FaucetParams{
-			Logger:    (*logging.Slogger)(inst.logger.With("module", "faucet")),
+			Logger:    logging.FromCometBFT((*logging.Slogger)(inst.logger).With("module", "faucet")),
 			Account:   f.Account,
 			Key:       build.ED25519PrivateKey(sk),
 			Submitter: client,

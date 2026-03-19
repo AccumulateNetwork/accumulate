@@ -11,10 +11,10 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/exp/lxrand"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/common"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
@@ -387,7 +387,7 @@ func TestDelete(t *testing.T) {
 	require.Equal(t, hex.EncodeToString(before[:]), hex.EncodeToString(after[:]))
 }
 
-func newBPT(parent database.Record, logger log.Logger, store database.Store, key *record.Key, name string) *BPT {
+func newBPT(parent database.Record, logger logging.Logger, store database.Store, key *record.Key, name string) *BPT {
 	return New(parent, logger, store, key)
 }
 

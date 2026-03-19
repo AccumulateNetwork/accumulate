@@ -46,9 +46,9 @@
       "priority": 1,
       "wave": 1,
       "description": "Wire GossipSub into accumulated integration. The DAG-BFT consensus works in consensus-testnet but the accumulated integration passes nil for host and pubsub. Fix internal/node/dagbft/service.go:130 to pass real libp2p host and GossipSub.",
-      "status": "in_progress",
+      "status": "completed",
       "assigned_worker": 1,
-      "pipeline_stage": 1
+      "pipeline_stage": 3
     },
     {
       "number": 3815,
@@ -56,9 +56,9 @@
       "priority": 2,
       "wave": 2,
       "description": "Implement BPT-level sync recovery algorithm: 1) Request missing BPT entries from neighbors, 2) Background BPT walk to fill gaps, 3) Validation passes until all nodes valid, 4) Fill missing chain entries.",
-      "status": "in_progress",
+      "status": "completed",
       "assigned_worker": 2,
-      "pipeline_stage": 1
+      "pipeline_stage": 3
     },
     {
       "number": 3816,
@@ -66,9 +66,9 @@
       "priority": 2,
       "wave": 2,
       "description": "Review and test backpressure improvements: batch count check in Submit(), eviction in createAndBroadcastBatch(), reduced MaxStoredBatches. Changes already implemented, needs review and tests.",
-      "status": "in_progress",
+      "status": "completed",
       "assigned_worker": 3,
-      "pipeline_stage": 1
+      "pipeline_stage": 3
     },
     {
       "number": 3817,
@@ -76,9 +76,9 @@
       "priority": 3,
       "wave": 3,
       "description": "Tracking issue for DAG-BFT integration. Update status as other issues complete.",
-      "status": "in_progress",
+      "status": "completed",
       "assigned_worker": 4,
-      "pipeline_stage": 1
+      "pipeline_stage": 3
     }
   ]
 }
