@@ -532,6 +532,7 @@ func TestConsensusTestnet_BasicConsensus(t *testing.T) {
 	// At least 2/3 of nodes should have matching state hashes
 	hashCounts := make(map[string]int)
 	for _, h := range stateHashes {
+		h := h // Create local copy to avoid rangevarref lint warning
 		hashCounts[hex.EncodeToString(h[:])]++
 	}
 
