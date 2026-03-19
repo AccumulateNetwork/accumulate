@@ -83,7 +83,7 @@ func (s *SnapshotService) start(inst *Instance) error {
 	c.directory = inst.path(s.Directory)
 	c.logger = inst.logger
 	c.schedule = s.Schedule
-	c.db = coredb.New(store, (*logging.Slogger)(inst.logger))
+	c.db = coredb.New(store, logging.FromCometBFT((*logging.Slogger)(inst.logger)))
 	c.index = *s.EnableIndexing
 	c.events = bus
 	c.consensus = consensus

@@ -35,7 +35,7 @@ type ResponseSubmit struct {
 
 func newRouter(logger log.Logger) *Router {
 	r := new(Router)
-	r.logger.Set(logger, "module", "router")
+	r.logger.Set(logging.FromCometBFT(logger), "module", "router")
 	r.overrides = map[[32]byte]string{}
 	return r
 }

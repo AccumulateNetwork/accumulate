@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/common"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
@@ -31,8 +32,8 @@ import (
 func TestCollect(t *testing.T) {
 	// Setup
 	dir := t.TempDir()
-	logger := acctesting.NewTestLogger(t)
-	db, err := coredb.OpenBadger(filepath.Join(dir, "test.db"), logger)
+	cometLogger := acctesting.NewTestLogger(t)
+	db, err := coredb.OpenBadger(filepath.Join(dir, "test.db"), logging.FromCometBFT(cometLogger))
 	require.NoError(t, err)
 	defer db.Close()
 	db.SetObserver(acctesting.NullObserver{})
@@ -61,8 +62,8 @@ func BenchmarkCollect(b *testing.B) {
 	const M = 1000
 	for _, N := range N {
 		dir := b.TempDir()
-		logger := acctesting.NewTestLogger(b)
-		db, err := coredb.OpenBadger(filepath.Join(dir, "test.db"), logger)
+		cometLogger := acctesting.NewTestLogger(b)
+		db, err := coredb.OpenBadger(filepath.Join(dir, "test.db"), logging.FromCometBFT(cometLogger))
 		require.NoError(b, err)
 		defer db.Close()
 		db.SetObserver(acctesting.NullObserver{})

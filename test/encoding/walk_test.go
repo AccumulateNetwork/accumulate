@@ -11,9 +11,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/bsn"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -146,7 +146,7 @@ func TestWalkAndReplay(t *testing.T) {
 	sim.StepN(100)
 
 	// Restore snapshot into BSN database
-	logger := acctesting.NewTestLogger(t)
+	logger := logging.FromCometBFT(acctesting.NewTestLogger(t))
 	store := memory.New(nil)
 	bsndb := bsn.NewChangeSet(store, logger.With("module", "database"))
 	for _, part := range sim.Partitions() {
@@ -212,7 +212,7 @@ func TestWalkAndReplay(t *testing.T) {
 }
 
 type partitionBeginner struct {
-	logger    log.Logger
+	logger    logging.Logger
 	store     keyvalue.Beginner
 	partition string
 }

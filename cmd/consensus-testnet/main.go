@@ -14,6 +14,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -21,6 +22,7 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"os/signal"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -34,6 +36,8 @@ import (
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
@@ -209,7 +213,9 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	ps, err := pubsub.NewGossipSub(ctx, host)
+	ps, err := pubsub.NewGossipSub(ctx, host,
+		pubsub.WithValidateWorkers(runtime.NumCPU()), // Parallel signature validation
+	)
 	if err != nil {
 		slog.Error("Failed to create pubsub", "error", err)
 		os.Exit(1)
@@ -355,23 +361,56 @@ func main() {
 	slog.Info("Accumulate transaction generator initialized",
 		"lite_account", accTxGen.GetLiteTokenAccount().String())
 
+	// Transaction type counters for statistics
+	var sendTokensCount, writeDataCount, burnTokensCount atomic.Uint64
+
 	var genWg sync.WaitGroup
 	for g := 0; g < numGenerators; g++ {
 		genWg.Add(1)
+		generatorID := g
 		go func() {
 			defer genWg.Done()
 			ticker := time.NewTicker(time.Second / time.Duration(ratePerGenerator))
 			defer ticker.Stop()
 
+			txCounter := uint64(0)
 			for {
 				select {
 				case <-ctx.Done():
 					return
 				case <-ticker.C:
-					// Generate a valid Accumulate SendTokens transaction
-					env, err := accTxGen.GenerateSelfSendTokens(1)
+					txCounter++
+					var env *messaging.Envelope
+					var err error
+					var txType string
+
+					// Distribute transaction types: 60% SendTokens, 25% WriteData, 15% BurnTokens
+					// Use counter for deterministic distribution across generators
+					switch (txCounter + uint64(generatorID)) % 20 {
+					case 0, 1, 2: // 15% BurnTokens
+						env, err = accTxGen.GenerateBurnTokens(1)
+						txType = "BurnTokens"
+						if err == nil {
+							burnTokensCount.Add(1)
+						}
+					case 3, 4, 5, 6, 7: // 25% WriteData
+						data := make([]byte, 64)
+						rand.Read(data)
+						env, err = accTxGen.GenerateWriteData(data)
+						txType = "WriteData"
+						if err == nil {
+							writeDataCount.Add(1)
+						}
+					default: // 60% SendTokens
+						env, err = accTxGen.GenerateSelfSendTokens(1)
+						txType = "SendTokens"
+						if err == nil {
+							sendTokensCount.Add(1)
+						}
+					}
+
 					if err != nil {
-						slog.Debug("Failed to generate Accumulate transaction", "error", err)
+						slog.Debug("Failed to generate Accumulate transaction", "type", txType, "error", err)
 						dropped.Add(1)
 						continue
 					}
@@ -386,6 +425,12 @@ func main() {
 
 					if err := node.SubmitTransaction(envData); err != nil {
 						dropped.Add(1)
+						// Log backpressure specifically - this is NOT a silent drop
+						if errors.Is(err, worker.ErrBackpressure) {
+							slog.Warn("Backpressure: transaction rejected", "type", txType, "error", err)
+						} else {
+							slog.Debug("Transaction submission failed", "type", txType, "error", err)
+						}
 					} else {
 						submitted.Add(1)
 					}
@@ -424,7 +469,10 @@ func main() {
 					"sub/s", (currSubmitted-lastSubmitted)/10,
 					"drop/s", (currDropped-lastDropped)/10,
 					"tps", (currProcessed-lastProcessed)/10,
-					"round", node.Primary().CurrentRound())
+					"round", node.Primary().CurrentRound(),
+					"send_tokens", sendTokensCount.Load(),
+					"write_data", writeDataCount.Load(),
+					"burn_tokens", burnTokensCount.Load())
 				lastSubmitted = currSubmitted
 				lastDropped = currDropped
 				lastProcessed = currProcessed
@@ -452,6 +500,10 @@ func main() {
 	fmt.Printf("Transactions processed: %d\n", executor.GetProcessedCount())
 	fmt.Printf("  - Accumulate transactions: %d\n", executor.GetAccumulateTxCount())
 	fmt.Printf("  - Legacy transactions: %d\n", executor.GetLegacyTxCount())
+	fmt.Printf("Transaction types generated:\n")
+	fmt.Printf("  - SendTokens: %d\n", sendTokensCount.Load())
+	fmt.Printf("  - WriteData: %d\n", writeDataCount.Load())
+	fmt.Printf("  - BurnTokens: %d\n", burnTokensCount.Load())
 	stateHash := executor.GetStateHash()
 	fmt.Printf("Final state hash: %s\n", hex.EncodeToString(stateHash[:]))
 	latestBlock := executor.GetLatestBlock()

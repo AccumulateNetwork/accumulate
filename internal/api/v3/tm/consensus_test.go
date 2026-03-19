@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/api/v3/tm"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
@@ -35,12 +36,12 @@ func TestConsensusStatus(t *testing.T) {
 	require.NoError(t, err)
 
 	svc := NewConsensusService(ConsensusServiceParams{
-		Logger:           logger,
+		Logger:           logging.Nop{},
 		Local:            staticClient{},
 		Database:         sim.Database(protocol.Directory),
 		PartitionID:      protocol.Directory,
 		PartitionType:    protocol.PartitionTypeDirectory,
-		EventBus:         events.NewBus(logger),
+		EventBus:         events.NewBus(logging.Nop{}),
 		NodeKeyHash:      sha256.Sum256(net.Bvns[0].Nodes[0].DnNodeKey[32:]),
 		ValidatorKeyHash: sha256.Sum256(net.Bvns[0].Nodes[0].PrivValKey[32:]),
 	})
