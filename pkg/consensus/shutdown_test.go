@@ -59,8 +59,8 @@ func TestShutdownManager_GracefulShutdown(t *testing.T) {
 	// Submit some transactions
 	for i := 0; i < 10; i++ {
 		tx := make([]byte, 32)
-		rand.Read(tx)
-		node.SubmitTransaction(tx)
+		_, _ = rand.Read(tx)
+		_ = node.SubmitTransaction(tx)
 	}
 
 	// Create shutdown manager
@@ -166,12 +166,12 @@ func TestShutdownManager_AlreadyInProgress(t *testing.T) {
 	}, committee, nil, nil)
 
 	ctx := context.Background()
-	node.Start(ctx)
+	_ = node.Start(ctx)
 
 	manager := NewShutdownManager(node, ShutdownConfig{})
 
 	// Start first shutdown in background
-	go manager.Shutdown(context.Background())
+	go func() { _ = manager.Shutdown(context.Background()) }()
 
 	// Give it time to start
 	time.Sleep(10 * time.Millisecond)
@@ -193,13 +193,13 @@ func TestNode_DrainWithTimeout(t *testing.T) {
 	}, committee, nil, nil)
 
 	ctx := context.Background()
-	node.Start(ctx)
+	_ = node.Start(ctx)
 
 	// Submit transactions
 	for i := 0; i < 5; i++ {
 		tx := make([]byte, 32)
-		rand.Read(tx)
-		node.SubmitTransaction(tx)
+		_, _ = rand.Read(tx)
+		_ = node.SubmitTransaction(tx)
 	}
 
 	// Drain with short timeout (should succeed as transactions are processed quickly)
@@ -221,11 +221,11 @@ func TestNode_StopAccepting(t *testing.T) {
 	}, committee, nil, nil)
 
 	ctx := context.Background()
-	node.Start(ctx)
+	_ = node.Start(ctx)
 
 	// Should accept transactions initially
 	tx := make([]byte, 32)
-	rand.Read(tx)
+	_, _ = rand.Read(tx)
 	if err := node.SubmitTransaction(tx); err != nil {
 		t.Errorf("should accept transaction initially: %v", err)
 	}
@@ -289,7 +289,7 @@ func TestGracefulShutdown(t *testing.T) {
 	// Submit transactions to create pending batches
 	for i := 0; i < 20; i++ {
 		tx := make([]byte, 64)
-		rand.Read(tx)
+		_, _ = rand.Read(tx)
 		if err := node.SubmitTransaction(tx); err != nil {
 			t.Fatalf("failed to submit transaction %d: %v", i, err)
 		}

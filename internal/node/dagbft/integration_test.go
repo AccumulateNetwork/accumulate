@@ -275,7 +275,7 @@ func TestIntegration_ProcessTransactions(t *testing.T) {
 	defer cancel()
 	err = node.Start(ctx)
 	require.NoError(t, err)
-	defer node.Stop()
+	defer func() { _ = node.Stop() }()
 
 	// 5. Create test transactions
 	envelope := &messaging.Envelope{}
@@ -356,7 +356,7 @@ func TestIntegration_InvalidTransaction(t *testing.T) {
 	defer cancel()
 	err = node.Start(ctx)
 	require.NoError(t, err)
-	defer node.Stop()
+	defer func() { _ = node.Stop() }()
 
 	// Try to submit invalid transaction
 	envelope := &messaging.Envelope{}
@@ -463,7 +463,7 @@ func TestIntegration_ValidatorUpdates(t *testing.T) {
 	defer cancel()
 	err = node.Start(ctx)
 	require.NoError(t, err)
-	defer node.Stop()
+	defer func() { _ = node.Stop() }()
 
 	// Setup executor to report validator updates
 	newValidators := []*execute.ValidatorUpdate{
@@ -644,7 +644,7 @@ func TestIntegration_BullsharkOrdering(t *testing.T) {
 	defer cancel()
 	err = node.Start(ctx)
 	require.NoError(t, err)
-	defer node.Stop()
+	defer func() { _ = node.Stop() }()
 
 	// Create chain of certificates (simulating proper DAG)
 	// Round 0: Genesis (already inserted)

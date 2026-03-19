@@ -383,7 +383,7 @@ func createTestCertificates(committee *types.Committee, count int) []*types.Cert
 		for j := 0; j < quorumCount && j < len(committee.Validators); j++ {
 			// Create a mock signature (in real code, this would be a valid ed25519 signature)
 			sig := make([]byte, ed25519.SignatureSize)
-			rand.Read(sig)
+			_, _ = rand.Read(sig)
 			sigs = append(sigs, sig)
 			authorities = append(authorities, uint16(j))
 		}

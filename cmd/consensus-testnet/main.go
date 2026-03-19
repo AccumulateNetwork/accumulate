@@ -395,7 +395,7 @@ func main() {
 						}
 					case 3, 4, 5, 6, 7: // 25% WriteData
 						data := make([]byte, 64)
-						rand.Read(data)
+						_, _ = rand.Read(data)
 						env, err = accTxGen.GenerateWriteData(data)
 						txType = "WriteData"
 						if err == nil {
@@ -492,7 +492,7 @@ func main() {
 	<-txGenDone
 	executor.Stop()
 	node.Stop()
-	executor.Cleanup()
+	_ = executor.Cleanup()
 
 	// Print final stats
 	fmt.Printf("\n=== Final Statistics ===\n")

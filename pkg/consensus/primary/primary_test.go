@@ -93,7 +93,7 @@ func TestPrimaryNew(t *testing.T) {
 	require.NotNil(t, p)
 	require.Equal(t, types.Round(0), p.CurrentRound())
 	require.Equal(t, uint64(1), p.CurrentEpoch())
-	require.Equal(t, v.pub, ed25519.PublicKey(p.PublicKey()))
+	require.Equal(t, v.pub, p.PublicKey())
 }
 
 func TestPrimaryConfig(t *testing.T) {

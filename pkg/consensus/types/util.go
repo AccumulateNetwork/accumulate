@@ -12,8 +12,3 @@ import "encoding/hex"
 func hexEncode(b []byte) string {
 	return hex.EncodeToString(b)
 }
-
-// hexDecode decodes a hex string to bytes.
-func hexDecode(s string) ([]byte, error) {
-	return hex.DecodeString(s)
-}

@@ -199,7 +199,7 @@ func TestExecutor_BlockProduction(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		tx := NewDataTx(pub, []byte("test"), uint64(i+1))
 		tx.Sign(priv)
-		executor.ProcessTransaction(tx.Marshal())
+		_ = executor.ProcessTransaction(tx.Marshal())
 	}
 
 	executor.Start(ctx)
@@ -293,7 +293,7 @@ func TestSingleNodeBlockProduction_ADI(t *testing.T) {
 		DataDir:    "/tmp/consensus-testnet-single-adi",
 	})
 	require.NoError(t, err)
-	t.Cleanup(func() { executor.Cleanup() })
+	t.Cleanup(func() { _ = executor.Cleanup() })
 
 	// Track blocks produced and state hashes
 	var blocksProduced atomic.Int32
@@ -445,7 +445,7 @@ func TestSingleNodeBlockProduction_MemoryStability(t *testing.T) {
 		DataDir:    "/tmp/consensus-testnet-memory",
 	})
 	require.NoError(t, err)
-	t.Cleanup(func() { executor.Cleanup() })
+	t.Cleanup(func() { _ = executor.Cleanup() })
 
 	// Start executor and consensus node
 	executor.Start(ctx)
@@ -492,7 +492,7 @@ func TestSingleNodeBlockProduction_MemoryStability(t *testing.T) {
 	var submitted atomic.Uint64
 	go func() {
 		payload := make([]byte, 256)
-		rand.Read(payload)
+		_, _ = rand.Read(payload)
 		ticker := time.NewTicker(10 * time.Millisecond)
 		defer ticker.Stop()
 

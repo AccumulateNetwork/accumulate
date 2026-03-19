@@ -102,7 +102,7 @@ func TestAccumulateTransactionGenerator_MarshalUnmarshal(t *testing.T) {
 		TxRate:        100,
 	})
 	require.NoError(t, err)
-	defer executor.Cleanup()
+	defer func() { _ = executor.Cleanup() }()
 
 	// Process the transaction
 	err = executor.ProcessTransaction(data)
@@ -164,7 +164,7 @@ func TestExecutor_ProcessAccumulateAndLegacyTransactions(t *testing.T) {
 		TxRate:        100,
 	})
 	require.NoError(t, err)
-	defer executor.Cleanup()
+	defer func() { _ = executor.Cleanup() }()
 
 	// Create Accumulate transaction generator
 	gen, err := NewAccumulateTransactionGenerator(priv)

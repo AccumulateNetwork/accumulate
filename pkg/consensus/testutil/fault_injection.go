@@ -465,7 +465,6 @@ type ConnectionInterceptor struct {
 	injector  *FaultInjector
 	nodeIdx   int
 	origConns map[peer.ID]network.Conn
-	mu        sync.RWMutex
 }
 
 // NewConnectionInterceptor creates a new connection interceptor.
