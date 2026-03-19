@@ -294,7 +294,7 @@ func TestIntegration_ProcessTransactions(t *testing.T) {
 	clonedHeader := header.Clone()
 	headerDigest := header.Digest()
 	sig := ed25519.Sign(priv, headerDigest[:])
-	cert := types.NewCertificate(*clonedHeader, [][]byte{sig}, []uint16{0})
+	cert := types.NewCertificate(clonedHeader, [][]byte{sig}, []uint16{0})
 
 	// 7. Insert genesis certificates
 	genesisHeader := types.NewHeader(pub, 0, committee.Epoch, nil, nil)
@@ -303,7 +303,7 @@ func TestIntegration_ProcessTransactions(t *testing.T) {
 	clonedGenesisHeader := genesisHeader.Clone()
 	genesisDigest := genesisHeader.Digest()
 	genesisSig := ed25519.Sign(priv, genesisDigest[:])
-	genesisCert := types.NewCertificate(*clonedGenesisHeader, [][]byte{genesisSig}, []uint16{0})
+	genesisCert := types.NewCertificate(clonedGenesisHeader, [][]byte{genesisSig}, []uint16{0})
 	err = d.InsertGenesis(genesisCert)
 	require.NoError(t, err)
 
@@ -409,7 +409,7 @@ func TestIntegration_BlockHashes(t *testing.T) {
 	clonedHeader := header.Clone()
 	headerDigest := header.Digest()
 	sig := ed25519.Sign(priv, headerDigest[:])
-	cert := types.NewCertificate(*clonedHeader, [][]byte{sig}, []uint16{0})
+	cert := types.NewCertificate(clonedHeader, [][]byte{sig}, []uint16{0})
 
 	// Same block params for both
 	blockTime := time.Now()
@@ -518,7 +518,7 @@ func TestIntegration_EmptyBlocks(t *testing.T) {
 	clonedHeader := header.Clone()
 	headerDigest := header.Digest()
 	sig := ed25519.Sign(priv, headerDigest[:])
-	cert := types.NewCertificate(*clonedHeader, [][]byte{sig}, []uint16{0})
+	cert := types.NewCertificate(clonedHeader, [][]byte{sig}, []uint16{0})
 
 	params := BlockParams{
 		Index:       1,
@@ -575,7 +575,7 @@ func TestIntegration_MultipleBlocks(t *testing.T) {
 		clonedHeader := header.Clone()
 		headerDigest := header.Digest()
 		sig := ed25519.Sign(priv, headerDigest[:])
-		cert := types.NewCertificate(*clonedHeader, [][]byte{sig}, []uint16{0})
+		cert := types.NewCertificate(clonedHeader, [][]byte{sig}, []uint16{0})
 
 		params := BlockParams{
 			Index:       uint64(i + 1),
@@ -624,7 +624,7 @@ func TestIntegration_BullsharkOrdering(t *testing.T) {
 	clonedGenesisHeader := genesisHeader.Clone()
 	genesisDigest := genesisHeader.Digest()
 	genesisSig := ed25519.Sign(priv, genesisDigest[:])
-	genesisCert := types.NewCertificate(*clonedGenesisHeader, [][]byte{genesisSig}, []uint16{0})
+	genesisCert := types.NewCertificate(clonedGenesisHeader, [][]byte{genesisSig}, []uint16{0})
 	err = d.InsertGenesis(genesisCert)
 	require.NoError(t, err)
 
@@ -662,7 +662,7 @@ func TestIntegration_BullsharkOrdering(t *testing.T) {
 		clonedHeader := header.Clone()
 		headerDigest := header.Digest()
 		sig := ed25519.Sign(priv, headerDigest[:])
-		cert := types.NewCertificate(*clonedHeader, [][]byte{sig}, []uint16{0})
+		cert := types.NewCertificate(clonedHeader, [][]byte{sig}, []uint16{0})
 
 		err = d.Insert(cert)
 		require.NoError(t, err)

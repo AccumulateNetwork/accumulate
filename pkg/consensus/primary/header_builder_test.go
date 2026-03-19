@@ -93,7 +93,7 @@ func TestCreateHeaderNotEnoughParents(t *testing.T) {
 	sigs := [][]byte{make([]byte, 64)}
 	authors := []uint16{0}
 
-	cert := types.NewCertificate(*header, sigs, authors)
+	cert := types.NewCertificate(header, sigs, authors)
 	require.NoError(t, d.InsertGenesis(cert))
 
 	config := Config{
@@ -374,7 +374,7 @@ func TestBatchesNotLostOnParentCheckFailure(t *testing.T) {
 	sigs := [][]byte{make([]byte, 64)}
 	authors := []uint16{0}
 
-	cert := types.NewCertificate(*header, sigs, authors)
+	cert := types.NewCertificate(header, sigs, authors)
 	require.NoError(t, d.InsertGenesis(cert))
 
 	// Create a worker with available batches
@@ -480,7 +480,7 @@ func TestBatchesAvailableInNextHeaderAfterFailure(t *testing.T) {
 	sigs := [][]byte{make([]byte, 64)}
 	authors := []uint16{0}
 
-	cert := types.NewCertificate(*header0, sigs, authors)
+	cert := types.NewCertificate(header0, sigs, authors)
 	require.NoError(t, d.InsertGenesis(cert))
 
 	// Create a worker with available batches
@@ -525,7 +525,7 @@ func TestBatchesAvailableInNextHeaderAfterFailure(t *testing.T) {
 			authorsSlice[j] = uint16(j)
 		}
 
-		c := types.NewCertificate(*h, sigs, authorsSlice)
+		c := types.NewCertificate(h, sigs, authorsSlice)
 		require.NoError(t, d.InsertGenesis(c))
 	}
 

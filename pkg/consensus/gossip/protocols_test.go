@@ -223,7 +223,7 @@ func TestProtocolHandler_CertFetch(t *testing.T) {
 	err = header.Sign(priv)
 	require.NoError(t, err)
 
-	cert := types.NewCertificate(*header, [][]byte{header.Signature}, []uint16{0})
+	cert := types.NewCertificate(header, [][]byte{header.Signature}, []uint16{0})
 	err = dagStore.StoreCertificate(cert)
 	require.NoError(t, err)
 
@@ -275,7 +275,7 @@ func TestProtocolHandler_DAGSync(t *testing.T) {
 			err = header.Sign(priv)
 			require.NoError(t, err)
 
-			cert := types.NewCertificate(*header, [][]byte{header.Signature}, []uint16{0})
+			cert := types.NewCertificate(header, [][]byte{header.Signature}, []uint16{0})
 			err = dagStore.StoreCertificate(cert)
 			require.NoError(t, err)
 			expectedCerts = append(expectedCerts, cert)
