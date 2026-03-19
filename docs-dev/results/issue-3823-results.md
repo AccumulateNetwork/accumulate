@@ -1,5 +1,24 @@
 # Issue #3823: 7-Node Integration Test Results
 
+## STATUS: INVALID - WRONG TEST EXECUTED
+
+**The test documented below was the WRONG test.**
+
+What was run: `cmd/consensus-testnet` (standalone consensus layer test)
+What should have been run: 7 `accumulated` validators with DAG-BFT
+
+The consensus-testnet test only validates `pkg/consensus` in isolation. Issue #3823 requires running the actual `accumulated` binary with:
+- DAGBFTService (cmd/accumulated/run/dagbft.go)
+- Each validator running BVN + DN partitions
+- Real Accumulate transaction processing
+- Cross-partition anchoring
+
+**This test must be re-run with actual accumulated nodes.**
+
+---
+
+## INVALID TEST RESULTS BELOW (for reference only)
+
 **Test Started**: 2026-03-19 12:42:25 CDT
 **Test Duration**: 30 minutes
 **Target TPS**: 1000
