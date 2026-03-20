@@ -38,8 +38,8 @@ import (
 	"github.com/multiformats/go-multihash"
 	"github.com/spf13/viper"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
-	tmlib "gitlab.com/accumulatenetwork/accumulate/exp/tendermint"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/comet"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	tmapi "gitlab.com/accumulatenetwork/accumulate/internal/api/v3/tm"
@@ -409,7 +409,7 @@ func (c *CoreConsensusApp) Provides() []ioc.Provided {
 }
 
 func (c *CoreConsensusApp) prestart(inst *Instance) error {
-	return coreConsensusProvidesClient.Register(inst.services, c, tmlib.NewDeferredClient())
+	return coreConsensusProvidesClient.Register(inst.services, c, comet.NewDeferredClient())
 }
 
 func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Application, error) {
@@ -453,7 +453,7 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 		},
 	}
 
-	// Why does this exist? Why not just use tmlib.DispatcherClient?
+	// Why does this exist? Why not just use comet.DispatcherClient?
 	type Client interface {
 		tmrpc.ABCIClient
 		tmrpc.NetworkClient
@@ -461,7 +461,7 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 		tmrpc.StatusClient
 	}
 
-	clients := map[string]tmlib.DispatcherClient{}
+	clients := map[string]comet.DispatcherClient{}
 	ioc.ForEach(inst.services, func(desc ioc.Descriptor, svc Client) {
 		clients[strings.ToLower(desc.Namespace())] = svc
 	})
@@ -477,7 +477,7 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 	} else {
 		// Otherwise, use the Tendermint dispatcher
 		execOpts.NewDispatcher = func() execute.Dispatcher {
-			return tmlib.NewDispatcher(router, clients)
+			return comet.NewDispatcher(router, clients)
 		}
 	}
 

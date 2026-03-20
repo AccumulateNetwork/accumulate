@@ -40,8 +40,8 @@ import (
 	"github.com/rs/zerolog"
 	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/exp/loki"
-	"gitlab.com/accumulatenetwork/accumulate/exp/tendermint"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/comet"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3/tm"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
@@ -82,11 +82,11 @@ type Daemon struct {
 	nodeKey          *tmp2p.NodeKey
 	router           routing.Router
 	eventBus         *events.Bus
-	localTm          *tendermint.DeferredClient
+	localTm          *comet.DeferredClient
 	snapshotSchedule cron.Schedule
 	snapshotLock     *sync.Mutex
 	tracer           trace.Tracer
-	local            map[string]tendermint.DispatcherClient
+	local            map[string]comet.DispatcherClient
 
 	// knobs for tests
 	// IsTest   bool
@@ -106,7 +106,7 @@ func New(cfg *config.Config, newWriter func(*config.Config) (io.Writer, error)) 
 	var daemon Daemon
 	daemon.snapshotLock = new(sync.Mutex)
 	daemon.Config = cfg
-	daemon.localTm = tendermint.NewDeferredClient()
+	daemon.localTm = comet.NewDeferredClient()
 	daemon.done = make(chan struct{})
 
 	if newWriter == nil {
@@ -204,7 +204,7 @@ func (d *Daemon) StartSecondary(e *Daemon, others ...*Daemon) error {
 }
 
 func (d *Daemon) Start(others ...*Daemon) (err error) {
-	d.local = map[string]tendermint.DispatcherClient{}
+	d.local = map[string]comet.DispatcherClient{}
 	d.local[strings.ToLower(d.Config.Accumulate.PartitionId)] = d.localTm
 	for _, e := range others {
 		part := strings.ToLower(e.Config.Accumulate.PartitionId)
@@ -421,7 +421,7 @@ func (d *Daemon) startApp(caughtUp <-chan struct{}) (types.Application, error) {
 	} else {
 		// Otherwise, use the Tendermint dispatcher
 		execOpts.NewDispatcher = func() execute.Dispatcher {
-			return tendermint.NewDispatcher(d.router, d.local)
+			return comet.NewDispatcher(d.router, d.local)
 		}
 	}
 
