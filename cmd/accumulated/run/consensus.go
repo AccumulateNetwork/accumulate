@@ -48,7 +48,6 @@ import (
 	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
 	v3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -514,20 +513,10 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 		return nil, errors.UnknownError.WithFormat("initialize chain executor: %w", err)
 	}
 
-	app := abci.NewAccumulator(abci.AccumulatorOptions{
-		ID:        inst.id,
-		Address:   d.privVal.Key.PubKey.Address(),
-		Executor:  exec,
-		Logger:    d.logger.With("module", "abci"),
-		EventBus:  d.eventBus,
-		Database:  db,
-		Genesis:   genesis.DocProvider(d.config),
-		Partition: c.Partition.ID,
-		RootDir:   d.config.RootDir,
-
-		MaxEnvelopesPerBlock: int(*c.MaxEnvelopesPerBlock),
-	})
-	return app, nil
+	// CometBFT ABCI has been removed in favor of DAG-BFT consensus
+	_ = exec // silence unused variable
+	_ = db   // silence unused variable
+	return nil, errors.NotAllowed.With("CometBFT consensus is no longer supported, use DAG-BFT instead")
 }
 
 func (c *CoreConsensusApp) register(inst *Instance, d *tendermint, node *tmnode.Node) error {

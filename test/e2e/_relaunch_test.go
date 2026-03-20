@@ -17,7 +17,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -36,10 +35,7 @@ func TestRelaunch(t *testing.T) {
 	for _, netName := range partitions {
 		for _, daemon := range daemons[netName] {
 			require.NoError(t, daemon.Start())
-			daemon.Node_TESTONLY().ABCI.(*abci.Accumulator).OnFatal(func(err error) {
-				t.Helper()
-				require.NoError(t, err)
-			})
+			// Note: OnFatal callback removed - ABCI no longer supported
 		}
 	}
 
@@ -92,10 +88,7 @@ func TestRelaunch(t *testing.T) {
 	for _, netName := range partitions {
 		for _, daemon := range daemons[netName] {
 			require.NoError(t, daemon.Start())
-			daemon.Node_TESTONLY().ABCI.(*abci.Accumulator).OnFatal(func(err error) {
-				t.Helper()
-				require.NoError(t, err)
-			})
+			// Note: OnFatal callback removed - ABCI no longer supported
 
 			daemon := daemon
 			defer func() {

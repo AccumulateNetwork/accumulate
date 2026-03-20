@@ -18,9 +18,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/bsn"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
 	v3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
@@ -146,22 +144,9 @@ func (d *Daemon) startSummaryApp() (types.Application, error) {
 		return nil, errors.UnknownError.WithFormat("start executor: %w", err)
 	}
 
-	app := abci.NewAccumulator(abci.AccumulatorOptions{
-		Address:     d.Key().PubKey().Address(),
-		Executor:    exec,
-		Logger:      d.Logger,
-		EventBus:    d.eventBus,
-		Tracer:      d.tracer,
-		Snapshots:   &d.Config.Accumulate.Snapshots,
-		Genesis:     genesis.DocProvider(&d.Config.Config),
-		Partition:   d.Config.Accumulate.PartitionId,
-		RootDir:     d.Config.RootDir,
-		AnalysisLog: d.Config.Accumulate.AnalysisLog,
-
-		MaxEnvelopesPerBlock: d.Config.Accumulate.MaxEnvelopesPerBlock,
-	})
-
-	return app, nil
+	// CometBFT ABCI has been removed in favor of DAG-BFT consensus
+	_ = exec // silence unused variable
+	return nil, errors.NotAllowed.With("CometBFT consensus is no longer supported, use DAG-BFT instead")
 }
 
 func (d *Daemon) startSummaryServices() error {

@@ -196,3 +196,25 @@ func (m *SyntheticMessage) Hash() [32]byte         { return encoding.Hash(m) }
 func (m *NetworkUpdate) Hash() [32]byte            { return encoding.Hash(m) }
 func (m *MakeMajorBlock) Hash() [32]byte           { return encoding.Hash(m) }
 func (m *DidUpdateExecutorVersion) Hash() [32]byte { return encoding.Hash(m) }
+
+// AdjustStatusIDs corrects for the fact that the block anchor's ID method was
+// bad and has been changed. It modifies the transaction status TxIDs in-place
+// to use the old ID format for block anchors.
+func AdjustStatusIDs(messages []Message, st []*protocol.TransactionStatus) {
+	adjustedIDs := map[[32]byte]*url.TxID{}
+	for _, msg := range messages {
+		switch msg := msg.(type) {
+		case *BlockAnchor:
+			adjustedIDs[msg.Hash()] = msg.OldID()
+		}
+	}
+	for _, st := range st {
+		if st.TxID == nil {
+			continue
+		}
+		id, ok := adjustedIDs[st.TxID.Hash()]
+		if ok {
+			st.TxID = id
+		}
+	}
+}

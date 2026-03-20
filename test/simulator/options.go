@@ -375,9 +375,3 @@ func InitialAcmeSupply(v *big.Int) Option {
 	})
 }
 
-func UseABCI() Option {
-	return optionFunc(func(opts *simFactory) error {
-		opts.abci = withABCI
-		return nil
-	})
-}

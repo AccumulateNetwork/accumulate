@@ -21,9 +21,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
@@ -254,7 +253,7 @@ func (d *Daemon) isTimeForSnapshot(blockTime time.Time) bool {
 
 	// If there are no snapshots, capture a snapshot
 	snapDir := config.MakeAbsolute(d.Config.RootDir, d.Config.Accumulate.Snapshots.Directory)
-	snapshots, err := abci.ListSnapshots(snapDir)
+	snapshots, err := snapshot.ListSnapshots(snapDir)
 	if err != nil || len(snapshots) == 0 {
 		return true
 	}
