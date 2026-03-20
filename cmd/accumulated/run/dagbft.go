@@ -11,19 +11,24 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"log/slog"
+	"os"
 	"time"
 
 	"github.com/fatih/color"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
+	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
-	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
+	multiexec "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/dagbft"
 	v3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -35,6 +40,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // DAG-BFT service IOC providers
@@ -147,8 +153,16 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	// Create database
 	db := database.New(store, logging.FromCometBFT(logger))
 
+	// Load genesis snapshot if needed (before creating executor)
+	genesisPath := inst.path(s.Genesis)
+	genesisLoaded, err := s.loadGenesisIfNeeded(db, genesisPath, logging.FromCometBFT(logger))
+	if err != nil {
+		return errors.UnknownError.WithFormat("load genesis: %w", err)
+	}
+	_ = genesisLoaded // May be used in the future for initialization logic
+
 	// Create executor options
-	execOpts := execute.Options{
+	execOpts := multiexec.Options{
 		Logger:        logging.FromCometBFT(logger.With("module", "executor")),
 		Database:      db,
 		Key:           validatorKey,
@@ -157,7 +171,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		Sequencer:     client.Private(),
 		Querier:       client,
 		EnableHealing: *s.EnableHealing,
-		Describe: execute.DescribeShim{
+		Describe: multiexec.DescribeShim{
 			NetworkType: s.Partition.Type,
 			PartitionId: s.Partition.ID,
 		},
@@ -165,11 +179,11 @@ func (s *DAGBFTService) start(inst *Instance) error {
 
 	// Configure dispatcher
 	if *s.EnableDirectDispatch {
-		execOpts.NewDispatcher = func() execute.Dispatcher {
+		execOpts.NewDispatcher = func() multiexec.Dispatcher {
 			return accumulated.NewDispatcher(inst.config.Network, router, dialer)
 		}
 	} else {
-		execOpts.NewDispatcher = func() execute.Dispatcher {
+		execOpts.NewDispatcher = func() multiexec.Dispatcher {
 			return accumulated.NewDispatcher(inst.config.Network, router, dialer)
 		}
 	}
@@ -200,7 +214,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	}
 
 	// Create executor
-	exec, err := execute.NewExecutor(execOpts)
+	exec, err := multiexec.NewExecutor(execOpts)
 	if err != nil {
 		return errors.UnknownError.WithFormat("create executor: %w", err)
 	}
@@ -364,6 +378,60 @@ func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Begin
 	}
 
 	return nil
+}
+
+// loadGenesisIfNeeded loads the genesis snapshot into the database if needed.
+// It returns true if genesis was loaded, false if the database already has data.
+func (s *DAGBFTService) loadGenesisIfNeeded(db *database.Database, genesisPath string, logger logging.Logger) (bool, error) {
+	// Set the database observer (required for BPT updates)
+	db.SetObserver(execute.NewDatabaseObserver())
+
+	// Check if database already has state
+	batch := db.Begin(false)
+	ledger := batch.Account(protocol.PartitionUrl(s.Partition.ID).JoinPath(protocol.Ledger))
+	_, err := ledger.Main().Get()
+	batch.Discard()
+
+	if err == nil {
+		// Database already initialized
+		return false, nil
+	}
+
+	// Check if it's a "not found" error (expected for empty database)
+	if !errors.Is(err, errors.NotFound) {
+		return false, errors.UnknownError.WithFormat("check ledger: %w", err)
+	}
+
+	// Database is empty, need to load genesis
+	if genesisPath == "" {
+		return false, errors.BadRequest.With("genesis path is required for empty database")
+	}
+
+	// Check if genesis file exists
+	if _, err := os.Stat(genesisPath); err != nil {
+		if os.IsNotExist(err) {
+			return false, errors.BadRequest.WithFormat("genesis file not found: %s", genesisPath)
+		}
+		return false, errors.UnknownError.WithFormat("check genesis file: %w", err)
+	}
+
+	// Read the genesis snapshot
+	data, err := os.ReadFile(genesisPath)
+	if err != nil {
+		return false, errors.UnknownError.WithFormat("read genesis file: %w", err)
+	}
+
+	slog.Info("Loading genesis snapshot", "path", genesisPath, "partition", s.Partition.ID)
+
+	// Restore the snapshot into the database
+	network := config.NetworkUrl{URL: protocol.PartitionUrl(s.Partition.ID)}
+	err = snapshot.FullRestore(db, ioutil.NewBuffer(data), logger, network)
+	if err != nil {
+		return false, errors.UnknownError.WithFormat("restore genesis snapshot: %w", err)
+	}
+
+	slog.Info("Genesis snapshot loaded successfully", "partition", s.Partition.ID)
+	return true, nil
 }
 
 // Ensure DAGBFTService implements the required interfaces
