@@ -35,7 +35,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // DAG-BFT service IOC providers
@@ -50,36 +49,8 @@ var (
 	dagbftNeedsStorage = ioc.Needs[keyvalue.Beginner](func(s *DAGBFTService) string { return s.Partition.ID })
 )
 
-// DAGBFTService wraps DAG-BFT consensus for the accumulated binary.
+// DAGBFTService is defined in types_gen.go (generated from schema.yml).
 // It replaces the CometBFT-based ConsensusService with DAG-based consensus.
-type DAGBFTService struct {
-	// Configuration
-	NodeDir      string         `json:"nodeDir,omitempty" form:"nodeDir" query:"nodeDir" validate:"required"`
-	ValidatorKey PrivateKey     `json:"validatorKey,omitempty" form:"validatorKey" query:"validatorKey" validate:"required"`
-	Genesis      string         `json:"genesis,omitempty" form:"genesis" query:"genesis" validate:"required"`
-	Partition    *protocol.PartitionInfo `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
-
-	// DAG-BFT specific configuration
-	NumWorkers       *int `json:"numWorkers,omitempty" form:"numWorkers" query:"numWorkers"`
-	DAGGCDepth       *int `json:"dagGCDepth,omitempty" form:"dagGCDepth" query:"dagGCDepth"`
-	CommitBufferSize *int `json:"commitBufferSize,omitempty" form:"commitBufferSize" query:"commitBufferSize"`
-
-	// Executor options
-	EnableHealing        *bool `json:"enableHealing,omitempty" form:"enableHealing" query:"enableHealing"`
-	EnableDirectDispatch *bool `json:"enableDirectDispatch,omitempty" form:"enableDirectDispatch" query:"enableDirectDispatch"`
-	MaxEnvelopesPerBlock *uint `json:"maxEnvelopesPerBlock,omitempty" form:"maxEnvelopesPerBlock" query:"maxEnvelopesPerBlock"`
-
-	// Runtime state (transient)
-	service  *dagbft.Service
-	eventBus *events.Bus
-	globals  chan *network.GlobalValues
-}
-
-// Type returns the service type for DAG-BFT.
-func (s *DAGBFTService) Type() ServiceType {
-	// Use a new service type for DAG-BFT
-	return ServiceTypeConsensus
-}
 
 // Requires returns the IOC requirements for DAG-BFT.
 func (s *DAGBFTService) Requires() []ioc.Requirement {
@@ -122,10 +93,10 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	// Apply defaults
 	setDefaultPtr(&s.EnableHealing, false)
 	setDefaultPtr(&s.EnableDirectDispatch, true)
-	setDefaultPtr(&s.MaxEnvelopesPerBlock, 100)
-	setDefaultPtr(&s.NumWorkers, dagconfig.DefaultNumWorkers)
-	setDefaultPtr(&s.DAGGCDepth, dagconfig.DefaultDAGGCDepth)
-	setDefaultPtr(&s.CommitBufferSize, dagconfig.DefaultCommitBufferSize)
+	setDefaultPtr(&s.MaxEnvelopesPerBlock, uint64(100))
+	setDefaultPtr(&s.NumWorkers, int64(dagconfig.DefaultNumWorkers))
+	setDefaultPtr(&s.DAGGCDepth, int64(dagconfig.DefaultDAGGCDepth))
+	setDefaultPtr(&s.CommitBufferSize, int64(dagconfig.DefaultCommitBufferSize))
 
 	// Get the logger
 	logger := (*logging.Slogger)(inst.logger)
@@ -206,11 +177,11 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		}
 	}
 
-	// Setup globals channel
-	s.globals = make(chan *network.GlobalValues, 1)
+	// Setup globals channel for passing to registerAPIServices
+	globalsCh := make(chan *network.GlobalValues, 1)
 	events.SubscribeSync(s.eventBus, func(e events.WillChangeGlobals) error {
 		select {
-		case s.globals <- e.New:
+		case globalsCh <- e.New:
 		default:
 		}
 		return nil
@@ -249,17 +220,17 @@ func (s *DAGBFTService) start(inst *Instance) error {
 
 	// Build DAG-BFT configuration
 	dagCfg := dagconfig.DefaultConfig()
-	dagCfg.Consensus.NumWorkers = *s.NumWorkers
-	dagCfg.Consensus.DAGGCDepth = *s.DAGGCDepth
-	dagCfg.Consensus.CommitBufferSize = *s.CommitBufferSize
+	dagCfg.Consensus.NumWorkers = int(*s.NumWorkers)
+	dagCfg.Consensus.DAGGCDepth = int(*s.DAGGCDepth)
+	dagCfg.Consensus.CommitBufferSize = int(*s.CommitBufferSize)
 
 	// Create the DAG-BFT node configuration
 	nodeConfig := consensus.NodeConfig{
 		Partition:        s.Partition.ID,
 		KeyPair:          validatorKey,
-		NumWorkers:       *s.NumWorkers,
+		NumWorkers:       int(*s.NumWorkers),
 		DAGGCDepth:       types.Round(*s.DAGGCDepth),
-		CommitBufferSize: *s.CommitBufferSize,
+		CommitBufferSize: int(*s.CommitBufferSize),
 	}
 
 	// Create GossipSub for DAG-BFT certificate/batch dissemination
@@ -318,7 +289,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	}
 
 	// Register consensus API services
-	err = s.registerAPIServices(inst, store, validatorKey)
+	err = s.registerAPIServices(inst, store, validatorKey, globalsCh)
 	if err != nil {
 		return err
 	}
@@ -328,7 +299,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 }
 
 // registerAPIServices registers the API services for DAG-BFT.
-func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Beginner, validatorKey []byte) error {
+func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Beginner, validatorKey []byte, globalsCh <-chan *network.GlobalValues) error {
 	logger := (*logging.Slogger)(inst.logger)
 	db := database.New(store, logging.FromCometBFT(logger))
 
@@ -374,7 +345,7 @@ func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Begin
 	// Wait for globals to be available
 	var globals *network.GlobalValues
 	select {
-	case globals = <-s.globals:
+	case globals = <-globalsCh:
 	case <-time.After(5 * time.Second):
 		// Use a default if globals aren't available yet
 		globals = new(network.GlobalValues)

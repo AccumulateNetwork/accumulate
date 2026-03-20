@@ -7,12 +7,9 @@
 package run
 
 import (
-	types "github.com/cometbft/cometbft/abci/types"
-	tmnode "github.com/cometbft/cometbft/node"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/address"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 //go:generate go run gitlab.com/accumulatenetwork/core/schema/cmd/generate schema schema.yml -w schema_gen.go
@@ -50,14 +47,4 @@ type Storage interface {
 type PrivateKey interface {
 	Type() PrivateKeyType
 	get(inst *Instance) (address.Address, error)
-}
-
-type ConsensusApp interface {
-	Type() ConsensusAppType
-	partition() *protocol.PartitionInfo
-	Requires() []ioc.Requirement
-	Provides() []ioc.Provided
-	prestart(*Instance) error
-	start(*Instance, *tendermint) (types.Application, error)
-	register(*Instance, *tendermint, *tmnode.Node) error
 }

@@ -118,33 +118,21 @@ type partOpts struct {
 func (p partOpts) apply(cfg *Config) error {
 	setDefaultPtr(&p.EnableSnapshots, false)
 
-	var offset portOffset
-	if p.Type == protocol.PartitionTypeDirectory {
-		offset = portDir
-	} else {
-		offset = portBVN
-	}
-
-	// Consensus
+	// DAG-BFT Consensus
 	addService(cfg,
-		&ConsensusService{
-			NodeDir:          p.Dir,
-			ValidatorKey:     p.ValidatorKey,
-			Genesis:          p.Genesis,
-			Listen:           applyAddrTransforms(p.Listen, offset),
-			BootstrapPeers:   p.BootstrapPeers,
-			MetricsNamespace: p.MetricsNamespace,
-			App: &CoreConsensusApp{
-				EnableHealing:        p.EnableHealing,
-				EnableDirectDispatch: p.EnableDirectDispatch,
-				MaxEnvelopesPerBlock: p.MaxEnvelopesPerBlock,
-				Partition: &protocol.PartitionInfo{
-					ID:   p.ID,
-					Type: p.Type,
-				},
+		&DAGBFTService{
+			NodeDir:              p.Dir,
+			ValidatorKey:         p.ValidatorKey,
+			Genesis:              p.Genesis,
+			EnableHealing:        p.EnableHealing,
+			EnableDirectDispatch: p.EnableDirectDispatch,
+			MaxEnvelopesPerBlock: p.MaxEnvelopesPerBlock,
+			Partition: &protocol.PartitionInfo{
+				ID:   p.ID,
+				Type: p.Type,
 			},
 		},
-		func(c *ConsensusService) string { return c.App.partition().ID })
+		func(s *DAGBFTService) string { return s.Partition.ID })
 
 	// Storage
 	if !haveService2(cfg, p.ID, func(s *StorageService) string { return s.Name }, nil) {
