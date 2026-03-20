@@ -43,7 +43,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/exp/tendermint"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3/tm"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
@@ -553,7 +552,7 @@ func (d *Daemon) startServices(chGlobals <-chan *core.GlobalValues) error {
 
 	// Initialize all the services
 	rpcLogger := logging.FromCometBFT(d.Logger).With("module", "acc-rpc")
-	consensusSvc := tm.NewConsensusService(tm.ConsensusServiceParams{
+	consensusSvc := tendermint.NewConsensusService(tendermint.ConsensusServiceParams{
 		Logger:           rpcLogger,
 		Local:            d.localTm,
 		Database:         d.db,
@@ -580,11 +579,11 @@ func (d *Daemon) startServices(chGlobals <-chan *core.GlobalValues) error {
 		Node:    consensusSvc,
 		Querier: querySvc,
 	})
-	submitSvc := tm.NewSubmitter(tm.SubmitterParams{
+	submitSvc := tendermint.NewSubmitter(tendermint.SubmitterParams{
 		Logger: rpcLogger,
 		Local:  d.localTm,
 	})
-	validateSvc := tm.NewValidator(tm.ValidatorParams{
+	validateSvc := tendermint.NewValidator(tendermint.ValidatorParams{
 		Logger: rpcLogger,
 		Local:  d.localTm,
 	})

@@ -14,7 +14,7 @@ import (
 	"github.com/cometbft/cometbft/abci/types"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3/tm"
+	tm "gitlab.com/accumulatenetwork/accumulate/exp/tendermint"
 	"gitlab.com/accumulatenetwork/accumulate/internal/bsn"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"

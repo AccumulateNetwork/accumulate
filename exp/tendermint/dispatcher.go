@@ -19,7 +19,6 @@ import (
 	jrpc "github.com/cometbft/cometbft/rpc/jsonrpc/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	v2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3/tm"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -29,7 +28,7 @@ import (
 )
 
 type DispatcherClient interface {
-	tm.SubmitClient
+	SubmitClient
 	rpc.NetworkClient
 }
 
@@ -192,7 +191,7 @@ func (d *dispatcher) send(ctx context.Context, queue map[string][]*messaging.Env
 		}
 
 		// Submit envelopes directly via Tendermint RPC
-		submitter := tm.NewSubmitter(tm.SubmitterParams{
+		submitter := NewSubmitter(SubmitterParams{
 			Local: client,
 		})
 
