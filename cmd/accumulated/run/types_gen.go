@@ -396,6 +396,41 @@ func (v *CoreValidatorMode) UnmarshalJSON(b []byte) error {
 	return sCoreValidatorMode.UnmarshalJSON(b, v)
 }
 
+type DAGBFTService struct {
+	NodeDir              string
+	ValidatorKey         PrivateKey
+	Genesis              string
+	Partition            *protocol.PartitionInfo
+	NumWorkers           *int64
+	DAGGCDepth           *int64
+	CommitBufferSize     *int64
+	EnableHealing        *bool
+	EnableDirectDispatch *bool
+	MaxEnvelopesPerBlock *uint64
+}
+
+func (DAGBFTService) Type() ServiceType { return ServiceTypeDAGBFT }
+
+// Copy returns a copy of the DAGBFTService.
+func (v *DAGBFTService) Copy() *DAGBFTService {
+	return sDAGBFTService.Copy(v)
+}
+
+// EqualDAGBFTService returns true if V is equal to U.
+func (v *DAGBFTService) Equal(u *DAGBFTService) bool {
+	return sDAGBFTService.Equal(v, u)
+}
+
+// MarshalBinary marshals the DAGBFTService to JSON.
+func (v *DAGBFTService) MarshalJSON() ([]byte, error) {
+	return sDAGBFTService.MarshalJSON(v)
+}
+
+// UnmarshalJSON unmarshals the DAGBFTService from JSON.
+func (v *DAGBFTService) UnmarshalJSON(b []byte) error {
+	return sDAGBFTService.UnmarshalJSON(b, v)
+}
+
 type DevnetConfiguration struct {
 	Listen      Multiaddr
 	Bvns        uint64
@@ -1115,6 +1150,7 @@ type ServiceType int64
 
 const (
 	ServiceTypeConsensus ServiceType = 2
+	ServiceTypeDAGBFT    ServiceType = 12
 	ServiceTypeEvents    ServiceType = 6
 	ServiceTypeFaucet    ServiceType = 10
 	ServiceTypeHttp      ServiceType = 7

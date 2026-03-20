@@ -32,6 +32,7 @@ var (
 	sCoreConsensusApp           schema.Methods[*CoreConsensusApp, *CoreConsensusApp, *schema.CompositeType]
 	sCoreValidatorConfiguration schema.Methods[*CoreValidatorConfiguration, *CoreValidatorConfiguration, *schema.CompositeType]
 	sCoreValidatorMode          schema.EnumMethods[CoreValidatorMode]
+	sDAGBFTService              schema.Methods[*DAGBFTService, *DAGBFTService, *schema.CompositeType]
 	sDevnetConfiguration        schema.Methods[*DevnetConfiguration, *DevnetConfiguration, *schema.CompositeType]
 	sEventsService              schema.Methods[*EventsService, *EventsService, *schema.CompositeType]
 	sExpBlockDBStorage          schema.Methods[*ExpBlockDBStorage, *ExpBlockDBStorage, *schema.CompositeType]
@@ -481,6 +482,80 @@ func init() {
 				},
 			},
 		}).SetGoType()
+
+	sDAGBFTService = schema.WithMethods[*DAGBFTService, *DAGBFTService](&schema.CompositeType{
+		TypeBase: schema.TypeBase{
+			Name: "DAGBFTService",
+		},
+		Fields: []*schema.Field{
+			{
+				Name: "NodeDir",
+				Type: &schema.SimpleType{Type: schema.SimpleTypeString},
+			},
+			(&schema.Field{
+				Name: "ValidatorKey",
+			}).ResolveTo(&deferredTypes, "PrivateKey"),
+			{
+				Name: "Genesis",
+				Type: &schema.SimpleType{Type: schema.SimpleTypeString},
+			},
+			{
+				Name: "Partition",
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     schema.TypeReferenceFor[protocol.PartitionInfo](),
+				},
+			},
+			{
+				Name:     "NumWorkers",
+				Optional: true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     &schema.SimpleType{Type: schema.SimpleTypeInt},
+				},
+			},
+			{
+				Name:     "DAGGCDepth",
+				Optional: true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     &schema.SimpleType{Type: schema.SimpleTypeInt},
+				},
+			},
+			{
+				Name:     "CommitBufferSize",
+				Optional: true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     &schema.SimpleType{Type: schema.SimpleTypeInt},
+				},
+			},
+			{
+				Name:     "EnableHealing",
+				Optional: true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     &schema.SimpleType{Type: schema.SimpleTypeBool},
+				},
+			},
+			{
+				Name:     "EnableDirectDispatch",
+				Optional: true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     &schema.SimpleType{Type: schema.SimpleTypeBool},
+				},
+			},
+			{
+				Name:     "MaxEnvelopesPerBlock",
+				Optional: true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     &schema.SimpleType{Type: schema.SimpleTypeUint},
+				},
+			},
+		},
+	}).SetGoType()
 
 	sDevnetConfiguration = schema.WithMethods[*DevnetConfiguration, *DevnetConfiguration](&schema.CompositeType{
 		TypeBase: schema.TypeBase{
@@ -1235,6 +1310,13 @@ func init() {
 					}).
 						ResolveElemTo(&deferredTypes, "SubnodeService"),
 				},
+				{
+					Discriminator: "dagbft",
+					Type: (&schema.PointerType{
+						TypeBase: schema.TypeBase{},
+					}).
+						ResolveElemTo(&deferredTypes, "DAGBFTService"),
+				},
 			},
 		}).SetGoType()
 
@@ -1248,6 +1330,10 @@ func init() {
 				"Consensus": {
 					Name:  "Consensus",
 					Value: 2,
+				},
+				"DAGBFT": {
+					Name:  "DAGBFT",
+					Value: 12,
 				},
 				"Events": {
 					Name:  "Events",
@@ -1556,6 +1642,7 @@ func init() {
 		sCoreConsensusApp.Type,
 		sCoreValidatorConfiguration.Type,
 		sCoreValidatorMode.Type,
+		sDAGBFTService.Type,
 		sDevnetConfiguration.Type,
 		sEventsService.Type,
 		sExpBlockDBStorage.Type,

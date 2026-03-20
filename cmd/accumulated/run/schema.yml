@@ -296,6 +296,8 @@ Service:
           value: 10
         Subnode:
           value: 11
+        DAGBFT:
+          value: 12
 
   members:
     - name: StorageService
@@ -508,6 +510,37 @@ Service:
           type: PrivateKey
         - name: Services
           type: '[]Service'
+
+    - name: DAGBFTService
+      class: composite
+      pointer: true
+      fields:
+        - name: NodeDir
+          type: string
+        - name: ValidatorKey
+          type: PrivateKey
+        - name: Genesis
+          type: string
+        - name: Partition
+          type: '*protocol.PartitionInfo'
+        - name: NumWorkers
+          type: '*int'
+          optional: true
+        - name: DAGGCDepth
+          type: '*int'
+          optional: true
+        - name: CommitBufferSize
+          type: '*int'
+          optional: true
+        - name: EnableHealing
+          type: '*bool'
+          optional: true
+        - name: EnableDirectDispatch
+          type: '*bool'
+          optional: true
+        - name: MaxEnvelopesPerBlock
+          type: '*uint'
+          optional: true
 
 Storage:
   class: union

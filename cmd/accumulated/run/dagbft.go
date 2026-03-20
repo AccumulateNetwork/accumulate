@@ -11,6 +11,7 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/fatih/color"
@@ -35,8 +36,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
+
+// DAGBFTService is defined in types_gen.go via schema.yml.
+// This file contains the runtime implementation methods.
 
 // DAG-BFT service IOC providers
 var (
@@ -50,35 +53,29 @@ var (
 	dagbftNeedsStorage = ioc.Needs[keyvalue.Beginner](func(s *DAGBFTService) string { return s.Partition.ID })
 )
 
-// DAGBFTService wraps DAG-BFT consensus for the accumulated binary.
-// It replaces the CometBFT-based ConsensusService with DAG-based consensus.
-type DAGBFTService struct {
-	// Configuration
-	NodeDir      string         `json:"nodeDir,omitempty" form:"nodeDir" query:"nodeDir" validate:"required"`
-	ValidatorKey PrivateKey     `json:"validatorKey,omitempty" form:"validatorKey" query:"validatorKey" validate:"required"`
-	Genesis      string         `json:"genesis,omitempty" form:"genesis" query:"genesis" validate:"required"`
-	Partition    *protocol.PartitionInfo `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
-
-	// DAG-BFT specific configuration
-	NumWorkers       *int `json:"numWorkers,omitempty" form:"numWorkers" query:"numWorkers"`
-	DAGGCDepth       *int `json:"dagGCDepth,omitempty" form:"dagGCDepth" query:"dagGCDepth"`
-	CommitBufferSize *int `json:"commitBufferSize,omitempty" form:"commitBufferSize" query:"commitBufferSize"`
-
-	// Executor options
-	EnableHealing        *bool `json:"enableHealing,omitempty" form:"enableHealing" query:"enableHealing"`
-	EnableDirectDispatch *bool `json:"enableDirectDispatch,omitempty" form:"enableDirectDispatch" query:"enableDirectDispatch"`
-	MaxEnvelopesPerBlock *uint `json:"maxEnvelopesPerBlock,omitempty" form:"maxEnvelopesPerBlock" query:"maxEnvelopesPerBlock"`
-
-	// Runtime state (transient)
+// dagbftRuntime holds transient runtime state for DAGBFTService.
+type dagbftRuntime struct {
 	service  *dagbft.Service
 	eventBus *events.Bus
 	globals  chan *network.GlobalValues
 }
 
-// Type returns the service type for DAG-BFT.
-func (s *DAGBFTService) Type() ServiceType {
-	// Use a new service type for DAG-BFT
-	return ServiceTypeConsensus
+// dagbftRuntimes stores runtime state for each DAGBFTService instance.
+var (
+	dagbftRuntimes   = make(map[*DAGBFTService]*dagbftRuntime)
+	dagbftRuntimesMu sync.RWMutex
+)
+
+// getRuntime returns the runtime state for a DAGBFTService, creating it if needed.
+func (s *DAGBFTService) getRuntime() *dagbftRuntime {
+	dagbftRuntimesMu.Lock()
+	defer dagbftRuntimesMu.Unlock()
+	rt := dagbftRuntimes[s]
+	if rt == nil {
+		rt = &dagbftRuntime{}
+		dagbftRuntimes[s] = rt
+	}
+	return rt
 }
 
 // Requires returns the IOC requirements for DAG-BFT.
@@ -119,22 +116,25 @@ func (s *DAGBFTService) prestart(inst *Instance) error {
 
 // start initializes and starts the DAG-BFT service.
 func (s *DAGBFTService) start(inst *Instance) error {
-	// Apply defaults
+	// Apply defaults - use int64 versions for generated type
 	setDefaultPtr(&s.EnableHealing, false)
 	setDefaultPtr(&s.EnableDirectDispatch, true)
-	setDefaultPtr(&s.MaxEnvelopesPerBlock, 100)
-	setDefaultPtr(&s.NumWorkers, dagconfig.DefaultNumWorkers)
-	setDefaultPtr(&s.DAGGCDepth, dagconfig.DefaultDAGGCDepth)
-	setDefaultPtr(&s.CommitBufferSize, dagconfig.DefaultCommitBufferSize)
+	setDefaultPtr(&s.MaxEnvelopesPerBlock, uint64(100))
+	setDefaultPtr(&s.NumWorkers, int64(dagconfig.DefaultNumWorkers))
+	setDefaultPtr(&s.DAGGCDepth, int64(dagconfig.DefaultDAGGCDepth))
+	setDefaultPtr(&s.CommitBufferSize, int64(dagconfig.DefaultCommitBufferSize))
+
+	// Get runtime state
+	rt := s.getRuntime()
 
 	// Get the logger
 	logger := (*logging.Slogger)(inst.logger)
 
 	// Create event bus
-	s.eventBus = events.NewBus(logging.FromCometBFT(logger.With("module", "events")))
+	rt.eventBus = events.NewBus(logging.FromCometBFT(logger.With("module", "events")))
 
 	// Subscribe to fatal errors
-	events.SubscribeAsync(s.eventBus, func(e events.FatalError) {
+	events.SubscribeAsync(rt.eventBus, func(e events.FatalError) {
 		slog.ErrorContext(inst.context, "Shutting down due to a fatal error", "error", e.Err)
 		inst.shutdown()
 	})
@@ -160,7 +160,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 
 	// Create router
 	router := routing.NewRouter(routing.RouterOptions{
-		Events: s.eventBus,
+		Events: rt.eventBus,
 		Logger: logging.FromCometBFT(logger),
 	})
 	err = dagbftProvidesRouter.Register(inst.services, s, router)
@@ -185,7 +185,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		Database:      db,
 		Key:           validatorKey,
 		Router:        router,
-		EventBus:      s.eventBus,
+		EventBus:      rt.eventBus,
 		Sequencer:     client.Private(),
 		Querier:       client,
 		EnableHealing: *s.EnableHealing,
@@ -207,10 +207,10 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	}
 
 	// Setup globals channel
-	s.globals = make(chan *network.GlobalValues, 1)
-	events.SubscribeSync(s.eventBus, func(e events.WillChangeGlobals) error {
+	rt.globals = make(chan *network.GlobalValues, 1)
+	events.SubscribeSync(rt.eventBus, func(e events.WillChangeGlobals) error {
 		select {
-		case s.globals <- e.New:
+		case rt.globals <- e.New:
 		default:
 		}
 		return nil
@@ -226,7 +226,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		RunTask:             execOpts.BackgroundTaskLauncher,
 		EnableAnchorHealing: Ptr(false),
 	}
-	err = conductor.Start(s.eventBus)
+	err = conductor.Start(rt.eventBus)
 	if err != nil {
 		return errors.UnknownError.WithFormat("start conductor: %w", err)
 	}
@@ -241,7 +241,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	executorBridge, err := adapter.NewExecutorBridge(adapter.ExecutorBridgeConfig{
 		Executor:    exec,
 		PartitionID: s.Partition.ID,
-		EventBus:    s.eventBus,
+		EventBus:    rt.eventBus,
 	})
 	if err != nil {
 		return errors.UnknownError.WithFormat("create executor bridge: %w", err)
@@ -249,17 +249,17 @@ func (s *DAGBFTService) start(inst *Instance) error {
 
 	// Build DAG-BFT configuration
 	dagCfg := dagconfig.DefaultConfig()
-	dagCfg.Consensus.NumWorkers = *s.NumWorkers
-	dagCfg.Consensus.DAGGCDepth = *s.DAGGCDepth
-	dagCfg.Consensus.CommitBufferSize = *s.CommitBufferSize
+	dagCfg.Consensus.NumWorkers = int(*s.NumWorkers)
+	dagCfg.Consensus.DAGGCDepth = int(*s.DAGGCDepth)
+	dagCfg.Consensus.CommitBufferSize = int(*s.CommitBufferSize)
 
 	// Create the DAG-BFT node configuration
 	nodeConfig := consensus.NodeConfig{
 		Partition:        s.Partition.ID,
 		KeyPair:          validatorKey,
-		NumWorkers:       *s.NumWorkers,
+		NumWorkers:       int(*s.NumWorkers),
 		DAGGCDepth:       types.Round(*s.DAGGCDepth),
-		CommitBufferSize: *s.CommitBufferSize,
+		CommitBufferSize: int(*s.CommitBufferSize),
 	}
 
 	// Create GossipSub for DAG-BFT certificate/batch dissemination
@@ -284,7 +284,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		Partition:  s.Partition,
 		NodeConfig: nodeConfig,
 		Adapter:    executorBridge,
-		EventBus:   s.eventBus,
+		EventBus:   rt.eventBus,
 		Logger:     logging.FromCometBFT(logger.With("module", "dagbft")),
 		Genesis:    inst.path(s.Genesis),
 	}
@@ -295,30 +295,30 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		svcConfig.PubSub = ps
 	}
 
-	s.service, err = dagbft.NewService(svcConfig)
+	rt.service, err = dagbft.NewService(svcConfig)
 	if err != nil {
 		return errors.UnknownError.WithFormat("create DAG-BFT service: %w", err)
 	}
 
 	// Start the service
-	err = s.service.Start(inst.context)
+	err = rt.service.Start(inst.context)
 	if err != nil {
 		return errors.UnknownError.WithFormat("start DAG-BFT service: %w", err)
 	}
 
 	// Register cleanup
 	inst.cleanup("dagbft service", func(ctx context.Context) error {
-		return s.service.Stop()
+		return rt.service.Stop()
 	})
 
 	// Register event bus
-	err = dagbftProvidesEventBus.Register(inst.services, s, s.eventBus)
+	err = dagbftProvidesEventBus.Register(inst.services, s, rt.eventBus)
 	if err != nil {
 		return errors.UnknownError.WithFormat("register event bus: %w", err)
 	}
 
 	// Register consensus API services
-	err = s.registerAPIServices(inst, store, validatorKey)
+	err = s.registerAPIServices(inst, rt, store, validatorKey)
 	if err != nil {
 		return err
 	}
@@ -328,18 +328,18 @@ func (s *DAGBFTService) start(inst *Instance) error {
 }
 
 // registerAPIServices registers the API services for DAG-BFT.
-func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Beginner, validatorKey []byte) error {
+func (s *DAGBFTService) registerAPIServices(inst *Instance, rt *dagbftRuntime, store keyvalue.Beginner, validatorKey []byte) error {
 	logger := (*logging.Slogger)(inst.logger)
 	db := database.New(store, logging.FromCometBFT(logger))
 
 	// Create consensus service
 	consensusSvc := dagbft.NewConsensusAPIService(dagbft.ConsensusAPIServiceParams{
 		Logger:           logging.FromCometBFT(logger.With("module", "api")),
-		Service:          s.service,
+		Service:          rt.service,
 		Database:         db,
 		PartitionID:      s.Partition.ID,
 		PartitionType:    s.Partition.Type,
-		EventBus:         s.eventBus,
+		EventBus:         rt.eventBus,
 		NodeKeyHash:      sha256.Sum256(validatorKey[32:]), // Public key portion
 		ValidatorKeyHash: sha256.Sum256(validatorKey[32:]),
 	})
@@ -352,7 +352,7 @@ func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Begin
 	// Create submitter service
 	submitterSvc := dagbft.NewSubmitterService(dagbft.SubmitterServiceParams{
 		Logger:  logging.FromCometBFT(logger.With("module", "api")),
-		Service: s.service,
+		Service: rt.service,
 	})
 	registerRpcService(inst, submitterSvc.Type().AddressFor(s.Partition.ID), message.Submitter{Submitter: submitterSvc})
 	err = dagbftProvidesSubmitter.Register(inst.services, s, submitterSvc)
@@ -363,7 +363,7 @@ func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Begin
 	// Create validator service
 	validatorSvc := dagbft.NewValidatorService(dagbft.ValidatorServiceParams{
 		Logger:  logging.FromCometBFT(logger.With("module", "api")),
-		Service: s.service,
+		Service: rt.service,
 	})
 	registerRpcService(inst, validatorSvc.Type().AddressFor(s.Partition.ID), message.Validator{Validator: validatorSvc})
 	err = dagbftProvidesValidator.Register(inst.services, s, validatorSvc)
@@ -374,7 +374,7 @@ func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Begin
 	// Wait for globals to be available
 	var globals *network.GlobalValues
 	select {
-	case globals = <-s.globals:
+	case globals = <-rt.globals:
 	case <-time.After(5 * time.Second):
 		// Use a default if globals aren't available yet
 		globals = new(network.GlobalValues)
@@ -384,7 +384,7 @@ func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Begin
 	sequencerSvc := api.NewSequencer(api.SequencerParams{
 		Logger:       logging.FromCometBFT(logger.With("module", "api")),
 		Database:     db,
-		EventBus:     s.eventBus,
+		EventBus:     rt.eventBus,
 		Globals:      globals,
 		Partition:    s.Partition.ID,
 		ValidatorKey: validatorKey,
