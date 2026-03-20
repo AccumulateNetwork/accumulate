@@ -16,6 +16,7 @@ import (
 	"github.com/julienschmidt/httprouter"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	ethimpl "gitlab.com/accumulatenetwork/accumulate/internal/api/ethereum"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	v2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
@@ -175,6 +176,12 @@ func NewHandler(opts Options) (*Handler, error) {
 
 	h.mux.POST("/eth", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		eth.ServeHTTP(w, r)
+	})
+
+	// Prometheus metrics endpoint
+	metricsHandler := promhttp.Handler()
+	h.mux.GET("/metrics", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+		metricsHandler.ServeHTTP(w, r)
 	})
 
 	h.mux.GET("/", func(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
