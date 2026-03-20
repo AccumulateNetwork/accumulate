@@ -18,6 +18,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/adapter"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/txtracker"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker"
 	pkgerrors "gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -74,6 +75,9 @@ func (s *Submitter) Submit(ctx context.Context, envelope *messaging.Envelope, op
 	// Submit to DAG-BFT node
 	err = s.node.SubmitTransaction(b)
 	if err != nil {
+		if errors.Is(err, worker.ErrBackpressure) {
+			return nil, pkgerrors.TooManyRequests.WithFormat("submit: %w", err)
+		}
 		s.logger.Error("Submit: node submission failed", "error", err)
 		return nil, pkgerrors.InternalError.WithFormat("submit: %w", err)
 	}
