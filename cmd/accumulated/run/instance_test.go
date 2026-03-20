@@ -119,26 +119,22 @@ func TestRun(t *testing.T) {
 			Key: &CometNodeKeyFile{Path: "node-1/dnn/config/node_key.json"},
 		},
 		Services: []Service{
-			&ConsensusService{
-				NodeDir: "node-1/dnn",
-				Genesis: "node-1/dn-genesis.snap",
-				App: &CoreConsensusApp{
-					EnableHealing: Ptr(true),
-					Partition: &protocol.PartitionInfo{
-						ID:   protocol.Directory,
-						Type: protocol.PartitionTypeDirectory,
-					},
+			&DAGBFTService{
+				NodeDir:       "node-1/dnn",
+				Genesis:       "node-1/dn-genesis.snap",
+				EnableHealing: Ptr(true),
+				Partition: &protocol.PartitionInfo{
+					ID:   protocol.Directory,
+					Type: protocol.PartitionTypeDirectory,
 				},
 			},
-			&ConsensusService{
-				NodeDir: "node-1/bvnn",
-				Genesis: "node-1/bvn-genesis.snap",
-				App: &CoreConsensusApp{
-					EnableHealing: Ptr(true),
-					Partition: &protocol.PartitionInfo{
-						ID:   "BVN1",
-						Type: protocol.PartitionTypeBlockValidator,
-					},
+			&DAGBFTService{
+				NodeDir:       "node-1/bvnn",
+				Genesis:       "node-1/bvn-genesis.snap",
+				EnableHealing: Ptr(true),
+				Partition: &protocol.PartitionInfo{
+					ID:   "BVN1",
+					Type: protocol.PartitionTypeBlockValidator,
 				},
 			},
 			&StorageService{
