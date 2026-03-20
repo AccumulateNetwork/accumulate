@@ -117,7 +117,8 @@
       "execution_task": true,
       "requires_tmux": true,
       "min_runtime_minutes": 30,
-      "description": "Run 7 accumulated validator nodes (each with BVN + DN) using DAG-BFT consensus for 30 minutes."
+      "description": "Run 7 accumulated validator nodes (each with BVN + DN) using DAG-BFT consensus for 30 minutes.",
+      "notes": "IMPORTANT: The consensus-testnet tests use mock executors and do NOT satisfy this requirement. Must run actual accumulated binaries with dual network configuration (DN + BVN) using 'accumulated init network' setup. See docs/dagbft-deployment-steps.md Part B."
     },
     {
       "number": 3825,
