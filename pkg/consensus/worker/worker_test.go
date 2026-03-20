@@ -95,7 +95,7 @@ func TestWorker_Submit(t *testing.T) {
 		assert.Equal(t, 0, w.PendingCount())
 	})
 
-	t.Run("backpressure when limit reached", func(t *testing.T) {
+	t.Run("backpressure when size limit reached", func(t *testing.T) {
 		w := worker.New(worker.Config{
 			ID:             0,
 			Partition:      "test",
@@ -108,6 +108,24 @@ func TestWorker_Submit(t *testing.T) {
 
 		// This should trigger backpressure
 		err = w.Submit(make([]byte, 20))
+		assert.ErrorIs(t, err, worker.ErrBackpressure)
+	})
+
+	t.Run("backpressure when count limit reached", func(t *testing.T) {
+		w := worker.New(worker.Config{
+			ID:              0,
+			Partition:       "test",
+			MaxPendingCount: 5, // Very small count limit
+		}, nil)
+
+		// Fill up to the limit
+		for i := 0; i < 5; i++ {
+			err := w.Submit([]byte("tx"))
+			require.NoError(t, err)
+		}
+
+		// This should trigger backpressure
+		err := w.Submit([]byte("tx"))
 		assert.ErrorIs(t, err, worker.ErrBackpressure)
 	})
 

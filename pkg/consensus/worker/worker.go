@@ -26,10 +26,11 @@ import (
 
 // Default configuration values.
 const (
-	DefaultBatchSize       = 500                    // max transactions per batch
-	DefaultBatchTimeout    = 100 * time.Millisecond // max time to wait for full batch
-	DefaultMaxBatchBytes   = 500 * 1024             // 500KB max batch size
-	DefaultMaxPendingSize  = 10 * 1024 * 1024       // 10MB max pending transactions
+	DefaultBatchSize         = 500                    // max transactions per batch
+	DefaultBatchTimeout      = 100 * time.Millisecond // max time to wait for full batch
+	DefaultMaxBatchBytes     = 500 * 1024             // 500KB max batch size
+	DefaultMaxPendingSize    = 10 * 1024 * 1024       // 10MB max pending transactions
+	DefaultMaxPendingCount   = 10000                  // max pending transaction count
 	DefaultMaxStoredBatches  = 1000                   // max batches stored before eviction (reduced for memory safety)
 	DefaultMaxBatchQueueSize = 1000                   // max batches in available queue before blocking
 )
@@ -75,10 +76,15 @@ type Config struct {
 	// Defaults to DefaultMaxBatchBytes.
 	MaxBatchBytes int
 
-	// MaxPendingSize is the maximum total size of pending transactions.
+	// MaxPendingSize is the maximum total size of pending transactions in bytes.
 	// When exceeded, Submit will return ErrBackpressure.
 	// Defaults to DefaultMaxPendingSize.
 	MaxPendingSize int
+
+	// MaxPendingCount is the maximum number of pending transactions.
+	// When exceeded, Submit will return ErrBackpressure.
+	// Defaults to DefaultMaxPendingCount.
+	MaxPendingCount int
 
 	// MaxStoredBatches is the maximum number of batches to store.
 	// When exceeded, random batches are evicted to make room.
@@ -110,6 +116,9 @@ func (c *Config) applyDefaults() {
 	}
 	if c.MaxPendingSize <= 0 {
 		c.MaxPendingSize = DefaultMaxPendingSize
+	}
+	if c.MaxPendingCount <= 0 {
+		c.MaxPendingCount = DefaultMaxPendingCount
 	}
 	if c.MaxStoredBatches <= 0 {
 		c.MaxStoredBatches = DefaultMaxStoredBatches
@@ -233,6 +242,12 @@ func (w *Worker) Submit(tx []byte) error {
 	}
 
 	w.mu.Lock()
+
+	// Check pending count backpressure
+	if len(w.pending) >= w.config.MaxPendingCount {
+		w.mu.Unlock()
+		return ErrBackpressure
+	}
 
 	// Check pending size backpressure
 	if w.pendingSize+len(tx) > w.config.MaxPendingSize {
