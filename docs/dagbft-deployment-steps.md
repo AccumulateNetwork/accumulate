@@ -368,14 +368,20 @@ Each node runs:
 ### Start Validators
 
 ```bash
-# Terminal 1-7: Start each validator
-./accumulated run -w .nodes/bvn1-1
-./accumulated run -w .nodes/bvn1-2
-./accumulated run -w .nodes/bvn1-3
-./accumulated run -w .nodes/bvn2-1
-./accumulated run -w .nodes/bvn2-2
-./accumulated run -w .nodes/bvn2-3
-./accumulated run -w .nodes/bvn2-4
+# Terminal 1-7: Start each validator using the new-style config
+# Note: Use the config file path directly (not "run -w")
+./accumulated .nodes/bvn1-1/accumulate.toml
+./accumulated .nodes/bvn1-2/accumulate.toml
+./accumulated .nodes/bvn1-3/accumulate.toml
+./accumulated .nodes/bvn2-1/accumulate.toml
+./accumulated .nodes/bvn2-2/accumulate.toml
+./accumulated .nodes/bvn2-3/accumulate.toml
+./accumulated .nodes/bvn2-4/accumulate.toml
+
+# Or start all in background (redirect output to logs):
+for node in bvn1-{1,2,3} bvn2-{1,2,3,4}; do
+  ./accumulated .nodes/$node/accumulate.toml > /tmp/$node.log 2>&1 &
+done
 ```
 
 ### Validation Criteria for Issue #3823
@@ -401,12 +407,30 @@ The test must run for **30 minutes** and verify:
 | Block production | Timer triggers blocks | Certificates trigger blocks |
 | State | Simple hash | Full BPT state |
 
-### Current Blocker
+### Recent Fixes (March 2026)
 
-The `DAGBFTService` in `cmd/accumulated/run/dagbft.go` needs verification that:
+The following initialization issues have been resolved:
+
+1. **Genesis loading**: `loadGenesisIfNeeded()` now loads the genesis snapshot
+   into the database BEFORE creating the executor. This ensures globals are
+   available when the executor initializes.
+
+2. **Database observer**: The BPT observer is now set before restoring the
+   genesis snapshot, preventing "cannot modify account - observer not set" errors.
+
+3. **Empty database handling**: `ExecutorBridge.NewExecutorBridge()` now handles
+   `NotFound` errors from `LastBlock()` gracefully, initializing to block 0.
+
+4. **Nil globals check**: `Conductor.willBeginBlock()` now checks for nil globals
+   before accessing them, preventing crashes on fresh databases.
+
+### Remaining Work
+
+To complete issue #3823, verify that:
 1. Blocks are produced from committed certificates (not independently)
 2. The executor processes transactions from certificate payloads
 3. Cross-partition communication works via the conductor
+4. All 7 validators converge on state after 30 minutes
 
 ---
 

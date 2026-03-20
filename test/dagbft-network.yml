@@ -1,0 +1,48 @@
+id: "DAGBFTTest"
+bvns:
+  - id: "BVN1"
+    nodes:
+      - listenAddress: "127.0.1.1"
+        peerAddress: "127.0.1.1"
+        advertizeAddress: "127.0.1.1"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+      - listenAddress: "127.0.1.2"
+        peerAddress: "127.0.1.2"
+        advertizeAddress: "127.0.1.2"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+      - listenAddress: "127.0.1.3"
+        peerAddress: "127.0.1.3"
+        advertizeAddress: "127.0.1.3"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+  - id: "BVN2"
+    nodes:
+      - listenAddress: "127.0.2.1"
+        peerAddress: "127.0.2.1"
+        advertizeAddress: "127.0.2.1"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+      - listenAddress: "127.0.2.2"
+        peerAddress: "127.0.2.2"
+        advertizeAddress: "127.0.2.2"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+      - listenAddress: "127.0.2.3"
+        peerAddress: "127.0.2.3"
+        advertizeAddress: "127.0.2.3"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+      - listenAddress: "127.0.2.4"
+        peerAddress: "127.0.2.4"
+        advertizeAddress: "127.0.2.4"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"

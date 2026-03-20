@@ -71,8 +71,14 @@ func (c *Conductor) willChangeGlobals(e events.WillChangeGlobals) error {
 }
 
 func (c *Conductor) willBeginBlock(e execute.WillBeginBlock) error {
+	// Skip if globals not yet loaded (fresh database before genesis)
+	globals := c.Globals.Load()
+	if globals == nil {
+		return nil
+	}
+
 	// Skip for v1
-	if !c.Globals.Load().ExecutorVersion.V2Enabled() {
+	if !globals.ExecutorVersion.V2Enabled() {
 		return nil
 	}
 

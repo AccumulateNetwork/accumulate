@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
@@ -17,6 +18,15 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 )
+
+// isNotFoundError checks if an error indicates a not-found condition.
+func isNotFoundError(err error) bool {
+	if err == nil {
+		return false
+	}
+	// Check error message for "notFound" which is what pkg/errors returns
+	return strings.Contains(err.Error(), "notFound")
+}
 
 // ExecutorBridge bridges the DAG-BFT consensus to the Accumulate Executor.
 // It implements both the ConsensusAdapter and Executor interfaces.
@@ -62,15 +72,22 @@ func NewExecutorBridge(config ExecutorBridgeConfig) (*ExecutorBridge, error) {
 		validators:  make([]ValidatorInfo, 0),
 	}
 
-	// Get initial state
+	// Get initial state (handle empty/fresh databases)
 	params, hash, err := config.Executor.LastBlock()
 	if err != nil {
-		return nil, fmt.Errorf("get last block: %w", err)
+		// NotFound is expected for fresh databases before genesis is loaded
+		if !isNotFoundError(err) {
+			return nil, fmt.Errorf("get last block: %w", err)
+		}
+		// Fresh database - start from block 0 with empty hash
+		bridge.lastBlockIndex = 0
+		bridge.lastBlockHash = [32]byte{}
+	} else {
+		if params != nil {
+			bridge.lastBlockIndex = params.Index
+		}
+		bridge.lastBlockHash = hash
 	}
-	if params != nil {
-		bridge.lastBlockIndex = params.Index
-	}
-	bridge.lastBlockHash = hash
 
 	// Subscribe to global value changes if event bus is provided
 	if config.EventBus != nil {
