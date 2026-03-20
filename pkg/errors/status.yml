@@ -63,6 +63,9 @@ Status:
   InsufficientBalance:
     value: 415
     description: means the account balance is insufficient to satisfy the request
+  TooManyRequests:
+    value: 429
+    description: means the request rate is too high (backpressure)
 
   # Server/system errors
   InternalError:

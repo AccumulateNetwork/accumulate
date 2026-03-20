@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/txtracker"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -230,4 +231,24 @@ func TestDAGSubmitter_NilEnvelope(t *testing.T) {
 
 	err := submitter.SubmitEnvelope(context.Background(), nil)
 	assert.Error(t, err)
+}
+
+func TestDAGSubmitter_Backpressure(t *testing.T) {
+	// Simulate backpressure error from the worker
+	mock := &mockSubmitter{err: worker.ErrBackpressure}
+
+	submitter := NewDAGSubmitter(
+		DAGSubmitterConfig{},
+		mock,
+		nil,
+		nil,
+	)
+	defer submitter.Close()
+
+	tx := []byte("test transaction")
+	err := submitter.SubmitRaw(context.Background(), tx)
+
+	// The error should propagate (will be wrapped by caller with TooManyRequests)
+	assert.True(t, errors.Is(err, worker.ErrBackpressure))
+	assert.Equal(t, int32(1), mock.submissions.Load())
 }

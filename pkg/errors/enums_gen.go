@@ -1,4 +1,4 @@
-// Copyright 2026 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -71,6 +71,9 @@ const IncompleteChain Status = 414
 // InsufficientBalance means the account balance is insufficient to satisfy the request.
 const InsufficientBalance Status = 415
 
+// TooManyRequests means the request rate is too high (backpressure).
+const TooManyRequests Status = 429
+
 // InternalError means an internal error occurred.
 const InternalError Status = 500
 
@@ -108,7 +111,7 @@ func (v Status) GetEnumValue() uint64 { return uint64(v) }
 func (v *Status) SetEnumValue(id uint64) bool {
 	u := Status(id)
 	switch u {
-	case OK, Delivered, Pending, Remote, WrongPartition, BadRequest, Unauthenticated, InsufficientCredits, Unauthorized, NotFound, NotAllowed, Rejected, Expired, Conflict, BadSignerVersion, BadTimestamp, BadUrlLength, IncompleteChain, InsufficientBalance, InternalError, UnknownError, EncodingError, FatalError, NotReady, WrongType, NoPeer, PeerMisbehaved, InvalidRecord, StreamAborted:
+	case OK, Delivered, Pending, Remote, WrongPartition, BadRequest, Unauthenticated, InsufficientCredits, Unauthorized, NotFound, NotAllowed, Rejected, Expired, Conflict, BadSignerVersion, BadTimestamp, BadUrlLength, IncompleteChain, InsufficientBalance, TooManyRequests, InternalError, UnknownError, EncodingError, FatalError, NotReady, WrongType, NoPeer, PeerMisbehaved, InvalidRecord, StreamAborted:
 		*v = u
 		return true
 	}
@@ -156,6 +159,8 @@ func (v Status) String() string {
 		return "incompleteChain"
 	case InsufficientBalance:
 		return "insufficientBalance"
+	case TooManyRequests:
+		return "tooManyRequests"
 	case InternalError:
 		return "internalError"
 	case UnknownError:
@@ -221,6 +226,8 @@ func StatusByName(name string) (Status, bool) {
 		return IncompleteChain, true
 	case "insufficientbalance":
 		return InsufficientBalance, true
+	case "toomanyrequests":
+		return TooManyRequests, true
 	case "internalerror":
 		return InternalError, true
 	case "unknownerror":
