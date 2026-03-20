@@ -95,9 +95,34 @@ type partOpts struct {
 - **Confidence**: HIGH
 
 ### Fact 5: CoreValidatorConfiguration has the executor options
-- **Source**: (need to check schema.yml or types_gen.go)
-- **Content**: The `CoreValidatorConfiguration` embedded in `partOpts` contains `EnableHealing`, `EnableDirectDispatch`, `MaxEnvelopesPerBlock`, and `ValidatorKey` fields.
-- **Confidence**: MEDIUM (based on usage in existing code at lines 138-140)
+- **Source**: `cmd/accumulated/run/types_gen.go:326-340`
+- **Content**:
+```go
+type CoreValidatorConfiguration struct {
+    Mode                 CoreValidatorMode
+    Listen               Multiaddr
+    BVN                  string
+    ValidatorKey         PrivateKey
+    DnGenesis            string
+    BvnGenesis           string
+    DnBootstrapPeers     []Multiaddr
+    BvnBootstrapPeers    []Multiaddr
+    EnableHealing        *bool
+    EnableDirectDispatch *bool
+    EnableSnapshots      *bool
+    MaxEnvelopesPerBlock *uint64   // NOTE: uint64, not uint
+    StorageType          *StorageType
+}
+```
+- **Confidence**: HIGH
+
+### Fact 8: Type mismatch for MaxEnvelopesPerBlock
+- **Source**: `cmd/accumulated/run/types_gen.go:338` and `cmd/accumulated/run/dagbft.go:70`
+- **Content**:
+  - `CoreValidatorConfiguration.MaxEnvelopesPerBlock` is `*uint64`
+  - `DAGBFTService.MaxEnvelopesPerBlock` is `*uint`
+  - This type mismatch requires a conversion when assigning the field
+- **Confidence**: HIGH
 
 ### Fact 6: DAGBFTService uses libp2p for networking, not CometBFT P2P
 - **Source**: `cmd/accumulated/run/dagbft.go:265-296`
@@ -161,13 +186,20 @@ func (s *DAGBFTService) Type() ServiceType {
 | `App.Partition` | `Partition` | Direct mapping |
 | `App.EnableHealing` | `EnableHealing` | Direct mapping |
 | `App.EnableDirectDispatch` | `EnableDirectDispatch` | Direct mapping |
-| `App.MaxEnvelopesPerBlock` | `MaxEnvelopesPerBlock` | Direct mapping |
+| `App.MaxEnvelopesPerBlock` | `MaxEnvelopesPerBlock` | **Type mismatch**: `*uint64` → `*uint`, requires conversion |
 
 ## Required Change
 
 Replace lines 129-147 of `core_validator.go` with:
 
 ```go
+// Convert MaxEnvelopesPerBlock from *uint64 to *uint
+var maxEnvelopes *uint
+if p.MaxEnvelopesPerBlock != nil {
+    v := uint(*p.MaxEnvelopesPerBlock)
+    maxEnvelopes = &v
+}
+
 addService(cfg,
     &DAGBFTService{
         NodeDir:              p.Dir,
@@ -179,10 +211,12 @@ addService(cfg,
         },
         EnableHealing:        p.EnableHealing,
         EnableDirectDispatch: p.EnableDirectDispatch,
-        MaxEnvelopesPerBlock: p.MaxEnvelopesPerBlock,
+        MaxEnvelopesPerBlock: maxEnvelopes,
     },
     func(s *DAGBFTService) string { return s.Partition.ID })
 ```
+
+**Note**: The type conversion is required because `CoreValidatorConfiguration.MaxEnvelopesPerBlock` is `*uint64` but `DAGBFTService.MaxEnvelopesPerBlock` is `*uint`. An alternative fix is to update `DAGBFTService` to use `*uint64` for consistency with the schema.
 
 ## Open Questions
 
@@ -192,7 +226,14 @@ addService(cfg,
 
 ## Contradictions
 
-None found. The DAGBFTService is designed as a drop-in replacement for ConsensusService and provides all the same IOC provisions.
+### Type Mismatch in MaxEnvelopesPerBlock
+- **CoreValidatorConfiguration** (schema-generated): `MaxEnvelopesPerBlock *uint64`
+- **DAGBFTService** (manually defined): `MaxEnvelopesPerBlock *uint`
+- **Resolution options**:
+  1. Convert the value in `core_validator.go` when creating `DAGBFTService`
+  2. Update `DAGBFTService` to use `*uint64` to match the schema
+
+Otherwise, the DAGBFTService is designed as a drop-in replacement for ConsensusService and provides all the same IOC provisions.
 
 ## Success Criteria Verification
 
