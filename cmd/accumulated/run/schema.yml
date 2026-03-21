@@ -238,6 +238,9 @@ Configuration:
         - name: StorageType
           type: '*StorageType'
           optional: true
+        - name: NumWorkers
+          type: '*int'
+          optional: true
 
     - name: GatewayConfiguration
       class: composite

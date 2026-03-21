@@ -60,6 +60,7 @@ func (c *CoreValidatorConfiguration) apply(_ *Instance, cfg *Config) error {
 			Genesis:        c.DnGenesis,
 			BootstrapPeers: c.DnBootstrapPeers,
 			Dir:            "dnn",
+			NumWorkers:     c.NumWorkers,
 		}.apply(cfg)
 		if err != nil {
 			return err
@@ -76,6 +77,7 @@ func (c *CoreValidatorConfiguration) apply(_ *Instance, cfg *Config) error {
 			Genesis:        c.BvnGenesis,
 			BootstrapPeers: c.BvnBootstrapPeers,
 			Dir:            "bvnn",
+			NumWorkers:     c.NumWorkers,
 		}.apply(cfg)
 		if err != nil {
 			return err
@@ -113,6 +115,7 @@ type partOpts struct {
 	Dir              string
 	BootstrapPeers   []multiaddr.Multiaddr
 	MetricsNamespace string
+	NumWorkers       *int64
 }
 
 func (p partOpts) apply(cfg *Config) error {
@@ -131,6 +134,7 @@ func (p partOpts) apply(cfg *Config) error {
 			EnableHealing:        p.EnableHealing,
 			EnableDirectDispatch: p.EnableDirectDispatch,
 			MaxEnvelopesPerBlock: p.MaxEnvelopesPerBlock,
+			NumWorkers:           p.NumWorkers,
 		},
 		func(s *DAGBFTService) string { return s.Partition.ID })
 
