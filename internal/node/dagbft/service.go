@@ -207,16 +207,22 @@ func (s *Service) IsRunning() bool {
 
 // Node returns the underlying consensus node.
 func (s *Service) Node() *consensus.Node {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return s.node
 }
 
 // Committee returns the current committee.
 func (s *Service) Committee() *types.Committee {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return s.committee
 }
 
 // CurrentRound returns the current consensus round.
 func (s *Service) CurrentRound() types.Round {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	if s.node == nil {
 		return 0
 	}
@@ -225,6 +231,8 @@ func (s *Service) CurrentRound() types.Round {
 
 // LastCommitRound returns the last committed leader round.
 func (s *Service) LastCommitRound() types.Round {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	if s.node == nil {
 		return 0
 	}
@@ -233,10 +241,13 @@ func (s *Service) LastCommitRound() types.Round {
 
 // SubmitTransaction submits a transaction to the consensus node.
 func (s *Service) SubmitTransaction(tx []byte) error {
-	if s.node == nil {
+	s.mu.RLock()
+	node := s.node
+	s.mu.RUnlock()
+	if node == nil {
 		return errors.BadRequest.With("node not started")
 	}
-	return s.node.SubmitTransaction(tx)
+	return node.SubmitTransaction(tx)
 }
 
 // initializeCommittee creates the initial committee from genesis.
@@ -342,17 +353,29 @@ func (s *Service) processCommittedCertificate(cert *types.Certificate) error {
 		return fmt.Errorf("consensus halted due to state divergence: %w", s.haltReason)
 	}
 
-	// Get batches from workers - the Payload map contains batch digests
+	// Capture workers and state under lock, then release for I/O
+	workers := s.node.Workers()
+	blockIndex := s.lastBlockIndex + 1
+	s.mu.Unlock()
+
+	// Get batches from workers outside the lock - this involves I/O
 	batches := make(map[types.BatchDigest]*types.Batch)
 	committedDigests := make([]types.BatchDigest, 0)
 	for digest := range cert.Header.Payload {
-		for _, w := range s.node.Workers() {
+		var found bool
+		for _, w := range workers {
 			batch, err := w.GetBatch(digest)
 			if err == nil && batch != nil {
 				batches[digest] = batch
 				committedDigests = append(committedDigests, digest)
+				found = true
 				break
 			}
+		}
+		if !found {
+			s.logger.Error("Batch missing from all workers",
+				"digest", fmt.Sprintf("%x", digest[:]),
+				"round", cert.Header.Round)
 		}
 	}
 
@@ -361,7 +384,6 @@ func (s *Service) processCommittedCertificate(cert *types.Certificate) error {
 	isLeader := types.ValidatorsEqual(cert.Header.Author, pubKey)
 
 	// Produce block
-	blockIndex := s.lastBlockIndex + 1
 	blockTime := time.Now()
 
 	params := adapter.BlockParams{
@@ -372,8 +394,6 @@ func (s *Service) processCommittedCertificate(cert *types.Certificate) error {
 		Certificate: cert,
 		Batches:     batches,
 	}
-
-	s.mu.Unlock()
 
 	hash, err := s.adapter.ProduceBlock(s.ctx, params)
 	if err != nil {
