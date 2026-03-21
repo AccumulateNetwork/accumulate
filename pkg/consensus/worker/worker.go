@@ -501,7 +501,16 @@ func (w *Worker) createAndBroadcastBatch() {
 	// Add to available batches
 	w.availableMu.Lock()
 	w.availableBatches = append(w.availableBatches, digest)
+	queueDepth := len(w.availableBatches)
 	w.availableMu.Unlock()
+
+	// Warn if batch queue depth is excessive (consensus not consuming batches fast enough)
+	if queueDepth > 500 {
+		slog.Warn("Batch queue depth exceeds threshold",
+			"queueDepth", queueDepth,
+			"workerID", w.config.ID,
+			"partition", w.config.Partition)
+	}
 
 	// Update metrics
 	w.batchesCreated.Add(1)
