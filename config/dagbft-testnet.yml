@@ -1,0 +1,62 @@
+# DAG-BFT Stress Test Network Configuration
+# 7-validator network: 2 BVNs (3 + 4 nodes)
+# Each node runs DN + assigned BVN
+
+id: "DAGBFTStressTest"
+
+bvns:
+  - id: "BVN1"
+    nodes:
+      - listenAddress: "127.0.1.1"
+        peerAddress: "127.0.1.1"
+        advertizeAddress: "127.0.1.1"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+      - listenAddress: "127.0.1.2"
+        peerAddress: "127.0.1.2"
+        advertizeAddress: "127.0.1.2"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+      - listenAddress: "127.0.1.3"
+        peerAddress: "127.0.1.3"
+        advertizeAddress: "127.0.1.3"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+
+  - id: "BVN2"
+    nodes:
+      - listenAddress: "127.0.2.1"
+        peerAddress: "127.0.2.1"
+        advertizeAddress: "127.0.2.1"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+      - listenAddress: "127.0.2.2"
+        peerAddress: "127.0.2.2"
+        advertizeAddress: "127.0.2.2"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+      - listenAddress: "127.0.2.3"
+        peerAddress: "127.0.2.3"
+        advertizeAddress: "127.0.2.3"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+      - listenAddress: "127.0.2.4"
+        peerAddress: "127.0.2.4"
+        advertizeAddress: "127.0.2.4"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+
+# Global network configuration
+globals:
+  executorVersion: "v2"
+  globals:
+    majorBlockSchedule: "0 */12 * * *"  # Major blocks every 12 hours
+  oracle:
+    price: 500  # 5.00 USD per ACME (testnet price)
