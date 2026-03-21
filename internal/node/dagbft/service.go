@@ -338,7 +338,19 @@ func (s *Service) blockProductionLoop() {
 			}
 
 		case <-ticker.C:
-			// Periodic check - could be used for timeouts or health checks
+			// Liveness check - warn if no blocks produced recently
+			s.mu.RLock()
+			elapsed := time.Since(s.lastBlockTime)
+			lastBlock := s.lastBlockTime
+			s.mu.RUnlock()
+
+			// Only check if we've produced at least one block
+			if !lastBlock.IsZero() && elapsed > 30*time.Second {
+				s.logger.Info("WARNING: No blocks produced",
+					"elapsed", elapsed,
+					"lastBlockTime", lastBlock,
+					"round", s.CurrentRound())
+			}
 		}
 	}
 }
