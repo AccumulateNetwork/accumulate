@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -188,7 +189,15 @@ func initNetwork(cmd *cobra.Command, args []string) {
 			cfg := template.Copy()
 			cfg.Network = network.Id
 
-			// TODO: log levels
+			// Add debug logging for DAG consensus modules
+			cfg.Logging = &run.Logging{
+				Format: "plain",
+				Color:  run.Ptr(true),
+				Rules: []*run.LoggingRule{
+					{Level: slog.LevelDebug, Modules: []string{"dagbft", "consensus", "primary", "worker", "bullshark", "gossip"}},
+					{Level: slog.LevelInfo, Modules: []string{"*"}},
+				},
+			}
 
 			// Configure the node key
 			addr := address.FromED25519PrivateKey(node.DnNodeKey)
@@ -217,6 +226,18 @@ func initNetwork(cmd *cobra.Command, args []string) {
 			// Configure the validator key
 			addr = address.FromED25519PrivateKey(node.PrivValKey)
 			cvc.ValidatorKey = &run.RawPrivateKey{Address: addr.String()}
+
+			// Set 100 workers per node for high throughput stress testing
+			cvc.NumWorkers = run.Ptr(int64(100))
+
+			// Add pprof profiling to bvn1-1 for performance analysis
+			if i == 0 && j == 0 {
+				pprofAddr, _ := multiaddr.NewMultiaddr("/ip4/" + node.ListenAddress + "/tcp/6060")
+				cfg.Instrumentation = &run.Instrumentation{
+					PprofListen: pprofAddr,
+				}
+				fmt.Printf("  Pprof enabled on %s:6060\n", node.ListenAddress)
+			}
 
 			// Write the genesis documents
 			cvc.DnGenesis = "directory-genesis.snap"

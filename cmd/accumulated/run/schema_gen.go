@@ -345,6 +345,14 @@ func init() {
 				}).
 					ResolveElemTo(&deferredTypes, "StorageType"),
 			},
+			{
+				Name:     "NumWorkers",
+				Optional: true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     &schema.SimpleType{Type: schema.SimpleTypeInt},
+				},
+			},
 		},
 	}).SetGoType()
 

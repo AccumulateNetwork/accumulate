@@ -226,6 +226,7 @@ type CoreValidatorConfiguration struct {
 	EnableSnapshots      *bool
 	MaxEnvelopesPerBlock *uint64
 	StorageType          *StorageType
+	NumWorkers           *int64
 }
 
 func (CoreValidatorConfiguration) Type() ConfigurationType { return ConfigurationTypeCoreValidator }
