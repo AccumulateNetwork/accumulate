@@ -18,7 +18,11 @@ import (
 
 	"github.com/BurntSushi/toml"
 	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
+	dht "github.com/libp2p/go-libp2p-kad-dht"
+	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/peer"
 	cmtjson "github.com/cometbft/cometbft/libs/json"
+	"github.com/multiformats/go-multiaddr"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run"
 	"gitlab.com/accumulatenetwork/accumulate/exp/faucet"
@@ -132,6 +136,48 @@ func initNetwork(cmd *cobra.Command, args []string) {
 		check(template.Load([]byte(network.Template), toml.Unmarshal))
 	}
 
+	// Create a dedicated bootstrap node for P2P discovery
+	// Use a deterministic key derived from the network ID
+	bootstrapSeed := storage.MakeKey(network.Id, "bootstrap")
+	bootstrapKey := ed25519.NewKeyFromSeed(bootstrapSeed[:])
+	bootstrapAddr := address.FromED25519PrivateKey(bootstrapKey)
+
+	// Compute the bootstrap node's peer ID for multiaddr
+	libp2pKey, _ := crypto.UnmarshalEd25519PrivateKey(bootstrapKey)
+	bootstrapPeerID, _ := peer.IDFromPrivateKey(libp2pKey)
+
+	// Bootstrap node listens on 127.0.0.1:16658 (before validator ports)
+	bootstrapListenAddr := "/ip4/127.0.0.1/tcp/16658"
+	bootstrapMultiaddr, _ := multiaddr.NewMultiaddr(bootstrapListenAddr + "/p2p/" + bootstrapPeerID.String())
+
+	// Create bootstrap node config
+	{
+		dir := filepath.Join(flagMain.WorkDir, "bootstrap")
+		check(os.MkdirAll(dir, 0755))
+
+		cfg := template.Copy()
+		cfg.Network = network.Id
+		cfg.P2P.Key = &run.RawPrivateKey{Address: bootstrapAddr.String()}
+		cfg.P2P.DiscoveryMode = run.Ptr(run.DhtMode(dht.ModeAutoServer))
+		listenAddr, _ := multiaddr.NewMultiaddr(bootstrapListenAddr)
+		cfg.P2P.Listen = []run.Multiaddr{listenAddr}
+
+		// Add RouterService for cross-partition routing
+		cfg.Services = append(cfg.Services, &run.RouterService{})
+
+		// Add HttpService for API access
+		httpListen, _ := multiaddr.NewMultiaddr("/ip4/127.0.0.1/tcp/16660/http")
+		cfg.Services = append(cfg.Services, &run.HttpService{
+			HttpListener: run.HttpListener{
+				Listen: []run.Multiaddr{httpListen},
+			},
+			Router: run.ServiceReference[*run.RouterService](""),
+		})
+
+		check(cfg.SaveTo(filepath.Join(dir, "accumulate.toml")))
+		fmt.Printf("Bootstrap node: %s (peer ID: %s)\n", bootstrapListenAddr, bootstrapPeerID.String())
+	}
+
 	genDocs := buildGenesis(network)
 	for i, bvn := range network.Bvns {
 		for j, node := range bvn.Nodes {
@@ -148,13 +194,25 @@ func initNetwork(cmd *cobra.Command, args []string) {
 			addr := address.FromED25519PrivateKey(node.DnNodeKey)
 			cfg.P2P.Key = &run.RawPrivateKey{Address: addr.String()}
 
+			// Enable DHT server mode for peer discovery
+			cfg.P2P.DiscoveryMode = run.Ptr(run.DhtMode(dht.ModeAutoServer))
+
 			// Configure the validator
 			cvc := run.AddConfiguration(cfg, new(run.CoreValidatorConfiguration), nil)
 			cfg.Configurations = []run.Configuration{cvc}
 			cvc.Listen = node.Listen().Scheme("tcp").Directory().TendermintP2P().Multiaddr()
 			cvc.BVN = bvn.Id
-			cvc.BvnBootstrapPeers = bvn.Peers(node).Scheme("tcp").BlockValidator().TendermintP2P().WithKey().Multiaddr()
-			cvc.DnBootstrapPeers = network.Peers(node).Scheme("tcp").Directory().TendermintP2P().WithKey().Multiaddr()
+			cvc.BvnBootstrapPeers = bvn.Peers(node).Scheme("tcp").BlockValidator().AccumulateP2P().WithKey().Multiaddr()
+			cvc.DnBootstrapPeers = network.Peers(node).Scheme("tcp").Directory().AccumulateP2P().WithKey().Multiaddr()
+
+			// Set P2P bootstrap peers - primary is the bootstrap node, then add other peers
+			cfg.P2P.BootstrapPeers = []run.Multiaddr{bootstrapMultiaddr}
+			cfg.P2P.BootstrapPeers = append(cfg.P2P.BootstrapPeers, cvc.DnBootstrapPeers...)
+			// Add bootstrap peers from ALL BVNs for cross-partition routing
+			for _, otherBvn := range network.Bvns {
+				allBvnPeers := otherBvn.Peers(node).Scheme("tcp").BlockValidator().AccumulateP2P().WithKey().Multiaddr()
+				cfg.P2P.BootstrapPeers = append(cfg.P2P.BootstrapPeers, allBvnPeers...)
+			}
 
 			// Configure the validator key
 			addr = address.FromED25519PrivateKey(node.PrivValKey)

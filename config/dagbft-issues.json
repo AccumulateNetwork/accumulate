@@ -1,32 +1,349 @@
 {
-  "project": "dagbft-integration",
-  "tmux_session": "dagbft-orchestrator",
-  "num_workers": 4,
   "cycle_interval": 60,
-  "max_retries": 3,
-  "stall_timeout": 600,
-  "wall_clock_timeout": 7200,
-  "stagger_delay": 15,
-  "repos": {
-    "accumulate": {
-      "path": "/home/paul/go/src/gitlab.com/AccumulateNetwork/accumulate",
-      "platform": "gitlab",
-      "default_branch": "dagbft-integration",
-      "branch_prefix": "issue/dagbft-",
-      "worktree_base": "/home/paul/worktrees/accumulate-dagbft"
+  "epics": [
+    {
+      "description": "Epic issue that tracks the complete removal of CometBFT from accumulated and validation of DAG-BFT integration. Sub-issues must be completed in order due to dependencies.",
+      "number": 3824,
+      "status": "in_progress",
+      "sub_issues": [
+        3825,
+        3826,
+        3827,
+        3828,
+        3829,
+        3830,
+        3823
+      ],
+      "title": "Remove CometBFT and make DAG-BFT the default consensus"
+    },
+    {
+      "description": "Epic for parallel ADI execution. ADIs are independent and can be processed in parallel. Partition ADIs into 10 execution channels using hash-based assignment (leading 4 bytes of ADI hash mod 10), execute channels in parallel, then combine results into minor/major block cryptographic proofs.",
+      "number": 3840,
+      "status": "pending",
+      "sub_issues": [
+        3841,
+        3842,
+        3843
+      ],
+      "title": "Parallel ADI execution with 10 channels"
     }
-  },
+  ],
+  "issues": [
+    {
+      "assigned_worker": null,
+      "depends_on": [],
+      "description": "Wire GossipSub networking into the DAG-BFT service in accumulated.",
+      "number": 3813,
+      "pipeline_stage": 4,
+      "priority": 1,
+      "status": "completed",
+      "title": "Wire GossipSub into accumulated integration",
+      "wave": 1
+    },
+    {
+      "assigned_worker": null,
+      "depends_on": [
+        3830
+      ],
+      "description": "Implement BPT (Binary Patricia Trie) sync for state recovery when nodes diverge or fall behind. When a node detects its state hash differs from the committed certificate's state hash, it must sync the BPT from peers to recover. This involves: (1) Detecting state divergence after certificate commit, (2) Requesting BPT proof/data from peers with correct state, (3) Applying the sync to local database, (4) Resuming normal consensus participation.",
+      "notes": "Not blocking the initial integration test (#3823) but required for production robustness. Without this, a node that diverges must resync from genesis.",
+      "number": 3815,
+      "pipeline_stage": 0,
+      "priority": 3,
+      "requires_research": true,
+      "research_notes": "Research phase should investigate: (1) Existing BPT sync mechanisms in codebase, (2) How to detect divergence efficiently, (3) Protocol for requesting/serving BPT data between peers. May spawn sub-issues for implementation phases.",
+      "status": "pending",
+      "title": "Implement BPT sync recovery",
+      "wave": 4
+    },
+    {
+      "assigned_worker": null,
+      "depends_on": [
+        3823
+      ],
+      "description": "Run the 7-validator dual-launch network with 10 TPS load for 24 hours continuously. Validates long-term stability, memory leaks, resource exhaustion, and sustained consensus under load.",
+      "execution_task": true,
+      "load_tps": 10,
+      "min_runtime_minutes": 1440,
+      "number": 3831,
+      "pipeline_stage": 0,
+      "priority": 2,
+      "status": "pending",
+      "title": "24-hour stability test at 10 TPS",
+      "wave": 5
+    },
+    {
+      "assigned_worker": null,
+      "depends_on": [
+        3823
+      ],
+      "description": "Test DAG-BFT consensus under simulated network latency using tc netem. Inject 50-200ms latency between nodes and verify consensus continues, certificates reach quorum, and state converges.",
+      "number": 3832,
+      "pipeline_stage": 0,
+      "priority": 2,
+      "status": "pending",
+      "title": "Test consensus with network latency injection",
+      "wave": 5
+    },
+    {
+      "assigned_worker": null,
+      "depends_on": [
+        3823
+      ],
+      "description": "Verify cross-partition anchoring works correctly with DAG-BFT. DN anchors BVN state, BVNs anchor to DN. Validate anchor transactions flow correctly and state proofs are valid across partitions.",
+      "number": 3833,
+      "pipeline_stage": 0,
+      "priority": 2,
+      "status": "pending",
+      "title": "Verify cross-partition anchoring with DAG-BFT",
+      "wave": 5
+    },
+    {
+      "number": 3818,
+      "pipeline_stage": 4,
+      "status": "completed",
+      "title": "Fix SA1026 json.Marshal in persist.go"
+    },
+    {
+      "number": 3819,
+      "pipeline_stage": 4,
+      "status": "completed",
+      "title": "Fix copylocks in Certificate/Header"
+    },
+    {
+      "number": 3820,
+      "pipeline_stage": 4,
+      "status": "completed",
+      "title": "Migrate exp/light logger"
+    },
+    {
+      "number": 3821,
+      "pipeline_stage": 4,
+      "status": "completed",
+      "title": "Fix rangevarref lint warnings"
+    },
+    {
+      "number": 3822,
+      "pipeline_stage": 4,
+      "status": "completed",
+      "title": "Fix ineffassign lint warnings"
+    },
+    {
+      "assigned_worker": null,
+      "depends_on": [
+        3830,
+        3834
+      ],
+      "description": "Run 7 accumulated validator nodes using dual launch (each node runs a specific BVN/DN pair, as in production deployments) with DAG-BFT consensus for 30 minutes under 10 TPS load. NOT devnet - this validates the production deployment model where each validator launches its assigned BVN partition paired with the DN.",
+      "epic": 3824,
+      "execution_task": true,
+      "load_tps": 10,
+      "min_runtime_minutes": 30,
+      "notes": "IMPORTANT: (1) Do NOT use devnet - each node must be launched individually with its own config, simulating production deployment. (2) The consensus-testnet tests use mock executors and do NOT satisfy this requirement. (3) Load must be submitted via node APIs (like external transactions), distributed across all 7 nodes (~1.4 TPS each), processed through the DAG, and executed by Accumulate. (4) Transaction types: create lite token accounts and send ACME transfers between them. (5) Verify metrics at /metrics endpoint: certificatesCommitted > 0, blocksProduced > 0. See docs/dagbft-deployment-steps.md Part B. (6) Cross-partition routing fixed in #3850 - connectedPeersDiscoverer checks connected peers before DHT.",
+      "number": 3823,
+      "pipeline_stage": 0,
+      "priority": 1,
+      "requires_tmux": true,
+      "status": "pending",
+      "title": "Run 7 validators with DAG-BFT at 10 TPS",
+      "wave": 3
+    },
+    {
+      "assigned_worker": null,
+      "depends_on": [],
+      "description": "DHT discovery for cross-partition service lookup was slow for small test networks. Fixed by adding connectedPeersDiscoverer in pkg/api/v3/p2p/dial_network.go that checks connected peers first before falling back to DHT. Cross-partition stress test achieved 8,263 TPS with 99.78% success rate across both BVN1 and BVN2.",
+      "notes": "Solution: Added connectedPeersDiscoverer that iterates connected peers and checks their registered protocols before using DHT FindProviders. This works because all validators are bootstrap peers of each other, so they're connected before service discovery is needed.",
+      "number": 3850,
+      "pipeline_stage": 4,
+      "priority": 1,
+      "status": "completed",
+      "title": "Fix DHT discovery for cross-partition routing",
+      "wave": 2
+    },
+    {
+      "assigned_worker": 2,
+      "depends_on": [
+        3813
+      ],
+      "description": "Modify core_validator.go to create DAGBFTService instead of ConsensusService. This is the critical first step to enable DAG-BFT in accumulated.",
+      "epic": 3824,
+      "number": 3825,
+      "pipeline_stage": 3,
+      "priority": 1,
+      "status": "completed",
+      "title": "Enable DAG-BFT in core_validator.go",
+      "wave": 2
+    },
+    {
+      "assigned_worker": 1,
+      "depends_on": [
+        3825
+      ],
+      "description": "Remove ConsensusService and CoreConsensusApp type registrations from types.go after core_validator.go is updated.",
+      "epic": 3824,
+      "number": 3826,
+      "pipeline_stage": 3,
+      "priority": 1,
+      "status": "completed",
+      "title": "Remove ConsensusService from types.go",
+      "wave": 2
+    },
+    {
+      "assigned_worker": 2,
+      "depends_on": [
+        3826
+      ],
+      "description": "Delete the internal/node/abci/ package (CometBFT ABCI interface). First update all imports, then delete.",
+      "epic": 3824,
+      "number": 3827,
+      "pipeline_stage": 3,
+      "priority": 1,
+      "status": "completed",
+      "title": "Delete internal/node/abci package",
+      "wave": 2
+    },
+    {
+      "assigned_worker": 3,
+      "depends_on": [
+        3826
+      ],
+      "description": "Delete the internal/api/v3/tm/ package (CometBFT API implementations). DAG-BFT equivalents exist in internal/node/dagbft/api.go.",
+      "epic": 3824,
+      "number": 3828,
+      "pipeline_stage": 3,
+      "priority": 1,
+      "status": "completed",
+      "title": "Delete internal/api/v3/tm package",
+      "wave": 2
+    },
+    {
+      "assigned_worker": 1,
+      "depends_on": [
+        3826
+      ],
+      "description": "Delete the exp/tendermint/ package (Tendermint/CometBFT utilities). First update all imports, then delete.",
+      "epic": 3824,
+      "number": 3829,
+      "pipeline_stage": 3,
+      "priority": 1,
+      "status": "completed",
+      "title": "Delete exp/tendermint package",
+      "wave": 2
+    },
+    {
+      "assigned_worker": 1,
+      "depends_on": [
+        3827,
+        3828,
+        3829
+      ],
+      "description": "Final CometBFT removal: (1) Delete cmd/accumulated/run/consensus.go if still present, (2) Remove all CometBFT/Tendermint dependencies from go.mod (cometbft/cometbft, tendermint/*), (3) Run go mod tidy, (4) Update any remaining logging that references CometBFT/Tendermint, (5) Verify full build with 'go build ./cmd/accumulated', (6) Verify tests pass with 'go test ./...'",
+      "epic": 3824,
+      "notes": "This unblocks #3823 (7-validator integration test) and #3815 (BPT sync). After this, no CometBFT code paths should remain in accumulated.",
+      "number": 3830,
+      "pipeline_stage": 1,
+      "priority": 1,
+      "status": "in_progress",
+      "title": "Remove CometBFT from go.mod and clean up",
+      "wave": 2
+    },
+    {
+      "assigned_worker": null,
+      "depends_on": [
+        3830
+      ],
+      "description": "Create a load generator tool for DAG-BFT integration testing. The tool must: (1) Connect to multiple accumulated nodes via API, (2) Distribute transactions across lite accounts and ADIs, (3) Distribute load evenly across all target nodes (round-robin), (4) Support configurable TPS rate, (5) Report success/failure rates and latency metrics.",
+      "notes": "Implemented in cmd/load-generator. Supports --setup for account creation, --tps for rate control, --duration for test length. Cross-partition stress test achieved 8,263 TPS with 99.78% success rate. ADI creation has timing issues (needs longer wait between transactions) - use --lite-percent=100 for pure lite account testing.",
+      "number": 3834,
+      "pipeline_stage": 4,
+      "priority": 1,
+      "status": "completed",
+      "title": "Create load generator for integration tests",
+      "wave": 3
+    },
+    {
+      "assigned_worker": null,
+      "depends_on": [
+        3823
+      ],
+      "description": "Test DAG-BFT consensus with a Byzantine (malicious) node. Configure one of 7 validators to exhibit Byzantine behavior: (1) Send conflicting votes, (2) Withhold certificates, (3) Propose invalid blocks. Verify the network continues to make progress with 6 honest nodes and rejects invalid contributions.",
+      "number": 3835,
+      "pipeline_stage": 0,
+      "priority": 2,
+      "requires_research": true,
+      "research_notes": "Research phase should investigate: (1) How to inject Byzantine behavior into DAG-BFT node, (2) What Byzantine scenarios are most important to test, (3) How to verify network correctly rejects invalid contributions. May spawn sub-issues for different Byzantine scenarios.",
+      "status": "pending",
+      "title": "Test consensus with Byzantine node",
+      "wave": 5
+    },
+    {
+      "assigned_worker": null,
+      "depends_on": [],
+      "description": "Implement ADI channel assignment for parallel execution. Use leading 4 bytes of ADI hash mod 10 to assign each ADI to one of 10 execution channels. ADIs are independent - transactions within one ADI don't affect other ADIs - so channels can execute in parallel.",
+      "epic": 3840,
+      "notes": "ADI hashes are cryptographically random, so leading 4 bytes mod 10 gives uniform distribution across channels.",
+      "number": 3841,
+      "pipeline_stage": 0,
+      "priority": 2,
+      "requires_research": true,
+      "research_notes": "Research phase should investigate: (1) Where in the executor ADI routing currently happens, (2) How to extract ADI from transaction for channel assignment, (3) Impact on existing transaction ordering guarantees. May spawn sub-issues for implementation.",
+      "status": "pending",
+      "title": "Implement ADI channel assignment (hash mod 10)",
+      "wave": 6
+    },
+    {
+      "assigned_worker": null,
+      "depends_on": [
+        3841
+      ],
+      "description": "Implement parallel execution of 10 ADI channels. Each channel processes its assigned ADIs independently. Channels run concurrently with no synchronization needed during execution since ADIs are isolated from each other.",
+      "epic": 3840,
+      "number": 3842,
+      "pipeline_stage": 0,
+      "priority": 2,
+      "requires_research": true,
+      "research_notes": "Research phase should investigate: (1) Current executor threading model, (2) How to partition work across goroutines safely, (3) Database access patterns for parallel execution. May spawn sub-issues for implementation.",
+      "status": "pending",
+      "title": "Parallel execution of ADI channels",
+      "wave": 6
+    },
+    {
+      "assigned_worker": null,
+      "depends_on": [
+        3842
+      ],
+      "description": "Combine results from 10 ADI execution channels into cryptographic proofs. Accumulate doesn't have traditional blocks, but creates: (1) Minor block proofs after each minor block interval, (2) Major block proofs after each major block interval. Merge channel state into unified BPT and generate proofs.",
+      "epic": 3840,
+      "number": 3843,
+      "pipeline_stage": 0,
+      "priority": 2,
+      "requires_research": true,
+      "research_notes": "Research phase should investigate: (1) Current BPT update mechanism, (2) How to merge partial BPT updates from channels, (3) Proof generation timing relative to block intervals. May spawn sub-issues for implementation.",
+      "status": "pending",
+      "title": "Combine channels into block proofs",
+      "wave": 6
+    }
+  ],
+  "max_retries": 3,
+  "num_workers": 4,
   "pipeline": [
     "research",
     "implement",
     "validate",
     "review"
   ],
+  "project": "dagbft-integration",
   "project_context": {
+    "build_command": "go build ./cmd/accumulated \u003e /tmp/build.log 2\u003e\u00261",
+    "key_files": [
+      "CLAUDE.md",
+      "cmd/accumulated/run/dagbft.go",
+      "cmd/accumulated/run/core_validator.go",
+      "cmd/accumulated/run/types.go",
+      "internal/node/dagbft/service.go"
+    ],
     "language": "go",
-    "build_command": "go build ./cmd/accumulated > /tmp/build.log 2>&1",
-    "test_command": "go test ./internal/node/dagbft/... ./pkg/consensus/... -v -short -timeout 5m > /tmp/test.log 2>&1",
-    "lint_command": "golangci-lint run ./cmd/accumulated/... ./internal/node/dagbft/... > /tmp/lint.log 2>&1 || true",
+    "lint_command": "golangci-lint run ./cmd/accumulated/... ./internal/node/dagbft/... \u003e /tmp/lint.log 2\u003e\u00261 || true",
     "safety_rules": [
       "**NEVER reset blockchain data** - see CLAUDE.md",
       "**Redirect command output to log files** - long output crashes context",
@@ -34,163 +351,19 @@
       "**Run go build ./cmd/accumulated to verify build after changes**",
       "**Do NOT delete files until imports are updated**"
     ],
-    "key_files": [
-      "CLAUDE.md",
-      "cmd/accumulated/run/dagbft.go",
-      "cmd/accumulated/run/core_validator.go",
-      "cmd/accumulated/run/consensus.go",
-      "cmd/accumulated/run/types.go",
-      "internal/node/dagbft/service.go"
-    ]
+    "test_command": "go test ./internal/node/dagbft/... ./pkg/consensus/... -v -short -timeout 5m \u003e /tmp/test.log 2\u003e\u00261"
   },
-  "epics": [
-    {
-      "number": 3824,
-      "title": "Remove CometBFT and make DAG-BFT the default consensus",
-      "description": "Epic issue that tracks the complete removal of CometBFT from accumulated. Sub-issues must be completed in order due to dependencies.",
-      "sub_issues": [3825, 3826, 3827, 3828, 3829, 3830],
-      "status": "in_progress"
+  "repos": {
+    "accumulate": {
+      "branch_prefix": "issue/dagbft-",
+      "default_branch": "dagbft-integration",
+      "path": "/home/paul/go/src/gitlab.com/AccumulateNetwork/accumulate",
+      "platform": "gitlab",
+      "worktree_base": "/home/paul/worktrees/accumulate-dagbft"
     }
-  ],
-  "issues": [
-    {
-      "number": 3813,
-      "title": "Wire GossipSub into accumulated integration",
-      "priority": 1,
-      "wave": 1,
-      "depends_on": [],
-      "description": "Wire GossipSub networking into the DAG-BFT service in accumulated.",
-      "status": "completed",
-      "assigned_worker": null,
-      "pipeline_stage": 4
-    },
-    {
-      "number": 3815,
-      "title": "Implement BPT sync recovery",
-      "priority": 3,
-      "wave": 4,
-      "depends_on": [3830],
-      "description": "Implement BPT (Binary Patricia Trie) sync for state recovery when nodes diverge or fall behind. This is needed for robustness but not blocking the integration test.",
-      "status": "pending",
-      "assigned_worker": null,
-      "pipeline_stage": 0
-    },
-    {
-      "number": 3818,
-      "title": "Fix SA1026 json.Marshal in persist.go",
-      "status": "completed",
-      "pipeline_stage": 4
-    },
-    {
-      "number": 3819,
-      "title": "Fix copylocks in Certificate/Header",
-      "status": "completed",
-      "pipeline_stage": 4
-    },
-    {
-      "number": 3820,
-      "title": "Migrate exp/light logger",
-      "status": "completed",
-      "pipeline_stage": 4
-    },
-    {
-      "number": 3821,
-      "title": "Fix rangevarref lint warnings",
-      "status": "completed",
-      "pipeline_stage": 4
-    },
-    {
-      "number": 3822,
-      "title": "Fix ineffassign lint warnings",
-      "status": "completed",
-      "pipeline_stage": 4
-    },
-    {
-      "number": 3823,
-      "title": "Run 7 accumulated validators with DAG-BFT",
-      "priority": 1,
-      "wave": 3,
-      "status": "pending",
-      "assigned_worker": null,
-      "pipeline_stage": 0,
-      "depends_on": [3830],
-      "execution_task": true,
-      "requires_tmux": true,
-      "min_runtime_minutes": 30,
-      "description": "Run 7 accumulated validator nodes (each with BVN + DN) using DAG-BFT consensus for 30 minutes.",
-      "notes": "IMPORTANT: The consensus-testnet tests use mock executors and do NOT satisfy this requirement. Must run actual accumulated binaries with dual network configuration (DN + BVN) using 'accumulated init network' setup. See docs/dagbft-deployment-steps.md Part B."
-    },
-    {
-      "number": 3825,
-      "title": "Enable DAG-BFT in core_validator.go",
-      "priority": 1,
-      "wave": 2,
-      "status": "pending",
-      "assigned_worker": null,
-      "pipeline_stage": 0,
-      "depends_on": [3813],
-      "epic": 3824,
-      "description": "Modify core_validator.go to create DAGBFTService instead of ConsensusService. This is the critical first step to enable DAG-BFT in accumulated."
-    },
-    {
-      "number": 3826,
-      "title": "Remove ConsensusService from types.go",
-      "priority": 1,
-      "wave": 2,
-      "status": "pending",
-      "assigned_worker": null,
-      "pipeline_stage": 0,
-      "depends_on": [3825],
-      "epic": 3824,
-      "description": "Remove ConsensusService and CoreConsensusApp type registrations from types.go after core_validator.go is updated."
-    },
-    {
-      "number": 3827,
-      "title": "Delete internal/node/abci package",
-      "priority": 1,
-      "wave": 2,
-      "status": "pending",
-      "assigned_worker": null,
-      "pipeline_stage": 0,
-      "depends_on": [3826],
-      "epic": 3824,
-      "description": "Delete the internal/node/abci/ package (CometBFT ABCI interface). First update all imports, then delete."
-    },
-    {
-      "number": 3828,
-      "title": "Delete internal/api/v3/tm package",
-      "priority": 1,
-      "wave": 2,
-      "status": "pending",
-      "assigned_worker": null,
-      "pipeline_stage": 0,
-      "depends_on": [3826],
-      "epic": 3824,
-      "description": "Delete the internal/api/v3/tm/ package (CometBFT API implementations). DAG-BFT equivalents exist in internal/node/dagbft/api.go."
-    },
-    {
-      "number": 3829,
-      "title": "Delete exp/tendermint package",
-      "priority": 1,
-      "wave": 2,
-      "status": "pending",
-      "assigned_worker": null,
-      "pipeline_stage": 0,
-      "depends_on": [3826],
-      "epic": 3824,
-      "description": "Delete the exp/tendermint/ package (Tendermint/CometBFT utilities). First update all imports, then delete."
-    },
-    {
-      "number": 3830,
-      "title": "Remove CometBFT from go.mod and clean up",
-      "priority": 1,
-      "wave": 2,
-      "status": "pending",
-      "assigned_worker": null,
-      "pipeline_stage": 0,
-      "depends_on": [3827, 3828, 3829],
-      "epic": 3824,
-      "description": "Final cleanup: delete consensus.go, update logging, remove CometBFT from go.mod, verify full build."
-    }
-  ]
+  },
+  "stagger_delay": 15,
+  "stall_timeout": 600,
+  "tmux_session": "dagbft-orchestrator",
+  "wall_clock_timeout": 7200
 }
