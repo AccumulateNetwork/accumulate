@@ -8,7 +8,9 @@ package p2p
 
 import (
 	"context"
+	"slices"
 
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
@@ -35,6 +37,10 @@ func (n *Node) DialNetwork() message.Dialer {
 		host = (*connector)(n)
 		peers = (*dhtDiscoverer)(n)
 	}
+
+	// Wrap with connected peers discoverer for fast local discovery
+	// This checks connected peers before falling back to DHT
+	peers = &connectedPeersDiscoverer{n, peers}
 
 	// Always use self-discovery
 	peers = &selfDiscoverer{n, peers}
@@ -94,6 +100,49 @@ func (d *dhtDiscoverer) Discover(ctx context.Context, req *dial.DiscoveryRequest
 
 	ch, err := (*Node)(d).peermgr.getPeers(ctx, addr, req.Limit, req.Timeout)
 	return dial.DiscoveredPeers(ch), err
+}
+
+// connectedPeersDiscoverer checks connected peers before falling back to DHT.
+// This provides fast discovery for small networks where DHT propagation may be slow.
+type connectedPeersDiscoverer struct {
+	n   *Node
+	dht dial.Discoverer
+}
+
+func (d *connectedPeersDiscoverer) Discover(ctx context.Context, req *dial.DiscoveryRequest) (dial.DiscoveryResponse, error) {
+	if req.Service == nil {
+		return d.dht.Discover(ctx, req)
+	}
+
+	// Build the protocol ID for this service
+	protocolID := idRpc(req.Service)
+
+	// Check connected peers for ones that support this protocol
+	var found []peer.AddrInfo
+	for _, p := range d.n.host.Network().Peers() {
+		// Check if peer supports the service protocol
+		protocols, err := d.n.host.Peerstore().GetProtocols(p)
+		if err != nil {
+			continue
+		}
+		if slices.Contains(protocols, protocolID) {
+			addrs := d.n.host.Peerstore().Addrs(p)
+			found = append(found, peer.AddrInfo{ID: p, Addrs: addrs})
+		}
+	}
+
+	// If we found connected peers with the service, return them
+	if len(found) > 0 {
+		ch := make(chan peer.AddrInfo, len(found))
+		for _, p := range found {
+			ch <- p
+		}
+		close(ch)
+		return dial.DiscoveredPeers(ch), nil
+	}
+
+	// Fall back to DHT discovery
+	return d.dht.Discover(ctx, req)
 }
 
 type connector Node

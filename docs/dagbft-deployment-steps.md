@@ -316,7 +316,10 @@ Recovery Time:   _____ sec
 
 ## Part B: Accumulated Integration Tests (Issue #3823)
 
-These tests run actual `accumulated` validators with DAG-BFT consensus.
+These tests run actual `accumulated` validators with DAG-BFT consensus using
+**dual launch** (each node runs its assigned BVN/DN pair individually).
+
+**Do NOT use devnet** - this test validates the production deployment model.
 
 ### Prerequisites
 
@@ -346,6 +349,12 @@ bvns:
       - listen_address: "127.0.2.4"
 globals:
   executor_version: v2
+  fee_schedule: testnet  # Use cheaper testnet fees
+# Genesis funding for load testing
+genesis:
+  accounts:
+    - url: "acc://load-test-funder.acme/tokens"
+      balance: 1000000  # 1M ACME for creating 10,000+ test accounts
 ```
 
 Each node runs:
@@ -384,28 +393,78 @@ for node in bvn1-{1,2,3} bvn2-{1,2,3,4}; do
 done
 ```
 
+### Why Dual Launch (Not Devnet)?
+
+This test validates the **production deployment model**:
+- In production, each validator operator launches their node with a specific BVN/DN pair
+- Devnet runs everything in one process, which doesn't reflect real deployment
+- Each node must be individually configured and launched, as operators would do
+
+**Do NOT use devnet for this test.**
+
+### Load Generation
+
+The test requires **10 TPS sustained load** submitted via node APIs:
+- Transactions must be submitted through the HTTP/JSON-RPC API (like external clients)
+- Load must be distributed across **all 7 nodes** (~1.4 TPS each, round-robin)
+- Transactions enter the DAG through the normal submission path
+- Accumulate executor processes transactions from committed certificates
+
+**Transaction types for load testing:**
+- Create lite token accounts
+- Send ACME transfers between accounts
+- Transactions are routed by ADI, so create accounts across different ADIs to exercise parallel execution
+
+**Genesis setup for load testing:**
+- Allocate 1M ACME tokens to a funding ADI or lite account
+- Use testnet fee schedule (cheaper fees reduce token burn)
+- This provides enough tokens to create 10,000+ test accounts
+
+**Load generator requirements** (see issue #3834):
+```bash
+# Use the load generator tool with 7 node endpoints
+./load-generator \
+  --nodes=http://127.0.1.1:8080,http://127.0.1.2:8080,... \
+  --tps=10 \
+  --duration=30m \
+  --accounts=10000
+```
+
+**Note on ADI parallelism:** ADIs are independent - transactions within one ADI don't affect other ADIs. This means ADIs can be processed in parallel. The load generator must distribute transactions across at least 10,000 ADIs/lite accounts to ensure good distribution across the 10 execution channels (ADI hash mod 10).
+
 ### Validation Criteria for Issue #3823
 
-The test must run for **30 minutes** and verify:
+The test must run for **30 minutes at 10 TPS** and verify:
 
 - [ ] All 7 validators start with DAG-BFT (check logs for "Running DAG-BFT")
 - [ ] Both DN and BVN partitions use DAGBFTService
 - [ ] Blocks are produced via DAG-BFT certificates (not timer-based)
-- [ ] `certificatesCommitted > 0` in metrics
+- [ ] **10 TPS load sustained** via API submission to all 7 nodes (~1.4 TPS each)
+- [ ] Transactions processed through DAG and executed by Accumulate
 - [ ] State hashes converge across validators (at least 5/7 agreement)
 - [ ] No CometBFT/Tendermint code paths executed
-- [ ] Network handles transaction submission via API
 - [ ] Cross-partition anchoring works (DN <-> BVN)
+
+**Metrics verification** (check /metrics endpoint on each node):
+```bash
+curl http://127.0.1.1:8080/metrics | grep -E "certificates|blocks"
+```
+- [ ] `dagbft_certificates_committed > 0`
+- [ ] `dagbft_blocks_produced > 0`
+- [ ] `dagbft_transactions_processed` increases over time
 
 ### Key Differences from Consensus Layer Tests
 
-| Aspect | consensus-testnet | accumulated |
+| Aspect | consensus-testnet | accumulated (Issue #3823) |
 |--------|------------------|-------------|
 | Executor | Mock (timer-based blocks) | Real Accumulate executor |
 | Partitions | Single test partition | DN + BVN per validator |
-| Transactions | Test transactions | Accumulate protocol |
+| Transactions | Internal test transactions | External API submission |
+| Load source | Self-generated | Load generator via API to all 7 nodes |
+| Load target | N/A | 10 TPS sustained |
 | Block production | Timer triggers blocks | Certificates trigger blocks |
 | State | Simple hash | Full BPT state |
+| Deployment model | Single process | Dual launch per node (production model) |
 
 ### Recent Fixes (March 2026)
 
@@ -431,13 +490,26 @@ To complete issue #3823, verify that:
 2. The executor processes transactions from certificate payloads
 3. Cross-partition communication works via the conductor
 4. All 7 validators converge on state after 30 minutes
+5. **10 TPS load sustained** - transactions submitted via API to all 7 nodes
+6. Load generator distributes transactions across all nodes (not just one)
 
 ---
 
 ## Next Steps After Validation
 
-1. [ ] Run 24-hour stability test
-2. [ ] Test with network latency injection (tc netem)
-3. [ ] Test with Byzantine node (malicious behavior)
-4. [ ] Verify cross-partition anchoring with DAG-BFT
-5. [ ] Performance comparison: CometBFT vs DAG-BFT
+1. [ ] #3831: Run 24-hour stability test at 10 TPS
+2. [ ] #3832: Test with network latency injection (tc netem)
+3. [ ] #3833: Verify cross-partition anchoring with DAG-BFT
+4. [ ] #3835: Test with Byzantine node (malicious behavior)
+5. [ ] #3815: Implement BPT sync recovery
+
+## Future: Parallel ADI Execution (Epic #3840)
+
+ADIs (Accumulate Digital Identifiers) are independent - transactions within one ADI
+don't affect other ADIs. This enables parallel execution:
+
+1. [ ] #3841: Implement ADI channel assignment using leading 4 bytes of ADI hash mod 10
+2. [ ] #3842: Execute 10 ADI channels in parallel
+3. [ ] #3843: Combine channel results into minor/major block cryptographic proofs
+
+This architecture allows 10x throughput improvement by processing ADIs concurrently.

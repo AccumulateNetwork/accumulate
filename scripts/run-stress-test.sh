@@ -13,8 +13,12 @@ LOG_DIR="/tmp/dagbft-stress"
 FAUCET_URL="acc://7cf23160d39d51ac2b59f36d936862c77902d27a6c452d7d/ACME"
 FAUCET_KEY="924a0963318e868947d9858bc94d8499b9bb8cab68581a368dbd1995221a946e36b64dcdb69a88bc6b1a7e00f85f3ca2327c9b22b377480d52f3185d08523370"
 
-# Node endpoints
-NODES="http://127.0.1.1:26660/v3,http://127.0.1.2:26660/v3,http://127.0.1.3:26660/v3,http://127.0.2.1:26660/v3,http://127.0.2.2:26660/v3,http://127.0.2.3:26660/v3,http://127.0.2.4:26660/v3"
+# Node endpoints - for stress testing, use a single partition to avoid cross-partition routing issues
+# The faucet routes to BVN2, so use BVN2 nodes for now until DHT discovery is fixed
+BVN1_NODES="http://127.0.1.1:26660/v3,http://127.0.1.2:26660/v3,http://127.0.1.3:26660/v3"
+BVN2_NODES="http://127.0.2.1:26660/v3,http://127.0.2.2:26660/v3,http://127.0.2.3:26660/v3,http://127.0.2.4:26660/v3"
+# Default to BVN2 since faucet is there
+NODES="$BVN2_NODES"
 
 usage() {
     echo "Usage: $0 <command>"
@@ -52,18 +56,28 @@ cmd_init() {
 }
 
 cmd_start() {
-    echo "Starting 7 validators..."
+    echo "Starting bootstrap node and 7 validators..."
     mkdir -p "$LOG_DIR"
 
     cd "$ROOT_DIR"
 
+    # Start bootstrap node first for P2P discovery
+    echo "  Starting bootstrap node..."
+    ./accumulated ".nodes/bootstrap/accumulate.toml" > "$LOG_DIR/bootstrap.log" 2>&1 &
+    echo $! > "$LOG_DIR/bootstrap.pid"
+
+    # Wait for bootstrap node to be ready
+    echo "  Waiting 5 seconds for bootstrap node..."
+    sleep 5
+
     for node in bvn1-{1,2,3} bvn2-{1,2,3,4}; do
         echo "  Starting $node..."
-        ./accumulated run -w ".nodes/$node" > "$LOG_DIR/$node.log" 2>&1 &
+        # New-style: pass config file directly as argument
+        ./accumulated ".nodes/$node/accumulate.toml" > "$LOG_DIR/$node.log" 2>&1 &
         echo $! > "$LOG_DIR/$node.pid"
     done
 
-    echo "All validators starting. Logs in: $LOG_DIR"
+    echo "All nodes starting. Logs in: $LOG_DIR"
     echo "Wait 30 seconds for network to stabilize..."
 }
 
@@ -109,8 +123,18 @@ cmd_load() {
 }
 
 cmd_status() {
-    echo "Checking validator status..."
+    echo "Checking node status..."
 
+    # Check bootstrap node
+    status=$(curl -s "http://127.0.0.1:16660/v3" -X POST -H "Content-Type: application/json" \
+        -d '{"jsonrpc":"2.0","id":1,"method":"network-status","params":{}}' 2>/dev/null | head -c 200)
+    if [ -n "$status" ]; then
+        echo "  bootstrap: OK"
+    else
+        echo "  bootstrap: NOT RESPONDING"
+    fi
+
+    # Check validators
     for node in 127.0.1.{1,2,3} 127.0.2.{1,2,3,4}; do
         status=$(curl -s "http://$node:26660/v3" -X POST -H "Content-Type: application/json" \
             -d '{"jsonrpc":"2.0","id":1,"method":"consensus-status","params":{}}' 2>/dev/null | head -c 200)

@@ -26,6 +26,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -150,6 +151,15 @@ func main() {
 			log.Fatalf("Account setup failed: %v", err)
 		}
 		log.Println("Account setup complete")
+
+		// If duration is specified with setup, also run load
+		if config.Duration > 0 && ctx.Err() == nil {
+			log.Println("Starting load generation phase...")
+			if err := lg.GenerateLoad(ctx); err != nil && ctx.Err() == nil {
+				log.Fatalf("Load generation failed: %v", err)
+			}
+			lg.PrintMetrics()
+		}
 	} else {
 		log.Println("Starting load generation phase...")
 		if err := lg.GenerateLoad(ctx); err != nil && ctx.Err() == nil {
@@ -367,10 +377,67 @@ func (lg *LoadGenerator) submitAndWait(ctx context.Context, env *messaging.Envel
 		}
 	}
 
-	// Wait a bit for the transaction to be processed
-	// In production, we'd poll for status
-	time.Sleep(2 * time.Second)
-	return nil
+	// Get the transaction hash to poll for completion
+	if len(env.Messages) == 0 {
+		return nil
+	}
+
+	// Get the first transaction's ID
+	var txID *url.TxID
+	for _, msg := range env.Messages {
+		if tx, ok := msg.(*messaging.TransactionMessage); ok {
+			txID = tx.Transaction.ID()
+			break
+		}
+	}
+	if txID == nil {
+		// No transaction to wait for, just sleep
+		time.Sleep(2 * time.Second)
+		return nil
+	}
+
+	// Poll for transaction completion with timeout
+	timeout := time.After(30 * time.Second)
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-timeout:
+			return fmt.Errorf("timeout waiting for transaction %v", txID)
+		case <-ticker.C:
+			// Query the transaction status
+			resp, err := client.Query(ctx, txID.AsUrl(), &api.DefaultQuery{})
+			if err != nil {
+				continue // Keep trying
+			}
+
+			// Check if it's a message record (transaction)
+			txRec, ok := resp.(*api.MessageRecord[messaging.Message])
+			if !ok {
+				continue
+			}
+
+			// Check transaction status
+			switch txRec.Status {
+			case errors.Delivered:
+				// Transaction delivered, wait a bit for synth txns
+				time.Sleep(500 * time.Millisecond)
+				return nil
+			case errors.Pending:
+				// Still pending, keep waiting
+				continue
+			default:
+				// Failed or unknown status
+				if txRec.Error != nil {
+					return fmt.Errorf("transaction failed: %v", txRec.Error)
+				}
+				continue
+			}
+		}
+	}
 }
 
 // GenerateLoad generates transaction load against the network.
@@ -411,29 +478,19 @@ func (lg *LoadGenerator) GenerateLoad(ctx context.Context) error {
 
 // worker sends transactions at the specified rate.
 func (lg *LoadGenerator) worker(ctx context.Context, workerID int, interval time.Duration) {
-	// Each worker handles a subset of accounts
-	accountsPerWorker := len(lg.accounts) / lg.config.TPS
-	if accountsPerWorker < 1 {
-		accountsPerWorker = 1
-	}
-
-	startIdx := workerID * accountsPerWorker % len(lg.accounts)
+	_ = workerID // unused for now since we use funder account only
 
 	ticker := time.NewTicker(interval * time.Duration(lg.config.TPS/100+1))
 	defer ticker.Stop()
 
-	txCount := 0
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			// Select source and destination accounts
-			srcIdx := (startIdx + txCount) % len(lg.accounts)
-			dstIdx := (srcIdx + 1) % len(lg.accounts)
-
-			src := lg.accounts[srcIdx]
-			dst := lg.accounts[dstIdx]
+			// Use funder account for both src and dst to guarantee same partition
+			src := lg.funder
+			dst := lg.funder
 
 			// Select node (round-robin)
 			nodeIdx := int(lg.metrics.Submitted.Load()) % len(lg.clients)
@@ -442,7 +499,6 @@ func (lg *LoadGenerator) worker(ctx context.Context, workerID int, interval time
 
 			// Send transaction
 			lg.sendTransaction(ctx, client, nodeURL, src, dst)
-			txCount++
 		}
 	}
 }
@@ -489,6 +545,11 @@ func (lg *LoadGenerator) sendTransaction(ctx context.Context, client *jsonrpc.Cl
 	if err != nil || len(subs) == 0 || !subs[0].Success {
 		lg.metrics.Failure.Add(1)
 		nodeMetrics.Failure.Add(1)
+		if err != nil && lg.metrics.Failure.Load() <= 5 {
+			log.Printf("Transaction failed: %v", err)
+		} else if len(subs) > 0 && !subs[0].Success && lg.metrics.Failure.Load() <= 5 {
+			log.Printf("Transaction rejected: %s", subs[0].Message)
+		}
 		return
 	}
 
