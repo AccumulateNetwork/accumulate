@@ -54,6 +54,11 @@ type ServiceConfig struct {
 
 	// PubSub is the GossipSub instance for certificate/batch dissemination (optional).
 	PubSub *pubsub.PubSub
+
+	// InitialValidators provides the initial validator set for committee initialization.
+	// This is needed because the WillChangeGlobals event that populates the adapter's
+	// validators fires before the adapter is created.
+	InitialValidators []adapter.ValidatorInfo
 }
 
 // Service wraps the DAG-BFT consensus node for integration with accumulated.
@@ -252,26 +257,53 @@ func (s *Service) SubmitTransaction(tx []byte) error {
 
 // initializeCommittee creates the initial committee from genesis.
 func (s *Service) initializeCommittee() (*types.Committee, error) {
-	// For now, create a single-validator committee using our own key
-	pubKey := s.config.NodeConfig.KeyPair.Public().(ed25519.PublicKey)
+	// Try to get validators from multiple sources in order of preference:
+	// 1. InitialValidators from config (set at startup from globals)
+	// 2. Adapter validators (populated via WillChangeGlobals event)
+	// 3. Fallback to single-validator with our own key
 
-	validators := []types.ValidatorInfo{
-		{
-			PublicKey: pubKey,
-			Stake:     1,
-		},
-	}
+	var validators []types.ValidatorInfo
 
-	// Check for validator info from adapter
-	adapterValidators := s.adapter.Validators()
-	if len(adapterValidators) > 0 {
-		validators = make([]types.ValidatorInfo, len(adapterValidators))
-		for i, v := range adapterValidators {
+	// First, try initial validators from config
+	if len(s.config.InitialValidators) > 0 {
+		validators = make([]types.ValidatorInfo, len(s.config.InitialValidators))
+		for i, v := range s.config.InitialValidators {
 			validators[i] = types.ValidatorInfo{
 				PublicKey: v.PublicKey[:],
 				Stake:     v.Stake,
 			}
 		}
+		s.logger.Info("Using initial validators from config",
+			"count", len(validators))
+	}
+
+	// Second, check adapter validators
+	if len(validators) == 0 {
+		adapterValidators := s.adapter.Validators()
+		if len(adapterValidators) > 0 {
+			validators = make([]types.ValidatorInfo, len(adapterValidators))
+			for i, v := range adapterValidators {
+				validators[i] = types.ValidatorInfo{
+					PublicKey: v.PublicKey[:],
+					Stake:     v.Stake,
+				}
+			}
+			s.logger.Info("Using validators from adapter",
+				"count", len(validators))
+		}
+	}
+
+	// Fallback: create single-validator committee with our own key
+	if len(validators) == 0 {
+		pubKey := s.config.NodeConfig.KeyPair.Public().(ed25519.PublicKey)
+		validators = []types.ValidatorInfo{
+			{
+				PublicKey: pubKey,
+				Stake:     1,
+			},
+		}
+		slog.Warn("No validators found, using single-validator fallback",
+			"partition", s.config.Partition.ID)
 	}
 
 	committee := types.NewCommittee(validators, 0)
@@ -301,10 +333,23 @@ func (s *Service) initializeGenesis() error {
 		}
 	}
 
-	// For a single-validator setup, insert genesis certificates
-	keys := []ed25519.PrivateKey{s.config.NodeConfig.KeyPair}
-	if err := s.node.InsertGenesisForAll(keys); err != nil {
-		return fmt.Errorf("insert genesis certificates: %w", err)
+	// Only insert genesis certificates in single-validator mode.
+	// In multi-validator mode, genesis certificates need to be created with
+	// signatures from all validators, which requires either:
+	// 1. Pre-computed genesis certs embedded in the genesis snapshot
+	// 2. Gossip-based genesis cert synchronization
+	// For now, we skip genesis insertion in multi-validator mode and rely on
+	// the Primary to create round 1 certificates that reference empty parents.
+	// The Primary's getParentCertsForRound() has been updated to allow this.
+	if s.committee.Len() == 1 {
+		keys := []ed25519.PrivateKey{s.config.NodeConfig.KeyPair}
+		if err := s.node.InsertGenesisForAll(keys); err != nil {
+			return fmt.Errorf("insert genesis certificates: %w", err)
+		}
+		s.logger.Info("Inserted genesis certificates for single-validator mode")
+	} else {
+		s.logger.Info("Multi-validator mode: skipping local genesis insertion",
+			"validators", s.committee.Len())
 	}
 
 	return nil
