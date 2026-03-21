@@ -107,7 +107,12 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	// Create event bus
 	s.eventBus = events.NewBus(logging.FromCometBFT(logger.With("module", "events")))
 
-	// Subscribe to fatal errors
+	// Subscribe to fatal errors.
+	// NOTE: EventBus subscribers are not unsubscribed on shutdown. This is a
+	// known limitation of the events.Bus implementation which does not return
+	// unsubscribe handles. Since the event bus is created per-service and the
+	// service runs for the lifetime of the process, this does not cause a
+	// practical memory leak. See issue #3830.
 	events.SubscribeAsync(s.eventBus, func(e events.FatalError) {
 		slog.ErrorContext(inst.context, "Shutting down due to a fatal error", "error", e.Err)
 		inst.shutdown()
@@ -188,7 +193,9 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		}
 	}
 
-	// Setup globals channel for passing global values to API services
+	// Setup globals channel for passing global values to API services.
+	// NOTE: This subscriber is not unsubscribed on shutdown. See note above
+	// about EventBus subscriber lifecycle (issue #3830).
 	globalsChan := make(chan *network.GlobalValues, 1)
 	events.SubscribeSync(s.eventBus, func(e events.WillChangeGlobals) error {
 		select {
