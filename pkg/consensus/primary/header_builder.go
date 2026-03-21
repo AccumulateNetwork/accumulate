@@ -69,6 +69,13 @@ func (p *Primary) getParentCertsForRound(round types.Round) ([]types.Certificate
 
 	certs := p.dag.GetRound(round - 1)
 
+	// Special case for round 1 in multi-validator mode:
+	// If round 0 has no certificates (no genesis), allow round 1 to proceed with empty parents.
+	// This enables multi-validator networks to bootstrap without pre-computed genesis certificates.
+	if round == 1 && len(certs) == 0 {
+		return nil, nil // round 1 can start with empty parents in multi-validator mode
+	}
+
 	// Get quorum count (needs committeeMu for reading committee)
 	p.committeeMu.RLock()
 	quorumCount := p.committee.QuorumCount()

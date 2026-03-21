@@ -248,6 +248,8 @@ func (p *Primary) Start(ctx context.Context) error {
 			p.tryAdvanceRound()
 			// Periodically prune old pending certificates
 			p.prunePendingCerts()
+			// Re-broadcast pending headers that haven't achieved quorum
+			p.rebroadcastPendingHeaders()
 		}
 	}
 }
@@ -336,7 +338,8 @@ func (p *Primary) tryCreateAndBroadcastHeader() {
 	header, err := p.createHeaderLockedWithRound(currentRound, currentEpoch)
 	if err != nil {
 		p.pendingMu.Unlock()
-		slog.Debug("Cannot create header",
+		slog.Info("Cannot create header",
+			"partition", p.config.Partition,
 			"error", err,
 			"round", currentRound)
 		return
@@ -447,5 +450,35 @@ func (p *Primary) signalNewCertificate(cert *types.Certificate) {
 	default:
 		slog.Warn("New certificates channel full, dropping notification",
 			"digest", cert.Digest().String())
+	}
+}
+
+// rebroadcastPendingHeaders re-broadcasts headers that haven't achieved quorum.
+// This helps with mesh formation issues where initial broadcasts may be lost.
+func (p *Primary) rebroadcastPendingHeaders() {
+	if p.gossip == nil {
+		return
+	}
+
+	p.pendingMu.Lock()
+	// Collect headers that need rebroadcast (those without certificates yet)
+	var toRebroadcast []*types.Header
+	for _, header := range p.ourHeaders {
+		// Only rebroadcast if we don't have a certificate for this round yet
+		if _, hasCert := p.ourCerts[header.Round]; !hasCert {
+			toRebroadcast = append(toRebroadcast, header)
+		}
+	}
+	p.pendingMu.Unlock()
+
+	// Rebroadcast outside the lock
+	for _, header := range toRebroadcast {
+		go func(h *types.Header) {
+			if err := p.gossip.BroadcastHeader(p.ctx, h); err != nil {
+				slog.Debug("Failed to rebroadcast header",
+					"error", err,
+					"digest", h.Digest().String())
+			}
+		}(header)
 	}
 }

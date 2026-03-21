@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -148,13 +149,21 @@ func (g *GossipLayer) Start(ctx context.Context) error {
 		return fmt.Errorf("join topics: %w", err)
 	}
 
-	// Start message handlers
+	// Start message handlers BEFORE waiting for mesh formation.
+	// This ensures we can receive messages while waiting for peers.
 	g.wg.Add(5)
 	go g.handleSubscription(TopicBatches, g.handleBatchMessage)
 	go g.handleSubscription(TopicHeaders, g.handleHeaderMessage)
 	go g.handleSubscription(TopicVotes, g.handleVoteMessage)
 	go g.handleSubscription(TopicCerts, g.handleCertMessage)
 	go g.handleSubscription(TopicCertSync, g.handleCertSyncMessage)
+
+	// Wait for GossipSub mesh to form before signaling ready.
+	// This ensures peers are connected before the Primary starts broadcasting.
+	// The mesh formation takes time as peers need to discover each other,
+	// join topics, and establish connections.
+	time.Sleep(3 * time.Second)
+	slog.Info("Gossip layer started, topics joined", "partition", g.partition)
 
 	return nil
 }
@@ -322,6 +331,10 @@ func (g *GossipLayer) handleHeaderMessage(data []byte) {
 			"partition", g.partition)
 		return
 	}
+	slog.Info("Received header via gossip",
+		"partition", g.partition,
+		"round", header.Round,
+		"author", fmt.Sprintf("%x", header.Author[:8]))
 
 	select {
 	case g.headers <- header:
@@ -340,6 +353,10 @@ func (g *GossipLayer) handleVoteMessage(data []byte) {
 			"partition", g.partition)
 		return
 	}
+	slog.Info("Received vote via gossip",
+		"partition", g.partition,
+		"round", vote.Round,
+		"author", fmt.Sprintf("%x", vote.Author[:8]))
 
 	select {
 	case g.votes <- vote:
