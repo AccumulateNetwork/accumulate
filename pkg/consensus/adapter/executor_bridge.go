@@ -29,7 +29,7 @@ func isNotFoundError(err error) bool {
 }
 
 // ExecutorBridge bridges the DAG-BFT consensus to the Accumulate Executor.
-// It implements both the ConsensusAdapter and Executor interfaces.
+// It implements the ConsensusAdapter interface.
 type ExecutorBridge struct {
 	executor    execute.Executor
 	partitionID string
@@ -39,10 +39,6 @@ type ExecutorBridge struct {
 	lastBlockHash          [32]byte
 	validators             []ValidatorInfo
 	validatorChangeHandler func(validators []ValidatorInfo)
-
-	// Block execution state (for Executor interface)
-	currentBlock      execute.Block
-	currentBlockState execute.BlockState
 }
 
 // ExecutorBridgeConfig holds configuration for creating an ExecutorBridge.
@@ -368,135 +364,5 @@ func (b *ExecutorBridge) handleValidatorUpdates(updates []*execute.ValidatorUpda
 	handler(validators)
 }
 
-// BeginBlock starts a new block for the Executor interface.
-// This prepares the executor to receive transactions.
-func (b *ExecutorBridge) BeginBlock(ctx context.Context, params BeginBlockParams) error {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	if b.currentBlock != nil {
-		return fmt.Errorf("block already in progress")
-	}
-
-	execParams := execute.BlockParams{
-		Context:  ctx,
-		IsLeader: params.IsLeader,
-		Index:    params.Index,
-		Time:     params.Time,
-	}
-
-	block, err := b.executor.Begin(execParams)
-	if err != nil {
-		return fmt.Errorf("begin block: %w", err)
-	}
-
-	b.currentBlock = block
-	return nil
-}
-
-// ExecuteTransaction executes a single transaction for the Executor interface.
-func (b *ExecutorBridge) ExecuteTransaction(ctx context.Context, tx []byte) (*TxResult, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	if b.currentBlock == nil {
-		return nil, fmt.Errorf("no block in progress")
-	}
-
-	// Unmarshal transaction to envelope
-	envelope := new(messaging.Envelope)
-	if err := envelope.UnmarshalBinary(tx); err != nil {
-		return &TxResult{
-			Success: false,
-			Error:   fmt.Errorf("unmarshal envelope: %w", err),
-		}, nil
-	}
-
-	// Process the envelope
-	statuses, err := b.currentBlock.Process(envelope)
-	if err != nil {
-		return &TxResult{
-			Success: false,
-			Error:   fmt.Errorf("process transaction: %w", err),
-		}, nil
-	}
-
-	// Build result from statuses
-	result := &TxResult{
-		Success: true,
-		Events:  make([]Event, 0),
-	}
-
-	for _, status := range statuses {
-		if status.Error != nil {
-			result.Success = false
-			result.Error = status.Error
-		}
-	}
-
-	return result, nil
-}
-
-// EndBlock finalizes the block and returns the state hash for the Executor interface.
-func (b *ExecutorBridge) EndBlock(ctx context.Context) (stateHash [32]byte, err error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	if b.currentBlock == nil {
-		return [32]byte{}, fmt.Errorf("no block in progress")
-	}
-
-	// Close block
-	state, err := b.currentBlock.Close()
-	if err != nil {
-		return [32]byte{}, fmt.Errorf("close block: %w", err)
-	}
-
-	// Get block hash
-	hash, err := state.Hash()
-	if err != nil {
-		state.Discard()
-		return [32]byte{}, fmt.Errorf("get block hash: %w", err)
-	}
-
-	b.currentBlockState = state
-	return hash, nil
-}
-
-// Commit persists the block to storage for the Executor interface.
-func (b *ExecutorBridge) Commit(ctx context.Context) error {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	if b.currentBlockState == nil {
-		return fmt.Errorf("no block state to commit")
-	}
-
-	// Commit changes
-	if err := b.currentBlockState.Commit(); err != nil {
-		return fmt.Errorf("commit block: %w", err)
-	}
-
-	// Get the hash before clearing state
-	hash, err := b.currentBlockState.Hash()
-	if err == nil {
-		b.lastBlockHash = hash
-	}
-
-	// Check for validator updates
-	if updates, changed := b.currentBlockState.DidUpdateValidators(); changed {
-		b.handleValidatorUpdates(updates)
-	}
-
-	// Clear block state
-	b.currentBlock = nil
-	b.currentBlockState = nil
-
-	return nil
-}
-
 // Ensure ExecutorBridge implements ConsensusAdapter
 var _ ConsensusAdapter = (*ExecutorBridge)(nil)
-
-// Ensure ExecutorBridge implements Executor
-var _ Executor = (*ExecutorBridge)(nil)
