@@ -102,10 +102,10 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	setDefaultPtr(&s.CommitBufferSize, dagconfig.DefaultCommitBufferSize)
 
 	// Get the logger
-	logger := (*logging.Slogger)(inst.logger)
+	logger := logging.NewSlogLogger(inst.logger)
 
 	// Create event bus
-	s.eventBus = events.NewBus(logging.FromCometBFT(logger.With("module", "events")))
+	s.eventBus = events.NewBus(logger.With("module", "events"))
 
 	// Subscribe to fatal errors.
 	// NOTE: EventBus subscribers are not unsubscribed on shutdown. This is a
@@ -140,7 +140,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	// Create router
 	router := routing.NewRouter(routing.RouterOptions{
 		Events: s.eventBus,
-		Logger: logging.FromCometBFT(logger),
+		Logger: logger,
 	})
 	err = dagbftProvidesRouter.Register(inst.services, s, router)
 	if err != nil {
@@ -156,11 +156,11 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	}}
 
 	// Create database
-	db := database.New(store, logging.FromCometBFT(logger))
+	db := database.New(store, logger)
 
 	// Load genesis snapshot if needed (before creating executor)
 	genesisPath := inst.path(s.Genesis)
-	genesisLoaded, err := s.loadGenesisIfNeeded(db, genesisPath, logging.FromCometBFT(logger))
+	genesisLoaded, err := s.loadGenesisIfNeeded(db, genesisPath, logger)
 	if err != nil {
 		return errors.UnknownError.WithFormat("load genesis: %w", err)
 	}
@@ -168,7 +168,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 
 	// Create executor options
 	execOpts := multiexec.Options{
-		Logger:        logging.FromCometBFT(logger.With("module", "executor")),
+		Logger:        logger.With("module", "executor"),
 		Database:      db,
 		Key:           validatorKey,
 		Router:        router,
@@ -274,7 +274,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		NodeConfig: nodeConfig,
 		Adapter:    executorBridge,
 		EventBus:   s.eventBus,
-		Logger:     logging.FromCometBFT(logger.With("module", "dagbft")),
+		Logger:     logger.With("module", "dagbft"),
 		Genesis:    inst.path(s.Genesis),
 	}
 
@@ -318,12 +318,12 @@ func (s *DAGBFTService) start(inst *Instance) error {
 
 // registerAPIServices registers the API services for DAG-BFT.
 func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Beginner, validatorKey []byte, globalsChan chan *network.GlobalValues) error {
-	logger := (*logging.Slogger)(inst.logger)
-	db := database.New(store, logging.FromCometBFT(logger))
+	logger := logging.NewSlogLogger(inst.logger)
+	db := database.New(store, logger)
 
 	// Create consensus service
 	consensusSvc := dagbft.NewConsensusAPIService(dagbft.ConsensusAPIServiceParams{
-		Logger:           logging.FromCometBFT(logger.With("module", "api")),
+		Logger:           logger.With("module", "api"),
 		Service:          s.service,
 		Database:         db,
 		PartitionID:      s.Partition.ID,
@@ -340,7 +340,7 @@ func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Begin
 
 	// Create submitter service
 	submitterSvc := dagbft.NewSubmitterService(dagbft.SubmitterServiceParams{
-		Logger:  logging.FromCometBFT(logger.With("module", "api")),
+		Logger:  logger.With("module", "api"),
 		Service: s.service,
 	})
 	registerRpcService(inst, submitterSvc.Type().AddressFor(s.Partition.ID), message.Submitter{Submitter: submitterSvc})
@@ -351,7 +351,7 @@ func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Begin
 
 	// Create validator service
 	validatorSvc := dagbft.NewValidatorService(dagbft.ValidatorServiceParams{
-		Logger:  logging.FromCometBFT(logger.With("module", "api")),
+		Logger:  logger.With("module", "api"),
 		Service: s.service,
 	})
 	registerRpcService(inst, validatorSvc.Type().AddressFor(s.Partition.ID), message.Validator{Validator: validatorSvc})
@@ -371,7 +371,7 @@ func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Begin
 
 	// Create sequencer service
 	sequencerSvc := api.NewSequencer(api.SequencerParams{
-		Logger:       logging.FromCometBFT(logger.With("module", "api")),
+		Logger:       logger.With("module", "api"),
 		Database:     db,
 		EventBus:     s.eventBus,
 		Globals:      globals,
