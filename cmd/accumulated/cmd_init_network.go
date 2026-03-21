@@ -190,12 +190,14 @@ func initNetwork(cmd *cobra.Command, args []string) {
 			cfg.Network = network.Id
 
 			// Add debug logging for DAG consensus modules
+			// First rule: DEBUG for consensus modules (must have module= attribute)
+			// Second rule: no modules means default level for all other logs
 			cfg.Logging = &run.Logging{
 				Format: "plain",
 				Color:  run.Ptr(true),
 				Rules: []*run.LoggingRule{
-					{Level: slog.LevelDebug, Modules: []string{"dagbft", "consensus", "primary", "worker", "bullshark", "gossip"}},
-					{Level: slog.LevelInfo, Modules: []string{"*"}},
+					{Level: slog.LevelDebug, Modules: []string{"dagbft", "consensus", "primary", "worker", "bullshark", "gossip", "dag", "adapter"}},
+					{Level: slog.LevelInfo}, // Default level for logs without "module" attribute
 				},
 			}
 
@@ -211,17 +213,14 @@ func initNetwork(cmd *cobra.Command, args []string) {
 			cfg.Configurations = []run.Configuration{cvc}
 			cvc.Listen = node.Listen().Scheme("tcp").Directory().TendermintP2P().Multiaddr()
 			cvc.BVN = bvn.Id
-			cvc.BvnBootstrapPeers = bvn.Peers(node).Scheme("tcp").BlockValidator().AccumulateP2P().WithKey().Multiaddr()
+			// Use Directory().AccumulateP2P() for all bootstrap peers to match the actual P2P listen port
+			// (CoreValidatorConfiguration derives P2P listen from cvc.Listen + portDir + portAccP2P = base + 0 + 2)
+			cvc.BvnBootstrapPeers = bvn.Peers(node).Scheme("tcp").Directory().AccumulateP2P().WithKey().Multiaddr()
 			cvc.DnBootstrapPeers = network.Peers(node).Scheme("tcp").Directory().AccumulateP2P().WithKey().Multiaddr()
 
 			// Set P2P bootstrap peers - primary is the bootstrap node, then add other peers
 			cfg.P2P.BootstrapPeers = []run.Multiaddr{bootstrapMultiaddr}
 			cfg.P2P.BootstrapPeers = append(cfg.P2P.BootstrapPeers, cvc.DnBootstrapPeers...)
-			// Add bootstrap peers from ALL BVNs for cross-partition routing
-			for _, otherBvn := range network.Bvns {
-				allBvnPeers := otherBvn.Peers(node).Scheme("tcp").BlockValidator().AccumulateP2P().WithKey().Multiaddr()
-				cfg.P2P.BootstrapPeers = append(cfg.P2P.BootstrapPeers, allBvnPeers...)
-			}
 
 			// Configure the validator key
 			addr = address.FromED25519PrivateKey(node.PrivValKey)

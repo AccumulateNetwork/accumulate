@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/fatih/color"
-	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
@@ -251,31 +250,58 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		CommitBufferSize: int(*s.CommitBufferSize),
 	}
 
-	// Create GossipSub for DAG-BFT certificate/batch dissemination
-	// This enables multi-node consensus networking via libp2p
-	var ps *pubsub.PubSub
-	if inst.p2p != nil {
-		h := inst.p2p.Host()
-		if h != nil {
-			ps, err = pubsub.NewGossipSub(inst.context, h,
-				pubsub.WithPeerExchange(true),
-				pubsub.WithFloodPublish(true),
-			)
-			if err != nil {
-				return errors.UnknownError.WithFormat("create gossipsub: %w", err)
+	// Use the shared GossipSub for DAG-BFT certificate/batch dissemination.
+	// The GossipSub is created once per host in Instance.StartFiltered() and
+	// shared across all partitions. Topics separate messages by partition.
+	ps := inst.pubsub
+	if ps != nil {
+		slog.Info("Using shared GossipSub for DAG-BFT networking", "partition", s.Partition.ID)
+	}
+
+	// Wait for globals to be available before creating the service.
+	// The WillChangeGlobals event fires during executor creation (in loadGlobals),
+	// which populates globalsChan. We need these to get the initial validators.
+	var globals *network.GlobalValues
+	select {
+	case globals = <-globalsChan:
+		slog.Info("Received initial globals for DAG-BFT", "partition", s.Partition.ID)
+	case <-time.After(5 * time.Second):
+		slog.Warn("Timeout waiting for initial globals, DAG-BFT may not reach quorum", "partition", s.Partition.ID)
+		globals = new(network.GlobalValues)
+	}
+
+	// Extract initial validators from globals
+	var initialValidators []adapter.ValidatorInfo
+	if globals != nil && globals.Network != nil {
+		for _, v := range globals.Network.Validators {
+			if !v.IsActiveOn(s.Partition.ID) {
+				continue
 			}
-			slog.Info("Created GossipSub for DAG-BFT networking", "partition", s.Partition.ID)
+			if len(v.PublicKey) != 32 {
+				continue
+			}
+			var pubKey [32]byte
+			copy(pubKey[:], v.PublicKey)
+			initialValidators = append(initialValidators, adapter.ValidatorInfo{
+				PublicKey: pubKey,
+				Stake:     1,
+				Active:    true,
+			})
 		}
+		slog.Info("Extracted initial validators for DAG-BFT",
+			"partition", s.Partition.ID,
+			"validators", len(initialValidators))
 	}
 
 	// Create the service
 	svcConfig := dagbft.ServiceConfig{
-		Partition:  s.Partition,
-		NodeConfig: nodeConfig,
-		Adapter:    executorBridge,
-		EventBus:   s.eventBus,
-		Logger:     logger.With("module", "dagbft"),
-		Genesis:    inst.path(s.Genesis),
+		Partition:         s.Partition,
+		NodeConfig:        nodeConfig,
+		Adapter:           executorBridge,
+		EventBus:          s.eventBus,
+		Logger:            logger.With("module", "dagbft"),
+		Genesis:           inst.path(s.Genesis),
+		InitialValidators: initialValidators,
 	}
 
 	// Wire in libp2p networking if available
@@ -307,7 +333,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	}
 
 	// Register consensus API services
-	err = s.registerAPIServices(inst, store, validatorKey, globalsChan)
+	err = s.registerAPIServices(inst, store, validatorKey, globals)
 	if err != nil {
 		return err
 	}
@@ -317,7 +343,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 }
 
 // registerAPIServices registers the API services for DAG-BFT.
-func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Beginner, validatorKey []byte, globalsChan chan *network.GlobalValues) error {
+func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Beginner, validatorKey []byte, globals *network.GlobalValues) error {
 	logger := logging.NewSlogLogger(inst.logger)
 	db := database.New(store, logger)
 
@@ -358,15 +384,6 @@ func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Begin
 	err = dagbftProvidesValidator.Register(inst.services, s, validatorSvc)
 	if err != nil {
 		return errors.UnknownError.WithFormat("register validator service: %w", err)
-	}
-
-	// Wait for globals to be available
-	var globals *network.GlobalValues
-	select {
-	case globals = <-globalsChan:
-	case <-time.After(5 * time.Second):
-		// Use a default if globals aren't available yet
-		globals = new(network.GlobalValues)
 	}
 
 	// Create sequencer service

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -37,6 +38,7 @@ type Instance struct {
 	shutdown context.CancelFunc // shuts down the instance
 	logger   *slog.Logger
 	p2p      *p2p.Node
+	pubsub   *pubsub.PubSub // shared GossipSub for all DAG-BFT services
 	services ioc.Registry
 }
 
@@ -171,6 +173,18 @@ func (inst *Instance) StartFiltered(predicate func(Service) bool) (err error) {
 	err = inst.config.P2P.start(inst)
 	if err != nil {
 		return errors.UnknownError.WithFormat("start p2p: %w", err)
+	}
+
+	// Create shared GossipSub for DAG-BFT services (must be created ONCE per host)
+	if inst.p2p != nil && inst.p2p.Host() != nil {
+		inst.pubsub, err = pubsub.NewGossipSub(inst.context, inst.p2p.Host(),
+			pubsub.WithPeerExchange(true),
+			pubsub.WithFloodPublish(true),
+		)
+		if err != nil {
+			return errors.UnknownError.WithFormat("create gossipsub: %w", err)
+		}
+		slog.Info("Created shared GossipSub for DAG-BFT")
 	}
 
 	// Prestart

@@ -125,6 +125,7 @@ func (p *Primary) tryCreateCertificateLocked(headerDigest types.HeaderDigest) {
 	p.certificatesCreated.Add(1)
 
 	slog.Info("Created certificate",
+		"partition", p.config.Partition,
 		"digest", cert.Digest().String(),
 		"round", cert.Round(),
 		"signers", len(cert.SignedAuthorities))
