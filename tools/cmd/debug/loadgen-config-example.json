@@ -1,0 +1,17 @@
+{
+  "server": "http://localhost:26660",
+  "targetTPS": 100,
+  "runtimeSeconds": 300,
+  "rampUpSeconds": 30,
+  "operations": {
+    "liteToLiteTransfer": 30,
+    "liteToADITransfer": 15,
+    "adiToAdiTransfer": 15,
+    "keyRotation": 10,
+    "addKeyBook": 5,
+    "addKeyPage": 5,
+    "writeData": 15,
+    "createAccount": 5,
+    "updateKeyWeight": 0
+  }
+}
