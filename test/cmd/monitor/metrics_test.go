@@ -154,3 +154,44 @@ func TestMetricsSnapshot(t *testing.T) {
 		t.Error("Snapshot should match node status")
 	}
 }
+
+func TestMetricsAddLatency_Ordering(t *testing.T) {
+	m := &Metrics{
+		errors: make(map[string]int64),
+	}
+
+	// Add latencies in specific order
+	m.AddLatency(100 * time.Millisecond)
+	m.AddLatency(10 * time.Millisecond)
+	m.AddLatency(50 * time.Millisecond)
+
+	m.mu.RLock()
+	count := len(m.requestLatencies)
+	m.mu.RUnlock()
+
+	if count != 3 {
+		t.Errorf("Expected 3 latencies, got %d", count)
+	}
+}
+
+func TestMetricsInitialization(t *testing.T) {
+	m := &Metrics{
+		errors: make(map[string]int64),
+	}
+
+	// Check initial state
+	snap := m.GetSnapshot()
+
+	if snap.actualTPS != 0 {
+		t.Error("Initial actualTPS should be 0")
+	}
+	if snap.targetTPS != 0 {
+		t.Error("Initial targetTPS should be 0")
+	}
+	if snap.blockHeight != 0 {
+		t.Error("Initial blockHeight should be 0")
+	}
+	if snap.nodeStatus != "" {
+		t.Error("Initial nodeStatus should be empty")
+	}
+}
