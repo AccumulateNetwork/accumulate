@@ -1,0 +1,16 @@
+{
+  "serverUrl": "http://127.0.1.1:26660",
+  "targetTps": 100,
+  "duration": 60,
+  "rampUpSeconds": 10,
+  "reloadInterval": 30,
+  "operationMix": {
+    "token-transfer-lite": 30,
+    "token-transfer-adi": 20,
+    "write-data": 20,
+    "create-account": 10,
+    "key-rotation": 10,
+    "create-keypage": 5,
+    "create-keybook": 5
+  }
+}
