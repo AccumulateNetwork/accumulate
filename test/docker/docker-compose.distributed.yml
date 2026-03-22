@@ -1,0 +1,355 @@
+# Docker Compose for Distributed Load Testing Environment
+#
+# This configuration runs each validator in a separate container:
+#   - 3 Block Validator Networks (BVN1, BVN2, BVN3)
+#   - 4 validators per BVN = 12 validator containers
+#   - Each BVN validator runs independently
+#   - Better isolation for failure testing
+#
+# Advantages over all-in-one:
+#   - Individual node restarts
+#   - Fault injection (kill specific nodes)
+#   - Per-node resource limits
+#   - More realistic production topology
+#
+# Resource Requirements:
+#   - 12 containers @ 2GB each = 24GB minimum
+#   - Adjust mem_limit based on available resources
+#
+# Usage:
+#   docker compose -f test/docker/docker-compose.distributed.yml build
+#   docker compose -f test/docker/docker-compose.distributed.yml up
+#   docker compose -f test/docker/docker-compose.distributed.yml down
+#
+# Scale specific BVN:
+#   docker compose -f test/docker/docker-compose.distributed.yml up --scale bvn1-0=0
+#
+# Individual node logs:
+#   docker compose -f test/docker/docker-compose.distributed.yml logs -f bvn1-0
+
+version: '3.8'
+
+x-node-common: &node-common
+  build:
+    context: ../..
+    dockerfile: Dockerfile
+  restart: unless-stopped
+  mem_limit: 2g
+  networks:
+    - load-test-net
+
+x-bvn-env: &bvn-env
+  ACC_LOG_LEVEL: info
+  NETWORK_NAME: LoadTest
+  NUM_BVNS: "3"
+  NUM_VALIDATORS: "4"
+
+services:
+  # ============================================================================
+  # BVN0 (First Block Validator Network)
+  # ============================================================================
+
+  bvn0-0:
+    <<: *node-common
+    container_name: load-test-bvn0-0
+    hostname: bvn0-0
+    environment:
+      <<: *bvn-env
+      NODE_TYPE: validator
+      PARTITION: BVN0
+      NODE_INDEX: "0"
+    command:
+      - run
+      - devnet
+      - --node=0
+      - --bvns=3
+      - --validators=4
+    ports:
+      - "26656:26656"
+      - "26660:26660"
+      - "8080:8080"
+    volumes:
+      - bvn0-0-data:/root/.accumulate
+
+  bvn0-1:
+    <<: *node-common
+    container_name: load-test-bvn0-1
+    hostname: bvn0-1
+    environment:
+      <<: *bvn-env
+      NODE_TYPE: validator
+      PARTITION: BVN0
+      NODE_INDEX: "1"
+    command:
+      - run
+      - devnet
+      - --node=1
+      - --bvns=3
+      - --validators=4
+    ports:
+      - "26657:26656"
+      - "26661:26660"
+    volumes:
+      - bvn0-1-data:/root/.accumulate
+    depends_on:
+      - bvn0-0
+
+  bvn0-2:
+    <<: *node-common
+    container_name: load-test-bvn0-2
+    hostname: bvn0-2
+    environment:
+      <<: *bvn-env
+      NODE_TYPE: validator
+      PARTITION: BVN0
+      NODE_INDEX: "2"
+    command:
+      - run
+      - devnet
+      - --node=2
+      - --bvns=3
+      - --validators=4
+    ports:
+      - "26658:26656"
+      - "26662:26660"
+    volumes:
+      - bvn0-2-data:/root/.accumulate
+    depends_on:
+      - bvn0-0
+
+  bvn0-3:
+    <<: *node-common
+    container_name: load-test-bvn0-3
+    hostname: bvn0-3
+    environment:
+      <<: *bvn-env
+      NODE_TYPE: validator
+      PARTITION: BVN0
+      NODE_INDEX: "3"
+    command:
+      - run
+      - devnet
+      - --node=3
+      - --bvns=3
+      - --validators=4
+    ports:
+      - "26659:26656"
+      - "26663:26660"
+    volumes:
+      - bvn0-3-data:/root/.accumulate
+    depends_on:
+      - bvn0-0
+
+  # ============================================================================
+  # BVN1 (Second Block Validator Network)
+  # ============================================================================
+
+  bvn1-0:
+    <<: *node-common
+    container_name: load-test-bvn1-0
+    hostname: bvn1-0
+    environment:
+      <<: *bvn-env
+      NODE_TYPE: validator
+      PARTITION: BVN1
+      NODE_INDEX: "0"
+    command:
+      - run
+      - devnet
+      - --node=4
+      - --bvns=3
+      - --validators=4
+    ports:
+      - "26664:26656"
+      - "26668:26660"
+      - "8081:8080"
+    volumes:
+      - bvn1-0-data:/root/.accumulate
+
+  bvn1-1:
+    <<: *node-common
+    container_name: load-test-bvn1-1
+    hostname: bvn1-1
+    environment:
+      <<: *bvn-env
+      NODE_TYPE: validator
+      PARTITION: BVN1
+      NODE_INDEX: "1"
+    command:
+      - run
+      - devnet
+      - --node=5
+      - --bvns=3
+      - --validators=4
+    ports:
+      - "26665:26656"
+      - "26669:26660"
+    volumes:
+      - bvn1-1-data:/root/.accumulate
+    depends_on:
+      - bvn1-0
+
+  bvn1-2:
+    <<: *node-common
+    container_name: load-test-bvn1-2
+    hostname: bvn1-2
+    environment:
+      <<: *bvn-env
+      NODE_TYPE: validator
+      PARTITION: BVN1
+      NODE_INDEX: "2"
+    command:
+      - run
+      - devnet
+      - --node=6
+      - --bvns=3
+      - --validators=4
+    ports:
+      - "26666:26656"
+      - "26670:26660"
+    volumes:
+      - bvn1-2-data:/root/.accumulate
+    depends_on:
+      - bvn1-0
+
+  bvn1-3:
+    <<: *node-common
+    container_name: load-test-bvn1-3
+    hostname: bvn1-3
+    environment:
+      <<: *bvn-env
+      NODE_TYPE: validator
+      PARTITION: BVN1
+      NODE_INDEX: "3"
+    command:
+      - run
+      - devnet
+      - --node=7
+      - --bvns=3
+      - --validators=4
+    ports:
+      - "26667:26656"
+      - "26671:26660"
+    volumes:
+      - bvn1-3-data:/root/.accumulate
+    depends_on:
+      - bvn1-0
+
+  # ============================================================================
+  # BVN2 (Third Block Validator Network)
+  # ============================================================================
+
+  bvn2-0:
+    <<: *node-common
+    container_name: load-test-bvn2-0
+    hostname: bvn2-0
+    environment:
+      <<: *bvn-env
+      NODE_TYPE: validator
+      PARTITION: BVN2
+      NODE_INDEX: "0"
+    command:
+      - run
+      - devnet
+      - --node=8
+      - --bvns=3
+      - --validators=4
+    ports:
+      - "26672:26656"
+      - "26676:26660"
+      - "8082:8080"
+    volumes:
+      - bvn2-0-data:/root/.accumulate
+
+  bvn2-1:
+    <<: *node-common
+    container_name: load-test-bvn2-1
+    hostname: bvn2-1
+    environment:
+      <<: *bvn-env
+      NODE_TYPE: validator
+      PARTITION: BVN2
+      NODE_INDEX: "1"
+    command:
+      - run
+      - devnet
+      - --node=9
+      - --bvns=3
+      - --validators=4
+    ports:
+      - "26673:26656"
+      - "26677:26660"
+    volumes:
+      - bvn2-1-data:/root/.accumulate
+    depends_on:
+      - bvn2-0
+
+  bvn2-2:
+    <<: *node-common
+    container_name: load-test-bvn2-2
+    hostname: bvn2-2
+    environment:
+      <<: *bvn-env
+      NODE_TYPE: validator
+      PARTITION: BVN2
+      NODE_INDEX: "2"
+    command:
+      - run
+      - devnet
+      - --node=10
+      - --bvns=3
+      - --validators=4
+    ports:
+      - "26674:26656"
+      - "26678:26660"
+    volumes:
+      - bvn2-2-data:/root/.accumulate
+    depends_on:
+      - bvn2-0
+
+  bvn2-3:
+    <<: *node-common
+    container_name: load-test-bvn2-3
+    hostname: bvn2-3
+    environment:
+      <<: *bvn-env
+      NODE_TYPE: validator
+      PARTITION: BVN2
+      NODE_INDEX: "3"
+    command:
+      - run
+      - devnet
+      - --node=11
+      - --bvns=3
+      - --validators=4
+    ports:
+      - "26675:26656"
+      - "26679:26660"
+    volumes:
+      - bvn2-3-data:/root/.accumulate
+    depends_on:
+      - bvn2-0
+
+volumes:
+  # BVN0 volumes
+  bvn0-0-data:
+  bvn0-1-data:
+  bvn0-2-data:
+  bvn0-3-data:
+  # BVN1 volumes
+  bvn1-0-data:
+  bvn1-1-data:
+  bvn1-2-data:
+  bvn1-3-data:
+  # BVN2 volumes
+  bvn2-0-data:
+  bvn2-1-data:
+  bvn2-2-data:
+  bvn2-3-data:
+
+networks:
+  load-test-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.29.0.0/16
