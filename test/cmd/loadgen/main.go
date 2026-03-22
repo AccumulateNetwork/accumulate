@@ -377,11 +377,8 @@ func (lg *LoadGenerator) createADIAccount() (*Account, error) {
 
 	// Create ADI
 	adiNum := lg.adiCounter.Add(1)
-	adiName := fmt.Sprintf("acc://loadtest-%d-%d.acme", time.Now().Unix(), adiNum)
-	adiURL, err := url.Parse(adiName)
-	if err != nil {
-		return nil, err
-	}
+	adiName := fmt.Sprintf("loadtest-%d-%d.acme", time.Now().Unix(), adiNum)
+	adiURL := protocol.AccountUrl(adiName)
 
 	nonce := liteAcc.Nonce
 	env, err := build.Transaction().
