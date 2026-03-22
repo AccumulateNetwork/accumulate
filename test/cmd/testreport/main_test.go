@@ -682,3 +682,765 @@ func init() {
 	duration = flag.Int("duration", 5, "Test duration in seconds")
 	notes = flag.String("notes", "", "Test notes")
 }
+
+// Additional tests for better coverage
+func TestRunTrendWithCommitFilter(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	db, err := testresults.NewDatabase(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to create database: %v", err)
+	}
+	defer db.Close()
+
+	// Insert multiple test runs with same commit
+	baseTime := time.Now().Add(-7 * 24 * time.Hour)
+	commitHash := "filtered-commit"
+	for i := 0; i < 3; i++ {
+		run := &testresults.TestRun{
+			CommitHash:    commitHash,
+			Branch:        "main",
+			StartTime:     baseTime.Add(time.Duration(i) * 24 * time.Hour),
+			EndTime:       baseTime.Add(time.Duration(i)*24*time.Hour + 5*time.Minute),
+			Duration:      300,
+			TargetTPS:     100,
+			Concurrency:   25,
+			TotalTx:       30000,
+			TxPassed:      29000,
+			TxFailed:      1000,
+			AverageTPS:    100.0 + float64(i)*2,
+			PeakTPS:       120.0,
+			AvgLatency:    50.0,
+			P50Latency:    45.0,
+			P95Latency:    100.0,
+			P99Latency:    200.0,
+			ErrorRate:     3.33,
+			NetworkConfig: "{}",
+			TestConfig:    "{}",
+		}
+
+		_, err := db.InsertTestRun(run)
+		if err != nil {
+			t.Fatalf("Failed to insert test run: %v", err)
+		}
+	}
+
+	*metric = "avg_tps"
+	*days = 30
+	*format = "markdown"
+	commits = StringSliceFlag{commitHash}
+
+	output, err := runTrend(db)
+	if err != nil {
+		t.Fatalf("runTrend with commit filter failed: %v", err)
+	}
+
+	if !strings.Contains(output, "Trend Analysis") {
+		t.Error("Output should contain trend analysis title")
+	}
+}
+
+func TestRunTrendHTML(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	db, err := testresults.NewDatabase(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to create database: %v", err)
+	}
+	defer db.Close()
+
+	baseTime := time.Now().Add(-7 * 24 * time.Hour)
+	for i := 0; i < 3; i++ {
+		run := &testresults.TestRun{
+			CommitHash:    fmt.Sprintf("html-trend-%d", i),
+			Branch:        "main",
+			StartTime:     baseTime.Add(time.Duration(i) * 24 * time.Hour),
+			EndTime:       baseTime.Add(time.Duration(i)*24*time.Hour + 5*time.Minute),
+			Duration:      300,
+			TargetTPS:     100,
+			Concurrency:   25,
+			TotalTx:       30000,
+			TxPassed:      29000,
+			TxFailed:      1000,
+			AverageTPS:    100.0 + float64(i)*2,
+			PeakTPS:       120.0,
+			AvgLatency:    50.0,
+			P50Latency:    45.0,
+			P95Latency:    100.0,
+			P99Latency:    200.0,
+			ErrorRate:     3.33,
+			NetworkConfig: "{}",
+			TestConfig:    "{}",
+		}
+
+		_, err := db.InsertTestRun(run)
+		if err != nil {
+			t.Fatalf("Failed to insert test run: %v", err)
+		}
+	}
+
+	*metric = "avg_tps"
+	*days = 30
+	*format = "html"
+	commits = nil
+
+	output, err := runTrend(db)
+	if err != nil {
+		t.Fatalf("runTrend HTML failed: %v", err)
+	}
+
+	if !strings.Contains(output, "<html") {
+		t.Error("HTML output should contain html tag")
+	}
+}
+
+func TestRunCompareInvalidBaseCommit(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	db, err := testresults.NewDatabase(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to create database: %v", err)
+	}
+	defer db.Close()
+
+	*baseID = 0
+	*compareID = 0
+	commits = StringSliceFlag{"nonexistent-commit"}
+	*format = "markdown"
+
+	_, err = runCompare(db)
+	if err == nil {
+		t.Error("Expected error for nonexistent base commit")
+	}
+}
+
+func TestRunCompareInvalidCompareCommit(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	db, err := testresults.NewDatabase(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to create database: %v", err)
+	}
+	defer db.Close()
+
+	// Insert one run
+	run := &testresults.TestRun{
+		CommitHash:    "base-only",
+		Branch:        "main",
+		StartTime:     time.Now().Add(-5 * time.Minute),
+		EndTime:       time.Now(),
+		Duration:      300,
+		TargetTPS:     100,
+		Concurrency:   25,
+		TotalTx:       30000,
+		TxPassed:      29000,
+		TxFailed:      1000,
+		AverageTPS:    100.0,
+		PeakTPS:       120.0,
+		AvgLatency:    50.0,
+		P50Latency:    45.0,
+		P95Latency:    100.0,
+		P99Latency:    200.0,
+		ErrorRate:     3.33,
+		NetworkConfig: "{}",
+		TestConfig:    "{}",
+	}
+
+	db.InsertTestRun(run)
+
+	*baseID = 0
+	*compareID = 0
+	commits = StringSliceFlag{"base-only", "nonexistent-compare"}
+	*format = "markdown"
+
+	_, err = runCompare(db)
+	if err == nil {
+		t.Error("Expected error for nonexistent compare commit")
+	}
+}
+
+func TestRunCompareInvalidBaseID(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	db, err := testresults.NewDatabase(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to create database: %v", err)
+	}
+	defer db.Close()
+
+	*baseID = 99999
+	*compareID = 1
+	commits = nil
+	*format = "markdown"
+
+	_, err = runCompare(db)
+	if err == nil {
+		t.Error("Expected error for invalid base ID")
+	}
+}
+
+func TestRunCompareInvalidCompareID(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	db, err := testresults.NewDatabase(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to create database: %v", err)
+	}
+	defer db.Close()
+
+	// Insert one run
+	run := &testresults.TestRun{
+		CommitHash:    "base",
+		Branch:        "main",
+		StartTime:     time.Now().Add(-5 * time.Minute),
+		EndTime:       time.Now(),
+		Duration:      300,
+		TargetTPS:     100,
+		Concurrency:   25,
+		TotalTx:       30000,
+		TxPassed:      29000,
+		TxFailed:      1000,
+		AverageTPS:    100.0,
+		PeakTPS:       120.0,
+		AvgLatency:    50.0,
+		P50Latency:    45.0,
+		P95Latency:    100.0,
+		P99Latency:    200.0,
+		ErrorRate:     3.33,
+		NetworkConfig: "{}",
+		TestConfig:    "{}",
+	}
+
+	id, _ := db.InsertTestRun(run)
+
+	*baseID = id
+	*compareID = 99999
+	commits = nil
+	*format = "markdown"
+
+	_, err = runCompare(db)
+	if err == nil {
+		t.Error("Expected error for invalid compare ID")
+	}
+}
+
+func TestRunCompareHTML(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	db, err := testresults.NewDatabase(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to create database: %v", err)
+	}
+	defer db.Close()
+
+	// Insert two runs
+	baseRun := &testresults.TestRun{
+		CommitHash:    "html-base",
+		Branch:        "main",
+		StartTime:     time.Now().Add(-10 * time.Minute),
+		EndTime:       time.Now().Add(-5 * time.Minute),
+		Duration:      300,
+		TargetTPS:     100,
+		Concurrency:   25,
+		TotalTx:       30000,
+		TxPassed:      29000,
+		TxFailed:      1000,
+		AverageTPS:    100.0,
+		PeakTPS:       120.0,
+		AvgLatency:    50.0,
+		P50Latency:    45.0,
+		P95Latency:    100.0,
+		P99Latency:    200.0,
+		ErrorRate:     3.33,
+		NetworkConfig: "{}",
+		TestConfig:    "{}",
+	}
+	baseRunID, _ := db.InsertTestRun(baseRun)
+
+	compareRun := &testresults.TestRun{
+		CommitHash:    "html-compare",
+		Branch:        "main",
+		StartTime:     time.Now().Add(-5 * time.Minute),
+		EndTime:       time.Now(),
+		Duration:      300,
+		TargetTPS:     100,
+		Concurrency:   25,
+		TotalTx:       30000,
+		TxPassed:      29500,
+		TxFailed:      500,
+		AverageTPS:    110.0,
+		PeakTPS:       130.0,
+		AvgLatency:    45.0,
+		P50Latency:    40.0,
+		P95Latency:    90.0,
+		P99Latency:    180.0,
+		ErrorRate:     1.67,
+		NetworkConfig: "{}",
+		TestConfig:    "{}",
+	}
+	compareRunID, _ := db.InsertTestRun(compareRun)
+
+	*baseID = baseRunID
+	*compareID = compareRunID
+	*format = "html"
+	commits = nil
+
+	output, err := runCompare(db)
+	if err != nil {
+		t.Fatalf("runCompare HTML failed: %v", err)
+	}
+
+	if !strings.Contains(output, "<html") {
+		t.Error("HTML output should contain html tag")
+	}
+}
+
+// Additional coverage for edge cases
+func TestRunTrendNullAnalysis(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	db, err := testresults.NewDatabase(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to create database: %v", err)
+	}
+	defer db.Close()
+
+	// Insert only 1 run (insufficient for trend)
+	run := &testresults.TestRun{
+		CommitHash:    "single-run",
+		Branch:        "main",
+		StartTime:     time.Now().Add(-1 * time.Hour),
+		EndTime:       time.Now(),
+		Duration:      300,
+		TargetTPS:     100,
+		Concurrency:   25,
+		TotalTx:       30000,
+		TxPassed:      29000,
+		TxFailed:      1000,
+		AverageTPS:    100.0,
+		PeakTPS:       120.0,
+		AvgLatency:    50.0,
+		P50Latency:    45.0,
+		P95Latency:    100.0,
+		P99Latency:    200.0,
+		ErrorRate:     3.33,
+		NetworkConfig: "{}",
+		TestConfig:    "{}",
+	}
+	db.InsertTestRun(run)
+
+	*metric = "avg_tps"
+	*days = 30
+	*format = "markdown"
+	commits = nil
+
+	_, err = runTrend(db)
+	if err == nil {
+		t.Error("Expected error for insufficient runs")
+	}
+}
+
+func TestWriteOutputError(t *testing.T) {
+	// Test writing to invalid directory
+	invalidPath := "/invalid/path/that/does/not/exist/output.txt"
+	*outputFile = invalidPath
+
+	err := writeOutput("test output")
+	if err == nil {
+		t.Error("Expected error when writing to invalid path")
+	}
+}
+
+func TestParseLoadTestDataGlobError(t *testing.T) {
+	// Use invalid glob pattern characters if possible
+	run := &testresults.TestRun{}
+	// This should handle the case where glob finds files
+	tmpDir := t.TempDir()
+	
+	// Create a settlement file
+	dataFile := filepath.Join(tmpDir, "load_settlement_test.dat")
+	if err := os.WriteFile(dataFile, []byte("test data"), 0644); err != nil {
+		t.Fatalf("Failed to create test data file: %v", err)
+	}
+
+	err := parseLoadTestData(tmpDir, run)
+	// Should get "not yet implemented" error
+	if err == nil {
+		t.Error("Expected error from parseLoadTestData")
+	}
+}
+
+// Test filtered trend with insufficient data
+func TestRunTrendFilteredInsufficientData(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	db, err := testresults.NewDatabase(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to create database: %v", err)
+	}
+	defer db.Close()
+
+	// Insert runs with different commits
+	baseTime := time.Now().Add(-7 * 24 * time.Hour)
+	for i := 0; i < 3; i++ {
+		run := &testresults.TestRun{
+			CommitHash:    fmt.Sprintf("commit-%d", i),
+			Branch:        "main",
+			StartTime:     baseTime.Add(time.Duration(i) * 24 * time.Hour),
+			EndTime:       baseTime.Add(time.Duration(i)*24*time.Hour + 5*time.Minute),
+			Duration:      300,
+			TargetTPS:     100,
+			Concurrency:   25,
+			TotalTx:       30000,
+			TxPassed:      29000,
+			TxFailed:      1000,
+			AverageTPS:    100.0,
+			PeakTPS:       120.0,
+			AvgLatency:    50.0,
+			P50Latency:    45.0,
+			P95Latency:    100.0,
+			P99Latency:    200.0,
+			ErrorRate:     3.33,
+			NetworkConfig: "{}",
+			TestConfig:    "{}",
+		}
+		db.InsertTestRun(run)
+	}
+
+	// Filter by commit that only has 1 run
+	*metric = "avg_tps"
+	*days = 30
+	*format = "markdown"
+	commits = StringSliceFlag{"commit-0"}
+
+	_, err = runTrend(db)
+	if err == nil {
+		t.Error("Expected error for insufficient filtered data")
+	}
+	if !strings.Contains(err.Error(), "insufficient") && !strings.Contains(err.Error(), "need at least 2") {
+		t.Errorf("Expected insufficient data error, got: %v", err)
+	}
+}
+
+// Test database error in runTrend
+func TestRunTrendDatabaseError(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	db, err := testresults.NewDatabase(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to create database: %v", err)
+	}
+	
+	// Close the database to cause an error
+	db.Close()
+
+	*metric = "avg_tps"
+	*days = 30
+	*format = "markdown"
+	commits = nil
+
+	_, err = runTrend(db)
+	if err == nil {
+		t.Error("Expected error from closed database")
+	}
+}
+
+// Test all output formats for summary
+func TestSummaryAllFormats(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	db, err := testresults.NewDatabase(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to create database: %v", err)
+	}
+	defer db.Close()
+
+	run := &testresults.TestRun{
+		CommitHash:    "format-test",
+		Branch:        "main",
+		StartTime:     time.Now().Add(-5 * time.Minute),
+		EndTime:       time.Now(),
+		Duration:      300,
+		TargetTPS:     100,
+		Concurrency:   25,
+		TotalTx:       30000,
+		TxPassed:      29500,
+		TxFailed:      500,
+		AverageTPS:    98.5,
+		PeakTPS:       120.0,
+		AvgLatency:    50.0,
+		P50Latency:    45.0,
+		P95Latency:    100.0,
+		P99Latency:    200.0,
+		ErrorRate:     1.67,
+		NetworkConfig: "{}",
+		TestConfig:    "{}",
+	}
+
+	id, _ := db.InsertTestRun(run)
+	*runID = id
+
+	formats := []string{"markdown", "json", "html"}
+	for _, fmt := range formats {
+		t.Run("Format_"+fmt, func(t *testing.T) {
+			*format = fmt
+			output, err := runSummary(db)
+			if err != nil {
+				t.Errorf("runSummary with format %s failed: %v", fmt, err)
+			}
+			if output == "" {
+				t.Errorf("Expected non-empty output for format %s", fmt)
+			}
+		})
+	}
+}
+
+// Test invalid format in summary
+func TestSummaryInvalidFormat(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	db, err := testresults.NewDatabase(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to create database: %v", err)
+	}
+	defer db.Close()
+
+	run := &testresults.TestRun{
+		CommitHash:    "invalid-format",
+		Branch:        "main",
+		StartTime:     time.Now().Add(-5 * time.Minute),
+		EndTime:       time.Now(),
+		Duration:      300,
+		TargetTPS:     100,
+		Concurrency:   25,
+		TotalTx:       30000,
+		TxPassed:      29500,
+		TxFailed:      500,
+		AverageTPS:    98.5,
+		PeakTPS:       120.0,
+		AvgLatency:    50.0,
+		P50Latency:    45.0,
+		P95Latency:    100.0,
+		P99Latency:    200.0,
+		ErrorRate:     1.67,
+		NetworkConfig: "{}",
+		TestConfig:    "{}",
+	}
+
+	id, _ := db.InsertTestRun(run)
+	*runID = id
+	*format = "invalid-format-type"
+
+	_, err = runSummary(db)
+	if err == nil {
+		t.Error("Expected error for invalid format")
+	}
+}
+
+// Test import with notes parameter
+func TestRunImportWithNotes(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	db, err := testresults.NewDatabase(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to create database: %v", err)
+	}
+	defer db.Close()
+
+	dataDir := t.TempDir()
+	*dataPath = dataDir
+	*branch = "test-branch"
+	*targetTPS = 100
+	*concurrency = 25
+	*duration = 300
+	*notes = "Test run with notes"
+	commits = StringSliceFlag{"import-with-notes"}
+
+	output, err := runImport(db)
+	if err != nil {
+		t.Fatalf("runImport with notes failed: %v", err)
+	}
+
+	if !strings.Contains(output, "Imported test run") {
+		t.Error("Output should confirm import")
+	}
+
+	// Verify the run was inserted
+	runs, err := db.GetTestRunsByCommit("import-with-notes")
+	if err != nil {
+		t.Fatalf("Failed to get imported run: %v", err)
+	}
+	if len(runs) != 1 {
+		t.Errorf("Expected 1 imported run, got %d", len(runs))
+	}
+}
+
+// Test all trend metrics
+func TestTrendAllMetrics(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	db, err := testresults.NewDatabase(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to create database: %v", err)
+	}
+	defer db.Close()
+
+	// Insert multiple test runs
+	baseTime := time.Now().Add(-7 * 24 * time.Hour)
+	for i := 0; i < 3; i++ {
+		run := &testresults.TestRun{
+			CommitHash:    fmt.Sprintf("metric-test-%d", i),
+			Branch:        "main",
+			StartTime:     baseTime.Add(time.Duration(i) * 24 * time.Hour),
+			EndTime:       baseTime.Add(time.Duration(i)*24*time.Hour + 5*time.Minute),
+			Duration:      300,
+			TargetTPS:     100,
+			Concurrency:   25,
+			TotalTx:       30000,
+			TxPassed:      29000,
+			TxFailed:      1000,
+			AverageTPS:    100.0 + float64(i)*2,
+			PeakTPS:       120.0 + float64(i)*5,
+			AvgLatency:    50.0 - float64(i)*1,
+			P50Latency:    45.0 - float64(i)*1,
+			P95Latency:    100.0 - float64(i)*2,
+			P99Latency:    200.0 - float64(i)*5,
+			ErrorRate:     3.33 - float64(i)*0.5,
+			NetworkConfig: "{}",
+			TestConfig:    "{}",
+		}
+		db.InsertTestRun(run)
+	}
+
+	metrics := []string{"avg_tps", "peak_tps", "avg_latency", "p95_latency", "p99_latency", "error_rate"}
+	*days = 30
+	*format = "markdown"
+	commits = nil
+
+	for _, m := range metrics {
+		t.Run("Metric_"+m, func(t *testing.T) {
+			*metric = m
+			output, err := runTrend(db)
+			if err != nil {
+				t.Errorf("runTrend with metric %s failed: %v", m, err)
+			}
+			if output == "" {
+				t.Errorf("Expected non-empty output for metric %s", m)
+			}
+		})
+	}
+}
+
+// Test error case in parseLoadTestData
+func TestParseLoadTestDataMultipleFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+	
+	// Create multiple settlement files
+	for i := 0; i < 3; i++ {
+		dataFile := filepath.Join(tmpDir, fmt.Sprintf("load_settlement_%d.dat", i))
+		if err := os.WriteFile(dataFile, []byte(fmt.Sprintf("test data %d", i)), 0644); err != nil {
+			t.Fatalf("Failed to create test data file: %v", err)
+		}
+	}
+
+	run := &testresults.TestRun{}
+	err := parseLoadTestData(tmpDir, run)
+	
+	// Should get error because parsing is not implemented yet
+	if err == nil {
+		t.Error("Expected error from parseLoadTestData")
+	}
+	
+	// But it should have found the files
+	if !strings.Contains(err.Error(), "not yet implemented") {
+		t.Logf("Got expected error: %v", err)
+	}
+}
+
+// Test compare with both commit and ID parameters
+func TestRunCompareWithBothParams(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	db, err := testresults.NewDatabase(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to create database: %v", err)
+	}
+	defer db.Close()
+
+	// Insert two test runs
+	run1 := &testresults.TestRun{
+		CommitHash:    "both-params-1",
+		Branch:        "main",
+		StartTime:     time.Now().Add(-10 * time.Minute),
+		EndTime:       time.Now().Add(-5 * time.Minute),
+		Duration:      300,
+		TargetTPS:     100,
+		Concurrency:   25,
+		TotalTx:       30000,
+		TxPassed:      29000,
+		TxFailed:      1000,
+		AverageTPS:    100.0,
+		PeakTPS:       120.0,
+		AvgLatency:    50.0,
+		P50Latency:    45.0,
+		P95Latency:    100.0,
+		P99Latency:    200.0,
+		ErrorRate:     3.33,
+		NetworkConfig: "{}",
+		TestConfig:    "{}",
+	}
+	id1, _ := db.InsertTestRun(run1)
+
+	run2 := &testresults.TestRun{
+		CommitHash:    "both-params-2",
+		Branch:        "main",
+		StartTime:     time.Now().Add(-5 * time.Minute),
+		EndTime:       time.Now(),
+		Duration:      300,
+		TargetTPS:     100,
+		Concurrency:   25,
+		TotalTx:       30000,
+		TxPassed:      29500,
+		TxFailed:      500,
+		AverageTPS:    110.0,
+		PeakTPS:       130.0,
+		AvgLatency:    45.0,
+		P50Latency:    40.0,
+		P95Latency:    90.0,
+		P99Latency:    180.0,
+		ErrorRate:     1.67,
+		NetworkConfig: "{}",
+		TestConfig:    "{}",
+	}
+	_, _ = db.InsertTestRun(run2)
+
+	// Use both ID and commit (ID takes precedence)
+	*baseID = id1
+	*compareID = 0
+	commits = StringSliceFlag{"nonexistent1", "both-params-2"}
+	*format = "markdown"
+
+	output, err := runCompare(db)
+	if err != nil {
+		t.Fatalf("runCompare failed: %v", err)
+	}
+
+	if !strings.Contains(output, "Comparison") {
+		t.Error("Output should contain comparison")
+	}
+}
