@@ -34,8 +34,8 @@ require (
 	gitlab.com/ethan.reesor/vscode-notebooks/yaegi v0.0.0-20220417214422-5c573557938e
 	golang.org/x/exp v0.0.0-20240909161429-701f63a606c0
 	golang.org/x/sync v0.10.0
-	golang.org/x/sys v0.28.0
-	golang.org/x/term v0.27.0
+	golang.org/x/sys v0.29.0
+	golang.org/x/term v0.28.0
 	golang.org/x/text v0.21.0
 	golang.org/x/tools v0.28.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -132,6 +132,8 @@ require (
 	github.com/firefart/nonamedreturns v1.0.5 // indirect
 	github.com/flynn/noise v1.1.0 // indirect
 	github.com/francoispqt/gojay v1.2.13 // indirect
+	github.com/gdamore/encoding v1.0.1 // indirect
+	github.com/gdamore/tcell/v2 v2.8.1 // indirect
 	github.com/ghostiam/protogetter v0.3.8 // indirect
 	github.com/go-kit/log v0.2.1 // indirect
 	github.com/go-logfmt/logfmt v0.6.0 // indirect
@@ -183,6 +185,7 @@ require (
 	github.com/libp2p/go-netroute v0.2.1 // indirect
 	github.com/libp2p/go-reuseport v0.4.0 // indirect
 	github.com/libp2p/go-yamux/v4 v4.0.1 // indirect
+	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/macabu/inamedparam v0.1.3 // indirect
 	github.com/maratori/testableexamples v1.0.0 // indirect
 	github.com/marten-seemann/tcp v0.0.0-20210406111302-dfbc87cc63fd // indirect
@@ -213,6 +216,7 @@ require (
 	github.com/quic-go/webtransport-go v0.6.0 // indirect
 	github.com/raeperd/recvcheck v0.2.0 // indirect
 	github.com/raulk/go-watchdog v1.3.0 // indirect
+	github.com/rivo/tview v0.42.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/rogpeppe/go-internal v1.13.1 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.1 // indirect
