@@ -114,60 +114,7 @@ func createTestDataSet() *logging.DataSet {
 	return dsl.GetDataSet("test")
 }
 
-// Helper function to wrap initTxs for testing
-func testInitTxs(simTime float64, transactionsPerClient int, client *Client, mock APIClient) error {
-	// Temporarily override the client's Client field with our mock
-	// by creating a wrapper that mimics what initTxs does
-	var m sync.Mutex
-	deltas := make([]float64, transactionsPerClient)
-	times := make([]float64, transactionsPerClient)
-
-	txWaitGroup := sync.WaitGroup{}
-	for i := 0; i < transactionsPerClient; i++ {
-		acc, _ := createAccount()
-		txWaitGroup.Add(1)
-
-		go func(n int) {
-			defer txWaitGroup.Done()
-			t := time.Now()
-
-			resp, err := mock.Faucet(context.Background(), &protocol.AcmeFaucet{Url: acc})
-			if err != nil {
-				return
-			}
-			txReq := api.TxnQuery{}
-			txReq.Txid = resp.TransactionHash
-			txReq.Wait = time.Second * 100
-			txReq.IgnorePending = false
-
-			_, err = mock.QueryTx(context.Background(), &txReq)
-			if err != nil {
-				return
-			}
-
-			m.Lock()
-			deltas[n] = time.Since(t).Seconds()
-			client.TxCount++
-			m.Unlock()
-		}(i)
-
-		times[i] = time.Since(start).Seconds()
-	}
-
-	txWaitGroup.Wait()
-	mock.CloseIdleConnections()
-
-	for i := 0; i < transactionsPerClient; i++ {
-		client.DataSet.Lock()
-		client.DataSet.Save("index", (transactionsPerClient*client.Id)+i, 10, true)
-		client.DataSet.Save("simTime", simTime, 10, false)
-		client.DataSet.Save("clientId", client.Id, 10, false)
-		client.DataSet.Save("settlementTime", deltas[i], 10, false)
-		client.DataSet.Unlock()
-	}
-
-	return nil
-}
+// Helper function removed - now we can use initTxs directly with mocks
 
 // TestCreateAccount tests the account creation function
 func TestCreateAccount(t *testing.T) {
@@ -199,13 +146,13 @@ func TestInitTxsBasic(t *testing.T) {
 
 	client := &Client{
 		DataSet: ds,
-		Client:  nil, // Not used in testInitTxs
+		Client:  mock, // Not used in initTxs
 		Id:      0,
 		TxCount: 0,
 	}
 
 	// Test with a small number of transactions
-	err := testInitTxs(0.0, 5, client, mock)
+	err := initTxs(0.0, 5, client)
 	require.NoError(t, err)
 
 	// Verify that faucet was called for each transaction
@@ -239,14 +186,14 @@ func TestInitTxsConcurrency(t *testing.T) {
 	ds := createTestDataSet()
 	client := &Client{
 		DataSet: ds,
-		Client:  nil,
+		Client:  mock,
 		Id:      0,
 		TxCount: 0,
 	}
 
 	// Run with multiple concurrent transactions
 	start := time.Now()
-	err := testInitTxs(0.0, 10, client, mock)
+	err := initTxs(0.0, 10, client)
 	elapsed := time.Since(start)
 
 	require.NoError(t, err)
@@ -268,14 +215,14 @@ func TestInitTxsErrorHandling(t *testing.T) {
 	ds := createTestDataSet()
 	client := &Client{
 		DataSet: ds,
-		Client:  nil,
+		Client:  mock,
 		Id:      0,
 		TxCount: 0,
 	}
 
 	// Should not return error even if faucet fails
-	err := testInitTxs(0.0, 3, client, mock)
-	require.NoError(t, err, "testInitTxs should not return error even if faucet fails")
+	err := initTxs(0.0, 3, client)
+	require.NoError(t, err, "initTxs should not return error even if faucet fails")
 
 	// TxCount should not increment on failures
 	require.Equal(t, 0, client.TxCount, "TxCount should not increment on failures")
@@ -292,13 +239,13 @@ func TestInitTxsQueryTxError(t *testing.T) {
 	ds := createTestDataSet()
 	client := &Client{
 		DataSet: ds,
-		Client:  nil,
+		Client:  mock,
 		Id:      0,
 		TxCount: 0,
 	}
 
-	err := testInitTxs(0.0, 3, client, mock)
-	require.NoError(t, err, "testInitTxs should not return error even if QueryTx fails")
+	err := initTxs(0.0, 3, client)
+	require.NoError(t, err, "initTxs should not return error even if QueryTx fails")
 
 	// TxCount should not increment on QueryTx failures
 	require.Equal(t, 0, client.TxCount, "TxCount should not increment on QueryTx failures")
@@ -307,10 +254,11 @@ func TestInitTxsQueryTxError(t *testing.T) {
 // TestClientStructure tests the Client structure initialization
 func TestClientStructure(t *testing.T) {
 	ds := createTestDataSet()
+	mock := &MockClient{}
 
 	client := &Client{
 		DataSet: ds,
-		Client:  nil,
+		Client:  mock,
 		Id:      42,
 		TxCount: 10,
 	}
@@ -339,7 +287,7 @@ func TestRateLimiting(t *testing.T) {
 	ds := createTestDataSet()
 	client := &Client{
 		DataSet: ds,
-		Client:  nil,
+		Client:  mock,
 		Id:      0,
 		TxCount: 0,
 	}
@@ -352,7 +300,7 @@ func TestRateLimiting(t *testing.T) {
 	startTime := time.Now()
 	for i := 0; i < numBursts; i++ {
 		tick := time.Now()
-		err := testInitTxs(float64(i), transactionsPerClient, client, mock)
+		err := initTxs(float64(i), transactionsPerClient, client)
 		require.NoError(t, err)
 
 		// Sleep to maintain 1 second per burst
@@ -377,12 +325,12 @@ func TestDataSetSaving(t *testing.T) {
 
 	client := &Client{
 		DataSet: ds,
-		Client:  nil,
+		Client:  mock,
 		Id:      5,
 		TxCount: 0,
 	}
 
-	err := testInitTxs(1.5, 2, client, mock)
+	err := initTxs(1.5, 2, client)
 	require.NoError(t, err)
 
 	// Verify dataset has entries
@@ -444,12 +392,12 @@ func TestTransactionHashGeneration(t *testing.T) {
 	ds := createTestDataSet()
 	client := &Client{
 		DataSet: ds,
-		Client:  nil,
+		Client:  mock,
 		Id:      0,
 		TxCount: 0,
 	}
 
-	err := testInitTxs(0.0, 1, client, mock)
+	err := initTxs(0.0, 1, client)
 	require.NoError(t, err)
 	require.Equal(t, 1, mock.GetFaucetCalls())
 	require.Equal(t, 1, mock.GetQueryTxCalls())
@@ -472,7 +420,7 @@ func BenchmarkInitTxs(b *testing.B) {
 
 	client := &Client{
 		DataSet: ds,
-		Client:  nil,
+		Client:  mock,
 		Id:      0,
 		TxCount: 0,
 	}
@@ -480,7 +428,7 @@ func BenchmarkInitTxs(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		client.TxCount = 0 // Reset for each iteration
-		_ = testInitTxs(0.0, 10, client, mock)
+		_ = initTxs(0.0, 10, client)
 	}
 }
 
@@ -538,18 +486,18 @@ func TestTxCountIncrement(t *testing.T) {
 
 	client := &Client{
 		DataSet: ds,
-		Client:  nil,
+		Client:  mock,
 		Id:      0,
 		TxCount: 0,
 	}
 
 	// First batch
-	err := testInitTxs(0.0, 3, client, mock)
+	err := initTxs(0.0, 3, client)
 	require.NoError(t, err)
 	require.Equal(t, 3, client.TxCount)
 
 	// Second batch should add to existing count
-	err = testInitTxs(1.0, 5, client, mock)
+	err = initTxs(1.0, 5, client)
 	require.NoError(t, err)
 	require.Equal(t, 8, client.TxCount)
 }
@@ -561,7 +509,7 @@ func TestSimTimePropagation(t *testing.T) {
 
 	client := &Client{
 		DataSet: ds,
-		Client:  nil,
+		Client:  mock,
 		Id:      0,
 		TxCount: 0,
 	}
@@ -569,7 +517,7 @@ func TestSimTimePropagation(t *testing.T) {
 	// Test with different simulation times
 	simTimes := []float64{0.0, 1.5, 2.0, 10.5}
 	for _, simTime := range simTimes {
-		err := testInitTxs(simTime, 2, client, mock)
+		err := initTxs(simTime, 2, client)
 		require.NoError(t, err)
 	}
 
@@ -630,12 +578,12 @@ func TestFaucetURL(t *testing.T) {
 	ds := createTestDataSet()
 	client := &Client{
 		DataSet: ds,
-		Client:  nil,
+		Client:  mock,
 		Id:      0,
 		TxCount: 0,
 	}
 
-	err := testInitTxs(0.0, 1, client, mock)
+	err := initTxs(0.0, 1, client)
 	require.NoError(t, err)
 	require.NotEmpty(t, receivedURL, "Faucet should receive a URL")
 	require.Contains(t, receivedURL, "acc://")

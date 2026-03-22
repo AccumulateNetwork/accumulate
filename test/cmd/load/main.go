@@ -162,10 +162,17 @@ func initTxs(simTime float64, transactionsPerClient int, c *Client) error {
 	return nil
 }
 
+// ClientInterface defines the interface for API client operations
+type ClientInterface interface {
+	Faucet(context.Context, *protocol.AcmeFaucet) (*api.TxResponse, error)
+	QueryTx(context.Context, *api.TxnQuery) (*api.TransactionQueryResponse, error)
+	CloseIdleConnections()
+}
+
 // Client structure for client info
 type Client struct {
 	DataSet *logging.DataSet
-	Client  *client.Client
+	Client  ClientInterface
 	Id      int
 	TxCount int
 }
