@@ -62,6 +62,7 @@ require (
 	github.com/libp2p/go-libp2p-kad-dht v0.25.2
 	github.com/libp2p/go-libp2p-pubsub v0.10.0
 	github.com/mattn/go-shellwords v1.0.12
+	github.com/mattn/go-sqlite3 v1.14.37
 	github.com/mr-tron/base58 v1.2.0
 	github.com/multiformats/go-multiaddr v0.12.2
 	github.com/multiformats/go-multiaddr-fmt v0.1.0
