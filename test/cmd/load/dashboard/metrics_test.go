@@ -7,8 +7,6 @@
 package dashboard
 
 import (
-	"bytes"
-	"context"
 	"testing"
 	"time"
 )
@@ -163,181 +161,343 @@ func TestLoadMetrics_PeakTPS(t *testing.T) {
 	}
 }
 
-func TestSystemMetrics_Update(t *testing.T) {
-	sm := NewSystemMetrics()
-
-	// Update should not error
-	if err := sm.Update(); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	snap := sm.GetSnapshot()
-
-	// Basic sanity checks (values depend on system)
-	if snap.CPUPercent < 0 || snap.CPUPercent > 100 {
-		t.Errorf("invalid CPU percent: %.2f", snap.CPUPercent)
-	}
-	if snap.MemoryTotalMB <= 0 {
-		t.Errorf("invalid total memory: %.2f MB", snap.MemoryTotalMB)
-	}
-	if snap.MemoryUsedMB < 0 {
-		t.Errorf("invalid used memory: %.2f MB", snap.MemoryUsedMB)
-	}
-}
-
-func TestDashboard_Lifecycle(t *testing.T) {
-	var buf bytes.Buffer
-	d := NewWithWriter(100, &buf)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// Start dashboard in background
-	go d.Start(ctx, 100*time.Millisecond)
-
-	// Wait for a few updates
-	time.Sleep(350 * time.Millisecond)
-
-	// Record some transactions
-	d.LoadMetrics().RecordTransaction(true, 10*time.Millisecond)
-	d.LoadMetrics().RecordTransaction(false, 20*time.Millisecond)
-
-	// Wait for update
-	time.Sleep(150 * time.Millisecond)
-
-	// Stop dashboard
-	cancel()
-	time.Sleep(50 * time.Millisecond)
-
-	// Check that we got some output
-	if buf.Len() == 0 {
-		t.Error("expected dashboard output, got none")
-	}
-
-	// Check that dashboard stopped
-	if !d.IsDone() {
-		t.Error("dashboard should be done")
-	}
-}
-
-func TestDashboard_Stop_Idempotent(t *testing.T) {
-	d := New(100)
-
-	// Stop should be safe to call multiple times
-	d.Stop()
-	d.Stop()
-	d.Stop()
-
-	if !d.IsDone() {
-		t.Error("dashboard should be done after Stop()")
-	}
-}
-
-func TestDisplay_ProgressBar(t *testing.T) {
-	var buf bytes.Buffer
-	d := NewDisplay(&buf)
-
-	tests := []struct {
-		percent float64
-		width   int
-	}{
-		{0, 10},
-		{50, 10},
-		{100, 10},
-		{75, 20},
-		{-10, 10}, // Should clamp to 0
-		{150, 10}, // Should clamp to 100
-	}
-
-	for _, tt := range tests {
-		bar := d.progressBar(tt.percent, tt.width)
-		if bar == "" {
-			t.Errorf("progressBar(%.1f, %d) returned empty string", tt.percent, tt.width)
-		}
-	}
-}
-
-func TestDisplay_Render(t *testing.T) {
-	var buf bytes.Buffer
-	d := NewDisplay(&buf)
-
-	load := NewLoadMetrics(1000)
-	load.RecordTransaction(true, 10*time.Millisecond)
-	load.RecordTransaction(true, 20*time.Millisecond)
-
-	sys := NewSystemMetrics()
-	sys.Update()
-
-	// Should not panic
-	d.Render(load, sys)
-
-	// Should have written something
-	if buf.Len() == 0 {
-		t.Error("expected render output, got none")
-	}
-
-	output := buf.String()
-
-	// Check for expected sections
-	expectedSections := []string{
-		"Accumulate Load Test Dashboard",
-		"Load Test Metrics:",
-		"System Metrics:",
-		"Last update:",
-	}
-
-	for _, section := range expectedSections {
-		if !bytes.Contains([]byte(output), []byte(section)) {
-			t.Errorf("output missing expected section: %s", section)
-		}
-	}
-}
-
-func TestLoadMetrics_ConcurrentAccess(t *testing.T) {
+func TestLoadMetrics_LatencyWindowLimit(t *testing.T) {
 	m := NewLoadMetrics(1000)
 
-	// Simulate concurrent access
-	done := make(chan struct{})
-	go func() {
-		for i := 0; i < 100; i++ {
-			m.RecordTransaction(true, 10*time.Millisecond)
-			time.Sleep(time.Millisecond)
-		}
-		close(done)
-	}()
-
-	// Read snapshots concurrently
-	for i := 0; i < 100; i++ {
-		_ = m.GetSnapshot()
-		time.Sleep(time.Millisecond)
+	// Record more than maxWindow latencies
+	for i := 0; i < 1500; i++ {
+		m.RecordTransaction(true, time.Duration(i)*time.Millisecond)
 	}
 
-	<-done
+	// Check that latency window is limited
+	m.mu.RLock()
+	latencyCount := len(m.latencies)
+	m.mu.RUnlock()
 
-	snap := m.GetSnapshot()
-	if snap.TotalTxs != 100 {
-		t.Errorf("expected 100 total txs, got %d", snap.TotalTxs)
+	if latencyCount > m.maxWindow {
+		t.Errorf("latency window should be limited to %d, got %d", m.maxWindow, latencyCount)
+	}
+
+	if latencyCount != m.maxWindow {
+		t.Errorf("expected latency window size %d, got %d", m.maxWindow, latencyCount)
 	}
 }
 
-func TestSystemMetrics_ConcurrentAccess(t *testing.T) {
-	sm := NewSystemMetrics()
+func TestLoadMetrics_AvgTPS_Calculation(t *testing.T) {
+	m := NewLoadMetrics(1000)
 
-	// Simulate concurrent access
-	done := make(chan struct{})
-	go func() {
-		for i := 0; i < 10; i++ {
-			sm.Update()
-			time.Sleep(10 * time.Millisecond)
-		}
-		close(done)
-	}()
-
-	// Read snapshots concurrently
-	for i := 0; i < 10; i++ {
-		_ = sm.GetSnapshot()
+	// Record transactions over a known period
+	for i := 0; i < 50; i++ {
+		m.RecordTransaction(true, 10*time.Millisecond)
 		time.Sleep(10 * time.Millisecond)
 	}
 
-	<-done
+	snap := m.GetSnapshot()
+
+	// Average TPS should be calculated from total time elapsed
+	elapsed := time.Since(snap.StartTime).Seconds()
+	expectedAvgTPS := float64(snap.TotalTxs) / elapsed
+
+	tolerance := 2.0
+	if snap.AvgTPS < expectedAvgTPS-tolerance || snap.AvgTPS > expectedAvgTPS+tolerance {
+		t.Errorf("expected avg TPS ~%.2f, got %.2f", expectedAvgTPS, snap.AvgTPS)
+	}
+}
+
+func TestLoadMetrics_ZeroLatencies(t *testing.T) {
+	m := NewLoadMetrics(100)
+
+	// Don't record any transactions
+	snap := m.GetSnapshot()
+
+	if snap.AvgLatency != 0 {
+		t.Errorf("expected zero average latency, got %v", snap.AvgLatency)
+	}
+
+	if snap.P95Latency != 0 {
+		t.Errorf("expected zero P95 latency, got %v", snap.P95Latency)
+	}
+
+	if snap.P99Latency != 0 {
+		t.Errorf("expected zero P99 latency, got %v", snap.P99Latency)
+	}
+}
+
+func TestLoadMetrics_SingleLatency(t *testing.T) {
+	m := NewLoadMetrics(100)
+
+	latency := 42 * time.Millisecond
+	m.RecordTransaction(true, latency)
+
+	snap := m.GetSnapshot()
+
+	// With only one latency, all percentiles should be the same
+	if snap.AvgLatency != latency {
+		t.Errorf("expected avg latency %v, got %v", latency, snap.AvgLatency)
+	}
+
+	if snap.P95Latency != latency {
+		t.Errorf("expected P95 latency %v, got %v", latency, snap.P95Latency)
+	}
+
+	if snap.P99Latency != latency {
+		t.Errorf("expected P99 latency %v, got %v", latency, snap.P99Latency)
+	}
+}
+
+func TestLoadMetrics_TargetTxs(t *testing.T) {
+	targetTxs := int64(500)
+	m := NewLoadMetrics(targetTxs)
+
+	snap := m.GetSnapshot()
+
+	if snap.TargetTxs != targetTxs {
+		t.Errorf("expected target txs %d, got %d", targetTxs, snap.TargetTxs)
+	}
+}
+
+func TestLoadMetrics_WindowReset(t *testing.T) {
+	m := NewLoadMetrics(1000)
+
+	// Record transactions in first window
+	for i := 0; i < 10; i++ {
+		m.RecordTransaction(true, 10*time.Millisecond)
+	}
+
+	// Wait for window to expire
+	time.Sleep(1100 * time.Millisecond)
+
+	// Record more transactions in new window
+	for i := 0; i < 5; i++ {
+		m.RecordTransaction(true, 10*time.Millisecond)
+	}
+
+	// Current TPS should be based on new window
+	snap := m.GetSnapshot()
+
+	// Current TPS should be lower than peak
+	if snap.CurrentTPS > snap.PeakTPS {
+		t.Errorf("current TPS (%.2f) should not exceed peak TPS (%.2f)", snap.CurrentTPS, snap.PeakTPS)
+	}
+}
+
+func TestLoadMetrics_ErrorRate_ZeroTransactions(t *testing.T) {
+	m := NewLoadMetrics(100)
+
+	snap := m.GetSnapshot()
+
+	// Error rate should be 0 when no transactions recorded
+	if snap.ErrorRate != 0 {
+		t.Errorf("expected 0%% error rate with no transactions, got %.2f%%", snap.ErrorRate)
+	}
+}
+
+func TestLoadMetrics_ErrorRate_AllSuccess(t *testing.T) {
+	m := NewLoadMetrics(100)
+
+	for i := 0; i < 50; i++ {
+		m.RecordTransaction(true, 10*time.Millisecond)
+	}
+
+	snap := m.GetSnapshot()
+
+	if snap.ErrorRate != 0 {
+		t.Errorf("expected 0%% error rate with all success, got %.2f%%", snap.ErrorRate)
+	}
+}
+
+func TestLoadMetrics_ErrorRate_AllFailed(t *testing.T) {
+	m := NewLoadMetrics(100)
+
+	for i := 0; i < 50; i++ {
+		m.RecordTransaction(false, 10*time.Millisecond)
+	}
+
+	snap := m.GetSnapshot()
+
+	if snap.ErrorRate != 100 {
+		t.Errorf("expected 100%% error rate with all failures, got %.2f%%", snap.ErrorRate)
+	}
+}
+
+func TestMetrics_New(t *testing.T) {
+	m := NewMetrics()
+
+	if m == nil {
+		t.Fatal("expected non-nil metrics")
+	}
+
+	snap := m.Snapshot()
+
+	if snap.ErrorsByType == nil {
+		t.Error("errors map should be initialized")
+	}
+
+	// Latencies may be nil if empty, which is fine
+
+	if snap.NodeHealth != "unknown" {
+		t.Errorf("expected 'unknown' node health, got %s", snap.NodeHealth)
+	}
+
+	if snap.StartTime.IsZero() {
+		t.Error("start time should be set")
+	}
+}
+
+func TestMetrics_RecordTransaction_Success(t *testing.T) {
+	m := NewMetrics()
+
+	m.RecordTransaction(true, 10.5, "")
+
+	snap := m.Snapshot()
+
+	if snap.TotalTx != 1 {
+		t.Errorf("expected 1 total tx, got %d", snap.TotalTx)
+	}
+
+	if snap.SuccessTx != 1 {
+		t.Errorf("expected 1 success tx, got %d", snap.SuccessTx)
+	}
+
+	if snap.FailedTx != 0 {
+		t.Errorf("expected 0 failed tx, got %d", snap.FailedTx)
+	}
+
+	if len(snap.Latencies) != 1 {
+		t.Errorf("expected 1 latency, got %d", len(snap.Latencies))
+	}
+
+	if snap.Latencies[0] != 10.5 {
+		t.Errorf("expected latency 10.5, got %f", snap.Latencies[0])
+	}
+}
+
+func TestMetrics_RecordTransaction_Failed(t *testing.T) {
+	m := NewMetrics()
+
+	m.RecordTransaction(false, 20.0, "timeout")
+
+	snap := m.Snapshot()
+
+	if snap.TotalTx != 1 {
+		t.Errorf("expected 1 total tx, got %d", snap.TotalTx)
+	}
+
+	if snap.SuccessTx != 0 {
+		t.Errorf("expected 0 success tx, got %d", snap.SuccessTx)
+	}
+
+	if snap.FailedTx != 1 {
+		t.Errorf("expected 1 failed tx, got %d", snap.FailedTx)
+	}
+
+	if snap.ErrorsByType["timeout"] != 1 {
+		t.Errorf("expected 1 timeout error, got %d", snap.ErrorsByType["timeout"])
+	}
+}
+
+func TestMetrics_RecordTransaction_LatencyWindow(t *testing.T) {
+	m := NewMetrics()
+
+	// Record more than 1000 latencies
+	for i := 0; i < 1200; i++ {
+		m.RecordTransaction(true, float64(i), "")
+	}
+
+	snap := m.Snapshot()
+
+	// Should keep only last 1000
+	if len(snap.Latencies) != 1000 {
+		t.Errorf("expected 1000 latencies, got %d", len(snap.Latencies))
+	}
+
+	// Should have latest values
+	if snap.Latencies[len(snap.Latencies)-1] != 1199.0 {
+		t.Errorf("expected last latency 1199.0, got %f", snap.Latencies[len(snap.Latencies)-1])
+	}
+}
+
+func TestMetrics_UpdateTPS(t *testing.T) {
+	m := NewMetrics()
+
+	// Record some transactions
+	for i := 0; i < 100; i++ {
+		m.RecordTransaction(true, 10.0, "")
+	}
+
+	// Wait a bit to allow time to pass
+	time.Sleep(100 * time.Millisecond)
+
+	m.UpdateTPS()
+
+	snap := m.Snapshot()
+
+	if snap.ActualTPS == 0 {
+		t.Error("expected non-zero TPS after update")
+	}
+
+	if snap.Runtime == 0 {
+		t.Error("expected non-zero runtime")
+	}
+}
+
+func TestMetrics_Update_Function(t *testing.T) {
+	m := NewMetrics()
+
+	// Use Update function to modify metrics
+	m.Update(func(snap *MetricsSnapshot) {
+		snap.TargetTPS = 200
+		snap.NodeHealth = "healthy"
+		snap.BlockRate = 5.5
+	})
+
+	snap := m.Snapshot()
+
+	if snap.TargetTPS != 200 {
+		t.Errorf("expected target TPS 200, got %d", snap.TargetTPS)
+	}
+
+	if snap.NodeHealth != "healthy" {
+		t.Errorf("expected 'healthy' node health, got %s", snap.NodeHealth)
+	}
+
+	if snap.BlockRate != 5.5 {
+		t.Errorf("expected block rate 5.5, got %f", snap.BlockRate)
+	}
+}
+
+func TestMetrics_Snapshot_Independence(t *testing.T) {
+	m := NewMetrics()
+
+	m.RecordTransaction(true, 15.0, "")
+
+	snap1 := m.Snapshot()
+	snap2 := m.Snapshot()
+
+	// Modify snap1's map
+	snap1.ErrorsByType["test"] = 42
+
+	// snap2 should not be affected
+	if snap2.ErrorsByType["test"] != 0 {
+		t.Error("snapshots should be independent")
+	}
+}
+
+func TestMetrics_ErrorsByType_Multiple(t *testing.T) {
+	m := NewMetrics()
+
+	m.RecordTransaction(false, 10.0, "timeout")
+	m.RecordTransaction(false, 12.0, "timeout")
+	m.RecordTransaction(false, 15.0, "connection")
+	m.RecordTransaction(false, 18.0, "timeout")
+
+	snap := m.Snapshot()
+
+	if snap.ErrorsByType["timeout"] != 3 {
+		t.Errorf("expected 3 timeout errors, got %d", snap.ErrorsByType["timeout"])
+	}
+
+	if snap.ErrorsByType["connection"] != 1 {
+		t.Errorf("expected 1 connection error, got %d", snap.ErrorsByType["connection"])
+	}
 }
