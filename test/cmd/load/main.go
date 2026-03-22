@@ -13,7 +13,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
@@ -22,16 +24,19 @@ import (
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/test/cmd/load/dashboard"
 )
 
 var serverUrl string
 var transactions int
 var duration int
 var maxGoroutines = 25
+var enableDashboard bool
 
 // Start logging with dataset log
 var dsl = logging.DataSetLog{}
 var start time.Time
+var dash *dashboard.Dashboard
 
 func main() {
 	flag.Parse()
@@ -49,6 +54,28 @@ func main() {
 	clients, err := initializeClients(maxNumClients)
 	if err != nil {
 		log.Fatalf("%v, failed to initialize client %d", err, maxNumClients)
+	}
+
+	// Initialize dashboard if enabled
+	if enableDashboard {
+		dash = dashboard.New(int64(totalTransactions))
+
+		// Start dashboard in background with 1-second updates
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		go dash.Start(ctx, 1*time.Second)
+		defer dash.Stop()
+
+		// Setup signal handler for clean shutdown
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+		go func() {
+			<-sigChan
+			cancel()
+			dash.Stop()
+			os.Exit(0)
+		}()
 	}
 
 	// Start the global clock
@@ -87,6 +114,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("cannot dump data set to disk, %v", err)
 	}
+
+	// If dashboard is enabled, wait a moment before exiting to show final results
+	if enableDashboard {
+		time.Sleep(3 * time.Second)
+	}
 }
 
 func init() {
@@ -94,6 +126,7 @@ func init() {
 	flag.IntVar(&transactions, "t", 100, "Number of transactions per second")
 	flag.IntVar(&maxGoroutines, "r", 25, "Number of transactions per client (i.e. go routines)")
 	flag.IntVar(&duration, "d", 5, "Throttle go routines per client")
+	flag.BoolVar(&enableDashboard, "dashboard", false, "Enable real-time dashboard")
 }
 
 // Init account creation and transaction sending
@@ -120,6 +153,10 @@ func initTxs(simTime float64, transactionsPerClient int, c *Client) error {
 			resp, err := c.Client.Faucet(context.Background(), &protocol.AcmeFaucet{Url: acc})
 			if err != nil {
 				log.Printf("Error: fauceting account with error: %v, on client %d, tx %d\n", err, c.Id, c.TxCount+1)
+				// Record failed transaction in dashboard
+				if dash != nil {
+					dash.LoadMetrics().RecordTransaction(false, time.Since(t))
+				}
 				return
 			}
 			txReq := api.TxnQuery{}
@@ -130,13 +167,23 @@ func initTxs(simTime float64, transactionsPerClient int, c *Client) error {
 			_, err = c.Client.QueryTx(context.Background(), &txReq)
 			if err != nil {
 				log.Printf("Error: waiting for transaction to complete account with error: %v, on client %d, tx %d\n", err, c.Id, c.TxCount+1)
+				// Record failed transaction in dashboard
+				if dash != nil {
+					dash.LoadMetrics().RecordTransaction(false, time.Since(t))
+				}
 				return
 			}
 
+			latency := time.Since(t)
 			m.Lock()
-			deltas[n] = time.Since(t).Seconds()
+			deltas[n] = latency.Seconds()
 			c.TxCount++
 			m.Unlock()
+
+			// Record successful transaction in dashboard
+			if dash != nil {
+				dash.LoadMetrics().RecordTransaction(true, latency)
+			}
 		}(i)
 
 		//capture the timestamp of when the transaction started
