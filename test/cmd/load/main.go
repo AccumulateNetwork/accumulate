@@ -205,6 +205,11 @@ func initializeClients(c int) ([]*Client, error) {
 		}
 	}
 
+	// If no nodes were found, fall back to the server URL
+	if len(addrs) == 0 {
+		addrs = []string{serverUrl}
+	}
+
 	//initialize the datasets and clients
 	clients := make([]*Client, c)
 	for i := 0; i < c; i++ {
