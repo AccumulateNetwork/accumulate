@@ -123,15 +123,16 @@ func TestVersion(t *testing.T) {
 	require.NoError(t, sub.Commit())
 	require.NoError(t, batch.Commit())
 
-	// Unsafe
+	// Unsafe - concurrent writes should produce a conflict error
 	batch = root.Begin(true)
 	sub = batch.Begin(true)
 	a = get(batch)
 	b := get(sub)
 	set(batch, a, 5)
 	set(sub, b, 6)
-	require.NoError(t, sub.Commit())
-	require.NoError(t, batch.Commit())
+	err := sub.Commit()
+	require.Error(t, err, "expected conflict error when committing concurrent writes")
+	require.ErrorContains(t, err, "conflict")
 }
 
 func TestNonLedgerEvents(t *testing.T) {
