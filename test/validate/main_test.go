@@ -55,6 +55,11 @@ func TestValidate(t *testing.T) {
 
 // TestValidateAPI runs the validation test suite against the simulator via API
 // v2 over P2P.
+//
+// Note: This test has known reliability issues with P2P cleanup. When the test
+// finishes, libp2p goroutines (handlePeerDead, handleNewMessage, etc.) can hang
+// waiting for streams to close. This is a known libp2p issue when both sides
+// close simultaneously. The test is skipped in CI until this can be resolved.
 func TestValidateAPI(t *testing.T) {
 	acctesting.SkipCI(t, "Not sufficiently reliable yet")
 
@@ -66,7 +71,6 @@ func TestValidateAPI(t *testing.T) {
 
 	// Start listening
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	err := s.sim.ListenAndServe(ctx, simulator.ListenOptions{
 		ListenP2Pv3: true,
 	})
@@ -81,7 +85,12 @@ func TestValidateAPI(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = node.Close() })
+
+	// Cleanup in the correct order: client node first, then simulator
+	t.Cleanup(func() {
+		_ = node.Close()
+		cancel()
+	})
 
 	// Run the faucet through the API
 	handler, err := message.NewHandler(message.Faucet{Faucet: s.faucetSvc})
@@ -210,6 +219,7 @@ func setupSim(t *testing.T, net *accumulated.NetworkInit) (*simulator.Simulator,
 		Submitter: sim.Services(),
 		Querier:   sim.Services(),
 		Events:    sim.Services(),
+		Amount:    20000, // 20k ACME per faucet call (enough for Purchase(1e6) at mainnet oracle)
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { faucetSvc.Stop() })
