@@ -94,8 +94,21 @@ func FullRestore(db database.Beginner, file ioutil2.SectionReader, logger log.Lo
 		return errors.UnknownError.Wrap(err)
 	}
 
-	batch := db.Begin(true)
-	defer batch.Discard()
+	// If db is a batch, we need to update the BPT now before continuing.
+	// We'll also reuse it for the post-restore work without committing.
+	var batch *database.Batch
+	var providedBatch bool
+	if b, ok := db.(*database.Batch); ok {
+		batch = b
+		providedBatch = true
+		err = batch.UpdateBPT()
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+	} else {
+		batch = db.Begin(true)
+		defer batch.Discard()
+	}
 
 	// Rebuild the synthetic transaction index index
 	record := batch.Account(network.Synthetic())
@@ -122,6 +135,10 @@ func FullRestore(db database.Beginner, file ioutil2.SectionReader, logger log.Lo
 		}
 	}
 
-	err = batch.Commit()
-	return errors.UnknownError.Wrap(err)
+	// Only commit if we created the batch ourselves
+	if !providedBatch {
+		err = batch.Commit()
+		return errors.UnknownError.Wrap(err)
+	}
+	return nil
 }

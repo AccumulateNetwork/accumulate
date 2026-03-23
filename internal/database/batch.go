@@ -285,3 +285,8 @@ func (b *Batch) UpdatedAccounts() []*Account {
 	}
 	return accounts
 }
+
+// IsChildBatch returns true if this batch has a parent batch.
+func (b *Batch) IsChildBatch() bool {
+	return b.parent != nil
+}

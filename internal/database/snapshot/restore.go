@@ -28,6 +28,7 @@ type RestoreVisitor struct {
 
 	DisableWriteBatching bool
 	CompressChains       bool
+	providedBatch        bool // true if db is a batch, not a database
 }
 
 func Restore(db database.Beginner, file ioutil2.SectionReader, logger log.Logger) error {
@@ -39,6 +40,11 @@ func NewRestoreVisitor(db database.Beginner, logger log.Logger) *RestoreVisitor 
 	v := new(RestoreVisitor)
 	v.logger.L = logger
 	v.db = db
+	// Check if db is a batch (has a parent field) rather than a database
+	if batch, ok := db.(*database.Batch); ok {
+		v.providedBatch = true
+		v.batch = batch
+	}
 	return v
 }
 
@@ -95,6 +101,7 @@ func (v *RestoreVisitor) VisitAccount(acct *Account, i int) error {
 
 	// Add chain entries 10000 at a time
 	for len(pos) > 0 {
+		// Get a fresh account record from the current batch
 		record := v.batch.Account(acct.Url)
 		for _, c := range acct.Chains {
 			start, ok := pos[c.Name]
@@ -134,6 +141,7 @@ func (v *RestoreVisitor) VisitAccount(acct *Account, i int) error {
 
 		const batchSize = chainBatchSize / 256 // Each mark point has 256 entries
 		for len(pos) > 0 {
+			// Get a fresh account record from the current batch
 			record := v.batch.Account(acct.Url)
 			for _, c := range acct.Chains {
 				start, ok := pos[c.Name]
@@ -222,6 +230,10 @@ func (v *RestoreVisitor) VisitSignature(sig *Signature, i int) error {
 func (v *RestoreVisitor) visit(i, threshold int, msg string, force bool) error {
 	if i == 0 {
 		v.start = time.Now()
+		// Initialize the batch if not already set
+		if v.batch == nil {
+			v.batch = v.db.Begin(true)
+		}
 	}
 
 	begin := force || v.batch == nil
@@ -242,12 +254,15 @@ func (v *RestoreVisitor) visit(i, threshold int, msg string, force bool) error {
 }
 
 func (v *RestoreVisitor) refreshBatch() error {
+	// If we were provided a batch (e.g., from db.Update()), don't refresh it.
+	// The caller is responsible for committing. Just keep using the same batch.
+	if v.providedBatch {
+		return nil
+	}
+
+	// Working with top-level batches - commit the current one and create a new one
 	if v.batch != nil {
-		err := v.batch.UpdateBPT()
-		if err != nil {
-			return errors.UnknownError.Wrap(err)
-		}
-		err = v.batch.Commit()
+		err := v.batch.Commit()
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
 		}
@@ -262,6 +277,13 @@ func (v *RestoreVisitor) end(count int, msg string) error {
 	}
 	d := time.Since(v.start)
 	v.logger.Info(msg, "module", "restore", "count", count, "duration", d, "per-second", float64(count)/d.Seconds())
+
+	// If we were provided a batch, don't commit it here.
+	// The caller is responsible for committing.
+	if v.providedBatch {
+		return nil
+	}
+
 	err := v.batch.UpdateBPT()
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
