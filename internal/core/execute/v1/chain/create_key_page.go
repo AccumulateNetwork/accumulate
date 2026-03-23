@@ -44,7 +44,7 @@ func (CreateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 	for _, key := range body.Keys {
 		switch len(key.KeyHash) {
 		case 0:
-			continue
+			return nil, errors.BadRequest.WithFormat("public key hash is missing")
 		case 32:
 			if uniqueKeys[string(key.KeyHash)] {
 				return nil, fmt.Errorf("duplicate keys: signing keys of a keypage must be unique")
