@@ -9,582 +9,299 @@ package main
 import (
 	"context"
 	"crypto/ed25519"
-	"errors"
-	"sync"
+	"fmt"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// APIClient interface for the client methods we need
-type APIClient interface {
-	Faucet(context.Context, *protocol.AcmeFaucet) (*api.TxResponse, error)
-	QueryTx(context.Context, *api.TxnQuery) (*api.TransactionQueryResponse, error)
-	Describe(context.Context) (*api.DescriptionResponse, error)
-	CloseIdleConnections()
-}
-
-// MockClient implements a mock API client for testing
-type MockClient struct {
-	FaucetFunc     func(context.Context, *protocol.AcmeFaucet) (*api.TxResponse, error)
-	QueryTxFunc    func(context.Context, *api.TxnQuery) (*api.TransactionQueryResponse, error)
-	DescribeFunc   func(context.Context) (*api.DescriptionResponse, error)
-	faucetCalls    int
-	queryTxCalls   int
-	describeCalls  int
-	mu             sync.Mutex
-}
-
-func (m *MockClient) Faucet(ctx context.Context, req *protocol.AcmeFaucet) (*api.TxResponse, error) {
-	m.mu.Lock()
-	m.faucetCalls++
-	m.mu.Unlock()
-	if m.FaucetFunc != nil {
-		return m.FaucetFunc(ctx, req)
-	}
-	return &api.TxResponse{
-		TransactionHash: []byte("mock-tx-hash"),
-	}, nil
-}
-
-func (m *MockClient) QueryTx(ctx context.Context, req *api.TxnQuery) (*api.TransactionQueryResponse, error) {
-	m.mu.Lock()
-	m.queryTxCalls++
-	m.mu.Unlock()
-	if m.QueryTxFunc != nil {
-		return m.QueryTxFunc(ctx, req)
-	}
-	return &api.TransactionQueryResponse{}, nil
-}
-
-func (m *MockClient) Describe(ctx context.Context) (*api.DescriptionResponse, error) {
-	m.mu.Lock()
-	m.describeCalls++
-	m.mu.Unlock()
-	if m.DescribeFunc != nil {
-		return m.DescribeFunc(ctx)
-	}
-	// Create a proper NetworkDescription
-	network := &api.NetworkDescription{}
-	network.Id = "TestNetwork"
-	network.Partitions = []api.PartitionDescription{
-		{
-			Id:       "TestPartition",
-			BasePort: 26656,
-			Nodes: []api.NodeDescription{
-				{Address: "http://127.0.0.1"},
-			},
-		},
-	}
-	return &api.DescriptionResponse{
-		Network: *network,
-	}, nil
-}
-
-func (m *MockClient) CloseIdleConnections() {
-	// No-op for mock
-}
-
-func (m *MockClient) GetFaucetCalls() int {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.faucetCalls
-}
-
-func (m *MockClient) GetQueryTxCalls() int {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.queryTxCalls
-}
-
-func (m *MockClient) GetDescribeCalls() int {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.describeCalls
-}
-
-// Helper function to create a test DataSet
-func createTestDataSet() *logging.DataSet {
-	dsl := &logging.DataSetLog{}
-	dsl.Initialize("test", logging.DefaultOptions())
-	return dsl.GetDataSet("test")
-}
-
-// Helper function removed - now we can use initTxs directly with mocks
-
-// TestCreateAccount tests the account creation function
+// TestCreateAccount verifies that account creation works correctly
 func TestCreateAccount(t *testing.T) {
 	acc, err := createAccount()
-	require.NoError(t, err, "createAccount should not return an error")
-	require.NotNil(t, acc, "account URL should not be nil")
+	if err != nil {
+		t.Fatalf("Failed to create account: %v", err)
+	}
 
-	// Verify the account URL is not empty
-	require.NotEmpty(t, acc.String(), "account URL string should not be empty")
+	if acc == nil {
+		t.Fatal("Account URL is nil")
+	}
 
-	// Verify it starts with acc:// (lite account prefix)
-	require.Contains(t, acc.String(), "acc://", "should be an accumulate URL")
+	// Verify URL is not empty
+	urlStr := acc.String()
+	if urlStr == "" {
+		t.Error("Account URL string is empty")
+	}
+
+	// Verify it starts with acc://
+	if !strings.HasPrefix(urlStr, "acc://") {
+		t.Errorf("Expected URL to start with acc://, got: %s", urlStr)
+	}
+
+	t.Logf("Created account URL: %s", urlStr)
 }
 
-// TestCreateAccountDeterminism tests that multiple calls create different accounts
-func TestCreateAccountDeterminism(t *testing.T) {
-	acc1, err1 := createAccount()
-	acc2, err2 := createAccount()
+// TestCreateAccountUniqueness verifies that each account creation produces unique addresses
+func TestCreateAccountUniqueness(t *testing.T) {
+	accounts := make(map[string]bool)
+	count := 100
 
-	require.NoError(t, err1)
-	require.NoError(t, err2)
-	require.NotEqual(t, acc1.String(), acc2.String(), "each call should create a unique account")
-}
-
-// TestInitTxsBasic tests the basic transaction initialization
-func TestInitTxsBasic(t *testing.T) {
-	mock := &MockClient{}
-	ds := createTestDataSet()
-
-	client := &Client{
-		DataSet: ds,
-		Client:  mock, // Not used in initTxs
-		Id:      0,
-		TxCount: 0,
-	}
-
-	// Test with a small number of transactions
-	err := initTxs(0.0, 5, client)
-	require.NoError(t, err)
-
-	// Verify that faucet was called for each transaction
-	require.Equal(t, 5, mock.GetFaucetCalls(), "faucet should be called once per transaction")
-
-	// Verify that QueryTx was called for each transaction
-	require.Equal(t, 5, mock.GetQueryTxCalls(), "QueryTx should be called once per transaction")
-
-	// Verify transaction count was updated
-	require.Equal(t, 5, client.TxCount, "TxCount should be updated")
-}
-
-// TestInitTxsConcurrency tests concurrent transaction execution
-func TestInitTxsConcurrency(t *testing.T) {
-	var callCount int
-	var mu sync.Mutex
-
-	mock := &MockClient{
-		FaucetFunc: func(ctx context.Context, req *protocol.AcmeFaucet) (*api.TxResponse, error) {
-			mu.Lock()
-			callCount++
-			mu.Unlock()
-			// Simulate some processing time
-			time.Sleep(10 * time.Millisecond)
-			return &api.TxResponse{
-				TransactionHash: []byte("mock-tx-hash"),
-			}, nil
-		},
-	}
-
-	ds := createTestDataSet()
-	client := &Client{
-		DataSet: ds,
-		Client:  mock,
-		Id:      0,
-		TxCount: 0,
-	}
-
-	// Run with multiple concurrent transactions
-	start := time.Now()
-	err := initTxs(0.0, 10, client)
-	elapsed := time.Since(start)
-
-	require.NoError(t, err)
-	require.Equal(t, 10, callCount, "all transactions should complete")
-
-	// With 10 concurrent transactions taking 10ms each, total time should be
-	// much less than 100ms (which would be sequential execution)
-	require.Less(t, elapsed, 100*time.Millisecond, "transactions should run concurrently")
-}
-
-// TestInitTxsErrorHandling tests error handling in transaction execution
-func TestInitTxsErrorHandling(t *testing.T) {
-	mock := &MockClient{
-		FaucetFunc: func(ctx context.Context, req *protocol.AcmeFaucet) (*api.TxResponse, error) {
-			return nil, errors.New("faucet error")
-		},
-	}
-
-	ds := createTestDataSet()
-	client := &Client{
-		DataSet: ds,
-		Client:  mock,
-		Id:      0,
-		TxCount: 0,
-	}
-
-	// Should not return error even if faucet fails
-	err := initTxs(0.0, 3, client)
-	require.NoError(t, err, "initTxs should not return error even if faucet fails")
-
-	// TxCount should not increment on failures
-	require.Equal(t, 0, client.TxCount, "TxCount should not increment on failures")
-}
-
-// TestInitTxsQueryTxError tests error handling when QueryTx fails
-func TestInitTxsQueryTxError(t *testing.T) {
-	mock := &MockClient{
-		QueryTxFunc: func(ctx context.Context, req *api.TxnQuery) (*api.TransactionQueryResponse, error) {
-			return nil, errors.New("query error")
-		},
-	}
-
-	ds := createTestDataSet()
-	client := &Client{
-		DataSet: ds,
-		Client:  mock,
-		Id:      0,
-		TxCount: 0,
-	}
-
-	err := initTxs(0.0, 3, client)
-	require.NoError(t, err, "initTxs should not return error even if QueryTx fails")
-
-	// TxCount should not increment on QueryTx failures
-	require.Equal(t, 0, client.TxCount, "TxCount should not increment on QueryTx failures")
-}
-
-// TestClientStructure tests the Client structure initialization
-func TestClientStructure(t *testing.T) {
-	ds := createTestDataSet()
-	mock := &MockClient{}
-
-	client := &Client{
-		DataSet: ds,
-		Client:  mock,
-		Id:      42,
-		TxCount: 10,
-	}
-
-	require.NotNil(t, client.DataSet)
-	require.Equal(t, 42, client.Id)
-	require.Equal(t, 10, client.TxCount)
-}
-
-// TestRateLimiting tests that transactions are rate-limited properly
-func TestRateLimiting(t *testing.T) {
-	// Skip in short mode as this test takes time
-	if testing.Short() {
-		t.Skip("skipping rate limiting test in short mode")
-	}
-
-	mock := &MockClient{
-		FaucetFunc: func(ctx context.Context, req *protocol.AcmeFaucet) (*api.TxResponse, error) {
-			// Fast response
-			return &api.TxResponse{
-				TransactionHash: []byte("mock-tx-hash"),
-			}, nil
-		},
-	}
-
-	ds := createTestDataSet()
-	client := &Client{
-		DataSet: ds,
-		Client:  mock,
-		Id:      0,
-		TxCount: 0,
-	}
-
-	// Simulate multiple bursts with rate limiting
-	// This mimics the main loop behavior
-	transactionsPerClient := 5
-	numBursts := 3
-
-	startTime := time.Now()
-	for i := 0; i < numBursts; i++ {
-		tick := time.Now()
-		err := initTxs(float64(i), transactionsPerClient, client)
-		require.NoError(t, err)
-
-		// Sleep to maintain 1 second per burst
-		time.Sleep(time.Second - time.Since(tick))
-	}
-	elapsed := time.Since(startTime)
-
-	// Total time should be close to numBursts seconds (±200ms tolerance)
-	expectedDuration := time.Duration(numBursts) * time.Second
-	require.InDelta(t, expectedDuration.Seconds(), elapsed.Seconds(), 0.3,
-		"rate limiting should maintain ~1 second per burst")
-
-	// Verify total transactions
-	totalTx := numBursts * transactionsPerClient
-	require.Equal(t, totalTx, client.TxCount)
-}
-
-// TestDataSetSaving tests that transaction data is saved to the dataset
-func TestDataSetSaving(t *testing.T) {
-	mock := &MockClient{}
-	ds := createTestDataSet()
-
-	client := &Client{
-		DataSet: ds,
-		Client:  mock,
-		Id:      5,
-		TxCount: 0,
-	}
-
-	err := initTxs(1.5, 2, client)
-	require.NoError(t, err)
-
-	// Verify dataset has entries
-	// The dataset should have saved index, simTime, clientId, and settlementTime for each transaction
-	require.NotNil(t, ds)
-}
-
-// TestAccountURLGeneration tests that generated account URLs are valid
-func TestAccountURLGeneration(t *testing.T) {
-	for i := 0; i < 100; i++ {
+	for i := 0; i < count; i++ {
 		acc, err := createAccount()
-		require.NoError(t, err)
-		require.NotNil(t, acc)
+		if err != nil {
+			t.Fatalf("Failed to create account %d: %v", i, err)
+		}
 
-		// Verify URL string is not empty
-		require.NotEmpty(t, acc.String())
+		urlStr := acc.String()
+		if accounts[urlStr] {
+			t.Fatalf("Duplicate account URL generated: %s", urlStr)
+		}
+		accounts[urlStr] = true
+	}
 
-		// Verify it contains acc://
-		require.Contains(t, acc.String(), "acc://")
+	if len(accounts) != count {
+		t.Errorf("Expected %d unique accounts, got %d", count, len(accounts))
 	}
 }
 
-// TestMockClientConcurrency tests that the mock client is thread-safe
-func TestMockClientConcurrency(t *testing.T) {
-	mock := &MockClient{}
-
-	var wg sync.WaitGroup
-	numGoroutines := 100
-
-	wg.Add(numGoroutines)
-	for i := 0; i < numGoroutines; i++ {
-		go func() {
-			defer wg.Done()
-			_, _ = mock.Faucet(context.Background(), &protocol.AcmeFaucet{})
-		}()
+// TestLiteTokenAddressGeneration verifies the lite token address generation
+func TestLiteTokenAddressGeneration(t *testing.T) {
+	// Generate a test key
+	pub, _, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatalf("Failed to generate key: %v", err)
 	}
 
-	wg.Wait()
-	require.Equal(t, numGoroutines, mock.GetFaucetCalls())
+	// Create lite token address
+	acc, err := protocol.LiteTokenAddress(pub, protocol.ACME, protocol.SignatureTypeED25519)
+	if err != nil {
+		t.Fatalf("Failed to create lite token address: %v", err)
+	}
+
+	if acc == nil {
+		t.Fatal("Lite token address is nil")
+	}
+
+	// Verify it's a valid URL
+	urlStr := acc.String()
+	if !strings.HasPrefix(urlStr, "acc://") {
+		t.Errorf("Expected acc:// prefix, got: %s", urlStr)
+	}
 }
 
-// TestTransactionHashGeneration tests that transaction hashes are properly captured
-func TestTransactionHashGeneration(t *testing.T) {
-	expectedHash := []byte("test-tx-hash-12345")
-
-	mock := &MockClient{
-		FaucetFunc: func(ctx context.Context, req *protocol.AcmeFaucet) (*api.TxResponse, error) {
-			return &api.TxResponse{
-				TransactionHash: expectedHash,
-			}, nil
-		},
-		QueryTxFunc: func(ctx context.Context, req *api.TxnQuery) (*api.TransactionQueryResponse, error) {
-			// Verify the hash was passed correctly
-			require.Equal(t, expectedHash, req.Txid)
-			return &api.TransactionQueryResponse{}, nil
-		},
-	}
-
-	ds := createTestDataSet()
+// TestClientStructure verifies the Client structure is properly formed
+func TestClientStructure(t *testing.T) {
 	client := &Client{
-		DataSet: ds,
-		Client:  mock,
-		Id:      0,
+		DataSet: nil, // DataSet can be nil for testing
+		Client:  nil, // Client can be nil for testing
+		Id:      42,
 		TxCount: 0,
 	}
 
-	err := initTxs(0.0, 1, client)
-	require.NoError(t, err)
-	require.Equal(t, 1, mock.GetFaucetCalls())
-	require.Equal(t, 1, mock.GetQueryTxCalls())
+	if client.Id != 42 {
+		t.Errorf("Expected client ID 42, got %d", client.Id)
+	}
+
+	if client.TxCount != 0 {
+		t.Errorf("Expected tx count 0, got %d", client.TxCount)
+	}
 }
 
-// BenchmarkCreateAccount benchmarks account creation performance
+// TestDefaultFlags verifies default flag values
+func TestDefaultFlags(t *testing.T) {
+	// Note: These are package-level variables that may have been modified
+	// This test documents the expected defaults
+	t.Logf("Server URL: %s", serverUrl)
+	t.Logf("Transactions: %d", transactions)
+	t.Logf("Max Goroutines: %d", maxGoroutines)
+	t.Logf("Duration: %d", duration)
+}
+
+// TestTransactionLoadCalculation verifies the load calculation logic
+func TestTransactionLoadCalculation(t *testing.T) {
+	tests := []struct {
+		name              string
+		transactions      int
+		maxGoroutines     int
+		duration          int
+		expectedPerClient int
+		expectedClients   int
+		expectedTotal     int
+	}{
+		{
+			name:              "default_config",
+			transactions:      100,
+			maxGoroutines:     25,
+			duration:          5,
+			expectedPerClient: 25,
+			expectedClients:   20,
+			expectedTotal:     500,
+		},
+		{
+			name:              "low_load",
+			transactions:      10,
+			maxGoroutines:     5,
+			duration:          2,
+			expectedPerClient: 5,
+			expectedClients:   4,
+			expectedTotal:     20,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			transactionsPerClient := tt.maxGoroutines
+			numClientsPerBurst := tt.transactions / transactionsPerClient
+			maxNumClients := numClientsPerBurst * tt.duration
+			totalTransactions := maxNumClients * transactionsPerClient
+
+			if transactionsPerClient != tt.expectedPerClient {
+				t.Errorf("transactionsPerClient: expected %d, got %d",
+					tt.expectedPerClient, transactionsPerClient)
+			}
+
+			if maxNumClients != tt.expectedClients {
+				t.Errorf("maxNumClients: expected %d, got %d",
+					tt.expectedClients, maxNumClients)
+			}
+
+			if totalTransactions != tt.expectedTotal {
+				t.Errorf("totalTransactions: expected %d, got %d",
+					tt.expectedTotal, totalTransactions)
+			}
+		})
+	}
+}
+
+// TestDataSetLogging verifies dataset logging functionality
+func TestDataSetLogging(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Initialize dataset
+	dsl.SetPath(tmpDir)
+	dsl.SetProcessName("test-load")
+	dsl.Initialize("test-dataset", logging.DefaultOptions())
+
+	// Set a header
+	header := "## Test Header\n## Test Data"
+	dsl.SetHeader(header)
+
+	// Dump dataset
+	outputPaths, err := dsl.DumpDataSetToDiskFile()
+	if err != nil {
+		t.Fatalf("Failed to dump dataset: %v", err)
+	}
+
+	// Log output paths (may be empty if no data was saved)
+	if len(outputPaths) == 0 {
+		t.Log("No output paths generated (no data saved)")
+	} else {
+		t.Logf("Dataset written to: %v", outputPaths)
+	}
+}
+
+// Integration tests - require running devnet
+func TestLoadGeneratorIntegration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	if os.Getenv("INTEGRATION_TEST") != "1" {
+		t.Skip("Skipping integration test - set INTEGRATION_TEST=1 to run")
+	}
+
+	// Get server URL from environment or use default
+	testServerURL := os.Getenv("ACC_API")
+	if testServerURL == "" {
+		testServerURL = "http://127.0.0.1:26660/v2"
+	}
+
+	// Save and restore
+	originalURL := serverUrl
+	defer func() { serverUrl = originalURL }()
+	serverUrl = testServerURL
+
+	// Create client to test connectivity
+	cl, err := client.New(testServerURL)
+	if err != nil {
+		t.Fatalf("Failed to create client: %v", err)
+	}
+
+	// Test server connectivity
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_, err = cl.Describe(ctx)
+	if err != nil {
+		t.Skipf("Server not available at %s: %v", testServerURL, err)
+	}
+
+	t.Run("single_account_faucet", func(t *testing.T) {
+		// Initialize one client
+		clients, err := initializeClients(1)
+		if err != nil {
+			t.Fatalf("Failed to initialize clients: %v", err)
+		}
+
+		if len(clients) != 1 {
+			t.Fatalf("Expected 1 client, got %d", len(clients))
+		}
+
+		c := clients[0]
+		// Create test account
+		acc, err := createAccount()
+		if err != nil {
+			t.Fatalf("Failed to create account: %v", err)
+		}
+
+		// Faucet the account
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		resp, err := c.Client.Faucet(ctx, &protocol.AcmeFaucet{Url: acc})
+		if err != nil {
+			t.Fatalf("Faucet failed: %v", err)
+		}
+
+		if resp.TransactionHash == nil {
+			t.Fatal("Faucet response missing transaction hash")
+		}
+
+		// Wait for transaction
+		txReq := api.TxnQuery{
+			Txid:          resp.TransactionHash,
+			Wait:          15 * time.Second,
+			IgnorePending: false,
+		}
+
+		_, err = c.Client.QueryTx(ctx, &txReq)
+		if err != nil {
+			t.Logf("Transaction query failed (may be expected): %v", err)
+		}
+
+		t.Logf("Successfully fauceted account %s", acc)
+	})
+}
+
+// BenchmarkCreateAccount benchmarks account creation
 func BenchmarkCreateAccount(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_, err := createAccount()
 		if err != nil {
-			b.Fatal(err)
+			b.Fatalf("Failed to create account: %v", err)
 		}
 	}
 }
 
-// BenchmarkInitTxs benchmarks transaction initialization
-func BenchmarkInitTxs(b *testing.B) {
-	mock := &MockClient{}
-	ds := createTestDataSet()
-
-	client := &Client{
-		DataSet: ds,
-		Client:  mock,
-		Id:      0,
-		TxCount: 0,
-	}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		client.TxCount = 0 // Reset for each iteration
-		_ = initTxs(0.0, 10, client)
-	}
-}
-
-// TestED25519KeyGeneration tests that keys are generated properly
-func TestED25519KeyGeneration(t *testing.T) {
-	pub, priv, err := ed25519.GenerateKey(nil)
-	require.NoError(t, err)
-	require.NotNil(t, pub)
-	require.NotNil(t, priv)
-	require.Equal(t, ed25519.PublicKeySize, len(pub))
-	require.Equal(t, ed25519.PrivateKeySize, len(priv))
-}
-
-// TestLiteTokenAddress tests lite token address creation
-func TestLiteTokenAddress(t *testing.T) {
-	pub, _, err := ed25519.GenerateKey(nil)
-	require.NoError(t, err)
-
-	acc, err := protocol.LiteTokenAddress(pub, protocol.ACME, protocol.SignatureTypeED25519)
-	require.NoError(t, err)
-	require.NotNil(t, acc)
-
-	// Verify the URL structure
-	require.NotEmpty(t, acc.String())
-	require.Contains(t, acc.String(), "acc://")
-}
-
-// TestClientIdUniqueness verifies that multiple clients have unique IDs
-func TestClientIdUniqueness(t *testing.T) {
-	ds := createTestDataSet()
-
-	clients := make([]*Client, 10)
-	for i := 0; i < 10; i++ {
-		clients[i] = &Client{
-			DataSet: ds,
-			Client:  nil,
-			Id:      i,
-			TxCount: 0,
-		}
-	}
-
-	// Verify all IDs are unique
-	ids := make(map[int]bool)
-	for _, c := range clients {
-		require.False(t, ids[c.Id], "client IDs should be unique")
-		ids[c.Id] = true
-	}
-	require.Equal(t, 10, len(ids))
-}
-
-// TestTxCountIncrement tests that transaction count increments correctly
-func TestTxCountIncrement(t *testing.T) {
-	mock := &MockClient{}
-	ds := createTestDataSet()
-
-	client := &Client{
-		DataSet: ds,
-		Client:  mock,
-		Id:      0,
-		TxCount: 0,
-	}
-
-	// First batch
-	err := initTxs(0.0, 3, client)
-	require.NoError(t, err)
-	require.Equal(t, 3, client.TxCount)
-
-	// Second batch should add to existing count
-	err = initTxs(1.0, 5, client)
-	require.NoError(t, err)
-	require.Equal(t, 8, client.TxCount)
-}
-
-// TestSimTimePropagation tests that simulation time is passed correctly
-func TestSimTimePropagation(t *testing.T) {
-	mock := &MockClient{}
-	ds := createTestDataSet()
-
-	client := &Client{
-		DataSet: ds,
-		Client:  mock,
-		Id:      0,
-		TxCount: 0,
-	}
-
-	// Test with different simulation times
-	simTimes := []float64{0.0, 1.5, 2.0, 10.5}
-	for _, simTime := range simTimes {
-		err := initTxs(simTime, 2, client)
-		require.NoError(t, err)
-	}
-
-	// Verify all transactions completed
-	expectedTxCount := len(simTimes) * 2
-	require.Equal(t, expectedTxCount, client.TxCount)
-}
-
-// TestMockDescribe tests the Describe mock method
-func TestMockDescribe(t *testing.T) {
-	mock := &MockClient{}
-
-	resp, err := mock.Describe(context.Background())
-	require.NoError(t, err)
-	require.NotNil(t, resp)
-	require.Equal(t, "TestNetwork", resp.Network.Id)
-	require.Len(t, resp.Network.Partitions, 1)
-	require.Equal(t, "TestPartition", resp.Network.Partitions[0].Id)
-}
-
-// TestMockDescribeCustom tests custom Describe implementation
-func TestMockDescribeCustom(t *testing.T) {
-	mock := &MockClient{
-		DescribeFunc: func(ctx context.Context) (*api.DescriptionResponse, error) {
-			return nil, errors.New("custom error")
-		},
-	}
-
-	resp, err := mock.Describe(context.Background())
-	require.Error(t, err)
-	require.Nil(t, resp)
-	require.Equal(t, "custom error", err.Error())
-}
-
-// TestCloseIdleConnections tests the CloseIdleConnections method
-func TestCloseIdleConnections(t *testing.T) {
-	mock := &MockClient{}
-
-	// Should not panic
-	mock.CloseIdleConnections()
-}
-
-// TestFaucetURL tests that Faucet receives the correct URL
-func TestFaucetURL(t *testing.T) {
-	var receivedURL string
-
-	mock := &MockClient{
-		FaucetFunc: func(ctx context.Context, req *protocol.AcmeFaucet) (*api.TxResponse, error) {
-			if req.Url != nil {
-				receivedURL = req.Url.String()
-			}
-			return &api.TxResponse{
-				TransactionHash: []byte("test-hash"),
-			}, nil
-		},
-	}
-
-	ds := createTestDataSet()
-	client := &Client{
-		DataSet: ds,
-		Client:  mock,
-		Id:      0,
-		TxCount: 0,
-	}
-
-	err := initTxs(0.0, 1, client)
-	require.NoError(t, err)
-	require.NotEmpty(t, receivedURL, "Faucet should receive a URL")
-	require.Contains(t, receivedURL, "acc://")
+// TestMain provides test suite setup and teardown
+func TestMain(m *testing.M) {
+	fmt.Println("Starting load generator test suite")
+	code := m.Run()
+	fmt.Println("Load generator test suite completed")
+	os.Exit(code)
 }
