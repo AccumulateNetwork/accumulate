@@ -1,0 +1,19 @@
+# ACCOUNT TYPE            URL
+--------------------------------------------------------------------------------
+dataAccount               acc://alice.acme/data
+identity                  acc://bvn-BVN0.acme
+dataAccount               acc://bvn-BVN0.acme/network
+blockLedger               acc://bvn-BVN0.acme/ledger/1
+identity                  acc://alice.acme
+keyBook                   acc://bvn-BVN0.acme/operators
+dataAccount               acc://bvn-BVN0.acme/routing
+dataAccount               acc://bvn-BVN0.acme/evidence
+dataAccount               acc://bvn-BVN0.acme/oracle
+anchorLedger              acc://bvn-BVN0.acme/anchors
+dataAccount               acc://bvn-BVN0.acme/votes
+keyPage                   acc://bvn-BVN0.acme/operators/1
+syntheticLedger           acc://bvn-BVN0.acme/synthetic
+systemLedger              acc://bvn-BVN0.acme/ledger
+keyPage                   acc://alice.acme/book/1
+keyBook                   acc://alice.acme/book
+dataAccount               acc://bvn-BVN0.acme/globals
