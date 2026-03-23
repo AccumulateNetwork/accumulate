@@ -43,3 +43,17 @@ tmp
 #jj
 .newscripts
 test/cmd/testreport/testreport
+
+# Build artifacts
+/accumulated-testnet
+/load-generator
+
+# Orchestrator artifacts
+/reviews/
+/state/
+/config/load-test-issues.json
+
+# Snapshot URLs (temporary files)
+/snapshot.urls
+/cmd/accumulated/run/snapshot.urls
+/internal/node/abci/snapshot.urls
