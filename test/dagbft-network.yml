@@ -20,6 +20,12 @@ bvns:
         basePort: 26656
         dnnType: "validator"
         bvnnType: "validator"
+      - listenAddress: "127.0.1.4"
+        peerAddress: "127.0.1.4"
+        advertizeAddress: "127.0.1.4"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
   - id: "BVN2"
     nodes:
       - listenAddress: "127.0.2.1"
@@ -43,6 +49,32 @@ bvns:
       - listenAddress: "127.0.2.4"
         peerAddress: "127.0.2.4"
         advertizeAddress: "127.0.2.4"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+  - id: "BVN3"
+    nodes:
+      - listenAddress: "127.0.3.1"
+        peerAddress: "127.0.3.1"
+        advertizeAddress: "127.0.3.1"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+      - listenAddress: "127.0.3.2"
+        peerAddress: "127.0.3.2"
+        advertizeAddress: "127.0.3.2"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+      - listenAddress: "127.0.3.3"
+        peerAddress: "127.0.3.3"
+        advertizeAddress: "127.0.3.3"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+      - listenAddress: "127.0.3.4"
+        peerAddress: "127.0.3.4"
+        advertizeAddress: "127.0.3.4"
         basePort: 26656
         dnnType: "validator"
         bvnnType: "validator"
