@@ -605,9 +605,13 @@ func (i *Initializer) submitAndWait(ctx context.Context, env *messaging.Envelope
 func (i *Initializer) printSummary() {
 	duration := time.Since(i.stats.StartTime)
 
-	fmt.Println("\n" + string([]rune{'='}[0:50]))
+	separator := ""
+	for j := 0; j < 50; j++ {
+		separator += "="
+	}
+	fmt.Println("\n" + separator)
 	fmt.Println("Initialization Complete")
-	fmt.Println(string([]rune{'='}[0:50]))
+	fmt.Println(separator)
 	fmt.Printf("Duration: %v\n\n", duration.Round(time.Second))
 
 	fmt.Println("Results:")
