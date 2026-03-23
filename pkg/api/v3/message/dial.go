@@ -8,6 +8,7 @@ package message
 
 import (
 	"context"
+	"sync"
 
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -52,6 +53,7 @@ type batchDialer struct {
 	context context.Context
 	dialer  Dialer
 	multi   MultiDialer
+	mu      sync.RWMutex
 	streams map[string]Stream
 }
 
@@ -62,8 +64,13 @@ func (b *batchDialer) Dial(_ context.Context, addr multiaddr.Multiaddr) (Stream,
 		return nil, errors.BadRequest.With("cannot batch dial without an address")
 	}
 
-	// Check the dictionary
-	if s, ok := b.streams[addr.String()]; ok {
+	addrStr := addr.String()
+
+	// Check the dictionary with a read lock
+	b.mu.RLock()
+	s, ok := b.streams[addrStr]
+	b.mu.RUnlock()
+	if ok {
 		return s, nil
 	}
 
@@ -73,15 +80,19 @@ func (b *batchDialer) Dial(_ context.Context, addr multiaddr.Multiaddr) (Stream,
 		return nil, err
 	}
 
-	// Remember it
-	b.streams[addr.String()] = s
+	// Remember it with a write lock
+	b.mu.Lock()
+	b.streams[addrStr] = s
+	b.mu.Unlock()
 	return s, nil
 }
 
 // BadDial implements [MultiDialer.BadDial].
 func (b *batchDialer) BadDial(_ context.Context, addr multiaddr.Multiaddr, s Stream, err error) bool {
-	// Forget the bad stream
+	// Forget the bad stream with a write lock
+	b.mu.Lock()
 	delete(b.streams, addr.String())
+	b.mu.Unlock()
 
 	// If the inner dialer is a multi dialer, inform it of the bad stream
 	if b.multi == nil {
