@@ -197,6 +197,104 @@ Tests cover:
 - Yellow: Latency metrics
 - Gray: Secondary information
 
+## Metrics Formulas
+
+### Transaction Performance Metrics
+
+**Current TPS (Transactions Per Second)**
+```
+Current TPS = transactions_in_window / window_elapsed_seconds
+```
+- Uses a rolling 1-second window
+- Resets when window expires
+
+**Average TPS**
+```
+Average TPS = total_transactions / elapsed_time_since_start
+```
+- Calculated over entire test duration
+- More stable than current TPS
+
+**Peak TPS**
+```
+Peak TPS = max(all_window_tps_values)
+```
+- Highest TPS observed in any 1-second window
+- Monotonically increasing (never decreases)
+
+**Error Rate**
+```
+Error Rate (%) = (failed_transactions / total_transactions) × 100
+```
+- Returns 0% when no transactions have been recorded
+
+### Latency Metrics
+
+**Average Latency**
+```
+Average Latency = sum(all_latencies) / count(latencies)
+```
+- Simple arithmetic mean
+- Uses up to last 1000 latencies
+
+**Percentile Calculations (P50, P95, P99)**
+```
+1. Sort latencies in ascending order
+2. P50 = sorted[count × 50/100]
+3. P95 = sorted[count × 95/100]
+4. P99 = sorted[count × 99/100]
+```
+- Uses simple index-based percentile (not interpolated)
+- Based on rolling window of last 1000 latencies
+
+### System Metrics
+
+**CPU Percentage** (Linux only)
+```
+1. Read /proc/stat CPU counters (user, nice, system, idle, iowait, irq, soft)
+2. Calculate deltas from previous reading
+3. CPU % = ((total_delta - idle_delta) / total_delta) × 100
+```
+- Returns 0 on non-Linux systems
+
+**Memory Usage**
+```
+Memory Used MB = (MemTotal - MemAvailable) / 1024
+```
+- Reads from /proc/meminfo on Linux
+- Uses runtime.MemStats on non-Linux systems
+
+**Disk I/O Rates** (Linux only)
+```
+1. Read /proc/diskstats for sectors read/written
+2. Convert sectors to bytes (sectors × 512)
+3. Disk Read MB/s = (read_bytes_delta / 1024 / 1024) / elapsed_seconds
+4. Disk Write MB/s = (write_bytes_delta / 1024 / 1024) / elapsed_seconds
+```
+- Aggregates across all physical disks (skips loop, ram, partitions)
+- Returns 0 on non-Linux systems
+
+**Network Throughput** (Linux only)
+```
+1. Read /proc/net/dev for rx/tx bytes
+2. Network Rx MB/s = (rx_bytes_delta / 1024 / 1024) / elapsed_seconds
+3. Network Tx MB/s = (tx_bytes_delta / 1024 / 1024) / elapsed_seconds
+```
+- Aggregates across all interfaces except loopback
+- Returns 0 on non-Linux systems
+
+### Rolling Windows
+
+**Latency Window**
+- Maintains last 1000 latencies
+- Older latencies are dropped when limit exceeded
+- Used for percentile calculations
+
+**TPS Window**
+- 1-second sliding window
+- Resets after window expires
+- Used for current TPS calculation
+
 ## Known Limitations
 
 - Percentile calculations are approximate (simple sorting)
