@@ -78,7 +78,6 @@ func TestValidateAPI(t *testing.T) {
 
 	// Start listening
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	err = s.sim.ListenAndServe(ctx, simulator.ListenOptions{
 		ListenP2Pv3: true,
 	})
