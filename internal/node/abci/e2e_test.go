@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -41,6 +42,13 @@ func init() { acctesting.EnableDebugFeatures() }
 
 func TestCreateLiteAccount(t *testing.T) {
 	n := simulator.NewFakeNodeV1(t, nil)
+
+	// Initialize faucet account - generate the faucet private key the same way protocol does
+	n.Update(func(batch *database.Batch) {
+		faucetSeed := sha256.Sum256([]byte("faucet"))
+		faucetKey := tmed25519.PrivKey(ed25519.NewKeyFromSeed(faucetSeed[:]))
+		require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, faucetKey, protocol.AcmeFaucetBalance, 0))
+	})
 
 	const N, M = 11, 1
 	const count = N * M
@@ -109,6 +117,13 @@ func testLiteTx(n *simulator.FakeNode, N, M int, credits float64) (string, map[*
 
 func TestFaucet(t *testing.T) {
 	n := simulator.NewFakeNodeV1(t, nil)
+
+	// Initialize faucet account - generate the faucet private key the same way protocol does
+	n.Update(func(batch *database.Batch) {
+		faucetSeed := sha256.Sum256([]byte("faucet"))
+		faucetKey := tmed25519.PrivKey(ed25519.NewKeyFromSeed(faucetSeed[:]))
+		require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, faucetKey, protocol.AcmeFaucetBalance, 0))
+	})
 
 	alice := generateKey()
 	aliceUrl := acctesting.AcmeLiteAddressTmPriv(alice)
