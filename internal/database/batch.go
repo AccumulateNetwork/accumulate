@@ -143,7 +143,12 @@ func (b *Batch) Commit() error {
 
 	err := b.baseCommit()
 	if err != nil {
-		// An error during commit indicates a serious bug and likely will result
+		// Conflict errors indicate concurrent writes to the same key and should
+		// be returned gracefully to allow the caller to retry or handle appropriately
+		if errors.Is(err, errors.Conflict) {
+			return err
+		}
+		// Other errors during commit indicate a serious bug and likely will result
 		// in a corrupted database (partial write) so it's time to panic
 		panic(errors.UnknownError.Wrap(err))
 	}
