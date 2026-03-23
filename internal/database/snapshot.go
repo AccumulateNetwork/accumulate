@@ -388,19 +388,28 @@ func (batch *Batch) collectBPT(w *snapshot.Writer, opts *CollectOptions) error {
 	startTime := time.Now()
 
 	// AI: Create a file for writing URLs
-	// Get the current working directory
-	cwd, err := os.Getwd()
-	if err != nil {
-		return errors.UnknownError.WithFormat("failed to get current working directory: %w", err)
-	}
-
-	// Create a file with .urls extension in the current directory
-	// Use SNAPSHOT_URLS_PATH environment variable if set, otherwise use default name
+	// Get the current working directory, fall back to temp directory if unavailable
+	var urlsFilePath string
 	urlsFileName := os.Getenv("SNAPSHOT_URLS_PATH")
 	if urlsFileName == "" {
 		urlsFileName = "snapshot.urls"
 	}
-	urlsFilePath := filepath.Join(cwd, urlsFileName)
+
+	// If urlsFileName is already an absolute path, use it directly
+	if filepath.IsAbs(urlsFileName) {
+		urlsFilePath = urlsFileName
+	} else {
+		// Try to get current working directory
+		cwd, err := os.Getwd()
+		if err != nil {
+			// If we can't get the working directory (e.g., it was deleted),
+			// use the temp directory as fallback
+			urlsFilePath = filepath.Join(os.TempDir(), urlsFileName)
+		} else {
+			urlsFilePath = filepath.Join(cwd, urlsFileName)
+		}
+	}
+
 	urlsFile, err := os.Create(urlsFilePath)
 	if err != nil {
 		return errors.UnknownError.WithFormat("failed to create URLs file: %w", err)
