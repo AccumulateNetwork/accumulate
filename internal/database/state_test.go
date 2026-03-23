@@ -30,7 +30,12 @@ func TestState(t *testing.T) {
 
 	// Create a lite token account directly
 	alice := acctesting.GenerateTmKey(t.Name(), "Alice")
-	aliceUrl := sim.CreateLiteTokenAccount(alice, protocol.AcmeUrl(), 1e9, 1e6)
+	aliceUrl := acctesting.AcmeLiteAddressTmPriv(alice)
+
+	// Create lite token account directly (faucet only exists with testnet build tag)
+	batch := sim.PartitionFor(aliceUrl).Database.Begin(true)
+	require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, alice, protocol.AcmeFaucetAmount, 1e9))
+	require.NoError(t, batch.Commit())
 
 	sim.ExecuteBlocks(10)
 
