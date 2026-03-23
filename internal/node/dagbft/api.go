@@ -153,10 +153,13 @@ func (s *SubmitterService) Type() api.ServiceType { return api.ServiceTypeSubmit
 
 // Submit submits an envelope to the DAG-BFT consensus.
 func (s *SubmitterService) Submit(ctx context.Context, envelope *messaging.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
+	s.logger.Info("TRACE-SUBMIT: SubmitterService.Submit() called (DAG-BFT)")
+
 	// Verify the envelope is well-formed
 	if opts.Verify == nil || *opts.Verify {
 		_, err := envelope.Normalize()
 		if err != nil {
+			s.logger.Error("TRACE-SUBMIT: envelope normalization failed", "error", err)
 			return nil, errors.BadRequest.WithFormat("verify: %w", err)
 		}
 	}
@@ -164,29 +167,49 @@ func (s *SubmitterService) Submit(ctx context.Context, envelope *messaging.Envel
 	// Marshal envelope
 	b, err := envelope.MarshalBinary()
 	if err != nil {
+		s.logger.Error("TRACE-SUBMIT: envelope marshaling failed", "error", err)
 		return nil, errors.EncodingError.WithFormat("marshal: %w", err)
 	}
+
+	s.logger.Info("TRACE-SUBMIT: submitting to DAG-BFT service.SubmitTransaction")
 
 	// Submit to consensus (includes pre-batch validation)
 	if err := s.service.SubmitTransaction(b); err != nil {
 		// Check if this is a validation error
 		if stderrors.Is(err, worker.ErrValidationFailed) {
+			s.logger.Error("TRACE-SUBMIT: validation failed, returning error submission", "error", err)
 			return []*api.Submission{{
 				Success: false,
 				Message: fmt.Sprintf("Transaction validation failed: %v", err),
+				Status: &protocol.TransactionStatus{
+					TxID: nil,
+					Code: errors.Pending,
+				},
 			}}, nil
 		}
 		if stderrors.Is(err, worker.ErrBackpressure) {
+			s.logger.Error("TRACE-SUBMIT: backpressure error", "error", err)
 			return nil, errors.NotReady.WithFormat("submit: %w", err)
 		}
+		s.logger.Error("TRACE-SUBMIT: internal error", "error", err)
 		return nil, errors.InternalError.WithFormat("submit: %w", err)
 	}
 
+	s.logger.Info("TRACE-SUBMIT: submission successful, creating result WITHOUT Status field (BUG!)")
+
 	// Return success - DAG-BFT doesn't have synchronous result like CometBFT
-	return []*api.Submission{{
+	result := []*api.Submission{{
 		Success: true,
 		Message: "Transaction submitted to DAG-BFT consensus",
-	}}, nil
+		Status: &protocol.TransactionStatus{
+			TxID: nil,
+			Code: errors.Pending,
+		},
+	}}
+
+	s.logger.Info("TRACE-SUBMIT: returning result", "submission_count", len(result), "status_is_nil", result[0].Status == nil)
+
+	return result, nil
 }
 
 // ValidatorService implements api.Validator for DAG-BFT.
