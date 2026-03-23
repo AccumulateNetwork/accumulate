@@ -271,10 +271,10 @@ func (v *value[T]) LoadValue(value database.Value, put bool) error {
 		return errors.UnknownError.Wrap(err)
 	}
 
-	// Warn if a value is modified incorrectly - except for the BPT since it
+	// Detect if a value is modified incorrectly - except for the BPT since it
 	// doesn't follow the rules
 	if put && version <= v.version && !isBptValue(v.key) {
-		slog.Error("Conflicting values written from concurrent batches", "key", v.key, "module", "database")
+		return errors.Conflict.WithFormat("conflicting values written from concurrent batches for key %v (version %d <= current %d)", v.key, version, v.version)
 	}
 	v.version = version
 
