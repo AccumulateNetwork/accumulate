@@ -503,9 +503,12 @@ func writeReport(report *PerformanceReport, outputPath, format string) error {
 
 // writeTextReport formats the report as human-readable text
 func writeTextReport(w io.Writer, report *PerformanceReport) error {
+	const separator = "================================================================================\n"
+	const divider = "--------------------------------------------------------------------------------\n"
+
 	fmt.Fprintf(w, "Performance Analysis Report\n")
 	fmt.Fprintf(w, "Generated: %s\n", report.GeneratedAt.Format(time.RFC3339))
-	fmt.Fprintf(w, strings.Repeat("=", 80) + "\n\n")
+	fmt.Fprintf(w, separator+"\n")
 
 	// Metrics summary
 	if len(report.Metrics) > 0 {
@@ -528,7 +531,7 @@ func writeTextReport(w io.Writer, report *PerformanceReport) error {
 	// Bottlenecks
 	if len(report.Bottlenecks) > 0 {
 		fmt.Fprintf(w, "Bottlenecks Detected: %d\n", len(report.Bottlenecks))
-		fmt.Fprintf(w, strings.Repeat("-", 80) + "\n")
+		fmt.Fprintf(w, divider)
 		for i, bn := range report.Bottlenecks {
 			fmt.Fprintf(w, "%d. [%s] %s: %s\n", i+1, strings.ToUpper(bn.Severity), bn.Type, bn.Description)
 			fmt.Fprintf(w, "   Value: %.2f, Threshold: %.2f\n", bn.Value, bn.Threshold)
@@ -541,7 +544,7 @@ func writeTextReport(w io.Writer, report *PerformanceReport) error {
 	// Regressions
 	if len(report.Regressions) > 0 {
 		fmt.Fprintf(w, "Performance Regressions: %d\n", len(report.Regressions))
-		fmt.Fprintf(w, strings.Repeat("-", 80) + "\n")
+		fmt.Fprintf(w, divider)
 		for i, reg := range report.Regressions {
 			fmt.Fprintf(w, "%d. %s: %.2f%% degradation\n", i+1, reg.Metric, reg.Degradation)
 			fmt.Fprintf(w, "   Baseline: %.2f, Current: %.2f\n", reg.Baseline, reg.Current)
@@ -552,7 +555,7 @@ func writeTextReport(w io.Writer, report *PerformanceReport) error {
 	// Tuning recommendations
 	if len(report.Tuning) > 0 {
 		fmt.Fprintf(w, "Tuning Recommendations:\n")
-		fmt.Fprintf(w, strings.Repeat("-", 80) + "\n")
+		fmt.Fprintf(w, divider)
 		for i, rec := range report.Tuning {
 			fmt.Fprintf(w, "%d. [%s] %s\n", i+1, strings.ToUpper(rec.Priority), rec.Category)
 			fmt.Fprintf(w, "   %s\n", rec.Description)
