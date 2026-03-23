@@ -57,3 +57,4 @@ test/cmd/testreport/testreport
 /snapshot.urls
 /cmd/accumulated/run/snapshot.urls
 /internal/node/abci/snapshot.urls
+/tools/cmd/debug/reviews/
