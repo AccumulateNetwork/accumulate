@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Accumulate Load Test Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #0a0e27;
+            color: #e0e0e0;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+
+        h1 { font-size: 2.5em; margin-bottom: 10px; }
+        .subtitle { font-size: 1.2em; opacity: 0.8; }
+
+        .status {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            margin-top: 10px;
+        }
+
+        .status.connected { background: #27ae60; }
+        .status.disconnected { background: #e74c3c; }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .metric-card {
+            background: #1a1f3a;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+            border: 1px solid #2a3f5f;
+        }
+
+        .metric-label {
+            font-size: 0.9em;
+            opacity: 0.7;
+            margin-bottom: 10px;
+        }
+
+        .metric-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .metric-value.good { color: #27ae60; }
+        .metric-value.warning { color: #f39c12; }
+        .metric-value.bad { color: #e74c3c; }
+
+        .metric-unit {
+            font-size: 0.5em;
+            opacity: 0.8;
+            margin-left: 5px;
+        }
+
+        .chart-container {
+            background: #1a1f3a;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+            border: 1px solid #2a3f5f;
+            margin-bottom: 20px;
+            height: 300px;
+        }
+
+        .node-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .node-card {
+            background: #1a1f3a;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #2a3f5f;
+        }
+
+        .node-name {
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #3498db;
+        }
+
+        .node-metric {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.9em;
+            margin: 5px 0;
+        }
+
+        .section-title {
+            font-size: 1.8em;
+            margin: 30px 0 15px 0;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #2a5298;
+        }
+
+        .timestamp {
+            text-align: center;
+            opacity: 0.6;
+            font-size: 0.9em;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🚀 Accumulate Load Test Dashboard</h1>
+        <div class="subtitle">Real-time Performance Monitoring</div>
+        <div class="status connected" id="status">● Connected</div>
+    </div>
+
+    <div class="metrics-grid">
+        <div class="metric-card">
+            <div class="metric-label">Current TPS</div>
+            <div class="metric-value good" id="tps">0<span class="metric-unit">tx/s</span></div>
+            <div class="metric-label">Target: 12,000 TPS</div>
+        </div>
+
+        <div class="metric-card">
+            <div class="metric-label">Total Transactions</div>
+            <div class="metric-value" id="total-txns">0<span class="metric-unit">txns</span></div>
+            <div class="metric-label" id="success-rate">Success: 0%</div>
+        </div>
+
+        <div class="metric-card">
+            <div class="metric-label">Cluster CPU</div>
+            <div class="metric-value" id="cpu">0<span class="metric-unit">cores</span></div>
+            <div class="metric-label" id="cpu-pct">0% average per node</div>
+        </div>
+
+        <div class="metric-card">
+            <div class="metric-label">Cluster Memory</div>
+            <div class="metric-value" id="memory">0<span class="metric-unit">GB</span></div>
+            <div class="metric-label" id="memory-pct">0% of allocated</div>
+        </div>
+
+        <div class="metric-card">
+            <div class="metric-label">Total Database</div>
+            <div class="metric-value" id="db-size">0<span class="metric-unit">GB</span></div>
+            <div class="metric-label" id="db-growth">Growth: 0 MB/min</div>
+        </div>
+
+        <div class="metric-card">
+            <div class="metric-label">Test Duration</div>
+            <div class="metric-value" id="duration">0<span class="metric-unit">min</span></div>
+            <div class="metric-label" id="elapsed">Elapsed time</div>
+        </div>
+    </div>
+
+    <h2 class="section-title">📊 TPS History (Last 5 Minutes)</h2>
+    <div class="chart-container">
+        <canvas id="tpsChart"></canvas>
+    </div>
+
+    <h2 class="section-title">🖥️ Per-Node Metrics (12 Validators)</h2>
+    <div class="node-grid" id="node-grid"></div>
+
+    <div class="timestamp" id="last-update">Last update: Never</div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script>
+        const METRICS_URL = 'http://localhost:8888/metrics';
+        const UPDATE_INTERVAL = 2000; // 2 seconds
+
+        // TPS Chart
+        const ctx = document.getElementById('tpsChart').getContext('2d');
+        const tpsChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'TPS',
+                    data: [],
+                    borderColor: '#27ae60',
+                    backgroundColor: 'rgba(39, 174, 96, 0.1)',
+                    borderWidth: 2,
+                    tension: 0.4,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: '#2a3f5f' },
+                        ticks: { color: '#e0e0e0' }
+                    },
+                    x: {
+                        grid: { color: '#2a3f5f' },
+                        ticks: { color: '#e0e0e0' }
+                    }
+                },
+                plugins: {
+                    legend: { labels: { color: '#e0e0e0' } }
+                }
+            }
+        });
+
+        let startTime = null;
+
+        function updateMetrics() {
+            fetch(METRICS_URL)
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('status').className = 'status connected';
+                    document.getElementById('status').textContent = '● Connected';
+
+                    // Calculate TPS
+                    const tps = data.tps || 0;
+                    document.getElementById('tps').innerHTML = `${tps.toLocaleString()}<span class="metric-unit">tx/s</span>`;
+
+                    // Color TPS based on performance
+                    const tpsElement = document.getElementById('tps');
+                    if (tps >= 11000) {
+                        tpsElement.className = 'metric-value good';
+                    } else if (tps >= 8000) {
+                        tpsElement.className = 'metric-value warning';
+                    } else {
+                        tpsElement.className = 'metric-value';
+                    }
+
+                    // Total transactions
+                    const total = data.total_submitted || 0;
+                    const success = data.total_succeeded || 0;
+                    const successRate = total > 0 ? (success / total * 100).toFixed(2) : 0;
+                    document.getElementById('total-txns').innerHTML = `${total.toLocaleString()}<span class="metric-unit">txns</span>`;
+                    document.getElementById('success-rate').textContent = `Success: ${successRate}%`;
+
+                    // CPU
+                    const cpu = data.cpu_cores || 0;
+                    const cpuPct = data.avg_cpu_percent || 0;
+                    document.getElementById('cpu').innerHTML = `${cpu.toFixed(1)}<span class="metric-unit">cores</span>`;
+                    document.getElementById('cpu-pct').textContent = `${cpuPct.toFixed(1)}% average per node`;
+
+                    // Memory
+                    const mem = data.memory_gb || 0;
+                    const memPct = data.avg_memory_percent || 0;
+                    document.getElementById('memory').innerHTML = `${mem.toFixed(2)}<span class="metric-unit">GB</span>`;
+                    document.getElementById('memory-pct').textContent = `${memPct.toFixed(1)}% of allocated`;
+
+                    // Database
+                    const dbSize = data.db_size_gb || 0;
+                    const dbGrowth = data.db_growth_mb_per_min || 0;
+                    document.getElementById('db-size').innerHTML = `${dbSize.toFixed(2)}<span class="metric-unit">GB</span>`;
+                    document.getElementById('db-growth').textContent = `Growth: ${dbGrowth.toFixed(1)} MB/min`;
+
+                    // Duration
+                    if (!startTime && total > 0) startTime = Date.now();
+                    if (startTime) {
+                        const elapsed = (Date.now() - startTime) / 1000 / 60;
+                        document.getElementById('duration').innerHTML = `${elapsed.toFixed(1)}<span class="metric-unit">min</span>`;
+                    }
+
+                    // Update TPS chart
+                    const now = new Date().toLocaleTimeString();
+                    tpsChart.data.labels.push(now);
+                    tpsChart.data.datasets[0].data.push(tps);
+
+                    // Keep only last 150 points (5 minutes at 2s intervals)
+                    if (tpsChart.data.labels.length > 150) {
+                        tpsChart.data.labels.shift();
+                        tpsChart.data.datasets[0].data.shift();
+                    }
+                    tpsChart.update('none');
+
+                    // Update per-node metrics
+                    if (data.nodes) {
+                        const nodeGrid = document.getElementById('node-grid');
+                        nodeGrid.innerHTML = '';
+
+                        data.nodes.forEach(node => {
+                            const card = document.createElement('div');
+                            card.className = 'node-card';
+                            card.innerHTML = `
+                                <div class="node-name">${node.name}</div>
+                                <div class="node-metric"><span>CPU:</span><span>${node.cpu.toFixed(1)}%</span></div>
+                                <div class="node-metric"><span>Memory:</span><span>${node.memory_mb.toFixed(0)} MB</span></div>
+                                <div class="node-metric"><span>Database:</span><span>${node.db_size_mb.toFixed(0)} MB</span></div>
+                            `;
+                            nodeGrid.appendChild(card);
+                        });
+                    }
+
+                    document.getElementById('last-update').textContent = `Last update: ${new Date().toLocaleTimeString()}`;
+                })
+                .catch(error => {
+                    document.getElementById('status').className = 'status disconnected';
+                    document.getElementById('status').textContent = '● Disconnected';
+                    console.error('Error fetching metrics:', error);
+                });
+        }
+
+        // Initial update and set interval
+        updateMetrics();
+        setInterval(updateMetrics, UPDATE_INTERVAL);
+    </script>
+</body>
+</html>
