@@ -299,9 +299,13 @@ func LoadAcc(dir string) (*Accumulate, error) {
 }
 
 func loadFile(dir, tmFile, accFile string) (*Config, error) {
-	tm, err := loadTendermint(dir, tmFile)
+	// Try to load Tendermint config, but it's optional for DAG-BFT nodes
+	tmCfg, err := loadTendermint(dir, tmFile)
 	if err != nil {
-		return nil, err
+		// If Tendermint config doesn't exist, use default and continue
+		// This allows DAG-BFT nodes to run without CometBFT configuration
+		tmCfg = tm.DefaultConfig()
+		tmCfg.SetRoot(dir)
 	}
 
 	acc, err := loadAccumulate(dir, accFile)
@@ -309,7 +313,7 @@ func loadFile(dir, tmFile, accFile string) (*Config, error) {
 		return nil, err
 	}
 
-	return &Config{*tm, *acc}, nil
+	return &Config{*tmCfg, *acc}, nil
 }
 
 func Store(config *Config) (err error) {

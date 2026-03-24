@@ -77,7 +77,21 @@ func (k *CometPrivValFile) get(inst *Instance) (address.Address, error) {
 
 	b, err := os.ReadFile(inst.path(k.Path))
 	if err != nil {
-		return nil, err
+		// CometBFT key files are optional for DAG-BFT nodes
+		// Generate a transient key instead
+		inst.logger.WarnContext(inst.context, "CometBFT validator key not found, generating transient key (OK for DAG-BFT)", "error", err)
+		pk, sk, err := ed25519.GenerateKey(rand.Reader)
+		if err != nil {
+			return nil, err
+		}
+		k.key = &address.PrivateKey{
+			PublicKey: address.PublicKey{
+				Type: protocol.SignatureTypeED25519,
+				Key:  pk,
+			},
+			Key: sk,
+		}
+		return k.key, nil
 	}
 
 	var keyFile cometKeyJSON
@@ -96,7 +110,21 @@ func (k *CometNodeKeyFile) get(inst *Instance) (address.Address, error) {
 
 	b, err := os.ReadFile(inst.path(k.Path))
 	if err != nil {
-		return nil, err
+		// CometBFT key files are optional for DAG-BFT nodes
+		// Generate a transient key instead
+		inst.logger.WarnContext(inst.context, "CometBFT node key not found, generating transient key (OK for DAG-BFT)", "error", err)
+		pk, sk, err := ed25519.GenerateKey(rand.Reader)
+		if err != nil {
+			return nil, err
+		}
+		k.key = &address.PrivateKey{
+			PublicKey: address.PublicKey{
+				Type: protocol.SignatureTypeED25519,
+				Key:  pk,
+			},
+			Key: sk,
+		}
+		return k.key, nil
 	}
 
 	var keyFile cometKeyJSON
