@@ -33,6 +33,7 @@ func (p *Primary) OnVoteReceived(vote *types.Vote) {
 	// Check voter is in committee (uses committeeMu)
 	p.committeeMu.RLock()
 	inCommittee := p.committee.ContainsValidator(vote.Author)
+	quorumCount := p.committee.QuorumCount()
 	p.committeeMu.RUnlock()
 
 	if !inCommittee {
@@ -67,8 +68,22 @@ func (p *Primary) OnVoteReceived(vote *types.Vote) {
 		return
 	}
 
-	// Add vote (avoid duplicates)
+	// Check if we've already reached the vote limit (spam protection)
+	// Maximum votes = 2x the quorum threshold (2f+1)
+	// This allows some safety margin while preventing spam attacks
+	maxVotes := quorumCount * VotesPerHeaderMultiplier
 	votes := p.pendingVotes[vote.HeaderDigest]
+	if len(votes) >= maxVotes {
+		slog.Warn("Vote limit reached for header - potential spam attack",
+			"headerDigest", vote.HeaderDigest.String(),
+			"currentVotes", len(votes),
+			"maxVotes", maxVotes,
+			"quorumCount", quorumCount,
+			"author", hexEncode(vote.Author))
+		return
+	}
+
+	// Add vote (avoid duplicates)
 	for _, v := range votes {
 		if bytes.Equal(v.Author, vote.Author) {
 			return // already have vote from this author

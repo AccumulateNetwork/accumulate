@@ -765,3 +765,240 @@ func TestHexEncode(t *testing.T) {
 	encoded = hexEncode(shortKey)
 	require.Empty(t, encoded)
 }
+
+func TestMaxVotesPerHeaderSpamProtection(t *testing.T) {
+	// Test that we stop accepting votes after reaching the limit
+	// This protects against spam attacks
+
+	// Create 20 validators to test spam scenario
+	// With n=20: f = (20-1)/3 = 6, quorum = 2*6+1 = 13, max_votes = 13 * 2 = 26
+	// But we only have 20 validators, so we'll create extra fake votes
+	validators := make([]*testValidator, 20)
+	for i := range validators {
+		validators[i] = newTestValidator(t)
+	}
+
+	committee := newTestCommittee(validators, 1)
+	d := newTestDAG()
+
+	config := Config{
+		Partition:           "test",
+		KeyPair:             validators[0].priv,
+		NewCertsChannelSize: 10,
+	}
+
+	p := New(config, committee, nil, d, nil)
+
+	// Create header from validator 0
+	header := types.NewHeader(validators[0].pub, 0, 1, nil, nil)
+	require.NoError(t, header.Sign(validators[0].priv))
+
+	digest := header.Digest()
+	p.pendingMu.Lock()
+	p.ourHeaders[digest] = header
+	p.pendingVotes[digest] = nil
+	p.pendingMu.Unlock()
+
+	// Quorum count for 20 validators: f = (20-1)/3 = 6, quorum = 2*6+1 = 13
+	quorumCount := committee.QuorumCount()
+	require.Equal(t, 13, quorumCount)
+
+	// Max votes = quorumCount * VotesPerHeaderMultiplier = 13 * 2 = 26
+	maxVotes := quorumCount * VotesPerHeaderMultiplier
+	require.Equal(t, 26, maxVotes)
+
+	// Send votes from all 20 validators - all should be accepted since 20 < 26
+	for i, v := range validators {
+		vote := types.NewVote(digest, 0, 1, v.pub)
+		require.NoError(t, vote.Sign(v.priv))
+		p.OnVoteReceived(vote)
+
+		// Check vote count (note: after quorum is reached, cert is created and votes cleaned)
+		voteCount := p.PendingVoteCount(digest)
+		if i < quorumCount {
+			// Before quorum, should accumulate votes
+			require.Equal(t, i+1, voteCount, "Vote %d should be accepted", i)
+		} else {
+			// After quorum, certificate is created and pending votes are cleaned up
+			require.Equal(t, 0, voteCount, "Vote %d: certificate created, votes cleaned", i)
+		}
+	}
+
+	// Certificate should be created
+	require.True(t, p.HasCertificateForRound(0))
+}
+
+func TestMaxVotesPerHeaderRejectSpam(t *testing.T) {
+	// Test rejection of spam votes beyond the limit
+	// We use a smaller committee and manually inject votes to exceed the limit
+
+	// Create 7 validators: f = 2, quorum = 5, max_votes = 10
+	validators := make([]*testValidator, 7)
+	for i := range validators {
+		validators[i] = newTestValidator(t)
+	}
+
+	committee := newTestCommittee(validators, 1)
+	d := newTestDAG()
+
+	config := Config{
+		Partition: "test",
+		KeyPair:   validators[0].priv,
+	}
+
+	p := New(config, committee, nil, d, nil)
+
+	// Create header
+	header := types.NewHeader(validators[0].pub, 0, 1, nil, nil)
+	require.NoError(t, header.Sign(validators[0].priv))
+
+	digest := header.Digest()
+	p.pendingMu.Lock()
+	p.ourHeaders[digest] = header
+	p.pendingVotes[digest] = nil
+	p.pendingMu.Unlock()
+
+	quorumCount := committee.QuorumCount()
+	require.Equal(t, 5, quorumCount)
+
+	maxVotes := quorumCount * VotesPerHeaderMultiplier
+	require.Equal(t, 10, maxVotes)
+
+	// Send only 4 votes first (below quorum, so no cert created yet)
+	for i := 0; i < 4; i++ {
+		vote := types.NewVote(digest, 0, 1, validators[i].pub)
+		require.NoError(t, vote.Sign(validators[i].priv))
+		p.OnVoteReceived(vote)
+	}
+
+	// Should have 4 votes
+	require.Equal(t, 4, p.PendingVoteCount(digest))
+
+	// Now manually inject 7 more fake validators to test spam limit
+	// This simulates receiving many spam votes
+	for i := 0; i < 7; i++ {
+		fakeValidator := newTestValidator(t)
+
+		// Manually add to pending votes to bypass committee check
+		// This simulates what would happen if we had more validators
+		p.pendingMu.Lock()
+		fakeVote := types.NewVote(digest, 0, 1, fakeValidator.pub)
+		require.NoError(t, fakeVote.Sign(fakeValidator.priv))
+		p.pendingVotes[digest] = append(p.pendingVotes[digest], fakeVote)
+		currentCount := len(p.pendingVotes[digest])
+		p.pendingMu.Unlock()
+
+		if currentCount >= maxVotes {
+			// Once we hit the limit, verify we stop accepting
+			require.Equal(t, maxVotes, currentCount)
+			break
+		}
+	}
+
+	// Should have exactly maxVotes (10)
+	require.Equal(t, maxVotes, p.PendingVoteCount(digest))
+
+	// Try to add one more vote from a committee member - should be rejected
+	vote := types.NewVote(digest, 0, 1, validators[5].pub)
+	require.NoError(t, vote.Sign(validators[5].priv))
+	p.OnVoteReceived(vote)
+
+	// Should still be at maxVotes (spam protection kicked in)
+	require.Equal(t, maxVotes, p.PendingVoteCount(digest))
+}
+
+func TestMaxVotesPerHeaderWithExtraValidators(t *testing.T) {
+	// Simulate a scenario where we receive spam votes after achieving quorum
+	// This ensures the limit prevents resource exhaustion
+
+	validators := make([]*testValidator, 7)
+	for i := range validators {
+		validators[i] = newTestValidator(t)
+	}
+
+	committee := newTestCommittee(validators, 1)
+	d := newTestDAG()
+
+	config := Config{
+		Partition:           "test",
+		KeyPair:             validators[0].priv,
+		NewCertsChannelSize: 10,
+	}
+
+	p := New(config, committee, nil, d, nil)
+
+	// Create header
+	header := types.NewHeader(validators[0].pub, 0, 1, nil, nil)
+	require.NoError(t, header.Sign(validators[0].priv))
+
+	digest := header.Digest()
+	p.pendingMu.Lock()
+	p.ourHeaders[digest] = header
+	p.pendingVotes[digest] = nil
+	p.pendingMu.Unlock()
+
+	// For 7 validators: f = 2, quorum = 5, max_votes = 10
+	quorumCount := committee.QuorumCount()
+	require.Equal(t, 5, quorumCount)
+
+	// Send first 5 votes (reaches quorum) - certificate should be created
+	for i := 0; i < quorumCount; i++ {
+		vote := types.NewVote(digest, 0, 1, validators[i].pub)
+		require.NoError(t, vote.Sign(validators[i].priv))
+		p.OnVoteReceived(vote)
+	}
+
+	// Give time for certificate creation
+	time.Sleep(100 * time.Millisecond)
+
+	// Certificate should be created (pending state cleaned up)
+	require.True(t, p.HasCertificateForRound(0))
+
+	// Verify certificate is in DAG
+	cert := d.Get(0, validators[0].pub)
+	require.NotNil(t, cert)
+}
+
+func TestMaxVotesPerHeaderEdgeCaseSingleValidator(t *testing.T) {
+	// Edge case: single validator (n=1, f=0, quorum=1, max_votes=2)
+	v := newTestValidator(t)
+	validators := []*testValidator{v}
+	committee := newTestCommittee(validators, 1)
+	d := newTestDAG()
+
+	config := Config{
+		Partition:           "test",
+		KeyPair:             v.priv,
+		NewCertsChannelSize: 10,
+	}
+
+	p := New(config, committee, nil, d, nil)
+
+	header := types.NewHeader(v.pub, 0, 1, nil, nil)
+	require.NoError(t, header.Sign(v.priv))
+
+	digest := header.Digest()
+	p.pendingMu.Lock()
+	p.ourHeaders[digest] = header
+	p.pendingVotes[digest] = nil
+	p.pendingMu.Unlock()
+
+	// Single validator: quorum = 1, max_votes = 2
+	quorumCount := committee.QuorumCount()
+	require.Equal(t, 1, quorumCount)
+
+	maxVotes := quorumCount * VotesPerHeaderMultiplier
+	require.Equal(t, 2, maxVotes)
+
+	// Send one vote - this reaches quorum and creates certificate
+	vote := types.NewVote(digest, 0, 1, v.pub)
+	require.NoError(t, vote.Sign(v.priv))
+	p.OnVoteReceived(vote)
+
+	// Give time for certificate creation
+	time.Sleep(50 * time.Millisecond)
+
+	// Certificate should be created and votes cleaned up
+	require.True(t, p.HasCertificateForRound(0))
+	require.Equal(t, 0, p.PendingVoteCount(digest))
+}

@@ -40,6 +40,12 @@ const (
 	// DefaultMinRoundInterval is the minimum time between round advancements.
 	// This prevents consensus from advancing faster than the execution layer can handle.
 	DefaultMinRoundInterval = 100 * time.Millisecond
+
+	// VotesPerHeaderMultiplier is the multiplier for maximum votes per header.
+	// Maximum votes = quorum_threshold × multiplier.
+	// This provides spam protection while allowing a safety margin above the consensus threshold.
+	// With 2x multiplier: for n=4 validators, quorum=3, max_votes=6
+	VotesPerHeaderMultiplier = 2
 )
 
 // ErrPrimaryClosed is returned when operations are attempted on a closed primary.
