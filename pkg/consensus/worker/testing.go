@@ -14,10 +14,14 @@ func (w *Worker) AddTestBatch(batch *types.Batch) {
 	digest := batch.Digest()
 
 	w.batchMu.Lock()
-	w.batches[digest] = batch
+	element := w.lruList.PushFront(digest)
+	w.batches[digest] = &lruEntry{
+		batch:   batch,
+		element: element,
+	}
 	w.batchMu.Unlock()
 
-	w.availableMu.Lock()
-	w.availableBatches = append(w.availableBatches, digest)
-	w.availableMu.Unlock()
+	// Add to available batch queue
+	w.queueDepth.Add(1)
+	w.availableBatchQueue <- digest
 }

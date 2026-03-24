@@ -11,6 +11,7 @@
 package worker
 
 import (
+	"container/list"
 	"context"
 	"errors"
 	"fmt"
@@ -29,7 +30,8 @@ const (
 	DefaultBatchTimeout    = 100 * time.Millisecond // max time to wait for full batch
 	DefaultMaxBatchBytes   = 500 * 1024             // 500KB max batch size
 	DefaultMaxPendingSize  = 10 * 1024 * 1024       // 10MB max pending transactions
-	DefaultMaxStoredBatches = 1000                  // max batches stored before eviction (reduced for memory safety)
+	DefaultMaxStoredBatches  = 1000                   // max batches stored before eviction (reduced for memory safety)
+	DefaultMaxBatchQueueSize = 1000                   // max batches in available queue before blocking
 )
 
 // ErrWorkerClosed is returned when operations are attempted on a closed worker.
@@ -84,6 +86,12 @@ type Config struct {
 	// Defaults to DefaultMaxStoredBatches.
 	MaxStoredBatches int
 
+	// MaxBatchQueueSize is the maximum number of batches in the available queue.
+	// When exceeded, batch creation will block until space is available.
+	// This provides backpressure when consensus cannot keep up.
+	// Defaults to DefaultMaxBatchQueueSize.
+	MaxBatchQueueSize int
+
 	// Validator validates transactions before they are added to a batch.
 	// If nil, no validation is performed (not recommended for production).
 	Validator TransactionValidator
@@ -106,6 +114,9 @@ func (c *Config) applyDefaults() {
 	if c.MaxStoredBatches <= 0 {
 		c.MaxStoredBatches = DefaultMaxStoredBatches
 	}
+	if c.MaxBatchQueueSize <= 0 {
+		c.MaxBatchQueueSize = DefaultMaxBatchQueueSize
+	}
 }
 
 // BatchStore defines the interface for storing and retrieving batches.
@@ -117,6 +128,12 @@ type BatchStore interface {
 
 	// StoreBatch stores a batch.
 	StoreBatch(batch *types.Batch) error
+}
+
+// lruEntry wraps a batch with its position in the LRU list.
+type lruEntry struct {
+	batch   *types.Batch
+	element *list.Element // pointer to element in lruList
 }
 
 // Worker collects transactions and creates batches for the consensus layer.
@@ -131,13 +148,15 @@ type Worker struct {
 	pending     [][]byte
 	pendingSize int
 
-	// Batch storage
-	batchMu sync.RWMutex
-	batches map[types.BatchDigest]*types.Batch
+	// Batch storage with LRU eviction
+	batchMu    sync.RWMutex
+	batches    map[types.BatchDigest]*lruEntry
+	lruList    *list.List // LRU tracking: front = most recent, back = least recent
 
-	// Available batch digests (for header creation)
-	availableMu      sync.Mutex
-	availableBatches []types.BatchDigest
+	// Available batch digests (for header creation) - bounded queue with backpressure
+	availableBatchQueue chan types.BatchDigest
+	queueDepth          atomic.Int64
+	batchesBlocked      atomic.Uint64
 
 	// Lifecycle management
 	lifecycleMu sync.Mutex
@@ -167,9 +186,10 @@ func New(config Config, g *gossip.GossipLayer) *Worker {
 		gossip:           g,
 		validator:        config.Validator,
 		pending:          make([][]byte, 0, config.BatchSize),
-		batches:          make(map[types.BatchDigest]*types.Batch),
-		availableBatches: make([]types.BatchDigest, 0),
-		triggerBatch:     make(chan struct{}, 1),
+		batches:             make(map[types.BatchDigest]*lruEntry),
+		lruList:             list.New(),
+		availableBatchQueue: make(chan types.BatchDigest, config.MaxBatchQueueSize),
+		triggerBatch:        make(chan struct{}, 1),
 	}
 }
 
@@ -306,20 +326,25 @@ func (w *Worker) Close() error {
 // GetBatch retrieves a batch by its digest.
 // Returns nil, nil if the batch is not found.
 // Implements the BatchStore interface.
+// Updates LRU on access to mark the batch as recently used.
 func (w *Worker) GetBatch(digest types.BatchDigest) (*types.Batch, error) {
-	w.batchMu.RLock()
-	defer w.batchMu.RUnlock()
+	w.batchMu.Lock()
+	defer w.batchMu.Unlock()
 
-	batch, ok := w.batches[digest]
+	entry, ok := w.batches[digest]
 	if !ok {
 		return nil, nil // Not found, not an error
 	}
 
-	return batch, nil
+	// Move to front of LRU list (most recently used)
+	w.lruList.MoveToFront(entry.element)
+
+	return entry.batch, nil
 }
 
 // StoreBatch stores a batch received from another worker.
 // Implements the BatchStore interface.
+// Uses LRU eviction policy when storage limit is reached.
 func (w *Worker) StoreBatch(batch *types.Batch) error {
 	if batch == nil {
 		return errors.New("batch is nil")
@@ -330,28 +355,41 @@ func (w *Worker) StoreBatch(batch *types.Batch) error {
 	w.batchMu.Lock()
 	defer w.batchMu.Unlock()
 
-	// Only store if we don't already have it
-	if _, exists := w.batches[digest]; !exists {
-		// Evict random batches if we're at the limit
-		// This prevents unbounded memory growth from gossip batches
-		if len(w.batches) >= w.config.MaxStoredBatches {
-			evictCount := len(w.batches) / 10 // Evict 10%
-			if evictCount < 1 {
-				evictCount = 1
-			}
-			evicted := 0
-			for d := range w.batches {
-				delete(w.batches, d)
-				evicted++
-				if evicted >= evictCount {
-					break
-				}
-			}
-			slog.Debug("Evicted batches due to storage limit",
-				"evicted", evicted,
-				"remaining", len(w.batches))
+	// If batch already exists, move it to front (mark as recently used)
+	if entry, exists := w.batches[digest]; exists {
+		w.lruList.MoveToFront(entry.element)
+		return nil
+	}
+
+	// Evict LRU batches if we're at the limit
+	// This prevents unbounded memory growth from gossip batches
+	if len(w.batches) >= w.config.MaxStoredBatches {
+		evictCount := len(w.batches) / 10 // Evict 10%
+		if evictCount < 1 {
+			evictCount = 1
 		}
-		w.batches[digest] = batch
+		evicted := 0
+		for i := 0; i < evictCount; i++ {
+			// Remove from back of list (least recently used)
+			back := w.lruList.Back()
+			if back == nil {
+				break
+			}
+			lruDigest := back.Value.(types.BatchDigest)
+			w.lruList.Remove(back)
+			delete(w.batches, lruDigest)
+			evicted++
+		}
+		slog.Debug("Evicted batches due to storage limit (LRU)",
+			"evicted", evicted,
+			"remaining", len(w.batches))
+	}
+
+	// Add new batch to front of LRU list (most recently used)
+	element := w.lruList.PushFront(digest)
+	w.batches[digest] = &lruEntry{
+		batch:   batch,
+		element: element,
 	}
 
 	return nil
@@ -361,34 +399,52 @@ func (w *Worker) StoreBatch(batch *types.Batch) error {
 // These are batches created by this worker that have been broadcast but not yet
 // included in a committed header.
 func (w *Worker) AvailableBatches() []types.BatchDigest {
-	w.availableMu.Lock()
-	defer w.availableMu.Unlock()
+	var result []types.BatchDigest
 
-	// Return a copy to prevent external modification
-	result := make([]types.BatchDigest, len(w.availableBatches))
-	copy(result, w.availableBatches)
-	return result
+	// Drain available batches from channel without blocking
+	for {
+		select {
+		case digest := <-w.availableBatchQueue:
+			result = append(result, digest)
+		default:
+			// No more batches available
+			w.queueDepth.Store(0)
+			return result
+		}
+	}
 }
 
 // ConsumeAvailableBatches returns and clears all available batch digests.
 // This is used by the primary when creating a header.
 func (w *Worker) ConsumeAvailableBatches() []types.BatchDigest {
-	w.availableMu.Lock()
-	defer w.availableMu.Unlock()
+	var result []types.BatchDigest
 
-	result := w.availableBatches
-	w.availableBatches = make([]types.BatchDigest, 0)
-	return result
+	// Drain all available batches from channel without blocking
+	for {
+		select {
+		case digest := <-w.availableBatchQueue:
+			result = append(result, digest)
+			w.queueDepth.Add(-1)
+		default:
+			// No more batches available
+			w.queueDepth.Store(0)
+			return result
+		}
+	}
 }
 
 // PruneBatches removes batches that have been committed to consensus.
 // This should be called after batches are finalized to free memory.
+// Also removes entries from the LRU list.
 func (w *Worker) PruneBatches(committed []types.BatchDigest) {
 	w.batchMu.Lock()
 	defer w.batchMu.Unlock()
 
 	for _, digest := range committed {
-		delete(w.batches, digest)
+		if entry, ok := w.batches[digest]; ok {
+			w.lruList.Remove(entry.element)
+			delete(w.batches, digest)
+		}
 	}
 
 	slog.Debug("Pruned committed batches",
@@ -425,6 +481,13 @@ func (w *Worker) Metrics() (batchesCreated, txnsProcessed, txnsReceived uint64) 
 // ValidationMetrics returns the worker's validation metrics.
 func (w *Worker) ValidationMetrics() (validated, rejected uint64) {
 	return w.txnsValidated.Load(), w.txnsRejected.Load()
+}
+
+// QueueMetrics returns the worker's batch queue metrics.
+// queueDepth is the current number of batches in the available queue.
+// batchesBlocked is the total number of times batch creation was blocked due to full queue.
+func (w *Worker) QueueMetrics() (queueDepth int64, batchesBlocked uint64) {
+	return w.queueDepth.Load(), w.batchesBlocked.Load()
 }
 
 // ID returns the worker's ID.
@@ -475,7 +538,7 @@ func (w *Worker) createAndBroadcastBatch() {
 		return
 	}
 
-	// Store locally first (with eviction to prevent unbounded growth)
+	// Store locally first (with LRU eviction to prevent unbounded growth)
 	digest := batch.Digest()
 	w.batchMu.Lock()
 	if len(w.batches) >= w.config.MaxStoredBatches {
@@ -484,25 +547,51 @@ func (w *Worker) createAndBroadcastBatch() {
 			evictCount = 1
 		}
 		evicted := 0
-		for d := range w.batches {
-			delete(w.batches, d)
-			evicted++
-			if evicted >= evictCount {
+		for i := 0; i < evictCount; i++ {
+			// Remove from back of list (least recently used)
+			back := w.lruList.Back()
+			if back == nil {
 				break
 			}
+			lruDigest := back.Value.(types.BatchDigest)
+			w.lruList.Remove(back)
+			delete(w.batches, lruDigest)
+			evicted++
 		}
-		slog.Warn("Evicted local batches due to storage limit (consensus not keeping up)",
+		slog.Warn("Evicted local batches due to storage limit (consensus not keeping up, LRU)",
 			"evicted", evicted,
 			"remaining", len(w.batches))
 	}
-	w.batches[digest] = batch
+	// Add new batch to front of LRU list (most recently used)
+	element := w.lruList.PushFront(digest)
+	w.batches[digest] = &lruEntry{
+		batch:   batch,
+		element: element,
+	}
 	w.batchMu.Unlock()
 
-	// Add to available batches
-	w.availableMu.Lock()
-	w.availableBatches = append(w.availableBatches, digest)
-	queueDepth := len(w.availableBatches)
-	w.availableMu.Unlock()
+	// Add to available batch queue (blocking backpressure if full)
+	queueDepth := w.queueDepth.Add(1)
+
+	// Log if we're about to block due to full queue
+	if queueDepth > int64(w.config.MaxBatchQueueSize) {
+		w.batchesBlocked.Add(1)
+		slog.Warn("Batch queue full, applying backpressure",
+			"queueDepth", queueDepth,
+			"maxQueueSize", w.config.MaxBatchQueueSize,
+			"workerID", w.config.ID,
+			"partition", w.config.Partition)
+	}
+
+	// This will block if the queue is full (backpressure)
+	select {
+	case w.availableBatchQueue <- digest:
+		// Successfully enqueued
+	case <-w.ctx.Done():
+		// Worker is shutting down
+		w.queueDepth.Add(-1)
+		return
+	}
 
 	// Warn if batch queue depth is excessive (consensus not consuming batches fast enough)
 	if queueDepth > 500 {
@@ -585,6 +674,7 @@ func (w *Worker) handleIncomingBatches() {
 }
 
 // HasBatch returns true if the worker has the batch with the given digest.
+// Does not update LRU (read-only check).
 func (w *Worker) HasBatch(digest types.BatchDigest) bool {
 	w.batchMu.RLock()
 	defer w.batchMu.RUnlock()
@@ -593,6 +683,7 @@ func (w *Worker) HasBatch(digest types.BatchDigest) bool {
 }
 
 // BatchDigests returns the digests of all stored batches.
+// Does not update LRU (read-only access).
 func (w *Worker) BatchDigests() []types.BatchDigest {
 	w.batchMu.RLock()
 	defer w.batchMu.RUnlock()

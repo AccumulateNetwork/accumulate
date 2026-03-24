@@ -348,16 +348,27 @@ func TestWorker_AvailableBatches(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Should have 2 available batches
+	// Note: AvailableBatches() drains the queue, so we can only call it once
 	available := w.AvailableBatches()
 	assert.Len(t, available, 2)
 
-	// Consume them
+	// Queue should now be empty after draining
+	available2 := w.AvailableBatches()
+	assert.Len(t, available2, 0)
+
+	// Create one more batch to test ConsumeAvailableBatches
+	for i := 0; i < 3; i++ {
+		_ = w.Submit([]byte("batch3"))
+	}
+	time.Sleep(100 * time.Millisecond)
+
+	// Consume should also drain the queue
 	consumed := w.ConsumeAvailableBatches()
-	assert.Len(t, consumed, 2)
+	assert.Len(t, consumed, 1)
 
 	// Available should now be empty
-	available = w.AvailableBatches()
-	assert.Len(t, available, 0)
+	available3 := w.AvailableBatches()
+	assert.Len(t, available3, 0)
 
 	cancel()
 }
@@ -766,6 +777,106 @@ func TestWorker_BatchContentsCorrect(t *testing.T) {
 	for i, tx := range batch.Transactions {
 		assert.True(t, bytes.Equal(txns[i], tx), "transaction %d should match", i)
 	}
+
+	cancel()
+}
+
+func TestWorker_BoundedQueueBackpressure(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Create worker with very small queue size for testing
+	w := worker.New(worker.Config{
+		ID:                0,
+		Partition:         "test",
+		BatchSize:         2,
+		BatchTimeout:      10 * time.Second,
+		MaxBatchQueueSize: 3, // Very small queue
+	}, nil)
+
+	go func() { _ = w.Start(ctx) }()
+	time.Sleep(50 * time.Millisecond)
+
+	// Create batches to fill the queue (don't consume them)
+	for i := 0; i < 3; i++ {
+		err := w.Submit([]byte("tx1"))
+		require.NoError(t, err)
+		err = w.Submit([]byte("tx2"))
+		require.NoError(t, err)
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	// Queue should now be full (3 batches)
+	queueDepth, _ := w.QueueMetrics()
+	assert.Equal(t, int64(3), queueDepth)
+
+	// Try to create one more batch - this should block briefly
+	// We'll do this in a goroutine with a timeout
+	done := make(chan bool, 1)
+	go func() {
+		// Submit 2 more transactions to trigger batch creation
+		_ = w.Submit([]byte("tx3"))
+		_ = w.Submit([]byte("tx4"))
+		done <- true
+	}()
+
+	// Give it a moment to start blocking
+	time.Sleep(100 * time.Millisecond)
+
+	// Consume one batch to make space
+	consumed := w.ConsumeAvailableBatches()
+	assert.GreaterOrEqual(t, len(consumed), 1, "should have consumed at least 1 batch")
+
+	// Now the goroutine should be able to complete
+	select {
+	case <-done:
+		// Success - batch was created after space became available
+	case <-time.After(2 * time.Second):
+		t.Fatal("batch creation did not complete after making space in queue")
+	}
+
+	// Check that batches were blocked metric is incremented
+	_, batchesBlocked := w.QueueMetrics()
+	assert.Greater(t, batchesBlocked, uint64(0), "should have recorded blocked batches")
+
+	cancel()
+}
+
+func TestWorker_QueueMetrics(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	w := worker.New(worker.Config{
+		ID:           0,
+		Partition:    "test",
+		BatchSize:    2,
+		BatchTimeout: 10 * time.Second,
+	}, nil)
+
+	go func() { _ = w.Start(ctx) }()
+	time.Sleep(50 * time.Millisecond)
+
+	// Initially, queue should be empty
+	queueDepth, batchesBlocked := w.QueueMetrics()
+	assert.Equal(t, int64(0), queueDepth)
+	assert.Equal(t, uint64(0), batchesBlocked)
+
+	// Create a batch
+	_ = w.Submit([]byte("tx1"))
+	_ = w.Submit([]byte("tx2"))
+	time.Sleep(100 * time.Millisecond)
+
+	// Queue depth should be 1
+	queueDepth, _ = w.QueueMetrics()
+	assert.Equal(t, int64(1), queueDepth)
+
+	// Consume the batch
+	consumed := w.ConsumeAvailableBatches()
+	assert.Len(t, consumed, 1)
+
+	// Queue should be empty again
+	queueDepth, _ = w.QueueMetrics()
+	assert.Equal(t, int64(0), queueDepth)
 
 	cancel()
 }
