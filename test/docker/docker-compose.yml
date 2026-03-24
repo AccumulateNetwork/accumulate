@@ -1,84 +1,285 @@
-# Docker Compose for Load Testing Environment
+# Docker Compose for 12-Node DAG-BFT Network
+# 3 BVNs × 4 validators each
 #
-# This configuration runs a full Accumulate network for load testing:
-#   - 3 Block Validator Networks (BVN1, BVN2, BVN3)
-#   - 4 validators per BVN (12 validator nodes total)
-#   - 1 Directory Network (DN) with validators
-#   - Configured for comprehensive load testing
-#
-# Network Architecture:
-#   - DN: Coordinates cross-BVN transactions
-#   - BVN1, BVN2, BVN3: Process account transactions independently
-#   - Each BVN has 4 validators for Byzantine fault tolerance
-#
-# Memory Management:
-#   - Each node limited to 4GB (48GB total for 12 nodes)
-#   - Monitor with: docker stats
-#   - Adjust mem_limit if nodes OOM
+# ⚠️  CRITICAL: Bootstrap server is REQUIRED - do not remove or disable it!
+# ⚠️  See README-DAGBFT.md for complete documentation
 #
 # Usage:
 #   docker compose -f test/docker/docker-compose.yml build
-#   docker compose -f test/docker/docker-compose.yml up
-#   docker compose -f test/docker/docker-compose.yml down
-#
-# View logs:
+#   docker compose -f test/docker/docker-compose.yml up -d
 #   docker compose -f test/docker/docker-compose.yml logs -f
-#   docker compose -f test/docker/docker-compose.yml logs -f load-testnet
-#
-# Access API:
-#   curl http://localhost:8080/v3/describe
-
-version: '3.8'
+#   docker compose -f test/docker/docker-compose.yml down -v
 
 services:
-  # Main load testing network - runs all nodes via devnet mode
-  load-testnet:
+  # CRITICAL: Bootstrap server is REQUIRED for peer discovery
+  # All validators need this to find each other on the network
+  bootstrap:
     build:
       context: ../..
       dockerfile: Dockerfile
-    container_name: accumulate-load-testnet
-    hostname: load-testnet
-    restart: unless-stopped
-    mem_limit: 16g
-    command:
-      - run
-      - devnet
-      - --bvns=3
-      - --validators=4
-      - --followers=0
-      - --name=LoadTest
-      - --port=26656
-      - --reset
-    environment:
-      - ACC_LOG_LEVEL=info
+    container_name: acc-bootstrap
+    mem_limit: 2g
     ports:
-      # API ports for each BVN + DN
-      - "8080:8080"    # BVN0 API
-      - "8081:8081"    # BVN1 API
-      - "8082:8082"    # BVN2 API
-      - "8083:8083"    # DN API
-      # P2P ports
-      - "26656-26670:26656-26670"
-      # Prometheus metrics
-      - "26660-26674:26660-26674"
-    volumes:
-      - load-testnet-data:/root/.accumulate
-    networks:
-      - load-test-net
+      - "16593:16593"
+    entrypoint: ["/bin/accumulated-bootstrap"]
+    command:
+      - --listen
+      - /ip4/0.0.0.0/tcp/16593
+    restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/v3/describe"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
+      test: ["CMD-SHELL", "netstat -tuln | grep -q ':16593 ' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Initialize network configuration
+  init:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    container_name: acc-init
+    volumes:
+      - network-config:/root/.accumulate
+      - ../..:/workspace
+    working_dir: /workspace
+    command:
+      - init
+      - network
+      - test/docker/docker-network.yml
+      - --reset
+      - --faucet-seed=FAUCET
+
+  # BVN1 Validators
+  bvn1-val1:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    container_name: acc-bvn1-val1
+    mem_limit: 2g
+    volumes:
+      - network-config:/root/.accumulate
+    command:
+      - -w=/root/.accumulate/bvn1-1
+      - /root/.accumulate/bvn1-1/accumulate.toml
+    ports:
+      - "26660:26660"
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      bootstrap:
+        condition: service_started
+
+  bvn1-val2:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    container_name: acc-bvn1-val2
+    mem_limit: 2g
+    volumes:
+      - network-config:/root/.accumulate
+    command:
+      - -w=/root/.accumulate/bvn1-2
+      - /root/.accumulate/bvn1-2/accumulate.toml
+    ports:
+      - "26661:26660"
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      bootstrap:
+        condition: service_started
+
+  bvn1-val3:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    container_name: acc-bvn1-val3
+    mem_limit: 2g
+    volumes:
+      - network-config:/root/.accumulate
+    command:
+      - -w=/root/.accumulate/bvn1-3
+      - /root/.accumulate/bvn1-3/accumulate.toml
+    ports:
+      - "26662:26660"
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      bootstrap:
+        condition: service_started
+
+  bvn1-val4:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    container_name: acc-bvn1-val4
+    mem_limit: 2g
+    volumes:
+      - network-config:/root/.accumulate
+    command:
+      - -w=/root/.accumulate/bvn1-4
+      - /root/.accumulate/bvn1-4/accumulate.toml
+    ports:
+      - "26663:26660"
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      bootstrap:
+        condition: service_started
+
+  # BVN2 Validators
+  bvn2-val1:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    container_name: acc-bvn2-val1
+    mem_limit: 2g
+    volumes:
+      - network-config:/root/.accumulate
+    command:
+      - -w=/root/.accumulate/bvn2-1
+      - /root/.accumulate/bvn2-1/accumulate.toml
+    ports:
+      - "26664:26660"
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      bootstrap:
+        condition: service_started
+
+  bvn2-val2:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    container_name: acc-bvn2-val2
+    mem_limit: 2g
+    volumes:
+      - network-config:/root/.accumulate
+    command:
+      - -w=/root/.accumulate/bvn2-2
+      - /root/.accumulate/bvn2-2/accumulate.toml
+    ports:
+      - "26665:26660"
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      bootstrap:
+        condition: service_started
+
+  bvn2-val3:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    container_name: acc-bvn2-val3
+    mem_limit: 2g
+    volumes:
+      - network-config:/root/.accumulate
+    command:
+      - -w=/root/.accumulate/bvn2-3
+      - /root/.accumulate/bvn2-3/accumulate.toml
+    ports:
+      - "26666:26660"
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      bootstrap:
+        condition: service_started
+
+  bvn2-val4:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    container_name: acc-bvn2-val4
+    mem_limit: 2g
+    volumes:
+      - network-config:/root/.accumulate
+    command:
+      - -w=/root/.accumulate/bvn2-4
+      - /root/.accumulate/bvn2-4/accumulate.toml
+    ports:
+      - "26667:26660"
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      bootstrap:
+        condition: service_started
+
+  # BVN3 Validators
+  bvn3-val1:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    container_name: acc-bvn3-val1
+    mem_limit: 2g
+    volumes:
+      - network-config:/root/.accumulate
+    command:
+      - -w=/root/.accumulate/bvn3-1
+      - /root/.accumulate/bvn3-1/accumulate.toml
+    ports:
+      - "26668:26660"
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      bootstrap:
+        condition: service_started
+
+  bvn3-val2:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    container_name: acc-bvn3-val2
+    mem_limit: 2g
+    volumes:
+      - network-config:/root/.accumulate
+    command:
+      - -w=/root/.accumulate/bvn3-2
+      - /root/.accumulate/bvn3-2/accumulate.toml
+    ports:
+      - "26669:26660"
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      bootstrap:
+        condition: service_started
+
+  bvn3-val3:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    container_name: acc-bvn3-val3
+    mem_limit: 2g
+    volumes:
+      - network-config:/root/.accumulate
+    command:
+      - -w=/root/.accumulate/bvn3-3
+      - /root/.accumulate/bvn3-3/accumulate.toml
+    ports:
+      - "26670:26660"
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      bootstrap:
+        condition: service_started
+
+  bvn3-val4:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    container_name: acc-bvn3-val4
+    mem_limit: 2g
+    volumes:
+      - network-config:/root/.accumulate
+    command:
+      - -w=/root/.accumulate/bvn3-4
+      - /root/.accumulate/bvn3-4/accumulate.toml
+    ports:
+      - "26671:26660"
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      bootstrap:
+        condition: service_started
 
 volumes:
-  load-testnet-data:
-    driver: local
-
-networks:
-  load-test-net:
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 172.28.0.0/16
+  network-config:

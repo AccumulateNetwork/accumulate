@@ -371,18 +371,39 @@ func (d *Daemon) loadKeys() error {
 		return nil
 	}
 
-	var err error
-	d.privVal, err = config.LoadFilePV(
-		d.Config.PrivValidatorKeyFile(),
-		d.Config.PrivValidatorStateFile(),
-	)
-	if err != nil {
-		return errors.UnknownError.WithFormat("load private validator key: %v", err)
+	// CometBFT keys are optional for DAG-BFT nodes
+	// Check if files exist before trying to load them to avoid CometBFT panics
+	keyFile := d.Config.PrivValidatorKeyFile()
+	stateFile := d.Config.PrivValidatorStateFile()
+
+	if _, err := os.Stat(keyFile); err == nil {
+		// File exists, try to load it
+		var err error
+		d.privVal, err = config.LoadFilePV(keyFile, stateFile)
+		if err != nil {
+			d.Logger.Info("CometBFT validator key exists but failed to load (OK for DAG-BFT nodes)", "error", err)
+			d.privVal = nil
+		}
+	} else {
+		// File doesn't exist - this is OK for DAG-BFT nodes
+		d.Logger.Info("CometBFT validator key not found (OK for DAG-BFT nodes)")
+		d.privVal = nil
 	}
 
-	d.nodeKey, err = tmp2p.LoadNodeKey(d.Config.NodeKeyFile())
-	if err != nil {
-		return errors.UnknownError.WithFormat("load node key: %v", err)
+	// CometBFT node key is also optional for DAG-BFT nodes
+	nodeKeyFile := d.Config.NodeKeyFile()
+	if _, err := os.Stat(nodeKeyFile); err == nil {
+		// File exists, try to load it
+		var err error
+		d.nodeKey, err = tmp2p.LoadNodeKey(nodeKeyFile)
+		if err != nil {
+			d.Logger.Info("CometBFT node key exists but failed to load (OK for DAG-BFT nodes)", "error", err)
+			d.nodeKey = nil
+		}
+	} else {
+		// File doesn't exist - this is OK for DAG-BFT nodes
+		d.Logger.Info("CometBFT node key not found (OK for DAG-BFT nodes)")
+		d.nodeKey = nil
 	}
 
 	return nil
