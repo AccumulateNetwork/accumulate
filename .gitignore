@@ -4,11 +4,15 @@ accumulate
 play-accumulate
 golangci-lint
 consensus-testnet
+perfmon
+debug
 !*/
 tools/cmd/gen-types/gen-types
 tools/cmd/gen-enum/gen-enum
 tools/cmd/gen-types/go_build*
 tools/cmd/gen-enum/go_build*
+test/cmd/perfmon/perfmon
+tools/cmd/debug/debug
 
 # Binaries and test data
 *.exe

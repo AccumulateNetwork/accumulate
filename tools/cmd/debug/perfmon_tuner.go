@@ -45,12 +45,17 @@ func init() {
 // TuningRecommendation represents a single tuning suggestion
 type TuningRecommendation struct {
 	Category    string                 `json:"category"`
-	Parameter   string                 `json:"parameter"`
-	CurrentVal  interface{}            `json:"current_value,omitempty"`
-	Suggested   interface{}            `json:"suggested_value"`
-	Reason      string                 `json:"reason"`
-	Impact      string                 `json:"expected_impact"`
 	Priority    string                 `json:"priority"`
+	Description string                 `json:"description"`
+	Expected    string                 `json:"expected"`
+	Actions     []string               `json:"actions,omitempty"`
+
+	// Legacy fields for compatibility with existing code
+	Parameter   string                 `json:"parameter,omitempty"`
+	CurrentVal  interface{}            `json:"current_value,omitempty"`
+	Suggested   interface{}            `json:"suggested_value,omitempty"`
+	Reason      string                 `json:"reason,omitempty"`
+	Impact      string                 `json:"expected_impact,omitempty"`
 	Additional  map[string]interface{} `json:"additional_info,omitempty"`
 }
 
@@ -66,12 +71,15 @@ type BottleneckAnalysis struct {
 
 // TuningReport contains the complete tuning analysis
 type TuningReport struct {
-	ReportFile       string                 `json:"report_file"`
-	AnalysisTime     string                 `json:"analysis_time"`
-	Summary          TuningSummary          `json:"summary"`
-	Bottlenecks      []BottleneckAnalysis   `json:"bottlenecks"`
 	Recommendations  []TuningRecommendation `json:"recommendations"`
-	BaselineComparison *BaselineComparison  `json:"baseline_comparison,omitempty"`
+	Regressions      []Regression           `json:"regressions,omitempty"`
+
+	// Legacy fields for compatibility with existing code
+	ReportFile         string              `json:"report_file,omitempty"`
+	AnalysisTime       string              `json:"analysis_time,omitempty"`
+	Summary            TuningSummary       `json:"summary,omitempty"`
+	Bottlenecks        []BottleneckAnalysis `json:"bottlenecks,omitempty"`
+	BaselineComparison *BaselineComparison `json:"baseline_comparison,omitempty"`
 }
 
 // TuningSummary provides high-level analysis

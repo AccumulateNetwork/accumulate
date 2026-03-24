@@ -77,6 +77,14 @@ type ExecutorConfig struct {
 
 // NewExecutor creates a new transaction executor.
 func NewExecutor(config ExecutorConfig) (*Executor, error) {
+	// Validate and set default block interval
+	if config.BlockInterval < 0 {
+		return nil, errors.New("block interval cannot be negative")
+	}
+	if config.BlockInterval == 0 {
+		config.BlockInterval = 1 * time.Second // Default to 1 second
+	}
+
 	validators := make(map[string]bool)
 	for _, v := range config.Validators {
 		validators[string(v)] = true

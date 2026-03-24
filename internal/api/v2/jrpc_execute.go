@@ -155,11 +155,15 @@ func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byt
 }
 
 func (m *JrpcMethods) ExecuteDirect(ctx context.Context, params json.RawMessage) interface{} {
+	m.logger.Info("ExecuteDirect called")
+
 	req := new(ExecuteRequest)
 	err := json.Unmarshal(params, req)
 	if err != nil {
 		return validatorError(err)
 	}
+
+	m.logger.Info("ExecuteDirect submitter info", "submitter_type", fmt.Sprintf("%T", m.Submitter), "check_only", req.CheckOnly)
 
 	return m.submit(m.Submitter, m.Validator, ctx, req.Envelope, req.CheckOnly)
 }
@@ -192,15 +196,24 @@ func (m *JrpcMethods) submit(sub api.Submitter, val api.Validator, ctx context.C
 		if val == nil {
 			return accumulateError(fmt.Errorf("service not available"))
 		}
+		m.logger.Info("Calling validator.Validate", "validator_type", fmt.Sprintf("%T", val))
 		resp, err = val.Validate(ctx, env, api.ValidateOptions{Full: &no})
 	} else {
 		if sub == nil {
 			return accumulateError(fmt.Errorf("service not available"))
 		}
+		m.logger.Info("Calling submitter.Submit", "submitter_type", fmt.Sprintf("%T", sub))
 		resp, err = sub.Submit(ctx, env, api.SubmitOptions{Verify: &no, Wait: &yes})
 	}
 	if err != nil {
+		m.logger.Error("Submit/Validate failed", "error", err)
 		return accumulateError(err)
+	}
+
+	m.logger.Info("Submit/Validate response received", "num_submissions", len(resp))
+	for i, s := range resp {
+		statusNil := s.Status == nil
+		m.logger.Info("Submission details", "index", i, "success", s.Success, "message", s.Message, "status_is_nil", statusNil)
 	}
 
 	// Build the response
@@ -221,11 +234,35 @@ func (m *JrpcMethods) submit(sub api.Submitter, val api.Validator, ctx context.C
 func submissionV3(sub ...*api.Submission) *TxResponse {
 	// Build the response
 	res := new(TxResponse)
-	for _, r := range sub {
+
+	// Defensive check: ensure we have at least one submission
+	if len(sub) == 0 {
+		res.Code = 1
+		res.Message = "No submissions returned"
+		return res
+	}
+
+	for i, r := range sub {
+		statusNil := r.Status == nil
+		// Log each submission's Status field value before the nil check
+		if statusNil {
+			// Log with more context about the nil Status
+			fmt.Printf("DEBUG submissionV3: submission[%d] has nil Status (Success=%v, Message=%q)\n", i, r.Success, r.Message)
+		} else {
+			fmt.Printf("DEBUG submissionV3: submission[%d] has non-nil Status (TxID=%v)\n", i, r.Status.TxID)
+		}
+
 		if !r.Success {
 			res.Code = 1
 			res.Message = r.Message + "; "
 		}
+	}
+
+	// Defensive check: ensure first submission has Status field
+	if sub[0].Status == nil {
+		res.Code = 1
+		res.Message = "Transaction status not available"
+		return res
 	}
 
 	res.Txid = sub[0].Status.TxID
@@ -233,8 +270,12 @@ func submissionV3(sub ...*api.Submission) *TxResponse {
 	res.TransactionHash = h[:]
 
 	res.SignatureHashes = make([][]byte, len(sub)-1)
-	for i, sub := range sub[1:] {
-		h := sub.Status.TxID.Hash()
+	for i, s := range sub[1:] {
+		// Defensive check: skip if Status is nil
+		if s.Status == nil {
+			continue
+		}
+		h := s.Status.TxID.Hash()
 		res.SignatureHashes[i] = h[:]
 	}
 
@@ -243,7 +284,10 @@ func submissionV3(sub ...*api.Submission) *TxResponse {
 	} else if len(sub) > 0 {
 		var st []*protocol.TransactionStatus
 		for _, r := range sub {
-			st = append(st, r.Status)
+			// Defensive check: only append non-nil Status
+			if r.Status != nil {
+				st = append(st, r.Status)
+			}
 		}
 		res.Result = st
 	}

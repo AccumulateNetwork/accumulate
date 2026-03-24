@@ -576,3 +576,38 @@ func TestComputeTxnsHash(t *testing.T) {
 	hash5 := ComputeTxnsHash([][32]byte{txHash2, txHash})
 	assert.NotEqual(t, hash4, hash5)
 }
+
+func TestExecutor_InvalidBlockInterval(t *testing.T) {
+	pub, _, _ := ed25519.GenerateKey(rand.Reader)
+
+	// Test zero interval defaults to 1 second
+	executor, err := NewExecutor(ExecutorConfig{
+		Validators:    []ed25519.PublicKey{pub},
+		BlockInterval: 0,
+		TxRate:        100,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, executor)
+	assert.Equal(t, 1*time.Second, executor.GetBlockInterval())
+	executor.Cleanup()
+
+	// Test negative interval returns error
+	_, err = NewExecutor(ExecutorConfig{
+		Validators:    []ed25519.PublicKey{pub},
+		BlockInterval: -1 * time.Second,
+		TxRate:        100,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "block interval cannot be negative")
+
+	// Test valid interval works
+	executor, err = NewExecutor(ExecutorConfig{
+		Validators:    []ed25519.PublicKey{pub},
+		BlockInterval: 3 * time.Second,
+		TxRate:        100,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, executor)
+	assert.Equal(t, 3*time.Second, executor.GetBlockInterval())
+	defer executor.Cleanup()
+}
