@@ -86,6 +86,12 @@ func main() {
 	}
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: level})))
 
+	// Validate block interval
+	if *blockInterval <= 0 {
+		slog.Error("Invalid block interval: must be positive", "block_interval", *blockInterval)
+		os.Exit(1)
+	}
+
 	// Generate or load key and create signer
 	var privKey ed25519.PrivateKey
 	var signer types.Signer
