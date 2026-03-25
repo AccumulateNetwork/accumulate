@@ -51,6 +51,8 @@ test/cmd/testreport/testreport
 # Build artifacts
 /accumulated-testnet
 /load-generator
+byzantine-attack
+vote-spam-attack
 
 # Orchestrator artifacts
 /reviews/
