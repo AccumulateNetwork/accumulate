@@ -284,5 +284,30 @@ services:
       bootstrap:
         condition: service_started
 
+  # Per-node monitoring (collects CPU, memory, and database metrics)
+  monitoring:
+    image: python:3.12-slim
+    container_name: acc-monitoring
+    volumes:
+      - network-config:/root/.accumulate:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./monitoring.py:/monitoring.py:ro
+    working_dir: /
+    command: ["python3", "/monitoring.py"]
+    depends_on:
+      - bvn1-val1
+      - bvn1-val2
+      - bvn1-val3
+      - bvn1-val4
+      - bvn2-val1
+      - bvn2-val2
+      - bvn2-val3
+      - bvn2-val4
+      - bvn3-val1
+      - bvn3-val2
+      - bvn3-val3
+      - bvn3-val4
+    restart: unless-stopped
+
 volumes:
   network-config:
