@@ -25,6 +25,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+// MaxRequestBodySize is the maximum allowed size for HTTP request bodies (10MB).
+// This prevents denial-of-service attacks via extremely large requests.
+const MaxRequestBodySize = 10 * 1024 * 1024
+
 type JrpcMethods struct {
 	Options
 	methods  jsonrpc2.MethodMap
@@ -62,10 +66,17 @@ func (m *JrpcMethods) Register(r *httprouter.Router) error {
 	r.GET("/describe", m.jrpc2http(m.Describe))
 
 	rpc := jsonrpc2.HTTPRequestHandler(m.methods, stdlog.New(os.Stdout, "", 0))
-	r.POST("/v2", func(w http.ResponseWriter, r *http.Request, p_ httprouter.Params) {
-		rpc(w, r)
-	})
+	r.POST("/v2", m.limitRequestBodySize(rpc))
 	return nil
+}
+
+// limitRequestBodySize wraps an http.Handler to enforce request body size limits.
+func (m *JrpcMethods) limitRequestBodySize(next http.HandlerFunc) httprouter.Handle {
+	return func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+		// Limit request body size to prevent DoS attacks
+		r.Body = http.MaxBytesReader(w, r.Body, MaxRequestBodySize)
+		next(w, r)
+	}
 }
 
 func (m *JrpcMethods) NewMux() *httprouter.Router {
@@ -76,9 +87,27 @@ func (m *JrpcMethods) NewMux() *httprouter.Router {
 
 func (m *JrpcMethods) jrpc2http(jrpc jsonrpc2.MethodFunc) httprouter.Handle {
 	return func(res http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+		// Limit request body size to prevent DoS attacks
+		req.Body = http.MaxBytesReader(res, req.Body, MaxRequestBodySize)
+
 		body, err := io.ReadAll(req.Body)
 		if err != nil {
-			res.WriteHeader(http.StatusBadRequest)
+			// Check if the error is due to request size exceeding limit
+			res.Header().Add("Content-Type", "application/json")
+			if err.Error() == "http: request body too large" {
+				m.logError("Request body size exceeded", "max_size", MaxRequestBodySize)
+				res.WriteHeader(http.StatusRequestEntityTooLarge)
+				errorResp := map[string]interface{}{
+					"error": map[string]interface{}{
+						"code":    -32700,
+						"message": fmt.Sprintf("Request body too large. Maximum size is %d bytes", MaxRequestBodySize),
+					},
+				}
+				data, _ := json.Marshal(errorResp)
+				_, _ = res.Write(data)
+			} else {
+				res.WriteHeader(http.StatusBadRequest)
+			}
 			return
 		}
 
