@@ -22,15 +22,8 @@ func (p *Primary) OnVoteReceived(vote *types.Vote) {
 
 	p.votesReceived.Add(1)
 
-	// Verify vote signature
-	if err := vote.Verify(); err != nil {
-		slog.Debug("Invalid vote signature",
-			"error", err,
-			"author", hexEncode(vote.Author))
-		return
-	}
-
-	// Check voter is in committee (uses committeeMu)
+	// CHEAP CHECK FIRST: Committee membership (~21ns)
+	// This prevents CPU exhaustion from non-validator vote spam
 	p.committeeMu.RLock()
 	inCommittee := p.committee.ContainsValidator(vote.Author)
 	quorumCount := p.committee.QuorumCount()
@@ -38,6 +31,15 @@ func (p *Primary) OnVoteReceived(vote *types.Vote) {
 
 	if !inCommittee {
 		slog.Debug("Vote from unknown validator",
+			"author", hexEncode(vote.Author))
+		return
+	}
+
+	// EXPENSIVE CHECK SECOND: Signature verification (~29µs)
+	// Only verify signatures from committee members
+	if err := vote.Verify(); err != nil {
+		slog.Debug("Invalid vote signature",
+			"error", err,
 			"author", hexEncode(vote.Author))
 		return
 	}
