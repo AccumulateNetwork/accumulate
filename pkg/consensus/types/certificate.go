@@ -180,12 +180,10 @@ func (c *Certificate) Verify(committee *Committee) error {
 			return errors.New("invalid signature size")
 		}
 
-		// Try to verify against voteContent first (from votes)
-		// Fall back to headerDigest for backward compatibility
+		// Verify signature against voteContent (headerDigest + round + epoch)
+		// Issue #3880: Removed insecure fallback to headerDigest-only verification
 		if !ed25519.Verify(validator.PublicKey, voteContent, sig) {
-			if !ed25519.Verify(validator.PublicKey, headerDigest[:], sig) {
-				return errors.New("invalid signature in certificate")
-			}
+			return errors.New("invalid signature in certificate")
 		}
 
 		totalStake += validator.Stake
