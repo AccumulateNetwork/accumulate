@@ -11,6 +11,7 @@ import (
 	multiaddr "github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/dagbft"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/keyrotation"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/address"
 	encoding "gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
@@ -40,6 +41,8 @@ var (
 	sHttpPeerMapEntry           schema.Methods[*HttpPeerMapEntry, *HttpPeerMapEntry, *schema.CompositeType]
 	sHttpService                schema.Methods[*HttpService, *HttpService, *schema.CompositeType]
 	sInstrumentation            schema.Methods[*Instrumentation, *Instrumentation, *schema.CompositeType]
+	sKeyRotationConfig          schema.Methods[*KeyRotationConfig, *KeyRotationConfig, *schema.CompositeType]
+	sKeyRotationService         schema.Methods[*KeyRotationService, *KeyRotationService, *schema.CompositeType]
 	sLevelDBStorage             schema.Methods[*LevelDBStorage, *LevelDBStorage, *schema.CompositeType]
 	sLogging                    schema.Methods[*Logging, *Logging, *schema.CompositeType]
 	sLoggingRule                schema.Methods[*LoggingRule, *LoggingRule, *schema.CompositeType]
@@ -711,6 +714,71 @@ func init() {
 		},
 	}).SetGoType()
 
+	sKeyRotationConfig = schema.WithMethods[*KeyRotationConfig, *KeyRotationConfig](&schema.CompositeType{
+		TypeBase: schema.TypeBase{
+			Name: "KeyRotationConfig",
+		},
+		Fields: []*schema.Field{
+			{
+				Name: "Enabled",
+				Type: &schema.SimpleType{Type: schema.SimpleTypeBool},
+			},
+			{
+				Name: "RotationIntervalDays",
+				Type: &schema.SimpleType{Type: schema.SimpleTypeInt},
+			},
+			{
+				Name: "GracePeriodDays",
+				Type: &schema.SimpleType{Type: schema.SimpleTypeInt},
+			},
+			{
+				Name: "WarningPeriodDays",
+				Type: &schema.SimpleType{Type: schema.SimpleTypeInt},
+			},
+			{
+				Name:     "AuditDirectory",
+				Optional: true,
+				Type:     &schema.SimpleType{Type: schema.SimpleTypeString},
+			},
+			{
+				Name:     "AuditRetentionDays",
+				Optional: true,
+				Type:     &schema.SimpleType{Type: schema.SimpleTypeInt},
+			},
+		},
+	}).SetGoType()
+
+	sKeyRotationService = schema.WithMethods[*KeyRotationService, *KeyRotationService](&schema.CompositeType{
+		TypeBase: schema.TypeBase{
+			Name: "KeyRotationService",
+		},
+		Fields: []*schema.Field{
+			{
+				Name: "Partition",
+				Type: &schema.SimpleType{Type: schema.SimpleTypeString},
+			},
+			(&schema.Field{
+				Name: "ValidatorKey",
+			}).ResolveTo(&deferredTypes, "PrivateKey"),
+			{
+				Name: "Config",
+				Type: (&schema.PointerType{
+					TypeBase: schema.TypeBase{},
+				}).
+					ResolveElemTo(&deferredTypes, "KeyRotationConfig"),
+			},
+		},
+		Transients: []*schema.Field{
+			{
+				Name: "manager",
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     schema.TypeReferenceFor[keyrotation.Manager](),
+				},
+			},
+		},
+	}).SetGoType()
+
 	sLevelDBStorage = schema.WithMethods[*LevelDBStorage, *LevelDBStorage](&schema.CompositeType{
 		TypeBase: schema.TypeBase{
 			Name: "LevelDBStorage",
@@ -1188,6 +1256,13 @@ func init() {
 						ResolveElemTo(&deferredTypes, "EventsService"),
 				},
 				{
+					Discriminator: "keyRotation",
+					Type: (&schema.PointerType{
+						TypeBase: schema.TypeBase{},
+					}).
+						ResolveElemTo(&deferredTypes, "KeyRotationService"),
+				},
+				{
 					Discriminator: "http",
 					Type: (&schema.PointerType{
 						TypeBase: schema.TypeBase{},
@@ -1247,6 +1322,10 @@ func init() {
 				"Http": {
 					Name:  "Http",
 					Value: 7,
+				},
+				"KeyRotation": {
+					Name:  "KeyRotation",
+					Value: 12,
 				},
 				"Metrics": {
 					Name:  "Metrics",
@@ -1549,6 +1628,8 @@ func init() {
 		sHttpPeerMapEntry.Type,
 		sHttpService.Type,
 		sInstrumentation.Type,
+		sKeyRotationConfig.Type,
+		sKeyRotationService.Type,
 		sLevelDBStorage.Type,
 		sLogging.Type,
 		sLoggingRule.Type,

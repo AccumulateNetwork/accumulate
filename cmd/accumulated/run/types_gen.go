@@ -10,6 +10,7 @@ import (
 	multiaddr "github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/dagbft"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/keyrotation"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/address"
 	encoding "gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
@@ -579,6 +580,64 @@ func (v *Instrumentation) UnmarshalJSON(b []byte) error {
 	return sInstrumentation.UnmarshalJSON(b, v)
 }
 
+type KeyRotationConfig struct {
+	Enabled              bool
+	RotationIntervalDays int64
+	GracePeriodDays      int64
+	WarningPeriodDays    int64
+	AuditDirectory       string
+	AuditRetentionDays   int64
+}
+
+// Copy returns a copy of the KeyRotationConfig.
+func (v *KeyRotationConfig) Copy() *KeyRotationConfig {
+	return sKeyRotationConfig.Copy(v)
+}
+
+// EqualKeyRotationConfig returns true if V is equal to U.
+func (v *KeyRotationConfig) Equal(u *KeyRotationConfig) bool {
+	return sKeyRotationConfig.Equal(v, u)
+}
+
+// MarshalBinary marshals the KeyRotationConfig to JSON.
+func (v *KeyRotationConfig) MarshalJSON() ([]byte, error) {
+	return sKeyRotationConfig.MarshalJSON(v)
+}
+
+// UnmarshalJSON unmarshals the KeyRotationConfig from JSON.
+func (v *KeyRotationConfig) UnmarshalJSON(b []byte) error {
+	return sKeyRotationConfig.UnmarshalJSON(b, v)
+}
+
+type KeyRotationService struct {
+	Partition    string
+	ValidatorKey PrivateKey
+	Config       *KeyRotationConfig
+	manager      *keyrotation.Manager
+}
+
+func (KeyRotationService) Type() ServiceType { return ServiceTypeKeyRotation }
+
+// Copy returns a copy of the KeyRotationService.
+func (v *KeyRotationService) Copy() *KeyRotationService {
+	return sKeyRotationService.Copy(v)
+}
+
+// EqualKeyRotationService returns true if V is equal to U.
+func (v *KeyRotationService) Equal(u *KeyRotationService) bool {
+	return sKeyRotationService.Equal(v, u)
+}
+
+// MarshalBinary marshals the KeyRotationService to JSON.
+func (v *KeyRotationService) MarshalJSON() ([]byte, error) {
+	return sKeyRotationService.MarshalJSON(v)
+}
+
+// UnmarshalJSON unmarshals the KeyRotationService from JSON.
+func (v *KeyRotationService) UnmarshalJSON(b []byte) error {
+	return sKeyRotationService.UnmarshalJSON(b, v)
+}
+
 type LevelDBStorage struct {
 	Path string
 }
@@ -1041,17 +1100,18 @@ func UnmarshalServiceJSON(b []byte) (Service, error) {
 type ServiceType int64
 
 const (
-	ServiceTypeDAGBFT   ServiceType = 2
-	ServiceTypeEvents   ServiceType = 6
-	ServiceTypeFaucet   ServiceType = 10
-	ServiceTypeHttp     ServiceType = 7
-	ServiceTypeMetrics  ServiceType = 5
-	ServiceTypeNetwork  ServiceType = 4
-	ServiceTypeQuerier  ServiceType = 3
-	ServiceTypeRouter   ServiceType = 8
-	ServiceTypeSnapshot ServiceType = 9
-	ServiceTypeStorage  ServiceType = 1
-	ServiceTypeSubnode  ServiceType = 11
+	ServiceTypeDAGBFT      ServiceType = 2
+	ServiceTypeEvents      ServiceType = 6
+	ServiceTypeFaucet      ServiceType = 10
+	ServiceTypeHttp        ServiceType = 7
+	ServiceTypeKeyRotation ServiceType = 12
+	ServiceTypeMetrics     ServiceType = 5
+	ServiceTypeNetwork     ServiceType = 4
+	ServiceTypeQuerier     ServiceType = 3
+	ServiceTypeRouter      ServiceType = 8
+	ServiceTypeSnapshot    ServiceType = 9
+	ServiceTypeStorage     ServiceType = 1
+	ServiceTypeSubnode     ServiceType = 11
 )
 
 // SetByName looks up a ServiceType by name.
