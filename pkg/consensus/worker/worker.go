@@ -547,8 +547,8 @@ func (w *Worker) createAndBroadcastBatch() {
 	}
 	w.batchMu.Unlock()
 
-	// Update metrics immediately after batch creation
-	// Do this before queueing to ensure metrics are recorded even during shutdown
+	// Update metrics immediately after creating the batch
+	// This must happen before enqueueing to ensure metrics are updated even if shutdown occurs
 	w.batchesCreated.Add(1)
 	w.txnsProcessed.Add(uint64(batch.Len()))
 
