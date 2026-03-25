@@ -570,6 +570,11 @@ func (w *Worker) createAndBroadcastBatch() {
 	}
 	w.batchMu.Unlock()
 
+	// Update metrics immediately after creating the batch
+	// This must happen before enqueueing to ensure metrics are updated even if shutdown occurs
+	w.batchesCreated.Add(1)
+	w.txnsProcessed.Add(uint64(batch.Len()))
+
 	// Add to available batch queue (blocking backpressure if full)
 	queueDepth := w.queueDepth.Add(1)
 
@@ -600,10 +605,6 @@ func (w *Worker) createAndBroadcastBatch() {
 			"workerID", w.config.ID,
 			"partition", w.config.Partition)
 	}
-
-	// Update metrics
-	w.batchesCreated.Add(1)
-	w.txnsProcessed.Add(uint64(batch.Len()))
 
 	// Broadcast to network
 	if w.gossip != nil {
