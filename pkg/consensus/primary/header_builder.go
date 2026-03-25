@@ -16,8 +16,10 @@ import (
 // createHeaderLocked creates a header for the current round.
 // Must be called with p.roundMu held.
 func (p *Primary) createHeaderLocked() (*types.Header, error) {
-	// p.roundMu must be held by caller
-	return p.createHeaderLockedWithRound(p.currentRound, p.currentEpoch)
+	// p.roundMu must be held by caller (ensures thread-safe access to currentRound/currentEpoch)
+	round := p.currentRound
+	epoch := p.currentEpoch
+	return p.createHeaderLockedWithRound(round, epoch)
 }
 
 // createHeaderLockedWithRound creates a header for the specified round.
@@ -56,8 +58,9 @@ func (p *Primary) createHeaderLockedWithRound(round types.Round, epoch uint64) (
 // getParentCertsLocked retrieves 2f+1 parent certificates from round-1.
 // Must be called with p.roundMu held.
 func (p *Primary) getParentCertsLocked() ([]types.CertificateDigest, error) {
-	// p.roundMu must be held by caller
-	return p.getParentCertsForRound(p.currentRound)
+	// p.roundMu must be held by caller (ensures thread-safe access to currentRound)
+	round := p.currentRound
+	return p.getParentCertsForRound(round)
 }
 
 // getParentCertsForRound retrieves 2f+1 parent certificates from round-1.

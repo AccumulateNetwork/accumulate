@@ -216,10 +216,16 @@ func (p *Primary) Start(ctx context.Context) error {
 	ticker := time.NewTicker(p.config.RoundAdvanceInterval)
 	defer ticker.Stop()
 
+	// Get current round/epoch for logging (thread-safe)
+	p.roundMu.Lock()
+	startRound := p.currentRound
+	startEpoch := p.currentEpoch
+	p.roundMu.Unlock()
+
 	slog.Info("Primary started",
 		"partition", p.config.Partition,
-		"epoch", p.currentEpoch,
-		"round", p.currentRound)
+		"epoch", startEpoch,
+		"round", startRound)
 
 	// Try to create initial header if we can
 	p.tryCreateAndBroadcastHeader()
