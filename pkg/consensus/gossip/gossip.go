@@ -15,6 +15,7 @@ import (
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/metrics"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 )
 
@@ -44,6 +45,9 @@ type GossipLayer struct {
 	certs        chan *types.Certificate
 	syncRequests chan *CertSyncRequest
 	syncResponses chan *CertSyncResponse
+
+	// Rate limiting
+	rateLimiter *PeerRateLimiter
 
 	// Lifecycle management
 	ctx    context.Context
@@ -115,6 +119,9 @@ func NewGossipLayerWithOptions(h host.Host, ps *pubsub.PubSub, partition string,
 		opts.CertSyncChannelSize = DefaultCertSyncChannelSize
 	}
 
+	// Initialize rate limiter with default configuration
+	rateLimiter := NewPeerRateLimiter(RateLimitConfig{})
+
 	return &GossipLayer{
 		host:          h,
 		pubsub:        ps,
@@ -126,6 +133,7 @@ func NewGossipLayerWithOptions(h host.Host, ps *pubsub.PubSub, partition string,
 		certs:         make(chan *types.Certificate, opts.CertificateChannelSize),
 		syncRequests:  make(chan *CertSyncRequest, opts.CertSyncChannelSize),
 		syncResponses: make(chan *CertSyncResponse, opts.CertSyncChannelSize),
+		rateLimiter:   rateLimiter,
 	}, nil
 }
 
@@ -151,12 +159,13 @@ func (g *GossipLayer) Start(ctx context.Context) error {
 
 	// Start message handlers BEFORE waiting for mesh formation.
 	// This ensures we can receive messages while waiting for peers.
-	g.wg.Add(5)
+	g.wg.Add(6)
 	go g.handleSubscription(TopicBatches, g.handleBatchMessage)
 	go g.handleSubscription(TopicHeaders, g.handleHeaderMessage)
-	go g.handleSubscription(TopicVotes, g.handleVoteMessage)
+	go g.handleVoteSubscription()
 	go g.handleSubscription(TopicCerts, g.handleCertMessage)
 	go g.handleSubscription(TopicCertSync, g.handleCertSyncMessage)
+	go g.rateLimiterCleanup()
 
 	// Wait for GossipSub mesh to form before signaling ready.
 	// This ensures peers are connected before the Primary starts broadcasting.
@@ -475,4 +484,88 @@ func (g *GossipLayer) SubscribeSyncRequests() <-chan *CertSyncRequest {
 // SubscribeSyncResponses returns a channel that receives sync responses from other nodes.
 func (g *GossipLayer) SubscribeSyncResponses() <-chan *CertSyncResponse {
 	return g.syncResponses
+}
+
+// handleVoteSubscription reads votes from the subscription and applies rate limiting.
+func (g *GossipLayer) handleVoteSubscription() {
+	defer g.wg.Done()
+
+	sub := g.topics.GetSubscription(TopicVotes)
+	if sub == nil {
+		slog.Error("Subscription not found", "pattern", TopicVotes, "partition", g.partition)
+		return
+	}
+
+	for {
+		msg, err := sub.Next(g.ctx)
+		if err != nil {
+			// Context canceled or subscription closed
+			if g.ctx.Err() != nil {
+				return
+			}
+			slog.Error("Error reading from subscription",
+				"error", err,
+				"pattern", TopicVotes,
+				"partition", g.partition)
+			return
+		}
+
+		// Skip messages from ourselves
+		if msg.ReceivedFrom == g.host.ID() {
+			continue
+		}
+
+		// Check if peer was previously unbanned (track ban metric)
+		wasBanned := g.rateLimiter.IsBanned(msg.ReceivedFrom)
+
+		// Apply rate limiting
+		if !g.rateLimiter.Allow(msg.ReceivedFrom) {
+			metrics.VotesRateLimitedTotal.Inc()
+
+			// Check if peer is now banned (first time)
+			if !wasBanned && g.rateLimiter.IsBanned(msg.ReceivedFrom) {
+				metrics.PeersBannedTotal.Inc()
+				slog.Warn("Peer banned for rate limiting violations",
+					"peer", msg.ReceivedFrom,
+					"partition", g.partition)
+			}
+
+			slog.Debug("Vote rate limited",
+				"peer", msg.ReceivedFrom,
+				"partition", g.partition)
+			continue
+		}
+
+		// Process the vote
+		g.handleVoteMessage(msg.Data)
+	}
+}
+
+// rateLimiterCleanup periodically cleans up old peer state from the rate limiter
+// and updates metrics.
+func (g *GossipLayer) rateLimiterCleanup() {
+	defer g.wg.Done()
+
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-g.ctx.Done():
+			return
+		case <-ticker.C:
+			// Update banned peers metric
+			stats := g.rateLimiter.GetAllStats()
+			bannedCount := 0
+			for _, stat := range stats {
+				if stat.Banned {
+					bannedCount++
+				}
+			}
+			metrics.PeersBannedCurrent.Set(float64(bannedCount))
+
+			// Clean up peers not seen in the last 10 minutes
+			g.rateLimiter.Cleanup(10 * time.Minute)
+		}
+	}
 }
