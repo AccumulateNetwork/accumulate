@@ -1104,7 +1104,7 @@ Q4: Incident response drill
 - [ ] **Key Management:** 10+ validators using HSM/KMS (not file-based keys)
 - [ ] **Monitoring:** Prometheus + Grafana deployed, all metrics collecting
 - [ ] **Alerts:** Critical alert rules configured and tested
-- [ ] **NTP Sync:** All validators synchronized to < 100ms drift
+- [ ] **NTP Sync:** All validators synchronized to < 100ms drift (see [docs/timestamp-requirements.md](docs/timestamp-requirements.md))
 - [ ] **Runbooks:** Incident response procedures documented and tested
 - [ ] **Backups:** Database backup strategy implemented and tested
 
