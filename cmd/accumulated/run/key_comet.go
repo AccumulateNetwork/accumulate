@@ -10,6 +10,7 @@ package run
 
 import (
 	"crypto/ed25519"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"os"
