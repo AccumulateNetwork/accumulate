@@ -9,9 +9,17 @@ package primary
 import (
 	"crypto/ed25519"
 	"fmt"
+	"log/slog"
+	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 )
+
+// DefaultParentWaitTimeout is the time to wait for additional parent certificates
+// after reaching quorum. This helps ensure late-arriving certificates are included.
+// The timeout should be shorter than MinRoundInterval to avoid cascading delays.
+// With MinRoundInterval=100ms, we use 80ms to leave margin.
+const DefaultParentWaitTimeout = 80 * time.Millisecond
 
 // createHeaderLocked creates a header for the current round.
 // Must be called with p.roundMu held.
@@ -55,7 +63,7 @@ func (p *Primary) createHeaderLockedWithRound(round types.Round, epoch uint64) (
 	return header, nil
 }
 
-// getParentCertsLocked retrieves 2f+1 parent certificates from round-1.
+// getParentCertsLocked retrieves parent certificates from round-1.
 // Must be called with p.roundMu held.
 func (p *Primary) getParentCertsLocked() ([]types.CertificateDigest, error) {
 	// p.roundMu must be held by caller (ensures thread-safe access to currentRound)
@@ -89,14 +97,61 @@ func (p *Primary) getParentCertsForRound(round types.Round) ([]types.Certificate
 			ErrNotEnoughParents, len(certs), quorumCount)
 	}
 
-	// Collect digests from certificates, up to quorum
-	// We could take all, but quorum is sufficient
+	// Collect digests from ALL available certificates
+	// This ensures late-arriving certificates are included as parents
 	digests := make([]types.CertificateDigest, 0, len(certs))
 	for _, cert := range certs {
 		digests = append(digests, cert.Digest())
 	}
 
 	return digests, nil
+}
+
+// waitForAllParents waits until all validators' certificates from the previous round
+// are available, or until a timeout expires. This should be called BEFORE taking
+// the lock to avoid blocking other operations.
+func (p *Primary) waitForAllParents() {
+	p.roundMu.Lock()
+	round := p.currentRound
+	p.roundMu.Unlock()
+
+	p.committeeMu.RLock()
+	validatorCount := p.committee.Len()
+	p.committeeMu.RUnlock()
+
+	if round == 0 {
+		return // genesis round has no parents
+	}
+
+	prevRound := round - 1
+	deadline := time.Now().Add(DefaultParentWaitTimeout)
+
+	initialCerts := p.dag.GetRound(prevRound)
+	initialCount := len(initialCerts)
+
+	for time.Now().Before(deadline) {
+		certs := p.dag.GetRound(prevRound)
+		if len(certs) >= validatorCount {
+			slog.Debug("All parent certificates available",
+				"round", prevRound,
+				"count", len(certs),
+				"validators", validatorCount)
+			return
+		}
+
+		// Sleep a bit and check again
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	// Log if we timed out without all certificates
+	certs := p.dag.GetRound(prevRound)
+	if len(certs) < validatorCount {
+		slog.Debug("Proceeding with partial parent certificates after timeout",
+			"round", prevRound,
+			"initial", initialCount,
+			"have", len(certs),
+			"want", validatorCount)
+	}
 }
 
 // CreateHeader creates a header for the current round (thread-safe).
