@@ -1,0 +1,18 @@
+# Test artifacts (binaries in root only)
+/byzantine-attack
+/vote-spam-attack
+results/
+logs/
+
+# Go build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Go workspace
+go.work
+go.work.sum

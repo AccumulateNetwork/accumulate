@@ -1,0 +1,672 @@
+# Docker Compose for 25-Node Byzantine Fault Tolerance Testing
+#
+# Network Architecture:
+#   - 3 Block Validator Networks (BVN0, BVN1, BVN2)
+#   - 8 validators per BVN = 24 validators
+#   - 1 Directory Network (DN) with 1 validator = 25 total validators
+#   - 1 bootstrap node
+#
+# Byzantine Attack Testing:
+#   - Up to 9 validators can be turned malicious (Byzantine)
+#   - 16 honest validators out of 25 total
+#   - Tests consensus under 36% Byzantine fault (exceeds 33% BFT threshold)
+#   - Validates issues #3869 (duplicate vote handling) and #3870 (vote spam protection)
+#
+# Resource Requirements:
+#   - 26 containers @ 2GB each = 52GB minimum
+#   - Adjust mem_limit based on available resources
+#
+# Usage:
+#   docker compose -f test/docker/byzantine-test/docker-compose-25node.yml build
+#   docker compose -f test/docker/byzantine-test/docker-compose-25node.yml up
+#   docker compose -f test/docker/byzantine-test/docker-compose-25node.yml down -v
+#
+# Run Byzantine Tests:
+#   ./test/docker/byzantine-test/run-byzantine-tests.sh
+
+version: '3.8'
+
+x-node-common: &node-common
+  build:
+    context: ../../..
+    dockerfile: Dockerfile
+  restart: unless-stopped
+  mem_limit: 2g
+  networks:
+    - byzantine-test-net
+
+x-env-common: &env-common
+  ACC_LOG_LEVEL: info
+
+services:
+  # ============================================================================
+  # Bootstrap Node
+  # ============================================================================
+
+  bootstrap:
+    <<: *node-common
+    container_name: byzantine-bootstrap
+    hostname: bootstrap
+    environment:
+      <<: *env-common
+      NODE_TYPE: bootstrap
+    command:
+      - run
+      - devnet
+      - --node=0
+      - --bvns=3
+      - --validators=8
+    ports:
+      - "26656:26656"
+      - "26660:26660"
+    volumes:
+      - bootstrap-data:/root/.accumulate
+
+  # ============================================================================
+  # BVN0 - 8 Validators
+  # ============================================================================
+
+  bvn0-0:
+    <<: *node-common
+    container_name: byzantine-bvn0-0
+    hostname: bvn0-0
+    environment:
+      <<: *env-common
+      NODE_TYPE: validator
+      PARTITION: BVN0
+    command:
+      - run
+      - devnet
+      - --node=0
+      - --bvns=3
+      - --validators=8
+    ports:
+      - "27000:26656"
+      - "27100:26660"
+      - "8080:8080"
+    volumes:
+      - bvn0-0-data:/root/.accumulate
+    depends_on:
+      - bootstrap
+
+  bvn0-1:
+    <<: *node-common
+    container_name: byzantine-bvn0-1
+    hostname: bvn0-1
+    environment:
+      <<: *env-common
+      NODE_TYPE: validator
+      PARTITION: BVN0
+    command:
+      - run
+      - devnet
+      - --node=1
+      - --bvns=3
+      - --validators=8
+    ports:
+      - "27001:26656"
+      - "27101:26660"
+    volumes:
+      - bvn0-1-data:/root/.accumulate
+    depends_on:
+      - bootstrap
+
+  bvn0-2:
+    <<: *node-common
+    container_name: byzantine-bvn0-2
+    hostname: bvn0-2
+    environment:
+      <<: *env-common
+      NODE_TYPE: validator
+      PARTITION: BVN0
+    command:
+      - run
+      - devnet
+      - --node=2
+      - --bvns=3
+      - --validators=8
+    ports:
+      - "27002:26656"
+      - "27102:26660"
+    volumes:
+      - bvn0-2-data:/root/.accumulate
+    depends_on:
+      - bootstrap
+
+  bvn0-3:
+    <<: *node-common
+    container_name: byzantine-bvn0-3
+    hostname: bvn0-3
+    environment:
+      <<: *env-common
+      NODE_TYPE: validator
+      PARTITION: BVN0
+    command:
+      - run
+      - devnet
+      - --node=3
+      - --bvns=3
+      - --validators=8
+    ports:
+      - "27003:26656"
+      - "27103:26660"
+    volumes:
+      - bvn0-3-data:/root/.accumulate
+    depends_on:
+      - bootstrap
+
+  bvn0-4:
+    <<: *node-common
+    container_name: byzantine-bvn0-4
+    hostname: bvn0-4
+    environment:
+      <<: *env-common
+      NODE_TYPE: validator
+      PARTITION: BVN0
+    command:
+      - run
+      - devnet
+      - --node=4
+      - --bvns=3
+      - --validators=8
+    ports:
+      - "27004:26656"
+      - "27104:26660"
+    volumes:
+      - bvn0-4-data:/root/.accumulate
+    depends_on:
+      - bootstrap
+
+  bvn0-5:
+    <<: *node-common
+    container_name: byzantine-bvn0-5
+    hostname: bvn0-5
+    environment:
+      <<: *env-common
+      NODE_TYPE: validator
+      PARTITION: BVN0
+    command:
+      - run
+      - devnet
+      - --node=5
+      - --bvns=3
+      - --validators=8
+    ports:
+      - "27005:26656"
+      - "27105:26660"
+    volumes:
+      - bvn0-5-data:/root/.accumulate
+    depends_on:
+      - bootstrap
+
+  bvn0-6:
+    <<: *node-common
+    container_name: byzantine-bvn0-6
+    hostname: bvn0-6
+    environment:
+      <<: *env-common
+      NODE_TYPE: validator
+      PARTITION: BVN0
+    command:
+      - run
+      - devnet
+      - --node=6
+      - --bvns=3
+      - --validators=8
+    ports:
+      - "27006:26656"
+      - "27106:26660"
+    volumes:
+      - bvn0-6-data:/root/.accumulate
+    depends_on:
+      - bootstrap
+
+  bvn0-7:
+    <<: *node-common
+    container_name: byzantine-bvn0-7
+    hostname: bvn0-7
+    environment:
+      <<: *env-common
+      NODE_TYPE: validator
+      PARTITION: BVN0
+    command:
+      - run
+      - devnet
+      - --node=7
+      - --bvns=3
+      - --validators=8
+    ports:
+      - "27007:26656"
+      - "27107:26660"
+    volumes:
+      - bvn0-7-data:/root/.accumulate
+    depends_on:
+      - bootstrap
+
+  # ============================================================================
+  # BVN1 - 8 Validators
+  # ============================================================================
+
+  bvn1-0:
+    <<: *node-common
+    container_name: byzantine-bvn1-0
+    hostname: bvn1-0
+    environment:
+      <<: *env-common
+      NODE_TYPE: validator
+      PARTITION: BVN1
+    command:
+      - run
+      - devnet
+      - --node=8
+      - --bvns=3
+      - --validators=8
+    ports:
+      - "27008:26656"
+      - "27108:26660"
+      - "8081:8080"
+    volumes:
+      - bvn1-0-data:/root/.accumulate
+    depends_on:
+      - bootstrap
+
+  bvn1-1:
+    <<: *node-common
+    container_name: byzantine-bvn1-1
+    hostname: bvn1-1
+    environment:
+      <<: *env-common
+      NODE_TYPE: validator
+      PARTITION: BVN1
+    command:
+      - run
+      - devnet
+      - --node=9
+      - --bvns=3
+      - --validators=8
+    ports:
+      - "27009:26656"
+      - "27109:26660"
+    volumes:
+      - bvn1-1-data:/root/.accumulate
+    depends_on:
+      - bootstrap
+
+  bvn1-2:
+    <<: *node-common
+    container_name: byzantine-bvn1-2
+    hostname: bvn1-2
+    environment:
+      <<: *env-common
+      NODE_TYPE: validator
+      PARTITION: BVN1
+    command:
+      - run
+      - devnet
+      - --node=10
+      - --bvns=3
+      - --validators=8
+    ports:
+      - "27010:26656"
+      - "27110:26660"
+    volumes:
+      - bvn1-2-data:/root/.accumulate
+    depends_on:
+      - bootstrap
+
+  bvn1-3:
+    <<: *node-common
+    container_name: byzantine-bvn1-3
+    hostname: bvn1-3
+    environment:
+      <<: *env-common
+      NODE_TYPE: validator
+      PARTITION: BVN1
+    command:
+      - run
+      - devnet
+      - --node=11
+      - --bvns=3
+      - --validators=8
+    ports:
+      - "27011:26656"
+      - "27111:26660"
+    volumes:
+      - bvn1-3-data:/root/.accumulate
+    depends_on:
+      - bootstrap
+
+  bvn1-4:
+    <<: *node-common
+    container_name: byzantine-bvn1-4
+    hostname: bvn1-4
+    environment:
+      <<: *env-common
+      NODE_TYPE: validator
+      PARTITION: BVN1
+    command:
+      - run
+      - devnet
+      - --node=12
+      - --bvns=3
+      - --validators=8
+    ports:
+      - "27012:26656"
+      - "27112:26660"
+    volumes:
+      - bvn1-4-data:/root/.accumulate
+    depends_on:
+      - bootstrap
+
+  bvn1-5:
+    <<: *node-common
+    container_name: byzantine-bvn1-5
+    hostname: bvn1-5
+    environment:
+      <<: *env-common
+      NODE_TYPE: validator
+      PARTITION: BVN1
+    command:
+      - run
+      - devnet
+      - --node=13
+      - --bvns=3
+      - --validators=8
+    ports:
+      - "27013:26656"
+      - "27113:26660"
+    volumes:
+      - bvn1-5-data:/root/.accumulate
+    depends_on:
+      - bootstrap
+
+  bvn1-6:
+    <<: *node-common
+    container_name: byzantine-bvn1-6
+    hostname: bvn1-6
+    environment:
+      <<: *env-common
+      NODE_TYPE: validator
+      PARTITION: BVN1
+    command:
+      - run
+      - devnet
+      - --node=14
+      - --bvns=3
+      - --validators=8
+    ports:
+      - "27014:26656"
+      - "27114:26660"
+    volumes:
+      - bvn1-6-data:/root/.accumulate
+    depends_on:
+      - bootstrap
+
+  bvn1-7:
+    <<: *node-common
+    container_name: byzantine-bvn1-7
+    hostname: bvn1-7
+    environment:
+      <<: *env-common
+      NODE_TYPE: validator
+      PARTITION: BVN1
+    command:
+      - run
+      - devnet
+      - --node=15
+      - --bvns=3
+      - --validators=8
+    ports:
+      - "27015:26656"
+      - "27115:26660"
+    volumes:
+      - bvn1-7-data:/root/.accumulate
+    depends_on:
+      - bootstrap
+
+  # ============================================================================
+  # BVN2 - 8 Validators
+  # ============================================================================
+
+  bvn2-0:
+    <<: *node-common
+    container_name: byzantine-bvn2-0
+    hostname: bvn2-0
+    environment:
+      <<: *env-common
+      NODE_TYPE: validator
+      PARTITION: BVN2
+    command:
+      - run
+      - devnet
+      - --node=16
+      - --bvns=3
+      - --validators=8
+    ports:
+      - "27016:26656"
+      - "27116:26660"
+      - "8082:8080"
+    volumes:
+      - bvn2-0-data:/root/.accumulate
+    depends_on:
+      - bootstrap
+
+  bvn2-1:
+    <<: *node-common
+    container_name: byzantine-bvn2-1
+    hostname: bvn2-1
+    environment:
+      <<: *env-common
+      NODE_TYPE: validator
+      PARTITION: BVN2
+    command:
+      - run
+      - devnet
+      - --node=17
+      - --bvns=3
+      - --validators=8
+    ports:
+      - "27017:26656"
+      - "27117:26660"
+    volumes:
+      - bvn2-1-data:/root/.accumulate
+    depends_on:
+      - bootstrap
+
+  bvn2-2:
+    <<: *node-common
+    container_name: byzantine-bvn2-2
+    hostname: bvn2-2
+    environment:
+      <<: *env-common
+      NODE_TYPE: validator
+      PARTITION: BVN2
+    command:
+      - run
+      - devnet
+      - --node=18
+      - --bvns=3
+      - --validators=8
+    ports:
+      - "27018:26656"
+      - "27118:26660"
+    volumes:
+      - bvn2-2-data:/root/.accumulate
+    depends_on:
+      - bootstrap
+
+  bvn2-3:
+    <<: *node-common
+    container_name: byzantine-bvn2-3
+    hostname: bvn2-3
+    environment:
+      <<: *env-common
+      NODE_TYPE: validator
+      PARTITION: BVN2
+    command:
+      - run
+      - devnet
+      - --node=19
+      - --bvns=3
+      - --validators=8
+    ports:
+      - "27019:26656"
+      - "27119:26660"
+    volumes:
+      - bvn2-3-data:/root/.accumulate
+    depends_on:
+      - bootstrap
+
+  bvn2-4:
+    <<: *node-common
+    container_name: byzantine-bvn2-4
+    hostname: bvn2-4
+    environment:
+      <<: *env-common
+      NODE_TYPE: validator
+      PARTITION: BVN2
+    command:
+      - run
+      - devnet
+      - --node=20
+      - --bvns=3
+      - --validators=8
+    ports:
+      - "27020:26656"
+      - "27120:26660"
+    volumes:
+      - bvn2-4-data:/root/.accumulate
+    depends_on:
+      - bootstrap
+
+  bvn2-5:
+    <<: *node-common
+    container_name: byzantine-bvn2-5
+    hostname: bvn2-5
+    environment:
+      <<: *env-common
+      NODE_TYPE: validator
+      PARTITION: BVN2
+    command:
+      - run
+      - devnet
+      - --node=21
+      - --bvns=3
+      - --validators=8
+    ports:
+      - "27021:26656"
+      - "27121:26660"
+    volumes:
+      - bvn2-5-data:/root/.accumulate
+    depends_on:
+      - bootstrap
+
+  bvn2-6:
+    <<: *node-common
+    container_name: byzantine-bvn2-6
+    hostname: bvn2-6
+    environment:
+      <<: *env-common
+      NODE_TYPE: validator
+      PARTITION: BVN2
+    command:
+      - run
+      - devnet
+      - --node=22
+      - --bvns=3
+      - --validators=8
+    ports:
+      - "27022:26656"
+      - "27122:26660"
+    volumes:
+      - bvn2-6-data:/root/.accumulate
+    depends_on:
+      - bootstrap
+
+  bvn2-7:
+    <<: *node-common
+    container_name: byzantine-bvn2-7
+    hostname: bvn2-7
+    environment:
+      <<: *env-common
+      NODE_TYPE: validator
+      PARTITION: BVN2
+    command:
+      - run
+      - devnet
+      - --node=23
+      - --bvns=3
+      - --validators=8
+    ports:
+      - "27023:26656"
+      - "27123:26660"
+    volumes:
+      - bvn2-7-data:/root/.accumulate
+    depends_on:
+      - bootstrap
+
+  # ============================================================================
+  # DN - 1 Validator
+  # ============================================================================
+
+  dn-0:
+    <<: *node-common
+    container_name: byzantine-dn-0
+    hostname: dn-0
+    environment:
+      <<: *env-common
+      NODE_TYPE: validator
+      PARTITION: DN
+    command:
+      - run
+      - devnet
+      - --node=24
+      - --bvns=3
+      - --validators=8
+    ports:
+      - "27024:26656"
+      - "27124:26660"
+      - "8083:8080"
+    volumes:
+      - dn-0-data:/root/.accumulate
+    depends_on:
+      - bootstrap
+
+volumes:
+  bootstrap-data:
+  # BVN0 volumes
+  bvn0-0-data:
+  bvn0-1-data:
+  bvn0-2-data:
+  bvn0-3-data:
+  bvn0-4-data:
+  bvn0-5-data:
+  bvn0-6-data:
+  bvn0-7-data:
+  # BVN1 volumes
+  bvn1-0-data:
+  bvn1-1-data:
+  bvn1-2-data:
+  bvn1-3-data:
+  bvn1-4-data:
+  bvn1-5-data:
+  bvn1-6-data:
+  bvn1-7-data:
+  # BVN2 volumes
+  bvn2-0-data:
+  bvn2-1-data:
+  bvn2-2-data:
+  bvn2-3-data:
+  bvn2-4-data:
+  bvn2-5-data:
+  bvn2-6-data:
+  bvn2-7-data:
+  # DN volumes
+  dn-0-data:
+
+networks:
+  byzantine-test-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/16
