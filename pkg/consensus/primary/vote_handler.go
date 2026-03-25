@@ -22,15 +22,8 @@ func (p *Primary) OnVoteReceived(vote *types.Vote) {
 
 	p.votesReceived.Add(1)
 
-	// Verify vote signature
-	if err := vote.Verify(); err != nil {
-		slog.Debug("Invalid vote signature",
-			"error", err,
-			"author", hexEncode(vote.Author))
-		return
-	}
-
-	// Check voter is in committee (uses committeeMu)
+	// CHEAP CHECK FIRST: Committee membership (~21ns)
+	// This prevents CPU exhaustion from non-validator vote spam
 	p.committeeMu.RLock()
 	inCommittee := p.committee.ContainsValidator(vote.Author)
 	quorumCount := p.committee.QuorumCount()
@@ -38,6 +31,15 @@ func (p *Primary) OnVoteReceived(vote *types.Vote) {
 
 	if !inCommittee {
 		slog.Debug("Vote from unknown validator",
+			"author", hexEncode(vote.Author))
+		return
+	}
+
+	// EXPENSIVE CHECK SECOND: Signature verification (~29µs)
+	// Only verify signatures from committee members
+	if err := vote.Verify(); err != nil {
+		slog.Debug("Invalid vote signature",
+			"error", err,
 			"author", hexEncode(vote.Author))
 		return
 	}
@@ -69,10 +71,26 @@ func (p *Primary) OnVoteReceived(vote *types.Vote) {
 	}
 
 	// Check if we've already reached the vote limit (spam protection)
+
+	// Get current votes for this header
+	votes := p.pendingVotes[vote.HeaderDigest]
+
+	// Check for duplicates FIRST (before counting against limit)
+	// This prevents spam attack where one validator sends many duplicate votes
+	// to fill the vote limit and block legitimate votes from other validators
+	for _, v := range votes {
+		if bytes.Equal(v.Author, vote.Author) {
+			slog.Debug("Duplicate vote from author",
+				"headerDigest", vote.HeaderDigest.String(),
+				"author", hexEncode(vote.Author))
+			return // already have vote from this author
+		}
+	}
+
+	// Now check vote limit (only counting unique votes)
 	// Maximum votes = 2x the quorum threshold (2f+1)
 	// This allows some safety margin while preventing spam attacks
 	maxVotes := quorumCount * VotesPerHeaderMultiplier
-	votes := p.pendingVotes[vote.HeaderDigest]
 	if len(votes) >= maxVotes {
 		slog.Warn("Vote limit reached for header - potential spam attack",
 			"headerDigest", vote.HeaderDigest.String(),
@@ -83,12 +101,7 @@ func (p *Primary) OnVoteReceived(vote *types.Vote) {
 		return
 	}
 
-	// Add vote (avoid duplicates)
-	for _, v := range votes {
-		if bytes.Equal(v.Author, vote.Author) {
-			return // already have vote from this author
-		}
-	}
+	// Add the unique vote
 	p.pendingVotes[vote.HeaderDigest] = append(votes, vote)
 
 	slog.Debug("Added vote",
