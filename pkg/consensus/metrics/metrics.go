@@ -247,6 +247,33 @@ var (
 	})
 )
 
+// Rate limiting metrics
+var (
+	// VotesRateLimitedTotal is the total number of votes rate limited.
+	VotesRateLimitedTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "votes_rate_limited_total",
+		Help:      "Total number of votes rate limited",
+	})
+
+	// PeersBannedTotal is the total number of peers banned for rate limiting violations.
+	PeersBannedTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "peers_banned_total",
+		Help:      "Total number of peers banned for rate limiting violations",
+	})
+
+	// PeersBannedCurrent is the current number of banned peers.
+	PeersBannedCurrent = promauto.NewGauge(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "peers_banned_current",
+		Help:      "Current number of banned peers",
+	})
+)
+
 // Metrics provides an interface to update DAG-BFT metrics.
 type Metrics struct {
 	enabled bool
@@ -437,5 +464,26 @@ func (m *Metrics) IncCertSyncResponsesReceived() {
 func (m *Metrics) IncCertSyncCertificatesReceived(count int) {
 	if m.enabled {
 		CertSyncCertificatesReceivedTotal.Add(float64(count))
+	}
+}
+
+// IncVotesRateLimited increments the votes rate limited counter.
+func (m *Metrics) IncVotesRateLimited() {
+	if m.enabled {
+		VotesRateLimitedTotal.Inc()
+	}
+}
+
+// IncPeersBanned increments the peers banned counter.
+func (m *Metrics) IncPeersBanned() {
+	if m.enabled {
+		PeersBannedTotal.Inc()
+	}
+}
+
+// SetPeersBannedCurrent sets the current banned peers gauge.
+func (m *Metrics) SetPeersBannedCurrent(count int) {
+	if m.enabled {
+		PeersBannedCurrent.Set(float64(count))
 	}
 }
