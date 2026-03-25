@@ -146,6 +146,9 @@ func (x *TxID) unmarshal(s string) error {
 		return err
 	}
 
-	*x = *v //nolint:govet
+	// Copy fields explicitly to avoid copying atomic.Pointer (contains noCopy)
+	x.url = v.url
+	x.hash = v.hash
+	// Do not copy memoize field - leave it as zero value
 	return nil
 }
