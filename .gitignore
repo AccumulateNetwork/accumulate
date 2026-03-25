@@ -63,3 +63,4 @@ test/cmd/testreport/testreport
 
 # Go workspace
 go.work.sum
+/accumulated-dagbft
