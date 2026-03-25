@@ -62,3 +62,6 @@ test/cmd/testreport/testreport
 /cmd/accumulated/run/snapshot.urls
 /internal/node/abci/snapshot.urls
 /tools/cmd/debug/reviews/
+
+# Go workspace
+go.work.sum
