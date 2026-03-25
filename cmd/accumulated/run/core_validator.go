@@ -165,5 +165,19 @@ func (p partOpts) apply(cfg *Config) error {
 	addService(cfg, &MetricsService{Partition: p.ID}, func(s *MetricsService) string { return s.Partition })
 	addService(cfg, &EventsService{Partition: p.ID}, func(s *EventsService) string { return s.Partition })
 
+	// Key rotation service (with default config)
+	addService(cfg, &KeyRotationService{
+		Partition:    p.ID,
+		ValidatorKey: p.ValidatorKey,
+		Config: &KeyRotationConfig{
+			Enabled:              true,
+			RotationIntervalDays: 90,
+			GracePeriodDays:      7,
+			WarningPeriodDays:    7,
+			AuditDirectory:       filepath.Join(p.Dir, "key-rotation-audit"),
+			AuditRetentionDays:   365,
+		},
+	}, func(s *KeyRotationService) string { return s.Partition })
+
 	return nil
 }
