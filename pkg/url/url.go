@@ -184,9 +184,16 @@ func (u *URL) Compare(v *URL) int {
 
 // copy returns a copy of the url.
 func (u *URL) copy() *URL {
-	v := *u //nolint:govet
-	v.memoize = urlMemoize{}
-	return &v
+	// Copy fields explicitly to avoid copying atomic.Pointer (contains noCopy)
+	v := &URL{
+		UserInfo:  u.UserInfo,
+		Authority: u.Authority,
+		Path:      u.Path,
+		Query:     u.Query,
+		Fragment:  u.Fragment,
+		// memoize left as zero value
+	}
+	return v
 }
 
 func (u *URL) format(txid []byte, encode bool) string {
@@ -526,6 +533,12 @@ func (u *URL) unmarshal(s string) error {
 		return err
 	}
 
-	*u = *v //nolint:govet
+	// Copy fields explicitly to avoid copying atomic.Pointer (contains noCopy)
+	u.UserInfo = v.UserInfo
+	u.Authority = v.Authority
+	u.Path = v.Path
+	u.Query = v.Query
+	u.Fragment = v.Fragment
+	// Do not copy memoize field - leave it as is (will be recalculated)
 	return nil
 }
