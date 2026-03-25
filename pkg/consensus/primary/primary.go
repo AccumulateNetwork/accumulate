@@ -386,7 +386,18 @@ func (p *Primary) tryCreateAndBroadcastHeader() {
 	p.pendingMu.Unlock()
 
 	// Broadcast header (outside lock)
+	p.wg.Add(1)
 	go func() {
+		defer p.wg.Done()
+
+		// Check if context is cancelled
+		if p.ctx != nil {
+			select {
+			case <-p.ctx.Done():
+				return
+			default:
+			}
+		}
 		if p.gossip == nil {
 			return
 		}
@@ -485,7 +496,18 @@ func (p *Primary) rebroadcastPendingHeaders() {
 
 	// Rebroadcast outside the lock
 	for _, header := range toRebroadcast {
+		p.wg.Add(1)
 		go func(h *types.Header) {
+			defer p.wg.Done()
+
+			// Check if context is cancelled
+			if p.ctx != nil {
+				select {
+				case <-p.ctx.Done():
+					return
+				default:
+				}
+			}
 			if err := p.gossip.BroadcastHeader(p.ctx, h); err != nil {
 				slog.Debug("Failed to rebroadcast header",
 					"error", err,

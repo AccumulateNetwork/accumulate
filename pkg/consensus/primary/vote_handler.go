@@ -163,7 +163,18 @@ func (p *Primary) tryCreateCertificateLocked(headerDigest types.HeaderDigest) {
 	delete(p.ourHeaders, headerDigest)
 
 	// Insert into DAG and broadcast (outside lock)
+	p.wg.Add(1)
 	go func() {
+		defer p.wg.Done()
+
+		// Check if context is cancelled
+		if p.ctx != nil {
+			select {
+			case <-p.ctx.Done():
+				return
+			default:
+			}
+		}
 		// Insert into DAG
 		var err error
 		if cert.Round() == 0 {
@@ -323,7 +334,18 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 		"round", header.Round)
 
 	// Broadcast vote
+	p.wg.Add(1)
 	go func() {
+		defer p.wg.Done()
+
+		// Check if context is cancelled
+		if p.ctx != nil {
+			select {
+			case <-p.ctx.Done():
+				return
+			default:
+			}
+		}
 		if p.gossip == nil {
 			return
 		}
