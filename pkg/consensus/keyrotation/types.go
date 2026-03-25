@@ -8,6 +8,7 @@ package keyrotation
 
 import (
 	"crypto/ed25519"
+	"encoding/hex"
 	"time"
 )
 
@@ -267,4 +268,9 @@ type ValidationError struct {
 // Error implements the error interface.
 func (e *ValidationError) Error() string {
 	return "validation error: " + e.Field + ": " + e.Message
+}
+
+// EncodePublicKey encodes an Ed25519 public key to hex string.
+func EncodePublicKey(pubKey ed25519.PublicKey) string {
+	return hex.EncodeToString(pubKey)
 }
