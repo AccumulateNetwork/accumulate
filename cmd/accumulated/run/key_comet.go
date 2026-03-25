@@ -4,11 +4,12 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
+//go:build !dagbft
+
 package run
 
 import (
 	"crypto/ed25519"
-	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -26,48 +27,6 @@ type cometKeyJSON struct {
 type cometKeyData struct {
 	Type  string `json:"type"`
 	Value []byte `json:"value"` // base64-decoded by encoding/json
-}
-
-func (k *RawPrivateKey) get(inst *Instance) (address.Address, error) {
-	return address.Parse(k.Address)
-}
-
-func (k *TransientPrivateKey) get(inst *Instance) (address.Address, error) {
-	if k.key != nil {
-		return k.key, nil
-	}
-
-	inst.logger.WarnContext(inst.context, "Generating a new key. This is highly discouraged for permanent infrastructure.")
-	pk, sk, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		panic(err)
-	}
-	k.key = &address.PrivateKey{
-		PublicKey: address.PublicKey{
-			Type: protocol.SignatureTypeED25519,
-			Key:  pk,
-		},
-		Key: sk,
-	}
-	return k.key, nil
-}
-
-func (k *PrivateKeySeed) get(inst *Instance) (address.Address, error) {
-	if k.key != nil {
-		return k.key, nil
-	}
-
-	inst.logger.WarnContext(inst.context, "Generating a new key from a seed. This is not at all secure.")
-	h := k.Seed.Hash()
-	sk := ed25519.NewKeyFromSeed(h[:])
-	k.key = &address.PrivateKey{
-		PublicKey: address.PublicKey{
-			Type: protocol.SignatureTypeED25519,
-			Key:  sk[32:],
-		},
-		Key: sk,
-	}
-	return k.key, nil
 }
 
 func (k *CometPrivValFile) get(inst *Instance) (address.Address, error) {
