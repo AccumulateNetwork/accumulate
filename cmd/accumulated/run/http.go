@@ -95,7 +95,18 @@ func (h *HttpService) start(inst *Instance) error {
 		return err
 	}
 
+	// Create key rotation API handler
+	keyRotationAPI := NewKeyRotationAPI(inst)
+
 	api2 := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Check for key rotation API endpoints
+		const krPrefix = "/api/v1/validator/key/"
+		if strings.HasPrefix(r.URL.Path, krPrefix) {
+			keyRotationAPI.ServeHTTP(w, r)
+			return
+		}
+
+		// Check for timestamp API
 		const prefix = "/timestamp/"
 		if r.Method != "GET" || !strings.HasPrefix(r.URL.Path, prefix) {
 			api.ServeHTTP(w, r)

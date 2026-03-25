@@ -299,6 +299,8 @@ Service:
           value: 10
         Subnode:
           value: 11
+        KeyRotation:
+          value: 12
 
   members:
     - name: StorageService
@@ -380,6 +382,39 @@ Service:
       fields:
         - name: Partition
           type: string
+
+    - name: KeyRotationService
+      class: composite
+      pointer: true
+      transients:
+        - name: manager
+          type: '*keyrotation.Manager'
+          marshal-as: none
+      fields:
+        - name: Partition
+          type: string
+        - name: ValidatorKey
+          type: PrivateKey
+        - name: Config
+          type:
+            name: KeyRotationConfig
+            class: composite
+            pointer: true
+            fields:
+              - name: Enabled
+                type: bool
+              - name: RotationIntervalDays
+                type: int
+              - name: GracePeriodDays
+                type: int
+              - name: WarningPeriodDays
+                type: int
+              - name: AuditDirectory
+                type: string
+                optional: true
+              - name: AuditRetentionDays
+                type: int
+                optional: true
 
     - name: HttpService
       class: composite
