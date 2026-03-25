@@ -58,9 +58,7 @@ test/cmd/testreport/testreport
 /config/load-test-issues.json
 
 # Snapshot URLs (temporary files)
-/snapshot.urls
-/cmd/accumulated/run/snapshot.urls
-/internal/node/abci/snapshot.urls
+**/snapshot.urls
 /tools/cmd/debug/reviews/
 
 # Go workspace
