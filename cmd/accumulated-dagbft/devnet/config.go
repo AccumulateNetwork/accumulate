@@ -1,3 +1,5 @@
+//go:build dagbft
+
 // Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
