@@ -16,7 +16,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"github.com/rs/zerolog"
 )
 
@@ -34,7 +33,7 @@ func (s *Slogger) Error(msg string, keyvals ...interface{}) {
 	(*slog.Logger)(s).Error(msg, keyvals...)
 }
 
-func (s *Slogger) With(keyvals ...interface{}) log.Logger {
+func (s *Slogger) With(keyvals ...interface{}) Logger {
 	l := (*slog.Logger)(s).With(keyvals...)
 	return (*Slogger)(l)
 }
