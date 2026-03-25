@@ -10,6 +10,8 @@ go build:
   - go build -v ./...
   # Check tags
   - go build -tags debug,no_mmap -v ./...
+  # Build dagbft variant
+  - go build -tags dagbft -v ./cmd/accumulated-dagbft
   # Build manual submission tool
   # - (cd test/cmd/manual; go build -v .)
 
