@@ -9,6 +9,9 @@ tools/cmd/gen-enum/gen-enum
 tools/cmd/gen-types/go_build*
 tools/cmd/gen-enum/go_build*
 
+# Go workspace
+go.work.sum
+
 # Binaries and test data
 *.exe
 *.test
