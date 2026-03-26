@@ -131,6 +131,8 @@ func Default(netName string, net protocol.PartitionType, _ NodeType, partitionId
 	c.Accumulate.API.ConnectionLimit = 500
 	c.Accumulate.Storage.Type = BadgerStorage
 	c.Accumulate.Storage.Path = filepath.Join("data", "accumulate.db")
+	c.Accumulate.BPT.Sharding.Enabled = false  // Disabled by default for backward compatibility
+	c.Accumulate.BPT.Sharding.Depth = 4        // 16 shards - optimal for 16-core systems
 	c.Accumulate.Snapshots.Enable = false
 	c.Accumulate.Snapshots.Directory = "snapshots"
 	c.Accumulate.Snapshots.RetainCount = 10
@@ -163,6 +165,7 @@ type Accumulate struct {
 	Healing     Healing     `toml:"healing" mapstructure:"healing"`
 	Snapshots   Snapshots   `toml:"snapshots" mapstructure:"snapshots"`
 	Storage     Storage     `toml:"storage" mapstructure:"storage"`
+	BPT         BPT         `toml:"bpt" mapstructure:"bpt"`
 	P2P         P2P         `toml:"p2p" mapstructure:"p2p"`
 	API         API         `toml:"api" mapstructure:"api"`
 	AnalysisLog AnalysisLog `toml:"analysis" mapstructure:"analysis"`
@@ -253,6 +256,21 @@ type API struct {
 	DebugJSONRPC      bool          `toml:"debug-jsonrpc" mapstructure:"debug-jsonrpc"`
 	ConnectionLimit   int           `toml:"connection-limit" mapstructure:"connection-limit"`
 	ReadHeaderTimeout time.Duration `toml:"read-header-timeout" mapstructure:"read-header-timeout"`
+}
+
+// ValidateBPTConfig validates the BPT configuration parameters.
+// Returns an error if the configuration is invalid.
+func (b *BPT) Validate() error {
+	if !b.Sharding.Enabled {
+		return nil // No validation needed if sharding is disabled
+	}
+
+	depth := b.Sharding.Depth
+	if depth < 1 || depth > 8 {
+		return fmt.Errorf("bpt.sharding.depth must be between 1 and 8, got %d", depth)
+	}
+
+	return nil
 }
 
 func MakeAbsolute(root, path string) string {
