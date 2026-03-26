@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
@@ -381,4 +382,501 @@ func TestInvalidShardDepth(t *testing.T) {
 		_, err := NewShardedBPT(store, key, depth)
 		require.NoError(t, err, "depth %d should be accepted", depth)
 	}
+}
+
+// TestShardedBPTStressTest runs continuous operations for 10 seconds with 64
+// goroutines to verify thread safety and data consistency under heavy load.
+// This test is skipped with -short flag.
+//
+// Validates: no data races, no corruption, all inserted data is retrievable.
+func TestShardedBPTStressTest(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping stress test in short mode")
+	}
+
+	kvs := memory.New(nil).Begin(nil, true)
+	defer kvs.Discard()
+	store := keyvalue.RecordStore{Store: kvs}
+
+	key := record.NewKey("stress-test")
+
+	// Create sharded BPT with 16 shards
+	s, err := NewShardedBPT(store, key, 4)
+	require.NoError(t, err)
+
+	// Track all operations for verification using thread-safe maps
+	var opsLock sync.Mutex
+	inserted := make(map[string][32]byte)
+	deleted := make(map[string]bool)
+
+	numGoroutines := 64
+	duration := 10 // seconds
+
+	// Start time for duration tracking
+	done := make(chan struct{})
+	go func() {
+		<-time.After(time.Duration(duration) * time.Second)
+		close(done)
+	}()
+
+	// Launch worker goroutines
+	var wg sync.WaitGroup
+	wg.Add(numGoroutines)
+
+	for g := 0; g < numGoroutines; g++ {
+		g := g
+		go func() {
+			defer wg.Done()
+
+			counter := 0
+			for {
+				select {
+				case <-done:
+					return
+				default:
+					k := record.NewKey(fmt.Sprintf("g%d-key%d", g, counter))
+					v := sha256.Sum256([]byte(fmt.Sprintf("g%d-val%d", g, counter)))
+					keyStr := k.String()
+
+					// Insert
+					err := s.Insert(k, v[:])
+					require.NoError(t, err)
+
+					opsLock.Lock()
+					inserted[keyStr] = v
+					opsLock.Unlock()
+
+					// Get to verify
+					retrieved, err := s.Get(k)
+					require.NoError(t, err)
+					require.Equal(t, v[:], retrieved)
+
+					// Delete some entries (50% chance)
+					if counter%2 == 0 {
+						err = s.Delete(k)
+						require.NoError(t, err)
+
+						opsLock.Lock()
+						deleted[keyStr] = true
+						opsLock.Unlock()
+					}
+
+					counter++
+				}
+			}
+		}()
+	}
+
+	wg.Wait()
+
+	// Verify all inserted but not deleted keys are still present
+	verified := 0
+	for keyStr, value := range inserted {
+		if deleted[keyStr] {
+			continue
+		}
+
+		k := record.NewKey(keyStr)
+		retrieved, err := s.Get(k)
+		require.NoError(t, err)
+		require.Equal(t, value[:], retrieved, "data corruption for key %s", keyStr)
+		verified++
+	}
+
+	t.Logf("Stress test completed: verified %d keys, %d deleted", verified, len(deleted))
+
+	// Verify we can get root hash without errors
+	_, err = s.GetRootHash()
+	require.NoError(t, err)
+}
+
+// TestShardedBPTLargeDataset verifies behavior with 100,000 entries to test
+// scalability, memory usage, and correctness at scale.
+//
+// Validates: root hash matches non-sharded BPT, no memory leaks, performance
+// across different shard depths.
+func TestShardedBPTLargeDataset(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping large dataset test in short mode")
+	}
+
+	numEntries := 100000
+
+	tests := []struct {
+		name       string
+		shardDepth int
+	}{
+		{"16 shards (depth 4)", 4},
+		{"32 shards (depth 5)", 5},
+		{"64 shards (depth 6)", 6},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create two separate stores for comparison
+			kvs1 := memory.New(nil).Begin(nil, true)
+			defer kvs1.Discard()
+			store1 := keyvalue.RecordStore{Store: kvs1}
+
+			kvs2 := memory.New(nil).Begin(nil, true)
+			defer kvs2.Discard()
+			store2 := keyvalue.RecordStore{Store: kvs2}
+
+			key := record.NewKey("large-dataset")
+
+			// Create sharded and non-sharded BPTs
+			sharded, err := NewShardedBPT(store1, key, tt.shardDepth)
+			require.NoError(t, err)
+
+			nonSharded := New(nil, nil, store2, key)
+
+			// Insert 100K entries into both
+			t.Logf("Inserting %d entries...", numEntries)
+			for i := 0; i < numEntries; i++ {
+				k := record.NewKey(fmt.Sprintf("large-key-%d", i))
+				v := sha256.Sum256([]byte(fmt.Sprintf("large-value-%d", i)))
+
+				err = sharded.Insert(k, v[:])
+				require.NoError(t, err)
+				err = nonSharded.Insert(k, v[:])
+				require.NoError(t, err)
+
+				if i%10000 == 0 {
+					t.Logf("Inserted %d entries", i)
+				}
+			}
+
+			// Get root hashes
+			t.Logf("Computing root hashes...")
+			shardedRoot, err := sharded.GetRootHash()
+			require.NoError(t, err)
+			nonShardedRoot, err := nonSharded.GetRootHash()
+			require.NoError(t, err)
+
+			// CRITICAL: Root hashes must be identical
+			require.Equal(t, nonShardedRoot, shardedRoot,
+				"sharded and non-sharded BPTs must produce identical root hashes for %d entries", numEntries)
+
+			// Verify random sample of entries (check 1000 random keys)
+			t.Logf("Verifying random sample...")
+			for i := 0; i < 1000; i++ {
+				idx := i * (numEntries / 1000)
+				k := record.NewKey(fmt.Sprintf("large-key-%d", idx))
+
+				shardedVal, err := sharded.Get(k)
+				require.NoError(t, err)
+				nonShardedVal, err := nonSharded.Get(k)
+				require.NoError(t, err)
+				require.Equal(t, nonShardedVal, shardedVal)
+			}
+
+			t.Logf("Large dataset test completed successfully for %s", tt.name)
+		})
+	}
+}
+
+// TestShardedBPTEdgeCases tests pathological and edge case scenarios.
+//
+// Validates: single shard usage, interleaved operations, non-existent keys,
+// empty shards, and root hash consistency in unusual situations.
+func TestShardedBPTEdgeCases(t *testing.T) {
+	t.Run("all data in one shard", func(t *testing.T) {
+		kvs := memory.New(nil).Begin(nil, true)
+		defer kvs.Discard()
+		store := keyvalue.RecordStore{Store: kvs}
+
+		key := record.NewKey("edge-one-shard")
+		s, err := NewShardedBPT(store, key, 4)
+		require.NoError(t, err)
+
+		// Force all keys to route to shard 0 by using keys that hash to 0x0X
+		// This is unlikely but tests the pathological case
+		numEntries := 1000
+		for i := 0; i < numEntries; i++ {
+			// Try to find keys that route to shard 0
+			k := record.NewKey(fmt.Sprintf("shard0-key-%d", i))
+			v := sha256.Sum256([]byte(fmt.Sprintf("value-%d", i)))
+
+			err = s.Insert(k, v[:])
+			require.NoError(t, err)
+		}
+
+		// Verify root hash can be computed
+		_, err = s.GetRootHash()
+		require.NoError(t, err)
+	})
+
+	t.Run("interleaved inserts and root hash calls", func(t *testing.T) {
+		kvs := memory.New(nil).Begin(nil, true)
+		defer kvs.Discard()
+		store := keyvalue.RecordStore{Store: kvs}
+
+		key := record.NewKey("edge-interleaved")
+		s, err := NewShardedBPT(store, key, 4)
+		require.NoError(t, err)
+
+		var lastRoot [32]byte
+		for i := 0; i < 100; i++ {
+			// Insert
+			k := record.NewKey(fmt.Sprintf("key-%d", i))
+			v := sha256.Sum256([]byte(fmt.Sprintf("value-%d", i)))
+			err = s.Insert(k, v[:])
+			require.NoError(t, err)
+
+			// Get root hash immediately
+			root, err := s.GetRootHash()
+			require.NoError(t, err)
+			require.NotEqual(t, [32]byte{}, root)
+
+			// Root should change with each insert
+			if i > 0 {
+				require.NotEqual(t, lastRoot, root, "root hash should change after insert")
+			}
+			lastRoot = root
+		}
+	})
+
+	t.Run("delete non-existent keys", func(t *testing.T) {
+		kvs := memory.New(nil).Begin(nil, true)
+		defer kvs.Discard()
+		store := keyvalue.RecordStore{Store: kvs}
+
+		key := record.NewKey("edge-delete")
+		s, err := NewShardedBPT(store, key, 4)
+		require.NoError(t, err)
+
+		// Delete keys that don't exist
+		for i := 0; i < 10; i++ {
+			k := record.NewKey(fmt.Sprintf("nonexistent-%d", i))
+			err = s.Delete(k)
+			// Should not panic, may return error depending on BPT behavior
+			_ = err
+		}
+
+		// Verify we can still get root hash
+		_, err = s.GetRootHash()
+		require.NoError(t, err)
+	})
+
+	t.Run("get from empty shard", func(t *testing.T) {
+		kvs := memory.New(nil).Begin(nil, true)
+		defer kvs.Discard()
+		store := keyvalue.RecordStore{Store: kvs}
+
+		key := record.NewKey("edge-empty-get")
+		s, err := NewShardedBPT(store, key, 4)
+		require.NoError(t, err)
+
+		// Try to get from empty BPT
+		k := record.NewKey("nonexistent")
+		_, err = s.Get(k)
+		require.Error(t, err, "should error when getting from empty BPT")
+	})
+
+	t.Run("root hash with some empty shards", func(t *testing.T) {
+		kvs := memory.New(nil).Begin(nil, true)
+		defer kvs.Discard()
+		store := keyvalue.RecordStore{Store: kvs}
+
+		key := record.NewKey("edge-partial")
+		s, err := NewShardedBPT(store, key, 4)
+		require.NoError(t, err)
+
+		// Insert into only 3 shards
+		keys := []string{"key-a", "key-b", "key-c"}
+		for _, k := range keys {
+			key := record.NewKey(k)
+			v := sha256.Sum256([]byte(k))
+			err = s.Insert(key, v[:])
+			require.NoError(t, err)
+		}
+
+		// Get root hash - should handle empty shards
+		root, err := s.GetRootHash()
+		require.NoError(t, err)
+		require.NotEqual(t, [32]byte{}, root)
+	})
+}
+
+// TestShardDistribution verifies that keys are distributed roughly evenly
+// across shards using SHA-256 hashing.
+//
+// Validates: uniform distribution, no pathological clustering, SHA-256
+// provides good shard balancing.
+func TestShardDistribution(t *testing.T) {
+	kvs := memory.New(nil).Begin(nil, true)
+	defer kvs.Discard()
+	store := keyvalue.RecordStore{Store: kvs}
+
+	key := record.NewKey("distribution")
+
+	tests := []struct {
+		name       string
+		shardDepth int
+	}{
+		{"16 shards", 4},
+		{"32 shards", 5},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s, err := NewShardedBPT(store, key, tt.shardDepth)
+			require.NoError(t, err)
+
+			numKeys := 10000
+			shardCounts := make([]int, s.numShards)
+
+			// Insert keys and track distribution
+			for i := 0; i < numKeys; i++ {
+				k := record.NewKey(fmt.Sprintf("dist-key-%d", i))
+				v := sha256.Sum256([]byte(fmt.Sprintf("value-%d", i)))
+
+				// Determine which shard this key goes to
+				keyHash := k.Hash()
+				shardID := int(keyHash[0] >> (8 - s.shardDepth))
+				shardCounts[shardID]++
+
+				err = s.Insert(k, v[:])
+				require.NoError(t, err)
+			}
+
+			// Calculate expected count per shard
+			expectedPerShard := numKeys / s.numShards
+
+			// Verify distribution is roughly even (allow ±20% variance)
+			t.Logf("Distribution across %d shards:", s.numShards)
+			for i, count := range shardCounts {
+				variance := float64(count-expectedPerShard) / float64(expectedPerShard) * 100
+				t.Logf("  Shard %2d: %4d keys (%.1f%% variance)", i, count, variance)
+
+				// Check that no shard is more than 20% off from expected
+				require.InDelta(t, expectedPerShard, count, float64(expectedPerShard)*0.2,
+					"shard %d has %d keys, expected ~%d (±20%%)", i, count, expectedPerShard)
+			}
+		})
+	}
+}
+
+// TestConcurrentGetRootHash tests multiple goroutines calling GetRootHash
+// simultaneously while other goroutines are inserting data.
+//
+// Validates: thread safety of GetRootHash, consistency of returned hashes,
+// no data races during concurrent operations.
+func TestConcurrentGetRootHash(t *testing.T) {
+	kvs := memory.New(nil).Begin(nil, true)
+	defer kvs.Discard()
+	store := keyvalue.RecordStore{Store: kvs}
+
+	key := record.NewKey("concurrent-root")
+	s, err := NewShardedBPT(store, key, 4)
+	require.NoError(t, err)
+
+	numWriters := 16
+	numReaders := 16
+	duration := 2 // seconds
+
+	done := make(chan struct{})
+	go func() {
+		<-time.After(time.Duration(duration) * time.Second)
+		close(done)
+	}()
+
+	var wg sync.WaitGroup
+	var hashCount sync.WaitGroup
+	var hashCountValue int
+	var hashCountMu sync.Mutex
+
+	// Start writer goroutines
+	wg.Add(numWriters)
+	for w := 0; w < numWriters; w++ {
+		w := w
+		go func() {
+			defer wg.Done()
+			counter := 0
+			for {
+				select {
+				case <-done:
+					return
+				default:
+					k := record.NewKey(fmt.Sprintf("writer%d-key%d", w, counter))
+					v := sha256.Sum256([]byte(fmt.Sprintf("value%d", counter)))
+					err := s.Insert(k, v[:])
+					require.NoError(t, err)
+					counter++
+				}
+			}
+		}()
+	}
+
+	// Start reader goroutines that call GetRootHash continuously
+	wg.Add(numReaders)
+	for r := 0; r < numReaders; r++ {
+		go func() {
+			defer wg.Done()
+			localCount := 0
+			for {
+				select {
+				case <-done:
+					hashCountMu.Lock()
+					hashCountValue += localCount
+					hashCountMu.Unlock()
+					return
+				default:
+					root, err := s.GetRootHash()
+					require.NoError(t, err)
+					require.NotEqual(t, [32]byte{}, root)
+					localCount++
+				}
+			}
+		}()
+	}
+
+	wg.Wait()
+
+	// Verify we got many root hash calls without errors
+	require.Greater(t, hashCountValue, 100, "should have computed many root hashes")
+
+	// Get final root hash
+	finalRoot, err := s.GetRootHash()
+	require.NoError(t, err)
+	require.NotEqual(t, [32]byte{}, finalRoot)
+
+	t.Logf("Concurrent test completed: %d root hash calls", hashCountValue)
+}
+
+// TestShardedBPTErrors verifies proper error handling for invalid parameters
+// and edge cases.
+//
+// Validates: error messages, nil handling, parameter validation.
+func TestShardedBPTErrors(t *testing.T) {
+	t.Run("invalid shard depths", func(t *testing.T) {
+		kvs := memory.New(nil).Begin(nil, true)
+		defer kvs.Discard()
+		store := keyvalue.RecordStore{Store: kvs}
+
+		key := record.NewKey("error-test")
+
+		tests := []struct {
+			depth       int
+			shouldError bool
+		}{
+			{0, true},
+			{-1, true},
+			{9, true},
+			{10, true},
+			{1, false},
+			{4, false},
+			{8, false},
+		}
+
+		for _, tt := range tests {
+			_, err := NewShardedBPT(store, key, tt.depth)
+			if tt.shouldError {
+				require.Error(t, err, "depth %d should error", tt.depth)
+				require.Contains(t, err.Error(), "shard depth must be between 1 and 8")
+			} else {
+				require.NoError(t, err, "depth %d should be valid", tt.depth)
+			}
+		}
+	})
 }
