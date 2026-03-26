@@ -382,3 +382,28 @@ AuthoritySignature:
     - name: Memo
       type: string
       optional: true
+
+EthereumDataSignature:
+  union: { type: signature }
+  description: validates an embedded Ethereum signature in EthereumDataEntry for self-authenticating writes
+  fields:
+    - name: Signer
+      description: is the lite account URL derived from the Ethereum address (computed during verification)
+      type: url
+      pointer: true
+    - name: SignerVersion
+      type: uint
+    - name: Timestamp
+      type: uint
+      optional: true
+    - name: Vote
+      type: VoteType
+      marshal-as: enum
+      optional: true
+    - name: TransactionHash
+      type: hash
+      optional: true
+    - name: ExpectedChainId
+      description: is the expected Ethereum chain ID for cross-chain replay protection
+      type: uint
+      optional: true

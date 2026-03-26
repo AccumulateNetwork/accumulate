@@ -313,6 +313,7 @@ type Account struct {
 	anchorChain            map[accountAnchorChainMapKey]*AccountAnchorChain
 	chains                 values.Set[*protocol.ChainMetadata]
 	syntheticAnchors       values.Set[[32]byte]
+	ethereumTxHashes       values.Set[[32]byte]
 	data                   *AccountData
 }
 
@@ -533,6 +534,14 @@ func (c *Account) newSyntheticAnchors() values.Set[[32]byte] {
 	return values.NewSet(c.logger.L, c.store, c.key.Append("SyntheticAnchors"), values.Wrapped(values.HashWrapper), values.CompareHash)
 }
 
+func (c *Account) EthereumTxHashes() values.Set[[32]byte] {
+	return values.GetOrCreate(c, &c.ethereumTxHashes, (*Account).newEthereumTxHashes)
+}
+
+func (c *Account) newEthereumTxHashes() values.Set[[32]byte] {
+	return values.NewSet(c.logger.L, c.store, c.key.Append("EthereumTxHashes"), values.Wrapped(values.HashWrapper), values.CompareHash)
+}
+
 func (c *Account) Data() *AccountData {
 	return values.GetOrCreate(c, &c.data, (*Account).newData)
 }
@@ -622,6 +631,8 @@ func (c *Account) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 		return c.Chains(), key.SliceI(1), nil
 	case "SyntheticAnchors":
 		return c.SyntheticAnchors(), key.SliceI(1), nil
+	case "EthereumTxHashes":
+		return c.EthereumTxHashes(), key.SliceI(1), nil
 	case "Data":
 		return c.Data(), key.SliceI(1), nil
 	default:
@@ -699,6 +710,9 @@ func (c *Account) IsDirty() bool {
 	if values.IsDirty(c.syntheticAnchors) {
 		return true
 	}
+	if values.IsDirty(c.ethereumTxHashes) {
+		return true
+	}
 	if values.IsDirty(c.data) {
 		return true
 	}
@@ -760,6 +774,9 @@ func (c *Account) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	if !opts.IgnoreIndices {
 		values.WalkField(&err, c.syntheticAnchors, c.newSyntheticAnchors, opts, fn)
 	}
+	if !opts.IgnoreIndices {
+		values.WalkField(&err, c.ethereumTxHashes, c.newEthereumTxHashes, opts, fn)
+	}
 	values.WalkField(&err, c.data, c.newData, opts, fn)
 	return err
 }
@@ -797,6 +814,7 @@ func (c *Account) baseCommit() error {
 	}
 	values.Commit(&err, c.chains)
 	values.Commit(&err, c.syntheticAnchors)
+	values.Commit(&err, c.ethereumTxHashes)
 	values.Commit(&err, c.data)
 
 	return err

@@ -257,6 +257,8 @@ func NewDataEntry(typ DataEntryType) (DataEntry, error) {
 		return new(AccumulateDataEntry), nil
 	case DataEntryTypeDoubleHash:
 		return new(DoubleHashDataEntry), nil
+	case DataEntryTypeEthereum:
+		return new(EthereumDataEntry), nil
 	case DataEntryTypeFactom:
 		return new(FactomDataEntryWrapper), nil
 	}
@@ -281,6 +283,12 @@ func EqualDataEntry(a, b DataEntry) bool {
 		}
 		b, ok := b.(*DoubleHashDataEntry)
 		return ok && a.Equal(b)
+	case *EthereumDataEntry:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*EthereumDataEntry)
+		return ok && a.Equal(b)
 	case *FactomDataEntryWrapper:
 		if a == nil {
 			return b == nil
@@ -297,6 +305,8 @@ func CopyDataEntry(v DataEntry) DataEntry {
 	case *AccumulateDataEntry:
 		return v.Copy()
 	case *DoubleHashDataEntry:
+		return v.Copy()
+	case *EthereumDataEntry:
 		return v.Copy()
 	case *FactomDataEntryWrapper:
 		return v.Copy()
@@ -1089,6 +1099,8 @@ func NewSignature(typ SignatureType) (Signature, error) {
 		return new(ETHSignature), nil
 	case SignatureTypeEcdsaSha256:
 		return new(EcdsaSha256Signature), nil
+	case SignatureTypeEthereumData:
+		return new(EthereumDataSignature), nil
 	case SignatureTypeInternal:
 		return new(InternalSignature), nil
 	case SignatureTypeLegacyED25519:
@@ -1158,6 +1170,12 @@ func EqualSignature(a, b Signature) bool {
 			return b == nil
 		}
 		b, ok := b.(*EcdsaSha256Signature)
+		return ok && a.Equal(b)
+	case *EthereumDataSignature:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*EthereumDataSignature)
 		return ok && a.Equal(b)
 	case *InternalSignature:
 		if a == nil {
@@ -1233,6 +1251,8 @@ func CopySignature(v Signature) Signature {
 	case *ETHSignature:
 		return v.Copy()
 	case *EcdsaSha256Signature:
+		return v.Copy()
+	case *EthereumDataSignature:
 		return v.Copy()
 	case *InternalSignature:
 		return v.Copy()
