@@ -67,6 +67,8 @@ var cu = func() *user.User {
 }()
 
 func init() {
+	cmd.AddCommand(VersionCmd())
+
 	flag.Key.Value = &TransientPrivateKey{}
 
 	if cu != nil {
@@ -90,14 +92,17 @@ func init() {
 	cmd.Flags().StringVar(&flag.Pprof, "pprof", "", "Address to run net/http/pprof on")
 	cmd.Flags().StringVar(&flag.ExtraServices, "extra-services", "", "A file containing additional services, formatted the same as accumulate.toml")
 
-	cmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
-		if !cmd.Flag("prom-listen").Changed {
+	cmd.PersistentPreRun = func(c *cobra.Command, args []string) {
+		root := c.Root()
+		if f := root.Flag("prom-listen"); f != nil && !f.Changed {
 			flag.PromListen = []multiaddr.Multiaddr{multiaddr.StringCast("/ip4/0.0.0.0/tcp/8081/http")}
 		}
-		if !cmd.Flag("peer").Changed {
+		if f := root.Flag("peer"); f != nil && !f.Changed {
 			flag.Peers = accumulate.BootstrapServers
 		}
 	}
+
+	AddVersionFlag(cmd)
 }
 
 func run(cmd *cobra.Command, args []string) {

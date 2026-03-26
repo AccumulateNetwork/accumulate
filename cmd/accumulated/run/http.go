@@ -98,11 +98,42 @@ func (h *HttpService) start(inst *Instance) error {
 	// Create key rotation API handler
 	keyRotationAPI := NewKeyRotationAPI(inst)
 
+	// Determine which instance holds the halt controllers
+	// (if we're a subnode, use the parent instance)
+	haltInst := inst
+	if inst.parentInstance != nil {
+		haltInst = inst.parentInstance
+	}
+
 	api2 := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Check for key rotation API endpoints
 		const krPrefix = "/api/v1/validator/key/"
 		if strings.HasPrefix(r.URL.Path, krPrefix) {
 			keyRotationAPI.ServeHTTP(w, r)
+			return
+		}
+
+		// Handle admin endpoints
+		if r.URL.Path == "/admin/halt" {
+			w.Header().Set("Content-Type", "application/json")
+			switch r.Method {
+			case http.MethodPost:
+				haltInst.RequestHaltAll()
+				json.NewEncoder(w).Encode(HaltResponse{
+					Status:  "scheduled",
+					Message: "Node will halt after next major block",
+				})
+			case http.MethodDelete:
+				haltInst.CancelHaltAll()
+				json.NewEncoder(w).Encode(HaltResponse{
+					Status:  "cancelled",
+					Message: "Halt request cancelled",
+				})
+			case http.MethodGet:
+				json.NewEncoder(w).Encode(haltInst.GetHaltStatus())
+			default:
+				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			}
 			return
 		}
 

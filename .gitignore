@@ -20,7 +20,6 @@ tools/cmd/debug/debug
 .testdata
 __debug_bin*
 tmp
-
 # Temp and log files
 *~
 *.kate-swp
@@ -30,10 +29,8 @@ tmp
 *.log
 *.swp
 *.out
-
 # macOS
 .DS_Store
-
 # Tooling
 .idea
 .nodes*
@@ -43,24 +40,47 @@ tmp
 .terraform
 .terraform.lock.hcl
 /.vscode/settings.json
-
 #jj
 .newscripts
 test/cmd/testreport/testreport
-
 # Build artifacts
 /accumulated-testnet
 /load-generator
-
 # Orchestrator artifacts
 /reviews/
 /state/
 /config/load-test-issues.json
-
 # Snapshot URLs (temporary files)
 **/snapshot.urls
 /tools/cmd/debug/reviews/
-
 # Go workspace
 go.work.sum
 /accumulated-dagbft
+# Custom tool binaries
+/accumulated-*
+/bpt-info
+/check-acc-height
+/check-state
+/cleanup-bpt
+/create-snap
+/db-block-height
+/debug-consensus
+/deploy-follower
+/follower-monitor
+/init-state
+/repair-snapshot
+/snapshot-info
+/cmd/accumulated-bootstrap/accumulated-bootstrap
+/cmd/check-state/check-state
+/cmd/extract-validators/extract-validators
+/cmd/init-state/init-state
+/tools/deploy-follower/deploy-follower
+/tools/follower-monitor/follower-monitor
+/tools/torrent-deploy/cmd/torrent-server/torrent-server
+# Data directories and snapshots
+/accumulate-dual-data/
+/accumulate-dual-test/
+/*.snap
+/snapshot-tool
+.archive/
+mcp/mcp-server

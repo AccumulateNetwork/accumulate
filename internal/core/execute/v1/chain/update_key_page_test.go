@@ -45,7 +45,6 @@ func doHash(b []byte) []byte {
 
 func TestUpdateKeyPage_Priority(t *testing.T) {
 	db := database.OpenInMemory(nil)
-	db.SetObserver(acctesting.NullObserver{})
 
 	fooKey, testKey, newKey := generateKey(), generateKey(), generateKey()
 	batch := db.Begin(true)

@@ -1,0 +1,62 @@
+// Copyright 2026 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
+package database
+
+import (
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+)
+
+type databaseObserver struct{}
+
+var _ Observer = databaseObserver{}
+
+type observedAccount struct {
+	*Account
+	batch *Batch
+}
+
+// NewDatabaseObserver returns the production observer that computes real
+// account state hashes for the BPT.
+func NewDatabaseObserver() Observer {
+	return databaseObserver{}
+}
+
+func zero[T any]() (z T) { return z }
+
+func loadState[T any](lastErr *error, allowMissing bool, get func() (T, error)) T {
+	if *lastErr != nil {
+		return zero[T]()
+	}
+
+	v, err := get()
+	if allowMissing && errors.Is(err, errors.NotFound) {
+		return zero[T]()
+	}
+	if err != nil {
+		*lastErr = err
+		return zero[T]()
+	}
+
+	return v
+}
+
+func loadState1[T, A1 any](lastErr *error, allowMissing bool, get func(A1) (T, error), a1 A1) T {
+	if *lastErr != nil {
+		return zero[T]()
+	}
+
+	v, err := get(a1)
+	if allowMissing && errors.Is(err, errors.NotFound) {
+		return zero[T]()
+	}
+	if err != nil {
+		*lastErr = err
+		return zero[T]()
+	}
+
+	return v
+}
