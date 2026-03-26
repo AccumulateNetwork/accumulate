@@ -116,23 +116,42 @@ func (s *ShardedBPT) Delete(key *record.Key) error {
 // hierarchically. This is the only coordination point in the sharded BPT.
 //
 // The algorithm:
-// 1. Read root hash from each shard (with per-shard locking)
+// 1. Read root hash from each shard IN PARALLEL (each executePending() independently)
 // 2. Combine the shard roots bottom-up in a virtual binary tree
 // 3. Return the final root hash
 //
 // This produces the same root hash as a non-sharded BPT with the same data.
+// The parallel execution of executePending() across shards is a key performance benefit.
 func (s *ShardedBPT) GetRootHash() ([32]byte, error) {
-	// Read all shard root hashes with per-shard locking
+	// Read all shard root hashes IN PARALLEL
+	// Each shard's executePending() runs concurrently
 	shardRoots := make([][32]byte, s.numShards)
-	for i, shard := range s.shards {
-		s.shardMu[i].Lock()
-		rootHash, err := shard.GetRootHash()
-		s.shardMu[i].Unlock()
+	errChan := make(chan error, s.numShards)
+	var wg sync.WaitGroup
 
-		if err != nil {
-			return [32]byte{}, errors.UnknownError.WithFormat("get shard %d root: %w", i, err)
-		}
-		shardRoots[i] = rootHash
+	for i := range s.shards {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+
+			s.shardMu[idx].Lock()
+			defer s.shardMu[idx].Unlock()
+
+			rootHash, err := s.shards[idx].GetRootHash()
+			if err != nil {
+				errChan <- errors.UnknownError.WithFormat("get shard %d root: %w", idx, err)
+				return
+			}
+			shardRoots[idx] = rootHash
+		}(i)
+	}
+
+	wg.Wait()
+	close(errChan)
+
+	// Check for errors
+	if err := <-errChan; err != nil {
+		return [32]byte{}, err
 	}
 
 	// Combine the shard roots hierarchically
