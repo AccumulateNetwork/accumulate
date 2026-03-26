@@ -7,6 +7,7 @@
 package bpt
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"fmt"
 	"sync"
@@ -419,6 +420,9 @@ func TestShardedBPTStressTest(t *testing.T) {
 		close(done)
 	}()
 
+	// Error channel for goroutine errors (buffered to prevent blocking)
+	errChan := make(chan error, numGoroutines*10)
+
 	// Launch worker goroutines
 	var wg sync.WaitGroup
 	wg.Add(numGoroutines)
@@ -440,7 +444,10 @@ func TestShardedBPTStressTest(t *testing.T) {
 
 					// Insert
 					err := s.Insert(k, v[:])
-					require.NoError(t, err)
+					if err != nil {
+						errChan <- fmt.Errorf("insert failed: %w", err)
+						return
+					}
 
 					opsLock.Lock()
 					inserted[keyStr] = v
@@ -448,13 +455,22 @@ func TestShardedBPTStressTest(t *testing.T) {
 
 					// Get to verify
 					retrieved, err := s.Get(k)
-					require.NoError(t, err)
-					require.Equal(t, v[:], retrieved)
+					if err != nil {
+						errChan <- fmt.Errorf("get failed: %w", err)
+						return
+					}
+					if !bytes.Equal(v[:], retrieved) {
+						errChan <- fmt.Errorf("data mismatch for key %s", keyStr)
+						return
+					}
 
 					// Delete some entries (50% chance)
 					if counter%2 == 0 {
 						err = s.Delete(k)
-						require.NoError(t, err)
+						if err != nil {
+							errChan <- fmt.Errorf("delete failed: %w", err)
+							return
+						}
 
 						opsLock.Lock()
 						deleted[keyStr] = true
@@ -468,6 +484,12 @@ func TestShardedBPTStressTest(t *testing.T) {
 	}
 
 	wg.Wait()
+	close(errChan)
+
+	// Check for any errors from goroutines
+	for err := range errChan {
+		t.Errorf("Goroutine error: %v", err)
+	}
 
 	// Verify all inserted but not deleted keys are still present
 	verified := 0
