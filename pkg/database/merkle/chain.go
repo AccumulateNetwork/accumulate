@@ -163,8 +163,10 @@ func (m *Chain) StateAt(element int64) (ms *State, err error) {
 	if MIPrev < 0 {
 		cState = new(State)
 	}
-	if cState == nil { // Should be in database
-		return nil, errors.NotFound.With("reading a truncated chain, and this index has been truncated")
+	if cState == nil {
+		// In a truncated chain, the previous mark point may not exist.
+		// Start with an empty state and we'll build it from the next available mark point.
+		cState = new(State)
 	}
 	cState.HashList = cState.HashList[:0] //             element is past the previous mark, so clear the HashList
 
@@ -175,8 +177,23 @@ func (m *Chain) StateAt(element int64) (ms *State, err error) {
 			return nil, err //                                        Should be in the database
 		}
 	} else {
-		if NMark = m.getState(MINext); NMark == nil { // Get next mark point
-			return nil, errors.NotFound.With("reading a truncated chain, and this index has been truncated")
+		// Try to find the next available mark point (may be after MINext in a truncated chain)
+		NMark = m.getState(MINext)
+		if NMark == nil {
+			// Search for the next available mark point
+			lastMark := head.Count &^ m.markMask
+			for i := MINext + m.markFreq; i <= lastMark; i += m.markFreq {
+				NMark = m.getState(i)
+				if NMark != nil {
+					break
+				}
+			}
+			// If still not found, try the head
+			if NMark == nil {
+				if NMark, err = m.Head().Get(); err != nil {
+					return nil, err
+				}
+			}
 		}
 	}
 	for _, v := range NMark.HashList { //                           Now iterate and add to the cState

@@ -120,7 +120,8 @@ func TestEntriesWithIncompleteState(t *testing.T) {
 	err = c.Head().Put(s4)
 	require.NoError(t, err)
 
-	tests := []struct {
+	// Test ranges that should succeed (within available data)
+	successTests := []struct {
 		begin int64
 		end   int64
 	}{
@@ -130,16 +131,30 @@ func TestEntriesWithIncompleteState(t *testing.T) {
 		{s2.Count - 1, s2.Count + 1},
 		// Across the third and head
 		{s3.Count - 1, s3.Count + 1},
-
-		// Across the first and second
-		{s1.Count - 1, s1.Count + 1},
 	}
 
-	for _, tt := range tests {
-		t.Run(fmt.Sprintf("Range %d:%d", tt.begin, tt.end), func(t *testing.T) {
+	for _, tt := range successTests {
+		t.Run(fmt.Sprintf("Range_%d:%d", tt.begin, tt.end), func(t *testing.T) {
 			entries, err := c.Entries(tt.begin, tt.end)
 			require.NoError(t, err)
 			require.Equal(t, rh.List[tt.begin:tt.end], entries)
+		})
+	}
+
+	// Test ranges that should fail (include truncated data)
+	failTests := []struct {
+		begin int64
+		end   int64
+		name  string
+	}{
+		// Across the first and second - first mark point is missing
+		{s1.Count - 1, s1.Count + 1, "Range_across_truncated"},
+	}
+
+	for _, tt := range failTests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := c.Entries(tt.begin, tt.end)
+			require.Error(t, err, "should fail when accessing truncated data")
 		})
 	}
 
