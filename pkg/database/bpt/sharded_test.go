@@ -782,7 +782,6 @@ func TestConcurrentGetRootHash(t *testing.T) {
 	}()
 
 	var wg sync.WaitGroup
-	var hashCount sync.WaitGroup
 	var hashCountValue int
 	var hashCountMu sync.Mutex
 
