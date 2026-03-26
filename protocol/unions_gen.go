@@ -404,6 +404,8 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(RemoteTransaction), nil
 	case TransactionTypeSendTokens:
 		return new(SendTokens), nil
+	case TransactionTypeSetLiteAccountDelegate:
+		return new(SetLiteAccountDelegate), nil
 	case TransactionTypeSyntheticBurnTokens:
 		return new(SyntheticBurnTokens), nil
 	case TransactionTypeSyntheticCreateIdentity:
@@ -556,6 +558,12 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 		}
 		b, ok := b.(*SendTokens)
 		return ok && a.Equal(b)
+	case *SetLiteAccountDelegate:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*SetLiteAccountDelegate)
+		return ok && a.Equal(b)
 	case *SyntheticBurnTokens:
 		if a == nil {
 			return b == nil
@@ -684,6 +692,8 @@ func CopyTransactionBody(v TransactionBody) TransactionBody {
 	case *RemoteTransaction:
 		return v.Copy()
 	case *SendTokens:
+		return v.Copy()
+	case *SetLiteAccountDelegate:
 		return v.Copy()
 	case *SyntheticBurnTokens:
 		return v.Copy()

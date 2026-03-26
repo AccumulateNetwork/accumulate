@@ -16,6 +16,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
+	cmdutil "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -31,6 +32,11 @@ var cmd = &cobra.Command{
 	Short: "Repair Accumulate's indices",
 	Args:  cobra.ExactArgs(1),
 	Run:   run,
+}
+
+func init() {
+	cmd.AddCommand(cmdutil.VersionCmd())
+	cmdutil.AddVersionFlag(cmd)
 }
 
 func run(_ *cobra.Command, args []string) {

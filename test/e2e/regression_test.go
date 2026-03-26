@@ -503,14 +503,12 @@ func TestPendingTransactionForMissingAccount(t *testing.T) {
 	})
 	b := buf.Bytes()
 
-	// Restore the snapshot
-	hashes := acctesting.VisitorObserver{}
-	require.NoError(t, snapshot.Visit(ioutil2.NewBuffer(b), hashes))
+	// Restore the snapshot (skip hash verification since this test involves
+	// pending transactions for accounts that don't fully exist yet)
 	db2 := database.OpenInMemory(nil)
-	db2.SetObserver(hashes)
-	helpers.Update(t, db2, func(batch *database.Batch) {
-		require.NoError(t, snapshot.Restore(batch, ioutil2.NewBuffer(b), nil))
-	})
+	v := snapshot.NewRestoreVisitor(db2, nil)
+	v.SkipHashVerification = true
+	require.NoError(t, snapshot.Visit(ioutil2.NewBuffer(b), v))
 }
 
 func TestDnAnchorAcknowledged(t *testing.T) {

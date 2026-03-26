@@ -27,6 +27,8 @@ func (s *SubnodeService) start(inst *Instance) error {
 	sub.services = ioc.Registry{}
 	sub.logger = inst.logger.With("node", s.Name)
 	sub.p2p = inst.p2p
+	// Share halt controllers with parent so HTTP handler can access them
+	sub.parentInstance = inst
 
 	sub.config = &Config{
 		Network: inst.config.Network,

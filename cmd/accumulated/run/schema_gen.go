@@ -36,6 +36,7 @@ var (
 	sEventsService              schema.Methods[*EventsService, *EventsService, *schema.CompositeType]
 	sExpBlockDBStorage          schema.Methods[*ExpBlockDBStorage, *ExpBlockDBStorage, *schema.CompositeType]
 	sFaucetService              schema.Methods[*FaucetService, *FaucetService, *schema.CompositeType]
+	sFollowerConfiguration      schema.Methods[*FollowerConfiguration, *FollowerConfiguration, *schema.CompositeType]
 	sGatewayConfiguration       schema.Methods[*GatewayConfiguration, *GatewayConfiguration, *schema.CompositeType]
 	sHttpListener               schema.Methods[*HttpListener, *HttpListener, *schema.CompositeType]
 	sHttpPeerMapEntry           schema.Methods[*HttpPeerMapEntry, *HttpPeerMapEntry, *schema.CompositeType]
@@ -243,6 +244,13 @@ func init() {
 					}).
 						ResolveElemTo(&deferredTypes, "DevnetConfiguration"),
 				},
+				{
+					Discriminator: "follower",
+					Type: (&schema.PointerType{
+						TypeBase: schema.TypeBase{},
+					}).
+						ResolveElemTo(&deferredTypes, "FollowerConfiguration"),
+				},
 			},
 		}).SetGoType()
 
@@ -260,6 +268,10 @@ func init() {
 				"Devnet": {
 					Name:  "Devnet",
 					Value: 3,
+				},
+				"Follower": {
+					Name:  "Follower",
+					Value: 4,
 				},
 				"Gateway": {
 					Name:  "Gateway",
@@ -556,6 +568,86 @@ func init() {
 					TypeBase: schema.TypeBase{},
 					Elem:     schema.TypeReferenceFor[RouterServiceRef](),
 				},
+			},
+		},
+	}).SetGoType()
+
+	sFollowerConfiguration = schema.WithMethods[*FollowerConfiguration, *FollowerConfiguration](&schema.CompositeType{
+		TypeBase: schema.TypeBase{
+			Name: "FollowerConfiguration",
+		},
+		Fields: []*schema.Field{
+			(&schema.Field{
+				Name: "Mode",
+			}).ResolveTo(&deferredTypes, "CoreValidatorMode"),
+			(&schema.Field{
+				Name: "Listen",
+			}).ResolveTo(&deferredTypes, "Multiaddr"),
+			{
+				Name: "BVN",
+				Type: &schema.SimpleType{Type: schema.SimpleTypeString},
+			},
+			{
+				Name: "DnGenesis",
+				Type: &schema.SimpleType{Type: schema.SimpleTypeString},
+			},
+			{
+				Name: "BvnGenesis",
+				Type: &schema.SimpleType{Type: schema.SimpleTypeString},
+			},
+			{
+				Name: "DnBootstrapPeers",
+				Type: (&schema.ArrayType{
+					TypeBase: schema.TypeBase{},
+				}).
+					ResolveElemTo(&deferredTypes, "Multiaddr"),
+			},
+			{
+				Name: "BvnBootstrapPeers",
+				Type: (&schema.ArrayType{
+					TypeBase: schema.TypeBase{},
+				}).
+					ResolveElemTo(&deferredTypes, "Multiaddr"),
+			},
+			{
+				Name:     "EnableHealing",
+				Optional: true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     &schema.SimpleType{Type: schema.SimpleTypeBool},
+				},
+			},
+			{
+				Name:     "EnableDirectDispatch",
+				Optional: true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     &schema.SimpleType{Type: schema.SimpleTypeBool},
+				},
+			},
+			{
+				Name:     "EnableSnapshots",
+				Optional: true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     &schema.SimpleType{Type: schema.SimpleTypeBool},
+				},
+			},
+			{
+				Name:     "MaxEnvelopesPerBlock",
+				Optional: true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     &schema.SimpleType{Type: schema.SimpleTypeUint},
+				},
+			},
+			{
+				Name:     "StorageType",
+				Optional: true,
+				Type: (&schema.PointerType{
+					TypeBase: schema.TypeBase{},
+				}).
+					ResolveElemTo(&deferredTypes, "StorageType"),
 			},
 		},
 	}).SetGoType()
@@ -1623,6 +1715,7 @@ func init() {
 		sEventsService.Type,
 		sExpBlockDBStorage.Type,
 		sFaucetService.Type,
+		sFollowerConfiguration.Type,
 		sGatewayConfiguration.Type,
 		sHttpListener.Type,
 		sHttpPeerMapEntry.Type,

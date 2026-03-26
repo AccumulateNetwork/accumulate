@@ -80,6 +80,7 @@ func (s *SnapshotService) start(inst *Instance) error {
 	}
 
 	c := new(snapshotCollector)
+	c.context = inst.context
 	c.mu = new(sync.Mutex)
 	c.partition = protocol.PartitionUrl(s.Partition)
 	c.directory = inst.path(s.Directory)
@@ -102,6 +103,7 @@ func (s *SnapshotService) start(inst *Instance) error {
 }
 
 type snapshotCollector struct {
+	context   context.Context
 	mu        *sync.Mutex
 	partition *url.URL
 	directory string
@@ -265,7 +267,7 @@ func (c *snapshotCollector) isTimeForSnapshot(blockTime time.Time) bool {
 	}
 
 	// If there are no snapshots, capture a snapshot
-	snapshots, err := abci.ListSnapshots(c.directory)
+	snapshots, err := abci.ListSnapshots(c.context, c.directory)
 	if err != nil || len(snapshots) == 0 {
 		return true
 	}
@@ -320,7 +322,7 @@ func (c *snapshotCollector) collectConsensusDoc(w *sv2.Writer, minorBlock uint64
 var _ api.SnapshotService = (*snapshotCollector)(nil)
 
 func (c *snapshotCollector) ListSnapshots(ctx context.Context, opts api.ListSnapshotsOptions) ([]*api.SnapshotInfo, error) {
-	snapshots, err := abci.ListSnapshots(c.directory)
+	snapshots, err := abci.ListSnapshots(ctx, c.directory)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("list snapshots: %w", err)
 	}
