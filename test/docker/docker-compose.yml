@@ -51,6 +51,8 @@ services:
       - --reset
     environment:
       - ACC_LOG_LEVEL=info
+      - ACC_BPT_SHARDING_ENABLED=true
+      - ACC_BPT_SHARDING_DEPTH=4
     ports:
       # API ports for each BVN + DN
       - "8080:8080"    # BVN0 API

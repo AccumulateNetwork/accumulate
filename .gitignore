@@ -1,5 +1,6 @@
 # Binaries (mac, linux)
 accumulated
+accumulated-dagbft
 accumulate
 play-accumulate
 golangci-lint
@@ -51,6 +52,7 @@ test/cmd/testreport/testreport
 # Build artifacts
 /accumulated-testnet
 /load-generator
+/test/docker/loadtest-12k
 
 # Orchestrator artifacts
 /reviews/
