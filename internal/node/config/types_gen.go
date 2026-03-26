@@ -22,6 +22,19 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+type BPT struct {
+	fieldsSet []bool
+	Sharding  BPTSharding `json:"sharding,omitempty" form:"sharding" query:"sharding" validate:"required" toml:"sharding" mapstructure:"sharding"`
+	extraData []byte
+}
+
+type BPTSharding struct {
+	fieldsSet []bool
+	Enabled   bool  `json:"enabled,omitempty" form:"enabled" query:"enabled" validate:"required" toml:"enabled" mapstructure:"enabled"`
+	Depth     int64 `json:"depth,omitempty" form:"depth" query:"depth" validate:"required" toml:"depth" mapstructure:"depth"`
+	extraData []byte
+}
+
 type Describe struct {
 	fieldsSet   []bool
 	NetworkType protocol.PartitionType `json:"networkType,omitempty" form:"networkType" query:"networkType" validate:"required" toml:"type" mapstructure:"type"`
@@ -58,6 +71,35 @@ type Partition struct {
 	Nodes     []Node                 `json:"nodes,omitempty" form:"nodes" query:"nodes" validate:"required" toml:"nodes" mapstructure:"nodes"`
 	extraData []byte
 }
+
+func (v *BPT) Copy() *BPT {
+	u := new(BPT)
+
+	u.Sharding = *(&v.Sharding).Copy()
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *BPT) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *BPTSharding) Copy() *BPTSharding {
+	u := new(BPTSharding)
+
+	u.Enabled = v.Enabled
+	u.Depth = v.Depth
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *BPTSharding) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *Describe) Copy() *Describe {
 	u := new(Describe)
@@ -152,6 +194,25 @@ func (v *Partition) Copy() *Partition {
 
 func (v *Partition) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *BPT) Equal(u *BPT) bool {
+	if !((&v.Sharding).Equal(&u.Sharding)) {
+		return false
+	}
+
+	return true
+}
+
+func (v *BPTSharding) Equal(u *BPTSharding) bool {
+	if !(v.Enabled == u.Enabled) {
+		return false
+	}
+	if !(v.Depth == u.Depth) {
+		return false
+	}
+
+	return true
+}
+
 func (v *Describe) Equal(u *Describe) bool {
 	if !(v.NetworkType == u.NetworkType) {
 		return false
@@ -226,6 +287,113 @@ func (v *Partition) Equal(u *Partition) bool {
 	}
 
 	return true
+}
+
+var fieldNames_BPT = []string{
+	1: "Sharding",
+}
+
+func (v *BPT) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	if !((v.Sharding).Equal(new(BPTSharding))) {
+		writer.WriteValue(1, v.Sharding.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_BPT)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *BPT) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Sharding is missing")
+	} else if (v.Sharding).Equal(new(BPTSharding)) {
+		errs = append(errs, "field Sharding is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_BPTSharding = []string{
+	1: "Enabled",
+	2: "Depth",
+}
+
+func (v *BPTSharding) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	if !(!v.Enabled) {
+		writer.WriteBool(1, v.Enabled)
+	}
+	if !(v.Depth == 0) {
+		writer.WriteInt(2, v.Depth)
+	}
+
+	_, _, err := writer.Reset(fieldNames_BPTSharding)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *BPTSharding) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Enabled is missing")
+	} else if !v.Enabled {
+		errs = append(errs, "field Enabled is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Depth is missing")
+	} else if v.Depth == 0 {
+		errs = append(errs, "field Depth is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
 }
 
 var fieldNames_Describe = []string{
@@ -512,6 +680,55 @@ func (v *Partition) IsValid() error {
 	}
 }
 
+func (v *BPT) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *BPT) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x := new(BPTSharding); reader.ReadValue(1, x.UnmarshalBinaryFrom) {
+		v.Sharding = *x
+	}
+
+	seen, err := reader.Reset(fieldNames_BPT)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *BPTSharding) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *BPTSharding) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadBool(1); ok {
+		v.Enabled = x
+	}
+	if x, ok := reader.ReadInt(2); ok {
+		v.Depth = x
+	}
+
+	seen, err := reader.Reset(fieldNames_BPTSharding)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *Describe) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -671,6 +888,15 @@ func (v *Partition) UnmarshalBinaryFrom(rd io.Reader) error {
 }
 
 func init() {
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("sharding", "BPTSharding"),
+	}, "BPT", "bpt")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("enabled", "bool"),
+		encoding.NewTypeField("depth", "int64"),
+	}, "BPTSharding", "bptsharding")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("networkType", "string"),
