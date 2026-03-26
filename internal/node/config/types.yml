@@ -60,3 +60,19 @@ Node:
       toml: type
       type: NodeType
       marshal-as: enum
+
+BPT:
+  fields:
+    - name: Sharding
+      toml: sharding
+      type: BPTSharding
+      marshal-as: reference
+
+BPTSharding:
+  fields:
+    - name: Enabled
+      toml: enabled
+      type: bool
+    - name: Depth
+      toml: depth
+      type: int
