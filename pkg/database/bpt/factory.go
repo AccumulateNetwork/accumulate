@@ -11,9 +11,15 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 )
 
-// BPTree is the common interface implemented by both BPT and ShardedBPT.
-// This interface provides the core operations for a binary Patricia tree,
-// allowing code to work with either implementation transparently.
+// BPTree is a minimal interface for BPT operations.
+//
+// NOTE: This interface is primarily used for testing and the factory pattern.
+// In production code, prefer using concrete types (*BPT or *ShardedBPT) directly
+// as they may have additional methods not in this interface.
+//
+// The interface allows the factory to return either implementation, but most
+// code should use the concrete types for better type safety and access to
+// implementation-specific methods.
 type BPTree interface {
 	// Insert adds or updates a key-value pair in the tree
 	Insert(key *record.Key, value []byte) error
