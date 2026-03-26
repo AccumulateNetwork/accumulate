@@ -59,6 +59,9 @@ DataEntryType:
     value: 2
   DoubleHash:
     value: 3
+  Ethereum:
+    value: 4
+    description: stores raw Ethereum transaction data with embedded signature
 
 ObjectType:
   Unknown:
@@ -124,6 +127,9 @@ SignatureType:
   TypedData:
     value: 16
     description: implements EIP-712 sign typed data specification
+  EthereumData:
+    value: 17
+    description: validates embedded Ethereum signature in EthereumDataEntry for self-authenticating writes
 
 KeyPageOperationType:
   Unknown:

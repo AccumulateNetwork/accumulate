@@ -94,6 +94,10 @@ func (s *Builder) Import(sig protocol.Signature) (*Builder, error) {
 		s.Timestamp = TimestampFromValue(sig.Timestamp)
 		s.Memo = sig.Memo
 		s.Data = sig.Data
+	case *protocol.EthereumDataSignature:
+		s.Url = sig.Signer
+		s.Version = sig.SignerVersion
+		s.Timestamp = TimestampFromValue(sig.Timestamp)
 	case *protocol.DelegatedSignature:
 		_, err := s.Import(sig.Signature)
 		if err != nil {
@@ -190,6 +194,39 @@ func (s *Builder) UseFaucet() *Builder {
 	s.Timestamp = TimestampFromValue(f.Timestamp())
 	s.Version = f.Version()
 	return s
+}
+
+// PrepareEthereumDataSignature creates an EthereumDataSignature for use with
+// WriteData transactions containing an EthereumDataEntry. Unlike other signature
+// types, the signature is embedded in the EthereumDataEntry itself, so no
+// private key signing is required.
+func (s *Builder) PrepareEthereumDataSignature(expectedChainID uint64) (*protocol.EthereumDataSignature, error) {
+	var errs []string
+	if s.Url == nil {
+		errs = append(errs, "missing signer URL")
+	}
+	if s.Version == 0 {
+		errs = append(errs, "missing version")
+	}
+	if s.Timestamp == nil {
+		errs = append(errs, "missing timestamp")
+	}
+	if len(errs) > 0 {
+		return nil, fmt.Errorf("cannot prepare EthereumDataSignature: %s", strings.Join(errs, ", "))
+	}
+
+	timestamp, err := s.Timestamp.Get()
+	if err != nil {
+		return nil, err
+	}
+
+	sig := new(protocol.EthereumDataSignature)
+	sig.Signer = s.Url
+	sig.SignerVersion = s.Version
+	sig.Timestamp = timestamp
+	sig.Vote = s.Vote
+	sig.ExpectedChainId = expectedChainID
+	return sig, nil
 }
 
 func (s *Builder) prepare(init bool) (protocol.KeySignature, error) {

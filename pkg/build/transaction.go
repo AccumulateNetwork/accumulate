@@ -260,6 +260,11 @@ func (b WriteDataBuilder) DoubleHash(data ...any) WriteDataBuilder {
 	return b.Entry(&protocol.DoubleHashDataEntry{Data: parts})
 }
 
+// Ethereum creates an EthereumDataEntry with the given raw transaction bytes.
+func (b WriteDataBuilder) Ethereum(rawTx []byte) WriteDataBuilder {
+	return b.Entry(&protocol.EthereumDataEntry{RawTx: rawTx})
+}
+
 func (b WriteDataBuilder) Scratch() WriteDataBuilder {
 	b.body.Scratch = true
 	return b
@@ -287,6 +292,16 @@ func (b WriteDataBuilder) Done() (*protocol.Transaction, error) {
 
 func (b WriteDataBuilder) SignWith(signer any, path ...string) SignatureBuilder {
 	return b.FinishTransaction().SignWith(signer, path...)
+}
+
+// EthereumData creates an EthereumDataSignature for self-authenticating writes.
+// The signature is extracted from the EthereumDataEntry in the transaction body,
+// so no private key is required. The expectedChainID is used for cross-chain
+// replay protection (use 0 to skip chain ID verification).
+func (b WriteDataBuilder) EthereumData(expectedChainID uint64) SignatureBuilder {
+	// Must finish the transaction first to set the body
+	tb := b.FinishTransaction()
+	return SignatureBuilder{parser: tb.parser, transaction: &tb.t}.EthereumData(expectedChainID)
 }
 
 type WriteDataToBuilder struct {
