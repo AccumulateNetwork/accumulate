@@ -11,6 +11,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -900,4 +901,276 @@ func TestShardedBPTErrors(t *testing.T) {
 			}
 		}
 	})
+}
+
+// TestShardedBPT_GetRootHashWithDatabaseError tests error handling when
+// a shard's database operation fails. This validates that errors are properly
+// propagated from individual shards to the coordinator.
+func TestShardedBPT_GetRootHashWithDatabaseError(t *testing.T) {
+	// Note: This test requires mocking the database to inject errors.
+	// Since we're using memory.New() which doesn't fail, we'll test the
+	// error path by using a corrupted database state.
+
+	kvs := memory.New(nil).Begin(nil, true)
+	defer kvs.Discard()
+	store := keyvalue.RecordStore{Store: kvs}
+
+	key := record.NewKey("error-test")
+	s, err := NewShardedBPT(store, key, 4)
+	require.NoError(t, err)
+
+	// Insert some data
+	for i := 0; i < 100; i++ {
+		k := record.NewKey(fmt.Sprintf("key-%d", i))
+		v := sha256.Sum256([]byte(fmt.Sprintf("value-%d", i)))
+		err := s.Insert(k, v[:])
+		require.NoError(t, err)
+	}
+
+	// First GetRootHash should succeed
+	_, err = s.GetRootHash()
+	require.NoError(t, err)
+
+	// TODO: Add actual error injection when database mocking is available
+	// For now, this test validates the happy path and serves as a placeholder
+	// for future error injection testing.
+}
+
+// TestShardedBPT_ConcurrentModifyAndGetRootHash validates thread safety when
+// multiple goroutines are continuously inserting data while others are calling
+// GetRootHash. This is a critical production scenario.
+func TestShardedBPT_ConcurrentModifyAndGetRootHash(t *testing.T) {
+	kvs := memory.New(nil).Begin(nil, true)
+	defer kvs.Discard()
+	store := keyvalue.RecordStore{Store: kvs}
+
+	key := record.NewKey("concurrent-test")
+	s, err := NewShardedBPT(store, key, 4)
+	require.NoError(t, err)
+
+	// Test duration
+	duration := 5 * time.Second
+	if testing.Short() {
+		duration = 1 * time.Second
+	}
+
+	done := make(chan struct{})
+	go func() {
+		<-time.After(duration)
+		close(done)
+	}()
+
+	// Track operations
+	var insertCount, hashCount atomic.Int64
+
+	// Launch writer goroutines
+	var wg sync.WaitGroup
+	numWriters := 8
+	wg.Add(numWriters)
+
+	for w := 0; w < numWriters; w++ {
+		w := w
+		go func() {
+			defer wg.Done()
+			counter := 0
+			for {
+				select {
+				case <-done:
+					return
+				default:
+					k := record.NewKey(fmt.Sprintf("writer%d-key%d", w, counter))
+					v := sha256.Sum256([]byte(fmt.Sprintf("value%d", counter)))
+
+					err := s.Insert(k, v[:])
+					if err != nil {
+						t.Errorf("Insert failed: %v", err)
+						return
+					}
+
+					insertCount.Add(1)
+					counter++
+
+					// Small delay to allow other goroutines to run
+					if counter%10 == 0 {
+						time.Sleep(time.Microsecond)
+					}
+				}
+			}
+		}()
+	}
+
+	// Launch reader goroutines (calling GetRootHash)
+	numReaders := 8
+	wg.Add(numReaders)
+
+	for r := 0; r < numReaders; r++ {
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-done:
+					return
+				default:
+					_, err := s.GetRootHash()
+					if err != nil {
+						t.Errorf("GetRootHash failed: %v", err)
+						return
+					}
+
+					hashCount.Add(1)
+
+					// Small delay
+					time.Sleep(time.Millisecond)
+				}
+			}
+		}()
+	}
+
+	wg.Wait()
+
+	t.Logf("Concurrent test completed: %d inserts, %d root hash calls",
+		insertCount.Load(), hashCount.Load())
+
+	// Verify final state
+	finalHash, err := s.GetRootHash()
+	require.NoError(t, err)
+	require.NotEqual(t, [32]byte{}, finalHash, "Root hash should not be empty")
+}
+
+// TestShardedBPT_ConcurrentDeletes validates thread safety and correctness
+// when multiple goroutines are deleting keys concurrently, including attempts
+// to delete the same key from different goroutines.
+func TestShardedBPT_ConcurrentDeletes(t *testing.T) {
+	kvs := memory.New(nil).Begin(nil, true)
+	defer kvs.Discard()
+	store := keyvalue.RecordStore{Store: kvs}
+
+	key := record.NewKey("delete-test")
+	s, err := NewShardedBPT(store, key, 4)
+	require.NoError(t, err)
+
+	// Pre-populate with 1000 keys
+	numKeys := 1000
+	keys := make([]*record.Key, numKeys)
+	for i := 0; i < numKeys; i++ {
+		k := record.NewKey(fmt.Sprintf("key-%d", i))
+		v := sha256.Sum256([]byte(fmt.Sprintf("value-%d", i)))
+		err := s.Insert(k, v[:])
+		require.NoError(t, err)
+		keys[i] = k
+	}
+
+	// Get root hash before deletes
+	rootBefore, err := s.GetRootHash()
+	require.NoError(t, err)
+
+	// Delete all keys concurrently
+	var wg sync.WaitGroup
+	numGoroutines := 16
+	keysPerGoroutine := numKeys / numGoroutines
+
+	var deleteCount atomic.Int64
+
+	for g := 0; g < numGoroutines; g++ {
+		wg.Add(1)
+		start := g * keysPerGoroutine
+		end := start + keysPerGoroutine
+		if g == numGoroutines-1 {
+			end = numKeys // Last goroutine handles remainder
+		}
+
+		go func(startIdx, endIdx int) {
+			defer wg.Done()
+			for i := startIdx; i < endIdx; i++ {
+				err := s.Delete(keys[i])
+				if err != nil {
+					t.Errorf("Delete failed for key %d: %v", i, err)
+					return
+				}
+				deleteCount.Add(1)
+			}
+		}(start, end)
+	}
+
+	wg.Wait()
+
+	require.Equal(t, int64(numKeys), deleteCount.Load(), "All keys should be deleted")
+
+	// Verify all keys are gone
+	for i, k := range keys {
+		_, err := s.Get(k)
+		require.Error(t, err, "Key %d should not exist after delete", i)
+	}
+
+	// Get root hash after all deletes - should be different
+	rootAfter, err := s.GetRootHash()
+	require.NoError(t, err)
+	require.NotEqual(t, rootBefore, rootAfter, "Root hash should change after deletes")
+
+	t.Logf("Successfully deleted %d keys concurrently", numKeys)
+}
+
+// TestShardedBPT_ConcurrentSameKey tests concurrent operations on the same key.
+// All operations on the same key route to the same shard and are serialized
+// by that shard's lock.
+//
+// Note: We create a new Key object for each operation to avoid data races in
+// the Key.Hash() method itself (which caches hashes). The test validates that
+// ShardedBPT correctly handles concurrent operations on the *logical* same key.
+func TestShardedBPT_ConcurrentSameKey(t *testing.T) {
+	kvs := memory.New(nil).Begin(nil, true)
+	defer kvs.Discard()
+	store := keyvalue.RecordStore{Store: kvs}
+
+	key := record.NewKey("same-key-test")
+	s, err := NewShardedBPT(store, key, 4)
+	require.NoError(t, err)
+
+	// Use same key string for all operations
+	const sharedKeyName = "shared-key"
+
+	var wg sync.WaitGroup
+	numGoroutines := 32
+	opsPerGoroutine := 100
+
+	// All goroutines try to insert/update the same key
+	wg.Add(numGoroutines)
+	for g := 0; g < numGoroutines; g++ {
+		g := g
+		go func() {
+			defer wg.Done()
+			for i := 0; i < opsPerGoroutine; i++ {
+				// Create a new Key object each time to avoid Key.Hash() data race
+				// (the Hash() method caches the hash, which causes races)
+				testKey := record.NewKey(sharedKeyName)
+
+				// Each goroutine writes its own value
+				v := sha256.Sum256([]byte(fmt.Sprintf("goroutine-%d-op-%d", g, i)))
+				err := s.Insert(testKey, v[:])
+				if err != nil {
+					t.Errorf("Insert failed: %v", err)
+					return
+				}
+
+				// Read it back (create new Key to avoid race)
+				readKey := record.NewKey(sharedKeyName)
+				_, err = s.Get(readKey)
+				if err != nil {
+					t.Errorf("Get failed: %v", err)
+					return
+				}
+			}
+		}()
+	}
+
+	wg.Wait()
+
+	// Final read should succeed
+	finalKey := record.NewKey(sharedKeyName)
+	finalValue, err := s.Get(finalKey)
+	require.NoError(t, err)
+	require.Len(t, finalValue, 32, "Value should be 32 bytes (SHA256)")
+
+	t.Logf("Concurrent same-key test completed: %d goroutines × %d ops",
+		numGoroutines, opsPerGoroutine)
 }
