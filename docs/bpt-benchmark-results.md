@@ -295,47 +295,6 @@ go test ./pkg/database/bpt -run='^$' -bench=BenchmarkMixedWorkload -benchtime=2s
 go test ./pkg/database/bpt -run='^$' -bench=BenchmarkShardedVsNonSharded -cpu=1,4,8,16
 ```
 
-## Running Benchmarks with Profiling
-
-### Memory Allocation Analysis
-
-To analyze memory allocations:
-
-```bash
-go test ./pkg/database/bpt -bench=BenchmarkSharded -benchmem -benchtime=3s
-```
-
-The output will show:
-- `allocs/op`: Number of allocations per operation
-- `B/op`: Bytes allocated per operation
-
-### CPU Profiling
-
-To identify hot spots:
-
-```bash
-go test ./pkg/database/bpt -bench=. -cpuprofile=cpu.out
-go tool pprof -http=:8080 cpu.out
-```
-
-### Lock Contention Analysis
-
-To measure actual lock contention:
-
-```bash
-go test ./pkg/database/bpt -bench=BenchmarkContention -blockprofile=block.out
-go tool pprof -http=:8080 block.out
-```
-
-### Memory Profiling
-
-To analyze memory usage patterns:
-
-```bash
-go test ./pkg/database/bpt -bench=. -memprofile=mem.out
-go tool pprof -http=:8080 mem.out
-```
-
 ## Future Optimization Opportunities
 
 1. **Lock-Free Reads**: Implement MVCC for read operations
