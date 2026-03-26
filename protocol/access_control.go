@@ -65,6 +65,8 @@ func (typ TransactionType) AllowedTransactionBit() (AllowedTransactionBit, bool)
 		return AllowedTransactionBitUpdateKeyPage, true
 	case TransactionTypeUpdateAccountAuth:
 		return AllowedTransactionBitUpdateAccountAuth, true
+	case TransactionTypeWriteData:
+		return AllowedTransactionBitWriteData, true
 	}
 
 	return 0, false

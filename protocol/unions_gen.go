@@ -916,6 +916,8 @@ func NewKeyPageOperation(typ KeyPageOperationType) (KeyPageOperation, error) {
 		return new(AddKeyOperation), nil
 	case KeyPageOperationTypeRemove:
 		return new(RemoveKeyOperation), nil
+	case KeyPageOperationTypeSetAllowedTransactions:
+		return new(SetAllowedTransactionsKeyPageOperation), nil
 	case KeyPageOperationTypeSetRejectThreshold:
 		return new(SetRejectThresholdKeyPageOperation), nil
 	case KeyPageOperationTypeSetResponseThreshold:
@@ -947,6 +949,12 @@ func EqualKeyPageOperation(a, b KeyPageOperation) bool {
 			return b == nil
 		}
 		b, ok := b.(*RemoveKeyOperation)
+		return ok && a.Equal(b)
+	case *SetAllowedTransactionsKeyPageOperation:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*SetAllowedTransactionsKeyPageOperation)
 		return ok && a.Equal(b)
 	case *SetRejectThresholdKeyPageOperation:
 		if a == nil {
@@ -988,6 +996,8 @@ func CopyKeyPageOperation(v KeyPageOperation) KeyPageOperation {
 	case *AddKeyOperation:
 		return v.Copy()
 	case *RemoveKeyOperation:
+		return v.Copy()
+	case *SetAllowedTransactionsKeyPageOperation:
 		return v.Copy()
 	case *SetRejectThresholdKeyPageOperation:
 		return v.Copy()

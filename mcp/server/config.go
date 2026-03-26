@@ -22,9 +22,9 @@ type Config struct {
 	DockerImage string
 
 	// Timeout configuration
-	APITimeout      time.Duration // Timeout for API calls (default: 30s)
-	BuildTimeout    time.Duration // Timeout for build operations (default: 10m)
-	DatabaseTimeout time.Duration // Timeout for database operations (default: 60s)
+	APITimeout         time.Duration // Timeout for API calls (default: 30s)
+	BuildTimeout       time.Duration // Timeout for build operations (default: 10m)
+	DatabaseTimeout    time.Duration // Timeout for database operations (default: 60s)
 	LogAnalysisTimeout time.Duration // Timeout for log analysis (default: 30s)
 }
 

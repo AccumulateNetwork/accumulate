@@ -127,6 +127,12 @@ KeyPage:
       marshal-as: enum
       pointer: true
       optional: true
+    - name: TransactionWhitelist
+      description: If set, this page can ONLY authorize transactions of these types. Mutually exclusive with TransactionBlacklist.
+      type: AllowedTransactions
+      marshal-as: enum
+      pointer: true
+      optional: true
 
 DataAccount:
   union: { type: account, value: DataAccount }

@@ -278,7 +278,7 @@ func generateDeployFollowerNodeTemplate(args map[string]string, getArg func(stri
 	b.WriteString("```json\n")
 	b.WriteString("{\n")
 	b.WriteString(fmt.Sprintf(`  "work_dir": "%s",`+"\n", workDir))
-	b.WriteString(`  "network": "mainnet"`+"\n")
+	b.WriteString(`  "network": "mainnet"` + "\n")
 	b.WriteString("}\n```\n\n")
 
 	b.WriteString("**Required Checks:**\n")
@@ -349,7 +349,7 @@ func generateDeployFollowerNodeTemplate(args map[string]string, getArg func(stri
 	b.WriteString("Use `accumulate_get_sync_progress` for detailed sync status:\n")
 	b.WriteString("```json\n")
 	b.WriteString("{\n")
-	b.WriteString(`  "include_rate": true`+"\n")
+	b.WriteString(`  "include_rate": true` + "\n")
 	b.WriteString("}\n```\n\n")
 
 	b.WriteString("**Monitor:**\n")
@@ -362,8 +362,8 @@ func generateDeployFollowerNodeTemplate(args map[string]string, getArg func(stri
 	b.WriteString("Use `accumulate_analyze_logs` to diagnose problems:\n")
 	b.WriteString("```json\n")
 	b.WriteString("{\n")
-	b.WriteString(`  "lines": 500,`+"\n")
-	b.WriteString(`  "filter": "all"`+"\n")
+	b.WriteString(`  "lines": 500,` + "\n")
+	b.WriteString(`  "filter": "all"` + "\n")
 	b.WriteString("}\n```\n\n")
 
 	b.WriteString("**Check:**\n")
@@ -428,7 +428,7 @@ func generateMonitorFollowerHealthTemplate(args map[string]string, getArg func(s
 	b.WriteString("Use `accumulate_get_sync_progress` for comprehensive sync status:\n")
 	b.WriteString("```json\n")
 	b.WriteString("{\n")
-	b.WriteString(`  "include_rate": true`+"\n")
+	b.WriteString(`  "include_rate": true` + "\n")
 	b.WriteString("}\n```\n\n")
 
 	b.WriteString("**Key Metrics:**\n")
@@ -445,8 +445,8 @@ func generateMonitorFollowerHealthTemplate(args map[string]string, getArg func(s
 	b.WriteString("Use `accumulate_analyze_logs` for error detection:\n")
 	b.WriteString("```json\n")
 	b.WriteString("{\n")
-	b.WriteString(`  "lines": 500,`+"\n")
-	b.WriteString(`  "filter": "all"`+"\n")
+	b.WriteString(`  "lines": 500,` + "\n")
+	b.WriteString(`  "filter": "all"` + "\n")
 	b.WriteString("}\n```\n\n")
 
 	b.WriteString("**Health Assessment:**\n")
@@ -539,7 +539,7 @@ func generateTroubleshootFollowerSyncTemplate(args map[string]string, getArg fun
 	b.WriteString("### 1.2 Sync Progress (NEW)\n")
 	b.WriteString("```json\n")
 	b.WriteString("accumulate_get_sync_progress {\n")
-	b.WriteString(`  "include_rate": true`+"\n")
+	b.WriteString(`  "include_rate": true` + "\n")
 	b.WriteString("}\n```\n\n")
 
 	b.WriteString("**Interpretation:**\n")
@@ -553,8 +553,8 @@ func generateTroubleshootFollowerSyncTemplate(args map[string]string, getArg fun
 	b.WriteString("### 1.3 Log Analysis (NEW)\n")
 	b.WriteString("```json\n")
 	b.WriteString("accumulate_analyze_logs {\n")
-	b.WriteString(`  "lines": 1000,`+"\n")
-	b.WriteString(`  "filter": "all"`+"\n")
+	b.WriteString(`  "lines": 1000,` + "\n")
+	b.WriteString(`  "filter": "all"` + "\n")
 	b.WriteString("}\n```\n\n")
 
 	b.WriteString("**Key Patterns:**\n")
@@ -570,7 +570,7 @@ func generateTroubleshootFollowerSyncTemplate(args map[string]string, getArg fun
 	b.WriteString("```json\n")
 	b.WriteString("accumulate_validate_prerequisites {\n")
 	b.WriteString(fmt.Sprintf(`  "work_dir": "%s",`+"\n", workDir))
-	b.WriteString(`  "network": "mainnet"`+"\n")
+	b.WriteString(`  "network": "mainnet"` + "\n")
 	b.WriteString("}\n```\n\n")
 
 	b.WriteString("---\n\n")
@@ -643,7 +643,7 @@ func generateTroubleshootFollowerSyncTemplate(args map[string]string, getArg fun
 	b.WriteString("   ```json\n")
 	b.WriteString("   accumulate_init_follower {\n")
 	b.WriteString(fmt.Sprintf(`     "work_dir": "%s",`+"\n", workDir))
-	b.WriteString(`     "auto_discover_peers": true`+"\n")
+	b.WriteString(`     "auto_discover_peers": true` + "\n")
 	b.WriteString("   }\n")
 	b.WriteString("   ```\n\n")
 
@@ -751,7 +751,7 @@ func generateSetupDevWalletTemplate(args map[string]string, getArg func(string, 
 	b.WriteString("{\n")
 	b.WriteString(fmt.Sprintf(`  "wallet_dir": "%s"`, walletDir))
 	if noPassword == "true" {
-		b.WriteString(`,`+"\n"+`  "no_password": true`)
+		b.WriteString(`,` + "\n" + `  "no_password": true`)
 	}
 	b.WriteString("\n}\n```\n\n")
 
@@ -765,7 +765,7 @@ func generateSetupDevWalletTemplate(args map[string]string, getArg func(string, 
 	b.WriteString("```json\n")
 	b.WriteString("{\n")
 	if noPassword != "true" {
-		b.WriteString(`  "password": "your-password"`+"\n")
+		b.WriteString(`  "password": "your-password"` + "\n")
 	}
 	b.WriteString("}\n```\n\n")
 
@@ -774,7 +774,7 @@ func generateSetupDevWalletTemplate(args map[string]string, getArg func(string, 
 	b.WriteString("Use `wallet_generate_key` (repeat 2-3 times):\n")
 	b.WriteString("```json\n")
 	b.WriteString("{\n")
-	b.WriteString(`  "label": "dev-key-1"`+"\n")
+	b.WriteString(`  "label": "dev-key-1"` + "\n")
 	b.WriteString("}\n```\n\n")
 
 	b.WriteString("**Expected Output:**\n")
@@ -795,7 +795,7 @@ func generateSetupDevWalletTemplate(args map[string]string, getArg func(string, 
 	b.WriteString("Use `accumulate_create_lite_account`:\n")
 	b.WriteString("```json\n")
 	b.WriteString("{\n")
-	b.WriteString(`  "public_key": "[key from step 3]",`+"\n")
+	b.WriteString(`  "public_key": "[key from step 3]",` + "\n")
 	b.WriteString(fmt.Sprintf(`  "network": "%s"`+"\n", network))
 	b.WriteString("}\n```\n\n")
 
@@ -809,7 +809,7 @@ func generateSetupDevWalletTemplate(args map[string]string, getArg func(string, 
 		b.WriteString("Use `accumulate_faucet`:\n")
 		b.WriteString("```json\n")
 		b.WriteString("{\n")
-		b.WriteString(`  "account": "[lite account from step 5]"`+"\n")
+		b.WriteString(`  "account": "[lite account from step 5]"` + "\n")
 		b.WriteString("}\n```\n\n")
 
 		b.WriteString("**Expected Output:**\n")
@@ -885,7 +885,7 @@ func generateQuickNodeStatusTemplate(args map[string]string, getArg func(string,
 	b.WriteString("Use `accumulate_node_info`:\n")
 	b.WriteString("```json\n")
 	b.WriteString("{\n")
-	b.WriteString(`  "network": "mainnet"`+"\n")
+	b.WriteString(`  "network": "mainnet"` + "\n")
 	b.WriteString("}\n```\n\n")
 
 	b.WriteString("**Concise Output:**\n\n")
@@ -1065,7 +1065,7 @@ func generatePrepareMainnetFollowerTemplate(args map[string]string, getArg func(
 	b.WriteString("```json\n")
 	b.WriteString("{\n")
 	b.WriteString(fmt.Sprintf(`  "work_dir": "%s",`+"\n", workDir))
-	b.WriteString(`  "network": "mainnet"`+"\n")
+	b.WriteString(`  "network": "mainnet"` + "\n")
 	b.WriteString("}\n```\n\n")
 
 	b.WriteString("### Required Checks\n\n")
@@ -1202,8 +1202,8 @@ func generateRecoveryFromFailureTemplate(args map[string]string, getArg func(str
 	b.WriteString("```json\n")
 	b.WriteString("accumulate_analyze_logs {\n")
 	b.WriteString(fmt.Sprintf(`  "container_name": "%s",`+"\n", containerName))
-	b.WriteString(`  "lines": 1000,`+"\n")
-	b.WriteString(`  "filter": "all"`+"\n")
+	b.WriteString(`  "lines": 1000,` + "\n")
+	b.WriteString(`  "filter": "all"` + "\n")
 	b.WriteString("}\n```\n\n")
 
 	b.WriteString("### Check Sync Progress\n")
@@ -1238,7 +1238,7 @@ func generateRecoveryFromFailureTemplate(args map[string]string, getArg func(str
 	if workDir != "" {
 		b.WriteString(fmt.Sprintf(`     "work_dir": "%s"`+"\n", workDir))
 	} else {
-		b.WriteString(`     "work_dir": "/path/to/work_dir"`+"\n")
+		b.WriteString(`     "work_dir": "/path/to/work_dir"` + "\n")
 	}
 	b.WriteString("   }\n")
 	b.WriteString("   ```\n\n")
@@ -1354,13 +1354,13 @@ func generateMainnetSyncStatusTemplate(args map[string]string, getArg func(strin
 	b.WriteString("```json\n")
 	b.WriteString("accumulate_get_sync_progress {\n")
 	b.WriteString(fmt.Sprintf(`  "container_name": "%s",`+"\n", containerName))
-	b.WriteString(`  "include_rate": true`+"\n")
+	b.WriteString(`  "include_rate": true` + "\n")
 	b.WriteString("}\n```\n\n")
 
 	b.WriteString("### 3. Network Comparison\n")
 	b.WriteString("```json\n")
 	b.WriteString("accumulate_network_status {\n")
-	b.WriteString(`  "network": "mainnet"`+"\n")
+	b.WriteString(`  "network": "mainnet"` + "\n")
 	b.WriteString("}\n```\n\n")
 
 	b.WriteString("---\n\n")

@@ -338,4 +338,3 @@ func main() {
 		fmt.Printf("\nSnapshot created: %s\n", outputFile)
 	}
 }
-

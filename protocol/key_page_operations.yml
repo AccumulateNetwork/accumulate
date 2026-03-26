@@ -53,3 +53,13 @@ UpdateAllowedKeyPageOperation:
       repeatable: true
       marshal-as: enum
       optional: true
+
+SetAllowedTransactionsKeyPageOperation:
+  union: { type: keyPageOperation }
+  fields:
+    - name: Transactions
+      description: The allowed transaction types. If nil/empty, the whitelist is cleared.
+      type: TransactionType
+      repeatable: true
+      marshal-as: enum
+      optional: true

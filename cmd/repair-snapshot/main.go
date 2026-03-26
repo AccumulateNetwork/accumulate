@@ -1,3 +1,9 @@
+// Copyright 2025 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 // repair-snapshot repairs Dec 1 2025 snapshots that have malformed consensus sections.
 // The issue: validators in the consensus section are missing the 0x00 end markers
 // that the widget binary encoding requires.

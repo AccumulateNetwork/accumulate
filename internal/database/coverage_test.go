@@ -21,7 +21,7 @@ import (
 
 func randomHash() [32]byte {
 	var buf [32]byte
-	rand.Read(buf[:])
+	_, _ = rand.Read(buf[:])
 	return sha256.Sum256(buf[:])
 }
 
@@ -632,10 +632,8 @@ func TestChainEntries(t *testing.T) {
 	chain, err := batch.Account(account).MainChain().Get()
 	require.NoError(t, err)
 
-	var addedEntries [][]byte
 	for i := 0; i < 5; i++ {
 		entry := randomHash()
-		addedEntries = append(addedEntries, entry[:])
 		require.NoError(t, chain.AddEntry(entry[:], false))
 	}
 

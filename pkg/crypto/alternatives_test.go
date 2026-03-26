@@ -200,7 +200,7 @@ func TestDecompressPubkey(t *testing.T) {
 	// Test with valid length but invalid data (should fail gracefully)
 	invalidCompressed := make([]byte, 33)
 	invalidCompressed[0] = 0x02
-	_, err = DecompressPubkey(invalidCompressed)
+	_, _ = DecompressPubkey(invalidCompressed)
 	// This may or may not error depending on the random data, that's ok
 
 	// The important thing is that the function doesn't crash
