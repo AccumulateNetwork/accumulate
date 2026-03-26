@@ -40,7 +40,7 @@ type NetworkService struct {
 var _ api.NetworkService = (*NetworkService)(nil)
 
 type NetworkServiceParams struct {
-	Logger    log.Logger
+	Logger    logging.Logger
 	EventBus  *events.Bus
 	Partition string
 	Database  database.Viewer
