@@ -32,14 +32,14 @@ var (
 type DeploymentState string
 
 const (
-	StateUnknown       DeploymentState = "unknown"
-	StateNotDeployed   DeploymentState = "not_deployed"
+	StateUnknown         DeploymentState = "unknown"
+	StateNotDeployed     DeploymentState = "not_deployed"
 	StateInitializingDN  DeploymentState = "initializing_dn"
 	StateInitializingBVN DeploymentState = "initializing_bvn"
-	StateStopped       DeploymentState = "stopped"
-	StateStarting      DeploymentState = "starting"
-	StateRunning       DeploymentState = "running"
-	StateStopping      DeploymentState = "stopping"
+	StateStopped         DeploymentState = "stopped"
+	StateStarting        DeploymentState = "starting"
+	StateRunning         DeploymentState = "running"
+	StateStopping        DeploymentState = "stopping"
 )
 
 type NodeMetrics struct {
@@ -92,38 +92,38 @@ type LogEntry struct {
 }
 
 type DeploymentStatus struct {
-	State          DeploymentState `json:"state"`
-	WorkDir        string          `json:"work_dir"`
-	PID            int             `json:"pid,omitempty"`
-	StartedAt      time.Time       `json:"started_at,omitempty"`
-	Uptime         string          `json:"uptime,omitempty"`
-	DeployedAt     time.Time       `json:"deployed_at,omitempty"`
-	DeployedAge    string          `json:"deployed_age,omitempty"`
-	DNInitialized  bool            `json:"dn_initialized"`
-	BVNInitialized bool            `json:"bvn_initialized"`
-	ConfigExists   bool            `json:"config_exists"`
-	BinaryVersion  string          `json:"binary_version,omitempty"`
-	BinaryAge      string          `json:"binary_age,omitempty"`
-	UpdateAvailable bool           `json:"update_available"`
-	RecentLogs     []LogEntry      `json:"recent_logs"`
+	State           DeploymentState `json:"state"`
+	WorkDir         string          `json:"work_dir"`
+	PID             int             `json:"pid,omitempty"`
+	StartedAt       time.Time       `json:"started_at,omitempty"`
+	Uptime          string          `json:"uptime,omitempty"`
+	DeployedAt      time.Time       `json:"deployed_at,omitempty"`
+	DeployedAge     string          `json:"deployed_age,omitempty"`
+	DNInitialized   bool            `json:"dn_initialized"`
+	BVNInitialized  bool            `json:"bvn_initialized"`
+	ConfigExists    bool            `json:"config_exists"`
+	BinaryVersion   string          `json:"binary_version,omitempty"`
+	BinaryAge       string          `json:"binary_age,omitempty"`
+	UpdateAvailable bool            `json:"update_available"`
+	RecentLogs      []LogEntry      `json:"recent_logs"`
 }
 
 type PortInfo struct {
-	DNRPC    int `json:"dn_rpc"`
-	DNP2P    int `json:"dn_p2p"`
-	DNAPI    int `json:"dn_api"`
-	BVNRPC   int `json:"bvn_rpc"`
-	BVNP2P   int `json:"bvn_p2p"`
-	BVNAPI   int `json:"bvn_api"`
+	DNRPC  int `json:"dn_rpc"`
+	DNP2P  int `json:"dn_p2p"`
+	DNAPI  int `json:"dn_api"`
+	BVNRPC int `json:"bvn_rpc"`
+	BVNP2P int `json:"bvn_p2p"`
+	BVNAPI int `json:"bvn_api"`
 }
 
 type Monitor struct {
-	mainnet      *NodeMetrics
-	follower     *NodeMetrics
-	comparison   *ComparisonMetrics
-	deployment   *DeploymentStatus
-	ports        *PortInfo
-	mu           sync.RWMutex
+	mainnet    *NodeMetrics
+	follower   *NodeMetrics
+	comparison *ComparisonMetrics
+	deployment *DeploymentStatus
+	ports      *PortInfo
+	mu         sync.RWMutex
 
 	// For rate calculation
 	lastMainnetDN   int64

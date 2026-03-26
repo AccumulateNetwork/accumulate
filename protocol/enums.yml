@@ -29,9 +29,13 @@ ExecutorVersion:
     value: 8
     label: v2-jiuquan
     description: enables the Jiuquan release
+  V2Tanegashima:
+    value: 9
+    label: v2-tanegashima
+    description: enables lite account delegation and transaction whitelists
 
   VNext:
-    value: 9
+    value: 10
     description: is a placeholder for testing. DO NOT USE
 
 PartitionType:
@@ -146,6 +150,9 @@ KeyPageOperationType:
   SetResponseThreshold:
     value: 7
     description: sets the response threshold
+  SetAllowedTransactions:
+    value: 8
+    description: sets the transaction whitelist (allowed transactions only)
 
 AccountAuthOperationType:
   Unknown:
@@ -351,6 +358,9 @@ AllowedTransactionBit:
   UpdateAccountAuth:
     value: 2
     description: is the offset of the UpdateAccountAuth bit
+  WriteData:
+    value: 3
+    description: is the offset of the WriteData bit
 
 VoteType:
   Accept:

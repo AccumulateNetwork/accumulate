@@ -1,3 +1,4 @@
+//go:build integration
 // +build integration
 
 package main
@@ -13,7 +14,7 @@ import (
 )
 
 const (
-	devnetURL = "http://127.0.0.1:26660/v3"
+	devnetURL   = "http://127.0.0.1:26660/v3"
 	testTimeout = 30 * time.Second
 )
 

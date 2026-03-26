@@ -79,7 +79,7 @@ func TestBatchExtract_WithChains(t *testing.T) {
 	srv := NewServer()
 
 	args := map[string]interface{}{
-		"accounts":      []interface{}{"acc://ACME"},
+		"accounts":       []interface{}{"acc://ACME"},
 		"include_chains": true,
 	}
 

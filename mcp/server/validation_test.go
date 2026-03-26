@@ -16,9 +16,9 @@ func TestValidatePath(t *testing.T) {
 		errContains string
 	}{
 		{
-			name:    "empty path",
-			path:    "",
-			wantErr: true,
+			name:        "empty path",
+			path:        "",
+			wantErr:     true,
 			errContains: "cannot be empty",
 		},
 		{

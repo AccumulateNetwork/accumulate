@@ -470,12 +470,12 @@ func TestCreateIdentityValidation(t *testing.T) {
 			errContains: "invalid sponsor URL",
 		},
 		{
-			name:        "keys with 0x prefix",
-			adiURL:      "acc://test.acme",
-			publicKey:   "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-			sponsor:     "acc://sponsor.acme",
-			privateKey:  "0x" + testPrivateKey,
-			expectErr:   false,
+			name:       "keys with 0x prefix",
+			adiURL:     "acc://test.acme",
+			publicKey:  "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+			sponsor:    "acc://sponsor.acme",
+			privateKey: "0x" + testPrivateKey,
+			expectErr:  false,
 		},
 	}
 

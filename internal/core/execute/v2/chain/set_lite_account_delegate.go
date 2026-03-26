@@ -25,6 +25,11 @@ func (SetLiteAccountDelegate) Type() protocol.TransactionType {
 }
 
 func (x SetLiteAccountDelegate) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	// Version guard: SetLiteAccountDelegate requires V2Tanegashima
+	if !st.Globals.ExecutorVersion.V2TanegashimaEnabled() {
+		return nil, errors.NotAllowed.WithFormat("SetLiteAccountDelegate requires protocol version %v or later", protocol.ExecutorVersionV2Tanegashima)
+	}
+
 	_, err := x.check(st, tx)
 	return nil, err
 }

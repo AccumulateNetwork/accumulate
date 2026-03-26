@@ -625,6 +625,10 @@ func (b UpdateKeyPageBuilder) UpdateAllowed() UpdateAllowedKeyPageOperationBuild
 	return UpdateAllowedKeyPageOperationBuilder{b: b}
 }
 
+func (b UpdateKeyPageBuilder) SetAllowedTransactions() SetAllowedTransactionsKeyPageOperationBuilder {
+	return SetAllowedTransactionsKeyPageOperationBuilder{b: b}
+}
+
 func (b UpdateKeyPageBuilder) FinishTransaction() TransactionBuilder {
 	return b.t.Body(&b.body)
 }

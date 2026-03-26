@@ -408,3 +408,121 @@ func TestUpdateKeyPage_PageDelegate_Update(t *testing.T) {
 	_, err := sim.SubmitAndExecuteBlock(env)
 	require.EqualError(t, err, "invalid delegate acc://alice.acme/book/1: a key page is not a valid authority")
 }
+
+func TestUpdateKeyPage_WhitelistOnPage1_Fails(t *testing.T) {
+	// Initialize
+	sim := simulator.New(t, 1)
+	sim.InitFromGenesis()
+
+	alice := protocol.AccountUrl("alice")
+	aliceKey := acctesting.GenerateKey(alice)
+	sim.CreateIdentity(alice, aliceKey[32:])
+
+	// Try to set a whitelist on page 1 - this should fail to prevent lockout
+	env :=
+		MustBuild(t, build.Transaction().
+			For(alice.JoinPath("book", "1")).
+			Body(&protocol.UpdateKeyPage{Operation: []protocol.KeyPageOperation{
+				&protocol.SetAllowedTransactionsKeyPageOperation{
+					Transactions: []protocol.TransactionType{
+						protocol.TransactionTypeSendTokens,
+					},
+				},
+			}}).
+			SignWith(alice.JoinPath("book", "1")).Version(1).Timestamp(1).PrivateKey(aliceKey).Type(protocol.SignatureTypeED25519))
+
+	x := sim.PartitionFor(alice)
+	st, txn := LoadStateManagerForTest(t, x.Database, env)
+	defer st.Discard()
+
+	_, err := UpdateKeyPage{}.Validate(st, txn)
+	require.EqualError(t, err, "cannot set transaction whitelist on the first page of a key book")
+}
+
+func TestUpdateKeyPage_BlacklistOnPage1_Fails(t *testing.T) {
+	// Initialize
+	sim := simulator.New(t, 1)
+	sim.InitFromGenesis()
+
+	alice := protocol.AccountUrl("alice")
+	aliceKey := acctesting.GenerateKey(alice)
+	sim.CreateIdentity(alice, aliceKey[32:])
+
+	// Try to deny transactions on page 1 - this should fail to prevent lockout
+	env :=
+		MustBuild(t, build.Transaction().
+			For(alice.JoinPath("book", "1")).
+			Body(&protocol.UpdateKeyPage{Operation: []protocol.KeyPageOperation{
+				&protocol.UpdateAllowedKeyPageOperation{
+					Deny: []protocol.TransactionType{
+						protocol.TransactionTypeUpdateKeyPage,
+					},
+				},
+			}}).
+			SignWith(alice.JoinPath("book", "1")).Version(1).Timestamp(1).PrivateKey(aliceKey).Type(protocol.SignatureTypeED25519))
+
+	x := sim.PartitionFor(alice)
+	st, txn := LoadStateManagerForTest(t, x.Database, env)
+	defer st.Discard()
+
+	_, err := UpdateKeyPage{}.Validate(st, txn)
+	require.EqualError(t, err, "cannot deny transactions on the first page of a key book")
+}
+
+func TestUpdateKeyPage_ClearWhitelistOnPage1_Succeeds(t *testing.T) {
+	// Initialize - clearing a whitelist (empty list) on page 1 should work
+	sim := simulator.New(t, 1)
+	sim.InitFromGenesis()
+
+	alice := protocol.AccountUrl("alice")
+	aliceKey := acctesting.GenerateKey(alice)
+	sim.CreateIdentity(alice, aliceKey[32:])
+
+	// Clear whitelist (empty Transactions slice) - this should succeed
+	env :=
+		MustBuild(t, build.Transaction().
+			For(alice.JoinPath("book", "1")).
+			Body(&protocol.UpdateKeyPage{Operation: []protocol.KeyPageOperation{
+				&protocol.SetAllowedTransactionsKeyPageOperation{
+					Transactions: []protocol.TransactionType{},
+				},
+			}}).
+			SignWith(alice.JoinPath("book", "1")).Version(1).Timestamp(1).PrivateKey(aliceKey).Type(protocol.SignatureTypeED25519))
+
+	x := sim.PartitionFor(alice)
+	st, txn := LoadStateManagerForTest(t, x.Database, env)
+	defer st.Discard()
+
+	_, err := UpdateKeyPage{}.Validate(st, txn)
+	require.NoError(t, err, "clearing whitelist on page 1 should succeed")
+}
+
+func TestUpdateKeyPage_AllowOnPage1_Succeeds(t *testing.T) {
+	// Initialize - allowing transactions (clearing blacklist entries) on page 1 should work
+	sim := simulator.New(t, 1)
+	sim.InitFromGenesis()
+
+	alice := protocol.AccountUrl("alice")
+	aliceKey := acctesting.GenerateKey(alice)
+	sim.CreateIdentity(alice, aliceKey[32:])
+
+	// Allow transactions (not deny) - this should succeed
+	env :=
+		MustBuild(t, build.Transaction().
+			For(alice.JoinPath("book", "1")).
+			Body(&protocol.UpdateKeyPage{Operation: []protocol.KeyPageOperation{
+				&protocol.UpdateAllowedKeyPageOperation{
+					Allow: []protocol.TransactionType{
+						protocol.TransactionTypeSendTokens,
+					},
+				},
+			}}).
+			SignWith(alice.JoinPath("book", "1")).Version(1).Timestamp(1).PrivateKey(aliceKey).Type(protocol.SignatureTypeED25519))
+
+	x := sim.PartitionFor(alice)
+	st, txn := LoadStateManagerForTest(t, x.Database, env)
+	defer st.Discard()
+
+	_, err := UpdateKeyPage{}.Validate(st, txn)
+	require.NoError(t, err, "allowing transactions on page 1 should succeed")
+}
