@@ -1,5 +1,14 @@
 # Docker Compose for Load Testing Environment
 #
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+# WARNING: This configuration uses DEVNET MODE which is NOT suitable for
+# proper load testing or production-like testing!
+#
+# DEVNET runs all validators in ONE process and does NOT expose proper HTTP APIs.
+#
+# For real load testing, use docker-compose.distributed.yml instead!
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+#
 # This configuration runs a full Accumulate network for load testing:
 #   - 3 Block Validator Networks (BVN1, BVN2, BVN3)
 #   - 4 validators per BVN (12 validator nodes total)
@@ -26,7 +35,7 @@
 #   docker compose -f test/docker/docker-compose.yml logs -f load-testnet
 #
 # Access API:
-#   curl http://localhost:8080/v3/describe
+#   curl http://localhost:20080/v3/describe
 
 version: '3.8'
 
@@ -54,15 +63,15 @@ services:
       - ACC_BPT_SHARDING_ENABLED=true
       - ACC_BPT_SHARDING_DEPTH=4
     ports:
-      # API ports for each BVN + DN
-      - "8080:8080"    # BVN0 API
-      - "8081:8081"    # BVN1 API
-      - "8082:8082"    # BVN2 API
-      - "8083:8083"    # DN API
+      # API ports for each BVN + DN (mapped to 20000+ range)
+      - "20080:8080"    # BVN0 API
+      - "20081:8081"    # BVN1 API
+      - "20082:8082"    # BVN2 API
+      - "20083:8083"    # DN API
       # P2P ports
-      - "26656-26670:26656-26670"
+      - "20656-20670:26656-26670"
       # Prometheus metrics
-      - "26660-26674:26660-26674"
+      - "20660-20674:26660-26674"
     volumes:
       - load-testnet-data:/root/.accumulate
     networks:

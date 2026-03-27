@@ -32,7 +32,40 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-const localHost = "/ip4/127.0.0.1"
+// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+// WARNING: DO NOT USE DEVNET MODE UNLESS EXPLICITLY REQUIRED IN THE PROMPT
+// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+//
+// DEVNET MODE IS FOR INTERNAL TESTING ONLY
+//
+// Problems with devnet:
+//   - Runs all validators in a SINGLE process (not realistic for production testing)
+//   - Does NOT create proper HTTP API services for BVN validator nodes
+//   - Only the bootstrap node gets an HTTP service (on metrics port, not API ports)
+//   - Cannot properly test distributed systems behavior
+//   - Cannot test failure scenarios (individual node crashes)
+//   - Cannot test network partitions or latency
+//
+// For proper testing and deployment, you MUST use one of:
+//   - Individual node deployment with proper configuration
+//   - Docker distributed mode (docker-compose.distributed.yml)
+//   - Kubernetes deployment with separate pods per validator
+//
+// DO NOT use devnet for:
+//   - Load testing
+//   - Performance testing
+//   - Production-like testing
+//   - API testing
+//   - Multi-node behavior testing
+//
+// ONLY use devnet if:
+//   - The user EXPLICITLY requests "devnet" mode
+//   - You are testing consensus logic in isolation
+//   - You need a quick throw-away local test environment
+//
+// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+const localHost = "/ip4/0.0.0.0"
 const devNetDefaultHost = "/ip4/127.0.1.1"
 
 var devnetAsset = regexp.MustCompile(`^` +
