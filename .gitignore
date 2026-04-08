@@ -14,6 +14,9 @@ tools/cmd/gen-enum/go_build*
 test/cmd/perfmon/perfmon
 tools/cmd/debug/debug
 
+# Go workspace
+go.work.sum
+
 # Binaries and test data
 *.exe
 *.test
