@@ -178,9 +178,9 @@ func NewHandler(opts Options) (*Handler, error) {
 		eth.ServeHTTP(w, r)
 	})
 
-	// Prometheus metrics endpoint
+	// Prometheus metrics endpoint (uses /prom/metrics to avoid conflict with REST /metrics)
 	metricsHandler := promhttp.Handler()
-	h.mux.GET("/metrics", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	h.mux.GET("/prom/metrics", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		metricsHandler.ServeHTTP(w, r)
 	})
 
