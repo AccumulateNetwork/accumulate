@@ -30,6 +30,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
@@ -481,7 +482,7 @@ func (d *Daemon) LoadSnapshot(file ioutil2.SectionReader) error {
 		return fmt.Errorf("failed to seek to start for database restore: %v", err)
 	}
 
-	db, err := coredb.Open(d.Config, d.Logger)
+	db, err := coredb.Open(d.Config, logging.FromCometBFT(d.Logger))
 	if err != nil {
 		return fmt.Errorf("failed to open database: %v", err)
 	}
@@ -491,7 +492,7 @@ func (d *Daemon) LoadSnapshot(file ioutil2.SectionReader) error {
 	}()
 
 	d.Logger.Info("Starting FullRestore")
-	err = snapshot.FullRestore(db, file, d.Logger, d.Config.Accumulate.Describe.PartitionUrl())
+	err = snapshot.FullRestore(db, file, logging.FromCometBFT(d.Logger), d.Config.Accumulate.Describe.PartitionUrl())
 	if err != nil {
 		return fmt.Errorf("failed to restore database: %v", err)
 	}
@@ -508,7 +509,7 @@ func (d *Daemon) isTimeForSnapshot(blockTime time.Time) bool {
 
 	// If there are no snapshots, capture a snapshot
 	snapDir := config.MakeAbsolute(d.Config.RootDir, d.Config.Accumulate.Snapshots.Directory)
-	snapshots, err := abci.ListSnapshots(context.Background(), snapDir)
+	snapshots, err := abci.ListSnapshots(snapDir)
 	if err != nil || len(snapshots) == 0 {
 		return true
 	}
