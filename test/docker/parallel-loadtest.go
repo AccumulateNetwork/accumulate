@@ -3,11 +3,15 @@ package main
 import (
 	"context"
 	"crypto/ed25519"
+	"crypto/sha256"
+	"flag"
 	"fmt"
+	"math/rand"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -21,50 +25,230 @@ import (
 )
 
 const (
-	// 12 nodes × 3 workers per node = 36 total generators
-	workersPerNode = 3
+	workersPerNode = 4
 	totalNodes     = 12
-	targetTPS      = 10000
-	// Each worker targets: 10,000 TPS / 36 workers = 278 TPS
-	tpsPerWorker = targetTPS / (totalNodes * workersPerNode)
-	// Accounts per worker (10 each)
-	accountsPerWorker = 10
 )
 
+// Dynamic TPS control
+var currentTPS atomic.Int64
+var targetTPS atomic.Int64
+
+// Account pool for moving tokens
+type accountPool struct {
+	mu       sync.RWMutex
+	accounts []liteAccount
+	nextIdx  atomic.Uint64
+}
+
+type liteAccount struct {
+	key ed25519.PrivateKey
+	url *url.URL
+}
+
+func (p *accountPool) add(acc liteAccount) {
+	p.mu.Lock()
+	p.accounts = append(p.accounts, acc)
+	p.mu.Unlock()
+}
+
+func (p *accountPool) size() int {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return len(p.accounts)
+}
+
+func (p *accountPool) getRandom() liteAccount {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	if len(p.accounts) == 0 {
+		return liteAccount{}
+	}
+	idx := rand.Intn(len(p.accounts))
+	return p.accounts[idx]
+}
+
+func (p *accountPool) getNext() liteAccount {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	if len(p.accounts) == 0 {
+		return liteAccount{}
+	}
+	idx := p.nextIdx.Add(1) % uint64(len(p.accounts))
+	return p.accounts[idx]
+}
+
 func main() {
-	// 12 validator API endpoints (one per node)
+	startTPS := flag.Int("start-tps", 10, "Starting TPS")
+	endTPS := flag.Int("end-tps", 10000, "Ending TPS after ramp duration")
+	rampDuration := flag.Duration("ramp-duration", 1*time.Hour, "Duration to ramp from start to end TPS")
+	controlPort := flag.Int("control-port", 8099, "HTTP port for dynamic TPS control")
+	duration := flag.Duration("duration", 0, "Test duration (0 for unlimited)")
+	tokensPerWorker := flag.Int64("tokens-per-worker", 10000000, "ACME tokens to allocate per worker")
+	maxAccounts := flag.Int("max-accounts", 1000000, "Maximum lite accounts in pool")
+	flag.Parse()
+
+	currentTPS.Store(int64(*startTPS))
+	targetTPS.Store(int64(*endTPS))
+
+	// Derive funding account from genesis seed "FAUCET"
+	var fundingSeed [32]byte
+	fundingSeed = sha256.Sum256(append(fundingSeed[:], []byte("FAUCET")...))
+	fundingKey := ed25519.NewKeyFromSeed(fundingSeed[:])
+	fundingURL, err := protocol.LiteTokenAddress(fundingKey[32:], "ACME", protocol.SignatureTypeED25519)
+	if err != nil {
+		fmt.Printf("ERROR: Failed to create funding URL: %v\n", err)
+		os.Exit(1)
+	}
+
+	// 12 validator API endpoints
 	nodes := []string{
-		"http://localhost:26660/v3", // BVN1-val1
-		"http://localhost:26661/v3", // BVN1-val2
-		"http://localhost:26662/v3", // BVN1-val3
-		"http://localhost:26663/v3", // BVN1-val4
-		"http://localhost:26664/v3", // BVN2-val1
-		"http://localhost:26665/v3", // BVN2-val2
-		"http://localhost:26666/v3", // BVN2-val3
-		"http://localhost:26667/v3", // BVN2-val4
-		"http://localhost:26668/v3", // BVN3-val1
-		"http://localhost:26669/v3", // BVN3-val2
-		"http://localhost:26670/v3", // BVN3-val3
-		"http://localhost:26671/v3", // BVN3-val4
+		"http://localhost:26660/v3",
+		"http://localhost:26661/v3",
+		"http://localhost:26662/v3",
+		"http://localhost:26663/v3",
+		"http://localhost:26664/v3",
+		"http://localhost:26665/v3",
+		"http://localhost:26666/v3",
+		"http://localhost:26667/v3",
+		"http://localhost:26668/v3",
+		"http://localhost:26669/v3",
+		"http://localhost:26670/v3",
+		"http://localhost:26671/v3",
 	}
 
 	totalWorkers := len(nodes) * workersPerNode
-	fmt.Printf("Starting parallel load test with %d workers (%d nodes × %d workers/node)\n",
-		totalWorkers, len(nodes), workersPerNode)
-	fmt.Printf("Target: %d TPS total (~%d TPS per worker)\n\n", targetTPS, tpsPerWorker)
+	fmt.Printf("Accumulate Load Test\n")
+	fmt.Printf("====================\n")
+	fmt.Printf("Workers: %d (%d nodes x %d workers/node)\n", totalWorkers, len(nodes), workersPerNode)
+	fmt.Printf("Funding account: %s\n", fundingURL)
+	fmt.Printf("TPS ramp: %d -> %d over %v\n", *startTPS, *endTPS, *rampDuration)
+	fmt.Printf("Max accounts: %d\n", *maxAccounts)
+	fmt.Printf("Control endpoint: http://localhost:%d/tps\n\n", *controlPort)
 
-	// Create root context with cancellation for clean shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	// Initialize account pool
+	pool := &accountPool{}
+
+	// Generate worker accounts
+	fmt.Println("Generating worker accounts...")
+	workerAccounts := make([]liteAccount, totalWorkers)
+	for i := 0; i < totalWorkers; i++ {
+		_, sk, _ := ed25519.GenerateKey(nil)
+		workerAccounts[i].key = sk
+		workerAccounts[i].url, _ = protocol.LiteTokenAddress(sk[32:], "ACME", protocol.SignatureTypeED25519)
+		pool.add(workerAccounts[i])
+	}
+
+	// Fund worker accounts
+	fmt.Printf("Funding %d worker accounts with %d ACME each...\n", totalWorkers, *tokensPerWorker)
+	client := jsonrpc.NewClient(nodes[0])
+	nonce := uint64(time.Now().UnixMilli())
+
+	for i, wa := range workerAccounts {
+		env, err := build.Transaction().
+			For(fundingURL).
+			SendTokens(uint64(*tokensPerWorker), 0).To(wa.url).
+			SignWith(fundingURL).
+			Version(1).
+			Timestamp(&nonce).
+			PrivateKey(fundingKey).
+			Done()
+		if err != nil {
+			fmt.Printf("ERROR building funding tx %d: %v\n", i, err)
+			os.Exit(1)
+		}
+
+		reqCtx, reqCancel := context.WithTimeout(ctx, 30*time.Second)
+		subs, err := client.Submit(reqCtx, env, api.SubmitOptions{})
+		reqCancel()
+		if err != nil {
+			fmt.Printf("ERROR submitting funding tx %d: %v\n", i, err)
+			os.Exit(1)
+		}
+		if len(subs) == 0 || !subs[0].Success {
+			msg := "unknown"
+			if len(subs) > 0 {
+				msg = subs[0].Message
+			}
+			fmt.Printf("ERROR: funding tx %d failed: %s\n", i, msg)
+			os.Exit(1)
+		}
+		fmt.Printf("  Worker %d funded: %s\n", i+1, wa.url)
+	}
+
+	fmt.Println("Waiting for funding transactions to settle...")
+	time.Sleep(5 * time.Second)
 
 	// Global counters
 	var submitted, succeeded, failed atomic.Uint64
 	var wg sync.WaitGroup
 
-	// Progress reporter with context cancellation
+	// TPS ramping goroutine
+	rampStart := time.Now()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		ticker := time.NewTicker(1 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				elapsed := time.Since(rampStart)
+				if elapsed >= *rampDuration {
+					currentTPS.Store(int64(*endTPS))
+				} else {
+					progress := float64(elapsed) / float64(*rampDuration)
+					newTPS := float64(*startTPS) + progress*float64(*endTPS-*startTPS)
+					currentTPS.Store(int64(newTPS))
+				}
+			}
+		}
+	}()
+
+	// HTTP control server
+	mux := http.NewServeMux()
+	mux.HandleFunc("/tps", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost || r.URL.Query().Has("v") {
+			vStr := r.URL.Query().Get("v")
+			v, err := strconv.ParseInt(vStr, 10, 64)
+			if err != nil || v < 0 {
+				http.Error(w, "invalid TPS value", http.StatusBadRequest)
+				return
+			}
+			old := currentTPS.Swap(v)
+			fmt.Printf("TPS changed: %d -> %d\n", old, v)
+			fmt.Fprintf(w, "TPS changed: %d -> %d\n", old, v)
+			return
+		}
+		fmt.Fprintf(w, "Current TPS: %d\nTarget TPS: %d\nAccounts: %d\n",
+			currentTPS.Load(), targetTPS.Load(), pool.size())
+	})
+
+	controlServer := &http.Server{
+		Addr:    fmt.Sprintf(":%d", *controlPort),
+		Handler: mux,
+	}
+	go func() {
+		if err := controlServer.ListenAndServe(); err != http.ErrServerClosed {
+			fmt.Printf("Control server error: %v\n", err)
+		}
+	}()
+
+	// Progress reporter
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 	start := time.Now()
+
+	type sample struct {
+		time      time.Time
+		submitted uint64
+	}
+	samples := make([]sample, 0, 100)
 
 	wg.Add(1)
 	go func() {
@@ -74,25 +258,70 @@ func main() {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				elapsed := time.Since(start)
+				now := time.Now()
+				elapsed := now.Sub(start)
 				s := submitted.Load()
-				tps := float64(s) / elapsed.Seconds()
-				fmt.Printf("Progress: submitted=%d success=%d failure=%d elapsed=%v actual_tps=%.2f\n",
+
+				tpsSinceLaunch := float64(s) / elapsed.Seconds()
+
+				samples = append(samples, sample{time: now, submitted: s})
+
+				// Keep last 15 minutes
+				cutoff := now.Add(-15 * time.Minute)
+				firstValid := 0
+				for i, samp := range samples {
+					if samp.time.After(cutoff) {
+						firstValid = i
+						break
+					}
+				}
+				if firstValid > 0 {
+					samples = samples[firstValid:]
+				}
+
+				// Calculate TPS for different windows
+				var tps1min, tps5min, tps15min float64
+				for _, window := range []struct {
+					dur time.Duration
+					ptr *float64
+				}{
+					{60 * time.Second, &tps1min},
+					{5 * time.Minute, &tps5min},
+					{15 * time.Minute, &tps15min},
+				} {
+					windowCutoff := now.Add(-window.dur)
+					var oldest *sample
+					for i := range samples {
+						if samples[i].time.After(windowCutoff) {
+							oldest = &samples[i]
+							break
+						}
+					}
+					if oldest != nil && len(samples) > 0 {
+						newest := samples[len(samples)-1]
+						dur := newest.time.Sub(oldest.time).Seconds()
+						if dur > 0 {
+							*window.ptr = float64(newest.submitted-oldest.submitted) / dur
+						}
+					}
+				}
+
+				fmt.Printf("Progress: submitted=%d success=%d failure=%d elapsed=%v tps_1min=%.0f tps_5min=%.0f tps_15min=%.0f tps_total=%.0f target=%d accounts=%d\n",
 					s, succeeded.Load(), failed.Load(),
-					elapsed.Round(time.Second), tps)
+					elapsed.Round(time.Second), tps1min, tps5min, tps15min, tpsSinceLaunch,
+					currentTPS.Load(), pool.size())
 			}
 		}
 	}()
 
 	fmt.Println("Starting load generators...")
 
-	// Configure shared HTTP client with optimized connection pooling
-	// For 36 workers, we need sufficient connection capacity
+	// Shared HTTP client
 	httpClient := &http.Client{
 		Transport: &http.Transport{
-			MaxIdleConns:        200, // Increased for more workers
+			MaxIdleConns:        500,
 			IdleConnTimeout:     90 * time.Second,
-			MaxIdleConnsPerHost: 20,  // Increased for parallel workers per host
+			MaxIdleConnsPerHost: 50,
 			DialContext: (&net.Dialer{
 				Timeout:   30 * time.Second,
 				KeepAlive: 30 * time.Second,
@@ -101,41 +330,39 @@ func main() {
 		Timeout: 30 * time.Second,
 	}
 
-	// Start workers per node
-	for nodeIdx, nodeURL := range nodes {
-		// Spawn multiple workers for this node
-		for workerIdx := 0; workerIdx < workersPerNode; workerIdx++ {
-			wg.Add(1)
-			workerID := nodeIdx*workersPerNode + workerIdx + 1
-			go func(workerID int, nodeURL string) {
-				defer wg.Done()
-				runWorker(ctx, workerID, nodeURL, httpClient, &submitted, &succeeded, &failed)
-			}(workerID, nodeURL)
-		}
+	// Start workers
+	for i := 0; i < totalWorkers; i++ {
+		nodeURL := nodes[i%len(nodes)]
+		wg.Add(1)
+		go func(workerID int, nodeURL string, account liteAccount) {
+			defer wg.Done()
+			runWorker(ctx, workerID, nodeURL, totalWorkers, account, pool, *maxAccounts, httpClient, &submitted, &succeeded, &failed)
+		}(i+1, nodeURL, workerAccounts[i])
 	}
 
-	fmt.Printf("All %d workers started. Running for 5 minutes...\n\n", totalWorkers)
+	fmt.Printf("All %d workers started.\n\n", totalWorkers)
 
-	// Setup signal handling for graceful shutdown
+	// Signal handling
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	// Create timer for 5 minute timeout
-	timer := time.NewTimer(5 * time.Minute)
-	defer timer.Stop()
-
-	// Wait for either timeout or interrupt signal
-	select {
-	case <-timer.C:
-		fmt.Println("\n5 minute test duration reached. Shutting down gracefully...")
-	case sig := <-sigChan:
-		fmt.Printf("\nReceived signal %v. Shutting down gracefully...\n", sig)
+	if *duration > 0 {
+		timer := time.NewTimer(*duration)
+		defer timer.Stop()
+		select {
+		case <-timer.C:
+			fmt.Printf("\n%v test duration reached. Shutting down...\n", *duration)
+		case sig := <-sigChan:
+			fmt.Printf("\nReceived signal %v. Shutting down...\n", sig)
+		}
+	} else {
+		sig := <-sigChan
+		fmt.Printf("\nReceived signal %v. Shutting down...\n", sig)
 	}
 
-	// Cancel context to stop all workers
 	cancel()
+	controlServer.Shutdown(context.Background())
 
-	// Wait for all goroutines to finish with timeout
 	done := make(chan struct{})
 	go func() {
 		wg.Wait()
@@ -144,15 +371,13 @@ func main() {
 
 	select {
 	case <-done:
-		fmt.Println("All workers stopped cleanly.")
+		fmt.Println("All workers stopped.")
 	case <-time.After(10 * time.Second):
 		fmt.Println("Warning: Some workers did not stop within timeout.")
 	}
 
-	// Close HTTP client connections
 	httpClient.CloseIdleConnections()
 
-	// Final report
 	elapsed := time.Since(start)
 	s := submitted.Load()
 	tps := float64(s) / elapsed.Seconds()
@@ -162,31 +387,16 @@ func main() {
 	fmt.Printf("  Success: %d\n", succeeded.Load())
 	fmt.Printf("  Failed: %d\n", failed.Load())
 	fmt.Printf("  Average TPS: %.2f\n", tps)
-
-	fmt.Println("\nTest complete!")
+	fmt.Printf("  Total Accounts: %d\n", pool.size())
+	fmt.Println("\nTest complete.")
 }
 
-func runWorker(ctx context.Context, workerID int, nodeURL string, httpClient *http.Client, submitted, succeeded, failed *atomic.Uint64) {
-	// Create JSON-RPC client for this worker
+func runWorker(ctx context.Context, workerID int, nodeURL string, totalWorkers int, account liteAccount, pool *accountPool, maxAccounts int, httpClient *http.Client, submitted, succeeded, failed *atomic.Uint64) {
 	client := jsonrpc.NewClient(nodeURL)
-
-	// Pre-allocate accounts for this worker
-	accounts := make([]ed25519.PrivateKey, accountsPerWorker)
-	urls := make([]*url.URL, accountsPerWorker)
-
-	for i := range accounts {
-		_, sk, _ := ed25519.GenerateKey(nil)
-		accounts[i] = sk
-		urls[i], _ = protocol.LiteTokenAddress(sk[32:], "ACME", protocol.SignatureTypeED25519)
-	}
-
-	// Calculate target interval for this worker
-	// 278 TPS = 1 transaction every ~3.6ms
-	targetInterval := time.Second / time.Duration(tpsPerWorker)
 	nonce := uint64(time.Now().UnixMilli()) + uint64(workerID*1000000)
+	localRand := rand.New(rand.NewSource(time.Now().UnixNano() + int64(workerID)))
 
 	for {
-		// Check if context is cancelled
 		select {
 		case <-ctx.Done():
 			return
@@ -195,18 +405,54 @@ func runWorker(ctx context.Context, workerID int, nodeURL string, httpClient *ht
 
 		loopStart := time.Now()
 
-		// Pick sender and receiver from worker's accounts
-		sender := int(time.Now().UnixNano() % int64(len(accounts)))
-		receiver := (sender + 1) % len(accounts)
+		tps := currentTPS.Load()
+		if tps <= 0 {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(100 * time.Millisecond):
+				continue
+			}
+		}
 
-		// Build transaction
+		tpsPerWorker := tps / int64(totalWorkers)
+		if tpsPerWorker < 1 {
+			tpsPerWorker = 1
+		}
+		targetInterval := time.Second / time.Duration(tpsPerWorker)
+
+		// Decide whether to create new account or reuse existing
+		var destURL *url.URL
+		poolSize := pool.size()
+
+		if poolSize < maxAccounts && localRand.Float32() < 0.3 {
+			// 30% chance to create new account if under limit
+			_, destKey, _ := ed25519.GenerateKey(localRand)
+			destURL, _ = protocol.LiteTokenAddress(destKey[32:], "ACME", protocol.SignatureTypeED25519)
+			pool.add(liteAccount{key: destKey, url: destURL})
+		} else if poolSize > 0 {
+			// Use existing account from pool
+			dest := pool.getRandom()
+			destURL = dest.url
+		} else {
+			// Fallback: create new account
+			_, destKey, _ := ed25519.GenerateKey(localRand)
+			destURL, _ = protocol.LiteTokenAddress(destKey[32:], "ACME", protocol.SignatureTypeED25519)
+			pool.add(liteAccount{key: destKey, url: destURL})
+		}
+
+		if destURL == nil {
+			continue
+		}
+
+		// Send 1 ACME
 		env, err := build.Transaction().
-			For(urls[sender]).
-			SendTokens(1, 0).To(urls[receiver]).
-			SignWith(urls[sender]).
+			For(account.url).
+			SendTokens(1, 0).To(destURL).
+			SignWith(account.url).
 			Version(1).
 			Timestamp(&nonce).
-			PrivateKey(accounts[sender]).
+			PrivateKey(account.key).
 			Done()
 
 		if err != nil {
@@ -214,16 +460,13 @@ func runWorker(ctx context.Context, workerID int, nodeURL string, httpClient *ht
 			continue
 		}
 
-		// Submit transaction with context
 		submitted.Add(1)
 
-		// Create timeout context for this request
 		reqCtx, reqCancel := context.WithTimeout(ctx, 10*time.Second)
 		_, err = client.Submit(reqCtx, env, api.SubmitOptions{})
-		reqCancel() // Always cancel to release resources
+		reqCancel()
 
 		if err != nil {
-			// Check if error is due to context cancellation (shutdown)
 			if ctx.Err() != nil {
 				return
 			}
@@ -232,15 +475,12 @@ func runWorker(ctx context.Context, workerID int, nodeURL string, httpClient *ht
 			succeeded.Add(1)
 		}
 
-		// Rate limit with context awareness
 		elapsed := time.Since(loopStart)
 		if elapsed < targetInterval {
-			sleepDuration := targetInterval - elapsed
 			select {
 			case <-ctx.Done():
 				return
-			case <-time.After(sleepDuration):
-				// Continue to next iteration
+			case <-time.After(targetInterval - elapsed):
 			}
 		}
 	}
