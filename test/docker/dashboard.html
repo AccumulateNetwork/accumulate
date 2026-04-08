@@ -39,27 +39,27 @@
 
         .metrics-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 20px;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
             margin-bottom: 30px;
         }
 
         .metric-card {
             background: #1a1f3a;
-            padding: 20px;
+            padding: 15px;
             border-radius: 10px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.2);
             border: 1px solid #2a3f5f;
         }
 
         .metric-label {
-            font-size: 0.9em;
+            font-size: 0.85em;
             opacity: 0.7;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
         }
 
         .metric-value {
-            font-size: 2.5em;
+            font-size: 2em;
             font-weight: bold;
             margin-bottom: 5px;
         }
@@ -72,6 +72,26 @@
             font-size: 0.5em;
             opacity: 0.8;
             margin-left: 5px;
+        }
+
+        .tps-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .tps-card {
+            background: #1a1f3a;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+            border: 1px solid #2a3f5f;
+            text-align: center;
+        }
+
+        .tps-card .metric-value {
+            font-size: 2.5em;
         }
 
         .chart-container {
@@ -112,7 +132,7 @@
         }
 
         .section-title {
-            font-size: 1.8em;
+            font-size: 1.5em;
             margin: 30px 0 15px 0;
             padding-bottom: 10px;
             border-bottom: 2px solid #2a5298;
@@ -124,22 +144,44 @@
             font-size: 0.9em;
             margin-top: 20px;
         }
+
+        .target-info {
+            text-align: center;
+            margin-top: 10px;
+            font-size: 0.9em;
+            opacity: 0.7;
+        }
     </style>
 </head>
 <body>
     <div class="header">
-        <h1>🚀 Accumulate Load Test Dashboard</h1>
+        <h1>Accumulate Load Test Dashboard</h1>
         <div class="subtitle">Real-time Performance Monitoring</div>
-        <div class="status connected" id="status">● Connected</div>
+        <div class="status connected" id="status">Connected</div>
     </div>
 
-    <div class="metrics-grid">
-        <div class="metric-card">
-            <div class="metric-label">Current TPS</div>
-            <div class="metric-value good" id="tps">0<span class="metric-unit">tx/s</span></div>
-            <div class="metric-label">Target: 12,000 TPS</div>
+    <h2 class="section-title">TPS Metrics</h2>
+    <div class="tps-grid">
+        <div class="tps-card">
+            <div class="metric-label">TPS (1 min)</div>
+            <div class="metric-value good" id="tps-1min">0<span class="metric-unit">tx/s</span></div>
         </div>
+        <div class="tps-card">
+            <div class="metric-label">TPS (5 min)</div>
+            <div class="metric-value" id="tps-5min">0<span class="metric-unit">tx/s</span></div>
+        </div>
+        <div class="tps-card">
+            <div class="metric-label">TPS (15 min)</div>
+            <div class="metric-value" id="tps-15min">0<span class="metric-unit">tx/s</span></div>
+        </div>
+        <div class="tps-card">
+            <div class="metric-label">TPS (Total)</div>
+            <div class="metric-value" id="tps-total">0<span class="metric-unit">tx/s</span></div>
+        </div>
+    </div>
+    <div class="target-info" id="target-info">Target: 10 TPS (ramping to 10,000 TPS over 1 hour)</div>
 
+    <div class="metrics-grid">
         <div class="metric-card">
             <div class="metric-label">Total Transactions</div>
             <div class="metric-value" id="total-txns">0<span class="metric-unit">txns</span></div>
@@ -169,14 +211,20 @@
             <div class="metric-value" id="duration">0<span class="metric-unit">min</span></div>
             <div class="metric-label" id="elapsed">Elapsed time</div>
         </div>
+
+        <div class="metric-card">
+            <div class="metric-label">Lite Accounts</div>
+            <div class="metric-value" id="accounts">0<span class="metric-unit"></span></div>
+            <div class="metric-label">Active accounts</div>
+        </div>
     </div>
 
-    <h2 class="section-title">📊 TPS History (Last 5 Minutes)</h2>
+    <h2 class="section-title">TPS History</h2>
     <div class="chart-container">
         <canvas id="tpsChart"></canvas>
     </div>
 
-    <h2 class="section-title">🖥️ Per-Node Metrics (12 Validators)</h2>
+    <h2 class="section-title">Per-Node Metrics (12 Validators)</h2>
     <div class="node-grid" id="node-grid"></div>
 
     <div class="timestamp" id="last-update">Last update: Never</div>
@@ -184,23 +232,43 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script>
         const METRICS_URL = 'http://localhost:8888/metrics';
-        const UPDATE_INTERVAL = 2000; // 2 seconds
+        const UPDATE_INTERVAL = 2000;
 
-        // TPS Chart
         const ctx = document.getElementById('tpsChart').getContext('2d');
         const tpsChart = new Chart(ctx, {
             type: 'line',
             data: {
                 labels: [],
-                datasets: [{
-                    label: 'TPS',
-                    data: [],
-                    borderColor: '#27ae60',
-                    backgroundColor: 'rgba(39, 174, 96, 0.1)',
-                    borderWidth: 2,
-                    tension: 0.4,
-                    fill: true
-                }]
+                datasets: [
+                    {
+                        label: 'TPS (1 min)',
+                        data: [],
+                        borderColor: '#27ae60',
+                        backgroundColor: 'rgba(39, 174, 96, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.4,
+                        fill: false
+                    },
+                    {
+                        label: 'TPS (5 min)',
+                        data: [],
+                        borderColor: '#3498db',
+                        backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.4,
+                        fill: false
+                    },
+                    {
+                        label: 'Target',
+                        data: [],
+                        borderColor: '#e74c3c',
+                        borderWidth: 1,
+                        borderDash: [5, 5],
+                        tension: 0,
+                        fill: false,
+                        pointRadius: 0
+                    }
+                ]
             },
             options: {
                 responsive: true,
@@ -229,21 +297,32 @@
                 .then(response => response.json())
                 .then(data => {
                     document.getElementById('status').className = 'status connected';
-                    document.getElementById('status').textContent = '● Connected';
+                    document.getElementById('status').textContent = 'Connected';
 
-                    // Calculate TPS
-                    const tps = data.tps || 0;
-                    document.getElementById('tps').innerHTML = `${tps.toLocaleString()}<span class="metric-unit">tx/s</span>`;
+                    // TPS values for different time frames
+                    const tps1min = data.tps_1min || data.tps || 0;
+                    const tps5min = data.tps_5min || tps1min;
+                    const tps15min = data.tps_15min || tps1min;
+                    const tpsTotal = data.tps_total || 0;
+                    const target = data.target_tps || 10;
 
-                    // Color TPS based on performance
-                    const tpsElement = document.getElementById('tps');
-                    if (tps >= 11000) {
-                        tpsElement.className = 'metric-value good';
-                    } else if (tps >= 8000) {
-                        tpsElement.className = 'metric-value warning';
+                    document.getElementById('tps-1min').innerHTML = `${Math.round(tps1min).toLocaleString()}<span class="metric-unit">tx/s</span>`;
+                    document.getElementById('tps-5min').innerHTML = `${Math.round(tps5min).toLocaleString()}<span class="metric-unit">tx/s</span>`;
+                    document.getElementById('tps-15min').innerHTML = `${Math.round(tps15min).toLocaleString()}<span class="metric-unit">tx/s</span>`;
+                    document.getElementById('tps-total').innerHTML = `${Math.round(tpsTotal).toLocaleString()}<span class="metric-unit">tx/s</span>`;
+
+                    // Color TPS based on target
+                    const tps1minEl = document.getElementById('tps-1min');
+                    if (tps1min >= target * 0.95) {
+                        tps1minEl.className = 'metric-value good';
+                    } else if (tps1min >= target * 0.7) {
+                        tps1minEl.className = 'metric-value warning';
                     } else {
-                        tpsElement.className = 'metric-value';
+                        tps1minEl.className = 'metric-value';
                     }
+
+                    // Update target info
+                    document.getElementById('target-info').textContent = `Current Target: ${target.toLocaleString()} TPS`;
 
                     // Total transactions
                     const total = data.total_submitted || 0;
@@ -251,6 +330,10 @@
                     const successRate = total > 0 ? (success / total * 100).toFixed(2) : 0;
                     document.getElementById('total-txns').innerHTML = `${total.toLocaleString()}<span class="metric-unit">txns</span>`;
                     document.getElementById('success-rate').textContent = `Success: ${successRate}%`;
+
+                    // Accounts
+                    const accounts = data.active_accounts || 0;
+                    document.getElementById('accounts').innerHTML = `${accounts.toLocaleString()}<span class="metric-unit"></span>`;
 
                     // CPU
                     const cpu = data.cpu_cores || 0;
@@ -280,12 +363,14 @@
                     // Update TPS chart
                     const now = new Date().toLocaleTimeString();
                     tpsChart.data.labels.push(now);
-                    tpsChart.data.datasets[0].data.push(tps);
+                    tpsChart.data.datasets[0].data.push(tps1min);
+                    tpsChart.data.datasets[1].data.push(tps5min);
+                    tpsChart.data.datasets[2].data.push(target);
 
                     // Keep only last 150 points (5 minutes at 2s intervals)
                     if (tpsChart.data.labels.length > 150) {
                         tpsChart.data.labels.shift();
-                        tpsChart.data.datasets[0].data.shift();
+                        tpsChart.data.datasets.forEach(ds => ds.data.shift());
                     }
                     tpsChart.update('none');
 
@@ -311,12 +396,11 @@
                 })
                 .catch(error => {
                     document.getElementById('status').className = 'status disconnected';
-                    document.getElementById('status').textContent = '● Disconnected';
+                    document.getElementById('status').textContent = 'Disconnected';
                     console.error('Error fetching metrics:', error);
                 });
         }
 
-        // Initial update and set interval
         updateMetrics();
         setInterval(updateMetrics, UPDATE_INTERVAL);
     </script>
