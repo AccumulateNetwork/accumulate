@@ -189,7 +189,7 @@ func (s *SubmitterService) Submit(ctx context.Context, envelope *messaging.Envel
 		}
 		if stderrors.Is(err, worker.ErrBackpressure) {
 			s.logger.Error("TRACE-SUBMIT: backpressure error", "error", err)
-			return nil, errors.NotReady.WithFormat("submit: %w", err)
+			return nil, errors.TooManyRequests.WithFormat("submit: %w", err)
 		}
 		s.logger.Error("TRACE-SUBMIT: internal error", "error", err)
 		return nil, errors.InternalError.WithFormat("submit: %w", err)
