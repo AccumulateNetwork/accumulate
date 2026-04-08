@@ -175,6 +175,9 @@ type Worker struct {
 
 	// Trigger channel for immediate batch creation
 	triggerBatch chan struct{}
+
+	// Eviction control
+	triggerEviction chan struct{}
 }
 
 // New creates a new Worker with the given configuration and gossip layer.
@@ -182,14 +185,15 @@ func New(config Config, g *gossip.GossipLayer) *Worker {
 	config.applyDefaults()
 
 	return &Worker{
-		config:           config,
-		gossip:           g,
-		validator:        config.Validator,
-		pending:          make([][]byte, 0, config.BatchSize),
+		config:              config,
+		gossip:              g,
+		validator:           config.Validator,
+		pending:             make([][]byte, 0, config.BatchSize),
 		batches:             make(map[types.BatchDigest]*lruEntry),
 		lruList:             list.New(),
 		availableBatchQueue: make(chan types.BatchDigest, config.MaxBatchQueueSize),
 		triggerBatch:        make(chan struct{}, 1),
+		triggerEviction:     make(chan struct{}, 1),
 	}
 }
 
@@ -361,28 +365,14 @@ func (w *Worker) StoreBatch(batch *types.Batch) error {
 		return nil
 	}
 
-	// Evict LRU batches if we're at the limit
-	// This prevents unbounded memory growth from gossip batches
+	// Trigger eviction if we're approaching the limit (non-blocking)
+	// Eviction is handled by dedicated goroutine to minimize lock contention
 	if len(w.batches) >= w.config.MaxStoredBatches {
-		evictCount := len(w.batches) / 10 // Evict 10%
-		if evictCount < 1 {
-			evictCount = 1
+		select {
+		case w.triggerEviction <- struct{}{}:
+		default:
+			// Eviction already triggered or in progress
 		}
-		evicted := 0
-		for i := 0; i < evictCount; i++ {
-			// Remove from back of list (least recently used)
-			back := w.lruList.Back()
-			if back == nil {
-				break
-			}
-			lruDigest := back.Value.(types.BatchDigest)
-			w.lruList.Remove(back)
-			delete(w.batches, lruDigest)
-			evicted++
-		}
-		slog.Debug("Evicted batches due to storage limit (LRU)",
-			"evicted", evicted,
-			"remaining", len(w.batches))
 	}
 
 	// Add new batch to front of LRU list (most recently used)
@@ -538,29 +528,16 @@ func (w *Worker) createAndBroadcastBatch() {
 		return
 	}
 
-	// Store locally first (with LRU eviction to prevent unbounded growth)
+	// Store locally first (eviction is handled by dedicated goroutine)
 	digest := batch.Digest()
 	w.batchMu.Lock()
+	// Trigger eviction if we're approaching the limit (non-blocking)
 	if len(w.batches) >= w.config.MaxStoredBatches {
-		evictCount := len(w.batches) / 10 // Evict 10%
-		if evictCount < 1 {
-			evictCount = 1
+		select {
+		case w.triggerEviction <- struct{}{}:
+		default:
+			// Eviction already triggered or in progress
 		}
-		evicted := 0
-		for i := 0; i < evictCount; i++ {
-			// Remove from back of list (least recently used)
-			back := w.lruList.Back()
-			if back == nil {
-				break
-			}
-			lruDigest := back.Value.(types.BatchDigest)
-			w.lruList.Remove(back)
-			delete(w.batches, lruDigest)
-			evicted++
-		}
-		slog.Warn("Evicted local batches due to storage limit (consensus not keeping up, LRU)",
-			"evicted", evicted,
-			"remaining", len(w.batches))
 	}
 	// Add new batch to front of LRU list (most recently used)
 	element := w.lruList.PushFront(digest)
@@ -569,6 +546,11 @@ func (w *Worker) createAndBroadcastBatch() {
 		element: element,
 	}
 	w.batchMu.Unlock()
+
+	// Update metrics immediately after batch creation
+	// Do this before queueing to ensure metrics are recorded even during shutdown
+	w.batchesCreated.Add(1)
+	w.txnsProcessed.Add(uint64(batch.Len()))
 
 	// Add to available batch queue (blocking backpressure if full)
 	queueDepth := w.queueDepth.Add(1)
@@ -600,10 +582,6 @@ func (w *Worker) createAndBroadcastBatch() {
 			"workerID", w.config.ID,
 			"partition", w.config.Partition)
 	}
-
-	// Update metrics
-	w.batchesCreated.Add(1)
-	w.txnsProcessed.Add(uint64(batch.Len()))
 
 	// Broadcast to network
 	if w.gossip != nil {
@@ -670,6 +648,66 @@ func (w *Worker) handleIncomingBatches() {
 				}
 			}
 		}
+	}
+}
+
+// evictionLoop runs the LRU eviction process in a dedicated goroutine.
+// This minimizes lock contention by moving eviction out of the critical path
+// of batch creation and storage operations.
+func (w *Worker) evictionLoop() {
+	defer w.wg.Done()
+
+	// Run eviction checks periodically and when triggered
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-w.ctx.Done():
+			return
+
+		case <-ticker.C:
+			w.performEviction()
+
+		case <-w.triggerEviction:
+			w.performEviction()
+		}
+	}
+}
+
+// performEviction evicts LRU batches if the storage limit is reached.
+// This is called by the dedicated goroutine to minimize lock contention.
+func (w *Worker) performEviction() {
+	w.batchMu.Lock()
+	defer w.batchMu.Unlock()
+
+	if len(w.batches) < w.config.MaxStoredBatches {
+		return // No eviction needed
+	}
+
+	evictCount := len(w.batches) / 10 // Evict 10%
+	if evictCount < 1 {
+		evictCount = 1
+	}
+
+	evicted := 0
+	for i := 0; i < evictCount; i++ {
+		// Remove from back of list (least recently used)
+		back := w.lruList.Back()
+		if back == nil {
+			break
+		}
+		lruDigest := back.Value.(types.BatchDigest)
+		w.lruList.Remove(back)
+		delete(w.batches, lruDigest)
+		evicted++
+	}
+
+	if evicted > 0 {
+		slog.Warn("Evicted batches due to storage limit (LRU)",
+			"evicted", evicted,
+			"remaining", len(w.batches),
+			"workerID", w.config.ID)
 	}
 }
 

@@ -258,7 +258,9 @@ func (UserSignature) verifySigner(batch *database.Batch, ctx *userSigContext) er
 		return errors.Unauthorized.With("key does not belong to signer")
 	}
 
-	// Check the timestamp
+	// Check the timestamp for replay protection
+	// Timestamps must be strictly increasing per key to prevent signature replay
+	// See docs/timestamp-requirements.md for operator guidance on NTP requirements
 	if ctx.keySig.GetTimestamp() != 0 && ctx.keyEntry.GetLastUsedOn() >= ctx.keySig.GetTimestamp() {
 		return errors.BadTimestamp.WithFormat("invalid timestamp: have %d, got %d", ctx.keyEntry.GetLastUsedOn(), ctx.keySig.GetTimestamp())
 	}
