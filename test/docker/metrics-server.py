@@ -80,9 +80,11 @@ class MetricsCollector:
                         if self.start_time is None:
                             self.start_time = time.time()
 
-                        # Record sample on each progress update
-                        now = time.time()
-                        self.samples.append((now, submitted))
+                        # Record sample only if submitted count changed (avoid duplicate samples)
+                        if submitted != self.last_submitted:
+                            now = time.time()
+                            self.samples.append((now, submitted))
+                            self.last_submitted = submitted
 
                         # Calculate TPS for different time windows
                         tps_1min = self._calc_tps(60)
