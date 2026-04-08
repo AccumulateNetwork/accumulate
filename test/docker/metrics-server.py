@@ -211,6 +211,40 @@ class MetricsCollector:
         with self.lock:
             return dict(self.metrics)
 
+    def reset(self):
+        """Reset metrics for a new test run"""
+        with self.lock:
+            self.samples.clear()
+            self.start_time = None
+            self.last_submitted = 0
+            self.last_progress_time = None
+            # Reset metrics to defaults
+            self.metrics = {
+                'tps_1min': 0,
+                'tps_5min': 0,
+                'tps_15min': 0,
+                'tps_total': 0,
+                'target_tps': 10,
+                'total_submitted': 0,
+                'total_succeeded': 0,
+                'total_failed': 0,
+                'active_accounts': 0,
+                'cpu_cores': 0,
+                'avg_cpu_percent': 0,
+                'memory_gb': 0,
+                'avg_memory_percent': 0,
+                'db_size_gb': 0,
+                'db_growth_mb_per_min': 0,
+                'nodes': []
+            }
+
+        # Clear the log file to start fresh for next test
+        if self.loadtest_log and self.loadtest_log.exists():
+            try:
+                self.loadtest_log.unlink()
+            except Exception as e:
+                print(f"Warning: could not delete log file: {e}")
+
 class MetricsHandler(BaseHTTPRequestHandler):
     collector = None
 
@@ -223,6 +257,14 @@ class MetricsHandler(BaseHTTPRequestHandler):
 
             metrics = self.collector.get_metrics()
             self.wfile.write(json.dumps(metrics).encode())
+
+        elif self.path == '/reset':
+            self.collector.reset()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps({'status': 'reset'}).encode())
 
         elif self.path == '/' or self.path == '/dashboard':
             # Try local dashboard first, then workspace
@@ -254,6 +296,7 @@ def run_server(collector, port=8888):
     print(f"Metrics server running on http://0.0.0.0:{port}")
     print(f"Dashboard: http://localhost:{port}/")
     print(f"Metrics API: http://localhost:{port}/metrics")
+    print(f"Reset metrics: http://localhost:{port}/reset")
     server.serve_forever()
 
 if __name__ == '__main__':
