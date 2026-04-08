@@ -37,7 +37,9 @@ class MetricsCollector:
         }
         self.loadtest_log = None
         self.monitoring_dir = None
-        self.start_time = time.time()
+        self.start_time = None  # Will be set from first loadtest progress entry
+        self.last_submitted = 0  # Track previous count to avoid duplicate samples
+        self.last_progress_time = None  # Track timestamp of last progress update
 
         # Sample history for TPS calculations
         # Each sample is (timestamp, submitted_count)
@@ -74,7 +76,11 @@ class MetricsCollector:
                         accounts_match = re.search(r'accounts=(\d+)', line)
                         accounts = int(accounts_match.group(1)) if accounts_match else 0
 
-                        # Record sample
+                        # Initialize start time from first progress update
+                        if self.start_time is None:
+                            self.start_time = time.time()
+
+                        # Record sample on each progress update
                         now = time.time()
                         self.samples.append((now, submitted))
 
