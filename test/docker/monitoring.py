@@ -48,14 +48,14 @@ def get_docker_stats():
                     continue
                 try:
                     data = json.loads(line)
-                    container_name = data.get('Names', '')
+                    container_name = data.get('Name', '')
 
                     if container_name in VALIDATORS:
                         # Parse CPU percentage (e.g., "12.34%")
-                        cpu_str = data.get('CPUPercent', '0%').replace('%', '')
+                        cpu_str = data.get('CPUPerc', '0%').replace('%', '')
                         cpu = float(cpu_str) if cpu_str else 0
 
-                        # Parse memory (e.g., "256.5MiB")
+                        # Parse memory (e.g., "256.5MiB / 1GiB")
                         mem_str = data.get('MemUsage', '0MiB').split('/')[0].strip()
                         mem_mb = parse_memory(mem_str)
 
@@ -64,7 +64,7 @@ def get_docker_stats():
                             'memory_mb': mem_mb
                         }
                 except (json.JSONDecodeError, ValueError, KeyError) as e:
-                    print(f"Error parsing stats for {container_name}: {e}")
+                    print(f"Error parsing stats for line: {e}")
     except subprocess.TimeoutExpired:
         print("docker stats timed out")
     except Exception as e:
