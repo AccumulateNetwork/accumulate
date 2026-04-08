@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -13,10 +13,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"github.com/julienschmidt/httprouter"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	ethimpl "gitlab.com/accumulatenetwork/accumulate/internal/api/ethereum"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	v2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
@@ -42,7 +42,7 @@ type Handler struct {
 
 // Options are the options for a [Handler].
 type Options struct {
-	Logger    log.Logger
+	Logger    logging.Logger
 	Node      *p2p.Node
 	Router    routing.Router
 	NetworkId string
@@ -132,7 +132,7 @@ func NewHandler(opts Options) (*Handler, error) {
 
 	// JSON-RPC API v2
 	v2, err := v2.NewJrpc(v2.Options{
-		Logger:        opts.Logger,
+		Logger:        logging.CometBFTLogger(opts.Logger),
 		Describe:      opts.Network,
 		TxMaxWaitTime: opts.MaxWait,
 		LocalV3:       selfClient,
@@ -176,6 +176,12 @@ func NewHandler(opts Options) (*Handler, error) {
 
 	h.mux.POST("/eth", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		eth.ServeHTTP(w, r)
+	})
+
+	// Prometheus metrics endpoint (uses /prom/metrics to avoid conflict with REST /metrics)
+	metricsHandler := promhttp.Handler()
+	h.mux.GET("/prom/metrics", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+		metricsHandler.ServeHTTP(w, r)
 	})
 
 	h.mux.GET("/", func(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
