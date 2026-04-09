@@ -10,17 +10,17 @@ import (
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/elliptic"
-	"encoding/binary"
+	"crypto/sha256"
 	"fmt"
 	"io"
 	"math/big"
-	badrand "math/rand"
 
-	btc "github.com/btcsuite/btcd/btcec"
+	altcrypto "gitlab.com/accumulatenetwork/accumulate/pkg/crypto"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/address"
+	"golang.org/x/crypto/hkdf"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -145,7 +145,7 @@ func (b *KeyPageBuilder) GenerateKey(typ protocol.SignatureType, seedParts ...an
 	case protocol.SignatureTypeETH,
 		protocol.SignatureTypeBTC,
 		protocol.SignatureTypeBTCLegacy:
-		sk := ecdsaFromSeed(btc.S256(), seed)
+		sk := ecdsaFromSeed(altcrypto.S256(), seed)
 		addr := address.FromETHPrivateKey(sk)
 		addr.Type = typ
 		b.AddKey(addr)
@@ -158,13 +158,16 @@ func (b *KeyPageBuilder) GenerateKey(typ protocol.SignatureType, seedParts ...an
 }
 
 func ecdsaFromSeed(c elliptic.Curve, seed [32]byte) *ecdsa.PrivateKey {
-	rand := badrand.New(badrand.NewSource(int64(binary.BigEndian.Uint64(seed[:]))))
+	// Use HKDF-SHA256 to derive key material from the seed.
+	// This preserves full 256-bit entropy from the seed input.
+	// The output is deterministic: same seed always produces same key.
+	reader := hkdf.New(sha256.New, seed[:], nil, []byte("accumulate-ecdsa-keygen"))
 
 	var k *big.Int
 	for {
 		N := c.Params().N
 		b := make([]byte, (N.BitLen()+7)/8)
-		if _, err := io.ReadFull(rand, b); err != nil {
+		if _, err := io.ReadFull(reader, b); err != nil {
 			panic(err)
 		}
 		if excess := len(b)*8 - N.BitLen(); excess > 0 {
