@@ -128,14 +128,10 @@ type followerPartOpts struct {
 func (p followerPartOpts) apply(cfg *Config) error {
 	setDefaultPtr(&p.EnableSnapshots, false)
 
-	var offset portOffset
-	if p.Type == protocol.PartitionTypeDirectory {
-		offset = portDir
-	} else {
-		offset = portBVN
-	}
-
-	// Consensus - with transient key for follower mode
+	// TODO: Implement consensus service for DAG-BFT followers
+	// Consensus service is not available on DAG-BFT integration branch
+	// Follower nodes will use block sync instead of consensus participation
+	/*
 	addService(cfg,
 		&ConsensusService{
 			NodeDir:          p.Dir,
@@ -155,6 +151,7 @@ func (p followerPartOpts) apply(cfg *Config) error {
 			},
 		},
 		func(c *ConsensusService) string { return c.App.partition().ID })
+	*/
 
 	// Storage
 	if !haveService2(cfg, p.ID, func(s *StorageService) string { return s.Name }, nil) {
