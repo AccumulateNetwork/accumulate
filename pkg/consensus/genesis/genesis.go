@@ -10,6 +10,7 @@ package genesis
 
 import (
 	"crypto/ed25519"
+	"encoding/binary"
 	"errors"
 	"fmt"
 
@@ -117,17 +118,23 @@ func createGenesisCertificate(
 	}
 
 	// Collect signatures from all validators
+	// Signatures must be over voteContent (headerDigest + round + epoch) to match certificate verification
 	headerDigest := header.Digest()
+	voteContent := make([]byte, 32+8+8)
+	copy(voteContent[0:32], headerDigest[:])
+	binary.BigEndian.PutUint64(voteContent[32:40], uint64(header.Round))
+	binary.BigEndian.PutUint64(voteContent[40:48], header.Epoch)
+
 	signatures := make([][]byte, len(validators))
 	authorities := make([]uint16, len(validators))
 
 	for i, v := range validators {
-		// Sign the header digest (matching Vote behavior)
-		signatures[i] = ed25519.Sign(v.PrivateKey, headerDigest[:])
+		// Sign the voteContent (matching certificate verification expectations)
+		signatures[i] = ed25519.Sign(v.PrivateKey, voteContent)
 		authorities[i] = uint16(i)
 	}
 
-	cert := types.NewCertificate(header, signatures, authorities)
+	cert := types.NewCertificate(*header, signatures, authorities)
 
 	// Verify the certificate is valid
 	if err := cert.Verify(committee); err != nil {
