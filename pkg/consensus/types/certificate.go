@@ -60,10 +60,9 @@ type Certificate struct {
 }
 
 // NewCertificate creates a new certificate from a header and collected signatures.
-// The header fields are copied to avoid copying the mutex.
-func NewCertificate(header *Header, signatures [][]byte, signedAuthorities []uint16) *Certificate {
+func NewCertificate(header Header, signatures [][]byte, signedAuthorities []uint16) *Certificate {
 	return &Certificate{
-		Header:            header.copyFields(),
+		Header:            header,
 		Signatures:        signatures,
 		SignedAuthorities: signedAuthorities,
 	}
@@ -359,7 +358,7 @@ func UnmarshalCertificate(data []byte) (*Certificate, error) {
 	}
 
 	return &Certificate{
-		Header:            header.copyFields(),
+		Header:            *header,
 		Signatures:        signatures,
 		SignedAuthorities: authorities,
 		StateHash:         stateHash,
@@ -377,8 +376,11 @@ func (c *Certificate) Clone() *Certificate {
 	authorities := make([]uint16, len(c.SignedAuthorities))
 	copy(authorities, c.SignedAuthorities)
 
+	// Deep copy the header fields
+	headerClone := c.Header.copyFields()
+
 	return &Certificate{
-		Header:            c.Header.copyFields(),
+		Header:            headerClone,
 		Signatures:        signatures,
 		SignedAuthorities: authorities,
 		StateHash:         c.StateHash,
