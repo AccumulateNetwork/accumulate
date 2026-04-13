@@ -402,18 +402,29 @@ func (w *Worker) StoreBatch(batch *types.Batch) error {
 
 // AvailableBatches returns all batch digests that are available for header creation.
 // These are batches created by this worker that have been broadcast but not yet
-// included in a committed header.
+// included in a committed header. This method peeks without consuming.
 func (w *Worker) AvailableBatches() []types.BatchDigest {
 	var result []types.BatchDigest
 
-	// Drain available batches from channel without blocking
+	// Temporarily drain available batches from channel without blocking
+	drained := make([]types.BatchDigest, 0)
 	for {
 		select {
 		case digest := <-w.availableBatchQueue:
+			drained = append(drained, digest)
 			result = append(result, digest)
 		default:
-			// No more batches available
-			w.queueDepth.Store(0)
+			// No more batches available - put them back in the queue
+			for _, digest := range drained {
+				// Send back to queue (should not block as we just drained space)
+				select {
+				case w.availableBatchQueue <- digest:
+				default:
+					// Queue is full - should not happen since we just drained it
+					// But if it does, we've lost the batch. Log it.
+					fmt.Printf("ERROR: Failed to put batch back in queue: %s\n", digest.String())
+				}
+			}
 			return result
 		}
 	}
