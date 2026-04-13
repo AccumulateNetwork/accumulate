@@ -509,7 +509,7 @@ func (d *Daemon) isTimeForSnapshot(blockTime time.Time) bool {
 
 	// If there are no snapshots, capture a snapshot
 	snapDir := config.MakeAbsolute(d.Config.RootDir, d.Config.Accumulate.Snapshots.Directory)
-	snapshots, err := abci.ListSnapshots(snapDir)
+	snapshots, err := abci.ListSnapshots(context.Background(), snapDir)
 	if err != nil || len(snapshots) == 0 {
 		return true
 	}
