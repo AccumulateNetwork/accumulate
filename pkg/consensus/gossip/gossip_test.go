@@ -351,7 +351,7 @@ func TestGossipLayer_BroadcastAndReceiveCertificate(t *testing.T) {
 	err = header.Sign(priv)
 	require.NoError(t, err)
 
-	cert := types.NewCertificate(header, [][]byte{header.Signature}, []uint16{0})
+	cert := types.NewCertificate(*header, [][]byte{header.Signature}, []uint16{0})
 
 	err = gl1.BroadcastCertificate(ctx, cert)
 	require.NoError(t, err)
