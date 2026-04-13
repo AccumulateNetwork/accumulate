@@ -18,12 +18,13 @@ import (
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/cometbft"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 func init() {
-	cmdMain.AddCommand(cmdValidateSnapshot, cmdRestoreGenesis)
+	// Note: CometBFT snapshot commands are not registered for DAG-BFT
+	// DAG-BFT uses a different snapshot format and restoration process
+	// cmdMain.AddCommand(cmdValidateSnapshot, cmdRestoreGenesis)
 }
 
 var cmdValidateSnapshot = &cobra.Command{
@@ -197,38 +198,8 @@ type consensusInfo struct {
 
 func validateConsensusSection(rd *snapshot.Reader) consensusInfo {
 	info := consensusInfo{}
-
-	// Find and open consensus section
-	consensusReader, err := rd.Open(snapshot.SectionTypeConsensus)
-	if err != nil {
-		info.err = err
-		return info
-	}
-
-	// Read the raw bytes
-	rawBytes, err := io.ReadAll(consensusReader)
-	if err != nil {
-		info.err = fmt.Errorf("read consensus section: %v", err)
-		return info
-	}
-
-	// Unmarshal the consensus doc
-	consensusDoc := new(cometbft.GenesisDoc)
-	err = consensusDoc.UnmarshalBinary(rawBytes)
-	if err != nil {
-		info.err = fmt.Errorf("unmarshal consensus doc: %v", err)
-		return info
-	}
-
-	info.chainID = consensusDoc.ChainID
-	info.validatorCount = len(consensusDoc.Validators)
-
-	if consensusDoc.Block != nil {
-		info.hasBlock = true
-		info.blockHeight = consensusDoc.Block.Height
-		info.blockTime = consensusDoc.Block.Time.String()
-	}
-
+	// CometBFT consensus section validation not supported in DAG-BFT
+	info.err = fmt.Errorf("consensus section validation not available in DAG-BFT")
 	return info
 }
 
@@ -309,30 +280,9 @@ func restoreGenesis(_ *cobra.Command, args []string) {
 	err = os.MkdirAll(dataPath, 0755)
 	checkf(err, "create data directory")
 
-	fmt.Println("\n=== EXTRACTING RAW DATABASE ARCHIVES ===")
-
-	// Extract CometBFT state.db
-	if err := extractDatabaseArchive(rd, snapshot.SectionTypeCometStateDB, filepath.Join(dataPath, "state.db")); err != nil {
-		fmt.Printf("Warning: Could not extract state.db: %v\n", err)
-	} else {
-		fmt.Println("  state.db extracted successfully")
-	}
-
-	// Extract CometBFT blockstore.db
-	if err := extractDatabaseArchive(rd, snapshot.SectionTypeCometBlockstoreDB, filepath.Join(dataPath, "blockstore.db")); err != nil {
-		fmt.Printf("Warning: Could not extract blockstore.db: %v\n", err)
-	} else {
-		fmt.Println("  blockstore.db extracted successfully")
-	}
-
-	// Extract Accumulate database
-	if err := extractDatabaseArchive(rd, snapshot.SectionTypeAccumulateDB, filepath.Join(dataPath, "accumulate.db")); err != nil {
-		fmt.Printf("Warning: Could not extract accumulate.db: %v\n", err)
-	} else {
-		fmt.Println("  accumulate.db extracted successfully")
-	}
-
-	fmt.Println("=== DATABASE EXTRACTION COMPLETE ===")
+	fmt.Println("\n=== NOTE: CometBFT snapshot extraction is not used in DAG-BFT ===")
+	// DAG-BFT uses a different snapshot format and restoration process
+	// Snapshot sections like state.db and blockstore.db are CometBFT-specific
 
 	fmt.Println("\n=== RESTORE COMPLETE ===")
 	fmt.Printf("Work directory: %s\n", flagMain.WorkDir)
