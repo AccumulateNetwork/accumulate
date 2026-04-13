@@ -227,7 +227,7 @@ func (p *Primary) createCertificateFromVotes(header *types.Header, votes []*type
 	}
 	p.committeeMu.RUnlock()
 
-	return types.NewCertificate(header, sigs, authors)
+	return types.NewCertificate(*header, sigs, authors)
 }
 
 // OnHeaderReceived handles an incoming header from another validator.

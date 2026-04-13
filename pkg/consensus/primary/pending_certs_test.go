@@ -35,7 +35,7 @@ func TestPendingCertificatesAdd(t *testing.T) {
 		sigs[i] = vote.Signature
 		authors[i] = uint16(i)
 	}
-	cert := types.NewCertificate(header, sigs, authors)
+	cert := types.NewCertificate(*header, sigs, authors)
 
 	// Create fake parent digests
 	var parent1, parent2 types.CertificateDigest
@@ -82,7 +82,7 @@ func TestPendingCertificatesAddNil(t *testing.T) {
 	v := newTestValidator(t)
 	header := types.NewHeader(v.pub, 0, 1, nil, nil)
 	require.NoError(t, header.Sign(v.priv))
-	cert := types.NewCertificate(header, nil, nil)
+	cert := types.NewCertificate(*header, nil, nil)
 
 	added = pc.Add(cert, nil)
 	require.False(t, added)
@@ -118,7 +118,7 @@ func TestPendingCertificatesMaxSize(t *testing.T) {
 			sigs[j] = vote.Signature
 			authors[j] = uint16(j)
 		}
-		cert := types.NewCertificate(header, sigs, authors)
+		cert := types.NewCertificate(*header, sigs, authors)
 
 		added := pc.Add(cert, []types.CertificateDigest{parent})
 		require.True(t, added, "should be able to add certificate %d", i)
@@ -129,7 +129,7 @@ func TestPendingCertificatesMaxSize(t *testing.T) {
 	// Try to add one more - should fail
 	header := types.NewHeader(validators[0].pub, 100, 1, nil, nil)
 	require.NoError(t, header.Sign(validators[0].priv))
-	cert := types.NewCertificate(header, nil, nil)
+	cert := types.NewCertificate(*header, nil, nil)
 
 	added := pc.Add(cert, []types.CertificateDigest{parent})
 	require.False(t, added)
@@ -161,7 +161,7 @@ func TestPendingCertificatesOnParentAvailable(t *testing.T) {
 		sigs[i] = vote.Signature
 		authors[i] = uint16(i)
 	}
-	cert := types.NewCertificate(header, sigs, authors)
+	cert := types.NewCertificate(*header, sigs, authors)
 
 	added := pc.Add(cert, []types.CertificateDigest{parent1, parent2})
 	require.True(t, added)
@@ -211,7 +211,7 @@ func TestPendingCertificatesMultipleWaiters(t *testing.T) {
 			sigs[j] = vote.Signature
 			authors[j] = uint16(j)
 		}
-		certs[i] = types.NewCertificate(header, sigs, authors)
+		certs[i] = types.NewCertificate(*header, sigs, authors)
 
 		added := pc.Add(certs[i], []types.CertificateDigest{sharedParent})
 		require.True(t, added)
@@ -255,7 +255,7 @@ func TestPendingCertificatesPrune(t *testing.T) {
 			sigs[j] = vote.Signature
 			authors[j] = uint16(j)
 		}
-		cert := types.NewCertificate(header, sigs, authors)
+		cert := types.NewCertificate(*header, sigs, authors)
 
 		added := pc.Add(cert, []types.CertificateDigest{parent})
 		require.True(t, added)
@@ -319,7 +319,7 @@ func TestPendingCertificatesContains(t *testing.T) {
 	v := newTestValidator(t)
 	header := types.NewHeader(v.pub, 1, 1, nil, nil)
 	require.NoError(t, header.Sign(v.priv))
-	cert := types.NewCertificate(header, nil, nil)
+	cert := types.NewCertificate(*header, nil, nil)
 
 	var parent types.CertificateDigest
 	copy(parent[:], []byte("parent__________________"))
@@ -370,7 +370,7 @@ func TestIntegrationBufferAndRecoverMissingParent(t *testing.T) {
 			sigs[j] = vote.Signature
 			authors[j] = uint16(j)
 		}
-		round1Certs[i] = types.NewCertificate(header, sigs, authors)
+		round1Certs[i] = types.NewCertificate(*header, sigs, authors)
 	}
 
 	// Create a round 2 certificate that references round 1 certificates
@@ -390,7 +390,7 @@ func TestIntegrationBufferAndRecoverMissingParent(t *testing.T) {
 		sigs[i] = vote.Signature
 		authors[i] = uint16(i)
 	}
-	round2Cert := types.NewCertificate(header, sigs, authors)
+	round2Cert := types.NewCertificate(*header, sigs, authors)
 
 	// Receive round 2 certificate FIRST (out of order)
 	// This should buffer it because round 1 parents are missing
@@ -459,7 +459,7 @@ func TestIntegrationChainedPendingCertificates(t *testing.T) {
 		sigs1[i] = vote.Signature
 		authors1[i] = uint16(i)
 	}
-	round1Cert := types.NewCertificate(header1, sigs1, authors1)
+	round1Cert := types.NewCertificate(*header1, sigs1, authors1)
 
 	// Create round 2 certificate referencing round 1
 	header2 := types.NewHeader(validators[0].pub, 2, 1, nil, []types.CertificateDigest{round1Cert.Digest()})
@@ -473,7 +473,7 @@ func TestIntegrationChainedPendingCertificates(t *testing.T) {
 		sigs2[i] = vote.Signature
 		authors2[i] = uint16(i)
 	}
-	round2Cert := types.NewCertificate(header2, sigs2, authors2)
+	round2Cert := types.NewCertificate(*header2, sigs2, authors2)
 
 	// Create round 3 certificate referencing round 2
 	header3 := types.NewHeader(validators[0].pub, 3, 1, nil, []types.CertificateDigest{round2Cert.Digest()})
@@ -487,7 +487,7 @@ func TestIntegrationChainedPendingCertificates(t *testing.T) {
 		sigs3[i] = vote.Signature
 		authors3[i] = uint16(i)
 	}
-	round3Cert := types.NewCertificate(header3, sigs3, authors3)
+	round3Cert := types.NewCertificate(*header3, sigs3, authors3)
 
 	// Receive certificates in reverse order: Round 3, then Round 2, then Round 1
 	p.OnCertificateReceived(round3Cert)
