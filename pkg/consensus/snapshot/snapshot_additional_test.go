@@ -1042,7 +1042,7 @@ func TestVerifySnapshot_WithCertificateVerificationError(t *testing.T) {
 		nil,
 		nil,
 	)
-	cert := types.NewCertificate(header, [][]byte{make([]byte, 64)}, []uint16{0}) // Invalid signature
+	cert := types.NewCertificate(*header, [][]byte{make([]byte, 64)}, []uint16{0}) // Invalid signature
 
 	snap := &Snapshot{
 		Version:      Version,
@@ -1066,7 +1066,7 @@ func TestRestoreWithOptions_CertificateVerificationFails(t *testing.T) {
 		nil,
 		nil,
 	)
-	cert := types.NewCertificate(header, [][]byte{make([]byte, 64)}, []uint16{0})
+	cert := types.NewCertificate(*header, [][]byte{make([]byte, 64)}, []uint16{0})
 
 	snap := &Snapshot{
 		Version:      Version,
