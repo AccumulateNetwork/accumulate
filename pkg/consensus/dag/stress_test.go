@@ -69,7 +69,7 @@ func createStressCert(b *testing.B, committee *types.Committee, privKeys []ed255
 	err := header.Sign(priv)
 	require.NoError(b, err)
 
-	cert := types.NewCertificate(header, nil, nil)
+	cert := types.NewCertificate(*header, nil, nil)
 
 	// Add signatures from enough validators for quorum
 	headerDigest := header.Digest()
@@ -93,7 +93,7 @@ func createStressCertT(t *testing.T, committee *types.Committee, privKeys []ed25
 	err := header.Sign(priv)
 	require.NoError(t, err)
 
-	cert := types.NewCertificate(header, nil, nil)
+	cert := types.NewCertificate(*header, nil, nil)
 
 	// Add signatures from enough validators for quorum
 	headerDigest := header.Digest()
@@ -396,7 +396,7 @@ func BenchmarkDAG_LargeBatch(b *testing.B) {
 				header := types.NewHeader(pub, types.Round(i), 0, payload, nil)
 				_ = header.Sign(priv)
 
-				cert := types.NewCertificate(header, nil, nil)
+				cert := types.NewCertificate(*header, nil, nil)
 				headerDigest := header.Digest()
 				quorumCount := 3
 				for j := 0; j < quorumCount; j++ {
