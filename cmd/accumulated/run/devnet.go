@@ -260,7 +260,7 @@ func (d *DevnetConfiguration) buildGenesis(inst *Instance, cfg *Config, nodes []
 			PartitionId:     part.ID,
 			NetworkType:     part.Type,
 			GenesisTime:     time.Now(),
-			Logger:          (*logging.Slogger)(inst.logger).With("partition", part.ID),
+			Logger:          logging.CometBFTLogger((*logging.Slogger)(inst.logger).With("partition", part.ID)),
 			GenesisGlobals:  v,
 			OperatorKeys:    [][]byte{mainPubKey},
 			ConsensusParams: nil, // Not needed for DAG-BFT
