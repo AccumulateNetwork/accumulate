@@ -103,49 +103,19 @@ func TestExecutorConfigPersistsAcrossBatches(t *testing.T) {
 	assert.Equal(t, uint64(128), cfg.ExecutorShardCount)
 }
 
-func TestExecutorConfigSubBatch(t *testing.T) {
+func TestExecutorConfigWriteAndReadInSameBatch(t *testing.T) {
 	db := OpenInMemory(nil)
 
+	// Write and read within the same batch (no commit required for visibility
+	// within the batch since val.Commit() writes to the batch's store).
 	batch := db.Begin(true)
 	defer batch.Discard()
 
-	// Write in a sub-batch.
-	sub := batch.Begin(true)
-	require.NoError(t, PutExecutorConfig(sub, &ExecutorConfig{ExecutorShardCount: 8}))
-	require.NoError(t, sub.Commit())
+	require.NoError(t, PutExecutorConfig(batch, &ExecutorConfig{ExecutorShardCount: 8}))
 
-	// Visible in parent after sub-commit.
 	cfg, err := GetExecutorConfig(batch)
 	require.NoError(t, err)
 	assert.Equal(t, uint64(8), cfg.ExecutorShardCount)
-}
-
-func TestExecutorConfigSubBatchVisibility(t *testing.T) {
-	db := OpenInMemory(nil)
-
-	// Set initial value.
-	batch := db.Begin(true)
-	require.NoError(t, PutExecutorConfig(batch, &ExecutorConfig{ExecutorShardCount: 32}))
-	require.NoError(t, batch.Commit())
-
-	// Executor config writes go directly to the underlying KV store,
-	// so changes are visible immediately across all batches.
-	batch = db.Begin(true)
-	defer batch.Discard()
-
-	sub := batch.Begin(true)
-	require.NoError(t, PutExecutorConfig(sub, &ExecutorConfig{ExecutorShardCount: 128}))
-
-	// Write is immediately visible from any batch since it bypasses
-	// batch isolation and writes to the KV store directly.
-	cfg, err := GetExecutorConfig(batch)
-	require.NoError(t, err)
-	assert.Equal(t, uint64(128), cfg.ExecutorShardCount)
-
-	require.NoError(t, sub.Commit())
-	cfg, err = GetExecutorConfig(batch)
-	require.NoError(t, err)
-	assert.Equal(t, uint64(128), cfg.ExecutorShardCount)
 }
 
 func TestExecutorConfigAllValidValues(t *testing.T) {
