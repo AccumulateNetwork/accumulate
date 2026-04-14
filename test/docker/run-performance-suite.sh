@@ -245,6 +245,18 @@ run_test_config() {
 
     log_success "Network started ($validators validators, $bvns BVN(s))"
 
+    # Verify sharding is enabled (64 shards)
+    log "Verifying executor configuration (expecting 64 shards)..."
+    sleep 3
+    local shard_logs=$(docker compose logs 2>&1 | grep -c "shard-count=64" || echo "0")
+    if [ "$shard_logs" -eq 0 ]; then
+        log_error "WARNING: No logs showing shard-count=64. Sharding may not be enabled."
+        log_error "Docker logs snippet:"
+        docker compose logs 2>&1 | grep -i "shard\|executor" | head -10
+    else
+        log_success "Confirmed: 64-shard execution enabled (found $shard_logs log entries)"
+    fi
+
     # Start monitoring
     log "Starting monitoring..."
     mkdir -p "/tmp/perf-test-monitoring/$test_id"
