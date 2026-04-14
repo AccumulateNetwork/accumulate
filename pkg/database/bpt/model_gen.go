@@ -25,6 +25,10 @@ type BPT struct {
 
 	state values.Value[*stateData]
 	root  *rootRecord
+
+	// sharded delegates core operations to a ShardedBPT when set.
+	// This field is not generated; it is set by EnableSharding.
+	sharded *ShardedBPT
 }
 
 func (c *BPT) Key() *record.Key { return c.key }

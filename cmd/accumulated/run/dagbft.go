@@ -181,6 +181,18 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		},
 	}
 
+	// Load executor configuration (shard count) from database
+	if err := db.View(func(batch *database.Batch) error {
+		cfg, err := database.GetExecutorConfig(batch)
+		if err != nil {
+			return err
+		}
+		execOpts.ShardCount = int(cfg.ExecutorShardCount)
+		return nil
+	}); err != nil {
+		slog.Warn("Failed to load executor config, sharding disabled", "error", err, "partition", s.Partition.ID)
+	}
+
 	// Configure dispatcher
 	if *s.EnableDirectDispatch {
 		execOpts.NewDispatcher = func() multiexec.Dispatcher {

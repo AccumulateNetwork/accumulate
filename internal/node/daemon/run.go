@@ -488,6 +488,12 @@ func (d *Daemon) startApp(caughtUp <-chan struct{}) (types.Application, error) {
 		return nil, errors.UnknownError.WithFormat("start conductor: %v", err)
 	}
 
+	if execOpts.ShardCount > 0 {
+		d.Logger.Info("Daemon starting executor", "shard-count", execOpts.ShardCount, "sharding", "ENABLED")
+	} else {
+		d.Logger.Info("Daemon starting executor", "sharding", "DISABLED")
+	}
+
 	exec, err := execute.NewExecutor(execOpts)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("initialize chain executor: %v", err)

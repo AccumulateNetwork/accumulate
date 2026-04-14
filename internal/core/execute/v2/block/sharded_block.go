@@ -15,6 +15,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -104,18 +105,22 @@ func (sb *ShardedBlock) Process(envelope *messaging.Envelope) ([]*protocol.Trans
 		return sb.inner.Process(envelope)
 	}
 
-	// Classify messages by shard
+	// Classify messages by shard. Transaction messages are routed by their
+	// principal account. Synthetic messages (SyntheticMessage, BadSyntheticMessage)
+	// are routed by the principal of the inner transaction so they execute on the
+	// correct shard and see consistent state. All other messages (signatures,
+	// anchors, etc.) are processed sequentially after shard execution.
 	var nonTxnMsgs []messaging.Message
 	shardBuckets := make(map[int]*shardWork, sb.shardCount)
 
 	for _, msg := range messages {
-		txnMsg, ok := msg.(*messaging.TransactionMessage)
-		if !ok || txnMsg.Transaction == nil || txnMsg.Transaction.Header.Principal == nil {
+		principal := extractShardablePrincipal(msg)
+		if principal == nil {
 			nonTxnMsgs = append(nonTxnMsgs, msg)
 			continue
 		}
 
-		sid := sb.dispatcher.RouteToShard(txnMsg.Transaction.Header.Principal)
+		sid := sb.dispatcher.RouteToShard(principal)
 		sw, exists := shardBuckets[sid]
 		if !exists {
 			sw = &shardWork{shardID: sid}
@@ -222,6 +227,45 @@ func (sb *ShardedBlock) Process(envelope *messaging.Envelope) ([]*protocol.Trans
 	}
 
 	return allStatuses, nil
+}
+
+// extractShardablePrincipal returns the principal URL for shard routing, or nil
+// if the message cannot be routed to a shard. It handles:
+//   - TransactionMessage: returns the transaction principal
+//   - SyntheticMessage / BadSyntheticMessage: unwraps through SequencedMessage
+//     to find the inner TransactionMessage principal
+func extractShardablePrincipal(msg messaging.Message) *url.URL {
+	switch m := msg.(type) {
+	case *messaging.TransactionMessage:
+		if m.Transaction != nil && m.Transaction.Header.Principal != nil {
+			return m.Transaction.Header.Principal
+		}
+
+	case *messaging.SyntheticMessage:
+		return extractPrincipalFromSynthFields(m.Message)
+
+	case *messaging.BadSyntheticMessage:
+		return extractPrincipalFromSynthFields(m.Message)
+	}
+	return nil
+}
+
+// extractPrincipalFromSynthFields unwraps a synthetic message's inner message
+// (SequencedMessage → TransactionMessage) to find the principal URL.
+func extractPrincipalFromSynthFields(inner messaging.Message) *url.URL {
+	if inner == nil {
+		return nil
+	}
+	// Unwrap SequencedMessage if present
+	if seq, ok := inner.(*messaging.SequencedMessage); ok {
+		inner = seq.Message
+	}
+	if txn, ok := inner.(*messaging.TransactionMessage); ok {
+		if txn.Transaction != nil && txn.Transaction.Header.Principal != nil {
+			return txn.Transaction.Header.Principal
+		}
+	}
+	return nil
 }
 
 // ShardedBlockMetrics provides metrics about sharded block execution.
