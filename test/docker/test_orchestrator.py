@@ -88,7 +88,8 @@ class TestOrchestrator:
         self.log_section(f"Test {config.test_id}: {config.description}")
         logger.info(f"Configuration: {config.validators} validators, {config.bvns} BVN(s)")
 
-        docker = DockerManager(Path.cwd() / "docker-compose.yml")
+        # TODO: Generate docker-compose-{validators}-val-{bvns}-bvn.yml dynamically
+        docker = DockerManager(Path.cwd() / f"docker-compose-{config.validators}-val-{config.bvns}-bvn.yml")
 
         try:
             # Pre-test cleanup
