@@ -81,7 +81,7 @@ func NewNode(ctx context.Context, network string, key ed25519.PrivateKey, app Ap
 	n.app = app
 	n.network = network
 	n.context = logging.With(ctx, "module", "consensus")
-	n.mempool = newMempool((*logging.Slogger)(slog.Default().With("module", "consensus")))
+	n.mempool = newMempool(logging.CometBFTLogger((*logging.Slogger)(slog.Default().With("module", "consensus"))))
 	return n
 }
 
