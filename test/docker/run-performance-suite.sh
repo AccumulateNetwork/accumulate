@@ -59,6 +59,59 @@ log_success() {
     echo -e "${GREEN}[SUCCESS] $*${NC}" | tee -a "$SUITE_LOG"
 }
 
+# Complete Docker cleanup - wipe everything
+docker_cleanup() {
+    log "Performing complete Docker cleanup..."
+
+    # Stop all accumulate containers
+    docker ps -a --filter "label=accumulate=true" -q 2>/dev/null | xargs -r docker stop 2>/dev/null || true
+    docker ps -a --filter "label=accumulate=true" -q 2>/dev/null | xargs -r docker rm -f 2>/dev/null || true
+
+    # Stop containers by name pattern
+    docker ps -a 2>/dev/null | grep -E "acc-|accumulate" | awk '{print $1}' | xargs -r docker stop 2>/dev/null || true
+    docker ps -a 2>/dev/null | grep -E "acc-|accumulate" | awk '{print $1}' | xargs -r docker rm -f 2>/dev/null || true
+
+    # Remove networks
+    docker network ls 2>/dev/null | grep -E "acc-network|accumulate" | awk '{print $1}' | xargs -r docker network rm 2>/dev/null || true
+
+    # Remove volumes
+    docker volume ls 2>/dev/null | grep -E "acc-|accumulate" | awk '{print $2}' | xargs -r docker volume rm -f 2>/dev/null || true
+
+    # Prune dangling images/volumes/networks (but not stopped containers we might need)
+    docker volume prune -f --filter "label!=keep" 2>/dev/null || true
+
+    # Clear local database directories
+    rm -rf /tmp/accumulate-* 2>/dev/null || true
+    rm -rf /tmp/perf-test-data/* 2>/dev/null || true
+    rm -rf /tmp/perf-test-monitoring/* 2>/dev/null || true
+
+    # Wait for cleanup to settle
+    sleep 3
+
+    log_success "Docker cleanup complete"
+}
+
+# Verify Docker is clean
+verify_docker_clean() {
+    log "Verifying Docker is clean..."
+
+    local acc_containers=$(docker ps -a 2>/dev/null | grep -c -E "acc-|accumulate" || echo 0)
+    if [ "$acc_containers" -gt 0 ]; then
+        log_error "Found $acc_containers lingering accumulate containers. Forcing cleanup..."
+        docker ps -a 2>/dev/null | grep -E "acc-|accumulate"
+        docker system prune -f 2>/dev/null || true
+        sleep 2
+    fi
+
+    local acc_volumes=$(docker volume ls 2>/dev/null | grep -c -E "acc-|accumulate" || echo 0)
+    if [ "$acc_volumes" -gt 0 ]; then
+        log_error "Found $acc_volumes lingering accumulate volumes. Forcing cleanup..."
+        docker volume ls 2>/dev/null | grep -E "acc-|accumulate"
+    fi
+
+    log_success "Docker verification complete"
+}
+
 # Build binary once
 build_binary() {
     log_section "Building accumulated binary"
@@ -157,6 +210,11 @@ run_test_config() {
     # Initialize results CSV
     echo "TPS_TARGET,SUBMITTED,SUCCESS,FAILED,ERROR_RATE,ACTUAL_TPS,P50_LATENCY,P99_LATENCY,CPU_PCT,MEMORY_PCT,PUSHBACK_DETECTED" > "$config_results"
 
+    # Complete Docker cleanup before this test
+    log "Wiping Docker state before test..."
+    docker_cleanup
+    verify_docker_clean
+
     # Generate docker-compose
     local compose_file=$(generate_docker_compose "$validators" "$bvns")
 
@@ -164,10 +222,14 @@ run_test_config() {
     log "Starting Docker network..."
     export COMPOSE_FILE="$compose_file"
     cd "$SCRIPT_DIR"
+
+    # One more explicit cleanup via compose
     docker compose down -v 2>/dev/null || true
-    sleep 2
+    sleep 3
+
     docker compose build > /dev/null 2>&1 || {
         log_error "Docker build failed"
+        docker_cleanup
         return 1
     }
     docker compose up -d > /dev/null 2>&1
@@ -237,11 +299,18 @@ run_test_config() {
         sleep 5
     done
 
-    # Cleanup
-    log "Stopping network..."
+    # Cleanup - aggressive wipe for this configuration
+    log "Stopping network and cleaning Docker state..."
     docker compose down -v 2>/dev/null || true
     pkill -f "monitor.py" 2>/dev/null || true
     unset COMPOSE_FILE
+
+    # Wait for containers to fully stop
+    sleep 3
+
+    # Wipe all Docker state to prevent contamination of next test
+    docker_cleanup
+    verify_docker_clean
 
     log_success "Test $test_id complete. Results in $config_results"
 }
@@ -310,6 +379,11 @@ main() {
     log "Test configurations: ${#CONFIGS[@]}"
     log "TPS sequence: ${TPS_SEQUENCE[*]}"
 
+    # Complete cleanup before starting
+    log_section "Pre-Suite Docker Cleanup"
+    docker_cleanup
+    verify_docker_clean
+
     # Build once
     build_binary
 
@@ -323,6 +397,9 @@ main() {
         else
             ((failed++))
             log_error "Test $test_id failed"
+            # Clean up aggressively after failure to prevent state bleed
+            docker_cleanup
+            verify_docker_clean
         fi
     done
 
@@ -335,6 +412,12 @@ main() {
     log "Failed: $failed"
     log "Results directory: $RESULTS_DIR"
     log "Full log: $SUITE_LOG"
+
+    # Final cleanup to leave system clean
+    log_section "Post-Suite Docker Cleanup"
+    docker_cleanup
+    verify_docker_clean
+    log_success "All resources cleaned up"
 }
 
 main "$@"
