@@ -10,7 +10,9 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"runtime"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -546,4 +548,342 @@ func TestCrossShard_DispatchBlockMultiShard(t *testing.T) {
 	}
 	assert.Greater(t, nonEmpty, 1,
 		"transactions should be distributed across multiple shards")
+}
+
+// TestCrossShard_ShardMutexOrdering verifies that per-shard mutexes do not
+// cause deadlocks when multiple goroutines access different shards concurrently.
+// Since each shard has its own independent mutex, there is no lock ordering
+// concern -- but we verify this holds under contention.
+func TestCrossShard_ShardMutexOrdering(t *testing.T) {
+	db := database.OpenInMemory(nil)
+	se, err := NewShardedExecutor(4, db)
+	require.NoError(t, err)
+
+	se.BeginBlock()
+
+	// Pre-build account URLs for each shard.
+	shardAccounts := make(map[int]*url.URL)
+	for i := 0; i < 10000; i++ {
+		u := mustParseUrl(fmt.Sprintf("acc://lockorder%d.acme/tokens", i))
+		s := se.RouteAccount(u)
+		if _, ok := shardAccounts[s]; !ok {
+			shardAccounts[s] = u
+		}
+		if len(shardAccounts) == 4 {
+			break
+		}
+	}
+
+	// Spawn goroutines that each access multiple shards in different orders.
+	// If there were a lock ordering problem, this would deadlock.
+	const goroutines = 20
+	const iterations = 100
+	done := make(chan struct{})
+	go func() {
+		var wg sync.WaitGroup
+		for g := 0; g < goroutines; g++ {
+			wg.Add(1)
+			go func(id int) {
+				defer wg.Done()
+				for i := 0; i < iterations; i++ {
+					// Access shards in varying order based on goroutine ID.
+					for s := 0; s < 4; s++ {
+						shardID := (s + id) % 4
+						if u, ok := shardAccounts[shardID]; ok {
+							shard := se.Shard(shardID)
+							shard.Account(u)
+						}
+					}
+				}
+			}(g)
+		}
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// Completed without deadlock.
+	case <-time.After(5 * time.Second):
+		t.Fatal("deadlock detected: goroutines did not complete within timeout")
+	}
+
+	se.Discard()
+}
+
+// TestCrossShard_DeadlockPrevention verifies that the sharding design prevents
+// deadlocks by construction. Since accounts are deterministically assigned to
+// shards and each shard has its own independent batch, there is no cross-shard
+// locking. This test verifies that concurrent multi-shard executions complete
+// without deadlock even when they touch overlapping shard sets.
+func TestCrossShard_DeadlockPrevention(t *testing.T) {
+	db := database.OpenInMemory(nil)
+	se, err := NewShardedExecutor(4, db)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	const rounds = 10
+
+	for round := 0; round < rounds; round++ {
+		se.BeginBlock()
+
+		// Execute two concurrent multi-shard transactions that touch overlapping shards:
+		// Transaction A: shards [0, 1]
+		// Transaction B: shards [1, 2]
+		// If locking were done per-shard with wrong ordering, shard 1 could deadlock.
+
+		var wg sync.WaitGroup
+		errCh := make(chan error, 2)
+
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			_, err := se.ExecuteTransactionOnShards(ctx, []int{0, 1},
+				func(shard *PerShardExecutor) (interface{}, error) {
+					runtime.Gosched() // encourage interleaving
+					return fmt.Sprintf("txA-shard%d", shard.ID), nil
+				},
+			)
+			if err != nil {
+				errCh <- fmt.Errorf("txA round %d: %w", round, err)
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			_, err := se.ExecuteTransactionOnShards(ctx, []int{1, 2},
+				func(shard *PerShardExecutor) (interface{}, error) {
+					runtime.Gosched() // encourage interleaving
+					return fmt.Sprintf("txB-shard%d", shard.ID), nil
+				},
+			)
+			if err != nil {
+				errCh <- fmt.Errorf("txB round %d: %w", round, err)
+			}
+		}()
+
+		done := make(chan struct{})
+		go func() {
+			wg.Wait()
+			close(done)
+		}()
+
+		select {
+		case <-done:
+			// No deadlock.
+		case <-time.After(5 * time.Second):
+			t.Fatalf("deadlock detected in round %d", round)
+		}
+
+		close(errCh)
+		for err := range errCh {
+			// Errors are acceptable (batches may conflict), but no deadlock.
+			t.Logf("round %d error (acceptable): %v", round, err)
+		}
+
+		se.Discard()
+	}
+}
+
+// TestCrossShard_ConcurrentCrossAndSameShard verifies that cross-shard
+// transactions and same-shard transactions can execute concurrently without
+// interference. Same-shard transactions should not be blocked or affected by
+// cross-shard work on other shards.
+func TestCrossShard_ConcurrentCrossAndSameShard(t *testing.T) {
+	db := database.OpenInMemory(nil)
+	se, err := NewShardedExecutor(4, db)
+	require.NoError(t, err)
+
+	se.BeginBlock()
+	ctx := context.Background()
+
+	// Track execution order and completions.
+	var sameShardDone atomic.Int32
+	var crossShardDone atomic.Int32
+
+	var wg sync.WaitGroup
+
+	// Launch same-shard transactions on shards 0 and 3.
+	for _, shardID := range []int{0, 3} {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			_, err := se.ExecuteTransactionOnShards(ctx, []int{id},
+				func(shard *PerShardExecutor) (interface{}, error) {
+					// Simulate some work.
+					time.Sleep(time.Millisecond)
+					sameShardDone.Add(1)
+					return fmt.Sprintf("same-shard-%d", shard.ID), nil
+				},
+			)
+			assert.NoError(t, err)
+		}(shardID)
+	}
+
+	// Launch a cross-shard transaction on shards 1 and 2.
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_, err := se.ExecuteTransactionOnShards(ctx, []int{1, 2},
+			func(shard *PerShardExecutor) (interface{}, error) {
+				// Simulate heavier cross-shard work.
+				time.Sleep(2 * time.Millisecond)
+				crossShardDone.Add(1)
+				return fmt.Sprintf("cross-shard-%d", shard.ID), nil
+			},
+		)
+		assert.NoError(t, err)
+	}()
+
+	wg.Wait()
+
+	assert.Equal(t, int32(2), sameShardDone.Load(),
+		"both same-shard transactions should complete")
+	assert.Equal(t, int32(2), crossShardDone.Load(),
+		"cross-shard execution should call function on both shards")
+
+	se.Discard()
+}
+
+// TestCrossShard_MultiShardSpanning verifies that a transaction can span
+// all available shards and that the dispatcher correctly identifies all of them.
+func TestCrossShard_MultiShardSpanning(t *testing.T) {
+	d := NewTransactionDispatcher(2) // 4 shards
+
+	// Build a TransferCredits with recipients on all 4 shards.
+	sender := mustParseUrl("acc://spanning.acme/credits")
+	senderShard := d.RouteToShard(sender)
+
+	// Find one recipient per shard (excluding sender's shard).
+	shardRecipients := make(map[int]*url.URL)
+	shardRecipients[senderShard] = sender // sender covers its own shard
+	for i := 0; i < 10000 && len(shardRecipients) < 4; i++ {
+		u := mustParseUrl(fmt.Sprintf("acc://span%d.acme/credits", i))
+		s := d.RouteToShard(u)
+		if _, ok := shardRecipients[s]; !ok {
+			shardRecipients[s] = u
+		}
+	}
+	require.Equal(t, 4, len(shardRecipients), "should find accounts on all 4 shards")
+
+	// Build recipients list (excluding sender).
+	var recipients []*protocol.CreditRecipient
+	for s, u := range shardRecipients {
+		if s != senderShard {
+			recipients = append(recipients, &protocol.CreditRecipient{Url: u})
+		}
+	}
+
+	txn := &protocol.Transaction{
+		Header: protocol.TransactionHeader{Principal: sender},
+		Body: &protocol.TransferCredits{
+			To: recipients,
+		},
+	}
+
+	result := d.RouteTransaction(txn)
+
+	// All 4 shards should be touched.
+	assert.Equal(t, 4, len(result.Portions),
+		"transaction spanning all shards should touch all 4")
+
+	// Only the sender shard should be primary.
+	primaryCount := 0
+	for _, portion := range result.Portions {
+		if portion.IsPrimary {
+			primaryCount++
+		}
+	}
+	assert.Equal(t, 1, primaryCount, "exactly one shard should be primary")
+	assert.True(t, result.Portions[senderShard].IsPrimary)
+}
+
+// BenchmarkCrossShardExecution measures the overhead of cross-shard execution
+// compared to single-shard execution.
+func BenchmarkCrossShardExecution(b *testing.B) {
+	db := database.OpenInMemory(nil)
+	se, err := NewShardedExecutor(4, db)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	ctx := context.Background()
+	workFn := func(shard *PerShardExecutor) (interface{}, error) {
+		return shard.ID, nil
+	}
+
+	b.Run("single_shard", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			se.BeginBlock()
+			_, err := se.ExecuteTransactionOnShards(ctx, []int{0}, workFn)
+			if err != nil {
+				b.Fatal(err)
+			}
+			se.Discard()
+		}
+	})
+
+	b.Run("two_shards", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			se.BeginBlock()
+			_, err := se.ExecuteTransactionOnShards(ctx, []int{0, 1}, workFn)
+			if err != nil {
+				b.Fatal(err)
+			}
+			se.Discard()
+		}
+	})
+
+	b.Run("four_shards", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			se.BeginBlock()
+			_, err := se.ExecuteTransactionOnShards(ctx, []int{0, 1, 2, 3}, workFn)
+			if err != nil {
+				b.Fatal(err)
+			}
+			se.Discard()
+		}
+	})
+}
+
+// BenchmarkDispatchRouting measures the cost of routing transactions to shards.
+func BenchmarkDispatchRouting(b *testing.B) {
+	d := NewTransactionDispatcher(4) // 16 shards
+	acct := mustParseUrl("acc://bench.acme/tokens")
+
+	b.Run("route_single", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			d.RouteToShard(acct)
+		}
+	})
+
+	b.Run("route_transaction", func(b *testing.B) {
+		txn := &protocol.Transaction{
+			Header: protocol.TransactionHeader{Principal: acct},
+			Body: &protocol.SendTokens{
+				To: []*protocol.TokenRecipient{
+					{Url: mustParseUrl("acc://dest.acme/tokens"), Amount: *big.NewInt(1)},
+				},
+			},
+		}
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			d.RouteTransaction(txn)
+		}
+	})
+
+	b.Run("dispatch_block_50txns", func(b *testing.B) {
+		txns := make([]*protocol.Transaction, 50)
+		for i := range txns {
+			txns[i] = &protocol.Transaction{
+				Header: protocol.TransactionHeader{
+					Principal: mustParseUrl(fmt.Sprintf("acc://benchuser%d.acme/tokens", i)),
+				},
+				Body: &protocol.WriteData{},
+			}
+		}
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			d.DispatchBlock(txns)
+		}
+	})
 }
