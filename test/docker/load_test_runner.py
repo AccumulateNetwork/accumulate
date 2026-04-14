@@ -41,10 +41,19 @@ class LoadTestRunner:
         logger.info(f"Running load test: {target_tps} TPS for {duration_seconds}s")
 
         try:
-            # Build command - call parallel-loadtest with TPS target
+            # Build command - parallel-loadtest uses adaptive ramping:
+            # -start-tps: starting TPS
+            # -min-tps: minimum TPS (ramp down to this first)
+            # -max-tps: maximum TPS (ramp up limit)
+            # For fixed-rate testing, set start=min=max=target to hold steady
             cmd = [
                 "go", "run", "parallel-loadtest.go",
-                "-target-tps", str(target_tps),
+                "-start-tps", str(target_tps),
+                "-min-tps", str(target_tps),
+                "-max-tps", str(target_tps),
+                "-ramp-down-duration", "0s",  # No ramp-down for fixed rate
+                "-ramp-up-duration", "0s",    # No ramp-up for fixed rate
+                "-error-threshold", "0.05",   # 5% error threshold for pushback
                 "-duration", f"{duration_seconds}s",
             ]
 
