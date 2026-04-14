@@ -26,9 +26,11 @@ TEST_CONFIGS: List[TestConfig] = [
     TestConfig(4, 3, "C2", "Triple-BVN-4-Validators"),
 ]
 
-# TPS sequence: start low, increment until pushback detected
-TPS_SEQUENCE: List[int] = [1000, 2000, 3000, 5000, 7000, 10000, 12000]
+# TPS sequence: start at 1000, increment by 1000-2000 until 15000 or pushback
+TPS_SEQUENCE: List[int] = [1000, 2000, 3000, 5000, 7000, 10000, 12000, 15000]
 
 # Test parameters
-INCREMENT_DURATION_SECONDS = 60
-ERROR_THRESHOLD = 0.05  # 5% error rate triggers pushback
+# Total test duration ~15 minutes across all TPS levels, stop on pushback
+# 8 levels × ~112 seconds = ~15 minutes total
+INCREMENT_DURATION_SECONDS = 112  # ~2 minutes per TPS level (15 min total / 8 levels)
+ERROR_THRESHOLD = 0.05  # 5% error rate triggers pushback, stop incrementing
