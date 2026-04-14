@@ -16,7 +16,10 @@ from pathlib import Path
 
 from test_config import TEST_CONFIGS, TPS_SEQUENCE, INCREMENT_DURATION_SECONDS, ERROR_THRESHOLD
 from docker_manager import DockerManager
+from docker_generator import generate_docker_compose
+from load_test_runner import LoadTestRunner, LoadTestMetrics
 from failure_reporter import FailureReport, FailureRegistry
+from results_aggregator import ResultsAggregator, ConfigResult
 
 
 # Setup logging
@@ -36,6 +39,8 @@ class TestOrchestrator:
         self.results_dir.mkdir(parents=True, exist_ok=True)
         self.suite_log = self.results_dir / f"suite-{datetime.now().strftime('%Y%m%d-%H%M%S')}.log"
         self.failure_registry = FailureRegistry()
+        self.results_aggregator = ResultsAggregator(self.results_dir)
+        self.load_test_runner = LoadTestRunner(Path.cwd())
         self.passed = 0
         self.failed = 0
 
@@ -88,8 +93,9 @@ class TestOrchestrator:
         self.log_section(f"Test {config.test_id}: {config.description}")
         logger.info(f"Configuration: {config.validators} validators, {config.bvns} BVN(s)")
 
-        # TODO: Generate docker-compose-{validators}-val-{bvns}-bvn.yml dynamically
-        docker = DockerManager(Path.cwd() / f"docker-compose-{config.validators}-val-{config.bvns}-bvn.yml")
+        # Generate docker-compose for this configuration
+        compose_file = generate_docker_compose(config, Path.cwd())
+        docker = DockerManager(compose_file)
 
         try:
             # Pre-test cleanup
@@ -118,17 +124,20 @@ class TestOrchestrator:
             if not shards_ok:
                 logger.warning("⚠ No 64-shard confirmation found in logs")
                 logger.warning("Executor messages found:")
-                for msg in shard_msgs:
+                for msg in shard_msgs[:5]:  # Show first 5
                     logger.warning(f"  {msg[:100]}")
-                # Continue anyway - might just be logging issue
             else:
                 logger.info(f"✓ Confirmed: 64-shard execution enabled ({len(shard_msgs)} confirmations)")
 
-            # Run incremental TPS tests
-            self._run_tps_sequence(config, docker)
-
-            logger.info(f"✓ Test {config.test_id} completed successfully")
-            self.passed += 1
+            # Run incremental TPS tests and collect results
+            config_result = self._run_tps_sequence(config, docker)
+            if config_result:
+                self.results_aggregator.add_config_result(config_result)
+                logger.info(f"✓ Test {config.test_id} completed successfully")
+                self.passed += 1
+            else:
+                logger.error(f"✗ Test {config.test_id} failed to produce results")
+                self.failed += 1
 
         except Exception as e:
             logger.error(f"Unexpected error in test {config.test_id}: {e}")
@@ -149,21 +158,66 @@ class TestOrchestrator:
         logger.info(f"Each level: {INCREMENT_DURATION_SECONDS}s (~2 min/level, ~15 min total)")
         logger.info(f"Stop condition: error rate > {ERROR_THRESHOLD*100}% OR TPS reaches 15000")
 
+        metrics_by_tps = {}
+        max_sustained_tps = 0
+        pushback_tps = 0
+        stable_min_tps = 0
+        stable_max_tps = 0
+
         for i, tps in enumerate(TPS_SEQUENCE, 1):
             logger.info(f"\n--- Level {i}/{len(TPS_SEQUENCE)}: {tps} TPS ({INCREMENT_DURATION_SECONDS}s) ---")
 
-            # TODO: Call parallel-loadtest.go with TPS target and parse results
-            logger.info(f"[PLACEHOLDER] Would run: parallel-loadtest -target-tps {tps} -duration {INCREMENT_DURATION_SECONDS}s")
-            logger.info(f"[PLACEHOLDER] Would parse metrics: submitted, success, failed, error_rate, actual_tps")
+            # Run load test
+            success, metrics = self.load_test_runner.run(tps, INCREMENT_DURATION_SECONDS)
 
-            # TODO: Detect pushback and stop incrementing
-            # error_rate = parse_result(output)
-            # if error_rate > ERROR_THRESHOLD:
-            #     logger.warning(f"PUSHBACK DETECTED at {tps} TPS (error rate: {error_rate*100:.1f}%)")
-            #     break
+            if not success or not metrics:
+                logger.error(f"Load test failed at {tps} TPS")
+                # Continue to next level anyway
+                continue
 
-            # Simulate test run for now
-            time.sleep(2)
+            # Store metrics
+            metrics_dict = {
+                'submitted': metrics.submitted,
+                'success': metrics.success,
+                'failed': metrics.failed,
+                'error_rate': metrics.error_rate,
+                'actual_tps': metrics.actual_tps,
+                'p50_latency': metrics.p50_latency,
+                'p99_latency': metrics.p99_latency,
+            }
+            metrics_by_tps[tps] = metrics_dict
+
+            # Track stable range (error < 1%)
+            if metrics.error_rate < 0.01:
+                if stable_min_tps == 0:
+                    stable_min_tps = tps
+                stable_max_tps = tps
+
+            # Update max sustained
+            max_sustained_tps = tps
+
+            # Check for pushback
+            if metrics.error_rate > ERROR_THRESHOLD:
+                logger.warning(f"⚠ PUSHBACK DETECTED at {tps} TPS (error rate: {metrics.error_rate*100:.2f}%)")
+                pushback_tps = tps
+                break
+
+        # Create config result
+        config_result = ConfigResult(
+            test_id=config.test_id,
+            description=config.description,
+            validators=config.validators,
+            bvns=config.bvns,
+            metrics_by_tps=metrics_by_tps,
+            max_sustained_tps=max_sustained_tps,
+            pushback_detected_at=pushback_tps,
+            stable_range_tps=(stable_min_tps, stable_max_tps) if stable_min_tps else (0, 0),
+        )
+
+        # Save CSV for this config
+        self.results_aggregator.generate_csv(config_result)
+
+        return config_result
 
     def _handle_failure(self, config, error_msg: str, stage: str, docker):
         """Capture failure details for debugging team."""
@@ -176,12 +230,18 @@ class TestOrchestrator:
         logger.error(f"Failure report saved: {filepath}")
 
     def print_summary(self):
-        """Print test suite summary."""
+        """Print test suite summary and generate reports."""
         self.log_section("Test Suite Complete")
         logger.info(f"Passed: {self.passed}/{len(TEST_CONFIGS)}")
         logger.info(f"Failed: {self.failed}/{len(TEST_CONFIGS)}")
         logger.info(f"Results directory: {self.results_dir}")
         logger.info(f"Suite log: {self.suite_log}")
+
+        # Generate comprehensive performance report
+        if self.results_aggregator.config_results:
+            logger.info("\nGenerating performance report...")
+            report_file = self.results_aggregator.generate_summary_report()
+            logger.info(f"✓ Report: {report_file}")
 
         if self.failed > 0:
             summary = self.failure_registry.summary()
