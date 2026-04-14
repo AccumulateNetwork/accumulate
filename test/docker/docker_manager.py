@@ -5,6 +5,7 @@ import time
 import logging
 from typing import List, Tuple
 from pathlib import Path
+import json
 
 
 logger = logging.getLogger(__name__)
@@ -105,14 +106,14 @@ class DockerManager:
         """Start Docker Compose network."""
         logger.info("Starting Docker Compose network...")
 
-        # Build
-        rc, out, err = self.run(["docker", "compose", "build"])
+        # Build (with explicit compose file)
+        rc, out, err = self.run(["docker", "compose", "-f", str(self.compose_file), "build"], timeout=600)
         if rc != 0:
             logger.error(f"Docker build failed: {err}")
             return False
 
-        # Up
-        rc, out, err = self.run(["docker", "compose", "up", "-d"])
+        # Up (with explicit compose file)
+        rc, out, err = self.run(["docker", "compose", "-f", str(self.compose_file), "up", "-d"])
         if rc != 0:
             logger.error(f"Docker up failed: {err}")
             return False
@@ -123,28 +124,54 @@ class DockerManager:
     def compose_down(self) -> bool:
         """Stop and remove Docker Compose network."""
         logger.info("Stopping Docker Compose network...")
-        self.run(["docker", "compose", "down", "-v"])
+        self.run(["docker", "compose", "-f", str(self.compose_file), "down", "-v"])
         time.sleep(2)
         return True
 
-    def wait_healthy(self, timeout: int = 60) -> bool:
-        """Wait for all containers to be healthy."""
+    def wait_healthy(self, timeout: int = 120) -> bool:
+        """Wait for all containers to be healthy and nodes to respond to JSON-RPC."""
         logger.info(f"Waiting for containers to be healthy (timeout {timeout}s)...")
         start = time.time()
 
+        # First, wait for all containers to be running
         while time.time() - start < timeout:
-            rc, out, err = self.run(["docker", "compose", "ps"])
-            if "healthy" in out and "unhealthy" not in out:
-                logger.info("All containers healthy")
-                return True
-            time.sleep(5)
+            rc, out, err = self.run(["docker", "compose", "-f", str(self.compose_file), "ps"])
+            if "running" in out and "Exit" not in out:
+                logger.info("All containers running")
+                break
+            time.sleep(2)
 
-        logger.error("Containers did not reach healthy state")
+        # Then, wait for JSON-RPC to respond on validator ports
+        logger.info("Waiting for JSON-RPC to be responsive...")
+        remaining = timeout - (time.time() - start)
+        json_rpc_start = time.time()
+
+        while time.time() - json_rpc_start < remaining:
+            try:
+                # Try to reach a validator on standard port 26660 via JSON-RPC
+                # /v3 endpoint requires POST with valid JSON-RPC request
+                result = subprocess.run(
+                    ["curl", "-s", "-X", "POST", "http://localhost:26660/v3",
+                     "-H", "Content-Type: application/json",
+                     "-d", '{"jsonrpc":"2.0","method":"jrpc_methods","params":[],"id":1}'],
+                    capture_output=True,
+                    text=True,
+                    timeout=5
+                )
+                if result.returncode == 0 and "jsonrpc" in result.stdout:
+                    logger.info("✓ JSON-RPC is responding")
+                    return True
+            except:
+                pass
+
+            time.sleep(3)
+
+        logger.error("Containers or JSON-RPC did not become healthy")
         return False
 
     def get_logs(self, max_lines: int = 500) -> str:
         """Get Docker Compose logs."""
-        rc, out, err = self.run(["docker", "compose", "logs"])
+        rc, out, err = self.run(["docker", "compose", "-f", str(self.compose_file), "logs"])
         lines = out.split('\n')
         return '\n'.join(lines[-max_lines:])
 
@@ -175,5 +202,5 @@ class DockerManager:
 
     def ps(self) -> str:
         """Get docker compose ps output."""
-        rc, out, err = self.run(["docker", "compose", "ps"])
+        rc, out, err = self.run(["docker", "compose", "-f", str(self.compose_file), "ps"])
         return out

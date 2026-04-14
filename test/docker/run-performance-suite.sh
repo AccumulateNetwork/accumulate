@@ -40,6 +40,66 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+# Text failure capture for debugging team
+capture_failure() {
+    local test_id=$1
+    local error_msg=$2
+    local stage=$3
+
+    local failure_file="$RESULTS_DIR/FAILED-${test_id}-$(date +%Y%m%d-%H%M%S).txt"
+
+    log "Capturing failure details to $failure_file"
+
+    cat > "$failure_file" << EOF
+========================================
+FAILURE REPORT
+========================================
+
+Test ID: $test_id
+Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+Stage: $stage
+Error Message: $error_msg
+
+========================================
+DOCKER STATE
+========================================
+
+=== docker ps -a ===
+$(docker ps -a 2>&1)
+
+=== docker volume ls ===
+$(docker volume ls 2>&1)
+
+=== docker network ls ===
+$(docker network ls 2>&1)
+
+=== docker compose ps ===
+$(docker compose ps 2>&1)
+
+========================================
+CONTAINER LOGS
+========================================
+
+=== bootstrap logs (last 100 lines) ===
+$(docker compose logs bootstrap 2>&1 | tail -100)
+
+=== all container logs (last 200 lines) ===
+$(docker compose logs 2>&1 | tail -200)
+
+========================================
+SYSTEM STATE
+========================================
+
+Date: $(date)
+Disk: $(df -h /)
+Memory: $(free -h)
+Load: $(uptime)
+EOF
+
+    log_error "Failure captured in: $failure_file"
+    log_error "Share this file with the debugging team"
+}
+
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$SUITE_LOG"
 }
@@ -229,6 +289,7 @@ run_test_config() {
 
     docker compose build > /dev/null 2>&1 || {
         log_error "Docker build failed"
+        capture_failure "$test_id" "Docker image build failed" "docker_build"
         docker_cleanup
         return 1
     }
@@ -239,6 +300,10 @@ run_test_config() {
     if ! docker compose ps | grep -q "healthy"; then
         log_error "Network failed to start. Logs:"
         docker compose logs bootstrap 2>&1 | tail -30
+
+        # Capture detailed failure info for debugging team
+        capture_failure "$test_id" "Network containers did not reach healthy state after 30s" "network_startup"
+
         docker compose down -v 2>/dev/null || true
         return 1
     fi
@@ -424,6 +489,27 @@ main() {
     log "Failed: $failed"
     log "Results directory: $RESULTS_DIR"
     log "Full log: $SUITE_LOG"
+
+    if [ "$failed" -gt 0 ]; then
+        log_section "FAILURES DETECTED - Debugging Team Required"
+        log "The following tests failed and require investigation:"
+        ls "$RESULTS_DIR"/FAILED-*.json 2>/dev/null | while read f; do
+            log "  - $f"
+        done
+        log ""
+        log "Next steps:"
+        log "1. Review the FAILED-*.json files in $RESULTS_DIR"
+        log "2. Create v1.5.1-rc-debugging team to investigate"
+        log "3. Assign failures to appropriate specialists:"
+        log "   - network-debugger: Network startup, Docker issues"
+        log "   - sharding-debugger: Missing shard logs, executor config"
+        log "   - load-test-debugger: Transaction submission, account issues"
+        log "   - consensus-debugger: TPS plateaus, block production"
+        log "   - memory-debugger: Memory runaway, goroutine leaks"
+        log "   - cleanup-debugger: Docker cleanup failures"
+        log ""
+        log "See: .claude/plans/issue-3905-debugging-team-coordination.md"
+    fi
 
     # Final cleanup to leave system clean
     log_section "Post-Suite Docker Cleanup"

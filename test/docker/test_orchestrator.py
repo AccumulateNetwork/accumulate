@@ -16,7 +16,6 @@ from pathlib import Path
 
 from test_config import TEST_CONFIGS, TPS_SEQUENCE, INCREMENT_DURATION_SECONDS, ERROR_THRESHOLD
 from docker_manager import DockerManager
-from docker_generator import generate_docker_compose
 from load_test_runner import LoadTestRunner, LoadTestMetrics
 from failure_reporter import FailureReport, FailureRegistry
 from results_aggregator import ResultsAggregator, ConfigResult
@@ -93,8 +92,13 @@ class TestOrchestrator:
         self.log_section(f"Test {config.test_id}: {config.description}")
         logger.info(f"Configuration: {config.validators} validators, {config.bvns} BVN(s)")
 
-        # Generate docker-compose for this configuration
-        compose_file = generate_docker_compose(config, Path.cwd())
+        # Use pre-made docker-compose file for this configuration
+        compose_file = Path.cwd() / f"docker-compose-{config.test_id.lower()}.yml"
+        if not compose_file.exists():
+            logger.error(f"Compose file not found: {compose_file}")
+            self.failed += 1
+            return
+
         docker = DockerManager(compose_file)
 
         try:

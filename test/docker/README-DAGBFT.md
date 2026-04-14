@@ -105,6 +105,65 @@ docker compose -f test/docker/docker-compose.yml down
 docker compose -f test/docker/docker-compose.yml down -v
 ```
 
+## Performance Testing with Dashboard
+
+For comprehensive guidance on running performance tests with real-time monitoring, see **[PERFORMANCE-TEST-DASHBOARD.md](PERFORMANCE-TEST-DASHBOARD.md)**.
+
+### Quick Start: Load Testing
+
+**1. Start network**
+```bash
+cd test/docker
+docker compose -f docker-compose.yml up -d
+```
+
+**2. Start monitoring (separate terminal)**
+```bash
+mkdir -p /tmp/monitoring-results
+python3 monitor.py /tmp/monitoring-results 3600 10 > /tmp/monitor.log 2>&1 &
+```
+
+**3. Start metrics dashboard (separate terminal)**
+```bash
+python3 metrics-server.py /tmp/loadtest.log /tmp/monitoring-results 8888 > /tmp/metrics.log 2>&1 &
+```
+
+**4. Open dashboard**
+- Go to: http://localhost:8888/
+- Monitor real-time TPS, CPU, memory, success rate
+
+**5. Run load test**
+```bash
+# Build and run load test
+go run parallel-loadtest.go > /tmp/loadtest.log 2>&1 &
+
+# Watch output
+tail -f /tmp/loadtest.log
+```
+
+### What the Dashboard Shows
+
+- **Real-time TPS** (1-min, 5-min, 15-min, total average)
+- **Transaction metrics** (submitted, success, failed)
+- **Per-node resources** (CPU%, memory, database size)
+- **System utilization** (total cores, cluster memory, growth rate)
+- **Live updates** every 1 second
+
+### Running Automated Test Suite
+
+For issue #3905 (RC v1.5.1-breaking performance validation):
+
+```bash
+# Run all 6 configurations (3/4 validators × 1/2/3 BVNs)
+python3 test_orchestrator.py
+
+# View results
+tail -f /tmp/perf-test.log
+ls -la performance-results/  # CSV files and summary report
+```
+
+---
+
 ## Troubleshooting
 
 ### Bootstrap Server Not Running
