@@ -120,6 +120,7 @@ func CollectAccount(record *database.Account, fullChainHistory bool) (*Account, 
 	acct.Main = loadState(&err, true, record.Main().Get)
 	acct.Pending = loadState(&err, true, record.Pending().Get)
 	acct.Directory = loadState(&err, true, record.Directory().Get)
+	acct.extraData = []byte{} // Initialize to empty slice for consistent JSON serialization
 
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
