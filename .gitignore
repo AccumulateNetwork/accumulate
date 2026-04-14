@@ -88,6 +88,9 @@ go.work.sum
 /snapshot-tool
 .archive/
 mcp/mcp-server
+# Large binaries
+/export-snapshot
+test/docker/loadtest
 # Claude Code
 .claude/
 # Generated docker test files
