@@ -103,11 +103,13 @@ func (p *Primary) OnVoteReceived(vote *types.Vote) {
 
 	// Add the unique vote
 	p.pendingVotes[vote.HeaderDigest] = append(votes, vote)
+	totalVotes := len(p.pendingVotes[vote.HeaderDigest])
 
-	slog.Debug("Added vote",
+	slog.Info("Added vote - attempting certificate",
 		"headerDigest", vote.HeaderDigest.String(),
 		"author", hexEncode(vote.Author),
-		"totalVotes", len(p.pendingVotes[vote.HeaderDigest]))
+		"totalVotes", totalVotes,
+		"quorumCount", quorumCount)
 
 	// Try to create certificate
 	p.tryCreateCertificateLocked(vote.HeaderDigest)
@@ -119,15 +121,28 @@ func (p *Primary) tryCreateCertificateLocked(headerDigest types.HeaderDigest) {
 	votes := p.pendingVotes[headerDigest]
 	header := p.ourHeaders[headerDigest]
 
+	slog.Debug("tryCreateCertificateLocked",
+		"headerDigest", headerDigest.String(),
+		"votesForThisHeader", len(votes),
+		"headerExists", header != nil)
+
 	if header == nil {
+		slog.Warn("tryCreateCertificateLocked: header not found",
+			"headerDigest", headerDigest.String())
 		return
 	}
 
 	// Calculate total stake from votes (needs committeeMu for reading stake)
 	p.committeeMu.RLock()
 	var totalStake uint64
-	for _, v := range votes {
-		totalStake += p.committee.StakeOf(v.Author)
+	for i, v := range votes {
+		stake := p.committee.StakeOf(v.Author)
+		totalStake += stake
+		slog.Debug("Vote stake",
+			"voteIndex", i,
+			"author", hexEncode(v.Author),
+			"stake", stake,
+			"runningTotal", totalStake)
 	}
 	hasQuorum := p.committee.HasQuorum(totalStake)
 	quorumThreshold := p.committee.QuorumThreshold()
@@ -135,12 +150,20 @@ func (p *Primary) tryCreateCertificateLocked(headerDigest types.HeaderDigest) {
 
 	// Need 2f+1 stake
 	if !hasQuorum {
-		slog.Debug("Not enough stake for certificate",
+		slog.Info("Not enough stake for certificate",
 			"headerDigest", headerDigest.String(),
 			"totalStake", totalStake,
-			"threshold", quorumThreshold)
+			"threshold", quorumThreshold,
+			"numVotes", len(votes),
+			"hasQuorum", hasQuorum)
 		return
 	}
+
+	slog.Info("Quorum achieved - creating certificate",
+		"headerDigest", headerDigest.String(),
+		"totalStake", totalStake,
+		"threshold", quorumThreshold,
+		"numVotes", len(votes))
 
 	// Create certificate (needs committeeMu for finding validators)
 	cert := p.createCertificateFromVotes(header, votes)
@@ -259,6 +282,8 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 	// Don't vote on our own headers
 	pubKey := p.config.KeyPair.Public().(ed25519.PublicKey)
 	if bytes.Equal(header.Author, pubKey) {
+		slog.Info("TRACE: skipping own header",
+			"author", hexEncode(header.Author))
 		return
 	}
 
@@ -267,6 +292,12 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 	currentEpoch := p.currentEpoch
 	currentRound := p.currentRound
 	p.roundMu.Unlock()
+
+	slog.Info("TRACE: epoch/round check",
+		"headerEpoch", header.Epoch,
+		"currentEpoch", currentEpoch,
+		"headerRound", header.Round,
+		"currentRound", currentRound)
 
 	// Check epoch matches
 	if header.Epoch != currentEpoch {
@@ -328,10 +359,11 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 
 	p.votesSent.Add(1)
 
-	slog.Debug("Voting on header",
+	slog.Info("Successfully voting on header",
 		"headerDigest", headerDigest.String(),
 		"author", hexEncode(header.Author),
-		"round", header.Round)
+		"round", header.Round,
+		"epoch", header.Epoch)
 
 	// Broadcast vote
 	p.wg.Add(1)
