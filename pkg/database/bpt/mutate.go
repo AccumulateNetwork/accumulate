@@ -24,6 +24,10 @@ type mutation struct {
 // Insert updates or inserts a hash for the given key. Insert may defer the
 // actual update.
 func (b *BPT) Insert(key *record.Key, value []byte) error {
+	if b.sharded != nil {
+		return b.sharded.Insert(key, value)
+	}
+
 	if b.pending == nil {
 		b.pending = map[[32]byte]*mutation{}
 	}
@@ -38,6 +42,10 @@ func (b *BPT) Insert(key *record.Key, value []byte) error {
 // Delete removes the entry for the given key, if present. Delete may defer the
 // actual update.
 func (b *BPT) Delete(key *record.Key) error {
+	if b.sharded != nil {
+		return b.sharded.Delete(key)
+	}
+
 	if b.pending == nil {
 		b.pending = map[[32]byte]*mutation{}
 	}

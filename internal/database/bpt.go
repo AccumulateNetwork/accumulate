@@ -9,6 +9,7 @@ package database
 import (
 	"bytes"
 	"io"
+	"math/bits"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
@@ -19,7 +20,24 @@ import (
 )
 
 func newBPT(parent record.Record, logger logging.Logger, store record.Store, key *record.Key, name string) *bpt.BPT {
-	return bpt.New(parent, logger, store, key)
+	b := bpt.New(parent, logger, store, key)
+
+	// Enable sharding only on root batches (no parent) when sharding has been
+	// explicitly configured. Child batches use regular BPT and push updates to
+	// the parent via commitUpdatesDirect.
+	if batch, ok := parent.(*Batch); ok && batch.parent == nil && IsShardingConfigured(batch) {
+		cfg, err := GetExecutorConfig(batch)
+		if err == nil && cfg.ExecutorShardCount > 1 {
+			depth := bits.TrailingZeros64(cfg.ExecutorShardCount)
+			if err := b.EnableSharding(depth); err != nil {
+				if logger != nil {
+					logger.Info("BPT sharding disabled", "error", err)
+				}
+			}
+		}
+	}
+
+	return b
 }
 
 // GetBptRootHash returns the BPT root hash, after applying updates as necessary

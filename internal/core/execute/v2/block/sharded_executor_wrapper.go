@@ -21,6 +21,7 @@ import (
 type ShardedExecutorWrapper struct {
 	inner      *Executor
 	shardCount int
+	logger     logging.OptionalLogger
 }
 
 // NewShardedExecutorWrapper creates a wrapper that produces sharded blocks.
@@ -34,10 +35,15 @@ func NewShardedExecutorWrapper(inner *Executor, shardCount int) (*ShardedExecuto
 		return nil, fmt.Errorf("shard count must be a power of two, got %d", shardCount)
 	}
 
-	return &ShardedExecutorWrapper{
+	w := &ShardedExecutorWrapper{
 		inner:      inner,
 		shardCount: shardCount,
-	}, nil
+	}
+	if inner != nil && inner.logger.L != nil {
+		w.logger.Set(inner.logger.L, "module", "sharded-executor")
+	}
+	w.logger.Info("Sharded executor wrapper created", "shard-count", shardCount)
+	return w, nil
 }
 
 func (w *ShardedExecutorWrapper) EnableTimers() {
@@ -71,14 +77,17 @@ func (w *ShardedExecutorWrapper) Begin(params execute.BlockParams) (execute.Bloc
 	innerBlock, ok := block.(*Block)
 	if !ok {
 		// If for some reason the inner executor doesn't return *Block, fall back
+		w.logger.Error("Block execution is SEQUENTIAL", "reason", "inner executor returned unexpected block type", "type", fmt.Sprintf("%T", block))
 		return block, nil
 	}
 
 	sb, err := NewShardedBlock(innerBlock, w.shardCount)
 	if err != nil {
 		// If sharding fails, fall back to sequential
+		w.logger.Error("Block execution is SEQUENTIAL", "reason", "sharded block creation failed", "error", err, "shard-count", w.shardCount)
 		return block, nil
 	}
 
+	w.logger.Debug("Block execution is SHARDED", "shard-count", w.shardCount)
 	return sb, nil
 }
