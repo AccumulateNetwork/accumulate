@@ -17,8 +17,8 @@ echo ""
 echo "Configuration:"
 echo "  Duration: ${DURATION}s"
 echo "  Target TPS: ${TARGET_TPS}"
-echo "  Network: 1 bootstrap + 12 validators (3 BVNs × 4)"
-echo "  Workers: 48 (4 per node)"
+echo "  Network: 1 bootstrap + 4 validators (1 BVN × 4)"
+echo "  Workers: 32 (8 per node)"
 echo ""
 
 # Colors
@@ -55,7 +55,7 @@ if ! docker compose ps | grep -q "healthy"; then
     docker compose logs bootstrap | tail -20
     exit 1
 fi
-echo -e "${GREEN}✓ Network started (12 validators healthy)${NC}"
+echo -e "${GREEN}✓ Network started (4 validators healthy)${NC}"
 
 # Step 4: Start monitoring
 echo -e "${YELLOW}[4/6]${NC} Starting metrics collection..."

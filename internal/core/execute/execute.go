@@ -70,6 +70,7 @@ type Options struct {
 	Sequencer              private.Sequencer  // Synthetic and anchor sequence API service
 	Querier                api.Querier        // Query API service
 	EnableHealing          bool               //
+	ShardCount             int                // Number of parallel execution shards (0 = disabled, must be power of 2, max 256)
 }
 
 // A Dispatcher dispatches synthetic transactions produced by the executor.
