@@ -170,13 +170,100 @@ Document findings:
 
 ---
 
-## Phase 4: Issues & Fixes (if needed)
+## Phase 4: Test Failure Debugging & Fixes
 
-If performance doesn't reach 10K per-BVN, create sub-issues:
+Tests will run unattended for 6-8 hours. Failures can occur at various stages. Use team coordination to diagnose and fix issues.
 
-- **#3905.1**: Profile bottleneck (CPU? Memory? Lock contention?)
-- **#3905.2**: Fix identified bottleneck
-- **#3905.3**: Re-test and confirm improvement
+### Expected Failure Modes
+
+| Failure Type | Symptoms | Root Cause | Fix Owner | Time to Fix |
+|---|---|---|---|---|
+| **Network startup failure** | "Network failed to start" after 30s | Docker network misconfiguration, port conflicts, container won't boot | network-debugger | 30 min - 2 hours |
+| **Missing sharding logs** | No `shard-count=64` in Docker logs | BPT sharding not enabled in DAG-BFT startup path | sharding-debugger | 30 min - 1 hour |
+| **Load test won't submit** | 0% success rate, connection refused | Network not exposed/accessible, API port wrong, firewall | network-debugger | 15 min - 1 hour |
+| **All transactions fail with "Account.Main not found"** | 100% error rate, but network is healthy | Load test submitting too fast before funding completes | load-test-debugger | 15 min - 30 min |
+| **TPS plateaus at low level (< 1K)** | TPS stuck despite low CPU/memory | Block production stalled, consensus stuck, mempool full | consensus-debugger | 1 - 3 hours |
+| **Memory leak or runaway memory** | Memory grows 1-5% per minute until OOM | Goroutine leak, unbounded cache, batch not discarded | memory-debugger | 1 - 4 hours |
+| **Docker cleanup fails** | Lingering containers/volumes block next test | Resource cleanup incomplete, Docker daemon issues | cleanup-debugger | 15 min - 1 hour |
+
+### Debugging Process
+
+For each failed test:
+
+1. **Automated capture** (done by orchestration script):
+   - Full Docker logs for all containers
+   - Test metrics/output
+   - Docker resource usage at failure time
+   - Timestamp of failure
+
+2. **Team investigation**:
+   - Analyze logs and metrics for root cause
+   - Identify which category of failure
+   - Assign to appropriate specialist
+   - Create sub-task for fix
+
+3. **Fix & verify**:
+   - Implement fix in isolated branch
+   - Test the fix on single configuration
+   - If successful: apply to main branch, re-run full suite
+   - If unsuccessful: escalate to next tier specialist
+
+### Team Structure for Debugging
+
+Create v1.5.1-rc-debugging team with specialists:
+
+- **network-debugger**: Docker networking, container startup, port exposure
+- **sharding-debugger**: BPT sharding enablement, executor config, logging
+- **load-test-debugger**: Load generator issues, transaction submission, account setup
+- **consensus-debugger**: Block production, mempool, consensus throughput
+- **memory-debugger**: Memory leaks, goroutine leaks, resource bounds
+- **cleanup-debugger**: Docker resource cleanup, volume removal
+
+### How to Trigger Debugging
+
+If test orchestration detects failure:
+
+```bash
+# Script will create: test/docker/performance-results/FAILED-TEST-<test-id>.json
+# Contains: logs, metrics, timestamp, test configuration
+
+# Manually trigger investigation:
+teams create v1.5.1-rc-debugging
+teams assign network-debugger FAILED-TEST-A1.json
+# Agent analyzes and reports findings
+```
+
+### Common Fixes & Workarounds
+
+**Issue**: All tests fail at Docker startup
+- **Quick fix**: Run `docker system prune -f` and `docker volume prune -f -a`
+- **Better fix**: Improve cleanup script in handler
+
+**Issue**: Sharding not enabled
+- **Fix**: Ensure `cmd/accumulated/run/dagbft.go` loads executor config (already done by performance-validator)
+- **Verify**: Check logs for `shard-count=64 sharding=ENABLED`
+
+**Issue**: Load test stuck at 0% success with "Account.Main not found"
+- **Cause**: Funding transactions not committed before sending from accounts
+- **Fix**: Increase `wait-for-funding` duration in parallel-loadtest.go
+- **Verify**: Logs show accounts created, then wait period, then sending begins
+
+**Issue**: TPS plateaus < 2K despite low CPU
+- **Cause**: Block production rate too slow (only 10 tx/block, not 100 tx/block)
+- **Investigate**: Check how many tx per block in logs
+- **Fix**: Increase block size limit or production rate in consensus config
+
+---
+
+## Phase 5: Re-testing & Verification
+
+If failures occurred and fixes were applied:
+
+1. Clean all data: `docker system prune -f && docker volume prune -f -a`
+2. Rebuild binary with fixes: `go build ./cmd/accumulated`
+3. Re-run full test suite: `./run-performance-suite.sh`
+4. Compare results with Phase 2 baseline
+5. Document what failed and how it was fixed
 
 ---
 
@@ -189,14 +276,29 @@ If performance doesn't reach 10K per-BVN, create sub-issues:
 - [ ] All sharding logs present and shard distribution balanced
 - [ ] No critical errors or crashes under load
 - [ ] Performance results documented in `PERFORMANCE-RESULTS-RC-v1.5.1.md`
+- [ ] All test failures debugged and root causes documented
+- [ ] Any necessary fixes committed and re-tested
 
 ---
 
 ## Timeline
 
 - **Phase 1** (Fix issues): 2-4 hours
-- **Phase 2** (Testing): 6-8 hours (6 configurations × ~1 hour per config including setup/cooldown)
+- **Phase 2** (Testing): ~1.5-2 hours (runs unattended, 6 configs × 15 min each)
+  - 6 configurations × ~15 minutes per config = ~90 minutes
+  - Plus 30 min setup/cleanup = ~2 hours total
 - **Phase 3** (Documentation): 1-2 hours
-- **Phase 4** (If fixes needed): TBD based on findings
+- **Phase 4** (Debugging & fixes): 2-8 hours (only if failures occur)
+- **Phase 5** (Re-test): 1.5-2 hours (only if Phase 4 fixes applied)
 
-**Total**: 10-15 hours for complete performance validation
+**Total**: 7-12 hours minimum, up to 18-24 hours if major issues found
+
+---
+
+## Testing Mindset
+
+1. **Expect failures**: With 6 configurations × 8 TPS levels = 48 individual test steps, some may fail
+2. **Document everything**: Each failure is a learning opportunity for improving the code/tests
+3. **Fix systematically**: Don't patch around issues; find and fix root causes
+4. **Re-validate**: After fixes, always re-run the full suite to ensure fixes don't break other tests
+5. **Build confidence**: Only mark RC as ready after all tests pass with documented shard verification
