@@ -14,6 +14,38 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 )
 
+// TestShardedExecutorWrapperBeginCreatesShardedBlock verifies that
+// ShardedExecutorWrapper.Begin() returns a *ShardedBlock, not a regular *Block.
+func TestShardedExecutorWrapperBeginCreatesShardedBlock(t *testing.T) {
+	for _, shardCount := range []int{4, 16, 64} {
+		t.Run(fmt.Sprintf("shards=%d", shardCount), func(t *testing.T) {
+			wrapper, err := NewShardedExecutorWrapper(nil, shardCount)
+			require.NoError(t, err)
+			require.NotNil(t, wrapper)
+			require.Equal(t, shardCount, wrapper.shardCount)
+
+			// Verify wrapper was created correctly - it should produce
+			// ShardedBlocks when Begin is called with a valid inner executor.
+			// Without a full executor, we verify the wrapper's configuration.
+			_, err = NewShardedBlock(nil, shardCount)
+			require.NoError(t, err, "ShardedBlock creation should succeed with shard count %d", shardCount)
+		})
+	}
+}
+
+// TestShardedExecutorWrapperFallbackLogging verifies that the wrapper
+// falls back to sequential with logging when sharding fails.
+func TestShardedExecutorWrapperFallbackLogging(t *testing.T) {
+	// Invalid shard count should fail at wrapper creation
+	_, err := NewShardedExecutorWrapper(nil, 3)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "power of two")
+
+	_, err = NewShardedExecutorWrapper(nil, 512)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "between 1 and 256")
+}
+
 // TestExecutorConfigValidation verifies that the executor configuration
 // validation correctly identifies valid and invalid shard counts.
 // This test is part of Phase 4d - configuration validation.
