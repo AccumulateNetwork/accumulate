@@ -38,7 +38,9 @@ func ValidateShardCount(count uint64) error {
 var executorConfigKey = record.NewKey("ExecutorConfig", "ShardCount")
 
 // getKVStore returns the underlying key-value store for the batch,
-// walking up through parent batches as needed.
+// walking up through parent batches to the root batch's changeset.
+// Executor config bypasses batch model isolation intentionally since
+// shard configuration is a global node setting, not transactional state.
 func getKVStore(b *Batch) keyvalue.Store {
 	for b.parent != nil {
 		b = b.parent
