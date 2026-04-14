@@ -32,6 +32,8 @@ const (
 // Dynamic TPS control
 var currentTPS atomic.Int64
 var targetTPS atomic.Int64
+var peakTPS atomic.Int64
+var lastErrorRatePercent atomic.Int64 // stored as int64(rate * 100)
 
 // Account pool for moving tokens
 type accountPool struct {
@@ -78,9 +80,12 @@ func (p *accountPool) getNext() liteAccount {
 }
 
 func main() {
-	startTPS := flag.Int("start-tps", 10, "Starting TPS")
-	endTPS := flag.Int("end-tps", 10000, "Ending TPS after ramp duration")
-	rampDuration := flag.Duration("ramp-duration", 1*time.Hour, "Duration to ramp from start to end TPS")
+	startTPS := flag.Int("start-tps", 15000, "Starting TPS (will ramp down to min-tps first)")
+	minTPS := flag.Int("min-tps", 10000, "Minimum TPS to ramp down to before ramping up")
+	maxTPS := flag.Int("max-tps", 50000, "Maximum TPS to test before stopping")
+	rampDownDuration := flag.Duration("ramp-down-duration", 1*time.Minute, "Duration to ramp from start to min TPS")
+	rampUpDuration := flag.Duration("ramp-up-duration", 30*time.Second, "Duration to ramp TPS by 1000 while looking for pushback")
+	errorThreshold := flag.Float64("error-threshold", 0.05, "Error rate threshold to detect pushback (0.05 = 5%)")
 	controlPort := flag.Int("control-port", 8099, "HTTP port for dynamic TPS control")
 	duration := flag.Duration("duration", 0, "Test duration (0 for unlimited)")
 	tokensPerWorker := flag.Int64("tokens-per-worker", 10000000, "ACME tokens to allocate per worker")
@@ -88,7 +93,7 @@ func main() {
 	flag.Parse()
 
 	currentTPS.Store(int64(*startTPS))
-	targetTPS.Store(int64(*endTPS))
+	targetTPS.Store(int64(*maxTPS))
 
 	// Derive funding account from genesis seed "FAUCET"
 	var fundingSeed [32]byte
@@ -121,7 +126,8 @@ func main() {
 	fmt.Printf("====================\n")
 	fmt.Printf("Workers: %d (%d nodes x %d workers/node)\n", totalWorkers, len(nodes), workersPerNode)
 	fmt.Printf("Funding account: %s\n", fundingURL)
-	fmt.Printf("TPS ramp: %d -> %d over %v\n", *startTPS, *endTPS, *rampDuration)
+	fmt.Printf("TPS strategy: %d (start) -> %d (min, after %v) -> ramp up (every %v) until pushback >%.1f%% errors\n",
+		*startTPS, *minTPS, *rampDownDuration, *rampUpDuration, (*errorThreshold)*100)
 	fmt.Printf("Max accounts: %d\n", *maxAccounts)
 	fmt.Printf("Control endpoint: http://localhost:%d/tps\n\n", *controlPort)
 
@@ -185,13 +191,20 @@ func main() {
 	var submitted, succeeded, failed atomic.Uint64
 	var wg sync.WaitGroup
 
-	// TPS ramping goroutine
+	// Adaptive TPS ramping goroutine: down to min, then up until pushback detected
 	rampStart := time.Now()
+	peakTPS.Store(int64(*startTPS))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		ticker := time.NewTicker(1 * time.Second)
 		defer ticker.Stop()
+		lastCheckTime := time.Now()
+		lastCheckSubmitted := uint64(0)
+		lastCheckSucceeded := uint64(0)
+
+		phase := "ramp-down" // ramp-down, hold-min, or ramp-up
+		rampUpStartTime := time.Now()
 
 		for {
 			select {
@@ -199,12 +212,79 @@ func main() {
 				return
 			case <-ticker.C:
 				elapsed := time.Since(rampStart)
-				if elapsed >= *rampDuration {
-					currentTPS.Store(int64(*endTPS))
-				} else {
-					progress := float64(elapsed) / float64(*rampDuration)
-					newTPS := float64(*startTPS) + progress*float64(*endTPS-*startTPS)
+				now := time.Now()
+
+				// Phase 1: Ramp down to minimum TPS
+				if phase == "ramp-down" && elapsed < *rampDownDuration {
+					progress := float64(elapsed) / float64(*rampDownDuration)
+					newTPS := float64(*startTPS) - progress*float64(*startTPS-*minTPS)
 					currentTPS.Store(int64(newTPS))
+				} else if phase == "ramp-down" {
+					// Transition to holding at minimum
+					currentTPS.Store(int64(*minTPS))
+					peakTPS.Store(int64(*minTPS))
+					phase = "hold-min"
+					rampUpStartTime = now
+					lastCheckTime = now
+					lastCheckSubmitted = submitted.Load()
+					lastCheckSucceeded = succeeded.Load()
+					fmt.Printf("[%v] Reached minimum TPS of %d. Starting ramp-up phase...\n", elapsed.Round(time.Second), *minTPS)
+				}
+
+				// Phase 2: Ramp up, checking for pushback
+				if phase == "hold-min" || phase == "ramp-up" {
+					phase = "ramp-up"
+
+					// Every rampUpDuration, check error rate and increase TPS if healthy
+					if now.Sub(rampUpStartTime) >= *rampUpDuration {
+						timeSinceLastCheck := now.Sub(lastCheckTime).Seconds()
+						if timeSinceLastCheck > 0 {
+							totalSubmitted := submitted.Load() - lastCheckSubmitted
+							totalSucceeded := succeeded.Load() - lastCheckSucceeded
+
+							// Protect against underflow if succeeded > submitted (race condition)
+							var totalFailed uint64
+							if totalSucceeded > totalSubmitted {
+								// Shouldn't happen, but log it and treat as no failures
+								fmt.Printf("WARNING: succeeded (%d) > submitted (%d), clamping failures to 0\n", totalSucceeded, totalSubmitted)
+								totalFailed = 0
+								totalSubmitted = totalSucceeded // Use actual succeeded count as baseline
+							} else {
+								totalFailed = totalSubmitted - totalSucceeded
+							}
+
+							errorRate := 0.0
+							if totalSubmitted > 0 {
+								errorRate = float64(totalFailed) / float64(totalSubmitted)
+							}
+							lastErrorRatePercent.Store(int64(errorRate * 100))
+
+							fmt.Printf("[%v] Error rate: %.2f%% (%d failed/%d submitted) | Current TPS: %d\n",
+								elapsed.Round(time.Second), errorRate*100, totalFailed, totalSubmitted, currentTPS.Load())
+
+							// If error rate is acceptable, try higher TPS
+							if errorRate < *errorThreshold && currentTPS.Load() < int64(*maxTPS) {
+								newTPS := currentTPS.Load() + 1000
+								if newTPS > int64(*maxTPS) {
+									newTPS = int64(*maxTPS)
+								}
+								currentTPS.Store(newTPS)
+								peakTPS.Store(newTPS)
+								fmt.Printf("  -> Increasing TPS to %d (error rate OK)\n", newTPS)
+								rampUpStartTime = now
+								lastCheckTime = now
+								lastCheckSubmitted = submitted.Load()
+								lastCheckSucceeded = succeeded.Load()
+							} else if errorRate >= *errorThreshold {
+								// Pushback detected! Stay at current TPS
+								fmt.Printf("  -> PUSHBACK DETECTED! Holding at %d TPS\n", currentTPS.Load())
+								peakTPS.Store(currentTPS.Load())
+							} else {
+								// Reached max TPS
+								fmt.Printf("  -> Reached maximum TPS limit of %d\n", *maxTPS)
+							}
+						}
+					}
 				}
 			}
 		}
@@ -306,8 +386,13 @@ func main() {
 					}
 				}
 
-				fmt.Printf("Progress: submitted=%d success=%d failure=%d elapsed=%v tps_1min=%.0f tps_5min=%.0f tps_15min=%.0f tps_total=%.0f target=%d accounts=%d\n",
-					s, succeeded.Load(), failed.Load(),
+				totalFailed := failed.Load()
+				errorRate := 0.0
+				if s > 0 {
+					errorRate = float64(totalFailed) / float64(s) * 100
+				}
+				fmt.Printf("Progress: submitted=%d success=%d failure=%d (%.2f%% error) elapsed=%v tps_1min=%.0f tps_5min=%.0f tps_15min=%.0f tps_total=%.0f current_target=%d accounts=%d\n",
+					s, succeeded.Load(), totalFailed, errorRate,
 					elapsed.Round(time.Second), tps1min, tps5min, tps15min, tpsSinceLaunch,
 					currentTPS.Load(), pool.size())
 			}
@@ -380,13 +465,21 @@ func main() {
 
 	elapsed := time.Since(start)
 	s := submitted.Load()
+	succeedCount := succeeded.Load()
+	failCount := failed.Load()
 	tps := float64(s) / elapsed.Seconds()
-	fmt.Printf("\nFinal Results:\n")
+	errorRate := 0.0
+	if s > 0 {
+		errorRate = float64(failCount) / float64(s) * 100
+	}
+	fmt.Printf("\n=== FINAL RESULTS ===\n")
 	fmt.Printf("  Duration: %v\n", elapsed.Round(time.Second))
 	fmt.Printf("  Submitted: %d\n", s)
-	fmt.Printf("  Success: %d\n", succeeded.Load())
-	fmt.Printf("  Failed: %d\n", failed.Load())
+	fmt.Printf("  Success: %d\n", succeedCount)
+	fmt.Printf("  Failed: %d (%.2f%%)\n", failCount, errorRate)
 	fmt.Printf("  Average TPS: %.2f\n", tps)
+	fmt.Printf("  Peak TPS Reached: %d\n", peakTPS.Load())
+	fmt.Printf("  Last Error Rate: %.2f%%\n", float64(lastErrorRatePercent.Load()))
 	fmt.Printf("  Total Accounts: %d\n", pool.size())
 	fmt.Println("\nTest complete.")
 }
