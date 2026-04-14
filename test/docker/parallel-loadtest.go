@@ -25,8 +25,8 @@ import (
 )
 
 const (
-	workersPerNode = 4
-	totalNodes     = 12
+	workersPerNode = 8
+	totalNodes     = 4 // Workers: 8 per node × 4 = 32 total
 )
 
 // Dynamic TPS control
@@ -107,18 +107,10 @@ func main() {
 
 	// 12 validator API endpoints
 	nodes := []string{
-		"http://localhost:26660/v3",
-		"http://localhost:26661/v3",
-		"http://localhost:26662/v3",
-		"http://localhost:26663/v3",
-		"http://localhost:26664/v3",
-		"http://localhost:26665/v3",
-		"http://localhost:26666/v3",
-		"http://localhost:26667/v3",
-		"http://localhost:26668/v3",
-		"http://localhost:26669/v3",
-		"http://localhost:26670/v3",
-		"http://localhost:26671/v3",
+		"http://localhost:26660/v3",  // BVN1-Val1
+		"http://localhost:26661/v3",  // BVN1-Val2
+		"http://localhost:26662/v3",  // BVN1-Val3
+		"http://localhost:26663/v3",  // BVN1-Val4
 	}
 
 	totalWorkers := len(nodes) * workersPerNode

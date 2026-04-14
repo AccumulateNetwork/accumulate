@@ -54,6 +54,13 @@ func NewExecutor(opts Options) (Executor, error) {
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("create v2 executor: %w", err)
 		}
+		if opts.ShardCount > 0 {
+			sharded, err := v2.NewShardedExecutorWrapper(exec, opts.ShardCount)
+			if err != nil {
+				return nil, errors.UnknownError.WithFormat("create sharded executor: %w", err)
+			}
+			return sharded, nil
+		}
 		return exec, nil
 	}
 
@@ -111,7 +118,15 @@ func (m *Multi) updateActive() error {
 		return errors.UnknownError.WithFormat("create v2 executor: %w", err)
 	}
 
-	m.setActive(exec)
+	if m.opts.ShardCount > 0 {
+		sharded, err := v2.NewShardedExecutorWrapper(exec, m.opts.ShardCount)
+		if err != nil {
+			return errors.UnknownError.WithFormat("create sharded executor: %w", err)
+		}
+		m.setActive(sharded)
+	} else {
+		m.setActive(exec)
+	}
 	return nil
 }
 

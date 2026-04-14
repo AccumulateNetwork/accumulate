@@ -274,6 +274,25 @@ var (
 	})
 )
 
+// Executor shard metrics
+var (
+	// ExecutorShardCount is the configured number of executor shards.
+	ExecutorShardCount = promauto.NewGauge(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Subsystem: "executor",
+		Name:      "shard_count",
+		Help:      "Configured number of executor shards",
+	})
+
+	// ExecutorShardsActive is the number of shards currently processing transactions.
+	ExecutorShardsActive = promauto.NewGauge(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Subsystem: "executor",
+		Name:      "shards_active",
+		Help:      "Number of executor shards currently processing transactions",
+	})
+)
+
 // Metrics provides an interface to update DAG-BFT metrics.
 type Metrics struct {
 	enabled bool
@@ -485,5 +504,19 @@ func (m *Metrics) IncPeersBanned() {
 func (m *Metrics) SetPeersBannedCurrent(count int) {
 	if m.enabled {
 		PeersBannedCurrent.Set(float64(count))
+	}
+}
+
+// SetExecutorShardCount sets the configured executor shard count.
+func (m *Metrics) SetExecutorShardCount(count uint64) {
+	if m.enabled {
+		ExecutorShardCount.Set(float64(count))
+	}
+}
+
+// SetExecutorShardsActive sets the number of active executor shards.
+func (m *Metrics) SetExecutorShardsActive(count int) {
+	if m.enabled {
+		ExecutorShardsActive.Set(float64(count))
 	}
 }
