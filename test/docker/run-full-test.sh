@@ -75,6 +75,10 @@ DASHBOARD_PID=$!
 sleep 2
 echo -e "${GREEN}✓ Dashboard started (PID: $DASHBOARD_PID)${NC}"
 
+# Reset metrics before starting test
+sleep 1
+curl -s "http://localhost:8888/reset" > /dev/null 2>&1 || echo "Warning: Could not reset metrics"
+
 # Step 6: Run load test
 echo -e "${YELLOW}[6/6]${NC} Starting load test..."
 echo ""
@@ -84,9 +88,14 @@ echo "════════════════════════�
 echo ""
 
 cd "$SCRIPT_DIR"
+# For adaptive testing: start at 15K, ramp down to 10K, then up to find ceiling
 go run parallel-loadtest.go \
-    -start-tps "$TARGET_TPS" \
-    -end-tps "$TARGET_TPS" \
+    -start-tps 15000 \
+    -min-tps 10000 \
+    -max-tps 30000 \
+    -ramp-down-duration 1m \
+    -ramp-up-duration 30s \
+    -error-threshold 0.05 \
     -duration "${DURATION}s" \
     2>&1 | tee /tmp/loadtest.log
 

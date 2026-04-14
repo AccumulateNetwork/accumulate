@@ -49,6 +49,33 @@ class MetricsCollector:
         self.loadtest_log = Path(loadtest_log)
         self.monitoring_dir = Path(monitoring_dir)
 
+    def reset(self):
+        """Reset metrics state for a new test run"""
+        with self.lock:
+            self.start_time = None
+            self.last_submitted = 0
+            self.last_progress_time = None
+            self.samples.clear()
+            # Reset all metrics to initial state
+            self.metrics = {
+                'tps_1min': 0,
+                'tps_5min': 0,
+                'tps_15min': 0,
+                'tps_total': 0,
+                'target_tps': 10,
+                'total_submitted': 0,
+                'total_succeeded': 0,
+                'total_failed': 0,
+                'active_accounts': 0,
+                'cpu_cores': 0,
+                'avg_cpu_percent': 0,
+                'memory_gb': 0,
+                'avg_memory_percent': 0,
+                'db_size_gb': 0,
+                'db_growth_mb_per_min': 0,
+                'nodes': []
+            }
+
     def update_from_loadtest(self):
         """Read load test log for TPS and transaction counts"""
         if not self.loadtest_log or not self.loadtest_log.exists():
@@ -75,6 +102,14 @@ class MetricsCollector:
                         # Get active accounts if present
                         accounts_match = re.search(r'accounts=(\d+)', line)
                         accounts = int(accounts_match.group(1)) if accounts_match else 0
+
+                        # Detect new test start: submitted count dropped back to low value
+                        # (indicates test was reset/restarted)
+                        if self.last_submitted > 0 and submitted < self.last_submitted * 0.5:
+                            print(f"New test detected (submitted went from {self.last_submitted} to {submitted}), resetting metrics")
+                            self.reset()
+
+                        self.last_submitted = submitted
 
                         # Initialize start time from first progress update
                         if self.start_time is None:
@@ -128,7 +163,9 @@ class MetricsCollector:
         if duration <= 0:
             return 0
 
-        return (newest[1] - oldest_in_window[1]) / duration
+        # Clamp to 0 to prevent negative TPS (can happen on test transitions)
+        tps = (newest[1] - oldest_in_window[1]) / duration
+        return max(0.0, tps)
 
     def update_from_monitoring(self):
         """Read monitoring CSVs for node metrics"""
@@ -221,6 +258,14 @@ class MetricsHandler(BaseHTTPRequestHandler):
 
             metrics = self.collector.get_metrics()
             self.wfile.write(json.dumps(metrics).encode())
+
+        elif self.path == '/reset':
+            # Reset metrics for a new test run
+            self.collector.reset()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({'status': 'reset'}).encode())
 
         elif self.path == '/' or self.path == '/dashboard':
             # Try local dashboard first, then workspace
