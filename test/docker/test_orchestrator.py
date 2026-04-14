@@ -14,7 +14,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from test_config import TEST_CONFIGS, TPS_SEQUENCE, INCREMENT_DURATION_SECONDS
+from test_config import TEST_CONFIGS, TPS_SEQUENCE, INCREMENT_DURATION_SECONDS, ERROR_THRESHOLD
 from docker_manager import DockerManager
 from failure_reporter import FailureReport, FailureRegistry
 
@@ -143,16 +143,23 @@ class TestOrchestrator:
             docker.verify_clean()
 
     def _run_tps_sequence(self, config, docker):
-        """Run incremental TPS steps until pushback detected."""
+        """Run incremental TPS steps until pushback detected or 15K TPS reached."""
         logger.info(f"Running TPS sequence: {TPS_SEQUENCE}")
+        logger.info(f"Each level: {INCREMENT_DURATION_SECONDS}s (~2 min/level, ~15 min total)")
+        logger.info(f"Stop condition: error rate > {ERROR_THRESHOLD*100}% OR TPS reaches 15000")
 
-        for tps in TPS_SEQUENCE:
-            logger.info(f"\n--- Testing at {tps} TPS (duration {INCREMENT_DURATION_SECONDS}s) ---")
+        for i, tps in enumerate(TPS_SEQUENCE, 1):
+            logger.info(f"\n--- Level {i}/{len(TPS_SEQUENCE)}: {tps} TPS ({INCREMENT_DURATION_SECONDS}s) ---")
 
-            # TODO: Call parallel-loadtest.go with TPS target
-            # For now, just log that we would do it
+            # TODO: Call parallel-loadtest.go with TPS target and parse results
             logger.info(f"[PLACEHOLDER] Would run: parallel-loadtest -target-tps {tps} -duration {INCREMENT_DURATION_SECONDS}s")
-            logger.info(f"[PLACEHOLDER] Would collect metrics and check for pushback")
+            logger.info(f"[PLACEHOLDER] Would parse metrics: submitted, success, failed, error_rate, actual_tps")
+
+            # TODO: Detect pushback and stop incrementing
+            # error_rate = parse_result(output)
+            # if error_rate > ERROR_THRESHOLD:
+            #     logger.warning(f"PUSHBACK DETECTED at {tps} TPS (error rate: {error_rate*100:.1f}%)")
+            #     break
 
             # Simulate test run for now
             time.sleep(2)
