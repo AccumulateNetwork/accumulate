@@ -17,7 +17,7 @@ class DockerManager:
         self.compose_file = compose_file
         self.compose_dir = compose_file.parent
 
-    def run(self, cmd: List[str], check: bool = True) -> Tuple[int, str, str]:
+    def run(self, cmd: List[str], check: bool = True, timeout: int = 60) -> Tuple[int, str, str]:
         """Run a command and return (returncode, stdout, stderr)."""
         try:
             result = subprocess.run(
@@ -25,7 +25,7 @@ class DockerManager:
                 cwd=self.compose_dir,
                 capture_output=True,
                 text=True,
-                timeout=60
+                timeout=timeout
             )
             return result.returncode, result.stdout, result.stderr
         except subprocess.TimeoutExpired:
@@ -76,7 +76,10 @@ class DockerManager:
 
         # Check for lingering containers
         rc, out, err = self.run(["sh", "-c", "docker ps -a 2>/dev/null | grep -c -E 'acc-|accumulate' || echo 0"])
-        containers = int(out.strip()) if out.strip() else 0
+        try:
+            containers = int(out.strip().split('\n')[0]) if out.strip() else 0
+        except (ValueError, IndexError):
+            containers = 0
 
         if containers > 0:
             logger.warning(f"Found {containers} lingering accumulate containers")
@@ -85,7 +88,10 @@ class DockerManager:
 
         # Check for lingering volumes
         rc, out, err = self.run(["sh", "-c", "docker volume ls 2>/dev/null | grep -c -E 'acc-|accumulate' || echo 0"])
-        volumes = int(out.strip()) if out.strip() else 0
+        try:
+            volumes = int(out.strip().split('\n')[0]) if out.strip() else 0
+        except (ValueError, IndexError):
+            volumes = 0
 
         if volumes > 0:
             logger.warning(f"Found {volumes} lingering accumulate volumes")
