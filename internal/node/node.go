@@ -9,22 +9,16 @@ package node
 import (
 	"context"
 
-	abci "github.com/cometbft/cometbft/abci/types"
 	"github.com/cometbft/cometbft/node"
-	"github.com/cometbft/cometbft/privval"
 	coretypes "github.com/cometbft/cometbft/rpc/core/types"
 	corerpc "github.com/cometbft/cometbft/rpc/jsonrpc/client"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 )
 
-// AppFactory creates and returns an ABCI application.
-type AppFactory func(*privval.FilePV) (abci.Application, error)
-
 // Node wraps a Tendermint node.
 type Node struct {
 	*node.Node
 	Config *config.Config
-	ABCI   abci.Application
 }
 
 // Start starts the Tendermint node.
