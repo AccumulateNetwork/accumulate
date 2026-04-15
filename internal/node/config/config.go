@@ -40,7 +40,7 @@ const (
 	accConfigFile = "accumulate.toml"
 )
 
-const DevNet = "devnet"
+const NetSim = "netsim" // OneNodeNetSim, formally known as devnet
 
 type NodeType uint64
 type PortOffset uint64
@@ -133,10 +133,6 @@ func Default(netName string, net protocol.PartitionType, _ NodeType, partitionId
 	c.Accumulate.Storage.Path = filepath.Join("data", "accumulate.db")
 	c.Accumulate.BPT.Sharding.Enabled = false  // Disabled by default for backward compatibility
 	c.Accumulate.BPT.Sharding.Depth = 4        // 16 shards - optimal for 16-core systems
-	c.Accumulate.Snapshots.Enable = false
-	c.Accumulate.Snapshots.Directory = "snapshots"
-	c.Accumulate.Snapshots.RetainCount = 10
-	c.Accumulate.Snapshots.Schedule = protocol.DefaultMajorBlockSchedule
 	c.Accumulate.AnalysisLog.Directory = "analysis"
 	c.Accumulate.AnalysisLog.Enabled = false
 	c.Accumulate.API.ReadHeaderTimeout = 10 * time.Second
@@ -163,7 +159,6 @@ type Accumulate struct {
 	// TODO: move network config to its own file since it will be constantly changing over time.
 	//	NetworkConfig string      `toml:"network" mapstructure:"network"`
 	Healing     Healing     `toml:"healing" mapstructure:"healing"`
-	Snapshots   Snapshots   `toml:"snapshots" mapstructure:"snapshots"`
 	Storage     Storage     `toml:"storage" mapstructure:"storage"`
 	BPT         BPT         `toml:"bpt" mapstructure:"bpt"`
 	P2P         P2P         `toml:"p2p" mapstructure:"p2p"`
@@ -182,23 +177,6 @@ type Logging struct {
 type Healing struct {
 	// Enable enables healing
 	Enable bool `toml:"enable" mapstructure:"enable"`
-}
-
-type Snapshots struct {
-	// Enable enables snapshots
-	Enable bool `toml:"enable" mapstructure:"enable"`
-
-	// EnableIndexing enables indexing of snapshots
-	EnableIndexing bool `toml:"enable-indexing" mapstructure:"enable-indexing"`
-
-	// Directory is the directory to store snapshots in
-	Directory string `toml:"directory" mapstructure:"directory"`
-
-	// RetainCount is the number of snapshots to retain
-	RetainCount int `toml:"retain" mapstructure:"retain"`
-
-	// Schedule is the schedule for capturing snapshots.
-	Schedule string `toml:"schedule" mapstructure:"schedule"`
 }
 
 type AnalysisLog struct {

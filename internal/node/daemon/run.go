@@ -20,7 +20,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
@@ -36,7 +35,6 @@ import (
 	"github.com/cometbft/cometbft/rpc/client/local"
 	"github.com/fatih/color"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
-	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog"
 	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/exp/loki"
@@ -83,8 +81,6 @@ type Daemon struct {
 	router           routing.Router
 	eventBus         *events.Bus
 	localTm          *tendermint.DeferredClient
-	snapshotSchedule cron.Schedule
-	snapshotLock     *sync.Mutex
 	tracer           trace.Tracer
 	local            map[string]tendermint.DispatcherClient
 
@@ -104,7 +100,6 @@ func Load(dir string, newWriter func(*config.Config) (io.Writer, error)) (*Daemo
 
 func New(cfg *config.Config, newWriter func(*config.Config) (io.Writer, error)) (*Daemon, error) {
 	var daemon Daemon
-	daemon.snapshotLock = new(sync.Mutex)
 	daemon.Config = cfg
 	daemon.localTm = tendermint.NewDeferredClient()
 	daemon.done = make(chan struct{})
@@ -232,13 +227,6 @@ func (d *Daemon) Start(others ...*Daemon) (err error) {
 		}
 	}()
 
-	// Parse the snapshot schedule
-	if s, err := core.Cron.Parse(d.Config.Accumulate.Snapshots.Schedule); err != nil {
-		d.Logger.Error("Ignoring invalid snapshot schedule", "error", err, "value", d.Config.Accumulate.Snapshots.Schedule)
-	} else {
-		d.snapshotSchedule = s
-	}
-
 	// Load keys
 	err = d.loadKeys()
 	if err != nil {
@@ -273,9 +261,6 @@ func (d *Daemon) startValidator() (err error) {
 			_ = d.db.Close()
 		}
 	}()
-
-	// Setup the event bus
-	events.SubscribeSync(d.eventBus, d.onDidCommitBlock)
 
 	globals := make(chan *core.GlobalValues, 1)
 	events.SubscribeSync(d.eventBus, func(e events.WillChangeGlobals) error {
@@ -506,7 +491,6 @@ func (d *Daemon) startApp(caughtUp <-chan struct{}) (types.Application, error) {
 		EventBus:    d.eventBus,
 		Tracer:      d.tracer,
 		Database:    d.db,
-		Snapshots:   &d.Config.Accumulate.Snapshots,
 		Genesis:     genesis.DocProvider(&d.Config.Config),
 		Partition:   d.Config.Accumulate.PartitionId,
 		RootDir:     d.Config.RootDir,
