@@ -86,11 +86,8 @@ func (d *Dashboard) LoadMetrics() *LoadMetrics {
 
 // update collects metrics and refreshes display
 func (d *Dashboard) update() {
-	// Update system metrics
-	if err := d.systemMetrics.Update(); err != nil {
-		// Log error but continue
-		return
-	}
+	// Update system metrics — ignore errors and render anyway
+	d.systemMetrics.Update()
 
 	// Render updated display
 	d.render()

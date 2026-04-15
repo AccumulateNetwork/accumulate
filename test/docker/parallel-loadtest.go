@@ -3,325 +3,187 @@ package main
 import (
 	"context"
 	"crypto/ed25519"
-	"crypto/sha256"
+	"encoding/json"
 	"flag"
 	"fmt"
-	"math/rand"
-	"net"
-	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
+	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-const (
-	workersPerNode = 8
-	totalNodes     = 4 // Workers: 8 per node × 4 = 32 total
-)
-
-// Dynamic TPS control
-var currentTPS atomic.Int64
-var targetTPS atomic.Int64
-var peakTPS atomic.Int64
-var lastErrorRatePercent atomic.Int64 // stored as int64(rate * 100)
-
-// Account pool for moving tokens
-type accountPool struct {
-	mu       sync.RWMutex
-	accounts []liteAccount
-	nextIdx  atomic.Uint64
-}
-
-type liteAccount struct {
-	key ed25519.PrivateKey
-	url *url.URL
-}
-
-func (p *accountPool) add(acc liteAccount) {
-	p.mu.Lock()
-	p.accounts = append(p.accounts, acc)
-	p.mu.Unlock()
-}
-
-func (p *accountPool) size() int {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	return len(p.accounts)
-}
-
-func (p *accountPool) getRandom() liteAccount {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	if len(p.accounts) == 0 {
-		return liteAccount{}
-	}
-	idx := rand.Intn(len(p.accounts))
-	return p.accounts[idx]
-}
-
-func (p *accountPool) getNext() liteAccount {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	if len(p.accounts) == 0 {
-		return liteAccount{}
-	}
-	idx := p.nextIdx.Add(1) % uint64(len(p.accounts))
-	return p.accounts[idx]
-}
+const recvStride = 7 // stride for destination walk — coprime to account count
 
 func main() {
-	startTPS := flag.Int("start-tps", 15000, "Starting TPS (will ramp down to min-tps first)")
-	minTPS := flag.Int("min-tps", 10000, "Minimum TPS to ramp down to before ramping up")
-	maxTPS := flag.Int("max-tps", 50000, "Maximum TPS to test before stopping")
-	rampDownDuration := flag.Duration("ramp-down-duration", 1*time.Minute, "Duration to ramp from start to min TPS")
-	rampUpDuration := flag.Duration("ramp-up-duration", 30*time.Second, "Duration to ramp TPS by 1000 while looking for pushback")
-	errorThreshold := flag.Float64("error-threshold", 0.05, "Error rate threshold to detect pushback (0.05 = 5%)")
-	controlPort := flag.Int("control-port", 8099, "HTTP port for dynamic TPS control")
-	duration := flag.Duration("duration", 0, "Test duration (0 for unlimited)")
-	tokensPerWorker := flag.Int64("tokens-per-worker", 10000000, "ACME tokens to allocate per worker")
-	maxAccounts := flag.Int("max-accounts", 1000000, "Maximum lite accounts in pool")
+	var (
+		nodesFlag     string
+		numWorkers    int
+		startTPS      int
+		maxTPS        int
+		rampInterval  time.Duration
+		rampStep      int
+		duration      time.Duration
+		label         string
+		statusDir     string
+		faucetSeed    string
+		totalAccounts int
+		fundingAmount uint64
+		oraclePrice   float64
+		errorCutoff   float64
+	)
+
+	flag.StringVar(&nodesFlag, "nodes", "", "Comma-separated list of node API endpoints")
+	flag.IntVar(&numWorkers, "workers", 16, "Number of worker goroutines (distributed evenly across nodes)")
+	flag.IntVar(&startTPS, "start-tps", 1000, "Starting TPS")
+	flag.IntVar(&maxTPS, "max-tps", 25000, "Maximum TPS")
+	flag.IntVar(&rampStep, "ramp-step", 2000, "TPS increase per ramp interval")
+	flag.DurationVar(&rampInterval, "ramp-interval", 30*time.Second, "Time between TPS increases")
+	flag.DurationVar(&duration, "duration", 5*time.Minute, "Total test duration")
+	flag.StringVar(&label, "label", "", "Test label shown on dashboard")
+	flag.StringVar(&statusDir, "status-dir", "/tmp/loadtest-workspace", "Directory for status.json")
+	flag.StringVar(&faucetSeed, "faucet-seed", "FAUCET", "Faucet seed (must match init network)")
+	flag.IntVar(&totalAccounts, "accounts", 1000, "Total sender accounts (split across workers)")
+	flag.Uint64Var(&fundingAmount, "fund-amount", 100000, "Whole ACME per funder")
+	flag.Float64Var(&oraclePrice, "oracle", 1000, "ACME oracle price in USD")
+	flag.Float64Var(&errorCutoff, "error-cutoff", 5.0, "Stop ramping at this error percentage")
 	flag.Parse()
 
-	currentTPS.Store(int64(*startTPS))
-	targetTPS.Store(int64(*maxTPS))
-
-	// Derive funding account from genesis seed "FAUCET"
-	var fundingSeed [32]byte
-	fundingSeed = sha256.Sum256(append(fundingSeed[:], []byte("FAUCET")...))
-	fundingKey := ed25519.NewKeyFromSeed(fundingSeed[:])
-	fundingURL, err := protocol.LiteTokenAddress(fundingKey[32:], "ACME", protocol.SignatureTypeED25519)
-	if err != nil {
-		fmt.Printf("ERROR: Failed to create funding URL: %v\n", err)
+	if totalAccounts < 1 {
+		fmt.Fprintf(os.Stderr, "accounts must be >= 1\n")
 		os.Exit(1)
 	}
 
-	// 12 validator API endpoints
-	nodes := []string{
-		"http://localhost:26660/v3",  // BVN1-Val1
-		"http://localhost:26661/v3",  // BVN1-Val2
-		"http://localhost:26662/v3",  // BVN1-Val3
-		"http://localhost:26663/v3",  // BVN1-Val4
+	// Parse node list
+	var nodes []string
+	if nodesFlag != "" {
+		for _, n := range strings.Split(nodesFlag, ",") {
+			n = strings.TrimSpace(n)
+			if n != "" {
+				nodes = append(nodes, n)
+			}
+		}
+	}
+	if len(nodes) == 0 {
+		for port := 26660; port <= 26671; port++ {
+			nodes = append(nodes, fmt.Sprintf("http://localhost:%d/v3", port))
+		}
 	}
 
-	totalWorkers := len(nodes) * workersPerNode
-	fmt.Printf("Accumulate Load Test\n")
-	fmt.Printf("====================\n")
-	fmt.Printf("Workers: %d (%d nodes x %d workers/node)\n", totalWorkers, len(nodes), workersPerNode)
-	fmt.Printf("Funding account: %s\n", fundingURL)
-	fmt.Printf("TPS strategy: %d (start) -> %d (min, after %v) -> ramp up (every %v) until pushback >%.1f%% errors\n",
-		*startTPS, *minTPS, *rampDownDuration, *rampUpDuration, (*errorThreshold)*100)
-	fmt.Printf("Max accounts: %d\n", *maxAccounts)
-	fmt.Printf("Control endpoint: http://localhost:%d/tps\n\n", *controlPort)
+	if numWorkers < 16 {
+		numWorkers = 16
+	}
+
+	// Ensure account count per worker is coprime to recvStride
+	acctPerWorker := totalAccounts / numWorkers
+	for acctPerWorker%recvStride == 0 {
+		acctPerWorker++
+	}
+
+	fmt.Printf("Load test: %d workers across %d nodes\n", numWorkers, len(nodes))
+	fmt.Printf("TPS ramp: %d → %d, +%d every %v (cutoff at %.1f%% errors)\n",
+		startTPS, maxTPS, rampStep, rampInterval, errorCutoff)
+	fmt.Printf("Accounts: %d per worker (%d total), coprime to stride %d\n",
+		acctPerWorker, acctPerWorker*numWorkers, recvStride)
+	fmt.Printf("Duration: %v\n\n", duration)
+
+	// Derive faucet
+	faucetSK := deriveKey(faucetSeed)
+	faucetURL, err := protocol.LiteTokenAddress(faucetSK[32:], "ACME", protocol.SignatureTypeED25519)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Faucet key error: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("Faucet: %v\n", faucetURL)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Initialize account pool
-	pool := &accountPool{}
-
-	// Generate worker accounts
-	fmt.Println("Generating worker accounts...")
-	workerAccounts := make([]liteAccount, totalWorkers)
-	for i := 0; i < totalWorkers; i++ {
-		_, sk, _ := ed25519.GenerateKey(nil)
-		workerAccounts[i].key = sk
-		workerAccounts[i].url, _ = protocol.LiteTokenAddress(sk[32:], "ACME", protocol.SignatureTypeED25519)
-		pool.add(workerAccounts[i])
+	// ── Seed funder accounts from faucet (fast, no waiting) ──
+	// Submit funding + credit purchases back to back. Workers start
+	// immediately — early sender funding may fail if funder hasn't
+	// settled yet, but the worker just retries on the next pass.
+	fmt.Printf("Seeding %d funder accounts from faucet...\n", numWorkers)
+	type funderAcct struct {
+		sk  ed25519.PrivateKey
+		url *url.URL
 	}
+	funders := make([]funderAcct, numWorkers)
+	{
+		client := jsonrpc.NewClient(nodes[0])
+		nonce := uint64(time.Now().UnixMilli())
+		for i := 0; i < numWorkers; i++ {
+			sk := deriveKey(faucetSeed, "funder", i)
+			u, _ := protocol.LiteTokenAddress(sk[32:], "ACME", protocol.SignatureTypeED25519)
+			funders[i] = funderAcct{sk: sk, url: u}
 
-	// Fund worker accounts
-	fmt.Printf("Funding %d worker accounts with %d ACME each...\n", totalWorkers, *tokensPerWorker)
-	client := jsonrpc.NewClient(nodes[0])
-	nonce := uint64(time.Now().UnixMilli())
-
-	for i, wa := range workerAccounts {
-		env, err := build.Transaction().
-			For(fundingURL).
-			SendTokens(uint64(*tokensPerWorker), 0).To(wa.url).
-			SignWith(fundingURL).
-			Version(1).
-			Timestamp(&nonce).
-			PrivateKey(fundingKey).
-			Done()
-		if err != nil {
-			fmt.Printf("ERROR building funding tx %d: %v\n", i, err)
-			os.Exit(1)
-		}
-
-		reqCtx, reqCancel := context.WithTimeout(ctx, 30*time.Second)
-		subs, err := client.Submit(reqCtx, env, api.SubmitOptions{})
-		reqCancel()
-		if err != nil {
-			fmt.Printf("ERROR submitting funding tx %d: %v\n", i, err)
-			os.Exit(1)
-		}
-		if len(subs) == 0 || !subs[0].Success {
-			msg := "unknown"
-			if len(subs) > 0 {
-				msg = subs[0].Message
+			// Send ACME to funder
+			env, _ := build.Transaction().
+				For(faucetURL).
+				SendTokens(fundingAmount, protocol.AcmePrecisionPower).To(u).
+				SignWith(faucetURL).
+				Version(1).
+				Timestamp(&nonce).
+				PrivateKey(faucetSK).
+				Done()
+			if env != nil {
+				submit(ctx, client, env)
 			}
-			fmt.Printf("ERROR: funding tx %d failed: %s\n", i, msg)
-			os.Exit(1)
+
+			// Buy credits for funder (AddCredits doesn't need credits)
+			env, _ = build.Transaction().
+				For(u).
+				AddCredits().
+				WithOracle(oraclePrice).
+				Spend(3).
+				To(u.RootIdentity()).
+				SignWith(u).
+				Version(1).
+				Timestamp(&nonce).
+				PrivateKey(sk).
+				Done()
+			if env != nil {
+				submit(ctx, client, env)
+			}
 		}
-		fmt.Printf("  Worker %d funded: %s\n", i+1, wa.url)
+		fmt.Printf("Seeded %d funders. Workers starting immediately.\n", numWorkers)
 	}
 
-	fmt.Println("Waiting for funding transactions to settle...")
-	time.Sleep(5 * time.Second)
+	// ── Shared TPS target — ramps up over time ──
+	var currentTargetTPS atomic.Int64
+	currentTargetTPS.Store(int64(startTPS))
 
-	// Global counters
+	// ── Counters ──
 	var submitted, succeeded, failed atomic.Uint64
 	var wg sync.WaitGroup
 
-	// Adaptive TPS ramping goroutine: down to min, then up until pushback detected
-	rampStart := time.Now()
-	peakTPS.Store(int64(*startTPS))
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		ticker := time.NewTicker(1 * time.Second)
-		defer ticker.Stop()
-		lastCheckTime := time.Now()
-		lastCheckSubmitted := uint64(0)
-		lastCheckSucceeded := uint64(0)
-
-		phase := "ramp-down" // ramp-down, hold-min, or ramp-up
-		rampUpStartTime := time.Now()
-
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				elapsed := time.Since(rampStart)
-				now := time.Now()
-
-				// Phase 1: Ramp down to minimum TPS
-				if phase == "ramp-down" && elapsed < *rampDownDuration {
-					progress := float64(elapsed) / float64(*rampDownDuration)
-					newTPS := float64(*startTPS) - progress*float64(*startTPS-*minTPS)
-					currentTPS.Store(int64(newTPS))
-				} else if phase == "ramp-down" {
-					// Transition to holding at minimum
-					currentTPS.Store(int64(*minTPS))
-					peakTPS.Store(int64(*minTPS))
-					phase = "hold-min"
-					rampUpStartTime = now
-					lastCheckTime = now
-					lastCheckSubmitted = submitted.Load()
-					lastCheckSucceeded = succeeded.Load()
-					fmt.Printf("[%v] Reached minimum TPS of %d. Starting ramp-up phase...\n", elapsed.Round(time.Second), *minTPS)
-				}
-
-				// Phase 2: Ramp up, checking for pushback
-				if phase == "hold-min" || phase == "ramp-up" {
-					phase = "ramp-up"
-
-					// Every rampUpDuration, check error rate and increase TPS if healthy
-					if now.Sub(rampUpStartTime) >= *rampUpDuration {
-						timeSinceLastCheck := now.Sub(lastCheckTime).Seconds()
-						if timeSinceLastCheck > 0 {
-							totalSubmitted := submitted.Load() - lastCheckSubmitted
-							totalSucceeded := succeeded.Load() - lastCheckSucceeded
-
-							// Protect against underflow if succeeded > submitted (race condition)
-							var totalFailed uint64
-							if totalSucceeded > totalSubmitted {
-								// Shouldn't happen, but log it and treat as no failures
-								fmt.Printf("WARNING: succeeded (%d) > submitted (%d), clamping failures to 0\n", totalSucceeded, totalSubmitted)
-								totalFailed = 0
-								totalSubmitted = totalSucceeded // Use actual succeeded count as baseline
-							} else {
-								totalFailed = totalSubmitted - totalSucceeded
-							}
-
-							errorRate := 0.0
-							if totalSubmitted > 0 {
-								errorRate = float64(totalFailed) / float64(totalSubmitted)
-							}
-							lastErrorRatePercent.Store(int64(errorRate * 100))
-
-							fmt.Printf("[%v] Error rate: %.2f%% (%d failed/%d submitted) | Current TPS: %d\n",
-								elapsed.Round(time.Second), errorRate*100, totalFailed, totalSubmitted, currentTPS.Load())
-
-							// If error rate is acceptable, try higher TPS
-							if errorRate < *errorThreshold && currentTPS.Load() < int64(*maxTPS) {
-								newTPS := currentTPS.Load() + 1000
-								if newTPS > int64(*maxTPS) {
-									newTPS = int64(*maxTPS)
-								}
-								currentTPS.Store(newTPS)
-								peakTPS.Store(newTPS)
-								fmt.Printf("  -> Increasing TPS to %d (error rate OK)\n", newTPS)
-								rampUpStartTime = now
-								lastCheckTime = now
-								lastCheckSubmitted = submitted.Load()
-								lastCheckSucceeded = succeeded.Load()
-							} else if errorRate >= *errorThreshold {
-								// Pushback detected! Stay at current TPS
-								fmt.Printf("  -> PUSHBACK DETECTED! Holding at %d TPS\n", currentTPS.Load())
-								peakTPS.Store(currentTPS.Load())
-							} else {
-								// Reached max TPS
-								fmt.Printf("  -> Reached maximum TPS limit of %d\n", *maxTPS)
-							}
-						}
-					}
-				}
-			}
-		}
-	}()
-
-	// HTTP control server
-	mux := http.NewServeMux()
-	mux.HandleFunc("/tps", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost || r.URL.Query().Has("v") {
-			vStr := r.URL.Query().Get("v")
-			v, err := strconv.ParseInt(vStr, 10, 64)
-			if err != nil || v < 0 {
-				http.Error(w, "invalid TPS value", http.StatusBadRequest)
-				return
-			}
-			old := currentTPS.Swap(v)
-			fmt.Printf("TPS changed: %d -> %d\n", old, v)
-			fmt.Fprintf(w, "TPS changed: %d -> %d\n", old, v)
-			return
-		}
-		fmt.Fprintf(w, "Current TPS: %d\nTarget TPS: %d\nAccounts: %d\n",
-			currentTPS.Load(), targetTPS.Load(), pool.size())
-	})
-
-	controlServer := &http.Server{
-		Addr:    fmt.Sprintf(":%d", *controlPort),
-		Handler: mux,
-	}
-	go func() {
-		if err := controlServer.ListenAndServe(); err != http.ErrServerClosed {
-			fmt.Printf("Control server error: %v\n", err)
-		}
-	}()
-
-	// Progress reporter
-	ticker := time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
+	// Status reporter + dashboard writer
+	os.MkdirAll(statusDir, 0755)
+	statusFile := filepath.Join(statusDir, "status.json")
+	logFile := filepath.Join(statusDir, "log.jsonl")
+	var peakTPS float64 // only accessed by ticker goroutine + main after wg.Wait
 	start := time.Now()
 
-	type sample struct {
-		time      time.Time
-		submitted uint64
-	}
-	samples := make([]sample, 0, 100)
+	// Windowed TPS tracking (15-second window)
+	var prevSubmitted uint64
+	var prevTime = start
 
+	// Write initial log entry
+	appendLog(logFile, fmt.Sprintf("Test started: %s", label))
+
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -333,153 +195,217 @@ func main() {
 				now := time.Now()
 				elapsed := now.Sub(start)
 				s := submitted.Load()
+				su := succeeded.Load()
+				f := failed.Load()
 
-				tpsSinceLaunch := float64(s) / elapsed.Seconds()
-
-				samples = append(samples, sample{time: now, submitted: s})
-
-				// Keep last 15 minutes
-				cutoff := now.Add(-15 * time.Minute)
-				firstValid := 0
-				for i, samp := range samples {
-					if samp.time.After(cutoff) {
-						firstValid = i
-						break
-					}
-				}
-				if firstValid > 0 {
-					samples = samples[firstValid:]
+				// Reset window every 15 seconds BEFORE calculating TPS
+				if now.Sub(prevTime) >= 15*time.Second {
+					prevSubmitted = s
+					prevTime = now
 				}
 
-				// Calculate TPS for different windows
-				var tps1min, tps5min, tps15min float64
-				for _, window := range []struct {
-					dur time.Duration
-					ptr *float64
-				}{
-					{60 * time.Second, &tps1min},
-					{5 * time.Minute, &tps5min},
-					{15 * time.Minute, &tps15min},
-				} {
-					windowCutoff := now.Add(-window.dur)
-					var oldest *sample
-					for i := range samples {
-						if samples[i].time.After(windowCutoff) {
-							oldest = &samples[i]
-							break
-						}
-					}
-					if oldest != nil && len(samples) > 0 {
-						newest := samples[len(samples)-1]
-						dur := newest.time.Sub(oldest.time).Seconds()
-						if dur > 0 {
-							*window.ptr = float64(newest.submitted-oldest.submitted) / dur
-						}
-					}
+				// Windowed TPS: transactions in last window / window duration
+				windowDuration := now.Sub(prevTime).Seconds()
+				windowTxns := s - prevSubmitted
+				var windowTPS float64
+				if windowDuration > 0 {
+					windowTPS = float64(windowTxns) / windowDuration
 				}
 
-				totalFailed := failed.Load()
-				errorRate := 0.0
+				avgTPS := float64(s) / elapsed.Seconds()
+				if windowTPS > peakTPS {
+					peakTPS = windowTPS
+				}
+				var errorRate float64
 				if s > 0 {
-					errorRate = float64(totalFailed) / float64(s) * 100
+					errorRate = float64(f) / float64(s) * 100
 				}
-				fmt.Printf("Progress: submitted=%d success=%d failure=%d (%.2f%% error) elapsed=%v tps_1min=%.0f tps_5min=%.0f tps_15min=%.0f tps_total=%.0f current_target=%d accounts=%d\n",
-					s, succeeded.Load(), totalFailed, errorRate,
-					elapsed.Round(time.Second), tps1min, tps5min, tps15min, tpsSinceLaunch,
-					currentTPS.Load(), pool.size())
+				target := currentTargetTPS.Load()
+				fmt.Printf("[%v] target=%d window_tps=%.0f avg_tps=%.0f submitted=%d success=%d failed=%d err=%.2f%%\n",
+					elapsed.Round(time.Second), target, windowTPS, avgTPS, s, su, f, errorRate)
+
+				status := map[string]any{
+					"stale":       false,
+					"test_label":  label,
+					"current_tps": windowTPS,
+					"target_tps":  target,
+					"peak_tps":    peakTPS,
+					"submitted":   s,
+					"succeeded":   su,
+					"failed":      f,
+					"error_rate":  errorRate,
+					"avg_tps":     avgTPS,
+					"elapsed":     elapsed.Round(time.Second).String(),
+					"workers":     numWorkers,
+					"nodes":       len(nodes),
+				}
+				if b, err := json.Marshal(status); err == nil {
+					os.WriteFile(statusFile, b, 0644)
+				}
 			}
 		}
 	}()
 
-	fmt.Println("Starting load generators...")
-
-	// Shared HTTP client
-	httpClient := &http.Client{
-		Transport: &http.Transport{
-			MaxIdleConns:        500,
-			IdleConnTimeout:     90 * time.Second,
-			MaxIdleConnsPerHost: 50,
-			DialContext: (&net.Dialer{
-				Timeout:   30 * time.Second,
-				KeepAlive: 30 * time.Second,
-			}).DialContext,
-		},
-		Timeout: 30 * time.Second,
-	}
-
-	// Start workers
-	for i := 0; i < totalWorkers; i++ {
-		nodeURL := nodes[i%len(nodes)]
-		wg.Add(1)
-		go func(workerID int, nodeURL string, account liteAccount) {
-			defer wg.Done()
-			runWorker(ctx, workerID, nodeURL, totalWorkers, account, pool, *maxAccounts, httpClient, &submitted, &succeeded, &failed)
-		}(i+1, nodeURL, workerAccounts[i])
-	}
-
-	fmt.Printf("All %d workers started.\n\n", totalWorkers)
-
-	// Signal handling
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-
-	if *duration > 0 {
-		timer := time.NewTimer(*duration)
-		defer timer.Stop()
-		select {
-		case <-timer.C:
-			fmt.Printf("\n%v test duration reached. Shutting down...\n", *duration)
-		case sig := <-sigChan:
-			fmt.Printf("\nReceived signal %v. Shutting down...\n", sig)
-		}
-	} else {
-		sig := <-sigChan
-		fmt.Printf("\nReceived signal %v. Shutting down...\n", sig)
-	}
-
-	cancel()
-	controlServer.Shutdown(context.Background())
-
-	done := make(chan struct{})
+	// TPS ramper — increases target TPS on interval until max or error cutoff
+	wg.Add(1)
 	go func() {
-		wg.Wait()
-		close(done)
+		defer wg.Done()
+		rampTicker := time.NewTicker(rampInterval)
+		defer rampTicker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-rampTicker.C:
+				s := submitted.Load()
+				f := failed.Load()
+				if s > 0 {
+					errPct := float64(f) / float64(s) * 100
+					if errPct > errorCutoff {
+						msg := fmt.Sprintf("Error rate %.2f%% exceeds cutoff %.1f%%, holding TPS", errPct, errorCutoff)
+						fmt.Printf("── %s ──\n", msg)
+						appendLog(logFile, msg)
+						continue
+					}
+				}
+				cur := currentTargetTPS.Load()
+				next := cur + int64(rampStep)
+				if next > int64(maxTPS) {
+					next = int64(maxTPS)
+				}
+				if next != cur {
+					currentTargetTPS.Store(next)
+					msg := fmt.Sprintf("Ramping TPS: %d -> %d", cur, next)
+					fmt.Printf("── %s ──\n", msg)
+					appendLog(logFile, msg)
+				}
+			}
+		}
 	}()
 
+	// ── Start workers ──
+	// Distribute workers evenly across nodes: worker i → nodes[i % len(nodes)]
+	for i := 0; i < numWorkers; i++ {
+		nodeURL := nodes[i%len(nodes)]
+		funder := funders[i]
+		wg.Add(1)
+		go func(wID int, nURL string, funder funderAcct) {
+			defer wg.Done()
+			runWorker(ctx, wID, nURL, faucetSeed, funder, acctPerWorker,
+				fundingAmount, oraclePrice, numWorkers, &currentTargetTPS,
+				&submitted, &succeeded, &failed)
+		}(i, nodeURL, funder)
+	}
+
+	fmt.Printf("\n── %d workers started across %d nodes. Running for %v ──\n\n", numWorkers, len(nodes), duration)
+
+	// Wait for duration or signal
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	timer := time.NewTimer(duration)
+	defer timer.Stop()
+
+	select {
+	case <-timer.C:
+		fmt.Printf("\n%v reached. Shutting down...\n", duration)
+	case sig := <-sigChan:
+		fmt.Printf("\nSignal %v. Shutting down...\n", sig)
+	}
+	cancel()
+
+	done := make(chan struct{})
+	go func() { wg.Wait(); close(done) }()
 	select {
 	case <-done:
 		fmt.Println("All workers stopped.")
 	case <-time.After(10 * time.Second):
-		fmt.Println("Warning: Some workers did not stop within timeout.")
+		fmt.Println("Warning: some workers did not stop in time.")
 	}
-
-	httpClient.CloseIdleConnections()
 
 	elapsed := time.Since(start)
 	s := submitted.Load()
-	succeedCount := succeeded.Load()
-	failCount := failed.Load()
 	tps := float64(s) / elapsed.Seconds()
-	errorRate := 0.0
-	if s > 0 {
-		errorRate = float64(failCount) / float64(s) * 100
-	}
-	fmt.Printf("\n=== FINAL RESULTS ===\n")
+	fmt.Printf("\nFinal Results:\n")
 	fmt.Printf("  Duration: %v\n", elapsed.Round(time.Second))
 	fmt.Printf("  Submitted: %d\n", s)
-	fmt.Printf("  Success: %d\n", succeedCount)
-	fmt.Printf("  Failed: %d (%.2f%%)\n", failCount, errorRate)
+	fmt.Printf("  Success: %d\n", succeeded.Load())
+	fmt.Printf("  Failed: %d\n", failed.Load())
+	fmt.Printf("  Peak TPS: %.0f\n", peakTPS)
 	fmt.Printf("  Average TPS: %.2f\n", tps)
-	fmt.Printf("  Peak TPS Reached: %d\n", peakTPS.Load())
-	fmt.Printf("  Last Error Rate: %.2f%%\n", float64(lastErrorRatePercent.Load()))
-	fmt.Printf("  Total Accounts: %d\n", pool.size())
-	fmt.Println("\nTest complete.")
+	fmt.Println("\nTest complete!")
 }
 
-func runWorker(ctx context.Context, workerID int, nodeURL string, totalWorkers int, account liteAccount, pool *accountPool, maxAccounts int, httpClient *http.Client, submitted, succeeded, failed *atomic.Uint64) {
+// appendLog appends a timestamped JSON log entry to a JSONL file.
+func appendLog(path string, msg string) {
+	entry := map[string]string{
+		"time": time.Now().Format(time.RFC3339),
+		"msg":  msg,
+	}
+	b, _ := json.Marshal(entry)
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	f.Write(b)
+	f.Write([]byte("\n"))
+}
+
+// deriveKey produces a deterministic ed25519 key from seed components.
+func deriveKey(components ...any) ed25519.PrivateKey {
+	var seed storage.Key
+	for _, c := range components {
+		seed = seed.Append(c)
+	}
+	return ed25519.NewKeyFromSeed(seed[:])
+}
+
+// acctSlot is a private key / address pair with funding state.
+type acctSlot struct {
+	privKey    ed25519.PrivateKey
+	addr       *url.URL
+	hasTokens  bool
+	hasCredits bool
+}
+
+// submit sends a transaction envelope to the network. Returns true on success.
+func submit(ctx context.Context, client *jsonrpc.Client, env *messaging.Envelope) bool {
+	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	_, err := client.Submit(reqCtx, env, api.SubmitOptions{})
+	return err == nil
+}
+
+// runWorker walks through its account slots, funding on first use, then
+// sending tokens at the per-worker share of the current TPS target.
+// The TPS target is shared across all workers and ramps up over time.
+func runWorker(ctx context.Context, workerID int, nodeURL string, faucetSeed string,
+	funder struct {
+		sk  ed25519.PrivateKey
+		url *url.URL
+	},
+	acctCount int, fundingAmount uint64, oraclePrice float64, totalWorkers int,
+	targetTPS *atomic.Int64,
+	submitted, succeeded, failed *atomic.Uint64,
+) {
 	client := jsonrpc.NewClient(nodeURL)
-	nonce := uint64(time.Now().UnixMilli()) + uint64(workerID*1000000)
-	localRand := rand.New(rand.NewSource(time.Now().UnixNano() + int64(workerID)))
+
+	// Pre-compute account keys into flat array
+	slots := make([]acctSlot, acctCount)
+	for i := range slots {
+		sk := deriveKey(faucetSeed, "sender", workerID, i)
+		u, _ := protocol.LiteTokenAddress(sk[32:], "ACME", protocol.SignatureTypeED25519)
+		slots[i] = acctSlot{privKey: sk, addr: u}
+	}
+
+	nonce := uint64(time.Now().UnixMilli()) + uint64(workerID)*1000000
+	sendIdx := 0
+	recvIdx := 0
+
+	perAccountFund := fundingAmount / uint64(acctCount)
+	if perAccountFund < 2 {
+		perAccountFund = 2
+	}
 
 	for {
 		select {
@@ -489,77 +415,91 @@ func runWorker(ctx context.Context, workerID int, nodeURL string, totalWorkers i
 		}
 
 		loopStart := time.Now()
+		from := &slots[sendIdx]
+		to := &slots[recvIdx]
 
-		tps := currentTPS.Load()
-		if tps <= 0 {
-			select {
-			case <-ctx.Done():
-				return
-			case <-time.After(100 * time.Millisecond):
-				continue
-			}
-		}
-
-		tpsPerWorker := tps / int64(totalWorkers)
+		// Compute per-worker rate from shared target
+		tpsPerWorker := int(targetTPS.Load()) / totalWorkers
 		if tpsPerWorker < 1 {
 			tpsPerWorker = 1
 		}
 		targetInterval := time.Second / time.Duration(tpsPerWorker)
 
-		// Decide whether to create new account or reuse existing
-		var destURL *url.URL
-		poolSize := pool.size()
-
-		if poolSize < maxAccounts && localRand.Float32() < 0.3 {
-			// 30% chance to create new account if under limit
-			_, destKey, _ := ed25519.GenerateKey(localRand)
-			destURL, _ = protocol.LiteTokenAddress(destKey[32:], "ACME", protocol.SignatureTypeED25519)
-			pool.add(liteAccount{key: destKey, url: destURL})
-		} else if poolSize > 0 {
-			// Use existing account from pool
-			dest := pool.getRandom()
-			destURL = dest.url
-		} else {
-			// Fallback: create new account
-			_, destKey, _ := ed25519.GenerateKey(localRand)
-			destURL, _ = protocol.LiteTokenAddress(destKey[32:], "ACME", protocol.SignatureTypeED25519)
-			pool.add(liteAccount{key: destKey, url: destURL})
-		}
-
-		if destURL == nil {
-			continue
-		}
-
-		// Send 1 ACME
-		env, err := build.Transaction().
-			For(account.url).
-			SendTokens(1, 0).To(destURL).
-			SignWith(account.url).
-			Version(1).
-			Timestamp(&nonce).
-			PrivateKey(account.key).
-			Done()
-
-		if err != nil {
-			failed.Add(1)
-			continue
-		}
-
-		submitted.Add(1)
-
-		reqCtx, reqCancel := context.WithTimeout(ctx, 10*time.Second)
-		_, err = client.Submit(reqCtx, env, api.SubmitOptions{})
-		reqCancel()
-
-		if err != nil {
-			if ctx.Err() != nil {
-				return
+		if !from.hasTokens {
+			// Fund sender: send ACME from funder
+			env, _ := build.Transaction().
+				For(funder.url).
+				SendTokens(perAccountFund, protocol.AcmePrecisionPower).To(from.addr).
+				SignWith(funder.url).
+				Version(1).
+				Timestamp(&nonce).
+				PrivateKey(funder.sk).
+				Done()
+			if env != nil {
+				submitted.Add(1)
+				if submit(ctx, client, env) {
+					succeeded.Add(1)
+				} else {
+					failed.Add(1)
+				}
 			}
-			failed.Add(1)
+			from.hasTokens = true
+
+		} else if !from.hasCredits {
+			// Buy credits
+			env, _ := build.Transaction().
+				For(from.addr).
+				AddCredits().
+				WithOracle(oraclePrice).
+				Spend(1).
+				To(from.addr.RootIdentity()).
+				SignWith(from.addr).
+				Version(1).
+				Timestamp(&nonce).
+				PrivateKey(from.privKey).
+				Done()
+			if env != nil {
+				submitted.Add(1)
+				if submit(ctx, client, env) {
+					succeeded.Add(1)
+				} else {
+					failed.Add(1)
+				}
+			}
+			from.hasCredits = true
+
 		} else {
-			succeeded.Add(1)
+			// Send tokens
+			env, err := build.Transaction().
+				For(from.addr).
+				SendTokens(1, 0).To(to.addr).
+				SignWith(from.addr).
+				Version(1).
+				Timestamp(&nonce).
+				PrivateKey(from.privKey).
+				Done()
+			if err != nil {
+				// Build error — don't count as submitted
+				failed.Add(1)
+			} else {
+				submitted.Add(1)
+				if submit(ctx, client, env) {
+					succeeded.Add(1)
+				} else {
+					failed.Add(1)
+				}
+			}
 		}
 
+		if ctx.Err() != nil {
+			return
+		}
+
+		// Advance walks
+		sendIdx = (sendIdx + 1) % acctCount
+		recvIdx = (recvIdx + recvStride) % acctCount
+
+		// Rate limit based on current TPS target
 		elapsed := time.Since(loopStart)
 		if elapsed < targetInterval {
 			select {
