@@ -9,6 +9,9 @@ import (
 
 	peer "github.com/libp2p/go-libp2p/core/peer"
 	multiaddr "github.com/multiformats/go-multiaddr"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/dagbft"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/keyrotation"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/address"
 	encoding "gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
@@ -26,20 +29,20 @@ var (
 	sConfig                     schema.Methods[*Config, *Config, *schema.CompositeType]
 	sConfiguration              schema.UnionMethods[Configuration, ConfigurationType]
 	sConfigurationType          schema.EnumMethods[ConfigurationType]
-	sConsensusApp               schema.UnionMethods[ConsensusApp, ConsensusAppType]
-	sConsensusAppType           schema.EnumMethods[ConsensusAppType]
-	sConsensusService           schema.Methods[*ConsensusService, *ConsensusService, *schema.CompositeType]
-	sCoreConsensusApp           schema.Methods[*CoreConsensusApp, *CoreConsensusApp, *schema.CompositeType]
 	sCoreValidatorConfiguration schema.Methods[*CoreValidatorConfiguration, *CoreValidatorConfiguration, *schema.CompositeType]
 	sCoreValidatorMode          schema.EnumMethods[CoreValidatorMode]
+	sDAGBFTService              schema.Methods[*DAGBFTService, *DAGBFTService, *schema.CompositeType]
 	sEventsService              schema.Methods[*EventsService, *EventsService, *schema.CompositeType]
 	sExpBlockDBStorage          schema.Methods[*ExpBlockDBStorage, *ExpBlockDBStorage, *schema.CompositeType]
 	sFaucetService              schema.Methods[*FaucetService, *FaucetService, *schema.CompositeType]
+	sFollowerConfiguration      schema.Methods[*FollowerConfiguration, *FollowerConfiguration, *schema.CompositeType]
 	sGatewayConfiguration       schema.Methods[*GatewayConfiguration, *GatewayConfiguration, *schema.CompositeType]
 	sHttpListener               schema.Methods[*HttpListener, *HttpListener, *schema.CompositeType]
 	sHttpPeerMapEntry           schema.Methods[*HttpPeerMapEntry, *HttpPeerMapEntry, *schema.CompositeType]
 	sHttpService                schema.Methods[*HttpService, *HttpService, *schema.CompositeType]
 	sInstrumentation            schema.Methods[*Instrumentation, *Instrumentation, *schema.CompositeType]
+	sKeyRotationConfig          schema.Methods[*KeyRotationConfig, *KeyRotationConfig, *schema.CompositeType]
+	sKeyRotationService         schema.Methods[*KeyRotationService, *KeyRotationService, *schema.CompositeType]
 	sLevelDBStorage             schema.Methods[*LevelDBStorage, *LevelDBStorage, *schema.CompositeType]
 	sLogging                    schema.Methods[*Logging, *Logging, *schema.CompositeType]
 	sLoggingRule                schema.Methods[*LoggingRule, *LoggingRule, *schema.CompositeType]
@@ -240,6 +243,13 @@ func init() {
 					}).
 						ResolveElemTo(&deferredTypes, "NetSimConfiguration"),
 				},
+				{
+					Discriminator: "follower",
+					Type: (&schema.PointerType{
+						TypeBase: schema.TypeBase{},
+					}).
+						ResolveElemTo(&deferredTypes, "FollowerConfiguration"),
+				},
 			},
 		}).SetGoType()
 
@@ -254,6 +264,10 @@ func init() {
 					Name:  "CoreValidator",
 					Value: 1,
 				},
+				"Follower": {
+					Name:  "Follower",
+					Value: 4,
+				},
 				"Gateway": {
 					Name:  "Gateway",
 					Value: 2,
@@ -264,117 +278,6 @@ func init() {
 				},
 			},
 		}).SetGoType()
-
-	sConsensusApp = schema.WithUnionMethods[ConsensusApp, ConsensusAppType](
-		&schema.UnionType{
-			TypeBase: schema.TypeBase{
-				Name: "ConsensusApp",
-			},
-			Discriminator: (&schema.UnionDiscriminator{
-				Field: "Type",
-			}).
-				ResolveTypeTo(&deferredTypes, "ConsensusAppType").
-				ResolveEnumTo(&deferredTypes, "ConsensusAppType"),
-			Members: []*schema.UnionMember{
-				{
-					Discriminator: "core",
-					Type: (&schema.PointerType{
-						TypeBase: schema.TypeBase{},
-					}).
-						ResolveElemTo(&deferredTypes, "CoreConsensusApp"),
-				},
-			},
-		}).SetGoType()
-
-	sConsensusAppType = schema.WithEnumMethods[ConsensusAppType](
-		&schema.EnumType{
-			TypeBase: schema.TypeBase{
-				Name: "ConsensusAppType",
-			},
-			Underlying: &schema.SimpleType{Type: schema.SimpleTypeInt},
-			Values: map[string]*schema.EnumValue{
-				"Core": {
-					Name:  "Core",
-					Value: 1,
-				},
-			},
-		}).SetGoType()
-
-	sConsensusService = schema.WithMethods[*ConsensusService, *ConsensusService](&schema.CompositeType{
-		TypeBase: schema.TypeBase{
-			Name: "ConsensusService",
-		},
-		Fields: []*schema.Field{
-			{
-				Name: "NodeDir",
-				Type: &schema.SimpleType{Type: schema.SimpleTypeString},
-			},
-			(&schema.Field{
-				Name: "ValidatorKey",
-			}).ResolveTo(&deferredTypes, "PrivateKey"),
-			{
-				Name: "Genesis",
-				Type: &schema.SimpleType{Type: schema.SimpleTypeString},
-			},
-			(&schema.Field{
-				Name: "Listen",
-			}).ResolveTo(&deferredTypes, "Multiaddr"),
-			{
-				Name: "BootstrapPeers",
-				Type: (&schema.ArrayType{
-					TypeBase: schema.TypeBase{},
-				}).
-					ResolveElemTo(&deferredTypes, "Multiaddr"),
-			},
-			{
-				Name:     "MetricsNamespace",
-				Optional: true,
-				Type:     &schema.SimpleType{Type: schema.SimpleTypeString},
-			},
-			(&schema.Field{
-				Name: "App",
-			}).ResolveTo(&deferredTypes, "ConsensusApp"),
-		},
-	}).SetGoType()
-
-	sCoreConsensusApp = schema.WithMethods[*CoreConsensusApp, *CoreConsensusApp](&schema.CompositeType{
-		TypeBase: schema.TypeBase{
-			Name: "CoreConsensusApp",
-		},
-		Fields: []*schema.Field{
-			{
-				Name: "Partition",
-				Type: &schema.PointerType{
-					TypeBase: schema.TypeBase{},
-					Elem:     schema.TypeReferenceFor[protocol.PartitionInfo](),
-				},
-			},
-			{
-				Name:     "EnableHealing",
-				Optional: true,
-				Type: &schema.PointerType{
-					TypeBase: schema.TypeBase{},
-					Elem:     &schema.SimpleType{Type: schema.SimpleTypeBool},
-				},
-			},
-			{
-				Name:     "EnableDirectDispatch",
-				Optional: true,
-				Type: &schema.PointerType{
-					TypeBase: schema.TypeBase{},
-					Elem:     &schema.SimpleType{Type: schema.SimpleTypeBool},
-				},
-			},
-			{
-				Name:     "MaxEnvelopesPerBlock",
-				Optional: true,
-				Type: &schema.PointerType{
-					TypeBase: schema.TypeBase{},
-					Elem:     &schema.SimpleType{Type: schema.SimpleTypeUint},
-				},
-			},
-		},
-	}).SetGoType()
 
 	sCoreValidatorConfiguration = schema.WithMethods[*CoreValidatorConfiguration, *CoreValidatorConfiguration](&schema.CompositeType{
 		TypeBase: schema.TypeBase{
@@ -448,6 +351,14 @@ func init() {
 				}).
 					ResolveElemTo(&deferredTypes, "StorageType"),
 			},
+			{
+				Name:     "NumWorkers",
+				Optional: true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     &schema.SimpleType{Type: schema.SimpleTypeInt},
+				},
+			},
 		},
 	}).SetGoType()
 
@@ -472,6 +383,97 @@ func init() {
 				},
 			},
 		}).SetGoType()
+
+	sDAGBFTService = schema.WithMethods[*DAGBFTService, *DAGBFTService](&schema.CompositeType{
+		TypeBase: schema.TypeBase{
+			Name: "DAGBFTService",
+		},
+		Fields: []*schema.Field{
+			{
+				Name:     "NodeDir",
+				Optional: true,
+				Type:     &schema.SimpleType{Type: schema.SimpleTypeString},
+			},
+			(&schema.Field{
+				Name: "ValidatorKey",
+			}).ResolveTo(&deferredTypes, "PrivateKey"),
+			{
+				Name: "Genesis",
+				Type: &schema.SimpleType{Type: schema.SimpleTypeString},
+			},
+			{
+				Name: "Partition",
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     schema.TypeReferenceFor[protocol.PartitionInfo](),
+				},
+			},
+			{
+				Name:     "NumWorkers",
+				Optional: true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     &schema.SimpleType{Type: schema.SimpleTypeInt},
+				},
+			},
+			{
+				Name:     "DAGGCDepth",
+				Optional: true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     &schema.SimpleType{Type: schema.SimpleTypeInt},
+				},
+			},
+			{
+				Name:     "CommitBufferSize",
+				Optional: true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     &schema.SimpleType{Type: schema.SimpleTypeInt},
+				},
+			},
+			{
+				Name:     "EnableHealing",
+				Optional: true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     &schema.SimpleType{Type: schema.SimpleTypeBool},
+				},
+			},
+			{
+				Name:     "EnableDirectDispatch",
+				Optional: true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     &schema.SimpleType{Type: schema.SimpleTypeBool},
+				},
+			},
+			{
+				Name:     "MaxEnvelopesPerBlock",
+				Optional: true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     schema.TypeReferenceFor[uint64](),
+				},
+			},
+		},
+		Transients: []*schema.Field{
+			{
+				Name: "service",
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     schema.TypeReferenceFor[dagbft.Service](),
+				},
+			},
+			{
+				Name: "eventBus",
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     schema.TypeReferenceFor[events.Bus](),
+				},
+			},
+		},
+	}).SetGoType()
 
 	sEventsService = schema.WithMethods[*EventsService, *EventsService](&schema.CompositeType{
 		TypeBase: schema.TypeBase{
@@ -518,6 +520,78 @@ func init() {
 					TypeBase: schema.TypeBase{},
 					Elem:     schema.TypeReferenceFor[RouterServiceRef](),
 				},
+			},
+		},
+	}).SetGoType()
+
+	sFollowerConfiguration = schema.WithMethods[*FollowerConfiguration, *FollowerConfiguration](&schema.CompositeType{
+		TypeBase: schema.TypeBase{
+			Name: "FollowerConfiguration",
+		},
+		Fields: []*schema.Field{
+			(&schema.Field{
+				Name: "Mode",
+			}).ResolveTo(&deferredTypes, "CoreValidatorMode"),
+			(&schema.Field{
+				Name: "Listen",
+			}).ResolveTo(&deferredTypes, "Multiaddr"),
+			{
+				Name: "BVN",
+				Type: &schema.SimpleType{Type: schema.SimpleTypeString},
+			},
+			{
+				Name: "DnGenesis",
+				Type: &schema.SimpleType{Type: schema.SimpleTypeString},
+			},
+			{
+				Name: "BvnGenesis",
+				Type: &schema.SimpleType{Type: schema.SimpleTypeString},
+			},
+			{
+				Name: "DnBootstrapPeers",
+				Type: (&schema.ArrayType{
+					TypeBase: schema.TypeBase{},
+				}).
+					ResolveElemTo(&deferredTypes, "Multiaddr"),
+			},
+			{
+				Name: "BvnBootstrapPeers",
+				Type: (&schema.ArrayType{
+					TypeBase: schema.TypeBase{},
+				}).
+					ResolveElemTo(&deferredTypes, "Multiaddr"),
+			},
+			{
+				Name:     "EnableHealing",
+				Optional: true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     &schema.SimpleType{Type: schema.SimpleTypeBool},
+				},
+			},
+			{
+				Name:     "EnableDirectDispatch",
+				Optional: true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     &schema.SimpleType{Type: schema.SimpleTypeBool},
+				},
+			},
+			{
+				Name:     "MaxEnvelopesPerBlock",
+				Optional: true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     &schema.SimpleType{Type: schema.SimpleTypeUint},
+				},
+			},
+			{
+				Name:     "StorageType",
+				Optional: true,
+				Type: (&schema.PointerType{
+					TypeBase: schema.TypeBase{},
+				}).
+					ResolveElemTo(&deferredTypes, "StorageType"),
 			},
 		},
 	}).SetGoType()
@@ -672,6 +746,71 @@ func init() {
 					TypeBase: schema.TypeBase{},
 				}).
 					ResolveElemTo(&deferredTypes, "Monitor"),
+			},
+		},
+	}).SetGoType()
+
+	sKeyRotationConfig = schema.WithMethods[*KeyRotationConfig, *KeyRotationConfig](&schema.CompositeType{
+		TypeBase: schema.TypeBase{
+			Name: "KeyRotationConfig",
+		},
+		Fields: []*schema.Field{
+			{
+				Name: "Enabled",
+				Type: &schema.SimpleType{Type: schema.SimpleTypeBool},
+			},
+			{
+				Name: "RotationIntervalDays",
+				Type: &schema.SimpleType{Type: schema.SimpleTypeInt},
+			},
+			{
+				Name: "GracePeriodDays",
+				Type: &schema.SimpleType{Type: schema.SimpleTypeInt},
+			},
+			{
+				Name: "WarningPeriodDays",
+				Type: &schema.SimpleType{Type: schema.SimpleTypeInt},
+			},
+			{
+				Name:     "AuditDirectory",
+				Optional: true,
+				Type:     &schema.SimpleType{Type: schema.SimpleTypeString},
+			},
+			{
+				Name:     "AuditRetentionDays",
+				Optional: true,
+				Type:     &schema.SimpleType{Type: schema.SimpleTypeInt},
+			},
+		},
+	}).SetGoType()
+
+	sKeyRotationService = schema.WithMethods[*KeyRotationService, *KeyRotationService](&schema.CompositeType{
+		TypeBase: schema.TypeBase{
+			Name: "KeyRotationService",
+		},
+		Fields: []*schema.Field{
+			{
+				Name: "Partition",
+				Type: &schema.SimpleType{Type: schema.SimpleTypeString},
+			},
+			(&schema.Field{
+				Name: "ValidatorKey",
+			}).ResolveTo(&deferredTypes, "PrivateKey"),
+			{
+				Name: "Config",
+				Type: (&schema.PointerType{
+					TypeBase: schema.TypeBase{},
+				}).
+					ResolveElemTo(&deferredTypes, "KeyRotationConfig"),
+			},
+		},
+		Transients: []*schema.Field{
+			{
+				Name: "manager",
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     schema.TypeReferenceFor[keyrotation.Manager](),
+				},
 			},
 		},
 	}).SetGoType()
@@ -1157,11 +1296,11 @@ func init() {
 						ResolveElemTo(&deferredTypes, "StorageService"),
 				},
 				{
-					Discriminator: "consensus",
+					Discriminator: "dagbft",
 					Type: (&schema.PointerType{
 						TypeBase: schema.TypeBase{},
 					}).
-						ResolveElemTo(&deferredTypes, "ConsensusService"),
+						ResolveElemTo(&deferredTypes, "DAGBFTService"),
 				},
 				{
 					Discriminator: "querier",
@@ -1190,6 +1329,13 @@ func init() {
 						TypeBase: schema.TypeBase{},
 					}).
 						ResolveElemTo(&deferredTypes, "EventsService"),
+				},
+				{
+					Discriminator: "keyRotation",
+					Type: (&schema.PointerType{
+						TypeBase: schema.TypeBase{},
+					}).
+						ResolveElemTo(&deferredTypes, "KeyRotationService"),
 				},
 				{
 					Discriminator: "http",
@@ -1229,8 +1375,8 @@ func init() {
 			},
 			Underlying: &schema.SimpleType{Type: schema.SimpleTypeInt},
 			Values: map[string]*schema.EnumValue{
-				"Consensus": {
-					Name:  "Consensus",
+				"DAGBFT": {
+					Name:  "DAGBFT",
 					Value: 2,
 				},
 				"Events": {
@@ -1244,6 +1390,10 @@ func init() {
 				"Http": {
 					Name:  "Http",
 					Value: 7,
+				},
+				"KeyRotation": {
+					Name:  "KeyRotation",
+					Value: 12,
 				},
 				"Metrics": {
 					Name:  "Metrics",
@@ -1478,20 +1628,20 @@ func init() {
 		sConfig.Type,
 		sConfiguration.Type,
 		sConfigurationType.Type,
-		sConsensusApp.Type,
-		sConsensusAppType.Type,
-		sConsensusService.Type,
-		sCoreConsensusApp.Type,
 		sCoreValidatorConfiguration.Type,
 		sCoreValidatorMode.Type,
+		sDAGBFTService.Type,
 		sEventsService.Type,
 		sExpBlockDBStorage.Type,
 		sFaucetService.Type,
+		sFollowerConfiguration.Type,
 		sGatewayConfiguration.Type,
 		sHttpListener.Type,
 		sHttpPeerMapEntry.Type,
 		sHttpService.Type,
 		sInstrumentation.Type,
+		sKeyRotationConfig.Type,
+		sKeyRotationService.Type,
 		sLevelDBStorage.Type,
 		sLogging.Type,
 		sLoggingRule.Type,
