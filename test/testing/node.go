@@ -73,9 +73,9 @@ func ConfigureSlog(c logging.SlogConfig) {
 	slog.SetDefault(slog.New(h))
 }
 
-func NewTestLogger(t testing.TB) log.Logger {
+func NewTestLogger(t testing.TB) logging.Logger {
 	if !LogConsole {
-		return logging.NewTestLogger(t, "plain", DefaultLogLevels, false)
+		return logging.FromCometBFT(logging.NewTestLogger(t, "plain", DefaultLogLevels, false))
 	}
 
 	var w io.Writer = &zerolog.ConsoleWriter{
@@ -103,7 +103,7 @@ func NewTestLogger(t testing.TB) log.Logger {
 
 	logger, err := logging.NewTendermintLogger(zerolog.New(w), level, false)
 	require.NoError(t, err)
-	return logger
+	return logging.FromCometBFT(logger)
 }
 
 var DefaultLogLevels = config.LogLevel{}.

@@ -45,7 +45,7 @@ func (r *RouterService) create(inst *Instance) (routing.Router, error) {
 		Node:    inst.p2p,
 		Network: inst.config.Network,
 		Events:  events,
-		Logger:  logging.CometBFTLogger(logging.OptionalLogger{(*logging.Slogger)(inst.logger)}),
+		Logger:  logging.CometBFTLogger(logging.OptionalLogger{logging.NewSlogLogger(inst.logger)}),
 	}
 
 	if len(r.PeerMap) > 0 {
