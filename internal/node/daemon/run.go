@@ -221,13 +221,6 @@ func (d *Daemon) Start(others ...*Daemon) (err error) {
 		}
 	}()
 
-	// Parse the snapshot schedule
-	if s, err := core.Cron.Parse(d.Config.Accumulate.Snapshots.Schedule); err != nil {
-		d.Logger.Error("Ignoring invalid snapshot schedule", "error", err, "value", d.Config.Accumulate.Snapshots.Schedule)
-	} else {
-		d.snapshotSchedule = s
-	}
-
 	// Load keys
 	err = d.loadKeys()
 	if err != nil {
@@ -262,9 +255,6 @@ func (d *Daemon) startValidator() (err error) {
 			_ = d.db.Close()
 		}
 	}()
-
-	// Setup the event bus
-	events.SubscribeSync(d.eventBus, d.onDidCommitBlock)
 
 	globals := make(chan *core.GlobalValues, 1)
 	events.SubscribeSync(d.eventBus, func(e events.WillChangeGlobals) error {

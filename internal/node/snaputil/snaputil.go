@@ -154,7 +154,7 @@ func ListSnapshots(dir string) ([]*SnapshotInfo, error) {
 		if err != nil {
 			return nil, err
 		}
-		info.fileMd.Chunks, err = torrent.ChunksBySize(f, snapshotChunkSize)
+		info.fileMd.Chunks, _, err = torrent.ChunksBySize(f, snapshotChunkSize)
 		if err != nil {
 			return nil, err
 		}
