@@ -16,7 +16,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -48,13 +47,13 @@ var GenesisTime = time.Date(2022, 7, 1, 0, 0, 0, 0, time.UTC)
 type SimulatorOptions struct {
 	BvnCount        int
 	LogLevels       string
-	OpenDB          func(partition string, nodeIndex int, logger log.Logger) *database.Database
+	OpenDB          func(partition string, nodeIndex int, logger logging.Logger) *database.Database
 	FactomAddresses func() (io.Reader, error)
 }
 
 type Simulator struct {
 	tb
-	Logger     log.Logger
+	Logger     logging.Logger
 	Partitions []config.Partition
 	Executors  map[string]*ExecEntry
 
@@ -64,9 +63,9 @@ type Simulator struct {
 	routingOverrides map[[32]byte]string
 }
 
-func (s *Simulator) newLogger(opts SimulatorOptions) log.Logger {
+func (s *Simulator) newLogger(opts SimulatorOptions) logging.Logger {
 	if !acctesting.LogConsole {
-		return logging.NewTestLogger(s, "plain", opts.LogLevels, false)
+		return logging.FromCometBFT(logging.NewTestLogger(s, "plain", opts.LogLevels, false))
 	}
 
 	w, err := logging.NewConsoleWriter("plain")
@@ -75,7 +74,7 @@ func (s *Simulator) newLogger(opts SimulatorOptions) log.Logger {
 	require.NoError(s, err)
 	logger, err := logging.NewTendermintLogger(zerolog.New(writer), level, false)
 	require.NoError(s, err)
-	return logger
+	return logging.FromCometBFT(logger)
 }
 
 func New(t TB, bvnCount int) *Simulator {
@@ -104,8 +103,8 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 		opts.LogLevels = acctesting.DefaultLogLevels
 	}
 	if opts.OpenDB == nil {
-		opts.OpenDB = func(_ string, _ int, logger log.Logger) *database.Database {
-			return database.OpenInMemory(logging.FromCometBFT(logger))
+		opts.OpenDB = func(_ string, _ int, logger logging.Logger) *database.Database {
+			return database.OpenInMemory(logger)
 		}
 	}
 	sim.opts = opts
@@ -135,11 +134,11 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 		sim.Partitions = append(sim.Partitions, partition)
 	}
 
-	mainEventBus := events.NewBus(logging.FromCometBFT(sim.Logger).With("partition", protocol.Directory))
+	mainEventBus := events.NewBus(sim.Logger.With("partition", protocol.Directory))
 	events.SubscribeSync(mainEventBus, sim.willChangeGlobals)
 	sim.router = &router{sim, routing.NewRouter(routing.RouterOptions{
 		Events: mainEventBus,
-		Logger: logging.FromCometBFT(sim.Logger),
+		Logger: sim.Logger,
 	})}
 
 	// Initialize each executor
@@ -184,7 +183,7 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 			bvnInit.Nodes[0],
 			network,
 			opts.OpenDB(bvn.Id, 0, logger),
-			events.NewBus(logging.FromCometBFT(logger)),
+			events.NewBus(logger),
 		)
 		sim.Executors[bvn.Id] = x
 	}
@@ -315,7 +314,7 @@ func (s *Simulator) InitFromGenesisWith(values *core.GlobalValues) {
 	// The simulator only runs one DNN so set the threshold low
 	values.Globals.ValidatorAcceptThreshold.Set(1, 1000)
 
-	genDocs, err := accumulated.BuildGenesisDocs(s.netInit, values, GenesisTime, s.Logger, s.opts.FactomAddresses, nil)
+	genDocs, err := accumulated.BuildGenesisDocs(s.netInit, values, GenesisTime, logging.CometBFTLogger(s.Logger), s.opts.FactomAddresses, nil)
 	require.NoError(s, err)
 
 	// Execute bootstrap after the entire network is known
@@ -573,7 +572,7 @@ type ExecEntry struct {
 }
 
 // init initializes the partition.
-func (x *ExecEntry) init(sim *Simulator, logger log.Logger, partition *config.Partition, init *accumulated.NodeInit, network config.Describe, db *database.Database, eventBus *events.Bus) {
+func (x *ExecEntry) init(sim *Simulator, logger logging.Logger, partition *config.Partition, init *accumulated.NodeInit, network config.Describe, db *database.Database, eventBus *events.Bus) {
 	x.blockTime = GenesisTime
 	x.nodeKey = init.DnNodeKey
 	x.Validators = [][]byte{init.PrivValKey[32:]}
@@ -583,7 +582,7 @@ func (x *ExecEntry) init(sim *Simulator, logger log.Logger, partition *config.Pa
 
 	// Initialize the executor
 	execOpts := block.ExecutorOptions{
-		Logger:        logging.FromCometBFT(logger),
+		Logger:        logger,
 		Database:      x,
 		Key:           init.PrivValKey,
 		Describe:      execute.DescribeShim{NetworkType: network.NetworkType, PartitionId: network.PartitionId},

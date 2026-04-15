@@ -7,6 +7,8 @@
 package testing
 
 import (
+	"crypto/ed25519"
+	"crypto/rand"
 	"fmt"
 	"io"
 	"log/slog"
@@ -16,8 +18,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cometbft/cometbft/crypto/ed25519"
-	"github.com/cometbft/cometbft/libs/log"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -143,7 +143,14 @@ func CreateTestNet(t testing.TB, numBvns, numValidators, numFollowers int, withF
 		FollowerCount:  numFollowers,
 		BasePort:       30000,
 		GenerateKeys: func() (privVal, dnn, bvnn, bsnn []byte) {
-			return ed25519.GenPrivKey(), ed25519.GenPrivKey(), ed25519.GenPrivKey(), ed25519.GenPrivKey()
+			genKey := func() []byte {
+				_, priv, err := ed25519.GenerateKey(rand.Reader)
+				if err != nil {
+					panic(err)
+				}
+				return priv
+			}
+			return genKey(), genKey(), genKey(), genKey()
 		},
 		HostName: func(bvnNum, nodeNum int) (host string, listen string) {
 			var id string
@@ -157,7 +164,7 @@ func CreateTestNet(t testing.TB, numBvns, numValidators, numFollowers int, withF
 		},
 	})
 
-	var initLogger log.Logger
+	var initLogger logging.Logger
 	var logWriter func(format string) (io.Writer, error)
 	if LogConsole {
 		logWriter = logging.NewConsoleWriter
@@ -165,11 +172,12 @@ func CreateTestNet(t testing.TB, numBvns, numValidators, numFollowers int, withF
 		require.NoError(t, err)
 		level, writer, err := logging.ParseLogLevel(DefaultLogLevels, w)
 		require.NoError(t, err)
-		initLogger, err = logging.NewTendermintLogger(zerolog.New(writer), level, false)
+		tmLogger, err := logging.NewTendermintLogger(zerolog.New(writer), level, false)
 		require.NoError(t, err)
+		initLogger = logging.FromCometBFT(tmLogger)
 	} else {
 		logWriter = logging.TestLogWriter(t)
-		initLogger = logging.NewTestLogger(t, "plain", DefaultLogLevels, false)
+		initLogger = logging.FromCometBFT(logging.NewTestLogger(t, "plain", DefaultLogLevels, false))
 	}
 
 	// Disable the sliding fee schedule
@@ -182,7 +190,7 @@ func CreateTestNet(t testing.TB, numBvns, numValidators, numFollowers int, withF
 	if withFactomAddress {
 		factomAddresses = func() (io.Reader, error) { return strings.NewReader(testdata.FactomAddresses), nil }
 	}
-	genDocs, err := accumulated.BuildGenesisDocs(netInit, values, time.Now(), initLogger, factomAddresses, nil)
+	genDocs, err := accumulated.BuildGenesisDocs(netInit, values, time.Now(), logging.CometBFTLogger(initLogger), factomAddresses, nil)
 	require.NoError(t, err)
 
 	configs := accumulated.BuildNodesConfig(netInit, DefaultConfig)
