@@ -17,9 +17,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3/tm"
 	"gitlab.com/accumulatenetwork/accumulate/internal/bsn"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
 	v3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
@@ -145,22 +143,10 @@ func (d *Daemon) startSummaryApp() (types.Application, error) {
 		return nil, errors.UnknownError.WithFormat("start executor: %w", err)
 	}
 
-	app := abci.NewAccumulator(abci.AccumulatorOptions{
-		Address:     d.Key().PubKey().Address(),
-		Executor:    exec,
-		Logger:      d.Logger,
-		EventBus:    d.eventBus,
-		Tracer:      d.tracer,
-		Snapshots:   &d.Config.Accumulate.Snapshots,
-		Genesis:     genesis.DocProvider(&d.Config.Config),
-		Partition:   d.Config.Accumulate.PartitionId,
-		RootDir:     d.Config.RootDir,
-		AnalysisLog: d.Config.Accumulate.AnalysisLog,
-
-		MaxEnvelopesPerBlock: d.Config.Accumulate.MaxEnvelopesPerBlock,
-	})
-
-	return app, nil
+	// The ABCI layer has been removed. CometBFT consensus is no longer
+	// supported. Use accumulated-dagbft instead.
+	_ = exec
+	return nil, errors.NotAllowed.With("ABCI/CometBFT consensus has been removed; use accumulated-dagbft")
 }
 
 func (d *Daemon) startSummaryServices() error {

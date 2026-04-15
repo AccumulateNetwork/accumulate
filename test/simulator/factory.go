@@ -27,7 +27,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
@@ -45,7 +44,6 @@ type simFactory struct {
 	storeOpt      OpenDatabaseFunc
 	snapshot      SnapshotFunc
 	recordings    RecordingFunc
-	abci          abciFunc
 	initialSupply *big.Int
 
 	dropDispatchedMessages      bool
@@ -470,26 +468,12 @@ func (f *nodeFactory) registerSvc(typ api.ServiceType, svc message.Service) {
 	f.getServices().RegisterService(f.getPeerID(), sa, h.Handle)
 }
 
-type abciFunc = func(*nodeFactory, execute.Executor, consensus.RestoreFunc) consensus.App
-
-func noABCI(node *nodeFactory, exec execute.Executor, restore consensus.RestoreFunc) consensus.App {
+func newApp(node *nodeFactory, exec execute.Executor, restore consensus.RestoreFunc) consensus.App {
 	return &consensus.ExecutorApp{
 		Executor: exec,
 		EventBus: node.getEventBus(),
 		Restore:  restore,
 	}
-}
-
-func withABCI(node *nodeFactory, exec execute.Executor, restore consensus.RestoreFunc) consensus.App {
-	a := abci.NewAccumulator(abci.AccumulatorOptions{
-		Partition: node.networkFactory.id,
-		Executor:  exec,
-		EventBus:  node.eventBus,
-		Logger:    node.logger,
-		Database:  node.getDatabase(),
-		Address:   node.network.PrivValKey,
-	})
-	return (*consensus.AbciApp)(a)
 }
 
 type appFunc = func(*nodeFactory) *consensus.Node
@@ -506,7 +490,7 @@ func (f *nodeFactory) makeSummaryApp() *consensus.Node {
 	}
 
 	// Create the app interface
-	abci := f.abci(f, exec, func(file ioutil.SectionReader) error {
+	abci := newApp(f, exec, func(file ioutil.SectionReader) error {
 		return bsn.LoadSnapshot(file, f.getStore(), f.getLogger())
 	})
 
@@ -607,7 +591,7 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 	}
 
 	// Create the app interface
-	abci := f.abci(f, exec, func(file ioutil.SectionReader) error {
+	abci := newApp(f, exec, func(file ioutil.SectionReader) error {
 		return snapshot.FullRestore(execOpts.Database, file, f.getLogger(), execOpts.Describe.PartitionUrl())
 	})
 

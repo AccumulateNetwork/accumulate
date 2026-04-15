@@ -25,7 +25,6 @@ import (
 	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
 	sv1 "gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
@@ -263,7 +262,7 @@ func (c *snapshotCollector) isTimeForSnapshot(blockTime time.Time) bool {
 	}
 
 	// If there are no snapshots, capture a snapshot
-	snapshots, err := abci.ListSnapshots(c.directory)
+	snapshots, err := sv1.ListSnapshots(c.directory)
 	if err != nil || len(snapshots) == 0 {
 		return true
 	}
@@ -318,7 +317,7 @@ func (c *snapshotCollector) collectConsensusDoc(w *sv2.Writer, minorBlock uint64
 var _ api.SnapshotService = (*snapshotCollector)(nil)
 
 func (c *snapshotCollector) ListSnapshots(ctx context.Context, opts api.ListSnapshotsOptions) ([]*api.SnapshotInfo, error) {
-	snapshots, err := abci.ListSnapshots(c.directory)
+	snapshots, err := sv1.ListSnapshots(c.directory)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("list snapshots: %w", err)
 	}

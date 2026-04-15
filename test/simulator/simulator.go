@@ -42,8 +42,6 @@ func New(opts ...Option) (*Simulator, error) {
 		snapshot: func(string, *accumulated.NetworkInit, log.Logger) (ioutil2.SectionReader, error) {
 			return new(ioutil2.Buffer), nil
 		},
-		abci: noABCI,
-
 		// Tests like to materialize tokens, which can cause problems with the
 		// supply calculations. So start with a non-zero supply to provide a
 		// buffer.

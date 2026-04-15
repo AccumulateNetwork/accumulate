@@ -23,7 +23,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -230,10 +229,6 @@ func RunTestNet(t testing.TB, partitions []string, daemons map[string][]*accumul
 	for _, netName := range partitions {
 		for _, daemon := range daemons[netName] {
 			require.NoError(t, daemon.Start())
-			daemon.Node_TESTONLY().ABCI.(*abci.Accumulator).OnFatal(func(err error) {
-				t.Helper()
-				require.NoError(t, err)
-			})
 			all = append(all, daemon)
 		}
 	}

@@ -375,9 +375,12 @@ func InitialAcmeSupply(v *big.Int) Option {
 	})
 }
 
+// UseABCI is a no-op, retained for API compatibility. The ABCI layer has been
+// removed; the simulator always uses the direct executor path.
+//
+// Deprecated: ABCI has been removed. This option does nothing.
 func UseABCI() Option {
 	return optionFunc(func(opts *simFactory) error {
-		opts.abci = withABCI
 		return nil
 	})
 }

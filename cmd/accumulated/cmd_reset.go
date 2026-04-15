@@ -18,7 +18,6 @@ import (
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
 	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
@@ -97,7 +96,7 @@ func resetConsensus(_ *cobra.Command, args []string) {
 	// Rebuild the app state
 	genDoc.InitialHeight = int64(ledger.Index) + 1
 	genDoc.GenesisTime = ledger.Timestamp
-	genDoc.ConsensusParams.Version.App = abci.Version
+	genDoc.ConsensusParams.Version.App = 0x2 // Legacy ABCI version
 
 	hash, err := batch.GetBptRootHash()
 	checkf(err, "get root hash")
