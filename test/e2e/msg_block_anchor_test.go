@@ -183,7 +183,7 @@ func TestAnchorPlaceholder(t *testing.T) {
 
 	// Verify that AdjustStatusIDs changes the ID back to the old ID
 	require.Equal(t, captured[1].ID().String(), st[0].TxID.String())
-	messaging.AdjustStatusIDs([]messaging.Message{captured[1]}, st)
+	adjustStatusIDs([]messaging.Message{captured[1]}, st)
 	require.Equal(t, captured[1].OldID().String(), st[0].TxID.String())
 
 	// Verify it executes
@@ -194,5 +194,26 @@ func TestAnchorPlaceholder(t *testing.T) {
 	for _, msg := range captured {
 		sim.Verify(
 			Msg(msg.ID()).Succeeds())
+	}
+}
+
+// adjustStatusIDs corrects for the fact that the block anchor's ID method was
+// bad and has been changed.
+func adjustStatusIDs(messages []messaging.Message, st []*TransactionStatus) {
+	adjustedIDs := map[[32]byte]*url.TxID{}
+	for _, msg := range messages {
+		switch msg := msg.(type) {
+		case *messaging.BlockAnchor:
+			adjustedIDs[msg.Hash()] = msg.OldID()
+		}
+	}
+	for _, st := range st {
+		if st.TxID == nil {
+			continue
+		}
+		id, ok := adjustedIDs[st.TxID.Hash()]
+		if ok {
+			st.TxID = id
+		}
 	}
 }
