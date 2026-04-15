@@ -88,7 +88,7 @@ func (d *Daemon) startSummaryApp() (interface{}, error) {
 func (d *Daemon) startSummaryServices() error {
 	// Initialize all the services
 	nodeSvc := tm.NewConsensusService(tm.ConsensusServiceParams{
-		Logger:           d.Logger.With("module", "acc-rpc"),
+		Logger:           d.logger().With("module", "acc-rpc"),
 		Local:            d.localTm,
 		PartitionID:      d.Config.Accumulate.PartitionId,
 		PartitionType:    d.Config.Accumulate.NetworkType,
@@ -97,11 +97,11 @@ func (d *Daemon) startSummaryServices() error {
 		ValidatorKeyHash: sha256.Sum256(d.privVal.Key.PubKey.Bytes()),
 	})
 	submitSvc := tm.NewSubmitter(tm.SubmitterParams{
-		Logger: d.Logger.With("module", "acc-rpc"),
+		Logger: d.logger().With("module", "acc-rpc"),
 		Local:  d.localTm,
 	})
 	validateSvc := tm.NewValidator(tm.ValidatorParams{
-		Logger: d.Logger.With("module", "acc-rpc"),
+		Logger: d.logger().With("module", "acc-rpc"),
 		Local:  d.localTm,
 	})
 	messageHandler, err := message.NewHandler(

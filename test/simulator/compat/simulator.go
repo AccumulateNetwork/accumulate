@@ -82,7 +82,7 @@ func (s *Simulator) Init(opts ...simulator.Option) {
 	opts = append(opts,
 		simulator.SimpleNetwork(s.TB.Name(), s.opts.BvnCount, 1),
 		simulator.WithRecordings(harness.Recordings(s.TB)),
-		simulator.WithLogger(acctesting.NewTestLogger(s.TB)),
+		simulator.WithLogger(logging.FromCometBFT(acctesting.NewTestLogger(s.TB))),
 	)
 
 	var err error
