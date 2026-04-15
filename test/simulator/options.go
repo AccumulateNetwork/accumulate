@@ -354,7 +354,7 @@ func (g genesis) apply(opts *simFactory) error {
 		}
 
 		var err error
-		genDocs, err = accumulated.BuildGenesisDocs(net, g.values, g.time, logger, nil, snapshots)
+		genDocs, err = accumulated.BuildGenesisDocs(net, g.values, g.time, logging.CometBFTLogger(logger), nil, snapshots)
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("build genesis docs: %w", err)
 		}

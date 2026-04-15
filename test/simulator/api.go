@@ -18,6 +18,7 @@ import (
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	apiv2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/web"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -43,7 +44,7 @@ func (s *Simulator) SetService(address *api.ServiceAddress, handler func(message
 func (n *Node) newApiV2() (*apiv2.JrpcMethods, error) {
 	svc := n.partition.sim.services
 	return apiv2.NewJrpc(apiv2.Options{
-		Logger:        n.logger,
+		Logger:        logging.CometBFTLogger(n.logger),
 		TxMaxWaitTime: time.Hour,
 		LocalV3:       svc.ForPeer(n.peerID),
 		Querier:       &api.Collator{Querier: svc, Network: svc},
