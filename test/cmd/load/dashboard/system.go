@@ -78,7 +78,7 @@ func (sm *SystemMetrics) GetSnapshot() SystemMetrics {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
 
-	// Return a copy without the mutex
+	// Return a copy with only the consumer-facing fields
 	return SystemMetrics{
 		CPUPercent:    sm.CPUPercent,
 		MemoryUsedMB:  sm.MemoryUsedMB,
@@ -87,11 +87,6 @@ func (sm *SystemMetrics) GetSnapshot() SystemMetrics {
 		DiskWriteMB:   sm.DiskWriteMB,
 		NetworkRxMB:   sm.NetworkRxMB,
 		NetworkTxMB:   sm.NetworkTxMB,
-
-		lastCPU:         sm.lastCPU,
-		lastDisk:        sm.lastDisk,
-		lastNet:         sm.lastNet,
-		lastCollectTime: sm.lastCollectTime,
 	}
 }
 
@@ -252,11 +247,10 @@ func (sm *SystemMetrics) collectDisk(elapsed float64) error {
 			continue
 		}
 
-		// Skip loop, ram, and partition devices
+		// Skip loop and ram devices
 		deviceName := fields[2]
 		if strings.HasPrefix(deviceName, "loop") ||
-			strings.HasPrefix(deviceName, "ram") ||
-			strings.Contains(deviceName, "p") && len(deviceName) > 3 {
+			strings.HasPrefix(deviceName, "ram") {
 			continue
 		}
 

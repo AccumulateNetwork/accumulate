@@ -12,24 +12,31 @@ import time
 from pathlib import Path
 from datetime import datetime
 
-# Validator container names (must match docker-compose.yml)
-VALIDATORS = [
-    "acc-bvn1-val1", "acc-bvn1-val2", "acc-bvn1-val3", "acc-bvn1-val4",
-    "acc-bvn2-val1", "acc-bvn2-val2", "acc-bvn2-val3", "acc-bvn2-val4",
-    "acc-bvn3-val1", "acc-bvn3-val2", "acc-bvn3-val3", "acc-bvn3-val4",
-]
+def discover_validators():
+    """Discover running acc-bvn* validator containers."""
+    validators = []
+    container_to_path = {}
+    try:
+        result = subprocess.run(
+            ["docker", "ps", "--format", "{{.Names}}", "--filter", "name=acc-bvn"],
+            capture_output=True, text=True, timeout=5
+        )
+        if result.returncode == 0:
+            for name in sorted(result.stdout.strip().split('\n')):
+                if not name:
+                    continue
+                validators.append(name)
+                # acc-bvn1-val2 -> bvn1-2
+                parts = name.replace("acc-", "").split("-")
+                if len(parts) >= 2:
+                    bvn = parts[0]  # bvn1
+                    val = parts[1].replace("val", "")  # 2
+                    container_to_path[name] = f"{bvn}-{val}"
+    except Exception as e:
+        print(f"Error discovering validators: {e}")
+    return validators, container_to_path
 
-# Data directory mapping (container_name -> bvn-N path)
-CONTAINER_TO_PATH = {
-    "acc-bvn1-val1": "bvn1-1", "acc-bvn1-val2": "bvn1-2",
-    "acc-bvn1-val3": "bvn1-3", "acc-bvn1-val4": "bvn1-4",
-    "acc-bvn2-val1": "bvn2-1", "acc-bvn2-val2": "bvn2-2",
-    "acc-bvn2-val3": "bvn2-3", "acc-bvn2-val4": "bvn2-4",
-    "acc-bvn3-val1": "bvn3-1", "acc-bvn3-val2": "bvn3-2",
-    "acc-bvn3-val3": "bvn3-3", "acc-bvn3-val4": "bvn3-4",
-}
-
-def get_docker_stats():
+def get_docker_stats(validators):
     """Get CPU and memory stats for all validators using docker stats."""
     stats = {}
 
@@ -50,7 +57,7 @@ def get_docker_stats():
                     data = json.loads(line)
                     container_name = data.get('Name', '')
 
-                    if container_name in VALIDATORS:
+                    if container_name in validators:
                         # Parse CPU percentage (e.g., "12.34%")
                         cpu_str = data.get('CPUPerc', '0%').replace('%', '')
                         cpu = float(cpu_str) if cpu_str else 0
@@ -87,7 +94,7 @@ def parse_memory(mem_str):
     except:
         return 0
 
-def get_db_sizes(network_config_path):
+def get_db_sizes(network_config_path, container_to_path):
     """Get database sizes for each validator."""
     db_sizes = {}
 
@@ -95,7 +102,7 @@ def get_db_sizes(network_config_path):
     if not network_path.exists():
         return db_sizes
 
-    for container_name, bvn_path in CONTAINER_TO_PATH.items():
+    for container_name, bvn_path in container_to_path.items():
         db_path = network_path / bvn_path / "blockdb"
 
         if db_path.exists():
@@ -165,25 +172,28 @@ def write_database_csv(db_sizes, output_file):
 def main():
     """Main monitoring loop."""
     # Create monitoring directory if it doesn't exist
-    monitoring_dir = Path('/tmp/monitoring')
+    monitoring_dir = Path('/tmp/loadtest-workspace/monitoring')
     monitoring_dir.mkdir(parents=True, exist_ok=True)
 
-    # Network config path (same as used by docker-compose)
-    network_config = Path('/root/.accumulate')
+    # Network config path — try Docker volume mount, then fallback
+    network_config = Path('/tmp/loadtest-workspace/network-config')
+    if not network_config.exists():
+        network_config = Path('/root/.accumulate')
 
     print("Starting per-node monitoring...")
     print(f"Monitoring directory: {monitoring_dir}")
     print(f"Network config path: {network_config}")
-    print(f"Monitoring {len(VALIDATORS)} validators\n")
 
-    # Initial collection
     interval = 10  # Collect every 10 seconds
 
     while True:
         try:
+            # Re-discover containers each iteration (they may start after us)
+            validators, container_to_path = discover_validators()
+
             # Get current metrics
-            stats = get_docker_stats()
-            db_sizes = get_db_sizes(network_config)
+            stats = get_docker_stats(validators)
+            db_sizes = get_db_sizes(network_config, container_to_path)
 
             # Write to CSV files
             write_resource_csv(stats, monitoring_dir / 'per-node-resources.csv')
@@ -191,7 +201,7 @@ def main():
 
             # Log summary
             timestamp = datetime.now().strftime('%H:%M:%S')
-            print(f"[{timestamp}] Collected metrics for {len(stats)} validators")
+            print(f"[{timestamp}] Collected metrics for {len(stats)}/{len(validators)} validators")
 
             time.sleep(interval)
         except KeyboardInterrupt:

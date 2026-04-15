@@ -185,7 +185,10 @@ func (d *Display) renderSystemMetrics(sb *strings.Builder, sm *SystemMetrics) {
 		d.progressBar(snap.CPUPercent, 40)))
 
 	// Memory
-	memPercent := snap.MemoryUsedMB / snap.MemoryTotalMB * 100
+	var memPercent float64
+	if snap.MemoryTotalMB > 0 {
+		memPercent = snap.MemoryUsedMB / snap.MemoryTotalMB * 100
+	}
 	memColor := colorGreen
 	if memPercent > 70 {
 		memColor = colorYellow
