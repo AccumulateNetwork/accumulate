@@ -125,30 +125,7 @@ type followerPartOpts struct {
 }
 
 func (p followerPartOpts) apply(cfg *Config) error {
-	// TODO: Implement consensus service for DAG-BFT followers
-	// Consensus service is not available on DAG-BFT integration branch
-	// Follower nodes will use block sync instead of consensus participation
-	/*
-		addService(cfg,
-			&ConsensusService{
-				NodeDir:          p.Dir,
-				ValidatorKey:     p.ValidatorKey, // TransientPrivateKey - voting_power=0
-				Genesis:          p.Genesis,
-				Listen:           applyAddrTransforms(p.Listen, offset),
-				BootstrapPeers:   p.BootstrapPeers,
-				MetricsNamespace: p.MetricsNamespace,
-				App: &CoreConsensusApp{
-					EnableHealing:        p.EnableHealing,
-					EnableDirectDispatch: p.EnableDirectDispatch,
-					MaxEnvelopesPerBlock: p.MaxEnvelopesPerBlock,
-					Partition: &protocol.PartitionInfo{
-						ID:   p.ID,
-						Type: p.Type,
-					},
-				},
-			},
-			func(c *ConsensusService) string { return c.App.partition().ID })
-	*/
+	// TODO: Add DAG-BFT consensus service for followers
 
 	// Storage
 	if !haveService2(cfg, p.ID, func(s *StorageService) string { return s.Name }, nil) {
