@@ -105,21 +105,9 @@ func (l LogLevel) String() string {
 
 var DefaultLogLevels = LogLevel{}.
 	SetDefault("error").
-	SetModule("statesync", "info").
-	SetModule("snapshot", "info").
-	SetModule("restore", "info").
-	// SetModule("accumulate", "info").
-	// SetModule("main", "info").
-	// SetModule("state", "info").
-	// SetModule("statesync", "info").
-	// SetModule("accumulate", "debug").
 	SetModule("executor", "info").
 	SetModule("synthetic", "info").
-	// SetModule("storage", "debug").
-	// SetModule("database", "debug").
 	SetModule("website", "info").
-	// SetModule("disk-monitor", "info").
-	// SetModule("init", "info").
 	String()
 
 func Default(netName string, net protocol.PartitionType, _ NodeType, partitionId string) *Config {
