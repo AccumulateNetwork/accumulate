@@ -13,8 +13,14 @@ import (
 	"strings"
 	"time"
 
-	tmconfig "github.com/cometbft/cometbft/config"
 	"github.com/rs/zerolog"
+)
+
+const (
+	// LogFormatPlain is the plain text log format (matches CometBFT's config value).
+	LogFormatPlain = "plain"
+	// LogFormatJSON is the JSON log format (matches CometBFT's config value).
+	LogFormatJSON = "json"
 )
 
 // NewConsoleWriter parses the log format and creates an appropriate writer.
@@ -25,10 +31,10 @@ func NewConsoleWriter(format string) (io.Writer, error) {
 
 func NewConsoleWriterWith(w io.Writer, format string) (io.Writer, error) {
 	switch strings.ToLower(format) {
-	case tmconfig.LogFormatPlain:
+	case LogFormatPlain:
 		return newConsoleWriter(w), nil
 
-	case tmconfig.LogFormatJSON:
+	case LogFormatJSON:
 		return w, nil
 
 	default:

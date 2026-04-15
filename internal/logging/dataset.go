@@ -12,8 +12,6 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
-
-	tmos "github.com/cometbft/cometbft/libs/os"
 )
 
 type multiSet map[string]*DataSet
@@ -111,14 +109,14 @@ func (d *DataSetLog) DumpDataSetToDiskFile() ([]string, error) {
 			fileName = filepath.Join(d.path, d.processName+"_"+dkey+fileEnd)
 			fileNames = append(fileNames, fileName)
 
-			needHeader := !tmos.FileExists(fileName)
+			needHeader := !fileExists(fileName)
 			file, err := os.OpenFile(fileName, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0700)
 			if err != nil {
 				//open failed, try to dump to local directory.
 				//clear with no parameter => 0 => clears all bits of ios error state.
 				fileName = d.processName + "_" + dkey + fileEnd
 
-				needHeader = !tmos.FileExists(fileName)
+				needHeader = !fileExists(fileName)
 				file, err = os.OpenFile(fileName, os.O_RDWR|os.O_EXCL|os.O_CREATE|os.O_APPEND, 0700)
 				if err != nil {
 					return nil, err
@@ -267,4 +265,10 @@ func (d *DataSet) Unlock() {
 
 func (d *DataSet) SetHeader(header string) {
 	d.header = header
+}
+
+// fileExists returns true if a file exists at the given path.
+func fileExists(filePath string) bool {
+	_, err := os.Stat(filePath)
+	return !os.IsNotExist(err)
 }
