@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
-	"github.com/cometbft/cometbft/libs/log"
 	"github.com/julienschmidt/httprouter"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/spf13/cobra"
@@ -75,7 +74,7 @@ func serveApiFromDatabases(cmd *cobra.Command, args []string) {
 	databases := map[string]*coredb.Database{}
 	for _, arg := range args {
 		// Open database
-		db, err := coredb.OpenBadger(arg, logging.FromCometBFT(logger))
+		db, err := coredb.OpenBadger(arg, logger)
 		Check(err)
 		defer db.Close()
 
@@ -101,7 +100,7 @@ func serveApiFromDatabases(cmd *cobra.Command, args []string) {
 			return batch.Account(u).Main().GetAs(target)
 		}))
 	}
-	router := routing.NewRouter(routing.RouterOptions{Initial: g.Routing, Logger: logging.FromCometBFT(logger)})
+	router := routing.NewRouter(routing.RouterOptions{Initial: g.Routing, Logger: logger})
 
 	// Make a querier for each partition
 	Q := &Querier{
@@ -115,7 +114,7 @@ func serveApiFromDatabases(cmd *cobra.Command, args []string) {
 		}
 
 		Q.parts[part.ID] = api.NewQuerier(api.QuerierParams{
-			Logger:    logging.FromCometBFT(logger),
+			Logger:    logger,
 			Database:  db,
 			Partition: part.ID,
 		})
@@ -234,7 +233,7 @@ func (q *Querier) Query(ctx context.Context, scope *url.URL, query v3.Query) (v3
 	return q.parts[part].Query(ctx, scope, query)
 }
 
-func serve(server *http.Server, l net.Listener, wg *sync.WaitGroup, logger log.Logger) {
+func serve(server *http.Server, l net.Listener, wg *sync.WaitGroup, logger logging.Logger) {
 	wg.Add(1)
 	fmt.Printf("Listening on %v\n", l.Addr())
 
