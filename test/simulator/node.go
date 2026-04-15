@@ -10,10 +10,10 @@ import (
 	"context"
 	"crypto/sha256"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
@@ -27,7 +27,7 @@ type Node struct {
 	id         int
 	network    *accumulated.NodeInit
 	partition  *Partition
-	logger     log.Logger
+	logger     logging.Logger
 	eventBus   *events.Bus
 	nodeKey    []byte
 	privValKey []byte
