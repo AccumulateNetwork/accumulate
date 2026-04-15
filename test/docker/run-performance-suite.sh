@@ -1,7 +1,14 @@
 #!/bin/bash
-# Orchestration script for Issue #3905 performance testing
-# Runs all 6 configurations in sequence with incremental TPS testing
-# Results saved to test/docker/performance-results/
+# Performance test suite for Issue #3905
+# Runs all 9 topologies in sequence: deploy, test, collect, wipe, next.
+#
+# Each node runs both DN and BVN (dual mode).
+# Topologies: {2,3,4} validators × {1,2,3} BVNs
+#
+# Usage:
+#   ./run-performance-suite.sh              # Run all 9
+#   ./run-performance-suite.sh 2 1          # Run just 2-val-1-bvn
+#   ./run-performance-suite.sh 3 2 4 3      # Run 3v2b then 4v3b
 
 set -e
 
@@ -10,95 +17,36 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 RESULTS_DIR="$SCRIPT_DIR/performance-results"
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 
-# Ensure directories exist
 mkdir -p "$RESULTS_DIR"
-mkdir -p /tmp/perf-test-monitoring
-mkdir -p /tmp/perf-test-data
+mkdir -p /tmp/loadtest-workspace
 
-# Log file for entire test suite
 SUITE_LOG="$RESULTS_DIR/suite-$TIMESTAMP.log"
+DASHBOARD_PORT=8888
+DASHBOARD_PID=""
 
-# Test configurations: (validators, bvns, test_id, description)
-declare -a CONFIGS=(
-    "3 1 A1 Single-BVN-3-Validators"
-    "4 1 A2 Single-BVN-4-Validators"
-    "3 2 B1 Dual-BVN-3-Validators"
-    "4 2 B2 Dual-BVN-4-Validators"
-    "3 3 C1 Triple-BVN-3-Validators"
-    "4 3 C2 Triple-BVN-4-Validators"
+# All 9 topologies: validators bvns
+ALL_CONFIGS=(
+    "2 1"
+    "2 2"
+    "2 3"
+    "3 1"
+    "3 2"
+    "3 3"
+    "4 1"
+    "4 2"
+    "4 3"
 )
 
-# Incremental TPS sequence
-TPS_SEQUENCE=(1000 2000 3000 5000 7000 10000 12000)
-INCREMENT_DURATION=60
-ERROR_THRESHOLD=0.05
+# Test parameters
+TEST_DURATION=300    # seconds per topology (5 minutes)
+ERROR_THRESHOLD=5.0  # stop ramping at this error %
 
-# Colors for output
+# Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
-
-# Text failure capture for debugging team
-capture_failure() {
-    local test_id=$1
-    local error_msg=$2
-    local stage=$3
-
-    local failure_file="$RESULTS_DIR/FAILED-${test_id}-$(date +%Y%m%d-%H%M%S).txt"
-
-    log "Capturing failure details to $failure_file"
-
-    cat > "$failure_file" << EOF
-========================================
-FAILURE REPORT
-========================================
-
-Test ID: $test_id
-Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)
-Stage: $stage
-Error Message: $error_msg
-
-========================================
-DOCKER STATE
-========================================
-
-=== docker ps -a ===
-$(docker ps -a 2>&1)
-
-=== docker volume ls ===
-$(docker volume ls 2>&1)
-
-=== docker network ls ===
-$(docker network ls 2>&1)
-
-=== docker compose ps ===
-$(docker compose ps 2>&1)
-
-========================================
-CONTAINER LOGS
-========================================
-
-=== bootstrap logs (last 100 lines) ===
-$(docker compose logs bootstrap 2>&1 | tail -100)
-
-=== all container logs (last 200 lines) ===
-$(docker compose logs 2>&1 | tail -200)
-
-========================================
-SYSTEM STATE
-========================================
-
-Date: $(date)
-Disk: $(df -h /)
-Memory: $(free -h)
-Load: $(uptime)
-EOF
-
-    log_error "Failure captured in: $failure_file"
-    log_error "Share this file with the debugging team"
-}
+NC='\033[0m'
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$SUITE_LOG"
@@ -116,406 +64,342 @@ log_error() {
 }
 
 log_success() {
-    echo -e "${GREEN}[SUCCESS] $*${NC}" | tee -a "$SUITE_LOG"
+    echo -e "${GREEN}[OK] $*${NC}" | tee -a "$SUITE_LOG"
 }
 
-# Complete Docker cleanup - wipe everything
+# Start the dashboard server
+start_dashboard() {
+    pkill -f "dashboard-server.py" 2>/dev/null || true
+    sleep 1
+    python3 "$SCRIPT_DIR/dashboard-server.py" "$DASHBOARD_PORT" > /tmp/dashboard-server.log 2>&1 &
+    DASHBOARD_PID=$!
+    log_success "Dashboard running at http://localhost:$DASHBOARD_PORT/"
+}
+
+# Stop the dashboard server
+stop_dashboard() {
+    if [ -n "$DASHBOARD_PID" ]; then
+        kill "$DASHBOARD_PID" 2>/dev/null || true
+        DASHBOARD_PID=""
+    fi
+    pkill -f "dashboard-server.py" 2>/dev/null || true
+}
+
+# Wipe all Docker state between tests
 docker_cleanup() {
-    log "Performing complete Docker cleanup..."
+    log "Cleaning Docker state..."
 
-    # Stop all accumulate containers
-    docker ps -a --filter "label=accumulate=true" -q 2>/dev/null | xargs -r docker stop 2>/dev/null || true
-    docker ps -a --filter "label=accumulate=true" -q 2>/dev/null | xargs -r docker rm -f 2>/dev/null || true
-
-    # Stop containers by name pattern
-    docker ps -a 2>/dev/null | grep -E "acc-|accumulate" | awk '{print $1}' | xargs -r docker stop 2>/dev/null || true
-    docker ps -a 2>/dev/null | grep -E "acc-|accumulate" | awk '{print $1}' | xargs -r docker rm -f 2>/dev/null || true
-
-    # Remove networks
-    docker network ls 2>/dev/null | grep -E "acc-network|accumulate" | awk '{print $1}' | xargs -r docker network rm 2>/dev/null || true
-
-    # Remove volumes
-    docker volume ls 2>/dev/null | grep -E "acc-|accumulate" | awk '{print $2}' | xargs -r docker volume rm -f 2>/dev/null || true
-
-    # Prune dangling images/volumes/networks (but not stopped containers we might need)
-    docker volume prune -f --filter "label!=keep" 2>/dev/null || true
-
-    # Clear local database directories
-    rm -rf /tmp/accumulate-* 2>/dev/null || true
-    rm -rf /tmp/perf-test-data/* 2>/dev/null || true
-    rm -rf /tmp/perf-test-monitoring/* 2>/dev/null || true
-
-    # Wait for cleanup to settle
-    sleep 3
-
-    log_success "Docker cleanup complete"
-}
-
-# Verify Docker is clean
-verify_docker_clean() {
-    log "Verifying Docker is clean..."
-
-    local acc_containers=$(docker ps -a 2>/dev/null | grep -c -E "acc-|accumulate" || echo 0)
-    if [ "$acc_containers" -gt 0 ]; then
-        log_error "Found $acc_containers lingering accumulate containers. Forcing cleanup..."
-        docker ps -a 2>/dev/null | grep -E "acc-|accumulate"
-        docker system prune -f 2>/dev/null || true
-        sleep 2
-    fi
-
-    local acc_volumes=$(docker volume ls 2>/dev/null | grep -c -E "acc-|accumulate" || echo 0)
-    if [ "$acc_volumes" -gt 0 ]; then
-        log_error "Found $acc_volumes lingering accumulate volumes. Forcing cleanup..."
-        docker volume ls 2>/dev/null | grep -E "acc-|accumulate"
-    fi
-
-    log_success "Docker verification complete"
-}
-
-# Build binary once
-build_binary() {
-    log_section "Building accumulated binary"
-    cd "$REPO_ROOT"
-    if ! go build -o /tmp/accumulated ./cmd/accumulated 2>/tmp/build.log; then
-        log_error "Build failed. See /tmp/build.log"
-        tail -50 /tmp/build.log
-        exit 1
-    fi
-    log_success "Binary built"
-}
-
-# Generate docker-compose for specific validator/BVN count
-generate_docker_compose() {
-    local validators=$1
-    local bvns=$2
-    local output_file="$SCRIPT_DIR/docker-compose-$validators-val-$bvns-bvn.yml"
-
-    log "Generating docker-compose for $validators validators, $bvns BVNs"
-
-    # Template based on current docker-compose.yml structure
-    cat > "$output_file" << 'COMPOSE_EOF'
-version: '3.8'
-
-services:
-  bootstrap:
-    image: docker-bootstrap
-    container_name: acc-bootstrap
-    environment:
-      - BVNS=%BVNS%
-      - VALIDATORS=%VALIDATORS%
-    ports:
-      - "16593:16593"
-    networks:
-      - acc-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:16593/health"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-      start_period: 30s
-COMPOSE_EOF
-
-    # Generate validator services
-    for ((i=1; i<=bvns; i++)); do
-        for ((j=1; j<=validators; j++)); do
-            cat >> "$output_file" << EOF
-
-  bvn${i}-val${j}:
-    image: docker-bvn${i}-val${j}
-    container_name: acc-bvn${i}-val${j}
-    depends_on:
-      bootstrap:
-        condition: service_healthy
-    environment:
-      - BVNS=$bvns
-      - VALIDATORS=$validators
-      - BVN_INDEX=$i
-      - VAL_INDEX=$j
-    ports:
-      - "2666${i}${j}:26660"
-    networks:
-      - acc-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:26660/health"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-      start_period: 30s
-EOF
-        done
-    done
-
-    cat >> "$output_file" << 'COMPOSE_EOF'
-
-networks:
-  acc-network:
-    driver: bridge
-COMPOSE_EOF
-
-    echo "$output_file"
-}
-
-# Run single test configuration
-run_test_config() {
-    local validators=$1
-    local bvns=$2
-    local test_id=$3
-    local description=$4
-
-    log_section "Test $test_id: $description ($validators validators, $bvns BVNs)"
-
-    local config_results="$RESULTS_DIR/${test_id}-results.csv"
-    local config_log="$RESULTS_DIR/${test_id}.log"
-
-    # Initialize results CSV
-    echo "TPS_TARGET,SUBMITTED,SUCCESS,FAILED,ERROR_RATE,ACTUAL_TPS,P50_LATENCY,P99_LATENCY,CPU_PCT,MEMORY_PCT,PUSHBACK_DETECTED" > "$config_results"
-
-    # Complete Docker cleanup before this test
-    log "Wiping Docker state before test..."
-    docker_cleanup
-    verify_docker_clean
-
-    # Generate docker-compose
-    local compose_file=$(generate_docker_compose "$validators" "$bvns")
-
-    # Start network
-    log "Starting Docker network..."
-    export COMPOSE_FILE="$compose_file"
     cd "$SCRIPT_DIR"
 
-    # One more explicit cleanup via compose
-    docker compose down -v 2>/dev/null || true
-    sleep 3
-
-    docker compose build > /dev/null 2>&1 || {
-        log_error "Docker build failed"
-        capture_failure "$test_id" "Docker image build failed" "docker_build"
-        docker_cleanup
-        return 1
-    }
-    docker compose up -d > /dev/null 2>&1
-    sleep 30
-
-    # Check health
-    if ! docker compose ps | grep -q "healthy"; then
-        log_error "Network failed to start. Logs:"
-        docker compose logs bootstrap 2>&1 | tail -30
-
-        # Capture detailed failure info for debugging team
-        capture_failure "$test_id" "Network containers did not reach healthy state after 30s" "network_startup"
-
-        docker compose down -v 2>/dev/null || true
-        return 1
-    fi
-
-    log_success "Network started ($validators validators, $bvns BVN(s))"
-
-    # Verify sharding is enabled (64 shards)
-    log "Verifying executor configuration (expecting 64 shards)..."
-    sleep 3
-    local shard_logs=$(docker compose logs 2>&1 | grep -c "shard-count=64" || echo "0")
-    if [ "$shard_logs" -eq 0 ]; then
-        log_error "WARNING: No logs showing shard-count=64. Sharding may not be enabled."
-        log_error "Docker logs snippet:"
-        docker compose logs 2>&1 | grep -i "shard\|executor" | head -10
-    else
-        log_success "Confirmed: 64-shard execution enabled (found $shard_logs log entries)"
-    fi
-
-    # Start monitoring
-    log "Starting monitoring..."
-    mkdir -p "/tmp/perf-test-monitoring/$test_id"
-    pkill -f "monitor.py" 2>/dev/null || true
-    python3 "$SCRIPT_DIR/monitor.py" "/tmp/perf-test-monitoring/$test_id" 3600 10 > /dev/null 2>&1 &
-    sleep 2
-
-    # Run incremental TPS tests
-    local pushback_detected=false
-    for tps in "${TPS_SEQUENCE[@]}"; do
-        if [ "$pushback_detected" = true ]; then
-            log "Stopping increments: pushback already detected at lower TPS"
-            break
-        fi
-
-        log "Testing at $tps TPS (${INCREMENT_DURATION}s)..."
-
-        cd "$SCRIPT_DIR"
-        local test_output="/tmp/perf-test-data/${test_id}-${tps}-tps.txt"
-
-        timeout $((INCREMENT_DURATION + 30)) go run parallel-loadtest.go \
-            -duration "${INCREMENT_DURATION}s" \
-            -target-tps "$tps" \
-            2>&1 | tee "$test_output" || true
-
-        # Parse results from output
-        local submitted=$(grep "Submitted:" "$test_output" | tail -1 | awk '{print $NF}')
-        local success=$(grep "Success:" "$test_output" | tail -1 | awk '{print $NF}')
-        local failed=$(grep "Failed:" "$test_output" | tail -1 | awk '{print $NF}')
-        local actual_tps=$(grep "Average TPS:" "$test_output" | tail -1 | awk '{print $NF}')
-
-        # Calculate error rate
-        local error_rate="0.0"
-        if [ -n "$submitted" ] && [ "$submitted" -gt 0 ]; then
-            error_rate=$(awk "BEGIN {printf \"%.2f\", ($failed / $submitted) * 100}")
-        fi
-
-        # Get CPU/memory from monitoring (placeholder - needs refinement)
-        local cpu_pct="N/A"
-        local memory_pct="N/A"
-
-        # Check for pushback
-        if (( $(echo "$error_rate > $ERROR_THRESHOLD" | bc -l) )); then
-            log_error "Pushback detected at $tps TPS (error rate: ${error_rate}%)"
-            pushback_detected=true
-            echo "$tps,$submitted,$success,$failed,$error_rate,$actual_tps,N/A,N/A,$cpu_pct,$memory_pct,TRUE" >> "$config_results"
-        else
-            log_success "$tps TPS: $actual_tps actual TPS, ${error_rate}% error"
-            echo "$tps,$submitted,$success,$failed,$error_rate,$actual_tps,N/A,N/A,$cpu_pct,$memory_pct,FALSE" >> "$config_results"
-        fi
-
-        sleep 5
+    # Try compose down for any compose file that might be active
+    for f in docker-compose-*-val-*-bvn.yml docker-compose.yml; do
+        docker compose -f "$f" down -v 2>/dev/null || true
     done
 
-    # Cleanup - aggressive wipe for this configuration
-    log "Stopping network and cleaning Docker state..."
-    docker compose down -v 2>/dev/null || true
-    pkill -f "monitor.py" 2>/dev/null || true
-    unset COMPOSE_FILE
+    # Kill any accumulate containers by name
+    docker ps -a 2>/dev/null | grep -E "acc-" | awk '{print $1}' | xargs -r docker stop 2>/dev/null || true
+    docker ps -a 2>/dev/null | grep -E "acc-" | awk '{print $1}' | xargs -r docker rm -f 2>/dev/null || true
 
-    # Wait for containers to fully stop
-    sleep 3
+    # Remove accumulate volumes
+    docker volume ls -q 2>/dev/null | grep -E "docker_network-config|network-config" | xargs -r docker volume rm -f 2>/dev/null || true
 
-    # Wipe all Docker state to prevent contamination of next test
+    # Prune
+    docker volume prune -f 2>/dev/null || true
+
+    sleep 2
+    log_success "Docker clean"
+}
+
+# Capture failure details
+capture_failure() {
+    local test_id=$1
+    local error_msg=$2
+    local stage=$3
+    local compose_file=$4
+
+    local failure_file="$RESULTS_DIR/FAILED-${test_id}-$(date +%Y%m%d-%H%M%S).txt"
+
+    cat > "$failure_file" << EOF
+FAILURE REPORT
+==============
+Test ID: $test_id
+Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+Stage: $stage
+Error: $error_msg
+
+DOCKER STATE
+============
+$(docker ps -a 2>&1)
+
+CONTAINER LOGS (last 100 lines)
+===============================
+$(docker compose -f "$compose_file" logs 2>&1 | tail -100)
+
+SYSTEM
+======
+Disk: $(df -h / 2>&1)
+Memory: $(free -h 2>&1)
+Load: $(uptime 2>&1)
+EOF
+
+    log_error "Failure details: $failure_file"
+}
+
+# Build Docker image once
+build_image() {
+    log_section "Building Docker image"
+    cd "$REPO_ROOT"
+    if ! docker build -t accumulated-test -f Dockerfile . > /tmp/docker-build.log 2>&1; then
+        log_error "Docker build failed. See /tmp/docker-build.log"
+        tail -20 /tmp/docker-build.log | tee -a "$SUITE_LOG"
+        exit 1
+    fi
+    log_success "Docker image built"
+}
+
+# Get the list of API ports for a given topology
+get_api_ports() {
+    local validators=$1
+    local bvns=$2
+    local compose_file="$SCRIPT_DIR/docker-compose-${validators}-val-${bvns}-bvn.yml"
+
+    # Extract host ports mapped to 26660
+    grep -E '^\s+- "[0-9]+:26660"' "$compose_file" | sed 's/.*"\([0-9]*\):26660".*/\1/'
+}
+
+# Wait for network to be ready
+wait_for_network() {
+    local validators=$1
+    local bvns=$2
+    local max_wait=120
+    local elapsed=0
+
+    log "Waiting for network to be ready (up to ${max_wait}s)..."
+
+    # Get the first API port to poll
+    local first_port=$(get_api_ports "$validators" "$bvns" | head -1)
+    if [ -z "$first_port" ]; then
+        log_error "Failed to extract API port from compose file"
+        return 1
+    fi
+
+    while [ $elapsed -lt $max_wait ]; do
+        if curl -sf -X POST "http://localhost:${first_port}/v3" \
+            -H "Content-Type: application/json" \
+            -d '{"jsonrpc":"2.0","id":1,"method":"network-status","params":{}}' \
+            > /dev/null 2>&1; then
+            log_success "Network ready after ${elapsed}s"
+            return 0
+        fi
+        sleep 5
+        elapsed=$((elapsed + 5))
+    done
+
+    log_error "Network not ready after ${max_wait}s"
+    return 1
+}
+
+# Run a single topology test — continuous ramp, one invocation
+run_test() {
+    local validators=$1
+    local bvns=$2
+    local total_nodes=$((validators * bvns))
+    local test_id="${validators}v-${bvns}b"
+    local compose_file="$SCRIPT_DIR/docker-compose-${validators}-val-${bvns}-bvn.yml"
+
+    log_section "Test: ${validators} validators x ${bvns} BVN(s) = ${total_nodes} nodes"
+
+    if [ ! -f "$compose_file" ]; then
+        log_error "Missing: $compose_file"
+        return 1
+    fi
+
+    # Clean before test
     docker_cleanup
-    verify_docker_clean
 
-    log_success "Test $test_id complete. Results in $config_results"
+    # Deploy
+    log "Deploying ${test_id}..."
+    cd "$SCRIPT_DIR"
+
+    if ! docker compose -f "$compose_file" up -d > /tmp/compose-up-${test_id}.log 2>&1; then
+        log_error "Deploy failed"
+        capture_failure "$test_id" "docker compose up failed" "deploy" "$compose_file"
+        docker compose -f "$compose_file" down -v 2>/dev/null || true
+        return 1
+    fi
+
+    log "Waiting for init to finish..."
+    docker compose -f "$compose_file" wait init > /dev/null 2>&1 || true
+    log "Waiting for bootstrap and validators..."
+    sleep 30
+
+    if ! wait_for_network "$validators" "$bvns"; then
+        capture_failure "$test_id" "Network did not come up" "startup" "$compose_file"
+        docker compose -f "$compose_file" down -v 2>/dev/null || true
+        return 1
+    fi
+
+    log_success "Network running: ${total_nodes} nodes"
+
+    # Build API endpoint list
+    local endpoints=""
+    for port in $(get_api_ports "$validators" "$bvns"); do
+        if [ -n "$endpoints" ]; then
+            endpoints="${endpoints},"
+        fi
+        endpoints="${endpoints}http://localhost:${port}/v3"
+    done
+
+    # Clear stale status (but NOT the log — it accumulates across tests)
+    rm -f /tmp/loadtest-workspace/status.json
+
+    # Run continuous ramp load test
+    local test_output="$RESULTS_DIR/${test_id}-output.txt"
+    log "Starting load test: ${test_id}..."
+
+    timeout $((TEST_DURATION + 120)) go run parallel-loadtest.go \
+        -duration "${TEST_DURATION}s" \
+        -start-tps 1000 \
+        -max-tps 25000 \
+        -ramp-step 2000 \
+        -ramp-interval 30s \
+        -error-cutoff "$ERROR_THRESHOLD" \
+        -nodes "$endpoints" \
+        -faucet-seed "FAUCET" \
+        -oracle 1000 \
+        -accounts 1000 \
+        -label "${test_id}" \
+        > "$test_output" 2>&1 || true
+
+    # Parse final results
+    local submitted=$(grep "^  Submitted:" "$test_output" 2>/dev/null | awk '{print $2}')
+    local failed=$(grep "^  Failed:" "$test_output" 2>/dev/null | awk '{print $2}')
+    local peak=$(grep "^  Peak TPS:" "$test_output" 2>/dev/null | awk '{print $3}')
+    local avg_tps=$(grep "^  Average TPS:" "$test_output" 2>/dev/null | awk '{print $3}')
+    submitted=${submitted:-0}; failed=${failed:-0}; peak=${peak:-0}; avg_tps=${avg_tps:-0}
+
+    log_success "${test_id}: peak=${peak} avg=${avg_tps} submitted=${submitted} failed=${failed}"
+
+    # Tear down
+    log "Tearing down ${test_id}..."
+    docker compose -f "$compose_file" down -v > /dev/null 2>&1 || true
+    docker_cleanup
+
+    log_success "Test ${test_id} complete"
 }
 
 # Generate summary report
-generate_summary_report() {
+generate_report() {
     log_section "Generating Summary Report"
 
-    local report_file="$RESULTS_DIR/PERFORMANCE-RESULTS-RC-v1.5.1.md"
+    local report="$RESULTS_DIR/PERFORMANCE-RESULTS-$TIMESTAMP.md"
 
-    cat > "$report_file" << 'REPORT_EOF'
-# Performance Test Results - RC v1.5.1-breaking (Issue #3905)
+    cat > "$report" << EOF
+# Performance Test Results -- RC v1.5.1-breaking
 
-**Test Date**: %TIMESTAMP%
-**Test Suite**: Incremental TPS testing across 6 configurations
-**Methodology**: Start at 1000 TPS, increment 1000-2000 TPS per step until error rate >5%
+**Date**: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+**Methodology**: Continuous ramp 1K->25K TPS (+2K every 30s), cutoff at ${ERROR_THRESHOLD}% errors
+**Duration per topology**: ${TEST_DURATION}s
+**Topologies**: {2,3,4} validators x {1,2,3} BVNs (every node runs DN+BVN)
 
-## Summary Table
+## Results
 
-| Test ID | Config | Per-BVN Limit | Total Network | Notes |
-|---------|--------|---------------|----------------|-------|
-REPORT_EOF
+| Topology | Nodes | Peak TPS | Avg TPS | Submitted | Failed |
+|----------|-------|----------|---------|-----------|--------|
+EOF
 
-    # Add per-config summary
-    for config in "${CONFIGS[@]}"; do
-        IFS=' ' read -r validators bvns test_id desc <<< "$config"
-        local results_file="$RESULTS_DIR/${test_id}-results.csv"
+    for config in "${RUN_CONFIGS[@]}"; do
+        IFS=' ' read -r v b <<< "$config"
+        local test_id="${v}v-${b}b"
+        local nodes=$((v * b))
+        local output="$RESULTS_DIR/${test_id}-output.txt"
 
-        if [ -f "$results_file" ]; then
-            # Find highest TPS before pushback
-            local max_tps=$(awk -F',' '$11=="FALSE" {print $1}' "$results_file" | tail -1)
-            local total=$(echo "$max_tps * $bvns" | bc)
-            echo "| $test_id | $validators val, $bvns BVN | ~${max_tps} TPS | ~${total} TPS | See detailed results |" >> "$report_file"
+        if [ -f "$output" ]; then
+            local peak=$(grep "^  Peak TPS:" "$output" 2>/dev/null | awk '{print $3}')
+            local avg=$(grep "^  Average TPS:" "$output" 2>/dev/null | awk '{print $3}')
+            local sub=$(grep "^  Submitted:" "$output" 2>/dev/null | awk '{print $2}')
+            local fail=$(grep "^  Failed:" "$output" 2>/dev/null | awk '{print $2}')
+            peak=${peak:-N/A}; avg=${avg:-N/A}; sub=${sub:-N/A}; fail=${fail:-N/A}
+            echo "| ${v}v x ${b}b | ${nodes} | ${peak} | ${avg} | ${sub} | ${fail} |" >> "$report"
+        else
+            echo "| ${v}v x ${b}b | ${nodes} | FAILED | -- | -- | -- |" >> "$report"
         fi
     done
 
-    cat >> "$report_file" << 'REPORT_EOF'
+    cat >> "$report" << 'EOF'
 
-## Detailed Results
+## Detailed Output
 
-REPORT_EOF
+See individual `*-output.txt` files in this directory.
 
-    # Add per-config detailed results
-    for config in "${CONFIGS[@]}"; do
-        IFS=' ' read -r validators bvns test_id desc <<< "$config"
-        local results_file="$RESULTS_DIR/${test_id}-results.csv"
+## Test Log
 
-        if [ -f "$results_file" ]; then
-            echo "### Test $test_id: $desc" >> "$report_file"
-            echo "" >> "$report_file"
-            echo "\`\`\`" >> "$report_file"
-            cat "$results_file" >> "$report_file"
-            echo "\`\`\`" >> "$report_file"
-            echo "" >> "$report_file"
-        fi
-    done
+See `/tmp/loadtest-workspace/log.jsonl` for the full event log across all topologies.
+EOF
 
-    log_success "Summary report: $report_file"
+    log_success "Report: $report"
 }
 
-# Main execution
+# Main
 main() {
-    log_section "Starting Performance Test Suite - Issue #3905"
-    log "Results directory: $RESULTS_DIR"
-    log "Timestamp: $TIMESTAMP"
-    log "Test configurations: ${#CONFIGS[@]}"
-    log "TPS sequence: ${TPS_SEQUENCE[*]}"
+    log_section "Performance Test Suite — Issue #3905"
 
-    # Complete cleanup before starting
-    log_section "Pre-Suite Docker Cleanup"
+    # Parse args: pairs of (validators bvns), or run all 9
+    RUN_CONFIGS=()
+    if [ $# -gt 0 ]; then
+        while [ $# -ge 2 ]; do
+            RUN_CONFIGS+=("$1 $2")
+            shift 2
+        done
+    else
+        RUN_CONFIGS=("${ALL_CONFIGS[@]}")
+    fi
+
+    log "Topologies to test: ${#RUN_CONFIGS[@]}"
+    for c in "${RUN_CONFIGS[@]}"; do
+        IFS=' ' read -r v b <<< "$c"
+        log "  ${v} validators × ${b} BVN(s) = $((v * b)) nodes"
+    done
+
+    # Clean slate
     docker_cleanup
-    verify_docker_clean
 
-    # Build once
-    build_binary
+    # Build image once
+    build_image
 
-    # Run each configuration
+    # Start dashboard — stays up for entire suite
+    start_dashboard
+
+    # Cleanup handler
+    trap 'stop_dashboard; docker_cleanup' EXIT
+
+    # Run each topology
     local passed=0
     local failed=0
-    for config in "${CONFIGS[@]}"; do
-        IFS=' ' read -r validators bvns test_id desc <<< "$config"
-        if run_test_config "$validators" "$bvns" "$test_id" "$desc"; then
+    for config in "${RUN_CONFIGS[@]}"; do
+        IFS=' ' read -r v b <<< "$config"
+        if run_test "$v" "$b"; then
             ((passed++))
         else
             ((failed++))
-            log_error "Test $test_id failed"
-            # Clean up aggressively after failure to prevent state bleed
+            log_error "FAILED: ${v}v-${b}b"
             docker_cleanup
-            verify_docker_clean
         fi
     done
 
-    # Generate report
-    generate_summary_report
+    # Report
+    generate_report
 
-    # Final summary
-    log_section "Test Suite Complete"
-    log "Passed: $passed"
+    # Summary
+    log_section "Suite Complete"
+    log "Passed: $passed / $((passed + failed))"
     log "Failed: $failed"
-    log "Results directory: $RESULTS_DIR"
-    log "Full log: $SUITE_LOG"
+    log "Results: $RESULTS_DIR"
+    log "Dashboard was at http://localhost:$DASHBOARD_PORT/"
 
-    if [ "$failed" -gt 0 ]; then
-        log_section "FAILURES DETECTED - Debugging Team Required"
-        log "The following tests failed and require investigation:"
-        ls "$RESULTS_DIR"/FAILED-*.json 2>/dev/null | while read f; do
-            log "  - $f"
-        done
-        log ""
-        log "Next steps:"
-        log "1. Review the FAILED-*.json files in $RESULTS_DIR"
-        log "2. Create v1.5.1-rc-debugging team to investigate"
-        log "3. Assign failures to appropriate specialists:"
-        log "   - network-debugger: Network startup, Docker issues"
-        log "   - sharding-debugger: Missing shard logs, executor config"
-        log "   - load-test-debugger: Transaction submission, account issues"
-        log "   - consensus-debugger: TPS plateaus, block production"
-        log "   - memory-debugger: Memory runaway, goroutine leaks"
-        log "   - cleanup-debugger: Docker cleanup failures"
-        log ""
-        log "See: .claude/plans/issue-3905-debugging-team-coordination.md"
-    fi
-
-    # Final cleanup to leave system clean
-    log_section "Post-Suite Docker Cleanup"
+    # Final cleanup (also handled by trap)
+    stop_dashboard
     docker_cleanup
-    verify_docker_clean
-    log_success "All resources cleaned up"
 }
 
 main "$@"
