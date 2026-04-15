@@ -8,10 +8,8 @@ package accumulated
 
 import (
 	"context"
-	"crypto/sha256"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3/tm"
 	"gitlab.com/accumulatenetwork/accumulate/internal/bsn"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	v3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -81,52 +79,6 @@ func (d *Daemon) startSummary() error {
 	return errors.NotAllowed.With("CometBFT consensus removed; use accumulated-dagbft")
 }
 
-func (d *Daemon) startSummaryApp() (interface{}, error) {
-	return nil, errors.NotAllowed.With("CometBFT consensus removed; use accumulated-dagbft")
-}
-
-func (d *Daemon) startSummaryServices() error {
-	// Initialize all the services
-	nodeSvc := tm.NewConsensusService(tm.ConsensusServiceParams{
-		Logger:           d.logger().With("module", "acc-rpc"),
-		Local:            d.localTm,
-		PartitionID:      d.Config.Accumulate.PartitionId,
-		PartitionType:    d.Config.Accumulate.NetworkType,
-		EventBus:         d.eventBus,
-		NodeKeyHash:      sha256.Sum256(d.nodeKey.PubKey().Bytes()),
-		ValidatorKeyHash: sha256.Sum256(d.privVal.Key.PubKey.Bytes()),
-	})
-	submitSvc := tm.NewSubmitter(tm.SubmitterParams{
-		Logger: d.logger().With("module", "acc-rpc"),
-		Local:  d.localTm,
-	})
-	validateSvc := tm.NewValidator(tm.ValidatorParams{
-		Logger: d.logger().With("module", "acc-rpc"),
-		Local:  d.localTm,
-	})
-	messageHandler, err := message.NewHandler(
-		&message.ConsensusService{ConsensusService: nodeSvc},
-		&message.Submitter{Submitter: submitSvc},
-		&message.Validator{Validator: validateSvc},
-	)
-	if err != nil {
-		return errors.UnknownError.WithFormat("initialize P2P handler: %w", err)
-	}
-
-	services := []interface{ Type() v3.ServiceType }{
-		nodeSvc,
-		submitSvc,
-		validateSvc,
-	}
-	for _, s := range services {
-		d.p2pnode.RegisterService(&v3.ServiceAddress{
-			Type:     s.Type(),
-			Argument: d.Config.Accumulate.PartitionId,
-		}, messageHandler.Handle)
-	}
-
-	return nil
-}
 
 type summaryRouter string
 
