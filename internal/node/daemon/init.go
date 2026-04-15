@@ -175,7 +175,6 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][]*config.
 		ConfigureNodePorts(network.Bootstrap, cfg, protocol.PartitionTypeDirectory)
 		cfg.Accumulate.P2P.BootstrapPeers = nil
 		cfg.Accumulate.AnalysisLog = config.AnalysisLog{}
-		cfg.Accumulate.Snapshots = config.Snapshots{}
 		cfg.Storage = nil
 
 		allConfigs = append(allConfigs, [][]*config.Config{{cfg}})

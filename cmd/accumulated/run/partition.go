@@ -26,8 +26,6 @@ type partOpts struct {
 }
 
 func (p partOpts) apply(cfg *Config) error {
-	setDefaultPtr(&p.EnableSnapshots, false)
-
 	// Consensus (DAG-BFT)
 	addService(cfg,
 		&DAGBFTService{
@@ -55,9 +53,6 @@ func (p partOpts) apply(cfg *Config) error {
 		storage.setPath(filepath.Join(p.Dir, "data", "accumulate.db"))
 		cfg.Services = append(cfg.Services, &StorageService{Name: p.ID, Storage: storage})
 	}
-
-	// Snapshots; capture on every major block (CometBFT only)
-	p.addSnapshotService(cfg)
 
 	// Services
 	addService(cfg, &Querier{Partition: p.ID}, func(s *Querier) string { return s.Partition })

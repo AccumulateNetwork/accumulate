@@ -16,7 +16,6 @@ import (
 	"path/filepath"
 	"runtime/debug"
 	"sort"
-	"sync/atomic"
 	"time"
 
 	abci "github.com/cometbft/cometbft/abci/types"
@@ -51,14 +50,12 @@ type Accumulator struct {
 	AccumulatorOptions
 	logger log.Logger
 
-	snapshots      snapshotManager
 	block          execute.Block
 	blockState     execute.BlockState
 	blockSpan      trace.Span
 	txct           int64
 	timer          time.Time
 	didPanic       bool
-	lastSnapshot   uint64
 	pendingUpdates abci.ValidatorUpdates
 	startTime      time.Time
 	ready          bool
@@ -76,7 +73,6 @@ type AccumulatorOptions struct {
 	Executor             execute.Executor
 	EventBus             *events.Bus
 	Logger               log.Logger
-	Snapshots            *config.Snapshots
 	Database             coredb.Beginner
 	Address              crypto.Address // This is the address of this node, and is used to determine if the node is the leader
 	Genesis              node.GenesisDocProvider
@@ -103,10 +99,6 @@ func NewAccumulator(opts AccumulatorOptions) *Accumulator {
 	if app.AnalysisLog.Enabled {
 		app.AnalysisLog.Init(app.RootDir, app.Partition)
 	}
-
-	events.SubscribeAsync(opts.EventBus, func(e events.DidSaveSnapshot) {
-		atomic.StoreUint64(&app.lastSnapshot, e.MinorIndex)
-	})
 
 	app.logger.Info("Starting ABCI application", "accumulate", accumulate.Version, "abci", Version)
 	return app
@@ -717,12 +709,6 @@ func (app *Accumulator) discardBlock() {
 //
 // Commits the transaction block to the chains.
 func (app *Accumulator) Commit(_ context.Context, req *abci.RequestCommit) (*abci.ResponseCommit, error) {
-	// // Keep this disabled until we have real snapshot support through Tendermint
-	// if false {
-	// 	// Truncate Tendermint's block store to the latest snapshot
-	// 	resp.RetainHeight = int64(app.lastSnapshot)
-	// }
-
 	// COMMIT DOES NOT COMMIT TO DISK.
 	//
 	// That is deferred until the next BeginBlock, in order to ensure that
