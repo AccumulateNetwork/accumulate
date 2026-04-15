@@ -1,4 +1,4 @@
-// Copyright 2026 The Accumulate Authors
+// Copyright 2025 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -13,28 +13,23 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
-	"github.com/cometbft/cometbft/abci/types"
-	tmcfg "github.com/cometbft/cometbft/config"
 	"github.com/cometbft/cometbft/crypto"
 	tmlog "github.com/cometbft/cometbft/libs/log"
-	service2 "github.com/cometbft/cometbft/libs/service"
-	tmnode "github.com/cometbft/cometbft/node"
 	tmp2p "github.com/cometbft/cometbft/p2p"
 	"github.com/cometbft/cometbft/privval"
-	"github.com/cometbft/cometbft/proxy"
-	"github.com/cometbft/cometbft/rpc/client/local"
 	"github.com/fatih/color"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
+	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog"
 	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/exp/loki"
@@ -43,15 +38,11 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3/tm"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
-	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
 	nodeapi "gitlab.com/accumulatenetwork/accumulate/internal/node/http"
 	v3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
@@ -81,6 +72,8 @@ type Daemon struct {
 	router           routing.Router
 	eventBus         *events.Bus
 	localTm          *tendermint.DeferredClient
+	snapshotSchedule cron.Schedule
+	snapshotLock     *sync.Mutex
 	tracer           trace.Tracer
 	local            map[string]tendermint.DispatcherClient
 
@@ -100,6 +93,7 @@ func Load(dir string, newWriter func(*config.Config) (io.Writer, error)) (*Daemo
 
 func New(cfg *config.Config, newWriter func(*config.Config) (io.Writer, error)) (*Daemon, error) {
 	var daemon Daemon
+	daemon.snapshotLock = new(sync.Mutex)
 	daemon.Config = cfg
 	daemon.localTm = tendermint.NewDeferredClient()
 	daemon.done = make(chan struct{})
@@ -176,7 +170,7 @@ func New(cfg *config.Config, newWriter func(*config.Config) (io.Writer, error)) 
 		return nil, errors.UnknownError.WithFormat("initialize logger: %v", err)
 	}
 
-	daemon.eventBus = events.NewBus(logging.FromCometBFT(daemon.Logger).With("module", "events"))
+	daemon.eventBus = events.NewBus(daemon.Logger.With("module", "events"))
 	return &daemon, nil
 }
 
@@ -227,6 +221,13 @@ func (d *Daemon) Start(others ...*Daemon) (err error) {
 		}
 	}()
 
+	// Parse the snapshot schedule
+	if s, err := core.Cron.Parse(d.Config.Accumulate.Snapshots.Schedule); err != nil {
+		d.Logger.Error("Ignoring invalid snapshot schedule", "error", err, "value", d.Config.Accumulate.Snapshots.Schedule)
+	} else {
+		d.snapshotSchedule = s
+	}
+
 	// Load keys
 	err = d.loadKeys()
 	if err != nil {
@@ -252,7 +253,7 @@ func (d *Daemon) Start(others ...*Daemon) (err error) {
 
 func (d *Daemon) startValidator() (err error) {
 	// Start the database
-	d.db, err = database.Open(d.Config, logging.FromCometBFT(d.Logger))
+	d.db, err = database.Open(d.Config, d.Logger)
 	if err != nil {
 		return errors.UnknownError.WithFormat("open database: %w", err)
 	}
@@ -261,6 +262,9 @@ func (d *Daemon) startValidator() (err error) {
 			_ = d.db.Close()
 		}
 	}()
+
+	// Setup the event bus
+	events.SubscribeSync(d.eventBus, d.onDidCommitBlock)
 
 	globals := make(chan *core.GlobalValues, 1)
 	events.SubscribeSync(d.eventBus, func(e events.WillChangeGlobals) error {
@@ -356,227 +360,29 @@ func (d *Daemon) loadKeys() error {
 		return nil
 	}
 
-	// CometBFT keys are optional for DAG-BFT nodes
-	// Check if files exist before trying to load them to avoid CometBFT panics
-	keyFile := d.Config.PrivValidatorKeyFile()
-	stateFile := d.Config.PrivValidatorStateFile()
-
-	if _, err := os.Stat(keyFile); err == nil {
-		// File exists, try to load it
-		var err error
-		d.privVal, err = config.LoadFilePV(keyFile, stateFile)
-		if err != nil {
-			d.Logger.Info("CometBFT validator key exists but failed to load (OK for DAG-BFT nodes)", "error", err)
-			d.privVal = nil
-		}
-	} else {
-		// File doesn't exist - this is OK for DAG-BFT nodes
-		d.Logger.Info("CometBFT validator key not found (OK for DAG-BFT nodes)")
-		d.privVal = nil
-	}
-
-	// CometBFT node key is also optional for DAG-BFT nodes
-	nodeKeyFile := d.Config.NodeKeyFile()
-	if _, err := os.Stat(nodeKeyFile); err == nil {
-		// File exists, try to load it
-		var err error
-		d.nodeKey, err = tmp2p.LoadNodeKey(nodeKeyFile)
-		if err != nil {
-			d.Logger.Info("CometBFT node key exists but failed to load (OK for DAG-BFT nodes)", "error", err)
-			d.nodeKey = nil
-		}
-	} else {
-		// File doesn't exist - this is OK for DAG-BFT nodes
-		d.Logger.Info("CometBFT node key not found (OK for DAG-BFT nodes)")
-		d.nodeKey = nil
-	}
-
-	return nil
-}
-
-func (d *Daemon) startApp(caughtUp <-chan struct{}) (types.Application, error) {
-	dialer := d.p2pnode.DialNetwork()
-	client := &message.Client{Transport: &message.RoutedTransport{
-		Network: d.Config.Accumulate.Network.Id,
-		Dialer:  dialer,
-		Router:  routing.MessageRouter{Router: d.router},
-	}}
-	execOpts := execute.Options{
-		Logger:        logging.FromCometBFT(d.Logger),
-		Database:      d.db,
-		Key:           d.Key().Bytes(),
-		Router:        d.router,
-		EventBus:      d.eventBus,
-		Sequencer:     client.Private(),
-		Querier:       client,
-		EnableHealing: d.Config.Accumulate.Healing.Enable,
-		Describe: execute.DescribeShim{
-			NetworkType: d.Config.Accumulate.Describe.NetworkType,
-			PartitionId: d.Config.Accumulate.Describe.PartitionId,
-		},
-	}
-
-	// Load executor configuration (shard count) from database
-	if errCfg := d.db.View(func(batch *database.Batch) error {
-		cfg, err := database.GetExecutorConfig(batch)
-		if err != nil {
-			return err
-		}
-		// Cast uint64 to int for Options struct
-		execOpts.ShardCount = int(cfg.ExecutorShardCount)
-		return nil
-	}); errCfg != nil {
-		return nil, errors.UnknownError.WithFormat("load executor config: %v", errCfg)
-	}
-
-	if _, ok := d.local["directory"]; !ok ||
-		d.Config.Accumulate.DisableDirectDispatch {
-		// If we are not attached to a DN node, or direct dispatch is disabled,
-		// use the API dispatcher
-		execOpts.NewDispatcher = func() execute.Dispatcher {
-			return NewDispatcher(d.Config.Accumulate.Network.Id, d.router, dialer)
-		}
-
-	} else {
-		// Otherwise, use the Tendermint dispatcher
-		execOpts.NewDispatcher = func() execute.Dispatcher {
-			return tendermint.NewDispatcher(d.router, d.local)
-		}
-	}
-
-	// This must happen before creating the executor since it needs to receive
-	// the initial WillChangeGlobals event
-	no := false
-	conductor := &crosschain.Conductor{
-		Partition:    &protocol.PartitionInfo{ID: d.Config.Accumulate.PartitionId, Type: d.Config.Accumulate.NetworkType},
-		ValidatorKey: execOpts.Key,
-		Database:     execOpts.Database,
-		Querier:      v3.Querier2{Querier: client},
-		Dispatcher:   execOpts.NewDispatcher(),
-		RunTask:      execOpts.BackgroundTaskLauncher,
-
-		// TODO Fix the flooding issues and enable this by default
-		EnableAnchorHealing: &no,
-
-		Ready: func(execute.WillBeginBlock) bool {
-			// Pause the conductor until the node has caught up
-			select {
-			case <-caughtUp:
-				return true
-			default:
-				return false
-			}
-		},
-	}
-	err := conductor.Start(d.eventBus)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("start conductor: %v", err)
-	}
-
-	if execOpts.ShardCount > 0 {
-		d.Logger.Info("Daemon starting executor", "shard-count", execOpts.ShardCount, "sharding", "ENABLED")
-	} else {
-		d.Logger.Info("Daemon starting executor", "sharding", "DISABLED")
-	}
-
-	exec, err := execute.NewExecutor(execOpts)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("initialize chain executor: %v", err)
-	}
-
-	app := abci.NewAccumulator(abci.AccumulatorOptions{
-		Address:     d.Key().PubKey().Address(),
-		Executor:    exec,
-		Logger:      d.Logger,
-		EventBus:    d.eventBus,
-		Tracer:      d.tracer,
-		Database:    d.db,
-		Genesis:     genesis.DocProvider(&d.Config.Config),
-		Partition:   d.Config.Accumulate.PartitionId,
-		RootDir:     d.Config.RootDir,
-		AnalysisLog: d.Config.Accumulate.AnalysisLog,
-
-		MaxEnvelopesPerBlock: d.Config.Accumulate.MaxEnvelopesPerBlock,
-	})
-	return app, nil
-}
-
-func (d *Daemon) startConsensus(app types.Application, caughtUp chan<- struct{}) error {
-	// Create node
-	tmn, err := tmnode.NewNode(
-		&d.Config.Config,
-		d.privVal,
-		d.nodeKey,
-		proxy.NewLocalClientCreator(app),
-		genesis.DocProvider(&d.Config.Config),
-		tmcfg.DefaultDBProvider,
-		tmnode.DefaultMetricsProvider(d.Config.Instrumentation),
-		d.Logger,
+	var err error
+	d.privVal, err = config.LoadFilePV(
+		d.Config.PrivValidatorKeyFile(),
+		d.Config.PrivValidatorStateFile(),
 	)
 	if err != nil {
-		return errors.UnknownError.WithFormat("initialize consensus: %v", err)
+		return errors.UnknownError.WithFormat("load private validator key: %v", err)
 	}
-	d.node = &node.Node{Node: tmn, Config: d.Config, ABCI: app}
 
-	// Start node
-	err = d.node.Start()
+	d.nodeKey, err = tmp2p.LoadNodeKey(d.Config.NodeKeyFile())
 	if err != nil {
-		return errors.UnknownError.WithFormat("start consensus: %v", err)
-	}
-
-	// Stop the node if start fails (mostly for tests)
-	defer func() {
-		if err != nil {
-			_ = d.node.Stop()
-			<-d.node.Quit()
-		}
-	}()
-
-	events.SubscribeAsync(d.eventBus, func(e events.FatalError) {
-		d.Logger.Error("Shutting down due to a fatal error", "error", e.Err)
-		err := d.Stop()
-		if errors.Is(err, service2.ErrAlreadyStopped) {
-			return
-		}
-		if err != nil {
-			d.Logger.Error("Error while shutting down", "error", err)
-		}
-	})
-
-	// Create a local client
-	err = d.localTm.Resolve(local.New(d.node.Node))
-	if err != nil {
-		return err
-	}
-
-	// Signal once the node is caught up
-	if caughtUp != nil {
-		go func() {
-			// Create a sync monitor to detect stuck sync and attempt recovery
-			monitor := NewSyncMonitor(
-				&daemonStatusProvider{d.localTm},
-				&daemonPeerDialer{d.node.Node.Switch()},
-				d.Config.P2P.PersistentPeers,
-			)
-
-			t := time.NewTicker(time.Second)
-			defer t.Stop()
-			for range t.C {
-				result, err := monitor.Check(context.Background())
-				if err != nil {
-					slog.Error("Querying consensus status", "error", err)
-					continue
-				}
-
-				if result == CheckResultSynced {
-					close(caughtUp)
-					return
-				}
-			}
-		}()
+		return errors.UnknownError.WithFormat("load node key: %v", err)
 	}
 
 	return nil
+}
+
+func (d *Daemon) startApp(caughtUp <-chan struct{}) (interface{}, error) {
+	return nil, errors.NotAllowed.With("CometBFT consensus removed; use accumulated-dagbft")
+}
+
+func (d *Daemon) startConsensus(app interface{}, caughtUp chan<- struct{}) error {
+	return errors.NotAllowed.With("CometBFT consensus removed; use accumulated-dagbft")
 }
 
 func (d *Daemon) startServices(chGlobals <-chan *core.GlobalValues) error {
@@ -584,9 +390,8 @@ func (d *Daemon) startServices(chGlobals <-chan *core.GlobalValues) error {
 	globals := <-chGlobals
 
 	// Initialize all the services
-	rpcLogger := logging.FromCometBFT(d.Logger).With("module", "acc-rpc")
 	consensusSvc := tm.NewConsensusService(tm.ConsensusServiceParams{
-		Logger:           rpcLogger,
+		Logger:           d.Logger.With("module", "acc-rpc"),
 		Local:            d.localTm,
 		Database:         d.db,
 		PartitionID:      d.Config.Accumulate.PartitionId,
@@ -596,39 +401,38 @@ func (d *Daemon) startServices(chGlobals <-chan *core.GlobalValues) error {
 		ValidatorKeyHash: sha256.Sum256(d.privVal.Key.PubKey.Bytes()),
 	})
 	netSvc := api.NewNetworkService(api.NetworkServiceParams{
-		Logger:     rpcLogger,
-		EventBus:   d.eventBus,
-		Partition:  d.Config.Accumulate.PartitionId,
-		Database:   d.db,
-		NodeStatus: d.localTm,
+		Logger:    d.Logger.With("module", "acc-rpc"),
+		EventBus:  d.eventBus,
+		Partition: d.Config.Accumulate.PartitionId,
+		Database:  d.db,
 	})
 	querySvc := api.NewQuerier(api.QuerierParams{
-		Logger:    rpcLogger,
+		Logger:    d.Logger.With("module", "acc-rpc"),
 		Database:  d.db,
 		Partition: d.Config.Accumulate.PartitionId,
 		Consensus: consensusSvc,
 	})
 	metricsSvc := api.NewMetricsService(api.MetricsServiceParams{
-		Logger:  rpcLogger,
+		Logger:  d.Logger.With("module", "acc-rpc"),
 		Node:    consensusSvc,
 		Querier: querySvc,
 	})
 	submitSvc := tm.NewSubmitter(tm.SubmitterParams{
-		Logger: rpcLogger,
+		Logger: d.Logger.With("module", "acc-rpc"),
 		Local:  d.localTm,
 	})
 	validateSvc := tm.NewValidator(tm.ValidatorParams{
-		Logger: rpcLogger,
+		Logger: d.Logger.With("module", "acc-rpc"),
 		Local:  d.localTm,
 	})
 	eventSvc := api.NewEventService(api.EventServiceParams{
-		Logger:    rpcLogger,
+		Logger:    d.Logger.With("module", "acc-rpc"),
 		Database:  d.db,
 		Partition: d.Config.Accumulate.PartitionId,
 		EventBus:  d.eventBus,
 	})
 	sequencerSvc := api.NewSequencer(api.SequencerParams{
-		Logger:       rpcLogger,
+		Logger:       d.Logger.With("module", "acc-rpc"),
 		Database:     d.db,
 		EventBus:     d.eventBus,
 		Partition:    d.Config.Accumulate.PartitionId,
@@ -689,42 +493,13 @@ func (d *Daemon) StartP2P() error {
 	if err != nil {
 		return errors.UnknownError.WithFormat("initialize P2P: %w", err)
 	}
-
-	// Start P2P peer database pruning
-	// This prevents stale peers from accumulating indefinitely
-	if tracker := d.p2pnode.Tracker(); tracker != nil {
-		if pt, ok := tracker.(interface{ DB() interface{ prune() } }); ok {
-			db := pt.DB()
-
-			// Initial aggressive prune on startup
-			db.prune()
-			d.Logger.Info("Initial P2P peer pruning completed")
-
-			// Start periodic pruning (every hour)
-			go func() {
-				ticker := time.NewTicker(1 * time.Hour)
-				defer ticker.Stop()
-
-				for {
-					select {
-					case <-ticker.C:
-						db.prune()
-						d.Logger.Debug("Periodic P2P peer pruning completed")
-					case <-d.done:
-						return
-					}
-				}
-			}()
-		}
-	}
-
 	return nil
 }
 
 func (d *Daemon) startAPI() error {
 	d.router = routing.NewRouter(routing.RouterOptions{
 		Events: d.eventBus,
-		Logger: logging.FromCometBFT(d.Logger),
+		Logger: d.Logger,
 	})
 
 	// Setup the p2p node
@@ -734,7 +509,7 @@ func (d *Daemon) startAPI() error {
 	}
 
 	d.api, err = nodeapi.NewHandler(nodeapi.Options{
-		Logger:  logging.FromCometBFT(d.Logger).With("module", "acc-rpc"),
+		Logger:  d.Logger.With("module", "acc-rpc"),
 		Node:    d.p2pnode,
 		Router:  d.router,
 		Network: &d.Config.Accumulate.Describe,

@@ -1,4 +1,4 @@
-// Copyright 2026 The Accumulate Authors
+// Copyright 2025 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -18,8 +18,6 @@ import (
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
 	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
@@ -58,7 +56,7 @@ func resetConsensus(_ *cobra.Command, args []string) {
 	genDoc, err := types.GenesisDocFromFile(daemon.Config.GenesisFile())
 	checkf(err, "load current genesis document")
 
-	db, err := coredb.Open(daemon.Config, logging.FromCometBFT(daemon.Logger))
+	db, err := coredb.Open(daemon.Config, daemon.Logger)
 	checkf(err, "open database")
 
 	batch := db.Begin(false)
@@ -98,7 +96,7 @@ func resetConsensus(_ *cobra.Command, args []string) {
 	// Rebuild the app state
 	genDoc.InitialHeight = int64(ledger.Index) + 1
 	genDoc.GenesisTime = ledger.Timestamp
-	genDoc.ConsensusParams.Version.App = abci.Version
+	genDoc.ConsensusParams.Version.App = 0x2 // Legacy ABCI version
 
 	hash, err := batch.GetBptRootHash()
 	checkf(err, "get root hash")

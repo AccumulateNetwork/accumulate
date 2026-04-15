@@ -12,7 +12,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -184,7 +183,7 @@ func TestAnchorPlaceholder(t *testing.T) {
 
 	// Verify that AdjustStatusIDs changes the ID back to the old ID
 	require.Equal(t, captured[1].ID().String(), st[0].TxID.String())
-	abci.AdjustStatusIDs([]messaging.Message{captured[1]}, st)
+	messaging.AdjustStatusIDs([]messaging.Message{captured[1]}, st)
 	require.Equal(t, captured[1].OldID().String(), st[0].TxID.String())
 
 	// Verify it executes
