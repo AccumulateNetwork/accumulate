@@ -1,10 +1,8 @@
-// Copyright 2026 The Accumulate Authors
+// Copyright 2025 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
-
-//go:build !dagbft
 
 package run
 
@@ -19,7 +17,7 @@ import (
 
 func (c *CoreValidatorConfiguration) apply(_ *Instance, cfg *Config) error {
 	// Set core validator defaults
-	setDefaultPtr(&c.StorageType, StorageTypeLevelDB)
+	setDefaultPtr(&c.StorageType, StorageTypeBadger)
 
 	// Validate
 	if c.Listen == nil {
@@ -61,7 +59,6 @@ func (c *CoreValidatorConfiguration) apply(_ *Instance, cfg *Config) error {
 			Genesis:        c.DnGenesis,
 			BootstrapPeers: c.DnBootstrapPeers,
 			Dir:            "dnn",
-			NumWorkers:     c.NumWorkers,
 		}.apply(cfg)
 		if err != nil {
 			return err
@@ -78,7 +75,6 @@ func (c *CoreValidatorConfiguration) apply(_ *Instance, cfg *Config) error {
 			Genesis:        c.BvnGenesis,
 			BootstrapPeers: c.BvnBootstrapPeers,
 			Dir:            "bvnn",
-			NumWorkers:     c.NumWorkers,
 		}.apply(cfg)
 		if err != nil {
 			return err
@@ -104,6 +100,65 @@ func (c *CoreValidatorConfiguration) apply(_ *Instance, cfg *Config) error {
 			Router: ServiceReference[*RouterService](routerPart),
 		})
 	}
+
+	return nil
+}
+
+type partOpts struct {
+	*CoreValidatorConfiguration
+	ID               string
+	Type             protocol.PartitionType
+	Genesis          string
+	Dir              string
+	BootstrapPeers   []multiaddr.Multiaddr
+	MetricsNamespace string
+}
+
+func (p partOpts) apply(cfg *Config) error {
+	var offset portOffset
+	if p.Type == protocol.PartitionTypeDirectory {
+		offset = portDir
+	} else {
+		offset = portBVN
+	}
+
+	// Consensus
+	addService(cfg,
+		&ConsensusService{
+			NodeDir:          p.Dir,
+			ValidatorKey:     p.ValidatorKey,
+			Genesis:          p.Genesis,
+			Listen:           applyAddrTransforms(p.Listen, offset),
+			BootstrapPeers:   p.BootstrapPeers,
+			MetricsNamespace: p.MetricsNamespace,
+			App: &CoreConsensusApp{
+				EnableHealing:        p.EnableHealing,
+				EnableDirectDispatch: p.EnableDirectDispatch,
+				MaxEnvelopesPerBlock: p.MaxEnvelopesPerBlock,
+				Partition: &protocol.PartitionInfo{
+					ID:   p.ID,
+					Type: p.Type,
+				},
+			},
+		},
+		func(c *ConsensusService) string { return c.App.partition().ID })
+
+	// Storage
+	if !haveService2(cfg, p.ID, func(s *StorageService) string { return s.Name }, nil) {
+		storage, err := sStorage.New(*p.StorageType)
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+
+		storage.setPath(filepath.Join(p.Dir, "data", "accumulate.db"))
+		cfg.Services = append(cfg.Services, &StorageService{Name: p.ID, Storage: storage})
+	}
+
+	// Services
+	addService(cfg, &Querier{Partition: p.ID}, func(s *Querier) string { return s.Partition })
+	addService(cfg, &NetworkService{Partition: p.ID}, func(s *NetworkService) string { return s.Partition })
+	addService(cfg, &MetricsService{Partition: p.ID}, func(s *MetricsService) string { return s.Partition })
+	addService(cfg, &EventsService{Partition: p.ID}, func(s *EventsService) string { return s.Partition })
 
 	return nil
 }
