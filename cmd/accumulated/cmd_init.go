@@ -501,15 +501,6 @@ outer:
 	// 	config.P2P.BootstrapPeers += "," + u.String()
 	// }
 
-	// Check for snapshots
-	err = selectSnapshot(cmd.Context(), config, accClient, v3.ListSnapshotsOptions{
-		NodeID:    ni.PeerID.String(),
-		Partition: partitionID,
-	}, tmRPC, true)
-	if err != nil {
-		return 0, nil, nil, err
-	}
-
 	config.Accumulate.Describe = cfg.Describe{
 		NetworkType: partitionType,
 		PartitionId: partitionID,

@@ -12,7 +12,6 @@ import (
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -126,8 +125,6 @@ type followerPartOpts struct {
 }
 
 func (p followerPartOpts) apply(cfg *Config) error {
-	setDefaultPtr(&p.EnableSnapshots, false)
-
 	// TODO: Implement consensus service for DAG-BFT followers
 	// Consensus service is not available on DAG-BFT integration branch
 	// Follower nodes will use block sync instead of consensus participation
@@ -162,16 +159,6 @@ func (p followerPartOpts) apply(cfg *Config) error {
 
 		storage.setPath(filepath.Join(p.Dir, "data", "accumulate.db"))
 		cfg.Services = append(cfg.Services, &StorageService{Name: p.ID, Storage: storage})
-	}
-
-	// Snapshots; capture on every major block
-	if *p.EnableSnapshots {
-		addService(cfg,
-			&SnapshotService{
-				Partition: p.ID,
-				Directory: filepath.Join(p.Dir, "snapshots"),
-				Schedule:  network.MustParseCron("* * * * *")},
-			func(s *SnapshotService) string { return s.Partition })
 	}
 
 	// Services

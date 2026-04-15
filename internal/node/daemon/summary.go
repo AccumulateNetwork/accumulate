@@ -152,7 +152,6 @@ func (d *Daemon) startSummaryApp() (types.Application, error) {
 		Logger:      d.Logger,
 		EventBus:    d.eventBus,
 		Tracer:      d.tracer,
-		Snapshots:   &d.Config.Accumulate.Snapshots,
 		Genesis:     genesis.DocProvider(&d.Config.Config),
 		Partition:   d.Config.Accumulate.PartitionId,
 		RootDir:     d.Config.RootDir,
