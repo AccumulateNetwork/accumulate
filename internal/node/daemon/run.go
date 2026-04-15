@@ -30,7 +30,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	nodeapi "gitlab.com/accumulatenetwork/accumulate/internal/node/http"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
@@ -50,7 +49,6 @@ type Daemon struct {
 
 	done      chan struct{}
 	db        *database.Database
-	node      *node.Node
 	apiServer *http.Server
 	privVal   *privval.FilePV
 	p2pnode   *p2p.Node
@@ -161,7 +159,6 @@ func (d *Daemon) Key() crypto.PrivKey {
 }
 
 func (d *Daemon) DB_TESTONLY() *database.Database { return d.db }
-func (d *Daemon) Node_TESTONLY() *node.Node       { return d.node }
 func (d *Daemon) P2P_TESTONLY() *p2p.Node         { return d.p2pnode }
 func (d *Daemon) API() *nodeapi.Handler           { return d.api }
 func (d *Daemon) EventBus() *events.Bus           { return d.eventBus }
@@ -436,17 +433,12 @@ func listenHttpUrl(s string) (net.Listener, bool, error) {
 }
 
 func (d *Daemon) Stop() error {
-	err := d.node.Stop()
-	if err != nil {
-		return err
-	}
-
-	<-d.done
+	close(d.done)
 	return nil
 }
 
 func (d *Daemon) Done() <-chan struct{} {
-	return d.node.Quit()
+	return d.done
 }
 
 type writeFunc func([]byte) (int, error)

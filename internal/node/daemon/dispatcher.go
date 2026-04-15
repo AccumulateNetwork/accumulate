@@ -9,7 +9,6 @@ package accumulated
 import (
 	"context"
 
-	"gitlab.com/accumulatenetwork/accumulate/exp/tendermint"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -79,8 +78,7 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 
 	errs := make(chan error)
 	check := func(err error) {
-		err = tendermint.CheckDispatchError(err)
-		if err != nil {
+		if err == nil {
 			return
 		}
 		errs <- err
