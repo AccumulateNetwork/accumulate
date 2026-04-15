@@ -18,7 +18,6 @@ import (
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
 	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
@@ -57,7 +56,7 @@ func resetConsensus(_ *cobra.Command, args []string) {
 	genDoc, err := types.GenesisDocFromFile(daemon.Config.GenesisFile())
 	checkf(err, "load current genesis document")
 
-	db, err := coredb.Open(daemon.Config, logging.FromCometBFT(daemon.Logger))
+	db, err := coredb.Open(daemon.Config, daemon.Logger)
 	checkf(err, "open database")
 
 	batch := db.Begin(false)

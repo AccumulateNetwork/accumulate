@@ -146,7 +146,7 @@ func TestWalkAndReplay(t *testing.T) {
 	sim.StepN(100)
 
 	// Restore snapshot into BSN database
-	logger := logging.FromCometBFT(acctesting.NewTestLogger(t))
+	logger := acctesting.NewTestLogger(t)
 	store := memory.New(nil)
 	bsndb := bsn.NewChangeSet(store, logger.With("module", "database"))
 	for _, part := range sim.Partitions() {

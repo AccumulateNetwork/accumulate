@@ -195,10 +195,9 @@ func (s *ValidationTestSuite) SetupSuite() {
 
 func setupSim(t *testing.T, net *accumulated.NetworkInit) (*simulator.Simulator, api.Faucet) {
 	// Set up the simulator and harness
-	cometLogger := acctesting.NewTestLogger(t)
-	logger := logging.FromCometBFT(cometLogger)
+	logger := acctesting.NewTestLogger(t)
 	sim, err := simulator.New(
-		simulator.WithLogger(cometLogger),
+		simulator.WithLogger(logger),
 		simulator.WithNetwork(net),
 		simulator.Genesis(GenesisTime),
 
