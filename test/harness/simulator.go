@@ -23,7 +23,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
@@ -36,7 +35,7 @@ var GenesisTime = time.Date(2022, 7, 1, 0, 0, 0, 0, time.UTC)
 func NewSim(tb testing.TB, opts ...simulator.Option) *Sim {
 	opts = append(opts,
 		simulator.WithRecordings(Recordings(tb)),
-		simulator.WithLogger(logging.FromCometBFT(acctesting.NewTestLogger(tb))),
+		simulator.WithLogger(acctesting.NewTestLogger(tb)),
 	)
 	s, err := simulator.New(opts...)
 	require.NoError(tb, err)

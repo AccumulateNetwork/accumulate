@@ -20,7 +20,6 @@ import (
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/cometbft/cometbft/crypto"
-	tmlog "github.com/cometbft/cometbft/libs/log"
 	tmp2p "github.com/cometbft/cometbft/p2p"
 	"github.com/cometbft/cometbft/privval"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
@@ -47,7 +46,7 @@ import (
 
 type Daemon struct {
 	Config *config.Config
-	Logger tmlog.Logger
+	Logger logging.Logger
 
 	done      chan struct{}
 	db        *database.Database
@@ -64,11 +63,6 @@ type Daemon struct {
 	// knobs for tests
 	// IsTest   bool
 	UseMemDB bool
-}
-
-// logger returns d.Logger wrapped as a logging.Logger.
-func (d *Daemon) logger() logging.Logger {
-	return logging.FromCometBFT(d.Logger)
 }
 
 func Load(dir string, newWriter func(*config.Config) (io.Writer, error)) (*Daemon, error) {
@@ -152,12 +146,13 @@ func New(cfg *config.Config, newWriter func(*config.Config) (io.Writer, error)) 
 		}))
 	}
 
-	daemon.Logger, err = logging.NewTendermintLogger(zerolog.New(logWriter), logLevel, false)
+	tmLogger, err := logging.NewTendermintLogger(zerolog.New(logWriter), logLevel, false)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("initialize logger: %v", err)
 	}
+	daemon.Logger = logging.FromCometBFT(tmLogger)
 
-	daemon.eventBus = events.NewBus(logging.FromCometBFT(daemon.Logger).With("module", "events"))
+	daemon.eventBus = events.NewBus(daemon.Logger.With("module", "events"))
 	return &daemon, nil
 }
 
@@ -223,7 +218,7 @@ func (d *Daemon) Start(others ...*Daemon) (err error) {
 
 func (d *Daemon) startValidator() (err error) {
 	// Start the database
-	d.db, err = database.Open(d.Config, d.logger())
+	d.db, err = database.Open(d.Config, d.Logger)
 	if err != nil {
 		return errors.UnknownError.WithFormat("open database: %w", err)
 	}
@@ -348,7 +343,7 @@ func (d *Daemon) StartP2P() error {
 func (d *Daemon) startAPI() error {
 	d.router = routing.NewRouter(routing.RouterOptions{
 		Events: d.eventBus,
-		Logger: d.logger(),
+		Logger: d.Logger,
 	})
 
 	// Setup the p2p node
@@ -358,7 +353,7 @@ func (d *Daemon) startAPI() error {
 	}
 
 	d.api, err = nodeapi.NewHandler(nodeapi.Options{
-		Logger:  d.logger().With("module", "acc-rpc"),
+		Logger:  d.Logger.With("module", "acc-rpc"),
 		Node:    d.p2pnode,
 		Router:  d.router,
 		Network: &d.Config.Accumulate.Describe,

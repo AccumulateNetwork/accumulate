@@ -19,25 +19,6 @@ import (
 	"github.com/rs/zerolog"
 )
 
-type Slogger slog.Logger
-
-func (s *Slogger) Debug(msg string, keyvals ...interface{}) {
-	(*slog.Logger)(s).Debug(msg, keyvals...)
-}
-
-func (s *Slogger) Info(msg string, keyvals ...interface{}) {
-	(*slog.Logger)(s).Info(msg, keyvals...)
-}
-
-func (s *Slogger) Error(msg string, keyvals ...interface{}) {
-	(*slog.Logger)(s).Error(msg, keyvals...)
-}
-
-func (s *Slogger) With(keyvals ...interface{}) Logger {
-	l := (*slog.Logger)(s).With(keyvals...)
-	return (*Slogger)(l)
-}
-
 type SlogConfig struct {
 	DefaultLevel slog.Level
 	ModuleLevels map[string]slog.Level

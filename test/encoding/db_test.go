@@ -17,7 +17,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -45,14 +44,13 @@ func TestGenerateDbTestdata(t *testing.T) {
 	aliceKey := acctesting.GenerateKey(alice)
 	bobKey := acctesting.GenerateKey(bob)
 
-	cometLogger := acctesting.NewTestLogger(t)
-	logger := logging.FromCometBFT(cometLogger)
+	logger := acctesting.NewTestLogger(t)
 	store := memory.New(nil)
 	db := database.New(store, logger)
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.WithDatabase(func(partition *protocol.PartitionInfo, _ int, logger log.Logger) keyvalue.Beginner {
+		simulator.WithDatabase(func(partition *protocol.PartitionInfo, _ int, logger logging.Logger) keyvalue.Beginner {
 			if strings.EqualFold(partition.ID, protocol.Directory) {
 				return memory.New(nil)
 			}
@@ -109,7 +107,7 @@ func TestGenerateDbTestdata(t *testing.T) {
 	batch := db.Begin(false)
 	defer batch.Discard()
 	_, err = snapshot.Collect(batch, new(snapshot.Header), f, snapshot.CollectOptions{
-		Logger: logging.FromCometBFT(cometLogger),
+		Logger: logger,
 	})
 	require.NoError(t, err)
 }
@@ -119,8 +117,7 @@ func TestDbEncoding(t *testing.T) {
 	require.NoError(t, err)
 	var entries []memory.Entry
 	require.NoError(t, json.Unmarshal(b, &entries))
-	cometLogger := acctesting.NewTestLogger(t)
-	logger := logging.FromCometBFT(cometLogger)
+	logger := acctesting.NewTestLogger(t)
 	store := memory.New(nil)
 	require.NoError(t, store.Import(entries))
 
