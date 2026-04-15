@@ -13,8 +13,6 @@ import (
 	"sync"
 	"time"
 
-	abcitypes "github.com/cometbft/cometbft/abci/types"
-	tmtypes "github.com/cometbft/cometbft/proto/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -364,24 +362,6 @@ func (d *MockDispatcher) Clear() {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.submitted = nil
-}
-
-// MockCommitInfo creates a mock commit info for testing.
-func MockCommitInfo(round int64, votes int) *abcitypes.CommitInfo {
-	voteInfos := make([]abcitypes.VoteInfo, votes)
-	for i := 0; i < votes; i++ {
-		voteInfos[i] = abcitypes.VoteInfo{
-			Validator: abcitypes.Validator{
-				Address: []byte{byte(i)},
-				Power:   1,
-			},
-			BlockIdFlag: tmtypes.BlockIDFlagCommit,
-		}
-	}
-	return &abcitypes.CommitInfo{
-		Round: int32(round),
-		Votes: voteInfos,
-	}
 }
 
 // MockBlockParams creates mock block parameters.
