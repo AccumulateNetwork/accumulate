@@ -29,7 +29,7 @@ func initDevNet(cmd *cobra.Command) *run.Config {
 		check(os.MkdirAll(flagMain.WorkDir, 0700))
 
 		// Default config
-		dev := &run.DevnetConfiguration{
+		dev := &run.NetSimConfiguration{
 			Listen: multiaddr.StringCast(fmt.Sprintf("/tcp/%d", flagRunDevnet.BasePort)),
 		}
 		cfg := &run.Config{
@@ -44,11 +44,11 @@ func initDevNet(cmd *cobra.Command) *run.Config {
 
 	cfg := new(run.Config)
 	check(cfg.LoadFrom(f))
-	i := slices.IndexFunc(cfg.Configurations, func(c run.Configuration) bool { return c.Type() == run.ConfigurationTypeDevnet })
+	i := slices.IndexFunc(cfg.Configurations, func(c run.Configuration) bool { return c.Type() == run.ConfigurationTypeNetSim })
 	if i < 0 {
 		fatalf("not a devnet: %q", f)
 	}
-	dev := cfg.Configurations[i].(*run.DevnetConfiguration)
+	dev := cfg.Configurations[i].(*run.NetSimConfiguration)
 
 	// Are any of the values different?
 	wantReset := false ||
@@ -89,7 +89,7 @@ func initDevNet(cmd *cobra.Command) *run.Config {
 	return cfg
 }
 
-func applyDevNetFlags(cmd *cobra.Command, cfg *run.Config, dev *run.DevnetConfiguration, onlyChanged bool) {
+func applyDevNetFlags(cmd *cobra.Command, cfg *run.Config, dev *run.NetSimConfiguration, onlyChanged bool) {
 	if cfg.P2P == nil {
 		cfg.P2P = new(run.P2P)
 	}

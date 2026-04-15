@@ -1,4 +1,4 @@
-// Copyright 2026 The Accumulate Authors
+// Copyright 2025 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -236,6 +236,8 @@ func migrateCfg(cfg *run.Config, cvc *run.CoreValidatorConfiguration, dir string
 			Password: old.Accumulate.Logging.LokiPassword,
 		}
 	}
+
+	// SnapshotService has been removed from the schema; skip snapshot migration
 
 	// DN-/BVN-specific values
 	switch old.Accumulate.NetworkType {
