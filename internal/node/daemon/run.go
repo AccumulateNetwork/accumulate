@@ -9,7 +9,6 @@ package accumulated
 import (
 	"context"
 	"crypto/ed25519"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -18,34 +17,23 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"strings"
-	"sync"
-	"time"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/cometbft/cometbft/crypto"
 	tmlog "github.com/cometbft/cometbft/libs/log"
 	tmp2p "github.com/cometbft/cometbft/p2p"
 	"github.com/cometbft/cometbft/privval"
-	"github.com/fatih/color"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
-	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog"
 	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/exp/loki"
-	"gitlab.com/accumulatenetwork/accumulate/exp/tendermint"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3/tm"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	nodeapi "gitlab.com/accumulatenetwork/accumulate/internal/node/http"
-	v3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -61,21 +49,17 @@ type Daemon struct {
 	Config *config.Config
 	Logger tmlog.Logger
 
-	done             chan struct{}
-	db               *database.Database
-	node             *node.Node
-	apiServer        *http.Server
-	privVal          *privval.FilePV
-	p2pnode          *p2p.Node
-	api              *nodeapi.Handler
-	nodeKey          *tmp2p.NodeKey
-	router           routing.Router
-	eventBus         *events.Bus
-	localTm          *tendermint.DeferredClient
-	snapshotSchedule cron.Schedule
-	snapshotLock     *sync.Mutex
-	tracer           trace.Tracer
-	local            map[string]tendermint.DispatcherClient
+	done      chan struct{}
+	db        *database.Database
+	node      *node.Node
+	apiServer *http.Server
+	privVal   *privval.FilePV
+	p2pnode   *p2p.Node
+	api       *nodeapi.Handler
+	nodeKey   *tmp2p.NodeKey
+	router    routing.Router
+	eventBus  *events.Bus
+	tracer    trace.Tracer
 
 	// knobs for tests
 	// IsTest   bool
@@ -98,9 +82,7 @@ func Load(dir string, newWriter func(*config.Config) (io.Writer, error)) (*Daemo
 
 func New(cfg *config.Config, newWriter func(*config.Config) (io.Writer, error)) (*Daemon, error) {
 	var daemon Daemon
-	daemon.snapshotLock = new(sync.Mutex)
 	daemon.Config = cfg
-	daemon.localTm = tendermint.NewDeferredClient()
 	daemon.done = make(chan struct{})
 
 	if newWriter == nil {
@@ -198,15 +180,6 @@ func (d *Daemon) StartSecondary(e *Daemon, others ...*Daemon) error {
 }
 
 func (d *Daemon) Start(others ...*Daemon) (err error) {
-	d.local = map[string]tendermint.DispatcherClient{}
-	d.local[strings.ToLower(d.Config.Accumulate.PartitionId)] = d.localTm
-	for _, e := range others {
-		part := strings.ToLower(e.Config.Accumulate.PartitionId)
-		if d.local[part] == nil {
-			d.local[part] = e.localTm
-		}
-	}
-
 	if d.Config.Accumulate.API.DebugJSONRPC {
 		jsonrpc2.DebugMethodFunc = true
 	}
@@ -245,7 +218,6 @@ func (d *Daemon) Start(others ...*Daemon) (err error) {
 		return errors.UnknownError.Wrap(err)
 	}
 
-	d.startMonitoringAndCleanup()
 	return nil
 }
 
@@ -261,15 +233,6 @@ func (d *Daemon) startValidator() (err error) {
 		}
 	}()
 
-	globals := make(chan *core.GlobalValues, 1)
-	events.SubscribeSync(d.eventBus, func(e events.WillChangeGlobals) error {
-		select {
-		case globals <- e.New:
-		default:
-		}
-		return nil
-	})
-
 	// Start the API
 	err = d.startAPI()
 	if err != nil {
@@ -284,23 +247,9 @@ func (d *Daemon) startValidator() (err error) {
 		}
 	}
 
-	caughtUp := make(chan struct{})
-
-	// Start the executor and ABCI
-	app, err := d.startApp(caughtUp)
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-
-	// Start Tendermint
-	err = d.startConsensus(app, caughtUp)
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-
-	// Start services
-	err = d.startServices(globals)
-	return errors.UnknownError.Wrap(err)
+	// CometBFT ABCI app, consensus, and services have been removed.
+	// Use accumulated-dagbft instead.
+	return errors.NotAllowed.With("CometBFT consensus removed; use accumulated-dagbft")
 }
 
 func (d *Daemon) startAnalysis() error {
@@ -372,101 +321,6 @@ func (d *Daemon) loadKeys() error {
 	return nil
 }
 
-func (d *Daemon) startApp(caughtUp <-chan struct{}) (interface{}, error) {
-	return nil, errors.NotAllowed.With("CometBFT consensus removed; use accumulated-dagbft")
-}
-
-func (d *Daemon) startConsensus(app interface{}, caughtUp chan<- struct{}) error {
-	return errors.NotAllowed.With("CometBFT consensus removed; use accumulated-dagbft")
-}
-
-func (d *Daemon) startServices(chGlobals <-chan *core.GlobalValues) error {
-	// Wait for the executor to finish loading everything
-	globals := <-chGlobals
-
-	// Initialize all the services
-	consensusSvc := tm.NewConsensusService(tm.ConsensusServiceParams{
-		Logger:           d.logger().With("module", "acc-rpc"),
-		Local:            d.localTm,
-		Database:         d.db,
-		PartitionID:      d.Config.Accumulate.PartitionId,
-		PartitionType:    d.Config.Accumulate.NetworkType,
-		EventBus:         d.eventBus,
-		NodeKeyHash:      sha256.Sum256(d.nodeKey.PubKey().Bytes()),
-		ValidatorKeyHash: sha256.Sum256(d.privVal.Key.PubKey.Bytes()),
-	})
-	netSvc := api.NewNetworkService(api.NetworkServiceParams{
-		Logger:    d.logger().With("module", "acc-rpc"),
-		EventBus:  d.eventBus,
-		Partition: d.Config.Accumulate.PartitionId,
-		Database:  d.db,
-	})
-	querySvc := api.NewQuerier(api.QuerierParams{
-		Logger:    d.logger().With("module", "acc-rpc"),
-		Database:  d.db,
-		Partition: d.Config.Accumulate.PartitionId,
-		Consensus: consensusSvc,
-	})
-	metricsSvc := api.NewMetricsService(api.MetricsServiceParams{
-		Logger:  d.logger().With("module", "acc-rpc"),
-		Node:    consensusSvc,
-		Querier: querySvc,
-	})
-	submitSvc := tm.NewSubmitter(tm.SubmitterParams{
-		Logger: d.logger().With("module", "acc-rpc"),
-		Local:  d.localTm,
-	})
-	validateSvc := tm.NewValidator(tm.ValidatorParams{
-		Logger: d.logger().With("module", "acc-rpc"),
-		Local:  d.localTm,
-	})
-	eventSvc := api.NewEventService(api.EventServiceParams{
-		Logger:    d.logger().With("module", "acc-rpc"),
-		Database:  d.db,
-		Partition: d.Config.Accumulate.PartitionId,
-		EventBus:  d.eventBus,
-	})
-	sequencerSvc := api.NewSequencer(api.SequencerParams{
-		Logger:       d.logger().With("module", "acc-rpc"),
-		Database:     d.db,
-		EventBus:     d.eventBus,
-		Partition:    d.Config.Accumulate.PartitionId,
-		Globals:      globals,
-		ValidatorKey: d.Key().Bytes(),
-	})
-	messageHandler, err := message.NewHandler(
-		&message.ConsensusService{ConsensusService: consensusSvc},
-		&message.MetricsService{MetricsService: metricsSvc},
-		&message.NetworkService{NetworkService: netSvc},
-		&message.Querier{Querier: querySvc},
-		&message.Submitter{Submitter: submitSvc},
-		&message.Validator{Validator: validateSvc},
-		&message.EventService{EventService: eventSvc},
-		&message.Sequencer{Sequencer: sequencerSvc},
-	)
-	if err != nil {
-		return errors.UnknownError.WithFormat("initialize P2P handler: %w", err)
-	}
-
-	services := []interface{ Type() v3.ServiceType }{
-		consensusSvc,
-		metricsSvc,
-		netSvc,
-		querySvc,
-		submitSvc,
-		validateSvc,
-		eventSvc,
-		sequencerSvc,
-	}
-	for _, s := range services {
-		d.p2pnode.RegisterService(&v3.ServiceAddress{
-			Type:     s.Type(),
-			Argument: d.Config.Accumulate.PartitionId,
-		}, messageHandler.Handle)
-	}
-
-	return nil
-}
 
 func (d *Daemon) StartP2P() error {
 	if d.p2pnode != nil {
@@ -541,43 +395,6 @@ func (d *Daemon) startAPI() error {
 	return nil
 }
 
-func (d *Daemon) startMonitoringAndCleanup() {
-	// Shut down the node if the disk space gets too low
-	go d.ensureSufficientDiskSpace(d.Config.RootDir)
-	for !d.node.IsRunning() {
-		color.HiMagenta("Syncing ....")
-		time.Sleep(time.Second * 1)
-	}
-	color.HiBlue(" %s node running at %s :", d.Config.Accumulate.NetworkType, d.Config.Accumulate.API.ListenAddress)
-
-	// Clean up once the node is stopped (mostly for tests)
-	go func() {
-		defer close(d.done)
-
-		d.node.Wait()
-
-		ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(5*time.Second))
-		defer cancel()
-
-		if d.apiServer != nil {
-			err := d.apiServer.Shutdown(ctx)
-			if err != nil {
-				d.Logger.Error("Error stopping API", "module", "jrpc", "error", err)
-			}
-		}
-
-		if d.db != nil {
-			err := d.db.Close()
-			if err != nil {
-				module := "badger"
-				if d.UseMemDB {
-					module = "memdb"
-				}
-				d.Logger.Error("Error closing database", "module", module, "error", err)
-			}
-		}
-	}()
-}
 
 func (d *Daemon) ConnectDirectly(e *Daemon) error {
 	if d.nodeKey.PrivKey.Equals(e.nodeKey.PrivKey) {
@@ -592,28 +409,6 @@ func (d *Daemon) ConnectDirectly(e *Daemon) error {
 	return e.p2pnode.ConnectDirectly(d.p2pnode)
 }
 
-func (d *Daemon) ensureSufficientDiskSpace(dbPath string) {
-	defer func() { _ = d.node.Stop() }()
-
-	logger := d.logger().With("module", "disk-monitor")
-
-	for {
-		free, err := diskUsage(dbPath)
-		if err != nil {
-			logger.Error("Failed to get disk size, shutting down", "error", err)
-			return
-		}
-
-		if free < 0.05 {
-			logger.Error("Less than 5% disk space available, shutting down", "free", free)
-			return
-		}
-
-		logger.Info("Disk usage", "free", free)
-
-		time.Sleep(10 * time.Minute)
-	}
-}
 
 // listenHttpUrl takes a string such as `http://localhost:123` and creates a TCP
 // listener.
