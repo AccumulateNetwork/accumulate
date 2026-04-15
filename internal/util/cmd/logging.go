@@ -11,20 +11,19 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"github.com/rs/zerolog"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 )
 
-func NewConsoleLogger(levels string) log.Logger {
+func NewConsoleLogger(levels string) logging.Logger {
 	lw, err := logging.NewConsoleWriter("plain")
 	Check(err)
 	ll, lw, err := logging.ParseLogLevel(levels, lw)
 	Check(err)
 	logger, err := logging.NewTendermintLogger(zerolog.New(lw), ll, false)
 	Check(err)
-	return logger
+	return logging.FromCometBFT(logger)
 }
 
 type LogLevelFlag []*run.LoggingRule

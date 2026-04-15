@@ -14,21 +14,21 @@ import (
 	"github.com/FactomProject/factomd/common/entryBlock"
 	"github.com/FactomProject/factomd/common/entryCreditBlock"
 	"github.com/FactomProject/factomd/common/factoid"
-	"github.com/cometbft/cometbft/libs/log"
 	"github.com/rs/zerolog"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 )
 
-func ReadObjectFile(buff []byte, logger log.Logger, fn func(header *Header, object interface{})) error {
+func ReadObjectFile(buff []byte, logger logging.Logger, fn func(header *Header, object interface{})) error {
 	if logger == nil {
 		logWriter, err := logging.NewConsoleWriter("plain")
 		if err != nil {
 			panic(err)
 		}
-		logger, err = logging.NewTendermintLogger(zerolog.New(logWriter), "info", false)
+		cmtLogger, err := logging.NewTendermintLogger(zerolog.New(logWriter), "info", false)
 		if err != nil {
 			panic(err)
 		}
+		logger = logging.FromCometBFT(cmtLogger)
 	}
 
 	for len(buff) > 0 {

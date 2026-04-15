@@ -15,7 +15,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/cometbft/cometbft/types"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
 	sv1 "gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	sv2 "gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
@@ -26,8 +25,13 @@ import (
 func openSnapshotFile(filename string) ioutil.SectionReader {
 	if filepath.Ext(filename) == ".json" {
 		fmt.Fprintf(os.Stderr, "Loading %s\n", filename)
-		genDoc, err := types.GenesisDocFromFile(filename)
+		data, err := os.ReadFile(filename)
 		checkf(err, "read %s", filename)
+
+		var genDoc struct {
+			AppState json.RawMessage `json:"app_state"`
+		}
+		check(json.Unmarshal(data, &genDoc))
 
 		var b []byte
 		check(json.Unmarshal(genDoc.AppState, &b))
