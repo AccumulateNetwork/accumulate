@@ -17,8 +17,6 @@ import (
 	"strings"
 
 	btc "github.com/btcsuite/btcd/btcec"
-	tmcrypto "github.com/cometbft/cometbft/crypto"
-	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
@@ -36,8 +34,11 @@ func GenerateKey(seed ...interface{}) ed25519.PrivateKey {
 	return ed25519.NewKeyFromSeed(h[:])
 }
 
-func GenerateTmKey(seed ...interface{}) tmed25519.PrivKey {
-	return tmed25519.PrivKey(GenerateKey(seed...))
+// GenerateTmKey generates an ed25519 private key from the given seed.
+// Deprecated: Use GenerateKey instead. This function is kept for backward
+// compatibility with existing tests.
+func GenerateTmKey(seed ...interface{}) ed25519.PrivateKey {
+	return GenerateKey(seed...)
 }
 
 // generates privatekey and compressed public key
@@ -91,8 +92,8 @@ func BuildTestTokenTxGenTx(sponsor ed25519.PrivateKey, destAddr string, amount u
 		Done()
 }
 
-func CreateLiteTokenAccount(db DB, key tmed25519.PrivKey, tokens float64) error {
-	url := AcmeLiteAddressTmPriv(key)
+func CreateLiteTokenAccount(db DB, key ed25519.PrivateKey, tokens float64) error {
+	url := AcmeLiteAddressStdPriv(key)
 	err := CreateTokenAccount(db, url.String(), protocol.AcmeUrl().String(), tokens, true)
 	if err != nil {
 		return err
@@ -116,8 +117,8 @@ func AddCredits(db DB, account *url.URL, credits float64) error {
 	return db.Account(account).Main().Put(state)
 }
 
-func CreateLiteTokenAccountWithCredits(db DB, key tmed25519.PrivKey, tokens, credits float64) error {
-	url := AcmeLiteAddressTmPriv(key)
+func CreateLiteTokenAccountWithCredits(db DB, key ed25519.PrivateKey, tokens, credits float64) error {
+	url := AcmeLiteAddressStdPriv(key)
 	err := CreateTokenAccount(db, url.String(), protocol.AcmeUrl().String(), tokens, true)
 	if err != nil {
 		return err
@@ -164,8 +165,8 @@ func WriteStates(db DB, chains ...protocol.Account) error {
 	return nil
 }
 
-func CreateADI(db DB, key tmed25519.PrivKey, urlStr string) error {
-	keyHash := sha256.Sum256(key.PubKey().Bytes()) // TODO This is not what create_identity / create_key_page do, nonce will be > 0 also
+func CreateADI(db DB, key ed25519.PrivateKey, urlStr string) error {
+	keyHash := sha256.Sum256(key.Public().(ed25519.PublicKey)) // TODO This is not what create_identity / create_key_page do, nonce will be > 0 also
 
 	identityUrl, err := ParseUrl(urlStr)
 	if err != nil {
@@ -212,7 +213,7 @@ func CreateSubADI(db DB, originUrlStr string, urlStr string) error {
 	return WriteStates(db, adi)
 }
 
-func CreateAdiWithCredits(db DB, key tmed25519.PrivKey, urlStr string, credits float64) error {
+func CreateAdiWithCredits(db DB, key ed25519.PrivateKey, urlStr string, credits float64) error {
 	err := CreateADI(db, key, urlStr)
 	if err != nil {
 		return err
@@ -286,7 +287,7 @@ func CreateTokenIssuer(db DB, urlStr, symbol string, precision uint64, supplyLim
 	return db.Account(u).Main().Put(issuer)
 }
 
-func CreateKeyPage(db DB, bookUrlStr string, keys ...tmed25519.PubKey) error {
+func CreateKeyPage(db DB, bookUrlStr string, keys ...ed25519.PublicKey) error {
 	bookUrl, err := ParseUrl(bookUrlStr)
 	if err != nil {
 		return err
@@ -305,7 +306,7 @@ func CreateKeyPage(db DB, bookUrlStr string, keys ...tmed25519.PubKey) error {
 	page.Version = 1
 	page.Keys = make([]*protocol.KeySpec, 0, len(keys))
 	for _, key := range keys {
-		hash := sha256.Sum256(key.Bytes())
+		hash := sha256.Sum256(key)
 		page.AddKeySpec(&protocol.KeySpec{
 			PublicKeyHash: hash[:],
 		})
@@ -314,7 +315,7 @@ func CreateKeyPage(db DB, bookUrlStr string, keys ...tmed25519.PubKey) error {
 	return WriteStates(db, page, book)
 }
 
-func CreateKeyBook(db DB, urlStr string, publicKey tmed25519.PubKey) error {
+func CreateKeyBook(db DB, urlStr string, publicKey ed25519.PublicKey) error {
 	bookUrl, err := ParseUrl(urlStr)
 	if err != nil {
 		return err
@@ -382,8 +383,10 @@ func AcmeLiteAddress(pubKey []byte) *url.URL {
 	return u
 }
 
-func AcmeLiteAddressTmPriv(key tmcrypto.PrivKey) *url.URL {
-	return AcmeLiteAddress(key.PubKey().Bytes())
+// AcmeLiteAddressTmPriv creates an ACME lite address from an ed25519 private key.
+// Deprecated: Use AcmeLiteAddressStdPriv instead.
+func AcmeLiteAddressTmPriv(key ed25519.PrivateKey) *url.URL {
+	return AcmeLiteAddress(key.Public().(ed25519.PublicKey))
 }
 
 func AcmeLiteAddressStdPriv(key ed25519.PrivateKey) *url.URL {
