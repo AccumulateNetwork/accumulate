@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 )
 
 // dbEntry holds a database connection with metadata
@@ -19,13 +19,13 @@ type dbEntry struct {
 type DatabaseManager struct {
 	mu         sync.RWMutex
 	dbs        map[string]*dbEntry
-	logger     log.Logger
+	logger     logging.Logger
 	maxAge     time.Duration // Maximum age before eviction
 	maxEntries int           // Maximum number of cached connections
 }
 
 // NewDatabaseManager creates a new database connection manager
-func NewDatabaseManager(logger log.Logger) *DatabaseManager {
+func NewDatabaseManager(logger logging.Logger) *DatabaseManager {
 	dm := &DatabaseManager{
 		dbs:        make(map[string]*dbEntry),
 		logger:     logger,

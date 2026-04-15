@@ -130,7 +130,7 @@ func NewHandler(opts Options) (*Handler, error) {
 
 	// JSON-RPC API v2
 	v2, err := v2.NewJrpc(v2.Options{
-		Logger:        logging.CometBFTLogger(opts.Logger),
+		Logger:        opts.Logger,
 		Describe:      opts.Network,
 		TxMaxWaitTime: opts.MaxWait,
 		LocalV3:       selfClient,

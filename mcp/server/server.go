@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	cometLog "github.com/cometbft/cometbft/libs/log"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/mcp/wallet"
 )
 
@@ -39,7 +39,7 @@ func NewServer() *Server {
 	log.Printf("  Server: %s", cfg.Server)
 
 	// Initialize database manager with connection pooling
-	logger := cometLog.NewNopLogger()
+	logger := logging.NullLogger{}
 	dbManager := NewDatabaseManager(logger)
 
 	return &Server{
