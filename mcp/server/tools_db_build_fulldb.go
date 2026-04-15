@@ -7,8 +7,8 @@ import (
 	"os"
 	"time"
 
-	cometLog "github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
@@ -46,7 +46,7 @@ func (s *Server) dbBuildFulldb(args map[string]interface{}) (map[string]interfac
 	}
 
 	// Create logger for database
-	logger := cometLog.NewNopLogger()
+	logger := logging.NullLogger{}
 
 	// Create output database using OpenBadger
 	db, err := database.OpenBadger(outputPath, logger)
