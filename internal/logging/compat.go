@@ -25,7 +25,7 @@ func CometBFTLogger(l Logger) log.Logger {
 // FromCometBFT wraps a cometbft/libs/log.Logger as our Logger interface.
 func FromCometBFT(l log.Logger) Logger {
 	if l == nil {
-		return Nop{}
+		return NullLogger{}
 	}
 	// Check if it's a cometAdapter, return the underlying logger
 	if a, ok := l.(*cometAdapter); ok {

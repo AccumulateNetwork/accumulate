@@ -8,6 +8,9 @@ import (
 
 	peer "github.com/libp2p/go-libp2p/core/peer"
 	multiaddr "github.com/multiformats/go-multiaddr"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/dagbft"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/keyrotation"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/address"
 	encoding "gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
@@ -179,6 +182,7 @@ type ConfigurationType int64
 
 const (
 	ConfigurationTypeCoreValidator ConfigurationType = 1
+	ConfigurationTypeFollower      ConfigurationType = 4
 	ConfigurationTypeGateway       ConfigurationType = 2
 	ConfigurationTypeNetSim        ConfigurationType = 3
 )
@@ -210,119 +214,6 @@ func (v *ConfigurationType) UnmarshalJSON(b []byte) error {
 	return sConfigurationType.UnmarshalJSON(b, v)
 }
 
-// TODO type ConsensusApp interface {}
-
-// CopyConsensusApp returns a copy of the ConsensusApp.
-func CopyConsensusApp(v ConsensusApp) ConsensusApp {
-	return sConsensusApp.Copy(v)
-}
-
-// EqualConsensusApp returns true if A and B are equal.
-func EqualConsensusApp(a, b ConsensusApp) bool {
-	return sConsensusApp.Equal(a, b)
-}
-
-// UnmarshalConsensusAppJSON unmarshals a ConsensusApp from JSON.
-func UnmarshalConsensusAppJSON(b []byte) (ConsensusApp, error) {
-	var v ConsensusApp
-	err := sConsensusApp.UnmarshalJSON(b, &v)
-	return v, err
-}
-
-type ConsensusAppType int64
-
-const (
-	ConsensusAppTypeCore ConsensusAppType = 1
-)
-
-// SetByName looks up a ConsensusAppType by name.
-func (v *ConsensusAppType) SetByName(s string) (ok bool) {
-	*v, ok = sConsensusAppType.ByName(s)
-	return
-}
-
-// SetByValue looks up a ConsensusAppType by value.
-func (v *ConsensusAppType) SetByValue(i int64) (ok bool) {
-	*v, ok = sConsensusAppType.ByValue(i)
-	return
-}
-
-// String returns the label or name of the ConsensusAppType.
-func (v ConsensusAppType) String() string {
-	return sConsensusAppType.String(v)
-}
-
-// MarshalBinary marshals the ConsensusAppType to JSON.
-func (v ConsensusAppType) MarshalJSON() ([]byte, error) {
-	return sConsensusAppType.MarshalJSON(v)
-}
-
-// UnmarshalJSON unmarshals the ConsensusAppType from JSON.
-func (v *ConsensusAppType) UnmarshalJSON(b []byte) error {
-	return sConsensusAppType.UnmarshalJSON(b, v)
-}
-
-type ConsensusService struct {
-	NodeDir          string
-	ValidatorKey     PrivateKey
-	Genesis          string
-	Listen           Multiaddr
-	BootstrapPeers   []Multiaddr
-	MetricsNamespace string
-	App              ConsensusApp
-}
-
-func (ConsensusService) Type() ServiceType { return ServiceTypeConsensus }
-
-// Copy returns a copy of the ConsensusService.
-func (v *ConsensusService) Copy() *ConsensusService {
-	return sConsensusService.Copy(v)
-}
-
-// EqualConsensusService returns true if V is equal to U.
-func (v *ConsensusService) Equal(u *ConsensusService) bool {
-	return sConsensusService.Equal(v, u)
-}
-
-// MarshalBinary marshals the ConsensusService to JSON.
-func (v *ConsensusService) MarshalJSON() ([]byte, error) {
-	return sConsensusService.MarshalJSON(v)
-}
-
-// UnmarshalJSON unmarshals the ConsensusService from JSON.
-func (v *ConsensusService) UnmarshalJSON(b []byte) error {
-	return sConsensusService.UnmarshalJSON(b, v)
-}
-
-type CoreConsensusApp struct {
-	Partition            *protocol.PartitionInfo
-	EnableHealing        *bool
-	EnableDirectDispatch *bool
-	MaxEnvelopesPerBlock *uint64
-}
-
-func (CoreConsensusApp) Type() ConsensusAppType { return ConsensusAppTypeCore }
-
-// Copy returns a copy of the CoreConsensusApp.
-func (v *CoreConsensusApp) Copy() *CoreConsensusApp {
-	return sCoreConsensusApp.Copy(v)
-}
-
-// EqualCoreConsensusApp returns true if V is equal to U.
-func (v *CoreConsensusApp) Equal(u *CoreConsensusApp) bool {
-	return sCoreConsensusApp.Equal(v, u)
-}
-
-// MarshalBinary marshals the CoreConsensusApp to JSON.
-func (v *CoreConsensusApp) MarshalJSON() ([]byte, error) {
-	return sCoreConsensusApp.MarshalJSON(v)
-}
-
-// UnmarshalJSON unmarshals the CoreConsensusApp from JSON.
-func (v *CoreConsensusApp) UnmarshalJSON(b []byte) error {
-	return sCoreConsensusApp.UnmarshalJSON(b, v)
-}
-
 type CoreValidatorConfiguration struct {
 	Mode                 CoreValidatorMode
 	Listen               Multiaddr
@@ -336,6 +227,7 @@ type CoreValidatorConfiguration struct {
 	EnableDirectDispatch *bool
 	MaxEnvelopesPerBlock *uint64
 	StorageType          *StorageType
+	NumWorkers           *int64
 }
 
 func (CoreValidatorConfiguration) Type() ConfigurationType { return ConfigurationTypeCoreValidator }
@@ -393,6 +285,43 @@ func (v CoreValidatorMode) MarshalJSON() ([]byte, error) {
 // UnmarshalJSON unmarshals the CoreValidatorMode from JSON.
 func (v *CoreValidatorMode) UnmarshalJSON(b []byte) error {
 	return sCoreValidatorMode.UnmarshalJSON(b, v)
+}
+
+type DAGBFTService struct {
+	NodeDir              string
+	ValidatorKey         PrivateKey
+	Genesis              string
+	Partition            *protocol.PartitionInfo
+	NumWorkers           *int64
+	DAGGCDepth           *int64
+	CommitBufferSize     *int64
+	EnableHealing        *bool
+	EnableDirectDispatch *bool
+	MaxEnvelopesPerBlock *uint64
+	service              *dagbft.Service
+	eventBus             *events.Bus
+}
+
+func (DAGBFTService) Type() ServiceType { return ServiceTypeDAGBFT }
+
+// Copy returns a copy of the DAGBFTService.
+func (v *DAGBFTService) Copy() *DAGBFTService {
+	return sDAGBFTService.Copy(v)
+}
+
+// EqualDAGBFTService returns true if V is equal to U.
+func (v *DAGBFTService) Equal(u *DAGBFTService) bool {
+	return sDAGBFTService.Equal(v, u)
+}
+
+// MarshalBinary marshals the DAGBFTService to JSON.
+func (v *DAGBFTService) MarshalJSON() ([]byte, error) {
+	return sDAGBFTService.MarshalJSON(v)
+}
+
+// UnmarshalJSON unmarshals the DAGBFTService from JSON.
+func (v *DAGBFTService) UnmarshalJSON(b []byte) error {
+	return sDAGBFTService.UnmarshalJSON(b, v)
 }
 
 type EventsService struct {
@@ -473,6 +402,42 @@ func (v *FaucetService) MarshalJSON() ([]byte, error) {
 // UnmarshalJSON unmarshals the FaucetService from JSON.
 func (v *FaucetService) UnmarshalJSON(b []byte) error {
 	return sFaucetService.UnmarshalJSON(b, v)
+}
+
+type FollowerConfiguration struct {
+	Mode                 CoreValidatorMode
+	Listen               Multiaddr
+	BVN                  string
+	DnGenesis            string
+	BvnGenesis           string
+	DnBootstrapPeers     []Multiaddr
+	BvnBootstrapPeers    []Multiaddr
+	EnableHealing        *bool
+	EnableDirectDispatch *bool
+	MaxEnvelopesPerBlock *uint64
+	StorageType          *StorageType
+}
+
+func (FollowerConfiguration) Type() ConfigurationType { return ConfigurationTypeFollower }
+
+// Copy returns a copy of the FollowerConfiguration.
+func (v *FollowerConfiguration) Copy() *FollowerConfiguration {
+	return sFollowerConfiguration.Copy(v)
+}
+
+// EqualFollowerConfiguration returns true if V is equal to U.
+func (v *FollowerConfiguration) Equal(u *FollowerConfiguration) bool {
+	return sFollowerConfiguration.Equal(v, u)
+}
+
+// MarshalBinary marshals the FollowerConfiguration to JSON.
+func (v *FollowerConfiguration) MarshalJSON() ([]byte, error) {
+	return sFollowerConfiguration.MarshalJSON(v)
+}
+
+// UnmarshalJSON unmarshals the FollowerConfiguration from JSON.
+func (v *FollowerConfiguration) UnmarshalJSON(b []byte) error {
+	return sFollowerConfiguration.UnmarshalJSON(b, v)
 }
 
 type GatewayConfiguration struct {
@@ -618,6 +583,64 @@ func (v *Instrumentation) MarshalJSON() ([]byte, error) {
 // UnmarshalJSON unmarshals the Instrumentation from JSON.
 func (v *Instrumentation) UnmarshalJSON(b []byte) error {
 	return sInstrumentation.UnmarshalJSON(b, v)
+}
+
+type KeyRotationConfig struct {
+	Enabled              bool
+	RotationIntervalDays int64
+	GracePeriodDays      int64
+	WarningPeriodDays    int64
+	AuditDirectory       string
+	AuditRetentionDays   int64
+}
+
+// Copy returns a copy of the KeyRotationConfig.
+func (v *KeyRotationConfig) Copy() *KeyRotationConfig {
+	return sKeyRotationConfig.Copy(v)
+}
+
+// EqualKeyRotationConfig returns true if V is equal to U.
+func (v *KeyRotationConfig) Equal(u *KeyRotationConfig) bool {
+	return sKeyRotationConfig.Equal(v, u)
+}
+
+// MarshalBinary marshals the KeyRotationConfig to JSON.
+func (v *KeyRotationConfig) MarshalJSON() ([]byte, error) {
+	return sKeyRotationConfig.MarshalJSON(v)
+}
+
+// UnmarshalJSON unmarshals the KeyRotationConfig from JSON.
+func (v *KeyRotationConfig) UnmarshalJSON(b []byte) error {
+	return sKeyRotationConfig.UnmarshalJSON(b, v)
+}
+
+type KeyRotationService struct {
+	Partition    string
+	ValidatorKey PrivateKey
+	Config       *KeyRotationConfig
+	manager      *keyrotation.Manager
+}
+
+func (KeyRotationService) Type() ServiceType { return ServiceTypeKeyRotation }
+
+// Copy returns a copy of the KeyRotationService.
+func (v *KeyRotationService) Copy() *KeyRotationService {
+	return sKeyRotationService.Copy(v)
+}
+
+// EqualKeyRotationService returns true if V is equal to U.
+func (v *KeyRotationService) Equal(u *KeyRotationService) bool {
+	return sKeyRotationService.Equal(v, u)
+}
+
+// MarshalBinary marshals the KeyRotationService to JSON.
+func (v *KeyRotationService) MarshalJSON() ([]byte, error) {
+	return sKeyRotationService.MarshalJSON(v)
+}
+
+// UnmarshalJSON unmarshals the KeyRotationService from JSON.
+func (v *KeyRotationService) UnmarshalJSON(b []byte) error {
+	return sKeyRotationService.UnmarshalJSON(b, v)
 }
 
 type LevelDBStorage struct {
@@ -1113,16 +1136,17 @@ func UnmarshalServiceJSON(b []byte) (Service, error) {
 type ServiceType int64
 
 const (
-	ServiceTypeConsensus ServiceType = 2
-	ServiceTypeEvents    ServiceType = 6
-	ServiceTypeFaucet    ServiceType = 10
-	ServiceTypeHttp      ServiceType = 7
-	ServiceTypeMetrics   ServiceType = 5
-	ServiceTypeNetwork   ServiceType = 4
-	ServiceTypeQuerier   ServiceType = 3
-	ServiceTypeRouter    ServiceType = 8
-	ServiceTypeStorage   ServiceType = 1
-	ServiceTypeSubnode   ServiceType = 11
+	ServiceTypeDAGBFT      ServiceType = 2
+	ServiceTypeEvents      ServiceType = 6
+	ServiceTypeFaucet      ServiceType = 10
+	ServiceTypeHttp        ServiceType = 7
+	ServiceTypeKeyRotation ServiceType = 12
+	ServiceTypeMetrics     ServiceType = 5
+	ServiceTypeNetwork     ServiceType = 4
+	ServiceTypeQuerier     ServiceType = 3
+	ServiceTypeRouter      ServiceType = 8
+	ServiceTypeStorage     ServiceType = 1
+	ServiceTypeSubnode     ServiceType = 11
 )
 
 // SetByName looks up a ServiceType by name.
