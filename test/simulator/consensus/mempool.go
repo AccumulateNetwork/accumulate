@@ -33,7 +33,7 @@ type mpEntry struct {
 
 func newMempool(logger logging.Logger) *mempool {
 	m := new(mempool)
-	m.logger.Set(logging.FromCometBFT(logger))
+	m.logger.Set(logger)
 	m.pool = map[[32]byte]*mpEntry{}
 	return m
 }
