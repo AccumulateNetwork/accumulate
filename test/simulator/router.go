@@ -7,7 +7,6 @@
 package simulator
 
 import (
-	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -33,7 +32,7 @@ type ResponseSubmit struct {
 	MempoolError string
 }
 
-func newRouter(logger log.Logger) *Router {
+func newRouter(logger logging.Logger) *Router {
 	r := new(Router)
 	r.logger.Set(logging.FromCometBFT(logger), "module", "router")
 	r.overrides = map[[32]byte]string{}
