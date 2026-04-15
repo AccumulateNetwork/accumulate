@@ -17,8 +17,8 @@ import (
 	"os"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
-	"github.com/cometbft/cometbft/libs/log"
 	"github.com/go-playground/validator/v10"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"github.com/julienschmidt/httprouter"
 	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -33,7 +33,7 @@ type JrpcMethods struct {
 	Options
 	methods  jsonrpc2.MethodMap
 	validate *validator.Validate
-	logger   log.Logger
+	logger   logging.Logger
 }
 
 func NewJrpc(opts Options) (*JrpcMethods, error) {
