@@ -7,7 +7,7 @@ ARG GIT_COMMIT
 WORKDIR /root
 COPY . .
 ENV CGO_ENABLED 0
-ARG TAGS=production,mainnet
+ARG TAGS=production,mainnet,dagbft
 RUN make -B TAGS=$TAGS GIT_DESCRIBE=$GIT_DESCRIBE GIT_COMMIT=$GIT_COMMIT
 RUN go install github.com/cometbft/cometbft/cmd/cometbft
 RUN go build ./tools/cmd/snapshot
