@@ -264,6 +264,7 @@ func main() {
 		rampPrevSubmitted := uint64(0)
 		rampPrevTime := time.Now()
 		var lastWindowTPS int64
+		var peakWindowTPS int64
 		var plateauCount int
 
 		for {
@@ -296,21 +297,23 @@ func main() {
 					}
 				}
 
-				// Check for plateau — window TPS not growing despite ramp
-				if lastWindowTPS > 0 && windowTPS > 0 {
-					growth := float64(windowTPS-lastWindowTPS) / float64(lastWindowTPS)
-					if growth < 0.05 {
-						plateauCount++
-						if plateauCount >= 3 {
-							msg := fmt.Sprintf("TPS plateau at ~%d (no growth in 3 intervals), max found", windowTPS)
-							fmt.Printf("\n── %s ──\n", msg)
-							appendLog(logFile, msg)
-							cancel()
-							return
-						}
-					} else {
-						plateauCount = 0
+				// Track peak window TPS
+				if windowTPS > peakWindowTPS {
+					peakWindowTPS = windowTPS
+				}
+
+				// Check for plateau: TPS stuck below 90% of peak for 3+ intervals
+				if peakWindowTPS > 0 && windowTPS < int64(float64(peakWindowTPS)*0.9) {
+					plateauCount++
+					if plateauCount >= 3 {
+						msg := fmt.Sprintf("TPS saturated: peak %d, current %d (3 intervals below 90%% of peak)", peakWindowTPS, windowTPS)
+						fmt.Printf("\n── %s ──\n", msg)
+						appendLog(logFile, msg)
+						cancel()
+						return
 					}
+				} else if windowTPS > lastWindowTPS {
+					plateauCount = 0 // still growing, reset
 				}
 				lastWindowTPS = windowTPS
 
