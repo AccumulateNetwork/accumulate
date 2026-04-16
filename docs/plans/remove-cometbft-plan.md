@@ -56,17 +56,17 @@ Copy CometBFT genesis structs into local files. Same JSON serialization.
 |----|-------|------|--------|---------|--------|-------|
 | GN1 | #3928 | Copy `types.GenesisDoc`, `GenesisValidator`, `ConsensusParams` into `pkg/types/cometbft/` or a new local package. Same JSON tags. Remove CometBFT import. | DONE | L6 | 6b62bec08 | Local ConsensusParams/Block structs with protowire encoding; callers updated to field-by-field construction |
 | GN2 | #3928 | Update `internal/node/genesis/bootstrap.go` and `provider.go` | DONE | GN1 | 59c341061, a516281a4 | InitOpts.Logger→logging.Logger, ConsensusParams→local type, provider.go dead code removed, local GenesisDocJSON type |
-| GN3 | #3929 | Remove or replace `internal/api/v3/tm/` — copy needed RPC response types locally | PENDING | GN1 | | |
+| GN3 | #3929 | Remove or replace `internal/api/v3/tm/` — copy needed RPC response types locally | DONE | GN1 | 8635056b9 | Deleted dead tm package, local NodeStatusResult in network.go |
 | GNT | — | Write compat tests for genesis types: create CometBFT `GenesisDoc` with validators and consensus params, marshal to JSON, unmarshal into our local types, verify all fields match. Also test: write a genesis.json with CometBFT, read it with our types. Put tests in `pkg/types/cometbft/compat_test.go` or `internal/node/genesis/compat_test.go`. | DONE | GN1 | b21e6cb16 | 8 compat tests: protobuf encoding, defaults, round-trip, block, JSON format |
 
 ### Phase 5: CLI commands
 
 | ID | Issue | Task | Status | Depends | Commit | Notes |
 |----|-------|------|--------|---------|--------|-------|
-| CL1 | #3932 | Update `cmd/accumulated/cmd_reset.go` — use local key/genesis types | PENDING | K1, GN1 | | |
-| CL2 | #3932 | Update `cmd/accumulated/cmd_init.go` and `cmd_init_network.go` | PENDING | K1, CF1, GN1 | | |
+| CL1 | #3932 | Update `cmd/accumulated/cmd_reset.go` — use local key/genesis types | DONE | K1, GN1 | 6978a4e39 | genesis.GenesisDocJSON, SHA256 for address |
+| CL2 | #3932 | Update `cmd/accumulated/cmd_init.go` and `cmd_init_network.go` | DONE | K1, CF1, GN1 | 0a206a5bd | Local cometRPCClient, genesis.GenesisDocJSON, stdlib ed25519 |
 | CL3 | #3932 | Update `cmd/accumulated/cmd_run.go` and `cmd_run_dual.go` | DONE | CF1 | b6684d84e | Replaced LogFormat constants and ErrAlreadyStopped; also cleaned cmd_run_netsim.go (125131991) |
-| CL4 | #3932 | Update `cmd/accumulated/cmd_migrate.go` | PENDING | CF1 | | |
+| CL4 | #3932 | Update `cmd/accumulated/cmd_migrate.go` | DONE | CF1 | n/a | No CometBFT imports found — already clean |
 | CL5 | #3932 | Clean up `cmd/accumulated/run/consensus.go` | PENDING | CF1, GN3 | | |
 | CL6 | #3932 | Clean up `cmd/accumulated/run/key_comet.go` | PENDING | K1 | | |
 
@@ -91,3 +91,4 @@ Copy CometBFT genesis structs into local files. Same JSON serialization.
 | 2026-04-16 | Session 4 | S2, CF1, CFT | pkg/build/parser.go cleaned, local TendermintConfig struct with compat tests |
 | 2026-04-16 | Session 5 | GN1, CF2, CF3, CL3 | Local ConsensusParams/Block with protowire encoding, cmd_run*.go cleaned |
 | 2026-04-16 | Session 6 | GN2, GNT, L4 | genesis bootstrap/provider cleaned, compat tests, logging/compat.go deleted, local GenesisDocJSON type |
+| 2026-04-16 | Session 7 | GN3, CL1, CL2, CL4 | Deleted dead tm/ package, cmd_reset/cmd_init cleaned, local CometBFT RPC client |
