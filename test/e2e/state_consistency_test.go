@@ -13,8 +13,8 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
@@ -68,7 +68,7 @@ func TestStateRelaunch(t *testing.T) {
 		stores[fmt.Sprintf("%s-%d", Directory, i)] = memory.New(nil)
 		stores[fmt.Sprintf("BVN%d-0", i)] = memory.New(nil)
 	}
-	openDb := func(partition *PartitionInfo, node int, logger log.Logger) keyvalue.Beginner {
+	openDb := func(partition *PartitionInfo, node int, logger logging.Logger) keyvalue.Beginner {
 		return stores[fmt.Sprintf("%s-%d", partition.ID, node)]
 	}
 

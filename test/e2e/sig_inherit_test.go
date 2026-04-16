@@ -10,8 +10,8 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"github.com/stretchr/testify/assert"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
@@ -185,7 +185,7 @@ func TestRemoveLastAuthorityCantInherit(t *testing.T) {
 	sim := NewSim(t,
 		simulator.SimpleNetwork(t.Name(), 3, 1),
 		simulator.Genesis(GenesisTime),
-		simulator.WithDatabase(func(partition *PartitionInfo, node int, _ log.Logger) keyvalue.Beginner {
+		simulator.WithDatabase(func(partition *PartitionInfo, node int, _ logging.Logger) keyvalue.Beginner {
 			if dbs[partition.ID] == nil {
 				dbs[partition.ID] = map[int]keyvalue.Beginner{}
 			}
