@@ -67,8 +67,10 @@ Copy CometBFT genesis structs into local files. Same JSON serialization.
 | CL2 | #3932 | Update `cmd/accumulated/cmd_init.go` and `cmd_init_network.go` | DONE | K1, CF1, GN1 | 0a206a5bd | Local cometRPCClient, genesis.GenesisDocJSON, stdlib ed25519 |
 | CL3 | #3932 | Update `cmd/accumulated/cmd_run.go` and `cmd_run_dual.go` | DONE | CF1 | b6684d84e | Replaced LogFormat constants and ErrAlreadyStopped; also cleaned cmd_run_netsim.go (125131991) |
 | CL4 | #3932 | Update `cmd/accumulated/cmd_migrate.go` | DONE | CF1 | n/a | No CometBFT imports found — already clean |
-| CL5 | #3932 | Clean up `cmd/accumulated/run/consensus.go` | PENDING | CF1, GN3 | | |
-| CL6 | #3932 | Clean up `cmd/accumulated/run/key_comet.go` | PENDING | K1 | | |
+| CL5 | #3932 | Clean up `cmd/accumulated/run/consensus.go` | DONE | CF1, GN3 | n/a | File does not exist — already clean |
+| CL6 | #3932 | Clean up `cmd/accumulated/run/key_comet.go` | DONE | K1 | n/a | No CometBFT imports — uses stdlib ed25519 and local types |
+| CL7 | — | Delete dead CometBFT state utilities: cmd/init-state, cmd/check-state, cmd/extract-validators | DONE | — | b2732a9eb | Entirely CometBFT-specific tools for state.db — dead after removal |
+| CL8 | — | Remove CometBFT imports from `mcp/server/tools_snapshot_restore.go` | DONE | K1 | eb00ef057 | Replaced p2p.LoadOrGenNodeKey and privval.GenFilePV with local types |
 
 ### Phase 6: Remaining
 
@@ -78,7 +80,7 @@ Copy CometBFT genesis structs into local files. Same JSON serialization.
 | S2 | — | Clean up `pkg/build/parser.go` — use stdlib ed25519 | DONE | K3 | 4bb4e3cee | Removed tmed25519 import, removed CometBFT key type cases |
 | S3 | — | Clean up `exp/telemetry/otel_prom.go` | DONE | — | n/a | No CometBFT imports — only string literals in regex |
 | S4 | — | Clean up `vdk/node/node.go` | DONE | L6 | a4101c005 | Removed dead CometBFT-dependent functions (package unused) |
-| S5 | — | Clean up `pkg/api/v3/types_gen.go` CometBFT ref | PENDING | GN1 | | |
+| S5 | — | Clean up `pkg/api/v3/types_gen.go` CometBFT ref | DONE | GN1 | n/a | Imports `pkg/types/cometbft` (local package), not github.com/cometbft — already clean |
 | S6 | — | Run `go mod tidy` and verify CometBFT removed from go.mod | PENDING | ALL | | Final step |
 
 ## Progress Log
@@ -92,3 +94,4 @@ Copy CometBFT genesis structs into local files. Same JSON serialization.
 | 2026-04-16 | Session 5 | GN1, CF2, CF3, CL3 | Local ConsensusParams/Block with protowire encoding, cmd_run*.go cleaned |
 | 2026-04-16 | Session 6 | GN2, GNT, L4 | genesis bootstrap/provider cleaned, compat tests, logging/compat.go deleted, local GenesisDocJSON type |
 | 2026-04-16 | Session 7 | GN3, CL1, CL2, CL4 | Deleted dead tm/ package, cmd_reset/cmd_init cleaned, local CometBFT RPC client |
+| 2026-04-16 | Session 8 | CL5, CL6, CL7, CL8, S5 | Deleted dead cmd tools, MCP snapshot restore cleaned, verified CL5/CL6/S5 already clean |
