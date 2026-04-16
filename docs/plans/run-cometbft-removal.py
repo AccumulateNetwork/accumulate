@@ -469,7 +469,8 @@ def launch_claude(prompt, label, cycle=0):
     plan_backup = PLAN_FILE.read_text() if PLAN_FILE.exists() else ""
 
     rc, stdout, stderr = run_cmd(
-        ["claude", "--yes", "-p", prompt], timeout=CLAUDE_TIMEOUT
+        ["claude", "-p", prompt, "--permission-mode", "bypassPermissions"],
+        timeout=CLAUDE_TIMEOUT
     )
 
     logfile = LOG_DIR / f"cycle-{cycle:03d}-{label}.log"
