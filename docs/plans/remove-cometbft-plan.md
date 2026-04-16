@@ -43,10 +43,10 @@ Copy used fields from `tm.Config` into a local struct. Same TOML tags.
 
 | ID | Issue | Task | Status | Depends | Commit | Notes |
 |----|-------|------|--------|---------|--------|-------|
-| CF1 | #3926 | Copy the fields from `tm.Config` that `internal/node/config/config.go` actually reads into a local struct. Same field names, same TOML tags. Remove the embedding. | PENDING | L6 | | |
+| CF1 | #3926 | Copy the fields from `tm.Config` that `internal/node/config/config.go` actually reads into a local struct. Same field names, same TOML tags. Remove the embedding. | DONE | L6 | 2300f77a2 | Local TendermintConfig in tendermint.go with all used fields, same mapstructure/toml tags |
 | CF2 | #3926 | Update `internal/node/daemon/run.go` to use the local config | PENDING | CF1 | | |
 | CF3 | #3926 | Update `internal/node/config/enums_gen.go` — remove tendermintP2P/tendermintRpc if unused | PENDING | CF1 | | |
-| CFT | — | Write compat tests for config: create CometBFT `tm.Config` with known values, marshal to TOML, unmarshal into our local config struct, verify all used fields match. Put tests in `internal/node/config/compat_test.go`. | PENDING | CF1 | | |
+| CFT | — | Write compat tests for config: create CometBFT `tm.Config` with known values, marshal to TOML, unmarshal into our local config struct, verify all used fields match. Put tests in `internal/node/config/compat_test.go`. | DONE | CF1 | 562ed3c74 | 4 compat tests: BaseConfig paths, InstrumentationConfig, TOML roundtrip, defaults match |
 
 ### Phase 4: Genesis types
 
@@ -75,7 +75,7 @@ Copy CometBFT genesis structs into local files. Same JSON serialization.
 | ID | Issue | Task | Status | Depends | Commit | Notes |
 |----|-------|------|--------|---------|--------|-------|
 | S1 | — | Clean up `internal/core/execute/execute.go` CometBFT import | DONE | L6 | n/a | No CometBFT imports found (already clean) |
-| S2 | — | Clean up `pkg/build/parser.go` — use stdlib ed25519 | PENDING | K3 | | |
+| S2 | — | Clean up `pkg/build/parser.go` — use stdlib ed25519 | DONE | K3 | 4bb4e3cee | Removed tmed25519 import, removed CometBFT key type cases |
 | S3 | — | Clean up `exp/telemetry/otel_prom.go` | DONE | — | n/a | No CometBFT imports — only string literals in regex |
 | S4 | — | Clean up `vdk/node/node.go` | DONE | L6 | a4101c005 | Removed dead CometBFT-dependent functions (package unused) |
 | S5 | — | Clean up `pkg/api/v3/types_gen.go` CometBFT ref | PENDING | GN1 | | |
@@ -88,3 +88,4 @@ Copy CometBFT genesis structs into local files. Same JSON serialization.
 | 2026-04-15 | Session 1 | Initial branch setup, ABCI removal, schema fixes, daemon cleanup, dead file removal, logger unification, tool cleanup, test infra, api/v2+MCP | 88 -> 41 CometBFT files |
 | 2026-04-16 | Session 2 | L1, L2, L3, L5, L6, S3, S4 | Logger return types changed, callers fixed, vdk cleaned. L4 blocked on Phase 4. |
 | 2026-04-16 | Session 3 | K1, K2, K3, K4, K5, KT, S1 + v1 test files | Local key types with compat tests, daemon files cleaned, v1 execute test files cleaned |
+| 2026-04-16 | Session 4 | S2, CF1, CFT | pkg/build/parser.go cleaned, local TendermintConfig struct with compat tests |
