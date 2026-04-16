@@ -130,7 +130,7 @@ func addToSnapshot(filename string, files []string, process func(string, int, *d
 	check(err)
 	cmtLogger, err := logging.NewTendermintLogger(zerolog.New(logWriter), flags.LogLevel, false)
 	check(err)
-	logger := logging.FromCometBFT(cmtLogger)
+	logger := cmtLogger
 
 	dbdir, err := os.MkdirTemp("", "badger-*.db")
 	check(err)

@@ -23,7 +23,7 @@ func NewConsoleLogger(levels string) logging.Logger {
 	Check(err)
 	logger, err := logging.NewTendermintLogger(zerolog.New(lw), ll, false)
 	Check(err)
-	return logging.FromCometBFT(logger)
+	return logger
 }
 
 type LogLevelFlag []*run.LoggingRule

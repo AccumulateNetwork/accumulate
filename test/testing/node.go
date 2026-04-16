@@ -75,7 +75,7 @@ func ConfigureSlog(c logging.SlogConfig) {
 
 func NewTestLogger(t testing.TB) logging.Logger {
 	if !LogConsole {
-		return logging.FromCometBFT(logging.NewTestLogger(t, "plain", DefaultLogLevels, false))
+		return logging.NewTestLogger(t, "plain", DefaultLogLevels, false)
 	}
 
 	var w io.Writer = &zerolog.ConsoleWriter{
@@ -103,7 +103,7 @@ func NewTestLogger(t testing.TB) logging.Logger {
 
 	logger, err := logging.NewTendermintLogger(zerolog.New(w), level, false)
 	require.NoError(t, err)
-	return logging.FromCometBFT(logger)
+	return logger
 }
 
 var DefaultLogLevels = config.LogLevel{}.
@@ -174,10 +174,10 @@ func CreateTestNet(t testing.TB, numBvns, numValidators, numFollowers int, withF
 		require.NoError(t, err)
 		tmLogger, err := logging.NewTendermintLogger(zerolog.New(writer), level, false)
 		require.NoError(t, err)
-		initLogger = logging.FromCometBFT(tmLogger)
+		initLogger = tmLogger
 	} else {
 		logWriter = logging.TestLogWriter(t)
-		initLogger = logging.FromCometBFT(logging.NewTestLogger(t, "plain", DefaultLogLevels, false))
+		initLogger = logging.NewTestLogger(t, "plain", DefaultLogLevels, false)
 	}
 
 	// Disable the sliding fee schedule

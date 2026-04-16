@@ -692,7 +692,7 @@ func newLogger() log.Logger {
 	check(err)
 	logger, err := logging.NewTendermintLogger(zerolog.New(writer), level, false)
 	check(err)
-	return logger
+	return logging.CometBFTLogger(logger)
 }
 
 func resolveIp(addr string) (string, error) {
