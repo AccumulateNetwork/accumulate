@@ -44,6 +44,9 @@ type ExecutorBridge struct {
 
 	// Open block state (for multi-certificate blocks)
 	openBlock execute.Block
+
+	// Pipelined commit: at most one commit in flight
+	pendingCommit chan error // nil when no commit in flight
 }
 
 // ExecutorBridgeConfig holds configuration for creating an ExecutorBridge.
@@ -177,8 +180,34 @@ func (b *ExecutorBridge) SetValidators(validators []ValidatorInfo) {
 	}
 }
 
+// waitForPendingCommit waits for any in-flight background commit to finish.
+// Must NOT hold b.mu when calling this.
+func (b *ExecutorBridge) waitForPendingCommit() error {
+	b.mu.RLock()
+	ch := b.pendingCommit
+	b.mu.RUnlock()
+
+	if ch == nil {
+		return nil
+	}
+
+	err := <-ch
+
+	b.mu.Lock()
+	b.pendingCommit = nil
+	b.mu.Unlock()
+
+	return err
+}
+
 // BeginBlock opens a new block at the given index and time.
+// If a prior block is still committing in the background, waits for it first.
 func (b *ExecutorBridge) BeginBlock(ctx context.Context, index uint64, blockTime time.Time) error {
+	// Wait for any prior commit to finish before starting a new block
+	if err := b.waitForPendingCommit(); err != nil {
+		return fmt.Errorf("prior commit failed: %w", err)
+	}
+
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -188,7 +217,7 @@ func (b *ExecutorBridge) BeginBlock(ctx context.Context, index uint64, blockTime
 
 	execParams := execute.BlockParams{
 		Context:  ctx,
-		IsLeader: true, // will be updated per certificate
+		IsLeader: true,
 		Index:    index,
 		Time:     blockTime,
 	}
@@ -216,7 +245,10 @@ func (b *ExecutorBridge) ProcessCertificate(ctx context.Context, params Certific
 	return b.processTransactions(block, params.Batches, params.LeaderRound)
 }
 
-// CommitBlock closes and commits the currently open block.
+// CommitBlock closes the currently open block and commits it in the background.
+// Close() and Hash() happen synchronously. The disk-flushing Commit() runs in
+// a goroutine so the next block can begin immediately. The next BeginBlock will
+// wait for this commit to finish if it hasn't already.
 func (b *ExecutorBridge) CommitBlock(ctx context.Context) ([32]byte, error) {
 	b.mu.Lock()
 	block := b.openBlock
@@ -227,29 +259,42 @@ func (b *ExecutorBridge) CommitBlock(ctx context.Context) ([32]byte, error) {
 		return [32]byte{}, fmt.Errorf("no open block")
 	}
 
+	// Close is synchronous — computes final state
 	state, err := block.Close()
 	if err != nil {
 		return [32]byte{}, fmt.Errorf("close block: %w", err)
 	}
 
+	// Hash is synchronous — needed before we return
 	hash, err := state.Hash()
 	if err != nil {
 		state.Discard()
 		return [32]byte{}, fmt.Errorf("get block hash: %w", err)
 	}
 
-	if err := state.Commit(); err != nil {
-		return [32]byte{}, fmt.Errorf("commit block: %w", err)
-	}
-
 	b.mu.Lock()
 	b.lastBlockHash = hash
 	b.mu.Unlock()
 
-	// Check for validator updates
-	if updates, changed := state.DidUpdateValidators(); changed {
-		b.handleValidatorUpdates(updates)
-	}
+	// Commit runs in background — disk flush happens while next block processes
+	ch := make(chan error, 1)
+	b.mu.Lock()
+	b.pendingCommit = ch
+	b.mu.Unlock()
+
+	go func() {
+		commitErr := state.Commit()
+		if commitErr != nil {
+			slog.Error("Background block commit failed", "error", commitErr)
+		}
+
+		// Check for validator updates after commit
+		if updates, changed := state.DidUpdateValidators(); changed {
+			b.handleValidatorUpdates(updates)
+		}
+
+		ch <- commitErr
+	}()
 
 	return hash, nil
 }
