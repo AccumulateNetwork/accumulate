@@ -50,7 +50,7 @@ func (d *Daemon) startCollector() error {
 
 		env, err := build.SignatureForMessage(e.Summary).
 			Url(protocol.PartitionUrl(d.Config.Accumulate.PartitionId)).
-			PrivateKey(d.privVal.Key.PrivKey.Bytes()).
+			PrivateKey(d.privVal.Key.PrivKey).
 			Done()
 		if err != nil {
 			d.Logger.Error("Failed to sign block summary", "error", err)
