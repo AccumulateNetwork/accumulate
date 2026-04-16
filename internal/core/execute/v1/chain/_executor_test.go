@@ -14,8 +14,6 @@ import (
 	"time"
 	"unsafe"
 
-	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
-	tmtypes "github.com/cometbft/cometbft/types"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -59,9 +57,7 @@ func BenchmarkHighTps(b *testing.B) {
 		Network:     network,
 		GenesisTime: time.Now(),
 		Logger:      logger,
-		Validators: []tmtypes.GenesisValidator{
-			{PubKey: tmed25519.PubKey(nodeKey[32:])},
-		},
+		OperatorKeys: [][]byte{nodeKey[32:]},
 	})
 	require.NoError(b, err)
 	err := bootstrap.Bootstrap()
