@@ -13,7 +13,6 @@ import (
 	"os"
 	"strings"
 
-	tmconfig "github.com/cometbft/cometbft/config"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run"
@@ -113,7 +112,7 @@ var partitionColor = map[string]*color.Color{}
 
 func newNodeWriter(w io.Writer, format, partition string, node int, color bool) io.Writer {
 	switch format {
-	case tmconfig.LogFormatPlain:
+	case "plain":
 		id := fmt.Sprintf("%s.%d", partition, node)
 		if nodeIdLen < len(id) {
 			nodeIdLen = len(id)
@@ -136,7 +135,7 @@ func newNodeWriter(w io.Writer, format, partition string, node int, color bool) 
 		s = c.Sprint(s)
 		return &plainNodeWriter{s, w}
 
-	case tmconfig.LogFormatJSON:
+	case "json":
 		s := fmt.Sprintf(`"partition":"%s","node":%d`, partition, node)
 		return &jsonNodeWriter{s, w}
 
