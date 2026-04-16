@@ -44,8 +44,8 @@ Copy used fields from `tm.Config` into a local struct. Same TOML tags.
 | ID | Issue | Task | Status | Depends | Commit | Notes |
 |----|-------|------|--------|---------|--------|-------|
 | CF1 | #3926 | Copy the fields from `tm.Config` that `internal/node/config/config.go` actually reads into a local struct. Same field names, same TOML tags. Remove the embedding. | DONE | L6 | 2300f77a2 | Local TendermintConfig in tendermint.go with all used fields, same mapstructure/toml tags |
-| CF2 | #3926 | Update `internal/node/daemon/run.go` to use the local config | PENDING | CF1 | | |
-| CF3 | #3926 | Update `internal/node/config/enums_gen.go` — remove tendermintP2P/tendermintRpc if unused | PENDING | CF1 | | |
+| CF2 | #3926 | Update `internal/node/daemon/run.go` to use the local config | DONE | CF1 | n/a | No CometBFT imports found — already clean |
+| CF3 | #3926 | Update `internal/node/config/enums_gen.go` — remove tendermintP2P/tendermintRpc if unused | DONE | CF1 | n/a | No CometBFT imports; port offsets still used by callers |
 | CFT | — | Write compat tests for config: create CometBFT `tm.Config` with known values, marshal to TOML, unmarshal into our local config struct, verify all used fields match. Put tests in `internal/node/config/compat_test.go`. | DONE | CF1 | 562ed3c74 | 4 compat tests: BaseConfig paths, InstrumentationConfig, TOML roundtrip, defaults match |
 
 ### Phase 4: Genesis types
@@ -54,7 +54,7 @@ Copy CometBFT genesis structs into local files. Same JSON serialization.
 
 | ID | Issue | Task | Status | Depends | Commit | Notes |
 |----|-------|------|--------|---------|--------|-------|
-| GN1 | #3928 | Copy `types.GenesisDoc`, `GenesisValidator`, `ConsensusParams` into `pkg/types/cometbft/` or a new local package. Same JSON tags. Remove CometBFT import. | PENDING | L6 | | pkg/types/cometbft/ already wraps these — may just need to inline the definitions |
+| GN1 | #3928 | Copy `types.GenesisDoc`, `GenesisValidator`, `ConsensusParams` into `pkg/types/cometbft/` or a new local package. Same JSON tags. Remove CometBFT import. | DONE | L6 | 6b62bec08 | Local ConsensusParams/Block structs with protowire encoding; callers updated to field-by-field construction |
 | GN2 | #3928 | Update `internal/node/genesis/bootstrap.go` and `provider.go` | PENDING | GN1 | | |
 | GN3 | #3929 | Remove or replace `internal/api/v3/tm/` — copy needed RPC response types locally | PENDING | GN1 | | |
 | GNT | — | Write compat tests for genesis types: create CometBFT `GenesisDoc` with validators and consensus params, marshal to JSON, unmarshal into our local types, verify all fields match. Also test: write a genesis.json with CometBFT, read it with our types. Put tests in `pkg/types/cometbft/compat_test.go` or `internal/node/genesis/compat_test.go`. | PENDING | GN1 | | |
@@ -65,7 +65,7 @@ Copy CometBFT genesis structs into local files. Same JSON serialization.
 |----|-------|------|--------|---------|--------|-------|
 | CL1 | #3932 | Update `cmd/accumulated/cmd_reset.go` — use local key/genesis types | PENDING | K1, GN1 | | |
 | CL2 | #3932 | Update `cmd/accumulated/cmd_init.go` and `cmd_init_network.go` | PENDING | K1, CF1, GN1 | | |
-| CL3 | #3932 | Update `cmd/accumulated/cmd_run.go` and `cmd_run_dual.go` | PENDING | CF1 | | |
+| CL3 | #3932 | Update `cmd/accumulated/cmd_run.go` and `cmd_run_dual.go` | DONE | CF1 | b6684d84e | Replaced LogFormat constants and ErrAlreadyStopped; also cleaned cmd_run_netsim.go (125131991) |
 | CL4 | #3932 | Update `cmd/accumulated/cmd_migrate.go` | PENDING | CF1 | | |
 | CL5 | #3932 | Clean up `cmd/accumulated/run/consensus.go` | PENDING | CF1, GN3 | | |
 | CL6 | #3932 | Clean up `cmd/accumulated/run/key_comet.go` | PENDING | K1 | | |
@@ -89,3 +89,4 @@ Copy CometBFT genesis structs into local files. Same JSON serialization.
 | 2026-04-16 | Session 2 | L1, L2, L3, L5, L6, S3, S4 | Logger return types changed, callers fixed, vdk cleaned. L4 blocked on Phase 4. |
 | 2026-04-16 | Session 3 | K1, K2, K3, K4, K5, KT, S1 + v1 test files | Local key types with compat tests, daemon files cleaned, v1 execute test files cleaned |
 | 2026-04-16 | Session 4 | S2, CF1, CFT | pkg/build/parser.go cleaned, local TendermintConfig struct with compat tests |
+| 2026-04-16 | Session 5 | GN1, CF2, CF3, CL3 | Local ConsensusParams/Block with protowire encoding, cmd_run*.go cleaned |
