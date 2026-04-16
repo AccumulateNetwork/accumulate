@@ -10,7 +10,6 @@ import (
 	"crypto/ed25519"
 	"testing"
 
-	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
 	"github.com/stretchr/testify/require"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -28,7 +27,7 @@ func TestLiteTokenTransactions(t *testing.T) {
 	_, destPrivKey, _ := ed25519.GenerateKey(nil)
 
 	batch := db.Begin(true)
-	require.NoError(t, acctesting.CreateLiteTokenAccount(batch, tmed25519.PrivKey(privKey), protocol.AcmeFaucetAmount))
+	require.NoError(t, acctesting.CreateLiteTokenAccount(batch, privKey, protocol.AcmeFaucetAmount))
 	require.NoError(t, batch.Commit())
 
 	sponsorUrl := acctesting.AcmeLiteAddressStdPriv(privKey)
