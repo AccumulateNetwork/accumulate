@@ -4,6 +4,13 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
+//go:build ignore
+// +build ignore
+
+// This test verifies wire-format compatibility with CometBFT types.
+// Run manually: go test -tags="" -run TestCompat -count=1 ./pkg/types/cometbft/
+// (requires adding cometbft back to go.mod temporarily)
+
 package cometbft
 
 import (
