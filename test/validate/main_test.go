@@ -17,7 +17,6 @@ import (
 	"testing"
 	"time"
 
-	tmp2p "github.com/cometbft/cometbft/p2p"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
@@ -141,9 +140,9 @@ func TestValidateNetwork(t *testing.T) {
 		node, err := accumulated.Load(*validateNetwork, nil)
 		require.NoError(t, err)
 		network = node.Config.Accumulate.Network.Id
-		key, err := tmp2p.LoadNodeKey(node.Config.NodeKeyFile())
+		key, err := accumulated.LoadNodeKey(node.Config.NodeKeyFile())
 		require.NoError(t, err)
-		ed := ed25519.PrivateKey(key.PrivKey.Bytes())
+		ed := ed25519.PrivateKey(key.PrivKey)
 		sk, _, err := crypto.KeyPairFromStdKey(&ed)
 		require.NoError(t, err)
 		id, err := peer.IDFromPrivateKey(sk)
