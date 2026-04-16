@@ -260,12 +260,11 @@ func main() {
 		rampTicker := time.NewTicker(rampInterval)
 		defer rampTicker.Stop()
 
-		// Track window TPS between ramp ticks (no shared state with reporter)
+		// Track window TPS between ramp ticks
 		rampPrevSubmitted := uint64(0)
 		rampPrevTime := time.Now()
-		var lastWindowTPS int64
-		var peakWindowTPS int64
-		var plateauCount int
+		var athTPS int64     // all-time high window TPS
+		var hitATH bool      // did we hit a new ATH since last ramp?
 
 		for {
 			select {
@@ -285,11 +284,11 @@ func main() {
 				rampPrevSubmitted = s
 				rampPrevTime = now
 
-				// Check error cutoff — stop the test
+				// Check error cutoff
 				if s > 0 {
 					errPct := float64(f) / float64(s) * 100
 					if errPct > errorCutoff {
-						msg := fmt.Sprintf("Error rate %.2f%% exceeds cutoff %.1f%%, max TPS ~%d", errPct, errorCutoff, windowTPS)
+						msg := fmt.Sprintf("Error rate %.2f%% exceeds cutoff %.1f%%, max TPS %d", errPct, errorCutoff, athTPS)
 						fmt.Printf("\n── %s ──\n", msg)
 						appendLog(logFile, msg)
 						cancel()
@@ -297,25 +296,21 @@ func main() {
 					}
 				}
 
-				// Track peak window TPS
-				if windowTPS > peakWindowTPS {
-					peakWindowTPS = windowTPS
+				// Track ATH
+				if windowTPS > athTPS {
+					athTPS = windowTPS
+					hitATH = true
 				}
 
-				// Check for plateau: TPS stuck below 90% of peak for 3+ intervals
-				if peakWindowTPS > 0 && windowTPS < int64(float64(peakWindowTPS)*0.9) {
-					plateauCount++
-					if plateauCount >= 3 {
-						msg := fmt.Sprintf("TPS saturated: peak %d, current %d (3 intervals below 90%% of peak)", peakWindowTPS, windowTPS)
-						fmt.Printf("\n── %s ──\n", msg)
-						appendLog(logFile, msg)
-						cancel()
-						return
-					}
-				} else if windowTPS > lastWindowTPS {
-					plateauCount = 0 // still growing, reset
+				// If we didn't hit a new ATH this interval, we've found the max
+				if athTPS > 0 && !hitATH {
+					msg := fmt.Sprintf("Max TPS found: %d (no new ATH after ramp to %d)", athTPS, currentTargetTPS.Load())
+					fmt.Printf("\n── %s ──\n", msg)
+					appendLog(logFile, msg)
+					cancel()
+					return
 				}
-				lastWindowTPS = windowTPS
+				hitATH = false // reset for next interval
 
 				// Ramp up
 				cur := currentTargetTPS.Load()
