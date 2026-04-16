@@ -198,18 +198,18 @@ func main() {
 				su := succeeded.Load()
 				f := failed.Load()
 
-				// Reset window every 15 seconds BEFORE calculating TPS
-				if now.Sub(prevTime) >= 15*time.Second {
-					prevSubmitted = s
-					prevTime = now
-				}
-
 				// Windowed TPS: transactions in last window / window duration
 				windowDuration := now.Sub(prevTime).Seconds()
 				windowTxns := s - prevSubmitted
 				var windowTPS float64
 				if windowDuration > 0 {
 					windowTPS = float64(windowTxns) / windowDuration
+				}
+
+				// Reset window AFTER calculating TPS (avoids 0-TPS artifact on reset tick)
+				if now.Sub(prevTime) >= 15*time.Second {
+					prevSubmitted = s
+					prevTime = now
 				}
 
 				avgTPS := float64(s) / elapsed.Seconds()
