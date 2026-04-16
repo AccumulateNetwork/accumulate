@@ -7,10 +7,10 @@
 package block_test
 
 import (
+	"crypto/ed25519"
 	"fmt"
 	"testing"
 
-	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/simulator"
@@ -224,10 +224,10 @@ func TestDelegatedSignature_Double(t *testing.T) {
 	alice := AccountUrl("alice")
 	key1, key2, key3 := acctesting.GenerateKey(), acctesting.GenerateKey(), acctesting.GenerateKey()
 	updatePartitionFor(sim, alice, func(batch *database.Batch) {
-		require.NoError(t, acctesting.CreateAdiWithCredits(batch, tmed25519.PrivKey(key1), alice.String(), 1e9))
-		require.NoError(t, acctesting.CreateKeyBook(batch, alice.JoinPath("book1").String(), tmed25519.PubKey(key2[32:])))
+		require.NoError(t, acctesting.CreateAdiWithCredits(batch, ed25519.PrivateKey(key1), alice.String(), 1e9))
+		require.NoError(t, acctesting.CreateKeyBook(batch, alice.JoinPath("book1").String(), ed25519.PublicKey(key2[32:])))
 		require.NoError(t, acctesting.AddCredits(batch, alice.JoinPath("book1", "1"), 1e9))
-		require.NoError(t, acctesting.CreateKeyBook(batch, alice.JoinPath("book2").String(), tmed25519.PubKey(key3[32:])))
+		require.NoError(t, acctesting.CreateKeyBook(batch, alice.JoinPath("book2").String(), ed25519.PublicKey(key3[32:])))
 		require.NoError(t, acctesting.AddCredits(batch, alice.JoinPath("book2", "1"), 1e9))
 		require.NoError(t, acctesting.CreateAccount(batch, &DataAccount{Url: alice.JoinPath("data")}))
 		require.NoError(t, acctesting.UpdateKeyPage(batch, alice.JoinPath("book0", "1"), func(page *KeyPage) {
@@ -273,14 +273,14 @@ func TestDelegatedSignature_RemoteDelegate(t *testing.T) {
 	// Setup
 	key1, key2 := acctesting.GenerateKey(), acctesting.GenerateKey()
 	updatePartitionFor(sim, alice, func(batch *database.Batch) {
-		require.NoError(t, acctesting.CreateAdiWithCredits(batch, tmed25519.PrivKey(key1), alice.String(), 1e9))
+		require.NoError(t, acctesting.CreateAdiWithCredits(batch, ed25519.PrivateKey(key1), alice.String(), 1e9))
 		require.NoError(t, acctesting.CreateAccount(batch, &DataAccount{Url: alice.JoinPath("data")}))
 		require.NoError(t, acctesting.UpdateKeyPage(batch, alice.JoinPath("book0", "1"), func(page *KeyPage) {
 			page.AddKeySpec(&KeySpec{Delegate: bob.JoinPath("book0")})
 		}))
 	})
 	updatePartitionFor(sim, bob, func(batch *database.Batch) {
-		require.NoError(t, acctesting.CreateAdiWithCredits(batch, tmed25519.PrivKey(key2), bob.String(), 1e9))
+		require.NoError(t, acctesting.CreateAdiWithCredits(batch, ed25519.PrivateKey(key2), bob.String(), 1e9))
 	})
 
 	// Execute
@@ -318,12 +318,12 @@ func TestDelegatedSignature_RemoteDelegator(t *testing.T) {
 	// Setup
 	key1, key2, key3 := acctesting.GenerateKey(), acctesting.GenerateKey(), acctesting.GenerateKey()
 	updatePartitionFor(sim, alice, func(batch *database.Batch) {
-		require.NoError(t, acctesting.CreateAdiWithCredits(batch, tmed25519.PrivKey(key1), alice.String(), 1e9))
+		require.NoError(t, acctesting.CreateAdiWithCredits(batch, ed25519.PrivateKey(key1), alice.String(), 1e9))
 		require.NoError(t, acctesting.CreateAccount(batch, &DataAccount{Url: alice.JoinPath("data"), AccountAuth: AccountAuth{Authorities: []AuthorityEntry{{Url: bob.JoinPath("book0")}}}}))
 	})
 	updatePartitionFor(sim, bob, func(batch *database.Batch) {
-		require.NoError(t, acctesting.CreateAdiWithCredits(batch, tmed25519.PrivKey(key2), bob.String(), 1e9))
-		require.NoError(t, acctesting.CreateKeyBook(batch, bob.JoinPath("book1").String(), tmed25519.PubKey(key3[32:])))
+		require.NoError(t, acctesting.CreateAdiWithCredits(batch, ed25519.PrivateKey(key2), bob.String(), 1e9))
+		require.NoError(t, acctesting.CreateKeyBook(batch, bob.JoinPath("book1").String(), ed25519.PublicKey(key3[32:])))
 		require.NoError(t, acctesting.AddCredits(batch, bob.JoinPath("book1", "1"), 1e9))
 		require.NoError(t, acctesting.UpdateAccount(batch, bob.JoinPath("book0", "1"), func(page *KeyPage) {
 			page.AddKeySpec(&KeySpec{Delegate: bob.JoinPath("book1")})
@@ -366,17 +366,17 @@ func TestDelegatedSignature_RemoteDelegateAndAuthority(t *testing.T) {
 	// Setup
 	key1, key2, key3 := acctesting.GenerateKey(), acctesting.GenerateKey(), acctesting.GenerateKey()
 	updatePartitionFor(sim, alice, func(batch *database.Batch) {
-		require.NoError(t, acctesting.CreateAdiWithCredits(batch, tmed25519.PrivKey(key1), alice.String(), 1e9))
+		require.NoError(t, acctesting.CreateAdiWithCredits(batch, ed25519.PrivateKey(key1), alice.String(), 1e9))
 		require.NoError(t, acctesting.CreateAccount(batch, &DataAccount{Url: alice.JoinPath("data"), AccountAuth: AccountAuth{Authorities: []AuthorityEntry{{Url: bob.JoinPath("book0")}}}}))
 	})
 	updatePartitionFor(sim, bob, func(batch *database.Batch) {
-		require.NoError(t, acctesting.CreateAdiWithCredits(batch, tmed25519.PrivKey(key2), bob.String(), 1e9))
+		require.NoError(t, acctesting.CreateAdiWithCredits(batch, ed25519.PrivateKey(key2), bob.String(), 1e9))
 		require.NoError(t, acctesting.UpdateAccount(batch, bob.JoinPath("book0", "1"), func(page *KeyPage) {
 			page.AddKeySpec(&KeySpec{Delegate: charlie.JoinPath("book0")})
 		}))
 	})
 	updatePartitionFor(sim, charlie, func(batch *database.Batch) {
-		require.NoError(t, acctesting.CreateAdiWithCredits(batch, tmed25519.PrivKey(key3), charlie.String(), 1e9))
+		require.NoError(t, acctesting.CreateAdiWithCredits(batch, ed25519.PrivateKey(key3), charlie.String(), 1e9))
 	})
 
 	// Execute
@@ -415,20 +415,20 @@ func TestDelegatedSignature_DobuleRemote(t *testing.T) {
 	// Setup
 	key1, key2, key3 := acctesting.GenerateKey(), acctesting.GenerateKey(), acctesting.GenerateKey()
 	updatePartitionFor(sim, alice, func(batch *database.Batch) {
-		require.NoError(t, acctesting.CreateAdiWithCredits(batch, tmed25519.PrivKey(key1), alice.String(), 1e9))
+		require.NoError(t, acctesting.CreateAdiWithCredits(batch, ed25519.PrivateKey(key1), alice.String(), 1e9))
 		require.NoError(t, acctesting.CreateAccount(batch, &DataAccount{Url: alice.JoinPath("data")}))
 		require.NoError(t, acctesting.UpdateAccount(batch, alice.JoinPath("book0", "1"), func(page *KeyPage) {
 			page.AddKeySpec(&KeySpec{Delegate: bob.JoinPath("book0")})
 		}))
 	})
 	updatePartitionFor(sim, bob, func(batch *database.Batch) {
-		require.NoError(t, acctesting.CreateAdiWithCredits(batch, tmed25519.PrivKey(key2), bob.String(), 1e9))
+		require.NoError(t, acctesting.CreateAdiWithCredits(batch, ed25519.PrivateKey(key2), bob.String(), 1e9))
 		require.NoError(t, acctesting.UpdateAccount(batch, bob.JoinPath("book0", "1"), func(page *KeyPage) {
 			page.AddKeySpec(&KeySpec{Delegate: charlie.JoinPath("book0")})
 		}))
 	})
 	updatePartitionFor(sim, charlie, func(batch *database.Batch) {
-		require.NoError(t, acctesting.CreateAdiWithCredits(batch, tmed25519.PrivKey(key3), charlie.String(), 1e9))
+		require.NoError(t, acctesting.CreateAdiWithCredits(batch, ed25519.PrivateKey(key3), charlie.String(), 1e9))
 	})
 
 	// Execute
