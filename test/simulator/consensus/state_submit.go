@@ -25,6 +25,20 @@ func (n *Node) processSubmission(sub *SubmitEnvelope) (submitState, []Message, e
 		return nil, nil, err
 	}
 
+	// If all results failed, return an error (matches old ABCI CheckTx behavior)
+	if len(result) > 0 {
+		allFailed := true
+		for _, st := range result {
+			if !st.Failed() {
+				allFailed = false
+				break
+			}
+		}
+		if allFailed {
+			return nil, nil, result[0].AsError()
+		}
+	}
+
 	if sub.Pretend {
 		return nil, []Message{
 			&EnvelopeSubmitted{
