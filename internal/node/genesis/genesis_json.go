@@ -11,6 +11,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 )
@@ -120,4 +121,26 @@ func (k *pubKeyJSON) UnmarshalJSON(data []byte) error {
 	}
 	*k = decoded
 	return nil
+}
+
+// GenesisDocFromFile reads a genesis JSON file and returns a GenesisDocJSON.
+func GenesisDocFromFile(path string) (*GenesisDocJSON, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read genesis file: %w", err)
+	}
+	doc := new(GenesisDocJSON)
+	if err := json.Unmarshal(data, doc); err != nil {
+		return nil, fmt.Errorf("parse genesis file: %w", err)
+	}
+	return doc, nil
+}
+
+// SaveAs writes the genesis document to the given file path.
+func (doc *GenesisDocJSON) SaveAs(path string) error {
+	data, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal genesis document: %w", err)
+	}
+	return os.WriteFile(path, data, 0644)
 }
