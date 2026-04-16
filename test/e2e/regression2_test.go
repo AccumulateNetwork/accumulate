@@ -9,6 +9,7 @@ package e2e
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
 	"crypto/sha256"
 	"fmt"
 	"math/big"
@@ -17,7 +18,6 @@ import (
 	"strings"
 	"testing"
 
-	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
@@ -179,7 +179,7 @@ func TestSendDirectToWrongPartition(t *testing.T) {
 	alice, bob := acctesting.AcmeLiteAddressStdPriv(aliceKey), acctesting.AcmeLiteAddressStdPriv(bobKey)
 
 	Update(t, sim.DatabaseFor(alice), func(batch *database.Batch) {
-		require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, tmed25519.PrivKey(aliceKey), 1e6, 1e9))
+		require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, ed25519.PrivateKey(aliceKey), 1e6, 1e9))
 	})
 
 	goodBvn, err := sim.Router().RouteAccount(alice)
@@ -1266,7 +1266,7 @@ func TestLiteIdentityPendingTransaction(t *testing.T) {
 			)
 
 			Update(t, sim.DatabaseFor(alice), func(batch *database.Batch) {
-				require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, tmed25519.PrivKey(aliceKey), 1e6, 1e9))
+				require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, ed25519.PrivateKey(aliceKey), 1e6, 1e9))
 			})
 
 			// Execute
