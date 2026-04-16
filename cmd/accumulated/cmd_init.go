@@ -23,7 +23,6 @@ import (
 	"strings"
 
 	cmtjson "github.com/cometbft/cometbft/libs/json"
-	"github.com/cometbft/cometbft/libs/log"
 	rpchttp "github.com/cometbft/cometbft/rpc/client/http"
 	"github.com/cometbft/cometbft/types"
 	"github.com/rs/zerolog"
@@ -680,7 +679,7 @@ func netDir(networkType protocol.PartitionType) string {
 	return ""
 }
 
-func newLogger() log.Logger {
+func newLogger() logging.Logger {
 	levels := cfg.DefaultLogLevels
 	if flagInit.LogLevels != "" {
 		levels = flagInit.LogLevels
@@ -692,7 +691,7 @@ func newLogger() log.Logger {
 	check(err)
 	logger, err := logging.NewTendermintLogger(zerolog.New(writer), level, false)
 	check(err)
-	return logging.CometBFTLogger(logger)
+	return logger
 }
 
 func resolveIp(addr string) (string, error) {
