@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -84,10 +83,10 @@ func loadNetworkConfiguration(file ...string) *accumulated.NetworkInit {
 	for _, bvn := range network.Bvns {
 		for _, node := range bvn.Nodes {
 			if node.PrivValKey == nil {
-				node.PrivValKey = tmed25519.GenPrivKey()
+				node.PrivValKey = generateEd25519Key()
 			}
 			if node.DnNodeKey == nil {
-				node.DnNodeKey = tmed25519.GenPrivKey()
+				node.DnNodeKey = generateEd25519Key()
 			}
 			if node.BvnNodeKey == nil {
 				node.BvnNodeKey = node.DnNodeKey
@@ -114,13 +113,13 @@ func initNetwork(cmd *cobra.Command, args []string) {
 	for _, bvn := range network.Bvns {
 		for _, node := range bvn.Nodes {
 			if node.PrivValKey == nil {
-				node.PrivValKey = tmed25519.GenPrivKey()
+				node.PrivValKey = generateEd25519Key()
 			}
 			if node.DnNodeKey == nil {
-				node.DnNodeKey = tmed25519.GenPrivKey()
+				node.DnNodeKey = generateEd25519Key()
 			}
 			if node.BvnNodeKey == nil {
-				node.BvnNodeKey = tmed25519.GenPrivKey()
+				node.BvnNodeKey = generateEd25519Key()
 			}
 			if node.ListenAddress == "" {
 				node.ListenAddress = "0.0.0.0"
