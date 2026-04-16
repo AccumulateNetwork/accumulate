@@ -146,7 +146,15 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) error {
 			// Convert the consensus parameters
 			doc := new(cometbft.GenesisDoc)
 			doc.ChainID = opts.NetworkID + "." + opts.PartitionId
-			doc.Params = (*cometbft.ConsensusParams)(opts.ConsensusParams)
+			if opts.ConsensusParams != nil {
+					doc.Params = &cometbft.ConsensusParams{
+						Block:     cometbft.BlockParams{MaxBytes: opts.ConsensusParams.Block.MaxBytes, MaxGas: opts.ConsensusParams.Block.MaxGas},
+						Evidence:  cometbft.EvidenceParams{MaxAgeNumBlocks: opts.ConsensusParams.Evidence.MaxAgeNumBlocks, MaxAgeDuration: opts.ConsensusParams.Evidence.MaxAgeDuration, MaxBytes: opts.ConsensusParams.Evidence.MaxBytes},
+						Validator: cometbft.ValidatorParams{PubKeyTypes: opts.ConsensusParams.Validator.PubKeyTypes},
+						Version:   cometbft.VersionParams{App: opts.ConsensusParams.Version.App},
+						ABCI:      cometbft.ABCIParams{VoteExtensionsEnableHeight: opts.ConsensusParams.ABCI.VoteExtensionsEnableHeight},
+					}
+				}
 			for _, v := range opts.GenesisGlobals.Network.Validators {
 				if !v.IsActiveOn(opts.PartitionId) {
 					continue
