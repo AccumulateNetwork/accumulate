@@ -25,6 +25,15 @@ func errShim() error {
 
 // IsDirty returns true if the BPT has pending updates.
 func (b *BPT) IsDirty() bool {
+	if b.sharded != nil {
+		// Check if any shard is dirty
+		for _, shard := range b.sharded.shards {
+			if shard.IsDirty() {
+				return true
+			}
+		}
+		return false
+	}
 	return len(b.pending) > 0 || b.baseIsDirty()
 }
 
@@ -87,6 +96,10 @@ func (b *BPT) commitUpdatesDirect() (bool, error) {
 
 // Commit commits the BPT.
 func (b *BPT) Commit() error {
+	if b.sharded != nil {
+		return b.commitSharded()
+	}
+
 	// If we're not dirty there's nothing to do
 	if !b.IsDirty() {
 		return nil
@@ -117,6 +130,16 @@ func (b *BPT) Commit() error {
 
 	// Commit
 	return b.baseCommit()
+}
+
+// commitSharded commits all shard BPTs.
+func (b *BPT) commitSharded() error {
+	for i, shard := range b.sharded.shards {
+		if err := shard.Commit(); err != nil {
+			return errors.UnknownError.WithFormat("commit shard %d: %w", i, err)
+		}
+	}
+	return nil
 }
 
 // nodeRecord is a wrapper for [branch] that implements [record.Record].

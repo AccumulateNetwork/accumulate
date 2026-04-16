@@ -1,12 +1,5 @@
 id: "DAGBFTTest"
 
-# Bootstrap node configuration for Docker peer discovery
-bootstrap:
-  peerAddress: "acc-bootstrap"
-  advertizeAddress: "acc-bootstrap"
-  listenAddress: "0.0.0.0"
-  basePort: 16593
-
 # Global network configuration
 globals:
   executorVersion: "v2"

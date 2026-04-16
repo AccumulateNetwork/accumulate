@@ -48,6 +48,19 @@ func getKVStore(b *Batch) keyvalue.Store {
 	return b.store.(interface{ Unwrap() keyvalue.Store }).Unwrap()
 }
 
+// IsShardingConfigured returns true if a shard count has been explicitly stored
+// in the database (i.e., not just the default).
+func IsShardingConfigured(batch *Batch) bool {
+	data, err := getKVStore(batch).Get(executorConfigKey)
+	if err != nil {
+		return false
+	}
+	if len(data) == 0 {
+		return false
+	}
+	return binary.BigEndian.Uint64(data) > 1
+}
+
 // GetExecutorConfig reads the executor configuration from the database.
 // Returns a config with DefaultExecutorShardCount if no value has been stored.
 func GetExecutorConfig(batch *Batch) (*ExecutorConfig, error) {

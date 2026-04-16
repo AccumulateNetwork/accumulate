@@ -431,6 +431,19 @@ func (d *Daemon) startApp(caughtUp <-chan struct{}) (types.Application, error) {
 		},
 	}
 
+	// Load executor configuration (shard count) from database
+	if errCfg := d.db.View(func(batch *database.Batch) error {
+		cfg, err := database.GetExecutorConfig(batch)
+		if err != nil {
+			return err
+		}
+		// Cast uint64 to int for Options struct
+		execOpts.ShardCount = int(cfg.ExecutorShardCount)
+		return nil
+	}); errCfg != nil {
+		return nil, errors.UnknownError.WithFormat("load executor config: %v", errCfg)
+	}
+
 	if _, ok := d.local["directory"]; !ok ||
 		d.Config.Accumulate.DisableDirectDispatch {
 		// If we are not attached to a DN node, or direct dispatch is disabled,
@@ -473,6 +486,12 @@ func (d *Daemon) startApp(caughtUp <-chan struct{}) (types.Application, error) {
 	err := conductor.Start(d.eventBus)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("start conductor: %v", err)
+	}
+
+	if execOpts.ShardCount > 0 {
+		d.Logger.Info("Daemon starting executor", "shard-count", execOpts.ShardCount, "sharding", "ENABLED")
+	} else {
+		d.Logger.Info("Daemon starting executor", "sharding", "DISABLED")
 	}
 
 	exec, err := execute.NewExecutor(execOpts)

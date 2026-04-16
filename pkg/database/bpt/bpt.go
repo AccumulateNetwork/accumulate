@@ -27,9 +27,30 @@ func New(_ database.Record, logger logging.Logger, store database.Store, key *da
 	return b
 }
 
+// EnableSharding configures this BPT to delegate core operations (Insert, Get,
+// Delete, GetRootHash) to a ShardedBPT with the given depth. The BPT retains
+// its identity for the record/commit system while gaining parallel performance.
+func (b *BPT) EnableSharding(depth int) error {
+	s, err := NewShardedBPT(b.store, b.key, depth)
+	if err != nil {
+		return err
+	}
+	b.sharded = s
+	return nil
+}
+
+// IsSharded returns true if this BPT delegates to a ShardedBPT.
+func (b *BPT) IsSharded() bool {
+	return b.sharded != nil
+}
+
 // GetRootHash returns the root hash of the BPT, loading nodes, executing
 // pending updates, and recalculating hashes if necessary.
 func (b *BPT) GetRootHash() ([32]byte, error) {
+	if b.sharded != nil {
+		return b.sharded.GetRootHash()
+	}
+
 	// Execute pending updates
 	err := b.executePending()
 	if err != nil {
@@ -95,6 +116,10 @@ func parseNodeKey(nodeKey [32]byte) (height uint64, key [32]byte, ok bool) { //n
 
 // Get retrieves the latest hash associated with the given key.
 func (b *BPT) Get(key *record.Key) ([]byte, error) {
+	if b.sharded != nil {
+		return b.sharded.Get(key)
+	}
+
 	if v, ok := b.pending[key.Hash()]; ok {
 		if v.delete {
 			return nil, errors.NotFound
