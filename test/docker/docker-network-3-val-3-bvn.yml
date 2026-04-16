@@ -1,0 +1,79 @@
+id: "DAGBFTTest-3v-3b"
+
+# Bootstrap node configuration for Docker peer discovery
+bootstrap:
+  peerAddress: "acc-bootstrap-3v-3b"
+  advertizeAddress: "acc-bootstrap-3v-3b"
+  listenAddress: "0.0.0.0"
+  basePort: 16593
+
+# Global network configuration
+globals:
+  executorVersion: "v2"
+  oracle:
+    price: 10000000  # 1000 * AcmeOraclePrecision (netsim default: 0.10 USD per ACME)
+  globals:
+    majorBlockSchedule: "0 */12 * * *"  # Major blocks every 12 hours
+
+bvns:
+  - id: "BVN1"
+    nodes:
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bvn1-val1-3v-3b"
+        advertizeAddress: "acc-bvn1-val1-3v-3b"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bvn1-val2-3v-3b"
+        advertizeAddress: "acc-bvn1-val2-3v-3b"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bvn1-val3-3v-3b"
+        advertizeAddress: "acc-bvn1-val3-3v-3b"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+  - id: "BVN2"
+    nodes:
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bvn2-val1-3v-3b"
+        advertizeAddress: "acc-bvn2-val1-3v-3b"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bvn2-val2-3v-3b"
+        advertizeAddress: "acc-bvn2-val2-3v-3b"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bvn2-val3-3v-3b"
+        advertizeAddress: "acc-bvn2-val3-3v-3b"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+  - id: "BVN3"
+    nodes:
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bvn3-val1-3v-3b"
+        advertizeAddress: "acc-bvn3-val1-3v-3b"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bvn3-val2-3v-3b"
+        advertizeAddress: "acc-bvn3-val2-3v-3b"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bvn3-val3-3v-3b"
+        advertizeAddress: "acc-bvn3-val3-3v-3b"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+

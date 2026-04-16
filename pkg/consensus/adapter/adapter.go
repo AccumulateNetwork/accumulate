@@ -15,34 +15,41 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 )
 
-// BlockProducer is called by the consensus layer when certificates are committed.
-// It processes batches from committed certificates and produces blocks.
+// BlockProducer manages block lifecycle: begin, process certificates, commit.
 type BlockProducer interface {
-	// ProduceBlock processes a committed certificate and its batches.
-	// Returns the block hash and any error.
+	// BeginBlock opens a new block at the given index and time.
+	BeginBlock(ctx context.Context, index uint64, time time.Time) error
+
+	// ProcessCertificate processes a committed certificate's transactions into
+	// the currently open block without committing.
+	ProcessCertificate(ctx context.Context, params CertificateParams) error
+
+	// CommitBlock closes and commits the currently open block.
+	// Returns the block hash.
+	CommitBlock(ctx context.Context) ([32]byte, error)
+
+	// ProduceBlock is the legacy single-shot method that opens, processes, and
+	// commits a block in one call. Kept for backward compatibility with tests.
 	ProduceBlock(ctx context.Context, params BlockParams) (hash [32]byte, err error)
 }
 
-// BlockParams contains the parameters for block production.
+// BlockParams contains the parameters for single-shot block production (legacy).
 type BlockParams struct {
-	// Index is the block height/index.
-	Index uint64
-
-	// Time is the block timestamp.
-	Time time.Time
-
-	// IsLeader indicates if this node was the leader for this block.
-	IsLeader bool
-
-	// LeaderRound is the consensus round that committed this block.
+	Index       uint64
+	Time        time.Time
+	IsLeader    bool
 	LeaderRound types.Round
-
-	// Certificate is the committed certificate that triggered this block.
 	Certificate *types.Certificate
+	Batches     map[types.BatchDigest]*types.Batch
+}
 
-	// Batches contains the transaction batches referenced by the certificate.
-	// Map from batch digest to batch data.
-	Batches map[types.BatchDigest]*types.Batch
+// CertificateParams contains the parameters for processing a certificate
+// into an already-open block.
+type CertificateParams struct {
+	IsLeader    bool
+	LeaderRound types.Round
+	Certificate *types.Certificate
+	Batches     map[types.BatchDigest]*types.Batch
 }
 
 // TransactionValidator validates transactions before they are added to batches.

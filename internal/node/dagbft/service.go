@@ -29,6 +29,9 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+// DefaultBlockInterval is the minimum time a block stays open before committing.
+const DefaultBlockInterval = 3 * time.Second
+
 // ServiceConfig holds the configuration for a DAG-BFT service.
 type ServiceConfig struct {
 	// Partition is the network partition info.
@@ -56,9 +59,13 @@ type ServiceConfig struct {
 	PubSub *pubsub.PubSub
 
 	// InitialValidators provides the initial validator set for committee initialization.
-	// This is needed because the WillChangeGlobals event that populates the adapter's
-	// validators fires before the adapter is created.
 	InitialValidators []adapter.ValidatorInfo
+
+	// BlockInterval is the minimum time a block stays open before committing.
+	// Committed certificates are processed continuously; the block commits
+	// after this interval elapses and the current certificate finishes.
+	// Defaults to DefaultBlockInterval (3s).
+	BlockInterval time.Duration
 }
 
 // Service wraps the DAG-BFT consensus node for integration with accumulated.
@@ -81,6 +88,7 @@ type Service struct {
 	// Block production state
 	lastBlockIndex uint64
 	lastBlockTime  time.Time
+	blockInterval  time.Duration // minimum block duration (default 3s)
 
 	// Validator synchronization
 	validatorUpdateHeight uint64 // Height at which validator update was detected
@@ -103,10 +111,16 @@ func NewService(config ServiceConfig) (*Service, error) {
 		return nil, errors.BadRequest.With("event bus is required")
 	}
 
+	blockInterval := config.BlockInterval
+	if blockInterval <= 0 {
+		blockInterval = DefaultBlockInterval
+	}
+
 	s := &Service{
 		config:           config,
 		adapter:          config.Adapter,
 		eventBus:         config.EventBus,
+		blockInterval:    blockInterval,
 		stateHashTracker: types.NewStateHashTracker(100), // Track last 100 rounds
 	}
 	s.logger.L = config.Logger
@@ -360,62 +374,123 @@ func (s *Service) blockProductionLoop() {
 	defer s.wg.Done()
 
 	committed := s.node.Committed()
-	ticker := time.NewTicker(100 * time.Millisecond)
-	defer ticker.Stop()
+
+	var (
+		blockOpen      bool
+		blockStartTime time.Time
+		blockTimer     *time.Timer
+		certsInBlock   int
+	)
+
+	// commitBlock closes and commits the current open block.
+	commitBlock := func() {
+		if !blockOpen {
+			return
+		}
+
+		hash, err := s.adapter.CommitBlock(s.ctx)
+		if err != nil {
+			slog.Error("Failed to commit block", "error", err)
+			blockOpen = false
+			return
+		}
+
+		s.mu.Lock()
+		blockIndex := s.lastBlockIndex
+		blockTime := s.lastBlockTime
+
+		stateHash := s.adapter.StateHash()
+		s.mu.Unlock()
+
+		// Emit block event
+		event := events.DidCommitBlock{
+			Index: blockIndex,
+			Time:  blockTime,
+		}
+		if err := s.eventBus.Publish(event); err != nil {
+			s.logger.Error("Failed to publish block event", "error", err)
+		}
+
+		s.logger.Debug("Committed block",
+			"index", blockIndex,
+			"certificates", certsInBlock,
+			"hash", fmt.Sprintf("%x", hash[:8]),
+			"stateHash", fmt.Sprintf("%x", stateHash[:8]),
+			"duration", time.Since(blockStartTime))
+
+		blockOpen = false
+		certsInBlock = 0
+		if blockTimer != nil {
+			blockTimer.Stop()
+			blockTimer = nil
+		}
+	}
 
 	for {
+		// If no block is open, wait for a certificate or shutdown.
+		// If a block is open, also listen for the timer.
+		var timerCh <-chan time.Time
+		if blockTimer != nil {
+			timerCh = blockTimer.C
+		}
+
 		select {
 		case <-s.ctx.Done():
+			commitBlock() // commit whatever we have
 			return
 
 		case cert, ok := <-committed:
 			if !ok {
+				commitBlock()
 				return
 			}
 			if cert == nil {
 				continue
 			}
 
-			if err := s.processCommittedCertificate(cert); err != nil {
-				slog.Error("Failed to process committed certificate",
+			// Open a new block if needed
+			if !blockOpen {
+				s.mu.Lock()
+				if s.halted {
+					s.mu.Unlock()
+					slog.Error("Consensus halted", "error", s.haltReason)
+					continue
+				}
+				blockIndex := s.lastBlockIndex + 1
+				s.lastBlockIndex = blockIndex
+				s.lastBlockTime = time.Now()
+				s.mu.Unlock()
+
+				blockStartTime = time.Now()
+				if err := s.adapter.BeginBlock(s.ctx, blockIndex, blockStartTime); err != nil {
+					slog.Error("Failed to begin block", "error", err, "index", blockIndex)
+					continue
+				}
+				blockOpen = true
+				blockTimer = time.NewTimer(s.blockInterval)
+			}
+
+			// Process this certificate's transactions into the open block
+			if err := s.processCertificateIntoBlock(cert); err != nil {
+				slog.Error("Failed to process certificate",
 					"error", err,
 					"round", cert.Header.Round)
 			}
+			certsInBlock++
 
-		case <-ticker.C:
-			// Liveness check - warn if no blocks produced recently
-			s.mu.RLock()
-			elapsed := time.Since(s.lastBlockTime)
-			lastBlock := s.lastBlockTime
-			s.mu.RUnlock()
-
-			// Only check if we've produced at least one block
-			if !lastBlock.IsZero() && elapsed > 30*time.Second {
-				s.logger.Info("WARNING: No blocks produced",
-					"elapsed", elapsed,
-					"lastBlockTime", lastBlock,
-					"round", s.CurrentRound())
-			}
+		case <-timerCh:
+			// Block interval elapsed — commit the block
+			commitBlock()
 		}
 	}
 }
 
-// processCommittedCertificate processes a committed certificate and produces a block.
-func (s *Service) processCommittedCertificate(cert *types.Certificate) error {
-	s.mu.Lock()
-
-	// Check if halted due to state divergence
-	if s.halted {
-		s.mu.Unlock()
-		return fmt.Errorf("consensus halted due to state divergence: %w", s.haltReason)
-	}
-
-	// Capture workers and state under lock, then release for I/O
+// processCertificateIntoBlock processes a committed certificate's transactions
+// into the currently open block without committing.
+func (s *Service) processCertificateIntoBlock(cert *types.Certificate) error {
 	workers := s.node.Workers()
-	blockIndex := s.lastBlockIndex + 1
-	s.mu.Unlock()
 
-	// Get batches from workers outside the lock - this involves I/O
+	// Get batches from workers
 	batches := make(map[types.BatchDigest]*types.Batch)
 	committedDigests := make([]types.BatchDigest, 0)
 	for digest := range cert.Header.Payload {
@@ -436,59 +511,32 @@ func (s *Service) processCommittedCertificate(cert *types.Certificate) error {
 		}
 	}
 
-	// Check if this validator is the leader
+	// Check if this validator is the leader for this certificate
 	pubKey := s.config.NodeConfig.KeyPair.Public().(ed25519.PublicKey)
 	isLeader := types.ValidatorsEqual(cert.Header.Author, pubKey)
 
-	// Produce block
-	blockTime := time.Now()
-
-	params := adapter.BlockParams{
-		Index:       blockIndex,
-		Time:        blockTime,
+	// Process transactions into the open block
+	err := s.adapter.ProcessCertificate(s.ctx, adapter.CertificateParams{
 		IsLeader:    isLeader,
 		LeaderRound: cert.Header.Round,
 		Certificate: cert,
 		Batches:     batches,
-	}
-
-	hash, err := s.adapter.ProduceBlock(s.ctx, params)
+	})
 	if err != nil {
-		return fmt.Errorf("produce block: %w", err)
+		return fmt.Errorf("process certificate: %w", err)
 	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	// Update state
-	s.lastBlockIndex = blockIndex
-	s.lastBlockTime = blockTime
 
 	// Record state hash for consistency verification
+	s.mu.Lock()
 	stateHash := s.adapter.StateHash()
 	cert.SetStateHash(types.StateHash(stateHash))
-	s.RecordStateHash(cert.Header.Round, blockIndex, types.StateHash(stateHash))
+	s.RecordStateHash(cert.Header.Round, s.lastBlockIndex, types.StateHash(stateHash))
+	s.mu.Unlock()
 
-	// Prune batches from workers now that they've been processed
-	for _, w := range s.node.Workers() {
+	// Prune batches from workers
+	for _, w := range workers {
 		w.PruneBatches(committedDigests)
 	}
-
-	// Emit block event
-	event := events.DidCommitBlock{
-		Index: blockIndex,
-		Time:  blockTime,
-	}
-	if err := s.eventBus.Publish(event); err != nil {
-		s.logger.Error("Failed to publish block event", "error", err)
-	}
-
-	s.logger.Debug("Produced block",
-		"index", blockIndex,
-		"round", cert.Header.Round,
-		"hash", fmt.Sprintf("%x", hash[:8]),
-		"stateHash", fmt.Sprintf("%x", stateHash[:8]),
-		"batches", len(batches))
 
 	return nil
 }

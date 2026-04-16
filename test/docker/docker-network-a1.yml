@@ -1,0 +1,36 @@
+id: "DAGBFTTest-A1"
+
+bootstrap:
+  peerAddress: "acc-bootstrap-a1"
+  advertizeAddress: "acc-bootstrap-a1"
+  listenAddress: "0.0.0.0"
+  basePort: 16593
+
+globals:
+  executorVersion: "v2"
+  oracle:
+    price: 10000000
+  globals:
+    majorBlockSchedule: "0 */12 * * *"
+
+bvns:
+  - id: "BVN1"
+    nodes:
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bvn1-val1-a1"
+        advertizeAddress: "acc-bvn1-val1-a1"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bvn1-val2-a1"
+        advertizeAddress: "acc-bvn1-val2-a1"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bvn1-val3-a1"
+        advertizeAddress: "acc-bvn1-val3-a1"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"

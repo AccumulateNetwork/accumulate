@@ -12,9 +12,11 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 )
@@ -39,6 +41,9 @@ type ExecutorBridge struct {
 	lastBlockHash          [32]byte
 	validators             []ValidatorInfo
 	validatorChangeHandler func(validators []ValidatorInfo)
+
+	// Open block state (for multi-certificate blocks)
+	openBlock execute.Block
 }
 
 // ExecutorBridgeConfig holds configuration for creating an ExecutorBridge.
@@ -172,9 +177,126 @@ func (b *ExecutorBridge) SetValidators(validators []ValidatorInfo) {
 	}
 }
 
-// ProduceBlock processes a committed certificate and produces a block.
-// It extracts transactions from batches, converts them to envelopes,
-// and calls the executor to process them.
+// BeginBlock opens a new block at the given index and time.
+func (b *ExecutorBridge) BeginBlock(ctx context.Context, index uint64, blockTime time.Time) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if b.openBlock != nil {
+		return fmt.Errorf("block already open")
+	}
+
+	execParams := execute.BlockParams{
+		Context:  ctx,
+		IsLeader: true, // will be updated per certificate
+		Index:    index,
+		Time:     blockTime,
+	}
+
+	block, err := b.executor.Begin(execParams)
+	if err != nil {
+		return fmt.Errorf("begin block: %w", err)
+	}
+
+	b.openBlock = block
+	return nil
+}
+
+// ProcessCertificate processes a committed certificate's transactions into
+// the currently open block.
+func (b *ExecutorBridge) ProcessCertificate(ctx context.Context, params CertificateParams) error {
+	b.mu.RLock()
+	block := b.openBlock
+	b.mu.RUnlock()
+
+	if block == nil {
+		return fmt.Errorf("no open block")
+	}
+
+	return b.processTransactions(block, params.Batches, params.LeaderRound)
+}
+
+// CommitBlock closes and commits the currently open block.
+func (b *ExecutorBridge) CommitBlock(ctx context.Context) ([32]byte, error) {
+	b.mu.Lock()
+	block := b.openBlock
+	b.openBlock = nil
+	b.mu.Unlock()
+
+	if block == nil {
+		return [32]byte{}, fmt.Errorf("no open block")
+	}
+
+	state, err := block.Close()
+	if err != nil {
+		return [32]byte{}, fmt.Errorf("close block: %w", err)
+	}
+
+	hash, err := state.Hash()
+	if err != nil {
+		state.Discard()
+		return [32]byte{}, fmt.Errorf("get block hash: %w", err)
+	}
+
+	if err := state.Commit(); err != nil {
+		return [32]byte{}, fmt.Errorf("commit block: %w", err)
+	}
+
+	b.mu.Lock()
+	b.lastBlockHash = hash
+	b.mu.Unlock()
+
+	// Check for validator updates
+	if updates, changed := state.DidUpdateValidators(); changed {
+		b.handleValidatorUpdates(updates)
+	}
+
+	return hash, nil
+}
+
+// processTransactions processes all transactions from batches into a block.
+func (b *ExecutorBridge) processTransactions(block execute.Block, batches map[types.BatchDigest]*types.Batch, round types.Round) error {
+	for digest, batch := range batches {
+		if batch == nil {
+			slog.Warn("Missing batch in certificate",
+				"digest", digest.String(),
+				"round", round)
+			continue
+		}
+
+		for i, txBytes := range batch.Transactions {
+			envelope := new(messaging.Envelope)
+			if err := envelope.UnmarshalBinary(txBytes); err != nil {
+				slog.Debug("Failed to unmarshal transaction",
+					"error", err,
+					"batch", digest.String(),
+					"index", i)
+				continue
+			}
+
+			statuses, err := block.Process(envelope)
+			if err != nil {
+				slog.Warn("Failed to process transaction",
+					"error", err,
+					"batch", digest.String(),
+					"index", i)
+				continue
+			}
+
+			for _, status := range statuses {
+				if status.Error != nil {
+					slog.Debug("Transaction failed",
+						"error", status.Error,
+						"code", status.Code)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// ProduceBlock is the legacy single-shot method. It opens, processes, and
+// commits a block in one call. Kept for backward compatibility.
 func (b *ExecutorBridge) ProduceBlock(ctx context.Context, params BlockParams) ([32]byte, error) {
 	// Create executor block params
 	// Note: We don't have CometBFT CommitInfo/Evidence, so we leave them nil

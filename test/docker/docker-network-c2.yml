@@ -1,0 +1,94 @@
+id: "DAGBFTTest-C2"
+
+bootstrap:
+  peerAddress: "acc-bootstrap-c2"
+  advertizeAddress: "acc-bootstrap-c2"
+  listenAddress: "0.0.0.0"
+  basePort: 16593
+
+globals:
+  executorVersion: "v2"
+  oracle:
+    price: 10000000
+  globals:
+    majorBlockSchedule: "0 */12 * * *"
+
+bvns:
+  - id: "BVN1"
+    nodes:
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bvn1-val1-c2"
+        advertizeAddress: "acc-bvn1-val1-c2"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bvn1-val2-c2"
+        advertizeAddress: "acc-bvn1-val2-c2"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bvn1-val3-c2"
+        advertizeAddress: "acc-bvn1-val3-c2"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bvn1-val4-c2"
+        advertizeAddress: "acc-bvn1-val4-c2"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+  - id: "BVN2"
+    nodes:
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bvn2-val1-c2"
+        advertizeAddress: "acc-bvn2-val1-c2"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bvn2-val2-c2"
+        advertizeAddress: "acc-bvn2-val2-c2"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bvn2-val3-c2"
+        advertizeAddress: "acc-bvn2-val3-c2"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bvn2-val4-c2"
+        advertizeAddress: "acc-bvn2-val4-c2"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+  - id: "BVN3"
+    nodes:
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bvn3-val1-c2"
+        advertizeAddress: "acc-bvn3-val1-c2"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bvn3-val2-c2"
+        advertizeAddress: "acc-bvn3-val2-c2"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bvn3-val3-c2"
+        advertizeAddress: "acc-bvn3-val3-c2"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bvn3-val4-c2"
+        advertizeAddress: "acc-bvn3-val4-c2"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"

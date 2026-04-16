@@ -23,6 +23,18 @@ type mockBlockProducer struct {
 	nextHash       [32]byte
 }
 
+func (m *mockBlockProducer) BeginBlock(ctx context.Context, index uint64, t time.Time) error {
+	return nil
+}
+
+func (m *mockBlockProducer) ProcessCertificate(ctx context.Context, params adapter.CertificateParams) error {
+	return nil
+}
+
+func (m *mockBlockProducer) CommitBlock(ctx context.Context) ([32]byte, error) {
+	return m.nextHash, nil
+}
+
 func (m *mockBlockProducer) ProduceBlock(ctx context.Context, params adapter.BlockParams) ([32]byte, error) {
 	m.producedBlocks = append(m.producedBlocks, params)
 	return m.nextHash, nil
