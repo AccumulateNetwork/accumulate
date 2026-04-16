@@ -10,7 +10,9 @@
 #   ./run-performance-suite.sh 2 1          # Run just 2-val-1-bvn
 #   ./run-performance-suite.sh 3 2 4 3      # Run 3v2b then 4v3b
 
-set -e
+# NOTE: do NOT use set -e here — arithmetic like ((passed++)) returns 1
+# when the value was 0, and run_test failures should be caught by the loop,
+# not kill the entire suite.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -379,9 +381,9 @@ main() {
     for config in "${RUN_CONFIGS[@]}"; do
         IFS=' ' read -r v b <<< "$config"
         if run_test "$v" "$b"; then
-            ((passed++))
+            passed=$((passed + 1))
         else
-            ((failed++))
+            failed=$((failed + 1))
             log_error "FAILED: ${v}v-${b}b"
             docker_cleanup
         fi
