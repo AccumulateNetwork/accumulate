@@ -9,8 +9,8 @@ package api
 import (
 	"context"
 	"sync/atomic"
+	"time"
 
-	coretypes "github.com/cometbft/cometbft/rpc/core/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -22,9 +22,17 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// NodeStatusClient is the interface for querying node status from CometBFT.
+// NodeStatusResult contains the subset of node status fields used by
+// NetworkService for staleness detection. This replaces the CometBFT
+// coretypes.ResultStatus dependency.
+type NodeStatusResult struct {
+	LatestBlockTime time.Time
+	CatchingUp      bool
+}
+
+// NodeStatusClient is the interface for querying node status.
 type NodeStatusClient interface {
-	Status(context.Context) (*coretypes.ResultStatus, error)
+	Status(context.Context) (*NodeStatusResult, error)
 }
 
 type NetworkService struct {
@@ -109,9 +117,9 @@ func (s *NetworkService) NetworkStatus(ctx context.Context, _ api.NetworkStatusO
 		if err != nil {
 			s.logger.Error("Failed to get node status for staleness detection", "error", err)
 		} else {
-			t := status.SyncInfo.LatestBlockTime
+			t := status.LatestBlockTime
 			res.LastBlockTime = &t
-			catchingUp := status.SyncInfo.CatchingUp
+			catchingUp := status.CatchingUp
 			res.CatchingUp = &catchingUp
 		}
 	}
