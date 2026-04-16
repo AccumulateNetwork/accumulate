@@ -22,7 +22,6 @@ import (
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
-	cmtjson "github.com/cometbft/cometbft/libs/json"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run"
@@ -261,7 +260,7 @@ func initGenesis(cmd *cobra.Command, args []string) {
 		check(os.WriteFile(filepath.Join(flagMain.WorkDir, part+".snap"), snap, 0600))
 		doc, err := genesis.ConvertSnapshotToJson(snap)
 		check(err)
-		snap, err = cmtjson.MarshalIndent(doc, "", "  ")
+		snap, err = json.MarshalIndent(doc, "", "  ")
 		check(err)
 		check(os.WriteFile(filepath.Join(flagMain.WorkDir, part+".json"), snap, 0600))
 	}
