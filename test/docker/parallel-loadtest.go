@@ -176,58 +176,64 @@ func main() {
 	start := time.Now()
 
 	// Windowed TPS tracking (15-second window)
-	var prevSubmitted uint64
-	var prevTime = start
+	// Ring buffer for recent TPS: store submitted count every tick.
+	// Recent TPS = (now - 5 seconds ago) / 5.
+	const recentWindow = 5 // seconds
+	recentBuf := make([]uint64, recentWindow+1) // circular buffer of submitted counts
+	recentIdx := 0
 
-	// Write initial log entry
 	appendLog(logFile, fmt.Sprintf("Test started: %s", label))
 
-	ticker := time.NewTicker(2 * time.Second)
+	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		tickCount := 0
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				now := time.Now()
-				elapsed := now.Sub(start)
+				tickCount++
 				s := submitted.Load()
 				su := succeeded.Load()
 				f := failed.Load()
+				elapsed := time.Since(start)
 
-				// Windowed TPS: transactions in last window / window duration
-				windowDuration := now.Sub(prevTime).Seconds()
-				windowTxns := s - prevSubmitted
-				var windowTPS float64
-				if windowDuration > 0 {
-					windowTPS = float64(windowTxns) / windowDuration
-				}
+				// Store current count in ring buffer
+				recentBuf[recentIdx] = s
+				oldIdx := (recentIdx + 1) % len(recentBuf)
+				recentIdx = oldIdx
 
-				// Reset window AFTER calculating TPS (avoids 0-TPS artifact on reset tick)
-				if now.Sub(prevTime) >= 15*time.Second {
-					prevSubmitted = s
-					prevTime = now
+				// Recent TPS: submissions in last N seconds / N
+				var recentTPS float64
+				if tickCount >= recentWindow {
+					recentTPS = float64(s-recentBuf[oldIdx]) / float64(recentWindow)
+				} else if elapsed.Seconds() > 0 {
+					recentTPS = float64(s) / elapsed.Seconds()
 				}
 
 				avgTPS := float64(s) / elapsed.Seconds()
-				if windowTPS > peakTPS {
-					peakTPS = windowTPS
+				if recentTPS > peakTPS {
+					peakTPS = recentTPS
 				}
 				var errorRate float64
 				if s > 0 {
 					errorRate = float64(f) / float64(s) * 100
 				}
 				target := currentTargetTPS.Load()
-				fmt.Printf("[%v] target=%d window_tps=%.0f avg_tps=%.0f submitted=%d success=%d failed=%d err=%.2f%%\n",
-					elapsed.Round(time.Second), target, windowTPS, avgTPS, s, su, f, errorRate)
+
+				// Only print every 2 seconds to avoid log spam
+				if tickCount%2 == 0 {
+					fmt.Printf("[%v] target=%d tps=%.0f avg=%.0f submitted=%d success=%d failed=%d err=%.2f%%\n",
+						elapsed.Round(time.Second), target, recentTPS, avgTPS, s, su, f, errorRate)
+				}
 
 				status := map[string]any{
 					"stale":       false,
 					"test_label":  label,
-					"current_tps": windowTPS,
+					"current_tps": recentTPS,
 					"target_tps":  target,
 					"peak_tps":    peakTPS,
 					"submitted":   s,
