@@ -17,12 +17,12 @@ on wire — just no import.
 
 | ID | Issue | Task | Status | Depends | Commit | Notes |
 |----|-------|------|--------|---------|--------|-------|
-| L1 | #3925 | Make `TendermintZeroLogger.With()` return `Logger` instead of `log.Logger` in `internal/logging/tendermint.go` | PENDING | — | | Change return type, update callers |
-| L2 | #3925 | Make `NullLogger.With()` return `Logger` in `internal/logging/null.go` | PENDING | — | | |
-| L3 | #3925 | Change `NewTendermintLogger()` return type from `log.Logger` to `Logger` | PENDING | L1 | | Fix callers — wrap with CometBFT adapter only where CometBFT APIs still need it |
-| L4 | #3925 | Remove `cometbft/libs/log` import from `internal/logging/compat.go` | PENDING | L3 | | Redefine adapter using a local interface instead of importing CometBFT |
-| L5 | #3925 | Remove `cometbft/libs/log` from remaining logging files | PENDING | L3, L4 | | slog.go, null.go, test.go |
-| L6 | #3925 | Fix callers of `NewTendermintLogger` outside logging package | PENDING | L3 | | daemon, cmd/accumulated, tools, test/testing |
+| L1 | #3925 | Make `TendermintZeroLogger.With()` return `Logger` instead of `log.Logger` in `internal/logging/tendermint.go` | DONE | — | 44846d859 | Change return type, update callers |
+| L2 | #3925 | Make `NullLogger.With()` return `Logger` in `internal/logging/null.go` | DONE | — | pre-existing | Already returned Logger |
+| L3 | #3925 | Change `NewTendermintLogger()` return type from `log.Logger` to `Logger` | DONE | L1 | 44846d859 | Also changed NewTestLogger, ConsoleLoggerForTest return types |
+| L4 | #3925 | Remove `cometbft/libs/log` import from `internal/logging/compat.go` | BLOCKED | L3 | | compat.go provides CometBFTLogger/FromCometBFT used by genesis/init APIs that still use log.Logger. Must wait for Phase 4 (GN1/GN2) to change InitOpts.Logger type |
+| L5 | #3925 | Remove `cometbft/libs/log` from remaining logging files | DONE | L3, L4 | 44846d859 | slog.go/null.go never had import; test.go cleaned in L3 commit |
+| L6 | #3925 | Fix callers of `NewTendermintLogger` outside logging package | DONE | L3 | 44846d859 | Removed FromCometBFT wrapping at all call sites |
 
 ### Phase 2: Key types
 
@@ -76,8 +76,8 @@ Copy CometBFT genesis structs into local files. Same JSON serialization.
 |----|-------|------|--------|---------|--------|-------|
 | S1 | — | Clean up `internal/core/execute/execute.go` CometBFT import | PENDING | L6 | | |
 | S2 | — | Clean up `pkg/build/parser.go` — use stdlib ed25519 | PENDING | K3 | | |
-| S3 | — | Clean up `exp/telemetry/otel_prom.go` | PENDING | — | | May not have actual imports |
-| S4 | — | Clean up `vdk/node/node.go` | PENDING | L6 | | |
+| S3 | — | Clean up `exp/telemetry/otel_prom.go` | DONE | — | n/a | No CometBFT imports — only string literals in regex |
+| S4 | — | Clean up `vdk/node/node.go` | DONE | L6 | a4101c005 | Removed dead CometBFT-dependent functions (package unused) |
 | S5 | — | Clean up `pkg/api/v3/types_gen.go` CometBFT ref | PENDING | GN1 | | |
 | S6 | — | Run `go mod tidy` and verify CometBFT removed from go.mod | PENDING | ALL | | Final step |
 
@@ -86,3 +86,4 @@ Copy CometBFT genesis structs into local files. Same JSON serialization.
 | Date | Session | Tasks completed | Notes |
 |------|---------|----------------|-------|
 | 2026-04-15 | Session 1 | Initial branch setup, ABCI removal, schema fixes, daemon cleanup, dead file removal, logger unification, tool cleanup, test infra, api/v2+MCP | 88 -> 41 CometBFT files |
+| 2026-04-16 | Session 2 | L1, L2, L3, L5, L6, S3, S4 | Logger return types changed, callers fixed, vdk cleaned. L4 blocked on Phase 4. |
