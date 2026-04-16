@@ -246,7 +246,12 @@ func main() {
 		}
 	}()
 
-	// TPS ramper — increases target TPS on interval until max or error cutoff
+	// TPS ramper — increases target TPS on interval until max or error cutoff.
+	// When errors exceed cutoff, the test stops (we found max TPS).
+	// When TPS plateaus (actual TPS stops growing despite ramp), the test stops.
+	var lastActualTPS atomic.Int64
+	var plateauCount atomic.Int64
+
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -259,15 +264,46 @@ func main() {
 			case <-rampTicker.C:
 				s := submitted.Load()
 				f := failed.Load()
+
+				// Check error cutoff — stop the test
 				if s > 0 {
 					errPct := float64(f) / float64(s) * 100
 					if errPct > errorCutoff {
-						msg := fmt.Sprintf("Error rate %.2f%% exceeds cutoff %.1f%%, holding TPS", errPct, errorCutoff)
-						fmt.Printf("── %s ──\n", msg)
+						msg := fmt.Sprintf("Error rate %.2f%% exceeds cutoff %.1f%%, stopping test — max TPS found", errPct, errorCutoff)
+						fmt.Printf("\n── %s ──\n", msg)
 						appendLog(logFile, msg)
-						continue
+						cancel()
+						return
 					}
 				}
+
+				// Check for TPS plateau — if actual TPS hasn't grown in 3 ramp
+				// intervals despite increasing target, we've hit the ceiling
+				currentActual := lastActualTPS.Load()
+				windowTPS := int64(0)
+				elapsed := time.Since(start).Seconds()
+				if elapsed > 0 {
+					windowTPS = int64(float64(s) / elapsed)
+				}
+				lastActualTPS.Store(windowTPS)
+
+				if currentActual > 0 && windowTPS > 0 {
+					growth := float64(windowTPS-currentActual) / float64(currentActual)
+					if growth < 0.05 { // less than 5% growth
+						plateauCount.Add(1)
+						if plateauCount.Load() >= 3 {
+							msg := fmt.Sprintf("TPS plateau detected at ~%d TPS (no growth in 3 intervals), stopping", windowTPS)
+							fmt.Printf("\n── %s ──\n", msg)
+							appendLog(logFile, msg)
+							cancel()
+							return
+						}
+					} else {
+						plateauCount.Store(0)
+					}
+				}
+
+				// Ramp up
 				cur := currentTargetTPS.Load()
 				next := cur + int64(rampStep)
 				if next > int64(maxTPS) {
@@ -297,21 +333,38 @@ func main() {
 		}(i, nodeURL, funder)
 	}
 
-	fmt.Printf("\n── %d workers started across %d nodes. Running for %v ──\n\n", numWorkers, len(nodes), duration)
+	if duration > 0 {
+		fmt.Printf("\n── %d workers started across %d nodes. Max duration %v ──\n\n", numWorkers, len(nodes), duration)
+	} else {
+		fmt.Printf("\n── %d workers started across %d nodes. Running until max TPS found ──\n\n", numWorkers, len(nodes))
+	}
 
-	// Wait for duration or signal
+	// Wait for context cancel (error cutoff, plateau, or max duration), or signal
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	timer := time.NewTimer(duration)
-	defer timer.Stop()
 
-	select {
-	case <-timer.C:
-		fmt.Printf("\n%v reached. Shutting down...\n", duration)
-	case sig := <-sigChan:
-		fmt.Printf("\nSignal %v. Shutting down...\n", sig)
+	if duration > 0 {
+		timer := time.NewTimer(duration)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			fmt.Printf("\nTest stopped (max TPS found). Shutting down...\n")
+		case <-timer.C:
+			fmt.Printf("\n%v reached. Shutting down...\n", duration)
+			cancel()
+		case sig := <-sigChan:
+			fmt.Printf("\nSignal %v. Shutting down...\n", sig)
+			cancel()
+		}
+	} else {
+		select {
+		case <-ctx.Done():
+			fmt.Printf("\nTest stopped (max TPS found). Shutting down...\n")
+		case sig := <-sigChan:
+			fmt.Printf("\nSignal %v. Shutting down...\n", sig)
+			cancel()
+		}
 	}
-	cancel()
 
 	done := make(chan struct{})
 	go func() { wg.Wait(); close(done) }()

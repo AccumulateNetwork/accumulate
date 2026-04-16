@@ -40,8 +40,8 @@ ALL_CONFIGS=(
 )
 
 # Test parameters
-TEST_DURATION=300    # seconds per topology (5 minutes)
-ERROR_THRESHOLD=5.0  # stop ramping at this error %
+TEST_DURATION=0      # 0 = run until error cutoff stops the test
+ERROR_THRESHOLD=5.0  # stop test at this error %
 
 # Colors
 RED='\033[0;31m'
@@ -259,12 +259,12 @@ run_test() {
     local test_output="$RESULTS_DIR/${test_id}-output.txt"
     log "Starting load test: ${test_id}..."
 
-    timeout $((TEST_DURATION + 120)) go run parallel-loadtest.go \
-        -duration "${TEST_DURATION}s" \
+    go run parallel-loadtest.go \
+        -duration 0 \
         -start-tps 1000 \
-        -max-tps 25000 \
-        -ramp-step 2000 \
-        -ramp-interval 30s \
+        -max-tps 50000 \
+        -ramp-step 1000 \
+        -ramp-interval 20s \
         -error-cutoff "$ERROR_THRESHOLD" \
         -nodes "$endpoints" \
         -faucet-seed "FAUCET" \
