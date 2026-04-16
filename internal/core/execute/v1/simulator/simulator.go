@@ -65,7 +65,7 @@ type Simulator struct {
 
 func (s *Simulator) newLogger(opts SimulatorOptions) logging.Logger {
 	if !acctesting.LogConsole {
-		return logging.FromCometBFT(logging.NewTestLogger(s, "plain", opts.LogLevels, false))
+		return logging.NewTestLogger(s, "plain", opts.LogLevels, false)
 	}
 
 	w, err := logging.NewConsoleWriter("plain")
@@ -74,7 +74,7 @@ func (s *Simulator) newLogger(opts SimulatorOptions) logging.Logger {
 	require.NoError(s, err)
 	logger, err := logging.NewTendermintLogger(zerolog.New(writer), level, false)
 	require.NoError(s, err)
-	return logging.FromCometBFT(logger)
+	return logger
 }
 
 func New(t TB, bvnCount int) *Simulator {

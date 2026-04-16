@@ -63,7 +63,7 @@ func newLogger() logging.Logger {
 	check(err)
 	cmtLogger, err := logging.NewTendermintLogger(zerolog.New(logWriter), flagConvert.LogLevel, false)
 	check(err)
-	return logging.FromCometBFT(cmtLogger)
+	return cmtLogger
 }
 
 func tempBadger(logger logging.Logger) (*database.Database, func()) {
