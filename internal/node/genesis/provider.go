@@ -138,7 +138,13 @@ func buildGenesisDoc(s *snapshot.Reader) (*types.GenesisDoc, error) {
 	// Use default consensus params if not provided
 	var consensusParams *types.ConsensusParams
 	if p.Params != nil {
-		consensusParams = (*types.ConsensusParams)(p.Params)
+		consensusParams = &types.ConsensusParams{
+			Block:     types.BlockParams{MaxBytes: p.Params.Block.MaxBytes, MaxGas: p.Params.Block.MaxGas},
+			Evidence:  types.EvidenceParams{MaxAgeNumBlocks: p.Params.Evidence.MaxAgeNumBlocks, MaxAgeDuration: p.Params.Evidence.MaxAgeDuration, MaxBytes: p.Params.Evidence.MaxBytes},
+			Validator: types.ValidatorParams{PubKeyTypes: p.Params.Validator.PubKeyTypes},
+			Version:   types.VersionParams{App: p.Params.Version.App},
+			ABCI:      types.ABCIParams{VoteExtensionsEnableHeight: p.Params.ABCI.VoteExtensionsEnableHeight},
+		}
 	} else {
 		consensusParams = types.DefaultConsensusParams()
 	}
