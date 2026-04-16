@@ -471,10 +471,9 @@ func runWorker(ctx context.Context, workerID int, nodeURL string, faucetSeed str
 		perAccountFund = 2
 	}
 
-	// Adaptive rate control: track how many we SHOULD have sent by now
-	// vs how many we actually sent. Send without sleeping when behind.
-	workerStart := time.Now()
-	var workerSent uint64
+	// Simple rate control: sleep for the interval minus the time spent sending.
+	// nextSend tracks when the next transaction should go out.
+	nextSend := time.Now()
 
 	for {
 		select {
@@ -483,30 +482,30 @@ func runWorker(ctx context.Context, workerID int, nodeURL string, faucetSeed str
 		default:
 		}
 
+		// Wait until it's time to send the next one
+		now := time.Now()
+		if now.Before(nextSend) {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(nextSend.Sub(now)):
+			}
+		}
+
 		from := &slots[sendIdx]
 		to := &slots[recvIdx]
 
-		// How many should this worker have sent by now?
-		elapsed := time.Since(workerStart).Seconds()
+		// Compute interval from current target
 		tpsPerWorker := float64(targetTPS.Load()) / float64(totalWorkers)
 		if tpsPerWorker < 1 {
 			tpsPerWorker = 1
 		}
-		expectedSent := tpsPerWorker * elapsed
+		interval := time.Duration(float64(time.Second) / tpsPerWorker)
 
-		// If we're ahead of schedule, sleep until we should send the next one
-		if float64(workerSent) >= expectedSent {
-			deficit := float64(workerSent) - expectedSent
-			sleepTime := time.Duration(deficit/tpsPerWorker*1e9) * time.Nanosecond
-			if sleepTime > time.Millisecond {
-				select {
-				case <-ctx.Done():
-					return
-				case <-time.After(sleepTime):
-				}
-			}
-		}
-		// If behind, no sleep — send immediately
+		// Schedule next send BEFORE doing the work — this way send time
+		// doesn't accumulate as drift. If sending takes longer than the
+		// interval, nextSend will be in the past and we send immediately.
+		nextSend = nextSend.Add(interval)
 
 		if !from.hasTokens {
 			// Fund sender: send ACME from funder
@@ -577,8 +576,6 @@ func runWorker(ctx context.Context, workerID int, nodeURL string, faucetSeed str
 		if ctx.Err() != nil {
 			return
 		}
-
-		workerSent++
 
 		// Advance walks
 		sendIdx = (sendIdx + 1) % acctCount
