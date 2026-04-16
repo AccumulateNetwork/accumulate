@@ -16,8 +16,6 @@ import (
 	"strings"
 	"time"
 
-	tm "github.com/cometbft/cometbft/config"
-	"github.com/cometbft/cometbft/privval"
 	"github.com/mitchellh/mapstructure"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/pelletier/go-toml"
@@ -125,7 +123,7 @@ func Default(netName string, net protocol.PartitionType, _ NodeType, partitionId
 	c.Accumulate.AnalysisLog.Enabled = false
 	c.Accumulate.API.ReadHeaderTimeout = 10 * time.Second
 	c.Accumulate.P2P.BootstrapPeers = accumulate.BootstrapServers
-	c.Config = *tm.DefaultConfig()
+	c.TendermintConfig = *DefaultTendermintConfig()
 	c.LogLevel = DefaultLogLevels
 	c.Instrumentation.Prometheus = true
 	c.ProxyApp = ""
@@ -134,7 +132,7 @@ func Default(netName string, net protocol.PartitionType, _ NodeType, partitionId
 }
 
 type Config struct {
-	tm.Config
+	TendermintConfig
 	Accumulate Accumulate
 }
 
@@ -268,12 +266,6 @@ func OffsetPort(addr string, basePort int, offset int) (*url.URL, error) {
 	return u, nil
 }
 
-func LoadFilePV(keyFilePath, stateFilePath string) (*privval.FilePV, error) {
-	// TODO Submit an MR to CometBFT to fix their bull**** (calling os.Exit if
-	// the config file load fails)
-	return privval.LoadFilePV(keyFilePath, stateFilePath), nil
-}
-
 func Load(dir string) (*Config, error) {
 	return loadFile(dir, filepath.Join(dir, configDir, tmConfigFile), filepath.Join(dir, configDir, accConfigFile))
 }
@@ -288,7 +280,7 @@ func loadFile(dir, tmFile, accFile string) (*Config, error) {
 	if err != nil {
 		// If Tendermint config doesn't exist, use default and continue
 		// This allows DAG-BFT nodes to run without CometBFT configuration
-		tmCfg = tm.DefaultConfig()
+		tmCfg = DefaultTendermintConfig()
 		tmCfg.SetRoot(dir)
 	}
 
@@ -312,7 +304,7 @@ func Store(config *Config) (err error) {
 		}
 	}()
 
-	tm.WriteConfigFile(filepath.Join(config.RootDir, configDir, tmConfigFile), &config.Config)
+	WriteTendermintConfigFile(filepath.Join(config.RootDir, configDir, tmConfigFile), &config.TendermintConfig)
 
 	return StoreAcc(config, filepath.Join(config.RootDir, configDir))
 }
@@ -331,8 +323,8 @@ func writeTomlFile(v any, file string) error {
 	return toml.NewEncoder(f).Encode(v)
 }
 
-func loadTendermint(dir, file string) (*tm.Config, error) {
-	config := tm.DefaultConfig()
+func loadTendermint(dir, file string) (*TendermintConfig, error) {
+	config := DefaultTendermintConfig()
 
 	err := load(dir, file, config)
 	if err != nil {
@@ -341,7 +333,7 @@ func loadTendermint(dir, file string) (*tm.Config, error) {
 
 	config.SetRoot(dir)
 
-	tm.EnsureRoot(config.RootDir)
+	EnsureRoot(config.RootDir)
 	if err := config.ValidateBasic(); err != nil {
 		return nil, fmt.Errorf("validate: %v", err)
 	}
