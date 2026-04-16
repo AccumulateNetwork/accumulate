@@ -12,7 +12,6 @@ import (
 	"math/big"
 	"testing"
 
-	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
@@ -33,7 +32,7 @@ var delivered = (*TransactionStatus).Delivered
 var pending = (*TransactionStatus).Pending
 
 func SetupForRemoteSignatures(sim *simulator.Simulator, timestamp *uint64, alice, bob, charlie ed25519.PrivateKey) {
-	aliceTm := tmed25519.PrivKey(alice)
+	aliceTm := ed25519.PrivateKey(alice)
 	aliceAcmeUrl := acctesting.AcmeLiteAddressTmPriv(aliceTm)
 	aliceUrl := aliceAcmeUrl.RootIdentity()
 	bobUrl, charlieUrl := AccountUrl("bob"), AccountUrl("charlie")
@@ -125,7 +124,7 @@ func TestRemoteSignatures_SignPending(t *testing.T) {
 	sim.InitFromGenesis()
 
 	alice := acctesting.GenerateKey(t.Name())
-	aliceAcmeUrl := acctesting.AcmeLiteAddressTmPriv(tmed25519.PrivKey(alice))
+	aliceAcmeUrl := acctesting.AcmeLiteAddressTmPriv(ed25519.PrivateKey(alice))
 	aliceUrl := aliceAcmeUrl.RootIdentity()
 	bobUrl, charlieUrl := AccountUrl("bob"), AccountUrl("charlie")
 	bobKey, charlieKey := acctesting.GenerateKey(), acctesting.GenerateKey()
@@ -173,7 +172,7 @@ func TestRemoteSignatures_SameBVN(t *testing.T) {
 	sim.InitFromGenesis()
 
 	alice := acctesting.GenerateKey(t.Name())
-	aliceAcmeUrl := acctesting.AcmeLiteAddressTmPriv(tmed25519.PrivKey(alice))
+	aliceAcmeUrl := acctesting.AcmeLiteAddressTmPriv(ed25519.PrivateKey(alice))
 	aliceUrl := aliceAcmeUrl.RootIdentity()
 	bobUrl, charlieUrl := AccountUrl("bob"), AccountUrl("charlie")
 	bobKey, charlieKey := acctesting.GenerateKey(), acctesting.GenerateKey()
@@ -221,7 +220,7 @@ func TestRemoteSignatures_Initiate(t *testing.T) {
 	sim.InitFromGenesis()
 
 	alice := acctesting.GenerateKey(t.Name())
-	aliceAcmeUrl := acctesting.AcmeLiteAddressTmPriv(tmed25519.PrivKey(alice))
+	aliceAcmeUrl := acctesting.AcmeLiteAddressTmPriv(ed25519.PrivateKey(alice))
 	aliceUrl := aliceAcmeUrl.RootIdentity()
 	bobUrl, charlieUrl := AccountUrl("bob"), AccountUrl("charlie")
 	bobKey := acctesting.GenerateKey(t.Name(), bobUrl)
@@ -283,7 +282,7 @@ func TestRemoteSignatures_Singlesig(t *testing.T) {
 	sim.InitFromGenesis()
 
 	alice := acctesting.GenerateKey(t.Name())
-	aliceAcmeUrl := acctesting.AcmeLiteAddressTmPriv(tmed25519.PrivKey(alice))
+	aliceAcmeUrl := acctesting.AcmeLiteAddressTmPriv(ed25519.PrivateKey(alice))
 	aliceUrl := aliceAcmeUrl.RootIdentity()
 	bobUrl, charlieUrl := AccountUrl("bob"), AccountUrl("charlie")
 	bobKey, charlieKey := acctesting.GenerateKey(), acctesting.GenerateKey()

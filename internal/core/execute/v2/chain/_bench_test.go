@@ -7,12 +7,11 @@
 package chain_test
 
 import (
+	"crypto/ed25519"
 	"math/big"
 	"path/filepath"
 	"testing"
 
-	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
-	"github.com/cometbft/cometbft/libs/log"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -28,12 +27,12 @@ import (
 
 func BenchmarkExecuteSendTokens(b *testing.B) {
 	testCases := map[string]struct {
-		NewStorage func(log.Logger) storage.KeyValueStore
+		NewStorage func(logging.Logger) storage.KeyValueStore
 	}{
-		"Memory": {NewStorage: func(logger log.Logger) storage.KeyValueStore {
+		"Memory": {NewStorage: func(logger logging.Logger) storage.KeyValueStore {
 			return memory.New(logger)
 		}},
-		"Badger": {NewStorage: func(logger log.Logger) storage.KeyValueStore {
+		"Badger": {NewStorage: func(logger logging.Logger) storage.KeyValueStore {
 			db, err := badger.New(filepath.Join(b.TempDir(), "badger.db"), logger)
 			require.NoError(b, err)
 			return db
@@ -102,7 +101,7 @@ func BenchmarkExecuteSendTokens(b *testing.B) {
 			toUrl0 := acctesting.AcmeLiteAddressStdPriv(toKey0)
 
 			batch := db.Begin(true)
-			require.NoError(b, acctesting.CreateLiteTokenAccountWithCredits(batch, tmed25519.PrivKey(fromKey), 1e9, 1e9))
+			require.NoError(b, acctesting.CreateLiteTokenAccountWithCredits(batch, ed25519.PrivateKey(fromKey), 1e9, 1e9))
 			require.NoError(b, batch.Commit())
 
 			env := acctesting.NewTransaction().
