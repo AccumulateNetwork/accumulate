@@ -19,6 +19,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // isNotFoundError checks if an error indicates a not-found condition.
@@ -443,23 +444,83 @@ func (b *ExecutorBridge) ProduceBlock(ctx context.Context, params BlockParams) (
 
 // ValidateTransaction validates a transaction before it is added to a batch.
 func (b *ExecutorBridge) ValidateTransaction(tx []byte) error {
-	// Unmarshal to envelope
+	// Lightweight pre-batch validation. Only checks what can be verified
+	// without database access. Full validation (credits, nonces, account
+	// existence) happens during block execution.
+
+	// 1. Envelope must deserialize
 	envelope := new(messaging.Envelope)
 	if err := envelope.UnmarshalBinary(tx); err != nil {
 		return fmt.Errorf("unmarshal envelope: %w", err)
 	}
 
-	// Validate using executor
-	statuses, err := b.executor.Validate(envelope, false)
-	if err != nil {
-		return fmt.Errorf("validate: %w", err)
+	// 2. Must have content
+	if len(envelope.Transaction) == 0 && len(envelope.Messages) == 0 {
+		return fmt.Errorf("envelope has no transactions or messages")
+	}
+	if len(envelope.Signatures) == 0 {
+		return fmt.Errorf("envelope has no signatures")
 	}
 
-	// Check for validation errors
-	for _, status := range statuses {
-		if status.Error != nil {
-			return status.Error
+	// 3. Verify each signature cryptographically (no database needed)
+	for _, sig := range envelope.Signatures {
+		if err := b.verifySignature(sig, envelope); err != nil {
+			return err
 		}
+	}
+
+	return nil
+}
+
+// verifySignature checks that a signature is cryptographically valid against
+// the transactions in the envelope. No database access.
+func (b *ExecutorBridge) verifySignature(sig protocol.Signature, env *messaging.Envelope) error {
+	// Find the transaction this signature covers
+	var signable protocol.Signable
+	for _, txn := range env.Transaction {
+		if txn != nil {
+			signable = txn
+			break
+		}
+	}
+	if signable == nil {
+		// Messages-only envelope, skip signature verification
+		return nil
+	}
+
+	// Type-switch to check signatures that support Verify
+	switch s := sig.(type) {
+	case *protocol.ED25519Signature:
+		if !s.Verify(nil, signable) {
+			return fmt.Errorf("invalid ED25519 signature")
+		}
+	case *protocol.LegacyED25519Signature:
+		if !s.Verify(nil, signable) {
+			return fmt.Errorf("invalid legacy ED25519 signature")
+		}
+	case *protocol.RCD1Signature:
+		if !s.Verify(nil, signable) {
+			return fmt.Errorf("invalid RCD1 signature")
+		}
+	case *protocol.BTCSignature:
+		if !s.Verify(nil, signable) {
+			return fmt.Errorf("invalid BTC signature")
+		}
+	case *protocol.BTCLegacySignature:
+		if !s.Verify(nil, signable) {
+			return fmt.Errorf("invalid BTC legacy signature")
+		}
+	case *protocol.ETHSignature:
+		if !s.Verify(nil, signable) {
+			return fmt.Errorf("invalid ETH signature")
+		}
+	case *protocol.DelegatedSignature:
+		// Delegated signatures need the inner signature verified
+		if s.Signature != nil {
+			return b.verifySignature(s.Signature, env)
+		}
+	default:
+		// Unknown signature types pass through — block execution will reject if invalid
 	}
 
 	return nil
