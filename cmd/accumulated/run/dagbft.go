@@ -338,6 +338,11 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		return s.service.Stop()
 	})
 
+	// Register halt controller for graceful shutdown on major blocks
+	hc := NewHaltController(s.Partition.ID, inst.shutdown, inst.logger)
+	events.SubscribeSync(s.eventBus, hc.OnDidCommitBlock)
+	inst.RegisterHaltController(hc)
+
 	// Register event bus
 	err = dagbftProvidesEventBus.Register(inst.services, s, s.eventBus)
 	if err != nil {
