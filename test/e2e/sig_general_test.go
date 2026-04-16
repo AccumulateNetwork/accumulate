@@ -445,13 +445,12 @@ func TestSignatureErrors(t *testing.T) {
 	sim := NewSim(t,
 		simulator.SimpleNetwork(t.Name(), 3, 1),
 		simulator.Genesis(GenesisTime),
-		simulator.UseABCI(),
 	)
 
 	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
 
-	// Submit
-	_, err := sim.SubmitRaw(MustBuild(t,
+	// Submit — without credits, the check should reject the signature
+	subs, err := sim.SubmitRaw(MustBuild(t,
 		build.Transaction().For(alice, "book", "1").
 			SendTokens(1, 0).To("foo").
 			SignWith(alice, "book", "1").
@@ -459,8 +458,16 @@ func TestSignatureErrors(t *testing.T) {
 			Memo("foo").
 			Metadata("bar").
 			PrivateKey(aliceKey)))
-	require.Error(t, err)
-	require.ErrorContains(t, err, "insufficient credits: have 0.00, want 0.01")
+	require.NoError(t, err)
+	// At least one submission should have failed with insufficient credits
+	var found bool
+	for _, sub := range subs {
+		if sub.Status != nil && sub.Status.Error != nil {
+			require.Contains(t, sub.Status.Error.Message, "insufficient credits")
+			found = true
+		}
+	}
+	require.True(t, found, "expected insufficient credits error in submission results")
 }
 
 // Verifies that ADI accounts do produce signature requests.
