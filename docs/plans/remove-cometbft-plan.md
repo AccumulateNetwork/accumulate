@@ -30,12 +30,12 @@ Copy CometBFT key structs into local files. Same serialization, no import.
 
 | ID | Issue | Task | Status | Depends | Commit | Notes |
 |----|-------|------|--------|---------|--------|-------|
-| K1 | #3927 | Copy `privval.FilePV` fields into a local struct in `internal/node/daemon/`. Keep same JSON tags. Replace all `privval.FilePV` usage with the local type. | PENDING | L6 | | Read privval source first to know exact fields |
-| K2 | #3927 | Copy `tmp2p.NodeKey` fields into a local struct. Replace usage. | PENDING | K1 | | |
-| K3 | #3927 | Replace `tmed25519.PubKey`/`crypto.PrivKey` with stdlib `crypto/ed25519` | PENDING | K1 | | These are just `[]byte` wrappers |
-| K4 | — | Remove `internal/node/daemon/address.go` CometBFT imports | PENDING | K2 | | |
-| K5 | — | Clean up `internal/node/daemon/dispatcher.go` | PENDING | L6 | | |
-| KT | — | Write compat tests for key types: create CometBFT `FilePV` and `NodeKey`, marshal to JSON, unmarshal into our local types, verify all fields match. Also test reverse direction. Put tests in `internal/node/daemon/compat_test.go`. | PENDING | K1, K2 | | Tests import both CometBFT and local types — that's OK for tests |
+| K1 | #3927 | Copy `privval.FilePV` fields into a local struct in `internal/node/daemon/`. Keep same JSON tags. Replace all `privval.FilePV` usage with the local type. | DONE | L6 | c3b9e077a | Local types in keys.go with identical JSON format |
+| K2 | #3927 | Copy `tmp2p.NodeKey` fields into a local struct. Replace usage. | DONE | K1 | c3b9e077a | Included in K1 commit |
+| K3 | #3927 | Replace `tmed25519.PubKey`/`crypto.PrivKey` with stdlib `crypto/ed25519` | DONE | K1 | c3b9e077a | Also cleaned daemon/run.go and summary.go |
+| K4 | — | Remove `internal/node/daemon/address.go` CometBFT imports | DONE | K2 | c3b9e077a | Cleaned in K1/K2/K3 commit |
+| K5 | — | Clean up `internal/node/daemon/dispatcher.go` | DONE | L6 | n/a | No CometBFT imports found |
+| KT | — | Write compat tests for key types: create CometBFT `FilePV` and `NodeKey`, marshal to JSON, unmarshal into our local types, verify all fields match. Also test reverse direction. Put tests in `internal/node/daemon/compat_test.go`. | DONE | K1, K2 | c3b9e077a | 5 compat tests all passing |
 
 ### Phase 3: Config
 
@@ -74,7 +74,7 @@ Copy CometBFT genesis structs into local files. Same JSON serialization.
 
 | ID | Issue | Task | Status | Depends | Commit | Notes |
 |----|-------|------|--------|---------|--------|-------|
-| S1 | — | Clean up `internal/core/execute/execute.go` CometBFT import | PENDING | L6 | | |
+| S1 | — | Clean up `internal/core/execute/execute.go` CometBFT import | DONE | L6 | n/a | No CometBFT imports found (already clean) |
 | S2 | — | Clean up `pkg/build/parser.go` — use stdlib ed25519 | PENDING | K3 | | |
 | S3 | — | Clean up `exp/telemetry/otel_prom.go` | DONE | — | n/a | No CometBFT imports — only string literals in regex |
 | S4 | — | Clean up `vdk/node/node.go` | DONE | L6 | a4101c005 | Removed dead CometBFT-dependent functions (package unused) |
@@ -87,3 +87,4 @@ Copy CometBFT genesis structs into local files. Same JSON serialization.
 |------|---------|----------------|-------|
 | 2026-04-15 | Session 1 | Initial branch setup, ABCI removal, schema fixes, daemon cleanup, dead file removal, logger unification, tool cleanup, test infra, api/v2+MCP | 88 -> 41 CometBFT files |
 | 2026-04-16 | Session 2 | L1, L2, L3, L5, L6, S3, S4 | Logger return types changed, callers fixed, vdk cleaned. L4 blocked on Phase 4. |
+| 2026-04-16 | Session 3 | K1, K2, K3, K4, K5, KT, S1 + v1 test files | Local key types with compat tests, daemon files cleaned, v1 execute test files cleaned |
