@@ -28,7 +28,7 @@ func ReadObjectFile(buff []byte, logger logging.Logger, fn func(header *Header, 
 		if err != nil {
 			panic(err)
 		}
-		logger = logging.FromCometBFT(cmtLogger)
+		logger = cmtLogger
 	}
 
 	for len(buff) > 0 {

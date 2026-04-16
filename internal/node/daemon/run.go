@@ -148,7 +148,7 @@ func New(cfg *config.Config, newWriter func(*config.Config) (io.Writer, error)) 
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("initialize logger: %v", err)
 	}
-	daemon.Logger = logging.FromCometBFT(tmLogger)
+	daemon.Logger = tmLogger
 
 	daemon.eventBus = events.NewBus(daemon.Logger.With("module", "events"))
 	return &daemon, nil
