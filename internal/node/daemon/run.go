@@ -19,9 +19,6 @@ import (
 	"path/filepath"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
-	"github.com/cometbft/cometbft/crypto"
-	tmp2p "github.com/cometbft/cometbft/p2p"
-	"github.com/cometbft/cometbft/privval"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/rs/zerolog"
 	"gitlab.com/accumulatenetwork/accumulate"
@@ -50,10 +47,10 @@ type Daemon struct {
 	done      chan struct{}
 	db        *database.Database
 	apiServer *http.Server
-	privVal   *privval.FilePV
+	privVal   *FilePV
 	p2pnode   *p2p.Node
 	api       *nodeapi.Handler
-	nodeKey   *tmp2p.NodeKey
+	nodeKey   *NodeKey
 	router    routing.Router
 	eventBus  *events.Bus
 	tracer    trace.Tracer
@@ -154,7 +151,7 @@ func New(cfg *config.Config, newWriter func(*config.Config) (io.Writer, error)) 
 	return &daemon, nil
 }
 
-func (d *Daemon) Key() crypto.PrivKey {
+func (d *Daemon) Key() ed25519.PrivateKey {
 	return d.privVal.Key.PrivKey
 }
 
@@ -297,7 +294,7 @@ func (d *Daemon) loadKeys() error {
 	}
 
 	var err error
-	d.privVal, err = config.LoadFilePV(
+	d.privVal, err = LoadFilePV(
 		d.Config.PrivValidatorKeyFile(),
 		d.Config.PrivValidatorStateFile(),
 	)
@@ -305,7 +302,7 @@ func (d *Daemon) loadKeys() error {
 		return errors.UnknownError.WithFormat("load private validator key: %v", err)
 	}
 
-	d.nodeKey, err = tmp2p.LoadNodeKey(d.Config.NodeKeyFile())
+	d.nodeKey, err = LoadNodeKey(d.Config.NodeKeyFile())
 	if err != nil {
 		return errors.UnknownError.WithFormat("load node key: %v", err)
 	}
@@ -328,7 +325,7 @@ func (d *Daemon) StartP2P() error {
 		Network:        d.Config.Accumulate.Network.Id,
 		Listen:         d.Config.Accumulate.P2P.Listen,
 		BootstrapPeers: d.Config.Accumulate.P2P.BootstrapPeers,
-		Key:            ed25519.PrivateKey(d.nodeKey.PrivKey.Bytes()),
+		Key:            d.nodeKey.PrivKey,
 		DiscoveryMode:  dht.ModeServer,
 	})
 	if err != nil {
@@ -389,7 +386,7 @@ func (d *Daemon) startAPI() error {
 
 
 func (d *Daemon) ConnectDirectly(e *Daemon) error {
-	if d.nodeKey.PrivKey.Equals(e.nodeKey.PrivKey) {
+	if d.nodeKey.PrivKey.Equal(e.nodeKey.PrivKey) {
 		return errors.Conflict.With("cannot connect nodes directly as they have the same node key")
 	}
 

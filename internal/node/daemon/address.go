@@ -7,11 +7,10 @@
 package accumulated
 
 import (
+	"crypto/ed25519"
 	"net"
 	"strconv"
 
-	"github.com/cometbft/cometbft/crypto/ed25519"
-	"github.com/cometbft/cometbft/p2p"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
@@ -178,8 +177,8 @@ func (b AddressBuilder) String() string {
 		default:
 			panic("invalid partition type")
 		}
-		nodeId := p2p.PubKeyToID(ed25519.PubKey(sk[32:]))
-		addr = p2p.IDAddressString(nodeId, addr)
+		nodeId := PubKeyToID(ed25519.PublicKey(sk[32:]))
+		addr = IDAddressString(nodeId, addr)
 	}
 
 	// Add the scheme
