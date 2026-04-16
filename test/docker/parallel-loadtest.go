@@ -246,17 +246,20 @@ func main() {
 		}
 	}()
 
-	// TPS ramper — increases target TPS on interval until max or error cutoff.
-	// When errors exceed cutoff, the test stops (we found max TPS).
-	// When TPS plateaus (actual TPS stops growing despite ramp), the test stops.
-	var lastActualTPS atomic.Int64
-	var plateauCount atomic.Int64
-
+	// TPS ramper — increases target TPS on interval.
+	// Stops when: error cutoff exceeded OR window TPS plateaus.
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		rampTicker := time.NewTicker(rampInterval)
 		defer rampTicker.Stop()
+
+		// Track window TPS between ramp ticks (no shared state with reporter)
+		rampPrevSubmitted := uint64(0)
+		rampPrevTime := time.Now()
+		var lastWindowTPS int64
+		var plateauCount int
+
 		for {
 			select {
 			case <-ctx.Done():
@@ -264,12 +267,22 @@ func main() {
 			case <-rampTicker.C:
 				s := submitted.Load()
 				f := failed.Load()
+				now := time.Now()
+
+				// Compute window TPS since last ramp tick
+				rampElapsed := now.Sub(rampPrevTime).Seconds()
+				var windowTPS int64
+				if rampElapsed > 0.5 {
+					windowTPS = int64(float64(s-rampPrevSubmitted) / rampElapsed)
+				}
+				rampPrevSubmitted = s
+				rampPrevTime = now
 
 				// Check error cutoff — stop the test
 				if s > 0 {
 					errPct := float64(f) / float64(s) * 100
 					if errPct > errorCutoff {
-						msg := fmt.Sprintf("Error rate %.2f%% exceeds cutoff %.1f%%, stopping test — max TPS found", errPct, errorCutoff)
+						msg := fmt.Sprintf("Error rate %.2f%% exceeds cutoff %.1f%%, max TPS ~%d", errPct, errorCutoff, windowTPS)
 						fmt.Printf("\n── %s ──\n", msg)
 						appendLog(logFile, msg)
 						cancel()
@@ -277,31 +290,23 @@ func main() {
 					}
 				}
 
-				// Check for TPS plateau — if actual TPS hasn't grown in 3 ramp
-				// intervals despite increasing target, we've hit the ceiling
-				currentActual := lastActualTPS.Load()
-				windowTPS := int64(0)
-				elapsed := time.Since(start).Seconds()
-				if elapsed > 0 {
-					windowTPS = int64(float64(s) / elapsed)
-				}
-				lastActualTPS.Store(windowTPS)
-
-				if currentActual > 0 && windowTPS > 0 {
-					growth := float64(windowTPS-currentActual) / float64(currentActual)
-					if growth < 0.05 { // less than 5% growth
-						plateauCount.Add(1)
-						if plateauCount.Load() >= 3 {
-							msg := fmt.Sprintf("TPS plateau detected at ~%d TPS (no growth in 3 intervals), stopping", windowTPS)
+				// Check for plateau — window TPS not growing despite ramp
+				if lastWindowTPS > 0 && windowTPS > 0 {
+					growth := float64(windowTPS-lastWindowTPS) / float64(lastWindowTPS)
+					if growth < 0.05 {
+						plateauCount++
+						if plateauCount >= 3 {
+							msg := fmt.Sprintf("TPS plateau at ~%d (no growth in 3 intervals), max found", windowTPS)
 							fmt.Printf("\n── %s ──\n", msg)
 							appendLog(logFile, msg)
 							cancel()
 							return
 						}
 					} else {
-						plateauCount.Store(0)
+						plateauCount = 0
 					}
 				}
+				lastWindowTPS = windowTPS
 
 				// Ramp up
 				cur := currentTargetTPS.Load()
@@ -311,7 +316,7 @@ func main() {
 				}
 				if next != cur {
 					currentTargetTPS.Store(next)
-					msg := fmt.Sprintf("Ramping TPS: %d -> %d", cur, next)
+					msg := fmt.Sprintf("Ramping TPS: %d -> %d (window: %d)", cur, next, windowTPS)
 					fmt.Printf("── %s ──\n", msg)
 					appendLog(logFile, msg)
 				}
@@ -460,6 +465,11 @@ func runWorker(ctx context.Context, workerID int, nodeURL string, faucetSeed str
 		perAccountFund = 2
 	}
 
+	// Adaptive rate control: track how many we SHOULD have sent by now
+	// vs how many we actually sent. Send without sleeping when behind.
+	workerStart := time.Now()
+	var workerSent uint64
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -467,16 +477,30 @@ func runWorker(ctx context.Context, workerID int, nodeURL string, faucetSeed str
 		default:
 		}
 
-		loopStart := time.Now()
 		from := &slots[sendIdx]
 		to := &slots[recvIdx]
 
-		// Compute per-worker rate from shared target
-		tpsPerWorker := int(targetTPS.Load()) / totalWorkers
+		// How many should this worker have sent by now?
+		elapsed := time.Since(workerStart).Seconds()
+		tpsPerWorker := float64(targetTPS.Load()) / float64(totalWorkers)
 		if tpsPerWorker < 1 {
 			tpsPerWorker = 1
 		}
-		targetInterval := time.Second / time.Duration(tpsPerWorker)
+		expectedSent := tpsPerWorker * elapsed
+
+		// If we're ahead of schedule, sleep until we should send the next one
+		if float64(workerSent) >= expectedSent {
+			deficit := float64(workerSent) - expectedSent
+			sleepTime := time.Duration(deficit/tpsPerWorker*1e9) * time.Nanosecond
+			if sleepTime > time.Millisecond {
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(sleepTime):
+				}
+			}
+		}
+		// If behind, no sleep — send immediately
 
 		if !from.hasTokens {
 			// Fund sender: send ACME from funder
@@ -548,18 +572,10 @@ func runWorker(ctx context.Context, workerID int, nodeURL string, faucetSeed str
 			return
 		}
 
+		workerSent++
+
 		// Advance walks
 		sendIdx = (sendIdx + 1) % acctCount
 		recvIdx = (recvIdx + recvStride) % acctCount
-
-		// Rate limit based on current TPS target
-		elapsed := time.Since(loopStart)
-		if elapsed < targetInterval {
-			select {
-			case <-ctx.Done():
-				return
-			case <-time.After(targetInterval - elapsed):
-			}
-		}
 	}
 }
