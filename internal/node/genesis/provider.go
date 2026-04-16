@@ -8,105 +8,16 @@ package genesis
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
+	"time"
 
-	tm "github.com/cometbft/cometbft/config"
-	"github.com/cometbft/cometbft/crypto/ed25519"
-	cmtjson "github.com/cometbft/cometbft/libs/json"
-	"github.com/cometbft/cometbft/node"
-	"github.com/cometbft/cometbft/types"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/cometbft"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-func ConvertJsonToSnapshot(doc *types.GenesisDoc) ([]byte, error) {
-	// The JSON genesis document was generated from a snapshot, which itself
-	// contains sufficient information to recreate the JSON genesis doc. So all
-	// we need to do here is extract the snapshot.
-	var b []byte
-	err := cmtjson.Unmarshal(doc.AppState, &b)
-	return b, err
-}
-
-// DocProvider reads the genesis document.
-func DocProvider(config *tm.Config) node.GenesisDocProvider {
-	// If it's a JSON file, fallback to the default
-	if filepath.Ext(config.Genesis) == ".json" {
-		return node.DefaultGenesisDocProviderFunc(config)
-	}
-
-	return func() (*types.GenesisDoc, error) {
-		snapshotPath := config.GenesisFile()
-
-		// Check for cached genesis metadata to avoid re-reading snapshot headers
-		cachePath := snapshotPath + ".genesis-cache.json"
-		if cached, err := loadCachedGenesis(cachePath); err == nil {
-			return cached, nil
-		}
-
-		// Open the snapshot file for reading (uses seeking, not full read)
-		doc, err := ReadGenesisFromSnapshot(snapshotPath)
-		if err != nil {
-			return nil, err
-		}
-
-		// Cache the genesis metadata for future restarts
-		_ = saveGenesisCache(cachePath, doc) // Ignore errors, caching is optional
-
-		return doc, nil
-	}
-}
-
-// ReadGenesisFromSnapshot reads genesis metadata from a snapshot file using
-// file seeking. This only reads the header and consensus sections (~KB),
-// not the full snapshot (~GB).
-func ReadGenesisFromSnapshot(path string) (*types.GenesisDoc, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, fmt.Errorf("open snapshot: %w", err)
-	}
-	defer f.Close()
-
-	s, err := snapshot.Open(f)
-	if err != nil {
-		return nil, fmt.Errorf("parse snapshot: %w", err)
-	}
-
-	return buildGenesisDoc(s)
-}
-
-// loadCachedGenesis loads genesis metadata from a cache file.
-func loadCachedGenesis(path string) (*types.GenesisDoc, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-
-	var doc types.GenesisDoc
-	if err := json.Unmarshal(data, &doc); err != nil {
-		return nil, err
-	}
-
-	return &doc, nil
-}
-
-// saveGenesisCache saves genesis metadata to a cache file.
-func saveGenesisCache(path string, doc *types.GenesisDoc) error {
-	data, err := json.MarshalIndent(doc, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, data, 0644)
-}
-
-// ConvertSnapshotToJson converts snapshot bytes to a CometBFT genesis document.
-// Deprecated: Use ReadGenesisFromSnapshot for file-based reading which avoids
-// loading the full snapshot into memory.
-func ConvertSnapshotToJson(snap []byte) (*types.GenesisDoc, error) {
+// ConvertSnapshotToJson converts snapshot bytes to a JSON genesis document.
+func ConvertSnapshotToJson(snap []byte) (*GenesisDocJSON, error) {
 	s, err := snapshot.Open(bytes.NewReader(snap))
 	if err != nil {
 		return nil, err
@@ -116,7 +27,7 @@ func ConvertSnapshotToJson(snap []byte) (*types.GenesisDoc, error) {
 
 // buildGenesisDoc extracts genesis metadata from an opened snapshot.
 // This only reads the header and consensus sections.
-func buildGenesisDoc(s *snapshot.Reader) (*types.GenesisDoc, error) {
+func buildGenesisDoc(s *snapshot.Reader) (*GenesisDocJSON, error) {
 	// Try to read the consensus section (may not exist or may be malformed)
 	p := new(cometbft.GenesisDoc)
 	rd, err := s.Open(snapshot.SectionTypeConsensus)
@@ -136,17 +47,17 @@ func buildGenesisDoc(s *snapshot.Reader) (*types.GenesisDoc, error) {
 	jsonBytes := []byte("null")
 
 	// Use default consensus params if not provided
-	var consensusParams *types.ConsensusParams
+	var consensusParams *ConsensusParamsJSON
 	if p.Params != nil {
-		consensusParams = &types.ConsensusParams{
-			Block:     types.BlockParams{MaxBytes: p.Params.Block.MaxBytes, MaxGas: p.Params.Block.MaxGas},
-			Evidence:  types.EvidenceParams{MaxAgeNumBlocks: p.Params.Evidence.MaxAgeNumBlocks, MaxAgeDuration: p.Params.Evidence.MaxAgeDuration, MaxBytes: p.Params.Evidence.MaxBytes},
-			Validator: types.ValidatorParams{PubKeyTypes: p.Params.Validator.PubKeyTypes},
-			Version:   types.VersionParams{App: p.Params.Version.App},
-			ABCI:      types.ABCIParams{VoteExtensionsEnableHeight: p.Params.ABCI.VoteExtensionsEnableHeight},
+		consensusParams = &ConsensusParamsJSON{
+			Block:     BlockParamsJSON{MaxBytes: p.Params.Block.MaxBytes, MaxGas: p.Params.Block.MaxGas},
+			Evidence:  EvidenceParamsJSON{MaxAgeNumBlocks: p.Params.Evidence.MaxAgeNumBlocks, MaxAgeDuration: p.Params.Evidence.MaxAgeDuration, MaxBytes: p.Params.Evidence.MaxBytes},
+			Validator: ValidatorParamsJSON{PubKeyTypes: p.Params.Validator.PubKeyTypes},
+			Version:   VersionParamsJSON{App: p.Params.Version.App},
+			ABCI:      ABCIParamsJSON{VoteExtensionsEnableHeight: p.Params.ABCI.VoteExtensionsEnableHeight},
 		}
 	} else {
-		consensusParams = types.DefaultConsensusParams()
+		consensusParams = defaultConsensusParamsJSON()
 	}
 
 	// Derive chain ID from partition URL if not provided
@@ -158,24 +69,24 @@ func buildGenesisDoc(s *snapshot.Reader) (*types.GenesisDoc, error) {
 		chainID = "accumulate"
 	}
 
-	doc := &types.GenesisDoc{
+	doc := &GenesisDocJSON{
 		GenesisTime:     s.Header.SystemLedger.Timestamp,
 		ChainID:         chainID,
 		InitialHeight:   int64(s.Header.SystemLedger.Index) + 1,
 		ConsensusParams: consensusParams,
-		Validators:      make([]types.GenesisValidator, len(p.Validators)),
-		AppHash:         s.Header.RootHash[:],
+		Validators:      make([]GenesisValidatorJSON, len(p.Validators)),
+		AppHash:         hexBytes(s.Header.RootHash[:]),
 		AppState:        jsonBytes,
 	}
 	for i, v := range p.Validators {
-		u := types.GenesisValidator{
-			Address: v.Address,
+		u := GenesisValidatorJSON{
+			Address: hexBytes(v.Address),
 			Power:   v.Power,
 			Name:    v.Name,
 		}
 		switch v.Type {
 		case protocol.SignatureTypeED25519:
-			u.PubKey = ed25519.PubKey(v.PubKey)
+			u.PubKey = pubKeyJSON(v.PubKey)
 		default:
 			return nil, fmt.Errorf("unsupported key type %s", v.Type)
 		}
@@ -183,4 +94,22 @@ func buildGenesisDoc(s *snapshot.Reader) (*types.GenesisDoc, error) {
 	}
 
 	return doc, nil
+}
+
+// defaultConsensusParamsJSON returns defaults matching CometBFT v0.38.
+func defaultConsensusParamsJSON() *ConsensusParamsJSON {
+	return &ConsensusParamsJSON{
+		Block: BlockParamsJSON{
+			MaxBytes: 22020096, // 21MB
+			MaxGas:   -1,
+		},
+		Evidence: EvidenceParamsJSON{
+			MaxAgeNumBlocks: 100000,
+			MaxAgeDuration:  48 * time.Hour,
+			MaxBytes:        1048576, // 1MB
+		},
+		Validator: ValidatorParamsJSON{
+			PubKeyTypes: []string{"ed25519"},
+		},
+	}
 }
