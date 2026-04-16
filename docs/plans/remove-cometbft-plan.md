@@ -94,4 +94,4 @@ Copy CometBFT genesis structs into local files. Same JSON serialization.
 | 2026-04-16 | Session 5 | GN1, CF2, CF3, CL3 | Local ConsensusParams/Block with protowire encoding, cmd_run*.go cleaned |
 | 2026-04-16 | Session 6 | GN2, GNT, L4 | genesis bootstrap/provider cleaned, compat tests, logging/compat.go deleted, local GenesisDocJSON type |
 | 2026-04-16 | Session 7 | GN3, CL1, CL2, CL4 | Deleted dead tm/ package, cmd_reset/cmd_init cleaned, local CometBFT RPC client |
-| 2026-04-16 | Session 8 | CL5, CL6, CL7, CL8, S5 | Deleted dead cmd tools, MCP snapshot restore cleaned, verified CL5/CL6/S5 already clean |
+| 2026-04-16 | Session 8 | CL5, CL6, CL7, CL8, S5 + 8 test files | Deleted dead cmd tools, MCP snapshot restore cleaned, e2e/bsn/validate/heal test files cleaned. Remaining: 4 compat_test.go (intentional), 1 gold_test.go (//go:build ignore), 9 _prefixed (disabled). 0 source files with CometBFT imports. |
