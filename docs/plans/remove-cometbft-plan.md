@@ -20,7 +20,7 @@ on wire — just no import.
 | L1 | #3925 | Make `TendermintZeroLogger.With()` return `Logger` instead of `log.Logger` in `internal/logging/tendermint.go` | DONE | — | 44846d859 | Change return type, update callers |
 | L2 | #3925 | Make `NullLogger.With()` return `Logger` in `internal/logging/null.go` | DONE | — | pre-existing | Already returned Logger |
 | L3 | #3925 | Change `NewTendermintLogger()` return type from `log.Logger` to `Logger` | DONE | L1 | 44846d859 | Also changed NewTestLogger, ConsoleLoggerForTest return types |
-| L4 | #3925 | Remove `cometbft/libs/log` import from `internal/logging/compat.go` | BLOCKED | L3 | | compat.go provides CometBFTLogger/FromCometBFT used by genesis/init APIs that still use log.Logger. Must wait for Phase 4 (GN1/GN2) to change InitOpts.Logger type |
+| L4 | #3925 | Remove `cometbft/libs/log` import from `internal/logging/compat.go` | DONE | L3 | 59c341061 | compat.go deleted — CometBFTLogger/FromCometBFT no longer used after InitOpts.Logger changed to logging.Logger |
 | L5 | #3925 | Remove `cometbft/libs/log` from remaining logging files | DONE | L3, L4 | 44846d859 | slog.go/null.go never had import; test.go cleaned in L3 commit |
 | L6 | #3925 | Fix callers of `NewTendermintLogger` outside logging package | DONE | L3 | 44846d859 | Removed FromCometBFT wrapping at all call sites |
 
@@ -55,9 +55,9 @@ Copy CometBFT genesis structs into local files. Same JSON serialization.
 | ID | Issue | Task | Status | Depends | Commit | Notes |
 |----|-------|------|--------|---------|--------|-------|
 | GN1 | #3928 | Copy `types.GenesisDoc`, `GenesisValidator`, `ConsensusParams` into `pkg/types/cometbft/` or a new local package. Same JSON tags. Remove CometBFT import. | DONE | L6 | 6b62bec08 | Local ConsensusParams/Block structs with protowire encoding; callers updated to field-by-field construction |
-| GN2 | #3928 | Update `internal/node/genesis/bootstrap.go` and `provider.go` | PENDING | GN1 | | |
+| GN2 | #3928 | Update `internal/node/genesis/bootstrap.go` and `provider.go` | DONE | GN1 | 59c341061, a516281a4 | InitOpts.Logger→logging.Logger, ConsensusParams→local type, provider.go dead code removed, local GenesisDocJSON type |
 | GN3 | #3929 | Remove or replace `internal/api/v3/tm/` — copy needed RPC response types locally | PENDING | GN1 | | |
-| GNT | — | Write compat tests for genesis types: create CometBFT `GenesisDoc` with validators and consensus params, marshal to JSON, unmarshal into our local types, verify all fields match. Also test: write a genesis.json with CometBFT, read it with our types. Put tests in `pkg/types/cometbft/compat_test.go` or `internal/node/genesis/compat_test.go`. | PENDING | GN1 | | |
+| GNT | — | Write compat tests for genesis types: create CometBFT `GenesisDoc` with validators and consensus params, marshal to JSON, unmarshal into our local types, verify all fields match. Also test: write a genesis.json with CometBFT, read it with our types. Put tests in `pkg/types/cometbft/compat_test.go` or `internal/node/genesis/compat_test.go`. | DONE | GN1 | b21e6cb16 | 8 compat tests: protobuf encoding, defaults, round-trip, block, JSON format |
 
 ### Phase 5: CLI commands
 
@@ -90,3 +90,4 @@ Copy CometBFT genesis structs into local files. Same JSON serialization.
 | 2026-04-16 | Session 3 | K1, K2, K3, K4, K5, KT, S1 + v1 test files | Local key types with compat tests, daemon files cleaned, v1 execute test files cleaned |
 | 2026-04-16 | Session 4 | S2, CF1, CFT | pkg/build/parser.go cleaned, local TendermintConfig struct with compat tests |
 | 2026-04-16 | Session 5 | GN1, CF2, CF3, CL3 | Local ConsensusParams/Block with protowire encoding, cmd_run*.go cleaned |
+| 2026-04-16 | Session 6 | GN2, GNT, L4 | genesis bootstrap/provider cleaned, compat tests, logging/compat.go deleted, local GenesisDocJSON type |
