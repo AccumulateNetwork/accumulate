@@ -19,8 +19,6 @@ import (
 	"syscall"
 	"time"
 
-	tmconfig "github.com/cometbft/cometbft/config"
-	service2 "github.com/cometbft/cometbft/libs/service"
 	"github.com/fatih/color"
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
@@ -98,7 +96,7 @@ func runNode(cmd *cobra.Command, _ []string) (string, error) {
 	err := prog.Run()
 	if err != nil {
 		//if it is already stopped, that is ok.
-		if !errors.Is(err, service2.ErrAlreadyStopped) {
+		if err.Error() != "already stopped" {
 			slog.Error("Service failed", "error", err)
 			return "", err
 		}
@@ -159,7 +157,7 @@ func newLogWriter() func(string, logAnnotator) (io.Writer, error) {
 		if logFile != nil {
 			w := io.Writer(logFile)
 			if annotate != nil {
-				w = annotate(w, tmconfig.LogFormatPlain, false)
+				w = annotate(w, "plain", false)
 			}
 			writers = append(writers, &zerolog.ConsoleWriter{
 				Out:        w,
@@ -177,7 +175,7 @@ func newLogWriter() func(string, logAnnotator) (io.Writer, error) {
 		if jsonLogFile != nil {
 			w := io.Writer(jsonLogFile)
 			if annotate != nil {
-				w = annotate(w, tmconfig.LogFormatJSON, false)
+				w = annotate(w, "json", false)
 			}
 			writers = append(writers, w)
 		}
