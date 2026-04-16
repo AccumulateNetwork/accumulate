@@ -269,7 +269,7 @@ run_test() {
         -nodes "$endpoints" \
         -faucet-seed "FAUCET" \
         -oracle 1000 \
-        -accounts 1000 \
+        -accounts 1000000 \
         -label "${test_id}" \
         > "$test_output" 2>&1 || true
 

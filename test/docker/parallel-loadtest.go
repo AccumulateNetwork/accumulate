@@ -54,7 +54,7 @@ func main() {
 	flag.StringVar(&label, "label", "", "Test label shown on dashboard")
 	flag.StringVar(&statusDir, "status-dir", "/tmp/loadtest-workspace", "Directory for status.json")
 	flag.StringVar(&faucetSeed, "faucet-seed", "FAUCET", "Faucet seed (must match init network)")
-	flag.IntVar(&totalAccounts, "accounts", 1000, "Total sender accounts (split across workers)")
+	flag.IntVar(&totalAccounts, "accounts", 1000000, "Total sender accounts (split across workers)")
 	flag.Uint64Var(&fundingAmount, "fund-amount", 100000, "Whole ACME per funder")
 	flag.Float64Var(&oraclePrice, "oracle", 1000, "ACME oracle price in USD")
 	flag.Float64Var(&errorCutoff, "error-cutoff", 5.0, "Stop ramping at this error percentage")
