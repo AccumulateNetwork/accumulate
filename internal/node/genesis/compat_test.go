@@ -4,6 +4,12 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
+//go:build ignore
+// +build ignore
+
+// This test verifies wire-format compatibility with CometBFT genesis types.
+// Run manually with cometbft in go.mod.
+
 package genesis
 
 import (
