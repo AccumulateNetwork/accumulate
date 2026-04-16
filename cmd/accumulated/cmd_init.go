@@ -22,9 +22,8 @@ import (
 	"strconv"
 	"strings"
 
-	cmtjson "github.com/cometbft/cometbft/libs/json"
-	rpchttp "github.com/cometbft/cometbft/rpc/client/http"
-	"github.com/cometbft/cometbft/types"
+	"encoding/json"
+
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate"
@@ -33,6 +32,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	cfg "gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
 	v3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
@@ -237,7 +237,7 @@ func bootstrapReset(dir string) bool {
 	return !keep
 }
 
-func initNodeFromSeedProxy(cmd *cobra.Command, args []string) (int, *cfg.Config, *types.GenesisDoc, error) {
+func initNodeFromSeedProxy(cmd *cobra.Command, args []string) (int, *cfg.Config, *genesis.GenesisDocJSON, error) {
 	s := strings.Split(args[0], ".")
 	if len(s) != 2 {
 		fatalf("network must be in the form of <partition-name>.<network-name>, e.g. mainnet.bvn0")
@@ -275,7 +275,7 @@ func initNodeFromSeedProxy(cmd *cobra.Command, args []string) (int, *cfg.Config,
 	config := cfg.Default(networkName, resp.Type, getNodeTypeFromFlag(), partitionName)
 	config.SetRoot(filepath.Join(flagMain.WorkDir, netDir(resp.Type)))
 
-	var lastHealthyTmPeer *rpchttp.HTTP
+	var lastHealthyTmPeer *cometRPCClient
 	var lastHealthyAccPeer *client.Client
 	for _, addr := range resp.Addresses {
 		//go build a list of healthy nodes
@@ -285,7 +285,7 @@ func initNodeFromSeedProxy(cmd *cobra.Command, args []string) (int, *cfg.Config,
 		}
 		//check the health of the peer
 		saddr := fmt.Sprintf("tcp://%s:%s", u.Hostname(), u.Port())
-		peerClient, err := rpchttp.New(saddr, saddr+"/websocket")
+		peerClient, err := newCometRPCClient(saddr)
 		if err != nil {
 			return 0, nil, nil, fmt.Errorf("failed to create Tendermint client for %s, %v", u.String(), err)
 		}
@@ -386,7 +386,7 @@ func initNodeFromSeedProxy(cmd *cobra.Command, args []string) (int, *cfg.Config,
 // initNodeFromPeer builds a node configuration from an existing/peer node. If
 // partitionType is zero, initNodeFromPeer will ask the node what it's partition
 // type is.
-func initNodeFromPeer(cmd *cobra.Command, args []string, partitionType protocol.PartitionType) (int, *cfg.Config, *types.GenesisDoc, error) {
+func initNodeFromPeer(cmd *cobra.Command, args []string, partitionType protocol.PartitionType) (int, *cfg.Config, *genesis.GenesisDocJSON, error) {
 	netAddr, netPort, err := resolveAddrWithPort(args[0])
 	if err != nil {
 		return 0, nil, nil, fmt.Errorf("invalid peer url %v", err)
@@ -394,7 +394,7 @@ func initNodeFromPeer(cmd *cobra.Command, args []string, partitionType protocol.
 
 	accClient := jsonrpc.NewClient(fmt.Sprintf("http://%s:%d/v3", netAddr, netPort+int(cfg.PortOffsetAccumulateApi)))
 	tmRPC := fmt.Sprintf("tcp://%s:%d", netAddr, netPort+int(cfg.PortOffsetTendermintRpc))
-	tmClient, err := rpchttp.New(tmRPC, tmRPC+"/websocket")
+	tmClient, err := newCometRPCClient(tmRPC)
 	if err != nil {
 		return 0, nil, nil, fmt.Errorf("failed to create Tendermint client for %s, %v", args[0], err)
 	}
@@ -507,9 +507,9 @@ outer:
 	return netPort, config, genDoc, nil
 }
 
-func getGenesis(server string, tmClient *rpchttp.HTTP) (*types.GenesisDoc, error) {
+func getGenesis(server string, tmClient *cometRPCClient) (*genesis.GenesisDocJSON, error) {
 	if flagInitNode.GenesisDoc != "" {
-		genDoc, err := types.GenesisDocFromFile(flagInitNode.GenesisDoc)
+		genDoc, err := genesis.GenesisDocFromFile(flagInitNode.GenesisDoc)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load genesis doc %q, %v", flagInitNode.GenesisDoc, err)
 		}
@@ -544,8 +544,8 @@ func getGenesis(server string, tmClient *rpchttp.HTTP) (*types.GenesisDoc, error
 		}
 	}
 
-	doc, err := types.GenesisDocFromJSON(buf.Bytes())
-	if err != nil {
+	doc := new(genesis.GenesisDocJSON)
+	if err := json.Unmarshal(buf.Bytes(), doc); err != nil {
 		return nil, fmt.Errorf("failed to decode genesis from %s, %v", server, err)
 	}
 
@@ -558,7 +558,7 @@ func initNode(cmd *cobra.Command, args []string, partitionType protocol.Partitio
 	}
 
 	var config *cfg.Config
-	var genDoc *types.GenesisDoc
+	var genDoc *genesis.GenesisDocJSON
 	var basePort int
 	var err error
 	if flagInitNode.SeedProxy != "" {
@@ -650,7 +650,7 @@ func initNode(cmd *cobra.Command, args []string, partitionType protocol.Partitio
 	}
 
 	// TODO If AppData contains a consensus section, convert to binary genesis
-	genDocBytes, err := cmtjson.MarshalIndent(genDoc, "", "  ")
+	genDocBytes, err := json.MarshalIndent(genDoc, "", "  ")
 	if err != nil {
 		return "", fmt.Errorf("write node files, %v", err)
 	}
