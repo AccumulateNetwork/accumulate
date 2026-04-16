@@ -65,13 +65,13 @@ func TestCommittee_QuorumThreshold(t *testing.T) {
 		validators := makeValidators(t, 4)
 		committee := types.NewCommittee(validators, 0)
 
-		// Total = 400, 2/3 = 266.67, so quorum = 266 (integer division of 2*400/3)
+		// Total = 400, need > 2/3 = 266.67, so quorum threshold = 267
 		threshold := committee.QuorumThreshold()
-		assert.Equal(t, uint64(266), threshold)
+		assert.Equal(t, uint64(267), threshold)
 
-		assert.True(t, committee.HasQuorum(266))
+		assert.True(t, committee.HasQuorum(267))
 		assert.True(t, committee.HasQuorum(300))
-		assert.False(t, committee.HasQuorum(265))
+		assert.False(t, committee.HasQuorum(266))
 		assert.False(t, committee.HasQuorum(200))
 	})
 
@@ -79,7 +79,7 @@ func TestCommittee_QuorumThreshold(t *testing.T) {
 		validators := makeValidators(t, 3)
 		committee := types.NewCommittee(validators, 0)
 
-		// Total = 300, 2/3 = 200, so quorum = 200 (allows 2 validators for BFT)
+		// Total = 300, ceil(2*300/3) = 200, so quorum threshold = 200
 		threshold := committee.QuorumThreshold()
 		assert.Equal(t, uint64(200), threshold)
 
