@@ -172,8 +172,10 @@ get_api_ports() {
     local bvns=$2
     local compose_file="$SCRIPT_DIR/docker-compose-${validators}-val-${bvns}-bvn.yml"
 
-    # Extract host ports mapped to 26660
-    grep -E '^\s+- "[0-9]+:26660"' "$compose_file" | sed 's/.*"\([0-9]*\):26660".*/\1/'
+    # Only use BVN1 validator ports — the /submit binary endpoint is only
+    # available on BVN1 nodes. All nodes route via p2p to all partitions,
+    # so BVN1 ports can submit to any BVN.
+    grep -E '^\s+- "[0-9]+:26660"' "$compose_file" | sed 's/.*"\([0-9]*\):26660".*/\1/' | head -"$validators"
 }
 
 # Wait for network to be ready
