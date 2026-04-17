@@ -14,7 +14,6 @@ import (
 	"net/http"
 	"strings"
 	"time"
-	"sync"
 
 	"github.com/multiformats/go-multiaddr"
 	"github.com/rs/cors"
@@ -108,28 +107,12 @@ func (h *HttpService) start(inst *Instance) error {
 		haltInst = inst.parentInstance
 	}
 
-	// Lazy submitter lookup for binary submit endpoint
-	var submitter apiv3.Submitter
-	var submitterOnce sync.Once
-	getSubmitter := func() apiv3.Submitter {
-		submitterOnce.Do(func() {
-			ioc.ForEach(inst.services, func(_ ioc.Descriptor, s apiv3.Submitter) {
-				if submitter == nil {
-					submitter = s
-				}
-			})
-		})
-		return submitter
-	}
-
 	api2 := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Binary transaction submission — bypasses JSON entirely
+		// Binary transaction submission — bypasses JSON entirely.
+		// Uses the same routed client as the JSON-RPC API so that
+		// envelopes are forwarded to the correct partition via p2p.
 		if r.URL.Path == "/submit" && r.Method == http.MethodPost {
-			if s := getSubmitter(); s != nil {
-				handleBinarySubmit(w, r, s)
-			} else {
-				http.Error(w, "no submitter available", http.StatusServiceUnavailable)
-			}
+			handleBinarySubmit(w, r, client)
 			return
 		}
 
