@@ -147,18 +147,11 @@ EOF
     log_error "Failure details: $failure_file"
 }
 
-# Build Docker image once — uses docker compose build so the compose
-# files use the freshly built image (not a stale cached one).
+# Build Docker image once
 build_image() {
     log_section "Building Docker image"
-    cd "$SCRIPT_DIR"
-    # Build via the first compose file — all compose files share the same
-    # Dockerfile and build context, so building one builds all.
-    local first_compose=$(ls docker-compose-*-val-*-bvn.yml 2>/dev/null | head -1)
-    if [ -z "$first_compose" ]; then
-        first_compose="docker-compose.yml"
-    fi
-    if ! docker compose -f "$first_compose" build --no-cache > /tmp/docker-build.log 2>&1; then
+    cd "$REPO_ROOT"
+    if ! docker build -t accumulated-test -f Dockerfile . > /tmp/docker-build.log 2>&1; then
         log_error "Docker build failed. See /tmp/docker-build.log"
         tail -20 /tmp/docker-build.log | tee -a "$SUITE_LOG"
         exit 1
@@ -172,10 +165,8 @@ get_api_ports() {
     local bvns=$2
     local compose_file="$SCRIPT_DIR/docker-compose-${validators}-val-${bvns}-bvn.yml"
 
-    # Only use BVN1 validator ports — the /submit binary endpoint is only
-    # available on BVN1 nodes. All nodes route via p2p to all partitions,
-    # so BVN1 ports can submit to any BVN.
-    grep -E '^\s+- "[0-9]+:26660"' "$compose_file" | sed 's/.*"\([0-9]*\):26660".*/\1/' | head -"$validators"
+    # Extract host ports mapped to 26660
+    grep -E '^\s+- "[0-9]+:26660"' "$compose_file" | sed 's/.*"\([0-9]*\):26660".*/\1/'
 }
 
 # Wait for network to be ready
