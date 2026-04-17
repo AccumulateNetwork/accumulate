@@ -214,7 +214,7 @@ func TestBinarySubmitDebugLoadtest(t *testing.T) {
 	t.Logf("Faucet: %v", faucetURL)
 	t.Logf("Faucet pubkey: %x", ed25519.PrivateKey(faucetSK).Public())
 
-	nodeURL := testNodeURL + "/v3"
+	nodeURL := testNodeURL + "/submit"
 	httpClient := &http.Client{Timeout: 30 * time.Second}
 
 	nonce := uint64(time.Now().UnixMilli())
@@ -248,7 +248,7 @@ func TestBinarySubmitDebugLoadtest(t *testing.T) {
 	t.Logf("Fund-funder envelope: %d bytes", len(data))
 
 	// Submit exactly as the load test does
-	ok := submit(context.Background(), nodeURL, httpClient, env)
+	ok := submit(context.Background(), httpClient, nodeURL, env)
 	t.Logf("Fund-funder submit (via loadtest submit func): %v", ok)
 
 	// Also try direct POST to /submit

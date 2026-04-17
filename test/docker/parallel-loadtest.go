@@ -1,11 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -16,8 +19,6 @@ import (
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -65,19 +66,27 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Parse node list
+	// Parse node list — strip any path (like /v3) and use /submit for binary
 	var nodes []string
 	if nodesFlag != "" {
 		for _, n := range strings.Split(nodesFlag, ",") {
 			n = strings.TrimSpace(n)
-			if n != "" {
-				nodes = append(nodes, n)
+			if n == "" {
+				continue
 			}
+			// Strip any path suffix (e.g. /v3) to get the base URL
+			if idx := strings.Index(n, "://"); idx >= 0 {
+				rest := n[idx+3:]
+				if slash := strings.Index(rest, "/"); slash >= 0 {
+					n = n[:idx+3+slash]
+				}
+			}
+			nodes = append(nodes, n+"/submit")
 		}
 	}
 	if len(nodes) == 0 {
 		for port := 26660; port <= 26671; port++ {
-			nodes = append(nodes, fmt.Sprintf("http://localhost:%d/v3", port))
+			nodes = append(nodes, fmt.Sprintf("http://localhost:%d/submit", port))
 		}
 	}
 
@@ -121,7 +130,7 @@ func main() {
 	}
 	funders := make([]funderAcct, numWorkers)
 	{
-		client := jsonrpc.NewClient(nodes[0])
+		httpClient := &http.Client{Timeout: 10 * time.Second}
 		nonce := uint64(time.Now().UnixMilli())
 		for i := 0; i < numWorkers; i++ {
 			sk := deriveKey(faucetSeed, "funder", i)
@@ -138,7 +147,7 @@ func main() {
 				PrivateKey(faucetSK).
 				Done()
 			if env != nil {
-				submit(ctx, client, env)
+				submit(ctx, httpClient, nodes[0], env)
 			}
 
 			// Buy credits for funder (AddCredits doesn't need credits)
@@ -154,7 +163,7 @@ func main() {
 				PrivateKey(sk).
 				Done()
 			if env != nil {
-				submit(ctx, client, env)
+				submit(ctx, httpClient, nodes[0], env)
 			}
 		}
 		fmt.Printf("Seeded %d funders. Workers starting immediately.\n", numWorkers)
@@ -430,12 +439,25 @@ type acctSlot struct {
 	hasCredits bool
 }
 
-// submit sends a transaction envelope to the network. Returns true on success.
-func submit(ctx context.Context, client *jsonrpc.Client, env *messaging.Envelope) bool {
-	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	_, err := client.Submit(reqCtx, env, api.SubmitOptions{})
-	return err == nil
+// submit sends a binary-encoded transaction envelope via POST /submit.
+// Returns true on HTTP 200.
+func submit(ctx context.Context, httpClient *http.Client, nodeURL string, env *messaging.Envelope) bool {
+	data, err := env.MarshalBinary()
+	if err != nil {
+		return false
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, nodeURL, bytes.NewReader(data))
+	if err != nil {
+		return false
+	}
+	req.Header.Set("Content-Type", "application/octet-stream")
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return false
+	}
+	io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
+	return resp.StatusCode == http.StatusOK
 }
 
 // runWorker walks through its account slots, funding on first use, then
@@ -450,7 +472,7 @@ func runWorker(ctx context.Context, workerID int, nodeURL string, faucetSeed str
 	targetTPS *atomic.Int64,
 	submitted, succeeded, failed *atomic.Uint64,
 ) {
-	client := jsonrpc.NewClient(nodeURL)
+	httpClient := &http.Client{Timeout: 10 * time.Second}
 
 	// Pre-compute account keys into flat array
 	slots := make([]acctSlot, acctCount)
@@ -517,7 +539,7 @@ func runWorker(ctx context.Context, workerID int, nodeURL string, faucetSeed str
 				Done()
 			if env != nil {
 				submitted.Add(1)
-				if submit(ctx, client, env) {
+				if submit(ctx, httpClient, nodeURL, env) {
 					succeeded.Add(1)
 				} else {
 					failed.Add(1)
@@ -540,7 +562,7 @@ func runWorker(ctx context.Context, workerID int, nodeURL string, faucetSeed str
 				Done()
 			if env != nil {
 				submitted.Add(1)
-				if submit(ctx, client, env) {
+				if submit(ctx, httpClient, nodeURL, env) {
 					succeeded.Add(1)
 				} else {
 					failed.Add(1)
@@ -563,7 +585,7 @@ func runWorker(ctx context.Context, workerID int, nodeURL string, faucetSeed str
 				failed.Add(1)
 			} else {
 				submitted.Add(1)
-				if submit(ctx, client, env) {
+				if submit(ctx, httpClient, nodeURL, env) {
 					succeeded.Add(1)
 				} else {
 					failed.Add(1)
