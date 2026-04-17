@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"sync"
 
 	"github.com/multiformats/go-multiaddr"
 	"github.com/rs/cors"
@@ -107,18 +108,28 @@ func (h *HttpService) start(inst *Instance) error {
 		haltInst = inst.parentInstance
 	}
 
-	// Find a submitter service for binary submit endpoint
+	// Lazy submitter lookup for binary submit endpoint
 	var submitter apiv3.Submitter
-	ioc.ForEach(inst.services, func(_ ioc.Descriptor, s apiv3.Submitter) {
-		if submitter == nil {
-			submitter = s
-		}
-	})
+	var submitterOnce sync.Once
+	getSubmitter := func() apiv3.Submitter {
+		submitterOnce.Do(func() {
+			ioc.ForEach(inst.services, func(_ ioc.Descriptor, s apiv3.Submitter) {
+				if submitter == nil {
+					submitter = s
+				}
+			})
+		})
+		return submitter
+	}
 
 	api2 := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Binary transaction submission — bypasses JSON entirely
-		if r.URL.Path == "/submit" && r.Method == http.MethodPost && submitter != nil {
-			handleBinarySubmit(w, r, submitter)
+		if r.URL.Path == "/submit" && r.Method == http.MethodPost {
+			if s := getSubmitter(); s != nil {
+				handleBinarySubmit(w, r, s)
+			} else {
+				http.Error(w, "no submitter available", http.StatusServiceUnavailable)
+			}
 			return
 		}
 

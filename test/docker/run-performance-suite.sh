@@ -151,7 +151,7 @@ EOF
 build_image() {
     log_section "Building Docker image"
     cd "$REPO_ROOT"
-    if ! docker build -t accumulated-test -f Dockerfile . > /tmp/docker-build.log 2>&1; then
+    if ! docker build --no-cache -t accumulated-test -f Dockerfile . > /tmp/docker-build.log 2>&1; then
         log_error "Docker build failed. See /tmp/docker-build.log"
         tail -20 /tmp/docker-build.log | tee -a "$SUITE_LOG"
         exit 1
