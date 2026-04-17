@@ -23,7 +23,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	nodehttp "gitlab.com/accumulatenetwork/accumulate/internal/node/http"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	apiv3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
@@ -84,7 +84,7 @@ func (h *HttpService) start(inst *Instance) error {
 		Dialer:  inst.p2p.DialNetwork(),
 	}}
 	timestamps := &apiutil.TimestampService{
-		Querier: &api.Collator{Querier: client, Network: client},
+		Querier: &apiv3.Collator{Querier: client, Network: client},
 		Cache:   memory.New(nil),
 	}
 
@@ -107,10 +107,18 @@ func (h *HttpService) start(inst *Instance) error {
 		haltInst = inst.parentInstance
 	}
 
+	// Find a submitter service for binary submit endpoint
+	var submitter apiv3.Submitter
+	ioc.ForEach(inst.services, func(_ ioc.Descriptor, s apiv3.Submitter) {
+		if submitter == nil {
+			submitter = s
+		}
+	})
+
 	api2 := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Binary transaction submission — bypasses JSON entirely
-		if r.URL.Path == "/submit" && r.Method == http.MethodPost {
-			handleBinarySubmit(w, r, client)
+		if r.URL.Path == "/submit" && r.Method == http.MethodPost && submitter != nil {
+			handleBinarySubmit(w, r, submitter)
 			return
 		}
 
@@ -256,9 +264,9 @@ func (h *HttpListener) serveHTTP(inst *Instance, server *http.Server, l net.List
 }
 
 // handleBinarySubmit handles POST /submit with binary-encoded envelopes.
-// Request body is a binary-marshaled messaging.Envelope.
-// Response is the binary-marshaled submission results, or an error.
-func handleBinarySubmit(w http.ResponseWriter, r *http.Request, client *message.Client) {
+// Request body is a binary-marshaled messaging.Envelope. The raw bytes
+// are forwarded directly to the submitter without JSON round-tripping.
+func handleBinarySubmit(w http.ResponseWriter, r *http.Request, submitter apiv3.Submitter) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "read body: "+err.Error(), http.StatusBadRequest)
@@ -271,20 +279,19 @@ func handleBinarySubmit(w http.ResponseWriter, r *http.Request, client *message.
 		return
 	}
 
-	subs, err := client.Submit(r.Context(), env, api.SubmitOptions{})
+	subs, err := submitter.Submit(r.Context(), env, apiv3.SubmitOptions{})
 	if err != nil {
-		http.Error(w, "submit: "+err.Error(), http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// Return binary-encoded results
+	// Simple success/failure response
 	w.Header().Set("Content-Type", "application/octet-stream")
 	for _, sub := range subs {
-		if sub.Status != nil {
-			b, err := sub.Status.MarshalBinary()
-			if err == nil {
-				w.Write(b)
-			}
+		if !sub.Success && sub.Message != "" {
+			http.Error(w, sub.Message, http.StatusUnprocessableEntity)
+			return
 		}
 	}
+	w.WriteHeader(http.StatusOK)
 }
