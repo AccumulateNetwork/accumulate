@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -16,8 +18,6 @@ import (
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -121,7 +121,8 @@ func main() {
 	}
 	funders := make([]funderAcct, numWorkers)
 	{
-		client := jsonrpc.NewClient(nodes[0])
+		httpClient := &http.Client{Timeout: 30 * time.Second}
+		seedURL := nodes[0]
 		nonce := uint64(time.Now().UnixMilli())
 		for i := 0; i < numWorkers; i++ {
 			sk := deriveKey(faucetSeed, "funder", i)
@@ -138,7 +139,7 @@ func main() {
 				PrivateKey(faucetSK).
 				Done()
 			if env != nil {
-				submit(ctx, client, env)
+				submit(ctx, seedURL, httpClient, env)
 			}
 
 			// Buy credits for funder (AddCredits doesn't need credits)
@@ -154,7 +155,7 @@ func main() {
 				PrivateKey(sk).
 				Done()
 			if env != nil {
-				submit(ctx, client, env)
+				submit(ctx, seedURL, httpClient, env)
 			}
 		}
 		fmt.Printf("Seeded %d funders. Workers starting immediately.\n", numWorkers)
@@ -430,12 +431,31 @@ type acctSlot struct {
 	hasCredits bool
 }
 
-// submit sends a transaction envelope to the network. Returns true on success.
-func submit(ctx context.Context, client *jsonrpc.Client, env *messaging.Envelope) bool {
+// submit sends a binary-encoded envelope to the /submit endpoint. Returns true on success.
+func submit(ctx context.Context, nodeURL string, httpClient *http.Client, env *messaging.Envelope) bool {
+	b, err := env.MarshalBinary()
+	if err != nil {
+		return false
+	}
+
+	// Replace /v3 suffix with /submit
+	submitURL := strings.TrimSuffix(nodeURL, "/v3") + "/submit"
+
 	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	_, err := client.Submit(reqCtx, env, api.SubmitOptions{})
-	return err == nil
+
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, submitURL, bytes.NewReader(b))
+	if err != nil {
+		return false
+	}
+	req.Header.Set("Content-Type", "application/octet-stream")
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return false
+	}
+	resp.Body.Close()
+	return resp.StatusCode == http.StatusOK
 }
 
 // runWorker walks through its account slots, funding on first use, then
@@ -450,7 +470,7 @@ func runWorker(ctx context.Context, workerID int, nodeURL string, faucetSeed str
 	targetTPS *atomic.Int64,
 	submitted, succeeded, failed *atomic.Uint64,
 ) {
-	client := jsonrpc.NewClient(nodeURL)
+	httpClient := &http.Client{Timeout: 15 * time.Second}
 
 	// Pre-compute account keys into flat array
 	slots := make([]acctSlot, acctCount)
@@ -517,7 +537,7 @@ func runWorker(ctx context.Context, workerID int, nodeURL string, faucetSeed str
 				Done()
 			if env != nil {
 				submitted.Add(1)
-				if submit(ctx, client, env) {
+				if submit(ctx, nodeURL, httpClient, env) {
 					succeeded.Add(1)
 				} else {
 					failed.Add(1)
@@ -540,7 +560,7 @@ func runWorker(ctx context.Context, workerID int, nodeURL string, faucetSeed str
 				Done()
 			if env != nil {
 				submitted.Add(1)
-				if submit(ctx, client, env) {
+				if submit(ctx, nodeURL, httpClient, env) {
 					succeeded.Add(1)
 				} else {
 					failed.Add(1)
@@ -563,7 +583,7 @@ func runWorker(ctx context.Context, workerID int, nodeURL string, faucetSeed str
 				failed.Add(1)
 			} else {
 				submitted.Add(1)
-				if submit(ctx, client, env) {
+				if submit(ctx, nodeURL, httpClient, env) {
 					succeeded.Add(1)
 				} else {
 					failed.Add(1)

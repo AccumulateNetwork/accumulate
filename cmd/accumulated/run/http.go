@@ -8,6 +8,7 @@ package run
 
 import (
 	"encoding/json"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -24,6 +25,7 @@ import (
 	nodehttp "gitlab.com/accumulatenetwork/accumulate/internal/node/http"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
@@ -106,6 +108,12 @@ func (h *HttpService) start(inst *Instance) error {
 	}
 
 	api2 := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Binary transaction submission — bypasses JSON entirely
+		if r.URL.Path == "/submit" && r.Method == http.MethodPost {
+			handleBinarySubmit(w, r, client)
+			return
+		}
+
 		// Check for key rotation API endpoints
 		const krPrefix = "/api/v1/validator/key/"
 		if strings.HasPrefix(r.URL.Path, krPrefix) {
@@ -245,4 +253,38 @@ func (h *HttpListener) serveHTTP(inst *Instance, server *http.Server, l net.List
 		slog.Error("Server stopped", "error", err, "address", l.Addr())
 	})
 	return nil
+}
+
+// handleBinarySubmit handles POST /submit with binary-encoded envelopes.
+// Request body is a binary-marshaled messaging.Envelope.
+// Response is the binary-marshaled submission results, or an error.
+func handleBinarySubmit(w http.ResponseWriter, r *http.Request, client *message.Client) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "read body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	env := new(messaging.Envelope)
+	if err := env.UnmarshalBinary(body); err != nil {
+		http.Error(w, "unmarshal: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	subs, err := client.Submit(r.Context(), env, api.SubmitOptions{})
+	if err != nil {
+		http.Error(w, "submit: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Return binary-encoded results
+	w.Header().Set("Content-Type", "application/octet-stream")
+	for _, sub := range subs {
+		if sub.Status != nil {
+			b, err := sub.Status.MarshalBinary()
+			if err == nil {
+				w.Write(b)
+			}
+		}
+	}
 }
