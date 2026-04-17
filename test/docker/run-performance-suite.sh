@@ -147,11 +147,18 @@ EOF
     log_error "Failure details: $failure_file"
 }
 
-# Build Docker image once
+# Build Docker image once — uses docker compose build so the compose
+# files use the freshly built image (not a stale cached one).
 build_image() {
     log_section "Building Docker image"
-    cd "$REPO_ROOT"
-    if ! docker build --no-cache -t accumulated-test -f Dockerfile . > /tmp/docker-build.log 2>&1; then
+    cd "$SCRIPT_DIR"
+    # Build via the first compose file — all compose files share the same
+    # Dockerfile and build context, so building one builds all.
+    local first_compose=$(ls docker-compose-*-val-*-bvn.yml 2>/dev/null | head -1)
+    if [ -z "$first_compose" ]; then
+        first_compose="docker-compose.yml"
+    fi
+    if ! docker compose -f "$first_compose" build --no-cache > /tmp/docker-build.log 2>&1; then
         log_error "Docker build failed. See /tmp/docker-build.log"
         tail -20 /tmp/docker-build.log | tee -a "$SUITE_LOG"
         exit 1
