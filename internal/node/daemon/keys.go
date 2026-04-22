@@ -81,17 +81,6 @@ func unmarshalPrivKey(ck cometKey) (ed25519.PrivateKey, error) {
 	return ed25519.PrivateKey(b), nil
 }
 
-func unmarshalPubKey(ck cometKey) (ed25519.PublicKey, error) {
-	if ck.Type != "tendermint/PubKeyEd25519" {
-		return nil, fmt.Errorf("unsupported key type: %s", ck.Type)
-	}
-	b, err := base64.StdEncoding.DecodeString(ck.Value)
-	if err != nil {
-		return nil, err
-	}
-	return ed25519.PublicKey(b), nil
-}
-
 // FilePVKey stores the immutable part of a private validator.
 // JSON format matches CometBFT's privval.FilePVKey exactly.
 type FilePVKey struct {

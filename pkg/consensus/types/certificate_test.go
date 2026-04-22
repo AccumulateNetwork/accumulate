@@ -45,7 +45,7 @@ func createSignedHeader(t *testing.T, pub ed25519.PublicKey, priv ed25519.Privat
 func createCertificate(t *testing.T, header *types.Header, committee *types.Committee, privKeys []ed25519.PrivateKey, signerIndices []int) *types.Certificate {
 	t.Helper()
 
-	cert := types.NewCertificate(*header, nil, nil)
+	cert := types.NewCertificate(header, nil, nil)
 	headerDigest := header.Digest()
 
 	// Build voteContent (headerDigest + round + epoch) to match certificate verification expectations
@@ -66,7 +66,7 @@ func TestCertificate_Digest(t *testing.T) {
 	pub, priv, _ := ed25519.GenerateKey(nil)
 	header := createSignedHeader(t, pub, priv, 1, 0)
 
-	cert := types.NewCertificate(*header, nil, nil)
+	cert := types.NewCertificate(header, nil, nil)
 
 	// Certificate digest should match header digest
 	assert.Equal(t, types.CertificateDigest(header.Digest()), cert.Digest())
@@ -79,7 +79,7 @@ func TestCertificate_Accessors(t *testing.T) {
 	err := header.Sign(priv)
 	require.NoError(t, err)
 
-	cert := types.NewCertificate(*header, nil, nil)
+	cert := types.NewCertificate(header, nil, nil)
 
 	assert.Equal(t, types.Round(5), cert.Round())
 	assert.Equal(t, uint64(2), cert.Epoch())
@@ -158,7 +158,7 @@ func TestCertificate_Verify(t *testing.T) {
 
 	t.Run("invalid authority index", func(t *testing.T) {
 		header := createSignedHeader(t, pub, priv, 1, 0)
-		cert := types.NewCertificate(*header, [][]byte{make([]byte, 64)}, []uint16{100}) // Out of bounds
+		cert := types.NewCertificate(header, [][]byte{make([]byte, 64)}, []uint16{100}) // Out of bounds
 
 		err := cert.Verify(committee)
 		assert.Error(t, err)
@@ -174,7 +174,7 @@ func TestCertificate_Verify(t *testing.T) {
 		binary.BigEndian.PutUint64(voteContent[32:40], uint64(header.Round))
 		binary.BigEndian.PutUint64(voteContent[40:48], header.Epoch)
 
-		cert := types.NewCertificate(*header,
+		cert := types.NewCertificate(header,
 			[][]byte{
 				ed25519.Sign(privKeys[0], voteContent),
 				ed25519.Sign(privKeys[0], voteContent),
@@ -190,7 +190,7 @@ func TestCertificate_Verify(t *testing.T) {
 
 	t.Run("no signatures", func(t *testing.T) {
 		header := createSignedHeader(t, pub, priv, 1, 0)
-		cert := types.NewCertificate(*header, nil, nil)
+		cert := types.NewCertificate(header, nil, nil)
 
 		err := cert.Verify(committee)
 		assert.Error(t, err)
@@ -292,7 +292,7 @@ func TestCertificate_AddSignature(t *testing.T) {
 	pub, priv, _ := ed25519.GenerateKey(nil)
 	header := createSignedHeader(t, pub, priv, 1, 0)
 
-	cert := types.NewCertificate(*header, nil, nil)
+	cert := types.NewCertificate(header, nil, nil)
 
 	sig1 := make([]byte, 64)
 	sig2 := make([]byte, 64)
@@ -316,7 +316,7 @@ func TestCertificate_HasSignatureFrom(t *testing.T) {
 	pub, priv, _ := ed25519.GenerateKey(nil)
 	header := createSignedHeader(t, pub, priv, 1, 0)
 
-	cert := types.NewCertificate(*header, nil, nil)
+	cert := types.NewCertificate(header, nil, nil)
 
 	cert.AddSignature(2, make([]byte, 64))
 	cert.AddSignature(5, make([]byte, 64))

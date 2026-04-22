@@ -1,3 +1,9 @@
+// Copyright 2026 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package main
 
 import (
@@ -169,7 +175,7 @@ func main() {
 	var wg sync.WaitGroup
 
 	// Status reporter + dashboard writer
-	os.MkdirAll(statusDir, 0755)
+	_ = os.MkdirAll(statusDir, 0755)
 	statusFile := filepath.Join(statusDir, "status.json")
 	logFile := filepath.Join(statusDir, "log.jsonl")
 	var peakTPS float64 // only accessed by ticker goroutine + main after wg.Wait
@@ -240,7 +246,7 @@ func main() {
 					"nodes":       len(nodes),
 				}
 				if b, err := json.Marshal(status); err == nil {
-					os.WriteFile(statusFile, b, 0644)
+					_ = os.WriteFile(statusFile, b, 0644)
 				}
 			}
 		}
@@ -347,8 +353,8 @@ func appendLog(path string, msg string) {
 		return
 	}
 	defer f.Close()
-	f.Write(b)
-	f.Write([]byte("\n"))
+	_, _ = f.Write(b)
+	_, _ = f.Write([]byte("\n"))
 }
 
 // deriveKey produces a deterministic ed25519 key from seed components.

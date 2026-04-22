@@ -1,3 +1,9 @@
+// Copyright 2026 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package results
 
 import (
@@ -193,7 +199,7 @@ func (b *BatchHealthRecorder) Flush() error {
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	for _, record := range b.records {
 		if err := b.db.SaveNodeHealth(record); err != nil {

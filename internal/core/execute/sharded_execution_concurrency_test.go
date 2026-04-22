@@ -116,7 +116,7 @@ func TestConcurrency_PanicRecoverySingleShard(t *testing.T) {
 
 	// Single shard path doesn't have defer/recover, so it panics
 	require.Panics(t, func() {
-		se.ExecuteTransactionOnShards(context.Background(), []int{0}, executeFn)
+		_, _ = se.ExecuteTransactionOnShards(context.Background(), []int{0}, executeFn)
 	})
 }
 
@@ -226,7 +226,7 @@ func TestConcurrency_NoGoroutineLeaks(t *testing.T) {
 			return shard.ID, nil
 		}
 
-		se.ExecuteTransactionOnShards(context.Background(), []int{0, 1, 2, 3}, executeFn)
+		_, _ = se.ExecuteTransactionOnShards(context.Background(), []int{0, 1, 2, 3}, executeFn)
 	}
 
 	// All started goroutines must have finished

@@ -98,18 +98,8 @@ func (h *testHelper) createCert(validatorIdx int, round types.Round, parents []*
 		authorities = append(authorities, uint16(i))
 	}
 
-	// Create certificate directly to avoid copying Header which contains mutex.
-	// The Certificate struct stores Header by value, so we need to copy the
-	// exported fields manually.
 	cert := &types.Certificate{
-		Header: types.Header{
-			Author:    header.Author,
-			Round:     header.Round,
-			Epoch:     header.Epoch,
-			Payload:   header.Payload,
-			Parents:   header.Parents,
-			Signature: header.Signature,
-		},
+		Header:            header,
 		Signatures:        signatures,
 		SignedAuthorities: authorities,
 	}

@@ -22,7 +22,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	multiexec "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
@@ -424,9 +423,6 @@ func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Begin
 // loadGenesisIfNeeded loads the genesis snapshot into the database if needed.
 // It returns true if genesis was loaded, false if the database already has data.
 func (s *DAGBFTService) loadGenesisIfNeeded(db *database.Database, genesisPath string, logger logging.Logger) (bool, error) {
-	// Set the database observer (required for BPT updates)
-	db.SetObserver(execute.NewDatabaseObserver())
-
 	// Check if database already has state
 	batch := db.Begin(false)
 	ledger := batch.Account(protocol.PartitionUrl(s.Partition.ID).JoinPath(protocol.Ledger))
