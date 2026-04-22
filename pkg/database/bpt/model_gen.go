@@ -1,4 +1,4 @@
-// Copyright 2026 The Accumulate Authors
+// Copyright 2022 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -25,10 +25,6 @@ type BPT struct {
 
 	state values.Value[*stateData]
 	root  *rootRecord
-
-	// sharded delegates core operations to a ShardedBPT when set.
-	// This field is not generated; it is set by EnableSharding.
-	sharded *ShardedBPT
 }
 
 func (c *BPT) Key() *record.Key { return c.key }
