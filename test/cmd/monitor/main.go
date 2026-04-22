@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -40,7 +40,6 @@ type Metrics struct {
 	cpuPercent         float64
 	memoryUsedMB       uint64
 	memoryTotalMB      uint64
-	errorCount         int64
 	blockHeight        uint64
 	blockProductionTPS float64
 	lastUpdate         time.Time
@@ -224,11 +223,11 @@ func collectMetrics(ctx context.Context, cl *client.Client, m *Metrics, period i
 
 			// Get node status
 			status, err := cl.Status(ctx)
-			nodeStatus := "HEALTHY"
+			var nodeStatus string
 			var blockHeight uint64
 
 			if err != nil {
-				nodeStatus = fmt.Sprintf("ERROR")
+				nodeStatus = "ERROR"
 				m.AddLatency(time.Since(reqStart))
 			} else {
 				if status.Ok {

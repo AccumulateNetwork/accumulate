@@ -134,7 +134,7 @@ func createGenesisCertificate(
 		authorities[i] = uint16(i)
 	}
 
-	cert := types.NewCertificate(*header, signatures, authorities)
+	cert := types.NewCertificate(header, signatures, authorities)
 
 	// Verify the certificate is valid
 	if err := cert.Verify(committee); err != nil {

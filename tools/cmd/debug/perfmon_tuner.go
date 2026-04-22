@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -441,7 +441,7 @@ func generateErrorRecommendations(report *PerformanceReport, bottleneck Bottlene
 	var recs []TuningRecommendation
 
 	// Analyze error types
-	if report.ErrorsByType != nil && len(report.ErrorsByType) > 0 {
+	if len(report.ErrorsByType) > 0 {
 		if txErrors, ok := report.ErrorsByType["tx_error"]; ok && txErrors > 0 {
 			recs = append(recs, TuningRecommendation{
 				Category:   "application",

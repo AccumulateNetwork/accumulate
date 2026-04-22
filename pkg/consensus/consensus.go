@@ -427,7 +427,7 @@ func (n *Node) InsertGenesisForAll(keys []ed25519.PrivateKey) error {
 			authors[j] = uint16(j)
 		}
 
-		cert := types.NewCertificate(*header, sigs, authors)
+		cert := types.NewCertificate(header, sigs, authors)
 
 		// Insert into DAG
 		if err := n.dag.InsertGenesis(cert); err != nil {

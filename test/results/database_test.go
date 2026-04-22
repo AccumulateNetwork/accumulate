@@ -1,3 +1,9 @@
+// Copyright 2026 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package results
 
 import (
@@ -215,7 +221,7 @@ func TestDeleteOldRuns(t *testing.T) {
 	configHash, _ := db.SaveConfig(config)
 
 	// Create an old run (manually set start_time)
-	db.db.Exec(`
+	_, _ = db.db.Exec(`
 		INSERT INTO test_runs (commit_hash, branch, config_hash, start_time, status)
 		VALUES (?, ?, ?, ?, ?)
 	`, "old123", "main", configHash, time.Now().AddDate(0, 0, -31), "completed")

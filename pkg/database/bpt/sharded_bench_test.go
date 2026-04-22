@@ -438,7 +438,7 @@ func BenchmarkShardedDelete(b *testing.B) {
 				key := record.KeyFromHash(rh.NextA())
 				keys[i] = key
 				value := rh.Next()
-				sharded.Insert(key, value)
+				_ = sharded.Insert(key, value)
 			}
 
 			b.ResetTimer()
@@ -457,7 +457,7 @@ func BenchmarkShardedDelete(b *testing.B) {
 				if (i+1)%prepopulate == 0 {
 					for j := 0; j < prepopulate; j++ {
 						value := rh.Next()
-						sharded.Insert(keys[j], value)
+						_ = sharded.Insert(keys[j], value)
 					}
 				}
 				idx++

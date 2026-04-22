@@ -1,3 +1,9 @@
+// Copyright 2026 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package main
 
 import (
@@ -18,17 +24,17 @@ import (
 func TestDeriveKeyDeterministic(t *testing.T) {
 	a := deriveKey("FAUCET")
 	b := deriveKey("FAUCET")
-	if !ed25519.PrivateKey(a).Equal(b) {
+	if !a.Equal(b) {
 		t.Fatal("same inputs produced different keys")
 	}
 
 	c := deriveKey("FAUCET", "funder", 0)
-	if ed25519.PrivateKey(a).Equal(c) {
+	if a.Equal(c) {
 		t.Fatal("different inputs produced same key")
 	}
 
 	d := deriveKey("FAUCET", "funder", 1)
-	if ed25519.PrivateKey(c).Equal(d) {
+	if c.Equal(d) {
 		t.Fatal("different worker IDs produced same key")
 	}
 }
@@ -40,7 +46,7 @@ func TestDeriveKeyMatchesCreateFaucet(t *testing.T) {
 	expected := ed25519.NewKeyFromSeed(seed[:])
 
 	got := deriveKey("FAUCET")
-	if !ed25519.PrivateKey(expected).Equal(got) {
+	if !expected.Equal(got) {
 		t.Fatal("deriveKey does not match createFaucet logic")
 	}
 
@@ -590,8 +596,7 @@ func TestFunderAndSenderKeysDontCollide(t *testing.T) {
 	}
 	for w := 0; w < 36; w++ {
 		for i := 0; i < 100; i++ {
-			sk := string(deriveKey("FAUCET", "sender", w, i))
-			if funderKeys[sk] {
+			if funderKeys[string(deriveKey("FAUCET", "sender", w, i))] {
 				t.Fatalf("sender key worker=%d idx=%d collides with a funder key", w, i)
 			}
 		}

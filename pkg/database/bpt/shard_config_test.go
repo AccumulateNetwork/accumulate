@@ -175,11 +175,8 @@ func TestRoutingDeterminism(t *testing.T) {
 func TestRouteToShardMatchesShardedBPT(t *testing.T) {
 	// Verify that the exported RouteToShard produces the same results as
 	// ShardedBPT.routeToShard for all valid depths.
+	// ShardedBPT recommends 4-6, but supports 1-8. We test the full range.
 	for depth := MinShardDepth; depth <= MaxShardDepth; depth++ {
-		if depth > 6 {
-			// ShardedBPT recommends 4-6, but supports 1-8.
-			// Just test up to 8.
-		}
 		numShards := 1 << depth
 		t.Run(fmt.Sprintf("depth_%d", depth), func(t *testing.T) {
 			for b := 0; b < 256; b++ {

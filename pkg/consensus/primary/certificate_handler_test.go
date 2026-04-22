@@ -48,7 +48,7 @@ func TestOnCertificateReceivedValid(t *testing.T) {
 		authors[i] = uint16(i)
 	}
 
-	cert := types.NewCertificate(*header, sigs, authors)
+	cert := types.NewCertificate(header, sigs, authors)
 
 	// Process certificate
 	p.OnCertificateReceived(cert)
@@ -90,7 +90,7 @@ func TestOnCertificateReceivedSignalsBullshark(t *testing.T) {
 		authors[i] = uint16(i)
 	}
 
-	cert := types.NewCertificate(*header, sigs, authors)
+	cert := types.NewCertificate(header, sigs, authors)
 
 	// Start listening on new certs channel
 	certChan := p.NewCertificates()
@@ -135,7 +135,7 @@ func TestOnCertificateReceivedInvalid(t *testing.T) {
 		authors[i] = uint16(i)
 	}
 
-	cert := types.NewCertificate(*header, sigs, authors)
+	cert := types.NewCertificate(header, sigs, authors)
 
 	// Process certificate
 	p.OnCertificateReceived(cert)
@@ -178,7 +178,7 @@ func TestOnCertificateReceivedMissingParent(t *testing.T) {
 		authors[i] = uint16(i)
 	}
 
-	cert := types.NewCertificate(*header, sigs, authors)
+	cert := types.NewCertificate(header, sigs, authors)
 
 	// Process certificate
 	p.OnCertificateReceived(cert)
@@ -235,7 +235,7 @@ func TestOnCertificateReceivedWrongEpoch(t *testing.T) {
 		authors[i] = uint16(i)
 	}
 
-	cert := types.NewCertificate(*header, sigs, authors)
+	cert := types.NewCertificate(header, sigs, authors)
 
 	// Process certificate - should fail verification
 	p.OnCertificateReceived(cert)
@@ -422,7 +422,7 @@ func TestMultipleCertificatesInRound(t *testing.T) {
 			authors[i] = uint16(i)
 		}
 
-		cert := types.NewCertificate(*header, sigs, authors)
+		cert := types.NewCertificate(header, sigs, authors)
 		p.OnCertificateReceived(cert)
 	}
 
@@ -511,7 +511,7 @@ func TestDuplicateCertificateHandling(t *testing.T) {
 		authors[i] = uint16(i)
 	}
 
-	cert := types.NewCertificate(*header, sigs, authors)
+	cert := types.NewCertificate(header, sigs, authors)
 
 	// Process same certificate multiple times
 	p.OnCertificateReceived(cert)
@@ -558,7 +558,7 @@ func TestConcurrentCertificateProcessing(t *testing.T) {
 				authors[i] = uint16(i)
 			}
 
-			cert := types.NewCertificate(*header, sigs, authors)
+			cert := types.NewCertificate(header, sigs, authors)
 			p.OnCertificateReceived(cert)
 			done <- struct{}{}
 		}(v)

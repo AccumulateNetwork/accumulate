@@ -499,6 +499,7 @@ func TestShardedBPTStressTest(t *testing.T) {
 			continue
 		}
 
+		value := value // local copy to avoid range-var aliasing
 		k := record.NewKey(keyStr)
 		retrieved, err := s.Get(k)
 		require.NoError(t, err)
