@@ -21,7 +21,7 @@ import (
 // TestAccountState verifies that adding an entry to an ADI's directory listing changes the account's BPT entry.
 func TestAccountState(t *testing.T) {
 	db := database.OpenInMemory(nil)
-	db.SetObserver(databaseObserver{})
+	db.SetObserver(databaseObserver{}) //nolint:staticcheck // test uses a specialized observer, which is what SetObserver is for per the deprecation notice.
 	batch := db.Begin(true)
 	defer batch.Discard()
 	adiurl := url.MustParse("acc://testadi1.acme")
@@ -42,7 +42,7 @@ func TestAccountState(t *testing.T) {
 
 func TestEvents(t *testing.T) {
 	db := database.OpenInMemory(nil)
-	db.SetObserver(databaseObserver{})
+	db.SetObserver(databaseObserver{}) //nolint:staticcheck // test uses a specialized observer, which is what SetObserver is for per the deprecation notice.
 	ledgerUrl := protocol.DnUrl().JoinPath(protocol.Ledger)
 
 	// Setup

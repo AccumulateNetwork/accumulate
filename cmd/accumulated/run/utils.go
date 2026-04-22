@@ -23,17 +23,13 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-const defaultHost = "/ip4/0.0.0.0"
-
 var (
 	portDir = portOffset(config.PortOffsetDirectory)
 	portBVN = portOffset(config.PortOffsetBlockValidator)
 
-	portCmtP2P  = portOffset(config.PortOffsetTendermintP2P)
-	portCmtRPC  = portOffset(config.PortOffsetTendermintRpc)
-	portMetrics = portOffset(config.PortOffsetPrometheus)
-	portAccAPI  = portOffset(config.PortOffsetAccumulateApi)
-	portAccP2P  = portOffset(config.PortOffsetAccumulateP2P)
+	portCmtP2P = portOffset(config.PortOffsetTendermintP2P)
+	portAccAPI = portOffset(config.PortOffsetAccumulateApi)
+	portAccP2P = portOffset(config.PortOffsetAccumulateP2P)
 )
 
 func must[V any](v V, err error) V {
@@ -122,24 +118,6 @@ func listen(addr multiaddr.Multiaddr, defaultHost string, transform ...addrTrans
 	return applyAddrTransforms(addr, transform...)
 }
 
-func listenUrl(addr multiaddr.Multiaddr, defaultHost string, transform ...addrTransform) string {
-	addr = listen(addr, defaultHost, transform...)
-	scheme, host, port, _, err := decomposeListen(addr)
-	if err != nil {
-		panic(err)
-	}
-	return fmt.Sprintf("%s://%s:%s", scheme, host, port)
-}
-
-func listenHostPort(addr multiaddr.Multiaddr, defaultHost string, transform ...addrTransform) string {
-	addr = listen(addr, defaultHost, transform...)
-	_, host, port, _, err := decomposeListen(addr)
-	if err != nil {
-		panic(err)
-	}
-	return fmt.Sprintf("%s:%s", host, port)
-}
-
 func decomposeListen(addr multiaddr.Multiaddr) (proto, host, port, http string, err error) {
 	multiaddr.ForEach(addr, func(c multiaddr.Component) bool {
 		switch c.Protocol().Code {
@@ -177,21 +155,6 @@ func httpListen(ma multiaddr.Multiaddr) (net.Listener, bool, error) {
 
 	l, err := net.Listen(proto, addr)
 	return l, http == "https", err
-}
-
-func isPrivate(addr multiaddr.Multiaddr) bool {
-	var private bool
-	multiaddr.ForEach(addr, func(c multiaddr.Component) bool {
-		switch c.Protocol().Code {
-		case multiaddr.P_IP4,
-			multiaddr.P_IP6:
-			ip := net.ParseIP(c.Value())
-			private = ip != nil && (ip.IsLoopback() || ip.IsPrivate())
-			return false
-		}
-		return true
-	})
-	return private
 }
 
 type addrTransform interface {

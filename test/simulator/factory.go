@@ -479,12 +479,6 @@ func noABCI(node *nodeFactory, exec execute.Executor, restore consensus.RestoreF
 	}
 }
 
-// withABCI is a no-op that falls back to noABCI since the CometBFT ABCI layer
-// has been removed. Use accumulated-dagbft for consensus.
-func withABCI(node *nodeFactory, exec execute.Executor, restore consensus.RestoreFunc) consensus.App {
-	return noABCI(node, exec, restore)
-}
-
 type appFunc = func(*nodeFactory) *consensus.Node
 
 func (f *nodeFactory) makeSummaryApp() *consensus.Node {
