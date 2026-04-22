@@ -142,7 +142,7 @@ func TestValidateNetwork(t *testing.T) {
 		network = node.Config.Accumulate.Network.Id
 		key, err := accumulated.LoadNodeKey(node.Config.NodeKeyFile())
 		require.NoError(t, err)
-		ed := ed25519.PrivateKey(key.PrivKey)
+		ed := key.PrivKey
 		sk, _, err := crypto.KeyPairFromStdKey(&ed)
 		require.NoError(t, err)
 		id, err := peer.IDFromPrivateKey(sk)

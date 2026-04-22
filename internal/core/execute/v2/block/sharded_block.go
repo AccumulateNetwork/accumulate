@@ -19,8 +19,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-const defaultShardCount = 64
-
 // ShardedBlock wraps a Block and dispatches transaction messages across shards
 // for parallel execution. Non-transaction messages (signatures, anchors, etc.)
 // are processed sequentially after shard execution.

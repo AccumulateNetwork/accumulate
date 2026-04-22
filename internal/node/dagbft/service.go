@@ -418,6 +418,7 @@ func (s *Service) processCommittedCertificate(cert *types.Certificate) error {
 	batches := make(map[types.BatchDigest]*types.Batch)
 	committedDigests := make([]types.BatchDigest, 0)
 	for digest := range cert.Header.Payload {
+		digest := digest // local copy to avoid range-var aliasing
 		var found bool
 		for _, w := range workers {
 			batch, err := w.GetBatch(digest)

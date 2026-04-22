@@ -1,3 +1,9 @@
+// Copyright 2026 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package main
 
 import (
@@ -11,7 +17,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -21,7 +26,6 @@ func main() {
 	tokensPerAccount := int64(20_000_000) // 20M ACME per account
 
 	db := coredb.OpenInMemory(nil)
-	db.SetObserver(execute.NewDatabaseObserver())
 	batch := db.Begin(true)
 	defer batch.Discard()
 

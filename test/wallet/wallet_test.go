@@ -75,8 +75,8 @@ func TestWalletCreateAndLoad(t *testing.T) {
 
 func TestGetAccount(t *testing.T) {
 	w := New("")
-	w.GenerateFunder("acc://test-funder.acme/tokens")
-	w.GenerateAccounts(5, 5, 5)
+	_ = w.GenerateFunder("acc://test-funder.acme/tokens")
+	_ = w.GenerateAccounts(5, 5, 5)
 
 	// Test valid index
 	acct, err := w.GetAccount(0)
@@ -96,8 +96,8 @@ func TestGetAccount(t *testing.T) {
 
 func TestGetAccountByURL(t *testing.T) {
 	w := New("")
-	w.GenerateFunder("acc://test-funder.acme/tokens")
-	w.GenerateAccounts(5, 5, 5)
+	_ = w.GenerateFunder("acc://test-funder.acme/tokens")
+	_ = w.GenerateAccounts(5, 5, 5)
 
 	// Get first ADI token account
 	adiAccounts := w.GetAccountsByType("adi-token")
@@ -123,8 +123,8 @@ func TestGetAccountByURL(t *testing.T) {
 
 func TestAccountKeys(t *testing.T) {
 	w := New("")
-	w.GenerateFunder("acc://test-funder.acme/tokens")
-	w.GenerateAccounts(1, 0, 0)
+	_ = w.GenerateFunder("acc://test-funder.acme/tokens")
+	_ = w.GenerateAccounts(1, 0, 0)
 
 	acct := w.Accounts[0]
 
@@ -155,8 +155,8 @@ func TestAccountKeys(t *testing.T) {
 
 func TestGetAccountsByType(t *testing.T) {
 	w := New("")
-	w.GenerateFunder("acc://test-funder.acme/tokens")
-	w.GenerateAccounts(3, 4, 5)
+	_ = w.GenerateFunder("acc://test-funder.acme/tokens")
+	_ = w.GenerateAccounts(3, 4, 5)
 
 	liteAccounts := w.GetAccountsByType("lite")
 	if len(liteAccounts) != 3 {
@@ -183,8 +183,8 @@ func TestGetAccountsByType(t *testing.T) {
 
 func TestAccountURLFormat(t *testing.T) {
 	w := New("")
-	w.GenerateFunder("acc://test-funder.acme/tokens")
-	w.GenerateAccounts(1, 1, 1)
+	_ = w.GenerateFunder("acc://test-funder.acme/tokens")
+	_ = w.GenerateAccounts(1, 1, 1)
 
 	// Check lite account URL format
 	liteAccounts := w.GetAccountsByType("lite")

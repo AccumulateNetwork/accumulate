@@ -8,7 +8,6 @@ package e2e
 
 import (
 	"context"
-	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/json"
 	"testing"
@@ -32,7 +31,7 @@ func TestMinorBlock_Expand(t *testing.T) {
 	lite := acctesting.GenerateKey(t.Name(), "Lite")
 	liteUrl := acctesting.AcmeLiteAddressStdPriv(lite)
 	batch := sim.PartitionFor(liteUrl).Database.Begin(true)
-	require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, ed25519.PrivateKey(lite), AcmeFaucetAmount, 1e9))
+	require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, lite, AcmeFaucetAmount, 1e9))
 	require.NoError(t, batch.Commit())
 
 	alice := AccountUrl("alice")

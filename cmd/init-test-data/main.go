@@ -50,7 +50,6 @@ type Stats struct {
 	ADIDataCreated  atomic.Uint64
 	ADIDataFailed   atomic.Uint64
 	StartTime       time.Time
-	mu              sync.Mutex
 	Errors          []string
 }
 

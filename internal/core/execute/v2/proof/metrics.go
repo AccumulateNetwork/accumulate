@@ -7,6 +7,8 @@
 package proof
 
 import (
+	"context"
+
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 )
@@ -102,30 +104,30 @@ func init() {
 // RecordProofCreated records when a proof is created
 func RecordProofCreated(isCollection bool, generationTimeMs int64, proofSizeBytes int64) {
 	if isCollection {
-		proofCollectionCreated.Add(nil, 1)
+		proofCollectionCreated.Add(context.TODO(), 1)
 	} else {
-		proofIndividualCreated.Add(nil, 1)
+		proofIndividualCreated.Add(context.TODO(), 1)
 	}
-	proofGenerationTime.Record(nil, generationTimeMs)
-	proofSize.Record(nil, proofSizeBytes)
+	proofGenerationTime.Record(context.TODO(), generationTimeMs)
+	proofSize.Record(context.TODO(), proofSizeBytes)
 }
 
 // RecordProofValidation records a proof validation attempt
 func RecordProofValidation(success bool) {
-	proofValidationAttempts.Add(nil, 1)
+	proofValidationAttempts.Add(context.TODO(), 1)
 	if success {
-		proofValidationSuccesses.Add(nil, 1)
+		proofValidationSuccesses.Add(context.TODO(), 1)
 	} else {
-		proofValidationFailures.Add(nil, 1)
+		proofValidationFailures.Add(context.TODO(), 1)
 	}
 }
 
 // RecordProofGenerationError records a proof generation error
 func RecordProofGenerationError() {
-	proofGenerationErrors.Add(nil, 1)
+	proofGenerationErrors.Add(context.TODO(), 1)
 }
 
 // RecordProofValidationError records a proof validation error
 func RecordProofValidationError() {
-	proofValidationErrors.Add(nil, 1)
+	proofValidationErrors.Add(context.TODO(), 1)
 }

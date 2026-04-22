@@ -30,7 +30,7 @@ func TestManager_InitialKeyGeneration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create manager: %v", err)
 	}
-	defer manager.Stop()
+	defer func() { _ = manager.Stop() }()
 
 	if err := manager.Start(); err != nil {
 		t.Fatalf("Failed to start manager: %v", err)
@@ -66,7 +66,7 @@ func TestManager_KeyValidation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create manager: %v", err)
 	}
-	defer manager.Stop()
+	defer func() { _ = manager.Stop() }()
 
 	if err := manager.Start(); err != nil {
 		t.Fatalf("Failed to start manager: %v", err)
@@ -102,7 +102,7 @@ func TestManager_ManualRotation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create manager: %v", err)
 	}
-	defer manager.Stop()
+	defer func() { _ = manager.Stop() }()
 
 	if err := manager.Start(); err != nil {
 		t.Fatalf("Failed to start manager: %v", err)
@@ -153,7 +153,7 @@ func TestManager_EmergencyRevocation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create manager: %v", err)
 	}
-	defer manager.Stop()
+	defer func() { _ = manager.Stop() }()
 
 	if err := manager.Start(); err != nil {
 		t.Fatalf("Failed to start manager: %v", err)
@@ -199,7 +199,7 @@ func TestManager_GracePeriodExpiration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create manager: %v", err)
 	}
-	defer manager.Stop()
+	defer func() { _ = manager.Stop() }()
 
 	if err := manager.Start(); err != nil {
 		t.Fatalf("Failed to start manager: %v", err)

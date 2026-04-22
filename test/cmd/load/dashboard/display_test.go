@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -139,7 +139,7 @@ func TestDisplay_Render_Complete(t *testing.T) {
 	load.RecordTransaction(false, 30*time.Millisecond)
 
 	sys := NewSystemMetrics()
-	sys.Update()
+	_ = sys.Update()
 
 	d.Render(load, sys)
 
@@ -241,7 +241,7 @@ func TestDisplay_RenderSystemMetrics_ColorThresholds(t *testing.T) {
 	sys := NewSystemMetrics()
 
 	// Force update to get some metrics
-	sys.Update()
+	_ = sys.Update()
 
 	var sb strings.Builder
 	d.renderSystemMetrics(&sb, sys)

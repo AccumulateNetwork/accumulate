@@ -7,7 +7,6 @@
 package e2e
 
 import (
-	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
 	"math/big"
@@ -61,7 +60,7 @@ func TestSendTokensToBadRecipient(t *testing.T) {
 	alice := acctesting.GenerateKey("Alice")
 	aliceUrl := acctesting.AcmeLiteAddressStdPriv(alice)
 	batch := sim.PartitionFor(aliceUrl).Database.Begin(true)
-	require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, ed25519.PrivateKey(alice), AcmeFaucetAmount, 1e9))
+	require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, alice, AcmeFaucetAmount, 1e9))
 	require.NoError(t, batch.Commit())
 
 	exch := new(SendTokens)
@@ -134,7 +133,7 @@ func TestSendTokensToBadRecipient2(t *testing.T) {
 	bob := acctesting.GenerateKey("Bob")
 	bobUrl := acctesting.AcmeLiteAddressStdPriv(bob)
 	batch := sim.PartitionFor(aliceUrl).Database.Begin(true)
-	require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, ed25519.PrivateKey(alice), AcmeFaucetAmount, 1e9))
+	require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, alice, AcmeFaucetAmount, 1e9))
 	require.NoError(t, batch.Commit())
 
 	var creditsBefore uint64
@@ -177,7 +176,7 @@ func TestCreateRootIdentity(t *testing.T) {
 	lite := acctesting.GenerateKey(t.Name(), "Lite")
 	liteUrl := acctesting.AcmeLiteAddressStdPriv(lite)
 	batch := sim.PartitionFor(liteUrl).Database.Begin(true)
-	require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, ed25519.PrivateKey(lite), AcmeFaucetAmount, 1e9))
+	require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, lite, AcmeFaucetAmount, 1e9))
 	require.NoError(t, batch.Commit())
 
 	alice := AccountUrl("alice")
@@ -209,7 +208,7 @@ func TestCreateRootIdentity(t *testing.T) {
 func TestWriteToLiteDataAccount(t *testing.T) {
 	// Setup
 	alice := acctesting.GenerateKey(t.Name())
-	aliceUrl := acctesting.AcmeLiteAddressTmPriv(ed25519.PrivateKey(alice))
+	aliceUrl := acctesting.AcmeLiteAddressTmPriv(alice)
 	aliceAdi := AccountUrl("alice")
 
 	firstEntry := DoubleHashDataEntry{}
@@ -228,7 +227,7 @@ func TestWriteToLiteDataAccount(t *testing.T) {
 
 		batch := sim.PartitionFor(aliceUrl).Database.Begin(true)
 		defer batch.Discard()
-		require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, ed25519.PrivateKey(alice), 1e9, 1e9))
+		require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, alice, 1e9, 1e9))
 		require.NoError(t, batch.Commit())
 
 		// Write data
@@ -255,7 +254,7 @@ func TestWriteToLiteDataAccount(t *testing.T) {
 
 		batch := sim.PartitionFor(aliceAdi).Database.Begin(true)
 		defer batch.Discard()
-		require.NoError(t, acctesting.CreateAdiWithCredits(batch, ed25519.PrivateKey(alice), "alice", 1e9))
+		require.NoError(t, acctesting.CreateAdiWithCredits(batch, alice, "alice", 1e9))
 		require.NoError(t, batch.Commit())
 
 		// Write data

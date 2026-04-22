@@ -45,7 +45,7 @@ func createTestCert(t *testing.T, committee *types.Committee, privKeys []ed25519
 	err := header.Sign(priv)
 	require.NoError(t, err)
 
-	cert := types.NewCertificate(*header, nil, nil)
+	cert := types.NewCertificate(header, nil, nil)
 
 	// Add signatures from enough validators for quorum
 	headerDigest := header.Digest()
