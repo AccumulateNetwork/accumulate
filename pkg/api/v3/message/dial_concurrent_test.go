@@ -128,7 +128,7 @@ func TestBatchDialerConcurrentBadDial(t *testing.T) {
 
 type mockStream struct{}
 
-func (mockStream) Read() (Message, error)     { return nil, nil }
-func (mockStream) Write(Message) error        { return nil }
-func (mockStream) Close() error               { return nil }
-func (mockStream) Context() context.Context   { return context.Background() }
+func (mockStream) Read() (Message, error)   { return nil, nil }
+func (mockStream) Write(Message) error      { return nil }
+func (mockStream) Close() error             { return nil }
+func (mockStream) Context() context.Context { return context.Background() }

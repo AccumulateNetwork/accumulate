@@ -31,11 +31,11 @@ type paddedMutex struct {
 // with zero contention between shards.
 //
 // Thread Safety:
-// - Each shard's BPT is accessed only under that shard's lock
-// - Different keys route to different shards with zero contention
-// - Same key always routes to same shard, protected by that shard's lock
-// - The base BPT type does not require external synchronization because
-//   each instance is accessed by only one shard under that shard's lock
+//   - Each shard's BPT is accessed only under that shard's lock
+//   - Different keys route to different shards with zero contention
+//   - Same key always routes to same shard, protected by that shard's lock
+//   - The base BPT type does not require external synchronization because
+//     each instance is accessed by only one shard under that shard's lock
 //
 // The sharding is based on the natural binary structure of the tree. At depth
 // N, the tree has 2^N branches, and each branch becomes an independent shard.
@@ -44,10 +44,10 @@ type paddedMutex struct {
 // Storage format is identical to non-sharded BPT - no database changes needed.
 // The tree structure itself provides natural partitioning.
 type ShardedBPT struct {
-	shardDepth int             // Number of bits for routing (4, 5, or 6)
-	numShards  int             // Number of shards (2^shardDepth)
-	shards     []*BPT          // Array of standard BPT instances
-	shardMu    []paddedMutex   // Per-shard locks (padded to prevent false sharing)
+	shardDepth int           // Number of bits for routing (4, 5, or 6)
+	numShards  int           // Number of shards (2^shardDepth)
+	shards     []*BPT        // Array of standard BPT instances
+	shardMu    []paddedMutex // Per-shard locks (padded to prevent false sharing)
 	store      database.Store
 	key        *record.Key
 }
@@ -92,9 +92,10 @@ func NewShardedBPT(store database.Store, key *record.Key, depth int) (*ShardedBP
 // tree structure. Returns both the shard and its index for locking.
 //
 // Routing algorithm:
-//   For depth=4: extract bits 7-4 from first byte (0b11110000 >> 4 = shard 0-15)
-//   For depth=5: extract bits 7-3 from first byte (0b11111000 >> 3 = shard 0-31)
-//   For depth=6: extract bits 7-2 from first byte (0b11111100 >> 2 = shard 0-63)
+//
+//	For depth=4: extract bits 7-4 from first byte (0b11110000 >> 4 = shard 0-15)
+//	For depth=5: extract bits 7-3 from first byte (0b11111000 >> 3 = shard 0-31)
+//	For depth=6: extract bits 7-2 from first byte (0b11111100 >> 2 = shard 0-63)
 //
 // The shift amount (8 - depth) moves the high-order bits to the low positions.
 func (s *ShardedBPT) routeToShard(keyHash [32]byte) (int, *BPT) {
