@@ -361,8 +361,8 @@ func BenchmarkShardedVsNonSharded(b *testing.B) {
 // inline timing (which adds measurement overhead). For detailed contention analysis,
 // use Go's profiling tools:
 //
-//   go test -bench=BenchmarkContention -cpuprofile=cpu.out -blockprofile=block.out
-//   go tool pprof -http=:8080 block.out
+//	go test -bench=BenchmarkContention -cpuprofile=cpu.out -blockprofile=block.out
+//	go tool pprof -http=:8080 block.out
 //
 // The block profile will show actual lock contention without measurement overhead.
 func BenchmarkContention(b *testing.B) {
