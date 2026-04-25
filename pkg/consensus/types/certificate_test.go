@@ -8,6 +8,7 @@ package types_test
 
 import (
 	"crypto/ed25519"
+	"encoding/binary"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -47,8 +48,14 @@ func createCertificate(t *testing.T, header *types.Header, committee *types.Comm
 	cert := types.NewCertificate(header, nil, nil)
 	headerDigest := header.Digest()
 
+	// Build voteContent (headerDigest + round + epoch) to match certificate verification expectations
+	voteContent := make([]byte, 32+8+8)
+	copy(voteContent[0:32], headerDigest[:])
+	binary.BigEndian.PutUint64(voteContent[32:40], uint64(header.Round))
+	binary.BigEndian.PutUint64(voteContent[40:48], header.Epoch)
+
 	for _, idx := range signerIndices {
-		sig := ed25519.Sign(privKeys[idx], headerDigest[:])
+		sig := ed25519.Sign(privKeys[idx], voteContent)
 		cert.AddSignature(uint16(idx), sig)
 	}
 
@@ -161,11 +168,17 @@ func TestCertificate_Verify(t *testing.T) {
 		header := createSignedHeader(t, pub, priv, 1, 0)
 		headerDigest := header.Digest()
 
+		// Build voteContent to match verification expectations
+		voteContent := make([]byte, 32+8+8)
+		copy(voteContent[0:32], headerDigest[:])
+		binary.BigEndian.PutUint64(voteContent[32:40], uint64(header.Round))
+		binary.BigEndian.PutUint64(voteContent[40:48], header.Epoch)
+
 		cert := types.NewCertificate(header,
 			[][]byte{
-				ed25519.Sign(privKeys[0], headerDigest[:]),
-				ed25519.Sign(privKeys[0], headerDigest[:]),
-				ed25519.Sign(privKeys[1], headerDigest[:]),
+				ed25519.Sign(privKeys[0], voteContent),
+				ed25519.Sign(privKeys[0], voteContent),
+				ed25519.Sign(privKeys[1], voteContent),
 			},
 			[]uint16{0, 0, 1}, // Duplicate 0
 		)

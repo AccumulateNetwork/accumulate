@@ -54,7 +54,7 @@ func TestDevNetConfig(t *testing.T) {
 			Key: &PrivateKeySeed{Seed: record.NewKey()},
 		},
 		Configurations: []Configuration{
-			&DevnetConfiguration{
+			&NetSimConfiguration{
 				Listen:     multiaddr.StringCast("/tcp/26656"),
 				Bvns:       1,
 				Validators: 1,

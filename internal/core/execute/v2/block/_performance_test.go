@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cometbft/cometbft/crypto/ed25519"
+	"crypto/ed25519"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
@@ -43,7 +43,7 @@ func BenchmarkPerformance(b *testing.B) {
 	charlieUrl := acctesting.AcmeLiteAddressStdPriv(charlie)
 
 	batch := sim.PartitionFor(aliceUrl).Database.Begin(true)
-	require.NoError(b, acctesting.CreateLiteTokenAccountWithCredits(batch, ed25519.PrivKey(alice), protocol.AcmeFaucetAmount, 1e9))
+	require.NoError(b, acctesting.CreateLiteTokenAccountWithCredits(batch, ed25519.PrivateKey(alice), protocol.AcmeFaucetAmount, 1e9))
 	require.NoError(b, batch.Commit())
 
 	// Create the transaction

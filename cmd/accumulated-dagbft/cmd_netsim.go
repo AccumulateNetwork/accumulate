@@ -15,7 +15,7 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
-	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulated-dagbft/devnet"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulated-dagbft/netsim"
 )
 
 // cmdDevnet returns the devnet command group.

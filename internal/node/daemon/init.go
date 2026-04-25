@@ -8,6 +8,8 @@ package accumulated
 
 import (
 	"bytes"
+	"crypto/ed25519"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -17,21 +19,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cometbft/cometbft/crypto/ed25519"
-	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
-	tmjson "github.com/cometbft/cometbft/libs/json"
-	"github.com/cometbft/cometbft/libs/log"
-	tmos "github.com/cometbft/cometbft/libs/os"
-	"github.com/cometbft/cometbft/p2p"
-	"github.com/cometbft/cometbft/privval"
-	tmtypes "github.com/cometbft/cometbft/types"
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/accumulate"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/cometbft"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -175,7 +171,6 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][]*config.
 		ConfigureNodePorts(network.Bootstrap, cfg, protocol.PartitionTypeDirectory)
 		cfg.Accumulate.P2P.BootstrapPeers = nil
 		cfg.Accumulate.AnalysisLog = config.AnalysisLog{}
-		cfg.Accumulate.Snapshots = config.Snapshots{}
 		cfg.Storage = nil
 
 		allConfigs = append(allConfigs, [][]*config.Config{{cfg}})
@@ -196,7 +191,7 @@ func ConfigureNodePorts(node *NodeInit, cfg *config.Config, part protocol.Partit
 	cfg.Accumulate.API.ListenAddress = node.Listen().Scheme("http").PartitionType(part).AccumulateAPI().String()
 }
 
-func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time time.Time, logger log.Logger, factomAddresses func() (io.Reader, error), snapshots []func(*core.GlobalValues) (ioutil2.SectionReader, error)) (map[string][]byte, error) {
+func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time time.Time, logger logging.Logger, factomAddresses func() (io.Reader, error), snapshots []func(*core.GlobalValues) (ioutil2.SectionReader, error)) (map[string][]byte, error) {
 	if globals == nil {
 		globals = new(core.GlobalValues)
 	}
@@ -212,18 +207,20 @@ func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time tim
 
 		for _, node := range bvn.Nodes {
 			i++
-			key := tmed25519.PrivKey(node.PrivValKey)
-			operators = append(operators, key.PubKey().Bytes())
-			netinfo.AddValidator(key.PubKey().Bytes(), protocol.Directory, node.DnnType == config.Validator)
-			netinfo.AddValidator(key.PubKey().Bytes(), bvn.Id, node.BvnnType == config.Validator)
+			privKey := ed25519.PrivateKey(node.PrivValKey)
+			pubKey := privKey.Public().(ed25519.PublicKey)
+			operators = append(operators, pubKey)
+			netinfo.AddValidator(pubKey, protocol.Directory, node.DnnType == config.Validator)
+			netinfo.AddValidator(pubKey, bvn.Id, node.BvnnType == config.Validator)
 		}
 	}
 
 	if network.Bsn != nil {
 		for _, node := range network.Bsn.Nodes {
-			key := tmed25519.PrivKey(node.PrivValKey)
-			operators = append(operators, key.PubKey().Bytes())
-			netinfo.AddValidator(key.PubKey().Bytes(), network.Bsn.Id, node.BsnnType == config.Validator)
+			privKey := ed25519.PrivateKey(node.PrivValKey)
+			pubKey := privKey.Public().(ed25519.PublicKey)
+			operators = append(operators, pubKey)
+			netinfo.AddValidator(pubKey, network.Bsn.Id, node.BsnnType == config.Validator)
 		}
 	}
 
@@ -269,7 +266,7 @@ func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time tim
 			OperatorKeys:    operators,
 			FactomAddresses: factomAddresses,
 			Snapshots:       snapshots,
-			ConsensusParams: tmtypes.DefaultConsensusParams(),
+			ConsensusParams: cometbft.DefaultConsensusParams(),
 		})
 		if err != nil {
 			return nil, fmt.Errorf("init %s: %w", id, err)
@@ -367,71 +364,72 @@ func WriteNodeFiles(cfg *config.Config, privValKey, nodeKey []byte, genDoc []byt
 func loadOrCreatePrivVal(cfg *config.Config, key []byte) error {
 	keyFile := cfg.PrivValidatorKeyFile()
 	stateFile := cfg.PrivValidatorStateFile()
-	if !tmos.FileExists(keyFile) {
-		pv := privval.NewFilePV(tmed25519.PrivKey(key), keyFile, stateFile)
+	if !fileExists(keyFile) {
+		pv := NewFilePV(ed25519.PrivateKey(key), keyFile, stateFile)
 		pv.Save()
 		return nil
 	}
-	var pv *privval.FilePV
+	var pv *FilePV
 	var err error
-	if !tmos.FileExists(stateFile) {
+	if !fileExists(stateFile) {
 		// When initializing the other node, the key file has already been created
-		pv = privval.NewFilePV(tmed25519.PrivKey(key), keyFile, stateFile)
+		pv = NewFilePV(ed25519.PrivateKey(key), keyFile, stateFile)
 		pv.LastSignState.Save()
 		// Don't return here - we still need to check that the key on disk matches what we expect
 	} else { // if file exists then we need to load it
-		pv, err = config.LoadFilePV(keyFile, stateFile)
+		pv, err = LoadFilePV(keyFile, stateFile)
 		if err != nil {
 			return err
 		}
 	}
 
-	if !bytes.Equal(pv.Key.PrivKey.Bytes(), key) {
+	if !bytes.Equal(pv.Key.PrivKey, key) {
 		return fmt.Errorf("existing private key does not match try using --reset flag")
 	}
 
 	return nil
 }
 
-func loadOrCreateNodeKey(config *config.Config, key []byte) error {
-	keyFile := config.NodeKeyFile()
-	if !tmos.FileExists(keyFile) {
-		nodeKey := p2p.NodeKey{
-			PrivKey: ed25519.PrivKey(key),
+func loadOrCreateNodeKey(cfg *config.Config, key []byte) error {
+	keyFile := cfg.NodeKeyFile()
+	if !fileExists(keyFile) {
+		nodeKey := &NodeKey{
+			PrivKey: ed25519.PrivateKey(key),
 		}
 		return nodeKey.SaveAs(keyFile)
 	}
 
-	nodeKey, err := p2p.LoadNodeKey(keyFile)
+	nodeKey, err := LoadNodeKey(keyFile)
 	if err != nil {
 		return err
 	}
 
-	if !bytes.Equal(nodeKey.PrivKey.Bytes(), key) {
+	if !bytes.Equal(nodeKey.PrivKey, key) {
 		return fmt.Errorf("existing private key does not match try using --reset flag")
 	}
 
 	return nil
 }
 
-func LoadOrGenerateTmPrivKey(privFileName string) (tmed25519.PrivKey, error) {
+func LoadOrGenerateTmPrivKey(privFileName string) (ed25519.PrivateKey, error) {
 	//attempt to load the priv validator key, create otherwise.
 	b, err := os.ReadFile(privFileName)
-	var privValKey tmed25519.PrivKey
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			//do not overwrite a private validator key.
-			return tmed25519.GenPrivKey(), nil
+			_, priv, err := ed25519.GenerateKey(nil)
+			if err != nil {
+				return nil, err
+			}
+			return priv, nil
 		}
 		return nil, err
 	}
-	var pvkey privval.FilePVKey
-	err = tmjson.Unmarshal(b, &pvkey)
+	var pvkey FilePVKey
+	err = json.Unmarshal(b, &pvkey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal existing private validator from %s: %v try using --reset flag", privFileName, err)
-	} else {
-		privValKey = pvkey.PrivKey.(tmed25519.PrivKey)
 	}
 
-	return privValKey, nil
+	return pvkey.PrivKey, nil
 }

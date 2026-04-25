@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -11,8 +11,6 @@ import (
 	"log/slog"
 	"strings"
 	"time"
-
-	coretypes "github.com/cometbft/cometbft/rpc/core/types"
 )
 
 // SyncStatus represents the current sync state returned by CometBFT
@@ -201,32 +199,3 @@ func (m *SyncMonitor) Reset() {
 	m.lastCheckTime = time.Time{}
 }
 
-// daemonStatusProvider adapts the CometBFT local client to StatusProvider
-type daemonStatusProvider struct {
-	client interface {
-		Status(ctx context.Context) (*coretypes.ResultStatus, error)
-	}
-}
-
-func (p *daemonStatusProvider) Status(ctx context.Context) (*SyncStatus, error) {
-	st, err := p.client.Status(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return &SyncStatus{
-		CatchingUp:        st.SyncInfo.CatchingUp,
-		LatestBlockHeight: st.SyncInfo.LatestBlockHeight,
-		LatestBlockTime:   st.SyncInfo.LatestBlockTime,
-	}, nil
-}
-
-// daemonPeerDialer adapts the CometBFT switch to PeerDialer
-type daemonPeerDialer struct {
-	sw interface {
-		DialPeersAsync(peers []string) error
-	}
-}
-
-func (d *daemonPeerDialer) DialPeersAsync(peers []string) error {
-	return d.sw.DialPeersAsync(peers)
-}

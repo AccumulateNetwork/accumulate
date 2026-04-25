@@ -44,8 +44,10 @@ func (h StateHash) String() string {
 // Certificate represents a certified header with signatures from 2f+1 validators.
 // A certificate proves that a quorum of validators have seen and validated the header.
 type Certificate struct {
-	// Header is the underlying header being certified.
-	Header Header
+	// Header is the underlying header being certified. Stored by pointer so the
+	// Header's internal RWMutex (used to guard the lazy digest cache) is not
+	// copied into certificates.
+	Header *Header
 	// Signatures contains the ed25519 signatures from validators who signed this header.
 	// Each signature is over the header digest.
 	Signatures [][]byte
@@ -60,10 +62,9 @@ type Certificate struct {
 }
 
 // NewCertificate creates a new certificate from a header and collected signatures.
-// The header fields are copied to avoid copying the mutex.
 func NewCertificate(header *Header, signatures [][]byte, signedAuthorities []uint16) *Certificate {
 	return &Certificate{
-		Header:            header.copyFields(),
+		Header:            header,
 		Signatures:        signatures,
 		SignedAuthorities: signedAuthorities,
 	}
@@ -359,7 +360,7 @@ func UnmarshalCertificate(data []byte) (*Certificate, error) {
 	}
 
 	return &Certificate{
-		Header:            header.copyFields(),
+		Header:            header,
 		Signatures:        signatures,
 		SignedAuthorities: authorities,
 		StateHash:         stateHash,
@@ -378,7 +379,7 @@ func (c *Certificate) Clone() *Certificate {
 	copy(authorities, c.SignedAuthorities)
 
 	return &Certificate{
-		Header:            c.Header.copyFields(),
+		Header:            c.Header.Clone(),
 		Signatures:        signatures,
 		SignedAuthorities: authorities,
 		StateHash:         c.StateHash,

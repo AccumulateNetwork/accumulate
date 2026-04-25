@@ -16,10 +16,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cometbft/cometbft/abci/types"
-	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
-	"github.com/cometbft/cometbft/libs/log"
-	tmtypes "github.com/cometbft/cometbft/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block"
@@ -40,7 +36,7 @@ import (
 )
 
 type InitOpts struct {
-	Logger log.Logger
+	Logger logging.Logger
 
 	NetworkID      string
 	PartitionId    string
@@ -50,7 +46,7 @@ type InitOpts struct {
 	OperatorKeys   [][]byte
 
 	// For Tendermint
-	ConsensusParams *tmtypes.ConsensusParams
+	ConsensusParams *cometbft.ConsensusParams
 
 	// Preloaded data
 	FactomAddresses func() (io.Reader, error)
@@ -90,14 +86,14 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) error {
 	b := &bootstrap{
 		InitOpts:    opts,
 		kvdb:        store,
-		db:          coredb.New(store, logging.FromCometBFT(opts.Logger).With("module", "database")),
+		db:          coredb.New(store, opts.Logger.With("module", "database")),
 		dataRecords: make([]DataRecord, 0),
 		records:     make([]protocol.Account, 0),
 		acmeIssued:  new(big.Int),
 		partition:   config.NetworkUrl{URL: protocol.PartitionUrl(opts.PartitionId)},
 	}
 	// Create the router
-	b.router = routing.NewRouter(routing.RouterOptions{Initial: gg.Routing, Logger: logging.FromCometBFT(b.Logger)})
+	b.router = routing.NewRouter(routing.RouterOptions{Initial: gg.Routing, Logger: b.Logger})
 
 	// Unpack snapshots
 	err := b.unpackSnapshots()
@@ -105,7 +101,7 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) error {
 		return errors.UnknownError.WithFormat("unpack snapshots: %w", err)
 	}
 
-	exec, err := block.NewGenesisExecutor(b.db, logging.FromCometBFT(opts.Logger), &config.Describe{
+	exec, err := block.NewGenesisExecutor(b.db, opts.Logger, &config.Describe{
 		NetworkType: opts.NetworkType,
 		PartitionId: opts.PartitionId,
 	}, gg, b.router)
@@ -146,7 +142,9 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) error {
 			// Convert the consensus parameters
 			doc := new(cometbft.GenesisDoc)
 			doc.ChainID = opts.NetworkID + "." + opts.PartitionId
-			doc.Params = (*cometbft.ConsensusParams)(opts.ConsensusParams)
+			if opts.ConsensusParams != nil {
+				doc.Params = opts.ConsensusParams.Copy()
+			}
 			for _, v := range opts.GenesisGlobals.Network.Validators {
 				if !v.IsActiveOn(opts.PartitionId) {
 					continue
@@ -159,10 +157,11 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) error {
 					name = v.Operator.ShortString()
 				}
 
-				key := tmed25519.PubKey(v.PublicKey)
+				// Compute CometBFT-compatible address: sha256(pubkey)[:20]
+				keyHash := sha256.Sum256(v.PublicKey)
 				doc.Validators = append(doc.Validators, &cometbft.Validator{
-					Address: key.Address(),
-					PubKey:  key,
+					Address: keyHash[:20],
+					PubKey:  v.PublicKey,
 					Type:    protocol.SignatureTypeED25519,
 					Power:   1,
 					Name:    name,
@@ -349,7 +348,11 @@ func (b *bootstrap) createAnchorPool() {
 func (b *bootstrap) createVoteScratchChain() error {
 	//create a vote scratch chain
 	wd := new(protocol.WriteData)
-	lci := types.CommitInfo{}
+	// Empty CommitInfo matching CometBFT ABCI types.CommitInfo JSON format
+	lci := struct {
+		Round int32        `json:"round,omitempty"`
+		Votes []struct{}   `json:"votes"`
+	}{}
 	data, err := json.Marshal(&lci)
 	if err != nil {
 		return errors.InternalError.WithFormat("marshal last commit info: %w", err)

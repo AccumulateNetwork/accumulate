@@ -11,12 +11,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -100,7 +100,7 @@ func (s *Simulator) InitFromGenesisWith(values *core.GlobalValues) {
 }
 
 func (s *Simulator) InitFromSnapshot(filename func(string) string) {
-	s.Init(simulator.WithSnapshot(func(partition string, _ *accumulated.NetworkInit, _ log.Logger) (ioutil2.SectionReader, error) {
+	s.Init(simulator.WithSnapshot(func(partition string, _ *accumulated.NetworkInit, _ logging.Logger) (ioutil2.SectionReader, error) {
 		return os.Open(filename(partition))
 	}))
 }

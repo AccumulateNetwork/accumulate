@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -850,7 +850,7 @@ func TestRunCompareInvalidCompareCommit(t *testing.T) {
 		TestConfig:    "{}",
 	}
 
-	db.InsertTestRun(run)
+	_, _ = db.InsertTestRun(run)
 
 	*baseID = 0
 	*compareID = 0
@@ -1035,7 +1035,7 @@ func TestRunTrendNullAnalysis(t *testing.T) {
 		NetworkConfig: "{}",
 		TestConfig:    "{}",
 	}
-	db.InsertTestRun(run)
+	_, _ = db.InsertTestRun(run)
 
 	*metric = "avg_tps"
 	*days = 30
@@ -1113,7 +1113,7 @@ func TestRunTrendFilteredInsufficientData(t *testing.T) {
 			NetworkConfig: "{}",
 			TestConfig:    "{}",
 		}
-		db.InsertTestRun(run)
+		_, _ = db.InsertTestRun(run)
 	}
 
 	// Filter by commit that only has 1 run
@@ -1323,7 +1323,7 @@ func TestTrendAllMetrics(t *testing.T) {
 			NetworkConfig: "{}",
 			TestConfig:    "{}",
 		}
-		db.InsertTestRun(run)
+		_, _ = db.InsertTestRun(run)
 	}
 
 	metrics := []string{"avg_tps", "peak_tps", "avg_latency", "p95_latency", "p99_latency", "error_rate"}

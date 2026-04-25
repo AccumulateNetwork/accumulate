@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -8,6 +8,7 @@ package main
 
 import (
 	"context"
+	cryptorand "crypto/rand"
 	"log/slog"
 	"math/rand"
 	"sync"
@@ -234,7 +235,10 @@ func (ad *ActiveDiscovery) randomWalkDiscovery(ctx context.Context) int {
 
 		// Generate a random peer ID to search for
 		randomBytes := make([]byte, 32)
-		rand.Read(randomBytes)
+		if _, err := cryptorand.Read(randomBytes); err != nil {
+			slog.Error("random read failed", "error", err)
+			continue
+		}
 
 		// FindPeersConnectedToPeer or GetClosestPeers does a DHT walk
 		closestCtx, cancel := context.WithTimeout(ctx, 30*time.Second)

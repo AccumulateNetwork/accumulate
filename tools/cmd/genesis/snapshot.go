@@ -12,7 +12,6 @@ import (
 	"io/fs"
 	"os"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -56,7 +55,7 @@ func init() {
 
 func addPrimary(_ *cobra.Command, args []string) {
 	operators := protocol.DnUrl().JoinPath(protocol.Operators)
-	addToSnapshot(args[0], args[1:], func(file string, row int, b *database.Batch, u *url.URL, _ []string, logger log.Logger) {
+	addToSnapshot(args[0], args[1:], func(file string, row int, b *database.Batch, u *url.URL, _ []string, logger logging.Logger) {
 		if !isValidIdentity(file, row, b, u, logger) {
 			return
 		}
@@ -85,7 +84,7 @@ func addPrimary(_ *cobra.Command, args []string) {
 }
 
 func addReserved(_ *cobra.Command, args []string) {
-	addToSnapshot(args[0], args[1:], func(file string, row int, b *database.Batch, u *url.URL, record []string, logger log.Logger) {
+	addToSnapshot(args[0], args[1:], func(file string, row int, b *database.Batch, u *url.URL, record []string, logger logging.Logger) {
 		if !isValidIdentity(file, row, b, u, logger) {
 			return
 		}
@@ -114,7 +113,7 @@ func addReserved(_ *cobra.Command, args []string) {
 	})
 }
 
-func addToSnapshot(filename string, files []string, process func(string, int, *database.Batch, *url.URL, []string, log.Logger)) {
+func addToSnapshot(filename string, files []string, process func(string, int, *database.Batch, *url.URL, []string, logging.Logger)) {
 	if flags.UrlCol <= 0 {
 		flags.UrlCol = 0
 	} else {
@@ -129,8 +128,9 @@ func addToSnapshot(filename string, files []string, process func(string, int, *d
 
 	logWriter, err := logging.NewConsoleWriter("plain")
 	check(err)
-	logger, err := logging.NewTendermintLogger(zerolog.New(logWriter), flags.LogLevel, false)
+	cmtLogger, err := logging.NewTendermintLogger(zerolog.New(logWriter), flags.LogLevel, false)
 	check(err)
+	logger := cmtLogger
 
 	dbdir, err := os.MkdirTemp("", "badger-*.db")
 	check(err)
@@ -142,7 +142,7 @@ func addToSnapshot(filename string, files []string, process func(string, int, *d
 
 	f, err := os.Open(filename)
 	if err == nil {
-		check(snapshot.Restore(db, f, logging.FromCometBFT(logger)))
+		check(snapshot.Restore(db, f, logger))
 		check(f.Close())
 	} else if errors.Is(err, fs.ErrNotExist) {
 		// Ok
@@ -202,7 +202,7 @@ func addToSnapshot(filename string, files []string, process func(string, int, *d
 	}))
 }
 
-func isValidIdentity(file string, row int, b *database.Batch, u *url.URL, logger log.Logger) bool {
+func isValidIdentity(file string, row int, b *database.Batch, u *url.URL, logger logging.Logger) bool {
 	err := protocol.IsValidAdiUrl(u, false)
 	if err != nil {
 		logger.Info("Invalid ADI URL", "file", file, "row", row, "url", u, "error", err)

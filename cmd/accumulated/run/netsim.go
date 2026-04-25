@@ -41,9 +41,9 @@ var devnetAsset = regexp.MustCompile(`^` +
 	`|` + `(dn|bvn\d+)-genesis.snap` + // Genesis snapshot
 	`)$`)
 
-var _ resetable = (*DevnetConfiguration)(nil)
+var _ resetable = (*NetSimConfiguration)(nil)
 
-func (d *DevnetConfiguration) reset(inst *Instance) error {
+func (d *NetSimConfiguration) reset(inst *Instance) error {
 	entries, err := os.ReadDir(inst.rootDir)
 	if err != nil {
 		return err
@@ -60,7 +60,7 @@ func (d *DevnetConfiguration) reset(inst *Instance) error {
 	return nil
 }
 
-func (d *DevnetConfiguration) apply(inst *Instance, cfg *Config) error {
+func (d *NetSimConfiguration) apply(inst *Instance, cfg *Config) error {
 	// Validate
 	if cfg.Network == "" {
 		return errors.BadRequest.With("must specify the network")
@@ -162,7 +162,7 @@ func (d *DevnetConfiguration) apply(inst *Instance, cfg *Config) error {
 	return nil
 }
 
-func (d *DevnetConfiguration) buildGenesis(inst *Instance, cfg *Config, nodes [][]*nodeOpts) error {
+func (d *NetSimConfiguration) buildGenesis(inst *Instance, cfg *Config, nodes [][]*nodeOpts) error {
 	v := setDefaultVal(&d.Globals, new(network.GlobalValues))
 
 	// Set the executor version
@@ -260,7 +260,7 @@ func (d *DevnetConfiguration) buildGenesis(inst *Instance, cfg *Config, nodes []
 			PartitionId:     part.ID,
 			NetworkType:     part.Type,
 			GenesisTime:     time.Now(),
-			Logger:          logging.CometBFTLogger((*logging.Slogger)(inst.logger).With("partition", part.ID)),
+			Logger:          logging.NewSlogLogger(inst.logger).With("partition", part.ID),
 			GenesisGlobals:  v,
 			OperatorKeys:    [][]byte{mainPubKey},
 			ConsensusParams: nil, // Not needed for DAG-BFT
@@ -275,7 +275,7 @@ func (d *DevnetConfiguration) buildGenesis(inst *Instance, cfg *Config, nodes []
 	return nil
 }
 
-func (d *DevnetConfiguration) generateKey(inst *Instance, cfg *Config, v ...any) ([]byte, error) {
+func (d *NetSimConfiguration) generateKey(inst *Instance, cfg *Config, v ...any) ([]byte, error) {
 	mainKey, err := cfg.P2P.Key.get(inst)
 	if err != nil {
 		return nil, err
@@ -303,7 +303,7 @@ func addrForPeer(addr multiaddr.Multiaddr, id peer.ID) multiaddr.Multiaddr {
 	return addr.Encapsulate(c)
 }
 
-func (d *DevnetConfiguration) applyBootstrap(inst *Instance, root *Config, ip ipOffset) error {
+func (d *NetSimConfiguration) applyBootstrap(inst *Instance, root *Config, ip ipOffset) error {
 	cfg, sub, err := d.addSubNode(inst, root, "bootstrap")
 	if err != nil {
 		return err
@@ -348,7 +348,7 @@ func (d *DevnetConfiguration) applyBootstrap(inst *Instance, root *Config, ip ip
 }
 
 type nodeOpts struct {
-	DevNet       *DevnetConfiguration
+	DevNet       *NetSimConfiguration
 	BVN          int
 	Node         int
 	IsVal        bool
@@ -401,7 +401,7 @@ func (n nodeOpts) apply(inst *Instance, root *Config) error {
 	return n.DevNet.writeSubNode(inst, root, cfg, sub, n.IP)
 }
 
-func (d *DevnetConfiguration) addSubNode(inst *Instance, root *Config, name string) (*Config, *SubnodeService, error) {
+func (d *NetSimConfiguration) addSubNode(inst *Instance, root *Config, name string) (*Config, *SubnodeService, error) {
 	sub := addService(root, &SubnodeService{Name: name}, func(s *SubnodeService) string { return s.Name })
 	cfg := &Config{Services: sub.Services}
 	cfg.file = inst.path(sub.Name, "accumulate.toml")
@@ -415,7 +415,7 @@ func (d *DevnetConfiguration) addSubNode(inst *Instance, root *Config, name stri
 	return cfg, sub, nil
 }
 
-func (d *DevnetConfiguration) writeSubNode(_ *Instance, root, cfg *Config, sub *SubnodeService, ip ipOffset) error {
+func (d *NetSimConfiguration) writeSubNode(_ *Instance, root, cfg *Config, sub *SubnodeService, ip ipOffset) error {
 	// Update the subnode configuration
 	sub.NodeKey = cfg.P2P.Key
 	sub.Services = cfg.Services

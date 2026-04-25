@@ -12,8 +12,6 @@ import (
 	"reflect"
 	"strings"
 
-	tmconfig "github.com/cometbft/cometbft/config"
-	"github.com/cometbft/cometbft/libs/log"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
 )
@@ -44,10 +42,10 @@ func TestLogWriter(t TB) func(string) (io.Writer, error) {
 	return func(format string) (io.Writer, error) {
 		var w io.Writer = &testLogger{Test: t}
 		switch strings.ToLower(format) {
-		case tmconfig.LogFormatPlain:
+		case LogFormatPlain:
 			w = newConsoleWriter(w)
 
-		case tmconfig.LogFormatJSON:
+		case LogFormatJSON:
 
 		default:
 			t.Fatalf("Unsupported log format: %s", format)
@@ -57,7 +55,7 @@ func TestLogWriter(t TB) func(string) (io.Writer, error) {
 	}
 }
 
-func NewTestLogger(t TB, format, level string, trace bool) log.Logger {
+func NewTestLogger(t TB, format, level string, trace bool) Logger {
 	writer, _ := TestLogWriter(t)(format)
 	level, writer, err := ParseLogLevel(level, writer)
 	require.NoError(t, err)
@@ -66,7 +64,7 @@ func NewTestLogger(t TB, format, level string, trace bool) log.Logger {
 	return logger.With("test", t.Name())
 }
 
-func ConsoleLoggerForTest(t TB, levels string) log.Logger {
+func ConsoleLoggerForTest(t TB, levels string) Logger {
 	w, err := NewConsoleWriter("plain")
 	require.NoError(t, err)
 	level, writer, err := ParseLogLevel(levels, w)

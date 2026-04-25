@@ -20,8 +20,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cometbft/cometbft/libs/log"
-	tmtypes "github.com/cometbft/cometbft/types"
 	"github.com/stretchr/testify/suite"
 	v2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2/query"
@@ -112,8 +110,8 @@ func (s *ValidationTestSuite) TestMain() {
 	values.Globals = new(NetworkGlobals)
 	values.Globals.MajorBlockSchedule = "*/10 * * * *"
 
-	var genDocs map[string]*tmtypes.GenesisDoc
-	var genesis simulator.SnapshotFunc = func(partition string, network *accumulated.NetworkInit, logger log.Logger) (ioutil2.SectionReader, error) {
+	var genDocs map[string][]byte
+	var genesis simulator.SnapshotFunc = func(partition string, network *accumulated.NetworkInit, logger logging.Logger) (ioutil2.SectionReader, error) {
 		var err error
 		if genDocs == nil {
 			genDocs, err = accumulated.BuildGenesisDocs(network, values, GenesisTime, logger, nil, []func() (ioutil2.SectionReader, error){func() (ioutil2.SectionReader, error) { return ioutil2.NewBuffer(liteSnap), nil }})
@@ -122,17 +120,11 @@ func (s *ValidationTestSuite) TestMain() {
 			}
 		}
 
-		var snapshot []byte
-		err = json.Unmarshal(genDocs[partition].AppState, &snapshot)
-		if err != nil {
-			return nil, errors.UnknownError.Wrap(err)
-		}
-
-		return ioutil2.NewBuffer(snapshot), nil
+		return ioutil2.NewBuffer(genDocs[partition]), nil
 	}
 
 	testData.State = map[string]*memory.DB{}
-	var openDb simulator.OpenDatabaseFunc = func(partition string, node int, logger log.Logger) database.Beginner {
+	var openDb simulator.OpenDatabaseFunc = func(partition string, node int, logger logging.Logger) database.Beginner {
 		mem := memory.New(logger)
 		if node == 0 {
 			testData.State[partition] = mem

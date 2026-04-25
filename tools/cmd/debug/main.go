@@ -22,7 +22,6 @@ import (
 )
 
 var (
-	outputJSON        bool
 	healContinuous    bool
 	cachedScan        string
 	verbose           bool

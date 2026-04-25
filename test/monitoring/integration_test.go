@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -29,9 +29,9 @@ import (
 )
 
 // TestMetricsAccuracy validates that the metrics service returns accurate TPS calculations
-// within ±5% tolerance as specified in the issue requirements
-// NOTE: Skipped because Metrics service is not available in simulator environment
-func _TestMetricsAccuracy(t *testing.T) {
+// within ±5% tolerance as specified in the issue requirements.
+func TestMetricsAccuracy(t *testing.T) {
+	t.Skip("Metrics service is not available in simulator environment")
 	acctesting.DisableDebugFeatures()
 	defer acctesting.EnableDebugFeatures()
 
@@ -148,9 +148,9 @@ func TestDataSetLogIntegration(t *testing.T) {
 	require.GreaterOrEqual(t, p99, p95)
 }
 
-// TestLoadPatternValidation tests the monitoring system with different load patterns
-// NOTE: Skipped because Metrics service is not available in simulator environment
-func _TestLoadPatternValidation(t *testing.T) {
+// TestLoadPatternValidation tests the monitoring system with different load patterns.
+func TestLoadPatternValidation(t *testing.T) {
+	t.Skip("Metrics service is not available in simulator environment")
 	acctesting.DisableDebugFeatures()
 	defer acctesting.EnableDebugFeatures()
 
@@ -223,9 +223,9 @@ func _TestLoadPatternValidation(t *testing.T) {
 	}
 }
 
-// TestMetricsServiceEdgeCases tests edge cases in metrics calculation
-// NOTE: Skipped because Metrics service is not available in simulator environment
-func _TestMetricsServiceEdgeCases(t *testing.T) {
+// TestMetricsServiceEdgeCases tests edge cases in metrics calculation.
+func TestMetricsServiceEdgeCases(t *testing.T) {
+	t.Skip("Metrics service is not available in simulator environment")
 	acctesting.DisableDebugFeatures()
 	defer acctesting.EnableDebugFeatures()
 

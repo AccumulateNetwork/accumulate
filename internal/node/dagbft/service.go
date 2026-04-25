@@ -21,7 +21,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/adapter"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
@@ -419,6 +418,7 @@ func (s *Service) processCommittedCertificate(cert *types.Certificate) error {
 	batches := make(map[types.BatchDigest]*types.Batch)
 	committedDigests := make([]types.BatchDigest, 0)
 	for digest := range cert.Header.Payload {
+		digest := digest // local copy to avoid range-var aliasing
 		var found bool
 		for _, w := range workers {
 			batch, err := w.GetBatch(digest)
@@ -539,8 +539,6 @@ func (s *Service) Status() Status {
 	return status
 }
 
-// For genesis loading - use existing infrastructure
-var _ = genesis.DocProvider
 
 // onValidatorSetChange is called when the adapter detects a validator set change.
 // It updates the consensus node's committee to reflect the new validator set.

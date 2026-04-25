@@ -19,7 +19,7 @@ import (
 
 func (c *CoreValidatorConfiguration) apply(_ *Instance, cfg *Config) error {
 	// Set core validator defaults
-	setDefaultPtr(&c.StorageType, StorageTypeLevelDB)
+	setDefaultPtr(&c.StorageType, StorageTypeBadger)
 
 	// Validate
 	if c.Listen == nil {
@@ -61,7 +61,6 @@ func (c *CoreValidatorConfiguration) apply(_ *Instance, cfg *Config) error {
 			Genesis:        c.DnGenesis,
 			BootstrapPeers: c.DnBootstrapPeers,
 			Dir:            "dnn",
-			NumWorkers:     c.NumWorkers,
 		}.apply(cfg)
 		if err != nil {
 			return err
@@ -78,7 +77,6 @@ func (c *CoreValidatorConfiguration) apply(_ *Instance, cfg *Config) error {
 			Genesis:        c.BvnGenesis,
 			BootstrapPeers: c.BvnBootstrapPeers,
 			Dir:            "bvnn",
-			NumWorkers:     c.NumWorkers,
 		}.apply(cfg)
 		if err != nil {
 			return err
@@ -107,3 +105,5 @@ func (c *CoreValidatorConfiguration) apply(_ *Instance, cfg *Config) error {
 
 	return nil
 }
+
+// partOpts is defined in partition.go (DAG-BFT version)

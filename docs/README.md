@@ -27,7 +27,21 @@ A comprehensive audit including:
 
 ---
 
-## 📖 Other Documentation
+## Unified Sharding (64-Shard Parallel Execution)
+
+Accumulate uses deterministic ADI-based sharding to parallelize transaction
+execution within each BVN. Transactions are routed to independent shards by
+hashing the identity URL, enabling near-linear throughput scaling on multi-core
+hardware. The default configuration uses 64 shards.
+
+- [Architecture](./sharding-architecture.md) -- Design, components, routing, thread safety
+- [Operations](./sharding-operations.md) -- Configuration, monitoring, troubleshooting
+- [Development](./sharding-development.md) -- Integration, testing, debugging
+- [Performance](./sharding-performance.md) -- Benchmarks, scalability, bottleneck analysis
+
+---
+
+## Other Documentation
 
 (Additional documentation sections can be added here as they're created)
 

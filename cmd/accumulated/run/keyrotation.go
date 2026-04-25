@@ -41,7 +41,6 @@ func (s *KeyRotationService) Provides() []ioc.Provided {
 // Prometheus metrics
 var (
 	krMeter               = otel.Meter("gitlab.com/accumulatenetwork/accumulate/pkg/consensus/keyrotation")
-	krRotationEvents      = must(krMeter.Int64Counter("key_rotation_events"))
 	krCurrentKeyAge       = must(krMeter.Int64ObservableGauge("key_rotation_current_age_days"))
 	krDaysUntilExpiration = must(krMeter.Int64ObservableGauge("key_rotation_days_until_expiration"))
 )

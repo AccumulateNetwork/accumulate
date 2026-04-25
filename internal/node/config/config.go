@@ -16,8 +16,6 @@ import (
 	"strings"
 	"time"
 
-	tm "github.com/cometbft/cometbft/config"
-	"github.com/cometbft/cometbft/privval"
 	"github.com/mitchellh/mapstructure"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/pelletier/go-toml"
@@ -40,7 +38,7 @@ const (
 	accConfigFile = "accumulate.toml"
 )
 
-const DevNet = "devnet"
+const NetSim = "netsim" // OneNodeNetSim, formally known as devnet
 
 type NodeType uint64
 type PortOffset uint64
@@ -105,21 +103,9 @@ func (l LogLevel) String() string {
 
 var DefaultLogLevels = LogLevel{}.
 	SetDefault("error").
-	SetModule("statesync", "info").
-	SetModule("snapshot", "info").
-	SetModule("restore", "info").
-	// SetModule("accumulate", "info").
-	// SetModule("main", "info").
-	// SetModule("state", "info").
-	// SetModule("statesync", "info").
-	// SetModule("accumulate", "debug").
 	SetModule("executor", "info").
 	SetModule("synthetic", "info").
-	// SetModule("storage", "debug").
-	// SetModule("database", "debug").
 	SetModule("website", "info").
-	// SetModule("disk-monitor", "info").
-	// SetModule("init", "info").
 	String()
 
 func Default(netName string, net protocol.PartitionType, _ NodeType, partitionId string) *Config {
@@ -133,15 +119,11 @@ func Default(netName string, net protocol.PartitionType, _ NodeType, partitionId
 	c.Accumulate.Storage.Path = filepath.Join("data", "accumulate.db")
 	c.Accumulate.BPT.Sharding.Enabled = false  // Disabled by default for backward compatibility
 	c.Accumulate.BPT.Sharding.Depth = 4        // 16 shards - optimal for 16-core systems
-	c.Accumulate.Snapshots.Enable = false
-	c.Accumulate.Snapshots.Directory = "snapshots"
-	c.Accumulate.Snapshots.RetainCount = 10
-	c.Accumulate.Snapshots.Schedule = protocol.DefaultMajorBlockSchedule
 	c.Accumulate.AnalysisLog.Directory = "analysis"
 	c.Accumulate.AnalysisLog.Enabled = false
 	c.Accumulate.API.ReadHeaderTimeout = 10 * time.Second
 	c.Accumulate.P2P.BootstrapPeers = accumulate.BootstrapServers
-	c.Config = *tm.DefaultConfig()
+	c.TendermintConfig = *DefaultTendermintConfig()
 	c.LogLevel = DefaultLogLevels
 	c.Instrumentation.Prometheus = true
 	c.ProxyApp = ""
@@ -150,7 +132,7 @@ func Default(netName string, net protocol.PartitionType, _ NodeType, partitionId
 }
 
 type Config struct {
-	tm.Config
+	TendermintConfig
 	Accumulate Accumulate
 }
 
@@ -163,7 +145,6 @@ type Accumulate struct {
 	// TODO: move network config to its own file since it will be constantly changing over time.
 	//	NetworkConfig string      `toml:"network" mapstructure:"network"`
 	Healing     Healing     `toml:"healing" mapstructure:"healing"`
-	Snapshots   Snapshots   `toml:"snapshots" mapstructure:"snapshots"`
 	Storage     Storage     `toml:"storage" mapstructure:"storage"`
 	BPT         BPT         `toml:"bpt" mapstructure:"bpt"`
 	P2P         P2P         `toml:"p2p" mapstructure:"p2p"`
@@ -182,23 +163,6 @@ type Logging struct {
 type Healing struct {
 	// Enable enables healing
 	Enable bool `toml:"enable" mapstructure:"enable"`
-}
-
-type Snapshots struct {
-	// Enable enables snapshots
-	Enable bool `toml:"enable" mapstructure:"enable"`
-
-	// EnableIndexing enables indexing of snapshots
-	EnableIndexing bool `toml:"enable-indexing" mapstructure:"enable-indexing"`
-
-	// Directory is the directory to store snapshots in
-	Directory string `toml:"directory" mapstructure:"directory"`
-
-	// RetainCount is the number of snapshots to retain
-	RetainCount int `toml:"retain" mapstructure:"retain"`
-
-	// Schedule is the schedule for capturing snapshots.
-	Schedule string `toml:"schedule" mapstructure:"schedule"`
 }
 
 type AnalysisLog struct {
@@ -302,12 +266,6 @@ func OffsetPort(addr string, basePort int, offset int) (*url.URL, error) {
 	return u, nil
 }
 
-func LoadFilePV(keyFilePath, stateFilePath string) (*privval.FilePV, error) {
-	// TODO Submit an MR to CometBFT to fix their bull**** (calling os.Exit if
-	// the config file load fails)
-	return privval.LoadFilePV(keyFilePath, stateFilePath), nil
-}
-
 func Load(dir string) (*Config, error) {
 	return loadFile(dir, filepath.Join(dir, configDir, tmConfigFile), filepath.Join(dir, configDir, accConfigFile))
 }
@@ -322,7 +280,7 @@ func loadFile(dir, tmFile, accFile string) (*Config, error) {
 	if err != nil {
 		// If Tendermint config doesn't exist, use default and continue
 		// This allows DAG-BFT nodes to run without CometBFT configuration
-		tmCfg = tm.DefaultConfig()
+		tmCfg = DefaultTendermintConfig()
 		tmCfg.SetRoot(dir)
 	}
 
@@ -346,7 +304,7 @@ func Store(config *Config) (err error) {
 		}
 	}()
 
-	tm.WriteConfigFile(filepath.Join(config.RootDir, configDir, tmConfigFile), &config.Config)
+	WriteTendermintConfigFile(filepath.Join(config.RootDir, configDir, tmConfigFile), &config.TendermintConfig)
 
 	return StoreAcc(config, filepath.Join(config.RootDir, configDir))
 }
@@ -365,8 +323,8 @@ func writeTomlFile(v any, file string) error {
 	return toml.NewEncoder(f).Encode(v)
 }
 
-func loadTendermint(dir, file string) (*tm.Config, error) {
-	config := tm.DefaultConfig()
+func loadTendermint(dir, file string) (*TendermintConfig, error) {
+	config := DefaultTendermintConfig()
 
 	err := load(dir, file, config)
 	if err != nil {
@@ -375,7 +333,7 @@ func loadTendermint(dir, file string) (*tm.Config, error) {
 
 	config.SetRoot(dir)
 
-	tm.EnsureRoot(config.RootDir)
+	EnsureRoot(config.RootDir)
 	if err := config.ValidateBasic(); err != nil {
 		return nil, fmt.Errorf("validate: %v", err)
 	}

@@ -32,7 +32,6 @@ var (
 	sCoreValidatorConfiguration schema.Methods[*CoreValidatorConfiguration, *CoreValidatorConfiguration, *schema.CompositeType]
 	sCoreValidatorMode          schema.EnumMethods[CoreValidatorMode]
 	sDAGBFTService              schema.Methods[*DAGBFTService, *DAGBFTService, *schema.CompositeType]
-	sDevnetConfiguration        schema.Methods[*DevnetConfiguration, *DevnetConfiguration, *schema.CompositeType]
 	sEventsService              schema.Methods[*EventsService, *EventsService, *schema.CompositeType]
 	sExpBlockDBStorage          schema.Methods[*ExpBlockDBStorage, *ExpBlockDBStorage, *schema.CompositeType]
 	sFaucetService              schema.Methods[*FaucetService, *FaucetService, *schema.CompositeType]
@@ -52,6 +51,7 @@ var (
 	sMetricsService             schema.Methods[*MetricsService, *MetricsService, *schema.CompositeType]
 	sMonitor                    schema.Methods[*Monitor, *Monitor, *schema.CompositeType]
 	sMultiaddr                  schema.Methods[*Multiaddr, *Multiaddr, *schema.ExternalType]
+	sNetSimConfiguration        schema.Methods[*NetSimConfiguration, *NetSimConfiguration, *schema.CompositeType]
 	sNetworkService             schema.Methods[*NetworkService, *NetworkService, *schema.CompositeType]
 	sOtlpConfig                 schema.Methods[*OtlpConfig, *OtlpConfig, *schema.CompositeType]
 	sP2P                        schema.Methods[*P2P, *P2P, *schema.CompositeType]
@@ -64,7 +64,6 @@ var (
 	sRouterService              schema.Methods[*RouterService, *RouterService, *schema.CompositeType]
 	sService                    schema.UnionMethods[Service, ServiceType]
 	sServiceType                schema.EnumMethods[ServiceType]
-	sSnapshotService            schema.Methods[*SnapshotService, *SnapshotService, *schema.CompositeType]
 	sStorage                    schema.UnionMethods[Storage, StorageType]
 	sStorageService             schema.Methods[*StorageService, *StorageService, *schema.CompositeType]
 	sStorageType                schema.EnumMethods[StorageType]
@@ -238,11 +237,11 @@ func init() {
 						ResolveElemTo(&deferredTypes, "GatewayConfiguration"),
 				},
 				{
-					Discriminator: "devnet",
+					Discriminator: "netSim",
 					Type: (&schema.PointerType{
 						TypeBase: schema.TypeBase{},
 					}).
-						ResolveElemTo(&deferredTypes, "DevnetConfiguration"),
+						ResolveElemTo(&deferredTypes, "NetSimConfiguration"),
 				},
 				{
 					Discriminator: "follower",
@@ -265,10 +264,6 @@ func init() {
 					Name:  "CoreValidator",
 					Value: 1,
 				},
-				"Devnet": {
-					Name:  "Devnet",
-					Value: 3,
-				},
 				"Follower": {
 					Name:  "Follower",
 					Value: 4,
@@ -276,6 +271,10 @@ func init() {
 				"Gateway": {
 					Name:  "Gateway",
 					Value: 2,
+				},
+				"NetSim": {
+					Name:  "NetSim",
+					Value: 3,
 				},
 			},
 		}).SetGoType()
@@ -330,14 +329,6 @@ func init() {
 			},
 			{
 				Name:     "EnableDirectDispatch",
-				Optional: true,
-				Type: &schema.PointerType{
-					TypeBase: schema.TypeBase{},
-					Elem:     &schema.SimpleType{Type: schema.SimpleTypeBool},
-				},
-			},
-			{
-				Name:     "EnableSnapshots",
 				Optional: true,
 				Type: &schema.PointerType{
 					TypeBase: schema.TypeBase{},
@@ -484,45 +475,6 @@ func init() {
 		},
 	}).SetGoType()
 
-	sDevnetConfiguration = schema.WithMethods[*DevnetConfiguration, *DevnetConfiguration](&schema.CompositeType{
-		TypeBase: schema.TypeBase{
-			Name: "DevnetConfiguration",
-		},
-		Fields: []*schema.Field{
-			(&schema.Field{
-				Name: "Listen",
-			}).ResolveTo(&deferredTypes, "Multiaddr"),
-			{
-				Name: "Bvns",
-				Type: &schema.SimpleType{Type: schema.SimpleTypeUint},
-			},
-			{
-				Name: "Validators",
-				Type: &schema.SimpleType{Type: schema.SimpleTypeUint},
-			},
-			{
-				Name:     "Followers",
-				Optional: true,
-				Type:     &schema.SimpleType{Type: schema.SimpleTypeUint},
-			},
-			{
-				Name: "Globals",
-				Type: &schema.PointerType{
-					TypeBase: schema.TypeBase{},
-					Elem:     schema.TypeReferenceFor[network.GlobalValues](),
-				},
-			},
-			{
-				Name:     "StorageType",
-				Optional: true,
-				Type: (&schema.PointerType{
-					TypeBase: schema.TypeBase{},
-				}).
-					ResolveElemTo(&deferredTypes, "StorageType"),
-			},
-		},
-	}).SetGoType()
-
 	sEventsService = schema.WithMethods[*EventsService, *EventsService](&schema.CompositeType{
 		TypeBase: schema.TypeBase{
 			Name: "EventsService",
@@ -619,14 +571,6 @@ func init() {
 			},
 			{
 				Name:     "EnableDirectDispatch",
-				Optional: true,
-				Type: &schema.PointerType{
-					TypeBase: schema.TypeBase{},
-					Elem:     &schema.SimpleType{Type: schema.SimpleTypeBool},
-				},
-			},
-			{
-				Name:     "EnableSnapshots",
 				Optional: true,
 				Type: &schema.PointerType{
 					TypeBase: schema.TypeBase{},
@@ -1032,6 +976,45 @@ func init() {
 			Encoder:    schema.WidgetExternalEncoder(wMultiaddr),
 		}).SetGoType()
 
+	sNetSimConfiguration = schema.WithMethods[*NetSimConfiguration, *NetSimConfiguration](&schema.CompositeType{
+		TypeBase: schema.TypeBase{
+			Name: "NetSimConfiguration",
+		},
+		Fields: []*schema.Field{
+			(&schema.Field{
+				Name: "Listen",
+			}).ResolveTo(&deferredTypes, "Multiaddr"),
+			{
+				Name: "Bvns",
+				Type: &schema.SimpleType{Type: schema.SimpleTypeUint},
+			},
+			{
+				Name: "Validators",
+				Type: &schema.SimpleType{Type: schema.SimpleTypeUint},
+			},
+			{
+				Name:     "Followers",
+				Optional: true,
+				Type:     &schema.SimpleType{Type: schema.SimpleTypeUint},
+			},
+			{
+				Name: "Globals",
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     schema.TypeReferenceFor[network.GlobalValues](),
+				},
+			},
+			{
+				Name:     "StorageType",
+				Optional: true,
+				Type: (&schema.PointerType{
+					TypeBase: schema.TypeBase{},
+				}).
+					ResolveElemTo(&deferredTypes, "StorageType"),
+			},
+		},
+	}).SetGoType()
+
 	sNetworkService = schema.WithMethods[*NetworkService, *NetworkService](&schema.CompositeType{
 		TypeBase: schema.TypeBase{
 			Name: "NetworkService",
@@ -1369,13 +1352,6 @@ func init() {
 						ResolveElemTo(&deferredTypes, "RouterService"),
 				},
 				{
-					Discriminator: "snapshot",
-					Type: (&schema.PointerType{
-						TypeBase: schema.TypeBase{},
-					}).
-						ResolveElemTo(&deferredTypes, "SnapshotService"),
-				},
-				{
 					Discriminator: "faucet",
 					Type: (&schema.PointerType{
 						TypeBase: schema.TypeBase{},
@@ -1435,10 +1411,6 @@ func init() {
 					Name:  "Router",
 					Value: 8,
 				},
-				"Snapshot": {
-					Name:  "Snapshot",
-					Value: 9,
-				},
 				"Storage": {
 					Name:  "Storage",
 					Value: 1,
@@ -1449,58 +1421,6 @@ func init() {
 				},
 			},
 		}).SetGoType()
-
-	sSnapshotService = schema.WithMethods[*SnapshotService, *SnapshotService](&schema.CompositeType{
-		TypeBase: schema.TypeBase{
-			Name: "SnapshotService",
-		},
-		Fields: []*schema.Field{
-			{
-				Name: "Partition",
-				Type: &schema.SimpleType{Type: schema.SimpleTypeString},
-			},
-			{
-				Name:     "Storage",
-				Optional: true,
-				Type: &schema.PointerType{
-					TypeBase: schema.TypeBase{},
-					Elem:     schema.TypeReferenceFor[StorageOrRef](),
-				},
-			},
-			{
-				Name:        "Directory",
-				Description: "is the directory to store snapshots in",
-				Type:        &schema.SimpleType{Type: schema.SimpleTypeString},
-			},
-			{
-				Name:        "Schedule",
-				Description: "is the schedule for automatically capturing snapshots",
-				Optional:    true,
-				Type: &schema.PointerType{
-					TypeBase: schema.TypeBase{},
-					Elem:     schema.TypeReferenceFor[network.CronSchedule](),
-				},
-			},
-			{
-				Name:        "RetainCount",
-				Description: "is the number of snapshots to retain",
-				Optional:    true,
-				Type: &schema.PointerType{
-					TypeBase: schema.TypeBase{},
-					Elem:     &schema.SimpleType{Type: schema.SimpleTypeUint},
-				},
-			},
-			{
-				Name:        "EnableIndexing",
-				Description: "enables indexing of snapshots",
-				Optional:    true,
-				Type: &schema.PointerType{
-					TypeBase: schema.TypeBase{},
-					Elem:     &schema.SimpleType{Type: schema.SimpleTypeBool},
-				},
-			},
-		},
-	}).SetGoType()
 
 	sStorage = schema.WithUnionMethods[Storage, StorageType](
 		&schema.UnionType{
@@ -1711,7 +1631,6 @@ func init() {
 		sCoreValidatorConfiguration.Type,
 		sCoreValidatorMode.Type,
 		sDAGBFTService.Type,
-		sDevnetConfiguration.Type,
 		sEventsService.Type,
 		sExpBlockDBStorage.Type,
 		sFaucetService.Type,
@@ -1731,6 +1650,7 @@ func init() {
 		sMetricsService.Type,
 		sMonitor.Type,
 		sMultiaddr.Type,
+		sNetSimConfiguration.Type,
 		sNetworkService.Type,
 		sOtlpConfig.Type,
 		sP2P.Type,
@@ -1743,7 +1663,6 @@ func init() {
 		sRouterService.Type,
 		sService.Type,
 		sServiceType.Type,
-		sSnapshotService.Type,
 		sStorage.Type,
 		sStorageService.Type,
 		sStorageType.Type,

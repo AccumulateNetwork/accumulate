@@ -101,7 +101,6 @@ func NewHandler(opts Options) (*Handler, error) {
 		jsonrpc.NodeService{NodeService: selfClient},
 		jsonrpc.ConsensusService{ConsensusService: selfClient},
 		jsonrpc.NetworkService{NetworkService: client},
-		jsonrpc.SnapshotService{SnapshotService: client},
 		jsonrpc.MetricsService{MetricsService: client},
 		jsonrpc.Querier{Querier: &api.Collator{Querier: client, Network: client}},
 		jsonrpc.Submitter{Submitter: client},
@@ -118,7 +117,6 @@ func NewHandler(opts Options) (*Handler, error) {
 		message.NodeService{NodeService: selfClient},
 		message.ConsensusService{ConsensusService: selfClient},
 		message.NetworkService{NetworkService: client},
-		message.SnapshotService{SnapshotService: client},
 		message.MetricsService{MetricsService: client},
 		message.Querier{Querier: &api.Collator{Querier: client, Network: client}},
 		message.Submitter{Submitter: client},
@@ -132,7 +130,7 @@ func NewHandler(opts Options) (*Handler, error) {
 
 	// JSON-RPC API v2
 	v2, err := v2.NewJrpc(v2.Options{
-		Logger:        logging.CometBFTLogger(opts.Logger),
+		Logger:        opts.Logger,
 		Describe:      opts.Network,
 		TxMaxWaitTime: opts.MaxWait,
 		LocalV3:       selfClient,
@@ -259,14 +257,6 @@ func (r unrouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 
 	case *message.NetworkStatusRequest:
 		service.Type = api.ServiceTypeNetwork
-
-		// Respect the partition if it is specified
-		if msg.Partition != "" {
-			service.Argument = msg.Partition
-		}
-
-	case *message.ListSnapshotsRequest:
-		service.Type = api.ServiceTypeSnapshot
 
 		// Respect the partition if it is specified
 		if msg.Partition != "" {

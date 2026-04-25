@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -49,7 +49,6 @@ type Metrics struct {
 	TotalFailed      atomic.Uint64
 	OperationCounts  map[string]*atomic.Uint64
 	OperationLatency map[string]*LatencyTracker
-	mu               sync.RWMutex
 }
 
 // LatencyTracker tracks latency statistics

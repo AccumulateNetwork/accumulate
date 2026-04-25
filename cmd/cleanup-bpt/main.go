@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -11,8 +11,8 @@ import (
 	"fmt"
 	"os"
 
-	cometLog "github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	cmdutil "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
@@ -50,7 +50,7 @@ func main() {
 	case "leveldb":
 		db, err = database.OpenLevelDB(dbPath, nil)
 	case "badger":
-		db, err = database.OpenBadger(dbPath, cometLog.NewNopLogger())
+		db, err = database.OpenBadger(dbPath, logging.Nop{})
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown database type: %s\n", dbType)
 		os.Exit(1)
@@ -74,7 +74,6 @@ func main() {
 	// Iterate through BPT and find orphaned entries
 	orphanedCount := 0
 	validCount := 0
-	var orphanedKeys []string
 
 	it := batch.IterateAccounts()
 	for it.Next() {
@@ -86,7 +85,6 @@ func main() {
 		if err != nil {
 			if errors.Is(err, errors.NotFound) {
 				orphanedCount++
-				orphanedKeys = append(orphanedKeys, u.String())
 				if orphanedCount <= 20 {
 					fmt.Printf("  Orphaned: %s\n", u)
 				}

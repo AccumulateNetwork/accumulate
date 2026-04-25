@@ -182,9 +182,9 @@ type ConfigurationType int64
 
 const (
 	ConfigurationTypeCoreValidator ConfigurationType = 1
-	ConfigurationTypeDevnet        ConfigurationType = 3
 	ConfigurationTypeFollower      ConfigurationType = 4
 	ConfigurationTypeGateway       ConfigurationType = 2
+	ConfigurationTypeNetSim        ConfigurationType = 3
 )
 
 // SetByName looks up a ConfigurationType by name.
@@ -225,7 +225,6 @@ type CoreValidatorConfiguration struct {
 	BvnBootstrapPeers    []Multiaddr
 	EnableHealing        *bool
 	EnableDirectDispatch *bool
-	EnableSnapshots      *bool
 	MaxEnvelopesPerBlock *uint64
 	StorageType          *StorageType
 	NumWorkers           *int64
@@ -325,37 +324,6 @@ func (v *DAGBFTService) UnmarshalJSON(b []byte) error {
 	return sDAGBFTService.UnmarshalJSON(b, v)
 }
 
-type DevnetConfiguration struct {
-	Listen      Multiaddr
-	Bvns        uint64
-	Validators  uint64
-	Followers   uint64
-	Globals     *network.GlobalValues
-	StorageType *StorageType
-}
-
-func (DevnetConfiguration) Type() ConfigurationType { return ConfigurationTypeDevnet }
-
-// Copy returns a copy of the DevnetConfiguration.
-func (v *DevnetConfiguration) Copy() *DevnetConfiguration {
-	return sDevnetConfiguration.Copy(v)
-}
-
-// EqualDevnetConfiguration returns true if V is equal to U.
-func (v *DevnetConfiguration) Equal(u *DevnetConfiguration) bool {
-	return sDevnetConfiguration.Equal(v, u)
-}
-
-// MarshalBinary marshals the DevnetConfiguration to JSON.
-func (v *DevnetConfiguration) MarshalJSON() ([]byte, error) {
-	return sDevnetConfiguration.MarshalJSON(v)
-}
-
-// UnmarshalJSON unmarshals the DevnetConfiguration from JSON.
-func (v *DevnetConfiguration) UnmarshalJSON(b []byte) error {
-	return sDevnetConfiguration.UnmarshalJSON(b, v)
-}
-
 type EventsService struct {
 	Partition string
 }
@@ -446,7 +414,6 @@ type FollowerConfiguration struct {
 	BvnBootstrapPeers    []Multiaddr
 	EnableHealing        *bool
 	EnableDirectDispatch *bool
-	EnableSnapshots      *bool
 	MaxEnvelopesPerBlock *uint64
 	StorageType          *StorageType
 }
@@ -865,6 +832,37 @@ func (v *Monitor) UnmarshalJSON(b []byte) error {
 
 type Multiaddr = multiaddr.Multiaddr
 
+type NetSimConfiguration struct {
+	Listen      Multiaddr
+	Bvns        uint64
+	Validators  uint64
+	Followers   uint64
+	Globals     *network.GlobalValues
+	StorageType *StorageType
+}
+
+func (NetSimConfiguration) Type() ConfigurationType { return ConfigurationTypeNetSim }
+
+// Copy returns a copy of the NetSimConfiguration.
+func (v *NetSimConfiguration) Copy() *NetSimConfiguration {
+	return sNetSimConfiguration.Copy(v)
+}
+
+// EqualNetSimConfiguration returns true if V is equal to U.
+func (v *NetSimConfiguration) Equal(u *NetSimConfiguration) bool {
+	return sNetSimConfiguration.Equal(v, u)
+}
+
+// MarshalBinary marshals the NetSimConfiguration to JSON.
+func (v *NetSimConfiguration) MarshalJSON() ([]byte, error) {
+	return sNetSimConfiguration.MarshalJSON(v)
+}
+
+// UnmarshalJSON unmarshals the NetSimConfiguration from JSON.
+func (v *NetSimConfiguration) UnmarshalJSON(b []byte) error {
+	return sNetSimConfiguration.UnmarshalJSON(b, v)
+}
+
 type NetworkService struct {
 	Partition string
 }
@@ -1147,7 +1145,6 @@ const (
 	ServiceTypeNetwork     ServiceType = 4
 	ServiceTypeQuerier     ServiceType = 3
 	ServiceTypeRouter      ServiceType = 8
-	ServiceTypeSnapshot    ServiceType = 9
 	ServiceTypeStorage     ServiceType = 1
 	ServiceTypeSubnode     ServiceType = 11
 )
@@ -1177,41 +1174,6 @@ func (v ServiceType) MarshalJSON() ([]byte, error) {
 // UnmarshalJSON unmarshals the ServiceType from JSON.
 func (v *ServiceType) UnmarshalJSON(b []byte) error {
 	return sServiceType.UnmarshalJSON(b, v)
-}
-
-type SnapshotService struct {
-	Partition string
-	Storage   *StorageOrRef
-	// Directory is the directory to store snapshots in.
-	Directory string
-	// Schedule is the schedule for automatically capturing snapshots.
-	Schedule *network.CronSchedule
-	// RetainCount is the number of snapshots to retain.
-	RetainCount *uint64
-	// EnableIndexing enables indexing of snapshots.
-	EnableIndexing *bool
-}
-
-func (SnapshotService) Type() ServiceType { return ServiceTypeSnapshot }
-
-// Copy returns a copy of the SnapshotService.
-func (v *SnapshotService) Copy() *SnapshotService {
-	return sSnapshotService.Copy(v)
-}
-
-// EqualSnapshotService returns true if V is equal to U.
-func (v *SnapshotService) Equal(u *SnapshotService) bool {
-	return sSnapshotService.Equal(v, u)
-}
-
-// MarshalBinary marshals the SnapshotService to JSON.
-func (v *SnapshotService) MarshalJSON() ([]byte, error) {
-	return sSnapshotService.MarshalJSON(v)
-}
-
-// UnmarshalJSON unmarshals the SnapshotService from JSON.
-func (v *SnapshotService) UnmarshalJSON(b []byte) error {
-	return sSnapshotService.UnmarshalJSON(b, v)
 }
 
 // TODO type Storage interface {}
