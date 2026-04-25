@@ -23,6 +23,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/badger"
 	"gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
@@ -94,12 +95,11 @@ func runNode(cmd *cobra.Command, _ []string) (string, error) {
 	color.HiGreen("------ starting a new node ------")
 
 	err := prog.Run()
-	if err != nil {
-		//if it is already stopped, that is ok.
-		if err.Error() != "already stopped" {
-			slog.Error("Service failed", "error", err)
-			return "", err
-		}
+	if err != nil && !errors.Is(err, accumulated.ErrAlreadyStopped) {
+		// "already stopped" is a benign signal that Stop() was called twice
+		// (e.g. by both the watchdog and a SIGTERM); any other error is fatal.
+		slog.Error("Service failed", "error", err)
+		return "", err
 	}
 	return "shutdown complete", nil
 }

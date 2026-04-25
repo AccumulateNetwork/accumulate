@@ -50,7 +50,8 @@ type BaseConfig struct {
 
 // RPCConfig holds RPC server configuration.
 type RPCConfig struct {
-	ListenAddress string `mapstructure:"laddr" toml:"laddr"`
+	ListenAddress      string `mapstructure:"laddr" toml:"laddr"`
+	MaxOpenConnections int    `mapstructure:"max_open_connections" toml:"max_open_connections"`
 }
 
 // P2PConfig holds P2P network configuration.
@@ -107,8 +108,10 @@ type InstrumentationConfig struct {
 	Namespace            string `mapstructure:"namespace" toml:"namespace"`
 }
 
-// DefaultTendermintConfig returns a TendermintConfig with CometBFT-compatible
-// defaults for the fields Accumulate uses.
+// DefaultTendermintConfig returns a TendermintConfig with CometBFT v0.38
+// defaults for the fields Accumulate reads. Keeping these in sync with
+// upstream avoids subtle behavior changes when the same TOML is read by
+// our local TendermintConfig vs an upstream CometBFT binary.
 func DefaultTendermintConfig() *TendermintConfig {
 	return &TendermintConfig{
 		BaseConfig: BaseConfig{
@@ -125,12 +128,25 @@ func DefaultTendermintConfig() *TendermintConfig {
 			ABCI:               "socket",
 			FilterPeers:        false,
 		},
-		RPC:             &RPCConfig{ListenAddress: "tcp://127.0.0.1:26657"},
-		P2P:             &P2PConfig{ListenAddress: "tcp://0.0.0.0:26656"},
-		Mempool:         &MempoolConfig{Size: 5000},
-		StateSync:       &StateSyncConfig{},
-		BlockSync:       &BlockSyncConfig{Version: "v0"},
-		Consensus:       &ConsensusConfig{WalPath: "data/cs.wal/wal"},
+		RPC: &RPCConfig{
+			ListenAddress:      "tcp://127.0.0.1:26657",
+			MaxOpenConnections: 900, // CometBFT v0.38 default
+		},
+		P2P: &P2PConfig{
+			ListenAddress:    "tcp://0.0.0.0:26656",
+			AddrBookStrict:   true,  // CometBFT v0.38 default
+			AllowDuplicateIP: false, // CometBFT v0.38 default
+		},
+		Mempool: &MempoolConfig{
+			Size:      5000,
+			CacheSize: 10000, // CometBFT v0.38 default
+		},
+		StateSync: &StateSyncConfig{},
+		BlockSync: &BlockSyncConfig{Version: "v0"},
+		Consensus: &ConsensusConfig{
+			WalPath:       "data/cs.wal/wal",
+			TimeoutCommit: time.Second, // CometBFT v0.38 default
+		},
 		TxIndex:         &TxIndexConfig{Indexer: "kv"},
 		Instrumentation: &InstrumentationConfig{Namespace: "cometbft"},
 	}

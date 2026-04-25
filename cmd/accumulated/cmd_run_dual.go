@@ -7,6 +7,7 @@
 package main
 
 import (
+	"errors"
 	"log/slog"
 	"net/http"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run"
+	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/badger"
 )
 
@@ -106,12 +108,9 @@ func runDualNode(cmd *cobra.Command, args []string) (string, error) {
 	}
 
 	err := prog.Run()
-	if err != nil {
-		//if it is already stopped, that is ok.
-		if err.Error() != "already stopped" {
-			slog.Error("Service failed", "error", err)
-			return "", err
-		}
+	if err != nil && !errors.Is(err, accumulated.ErrAlreadyStopped) {
+		slog.Error("Service failed", "error", err)
+		return "", err
 	}
 	return "run complete", nil
 }

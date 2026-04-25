@@ -10,6 +10,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"io"
 	"net"
@@ -429,7 +430,17 @@ func listenHttpUrl(s string) (net.Listener, bool, error) {
 	return l, secure, nil
 }
 
+// ErrAlreadyStopped is returned by Stop when the daemon has already been
+// stopped. Callers (e.g. cmd_run.go's runNode) treat this as a benign
+// condition. Use errors.Is to match it.
+var ErrAlreadyStopped = stderrors.New("already stopped")
+
 func (d *Daemon) Stop() error {
+	select {
+	case <-d.done:
+		return ErrAlreadyStopped
+	default:
+	}
 	close(d.done)
 	return nil
 }

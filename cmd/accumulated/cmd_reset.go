@@ -99,9 +99,15 @@ func resetConsensus(_ *cobra.Command, args []string) {
 	// Rebuild the app state
 	genDoc.InitialHeight = int64(ledger.Index) + 1
 	genDoc.GenesisTime = ledger.Timestamp
-	if genDoc.ConsensusParams != nil {
-		genDoc.ConsensusParams.Version.App = 0x2 // Legacy ABCI version
+	if genDoc.ConsensusParams == nil {
+		// ConsensusParams is required to set the legacy ABCI app version.
+		// GenesisDocFromFile.ValidateAndComplete fills in defaults when the
+		// file omits [consensus_params], so reaching here implies a corrupt
+		// or hand-edited genesis. Fail loudly instead of silently producing
+		// a genesis with no app version.
+		fatalf("genesis document has no consensus_params; cannot set ABCI app version")
 	}
+	genDoc.ConsensusParams.Version.App = 0x2 // Legacy ABCI version
 
 	hash, err := batch.GetBptRootHash()
 	checkf(err, "get root hash")

@@ -24,6 +24,7 @@ import (
 	"github.com/multiformats/go-multibase"
 	"github.com/multiformats/go-multicodec"
 	"github.com/multiformats/go-multihash"
+	"github.com/pelletier/go-toml"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
@@ -237,7 +238,16 @@ func migrateCfg(cfg *run.Config, cvc *run.CoreValidatorConfiguration, dir string
 		}
 	}
 
-	// SnapshotService has been removed from the schema; skip snapshot migration
+	// SnapshotService has been removed; CometBFT snapshot sync is replaced by
+	// BPT-level sync. Detect the legacy [snapshots] section in
+	// accumulate.toml and warn the operator that scheduled snapshotting is
+	// being dropped, so they can verify the new behavior is acceptable.
+	if warned, err := warnLegacySnapshotsConfig(dir); err != nil {
+		// A scan failure is non-fatal — log and continue.
+		fmt.Fprintln(os.Stderr, color.YellowString("(%s) Could not check for legacy [snapshots] config: %v", dir, err))
+	} else if warned {
+		// Warning was already emitted by warnLegacySnapshotsConfig.
+	}
 
 	// DN-/BVN-specific values
 	switch old.Accumulate.NetworkType {
@@ -356,4 +366,47 @@ func cometPeerToMultiaddr(s string) (multiaddr.Multiaddr, error) {
 		return nil, fmt.Errorf("construct multiaddr: %w", err)
 	}
 	return a, nil
+}
+
+// warnLegacySnapshotsConfig scans <dir>/config/accumulate.toml for the
+// legacy [snapshots] section. If present and enabled, it prints a warning
+// to stderr informing the operator that scheduled snapshotting has been
+// removed (replaced by BPT-level sync) and the section is being dropped.
+// Returns true iff a warning was emitted.
+func warnLegacySnapshotsConfig(dir string) (bool, error) {
+	path := filepath.Join(dir, "config", "accumulate.toml")
+	tree, err := toml.LoadFile(path)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return false, nil
+		}
+		return false, fmt.Errorf("read %s: %w", path, err)
+	}
+
+	snap := tree.Get("snapshots")
+	if snap == nil {
+		return false, nil
+	}
+	subTree, ok := snap.(*toml.Tree)
+	if !ok {
+		return false, nil
+	}
+
+	enable, _ := subTree.Get("enable").(bool)
+	schedule, _ := subTree.Get("schedule").(string)
+	directory, _ := subTree.Get("directory").(string)
+	retain, _ := subTree.Get("retain").(int64)
+
+	if !enable && schedule == "" && directory == "" && retain == 0 {
+		// Section present but no meaningful content; silent skip is fine.
+		return false, nil
+	}
+
+	fmt.Fprintln(os.Stderr, color.YellowString(
+		"(%s) WARNING: legacy [snapshots] config detected (enable=%v, schedule=%q, directory=%q, retain=%d). "+
+			"CometBFT-style scheduled snapshotting has been removed; this section will not be migrated. "+
+			"Snapshot synchronization is now handled at the BPT level. If you depend on scheduled snapshots, "+
+			"file an issue before upgrading.",
+		dir, enable, schedule, directory, retain))
+	return true, nil
 }
