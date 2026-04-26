@@ -191,6 +191,10 @@ func (s *FeeSchedule) ComputeTransactionFee(tx *Transaction) (Fee, error) {
 		*LockAccount:
 		fee = FeeGeneralSmall + FeeData*Fee(count-1)
 
+	case *SetLiteAccountDelegate:
+		// Similar to UpdateAccountAuth for adding an authority
+		fee = FeeUpdateAuth + FeeData*Fee(count-1)
+
 	case *TransferCredits:
 		fee = FeeGeneralTiny + FeeScratchData*Fee(count-1)
 
@@ -207,6 +211,10 @@ func (s *FeeSchedule) ComputeTransactionFee(tx *Transaction) (Fee, error) {
 
 	case *WriteDataTo:
 		fee = FeeData * Fee(count)
+
+	case *ReleaseLockedOperation:
+		// Same fee as basic signature/small transaction
+		fee = FeeSignature + FeeData*Fee(count-1)
 
 	case *ActivateProtocolVersion,
 		*NetworkMaintenance,

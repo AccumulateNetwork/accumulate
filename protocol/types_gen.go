@@ -427,6 +427,18 @@ type FeeSchedule struct {
 	extraData            []byte
 }
 
+// HashLockOptions specifies conditions for a hash-locked operation.
+type HashLockOptions struct {
+	fieldsSet []bool
+	// HashAlgorithm the hash algorithm used (SHA256, SHA256D, HASH160).
+	HashAlgorithm HashAlgorithm `json:"hashAlgorithm,omitempty" form:"hashAlgorithm" query:"hashAlgorithm" validate:"required"`
+	// Hash hash of the secret preimage (length depends on algorithm).
+	Hash []byte `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"`
+	// Expiration absolute time when the lock expires and tokens are refunded.
+	Expiration *time.Time `json:"expiration,omitempty" form:"expiration" query:"expiration" validate:"required"`
+	extraData  []byte
+}
+
 type HoldUntilOptions struct {
 	fieldsSet  []bool
 	MinorBlock uint64 `json:"minorBlock,omitempty" form:"minorBlock" query:"minorBlock"`
@@ -472,6 +484,14 @@ type KeyBook struct {
 	BookType  BookType `json:"bookType,omitempty" form:"bookType" query:"bookType" validate:"required"`
 	AccountAuth
 	PageCount uint64 `json:"pageCount,omitempty" form:"pageCount" query:"pageCount" validate:"required"`
+	extraData []byte
+}
+
+// KeyBookProof proves the existence of a KeyBook on a remote partition.
+type KeyBookProof struct {
+	fieldsSet []bool
+	KeyBook   *KeyBook        `json:"keyBook,omitempty" form:"keyBook" query:"keyBook" validate:"required"`
+	Receipt   *merkle.Receipt `json:"receipt,omitempty" form:"receipt" query:"receipt" validate:"required"`
 	extraData []byte
 }
 
@@ -541,7 +561,9 @@ type LiteTokenAccount struct {
 	Balance   big.Int  `json:"balance,omitempty" form:"balance" query:"balance" validate:"required"`
 	// LockHeight is the major block height after which the balance can be transferred out of this account.
 	LockHeight uint64 `json:"lockHeight,omitempty" form:"lockHeight" query:"lockHeight" validate:"required"`
-	extraData  []byte
+	// Delegate is an authority (KeyBook) that has exclusive signing rights over this account when set.
+	Delegate  *url.URL `json:"delegate,omitempty" form:"delegate" query:"delegate"`
+	extraData []byte
 }
 
 type LockAccount struct {
@@ -731,6 +753,32 @@ type ReceiptSignature struct {
 	extraData       []byte
 }
 
+// ReleaseLockedOperation releases a locked deposit by revealing the hash preimage.
+type ReleaseLockedOperation struct {
+	fieldsSet []bool
+	// LockedTxID the transaction ID of the SyntheticLockedDeposit to release.
+	LockedTxID *url.TxID `json:"lockedTxID,omitempty" form:"lockedTxID" query:"lockedTxID" validate:"required"`
+	// Preimage the secret value that SHA-256 hashes to the locked hash.
+	Preimage  []byte `json:"preimage,omitempty" form:"preimage" query:"preimage" validate:"required"`
+	extraData []byte
+}
+
+// ReleaseLockedOperationResult result of releasing a locked deposit, includes preimage for cross-chain extraction.
+type ReleaseLockedOperationResult struct {
+	fieldsSet []bool
+	// Preimage the revealed preimage.
+	Preimage []byte `json:"preimage,omitempty" form:"preimage" query:"preimage" validate:"required"`
+	// HashAlgorithm the hash algorithm used.
+	HashAlgorithm HashAlgorithm `json:"hashAlgorithm,omitempty" form:"hashAlgorithm" query:"hashAlgorithm" validate:"required"`
+	// Hash the hash that was unlocked.
+	Hash []byte `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"`
+	// Amount the amount of tokens released.
+	Amount big.Int `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	// Token the token type released.
+	Token     *url.URL `json:"token,omitempty" form:"token" query:"token" validate:"required"`
+	extraData []byte
+}
+
 // RemoteSignature is used when forwarding a signature from one partition to another.
 type RemoteSignature struct {
 	fieldsSet   []bool
@@ -802,6 +850,16 @@ type SendTokens struct {
 	Hash      [32]byte          `json:"hash,omitempty" form:"hash" query:"hash"`
 	Meta      json.RawMessage   `json:"meta,omitempty" form:"meta" query:"meta"`
 	To        []*TokenRecipient `json:"to,omitempty" form:"to" query:"to" validate:"required"`
+	extraData []byte
+}
+
+// SetLiteAccountDelegate sets or clears the delegate authority on a lite token account.
+type SetLiteAccountDelegate struct {
+	fieldsSet []bool
+	// Delegate is the authority (KeyBook) to delegate signing rights to, or nil to clear delegation.
+	Delegate *url.URL `json:"delegate,omitempty" form:"delegate" query:"delegate"`
+	// Proof is a proof of existence for the delegate KeyBook, required when the delegate is on a remote partition.
+	Proof     *KeyBookProof `json:"proof,omitempty" form:"proof" query:"proof"`
 	extraData []byte
 }
 
@@ -882,6 +940,35 @@ type SyntheticLedger struct {
 	// Sequence tracks sent and received synthetic transactions.
 	Sequence  []*PartitionSyntheticLedger `json:"sequence,omitempty" form:"sequence" query:"sequence" validate:"required"`
 	extraData []byte
+}
+
+// SyntheticLockedDeposit deposits tokens locked by a hash until preimage is revealed.
+type SyntheticLockedDeposit struct {
+	fieldsSet []bool
+	SyntheticOrigin
+	// Token the token type being deposited.
+	Token *url.URL `json:"token,omitempty" form:"token" query:"token" validate:"required"`
+	// Amount the amount of tokens locked.
+	Amount big.Int `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	// Sender the original sender to refund on expiration.
+	Sender *url.URL `json:"sender,omitempty" form:"sender" query:"sender" validate:"required"`
+	// HashAlgorithm the hash algorithm used (SHA256, SHA256D, HASH160).
+	HashAlgorithm HashAlgorithm `json:"hashAlgorithm,omitempty" form:"hashAlgorithm" query:"hashAlgorithm" validate:"required"`
+	// Hash hash that must be unlocked with preimage (length depends on algorithm).
+	Hash []byte `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"`
+	// Expiration when the lock expires and tokens are refunded.
+	Expiration *time.Time `json:"expiration,omitempty" form:"expiration" query:"expiration" validate:"required"`
+	// IsIssuer true if sender was the token issuer (affects refund type).
+	IsIssuer  bool `json:"isIssuer,omitempty" form:"isIssuer" query:"isIssuer" validate:"required"`
+	extraData []byte
+}
+
+// SyntheticLockedDepositResult result of a synthetic locked deposit, tracks release status.
+type SyntheticLockedDepositResult struct {
+	fieldsSet []bool
+	// ReleaseTxID the transaction ID of the ReleaseLockedOperation that released this deposit, nil if not yet released.
+	ReleaseTxID *url.TxID `json:"releaseTxID,omitempty" form:"releaseTxID" query:"releaseTxID"`
+	extraData   []byte
 }
 
 type SyntheticOrigin struct {
@@ -987,6 +1074,8 @@ type TransactionHeader struct {
 	Expire *ExpireOptions `json:"expire,omitempty" form:"expire" query:"expire"`
 	// HoldUntil holds the transaction as pending until the condition(s) are met.
 	HoldUntil *HoldUntilOptions `json:"holdUntil,omitempty" form:"holdUntil" query:"holdUntil"`
+	// HashLock locks the synthetic output until preimage is revealed or expiration.
+	HashLock *HashLockOptions `json:"hashLock,omitempty" form:"hashLock" query:"hashLock"`
 	// Authorities is a list of additional authorities that must approve the transaction.
 	Authorities []*url.URL `json:"authorities,omitempty" form:"authorities" query:"authorities"`
 	extraData   []byte
@@ -1242,6 +1331,12 @@ func (*RCD1Signature) Type() SignatureType { return SignatureTypeRCD1 }
 
 func (*ReceiptSignature) Type() SignatureType { return SignatureTypeReceipt }
 
+func (*ReleaseLockedOperation) Type() TransactionType { return TransactionTypeReleaseLockedOperation }
+
+func (*ReleaseLockedOperationResult) Type() TransactionType {
+	return TransactionTypeReleaseLockedOperation
+}
+
 func (*RemoteSignature) Type() SignatureType { return SignatureTypeRemote }
 
 func (*RemoteTransaction) Type() TransactionType { return TransactionTypeRemote }
@@ -1255,6 +1350,8 @@ func (*RemoveKeyOperation) Type() KeyPageOperationType { return KeyPageOperation
 func (*RsaSha256Signature) Type() SignatureType { return SignatureTypeRsaSha256 }
 
 func (*SendTokens) Type() TransactionType { return TransactionTypeSendTokens }
+
+func (*SetLiteAccountDelegate) Type() TransactionType { return TransactionTypeSetLiteAccountDelegate }
 
 func (*SetRejectThresholdKeyPageOperation) Type() KeyPageOperationType {
 	return KeyPageOperationTypeSetRejectThreshold
@@ -1283,6 +1380,12 @@ func (*SyntheticForwardTransaction) Type() TransactionType {
 }
 
 func (*SyntheticLedger) Type() AccountType { return AccountTypeSyntheticLedger }
+
+func (*SyntheticLockedDeposit) Type() TransactionType { return TransactionTypeSyntheticLockedDeposit }
+
+func (*SyntheticLockedDepositResult) Type() TransactionType {
+	return TransactionTypeSyntheticLockedDeposit
+}
 
 func (*SyntheticWriteData) Type() TransactionType { return TransactionTypeSyntheticWriteData }
 
@@ -2224,6 +2327,25 @@ func (v *FeeSchedule) Copy() *FeeSchedule {
 
 func (v *FeeSchedule) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *HashLockOptions) Copy() *HashLockOptions {
+	u := new(HashLockOptions)
+
+	u.HashAlgorithm = v.HashAlgorithm
+	u.Hash = encoding.BytesCopy(v.Hash)
+	if v.Expiration != nil {
+		u.Expiration = new(time.Time)
+		*u.Expiration = *v.Expiration
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *HashLockOptions) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *HoldUntilOptions) Copy() *HoldUntilOptions {
 	u := new(HoldUntilOptions)
 
@@ -2316,6 +2438,25 @@ func (v *KeyBook) Copy() *KeyBook {
 }
 
 func (v *KeyBook) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *KeyBookProof) Copy() *KeyBookProof {
+	u := new(KeyBookProof)
+
+	if v.KeyBook != nil {
+		u.KeyBook = (v.KeyBook).Copy()
+	}
+	if v.Receipt != nil {
+		u.Receipt = (v.Receipt).Copy()
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *KeyBookProof) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *KeyPage) Copy() *KeyPage {
 	u := new(KeyPage)
@@ -2452,6 +2593,9 @@ func (v *LiteTokenAccount) Copy() *LiteTokenAccount {
 	}
 	u.Balance = *encoding.BigintCopy(&v.Balance)
 	u.LockHeight = v.LockHeight
+	if v.Delegate != nil {
+		u.Delegate = v.Delegate
+	}
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -2810,6 +2954,43 @@ func (v *ReceiptSignature) Copy() *ReceiptSignature {
 
 func (v *ReceiptSignature) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *ReleaseLockedOperation) Copy() *ReleaseLockedOperation {
+	u := new(ReleaseLockedOperation)
+
+	if v.LockedTxID != nil {
+		u.LockedTxID = v.LockedTxID
+	}
+	u.Preimage = encoding.BytesCopy(v.Preimage)
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *ReleaseLockedOperation) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *ReleaseLockedOperationResult) Copy() *ReleaseLockedOperationResult {
+	u := new(ReleaseLockedOperationResult)
+
+	u.Preimage = encoding.BytesCopy(v.Preimage)
+	u.HashAlgorithm = v.HashAlgorithm
+	u.Hash = encoding.BytesCopy(v.Hash)
+	u.Amount = *encoding.BigintCopy(&v.Amount)
+	if v.Token != nil {
+		u.Token = v.Token
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *ReleaseLockedOperationResult) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *RemoteSignature) Copy() *RemoteSignature {
 	u := new(RemoteSignature)
 
@@ -2979,6 +3160,25 @@ func (v *SendTokens) Copy() *SendTokens {
 }
 
 func (v *SendTokens) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *SetLiteAccountDelegate) Copy() *SetLiteAccountDelegate {
+	u := new(SetLiteAccountDelegate)
+
+	if v.Delegate != nil {
+		u.Delegate = v.Delegate
+	}
+	if v.Proof != nil {
+		u.Proof = (v.Proof).Copy()
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *SetLiteAccountDelegate) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *SetRejectThresholdKeyPageOperation) Copy() *SetRejectThresholdKeyPageOperation {
 	u := new(SetRejectThresholdKeyPageOperation)
@@ -3169,6 +3369,50 @@ func (v *SyntheticLedger) Copy() *SyntheticLedger {
 }
 
 func (v *SyntheticLedger) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *SyntheticLockedDeposit) Copy() *SyntheticLockedDeposit {
+	u := new(SyntheticLockedDeposit)
+
+	u.SyntheticOrigin = *v.SyntheticOrigin.Copy()
+	if v.Token != nil {
+		u.Token = v.Token
+	}
+	u.Amount = *encoding.BigintCopy(&v.Amount)
+	if v.Sender != nil {
+		u.Sender = v.Sender
+	}
+	u.HashAlgorithm = v.HashAlgorithm
+	u.Hash = encoding.BytesCopy(v.Hash)
+	if v.Expiration != nil {
+		u.Expiration = new(time.Time)
+		*u.Expiration = *v.Expiration
+	}
+	u.IsIssuer = v.IsIssuer
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *SyntheticLockedDeposit) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *SyntheticLockedDepositResult) Copy() *SyntheticLockedDepositResult {
+	u := new(SyntheticLockedDepositResult)
+
+	if v.ReleaseTxID != nil {
+		u.ReleaseTxID = v.ReleaseTxID
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *SyntheticLockedDepositResult) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *SyntheticOrigin) Copy() *SyntheticOrigin {
 	u := new(SyntheticOrigin)
@@ -3387,6 +3631,9 @@ func (v *TransactionHeader) Copy() *TransactionHeader {
 	}
 	if v.HoldUntil != nil {
 		u.HoldUntil = (v.HoldUntil).Copy()
+	}
+	if v.HashLock != nil {
+		u.HashLock = (v.HashLock).Copy()
 	}
 	u.Authorities = make([]*url.URL, len(v.Authorities))
 	for i, v := range v.Authorities {
@@ -4680,6 +4927,25 @@ func (v *FeeSchedule) Equal(u *FeeSchedule) bool {
 	return true
 }
 
+func (v *HashLockOptions) Equal(u *HashLockOptions) bool {
+	if !(v.HashAlgorithm == u.HashAlgorithm) {
+		return false
+	}
+	if !(bytes.Equal(v.Hash, u.Hash)) {
+		return false
+	}
+	switch {
+	case v.Expiration == u.Expiration:
+		// equal
+	case v.Expiration == nil || u.Expiration == nil:
+		return false
+	case !((*v.Expiration).Equal(*u.Expiration)):
+		return false
+	}
+
+	return true
+}
+
 func (v *HoldUntilOptions) Equal(u *HoldUntilOptions) bool {
 	if !(v.MinorBlock == u.MinorBlock) {
 		return false
@@ -4764,6 +5030,27 @@ func (v *KeyBook) Equal(u *KeyBook) bool {
 		return false
 	}
 	if !(v.PageCount == u.PageCount) {
+		return false
+	}
+
+	return true
+}
+
+func (v *KeyBookProof) Equal(u *KeyBookProof) bool {
+	switch {
+	case v.KeyBook == u.KeyBook:
+		// equal
+	case v.KeyBook == nil || u.KeyBook == nil:
+		return false
+	case !((v.KeyBook).Equal(u.KeyBook)):
+		return false
+	}
+	switch {
+	case v.Receipt == u.Receipt:
+		// equal
+	case v.Receipt == nil || u.Receipt == nil:
+		return false
+	case !((v.Receipt).Equal(u.Receipt)):
 		return false
 	}
 
@@ -4936,6 +5223,14 @@ func (v *LiteTokenAccount) Equal(u *LiteTokenAccount) bool {
 		return false
 	}
 	if !(v.LockHeight == u.LockHeight) {
+		return false
+	}
+	switch {
+	case v.Delegate == u.Delegate:
+		// equal
+	case v.Delegate == nil || u.Delegate == nil:
+		return false
+	case !((v.Delegate).Equal(u.Delegate)):
 		return false
 	}
 
@@ -5298,6 +5593,47 @@ func (v *ReceiptSignature) Equal(u *ReceiptSignature) bool {
 	return true
 }
 
+func (v *ReleaseLockedOperation) Equal(u *ReleaseLockedOperation) bool {
+	switch {
+	case v.LockedTxID == u.LockedTxID:
+		// equal
+	case v.LockedTxID == nil || u.LockedTxID == nil:
+		return false
+	case !((v.LockedTxID).Equal(u.LockedTxID)):
+		return false
+	}
+	if !(bytes.Equal(v.Preimage, u.Preimage)) {
+		return false
+	}
+
+	return true
+}
+
+func (v *ReleaseLockedOperationResult) Equal(u *ReleaseLockedOperationResult) bool {
+	if !(bytes.Equal(v.Preimage, u.Preimage)) {
+		return false
+	}
+	if !(v.HashAlgorithm == u.HashAlgorithm) {
+		return false
+	}
+	if !(bytes.Equal(v.Hash, u.Hash)) {
+		return false
+	}
+	if !((&v.Amount).Cmp(&u.Amount) == 0) {
+		return false
+	}
+	switch {
+	case v.Token == u.Token:
+		// equal
+	case v.Token == nil || u.Token == nil:
+		return false
+	case !((v.Token).Equal(u.Token)):
+		return false
+	}
+
+	return true
+}
+
 func (v *RemoteSignature) Equal(u *RemoteSignature) bool {
 	switch {
 	case v.Destination == u.Destination:
@@ -5453,6 +5789,27 @@ func (v *SendTokens) Equal(u *SendTokens) bool {
 		if !((v.To[i]).Equal(u.To[i])) {
 			return false
 		}
+	}
+
+	return true
+}
+
+func (v *SetLiteAccountDelegate) Equal(u *SetLiteAccountDelegate) bool {
+	switch {
+	case v.Delegate == u.Delegate:
+		// equal
+	case v.Delegate == nil || u.Delegate == nil:
+		return false
+	case !((v.Delegate).Equal(u.Delegate)):
+		return false
+	}
+	switch {
+	case v.Proof == u.Proof:
+		// equal
+	case v.Proof == nil || u.Proof == nil:
+		return false
+	case !((v.Proof).Equal(u.Proof)):
+		return false
 	}
 
 	return true
@@ -5631,6 +5988,63 @@ func (v *SyntheticLedger) Equal(u *SyntheticLedger) bool {
 		if !((v.Sequence[i]).Equal(u.Sequence[i])) {
 			return false
 		}
+	}
+
+	return true
+}
+
+func (v *SyntheticLockedDeposit) Equal(u *SyntheticLockedDeposit) bool {
+	if !v.SyntheticOrigin.Equal(&u.SyntheticOrigin) {
+		return false
+	}
+	switch {
+	case v.Token == u.Token:
+		// equal
+	case v.Token == nil || u.Token == nil:
+		return false
+	case !((v.Token).Equal(u.Token)):
+		return false
+	}
+	if !((&v.Amount).Cmp(&u.Amount) == 0) {
+		return false
+	}
+	switch {
+	case v.Sender == u.Sender:
+		// equal
+	case v.Sender == nil || u.Sender == nil:
+		return false
+	case !((v.Sender).Equal(u.Sender)):
+		return false
+	}
+	if !(v.HashAlgorithm == u.HashAlgorithm) {
+		return false
+	}
+	if !(bytes.Equal(v.Hash, u.Hash)) {
+		return false
+	}
+	switch {
+	case v.Expiration == u.Expiration:
+		// equal
+	case v.Expiration == nil || u.Expiration == nil:
+		return false
+	case !((*v.Expiration).Equal(*u.Expiration)):
+		return false
+	}
+	if !(v.IsIssuer == u.IsIssuer) {
+		return false
+	}
+
+	return true
+}
+
+func (v *SyntheticLockedDepositResult) Equal(u *SyntheticLockedDepositResult) bool {
+	switch {
+	case v.ReleaseTxID == u.ReleaseTxID:
+		// equal
+	case v.ReleaseTxID == nil || u.ReleaseTxID == nil:
+		return false
+	case !((v.ReleaseTxID).Equal(u.ReleaseTxID)):
+		return false
 	}
 
 	return true
@@ -5882,6 +6296,14 @@ func (v *TransactionHeader) Equal(u *TransactionHeader) bool {
 	case v.HoldUntil == nil || u.HoldUntil == nil:
 		return false
 	case !((v.HoldUntil).Equal(u.HoldUntil)):
+		return false
+	}
+	switch {
+	case v.HashLock == u.HashLock:
+		// equal
+	case v.HashLock == nil || u.HashLock == nil:
+		return false
+	case !((v.HashLock).Equal(u.HashLock)):
 		return false
 	}
 	if len(v.Authorities) != len(u.Authorities) {
@@ -6257,7 +6679,9 @@ func (v *ADI) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -6271,7 +6695,11 @@ func (v *ADI) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *ADI) IsValid() error {
@@ -6308,7 +6736,9 @@ func (v *AccountAuth) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(len(v.Authorities) == 0) {
@@ -6322,7 +6752,11 @@ func (v *AccountAuth) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *AccountAuth) IsValid() error {
@@ -6354,7 +6788,9 @@ func (v *AccumulateDataEntry) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -6369,7 +6805,11 @@ func (v *AccumulateDataEntry) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *AccumulateDataEntry) IsValid() error {
@@ -6404,7 +6844,9 @@ func (v *AcmeFaucet) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -6417,7 +6859,11 @@ func (v *AcmeFaucet) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *AcmeFaucet) IsValid() error {
@@ -6451,7 +6897,9 @@ func (v *AcmeOracle) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.Price == 0) {
@@ -6463,7 +6911,11 @@ func (v *AcmeOracle) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *AcmeOracle) IsValid() error {
@@ -6495,7 +6947,9 @@ func (v *ActivateProtocolVersion) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -6508,7 +6962,11 @@ func (v *ActivateProtocolVersion) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *ActivateProtocolVersion) IsValid() error {
@@ -6538,7 +6996,9 @@ func (v *AddAccountAuthorityOperation) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -6551,7 +7011,11 @@ func (v *AddAccountAuthorityOperation) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *AddAccountAuthorityOperation) IsValid() error {
@@ -6588,7 +7052,9 @@ func (v *AddCredits) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -6607,7 +7073,11 @@ func (v *AddCredits) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *AddCredits) IsValid() error {
@@ -6654,7 +7124,9 @@ func (v *AddCreditsResult) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -6673,7 +7145,11 @@ func (v *AddCreditsResult) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *AddCreditsResult) IsValid() error {
@@ -6718,7 +7194,9 @@ func (v *AddKeyOperation) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -6731,7 +7209,11 @@ func (v *AddKeyOperation) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *AddKeyOperation) IsValid() error {
@@ -6771,7 +7253,9 @@ func (v *AnchorLedger) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -6803,7 +7287,11 @@ func (v *AnchorLedger) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *AnchorLedger) IsValid() error {
@@ -6867,7 +7355,9 @@ func (v *AnchorMetadata) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteValue(1, v.ChainMetadata.MarshalBinary)
@@ -6892,7 +7382,11 @@ func (v *AnchorMetadata) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *AnchorMetadata) IsValid() error {
@@ -6947,7 +7441,9 @@ func (v *AnnotatedReceipt) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.Receipt == nil) {
@@ -6962,7 +7458,11 @@ func (v *AnnotatedReceipt) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *AnnotatedReceipt) IsValid() error {
@@ -6999,7 +7499,9 @@ func (v *AuthorityEntry) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.Url == nil) {
@@ -7014,7 +7516,11 @@ func (v *AuthorityEntry) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *AuthorityEntry) IsValid() error {
@@ -7057,7 +7563,9 @@ func (v *AuthoritySignature) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -7090,7 +7598,11 @@ func (v *AuthoritySignature) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *AuthoritySignature) IsValid() error {
@@ -7153,7 +7665,9 @@ func (v *BTCLegacySignature) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -7190,7 +7704,11 @@ func (v *BTCLegacySignature) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *BTCLegacySignature) IsValid() error {
@@ -7248,7 +7766,9 @@ func (v *BTCSignature) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -7285,7 +7805,11 @@ func (v *BTCSignature) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *BTCSignature) IsValid() error {
@@ -7336,7 +7860,9 @@ func (v *BlockEntry) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.Account == nil) {
@@ -7352,7 +7878,11 @@ func (v *BlockEntry) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *BlockEntry) IsValid() error {
@@ -7395,7 +7925,9 @@ func (v *BlockLedger) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -7419,7 +7951,11 @@ func (v *BlockLedger) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *BlockLedger) IsValid() error {
@@ -7470,7 +8006,9 @@ func (v *BlockValidatorAnchor) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -7484,7 +8022,11 @@ func (v *BlockValidatorAnchor) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *BlockValidatorAnchor) IsValid() error {
@@ -7522,7 +8064,9 @@ func (v *BurnCredits) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -7535,7 +8079,11 @@ func (v *BurnCredits) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *BurnCredits) IsValid() error {
@@ -7570,7 +8118,9 @@ func (v *BurnTokens) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -7583,7 +8133,11 @@ func (v *BurnTokens) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *BurnTokens) IsValid() error {
@@ -7618,7 +8172,9 @@ func (v *ChainMetadata) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(len(v.Name) == 0) {
@@ -7633,7 +8189,11 @@ func (v *ChainMetadata) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *ChainMetadata) IsValid() error {
@@ -7670,7 +8230,9 @@ func (v *ChainParams) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(len(v.Data) == 0) {
@@ -7685,7 +8247,11 @@ func (v *ChainParams) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *ChainParams) IsValid() error {
@@ -7723,7 +8289,9 @@ func (v *CreateDataAccount) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -7741,7 +8309,11 @@ func (v *CreateDataAccount) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *CreateDataAccount) IsValid() error {
@@ -7779,7 +8351,9 @@ func (v *CreateIdentity) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -7803,7 +8377,11 @@ func (v *CreateIdentity) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *CreateIdentity) IsValid() error {
@@ -7840,7 +8418,9 @@ func (v *CreateKeyBook) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -7861,7 +8441,11 @@ func (v *CreateKeyBook) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *CreateKeyBook) IsValid() error {
@@ -7901,7 +8485,9 @@ func (v *CreateKeyPage) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -7916,7 +8502,11 @@ func (v *CreateKeyPage) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *CreateKeyPage) IsValid() error {
@@ -7950,7 +8540,9 @@ func (v *CreateLiteTokenAccount) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -7960,7 +8552,11 @@ func (v *CreateLiteTokenAccount) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *CreateLiteTokenAccount) IsValid() error {
@@ -7995,7 +8591,9 @@ func (v *CreateToken) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -8025,7 +8623,11 @@ func (v *CreateToken) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *CreateToken) IsValid() error {
@@ -8073,7 +8675,9 @@ func (v *CreateTokenAccount) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -8097,7 +8701,11 @@ func (v *CreateTokenAccount) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *CreateTokenAccount) IsValid() error {
@@ -8137,7 +8745,9 @@ func (v *CreditRecipient) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.Url == nil) {
@@ -8152,7 +8762,11 @@ func (v *CreditRecipient) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *CreditRecipient) IsValid() error {
@@ -8191,7 +8805,9 @@ func (v *DataAccount) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -8208,7 +8824,11 @@ func (v *DataAccount) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *DataAccount) IsValid() error {
@@ -8247,7 +8867,9 @@ func (v *DelegatedSignature) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -8263,7 +8885,11 @@ func (v *DelegatedSignature) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *DelegatedSignature) IsValid() error {
@@ -8307,7 +8933,9 @@ func (v *DirectoryAnchor) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -8334,7 +8962,11 @@ func (v *DirectoryAnchor) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *DirectoryAnchor) IsValid() error {
@@ -8387,7 +9019,9 @@ func (v *DisableAccountAuthOperation) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -8400,7 +9034,11 @@ func (v *DisableAccountAuthOperation) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *DisableAccountAuthOperation) IsValid() error {
@@ -8435,7 +9073,9 @@ func (v *DoubleHashDataEntry) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -8450,7 +9090,11 @@ func (v *DoubleHashDataEntry) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *DoubleHashDataEntry) IsValid() error {
@@ -8493,7 +9137,9 @@ func (v *ED25519Signature) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -8530,7 +9176,11 @@ func (v *ED25519Signature) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *ED25519Signature) IsValid() error {
@@ -8588,7 +9238,9 @@ func (v *ETHSignature) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -8625,7 +9277,11 @@ func (v *ETHSignature) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *ETHSignature) IsValid() error {
@@ -8683,7 +9339,9 @@ func (v *EcdsaSha256Signature) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -8720,7 +9378,11 @@ func (v *EcdsaSha256Signature) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *EcdsaSha256Signature) IsValid() error {
@@ -8769,7 +9431,9 @@ func (v *EmptyResult) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -8779,7 +9443,11 @@ func (v *EmptyResult) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *EmptyResult) IsValid() error {
@@ -8809,7 +9477,9 @@ func (v *EnableAccountAuthOperation) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -8822,7 +9492,11 @@ func (v *EnableAccountAuthOperation) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *EnableAccountAuthOperation) IsValid() error {
@@ -8856,7 +9530,9 @@ func (v *ExpireOptions) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.AtTime == nil) {
@@ -8868,7 +9544,11 @@ func (v *ExpireOptions) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *ExpireOptions) IsValid() error {
@@ -8894,7 +9574,9 @@ func (v *FactomDataEntryWrapper) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -8905,7 +9587,11 @@ func (v *FactomDataEntryWrapper) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *FactomDataEntryWrapper) IsValid() error {
@@ -8939,7 +9625,9 @@ func (v *FeeSchedule) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(len(v.CreateIdentitySliding) == 0) {
@@ -8959,7 +9647,11 @@ func (v *FeeSchedule) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *FeeSchedule) IsValid() error {
@@ -8991,6 +9683,73 @@ func (v *FeeSchedule) IsValid() error {
 	}
 }
 
+var fieldNames_HashLockOptions = []string{
+	1: "HashAlgorithm",
+	2: "Hash",
+	3: "Expiration",
+}
+
+func (v *HashLockOptions) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.HashAlgorithm == 0) {
+		writer.WriteEnum(1, v.HashAlgorithm)
+	}
+	if !(len(v.Hash) == 0) {
+		writer.WriteBytes(2, v.Hash)
+	}
+	if !(v.Expiration == nil) {
+		writer.WriteTime(3, *v.Expiration)
+	}
+
+	_, _, err := writer.Reset(fieldNames_HashLockOptions)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *HashLockOptions) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field HashAlgorithm is missing")
+	} else if v.HashAlgorithm == 0 {
+		errs = append(errs, "field HashAlgorithm is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Hash is missing")
+	} else if len(v.Hash) == 0 {
+		errs = append(errs, "field Hash is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Expiration is missing")
+	} else if v.Expiration == nil {
+		errs = append(errs, "field Expiration is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_HoldUntilOptions = []string{
 	1: "MinorBlock",
 }
@@ -9000,7 +9759,9 @@ func (v *HoldUntilOptions) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.MinorBlock == 0) {
@@ -9012,7 +9773,11 @@ func (v *HoldUntilOptions) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *HoldUntilOptions) IsValid() error {
@@ -9041,7 +9806,9 @@ func (v *IndexEntry) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.Source == 0) {
@@ -9065,7 +9832,11 @@ func (v *IndexEntry) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *IndexEntry) IsValid() error {
@@ -9118,7 +9889,9 @@ func (v *InternalSignature) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -9134,7 +9907,11 @@ func (v *InternalSignature) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *InternalSignature) IsValid() error {
@@ -9176,7 +9953,9 @@ func (v *IssueTokens) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -9197,7 +9976,11 @@ func (v *IssueTokens) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *IssueTokens) IsValid() error {
@@ -9245,7 +10028,9 @@ func (v *KeyBook) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -9265,7 +10050,11 @@ func (v *KeyBook) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *KeyBook) IsValid() error {
@@ -9303,6 +10092,64 @@ func (v *KeyBook) IsValid() error {
 	}
 }
 
+var fieldNames_KeyBookProof = []string{
+	1: "KeyBook",
+	2: "Receipt",
+}
+
+func (v *KeyBookProof) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.KeyBook == nil) {
+		writer.WriteValue(1, v.KeyBook.MarshalBinary)
+	}
+	if !(v.Receipt == nil) {
+		writer.WriteValue(2, v.Receipt.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_KeyBookProof)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *KeyBookProof) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field KeyBook is missing")
+	} else if v.KeyBook == nil {
+		errs = append(errs, "field KeyBook is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Receipt is missing")
+	} else if v.Receipt == nil {
+		errs = append(errs, "field Receipt is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_KeyPage = []string{
 	1:  "Type",
 	2:  "Url",
@@ -9321,7 +10168,9 @@ func (v *KeyPage) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -9360,7 +10209,11 @@ func (v *KeyPage) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *KeyPage) IsValid() error {
@@ -9431,7 +10284,9 @@ func (v *KeySpec) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(len(v.PublicKeyHash) == 0) {
@@ -9449,7 +10304,11 @@ func (v *KeySpec) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *KeySpec) IsValid() error {
@@ -9491,7 +10350,9 @@ func (v *KeySpecParams) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(len(v.KeyHash) == 0) {
@@ -9506,7 +10367,11 @@ func (v *KeySpecParams) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *KeySpecParams) IsValid() error {
@@ -9544,7 +10409,9 @@ func (v *LegacyED25519Signature) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -9575,7 +10442,11 @@ func (v *LegacyED25519Signature) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *LegacyED25519Signature) IsValid() error {
@@ -9630,7 +10501,9 @@ func (v *LiteDataAccount) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -9643,7 +10516,11 @@ func (v *LiteDataAccount) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *LiteDataAccount) IsValid() error {
@@ -9680,7 +10557,9 @@ func (v *LiteIdentity) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -9699,7 +10578,11 @@ func (v *LiteIdentity) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *LiteIdentity) IsValid() error {
@@ -9740,6 +10623,7 @@ var fieldNames_LiteTokenAccount = []string{
 	3: "TokenUrl",
 	4: "Balance",
 	5: "LockHeight",
+	6: "Delegate",
 }
 
 func (v *LiteTokenAccount) MarshalBinary() ([]byte, error) {
@@ -9747,7 +10631,9 @@ func (v *LiteTokenAccount) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -9763,13 +10649,20 @@ func (v *LiteTokenAccount) MarshalBinary() ([]byte, error) {
 	if !(v.LockHeight == 0) {
 		writer.WriteUint(5, v.LockHeight)
 	}
+	if !(v.Delegate == nil) {
+		writer.WriteUrl(6, v.Delegate)
+	}
 
 	_, _, err := writer.Reset(fieldNames_LiteTokenAccount)
 	if err != nil {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *LiteTokenAccount) IsValid() error {
@@ -9819,7 +10712,9 @@ func (v *LockAccount) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -9832,7 +10727,11 @@ func (v *LockAccount) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *LockAccount) IsValid() error {
@@ -9867,7 +10766,9 @@ func (v *MetricsRequest) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(len(v.Metric) == 0) {
@@ -9882,7 +10783,11 @@ func (v *MetricsRequest) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *MetricsRequest) IsValid() error {
@@ -9919,7 +10824,9 @@ func (v *NetworkAccountUpdate) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(len(v.Name) == 0) {
@@ -9934,7 +10841,11 @@ func (v *NetworkAccountUpdate) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *NetworkAccountUpdate) IsValid() error {
@@ -9973,7 +10884,9 @@ func (v *NetworkDefinition) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(len(v.NetworkName) == 0) {
@@ -9998,7 +10911,11 @@ func (v *NetworkDefinition) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *NetworkDefinition) IsValid() error {
@@ -10049,7 +10966,9 @@ func (v *NetworkGlobals) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !((v.OperatorAcceptThreshold).Equal(new(Rational))) {
@@ -10076,7 +10995,11 @@ func (v *NetworkGlobals) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *NetworkGlobals) IsValid() error {
@@ -10138,7 +11061,9 @@ func (v *NetworkLimits) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.DataEntryParts == 0) {
@@ -10168,7 +11093,11 @@ func (v *NetworkLimits) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *NetworkLimits) IsValid() error {
@@ -10230,7 +11159,9 @@ func (v *NetworkMaintenance) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -10245,7 +11176,11 @@ func (v *NetworkMaintenance) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *NetworkMaintenance) IsValid() error {
@@ -10281,7 +11216,9 @@ func (v *Object) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.Type == 0) {
@@ -10301,7 +11238,11 @@ func (v *Object) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *Object) IsValid() error {
@@ -10347,7 +11288,9 @@ func (v *PartitionAnchor) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.Source == nil) {
@@ -10374,7 +11317,11 @@ func (v *PartitionAnchor) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *PartitionAnchor) IsValid() error {
@@ -10431,7 +11378,9 @@ func (v *PartitionAnchorReceipt) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.Anchor == nil) {
@@ -10446,7 +11395,11 @@ func (v *PartitionAnchorReceipt) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *PartitionAnchorReceipt) IsValid() error {
@@ -10483,7 +11436,9 @@ func (v *PartitionExecutorVersion) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(len(v.Partition) == 0) {
@@ -10498,7 +11453,11 @@ func (v *PartitionExecutorVersion) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *PartitionExecutorVersion) IsValid() error {
@@ -10535,7 +11494,9 @@ func (v *PartitionInfo) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(len(v.ID) == 0) {
@@ -10550,7 +11511,11 @@ func (v *PartitionInfo) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *PartitionInfo) IsValid() error {
@@ -10590,7 +11555,9 @@ func (v *PartitionSignature) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -10612,7 +11579,11 @@ func (v *PartitionSignature) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *PartitionSignature) IsValid() error {
@@ -10660,7 +11631,9 @@ func (v *PartitionSyntheticLedger) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.Url == nil) {
@@ -10686,7 +11659,11 @@ func (v *PartitionSyntheticLedger) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *PartitionSyntheticLedger) IsValid() error {
@@ -10738,7 +11715,9 @@ func (v *PendingTransactionGCOperation) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -10751,7 +11730,11 @@ func (v *PendingTransactionGCOperation) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *PendingTransactionGCOperation) IsValid() error {
@@ -10794,7 +11777,9 @@ func (v *RCD1Signature) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -10831,7 +11816,11 @@ func (v *RCD1Signature) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *RCD1Signature) IsValid() error {
@@ -10881,7 +11870,9 @@ func (v *Rational) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.Numerator == 0) {
@@ -10896,7 +11887,11 @@ func (v *Rational) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *Rational) IsValid() error {
@@ -10935,7 +11930,9 @@ func (v *ReceiptSignature) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -10954,7 +11951,11 @@ func (v *ReceiptSignature) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *ReceiptSignature) IsValid() error {
@@ -10984,6 +11985,159 @@ func (v *ReceiptSignature) IsValid() error {
 	}
 }
 
+var fieldNames_ReleaseLockedOperation = []string{
+	1: "Type",
+	2: "LockedTxID",
+	3: "Preimage",
+}
+
+func (v *ReleaseLockedOperation) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.LockedTxID == nil) {
+		writer.WriteTxid(2, v.LockedTxID)
+	}
+	if !(len(v.Preimage) == 0) {
+		writer.WriteBytes(3, v.Preimage)
+	}
+
+	_, _, err := writer.Reset(fieldNames_ReleaseLockedOperation)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *ReleaseLockedOperation) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field LockedTxID is missing")
+	} else if v.LockedTxID == nil {
+		errs = append(errs, "field LockedTxID is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Preimage is missing")
+	} else if len(v.Preimage) == 0 {
+		errs = append(errs, "field Preimage is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_ReleaseLockedOperationResult = []string{
+	1: "Type",
+	2: "Preimage",
+	3: "HashAlgorithm",
+	4: "Hash",
+	5: "Amount",
+	6: "Token",
+}
+
+func (v *ReleaseLockedOperationResult) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(len(v.Preimage) == 0) {
+		writer.WriteBytes(2, v.Preimage)
+	}
+	if !(v.HashAlgorithm == 0) {
+		writer.WriteEnum(3, v.HashAlgorithm)
+	}
+	if !(len(v.Hash) == 0) {
+		writer.WriteBytes(4, v.Hash)
+	}
+	if !((v.Amount).Cmp(new(big.Int)) == 0) {
+		writer.WriteBigInt(5, &v.Amount)
+	}
+	if !(v.Token == nil) {
+		writer.WriteUrl(6, v.Token)
+	}
+
+	_, _, err := writer.Reset(fieldNames_ReleaseLockedOperationResult)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *ReleaseLockedOperationResult) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Preimage is missing")
+	} else if len(v.Preimage) == 0 {
+		errs = append(errs, "field Preimage is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field HashAlgorithm is missing")
+	} else if v.HashAlgorithm == 0 {
+		errs = append(errs, "field HashAlgorithm is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Hash is missing")
+	} else if len(v.Hash) == 0 {
+		errs = append(errs, "field Hash is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Amount is missing")
+	} else if (v.Amount).Cmp(new(big.Int)) == 0 {
+		errs = append(errs, "field Amount is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field Token is missing")
+	} else if v.Token == nil {
+		errs = append(errs, "field Token is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_RemoteSignature = []string{
 	1: "Type",
 	2: "Destination",
@@ -10996,7 +12150,9 @@ func (v *RemoteSignature) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -11017,7 +12173,11 @@ func (v *RemoteSignature) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *RemoteSignature) IsValid() error {
@@ -11062,7 +12222,9 @@ func (v *RemoteTransaction) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -11075,7 +12237,11 @@ func (v *RemoteTransaction) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *RemoteTransaction) IsValid() error {
@@ -11105,7 +12271,9 @@ func (v *RemoveAccountAuthorityOperation) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -11118,7 +12286,11 @@ func (v *RemoveAccountAuthorityOperation) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *RemoveAccountAuthorityOperation) IsValid() error {
@@ -11153,7 +12325,9 @@ func (v *RemoveKeyOperation) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -11166,7 +12340,11 @@ func (v *RemoveKeyOperation) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *RemoveKeyOperation) IsValid() error {
@@ -11202,7 +12380,9 @@ func (v *Route) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.Length == 0) {
@@ -11220,7 +12400,11 @@ func (v *Route) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *Route) IsValid() error {
@@ -11262,7 +12446,9 @@ func (v *RouteOverride) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.Account == nil) {
@@ -11277,7 +12463,11 @@ func (v *RouteOverride) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *RouteOverride) IsValid() error {
@@ -11314,7 +12504,9 @@ func (v *RoutingTable) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(len(v.Overrides) == 0) {
@@ -11333,7 +12525,11 @@ func (v *RoutingTable) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *RoutingTable) IsValid() error {
@@ -11378,7 +12574,9 @@ func (v *RsaSha256Signature) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -11415,7 +12613,11 @@ func (v *RsaSha256Signature) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *RsaSha256Signature) IsValid() error {
@@ -11467,7 +12669,9 @@ func (v *SendTokens) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -11488,7 +12692,11 @@ func (v *SendTokens) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *SendTokens) IsValid() error {
@@ -11513,6 +12721,59 @@ func (v *SendTokens) IsValid() error {
 	}
 }
 
+var fieldNames_SetLiteAccountDelegate = []string{
+	1: "Type",
+	2: "Delegate",
+	3: "Proof",
+}
+
+func (v *SetLiteAccountDelegate) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Delegate == nil) {
+		writer.WriteUrl(2, v.Delegate)
+	}
+	if !(v.Proof == nil) {
+		writer.WriteValue(3, v.Proof.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_SetLiteAccountDelegate)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *SetLiteAccountDelegate) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_SetRejectThresholdKeyPageOperation = []string{
 	1: "Type",
 	2: "Threshold",
@@ -11523,7 +12784,9 @@ func (v *SetRejectThresholdKeyPageOperation) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -11536,7 +12799,11 @@ func (v *SetRejectThresholdKeyPageOperation) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *SetRejectThresholdKeyPageOperation) IsValid() error {
@@ -11571,7 +12838,9 @@ func (v *SetResponseThresholdKeyPageOperation) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -11584,7 +12853,11 @@ func (v *SetResponseThresholdKeyPageOperation) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *SetResponseThresholdKeyPageOperation) IsValid() error {
@@ -11619,7 +12892,9 @@ func (v *SetThresholdKeyPageOperation) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -11632,7 +12907,11 @@ func (v *SetThresholdKeyPageOperation) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *SetThresholdKeyPageOperation) IsValid() error {
@@ -11671,7 +12950,9 @@ func (v *SignatureSet) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -11698,7 +12979,11 @@ func (v *SignatureSet) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *SignatureSet) IsValid() error {
@@ -11745,7 +13030,9 @@ func (v *SyntheticBurnTokens) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -11762,7 +13049,11 @@ func (v *SyntheticBurnTokens) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *SyntheticBurnTokens) IsValid() error {
@@ -11806,7 +13097,9 @@ func (v *SyntheticCreateIdentity) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -11822,7 +13115,11 @@ func (v *SyntheticCreateIdentity) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *SyntheticCreateIdentity) IsValid() error {
@@ -11863,7 +13160,9 @@ func (v *SyntheticDepositCredits) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -11883,7 +13182,11 @@ func (v *SyntheticDepositCredits) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *SyntheticDepositCredits) IsValid() error {
@@ -11935,7 +13238,9 @@ func (v *SyntheticDepositTokens) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -11958,7 +13263,11 @@ func (v *SyntheticDepositTokens) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *SyntheticDepositTokens) IsValid() error {
@@ -12012,7 +13321,9 @@ func (v *SyntheticForwardTransaction) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -12030,7 +13341,11 @@ func (v *SyntheticForwardTransaction) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *SyntheticForwardTransaction) IsValid() error {
@@ -12066,7 +13381,9 @@ func (v *SyntheticLedger) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -12084,7 +13401,11 @@ func (v *SyntheticLedger) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *SyntheticLedger) IsValid() error {
@@ -12114,6 +13435,168 @@ func (v *SyntheticLedger) IsValid() error {
 	}
 }
 
+var fieldNames_SyntheticLockedDeposit = []string{
+	1: "Type",
+	2: "SyntheticOrigin",
+	3: "Token",
+	4: "Amount",
+	5: "Sender",
+	6: "HashAlgorithm",
+	7: "Hash",
+	8: "Expiration",
+	9: "IsIssuer",
+}
+
+func (v *SyntheticLockedDeposit) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	writer.WriteValue(2, v.SyntheticOrigin.MarshalBinary)
+	if !(v.Token == nil) {
+		writer.WriteUrl(3, v.Token)
+	}
+	if !((v.Amount).Cmp(new(big.Int)) == 0) {
+		writer.WriteBigInt(4, &v.Amount)
+	}
+	if !(v.Sender == nil) {
+		writer.WriteUrl(5, v.Sender)
+	}
+	if !(v.HashAlgorithm == 0) {
+		writer.WriteEnum(6, v.HashAlgorithm)
+	}
+	if !(len(v.Hash) == 0) {
+		writer.WriteBytes(7, v.Hash)
+	}
+	if !(v.Expiration == nil) {
+		writer.WriteTime(8, *v.Expiration)
+	}
+	if !(!v.IsIssuer) {
+		writer.WriteBool(9, v.IsIssuer)
+	}
+
+	_, _, err := writer.Reset(fieldNames_SyntheticLockedDeposit)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *SyntheticLockedDeposit) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if err := v.SyntheticOrigin.IsValid(); err != nil {
+		errs = append(errs, err.Error())
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Token is missing")
+	} else if v.Token == nil {
+		errs = append(errs, "field Token is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Amount is missing")
+	} else if (v.Amount).Cmp(new(big.Int)) == 0 {
+		errs = append(errs, "field Amount is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Sender is missing")
+	} else if v.Sender == nil {
+		errs = append(errs, "field Sender is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field HashAlgorithm is missing")
+	} else if v.HashAlgorithm == 0 {
+		errs = append(errs, "field HashAlgorithm is not set")
+	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+		errs = append(errs, "field Hash is missing")
+	} else if len(v.Hash) == 0 {
+		errs = append(errs, "field Hash is not set")
+	}
+	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
+		errs = append(errs, "field Expiration is missing")
+	} else if v.Expiration == nil {
+		errs = append(errs, "field Expiration is not set")
+	}
+	if len(v.fieldsSet) > 8 && !v.fieldsSet[8] {
+		errs = append(errs, "field IsIssuer is missing")
+	} else if !v.IsIssuer {
+		errs = append(errs, "field IsIssuer is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_SyntheticLockedDepositResult = []string{
+	1: "Type",
+	2: "ReleaseTxID",
+}
+
+func (v *SyntheticLockedDepositResult) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.ReleaseTxID == nil) {
+		writer.WriteTxid(2, v.ReleaseTxID)
+	}
+
+	_, _, err := writer.Reset(fieldNames_SyntheticLockedDepositResult)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *SyntheticLockedDepositResult) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_SyntheticOrigin = []string{
 	1: "Cause",
 	3: "Initiator",
@@ -12126,7 +13609,9 @@ func (v *SyntheticOrigin) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.Cause == nil) {
@@ -12147,7 +13632,11 @@ func (v *SyntheticOrigin) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *SyntheticOrigin) IsValid() error {
@@ -12195,7 +13684,9 @@ func (v *SyntheticWriteData) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -12209,7 +13700,11 @@ func (v *SyntheticWriteData) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *SyntheticWriteData) IsValid() error {
@@ -12246,7 +13741,9 @@ func (v *SystemGenesis) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -12256,7 +13753,11 @@ func (v *SystemGenesis) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *SystemGenesis) IsValid() error {
@@ -12293,7 +13794,9 @@ func (v *SystemLedger) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -12331,7 +13834,11 @@ func (v *SystemLedger) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *SystemLedger) IsValid() error {
@@ -12397,7 +13904,9 @@ func (v *SystemWriteData) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -12413,7 +13922,11 @@ func (v *SystemWriteData) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *SystemWriteData) IsValid() error {
@@ -12451,7 +13964,9 @@ func (v *TokenAccount) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -12471,7 +13986,11 @@ func (v *TokenAccount) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *TokenAccount) IsValid() error {
@@ -12525,7 +14044,9 @@ func (v *TokenIssuer) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -12554,7 +14075,11 @@ func (v *TokenIssuer) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *TokenIssuer) IsValid() error {
@@ -12612,7 +14137,9 @@ func (v *TokenIssuerProof) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.Transaction == nil) {
@@ -12627,7 +14154,11 @@ func (v *TokenIssuerProof) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *TokenIssuerProof) IsValid() error {
@@ -12664,7 +14195,9 @@ func (v *TokenRecipient) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.Url == nil) {
@@ -12679,7 +14212,11 @@ func (v *TokenRecipient) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *TokenRecipient) IsValid() error {
@@ -12716,7 +14253,9 @@ func (v *Transaction) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !((v.Header).Equal(new(TransactionHeader))) {
@@ -12731,7 +14270,11 @@ func (v *Transaction) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *Transaction) IsValid() error {
@@ -12765,7 +14308,8 @@ var fieldNames_TransactionHeader = []string{
 	4: "Metadata",
 	5: "Expire",
 	6: "HoldUntil",
-	7: "Authorities",
+	7: "HashLock",
+	8: "Authorities",
 }
 
 func (v *TransactionHeader) MarshalBinary() ([]byte, error) {
@@ -12773,7 +14317,9 @@ func (v *TransactionHeader) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.Principal == nil) {
@@ -12794,9 +14340,12 @@ func (v *TransactionHeader) MarshalBinary() ([]byte, error) {
 	if !(v.HoldUntil == nil) {
 		writer.WriteValue(6, v.HoldUntil.MarshalBinary)
 	}
+	if !(v.HashLock == nil) {
+		writer.WriteValue(7, v.HashLock.MarshalBinary)
+	}
 	if !(len(v.Authorities) == 0) {
 		for _, v := range v.Authorities {
-			writer.WriteUrl(7, v)
+			writer.WriteUrl(8, v)
 		}
 	}
 
@@ -12805,7 +14354,11 @@ func (v *TransactionHeader) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *TransactionHeader) IsValid() error {
@@ -12841,7 +14394,9 @@ func (v *TransactionResultSet) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(len(v.Results) == 0) {
@@ -12855,7 +14410,11 @@ func (v *TransactionResultSet) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *TransactionResultSet) IsValid() error {
@@ -12898,7 +14457,9 @@ func (v *TransactionStatus) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.TxID == nil) {
@@ -12950,7 +14511,11 @@ func (v *TransactionStatus) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *TransactionStatus) IsValid() error {
@@ -13042,7 +14607,9 @@ func (v *TransferCredits) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -13057,7 +14624,11 @@ func (v *TransferCredits) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *TransferCredits) IsValid() error {
@@ -13091,7 +14662,9 @@ func (v *TxIdSet) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(len(v.Entries) == 0) {
@@ -13105,7 +14678,11 @@ func (v *TxIdSet) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *TxIdSet) IsValid() error {
@@ -13146,7 +14723,9 @@ func (v *TypedDataSignature) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -13186,7 +14765,11 @@ func (v *TypedDataSignature) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *TypedDataSignature) IsValid() error {
@@ -13241,7 +14824,9 @@ func (v *UnknownAccount) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -13254,7 +14839,11 @@ func (v *UnknownAccount) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *UnknownAccount) IsValid() error {
@@ -13290,7 +14879,9 @@ func (v *UnknownSigner) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -13306,7 +14897,11 @@ func (v *UnknownSigner) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *UnknownSigner) IsValid() error {
@@ -13346,7 +14941,9 @@ func (v *UpdateAccountAuth) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -13361,7 +14958,11 @@ func (v *UpdateAccountAuth) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *UpdateAccountAuth) IsValid() error {
@@ -13397,7 +14998,9 @@ func (v *UpdateAllowedKeyPageOperation) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -13417,7 +15020,11 @@ func (v *UpdateAllowedKeyPageOperation) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *UpdateAllowedKeyPageOperation) IsValid() error {
@@ -13447,7 +15054,9 @@ func (v *UpdateKey) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -13460,7 +15069,11 @@ func (v *UpdateKey) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *UpdateKey) IsValid() error {
@@ -13496,7 +15109,9 @@ func (v *UpdateKeyOperation) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -13512,7 +15127,11 @@ func (v *UpdateKeyOperation) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *UpdateKeyOperation) IsValid() error {
@@ -13552,7 +15171,9 @@ func (v *UpdateKeyPage) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -13567,7 +15188,11 @@ func (v *UpdateKeyPage) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *UpdateKeyPage) IsValid() error {
@@ -13604,7 +15229,9 @@ func (v *ValidatorInfo) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(len(v.PublicKey) == 0) {
@@ -13627,7 +15254,11 @@ func (v *ValidatorInfo) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *ValidatorInfo) IsValid() error {
@@ -13674,7 +15305,9 @@ func (v *ValidatorPartitionInfo) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(len(v.ID) == 0) {
@@ -13687,7 +15320,11 @@ func (v *ValidatorPartitionInfo) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *ValidatorPartitionInfo) IsValid() error {
@@ -13724,7 +15361,9 @@ func (v *WriteData) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -13743,7 +15382,11 @@ func (v *WriteData) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *WriteData) IsValid() error {
@@ -13780,7 +15423,9 @@ func (v *WriteDataResult) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -13799,7 +15444,11 @@ func (v *WriteDataResult) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *WriteDataResult) IsValid() error {
@@ -13845,7 +15494,9 @@ func (v *WriteDataTo) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -13861,7 +15512,11 @@ func (v *WriteDataTo) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *WriteDataTo) IsValid() error {
@@ -15673,6 +17328,35 @@ func (v *FeeSchedule) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *HashLockOptions) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *HashLockOptions) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x := new(HashAlgorithm); reader.ReadEnum(1, x) {
+		v.HashAlgorithm = *x
+	}
+	if x, ok := reader.ReadBytes(2); ok {
+		v.Hash = x
+	}
+	if x, ok := reader.ReadTime(3); ok {
+		v.Expiration = &x
+	}
+
+	seen, err := reader.Reset(fieldNames_HashLockOptions)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *HoldUntilOptions) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -15845,6 +17529,32 @@ func (v *KeyBook) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_KeyBook)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *KeyBookProof) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *KeyBookProof) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x := new(KeyBook); reader.ReadValue(1, x.UnmarshalBinaryFrom) {
+		v.KeyBook = x
+	}
+	if x := new(merkle.Receipt); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+		v.Receipt = x
+	}
+
+	seen, err := reader.Reset(fieldNames_KeyBookProof)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -16133,6 +17843,9 @@ func (v *LiteTokenAccount) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	}
 	if x, ok := reader.ReadUint(5); ok {
 		v.LockHeight = x
+	}
+	if x, ok := reader.ReadUrl(6); ok {
+		v.Delegate = x
 	}
 
 	seen, err := reader.Reset(fieldNames_LiteTokenAccount)
@@ -16794,6 +18507,91 @@ func (v *ReceiptSignature) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
+func (v *ReleaseLockedOperation) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *ReleaseLockedOperation) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *ReleaseLockedOperation) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadTxid(2); ok {
+		v.LockedTxID = x
+	}
+	if x, ok := reader.ReadBytes(3); ok {
+		v.Preimage = x
+	}
+
+	seen, err := reader.Reset(fieldNames_ReleaseLockedOperation)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *ReleaseLockedOperationResult) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *ReleaseLockedOperationResult) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *ReleaseLockedOperationResult) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadBytes(2); ok {
+		v.Preimage = x
+	}
+	if x := new(HashAlgorithm); reader.ReadEnum(3, x) {
+		v.HashAlgorithm = *x
+	}
+	if x, ok := reader.ReadBytes(4); ok {
+		v.Hash = x
+	}
+	if x, ok := reader.ReadBigInt(5); ok {
+		v.Amount = *x
+	}
+	if x, ok := reader.ReadUrl(6); ok {
+		v.Token = x
+	}
+
+	seen, err := reader.Reset(fieldNames_ReleaseLockedOperationResult)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *RemoteSignature) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -17130,6 +18928,44 @@ func (v *SendTokens) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_SendTokens)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *SetLiteAccountDelegate) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *SetLiteAccountDelegate) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *SetLiteAccountDelegate) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadUrl(2); ok {
+		v.Delegate = x
+	}
+	if x := new(KeyBookProof); reader.ReadValue(3, x.UnmarshalBinaryFrom) {
+		v.Proof = x
+	}
+
+	seen, err := reader.Reset(fieldNames_SetLiteAccountDelegate)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -17557,6 +19393,95 @@ func (v *SyntheticLedger) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
+func (v *SyntheticLockedDeposit) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *SyntheticLockedDeposit) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *SyntheticLockedDeposit) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	reader.ReadValue(2, v.SyntheticOrigin.UnmarshalBinaryFrom)
+	if x, ok := reader.ReadUrl(3); ok {
+		v.Token = x
+	}
+	if x, ok := reader.ReadBigInt(4); ok {
+		v.Amount = *x
+	}
+	if x, ok := reader.ReadUrl(5); ok {
+		v.Sender = x
+	}
+	if x := new(HashAlgorithm); reader.ReadEnum(6, x) {
+		v.HashAlgorithm = *x
+	}
+	if x, ok := reader.ReadBytes(7); ok {
+		v.Hash = x
+	}
+	if x, ok := reader.ReadTime(8); ok {
+		v.Expiration = &x
+	}
+	if x, ok := reader.ReadBool(9); ok {
+		v.IsIssuer = x
+	}
+
+	seen, err := reader.Reset(fieldNames_SyntheticLockedDeposit)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *SyntheticLockedDepositResult) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *SyntheticLockedDepositResult) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *SyntheticLockedDepositResult) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadTxid(2); ok {
+		v.ReleaseTxID = x
+	}
+
+	seen, err := reader.Reset(fieldNames_SyntheticLockedDepositResult)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *SyntheticOrigin) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -17971,8 +19896,11 @@ func (v *TransactionHeader) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(HoldUntilOptions); reader.ReadValue(6, x.UnmarshalBinaryFrom) {
 		v.HoldUntil = x
 	}
+	if x := new(HashLockOptions); reader.ReadValue(7, x.UnmarshalBinaryFrom) {
+		v.HashLock = x
+	}
 	for {
-		if x, ok := reader.ReadUrl(7); ok {
+		if x, ok := reader.ReadUrl(8); ok {
 			v.Authorities = append(v.Authorities, x)
 		} else {
 			break
@@ -19021,6 +20949,12 @@ func init() {
 	}, "FeeSchedule", "feeSchedule")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("hashAlgorithm", "string"),
+		encoding.NewTypeField("hash", "bytes"),
+		encoding.NewTypeField("expiration", "string"),
+	}, "HashLockOptions", "hashLockOptions")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("minorBlock", "uint64"),
 	}, "HoldUntilOptions", "holdUntilOptions")
 
@@ -19052,6 +20986,11 @@ func init() {
 		encoding.NewTypeField("authorities", "AuthorityEntry[]"),
 		encoding.NewTypeField("pageCount", "uint64"),
 	}, "KeyBook", "keyBook")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("keyBook", "KeyBook"),
+		encoding.NewTypeField("receipt", "merkle.Receipt"),
+	}, "KeyBookProof", "keyBookProof")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("type", "string"),
@@ -19107,6 +21046,7 @@ func init() {
 		encoding.NewTypeField("tokenUrl", "string"),
 		encoding.NewTypeField("balance", "uint256"),
 		encoding.NewTypeField("lockHeight", "uint64"),
+		encoding.NewTypeField("delegate", "string"),
 	}, "LiteTokenAccount", "liteTokenAccount")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -19237,6 +21177,21 @@ func init() {
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("lockedTxID", "string"),
+		encoding.NewTypeField("preimage", "bytes"),
+	}, "ReleaseLockedOperation", "releaseLockedOperation")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("preimage", "bytes"),
+		encoding.NewTypeField("hashAlgorithm", "string"),
+		encoding.NewTypeField("hash", "bytes"),
+		encoding.NewTypeField("amount", "uint256"),
+		encoding.NewTypeField("token", "string"),
+	}, "ReleaseLockedOperationResult", "releaseLockedOperationResult")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
 		encoding.NewTypeField("destination", "string"),
 		encoding.NewTypeField("signature", "Signature"),
 		encoding.NewTypeField("cause", "bytes32[]"),
@@ -19292,6 +21247,12 @@ func init() {
 		encoding.NewTypeField("meta", "string"),
 		encoding.NewTypeField("to", "TokenRecipient[]"),
 	}, "SendTokens", "sendTokens")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("delegate", "string"),
+		encoding.NewTypeField("proof", "KeyBookProof"),
+	}, "SetLiteAccountDelegate", "setLiteAccountDelegate")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("type", "string"),
@@ -19374,6 +21335,27 @@ func init() {
 		encoding.NewTypeField("url", "string"),
 		encoding.NewTypeField("sequence", "PartitionSyntheticLedger[]"),
 	}, "SyntheticLedger", "syntheticLedger")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("cause", "string"),
+		encoding.NewTypeField("source", "string"),
+		encoding.NewTypeField("initiator", "string"),
+		encoding.NewTypeField("feeRefund", "uint64"),
+		encoding.NewTypeField("index", "uint64"),
+		encoding.NewTypeField("token", "string"),
+		encoding.NewTypeField("amount", "uint256"),
+		encoding.NewTypeField("sender", "string"),
+		encoding.NewTypeField("hashAlgorithm", "string"),
+		encoding.NewTypeField("hash", "bytes"),
+		encoding.NewTypeField("expiration", "string"),
+		encoding.NewTypeField("isIssuer", "bool"),
+	}, "SyntheticLockedDeposit", "syntheticLockedDeposit")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("releaseTxID", "string"),
+	}, "SyntheticLockedDepositResult", "syntheticLockedDepositResult")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("cause", "string"),
@@ -19459,6 +21441,7 @@ func init() {
 		encoding.NewTypeField("metadata", "bytes"),
 		encoding.NewTypeField("expire", "ExpireOptions"),
 		encoding.NewTypeField("holdUntil", "HoldUntilOptions"),
+		encoding.NewTypeField("hashLock", "HashLockOptions"),
 		encoding.NewTypeField("authorities", "string[]"),
 	}, "TransactionHeader", "transactionHeader")
 
@@ -20536,6 +22519,26 @@ func (v *FeeSchedule) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *HashLockOptions) MarshalJSON() ([]byte, error) {
+	u := struct {
+		HashAlgorithm HashAlgorithm `json:"hashAlgorithm,omitempty"`
+		Hash          *string       `json:"hash,omitempty"`
+		Expiration    *time.Time    `json:"expiration,omitempty"`
+		ExtraData     *string       `json:"$epilogue,omitempty"`
+	}{}
+	if !(v.HashAlgorithm == 0) {
+		u.HashAlgorithm = v.HashAlgorithm
+	}
+	if !(len(v.Hash) == 0) {
+		u.Hash = encoding.BytesToJSON(v.Hash)
+	}
+	if !(v.Expiration == nil) {
+		u.Expiration = v.Expiration
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
 func (v *InternalSignature) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type            SignatureType `json:"type"`
@@ -20773,6 +22776,7 @@ func (v *LiteTokenAccount) MarshalJSON() ([]byte, error) {
 		TokenUrl   *url.URL    `json:"tokenUrl,omitempty"`
 		Balance    *string     `json:"balance,omitempty"`
 		LockHeight uint64      `json:"lockHeight,omitempty"`
+		Delegate   *url.URL    `json:"delegate,omitempty"`
 		ExtraData  *string     `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -20787,6 +22791,9 @@ func (v *LiteTokenAccount) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.LockHeight == 0) {
 		u.LockHeight = v.LockHeight
+	}
+	if !(v.Delegate == nil) {
+		u.Delegate = v.Delegate
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -21074,6 +23081,54 @@ func (v *ReceiptSignature) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *ReleaseLockedOperation) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type       TransactionType `json:"type"`
+		LockedTxID *url.TxID       `json:"lockedTxID,omitempty"`
+		Preimage   *string         `json:"preimage,omitempty"`
+		ExtraData  *string         `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.LockedTxID == nil) {
+		u.LockedTxID = v.LockedTxID
+	}
+	if !(len(v.Preimage) == 0) {
+		u.Preimage = encoding.BytesToJSON(v.Preimage)
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *ReleaseLockedOperationResult) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type          TransactionType `json:"type"`
+		Preimage      *string         `json:"preimage,omitempty"`
+		HashAlgorithm HashAlgorithm   `json:"hashAlgorithm,omitempty"`
+		Hash          *string         `json:"hash,omitempty"`
+		Amount        *string         `json:"amount,omitempty"`
+		Token         *url.URL        `json:"token,omitempty"`
+		ExtraData     *string         `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.Preimage) == 0) {
+		u.Preimage = encoding.BytesToJSON(v.Preimage)
+	}
+	if !(v.HashAlgorithm == 0) {
+		u.HashAlgorithm = v.HashAlgorithm
+	}
+	if !(len(v.Hash) == 0) {
+		u.Hash = encoding.BytesToJSON(v.Hash)
+	}
+	if !((v.Amount).Cmp(new(big.Int)) == 0) {
+		u.Amount = encoding.BigintToJSON(&v.Amount)
+	}
+	if !(v.Token == nil) {
+		u.Token = v.Token
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
 func (v *RemoteSignature) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type        SignatureType                          `json:"type"`
@@ -21220,6 +23275,24 @@ func (v *SendTokens) MarshalJSON() ([]byte, error) {
 	}
 	if !(len(v.To) == 0) {
 		u.To = v.To
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *SetLiteAccountDelegate) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      TransactionType `json:"type"`
+		Delegate  *url.URL        `json:"delegate,omitempty"`
+		Proof     *KeyBookProof   `json:"proof,omitempty"`
+		ExtraData *string         `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.Delegate == nil) {
+		u.Delegate = v.Delegate
+	}
+	if !(v.Proof == nil) {
+		u.Proof = v.Proof
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -21493,6 +23566,78 @@ func (v *SyntheticLedger) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *SyntheticLockedDeposit) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type          TransactionType `json:"type"`
+		Cause         *url.TxID       `json:"cause,omitempty"`
+		Source        *url.URL        `json:"source,omitempty"`
+		Initiator     *url.URL        `json:"initiator,omitempty"`
+		FeeRefund     uint64          `json:"feeRefund,omitempty"`
+		Index         uint64          `json:"index,omitempty"`
+		Token         *url.URL        `json:"token,omitempty"`
+		Amount        *string         `json:"amount,omitempty"`
+		Sender        *url.URL        `json:"sender,omitempty"`
+		HashAlgorithm HashAlgorithm   `json:"hashAlgorithm,omitempty"`
+		Hash          *string         `json:"hash,omitempty"`
+		Expiration    *time.Time      `json:"expiration,omitempty"`
+		IsIssuer      bool            `json:"isIssuer,omitempty"`
+		ExtraData     *string         `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.SyntheticOrigin.Cause == nil) {
+		u.Cause = v.SyntheticOrigin.Cause
+	}
+	if !(v.SyntheticOrigin.Source() == nil) {
+		u.Source = v.SyntheticOrigin.Source()
+	}
+	if !(v.SyntheticOrigin.Initiator == nil) {
+		u.Initiator = v.SyntheticOrigin.Initiator
+	}
+	if !(v.SyntheticOrigin.FeeRefund == 0) {
+		u.FeeRefund = v.SyntheticOrigin.FeeRefund
+	}
+	if !(v.SyntheticOrigin.Index == 0) {
+		u.Index = v.SyntheticOrigin.Index
+	}
+	if !(v.Token == nil) {
+		u.Token = v.Token
+	}
+	if !((v.Amount).Cmp(new(big.Int)) == 0) {
+		u.Amount = encoding.BigintToJSON(&v.Amount)
+	}
+	if !(v.Sender == nil) {
+		u.Sender = v.Sender
+	}
+	if !(v.HashAlgorithm == 0) {
+		u.HashAlgorithm = v.HashAlgorithm
+	}
+	if !(len(v.Hash) == 0) {
+		u.Hash = encoding.BytesToJSON(v.Hash)
+	}
+	if !(v.Expiration == nil) {
+		u.Expiration = v.Expiration
+	}
+	if !(!v.IsIssuer) {
+		u.IsIssuer = v.IsIssuer
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *SyntheticLockedDepositResult) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type        TransactionType `json:"type"`
+		ReleaseTxID *url.TxID       `json:"releaseTxID,omitempty"`
+		ExtraData   *string         `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.ReleaseTxID == nil) {
+		u.ReleaseTxID = v.ReleaseTxID
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
 func (v *SyntheticWriteData) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type      TransactionType                        `json:"type"`
@@ -21701,6 +23846,7 @@ func (v *TransactionHeader) MarshalJSON() ([]byte, error) {
 		Metadata    *string                     `json:"metadata,omitempty"`
 		Expire      *ExpireOptions              `json:"expire,omitempty"`
 		HoldUntil   *HoldUntilOptions           `json:"holdUntil,omitempty"`
+		HashLock    *HashLockOptions            `json:"hashLock,omitempty"`
 		Authorities encoding.JsonList[*url.URL] `json:"authorities,omitempty"`
 		ExtraData   *string                     `json:"$epilogue,omitempty"`
 	}{}
@@ -21721,6 +23867,9 @@ func (v *TransactionHeader) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.HoldUntil == nil) {
 		u.HoldUntil = v.HoldUntil
+	}
+	if !(v.HashLock == nil) {
+		u.HashLock = v.HashLock
 	}
 	if !(len(v.Authorities) == 0) {
 		u.Authorities = v.Authorities
@@ -23465,6 +25614,34 @@ func (v *FeeSchedule) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *HashLockOptions) UnmarshalJSON(data []byte) error {
+	u := struct {
+		HashAlgorithm HashAlgorithm `json:"hashAlgorithm,omitempty"`
+		Hash          *string       `json:"hash,omitempty"`
+		Expiration    *time.Time    `json:"expiration,omitempty"`
+		ExtraData     *string       `json:"$epilogue,omitempty"`
+	}{}
+	u.HashAlgorithm = v.HashAlgorithm
+	u.Hash = encoding.BytesToJSON(v.Hash)
+	u.Expiration = v.Expiration
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	v.HashAlgorithm = u.HashAlgorithm
+	if x, err := encoding.BytesFromJSON(u.Hash); err != nil {
+		return fmt.Errorf("error decoding Hash: %w", err)
+	} else {
+		v.Hash = x
+	}
+	v.Expiration = u.Expiration
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (v *InternalSignature) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type            SignatureType `json:"type"`
@@ -23794,6 +25971,7 @@ func (v *LiteTokenAccount) UnmarshalJSON(data []byte) error {
 		TokenUrl   *url.URL    `json:"tokenUrl,omitempty"`
 		Balance    *string     `json:"balance,omitempty"`
 		LockHeight uint64      `json:"lockHeight,omitempty"`
+		Delegate   *url.URL    `json:"delegate,omitempty"`
 		ExtraData  *string     `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -23801,6 +25979,7 @@ func (v *LiteTokenAccount) UnmarshalJSON(data []byte) error {
 	u.TokenUrl = v.TokenUrl
 	u.Balance = encoding.BigintToJSON(&v.Balance)
 	u.LockHeight = v.LockHeight
+	u.Delegate = v.Delegate
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -23816,6 +25995,7 @@ func (v *LiteTokenAccount) UnmarshalJSON(data []byte) error {
 		v.Balance = *x
 	}
 	v.LockHeight = u.LockHeight
+	v.Delegate = u.Delegate
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err
@@ -24217,6 +26397,83 @@ func (v *ReceiptSignature) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *ReleaseLockedOperation) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type       TransactionType `json:"type"`
+		LockedTxID *url.TxID       `json:"lockedTxID,omitempty"`
+		Preimage   *string         `json:"preimage,omitempty"`
+		ExtraData  *string         `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.LockedTxID = v.LockedTxID
+	u.Preimage = encoding.BytesToJSON(v.Preimage)
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.LockedTxID = u.LockedTxID
+	if x, err := encoding.BytesFromJSON(u.Preimage); err != nil {
+		return fmt.Errorf("error decoding Preimage: %w", err)
+	} else {
+		v.Preimage = x
+	}
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *ReleaseLockedOperationResult) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type          TransactionType `json:"type"`
+		Preimage      *string         `json:"preimage,omitempty"`
+		HashAlgorithm HashAlgorithm   `json:"hashAlgorithm,omitempty"`
+		Hash          *string         `json:"hash,omitempty"`
+		Amount        *string         `json:"amount,omitempty"`
+		Token         *url.URL        `json:"token,omitempty"`
+		ExtraData     *string         `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Preimage = encoding.BytesToJSON(v.Preimage)
+	u.HashAlgorithm = v.HashAlgorithm
+	u.Hash = encoding.BytesToJSON(v.Hash)
+	u.Amount = encoding.BigintToJSON(&v.Amount)
+	u.Token = v.Token
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	if x, err := encoding.BytesFromJSON(u.Preimage); err != nil {
+		return fmt.Errorf("error decoding Preimage: %w", err)
+	} else {
+		v.Preimage = x
+	}
+	v.HashAlgorithm = u.HashAlgorithm
+	if x, err := encoding.BytesFromJSON(u.Hash); err != nil {
+		return fmt.Errorf("error decoding Hash: %w", err)
+	} else {
+		v.Hash = x
+	}
+	if x, err := encoding.BigintFromJSON(u.Amount); err != nil {
+		return fmt.Errorf("error decoding Amount: %w", err)
+	} else {
+		v.Amount = *x
+	}
+	v.Token = u.Token
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (v *RemoteSignature) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type        SignatureType                          `json:"type"`
@@ -24442,6 +26699,32 @@ func (v *SendTokens) UnmarshalJSON(data []byte) error {
 	}
 	v.Meta = u.Meta
 	v.To = u.To
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *SetLiteAccountDelegate) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      TransactionType `json:"type"`
+		Delegate  *url.URL        `json:"delegate,omitempty"`
+		Proof     *KeyBookProof   `json:"proof,omitempty"`
+		ExtraData *string         `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Delegate = v.Delegate
+	u.Proof = v.Proof
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Delegate = u.Delegate
+	v.Proof = u.Proof
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err
@@ -24799,6 +27082,92 @@ func (v *SyntheticLedger) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *SyntheticLockedDeposit) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type          TransactionType `json:"type"`
+		Cause         *url.TxID       `json:"cause,omitempty"`
+		Source        *url.URL        `json:"source,omitempty"`
+		Initiator     *url.URL        `json:"initiator,omitempty"`
+		FeeRefund     uint64          `json:"feeRefund,omitempty"`
+		Index         uint64          `json:"index,omitempty"`
+		Token         *url.URL        `json:"token,omitempty"`
+		Amount        *string         `json:"amount,omitempty"`
+		Sender        *url.URL        `json:"sender,omitempty"`
+		HashAlgorithm HashAlgorithm   `json:"hashAlgorithm,omitempty"`
+		Hash          *string         `json:"hash,omitempty"`
+		Expiration    *time.Time      `json:"expiration,omitempty"`
+		IsIssuer      bool            `json:"isIssuer,omitempty"`
+		ExtraData     *string         `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Cause = v.SyntheticOrigin.Cause
+	u.Source = v.SyntheticOrigin.Source()
+	u.Initiator = v.SyntheticOrigin.Initiator
+	u.FeeRefund = v.SyntheticOrigin.FeeRefund
+	u.Index = v.SyntheticOrigin.Index
+	u.Token = v.Token
+	u.Amount = encoding.BigintToJSON(&v.Amount)
+	u.Sender = v.Sender
+	u.HashAlgorithm = v.HashAlgorithm
+	u.Hash = encoding.BytesToJSON(v.Hash)
+	u.Expiration = v.Expiration
+	u.IsIssuer = v.IsIssuer
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.SyntheticOrigin.Cause = u.Cause
+	v.SyntheticOrigin.Initiator = u.Initiator
+	v.SyntheticOrigin.FeeRefund = u.FeeRefund
+	v.SyntheticOrigin.Index = u.Index
+	v.Token = u.Token
+	if x, err := encoding.BigintFromJSON(u.Amount); err != nil {
+		return fmt.Errorf("error decoding Amount: %w", err)
+	} else {
+		v.Amount = *x
+	}
+	v.Sender = u.Sender
+	v.HashAlgorithm = u.HashAlgorithm
+	if x, err := encoding.BytesFromJSON(u.Hash); err != nil {
+		return fmt.Errorf("error decoding Hash: %w", err)
+	} else {
+		v.Hash = x
+	}
+	v.Expiration = u.Expiration
+	v.IsIssuer = u.IsIssuer
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *SyntheticLockedDepositResult) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type        TransactionType `json:"type"`
+		ReleaseTxID *url.TxID       `json:"releaseTxID,omitempty"`
+		ExtraData   *string         `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.ReleaseTxID = v.ReleaseTxID
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.ReleaseTxID = u.ReleaseTxID
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (v *SyntheticWriteData) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type      TransactionType                        `json:"type"`
@@ -25084,6 +27453,7 @@ func (v *TransactionHeader) UnmarshalJSON(data []byte) error {
 		Metadata    *string                     `json:"metadata,omitempty"`
 		Expire      *ExpireOptions              `json:"expire,omitempty"`
 		HoldUntil   *HoldUntilOptions           `json:"holdUntil,omitempty"`
+		HashLock    *HashLockOptions            `json:"hashLock,omitempty"`
 		Authorities encoding.JsonList[*url.URL] `json:"authorities,omitempty"`
 		ExtraData   *string                     `json:"$epilogue,omitempty"`
 	}{}
@@ -25093,6 +27463,7 @@ func (v *TransactionHeader) UnmarshalJSON(data []byte) error {
 	u.Metadata = encoding.BytesToJSON(v.Metadata)
 	u.Expire = v.Expire
 	u.HoldUntil = v.HoldUntil
+	u.HashLock = v.HashLock
 	u.Authorities = v.Authorities
 	err := json.Unmarshal(data, &u)
 	if err != nil {
@@ -25112,6 +27483,7 @@ func (v *TransactionHeader) UnmarshalJSON(data []byte) error {
 	}
 	v.Expire = u.Expire
 	v.HoldUntil = u.HoldUntil
+	v.HashLock = u.HashLock
 	v.Authorities = u.Authorities
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {

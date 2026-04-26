@@ -248,6 +248,12 @@ TransactionType:
   UpdateKey:
     value: 0x16
     description: update key for existing keys
+  SetLiteAccountDelegate:
+    value: 0x17
+    description: sets or clears the delegate authority on a lite token account
+  ReleaseLockedOperation:
+    value: 0x18
+    description: releases a locked deposit by revealing the hash preimage
   NetworkMaintenance:
     value: 0x2E
     description: executes network maintenance operations
@@ -278,6 +284,9 @@ TransactionType:
   SyntheticForwardTransaction:
     value: 0x36
     description: forwards a transaction from one partition to another
+  SyntheticLockedDeposit:
+    value: 0x37
+    description: deposits locked tokens requiring preimage revelation to unlock
 
   ##### SYSTEM TRANSACTIONS #####
   SystemGenesis:
@@ -373,3 +382,17 @@ BookType:
   Operator:
     value: 0x02
     description: Operator key book
+
+HashAlgorithm:
+  Unknown:
+    value: 0
+    description: is used when the hash algorithm is not known
+  SHA256:
+    value: 1
+    description: SHA-256, 32 bytes output (Ethereum, Bitcoin OP_SHA256)
+  SHA256D:
+    value: 2
+    description: double SHA-256, 32 bytes output (Bitcoin block hashing)
+  HASH160:
+    value: 3
+    description: RIPEMD160(SHA256(x)), 20 bytes output (Bitcoin OP_HASH160, addresses)

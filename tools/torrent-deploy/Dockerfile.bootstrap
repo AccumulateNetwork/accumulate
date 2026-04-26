@@ -1,0 +1,18 @@
+FROM alpine:3
+
+# Install torrent client and extraction tools
+RUN apk add --no-cache \
+    bash \
+    aria2 \
+    pv \
+    pigz \
+    tar \
+    coreutils
+
+WORKDIR /bootstrap
+
+# Copy bootstrap scripts
+COPY tools/torrent-deploy/scripts/download-and-extract.sh /bootstrap/
+RUN chmod +x /bootstrap/*.sh
+
+ENTRYPOINT ["/bootstrap/download-and-extract.sh"]

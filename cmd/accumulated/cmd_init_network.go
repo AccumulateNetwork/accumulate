@@ -32,7 +32,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/address"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/test/testing"
 	"gopkg.in/yaml.v3"
 )
 
@@ -196,7 +195,6 @@ func prepareGenesis(cmd *cobra.Command, args []string) {
 	defer tick.Stop()
 
 	db := coredb.OpenInMemory(nil)
-	db.SetObserver(testing.NullObserver{})
 	for _, path := range args[1:] {
 		fmt.Println("Processing", path)
 		file, err := os.Open(path)

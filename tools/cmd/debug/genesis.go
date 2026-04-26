@@ -20,7 +20,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/remote"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
-	"gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
 var cmdGenesis = &cobra.Command{
@@ -57,9 +56,6 @@ func ingestForGenesis(cmd *cobra.Command, args []string) {
 
 	db := coredb.New(store, nil)
 	defer db.Close() // also closes store
-
-	// Don't calculate BPT hashes since genesis doesn't want them
-	db.SetObserver(testing.NullObserver{})
 
 	// For more details on what gets changed, see [genesis.Extract]
 
