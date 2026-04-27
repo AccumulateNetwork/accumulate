@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -200,7 +200,7 @@ func TestDecompressPubkey(t *testing.T) {
 	// Test with valid length but invalid data (should fail gracefully)
 	invalidCompressed := make([]byte, 33)
 	invalidCompressed[0] = 0x02
-	_, err = DecompressPubkey(invalidCompressed)
+	_, _ = DecompressPubkey(invalidCompressed)
 	// This may or may not error depending on the random data, that's ok
 
 	// The important thing is that the function doesn't crash

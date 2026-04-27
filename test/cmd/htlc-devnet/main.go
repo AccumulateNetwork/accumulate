@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -160,6 +160,7 @@ func faucetLite(ctx context.Context, c *client.Client, account *url.URL) {
 	}
 }
 
+//nolint:unused
 func createIdentity(ctx context.Context, c *client.Client, signer, identity *url.URL, pub ed25519.PublicKey, priv ed25519.PrivateKey) {
 	txn := new(protocol.Transaction)
 	txn.Header.Principal = signer
@@ -172,6 +173,7 @@ func createIdentity(ctx context.Context, c *client.Client, signer, identity *url
 	signAndSubmit(ctx, c, txn, signer, pub, priv, 1)
 }
 
+//nolint:unused
 func createTokenAccount(ctx context.Context, c *client.Client, signer, account, token *url.URL, pub ed25519.PublicKey, priv ed25519.PrivateKey) {
 	txn := new(protocol.Transaction)
 	txn.Header.Principal = signer
@@ -183,6 +185,7 @@ func createTokenAccount(ctx context.Context, c *client.Client, signer, account, 
 	signAndSubmit(ctx, c, txn, signer.JoinPath("book", "1"), pub, priv, 1)
 }
 
+//nolint:unused
 func addCredits(ctx context.Context, c *client.Client, from, to *url.URL, amount uint64, pub ed25519.PublicKey, priv ed25519.PrivateKey) {
 	txn := new(protocol.Transaction)
 	txn.Header.Principal = from
@@ -208,6 +211,7 @@ func addCreditsLite(ctx context.Context, c *client.Client, from, to *url.URL, am
 	signAndSubmit(ctx, c, txn, from.RootIdentity(), pub, priv, 1)
 }
 
+//nolint:unused
 func sendTokens(ctx context.Context, c *client.Client, from, to *url.URL, amount uint64, pub ed25519.PublicKey, priv ed25519.PrivateKey) {
 	txn := new(protocol.Transaction)
 	txn.Header.Principal = from
@@ -223,6 +227,7 @@ func sendTokens(ctx context.Context, c *client.Client, from, to *url.URL, amount
 	signAndSubmit(ctx, c, txn, signer, pub, priv, 1)
 }
 
+//nolint:unused
 func sendLockedTokens(ctx context.Context, c *client.Client, from, to *url.URL, amount uint64, hash [32]byte, expiration time.Time, pub ed25519.PublicKey, priv ed25519.PrivateKey) *url.TxID {
 	txn := new(protocol.Transaction)
 	txn.Header.Principal = from
@@ -294,6 +299,7 @@ func getProducedLockedDeposit(ctx context.Context, c *client.Client, txid *url.T
 	return nil
 }
 
+//nolint:unused
 func releaseLockedDeposit(ctx context.Context, c *client.Client, principal *url.URL, lockedTxID *url.TxID, preimage []byte, pub ed25519.PublicKey, priv ed25519.PrivateKey) {
 	txn := new(protocol.Transaction)
 	txn.Header.Principal = principal
@@ -415,6 +421,7 @@ func waitForBalance(ctx context.Context, c *client.Client, account *url.URL, min
 	fatalf("Timeout waiting for balance on %s", account)
 }
 
+//nolint:unused
 func doSha256(data []byte) []byte {
 	h := sha256.Sum256(data)
 	return h[:]

@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -232,9 +232,11 @@ func (ad *ActiveDiscovery) randomWalkDiscovery(ctx context.Context) int {
 		default:
 		}
 
-		// Generate a random peer ID to search for
+		// Generate a random peer ID to search for. Non-cryptographic is fine
+		// for DHT walks; suppress staticcheck SA1019 (the recommended
+		// alternatives are for cryptographic use).
 		randomBytes := make([]byte, 32)
-		rand.Read(randomBytes)
+		_, _ = rand.Read(randomBytes) //nolint:staticcheck
 
 		// FindPeersConnectedToPeer or GetClosestPeers does a DHT walk
 		closestCtx, cancel := context.WithTimeout(ctx, 30*time.Second)

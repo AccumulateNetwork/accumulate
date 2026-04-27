@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -67,7 +67,6 @@ func main() {
 	// Iterate through BPT and find orphaned entries
 	orphanedCount := 0
 	validCount := 0
-	var orphanedKeys []string
 
 	it := batch.IterateAccounts()
 	for it.Next() {
@@ -79,7 +78,6 @@ func main() {
 		if err != nil {
 			if errors.Is(err, errors.NotFound) {
 				orphanedCount++
-				orphanedKeys = append(orphanedKeys, u.String())
 				if orphanedCount <= 20 {
 					fmt.Printf("  Orphaned: %s\n", u)
 				}

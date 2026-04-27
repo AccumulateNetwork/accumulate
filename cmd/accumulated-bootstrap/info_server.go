@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -362,7 +362,7 @@ func (s *InfoServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(ConnectResponse{
+		_ = json.NewEncoder(w).Encode(ConnectResponse{
 			Success: false,
 			Error:   "invalid request body: " + err.Error(),
 		})
@@ -372,7 +372,7 @@ func (s *InfoServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 	if req.Address == "" {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(ConnectResponse{
+		_ = json.NewEncoder(w).Encode(ConnectResponse{
 			Success: false,
 			Error:   "address is required",
 		})
@@ -384,7 +384,7 @@ func (s *InfoServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(ConnectResponse{
+		_ = json.NewEncoder(w).Encode(ConnectResponse{
 			Success: false,
 			Error:   "invalid multiaddr: " + err.Error(),
 		})
@@ -396,7 +396,7 @@ func (s *InfoServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(ConnectResponse{
+		_ = json.NewEncoder(w).Encode(ConnectResponse{
 			Success: false,
 			Error:   "could not extract peer info: " + err.Error(),
 		})
@@ -413,7 +413,7 @@ func (s *InfoServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 		slog.Error("Failed to connect to peer", "peer_id", peerInfo.ID, "error", err)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(ConnectResponse{
+		_ = json.NewEncoder(w).Encode(ConnectResponse{
 			Success: false,
 			PeerID:  peerInfo.ID.String(),
 			Error:   "connection failed: " + err.Error(),
@@ -424,7 +424,7 @@ func (s *InfoServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 	slog.Info("Successfully connected to peer", "peer_id", peerInfo.ID)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(ConnectResponse{
+	_ = json.NewEncoder(w).Encode(ConnectResponse{
 		Success: true,
 		PeerID:  peerInfo.ID.String(),
 	})

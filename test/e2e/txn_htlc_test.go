@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -694,7 +694,7 @@ func TestHTLC_ExpirationRegistration(t *testing.T) {
 
 	// Create hash for the lock
 	preimage := make([]byte, 32)
-	rand.Read(preimage)
+	_, _ = rand.Read(preimage)
 	hash := sha256.Sum256(preimage)
 	expiration := time.Now().Add(24 * time.Hour)
 
@@ -876,7 +876,7 @@ func TestHTLC_CrossChainSwap_AccumulateInitiated(t *testing.T) {
 
 	// Verify Alice's tokens were debited
 	aliceAccount := GetAccount[*TokenAccount](t, sim.DatabaseFor(alice), alice.JoinPath("tokens"))
-	require.Equal(t, int64((1000-acmeAmount)*AcmePrecision), aliceAccount.Balance.Int64())
+	require.Equal(t, (1000-acmeAmount)*AcmePrecision, aliceAccount.Balance.Int64())
 
 	// === Step 3: Bob sees Alice's lock and locks ETH (participant uses shorter timelock) ===
 	ethAmount := big.NewInt(1e18) // 1 ETH in wei
@@ -923,7 +923,7 @@ func TestHTLC_CrossChainSwap_AccumulateInitiated(t *testing.T) {
 
 	// === Verify swap completed successfully ===
 	bobAccount := GetAccount[*TokenAccount](t, sim.DatabaseFor(bob), bob.JoinPath("tokens"))
-	require.Equal(t, int64(acmeAmount*AcmePrecision), bobAccount.Balance.Int64())
+	require.Equal(t, acmeAmount*AcmePrecision, bobAccount.Balance.Int64())
 	t.Logf("Swap complete! Bob received %d ACME", acmeAmount)
 
 	// Verify the preimage is recorded in the Accumulate transaction result
@@ -1024,7 +1024,7 @@ func TestHTLC_CrossChainSwap_EthereumInitiated(t *testing.T) {
 
 	// Verify Bob received ACME
 	bobAccount := GetAccount[*TokenAccount](t, sim.DatabaseFor(bob), bob.JoinPath("tokens"))
-	require.Equal(t, int64(acmeAmount*AcmePrecision), bobAccount.Balance.Int64())
+	require.Equal(t, acmeAmount*AcmePrecision, bobAccount.Balance.Int64())
 
 	// === Step 5: Alice extracts secret from Accumulate ===
 	// Alice monitors the Accumulate blockchain for Bob's claim and extracts the preimage
@@ -1214,7 +1214,7 @@ func TestHTLC_CrossChainSwap_MultipleSwaps(t *testing.T) {
 
 	for i := range swaps {
 		swaps[i].secret = make([]byte, 32)
-		rand.Read(swaps[i].secret)
+		_, _ = rand.Read(swaps[i].secret)
 		swaps[i].hash = sha256.Sum256(swaps[i].secret)
 		swaps[i].amount = int64((i + 1) * 10) // 10, 20, 30 ACME
 

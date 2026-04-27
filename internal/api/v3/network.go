@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -9,7 +9,6 @@ package api
 import (
 	"context"
 	"sync/atomic"
-	"time"
 
 	"github.com/cometbft/cometbft/libs/log"
 	coretypes "github.com/cometbft/cometbft/rpc/core/types"
@@ -112,7 +111,7 @@ func (s *NetworkService) NetworkStatus(ctx context.Context, _ api.NetworkStatusO
 			s.logger.Error("Failed to get node status for staleness detection", "error", err)
 		} else {
 			t := status.SyncInfo.LatestBlockTime
-			res.LastBlockTime = (*time.Time)(&t)
+			res.LastBlockTime = &t
 			catchingUp := status.SyncInfo.CatchingUp
 			res.CatchingUp = &catchingUp
 		}
