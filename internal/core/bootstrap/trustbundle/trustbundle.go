@@ -21,6 +21,7 @@
 package trustbundle
 
 import (
+	"crypto/ed25519"
 	"errors"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -134,9 +135,12 @@ func (b *Bundle) Verify(opts VerifyOptions) error {
 		idx[v.PublicKeyHash] = i
 	}
 
+	canonical := b.CanonicalHash()
+
 	seen := make(map[[32]byte]bool, len(b.Signatures))
 	for _, sig := range b.Signatures {
-		if _, ok := idx[sig.PublicKeyHash]; !ok {
+		i, ok := idx[sig.PublicKeyHash]
+		if !ok {
 			// Signature from a non-validator — ignore (not an error,
 			// just not counted).
 			continue
@@ -144,10 +148,14 @@ func (b *Bundle) Verify(opts VerifyOptions) error {
 		if seen[sig.PublicKeyHash] {
 			continue // duplicate
 		}
-		// Cryptographic verification of the signature against the bundle's
-		// canonical hash is implementation-stubbed. Real implementation
-		// uses protocol.SignatureType-specific verifiers. Tracked as a
-		// follow-up under this issue.
+
+		// Cryptographic verification.
+		v := b.ValidatorSet[i]
+		if !verifySig(v, sig.Signature, canonical) {
+			// Skip without erroring; threshold rule decides.
+			continue
+		}
+
 		seen[sig.PublicKeyHash] = true
 	}
 
@@ -155,6 +163,22 @@ func (b *Bundle) Verify(opts VerifyOptions) error {
 		return errors.New("insufficient signatures")
 	}
 	return nil
+}
+
+// verifySig dispatches to the right cryptographic verifier based on
+// the validator's signature type. Returns false on type mismatch or
+// signature failure.
+func verifySig(v ValidatorEntry, sig []byte, hash [32]byte) bool {
+	switch v.Type {
+	case protocol.SignatureTypeED25519:
+		if len(v.PublicKey) != ed25519.PublicKeySize {
+			return false
+		}
+		return ed25519.Verify(ed25519.PublicKey(v.PublicKey), hash[:], sig)
+	default:
+		// Other signature types not yet supported by the bundle path.
+		return false
+	}
 }
 
 // VerifyOptions configures bundle verification.
