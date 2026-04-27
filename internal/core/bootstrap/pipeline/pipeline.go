@@ -85,6 +85,16 @@ type Result struct {
 	BackWalkEntries   int
 	GenesisTerminated bool
 	ArtifactPath      string
+
+	// LeavesReconciled is the count of pulled accounts whose locally
+	// stored state hash was verified against a peer-served BPT leaf and
+	// proof (issue #3980).
+	LeavesReconciled int
+
+	// ReconciledBptRoot is the peer-reported BPT root captured during
+	// reconciliation. Once GetTrustAnchor (#3983) is wired, this is
+	// compared to the validator-quorum-signed StateTreeAnchor.
+	ReconciledBptRoot [32]byte
 }
 
 // Run executes the bootstrap pipeline.
@@ -163,8 +173,25 @@ func Run(ctx context.Context, opts Options) (*Result, error) {
 		return nil, fmt.Errorf("commit pulled state: %w", err)
 	}
 
-	// 4. Run the back-walker on the operators keybook.
-	logf("[4/5] Running back-walker for proof of derivation")
+	// 4. Reconcile pulled state against the peer's BPT (issue #3980).
+	logf("[4/6] Reconciling pulled state against peer BPT")
+	scope := protocol.PartitionUrl(opts.Partition)
+	reconBatch := db.Begin(false)
+	reconRes, err := reconcileBPT(ctx, q, reconBatch, scope, accounts, logf)
+	reconBatch.Discard()
+	if err != nil {
+		if opts.SkipProof {
+			logf("    reconciliation error (skipped): %v", err)
+			reconRes = &ReconcileResult{}
+		} else {
+			return nil, fmt.Errorf("BPT reconciliation: %w (pass --skip-proof to ignore in development)", err)
+		}
+	} else {
+		logf("    %d/%d leaves verified, peer root=%x", reconRes.LeavesVerified, len(accounts), reconRes.PeerBptRoot[:8])
+	}
+
+	// 5. Run the back-walker on the operators keybook.
+	logf("[5/6] Running back-walker for proof of derivation")
 	walker := backwalk.New(backwalk.Options{PinnedGenesisHash: opts.PinnedGenesisHash})
 	roBatch := db.Begin(false)
 	defer roBatch.Discard()
@@ -185,8 +212,8 @@ func Run(ctx context.Context, opts Options) (*Result, error) {
 		}
 	}
 
-	// 5. Persist.
-	logf("[5/5] Persisting bootstrap artifact")
+	// 6. Persist.
+	logf("[6/6] Persisting bootstrap artifact")
 	artifact := &bootpersist.Artifact{
 		PinnedGenesisHash: opts.PinnedGenesisHash,
 		Network:           opts.Network,
@@ -210,6 +237,8 @@ func Run(ctx context.Context, opts Options) (*Result, error) {
 		ChainEntriesPulled: chainEntries,
 		BackWalkEntries:    walker.MemoSize(),
 		ArtifactPath:       filepath.Join(opts.DataDir, bootpersist.FileName),
+		LeavesReconciled:   reconRes.LeavesVerified,
+		ReconciledBptRoot:  reconRes.PeerBptRoot,
 	}
 	if earliest != nil {
 		res.GenesisTerminated = earliest.GenesisTerm

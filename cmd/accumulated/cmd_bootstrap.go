@@ -125,6 +125,10 @@ func runBootstrap(cmd *cobra.Command, args []string) error {
 	fmt.Printf("  pin block:           %d\n", res.PinBlock)
 	fmt.Printf("  accounts pulled:     %d\n", res.AccountsPulled)
 	fmt.Printf("  chain entries:       %d\n", res.ChainEntriesPulled)
+	fmt.Printf("  leaves reconciled:   %d\n", res.LeavesReconciled)
+	if res.ReconciledBptRoot != ([32]byte{}) {
+		fmt.Printf("  peer BPT root:       %x\n", res.ReconciledBptRoot[:8])
+	}
 	fmt.Printf("  back-walk memos:     %d\n", res.BackWalkEntries)
 	fmt.Printf("  genesis terminated:  %v\n", res.GenesisTerminated)
 	fmt.Printf("  artifact:            %s\n", res.ArtifactPath)
