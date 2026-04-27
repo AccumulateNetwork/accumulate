@@ -1,10 +1,18 @@
 # Minimum-Data Node Bootstrap — Implementation Status
 
-**Branch:** `minimum-bootstrap-launch` (integration baseline; design doc + back-walk probe)
+**Branch:** `minimum-bootstrap-launch` — **all 11 issue branches merged in**. One-stop branch for evaluation.
 **Companion:** `docs/plans/minimum-data-node-bootstrap.md`
 **Tracking issue:** #3953
 
-This file tracks the per-issue branches and their state. Each branch is a self-contained slice — explore individually with `git checkout <branch>` and `go test ./internal/core/bootstrap/<pkg>/`.
+A single command to evaluate everything:
+
+```bash
+git checkout minimum-bootstrap-launch
+go test ./internal/core/bootstrap/...      # 48 tests, 8 packages
+go build ./cmd/accumulated/                 # builds with the new bootstrap subcommand
+```
+
+The per-issue branches still exist for slice-by-slice review (each is a self-contained chunk of work). The integration branch combines them all.
 
 ## Per-issue branches
 
