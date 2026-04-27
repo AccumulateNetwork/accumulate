@@ -274,3 +274,20 @@ BptLeafRecord:
       pointer: true
     - name: BptRoot
       type: hash
+
+BptPageRecord:
+  union: { type: record }
+  description: one paginated chunk of BPT leaves consistent with the current BPT root (#3969, #3972)
+  fields:
+    - name: Entries
+      type: BptLeafSummary
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+    - name: NextStart
+      type: hash
+      pointer: true
+    - name: BptRoot
+      type: hash
+    - name: Done
+      type: bool

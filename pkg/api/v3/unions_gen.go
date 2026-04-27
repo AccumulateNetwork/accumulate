@@ -25,6 +25,8 @@ func NewRecord(typ RecordType) (Record, error) {
 		return new(AccountRecord), nil
 	case RecordTypeBptLeaf:
 		return new(BptLeafRecord), nil
+	case RecordTypeBptPage:
+		return new(BptPageRecord), nil
 	case RecordTypeChainEntry:
 		return new(ChainEntryRecord[Record]), nil
 	case RecordTypeChain:
@@ -70,6 +72,12 @@ func EqualRecord(a, b Record) bool {
 			return b == nil
 		}
 		b, ok := b.(*BptLeafRecord)
+		return ok && a.Equal(b)
+	case *BptPageRecord:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*BptPageRecord)
 		return ok && a.Equal(b)
 	case *ChainEntryRecord[Record]:
 		if a == nil {
@@ -153,6 +161,8 @@ func CopyRecord(v Record) Record {
 	case *AccountRecord:
 		return v.Copy()
 	case *BptLeafRecord:
+		return v.Copy()
+	case *BptPageRecord:
 		return v.Copy()
 	case *ChainRecord:
 		return v.Copy()
@@ -244,6 +254,8 @@ func NewQuery(typ QueryType) (Query, error) {
 		return new(BlockQuery), nil
 	case QueryTypeBptLeaf:
 		return new(BptLeafQuery), nil
+	case QueryTypeBptPage:
+		return new(BptPageQuery), nil
 	case QueryTypeChain:
 		return new(ChainQuery), nil
 	case QueryTypeData:
@@ -289,6 +301,12 @@ func EqualQuery(a, b Query) bool {
 			return b == nil
 		}
 		b, ok := b.(*BptLeafQuery)
+		return ok && a.Equal(b)
+	case *BptPageQuery:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*BptPageQuery)
 		return ok && a.Equal(b)
 	case *ChainQuery:
 		if a == nil {
@@ -356,6 +374,8 @@ func CopyQuery(v Query) Query {
 	case *BlockQuery:
 		return v.Copy()
 	case *BptLeafQuery:
+		return v.Copy()
+	case *BptPageQuery:
 		return v.Copy()
 	case *ChainQuery:
 		return v.Copy()

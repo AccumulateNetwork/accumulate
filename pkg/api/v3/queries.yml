@@ -143,3 +143,14 @@ BptLeafQuery:
   fields:
     - name: Key
       type: hash
+
+BptPageQuery:
+  union: { type: query }
+  description: paginated BPT enumeration (#3969, #3972)
+  fields:
+    - name: StartHash
+      type: hash
+      optional: true
+    - name: Count
+      type: uint
+      optional: true

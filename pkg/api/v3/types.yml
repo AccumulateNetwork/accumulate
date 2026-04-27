@@ -48,3 +48,10 @@ ServiceAddress:
     - name: Argument
       type: string
       optional: true
+
+BptLeafSummary:
+  fields:
+    - name: KeyHash
+      type: hash
+    - name: ValueHash
+      type: hash

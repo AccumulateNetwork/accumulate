@@ -315,6 +315,34 @@ func (s *Querier) query(ctx context.Context, batch *database.Batch, scope *url.U
 			BptRoot:   leaf.BptRoot,
 		}, nil
 
+	case *api.BptPageQuery:
+		// Issue #3972: expose bptproof.GetPage over v3 API.
+		count := int(query.Count)
+		if count <= 0 {
+			count = defaultPageSize
+		}
+		page, err := bptproof.GetPage(batch, query.StartHash, count)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("get bpt page: %w", err)
+		}
+		entries := make([]*api.BptLeafSummary, 0, len(page.Entries))
+		for _, e := range page.Entries {
+			entries = append(entries, &api.BptLeafSummary{
+				KeyHash:   e.KeyHash,
+				ValueHash: e.ValueHash,
+			})
+		}
+		out := &api.BptPageRecord{
+			Entries: entries,
+			BptRoot: page.BptRoot,
+			Done:    page.Done,
+		}
+		if !page.Done {
+			ns := page.NextStart
+			out.NextStart = &ns
+		}
+		return out, nil
+
 	default:
 		return nil, errors.NotAllowed.WithFormat("unknown query type %v", query.QueryType())
 	}
