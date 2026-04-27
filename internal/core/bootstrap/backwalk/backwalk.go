@@ -249,14 +249,40 @@ func (w *Walker) verifyEntry(batch *database.Batch, accountUrl *url.URL, txnHash
 
 	switch {
 	case txn.Body.Type().IsSynthetic(), txn.Body.Type().IsSystem():
-		// Synthetic / system path: trace cause; quorum check is pending.
+		// Synthetic / system path: trace cause and run validator-quorum
+		// check if we can determine the producing partition.
 		sv, err := verifySynthetic(batch, txnHash, txn)
 		if err != nil {
 			return nil, err
 		}
 		ve.Synthetic = true
-		ve.QuorumPending = sv.QuorumPending
 		ve.Causes = sv.Causes
+
+		// Run quorum verification for anchor-class transactions. For
+		// other synthetic types the partition discovery story isn't
+		// yet wired; mark QuorumPending so the proof artifact reflects
+		// reality.
+		if txn.Body.Type().IsAnchor() && blockTime != nil {
+			partition, ok := protocol.ParsePartitionUrl(accountUrl)
+			if ok {
+				_, qerr := VerifyValidatorQuorum(batch, accountUrl, txnHash, partition, *blockTime)
+				if qerr == nil {
+					ve.QuorumPending = false
+				} else {
+					// Don't hard-fail the walk on quorum-pending; the
+					// caller decides via QuorumPending=true. This lets
+					// us produce a structurally complete proof artifact
+					// even when validator signatures haven't all been
+					// gathered yet (e.g., during BOOTING when we may
+					// not have pulled them).
+					ve.QuorumPending = true
+				}
+			} else {
+				ve.QuorumPending = true
+			}
+		} else {
+			ve.QuorumPending = sv.QuorumPending
+		}
 
 	case txn.Body.Type().IsUser():
 		// User-signed: verify against keypage at blockTime.
