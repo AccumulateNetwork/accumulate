@@ -57,20 +57,60 @@ func verifySynthetic(batch *database.Batch, txnHash [32]byte, txn *protocol.Tran
 	}, nil
 }
 
-// signerForTransaction returns the URL we should use as the signer when
-// verifying user signatures on `txn`. For most user-signed transactions
-// the signer's keybook owns the principal account (the principal's
-// authority list points to its keybook). The principal's URL itself is
-// not necessarily a key page; it might be a token account or identity.
+// signerForTransaction returns candidate signer URLs for verifying
+// user signatures on `txn`. The first candidate is always the principal
+// itself (correct for transactions whose principal is a keypage, like
+// UpdateKeyPage on a page). Additional candidates follow the
+// principal's AccountAuth: each Authority's URL plus its first key
+// page (since signatures land at a specific keypage).
 //
-// For tonight's slice the simplification is: principal IS the signer
-// (works for transactions whose principal is itself a keypage, like
-// UpdateKeyPage on a page). External-signer flows (a parent identity
-// signs for a child account) require following the principal's
-// AccountAuth — deferred to a follow-up.
-func signerForTransaction(txn *protocol.Transaction) (*url.URL, error) {
+// The caller (verifyEntry) tries each candidate in order; the first
+// candidate that has signatures recorded for this transaction is used.
+func signerForTransaction(batch *database.Batch, txn *protocol.Transaction) ([]*url.URL, error) {
 	if txn == nil || txn.Header.Principal == nil {
 		return nil, fmt.Errorf("nil transaction or principal")
 	}
-	return txn.Header.Principal, nil
+	candidates := []*url.URL{txn.Header.Principal}
+
+	// If the principal is itself a keypage, no further candidates.
+	if _, _, ok := protocol.ParseKeyPageUrl(txn.Header.Principal); ok {
+		return candidates, nil
+	}
+
+	// Otherwise look up the principal's AccountAuth and add each
+	// authority's first key page. We surface multiple candidates so the
+	// caller can try them all when discovering which keybook signed.
+	auth, ok := loadAccountAuth(batch, txn.Header.Principal)
+	if !ok {
+		return candidates, nil
+	}
+	for _, entry := range auth.Authorities {
+		if entry.Url == nil {
+			continue
+		}
+		// Treat the authority URL as a keybook; add its page 1.
+		candidates = append(candidates, protocol.FormatKeyPageUrl(entry.Url, 0))
+	}
+	return candidates, nil
+}
+
+// loadAccountAuth attempts to load the account at u and return its
+// AccountAuth (the embedded authority list). Returns ok=false if the
+// account isn't present locally or doesn't carry an AccountAuth.
+func loadAccountAuth(batch *database.Batch, u *url.URL) (*protocol.AccountAuth, bool) {
+	var acct protocol.Account
+	if err := batch.Account(u).Main().GetAs(&acct); err != nil {
+		return nil, false
+	}
+	// FullAccount-shaped accounts expose AccountAuth via GetAuth().
+	type fullAcct interface {
+		GetAuth() *protocol.AccountAuth
+	}
+	if fa, ok := acct.(fullAcct); ok {
+		auth := fa.GetAuth()
+		if auth != nil {
+			return auth, true
+		}
+	}
+	return nil, false
 }

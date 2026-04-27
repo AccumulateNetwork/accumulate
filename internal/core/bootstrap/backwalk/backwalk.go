@@ -285,21 +285,37 @@ func (w *Walker) verifyEntry(batch *database.Batch, accountUrl *url.URL, txnHash
 		}
 
 	case txn.Body.Type().IsUser():
-		// User-signed: verify against keypage at blockTime.
-		signer, err := signerForTransaction(txn)
+		// User-signed: try each signer candidate (principal first, then
+		// authorities from the principal's AccountAuth).
+		candidates, err := signerForTransaction(batch, txn)
 		if err != nil {
 			return nil, err
 		}
-		ve.SignerUrl = signer
-		// User signatures live at the signer's account. For tonight's
-		// slice signer == principal; external-signer flows are a
-		// follow-up.
 		if blockTime != nil {
-			if err := VerifyUserSignaturesAt(batch, txnHash, signer, *blockTime); err != nil {
-				// Permit ErrNoSignatures during BOOTING walks where the
-				// node hasn't pulled signatures yet — caller can decide.
+			var lastErr error
+			verified := false
+			for _, signer := range candidates {
+				err := VerifyUserSignaturesAt(batch, txnHash, signer, *blockTime)
+				if err == nil {
+					ve.SignerUrl = signer
+					verified = true
+					break
+				}
+				if errors.Is(err, ErrNoSignatures) {
+					lastErr = err
+					continue
+				}
 				return nil, err
 			}
+			if !verified {
+				if lastErr != nil {
+					return nil, lastErr
+				}
+				return nil, ErrNoSignatures
+			}
+		} else if len(candidates) > 0 {
+			// No blockTime — record the first candidate as best guess.
+			ve.SignerUrl = candidates[0]
 		}
 
 	default:
