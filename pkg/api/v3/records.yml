@@ -259,3 +259,35 @@ ErrorRecord:
       type: errors2.Error
       pointer: true
       marshal-as: reference
+
+BptLeafRecord:
+  union: { type: record }
+  description: a BPT leaf and its Merkle proof to the current BPT root (#3958, #3971)
+  fields:
+    - name: KeyHash
+      type: hash
+    - name: ValueHash
+      type: hash
+    - name: Proof
+      type: merkle.Receipt
+      marshal-as: reference
+      pointer: true
+    - name: BptRoot
+      type: hash
+
+BptPageRecord:
+  union: { type: record }
+  description: one paginated chunk of BPT leaves consistent with the current BPT root (#3969, #3972)
+  fields:
+    - name: Entries
+      type: BptLeafSummary
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+    - name: NextStart
+      type: hash
+      pointer: true
+    - name: BptRoot
+      type: hash
+    - name: Done
+      type: bool

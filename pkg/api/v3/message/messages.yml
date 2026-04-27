@@ -197,3 +197,32 @@ EventMessage:
       marshal-as: union
       repeatable: true
       keep-empty: true
+
+# Issue #3973
+KeyBookAtRequest:
+  union: { type: message }
+  fields:
+    - type: api.KeyBookAtOptions
+      marshal-as: reference
+
+KeyBookAtResponse:
+  union: { type: message }
+  fields:
+    - name: Value
+      type: api.ResolvedKeyBook
+      marshal-as: reference
+      pointer: true
+
+BlockTimeForRequest:
+  union: { type: message }
+  fields:
+    - type: api.BlockTimeForOptions
+      marshal-as: reference
+
+BlockTimeForResponse:
+  union: { type: message }
+  fields:
+    - name: Value
+      type: api.BlockTimeResult
+      marshal-as: reference
+      pointer: true

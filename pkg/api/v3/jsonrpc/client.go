@@ -69,6 +69,14 @@ func (c *Client) Metrics(ctx context.Context, opts api.MetricsOptions) (*api.Met
 	return sendRequestUnmarshalAs[*api.Metrics](c, ctx, "metrics", &message.MetricsRequest{MetricsOptions: opts})
 }
 
+func (c *Client) ResolveKeyBookAt(ctx context.Context, opts api.KeyBookAtOptions) (*api.ResolvedKeyBook, error) {
+	return sendRequestUnmarshalAs[*api.ResolvedKeyBook](c, ctx, "resolveKeyBookAt", &message.KeyBookAtRequest{KeyBookAtOptions: opts})
+}
+
+func (c *Client) BlockTimeFor(ctx context.Context, opts api.BlockTimeForOptions) (*api.BlockTimeResult, error) {
+	return sendRequestUnmarshalAs[*api.BlockTimeResult](c, ctx, "blockTimeFor", &message.BlockTimeForRequest{BlockTimeForOptions: opts})
+}
+
 func (c *Client) Query(ctx context.Context, scope *url.URL, query api.Query) (api.Record, error) {
 	req := &message.QueryRequest{Scope: scope, Query: query}
 	return sendRequestUnmarshalWith(c, ctx, "query", req, api.UnmarshalRecordJSON)

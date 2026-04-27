@@ -136,3 +136,21 @@ MessageHashSearchQuery:
   fields:
     - name: Hash
       type: hash
+
+BptLeafQuery:
+  union: { type: query }
+  description: returns a BPT leaf with a Merkle proof against the current BPT root (#3958, #3971)
+  fields:
+    - name: Key
+      type: hash
+
+BptPageQuery:
+  union: { type: query }
+  description: paginated BPT enumeration (#3969, #3972)
+  fields:
+    - name: StartHash
+      type: hash
+      optional: true
+    - name: Count
+      type: uint
+      optional: true

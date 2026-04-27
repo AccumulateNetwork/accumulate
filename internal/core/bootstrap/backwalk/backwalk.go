@@ -218,9 +218,9 @@ func (w *Walker) walkLocked(batch *database.Batch, accountUrl *url.URL, blockTim
 
 	// Genesis termination: if the earliest entry is a SystemGenesis
 	// transaction (or otherwise signals the genesis snapshot), mark
-	// GenesisTerm. Cross-check against the pinned hash is a follow-up
-	// once we have the genesis-snapshot manifest available locally.
-	if isGenesisTerminator(batch, earliest.TxHash) {
+	// GenesisTerm. When the walker has a pinned genesis hash, the
+	// terminator check requires an exact hash match (#3979).
+	if w.isGenesisTerminator(batch, earliest.TxHash) {
 		earliest.GenesisTerm = true
 		w.terminations[accountUrl] = struct{}{}
 	}
@@ -384,15 +384,37 @@ func loadTx(batch *database.Batch, hash [32]byte) (*protocol.Transaction, error)
 }
 
 // isGenesisTerminator reports whether the transaction at txnHash should
-// be treated as terminating the chain at the genesis snapshot. For
-// tonight's slice we accept SystemGenesis as the terminator. A more
-// faithful check against the pinned-genesis manifest is a follow-up.
-func isGenesisTerminator(batch *database.Batch, txnHash [32]byte) bool {
+// be treated as terminating the chain at the genesis snapshot.
+//
+// Verification ladder (issue #3979):
+//
+//  1. The transaction must be a SystemGenesis-typed body — the only
+//     transaction class that creates genesis state.
+//  2. If the walker has a non-zero pinned genesis hash, the
+//     transaction's hash (or the hash of its containing snapshot
+//     when that's available) must match the pin. Mismatch → false.
+//  3. If the pin is zero (development / unpinned network), accept
+//     any SystemGenesis-typed earliest entry as the terminator. This
+//     fallback is documented as insecure in the pinned package.
+func (w *Walker) isGenesisTerminator(batch *database.Batch, txnHash [32]byte) bool {
 	txn, err := loadTx(batch, txnHash)
 	if err != nil || txn == nil {
 		return false
 	}
-	return txn.Body.Type() == protocol.TransactionTypeSystemGenesis
+	if txn.Body.Type() != protocol.TransactionTypeSystemGenesis {
+		return false
+	}
+	// Cross-check against the pinned hash if one is set. The genesis
+	// snapshot's identity is captured by the SystemGenesis transaction
+	// hash in the current schema; future iterations may use a
+	// dedicated snapshot hash that's a Merkle root over the genesis
+	// records — when that lands, swap the comparison here.
+	if w.pinnedGenesis != ([32]byte{}) {
+		if txnHash != w.pinnedGenesis {
+			return false
+		}
+	}
+	return true
 }
 
 // MemoSize returns the number of cached (account, blockTime) → entry

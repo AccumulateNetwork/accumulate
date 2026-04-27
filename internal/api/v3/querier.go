@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/cometbft/cometbft/libs/log"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/bptproof"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -54,6 +55,21 @@ func NewQuerier(params QuerierParams) *Querier {
 }
 
 func (s *Querier) Type() api.ServiceType { return api.ServiceTypeQuery }
+
+// Database returns the Querier's underlying database. Exposed so the
+// metrics service (and other co-located services) can construct
+// database.Batch instances for read paths that exist alongside the
+// querier — see issue #3978.
+func (s *Querier) Database() database.Viewer { return s.db }
+
+// PartitionID returns the partition this Querier serves.
+func (s *Querier) PartitionID() string {
+	if s.partition.URL == nil {
+		return ""
+	}
+	id, _ := protocol.ParsePartitionUrl(s.partition.URL)
+	return id
+}
 
 func (s *Querier) Query(ctx context.Context, scope *url.URL, query api.Query) (api.Record, error) {
 	// Ensure the query parameters are valid
@@ -300,6 +316,47 @@ func (s *Querier) query(ctx context.Context, batch *database.Batch, scope *url.U
 			r.LastBlockTime = s.getLastBlockTime(ctx, batch)
 		}
 		return r, err
+
+	case *api.BptLeafQuery:
+		// Issue #3971: expose bptproof.GetLeaf over v3 API.
+		leaf, err := bptproof.GetLeaf(batch, query.Key)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("get bpt leaf: %w", err)
+		}
+		return &api.BptLeafRecord{
+			KeyHash:   leaf.KeyHash,
+			ValueHash: leaf.ValueHash,
+			Proof:     leaf.Proof,
+			BptRoot:   leaf.BptRoot,
+		}, nil
+
+	case *api.BptPageQuery:
+		// Issue #3972: expose bptproof.GetPage over v3 API.
+		count := int(query.Count)
+		if count <= 0 {
+			count = defaultPageSize
+		}
+		page, err := bptproof.GetPage(batch, query.StartHash, count)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("get bpt page: %w", err)
+		}
+		entries := make([]*api.BptLeafSummary, 0, len(page.Entries))
+		for _, e := range page.Entries {
+			entries = append(entries, &api.BptLeafSummary{
+				KeyHash:   e.KeyHash,
+				ValueHash: e.ValueHash,
+			})
+		}
+		out := &api.BptPageRecord{
+			Entries: entries,
+			BptRoot: page.BptRoot,
+			Done:    page.Done,
+		}
+		if !page.Done {
+			ns := page.NextStart
+			out.NextStart = &ns
+		}
+		return out, nil
 
 	default:
 		return nil, errors.NotAllowed.WithFormat("unknown query type %v", query.QueryType())

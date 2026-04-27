@@ -24,6 +24,10 @@ func New(typ Type) (Message, error) {
 	switch typ {
 	case TypeAddressed:
 		return new(Addressed), nil
+	case TypeBlockTimeForRequest:
+		return new(BlockTimeForRequest), nil
+	case TypeBlockTimeForResponse:
+		return new(BlockTimeForResponse), nil
 	case TypeConsensusStatusRequest:
 		return new(ConsensusStatusRequest), nil
 	case TypeConsensusStatusResponse:
@@ -40,6 +44,10 @@ func New(typ Type) (Message, error) {
 		return new(FindServiceRequest), nil
 	case TypeFindServiceResponse:
 		return new(FindServiceResponse), nil
+	case TypeKeyBookAtRequest:
+		return new(KeyBookAtRequest), nil
+	case TypeKeyBookAtResponse:
+		return new(KeyBookAtResponse), nil
 	case TypeListSnapshotsRequest:
 		return new(ListSnapshotsRequest), nil
 	case TypeListSnapshotsResponse:
@@ -95,6 +103,18 @@ func Equal(a, b Message) bool {
 		}
 		b, ok := b.(*Addressed)
 		return ok && a.Equal(b)
+	case *BlockTimeForRequest:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*BlockTimeForRequest)
+		return ok && a.Equal(b)
+	case *BlockTimeForResponse:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*BlockTimeForResponse)
+		return ok && a.Equal(b)
 	case *ConsensusStatusRequest:
 		if a == nil {
 			return b == nil
@@ -142,6 +162,18 @@ func Equal(a, b Message) bool {
 			return b == nil
 		}
 		b, ok := b.(*FindServiceResponse)
+		return ok && a.Equal(b)
+	case *KeyBookAtRequest:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*KeyBookAtRequest)
+		return ok && a.Equal(b)
+	case *KeyBookAtResponse:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*KeyBookAtResponse)
 		return ok && a.Equal(b)
 	case *ListSnapshotsRequest:
 		if a == nil {
@@ -260,6 +292,10 @@ func Copy(v Message) Message {
 	switch v := v.(type) {
 	case *Addressed:
 		return v.Copy()
+	case *BlockTimeForRequest:
+		return v.Copy()
+	case *BlockTimeForResponse:
+		return v.Copy()
 	case *ConsensusStatusRequest:
 		return v.Copy()
 	case *ConsensusStatusResponse:
@@ -275,6 +311,10 @@ func Copy(v Message) Message {
 	case *FindServiceRequest:
 		return v.Copy()
 	case *FindServiceResponse:
+		return v.Copy()
+	case *KeyBookAtRequest:
+		return v.Copy()
+	case *KeyBookAtResponse:
 		return v.Copy()
 	case *ListSnapshotsRequest:
 		return v.Copy()

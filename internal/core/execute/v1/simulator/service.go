@@ -182,6 +182,16 @@ func (s *partService) Metrics(ctx context.Context, opts api.MetricsOptions) (*ap
 	return nil, errors.InternalError.With("not implemented")
 }
 
+// ResolveKeyBookAt — issue #3973. Stub on the v1 simulator partService.
+func (s *partService) ResolveKeyBookAt(ctx context.Context, opts api.KeyBookAtOptions) (*api.ResolvedKeyBook, error) {
+	return nil, errors.InternalError.With("not implemented")
+}
+
+// BlockTimeFor — issue #3973. Stub on the v1 simulator partService.
+func (s *partService) BlockTimeFor(ctx context.Context, opts api.BlockTimeForOptions) (*api.BlockTimeResult, error) {
+	return nil, errors.InternalError.With("not implemented")
+}
+
 // Query calls the partition's query service.
 func (s *partService) Query(ctx context.Context, scope *url.URL, query api.Query) (api.Record, error) {
 	r, err := s.query.Query(ctx, scope, query)

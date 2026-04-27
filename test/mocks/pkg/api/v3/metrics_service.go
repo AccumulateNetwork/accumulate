@@ -81,6 +81,59 @@ func (_c *MetricsService_Metrics_Call) RunAndReturn(run func(context.Context, ap
 	return _c
 }
 
+// ResolveKeyBookAt provides a mock function with given fields: ctx, opts
+// (issue #3973). Hand-written following the mockery-generated pattern.
+func (_m *MetricsService) ResolveKeyBookAt(ctx context.Context, opts api.KeyBookAtOptions) (*api.ResolvedKeyBook, error) {
+	ret := _m.Called(ctx, opts)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ResolveKeyBookAt")
+	}
+
+	var r0 *api.ResolvedKeyBook
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, api.KeyBookAtOptions) (*api.ResolvedKeyBook, error)); ok {
+		return rf(ctx, opts)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, api.KeyBookAtOptions) *api.ResolvedKeyBook); ok {
+		r0 = rf(ctx, opts)
+	} else if ret.Get(0) != nil {
+		r0 = ret.Get(0).(*api.ResolvedKeyBook)
+	}
+	if rf, ok := ret.Get(1).(func(context.Context, api.KeyBookAtOptions) error); ok {
+		r1 = rf(ctx, opts)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// BlockTimeFor provides a mock function with given fields: ctx, opts (#3973).
+func (_m *MetricsService) BlockTimeFor(ctx context.Context, opts api.BlockTimeForOptions) (*api.BlockTimeResult, error) {
+	ret := _m.Called(ctx, opts)
+
+	if len(ret) == 0 {
+		panic("no return value specified for BlockTimeFor")
+	}
+
+	var r0 *api.BlockTimeResult
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, api.BlockTimeForOptions) (*api.BlockTimeResult, error)); ok {
+		return rf(ctx, opts)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, api.BlockTimeForOptions) *api.BlockTimeResult); ok {
+		r0 = rf(ctx, opts)
+	} else if ret.Get(0) != nil {
+		r0 = ret.Get(0).(*api.BlockTimeResult)
+	}
+	if rf, ok := ret.Get(1).(func(context.Context, api.BlockTimeForOptions) error); ok {
+		r1 = rf(ctx, opts)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
 // NewMetricsService creates a new instance of MetricsService. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
 // The first argument is typically a *testing.T value.
 func NewMetricsService(t interface {

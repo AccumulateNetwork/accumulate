@@ -32,6 +32,10 @@ Type:
     value: 0x0A
   ListSnapshotsRequest:
     value: 0x0B
+  KeyBookAtRequest:
+    value: 0x0C
+  BlockTimeForRequest:
+    value: 0x0D
 
   ErrorResponse:
     value: 0x20
@@ -57,6 +61,10 @@ Type:
     value: 0x2A
   ListSnapshotsResponse:
     value: 0x2B
+  KeyBookAtResponse:
+    value: 0x2C
+  BlockTimeForResponse:
+    value: 0x2D
 
   Event:
     value: 0x40

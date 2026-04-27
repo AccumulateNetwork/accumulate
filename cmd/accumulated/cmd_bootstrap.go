@@ -8,12 +8,14 @@ package main
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
 	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pinned"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pipeline"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/accumulate"
 )
 
 // cmdBootstrap launches a node from minimum-data state via the receiver-
@@ -52,9 +54,11 @@ var flagBootstrap struct {
 	ConfigFile  string
 	DataDir     string
 	Network     string
+	Partition   string
 	TargetState string // "ACTIVE" (default) or "BOOTING"
 	TrustAnchor string // optional override "height:hexhash"
 	Force       bool
+	SkipProof   bool
 }
 
 func init() {
@@ -64,9 +68,11 @@ func init() {
 	f.StringVar(&flagBootstrap.ConfigFile, "config", "", "path to bootstrap.toml (omit for interactive)")
 	f.StringVar(&flagBootstrap.DataDir, "data-dir", "", "data directory (default ~/.accumulated)")
 	f.StringVar(&flagBootstrap.Network, "network", "", "network: mainnet | testnet | devnet | <endpoint>")
+	f.StringVar(&flagBootstrap.Partition, "partition", "Directory", "partition to bootstrap into (Directory or BVN name)")
 	f.StringVar(&flagBootstrap.TargetState, "target-state", "ACTIVE", "target state to reach before exiting: BOOTING or ACTIVE")
 	f.StringVar(&flagBootstrap.TrustAnchor, "trust-anchor", "", "override pinned trust anchor: 'height:hexhash'")
 	f.BoolVar(&flagBootstrap.Force, "force", false, "force re-bootstrap even if state is already persisted")
+	f.BoolVar(&flagBootstrap.SkipProof, "skip-proof", false, "do not abort on back-walker proof failures (development only)")
 }
 
 func runBootstrap(cmd *cobra.Command, args []string) error {
@@ -84,19 +90,45 @@ func runBootstrap(cmd *cobra.Command, args []string) error {
 	} else {
 		fmt.Printf("  trust-anchor: (built-in pinned for %s)\n", cfg.Network)
 	}
+	fmt.Println()
 
-	// The actual bootstrap pipeline:
-	//   1. Pin block H at confirmed depth.
-	//   2. Pull current state at H for the minimum bootstrap set.
-	//   3. Run the back-walk validator (#3960). Persist proof (#3965).
-	//   4. Fill the BPT structure via #3969.
-	//   5. Hand off to accumulated run; hydrator (#3964) drives BOOTING → ACTIVE.
-	//   6. If target = ACTIVE, wait for state transition before exit.
-	//
-	// This scaffolding wires the user-facing flags; the pipeline glue
-	// itself depends on persistence + back-walker + hydrator landing
-	// (next slice).
-	return errors.New("bootstrap pipeline not yet wired — see #3953 child issues for component status")
+	endpoint := accumulate.ResolveWellKnownEndpoint(cfg.Network, "v3")
+	if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
+		return fmt.Errorf("create data dir: %w", err)
+	}
+
+	pinnedHash := pinned.GenesisHash(cfg.Network)
+	if pinnedHash == ([32]byte{}) && !flagBootstrap.SkipProof {
+		fmt.Printf("Warning: no pinned genesis hash for network %q. ", cfg.Network)
+		fmt.Println("Genesis termination uses development-only fallback (any SystemGenesis-typed earliest entry).")
+		fmt.Println("Pass --skip-proof to suppress this warning, or wait for the network's hash to land in pkg/internal/core/bootstrap/pinned/pinned.go.")
+		fmt.Println()
+	}
+
+	res, err := pipeline.Run(cmd.Context(), pipeline.Options{
+		Endpoint:          endpoint,
+		Network:           cfg.Network,
+		Partition:         flagBootstrap.Partition,
+		DataDir:           cfg.DataDir,
+		SkipProof:         flagBootstrap.SkipProof,
+		PinnedGenesisHash: pinnedHash,
+		Logger: func(format string, a ...any) {
+			fmt.Printf(format+"\n", a...)
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("bootstrap pipeline: %w", err)
+	}
+
+	fmt.Println()
+	fmt.Println("Bootstrap result:")
+	fmt.Printf("  pin block:           %d\n", res.PinBlock)
+	fmt.Printf("  accounts pulled:     %d\n", res.AccountsPulled)
+	fmt.Printf("  chain entries:       %d\n", res.ChainEntriesPulled)
+	fmt.Printf("  back-walk memos:     %d\n", res.BackWalkEntries)
+	fmt.Printf("  genesis terminated:  %v\n", res.GenesisTerminated)
+	fmt.Printf("  artifact:            %s\n", res.ArtifactPath)
+	return nil
 }
 
 type bootstrapConfig struct {

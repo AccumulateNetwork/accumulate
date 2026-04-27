@@ -78,6 +78,29 @@ MetricsOptions:
       type: uint
       optional: true
 
+KeyBookAtOptions:
+  description: opts for the back-walk's key-book-at-time resolution (#3957, #3973)
+  fields:
+    - name: Url
+      type: url
+      pointer: true
+    - name: BlockTime
+      type: time
+
+BlockTimeForOptions:
+  description: opts for block-time lookup (#3973). Set TxId or BlockHeight, not both.
+  fields:
+    - name: Partition
+      type: string
+      optional: true
+    - name: TxId
+      type: txid
+      pointer: true
+      optional: true
+    - name: BlockHeight
+      type: uint
+      optional: true
+
 SubmitOptions:
   fields:
     - name: Verify

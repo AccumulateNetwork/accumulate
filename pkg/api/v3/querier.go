@@ -167,6 +167,21 @@ func (q Querier2) SearchForAnchor(ctx context.Context, scope *url.URL, search *A
 	return chainRangeOf[Record](doQuery(q, ctx, scope, search))
 }
 
+// QueryBptLeaf returns the BPT leaf at keyHash from the partition at scope,
+// plus a Merkle proof against the partition's current BPT root. Backs the
+// over-the-wire bootstrap path (issue #3971).
+func (q Querier2) QueryBptLeaf(ctx context.Context, scope *url.URL, query *BptLeafQuery) (*BptLeafRecord, error) {
+	return recordIs[*BptLeafRecord](doQuery(q, ctx, scope, query))
+}
+
+// QueryBptPage returns one paginated chunk of (key_hash, value_hash) pairs
+// from the partition at scope, consistent with the partition's current BPT
+// root. Drives Phase 1 BPT-structure fill in the bootstrap design (issue
+// #3972).
+func (q Querier2) QueryBptPage(ctx context.Context, scope *url.URL, query *BptPageQuery) (*BptPageRecord, error) {
+	return recordIs[*BptPageRecord](doQuery(q, ctx, scope, query))
+}
+
 func (q Querier2) SearchForPublicKey(ctx context.Context, scope *url.URL, search *PublicKeySearchQuery) (*RecordRange[*KeyRecord], error) {
 	return rangeOf[*KeyRecord](doQuery(q, ctx, scope, search))
 }

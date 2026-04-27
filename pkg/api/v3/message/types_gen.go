@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -31,6 +32,18 @@ type Addressed struct {
 	fieldsSet []bool
 	Message   Message       `json:"message,omitempty" form:"message" query:"message" validate:"required"`
 	Address   p2p.Multiaddr `json:"address,omitempty" form:"address" query:"address" validate:"required"`
+	extraData []byte
+}
+
+type BlockTimeForRequest struct {
+	fieldsSet []bool
+	api.BlockTimeForOptions
+	extraData []byte
+}
+
+type BlockTimeForResponse struct {
+	fieldsSet []bool
+	Value     *api.BlockTimeResult `json:"value,omitempty" form:"value" query:"value" validate:"required"`
 	extraData []byte
 }
 
@@ -80,6 +93,18 @@ type FindServiceRequest struct {
 type FindServiceResponse struct {
 	fieldsSet []bool
 	Value     []*api.FindServiceResult `json:"value" form:"value" query:"value" validate:"required"`
+	extraData []byte
+}
+
+type KeyBookAtRequest struct {
+	fieldsSet []bool
+	api.KeyBookAtOptions
+	extraData []byte
+}
+
+type KeyBookAtResponse struct {
+	fieldsSet []bool
+	Value     *api.ResolvedKeyBook `json:"value,omitempty" form:"value" query:"value" validate:"required"`
 	extraData []byte
 }
 
@@ -198,6 +223,10 @@ type ValidateResponse struct {
 
 func (*Addressed) Type() Type { return TypeAddressed }
 
+func (*BlockTimeForRequest) Type() Type { return TypeBlockTimeForRequest }
+
+func (*BlockTimeForResponse) Type() Type { return TypeBlockTimeForResponse }
+
 func (*ConsensusStatusRequest) Type() Type { return TypeConsensusStatusRequest }
 
 func (*ConsensusStatusResponse) Type() Type { return TypeConsensusStatusResponse }
@@ -213,6 +242,10 @@ func (*FaucetResponse) Type() Type { return TypeFaucetResponse }
 func (*FindServiceRequest) Type() Type { return TypeFindServiceRequest }
 
 func (*FindServiceResponse) Type() Type { return TypeFindServiceResponse }
+
+func (*KeyBookAtRequest) Type() Type { return TypeKeyBookAtRequest }
+
+func (*KeyBookAtResponse) Type() Type { return TypeKeyBookAtResponse }
 
 func (*ListSnapshotsRequest) Type() Type { return TypeListSnapshotsRequest }
 
@@ -268,6 +301,36 @@ func (v *Addressed) Copy() *Addressed {
 }
 
 func (v *Addressed) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *BlockTimeForRequest) Copy() *BlockTimeForRequest {
+	u := new(BlockTimeForRequest)
+
+	u.BlockTimeForOptions = *v.BlockTimeForOptions.Copy()
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *BlockTimeForRequest) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *BlockTimeForResponse) Copy() *BlockTimeForResponse {
+	u := new(BlockTimeForResponse)
+
+	if v.Value != nil {
+		u.Value = (v.Value).Copy()
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *BlockTimeForResponse) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *ConsensusStatusRequest) Copy() *ConsensusStatusRequest {
 	u := new(ConsensusStatusRequest)
@@ -401,6 +464,36 @@ func (v *FindServiceResponse) Copy() *FindServiceResponse {
 }
 
 func (v *FindServiceResponse) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *KeyBookAtRequest) Copy() *KeyBookAtRequest {
+	u := new(KeyBookAtRequest)
+
+	u.KeyBookAtOptions = *v.KeyBookAtOptions.Copy()
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *KeyBookAtRequest) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *KeyBookAtResponse) Copy() *KeyBookAtResponse {
+	u := new(KeyBookAtResponse)
+
+	if v.Value != nil {
+		u.Value = (v.Value).Copy()
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *KeyBookAtResponse) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *ListSnapshotsRequest) Copy() *ListSnapshotsRequest {
 	u := new(ListSnapshotsRequest)
@@ -710,6 +803,27 @@ func (v *Addressed) Equal(u *Addressed) bool {
 	return true
 }
 
+func (v *BlockTimeForRequest) Equal(u *BlockTimeForRequest) bool {
+	if !v.BlockTimeForOptions.Equal(&u.BlockTimeForOptions) {
+		return false
+	}
+
+	return true
+}
+
+func (v *BlockTimeForResponse) Equal(u *BlockTimeForResponse) bool {
+	switch {
+	case v.Value == u.Value:
+		// equal
+	case v.Value == nil || u.Value == nil:
+		return false
+	case !((v.Value).Equal(u.Value)):
+		return false
+	}
+
+	return true
+}
+
 func (v *ConsensusStatusRequest) Equal(u *ConsensusStatusRequest) bool {
 	if !v.ConsensusStatusOptions.Equal(&u.ConsensusStatusOptions) {
 		return false
@@ -802,6 +916,27 @@ func (v *FindServiceResponse) Equal(u *FindServiceResponse) bool {
 		if !((v.Value[i]).Equal(u.Value[i])) {
 			return false
 		}
+	}
+
+	return true
+}
+
+func (v *KeyBookAtRequest) Equal(u *KeyBookAtRequest) bool {
+	if !v.KeyBookAtOptions.Equal(&u.KeyBookAtOptions) {
+		return false
+	}
+
+	return true
+}
+
+func (v *KeyBookAtResponse) Equal(u *KeyBookAtResponse) bool {
+	switch {
+	case v.Value == u.Value:
+		// equal
+	case v.Value == nil || u.Value == nil:
+		return false
+	case !((v.Value).Equal(u.Value)):
+		return false
 	}
 
 	return true
@@ -1071,6 +1206,98 @@ func (v *Addressed) IsValid() error {
 		errs = append(errs, "field Address is missing")
 	} else if p2p.EqualMultiaddr(v.Address, nil) {
 		errs = append(errs, "field Address is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_BlockTimeForRequest = []string{
+	1: "Type",
+	2: "BlockTimeForOptions",
+}
+
+func (v *BlockTimeForRequest) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	writer.WriteValue(2, v.BlockTimeForOptions.MarshalBinary)
+
+	_, _, err := writer.Reset(fieldNames_BlockTimeForRequest)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *BlockTimeForRequest) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if err := v.BlockTimeForOptions.IsValid(); err != nil {
+		errs = append(errs, err.Error())
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_BlockTimeForResponse = []string{
+	1: "Type",
+	2: "Value",
+}
+
+func (v *BlockTimeForResponse) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Value == nil) {
+		writer.WriteValue(2, v.Value.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_BlockTimeForResponse)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *BlockTimeForResponse) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Value is missing")
+	} else if v.Value == nil {
+		errs = append(errs, "field Value is not set")
 	}
 
 	switch len(errs) {
@@ -1448,6 +1675,98 @@ func (v *FindServiceResponse) IsValid() error {
 	}
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Value is missing")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_KeyBookAtRequest = []string{
+	1: "Type",
+	2: "KeyBookAtOptions",
+}
+
+func (v *KeyBookAtRequest) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	writer.WriteValue(2, v.KeyBookAtOptions.MarshalBinary)
+
+	_, _, err := writer.Reset(fieldNames_KeyBookAtRequest)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *KeyBookAtRequest) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if err := v.KeyBookAtOptions.IsValid(); err != nil {
+		errs = append(errs, err.Error())
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_KeyBookAtResponse = []string{
+	1: "Type",
+	2: "Value",
+}
+
+func (v *KeyBookAtResponse) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Value == nil) {
+		writer.WriteValue(2, v.Value.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_KeyBookAtResponse)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *KeyBookAtResponse) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Value is missing")
+	} else if v.Value == nil {
+		errs = append(errs, "field Value is not set")
 	}
 
 	switch len(errs) {
@@ -2376,6 +2695,74 @@ func (v *Addressed) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
+func (v *BlockTimeForRequest) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *BlockTimeForRequest) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *BlockTimeForRequest) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	reader.ReadValue(2, v.BlockTimeForOptions.UnmarshalBinaryFrom)
+
+	seen, err := reader.Reset(fieldNames_BlockTimeForRequest)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *BlockTimeForResponse) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *BlockTimeForResponse) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *BlockTimeForResponse) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x := new(api.BlockTimeResult); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+		v.Value = x
+	}
+
+	seen, err := reader.Reset(fieldNames_BlockTimeForResponse)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *ConsensusStatusRequest) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -2655,6 +3042,74 @@ func (v *FindServiceResponse) UnmarshalFieldsFrom(reader *encoding.Reader) error
 	}
 
 	seen, err := reader.Reset(fieldNames_FindServiceResponse)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *KeyBookAtRequest) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *KeyBookAtRequest) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *KeyBookAtRequest) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	reader.ReadValue(2, v.KeyBookAtOptions.UnmarshalBinaryFrom)
+
+	seen, err := reader.Reset(fieldNames_KeyBookAtRequest)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *KeyBookAtResponse) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *KeyBookAtResponse) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *KeyBookAtResponse) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x := new(api.ResolvedKeyBook); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+		v.Value = x
+	}
+
+	seen, err := reader.Reset(fieldNames_KeyBookAtResponse)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -3325,6 +3780,18 @@ func init() {
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("partition", "string"),
+		encoding.NewTypeField("txId", "string"),
+		encoding.NewTypeField("blockHeight", "uint64"),
+	}, "BlockTimeForRequest", "blockTimeForRequest")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("value", "api.BlockTimeResult"),
+	}, "BlockTimeForResponse", "blockTimeForResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
 		encoding.NewTypeField("nodeID", "string"),
 		encoding.NewTypeField("partition", "string"),
 		encoding.NewTypeField("includePeers", "bool"),
@@ -3369,6 +3836,17 @@ func init() {
 		encoding.NewTypeField("type", "string"),
 		encoding.NewTypeField("value", "api.FindServiceResult[]"),
 	}, "FindServiceResponse", "findServiceResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("url", "string"),
+		encoding.NewTypeField("blockTime", "string"),
+	}, "KeyBookAtRequest", "keyBookAtRequest")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("value", "api.ResolvedKeyBook"),
+	}, "KeyBookAtResponse", "keyBookAtResponse")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("type", "string"),
@@ -3484,6 +3962,42 @@ func (v *Addressed) MarshalJSON() ([]byte, error) {
 	}
 	if !(p2p.EqualMultiaddr(v.Address, nil)) {
 		u.Address = &encoding.JsonUnmarshalWith[p2p.Multiaddr]{Value: v.Address, Func: p2p.UnmarshalMultiaddrJSON}
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *BlockTimeForRequest) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type        Type      `json:"type"`
+		Partition   string    `json:"partition,omitempty"`
+		TxId        *url.TxID `json:"txId,omitempty"`
+		BlockHeight uint64    `json:"blockHeight,omitempty"`
+		ExtraData   *string   `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.BlockTimeForOptions.Partition) == 0) {
+		u.Partition = v.BlockTimeForOptions.Partition
+	}
+	if !(v.BlockTimeForOptions.TxId == nil) {
+		u.TxId = v.BlockTimeForOptions.TxId
+	}
+	if !(v.BlockTimeForOptions.BlockHeight == 0) {
+		u.BlockHeight = v.BlockTimeForOptions.BlockHeight
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *BlockTimeForResponse) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      Type                 `json:"type"`
+		Value     *api.BlockTimeResult `json:"value,omitempty"`
+		ExtraData *string              `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.Value == nil) {
+		u.Value = v.Value
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -3621,6 +4135,38 @@ func (v *FindServiceResponse) MarshalJSON() ([]byte, error) {
 	}{}
 	u.Type = v.Type()
 	u.Value = v.Value
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *KeyBookAtRequest) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      Type      `json:"type"`
+		Url       *url.URL  `json:"url,omitempty"`
+		BlockTime time.Time `json:"blockTime,omitempty"`
+		ExtraData *string   `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.KeyBookAtOptions.Url == nil) {
+		u.Url = v.KeyBookAtOptions.Url
+	}
+	if !(v.KeyBookAtOptions.BlockTime == (time.Time{})) {
+		u.BlockTime = v.KeyBookAtOptions.BlockTime
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *KeyBookAtResponse) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      Type                 `json:"type"`
+		Value     *api.ResolvedKeyBook `json:"value,omitempty"`
+		ExtraData *string              `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.Value == nil) {
+		u.Value = v.Value
+	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
@@ -3941,6 +4487,58 @@ func (v *Addressed) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *BlockTimeForRequest) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type        Type      `json:"type"`
+		Partition   string    `json:"partition,omitempty"`
+		TxId        *url.TxID `json:"txId,omitempty"`
+		BlockHeight uint64    `json:"blockHeight,omitempty"`
+		ExtraData   *string   `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Partition = v.BlockTimeForOptions.Partition
+	u.TxId = v.BlockTimeForOptions.TxId
+	u.BlockHeight = v.BlockTimeForOptions.BlockHeight
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.BlockTimeForOptions.Partition = u.Partition
+	v.BlockTimeForOptions.TxId = u.TxId
+	v.BlockTimeForOptions.BlockHeight = u.BlockHeight
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *BlockTimeForResponse) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      Type                 `json:"type"`
+		Value     *api.BlockTimeResult `json:"value,omitempty"`
+		ExtraData *string              `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Value = v.Value
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Value = u.Value
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (v *ConsensusStatusRequest) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type              Type    `json:"type"`
@@ -4137,6 +4735,55 @@ func (v *FindServiceResponse) UnmarshalJSON(data []byte) error {
 		Type      Type                                      `json:"type"`
 		Value     encoding.JsonList[*api.FindServiceResult] `json:"value"`
 		ExtraData *string                                   `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Value = v.Value
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Value = u.Value
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *KeyBookAtRequest) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      Type      `json:"type"`
+		Url       *url.URL  `json:"url,omitempty"`
+		BlockTime time.Time `json:"blockTime,omitempty"`
+		ExtraData *string   `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Url = v.KeyBookAtOptions.Url
+	u.BlockTime = v.KeyBookAtOptions.BlockTime
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.KeyBookAtOptions.Url = u.Url
+	v.KeyBookAtOptions.BlockTime = u.BlockTime
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *KeyBookAtResponse) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      Type                 `json:"type"`
+		Value     *api.ResolvedKeyBook `json:"value,omitempty"`
+		ExtraData *string              `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Value = v.Value

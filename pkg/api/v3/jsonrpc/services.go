@@ -127,7 +127,9 @@ type MetricsService struct{ api.MetricsService }
 
 func (s MetricsService) methods() jsonrpc2.MethodMap {
 	return jsonrpc2.MethodMap{
-		"metrics": s.metrics,
+		"metrics":          s.metrics,
+		"resolveKeyBookAt": s.resolveKeyBookAt,
+		"blockTimeFor":     s.blockTimeFor,
 	}
 }
 
@@ -137,6 +139,22 @@ func (s MetricsService) metrics(ctx context.Context, params json.RawMessage) int
 		return formatResponse(nil, err)
 	}
 	return formatResponse(s.MetricsService.Metrics(ctx, req.MetricsOptions))
+}
+
+func (s MetricsService) resolveKeyBookAt(ctx context.Context, params json.RawMessage) interface{} {
+	req, err := parseRequest[*message.KeyBookAtRequest](params)
+	if err != nil {
+		return formatResponse(nil, err)
+	}
+	return formatResponse(s.MetricsService.ResolveKeyBookAt(ctx, req.KeyBookAtOptions))
+}
+
+func (s MetricsService) blockTimeFor(ctx context.Context, params json.RawMessage) interface{} {
+	req, err := parseRequest[*message.BlockTimeForRequest](params)
+	if err != nil {
+		return formatResponse(nil, err)
+	}
+	return formatResponse(s.MetricsService.BlockTimeFor(ctx, req.BlockTimeForOptions))
 }
 
 type Querier struct{ api.Querier }

@@ -183,6 +183,16 @@ func (c *Client) Metrics(ctx context.Context, opts api.MetricsOptions) (*api.Met
 	return c.inner.Metrics(ctx, opts)
 }
 
+// ResolveKeyBookAt implements [api.MetricsService.ResolveKeyBookAt] (#3973).
+func (c *Client) ResolveKeyBookAt(ctx context.Context, opts api.KeyBookAtOptions) (*api.ResolvedKeyBook, error) {
+	return c.inner.ResolveKeyBookAt(ctx, opts)
+}
+
+// BlockTimeFor implements [api.MetricsService.BlockTimeFor] (#3973).
+func (c *Client) BlockTimeFor(ctx context.Context, opts api.BlockTimeForOptions) (*api.BlockTimeResult, error) {
+	return c.inner.BlockTimeFor(ctx, opts)
+}
+
 // Query implements [api.Querier.Query].
 func (c *Client) Query(ctx context.Context, scope *url.URL, query api.Query) (api.Record, error) {
 	return c.inner.Query(ctx, scope, query)
