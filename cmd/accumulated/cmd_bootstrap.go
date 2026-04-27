@@ -8,12 +8,13 @@ package main
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
 	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pipeline"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/accumulate"
 )
 
 // cmdBootstrap launches a node from minimum-data state via the receiver-
@@ -84,19 +85,37 @@ func runBootstrap(cmd *cobra.Command, args []string) error {
 	} else {
 		fmt.Printf("  trust-anchor: (built-in pinned for %s)\n", cfg.Network)
 	}
+	fmt.Println()
 
-	// The actual bootstrap pipeline:
-	//   1. Pin block H at confirmed depth.
-	//   2. Pull current state at H for the minimum bootstrap set.
-	//   3. Run the back-walk validator (#3960). Persist proof (#3965).
-	//   4. Fill the BPT structure via #3969.
-	//   5. Hand off to accumulated run; hydrator (#3964) drives BOOTING → ACTIVE.
-	//   6. If target = ACTIVE, wait for state transition before exit.
-	//
-	// This scaffolding wires the user-facing flags; the pipeline glue
-	// itself depends on persistence + back-walker + hydrator landing
-	// (next slice).
-	return errors.New("bootstrap pipeline not yet wired — see #3953 child issues for component status")
+	endpoint := accumulate.ResolveWellKnownEndpoint(cfg.Network, "v3")
+	if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
+		return fmt.Errorf("create data dir: %w", err)
+	}
+
+	res, err := pipeline.Run(cmd.Context(), pipeline.Options{
+		Endpoint:  endpoint,
+		Network:   cfg.Network,
+		Partition: "Directory", // BVN selection comes in a follow-up
+		DataDir:   cfg.DataDir,
+		// PinnedGenesisHash left zero — placeholder until the binary
+		// pins per-network hashes (deferred under #3961 / #3974).
+		Logger: func(format string, a ...any) {
+			fmt.Printf(format+"\n", a...)
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("bootstrap pipeline: %w", err)
+	}
+
+	fmt.Println()
+	fmt.Println("Bootstrap result:")
+	fmt.Printf("  pin block:           %d\n", res.PinBlock)
+	fmt.Printf("  accounts pulled:     %d\n", res.AccountsPulled)
+	fmt.Printf("  chain entries:       %d\n", res.ChainEntriesPulled)
+	fmt.Printf("  back-walk memos:     %d\n", res.BackWalkEntries)
+	fmt.Printf("  genesis terminated:  %v\n", res.GenesisTerminated)
+	fmt.Printf("  artifact:            %s\n", res.ArtifactPath)
+	return nil
 }
 
 type bootstrapConfig struct {
