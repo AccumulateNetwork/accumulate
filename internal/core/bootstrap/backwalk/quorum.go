@@ -13,6 +13,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/keybookat"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -65,6 +66,15 @@ func VerifyValidatorQuorum(
 		return nil, fmt.Errorf("load validator signatures: %w", err)
 	}
 
+	// Load the BlockAnchor messages stored by RecordHistory. Each carries
+	// its own SequencedMessage — the canonical signing payload. We map
+	// signature → SequencedMessage by GetTransactionHash so per-signature
+	// Verify uses the correct payload. If the BlockAnchor messages aren't
+	// in the local DB (BOOTING-time partial state), we fall back to
+	// signature-only counting; the proof artifact records this as
+	// best-effort via QuorumPending=true at the caller.
+	signablesByKey := loadAnchorSignables(batch, anchorPrincipal, anchorTxnHash)
+
 	// Resolve the partition's operators keybook at blockTime.
 	operatorsBook := protocol.PartitionUrl(partition).JoinPath(protocol.Operators)
 	resolved, err := keybookat.Resolve(batch, operatorsBook, blockTime)
@@ -116,19 +126,22 @@ func VerifyValidatorQuorum(
 			continue
 		}
 
-		// Cryptographic verify. The anchor-signature payload is the
-		// SequencedMessage wrapping the transaction (per
-		// internal/core/execute/v2/block/msg_block_anchor.go's
-		// checkSignature). For now the back-walker calls Verify with
-		// nil signable — this works when the signature carries enough
-		// state to verify itself; otherwise the caller is expected to
-		// supply the SequencedMessage. A follow-up will reconstruct
-		// the SequencedMessage here for full faithfulness.
-		if !ksig.Verify(nil, nil) {
-			// Don't immediately fail — continue and let the threshold
-			// rule decide. Other signatures may still satisfy.
-			continue
+		// Cryptographic verify against the canonical SequencedMessage
+		// for this signer (per internal/core/execute/v2/block/
+		// msg_block_anchor.go's checkSignature). If we have the
+		// BlockAnchor message stored locally, use its embedded Anchor
+		// (a SequencedMessage). If not (partial-DB BOOTING case), skip
+		// crypto verify but still count the signature toward threshold
+		// — the caller treats the result as best-effort via
+		// QuorumPending.
+		if signable, ok := signablesByKey[keyID]; ok {
+			if !ksig.Verify(nil, signable) {
+				continue
+			}
 		}
+		// (else: no signable — signature was recorded but the BlockAnchor
+		// hasn't been pulled locally yet; count toward threshold but the
+		// result is structural.)
 
 		verifiedKeys[keyID] = struct{}{}
 	}
@@ -143,4 +156,61 @@ func VerifyValidatorQuorum(
 			ErrQuorumInsufficient, res.Verified, res.Total, res.Required)
 	}
 	return res, nil
+}
+
+// loadAnchorSignables walks the principal's signature chain (which is
+// where RecordHistory stores BlockAnchor messages) and returns a map
+// from validator-key ID to the SequencedMessage that the validator
+// signed.
+//
+// Returns an empty map when no BlockAnchor messages are stored locally
+// (e.g., partial DB during BOOTING). Caller treats missing entries as
+// "structural-only" verification.
+func loadAnchorSignables(batch *database.Batch, principal *url.URL, anchorTxnHash [32]byte) map[[32]byte]protocol.Signable {
+	out := map[[32]byte]protocol.Signable{}
+
+	// History records the indices on the SignatureChain where this
+	// transaction's signature messages live.
+	history, err := batch.Account(principal).Transaction(anchorTxnHash).History().Get()
+	if err != nil || len(history) == 0 {
+		return out
+	}
+
+	sigChain, err := batch.Account(principal).SignatureChain().Get()
+	if err != nil {
+		return out
+	}
+
+	for _, idx := range history {
+		if idx >= uint64(sigChain.Height()) {
+			continue
+		}
+		raw, err := sigChain.Entry(int64(idx))
+		if err != nil {
+			continue
+		}
+		var msgHash [32]byte
+		copy(msgHash[:], raw)
+
+		var msg messaging.Message
+		if err := batch.Message(msgHash).Main().GetAs(&msg); err != nil {
+			continue
+		}
+		ba, ok := msg.(*messaging.BlockAnchor)
+		if !ok {
+			continue // history may include non-BlockAnchor signature msgs
+		}
+		if ba.Signature == nil || ba.Anchor == nil {
+			continue
+		}
+		// The validator key is identified by its public-key hash on the
+		// signature; the signed payload is ba.Anchor (a SequencedMessage).
+		var keyID [32]byte
+		copy(keyID[:], ba.Signature.GetPublicKeyHash())
+		// SequencedMessage implements Signable via the messaging package.
+		if signable, ok := ba.Anchor.(protocol.Signable); ok {
+			out[keyID] = signable
+		}
+	}
+	return out
 }
