@@ -8,12 +8,15 @@
 // by walking the keybook's pages' main chains. Central back-walk primitive
 // for the minimum-data node bootstrap (issue #3957, #3953).
 //
-// Initial implementation handles the common case where no main-chain entries
-// post-date the requested block time — i.e., the requested time is at or
-// after every recorded mutation. In that case the resolver returns the pages'
-// current state. Forward replay for older block times is not yet implemented;
-// callers receive ErrNotYetImplemented when the requested time precedes
-// the most recent main-chain entry.
+// Resolution strategy:
+//   - If no main-chain entries post-date t, return the pages' current state.
+//   - Otherwise, replay the page's main chain forward (CreateKeyPage +
+//     UpdateKeyPage transactions) onto a fresh working page, stopping when
+//     the next entry's block time exceeds t. See replay.go.
+//
+// Forward replay handles UpdateKeyPage and CreateKeyPage. Other transaction
+// types affecting a page (UpdateKey from external owners, CreateIdentity
+// with embedded keybook initialization) surface as ErrUnsupportedTxType.
 package keybookat
 
 import (
@@ -33,9 +36,11 @@ type Resolved struct {
 	Pages     []*protocol.KeyPage
 }
 
-// ErrNotYetImplemented indicates the requested block time precedes
-// recorded mutations and the forward-replay path isn't built yet.
-var ErrNotYetImplemented = errors.New("keybookat: forward replay for historical times not yet implemented")
+// ErrNotYetImplemented is reserved for future code paths. The forward-
+// replay implementation supplants the original ErrNotYetImplemented
+// fallback for historical times. Kept exported so existing callers
+// continue to compile.
+var ErrNotYetImplemented = errors.New("keybookat: code path not yet implemented")
 
 // Resolve returns the state of the keybook at kbUrl as of block time t.
 // Pages are returned in page-index order (page 1 first).
@@ -44,10 +49,13 @@ func Resolve(batch *database.Batch, kbUrl *url.URL, t time.Time) (*Resolved, err
 		return nil, fmt.Errorf("nil keybook url")
 	}
 
-	var book protocol.KeyBook
+	var book *protocol.KeyBook
 	err := batch.Account(kbUrl).Main().GetAs(&book)
 	if err != nil {
 		return nil, fmt.Errorf("load keybook %s: %w", kbUrl, err)
+	}
+	if book == nil {
+		return nil, fmt.Errorf("keybook %s: nil after load", kbUrl)
 	}
 	if book.PageCount == 0 {
 		return &Resolved{Url: kbUrl, BlockTime: t}, nil
@@ -57,7 +65,7 @@ func Resolve(batch *database.Batch, kbUrl *url.URL, t time.Time) (*Resolved, err
 	for i := uint64(1); i <= book.PageCount; i++ {
 		pageUrl := protocol.FormatKeyPageUrl(kbUrl, i-1)
 
-		page, err := resolvePage(batch, pageUrl, t)
+		page, err := resolvePage(batch, book, pageUrl, t)
 		if err != nil {
 			return nil, fmt.Errorf("resolve page %d: %w", i, err)
 		}
@@ -66,41 +74,42 @@ func Resolve(batch *database.Batch, kbUrl *url.URL, t time.Time) (*Resolved, err
 	return res, nil
 }
 
-// resolvePage returns one page's state at time t. Initial implementation
-// only handles the case where no main-chain entries post-date t.
-func resolvePage(batch *database.Batch, pageUrl *url.URL, t time.Time) (*protocol.KeyPage, error) {
+// resolvePage returns one page's state at time t. If no main-chain
+// entries post-date t, returns the current state directly. Otherwise
+// replays the page's main chain forward to t.
+func resolvePage(batch *database.Batch, book *protocol.KeyBook, pageUrl *url.URL, t time.Time) (*protocol.KeyPage, error) {
 	acct := batch.Account(pageUrl)
 
-	var page protocol.KeyPage
-	err := acct.Main().GetAs(&page)
-	if err != nil {
-		return nil, fmt.Errorf("load page %s: %w", pageUrl, err)
-	}
-
-	// Check if any main-chain entries post-date t. If so, the current state
-	// already reflects later mutations; we'd need to roll them back.
-	chain, err := acct.MainChain().Get()
+	chainRec, err := acct.MainChain().Get()
 	if err != nil {
 		return nil, fmt.Errorf("get main chain: %w", err)
 	}
-	count := chain.Height()
-	if count == 0 {
-		return &page, nil
+	if chainRec.Height() == 0 {
+		// No main-chain history; return current state if any.
+		var page *protocol.KeyPage
+		err := acct.Main().GetAs(&page)
+		if err != nil {
+			return nil, fmt.Errorf("load page %s: %w", pageUrl, err)
+		}
+		return page, nil
 	}
 
-	// We don't have direct per-entry block-time on the main chain itself
-	// (it lives on the index chain alongside each entry). For the initial
-	// implementation we approximate: if the chain's last block time
-	// (returned by indexing) is at or before t, the current state is correct.
-	// Otherwise return ErrNotYetImplemented.
 	lastBlockTime, ok, err := lastEntryBlockTime(acct)
 	if err != nil {
 		return nil, fmt.Errorf("read last block time: %w", err)
 	}
 	if !ok || !lastBlockTime.After(t) {
+		// No mutations after t — current state already reflects t.
+		var page protocol.KeyPage
+		err := acct.Main().GetAs(&page)
+		if err != nil {
+			return nil, fmt.Errorf("load page %s: %w", pageUrl, err)
+		}
 		return &page, nil
 	}
-	return nil, ErrNotYetImplemented
+
+	// Forward replay path.
+	return replayPage(batch, book, pageUrl, t)
 }
 
 // lastEntryBlockTime returns the block time of the most recent main-chain
