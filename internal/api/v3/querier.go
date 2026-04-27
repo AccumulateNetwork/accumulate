@@ -56,6 +56,21 @@ func NewQuerier(params QuerierParams) *Querier {
 
 func (s *Querier) Type() api.ServiceType { return api.ServiceTypeQuery }
 
+// Database returns the Querier's underlying database. Exposed so the
+// metrics service (and other co-located services) can construct
+// database.Batch instances for read paths that exist alongside the
+// querier — see issue #3978.
+func (s *Querier) Database() database.Viewer { return s.db }
+
+// PartitionID returns the partition this Querier serves.
+func (s *Querier) PartitionID() string {
+	if s.partition.URL == nil {
+		return ""
+	}
+	id, _ := protocol.ParsePartitionUrl(s.partition.URL)
+	return id
+}
+
 func (s *Querier) Query(ctx context.Context, scope *url.URL, query api.Query) (api.Record, error) {
 	// Ensure the query parameters are valid
 	if query == nil {

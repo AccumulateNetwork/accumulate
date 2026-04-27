@@ -127,11 +127,20 @@ func (m *MetricsService) start(inst *Instance) error {
 		return err
 	}
 
-	impl := api.NewMetricsService(api.MetricsServiceParams{
+	params := api.MetricsServiceParams{
 		Logger:  (*logging.Slogger)(inst.logger).With("module", "api"),
 		Node:    consensus,
 		Querier: querier,
-	})
+	}
+	// Issue #3978: pass the underlying database + partition so the
+	// new ResolveKeyBookAt and BlockTimeFor methods (#3973) can read
+	// state. The querier is already the in-process *api.Querier with
+	// its own database.
+	if q, ok := querier.(*api.Querier); ok {
+		params.Database = q.Database()
+		params.Partition = q.PartitionID()
+	}
+	impl := api.NewMetricsService(params)
 	registerRpcService(inst, impl.Type().AddressFor(m.Partition), message.MetricsService{MetricsService: impl})
 	return metricsProvides.Register(inst.services, m, impl)
 }
