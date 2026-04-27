@@ -136,3 +136,10 @@ MessageHashSearchQuery:
   fields:
     - name: Hash
       type: hash
+
+BptLeafQuery:
+  union: { type: query }
+  description: returns a BPT leaf with a Merkle proof against the current BPT root (#3958, #3971)
+  fields:
+    - name: Key
+      type: hash

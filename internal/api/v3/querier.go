@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/cometbft/cometbft/libs/log"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/bptproof"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -300,6 +301,19 @@ func (s *Querier) query(ctx context.Context, batch *database.Batch, scope *url.U
 			r.LastBlockTime = s.getLastBlockTime(ctx, batch)
 		}
 		return r, err
+
+	case *api.BptLeafQuery:
+		// Issue #3971: expose bptproof.GetLeaf over v3 API.
+		leaf, err := bptproof.GetLeaf(batch, query.Key)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("get bpt leaf: %w", err)
+		}
+		return &api.BptLeafRecord{
+			KeyHash:   leaf.KeyHash,
+			ValueHash: leaf.ValueHash,
+			Proof:     leaf.Proof,
+			BptRoot:   leaf.BptRoot,
+		}, nil
 
 	default:
 		return nil, errors.NotAllowed.WithFormat("unknown query type %v", query.QueryType())

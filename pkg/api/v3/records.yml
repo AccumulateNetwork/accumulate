@@ -259,3 +259,18 @@ ErrorRecord:
       type: errors2.Error
       pointer: true
       marshal-as: reference
+
+BptLeafRecord:
+  union: { type: record }
+  description: a BPT leaf and its Merkle proof to the current BPT root (#3958, #3971)
+  fields:
+    - name: KeyHash
+      type: hash
+    - name: ValueHash
+      type: hash
+    - name: Proof
+      type: merkle.Receipt
+      marshal-as: reference
+      pointer: true
+    - name: BptRoot
+      type: hash

@@ -50,6 +50,9 @@ const QueryTypePending QueryType = 4
 // QueryTypeBlock .
 const QueryTypeBlock QueryType = 5
 
+// QueryTypeBptLeaf .
+const QueryTypeBptLeaf QueryType = 6
+
 // QueryTypeAnchorSearch .
 const QueryTypeAnchorSearch QueryType = 16
 
@@ -76,6 +79,9 @@ const RecordTypeChainEntry RecordType = 3
 
 // RecordTypeKey .
 const RecordTypeKey RecordType = 4
+
+// RecordTypeBptLeaf .
+const RecordTypeBptLeaf RecordType = 5
 
 // RecordTypeMessage .
 const RecordTypeMessage RecordType = 16
@@ -266,7 +272,7 @@ func (v QueryType) GetEnumValue() uint64 { return uint64(v) }
 func (v *QueryType) SetEnumValue(id uint64) bool {
 	u := QueryType(id)
 	switch u {
-	case QueryTypeDefault, QueryTypeChain, QueryTypeData, QueryTypeDirectory, QueryTypePending, QueryTypeBlock, QueryTypeAnchorSearch, QueryTypePublicKeySearch, QueryTypePublicKeyHashSearch, QueryTypeDelegateSearch, QueryTypeMessageHashSearch:
+	case QueryTypeDefault, QueryTypeChain, QueryTypeData, QueryTypeDirectory, QueryTypePending, QueryTypeBlock, QueryTypeBptLeaf, QueryTypeAnchorSearch, QueryTypePublicKeySearch, QueryTypePublicKeyHashSearch, QueryTypeDelegateSearch, QueryTypeMessageHashSearch:
 		*v = u
 		return true
 	}
@@ -288,6 +294,8 @@ func (v QueryType) String() string {
 		return "pending"
 	case QueryTypeBlock:
 		return "block"
+	case QueryTypeBptLeaf:
+		return "bptLeaf"
 	case QueryTypeAnchorSearch:
 		return "anchorSearch"
 	case QueryTypePublicKeySearch:
@@ -317,6 +325,8 @@ func QueryTypeByName(name string) (QueryType, bool) {
 		return QueryTypePending, true
 	case "block":
 		return QueryTypeBlock, true
+	case "bptleaf":
+		return QueryTypeBptLeaf, true
 	case "anchorsearch":
 		return QueryTypeAnchorSearch, true
 	case "publickeysearch":
@@ -359,7 +369,7 @@ func (v RecordType) GetEnumValue() uint64 { return uint64(v) }
 func (v *RecordType) SetEnumValue(id uint64) bool {
 	u := RecordType(id)
 	switch u {
-	case RecordTypeAccount, RecordTypeChain, RecordTypeChainEntry, RecordTypeKey, RecordTypeMessage, RecordTypeSignatureSet, RecordTypeMinorBlock, RecordTypeMajorBlock, RecordTypeRange, RecordTypeUrl, RecordTypeTxID, RecordTypeIndexEntry, RecordTypeError:
+	case RecordTypeAccount, RecordTypeChain, RecordTypeChainEntry, RecordTypeKey, RecordTypeBptLeaf, RecordTypeMessage, RecordTypeSignatureSet, RecordTypeMinorBlock, RecordTypeMajorBlock, RecordTypeRange, RecordTypeUrl, RecordTypeTxID, RecordTypeIndexEntry, RecordTypeError:
 		*v = u
 		return true
 	}
@@ -377,6 +387,8 @@ func (v RecordType) String() string {
 		return "chainEntry"
 	case RecordTypeKey:
 		return "key"
+	case RecordTypeBptLeaf:
+		return "bptLeaf"
 	case RecordTypeMessage:
 		return "message"
 	case RecordTypeSignatureSet:
@@ -410,6 +422,8 @@ func RecordTypeByName(name string) (RecordType, bool) {
 		return RecordTypeChainEntry, true
 	case "key":
 		return RecordTypeKey, true
+	case "bptleaf":
+		return RecordTypeBptLeaf, true
 	case "message":
 		return RecordTypeMessage, true
 	case "signatureset":

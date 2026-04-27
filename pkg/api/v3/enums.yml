@@ -54,6 +54,8 @@ QueryType:
     value: 0x04
   Block:
     value: 0x05
+  BptLeaf:
+    value: 0x06
 
   AnchorSearch:
     value: 0x10
@@ -75,6 +77,8 @@ RecordType:
     value: 0x03
   Key:
     value: 0x04
+  BptLeaf:
+    value: 0x05
 
   Message:
     value: 0x10
