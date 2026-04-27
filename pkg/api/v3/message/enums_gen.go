@@ -47,6 +47,12 @@ const TypeFaucetRequest Type = 10
 // TypeListSnapshotsRequest .
 const TypeListSnapshotsRequest Type = 11
 
+// TypeKeyBookAtRequest .
+const TypeKeyBookAtRequest Type = 12
+
+// TypeBlockTimeForRequest .
+const TypeBlockTimeForRequest Type = 13
+
 // TypeErrorResponse .
 const TypeErrorResponse Type = 32
 
@@ -83,6 +89,12 @@ const TypeFaucetResponse Type = 42
 // TypeListSnapshotsResponse .
 const TypeListSnapshotsResponse Type = 43
 
+// TypeKeyBookAtResponse .
+const TypeKeyBookAtResponse Type = 44
+
+// TypeBlockTimeForResponse .
+const TypeBlockTimeForResponse Type = 45
+
 // TypeEvent .
 const TypeEvent Type = 64
 
@@ -102,7 +114,7 @@ func (v Type) GetEnumValue() uint64 { return uint64(v) }
 func (v *Type) SetEnumValue(id uint64) bool {
 	u := Type(id)
 	switch u {
-	case TypeNodeInfoRequest, TypeFindServiceRequest, TypeConsensusStatusRequest, TypeNetworkStatusRequest, TypeMetricsRequest, TypeQueryRequest, TypeSubmitRequest, TypeValidateRequest, TypeSubscribeRequest, TypeFaucetRequest, TypeListSnapshotsRequest, TypeErrorResponse, TypeNodeInfoResponse, TypeFindServiceResponse, TypeConsensusStatusResponse, TypeNetworkStatusResponse, TypeMetricsResponse, TypeRecordResponse, TypeSubmitResponse, TypeValidateResponse, TypeSubscribeResponse, TypeFaucetResponse, TypeListSnapshotsResponse, TypeEvent, TypePrivateSequenceRequest, TypePrivateSequenceResponse, TypeAddressed:
+	case TypeNodeInfoRequest, TypeFindServiceRequest, TypeConsensusStatusRequest, TypeNetworkStatusRequest, TypeMetricsRequest, TypeQueryRequest, TypeSubmitRequest, TypeValidateRequest, TypeSubscribeRequest, TypeFaucetRequest, TypeListSnapshotsRequest, TypeKeyBookAtRequest, TypeBlockTimeForRequest, TypeErrorResponse, TypeNodeInfoResponse, TypeFindServiceResponse, TypeConsensusStatusResponse, TypeNetworkStatusResponse, TypeMetricsResponse, TypeRecordResponse, TypeSubmitResponse, TypeValidateResponse, TypeSubscribeResponse, TypeFaucetResponse, TypeListSnapshotsResponse, TypeKeyBookAtResponse, TypeBlockTimeForResponse, TypeEvent, TypePrivateSequenceRequest, TypePrivateSequenceResponse, TypeAddressed:
 		*v = u
 		return true
 	}
@@ -138,6 +150,10 @@ func (v Type) String() string {
 		return "faucetRequest"
 	case TypeListSnapshotsRequest:
 		return "listSnapshotsRequest"
+	case TypeKeyBookAtRequest:
+		return "keyBookAtRequest"
+	case TypeBlockTimeForRequest:
+		return "blockTimeForRequest"
 	case TypeErrorResponse:
 		return "errorResponse"
 	case TypeNodeInfoResponse:
@@ -162,6 +178,10 @@ func (v Type) String() string {
 		return "faucetResponse"
 	case TypeListSnapshotsResponse:
 		return "listSnapshotsResponse"
+	case TypeKeyBookAtResponse:
+		return "keyBookAtResponse"
+	case TypeBlockTimeForResponse:
+		return "blockTimeForResponse"
 	case TypeEvent:
 		return "event"
 	case TypePrivateSequenceRequest:
@@ -202,6 +222,10 @@ func TypeByName(name string) (Type, bool) {
 		return TypeFaucetRequest, true
 	case "listsnapshotsrequest":
 		return TypeListSnapshotsRequest, true
+	case "keybookatrequest":
+		return TypeKeyBookAtRequest, true
+	case "blocktimeforrequest":
+		return TypeBlockTimeForRequest, true
 	case "errorresponse":
 		return TypeErrorResponse, true
 	case "nodeinforesponse":
@@ -226,6 +250,10 @@ func TypeByName(name string) (Type, bool) {
 		return TypeFaucetResponse, true
 	case "listsnapshotsresponse":
 		return TypeListSnapshotsResponse, true
+	case "keybookatresponse":
+		return TypeKeyBookAtResponse, true
+	case "blocktimeforresponse":
+		return TypeBlockTimeForResponse, true
 	case "event":
 		return TypeEvent, true
 	case "privatesequencerequest":

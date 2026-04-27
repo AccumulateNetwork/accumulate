@@ -96,6 +96,16 @@ func (c *Client) Metrics(ctx context.Context, opts api.MetricsOptions) (*api.Met
 	return c.ForAddress(nil).Metrics(ctx, opts)
 }
 
+// ResolveKeyBookAt implements [api.MetricsService.ResolveKeyBookAt] (#3973).
+func (c *Client) ResolveKeyBookAt(ctx context.Context, opts api.KeyBookAtOptions) (*api.ResolvedKeyBook, error) {
+	return c.ForAddress(nil).ResolveKeyBookAt(ctx, opts)
+}
+
+// BlockTimeFor implements [api.MetricsService.BlockTimeFor] (#3973).
+func (c *Client) BlockTimeFor(ctx context.Context, opts api.BlockTimeForOptions) (*api.BlockTimeResult, error) {
+	return c.ForAddress(nil).BlockTimeFor(ctx, opts)
+}
+
 // Query implements [api.Querier.Query].
 func (c *Client) Query(ctx context.Context, scope *url.URL, query api.Query) (api.Record, error) {
 	return c.ForAddress(nil).Query(ctx, scope, query)
@@ -157,6 +167,18 @@ func (c AddressedClient) Metrics(ctx context.Context, opts api.MetricsOptions) (
 	// is unpacked into Metrics.
 	req := &MetricsRequest{MetricsOptions: opts}
 	return typedRequest[*MetricsResponse, *api.Metrics](c, ctx, req)
+}
+
+// ResolveKeyBookAt implements [api.MetricsService.ResolveKeyBookAt] (#3973).
+func (c AddressedClient) ResolveKeyBookAt(ctx context.Context, opts api.KeyBookAtOptions) (*api.ResolvedKeyBook, error) {
+	req := &KeyBookAtRequest{KeyBookAtOptions: opts}
+	return typedRequest[*KeyBookAtResponse, *api.ResolvedKeyBook](c, ctx, req)
+}
+
+// BlockTimeFor implements [api.MetricsService.BlockTimeFor] (#3973).
+func (c AddressedClient) BlockTimeFor(ctx context.Context, opts api.BlockTimeForOptions) (*api.BlockTimeResult, error) {
+	req := &BlockTimeForRequest{BlockTimeForOptions: opts}
+	return typedRequest[*BlockTimeForResponse, *api.BlockTimeResult](c, ctx, req)
 }
 
 // Query implements [api.Querier.Query].
@@ -234,6 +256,8 @@ func (r *ConsensusStatusResponse) rval() *api.ConsensusStatus { return r.Value }
 func (r *NetworkStatusResponse) rval() *api.NetworkStatus     { return r.Value }             //nolint:unused
 func (r *ListSnapshotsResponse) rval() []*api.SnapshotInfo    { return r.Value }             //nolint:unused
 func (r *MetricsResponse) rval() *api.Metrics                 { return r.Value }             //nolint:unused
+func (r *KeyBookAtResponse) rval() *api.ResolvedKeyBook       { return r.Value }             //nolint:unused
+func (r *BlockTimeForResponse) rval() *api.BlockTimeResult    { return r.Value }             //nolint:unused
 func (r *RecordResponse) rval() api.Record                    { return r.Value }             //nolint:unused
 func (r *SubmitResponse) rval() []*api.Submission             { return unNilArray(r.Value) } //nolint:unused
 func (r *ValidateResponse) rval() []*api.Submission           { return unNilArray(r.Value) } //nolint:unused

@@ -109,6 +109,26 @@ Metrics:
       type: float
       keep-empty: true
 
+ResolvedKeyBook:
+  description: resolved key book pages at a given block time (#3957, #3973)
+  fields:
+    - name: Url
+      type: url
+      pointer: true
+    - name: Pages
+      type: protocol.KeyPage
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+
+BlockTimeResult:
+  description: block time for a transaction or block (#3973)
+  fields:
+    - name: BlockTime
+      type: time
+    - name: BlockHeight
+      type: uint
+
 Submission:
   fields:
     - name: Status

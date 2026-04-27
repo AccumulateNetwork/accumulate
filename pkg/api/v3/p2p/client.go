@@ -108,6 +108,16 @@ func (n *ClientNode) Metrics(ctx context.Context, opts api.MetricsOptions) (*api
 	return n.client.Metrics(ctx, opts)
 }
 
+// ResolveKeyBookAt implements [api.MetricsService.ResolveKeyBookAt] (#3973).
+func (n *ClientNode) ResolveKeyBookAt(ctx context.Context, opts api.KeyBookAtOptions) (*api.ResolvedKeyBook, error) {
+	return n.client.ResolveKeyBookAt(ctx, opts)
+}
+
+// BlockTimeFor implements [api.MetricsService.BlockTimeFor] (#3973).
+func (n *ClientNode) BlockTimeFor(ctx context.Context, opts api.BlockTimeForOptions) (*api.BlockTimeResult, error) {
+	return n.client.BlockTimeFor(ctx, opts)
+}
+
 // Query implements [api.Querier.Query].
 func (n *ClientNode) Query(ctx context.Context, scope *url.URL, query api.Query) (api.Record, error) {
 	return n.client.Query(ctx, scope, query)

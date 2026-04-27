@@ -72,6 +72,23 @@ type BlockQuery struct {
 	extraData []byte
 }
 
+// BlockTimeForOptions opts for block-time lookup (#3973). Set TxId or BlockHeight, not both..
+type BlockTimeForOptions struct {
+	fieldsSet   []bool
+	Partition   string    `json:"partition,omitempty" form:"partition" query:"partition"`
+	TxId        *url.TxID `json:"txId,omitempty" form:"txId" query:"txId"`
+	BlockHeight uint64    `json:"blockHeight,omitempty" form:"blockHeight" query:"blockHeight"`
+	extraData   []byte
+}
+
+// BlockTimeResult block time for a transaction or block (#3973).
+type BlockTimeResult struct {
+	fieldsSet   []bool
+	BlockTime   time.Time `json:"blockTime,omitempty" form:"blockTime" query:"blockTime" validate:"required"`
+	BlockHeight uint64    `json:"blockHeight,omitempty" form:"blockHeight" query:"blockHeight" validate:"required"`
+	extraData   []byte
+}
+
 // BptLeafQuery returns a BPT leaf with a Merkle proof against the current BPT root (#3958,.
 type BptLeafQuery struct {
 	fieldsSet []bool
@@ -257,6 +274,14 @@ type IndexEntryRecord struct {
 	extraData []byte
 }
 
+// KeyBookAtOptions opts for the back-walk's key-book-at-time resolution (#3957,.
+type KeyBookAtOptions struct {
+	fieldsSet []bool
+	Url       *url.URL  `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	BlockTime time.Time `json:"blockTime,omitempty" form:"blockTime" query:"blockTime" validate:"required"`
+	extraData []byte
+}
+
 type KeyRecord struct {
 	fieldsSet []bool
 	Authority *url.URL          `json:"authority,omitempty" form:"authority" query:"authority" validate:"required"`
@@ -435,6 +460,14 @@ type RecordRange[T Record] struct {
 	Total         uint64     `json:"total" form:"total" query:"total" validate:"required"`
 	LastBlockTime *time.Time `json:"lastBlockTime,omitempty" form:"lastBlockTime" query:"lastBlockTime" validate:"required"`
 	extraData     []byte
+}
+
+// ResolvedKeyBook resolved key book pages at a given block time (#3957,.
+type ResolvedKeyBook struct {
+	fieldsSet []bool
+	Url       *url.URL            `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	Pages     []*protocol.KeyPage `json:"pages,omitempty" form:"pages" query:"pages" validate:"required"`
+	extraData []byte
 }
 
 type ServiceAddress struct {
@@ -665,6 +698,39 @@ func (v *BlockQuery) Copy() *BlockQuery {
 }
 
 func (v *BlockQuery) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *BlockTimeForOptions) Copy() *BlockTimeForOptions {
+	u := new(BlockTimeForOptions)
+
+	u.Partition = v.Partition
+	if v.TxId != nil {
+		u.TxId = v.TxId
+	}
+	u.BlockHeight = v.BlockHeight
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *BlockTimeForOptions) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *BlockTimeResult) Copy() *BlockTimeResult {
+	u := new(BlockTimeResult)
+
+	u.BlockTime = v.BlockTime
+	u.BlockHeight = v.BlockHeight
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *BlockTimeResult) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *BptLeafQuery) Copy() *BptLeafQuery {
 	u := new(BptLeafQuery)
@@ -1129,6 +1195,23 @@ func (v *IndexEntryRecord) Copy() *IndexEntryRecord {
 }
 
 func (v *IndexEntryRecord) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *KeyBookAtOptions) Copy() *KeyBookAtOptions {
+	u := new(KeyBookAtOptions)
+
+	if v.Url != nil {
+		u.Url = v.Url
+	}
+	u.BlockTime = v.BlockTime
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *KeyBookAtOptions) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *KeyRecord) Copy() *KeyRecord {
 	u := new(KeyRecord)
@@ -1596,6 +1679,29 @@ func RecordRangeAs[T2 Record, T1 Record](v *RecordRange[T1]) (*RecordRange[T2], 
 	return u, nil
 }
 
+func (v *ResolvedKeyBook) Copy() *ResolvedKeyBook {
+	u := new(ResolvedKeyBook)
+
+	if v.Url != nil {
+		u.Url = v.Url
+	}
+	u.Pages = make([]*protocol.KeyPage, len(v.Pages))
+	for i, v := range v.Pages {
+		v := v
+		if v != nil {
+			u.Pages[i] = (v).Copy()
+		}
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *ResolvedKeyBook) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *SignatureSetRecord) Copy() *SignatureSetRecord {
 	u := new(SignatureSetRecord)
 
@@ -1862,6 +1968,36 @@ func (v *BlockQuery) Equal(u *BlockQuery) bool {
 		return false
 	}
 	if !(v.OmitEmpty == u.OmitEmpty) {
+		return false
+	}
+
+	return true
+}
+
+func (v *BlockTimeForOptions) Equal(u *BlockTimeForOptions) bool {
+	if !(v.Partition == u.Partition) {
+		return false
+	}
+	switch {
+	case v.TxId == u.TxId:
+		// equal
+	case v.TxId == nil || u.TxId == nil:
+		return false
+	case !((v.TxId).Equal(u.TxId)):
+		return false
+	}
+	if !(v.BlockHeight == u.BlockHeight) {
+		return false
+	}
+
+	return true
+}
+
+func (v *BlockTimeResult) Equal(u *BlockTimeResult) bool {
+	if !((v.BlockTime).Equal(u.BlockTime)) {
+		return false
+	}
+	if !(v.BlockHeight == u.BlockHeight) {
 		return false
 	}
 
@@ -2332,6 +2468,22 @@ func (v *IndexEntryRecord) Equal(u *IndexEntryRecord) bool {
 	return true
 }
 
+func (v *KeyBookAtOptions) Equal(u *KeyBookAtOptions) bool {
+	switch {
+	case v.Url == u.Url:
+		// equal
+	case v.Url == nil || u.Url == nil:
+		return false
+	case !((v.Url).Equal(u.Url)):
+		return false
+	}
+	if !((v.BlockTime).Equal(u.BlockTime)) {
+		return false
+	}
+
+	return true
+}
+
 func (v *KeyRecord) Equal(u *KeyRecord) bool {
 	switch {
 	case v.Authority == u.Authority:
@@ -2793,6 +2945,27 @@ func (v *RecordRange[T]) Equal(u *RecordRange[T]) bool {
 	return true
 }
 
+func (v *ResolvedKeyBook) Equal(u *ResolvedKeyBook) bool {
+	switch {
+	case v.Url == u.Url:
+		// equal
+	case v.Url == nil || u.Url == nil:
+		return false
+	case !((v.Url).Equal(u.Url)):
+		return false
+	}
+	if len(v.Pages) != len(u.Pages) {
+		return false
+	}
+	for i := range v.Pages {
+		if !((v.Pages[i]).Equal(u.Pages[i])) {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (v *SignatureSetRecord) Equal(u *SignatureSetRecord) bool {
 	if !(protocol.EqualAccount(v.Account, u.Account)) {
 		return false
@@ -3198,6 +3371,103 @@ func (v *BlockQuery) baseIsValid() error {
 
 	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field QueryType is missing")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_BlockTimeForOptions = []string{
+	1: "Partition",
+	2: "TxId",
+	3: "BlockHeight",
+}
+
+func (v *BlockTimeForOptions) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(len(v.Partition) == 0) {
+		writer.WriteString(1, v.Partition)
+	}
+	if !(v.TxId == nil) {
+		writer.WriteTxid(2, v.TxId)
+	}
+	if !(v.BlockHeight == 0) {
+		writer.WriteUint(3, v.BlockHeight)
+	}
+
+	_, _, err := writer.Reset(fieldNames_BlockTimeForOptions)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *BlockTimeForOptions) IsValid() error {
+	var errs []string
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_BlockTimeResult = []string{
+	1: "BlockTime",
+	2: "BlockHeight",
+}
+
+func (v *BlockTimeResult) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.BlockTime == (time.Time{})) {
+		writer.WriteTime(1, v.BlockTime)
+	}
+	if !(v.BlockHeight == 0) {
+		writer.WriteUint(2, v.BlockHeight)
+	}
+
+	_, _, err := writer.Reset(fieldNames_BlockTimeResult)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *BlockTimeResult) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field BlockTime is missing")
+	} else if v.BlockTime == (time.Time{}) {
+		errs = append(errs, "field BlockTime is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field BlockHeight is missing")
+	} else if v.BlockHeight == 0 {
+		errs = append(errs, "field BlockHeight is not set")
 	}
 
 	switch len(errs) {
@@ -4570,6 +4840,58 @@ func (v *IndexEntryRecord) IsValid() error {
 	}
 }
 
+var fieldNames_KeyBookAtOptions = []string{
+	1: "Url",
+	2: "BlockTime",
+}
+
+func (v *KeyBookAtOptions) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Url == nil) {
+		writer.WriteUrl(1, v.Url)
+	}
+	if !(v.BlockTime == (time.Time{})) {
+		writer.WriteTime(2, v.BlockTime)
+	}
+
+	_, _, err := writer.Reset(fieldNames_KeyBookAtOptions)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *KeyBookAtOptions) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Url is missing")
+	} else if v.Url == nil {
+		errs = append(errs, "field Url is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field BlockTime is missing")
+	} else if v.BlockTime == (time.Time{}) {
+		errs = append(errs, "field BlockTime is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_KeyRecord = []string{
 	1: "RecordType",
 	2: "Authority",
@@ -5897,6 +6219,60 @@ func (v *RecordRange[T]) IsValid() error {
 	}
 }
 
+var fieldNames_ResolvedKeyBook = []string{
+	1: "Url",
+	2: "Pages",
+}
+
+func (v *ResolvedKeyBook) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Url == nil) {
+		writer.WriteUrl(1, v.Url)
+	}
+	if !(len(v.Pages) == 0) {
+		for _, v := range v.Pages {
+			writer.WriteValue(2, v.MarshalBinary)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_ResolvedKeyBook)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *ResolvedKeyBook) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Url is missing")
+	} else if v.Url == nil {
+		errs = append(errs, "field Url is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Pages is missing")
+	} else if len(v.Pages) == 0 {
+		errs = append(errs, "field Pages is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_ServiceAddress = []string{
 	1: "Type",
 	2: "Argument",
@@ -6508,6 +6884,61 @@ func (v *BlockQuery) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_BlockQuery)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *BlockTimeForOptions) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *BlockTimeForOptions) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadString(1); ok {
+		v.Partition = x
+	}
+	if x, ok := reader.ReadTxid(2); ok {
+		v.TxId = x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.BlockHeight = x
+	}
+
+	seen, err := reader.Reset(fieldNames_BlockTimeForOptions)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *BlockTimeResult) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *BlockTimeResult) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadTime(1); ok {
+		v.BlockTime = x
+	}
+	if x, ok := reader.ReadUint(2); ok {
+		v.BlockHeight = x
+	}
+
+	seen, err := reader.Reset(fieldNames_BlockTimeResult)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -7376,6 +7807,32 @@ func (v *IndexEntryRecord) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
+func (v *KeyBookAtOptions) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *KeyBookAtOptions) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUrl(1); ok {
+		v.Url = x
+	}
+	if x, ok := reader.ReadTime(2); ok {
+		v.BlockTime = x
+	}
+
+	seen, err := reader.Reset(fieldNames_KeyBookAtOptions)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *KeyRecord) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -8131,6 +8588,36 @@ func (v *RecordRange[T]) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
+func (v *ResolvedKeyBook) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *ResolvedKeyBook) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUrl(1); ok {
+		v.Url = x
+	}
+	for {
+		if x := new(protocol.KeyPage); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+			v.Pages = append(v.Pages, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_ResolvedKeyBook)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *ServiceAddress) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -8436,6 +8923,17 @@ func init() {
 	}, "BlockQuery", "blockQuery")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("partition", "string"),
+		encoding.NewTypeField("txId", "string"),
+		encoding.NewTypeField("blockHeight", "uint64"),
+	}, "BlockTimeForOptions", "blockTimeForOptions")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("blockTime", "string"),
+		encoding.NewTypeField("blockHeight", "uint64"),
+	}, "BlockTimeResult", "blockTimeResult")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("queryType", "string"),
 		encoding.NewTypeField("key", "bytes32"),
 	}, "BptLeafQuery", "bptLeafQuery")
@@ -8585,6 +9083,11 @@ func init() {
 	}, "IndexEntryRecord", "indexEntryRecord")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("url", "string"),
+		encoding.NewTypeField("blockTime", "string"),
+	}, "KeyBookAtOptions", "keyBookAtOptions")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("recordType", "string"),
 		encoding.NewTypeField("authority", "string"),
 		encoding.NewTypeField("signer", "string"),
@@ -8730,6 +9233,11 @@ func init() {
 		encoding.NewTypeField("total", "uint64"),
 		encoding.NewTypeField("lastBlockTime", "string"),
 	}, "RecordRange", "recordRange")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("url", "string"),
+		encoding.NewTypeField("pages", "protocol.KeyPage[]"),
+	}, "ResolvedKeyBook", "resolvedKeyBook")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("type", "ServiceType"),
@@ -9702,6 +10210,22 @@ func (v *RecordRange[T]) MarshalJSON() ([]byte, error) {
 	u.Total = v.Total
 	if !(v.LastBlockTime == nil) {
 		u.LastBlockTime = v.LastBlockTime
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *ResolvedKeyBook) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Url       *url.URL                             `json:"url,omitempty"`
+		Pages     encoding.JsonList[*protocol.KeyPage] `json:"pages,omitempty"`
+		ExtraData *string                              `json:"$epilogue,omitempty"`
+	}{}
+	if !(v.Url == nil) {
+		u.Url = v.Url
+	}
+	if !(len(v.Pages) == 0) {
+		u.Pages = v.Pages
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -11021,6 +11545,27 @@ func (v *RecordRange[T]) UnmarshalJSON(data []byte) error {
 	v.Start = u.Start
 	v.Total = u.Total
 	v.LastBlockTime = u.LastBlockTime
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *ResolvedKeyBook) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Url       *url.URL                             `json:"url,omitempty"`
+		Pages     encoding.JsonList[*protocol.KeyPage] `json:"pages,omitempty"`
+		ExtraData *string                              `json:"$epilogue,omitempty"`
+	}{}
+	u.Url = v.Url
+	u.Pages = v.Pages
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	v.Url = u.Url
+	v.Pages = u.Pages
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err

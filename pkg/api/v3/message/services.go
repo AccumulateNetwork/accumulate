@@ -166,8 +166,10 @@ type MetricsService struct {
 }
 
 func (s MetricsService) methods() serviceMethodMap {
-	typ, fn := makeServiceMethod(s.metrics)
-	return serviceMethodMap{typ: fn}
+	typ1, fn1 := makeServiceMethod(s.metrics)
+	typ2, fn2 := makeServiceMethod(s.resolveKeyBookAt)
+	typ3, fn3 := makeServiceMethod(s.blockTimeFor)
+	return serviceMethodMap{typ1: fn1, typ2: fn2, typ3: fn3}
 }
 
 func (s MetricsService) metrics(c *call[*MetricsRequest]) {
@@ -177,6 +179,24 @@ func (s MetricsService) metrics(c *call[*MetricsRequest]) {
 		return
 	}
 	c.Write(&MetricsResponse{Value: res})
+}
+
+func (s MetricsService) resolveKeyBookAt(c *call[*KeyBookAtRequest]) {
+	res, err := s.MetricsService.ResolveKeyBookAt(c.context, c.params.KeyBookAtOptions)
+	if err != nil {
+		c.Write(&ErrorResponse{Error: errors.UnknownError.Wrap(err).(*errors.Error)})
+		return
+	}
+	c.Write(&KeyBookAtResponse{Value: res})
+}
+
+func (s MetricsService) blockTimeFor(c *call[*BlockTimeForRequest]) {
+	res, err := s.MetricsService.BlockTimeFor(c.context, c.params.BlockTimeForOptions)
+	if err != nil {
+		c.Write(&ErrorResponse{Error: errors.UnknownError.Wrap(err).(*errors.Error)})
+		return
+	}
+	c.Write(&BlockTimeForResponse{Value: res})
 }
 
 // Querier forwards [QueryRequest]s to a [api.Querier].

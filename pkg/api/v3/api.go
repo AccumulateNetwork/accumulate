@@ -86,6 +86,16 @@ type SnapshotService interface {
 type MetricsService interface {
 	// Metrics returns network metrics such as transactions per second.
 	Metrics(ctx context.Context, opts MetricsOptions) (*Metrics, error)
+
+	// ResolveKeyBookAt resolves a keybook (or partition validator set,
+	// represented as a keybook) to its state at a given block time.
+	// Central back-walk primitive — see issue #3957, #3973.
+	ResolveKeyBookAt(ctx context.Context, opts KeyBookAtOptions) (*ResolvedKeyBook, error)
+
+	// BlockTimeFor returns the block time for a transaction (set TxId)
+	// or block height (set BlockHeight). Companion to ResolveKeyBookAt;
+	// the metrics service caches both on the server side. See #3973.
+	BlockTimeFor(ctx context.Context, opts BlockTimeForOptions) (*BlockTimeResult, error)
 }
 
 type Querier interface {
