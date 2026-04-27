@@ -7,7 +7,6 @@
 package backwalk
 
 import (
-	"errors"
 	"testing"
 	"time"
 
@@ -25,12 +24,12 @@ func TestNew_Defaults(t *testing.T) {
 	}
 }
 
-func TestWalk_NotImplemented(t *testing.T) {
+func TestWalk_NilBatch(t *testing.T) {
 	w := New(Options{PinnedGenesisHash: [32]byte{1}})
 	u, _ := url.Parse("dn.acme/operators")
 	_, err := w.Walk(nil, u, time.Now())
-	if !errors.Is(err, ErrNotImplemented) {
-		t.Fatalf("expected ErrNotImplemented, got %v", err)
+	if err == nil || !contains(err.Error(), "nil batch") {
+		t.Fatalf("expected nil-batch error, got %v", err)
 	}
 }
 
