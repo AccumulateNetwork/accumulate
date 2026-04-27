@@ -100,12 +100,12 @@ func resolvePage(batch *database.Batch, book *protocol.KeyBook, pageUrl *url.URL
 	}
 	if !ok || !lastBlockTime.After(t) {
 		// No mutations after t — current state already reflects t.
-		var page protocol.KeyPage
+		var page *protocol.KeyPage
 		err := acct.Main().GetAs(&page)
 		if err != nil {
 			return nil, fmt.Errorf("load page %s: %w", pageUrl, err)
 		}
-		return &page, nil
+		return page, nil
 	}
 
 	// Forward replay path.
