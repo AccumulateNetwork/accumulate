@@ -315,6 +315,14 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, book *protocol.Key
 	}
 }
 
+// ApplyKeyPageOperation applies a single key-page operation to the page in
+// place. Exposed for use by the bootstrap back-walk (issue #3957) which
+// replays main-chain entries to resolve a keybook's state at a past block
+// time.
+func ApplyKeyPageOperation(page *protocol.KeyPage, book *protocol.KeyBook, op protocol.KeyPageOperation) error {
+	return UpdateKeyPage{}.executeOperation(page, book, op)
+}
+
 func didUpdateKeyPage(page *protocol.KeyPage) {
 	page.Version += 1
 
