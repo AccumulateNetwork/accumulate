@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pinned"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pipeline"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/accumulate"
 )
@@ -96,14 +97,21 @@ func runBootstrap(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("create data dir: %w", err)
 	}
 
+	pinnedHash := pinned.GenesisHash(cfg.Network)
+	if pinnedHash == ([32]byte{}) && !flagBootstrap.SkipProof {
+		fmt.Printf("Warning: no pinned genesis hash for network %q. ", cfg.Network)
+		fmt.Println("Genesis termination uses development-only fallback (any SystemGenesis-typed earliest entry).")
+		fmt.Println("Pass --skip-proof to suppress this warning, or wait for the network's hash to land in pkg/internal/core/bootstrap/pinned/pinned.go.")
+		fmt.Println()
+	}
+
 	res, err := pipeline.Run(cmd.Context(), pipeline.Options{
-		Endpoint:  endpoint,
-		Network:   cfg.Network,
-		Partition: flagBootstrap.Partition,
-		DataDir:   cfg.DataDir,
-		SkipProof: flagBootstrap.SkipProof,
-		// PinnedGenesisHash left zero — placeholder until the binary
-		// pins per-network hashes (deferred under #3979).
+		Endpoint:          endpoint,
+		Network:           cfg.Network,
+		Partition:         flagBootstrap.Partition,
+		DataDir:           cfg.DataDir,
+		SkipProof:         flagBootstrap.SkipProof,
+		PinnedGenesisHash: pinnedHash,
 		Logger: func(format string, a ...any) {
 			fmt.Printf(format+"\n", a...)
 		},

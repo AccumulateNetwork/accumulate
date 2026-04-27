@@ -169,8 +169,14 @@ func Run(ctx context.Context, opts Options) (*Result, error) {
 	roBatch := db.Begin(false)
 	defer roBatch.Discard()
 
+	// Walk at the partition tip's time. This is approximately the pin
+	// block's time (typically within seconds for confirmation depth 2).
+	// Faithful pin-time at H specifically requires the historical
+	// block-time lookup deferred under #3978's BlockHeight path; for
+	// now this avoids the time.Now() drift that #3979 / C5 flagged.
+	pinTime := cs.LastBlock.Time
 	operatorsUrl := protocol.PartitionUrl(opts.Partition).JoinPath(protocol.Operators)
-	earliest, err := walker.Walk(roBatch, operatorsUrl, time.Now())
+	earliest, err := walker.Walk(roBatch, operatorsUrl, pinTime)
 	if err != nil {
 		if opts.SkipProof {
 			logf("    back-walker error (skipped): %v", err)

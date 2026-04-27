@@ -55,7 +55,7 @@ func TestWalk_GenesisTransaction_Terminates(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	w := New(Options{PinnedGenesisHash: [32]byte{0x01}})
+	w := New(Options{PinnedGenesisHash: txnHash})
 	ve, err := w.Walk(batch, pageUrl, time.Now())
 	if err != nil {
 		t.Fatalf("Walk: %v", err)
@@ -127,7 +127,9 @@ func TestWalk_MultiEntryChain(t *testing.T) {
 	hash1 := mkSysGen("first")
 	mkSysGen("second")
 
-	w := New(Options{PinnedGenesisHash: [32]byte{0x01}})
+	// Pin to hash1 — the earliest in-window entry — so the pinned-hash
+	// cross-check accepts it as the genesis terminator.
+	w := New(Options{PinnedGenesisHash: hash1})
 	earliest, err := w.Walk(batch, pageUrl, time.Now())
 	if err != nil {
 		t.Fatalf("Walk: %v", err)
