@@ -53,9 +53,11 @@ var flagBootstrap struct {
 	ConfigFile  string
 	DataDir     string
 	Network     string
+	Partition   string
 	TargetState string // "ACTIVE" (default) or "BOOTING"
 	TrustAnchor string // optional override "height:hexhash"
 	Force       bool
+	SkipProof   bool
 }
 
 func init() {
@@ -65,9 +67,11 @@ func init() {
 	f.StringVar(&flagBootstrap.ConfigFile, "config", "", "path to bootstrap.toml (omit for interactive)")
 	f.StringVar(&flagBootstrap.DataDir, "data-dir", "", "data directory (default ~/.accumulated)")
 	f.StringVar(&flagBootstrap.Network, "network", "", "network: mainnet | testnet | devnet | <endpoint>")
+	f.StringVar(&flagBootstrap.Partition, "partition", "Directory", "partition to bootstrap into (Directory or BVN name)")
 	f.StringVar(&flagBootstrap.TargetState, "target-state", "ACTIVE", "target state to reach before exiting: BOOTING or ACTIVE")
 	f.StringVar(&flagBootstrap.TrustAnchor, "trust-anchor", "", "override pinned trust anchor: 'height:hexhash'")
 	f.BoolVar(&flagBootstrap.Force, "force", false, "force re-bootstrap even if state is already persisted")
+	f.BoolVar(&flagBootstrap.SkipProof, "skip-proof", false, "do not abort on back-walker proof failures (development only)")
 }
 
 func runBootstrap(cmd *cobra.Command, args []string) error {
@@ -95,10 +99,11 @@ func runBootstrap(cmd *cobra.Command, args []string) error {
 	res, err := pipeline.Run(cmd.Context(), pipeline.Options{
 		Endpoint:  endpoint,
 		Network:   cfg.Network,
-		Partition: "Directory", // BVN selection comes in a follow-up
+		Partition: flagBootstrap.Partition,
 		DataDir:   cfg.DataDir,
+		SkipProof: flagBootstrap.SkipProof,
 		// PinnedGenesisHash left zero — placeholder until the binary
-		// pins per-network hashes (deferred under #3961 / #3974).
+		// pins per-network hashes (deferred under #3979).
 		Logger: func(format string, a ...any) {
 			fmt.Printf(format+"\n", a...)
 		},

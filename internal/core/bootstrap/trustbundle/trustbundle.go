@@ -23,10 +23,17 @@ package trustbundle
 import (
 	"crypto/ed25519"
 	"errors"
+	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
+
+// ErrInsufficientSignatures is returned when Verify counts fewer
+// distinct verified validator signatures than the threshold rule
+// requires. Sentinel for telemetry / programmatic handling (issue
+// #3984).
+var ErrInsufficientSignatures = errors.New("trustbundle: insufficient signatures")
 
 // Bundle is the peer-served delivery payload.
 type Bundle struct {
@@ -160,7 +167,8 @@ func (b *Bundle) Verify(opts VerifyOptions) error {
 	}
 
 	if len(seen) < thresh {
-		return errors.New("insufficient signatures")
+		return fmt.Errorf("%w: %d/%d verified, need %d",
+			ErrInsufficientSignatures, len(seen), len(b.ValidatorSet), thresh)
 	}
 	return nil
 }

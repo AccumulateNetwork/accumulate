@@ -68,6 +68,10 @@ type Options struct {
 	// alongside the standard minimum bootstrap set.
 	ExtraAccounts []*url.URL
 
+	// SkipProof bypasses back-walker error checking. Development use
+	// only — disables the proof-of-derivation guarantee.
+	SkipProof bool
+
 	// Logger receives status messages. nil = no output.
 	Logger func(format string, args ...any)
 }
@@ -168,10 +172,11 @@ func Run(ctx context.Context, opts Options) (*Result, error) {
 	operatorsUrl := protocol.PartitionUrl(opts.Partition).JoinPath(protocol.Operators)
 	earliest, err := walker.Walk(roBatch, operatorsUrl, time.Now())
 	if err != nil {
-		logf("    back-walker error: %v", err)
-		// Don't hard-fail — first-cut pipelines may have incomplete
-		// chain plumbing; the persist step still produces a useful
-		// artifact. Surface via Result.
+		if opts.SkipProof {
+			logf("    back-walker error (skipped): %v", err)
+		} else {
+			return nil, fmt.Errorf("back-walker: %w (pass --skip-proof to ignore in development)", err)
+		}
 	}
 
 	// 5. Persist.
