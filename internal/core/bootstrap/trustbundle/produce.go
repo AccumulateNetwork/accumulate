@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"sort"
 
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -152,4 +153,180 @@ func (b *Bundle) AddSignature(signer Signer) (ValidatorSignature, error) {
 	entry := ValidatorSignature{PublicKeyHash: pubHash, Signature: sig}
 	b.Signatures = append(b.Signatures, entry)
 	return entry, nil
+}
+
+// MarshalBinary serializes the bundle for wire transmission (issue
+// #3983). The format extends the canonical-hash encoding with the
+// signature list appended at the end. Decoders that don't recognize a
+// version (b.Version mismatch) MUST reject — the schema is append-only
+// within a major version but cross-version is not assumed compatible.
+func (b *Bundle) MarshalBinary() ([]byte, error) {
+	buf := make([]byte, 0, 1024)
+	wu64 := func(v uint64) {
+		var x [8]byte
+		binary.BigEndian.PutUint64(x[:], v)
+		buf = append(buf, x[:]...)
+	}
+	wu32 := func(v uint32) {
+		var x [4]byte
+		binary.BigEndian.PutUint32(x[:], v)
+		buf = append(buf, x[:]...)
+	}
+	wbytes := func(p []byte) {
+		wu64(uint64(len(p)))
+		buf = append(buf, p...)
+	}
+	wstr := func(s string) { wbytes([]byte(s)) }
+
+	wu32(b.Version)
+	wstr(b.Network)
+	wstr(b.Partition)
+	wu64(b.MajorBlockIndex)
+	wu64(b.MinorBlockIndex)
+	wu64(uint64(b.MajorBlockTimeUnix))
+
+	wu64(uint64(len(b.PerPartitionAnchors)))
+	for _, a := range b.PerPartitionAnchors {
+		wstr(a.Partition)
+		buf = append(buf, a.RootChainAnchor[:]...)
+		buf = append(buf, a.StateTreeAnchor[:]...)
+	}
+
+	wu64(uint64(len(b.MinimumBootstrapSet)))
+	for _, e := range b.MinimumBootstrapSet {
+		if e.Url != nil {
+			wstr(e.Url.String())
+		} else {
+			wstr("")
+		}
+		wbytes(e.State)
+		buf = append(buf, e.ValueHash[:]...)
+	}
+
+	wu64(uint64(len(b.ValidatorSet)))
+	for _, v := range b.ValidatorSet {
+		buf = append(buf, v.PublicKeyHash[:]...)
+		wbytes(v.PublicKey)
+		wu32(uint32(v.Type))
+	}
+
+	wu64(uint64(len(b.Signatures)))
+	for _, s := range b.Signatures {
+		buf = append(buf, s.PublicKeyHash[:]...)
+		wbytes(s.Signature)
+	}
+
+	return buf, nil
+}
+
+// UnmarshalBinary parses the wire-format bundle. Rejects truncated
+// input. Caller must call Verify to validate signatures separately.
+func (b *Bundle) UnmarshalBinary(data []byte) error {
+	r := &binReader{buf: data}
+
+	b.Version = r.u32()
+	b.Network = r.str()
+	b.Partition = r.str()
+	b.MajorBlockIndex = r.u64()
+	b.MinorBlockIndex = r.u64()
+	b.MajorBlockTimeUnix = int64(r.u64())
+
+	n := r.u64()
+	b.PerPartitionAnchors = make([]PartitionAnchorEntry, n)
+	for i := range b.PerPartitionAnchors {
+		b.PerPartitionAnchors[i].Partition = r.str()
+		copy(b.PerPartitionAnchors[i].RootChainAnchor[:], r.fixed(32))
+		copy(b.PerPartitionAnchors[i].StateTreeAnchor[:], r.fixed(32))
+	}
+
+	n = r.u64()
+	b.MinimumBootstrapSet = make([]AccountEntry, n)
+	for i := range b.MinimumBootstrapSet {
+		us := r.str()
+		if us != "" {
+			u, err := url.Parse(us)
+			if err != nil {
+				return fmt.Errorf("parse url %q: %w", us, err)
+			}
+			b.MinimumBootstrapSet[i].Url = u
+		}
+		b.MinimumBootstrapSet[i].State = r.bytes()
+		copy(b.MinimumBootstrapSet[i].ValueHash[:], r.fixed(32))
+	}
+
+	n = r.u64()
+	b.ValidatorSet = make([]ValidatorEntry, n)
+	for i := range b.ValidatorSet {
+		copy(b.ValidatorSet[i].PublicKeyHash[:], r.fixed(32))
+		b.ValidatorSet[i].PublicKey = r.bytes()
+		b.ValidatorSet[i].Type = protocol.SignatureType(r.u32())
+	}
+
+	n = r.u64()
+	b.Signatures = make([]ValidatorSignature, n)
+	for i := range b.Signatures {
+		copy(b.Signatures[i].PublicKeyHash[:], r.fixed(32))
+		b.Signatures[i].Signature = r.bytes()
+	}
+
+	return r.err
+}
+
+type binReader struct {
+	buf []byte
+	off int
+	err error
+}
+
+func (r *binReader) want(n int) []byte {
+	if r.err != nil {
+		return nil
+	}
+	if r.off+n > len(r.buf) {
+		r.err = fmt.Errorf("trustbundle: truncated input at offset %d, wanted %d bytes", r.off, n)
+		return nil
+	}
+	out := r.buf[r.off : r.off+n]
+	r.off += n
+	return out
+}
+
+func (r *binReader) u64() uint64 {
+	p := r.want(8)
+	if p == nil {
+		return 0
+	}
+	return binary.BigEndian.Uint64(p)
+}
+
+func (r *binReader) u32() uint32 {
+	p := r.want(4)
+	if p == nil {
+		return 0
+	}
+	return binary.BigEndian.Uint32(p)
+}
+
+func (r *binReader) bytes() []byte {
+	n := r.u64()
+	if r.err != nil {
+		return nil
+	}
+	p := r.want(int(n))
+	if p == nil {
+		return nil
+	}
+	out := make([]byte, n)
+	copy(out, p)
+	return out
+}
+
+func (r *binReader) str() string { return string(r.bytes()) }
+
+func (r *binReader) fixed(n int) []byte {
+	p := r.want(n)
+	if p == nil {
+		return make([]byte, n)
+	}
+	return p
 }
