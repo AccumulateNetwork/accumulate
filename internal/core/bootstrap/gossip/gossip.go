@@ -134,6 +134,14 @@ func handleEvent(
 			return fmt.Errorf("pull touched account %s: %w", u, err)
 		}
 	}
+	// UpdateBPT runs the observer over every dirty account and writes
+	// the resulting per-account hash into the local BPT. Without it,
+	// account writes never reach the BPT and the launcher's tracker
+	// can't compare a meaningful local root against signed anchors.
+	if err := batch.UpdateBPT(); err != nil {
+		batch.Discard()
+		return fmt.Errorf("update BPT: %w", err)
+	}
 	if err := batch.Commit(); err != nil {
 		return fmt.Errorf("commit: %w", err)
 	}
