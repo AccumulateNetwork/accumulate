@@ -16,6 +16,8 @@ import (
 
 	"github.com/google/uuid"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/bootpersist"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"go.opentelemetry.io/otel"
@@ -38,6 +40,29 @@ type Instance struct {
 	logger   *slog.Logger
 	p2p      *p2p.Node
 	services ioc.Registry
+
+	// bootMachine is the bootstrap state machine reconstructed from a
+	// persisted bootstrap-state.json artifact (#3981). nil means this
+	// node didn't go through the bootstrap launcher — normal startup.
+	bootMachine *nodestate.Machine
+
+	// bootArtifact is the persisted artifact that produced bootMachine.
+	// Retained so downstream services (#3982 advertisement publisher,
+	// #3964 hydrator, #3967 backfill) can resume cursors.
+	bootArtifact *bootpersist.Artifact
+}
+
+// BootMachine returns the bootstrap state machine if this node was
+// launched via the bootstrap pipeline (#3981 / #3970). Returns nil when
+// the node started without a bootpersist artifact.
+func (i *Instance) BootMachine() *nodestate.Machine {
+	return i.bootMachine
+}
+
+// BootArtifact returns the persisted bootstrap artifact, or nil if the
+// node was started without one.
+func (i *Instance) BootArtifact() *bootpersist.Artifact {
+	return i.bootArtifact
 }
 
 const minDiskSpace = 0.05
@@ -146,6 +171,15 @@ func (inst *Instance) StartFiltered(predicate func(Service) bool) (err error) {
 		return errors.FatalError.With("disk is full")
 	}
 	go inst.checkDiskSpace()
+
+	// Detect a bootstrap-launched data dir (#3981). If present,
+	// reconstruct the nodestate Machine from the persisted artifact so
+	// downstream services (advertisement publisher #3982, hydrator,
+	// backfill) can resume from the recorded state instead of starting
+	// from scratch.
+	if err := inst.detectBootstrapState(); err != nil {
+		return errors.UnknownError.WithFormat("detect bootstrap state: %w", err)
+	}
 
 	// Apply configurations
 	for _, c := range inst.config.Configurations {

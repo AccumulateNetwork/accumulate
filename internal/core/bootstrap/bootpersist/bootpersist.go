@@ -152,6 +152,22 @@ var ErrFormatMajor = errors.New("bootpersist: incompatible format major version"
 // expectedPinnedHash. Returns ErrFormatMajor for incompatible major
 // versions.
 func Load(dir string, expectedPinnedHash [32]byte) (*Artifact, error) {
+	a, err := Peek(dir)
+	if err != nil {
+		return nil, err
+	}
+	if a.PinnedGenesisHash != expectedPinnedHash {
+		return nil, ErrPinMismatch
+	}
+	return a, nil
+}
+
+// Peek reads the artifact from `dir` and validates the format-major
+// version, but does not enforce a pinned-hash check. Callers that
+// need to read the artifact's Network field before resolving the
+// expected pin (e.g., during accumulated run startup) use this and
+// then enforce the pin themselves.
+func Peek(dir string) (*Artifact, error) {
 	path := filepath.Join(dir, FileName)
 	f, err := os.Open(path)
 	if err != nil {
@@ -165,9 +181,6 @@ func Load(dir string, expectedPinnedHash [32]byte) (*Artifact, error) {
 	}
 	if a.FormatMajor != FormatMajor {
 		return nil, fmt.Errorf("%w: persisted=%d, this binary=%d", ErrFormatMajor, a.FormatMajor, FormatMajor)
-	}
-	if a.PinnedGenesisHash != expectedPinnedHash {
-		return nil, ErrPinMismatch
 	}
 	return a, nil
 }
