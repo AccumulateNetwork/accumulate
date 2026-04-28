@@ -102,15 +102,77 @@ func (s *APISource) Header(ctx context.Context, height uint64) (*Header, error) 
 }
 
 // Signatures returns validator signatures attached to the anchor
-// transaction. **Implementation note:** today this is a stub that
-// returns nil — proper retrieval requires querying the anchor
-// transaction's signature chain and decoding messaging.BlockAnchor
-// wrappers, with the launcher then mapping protocol.KeySignature to
-// HeaderSignature using the operators-keybook validator set. Tracked
-// as a follow-up; until it lands, walks against APISource use a fake
-// initial validator set or zero MinSignatures for smoke testing.
+// transaction at the given height. Pulls from the anchor txn's
+// signature chain, decodes messaging.BlockAnchor / SignatureMessage
+// wrappers, and surfaces each as a HeaderSignature with both the
+// raw key-hash + signature bytes and the protocol.KeySignature for
+// protocol-aware verification.
 func (s *APISource) Signatures(ctx context.Context, height uint64) ([]HeaderSignature, error) {
-	return nil, nil
+	rec, err := s.lookup(ctx, height)
+	if err != nil {
+		return nil, err
+	}
+	txnURL := rec.txid.AsUrl()
+
+	var out []HeaderSignature
+	var start uint64
+	for {
+		count := s.PageSize
+		expand := true
+		page, err := s.q.QuerySignatureChainEntries(ctx, txnURL, &api.ChainQuery{
+			Name: "signature",
+			Range: &api.RangeOptions{
+				Start:  start,
+				Count:  &count,
+				Expand: &expand,
+			},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("query signature chain for height %d: %w", height, err)
+		}
+		if page == nil || len(page.Records) == 0 {
+			break
+		}
+
+		for _, e := range page.Records {
+			if e == nil || e.Value == nil || e.Value.Message == nil {
+				continue
+			}
+			ks := extractKeySignature(e.Value.Message)
+			if ks == nil {
+				continue
+			}
+			var pkh [32]byte
+			copy(pkh[:], ks.GetPublicKeyHash())
+			out = append(out, HeaderSignature{
+				PublicKeyHash: pkh,
+				Signature:     ks.GetSignature(),
+				KeySignature:  ks,
+			})
+		}
+		if uint64(len(page.Records)) < count {
+			break
+		}
+		start += uint64(len(page.Records))
+	}
+	return out, nil
+}
+
+// extractKeySignature pulls the validator's KeySignature out of the
+// messaging wrappers used on the anchor txn's signature chain.
+// BlockAnchor.Signature is already typed as KeySignature;
+// SignatureMessage.Signature is the broader Signature interface and
+// only carries a KeySignature for validator-class signers.
+func extractKeySignature(m messaging.Message) protocol.KeySignature {
+	switch v := m.(type) {
+	case *messaging.BlockAnchor:
+		return v.Signature
+	case *messaging.SignatureMessage:
+		if ks, ok := v.Signature.(protocol.KeySignature); ok {
+			return ks
+		}
+	}
+	return nil
 }
 
 // OperatorsDeltaAt returns the operators-keybook deltas applied in

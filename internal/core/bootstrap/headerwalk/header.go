@@ -116,10 +116,33 @@ type ValidatorSet struct {
 }
 
 // HeaderSignature is one validator's signature on a header's
-// canonical hash.
+// canonical hash. Two carrier formats are supported:
+//
+//   - PublicKeyHash + Signature (raw): used by test fixtures and any
+//     caller that has already extracted the bytes. Verification path
+//     dispatches on Validator.Type and does direct ed25519 / etc.
+//
+//   - KeySignature: used by APISource and any caller pulling
+//     signatures from the live network. Verification delegates to
+//     the protocol's KeySignature.Verify, which handles the
+//     full Accumulate signature semantics (init/transaction hashes,
+//     versioned signers, signature scheme dispatch). When set, the
+//     raw fields are ignored.
 type HeaderSignature struct {
 	PublicKeyHash [32]byte
 	Signature     []byte
+
+	// KeySignature, if non-nil, supersedes PublicKeyHash + Signature.
+	// VerifyQuorum delegates to KeySignature.Verify against the
+	// header's canonical hash.
+	KeySignature protocol.KeySignature
+}
+
+// Hash satisfies protocol.Signable so KeySignature.Verify can take
+// *Header directly. Returns the canonical hash (anchor txn hash for
+// live-source headers).
+func (h *Header) Hash() [32]byte {
+	return h.CanonicalHash()
 }
 
 // QuorumOptions tunes the verification rule. Default rule is "at
@@ -164,22 +187,29 @@ func VerifyQuorum(h *Header, set ValidatorSet, sigs []HeaderSignature, opts Quor
 		idx[v.PublicKeyHash] = i
 	}
 
-	canonical := h.CanonicalHash()
-
 	seen := make(map[[32]byte]bool, len(sigs))
 	for _, s := range sigs {
-		i, ok := idx[s.PublicKeyHash]
+		// Resolve the public-key hash. KeySignature is authoritative
+		// when present; raw-bytes path uses the explicit field.
+		var pkh [32]byte
+		if s.KeySignature != nil {
+			copy(pkh[:], s.KeySignature.GetPublicKeyHash())
+		} else {
+			pkh = s.PublicKeyHash
+		}
+
+		i, ok := idx[pkh]
 		if !ok {
 			continue
 		}
-		if seen[s.PublicKeyHash] {
+		if seen[pkh] {
 			continue
 		}
 		v := set.Validators[i]
-		if !verifySig(v, s.Signature, canonical) {
+		if !verifySig(v, s, h) {
 			continue
 		}
-		seen[s.PublicKeyHash] = true
+		seen[pkh] = true
 	}
 
 	if len(seen) < thresh {
@@ -189,15 +219,29 @@ func VerifyQuorum(h *Header, set ValidatorSet, sigs []HeaderSignature, opts Quor
 	return nil
 }
 
-// verifySig dispatches on signature type. Unsupported types return
-// false, leaving the threshold rule to decide outcome.
-func verifySig(v Validator, sig []byte, hash [32]byte) bool {
+// verifySig dispatches: protocol-aware path when the signature
+// carries a KeySignature (live network), raw-bytes path otherwise
+// (test fixtures). Unsupported signature types return false, leaving
+// the threshold rule to decide outcome.
+func verifySig(v Validator, s HeaderSignature, h *Header) bool {
+	if s.KeySignature != nil {
+		// Protocol's Verify dispatches on the KeySignature's
+		// concrete type and handles full Accumulate signature
+		// semantics (versioned signers, init/transaction hashes,
+		// signature scheme dispatch).
+		return s.KeySignature.Verify(s.KeySignature, h)
+	}
+
+	// Raw-bytes path: caller supplied (PublicKeyHash, Signature)
+	// directly. Used by test fixtures that don't construct full
+	// protocol.KeySignature objects.
 	switch v.Type {
 	case protocol.SignatureTypeED25519:
 		if len(v.PublicKey) != ed25519.PublicKeySize {
 			return false
 		}
-		return ed25519.Verify(ed25519.PublicKey(v.PublicKey), hash[:], sig)
+		canonical := h.CanonicalHash()
+		return ed25519.Verify(ed25519.PublicKey(v.PublicKey), canonical[:], s.Signature)
 	default:
 		return false
 	}

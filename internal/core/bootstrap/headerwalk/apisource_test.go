@@ -190,15 +190,8 @@ func TestAPISource_PaginatesUntilTarget(t *testing.T) {
 	}
 }
 
-func TestAPISource_StubsReturnEmpty(t *testing.T) {
+func TestAPISource_OperatorsDeltaStubReturnsNil(t *testing.T) {
 	src := NewAPISource(api.Querier2{}, protocol.DnUrl().JoinPath(protocol.AnchorPool))
-	sigs, err := src.Signatures(context.Background(), 1)
-	if err != nil {
-		t.Fatalf("Signatures: %v", err)
-	}
-	if sigs != nil {
-		t.Errorf("Signatures stub should return nil, got %v", sigs)
-	}
 	deltas, err := src.OperatorsDeltaAt(context.Background(), 1)
 	if err != nil {
 		t.Fatalf("OperatorsDeltaAt: %v", err)
