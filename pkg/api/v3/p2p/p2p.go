@@ -39,6 +39,21 @@ type Node struct {
 	host     host.Host
 	tracker  dial.Tracker
 	services []*serviceHandler
+
+	// bootstrapAdvertProvider returns the current bootstrap-state
+	// advertisement to embed in NodeInfo, or nil if this node didn't
+	// go through the bootstrap launcher (#3982). The run package wires
+	// this in via SetBootstrapAdvertProvider when its bootMachine is
+	// non-nil. p2p deliberately doesn't import nodestate to avoid the
+	// reverse coupling — this hook returns the wire type directly.
+	bootstrapAdvertProvider func() *api.BootstrapAdvertisement
+}
+
+// SetBootstrapAdvertProvider installs a function that returns the
+// current bootstrap-state advertisement. NodeInfo will call it on
+// every request and embed the result. Pass nil to clear. Issue #3982.
+func (n *Node) SetBootstrapAdvertProvider(fn func() *api.BootstrapAdvertisement) {
+	n.bootstrapAdvertProvider = fn
 }
 
 // Options are options for creating a [Node].

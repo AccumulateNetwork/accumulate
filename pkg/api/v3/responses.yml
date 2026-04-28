@@ -15,6 +15,16 @@ NodeInfo:
       type: string
     - name: Commit
       type: string
+    # Bootstrap advertisement: optional; populated by nodes that went
+    # through the minimum-data bootstrap launcher (#3953). Legacy nodes
+    # leave this nil — peers treat that as "not advertised" and follow
+    # the backwards-compat fallback (legacy nodes are treated as
+    # COMPLETE for legacy queries, per #3970).
+    - name: BootstrapAdvertisement
+      type: BootstrapAdvertisement
+      marshal-as: reference
+      pointer: true
+      optional: true
 
 FindServiceResult:
   fields:

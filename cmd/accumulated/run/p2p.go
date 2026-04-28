@@ -13,6 +13,7 @@ import (
 	"strconv"
 
 	dht "github.com/libp2p/go-libp2p-kad-dht"
+	apiv3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
 )
 
@@ -35,6 +36,17 @@ func (p *P2P) start(inst *Instance) error {
 		return err
 	}
 	inst.p2p = node
+
+	// If we resumed from a bootstrap-launched data dir, plumb the
+	// nodestate machine through to NodeInfo so peers see our state
+	// (#3982). Reads on every NodeInfo request — the machine is
+	// authoritative; this is a snapshot view.
+	if inst.bootMachine != nil {
+		machine := inst.bootMachine
+		node.SetBootstrapAdvertProvider(func() *apiv3.BootstrapAdvertisement {
+			return advertisementFromMachine(machine)
+		})
+	}
 
 	slog.InfoContext(inst.context, "We are", "node-id", node.ID(), "instance-id", inst.id, "module", "run")
 

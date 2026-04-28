@@ -86,6 +86,9 @@ func (n *nodeService) NodeInfo(ctx context.Context, opts api.NodeInfoOptions) (*
 	for i, s := range n.services {
 		info.Services[i] = s.address
 	}
+	if n.bootstrapAdvertProvider != nil {
+		info.BootstrapAdvertisement = n.bootstrapAdvertProvider()
+	}
 	return info, nil
 }
 

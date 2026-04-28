@@ -71,6 +71,43 @@ func TestDetectBootstrapState_BootingArtifact(t *testing.T) {
 	}
 }
 
+func TestAdvertisementFromMachine_NilSafe(t *testing.T) {
+	if got := advertisementFromMachine(nil); got != nil {
+		t.Errorf("expected nil for nil machine, got %+v", got)
+	}
+}
+
+func TestAdvertisementFromMachine_BootingMachine(t *testing.T) {
+	m := nodestate.New() // starts in BOOTING
+	ad := advertisementFromMachine(m)
+	if ad == nil {
+		t.Fatal("expected non-nil advertisement")
+	}
+	if ad.State.String() != "booting" {
+		// BootstrapState.String is generated from the lower-cased enum
+		// member; just confirm it's the booting variant.
+		t.Errorf("State = %v, want booting", ad.State)
+	}
+	if ad.BptRootMatched != ([32]byte{}) {
+		t.Errorf("BOOTING advertisement should have zero BptRootMatched")
+	}
+}
+
+func TestAdvertisementFromMachine_ActiveMachine(t *testing.T) {
+	m := nodestate.New()
+	root := [32]byte{0xab}
+	if !m.PromoteToActive(root, 12345) {
+		t.Fatal("PromoteToActive failed")
+	}
+	ad := advertisementFromMachine(m)
+	if ad.SinceBlock != 12345 {
+		t.Errorf("SinceBlock = %d, want 12345", ad.SinceBlock)
+	}
+	if ad.BptRootMatched != root {
+		t.Errorf("BptRootMatched mismatch")
+	}
+}
+
 func TestDetectBootstrapState_PinMismatchFails(t *testing.T) {
 	dir := t.TempDir()
 	// Use a network name that has a pinned hash in the binary. Since

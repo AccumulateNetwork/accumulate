@@ -123,3 +123,19 @@ KnownPeerStatus:
   Bad:
     name: PeerStatusIsKnownBad
     value: 2
+
+# BootstrapState mirrors the internal nodestate.State enum on the wire
+# so peers can route queries by capability. Issue #3982, parent #3953.
+BootstrapState:
+  Unknown:
+    name: BootstrapStateUnknown
+    value: 0
+  Booting:
+    name: BootstrapStateBooting
+    value: 1
+  Active:
+    name: BootstrapStateActive
+    value: 2
+  Complete:
+    name: BootstrapStateComplete
+    value: 3
