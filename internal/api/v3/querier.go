@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/cometbft/cometbft/libs/log"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/bptproof"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -301,9 +302,54 @@ func (s *Querier) query(ctx context.Context, batch *database.Batch, scope *url.U
 		}
 		return r, err
 
+	case *api.BptPageQuery:
+		return s.queryBptPage(batch, query)
+
 	default:
 		return nil, errors.NotAllowed.WithFormat("unknown query type %v", query.QueryType())
 	}
+}
+
+// queryBptPage handles BPT enumeration for the bootstrap-v3 launcher's
+// sync phase. Returns a paginated chunk of (KeyHash, ValueHash) pairs
+// in BPT key order. Per-leaf Merkle proofs are intentionally omitted
+// — the launcher reconstructs the full BPT and matches its root against
+// a trusted current StateTreeAnchor; per-leaf proofs add nothing on
+// top of root match.
+func (s *Querier) queryBptPage(batch *database.Batch, query *api.BptPageQuery) (*api.BptPageRecord, error) {
+	const defaultPageSize = 256
+	const maxPageSize = 4096
+
+	count := query.Count
+	if count == 0 || count > maxPageSize {
+		count = defaultPageSize
+	}
+
+	var startKey [32]byte
+	if query.StartHash != ([32]byte{}) {
+		startKey = query.StartHash
+	} else {
+		startKey = bptproof.FullScanStart()
+	}
+
+	page, err := bptproof.GetPage(batch, startKey, int(count))
+	if err != nil {
+		return nil, err
+	}
+
+	out := &api.BptPageRecord{
+		NextStart: page.NextStart,
+		BptRoot:   page.BptRoot,
+		Done:      page.Done,
+		Entries:   make([]*api.BptLeafSummary, len(page.Entries)),
+	}
+	for i, e := range page.Entries {
+		out.Entries[i] = &api.BptLeafSummary{
+			KeyHash:   e.KeyHash,
+			ValueHash: e.ValueHash,
+		}
+	}
+	return out, nil
 }
 
 func (s *Querier) queryAccount(ctx context.Context, batch *database.Batch, record *database.Account, wantReceipt *api.ReceiptOptions) (*api.AccountRecord, error) {
