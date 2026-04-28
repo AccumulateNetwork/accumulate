@@ -48,3 +48,13 @@ ServiceAddress:
     - name: Argument
       type: string
       optional: true
+
+# BptLeafSummary is one BPT leaf — account-key hash + value hash.
+# Used by BptPageRecord for paginated BPT enumeration during the
+# bootstrap-v3 launcher's sync phase.
+BptLeafSummary:
+  fields:
+    - name: KeyHash
+      type: hash
+    - name: ValueHash
+      type: hash

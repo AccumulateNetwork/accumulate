@@ -72,6 +72,31 @@ type BlockQuery struct {
 	extraData []byte
 }
 
+type BptLeafSummary struct {
+	fieldsSet []bool
+	KeyHash   [32]byte `json:"keyHash,omitempty" form:"keyHash" query:"keyHash" validate:"required"`
+	ValueHash [32]byte `json:"valueHash,omitempty" form:"valueHash" query:"valueHash" validate:"required"`
+	extraData []byte
+}
+
+// BptPageQuery paginated BPT enumeration for the bootstrap-v3 launcher's sync phase.
+type BptPageQuery struct {
+	fieldsSet []bool
+	StartHash [32]byte `json:"startHash,omitempty" form:"startHash" query:"startHash"`
+	Count     uint64   `json:"count,omitempty" form:"count" query:"count"`
+	extraData []byte
+}
+
+// BptPageRecord one paginated chunk of the BPT for bootstrap-v3 enumeration.
+type BptPageRecord struct {
+	fieldsSet []bool
+	Entries   []*BptLeafSummary `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
+	NextStart [32]byte          `json:"nextStart,omitempty" form:"nextStart" query:"nextStart" validate:"required"`
+	BptRoot   [32]byte          `json:"bptRoot,omitempty" form:"bptRoot" query:"bptRoot" validate:"required"`
+	Done      bool              `json:"done,omitempty" form:"done" query:"done" validate:"required"`
+	extraData []byte
+}
+
 type ChainEntryRecord[T Record] struct {
 	fieldsSet []bool
 	// Account is the account (omitted if unambiguous).
@@ -469,6 +494,10 @@ func (*BlockEvent) EventType() EventType { return EventTypeBlock }
 
 func (*BlockQuery) QueryType() QueryType { return QueryTypeBlock }
 
+func (*BptPageQuery) QueryType() QueryType { return QueryTypeBptPage }
+
+func (*BptPageRecord) RecordType() RecordType { return RecordTypeBptPage }
+
 func (*ChainEntryRecord[T]) RecordType() RecordType { return RecordTypeChainEntry }
 
 func (*ChainQuery) QueryType() QueryType { return QueryTypeChain }
@@ -615,6 +644,59 @@ func (v *BlockQuery) Copy() *BlockQuery {
 }
 
 func (v *BlockQuery) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *BptLeafSummary) Copy() *BptLeafSummary {
+	u := new(BptLeafSummary)
+
+	u.KeyHash = v.KeyHash
+	u.ValueHash = v.ValueHash
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *BptLeafSummary) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *BptPageQuery) Copy() *BptPageQuery {
+	u := new(BptPageQuery)
+
+	u.StartHash = v.StartHash
+	u.Count = v.Count
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *BptPageQuery) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *BptPageRecord) Copy() *BptPageRecord {
+	u := new(BptPageRecord)
+
+	u.Entries = make([]*BptLeafSummary, len(v.Entries))
+	for i, v := range v.Entries {
+		v := v
+		if v != nil {
+			u.Entries[i] = (v).Copy()
+		}
+	}
+	u.NextStart = v.NextStart
+	u.BptRoot = v.BptRoot
+	u.Done = v.Done
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *BptPageRecord) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *ChainEntryRecord[T]) Copy() *ChainEntryRecord[T] {
 	u := new(ChainEntryRecord[T])
@@ -1723,6 +1805,50 @@ func (v *BlockQuery) Equal(u *BlockQuery) bool {
 		return false
 	}
 	if !(v.OmitEmpty == u.OmitEmpty) {
+		return false
+	}
+
+	return true
+}
+
+func (v *BptLeafSummary) Equal(u *BptLeafSummary) bool {
+	if !(v.KeyHash == u.KeyHash) {
+		return false
+	}
+	if !(v.ValueHash == u.ValueHash) {
+		return false
+	}
+
+	return true
+}
+
+func (v *BptPageQuery) Equal(u *BptPageQuery) bool {
+	if !(v.StartHash == u.StartHash) {
+		return false
+	}
+	if !(v.Count == u.Count) {
+		return false
+	}
+
+	return true
+}
+
+func (v *BptPageRecord) Equal(u *BptPageRecord) bool {
+	if len(v.Entries) != len(u.Entries) {
+		return false
+	}
+	for i := range v.Entries {
+		if !((v.Entries[i]).Equal(u.Entries[i])) {
+			return false
+		}
+	}
+	if !(v.NextStart == u.NextStart) {
+		return false
+	}
+	if !(v.BptRoot == u.BptRoot) {
+		return false
+	}
+	if !(v.Done == u.Done) {
 		return false
 	}
 
@@ -2980,6 +3106,182 @@ func (v *BlockQuery) baseIsValid() error {
 
 	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field QueryType is missing")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_BptLeafSummary = []string{
+	1: "KeyHash",
+	2: "ValueHash",
+}
+
+func (v *BptLeafSummary) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.KeyHash == ([32]byte{})) {
+		writer.WriteHash(1, &v.KeyHash)
+	}
+	if !(v.ValueHash == ([32]byte{})) {
+		writer.WriteHash(2, &v.ValueHash)
+	}
+
+	_, _, err := writer.Reset(fieldNames_BptLeafSummary)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *BptLeafSummary) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field KeyHash is missing")
+	} else if v.KeyHash == ([32]byte{}) {
+		errs = append(errs, "field KeyHash is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field ValueHash is missing")
+	} else if v.ValueHash == ([32]byte{}) {
+		errs = append(errs, "field ValueHash is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_BptPageQuery = []string{
+	1: "QueryType",
+	2: "StartHash",
+	3: "Count",
+}
+
+func (v *BptPageQuery) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.QueryType())
+	if !(v.StartHash == ([32]byte{})) {
+		writer.WriteHash(2, &v.StartHash)
+	}
+	if !(v.Count == 0) {
+		writer.WriteUint(3, v.Count)
+	}
+
+	_, _, err := writer.Reset(fieldNames_BptPageQuery)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *BptPageQuery) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field QueryType is missing")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_BptPageRecord = []string{
+	1: "RecordType",
+	2: "Entries",
+	3: "NextStart",
+	4: "BptRoot",
+	5: "Done",
+}
+
+func (v *BptPageRecord) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.RecordType())
+	if !(len(v.Entries) == 0) {
+		for _, v := range v.Entries {
+			writer.WriteValue(2, v.MarshalBinary)
+		}
+	}
+	if !(v.NextStart == ([32]byte{})) {
+		writer.WriteHash(3, &v.NextStart)
+	}
+	if !(v.BptRoot == ([32]byte{})) {
+		writer.WriteHash(4, &v.BptRoot)
+	}
+	if !(!v.Done) {
+		writer.WriteBool(5, v.Done)
+	}
+
+	_, _, err := writer.Reset(fieldNames_BptPageRecord)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *BptPageRecord) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field RecordType is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Entries is missing")
+	} else if len(v.Entries) == 0 {
+		errs = append(errs, "field Entries is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field NextStart is missing")
+	} else if v.NextStart == ([32]byte{}) {
+		errs = append(errs, "field NextStart is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field BptRoot is missing")
+	} else if v.BptRoot == ([32]byte{}) {
+		errs = append(errs, "field BptRoot is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Done is missing")
+	} else if !v.Done {
+		errs = append(errs, "field Done is not set")
 	}
 
 	switch len(errs) {
@@ -6002,6 +6304,118 @@ func (v *BlockQuery) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
+func (v *BptLeafSummary) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *BptLeafSummary) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadHash(1); ok {
+		v.KeyHash = *x
+	}
+	if x, ok := reader.ReadHash(2); ok {
+		v.ValueHash = *x
+	}
+
+	seen, err := reader.Reset(fieldNames_BptLeafSummary)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *BptPageQuery) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *BptPageQuery) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vQueryType QueryType
+	if x := new(QueryType); reader.ReadEnum(1, x) {
+		vQueryType = *x
+	}
+	if !(v.QueryType() == vQueryType) {
+		return fmt.Errorf("field QueryType: not equal: want %v, got %v", v.QueryType(), vQueryType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *BptPageQuery) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadHash(2); ok {
+		v.StartHash = *x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.Count = x
+	}
+
+	seen, err := reader.Reset(fieldNames_BptPageQuery)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *BptPageRecord) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *BptPageRecord) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vRecordType RecordType
+	if x := new(RecordType); reader.ReadEnum(1, x) {
+		vRecordType = *x
+	}
+	if !(v.RecordType() == vRecordType) {
+		return fmt.Errorf("field RecordType: not equal: want %v, got %v", v.RecordType(), vRecordType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *BptPageRecord) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	for {
+		if x := new(BptLeafSummary); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+			v.Entries = append(v.Entries, x)
+		} else {
+			break
+		}
+	}
+	if x, ok := reader.ReadHash(3); ok {
+		v.NextStart = *x
+	}
+	if x, ok := reader.ReadHash(4); ok {
+		v.BptRoot = *x
+	}
+	if x, ok := reader.ReadBool(5); ok {
+		v.Done = x
+	}
+
+	seen, err := reader.Reset(fieldNames_BptPageRecord)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *ChainEntryRecord[T]) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -7728,6 +8142,25 @@ func init() {
 	}, "BlockQuery", "blockQuery")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("keyHash", "bytes32"),
+		encoding.NewTypeField("valueHash", "bytes32"),
+	}, "BptLeafSummary", "bptLeafSummary")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("queryType", "string"),
+		encoding.NewTypeField("startHash", "bytes32"),
+		encoding.NewTypeField("count", "uint64"),
+	}, "BptPageQuery", "bptPageQuery")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("recordType", "string"),
+		encoding.NewTypeField("entries", "BptLeafSummary[]"),
+		encoding.NewTypeField("nextStart", "bytes32"),
+		encoding.NewTypeField("bptRoot", "bytes32"),
+		encoding.NewTypeField("done", "bool"),
+	}, "BptPageRecord", "bptPageRecord")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("recordType", "string"),
 		encoding.NewTypeField("account", "string"),
 		encoding.NewTypeField("name", "string"),
@@ -8146,6 +8579,66 @@ func (v *BlockQuery) MarshalJSON() ([]byte, error) {
 	}
 	if !(!v.OmitEmpty) {
 		u.OmitEmpty = v.OmitEmpty
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *BptLeafSummary) MarshalJSON() ([]byte, error) {
+	u := struct {
+		KeyHash   *string `json:"keyHash,omitempty"`
+		ValueHash *string `json:"valueHash,omitempty"`
+		ExtraData *string `json:"$epilogue,omitempty"`
+	}{}
+	if !(v.KeyHash == ([32]byte{})) {
+		u.KeyHash = encoding.ChainToJSON(&v.KeyHash)
+	}
+	if !(v.ValueHash == ([32]byte{})) {
+		u.ValueHash = encoding.ChainToJSON(&v.ValueHash)
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *BptPageQuery) MarshalJSON() ([]byte, error) {
+	u := struct {
+		QueryType QueryType `json:"queryType"`
+		StartHash *string   `json:"startHash,omitempty"`
+		Count     uint64    `json:"count,omitempty"`
+		ExtraData *string   `json:"$epilogue,omitempty"`
+	}{}
+	u.QueryType = v.QueryType()
+	if !(v.StartHash == ([32]byte{})) {
+		u.StartHash = encoding.ChainToJSON(&v.StartHash)
+	}
+	if !(v.Count == 0) {
+		u.Count = v.Count
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *BptPageRecord) MarshalJSON() ([]byte, error) {
+	u := struct {
+		RecordType RecordType                         `json:"recordType"`
+		Entries    encoding.JsonList[*BptLeafSummary] `json:"entries,omitempty"`
+		NextStart  *string                            `json:"nextStart,omitempty"`
+		BptRoot    *string                            `json:"bptRoot,omitempty"`
+		Done       bool                               `json:"done,omitempty"`
+		ExtraData  *string                            `json:"$epilogue,omitempty"`
+	}{}
+	u.RecordType = v.RecordType()
+	if !(len(v.Entries) == 0) {
+		u.Entries = v.Entries
+	}
+	if !(v.NextStart == ([32]byte{})) {
+		u.NextStart = encoding.ChainToJSON(&v.NextStart)
+	}
+	if !(v.BptRoot == ([32]byte{})) {
+		u.BptRoot = encoding.ChainToJSON(&v.BptRoot)
+	}
+	if !(!v.Done) {
+		u.Done = v.Done
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -9047,6 +9540,105 @@ func (v *BlockQuery) UnmarshalJSON(data []byte) error {
 	v.MajorRange = u.MajorRange
 	v.EntryRange = u.EntryRange
 	v.OmitEmpty = u.OmitEmpty
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *BptLeafSummary) UnmarshalJSON(data []byte) error {
+	u := struct {
+		KeyHash   *string `json:"keyHash,omitempty"`
+		ValueHash *string `json:"valueHash,omitempty"`
+		ExtraData *string `json:"$epilogue,omitempty"`
+	}{}
+	u.KeyHash = encoding.ChainToJSON(&v.KeyHash)
+	u.ValueHash = encoding.ChainToJSON(&v.ValueHash)
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if x, err := encoding.ChainFromJSON(u.KeyHash); err != nil {
+		return fmt.Errorf("error decoding KeyHash: %w", err)
+	} else {
+		v.KeyHash = *x
+	}
+	if x, err := encoding.ChainFromJSON(u.ValueHash); err != nil {
+		return fmt.Errorf("error decoding ValueHash: %w", err)
+	} else {
+		v.ValueHash = *x
+	}
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *BptPageQuery) UnmarshalJSON(data []byte) error {
+	u := struct {
+		QueryType QueryType `json:"queryType"`
+		StartHash *string   `json:"startHash,omitempty"`
+		Count     uint64    `json:"count,omitempty"`
+		ExtraData *string   `json:"$epilogue,omitempty"`
+	}{}
+	u.QueryType = v.QueryType()
+	u.StartHash = encoding.ChainToJSON(&v.StartHash)
+	u.Count = v.Count
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.QueryType() == u.QueryType) {
+		return fmt.Errorf("field QueryType: not equal: want %v, got %v", v.QueryType(), u.QueryType)
+	}
+	if x, err := encoding.ChainFromJSON(u.StartHash); err != nil {
+		return fmt.Errorf("error decoding StartHash: %w", err)
+	} else {
+		v.StartHash = *x
+	}
+	v.Count = u.Count
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *BptPageRecord) UnmarshalJSON(data []byte) error {
+	u := struct {
+		RecordType RecordType                         `json:"recordType"`
+		Entries    encoding.JsonList[*BptLeafSummary] `json:"entries,omitempty"`
+		NextStart  *string                            `json:"nextStart,omitempty"`
+		BptRoot    *string                            `json:"bptRoot,omitempty"`
+		Done       bool                               `json:"done,omitempty"`
+		ExtraData  *string                            `json:"$epilogue,omitempty"`
+	}{}
+	u.RecordType = v.RecordType()
+	u.Entries = v.Entries
+	u.NextStart = encoding.ChainToJSON(&v.NextStart)
+	u.BptRoot = encoding.ChainToJSON(&v.BptRoot)
+	u.Done = v.Done
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.RecordType() == u.RecordType) {
+		return fmt.Errorf("field RecordType: not equal: want %v, got %v", v.RecordType(), u.RecordType)
+	}
+	v.Entries = u.Entries
+	if x, err := encoding.ChainFromJSON(u.NextStart); err != nil {
+		return fmt.Errorf("error decoding NextStart: %w", err)
+	} else {
+		v.NextStart = *x
+	}
+	if x, err := encoding.ChainFromJSON(u.BptRoot); err != nil {
+		return fmt.Errorf("error decoding BptRoot: %w", err)
+	} else {
+		v.BptRoot = *x
+	}
+	v.Done = u.Done
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err

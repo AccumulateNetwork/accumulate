@@ -136,3 +136,14 @@ MessageHashSearchQuery:
   fields:
     - name: Hash
       type: hash
+
+BptPageQuery:
+  union: { type: query }
+  description: paginated BPT enumeration for the bootstrap-v3 launcher's sync phase
+  fields:
+    - name: StartHash
+      type: hash
+      optional: true
+    - name: Count
+      type: uint
+      optional: true
