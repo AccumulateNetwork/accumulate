@@ -43,11 +43,10 @@ func TestDetectBootstrapState_NoArtifact(t *testing.T) {
 func TestDetectBootstrapState_BootingArtifact(t *testing.T) {
 	dir := t.TempDir()
 	art := &bootpersist.Artifact{
-		Network:                "devnet",
-		Partition:              "Directory",
-		PinnedValidatorSetHash: [32]byte{},
-		PinnedHeight:           100,
-		State:                  bootpersist.StateRecord{Current: "BOOTING"},
+		Network:                  "devnet",
+		BVN:                      "Apollo",
+		DNGenesisStateTreeAnchor: [32]byte{},
+		State:                    bootpersist.StateRecord{Current: "BOOTING"},
 	}
 	if err := bootpersist.Save(dir, art); err != nil {
 		t.Fatal(err)
@@ -63,21 +62,23 @@ func TestDetectBootstrapState_BootingArtifact(t *testing.T) {
 	if got := inst.BootMachine().State(); got != nodestate.StateBooting {
 		t.Errorf("State = %v, want BOOTING", got)
 	}
-	if inst.BootArtifact() == nil || inst.BootArtifact().PinnedHeight != 100 {
-		t.Error("BootArtifact pinnedHeight not preserved")
+	if inst.BootArtifact() == nil || inst.BootArtifact().BVN != "Apollo" {
+		t.Error("BootArtifact BVN not preserved")
 	}
 }
 
 func TestDetectBootstrapState_ActiveArtifact(t *testing.T) {
 	dir := t.TempDir()
-	anchor := [32]byte{0xab, 0xcd}
+	dnAnchor := [32]byte{0xab, 0xcd}
+	bvnAnchor := [32]byte{0xee, 0xff}
 	art := &bootpersist.Artifact{
-		Network:        "devnet",
-		Partition:      "Directory",
-		PinnedHeight:   100,
-		VerifiedAnchor: anchor,
-		VerifiedHeight: 150,
-		State:          bootpersist.StateRecord{Current: "ACTIVE"},
+		Network:               "devnet",
+		BVN:                   "Apollo",
+		DNVerifiedAnchor:      dnAnchor,
+		DNVerifiedMajorBlock:  150,
+		BVNVerifiedAnchor:     bvnAnchor,
+		BVNVerifiedMajorBlock: 150,
+		State:                 bootpersist.StateRecord{Current: "ACTIVE"},
 	}
 	if err := bootpersist.Save(dir, art); err != nil {
 		t.Fatal(err)
@@ -90,26 +91,27 @@ func TestDetectBootstrapState_ActiveArtifact(t *testing.T) {
 	if got := inst.BootMachine().State(); got != nodestate.StateActive {
 		t.Errorf("State = %v, want ACTIVE", got)
 	}
+	// Advertisement carries the DN-side anchor (network-shared).
 	ad := inst.BootMachine().Get()
-	if ad.VerifiedAnchor != anchor {
-		t.Errorf("VerifiedAnchor not propagated: got %x, want %x", ad.VerifiedAnchor, anchor)
+	if ad.VerifiedAnchor != dnAnchor {
+		t.Errorf("Advertisement VerifiedAnchor = %x, want DN anchor %x", ad.VerifiedAnchor, dnAnchor)
 	}
 	if ad.SinceBlock != 150 {
-		t.Errorf("SinceBlock = %d, want 150 (VerifiedHeight)", ad.SinceBlock)
+		t.Errorf("SinceBlock = %d, want 150 (DNVerifiedMajorBlock)", ad.SinceBlock)
 	}
 }
 
 func TestDetectBootstrapState_PinMismatchFails(t *testing.T) {
 	dir := t.TempDir()
 	const network = "test-network-with-pin"
-	expected := pinned.Pin{ValidatorSetHash: [32]byte{0xaa}, PinnedHeight: 100}
+	expected := pinned.Pin{DNGenesisStateTreeAnchor: [32]byte{0xaa}}
 	t.Cleanup(pinned.RegisterForTest(network, expected))
 
 	art := &bootpersist.Artifact{
-		Network:                network,
-		Partition:              "Directory",
-		PinnedValidatorSetHash: [32]byte{0xbb}, // doesn't match registered
-		State:                  bootpersist.StateRecord{Current: "BOOTING"},
+		Network:                  network,
+		BVN:                      "Apollo",
+		DNGenesisStateTreeAnchor: [32]byte{0xbb}, // doesn't match registered
+		State:                    bootpersist.StateRecord{Current: "BOOTING"},
 	}
 	if err := bootpersist.Save(dir, art); err != nil {
 		t.Fatal(err)
@@ -209,15 +211,14 @@ func TestDetectBootstrapState_PinMatchSucceeds(t *testing.T) {
 	const network = "test-network-with-pin-match"
 	hash := [32]byte{0xcc, 0xdd}
 	t.Cleanup(pinned.RegisterForTest(network, pinned.Pin{
-		ValidatorSetHash: hash,
-		PinnedHeight:     50,
+		DNGenesisStateTreeAnchor: hash,
 	}))
 
 	art := &bootpersist.Artifact{
-		Network:                network,
-		Partition:              "Directory",
-		PinnedValidatorSetHash: hash,
-		State:                  bootpersist.StateRecord{Current: "BOOTING"},
+		Network:                  network,
+		BVN:                      "Apollo",
+		DNGenesisStateTreeAnchor: hash,
+		State:                    bootpersist.StateRecord{Current: "BOOTING"},
 	}
 	if err := bootpersist.Save(dir, art); err != nil {
 		t.Fatal(err)

@@ -109,8 +109,7 @@ func runBootstrap(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("resolve pin: %w", err)
 	}
 	fmt.Printf("Pin source: %s\n", pinSource)
-	fmt.Printf("  validator-set hash: %x\n", pin.ValidatorSetHash[:8])
-	fmt.Printf("  height:             %d\n", pin.PinnedHeight)
+	fmt.Printf("  DN genesis state-tree anchor: %x\n", pin.DNGenesisStateTreeAnchor[:8])
 	fmt.Println()
 
 	// 2. Identify partition + tip.
@@ -191,14 +190,19 @@ func runBootstrap(cmd *cobra.Command, args []string) error {
 	}
 
 	// 5. Persist the artifact.
+	//
+	// NOTE: this commit is the schema-rework slice. The
+	// single-phase pipeline still produces one VerifiedAnchor —
+	// stored under DNVerifiedAnchor, with BVN* fields left zero.
+	// Phase 5 of the rewrite splits this into a two-phase pipeline
+	// that produces both DN and BVN anchors.
 	now := time.Now().UTC()
 	art := &bootpersist.Artifact{
-		Network:                flagBootstrap.Network,
-		Partition:              flagBootstrap.Partition,
-		PinnedValidatorSetHash: pin.ValidatorSetHash,
-		PinnedHeight:           pin.PinnedHeight,
-		VerifiedAnchor:         res.VerifiedAnchor,
-		VerifiedHeight:         res.TerminalStep.Header.Height,
+		Network:                  flagBootstrap.Network,
+		BVN:                      flagBootstrap.Partition,
+		DNGenesisStateTreeAnchor: pin.DNGenesisStateTreeAnchor,
+		DNVerifiedAnchor:         res.VerifiedAnchor,
+		DNVerifiedMajorBlock:     res.TerminalStep.Header.Height,
 		State: bootpersist.StateRecord{
 			Current:        "ACTIVE",
 			EnteredBooting: now,
@@ -226,6 +230,13 @@ func runBootstrap(cmd *cobra.Command, args []string) error {
 
 // resolveBootstrapPin returns the pin to use for the network, plus a
 // human-readable description of where it came from.
+//
+// Phase-1 schema note: --pinned-hash is repurposed as the DN
+// genesis StateTreeAnchor override (not the validator-set hash);
+// --pinned-height is now unused and accepted only for backward
+// compat with operators' command lines. Phase 6 of the rewrite
+// renames the flag to --genesis-state-tree-anchor and removes
+// --pinned-height.
 func resolveBootstrapPin(network string) (pinned.Pin, string, error) {
 	if flagBootstrap.PinnedHashHex != "" {
 		var p pinned.Pin
@@ -233,14 +244,13 @@ func resolveBootstrapPin(network string) (pinned.Pin, string, error) {
 		if err != nil {
 			return pinned.Pin{}, "", fmt.Errorf("--pinned-hash: %w", err)
 		}
-		p.ValidatorSetHash = hash
-		p.PinnedHeight = flagBootstrap.PinnedHeight
+		p.DNGenesisStateTreeAnchor = hash
 		return p, "operator override (--pinned-hash)", nil
 	}
 
 	p := pinned.Get(network)
 	if p.IsZero() {
-		return pinned.Pin{}, "", fmt.Errorf("no pin available for network %q — pass --pinned-hash and --pinned-height to override", network)
+		return pinned.Pin{}, "", fmt.Errorf("no pin available for network %q — pass --pinned-hash to override", network)
 	}
 	return p, fmt.Sprintf("binary pin for %q", network), nil
 }

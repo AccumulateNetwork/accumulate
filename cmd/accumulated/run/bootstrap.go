@@ -60,9 +60,9 @@ func (inst *Instance) detectBootstrapState() error {
 			"Bootstrap artifact present but no pin for network — pin check skipped",
 			"network", art.Network,
 		)
-	} else if art.PinnedValidatorSetHash != pin.ValidatorSetHash {
+	} else if art.DNGenesisStateTreeAnchor != pin.DNGenesisStateTreeAnchor {
 		return fmt.Errorf("bootstrap pin mismatch for network %q: artifact=%x expected=%x — explicit migration required",
-			art.Network, art.PinnedValidatorSetHash[:8], pin.ValidatorSetHash[:8])
+			art.Network, art.DNGenesisStateTreeAnchor[:8], pin.DNGenesisStateTreeAnchor[:8])
 	}
 
 	state, err := nodestate.ParseState(art.State.Current)
@@ -70,10 +70,12 @@ func (inst *Instance) detectBootstrapState() error {
 		return fmt.Errorf("parse persisted state %q: %w", art.State.Current, err)
 	}
 
+	// Advertisement carries the DN-side anchor (network-shared
+	// across all BVNs that bootstrapped against this DN state).
 	machine, err := nodestate.Restore(
 		state,
-		art.VerifiedHeight,
-		art.VerifiedAnchor,
+		art.DNVerifiedMajorBlock,
+		art.DNVerifiedAnchor,
 		art.State.HistoryDepth,
 	)
 	if err != nil {
@@ -86,9 +88,9 @@ func (inst *Instance) detectBootstrapState() error {
 		"Resuming from v2 bootstrap-launched state",
 		"state", state,
 		"network", art.Network,
-		"partition", art.Partition,
-		"pinnedHeight", art.PinnedHeight,
-		"verifiedHeight", art.VerifiedHeight,
+		"bvn", art.BVN,
+		"dnVerifiedMajorBlock", art.DNVerifiedMajorBlock,
+		"bvnVerifiedMajorBlock", art.BVNVerifiedMajorBlock,
 	)
 	return nil
 }

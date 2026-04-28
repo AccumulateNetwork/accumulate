@@ -17,12 +17,13 @@ import (
 func TestSaveLoad_RoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	want := &Artifact{
-		Network:                "devnet",
-		Partition:              "Directory",
-		PinnedValidatorSetHash: [32]byte{0xaa, 0xbb},
-		PinnedHeight:           100,
-		VerifiedAnchor:         [32]byte{0x11, 0x22, 0x33},
-		VerifiedHeight:         150,
+		Network:                  "devnet",
+		BVN:                      "Apollo",
+		DNGenesisStateTreeAnchor: [32]byte{0xaa, 0xbb},
+		DNVerifiedAnchor:         [32]byte{0x11, 0x22, 0x33},
+		DNVerifiedMajorBlock:     150,
+		BVNVerifiedAnchor:        [32]byte{0x44, 0x55, 0x66},
+		BVNVerifiedMajorBlock:    150,
 		State: StateRecord{
 			Current:        "ACTIVE",
 			EnteredBooting: time.Unix(1700000000, 0).UTC(),
@@ -42,11 +43,12 @@ func TestSaveLoad_RoundTrip(t *testing.T) {
 		t.Fatalf("Load: %v", err)
 	}
 	if got.Network != want.Network ||
-		got.Partition != want.Partition ||
-		got.PinnedValidatorSetHash != want.PinnedValidatorSetHash ||
-		got.PinnedHeight != want.PinnedHeight ||
-		got.VerifiedAnchor != want.VerifiedAnchor ||
-		got.VerifiedHeight != want.VerifiedHeight ||
+		got.BVN != want.BVN ||
+		got.DNGenesisStateTreeAnchor != want.DNGenesisStateTreeAnchor ||
+		got.DNVerifiedAnchor != want.DNVerifiedAnchor ||
+		got.DNVerifiedMajorBlock != want.DNVerifiedMajorBlock ||
+		got.BVNVerifiedAnchor != want.BVNVerifiedAnchor ||
+		got.BVNVerifiedMajorBlock != want.BVNVerifiedMajorBlock ||
 		got.State.Current != want.State.Current ||
 		got.Cursors.WalkLastVerified != want.Cursors.WalkLastVerified ||
 		got.Cursors.AccountsPulled != want.Cursors.AccountsPulled {
@@ -64,7 +66,7 @@ func TestLoad_MissingFile_ReturnsNotExist(t *testing.T) {
 
 func TestLoad_PinMismatch_ReturnsErrPinMismatch(t *testing.T) {
 	dir := t.TempDir()
-	if err := Save(dir, &Artifact{PinnedValidatorSetHash: [32]byte{0xaa}}); err != nil {
+	if err := Save(dir, &Artifact{DNGenesisStateTreeAnchor: [32]byte{0xaa}}); err != nil {
 		t.Fatal(err)
 	}
 	_, err := Load(dir, [32]byte{0xbb})
@@ -75,7 +77,7 @@ func TestLoad_PinMismatch_ReturnsErrPinMismatch(t *testing.T) {
 
 func TestPeek_SkipsPinCheck(t *testing.T) {
 	dir := t.TempDir()
-	if err := Save(dir, &Artifact{Network: "devnet", PinnedValidatorSetHash: [32]byte{0xaa}}); err != nil {
+	if err := Save(dir, &Artifact{Network: "devnet", DNGenesisStateTreeAnchor: [32]byte{0xaa}}); err != nil {
 		t.Fatal(err)
 	}
 	a, err := Peek(dir)

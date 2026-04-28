@@ -154,18 +154,18 @@ func TestLifecycle_BootstrapToRunResume(t *testing.T) {
 	dir := t.TempDir()
 	pinHash := [32]byte{0xde, 0xad}
 	t.Cleanup(pinned.RegisterForTest(network, pinned.Pin{
-		ValidatorSetHash: pinHash,
-		PinnedHeight:     500,
+		DNGenesisStateTreeAnchor: pinHash,
 	}))
 
 	now := time.Now().UTC()
+	// Phase 1 schema: still single-anchor pipeline. Stored under
+	// DN* fields; BVN* fields zero. Phase 5 splits this.
 	art := &bootpersist.Artifact{
-		Network:                network,
-		Partition:              "Directory",
-		PinnedValidatorSetHash: pinHash,
-		PinnedHeight:           500,
-		VerifiedAnchor:         res.VerifiedAnchor,
-		VerifiedHeight:         res.TerminalStep.Header.Height,
+		Network:                  network,
+		BVN:                      "Apollo",
+		DNGenesisStateTreeAnchor: pinHash,
+		DNVerifiedAnchor:         res.VerifiedAnchor,
+		DNVerifiedMajorBlock:     res.TerminalStep.Header.Height,
 		State: bootpersist.StateRecord{
 			Current:        "ACTIVE",
 			EnteredBooting: now,

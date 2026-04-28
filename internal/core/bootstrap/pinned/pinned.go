@@ -4,53 +4,47 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-// Package pinned holds the per-network validator-set hash that the
-// v2 bootstrap launcher uses as its only out-of-band trust input.
+// Package pinned holds the per-network DN genesis StateTreeAnchor
+// that the v2 bootstrap launcher uses as its only out-of-band trust
+// input.
 //
-// Each entry pairs a network name with a hash of the validator set
-// at a specific recent height. A node bootstrapping against the
-// network requires the binary's pinned hash to match what the
-// network actually had at that height; mismatch aborts startup
-// unless the operator passes an explicit override.
+// The launcher walks DN-validator-signed DAs backward through a
+// chosen BVN's anchor pool. The walk terminates at DN major-block 1.
+// The pin is the DN's StateTreeAnchor at that genesis boundary —
+// invariant across BVN destinations, so one pin per network covers
+// every BVN bootstrap.
 //
-// Until per-network hashes are populated by the release process, the
+// Until per-network values are populated by the release process, the
 // table is empty — callers that look up an unknown network receive
-// a zero hash. The accumulated run handoff treats zero as "no pin
-// available" and falls back to a documented warn-and-proceed mode
-// for development networks; production deployments must either ship
-// a populated table or refuse to start without an override.
+// a zero hash. Operators on dev networks can pass
+// --genesis-state-tree-anchor to override.
 //
-// v1 used a pinned genesis-snapshot hash here; the v2 trust model
-// (validator quorum on a recent block, no genesis terminator) makes
-// the genesis hash irrelevant. The package name and surface remain
-// the same so callers porting from v1 don't need restructuring.
+// History: v1 pinned a genesis-snapshot hash. The first v2 draft
+// pinned a validator-set hash at a recent height. Both were wrong-
+// shaped: the actual proof artifact is the DN's BPT root at major-
+// block 1, since that's what the back-walk naturally terminates
+// against (extracted from each DA's PartitionAnchor).
 package pinned
 
 import "encoding/hex"
 
-// Pin records the validator-set state the binary trusts for a
-// network: the hash of the operators key book at PinnedHeight.
+// Pin holds the per-network bootstrap anchor. One field today: the
+// DN's StateTreeAnchor at major-block 1.
 //
-// PinnedHeight is the height at which the validator-set hash was
-// captured. The bootstrap header walk's first verification happens
-// at this height; the walker carries the validator set forward via
-// keybookat as operators-keybook updates appear in subsequent
-// blocks.
+// Kept as a struct so future fields (e.g., a major-block-1 BlockTime
+// for client-side sanity checks, or a pin-validity-window) can
+// extend without breaking the call surface.
 type Pin struct {
-	// ValidatorSetHash is the hash of the canonical-form validator
-	// set at PinnedHeight. The header walker rejects any header
-	// whose pre-walk validator set doesn't hash to this.
-	ValidatorSetHash [32]byte
-
-	// PinnedHeight is the partition's minor block height at which
-	// ValidatorSetHash applies.
-	PinnedHeight uint64
+	// DNGenesisStateTreeAnchor is the DN's BPT root at DN major-
+	// block 1. The bootstrap back-walk's terminator value must equal
+	// this. Fail closed otherwise.
+	DNGenesisStateTreeAnchor [32]byte
 }
 
-// IsZero reports whether the pin is the zero value (no hash
+// IsZero reports whether the pin is the zero value (no anchor
 // recorded).
 func (p Pin) IsZero() bool {
-	return p.ValidatorSetHash == ([32]byte{}) && p.PinnedHeight == 0
+	return p.DNGenesisStateTreeAnchor == ([32]byte{})
 }
 
 // Get returns the pin for the named network, or the zero Pin if the
@@ -71,14 +65,13 @@ func IsKnown(network string) bool {
 
 // networkPins is the build-time-populated table. Empty by default
 // so dev/test flows aren't blocked. The release process should add
-// entries as networks reach a stable validator set or as
-// re-anchoring is performed.
+// entries as networks reach the point where their genesis
+// StateTreeAnchor is known good.
 //
 // Example population (commented; populate at release time):
 //
 //	"mainnet": {
-//	    ValidatorSetHash: mustHex("..."),
-//	    PinnedHeight:     12345678,
+//	    DNGenesisStateTreeAnchor: mustHex("..."),
 //	},
 var networkPins = map[string]Pin{}
 

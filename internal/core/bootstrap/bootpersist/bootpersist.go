@@ -36,8 +36,9 @@ import (
 )
 
 // FormatMajor is the artifact's major version. Loaders reject any
-// major version they don't recognize.
-const FormatMajor = 1
+// major version they don't recognize. Bumped to 2 with the
+// (DN, BVN)-pair schema; pre-2 artifacts are not migrated in place.
+const FormatMajor = 2
 
 // FormatMinor is the artifact's minor version. Loaders tolerate any
 // minor version <= their own and ignore unknown fields.
@@ -46,36 +47,45 @@ const FormatMinor = 0
 // FileName is the on-disk name of the artifact within the data dir.
 const FileName = "bootstrap-state-v2.json"
 
-// Artifact is the top-level persisted object.
+// Artifact is the top-level persisted object. The (DN, BVN)-pair
+// model means two BPT convergence anchors plus one binary pin.
 type Artifact struct {
 	FormatMajor uint32 `json:"formatMajor"`
 	FormatMinor uint32 `json:"formatMinor"`
 
 	// Network identifies which network the launcher bootstrapped
-	// against. Used by callers to resolve the binary's pinned
-	// validator-set hash for that network at startup.
+	// against. Used to resolve the binary's pinned DN genesis
+	// StateTreeAnchor at run startup.
 	Network string `json:"network"`
 
-	// Partition the launcher is participating in (Directory or a
-	// BVN name).
-	Partition string `json:"partition"`
+	// BVN names the BVN partition this node participates in. Today
+	// there's only one BVN; the field exists so multi-BVN networks
+	// can plumb the choice through without schema churn.
+	BVN string `json:"bvn"`
 
-	// PinnedValidatorSetHash is the hash of the validator set the
-	// launcher was bootstrapped against. The walk's first header
-	// must be verifiable against the validator set whose hash
-	// matches this.
-	PinnedValidatorSetHash [32]byte `json:"pinnedValidatorSetHash"`
+	// DNGenesisStateTreeAnchor mirrors the binary pin's value at
+	// bootstrap time. accumulated run's startup compares the
+	// binary's current pin to this; mismatch fails closed.
+	DNGenesisStateTreeAnchor [32]byte `json:"dnGenesisStateTreeAnchor"`
 
-	// PinnedHeight is the height the launcher started its walk at.
-	PinnedHeight uint64 `json:"pinnedHeight"`
+	// DNVerifiedAnchor is DN's StateTreeAnchor from the latest
+	// verified DA in the trust-phase walk. The launcher's local DN
+	// BPT root must equal this for ACTIVE.
+	DNVerifiedAnchor [32]byte `json:"dnVerifiedAnchor,omitzero"`
 
-	// VerifiedAnchor is the StateTreeRoot from the terminal header
-	// the trust phase verified. The local BPT root must equal this
-	// for the launcher to be in (or above) ACTIVE.
-	VerifiedAnchor [32]byte `json:"verifiedAnchor,omitzero"`
+	// DNVerifiedMajorBlock is the DN major-block index the latest
+	// verified DA was anchored at.
+	DNVerifiedMajorBlock uint64 `json:"dnVerifiedMajorBlock,omitempty"`
 
-	// VerifiedHeight is the height of the terminal verified header.
-	VerifiedHeight uint64 `json:"verifiedHeight,omitempty"`
+	// BVNVerifiedAnchor is the BVN's StateTreeAnchor as read out of
+	// the trusted DN BPT (the BVN→DN BlockValidatorAnchor sitting
+	// in dn.acme/anchors). The launcher's local BVN BPT root must
+	// equal this.
+	BVNVerifiedAnchor [32]byte `json:"bvnVerifiedAnchor,omitzero"`
+
+	// BVNVerifiedMajorBlock is the BVN major-block index the
+	// trusted BVN→DN anchor was at.
+	BVNVerifiedMajorBlock uint64 `json:"bvnVerifiedMajorBlock,omitempty"`
 
 	// State is the current node state and its transition history.
 	State StateRecord `json:"state"`
@@ -120,10 +130,10 @@ type Cursors struct {
 }
 
 // ErrPinMismatch is returned by callers (not by this package
-// directly) when the persisted PinnedValidatorSetHash doesn't match
-// what the binary expects on startup. The package exports the
+// directly) when the persisted DNGenesisStateTreeAnchor doesn't
+// match what the binary expects on startup. The package exports the
 // sentinel for callers to use.
-var ErrPinMismatch = errors.New("bootpersist: pinned validator-set hash mismatch — explicit migration required")
+var ErrPinMismatch = errors.New("bootpersist: DN genesis StateTreeAnchor mismatch — explicit migration required")
 
 // ErrFormatMajor is returned when the persisted format major doesn't
 // match this binary's. Indicates an incompatible artifact.
@@ -138,7 +148,7 @@ func Load(dir string, expected [32]byte) (*Artifact, error) {
 	if err != nil {
 		return nil, err
 	}
-	if a.PinnedValidatorSetHash != expected {
+	if a.DNGenesisStateTreeAnchor != expected {
 		return nil, ErrPinMismatch
 	}
 	return a, nil
