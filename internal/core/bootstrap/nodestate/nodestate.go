@@ -130,6 +130,45 @@ func New() *Machine {
 	}
 }
 
+// Restore reconstructs a Machine from a persisted state record (issue
+// #3981 — accumulated run handoff). state must be one of StateBooting,
+// StateActive, or StateComplete. ACTIVE / COMPLETE require a non-zero
+// bptRootMatched.
+func Restore(state State, sinceBlock uint64, bptRootMatched [32]byte, historyDepth uint64) (*Machine, error) {
+	switch state {
+	case StateBooting, StateActive, StateComplete:
+		// ok
+	default:
+		return nil, fmt.Errorf("nodestate.Restore: invalid state %d", state)
+	}
+	if (state == StateActive || state == StateComplete) && bptRootMatched == ([32]byte{}) {
+		return nil, fmt.Errorf("nodestate.Restore: ACTIVE/COMPLETE requires non-zero bptRootMatched")
+	}
+	return &Machine{
+		state:   state,
+		since:   sinceBlock,
+		bptRoot: bptRootMatched,
+		depth:   historyDepth,
+		last:    time.Now(),
+	}, nil
+}
+
+// ParseState maps the persisted string form ("BOOTING" / "ACTIVE" /
+// "COMPLETE") to the typed State. Unrecognized strings return
+// StateUnknown plus an error.
+func ParseState(s string) (State, error) {
+	switch s {
+	case "BOOTING":
+		return StateBooting, nil
+	case "ACTIVE":
+		return StateActive, nil
+	case "COMPLETE":
+		return StateComplete, nil
+	default:
+		return StateUnknown, fmt.Errorf("nodestate: unknown state %q", s)
+	}
+}
+
 // Get returns the current advertisement payload.
 func (m *Machine) Get() Advertisement {
 	m.mu.RLock()

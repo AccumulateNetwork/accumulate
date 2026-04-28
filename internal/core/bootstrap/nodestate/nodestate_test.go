@@ -111,6 +111,54 @@ func TestMachine_OnChange(t *testing.T) {
 	}
 }
 
+func TestParseState(t *testing.T) {
+	cases := map[string]State{
+		"BOOTING":  StateBooting,
+		"ACTIVE":   StateActive,
+		"COMPLETE": StateComplete,
+	}
+	for s, want := range cases {
+		got, err := ParseState(s)
+		if err != nil {
+			t.Errorf("ParseState(%q) err = %v", s, err)
+		}
+		if got != want {
+			t.Errorf("ParseState(%q) = %v, want %v", s, got, want)
+		}
+	}
+	if _, err := ParseState("nonsense"); err == nil {
+		t.Error("expected error for unknown state")
+	}
+}
+
+func TestRestore(t *testing.T) {
+	root := [32]byte{0xaa}
+	m, err := Restore(StateActive, 42, root, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.State() != StateActive {
+		t.Errorf("State = %v, want ACTIVE", m.State())
+	}
+	ad := m.Get()
+	if ad.SinceBlock != 42 || ad.BptRootMatched != root {
+		t.Errorf("Get = %+v, missing restored fields", ad)
+	}
+
+	// ACTIVE without bptRoot is rejected.
+	if _, err := Restore(StateActive, 1, [32]byte{}, 0); err == nil {
+		t.Error("expected error for ACTIVE with zero root")
+	}
+	// Unknown state rejected.
+	if _, err := Restore(StateUnknown, 0, [32]byte{}, 0); err == nil {
+		t.Error("expected error for StateUnknown")
+	}
+	// BOOTING with zero root is fine.
+	if _, err := Restore(StateBooting, 0, [32]byte{}, 0); err != nil {
+		t.Errorf("BOOTING restore failed: %v", err)
+	}
+}
+
 func TestAdvertisement_Validate(t *testing.T) {
 	cases := []struct {
 		name   string
