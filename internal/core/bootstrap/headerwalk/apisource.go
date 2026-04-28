@@ -18,112 +18,114 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// APISource adapts an api.Querier2 into a HeaderSource by reading
-// from a partition's anchor pool. Each main-chain entry on the anchor
-// pool is an anchor transaction whose body embeds a PartitionAnchor.
-// The launcher cares about three things from each entry:
+// APISource is the v2-corrected HeaderSource over an api.Querier2.
 //
-//   - PartitionAnchor.MinorBlockIndex (height)
-//   - PartitionAnchor.RootChainAnchor (header's chain root)
-//   - PartitionAnchor.StateTreeAnchor (BPT root at this block)
-//   - The anchor transaction hash (what validators signed)
+// Trust phase model (see docs/plans/bootstrap-v2.md):
 //
-// Block time is taken from the chain entry's LastBlockTime metadata
-// since PartitionAnchor itself doesn't carry a timestamp.
+//   - The launcher targets a (DN, BVN) pair. Bootstrapping the BVN
+//     hangs on first proving the DN's major-block spine; once
+//     proven, BVN→DN anchors stored in trusted DN state give the
+//     BVN's StateTreeAnchor for free.
+//   - DN's outgoing DAs land on each receiving BVN's anchor pool.
+//     Their validator-quorum signatures (one BlockAnchor message per
+//     DN validator) attach to the DA txn's signature chain on the
+//     BVN side. DN itself does NOT store DN-validator signatures on
+//     its own outgoing DAs.
+//   - So this source is constructed against the *chosen BVN's*
+//     anchor pool, not the DN's. It walks the BVN's MajorBlockChain
+//     for skip-pagination, fetches each major-block-boundary DA
+//     from the BVN's main chain, and pulls signatures off the DA
+//     txn's signature chain on the BVN side.
 //
-// There is no direct height→entry index — anchor pool entries are
-// addressed by main-chain index, not block height. APISource
-// maintains an internal cache populated on demand: a Header(h) call
-// that misses scans forward through the anchor pool until it finds
-// MinorBlockIndex == h, caching every entry it touched along the way.
+// The validator set used to verify signatures is the *DN's*
+// operators key page — `dn.acme/operators/1`. SetOperatorsPage
+// records this URL so OperatorsDeltaAt can query it for rotation
+// updates during the back-walk.
 //
-// Signature retrieval is deferred to a follow-up: the signature chain
-// on the anchor transaction needs protocol-aware key-signature
-// verification (validators sign with KeySignature semantics, not raw
-// ed25519 over a hash) which warrants its own focused commit. Until
-// that lands, Signatures returns the raw KeySignature bytes paired
-// with their public-key hash, and VerifyQuorum's ed25519-only path
-// will accept ED25519 keys correctly while skipping other signature
-// types — exactly the behavior the walker tests exercise today.
+// Today (no operators rotations have occurred on mainnet)
+// OperatorsDeltaAt returns nil for every major block — the
+// steady-state hot path. The keybookat machinery on the consumer
+// side handles non-empty deltas correctly when they appear; this
+// source's wiring of "walk DN operators main chain for UpdateKeyPage
+// in the right minor-block range" is deferred to a sub-phase that
+// activates when mainnet first rotates.
 type APISource struct {
-	q          api.Querier2
-	anchorPool *url.URL
+	q             api.Querier2
+	bvnAnchorPool *url.URL // chosen BVN's acc://<bvn>.acme/anchors
 
-	// operatorsPage, if non-nil, is the operators key page URL used
-	// by OperatorsDeltaAt to extract validator-set updates. Without
-	// it, OperatorsDeltaAt returns nil — adequate for steady-state
-	// networks where rotation is rare. Production deployments wire
-	// this via SetOperatorsPage.
-	operatorsPage *url.URL
+	// dnOperatorsPage is dn.acme/operators/1, set via
+	// SetOperatorsPage. Used by OperatorsDeltaAt; nil disables
+	// rotation tracking.
+	dnOperatorsPage *url.URL
 
-	// partitionUrl, derived from anchorPool's parent, is the scope
-	// for QueryMinorBlock.
-	partitionUrl *url.URL
-
-	// PageSize is the chain-entries page size for anchor pool scans.
-	// Default 256.
+	// PageSize is the chain-entries page size for index/main-chain
+	// scans. Default 256.
 	PageSize uint64
 
 	mu    sync.Mutex
-	cache map[uint64]*anchorEntry
-	// scanned is the highest main-chain index we've inspected so far,
-	// so a fresh Header(h) call doesn't re-page from zero.
-	scanned uint64
+	cache map[uint64]*majorBlockEntry // keyed by DN major-block index
 }
 
-// anchorEntry is one resolved anchor: the parsed PartitionAnchor plus
-// the raw transaction (so we can hash it) and metadata.
-type anchorEntry struct {
-	pa        *protocol.PartitionAnchor
-	txn       *protocol.Transaction
-	txid      *url.TxID
-	blockTime int64 // chain entry's LastBlockTime, unix seconds
+// majorBlockEntry is one resolved major-block boundary on the BVN
+// side. Held in the cache so Header()/Signatures()/OperatorsDeltaAt
+// for the same majorIdx don't re-query.
+type majorBlockEntry struct {
+	majorIdx uint64
+
+	// daTxID is the txid of the DA from DN that landed on the BVN's
+	// anchor pool at this major-block boundary.
+	daTxID *url.TxID
+
+	// pa is the DN's PartitionAnchor extracted from the DA's body.
+	// pa.MajorBlockIndex equals majorIdx. pa.StateTreeAnchor is
+	// DN's BPT root at this boundary.
+	pa *protocol.PartitionAnchor
+
+	// sequenced is the SequencedMessage validators signed over —
+	// extracted from the BlockAnchor wrapper's Anchor field on the
+	// signature chain.
+	sequenced *messaging.SequencedMessage
+
+	// blockTime is unix seconds; from the BVN MajorBlockChain
+	// IndexEntry's BlockTime.
+	blockTime int64
 }
 
-// NewAPISource returns an APISource over q, scanning the partition's
-// anchor pool (acc://<partition>.acme/anchors). For the DN partition
-// this is acc://dn.acme/anchors; for BVNs it's acc://<bvn>.acme/anchors.
-//
-// The partition URL is derived as the anchor pool's parent.
-// OperatorsDeltaAt is dormant until SetOperatorsPage is called.
-func NewAPISource(q api.Querier2, anchorPool *url.URL) *APISource {
-	var partition *url.URL
-	if anchorPool != nil {
-		if p, ok := anchorPool.Parent(); ok {
-			partition = p
-		}
-	}
+// NewAPISource returns an APISource over q targeting the chosen
+// BVN's anchor pool URL. Use SetOperatorsPage to enable
+// OperatorsDeltaAt.
+func NewAPISource(q api.Querier2, bvnAnchorPool *url.URL) *APISource {
 	return &APISource{
-		q:            q,
-		anchorPool:   anchorPool,
-		partitionUrl: partition,
-		PageSize:     256,
-		cache:        make(map[uint64]*anchorEntry),
+		q:             q,
+		bvnAnchorPool: bvnAnchorPool,
+		PageSize:      256,
+		cache:         make(map[uint64]*majorBlockEntry),
 	}
 }
 
-// SetOperatorsPage installs the operators key page URL. After this
-// call, OperatorsDeltaAt(h) returns the operator-keybook updates
-// recorded in block h.
+// SetOperatorsPage installs the DN operators key page URL
+// (`dn.acme/operators/1`). After this call, OperatorsDeltaAt(N)
+// returns the operator-keybook deltas in DN's minor blocks between
+// major-block N-1 and N. Without it, OperatorsDeltaAt is dormant.
 func (s *APISource) SetOperatorsPage(u *url.URL) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.operatorsPage = u
+	s.dnOperatorsPage = u
 }
 
-func (s *APISource) Header(ctx context.Context, height uint64) (*Header, error) {
-	rec, err := s.lookup(ctx, height)
+// Header returns the trust-phase Header for DN major-block
+// majorIdx. Caches the result so Signatures() and
+// OperatorsDeltaAt() can reuse the same lookup.
+func (s *APISource) Header(ctx context.Context, majorIdx uint64) (*Header, error) {
+	rec, err := s.lookup(ctx, majorIdx)
 	if err != nil {
 		return nil, err
 	}
-	var anchorHash [32]byte
-	copy(anchorHash[:], rec.txn.GetHash())
-
 	hdr := &Header{
-		Height:        rec.pa.MinorBlockIndex,
+		Height:        rec.pa.MajorBlockIndex,
 		ChainRoot:     rec.pa.RootChainAnchor,
 		StateTreeRoot: rec.pa.StateTreeAnchor,
-		AnchorTxHash:  anchorHash,
+		Sequenced:     rec.sequenced,
 	}
 	if rec.blockTime > 0 {
 		hdr.Time = time.Unix(rec.blockTime, 0).UTC()
@@ -131,19 +133,20 @@ func (s *APISource) Header(ctx context.Context, height uint64) (*Header, error) 
 	return hdr, nil
 }
 
-// Signatures returns validator signatures attached to the anchor
-// transaction at the given height. Pulls from the anchor txn's
-// signature chain, decodes messaging.BlockAnchor / SignatureMessage
-// wrappers, and surfaces each as a HeaderSignature with both the
-// raw key-hash + signature bytes and the protocol.KeySignature for
-// protocol-aware verification.
-func (s *APISource) Signatures(ctx context.Context, height uint64) ([]HeaderSignature, error) {
-	rec, err := s.lookup(ctx, height)
+// Signatures returns DN-validator signatures attached to the major-
+// block-boundary DA at majorIdx. Each is a HeaderSignature carrying
+// both the raw bytes and the protocol.KeySignature, with Signable
+// pointing at the SequencedMessage that was signed.
+func (s *APISource) Signatures(ctx context.Context, majorIdx uint64) ([]HeaderSignature, error) {
+	rec, err := s.lookup(ctx, majorIdx)
 	if err != nil {
 		return nil, err
 	}
-	txnURL := rec.txid.AsUrl()
+	if rec.daTxID == nil {
+		return nil, nil
+	}
 
+	txnURL := rec.daTxID.AsUrl()
 	var out []HeaderSignature
 	var start uint64
 	for {
@@ -158,7 +161,7 @@ func (s *APISource) Signatures(ctx context.Context, height uint64) ([]HeaderSign
 			},
 		})
 		if err != nil {
-			return nil, fmt.Errorf("query signature chain for height %d: %w", height, err)
+			return nil, fmt.Errorf("query signature chain for major-block %d: %w", majorIdx, err)
 		}
 		if page == nil || len(page.Records) == 0 {
 			break
@@ -189,6 +192,192 @@ func (s *APISource) Signatures(ctx context.Context, height uint64) ([]HeaderSign
 	return out, nil
 }
 
+// OperatorsDeltaAt returns DN operators-keybook updates that landed
+// in DN's minor blocks aggregated under major-block majorIdx.
+// Today returns nil — wiring DN's MajorBlockChain → minor-block
+// range → operators-page UpdateKeyPage scan is deferred to a sub-
+// phase that activates when mainnet first rotates operators.
+//
+// keybookat.ApplyDelta on the consumer side handles non-empty
+// deltas correctly when they appear, so this stub is safe for
+// the no-rotation hot path.
+func (s *APISource) OperatorsDeltaAt(ctx context.Context, majorIdx uint64) ([]OperatorsDelta, error) {
+	s.mu.Lock()
+	page := s.dnOperatorsPage
+	s.mu.Unlock()
+	if page == nil {
+		return nil, nil
+	}
+	// TODO: query DN's MajorBlockChain to find the minor-block
+	// range for major-block majorIdx, then scan dnOperatorsPage's
+	// main chain for UpdateKeyPage txns in that range. For now,
+	// returning nil matches the steady-state path.
+	return nil, nil
+}
+
+// --- internals ----------------------------------------------------
+
+// lookup resolves a major-block index to its BVN-side DA + the
+// SequencedMessage validators signed over.
+func (s *APISource) lookup(ctx context.Context, majorIdx uint64) (*majorBlockEntry, error) {
+	s.mu.Lock()
+	if rec, ok := s.cache[majorIdx]; ok {
+		s.mu.Unlock()
+		return rec, nil
+	}
+	s.mu.Unlock()
+
+	rec, err := s.fetchMajorBlock(ctx, majorIdx)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	s.cache[majorIdx] = rec
+	s.mu.Unlock()
+	return rec, nil
+}
+
+// fetchMajorBlock pulls the IndexEntry for major-block majorIdx from
+// the BVN's MajorBlockChain, follows its Source to the BVN's main
+// chain, fetches the DA txn, and pulls one BlockAnchor message off
+// the signature chain to extract the SequencedMessage.
+func (s *APISource) fetchMajorBlock(ctx context.Context, majorIdx uint64) (*majorBlockEntry, error) {
+	if majorIdx == 0 {
+		return nil, fmt.Errorf("%w: major-block 0 doesn't exist (genesis is major-block 1)", ErrNoSuchHeight)
+	}
+	pos := majorIdx - 1 // major-block 1 → MajorBlockChain entry 0
+
+	// 1. BVN's MajorBlockChain entry at position (majorIdx-1) →
+	// IndexEntry pointing at the BVN main-chain position of the
+	// boundary DA.
+	one := uint64(1)
+	idxPage, err := s.q.QueryIndexChainEntries(ctx, s.bvnAnchorPool, &api.ChainQuery{
+		Name: "major-block",
+		Range: &api.RangeOptions{
+			Start: pos,
+			Count: &one,
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("query bvn major-block index entry %d: %w", pos, err)
+	}
+	if idxPage == nil || len(idxPage.Records) == 0 {
+		return nil, fmt.Errorf("%w: bvn major-block index entry %d not found", ErrNoSuchHeight, pos)
+	}
+	indexRec := idxPage.Records[0]
+	if indexRec == nil || indexRec.Value == nil || indexRec.Value.Value == nil {
+		return nil, fmt.Errorf("bvn major-block entry %d empty", pos)
+	}
+	indexEntry := indexRec.Value.Value
+	mainChainPos := indexEntry.Source
+
+	// 2. BVN's main chain entry at mainChainPos → the DA txn.
+	mainPage, err := s.q.QueryChainEntries(ctx, s.bvnAnchorPool, &api.ChainQuery{
+		Name: "main",
+		Range: &api.RangeOptions{
+			Start:  mainChainPos,
+			Count:  &one,
+			Expand: ptrBool(true),
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("query bvn main chain entry %d: %w", mainChainPos, err)
+	}
+	if mainPage == nil || len(mainPage.Records) == 0 {
+		return nil, fmt.Errorf("bvn main chain entry %d not found", mainChainPos)
+	}
+	mainRec := mainPage.Records[0]
+	pa, txn, txid, err := extractDAFromMainEntry(mainRec)
+	if err != nil {
+		return nil, fmt.Errorf("extract DA at major-block %d: %w", majorIdx, err)
+	}
+
+	// 3. Pull one BlockAnchor message off the DA's signature chain
+	// to extract the SequencedMessage. Any of them works — they all
+	// wrap the same seq.
+	seq, err := s.fetchSequencedFromSignatures(ctx, txid, txn)
+	if err != nil {
+		return nil, err
+	}
+
+	// Block time from the IndexEntry.
+	var blockTime int64
+	if indexEntry.BlockTime != nil {
+		blockTime = indexEntry.BlockTime.Unix()
+	}
+
+	return &majorBlockEntry{
+		majorIdx:  majorIdx,
+		daTxID:    txid,
+		pa:        pa,
+		sequenced: seq,
+		blockTime: blockTime,
+	}, nil
+}
+
+// fetchSequencedFromSignatures pulls the first available BlockAnchor
+// off the DA txn's signature chain and returns its SequencedMessage.
+// Falls back to constructing the seq locally from the txn if the
+// signature chain is empty (shouldn't happen on a well-formed
+// network, but defensive).
+func (s *APISource) fetchSequencedFromSignatures(ctx context.Context, txid *url.TxID, txn *protocol.Transaction) (*messaging.SequencedMessage, error) {
+	one := uint64(1)
+	expand := true
+	page, err := s.q.QuerySignatureChainEntries(ctx, txid.AsUrl(), &api.ChainQuery{
+		Name: "signature",
+		Range: &api.RangeOptions{
+			Start:  0,
+			Count:  &one,
+			Expand: &expand,
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("query signature chain for sequenced: %w", err)
+	}
+	if page == nil || len(page.Records) == 0 {
+		return nil, fmt.Errorf("DA txn %x has no signatures — peer may not have received the BlockAnchor messages", txid.Hash())
+	}
+	for _, e := range page.Records {
+		if e == nil || e.Value == nil || e.Value.Message == nil {
+			continue
+		}
+		if ba, ok := e.Value.Message.(*messaging.BlockAnchor); ok {
+			if seq, ok := ba.Anchor.(*messaging.SequencedMessage); ok {
+				return seq, nil
+			}
+		}
+	}
+	return nil, fmt.Errorf("DA txn %x signature chain has no BlockAnchor wrapper", txid.Hash())
+}
+
+// extractDAFromMainEntry casts a BVN main-chain entry to its
+// underlying DA transaction. Returns the PartitionAnchor (DN's
+// PartitionAnchor embedded in the DA body), the raw transaction,
+// and the txid.
+func extractDAFromMainEntry(e *api.ChainEntryRecord[api.Record]) (*protocol.PartitionAnchor, *protocol.Transaction, *url.TxID, error) {
+	if e == nil || e.Value == nil {
+		return nil, nil, nil, fmt.Errorf("empty main-chain entry")
+	}
+	mr, ok := e.Value.(*api.MessageRecord[messaging.Message])
+	if !ok || mr.Message == nil {
+		return nil, nil, nil, fmt.Errorf("main-chain entry value is not a MessageRecord")
+	}
+	tm, ok := mr.Message.(*messaging.TransactionMessage)
+	if !ok || tm.Transaction == nil {
+		return nil, nil, nil, fmt.Errorf("main-chain entry message is not a TransactionMessage")
+	}
+	body, ok := tm.Transaction.Body.(protocol.AnchorBody)
+	if !ok {
+		return nil, nil, nil, fmt.Errorf("main-chain entry body is %T, not an AnchorBody", tm.Transaction.Body)
+	}
+	pa := body.GetPartitionAnchor()
+	if pa == nil {
+		return nil, nil, nil, fmt.Errorf("anchor body has nil PartitionAnchor")
+	}
+	return pa, tm.Transaction, tm.ID(), nil
+}
+
 // extractKeySigAndSignable pulls the validator's KeySignature plus
 // the Signable it was made over out of the messaging wrappers on the
 // anchor txn's signature chain.
@@ -203,15 +392,9 @@ func (s *APISource) Signatures(ctx context.Context, height uint64) ([]HeaderSign
 // back to using the Header itself, which only verifies cleanly when
 // the Header's Sequenced is set (which it is for BlockAnchor-derived
 // headers).
-//
-// Live anchor signatures on the bootstrap path are BlockAnchor
-// wrappers, so the BlockAnchor branch is the hot path.
 func extractKeySigAndSignable(m messaging.Message) (protocol.KeySignature, protocol.Signable) {
 	switch v := m.(type) {
 	case *messaging.BlockAnchor:
-		// BlockAnchor.Signature is already typed as KeySignature.
-		// BlockAnchor.Anchor is the SequencedMessage validators
-		// signed over.
 		seq, _ := v.Anchor.(*messaging.SequencedMessage)
 		return v.Signature, seq
 	case *messaging.SignatureMessage:
@@ -222,223 +405,4 @@ func extractKeySigAndSignable(m messaging.Message) (protocol.KeySignature, proto
 	return nil, nil
 }
 
-// OperatorsDeltaAt returns the operators-keybook deltas recorded in
-// block `height`. Queries the partition's minor block at that
-// height, filters its entries for transactions whose principal is
-// the configured operators page, and extracts UpdateKeyPage
-// operations.
-//
-// Returns nil (no deltas, no error) when:
-//   - SetOperatorsPage wasn't called (steady-state mode)
-//   - The block exists but contains no operators-keybook updates
-//
-// Returns an error if the underlying queries fail. The walker treats
-// an error here as fatal; the launcher exits and the operator
-// retries. We deliberately don't paper over query failures —
-// returning empty deltas would silently misverify the next block's
-// quorum if a rotation got dropped.
-func (s *APISource) OperatorsDeltaAt(ctx context.Context, height uint64) ([]OperatorsDelta, error) {
-	s.mu.Lock()
-	opPage := s.operatorsPage
-	partition := s.partitionUrl
-	s.mu.Unlock()
-	if opPage == nil || partition == nil {
-		return nil, nil
-	}
-
-	var out []OperatorsDelta
-	var entryStart uint64
-	for {
-		count := s.PageSize
-		expand := true
-		block, err := s.q.QueryMinorBlock(ctx, partition, &api.BlockQuery{
-			Minor: &height,
-			EntryRange: &api.RangeOptions{
-				Start:  entryStart,
-				Count:  &count,
-				Expand: &expand,
-			},
-			OmitEmpty: true,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("query minor block %d: %w", height, err)
-		}
-		if block == nil || block.Entries == nil || len(block.Entries.Records) == 0 {
-			break
-		}
-
-		for _, e := range block.Entries.Records {
-			if e == nil || e.Account == nil || !e.Account.Equal(opPage) {
-				continue
-			}
-			ops, err := extractKeyPageOps(e.Value)
-			if err != nil {
-				return nil, fmt.Errorf("block %d entry %d: %w", height, e.Index, err)
-			}
-			for _, op := range ops {
-				delta, err := encodeKeyPageOp(op)
-				if err != nil {
-					return nil, fmt.Errorf("encode op: %w", err)
-				}
-				out = append(out, delta)
-			}
-		}
-
-		if uint64(len(block.Entries.Records)) < count {
-			break
-		}
-		entryStart += uint64(len(block.Entries.Records))
-	}
-	return out, nil
-}
-
-// extractKeyPageOps pulls the Operation slice out of a chain-entry
-// value if it's an UpdateKeyPage transaction. Other transaction
-// types and non-transaction records return nil.
-func extractKeyPageOps(value api.Record) ([]protocol.KeyPageOperation, error) {
-	if value == nil {
-		return nil, nil
-	}
-	mr, ok := value.(*api.MessageRecord[messaging.Message])
-	if !ok || mr == nil || mr.Message == nil {
-		return nil, nil
-	}
-	tm, ok := mr.Message.(*messaging.TransactionMessage)
-	if !ok || tm.Transaction == nil {
-		return nil, nil
-	}
-	body, ok := tm.Transaction.Body.(*protocol.UpdateKeyPage)
-	if !ok {
-		return nil, nil
-	}
-	return body.Operation, nil
-}
-
-// encodeKeyPageOp marshals a KeyPageOperation into the
-// OperatorsDelta wire format. The keybookat package owns the
-// canonical encoding, but we reproduce its byte-level contract here
-// to avoid pulling keybookat as an import (preserves the layering
-// where headerwalk doesn't depend on consumer packages).
-func encodeKeyPageOp(op protocol.KeyPageOperation) (OperatorsDelta, error) {
-	data, err := op.MarshalBinary()
-	if err != nil {
-		return OperatorsDelta{}, fmt.Errorf("marshal %T: %w", op, err)
-	}
-	return OperatorsDelta{
-		Kind:    op.Type().String(),
-		Payload: data,
-	}, nil
-}
-
-// lookup resolves height to an anchorEntry, scanning + caching as
-// needed.
-func (s *APISource) lookup(ctx context.Context, height uint64) (*anchorEntry, error) {
-	s.mu.Lock()
-	if rec, ok := s.cache[height]; ok {
-		s.mu.Unlock()
-		return rec, nil
-	}
-	s.mu.Unlock()
-
-	if err := s.scanUntil(ctx, height); err != nil {
-		return nil, err
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if rec, ok := s.cache[height]; ok {
-		return rec, nil
-	}
-	return nil, fmt.Errorf("%w: anchor for partition height %d not found in anchor pool", ErrNoSuchHeight, height)
-}
-
-// scanUntil walks anchor pool main-chain entries forward from
-// s.scanned, inserting each into the cache, until either the cache
-// contains `target` or pagination exhausts.
-func (s *APISource) scanUntil(ctx context.Context, target uint64) error {
-	for {
-		s.mu.Lock()
-		start := s.scanned
-		s.mu.Unlock()
-
-		count := s.PageSize
-		expand := true
-		page, err := s.q.QueryChainEntries(ctx, s.anchorPool, &api.ChainQuery{
-			Name: "main",
-			Range: &api.RangeOptions{
-				Start:  start,
-				Count:  &count,
-				Expand: &expand,
-			},
-		})
-		if err != nil {
-			return fmt.Errorf("query anchor pool main range[%d:+%d]: %w", start, count, err)
-		}
-		if page == nil || len(page.Records) == 0 {
-			return nil
-		}
-
-		s.mu.Lock()
-		hit := false
-		for _, e := range page.Records {
-			if e == nil || e.Value == nil {
-				continue
-			}
-			rec := extractAnchorRecord(e)
-			if rec == nil {
-				continue
-			}
-			s.cache[rec.pa.MinorBlockIndex] = rec
-			if rec.pa.MinorBlockIndex == target {
-				hit = true
-			}
-		}
-		s.scanned = start + uint64(len(page.Records))
-		s.mu.Unlock()
-
-		if hit {
-			return nil
-		}
-		// If the page was short, we've exhausted the chain.
-		if uint64(len(page.Records)) < count {
-			return nil
-		}
-	}
-}
-
-// extractAnchorRecord pulls the PartitionAnchor out of a
-// ChainEntryRecord. Returns nil if the record isn't an anchor txn
-// (defensive — the anchor pool's main chain should only contain
-// anchor txns, but bootstrap shouldn't crash if a peer returns
-// something unexpected).
-func extractAnchorRecord(e *api.ChainEntryRecord[api.Record]) *anchorEntry {
-	if e == nil || e.Value == nil {
-		return nil
-	}
-	mr, ok := e.Value.(*api.MessageRecord[messaging.Message])
-	if !ok || mr.Message == nil {
-		return nil
-	}
-	tm, ok := mr.Message.(*messaging.TransactionMessage)
-	if !ok || tm.Transaction == nil {
-		return nil
-	}
-	body, ok := tm.Transaction.Body.(protocol.AnchorBody)
-	if !ok {
-		return nil
-	}
-	pa := body.GetPartitionAnchor()
-	if pa == nil {
-		return nil
-	}
-	rec := &anchorEntry{
-		pa:   pa,
-		txn:  tm.Transaction,
-		txid: tm.ID(),
-	}
-	if e.LastBlockTime != nil {
-		rec.blockTime = e.LastBlockTime.Unix()
-	}
-	return rec
-}
-
+func ptrBool(b bool) *bool { return &b }
