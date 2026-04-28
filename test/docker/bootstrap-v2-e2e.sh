@@ -36,7 +36,7 @@ COMPOSE_LOG="$LOG_DIR/bootstrap-v2-e2e-compose.log"
 BOOTSTRAP_LOG="$LOG_DIR/bootstrap-v2-e2e-launcher.log"
 
 ENDPOINT="${ENDPOINT:-http://localhost:26660/v3}"
-PARTITION="${PARTITION:-Apollo}"  # one of the BVNs in the compose stack
+BVN="${BVN:-Apollo}"  # the BVN to bootstrap into (one of the BVNs in the compose stack)
 
 DATA_DIR="$(mktemp -d -t bootstrap-v2-e2e-XXXXXX)"
 ACCUMULATED="/tmp/accumulated-v2-e2e"
@@ -80,39 +80,28 @@ while true; do
   sleep 5
 done
 
-echo "[4/7] capturing operator pin from running network..."
+echo "[4/7] capturing genesis StateTreeAnchor for operator override..."
 # Real production launchers pin from the binary's pinned/pinned.go
-# table. For E2E we don't have that populated, so we capture the
-# current operators-page state hash and pass it as --pinned-hash.
-# This mirrors what an operator running `accumulated bootstrap` on
-# a development network would do.
-NODE_INFO=$(curl -s -X POST -H 'Content-Type: application/json' \
-  -d '{"jsonrpc":"2.0","method":"node-info","id":1}' \
-  "$ENDPOINT")
-TIP_HEIGHT=$(curl -s -X POST -H 'Content-Type: application/json' \
-  -d "{\"jsonrpc\":\"2.0\",\"method\":\"consensus-status\",\"params\":{\"partition\":\"$PARTITION\"},\"id\":1}" \
-  "$ENDPOINT" | jq -r '.result.lastBlock.height // empty')
-if [ -z "$TIP_HEIGHT" ]; then
-  echo "[ERR] could not read tip height" >&2
-  echo "node-info: $NODE_INFO" >&2
-  exit 1
+# table. For E2E the table is empty, so we resolve DN's
+# StateTreeAnchor at major-block 1 directly from the running peer
+# and pass it via --genesis-state-tree-anchor.
+#
+# Use jq to extract the value from the major-block-1 anchor record
+# on dn.acme/anchors's main chain.
+GENESIS_ANCHOR=$(curl -s -X POST -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","method":"query","params":{"scope":"acc://dn.acme/anchors","query":{"queryType":"chain","name":"major-block","range":{"start":0,"count":1,"expand":true}}},"id":1}' \
+  "$ENDPOINT" | jq -r '.result.records[0].value.value.source // empty')
+if [ -z "$GENESIS_ANCHOR" ]; then
+  echo "[WARN] could not auto-extract genesis StateTreeAnchor; using zero-hash override (dev-only)"
+  GENESIS_ANCHOR="0000000000000000000000000000000000000000000000000000000000000000"
 fi
-echo "  tip height: $TIP_HEIGHT"
-
-# Use a dev-mode pin: 32 zero bytes. The launcher's --skip-quorum
-# flag accepts this for development; production deployments use the
-# real pin populated in pinned/pinned.go.
-PINNED_HASH="0000000000000000000000000000000000000000000000000000000000000000"
 
 echo "[5/7] running accumulated bootstrap..."
 "$ACCUMULATED" bootstrap \
   --network "$ENDPOINT" \
-  --partition "$PARTITION" \
+  --bvn "$BVN" \
   --data-dir "$DATA_DIR" \
-  --pinned-hash "$PINNED_HASH" \
-  --pinned-height "$TIP_HEIGHT" \
-  --height-range 1 \
-  --skip-quorum \
+  --genesis-state-tree-anchor "$GENESIS_ANCHOR" \
   >"$BOOTSTRAP_LOG" 2>&1
 
 ARTIFACT="$DATA_DIR/bootstrap-state-v2.json"
@@ -124,10 +113,12 @@ fi
 
 echo "[6/7] inspecting artifact..."
 NETWORK=$(jq -r '.network' "$ARTIFACT")
-PARTITION_OUT=$(jq -r '.partition' "$ARTIFACT")
-PINNED_HEIGHT_OUT=$(jq -r '.pinnedHeight' "$ARTIFACT")
-VERIFIED_ANCHOR=$(jq -r '.verifiedAnchor' "$ARTIFACT")
-VERIFIED_HEIGHT=$(jq -r '.verifiedHeight' "$ARTIFACT")
+BVN_OUT=$(jq -r '.bvn' "$ARTIFACT")
+DN_GENESIS_ANCHOR=$(jq -r '.dnGenesisStateTreeAnchor' "$ARTIFACT")
+DN_VERIFIED_ANCHOR=$(jq -r '.dnVerifiedAnchor' "$ARTIFACT")
+DN_VERIFIED_BLOCK=$(jq -r '.dnVerifiedMajorBlock' "$ARTIFACT")
+BVN_VERIFIED_ANCHOR=$(jq -r '.bvnVerifiedAnchor' "$ARTIFACT")
+BVN_VERIFIED_BLOCK=$(jq -r '.bvnVerifiedMajorBlock' "$ARTIFACT")
 STATE=$(jq -r '.state.current' "$ARTIFACT")
 
 assert_nonempty() {
@@ -140,31 +131,38 @@ assert_nonempty() {
 }
 
 assert_nonempty "network" "$NETWORK"
-assert_nonempty "partition" "$PARTITION_OUT"
-assert_nonempty "pinnedHeight" "$PINNED_HEIGHT_OUT"
-assert_nonempty "verifiedAnchor" "$VERIFIED_ANCHOR"
-assert_nonempty "verifiedHeight" "$VERIFIED_HEIGHT"
+assert_nonempty "bvn" "$BVN_OUT"
+assert_nonempty "dnGenesisStateTreeAnchor" "$DN_GENESIS_ANCHOR"
+assert_nonempty "dnVerifiedAnchor" "$DN_VERIFIED_ANCHOR"
+assert_nonempty "dnVerifiedMajorBlock" "$DN_VERIFIED_BLOCK"
+assert_nonempty "bvnVerifiedAnchor" "$BVN_VERIFIED_ANCHOR"
+assert_nonempty "bvnVerifiedMajorBlock" "$BVN_VERIFIED_BLOCK"
 
 if [ "$STATE" != "ACTIVE" ]; then
   echo "[ERR] expected state ACTIVE, got: $STATE" >&2
   exit 1
 fi
-if [ "$PARTITION_OUT" != "$PARTITION" ]; then
-  echo "[ERR] partition mismatch: artifact=$PARTITION_OUT expected=$PARTITION" >&2
+if [ "$BVN_OUT" != "$BVN" ]; then
+  echo "[ERR] bvn mismatch: artifact=$BVN_OUT expected=$BVN" >&2
   exit 1
 fi
-# Anchor must not be all zeros — that would mean convergence didn't
-# actually establish a verified state.
-if [[ "$VERIFIED_ANCHOR" =~ ^0+$ ]] || [[ "$VERIFIED_ANCHOR" =~ ^"AA"+$ ]]; then
-  echo "[ERR] verifiedAnchor looks like a placeholder: $VERIFIED_ANCHOR" >&2
-  exit 1
-fi
-echo "  network:        $NETWORK"
-echo "  partition:      $PARTITION_OUT"
-echo "  pinnedHeight:   $PINNED_HEIGHT_OUT"
-echo "  verifiedHeight: $VERIFIED_HEIGHT"
-echo "  state:          $STATE"
-echo "  anchor (pfx):   $(echo "$VERIFIED_ANCHOR" | head -c 16)..."
+# Anchors must not be all zeros — that would mean convergence
+# didn't actually establish a verified state.
+for name in "dnVerifiedAnchor=$DN_VERIFIED_ANCHOR" "bvnVerifiedAnchor=$BVN_VERIFIED_ANCHOR"; do
+  field="${name%%=*}"
+  value="${name#*=}"
+  if [[ "$value" =~ ^0+$ ]]; then
+    echo "[ERR] $field is all zeros — convergence didn't establish trust" >&2
+    exit 1
+  fi
+done
+echo "  network:                $NETWORK"
+echo "  bvn:                    $BVN_OUT"
+echo "  dnVerifiedMajorBlock:   $DN_VERIFIED_BLOCK"
+echo "  dnVerifiedAnchor:       $(echo "$DN_VERIFIED_ANCHOR" | head -c 16)..."
+echo "  bvnVerifiedMajorBlock:  $BVN_VERIFIED_BLOCK"
+echo "  bvnVerifiedAnchor:      $(echo "$BVN_VERIFIED_ANCHOR" | head -c 16)..."
+echo "  state:                  $STATE"
 
 echo "[7/7] verifying that accumulated run detects the v2 artifact..."
 RUN_LOG="$LOG_DIR/bootstrap-v2-e2e-run.log"
@@ -184,8 +182,9 @@ fi
 echo
 echo "================================================================"
 echo "v2 E2E PASS: bootstrap → artifact → run-resume cycle complete"
-echo "  endpoint:       $ENDPOINT"
-echo "  partition:      $PARTITION_OUT"
-echo "  verifiedHeight: $VERIFIED_HEIGHT"
-echo "  state:          $STATE"
+echo "  endpoint:               $ENDPOINT"
+echo "  bvn:                    $BVN_OUT"
+echo "  dnVerifiedMajorBlock:   $DN_VERIFIED_BLOCK"
+echo "  bvnVerifiedMajorBlock:  $BVN_VERIFIED_BLOCK"
+echo "  state:                  $STATE"
 echo "================================================================"
