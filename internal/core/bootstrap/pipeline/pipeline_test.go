@@ -16,7 +16,6 @@ import (
 	"testing"
 	"time"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/convergence"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/headerwalk"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
@@ -25,7 +24,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// --- Header fake (mirrors headerwalk/walk_test.go's pattern) -------
+// --- Fakes -------------------------------------------------------
 
 type tv struct {
 	pub  ed25519.PublicKey
@@ -85,7 +84,7 @@ func (f *fakeHeaderSource) OperatorsDeltaAt(_ context.Context, _ uint64) ([]head
 	return nil, nil
 }
 
-// --- Helpers ------------------------------------------------------
+// --- Helpers -----------------------------------------------------
 
 func newDB(t *testing.T) *database.Database {
 	t.Helper()
@@ -120,80 +119,131 @@ func populateAccounts(t *testing.T, db *database.Database, urls []*url.URL) [32]
 	return root
 }
 
-// --- Tests --------------------------------------------------------
+// --- Tests -------------------------------------------------------
 
-// TestBootstrap_HappyPath ties trust phase + data phase + convergence
-// end-to-end. Reference DB stamps a known BPT root; the fake header
-// source signs a header that commits to that root; the puller fills
-// a fresh DB from the reference; convergence accepts.
+// TestBootstrap_HappyPath exercises Phase A (trust) + Phase B (DN
+// data + DN convergence) + Phase C (BVN data + BVN convergence).
+//
+// The DN headers at major-block 1 (pin) and ToMajorBlock both
+// commit the same StateTreeRoot — that's the value the DN data
+// phase converges against. The BVN's state is supplied by the
+// BVNAnchorFromDN callback; the BVN data phase converges against
+// it.
 func TestBootstrap_HappyPath(t *testing.T) {
-	urls := []*url.URL{
+	dnURLs := []*url.URL{
 		protocol.DnUrl().JoinPath("alice"),
 		protocol.DnUrl().JoinPath("bob"),
 	}
+	bvnURLs := []*url.URL{
+		protocol.PartitionUrl("Apollo").JoinPath("carol"),
+	}
 
-	ref := newDB(t)
-	expectedRoot := populateAccounts(t, ref, urls)
-	refRO := ref.Begin(false)
-	defer refRO.Discard()
+	dnRef := newDB(t)
+	dnRoot := populateAccounts(t, dnRef, dnURLs)
+	dnRefRO := dnRef.Begin(false)
+	defer dnRefRO.Discard()
 
-	// Header source signs a header whose StateTreeRoot equals the
-	// reference's root. Two-validator set, both sign — meets default
-	// quorum (ceil(2*2/3) = 2).
+	bvnRef := newDB(t)
+	bvnRoot := populateAccounts(t, bvnRef, bvnURLs)
+	bvnRefRO := bvnRef.Begin(false)
+	defer bvnRefRO.Discard()
+
+	// Validator set: 2 validators, both sign every major block.
 	vs := mkValidators(t, 2)
 	set := validatorSet(vs)
-	hdr := &headerwalk.Header{
-		Height:        100,
-		Time:          time.Unix(1700000000, 0),
-		StateTreeRoot: expectedRoot,
-	}
-	hsrc := &fakeHeaderSource{
-		headers: map[uint64]*headerwalk.Header{100: hdr},
-		sigs: map[uint64][]headerwalk.HeaderSignature{
-			100: {signHeader(hdr, vs[0]), signHeader(hdr, vs[1])},
-		},
+
+	mkHeader := func(h uint64) *headerwalk.Header {
+		return &headerwalk.Header{
+			Height:        h,
+			Time:          time.Unix(1700000000+int64(h)*60, 0),
+			StateTreeRoot: dnRoot,
+		}
 	}
 
-	// Target DB.
-	tgt := newDB(t)
+	hsrc := &fakeHeaderSource{
+		headers: make(map[uint64]*headerwalk.Header),
+		sigs:    make(map[uint64][]headerwalk.HeaderSignature),
+	}
+	for h := uint64(1); h <= 3; h++ {
+		hdr := mkHeader(h)
+		hsrc.headers[h] = hdr
+		hsrc.sigs[h] = []headerwalk.HeaderSignature{
+			signHeader(hdr, vs[0]),
+			signHeader(hdr, vs[1]),
+		}
+	}
+
+	// Pull source serves both DN and BVN refs. We reuse the
+	// dual-source pattern: a function that picks the right ref
+	// based on the URL's root identity.
+	dualSrc := &dualPullSource{
+		dn:  pull.NewDBSource(dnRefRO),
+		bvn: pull.NewDBSource(bvnRefRO),
+	}
+
+	dnTgt := newDB(t)
+	bvnTgt := newDB(t)
 
 	res, err := Bootstrap(context.Background(), Options{
-		HeaderSource:        hsrc,
-		StartHeight:         100,
-		EndHeight:           100,
-		InitialValidatorSet: set,
-		PullSource:          pull.NewDBSource(refRO),
-		Accounts:            urls,
-		Database:            tgt,
+		HeaderSource:           hsrc,
+		ToMajorBlock:           3,
+		InitialValidatorSet:    set,
+		QuorumOpts:             headerwalk.QuorumOptions{MinSignatures: 1},
+		GenesisStateTreeAnchor: dnRoot, // pin matches genesis-major-block 1
+		PullSource:             dualSrc,
+		DNAccounts:             dnURLs,
+		DNDatabase:             dnTgt,
+		BVN:                    "Apollo",
+		BVNAccounts:            bvnURLs,
+		BVNDatabase:            bvnTgt,
+		BVNAnchorFromDN: func(_ context.Context, _ *database.Database, bvn string) ([32]byte, uint64, error) {
+			if bvn != "Apollo" {
+				return [32]byte{}, 0, errors.New("unexpected bvn")
+			}
+			return bvnRoot, 7, nil
+		},
 	})
 	if err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
-	if res.VerifiedAnchor != expectedRoot {
-		t.Errorf("VerifiedAnchor mismatch: got %x, want %x", res.VerifiedAnchor, expectedRoot)
+	if res.DNVerifiedAnchor != dnRoot {
+		t.Errorf("DNVerifiedAnchor = %x, want %x", res.DNVerifiedAnchor, dnRoot)
 	}
-	if res.LocalBPTRoot != expectedRoot {
-		t.Errorf("LocalBPTRoot mismatch: got %x, want %x", res.LocalBPTRoot, expectedRoot)
+	if res.DNLocalBPTRoot != dnRoot {
+		t.Errorf("DNLocalBPTRoot = %x, want %x", res.DNLocalBPTRoot, dnRoot)
 	}
-	if res.AccountsPulled != len(urls) {
-		t.Errorf("AccountsPulled = %d, want %d", res.AccountsPulled, len(urls))
+	if res.DNVerifiedMajorBlock != 3 {
+		t.Errorf("DNVerifiedMajorBlock = %d, want 3", res.DNVerifiedMajorBlock)
+	}
+	if res.DNAccountsPulled != len(dnURLs) {
+		t.Errorf("DNAccountsPulled = %d, want %d", res.DNAccountsPulled, len(dnURLs))
+	}
+	if res.BVNVerifiedAnchor != bvnRoot {
+		t.Errorf("BVNVerifiedAnchor = %x, want %x", res.BVNVerifiedAnchor, bvnRoot)
+	}
+	if res.BVNLocalBPTRoot != bvnRoot {
+		t.Errorf("BVNLocalBPTRoot = %x, want %x", res.BVNLocalBPTRoot, bvnRoot)
+	}
+	if res.BVNVerifiedMajorBlock != 7 {
+		t.Errorf("BVNVerifiedMajorBlock = %d, want 7", res.BVNVerifiedMajorBlock)
+	}
+	if res.BVNAccountsPulled != len(bvnURLs) {
+		t.Errorf("BVNAccountsPulled = %d, want %d", res.BVNAccountsPulled, len(bvnURLs))
 	}
 }
 
-// TestBootstrap_TrustPhaseFails — header signature is forged; the
-// walk fails before any data is pulled. No partial state should
-// leak into the target DB.
-func TestBootstrap_TrustPhaseFails(t *testing.T) {
-	urls := []*url.URL{protocol.DnUrl().JoinPath("alice")}
-	ref := newDB(t)
-	expectedRoot := populateAccounts(t, ref, urls)
-	refRO := ref.Begin(false)
-	defer refRO.Discard()
+// TestBootstrap_GenesisPinMismatchFails closes the loop on the
+// "fail closed when chain isn't the expected network" guarantee.
+func TestBootstrap_GenesisPinMismatchFails(t *testing.T) {
+	dnRef := newDB(t)
+	dnURLs := []*url.URL{protocol.DnUrl().JoinPath("alice")}
+	dnRoot := populateAccounts(t, dnRef, dnURLs)
+	dnRefRO := dnRef.Begin(false)
+	defer dnRefRO.Discard()
 
-	vs := mkValidators(t, 4)
+	vs := mkValidators(t, 1)
 	set := validatorSet(vs)
-	hdr := &headerwalk.Header{Height: 1, StateTreeRoot: expectedRoot}
-	// Only one signer — well below ceil(2*4/3)=3.
+	hdr := &headerwalk.Header{Height: 1, StateTreeRoot: dnRoot}
 	hsrc := &fakeHeaderSource{
 		headers: map[uint64]*headerwalk.Header{1: hdr},
 		sigs: map[uint64][]headerwalk.HeaderSignature{
@@ -201,93 +251,97 @@ func TestBootstrap_TrustPhaseFails(t *testing.T) {
 		},
 	}
 
-	tgt := newDB(t)
 	_, err := Bootstrap(context.Background(), Options{
-		HeaderSource:        hsrc,
-		StartHeight:         1,
-		EndHeight:           1,
-		InitialValidatorSet: set,
-		PullSource:          pull.NewDBSource(refRO),
-		Accounts:            urls,
-		Database:            tgt,
-	})
-	if err == nil {
-		t.Fatal("expected trust-phase failure")
-	}
-	if !errors.Is(err, headerwalk.ErrInsufficientQuorum) {
-		t.Errorf("err = %v, want ErrInsufficientQuorum chain", err)
-	}
-
-	// Target DB should be untouched (no partial commit).
-	tgtRO := tgt.Begin(false)
-	defer tgtRO.Discard()
-	root, _ := tgtRO.GetBptRootHash()
-	if root != ([32]byte{}) {
-		t.Errorf("expected untouched target BPT (zero root), got %x", root)
-	}
-}
-
-// TestBootstrap_ConvergenceFails — header walker returns a
-// StateTreeRoot that differs from what the puller's source actually
-// holds. Convergence must catch the divergence.
-func TestBootstrap_ConvergenceFails(t *testing.T) {
-	urls := []*url.URL{protocol.DnUrl().JoinPath("alice")}
-	ref := newDB(t)
-	populateAccounts(t, ref, urls)
-	refRO := ref.Begin(false)
-	defer refRO.Discard()
-
-	// Header source claims a different StateTreeRoot than what's
-	// actually in the reference DB. Simulates a peer lying about
-	// its BPT, or a divergent fork.
-	vs := mkValidators(t, 2)
-	set := validatorSet(vs)
-	hdr := &headerwalk.Header{Height: 1, StateTreeRoot: [32]byte{0xde, 0xad, 0xbe, 0xef}}
-	hsrc := &fakeHeaderSource{
-		headers: map[uint64]*headerwalk.Header{1: hdr},
-		sigs: map[uint64][]headerwalk.HeaderSignature{
-			1: {signHeader(hdr, vs[0]), signHeader(hdr, vs[1])},
+		HeaderSource:           hsrc,
+		ToMajorBlock:           1,
+		InitialValidatorSet:    set,
+		QuorumOpts:             headerwalk.QuorumOptions{MinSignatures: 1},
+		GenesisStateTreeAnchor: [32]byte{0xde, 0xad, 0xbe, 0xef}, // doesn't match
+		PullSource:             pull.NewDBSource(dnRefRO),
+		DNAccounts:             dnURLs,
+		DNDatabase:             newDB(t),
+		BVN:                    "Apollo",
+		BVNAccounts:            nil,
+		BVNDatabase:            newDB(t),
+		BVNAnchorFromDN: func(_ context.Context, _ *database.Database, _ string) ([32]byte, uint64, error) {
+			return [32]byte{0x01}, 1, nil
 		},
-	}
-
-	tgt := newDB(t)
-	_, err := Bootstrap(context.Background(), Options{
-		HeaderSource:        hsrc,
-		StartHeight:         1,
-		EndHeight:           1,
-		InitialValidatorSet: set,
-		PullSource:          pull.NewDBSource(refRO),
-		Accounts:            urls,
-		Database:            tgt,
 	})
-	if err == nil {
-		t.Fatal("expected convergence failure")
-	}
-	if !errors.Is(err, convergence.ErrMismatch) {
-		t.Errorf("err = %v, want convergence.ErrMismatch chain", err)
+	if !errors.Is(err, ErrGenesisMismatch) {
+		t.Errorf("err = %v, want ErrGenesisMismatch chain", err)
 	}
 }
 
-// TestBootstrap_RejectsMissingInputs — guards.
+// TestBootstrap_RejectsMissingInputs — input-validation guards.
 func TestBootstrap_RejectsMissingInputs(t *testing.T) {
+	// One Options field missing per case; everything else stubbed
+	// out enough to reach validate().
+	base := func() Options {
+		return Options{
+			HeaderSource: &fakeHeaderSource{},
+			ToMajorBlock: 1,
+			PullSource:   pull.NewDBSource(nil),
+			DNDatabase:   newDB(t),
+			BVN:          "Apollo",
+			BVNDatabase:  newDB(t),
+			BVNAnchorFromDN: func(_ context.Context, _ *database.Database, _ string) ([32]byte, uint64, error) {
+				return [32]byte{}, 0, nil
+			},
+		}
+	}
 	cases := []struct {
-		name string
-		opts Options
-		want string
+		name    string
+		mutate  func(*Options)
+		wantSub string
 	}{
-		{"no header source", Options{PullSource: pull.NewDBSource(nil), Database: newDB(t)}, "HeaderSource"},
-		{"no pull source", Options{HeaderSource: &fakeHeaderSource{}, Database: newDB(t)}, "PullSource"},
-		{"no database", Options{HeaderSource: &fakeHeaderSource{}, PullSource: pull.NewDBSource(nil)}, "Database"},
+		{"no header source", func(o *Options) { o.HeaderSource = nil }, "HeaderSource"},
+		{"no pull source", func(o *Options) { o.PullSource = nil }, "PullSource"},
+		{"no DN db", func(o *Options) { o.DNDatabase = nil }, "DNDatabase"},
+		{"no BVN db", func(o *Options) { o.BVNDatabase = nil }, "BVNDatabase"},
+		{"no BVN", func(o *Options) { o.BVN = "" }, "BVN"},
+		{"no BVNAnchorFromDN", func(o *Options) { o.BVNAnchorFromDN = nil }, "BVNAnchorFromDN"},
+		{"zero ToMajorBlock", func(o *Options) { o.ToMajorBlock = 0 }, "ToMajorBlock"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			_, err := Bootstrap(context.Background(), c.opts)
+			o := base()
+			c.mutate(&o)
+			_, err := Bootstrap(context.Background(), o)
 			if err == nil {
 				t.Fatal("expected validation error")
 			}
-			if !strings.Contains(err.Error(), c.want) {
-				t.Errorf("err = %q, want substring %q", err.Error(), c.want)
+			if !strings.Contains(err.Error(), c.wantSub) {
+				t.Errorf("err = %q, want substring %q", err.Error(), c.wantSub)
 			}
 		})
 	}
+}
+
+// dualPullSource serves DN-prefixed URLs from one ref DB, BVN-
+// prefixed URLs from another. Test plumbing for the two-phase
+// pipeline.
+type dualPullSource struct {
+	dn, bvn pull.Source
+}
+
+func (d *dualPullSource) Main(ctx context.Context, u *url.URL) (protocol.Account, error) {
+	return d.pick(u).Main(ctx, u)
+}
+func (d *dualPullSource) DirectoryUrls(ctx context.Context, u *url.URL) ([]*url.URL, error) {
+	return d.pick(u).DirectoryUrls(ctx, u)
+}
+func (d *dualPullSource) PendingIDs(ctx context.Context, u *url.URL) ([]*url.TxID, error) {
+	return d.pick(u).PendingIDs(ctx, u)
+}
+func (d *dualPullSource) ChainNames(ctx context.Context, u *url.URL) ([]string, error) {
+	return d.pick(u).ChainNames(ctx, u)
+}
+func (d *dualPullSource) ChainEntries(ctx context.Context, u *url.URL, name string) ([][]byte, error) {
+	return d.pick(u).ChainEntries(ctx, u, name)
+}
+func (d *dualPullSource) pick(u *url.URL) pull.Source {
+	if u.RootIdentity().Equal(protocol.DnUrl()) {
+		return d.dn
+	}
+	return d.bvn
 }

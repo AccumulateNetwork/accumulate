@@ -4,20 +4,29 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-// Package pipeline orchestrates the v2 bootstrap end to end:
+// Package pipeline orchestrates the v2-corrected bootstrap end to
+// end: the (DN, BVN) pair model.
 //
-//  1. Trust phase: walk block headers, verify the validator quorum
-//     on each, evolve the operators key book across blocks.
-//  2. Data phase: pull every account in the bootstrap set into a
-//     local database via the v2 puller.
-//  3. Convergence: local UpdateBPT() must equal the verified
-//     terminal header's StateTreeRoot. Fail closed.
+//	Phase A — DN trust:
+//	   - Fetch the genesis (major-block 1) header from the source;
+//	     reject if its StateTreeAnchor doesn't match the binary pin.
+//	   - Walk major blocks 1 → ToMajorBlock verifying DN-validator
+//	     quorum on each DA's wrapping SequencedMessage.
+//	Phase B — DN data:
+//	   - Pull DN's complete account set into DNDatabase.
+//	   - UpdateBPT(); root must equal the latest verified DN
+//	     StateTreeAnchor.
+//	Phase C — BVN data:
+//	   - Read BVN's StateTreeAnchor + major-block index out of
+//	     trusted DN state via BVNAnchorFromDN. (The BVN→DN anchor
+//	     sits in dn.acme/anchors's main chain, committed to DN's
+//	     BPT we just verified.)
+//	   - Pull BVN's complete account set into BVNDatabase.
+//	   - UpdateBPT(); root must equal the BVN's StateTreeAnchor.
 //
-// The orchestration here is deliberately framework-poor: it takes
-// already-constructed sources and a database, runs the three phases
-// in order, and returns a Result. Wiring sources to a live network
-// (api.Querier2 for the puller, anchor-pool/signature messages for
-// the header source) is the next slice on this branch.
+// All four anchors (DN-genesis pin, DN-verified, BVN-verified, plus
+// the local BPT roots) are returned in Result for the caller to
+// persist via bootpersist.
 package pipeline
 
 import (
@@ -32,93 +41,149 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
-// Options carries the inputs Bootstrap orchestrates over.
+// Options carries every input Bootstrap orchestrates over.
 type Options struct {
-	// --- Trust phase inputs ---
+	// --- Trust phase (Phase A) ---
 
-	// HeaderSource serves block headers + signatures + operators
-	// deltas. In production this wraps an api.Querier2 view of the
-	// peer's anchor pool and signature messages.
+	// HeaderSource serves DN-validator-signed major-block headers.
+	// In production this is a headerwalk.APISource constructed
+	// against the chosen BVN's anchor pool URL.
 	HeaderSource headerwalk.HeaderSource
 
-	// StartHeight, EndHeight bound the header walk. Both inclusive.
-	StartHeight, EndHeight uint64
+	// ToMajorBlock is the latest DN major block to walk to. The
+	// walk runs 1..ToMajorBlock inclusive. Pipeline determines
+	// this from the peer's current consensus status before calling
+	// Bootstrap.
+	ToMajorBlock uint64
 
-	// InitialValidatorSet is the validator set assumed at
-	// StartHeight. Typically the binary's pinned set, or the set
-	// recorded in a previous bootstrap that is being resumed.
+	// InitialValidatorSet is the DN operators key page state used
+	// to verify the genesis end of the walk. For steady-state
+	// networks (no rotations), this is the current operators page
+	// fetched from the network.
 	InitialValidatorSet headerwalk.ValidatorSet
 
-	// ApplyDelta evolves the validator set across an
-	// operators-keybook update. nil means no rotation expected
-	// during the walk (steady-state networks); production passes
-	// the keybookat-backed implementation.
+	// ApplyDelta evolves the validator set across operators-keybook
+	// updates. Pass keybookat.ApplyDelta in production. nil
+	// substitutes a no-op (steady-state hot path).
 	ApplyDelta func(headerwalk.ValidatorSet, []headerwalk.OperatorsDelta) (headerwalk.ValidatorSet, error)
 
-	// QuorumOpts tunes the per-header verification (default 2/3).
+	// QuorumOpts tunes per-major-block validator-quorum
+	// verification. Default is the protocol's 2/3 rule.
 	QuorumOpts headerwalk.QuorumOptions
 
-	// --- Data phase inputs ---
+	// GenesisStateTreeAnchor is the binary's pinned DN
+	// StateTreeAnchor at major-block 1. The pipeline fetches the
+	// genesis header from the source, compares its StateTreeAnchor
+	// to this value, and aborts with ErrGenesisMismatch if they
+	// differ. Zero disables the check (dev-only path; production
+	// MUST set this).
+	GenesisStateTreeAnchor [32]byte
 
-	// PullSource serves account state for the puller. In production
-	// this is a pull.APISource over the same peer endpoint.
+	// --- Data phases (B + C) ---
+
+	// PullSource serves account state for both phases. In
+	// production this is a single pull.APISource over the same
+	// peer endpoint.
 	PullSource pull.Source
 
-	// Accounts is the minimum bootstrap set the launcher must pull.
-	Accounts []*url.URL
+	// DNAccounts is the DN's minimum bootstrap set.
+	DNAccounts []*url.URL
 
-	// --- Storage ---
+	// DNDatabase is the local DN store.
+	DNDatabase *database.Database
 
-	// Database is the local store the launcher is filling. It must
-	// have the production observer wired (default after construction
-	// today; pinned by completeness tests).
-	Database *database.Database
+	// BVN is the BVN partition this node will run (e.g., "Apollo").
+	BVN string
+
+	// BVNAccounts is the BVN's minimum bootstrap set.
+	BVNAccounts []*url.URL
+
+	// BVNDatabase is the local BVN store.
+	BVNDatabase *database.Database
+
+	// BVNAnchorFromDN extracts the BVN's StateTreeAnchor +
+	// major-block index out of trusted DN state, after Phase B has
+	// converged. It runs against the DN database (already committed
+	// at the time of the call), looks up the BVN→DN anchor on
+	// dn.acme/anchors, and returns the BVN's StateTreeAnchor.
+	BVNAnchorFromDN func(ctx context.Context, dnDB *database.Database, bvn string) (anchor [32]byte, majorBlock uint64, err error)
 }
 
-// Result reports a successful bootstrap.
+// Result reports what every phase produced on full success.
 type Result struct {
-	// VerifiedAnchor is the StateTreeRoot from the terminal verified
-	// header. After convergence this is also the root of the local
-	// BPT — they're equal by definition of a successful bootstrap.
-	VerifiedAnchor [32]byte
-
-	// LocalBPTRoot is what the local UpdateBPT produced. Equal to
-	// VerifiedAnchor on success.
-	LocalBPTRoot [32]byte
-
-	// AccountsPulled counts the URLs in opts.Accounts that the data
-	// phase processed without error.
-	AccountsPulled int
-
-	// TerminalStep is the last verified header from the trust phase
-	// (height, validator set after, etc.).
+	// TerminalStep is the last verified header from the trust
+	// phase — i.e., the major-block ToMajorBlock header.
 	TerminalStep *headerwalk.Step
+
+	// DNVerifiedAnchor is DN's StateTreeAnchor from the latest
+	// verified DA. Local DN BPT must equal this for ACTIVE.
+	DNVerifiedAnchor [32]byte
+
+	// DNVerifiedMajorBlock is the major-block index the latest
+	// verified DA was at — equal to ToMajorBlock on success.
+	DNVerifiedMajorBlock uint64
+
+	// DNLocalBPTRoot is what UpdateBPT(DN) produced. Equal to
+	// DNVerifiedAnchor on success.
+	DNLocalBPTRoot [32]byte
+
+	// DNAccountsPulled counts the DN URLs successfully pulled.
+	DNAccountsPulled int
+
+	// BVNVerifiedAnchor is the BVN's StateTreeAnchor as read out
+	// of trusted DN state. Local BVN BPT must equal this.
+	BVNVerifiedAnchor [32]byte
+
+	// BVNVerifiedMajorBlock is the BVN major-block index the
+	// trusted BVN→DN anchor was at.
+	BVNVerifiedMajorBlock uint64
+
+	// BVNLocalBPTRoot is what UpdateBPT(BVN) produced. Equal to
+	// BVNVerifiedAnchor on success.
+	BVNLocalBPTRoot [32]byte
+
+	// BVNAccountsPulled counts the BVN URLs successfully pulled.
+	BVNAccountsPulled int
 }
 
-// Bootstrap runs the three phases and returns Result on full success.
-// On any phase failure it returns an error and discards any partially
-// pulled state. Persistence of the bootstrap artifact (#3965-style)
-// is layered on top by the caller — this function only owns the
-// proof itself.
+// ErrGenesisMismatch is returned when the genesis-major-block
+// header's StateTreeAnchor doesn't match the binary's pinned value.
+// Sentinel so callers can branch on it (dev networks may want a
+// fallback; production aborts).
+var ErrGenesisMismatch = errors.New("pipeline: DN genesis StateTreeAnchor mismatch — chain or peer is not the expected network")
+
+// Bootstrap runs all three phases. On any phase failure it returns
+// an error and discards any partially pulled state in either
+// database.
 func Bootstrap(ctx context.Context, opts Options) (*Result, error) {
-	if opts.HeaderSource == nil {
-		return nil, errors.New("pipeline: HeaderSource required")
-	}
-	if opts.PullSource == nil {
-		return nil, errors.New("pipeline: PullSource required")
-	}
-	if opts.Database == nil {
-		return nil, errors.New("pipeline: Database required")
-	}
-	if opts.StartHeight > opts.EndHeight {
-		return nil, fmt.Errorf("pipeline: StartHeight (%d) > EndHeight (%d)", opts.StartHeight, opts.EndHeight)
+	if err := validate(opts); err != nil {
+		return nil, err
 	}
 
-	// 1. Trust phase.
+	// --- Phase A: trust ---
+
+	// Verify the genesis pin first. Without this, a malicious peer
+	// could fabricate the entire history and we'd accept whatever
+	// state they served.
+	if opts.GenesisStateTreeAnchor != ([32]byte{}) {
+		genesisHdr, err := opts.HeaderSource.Header(ctx, 1)
+		if err != nil {
+			return nil, fmt.Errorf("trust phase: fetch genesis header: %w", err)
+		}
+		if genesisHdr == nil {
+			return nil, errors.New("trust phase: nil genesis header")
+		}
+		if genesisHdr.StateTreeRoot != opts.GenesisStateTreeAnchor {
+			return nil, fmt.Errorf("%w: header=%x pin=%x",
+				ErrGenesisMismatch, genesisHdr.StateTreeRoot[:8], opts.GenesisStateTreeAnchor[:8])
+		}
+	}
+
+	// Walk major blocks 1..ToMajorBlock verifying validator quorum.
 	step, err := headerwalk.Walk(
 		ctx,
 		opts.HeaderSource,
-		opts.StartHeight, opts.EndHeight,
+		1, opts.ToMajorBlock,
 		opts.InitialValidatorSet,
 		opts.QuorumOpts,
 		opts.ApplyDelta,
@@ -129,39 +194,95 @@ func Bootstrap(ctx context.Context, opts Options) (*Result, error) {
 	if step == nil || step.Header == nil {
 		return nil, errors.New("trust phase: nil terminal step (no headers walked?)")
 	}
-	expected := step.Header.StateTreeRoot
+	dnExpected := step.Header.StateTreeRoot
 
-	// 2. Data phase.
-	batch := opts.Database.Begin(true)
-	pulled := 0
-	for _, u := range opts.Accounts {
-		if err := pull.Account(ctx, opts.PullSource, batch, u); err != nil {
-			batch.Discard()
-			return nil, fmt.Errorf("data phase: pull %s: %w", u, err)
+	// --- Phase B: DN data ---
+
+	dnBatch := opts.DNDatabase.Begin(true)
+	dnPulled := 0
+	for _, u := range opts.DNAccounts {
+		if err := pull.Account(ctx, opts.PullSource, dnBatch, u); err != nil {
+			dnBatch.Discard()
+			return nil, fmt.Errorf("DN data phase: pull %s: %w", u, err)
 		}
-		pulled++
+		dnPulled++
 	}
 
-	// 3. Convergence.
-	if err := convergence.Verify(batch, expected); err != nil {
-		batch.Discard()
-		return nil, fmt.Errorf("convergence: %w", err)
+	if err := convergence.Verify(dnBatch, dnExpected); err != nil {
+		dnBatch.Discard()
+		return nil, fmt.Errorf("DN convergence: %w", err)
 	}
-
-	// Read the now-equal local root for the result, then commit.
-	localRoot, err := batch.GetBptRootHash()
+	dnLocalRoot, err := dnBatch.GetBptRootHash()
 	if err != nil {
-		batch.Discard()
-		return nil, fmt.Errorf("read local BPT root: %w", err)
+		dnBatch.Discard()
+		return nil, fmt.Errorf("read DN local BPT root: %w", err)
 	}
-	if err := batch.Commit(); err != nil {
-		return nil, fmt.Errorf("commit: %w", err)
+	if err := dnBatch.Commit(); err != nil {
+		return nil, fmt.Errorf("commit DN: %w", err)
+	}
+
+	// --- Phase C: BVN data ---
+
+	bvnExpected, bvnMajor, err := opts.BVNAnchorFromDN(ctx, opts.DNDatabase, opts.BVN)
+	if err != nil {
+		return nil, fmt.Errorf("read BVN anchor from DN: %w", err)
+	}
+	if bvnExpected == ([32]byte{}) {
+		return nil, errors.New("BVN anchor extraction returned zero StateTreeAnchor")
+	}
+
+	bvnBatch := opts.BVNDatabase.Begin(true)
+	bvnPulled := 0
+	for _, u := range opts.BVNAccounts {
+		if err := pull.Account(ctx, opts.PullSource, bvnBatch, u); err != nil {
+			bvnBatch.Discard()
+			return nil, fmt.Errorf("BVN data phase: pull %s: %w", u, err)
+		}
+		bvnPulled++
+	}
+
+	if err := convergence.Verify(bvnBatch, bvnExpected); err != nil {
+		bvnBatch.Discard()
+		return nil, fmt.Errorf("BVN convergence: %w", err)
+	}
+	bvnLocalRoot, err := bvnBatch.GetBptRootHash()
+	if err != nil {
+		bvnBatch.Discard()
+		return nil, fmt.Errorf("read BVN local BPT root: %w", err)
+	}
+	if err := bvnBatch.Commit(); err != nil {
+		return nil, fmt.Errorf("commit BVN: %w", err)
 	}
 
 	return &Result{
-		VerifiedAnchor: expected,
-		LocalBPTRoot:   localRoot,
-		AccountsPulled: pulled,
-		TerminalStep:   step,
+		TerminalStep:          step,
+		DNVerifiedAnchor:      dnExpected,
+		DNVerifiedMajorBlock:  step.Header.Height,
+		DNLocalBPTRoot:        dnLocalRoot,
+		DNAccountsPulled:      dnPulled,
+		BVNVerifiedAnchor:     bvnExpected,
+		BVNVerifiedMajorBlock: bvnMajor,
+		BVNLocalBPTRoot:       bvnLocalRoot,
+		BVNAccountsPulled:     bvnPulled,
 	}, nil
+}
+
+func validate(opts Options) error {
+	switch {
+	case opts.HeaderSource == nil:
+		return errors.New("pipeline: HeaderSource required")
+	case opts.PullSource == nil:
+		return errors.New("pipeline: PullSource required")
+	case opts.DNDatabase == nil:
+		return errors.New("pipeline: DNDatabase required")
+	case opts.BVNDatabase == nil:
+		return errors.New("pipeline: BVNDatabase required")
+	case opts.BVN == "":
+		return errors.New("pipeline: BVN required")
+	case opts.BVNAnchorFromDN == nil:
+		return errors.New("pipeline: BVNAnchorFromDN required")
+	case opts.ToMajorBlock == 0:
+		return errors.New("pipeline: ToMajorBlock must be ≥ 1")
+	}
+	return nil
 }
