@@ -49,6 +49,17 @@ type APISource struct {
 	q          api.Querier2
 	anchorPool *url.URL
 
+	// operatorsPage, if non-nil, is the operators key page URL used
+	// by OperatorsDeltaAt to extract validator-set updates. Without
+	// it, OperatorsDeltaAt returns nil — adequate for steady-state
+	// networks where rotation is rare. Production deployments wire
+	// this via SetOperatorsPage.
+	operatorsPage *url.URL
+
+	// partitionUrl, derived from anchorPool's parent, is the scope
+	// for QueryMinorBlock.
+	partitionUrl *url.URL
+
 	// PageSize is the chain-entries page size for anchor pool scans.
 	// Default 256.
 	PageSize uint64
@@ -72,13 +83,32 @@ type anchorEntry struct {
 // NewAPISource returns an APISource over q, scanning the partition's
 // anchor pool (acc://<partition>.acme/anchors). For the DN partition
 // this is acc://dn.acme/anchors; for BVNs it's acc://<bvn>.acme/anchors.
+//
+// The partition URL is derived as the anchor pool's parent.
+// OperatorsDeltaAt is dormant until SetOperatorsPage is called.
 func NewAPISource(q api.Querier2, anchorPool *url.URL) *APISource {
-	return &APISource{
-		q:          q,
-		anchorPool: anchorPool,
-		PageSize:   256,
-		cache:      make(map[uint64]*anchorEntry),
+	var partition *url.URL
+	if anchorPool != nil {
+		if p, ok := anchorPool.Parent(); ok {
+			partition = p
+		}
 	}
+	return &APISource{
+		q:            q,
+		anchorPool:   anchorPool,
+		partitionUrl: partition,
+		PageSize:     256,
+		cache:        make(map[uint64]*anchorEntry),
+	}
+}
+
+// SetOperatorsPage installs the operators key page URL. After this
+// call, OperatorsDeltaAt(h) returns the operator-keybook updates
+// recorded in block h.
+func (s *APISource) SetOperatorsPage(u *url.URL) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.operatorsPage = u
 }
 
 func (s *APISource) Header(ctx context.Context, height uint64) (*Header, error) {
@@ -175,13 +205,112 @@ func extractKeySignature(m messaging.Message) protocol.KeySignature {
 	return nil
 }
 
-// OperatorsDeltaAt returns the operators-keybook deltas applied in
-// the block at the given height. Stub for now; needs to query the
-// operators key book's main chain at the relevant block range and
-// surface UpdateKeyPage / AddCredits / etc. operations. Deferred to
-// the keybookat-integration commit.
+// OperatorsDeltaAt returns the operators-keybook deltas recorded in
+// block `height`. Queries the partition's minor block at that
+// height, filters its entries for transactions whose principal is
+// the configured operators page, and extracts UpdateKeyPage
+// operations.
+//
+// Returns nil (no deltas, no error) when:
+//   - SetOperatorsPage wasn't called (steady-state mode)
+//   - The block exists but contains no operators-keybook updates
+//
+// Returns an error if the underlying queries fail. The walker treats
+// an error here as fatal; the launcher exits and the operator
+// retries. We deliberately don't paper over query failures —
+// returning empty deltas would silently misverify the next block's
+// quorum if a rotation got dropped.
 func (s *APISource) OperatorsDeltaAt(ctx context.Context, height uint64) ([]OperatorsDelta, error) {
-	return nil, nil
+	s.mu.Lock()
+	opPage := s.operatorsPage
+	partition := s.partitionUrl
+	s.mu.Unlock()
+	if opPage == nil || partition == nil {
+		return nil, nil
+	}
+
+	var out []OperatorsDelta
+	var entryStart uint64
+	for {
+		count := s.PageSize
+		expand := true
+		block, err := s.q.QueryMinorBlock(ctx, partition, &api.BlockQuery{
+			Minor: &height,
+			EntryRange: &api.RangeOptions{
+				Start:  entryStart,
+				Count:  &count,
+				Expand: &expand,
+			},
+			OmitEmpty: true,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("query minor block %d: %w", height, err)
+		}
+		if block == nil || block.Entries == nil || len(block.Entries.Records) == 0 {
+			break
+		}
+
+		for _, e := range block.Entries.Records {
+			if e == nil || e.Account == nil || !e.Account.Equal(opPage) {
+				continue
+			}
+			ops, err := extractKeyPageOps(e.Value)
+			if err != nil {
+				return nil, fmt.Errorf("block %d entry %d: %w", height, e.Index, err)
+			}
+			for _, op := range ops {
+				delta, err := encodeKeyPageOp(op)
+				if err != nil {
+					return nil, fmt.Errorf("encode op: %w", err)
+				}
+				out = append(out, delta)
+			}
+		}
+
+		if uint64(len(block.Entries.Records)) < count {
+			break
+		}
+		entryStart += uint64(len(block.Entries.Records))
+	}
+	return out, nil
+}
+
+// extractKeyPageOps pulls the Operation slice out of a chain-entry
+// value if it's an UpdateKeyPage transaction. Other transaction
+// types and non-transaction records return nil.
+func extractKeyPageOps(value api.Record) ([]protocol.KeyPageOperation, error) {
+	if value == nil {
+		return nil, nil
+	}
+	mr, ok := value.(*api.MessageRecord[messaging.Message])
+	if !ok || mr == nil || mr.Message == nil {
+		return nil, nil
+	}
+	tm, ok := mr.Message.(*messaging.TransactionMessage)
+	if !ok || tm.Transaction == nil {
+		return nil, nil
+	}
+	body, ok := tm.Transaction.Body.(*protocol.UpdateKeyPage)
+	if !ok {
+		return nil, nil
+	}
+	return body.Operation, nil
+}
+
+// encodeKeyPageOp marshals a KeyPageOperation into the
+// OperatorsDelta wire format. The keybookat package owns the
+// canonical encoding, but we reproduce its byte-level contract here
+// to avoid pulling keybookat as an import (preserves the layering
+// where headerwalk doesn't depend on consumer packages).
+func encodeKeyPageOp(op protocol.KeyPageOperation) (OperatorsDelta, error) {
+	data, err := op.MarshalBinary()
+	if err != nil {
+		return OperatorsDelta{}, fmt.Errorf("marshal %T: %w", op, err)
+	}
+	return OperatorsDelta{
+		Kind:    op.Type().String(),
+		Payload: data,
+	}, nil
 }
 
 // lookup resolves height to an anchorEntry, scanning + caching as

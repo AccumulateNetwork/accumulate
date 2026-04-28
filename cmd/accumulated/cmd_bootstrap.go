@@ -151,6 +151,9 @@ func runBootstrap(cmd *cobra.Command, args []string) error {
 
 	// 4. Construct sources and run the pipeline.
 	headerSrc := headerwalk.NewAPISource(q, partitionUrl.JoinPath(protocol.AnchorPool))
+	// Surface operators-keybook deltas across the walk so rotation
+	// is handled correctly.
+	headerSrc.SetOperatorsPage(operatorsUrl.JoinPath("1"))
 	pullSrc := pull.NewAPISource(q)
 
 	dbPath := filepath.Join(flagBootstrap.DataDir, "accumulate.db")

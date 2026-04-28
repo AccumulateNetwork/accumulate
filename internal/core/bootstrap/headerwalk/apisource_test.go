@@ -203,3 +203,184 @@ func TestAPISource_OperatorsDeltaStubReturnsNil(t *testing.T) {
 
 // Compile-time check.
 var _ HeaderSource = (*APISource)(nil)
+
+// fakeBlockQuerier extends fakeAnchorQuerier behavior to also handle
+// QueryMinorBlock so OperatorsDeltaAt can be exercised. Anchors and
+// minor blocks live behind the same Querier interface, dispatched on
+// the query type.
+type fakeBlockQuerier struct {
+	anchorScope *url.URL
+	anchorRecs  []*api.ChainEntryRecord[api.Record]
+	partScope   *url.URL
+	blocks      map[uint64]*api.MinorBlockRecord
+}
+
+func (f *fakeBlockQuerier) Query(_ context.Context, scope *url.URL, query api.Query) (api.Record, error) {
+	switch q := query.(type) {
+	case *api.ChainQuery:
+		if !scope.Equal(f.anchorScope) {
+			return nil, errors.New("fake: unexpected anchor scope " + scope.String())
+		}
+		start := uint64(0)
+		count := uint64(len(f.anchorRecs))
+		if q.Range != nil {
+			start = q.Range.Start
+			if q.Range.Count != nil {
+				count = *q.Range.Count
+			}
+		}
+		end := start + count
+		if end > uint64(len(f.anchorRecs)) {
+			end = uint64(len(f.anchorRecs))
+		}
+		if start > uint64(len(f.anchorRecs)) {
+			start = uint64(len(f.anchorRecs))
+		}
+		page := &api.RecordRange[*api.ChainEntryRecord[api.Record]]{
+			Total: uint64(len(f.anchorRecs)),
+			Start: start,
+		}
+		page.Records = append(page.Records, f.anchorRecs[start:end]...)
+		return page, nil
+
+	case *api.BlockQuery:
+		if !scope.Equal(f.partScope) {
+			return nil, errors.New("fake: unexpected block scope " + scope.String())
+		}
+		if q.Minor == nil {
+			return nil, errors.New("fake: only minor-block queries supported")
+		}
+		block, ok := f.blocks[*q.Minor]
+		if !ok {
+			return nil, errors.New("fake: no such block")
+		}
+		return block, nil
+
+	default:
+		return nil, errors.New("fake: unsupported query type")
+	}
+}
+
+// makeUpdateKeyPageEntry builds a chain entry for an UpdateKeyPage
+// transaction with the given operations on the given page URL.
+func makeUpdateKeyPageEntry(t *testing.T, page *url.URL, ops []protocol.KeyPageOperation) *api.ChainEntryRecord[api.Record] {
+	t.Helper()
+	body := &protocol.UpdateKeyPage{Operation: ops}
+	txn := &protocol.Transaction{
+		Header: protocol.TransactionHeader{Principal: page},
+		Body:   body,
+	}
+	tm := &messaging.TransactionMessage{Transaction: txn}
+	mr := &api.MessageRecord[messaging.Message]{ID: txn.ID(), Message: tm}
+	var hashArr [32]byte
+	copy(hashArr[:], txn.GetHash())
+	return &api.ChainEntryRecord[api.Record]{
+		Account: page,
+		Name:    "main",
+		Index:   0,
+		Entry:   hashArr,
+		Value:   mr,
+	}
+}
+
+func TestAPISource_OperatorsDeltaAt_ReturnsKeyPageOps(t *testing.T) {
+	partition := protocol.DnUrl()
+	anchorPool := partition.JoinPath(protocol.AnchorPool)
+	opPage := partition.JoinPath(protocol.Operators, "1")
+
+	// Block 100 contains an UpdateKeyPage with one AddKeyOperation.
+	addEntry := makeUpdateKeyPageEntry(t, opPage, []protocol.KeyPageOperation{
+		&protocol.AddKeyOperation{Entry: protocol.KeySpecParams{KeyHash: bytes32(0x42)}},
+	})
+	now := time.Unix(1700000000, 0).UTC()
+	block100 := &api.MinorBlockRecord{
+		Index:  100,
+		Time:   &now,
+		Source: partition,
+		Entries: &api.RecordRange[*api.ChainEntryRecord[api.Record]]{
+			Total:   1,
+			Records: []*api.ChainEntryRecord[api.Record]{addEntry},
+		},
+	}
+
+	q := &fakeBlockQuerier{
+		anchorScope: anchorPool,
+		partScope:   partition,
+		blocks:      map[uint64]*api.MinorBlockRecord{100: block100},
+	}
+
+	src := NewAPISource(api.Querier2{Querier: q}, anchorPool)
+	src.SetOperatorsPage(opPage)
+
+	deltas, err := src.OperatorsDeltaAt(context.Background(), 100)
+	if err != nil {
+		t.Fatalf("OperatorsDeltaAt: %v", err)
+	}
+	if len(deltas) != 1 {
+		t.Fatalf("got %d deltas, want 1", len(deltas))
+	}
+	if deltas[0].Kind != protocol.KeyPageOperationTypeAdd.String() {
+		t.Errorf("delta Kind = %q, want %q", deltas[0].Kind, protocol.KeyPageOperationTypeAdd)
+	}
+	if len(deltas[0].Payload) == 0 {
+		t.Error("delta Payload empty")
+	}
+}
+
+func TestAPISource_OperatorsDeltaAt_NoOperatorsPageYieldsNil(t *testing.T) {
+	src := NewAPISource(api.Querier2{}, protocol.DnUrl().JoinPath(protocol.AnchorPool))
+	deltas, err := src.OperatorsDeltaAt(context.Background(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deltas != nil {
+		t.Errorf("expected nil deltas without operators page, got %v", deltas)
+	}
+}
+
+func TestAPISource_OperatorsDeltaAt_FiltersNonOperatorsEntries(t *testing.T) {
+	partition := protocol.DnUrl()
+	anchorPool := partition.JoinPath(protocol.AnchorPool)
+	opPage := partition.JoinPath(protocol.Operators, "1")
+	otherPage := partition.JoinPath("network")
+
+	// Block contains an entry on a *different* account. Should be
+	// ignored — no deltas.
+	now := time.Unix(1700000000, 0).UTC()
+	block50 := &api.MinorBlockRecord{
+		Index:  50,
+		Time:   &now,
+		Source: partition,
+		Entries: &api.RecordRange[*api.ChainEntryRecord[api.Record]]{
+			Total: 1,
+			Records: []*api.ChainEntryRecord[api.Record]{
+				makeUpdateKeyPageEntry(t, otherPage, []protocol.KeyPageOperation{
+					&protocol.AddKeyOperation{Entry: protocol.KeySpecParams{KeyHash: bytes32(0x77)}},
+				}),
+			},
+		},
+	}
+
+	q := &fakeBlockQuerier{
+		anchorScope: anchorPool,
+		partScope:   partition,
+		blocks:      map[uint64]*api.MinorBlockRecord{50: block50},
+	}
+
+	src := NewAPISource(api.Querier2{Querier: q}, anchorPool)
+	src.SetOperatorsPage(opPage)
+
+	deltas, err := src.OperatorsDeltaAt(context.Background(), 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(deltas) != 0 {
+		t.Errorf("got %d deltas, want 0 (entry on non-operators account)", len(deltas))
+	}
+}
+
+func bytes32(b byte) []byte {
+	out := make([]byte, 32)
+	out[0] = b
+	return out
+}
