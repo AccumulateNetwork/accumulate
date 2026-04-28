@@ -40,12 +40,14 @@ func (p *P2P) start(inst *Instance) error {
 	// If we resumed from a v2 bootstrap-launched data dir, plumb the
 	// nodestate machine through to NodeInfo so peers see our state.
 	// Reads on every NodeInfo request — the machine is authoritative;
-	// this is a snapshot view.
+	// this is a snapshot view. Heartbeat goroutine refreshes
+	// LastUpdated so consumers don't expire the advertisement.
 	if inst.bootMachine != nil {
 		machine := inst.bootMachine
 		node.SetBootstrapAdvertProvider(func() *apiv3.BootstrapAdvertisement {
 			return advertisementFromMachine(machine)
 		})
+		startHeartbeat(inst.context, machine, HeartbeatInterval)
 	}
 
 	slog.InfoContext(inst.context, "We are", "node-id", node.ID(), "instance-id", inst.id, "module", "run")

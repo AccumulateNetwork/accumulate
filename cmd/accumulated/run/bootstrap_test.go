@@ -7,10 +7,12 @@
 package run
 
 import (
+	"context"
 	"io"
 	"log/slog"
 	"strings"
 	"testing"
+	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/bootpersist"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
@@ -118,6 +120,53 @@ func TestDetectBootstrapState_PinMismatchFails(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "pin mismatch") {
 		t.Fatalf("expected pin mismatch error, got %v", err)
 	}
+}
+
+func TestStartHeartbeat_AdvancesLastUpdated(t *testing.T) {
+	m := nodestate.New()
+	t0 := m.Get().LastUpdated
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	startHeartbeat(ctx, m, 5*time.Millisecond)
+
+	// Wait long enough for at least one tick.
+	deadline := time.Now().Add(200 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		if m.Get().LastUpdated.After(t0) {
+			return // success
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	t.Errorf("Heartbeat did not advance LastUpdated within timeout")
+}
+
+func TestStartHeartbeat_NilMachineNoOp(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	// Must not panic.
+	startHeartbeat(ctx, nil, 1*time.Millisecond)
+}
+
+func TestStartHeartbeat_StopsOnContextCancel(t *testing.T) {
+	m := nodestate.New()
+	ctx, cancel := context.WithCancel(context.Background())
+	startHeartbeat(ctx, m, 1*time.Millisecond)
+	time.Sleep(10 * time.Millisecond)
+	t1 := m.Get().LastUpdated
+	cancel()
+	time.Sleep(20 * time.Millisecond)
+	t2 := m.Get().LastUpdated
+	// After cancel, no further heartbeats. We can't assert exact
+	// equality because there's a tick in flight; instead, take a
+	// late reading and require the gap between t2 and a still-later
+	// reading to be zero (the goroutine should have stopped).
+	time.Sleep(20 * time.Millisecond)
+	t3 := m.Get().LastUpdated
+	if !t3.Equal(t2) {
+		t.Errorf("heartbeat fired after context cancel: t2=%v t3=%v", t2, t3)
+	}
+	_ = t1
 }
 
 func TestAdvertisementFromMachine_NilSafe(t *testing.T) {

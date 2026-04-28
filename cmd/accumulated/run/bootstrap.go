@@ -7,15 +7,24 @@
 package run
 
 import (
+	"context"
 	stderrors "errors"
 	"fmt"
 	"os"
+	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/bootpersist"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pinned"
 	apiv3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 )
+
+// HeartbeatInterval is how often the bootstrap-state heartbeat fires.
+// Consumers discard advertisements older than 2× this; pick something
+// well below typical peer-discovery refresh windows.
+//
+// Exposed as a var (not const) so tests can override.
+var HeartbeatInterval = 30 * time.Second
 
 // detectBootstrapState looks for a v2 bootpersist artifact in the
 // data directory. If present, reconstructs the nodestate Machine
@@ -100,6 +109,31 @@ func advertisementFromMachine(m *nodestate.Machine) *apiv3.BootstrapAdvertisemen
 		HistoryDepth:   ad.HistoryDepth,
 		LastUpdated:    ad.LastUpdated,
 	}
+}
+
+// startHeartbeat fires machine.Heartbeat() on a fixed interval so
+// advertisements published via NodeInfo carry a fresh LastUpdated.
+// Without this, consumers expire the advertisement after their
+// staleness window and fall back to the legacy "treat as COMPLETE"
+// behavior, defeating the capability-routing design.
+//
+// Returns immediately; the goroutine ends when ctx is canceled.
+func startHeartbeat(ctx context.Context, m *nodestate.Machine, interval time.Duration) {
+	if m == nil || interval <= 0 {
+		return
+	}
+	go func() {
+		t := time.NewTicker(interval)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				m.Heartbeat()
+			}
+		}
+	}()
 }
 
 func stateToWire(s nodestate.State) apiv3.BootstrapState {
