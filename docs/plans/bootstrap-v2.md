@@ -1,255 +1,263 @@
-# Bootstrap v2: anchor-walk over DN, with a (DN, BVN) target
+# Bootstrap v2: sync to a tracking node, with a (DN, BVN) target
 
-Supersedes the original `minimum-data-node-bootstrap.md` and replaces
-the first draft of this file. The revised model emerged from
-explicit code-archaeology of how Accumulate actually anchors, signs,
-and stores its proof structure (#3953 → #3984 → review →
-re-think). What follows is the load-bearing model. Earlier sections
-of v2 (account puller, BPT-root convergence, run-handoff,
-advertisement, heartbeat) survive nearly unchanged; the trust phase
-needs significant rework.
+This doc supersedes the original `minimum-data-node-bootstrap.md` and
+the prior drafts of this file. It describes the bootstrap launcher
+as a **sync protocol**, not a one-shot proof. The earlier drafts
+described a single-pass "verify, pull, converge" pipeline; the
+real model is closer to how Bitcoin's IBD or Tendermint's state-sync
+works — establish trust, then catch up to tip, then track.
 
-## The model
+## What the launcher is
 
-A node always runs both **DN and one BVN**. Bootstrap targets the
-(DN, BVN) pair atomically — you can't bootstrap one half. Today
-there's one BVN; the design generalizes when more land.
+A node that participates in Accumulate runs both **DN and one BVN**.
+Bootstrap targets that (DN, BVN) pair atomically. Today there's one
+BVN; the design generalizes when more land.
 
-Like Bitcoin's headers, **anchors are the entire historical proof
-structure**. Transaction-execution rules are the protocol's problem
-during build-time; the launcher does not re-run them. Everything
-hangs on the anchors:
+The launcher is a **passive gossip consumer plus selective puller**
+during boot. It receives gossip from peers, applies messages to its
+local state, fetches account state on demand, and enumerates the
+long-tail BPT in the background. It does **not** participate in P2P
+service routing or respond to peer requests; it consumes only.
+"ACTIVE" is the moment it has enough state to flip to a full P2P
+participant — at which point `accumulated run`'s existing node
+machinery takes over.
 
-- Each Accumulate **major block** is the canonical checkpoint for a
-  partition's state at that boundary (~12 hr cadence). Major-block
-  count for mainnet's lifetime is ~thousands, not millions.
-- At each DN major-block boundary, the DN executor produces a
-  `DirectoryAnchor` (DA) per BVN destination. Each DA carries DN's
-  `PartitionAnchor` (with DN's `RootChainAnchor` and `StateTreeAnchor`
-  — invariant across destinations at a given boundary) plus the
-  per-BVN `Receipts[]`.
-- DN's validators sign `seq.Hash()` of the `SequencedMessage`
-  wrapping each DA. (`internal/core/crosschain/anchoring.go:212–221`
-  + `internal/core/execute/v2/block/msg_block_anchor.go:204–207`.)
-- BVN→DN `BlockValidatorAnchor`s also exist — they carry the BVN's
-  `StateTreeAnchor` and live in `dn.acme/anchors`'s main chain. They
-  are not the trust-phase artifact; they're proven *transitively*
-  via DN once Phase A succeeds.
+## The proof model, restated
 
-## The proof, in one sentence
+> Anchors are the cryptographic spine of the network. Walking back
+> through DN-validator-signed major-block boundaries to a binary-
+> pinned DN genesis snapshot anchor establishes that we're synced
+> to the real DN. Once that's established, every BPT leaf in the
+> DN's state can be Merkle-proven against the trusted current
+> StateTreeAnchor — without us having to recompute or even fetch
+> the underlying account state. The BVN's trusted root falls out of
+> trusted DN state (the BVN→DN anchors stored in `dn.acme/anchors`),
+> so BVN bootstrap reduces to enumeration + gossip — no second
+> spine walk.
 
-> A peer's claimed (DN, BVN) state at the latest major-block
-> boundary is correct iff (a) walking back through DN-validator-
-> signed DAs to genesis terminates at the binary-pinned DN
-> `StateTreeAnchor`, *and* (b) the launcher can locally reconstruct
-> the DN BPT to match the latest verified DN `StateTreeAnchor`,
-> *and* (c) it can locally reconstruct the BVN BPT to match the
-> `StateTreeAnchor` of the BVN→DN anchor sitting in trusted DN state.
+Genesis snapshot anchor: the BPT root committing all DN state at DN
+major-block 1. One per network. Pinned in the binary at
+`internal/core/bootstrap/pinned`. Operators on dev networks can
+override via a flag.
 
-That's it. No genesis-snapshot pin, no validator-set-hash pin, no
-per-account back-walk, no historical user-signature replay.
+## Account state vs chain entries
 
-## Where the bytes live
+Two different categories of data, treated differently at boot:
 
-The proof structure is sharded across BVN anchor pools. Concretely
-for an Apollo-targeted bootstrap:
+- **Account state** = main state (`KeyBook`, `KeyPage`,
+  `DataAccount`, `ADI`, etc.) + secondary state (Directory list,
+  Pending txid list, etc.) + every chain's *head* (count, current
+  anchor, the `merkle.State`). This is everything the production
+  observer at `internal/core/execute/v2/internal/bpt_prod.go` reads
+  to compute the BPT leaf hash. **Compact**. Fetchable cheaply per
+  account.
+- **Chain entries** = the historical 32-byte hashes that built up
+  to the current chain head, plus the transactions / signatures
+  they reference. **Bulky**. Only collected for the spine; never
+  for non-spine accounts at boot.
 
-- DAs DN sent to Apollo: `apollo.acme/anchors`, **main chain**.
-- DN-validator signatures on each of those DAs:
-  `apollo.acme/anchors`'s transaction signature chain for that DA
-  txn (received and recorded via `BlockAnchor` messages).
-- DN's outgoing-anchor sequence numbers: tracked on
-  `dn.acme/anchors`'s `AnchorSequenceChain` — informational; the
-  signed artifact + signatures live on the BVN side.
-- BVN→DN anchors for any BVN: `dn.acme/anchors`, main chain.
-- DN operators key page: `dn.acme/operators/1`.
-- DN major-block index chain: `dn.acme/anchors`'s `major-block`
-  chain. Useful for big-jump pagination during Phase A — but the
-  *signed material* the walker verifies is on the chosen BVN's
-  side.
+For a non-spine account, having state-without-entries means we can
+recompute its BPT leaf hash, can append future entries to its
+chains via `merkle.AddEntry` (which only needs the previous head),
+but cannot answer historical queries like "what was txn X." That's
+fine — the launcher's job is to participate in current consensus,
+not serve historical queries.
 
-## Phases
+## The cryptographic spine
 
-### Phase A — DN trust
+The DN accounts the launcher walks back through, in full (state +
+all chain entries):
 
-Walk backward the chosen BVN's anchor pool main chain, filtering
-for entries whose source is `dn.acme` (i.e., DAs received from DN).
-For each:
+- `dn.acme/anchors` — the anchor pool. Major-block index chain
+  here gives the major-block boundary positions.
+- `dn.acme/ledger` — block index info.
+- `dn.acme/operators` — the operators keybook.
+- `dn.acme/operators/1` — the operators key page (the validator set).
 
-1. Resolve the DA txn (the entry's value when expanded).
-2. Read the txn's signature chain → `BlockAnchor` messages, each
-   wrapping a single DN-validator's `KeySignature` over the DA's
-   `SequencedMessage`.
-3. Reconstruct the `SequencedMessage` (it's directly inside the
-   `BlockAnchor`); verify ≥2/3 of DN's *current* operators key page
-   signed `seq.Hash()`.
-4. Extract DN's `PartitionAnchor.StateTreeAnchor` from the DA — this
-   is the value Phase B will converge against for the latest
-   verified entry.
-5. Continue walking back. Terminate at DN major-block 1: the
-   genesis DA's `PartitionAnchor.StateTreeAnchor` must equal the
-   binary-pinned value for this network.
+These are the only accounts whose **chain entries** are pulled at
+boot. Everything else gets BPT-leaf-only treatment.
 
-The major-block index chain on `dn.acme/anchors` lets the walker
-skip in major-block-sized increments rather than minor-block
-increments — same proof shape, far fewer iterations.
+The spine walk:
 
-When operators rotate (none have happened yet on mainnet), a
-signature-verification failure at some boundary triggers
-re-resolving DN operators state at that older time and continuing
-with the older set. `keybookat.ApplyDelta` already provides the
-delta application; the source-side `OperatorsDeltaAt` extracts
-`UpdateKeyPage` operations from the operators-page main chain in
-the right block range.
+1. Start from the latest major-block boundary the network reports.
+2. Walk back major-block by major-block. At each boundary, pull
+   the DA from the chosen BVN's anchor pool (where DN-validator
+   signatures land), verify ≥2/3 quorum on `seq.Hash()` of the
+   wrapping `SequencedMessage`, extract DN's `PartitionAnchor`.
+3. While walking, replay operators-keybook deltas (`UpdateKeyPage`
+   transactions) so the validator set used to verify older
+   boundaries reflects the set that was current then. Today no
+   rotations have happened on mainnet; the steady-state path is a
+   no-op.
+4. Terminate at major-block 1: its `PartitionAnchor.StateTreeAnchor`
+   must equal the binary-pinned DN genesis snapshot anchor. Fail
+   closed otherwise.
+5. The latest major-block boundary the spine walk verified is
+   then the **trusted current StateTreeAnchor**. Every long-tail
+   BPT leaf can be Merkle-proven against this.
 
-### Phase B — DN data
+Where validator signatures actually land: each DA is signed by
+DN validators with a `protocol.KeySignature` over the
+`SequencedMessage` hash; the signed material is stored on the
+*receiving* BVN's anchor pool (the DA's principal is
+`<bvn>.acme/anchors`). DN itself doesn't keep DN-validator
+signatures on its own outgoing DAs — the launcher reads them from
+the BVN side. (Verified at `internal/core/crosschain/anchoring.go:212–221`
+and `internal/core/execute/v2/block/msg_block_anchor.go:204–207`.)
 
-Pull DN's complete account set into a local database. Run
-`UpdateBPT()`. The root must equal the `StateTreeAnchor` of the
-latest verified DA from Phase A. Single byte comparison; fail
-closed otherwise.
+## The two-track sync protocol
 
-This is exactly the convergence v2's `convergence` package already
-implements — applied to DN.
+After the spine walk produces a trusted current StateTreeAnchor,
+two activities run **concurrently** until DN active:
 
-### Phase C — BVN data
+**Track 1 — BPT enumeration.** Paginated `bptproof.GetPage` against
+the network (any peer that can serve), pulling (key, value-hash)
+pairs with Merkle membership proofs. Each verified pair populates
+a leaf in the local DN BPT.
 
-Read the BVN→DN anchor for the chosen BVN out of *now-trusted* DN
-state. (It's an entry in `dn.acme/anchors`'s main chain; its
-content is committed to DN's BPT, which we just verified matches
-the verified `StateTreeAnchor`.) That anchor's
-`PartitionAnchor.StateTreeAnchor` is the BVN's BPT root, trusted
-by transitivity.
+Pulling from the network as a whole rather than from a fixed
+peer-snapshot lets the BPT advance under us during enumeration —
+new accounts created mid-enumeration appear in later pages because
+we're querying live state, not a frozen view. There's no
+single-instant consistency requirement; each pair is consistent
+with *some* recent root, and gossip will deliver any updates that
+moved the root since.
 
-Pull the BVN's complete account set. Run `UpdateBPT()`. The root
-must equal that anchor's `StateTreeAnchor`. Second convergence,
-same shape.
+**Track 2 — Gossip ingestion.** Subscribe to DN block events via
+`EventService.Subscribe` (or equivalent). Apply incoming messages
+to local state:
 
-### What gets persisted
+- Validate against the latest trusted operators-keybook state.
+- For each touched account, fetch its current state (head + chain
+  heads + secondary) on demand if we don't already have it. The
+  fetched head's hash must match the BPT-leaf value-hash we
+  trust; mismatch means the network and our trusted root have
+  drifted in a way we can't reconcile (peer lying, fork, bug).
+- Append new chain entries forward via `merkle.AddEntry`. The
+  predecessor entries don't need to exist locally; only the
+  previous chain head (which we have).
 
-```
+DN ACTIVE = local DN BPT root tracks the network's signed
+major-block anchors. Steady-state, not a single match. Once we're
+producing matching roots, the DN side is done.
+
+## BVN sync (no spine walk)
+
+Once DN is active, the BVN's trusted root is read out of DN's
+trusted state — the BVN→DN anchor sitting in `dn.acme/anchors`'s
+main chain. That anchor's `PartitionAnchor.StateTreeAnchor` is the
+BVN's BPT root, trusted transitively through DN.
+
+BVN bootstrap is then exactly Track 1 + Track 2 against the BVN —
+enumeration + gossip — without a separate spine walk. BVN ACTIVE
+= local BVN BPT root tracks the BVN's StateTreeAnchor as recorded
+in the trusted DN state (and updated on each DN major-block).
+
+## Persisted artifact
+
+```go
 bootpersist.Artifact {
-  Network                string
-  BVN                    string  // partition name (e.g., "Apollo")
-  DNGenesisStateTreeAnchor [32]byte  // mirrors the binary pin
-  DNVerifiedAnchor       [32]byte
-  DNVerifiedMajorBlock   uint64
-  BVNVerifiedAnchor      [32]byte
-  BVNVerifiedMajorBlock  uint64
-  State                  ...        // BOOTING/ACTIVE/COMPLETE
-  Cursors                ...
+  Network                  string
+  BVN                      string
+  DNGenesisStateTreeAnchor [32]byte  // mirrors binary pin
+  DNVerifiedAnchor         [32]byte  // latest StateTreeAnchor from spine walk
+  DNVerifiedMajorBlock     uint64
+  BVNVerifiedAnchor        [32]byte  // latest BVN StateTreeAnchor from trusted DN
+  BVNVerifiedMajorBlock    uint64
+  State                    StateRecord  // BOOTING / ACTIVE / COMPLETE
+  Cursors                  Cursors      // reserved; not actively updated yet
 }
 ```
 
-`accumulated run` reads this artifact and restores the nodestate
-machine in ACTIVE iff both anchors are populated. Pin override at
-load time compares against `DNGenesisStateTreeAnchor`.
+`accumulated run`'s `detectBootstrapState` reads this on startup
+and restores the nodestate machine in ACTIVE iff both anchors are
+populated. Pin-mismatch (binary's `DNGenesisStateTreeAnchor`
+disagrees with the artifact's) is fail-closed.
 
-## Pin shape
+## What the launcher cannot do
 
-`pinned.Pin` reduces to one field: the DN's `StateTreeAnchor` at
-major-block 1. This is per-network, BVN-agnostic — same pin works
-no matter which BVN the launcher is targeting. Operator override
-via `--genesis-state-tree-anchor` flag for development networks
-where the binary pin is empty.
+- **Respond to peer requests over P2P during boot.** It doesn't
+  have the state. If the launcher must answer API/P2P calls before
+  ACTIVE, two implementation paths are open:
+  - Forward calls to a COMPLETE or legacy peer (transparent proxy)
+    and pass the response back.
+  - Run with a transient libp2p identity that's not advertised
+    until ACTIVE flips and the node adopts its real key.
+- **Validate transactions whose preconditions touch accounts whose
+  state we haven't pulled yet.** Gossip processing has to fetch
+  state on demand or defer the message until state is available.
+- **Serve historical queries.** Chain entries for non-spine
+  accounts aren't kept locally. A `query "what was txid X in 2024"`
+  would need to be re-fetched from a COMPLETE peer.
 
-## Mapping onto existing v2 code
+## Implementation map
 
-What survives nearly unchanged:
+What survives from earlier v2 drafts and is reusable as-is:
 
-- `bootstrap/completeness` — the contract pinning what the puller
-  must round-trip. Independent of trust model.
-- `bootstrap/pull` (`Source` / `DBSource` / `APISource`) — works
-  for any account set; called twice (once for DN, once for BVN).
-- `bootstrap/convergence` — `Verify(batch, expected)` is fine
-  shape. Called twice.
-- `bootstrap/bootpersist` — schema additions; the
-  Save/Load/Peek/atomic-write machinery is right.
-- `bootstrap/nodestate` — orthogonal to trust model.
-- `bootstrap/keybookat` — `ApplyDelta` and `EncodeOperation` work
-  unchanged. Just narrowed to DN operators.
-- `cmd/accumulated/run/bootstrap.go` — detection + restore + the
-  advertisement + heartbeat plumbing. Schema rename of artifact
-  fields propagates here.
-- The wire-format `BootstrapAdvertisement` on NodeInfo. The
-  advertisement's `VerifiedAnchor` field can hold either DN or BVN
-  — needs a small decision (probably DN, since that's the
-  network-shared anchor).
+- `internal/core/bootstrap/bootpersist` — artifact, save/load,
+  format-major guard.
+- `internal/core/bootstrap/nodestate` — state machine,
+  advertisement, restore.
+- `internal/core/bootstrap/pinned` — DN genesis snapshot anchor
+  per network.
+- `internal/core/bootstrap/keybookat` — KeyPageOperation
+  application; used by the spine walker for operators-keybook
+  delta replay.
+- `cmd/accumulated/run/bootstrap.go` — artifact detection,
+  machine restoration, advertisement publisher, heartbeat.
 
-What needs significant rework:
+What needs to be built (or rebuilt from scratch):
 
-- `bootstrap/headerwalk`:
-  - `Header` shape: carries DN's `PartitionAnchor` + the `SequencedMessage` for verification. `AnchorTxHash`-as-CanonicalHash is wrong; replace with explicit `Signable` field that's the `SequencedMessage`.
-  - `HeaderSignature` gains a `Signable` field for live-network use; raw-fields path stays for synthetic tests.
-  - `verifySig` delegates to `KeySignature.Verify(s, sig.Signable)` when `KeySignature` is non-nil.
-  - `APISource` constructor takes the chosen-BVN's anchor pool URL. Walks it backward filtering DAs by `Source == dn.acme`. Operators page is hardcoded to `dn.acme/operators/1`. Major-block index chain on `dn.acme/anchors` is used only for skip-pagination, not as the primary source.
-  - The current "MajorAnchor"-flavored API I sketched earlier doesn't fit; back to per-major-block iteration but with the corrected source.
-  - `OperatorsDeltaAt` queries DN's operators-page main chain in the relevant block range. Today: returns nil because no rotations have occurred.
+- A spine walker that walks `dn.acme/anchors`, `dn.acme/ledger`,
+  `dn.acme/operators`, `dn.acme/operators/1` backward, replays
+  operators-keybook deltas, verifies validator-quorum signatures
+  on every major-block-boundary DA, terminates at the genesis pin.
+- A BPT-enumeration loop using `bptproof.GetPage` (or its v3 API
+  equivalent) that pulls (key, value-hash, proof) batches and
+  populates the local BPT.
+- A gossip-subscription loop using `EventService.Subscribe` that
+  receives block events and applies them to local state, with
+  on-demand state fetches for unfamiliar accounts.
+- A "tracking" predicate: locally produced BPT root catches up to
+  and stays at signed major-block anchors arriving via gossip.
+- A new orchestrator (`cmd/accumulated/cmd_bootstrap.go`) that
+  runs spine walk → start enumeration + gossip concurrently →
+  flip to ACTIVE when tracking → repeat for BVN.
 
-- `bootstrap/pipeline`:
-  - `Bootstrap()` runs A → B → C in sequence.
-  - Returns two `(StateTreeAnchor, MajorBlockIndex)` pairs in the result.
-  - The single `pull.Source` becomes two pulls against two account sets — the DN's minimum set and the BVN's. `Options` accommodates that.
+What needs to be deleted from the prior v2 build:
 
-- `pinned`:
-  - `Pin{ValidatorSetHash, PinnedHeight}` → `Pin{DNGenesisStateTreeAnchor [32]byte}`.
+- `internal/core/bootstrap/pipeline` — wrong shape (one-shot,
+  not sync).
+- `internal/core/bootstrap/pull` — wrong primitive (pulls every
+  chain entry).
+- `internal/core/bootstrap/completeness` — test methodology
+  pulls every entry. Replace with a test that populates by
+  setting chain heads directly.
+- `internal/core/bootstrap/headerwalk` — replace with the spine
+  walker; keep the validator-quorum verification logic.
+- `internal/core/bootstrap/convergence` — single-equality
+  verification is too narrow. The new model has tracking, not
+  one-shot match.
 
-- `cmd/accumulated/cmd_bootstrap.go`:
-  - Flags: `--network`, `--data-dir`, `--bvn` (replaces `--partition`; defaults to the only BVN), `--genesis-state-tree-anchor` (override). Drop `--pinned-hash` / `--pinned-height` / `--skip-quorum` (the last because validator quorum check is no longer optional in production; dev networks use the override flag).
-  - Runs the two-phase pipeline. Saves the new-shape artifact.
-
-- `bootpersist.Artifact`:
-  - Drop `PinnedValidatorSetHash`, `PinnedHeight`, single
-    `VerifiedAnchor`/`VerifiedHeight`.
-  - Add `BVN`, `DNGenesisStateTreeAnchor`, `DNVerifiedAnchor`,
-    `DNVerifiedMajorBlock`, `BVNVerifiedAnchor`,
-    `BVNVerifiedMajorBlock`.
-  - `FormatMajor` bumps to 2.
-
-- Tests: `headerwalk` synthetic-fixture tests adapt to new
-  `Header` shape; `pipeline` integration test runs two phases;
-  `bootstrap_lifecycle_test` saves the new artifact shape;
-  Docker E2E asserts both anchors.
-
-## Execution plan
-
-Phase 0 — this doc (done with this commit).
-
-Phase 1 — `pinned` shape change. Smallest unit; foundation for all
-later phases.
-
-Phase 2 — `headerwalk.Header` + `HeaderSignature` shape change.
-Update walker tests to match.
-
-Phase 3 — `headerwalk.APISource` rewrite around the BVN-side
-walking pattern. New tests against fake querier.
-
-Phase 4 — `bootpersist` schema bump and field rework.
-
-Phase 5 — `pipeline.Bootstrap` two-phase wiring; pipeline tests
-adapt.
-
-Phase 6 — `cmd/accumulated/cmd_bootstrap.go` rewrite. Flag and
-artifact-shape updates.
-
-Phase 7 — `cmd/accumulated/run/bootstrap.go` artifact-field
-rename; lifecycle test updates.
-
-Phase 8 — Docker E2E script update for new artifact assertions.
-
-Each phase is a separate commit + test green at the end. The
-`completeness`, `pull`, `convergence`, `nodestate`, `keybookat`
-packages should not move during this rewrite — they're already
-shape-correct.
-
-## Out of scope for this rewrite
+## Out of scope
 
 - Pin table population — release-process item, not code.
-- Live mainnet smoke — depends on populated pin or operator
-  override.
-- Cursor updates during the walk for crash-resume mid-bootstrap.
-- Multi-BVN selection logic; the launcher takes a single `--bvn`
-  flag and uses it.
-- The "rotation has happened" path in keybookat. Code is in place
-  but exercised only by unit tests. When mainnet first rotates
-  validators, this path will need real-network smoke.
+- Live mainnet smoke — depends on the populated pin (or operator
+  override).
+- Validator-rotation hot path. The keybookat side handles deltas
+  correctly when they appear; spine-walker source-side wiring
+  activates the day mainnet first rotates.
+- Historical-query backfill (we don't keep non-spine chain
+  entries; serving "what was txid X" is a follow-up).
+
+## How to read this branch
+
+The corrected model lives in this doc. The on-branch code
+(`internal/core/bootstrap/*`, `cmd/accumulated/cmd_bootstrap.go`,
+`cmd/accumulated/run/bootstrap.go`) reflects the prior, narrower
+designs and is partially correct (artifact + nodestate + pinned +
+keybookat + run-handoff) but its trust phase, pull strategy, and
+orchestrator do not match this doc. Treat the implementation as
+a partial sketch of the corrected model — the survives-list above
+is what to keep; everything else is a candidate for replacement
+when the rebuild commits land.
