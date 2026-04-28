@@ -14,6 +14,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/bootpersist"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pinned"
+	apiv3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 )
 
 // detectBootstrapState looks for a v2 bootpersist artifact in the
@@ -81,4 +82,35 @@ func (inst *Instance) detectBootstrapState() error {
 		"verifiedHeight", art.VerifiedHeight,
 	)
 	return nil
+}
+
+// advertisementFromMachine projects the in-process nodestate machine
+// onto the wire-format BootstrapAdvertisement that NodeInfo carries.
+// Returns nil if the machine is nil — callers should treat nil as
+// "this node didn't go through the v2 bootstrap launcher."
+func advertisementFromMachine(m *nodestate.Machine) *apiv3.BootstrapAdvertisement {
+	if m == nil {
+		return nil
+	}
+	ad := m.Get()
+	return &apiv3.BootstrapAdvertisement{
+		State:          stateToWire(ad.State),
+		SinceBlock:     ad.SinceBlock,
+		VerifiedAnchor: ad.VerifiedAnchor,
+		HistoryDepth:   ad.HistoryDepth,
+		LastUpdated:    ad.LastUpdated,
+	}
+}
+
+func stateToWire(s nodestate.State) apiv3.BootstrapState {
+	switch s {
+	case nodestate.StateBooting:
+		return apiv3.BootstrapStateBooting
+	case nodestate.StateActive:
+		return apiv3.BootstrapStateActive
+	case nodestate.StateComplete:
+		return apiv3.BootstrapStateComplete
+	default:
+		return apiv3.BootstrapStateUnknown
+	}
 }

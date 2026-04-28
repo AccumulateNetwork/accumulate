@@ -72,6 +72,16 @@ type BlockQuery struct {
 	extraData []byte
 }
 
+type BootstrapAdvertisement struct {
+	fieldsSet      []bool
+	State          BootstrapState `json:"state,omitempty" form:"state" query:"state" validate:"required"`
+	SinceBlock     uint64         `json:"sinceBlock,omitempty" form:"sinceBlock" query:"sinceBlock" validate:"required"`
+	VerifiedAnchor [32]byte       `json:"verifiedAnchor,omitempty" form:"verifiedAnchor" query:"verifiedAnchor" validate:"required"`
+	HistoryDepth   uint64         `json:"historyDepth,omitempty" form:"historyDepth" query:"historyDepth"`
+	LastUpdated    time.Time      `json:"lastUpdated,omitempty" form:"lastUpdated" query:"lastUpdated" validate:"required"`
+	extraData      []byte
+}
+
 type ChainEntryRecord[T Record] struct {
 	fieldsSet []bool
 	// Account is the account (omitted if unambiguous).
@@ -324,13 +334,14 @@ type NetworkStatusOptions struct {
 }
 
 type NodeInfo struct {
-	fieldsSet []bool
-	PeerID    p2p.PeerID        `json:"peerID,omitempty" form:"peerID" query:"peerID" validate:"required"`
-	Network   string            `json:"network,omitempty" form:"network" query:"network" validate:"required"`
-	Services  []*ServiceAddress `json:"services,omitempty" form:"services" query:"services" validate:"required"`
-	Version   string            `json:"version,omitempty" form:"version" query:"version" validate:"required"`
-	Commit    string            `json:"commit,omitempty" form:"commit" query:"commit" validate:"required"`
-	extraData []byte
+	fieldsSet              []bool
+	PeerID                 p2p.PeerID              `json:"peerID,omitempty" form:"peerID" query:"peerID" validate:"required"`
+	Network                string                  `json:"network,omitempty" form:"network" query:"network" validate:"required"`
+	Services               []*ServiceAddress       `json:"services,omitempty" form:"services" query:"services" validate:"required"`
+	Version                string                  `json:"version,omitempty" form:"version" query:"version" validate:"required"`
+	Commit                 string                  `json:"commit,omitempty" form:"commit" query:"commit" validate:"required"`
+	BootstrapAdvertisement *BootstrapAdvertisement `json:"bootstrapAdvertisement,omitempty" form:"bootstrapAdvertisement" query:"bootstrapAdvertisement"`
+	extraData              []byte
 }
 
 type NodeInfoOptions struct {
@@ -615,6 +626,24 @@ func (v *BlockQuery) Copy() *BlockQuery {
 }
 
 func (v *BlockQuery) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *BootstrapAdvertisement) Copy() *BootstrapAdvertisement {
+	u := new(BootstrapAdvertisement)
+
+	u.State = v.State
+	u.SinceBlock = v.SinceBlock
+	u.VerifiedAnchor = v.VerifiedAnchor
+	u.HistoryDepth = v.HistoryDepth
+	u.LastUpdated = v.LastUpdated
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *BootstrapAdvertisement) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *ChainEntryRecord[T]) Copy() *ChainEntryRecord[T] {
 	u := new(ChainEntryRecord[T])
@@ -1283,6 +1312,9 @@ func (v *NodeInfo) Copy() *NodeInfo {
 	}
 	u.Version = v.Version
 	u.Commit = v.Commit
+	if v.BootstrapAdvertisement != nil {
+		u.BootstrapAdvertisement = (v.BootstrapAdvertisement).Copy()
+	}
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -1723,6 +1755,26 @@ func (v *BlockQuery) Equal(u *BlockQuery) bool {
 		return false
 	}
 	if !(v.OmitEmpty == u.OmitEmpty) {
+		return false
+	}
+
+	return true
+}
+
+func (v *BootstrapAdvertisement) Equal(u *BootstrapAdvertisement) bool {
+	if !(v.State == u.State) {
+		return false
+	}
+	if !(v.SinceBlock == u.SinceBlock) {
+		return false
+	}
+	if !(v.VerifiedAnchor == u.VerifiedAnchor) {
+		return false
+	}
+	if !(v.HistoryDepth == u.HistoryDepth) {
+		return false
+	}
+	if !((v.LastUpdated).Equal(u.LastUpdated)) {
 		return false
 	}
 
@@ -2449,6 +2501,14 @@ func (v *NodeInfo) Equal(u *NodeInfo) bool {
 	if !(v.Commit == u.Commit) {
 		return false
 	}
+	switch {
+	case v.BootstrapAdvertisement == u.BootstrapAdvertisement:
+		// equal
+	case v.BootstrapAdvertisement == nil || u.BootstrapAdvertisement == nil:
+		return false
+	case !((v.BootstrapAdvertisement).Equal(u.BootstrapAdvertisement)):
+		return false
+	}
 
 	return true
 }
@@ -2980,6 +3040,80 @@ func (v *BlockQuery) baseIsValid() error {
 
 	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field QueryType is missing")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_BootstrapAdvertisement = []string{
+	1: "State",
+	2: "SinceBlock",
+	3: "VerifiedAnchor",
+	4: "HistoryDepth",
+	5: "LastUpdated",
+}
+
+func (v *BootstrapAdvertisement) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.State == 0) {
+		writer.WriteEnum(1, v.State)
+	}
+	if !(v.SinceBlock == 0) {
+		writer.WriteUint(2, v.SinceBlock)
+	}
+	if !(v.VerifiedAnchor == ([32]byte{})) {
+		writer.WriteHash(3, &v.VerifiedAnchor)
+	}
+	if !(v.HistoryDepth == 0) {
+		writer.WriteUint(4, v.HistoryDepth)
+	}
+	if !(v.LastUpdated == (time.Time{})) {
+		writer.WriteTime(5, v.LastUpdated)
+	}
+
+	_, _, err := writer.Reset(fieldNames_BootstrapAdvertisement)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *BootstrapAdvertisement) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field State is missing")
+	} else if v.State == 0 {
+		errs = append(errs, "field State is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field SinceBlock is missing")
+	} else if v.SinceBlock == 0 {
+		errs = append(errs, "field SinceBlock is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field VerifiedAnchor is missing")
+	} else if v.VerifiedAnchor == ([32]byte{}) {
+		errs = append(errs, "field VerifiedAnchor is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field LastUpdated is missing")
+	} else if v.LastUpdated == (time.Time{}) {
+		errs = append(errs, "field LastUpdated is not set")
 	}
 
 	switch len(errs) {
@@ -4873,6 +5007,7 @@ var fieldNames_NodeInfo = []string{
 	3: "Services",
 	4: "Version",
 	5: "Commit",
+	6: "BootstrapAdvertisement",
 }
 
 func (v *NodeInfo) MarshalBinary() ([]byte, error) {
@@ -4899,6 +5034,9 @@ func (v *NodeInfo) MarshalBinary() ([]byte, error) {
 	}
 	if !(len(v.Commit) == 0) {
 		writer.WriteString(5, v.Commit)
+	}
+	if !(v.BootstrapAdvertisement == nil) {
+		writer.WriteValue(6, v.BootstrapAdvertisement.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_NodeInfo)
@@ -5991,6 +6129,41 @@ func (v *BlockQuery) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_BlockQuery)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *BootstrapAdvertisement) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *BootstrapAdvertisement) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x := new(BootstrapState); reader.ReadEnum(1, x) {
+		v.State = *x
+	}
+	if x, ok := reader.ReadUint(2); ok {
+		v.SinceBlock = x
+	}
+	if x, ok := reader.ReadHash(3); ok {
+		v.VerifiedAnchor = *x
+	}
+	if x, ok := reader.ReadUint(4); ok {
+		v.HistoryDepth = x
+	}
+	if x, ok := reader.ReadTime(5); ok {
+		v.LastUpdated = x
+	}
+
+	seen, err := reader.Reset(fieldNames_BootstrapAdvertisement)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -7134,6 +7307,9 @@ func (v *NodeInfo) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadString(5); ok {
 		v.Commit = x
 	}
+	if x := new(BootstrapAdvertisement); reader.ReadValue(6, x.UnmarshalBinaryFrom) {
+		v.BootstrapAdvertisement = x
+	}
 
 	seen, err := reader.Reset(fieldNames_NodeInfo)
 	if err != nil {
@@ -7728,6 +7904,14 @@ func init() {
 	}, "BlockQuery", "blockQuery")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("state", "string"),
+		encoding.NewTypeField("sinceBlock", "uint64"),
+		encoding.NewTypeField("verifiedAnchor", "bytes32"),
+		encoding.NewTypeField("historyDepth", "uint64"),
+		encoding.NewTypeField("lastUpdated", "string"),
+	}, "BootstrapAdvertisement", "bootstrapAdvertisement")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("recordType", "string"),
 		encoding.NewTypeField("account", "string"),
 		encoding.NewTypeField("name", "string"),
@@ -7937,6 +8121,7 @@ func init() {
 		encoding.NewTypeField("services", "ServiceAddress[]"),
 		encoding.NewTypeField("version", "string"),
 		encoding.NewTypeField("commit", "string"),
+		encoding.NewTypeField("bootstrapAdvertisement", "BootstrapAdvertisement"),
 	}, "NodeInfo", "nodeInfo")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -8146,6 +8331,34 @@ func (v *BlockQuery) MarshalJSON() ([]byte, error) {
 	}
 	if !(!v.OmitEmpty) {
 		u.OmitEmpty = v.OmitEmpty
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *BootstrapAdvertisement) MarshalJSON() ([]byte, error) {
+	u := struct {
+		State          BootstrapState `json:"state,omitempty"`
+		SinceBlock     uint64         `json:"sinceBlock,omitempty"`
+		VerifiedAnchor *string        `json:"verifiedAnchor,omitempty"`
+		HistoryDepth   uint64         `json:"historyDepth,omitempty"`
+		LastUpdated    time.Time      `json:"lastUpdated,omitempty"`
+		ExtraData      *string        `json:"$epilogue,omitempty"`
+	}{}
+	if !(v.State == 0) {
+		u.State = v.State
+	}
+	if !(v.SinceBlock == 0) {
+		u.SinceBlock = v.SinceBlock
+	}
+	if !(v.VerifiedAnchor == ([32]byte{})) {
+		u.VerifiedAnchor = encoding.ChainToJSON(&v.VerifiedAnchor)
+	}
+	if !(v.HistoryDepth == 0) {
+		u.HistoryDepth = v.HistoryDepth
+	}
+	if !(v.LastUpdated == (time.Time{})) {
+		u.LastUpdated = v.LastUpdated
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -8717,12 +8930,13 @@ func (v *NetworkStatus) MarshalJSON() ([]byte, error) {
 
 func (v *NodeInfo) MarshalJSON() ([]byte, error) {
 	u := struct {
-		PeerID    *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"peerID,omitempty"`
-		Network   string                                  `json:"network,omitempty"`
-		Services  encoding.JsonList[*ServiceAddress]      `json:"services,omitempty"`
-		Version   string                                  `json:"version,omitempty"`
-		Commit    string                                  `json:"commit,omitempty"`
-		ExtraData *string                                 `json:"$epilogue,omitempty"`
+		PeerID                 *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"peerID,omitempty"`
+		Network                string                                  `json:"network,omitempty"`
+		Services               encoding.JsonList[*ServiceAddress]      `json:"services,omitempty"`
+		Version                string                                  `json:"version,omitempty"`
+		Commit                 string                                  `json:"commit,omitempty"`
+		BootstrapAdvertisement *BootstrapAdvertisement                 `json:"bootstrapAdvertisement,omitempty"`
+		ExtraData              *string                                 `json:"$epilogue,omitempty"`
 	}{}
 	if !(v.PeerID == ("")) {
 		u.PeerID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.PeerID, Func: p2p.UnmarshalPeerIDJSON}
@@ -8738,6 +8952,9 @@ func (v *NodeInfo) MarshalJSON() ([]byte, error) {
 	}
 	if !(len(v.Commit) == 0) {
 		u.Commit = v.Commit
+	}
+	if !(v.BootstrapAdvertisement == nil) {
+		u.BootstrapAdvertisement = v.BootstrapAdvertisement
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -9047,6 +9264,40 @@ func (v *BlockQuery) UnmarshalJSON(data []byte) error {
 	v.MajorRange = u.MajorRange
 	v.EntryRange = u.EntryRange
 	v.OmitEmpty = u.OmitEmpty
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *BootstrapAdvertisement) UnmarshalJSON(data []byte) error {
+	u := struct {
+		State          BootstrapState `json:"state,omitempty"`
+		SinceBlock     uint64         `json:"sinceBlock,omitempty"`
+		VerifiedAnchor *string        `json:"verifiedAnchor,omitempty"`
+		HistoryDepth   uint64         `json:"historyDepth,omitempty"`
+		LastUpdated    time.Time      `json:"lastUpdated,omitempty"`
+		ExtraData      *string        `json:"$epilogue,omitempty"`
+	}{}
+	u.State = v.State
+	u.SinceBlock = v.SinceBlock
+	u.VerifiedAnchor = encoding.ChainToJSON(&v.VerifiedAnchor)
+	u.HistoryDepth = v.HistoryDepth
+	u.LastUpdated = v.LastUpdated
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	v.State = u.State
+	v.SinceBlock = u.SinceBlock
+	if x, err := encoding.ChainFromJSON(u.VerifiedAnchor); err != nil {
+		return fmt.Errorf("error decoding VerifiedAnchor: %w", err)
+	} else {
+		v.VerifiedAnchor = *x
+	}
+	v.HistoryDepth = u.HistoryDepth
+	v.LastUpdated = u.LastUpdated
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err
@@ -9793,18 +10044,20 @@ func (v *NetworkStatus) UnmarshalJSON(data []byte) error {
 
 func (v *NodeInfo) UnmarshalJSON(data []byte) error {
 	u := struct {
-		PeerID    *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"peerID,omitempty"`
-		Network   string                                  `json:"network,omitempty"`
-		Services  encoding.JsonList[*ServiceAddress]      `json:"services,omitempty"`
-		Version   string                                  `json:"version,omitempty"`
-		Commit    string                                  `json:"commit,omitempty"`
-		ExtraData *string                                 `json:"$epilogue,omitempty"`
+		PeerID                 *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"peerID,omitempty"`
+		Network                string                                  `json:"network,omitempty"`
+		Services               encoding.JsonList[*ServiceAddress]      `json:"services,omitempty"`
+		Version                string                                  `json:"version,omitempty"`
+		Commit                 string                                  `json:"commit,omitempty"`
+		BootstrapAdvertisement *BootstrapAdvertisement                 `json:"bootstrapAdvertisement,omitempty"`
+		ExtraData              *string                                 `json:"$epilogue,omitempty"`
 	}{}
 	u.PeerID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.PeerID, Func: p2p.UnmarshalPeerIDJSON}
 	u.Network = v.Network
 	u.Services = v.Services
 	u.Version = v.Version
 	u.Commit = v.Commit
+	u.BootstrapAdvertisement = v.BootstrapAdvertisement
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -9817,6 +10070,7 @@ func (v *NodeInfo) UnmarshalJSON(data []byte) error {
 	v.Services = u.Services
 	v.Version = u.Version
 	v.Commit = u.Commit
+	v.BootstrapAdvertisement = u.BootstrapAdvertisement
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err

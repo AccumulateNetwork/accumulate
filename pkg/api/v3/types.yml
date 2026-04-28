@@ -48,3 +48,21 @@ ServiceAddress:
     - name: Argument
       type: string
       optional: true
+
+# BootstrapAdvertisement is the v2 bootstrap state machine's
+# advertisement payload. Carried in NodeInfo so peers can route
+# queries by capability (BOOTING / ACTIVE / COMPLETE).
+BootstrapAdvertisement:
+  fields:
+    - name: State
+      type: BootstrapState
+      marshal-as: enum
+    - name: SinceBlock
+      type: uint
+    - name: VerifiedAnchor
+      type: hash
+    - name: HistoryDepth
+      type: uint
+      optional: true
+    - name: LastUpdated
+      type: time

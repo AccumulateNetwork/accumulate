@@ -120,6 +120,41 @@ func TestDetectBootstrapState_PinMismatchFails(t *testing.T) {
 	}
 }
 
+func TestAdvertisementFromMachine_NilSafe(t *testing.T) {
+	if got := advertisementFromMachine(nil); got != nil {
+		t.Errorf("expected nil for nil machine, got %+v", got)
+	}
+}
+
+func TestAdvertisementFromMachine_BootingMachine(t *testing.T) {
+	m := nodestate.New() // starts in BOOTING
+	ad := advertisementFromMachine(m)
+	if ad == nil {
+		t.Fatal("expected non-nil advertisement")
+	}
+	if ad.VerifiedAnchor != ([32]byte{}) {
+		t.Errorf("BOOTING advertisement should have zero VerifiedAnchor")
+	}
+	if ad.LastUpdated.IsZero() {
+		t.Error("LastUpdated should be set on advertisement")
+	}
+}
+
+func TestAdvertisementFromMachine_ActiveMachine(t *testing.T) {
+	m := nodestate.New()
+	anchor := [32]byte{0xab}
+	if !m.PromoteToActive(anchor, 12345) {
+		t.Fatal("PromoteToActive failed")
+	}
+	ad := advertisementFromMachine(m)
+	if ad.SinceBlock != 12345 {
+		t.Errorf("SinceBlock = %d, want 12345", ad.SinceBlock)
+	}
+	if ad.VerifiedAnchor != anchor {
+		t.Errorf("VerifiedAnchor mismatch")
+	}
+}
+
 func TestDetectBootstrapState_PinMatchSucceeds(t *testing.T) {
 	dir := t.TempDir()
 	const network = "test-network-with-pin-match"

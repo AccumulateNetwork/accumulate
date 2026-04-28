@@ -14,6 +14,18 @@ import (
 	"strings"
 )
 
+// BootstrapStateUnknown .
+const BootstrapStateUnknown BootstrapState = 0
+
+// BootstrapStateBooting .
+const BootstrapStateBooting BootstrapState = 1
+
+// BootstrapStateActive .
+const BootstrapStateActive BootstrapState = 2
+
+// BootstrapStateComplete .
+const BootstrapStateComplete BootstrapState = 3
+
 // EventTypeError .
 const EventTypeError EventType = 1
 
@@ -136,6 +148,71 @@ const ServiceTypeFaucet ServiceType = 9
 
 // ServiceTypeSnapshot is the type of [SnapshotService].
 const ServiceTypeSnapshot ServiceType = 10
+
+// GetEnumValue returns the value of the Bootstrap State
+func (v BootstrapState) GetEnumValue() uint64 { return uint64(v) }
+
+// SetEnumValue sets the value. SetEnumValue returns false if the value is invalid.
+func (v *BootstrapState) SetEnumValue(id uint64) bool {
+	u := BootstrapState(id)
+	switch u {
+	case BootstrapStateUnknown, BootstrapStateBooting, BootstrapStateActive, BootstrapStateComplete:
+		*v = u
+		return true
+	}
+	return false
+}
+
+// String returns the name of the Bootstrap State.
+func (v BootstrapState) String() string {
+	switch v {
+	case BootstrapStateUnknown:
+		return "unknown"
+	case BootstrapStateBooting:
+		return "booting"
+	case BootstrapStateActive:
+		return "active"
+	case BootstrapStateComplete:
+		return "complete"
+	}
+	return fmt.Sprintf("BootstrapState:%d", v)
+}
+
+// BootstrapStateByName returns the named Bootstrap State.
+func BootstrapStateByName(name string) (BootstrapState, bool) {
+	switch strings.ToLower(name) {
+	case "unknown":
+		return BootstrapStateUnknown, true
+	case "booting":
+		return BootstrapStateBooting, true
+	case "active":
+		return BootstrapStateActive, true
+	case "complete":
+		return BootstrapStateComplete, true
+	}
+	return 0, false
+}
+
+// MarshalJSON marshals the Bootstrap State to JSON as a string.
+func (v BootstrapState) MarshalJSON() ([]byte, error) {
+	return json.Marshal(v.String())
+}
+
+// UnmarshalJSON unmarshals the Bootstrap State from JSON as a string.
+func (v *BootstrapState) UnmarshalJSON(data []byte) error {
+	var s string
+	err := json.Unmarshal(data, &s)
+	if err != nil {
+		return err
+	}
+
+	var ok bool
+	*v, ok = BootstrapStateByName(s)
+	if !ok || strings.ContainsRune(v.String(), ':') {
+		return fmt.Errorf("invalid Bootstrap State %q", s)
+	}
+	return nil
+}
 
 // GetEnumValue returns the value of the Event Type
 func (v EventType) GetEnumValue() uint64 { return uint64(v) }

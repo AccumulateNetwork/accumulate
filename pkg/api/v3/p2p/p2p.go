@@ -11,6 +11,7 @@ import (
 	"crypto/ed25519"
 	"net"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/libp2p/go-libp2p"
@@ -39,6 +40,31 @@ type Node struct {
 	host     host.Host
 	tracker  dial.Tracker
 	services []*serviceHandler
+
+	// bootstrapAdvert is read on every NodeInfo request and embedded
+	// in the response. Stored as an atomic.Pointer so concurrent
+	// SetBootstrapAdvertProvider/NodeInfo doesn't race. nil =
+	// "this node didn't go through the v2 bootstrap launcher" —
+	// peers see no advertisement and apply the legacy fallback.
+	bootstrapAdvert atomic.Pointer[bootstrapAdvertHolder]
+}
+
+// bootstrapAdvertHolder wraps the provider func so atomic.Pointer
+// can swap the entire registration as one unit.
+type bootstrapAdvertHolder struct {
+	provider func() *api.BootstrapAdvertisement
+}
+
+// SetBootstrapAdvertProvider installs (or clears, if fn is nil) a
+// function NodeInfo calls on every request to populate the
+// BootstrapAdvertisement field. Synchronization-safe with concurrent
+// NodeInfo calls.
+func (n *Node) SetBootstrapAdvertProvider(fn func() *api.BootstrapAdvertisement) {
+	if fn == nil {
+		n.bootstrapAdvert.Store(nil)
+		return
+	}
+	n.bootstrapAdvert.Store(&bootstrapAdvertHolder{provider: fn})
 }
 
 // Options are options for creating a [Node].

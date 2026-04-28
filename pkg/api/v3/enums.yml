@@ -115,3 +115,19 @@ KnownPeerStatus:
   Bad:
     name: PeerStatusIsKnownBad
     value: 2
+
+# BootstrapState mirrors internal nodestate.State on the wire.
+# Carried in NodeInfo so peers can route by capability.
+BootstrapState:
+  Unknown:
+    name: BootstrapStateUnknown
+    value: 0
+  Booting:
+    name: BootstrapStateBooting
+    value: 1
+  Active:
+    name: BootstrapStateActive
+    value: 2
+  Complete:
+    name: BootstrapStateComplete
+    value: 3
