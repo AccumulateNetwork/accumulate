@@ -28,32 +28,61 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// Header is the minimum payload the walker needs to verify a block.
-// Bigger payloads (full transactions, anchor chains) sit in other
-// records on the source; the walker only requires that this much be
-// committed to and signed.
+// Header is what the walker needs to verify a block. It carries the
+// fields the launcher consumes (StateTreeRoot for convergence, Height
+// for indexing) plus the AnchorTxHash that validators actually signed.
+//
+// Wire alignment: in Accumulate's protocol, validators sign the hash
+// of an anchor transaction (BlockValidatorAnchor / DirectoryAnchor)
+// whose body embeds a PartitionAnchor. The PartitionAnchor's
+// MinorBlockIndex / RootChainAnchor / StateTreeAnchor map onto our
+// Height / ChainRoot / StateTreeRoot. The hash validators signed is
+// the transaction hash, not a synthetic field-by-field hash — so
+// CanonicalHash returns AnchorTxHash directly. A source that mints
+// synthetic Headers (test fixtures) sets AnchorTxHash to whatever
+// it wants signers to sign over.
 type Header struct {
-	// Height is the partition's minor block height for this header.
+	// Height is the partition's minor block height for this header
+	// (PartitionAnchor.MinorBlockIndex).
 	Height uint64
 
 	// Time is the block time as recorded by the network.
 	Time time.Time
 
-	// ChainRoot is the root chain anchor of this block.
+	// ChainRoot is the partition's root chain anchor at this block
+	// (PartitionAnchor.RootChainAnchor).
 	ChainRoot [32]byte
 
-	// StateTreeRoot is the BPT root committed by this block. The
-	// data phase's locally reconstructed BPT must equal this for
-	// convergence to succeed.
+	// StateTreeRoot is the BPT root committed by this block
+	// (PartitionAnchor.StateTreeAnchor). The data phase's locally
+	// reconstructed BPT must equal this for convergence to succeed.
 	StateTreeRoot [32]byte
+
+	// AnchorTxHash is the hash of the anchor transaction that
+	// validators signed. For synthetic test fixtures, set this to
+	// the value signers signed over. For live sources, this is the
+	// anchor txn's GetHash().
+	AnchorTxHash [32]byte
 }
 
-// CanonicalHash returns the deterministic hash that validators sign
-// over. The encoding is intentionally simple and append-only: any
-// future addition extends, never reorders. Verifiers and signers must
-// agree byte-for-byte; that's what makes this useful as a signature
-// target.
+// CanonicalHash returns the value validator signatures must be
+// verified against. For Headers populated from a live source, this
+// is the anchor transaction hash. For synthetic Headers, it's
+// whatever the test fixture set as AnchorTxHash.
+//
+// If AnchorTxHash is the zero value (which would normally indicate a
+// misconfigured source), we fall back to a deterministic hash over
+// (Height, Time, ChainRoot, StateTreeRoot). The fallback is intended
+// for early test code that hasn't been updated yet — production
+// sources MUST populate AnchorTxHash.
 func (h *Header) CanonicalHash() [32]byte {
+	if h.AnchorTxHash != ([32]byte{}) {
+		return h.AnchorTxHash
+	}
+	return h.fieldsHash()
+}
+
+func (h *Header) fieldsHash() [32]byte {
 	hh := sha256.New()
 	var buf [8]byte
 
