@@ -152,6 +152,64 @@ func TestBundle_RoundTrip(t *testing.T) {
 	}
 }
 
+// TestBundle_BinaryRoundTrip ensures Marshal/UnmarshalBinary preserve
+// every persisted field including signatures (issue #3983).
+func TestBundle_BinaryRoundTrip(t *testing.T) {
+	vs := mkValidators(t, 3)
+	original := &Bundle{
+		Version:            1,
+		Network:            "testnet",
+		Partition:          "Directory",
+		MajorBlockIndex:    100,
+		MinorBlockIndex:    1234,
+		MajorBlockTimeUnix: 1700000000,
+		PerPartitionAnchors: []PartitionAnchorEntry{
+			{Partition: "Directory", RootChainAnchor: [32]byte{0x11}, StateTreeAnchor: [32]byte{0x22}},
+			{Partition: "Apollo", RootChainAnchor: [32]byte{0x33}, StateTreeAnchor: [32]byte{0x44}},
+		},
+		ValidatorSet: validatorEntries(vs),
+	}
+	for _, v := range vs {
+		signWith(t, original, v)
+	}
+
+	wire, err := original.MarshalBinary()
+	if err != nil {
+		t.Fatalf("MarshalBinary: %v", err)
+	}
+
+	var got Bundle
+	if err := got.UnmarshalBinary(wire); err != nil {
+		t.Fatalf("UnmarshalBinary: %v", err)
+	}
+
+	if got.CanonicalHash() != original.CanonicalHash() {
+		t.Error("canonical hash differs after round-trip")
+	}
+	if len(got.Signatures) != len(original.Signatures) {
+		t.Errorf("signature count = %d, want %d", len(got.Signatures), len(original.Signatures))
+	}
+	if got.MajorBlockIndex != original.MajorBlockIndex {
+		t.Error("MajorBlockIndex lost in round-trip")
+	}
+
+	// Verify still works after round-trip.
+	if err := got.Verify(VerifyOptions{}); err != nil {
+		t.Errorf("Verify after round-trip: %v", err)
+	}
+}
+
+func TestBundle_UnmarshalBinary_TruncatedFails(t *testing.T) {
+	b := &Bundle{Version: 1, Network: "x", Partition: "y"}
+	wire, _ := b.MarshalBinary()
+	var got Bundle
+	if err := got.UnmarshalBinary(wire[:len(wire)/2]); err == nil {
+		t.Fatal("expected truncation error")
+	} else if !strings.Contains(err.Error(), "truncated") {
+		t.Errorf("error = %v, want 'truncated'", err)
+	}
+}
+
 func TestCanonicalHash_OrderInsensitive(t *testing.T) {
 	vs := mkValidators(t, 3)
 	a := &Bundle{
