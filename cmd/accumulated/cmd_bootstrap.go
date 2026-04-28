@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/bootpersist"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/headerwalk"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/keybookat"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pinned"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pipeline"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
@@ -172,9 +173,15 @@ func runBootstrap(cmd *cobra.Command, args []string) error {
 		EndHeight:           endHeight,
 		InitialValidatorSet: initialSet,
 		QuorumOpts:          quorumOpts,
-		PullSource:          pullSrc,
-		Accounts:            accounts,
-		Database:            db,
+		// keybookat applies operators-keybook deltas across the
+		// walk so the validator set evolves correctly when there's
+		// rotation between the pinned height and current. For
+		// blocks without operators-keybook updates this is a no-op
+		// (which is the steady-state case).
+		ApplyDelta: keybookat.ApplyDelta,
+		PullSource: pullSrc,
+		Accounts:   accounts,
+		Database:   db,
 	})
 	if err != nil {
 		return fmt.Errorf("bootstrap pipeline: %w", err)
