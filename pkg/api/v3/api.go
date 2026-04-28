@@ -34,6 +34,11 @@ type EventType uint64
 // KnownPeerStatus is the status of a known peer.
 type KnownPeerStatus int64
 
+// BootstrapState mirrors the internal nodestate.State on the wire.
+// Carried in NodeInfo so peers can route queries by capability
+// (BOOTING / ACTIVE / COMPLETE). Issue #3982, parent #3953.
+type BootstrapState uint64
+
 // Query is an API query.
 type Query interface {
 	encoding.UnionValue

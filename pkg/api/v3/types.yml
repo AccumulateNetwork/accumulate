@@ -55,3 +55,21 @@ BptLeafSummary:
       type: hash
     - name: ValueHash
       type: hash
+
+# BootstrapAdvertisement is the bootstrap state machine's advertisement
+# payload. Carried in NodeInfo so peers can route queries by capability
+# (BOOTING / ACTIVE / COMPLETE). Issue #3982, parent #3953.
+BootstrapAdvertisement:
+  fields:
+    - name: State
+      type: BootstrapState
+      marshal-as: enum
+    - name: SinceBlock
+      type: uint
+    - name: BptRootMatched
+      type: hash
+    - name: HistoryDepth
+      type: uint
+      optional: true
+    - name: LastUpdated
+      type: time
