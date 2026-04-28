@@ -168,7 +168,7 @@ func (s *APISource) Signatures(ctx context.Context, height uint64) ([]HeaderSign
 			if e == nil || e.Value == nil || e.Value.Message == nil {
 				continue
 			}
-			ks := extractKeySignature(e.Value.Message)
+			ks, signable := extractKeySigAndSignable(e.Value.Message)
 			if ks == nil {
 				continue
 			}
@@ -178,6 +178,7 @@ func (s *APISource) Signatures(ctx context.Context, height uint64) ([]HeaderSign
 				PublicKeyHash: pkh,
 				Signature:     ks.GetSignature(),
 				KeySignature:  ks,
+				Signable:      signable,
 			})
 		}
 		if uint64(len(page.Records)) < count {
@@ -188,21 +189,37 @@ func (s *APISource) Signatures(ctx context.Context, height uint64) ([]HeaderSign
 	return out, nil
 }
 
-// extractKeySignature pulls the validator's KeySignature out of the
-// messaging wrappers used on the anchor txn's signature chain.
-// BlockAnchor.Signature is already typed as KeySignature;
-// SignatureMessage.Signature is the broader Signature interface and
-// only carries a KeySignature for validator-class signers.
-func extractKeySignature(m messaging.Message) protocol.KeySignature {
+// extractKeySigAndSignable pulls the validator's KeySignature plus
+// the Signable it was made over out of the messaging wrappers on the
+// anchor txn's signature chain.
+//
+// For BlockAnchor: signature was made over BlockAnchor.Anchor (the
+// SequencedMessage). Returns both.
+//
+// For SignatureMessage: the Signable is the underlying transaction
+// referenced by SignatureMessage.TxID — but we don't have the txn
+// inline; the caller would need a separate fetch. Return the
+// KeySignature with a nil Signable in that case; verifySig falls
+// back to using the Header itself, which only verifies cleanly when
+// the Header's Sequenced is set (which it is for BlockAnchor-derived
+// headers).
+//
+// Live anchor signatures on the bootstrap path are BlockAnchor
+// wrappers, so the BlockAnchor branch is the hot path.
+func extractKeySigAndSignable(m messaging.Message) (protocol.KeySignature, protocol.Signable) {
 	switch v := m.(type) {
 	case *messaging.BlockAnchor:
-		return v.Signature
+		// BlockAnchor.Signature is already typed as KeySignature.
+		// BlockAnchor.Anchor is the SequencedMessage validators
+		// signed over.
+		seq, _ := v.Anchor.(*messaging.SequencedMessage)
+		return v.Signature, seq
 	case *messaging.SignatureMessage:
 		if ks, ok := v.Signature.(protocol.KeySignature); ok {
-			return ks
+			return ks, nil
 		}
 	}
-	return nil
+	return nil, nil
 }
 
 // OperatorsDeltaAt returns the operators-keybook deltas recorded in

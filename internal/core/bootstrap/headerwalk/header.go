@@ -25,25 +25,32 @@ import (
 	"fmt"
 	"time"
 
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // Header is what the walker needs to verify a block. It carries the
 // fields the launcher consumes (StateTreeRoot for convergence, Height
-// for indexing) plus the AnchorTxHash that validators actually signed.
+// for indexing) plus the SequencedMessage that validators actually
+// signed.
 //
-// Wire alignment: in Accumulate's protocol, validators sign the hash
-// of an anchor transaction (BlockValidatorAnchor / DirectoryAnchor)
-// whose body embeds a PartitionAnchor. The PartitionAnchor's
-// MinorBlockIndex / RootChainAnchor / StateTreeAnchor map onto our
-// Height / ChainRoot / StateTreeRoot. The hash validators signed is
-// the transaction hash, not a synthetic field-by-field hash — so
-// CanonicalHash returns AnchorTxHash directly. A source that mints
-// synthetic Headers (test fixtures) sets AnchorTxHash to whatever
-// it wants signers to sign over.
+// Wire alignment with Accumulate's protocol (verified at
+// internal/core/crosschain/anchoring.go:212–221 for the producer
+// side and internal/core/execute/v2/block/msg_block_anchor.go:204–207
+// for the verifier): validators sign sha256(MarshalBinary(seq))
+// where seq is the SequencedMessage wrapping the anchor txn — NOT
+// the anchor txn's own GetHash(). Header.Sequenced carries that
+// SequencedMessage so CanonicalHash can return seq.Hash() directly,
+// and HeaderSignature.Signable can point to it for protocol.
+// KeySignature.Verify.
+//
+// Synthetic test fixtures that don't construct full SequencedMessage
+// values leave Sequenced nil; CanonicalHash falls back to a fields
+// hash so the raw-ed25519 test path keeps working. Production
+// sources MUST populate Sequenced.
 type Header struct {
-	// Height is the partition's minor block height for this header
-	// (PartitionAnchor.MinorBlockIndex).
+	// Height is the partition's block index for this header
+	// (PartitionAnchor.MinorBlockIndex for the source partition).
 	Height uint64
 
 	// Time is the block time as recorded by the network.
@@ -58,24 +65,33 @@ type Header struct {
 	// reconstructed BPT must equal this for convergence to succeed.
 	StateTreeRoot [32]byte
 
-	// AnchorTxHash is the hash of the anchor transaction that
-	// validators signed. For synthetic test fixtures, set this to
-	// the value signers signed over. For live sources, this is the
-	// anchor txn's GetHash().
+	// Sequenced is the SequencedMessage validators signed over.
+	// Live sources populate this from a BlockAnchor message's
+	// Anchor field; tests may leave it nil to use the fields-hash
+	// fallback in CanonicalHash.
+	Sequenced *messaging.SequencedMessage
+
+	// AnchorTxHash is a transitional field from the first v2 draft
+	// (which mistakenly used the anchor txn's GetHash() as the
+	// signed value). Removed when phase 3 rewrites APISource to
+	// populate Sequenced. Existing test fixtures that rely on it
+	// continue to work via the CanonicalHash precedence rules.
+	//
+	// Deprecated: use Sequenced.
 	AnchorTxHash [32]byte
 }
 
 // CanonicalHash returns the value validator signatures must be
-// verified against. For Headers populated from a live source, this
-// is the anchor transaction hash. For synthetic Headers, it's
-// whatever the test fixture set as AnchorTxHash.
+// verified against. Precedence:
 //
-// If AnchorTxHash is the zero value (which would normally indicate a
-// misconfigured source), we fall back to a deterministic hash over
-// (Height, Time, ChainRoot, StateTreeRoot). The fallback is intended
-// for early test code that hasn't been updated yet — production
-// sources MUST populate AnchorTxHash.
+//	1. Sequenced != nil → seq.Hash() (live-source headers)
+//	2. AnchorTxHash != zero → AnchorTxHash (transitional path
+//	   from the first v2 draft; removed in phase 3)
+//	3. otherwise → fields hash (synthetic test fixtures)
 func (h *Header) CanonicalHash() [32]byte {
+	if h.Sequenced != nil {
+		return h.Sequenced.Hash()
+	}
 	if h.AnchorTxHash != ([32]byte{}) {
 		return h.AnchorTxHash
 	}
@@ -115,32 +131,40 @@ type ValidatorSet struct {
 	Validators []Validator
 }
 
-// HeaderSignature is one validator's signature on a header's
-// canonical hash. Two carrier formats are supported:
+// HeaderSignature is one validator's signature on a header. Two
+// carrier formats are supported:
 //
 //   - PublicKeyHash + Signature (raw): used by test fixtures and any
 //     caller that has already extracted the bytes. Verification path
-//     dispatches on Validator.Type and does direct ed25519 / etc.
+//     dispatches on Validator.Type and does direct ed25519 / etc
+//     against the header's CanonicalHash.
 //
-//   - KeySignature: used by APISource and any caller pulling
-//     signatures from the live network. Verification delegates to
-//     the protocol's KeySignature.Verify, which handles the
-//     full Accumulate signature semantics (init/transaction hashes,
-//     versioned signers, signature scheme dispatch). When set, the
-//     raw fields are ignored.
+//   - KeySignature + Signable: used by APISource and any caller
+//     pulling signatures from the live network. KeySignature is the
+//     validator's protocol-level signature object; Signable is the
+//     thing it was made over (typically the SequencedMessage from
+//     the BlockAnchor wire message — NOT the inner anchor txn).
+//     Verification delegates to KeySignature.Verify(KeySignature,
+//     Signable), which handles the full Accumulate signature
+//     semantics. When KeySignature is set, the raw fields are
+//     ignored.
 type HeaderSignature struct {
 	PublicKeyHash [32]byte
 	Signature     []byte
 
 	// KeySignature, if non-nil, supersedes PublicKeyHash + Signature.
-	// VerifyQuorum delegates to KeySignature.Verify against the
-	// header's canonical hash.
 	KeySignature protocol.KeySignature
+
+	// Signable is the value KeySignature was made over. Required
+	// when KeySignature is set; nil falls back to using the Header
+	// itself (which only works if Sequenced is set on the Header,
+	// or the test fixture is using fields-hash semantics).
+	Signable protocol.Signable
 }
 
 // Hash satisfies protocol.Signable so KeySignature.Verify can take
-// *Header directly. Returns the canonical hash (anchor txn hash for
-// live-source headers).
+// *Header directly when no explicit Signable is supplied (test path).
+// Returns the canonical hash (seq.Hash() for live-source headers).
 func (h *Header) Hash() [32]byte {
 	return h.CanonicalHash()
 }
@@ -223,13 +247,19 @@ func VerifyQuorum(h *Header, set ValidatorSet, sigs []HeaderSignature, opts Quor
 // carries a KeySignature (live network), raw-bytes path otherwise
 // (test fixtures). Unsupported signature types return false, leaving
 // the threshold rule to decide outcome.
+//
+// For the protocol-aware path: KeySignature.Verify takes a Signable.
+// If HeaderSignature.Signable is set (live path: the SequencedMessage
+// from the BlockAnchor), use it. Otherwise fall back to the Header
+// itself, which only verifies cleanly when h.Sequenced is set
+// (CanonicalHash returns seq.Hash()).
 func verifySig(v Validator, s HeaderSignature, h *Header) bool {
 	if s.KeySignature != nil {
-		// Protocol's Verify dispatches on the KeySignature's
-		// concrete type and handles full Accumulate signature
-		// semantics (versioned signers, init/transaction hashes,
-		// signature scheme dispatch).
-		return s.KeySignature.Verify(s.KeySignature, h)
+		var target protocol.Signable = h
+		if s.Signable != nil {
+			target = s.Signable
+		}
+		return s.KeySignature.Verify(s.KeySignature, target)
 	}
 
 	// Raw-bytes path: caller supplied (PublicKeyHash, Signature)
