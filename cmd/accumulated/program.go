@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	cmdutil "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
@@ -57,6 +58,17 @@ func (p *Program) Run() error {
 	err := p.Start()
 	if err != nil {
 		return err
+	}
+
+	// Bootstrap-v3 resume hook (#3989). Runs synchronously after
+	// Start completes — if the persisted nodestate is BOOTING, this
+	// blocks until the orchestrator's steady-state phase promotes
+	// the node to ACTIVE (or ctx is canceled). No-op on legacy nodes
+	// or already-ACTIVE persisted state.
+	if p.primary != nil {
+		if err := run.ResumeIfBooting(ctx, p.primary.WorkDir(), p.primary.DB()); err != nil {
+			return errors.UnknownError.WithFormat("bootstrap-v3 resume: %w", err)
+		}
 	}
 
 	<-ctx.Done()

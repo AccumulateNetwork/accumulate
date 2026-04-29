@@ -195,6 +195,22 @@ func (d *Daemon) P2P_TESTONLY() *p2p.Node         { return d.p2pnode }
 func (d *Daemon) API() *nodeapi.Handler           { return d.api }
 func (d *Daemon) EventBus() *events.Bus           { return d.eventBus }
 
+// DB returns the daemon's database. Used by the bootstrap-v3 run
+// handoff (#3989) to attach orchestrator.RunSteady to the live DB
+// after Start completes. The DB_TESTONLY name is preserved for
+// existing test sites; new callers should use DB.
+func (d *Daemon) DB() *database.Database { return d.db }
+
+// P2P returns the daemon's libp2p node. Used by the bootstrap-v3
+// advertisement publisher (#3991) to register the bootstrap state
+// service on transitions to ACTIVE/COMPLETE.
+func (d *Daemon) P2P() *p2p.Node { return d.p2pnode }
+
+// WorkDir returns the daemon's working directory. Used by run-time
+// hooks that need to read or write files alongside the daemon's
+// data directory (e.g., bootstrap-state.json per #3990).
+func (d *Daemon) WorkDir() string { return d.Config.RootDir }
+
 // StartSecondary starts this daemon as a secondary process of the given daemon
 // (which must already be running).
 func (d *Daemon) StartSecondary(e *Daemon, others ...*Daemon) error {
