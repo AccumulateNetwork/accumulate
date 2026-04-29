@@ -22,6 +22,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/clientsrc"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/orchestrator"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/websocket"
@@ -118,6 +119,11 @@ func runBootstrap(cmd *cobra.Command, _ []string) {
 	dbPath := filepath.Join(dataDir, "bootstrap-"+flagBootstrap.Partition+".db")
 	db, err := database.OpenBadger(dbPath, nil)
 	checkf(err, "open local db at %s", dbPath)
+	// Install the production observer so the BPT update path
+	// (UpdateBPT during pull / gossip commits) can compute per-account
+	// hashes. Without this, batch.UpdateBPT errors with "observer is
+	// not set".
+	db.SetObserver(execute.NewDatabaseObserver())
 
 	// Pick AnchorSource: production over flag, dev fallback.
 	var anchors orchestrator.AnchorSource
