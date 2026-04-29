@@ -170,9 +170,14 @@ func NewHandler(opts Options) (*Handler, error) {
 
 	// Setup mux
 	v3h := ws.FallbackTo(v3)
-	h.mux.POST("/v3", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	v3Adapter := func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		v3h.ServeHTTP(w, r)
-	})
+	}
+	// POST handles JSON-RPC; GET handles WebSocket upgrades. Without
+	// the GET route the launcher's websocket.NewClient gets a 405
+	// from httprouter and reports "bad handshake".
+	h.mux.POST("/v3", v3Adapter)
+	h.mux.GET("/v3", v3Adapter)
 
 	h.mux.POST("/eth", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		eth.ServeHTTP(w, r)
