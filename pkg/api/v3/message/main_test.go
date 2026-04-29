@@ -17,6 +17,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	mocks "gitlab.com/accumulatenetwork/accumulate/test/mocks/pkg/api/v3"
 )
@@ -60,6 +61,63 @@ func TestQuerier(t *testing.T) {
 	actual, err := c.Query(context.Background(), protocol.AccountUrl("foo"), nil)
 	require.NoError(t, err)
 	require.True(t, api.EqualRecord(expect, actual))
+}
+
+// TestQuerier_BptPage exercises BptPageQuery round-trip through the
+// message-layer codec. Verifies (a) the request's StartHash and Count
+// reach the server intact through union marshalling, and (b) the
+// BptPageRecord with non-empty Entries returns intact through the
+// record union codec.
+//
+// Bootstrap-v3's enumerate.Run depends on this wire path; without
+// this test, a regression in either codec would silently break
+// remote bootstrap.
+func TestQuerier_BptPage(t *testing.T) {
+	wantStart := [32]byte{0xff, 0xff, 0xff}
+	wantCount := uint64(7)
+	expect := &api.BptPageRecord{
+		BptRoot:   [32]byte{0xab, 0xcd},
+		NextStart: [32]byte{0x10, 0x20},
+		Done:      false,
+		Entries: []*api.BptLeafSummary{
+			{KeyHash: [32]byte{0x01}, ValueHash: [32]byte{0x11}},
+			{KeyHash: [32]byte{0x02}, ValueHash: [32]byte{0x22}},
+		},
+	}
+
+	var gotQuery api.Query
+	var gotScope *url.URL
+	s := mocks.NewQuerier(t)
+	s.EXPECT().Query(mock.Anything, mock.Anything, mock.Anything).
+		Run(func(_ context.Context, scope *url.URL, q api.Query) {
+			gotScope = scope
+			gotQuery = q
+		}).
+		Return(expect, nil)
+	c := SetupTest(t, Querier{Querier: s})
+
+	q2 := api.Querier2{Querier: c}
+	scope := protocol.PartitionUrl("Directory")
+	actual, err := q2.QueryBptPage(context.Background(), scope, &api.BptPageQuery{
+		StartHash: wantStart,
+		Count:     wantCount,
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, scope.String(), gotScope.String())
+	q, ok := gotQuery.(*api.BptPageQuery)
+	require.True(t, ok, "server received non-BptPageQuery: %T", gotQuery)
+	require.Equal(t, wantStart, q.StartHash)
+	require.Equal(t, wantCount, q.Count)
+
+	require.Equal(t, expect.BptRoot, actual.BptRoot)
+	require.Equal(t, expect.NextStart, actual.NextStart)
+	require.Equal(t, expect.Done, actual.Done)
+	require.Len(t, actual.Entries, len(expect.Entries))
+	for i, e := range expect.Entries {
+		require.Equal(t, e.KeyHash, actual.Entries[i].KeyHash)
+		require.Equal(t, e.ValueHash, actual.Entries[i].ValueHash)
+	}
 }
 
 func TestSubmitter(t *testing.T) {
