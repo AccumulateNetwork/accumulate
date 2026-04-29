@@ -229,6 +229,38 @@ func TestNew_RejectsMissingInputs(t *testing.T) {
 	}
 }
 
+// TestSnapshot_RestoreRoundTrip — Snapshot of one tracker, RestoreFrom
+// into a fresh tracker, both produce the same promotion behavior.
+func TestSnapshot_RestoreRoundTrip(t *testing.T) {
+	db := newTrackerDB(t)
+	root := fillN(t, db, 4)
+
+	src, _ := New(db, nodestate.New())
+	src.Observe(11, root)
+	src.Observe(22, [32]byte{0xab})
+	src.Observe(7, [32]byte{0xcd})
+
+	snap := src.Snapshot()
+	if len(snap) != 3 {
+		t.Fatalf("snap len = %d, want 3", len(snap))
+	}
+
+	dst, _ := New(db, nodestate.New())
+	dst.RestoreFrom(snap)
+	if dst.ObservedCount() != 3 {
+		t.Errorf("dst observed count = %d, want 3", dst.ObservedCount())
+	}
+
+	// Promotion still fires on the matching anchor with its block.
+	promoted, err := dst.Check(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !promoted {
+		t.Fatal("expected promotion after restore")
+	}
+}
+
 // TestLatestObservedBlock — accessor accuracy.
 func TestLatestObservedBlock(t *testing.T) {
 	db := newTrackerDB(t)

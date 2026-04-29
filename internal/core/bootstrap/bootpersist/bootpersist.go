@@ -4,13 +4,21 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-// Package bootpersist persists v2 bootstrap state across restarts.
+// Package bootpersist persists bootstrap-v3 state across restarts.
 //
-// The v2 artifact is much smaller than v1's: there is no genesis
-// hash, no per-account back-walk record, no per-partition anchor
-// list. The proof shape is "verified header anchor + local BPT
-// matching it," so the persisted form just records that pair plus
-// enough cursor state to resume mid-bootstrap.
+// The v3 artifact records what cannot be reconstructed from the
+// local DB alone:
+//
+//   - Node-state machine snapshot (BOOTING / ACTIVE / COMPLETE plus
+//     anchor + sinceBlock).
+//   - Phase progress (spine pull done, enumerate done, enumerate
+//     resume cursor) so a crash mid-bootstrap doesn't redo work.
+//   - Observed-anchor map so the tracker resumes with prior
+//     candidates without re-querying the network from scratch.
+//
+// The local DB itself persists naturally — leaves inserted by
+// enumerate stay across restarts. This artifact is the
+// reconstruction-impossible delta.
 //
 // Format guarantees:
 //   - FormatMajor mismatch on Load is a hard error (incompatible).
@@ -19,13 +27,10 @@
 //   - Atomic save: write to a temp file in the same directory, then
 //     rename, so a crash mid-write doesn't leave a half-written
 //     artifact.
-//
-// Pin enforcement is enforced separately by the caller via Peek (read
-// without verifying) followed by an explicit pinned-validator-set
-// match. The package itself does not embed pin policy.
 package bootpersist
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -36,63 +41,46 @@ import (
 )
 
 // FormatMajor is the artifact's major version. Loaders reject any
-// major version they don't recognize. Bumped to 2 with the
-// (DN, BVN)-pair schema; pre-2 artifacts are not migrated in place.
-const FormatMajor = 2
+// major version they don't recognize. Bumped to 3 with the
+// bootstrap-v3 sync-protocol schema (no pinned hash, partition-
+// scoped). Pre-3 artifacts are not migrated in place.
+const FormatMajor = 3
 
 // FormatMinor is the artifact's minor version. Loaders tolerate any
 // minor version <= their own and ignore unknown fields.
 const FormatMinor = 0
 
 // FileName is the on-disk name of the artifact within the data dir.
-const FileName = "bootstrap-state-v2.json"
+const FileName = "bootstrap-state.json"
 
-// Artifact is the top-level persisted object. The (DN, BVN)-pair
-// model means two BPT convergence anchors plus one binary pin.
+// Artifact is the top-level persisted object for one partition's
+// bootstrap progress. Multi-partition nodes hold one artifact per
+// data dir / partition.
 type Artifact struct {
 	FormatMajor uint32 `json:"formatMajor"`
 	FormatMinor uint32 `json:"formatMinor"`
 
-	// Network identifies which network the launcher bootstrapped
-	// against. Used to resolve the binary's pinned DN genesis
-	// StateTreeAnchor at run startup.
-	Network string `json:"network"`
+	// Network identifies which network this bootstrap belongs to —
+	// "mainnet", "testnet", "devnet", or a custom name. Caller-set;
+	// the package does not enforce semantics.
+	Network string `json:"network,omitempty"`
 
-	// BVN names the BVN partition this node participates in. Today
-	// there's only one BVN; the field exists so multi-BVN networks
-	// can plumb the choice through without schema churn.
-	BVN string `json:"bvn"`
+	// Partition is the partition this artifact tracks — "Directory"
+	// for the DN, "<bvn-name>" for a BVN.
+	Partition string `json:"partition"`
 
-	// DNGenesisStateTreeAnchor mirrors the binary pin's value at
-	// bootstrap time. accumulated run's startup compares the
-	// binary's current pin to this; mismatch fails closed.
-	DNGenesisStateTreeAnchor [32]byte `json:"dnGenesisStateTreeAnchor"`
-
-	// DNVerifiedAnchor is DN's StateTreeAnchor from the latest
-	// verified DA in the trust-phase walk. The launcher's local DN
-	// BPT root must equal this for ACTIVE.
-	DNVerifiedAnchor [32]byte `json:"dnVerifiedAnchor,omitzero"`
-
-	// DNVerifiedMajorBlock is the DN major-block index the latest
-	// verified DA was anchored at.
-	DNVerifiedMajorBlock uint64 `json:"dnVerifiedMajorBlock,omitempty"`
-
-	// BVNVerifiedAnchor is the BVN's StateTreeAnchor as read out of
-	// the trusted DN BPT (the BVN→DN BlockValidatorAnchor sitting
-	// in dn.acme/anchors). The launcher's local BVN BPT root must
-	// equal this.
-	BVNVerifiedAnchor [32]byte `json:"bvnVerifiedAnchor,omitzero"`
-
-	// BVNVerifiedMajorBlock is the BVN major-block index the
-	// trusted BVN→DN anchor was at.
-	BVNVerifiedMajorBlock uint64 `json:"bvnVerifiedMajorBlock,omitempty"`
-
-	// State is the current node state and its transition history.
+	// State is the persisted node-state machine snapshot.
 	State StateRecord `json:"state"`
 
-	// Cursors track in-progress phases so a restart resumes without
-	// redoing work.
-	Cursors Cursors `json:"cursors"`
+	// Phases tracks completion of each bootstrap phase so a restart
+	// resumes without redoing work.
+	Phases Phases `json:"phases"`
+
+	// ObservedAnchors lets the tracker resume with prior anchor
+	// candidates after a restart, avoiding an immediate re-query of
+	// the AnchorSource. Each entry is one (block, anchor) pair the
+	// tracker has seen and considered valid.
+	ObservedAnchors []ObservedAnchor `json:"observedAnchors,omitempty"`
 }
 
 // StateRecord captures node state and transition history.
@@ -100,65 +88,57 @@ type StateRecord struct {
 	// Current is one of "BOOTING", "ACTIVE", "COMPLETE".
 	Current string `json:"current"`
 
-	// EnteredBooting / EnteredActive / EnteredComplete record when
-	// each transition occurred. Zero for never-reached states.
-	EnteredBooting  time.Time `json:"enteredBooting,omitzero"`
-	EnteredActive   time.Time `json:"enteredActive,omitzero"`
-	EnteredComplete time.Time `json:"enteredComplete,omitzero"`
+	// SinceBlock is the block height at which the current state
+	// became true (set on transition).
+	SinceBlock uint64 `json:"sinceBlock,omitempty"`
+
+	// VerifiedAnchor is the BPT root that validated the
+	// ACTIVE/COMPLETE claim. Empty for BOOTING.
+	VerifiedAnchor [32]byte `json:"verifiedAnchor,omitzero"`
 
 	// HistoryDepth is the oldest block fully retained, set at the
 	// ACTIVE → COMPLETE transition. Zero means unlimited (full
 	// history retained).
 	HistoryDepth uint64 `json:"historyDepth,omitempty"`
+
+	// EnteredBooting / EnteredActive / EnteredComplete record when
+	// each transition occurred. Zero for never-reached states.
+	EnteredBooting  time.Time `json:"enteredBooting,omitzero"`
+	EnteredActive   time.Time `json:"enteredActive,omitzero"`
+	EnteredComplete time.Time `json:"enteredComplete,omitzero"`
 }
 
-// Cursors track in-progress work so restarts don't redo it.
-type Cursors struct {
-	// WalkLastVerified is the highest header height the trust phase
-	// has verified so far. Zero means the walk hasn't started.
-	WalkLastVerified uint64 `json:"walkLastVerified,omitempty"`
+// Phases tracks per-phase completion / resume cursors.
+type Phases struct {
+	// SpinePullDone is true once the DN-side spine pull (#3985 phase 1)
+	// has committed for this artifact. Always false on BVN artifacts.
+	SpinePullDone bool `json:"spinePullDone,omitempty"`
 
-	// AccountsPulled is the count of accounts the data phase has
-	// successfully written. The list of remaining URLs is
-	// reconstructed by the caller from the bootstrap config.
-	AccountsPulled uint64 `json:"accountsPulled,omitempty"`
+	// EnumerateDone is true once the BPT enumeration scan reached
+	// page.Done == true. After this, only steady-state remains.
+	EnumerateDone bool `json:"enumerateDone,omitempty"`
 
-	// HistoryBackfillReached is the oldest block the post-ACTIVE
-	// history backfill has retrieved. Zero means backfill hasn't
-	// started.
-	HistoryBackfillReached uint64 `json:"historyBackfillReached,omitempty"`
+	// EnumerateNextStart is the resume cursor for the BPT enumeration
+	// scan. Zero means "start from the top" (FullScanStart). Updated
+	// after every successful page commit so a restart picks up where
+	// the scan left off.
+	EnumerateNextStart [32]byte `json:"enumerateNextStart,omitzero"`
 }
 
-// ErrPinMismatch is returned by callers (not by this package
-// directly) when the persisted DNGenesisStateTreeAnchor doesn't
-// match what the binary expects on startup. The package exports the
-// sentinel for callers to use.
-var ErrPinMismatch = errors.New("bootpersist: DN genesis StateTreeAnchor mismatch — explicit migration required")
+// ObservedAnchor is one (block, anchor) pair the tracker has seen.
+type ObservedAnchor struct {
+	Block  uint64   `json:"block"`
+	Anchor [32]byte `json:"anchor"`
+}
 
 // ErrFormatMajor is returned when the persisted format major doesn't
 // match this binary's. Indicates an incompatible artifact.
 var ErrFormatMajor = errors.New("bootpersist: incompatible format major version")
 
-// Load reads the artifact from `dir` and verifies it against the
-// expected pinned validator-set hash. Returns os.ErrNotExist if the
-// file is absent. Returns ErrPinMismatch if the persisted hash
-// differs. Returns ErrFormatMajor for incompatible major versions.
-func Load(dir string, expected [32]byte) (*Artifact, error) {
-	a, err := Peek(dir)
-	if err != nil {
-		return nil, err
-	}
-	if a.DNGenesisStateTreeAnchor != expected {
-		return nil, ErrPinMismatch
-	}
-	return a, nil
-}
-
-// Peek reads and validates the artifact's format major but does not
-// enforce the pin check. Callers that need to read the artifact's
-// Network field before resolving the expected pin (e.g., during
-// accumulated run startup) use this and enforce the pin themselves.
-func Peek(dir string) (*Artifact, error) {
+// Load reads and validates the artifact at `dir`. Returns
+// os.ErrNotExist if the file is absent. Returns ErrFormatMajor for
+// incompatible major versions.
+func Load(dir string) (*Artifact, error) {
 	path := filepath.Join(dir, FileName)
 	f, err := os.Open(path)
 	if err != nil {
@@ -225,3 +205,7 @@ func encode(w io.Writer, a *Artifact) error {
 	}
 	return nil
 }
+
+// HexKey is a convenience for tests / logging that want to render a
+// [32]byte without importing encoding/hex.
+func HexKey(k [32]byte) string { return hex.EncodeToString(k[:]) }

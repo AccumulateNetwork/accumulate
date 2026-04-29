@@ -17,96 +17,77 @@ import (
 func TestSaveLoad_RoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	want := &Artifact{
-		Network:                  "devnet",
-		BVN:                      "Apollo",
-		DNGenesisStateTreeAnchor: [32]byte{0xaa, 0xbb},
-		DNVerifiedAnchor:         [32]byte{0x11, 0x22, 0x33},
-		DNVerifiedMajorBlock:     150,
-		BVNVerifiedAnchor:        [32]byte{0x44, 0x55, 0x66},
-		BVNVerifiedMajorBlock:    150,
+		Network:   "devnet",
+		Partition: "Apollo",
 		State: StateRecord{
 			Current:        "ACTIVE",
+			SinceBlock:     150,
+			VerifiedAnchor: [32]byte{0x11, 0x22, 0x33},
 			EnteredBooting: time.Unix(1700000000, 0).UTC(),
 			EnteredActive:  time.Unix(1700001000, 0).UTC(),
 		},
-		Cursors: Cursors{
-			WalkLastVerified: 150,
-			AccountsPulled:   42,
+		Phases: Phases{
+			SpinePullDone:      true,
+			EnumerateDone:      false,
+			EnumerateNextStart: [32]byte{0xab, 0xcd, 0xef},
+		},
+		ObservedAnchors: []ObservedAnchor{
+			{Block: 100, Anchor: [32]byte{0x01}},
+			{Block: 150, Anchor: [32]byte{0x11, 0x22, 0x33}},
 		},
 	}
 	if err := Save(dir, want); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
 
-	got, err := Load(dir, [32]byte{0xaa, 0xbb})
+	got, err := Load(dir)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
 	if got.Network != want.Network ||
-		got.BVN != want.BVN ||
-		got.DNGenesisStateTreeAnchor != want.DNGenesisStateTreeAnchor ||
-		got.DNVerifiedAnchor != want.DNVerifiedAnchor ||
-		got.DNVerifiedMajorBlock != want.DNVerifiedMajorBlock ||
-		got.BVNVerifiedAnchor != want.BVNVerifiedAnchor ||
-		got.BVNVerifiedMajorBlock != want.BVNVerifiedMajorBlock ||
+		got.Partition != want.Partition ||
 		got.State.Current != want.State.Current ||
-		got.Cursors.WalkLastVerified != want.Cursors.WalkLastVerified ||
-		got.Cursors.AccountsPulled != want.Cursors.AccountsPulled {
+		got.State.SinceBlock != want.State.SinceBlock ||
+		got.State.VerifiedAnchor != want.State.VerifiedAnchor ||
+		got.Phases.SpinePullDone != want.Phases.SpinePullDone ||
+		got.Phases.EnumerateDone != want.Phases.EnumerateDone ||
+		got.Phases.EnumerateNextStart != want.Phases.EnumerateNextStart ||
+		len(got.ObservedAnchors) != len(want.ObservedAnchors) {
 		t.Errorf("round-trip drift:\n  want=%+v\n  got=%+v", want, got)
+	}
+	for i := range want.ObservedAnchors {
+		if got.ObservedAnchors[i] != want.ObservedAnchors[i] {
+			t.Errorf("observed[%d] drift:\n  want=%+v\n  got=%+v",
+				i, want.ObservedAnchors[i], got.ObservedAnchors[i])
+		}
 	}
 }
 
 func TestLoad_MissingFile_ReturnsNotExist(t *testing.T) {
 	dir := t.TempDir()
-	_, err := Load(dir, [32]byte{0xaa})
+	_, err := Load(dir)
 	if !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("err = %v, want os.ErrNotExist chain", err)
 	}
 }
 
-func TestLoad_PinMismatch_ReturnsErrPinMismatch(t *testing.T) {
-	dir := t.TempDir()
-	if err := Save(dir, &Artifact{DNGenesisStateTreeAnchor: [32]byte{0xaa}}); err != nil {
-		t.Fatal(err)
-	}
-	_, err := Load(dir, [32]byte{0xbb})
-	if !errors.Is(err, ErrPinMismatch) {
-		t.Errorf("err = %v, want ErrPinMismatch chain", err)
-	}
-}
-
-func TestPeek_SkipsPinCheck(t *testing.T) {
-	dir := t.TempDir()
-	if err := Save(dir, &Artifact{Network: "devnet", DNGenesisStateTreeAnchor: [32]byte{0xaa}}); err != nil {
-		t.Fatal(err)
-	}
-	a, err := Peek(dir)
-	if err != nil {
-		t.Fatalf("Peek: %v", err)
-	}
-	if a.Network != "devnet" {
-		t.Errorf("Network = %q, want devnet", a.Network)
-	}
-}
-
 func TestSave_AtomicReplace(t *testing.T) {
 	dir := t.TempDir()
-	a := &Artifact{Network: "first"}
+	a := &Artifact{Partition: "first"}
 	if err := Save(dir, a); err != nil {
 		t.Fatal(err)
 	}
 
-	// Overwrite with new content.
-	a.Network = "second"
+	a.Partition = "second"
 	if err := Save(dir, a); err != nil {
 		t.Fatal(err)
 	}
-	got, err := Peek(dir)
+	got, err := Load(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Network != "second" {
-		t.Errorf("Save did not overwrite; Network = %q, want second", got.Network)
+	if got.Partition != "second" {
+		t.Errorf("Save did not overwrite; Partition = %q, want second", got.Partition)
 	}
 
 	// .tmp shouldn't be left behind on success.
@@ -117,13 +98,12 @@ func TestSave_AtomicReplace(t *testing.T) {
 
 func TestLoad_FormatMajorMismatch(t *testing.T) {
 	dir := t.TempDir()
-	// Hand-craft an artifact with a future major.
 	path := filepath.Join(dir, FileName)
 	bad := []byte(`{"formatMajor": 99, "formatMinor": 0}`)
 	if err := os.WriteFile(path, bad, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_, err := Load(dir, [32]byte{})
+	_, err := Load(dir)
 	if !errors.Is(err, ErrFormatMajor) {
 		t.Errorf("err = %v, want ErrFormatMajor chain", err)
 	}
@@ -136,11 +116,33 @@ func TestSave_ForcesFormatVersion(t *testing.T) {
 	if err := Save(dir, a); err != nil {
 		t.Fatal(err)
 	}
-	got, err := Peek(dir)
+	got, err := Load(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got.FormatMajor != FormatMajor {
 		t.Errorf("FormatMajor not forced on Save; got %d, want %d", got.FormatMajor, FormatMajor)
+	}
+}
+
+// TestSave_AfterCrashTmpLeftBehind — a .tmp file from a prior crashed
+// run should not corrupt subsequent saves.
+func TestSave_AfterCrashTmpLeftBehind(t *testing.T) {
+	dir := t.TempDir()
+	// Plant a stale .tmp.
+	stale := filepath.Join(dir, FileName+".tmp")
+	if err := os.WriteFile(stale, []byte("garbage"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Save(dir, &Artifact{Partition: "ok"}); err != nil {
+		t.Fatalf("Save with stale .tmp present: %v", err)
+	}
+	got, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Partition != "ok" {
+		t.Errorf("Load got unexpected partition %q", got.Partition)
 	}
 }

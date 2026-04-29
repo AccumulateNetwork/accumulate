@@ -139,3 +139,31 @@ func (t *Tracker) ObservedCount() int {
 	defer t.mu.Unlock()
 	return len(t.observed)
 }
+
+// Observation is one (block, anchor) pair in the tracker's set.
+type Observation struct {
+	Block  uint64
+	Anchor [32]byte
+}
+
+// Snapshot returns a copy of the tracker's observed-anchor set, for
+// persistence. Order is unspecified. Safe to call concurrently with
+// Observe/Check.
+func (t *Tracker) Snapshot() []Observation {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	out := make([]Observation, 0, len(t.observed))
+	for anchor, block := range t.observed {
+		out = append(out, Observation{Block: block, Anchor: anchor})
+	}
+	return out
+}
+
+// RestoreFrom merges observations into the tracker. Used at startup
+// to rehydrate from persisted state. Existing entries take the
+// earliest block per anchor (same rule as Observe).
+func (t *Tracker) RestoreFrom(obs []Observation) {
+	for _, o := range obs {
+		t.Observe(o.Block, o.Anchor)
+	}
+}
