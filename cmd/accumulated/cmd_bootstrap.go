@@ -8,6 +8,8 @@ package main
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -20,7 +22,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/multiformats/go-multiaddr"
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/anchorsrc"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/bootpersist"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/clientsrc"
@@ -32,6 +36,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/websocket"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/address"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -74,6 +79,9 @@ var flagBootstrap = struct {
 	DiffOnly       bool
 	DiffSteadySecs uint64
 	ViaSnapshot    string // HTTP base URL of peer's snapshot endpoint, e.g. http://localhost:26680
+	WriteConfig    bool
+	TmListen       string
+	TmBootstrap    string // comma-separated Tendermint multiaddrs for catch-up
 }{}
 
 func init() {
@@ -90,6 +98,9 @@ func init() {
 	f.BoolVar(&flagBootstrap.DiffOnly, "diff", false, "DEV: after spine+enumerate, run a leaf-level BPT diff against the source and exit (no steady-state)")
 	f.Uint64Var(&flagBootstrap.DiffSteadySecs, "diff-after-steady", 0, "DEV: run --diff after this many seconds of steady-state (0 = immediately after enumerate)")
 	f.StringVar(&flagBootstrap.ViaSnapshot, "via-snapshot", "", "Bootstrap by fetching a verified major-block snapshot from this HTTP base URL (e.g. http://localhost:26680). Bypasses spine pull / enumerate / steady-state.")
+	f.BoolVar(&flagBootstrap.WriteConfig, "write-config", true, "After bootstrap, write accumulate.toml + move BPT db into the launchable layout that 'accumulated run' expects")
+	f.StringVar(&flagBootstrap.TmListen, "tm-listen", "/ip4/0.0.0.0/tcp/26656", "Listen address for the launched daemon (Tendermint base port; Accumulate ports derived from it)")
+	f.StringVar(&flagBootstrap.TmBootstrap, "tm-bootstrap-peers", "", "Comma-separated Tendermint P2P multiaddrs (e.g. /dns/host/tcp/26656/p2p/<id>) used as persistent peers for catch-up")
 }
 
 func runBootstrap(cmd *cobra.Command, _ []string) {
@@ -292,7 +303,15 @@ func runBootstrapViaSnapshot(dataDir string) {
 	db, err := database.OpenBadger(dbPath, nil)
 	checkf(err, "open local db")
 	db.SetObserver(execute.NewDatabaseObserver())
-	defer db.Close()
+	dbClosed := false
+	closeDB := func() {
+		if dbClosed {
+			return
+		}
+		dbClosed = true
+		_ = db.Close()
+	}
+	defer closeDB()
 
 	// Restore.
 	f, err := os.Open(tmpFile)
@@ -371,7 +390,130 @@ func runBootstrapViaSnapshot(dataDir string) {
 
 	fmt.Fprintf(os.Stderr, "[ACTIVE] node is ACTIVE at major block %d (anchor=%x)\n", majorBlock, root[:16])
 	fmt.Fprintf(os.Stderr, "[ACTIVE] persisted to %s\n", dataDir)
-	fmt.Fprintf(os.Stderr, "[ACTIVE] hand off: 'accumulated run' to catch up to current via consensus\n")
+
+	if flagBootstrap.WriteConfig {
+		// Close the BPT db before moving its directory; otherwise
+		// Badger's background flusher spins on the missing path.
+		closeDB()
+		if err := writeDaemonConfig(dataDir, dbPath); err != nil {
+			fatalf("write daemon config: %v", err)
+		}
+	} else {
+		fmt.Fprintf(os.Stderr, "[ACTIVE] hand off: 'accumulated run' to catch up to current via consensus\n")
+	}
+}
+
+// writeDaemonConfig produces the layout that `accumulated run`
+// expects after a snapshot-based bootstrap:
+//
+//	<dataDir>/accumulate.toml      — coreValidator config
+//	<dataDir>/<dnn|bvnn>/data/accumulate.db   — the BPT db (moved
+//	                                            from bootstrap-<P>.db)
+//	<dataDir>/<dnn|bvnn>/config/  — created on first run by daemon
+//
+// The node + validator keys are freshly generated. The validator key
+// is NOT registered in any operator keypage on the network, so the
+// resulting node will run as a non-validator full node (CometBFT
+// follower) which is exactly what we want for a bootstrapped
+// follower.
+//
+// Note: this writes config only. Two follow-up gaps still block an
+// actual `accumulated run`:
+//   - #4002: daemon must skip InitChain when bootstrap-state.json
+//     says ACTIVE (we already have BPT loaded).
+//   - #4003: CometBFT block-store catch-up from snapshot height B
+//     to current — without state-sync support, the daemon's
+//     consensus path needs to know how to reconcile a non-zero
+//     starting height.
+func writeDaemonConfig(dataDir, snapshotDB string) error {
+	mode, dir := partitionToCoreMode(flagBootstrap.Partition)
+
+	// Move the BPT db to where the daemon expects it.
+	want := filepath.Join(dataDir, dir, "data", "accumulate.db")
+	if err := os.MkdirAll(filepath.Dir(want), 0755); err != nil {
+		return fmt.Errorf("mkdir db parent: %w", err)
+	}
+	// If the destination already exists (e.g. re-run), wipe it so we
+	// don't fight Badger over a half-populated dir.
+	if _, err := os.Stat(want); err == nil {
+		if err := os.RemoveAll(want); err != nil {
+			return fmt.Errorf("clear stale db at %s: %w", want, err)
+		}
+	}
+	if err := os.Rename(snapshotDB, want); err != nil {
+		return fmt.Errorf("move bpt db %s → %s: %w", snapshotDB, want, err)
+	}
+	fmt.Fprintf(os.Stderr, "[config] moved BPT db → %s\n", want)
+
+	// Generate fresh ed25519 keys for node (P2P) and validator
+	// (consensus). The validator key is unprivileged; node runs as
+	// follower.
+	nodePub, nodePriv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return fmt.Errorf("generate node key: %w", err)
+	}
+	valPub, valPriv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return fmt.Errorf("generate validator key: %w", err)
+	}
+	_ = nodePub
+	_ = valPub
+
+	listenAddr, err := multiaddr.NewMultiaddr(flagBootstrap.TmListen)
+	if err != nil {
+		return fmt.Errorf("parse --tm-listen: %w", err)
+	}
+
+	var bsPeers []multiaddr.Multiaddr
+	if flagBootstrap.TmBootstrap != "" {
+		for _, s := range strings.Split(flagBootstrap.TmBootstrap, ",") {
+			s = strings.TrimSpace(s)
+			if s == "" {
+				continue
+			}
+			ma, err := multiaddr.NewMultiaddr(s)
+			if err != nil {
+				return fmt.Errorf("parse tm bootstrap peer %q: %w", s, err)
+			}
+			bsPeers = append(bsPeers, ma)
+		}
+	}
+
+	cfg := new(run.Config)
+	cfg.Network = flagBootstrap.Network
+	cfg.Logging = new(run.Logging)
+	cfg.P2P = new(run.P2P)
+	cfg.P2P.Key = &run.RawPrivateKey{Address: address.FromED25519PrivateKey(nodePriv).String()}
+
+	cvc := run.AddConfiguration(cfg, new(run.CoreValidatorConfiguration), nil)
+	cfg.Configurations = []run.Configuration{cvc}
+	cvc.Mode = mode
+	cvc.Listen = listenAddr
+	cvc.ValidatorKey = &run.RawPrivateKey{Address: address.FromED25519PrivateKey(valPriv).String()}
+	if mode == run.CoreValidatorModeBVN {
+		cvc.BVN = flagBootstrap.Partition
+		cvc.BvnBootstrapPeers = bsPeers
+	} else {
+		cvc.DnBootstrapPeers = bsPeers
+	}
+
+	tomlPath := filepath.Join(dataDir, "accumulate.toml")
+	if err := cfg.SaveTo(tomlPath); err != nil {
+		return fmt.Errorf("save accumulate.toml: %w", err)
+	}
+	fmt.Fprintf(os.Stderr, "[config] wrote %s\n", tomlPath)
+	fmt.Fprintf(os.Stderr, "[config] hand off: 'accumulated run -w %s' (pending #4002 + #4003)\n", dataDir)
+	return nil
+}
+
+// partitionToCoreMode returns (mode, nodeDir) for the partition the
+// launcher just bootstrapped. nodeDir is the subdir inside the data
+// dir where the daemon stores per-partition state ("dnn" or "bvnn").
+func partitionToCoreMode(partition string) (run.CoreValidatorMode, string) {
+	if strings.EqualFold(partition, protocol.Directory) {
+		return run.CoreValidatorModeDN, "dnn"
+	}
+	return run.CoreValidatorModeBVN, "bvnn"
 }
 
 // devAnchorSource — dev-only fixed-anchor source. Production
