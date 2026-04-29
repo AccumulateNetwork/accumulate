@@ -40,6 +40,9 @@ ServiceType:
   Snapshot:
     description: is the type of [SnapshotService]
     value: 10
+  Bootstrap:
+    description: advertises a node's bootstrap-v3 state. Argument is "active" or "complete"; consumers route current-state queries away from nodes that don't advertise this service.
+    value: 11
 
 QueryType:
   Default:

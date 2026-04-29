@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -142,6 +142,9 @@ const ServiceTypeFaucet ServiceType = 9
 
 // ServiceTypeSnapshot is the type of [SnapshotService].
 const ServiceTypeSnapshot ServiceType = 10
+
+// ServiceTypeBootstrap advertises a node's bootstrap-v3 state. Argument is "active" or "complete"; consumers route current-state queries away from nodes that don't advertise this service..
+const ServiceTypeBootstrap ServiceType = 11
 
 // GetEnumValue returns the value of the Event Type
 func (v EventType) GetEnumValue() uint64 { return uint64(v) }
@@ -474,7 +477,7 @@ func (v ServiceType) GetEnumValue() uint64 { return uint64(v) }
 func (v *ServiceType) SetEnumValue(id uint64) bool {
 	u := ServiceType(id)
 	switch u {
-	case ServiceTypeUnknown, ServiceTypeNode, ServiceTypeConsensus, ServiceTypeNetwork, ServiceTypeMetrics, ServiceTypeQuery, ServiceTypeEvent, ServiceTypeSubmit, ServiceTypeValidate, ServiceTypeFaucet, ServiceTypeSnapshot:
+	case ServiceTypeUnknown, ServiceTypeNode, ServiceTypeConsensus, ServiceTypeNetwork, ServiceTypeMetrics, ServiceTypeQuery, ServiceTypeEvent, ServiceTypeSubmit, ServiceTypeValidate, ServiceTypeFaucet, ServiceTypeSnapshot, ServiceTypeBootstrap:
 		*v = u
 		return true
 	}
@@ -506,6 +509,8 @@ func (v ServiceType) String() string {
 		return "faucet"
 	case ServiceTypeSnapshot:
 		return "snapshot"
+	case ServiceTypeBootstrap:
+		return "bootstrap"
 	}
 	return fmt.Sprintf("ServiceType:%d", v)
 }
@@ -535,6 +540,8 @@ func ServiceTypeByName(name string) (ServiceType, bool) {
 		return ServiceTypeFaucet, true
 	case "snapshot":
 		return ServiceTypeSnapshot, true
+	case "bootstrap":
+		return ServiceTypeBootstrap, true
 	}
 	return 0, false
 }
