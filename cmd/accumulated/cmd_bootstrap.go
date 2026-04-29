@@ -304,14 +304,74 @@ func runBootstrapViaSnapshot(dataDir string) {
 	err = snapshot.FullRestore(db, f, nil, netURL)
 	checkf(err, "restore snapshot")
 
-	// Read local BPT root after restore — this should equal the
-	// signed major-block anchor for the loaded block.
+	// Read local BPT root after restore.
 	ro := db.Begin(false)
 	root, rerr := ro.GetBptRootHash()
 	ro.Discard()
 	checkf(rerr, "read local BPT root")
-	fmt.Fprintf(os.Stderr, "[snapshot] DONE — local BPT root after restore: %x\n", root)
-	fmt.Fprintf(os.Stderr, "[snapshot] cross-check this against the signed anchor for major block %s.\n", latest)
+	fmt.Fprintf(os.Stderr, "[snapshot] local BPT root after restore: %x\n", root)
+
+	// Verify against a validator-quorum-signed anchor.
+	// This is the trust step: the peer served us snapshot bytes, but
+	// the bytes' authenticity comes from our local verification of a
+	// signed major-block anchor whose StateTreeAnchor equals our
+	// computed root. Without this we'd be trusting the peer.
+	if flagBootstrap.PeerWS == "" || flagBootstrap.PeerAnchorPool == "" {
+		fmt.Fprintf(os.Stderr, "[snapshot] WARN: --peer + --peer-anchor-pool not set; skipping signature verification.\n")
+		fmt.Fprintf(os.Stderr, "[snapshot] node remains in BOOTING; rerun with verification flags or run accumulated bootstrap manually with --anchor-hex %x to promote.\n", root)
+		return
+	}
+
+	ctx := context.Background()
+	ws, err := websocket.NewClient(flagBootstrap.PeerWS, flagBootstrap.Network)
+	checkf(err, "dial peer for anchor verification")
+	defer ws.Close()
+	poolURL, err := url.Parse(flagBootstrap.PeerAnchorPool)
+	checkf(err, "parse --peer-anchor-pool")
+	as, err := anchorsrc.New(ws, poolURL, db)
+	checkf(err, "build anchor source")
+
+	fmt.Fprintf(os.Stderr, "[verify] searching for signed anchor matching local root...\n")
+	majorBlock, ok, err := as.FindAnchor(ctx, flagBootstrap.Partition, root)
+	checkf(err, "find anchor")
+	if !ok {
+		fatalf("no validator-quorum-signed anchor matches local root %x — refusing to promote (peer may have served a tampered snapshot)", root)
+	}
+	fmt.Fprintf(os.Stderr, "[verify] OK — local root matches signed anchor for major block %d\n", majorBlock)
+
+	// Promote the state machine.
+	machine := nodestate.New()
+	if !machine.PromoteToActive(root, majorBlock) {
+		fatalf("PromoteToActive failed (machine in unexpected state)")
+	}
+	ad := machine.Get()
+
+	// Persist so accumulated run picks it up.
+	art := &bootpersist.Artifact{
+		Network:   flagBootstrap.Network,
+		Partition: flagBootstrap.Partition,
+		Resume: bootpersist.ResumeConfig{
+			PeerWS:         flagBootstrap.PeerWS,
+			PeerAnchorPool: flagBootstrap.PeerAnchorPool,
+		},
+		State: bootpersist.StateRecord{
+			Current:        ad.State.String(),
+			SinceBlock:     ad.SinceBlock,
+			VerifiedAnchor: ad.VerifiedAnchor,
+			EnteredActive:  time.Now().UTC(),
+		},
+		Phases: bootpersist.Phases{
+			SpinePullDone: true,
+			EnumerateDone: true,
+		},
+	}
+	if err := bootpersist.Save(dataDir, art); err != nil {
+		fatalf("save bootstrap-state.json: %v", err)
+	}
+
+	fmt.Fprintf(os.Stderr, "[ACTIVE] node is ACTIVE at major block %d (anchor=%x)\n", majorBlock, root[:16])
+	fmt.Fprintf(os.Stderr, "[ACTIVE] persisted to %s\n", dataDir)
+	fmt.Fprintf(os.Stderr, "[ACTIVE] hand off: 'accumulated run' to catch up to current via consensus\n")
 }
 
 // devAnchorSource — dev-only fixed-anchor source. Production

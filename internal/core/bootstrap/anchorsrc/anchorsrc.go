@@ -158,6 +158,66 @@ func (s *Source) LatestAnchor(ctx context.Context, partition string) (uint64, [3
 	return 0, [32]byte{}, nil
 }
 
+// FindAnchor walks recent anchors and looks for one whose
+// PartitionAnchor.StateTreeAnchor equals expectedRoot. If found and
+// validator-quorum-verified, returns (majorBlockIndex, true, nil).
+// Used by the snapshot-fetch bootstrap path: after restoring a
+// snapshot, the launcher knows its local BPT root R and needs to
+// find the signed major-block anchor that matches R to confirm the
+// peer didn't lie about the snapshot bytes.
+//
+// Returns (0, false, nil) if no anchor matches; (_, _, err) on
+// transport or DB failures.
+func (s *Source) FindAnchor(ctx context.Context, partition string, expectedRoot [32]byte) (uint64, bool, error) {
+	wantSource := protocol.PartitionUrl(partition)
+	count := s.scanWindow
+	expand := true
+	page, err := s.q.QueryMainChainEntries(ctx, s.peerAnchorPool, &api.ChainQuery{
+		Name: "main",
+		Range: &api.RangeOptions{
+			FromEnd: true,
+			Count:   &count,
+			Expand:  &expand,
+		},
+	})
+	if err != nil {
+		return 0, false, fmt.Errorf("query main chain: %w", err)
+	}
+	if page == nil {
+		return 0, false, nil
+	}
+	for i := len(page.Records) - 1; i >= 0; i-- {
+		entry := page.Records[i]
+		if entry == nil || entry.Value == nil || entry.Value.Message == nil {
+			continue
+		}
+		txnMsg := entry.Value.Message
+		if txnMsg.Transaction == nil {
+			continue
+		}
+		anchor, ok := txnMsg.Transaction.Body.(protocol.AnchorBody)
+		if !ok {
+			continue
+		}
+		pa := anchor.GetPartitionAnchor()
+		if pa == nil || pa.Source == nil || !pa.Source.Equal(wantSource) {
+			continue
+		}
+		if pa.MajorBlockIndex == 0 {
+			continue
+		}
+		if pa.StateTreeAnchor != expectedRoot {
+			continue
+		}
+		if err := s.verifyQuorum(ctx, partition, entry.Value); err != nil {
+			return 0, false, fmt.Errorf("anchor for block %d (root %x) found but quorum verification failed: %w",
+				pa.MajorBlockIndex, expectedRoot[:8], err)
+		}
+		return pa.MajorBlockIndex, true, nil
+	}
+	return 0, false, nil
+}
+
 // verifyQuorum returns nil iff the validator quorum signed this
 // anchor transaction. Loads the partition's validator keypage from
 // the local DB (populated in spine phase).
