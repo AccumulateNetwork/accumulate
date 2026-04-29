@@ -297,18 +297,22 @@ type dstChainAdder interface {
 	AddEntry(hash []byte, unique bool) error
 }
 
-// dnSpineAccounts is the canonical DN-side spine list. Exported as a
-// helper for the orchestrator (v3-5).
-func dnSpineAccounts() []*url.URL {
-	dn := protocol.DnUrl()
+// SpineAccounts returns the four spine accounts for a given
+// partition. The launcher pulls these in ModeFullSpine because the
+// orchestrator's tracker (#3988) needs full chain history for the
+// validator keypage to verify signed major-block anchors locally.
+//
+// For the DN: dn.acme/{anchors, ledger, operators, operators/1}.
+// For a BVN: <bvn>.acme/{anchors, ledger, operators, operators/1}.
+func SpineAccounts(partitionURL *url.URL) []*url.URL {
 	return []*url.URL{
-		dn.JoinPath(protocol.AnchorPool),
-		dn.JoinPath(protocol.Ledger),
-		dn.JoinPath(protocol.Operators),
-		dn.JoinPath(protocol.Operators, "1"),
+		partitionURL.JoinPath(protocol.AnchorPool),
+		partitionURL.JoinPath(protocol.Ledger),
+		partitionURL.JoinPath(protocol.Operators),
+		partitionURL.JoinPath(protocol.Operators, "1"),
 	}
 }
 
-// DnSpineAccounts returns the four DN-side spine accounts the
-// launcher pulls in ModeFullSpine.
-func DnSpineAccounts() []*url.URL { return dnSpineAccounts() }
+// DnSpineAccounts is a backward-compatible helper returning
+// SpineAccounts(protocol.DnUrl()).
+func DnSpineAccounts() []*url.URL { return SpineAccounts(protocol.DnUrl()) }

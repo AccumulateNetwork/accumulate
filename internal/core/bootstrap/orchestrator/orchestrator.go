@@ -70,9 +70,11 @@ type Options struct {
 	// uses protocol.PartitionUrl(Partition); tests can override.
 	PartitionURL *url.URL
 
-	// IsDirectory toggles spine-pull. True for DN (full chain entries
-	// pulled for the four spine accounts), false for BVN (skip spine,
-	// rely on enumeration + gossip alone).
+	// IsDirectory is retained for backward compatibility but no
+	// longer toggles spine pull. Both DN and BVN bootstraps now pull
+	// the partition's own spine accounts in ModeFullSpine — the BVN
+	// case needs the local validator keypage to verify signed
+	// anchors per #3988.
 	IsDirectory bool
 
 	// PageSize for paginated state-pull and BPT enumeration calls.
@@ -140,12 +142,10 @@ func Run(
 		}
 	}
 
-	// Phase 1: spine pull (DN only).
-	if opts.IsDirectory {
-		phase("spine", "pulling DN spine accounts in full")
-		if err := pullSpine(ctx, src, db, pageSize); err != nil {
-			return fmt.Errorf("spine: %w", err)
-		}
+	// Phase 1: spine pull (this partition's own).
+	phase("spine", fmt.Sprintf("pulling %s spine accounts in full", opts.Partition))
+	if err := pullSpine(ctx, src, db, opts.PartitionURL, pageSize); err != nil {
+		return fmt.Errorf("spine: %w", err)
 	}
 
 	// Phase 2: enumerate the partition BPT.
@@ -160,15 +160,15 @@ func Run(
 	return runSteady(ctx, src, eventCh, db, tr, opts.Partition, pageSize, pollEvery, opts.OnPhase)
 }
 
-// pullSpine pulls the four DN-side spine accounts in ModeFullSpine
+// pullSpine pulls the partition's spine accounts in ModeFullSpine
 // into a single batch and commits it. UpdateBPT is called before
 // Commit so the observer's per-account hashes land as BPT leaves —
 // without this, account writes never reach the BPT and the tracker's
 // local-root check never matches.
-func pullSpine(ctx context.Context, src pull.Source, db *database.Database, pageSize uint64) error {
+func pullSpine(ctx context.Context, src pull.Source, db *database.Database, partitionURL *url.URL, pageSize uint64) error {
 	batch := db.Begin(true)
 	defer batch.Discard()
-	for _, u := range pull.DnSpineAccounts() {
+	for _, u := range pull.SpineAccounts(partitionURL) {
 		if err := pull.Account(ctx, src, batch, u, pull.Options{
 			Mode:     pull.ModeFullSpine,
 			PageSize: pageSize,

@@ -138,6 +138,35 @@ func seedAccounts(t *testing.T, db *database.Database, urls []*url.URL) {
 	}
 }
 
+// seedSpine populates the spine accounts for partitionURL with empty
+// placeholder records so orchestrator.Run's mandatory spine pull
+// (#3997) succeeds. Test sources don't actually need spine state to
+// exist — they just need the accounts to be findable.
+func seedSpine(t *testing.T, db *database.Database, partitionURL *url.URL) {
+	t.Helper()
+	urls := []*url.URL{
+		partitionURL.JoinPath(protocol.AnchorPool),
+		partitionURL.JoinPath(protocol.Ledger),
+		partitionURL.JoinPath(protocol.Operators),
+		partitionURL.JoinPath(protocol.Operators, "1"),
+	}
+	err := db.Update(func(b *database.Batch) error {
+		for _, u := range urls {
+			// Use simple placeholders so the spine pull's
+			// QueryAccount succeeds. Real spine state is
+			// partition-dependent and out of scope for the
+			// orchestrator-only tests.
+			if err := b.Account(u).Main().Put(&protocol.DataAccount{Url: u}); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 // currentRoot reads db's current BPT root.
 func currentRoot(t *testing.T, db *database.Database) [32]byte {
 	t.Helper()
@@ -150,11 +179,14 @@ func currentRoot(t *testing.T, db *database.Database) [32]byte {
 	return r
 }
 
-// TestRun_BVN_PromotesAfterEnumerate is the BVN happy path: no spine
-// pull, enumerate brings dst's BPT to match src's, AnchorSource
+// TestRun_BVN_PromotesAfterEnumerate is the BVN happy path: spine
+// pull + enumerate brings dst's BPT to match src's, AnchorSource
 // returns that root, orchestrator promotes machine to ACTIVE.
 func TestRun_BVN_PromotesAfterEnumerate(t *testing.T) {
+	scope, _ := url.Parse(protocol.DnUrl().String())
+
 	src := newObservedDB(t)
+	seedSpine(t, src, scope)
 	urls := []*url.URL{
 		protocol.DnUrl().JoinPath("alpha"),
 		protocol.DnUrl().JoinPath("beta"),
@@ -184,8 +216,6 @@ func TestRun_BVN_PromotesAfterEnumerate(t *testing.T) {
 	fs := &fakeSource{db: src, anchor: root, block: 99}
 	ch := make(chan api.Event)
 	close(ch) // no live events; promotion comes from initial anchor poll
-
-	scope, _ := url.Parse(protocol.DnUrl().String())
 
 	var phases []string
 	err := Run(context.Background(), fs, ch, dst, machine, Options{
@@ -221,7 +251,9 @@ func TestRun_BVN_PromotesAfterEnumerate(t *testing.T) {
 // orchestrator stays running and promotes once the anchor settles
 // back to a value the dst already has.
 func TestRun_AnchorReturnsZeroThenMatches(t *testing.T) {
+	scope, _ := url.Parse(protocol.DnUrl().String())
 	src := newObservedDB(t)
+	seedSpine(t, src, scope)
 	urls := []*url.URL{
 		protocol.DnUrl().JoinPath("a"),
 		protocol.DnUrl().JoinPath("b"),
@@ -241,7 +273,6 @@ func TestRun_AnchorReturnsZeroThenMatches(t *testing.T) {
 	}()
 
 	ch := make(chan api.Event)
-	scope, _ := url.Parse(protocol.DnUrl().String())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -266,7 +297,9 @@ func TestRun_AnchorReturnsZeroThenMatches(t *testing.T) {
 // account on src and feed a BlockEvent; orchestrator pulls it; once
 // the anchor reflects the post-event root, ACTIVE flips.
 func TestRun_AppliesEventsBeforePromotion(t *testing.T) {
+	scope, _ := url.Parse(protocol.DnUrl().String())
 	src := newObservedDB(t)
+	seedSpine(t, src, scope)
 	uA := protocol.DnUrl().JoinPath("a")
 	seedAccounts(t, src, []*url.URL{uA})
 
@@ -294,8 +327,6 @@ func TestRun_AppliesEventsBeforePromotion(t *testing.T) {
 			},
 		}
 	}()
-
-	scope, _ := url.Parse(protocol.DnUrl().String())
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
@@ -337,12 +368,13 @@ func TestRun_AppliesEventsBeforePromotion(t *testing.T) {
 
 // TestRun_ContextCancel returns nil on cancel.
 func TestRun_ContextCancel(t *testing.T) {
+	scope, _ := url.Parse(protocol.DnUrl().String())
 	src := newObservedDB(t)
+	seedSpine(t, src, scope)
 	dst := newObservedDB(t)
 	fs := &fakeSource{db: src} // never returns matching anchor
 	ch := make(chan api.Event)
 
-	scope, _ := url.Parse(protocol.DnUrl().String())
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
