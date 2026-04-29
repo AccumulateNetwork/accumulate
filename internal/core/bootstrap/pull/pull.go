@@ -194,9 +194,11 @@ func pullPending(ctx context.Context, src Source, batch *database.Batch, u *url.
 // uses CurrentState().Anchor() which is computed from Pending only
 // (see internal/core/execute/v2/internal/bpt_prod.go).
 func pullChainHeads(ctx context.Context, src Source, batch *database.Batch, u *url.URL, pageSize uint64) error {
-	chains, err := src.QueryAccountChains(ctx, u, &api.ChainQuery{
-		Range: &api.RangeOptions{Count: &pageSize},
-	})
+	// Empty ChainQuery requests "list all chains for this account".
+	// Setting Range here triggers the v3 validator's "name is required
+	// when querying by index, entry, or range" rejection — Range is
+	// for entries within a named chain, not for the chain list.
+	chains, err := src.QueryAccountChains(ctx, u, &api.ChainQuery{})
 	if err != nil {
 		return fmt.Errorf("list chains: %w", err)
 	}
@@ -230,9 +232,8 @@ func pullChainHeads(ctx context.Context, src Source, batch *database.Batch, u *u
 // merkle.AddEntry. The Head is rebuilt naturally as entries are
 // added; we don't write Head() directly.
 func pullChainsFull(ctx context.Context, src Source, batch *database.Batch, u *url.URL, pageSize uint64) error {
-	chains, err := src.QueryAccountChains(ctx, u, &api.ChainQuery{
-		Range: &api.RangeOptions{Count: &pageSize},
-	})
+	// Empty ChainQuery: list-all-chains. See pullChainHeads.
+	chains, err := src.QueryAccountChains(ctx, u, &api.ChainQuery{})
 	if err != nil {
 		return fmt.Errorf("list chains: %w", err)
 	}

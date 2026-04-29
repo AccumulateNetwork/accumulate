@@ -29,7 +29,7 @@ services:
       - --listen
       - /ip4/0.0.0.0/tcp/16593
       - --key
-      - "626f6f74737472617076332d6e6f64652d6b65792d736565640000000000000000"
+      - "626f6f74737472617076332d6e6f64652d6b65792d7365656400000000000000"
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "netstat -tuln | grep -q ':16593 ' || exit 1"]
