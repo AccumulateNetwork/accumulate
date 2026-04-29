@@ -41,6 +41,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/tracker"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
@@ -475,14 +476,20 @@ func logRoots(db *database.Database, tr *tracker.Tracker, onPhase func(phase, ms
 	onPhase("debug", fmt.Sprintf("local root=%x..  observed=%d  latest=%d", r[:8], tr.ObservedCount(), tr.LatestObservedBlock()))
 }
 
-// applyEvent mirrors the gossip package's per-event handler: filter
-// to BlockEvent, dedup touched accounts, ModeStateOnly pull each, one
-// commit per event. We don't call gossip.RunChannel directly because
-// the orchestrator interleaves event processing with anchor polling
-// and tracker checks in the same select.
+// applyEvent processes a BlockEvent. For each chain entry on a
+// main chain (transaction hashes), fetch the transaction via
+// QueryMessage and pull every account it references — signers,
+// principal — in addition to the chain-touched account itself.
+// This widens state coverage beyond just chain-modified accounts;
+// without it, transactions that change Main-state without a chain
+// entry get missed and the local BPT diverges.
+//
+// (#72 will replace this with deterministic executor execution.
+// Until then this prefetch is the closest approximation of "what
+// the executor would write next.")
 func applyEvent(
 	ctx context.Context,
-	src pull.Source,
+	src Source,
 	db *database.Database,
 	ev api.Event,
 	pageSize uint64,
@@ -491,12 +498,56 @@ func applyEvent(
 	if !ok {
 		return nil
 	}
-	touched := dedupAccounts(blockEv.Entries)
-	if len(touched) == 0 {
+	// Start with chain-touched accounts (existing behavior).
+	wanted := make(map[string]*url.URL)
+	for _, e := range blockEv.Entries {
+		if e == nil || e.Account == nil {
+			continue
+		}
+		wanted[e.Account.String()] = e.Account
+	}
+
+	// For every main-chain entry that points to a transaction,
+	// fetch the transaction and add its signer + principal to the
+	// wanted set.
+	for _, e := range blockEv.Entries {
+		if e == nil || e.Account == nil {
+			continue
+		}
+		if e.Name != "main" || len(e.Entry) != 32 {
+			continue
+		}
+		var hash [32]byte
+		copy(hash[:], e.Entry[:])
+		txid := e.Account.WithTxID(hash)
+		rec, err := src.QueryMessage(ctx, txid, nil)
+		if err != nil || rec == nil || rec.Message == nil {
+			continue
+		}
+		tm, ok := rec.Message.(*messaging.TransactionMessage)
+		if !ok || tm.Transaction == nil || tm.Transaction.Header.Principal == nil {
+			continue
+		}
+		wanted[tm.Transaction.Header.Principal.String()] = tm.Transaction.Header.Principal
+		// Walk the signature sets for signer URLs.
+		if rec.Signatures != nil {
+			for _, set := range rec.Signatures.Records {
+				if set != nil && set.Account != nil {
+					u := set.Account.GetUrl()
+					if u != nil {
+						wanted[u.String()] = u
+					}
+				}
+			}
+		}
+	}
+
+	if len(wanted) == 0 {
 		return nil
 	}
+
 	batch := db.Begin(true)
-	for _, u := range touched {
+	for _, u := range wanted {
 		if err := pull.Account(ctx, src, batch, u, pull.Options{
 			Mode:     pull.ModeStateOnly,
 			PageSize: pageSize,
