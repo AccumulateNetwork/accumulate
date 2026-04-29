@@ -8,7 +8,11 @@ package http
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"os"
+	"sort"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -53,6 +57,12 @@ type Options struct {
 	// For API v2
 	Network *config.Describe
 	MaxWait time.Duration
+
+	// SnapshotDirs maps partition ID (case-insensitive) to the
+	// on-disk directory that holds major-block snapshots. When set,
+	// the handler exposes /v3/snapshot/:partition/:major for the
+	// bootstrap-v3 launcher to fetch verified-state snapshots.
+	SnapshotDirs map[string]string
 }
 
 // NewHandler returns a new Handler.
@@ -178,6 +188,65 @@ func NewHandler(opts Options) (*Handler, error) {
 	// from httprouter and reports "bad handshake".
 	h.mux.POST("/v3", v3Adapter)
 	h.mux.GET("/v3", v3Adapter)
+
+	// Bootstrap-v3 snapshot fetch. Streams the daemon's
+	// snapshot-major-block-{N}.bpt file. Used by the launcher to
+	// seed local DB at a verified boundary state.
+	if opts.SnapshotDirs != nil {
+		snapDirs := opts.SnapshotDirs
+		// List: returns one line per available major-block, ascending
+		// numeric. Plain text, no JSON wrapper, since the launcher
+		// just needs the "latest" number.
+		h.mux.GET("/v3/snapshot/:partition", func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+			partition := strings.ToLower(ps.ByName("partition"))
+			dir, ok := snapDirs[partition]
+			if !ok {
+				http.NotFound(w, r)
+				return
+			}
+			entries, err := os.ReadDir(dir)
+			if err != nil {
+				http.Error(w, "read snapshot dir: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
+			var nums []uint64
+			for _, e := range entries {
+				name := e.Name()
+				if !strings.HasPrefix(name, "snapshot-major-block-") || !strings.HasSuffix(name, ".bpt") {
+					continue
+				}
+				numStr := strings.TrimSuffix(strings.TrimPrefix(name, "snapshot-major-block-"), ".bpt")
+				n, err := strconv.ParseUint(numStr, 10, 64)
+				if err != nil {
+					continue
+				}
+				nums = append(nums, n)
+			}
+			sort.Slice(nums, func(i, j int) bool { return nums[i] < nums[j] })
+			w.Header().Set("Content-Type", "text/plain")
+			for _, n := range nums {
+				fmt.Fprintf(w, "%d\n", n)
+			}
+		})
+		// Fetch: streams the snapshot file.
+		h.mux.GET("/v3/snapshot/:partition/:major", func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+			partition := strings.ToLower(ps.ByName("partition"))
+			dir, ok := snapDirs[partition]
+			if !ok {
+				http.NotFound(w, r)
+				return
+			}
+			major := ps.ByName("major")
+			n, err := strconv.ParseUint(major, 10, 64)
+			if err != nil {
+				http.Error(w, "invalid major block", http.StatusBadRequest)
+				return
+			}
+			path := dir + "/" + "snapshot-major-block-" + fmt.Sprintf("%09d", n) + ".bpt"
+			w.Header().Set("Content-Type", "application/octet-stream")
+			http.ServeFile(w, r, path)
+		})
+	}
 
 	h.mux.POST("/eth", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		eth.ServeHTTP(w, r)

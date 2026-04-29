@@ -686,13 +686,23 @@ func (d *Daemon) startAPI() error {
 		return errors.UnknownError.Wrap(err)
 	}
 
-	d.api, err = nodeapi.NewHandler(nodeapi.Options{
+	apiOpts := nodeapi.Options{
 		Logger:  d.Logger.With("module", "acc-rpc"),
 		Node:    d.p2pnode,
 		Router:  d.router,
 		Network: &d.Config.Accumulate.Describe,
 		MaxWait: d.Config.Accumulate.API.TxMaxWaitTime,
-	})
+	}
+	// Bootstrap-v3: expose the periodic-snapshot directory so the
+	// /v3/snapshot/:partition/:major endpoint can stream verified
+	// boundary states to launchers.
+	if d.Config.Accumulate.Snapshots.Enable {
+		snapDir := config.MakeAbsolute(d.Config.RootDir, d.Config.Accumulate.Snapshots.Directory)
+		apiOpts.SnapshotDirs = map[string]string{
+			strings.ToLower(d.Config.Accumulate.PartitionId): snapDir,
+		}
+	}
+	d.api, err = nodeapi.NewHandler(apiOpts)
 	if err != nil {
 		return errors.UnknownError.WithFormat("initialize API: %w", err)
 	}

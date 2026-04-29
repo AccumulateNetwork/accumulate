@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -49,6 +50,36 @@ func (h *HttpService) Requires() []ioc.Requirement {
 
 func (h *HttpService) Provides() []ioc.Provided { return nil }
 
+// collectSnapshotDirs walks the configured services list and returns
+// a partition→absolute-directory map for every SnapshotService.
+// Recurses into SubnodeService.Services since the dual-node setup
+// nests per-partition services under a SubnodeService for the BVN.
+// The Directory in SnapshotService is relative to the run config's
+// root dir, so we make it absolute here for the http handler.
+func collectSnapshotDirs(rootDir string, services []Service) map[string]string {
+	out := map[string]string{}
+	var walk func(string, []Service)
+	walk = func(base string, ss []Service) {
+		for _, s := range ss {
+			switch s := s.(type) {
+			case *SnapshotService:
+				dir := s.Directory
+				if !filepath.IsAbs(dir) {
+					dir = filepath.Join(base, dir)
+				}
+				out[strings.ToLower(s.Partition)] = dir
+			case *SubnodeService:
+				walk(filepath.Join(base, s.Name), s.Services)
+			}
+		}
+	}
+	walk(rootDir, services)
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
 func (h *HttpService) start(inst *Instance) error {
 	setDefaultVal(&h.Listen, []multiaddr.Multiaddr{multiaddr.StringCast("/ip4/0.0.0.0/tcp/8080/http")})
 	h.applyHttpDefaults()
@@ -76,6 +107,11 @@ func (h *HttpService) start(inst *Instance) error {
 		MaxWait:   DefaultHTTPMaxWait,
 		NetworkId: inst.config.Network,
 	}
+	// Bootstrap-v3: collect partition→snapshot-dir mapping from
+	// any registered SnapshotService instances. The HTTP handler
+	// then exposes /v3/snapshot/:partition[/:major] for launchers
+	// to fetch verified-state snapshots.
+	apiOpts.SnapshotDirs = collectSnapshotDirs(inst.rootDir, inst.config.Services)
 	client := &message.Client{Transport: &message.RoutedTransport{
 		Network: inst.config.Network,
 		Router:  routing.MessageRouter{Router: router},
