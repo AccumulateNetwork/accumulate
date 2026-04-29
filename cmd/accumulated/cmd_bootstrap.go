@@ -34,6 +34,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
+	snapshotV2 "gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/websocket"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/address"
@@ -82,6 +83,7 @@ var flagBootstrap = struct {
 	WriteConfig    bool
 	TmListen       string
 	TmBootstrap    string // comma-separated Tendermint multiaddrs for catch-up
+	TmRpcServers   string // comma-separated Tendermint RPC URLs for state seeding (≥2)
 }{}
 
 func init() {
@@ -101,6 +103,7 @@ func init() {
 	f.BoolVar(&flagBootstrap.WriteConfig, "write-config", true, "After bootstrap, write accumulate.toml + move BPT db into the launchable layout that 'accumulated run' expects")
 	f.StringVar(&flagBootstrap.TmListen, "tm-listen", "/ip4/0.0.0.0/tcp/26656", "Listen address for the launched daemon (Tendermint base port; Accumulate ports derived from it)")
 	f.StringVar(&flagBootstrap.TmBootstrap, "tm-bootstrap-peers", "", "Comma-separated Tendermint P2P multiaddrs (e.g. /dns/host/tcp/26656/p2p/<id>) used as persistent peers for catch-up")
+	f.StringVar(&flagBootstrap.TmRpcServers, "tm-rpc-servers", "", "Comma-separated Tendermint RPC URLs (≥2 required for light-client state seeding, e.g. http://host:26657,http://host2:26657)")
 }
 
 func runBootstrap(cmd *cobra.Command, _ []string) {
@@ -313,13 +316,27 @@ func runBootstrapViaSnapshot(dataDir string) {
 	}
 	defer closeDB()
 
+	// Read header for the minor block height before restoring; used
+	// when pre-populating CometBFT's state DB. Snapshots are v2; the
+	// height + time live on the SystemLedger inside the header.
+	headerFile, err := os.Open(tmpFile)
+	checkf(err, "open snapshot for header read")
+	v2r, herr := snapshotV2.Open(headerFile)
+	checkf(herr, "read snapshot header")
+	headerFile.Close()
+	if v2r.Header == nil || v2r.Header.SystemLedger == nil {
+		fatalf("snapshot has no SystemLedger; cannot determine block height")
+	}
+	snapHeight := v2r.Header.SystemLedger.Index
+	snapTime := v2r.Header.SystemLedger.Timestamp
+
 	// Restore.
 	f, err := os.Open(tmpFile)
 	checkf(err, "open snapshot for restore")
 	defer f.Close()
 	scope := protocol.PartitionUrl(flagBootstrap.Partition)
 	netURL := config.NetworkUrl{URL: scope}
-	fmt.Fprintf(os.Stderr, "[snapshot] restoring into %s ...\n", dbPath)
+	fmt.Fprintf(os.Stderr, "[snapshot] restoring into %s (height=%d) ...\n", dbPath, snapHeight)
 	err = snapshot.FullRestore(db, f, nil, netURL)
 	checkf(err, "restore snapshot")
 
@@ -395,7 +412,7 @@ func runBootstrapViaSnapshot(dataDir string) {
 		// Close the BPT db before moving its directory; otherwise
 		// Badger's background flusher spins on the missing path.
 		closeDB()
-		if err := writeDaemonConfig(dataDir, dbPath); err != nil {
+		if err := writeDaemonConfig(dataDir, dbPath, root, snapHeight, snapTime); err != nil {
 			fatalf("write daemon config: %v", err)
 		}
 	} else {
@@ -425,7 +442,7 @@ func runBootstrapViaSnapshot(dataDir string) {
 //     to current — without state-sync support, the daemon's
 //     consensus path needs to know how to reconcile a non-zero
 //     starting height.
-func writeDaemonConfig(dataDir, snapshotDB string) error {
+func writeDaemonConfig(dataDir, snapshotDB string, appHash [32]byte, snapHeight uint64, snapTime time.Time) error {
 	mode, dir := partitionToCoreMode(flagBootstrap.Partition)
 
 	// Move the BPT db to where the daemon expects it.
@@ -502,8 +519,34 @@ func writeDaemonConfig(dataDir, snapshotDB string) error {
 		return fmt.Errorf("save accumulate.toml: %w", err)
 	}
 	fmt.Fprintf(os.Stderr, "[config] wrote %s\n", tomlPath)
-	fmt.Fprintf(os.Stderr, "[config] hand off: 'accumulated run -w %s' (pending #4002 + #4003)\n", dataDir)
+
+	// Pre-populate CometBFT state DB so the daemon's first run sees a
+	// node already at snapHeight, not a fresh chain at height 0. This
+	// closes the height-mismatch handshake (#4004 option B).
+	tmRPCs := splitNonempty(flagBootstrap.TmRpcServers, ",")
+	if len(tmRPCs) >= 2 {
+		nodeDir := filepath.Join(dataDir, dir)
+		if err := writeCometState(nodeDir, tmRPCs, appHash, snapHeight, snapTime); err != nil {
+			return fmt.Errorf("write comet state: %w", err)
+		}
+	} else {
+		fmt.Fprintf(os.Stderr, "[config] WARN: --tm-rpc-servers not set (need ≥2 for light client); CometBFT state DB not seeded — daemon will fail at handshake.\n")
+	}
+
+	fmt.Fprintf(os.Stderr, "[config] hand off: 'accumulated %s' to start the node\n", dataDir)
 	return nil
+}
+
+// splitNonempty is strings.Split followed by trim+drop-empty.
+func splitNonempty(s, sep string) []string {
+	var out []string
+	for _, x := range strings.Split(s, sep) {
+		x = strings.TrimSpace(x)
+		if x != "" {
+			out = append(out, x)
+		}
+	}
+	return out
 }
 
 // partitionToCoreMode returns (mode, nodeDir) for the partition the

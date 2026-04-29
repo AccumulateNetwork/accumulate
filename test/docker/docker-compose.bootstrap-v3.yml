@@ -9,12 +9,14 @@
 #   docker compose -f test/docker/docker-compose.bootstrap-v3.yml logs -f
 #   docker compose -f test/docker/docker-compose.bootstrap-v3.yml down -v
 #
-# API port mapping (host → container 26660):
-#   bvn1-val1 → 26680
-#   bvn1-val2 → 26681
-#   bvn1-val3 → 26682
-#   bvn1-val4 → 26683
+# API port mapping (host → container):
+#   bvn1-val1 → 26680 (Accumulate API), 26690 (DN Tendermint RPC)
+#   bvn1-val2 → 26681 (Accumulate API), 26691 (DN Tendermint RPC)
+#   bvn1-val3 → 26682 (Accumulate API), 26692 (DN Tendermint RPC)
+#   bvn1-val4 → 26683 (Accumulate API), 26693 (DN Tendermint RPC)
 # (different range from the load-test compose to avoid port conflicts).
+# The Tendermint RPC port is exposed so the bootstrap-v3 launcher can
+# pre-populate CometBFT state via NewLightClientStateProvider.
 
 services:
   # libp2p discovery bootstrap (distinct from bootstrap-v3 concept).
@@ -75,6 +77,7 @@ services:
       - /root/.accumulate/bvn1-1/accumulate.toml
     ports:
       - "26680:26660"
+      - "26690:26657"
     depends_on:
       init:
         condition: service_completed_successfully
@@ -94,6 +97,7 @@ services:
       - /root/.accumulate/bvn1-2/accumulate.toml
     ports:
       - "26681:26660"
+      - "26691:26657"
     depends_on:
       init:
         condition: service_completed_successfully
@@ -113,6 +117,7 @@ services:
       - /root/.accumulate/bvn1-3/accumulate.toml
     ports:
       - "26682:26660"
+      - "26692:26657"
     depends_on:
       init:
         condition: service_completed_successfully
@@ -132,6 +137,7 @@ services:
       - /root/.accumulate/bvn1-4/accumulate.toml
     ports:
       - "26683:26660"
+      - "26693:26657"
     depends_on:
       init:
         condition: service_completed_successfully
