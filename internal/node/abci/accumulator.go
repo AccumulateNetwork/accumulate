@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"runtime/debug"
 	"sort"
+	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -84,10 +85,38 @@ type AccumulatorOptions struct {
 	RootDir              string
 	AnalysisLog          config.AnalysisLog
 	MaxEnvelopesPerBlock int
+
+	// RetainBlocks tells CometBFT to prune blocks below
+	// (LastBlockHeight - RetainBlocks). Zero disables pruning (the
+	// CometBFT default). For Accumulate, deep CometBFT history is
+	// largely redundant with signed-anchor receipts in the protocol's
+	// own chains; the protocol-level floor is the evidence window
+	// (default max_age_num_blocks=100000), so 100000 is a reasonable
+	// default for full nodes. Bootstrapped followers can set this
+	// much lower if they don't need to source blocksync recovery.
+	RetainBlocks uint64
 }
 
 // NewAccumulator returns a new Accumulator.
 func NewAccumulator(opts AccumulatorOptions) *Accumulator {
+	// Default to pruning anything older than the evidence window
+	// (CometBFT's max_age_num_blocks default is 100000). Past that
+	// point, slashing evidence is too stale to act on, so retaining
+	// older blocks serves no protocol purpose — Accumulate's own
+	// signed-anchor + chain-receipt machinery is the system of
+	// record for past state.
+	//
+	// Override via $ACCUMULATE_RETAIN_BLOCKS (set in dev/test compose
+	// so pruning is observable in short runs without waiting for
+	// 100k blocks).
+	if opts.RetainBlocks == 0 {
+		opts.RetainBlocks = 100000
+		if v := os.Getenv("ACCUMULATE_RETAIN_BLOCKS"); v != "" {
+			if n, err := strconv.ParseUint(v, 10, 64); err == nil {
+				opts.RetainBlocks = n
+			}
+		}
+	}
 	app := &Accumulator{
 		AccumulatorOptions: opts,
 		logger:             opts.Logger.With("module", "accumulate", "partition", opts.Partition),
@@ -699,11 +728,19 @@ func (app *Accumulator) discardBlock() {
 //
 // Commits the transaction block to the chains.
 func (app *Accumulator) Commit(_ context.Context, req *abci.RequestCommit) (*abci.ResponseCommit, error) {
-	// // Keep this disabled until we have real snapshot support through Tendermint
-	// if false {
-	// 	// Truncate Tendermint's block store to the latest snapshot
-	// 	resp.RetainHeight = int64(app.lastSnapshot)
-	// }
+	resp := &abci.ResponseCommit{}
+
+	// Tell CometBFT how far back to keep blocks. Accumulate's signed
+	// anchors + chain receipts are the system of record for past
+	// state; CometBFT history is only required to (a) act on slashing
+	// evidence within max_age_num_blocks and (b) source blocksync for
+	// peers a few blocks behind. Anything older is dead weight.
+	if app.RetainBlocks > 0 && app.block != nil {
+		h := uint64(app.block.Params().Index)
+		if h > app.RetainBlocks {
+			resp.RetainHeight = int64(h - app.RetainBlocks)
+		}
+	}
 
 	// COMMIT DOES NOT COMMIT TO DISK.
 	//
@@ -713,13 +750,13 @@ func (app *Accumulator) Commit(_ context.Context, req *abci.RequestCommit) (*abc
 	// If the block is non-empty, we simply return the root hash and let
 	// BeginBlock handle the actual commit.
 	if !app.DisableLateCommit || app.block == nil {
-		return &abci.ResponseCommit{}, nil
+		return resp, nil
 	}
 
 	// TESTING ONLY - commit during commit, so that tests can observe state
 	// changes at the expected time
 	err := app.actualCommit()
-	return &abci.ResponseCommit{}, err
+	return resp, err
 }
 
 func (app *Accumulator) cleanupBlock() {

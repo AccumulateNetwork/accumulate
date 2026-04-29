@@ -70,6 +70,8 @@ services:
     image: accumulate:bootstrap-v3
     container_name: acc-bv3-bvn1-val1
     mem_limit: 1g
+    environment:
+      ACCUMULATE_RETAIN_BLOCKS: "50"
     volumes:
       - bv3-config:/root/.accumulate
     command:
@@ -90,6 +92,8 @@ services:
     image: accumulate:bootstrap-v3
     container_name: acc-bv3-bvn1-val2
     mem_limit: 1g
+    environment:
+      ACCUMULATE_RETAIN_BLOCKS: "50"
     volumes:
       - bv3-config:/root/.accumulate
     command:
@@ -110,6 +114,8 @@ services:
     image: accumulate:bootstrap-v3
     container_name: acc-bv3-bvn1-val3
     mem_limit: 1g
+    environment:
+      ACCUMULATE_RETAIN_BLOCKS: "50"
     volumes:
       - bv3-config:/root/.accumulate
     command:
@@ -130,6 +136,8 @@ services:
     image: accumulate:bootstrap-v3
     container_name: acc-bv3-bvn1-val4
     mem_limit: 1g
+    environment:
+      ACCUMULATE_RETAIN_BLOCKS: "50"
     volumes:
       - bv3-config:/root/.accumulate
     command:
