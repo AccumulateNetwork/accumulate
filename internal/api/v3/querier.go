@@ -347,6 +347,7 @@ func (s *Querier) queryBptPage(batch *database.Batch, query *api.BptPageQuery) (
 		out.Entries[i] = &api.BptLeafSummary{
 			KeyHash:   e.KeyHash,
 			ValueHash: e.ValueHash,
+			Account:   e.Account,
 		}
 	}
 	return out, nil

@@ -31,6 +31,7 @@ package orchestrator
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -88,6 +89,11 @@ type Options struct {
 	// OnPhase, if non-nil, is invoked at phase boundaries with a short
 	// human-readable status. Useful for CLI progress output.
 	OnPhase func(phase string, msg string)
+
+	// MatchThreshold overrides tracker.DefaultMatchThreshold. Zero
+	// keeps the default. Tests use 1 for immediate promotion on
+	// single match.
+	MatchThreshold int
 }
 
 // Run executes the bootstrap-v3 phases. Returns when the tracker
@@ -134,6 +140,9 @@ func Run(
 	tr, err := tracker.New(db, machine)
 	if err != nil {
 		return fmt.Errorf("tracker: %w", err)
+	}
+	if opts.MatchThreshold > 0 {
+		tr.MatchThreshold = opts.MatchThreshold
 	}
 
 	phase := func(name, msg string) {
@@ -229,12 +238,19 @@ func pullSpine(ctx context.Context, src pull.Source, db *database.Database, part
 	return nil
 }
 
-// runEnumerate runs enumerate.Run inside a single commit. The local
-// BPT after this returns reflects the source's BPT state at the end
-// of the scan (modulo the source advancing during enumeration).
+// runEnumerate runs enumerate.Run inside a single commit, then
+// hydrates account state for every leaf that doesn't already have
+// it. After this returns, every account source has at the moment
+// the scan completed exists in the local DB with full state
+// (Main + Directory + Pending + chain heads). The launcher's BPT
+// after observer-recompute will equal source's BPT at that moment
+// (modulo the source advancing during the pull).
+//
+// Already-populated accounts (e.g., the spine) are skipped — pull
+// only fires on a NotFound for Main.
 func runEnumerate(
 	ctx context.Context,
-	src enumerate.Source,
+	src Source,
 	db *database.Database,
 	scope *url.URL,
 	pageSize uint64,
@@ -252,10 +268,65 @@ func runEnumerate(
 		return fmt.Errorf("commit enumerate: %w", err)
 	}
 	if onPhase != nil {
-		onPhase("enumerate", fmt.Sprintf("scanned %d leaves across %d pages",
+		onPhase("enumerate", fmt.Sprintf("scanned %d leaves across %d pages; hydrating missing state",
 			res.LeavesInserted, res.PagesPulled))
 	}
+
+	// Post-enumerate state-pull pass.
+	pulled, skipped, errs := 0, 0, 0
+	for _, u := range res.Accounts {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		// Cheap probe: does this account already have Main locally?
+		if hasMain(db, u) {
+			skipped++
+			continue
+		}
+		hbatch := db.Begin(true)
+		err := pull.Account(ctx, src, hbatch, u, pull.Options{
+			Mode:     pull.ModeStateOnly,
+			PageSize: pageSize,
+		})
+		if err != nil {
+			hbatch.Discard()
+			errs++
+			if onPhase != nil {
+				onPhase("enumerate", fmt.Sprintf("hydrate %s: %v", u, err))
+			}
+			continue
+		}
+		if err := hbatch.UpdateBPT(); err != nil {
+			hbatch.Discard()
+			errs++
+			continue
+		}
+		if err := hbatch.Commit(); err != nil {
+			errs++
+			continue
+		}
+		pulled++
+	}
+	if onPhase != nil {
+		onPhase("enumerate", fmt.Sprintf("hydrated %d accounts (skipped %d already-populated, errored %d)",
+			pulled, skipped, errs))
+	}
 	return nil
+}
+
+// hasMain reports whether the account at u has its Main record
+// populated locally — the cheapest probe that distinguishes
+// "BPT leaf only" from "fully hydrated."
+func hasMain(db *database.Database, u *url.URL) bool {
+	b := db.Begin(false)
+	defer b.Discard()
+	v, err := b.Account(u).Main().Get()
+	if err != nil {
+		return false
+	}
+	// Main().Get() may return a non-nil default for accounts that
+	// were never written. Treat zero/empty as "not populated."
+	return v != nil
 }
 
 // runSteady runs the gossip+anchor loop until tracker promotes,
@@ -293,6 +364,9 @@ func runSteady(
 		}
 	}
 	if promoted, err := tr.Check(ctx); err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return nil
+		}
 		return fmt.Errorf("initial check: %w", err)
 	} else if promoted {
 		if onPhase != nil {
@@ -323,6 +397,9 @@ func runSteady(
 				logRoots(db, tr, onPhase)
 			}
 			if promoted, err := tr.Check(ctx); err != nil {
+				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+					return nil
+				}
 				return fmt.Errorf("check: %w", err)
 			} else if promoted {
 				if onPhase != nil {
@@ -359,6 +436,9 @@ func runSteady(
 				}
 			}
 			if promoted, err := tr.Check(ctx); err != nil {
+				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+					return nil
+				}
 				return fmt.Errorf("check: %w", err)
 			} else if promoted {
 				if onPhase != nil {

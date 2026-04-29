@@ -68,7 +68,7 @@ func TestCheck_PromotesOnMatch(t *testing.T) {
 	root := fillN(t, db, 5)
 
 	m := nodestate.New()
-	tr, err := New(db, m)
+	tr, err := New(db, m); tr.MatchThreshold = 1
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +102,7 @@ func TestCheck_NoMatchStaysBooting(t *testing.T) {
 	fillN(t, db, 3)
 
 	m := nodestate.New()
-	tr, _ := New(db, m)
+	tr, _ := New(db, m); tr.MatchThreshold = 1
 
 	var bogus [32]byte
 	bogus[0] = 0xff
@@ -136,7 +136,7 @@ func TestCheck_MovingTarget(t *testing.T) {
 	}
 
 	m := nodestate.New()
-	tr, _ := New(dst, m)
+	tr, _ := New(dst, m); tr.MatchThreshold = 1
 
 	tr.Observe(10, root1)
 	tr.Observe(20, root2)
@@ -174,7 +174,7 @@ func TestCheck_MovingTarget(t *testing.T) {
 // pre-genesis or malformed header) is silently ignored.
 func TestObserve_IgnoresZeroAnchor(t *testing.T) {
 	db := newTrackerDB(t)
-	tr, _ := New(db, nodestate.New())
+	tr, _ := New(db, nodestate.New()); tr.MatchThreshold = 1
 	tr.Observe(99, [32]byte{})
 	if tr.ObservedCount() != 0 {
 		t.Errorf("ObservedCount=%d, want 0 (zero anchor ignored)", tr.ObservedCount())
@@ -189,7 +189,7 @@ func TestObserve_KeepsEarliestBlockForSameAnchor(t *testing.T) {
 	root := fillN(t, db, 2)
 
 	m := nodestate.New()
-	tr, _ := New(db, m)
+	tr, _ := New(db, m); tr.MatchThreshold = 1
 	tr.Observe(100, root)
 	tr.Observe(50, root) // earlier — should win
 	tr.Observe(150, root)
@@ -209,7 +209,7 @@ func TestObserve_KeepsEarliestBlockForSameAnchor(t *testing.T) {
 // TestCheck_ContextCanceled returns ctx.Err.
 func TestCheck_ContextCanceled(t *testing.T) {
 	db := newTrackerDB(t)
-	tr, _ := New(db, nodestate.New())
+	tr, _ := New(db, nodestate.New()); tr.MatchThreshold = 1
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	if _, err := tr.Check(ctx); err == nil {
@@ -246,6 +246,7 @@ func TestSnapshot_RestoreRoundTrip(t *testing.T) {
 	}
 
 	dst, _ := New(db, nodestate.New())
+	dst.MatchThreshold = 1
 	dst.RestoreFrom(snap)
 	if dst.ObservedCount() != 3 {
 		t.Errorf("dst observed count = %d, want 3", dst.ObservedCount())
@@ -264,7 +265,7 @@ func TestSnapshot_RestoreRoundTrip(t *testing.T) {
 // TestLatestObservedBlock — accessor accuracy.
 func TestLatestObservedBlock(t *testing.T) {
 	db := newTrackerDB(t)
-	tr, _ := New(db, nodestate.New())
+	tr, _ := New(db, nodestate.New()); tr.MatchThreshold = 1
 	if tr.LatestObservedBlock() != 0 {
 		t.Errorf("LatestObservedBlock=%d, want 0", tr.LatestObservedBlock())
 	}
@@ -276,5 +277,73 @@ func TestLatestObservedBlock(t *testing.T) {
 	tr.Observe(15, a)
 	if tr.LatestObservedBlock() != 15 {
 		t.Errorf("LatestObservedBlock=%d, want 15", tr.LatestObservedBlock())
+	}
+}
+
+// TestCheck_ThresholdRequiresConsecutiveMatches — promotion only
+// fires after MatchThreshold consecutive Check calls match. A
+// single mismatch resets the streak. Default threshold (10) is
+// used to validate the production wiring; smaller thresholds are
+// covered by other tests.
+func TestCheck_ThresholdRequiresConsecutiveMatches(t *testing.T) {
+	db := newTrackerDB(t)
+	root := fillN(t, db, 3)
+
+	m := nodestate.New()
+	tr, _ := New(db, m) // default MatchThreshold = 10
+	tr.Observe(50, root)
+
+	// First 9 checks: streak grows but no promotion.
+	for i := 1; i < DefaultMatchThreshold; i++ {
+		promoted, err := tr.Check(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if promoted {
+			t.Fatalf("promoted at streak %d, want only at %d", i, DefaultMatchThreshold)
+		}
+		if got := tr.ConsecutiveMatches(); got != i {
+			t.Errorf("after Check %d: ConsecutiveMatches=%d, want %d", i, got, i)
+		}
+	}
+
+	// 10th check: promotion fires.
+	promoted, err := tr.Check(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !promoted {
+		t.Fatal("expected promotion at default threshold")
+	}
+	if m.Get().State != nodestate.StateActive {
+		t.Errorf("state = %v, want ACTIVE", m.Get().State)
+	}
+}
+
+// TestCheck_MismatchResetsStreak — any non-matching Check resets
+// the consecutive counter to zero. Subsequent matches must
+// re-accumulate from scratch.
+func TestCheck_MismatchResetsStreak(t *testing.T) {
+	db := newTrackerDB(t)
+	root := fillN(t, db, 3)
+
+	m := nodestate.New()
+	tr, _ := New(db, m)
+	tr.MatchThreshold = 3
+	tr.Observe(7, root)
+
+	// 2 matches, then mutate db so root changes (mismatch), then back.
+	for i := 0; i < 2; i++ {
+		_, _ = tr.Check(context.Background())
+	}
+	if got := tr.ConsecutiveMatches(); got != 2 {
+		t.Fatalf("expected streak 2, got %d", got)
+	}
+
+	// Mutate db — local root changes, no longer matches observed.
+	_ = fillRange(t, db, 100, 1)
+	_, _ = tr.Check(context.Background())
+	if got := tr.ConsecutiveMatches(); got != 0 {
+		t.Errorf("after mismatch: streak=%d, want 0", got)
 	}
 }

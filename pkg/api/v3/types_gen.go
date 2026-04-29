@@ -76,6 +76,7 @@ type BptLeafSummary struct {
 	fieldsSet []bool
 	KeyHash   [32]byte `json:"keyHash,omitempty" form:"keyHash" query:"keyHash" validate:"required"`
 	ValueHash [32]byte `json:"valueHash,omitempty" form:"valueHash" query:"valueHash" validate:"required"`
+	Account   *url.URL `json:"account,omitempty" form:"account" query:"account" validate:"required"`
 	extraData []byte
 }
 
@@ -650,6 +651,9 @@ func (v *BptLeafSummary) Copy() *BptLeafSummary {
 
 	u.KeyHash = v.KeyHash
 	u.ValueHash = v.ValueHash
+	if v.Account != nil {
+		u.Account = v.Account
+	}
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -1816,6 +1820,14 @@ func (v *BptLeafSummary) Equal(u *BptLeafSummary) bool {
 		return false
 	}
 	if !(v.ValueHash == u.ValueHash) {
+		return false
+	}
+	switch {
+	case v.Account == u.Account:
+		// equal
+	case v.Account == nil || u.Account == nil:
+		return false
+	case !((v.Account).Equal(u.Account)):
 		return false
 	}
 
@@ -3121,6 +3133,7 @@ func (v *BlockQuery) baseIsValid() error {
 var fieldNames_BptLeafSummary = []string{
 	1: "KeyHash",
 	2: "ValueHash",
+	3: "Account",
 }
 
 func (v *BptLeafSummary) MarshalBinary() ([]byte, error) {
@@ -3136,6 +3149,9 @@ func (v *BptLeafSummary) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.ValueHash == ([32]byte{})) {
 		writer.WriteHash(2, &v.ValueHash)
+	}
+	if !(v.Account == nil) {
+		writer.WriteUrl(3, v.Account)
 	}
 
 	_, _, err := writer.Reset(fieldNames_BptLeafSummary)
@@ -3158,6 +3174,11 @@ func (v *BptLeafSummary) IsValid() error {
 		errs = append(errs, "field ValueHash is missing")
 	} else if v.ValueHash == ([32]byte{}) {
 		errs = append(errs, "field ValueHash is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Account is missing")
+	} else if v.Account == nil {
+		errs = append(errs, "field Account is not set")
 	}
 
 	switch len(errs) {
@@ -6317,6 +6338,9 @@ func (v *BptLeafSummary) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadHash(2); ok {
 		v.ValueHash = *x
 	}
+	if x, ok := reader.ReadUrl(3); ok {
+		v.Account = x
+	}
 
 	seen, err := reader.Reset(fieldNames_BptLeafSummary)
 	if err != nil {
@@ -8144,6 +8168,7 @@ func init() {
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("keyHash", "bytes32"),
 		encoding.NewTypeField("valueHash", "bytes32"),
+		encoding.NewTypeField("account", "string"),
 	}, "BptLeafSummary", "bptLeafSummary")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -8586,15 +8611,19 @@ func (v *BlockQuery) MarshalJSON() ([]byte, error) {
 
 func (v *BptLeafSummary) MarshalJSON() ([]byte, error) {
 	u := struct {
-		KeyHash   *string `json:"keyHash,omitempty"`
-		ValueHash *string `json:"valueHash,omitempty"`
-		ExtraData *string `json:"$epilogue,omitempty"`
+		KeyHash   *string  `json:"keyHash,omitempty"`
+		ValueHash *string  `json:"valueHash,omitempty"`
+		Account   *url.URL `json:"account,omitempty"`
+		ExtraData *string  `json:"$epilogue,omitempty"`
 	}{}
 	if !(v.KeyHash == ([32]byte{})) {
 		u.KeyHash = encoding.ChainToJSON(&v.KeyHash)
 	}
 	if !(v.ValueHash == ([32]byte{})) {
 		u.ValueHash = encoding.ChainToJSON(&v.ValueHash)
+	}
+	if !(v.Account == nil) {
+		u.Account = v.Account
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -9549,12 +9578,14 @@ func (v *BlockQuery) UnmarshalJSON(data []byte) error {
 
 func (v *BptLeafSummary) UnmarshalJSON(data []byte) error {
 	u := struct {
-		KeyHash   *string `json:"keyHash,omitempty"`
-		ValueHash *string `json:"valueHash,omitempty"`
-		ExtraData *string `json:"$epilogue,omitempty"`
+		KeyHash   *string  `json:"keyHash,omitempty"`
+		ValueHash *string  `json:"valueHash,omitempty"`
+		Account   *url.URL `json:"account,omitempty"`
+		ExtraData *string  `json:"$epilogue,omitempty"`
 	}{}
 	u.KeyHash = encoding.ChainToJSON(&v.KeyHash)
 	u.ValueHash = encoding.ChainToJSON(&v.ValueHash)
+	u.Account = v.Account
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -9569,6 +9600,7 @@ func (v *BptLeafSummary) UnmarshalJSON(data []byte) error {
 	} else {
 		v.ValueHash = *x
 	}
+	v.Account = u.Account
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err

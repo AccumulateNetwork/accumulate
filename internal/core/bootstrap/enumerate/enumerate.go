@@ -53,6 +53,12 @@ type Result struct {
 	// catch-up progress; on a steady network the last page's root
 	// equals the current StateTreeAnchor.
 	LastBptRoot [32]byte
+
+	// Accounts is the de-duplicated list of account URLs encountered
+	// during enumeration. The caller uses this to drive the
+	// post-enumerate state-pull pass: for each URL whose Main is
+	// not yet local, pull the account.
+	Accounts []*url.URL
 }
 
 // Options configures Run.
@@ -125,6 +131,9 @@ func Run(
 					e.KeyHash[:8], res.PagesPulled, err)
 			}
 			res.LeavesInserted++
+			if e.Account != nil {
+				res.Accounts = append(res.Accounts, e.Account)
+			}
 		}
 		res.LastBptRoot = page.BptRoot
 

@@ -24,13 +24,17 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
 // LeafSummary is one BPT leaf — the account-key hash plus its
-// value hash. The value hash is the BPT leaf's content.
+// value hash and the account URL. The URL is what the launcher
+// needs to call pull.Account; without it the launcher would have
+// to maintain its own keyhash → URL map.
 type LeafSummary struct {
 	KeyHash   [32]byte
 	ValueHash [32]byte
+	Account   *url.URL
 }
 
 // Page is one paginated chunk of the BPT.
@@ -87,6 +91,15 @@ func GetPage(batch *database.Batch, startKey [32]byte, pageSize int) (*Page, err
 				p.Key.Hash(), len(p.Value))
 		}
 		copy(out.Entries[i].ValueHash[:], p.Value)
+		// Extract the account URL from the BPT record key.
+		// Account-leaf keys are ("Account", *url.URL); other record
+		// types may also be in the BPT in the future, so this is
+		// best-effort.
+		if p.Key.Len() >= 2 {
+			if u, ok := p.Key.Get(1).(*url.URL); ok {
+				out.Entries[i].Account = u
+			}
+		}
 	}
 	return out, nil
 }

@@ -31,11 +31,23 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 )
 
+// DefaultMatchThreshold is the number of consecutive matching
+// Check calls required before the tracker promotes the machine.
+// A single match could be coincidence (local root briefly equal
+// to a stale anchor while drifting); requiring N in a row across
+// a moving source proves we're actually tracking, not colliding.
+const DefaultMatchThreshold = 10
+
 // Tracker compares the local BPT root against observed anchors and
-// flips a nodestate.Machine to StateActive on first match.
+// flips a nodestate.Machine to StateActive after MatchThreshold
+// consecutive Check calls match.
 type Tracker struct {
 	db      *database.Database
 	machine *nodestate.Machine
+
+	// MatchThreshold is the number of consecutive matches required
+	// before promoting. Zero means use DefaultMatchThreshold.
+	MatchThreshold int
 
 	mu sync.Mutex
 	// observed maps anchor → block height it was seen at. A map
@@ -48,6 +60,16 @@ type Tracker struct {
 	// multiple observed anchors in one Check (it shouldn't, but a
 	// chain reorg in the source would).
 	latestBlock uint64
+	// consecutive is the current consecutive-match streak. Reset
+	// on any mismatch. Promotion fires when consecutive ≥
+	// MatchThreshold (or DefaultMatchThreshold when zero).
+	consecutive int
+	// streakAnchor and streakBlock record the anchor/block that
+	// most-recently extended the streak. PromoteToActive uses these
+	// so SinceBlock reflects the up-to-date observation, not the
+	// anchor that started the streak.
+	streakAnchor [32]byte
+	streakBlock  uint64
 }
 
 // New constructs a Tracker bound to db and machine.
@@ -89,10 +111,11 @@ func (t *Tracker) Observe(block uint64, anchor [32]byte) {
 	}
 }
 
-// Check reads the current local BPT root and, if it matches any
-// observed anchor, promotes the state machine to StateActive. Returns
-// (true, nil) on the promoting call; (false, nil) if no match yet or
-// if the machine was already past BOOTING.
+// Check reads the current local BPT root and updates the
+// consecutive-match streak. On reaching MatchThreshold it promotes
+// the state machine. Returns (true, nil) on the promoting call;
+// (false, nil) if not yet or if the machine was already past
+// BOOTING.
 func (t *Tracker) Check(ctx context.Context) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
@@ -108,20 +131,48 @@ func (t *Tracker) Check(ctx context.Context) (bool, error) {
 		return false, fmt.Errorf("read local BPT root: %w", err)
 	}
 
+	threshold := t.MatchThreshold
+	if threshold <= 0 {
+		threshold = DefaultMatchThreshold
+	}
+
 	t.mu.Lock()
 	block, ok := t.observed[local]
-	t.mu.Unlock()
 	if !ok {
+		// Mismatch — reset the streak.
+		t.consecutive = 0
+		t.streakAnchor = [32]byte{}
+		t.streakBlock = 0
+		t.mu.Unlock()
+		return false, nil
+	}
+	t.consecutive++
+	t.streakAnchor = local
+	t.streakBlock = block
+	streak := t.consecutive
+	t.mu.Unlock()
+
+	if streak < threshold {
 		return false, nil
 	}
 
-	// PromoteToActive returns false if a concurrent caller already
-	// transitioned us past BOOTING. We treat that as not-our-promotion
-	// rather than an error — both reach the same destination state.
+	// Streak reached the threshold. PromoteToActive returns false
+	// if a concurrent caller already transitioned us past BOOTING.
+	// We treat that as not-our-promotion rather than an error —
+	// both reach the same destination state.
 	if !t.machine.PromoteToActive(local, block) {
 		return false, nil
 	}
 	return true, nil
+}
+
+// ConsecutiveMatches reports the current consecutive-match streak
+// for diagnostics. Useful for logs that want to show "5/10 toward
+// promotion."
+func (t *Tracker) ConsecutiveMatches() int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.consecutive
 }
 
 // LatestObservedBlock reports the highest block any observed anchor

@@ -229,6 +229,7 @@ func TestRun_BVN_PromotesAfterEnumerate(t *testing.T) {
 		IsDirectory:        false,
 		PageSize:           2,
 		AnchorPollInterval: 10 * time.Millisecond,
+		MatchThreshold:     1,
 		OnPhase: func(p, m string) {
 			phases = append(phases, p+":"+m)
 		},
@@ -287,6 +288,7 @@ func TestRun_AnchorReturnsZeroThenMatches(t *testing.T) {
 		PartitionURL:       scope,
 		PageSize:           4,
 		AnchorPollInterval: 10 * time.Millisecond,
+		MatchThreshold:     1,
 	})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
@@ -340,6 +342,7 @@ func TestRun_AppliesEventsBeforePromotion(t *testing.T) {
 		PartitionURL:       scope,
 		PageSize:           4,
 		AnchorPollInterval: 10 * time.Millisecond,
+		MatchThreshold:     1,
 	})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
@@ -387,6 +390,7 @@ func TestRun_ContextCancel(t *testing.T) {
 		Partition:          "Apollo",
 		PartitionURL:       scope,
 		AnchorPollInterval: 10 * time.Millisecond,
+		MatchThreshold:     1,
 	})
 	if err != nil {
 		t.Errorf("expected nil on context timeout, got %v", err)
