@@ -10,13 +10,14 @@
 #   docker compose -f test/docker/docker-compose.bootstrap-v3.yml down -v
 #
 # API port mapping (host → container):
-#   bvn1-val1 → 26680 (Accumulate API), 26690 (DN Tendermint RPC)
-#   bvn1-val2 → 26681 (Accumulate API), 26691 (DN Tendermint RPC)
-#   bvn1-val3 → 26682 (Accumulate API), 26692 (DN Tendermint RPC)
-#   bvn1-val4 → 26683 (Accumulate API), 26693 (DN Tendermint RPC)
+#   bvn1-val1 → 26680 (Accumulate API), 26690 (DN TM RPC), 26696 (DN TM P2P)
+#   bvn1-val2 → 26681 (Accumulate API), 26691 (DN TM RPC), 26697 (DN TM P2P)
+#   bvn1-val3 → 26682 (Accumulate API), 26692 (DN TM RPC), 26698 (DN TM P2P)
+#   bvn1-val4 → 26683 (Accumulate API), 26693 (DN TM RPC), 26699 (DN TM P2P)
 # (different range from the load-test compose to avoid port conflicts).
-# The Tendermint RPC port is exposed so the bootstrap-v3 launcher can
-# pre-populate CometBFT state via NewLightClientStateProvider.
+# Tendermint RPC is exposed so the bootstrap-v3 launcher can pre-populate
+# CometBFT state via NewLightClientStateProvider; P2P is exposed so the
+# bootstrapped follower can blocksync against the network.
 
 services:
   # libp2p discovery bootstrap (distinct from bootstrap-v3 concept).
@@ -80,6 +81,7 @@ services:
     ports:
       - "26680:26660"
       - "26690:26657"
+      - "26696:26656"
     depends_on:
       init:
         condition: service_completed_successfully
@@ -102,6 +104,7 @@ services:
     ports:
       - "26681:26660"
       - "26691:26657"
+      - "26697:26656"
     depends_on:
       init:
         condition: service_completed_successfully
@@ -124,6 +127,7 @@ services:
     ports:
       - "26682:26660"
       - "26692:26657"
+      - "26698:26656"
     depends_on:
       init:
         condition: service_completed_successfully
@@ -146,6 +150,7 @@ services:
     ports:
       - "26683:26660"
       - "26693:26657"
+      - "26699:26656"
     depends_on:
       init:
         condition: service_completed_successfully

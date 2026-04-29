@@ -40,6 +40,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	cmtcfg "github.com/cometbft/cometbft/config"
@@ -70,7 +71,7 @@ var genesisDocKey = []byte("genesisDoc")
 //   - snapHeight: minor block height the snapshot was taken at
 //   - snapTime: the snapshot's recorded block time (unused; light
 //     client returns the authoritative value)
-func writeCometState(nodeDir string, tmRPCs []string, ourAppHash [32]byte, snapHeight uint64, snapTime time.Time) error {
+func writeCometState(nodeDir string, tmRPCs, tmP2P []string, ourAppHash [32]byte, snapHeight uint64, snapTime time.Time) error {
 	_ = snapTime
 	if len(tmRPCs) < 2 {
 		return fmt.Errorf("need ≥2 RPC servers, got %d", len(tmRPCs))
@@ -208,10 +209,35 @@ func writeCometState(nodeDir string, tmRPCs []string, ourAppHash [32]byte, snapH
 
 	fmt.Fprintf(os.Stderr, "[comet] seeded state.db + blockstore.db at height %d\n", state.LastBlockHeight)
 
+	// Build persistent_peers list: pair each --tm-rpc-servers URL
+	// with the matching --tm-p2p-peers host:port and prefix the node
+	// ID we fetch from /status. CometBFT requires <id>@<host>:<port>
+	// in persistent_peers.
+	var persistentPeers []string
+	if len(tmP2P) > 0 {
+		if len(tmP2P) != len(tmRPCs) {
+			return fmt.Errorf("--tm-p2p-peers (%d) must match --tm-rpc-servers (%d) count", len(tmP2P), len(tmRPCs))
+		}
+		for i, rpcURL := range tmRPCs {
+			c, err := cmtrpchttp.New(rpcURL, "/websocket")
+			if err != nil {
+				return fmt.Errorf("rpc client for %s: %w", rpcURL, err)
+			}
+			st, err := c.Status(ctx)
+			if err != nil {
+				return fmt.Errorf("status from %s: %w", rpcURL, err)
+			}
+			id := string(st.NodeInfo.DefaultNodeID)
+			persistentPeers = append(persistentPeers, fmt.Sprintf("%s@%s", id, tmP2P[i]))
+		}
+		fmt.Fprintf(os.Stderr, "[comet] resolved persistent_peers (%d): %s\n", len(persistentPeers), strings.Join(persistentPeers, ","))
+	}
+
 	// Write tendermint.toml with our preferred small-footprint
 	// settings: null tx indexer (we don't run a public RPC), discard
-	// ABCI responses (state.db stays small), default mempool/p2p.
-	if err := writeTendermintToml(nodeDir); err != nil {
+	// ABCI responses (state.db stays small), persistent_peers from
+	// --tm-p2p-peers (so blocksync can reach them).
+	if err := writeTendermintToml(nodeDir, persistentPeers); err != nil {
 		return fmt.Errorf("write tendermint.toml: %w", err)
 	}
 	return nil
@@ -227,7 +253,7 @@ func writeCometState(nodeDir string, tmRPCs []string, ourAppHash [32]byte, snapH
 // values for those — the existing-file branch trusts whatever's
 // loaded via Viper, so we set just the knobs we care about and let
 // CometBFT's own defaults handle the rest.
-func writeTendermintToml(nodeDir string) error {
+func writeTendermintToml(nodeDir string, persistentPeers []string) error {
 	configDir := filepath.Join(nodeDir, "config")
 	if err := os.MkdirAll(configDir, 0700); err != nil {
 		return fmt.Errorf("mkdir %s: %w", configDir, err)
@@ -238,9 +264,10 @@ func writeTendermintToml(nodeDir string) error {
 	cfg.Storage.DiscardABCIResponses = true
 	cfg.P2P.AllowDuplicateIP = false
 	cfg.P2P.AddrBookStrict = false // dev/test networks have private addrs
+	cfg.P2P.PersistentPeers = strings.Join(persistentPeers, ",")
 	cfg.Mempool.MaxTxBytes = 4194304
 	tmlPath := filepath.Join(configDir, "tendermint.toml")
 	cmtcfg.WriteConfigFile(tmlPath, cfg)
-	fmt.Fprintf(os.Stderr, "[comet] wrote %s (null indexer, discard ABCI responses)\n", tmlPath)
+	fmt.Fprintf(os.Stderr, "[comet] wrote %s (null indexer, discard ABCI, %d peers)\n", tmlPath, len(persistentPeers))
 	return nil
 }

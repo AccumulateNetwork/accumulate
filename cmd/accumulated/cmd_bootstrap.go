@@ -84,6 +84,7 @@ var flagBootstrap = struct {
 	TmListen       string
 	TmBootstrap    string // comma-separated Tendermint multiaddrs for catch-up
 	TmRpcServers   string // comma-separated Tendermint RPC URLs for state seeding (≥2)
+	TmP2PPeers     string // comma-separated Tendermint P2P host:port pairs (paired with --tm-rpc-servers; node IDs derived via /status)
 }{}
 
 func init() {
@@ -104,6 +105,7 @@ func init() {
 	f.StringVar(&flagBootstrap.TmListen, "tm-listen", "/ip4/0.0.0.0/tcp/26656", "Listen address for the launched daemon (Tendermint base port; Accumulate ports derived from it)")
 	f.StringVar(&flagBootstrap.TmBootstrap, "tm-bootstrap-peers", "", "Comma-separated Tendermint P2P multiaddrs (e.g. /dns/host/tcp/26656/p2p/<id>) used as persistent peers for catch-up")
 	f.StringVar(&flagBootstrap.TmRpcServers, "tm-rpc-servers", "", "Comma-separated Tendermint RPC URLs (≥2 required for light-client state seeding, e.g. http://host:26657,http://host2:26657)")
+	f.StringVar(&flagBootstrap.TmP2PPeers, "tm-p2p-peers", "", "Comma-separated Tendermint P2P host:port pairs paired with --tm-rpc-servers; node IDs are fetched via /status (e.g. host:26656,host2:26656)")
 }
 
 func runBootstrap(cmd *cobra.Command, _ []string) {
@@ -524,9 +526,10 @@ func writeDaemonConfig(dataDir, snapshotDB string, appHash [32]byte, snapHeight 
 	// node already at snapHeight, not a fresh chain at height 0. This
 	// closes the height-mismatch handshake (#4004 option B).
 	tmRPCs := splitNonempty(flagBootstrap.TmRpcServers, ",")
+	tmP2P := splitNonempty(flagBootstrap.TmP2PPeers, ",")
 	if len(tmRPCs) >= 2 {
 		nodeDir := filepath.Join(dataDir, dir)
-		if err := writeCometState(nodeDir, tmRPCs, appHash, snapHeight, snapTime); err != nil {
+		if err := writeCometState(nodeDir, tmRPCs, tmP2P, appHash, snapHeight, snapTime); err != nil {
 			return fmt.Errorf("write comet state: %w", err)
 		}
 	} else {
