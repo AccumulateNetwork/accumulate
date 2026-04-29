@@ -4,6 +4,7 @@ import (
     "context"
 
     "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+    "gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
     "gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
@@ -23,4 +24,7 @@ func (nopSrc) QueryAccountChains(_ context.Context, _ *url.URL, _ *api.ChainQuer
 }
 func (nopSrc) QueryChainEntries(_ context.Context, _ *url.URL, _ *api.ChainQuery) (*api.RecordRange[*api.ChainEntryRecord[api.Record]], error) {
     return &api.RecordRange[*api.ChainEntryRecord[api.Record]]{}, nil
+}
+func (nopSrc) QueryMessage(_ context.Context, _ *url.TxID, _ *api.DefaultQuery) (*api.MessageRecord[messaging.Message], error) {
+    return nil, nil
 }

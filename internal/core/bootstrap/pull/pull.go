@@ -33,6 +33,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -58,6 +59,12 @@ type Source interface {
 	QueryPendingIds(ctx context.Context, scope *url.URL, query *api.PendingQuery) (*api.RecordRange[*api.TxIDRecord], error)
 	QueryAccountChains(ctx context.Context, scope *url.URL, query *api.ChainQuery) (*api.RecordRange[*api.ChainRecord], error)
 	QueryChainEntries(ctx context.Context, scope *url.URL, query *api.ChainQuery) (*api.RecordRange[*api.ChainEntryRecord[api.Record]], error)
+
+	// QueryMessage is needed to pull the sig-material for pending
+	// transactions (validator signatures, payments, votes,
+	// signatures). Without this the per-account hash diverges for
+	// any account with non-empty Pending — see #3999.
+	QueryMessage(ctx context.Context, txid *url.TxID, query *api.DefaultQuery) (*api.MessageRecord[messaging.Message], error)
 }
 
 // Options configures Account.
@@ -180,6 +187,11 @@ func pullPending(ctx context.Context, src Source, batch *database.Batch, u *url.
 			if err := batch.Account(u).Pending().Add(r.Value); err != nil {
 				return fmt.Errorf("add %s: %w", r.Value, err)
 			}
+			// TODO #3999: also pull each pending tx's sig-material
+			// (ValidatorSignatures, Payments, Votes, Signatures) so
+			// hashPendingV2 can compute the same per-account hash as
+			// the source. Without that, accounts with non-empty
+			// Pending diverge and the launcher never promotes.
 		}
 		if uint64(len(page.Records)) < count {
 			return nil
@@ -187,6 +199,7 @@ func pullPending(ctx context.Context, src Source, batch *database.Batch, u *url.
 		start += uint64(len(page.Records))
 	}
 }
+
 
 // pullChainHeads sets each of the account's chains' Head() directly
 // from ChainRecord.{Count, State}. Skips chain entries entirely. The
