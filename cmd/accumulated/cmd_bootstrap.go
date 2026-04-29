@@ -15,6 +15,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/anchorsrc"
@@ -65,6 +66,8 @@ var flagBootstrap = struct {
 	PageSize       uint64
 	AnchorHex      string
 	AnchorBlk      uint64
+	DiffOnly       bool
+	DiffSteadySecs uint64
 }{}
 
 func init() {
@@ -78,6 +81,8 @@ func init() {
 	f.Uint64Var(&flagBootstrap.PageSize, "page-size", 256, "Paginated query page size")
 	f.StringVar(&flagBootstrap.AnchorHex, "anchor-hex", "", "DEV: hex-encoded BPT root that promotes ACTIVE on match")
 	f.Uint64Var(&flagBootstrap.AnchorBlk, "anchor-block", 0, "DEV: block height associated with --anchor-hex")
+	f.BoolVar(&flagBootstrap.DiffOnly, "diff", false, "DEV: after spine+enumerate, run a leaf-level BPT diff against the source and exit (no steady-state)")
+	f.Uint64Var(&flagBootstrap.DiffSteadySecs, "diff-after-steady", 0, "DEV: run --diff after this many seconds of steady-state (0 = immediately after enumerate)")
 }
 
 func runBootstrap(cmd *cobra.Command, _ []string) {
@@ -174,11 +179,36 @@ func runBootstrap(cmd *cobra.Command, _ []string) {
 			if err := savePhase(dataDir, phase); err != nil {
 				fmt.Fprintf(os.Stderr, "[persist] warn: %v\n", err)
 			}
+			// In --diff mode, cancel context after the configured
+			// steady-state delay (0 = immediately after enumerate).
+			if flagBootstrap.DiffOnly && phase == "enumerate" && msg != "scanning partition BPT" {
+				if flagBootstrap.DiffSteadySecs == 0 {
+					cancel()
+				} else {
+					go func() {
+						time.Sleep(time.Duration(flagBootstrap.DiffSteadySecs) * time.Second)
+						cancel()
+					}()
+				}
+			}
 		},
 	}
 
-	if err := orchestrator.Run(ctx, src, evCh, db, machine, opts); err != nil {
-		fatalf("bootstrap: %v", err)
+	runErr := orchestrator.Run(ctx, src, evCh, db, machine, opts)
+	if flagBootstrap.DiffOnly {
+		fmt.Fprintf(os.Stderr, "--- bpt diff: comparing local vs source ---\n")
+		// Use a fresh background context for the diff (the orchestrator
+		// run was canceled to bail out after enumerate).
+		diffCtx, diffCancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer diffCancel()
+		_, derr := orchestrator.RunBPTDiff(diffCtx, src, db, scope, flagBootstrap.PageSize, os.Stderr)
+		if derr != nil {
+			fatalf("bpt diff: %v", derr)
+		}
+		return
+	}
+	if runErr != nil {
+		fatalf("bootstrap: %v", runErr)
 	}
 
 	ad := machine.Get()

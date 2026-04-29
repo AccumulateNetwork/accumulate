@@ -157,7 +157,7 @@ func Run(
 	// Phase 3: steady-state — gossip ingestion + anchor polling.
 	// Exits when tracker flips machine to ACTIVE.
 	phase("steady", "applying gossip and watching anchors")
-	return runSteady(ctx, src, eventCh, db, tr, opts.Partition, pageSize, pollEvery, opts.OnPhase)
+	return runSteady(ctx, src, eventCh, db, tr, opts.PartitionURL, opts.Partition, pageSize, pollEvery, opts.OnPhase)
 }
 
 // RunSteady runs only the steady-state portion of the orchestrator:
@@ -201,7 +201,7 @@ func RunSteady(
 	if pollEvery == 0 {
 		pollEvery = 5 * time.Second
 	}
-	return runSteady(ctx, src, eventCh, db, tr, opts.Partition, pageSize, pollEvery, opts.OnPhase)
+	return runSteady(ctx, src, eventCh, db, tr, opts.PartitionURL, opts.Partition, pageSize, pollEvery, opts.OnPhase)
 }
 
 // pullSpine pulls the partition's spine accounts in ModeFullSpine
@@ -260,12 +260,22 @@ func runEnumerate(
 
 // runSteady runs the gossip+anchor loop until tracker promotes,
 // eventCh closes, or ctx is canceled.
+//
+// Per-anchor-tick we ALSO re-enumerate the partition's BPT. Why:
+// gossip BlockEvents only carry chain-modified accounts, but
+// state-changing system updates (e.g., dn.acme/ledger metadata)
+// can happen without a chain entry. Without re-enumeration the
+// local BPT diverges from source's. Empirical: 6 accounts only
+// on source after 60s of pure-gossip steady-state on a quiet
+// 4-validator devnet. Re-enumeration is O(N) per tick — fine for
+// small networks; mainnet would need a smarter delta path.
 func runSteady(
 	ctx context.Context,
 	src Source,
 	eventCh <-chan api.Event,
 	db *database.Database,
 	tr *tracker.Tracker,
+	partitionURL *url.URL,
 	partition string,
 	pageSize uint64,
 	pollEvery time.Duration,
@@ -299,8 +309,18 @@ func runSteady(
 		case <-ctx.Done():
 			return nil
 		case <-ticker.C:
+			// Re-enumerate first so the local BPT picks up
+			// anything gossip events missed.
+			if err := runEnumerate(ctx, src, db, partitionURL, pageSize, onPhase); err != nil {
+				if onPhase != nil {
+					onPhase("steady", fmt.Sprintf("re-enumerate: %v", err))
+				}
+			}
 			if err := pollAnchor(ctx, src, tr, partition); err != nil && onPhase != nil {
 				onPhase("steady", fmt.Sprintf("anchor poll: %v", err))
+			}
+			if onPhase != nil {
+				logRoots(db, tr, onPhase)
 			}
 			if promoted, err := tr.Check(ctx); err != nil {
 				return fmt.Errorf("check: %w", err)
@@ -319,6 +339,24 @@ func runSteady(
 			}
 			if err := applyEvent(ctx, src, db, ev, pageSize); err != nil {
 				return fmt.Errorf("apply event: %w", err)
+			}
+			// On a major-block boundary event, re-enumerate
+			// immediately. The major-block anchor in the AnchorSource
+			// corresponds to source's BPT at the boundary; re-pulling
+			// state right after the boundary gives us the best chance
+			// of local-root matching the anchor before source advances.
+			if blockEv, isBlock := ev.(*api.BlockEvent); isBlock && blockEv.Major > 0 {
+				if onPhase != nil {
+					onPhase("steady", fmt.Sprintf("major-block %d boundary; re-enumerate + repoll", blockEv.Major))
+				}
+				if err := runEnumerate(ctx, src, db, partitionURL, pageSize, onPhase); err != nil {
+					if onPhase != nil {
+						onPhase("steady", fmt.Sprintf("major-block re-enumerate: %v", err))
+					}
+				}
+				if err := pollAnchor(ctx, src, tr, partition); err != nil && onPhase != nil {
+					onPhase("steady", fmt.Sprintf("post-major anchor poll: %v", err))
+				}
 			}
 			if promoted, err := tr.Check(ctx); err != nil {
 				return fmt.Errorf("check: %w", err)
@@ -342,6 +380,19 @@ func pollAnchor(ctx context.Context, src AnchorSource, tr *tracker.Tracker, part
 	}
 	tr.Observe(block, anchor)
 	return nil
+}
+
+// logRoots emits the current local BPT root and the latest observed
+// anchor for diagnosing why tracker.Check isn't matching.
+func logRoots(db *database.Database, tr *tracker.Tracker, onPhase func(phase, msg string)) {
+	b := db.Begin(false)
+	defer b.Discard()
+	r, err := b.GetBptRootHash()
+	if err != nil {
+		onPhase("debug", fmt.Sprintf("local root err: %v", err))
+		return
+	}
+	onPhase("debug", fmt.Sprintf("local root=%x..  observed=%d  latest=%d", r[:8], tr.ObservedCount(), tr.LatestObservedBlock()))
 }
 
 // applyEvent mirrors the gossip package's per-event handler: filter
