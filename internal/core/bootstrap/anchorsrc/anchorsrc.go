@@ -99,7 +99,9 @@ func New(q api.Querier, peerAnchorPool *url.URL, localDB *database.Database) (*S
 // found, (0, zero, nil) when none is available yet (the orchestrator
 // retries), and (_, _, err) on transport or DB failures.
 func (s *Source) LatestAnchor(ctx context.Context, partition string) (uint64, [32]byte, error) {
-	wantSource := protocol.PartitionUrl(partition).JoinPath(protocol.AnchorPool)
+	// PartitionAnchor.Source is the partition that produced the
+	// anchor, e.g. acc://dn.acme — NOT the anchor pool URL.
+	wantSource := protocol.PartitionUrl(partition)
 
 	// Walk the latest main-chain entries on the peer's anchor pool.
 	// QueryMainChainEntries returns entries with their transaction
@@ -140,6 +142,11 @@ func (s *Source) LatestAnchor(ctx context.Context, partition string) (uint64, [3
 			continue
 		}
 		if !pa.Source.Equal(wantSource) {
+			continue
+		}
+		// Skip anchors without a major-block boundary — the launcher
+		// converges against major-block anchors only.
+		if pa.MajorBlockIndex == 0 {
 			continue
 		}
 		// Candidate matches. Verify its signatures.
