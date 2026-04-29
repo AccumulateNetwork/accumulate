@@ -69,6 +69,12 @@ type Artifact struct {
 	// for the DN, "<bvn-name>" for a BVN.
 	Partition string `json:"partition"`
 
+	// Resume captures the inputs needed to continue bootstrap after a
+	// crash without operator-supplied flags. accumulated run uses this
+	// to wire the orchestrator's steady-state phase (#3989) on a
+	// BOOTING node without re-prompting for peer info.
+	Resume ResumeConfig `json:"resume,omitempty"`
+
 	// State is the persisted node-state machine snapshot.
 	State StateRecord `json:"state"`
 
@@ -81,6 +87,18 @@ type Artifact struct {
 	// the AnchorSource. Each entry is one (block, anchor) pair the
 	// tracker has seen and considered valid.
 	ObservedAnchors []ObservedAnchor `json:"observedAnchors,omitempty"`
+}
+
+// ResumeConfig holds the inputs accumulated run needs to resume a
+// BOOTING bootstrap after a crash, without re-prompting the operator.
+// Populated by accumulated bootstrap on first save.
+type ResumeConfig struct {
+	// PeerWS is the WebSocket URL of the peer used for bootstrap.
+	PeerWS string `json:"peerWS,omitempty"`
+
+	// PeerAnchorPool is the URL of the receiving partition's anchor
+	// pool used by AnchorSource (#3988).
+	PeerAnchorPool string `json:"peerAnchorPool,omitempty"`
 }
 
 // StateRecord captures node state and transition history.

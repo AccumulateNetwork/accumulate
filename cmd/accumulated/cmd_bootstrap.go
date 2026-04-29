@@ -234,6 +234,8 @@ func saveState(dataDir string, ad nodestate.Advertisement) error {
 	}
 	art.Network = flagBootstrap.Network
 	art.Partition = flagBootstrap.Partition
+	art.Resume.PeerWS = flagBootstrap.PeerWS
+	art.Resume.PeerAnchorPool = flagBootstrap.PeerAnchorPool
 	art.State.Current = ad.State.String()
 	art.State.SinceBlock = ad.SinceBlock
 	art.State.VerifiedAnchor = ad.VerifiedAnchor
@@ -253,6 +255,10 @@ func savePhase(dataDir, phase string) error {
 		art = &bootpersist.Artifact{
 			Network:   flagBootstrap.Network,
 			Partition: flagBootstrap.Partition,
+			Resume: bootpersist.ResumeConfig{
+				PeerWS:         flagBootstrap.PeerWS,
+				PeerAnchorPool: flagBootstrap.PeerAnchorPool,
+			},
 		}
 	}
 	switch phase {

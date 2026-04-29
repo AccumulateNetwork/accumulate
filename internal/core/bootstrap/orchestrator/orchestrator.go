@@ -160,6 +160,50 @@ func Run(
 	return runSteady(ctx, src, eventCh, db, tr, opts.Partition, pageSize, pollEvery, opts.OnPhase)
 }
 
+// RunSteady runs only the steady-state portion of the orchestrator:
+// gossip ingestion + anchor polling, until the tracker promotes the
+// machine to StateActive, eventCh closes, or ctx is canceled.
+//
+// Used by `accumulated run` to resume a partially-bootstrapped node
+// after spine pull and enumeration already completed in a prior
+// `accumulated bootstrap` invocation (#3989). The caller is expected
+// to have already restored any persisted observed-anchor set onto
+// the tracker via tracker.RestoreFrom.
+func RunSteady(
+	ctx context.Context,
+	src Source,
+	eventCh <-chan api.Event,
+	db *database.Database,
+	machine *nodestate.Machine,
+	tr *tracker.Tracker,
+	opts Options,
+) error {
+	if src == nil {
+		return fmt.Errorf("orchestrator.RunSteady: src required")
+	}
+	if db == nil {
+		return fmt.Errorf("orchestrator.RunSteady: db required")
+	}
+	if machine == nil {
+		return fmt.Errorf("orchestrator.RunSteady: machine required")
+	}
+	if tr == nil {
+		return fmt.Errorf("orchestrator.RunSteady: tracker required")
+	}
+	if opts.Partition == "" {
+		return fmt.Errorf("orchestrator.RunSteady: Partition required")
+	}
+	pageSize := opts.PageSize
+	if pageSize == 0 {
+		pageSize = 256
+	}
+	pollEvery := opts.AnchorPollInterval
+	if pollEvery == 0 {
+		pollEvery = 5 * time.Second
+	}
+	return runSteady(ctx, src, eventCh, db, tr, opts.Partition, pageSize, pollEvery, opts.OnPhase)
+}
+
 // pullSpine pulls the partition's spine accounts in ModeFullSpine
 // into a single batch and commits it. UpdateBPT is called before
 // Commit so the observer's per-account hashes land as BPT leaves —
