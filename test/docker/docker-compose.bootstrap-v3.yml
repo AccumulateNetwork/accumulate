@@ -1,0 +1,142 @@
+# Bootstrap-v3 test network — 1 BVN × 4 validators, 1-minute major blocks.
+#
+# Distinct from docker-compose.yml (load-test 3-BVN setup) so this can run
+# alongside or in isolation. Uses the accumulate:bootstrap-v3 image so the
+# new BptPageQuery dispatch and accumulated bootstrap subcommand are present.
+#
+# Usage:
+#   docker compose -f test/docker/docker-compose.bootstrap-v3.yml up -d
+#   docker compose -f test/docker/docker-compose.bootstrap-v3.yml logs -f
+#   docker compose -f test/docker/docker-compose.bootstrap-v3.yml down -v
+#
+# API port mapping (host → container 26660):
+#   bvn1-val1 → 26680
+#   bvn1-val2 → 26681
+#   bvn1-val3 → 26682
+#   bvn1-val4 → 26683
+# (different range from the load-test compose to avoid port conflicts).
+
+services:
+  # libp2p discovery bootstrap (distinct from bootstrap-v3 concept).
+  bootstrap:
+    image: accumulate:bootstrap-v3
+    container_name: acc-bv3-bootstrap
+    mem_limit: 512m
+    ports:
+      - "16693:16593"  # different host port from the load-test bootstrap
+    entrypoint: ["/bin/accumulated-bootstrap"]
+    command:
+      - --listen
+      - /ip4/0.0.0.0/tcp/16593
+      - --key
+      - "626f6f74737472617076332d6e6f64652d6b65792d736565640000000000000000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "netstat -tuln | grep -q ':16593 ' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - bv3net
+
+  # Initialize network configuration.
+  init:
+    image: accumulate:bootstrap-v3
+    container_name: acc-bv3-init
+    volumes:
+      - bv3-config:/root/.accumulate
+      - ../..:/workspace
+    working_dir: /workspace
+    command:
+      - init
+      - network
+      - test/docker/docker-network.bootstrap-v3.yml
+      - --reset
+      - --faucet-seed=FAUCET
+    networks:
+      - bv3net
+
+  # 4 validators on BVN1 (each runs both DN and BVN subnodes via run-dual).
+  bvn1-val1:
+    image: accumulate:bootstrap-v3
+    container_name: acc-bv3-bvn1-val1
+    mem_limit: 1g
+    volumes:
+      - bv3-config:/root/.accumulate
+    command:
+      - -w=/root/.accumulate/bvn1-1
+      - /root/.accumulate/bvn1-1/accumulate.toml
+    ports:
+      - "26680:26660"
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      bootstrap:
+        condition: service_started
+    networks:
+      - bv3net
+
+  bvn1-val2:
+    image: accumulate:bootstrap-v3
+    container_name: acc-bv3-bvn1-val2
+    mem_limit: 1g
+    volumes:
+      - bv3-config:/root/.accumulate
+    command:
+      - -w=/root/.accumulate/bvn1-2
+      - /root/.accumulate/bvn1-2/accumulate.toml
+    ports:
+      - "26681:26660"
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      bootstrap:
+        condition: service_started
+    networks:
+      - bv3net
+
+  bvn1-val3:
+    image: accumulate:bootstrap-v3
+    container_name: acc-bv3-bvn1-val3
+    mem_limit: 1g
+    volumes:
+      - bv3-config:/root/.accumulate
+    command:
+      - -w=/root/.accumulate/bvn1-3
+      - /root/.accumulate/bvn1-3/accumulate.toml
+    ports:
+      - "26682:26660"
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      bootstrap:
+        condition: service_started
+    networks:
+      - bv3net
+
+  bvn1-val4:
+    image: accumulate:bootstrap-v3
+    container_name: acc-bv3-bvn1-val4
+    mem_limit: 1g
+    volumes:
+      - bv3-config:/root/.accumulate
+    command:
+      - -w=/root/.accumulate/bvn1-4
+      - /root/.accumulate/bvn1-4/accumulate.toml
+    ports:
+      - "26683:26660"
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      bootstrap:
+        condition: service_started
+    networks:
+      - bv3net
+
+volumes:
+  bv3-config:
+
+networks:
+  bv3net:
+    driver: bridge
