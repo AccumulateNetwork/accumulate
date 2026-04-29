@@ -23,7 +23,7 @@ services:
     container_name: acc-bv3-bootstrap
     mem_limit: 512m
     ports:
-      - "16693:16593"  # different host port from the load-test bootstrap
+      - "17693:16593"  # different host port from the load-test bootstrap and host accumulated
     entrypoint: ["/bin/accumulated-bootstrap"]
     command:
       - --listen
