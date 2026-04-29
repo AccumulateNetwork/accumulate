@@ -149,11 +149,7 @@ func (s *Source) LatestAnchor(ctx context.Context, partition string) (uint64, [3
 		if pa.MajorBlockIndex == 0 {
 			continue
 		}
-		// Candidate matches. Verify its signatures.
 		if err := s.verifyQuorum(ctx, partition, entry.Value); err != nil {
-			// Don't bubble — try the next candidate. Real failures
-			// (transport, DB) bubble. Below-quorum is "skip and try
-			// next."
 			continue
 		}
 		return pa.MajorBlockIndex, pa.StateTreeAnchor, nil
@@ -174,6 +170,17 @@ func (s *Source) verifyQuorum(_ context.Context, partition string, txn *api.Mess
 		return fmt.Errorf("validator keypage has zero accept threshold")
 	}
 
+	// BlockAnchor signatures verify against the SequencedMessage
+	// envelope wrapping the transaction, NOT the bare transaction.
+	// See internal/core/execute/v2/block/msg_block_anchor.go
+	// checkSignature for the canonical verification pattern.
+	if txn.Sequence == nil {
+		return fmt.Errorf("anchor record has no SequencedMessage")
+	}
+	seq := *txn.Sequence
+	seq.Message = txn.Message // ensure we sign over the actual TransactionMessage
+	signedOver := &seq
+
 	if txn.Signatures == nil || len(txn.Signatures.Records) == 0 {
 		return fmt.Errorf("anchor has no signatures")
 	}
@@ -190,20 +197,25 @@ func (s *Source) verifyQuorum(_ context.Context, partition string, txn *api.Mess
 			if sigMsg == nil || sigMsg.Message == nil {
 				continue
 			}
-			sm, ok := sigMsg.Message.(*messaging.SignatureMessage)
-			if !ok {
-				continue
+			// The wire delivers signatures as either a
+			// SignatureMessage (direct user signature) or a
+			// BlockAnchor (validator anchor signature). Both carry
+			// a protocol.KeySignature.
+			var keySig protocol.KeySignature
+			switch m := sigMsg.Message.(type) {
+			case *messaging.SignatureMessage:
+				keySig, _ = m.Signature.(protocol.KeySignature)
+			case *messaging.BlockAnchor:
+				keySig = m.Signature
 			}
-			keySig, ok := sm.Signature.(protocol.KeySignature)
-			if !ok {
+			if keySig == nil {
 				continue
 			}
 			idx := keypageIndexOf(keypage, keySig)
 			if idx < 0 {
 				continue
 			}
-			// The transaction hash is what's actually signed.
-			if !verifySig(keySig, txn.Message.Transaction) {
+			if !keySig.Verify(nil, signedOver) {
 				continue
 			}
 			signed[idx] = true
@@ -248,9 +260,3 @@ func keypageIndexOf(page *protocol.KeyPage, sig protocol.KeySignature) int {
 	return -1
 }
 
-// verifySig wraps KeySignature.Verify with the transaction envelope
-// as the signed payload. KeySignature embeds UserSignature which
-// provides Verify(Signature, Signable).
-func verifySig(sig protocol.KeySignature, txn *protocol.Transaction) bool {
-	return sig.Verify(sig, txn)
-}
