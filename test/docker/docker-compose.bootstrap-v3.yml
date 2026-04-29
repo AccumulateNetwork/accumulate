@@ -48,12 +48,18 @@ services:
       - bv3-config:/root/.accumulate
       - ../..:/workspace
     working_dir: /workspace
+    entrypoint: ["/bin/sh", "-c"]
     command:
-      - init
-      - network
-      - test/docker/docker-network.bootstrap-v3.yml
-      - --reset
-      - --faucet-seed=FAUCET
+      - |
+        accumulated init network test/docker/docker-network.bootstrap-v3.yml --reset --faucet-seed=FAUCET
+        # Enable periodic major-block snapshots on every validator's
+        # partition config. Bootstrap-v3 launcher fetches these to seed
+        # its local DB at a verified boundary state.
+        for f in /root/.accumulate/*/accumulate.toml; do
+          # Insert enable-snapshots = true after the line that says
+          # type = "coreValidator" inside each [[configurations]].
+          sed -i '/type = "coreValidator"/a\  enable-snapshots = true' "$$f"
+        done
     networks:
       - bv3net
 
