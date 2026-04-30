@@ -55,11 +55,17 @@ services:
         set -e
         echo "=== bootstrap phase ==="
         START_BOOTSTRAP=$$(date +%s)
+        # Snapshot path is the default (since #4018 / #4019 fixes).
+        # The launcher derives the snapshot HTTP URL from --peer
+        # (ws://host:port/v3 → http://host:port). The peer must have
+        # `enable-snapshots = true` AND have crossed at least one
+        # major block (mainnet schedule: 0 */12 * * *). To use the
+        # legacy spine-pull path instead, add `--spine-pull` and
+        # `--peer-anchor-pool $$LAUNCHER_PEER_ANCHOR`.
         accumulated bootstrap \
           --network        "$$LAUNCHER_NETWORK" \
           --partition      "$$LAUNCHER_PARTITION" \
           --peer           "$$LAUNCHER_PEER_WS" \
-          --peer-anchor-pool "$$LAUNCHER_PEER_ANCHOR" \
           --tm-rpc-servers "$$LAUNCHER_TM_RPCS" \
           --tm-p2p-peers   "$$LAUNCHER_TM_P2P" \
           --tm-listen      "$$LAUNCHER_TM_LISTEN" \
