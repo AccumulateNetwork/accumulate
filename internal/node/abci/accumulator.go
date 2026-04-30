@@ -275,8 +275,10 @@ func (app *Accumulator) Info(context.Context, *abci.RequestInfo) (*abci.Response
 	case err == nil:
 		res.LastBlockHeight = int64(block.Index)
 		res.LastBlockAppHash = hash[:]
+		app.logger.Info("ABCI Info reporting state", "height", res.LastBlockHeight, "appHash", fmt.Sprintf("%X", hash[:]))
 
 	case errors.Is(err, errors.NotFound):
+		app.logger.Info("ABCI Info: no LastBlock (genesis path)")
 		return res, nil
 
 	default:

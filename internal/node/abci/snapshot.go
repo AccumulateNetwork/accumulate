@@ -32,6 +32,11 @@ import (
 // This is one of four ABCI functions we have to implement for
 // Tendermint/CometBFT.
 func (app *Accumulator) ListSnapshots(_ context.Context, req *abci.RequestListSnapshots) (*abci.ResponseListSnapshots, error) {
+	// If Snapshots config wasn't plumbed in, this node can't serve
+	// snapshots. Return an empty list rather than nil-panic.
+	if app.Snapshots == nil {
+		return &abci.ResponseListSnapshots{}, nil
+	}
 	info, err := ListSnapshots(config.MakeAbsolute(app.RootDir, app.Snapshots.Directory))
 	if err != nil {
 		return nil, err
@@ -62,6 +67,9 @@ func (app *Accumulator) ListSnapshots(_ context.Context, req *abci.RequestListSn
 // This is one of four ABCI functions we have to implement for
 // Tendermint/CometBFT.
 func (app *Accumulator) LoadSnapshotChunk(_ context.Context, req *abci.RequestLoadSnapshotChunk) (*abci.ResponseLoadSnapshotChunk, error) {
+	if app.Snapshots == nil {
+		return &abci.ResponseLoadSnapshotChunk{}, nil
+	}
 	snapDir := config.MakeAbsolute(app.RootDir, app.Snapshots.Directory)
 	f, err := os.Open(filepath.Join(snapDir, fmt.Sprintf(core.SnapshotMajorFormat, req.Height)))
 	if err != nil {
@@ -75,12 +83,15 @@ func (app *Accumulator) LoadSnapshotChunk(_ context.Context, req *abci.RequestLo
 	}
 
 	var buf [chunkSize]byte
-	_, err = io.ReadFull(f, buf[:])
-	if err != nil {
+	// io.ReadFull errs with UnexpectedEOF if the last chunk is shorter
+	// than chunkSize — which it always is for snapshots smaller than
+	// 10MB. Use Read and tolerate short reads.
+	n, err := f.Read(buf[:])
+	if err != nil && err != io.EOF {
 		return nil, err
 	}
 
-	return &abci.ResponseLoadSnapshotChunk{Chunk: buf[:]}, nil
+	return &abci.ResponseLoadSnapshotChunk{Chunk: buf[:n]}, nil
 }
 
 // OfferSnapshot offers a snapshot to this node. This initiates the snapshot

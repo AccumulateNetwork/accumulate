@@ -300,27 +300,12 @@ func runBootstrapViaSnapshot(dataDir string) {
 	checkf(err, "save snapshot")
 	fmt.Fprintf(os.Stderr, "[snapshot] saved %d bytes to %s\n", n, tmpFile)
 
-	// Open local DB. Wipe any prior state so the restore starts clean.
-	dbPath := filepath.Join(dataDir, "bootstrap-"+flagBootstrap.Partition+".db")
-	if err := os.RemoveAll(dbPath); err != nil {
-		fatalf("clear local db: %v", err)
-	}
-	db, err := database.OpenBadger(dbPath, nil)
-	checkf(err, "open local db")
-	db.SetObserver(execute.NewDatabaseObserver())
-	dbClosed := false
-	closeDB := func() {
-		if dbClosed {
-			return
-		}
-		dbClosed = true
-		_ = db.Close()
-	}
-	defer closeDB()
-
-	// Read header for the minor block height before restoring; used
-	// when pre-populating CometBFT's state DB. Snapshots are v2; the
-	// height + time live on the SystemLedger inside the header.
+	// Read snapshot header to extract trust height + BPT root. We use
+	// these to a) verify against the signed-anchor pool, b) tell
+	// CometBFT state-sync what height+hash to trust. The snapshot bytes
+	// themselves are NOT restored locally — CometBFT state-sync will
+	// pull a fresh snapshot from peers via ABCI hooks on first daemon
+	// start, avoiding any auxiliary-state divergence.
 	headerFile, err := os.Open(tmpFile)
 	checkf(err, "open snapshot for header read")
 	v2r, herr := snapshotV2.Open(headerFile)
@@ -331,23 +316,24 @@ func runBootstrapViaSnapshot(dataDir string) {
 	}
 	snapHeight := v2r.Header.SystemLedger.Index
 	snapTime := v2r.Header.SystemLedger.Timestamp
+	root := v2r.Header.RootHash
+	fmt.Fprintf(os.Stderr, "[snapshot] header height=%d root=%x (no local restore — state-sync handles it)\n", snapHeight, root[:8])
 
-	// Restore.
-	f, err := os.Open(tmpFile)
-	checkf(err, "open snapshot for restore")
-	defer f.Close()
+	// Restore the snapshot into an in-memory DB so we can resolve the
+	// validator keypage when verifying signed anchors. We discard the
+	// in-memory DB after verification; the daemon will get its own
+	// state via CometBFT state-sync.
+	db := database.OpenInMemory(nil)
+	db.SetObserver(execute.NewDatabaseObserver())
+	defer db.Close()
+	rf, err := os.Open(tmpFile)
+	checkf(err, "open snapshot for in-memory restore")
+	defer rf.Close()
 	scope := protocol.PartitionUrl(flagBootstrap.Partition)
 	netURL := config.NetworkUrl{URL: scope}
-	fmt.Fprintf(os.Stderr, "[snapshot] restoring into %s (height=%d) ...\n", dbPath, snapHeight)
-	err = snapshot.FullRestore(db, f, nil, netURL)
-	checkf(err, "restore snapshot")
-
-	// Read local BPT root after restore.
-	ro := db.Begin(false)
-	root, rerr := ro.GetBptRootHash()
-	ro.Discard()
-	checkf(rerr, "read local BPT root")
-	fmt.Fprintf(os.Stderr, "[snapshot] local BPT root after restore: %x\n", root)
+	fmt.Fprintf(os.Stderr, "[verify] in-memory restore for keypage lookup ...\n")
+	err = snapshot.FullRestore(db, rf, nil, netURL)
+	checkf(err, "in-memory restore")
 
 	// Verify against a validator-quorum-signed anchor.
 	// This is the trust step: the peer served us snapshot bytes, but
@@ -411,10 +397,7 @@ func runBootstrapViaSnapshot(dataDir string) {
 	fmt.Fprintf(os.Stderr, "[ACTIVE] persisted to %s\n", dataDir)
 
 	if flagBootstrap.WriteConfig {
-		// Close the BPT db before moving its directory; otherwise
-		// Badger's background flusher spins on the missing path.
-		closeDB()
-		if err := writeDaemonConfig(dataDir, dbPath, root, snapHeight, snapTime); err != nil {
+		if err := writeDaemonConfig(dataDir, root, snapHeight, snapTime); err != nil {
 			fatalf("write daemon config: %v", err)
 		}
 	} else {
@@ -444,25 +427,17 @@ func runBootstrapViaSnapshot(dataDir string) {
 //     to current — without state-sync support, the daemon's
 //     consensus path needs to know how to reconcile a non-zero
 //     starting height.
-func writeDaemonConfig(dataDir, snapshotDB string, appHash [32]byte, snapHeight uint64, snapTime time.Time) error {
+func writeDaemonConfig(dataDir string, appHash [32]byte, snapHeight uint64, snapTime time.Time) error {
 	mode, dir := partitionToCoreMode(flagBootstrap.Partition)
 
-	// Move the BPT db to where the daemon expects it.
-	want := filepath.Join(dataDir, dir, "data", "accumulate.db")
-	if err := os.MkdirAll(filepath.Dir(want), 0755); err != nil {
+	// We do NOT move the BPT db. CometBFT state-sync (configured by
+	// writeStateSyncConfig below) handles the snapshot transfer +
+	// FullRestore on first daemon start via the ABCI snapshot hooks.
+	// Just ensure the data dir exists so state-sync's tmp dir resolves.
+	dataPath := filepath.Join(dataDir, dir, "data")
+	if err := os.MkdirAll(dataPath, 0755); err != nil {
 		return fmt.Errorf("mkdir db parent: %w", err)
 	}
-	// If the destination already exists (e.g. re-run), wipe it so we
-	// don't fight Badger over a half-populated dir.
-	if _, err := os.Stat(want); err == nil {
-		if err := os.RemoveAll(want); err != nil {
-			return fmt.Errorf("clear stale db at %s: %w", want, err)
-		}
-	}
-	if err := os.Rename(snapshotDB, want); err != nil {
-		return fmt.Errorf("move bpt db %s → %s: %w", snapshotDB, want, err)
-	}
-	fmt.Fprintf(os.Stderr, "[config] moved BPT db → %s\n", want)
 
 	// Generate fresh ed25519 keys for node (P2P) and validator
 	// (consensus). The validator key is unprivileged; node runs as
@@ -509,11 +484,18 @@ func writeDaemonConfig(dataDir, snapshotDB string, appHash [32]byte, snapHeight 
 	cvc.Mode = mode
 	cvc.Listen = listenAddr
 	cvc.ValidatorKey = &run.RawPrivateKey{Address: address.FromED25519PrivateKey(valPriv).String()}
+	// Set DnGenesis/BvnGenesis to a workdir-level filename so the run
+	// framework's genesisDocProvider (run/consensus.go) resolves it
+	// against inst.workDir, not the workdir itself. The .json
+	// extension routes through the JSON-doc provider, matching how we
+	// fetch the genesis doc from the peer's RPC.
 	if mode == run.CoreValidatorModeBVN {
 		cvc.BVN = flagBootstrap.Partition
 		cvc.BvnBootstrapPeers = bsPeers
+		cvc.BvnGenesis = strings.ToLower(flagBootstrap.Partition) + "-genesis.json"
 	} else {
 		cvc.DnBootstrapPeers = bsPeers
+		cvc.DnGenesis = "directory-genesis.json"
 	}
 
 	tomlPath := filepath.Join(dataDir, "accumulate.toml")
@@ -529,11 +511,17 @@ func writeDaemonConfig(dataDir, snapshotDB string, appHash [32]byte, snapHeight 
 	tmP2P := splitNonempty(flagBootstrap.TmP2PPeers, ",")
 	if len(tmRPCs) >= 2 {
 		nodeDir := filepath.Join(dataDir, dir)
-		if err := writeCometState(nodeDir, tmRPCs, tmP2P, appHash, snapHeight, snapTime); err != nil {
-			return fmt.Errorf("write comet state: %w", err)
+		var genesisFilename string
+		if mode == run.CoreValidatorModeBVN {
+			genesisFilename = cvc.BvnGenesis
+		} else {
+			genesisFilename = cvc.DnGenesis
+		}
+		if err := writeStateSyncConfig(nodeDir, genesisFilename, tmRPCs, tmP2P, appHash, snapHeight, snapTime); err != nil {
+			return fmt.Errorf("write state-sync config: %w", err)
 		}
 	} else {
-		fmt.Fprintf(os.Stderr, "[config] WARN: --tm-rpc-servers not set (need ≥2 for light client); CometBFT state DB not seeded — daemon will fail at handshake.\n")
+		fmt.Fprintf(os.Stderr, "[config] WARN: --tm-rpc-servers not set (need ≥2 for state-sync); skipping tendermint.toml.\n")
 	}
 
 	fmt.Fprintf(os.Stderr, "[config] hand off: 'accumulated %s' to start the node\n", dataDir)

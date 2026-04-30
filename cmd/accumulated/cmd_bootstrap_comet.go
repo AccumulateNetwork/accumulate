@@ -6,33 +6,40 @@
 
 package main
 
-// CometBFT state-DB seeding for the bootstrap-v3 launcher.
+// CometBFT state-sync configuration for the bootstrap-v3 launcher.
 //
-// After --via-snapshot loads BPT data at major-block boundary B (with
-// minor block height H), CometBFT's own consensus state DB is empty.
-// On first start the handshake compares a fresh consensus state
-// (height 0) against the app's non-zero AppHash and refuses with
-// "Did you reset CometBFT without resetting your application's data?".
+// Earlier iterations of this code attempted to pre-populate CometBFT's
+// state.db + blockstore.db manually using statesync.NewLightClientStateProvider
+// + state.Bootstrap(). That worked structurally — the daemon started at the
+// seeded height and connected to peers — but it produced an AppHash
+// mismatch when applying block H+1: our app's executor produced a
+// different AppHash than the network's block H+1 header recorded. The
+// root cause is that an Accumulate snapshot captures account state (the
+// BPT) but does not perfectly reproduce all auxiliary database keys
+// (synthetic-tx queues, sequence numbers, etc.) needed by the executor
+// to reproduce the network's exact block-execution semantics.
 //
-// We bypass this by reusing the same primitives CometBFT's own
-// state-sync uses internally:
+// The architecturally correct fix is to use CometBFT's native ABCI
+// state-sync. Accumulate has the four ABCI hooks
+// (ListSnapshots/LoadSnapshotChunk/OfferSnapshot/ApplySnapshotChunk)
+// implemented in internal/node/abci/snapshot.go. CometBFT will:
+//   1. Discover snapshots via ListSnapshots from peers.
+//   2. OfferSnapshot to our node — accept it.
+//   3. Stream chunks via LoadSnapshotChunk → ApplySnapshotChunk.
+//   4. The handler internally calls snapshot.FullRestore on our DB and
+//      verifies the BPT root against the snapshot's AppHash.
+//   5. CometBFT then writes its own state.db with the proper post-block
+//      metadata (validator sets, consensus params, AppHash) and starts
+//      blocksync from the snapshot height.
 //
-//   - statesync.NewLightClientStateProvider runs a light client over
-//     ≥2 peer Tendermint RPC URLs and exposes a State(height) call
-//     that returns a fully-populated state.State (validator sets,
-//     consensus params, AppHash, LastBlockID, etc.).
-//   - state.NewStore(...).Bootstrap(state) writes that State to the
-//     CometBFT state DB exactly the way state-sync does at the end
-//     of a successful sync.
-//   - blockStore.SaveSeenCommit persists the latest commit so
-//     blocksync knows where to pick up.
+// This way the snapshot transfer + state-DB seeding both go through
+// the protocol-aware path, eliminating the auxiliary-state divergence.
 //
-// We then cross-check that the State's AppHash equals the BPT root we
-// already verified via the Accumulate signed-anchor pool. If it does,
-// the launcher's trust chain (signed anchor → BPT root) and the
-// CometBFT trust chain (light client → block hash → AppHash) agree on
-// the same commitment, and the daemon can come up at height H without
-// running InitChain or replaying any historical blocks.
+// The launcher's job becomes much smaller: write tendermint.toml with
+// [statesync] enable=true plus trust info + RPC servers, then hand off.
+// We keep the Accumulate-native signed-anchor verification of the
+// snapshot's AppHash before configuring state-sync, so we don't blindly
+// trust the primary peer for the trust hash.
 
 import (
 	"context"
@@ -44,49 +51,33 @@ import (
 	"time"
 
 	cmtcfg "github.com/cometbft/cometbft/config"
-	cmtdb "github.com/cometbft/cometbft-db"
-	cmtjson "github.com/cometbft/cometbft/libs/json"
-	cmtlog "github.com/cometbft/cometbft/libs/log"
-	cmtlight "github.com/cometbft/cometbft/light"
-	cmtstateproto "github.com/cometbft/cometbft/proto/tendermint/state"
-	cmtstoreproto "github.com/cometbft/cometbft/proto/tendermint/store"
-	cmtversionproto "github.com/cometbft/cometbft/proto/tendermint/version"
 	cmtrpchttp "github.com/cometbft/cometbft/rpc/client/http"
-	cmtstate "github.com/cometbft/cometbft/state"
-	cmtstatesync "github.com/cometbft/cometbft/statesync"
-	cmtstore "github.com/cometbft/cometbft/store"
-	cmtversion "github.com/cometbft/cometbft/version"
 )
 
-// genesisDocKey is the state DB key that node.LoadStateFromDBOrGenesisDocProvider
-// reads to skip the GenesisDocProvider. Mirrors the unexported
-// constant in cometbft/node/setup.go.
-var genesisDocKey = []byte("genesisDoc")
-
-// writeCometState seeds the CometBFT state DB at <nodeDir>/data/{state,blockstore}.db.
+// writeStateSyncConfig writes the daemon's tendermint.toml with
+// CometBFT state-sync enabled. After this, the daemon's first start
+// will pull a snapshot from peers via ABCI state-sync hooks, then
+// blocksync to current.
 //
 //   - nodeDir: e.g. <dataDir>/dnn or <dataDir>/bvnn
-//   - tmRPCs:  ≥2 peer Tendermint RPC URLs (light client requirement)
-//   - ourAppHash: the BPT root verified against the signed anchor
-//   - snapHeight: minor block height the snapshot was taken at
-//   - snapTime: the snapshot's recorded block time (unused; light
-//     client returns the authoritative value)
-func writeCometState(nodeDir string, tmRPCs, tmP2P []string, ourAppHash [32]byte, snapHeight uint64, snapTime time.Time) error {
+//   - tmRPCs: ≥2 peer Tendermint RPC URLs (state-sync requires 2+)
+//   - tmP2P:  same count as tmRPCs; <host>:<port> for CometBFT P2P
+//   - verifiedAppHash: the BPT root we already verified via signed anchor
+//     (cross-checked against the trust block's AppHash from primary peer)
+//   - snapHeight: the major-block-fire minor block height (trust height)
+//   - snapTime: snapshot's recorded block time (used for trust window)
+func writeStateSyncConfig(nodeDir, genesisFilename string, tmRPCs, tmP2P []string, verifiedAppHash [32]byte, snapHeight uint64, snapTime time.Time) error {
 	_ = snapTime
 	if len(tmRPCs) < 2 {
-		return fmt.Errorf("need ≥2 RPC servers, got %d", len(tmRPCs))
-	}
-
-	dataDir := filepath.Join(nodeDir, "data")
-	if err := os.MkdirAll(dataDir, 0700); err != nil {
-		return fmt.Errorf("mkdir %s: %w", dataDir, err)
+		return fmt.Errorf("need ≥2 RPC servers for state-sync, got %d", len(tmRPCs))
 	}
 
 	ctx := context.Background()
 
-	// Fetch trust hash + chain ID from primary peer. Trusting the
-	// peer for the block hash alone is acceptable: the AppHash check
-	// below catches a lying peer.
+	// Fetch trust block hash + chain ID from primary peer. State-sync's
+	// trust model: we trust this hash for one bootstrap, then the light
+	// client verifies all subsequent blocks. We also cross-check the
+	// trust block's AppHash against our independently-verified BPT root.
 	primary, err := cmtrpchttp.New(tmRPCs[0], "/websocket")
 	if err != nil {
 		return fmt.Errorf("primary RPC client: %w", err)
@@ -98,121 +89,26 @@ func writeCometState(nodeDir string, tmRPCs, tmP2P []string, ourAppHash [32]byte
 	}
 	trustHash := commitRes.SignedHeader.Header.Hash()
 	chainID := commitRes.SignedHeader.Header.ChainID
-
-	fmt.Fprintf(os.Stderr, "[comet] trust hash at height %d (chain %s): %s\n",
+	fmt.Fprintf(os.Stderr, "[statesync] trust hash at height %d (chain %s): %s\n",
 		trustH, chainID, hex.EncodeToString(trustHash))
 
-	// Build light-client state provider.
-	logger := cmtlog.NewNopLogger()
-	version := cmtstateproto.Version{
-		Consensus: cmtversionproto.Consensus{Block: 11, App: 2},
-		Software:  cmtversion.TMCoreSemVer,
-	}
-	provider, err := cmtstatesync.NewLightClientStateProvider(
-		ctx,
-		chainID,
-		version,
-		1, // initial height (chain genesis)
-		tmRPCs,
-		cmtlight.TrustOptions{
-			Period: 168 * time.Hour,
-			Height: trustH,
-			Hash:   trustHash,
-		},
-		logger,
-	)
+	// AppHash cross-check: block H+1's header records post-block-H app
+	// hash. That should equal our verified BPT root.
+	hp1 := int64(snapHeight) + 1
+	bResp, err := primary.Block(ctx, &hp1)
 	if err != nil {
-		return fmt.Errorf("NewLightClientStateProvider: %w", err)
+		return fmt.Errorf("fetch block H+1=%d: %w", hp1, err)
 	}
+	if bResp == nil || bResp.Block == nil {
+		return fmt.Errorf("nil block response for H+1=%d", hp1)
+	}
+	if !equalBytes(bResp.Block.Header.AppHash, verifiedAppHash[:]) {
+		return fmt.Errorf("AppHash mismatch: block(H+1).AppHash=%X verified=%X — peer may be on a different chain or fork",
+			bResp.Block.Header.AppHash, verifiedAppHash[:])
+	}
+	fmt.Fprintf(os.Stderr, "[statesync] block(H+1).AppHash matches signed-anchor root ✓\n")
 
-	// AppHash() must be called first — it triggers fetching of blocks
-	// at H+1 and H+2 which State() then requires.
-	apphash, err := provider.AppHash(ctx, snapHeight)
-	if err != nil {
-		return fmt.Errorf("provider.AppHash(%d): %w", snapHeight, err)
-	}
-	if len(apphash) != 32 {
-		return fmt.Errorf("unexpected AppHash length %d", len(apphash))
-	}
-	var got [32]byte
-	copy(got[:], apphash)
-	if got != ourAppHash {
-		return fmt.Errorf("AppHash mismatch: light-client says %x, signed-anchor says %x",
-			apphash, ourAppHash[:])
-	}
-	fmt.Fprintf(os.Stderr, "[comet] light-client AppHash matches signed-anchor root ✓\n")
-
-	state, err := provider.State(ctx, snapHeight)
-	if err != nil {
-		return fmt.Errorf("provider.State(%d): %w", snapHeight, err)
-	}
-
-	commit, err := provider.Commit(ctx, snapHeight)
-	if err != nil {
-		return fmt.Errorf("provider.Commit(%d): %w", snapHeight, err)
-	}
-
-	// Fetch the actual chain's genesis doc. We write it both to the
-	// state DB (where node.LoadStateFromDBOrGenesisDocProvider reads
-	// it on subsequent starts) AND to <configDir>/genesis.json (which
-	// the Accumulate ABCI Info handler reads on first call via
-	// genesis.DocProvider).
-	genRes, err := primary.Genesis(ctx)
-	if err != nil {
-		return fmt.Errorf("fetch genesis doc: %w", err)
-	}
-	genBytes, err := cmtjson.Marshal(genRes.Genesis)
-	if err != nil {
-		return fmt.Errorf("marshal genesis doc: %w", err)
-	}
-	cfgDir := filepath.Join(nodeDir, "config")
-	if err := os.MkdirAll(cfgDir, 0700); err != nil {
-		return fmt.Errorf("mkdir %s: %w", cfgDir, err)
-	}
-	if err := os.WriteFile(filepath.Join(cfgDir, "genesis.json"), genBytes, 0600); err != nil {
-		return fmt.Errorf("write genesis.json: %w", err)
-	}
-	fmt.Fprintf(os.Stderr, "[comet] wrote genesis.json (%d bytes)\n", len(genBytes))
-
-	stateDB, err := cmtdb.NewGoLevelDB("state", dataDir)
-	if err != nil {
-		return fmt.Errorf("open state.db: %w", err)
-	}
-	defer stateDB.Close()
-
-	if err := stateDB.SetSync(genesisDocKey, genBytes); err != nil {
-		return fmt.Errorf("save genesis doc to state.db: %w", err)
-	}
-
-	stateStore := cmtstate.NewStore(stateDB, cmtstate.StoreOptions{DiscardABCIResponses: true})
-	if err := stateStore.Bootstrap(state); err != nil {
-		return fmt.Errorf("stateStore.Bootstrap: %w", err)
-	}
-
-	blockDB, err := cmtdb.NewGoLevelDB("blockstore", dataDir)
-	if err != nil {
-		return fmt.Errorf("open blockstore.db: %w", err)
-	}
-	defer blockDB.Close()
-
-	bs := cmtstore.NewBlockStore(blockDB)
-	if err := bs.SaveSeenCommit(state.LastBlockHeight, commit); err != nil {
-		return fmt.Errorf("SaveSeenCommit: %w", err)
-	}
-	// Manually update the BlockStoreState so the blockstore reports
-	// height == state.LastBlockHeight at next start. Without this the
-	// node panics with "state (H) and store (0) height mismatch".
-	cmtstore.SaveBlockStoreState(&cmtstoreproto.BlockStoreState{
-		Base:   state.LastBlockHeight,
-		Height: state.LastBlockHeight,
-	}, blockDB)
-
-	fmt.Fprintf(os.Stderr, "[comet] seeded state.db + blockstore.db at height %d\n", state.LastBlockHeight)
-
-	// Build persistent_peers list: pair each --tm-rpc-servers URL
-	// with the matching --tm-p2p-peers host:port and prefix the node
-	// ID we fetch from /status. CometBFT requires <id>@<host>:<port>
-	// in persistent_peers.
+	// Resolve peer node IDs for persistent_peers.
 	var persistentPeers []string
 	if len(tmP2P) > 0 {
 		if len(tmP2P) != len(tmRPCs) {
@@ -230,44 +126,83 @@ func writeCometState(nodeDir string, tmRPCs, tmP2P []string, ourAppHash [32]byte
 			id := string(st.NodeInfo.DefaultNodeID)
 			persistentPeers = append(persistentPeers, fmt.Sprintf("%s@%s", id, tmP2P[i]))
 		}
-		fmt.Fprintf(os.Stderr, "[comet] resolved persistent_peers (%d): %s\n", len(persistentPeers), strings.Join(persistentPeers, ","))
+		fmt.Fprintf(os.Stderr, "[statesync] resolved persistent_peers (%d): %s\n",
+			len(persistentPeers), strings.Join(persistentPeers, ","))
 	}
 
-	// Write tendermint.toml with our preferred small-footprint
-	// settings: null tx indexer (we don't run a public RPC), discard
-	// ABCI responses (state.db stays small), persistent_peers from
-	// --tm-p2p-peers (so blocksync can reach them).
-	if err := writeTendermintToml(nodeDir, persistentPeers); err != nil {
-		return fmt.Errorf("write tendermint.toml: %w", err)
+	// Write tendermint.toml with state-sync enabled.
+	cfgDir := filepath.Join(nodeDir, "config")
+	if err := os.MkdirAll(cfgDir, 0700); err != nil {
+		return fmt.Errorf("mkdir %s: %w", cfgDir, err)
 	}
-	return nil
-}
 
-// writeTendermintToml writes <nodeDir>/config/tendermint.toml with
-// our preferred low-disk-footprint settings before the daemon's first
-// run, so the daemon's existing-file path (run/consensus.go:138-156)
-// loads our config instead of generating a default.
-//
-// The daemon will fill in NodeKey/PrivValidatorKey paths, P2P listen
-// addresses, etc. on its own when it sees the file but with empty
-// values for those — the existing-file branch trusts whatever's
-// loaded via Viper, so we set just the knobs we care about and let
-// CometBFT's own defaults handle the rest.
-func writeTendermintToml(nodeDir string, persistentPeers []string) error {
-	configDir := filepath.Join(nodeDir, "config")
-	if err := os.MkdirAll(configDir, 0700); err != nil {
-		return fmt.Errorf("mkdir %s: %w", configDir, err)
+	// Genesis is still required even with state-sync — CometBFT needs
+	// the initial validator set + consensus params to verify subsequent
+	// blocks via the light client.
+	genRes, err := primary.Genesis(ctx)
+	if err != nil {
+		return fmt.Errorf("fetch genesis doc: %w", err)
 	}
+	genBytes, err := cometJSONMarshal(genRes.Genesis)
+	if err != nil {
+		return fmt.Errorf("marshal genesis doc: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(cfgDir, "genesis.json"), genBytes, 0600); err != nil {
+		return fmt.Errorf("write genesis.json: %w", err)
+	}
+	// Also write at the workdir level — the Accumulate run framework's
+	// genesisDocProvider resolves <workdir>/<DnGenesis|BvnGenesis>.
+	workDir := filepath.Dir(nodeDir)
+	wdGenPath := filepath.Join(workDir, genesisFilename)
+	if err := os.WriteFile(wdGenPath, genBytes, 0600); err != nil {
+		return fmt.Errorf("write workdir genesis %s: %w", wdGenPath, err)
+	}
+	fmt.Fprintf(os.Stderr, "[statesync] wrote genesis.json (%d bytes) → %s + %s\n",
+		len(genBytes), filepath.Join(cfgDir, "genesis.json"), wdGenPath)
+
 	cfg := cmtcfg.DefaultConfig()
 	cfg.SetRoot(nodeDir)
 	cfg.TxIndex.Indexer = "null"
 	cfg.Storage.DiscardABCIResponses = true
 	cfg.P2P.AllowDuplicateIP = false
-	cfg.P2P.AddrBookStrict = false // dev/test networks have private addrs
+	cfg.P2P.AddrBookStrict = false
 	cfg.P2P.PersistentPeers = strings.Join(persistentPeers, ",")
 	cfg.Mempool.MaxTxBytes = 4194304
-	tmlPath := filepath.Join(configDir, "tendermint.toml")
+
+	// State-sync configuration. CometBFT requires ≥2 RPC servers for
+	// the light client; trust_period is the window during which trust
+	// is considered fresh (24h is the conventional default).
+	cfg.StateSync.Enable = true
+	cfg.StateSync.RPCServers = tmRPCs
+	cfg.StateSync.TrustHeight = trustH
+	cfg.StateSync.TrustHash = hex.EncodeToString(trustHash)
+	cfg.StateSync.TrustPeriod = 168 * time.Hour
+	cfg.StateSync.DiscoveryTime = 15 * time.Second
+	cfg.StateSync.TempDir = filepath.Join(nodeDir, "data", "statesync.tmp")
+
+	tmlPath := filepath.Join(cfgDir, "tendermint.toml")
 	cmtcfg.WriteConfigFile(tmlPath, cfg)
-	fmt.Fprintf(os.Stderr, "[comet] wrote %s (null indexer, discard ABCI, %d peers)\n", tmlPath, len(persistentPeers))
+	fmt.Fprintf(os.Stderr, "[statesync] wrote %s (state-sync enabled, trust=%d, %d peers)\n",
+		tmlPath, trustH, len(persistentPeers))
 	return nil
+}
+
+func equalBytes(a, b []byte) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// cometJSONMarshal is exposed via a wrapper because we don't import
+// cometbft/libs/json in this file otherwise; kept as its own function
+// so it's clear we're using CometBFT's specific JSON encoding (not
+// stdlib) for the genesis doc.
+var cometJSONMarshal = func(v interface{}) ([]byte, error) {
+	return cometJSONMarshalImpl(v)
 }

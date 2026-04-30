@@ -72,7 +72,12 @@ services:
     container_name: acc-bv3-bvn1-val1
     mem_limit: 1g
     environment:
-      ACCUMULATE_RETAIN_BLOCKS: "50"
+      # Disabled (set to a huge value) for the bootstrap-v3 catch-up
+      # test — when set to 50, validators prune below latest-50 which
+      # makes the launched node unable to blocksync from snapshot
+      # height to current. Set to 1000000 in regular tests; back to
+      # ~50 to demonstrate steady-state pruning.
+      ACCUMULATE_RETAIN_BLOCKS: "1000000"
     volumes:
       - bv3-config:/root/.accumulate
     command:
@@ -95,7 +100,12 @@ services:
     container_name: acc-bv3-bvn1-val2
     mem_limit: 1g
     environment:
-      ACCUMULATE_RETAIN_BLOCKS: "50"
+      # Disabled (set to a huge value) for the bootstrap-v3 catch-up
+      # test — when set to 50, validators prune below latest-50 which
+      # makes the launched node unable to blocksync from snapshot
+      # height to current. Set to 1000000 in regular tests; back to
+      # ~50 to demonstrate steady-state pruning.
+      ACCUMULATE_RETAIN_BLOCKS: "1000000"
     volumes:
       - bv3-config:/root/.accumulate
     command:
@@ -118,7 +128,12 @@ services:
     container_name: acc-bv3-bvn1-val3
     mem_limit: 1g
     environment:
-      ACCUMULATE_RETAIN_BLOCKS: "50"
+      # Disabled (set to a huge value) for the bootstrap-v3 catch-up
+      # test — when set to 50, validators prune below latest-50 which
+      # makes the launched node unable to blocksync from snapshot
+      # height to current. Set to 1000000 in regular tests; back to
+      # ~50 to demonstrate steady-state pruning.
+      ACCUMULATE_RETAIN_BLOCKS: "1000000"
     volumes:
       - bv3-config:/root/.accumulate
     command:
@@ -141,7 +156,12 @@ services:
     container_name: acc-bv3-bvn1-val4
     mem_limit: 1g
     environment:
-      ACCUMULATE_RETAIN_BLOCKS: "50"
+      # Disabled (set to a huge value) for the bootstrap-v3 catch-up
+      # test — when set to 50, validators prune below latest-50 which
+      # makes the launched node unable to blocksync from snapshot
+      # height to current. Set to 1000000 in regular tests; back to
+      # ~50 to demonstrate steady-state pruning.
+      ACCUMULATE_RETAIN_BLOCKS: "1000000"
     volumes:
       - bv3-config:/root/.accumulate
     command:

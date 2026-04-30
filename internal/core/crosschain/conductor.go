@@ -71,8 +71,17 @@ func (c *Conductor) willChangeGlobals(e events.WillChangeGlobals) error {
 }
 
 func (c *Conductor) willBeginBlock(e execute.WillBeginBlock) error {
+	// Globals is populated by the WillChangeGlobals event which fires
+	// during InitChain or normal block flow. After a state-sync
+	// bootstrap, the event hasn't fired yet for this process — the
+	// state was loaded from a snapshot, not built up. Skip until
+	// Globals is populated.
+	g := c.Globals.Load()
+	if g == nil {
+		return nil
+	}
 	// Skip for v1
-	if !c.Globals.Load().ExecutorVersion.V2Enabled() {
+	if !g.ExecutorVersion.V2Enabled() {
 		return nil
 	}
 
