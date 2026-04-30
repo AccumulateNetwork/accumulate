@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
 	sv1 "gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	sv2 "gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
@@ -55,7 +54,6 @@ func restoreSnapshotCmd(cmd *cobra.Command, args []string) {
 	// Open the database
 	db, err := coredb.OpenBadger(args[1], nil)
 	check(err)
-	db.SetObserver(execute.NewDatabaseObserver())
 
 	// Timer for updating progress
 	tick := time.NewTicker(time.Second / 2)

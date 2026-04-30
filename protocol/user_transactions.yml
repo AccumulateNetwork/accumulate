@@ -267,3 +267,31 @@ RemoteTransaction:
     - name: Hash
       type: hash
       optional: true
+
+SetLiteAccountDelegate:
+  union: { type: transaction }
+  description: sets or clears the delegate authority on a lite token account
+  fields:
+    - name: Delegate
+      description: is the authority (KeyBook) to delegate signing rights to, or nil to clear delegation
+      type: url
+      pointer: true
+      optional: true
+    - name: Proof
+      description: is a proof of existence for the delegate KeyBook, required when the delegate is on a remote partition
+      type: KeyBookProof
+      marshal-as: reference
+      pointer: true
+      optional: true
+
+ReleaseLockedOperation:
+  union: { type: transaction }
+  description: releases a locked deposit by revealing the hash preimage
+  fields:
+    - name: LockedTxID
+      description: the transaction ID of the SyntheticLockedDeposit to release
+      type: txid
+      pointer: true
+    - name: Preimage
+      description: the secret value that SHA-256 hashes to the locked hash
+      type: bytes

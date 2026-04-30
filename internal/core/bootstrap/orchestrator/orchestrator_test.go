@@ -13,7 +13,6 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/bptproof"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -24,7 +23,7 @@ import (
 func newObservedDB(t *testing.T) *database.Database {
 	t.Helper()
 	db := database.OpenInMemory(nil)
-	db.SetObserver(execute.NewDatabaseObserver())
+	db.SetObserver(database.NewDatabaseObserver())
 	return db
 }
 

@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -115,6 +115,9 @@ func (s *ConsensusService) ConsensusStatus(ctx context.Context, opts api.Consens
 	default:
 		return nil, errors.InternalError.WithFormat("invalid block hash returned from Tendermint")
 	}
+
+	// Expose whether the node is catching up to the network
+	res.CatchingUp = status.SyncInfo.CatchingUp
 
 	if !boolOpt(opts.IncludePeers, true) {
 		return res, nil

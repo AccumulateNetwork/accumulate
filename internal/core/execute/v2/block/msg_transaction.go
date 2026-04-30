@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -653,19 +653,9 @@ func (x ExpiredTransaction) Process(batch *database.Batch, ctx *MessageContext) 
 }
 
 func (x ExpiredTransaction) expireTransaction(batch *database.Batch, ctx *MessageContext, msg *internal.ExpiredTransaction) error {
-	// If the transaction has been executed (which erases the credit
-	// payments), skip it
-	isInit, _, err := transactionIsInitiated(batch, msg.TxID)
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-	if !isInit {
-		return nil
-	}
-
-	// Load it
+	// Load the transaction first to check if it's a locked deposit
 	var txn *messaging.TransactionMessage
-	err = batch.Message(msg.TxID.Hash()).Main().GetAs(&txn)
+	err := batch.Message(msg.TxID.Hash()).Main().GetAs(&txn)
 	switch {
 	case err == nil:
 		// Ok
@@ -676,6 +666,23 @@ func (x ExpiredTransaction) expireTransaction(batch *database.Batch, ctx *Messag
 	default:
 		return errors.UnknownError.WithFormat("load pending transaction: %w", err)
 	}
+
+	// Handle SyntheticLockedDeposit specially - it doesn't have credit payments
+	// but still needs to be refunded on expiration
+	if _, ok := txn.Transaction.Body.(*protocol.SyntheticLockedDeposit); ok {
+		return x.expireLockedDeposit(batch, ctx, msg, txn)
+	}
+
+	// If the transaction has been executed (which erases the credit
+	// payments), skip it
+	isInit, _, err := transactionIsInitiated(batch, msg.TxID)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	if !isInit {
+		return nil
+	}
+
 	if ctx.message == nil {
 		ctx.message = msg
 	}
@@ -695,6 +702,53 @@ func (x ExpiredTransaction) expireTransaction(batch *database.Batch, ctx *Messag
 
 	err = TransactionMessage{}.postProcess(batch, ctx2, state, true)
 	return errors.UnknownError.Wrap(err)
+}
+
+// expireLockedDeposit handles expiration of SyntheticLockedDeposit transactions.
+// Unlike regular transactions, locked deposits don't have credit payments but
+// need to be refunded to the sender when they expire without being released.
+func (x ExpiredTransaction) expireLockedDeposit(batch *database.Batch, ctx *MessageContext, msg *internal.ExpiredTransaction, txn *messaging.TransactionMessage) error {
+	body := txn.Transaction.Body.(*protocol.SyntheticLockedDeposit)
+
+	// Check if the locked deposit was already released by checking for a
+	// ReleaseLockedOperation that references this transaction
+	txHash := msg.TxID.Hash()
+	status, err := batch.Transaction(txHash[:]).Status().Get()
+	if err != nil && !errors.Is(err, errors.NotFound) {
+		return errors.UnknownError.WithFormat("load locked deposit status: %w", err)
+	}
+
+	// If the transaction was already delivered (released), skip it
+	if status != nil && status.Code == errors.Delivered {
+		return nil
+	}
+
+	// Mark the locked deposit as expired
+	err = batch.Transaction(txHash[:]).Status().Put(&protocol.TransactionStatus{
+		TxID: msg.TxID,
+		Code: errors.Expired,
+	})
+	if err != nil {
+		return errors.UnknownError.WithFormat("update locked deposit status: %w", err)
+	}
+
+	// Produce refund synthetic transaction back to sender
+	state := new(chain.ProcessTransactionState)
+	if body.IsIssuer {
+		refund := new(protocol.SyntheticBurnTokens)
+		refund.Amount = body.Amount
+		refund.IsRefund = true
+		state.DidProduceTxn(body.Sender, refund)
+	} else {
+		refund := new(protocol.SyntheticDepositTokens)
+		refund.Token = body.Token
+		refund.Amount = body.Amount
+		refund.IsRefund = true
+		state.DidProduceTxn(body.Sender, refund)
+	}
+
+	ctx.State.MergeTransaction(state)
+	return nil
 }
 
 func (x ExpiredTransaction) eraseSignatures(batch *database.Batch, ctx *MessageContext, msg *internal.ExpiredTransaction) error {

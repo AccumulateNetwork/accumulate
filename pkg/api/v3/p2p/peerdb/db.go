@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -12,6 +12,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
@@ -61,7 +62,14 @@ func (p *PeerStatus) prune() bool {
 }
 
 func (a *PeerAddressStatus) prune() bool {
-	return a.Last.Success == nil
+	// Prune if never succeeded
+	if a.Last.Success == nil {
+		return true
+	}
+
+	// Prune if not seen in 7 days
+	age := a.Last.SinceSuccess()
+	return age > 7*24*time.Hour
 }
 
 func (n *PeerNetworkStatus) prune() bool {
@@ -70,7 +78,14 @@ func (n *PeerNetworkStatus) prune() bool {
 }
 
 func (a *PeerServiceStatus) prune() bool {
-	return a.Last.Success == nil
+	// Prune if never succeeded
+	if a.Last.Success == nil {
+		return true
+	}
+
+	// Prune if not seen in 7 days
+	age := a.Last.SinceSuccess()
+	return age > 7*24*time.Hour
 }
 
 func (db *DB) StoreFile(file string) error {

@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -28,11 +28,11 @@ type Services map[string]map[peer.ID]Handler
 
 type Handler = func(message.Stream)
 
-func NewNetwork(router routing.Router) *Network {
+func NewNetwork(networkId string, router routing.Router) *Network {
 	n := new(Network)
 	n.Services = Services{}
 	n.Client = &message.Client{Transport: &message.RoutedTransport{
-		Network:  "Simulator",
+		Network:  networkId,
 		Attempts: 1,
 		Dialer:   n.Services,
 		Router:   &routing.MessageRouter{Router: router},
@@ -57,6 +57,29 @@ func (s Services) Register(id peer.ID, address *api.ServiceAddress, handler Hand
 
 	m[id] = handler
 	return true
+}
+
+// GetHandler returns a handler for the given service address.
+func (s Services) GetHandler(address *api.ServiceAddress) Handler {
+	m, ok := s[address.String()]
+	if !ok {
+		return nil
+	}
+	for _, handler := range m {
+		return handler
+	}
+	return nil
+}
+
+// Replace replaces the handler for the given service address and peer ID.
+// If the service is not registered, it registers it.
+func (s Services) Replace(id peer.ID, address *api.ServiceAddress, handler Handler) {
+	m, ok := s[address.String()]
+	if !ok {
+		m = map[peer.ID]Handler{}
+		s[address.String()] = m
+	}
+	m[id] = handler
 }
 
 func (s Services) Dial(ctx context.Context, addr multiaddr.Multiaddr) (message.Stream, error) {

@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -7,10 +7,13 @@
 package build
 
 import (
+	"crypto/sha256"
 	"math/big"
 	"time"
 
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"golang.org/x/crypto/ripemd160" //nolint:staticcheck
 )
 
 type TransactionBuilder struct {
@@ -752,5 +755,87 @@ func (b LockAccountBuilder) Done() (*protocol.Transaction, error) {
 }
 
 func (b LockAccountBuilder) SignWith(signer any, path ...string) SignatureBuilder {
+	return b.FinishTransaction().SignWith(signer, path...)
+}
+
+// HashLock sets a hashlock on the transaction for HTLC (Hashed Time-Locked Contract) operations.
+// When present on token transfers, this causes the system to produce locked synthetic transactions
+// instead of direct deposits.
+func (b TransactionBuilder) HashLock(algorithm protocol.HashAlgorithm, hash []byte, expiration time.Time) TransactionBuilder {
+	b.t.Header.HashLock = &protocol.HashLockOptions{
+		HashAlgorithm: algorithm,
+		Hash:          hash,
+		Expiration:    &expiration,
+	}
+	return b
+}
+
+// HashLockSHA256 sets a SHA-256 hashlock (32 bytes, compatible with Ethereum and Bitcoin OP_SHA256).
+func (b TransactionBuilder) HashLockSHA256(hash [32]byte, expiration time.Time) TransactionBuilder {
+	return b.HashLock(protocol.HashAlgorithmSHA256, hash[:], expiration)
+}
+
+// HashLockSHA256FromPreimage computes the SHA-256 hash of the preimage and sets it as the hashlock.
+func (b TransactionBuilder) HashLockSHA256FromPreimage(preimage []byte, expiration time.Time) TransactionBuilder {
+	hash := sha256.Sum256(preimage)
+	return b.HashLockSHA256(hash, expiration)
+}
+
+// HashLockSHA256D sets a double SHA-256 hashlock (32 bytes, compatible with Bitcoin block hashing).
+// SHA256D = SHA256(SHA256(preimage))
+func (b TransactionBuilder) HashLockSHA256D(hash [32]byte, expiration time.Time) TransactionBuilder {
+	return b.HashLock(protocol.HashAlgorithmSHA256D, hash[:], expiration)
+}
+
+// HashLockSHA256DFromPreimage computes the double SHA-256 hash of the preimage and sets it as the hashlock.
+// SHA256D = SHA256(SHA256(preimage))
+func (b TransactionBuilder) HashLockSHA256DFromPreimage(preimage []byte, expiration time.Time) TransactionBuilder {
+	h1 := sha256.Sum256(preimage)
+	h2 := sha256.Sum256(h1[:])
+	return b.HashLockSHA256D(h2, expiration)
+}
+
+// HashLockHASH160 sets a HASH160 hashlock (20 bytes, compatible with Bitcoin OP_HASH160).
+// HASH160 = RIPEMD160(SHA256(preimage))
+func (b TransactionBuilder) HashLockHASH160(hash [20]byte, expiration time.Time) TransactionBuilder {
+	return b.HashLock(protocol.HashAlgorithmHASH160, hash[:], expiration)
+}
+
+// HashLockHASH160FromPreimage computes HASH160 of the preimage and sets it as the hashlock.
+// HASH160 = RIPEMD160(SHA256(preimage))
+func (b TransactionBuilder) HashLockHASH160FromPreimage(preimage []byte, expiration time.Time) TransactionBuilder {
+	h1 := sha256.Sum256(preimage)
+	h2 := ripemd160.New()
+	h2.Write(h1[:])
+	var hash [20]byte
+	copy(hash[:], h2.Sum(nil))
+	return b.HashLockHASH160(hash, expiration)
+}
+
+type ReleaseLockedOperationBuilder struct {
+	t    TransactionBuilder
+	body protocol.ReleaseLockedOperation
+}
+
+func (b TransactionBuilder) ReleaseLockedOperation(lockedTxID *url.TxID) ReleaseLockedOperationBuilder {
+	c := ReleaseLockedOperationBuilder{t: b}
+	c.body.LockedTxID = lockedTxID
+	return c
+}
+
+func (b ReleaseLockedOperationBuilder) WithPreimage(preimage []byte) ReleaseLockedOperationBuilder {
+	b.body.Preimage = preimage
+	return b
+}
+
+func (b ReleaseLockedOperationBuilder) FinishTransaction() TransactionBuilder {
+	return b.t.Body(&b.body)
+}
+
+func (b ReleaseLockedOperationBuilder) Done() (*protocol.Transaction, error) {
+	return b.FinishTransaction().Done()
+}
+
+func (b ReleaseLockedOperationBuilder) SignWith(signer any, path ...string) SignatureBuilder {
 	return b.FinishTransaction().SignWith(signer, path...)
 }

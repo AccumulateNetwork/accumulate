@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -35,7 +35,6 @@ func TestCollect(t *testing.T) {
 	db, err := coredb.OpenBadger(filepath.Join(dir, "test.db"), logger)
 	require.NoError(t, err)
 	defer db.Close()
-	db.SetObserver(acctesting.NullObserver{})
 	fillDB(t, db, 1, 10)
 
 	// Collect a snapshot
@@ -65,7 +64,6 @@ func BenchmarkCollect(b *testing.B) {
 		db, err := coredb.OpenBadger(filepath.Join(dir, "test.db"), logger)
 		require.NoError(b, err)
 		defer db.Close()
-		db.SetObserver(acctesting.NullObserver{})
 
 		// Set up a bunch of accounts
 		fillDB(b, db, N, M)

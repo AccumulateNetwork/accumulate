@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -13,7 +13,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
@@ -73,15 +72,18 @@ func NewExecutor(opts ExecutorOptions) (*Executor, error) {
 		chain.IssueTokens{},
 		chain.LockAccount{},
 		chain.SendTokens{},
+		chain.SetLiteAccountDelegate{},
 		chain.TransferCredits{},
 		chain.UpdateAccountAuth{},
 		chain.UpdateKey{},
 		chain.UpdateKeyPage{},
 		chain.WriteData{},
 		chain.WriteDataTo{},
+		chain.ReleaseLockedOperation{},
 
 		// Synthetic
 		chain.SyntheticBurnTokens{},
+		chain.SyntheticLockedDeposit{},
 		chain.SyntheticCreateIdentity{},
 		chain.SyntheticDepositCredits{},
 		chain.SyntheticDepositTokens{},
@@ -126,8 +128,6 @@ func NewExecutor(opts ExecutorOptions) (*Executor, error) {
 		return nil, errors.InternalError.WithFormat("init sigCache: %w", cacheErr)
 	}
 	m.sigCache = c
-
-	m.db.SetObserver(internal.NewDatabaseObserver())
 
 	if opts.Logger != nil {
 		m.logger.L = opts.Logger.With("module", "executor")
@@ -200,7 +200,22 @@ func (x *Executor) LastBlock() (*execute.BlockParams, [32]byte, error) {
 		return nil, [32]byte{}, errors.FatalError.WithFormat("load root index chain: %w", err)
 	}
 	if c.Height() == 0 {
-		return nil, [32]byte{}, errors.NotFound
+		// Fallback: try to read the SystemLedger directly
+		// This handles backup databases where the root chain index is empty
+		ledger := batch.Account(x.Describe.NodeUrl(protocol.Ledger))
+		var ledgerState *protocol.SystemLedger
+		err := ledger.Main().GetAs(&ledgerState)
+		if err != nil {
+			return nil, [32]byte{}, errors.NotFound
+		}
+		if ledgerState.Index == 0 {
+			return nil, [32]byte{}, errors.NotFound
+		}
+		b := new(execute.BlockParams)
+		b.Index = ledgerState.Index
+		b.Time = ledgerState.Timestamp
+		h, err := batch.GetBptRootHash()
+		return b, h, err
 	}
 
 	entry := new(protocol.IndexEntry)

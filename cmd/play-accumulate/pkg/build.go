@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -7,8 +7,11 @@
 package pkg
 
 import (
+	"crypto/sha256"
 	"math/big"
+	"time"
 
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -146,6 +149,11 @@ type (
 		bldTxn
 		body *protocol.UpdateKey
 	}
+
+	bldReleaseLockedOperation struct {
+		bldTxn
+		body *protocol.ReleaseLockedOperation
+	}
 )
 
 func (b bldTxn) CreateIdentity(url Urlish) bldCreateIdentity {
@@ -206,6 +214,24 @@ func (b bldSendTokens) To(recipient Urlish, amount Numish) bldSendTokens {
 
 func (b bldSendTokens) AndTo(recipient Urlish, amount Numish) bldSendTokens {
 	return b.To(recipient, amount)
+}
+
+func (b bldSendTokens) WithHashLock(algorithm protocol.HashAlgorithm, hash []byte, expiration time.Time) bldSendTokens {
+	b.transaction.Header.HashLock = &protocol.HashLockOptions{
+		HashAlgorithm: algorithm,
+		Hash:          hash,
+		Expiration:    &expiration,
+	}
+	return b
+}
+
+func (b bldSendTokens) WithHashLockSHA256(hash [32]byte, expiration time.Time) bldSendTokens {
+	return b.WithHashLock(protocol.HashAlgorithmSHA256, hash[:], expiration)
+}
+
+func (b bldSendTokens) WithHashLockFromPreimage(preimage []byte, expiration time.Time) bldSendTokens {
+	hash := sha256.Sum256(preimage)
+	return b.WithHashLockSHA256(hash, expiration)
 }
 
 func (b bldTxn) CreateDataAccount() bldCreateDataAccount {
@@ -429,4 +455,17 @@ func (b bldTxn) UpdateKey(newKey Keyish) bldUpdateKey {
 	c.bldTxn = b.WithBody(c.body)
 	c.body.NewKeyHash = b.s.pubkeyhash(newKey)
 	return c
+}
+
+func (b bldTxn) ReleaseLockedOperation(lockedTxID *url.TxID) bldReleaseLockedOperation {
+	var c bldReleaseLockedOperation
+	c.body = new(protocol.ReleaseLockedOperation)
+	c.bldTxn = b.WithBody(c.body)
+	c.body.LockedTxID = lockedTxID
+	return c
+}
+
+func (b bldReleaseLockedOperation) WithPreimage(preimage []byte) bldReleaseLockedOperation {
+	b.body.Preimage = preimage
+	return b
 }

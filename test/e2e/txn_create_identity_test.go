@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -10,11 +10,11 @@ import (
 	"crypto/sha256"
 	"testing"
 
-	btc "github.com/btcsuite/btcd/btcec"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
+	altcrypto "gitlab.com/accumulatenetwork/accumulate/pkg/crypto"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -121,8 +121,8 @@ func TestCreateIdentity(t *testing.T) {
 
 func TestCreateIdentity_Eth(t *testing.T) {
 	seed := storage.MakeKey(t.Name())
-	sk, pk := btc.PrivKeyFromBytes(btc.S256(), seed[:])
-	lite := LiteAuthorityForKey(pk.SerializeUncompressed(), SignatureTypeETH)
+	sk, pk := altcrypto.BTCPrivKeyFromBytes(altcrypto.S256(), seed[:])
+	lite := LiteAuthorityForKey(altcrypto.SerializeUncompressed(pk), SignatureTypeETH)
 	alice := AccountUrl("alice")
 
 	// Initialize
@@ -136,8 +136,8 @@ func TestCreateIdentity_Eth(t *testing.T) {
 	// Execute
 	st := sim.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(lite).
-			CreateIdentity(alice).WithKeyBook(alice, "book").WithKey(pk.SerializeUncompressed(), SignatureTypeETH).
-			SignWith(lite).Version(1).Timestamp(1).Type(SignatureTypeETH).PrivateKey(sk.Serialize()))
+			CreateIdentity(alice).WithKeyBook(alice, "book").WithKey(altcrypto.SerializeUncompressed(pk), SignatureTypeETH).
+			SignWith(lite).Version(1).Timestamp(1).Type(SignatureTypeETH).PrivateKey(altcrypto.SerializePrivateKey(sk)))
 	sim.StepUntil(
 		Txn(st.TxID).Completes())
 

@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -25,6 +25,9 @@ const ChainTypeIndex = merkle.ChainTypeIndex
 
 // BookType is the type of a key book.
 type BookType uint64
+
+// HashAlgorithm specifies the hash algorithm for HTLC operations.
+type HashAlgorithm uint64
 
 // ObjectType is the type of an object in the database.
 type ObjectType uint64

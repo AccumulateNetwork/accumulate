@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -178,6 +178,17 @@ func New(opts Options) (_ *Node, err error) {
 }
 
 func (n *Node) ID() peer.ID { return n.host.ID() }
+
+func (n *Node) Host() host.Host { return n.host }
+
+// DHT returns the underlying DHT instance for advanced operations.
+// This is primarily used by the bootstrap server for active peer discovery.
+func (n *Node) DHT() *dht.IpfsDHT {
+	if n.peermgr == nil {
+		return nil
+	}
+	return n.peermgr.dht
+}
 
 func (n *Node) Services() *nodeService { return (*nodeService)(n) }
 

@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -11,7 +11,6 @@ import (
 	"math/big"
 
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -31,7 +30,6 @@ func CreateLite(url *url.URL) ([]byte, error) {
 	lid.CreditBalance = math.MaxUint64
 
 	db := database.OpenInMemory(nil)
-	db.SetObserver(execute.NewDatabaseObserver())
 	batch := db.Begin(true)
 	defer batch.Discard()
 	for _, a := range []protocol.Account{lta, lid} {

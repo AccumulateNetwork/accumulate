@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -7,10 +7,13 @@
 package encoding
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding"
 	"fmt"
+	"hash"
 	"io"
+	"sync"
 )
 
 type Error struct {
@@ -35,13 +38,70 @@ type BinaryValue interface {
 	UnmarshalBinaryFrom(io.Reader) error
 }
 
+// WritableBinaryValue extends BinaryValue with efficient direct writing.
+// Types implementing this interface can write directly to an io.Writer
+// without intermediate allocation.
+type WritableBinaryValue interface {
+	BinaryValue
+	WriteTo(w io.Writer) (int64, error)
+}
+
 type UnionValue interface {
 	BinaryValue
 	UnmarshalFieldsFrom(reader *Reader) error
 }
 
+// bufferPool is a pool of bytes.Buffer for reducing allocations in MarshalBinary.
+var bufferPool = sync.Pool{
+	New: func() interface{} {
+		return new(bytes.Buffer)
+	},
+}
+
+// GetBuffer returns a buffer from the pool.
+func GetBuffer() *bytes.Buffer {
+	buf := bufferPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	return buf
+}
+
+// PutBuffer returns a buffer to the pool.
+func PutBuffer(buf *bytes.Buffer) {
+	// Don't pool huge buffers to avoid memory bloat
+	if buf.Cap() > 1<<20 { // 1MB
+		return
+	}
+	bufferPool.Put(buf)
+}
+
+// hashPool is a pool of sha256 hashers for reducing allocations in Hash.
+var hashPool = sync.Pool{
+	New: func() interface{} {
+		return sha256.New()
+	},
+}
+
+// Hash computes the SHA256 hash of a BinaryValue.
+// If the value implements WritableBinaryValue, it writes directly to the hasher
+// without intermediate allocation. Otherwise, it falls back to MarshalBinary.
 func Hash(m BinaryValue) [32]byte {
-	// If this fails something is seriously wrong
+	// Fast path: use WriteTo if available
+	if w, ok := m.(WritableBinaryValue); ok {
+		h := hashPool.Get().(hash.Hash)
+		h.Reset()
+		defer hashPool.Put(h)
+
+		_, err := w.WriteTo(h)
+		if err != nil {
+			panic(fmt.Errorf("writing message to hash: %w", err))
+		}
+
+		var result [32]byte
+		h.Sum(result[:0])
+		return result
+	}
+
+	// Slow path: allocate via MarshalBinary
 	b, err := m.MarshalBinary()
 	if err != nil {
 		panic(fmt.Errorf("marshaling message: %w", err))

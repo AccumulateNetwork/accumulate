@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"os"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
@@ -39,7 +38,7 @@ func main() {
 		os.Exit(1)
 	}
 	defer db.Close()
-	db.SetObserver(execute.NewDatabaseObserver())
+	db.SetObserver(database.NewDatabaseObserver())
 
 	f, err := os.Open(snapFile)
 	if err != nil {

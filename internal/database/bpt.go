@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -110,15 +110,13 @@ func (b *Batch) SaveAccounts(file io.WriteSeeker, collect func(*Account) ([]byte
 		account := b.Account(u)
 
 		// Check the hash
-		if _, ok := b.observer.(unsetObserver); !ok {
-			hasher, err := b.observer.DidChangeAccount(b, account)
-			if err != nil {
-				return nil, errors.UnknownError.WithFormat("hash %v: %w", u, err)
-			}
+		hasher, err := b.observer.DidChangeAccount(b, account)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("hash %v: %w", u, err)
+		}
 
-			if !bytes.Equal(hash[:], hasher.MerkleHash()) {
-				return nil, errors.Conflict.WithFormat("hash does not match for %v", u)
-			}
+		if !bytes.Equal(hash[:], hasher.MerkleHash()) {
+			return nil, errors.Conflict.WithFormat("hash does not match for %v", u)
 		}
 
 		state, err := collect(account)

@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -77,7 +76,7 @@ func (s *dbSource) QueryMessage(_ context.Context, _ *url.TxID, _ *api.DefaultQu
 func newObservedDB(t *testing.T) *database.Database {
 	t.Helper()
 	db := database.OpenInMemory(nil)
-	db.SetObserver(execute.NewDatabaseObserver())
+	db.SetObserver(database.NewDatabaseObserver())
 	return db
 }
 

@@ -30,7 +30,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/clientsrc"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/orchestrator"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
@@ -159,7 +158,7 @@ func runBootstrap(cmd *cobra.Command, _ []string) {
 	// (UpdateBPT during pull / gossip commits) can compute per-account
 	// hashes. Without this, batch.UpdateBPT errors with "observer is
 	// not set".
-	db.SetObserver(execute.NewDatabaseObserver())
+	db.SetObserver(database.NewDatabaseObserver())
 
 	// Pick AnchorSource: production over flag, dev fallback.
 	var anchors orchestrator.AnchorSource
@@ -330,7 +329,7 @@ func runBootstrapViaSnapshot(dataDir string) {
 	// in-memory DB after verification; the daemon will get its own
 	// state via CometBFT state-sync.
 	db := database.OpenInMemory(nil)
-	db.SetObserver(execute.NewDatabaseObserver())
+	db.SetObserver(database.NewDatabaseObserver())
 	defer db.Close()
 	rf, err := os.Open(tmpFile)
 	checkf(err, "open snapshot for in-memory restore")

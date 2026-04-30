@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -152,8 +152,10 @@ type ConsensusStatus struct {
 	ValidatorKeyHash [32]byte               `json:"validatorKeyHash,omitempty" form:"validatorKeyHash" query:"validatorKeyHash" validate:"required"`
 	PartitionID      string                 `json:"partitionID,omitempty" form:"partitionID" query:"partitionID" validate:"required"`
 	PartitionType    protocol.PartitionType `json:"partitionType,omitempty" form:"partitionType" query:"partitionType" validate:"required"`
-	Peers            []*ConsensusPeerInfo   `json:"peers,omitempty" form:"peers" query:"peers" validate:"required"`
-	extraData        []byte
+	// CatchingUp indicates whether the node is still catching up to the network.
+	CatchingUp bool                 `json:"catchingUp,omitempty" form:"catchingUp" query:"catchingUp"`
+	Peers      []*ConsensusPeerInfo `json:"peers,omitempty" form:"peers" query:"peers" validate:"required"`
+	extraData  []byte
 }
 
 type ConsensusStatusOptions struct {
@@ -340,7 +342,11 @@ type NetworkStatus struct {
 	MajorBlockHeight uint64 `json:"majorBlockHeight,omitempty" form:"majorBlockHeight" query:"majorBlockHeight" validate:"required"`
 	// BvnExecutorVersions is the active executor version of each BVN.
 	BvnExecutorVersions []*protocol.PartitionExecutorVersion `json:"bvnExecutorVersions,omitempty" form:"bvnExecutorVersions" query:"bvnExecutorVersions" validate:"required"`
-	extraData           []byte
+	// LastBlockTime is the timestamp of the last block, for detecting stale data.
+	LastBlockTime *time.Time `json:"lastBlockTime,omitempty" form:"lastBlockTime" query:"lastBlockTime"`
+	// CatchingUp indicates whether the node is still catching up to the network.
+	CatchingUp *bool `json:"catchingUp,omitempty" form:"catchingUp" query:"catchingUp"`
+	extraData  []byte
 }
 
 type NetworkStatusOptions struct {
@@ -842,6 +848,7 @@ func (v *ConsensusStatus) Copy() *ConsensusStatus {
 	u.ValidatorKeyHash = v.ValidatorKeyHash
 	u.PartitionID = v.PartitionID
 	u.PartitionType = v.PartitionType
+	u.CatchingUp = v.CatchingUp
 	u.Peers = make([]*ConsensusPeerInfo, len(v.Peers))
 	for i, v := range v.Peers {
 		v := v
@@ -1328,6 +1335,14 @@ func (v *NetworkStatus) Copy() *NetworkStatus {
 		if v != nil {
 			u.BvnExecutorVersions[i] = (v).Copy()
 		}
+	}
+	if v.LastBlockTime != nil {
+		u.LastBlockTime = new(time.Time)
+		*u.LastBlockTime = *v.LastBlockTime
+	}
+	if v.CatchingUp != nil {
+		u.CatchingUp = new(bool)
+		*u.CatchingUp = *v.CatchingUp
 	}
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
@@ -2036,6 +2051,9 @@ func (v *ConsensusStatus) Equal(u *ConsensusStatus) bool {
 	if !(v.PartitionType == u.PartitionType) {
 		return false
 	}
+	if !(v.CatchingUp == u.CatchingUp) {
+		return false
+	}
 	if len(v.Peers) != len(u.Peers) {
 		return false
 	}
@@ -2554,6 +2572,22 @@ func (v *NetworkStatus) Equal(u *NetworkStatus) bool {
 			return false
 		}
 	}
+	switch {
+	case v.LastBlockTime == u.LastBlockTime:
+		// equal
+	case v.LastBlockTime == nil || u.LastBlockTime == nil:
+		return false
+	case !((*v.LastBlockTime).Equal(*u.LastBlockTime)):
+		return false
+	}
+	switch {
+	case v.CatchingUp == u.CatchingUp:
+		// equal
+	case v.CatchingUp == nil || u.CatchingUp == nil:
+		return false
+	case !(*v.CatchingUp == *u.CatchingUp):
+		return false
+	}
 
 	return true
 }
@@ -2859,7 +2893,9 @@ func (v *AccountRecord) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.RecordType())
@@ -2884,7 +2920,11 @@ func (v *AccountRecord) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *AccountRecord) IsValid() error {
@@ -2940,7 +2980,9 @@ func (v *AnchorSearchQuery) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.QueryType())
@@ -2956,7 +2998,11 @@ func (v *AnchorSearchQuery) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *AnchorSearchQuery) IsValid() error {
@@ -2995,7 +3041,9 @@ func (v *BlockEvent) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.EventType())
@@ -3022,7 +3070,11 @@ func (v *BlockEvent) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *BlockEvent) IsValid() error {
@@ -3082,7 +3134,9 @@ func (v *BlockQuery) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.QueryType())
@@ -3110,7 +3164,11 @@ func (v *BlockQuery) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *BlockQuery) baseIsValid() error {
@@ -3333,7 +3391,9 @@ func (v *ChainEntryRecord[T]) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.RecordType())
@@ -3370,7 +3430,11 @@ func (v *ChainEntryRecord[T]) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *ChainEntryRecord[T]) IsValid() error {
@@ -3447,7 +3511,9 @@ func (v *ChainQuery) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.QueryType())
@@ -3472,7 +3538,11 @@ func (v *ChainQuery) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *ChainQuery) baseIsValid() error {
@@ -3507,7 +3577,9 @@ func (v *ChainRecord) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.RecordType())
@@ -3537,7 +3609,11 @@ func (v *ChainRecord) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *ChainRecord) IsValid() error {
@@ -3598,7 +3674,9 @@ func (v *ConsensusPeerInfo) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(len(v.NodeID) == 0) {
@@ -3616,7 +3694,11 @@ func (v *ConsensusPeerInfo) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *ConsensusPeerInfo) IsValid() error {
@@ -3649,15 +3731,16 @@ func (v *ConsensusPeerInfo) IsValid() error {
 }
 
 var fieldNames_ConsensusStatus = []string{
-	1: "Ok",
-	2: "LastBlock",
-	3: "Version",
-	4: "Commit",
-	5: "NodeKeyHash",
-	6: "ValidatorKeyHash",
-	7: "PartitionID",
-	8: "PartitionType",
-	9: "Peers",
+	1:  "Ok",
+	2:  "LastBlock",
+	3:  "Version",
+	4:  "Commit",
+	5:  "NodeKeyHash",
+	6:  "ValidatorKeyHash",
+	7:  "PartitionID",
+	8:  "PartitionType",
+	9:  "CatchingUp",
+	10: "Peers",
 }
 
 func (v *ConsensusStatus) MarshalBinary() ([]byte, error) {
@@ -3665,7 +3748,9 @@ func (v *ConsensusStatus) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(!v.Ok) {
@@ -3692,9 +3777,12 @@ func (v *ConsensusStatus) MarshalBinary() ([]byte, error) {
 	if !(v.PartitionType == 0) {
 		writer.WriteEnum(8, v.PartitionType)
 	}
+	if !(!v.CatchingUp) {
+		writer.WriteBool(9, v.CatchingUp)
+	}
 	if !(len(v.Peers) == 0) {
 		for _, v := range v.Peers {
-			writer.WriteValue(9, v.MarshalBinary)
+			writer.WriteValue(10, v.MarshalBinary)
 		}
 	}
 
@@ -3703,7 +3791,11 @@ func (v *ConsensusStatus) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *ConsensusStatus) IsValid() error {
@@ -3749,7 +3841,7 @@ func (v *ConsensusStatus) IsValid() error {
 	} else if v.PartitionType == 0 {
 		errs = append(errs, "field PartitionType is not set")
 	}
-	if len(v.fieldsSet) > 8 && !v.fieldsSet[8] {
+	if len(v.fieldsSet) > 9 && !v.fieldsSet[9] {
 		errs = append(errs, "field Peers is missing")
 	} else if len(v.Peers) == 0 {
 		errs = append(errs, "field Peers is not set")
@@ -3777,7 +3869,9 @@ func (v *ConsensusStatusOptions) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(len(v.NodeID) == 0) {
@@ -3798,7 +3892,11 @@ func (v *ConsensusStatusOptions) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *ConsensusStatusOptions) IsValid() error {
@@ -3837,7 +3935,9 @@ func (v *DataQuery) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.QueryType())
@@ -3856,7 +3956,11 @@ func (v *DataQuery) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *DataQuery) baseIsValid() error {
@@ -3886,7 +3990,9 @@ func (v *DefaultQuery) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.QueryType())
@@ -3899,7 +4005,11 @@ func (v *DefaultQuery) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *DefaultQuery) IsValid() error {
@@ -3929,7 +4039,9 @@ func (v *DelegateSearchQuery) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.QueryType())
@@ -3942,7 +4054,11 @@ func (v *DelegateSearchQuery) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *DelegateSearchQuery) IsValid() error {
@@ -3977,7 +4093,9 @@ func (v *DirectoryQuery) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.QueryType())
@@ -3990,7 +4108,11 @@ func (v *DirectoryQuery) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *DirectoryQuery) IsValid() error {
@@ -4025,7 +4147,9 @@ func (v *ErrorEvent) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.EventType())
@@ -4038,7 +4162,11 @@ func (v *ErrorEvent) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *ErrorEvent) IsValid() error {
@@ -4073,7 +4201,9 @@ func (v *ErrorRecord) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.RecordType())
@@ -4086,7 +4216,11 @@ func (v *ErrorRecord) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *ErrorRecord) IsValid() error {
@@ -4120,7 +4254,9 @@ func (v *FaucetOptions) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.Token == nil) {
@@ -4132,7 +4268,11 @@ func (v *FaucetOptions) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *FaucetOptions) IsValid() error {
@@ -4160,7 +4300,9 @@ func (v *FindServiceOptions) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(len(v.Network) == 0) {
@@ -4181,7 +4323,11 @@ func (v *FindServiceOptions) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *FindServiceOptions) IsValid() error {
@@ -4219,7 +4365,9 @@ func (v *FindServiceResult) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.PeerID == ("")) {
@@ -4239,7 +4387,11 @@ func (v *FindServiceResult) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *FindServiceResult) IsValid() error {
@@ -4282,7 +4434,9 @@ func (v *GlobalsEvent) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.EventType())
@@ -4298,7 +4452,11 @@ func (v *GlobalsEvent) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *GlobalsEvent) IsValid() error {
@@ -4338,7 +4496,9 @@ func (v *IndexEntryRecord) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.RecordType())
@@ -4351,7 +4511,11 @@ func (v *IndexEntryRecord) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *IndexEntryRecord) IsValid() error {
@@ -4390,7 +4554,9 @@ func (v *KeyRecord) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.RecordType())
@@ -4415,7 +4581,11 @@ func (v *KeyRecord) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *KeyRecord) IsValid() error {
@@ -4473,7 +4643,9 @@ func (v *LastBlock) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.Height == 0) {
@@ -4497,7 +4669,11 @@ func (v *LastBlock) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *LastBlock) IsValid() error {
@@ -4549,7 +4725,9 @@ func (v *ListSnapshotsOptions) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(len(v.NodeID) == 0) {
@@ -4564,7 +4742,11 @@ func (v *ListSnapshotsOptions) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *ListSnapshotsOptions) IsValid() error {
@@ -4604,7 +4786,9 @@ func (v *MajorBlockRecord) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.RecordType())
@@ -4626,7 +4810,11 @@ func (v *MajorBlockRecord) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *MajorBlockRecord) IsValid() error {
@@ -4676,7 +4864,9 @@ func (v *MessageHashSearchQuery) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.QueryType())
@@ -4689,7 +4879,11 @@ func (v *MessageHashSearchQuery) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *MessageHashSearchQuery) IsValid() error {
@@ -4736,7 +4930,9 @@ func (v *MessageRecord[T]) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.RecordType())
@@ -4785,7 +4981,11 @@ func (v *MessageRecord[T]) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *MessageRecord[T]) IsValid() error {
@@ -4874,7 +5074,9 @@ func (v *Metrics) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteFloat(1, v.TPS)
@@ -4884,7 +5086,11 @@ func (v *Metrics) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *Metrics) IsValid() error {
@@ -4914,7 +5120,9 @@ func (v *MetricsOptions) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(len(v.Partition) == 0) {
@@ -4929,7 +5137,11 @@ func (v *MetricsOptions) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *MetricsOptions) IsValid() error {
@@ -4966,7 +5178,9 @@ func (v *MinorBlockRecord) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.RecordType())
@@ -4994,7 +5208,11 @@ func (v *MinorBlockRecord) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *MinorBlockRecord) IsValid() error {
@@ -5045,14 +5263,16 @@ func (v *MinorBlockRecord) IsValid() error {
 }
 
 var fieldNames_NetworkStatus = []string{
-	1: "Oracle",
-	2: "Globals",
-	3: "Network",
-	4: "Routing",
-	5: "ExecutorVersion",
-	6: "DirectoryHeight",
-	7: "MajorBlockHeight",
-	8: "BvnExecutorVersions",
+	1:  "Oracle",
+	2:  "Globals",
+	3:  "Network",
+	4:  "Routing",
+	5:  "ExecutorVersion",
+	6:  "DirectoryHeight",
+	7:  "MajorBlockHeight",
+	8:  "BvnExecutorVersions",
+	9:  "LastBlockTime",
+	10: "CatchingUp",
 }
 
 func (v *NetworkStatus) MarshalBinary() ([]byte, error) {
@@ -5060,7 +5280,9 @@ func (v *NetworkStatus) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.Oracle == nil) {
@@ -5089,13 +5311,23 @@ func (v *NetworkStatus) MarshalBinary() ([]byte, error) {
 			writer.WriteValue(8, v.MarshalBinary)
 		}
 	}
+	if !(v.LastBlockTime == nil) {
+		writer.WriteTime(9, *v.LastBlockTime)
+	}
+	if !(v.CatchingUp == nil) {
+		writer.WriteBool(10, *v.CatchingUp)
+	}
 
 	_, _, err := writer.Reset(fieldNames_NetworkStatus)
 	if err != nil {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *NetworkStatus) IsValid() error {
@@ -5156,7 +5388,9 @@ func (v *NetworkStatusOptions) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(len(v.Partition) == 0) {
@@ -5168,7 +5402,11 @@ func (v *NetworkStatusOptions) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *NetworkStatusOptions) IsValid() error {
@@ -5203,7 +5441,9 @@ func (v *NodeInfo) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.PeerID == ("")) {
@@ -5229,7 +5469,11 @@ func (v *NodeInfo) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *NodeInfo) IsValid() error {
@@ -5280,7 +5524,9 @@ func (v *NodeInfoOptions) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.PeerID == ("")) {
@@ -5292,7 +5538,11 @@ func (v *NodeInfoOptions) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *NodeInfoOptions) IsValid() error {
@@ -5324,7 +5574,9 @@ func (v *PendingQuery) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.QueryType())
@@ -5337,7 +5589,11 @@ func (v *PendingQuery) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *PendingQuery) IsValid() error {
@@ -5372,7 +5628,9 @@ func (v *PublicKeyHashSearchQuery) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.QueryType())
@@ -5385,7 +5643,11 @@ func (v *PublicKeyHashSearchQuery) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *PublicKeyHashSearchQuery) IsValid() error {
@@ -5421,7 +5683,9 @@ func (v *PublicKeySearchQuery) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.QueryType())
@@ -5437,7 +5701,11 @@ func (v *PublicKeySearchQuery) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *PublicKeySearchQuery) IsValid() error {
@@ -5479,7 +5747,9 @@ func (v *RangeOptions) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.Start == 0) {
@@ -5500,7 +5770,11 @@ func (v *RangeOptions) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *RangeOptions) IsValid() error {
@@ -5528,7 +5802,9 @@ func (v *Receipt) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteValue(1, v.Receipt.MarshalBinary)
@@ -5547,7 +5823,11 @@ func (v *Receipt) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *Receipt) IsValid() error {
@@ -5592,7 +5872,9 @@ func (v *ReceiptOptions) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(!v.ForAny) {
@@ -5607,7 +5889,11 @@ func (v *ReceiptOptions) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *ReceiptOptions) IsValid() error {
@@ -5647,7 +5933,9 @@ func (v *RecordRange[T]) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.RecordType())
@@ -5667,7 +5955,11 @@ func (v *RecordRange[T]) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *RecordRange[T]) IsValid() error {
@@ -5713,7 +6005,9 @@ func (v *ServiceAddress) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.Type == 0) {
@@ -5728,7 +6022,11 @@ func (v *ServiceAddress) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *ServiceAddress) IsValid() error {
@@ -5761,7 +6059,9 @@ func (v *SignatureSetRecord) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.RecordType())
@@ -5777,7 +6077,11 @@ func (v *SignatureSetRecord) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *SignatureSetRecord) IsValid() error {
@@ -5817,7 +6121,9 @@ func (v *SnapshotInfo) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.Header == nil) {
@@ -5832,7 +6138,11 @@ func (v *SnapshotInfo) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *SnapshotInfo) IsValid() error {
@@ -5870,7 +6180,9 @@ func (v *Submission) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.Status == nil) {
@@ -5888,7 +6200,11 @@ func (v *Submission) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *Submission) IsValid() error {
@@ -5930,7 +6246,9 @@ func (v *SubmitOptions) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.Verify == nil) {
@@ -5945,7 +6263,11 @@ func (v *SubmitOptions) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *SubmitOptions) IsValid() error {
@@ -5971,7 +6293,9 @@ func (v *SubscribeOptions) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(len(v.Partition) == 0) {
@@ -5986,7 +6310,11 @@ func (v *SubscribeOptions) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *SubscribeOptions) IsValid() error {
@@ -6012,7 +6340,9 @@ func (v *TxIDRecord) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.RecordType())
@@ -6025,7 +6355,11 @@ func (v *TxIDRecord) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *TxIDRecord) IsValid() error {
@@ -6060,7 +6394,9 @@ func (v *UrlRecord) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.RecordType())
@@ -6073,7 +6409,11 @@ func (v *UrlRecord) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *UrlRecord) IsValid() error {
@@ -6107,7 +6447,9 @@ func (v *ValidateOptions) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.Full == nil) {
@@ -6119,7 +6461,11 @@ func (v *ValidateOptions) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *ValidateOptions) IsValid() error {
@@ -6668,8 +7014,11 @@ func (v *ConsensusStatus) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(protocol.PartitionType); reader.ReadEnum(8, x) {
 		v.PartitionType = *x
 	}
+	if x, ok := reader.ReadBool(9); ok {
+		v.CatchingUp = x
+	}
 	for {
-		if x := new(ConsensusPeerInfo); reader.ReadValue(9, x.UnmarshalBinaryFrom) {
+		if x := new(ConsensusPeerInfo); reader.ReadValue(10, x.UnmarshalBinaryFrom) {
 			v.Peers = append(v.Peers, x)
 		} else {
 			break
@@ -7506,6 +7855,12 @@ func (v *NetworkStatus) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
+	if x, ok := reader.ReadTime(9); ok {
+		v.LastBlockTime = &x
+	}
+	if x, ok := reader.ReadBool(10); ok {
+		v.CatchingUp = &x
+	}
 
 	seen, err := reader.Reset(fieldNames_NetworkStatus)
 	if err != nil {
@@ -8232,6 +8587,7 @@ func init() {
 		encoding.NewTypeField("validatorKeyHash", "bytes32"),
 		encoding.NewTypeField("partitionID", "string"),
 		encoding.NewTypeField("partitionType", "string"),
+		encoding.NewTypeField("catchingUp", "bool"),
 		encoding.NewTypeField("peers", "ConsensusPeerInfo[]"),
 	}, "ConsensusStatus", "consensusStatus")
 
@@ -8383,6 +8739,8 @@ func init() {
 		encoding.NewTypeField("directoryHeight", "uint64"),
 		encoding.NewTypeField("majorBlockHeight", "uint64"),
 		encoding.NewTypeField("bvnExecutorVersions", "protocol.PartitionExecutorVersion[]"),
+		encoding.NewTypeField("lastBlockTime", "string"),
+		encoding.NewTypeField("catchingUp", "bool"),
 	}, "NetworkStatus", "networkStatus")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -8797,6 +9155,7 @@ func (v *ConsensusStatus) MarshalJSON() ([]byte, error) {
 		ValidatorKeyHash *string                               `json:"validatorKeyHash,omitempty"`
 		PartitionID      string                                `json:"partitionID,omitempty"`
 		PartitionType    protocol.PartitionType                `json:"partitionType,omitempty"`
+		CatchingUp       bool                                  `json:"catchingUp,omitempty"`
 		Peers            encoding.JsonList[*ConsensusPeerInfo] `json:"peers,omitempty"`
 		ExtraData        *string                               `json:"$epilogue,omitempty"`
 	}{}
@@ -8823,6 +9182,9 @@ func (v *ConsensusStatus) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.PartitionType == 0) {
 		u.PartitionType = v.PartitionType
+	}
+	if !(!v.CatchingUp) {
+		u.CatchingUp = v.CatchingUp
 	}
 	if !(len(v.Peers) == 0) {
 		u.Peers = v.Peers
@@ -9207,6 +9569,8 @@ func (v *NetworkStatus) MarshalJSON() ([]byte, error) {
 		DirectoryHeight     uint64                                                `json:"directoryHeight,omitempty"`
 		MajorBlockHeight    uint64                                                `json:"majorBlockHeight,omitempty"`
 		BvnExecutorVersions encoding.JsonList[*protocol.PartitionExecutorVersion] `json:"bvnExecutorVersions,omitempty"`
+		LastBlockTime       *time.Time                                            `json:"lastBlockTime,omitempty"`
+		CatchingUp          *bool                                                 `json:"catchingUp,omitempty"`
 		ExtraData           *string                                               `json:"$epilogue,omitempty"`
 	}{}
 	if !(v.Oracle == nil) {
@@ -9232,6 +9596,12 @@ func (v *NetworkStatus) MarshalJSON() ([]byte, error) {
 	}
 	if !(len(v.BvnExecutorVersions) == 0) {
 		u.BvnExecutorVersions = v.BvnExecutorVersions
+	}
+	if !(v.LastBlockTime == nil) {
+		u.LastBlockTime = v.LastBlockTime
+	}
+	if !(v.CatchingUp == nil) {
+		u.CatchingUp = v.CatchingUp
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -9839,6 +10209,7 @@ func (v *ConsensusStatus) UnmarshalJSON(data []byte) error {
 		ValidatorKeyHash *string                               `json:"validatorKeyHash,omitempty"`
 		PartitionID      string                                `json:"partitionID,omitempty"`
 		PartitionType    protocol.PartitionType                `json:"partitionType,omitempty"`
+		CatchingUp       bool                                  `json:"catchingUp,omitempty"`
 		Peers            encoding.JsonList[*ConsensusPeerInfo] `json:"peers,omitempty"`
 		ExtraData        *string                               `json:"$epilogue,omitempty"`
 	}{}
@@ -9850,6 +10221,7 @@ func (v *ConsensusStatus) UnmarshalJSON(data []byte) error {
 	u.ValidatorKeyHash = encoding.ChainToJSON(&v.ValidatorKeyHash)
 	u.PartitionID = v.PartitionID
 	u.PartitionType = v.PartitionType
+	u.CatchingUp = v.CatchingUp
 	u.Peers = v.Peers
 	err := json.Unmarshal(data, &u)
 	if err != nil {
@@ -9871,6 +10243,7 @@ func (v *ConsensusStatus) UnmarshalJSON(data []byte) error {
 	}
 	v.PartitionID = u.PartitionID
 	v.PartitionType = u.PartitionType
+	v.CatchingUp = u.CatchingUp
 	v.Peers = u.Peers
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
@@ -10386,6 +10759,8 @@ func (v *NetworkStatus) UnmarshalJSON(data []byte) error {
 		DirectoryHeight     uint64                                                `json:"directoryHeight,omitempty"`
 		MajorBlockHeight    uint64                                                `json:"majorBlockHeight,omitempty"`
 		BvnExecutorVersions encoding.JsonList[*protocol.PartitionExecutorVersion] `json:"bvnExecutorVersions,omitempty"`
+		LastBlockTime       *time.Time                                            `json:"lastBlockTime,omitempty"`
+		CatchingUp          *bool                                                 `json:"catchingUp,omitempty"`
 		ExtraData           *string                                               `json:"$epilogue,omitempty"`
 	}{}
 	u.Oracle = v.Oracle
@@ -10396,6 +10771,8 @@ func (v *NetworkStatus) UnmarshalJSON(data []byte) error {
 	u.DirectoryHeight = v.DirectoryHeight
 	u.MajorBlockHeight = v.MajorBlockHeight
 	u.BvnExecutorVersions = v.BvnExecutorVersions
+	u.LastBlockTime = v.LastBlockTime
+	u.CatchingUp = v.CatchingUp
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -10408,6 +10785,8 @@ func (v *NetworkStatus) UnmarshalJSON(data []byte) error {
 	v.DirectoryHeight = u.DirectoryHeight
 	v.MajorBlockHeight = u.MajorBlockHeight
 	v.BvnExecutorVersions = u.BvnExecutorVersions
+	v.LastBlockTime = u.LastBlockTime
+	v.CatchingUp = u.CatchingUp
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err

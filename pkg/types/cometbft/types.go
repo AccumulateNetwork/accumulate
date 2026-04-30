@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -63,9 +63,25 @@ func (b *Block) ToProto() cmtproto.Block {
 }
 
 func (b *Block) FromProto(c cmtproto.Block) {
+	// For genesis blocks, LastCommit can be nil and validation may fail.
+	// BlockFromProto requires LastCommit and validates hashes.
+	// If parsing fails, leave the Block as zero value since it's often not used.
+	if c.LastCommit == nil {
+		c.LastCommit = &cmtproto.Commit{}
+	}
 	d, err := types.BlockFromProto(&c)
 	if err != nil {
-		panic(err)
+		// For snapshot consensus sections, we may have minimal blocks
+		// that don't pass CometBFT's strict validation. In this case,
+		// we can still extract the essential header fields.
+		if c.Header.ChainID != "" {
+			b.Header.ChainID = c.Header.ChainID
+			b.Header.Height = c.Header.Height
+			b.Header.Time = c.Header.Time
+			return
+		}
+		// Validation failed - leave Block as zero value
+		return
 	}
 	*(*types.Block)(b) = *d //nolint:govet
 }

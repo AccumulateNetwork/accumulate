@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -128,7 +128,7 @@ func (h *Handler) handle(s message.StreamOf[*Message], ctx context.Context, canc
 		s, ok := streams[req.ID]
 		streamsMu.Unlock()
 		if ok {
-			err = s.Write(req.Message)
+			err = s.Write(req.WebSocketMessage)
 			if err != nil {
 				if !errors.Is(err, io.EOF) {
 					slog.Info("Failed to write to stream", "id", req.ID, "error", err, "module", "api")
@@ -171,7 +171,7 @@ func (h *Handler) handle(s message.StreamOf[*Message], ctx context.Context, canc
 					return
 				}
 
-				outgoing <- &Message{ID: req.ID, Message: msg}
+				outgoing <- &Message{ID: req.ID, WebSocketMessage: msg}
 			}
 		}()
 
@@ -186,7 +186,7 @@ func (h *Handler) handle(s message.StreamOf[*Message], ctx context.Context, canc
 			h.inner.Handle(q)
 		}()
 
-		err = p.Write(req.Message)
+		err = p.Write(req.WebSocketMessage)
 		if err != nil {
 			if !errors.Is(err, io.EOF) {
 				slog.Info("Failed to write to stream", "id", req.ID, "error", err, "module", "api")

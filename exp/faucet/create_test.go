@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -11,7 +11,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
@@ -27,7 +26,6 @@ func TestCreate(t *testing.T) {
 	require.NoError(t, err)
 
 	db := database.OpenInMemory(nil)
-	db.SetObserver(execute.NewDatabaseObserver())
 
 	err = database.Restore(db, ioutil.NewBuffer(snap), &database.RestoreOptions{
 		BatchRecordLimit: 50_000,

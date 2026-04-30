@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -23,7 +23,6 @@ func init() { acctesting.EnableDebugFeatures() }
 func TestLiteTokenTransactions(t *testing.T) {
 	tokenUrl := protocol.AcmeUrl().String()
 	db := database.OpenInMemory(nil)
-	db.SetObserver(acctesting.NullObserver{})
 
 	_, privKey, _ := ed25519.GenerateKey(nil)
 	_, destPrivKey, _ := ed25519.GenerateKey(nil)

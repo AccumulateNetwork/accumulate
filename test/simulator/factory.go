@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -101,6 +101,7 @@ func (f *simFactory) Build() *Simulator {
 	// Initialize
 	s := new(Simulator)
 	s.deterministic = f.deterministic
+	s.networkId = f.network.Id
 	s.logger = f.getLogger()
 	s.router = f.getRouter()
 	s.hub = f.getHub()
@@ -301,7 +302,7 @@ func (f *simFactory) getServices() *services.Network {
 		return f.services
 	}
 
-	f.services = services.NewNetwork(f.getRouter())
+	f.services = services.NewNetwork(f.network.Id, f.getRouter())
 	return f.services
 }
 

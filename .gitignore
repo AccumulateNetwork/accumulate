@@ -10,21 +10,46 @@ tools/cmd/gen-types/go_build*
 tools/cmd/gen-enum/go_build*
 
 # Tool binaries built into the repo root by test scripts (go build -o <name> ./tools/cmd/<name>)
+/accumulated-*
 /bpt-info
+/check-acc-height
+/check-state
 /cleanup-bpt
-/debug
-/docker
+/create-snap
+/db-block-height
 /dbprobe
+/debug
+/debug-consensus
+/deploy-follower
+/docker
 /faucet-key
+/follower-monitor
+/init-state
 /keydump
 /keyhash
 /keysample
 /promote-validator
+/repair-snapshot
 /restore-snap
 /snapshot
+/snapshot-info
+/snapshot-tool
+/cmd/accumulated-bootstrap/accumulated-bootstrap
+/cmd/check-state/check-state
+/cmd/extract-validators/extract-validators
+/cmd/init-state/init-state
+/tools/deploy-follower/deploy-follower
+/tools/follower-monitor/follower-monitor
+/tools/torrent-deploy/cmd/torrent-server/torrent-server
 
 # Per-run output of `accumulated init`
 snapshot.urls
+**/snapshot.urls
+
+# Data directories and snapshots
+/accumulate-dual-data/
+/accumulate-dual-test/
+/*.snap
 
 # Local agent state
 .claude/
@@ -65,3 +90,5 @@ tmp
 
 #jj
 .newscripts
+.archive/
+mcp/mcp-server

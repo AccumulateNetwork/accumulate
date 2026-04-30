@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -20,7 +20,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/remote"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
-	"gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
 var cmdGenesis = &cobra.Command{
@@ -39,6 +38,7 @@ func init() {
 	cmdGenesis.AddCommand(cmdGenesisIngest)
 }
 
+//nolint:unused
 const calculateBPT = false
 
 func ingestForGenesis(cmd *cobra.Command, args []string) {
@@ -57,9 +57,6 @@ func ingestForGenesis(cmd *cobra.Command, args []string) {
 
 	db := coredb.New(store, nil)
 	defer db.Close() // also closes store
-
-	// Don't calculate BPT hashes since genesis doesn't want them
-	db.SetObserver(testing.NullObserver{})
 
 	// For more details on what gets changed, see [genesis.Extract]
 

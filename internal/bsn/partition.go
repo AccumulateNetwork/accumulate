@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -9,7 +9,6 @@ package bsn
 import (
 	"strings"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 )
@@ -36,6 +35,5 @@ func (c *ChangeSet) newPartition(key partitionKey) *database.Batch {
 
 	s := c.kvstore.Begin(record.NewKey(key.ID+"·"), true)
 	b := database.NewBatch(key.ID, s, true, c.logger)
-	b.SetObserver(execute.NewDatabaseObserver())
 	return b
 }

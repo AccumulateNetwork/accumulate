@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -34,6 +34,11 @@ import (
 
 // Services returns the simulator's API v3 implementation.
 func (s *Simulator) Services() *message.Client { return s.services.Client }
+
+// SetService replaces the service handler for the given address.
+func (s *Simulator) SetService(address *api.ServiceAddress, handler func(message.Stream)) {
+	s.services.Services.Replace("", address, handler)
+}
 
 func (n *Node) newApiV2() (*apiv2.JrpcMethods, error) {
 	svc := n.partition.sim.services
@@ -264,7 +269,7 @@ func (n *Node) listenP2P(ctx context.Context, opts ListenOptions, nodes *[]*p2p.
 	addr2 := n.network.Listen().Scheme("udp").PartitionType(n.partition.Type).AccumulateP2P().Multiaddr()
 
 	p2p, err := p2p.New(p2p.Options{
-		Network:       "Simulator",
+		Network:       n.partition.sim.networkId,
 		Listen:        []multiaddr.Multiaddr{addr1, addr2},
 		Key:           n.nodeKey,
 		DiscoveryMode: dht.ModeServer,
@@ -293,6 +298,15 @@ func (n *Node) listenP2P(ctx context.Context, opts ListenOptions, nodes *[]*p2p.
 	p2p.RegisterService(api.ServiceTypeValidate.AddressFor(n.partition.ID), n.services.Handle)
 	p2p.RegisterService(api.ServiceTypeEvent.AddressFor(n.partition.ID), n.services.Handle)
 	p2p.RegisterService(private.ServiceTypeSequencer.AddressFor(n.partition.ID), n.services.Handle)
+
+	// Register faucet service on the first DN node
+	if n.partition.Type == protocol.PartitionTypeDirectory && n.id == 0 {
+		faucetAddr := api.ServiceTypeFaucet.AddressForUrl(protocol.AcmeUrl())
+		handler := n.partition.sim.services.Services.GetHandler(faucetAddr)
+		if handler != nil {
+			p2p.RegisterService(faucetAddr, handler)
+		}
+	}
 
 	n.logger.Info("Node P2P up", "addresses", p2p.Addresses())
 	return nil

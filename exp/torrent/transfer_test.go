@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -28,7 +28,7 @@ func TestTransfer(t *testing.T) {
 	// Build the metadata (32 KiB blocks)
 	const chunkSize = 1 << 15
 	md := new(FileMetadata)
-	md.Chunks, err = ChunksBySize(bytes.NewBuffer(file), chunkSize)
+	md.Chunks, _, err = ChunksBySize(bytes.NewBuffer(file), chunkSize)
 	require.NoError(t, err)
 
 	// Start a job

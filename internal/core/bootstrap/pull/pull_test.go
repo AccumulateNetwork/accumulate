@@ -11,9 +11,10 @@ import (
 	"errors"
 	"testing"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	apierrors "gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -101,6 +102,13 @@ func (s *dbSource) QueryAccountChains(_ context.Context, u *url.URL, _ *api.Chai
 	return out, nil
 }
 
+// QueryMessage is a stub: these tests use accounts whose Pending
+// chains are empty, so the production sig-material backfill path is
+// never hit. Returning NotFound is the right shape for empty pending.
+func (s *dbSource) QueryMessage(_ context.Context, _ *url.TxID, _ *api.DefaultQuery) (*api.MessageRecord[messaging.Message], error) {
+	return nil, apierrors.NotFound
+}
+
 func (s *dbSource) QueryChainEntries(_ context.Context, u *url.URL, q *api.ChainQuery) (*api.RecordRange[*api.ChainEntryRecord[api.Record]], error) {
 	b := s.db.Begin(false)
 	defer b.Discard()
@@ -145,7 +153,7 @@ func (s *dbSource) QueryChainEntries(_ context.Context, u *url.URL, q *api.Chain
 func newObservedDB(t *testing.T) *database.Database {
 	t.Helper()
 	db := database.OpenInMemory(nil)
-	db.SetObserver(execute.NewDatabaseObserver())
+	db.SetObserver(database.NewDatabaseObserver())
 	return db
 }
 

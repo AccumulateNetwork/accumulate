@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -29,6 +29,14 @@ type ClientNode struct {
 // network to be available and queries it to determine the routing table. Thus
 // NewClient must not be used by the core nodes themselves.
 func NewClient(opts Options) (*ClientNode, error) {
+	return NewClientContext(context.Background(), opts)
+}
+
+// NewClientContext creates a new node with context for timeout control.
+// NewClientContext waits for the Network service of the Directory network to be
+// available and queries it to determine the routing table. Thus NewClientContext
+// must not be used by the core nodes themselves.
+func NewClientContext(ctx context.Context, opts Options) (*ClientNode, error) {
 	if opts.Network == "" {
 		return nil, errors.BadRequest.With("missing network")
 	}
@@ -38,7 +46,7 @@ func NewClient(opts Options) (*ClientNode, error) {
 		return nil, errors.UnknownError.WithFormat("initialize node: %w", err)
 	}
 
-	return NewClientWith(node)
+	return NewClientWithContext(ctx, node)
 }
 
 // NewClientWith creates a new client for the given node. NewClientWith waits
@@ -46,12 +54,20 @@ func NewClient(opts Options) (*ClientNode, error) {
 // it to determine the routing table. Thus NewClientWith must not be used by the
 // core nodes themselves.
 func NewClientWith(node *Node) (*ClientNode, error) {
+	return NewClientWithContext(context.Background(), node)
+}
+
+// NewClientWithContext creates a new client for the given node with context for
+// timeout control. NewClientWithContext waits for the Network service of the
+// Directory network to be available and queries it to determine the routing
+// table. Thus NewClientWithContext must not be used by the core nodes themselves.
+func NewClientWithContext(ctx context.Context, node *Node) (*ClientNode, error) {
 	// Wait for the directory service
 	dnAddr, err := api.ServiceTypeNetwork.AddressFor(protocol.Directory).MultiaddrFor(node.peermgr.network)
 	if err != nil {
 		return nil, err
 	}
-	err = node.WaitForService(context.Background(), dnAddr)
+	err = node.WaitForService(ctx, dnAddr)
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +79,7 @@ func NewClientWith(node *Node) (*ClientNode, error) {
 		Dialer:  node.DialNetwork(),
 		Router:  mr,
 	}}
-	ns, err := client.NetworkStatus(context.Background(), api.NetworkStatusOptions{})
+	ns, err := client.NetworkStatus(ctx, api.NetworkStatusOptions{})
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("query network status: %w", err)
 	}
