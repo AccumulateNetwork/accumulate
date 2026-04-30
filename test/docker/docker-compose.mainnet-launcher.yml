@@ -1,0 +1,75 @@
+# Mainnet bootstrap-v3 launcher.
+#
+# Runs `accumulated bootstrap` against a peer that exposes our v3 APIs
+# (signed-anchor pool, BptPage query, /v3/snapshot HTTP endpoint),
+# then launches the resulting daemon and lets it catch up to mainnet
+# head via CometBFT blocksync. Times each phase so we can answer
+# "how long does it take to launch a follower."
+#
+# Default peer: the local mainnet follower running on the host at
+# localhost:16595 (Accumulate API), 16592 (DN CometBFT RPC),
+# 16591 (DN CometBFT P2P). With `network_mode: host` the container
+# shares the host's network namespace; that's the simplest way to
+# reach the local follower without exposing it externally.
+#
+# Port layout for the launched daemon (must not collide with the host
+# follower's 16591-16699):
+#   DN  Tendermint P2P 26656 / RPC 26657 / Accumulate API 26660
+#   BVN Tendermint P2P 26756 / RPC 26757 / Accumulate API 26760
+#
+# Usage:
+#   docker compose -f test/docker/docker-compose.mainnet-launcher.yml up
+#
+# Reset and re-run:
+#   docker compose -f test/docker/docker-compose.mainnet-launcher.yml down -v
+#   docker compose -f test/docker/docker-compose.mainnet-launcher.yml up
+
+services:
+  launcher:
+    image: accumulate:bootstrap-v3
+    container_name: acc-mainnet-launcher
+    mem_limit: 4g
+    network_mode: host
+    volumes:
+      - launcher-data:/node
+    environment:
+      LAUNCHER_NETWORK: MainNet
+      LAUNCHER_PARTITION: Directory
+      # The peer that exposes our v3 APIs. From inside `network_mode:
+      # host`, localhost is the host machine — i.e. the local
+      # mainnet follower on its v3 API port.
+      LAUNCHER_PEER_HTTP: http://localhost:16595
+      LAUNCHER_PEER_WS: ws://localhost:16595/v3
+      LAUNCHER_PEER_ANCHOR: acc://dn.acme/anchors
+      # Tendermint state-seeding inputs. ≥2 RPCs required for the
+      # CometBFT light client; we list the host follower twice since
+      # we have only one source. The launcher fetches node IDs via
+      # /status and pairs them with the P2P host:port list.
+      LAUNCHER_TM_RPCS: http://localhost:16592,http://localhost:16592
+      LAUNCHER_TM_P2P: localhost:16591,localhost:16591
+      # Launched daemon listens on a shifted port range
+      LAUNCHER_TM_LISTEN: /ip4/0.0.0.0/tcp/26656
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        echo "=== bootstrap phase ==="
+        START_BOOTSTRAP=$$(date +%s)
+        accumulated bootstrap \
+          --network        "$$LAUNCHER_NETWORK" \
+          --partition      "$$LAUNCHER_PARTITION" \
+          --peer           "$$LAUNCHER_PEER_WS" \
+          --peer-anchor-pool "$$LAUNCHER_PEER_ANCHOR" \
+          --tm-rpc-servers "$$LAUNCHER_TM_RPCS" \
+          --tm-p2p-peers   "$$LAUNCHER_TM_P2P" \
+          --tm-listen      "$$LAUNCHER_TM_LISTEN" \
+          --data-dir       /node
+        END_BOOTSTRAP=$$(date +%s)
+        echo "=== BOOTSTRAP COMPLETE: $$((END_BOOTSTRAP-START_BOOTSTRAP)) seconds ==="
+        echo "=== launching daemon ==="
+        START_DAEMON=$$(date +%s)
+        echo "$$START_DAEMON" > /node/.start-daemon
+        exec accumulated /node/accumulate.toml
+
+volumes:
+  launcher-data:
