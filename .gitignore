@@ -9,6 +9,30 @@ tools/cmd/gen-enum/gen-enum
 tools/cmd/gen-types/go_build*
 tools/cmd/gen-enum/go_build*
 
+# Tool binaries built into the repo root by test scripts (go build -o <name> ./tools/cmd/<name>)
+/bpt-info
+/cleanup-bpt
+/debug
+/docker
+/dbprobe
+/faucet-key
+/keydump
+/keyhash
+/keysample
+/promote-validator
+/restore-snap
+/snapshot
+
+# Per-run output of `accumulated init`
+snapshot.urls
+
+# Local agent state
+.claude/
+
+# Load-test results
+test/docker/performance-results/
+test/docker/pprof-results/
+
 # Binaries and test data
 *.exe
 *.test
