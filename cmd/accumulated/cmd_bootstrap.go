@@ -281,8 +281,14 @@ func runBootstrapViaSnapshot(dataDir string) {
 	if len(lines) == 0 {
 		fatalf("no snapshots available — peer must have enable-snapshots = true and have crossed at least one major block")
 	}
-	latest := lines[len(lines)-1]
-	fmt.Fprintf(os.Stderr, "[snapshot] selected major block %s (of %d available)\n", latest, len(lines))
+	// Use the second-most-recent snapshot — the latest may not yet have
+	// a signed anchor propagated through the cross-partition cycle.
+	idx := len(lines) - 1
+	if len(lines) >= 2 {
+		idx = len(lines) - 2
+	}
+	latest := lines[idx]
+	fmt.Fprintf(os.Stderr, "[snapshot] selected snapshot %s (idx %d of %d available)\n", latest, idx, len(lines))
 
 	// Fetch the snapshot file.
 	fetchURL := base + "/v3/snapshot/" + partition + "/" + latest

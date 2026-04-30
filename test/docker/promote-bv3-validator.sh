@@ -75,12 +75,17 @@ VALADDR=$(awk '/\[configurations.validator-key\]/ {found=1; next} found && /addr
 log "new validator AS1: $VALADDR"
 
 log "=== extract docker validator operator keys ==="
+# After envelope 1 commits, threshold bumps from 3 → 4 (because operator
+# count went from 4 → 5). Envelope 2 (network update) needs to satisfy
+# the NEW threshold, so provide all 4 existing operators as signers.
 OP1=$(docker exec acc-bv3-bvn1-val1 grep 'address = "AS1' /root/.accumulate/bvn1-1/accumulate.toml | head -1 | sed -E 's/.*"(AS1[^"]+)".*/\1/')
 OP2=$(docker exec acc-bv3-bvn1-val2 grep 'address = "AS1' /root/.accumulate/bvn1-2/accumulate.toml | head -1 | sed -E 's/.*"(AS1[^"]+)".*/\1/')
 OP3=$(docker exec acc-bv3-bvn1-val3 grep 'address = "AS1' /root/.accumulate/bvn1-3/accumulate.toml | head -1 | sed -E 's/.*"(AS1[^"]+)".*/\1/')
+OP4=$(docker exec acc-bv3-bvn1-val4 grep 'address = "AS1' /root/.accumulate/bvn1-4/accumulate.toml | head -1 | sed -E 's/.*"(AS1[^"]+)".*/\1/')
 log "op1=$OP1"
 log "op2=$OP2"
 log "op3=$OP3"
+log "op4=$OP4"
 
 log "=== submit promotion ==="
 set -o pipefail
@@ -89,7 +94,7 @@ set -o pipefail
   --network BootstrapV3Test \
   --partition Directory \
   --new-validator-key "$VALADDR" \
-  --operator-key "$OP1" --operator-key "$OP2" --operator-key "$OP3" \
+  --operator-key "$OP1" --operator-key "$OP2" --operator-key "$OP3" --operator-key "$OP4" \
   2>&1 | tee -a "$LOG"
 PROMOTE_RC=${PIPESTATUS[0]}
 set +o pipefail
@@ -112,16 +117,18 @@ for i in {1..30}; do
   [ "$i" -eq 30 ] && fail "timeout waiting for keypage update"
 done
 
-log "=== verify network definition includes new validator ==="
+log "=== verify network definition includes new validator (5th entry, via network-status) ==="
 for i in {1..30}; do
-  if curl -s -X POST http://localhost:26680/v3 -H 'Content-Type: application/json' \
-      -d '{"jsonrpc":"2.0","id":1,"method":"query","params":{"scope":"acc://dn.acme/network","query":{"queryType":"default"}}}' \
-      | grep -qi "$NEWPUB"; then
-    log "VERIFIED: new key in network definition"
+  COUNT=$(curl -s -X POST http://localhost:26680/v3 -H 'Content-Type: application/json' \
+      -d '{"jsonrpc":"2.0","id":1,"method":"network-status","params":{"partition":"directory"}}' \
+      | python3 -c "import json,sys; r=json.load(sys.stdin); print(len(r.get('result',{}).get('network',{}).get('validators',[])))" 2>/dev/null)
+  log "  attempt $i: validator count = $COUNT"
+  if [ "$COUNT" = "5" ]; then
+    log "VERIFIED: 5 validators in network definition"
     break
   fi
   sleep 5
-  [ "$i" -eq 30 ] && fail "timeout waiting for network update"
+  [ "$i" -eq 30 ] && fail "timeout waiting for network update (count stayed at $COUNT)"
 done
 
 log "=== check CometBFT validator set on val1 ==="
