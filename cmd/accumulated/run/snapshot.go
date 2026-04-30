@@ -115,9 +115,15 @@ type snapshotCollector struct {
 }
 
 func (c *snapshotCollector) didCommitBlock(e events.DidCommitBlock) error {
-	if e.Major == 0 {
-		return nil
-	}
+	// Snapshot capture is gated by the configured cron schedule
+	// (isTimeForSnapshot) and the manual `.capture` trigger file —
+	// both are evaluated inside collect(). There is no protocol
+	// reason to require a major-block boundary here: every minor
+	// block is signed by a 2/3+ validator quorum (CometBFT commit),
+	// the BPT root at the end of any block is a valid coherent
+	// state, and the bootstrap-v3 launcher's snapshot+anchor
+	// verification works against any signed anchor regardless of
+	// whether it sits on a major-block boundary.
 
 	// Begin the batch synchronously immediately after commit
 	batch := c.db.Begin(false)

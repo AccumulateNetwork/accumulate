@@ -93,9 +93,13 @@ var (
 )
 
 func (d *Daemon) onDidCommitBlock(event events.DidCommitBlock) error {
-	if event.Major == 0 || !d.Config.Accumulate.Snapshots.Enable {
+	if !d.Config.Accumulate.Snapshots.Enable {
 		return nil
 	}
+	// Capture cadence is enforced by isTimeForSnapshot inside
+	// collectSnapshot. No protocol reason to require Major != 0:
+	// every minor block is validator-quorum-signed and its end-of-
+	// block BPT root is a coherent verifiable state.
 
 	// Begin the batch synchronously immediately after commit
 	batch := d.db.Begin(false)

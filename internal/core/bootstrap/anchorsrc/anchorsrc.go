@@ -144,15 +144,22 @@ func (s *Source) LatestAnchor(ctx context.Context, partition string) (uint64, [3
 		if !pa.Source.Equal(wantSource) {
 			continue
 		}
-		// Skip anchors without a major-block boundary — the launcher
-		// converges against major-block anchors only.
-		if pa.MajorBlockIndex == 0 {
-			continue
-		}
+		// Accept anchors at any block boundary. Every minor-block
+		// anchor in the pool carries validator-quorum signatures
+		// (BlockAnchor sigs verified by verifyQuorum below); the
+		// MajorBlockIndex is metadata only. Earlier code skipped
+		// non-major anchors with no protocol justification.
 		if err := s.verifyQuorum(ctx, partition, entry.Value); err != nil {
 			continue
 		}
-		return pa.MajorBlockIndex, pa.StateTreeAnchor, nil
+		// Use the minor-block index when no major-block boundary is
+		// recorded (most anchors), so callers always get a non-zero
+		// height for the latest signed anchor.
+		blk := pa.MajorBlockIndex
+		if blk == 0 {
+			blk = pa.MinorBlockIndex
+		}
+		return blk, pa.StateTreeAnchor, nil
 	}
 
 	return 0, [32]byte{}, nil
@@ -203,17 +210,22 @@ func (s *Source) FindAnchor(ctx context.Context, partition string, expectedRoot 
 		if pa == nil || pa.Source == nil || !pa.Source.Equal(wantSource) {
 			continue
 		}
-		if pa.MajorBlockIndex == 0 {
-			continue
-		}
+		// Accept any anchor whose StateTreeAnchor matches expectedRoot,
+		// regardless of whether it's a major-block boundary. Validator-
+		// quorum signature verification (verifyQuorum) is the security
+		// check; the major-block tag is metadata only.
 		if pa.StateTreeAnchor != expectedRoot {
 			continue
 		}
+		blk := pa.MajorBlockIndex
+		if blk == 0 {
+			blk = pa.MinorBlockIndex
+		}
 		if err := s.verifyQuorum(ctx, partition, entry.Value); err != nil {
 			return 0, false, fmt.Errorf("anchor for block %d (root %x) found but quorum verification failed: %w",
-				pa.MajorBlockIndex, expectedRoot[:8], err)
+				blk, expectedRoot[:8], err)
 		}
-		return pa.MajorBlockIndex, true, nil
+		return blk, true, nil
 	}
 	return 0, false, nil
 }
