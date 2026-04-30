@@ -54,6 +54,10 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
+        # The init network --reset only matches dirs named dnn/bvnn/node-*/bsn-*,
+        # not bvn1-N, so explicitly wipe the bv3-config volume first to ensure
+        # fresh state on every up.
+        rm -rf /root/.accumulate/*
         accumulated init network test/docker/docker-network.bootstrap-v3.yml --reset --faucet-seed=FAUCET
         # Enable periodic major-block snapshots on every validator's
         # partition config. Bootstrap-v3 launcher fetches these to seed
@@ -82,11 +86,13 @@ services:
       - bv3-config:/root/.accumulate
     command:
       - -w=/root/.accumulate/bvn1-1
+      - --pprof=0.0.0.0:6060
       - /root/.accumulate/bvn1-1/accumulate.toml
     ports:
       - "26680:26660"
       - "26690:26657"
       - "26696:26656"
+      - "6061:6060"
     depends_on:
       init:
         condition: service_completed_successfully
@@ -110,6 +116,7 @@ services:
       - bv3-config:/root/.accumulate
     command:
       - -w=/root/.accumulate/bvn1-2
+      - --pprof=0.0.0.0:6060
       - /root/.accumulate/bvn1-2/accumulate.toml
     ports:
       - "26681:26660"
@@ -138,6 +145,7 @@ services:
       - bv3-config:/root/.accumulate
     command:
       - -w=/root/.accumulate/bvn1-3
+      - --pprof=0.0.0.0:6060
       - /root/.accumulate/bvn1-3/accumulate.toml
     ports:
       - "26682:26660"
@@ -166,6 +174,7 @@ services:
       - bv3-config:/root/.accumulate
     command:
       - -w=/root/.accumulate/bvn1-4
+      - --pprof=0.0.0.0:6060
       - /root/.accumulate/bvn1-4/accumulate.toml
     ports:
       - "26683:26660"
