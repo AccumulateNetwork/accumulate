@@ -169,16 +169,21 @@ func writeStateSyncConfig(nodeDir, genesisFilename string, tmRPCs, tmP2P []strin
 	cfg.P2P.PersistentPeers = strings.Join(persistentPeers, ",")
 	cfg.Mempool.MaxTxBytes = 4194304
 
-	// State-sync configuration. CometBFT requires ≥2 RPC servers for
-	// the light client; trust_period is the window during which trust
-	// is considered fresh (24h is the conventional default).
-	cfg.StateSync.Enable = true
-	cfg.StateSync.RPCServers = tmRPCs
-	cfg.StateSync.TrustHeight = trustH
-	cfg.StateSync.TrustHash = hex.EncodeToString(trustHash)
-	cfg.StateSync.TrustPeriod = 168 * time.Hour
-	cfg.StateSync.DiscoveryTime = 15 * time.Second
-	cfg.StateSync.TempDir = filepath.Join(nodeDir, "data", "statesync.tmp")
+	// State-sync is currently disabled (#4005): the v2 snapshot path
+	// is lossy — even with IgnoreIndices=false in CollectOptions, the
+	// snapshot file captures only ~30% of the validator's actual DB
+	// keys. Restoring it produces a state from which the executor
+	// can't reproduce the network's block execution; AppHash diverges
+	// on the first applied block.
+	//
+	// Until snapshot.Collect/Restore is made lossless, fall back to
+	// blocksync from genesis: CometBFT applies InitChain (Accumulate
+	// detects existing DB state and is a no-op), then blocksync
+	// downloads every block from 1 to current and applies them via
+	// our V2 executor. Slow on long chains but always consistent.
+	cfg.StateSync.Enable = false
+	_ = trustH
+	_ = trustHash
 
 	tmlPath := filepath.Join(cfgDir, "tendermint.toml")
 	cmtcfg.WriteConfigFile(tmlPath, cfg)

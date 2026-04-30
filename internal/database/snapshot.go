@@ -962,9 +962,22 @@ func writeSnapshotIndex(w *snapshot.Writer, index *indexing.Bucket, opts *Collec
 const indexDataSize = 16
 
 func collectOptions(index *indexing.Bucket, opts *CollectOptions) snapshot.CollectOptions {
+	// IgnoreIndices was true historically to keep snapshots compact —
+	// indices can be rebuilt from the underlying chains. v1's
+	// FullRestore explicitly rebuilt SyntheticIndexIndex; v2 had no
+	// rebuild step. Empirical comparison of a validator's DB (49k
+	// entries) vs. a v2 FullRestore from the same height (10.7k
+	// entries) showed ~78% of keys missing — chain index entries,
+	// per-block synthetic-anchor lookups, etc. Without those, the
+	// V2 executor on the restored state can't reproduce the network's
+	// block execution; AppHash diverges on the first applied block.
+	//
+	// Set IgnoreIndices=false so v2 snapshots are lossless. Snapshot
+	// files grow ~4.5x but that's the price of letting state-sync
+	// nodes catch up without a separate rebuild pass.
 	copts := snapshot.CollectOptions{
 		Walk: database.WalkOptions{
-			IgnoreIndices: true,
+			IgnoreIndices: false,
 		},
 		Predicate: opts.Predicate,
 	}
