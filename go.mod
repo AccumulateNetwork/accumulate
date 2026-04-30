@@ -47,6 +47,7 @@ require (
 	github.com/chzyer/readline v1.5.1
 	github.com/cometbft/cometbft v0.38.0-rc3
 	github.com/cosmos/gogoproto v1.4.11
+	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.2.0
 	github.com/dgraph-io/badger/v3 v3.2103.5
 	github.com/dgraph-io/badger/v4 v4.2.0
 	github.com/edsrzf/mmap-go v1.1.0
@@ -56,6 +57,7 @@ require (
 	github.com/golangci/plugin-module-register v0.1.1
 	github.com/google/pprof v0.0.0-20240827171923-fa2c70bbbfe5
 	github.com/google/uuid v1.6.0
+	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/ipfs/go-cid v0.4.1
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/libp2p/go-libp2p v0.33.1
@@ -126,7 +128,6 @@ require (
 	github.com/containerd/cgroups v1.1.0 // indirect
 	github.com/curioswitch/go-reassign v0.3.0 // indirect
 	github.com/davidlazar/go-crypto v0.0.0-20200604182044-b73af7476f6c // indirect
-	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.2.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/elastic/gosigar v0.14.2 // indirect
 	github.com/firefart/nonamedreturns v1.0.5 // indirect
@@ -149,7 +150,6 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.20.0 // indirect
 	github.com/hashicorp/go-immutable-radix/v2 v2.1.0 // indirect
 	github.com/hashicorp/golang-lru v0.5.5-0.20210104140557-80c98217689d // indirect
-	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/huandu/xstrings v1.4.0 // indirect
 	github.com/huin/goupnp v1.3.0 // indirect
 	github.com/iancoleman/strcase v0.2.0 // indirect

@@ -1,6 +1,11 @@
 State:
   non-binary: true
   custom-equal: true
+  # Copy is hand-written in state.go as a shallow copy (slice headers
+  # cloned, inner []byte hashes shared) — the deep BytesCopy the generator
+  # emits for `repeatable: bytes` fields was the single largest allocator
+  # in the validator under load.
+  no-copy: true
   fields:
     - name: Count
       description: is the count of hashes added to the tree

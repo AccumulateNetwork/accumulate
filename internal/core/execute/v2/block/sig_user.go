@@ -7,6 +7,7 @@
 package block
 
 import (
+	"crypto/sha256"
 	"math/big"
 	"strings"
 
@@ -111,9 +112,16 @@ func (x UserSignature) check(batch *database.Batch, ctx *userSigContext) error {
 		verifySignature = protocol.VerifyUserSignatureV1
 	}
 
-	// Verify the signature signs the transaction
-	if !verifySignature(sig, ctx.transaction) {
-		return errors.Unauthenticated.WithFormat("invalid signature")
+	// Verify the signature signs the transaction. Skip the cryptographic
+	// check if this exact (signature, transaction) pair has been verified
+	// before — CometBFT mempool re-runs CheckTx after every block commit
+	// and signatures are immutable, so re-verification is pure waste.
+	cacheKey := sigCacheKey(sig, ctx.transaction)
+	if _, hit := ctx.Executor.sigCache.Get(cacheKey); !hit {
+		if !verifySignature(sig, ctx.transaction) {
+			return errors.Unauthenticated.WithFormat("invalid signature")
+		}
+		ctx.Executor.sigCache.Add(cacheKey, struct{}{})
 	}
 
 	// Check the chain ID, if this is an EIP-712 signature
@@ -555,4 +563,17 @@ func (UserSignature) computeSignerFee(ctx *userSigContext) (protocol.Fee, error)
 	// Subtract the base signature fee, but not the oversize surcharge if there is one
 	fee += txnFee - protocol.FeeSignature
 	return fee, nil
+}
+
+// sigCacheKey returns sha256(sig.Hash() || tx.Hash()) — a stable
+// identity for the (signature, transaction) pair used as the
+// signature-verification cache key.
+func sigCacheKey(sig protocol.Signature, tx protocol.Signable) [32]byte {
+	h := sha256.New()
+	h.Write(sig.Hash())
+	txHash := tx.Hash()
+	h.Write(txHash[:])
+	var out [32]byte
+	h.Sum(out[:0])
+	return out
 }
