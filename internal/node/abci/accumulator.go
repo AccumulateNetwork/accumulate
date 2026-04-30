@@ -488,6 +488,18 @@ func (app *Accumulator) FinalizeBlock(_ context.Context, req *abci.RequestFinali
 
 	// If the block is empty, discard it
 	if app.blockState.IsEmpty() {
+		// Capture the block params before discardBlock() resets
+		// app.block, so we can publish DidCommitBlock for this
+		// committed-at-consensus-level block. Without this,
+		// downstream subscribers (snapshot capture, halt
+		// controller, gossip) only see non-empty blocks — on a
+		// low-traffic network that's effectively never.
+		idx, when := uint64(req.Height), req.Time
+		if app.block != nil {
+			idx = app.block.Params().Index
+			when = app.block.Params().Time
+		}
+
 		app.discardBlock()
 
 		// Get the old root
@@ -496,6 +508,16 @@ func (app *Accumulator) FinalizeBlock(_ context.Context, req *abci.RequestFinali
 			return nil, err
 		}
 		res.AppHash = root[:]
+
+		if err := app.EventBus.Publish(events.DidCommitBlock{
+			Index: idx,
+			Time:  when,
+			// Empty blocks never end a major-block boundary, so
+			// Major stays zero. Subscribers that care
+			// distinguish via Major != 0.
+		}); err != nil {
+			return nil, err
+		}
 
 	} else {
 		// Get the new root
