@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	stdurl "net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -79,6 +80,7 @@ var flagBootstrap = struct {
 	DiffOnly       bool
 	DiffSteadySecs uint64
 	ViaSnapshot    string // HTTP base URL of peer's snapshot endpoint, e.g. http://localhost:26680
+	SpinePull      bool   // opt-in: legacy spine-pull + enumerate + hydrate path
 	WriteConfig    bool
 	TmListen       string
 	TmBootstrap    string // comma-separated Tendermint multiaddrs for catch-up
@@ -99,7 +101,8 @@ func init() {
 	f.Uint64Var(&flagBootstrap.AnchorBlk, "anchor-block", 0, "DEV: block height associated with --anchor-hex")
 	f.BoolVar(&flagBootstrap.DiffOnly, "diff", false, "DEV: after spine+enumerate, run a leaf-level BPT diff against the source and exit (no steady-state)")
 	f.Uint64Var(&flagBootstrap.DiffSteadySecs, "diff-after-steady", 0, "DEV: run --diff after this many seconds of steady-state (0 = immediately after enumerate)")
-	f.StringVar(&flagBootstrap.ViaSnapshot, "via-snapshot", "", "Bootstrap by fetching a verified major-block snapshot from this HTTP base URL (e.g. http://localhost:26680). Bypasses spine pull / enumerate / steady-state.")
+	f.StringVar(&flagBootstrap.ViaSnapshot, "via-snapshot", "", "HTTP base URL of the peer's snapshot endpoint (e.g. http://host:26680). When --peer is given and this is empty, the launcher derives this URL from --peer automatically. Snapshot fetch is the default and recommended path.")
+	f.BoolVar(&flagBootstrap.SpinePull, "spine-pull", false, "DEV: opt in to the legacy spine-pull + enumerate + hydrate path. Has known race and stale-BPT issues against a live network (#4018, #4019); requires either --peer-anchor-pool or --anchor-hex. Use --via-snapshot instead.")
 	f.BoolVar(&flagBootstrap.WriteConfig, "write-config", true, "After bootstrap, write accumulate.toml + move BPT db into the launchable layout that 'accumulated run' expects")
 	f.StringVar(&flagBootstrap.TmListen, "tm-listen", "/ip4/0.0.0.0/tcp/26656", "Listen address for the launched daemon (Tendermint base port; Accumulate ports derived from it)")
 	f.StringVar(&flagBootstrap.TmBootstrap, "tm-bootstrap-peers", "", "Comma-separated Tendermint P2P multiaddrs (e.g. /dns/host/tcp/26656/p2p/<id>) used as persistent peers for catch-up")
@@ -114,13 +117,32 @@ func runBootstrap(cmd *cobra.Command, _ []string) {
 	if flagBootstrap.Network == "" {
 		fatalf("--network required")
 	}
-	if flagBootstrap.ViaSnapshot == "" {
+
+	// Snapshot fetch is the default and recommended path. The legacy
+	// spine-pull + enumerate + hydrate path is opt-in via --spine-pull
+	// because it has unfixed defects against a live network: a race
+	// between hydrate and source advancement (#4018) and BPT entries
+	// the source can't hydrate (#4019).
+	if flagBootstrap.SpinePull {
 		// Legacy enumerate+steady path requires --peer + AnchorSource.
 		if flagBootstrap.PeerWS == "" {
-			fatalf("--peer required (or use --via-snapshot)")
+			fatalf("--peer required for --spine-pull")
 		}
 		if flagBootstrap.PeerAnchorPool == "" && flagBootstrap.AnchorHex == "" {
-			fatalf("either --peer-anchor-pool or --anchor-hex required (or use --via-snapshot)")
+			fatalf("either --peer-anchor-pool or --anchor-hex required for --spine-pull")
+		}
+	} else {
+		// Snapshot path. If --via-snapshot wasn't given explicitly,
+		// derive it from --peer (ws://host:port/v3 → http://host:port).
+		if flagBootstrap.ViaSnapshot == "" {
+			if flagBootstrap.PeerWS == "" {
+				fatalf("either --via-snapshot or --peer required (or use --spine-pull for the legacy DEV path)")
+			}
+			derived, err := deriveSnapshotURL(flagBootstrap.PeerWS)
+			if err != nil {
+				fatalf("derive --via-snapshot from --peer: %v (set --via-snapshot explicitly)", err)
+			}
+			flagBootstrap.ViaSnapshot = derived
 		}
 	}
 
@@ -132,7 +154,7 @@ func runBootstrap(cmd *cobra.Command, _ []string) {
 		fatalf("create data dir: %v", err)
 	}
 
-	if flagBootstrap.ViaSnapshot != "" {
+	if !flagBootstrap.SpinePull {
 		runBootstrapViaSnapshot(dataDir)
 		return
 	}
@@ -534,6 +556,35 @@ func writeDaemonConfig(dataDir string, appHash [32]byte, snapHeight uint64, snap
 }
 
 // splitNonempty is strings.Split followed by trim+drop-empty.
+// deriveSnapshotURL turns a peer WebSocket URL into the HTTP base URL
+// the snapshot endpoint is served on. The convention is that a peer
+// at ws://host:port/v3 (or wss://host:port/v3) serves snapshots at
+// http://host:port (or https://host:port). Path is dropped; scheme
+// is mapped ws→http, wss→https.
+func deriveSnapshotURL(peerWS string) (string, error) {
+	u, err := stdurl.Parse(peerWS)
+	if err != nil {
+		return "", fmt.Errorf("invalid peer URL %q: %w", peerWS, err)
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "ws":
+		u.Scheme = "http"
+	case "wss":
+		u.Scheme = "https"
+	case "http", "https":
+		// already an HTTP URL — accept as-is
+	default:
+		return "", fmt.Errorf("unsupported scheme %q in peer URL (expected ws/wss/http/https)", u.Scheme)
+	}
+	if u.Host == "" {
+		return "", fmt.Errorf("peer URL %q has no host", peerWS)
+	}
+	u.Path = ""
+	u.RawQuery = ""
+	u.Fragment = ""
+	return u.String(), nil
+}
+
 func splitNonempty(s, sep string) []string {
 	var out []string
 	for _, x := range strings.Split(s, sep) {

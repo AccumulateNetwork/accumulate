@@ -33,6 +33,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/enumerate"
@@ -41,9 +42,28 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/tracker"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	apierrors "gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
+
+// isNotFound classifies an error as "the source returned NotFound for
+// this account's Main." Used by the hydrate path so that stale BPT
+// entries the source can't resolve (per #4019) don't get counted as
+// hard errors — the leaf is already in the local BPT with the source's
+// BPT-recorded hash from enumerate, so omitting Main is fine.
+func isNotFound(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, apierrors.NotFound) {
+		return true
+	}
+	// Unwrap doesn't always reach the typed code in nested wraps from
+	// the v3 message client. Fall back to string-match on the canonical
+	// message produced by Account.Main().GetAs in the source.
+	return strings.Contains(err.Error(), "not found")
+}
 
 // AnchorSource hands the orchestrator verified major-block anchors.
 // Production wires this to a peer's anchor pool query; tests fake it.
@@ -274,7 +294,16 @@ func runEnumerate(
 	}
 
 	// Post-enumerate state-pull pass.
-	pulled, skipped, errs := 0, 0, 0
+	//
+	// `notInSource` counts accounts whose BPT leaf the enumerate phase
+	// recorded but whose Main state the source returns NotFound for.
+	// This is expected on networks with stale BPT entries (e.g.,
+	// per-block ledger accounts left over from the V1/early-V2 to
+	// V2Jiuquan migration; see #4019). The enumerate phase already
+	// inserted the leaf with the source's BPT-recorded hash — we
+	// just don't have its Main state record. Skipping the hydrate
+	// keeps the local BPT root consistent with the source's.
+	pulled, skipped, notInSource, errs := 0, 0, 0, 0
 	for _, u := range res.Accounts {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -291,6 +320,13 @@ func runEnumerate(
 		})
 		if err != nil {
 			hbatch.Discard()
+			if isNotFound(err) {
+				notInSource++
+				if onPhase != nil {
+					onPhase("enumerate", fmt.Sprintf("source has no Main for %s; keeping enumerate-recorded BPT leaf hash", u))
+				}
+				continue
+			}
 			errs++
 			if onPhase != nil {
 				onPhase("enumerate", fmt.Sprintf("hydrate %s: %v", u, err))
@@ -309,8 +345,8 @@ func runEnumerate(
 		pulled++
 	}
 	if onPhase != nil {
-		onPhase("enumerate", fmt.Sprintf("hydrated %d accounts (skipped %d already-populated, errored %d)",
-			pulled, skipped, errs))
+		onPhase("enumerate", fmt.Sprintf("hydrated %d accounts (skipped %d already-populated, %d not-in-source, errored %d)",
+			pulled, skipped, notInSource, errs))
 	}
 	return nil
 }
