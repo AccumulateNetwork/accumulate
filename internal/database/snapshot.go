@@ -440,16 +440,24 @@ func (batch *Batch) collectBPT(w *snapshot.Writer, opts *CollectOptions) error {
 	var currentHash [32]byte
 	for it.Next() {
 		for _, entry := range it.Value() {
-			// AI: Get the key hash for progress estimation
-			// Get the hash directly from the key
 			kh := entry.Key.Hash()
-
-			// AI: Store the current hash for progress estimation
 			copy(currentHash[:], kh[:])
 
-			key := batch.resolveAccountKey(entry.Key)
+			// CRITICAL: write the ORIGINAL entry.Key, not a resolved
+			// form. resolveAccountKey rewrites [KeyHash, "Url"] entries
+			// (long-URL accounts whose URL is hash-folded for storage)
+			// to [Account, url, "Url"], which has a different
+			// key.Hash(). Inserting the rewritten key on restore
+			// places the entry at a different position in the BPT
+			// tree than the source, so the local BPT root after
+			// restore would not match the source's claimed root for
+			// any partition that contains long-URL accounts.
+			// The resolved form below is used only to populate the
+			// optional .urls side-channel log file and the
+			// account-type counters; it must NOT be what we write to
+			// the snapshot.
 			err = wr.WriteValue(&snapshot.RecordEntry{
-				Key:   key,
+				Key:   entry.Key,
 				Value: entry.Value[:],
 			})
 			if err != nil {
@@ -458,6 +466,11 @@ func (batch *Batch) collectBPT(w *snapshot.Writer, opts *CollectOptions) error {
 			}
 			cnt++
 			totalEntries++
+
+			// Resolve the URL purely for diagnostic output (URL list
+			// + account-type counters); does NOT affect what's
+			// written to the snapshot.
+			key := batch.resolveAccountKey(entry.Key)
 
 			// AI: Count account types in the BPT
 			if _, ok := key.Get(0).(record.KeyHash); ok {
