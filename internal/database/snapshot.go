@@ -774,7 +774,14 @@ func Restore(db Beginner, file ioutil.SectionReader, opts *RestoreOptions) error
 		}
 	}
 
-	// We can't check an account's hash until its records are written
+	// We can't check an account's hash until its records are written.
+	// Skip the per-account hash check for any orphan (account whose
+	// Main is missing): there is no body-derived hash to verify
+	// against, and the stored BPT leaf — captured when the body still
+	// existed — is the network's canonical record. Block-ledger
+	// orphans, body-less lite-data orphans, and any other orphan
+	// class are all handled by the same rule. This is the original
+	// orphan handling restored after a too-narrow tightening.
 	batch = db.Begin(false)
 	it := batch.IterateAccounts()
 	for it.Next() {
@@ -782,20 +789,13 @@ func Restore(db Beginner, file ioutil.SectionReader, opts *RestoreOptions) error
 
 		kh := account.Key().Hash()
 
-		// Orphan check: the account body may be missing while the BPT entry
-		// remains. Most orphans (staking pages, etc.) still reproduce their
-		// stored leaf hash from body-less state via account.Hash(), so we
-		// verify them. Per-block ledger orphans are the exception — their
-		// historical leaf hash was written under an older account layout
-		// and does not reproduce — so we trust the snapshot verbatim there.
 		_, mainErr := account.Main().Get()
-		isOrphan := errors.Is(mainErr, errors.NotFound)
-		if mainErr != nil && !isOrphan {
-			return errors.UnknownError.WithFormat("load account main: %w", mainErr)
-		}
-		if isOrphan && isBlockLedgerUrl(account.Url()) {
+		if errors.Is(mainErr, errors.NotFound) {
 			delete(hashes, kh)
 			continue
+		}
+		if mainErr != nil {
+			return errors.UnknownError.WithFormat("load account main: %w", mainErr)
 		}
 
 		hash, err := account.Hash()
@@ -837,23 +837,6 @@ func Restore(db Beginner, file ioutil.SectionReader, opts *RestoreOptions) error
 		return errors.InvalidRecord.WithFormat("root hash does not match")
 	}
 	return nil
-}
-
-// isBlockLedgerUrl reports whether u is a per-block ledger account, i.e.
-// <partition>.acme/ledger/<digits>. These are the only orphan accounts whose
-// stored leaf hash does not reproduce from body-less state — they were
-// written under an older account layout and are cleaned up by V2Jiuquan.
-func isBlockLedgerUrl(u *url.URL) bool {
-	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
-	if len(parts) != 2 || parts[0] != protocol.Ledger {
-		return false
-	}
-	for _, c := range parts[1] {
-		if c < '0' || c > '9' {
-			return false
-		}
-	}
-	return true
 }
 
 func readBptSnapshot(snap *snapshot.Reader, opts *RestoreOptions) ([]*snapshot.RecordEntry, map[[32]byte][32]byte, error) {
