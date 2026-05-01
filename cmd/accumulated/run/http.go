@@ -9,6 +9,7 @@ package run
 import (
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
@@ -132,13 +133,26 @@ func (h *HttpService) start(inst *Instance) error {
 		// Atomic per-partition snapshot for the bootstrap-v3 launcher.
 		// Returns snapshot v2 bytes as a binary body; metadata is in
 		// response headers. Bypasses jsonrpc/websocket so a 25-30 MB
-		// body doesn't get base64'd into a JSON field.
+		// body doesn't get base64'd into a JSON field. Rate-limited per
+		// partition (see PartitionStateMinInterval) — repeated requests
+		// inside the window get HTTP 429 with a Retry-After hint.
 		const psPrefix = "/v3/partition-state/"
 		if r.Method == "GET" && strings.HasPrefix(r.URL.Path, psPrefix) {
 			partition := r.URL.Path[len(psPrefix):]
 			h, ok := inst.PartitionStateHandler(partition)
 			if !ok {
 				http.Error(w, "unknown partition", http.StatusNotFound)
+				return
+			}
+			if ok, retryAfter := inst.ReservePartitionState(partition); !ok {
+				retrySecs := int(retryAfter.Round(time.Second).Seconds())
+				if retrySecs < 1 {
+					retrySecs = 1
+				}
+				w.Header().Set("Retry-After", strconv.Itoa(retrySecs))
+				http.Error(w,
+					fmt.Sprintf("partition-state rate limit: retry in %ds", retrySecs),
+					http.StatusTooManyRequests)
 				return
 			}
 			block, root, body, err := h.BuildPartitionState()

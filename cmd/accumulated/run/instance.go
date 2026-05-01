@@ -53,9 +53,23 @@ type Instance struct {
 	// this endpoint, restores the bytes, and verifies BPT root against
 	// the signed anchor pool. The Querier service registers an entry
 	// on start; HttpService reads it during request handling.
-	partitionStateMu sync.RWMutex
-	partitionState   map[string]partitionStateHandler
+	//
+	// partitionStateLastReq is the rate-limit ledger — recording the
+	// instant a request was admitted, per partition. Combined with
+	// PartitionStateMinInterval below, it caps how often this node
+	// services the db.View walk, so a flood of bootstraps can't pin
+	// the executor's read snapshot machinery.
+	partitionStateMu      sync.RWMutex
+	partitionState        map[string]partitionStateHandler
+	partitionStateLastReq map[string]time.Time
 }
+
+// PartitionStateMinInterval is the minimum gap between two
+// /v3/partition-state/<partition> requests admitted on this node, per
+// partition. Snapshot building holds a single db.View for several
+// seconds and produces a 25–30 MB body; once per minute is enough for
+// realistic bootstrap demand and small enough to absorb retry storms.
+const PartitionStateMinInterval = time.Minute
 
 // partitionStateHandler builds an atomic snapshot of a partition's
 // state under a single database read view. Returns the minor block
@@ -83,6 +97,31 @@ func (inst *Instance) PartitionStateHandler(partition string) (partitionStateHan
 	defer inst.partitionStateMu.RUnlock()
 	h, ok := inst.partitionState[strings.ToLower(partition)]
 	return h, ok
+}
+
+// ReservePartitionState atomically applies the rate limit for a
+// partition-state request. Returns (true, 0) if the request may proceed
+// — and records the start time as a side effect — or (false, retryAfter)
+// if a previous request was admitted within PartitionStateMinInterval.
+//
+// The reservation is taken on entry, not on completion, so a long-
+// running snapshot walk does not allow a parallel walk to start before
+// the interval elapses. A failed snapshot still consumes the slot — the
+// db.View it held was the cost we are pacing.
+func (inst *Instance) ReservePartitionState(partition string) (bool, time.Duration) {
+	p := strings.ToLower(partition)
+	inst.partitionStateMu.Lock()
+	defer inst.partitionStateMu.Unlock()
+	if last, ok := inst.partitionStateLastReq[p]; ok {
+		if since := time.Since(last); since < PartitionStateMinInterval {
+			return false, PartitionStateMinInterval - since
+		}
+	}
+	if inst.partitionStateLastReq == nil {
+		inst.partitionStateLastReq = map[string]time.Time{}
+	}
+	inst.partitionStateLastReq[p] = time.Now()
+	return true, 0
 }
 
 const minDiskSpace = 0.05
