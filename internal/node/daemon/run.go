@@ -45,6 +45,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3/tm"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/bootpersist"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
@@ -87,6 +88,13 @@ type Daemon struct {
 	snapshotLock     *sync.Mutex
 	tracer           trace.Tracer
 	local            map[string]tendermint.DispatcherClient
+
+	// bootstrapState is the artifact written by `accumulated bootstrap`
+	// (or any future writer of bootstrap-state.json) that records this
+	// node's bootstrap-v3 state machine — BOOTING / WAITING / ACTIVE /
+	// COMPLETE plus the verified anchor. Loaded once at Start. Nil on
+	// legacy nodes that never went through bootstrap-v3.
+	bootstrapState *bootpersist.Artifact
 
 	// knobs for tests
 	// IsTest   bool
@@ -211,6 +219,40 @@ func (d *Daemon) P2P() *p2p.Node { return d.p2pnode }
 // data directory (e.g., bootstrap-state.json per #3990).
 func (d *Daemon) WorkDir() string { return d.Config.RootDir }
 
+// BootstrapState returns the bootstrap-v3 artifact loaded at Start, or
+// nil if this node has no persisted bootstrap-v3 state. Read-only — the
+// daemon does not currently mutate the artifact at runtime; that's the
+// deferred WAITING→ACTIVE verify loop (#107).
+func (d *Daemon) BootstrapState() *bootpersist.Artifact { return d.bootstrapState }
+
+// loadAndLogBootstrapState reads bootstrap-state.json from the daemon's
+// data dir if present and records the result on the Daemon. A missing
+// file is normal (legacy nodes / pre-bootstrap-v3 deployments) and is
+// logged at debug. A present file is logged at info with the headline
+// state plus the verified anchor — the operator wants to see this at
+// startup to confirm the node came up via bootstrap-v3 and at what
+// state.
+func (d *Daemon) loadAndLogBootstrapState() {
+	art, err := bootpersist.Load(d.WorkDir())
+	if errors.Is(err, os.ErrNotExist) {
+		d.Logger.Debug("Bootstrap-v3: no persisted state", "dir", d.WorkDir())
+		return
+	}
+	if err != nil {
+		d.Logger.Error("Bootstrap-v3: failed to load persisted state", "error", err, "dir", d.WorkDir())
+		return
+	}
+	d.bootstrapState = art
+	d.Logger.Info("Bootstrap-v3 state",
+		"state", art.State.Current,
+		"network", art.Network,
+		"partition", art.Partition,
+		"sinceBlock", art.State.SinceBlock,
+		"verifiedAnchor", bootpersist.HexKey(art.State.VerifiedAnchor),
+		"enteredActive", art.State.EnteredActive.Format(time.RFC3339),
+	)
+}
+
 // StartSecondary starts this daemon as a secondary process of the given daemon
 // (which must already be running).
 func (d *Daemon) StartSecondary(e *Daemon, others ...*Daemon) error {
@@ -228,6 +270,8 @@ func (d *Daemon) Start(others ...*Daemon) (err error) {
 			d.local[part] = e.localTm
 		}
 	}
+
+	d.loadAndLogBootstrapState()
 
 	if d.Config.Accumulate.API.DebugJSONRPC {
 		jsonrpc2.DebugMethodFunc = true
