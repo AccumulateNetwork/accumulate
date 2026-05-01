@@ -37,9 +37,6 @@ ServiceType:
   Faucet:
     description: is the type of [Faucet]
     value: 9
-  Snapshot:
-    description: is the type of [SnapshotService]
-    value: 10
   Bootstrap:
     description: advertises a node's bootstrap-v3 state. Argument is "active" or "complete"; consumers route current-state queries away from nodes that don't advertise this service.
     value: 11
@@ -59,6 +56,9 @@ QueryType:
     value: 0x05
   BptPage:
     value: 0x06
+  PartitionState:
+    description: atomic full-state dump of a partition for bootstrap; one db.View covers every leaf and body
+    value: 0x07
 
   AnchorSearch:
     value: 0x10
@@ -82,6 +82,9 @@ RecordType:
     value: 0x04
   BptPage:
     value: 0x05
+  PartitionState:
+    description: holds the bytes of an atomic partition snapshot at a specific minor block
+    value: 0x06
 
   Message:
     value: 0x10

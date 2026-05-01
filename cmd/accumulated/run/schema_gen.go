@@ -62,7 +62,6 @@ var (
 	sRouterService              schema.Methods[*RouterService, *RouterService, *schema.CompositeType]
 	sService                    schema.UnionMethods[Service, ServiceType]
 	sServiceType                schema.EnumMethods[ServiceType]
-	sSnapshotService            schema.Methods[*SnapshotService, *SnapshotService, *schema.CompositeType]
 	sStorage                    schema.UnionMethods[Storage, StorageType]
 	sStorageService             schema.Methods[*StorageService, *StorageService, *schema.CompositeType]
 	sStorageType                schema.EnumMethods[StorageType]
@@ -446,14 +445,6 @@ func init() {
 				},
 			},
 			{
-				Name:     "EnableSnapshots",
-				Optional: true,
-				Type: &schema.PointerType{
-					TypeBase: schema.TypeBase{},
-					Elem:     &schema.SimpleType{Type: schema.SimpleTypeBool},
-				},
-			},
-			{
 				Name:     "MaxEnvelopesPerBlock",
 				Optional: true,
 				Type: &schema.PointerType{
@@ -629,14 +620,6 @@ func init() {
 			},
 			{
 				Name:     "EnableDirectDispatch",
-				Optional: true,
-				Type: &schema.PointerType{
-					TypeBase: schema.TypeBase{},
-					Elem:     &schema.SimpleType{Type: schema.SimpleTypeBool},
-				},
-			},
-			{
-				Name:     "EnableSnapshots",
 				Optional: true,
 				Type: &schema.PointerType{
 					TypeBase: schema.TypeBase{},
@@ -1307,13 +1290,6 @@ func init() {
 						ResolveElemTo(&deferredTypes, "RouterService"),
 				},
 				{
-					Discriminator: "snapshot",
-					Type: (&schema.PointerType{
-						TypeBase: schema.TypeBase{},
-					}).
-						ResolveElemTo(&deferredTypes, "SnapshotService"),
-				},
-				{
 					Discriminator: "faucet",
 					Type: (&schema.PointerType{
 						TypeBase: schema.TypeBase{},
@@ -1369,10 +1345,6 @@ func init() {
 					Name:  "Router",
 					Value: 8,
 				},
-				"Snapshot": {
-					Name:  "Snapshot",
-					Value: 9,
-				},
 				"Storage": {
 					Name:  "Storage",
 					Value: 1,
@@ -1383,58 +1355,6 @@ func init() {
 				},
 			},
 		}).SetGoType()
-
-	sSnapshotService = schema.WithMethods[*SnapshotService, *SnapshotService](&schema.CompositeType{
-		TypeBase: schema.TypeBase{
-			Name: "SnapshotService",
-		},
-		Fields: []*schema.Field{
-			{
-				Name: "Partition",
-				Type: &schema.SimpleType{Type: schema.SimpleTypeString},
-			},
-			{
-				Name:     "Storage",
-				Optional: true,
-				Type: &schema.PointerType{
-					TypeBase: schema.TypeBase{},
-					Elem:     schema.TypeReferenceFor[StorageOrRef](),
-				},
-			},
-			{
-				Name:        "Directory",
-				Description: "is the directory to store snapshots in",
-				Type:        &schema.SimpleType{Type: schema.SimpleTypeString},
-			},
-			{
-				Name:        "Schedule",
-				Description: "is the schedule for automatically capturing snapshots",
-				Optional:    true,
-				Type: &schema.PointerType{
-					TypeBase: schema.TypeBase{},
-					Elem:     schema.TypeReferenceFor[network.CronSchedule](),
-				},
-			},
-			{
-				Name:        "RetainCount",
-				Description: "is the number of snapshots to retain",
-				Optional:    true,
-				Type: &schema.PointerType{
-					TypeBase: schema.TypeBase{},
-					Elem:     &schema.SimpleType{Type: schema.SimpleTypeUint},
-				},
-			},
-			{
-				Name:        "EnableIndexing",
-				Description: "enables indexing of snapshots",
-				Optional:    true,
-				Type: &schema.PointerType{
-					TypeBase: schema.TypeBase{},
-					Elem:     &schema.SimpleType{Type: schema.SimpleTypeBool},
-				},
-			},
-		},
-	}).SetGoType()
 
 	sStorage = schema.WithUnionMethods[Storage, StorageType](
 		&schema.UnionType{
@@ -1678,7 +1598,6 @@ func init() {
 		sRouterService.Type,
 		sService.Type,
 		sServiceType.Type,
-		sSnapshotService.Type,
 		sStorage.Type,
 		sStorageService.Type,
 		sStorageType.Type,

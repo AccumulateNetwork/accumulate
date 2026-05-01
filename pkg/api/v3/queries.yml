@@ -147,3 +147,8 @@ BptPageQuery:
     - name: Count
       type: uint
       optional: true
+
+PartitionStateQuery:
+  union: { type: query }
+  description: requests an atomic single-block dump of every BPT leaf and account body in the addressed partition under one server-side read view
+  fields: []

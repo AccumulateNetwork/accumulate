@@ -7,19 +7,24 @@
 // Package nodestate is the in-process bootstrap state machine and
 // the advertisement payload published to peer discovery.
 //
-// A node moves through three states with explicit trust semantics:
+// A node moves through four states with explicit trust semantics:
 //
-//   - BOOTING: pulling state and walking headers. Cannot serve
-//     queries reliably; cannot validate.
-//   - ACTIVE:  local BPT root matched the verified header anchor;
-//     can serve current-state queries and (with the rest of the
-//     node stack) participate in consensus.
-//   - COMPLETE: ACTIVE plus historical backfill complete (or
-//     historical retention policy satisfied).
+//   - BOOTING:  pulling spine + BPT (snapshot). Cannot serve
+//     queries; cannot validate.
+//   - WAITING:  snapshot applied locally; network is running but
+//     we are waiting on a major-block signed anchor that matches
+//     the snapshot's BPT root. Still cannot serve queries.
+//   - ACTIVE:   spine completed with validator-quorum signatures
+//     from a major block; local BPT root is consensus-verified.
+//     Can serve current-state queries and participate in consensus.
+//   - COMPLETE: ACTIVE plus historical backfill complete — every
+//     entry in every account chain is present locally (or the
+//     historical retention policy is satisfied).
 //
-// Forward-only transitions: BOOTING → ACTIVE → COMPLETE. A node never
-// regresses; if a verification breaks, the launcher exits or rolls
-// the data dir back to a pre-bootstrap state and starts over.
+// Forward-only transitions: BOOTING → WAITING → ACTIVE → COMPLETE.
+// A node never regresses; if a verification breaks, the launcher
+// exits or rolls the data dir back to a pre-bootstrap state and
+// starts over.
 //
 // The machine is orthogonal to the trust model — it would look the
 // same under a back-walk-to-genesis design or any other. Lives here
@@ -42,6 +47,7 @@ const (
 	// which is itself treated as COMPLETE for legacy queries.
 	StateUnknown State = iota
 	StateBooting
+	StateWaiting
 	StateActive
 	StateComplete
 )
@@ -50,6 +56,8 @@ func (s State) String() string {
 	switch s {
 	case StateBooting:
 		return "BOOTING"
+	case StateWaiting:
+		return "WAITING"
 	case StateActive:
 		return "ACTIVE"
 	case StateComplete:
@@ -99,7 +107,7 @@ type Advertisement struct {
 // Validate reports a malformed-payload error.
 func (a *Advertisement) Validate() error {
 	switch a.State {
-	case StateBooting, StateActive, StateComplete:
+	case StateBooting, StateWaiting, StateActive, StateComplete:
 		// ok
 	default:
 		return fmt.Errorf("nodestate: invalid state %d", a.State)
@@ -133,11 +141,11 @@ func New() *Machine {
 }
 
 // Restore reconstructs a Machine from a persisted state record.
-// state must be one of StateBooting, StateActive, or StateComplete.
-// ACTIVE / COMPLETE require a non-zero verifiedAnchor.
+// state must be one of StateBooting, StateWaiting, StateActive, or
+// StateComplete. ACTIVE / COMPLETE require a non-zero verifiedAnchor.
 func Restore(state State, sinceBlock uint64, verifiedAnchor [32]byte, historyDepth uint64) (*Machine, error) {
 	switch state {
-	case StateBooting, StateActive, StateComplete:
+	case StateBooting, StateWaiting, StateActive, StateComplete:
 		// ok
 	default:
 		return nil, fmt.Errorf("nodestate.Restore: invalid state %d", state)
@@ -154,13 +162,14 @@ func Restore(state State, sinceBlock uint64, verifiedAnchor [32]byte, historyDep
 	}, nil
 }
 
-// ParseState maps the persisted string form ("BOOTING" / "ACTIVE" /
-// "COMPLETE") to the typed State. Unrecognized strings return
-// StateUnknown plus an error.
+// ParseState maps the persisted string form to the typed State.
+// Unrecognized strings return StateUnknown plus an error.
 func ParseState(s string) (State, error) {
 	switch s {
 	case "BOOTING":
 		return StateBooting, nil
+	case "WAITING":
+		return StateWaiting, nil
 	case "ACTIVE":
 		return StateActive, nil
 	case "COMPLETE":
@@ -184,16 +193,46 @@ func (m *Machine) State() State {
 	return m.state
 }
 
-// PromoteToActive transitions BOOTING → ACTIVE. anchor is the
-// verified BPT root (must be non-zero); sinceBlock is the height
-// the verification was established at. Returns false if the
-// transition is invalid (e.g., already ACTIVE or beyond).
+// PromoteToWaiting transitions BOOTING → WAITING. The snapshot has
+// been applied locally (BPT root is the snapshot's claimed root) but
+// no validator-quorum-signed anchor matching that root has been
+// observed yet. claimedAnchor is the BPT root from the snapshot;
+// sinceBlock is the snapshot's minor block. Returns false if the
+// transition is invalid.
+func (m *Machine) PromoteToWaiting(claimedAnchor [32]byte, sinceBlock uint64) bool {
+	if claimedAnchor == ([32]byte{}) {
+		return false
+	}
+	m.mu.Lock()
+	if m.state != StateBooting {
+		m.mu.Unlock()
+		return false
+	}
+	m.state = StateWaiting
+	m.anchor = claimedAnchor
+	m.since = sinceBlock
+	m.last = time.Now()
+	cbs := append([]func(Advertisement){}, m.onChange...)
+	ad := m.adLocked()
+	m.mu.Unlock()
+
+	for _, cb := range cbs {
+		cb(ad)
+	}
+	return true
+}
+
+// PromoteToActive transitions WAITING → ACTIVE (or BOOTING → ACTIVE
+// for legacy callers who skip WAITING). anchor is the verified BPT
+// root from a major-block-signed anchor (must be non-zero);
+// sinceBlock is the height the verification was established at.
+// Returns false if the transition is invalid.
 func (m *Machine) PromoteToActive(anchor [32]byte, sinceBlock uint64) bool {
 	if anchor == ([32]byte{}) {
 		return false
 	}
 	m.mu.Lock()
-	if m.state != StateBooting {
+	if m.state != StateBooting && m.state != StateWaiting {
 		m.mu.Unlock()
 		return false
 	}

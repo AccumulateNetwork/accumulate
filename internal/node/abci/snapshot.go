@@ -6,6 +6,25 @@
 
 package abci
 
+// This file implements the four ABCI state-sync methods that
+// Application requires: ListSnapshots, LoadSnapshotChunk, OfferSnapshot,
+// and ApplySnapshotChunk. They are required to satisfy
+// abci.Application; they are NOT the active bootstrap path.
+//
+// The active bootstrap is the bootstrap-v3 launcher in cmd/accumulated:
+// it pulls a per-partition snapshot over HTTP, restores it into the
+// daemon's data dir, and hands off to `accumulated run`. CometBFT
+// state-sync is left disabled in writeTendermintToml so peers never
+// drive these methods, and on this node the methods either no-op
+// (Snapshots config nil) or operate over an empty manager.
+//
+// Kept dormant rather than stubbed because the implementation is
+// already correct should we re-enable CometBFT state-sync later, and
+// stubbing would require equivalent boilerplate to satisfy the
+// interface. If state-sync is decisively retired, this whole file
+// (plus the snapshots field on Accumulator) can be reduced to four
+// no-op methods.
+
 import (
 	"bytes"
 	"context"

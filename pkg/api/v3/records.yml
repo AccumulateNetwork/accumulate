@@ -275,3 +275,14 @@ BptPageRecord:
       type: hash
     - name: Done
       type: bool
+
+PartitionStateRecord:
+  union: { type: record }
+  description: response to PartitionStateQuery; BlockIndex names the minor block, BptRoot is the BPT root at that block, Snapshot is a snapshot-v2 file containing every leaf and body at that block
+  fields:
+    - name: BlockIndex
+      type: uint
+    - name: BptRoot
+      type: hash
+    - name: Snapshot
+      type: bytes

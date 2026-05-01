@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -45,6 +46,43 @@ type Instance struct {
 
 	haltControllersMu sync.RWMutex
 	haltControllers   map[string]*HaltController
+
+	// partitionState is the per-partition handler the HTTP listener
+	// uses to serve atomic bootstrap snapshots over GET
+	// /v3/partition-state/<partition>. The bootstrap-v3 launcher hits
+	// this endpoint, restores the bytes, and verifies BPT root against
+	// the signed anchor pool. The Querier service registers an entry
+	// on start; HttpService reads it during request handling.
+	partitionStateMu sync.RWMutex
+	partitionState   map[string]partitionStateHandler
+}
+
+// partitionStateHandler builds an atomic snapshot of a partition's
+// state under a single database read view. Returns the minor block
+// the snapshot reflects, the BPT root at that block, and the
+// snapshot v2 body.
+type partitionStateHandler interface {
+	BuildPartitionState() (blockIndex uint64, bptRoot [32]byte, body []byte, err error)
+}
+
+// registerPartitionStateHandler maps a partition (case-insensitive) to
+// the Querier instance that owns its database. Called once per
+// partition from the Querier service's start hook.
+func (inst *Instance) registerPartitionStateHandler(partition string, h partitionStateHandler) {
+	inst.partitionStateMu.Lock()
+	defer inst.partitionStateMu.Unlock()
+	if inst.partitionState == nil {
+		inst.partitionState = map[string]partitionStateHandler{}
+	}
+	inst.partitionState[strings.ToLower(partition)] = h
+}
+
+// PartitionStateHandler looks up the handler for a partition.
+func (inst *Instance) PartitionStateHandler(partition string) (partitionStateHandler, bool) {
+	inst.partitionStateMu.RLock()
+	defer inst.partitionStateMu.RUnlock()
+	h, ok := inst.partitionState[strings.ToLower(partition)]
+	return h, ok
 }
 
 const minDiskSpace = 0.05

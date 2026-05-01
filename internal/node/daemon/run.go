@@ -290,9 +290,6 @@ func (d *Daemon) startValidator() (err error) {
 		}
 	}()
 
-	// Setup the event bus
-	events.SubscribeSync(d.eventBus, d.onDidCommitBlock)
-
 	globals := make(chan *core.GlobalValues, 1)
 	events.SubscribeSync(d.eventBus, func(e events.WillChangeGlobals) error {
 		select {

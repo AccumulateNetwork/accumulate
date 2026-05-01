@@ -1,4 +1,4 @@
-// Copyright 2026 The Accumulate Authors
+// Copyright 2022 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -41,6 +41,8 @@ func NewRecord(typ RecordType) (Record, error) {
 		return new(MessageRecord[messaging.Message]), nil
 	case RecordTypeMinorBlock:
 		return new(MinorBlockRecord), nil
+	case RecordTypePartitionState:
+		return new(PartitionStateRecord), nil
 	case RecordTypeRange:
 		return new(RecordRange[Record]), nil
 	case RecordTypeSignatureSet:
@@ -119,6 +121,12 @@ func EqualRecord(a, b Record) bool {
 		}
 		b, ok := b.(*MinorBlockRecord)
 		return ok && a.Equal(b)
+	case *PartitionStateRecord:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*PartitionStateRecord)
+		return ok && a.Equal(b)
 	case *RecordRange[Record]:
 		if a == nil {
 			return b == nil
@@ -165,6 +173,8 @@ func CopyRecord(v Record) Record {
 	case *MajorBlockRecord:
 		return v.Copy()
 	case *MinorBlockRecord:
+		return v.Copy()
+	case *PartitionStateRecord:
 		return v.Copy()
 	case *SignatureSetRecord:
 		return v.Copy()
@@ -256,6 +266,8 @@ func NewQuery(typ QueryType) (Query, error) {
 		return new(DirectoryQuery), nil
 	case QueryTypeMessageHashSearch:
 		return new(MessageHashSearchQuery), nil
+	case QueryTypePartitionState:
+		return new(PartitionStateQuery), nil
 	case QueryTypePending:
 		return new(PendingQuery), nil
 	case QueryTypePublicKeyHashSearch:
@@ -326,6 +338,12 @@ func EqualQuery(a, b Query) bool {
 		}
 		b, ok := b.(*MessageHashSearchQuery)
 		return ok && a.Equal(b)
+	case *PartitionStateQuery:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*PartitionStateQuery)
+		return ok && a.Equal(b)
 	case *PendingQuery:
 		if a == nil {
 			return b == nil
@@ -368,6 +386,8 @@ func CopyQuery(v Query) Query {
 	case *DirectoryQuery:
 		return v.Copy()
 	case *MessageHashSearchQuery:
+		return v.Copy()
+	case *PartitionStateQuery:
 		return v.Copy()
 	case *PendingQuery:
 		return v.Copy()

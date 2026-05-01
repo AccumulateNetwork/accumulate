@@ -28,7 +28,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -236,20 +235,6 @@ func migrateCfg(cfg *run.Config, cvc *run.CoreValidatorConfiguration, dir string
 			Username: old.Accumulate.Logging.LokiUsername,
 			Password: old.Accumulate.Logging.LokiPassword,
 		}
-	}
-
-	if old.Accumulate.Snapshots.Enable {
-		schedule, err := network.ParseCron(old.Accumulate.Snapshots.Schedule)
-		if err != nil {
-			return fmt.Errorf("snapshot schedule: %w", err)
-		}
-		cfg.Services = append(cfg.Services, &run.SnapshotService{
-			Partition:      old.Accumulate.PartitionId,
-			Directory:      old.Accumulate.Snapshots.Directory,
-			Schedule:       schedule,
-			RetainCount:    run.Ptr(uint64(old.Accumulate.Snapshots.RetainCount)),
-			EnableIndexing: &old.Accumulate.Snapshots.EnableIndexing,
-		})
 	}
 
 	// DN-/BVN-specific values

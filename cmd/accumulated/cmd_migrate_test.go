@@ -271,63 +271,6 @@ func TestMigrateOld(t *testing.T) {
 		)
 	})
 
-	t.Run("Snapshots", func(t *testing.T) {
-		testMigrateOld(t,
-			`network = "Fozzie"
-
-			[[configurations]]
-			bvn = "Grizzly"
-			bvn-genesis = "bvnn/config/genesis.json"
-			enable-healing = false
-			listen = "/tcp/26556"
-			storage-type = "badger"
-			type = "coreValidator"
-
-			[configurations.validator-key]
-			path = "bvnn/config/priv_validator_key.json"
-			type = "cometPrivValFile"
-
-			[logging]
-			[p2p]
-			[p2p.key]
-			path = "bvnn/config/node_key.json"
-			type = "cometNodeKeyFile"
-
-			[[services]]
-			directory = "snapshots"
-			enable-indexing = false
-			partition = "Grizzly"
-			retain-count = 10
-			schedule = "0 */12 * * *"
-			type = "snapshot"
-			`,
-			applyOld(t, "bvnn",
-				`[api]
-				connection-limit = 500
-				listen-address = "http://0.0.0.0:26660"
-				read-header-timeout = "10s"
-				tx-max-wait-time = "10m0s"
-
-				[describe]
-				partition-id = "Grizzly"
-				type = "blockValidator"
-
-				[describe.network]
-				id = "Fozzie"
-
-				[storage]
-				path = "data/accumulate.db"
-				type = "badger"
-
-				[snapshots]
-				enable = true
-				directory = "snapshots"
-				retain = 10
-				schedule = "0 */12 * * *"
-				`, ``,
-			),
-		)
-	})
 }
 
 func testMigrateOld(t *testing.T, expect string, old ...applyFunc) {

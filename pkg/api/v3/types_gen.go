@@ -1,4 +1,4 @@
-// Copyright 2026 The Accumulate Authors
+// Copyright 2022 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -21,9 +21,7 @@ import (
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 	errors2 "gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/cometbft"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -263,13 +261,6 @@ type LastBlock struct {
 	extraData             []byte
 }
 
-type ListSnapshotsOptions struct {
-	fieldsSet []bool
-	NodeID    string `json:"nodeID,omitempty" form:"nodeID" query:"nodeID" validate:"required"`
-	Partition string `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
-	extraData []byte
-}
-
 type MajorBlockRecord struct {
 	fieldsSet     []bool
 	Index         uint64                          `json:"index,omitempty" form:"index" query:"index" validate:"required"`
@@ -371,6 +362,21 @@ type NodeInfoOptions struct {
 	extraData []byte
 }
 
+// PartitionStateQuery requests an atomic single-block dump of every BPT leaf and account body in the addressed partition under one server-side read view.
+type PartitionStateQuery struct {
+	fieldsSet []bool
+	extraData []byte
+}
+
+// PartitionStateRecord response to PartitionStateQuery; BlockIndex names the minor block, BptRoot is the BPT root at that block, Snapshot is a snapshot-v2 file containing every leaf and body at that block.
+type PartitionStateRecord struct {
+	fieldsSet  []bool
+	BlockIndex uint64   `json:"blockIndex,omitempty" form:"blockIndex" query:"blockIndex" validate:"required"`
+	BptRoot    [32]byte `json:"bptRoot,omitempty" form:"bptRoot" query:"bptRoot" validate:"required"`
+	Snapshot   []byte   `json:"snapshot,omitempty" form:"snapshot" query:"snapshot" validate:"required"`
+	extraData  []byte
+}
+
 type PendingQuery struct {
 	fieldsSet []bool
 	Range     *RangeOptions `json:"range,omitempty" form:"range" query:"range" validate:"required"`
@@ -439,13 +445,6 @@ type SignatureSetRecord struct {
 	Account    protocol.Account                                `json:"account,omitempty" form:"account" query:"account" validate:"required"`
 	Signatures *RecordRange[*MessageRecord[messaging.Message]] `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
 	extraData  []byte
-}
-
-type SnapshotInfo struct {
-	fieldsSet     []bool
-	Header        *snapshot.Header     `json:"header,omitempty" form:"header" query:"header" validate:"required"`
-	ConsensusInfo *cometbft.GenesisDoc `json:"consensusInfo,omitempty" form:"consensusInfo" query:"consensusInfo" validate:"required"`
-	extraData     []byte
 }
 
 type Submission struct {
@@ -536,6 +535,10 @@ func (*MessageHashSearchQuery) QueryType() QueryType { return QueryTypeMessageHa
 func (*MessageRecord[T]) RecordType() RecordType { return RecordTypeMessage }
 
 func (*MinorBlockRecord) RecordType() RecordType { return RecordTypeMinorBlock }
+
+func (*PartitionStateQuery) QueryType() QueryType { return QueryTypePartitionState }
+
+func (*PartitionStateRecord) RecordType() RecordType { return RecordTypePartitionState }
 
 func (*PendingQuery) QueryType() QueryType { return QueryTypePending }
 
@@ -1126,21 +1129,6 @@ func (v *LastBlock) Copy() *LastBlock {
 
 func (v *LastBlock) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *ListSnapshotsOptions) Copy() *ListSnapshotsOptions {
-	u := new(ListSnapshotsOptions)
-
-	u.NodeID = v.NodeID
-	u.Partition = v.Partition
-	if len(v.extraData) > 0 {
-		u.extraData = make([]byte, len(v.extraData))
-		copy(u.extraData, v.extraData)
-	}
-
-	return u
-}
-
-func (v *ListSnapshotsOptions) CopyAsInterface() interface{} { return v.Copy() }
-
 func (v *MajorBlockRecord) Copy() *MajorBlockRecord {
 	u := new(MajorBlockRecord)
 
@@ -1410,6 +1398,35 @@ func (v *NodeInfoOptions) Copy() *NodeInfoOptions {
 
 func (v *NodeInfoOptions) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *PartitionStateQuery) Copy() *PartitionStateQuery {
+	u := new(PartitionStateQuery)
+
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *PartitionStateQuery) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *PartitionStateRecord) Copy() *PartitionStateRecord {
+	u := new(PartitionStateRecord)
+
+	u.BlockIndex = v.BlockIndex
+	u.BptRoot = v.BptRoot
+	u.Snapshot = encoding.BytesCopy(v.Snapshot)
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *PartitionStateRecord) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *PendingQuery) Copy() *PendingQuery {
 	u := new(PendingQuery)
 
@@ -1576,25 +1593,6 @@ func (v *SignatureSetRecord) Copy() *SignatureSetRecord {
 }
 
 func (v *SignatureSetRecord) CopyAsInterface() interface{} { return v.Copy() }
-
-func (v *SnapshotInfo) Copy() *SnapshotInfo {
-	u := new(SnapshotInfo)
-
-	if v.Header != nil {
-		u.Header = (v.Header).Copy()
-	}
-	if v.ConsensusInfo != nil {
-		u.ConsensusInfo = (v.ConsensusInfo).Copy()
-	}
-	if len(v.extraData) > 0 {
-		u.extraData = make([]byte, len(v.extraData))
-		copy(u.extraData, v.extraData)
-	}
-
-	return u
-}
-
-func (v *SnapshotInfo) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *Submission) Copy() *Submission {
 	u := new(Submission)
@@ -2325,17 +2323,6 @@ func (v *LastBlock) Equal(u *LastBlock) bool {
 	return true
 }
 
-func (v *ListSnapshotsOptions) Equal(u *ListSnapshotsOptions) bool {
-	if !(v.NodeID == u.NodeID) {
-		return false
-	}
-	if !(v.Partition == u.Partition) {
-		return false
-	}
-
-	return true
-}
-
 func (v *MajorBlockRecord) Equal(u *MajorBlockRecord) bool {
 	if !(v.Index == u.Index) {
 		return false
@@ -2633,6 +2620,25 @@ func (v *NodeInfoOptions) Equal(u *NodeInfoOptions) bool {
 	return true
 }
 
+func (v *PartitionStateQuery) Equal(u *PartitionStateQuery) bool {
+
+	return true
+}
+
+func (v *PartitionStateRecord) Equal(u *PartitionStateRecord) bool {
+	if !(v.BlockIndex == u.BlockIndex) {
+		return false
+	}
+	if !(v.BptRoot == u.BptRoot) {
+		return false
+	}
+	if !(bytes.Equal(v.Snapshot, u.Snapshot)) {
+		return false
+	}
+
+	return true
+}
+
 func (v *PendingQuery) Equal(u *PendingQuery) bool {
 	switch {
 	case v.Range == u.Range:
@@ -2757,27 +2763,6 @@ func (v *SignatureSetRecord) Equal(u *SignatureSetRecord) bool {
 	case v.Signatures == nil || u.Signatures == nil:
 		return false
 	case !((v.Signatures).Equal(u.Signatures)):
-		return false
-	}
-
-	return true
-}
-
-func (v *SnapshotInfo) Equal(u *SnapshotInfo) bool {
-	switch {
-	case v.Header == u.Header:
-		// equal
-	case v.Header == nil || u.Header == nil:
-		return false
-	case !((v.Header).Equal(u.Header)):
-		return false
-	}
-	switch {
-	case v.ConsensusInfo == u.ConsensusInfo:
-		// equal
-	case v.ConsensusInfo == nil || u.ConsensusInfo == nil:
-		return false
-	case !((v.ConsensusInfo).Equal(u.ConsensusInfo)):
 		return false
 	}
 
@@ -3199,7 +3184,9 @@ func (v *BptLeafSummary) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.KeyHash == ([32]byte{})) {
@@ -3217,7 +3204,11 @@ func (v *BptLeafSummary) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *BptLeafSummary) IsValid() error {
@@ -3260,7 +3251,9 @@ func (v *BptPageQuery) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.QueryType())
@@ -3276,7 +3269,11 @@ func (v *BptPageQuery) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *BptPageQuery) IsValid() error {
@@ -3309,7 +3306,9 @@ func (v *BptPageRecord) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.RecordType())
@@ -3333,7 +3332,11 @@ func (v *BptPageRecord) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *BptPageRecord) IsValid() error {
@@ -4715,64 +4718,6 @@ func (v *LastBlock) IsValid() error {
 	}
 }
 
-var fieldNames_ListSnapshotsOptions = []string{
-	1: "NodeID",
-	2: "Partition",
-}
-
-func (v *ListSnapshotsOptions) MarshalBinary() ([]byte, error) {
-	if v == nil {
-		return []byte{encoding.EmptyObject}, nil
-	}
-
-	buffer := encoding.GetBuffer()
-	defer encoding.PutBuffer(buffer)
-
-	writer := encoding.NewWriter(buffer)
-
-	if !(len(v.NodeID) == 0) {
-		writer.WriteString(1, v.NodeID)
-	}
-	if !(len(v.Partition) == 0) {
-		writer.WriteString(2, v.Partition)
-	}
-
-	_, _, err := writer.Reset(fieldNames_ListSnapshotsOptions)
-	if err != nil {
-		return nil, encoding.Error{E: err}
-	}
-	buffer.Write(v.extraData)
-
-	// Return a copy since the buffer will be reused
-	result := make([]byte, buffer.Len())
-	copy(result, buffer.Bytes())
-	return result, nil
-}
-
-func (v *ListSnapshotsOptions) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
-		errs = append(errs, "field NodeID is missing")
-	} else if len(v.NodeID) == 0 {
-		errs = append(errs, "field NodeID is not set")
-	}
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Partition is missing")
-	} else if len(v.Partition) == 0 {
-		errs = append(errs, "field Partition is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
 var fieldNames_MajorBlockRecord = []string{
 	1: "RecordType",
 	2: "Index",
@@ -5564,6 +5509,123 @@ func (v *NodeInfoOptions) IsValid() error {
 	}
 }
 
+var fieldNames_PartitionStateQuery = []string{
+	1: "QueryType",
+}
+
+func (v *PartitionStateQuery) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.QueryType())
+
+	_, _, err := writer.Reset(fieldNames_PartitionStateQuery)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *PartitionStateQuery) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field QueryType is missing")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_PartitionStateRecord = []string{
+	1: "RecordType",
+	2: "BlockIndex",
+	3: "BptRoot",
+	4: "Snapshot",
+}
+
+func (v *PartitionStateRecord) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.RecordType())
+	if !(v.BlockIndex == 0) {
+		writer.WriteUint(2, v.BlockIndex)
+	}
+	if !(v.BptRoot == ([32]byte{})) {
+		writer.WriteHash(3, &v.BptRoot)
+	}
+	if !(len(v.Snapshot) == 0) {
+		writer.WriteBytes(4, v.Snapshot)
+	}
+
+	_, _, err := writer.Reset(fieldNames_PartitionStateRecord)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *PartitionStateRecord) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field RecordType is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field BlockIndex is missing")
+	} else if v.BlockIndex == 0 {
+		errs = append(errs, "field BlockIndex is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field BptRoot is missing")
+	} else if v.BptRoot == ([32]byte{}) {
+		errs = append(errs, "field BptRoot is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Snapshot is missing")
+	} else if len(v.Snapshot) == 0 {
+		errs = append(errs, "field Snapshot is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_PendingQuery = []string{
 	1: "QueryType",
 	2: "Range",
@@ -6099,64 +6161,6 @@ func (v *SignatureSetRecord) IsValid() error {
 		errs = append(errs, "field Signatures is missing")
 	} else if v.Signatures == nil {
 		errs = append(errs, "field Signatures is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
-var fieldNames_SnapshotInfo = []string{
-	1: "Header",
-	2: "ConsensusInfo",
-}
-
-func (v *SnapshotInfo) MarshalBinary() ([]byte, error) {
-	if v == nil {
-		return []byte{encoding.EmptyObject}, nil
-	}
-
-	buffer := encoding.GetBuffer()
-	defer encoding.PutBuffer(buffer)
-
-	writer := encoding.NewWriter(buffer)
-
-	if !(v.Header == nil) {
-		writer.WriteValue(1, v.Header.MarshalBinary)
-	}
-	if !(v.ConsensusInfo == nil) {
-		writer.WriteValue(2, v.ConsensusInfo.MarshalBinary)
-	}
-
-	_, _, err := writer.Reset(fieldNames_SnapshotInfo)
-	if err != nil {
-		return nil, encoding.Error{E: err}
-	}
-	buffer.Write(v.extraData)
-
-	// Return a copy since the buffer will be reused
-	result := make([]byte, buffer.Len())
-	copy(result, buffer.Bytes())
-	return result, nil
-}
-
-func (v *SnapshotInfo) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
-		errs = append(errs, "field Header is missing")
-	} else if v.Header == nil {
-		errs = append(errs, "field Header is not set")
-	}
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field ConsensusInfo is missing")
-	} else if v.ConsensusInfo == nil {
-		errs = append(errs, "field ConsensusInfo is not set")
 	}
 
 	switch len(errs) {
@@ -7537,32 +7541,6 @@ func (v *LastBlock) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
-func (v *ListSnapshotsOptions) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *ListSnapshotsOptions) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	if x, ok := reader.ReadString(1); ok {
-		v.NodeID = x
-	}
-	if x, ok := reader.ReadString(2); ok {
-		v.Partition = x
-	}
-
-	seen, err := reader.Reset(fieldNames_ListSnapshotsOptions)
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	return nil
-}
-
 func (v *MajorBlockRecord) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -7967,6 +7945,79 @@ func (v *NodeInfoOptions) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *PartitionStateQuery) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *PartitionStateQuery) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vQueryType QueryType
+	if x := new(QueryType); reader.ReadEnum(1, x) {
+		vQueryType = *x
+	}
+	if !(v.QueryType() == vQueryType) {
+		return fmt.Errorf("field QueryType: not equal: want %v, got %v", v.QueryType(), vQueryType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *PartitionStateQuery) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+
+	seen, err := reader.Reset(fieldNames_PartitionStateQuery)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *PartitionStateRecord) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *PartitionStateRecord) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vRecordType RecordType
+	if x := new(RecordType); reader.ReadEnum(1, x) {
+		vRecordType = *x
+	}
+	if !(v.RecordType() == vRecordType) {
+		return fmt.Errorf("field RecordType: not equal: want %v, got %v", v.RecordType(), vRecordType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *PartitionStateRecord) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadUint(2); ok {
+		v.BlockIndex = x
+	}
+	if x, ok := reader.ReadHash(3); ok {
+		v.BptRoot = *x
+	}
+	if x, ok := reader.ReadBytes(4); ok {
+		v.Snapshot = x
+	}
+
+	seen, err := reader.Reset(fieldNames_PartitionStateRecord)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *PendingQuery) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -8273,32 +8324,6 @@ func (v *SignatureSetRecord) UnmarshalFieldsFrom(reader *encoding.Reader) error 
 	}
 
 	seen, err := reader.Reset(fieldNames_SignatureSetRecord)
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	return nil
-}
-
-func (v *SnapshotInfo) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *SnapshotInfo) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	if x := new(snapshot.Header); reader.ReadValue(1, x.UnmarshalBinaryFrom) {
-		v.Header = x
-	}
-	if x := new(cometbft.GenesisDoc); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
-		v.ConsensusInfo = x
-	}
-
-	seen, err := reader.Reset(fieldNames_SnapshotInfo)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -8676,11 +8701,6 @@ func init() {
 	}, "LastBlock", "lastBlock")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
-		encoding.NewTypeField("nodeID", "string"),
-		encoding.NewTypeField("partition", "string"),
-	}, "ListSnapshotsOptions", "listSnapshotsOptions")
-
-	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("recordType", "string"),
 		encoding.NewTypeField("index", "uint64"),
 		encoding.NewTypeField("time", "string"),
@@ -8761,6 +8781,17 @@ func init() {
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("queryType", "string"),
+	}, "PartitionStateQuery", "partitionStateQuery")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("recordType", "string"),
+		encoding.NewTypeField("blockIndex", "uint64"),
+		encoding.NewTypeField("bptRoot", "bytes32"),
+		encoding.NewTypeField("snapshot", "bytes"),
+	}, "PartitionStateRecord", "partitionStateRecord")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("queryType", "string"),
 		encoding.NewTypeField("range", "RangeOptions"),
 	}, "PendingQuery", "pendingQuery")
 
@@ -8817,11 +8848,6 @@ func init() {
 		encoding.NewTypeField("account", "protocol.Account"),
 		encoding.NewTypeField("signatures", "RecordRange[*MessageRecord[messaging.Message]]"),
 	}, "SignatureSetRecord", "signatureSetRecord")
-
-	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
-		encoding.NewTypeField("header", "snapshot.Header"),
-		encoding.NewTypeField("consensusInfo", "cometbft.GenesisDoc"),
-	}, "SnapshotInfo", "snapshotInfo")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("status", "protocol.TransactionStatus"),
@@ -9642,6 +9668,38 @@ func (v *NodeInfoOptions) MarshalJSON() ([]byte, error) {
 	}{}
 	if !(v.PeerID == ("")) {
 		u.PeerID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.PeerID, Func: p2p.UnmarshalPeerIDJSON}
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *PartitionStateQuery) MarshalJSON() ([]byte, error) {
+	u := struct {
+		QueryType QueryType `json:"queryType"`
+		ExtraData *string   `json:"$epilogue,omitempty"`
+	}{}
+	u.QueryType = v.QueryType()
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *PartitionStateRecord) MarshalJSON() ([]byte, error) {
+	u := struct {
+		RecordType RecordType `json:"recordType"`
+		BlockIndex uint64     `json:"blockIndex,omitempty"`
+		BptRoot    *string    `json:"bptRoot,omitempty"`
+		Snapshot   *string    `json:"snapshot,omitempty"`
+		ExtraData  *string    `json:"$epilogue,omitempty"`
+	}{}
+	u.RecordType = v.RecordType()
+	if !(v.BlockIndex == 0) {
+		u.BlockIndex = v.BlockIndex
+	}
+	if !(v.BptRoot == ([32]byte{})) {
+		u.BptRoot = encoding.ChainToJSON(&v.BptRoot)
+	}
+	if !(len(v.Snapshot) == 0) {
+		u.Snapshot = encoding.BytesToJSON(v.Snapshot)
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -10841,6 +10899,63 @@ func (v *NodeInfoOptions) UnmarshalJSON(data []byte) error {
 		v.PeerID = u.PeerID.Value
 	}
 
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *PartitionStateQuery) UnmarshalJSON(data []byte) error {
+	u := struct {
+		QueryType QueryType `json:"queryType"`
+		ExtraData *string   `json:"$epilogue,omitempty"`
+	}{}
+	u.QueryType = v.QueryType()
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.QueryType() == u.QueryType) {
+		return fmt.Errorf("field QueryType: not equal: want %v, got %v", v.QueryType(), u.QueryType)
+	}
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *PartitionStateRecord) UnmarshalJSON(data []byte) error {
+	u := struct {
+		RecordType RecordType `json:"recordType"`
+		BlockIndex uint64     `json:"blockIndex,omitempty"`
+		BptRoot    *string    `json:"bptRoot,omitempty"`
+		Snapshot   *string    `json:"snapshot,omitempty"`
+		ExtraData  *string    `json:"$epilogue,omitempty"`
+	}{}
+	u.RecordType = v.RecordType()
+	u.BlockIndex = v.BlockIndex
+	u.BptRoot = encoding.ChainToJSON(&v.BptRoot)
+	u.Snapshot = encoding.BytesToJSON(v.Snapshot)
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.RecordType() == u.RecordType) {
+		return fmt.Errorf("field RecordType: not equal: want %v, got %v", v.RecordType(), u.RecordType)
+	}
+	v.BlockIndex = u.BlockIndex
+	if x, err := encoding.ChainFromJSON(u.BptRoot); err != nil {
+		return fmt.Errorf("error decoding BptRoot: %w", err)
+	} else {
+		v.BptRoot = *x
+	}
+	if x, err := encoding.BytesFromJSON(u.Snapshot); err != nil {
+		return fmt.Errorf("error decoding Snapshot: %w", err)
+	} else {
+		v.Snapshot = x
+	}
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err

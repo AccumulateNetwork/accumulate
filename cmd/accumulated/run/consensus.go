@@ -45,7 +45,6 @@ import (
 	tmlib "gitlab.com/accumulatenetwork/accumulate/exp/tendermint"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
-	nodecfg "gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	tmapi "gitlab.com/accumulatenetwork/accumulate/internal/api/v3/tm"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain"
@@ -273,8 +272,8 @@ func (c *ConsensusService) start(inst *Instance) error {
 		}
 
 		// Increase bandwidth limits for fast sync (default 5MB/s)
-		d.config.P2P.SendRate = 20480000  // 20 MB/s
-		d.config.P2P.RecvRate = 20480000  // 20 MB/s
+		d.config.P2P.SendRate = 20480000 // 20 MB/s
+		d.config.P2P.RecvRate = 20480000 // 20 MB/s
 
 		// Reduce flush throttle for more responsive connections
 		d.config.P2P.FlushThrottleTimeout = 50 * time.Millisecond // default 100ms
@@ -665,39 +664,6 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 		return nil, errors.UnknownError.WithFormat("initialize chain executor: %w", err)
 	}
 
-	// If a SnapshotService is registered for this partition, surface
-	// its directory to the ABCI snapshot hooks so this node can serve
-	// snapshots via CometBFT state-sync. Without this, ABCI ListSnapshots
-	// has no idea where to look and either nil-panics or returns empty.
-	//
-	// SnapshotService.Directory is workdir-relative (e.g. "dnn/snapshots"),
-	// but the ABCI Accumulator's RootDir is the per-partition node dir
-	// (e.g. <workdir>/dnn). Strip the leading nodeDir component so
-	// MakeAbsolute(nodeDir, dir) doesn't produce <workdir>/dnn/dnn/snapshots.
-	var snapshotsCfg *nodecfg.Snapshots
-	for _, s := range inst.config.Services {
-		ss, ok := s.(*SnapshotService)
-		if !ok {
-			continue
-		}
-		if !strings.EqualFold(ss.Partition, c.Partition.ID) {
-			continue
-		}
-		dir := ss.Directory
-		// Strip the leading nodeDir component if present (e.g.
-		// "dnn/snapshots" → "snapshots") since ABCI Accumulator's
-		// MakeAbsolute uses RootDir = <workdir>/<nodeDir> already.
-		nodeDirName := filepath.Base(d.config.RootDir)
-		if rel, err := filepath.Rel(nodeDirName, ss.Directory); err == nil && !strings.HasPrefix(rel, "..") {
-			dir = rel
-		}
-		snapshotsCfg = &nodecfg.Snapshots{
-			Enable:    true,
-			Directory: dir,
-		}
-		break
-	}
-
 	app := abci.NewAccumulator(abci.AccumulatorOptions{
 		ID:           inst.id,
 		Address:      d.privVal.Key.PubKey.Address(),
@@ -708,7 +674,6 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 		Genesis:      genesis.DocProvider(d.config),
 		Partition:    c.Partition.ID,
 		RootDir:      d.config.RootDir,
-		Snapshots:    snapshotsCfg,
 		SnapshotPath: d.snapshotPath,
 
 		MaxEnvelopesPerBlock: int(*c.MaxEnvelopesPerBlock),

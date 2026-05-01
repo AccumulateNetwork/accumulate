@@ -7,11 +7,12 @@
 package run
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"log/slog"
 	"net"
 	"net/http"
-	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -50,36 +51,6 @@ func (h *HttpService) Requires() []ioc.Requirement {
 
 func (h *HttpService) Provides() []ioc.Provided { return nil }
 
-// collectSnapshotDirs walks the configured services list and returns
-// a partition→absolute-directory map for every SnapshotService.
-// Recurses into SubnodeService.Services since the dual-node setup
-// nests per-partition services under a SubnodeService for the BVN.
-// The Directory in SnapshotService is relative to the run config's
-// root dir, so we make it absolute here for the http handler.
-func collectSnapshotDirs(rootDir string, services []Service) map[string]string {
-	out := map[string]string{}
-	var walk func(string, []Service)
-	walk = func(base string, ss []Service) {
-		for _, s := range ss {
-			switch s := s.(type) {
-			case *SnapshotService:
-				dir := s.Directory
-				if !filepath.IsAbs(dir) {
-					dir = filepath.Join(base, dir)
-				}
-				out[strings.ToLower(s.Partition)] = dir
-			case *SubnodeService:
-				walk(filepath.Join(base, s.Name), s.Services)
-			}
-		}
-	}
-	walk(rootDir, services)
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}
-
 func (h *HttpService) start(inst *Instance) error {
 	setDefaultVal(&h.Listen, []multiaddr.Multiaddr{multiaddr.StringCast("/ip4/0.0.0.0/tcp/8080/http")})
 	h.applyHttpDefaults()
@@ -107,11 +78,6 @@ func (h *HttpService) start(inst *Instance) error {
 		MaxWait:   DefaultHTTPMaxWait,
 		NetworkId: inst.config.Network,
 	}
-	// Bootstrap-v3: collect partition→snapshot-dir mapping from
-	// any registered SnapshotService instances. The HTTP handler
-	// then exposes /v3/snapshot/:partition[/:major] for launchers
-	// to fetch verified-state snapshots.
-	apiOpts.SnapshotDirs = collectSnapshotDirs(inst.rootDir, inst.config.Services)
 	client := &message.Client{Transport: &message.RoutedTransport{
 		Network: inst.config.Network,
 		Router:  routing.MessageRouter{Router: router},
@@ -159,6 +125,34 @@ func (h *HttpService) start(inst *Instance) error {
 				_ = json.NewEncoder(w).Encode(haltInst.GetHaltStatus())
 			default:
 				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			}
+			return
+		}
+
+		// Atomic per-partition snapshot for the bootstrap-v3 launcher.
+		// Returns snapshot v2 bytes as a binary body; metadata is in
+		// response headers. Bypasses jsonrpc/websocket so a 25-30 MB
+		// body doesn't get base64'd into a JSON field.
+		const psPrefix = "/v3/partition-state/"
+		if r.Method == "GET" && strings.HasPrefix(r.URL.Path, psPrefix) {
+			partition := r.URL.Path[len(psPrefix):]
+			h, ok := inst.PartitionStateHandler(partition)
+			if !ok {
+				http.Error(w, "unknown partition", http.StatusNotFound)
+				return
+			}
+			block, root, body, err := h.BuildPartitionState()
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Header().Set("X-Accumulate-Block-Index", strconv.FormatUint(block, 10))
+			w.Header().Set("X-Accumulate-Bpt-Root", hex.EncodeToString(root[:]))
+			w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+			if _, err := w.Write(body); err != nil {
+				slog.ErrorContext(r.Context(), "partition-state write failed",
+					"error", err, "partition", partition)
 			}
 			return
 		}

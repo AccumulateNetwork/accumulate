@@ -53,6 +53,15 @@ type CollectOptions struct {
 	// other messages (e.g. a signature's link to a transaction).
 	SkipMessageRefs bool
 
+	// SkipMessages omits the entire message-collection phase: no message
+	// hashes are gathered while walking accounts, and no message records
+	// are written. The result is an account-state-only snapshot that the
+	// bootstrap-v3 launcher restores under one db.View. Predicate alone
+	// can't do this — it short-circuits per-message but still walks every
+	// chain entry to enumerate them, which is prohibitively slow on a
+	// real network.
+	SkipMessages bool
+
 	Metrics *CollectMetrics
 }
 
@@ -184,7 +193,11 @@ func (batch *Batch) Collect(file io.WriteSeeker, partition *url.URL, opts *Colle
 	// Collect messages
 	//AI: Collect and write all message records (transactions, signatures, etc.)
 	//AI: to the snapshot file, optionally recording their locations in the index.
-	err = batch.collectMessages(w, index, hashes, opts)
+	if opts.SkipMessages {
+		err = nil
+	} else {
+		err = batch.collectMessages(w, index, hashes, opts)
+	}
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -262,10 +275,15 @@ func (batch *Batch) collectAccounts(w *snapshot.Writer, index, hashes *indexing.
 			return errors.UnknownError.WithFormat("collect %v: %w", account.Url(), err)
 		}
 
-		// Collect message hashes from all the message chains
-		err = collectMessageHashes(account, hashes, opts)
-		if err != nil {
-			return errors.UnknownError.WithFormat("collect %v message hashes: %w", account.Url(), err)
+		// Collect message hashes from all the message chains. Skipped
+		// when SkipMessages is set — walking every chain to enumerate
+		// message hashes is the dominant cost on a real network and is
+		// pure waste when the caller doesn't want messages anyway.
+		if !opts.SkipMessages {
+			err = collectMessageHashes(account, hashes, opts)
+			if err != nil {
+				return errors.UnknownError.WithFormat("collect %v message hashes: %w", account.Url(), err)
+			}
 		}
 	}
 	if it.Err() != nil {
@@ -616,7 +634,7 @@ func Restore(db Beginner, file ioutil.SectionReader, opts *RestoreOptions) error
 		return errors.UnknownError.WithFormat("open snapshot: %w", err)
 	}
 
-	hashes, err := readBptSnapshot(rd, opts)
+	bptEntries, hashes, err := readBptSnapshot(rd, opts)
 	if err != nil {
 		return errors.UnknownError.WithFormat("load hashes: %w", err)
 	}
@@ -694,7 +712,11 @@ func Restore(db Beginner, file ioutil.SectionReader, opts *RestoreOptions) error
 		}
 	}
 
-	// Force the BPT to update
+	// Force the BPT to update — this writes BPT entries for every account
+	// whose body was restored above. Orphan entries (BPT entries whose
+	// account body was deleted on the source but the BPT entry persisted as
+	// part of consensus state) are not visited here because they are not
+	// dirty; they are restored separately below.
 	err = batch.UpdateBPT()
 	if err != nil {
 		return errors.UnknownError.WithFormat("update BPT: %w", err)
@@ -709,17 +731,58 @@ func Restore(db Beginner, file ioutil.SectionReader, opts *RestoreOptions) error
 		return nil
 	}
 
+	// Restore orphan BPT entries verbatim from the snapshot. An orphan is a
+	// BPT entry with no corresponding account body — the body was deleted on
+	// the source but the BPT entry is still part of consensus state and must
+	// be reproduced to match the snapshot's BPT root. Non-orphan entries are
+	// inserted as a no-op since UpdateBPT already wrote the same value
+	// (consensus guarantees the body's hash equals the BPT entry's value).
+	if len(bptEntries) > 0 {
+		batch = db.Begin(true)
+		for _, e := range bptEntries {
+			err = batch.BPT().Insert(e.Key, e.Value)
+			if err != nil {
+				return errors.UnknownError.WithFormat("insert BPT entry: %w", err)
+			}
+		}
+		err = batch.UpdateBPT()
+		if err != nil {
+			return errors.UnknownError.WithFormat("update BPT: %w", err)
+		}
+		err = batch.Commit()
+		if err != nil {
+			return errors.UnknownError.WithFormat("commit changes: %w", err)
+		}
+	}
+
 	// We can't check an account's hash until its records are written
 	batch = db.Begin(false)
 	it := batch.IterateAccounts()
 	for it.Next() {
 		account := it.Value()
 
+		kh := account.Key().Hash()
+
+		// Orphan check: the account body may be missing while the BPT entry
+		// remains. Most orphans (staking pages, etc.) still reproduce their
+		// stored leaf hash from body-less state via account.Hash(), so we
+		// verify them. Per-block ledger orphans are the exception — their
+		// historical leaf hash was written under an older account layout
+		// and does not reproduce — so we trust the snapshot verbatim there.
+		_, mainErr := account.Main().Get()
+		isOrphan := errors.Is(mainErr, errors.NotFound)
+		if mainErr != nil && !isOrphan {
+			return errors.UnknownError.WithFormat("load account main: %w", mainErr)
+		}
+		if isOrphan && isBlockLedgerUrl(account.Url()) {
+			delete(hashes, kh)
+			continue
+		}
+
 		hash, err := account.Hash()
 		if err != nil {
 			return errors.UnknownError.WithFormat("calculate account hash: %w", err)
 		}
-		kh := account.Key().Hash()
 		if hashes[kh] != hash {
 			return errors.InvalidRecord.WithFormat("account %v hash does not match", account.Url())
 		}
@@ -757,16 +820,34 @@ func Restore(db Beginner, file ioutil.SectionReader, opts *RestoreOptions) error
 	return nil
 }
 
-func readBptSnapshot(snap *snapshot.Reader, opts *RestoreOptions) (map[[32]byte][32]byte, error) {
+// isBlockLedgerUrl reports whether u is a per-block ledger account, i.e.
+// <partition>.acme/ledger/<digits>. These are the only orphan accounts whose
+// stored leaf hash does not reproduce from body-less state — they were
+// written under an older account layout and are cleaned up by V2Jiuquan.
+func isBlockLedgerUrl(u *url.URL) bool {
+	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+	if len(parts) != 2 || parts[0] != protocol.Ledger {
+		return false
+	}
+	for _, c := range parts[1] {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func readBptSnapshot(snap *snapshot.Reader, opts *RestoreOptions) ([]*snapshot.RecordEntry, map[[32]byte][32]byte, error) {
 	if opts.SkipHashCheck {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	bpt, err := snap.OpenBPT(-1)
 	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
+		return nil, nil, errors.UnknownError.Wrap(err)
 	}
 
+	var entries []*snapshot.RecordEntry
 	hashes := map[[32]byte][32]byte{}
 	for {
 		r, err := bpt.Read()
@@ -774,12 +855,13 @@ func readBptSnapshot(snap *snapshot.Reader, opts *RestoreOptions) (map[[32]byte]
 			if errors.Is(err, io.EOF) {
 				break
 			}
-			return nil, errors.UnknownError.Wrap(err)
+			return nil, nil, errors.UnknownError.Wrap(err)
 		}
 
+		entries = append(entries, r)
 		hashes[r.Key.Hash()] = *(*[32]byte)(r.Value)
 	}
-	return hashes, nil
+	return entries, hashes, nil
 }
 
 func collectMessageHashes(a *Account, hashes *indexing.Bucket, opts *CollectOptions) error {

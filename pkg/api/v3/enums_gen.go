@@ -53,6 +53,9 @@ const QueryTypeBlock QueryType = 5
 // QueryTypeBptPage .
 const QueryTypeBptPage QueryType = 6
 
+// QueryTypePartitionState atomic full-state dump of a partition for bootstrap; one db.View covers every leaf and body.
+const QueryTypePartitionState QueryType = 7
+
 // QueryTypeAnchorSearch .
 const QueryTypeAnchorSearch QueryType = 16
 
@@ -82,6 +85,9 @@ const RecordTypeKey RecordType = 4
 
 // RecordTypeBptPage .
 const RecordTypeBptPage RecordType = 5
+
+// RecordTypePartitionState holds the bytes of an atomic partition snapshot at a specific minor block.
+const RecordTypePartitionState RecordType = 6
 
 // RecordTypeMessage .
 const RecordTypeMessage RecordType = 16
@@ -139,9 +145,6 @@ const ServiceTypeValidate ServiceType = 8
 
 // ServiceTypeFaucet is the type of [Faucet].
 const ServiceTypeFaucet ServiceType = 9
-
-// ServiceTypeSnapshot is the type of [SnapshotService].
-const ServiceTypeSnapshot ServiceType = 10
 
 // ServiceTypeBootstrap advertises a node's bootstrap-v3 state. Argument is "active" or "complete"; consumers route current-state queries away from nodes that don't advertise this service..
 const ServiceTypeBootstrap ServiceType = 11
@@ -275,7 +278,7 @@ func (v QueryType) GetEnumValue() uint64 { return uint64(v) }
 func (v *QueryType) SetEnumValue(id uint64) bool {
 	u := QueryType(id)
 	switch u {
-	case QueryTypeDefault, QueryTypeChain, QueryTypeData, QueryTypeDirectory, QueryTypePending, QueryTypeBlock, QueryTypeBptPage, QueryTypeAnchorSearch, QueryTypePublicKeySearch, QueryTypePublicKeyHashSearch, QueryTypeDelegateSearch, QueryTypeMessageHashSearch:
+	case QueryTypeDefault, QueryTypeChain, QueryTypeData, QueryTypeDirectory, QueryTypePending, QueryTypeBlock, QueryTypeBptPage, QueryTypePartitionState, QueryTypeAnchorSearch, QueryTypePublicKeySearch, QueryTypePublicKeyHashSearch, QueryTypeDelegateSearch, QueryTypeMessageHashSearch:
 		*v = u
 		return true
 	}
@@ -299,6 +302,8 @@ func (v QueryType) String() string {
 		return "block"
 	case QueryTypeBptPage:
 		return "bptPage"
+	case QueryTypePartitionState:
+		return "partitionState"
 	case QueryTypeAnchorSearch:
 		return "anchorSearch"
 	case QueryTypePublicKeySearch:
@@ -330,6 +335,8 @@ func QueryTypeByName(name string) (QueryType, bool) {
 		return QueryTypeBlock, true
 	case "bptpage":
 		return QueryTypeBptPage, true
+	case "partitionstate":
+		return QueryTypePartitionState, true
 	case "anchorsearch":
 		return QueryTypeAnchorSearch, true
 	case "publickeysearch":
@@ -372,7 +379,7 @@ func (v RecordType) GetEnumValue() uint64 { return uint64(v) }
 func (v *RecordType) SetEnumValue(id uint64) bool {
 	u := RecordType(id)
 	switch u {
-	case RecordTypeAccount, RecordTypeChain, RecordTypeChainEntry, RecordTypeKey, RecordTypeBptPage, RecordTypeMessage, RecordTypeSignatureSet, RecordTypeMinorBlock, RecordTypeMajorBlock, RecordTypeRange, RecordTypeUrl, RecordTypeTxID, RecordTypeIndexEntry, RecordTypeError:
+	case RecordTypeAccount, RecordTypeChain, RecordTypeChainEntry, RecordTypeKey, RecordTypeBptPage, RecordTypePartitionState, RecordTypeMessage, RecordTypeSignatureSet, RecordTypeMinorBlock, RecordTypeMajorBlock, RecordTypeRange, RecordTypeUrl, RecordTypeTxID, RecordTypeIndexEntry, RecordTypeError:
 		*v = u
 		return true
 	}
@@ -392,6 +399,8 @@ func (v RecordType) String() string {
 		return "key"
 	case RecordTypeBptPage:
 		return "bptPage"
+	case RecordTypePartitionState:
+		return "partitionState"
 	case RecordTypeMessage:
 		return "message"
 	case RecordTypeSignatureSet:
@@ -427,6 +436,8 @@ func RecordTypeByName(name string) (RecordType, bool) {
 		return RecordTypeKey, true
 	case "bptpage":
 		return RecordTypeBptPage, true
+	case "partitionstate":
+		return RecordTypePartitionState, true
 	case "message":
 		return RecordTypeMessage, true
 	case "signatureset":
@@ -477,7 +488,7 @@ func (v ServiceType) GetEnumValue() uint64 { return uint64(v) }
 func (v *ServiceType) SetEnumValue(id uint64) bool {
 	u := ServiceType(id)
 	switch u {
-	case ServiceTypeUnknown, ServiceTypeNode, ServiceTypeConsensus, ServiceTypeNetwork, ServiceTypeMetrics, ServiceTypeQuery, ServiceTypeEvent, ServiceTypeSubmit, ServiceTypeValidate, ServiceTypeFaucet, ServiceTypeSnapshot, ServiceTypeBootstrap:
+	case ServiceTypeUnknown, ServiceTypeNode, ServiceTypeConsensus, ServiceTypeNetwork, ServiceTypeMetrics, ServiceTypeQuery, ServiceTypeEvent, ServiceTypeSubmit, ServiceTypeValidate, ServiceTypeFaucet, ServiceTypeBootstrap:
 		*v = u
 		return true
 	}
@@ -507,8 +518,6 @@ func (v ServiceType) String() string {
 		return "validate"
 	case ServiceTypeFaucet:
 		return "faucet"
-	case ServiceTypeSnapshot:
-		return "snapshot"
 	case ServiceTypeBootstrap:
 		return "bootstrap"
 	}
@@ -538,8 +547,6 @@ func ServiceTypeByName(name string) (ServiceType, bool) {
 		return ServiceTypeValidate, true
 	case "faucet":
 		return ServiceTypeFaucet, true
-	case "snapshot":
-		return ServiceTypeSnapshot, true
 	case "bootstrap":
 		return ServiceTypeBootstrap, true
 	}
