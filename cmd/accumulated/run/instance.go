@@ -17,6 +17,7 @@ import (
 
 	"github.com/google/uuid"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/bootpersist"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"go.opentelemetry.io/otel"
@@ -97,6 +98,78 @@ func (inst *Instance) PartitionStateHandler(partition string) (partitionStateHan
 	defer inst.partitionStateMu.RUnlock()
 	h, ok := inst.partitionState[strings.ToLower(partition)]
 	return h, ok
+}
+
+// BootstrapStateView is the JSON shape returned by GET
+// /admin/bootstrap-state. Aggregates the bootstrap-state.json artifacts
+// found under the Instance's rootDir, keyed by partition.
+type BootstrapStateView struct {
+	// Partitions maps partition ID (case preserved from the artifact)
+	// to its loaded record. Empty when no artifact is present, e.g.
+	// nodes that never went through bootstrap-v3.
+	Partitions map[string]*BootstrapStateEntry `json:"partitions"`
+}
+
+// BootstrapStateEntry is the per-partition projection of an artifact
+// returned by /admin/bootstrap-state. Mirrors the persisted record but
+// omits resume credentials so the endpoint is safe to expose.
+type BootstrapStateEntry struct {
+	Network        string    `json:"network,omitempty"`
+	Partition      string    `json:"partition"`
+	State          string    `json:"state"`
+	SinceBlock     uint64    `json:"sinceBlock,omitempty"`
+	VerifiedAnchor string    `json:"verifiedAnchor,omitempty"`
+	HistoryDepth   uint64    `json:"historyDepth,omitempty"`
+	EnteredActive  time.Time `json:"enteredActive,omitzero"`
+}
+
+// collectBootstrapStates scans rootDir and one level of subdirectories
+// for bootstrap-state.json files, loads each via bootpersist.Load, and
+// returns the aggregate. Subdir scope is intentional: the dual-node
+// layout is `<rootDir>/{dnn,bvnn}/bootstrap-state.json`. Errors loading
+// individual files are logged but don't fail the response — the goal
+// is observability, not strict consistency.
+//
+// Defined in instance.go (and not http.go) so it lives next to the
+// Instance fields it reads, even though it's only invoked from the
+// HTTP admin handler.
+func (inst *Instance) collectBootstrapStates() BootstrapStateView {
+	out := BootstrapStateView{Partitions: map[string]*BootstrapStateEntry{}}
+
+	considerDir := func(dir string) {
+		art, err := bootpersist.Load(dir)
+		if errors.Is(err, os.ErrNotExist) {
+			return
+		}
+		if err != nil {
+			inst.logger.Warn("collect bootstrap state", "dir", dir, "error", err)
+			return
+		}
+		entry := &BootstrapStateEntry{
+			Network:        art.Network,
+			Partition:      art.Partition,
+			State:          art.State.Current,
+			SinceBlock:     art.State.SinceBlock,
+			VerifiedAnchor: bootpersist.HexKey(art.State.VerifiedAnchor),
+			HistoryDepth:   art.State.HistoryDepth,
+			EnteredActive:  art.State.EnteredActive,
+		}
+		key := art.Partition
+		if key == "" {
+			key = filepath.Base(dir)
+		}
+		out.Partitions[key] = entry
+	}
+
+	considerDir(inst.rootDir)
+	if entries, err := os.ReadDir(inst.rootDir); err == nil {
+		for _, e := range entries {
+			if e.IsDir() {
+				considerDir(filepath.Join(inst.rootDir, e.Name()))
+			}
+		}
+	}
+	return out
 }
 
 // ReservePartitionState atomically applies the rate limit for a

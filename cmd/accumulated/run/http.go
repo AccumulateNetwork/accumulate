@@ -130,6 +130,18 @@ func (h *HttpService) start(inst *Instance) error {
 			return
 		}
 
+		// Bootstrap-v3 state observability. Returns the contents of
+		// every bootstrap-state.json found under haltInst.rootDir
+		// (typically dnn/ and bvnn/) keyed by partition. Operators can
+		// curl this to confirm whether a node was bootstrapped via
+		// bootstrap-v3 and at what state, without parsing logs.
+		if r.Method == http.MethodGet && r.URL.Path == "/admin/bootstrap-state" {
+			states := haltInst.collectBootstrapStates()
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(states)
+			return
+		}
+
 		// Atomic per-partition snapshot for the bootstrap-v3 launcher.
 		// Returns snapshot v2 bytes as a binary body; metadata is in
 		// response headers. Bypasses jsonrpc/websocket so a 25-30 MB
