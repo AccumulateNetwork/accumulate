@@ -101,11 +101,7 @@ var flagBootstrap = struct {
 	PageSize       uint64
 	AnchorHex      string
 	AnchorBlk      uint64
-	WriteConfig    bool
-	TmListen       string
-	TmBootstrap    string // comma-separated Tendermint multiaddrs for catch-up
-	TmRpcServers   string // comma-separated Tendermint RPC URLs for state seeding (≥2)
-	TmP2PPeers     string // comma-separated Tendermint P2P host:port pairs (paired with --tm-rpc-servers; node IDs derived via /status)
+	TmRpcServers   string
 }{}
 
 func init() {
@@ -114,16 +110,12 @@ func init() {
 	f.StringVar(&flagBootstrap.Network, "network", "", "Network identifier (mainnet/testnet/devnet/...)")
 	f.StringVar(&flagBootstrap.Partition, "partition", "Directory", "Partition to bootstrap (Directory or BVN name)")
 	f.StringVar(&flagBootstrap.PeerWS, "peer", "", "WebSocket URL of an ACTIVE/COMPLETE peer")
-	f.StringVar(&flagBootstrap.PeerAnchorPool, "peer-anchor-pool", "", "URL of the peer's anchor pool that holds anchors from --partition (e.g. acc://dn.acme/anchors when bootstrapping a BVN)")
+	f.StringVar(&flagBootstrap.PeerAnchorPool, "peer-anchor-pool", "", "URL of the peer's anchor pool (e.g. acc://dn.acme/anchors when bootstrapping a BVN); recorded in bootstrap-state.json for the deferred daemon-side verify loop")
 	f.StringVar(&flagBootstrap.DataDir, "data-dir", "", "Bootstrap data directory (defaults to --work-dir)")
 	f.Uint64Var(&flagBootstrap.PageSize, "page-size", 256, "Paginated query page size")
 	f.StringVar(&flagBootstrap.AnchorHex, "anchor-hex", "", "DEV: hex-encoded BPT root that promotes ACTIVE on match")
 	f.Uint64Var(&flagBootstrap.AnchorBlk, "anchor-block", 0, "DEV: block height associated with --anchor-hex")
-	f.BoolVar(&flagBootstrap.WriteConfig, "write-config", true, "After bootstrap, write accumulate.toml + move BPT db into the launchable layout that 'accumulated run' expects")
-	f.StringVar(&flagBootstrap.TmListen, "tm-listen", "/ip4/0.0.0.0/tcp/26656", "Listen address for the launched daemon (Tendermint base port; Accumulate ports derived from it)")
-	f.StringVar(&flagBootstrap.TmBootstrap, "tm-bootstrap-peers", "", "Comma-separated Tendermint P2P multiaddrs (e.g. /dns/host/tcp/26656/p2p/<id>) used as persistent peers for catch-up")
-	f.StringVar(&flagBootstrap.TmRpcServers, "tm-rpc-servers", "", "Comma-separated Tendermint RPC URLs (≥2 required for light-client state seeding, e.g. http://host:26657,http://host2:26657)")
-	f.StringVar(&flagBootstrap.TmP2PPeers, "tm-p2p-peers", "", "Comma-separated Tendermint P2P host:port pairs paired with --tm-rpc-servers; node IDs are fetched via /status (e.g. host:26656,host2:26656)")
+	f.StringVar(&flagBootstrap.TmRpcServers, "tm-rpc-servers", "", "Comma-separated CometBFT RPC URLs (e.g. http://host:26657); first entry is used for /block app_hash verification. If unset, the URL is derived from --peer (api port − 3).")
 }
 
 func runBootstrap(cmd *cobra.Command, _ []string) {
@@ -134,11 +126,6 @@ func runBootstrap(cmd *cobra.Command, _ []string) {
 		fatalf("--network required")
 	}
 
-	// Snapshot fetch is the default and recommended path. The legacy
-	// spine-pull + enumerate + hydrate path is opt-in via --spine-pull
-	// because it has unfixed defects against a live network: a race
-	// between hydrate and source advancement (#4018) and BPT entries
-	// the source can't hydrate (#4019).
 	if flagBootstrap.PeerWS == "" {
 		fatalf("--peer required")
 	}
@@ -302,10 +289,6 @@ func runBootstrap(cmd *cobra.Command, _ []string) {
 			SinceBlock:     since,
 			VerifiedAnchor: peerRoot,
 			EnteredActive:  time.Now().UTC(),
-		},
-		Phases: bootpersist.Phases{
-			SpinePullDone: true,
-			EnumerateDone: true,
 		},
 	}
 	if err := bootpersist.Save(dataDir, art); err != nil {
