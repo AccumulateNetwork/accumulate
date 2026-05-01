@@ -190,14 +190,11 @@ func (batch *Batch) Collect(file io.WriteSeeker, partition *url.URL, opts *Colle
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	// Collect messages
-	//AI: Collect and write all message records (transactions, signatures, etc.)
-	//AI: to the snapshot file, optionally recording their locations in the index.
-	if opts.SkipMessages {
-		err = nil
-	} else {
-		err = batch.collectMessages(w, index, hashes, opts)
-	}
+	// Collect messages. The bucket holds either every message hash
+	// (default) or just pending-referenced hashes (SkipMessages).
+	// Either way, collectMessages writes whatever records exist for
+	// each hash; non-existent records produce no entries.
+	err = batch.collectMessages(w, index, hashes, opts)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -275,11 +272,20 @@ func (batch *Batch) collectAccounts(w *snapshot.Writer, index, hashes *indexing.
 			return errors.UnknownError.WithFormat("collect %v: %w", account.Url(), err)
 		}
 
-		// Collect message hashes from all the message chains. Skipped
-		// when SkipMessages is set — walking every chain to enumerate
-		// message hashes is the dominant cost on a real network and is
-		// pure waste when the caller doesn't want messages anyway.
-		if !opts.SkipMessages {
+		// Collect message hashes from chains. The default walks every
+		// transaction chain (the dominant cost on a real network).
+		// SkipMessages restricts collection to messages referenced by
+		// each account's Pending list — exactly what the BPT leaf hash
+		// (observer.hashPending) reads. Without those records the
+		// post-restore per-account hash check fails on any account
+		// with pending state. Completed/historical transactions are
+		// not needed for execute and are still skipped.
+		if opts.SkipMessages {
+			err = collectPendingMessageHashes(account, hashes, opts)
+			if err != nil {
+				return errors.UnknownError.WithFormat("collect %v pending hashes: %w", account.Url(), err)
+			}
+		} else {
 			err = collectMessageHashes(account, hashes, opts)
 			if err != nil {
 				return errors.UnknownError.WithFormat("collect %v message hashes: %w", account.Url(), err)
@@ -862,6 +868,32 @@ func readBptSnapshot(snap *snapshot.Reader, opts *RestoreOptions) ([]*snapshot.R
 		hashes[r.Key.Hash()] = *(*[32]byte)(r.Value)
 	}
 	return entries, hashes, nil
+}
+
+// collectPendingMessageHashes adds the message-level hash for every
+// TxID in the account's Pending list to the bucket. This is the
+// SkipMessages path — instead of walking every transaction chain,
+// we walk only the records the BPT leaf hash actually reads
+// (see observer.hashPending). For V1 pending entries this writes the
+// V1 Transaction's Main + Status; for V2 pending entries the
+// account-scoped Transaction(...) sub-records are already collected
+// in collectAccounts, so collectMessages may write nothing extra
+// for V2 hashes — both cases are correct.
+func collectPendingMessageHashes(a *Account, hashes *indexing.Bucket, _ *CollectOptions) error {
+	pending, err := a.Pending().Get()
+	if err != nil {
+		if errors.Is(err, errors.NotFound) {
+			return nil
+		}
+		return errors.UnknownError.WithFormat("load pending: %w", err)
+	}
+	for _, txid := range pending {
+		h := txid.Hash()
+		if err := hashes.Write(h, nil); err != nil {
+			return errors.UnknownError.WithFormat("record pending hash: %w", err)
+		}
+	}
+	return nil
 }
 
 func collectMessageHashes(a *Account, hashes *indexing.Bucket, opts *CollectOptions) error {
