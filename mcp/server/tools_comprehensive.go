@@ -1088,9 +1088,9 @@ func (s *Server) createKeyPage(args map[string]interface{}) (map[string]interfac
 	}
 
 	result := map[string]interface{}{
-		"txHash":      fmt.Sprintf("%x", txHash),
-		"keybookURL":  keybookURL,
-		"keysAdded":   len(keys),
+		"txHash":     fmt.Sprintf("%x", txHash),
+		"keybookURL": keybookURL,
+		"keysAdded":  len(keys),
 	}
 
 	resultData, err := json.MarshalIndent(result, "", "  ")
@@ -1158,9 +1158,9 @@ func (s *Server) updateKeyPage(args map[string]interface{}) (map[string]interfac
 	}
 
 	result := map[string]interface{}{
-		"txHash":      fmt.Sprintf("%x", txHash),
-		"keypageURL":  keypageURL,
-		"operation":   operation,
+		"txHash":     fmt.Sprintf("%x", txHash),
+		"keypageURL": keypageURL,
+		"operation":  operation,
 	}
 
 	resultData, err := json.MarshalIndent(result, "", "  ")
@@ -1217,8 +1217,8 @@ func (s *Server) createKeyBook(args map[string]interface{}) (map[string]interfac
 	}
 
 	result := map[string]interface{}{
-		"txHash":      fmt.Sprintf("%x", txHash),
-		"keybookURL":  keybookURL,
+		"txHash":     fmt.Sprintf("%x", txHash),
+		"keybookURL": keybookURL,
 	}
 
 	resultData, err := json.MarshalIndent(result, "", "  ")
@@ -1285,9 +1285,9 @@ func (s *Server) updateAccountAuth(args map[string]interface{}) (map[string]inte
 	}
 
 	result := map[string]interface{}{
-		"txHash":           fmt.Sprintf("%x", txHash),
-		"accountURL":       accountURL,
-		"operationsCount":  len(operations),
+		"txHash":          fmt.Sprintf("%x", txHash),
+		"accountURL":      accountURL,
+		"operationsCount": len(operations),
 	}
 
 	resultData, err := json.MarshalIndent(result, "", "  ")

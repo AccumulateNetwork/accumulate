@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -10,13 +10,13 @@ import (
 	"crypto/sha256"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"sort"
 
 	cometLog "github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"log/slog"
 )
 
 func main() {

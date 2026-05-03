@@ -124,11 +124,11 @@ func (s *Server) dbBuildFulldb(args map[string]interface{}) (map[string]interfac
 
 	// Return result
 	result := map[string]interface{}{
-		"output":       outputPath,
-		"snapshot":     snapshot,
-		"total":        totalAccounts,
-		"partitions":   accountsPerPartition,
-		"bpt_hash":     bptHashHex,
+		"output":     outputPath,
+		"snapshot":   snapshot,
+		"total":      totalAccounts,
+		"partitions": accountsPerPartition,
+		"bpt_hash":   bptHashHex,
 	}
 
 	return result, nil

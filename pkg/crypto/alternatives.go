@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -83,13 +83,13 @@ func FromECDSAPub(pub *ecdsa.PublicKey) []byte {
 		return nil
 	}
 	// Use the curve from the key, don't assume S256()
-	return elliptic.Marshal(pub.Curve, pub.X, pub.Y)
+	return elliptic.Marshal(pub.Curve, pub.X, pub.Y) //nolint:staticcheck // crypto/ecdh doesn't support secp256k1
 }
 
 // UnmarshalPubkey converts bytes to a secp256k1 public key.
 // Replaces ethereum/go-ethereum/crypto.UnmarshalPubkey
 func UnmarshalPubkey(pub []byte) (*ecdsa.PublicKey, error) {
-	x, y := elliptic.Unmarshal(S256(), pub)
+	x, y := elliptic.Unmarshal(S256(), pub) //nolint:staticcheck // crypto/ecdh doesn't support secp256k1
 	if x == nil {
 		return nil, errors.New("invalid secp256k1 public key")
 	}

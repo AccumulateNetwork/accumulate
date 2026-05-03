@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -57,13 +57,13 @@ func DefaultDiscoveryConfig() DiscoveryConfig {
 
 // ActiveDiscovery performs active peer discovery for the bootstrap server
 type ActiveDiscovery struct {
-	host       host.Host
-	dht        *dht.IpfsDHT
-	tracker    *PartitionTracker
-	metrics    *MetricsCollector
-	config     DiscoveryConfig
-	stopCh     chan struct{}
-	wg         sync.WaitGroup
+	host    host.Host
+	dht     *dht.IpfsDHT
+	tracker *PartitionTracker
+	metrics *MetricsCollector
+	config  DiscoveryConfig
+	stopCh  chan struct{}
+	wg      sync.WaitGroup
 
 	// Known bootstrap peers to seed discovery
 	bootstrapPeers []peer.AddrInfo
@@ -234,7 +234,7 @@ func (ad *ActiveDiscovery) randomWalkDiscovery(ctx context.Context) int {
 
 		// Generate a random peer ID to search for
 		randomBytes := make([]byte, 32)
-		rand.Read(randomBytes)
+		rand.Read(randomBytes) //nolint:staticcheck // math/rand is fine for non-cryptographic peer-discovery probing
 
 		// FindPeersConnectedToPeer or GetClosestPeers does a DHT walk
 		closestCtx, cancel := context.WithTimeout(ctx, 30*time.Second)

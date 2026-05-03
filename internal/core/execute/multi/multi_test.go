@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -232,20 +232,38 @@ func TestVersionSwitch(t *testing.T) {
 		Txn(st.TxID).Succeeds(),
 		VersionIs(ExecutorVersionV2Jiuquan))
 
+	// Update to v2 cyclops-bpt-repair
+	fmt.Println("Switching to v2 cyclops-bpt-repair")
+	st = sim.SubmitTxnSuccessfully(MustBuild(t,
+		build.Transaction().For(DnUrl()).
+			ActivateProtocolVersion(ExecutorVersionV2CyclopsBptRepair).
+			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(&timestamp).Signer(sim.SignWithNode(Directory, 0))))
+
+	sim.StepUntil(
+		Txn(st.TxID).Succeeds(),
+		VersionIs(ExecutorVersionV2CyclopsBptRepair))
+
+	// Give the version transition time to propagate to all partitions
+	// before the next activation (matches the pattern used by earlier
+	// activations that submit additional transactions).
+	sim.StepN(10)
+
 	if GetAccount[*SystemLedger](t, sim.Database(Directory), DnUrl().JoinPath(Ledger)).ExecutorVersion != ExecutorVersionLatest {
 		c := color.New(color.BgRed, color.FgWhite, color.Bold)
 		t.Fatal(c.Sprint("!!! THIS TEST NEEDS TO BE UPDATED !!!") + `
 		This test must be updated any time a new protocol version is added`)
 	}
 
-	// Update to the next version (verify that updates aren't broken)
+	// Update to the next version (verify that updates aren't broken).
+	// Use StepUntilN with a higher bound because each successive
+	// activation cycle adds several blocks of anchor propagation.
 	fmt.Println("Switching to v2 next")
 	st = sim.SubmitTxnSuccessfully(MustBuild(t,
 		build.Transaction().For(DnUrl()).
 			ActivateProtocolVersion(ExecutorVersionVNext).
 			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(&timestamp).Signer(sim.SignWithNode(Directory, 0))))
 
-	sim.StepUntil(
+	sim.StepUntilN(100,
 		Txn(st.TxID).Succeeds(),
 		VersionIs(ExecutorVersionVNext))
 }

@@ -130,7 +130,7 @@ func TestHTTPServer_ToolCallRequest(t *testing.T) {
 		"id":      3,
 		"method":  "tools/call",
 		"params": map[string]interface{}{
-			"name": "accumulate_db_list",
+			"name":      "accumulate_db_list",
 			"arguments": map[string]interface{}{},
 		},
 	}

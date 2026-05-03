@@ -183,18 +183,18 @@ func (s *Server) initFollower(args map[string]interface{}) (map[string]interface
 	}
 
 	result := map[string]interface{}{
-		"status":         "initialized",
-		"work_dir":       workDir,
-		"dn_path":        dnnPath,
-		"bvn_path":       bvnnPath,
-		"config_path":    configPath,
-		"container_name": containerName,
-		"network":        network,
-		"bvn_name":       bvnName,
-		"peer_source":    peerSource,
-		"dn_peers_count": len(dnBootstrapPeers),
+		"status":          "initialized",
+		"work_dir":        workDir,
+		"dn_path":         dnnPath,
+		"bvn_path":        bvnnPath,
+		"config_path":     configPath,
+		"container_name":  containerName,
+		"network":         network,
+		"bvn_name":        bvnName,
+		"peer_source":     peerSource,
+		"dn_peers_count":  len(dnBootstrapPeers),
 		"bvn_peers_count": len(bvnBootstrapPeers),
-		"next_steps":     "Use accumulate_run_follower to start the follower node in Docker",
+		"next_steps":      "Use accumulate_run_follower to start the follower node in Docker",
 	}
 
 	if dnGenesisPath != "" {
@@ -312,7 +312,7 @@ func (s *Server) runFollower(args map[string]interface{}) (map[string]interface{
 			"dn_api":  "16591-16593",
 			"bvn_api": "16691-16693",
 		},
-		"message": "Follower started in Docker container",
+		"message":      "Follower started in Docker container",
 		"check_status": fmt.Sprintf("docker logs -f %s", containerName),
 	}, nil
 }
@@ -636,11 +636,11 @@ func (s *Server) getGenesisFiles(args map[string]interface{}) (map[string]interf
 	bvnGenesis := filepath.Join(accumDir, fmt.Sprintf("bvn%s-genesis.snap", bvn))
 
 	result := map[string]interface{}{
-		"network":               network,
-		"bvn":                   bvn,
-		"dn_genesis_snap":       dnGenesis,
-		"bvn_genesis_snap":      bvnGenesis,
-		"accumulate_directory":  accumDir,
+		"network":              network,
+		"bvn":                  bvn,
+		"dn_genesis_snap":      dnGenesis,
+		"bvn_genesis_snap":     bvnGenesis,
+		"accumulate_directory": accumDir,
 	}
 
 	// Check if files exist

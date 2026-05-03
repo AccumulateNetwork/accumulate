@@ -1,3 +1,9 @@
+// Copyright 2026 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 // Utility to initialize CometBFT state.db from a genesis.json file
 // This is needed for blocksync when starting from genesis without InitChain
 package main
@@ -8,9 +14,9 @@ import (
 	"os"
 	"path/filepath"
 
+	dbm "github.com/cometbft/cometbft-db"
 	sm "github.com/cometbft/cometbft/state"
 	cmttypes "github.com/cometbft/cometbft/types"
-	dbm "github.com/cometbft/cometbft-db"
 )
 
 func main() {

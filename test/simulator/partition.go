@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -64,7 +64,7 @@ func (p *Partition) Begin(writable bool) *database.Batch {
 
 func (p *Partition) SetObserver(observer database.Observer) {
 	for _, n := range p.nodes {
-		n.database.SetObserver(observer)
+		n.database.SetObserver(observer) //nolint:staticcheck // SetObserver is for test/specialized observers
 	}
 }
 

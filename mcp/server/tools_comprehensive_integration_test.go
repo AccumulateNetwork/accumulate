@@ -1,3 +1,4 @@
+//go:build integration
 // +build integration
 
 package server
@@ -597,7 +598,7 @@ func TestComprehensive_KeyManagement(t *testing.T) {
 	t.Run("update_account_auth", func(t *testing.T) {
 		// Update account authorities
 		args := map[string]interface{}{
-			"account":     adiURL,
+			"account": adiURL,
 			"operations": []map[string]interface{}{
 				{
 					"operation": "enable",
@@ -694,13 +695,13 @@ func TestComprehensive_TokenIssuance(t *testing.T) {
 		tokenURL = adiURL + "/TestToken"
 
 		args := map[string]interface{}{
-			"url":         tokenURL,
-			"symbol":      "TST",
-			"precision":   "8",
+			"url":          tokenURL,
+			"symbol":       "TST",
+			"precision":    "8",
 			"supply_limit": "1000000000000000", // 10 million tokens
-			"principal":   adiURL,
-			"private_key": hex.EncodeToString(adiPriv),
-			"network":     devnetEndpoint,
+			"principal":    adiURL,
+			"private_key":  hex.EncodeToString(adiPriv),
+			"network":      devnetEndpoint,
 		}
 
 		result, err := server.createToken(args)

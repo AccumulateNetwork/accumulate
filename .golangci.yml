@@ -11,6 +11,8 @@ linters-settings:
     values:
       const:
         AUTHOR: The Accumulate Authors
+      regexp:
+        YEAR: \d{4}
     template: |-
       Copyright {{ YEAR }} {{ AUTHOR }}
 
@@ -72,6 +74,10 @@ issues:
     - gosec
 
   - path: smt/.*/RandHash\.go
+    linters:
+    - noprint
+
+  - path: ^(internal/database/snapshot\.go|internal/node/daemon/snapshots\.go)$
     linters:
     - noprint
 

@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -92,7 +92,7 @@ func TestSyncMonitor_StaleButMakingFastProgress(t *testing.T) {
 	// Prime the monitor with initial state
 	m.lastHeight = 90
 	m.lastCheckTime = time.Now().Add(-1 * time.Second) // 1 second ago
-	m.staleCount = 5                                    // already stale
+	m.staleCount = 5                                   // already stale
 
 	// Check with height 100 - that's 10 blocks in 1 second = 10 bl/sec (fast sync)
 	result, err := m.Check(context.Background())
@@ -117,7 +117,7 @@ func TestSyncMonitor_StaleButMakingSlowProgress(t *testing.T) {
 	// Prime the monitor with initial state
 	m.lastHeight = 99
 	m.lastCheckTime = time.Now().Add(-1 * time.Second) // 1 second ago
-	m.staleCount = 2                                    // already stale
+	m.staleCount = 2                                   // already stale
 
 	// Check with height 100 - that's 1 block in 1 second = 1 bl/sec (slow, just following)
 	result, err := m.Check(context.Background())
@@ -222,8 +222,8 @@ func TestSyncMonitor_NoPersistentPeers(t *testing.T) {
 	m.lastCheckTime = time.Now().Add(-1 * time.Second)
 
 	// Trigger reconnect threshold
-	m.Check(context.Background())
-	m.Check(context.Background())
+	_, _ = m.Check(context.Background())
+	_, _ = m.Check(context.Background())
 
 	assert.Empty(t, dialer.dialCalls, "should not dial when no peers configured")
 }
@@ -248,7 +248,7 @@ func TestSyncMonitor_DialError(t *testing.T) {
 	m.lastCheckTime = time.Now().Add(-1 * time.Second)
 
 	// Trigger reconnect - should not panic on dial error
-	m.Check(context.Background())
+	_, _ = m.Check(context.Background())
 	result, err := m.Check(context.Background())
 
 	require.NoError(t, err) // Check itself shouldn't error
@@ -295,8 +295,8 @@ func TestSyncMonitor_Reset(t *testing.T) {
 	// Build up some state
 	m.lastHeight = 100
 	m.lastCheckTime = time.Now().Add(-1 * time.Second)
-	m.Check(context.Background())
-	m.Check(context.Background())
+	_, _ = m.Check(context.Background())
+	_, _ = m.Check(context.Background())
 	assert.Greater(t, m.StaleCount(), 0)
 
 	// Reset

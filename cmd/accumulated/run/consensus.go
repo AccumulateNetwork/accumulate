@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -272,8 +272,8 @@ func (c *ConsensusService) start(inst *Instance) error {
 		}
 
 		// Increase bandwidth limits for fast sync (default 5MB/s)
-		d.config.P2P.SendRate = 20480000  // 20 MB/s
-		d.config.P2P.RecvRate = 20480000  // 20 MB/s
+		d.config.P2P.SendRate = 20480000 // 20 MB/s
+		d.config.P2P.RecvRate = 20480000 // 20 MB/s
 
 		// Reduce flush throttle for more responsive connections
 		d.config.P2P.FlushThrottleTimeout = 50 * time.Millisecond // default 100ms

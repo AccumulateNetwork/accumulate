@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -474,9 +474,9 @@ func (s *Server) makeCreateIdentityHandler(client *jsonrpc.Client) ToolHandler {
 
 		keyHash := sha256.Sum256(pubKey)
 		body := &protocol.CreateIdentity{
-			Url:         u,
-			KeyHash:     keyHash[:],
-			KeyBookUrl:  u.JoinPath("book"),
+			Url:        u,
+			KeyHash:    keyHash[:],
+			KeyBookUrl: u.JoinPath("book"),
 		}
 
 		result, err := s.buildAndSubmit(client, signer, body, signer, signerKeyHash)
@@ -662,7 +662,7 @@ func (s *Server) makeCreateKeyBookHandler(client *jsonrpc.Client) ToolHandler {
 
 		keyHash := sha256.Sum256(pubKey)
 		body := &protocol.CreateKeyBook{
-			Url:         u,
+			Url:           u,
 			PublicKeyHash: keyHash[:],
 		}
 
@@ -896,7 +896,7 @@ func (s *Server) makeIssueTokensHandler(client *jsonrpc.Client) ToolHandler {
 		amountBig := big.NewInt(int64(amount * 1e8))
 
 		body := &protocol.IssueTokens{
-			To:     []*protocol.TokenRecipient{{Url: to, Amount: *amountBig}},
+			To: []*protocol.TokenRecipient{{Url: to, Amount: *amountBig}},
 		}
 
 		result, err := s.buildAndSubmit(client, issuer, body, signer, signerKeyHash)

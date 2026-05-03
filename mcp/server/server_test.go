@@ -468,7 +468,7 @@ func TestHandleCallTool_WithValidTool(t *testing.T) {
 		"id":      7,
 		"method":  "tools/call",
 		"params": map[string]interface{}{
-			"name": "accumulate_generate_key",
+			"name":      "accumulate_generate_key",
 			"arguments": map[string]interface{}{
 				// generate_key requires no arguments
 			},

@@ -69,6 +69,8 @@ lint:
       optional: true
   variables:
     GIT_DEPTH: 0
+    # mockery v2.42.x panics on Go 1.23+ types.Alias values; disable via gotypesalias=0
+    GODEBUG: gotypesalias=0
   before_script:
     - function die { echo -e "${BOLD_RED}${1}${NO_COLOR}"; false; }
     - function check-diff { git diff --quiet "$@" && return 0; git --no-pager -c color.ui=always diff; return 1; }

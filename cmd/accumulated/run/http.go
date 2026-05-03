@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -109,18 +109,18 @@ func (h *HttpService) start(inst *Instance) error {
 			switch r.Method {
 			case http.MethodPost:
 				haltInst.RequestHaltAll()
-				json.NewEncoder(w).Encode(HaltResponse{
+				_ = json.NewEncoder(w).Encode(HaltResponse{
 					Status:  "scheduled",
 					Message: "Node will halt after next major block",
 				})
 			case http.MethodDelete:
 				haltInst.CancelHaltAll()
-				json.NewEncoder(w).Encode(HaltResponse{
+				_ = json.NewEncoder(w).Encode(HaltResponse{
 					Status:  "cancelled",
 					Message: "Halt request cancelled",
 				})
 			case http.MethodGet:
-				json.NewEncoder(w).Encode(haltInst.GetHaltStatus())
+				_ = json.NewEncoder(w).Encode(haltInst.GetHaltStatus())
 			default:
 				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			}

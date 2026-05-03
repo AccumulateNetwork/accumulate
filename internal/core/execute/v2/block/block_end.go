@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -323,6 +323,18 @@ func (b *Block) executePostUpdateActions() error {
 					return errors.UnknownError.WithFormat("delete BPT entry for block ledger %d: %w", i+j, err)
 				}
 			}
+		}
+
+	case protocol.ExecutorVersionV2CyclopsBptRepair:
+		// One-shot repair of the 22 BPT entries on the Cyclops BVN
+		// whose state was dropped during the post-reorg
+		// single-validator window. The repair function inspects the
+		// current partition and applies the per-partition target
+		// list (currently only Cyclops BVN has targets). UpdateBPT
+		// runs immediately after, refreshing the leaves.
+		// See docs/incidents/2026-05-cyclops-bpt-drift.md.
+		if err := b.applyCyclopsBptRepair(); err != nil {
+			return errors.UnknownError.WithFormat("cyclops BPT repair: %w", err)
 		}
 	}
 	return nil
