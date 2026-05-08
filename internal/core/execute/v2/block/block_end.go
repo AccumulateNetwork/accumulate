@@ -24,7 +24,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -169,21 +168,18 @@ func (block *Block) Close() (execute.BlockState, error) {
 		}
 	}
 
-	// Record the block entries
-	if block.Executor.globals.Active.ExecutorVersion.V2JiuquanEnabled() {
-		bl := new(database.BlockLedger)
-		bl.Index = block.Index
-		bl.Time = block.Time
-		bl.Entries = block.State.ChainUpdates.Entries
-		err = ledger.BlockLedger().Append(record.NewKey(block.Index), bl)
-	} else {
-		bl := new(protocol.BlockLedger)
-		bl.Url = m.Describe.Ledger().JoinPath(strconv.FormatUint(block.Index, 10))
-		bl.Index = block.Index
-		bl.Time = block.Time
-		bl.Entries = block.State.ChainUpdates.Entries
-		err = block.Batch.Account(bl.Url).Main().Put(bl)
-	}
+	// Record the block entries.
+	// The V2Jiuquan-gated branch (database.BlockLedger via index) is intentionally
+	// disabled on this fork. Cyclops on mainnet (the BVN's only validator) keeps
+	// writing block-ledger Accounts to the BPT, so followers must do the same to
+	// stay consensus-compatible with it. See docs/incidents/2026-05-08-* for the
+	// full investigation.
+	bl := new(protocol.BlockLedger)
+	bl.Url = m.Describe.Ledger().JoinPath(strconv.FormatUint(block.Index, 10))
+	bl.Index = block.Index
+	bl.Time = block.Time
+	bl.Entries = block.State.ChainUpdates.Entries
+	err = block.Batch.Account(bl.Url).Main().Put(bl)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("store block ledger: %w", err)
 	}
@@ -290,40 +286,11 @@ func (b *Block) executePostUpdateActions() error {
 
 	switch version {
 	case protocol.ExecutorVersionV2Jiuquan:
-		// For each previously recorded block, add a placeholder to the new
-		// block ledger and delete the BPT entry for the old block ledger
-		// account
-		acct := b.Batch.Account(b.Executor.Describe.Ledger())
-		chain := acct.RootChain().Index()
-		head, err := chain.Head().Get()
-		if err != nil {
-			return errors.UnknownError.WithFormat("load root index chain head: %w", err)
-		}
-
-		var entry protocol.IndexEntry
-		for i := 0; i < int(head.Count); i += 256 {
-			entries, err := chain.Inner().Entries(int64(i), int64(i+256))
-			if err != nil {
-				return errors.UnknownError.WithFormat("load root index chain entries (%d, %d): %w", i, i+255, err)
-			}
-
-			for j, data := range entries {
-				entry = protocol.IndexEntry{}
-				err = entry.UnmarshalBinary(data)
-				if err != nil {
-					return errors.UnknownError.WithFormat("decode root index chain entry %d: %w", i+j, err)
-				}
-				err = acct.BlockLedger().Append(record.NewKey(entry.BlockIndex), &database.BlockLedger{})
-				if err != nil {
-					return errors.UnknownError.WithFormat("add ledger entry for block %d: %w", i+j, err)
-				}
-				blockLedgerAccount := b.Batch.Account(b.Executor.Describe.BlockLedger(entry.BlockIndex))
-				err = b.Batch.BPT().Delete(blockLedgerAccount.Key())
-				if err != nil {
-					return errors.UnknownError.WithFormat("delete BPT entry for block ledger %d: %w", i+j, err)
-				}
-			}
-		}
+		// Migration disabled on this fork. The V2Jiuquan migration would delete
+		// block-ledger BPT entries that the BVN validator (Cyclops on mainnet)
+		// still keeps. Doing so re-introduces the divergence we're recovering
+		// from. See docs/incidents/2026-05-08-* for the full investigation.
+		_ = b
 	}
 	return nil
 }
