@@ -213,16 +213,56 @@ func run(_ *cobra.Command, _ []string) error {
 			SetTimestampWithVar(&timestamp)
 	}
 
-	// Construct envelope 1: UpdateKeyPage to add new key + adjust threshold.
-	env1, err := buildAddToOperatorPage(values, len(page.Keys), newKeyHash[:], signers)
-	if err != nil {
-		return fmt.Errorf("build keypage update: %w", err)
+	// If the new validator key is already in operators/1, envelope 1 (the
+	// AddKeyOperation) is a no-op — AddKey silently drops duplicates and the
+	// keypage version doesn't bump, which makes the post-env1 wait spin until
+	// timeout and env2 hit "invalid version". This happens when promoting an
+	// existing operator onto an additional partition (e.g. fol1 is already a
+	// Cyclops validator and now also needs to be a DN validator). Skip env1
+	// entirely in that case; env2 commits at the CURRENT page version.
+	alreadyInPage := false
+	for _, k := range page.Keys {
+		if string(k.PublicKeyHash) == string(newKeyHash[:]) {
+			alreadyInPage = true
+			break
+		}
 	}
-	fmt.Printf("[promote] envelope 1 (keypage update) txid: %x\n", env1.Transaction[0].GetHash()[:8])
 
-	// Bump signer versions for envelope 2 (it'll commit at version+1).
-	for _, s := range signers {
-		s.Version++
+	if !alreadyInPage {
+		// Construct envelope 1: UpdateKeyPage to add new key + adjust threshold.
+		env1, err := buildAddToOperatorPage(values, len(page.Keys), newKeyHash[:], signers)
+		if err != nil {
+			return fmt.Errorf("build keypage update: %w", err)
+		}
+		fmt.Printf("[promote] envelope 1 (keypage update) txid: %x\n", env1.Transaction[0].GetHash()[:8])
+
+		// Submit env1 first.
+		if err := submitAndWait(ctx, ws, env1, "keypage update"); err != nil {
+			return err
+		}
+
+		// Poll the keypage until its version actually bumps. Submit's
+		// Wait=true returns when the transaction is in a block, but the
+		// keypage account state may not be readable at the new version
+		// from every peer for another tick. Without this poll, env2's
+		// signers (using version+1) hit "invalid version: have 1, got 2".
+		deadline := time.Now().Add(45 * time.Second)
+		for time.Now().Before(deadline) {
+			var p *protocol.KeyPage
+			_, err := q.QueryAccountAs(ctx, operatorsURL, nil, &p)
+			if err == nil && p != nil && p.Version > page.Version {
+				fmt.Printf("[promote] keypage version bumped to %d\n", p.Version)
+				break
+			}
+			time.Sleep(2 * time.Second)
+		}
+
+		// Bump signer versions for env2 (it'll commit at version+1).
+		for _, s := range signers {
+			s.Version++
+		}
+	} else {
+		fmt.Println("[promote] new validator key already in operators/1; skipping keypage update (env1)")
 	}
 
 	// Construct envelope 2: WriteData on network with new validator entry.
@@ -233,33 +273,16 @@ func run(_ *cobra.Command, _ []string) error {
 	}
 	fmt.Printf("[promote] envelope 2 (network update) txid: %x\n", env2.Transaction[0].GetHash()[:8])
 
-	// Submit env1 first.
-	if err := submitAndWait(ctx, ws, env1, "keypage update"); err != nil {
-		return err
-	}
-
-	// Poll the keypage until its version actually bumps. Submit's
-	// Wait=true returns when the transaction is in a block, but the
-	// keypage account state may not be readable at the new version
-	// from every peer for another tick. Without this poll, env2's
-	// signers (using version+1) hit "invalid version: have 1, got 2".
-	deadline := time.Now().Add(45 * time.Second)
-	for time.Now().Before(deadline) {
-		var p *protocol.KeyPage
-		_, err := q.QueryAccountAs(ctx, operatorsURL, nil, &p)
-		if err == nil && p != nil && p.Version > page.Version {
-			fmt.Printf("[promote] keypage version bumped to %d\n", p.Version)
-			break
-		}
-		time.Sleep(2 * time.Second)
-	}
-
 	// Submit env2.
 	if err := submitAndWait(ctx, ws, env2, "network update"); err != nil {
 		return err
 	}
 
-	fmt.Println("[promote] both envelopes committed; validator promotion complete")
+	if alreadyInPage {
+		fmt.Println("[promote] envelope 2 committed; validator promotion complete (env1 skipped)")
+	} else {
+		fmt.Println("[promote] both envelopes committed; validator promotion complete")
+	}
 	return nil
 }
 
