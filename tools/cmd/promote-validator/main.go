@@ -92,7 +92,13 @@ func run(_ *cobra.Command, _ []string) error {
 	// Decode the new validator's pubkey. Accept either:
 	//   - 64 hex chars (32-byte ed25519 pubkey)
 	//   - AS1... (Accumulate-encoded ed25519 private key — we derive pubkey)
+	//
+	// When AS1 is provided, we also keep the private half so the new key can
+	// sign env2 itself (after env1 puts it in operators/1). That extra signer
+	// matters whenever threshold(N+1) > len(opKeys), which is the common case
+	// for the first few promotions under a 2/3 acceptance threshold.
 	var newPubKey []byte
+	var newPrivKey []byte
 	if strings.HasPrefix(flags.NewValidatorKey, "AS1") {
 		addr, err := address.Parse(flags.NewValidatorKey)
 		if err != nil {
@@ -103,6 +109,7 @@ func run(_ *cobra.Command, _ []string) error {
 			return fmt.Errorf("--new-validator-key %q: not an ed25519 private key", flags.NewValidatorKey)
 		}
 		newPubKey = ed25519.PrivateKey(priv).Public().(ed25519.PublicKey)
+		newPrivKey = priv
 	} else {
 		var err error
 		newPubKey, err = hex.DecodeString(strings.TrimPrefix(flags.NewValidatorKey, "0x"))
@@ -260,6 +267,23 @@ func run(_ *cobra.Command, _ []string) error {
 		// Bump signer versions for env2 (it'll commit at version+1).
 		for _, s := range signers {
 			s.Version++
+		}
+
+		// If we have the new validator's private key (AS1 input), add it as
+		// a signer for env2. After env1 commits, the new key is in
+		// operators/1 at version+1 and is a valid signer. This is the
+		// difference that makes 1→2 work under 2/3: env2 needs T(2)=2,
+		// which is exactly val0 + the just-added new validator.
+		if newPrivKey != nil {
+			newSigner := new(signing.Builder).
+				SetType(protocol.SignatureTypeED25519).
+				UseSimpleHash().
+				SetPrivateKey(ed25519.PrivateKey(newPrivKey)).
+				SetUrl(operatorsURL).
+				SetVersion(page.Version + 1).
+				SetTimestampWithVar(&timestamp)
+			signers = append(signers, newSigner)
+			fmt.Println("[promote] added new validator key as env2 signer (now in operators/1)")
 		}
 	} else {
 		fmt.Println("[promote] new validator key already in operators/1; skipping keypage update (env1)")
