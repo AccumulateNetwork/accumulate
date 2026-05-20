@@ -44,7 +44,12 @@ func init() {
 	cmd.Flags().VarP((*MultiaddrSliceFlag)(&flag.Peers), "peer", "p", "Peers to connect to")
 	cmd.Flags().Var(MultiaddrFlag{Value: &flag.External}, "external", "External address to advertize")
 
-	cmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
+	// PreRun (not PersistentPreRun) so this default-setting only fires
+	// when the root daemon command is invoked, not when a subcommand
+	// (e.g., `accumulated-bootstrap version`) runs. The subcommand
+	// doesn't declare `prom-listen`, so cascading would crash on a nil
+	// flag lookup.
+	cmd.PreRun = func(cmd *cobra.Command, args []string) {
 		if !cmd.Flag("prom-listen").Changed {
 			flag.PromListen = []multiaddr.Multiaddr{multiaddr.StringCast("/ip4/0.0.0.0/tcp/8081/http")}
 		}
