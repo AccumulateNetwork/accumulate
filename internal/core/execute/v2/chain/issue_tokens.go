@@ -64,7 +64,9 @@ func (x IssueTokens) Execute(st *StateManager, tx *Delivery) (protocol.Transacti
 		return nil, fmt.Errorf("invalid principal: want chain type %v, got %v", protocol.AccountTypeTokenIssuer, st.Origin.Type())
 	}
 
-	// Calculate the total and update Issued
+	// Calculate the total and update Issued. Symmetric inverse:
+	// SyntheticBurnTokens.Execute subtracts on burn — burning returns
+	// ACME to the unissued supply.
 	total := new(big.Int)
 	for _, to := range recipients {
 		total.Add(total, &to.Amount)
