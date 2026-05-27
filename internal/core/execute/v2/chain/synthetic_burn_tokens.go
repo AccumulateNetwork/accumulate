@@ -48,7 +48,10 @@ func (x SyntheticBurnTokens) Execute(st *StateManager, tx *Delivery) (protocol.T
 		return nil, fmt.Errorf("invalid principal: want chain type %v, got %v", protocol.AccountTypeTokenIssuer, st.Origin.Type())
 	}
 
-	// Subtract the amount burnt from the amount issued
+	// Burning returns ACME to the unissued supply: subtract the burnt
+	// amount from the issuer's Issued field. This is the symmetric inverse
+	// of TokenIssuer.Issue (which adds to Issued); the unissued supply
+	// (SupplyLimit - Issued) rises by exactly the burnt amount.
 	account.Issued.Sub(&account.Issued, &body.Amount)
 
 	// Verify that the result is not negative. The marshaller isn't capable of
