@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"net"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -287,6 +288,17 @@ func (c *ConsensusService) start(inst *Instance) error {
 		return err
 	}
 
+	// Advertise this node's real external address to CometBFT peers. CometBFT
+	// otherwise leaves ExternalAddress empty and auto-detects, which on
+	// NAT'd/multi-homed hosts resolves to the wrong IP; PEX then propagates
+	// that wrong address across the network and every node collapses to a
+	// single peer (the long-standing "nodes only ever get one peer" problem).
+	// Derived fresh from the operator-configured [p2p] external on every start
+	// so it always reflects current config rather than a stale tendermint.toml.
+	if ext := c.cometExternalAddress(inst); ext != "" {
+		d.config.P2P.ExternalAddress = ext
+	}
+
 	err = d.config.ValidateBasic()
 	if err != nil {
 		return err
@@ -470,6 +482,27 @@ func (c *ConsensusService) genesisDocProvider(inst *Instance) tmnode.GenesisDocP
 
 		return genesis.ConvertSnapshotToJson(all)
 	}
+}
+
+// cometExternalAddress returns the CometBFT external (advertised) P2P address
+// for this consensus node: the host from the operator-configured [p2p] external
+// multiaddr combined with this partition's CometBFT P2P port (the same port
+// ListenAddress uses). Returns "" when no external address is configured, in
+// which case CometBFT keeps its default auto-detection behaviour.
+func (c *ConsensusService) cometExternalAddress(inst *Instance) string {
+	if inst.config.P2P == nil || inst.config.P2P.External == nil {
+		return ""
+	}
+	_, host, _, _, err := decomposeListen(inst.config.P2P.External)
+	if err != nil || host == "" {
+		return ""
+	}
+	// Reuse the exact port logic of ListenAddress, swapping in the external host.
+	_, _, port, _, err := decomposeListen(listen(c.Listen, defaultHost, useTCP{}, portCmtP2P))
+	if err != nil || port == "" {
+		return ""
+	}
+	return net.JoinHostPort(host, port)
 }
 
 func cmtPeerAddress(addr multiaddr.Multiaddr) (string, error) {
