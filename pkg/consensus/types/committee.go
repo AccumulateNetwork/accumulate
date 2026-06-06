@@ -9,9 +9,26 @@ package types
 import (
 	"bytes"
 	"crypto/ed25519"
+	"crypto/sha256"
+	"encoding/binary"
 	"errors"
 	"sync"
 )
+
+// CommitteeDigest is a 32-byte SHA-256 hash that canonically identifies a committee
+// (its epoch, validators, and their stakes). It is the stake-weighted analog of a
+// CometBFT ValidatorsHash and is used to chain validator-set transitions across epochs.
+type CommitteeDigest [32]byte
+
+// IsZero returns true if the digest is all zeros.
+func (d CommitteeDigest) IsZero() bool {
+	return d == CommitteeDigest{}
+}
+
+// String returns a hex-encoded string representation of the digest.
+func (d CommitteeDigest) String() string {
+	return hexEncode(d[:])
+}
 
 // ValidatorInfo represents a validator in the committee.
 type ValidatorInfo struct {
@@ -89,6 +106,46 @@ func (c *Committee) ValidityThreshold() uint64 {
 	total := c.TotalStake()
 	// f+1 where f < n/3, so we need > 1/3 of stake
 	return total/3 + 1
+}
+
+// Digest returns a canonical SHA-256 commitment to the committee: its epoch and its
+// validators (each as public key + stake) in deterministic order. A verifier holding the
+// same epoch, validator set, and stakes recomputes the identical digest, so it can serve as
+// the stake-weighted ValidatorsHash analog when proving validator-set lineage across epochs.
+func (c *Committee) Digest() CommitteeDigest {
+	return sha256.Sum256(c.marshalForDigest())
+}
+
+// marshalForDigest serializes the committee for digest computation.
+// Format:
+//   - Epoch (8 bytes, big-endian)
+//   - NumValidators (4 bytes, big-endian)
+//   - Validators sorted by public key: [PublicKey (32 bytes)][Stake (8 bytes, big-endian)] each
+//
+// Validators are sorted into a local copy so the digest is independent of input ordering and
+// the caller's slice is left untouched.
+func (c *Committee) marshalForDigest() []byte {
+	sorted := make([]ValidatorInfo, len(c.Validators))
+	copy(sorted, c.Validators)
+	sortValidatorsByKey(sorted)
+
+	data := make([]byte, 8+4+len(sorted)*(32+8))
+	offset := 0
+
+	binary.BigEndian.PutUint64(data[offset:], c.Epoch)
+	offset += 8
+
+	binary.BigEndian.PutUint32(data[offset:], uint32(len(sorted)))
+	offset += 4
+
+	for _, v := range sorted {
+		copy(data[offset:], v.PublicKey)
+		offset += 32
+		binary.BigEndian.PutUint64(data[offset:], v.Stake)
+		offset += 8
+	}
+
+	return data
 }
 
 // GetValidator returns the validator at the given index.
