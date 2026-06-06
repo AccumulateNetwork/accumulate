@@ -48,8 +48,12 @@ func createCertificate(t *testing.T, header *types.Header, committee *types.Comm
 	headerDigest := header.Digest()
 
 	for _, idx := range signerIndices {
-		sig := ed25519.Sign(privKeys[idx], headerDigest[:])
-		cert.AddSignature(uint16(idx), sig)
+		// Certificate signatures are over the vote content (headerDigest+round+epoch),
+		// not the header digest alone. Sign via the public Vote API so the fixtures match
+		// Certificate.Verify after #3880 removed the insecure headerDigest-only fallback.
+		vote := types.NewVote(headerDigest, header.Round, header.Epoch, committee.Validators[idx].PublicKey)
+		require.NoError(t, vote.Sign(privKeys[idx]))
+		cert.AddSignature(uint16(idx), vote.Signature)
 	}
 
 	return cert
@@ -161,12 +165,16 @@ func TestCertificate_Verify(t *testing.T) {
 		header := createSignedHeader(t, pub, priv, 1, 0)
 		headerDigest := header.Digest()
 
+		// Sign the vote content (headerDigest+round+epoch) so the signatures are valid and
+		// Verify reaches the duplicate-signer check rather than failing on signature validity.
+		voteSig := func(idx int) []byte {
+			vote := types.NewVote(headerDigest, header.Round, header.Epoch, committee.Validators[idx].PublicKey)
+			require.NoError(t, vote.Sign(privKeys[idx]))
+			return vote.Signature
+		}
+
 		cert := types.NewCertificate(header,
-			[][]byte{
-				ed25519.Sign(privKeys[0], headerDigest[:]),
-				ed25519.Sign(privKeys[0], headerDigest[:]),
-				ed25519.Sign(privKeys[1], headerDigest[:]),
-			},
+			[][]byte{voteSig(0), voteSig(0), voteSig(1)},
 			[]uint16{0, 0, 1}, // Duplicate 0
 		)
 
