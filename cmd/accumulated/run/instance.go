@@ -48,6 +48,12 @@ type Instance struct {
 	haltControllersMu sync.RWMutex
 	haltControllers   map[string]*HaltController
 
+	// consensusAdv serves this node's CometBFT endpoints (one per
+	// partition) to the bootstrap server over consensuspeer.ProtocolID
+	// (#4043). Populated by each ConsensusService as it starts.
+	consensusAdvMu sync.Mutex
+	consensusAdv   *consensusAdvertiser
+
 	// partitionState is the per-partition handler the HTTP listener
 	// uses to serve atomic bootstrap snapshots over GET
 	// /v3/partition-state/<partition>. The bootstrap-v3 launcher hits

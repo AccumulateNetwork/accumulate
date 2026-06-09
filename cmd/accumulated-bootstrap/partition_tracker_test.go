@@ -11,14 +11,14 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"testing"
-	"time"
 
 	"github.com/cometbft/cometbft/crypto/tmhash"
+	tmp2p "github.com/cometbft/cometbft/p2p"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/multiformats/go-multiaddr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/consensuspeer"
 )
 
 // newTrackerPeer returns a libp2p peer ID and the CometBFT node ID
@@ -35,68 +35,73 @@ func newTrackerPeer(t *testing.T) (peer.ID, string) {
 }
 
 // newBareTracker builds a tracker with no libp2p host. GetConsensusPeers
-// and GetPeersByPartition only read the in-memory maps, so a host is not
-// needed for these tests.
+// only reads consensusByPartition, so a host is not needed here.
 func newBareTracker() *PartitionTracker {
 	return &PartitionTracker{
-		peers:       make(map[peer.ID]*PeerPartitionInfo),
-		byPartition: make(map[string]map[peer.ID]struct{}),
+		peers:                make(map[peer.ID]*PeerPartitionInfo),
+		byPartition:          make(map[string]map[peer.ID]struct{}),
+		consensusByPartition: make(map[string]map[peer.ID]consensuspeer.Peer),
 	}
-}
-
-func (pt *PartitionTracker) putPeer(id peer.ID, partition string, addrs ...string) {
-	mas := make([]multiaddr.Multiaddr, 0, len(addrs))
-	for _, a := range addrs {
-		ma, err := multiaddr.NewMultiaddr(a)
-		if err != nil {
-			panic(err)
-		}
-		mas = append(mas, ma)
-	}
-	pt.peers[id] = &PeerPartitionInfo{
-		PeerID:    id,
-		Partition: partition,
-		Addresses: mas,
-		LastSeen:  time.Now(),
-	}
-	if pt.byPartition[partition] == nil {
-		pt.byPartition[partition] = make(map[peer.ID]struct{})
-	}
-	pt.byPartition[partition][id] = struct{}{}
 }
 
 func TestGetConsensusPeers(t *testing.T) {
 	pt := newBareTracker()
 
-	id, wantID := newTrackerPeer(t)
-	pt.putPeer(id, PartitionDN, "/ip4/203.0.113.7/tcp/16593")
+	id, nodeID := newTrackerPeer(t)
+	pt.recordAdvertised(id, nodeID, "directory", "198.51.100.4", 26656)
 
-	peers := pt.GetConsensusPeers(PartitionDN)
+	peers := pt.GetConsensusPeers("Directory") // query is case-insensitive
 	require.Len(t, peers, 1)
-	assert.Equal(t, wantID, string(peers[0].ID))
-	assert.Equal(t, "203.0.113.7", peers[0].Host)
-	assert.Equal(t, 16591, peers[0].Port)
-	assert.Equal(t, wantID+"@203.0.113.7:16591", peers[0].DialString())
+	assert.Equal(t, nodeID, string(peers[0].ID))
+	assert.Equal(t, "198.51.100.4", peers[0].Host)
+	assert.Equal(t, 26656, peers[0].Port)
+	assert.Equal(t, nodeID+"@198.51.100.4:26656", peers[0].DialString())
 }
 
-func TestGetConsensusPeers_SkipsLoopback(t *testing.T) {
+func TestGetConsensusPeers_DualNodeDistinguishesPartitions(t *testing.T) {
 	pt := newBareTracker()
 
-	// A peer reachable only on loopback yields nothing dialable.
-	loop, _ := newTrackerPeer(t)
-	pt.putPeer(loop, PartitionDN, "/ip4/127.0.0.1/tcp/16593")
+	// One dual node advertises distinct DN and BVN endpoints on the same
+	// node ID — the exact case derivation could not disambiguate.
+	id, nodeID := newTrackerPeer(t)
+	pt.recordAdvertised(id, nodeID, "directory", "198.51.100.4", 26656)
+	pt.recordAdvertised(id, nodeID, "bvn1", "198.51.100.4", 26756)
 
-	// A peer with both a loopback and a routable address yields the
-	// routable one.
-	dual, wantID := newTrackerPeer(t)
-	pt.putPeer(dual, PartitionDN, "/ip4/127.0.0.1/tcp/16593", "/ip4/198.51.100.4/tcp/16593")
+	dn := pt.GetConsensusPeers("directory")
+	require.Len(t, dn, 1)
+	assert.Equal(t, 26656, dn[0].Port)
 
-	peers := pt.GetConsensusPeers(PartitionDN)
-	require.Len(t, peers, 1)
-	assert.Equal(t, wantID+"@198.51.100.4:16591", peers[0].DialString())
+	bvn := pt.GetConsensusPeers("bvn1")
+	require.Len(t, bvn, 1)
+	assert.Equal(t, 26756, bvn[0].Port)
+	assert.Equal(t, dn[0].ID, bvn[0].ID, "same node ID, different port per partition")
 }
 
 func TestGetConsensusPeers_UnknownPartition(t *testing.T) {
 	pt := newBareTracker()
 	assert.Empty(t, pt.GetConsensusPeers("nope"))
+}
+
+func TestForgetConsensusPeer(t *testing.T) {
+	pt := newBareTracker()
+	id, nodeID := newTrackerPeer(t)
+	pt.recordAdvertised(id, nodeID, "directory", "198.51.100.4", 26656)
+	pt.recordAdvertised(id, nodeID, "bvn1", "198.51.100.4", 26756)
+
+	pt.forgetConsensusPeer(id)
+	assert.Empty(t, pt.GetConsensusPeers("directory"))
+	assert.Empty(t, pt.GetConsensusPeers("bvn1"))
+}
+
+// recordAdvertised stores a peer's advertised endpoint for a partition,
+// keyed exactly as probeConsensusAdvertise does (lowercased partition).
+func (pt *PartitionTracker) recordAdvertised(id peer.ID, nodeID, partition, host string, port int) {
+	if pt.consensusByPartition[partition] == nil {
+		pt.consensusByPartition[partition] = make(map[peer.ID]consensuspeer.Peer)
+	}
+	pt.consensusByPartition[partition][id] = consensuspeer.Peer{
+		ID:   tmp2p.ID(nodeID),
+		Host: host,
+		Port: port,
+	}
 }

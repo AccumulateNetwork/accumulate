@@ -31,10 +31,53 @@ import (
 	"github.com/cometbft/cometbft/crypto/tmhash"
 	tmp2p "github.com/cometbft/cometbft/p2p"
 	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/multiformats/go-multihash"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
+
+// ProtocolID is the libp2p protocol a node serves to advertise its
+// CometBFT consensus endpoints, one per partition it runs. The bootstrap
+// server opens this stream on each peer it tracks and reads the
+// Advertisement (#4043).
+//
+// Advertisement carries only reachability (partition → host:port). The
+// CometBFT NodeID is NOT advertised — it is derived from the peer's
+// libp2p key (NodeIDFromPeerID), which the libp2p stream already
+// authenticates. This keeps identity un-forgeable while letting a
+// multi-partition (dual) node disambiguate which port serves which
+// partition — something pure address derivation cannot do.
+const ProtocolID protocol.ID = "/acc/consensus-peer/1.0.0"
+
+// Advertisement is the JSON a node serves over ProtocolID.
+type Advertisement struct {
+	Peers []Advertised `json:"peers"`
+}
+
+// Advertised is one partition's CometBFT P2P endpoint.
+type Advertised struct {
+	Partition string `json:"partition"`
+	Host      string `json:"host"`
+	Port      int    `json:"port"`
+}
+
+// NodeIDFromPeerID derives the CometBFT node ID from a libp2p peer ID by
+// extracting the embedded public key and hashing it the way CometBFT
+// does. It errors if the peer ID does not embed an extractable key
+// (e.g. a hashed, non-identity multihash for a non-ed25519 key).
+func NodeIDFromPeerID(id peer.ID) (tmp2p.ID, error) {
+	pub, err := id.ExtractPublicKey()
+	if err != nil {
+		return "", errors.BadRequest.WithFormat("extract public key from peer ID: %w", err)
+	}
+	raw, err := pub.Raw()
+	if err != nil {
+		return "", errors.BadRequest.WithFormat("unwrap public key: %w", err)
+	}
+	return tmp2p.ID(hex.EncodeToString(tmhash.SumTruncated(raw))), nil
+}
 
 // Libp2pToCometPortOffset is the difference between a node's libp2p P2P
 // port and its CometBFT P2P port in the standard deployment layout:

@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
@@ -355,6 +356,18 @@ func (c *ConsensusService) start(inst *Instance) error {
 
 	if err := c.App.register(inst, d, node); err != nil {
 		return err
+	}
+
+	// Advertise this partition's CometBFT endpoint so the bootstrap
+	// server can broker it to other nodes (#4043). The external host
+	// plus the partition-specific CometBFT P2P port lets a dual node
+	// distinguish its DN and BVN endpoints on one libp2p host.
+	if ext := c.cometExternalAddress(inst); ext != "" {
+		if host, portStr, err := net.SplitHostPort(ext); err == nil {
+			if port, err := strconv.Atoi(portStr); err == nil {
+				inst.advertiseConsensusEndpoint(c.App.partition().ID, host, port)
+			}
+		}
 	}
 
 	// Start the consensus peer feeder if a broker URL is configured. It

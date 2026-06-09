@@ -93,14 +93,18 @@ var flagInitDualNode struct {
 }
 
 var flagInitNetwork struct {
-	GenesisDoc     string
-	FactomBalances string
+	GenesisDoc          string
+	FactomBalances      string
+	ConsensusPeerBroker string
+	Libp2pBootstrapPeer string
 }
 
 func initInitFlags() {
 	cmdInitNetwork.ResetFlags()
 	cmdInitNetwork.Flags().StringVar(&flagInitNetwork.GenesisDoc, "genesis-doc", "", "Genesis doc for the target network")
 	cmdInitNetwork.Flags().StringVar(&flagInitNetwork.FactomBalances, "factom-balances", "", "Factom addresses and balances file path for writing onto the genesis block")
+	cmdInitNetwork.Flags().StringVar(&flagInitNetwork.ConsensusPeerBroker, "consensus-peer-broker", "", "Bootstrap info-server URL each node polls for CometBFT peers (#4043)")
+	cmdInitNetwork.Flags().StringVar(&flagInitNetwork.Libp2pBootstrapPeer, "libp2p-bootstrap-peer", "", "libp2p bootstrap multiaddr each node dials for discovery (overrides the compiled-in default)")
 
 	cmdInit.ResetFlags()
 	cmdInit.PersistentFlags().BoolVar(&flagInit.NoEmptyBlocks, "no-empty-blocks", false, "Do not create empty blocks")

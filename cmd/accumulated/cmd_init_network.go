@@ -19,6 +19,7 @@ import (
 	"github.com/BurntSushi/toml"
 	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
 	cmtjson "github.com/cometbft/cometbft/libs/json"
+	"github.com/multiformats/go-multiaddr"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run"
 	"gitlab.com/accumulatenetwork/accumulate/exp/faucet"
@@ -147,6 +148,15 @@ func initNetwork(cmd *cobra.Command, args []string) {
 			addr := address.FromED25519PrivateKey(node.DnNodeKey)
 			cfg.P2P.Key = &run.RawPrivateKey{Address: addr.String()}
 
+			// Point libp2p discovery at the given bootstrap peer instead
+			// of the compiled-in default, so a test network's nodes reach
+			// its own bootstrap server (#4043).
+			if flagInitNetwork.Libp2pBootstrapPeer != "" {
+				ma, err := multiaddr.NewMultiaddr(flagInitNetwork.Libp2pBootstrapPeer)
+				check(err)
+				cfg.P2P.BootstrapPeers = []multiaddr.Multiaddr{ma}
+			}
+
 			// Configure the validator
 			cvc := run.AddConfiguration(cfg, new(run.CoreValidatorConfiguration), nil)
 			cfg.Configurations = []run.Configuration{cvc}
@@ -154,6 +164,13 @@ func initNetwork(cmd *cobra.Command, args []string) {
 			cvc.BVN = bvn.Id
 			cvc.BvnBootstrapPeers = bvn.Peers(node).Scheme("tcp").BlockValidator().TendermintP2P().WithKey().Multiaddr()
 			cvc.DnBootstrapPeers = network.Peers(node).Scheme("tcp").Directory().TendermintP2P().WithKey().Multiaddr()
+			cvc.ConsensusPeerBroker = flagInitNetwork.ConsensusPeerBroker
+			if flagInitNetwork.ConsensusPeerBroker != "" {
+				// The consensus-peer feeder advertises this node's
+				// external CometBFT address, derived from P2P.External's
+				// host (#4043). Set it from the node's advertize address.
+				cfg.P2P.External = node.Advertize().Scheme("tcp").Directory().AccumulateP2P().Multiaddr()
+			}
 
 			// Configure the validator key
 			addr = address.FromED25519PrivateKey(node.PrivValKey)

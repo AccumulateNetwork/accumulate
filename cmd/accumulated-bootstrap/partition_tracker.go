@@ -8,6 +8,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"net"
 	"strings"
@@ -43,23 +44,33 @@ type PeerPartitionInfo struct {
 
 // PartitionTracker tracks peers by their partition membership
 type PartitionTracker struct {
-	host      host.Host
-	mu        sync.RWMutex
-	peers     map[peer.ID]*PeerPartitionInfo
+	host        host.Host
+	mu          sync.RWMutex
+	peers       map[peer.ID]*PeerPartitionInfo
 	byPartition map[string]map[peer.ID]struct{}
-	metrics   *MetricsCollector
-	stopCh    chan struct{}
-	probeTick *time.Ticker
+	// consensusByPartition holds CometBFT endpoints learned from peers'
+	// consensus-peer advertisements (#4043), keyed by lowercased
+	// partition ID then peer ID. This is the source for
+	// GetConsensusPeers — separate from byPartition (which is derived
+	// from libp2p protocol IDs) because a node advertises the exact
+	// per-partition CometBFT host:port, which derivation cannot
+	// disambiguate for dual nodes.
+	consensusByPartition map[string]map[peer.ID]consensuspeer.Peer
+	metrics              *MetricsCollector
+	stopCh               chan struct{}
+	probeTick            *time.Ticker
+	consensusTick        *time.Ticker
 }
 
 // NewPartitionTracker creates a new partition tracker
 func NewPartitionTracker(h host.Host, metrics *MetricsCollector) *PartitionTracker {
 	pt := &PartitionTracker{
-		host:        h,
-		peers:       make(map[peer.ID]*PeerPartitionInfo),
-		byPartition: make(map[string]map[peer.ID]struct{}),
-		metrics:     metrics,
-		stopCh:      make(chan struct{}),
+		host:                 h,
+		peers:                make(map[peer.ID]*PeerPartitionInfo),
+		byPartition:          make(map[string]map[peer.ID]struct{}),
+		consensusByPartition: make(map[string]map[peer.ID]consensuspeer.Peer),
+		metrics:              metrics,
+		stopCh:               make(chan struct{}),
 	}
 
 	// Initialize partition maps
@@ -71,6 +82,11 @@ func NewPartitionTracker(h host.Host, metrics *MetricsCollector) *PartitionTrack
 	pt.probeTick = time.NewTicker(5 * time.Minute)
 	go pt.probeLoop()
 
+	// Consensus-peer advertisements change with the validator set and
+	// IPs, so probe them more often than partition membership.
+	pt.consensusTick = time.NewTicker(15 * time.Second)
+	go pt.consensusProbeLoop()
+
 	return pt
 }
 
@@ -79,6 +95,74 @@ func (pt *PartitionTracker) Stop() {
 	close(pt.stopCh)
 	if pt.probeTick != nil {
 		pt.probeTick.Stop()
+	}
+	if pt.consensusTick != nil {
+		pt.consensusTick.Stop()
+	}
+}
+
+// consensusProbeLoop periodically reads consensus-peer advertisements
+// from connected peers (#4043).
+func (pt *PartitionTracker) consensusProbeLoop() {
+	// Probe once shortly after start so the broker converges without
+	// waiting a full tick.
+	pt.probeAllConsensus()
+	for {
+		select {
+		case <-pt.stopCh:
+			return
+		case <-pt.consensusTick.C:
+			pt.probeAllConsensus()
+		}
+	}
+}
+
+// probeAllConsensus opens the consensus-peer advertise stream on every
+// connected peer and records what it serves.
+func (pt *PartitionTracker) probeAllConsensus() {
+	for _, peerID := range pt.host.Network().Peers() {
+		pt.probeConsensusAdvertise(peerID)
+	}
+}
+
+// probeConsensusAdvertise reads one peer's consensus-peer advertisement
+// and records its CometBFT endpoint for each partition it serves. The
+// CometBFT node ID is derived from the peer's libp2p key (the stream is
+// libp2p-authenticated), so only the host:port is taken from the peer.
+func (pt *PartitionTracker) probeConsensusAdvertise(peerID peer.ID) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	id, err := consensuspeer.NodeIDFromPeerID(peerID)
+	if err != nil {
+		slog.Debug("Consensus probe: cannot derive node ID", "peer", peerID, "error", err)
+		return
+	}
+
+	s, err := pt.host.NewStream(ctx, peerID, consensuspeer.ProtocolID)
+	if err != nil {
+		slog.Debug("Consensus probe: stream failed", "peer", peerID, "error", err)
+		return
+	}
+	defer func() { _ = s.Close() }()
+
+	var adv consensuspeer.Advertisement
+	if err := json.NewDecoder(s).Decode(&adv); err != nil {
+		slog.Debug("Consensus probe: decode failed", "peer", peerID, "error", err)
+		return
+	}
+
+	pt.mu.Lock()
+	defer pt.mu.Unlock()
+	for _, a := range adv.Peers {
+		if a.Host == "" || a.Port == 0 || isUnroutableHost(a.Host) {
+			continue
+		}
+		key := strings.ToLower(a.Partition)
+		if pt.consensusByPartition[key] == nil {
+			pt.consensusByPartition[key] = make(map[peer.ID]consensuspeer.Peer)
+		}
+		pt.consensusByPartition[key][peerID] = consensuspeer.Peer{ID: id, Host: a.Host, Port: a.Port}
 	}
 }
 
@@ -241,8 +325,17 @@ func (pt *PartitionTracker) RemovePeer(peerID peer.ID) {
 		delete(pt.byPartition[info.Partition], peerID)
 	}
 	delete(pt.peers, peerID)
+	pt.forgetConsensusPeer(peerID)
 
 	pt.updateMetrics()
+}
+
+// forgetConsensusPeer drops a peer from every consensus partition. The
+// caller must hold pt.mu.
+func (pt *PartitionTracker) forgetConsensusPeer(peerID peer.ID) {
+	for _, byPeer := range pt.consensusByPartition {
+		delete(byPeer, peerID)
+	}
 }
 
 // GetPeersByPartition returns all peers for a given partition
@@ -266,36 +359,23 @@ func (pt *PartitionTracker) GetPeersByPartition(partition string) []PeerPartitio
 	return result
 }
 
-// GetConsensusPeers derives the CometBFT consensus peers
-// (`NodeID@host:port`) for a partition from the libp2p addresses the
-// tracker holds. The CometBFT node ID follows deterministically from
-// each peer's libp2p key (see internal/node/consensuspeer), so no
-// separate consensus-identity advertisement is needed — this is what
-// lets the bootstrap server broker consensus reachability (#4043).
-//
-// One entry is returned per libp2p peer (its first routable address).
-// Loopback / unspecified addresses are skipped, as are addresses that
-// do not yield a valid consensus peer.
+// GetConsensusPeers returns the CometBFT consensus peers
+// (`NodeID@host:port`) for a partition, as learned from peers'
+// consensus-peer advertisements (#4043). The CometBFT node ID is derived
+// from each peer's libp2p key; the host:port is what that peer
+// advertised for this partition, so dual nodes resolve to the correct
+// per-partition endpoint. Returns nil for an unknown partition.
 func (pt *PartitionTracker) GetConsensusPeers(partition string) []consensuspeer.Peer {
-	infos := pt.GetPeersByPartition(partition)
+	pt.mu.RLock()
+	defer pt.mu.RUnlock()
 
-	out := make([]consensuspeer.Peer, 0, len(infos))
-	for _, info := range infos {
-		for _, addr := range info.Addresses {
-			full, err := multiaddr.NewMultiaddr(addr.String() + "/p2p/" + info.PeerID.String())
-			if err != nil {
-				continue
-			}
-			p, err := consensuspeer.FromLibp2pMultiaddr(full)
-			if err != nil {
-				continue
-			}
-			if isUnroutableHost(p.Host) {
-				continue
-			}
-			out = append(out, p)
-			break // one consensus address per peer
-		}
+	byPeer, ok := pt.consensusByPartition[strings.ToLower(partition)]
+	if !ok {
+		return nil
+	}
+	out := make([]consensuspeer.Peer, 0, len(byPeer))
+	for _, p := range byPeer {
+		out = append(out, p)
 	}
 	return out
 }
@@ -428,6 +508,7 @@ func (pt *PartitionTracker) PruneStalePeers(maxAge time.Duration) int {
 				delete(pt.byPartition[info.Partition], peerID)
 			}
 			delete(pt.peers, peerID)
+			pt.forgetConsensusPeer(peerID)
 			pruned++
 		}
 	}
