@@ -343,6 +343,11 @@ func init() {
 				Optional: true,
 				Type:     &schema.SimpleType{Type: schema.SimpleTypeString},
 			},
+			{
+				Name:     "ConsensusPeerBroker",
+				Optional: true,
+				Type:     &schema.SimpleType{Type: schema.SimpleTypeString},
+			},
 			(&schema.Field{
 				Name: "App",
 			}).ResolveTo(&deferredTypes, "ConsensusApp"),
@@ -459,6 +464,11 @@ func init() {
 					TypeBase: schema.TypeBase{},
 				}).
 					ResolveElemTo(&deferredTypes, "StorageType"),
+			},
+			{
+				Name:     "ConsensusPeerBroker",
+				Optional: true,
+				Type:     &schema.SimpleType{Type: schema.SimpleTypeString},
 			},
 		},
 	}).SetGoType()
@@ -641,6 +651,11 @@ func init() {
 					TypeBase: schema.TypeBase{},
 				}).
 					ResolveElemTo(&deferredTypes, "StorageType"),
+			},
+			{
+				Name:     "ConsensusPeerBroker",
+				Optional: true,
+				Type:     &schema.SimpleType{Type: schema.SimpleTypeString},
 			},
 		},
 	}).SetGoType()

@@ -264,13 +264,14 @@ func (v *ConsensusAppType) UnmarshalJSON(b []byte) error {
 }
 
 type ConsensusService struct {
-	NodeDir          string
-	ValidatorKey     PrivateKey
-	Genesis          string
-	Listen           Multiaddr
-	BootstrapPeers   []Multiaddr
-	MetricsNamespace string
-	App              ConsensusApp
+	NodeDir             string
+	ValidatorKey        PrivateKey
+	Genesis             string
+	Listen              Multiaddr
+	BootstrapPeers      []Multiaddr
+	MetricsNamespace    string
+	ConsensusPeerBroker string
+	App                 ConsensusApp
 }
 
 func (ConsensusService) Type() ServiceType { return ServiceTypeConsensus }
@@ -337,6 +338,7 @@ type CoreValidatorConfiguration struct {
 	EnableDirectDispatch *bool
 	MaxEnvelopesPerBlock *uint64
 	StorageType          *StorageType
+	ConsensusPeerBroker  string
 }
 
 func (CoreValidatorConfiguration) Type() ConfigurationType { return ConfigurationTypeCoreValidator }
@@ -519,6 +521,7 @@ type FollowerConfiguration struct {
 	EnableDirectDispatch *bool
 	MaxEnvelopesPerBlock *uint64
 	StorageType          *StorageType
+	ConsensusPeerBroker  string
 }
 
 func (FollowerConfiguration) Type() ConfigurationType { return ConfigurationTypeFollower }

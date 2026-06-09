@@ -104,6 +104,7 @@ func NewInfoServer(h host.Host, listen multiaddr.Multiaddr, external []multiaddr
 	mux.HandleFunc("/health", s.handleHealth)
 	mux.HandleFunc("/peers", s.handlePeers)
 	mux.HandleFunc("/peers/", s.handlePeersByPartition)
+	mux.HandleFunc("/consensus-peers/", s.handleConsensusPeers)
 	mux.HandleFunc("/partitions", s.handlePartitions)
 	mux.HandleFunc("/connect", s.handleConnect)
 	mux.HandleFunc("/stats", s.handleStats)
@@ -749,6 +750,63 @@ func (s *InfoServer) handlePeersByPartition(w http.ResponseWriter, r *http.Reque
 	encoder.SetIndent("", "  ")
 	if err := encoder.Encode(response); err != nil {
 		slog.Error("Failed to encode peers by partition response", "error", err)
+	}
+}
+
+// handleConsensusPeers serves the CometBFT consensus peers
+// (`NodeID@host:port`) for a partition, derived from tracked libp2p
+// addresses (#4043). A node feeds the returned dial strings into
+// CometBFT's Switch().DialPeersAsync to keep its consensus peer set
+// current without hand-edited persistent_peers.
+func (s *InfoServer) handleConsensusPeers(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Extract partition from path: /consensus-peers/{partition}
+	path := strings.TrimPrefix(r.URL.Path, "/consensus-peers/")
+	partition := strings.ToLower(strings.TrimSpace(path))
+	if partition == "" {
+		http.Error(w, "Partition name required", http.StatusBadRequest)
+		return
+	}
+
+	start := time.Now()
+	defer func() {
+		s.metrics.RecordHTTPRequest("/consensus-peers/"+partition, http.StatusOK, time.Since(start))
+	}()
+
+	peers := s.partitions.GetConsensusPeers(partition)
+
+	peerInfos := make([]map[string]interface{}, 0, len(peers))
+	dials := make([]string, 0, len(peers))
+	for _, p := range peers {
+		dials = append(dials, p.DialString())
+		peerInfos = append(peerInfos, map[string]interface{}{
+			"node_id": string(p.ID),
+			"host":    p.Host,
+			"port":    p.Port,
+			"dial":    p.DialString(),
+		})
+	}
+
+	response := map[string]interface{}{
+		"partition": partition,
+		"count":     len(peerInfos),
+		"peers":     peerInfos,
+		// persistent_peers is the comma-joined form a node can drop
+		// straight into CometBFT config or DialPeersAsync.
+		"persistent_peers": strings.Join(dials, ","),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	encoder := json.NewEncoder(w)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(response); err != nil {
+		slog.Error("Failed to encode consensus peers response", "error", err)
 	}
 }
 

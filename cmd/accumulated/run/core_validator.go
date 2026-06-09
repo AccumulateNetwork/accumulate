@@ -54,11 +54,12 @@ func (c *CoreValidatorConfiguration) apply(_ *Instance, cfg *Config) error {
 		err := partOpts{
 			CoreValidatorConfiguration: c,
 
-			ID:             protocol.Directory,
-			Type:           protocol.PartitionTypeDirectory,
-			Genesis:        c.DnGenesis,
-			BootstrapPeers: c.DnBootstrapPeers,
-			Dir:            "dnn",
+			ID:                  protocol.Directory,
+			Type:                protocol.PartitionTypeDirectory,
+			Genesis:             c.DnGenesis,
+			BootstrapPeers:      c.DnBootstrapPeers,
+			Dir:                 "dnn",
+			ConsensusPeerBroker: c.ConsensusPeerBroker,
 		}.apply(cfg)
 		if err != nil {
 			return err
@@ -70,11 +71,12 @@ func (c *CoreValidatorConfiguration) apply(_ *Instance, cfg *Config) error {
 		err := partOpts{
 			CoreValidatorConfiguration: c,
 
-			ID:             c.BVN,
-			Type:           protocol.PartitionTypeBlockValidator,
-			Genesis:        c.BvnGenesis,
-			BootstrapPeers: c.BvnBootstrapPeers,
-			Dir:            "bvnn",
+			ID:                  c.BVN,
+			Type:                protocol.PartitionTypeBlockValidator,
+			Genesis:             c.BvnGenesis,
+			BootstrapPeers:      c.BvnBootstrapPeers,
+			Dir:                 "bvnn",
+			ConsensusPeerBroker: c.ConsensusPeerBroker,
 		}.apply(cfg)
 		if err != nil {
 			return err
@@ -106,12 +108,13 @@ func (c *CoreValidatorConfiguration) apply(_ *Instance, cfg *Config) error {
 
 type partOpts struct {
 	*CoreValidatorConfiguration
-	ID               string
-	Type             protocol.PartitionType
-	Genesis          string
-	Dir              string
-	BootstrapPeers   []multiaddr.Multiaddr
-	MetricsNamespace string
+	ID                  string
+	Type                protocol.PartitionType
+	Genesis             string
+	Dir                 string
+	BootstrapPeers      []multiaddr.Multiaddr
+	MetricsNamespace    string
+	ConsensusPeerBroker string
 }
 
 func (p partOpts) apply(cfg *Config) error {
@@ -125,12 +128,13 @@ func (p partOpts) apply(cfg *Config) error {
 	// Consensus
 	addService(cfg,
 		&ConsensusService{
-			NodeDir:          p.Dir,
-			ValidatorKey:     p.ValidatorKey,
-			Genesis:          p.Genesis,
-			Listen:           applyAddrTransforms(p.Listen, offset),
-			BootstrapPeers:   p.BootstrapPeers,
-			MetricsNamespace: p.MetricsNamespace,
+			NodeDir:             p.Dir,
+			ValidatorKey:        p.ValidatorKey,
+			Genesis:             p.Genesis,
+			Listen:              applyAddrTransforms(p.Listen, offset),
+			BootstrapPeers:      p.BootstrapPeers,
+			MetricsNamespace:    p.MetricsNamespace,
+			ConsensusPeerBroker: p.ConsensusPeerBroker,
 			App: &CoreConsensusApp{
 				EnableHealing:        p.EnableHealing,
 				EnableDirectDispatch: p.EnableDirectDispatch,

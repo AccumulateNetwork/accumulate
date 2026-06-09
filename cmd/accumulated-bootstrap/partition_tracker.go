@@ -9,6 +9,7 @@ package main
 import (
 	"context"
 	"log/slog"
+	"net"
 	"strings"
 	"sync"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/multiformats/go-multiaddr"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/consensuspeer"
 )
 
 // Known partitions in the Accumulate network
@@ -262,6 +264,51 @@ func (pt *PartitionTracker) GetPeersByPartition(partition string) []PeerPartitio
 	}
 
 	return result
+}
+
+// GetConsensusPeers derives the CometBFT consensus peers
+// (`NodeID@host:port`) for a partition from the libp2p addresses the
+// tracker holds. The CometBFT node ID follows deterministically from
+// each peer's libp2p key (see internal/node/consensuspeer), so no
+// separate consensus-identity advertisement is needed — this is what
+// lets the bootstrap server broker consensus reachability (#4043).
+//
+// One entry is returned per libp2p peer (its first routable address).
+// Loopback / unspecified addresses are skipped, as are addresses that
+// do not yield a valid consensus peer.
+func (pt *PartitionTracker) GetConsensusPeers(partition string) []consensuspeer.Peer {
+	infos := pt.GetPeersByPartition(partition)
+
+	out := make([]consensuspeer.Peer, 0, len(infos))
+	for _, info := range infos {
+		for _, addr := range info.Addresses {
+			full, err := multiaddr.NewMultiaddr(addr.String() + "/p2p/" + info.PeerID.String())
+			if err != nil {
+				continue
+			}
+			p, err := consensuspeer.FromLibp2pMultiaddr(full)
+			if err != nil {
+				continue
+			}
+			if isUnroutableHost(p.Host) {
+				continue
+			}
+			out = append(out, p)
+			break // one consensus address per peer
+		}
+	}
+	return out
+}
+
+// isUnroutableHost reports whether host is one a peer should not be
+// dialed at — loopback or the unspecified address. DNS names and any
+// other IP are treated as routable.
+func isUnroutableHost(host string) bool {
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false // hostname; assume routable
+	}
+	return ip.IsLoopback() || ip.IsUnspecified()
 }
 
 // GetPartitionStats returns statistics for all partitions

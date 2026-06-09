@@ -9,7 +9,6 @@ package run
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"io/fs"
 	"log/slog"
@@ -17,7 +16,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"strconv"
 	"strings"
 	"time"
 
@@ -26,7 +24,6 @@ import (
 	tmcfg "github.com/cometbft/cometbft/config"
 	tmcrypto "github.com/cometbft/cometbft/crypto"
 	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
-	"github.com/cometbft/cometbft/crypto/tmhash"
 	cmtjson "github.com/cometbft/cometbft/libs/json"
 	"github.com/cometbft/cometbft/libs/log"
 	tmnode "github.com/cometbft/cometbft/node"
@@ -38,9 +35,7 @@ import (
 	"github.com/cometbft/cometbft/rpc/client/local"
 	tmtypes "github.com/cometbft/cometbft/types"
 	"github.com/fatih/color"
-	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/multiformats/go-multiaddr"
-	"github.com/multiformats/go-multihash"
 	"github.com/spf13/viper"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
 	tmlib "gitlab.com/accumulatenetwork/accumulate/exp/tendermint"
@@ -54,6 +49,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/consensuspeer"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
 	v3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -357,7 +353,28 @@ func (c *ConsensusService) start(inst *Instance) error {
 		return err
 	}
 
-	return c.App.register(inst, d, node)
+	if err := c.App.register(inst, d, node); err != nil {
+		return err
+	}
+
+	// Start the consensus peer feeder if a broker URL is configured. It
+	// pulls this partition's CometBFT peers from the bootstrap server and
+	// dials them, keeping the consensus peer set current without
+	// hand-edited persistent_peers (#4043). Additive: the static
+	// persistent_peers remains the cold-start seed.
+	if c.ConsensusPeerBroker != "" {
+		partition := c.App.partition().ID
+		feeder := &accumulated.ConsensusPeerFeeder{
+			Source:    &accumulated.HTTPConsensusPeerSource{BaseURL: c.ConsensusPeerBroker},
+			Dialer:    node.Switch(),
+			Partition: partition,
+		}
+		inst.logger.Info("Starting consensus peer feeder",
+			"broker", c.ConsensusPeerBroker, "partition", partition)
+		go feeder.Run(inst.context)
+	}
+
+	return nil
 }
 
 func convertNodeKey(inst *Instance) (*tmp2p.NodeKey, error) {
@@ -505,71 +522,12 @@ func (c *ConsensusService) cometExternalAddress(inst *Instance) string {
 	return net.JoinHostPort(host, port)
 }
 
+// cmtPeerAddress converts a libp2p multiaddr into the CometBFT
+// `NodeID@host:port` peer string. The conversion lives in
+// internal/node/consensuspeer so the bootstrap server can derive the
+// same string for the peers it tracks (#4043).
 func cmtPeerAddress(addr multiaddr.Multiaddr) (string, error) {
-	var pub *multihash.DecodedMultihash
-	var host, port string
-	var err error
-	multiaddr.ForEach(addr, func(c multiaddr.Component) bool {
-		switch c.Protocol().Code {
-		case multiaddr.P_P2P:
-			pub, err = multihash.Decode(c.RawValue())
-		case multiaddr.P_IP4,
-			multiaddr.P_IP6,
-			multiaddr.P_DNS,
-			multiaddr.P_DNS4,
-			multiaddr.P_DNS6:
-			host = c.Value()
-		case multiaddr.P_TCP,
-			multiaddr.P_UDP:
-			port = c.Value()
-		}
-		if err != nil {
-			return false
-		}
-		return pub == nil || host == "" || port == ""
-	})
-	if err != nil {
-		return "", err
-	}
-	if pub == nil {
-		return "", errors.BadRequest.With("missing peer ID")
-	}
-	if host == "" {
-		return "", errors.BadRequest.With("missing host")
-	}
-	if port == "" {
-		return "", errors.BadRequest.With("missing port")
-	}
-
-	// Convert libp2p port to CometBFT P2P port
-	// libp2p uses port offset +2 (16593, 16693), CometBFT uses offset +0 (16591, 16691)
-	portNum, err := strconv.Atoi(port)
-	if err != nil {
-		return "", errors.BadRequest.WithFormat("invalid port %q: %w", port, err)
-	}
-	cmtPort := portNum - 2
-	if cmtPort < 1 || cmtPort > 65535 {
-		return "", errors.BadRequest.WithFormat("adjusted port %d out of valid range", cmtPort)
-	}
-
-	var hash []byte
-	switch pub.Code {
-	case multihash.IDENTITY:
-		p, err := crypto.UnmarshalPublicKey(pub.Digest)
-		if err != nil {
-			return "", errors.BadRequest.WithFormat("decode public key: %w", err)
-		}
-		b, err := p.Raw()
-		if err != nil {
-			return "", errors.BadRequest.WithFormat("unwrap public key: %w", err)
-		}
-		hash = tmhash.SumTruncated(b)
-	case multihash.SHA2_256:
-		hash = pub.Digest[:tmhash.TruncatedSize]
-	default:
-		return "", errors.BadRequest.WithFormat("unsupported multihash type %v", pub.Name)
-	}
-	return tmp2p.IDAddressString(tmp2p.ID(hex.EncodeToString(hash)), fmt.Sprintf("%s:%d", host, cmtPort)), nil
+	return consensuspeer.DialStringFromLibp2pMultiaddr(addr)
 }
 
 func (c *CoreConsensusApp) partition() *protocol.PartitionInfo { return c.Partition }

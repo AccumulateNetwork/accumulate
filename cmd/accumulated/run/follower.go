@@ -68,6 +68,7 @@ func (c *FollowerConfiguration) apply(inst *Instance, cfg *Config) error {
 			Genesis:               c.DnGenesis,
 			BootstrapPeers:        c.DnBootstrapPeers,
 			Dir:                   "dnn",
+			ConsensusPeerBroker:   c.ConsensusPeerBroker,
 		}.apply(cfg)
 		if err != nil {
 			return err
@@ -84,6 +85,7 @@ func (c *FollowerConfiguration) apply(inst *Instance, cfg *Config) error {
 			Genesis:               c.BvnGenesis,
 			BootstrapPeers:        c.BvnBootstrapPeers,
 			Dir:                   "bvnn",
+			ConsensusPeerBroker:   c.ConsensusPeerBroker,
 		}.apply(cfg)
 		if err != nil {
 			return err
@@ -115,13 +117,14 @@ func (c *FollowerConfiguration) apply(inst *Instance, cfg *Config) error {
 
 type followerPartOpts struct {
 	*FollowerConfiguration
-	ValidatorKey     PrivateKey
-	ID               string
-	Type             protocol.PartitionType
-	Genesis          string
-	Dir              string
-	BootstrapPeers   []multiaddr.Multiaddr
-	MetricsNamespace string
+	ValidatorKey        PrivateKey
+	ID                  string
+	Type                protocol.PartitionType
+	Genesis             string
+	Dir                 string
+	BootstrapPeers      []multiaddr.Multiaddr
+	MetricsNamespace    string
+	ConsensusPeerBroker string
 }
 
 func (p followerPartOpts) apply(cfg *Config) error {
@@ -135,12 +138,13 @@ func (p followerPartOpts) apply(cfg *Config) error {
 	// Consensus - with transient key for follower mode
 	addService(cfg,
 		&ConsensusService{
-			NodeDir:          p.Dir,
-			ValidatorKey:     p.ValidatorKey, // TransientPrivateKey - voting_power=0
-			Genesis:          p.Genesis,
-			Listen:           applyAddrTransforms(p.Listen, offset),
-			BootstrapPeers:   p.BootstrapPeers,
-			MetricsNamespace: p.MetricsNamespace,
+			NodeDir:             p.Dir,
+			ValidatorKey:        p.ValidatorKey, // TransientPrivateKey - voting_power=0
+			Genesis:             p.Genesis,
+			Listen:              applyAddrTransforms(p.Listen, offset),
+			BootstrapPeers:      p.BootstrapPeers,
+			MetricsNamespace:    p.MetricsNamespace,
+			ConsensusPeerBroker: p.ConsensusPeerBroker,
 			App: &CoreConsensusApp{
 				EnableHealing:        p.EnableHealing,
 				EnableDirectDispatch: p.EnableDirectDispatch,

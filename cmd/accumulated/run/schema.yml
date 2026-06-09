@@ -237,6 +237,9 @@ Configuration:
         - name: StorageType
           type: '*StorageType'
           optional: true
+        - name: ConsensusPeerBroker
+          type: string
+          optional: true
 
     - name: GatewayConfiguration
       class: composite
@@ -293,6 +296,9 @@ Configuration:
           optional: true
         - name: StorageType
           type: '*StorageType'
+          optional: true
+        - name: ConsensusPeerBroker
+          type: string
           optional: true
 
 Service:
@@ -351,6 +357,9 @@ Service:
         - name: BootstrapPeers
           type: '[]Multiaddr'
         - name: MetricsNamespace
+          type: string
+          optional: true
+        - name: ConsensusPeerBroker
           type: string
           optional: true
         - name: App
