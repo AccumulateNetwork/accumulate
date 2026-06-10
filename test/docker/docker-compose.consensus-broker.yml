@@ -9,22 +9,9 @@
 #   docker compose -p acc-cb -f test/docker/docker-compose.consensus-broker.yml down -v
 
 services:
-  bootstrap:
-    build:
-      context: ../..
-      dockerfile: Dockerfile
-    container_name: acc-cb-bootstrap
-    mem_limit: 1g
-    ports:
-      - "18080:8080"    # info server + /consensus-peers (libp2p stays on the docker network)
-    entrypoint: ["/bin/accumulated-bootstrap"]
-    command:
-      - --listen
-      - /ip4/0.0.0.0/tcp/16593
-      - --key
-      - "626f6f7473747261702d6e6f64652d6b65792d736565642d7631000000000000"
-    restart: unless-stopped
-
+  # init runs first and generates the bootstrap key (#4043); the
+  # bootstrap server reads that key file so its identity matches what
+  # init wired into the node configs — nothing is hand-pasted.
   init:
     build:
       context: ../..
@@ -40,8 +27,28 @@ services:
       - test/docker/docker-network.consensus-broker.yml
       - --reset
       - --faucet-seed=FAUCET
-      - --consensus-peer-broker=http://acc-cb-bootstrap:8080
-      - --libp2p-bootstrap-peer=/dns4/acc-cb-bootstrap/tcp/16593/p2p/12D3KooWRq3UGwehqoLWg6wDLJDQHduhUbQZ5UHPXKgkPvvWYfvg
+      - --consensus-peer-broker
+
+  bootstrap:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    container_name: acc-cb-bootstrap
+    mem_limit: 1g
+    ports:
+      - "18080:8080"    # info server + /consensus-peers (libp2p stays on the docker network)
+    volumes:
+      - network-config-cb:/root/.accumulate:ro
+    entrypoint: ["/bin/accumulated-bootstrap"]
+    command:
+      - --listen
+      - /ip4/0.0.0.0/tcp/16593
+      - --key
+      - /root/.accumulate/bootstrap/node_key.hex
+    restart: unless-stopped
+    depends_on:
+      init:
+        condition: service_completed_successfully
 
   bvn1-1:
     build: { context: ../.., dockerfile: Dockerfile }

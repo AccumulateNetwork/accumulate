@@ -40,7 +40,9 @@ func TestFeederRefreshDialsPeers(t *testing.T) {
 	dialer := &fakeDialer{}
 	f := &ConsensusPeerFeeder{Source: src, Dialer: dialer, Partition: "dn"}
 
-	require.NoError(t, f.refreshOnce(context.Background()))
+	n, err := f.refreshOnce(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 2, n)
 	require.Len(t, dialer.dialed, 1)
 	assert.Equal(t, src.peers, dialer.dialed[0])
 }
@@ -49,7 +51,9 @@ func TestFeederRefreshEmptyDoesNotDial(t *testing.T) {
 	dialer := &fakeDialer{}
 	f := &ConsensusPeerFeeder{Source: &fakeSource{peers: nil}, Dialer: dialer, Partition: "dn"}
 
-	require.NoError(t, f.refreshOnce(context.Background()))
+	n, err := f.refreshOnce(context.Background())
+	require.NoError(t, err)
+	assert.Zero(t, n)
 	assert.Empty(t, dialer.dialed)
 }
 
@@ -57,7 +61,8 @@ func TestFeederRefreshSourceErrorPropagates(t *testing.T) {
 	dialer := &fakeDialer{}
 	f := &ConsensusPeerFeeder{Source: &fakeSource{err: assert.AnError}, Dialer: dialer, Partition: "dn"}
 
-	require.Error(t, f.refreshOnce(context.Background()))
+	_, err := f.refreshOnce(context.Background())
+	require.Error(t, err)
 	assert.Empty(t, dialer.dialed)
 }
 
@@ -66,7 +71,9 @@ func TestFeederRefreshDialErrorSwallowed(t *testing.T) {
 	f := &ConsensusPeerFeeder{Source: &fakeSource{peers: []string{"abc@1.2.3.4:16591"}}, Dialer: dialer, Partition: "dn"}
 
 	// A dial failure should not bubble up — the loop keeps running.
-	require.NoError(t, f.refreshOnce(context.Background()))
+	n, err := f.refreshOnce(context.Background())
+	require.NoError(t, err)
+	assert.Zero(t, n, "a dial failure reports zero converged peers")
 	require.Len(t, dialer.dialed, 1)
 }
 

@@ -8,6 +8,7 @@ package main
 
 import (
 	"crypto/ed25519"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -19,6 +20,8 @@ import (
 	"github.com/BurntSushi/toml"
 	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
 	cmtjson "github.com/cometbft/cometbft/libs/json"
+	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run"
@@ -132,6 +135,25 @@ func initNetwork(cmd *cobra.Command, args []string) {
 		check(template.Load([]byte(network.Template), toml.Unmarshal))
 	}
 
+	// When the bootstrap server manages consensus peers (#4043), it is
+	// the single source of truth for both libp2p discovery and CometBFT
+	// peering. Derive the bootstrap's libp2p multiaddr from the network's
+	// own bootstrap key — generated and persisted here — so nothing is
+	// hand-pasted and the server and nodes always agree on its identity.
+	var bootstrapPeer multiaddr.Multiaddr
+	var brokerURL string
+	useBroker := flagInitNetwork.ConsensusPeerBroker
+	if useBroker {
+		if network.Bootstrap == nil {
+			fatalf("--consensus-peer-broker requires a bootstrap section in the network configuration")
+		}
+		bootstrapPeer = setupBootstrapIdentity(network.Bootstrap, flagMain.WorkDir)
+		// Derive the broker URL from the same bootstrap address, so the
+		// bootstrap's location lives in exactly one place (the network
+		// config) and libp2p discovery and the HTTP broker cannot drift.
+		brokerURL = fmt.Sprintf("http://%s:%d", network.Bootstrap.AdvertizeAddress, bootstrapInfoPort)
+	}
+
 	genDocs := buildGenesis(network)
 	for i, bvn := range network.Bvns {
 		for j, node := range bvn.Nodes {
@@ -148,28 +170,25 @@ func initNetwork(cmd *cobra.Command, args []string) {
 			addr := address.FromED25519PrivateKey(node.DnNodeKey)
 			cfg.P2P.Key = &run.RawPrivateKey{Address: addr.String()}
 
-			// Point libp2p discovery at the given bootstrap peer instead
-			// of the compiled-in default, so a test network's nodes reach
-			// its own bootstrap server (#4043).
-			if flagInitNetwork.Libp2pBootstrapPeer != "" {
-				ma, err := multiaddr.NewMultiaddr(flagInitNetwork.Libp2pBootstrapPeer)
-				check(err)
-				cfg.P2P.BootstrapPeers = []multiaddr.Multiaddr{ma}
-			}
-
 			// Configure the validator
 			cvc := run.AddConfiguration(cfg, new(run.CoreValidatorConfiguration), nil)
 			cfg.Configurations = []run.Configuration{cvc}
 			cvc.Listen = node.Listen().Scheme("tcp").Directory().TendermintP2P().Multiaddr()
 			cvc.BVN = bvn.Id
-			cvc.BvnBootstrapPeers = bvn.Peers(node).Scheme("tcp").BlockValidator().TendermintP2P().WithKey().Multiaddr()
-			cvc.DnBootstrapPeers = network.Peers(node).Scheme("tcp").Directory().TendermintP2P().WithKey().Multiaddr()
-			cvc.ConsensusPeerBroker = flagInitNetwork.ConsensusPeerBroker
-			if flagInitNetwork.ConsensusPeerBroker != "" {
-				// The consensus-peer feeder advertises this node's
-				// external CometBFT address, derived from P2P.External's
-				// host (#4043). Set it from the node's advertize address.
+
+			if useBroker {
+				// The bootstrap server manages peers: point libp2p
+				// discovery at it, advertise this node's external CometBFT
+				// address (host taken from P2P.External), and leave the
+				// static CometBFT peer lists empty — the feeder supplies
+				// them from the bootstrap (#4043).
+				cfg.P2P.BootstrapPeers = []multiaddr.Multiaddr{bootstrapPeer}
 				cfg.P2P.External = node.Advertize().Scheme("tcp").Directory().AccumulateP2P().Multiaddr()
+				cvc.ConsensusPeerBroker = brokerURL
+			} else {
+				// Legacy: bake static CometBFT persistent peers.
+				cvc.BvnBootstrapPeers = bvn.Peers(node).Scheme("tcp").BlockValidator().TendermintP2P().WithKey().Multiaddr()
+				cvc.DnBootstrapPeers = network.Peers(node).Scheme("tcp").Directory().TendermintP2P().WithKey().Multiaddr()
 			}
 
 			// Configure the validator key
@@ -186,6 +205,46 @@ func initNetwork(cmd *cobra.Command, args []string) {
 			check(cfg.SaveTo(filepath.Join(dir, "accumulate.toml")))
 		}
 	}
+}
+
+// bootstrapInfoPort is the bootstrap server's default info-server /
+// consensus-peer-broker port (accumulated-bootstrap --info-listen
+// defaults to :8080). The broker URL is derived from it.
+const bootstrapInfoPort = 8080
+
+// setupBootstrapIdentity makes init the single source of truth for the
+// bootstrap server's identity (#4043): it generates the bootstrap key if
+// absent, persists the seed as hex under <workDir>/bootstrap/node_key.hex
+// for the server's --key flag to read, and returns the libp2p multiaddr
+// nodes dial — derived from the same key, so server and nodes always
+// agree without any hand-pasted peer ID.
+func setupBootstrapIdentity(boot *accumulated.NodeInit, workDir string) multiaddr.Multiaddr {
+	if boot.AdvertizeAddress == "" {
+		fatalf("bootstrap advertizeAddress is required for --consensus-peer-broker")
+	}
+	if boot.BasePort == 0 {
+		fatalf("bootstrap basePort is required for --consensus-peer-broker")
+	}
+	if boot.DnNodeKey == nil {
+		boot.DnNodeKey = tmed25519.GenPrivKey()
+	}
+
+	// Derive the libp2p peer ID from the bootstrap public key
+	// (DnNodeKey[32:]), matching how node peer IDs are derived.
+	pub, err := libp2pcrypto.UnmarshalEd25519PublicKey(boot.DnNodeKey[32:])
+	check(err)
+	pid, err := peer.IDFromPublicKey(pub)
+	check(err)
+
+	// Persist the 32-byte seed as hex for the bootstrap server's --key.
+	dir := filepath.Join(workDir, "bootstrap")
+	check(os.MkdirAll(dir, 0755))
+	seedHex := hex.EncodeToString(boot.DnNodeKey[:32])
+	check(os.WriteFile(filepath.Join(dir, "node_key.hex"), []byte(seedHex), 0600))
+
+	ma, err := multiaddr.NewMultiaddr(fmt.Sprintf("/dns4/%s/tcp/%d/p2p/%s", boot.AdvertizeAddress, boot.BasePort, pid))
+	check(err)
+	return ma
 }
 
 func initGenesis(cmd *cobra.Command, args []string) {

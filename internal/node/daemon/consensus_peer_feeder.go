@@ -41,56 +41,73 @@ type ConsensusPeerFeeder struct {
 	Interval  time.Duration
 }
 
-// DefaultFeedInterval is how often the feeder refreshes by default.
-const DefaultFeedInterval = time.Minute
+// Feed intervals. The feeder polls quickly at cold start — when it is
+// the only source of consensus peers, the network cannot form a block
+// until peers arrive — then settles to a steady refresh once it has
+// dialed at least one peer.
+const (
+	StartupFeedInterval = 5 * time.Second
+	DefaultFeedInterval = time.Minute
+)
 
-// Run pulls and dials on Interval until ctx is cancelled. It performs an
-// immediate first refresh so a freshly started node converges without
-// waiting a full interval.
+// Run pulls and dials until ctx is cancelled. It polls every
+// StartupFeedInterval until the peer count is non-zero and stable across
+// two consecutive polls, then switches to the steady interval
+// (f.Interval, or DefaultFeedInterval). Waiting for a stable count keeps
+// a cold start from locking onto a partial peer set when nodes connect
+// to the bootstrap at slightly different times — important because the
+// broker is the only source of consensus peers.
 func (f *ConsensusPeerFeeder) Run(ctx context.Context) {
-	interval := f.Interval
-	if interval <= 0 {
-		interval = DefaultFeedInterval
+	steady := f.Interval
+	if steady <= 0 {
+		steady = DefaultFeedInterval
 	}
-
-	if err := f.refreshOnce(ctx); err != nil {
-		slog.DebugContext(ctx, "Consensus peer feed: initial refresh failed", "partition", f.Partition, "error", err)
+	interval := StartupFeedInterval
+	if steady < interval {
+		interval = steady
 	}
+	converged := false
+	lastN := -1
 
-	t := time.NewTicker(interval)
-	defer t.Stop()
 	for {
+		n, err := f.refreshOnce(ctx)
+		switch {
+		case err != nil:
+			slog.DebugContext(ctx, "Consensus peer feed: refresh failed", "partition", f.Partition, "error", err)
+		case !converged && n > 0 && n == lastN:
+			converged = true
+			interval = steady
+			slog.InfoContext(ctx, "Consensus peer feed: converged", "partition", f.Partition, "count", n, "steady_interval", steady)
+		}
+		if !converged {
+			lastN = n
+		}
+
 		select {
 		case <-ctx.Done():
 			return
-		case <-t.C:
-			if err := f.refreshOnce(ctx); err != nil {
-				slog.DebugContext(ctx, "Consensus peer feed: refresh failed", "partition", f.Partition, "error", err)
-			}
+		case <-time.After(interval):
 		}
 	}
 }
 
-// refreshOnce fetches the current peer list and dials it. It returns an
-// error only when the source fails; an empty list or a dial error is
-// logged and swallowed so the loop keeps running.
-func (f *ConsensusPeerFeeder) refreshOnce(ctx context.Context) error {
+// refreshOnce fetches the current peer list and dials it. It returns the
+// number of peers dialed and an error only when the source fails; an
+// empty list or a dial error yields (0, nil) so the loop keeps running.
+func (f *ConsensusPeerFeeder) refreshOnce(ctx context.Context) (int, error) {
 	peers, err := f.Source.ConsensusPeers(ctx, f.Partition)
 	if err != nil {
-		return err
+		return 0, err
 	}
-	if len(peers) == 0 {
-		return nil
-	}
-	if f.Dialer == nil {
-		return nil
+	if len(peers) == 0 || f.Dialer == nil {
+		return 0, nil
 	}
 	if err := f.Dialer.DialPeersAsync(peers); err != nil {
 		slog.WarnContext(ctx, "Consensus peer feed: dial failed", "partition", f.Partition, "count", len(peers), "error", err)
-		return nil
+		return 0, nil
 	}
 	slog.DebugContext(ctx, "Consensus peer feed: dialed peers", "partition", f.Partition, "count", len(peers))
-	return nil
+	return len(peers), nil
 }
 
 // HTTPConsensusPeerSource fetches consensus peers from a bootstrap
