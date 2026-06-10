@@ -11,7 +11,7 @@ type ExecutorVersion uint64
 
 // ExecutorVersionLatest is the latest version of the executor.
 // ExecutorVersionLatest is intended primarily for testing.
-const ExecutorVersionLatest = ExecutorVersionV2Jiuquan
+const ExecutorVersionLatest = ExecutorVersionV2CyclopsBptRepair
 
 func init() {
 	// Verify that ExecutorVersionLatest has been updated, so that tests can
@@ -56,4 +56,11 @@ func (v ExecutorVersion) V2VandenbergEnabled() bool {
 // V2JiuquanEnabled checks if the version is at least V2 Jiuquan.
 func (v ExecutorVersion) V2JiuquanEnabled() bool {
 	return v >= ExecutorVersionV2Jiuquan
+}
+
+// V2CyclopsBptRepairEnabled checks if the version is at least
+// V2CyclopsBptRepair, the activation that runs the one-shot repair of
+// the 22 dropped BPT entries on Cyclops.
+func (v ExecutorVersion) V2CyclopsBptRepairEnabled() bool {
+	return v >= ExecutorVersionV2CyclopsBptRepair
 }

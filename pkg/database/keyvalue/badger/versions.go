@@ -35,6 +35,9 @@ func OpenV1(filepath string, o ...Option) (*Database, error) {
 	if TruncateBadger {
 		opts = opts.WithTruncate(true)
 	}
+	if ReadOnlyBadger {
+		opts = opts.WithReadOnly(true)
+	}
 
 	// Open Badger
 	badger, err := v1.Open(opts)
@@ -67,6 +70,9 @@ func OpenV2(filepath string, o ...Option) (*DatabaseV2, error) {
 	if TruncateBadger {
 		opts = opts.WithTruncate(true)
 	}
+	if ReadOnlyBadger {
+		opts = opts.WithReadOnly(true)
+	}
 
 	// Open Badger
 	badger, err := v2.Open(opts)
@@ -94,6 +100,9 @@ func OpenV3(filepath string, o ...Option) (*DatabaseV3, error) {
 
 	opts := v3.DefaultOptions(filepath)
 	opts = opts.WithLogger(slogger{})
+	if ReadOnlyBadger {
+		opts = opts.WithReadOnly(true)
+	}
 
 	// Open Badger
 	badger, err := v3.Open(opts)
@@ -121,6 +130,9 @@ func OpenV4(filepath string, o ...Option) (*DatabaseV4, error) {
 
 	opts := v4.DefaultOptions(filepath)
 	opts = opts.WithLogger(slogger{})
+	if ReadOnlyBadger {
+		opts = opts.WithReadOnly(true)
+	}
 
 	// Open Badger
 	badger, err := v4.Open(opts)

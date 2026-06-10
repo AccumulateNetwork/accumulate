@@ -324,6 +324,18 @@ func (b *Block) executePostUpdateActions() error {
 				}
 			}
 		}
+
+	case protocol.ExecutorVersionV2CyclopsBptRepair:
+		// One-shot repair of the 22 BPT entries on the Cyclops BVN
+		// whose state was dropped during the post-reorg
+		// single-validator window. The repair function inspects the
+		// current partition and applies the per-partition target
+		// list (currently only Cyclops BVN has targets). UpdateBPT
+		// runs immediately after, refreshing the leaves.
+		// See docs/incidents/2026-05-cyclops-bpt-drift.md.
+		if err := b.applyCyclopsBptRepair(); err != nil {
+			return errors.UnknownError.WithFormat("cyclops BPT repair: %w", err)
+		}
 	}
 	return nil
 }

@@ -29,6 +29,11 @@ import (
 // break, such as synthetic transactions and anchoring.
 var TruncateBadger = false
 
+// ReadOnlyBadger opens the underlying Badger DB in read-only mode. The
+// background GC goroutine is also skipped. This is intended for offline
+// analysis tools that must not mutate historical databases.
+var ReadOnlyBadger = false
+
 type DB[Db dbImpl[Txn, Item, Wb], Txn txn[Item], Item item, Wb writeBatch] struct {
 	args[Txn, Item]
 	opts
@@ -67,8 +72,10 @@ func open[Db dbImpl[Txn, Item, Wb], Txn txn[Item], Item item, Wb writeBatch](bad
 		}
 	}
 
-	// Run GC every hour
-	go db.gc()
+	// Run GC every hour, but not in read-only mode (badger forbids it).
+	if !ReadOnlyBadger {
+		go db.gc()
+	}
 
 	mDbOpen.Inc()
 	return db, nil

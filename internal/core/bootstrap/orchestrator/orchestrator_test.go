@@ -16,8 +16,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/protocol/cyclopsrepair"
 )
 
 func newObservedDB(t *testing.T) *database.Database {
@@ -394,6 +396,214 @@ func TestRun_ContextCancel(t *testing.T) {
 	if err != nil {
 		t.Errorf("expected nil on context timeout, got %v", err)
 	}
+}
+
+// TestRun_CyclopsRepairExceptionPreservesEnumerateLeaf models the
+// 22-account drift on Cyclops mainnet (issue #4020): the source's BPT
+// holds a stored leaf hash that diverges from what account.Hash() would
+// recompute over the source's stored state. The bootstrap launcher
+// must NOT pull and recompute for these accounts — doing so would
+// produce a local leaf hash that diverges from the source's BPT root,
+// preventing the tracker from ever matching a signed anchor. Instead,
+// the orchestrator's hydrate loop skips the cyclopsrepair-listed URLs,
+// preserving the enumerate-recorded leaf hash (= source's stored leaf).
+//
+// The test seeds source with a normal account plus one Cyclops-listed
+// account, then directly overwrites the listed account's BPT entry
+// with a deliberately-wrong leaf to mimic the mainnet condition (BPT
+// stored hash != recomputed account.Hash()). It runs Run with a
+// MatchThreshold of 1 and confirms (a) the orchestrator promotes
+// because the local root matches the planted source root, and (b) the
+// dst BPT's leaf for the excepted account is the planted fake — i.e.
+// hydrate did not run.
+func TestRun_CyclopsRepairExceptionPreservesEnumerateLeaf(t *testing.T) {
+	scope, _ := url.Parse(protocol.DnUrl().String())
+
+	src := newObservedDB(t)
+	seedSpine(t, src, scope)
+
+	// Pick the first listed account on the Cyclops partition. The
+	// exception logic is partition-scoped, so the test's Run call
+	// below uses Partition: cyclopsrepair.Partition.
+	targets := cyclopsrepair.Targets(cyclopsrepair.Partition)
+	if len(targets) == 0 {
+		t.Fatal("cyclopsrepair.Targets() unexpectedly empty for Cyclops")
+	}
+	excepted := targets[0]
+
+	// One regular account so the BPT has a leaf the launcher can
+	// hydrate normally — gives us a positive control alongside the
+	// excepted leaf.
+	regular, _ := url.Parse(protocol.DnUrl().String() + "/regular")
+	seedAccounts(t, src, []*url.URL{regular})
+
+	// Plant a fake BPT entry directly for the excepted account. We do
+	// NOT seedAccounts(excepted) because some excepted URLs (e.g. ADIs)
+	// fail commit-path validation when written as a generic
+	// DataAccount. Inserting a BPT leaf without ever creating Main is
+	// the closer mirror of the mainnet condition anyway: the leaf is
+	// stale or stripped while the account body may be intact or absent.
+	// db.Update calls UpdateBPT after fn, but UpdateBPT only walks
+	// dirty accounts; the manual BPT().Insert isn't dirtied, so the
+	// planted leaf survives.
+	var fake [32]byte
+	for i := range fake {
+		fake[i] = 0xC0
+	}
+	if err := src.Update(func(b *database.Batch) error {
+		return b.BPT().Insert(record.NewKey("Account", excepted), fake[:])
+	}); err != nil {
+		t.Fatalf("plant fake leaf in src: %v", err)
+	}
+
+	// Sanity check: src.BPT() now holds the fake for the excepted
+	// account.
+	{
+		ro := src.Begin(false)
+		stored, err := ro.BPT().Get(record.NewKey("Account", excepted))
+		ro.Discard()
+		if err != nil {
+			t.Fatalf("src BPT lookup: %v", err)
+		}
+		if [32]byte(stored) != fake {
+			t.Fatalf("planted leaf did not stick: stored=%x want=%x", stored, fake)
+		}
+	}
+
+	srcRoot := currentRoot(t, src)
+
+	dst := newObservedDB(t)
+	machine := nodestate.New()
+
+	fs := &fakeSource{db: src, anchor: srcRoot, block: 99}
+	ch := make(chan api.Event)
+	close(ch)
+
+	var phases []string
+	err := Run(context.Background(), fs, ch, dst, machine, Options{
+		Partition:          cyclopsrepair.Partition,
+		PartitionURL:       scope,
+		IsDirectory:        false,
+		PageSize:           4,
+		AnchorPollInterval: 10 * time.Millisecond,
+		MatchThreshold:     1,
+		OnPhase: func(p, m string) {
+			phases = append(phases, p+":"+m)
+		},
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	ad := machine.Get()
+	if ad.State != nodestate.StateActive {
+		t.Errorf("state=%v phases=%v, want ACTIVE — exception path may be missing",
+			ad.State, phases)
+	}
+	if ad.VerifiedAnchor != srcRoot {
+		t.Errorf("verified anchor mismatch: got %x want %x", ad.VerifiedAnchor, srcRoot)
+	}
+
+	// dst's BPT leaf for the excepted account must equal the planted
+	// fake — hydrate must have been skipped.
+	roDst := dst.Begin(false)
+	defer roDst.Discard()
+	leaf, err := roDst.BPT().Get(record.NewKey("Account", excepted))
+	if err != nil {
+		t.Fatalf("dst BPT lookup: %v", err)
+	}
+	if [32]byte(leaf) != fake {
+		t.Errorf("dst BPT leaf for excepted account = %x, want fake %x — hydrate must have run despite the exception",
+			leaf, fake)
+	}
+}
+
+// TestRun_CyclopsRepairExceptionScopedToCyclopsPartition guards against
+// the case where a non-Cyclops partition (sim, devnet, other BVN)
+// happens to use one of the listed URLs. On such partitions the
+// exception path must NOT fire — the URL match alone is insufficient.
+// This test plants a fake leaf for a listed URL on a non-Cyclops
+// partition and verifies that the orchestrator attempts the regular
+// hydrate path (which here returns NotFound from the source, exercising
+// the existing notInSource path rather than the cyclops-excepted one).
+func TestRun_CyclopsRepairExceptionScopedToCyclopsPartition(t *testing.T) {
+	scope, _ := url.Parse(protocol.DnUrl().String())
+
+	src := newObservedDB(t)
+	seedSpine(t, src, scope)
+
+	targets := cyclopsrepair.Targets(cyclopsrepair.Partition)
+	if len(targets) == 0 {
+		t.Fatal("cyclopsrepair.Targets() unexpectedly empty for Cyclops")
+	}
+	listedURL := targets[0]
+
+	regular, _ := url.Parse(protocol.DnUrl().String() + "/regular")
+	seedAccounts(t, src, []*url.URL{regular})
+
+	var fake [32]byte
+	for i := range fake {
+		fake[i] = 0xC0
+	}
+	if err := src.Update(func(b *database.Batch) error {
+		return b.BPT().Insert(record.NewKey("Account", listedURL), fake[:])
+	}); err != nil {
+		t.Fatalf("plant fake leaf in src: %v", err)
+	}
+	srcRoot := currentRoot(t, src)
+
+	dst := newObservedDB(t)
+	machine := nodestate.New()
+
+	fs := &fakeSource{db: src, anchor: srcRoot, block: 99}
+	ch := make(chan api.Event)
+	close(ch)
+
+	var phases []string
+	err := Run(context.Background(), fs, ch, dst, machine, Options{
+		Partition:          "Apollo", // NOT Cyclops — exception must not fire
+		PartitionURL:       scope,
+		IsDirectory:        false,
+		PageSize:           4,
+		AnchorPollInterval: 10 * time.Millisecond,
+		MatchThreshold:     1,
+		OnPhase: func(p, m string) {
+			phases = append(phases, p+":"+m)
+		},
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	// The orchestrator should still promote: the hydrate path on a
+	// non-Cyclops partition routes the listedURL through the regular
+	// path. Because src has no Main for it, the existing notInSource
+	// path catches the NotFound and preserves the enumerate-recorded
+	// leaf. The local root still matches src's anchor, so promotion
+	// occurs. What we are guarding here is that a phase log line for
+	// the cyclops-excepted path did NOT appear — that path must only
+	// fire on the Cyclops partition.
+	ad := machine.Get()
+	if ad.State != nodestate.StateActive {
+		t.Errorf("state=%v phases=%v, want ACTIVE", ad.State, phases)
+	}
+	for _, p := range phases {
+		if containsCyclopsExceptionLog(p) {
+			t.Errorf("non-Cyclops partition saw cyclops-excepted phase log: %q (phases=%v)", p, phases)
+		}
+	}
+}
+
+// containsCyclopsExceptionLog reports whether a phase line is the
+// cyclops-excepted hydrate-skip log emitted by runEnumerate.
+func containsCyclopsExceptionLog(line string) bool {
+	const marker = "cyclops-repair exception:"
+	for i := 0; i+len(marker) <= len(line); i++ {
+		if line[i:i+len(marker)] == marker {
+			return true
+		}
+	}
+	return false
 }
 
 // TestRun_RejectsMissingInputs — guards.

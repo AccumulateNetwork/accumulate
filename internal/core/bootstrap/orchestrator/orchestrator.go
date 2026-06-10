@@ -45,6 +45,7 @@ import (
 	apierrors "gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol/cyclopsrepair"
 )
 
 // isNotFound classifies an error as "the source returned NotFound for
@@ -180,7 +181,7 @@ func Run(
 
 	// Phase 2: enumerate the partition BPT.
 	phase("enumerate", "scanning partition BPT")
-	if err := runEnumerate(ctx, src, db, opts.PartitionURL, pageSize, opts.OnPhase); err != nil {
+	if err := runEnumerate(ctx, src, db, opts.PartitionURL, opts.Partition, pageSize, opts.OnPhase); err != nil {
 		return fmt.Errorf("enumerate: %w", err)
 	}
 
@@ -274,6 +275,7 @@ func runEnumerate(
 	src Source,
 	db *database.Database,
 	scope *url.URL,
+	partition string,
 	pageSize uint64,
 	onPhase func(phase, msg string),
 ) error {
@@ -303,7 +305,21 @@ func runEnumerate(
 	// inserted the leaf with the source's BPT-recorded hash — we
 	// just don't have its Main state record. Skipping the hydrate
 	// keeps the local BPT root consistent with the source's.
-	pulled, skipped, notInSource, errs := 0, 0, 0, 0
+	//
+	// `excepted` counts accounts on the cyclopsrepair list (issue #4020).
+	// Source's BPT leaf for these 22 accounts disagrees with what
+	// account.Hash() would compute from source's stored state; pulling
+	// the state and recomputing locally would diverge from source's BPT
+	// root and prevent the tracker from ever matching. Skipping the
+	// hydrate preserves the enumerate-recorded leaf hash, which equals
+	// source's BPT leaf, so the local root tracks. Once the network
+	// activates V2CyclopsBptRepair the divergence is resolved on-chain
+	// and this branch becomes a no-op for any new bootstrap (the
+	// account is no longer on the list as far as the source's BPT is
+	// concerned). The exception code itself can be removed in a
+	// follow-up MR after activation is committed and old binaries are
+	// retired.
+	pulled, skipped, notInSource, excepted, errs := 0, 0, 0, 0, 0
 	for _, u := range res.Accounts {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -311,6 +327,13 @@ func runEnumerate(
 		// Cheap probe: does this account already have Main locally?
 		if hasMain(db, u) {
 			skipped++
+			continue
+		}
+		if cyclopsrepair.IsTarget(partition, u) {
+			excepted++
+			if onPhase != nil {
+				onPhase("enumerate", fmt.Sprintf("cyclops-repair exception: skipping hydrate for %s; keeping enumerate-recorded BPT leaf hash", u))
+			}
 			continue
 		}
 		hbatch := db.Begin(true)
@@ -345,8 +368,8 @@ func runEnumerate(
 		pulled++
 	}
 	if onPhase != nil {
-		onPhase("enumerate", fmt.Sprintf("hydrated %d accounts (skipped %d already-populated, %d not-in-source, errored %d)",
-			pulled, skipped, notInSource, errs))
+		onPhase("enumerate", fmt.Sprintf("hydrated %d accounts (skipped %d already-populated, %d not-in-source, %d cyclops-excepted, errored %d)",
+			pulled, skipped, notInSource, excepted, errs))
 	}
 	return nil
 }
@@ -422,7 +445,7 @@ func runSteady(
 		case <-ticker.C:
 			// Re-enumerate first so the local BPT picks up
 			// anything gossip events missed.
-			if err := runEnumerate(ctx, src, db, partitionURL, pageSize, onPhase); err != nil {
+			if err := runEnumerate(ctx, src, db, partitionURL, partition, pageSize, onPhase); err != nil {
 				if onPhase != nil {
 					onPhase("steady", fmt.Sprintf("re-enumerate: %v", err))
 				}
@@ -463,7 +486,7 @@ func runSteady(
 				if onPhase != nil {
 					onPhase("steady", fmt.Sprintf("major-block %d boundary; re-enumerate + repoll", blockEv.Major))
 				}
-				if err := runEnumerate(ctx, src, db, partitionURL, pageSize, onPhase); err != nil {
+				if err := runEnumerate(ctx, src, db, partitionURL, partition, pageSize, onPhase); err != nil {
 					if onPhase != nil {
 						onPhase("steady", fmt.Sprintf("major-block re-enumerate: %v", err))
 					}
