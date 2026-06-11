@@ -152,6 +152,41 @@ func TestComputeConsensus_NoVotingPowerNotPresent(t *testing.T) {
 	}
 }
 
+func TestComputeConsensus_EmptyVersionNotReady(t *testing.T) {
+	roster := []string{"aaa", "bbb"}
+	probes := map[string]probeResult{
+		"aaa": present("v1.0"),
+		"bbb": present(""), // present and voting, but reported no version
+	}
+
+	r := computeConsensus("Cyclops", roster, probes)
+	if r.ValidatorConsensus {
+		t.Fatalf("expected consensus=false; a present validator with no version is not ready: %+v", r)
+	}
+	if r.AgreedVersion != "" {
+		t.Fatalf("expected empty agreedVersion, got %q", r.AgreedVersion)
+	}
+	// Both are present, but bbb's empty version blocks consensus.
+	for _, v := range r.Validators {
+		if !v.Present {
+			t.Fatalf("expected validator %s present", v.KeyHash)
+		}
+	}
+}
+
+func TestComputeConsensus_AllEmptyVersionNotReady(t *testing.T) {
+	// The degenerate "everyone reports empty" case must NOT read as ready.
+	roster := []string{"aaa", "bbb"}
+	probes := map[string]probeResult{
+		"aaa": present(""),
+		"bbb": present(""),
+	}
+	r := computeConsensus("Cyclops", roster, probes)
+	if r.ValidatorConsensus {
+		t.Fatalf("expected consensus=false when all versions are empty: %+v", r)
+	}
+}
+
 func TestComputeConsensus_EmptyRosterPending(t *testing.T) {
 	r := computeConsensus("Cyclops", nil, map[string]probeResult{})
 	if !r.Pending {

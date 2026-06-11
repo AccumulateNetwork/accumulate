@@ -397,6 +397,7 @@ func computeConsensus(partition string, roster []string, probes map[string]probe
 	sort.Strings(uniq)
 
 	allPresent := true
+	allHaveVersion := true
 	versionSet := map[string]bool{}
 
 	for _, h := range uniq {
@@ -406,7 +407,14 @@ func computeConsensus(partition string, roster []string, probes map[string]probe
 			vv.Version = pr.version
 			vv.CatchingUp = pr.catchingUp
 			report.Versions[pr.version] = append(report.Versions[pr.version], h)
-			versionSet[pr.version] = true
+			// An empty version means the node did not report one (the
+			// /abci_info probe failed or the binary has no version). It
+			// cannot count as agreement — treat it as "not ready".
+			if pr.version == "" {
+				allHaveVersion = false
+			} else {
+				versionSet[pr.version] = true
+			}
 		} else {
 			allPresent = false
 		}
@@ -418,7 +426,7 @@ func computeConsensus(partition string, roster []string, probes map[string]probe
 		sort.Strings(report.Versions[v])
 	}
 
-	report.ValidatorConsensus = allPresent && len(versionSet) == 1
+	report.ValidatorConsensus = allPresent && allHaveVersion && len(versionSet) == 1
 	if report.ValidatorConsensus {
 		for v := range versionSet {
 			report.AgreedVersion = v
