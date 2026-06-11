@@ -39,7 +39,6 @@ func newTrackerPeer(t *testing.T) (peer.ID, string) {
 func newBareTracker() *PartitionTracker {
 	return &PartitionTracker{
 		peers:                make(map[peer.ID]*PeerPartitionInfo),
-		byPartition:          make(map[string]map[peer.ID]struct{}),
 		consensusByPartition: make(map[string]map[peer.ID]consensuspeer.Peer),
 	}
 }

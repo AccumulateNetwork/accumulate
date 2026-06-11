@@ -14,7 +14,9 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/host"
@@ -503,7 +505,7 @@ func buildExternalAddresses(h host.Host, external []multiaddr.Multiaddr) []strin
 		}
 
 		// Also add DNS-based variants if we can get the hostname
-		hostname := getHostname()
+		hostname := getHostname(external)
 		if hostname != "" {
 			// Extract unique ports from external addresses
 			ports := make(map[string]bool)
@@ -553,7 +555,7 @@ func buildExternalAddresses(h host.Host, external []multiaddr.Multiaddr) []strin
 		}
 
 		// Also add DNS-based addresses if available
-		hostname := getHostname()
+		hostname := getHostname(external)
 		if hostname != "" {
 			for port := range ports {
 				fullAddr := fmt.Sprintf("/dns/%s/tcp/%s/p2p/%s", hostname, port, peerID)
@@ -573,45 +575,79 @@ func buildExternalAddresses(h host.Host, external []multiaddr.Multiaddr) []strin
 	return result
 }
 
-// getPublicIP attempts to get the public IP from AWS metadata service
-func getPublicIP() string {
+// awsMetadata fetches a value from the AWS instance metadata service.
+// The result is memoized per-path so it is fetched at most once for the
+// process lifetime (the underlying IP/hostname does not change).
+var (
+	awsMetaMu    sync.Mutex
+	awsMetaCache = map[string]string{}
+)
+
+func awsMetadata(path string) string {
+	awsMetaMu.Lock()
+	defer awsMetaMu.Unlock()
+	if v, ok := awsMetaCache[path]; ok {
+		return v
+	}
+
 	client := &http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Get("http://169.254.169.254/latest/meta-data/public-ipv4")
+	resp, err := client.Get("http://169.254.169.254/latest/meta-data/" + path)
 	if err != nil {
+		awsMetaCache[path] = ""
 		return ""
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
+		awsMetaCache[path] = ""
 		return ""
 	}
 
-	return strings.TrimSpace(string(body))
+	v := strings.TrimSpace(string(body))
+	awsMetaCache[path] = v
+	return v
 }
 
-// getHostname attempts to get the public hostname
-func getHostname() string {
-	client := &http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Get("http://169.254.169.254/latest/meta-data/public-hostname")
-	if err != nil {
-		return ""
+// getPublicIP attempts to get the public IP from AWS metadata service
+// (memoized).
+func getPublicIP() string {
+	return awsMetadata("public-ipv4")
+}
+
+// getHostname derives the external host to advertise. It prefers a DNS
+// name from the configured --external addresses, then the AWS
+// public-hostname (memoized), and finally the OS hostname. AWS-internal
+// hostnames (compute.amazonaws.com) are not externally useful, so they
+// are skipped in favor of the OS hostname.
+func getHostname(external []multiaddr.Multiaddr) string {
+	// Prefer a DNS host from the configured external addresses.
+	for _, addr := range external {
+		var dnsHost string
+		multiaddr.ForEach(addr, func(c multiaddr.Component) bool {
+			switch c.Protocol().Code {
+			case multiaddr.P_DNS, multiaddr.P_DNS4, multiaddr.P_DNS6:
+				dnsHost = c.Value()
+				return false
+			}
+			return true
+		})
+		if dnsHost != "" {
+			return dnsHost
+		}
 	}
-	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return ""
+	// AWS public-hostname, unless it's an internal compute hostname.
+	if hostname := awsMetadata("public-hostname"); hostname != "" &&
+		!strings.Contains(hostname, "compute.amazonaws.com") {
+		return hostname
 	}
 
-	hostname := strings.TrimSpace(string(body))
-
-	// If we got an AWS hostname, prefer our custom DNS name
-	if strings.Contains(hostname, "compute.amazonaws.com") {
-		return "bootstrap.accumulate.defidevs.io"
+	// Fall back to the OS hostname.
+	if h, err := os.Hostname(); err == nil {
+		return h
 	}
-
-	return hostname
+	return ""
 }
 
 // listenMultiaddr creates a listener from a multiaddr
@@ -687,17 +723,20 @@ func (s *InfoServer) handlePeersByPartition(w http.ResponseWriter, r *http.Reque
 	path := strings.TrimPrefix(r.URL.Path, "/peers/")
 	partition := strings.ToLower(strings.TrimSpace(path))
 
+	status := http.StatusOK
+	start := time.Now()
+	defer func() {
+		s.metrics.RecordHTTPRequest("/peers/"+partition, status, time.Since(start))
+	}()
+
 	if partition == "" {
-		http.Error(w, "Partition name required", http.StatusBadRequest)
+		status = http.StatusBadRequest
+		http.Error(w, "Partition name required", status)
 		return
 	}
 
-	start := time.Now()
-	defer func() {
-		s.metrics.RecordHTTPRequest("/peers/"+partition, http.StatusOK, time.Since(start))
-	}()
-
-	// Get peers from partition tracker
+	// Get peers from partition tracker. An unknown or empty partition
+	// yields an empty list — never a fallback to all connected peers.
 	partitionPeers := s.partitions.GetPeersByPartition(partition)
 
 	// Build response with detailed peer info
@@ -712,29 +751,9 @@ func (s *InfoServer) handlePeersByPartition(w http.ResponseWriter, r *http.Reque
 		peerInfos = append(peerInfos, map[string]interface{}{
 			"peer_id":    info.PeerID.String(),
 			"addresses":  addrStrs,
-			"score":      info.Score,
 			"first_seen": info.FirstSeen.Format(time.RFC3339),
 			"last_seen":  info.LastSeen.Format(time.RFC3339),
 		})
-	}
-
-	// If no peers found in tracker, fall back to all connected peers
-	if len(peerInfos) == 0 {
-		peers := s.host.Network().Peers()
-		for _, peerID := range peers {
-			addrs := s.host.Peerstore().Addrs(peerID)
-			addrStrs := make([]string, 0, len(addrs))
-			for _, addr := range addrs {
-				fullAddr := addr.String() + "/p2p/" + peerID.String()
-				addrStrs = append(addrStrs, fullAddr)
-			}
-
-			peerInfos = append(peerInfos, map[string]interface{}{
-				"peer_id":   peerID.String(),
-				"addresses": addrStrs,
-				"note":      "partition not yet determined",
-			})
-		}
 	}
 
 	response := map[string]interface{}{
@@ -744,7 +763,7 @@ func (s *InfoServer) handlePeersByPartition(w http.ResponseWriter, r *http.Reque
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
+	w.WriteHeader(status)
 
 	encoder := json.NewEncoder(w)
 	encoder.SetIndent("", "  ")
@@ -767,15 +786,18 @@ func (s *InfoServer) handleConsensusPeers(w http.ResponseWriter, r *http.Request
 	// Extract partition from path: /consensus-peers/{partition}
 	path := strings.TrimPrefix(r.URL.Path, "/consensus-peers/")
 	partition := strings.ToLower(strings.TrimSpace(path))
-	if partition == "" {
-		http.Error(w, "Partition name required", http.StatusBadRequest)
-		return
-	}
 
+	status := http.StatusOK
 	start := time.Now()
 	defer func() {
-		s.metrics.RecordHTTPRequest("/consensus-peers/"+partition, http.StatusOK, time.Since(start))
+		s.metrics.RecordHTTPRequest("/consensus-peers/"+partition, status, time.Since(start))
 	}()
+
+	if partition == "" {
+		status = http.StatusBadRequest
+		http.Error(w, "Partition name required", status)
+		return
+	}
 
 	peers := s.partitions.GetConsensusPeers(partition)
 
@@ -801,7 +823,7 @@ func (s *InfoServer) handleConsensusPeers(w http.ResponseWriter, r *http.Request
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
+	w.WriteHeader(status)
 
 	encoder := json.NewEncoder(w)
 	encoder.SetIndent("", "  ")
@@ -825,29 +847,14 @@ func (s *InfoServer) handlePartitions(w http.ResponseWriter, r *http.Request) {
 	// Get partition stats from partition tracker
 	partitionStats := s.partitions.GetPartitionStats()
 
-	// Build response with detailed partition info
+	// Build response with detailed partition info. Partitions are
+	// reported as advertised by peers (#4043); there are no hardcoded
+	// partition names.
 	partitions := make(map[string]interface{})
 	for name, stats := range partitionStats {
 		partitions[name] = map[string]interface{}{
 			"total_peers":     stats.TotalPeers,
 			"connected_peers": stats.ConnectedPeers,
-			"average_score":   stats.AverageScore,
-		}
-	}
-
-	// Ensure known partitions are present even if empty
-	if _, ok := partitions[PartitionDN]; !ok {
-		partitions[PartitionDN] = map[string]interface{}{
-			"total_peers":     0,
-			"connected_peers": 0,
-			"average_score":   0.0,
-		}
-	}
-	if _, ok := partitions[PartitionCyclops]; !ok {
-		partitions[PartitionCyclops] = map[string]interface{}{
-			"total_peers":     0,
-			"connected_peers": 0,
-			"average_score":   0.0,
 		}
 	}
 

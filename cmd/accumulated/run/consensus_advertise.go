@@ -9,6 +9,7 @@ package run
 import (
 	"encoding/json"
 	"log/slog"
+	"net"
 
 	"github.com/libp2p/go-libp2p/core/network"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/consensuspeer"
@@ -32,6 +33,15 @@ type consensusAdvertiser struct {
 func (i *Instance) advertiseConsensusEndpoint(partition, host string, port int) {
 	if host == "" || port == 0 {
 		return
+	}
+
+	// A loopback or unspecified host is not externally reachable; the
+	// bootstrap server drops such endpoints downstream (isUnroutableHost).
+	// Warn so the misconfiguration is visible rather than silently
+	// advertising an unusable endpoint.
+	if ip := net.ParseIP(host); ip != nil && (ip.IsLoopback() || ip.IsUnspecified()) {
+		i.logger.Warn("Advertising a non-routable consensus endpoint; bootstrap will drop it",
+			"partition", partition, "host", host, "port", port)
 	}
 
 	i.consensusAdvMu.Lock()

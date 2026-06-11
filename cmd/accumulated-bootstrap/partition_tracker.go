@@ -9,6 +9,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"net"
 	"strings"
@@ -16,89 +17,117 @@ import (
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/consensuspeer"
 )
 
-// Known partitions in the Accumulate network
-const (
-	PartitionDN      = "dn"
-	PartitionCyclops = "cyclops"
-	PartitionUnknown = "unknown"
-)
-
-// PeerPartitionInfo stores information about a peer's partition membership
+// PeerPartitionInfo stores information about a tracked peer.
 type PeerPartitionInfo struct {
-	PeerID     peer.ID
-	Partition  string
-	Addresses  []multiaddr.Multiaddr
-	Protocols  []protocol.ID
-	FirstSeen  time.Time
-	LastSeen   time.Time
-	LastProbed time.Time
-	ProbeCount int
-	Score      float64
+	PeerID    peer.ID
+	Addresses []multiaddr.Multiaddr
+	Protocols []protocol.ID
+	FirstSeen time.Time
+	LastSeen  time.Time
 }
 
-// PartitionTracker tracks peers by their partition membership
+// PartitionTracker tracks peers and the CometBFT endpoints they
+// advertise per partition (#4043).
 type PartitionTracker struct {
-	host        host.Host
-	mu          sync.RWMutex
-	peers       map[peer.ID]*PeerPartitionInfo
-	byPartition map[string]map[peer.ID]struct{}
+	host  host.Host
+	mu    sync.RWMutex
+	peers map[peer.ID]*PeerPartitionInfo
 	// consensusByPartition holds CometBFT endpoints learned from peers'
 	// consensus-peer advertisements (#4043), keyed by lowercased
-	// partition ID then peer ID. This is the source for
-	// GetConsensusPeers — separate from byPartition (which is derived
-	// from libp2p protocol IDs) because a node advertises the exact
-	// per-partition CometBFT host:port, which derivation cannot
-	// disambiguate for dual nodes.
+	// partition ID then peer ID. This is the authoritative per-partition
+	// view: a node advertises the exact per-partition CometBFT host:port,
+	// which protocol-ID derivation cannot disambiguate for dual nodes.
 	consensusByPartition map[string]map[peer.ID]consensuspeer.Peer
 	metrics              *MetricsCollector
+	notifiee             *network.NotifyBundle
 	stopCh               chan struct{}
-	probeTick            *time.Ticker
 	consensusTick        *time.Ticker
+	pruneTick            *time.Ticker
 }
 
-// NewPartitionTracker creates a new partition tracker
+// NewPartitionTracker creates a new partition tracker.
 func NewPartitionTracker(h host.Host, metrics *MetricsCollector) *PartitionTracker {
 	pt := &PartitionTracker{
 		host:                 h,
 		peers:                make(map[peer.ID]*PeerPartitionInfo),
-		byPartition:          make(map[string]map[peer.ID]struct{}),
 		consensusByPartition: make(map[string]map[peer.ID]consensuspeer.Peer),
 		metrics:              metrics,
 		stopCh:               make(chan struct{}),
 	}
 
-	// Initialize partition maps
-	pt.byPartition[PartitionDN] = make(map[peer.ID]struct{})
-	pt.byPartition[PartitionCyclops] = make(map[peer.ID]struct{})
-	pt.byPartition[PartitionUnknown] = make(map[peer.ID]struct{})
-
-	// Start periodic probing
-	pt.probeTick = time.NewTicker(5 * time.Minute)
-	go pt.probeLoop()
+	// Track peers via libp2p connect/disconnect notifications rather than
+	// guessing from protocol IDs. A connected peer is added (or refreshed);
+	// a disconnected peer is forgotten promptly.
+	if h != nil {
+		pt.notifiee = &network.NotifyBundle{
+			ConnectedF: func(_ network.Network, conn network.Conn) {
+				pt.onConnected(conn.RemotePeer())
+			},
+			DisconnectedF: func(_ network.Network, conn network.Conn) {
+				// A peer may have multiple connections; only forget it
+				// once it is fully disconnected.
+				pid := conn.RemotePeer()
+				if pt.host.Network().Connectedness(pid) != network.Connected {
+					pt.RemovePeer(pid)
+				}
+			},
+		}
+		h.Network().Notify(pt.notifiee)
+	}
 
 	// Consensus-peer advertisements change with the validator set and
-	// IPs, so probe them more often than partition membership.
+	// IPs, so probe them frequently.
 	pt.consensusTick = time.NewTicker(15 * time.Second)
 	go pt.consensusProbeLoop()
+
+	// Safety net: prune anything the disconnect notifier somehow missed.
+	pt.pruneTick = time.NewTicker(5 * time.Minute)
+	go pt.pruneLoop()
 
 	return pt
 }
 
-// Stop stops the partition tracker
+// Stop stops the partition tracker.
 func (pt *PartitionTracker) Stop() {
-	close(pt.stopCh)
-	if pt.probeTick != nil {
-		pt.probeTick.Stop()
+	if pt.notifiee != nil && pt.host != nil {
+		pt.host.Network().StopNotify(pt.notifiee)
 	}
+	close(pt.stopCh)
 	if pt.consensusTick != nil {
 		pt.consensusTick.Stop()
 	}
+	if pt.pruneTick != nil {
+		pt.pruneTick.Stop()
+	}
+}
+
+// onConnected adds or refreshes a peer when libp2p reports a connection.
+func (pt *PartitionTracker) onConnected(peerID peer.ID) {
+	now := time.Now()
+
+	pt.mu.Lock()
+	defer pt.mu.Unlock()
+
+	info, exists := pt.peers[peerID]
+	if !exists {
+		info = &PeerPartitionInfo{
+			PeerID:    peerID,
+			FirstSeen: now,
+		}
+		pt.peers[peerID] = info
+	}
+	info.Addresses = pt.host.Peerstore().Addrs(peerID)
+	if protocols, err := pt.host.Peerstore().GetProtocols(peerID); err == nil {
+		info.Protocols = protocols
+	}
+	info.LastSeen = now
 }
 
 // consensusProbeLoop periodically reads consensus-peer advertisements
@@ -117,20 +146,51 @@ func (pt *PartitionTracker) consensusProbeLoop() {
 	}
 }
 
-// probeAllConsensus opens the consensus-peer advertise stream on every
-// connected peer and records what it serves.
-func (pt *PartitionTracker) probeAllConsensus() {
-	for _, peerID := range pt.host.Network().Peers() {
-		pt.probeConsensusAdvertise(peerID)
+// pruneLoop is a slow safety net that forgets peers the disconnect
+// notifier missed.
+func (pt *PartitionTracker) pruneLoop() {
+	for {
+		select {
+		case <-pt.stopCh:
+			return
+		case <-pt.pruneTick.C:
+			pt.PruneStalePeers(15 * time.Minute)
+		}
 	}
+}
+
+// probeAllConsensus opens the consensus-peer advertise stream on every
+// connected peer concurrently with a bounded worker pool (#4043, H1).
+func (pt *PartitionTracker) probeAllConsensus() {
+	peers := pt.host.Network().Peers()
+
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, 8)
+	for _, peerID := range peers {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(pid peer.ID) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			pt.probeConsensusAdvertise(pid)
+		}(peerID)
+	}
+	wg.Wait()
+
+	pt.updateMetrics()
 }
 
 // probeConsensusAdvertise reads one peer's consensus-peer advertisement
 // and records its CometBFT endpoint for each partition it serves. The
 // CometBFT node ID is derived from the peer's libp2p key (the stream is
 // libp2p-authenticated), so only the host:port is taken from the peer.
+//
+// Each successful probe is the authoritative full state for that peer, so
+// the peer's prior consensus entries are dropped before the new ones are
+// recorded (C2). The stream is size-limited and the advertised peer count
+// is capped to bound resource use (C1).
 func (pt *PartitionTracker) probeConsensusAdvertise(peerID peer.ID) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
 	id, err := consensuspeer.NodeIDFromPeerID(peerID)
@@ -147,13 +207,23 @@ func (pt *PartitionTracker) probeConsensusAdvertise(peerID peer.ID) {
 	defer func() { _ = s.Close() }()
 
 	var adv consensuspeer.Advertisement
-	if err := json.NewDecoder(s).Decode(&adv); err != nil {
+	if err := json.NewDecoder(io.LimitReader(s, 64<<10)).Decode(&adv); err != nil {
 		slog.Debug("Consensus probe: decode failed", "peer", peerID, "error", err)
+		return
+	}
+	if len(adv.Peers) > 64 {
+		slog.Warn("Consensus probe: advertisement too large, ignoring",
+			"peer", peerID, "count", len(adv.Peers))
 		return
 	}
 
 	pt.mu.Lock()
 	defer pt.mu.Unlock()
+
+	// Each probe is the authoritative full state for this peer: drop its
+	// prior entries so stale host:port/partitions don't persist.
+	pt.forgetConsensusPeer(peerID)
+
 	for _, a := range adv.Peers {
 		if a.Host == "" || a.Port == 0 || isUnroutableHost(a.Host) {
 			continue
@@ -166,168 +236,18 @@ func (pt *PartitionTracker) probeConsensusAdvertise(peerID peer.ID) {
 	}
 }
 
-// probeLoop periodically probes peers to update their partition information
-func (pt *PartitionTracker) probeLoop() {
-	for {
-		select {
-		case <-pt.stopCh:
-			return
-		case <-pt.probeTick.C:
-			pt.probeAllPeers()
-		}
-	}
-}
-
-// probeAllPeers probes all connected peers to determine their partitions
-func (pt *PartitionTracker) probeAllPeers() {
-	peers := pt.host.Network().Peers()
-	slog.Info("Probing peers for partition info", "peer_count", len(peers))
-
-	for _, peerID := range peers {
-		pt.probePeer(peerID)
-	}
-
-	// Update metrics
-	pt.updateMetrics()
-}
-
-// probePeer probes a single peer to determine its partition
-func (pt *PartitionTracker) probePeer(peerID peer.ID) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	// Get protocols supported by this peer
-	protocols, err := pt.host.Peerstore().GetProtocols(peerID)
-	if err != nil {
-		slog.Debug("Failed to get protocols for peer", "peer", peerID, "error", err)
-		return
-	}
-
-	// Determine partition from protocols
-	partition := pt.detectPartition(protocols)
-
-	// Get addresses
-	addrs := pt.host.Peerstore().Addrs(peerID)
-
-	pt.mu.Lock()
-	defer pt.mu.Unlock()
-
-	now := time.Now()
-
-	info, exists := pt.peers[peerID]
-	if !exists {
-		info = &PeerPartitionInfo{
-			PeerID:    peerID,
-			FirstSeen: now,
-			Score:     50, // Start with neutral score
-		}
-		pt.peers[peerID] = info
-	}
-
-	// Update peer info
-	oldPartition := info.Partition
-	info.Partition = partition
-	info.Addresses = addrs
-	info.Protocols = protocols
-	info.LastSeen = now
-	info.LastProbed = now
-	info.ProbeCount++
-
-	// Update partition index if changed
-	if oldPartition != partition {
-		if oldPartition != "" {
-			delete(pt.byPartition[oldPartition], peerID)
-		}
-		if pt.byPartition[partition] == nil {
-			pt.byPartition[partition] = make(map[peer.ID]struct{})
-		}
-		pt.byPartition[partition][peerID] = struct{}{}
-	}
-
-	_ = ctx // Used for future enhancements
-}
-
-// detectPartition attempts to detect a peer's partition from its protocols
-func (pt *PartitionTracker) detectPartition(protocols []protocol.ID) string {
-	for _, p := range protocols {
-		ps := string(p)
-		lower := strings.ToLower(ps)
-
-		// Check for Accumulate service protocols
-		if strings.Contains(lower, "/acc/") {
-			// Look for network identifiers
-			if strings.Contains(lower, "/directory/") || strings.Contains(lower, "/dn/") {
-				return PartitionDN
-			}
-			if strings.Contains(lower, "/cyclops/") || strings.Contains(lower, "/bvn0/") {
-				return PartitionCyclops
-			}
-		}
-
-		// Check for known partition patterns in protocol IDs
-		if strings.Contains(lower, "directory") {
-			return PartitionDN
-		}
-		if strings.Contains(lower, "cyclops") {
-			return PartitionCyclops
-		}
-	}
-
-	return PartitionUnknown
-}
-
-// AddPeer adds or updates a peer in the tracker
-func (pt *PartitionTracker) AddPeer(peerID peer.ID, partition string) {
-	pt.mu.Lock()
-	defer pt.mu.Unlock()
-
-	now := time.Now()
-
-	info, exists := pt.peers[peerID]
-	if !exists {
-		info = &PeerPartitionInfo{
-			PeerID:    peerID,
-			FirstSeen: now,
-			Score:     50,
-		}
-		pt.peers[peerID] = info
-	}
-
-	oldPartition := info.Partition
-	info.Partition = partition
-	info.LastSeen = now
-
-	// Update partition index if changed
-	if oldPartition != partition {
-		if oldPartition != "" {
-			delete(pt.byPartition[oldPartition], peerID)
-		}
-		if pt.byPartition[partition] == nil {
-			pt.byPartition[partition] = make(map[peer.ID]struct{})
-		}
-		pt.byPartition[partition][peerID] = struct{}{}
-	}
-
-	pt.updateMetrics()
-}
-
-// RemovePeer removes a peer from the tracker
+// RemovePeer removes a peer from the tracker.
 func (pt *PartitionTracker) RemovePeer(peerID peer.ID) {
 	pt.mu.Lock()
 	defer pt.mu.Unlock()
 
-	info, exists := pt.peers[peerID]
-	if !exists {
-		return
-	}
-
-	if info.Partition != "" {
-		delete(pt.byPartition[info.Partition], peerID)
-	}
+	_, exists := pt.peers[peerID]
 	delete(pt.peers, peerID)
 	pt.forgetConsensusPeer(peerID)
 
-	pt.updateMetrics()
+	if exists {
+		pt.updateMetrics()
+	}
 }
 
 // forgetConsensusPeer drops a peer from every consensus partition. The
@@ -338,22 +258,30 @@ func (pt *PartitionTracker) forgetConsensusPeer(peerID peer.ID) {
 	}
 }
 
-// GetPeersByPartition returns all peers for a given partition
+// GetPeersByPartition returns the tracked peers that advertised a
+// CometBFT endpoint for the given partition (#4043). Membership comes
+// from consensusByPartition, not from any protocol-ID guess.
 func (pt *PartitionTracker) GetPeersByPartition(partition string) []PeerPartitionInfo {
 	pt.mu.RLock()
 	defer pt.mu.RUnlock()
 
-	partition = strings.ToLower(partition)
-	peerIDs, ok := pt.byPartition[partition]
+	byPeer, ok := pt.consensusByPartition[strings.ToLower(partition)]
 	if !ok {
 		return nil
 	}
 
-	result := make([]PeerPartitionInfo, 0, len(peerIDs))
-	for peerID := range peerIDs {
+	result := make([]PeerPartitionInfo, 0, len(byPeer))
+	for peerID := range byPeer {
 		if info, exists := pt.peers[peerID]; exists {
 			result = append(result, *info)
+			continue
 		}
+		// The peer advertised this partition but isn't in the peers map
+		// (e.g. transient connection state); synthesize a minimal entry.
+		result = append(result, PeerPartitionInfo{
+			PeerID:    peerID,
+			Addresses: pt.host.Peerstore().Addrs(peerID),
+		})
 	}
 
 	return result
@@ -391,52 +319,38 @@ func isUnroutableHost(host string) bool {
 	return ip.IsLoopback() || ip.IsUnspecified()
 }
 
-// GetPartitionStats returns statistics for all partitions
+// GetPartitionStats returns statistics for all partitions, derived from
+// the per-partition consensus advertisements (#4043).
 func (pt *PartitionTracker) GetPartitionStats() map[string]PartitionStats {
 	pt.mu.RLock()
 	defer pt.mu.RUnlock()
 
 	stats := make(map[string]PartitionStats)
 
-	for partition, peerIDs := range pt.byPartition {
-		var totalScore float64
-		var connected int
-
-		for peerID := range peerIDs {
-			info := pt.peers[peerID]
-			if info != nil {
-				totalScore += info.Score
-
-				// Check if currently connected
-				if pt.host.Network().Connectedness(peerID) == 1 { // Connected
-					connected++
-				}
+	for partition, byPeer := range pt.consensusByPartition {
+		connected := 0
+		for peerID := range byPeer {
+			if pt.host != nil && pt.host.Network().Connectedness(peerID) == network.Connected {
+				connected++
 			}
 		}
 
-		avgScore := 0.0
-		if len(peerIDs) > 0 {
-			avgScore = totalScore / float64(len(peerIDs))
-		}
-
 		stats[partition] = PartitionStats{
-			TotalPeers:     len(peerIDs),
+			TotalPeers:     len(byPeer),
 			ConnectedPeers: connected,
-			AverageScore:   avgScore,
 		}
 	}
 
 	return stats
 }
 
-// PartitionStats contains statistics for a partition
+// PartitionStats contains statistics for a partition.
 type PartitionStats struct {
-	TotalPeers     int     `json:"total_peers"`
-	ConnectedPeers int     `json:"connected_peers"`
-	AverageScore   float64 `json:"average_score"`
+	TotalPeers     int `json:"total_peers"`
+	ConnectedPeers int `json:"connected_peers"`
 }
 
-// GetAllPeers returns all tracked peers
+// GetAllPeers returns all tracked peers.
 func (pt *PartitionTracker) GetAllPeers() []PeerPartitionInfo {
 	pt.mu.RLock()
 	defer pt.mu.RUnlock()
@@ -449,52 +363,24 @@ func (pt *PartitionTracker) GetAllPeers() []PeerPartitionInfo {
 	return result
 }
 
-// UpdateScore updates a peer's score
-func (pt *PartitionTracker) UpdateScore(peerID peer.ID, delta float64) {
-	pt.mu.Lock()
-	defer pt.mu.Unlock()
-
-	info, exists := pt.peers[peerID]
-	if !exists {
-		return
-	}
-
-	// Update score with bounds
-	info.Score += delta
-	if info.Score < 0 {
-		info.Score = 0
-	}
-	if info.Score > 100 {
-		info.Score = 100
-	}
-}
-
-// RecordSuccess records a successful interaction with a peer
-func (pt *PartitionTracker) RecordSuccess(peerID peer.ID) {
-	pt.UpdateScore(peerID, 1)
-}
-
-// RecordFailure records a failed interaction with a peer
-func (pt *PartitionTracker) RecordFailure(peerID peer.ID) {
-	pt.UpdateScore(peerID, -2)
-}
-
-// updateMetrics updates the metrics collector with current partition counts
+// updateMetrics updates the metrics collector with current partition
+// counts derived from consensusByPartition.
 func (pt *PartitionTracker) updateMetrics() {
 	if pt.metrics == nil {
 		return
 	}
 
-	for partition, peerIDs := range pt.byPartition {
-		peers := make([]peer.ID, 0, len(peerIDs))
-		for peerID := range peerIDs {
+	for partition, byPeer := range pt.consensusByPartition {
+		peers := make([]peer.ID, 0, len(byPeer))
+		for peerID := range byPeer {
 			peers = append(peers, peerID)
 		}
 		pt.metrics.SetPartitionPeers(partition, peers)
 	}
 }
 
-// PruneStalePeers removes peers that haven't been seen recently
+// PruneStalePeers removes peers that haven't been seen recently. With the
+// disconnect notifier in place this is only a safety net.
 func (pt *PartitionTracker) PruneStalePeers(maxAge time.Duration) int {
 	pt.mu.Lock()
 	defer pt.mu.Unlock()
@@ -503,10 +389,14 @@ func (pt *PartitionTracker) PruneStalePeers(maxAge time.Duration) int {
 	pruned := 0
 
 	for peerID, info := range pt.peers {
+		// Never prune a peer that is still connected — LastSeen is only
+		// refreshed on connection events, so a long-lived connection has a
+		// stale LastSeen but is not stale. This is purely a safety net for
+		// disconnects the notifier missed.
+		if pt.host != nil && pt.host.Network().Connectedness(peerID) == network.Connected {
+			continue
+		}
 		if info.LastSeen.Before(cutoff) {
-			if info.Partition != "" {
-				delete(pt.byPartition[info.Partition], peerID)
-			}
 			delete(pt.peers, peerID)
 			pt.forgetConsensusPeer(peerID)
 			pruned++

@@ -235,29 +235,20 @@ func (cm *ConnectionManager) pruneConnections() {
 		"remaining", totalConns-pruned)
 }
 
-// calculateConnectionScore calculates a priority score for a connection
-// Higher scores are kept, lower scores are pruned first
+// calculateConnectionScore calculates a priority score for a connection.
+// Higher scores are kept, lower scores are pruned first. Scoring is based
+// only on observable connection properties (direction and age) plus a
+// penalty for peers holding excess connections — there is no per-peer
+// reputation score.
 func (cm *ConnectionManager) calculateConnectionScore(peerID peer.ID, conn network.Conn, now time.Time) float64 {
 	score := 50.0 // Base score
 
-	// Factor 1: Tracker score (if available)
-	if cm.tracker != nil {
-		trackerPeers := cm.tracker.GetAllPeers()
-		for _, p := range trackerPeers {
-			if p.PeerID == peerID {
-				// Normalize tracker score (0-100) to 0-30 contribution
-				score += (p.Score / 100.0) * 30.0
-				break
-			}
-		}
-	}
-
-	// Factor 2: Connection direction (prefer outbound)
+	// Prefer outbound connections.
 	if conn.Stat().Direction == network.DirOutbound {
 		score += 10.0
 	}
 
-	// Factor 3: Connection age (prefer established connections)
+	// Prefer established connections.
 	if connTime, ok := cm.connTimes[peerID]; ok {
 		age := now.Sub(connTime)
 		// Give bonus for connections older than 5 minutes
@@ -271,24 +262,9 @@ func (cm *ConnectionManager) calculateConnectionScore(peerID peer.ID, conn netwo
 		}
 	}
 
-	// Factor 4: Partition membership (prefer known partitions)
-	if cm.tracker != nil {
-		// Check if peer is in a known partition
-		for _, partition := range []string{PartitionDN, PartitionCyclops} {
-			peers := cm.tracker.GetPeersByPartition(partition)
-			for _, p := range peers {
-				if p.PeerID == peerID {
-					score += 15.0 // Bonus for being in a known partition
-					break
-				}
-			}
-		}
-	}
-
-	// Factor 5: Penalize peers with too many connections
+	// Penalize peers with too many connections.
 	if count, ok := cm.connCounts[peerID]; ok {
 		if count > cm.config.MaxConnectionsPerPeer {
-			// Heavy penalty for excessive connections
 			score -= float64(count-cm.config.MaxConnectionsPerPeer) * 20.0
 		}
 	}
@@ -343,30 +319,3 @@ func (cm *ConnectionManager) GetConnectionStats() map[string]interface{} {
 	}
 }
 
-// ProtectConnection marks a connection as protected from pruning
-func (cm *ConnectionManager) ProtectConnection(peerID peer.ID) {
-	// This could be extended to maintain a protected list
-	// For now, resetting connection time gives it max grace period
-	cm.mu.Lock()
-	defer cm.mu.Unlock()
-	cm.connTimes[peerID] = time.Now()
-}
-
-// UnprotectConnection removes protection from a connection
-func (cm *ConnectionManager) UnprotectConnection(peerID peer.ID) {
-	// Could be extended if we maintain a protected list
-}
-
-// TrimConnections forces connection trimming regardless of watermark
-func (cm *ConnectionManager) TrimConnections(target int) int {
-	conns := cm.host.Network().Conns()
-	if len(conns) <= target {
-		return 0
-	}
-
-	// Use the same pruning logic
-	cm.config.LowWatermark = target
-	cm.pruneConnections()
-
-	return len(conns) - len(cm.host.Network().Conns())
-}
