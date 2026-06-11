@@ -50,6 +50,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/consensuspeer"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
@@ -365,7 +366,15 @@ func (c *ConsensusService) start(inst *Instance) error {
 	if ext := c.cometExternalAddress(inst); ext != "" {
 		if host, portStr, err := net.SplitHostPort(ext); err == nil {
 			if port, err := strconv.Atoi(portStr); err == nil {
-				inst.advertiseConsensusEndpoint(c.App.partition().ID, host, port)
+				// Advertise the CometBFT RPC port explicitly so the bootstrap
+				// server can probe version consensus without assuming the
+				// P2P+1 layout (#4043, §4.8). The RPC port is the same
+				// partition base as the P2P port, shifted by the
+				// RPC-minus-P2P offset.
+				rpcPort := port +
+					int(config.PortOffsetTendermintRpc) -
+					int(config.PortOffsetTendermintP2P)
+				inst.advertiseConsensusEndpoint(c.App.partition().ID, host, port, rpcPort)
 			}
 		}
 	}

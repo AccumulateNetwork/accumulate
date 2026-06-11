@@ -56,11 +56,17 @@ type Advertisement struct {
 	Peers []Advertised `json:"peers"`
 }
 
-// Advertised is one partition's CometBFT P2P endpoint.
+// Advertised is one partition's CometBFT endpoint. Port is the CometBFT
+// P2P port (used for persistent_peers / DialPeersAsync); RPCPort is the
+// CometBFT RPC port the bootstrap server probes for /status and
+// /abci_info (#4043, §4.8). RPCPort is advertised explicitly so no
+// P2P+1 port-layout assumption is made; a zero RPCPort means an older
+// node that did not advertise it.
 type Advertised struct {
 	Partition string `json:"partition"`
 	Host      string `json:"host"`
 	Port      int    `json:"port"`
+	RPCPort   int    `json:"rpcPort,omitempty"`
 }
 
 // NodeIDFromPeerID derives the CometBFT node ID from a libp2p peer ID by
@@ -87,11 +93,14 @@ func NodeIDFromPeerID(id peer.ID) (tmp2p.ID, error) {
 const Libp2pToCometPortOffset = -2
 
 // Peer is a resolved CometBFT consensus peer: its node ID plus the
-// host:port to dial.
+// host:port to dial. RPCPort is the CometBFT RPC port for version /
+// consensus probing (#4043, §4.8); it is 0 when unknown, in which case
+// callers may derive it from the P2P port.
 type Peer struct {
-	ID   tmp2p.ID
-	Host string
-	Port int
+	ID      tmp2p.ID
+	Host    string
+	Port    int
+	RPCPort int
 }
 
 // DialString returns the `NodeID@host:port` form CometBFT expects in

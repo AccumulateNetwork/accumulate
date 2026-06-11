@@ -232,7 +232,14 @@ func (pt *PartitionTracker) probeConsensusAdvertise(peerID peer.ID) {
 		if pt.consensusByPartition[key] == nil {
 			pt.consensusByPartition[key] = make(map[peer.ID]consensuspeer.Peer)
 		}
-		pt.consensusByPartition[key][peerID] = consensuspeer.Peer{ID: id, Host: a.Host, Port: a.Port}
+		// Carry the advertised CometBFT RPC port for version probing
+		// (#4043, §4.8). An older node that does not advertise it sends 0;
+		// fall back to deriving RPC = P2P+1 (the standard layout).
+		rpcPort := a.RPCPort
+		if rpcPort == 0 {
+			rpcPort = a.Port + 1
+		}
+		pt.consensusByPartition[key][peerID] = consensuspeer.Peer{ID: id, Host: a.Host, Port: a.Port, RPCPort: rpcPort}
 	}
 }
 
@@ -304,6 +311,21 @@ func (pt *PartitionTracker) GetConsensusPeers(partition string) []consensuspeer.
 	out := make([]consensuspeer.Peer, 0, len(byPeer))
 	for _, p := range byPeer {
 		out = append(out, p)
+	}
+	return out
+}
+
+// ConsensusPartitions returns the lowercased names of all partitions for
+// which at least one consensus endpoint is currently tracked (#4043).
+func (pt *PartitionTracker) ConsensusPartitions() []string {
+	pt.mu.RLock()
+	defer pt.mu.RUnlock()
+
+	out := make([]string, 0, len(pt.consensusByPartition))
+	for partition, byPeer := range pt.consensusByPartition {
+		if len(byPeer) > 0 {
+			out = append(out, partition)
+		}
 	}
 	return out
 }

@@ -86,6 +86,7 @@ type InfoServer struct {
 	external    []multiaddr.Multiaddr
 	metrics     *MetricsCollector
 	partitions  *PartitionTracker
+	versions    *VersionTracker
 	connections *ConnectionManager
 }
 
@@ -107,6 +108,7 @@ func NewInfoServer(h host.Host, listen multiaddr.Multiaddr, external []multiaddr
 	mux.HandleFunc("/peers", s.handlePeers)
 	mux.HandleFunc("/peers/", s.handlePeersByPartition)
 	mux.HandleFunc("/consensus-peers/", s.handleConsensusPeers)
+	mux.HandleFunc("/consensus/", s.handleConsensus)
 	mux.HandleFunc("/partitions", s.handlePartitions)
 	mux.HandleFunc("/connect", s.handleConnect)
 	mux.HandleFunc("/stats", s.handleStats)
@@ -435,6 +437,9 @@ func (s *InfoServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 
 // Shutdown gracefully shuts down the info server
 func (s *InfoServer) Shutdown(ctx context.Context) error {
+	if s.versions != nil {
+		s.versions.Stop()
+	}
 	if s.partitions != nil {
 		s.partitions.Stop()
 	}
@@ -457,6 +462,12 @@ func (s *InfoServer) Partitions() *PartitionTracker {
 // SetConnectionManager sets the connection manager
 func (s *InfoServer) SetConnectionManager(cm *ConnectionManager) {
 	s.connections = cm
+}
+
+// SetVersionTracker wires the fleet version-consensus tracker so the
+// /consensus/{partition} endpoint can serve its reports (#4043, §4.8).
+func (s *InfoServer) SetVersionTracker(vt *VersionTracker) {
+	s.versions = vt
 }
 
 // Connections returns the connection manager for external use
@@ -829,6 +840,69 @@ func (s *InfoServer) handleConsensusPeers(w http.ResponseWriter, r *http.Request
 	encoder.SetIndent("", "  ")
 	if err := encoder.Encode(response); err != nil {
 		slog.Error("Failed to encode consensus peers response", "error", err)
+	}
+}
+
+// handleConsensus serves the fleet version-consensus report for a
+// partition (#4043, §4.8): whether every on-chain validator of the
+// partition is reachable and running the same accumulated version. This
+// is the go/no-go gate before activating a consensus-critical protocol
+// version (e.g. V2CyclopsBptRepair).
+//
+// Status codes: 400 on an empty partition; 200 with the report
+// otherwise. When no probe pass has produced a report yet (or no roster
+// is known) the report is returned with pending=true and
+// validatorConsensus=false — a fail-safe "not ready", still 200 so a
+// poller can read the body.
+func (s *InfoServer) handleConsensus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Extract partition from path: /consensus/{partition}
+	path := strings.TrimPrefix(r.URL.Path, "/consensus/")
+	partition := strings.ToLower(strings.TrimSpace(path))
+
+	status := http.StatusOK
+	start := time.Now()
+	defer func() {
+		s.metrics.RecordHTTPRequest("/consensus/"+partition, status, time.Since(start))
+	}()
+
+	if partition == "" {
+		status = http.StatusBadRequest
+		http.Error(w, "Partition name required", status)
+		return
+	}
+
+	var report ConsensusReport
+	if s.versions != nil {
+		if rep, ok := s.versions.GetConsensusReport(partition); ok {
+			report = rep
+		}
+	}
+	// No report yet: return a clear pending state (still 200).
+	if report.Partition == "" {
+		report.Partition = partition
+	}
+	if report.Versions == nil {
+		report.Versions = map[string][]string{}
+	}
+	if report.Validators == nil {
+		report.Validators = []ValidatorVersion{}
+	}
+	if report.UpdatedAt.IsZero() {
+		report.Pending = true
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+
+	encoder := json.NewEncoder(w)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(report); err != nil {
+		slog.Error("Failed to encode consensus report response", "error", err)
 	}
 }
 

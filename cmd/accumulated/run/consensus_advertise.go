@@ -29,8 +29,10 @@ type consensusAdvertiser struct {
 // advertiseConsensusEndpoint records this partition's CometBFT endpoint
 // and, on first call, registers the advertise stream handler on the
 // shared libp2p host. host/port are the externally reachable CometBFT
-// P2P address; an empty host is ignored (nothing to advertise).
-func (i *Instance) advertiseConsensusEndpoint(partition, host string, port int) {
+// P2P address; rpcPort is the CometBFT RPC port the bootstrap server
+// probes for version consensus (#4043, §4.8). An empty host is ignored
+// (nothing to advertise).
+func (i *Instance) advertiseConsensusEndpoint(partition, host string, port, rpcPort int) {
 	if host == "" || port == 0 {
 		return
 	}
@@ -54,6 +56,7 @@ func (i *Instance) advertiseConsensusEndpoint(partition, host string, port int) 
 		Partition: partition,
 		Host:      host,
 		Port:      port,
+		RPCPort:   rpcPort,
 	}
 
 	if !i.consensusAdv.registered && i.p2p != nil {
