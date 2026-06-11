@@ -1,0 +1,82 @@
+# 3 BVN x 4 validator network for a sustained version-consensus + load
+# test (#4043). Every node is a dual node (DN validator + its BVN's
+# validator): 12 DN validators, 4 validators per BVN. Peers are brokered
+# by the bootstrap server (no static persistent_peers); the bootstrap's
+# GET /consensus/{partition} reports fleet version consensus.
+#
+# Usage:
+#   docker compose -p acc-cl -f test/docker/docker-compose.consensus-load.yml build
+#   docker compose -p acc-cl -f test/docker/docker-compose.consensus-load.yml up -d
+#   docker compose -p acc-cl -f test/docker/docker-compose.consensus-load.yml down -v
+#
+# Endpoints on the host:
+#   bootstrap info / /consensus : http://127.0.0.1:18081
+#   node APIs (v2/v3)           : 127.0.0.1:27680 .. 27691
+
+x-build: &build
+  context: ../..
+  dockerfile: Dockerfile
+  args:
+    GIT_DESCRIBE: ${GIT_DESCRIBE:-dev}
+    GIT_COMMIT: ${GIT_COMMIT:-}
+
+x-node: &node
+  build: *build
+  mem_limit: 1g
+  restart: unless-stopped
+  volumes: [ "network-config-cl:/root/.accumulate" ]
+  depends_on:
+    init: { condition: service_completed_successfully }
+    bootstrap: { condition: service_started }
+
+services:
+  init:
+    build: *build
+    container_name: acc-cl-init
+    volumes:
+      - network-config-cl:/root/.accumulate
+      - ../..:/workspace
+    working_dir: /workspace
+    command:
+      - init
+      - network
+      - test/docker/docker-network.consensus-load.yml
+      - --reset
+      - --faucet-seed=FAUCET
+      - --consensus-peer-broker
+
+  bootstrap:
+    build: *build
+    container_name: acc-cl-bootstrap
+    mem_limit: 1g
+    ports:
+      - "18081:8080"    # info server + /consensus + /consensus-peers
+    volumes:
+      - network-config-cl:/root/.accumulate:ro
+    entrypoint: ["/bin/accumulated-bootstrap"]
+    command:
+      - --listen
+      - /ip4/0.0.0.0/tcp/16593
+      - --key
+      - /root/.accumulate/bootstrap/node_key.hex
+    restart: unless-stopped
+    depends_on:
+      init: { condition: service_completed_successfully }
+
+  bvn1-1: { <<: *node, container_name: acc-cl-bvn1-1, command: [ "-w=/root/.accumulate/bvn1-1", "/root/.accumulate/bvn1-1/accumulate.toml" ], ports: [ "27680:26660" ] }
+  bvn1-2: { <<: *node, container_name: acc-cl-bvn1-2, command: [ "-w=/root/.accumulate/bvn1-2", "/root/.accumulate/bvn1-2/accumulate.toml" ], ports: [ "27681:26660" ] }
+  bvn1-3: { <<: *node, container_name: acc-cl-bvn1-3, command: [ "-w=/root/.accumulate/bvn1-3", "/root/.accumulate/bvn1-3/accumulate.toml" ], ports: [ "27682:26660" ] }
+  bvn1-4: { <<: *node, container_name: acc-cl-bvn1-4, command: [ "-w=/root/.accumulate/bvn1-4", "/root/.accumulate/bvn1-4/accumulate.toml" ], ports: [ "27683:26660" ] }
+
+  bvn2-1: { <<: *node, container_name: acc-cl-bvn2-1, command: [ "-w=/root/.accumulate/bvn2-1", "/root/.accumulate/bvn2-1/accumulate.toml" ], ports: [ "27684:26660" ] }
+  bvn2-2: { <<: *node, container_name: acc-cl-bvn2-2, command: [ "-w=/root/.accumulate/bvn2-2", "/root/.accumulate/bvn2-2/accumulate.toml" ], ports: [ "27685:26660" ] }
+  bvn2-3: { <<: *node, container_name: acc-cl-bvn2-3, command: [ "-w=/root/.accumulate/bvn2-3", "/root/.accumulate/bvn2-3/accumulate.toml" ], ports: [ "27686:26660" ] }
+  bvn2-4: { <<: *node, container_name: acc-cl-bvn2-4, command: [ "-w=/root/.accumulate/bvn2-4", "/root/.accumulate/bvn2-4/accumulate.toml" ], ports: [ "27687:26660" ] }
+
+  bvn3-1: { <<: *node, container_name: acc-cl-bvn3-1, command: [ "-w=/root/.accumulate/bvn3-1", "/root/.accumulate/bvn3-1/accumulate.toml" ], ports: [ "27688:26660" ] }
+  bvn3-2: { <<: *node, container_name: acc-cl-bvn3-2, command: [ "-w=/root/.accumulate/bvn3-2", "/root/.accumulate/bvn3-2/accumulate.toml" ], ports: [ "27689:26660" ] }
+  bvn3-3: { <<: *node, container_name: acc-cl-bvn3-3, command: [ "-w=/root/.accumulate/bvn3-3", "/root/.accumulate/bvn3-3/accumulate.toml" ], ports: [ "27690:26660" ] }
+  bvn3-4: { <<: *node, container_name: acc-cl-bvn3-4, command: [ "-w=/root/.accumulate/bvn3-4", "/root/.accumulate/bvn3-4/accumulate.toml" ], ports: [ "27691:26660" ] }
+
+volumes:
+  network-config-cl:
