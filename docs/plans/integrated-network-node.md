@@ -388,11 +388,16 @@ The bootstrap server already sees every node (it brokers their consensus reachab
 §4.7), so it is the natural place to answer this. It needs **no new advertisement
 field** — the data is already exposed by each node:
 
-1. **Authoritative roster.** The bootstrap queries `network-status` over libp2p (§4.1)
-   for `NetworkDefinition.Validators` — the on-chain, consensus-signed validator set,
-   each entry carrying the validator's consensus `PublicKeyHash` and the partitions it
-   is active on. This is the *expected* set, so the endpoint can report a **missing**
-   validator, not merely disagreement among the ones it reaches.
+1. **Authoritative roster.** The bootstrap needs the partition's *expected* validator
+   set so it can report a **missing** validator, not merely disagreement among the ones
+   it reaches. Two equivalent sources exist: the on-chain `NetworkDefinition.Validators`
+   (via v3 `network-status`) and CometBFT's `/validators` RPC — the same Ed25519
+   consensus keys, since genesis registers the priv_validator key directly into the
+   on-chain roster (`init.go` → `AddValidator`) and `DiffValidators` projects that same
+   set back to CometBFT. The implementation uses **`/validators`**: it reuses the RPC
+   transport already needed for step 2 and avoids wiring a v3 message client into the
+   bootstrap. The roster is fetched from the first reachable peer of the partition, with
+   a last-good cache when none answer.
 2. **Per-node probe.** For each consensus peer it tracks (host from the §4.7
    advertisement), the bootstrap calls the node's CometBFT RPC:
    - `/status` → `validator_info.pub_key` (consensus ED25519 key) and `voting_power`
