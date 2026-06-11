@@ -78,6 +78,27 @@ and info components to it.
 - starts `ConnectionManager` and `ActiveDiscovery` against `inst.P2P().Host()` and
   `inst.P2P().DHT()`.
 
+#### Responsibilities
+
+The bootstrap server has four jobs, and only these four:
+
+1. **Collect peers** — track the libp2p peers it discovers via the DHT and the
+   CometBFT endpoints they advertise (§4.7).
+2. **Liveness** — periodically probe each tracked peer and mark it alive or dead;
+   a peer that stops answering ages out. The version probe (below) is the liveness
+   signal.
+3. **Pull versions** — query each peer's running `accumulated` build version.
+4. **Report version consensus** — expose `/consensus/{partition}` answering "are all
+   of this partition's validators running the same version?" (§4.8). This is the gate
+   operators check before activating a consensus-critical protocol upgrade.
+
+A peer's partition is taken from authoritative data only: the node's own
+advertisement (§4.7, authenticated by the libp2p handshake) and, for validators, the
+on-chain validator set (§4.1). There is **no** "unknown partition" bucket and **no**
+protocol-ID partition guesser — both were speculative scaffolding (introduced by an
+AI-generated "optimize the bootstrap server" commit, never specified, contradicting
+§4.1's "membership is on-chain") and are removed.
+
 ### 3.2 New `BootstrapConfiguration`
 
 A macro, parallel to `GatewayConfiguration`. Its `apply()`:
@@ -275,9 +296,10 @@ peer sets:
 | Source | bootstrap server (**dynamic**) | baked in at init/migrate (**static**) |
 
 The bootstrap server's `PartitionTracker`
-(`cmd/accumulated-bootstrap/partition_tracker.go`) stores only `peer.ID` + libp2p
-multiaddrs, with the partition inferred from libp2p protocol IDs. It has no notion of a
-CometBFT `NodeID` or a Tendermint P2P endpoint. Consensus peering, meanwhile, is built
+(`cmd/accumulated-bootstrap/partition_tracker.go`) originally stored only `peer.ID` +
+libp2p multiaddrs, with the partition *inferred* from libp2p protocol IDs (the
+guesser removed per §3.1). It had no notion of a CometBFT `NodeID` or a Tendermint
+P2P endpoint. Consensus peering, meanwhile, is built
 in `cmd/accumulated/run/consensus.go` purely from the static `DnBootstrapPeers` /
 `BvnBootstrapPeers` written once by `cmd_init_network.go` / `cmd_migrate.go`. Nothing
 updates `persistent_peers` at runtime from the bootstrap server.
@@ -305,12 +327,15 @@ Apply the same identity/reachability split as §4.1, now to the consensus layer.
 bootstrap server brokers **addresses**; consensus membership (who is a validator) stays
 anchored on-chain.
 
-1. **Advertise.** Each node announces its CometBFT tuple `{partition, NodeID,
-   host:port}` over an authenticated libp2p stream — authenticated by its libp2p host
-   key, mirroring the existing partition-advertise path in `peer_discovery.go`.
-2. **Track.** Extend `PeerPartitionInfo` to carry the CometBFT endpoint alongside the
-   libp2p info. The bootstrap server exposes a partition→`[NodeID@host:port]` list
-   (a new endpoint, or an additive field on `/peers/{partition}`).
+1. **Advertise.** Each node announces its CometBFT endpoint `{partition, host, P2P
+   port, RPC port}` over a libp2p stream authenticated by its host key. The CometBFT
+   `NodeID` is **not** asserted: the bootstrap derives it from the peer's libp2p key
+   (`consensuspeer.NodeIDFromPeerID`), so it cannot be forged. (The RPC port is carried
+   so §4.8 need not assume the default P2P+1 layout.)
+2. **Track.** The bootstrap stores each peer's advertised endpoint(s) in a
+   per-partition index (`consensusByPartition`), kept **separate** from the libp2p
+   `PeerPartitionInfo` so a dual node serving DN + a BVN is disambiguated. It exposes
+   a partition→`[NodeID@host:port]` list via `/consensus-peers/{partition}`.
 3. **Consume.** Each node periodically pulls its partition's consensus peer list from
    the bootstrap server and feeds it into CometBFT via the already-wired
    `Switch().DialPeersAsync` — so the bootstrap server becomes the live source of
@@ -326,8 +351,8 @@ hostile broker entry is a connection failure, not an identity substitution. Vali
 identity stays consensus-anchored; only reachability is brokered.
 
 The weak binding is libp2p-`peer.ID` ↔ CometBFT `NodeID`: a peer asserts its own
-CometBFT tuple. For *dialing*, a bad assertion is self-defeating (the handshake
-rejects it). The authenticated version of that binding is Option B below, and it is the
+host:port (the `NodeID` itself is derived from the libp2p key, not asserted). For
+*dialing*, a bad address assertion is self-defeating (the handshake rejects it). The authenticated version of that binding is Option B below, and it is the
 consensus-layer analogue of the libp2p `libp2p-peer-id` binding in §4.6 — a different
 key, but the same on-chain mechanism.
 
@@ -350,6 +375,95 @@ backfill machinery.
 - Option B sequences with **Phase 3 / §4.6 (H4)**: it reuses the same on-chain
   network-definition change and backfill, adding the CometBFT `NodeID` field alongside
   `libp2p-peer-id`.
+
+### 4.8 Fleet version consensus — upgrade-readiness gate (#4043)
+
+A consensus-critical protocol change — a new `ExecutorVersion` activated network-wide
+by `ActivateProtocolVersion` — is only safe to activate once **every validator runs a
+binary that implements it**. If a validator is still on an older binary when the
+version activates, it computes a different app hash at the activation height and the
+partition halts. Operators need one authoritative answer to: *is the fleet ready?*
+
+The bootstrap server already sees every node (it brokers their consensus reachability,
+§4.7), so it is the natural place to answer this. It needs **no new advertisement
+field** — the data is already exposed by each node:
+
+1. **Authoritative roster.** The bootstrap queries `network-status` over libp2p (§4.1)
+   for `NetworkDefinition.Validators` — the on-chain, consensus-signed validator set,
+   each entry carrying the validator's consensus `PublicKeyHash` and the partitions it
+   is active on. This is the *expected* set, so the endpoint can report a **missing**
+   validator, not merely disagreement among the ones it reaches.
+2. **Per-node probe.** For each consensus peer it tracks (host from the §4.7
+   advertisement), the bootstrap calls the node's CometBFT RPC:
+   - `/status` → `validator_info.pub_key` (consensus ED25519 key) and `voting_power`
+     (whether it is currently a validator). `SHA256(pub_key)` matches the on-chain
+     `PublicKeyHash`.
+   - `/abci_info` → the ABCI app `Data` field, which carries `{Version, Commit}` =
+     `accumulate.Version` (the git-describe build string). This is the binary version.
+
+   RPC is bound to `0.0.0.0`, so an off-host bootstrap can reach it, and the
+   `exp/tendermint` HTTP client already implements `Status()` / `ABCIInfo()` and the
+   P2P→RPC port offset.
+3. **Liveness.** A node that does not answer the RPC is marked not-present; this probe
+   is also the §3.1 liveness signal.
+
+**Endpoint.** `GET /consensus/{partition}` returns the per-validator version map and a
+single boolean:
+
+```json
+{
+  "partition": "Cyclops",
+  "validatorConsensus": true,
+  "agreedVersion": "v1.4.4-beta.3-18-gb22356d13",
+  "versions": { "v1.4.4-beta.3-18-gb22356d13": ["<keyHash>", "<keyHash>"] },
+  "validators": [
+    { "keyHash": "…", "version": "v1.4.4-beta.3-18-gb22356d13", "present": true }
+  ]
+}
+```
+
+`validatorConsensus` is **true** iff every on-chain validator active on the partition
+is present *and* all present validators report the same version. Any missing validator
+or any version split yields **false** — "do not activate yet".
+
+**Authority.** Validator membership is the on-chain set (step 1); version and consensus
+key come from the validator's own running node (step 2), matched by `SHA256(pubkey)` so
+a node cannot be counted as a validator it is not. This is an *operational readiness*
+signal, not a security boundary — the fleet is operator-controlled, so the self-reported
+version is trusted. A validator-key-signed version attestation (the §4.6 / Option-B
+analogue) is the cryptographic hardening and is deferred.
+
+**Assumptions & edge cases.**
+
+- *Ed25519 consensus keys.* The `SHA256(pubkey)` match relies on validators using
+  Ed25519 consensus keys — `DiffValidators` and the executor reject non-32-byte keys,
+  and genesis registers the priv_validator key directly into the on-chain roster
+  (`init.go` → `NetworkDefinition.AddValidator`). A future consensus key type would
+  break both registration and this match; Ed25519 is an explicit precondition.
+- *RPC reachability.* The probe needs the node's CometBFT RPC, which defaults to a
+  `0.0.0.0` bind. The advertisement carries the RPC port explicitly (§4.7 step 1), so
+  no port-layout assumption is made; but a node whose operator binds RPC to loopback
+  (or firewalls it) is unprobeable and counts as **not present** — fail-safe, the gate
+  reads "not ready".
+- *Catching-up validators.* A state-syncing validator (`/status` `CatchingUp=true`) is
+  counted by version but flagged; its binary version still matters for the gate.
+- *Promotion/demotion window.* The on-chain roster (step 1) and the live CometBFT
+  validator set lag each other by the ABCI `ValidatorUpdates` applied at block end, so a
+  just-promoted/demoted node can transiently appear missing. This resolves to a
+  conservative "not ready" — a false-negative, never a false-positive.
+- *Liveness & debounce.* `validatorConsensus` is single-failure-sensitive: one transient
+  RPC timeout flips it to `false`. The probe runs on the same ~15 s cadence as the
+  consensus-peer probe; a validator unanswered for >60 s is marked not-present.
+  Operators should require N consecutive `true` reads (suggest N≥3) before activating,
+  not a single poll.
+- *Freshness dependency.* The roster query needs at least one reachable peer serving the
+  v3 NetworkService for the partition; the answer is only as fresh as that peer's
+  replicated state.
+
+**Why now.** This is the go/no-go gate for the Cyclops BPT repair (`V2CyclopsBptRepair`,
+#4020): the repair rewrites 22 BPT leaves at its activation height and must execute
+identically on every validator. `/consensus/Cyclops` returning `true` is the check
+before broadcasting that activation.
 
 ## 5. Deployment model
 
