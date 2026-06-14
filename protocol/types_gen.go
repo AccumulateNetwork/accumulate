@@ -629,7 +629,9 @@ type NetworkLimits struct {
 	PendingMajorBlocks uint64 `json:"pendingMajorBlocks,omitempty" form:"pendingMajorBlocks" query:"pendingMajorBlocks" validate:"required"`
 	// EventsPerBlock is the maximum number of scheduled events that will be executed per block.
 	EventsPerBlock uint64 `json:"eventsPerBlock,omitempty" form:"eventsPerBlock" query:"eventsPerBlock" validate:"required"`
-	extraData      []byte
+	// MempoolBackpressurePercent is the mempool fill percentage at or above which a node rejects new transactions to shed load; 0 uses the built-in default (50).
+	MempoolBackpressurePercent uint64 `json:"mempoolBackpressurePercent,omitempty" form:"mempoolBackpressurePercent" query:"mempoolBackpressurePercent"`
+	extraData                  []byte
 }
 
 type NetworkMaintenance struct {
@@ -2714,6 +2716,7 @@ func (v *NetworkLimits) Copy() *NetworkLimits {
 	u.IdentityAccounts = v.IdentityAccounts
 	u.PendingMajorBlocks = v.PendingMajorBlocks
 	u.EventsPerBlock = v.EventsPerBlock
+	u.MempoolBackpressurePercent = v.MempoolBackpressurePercent
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -5347,6 +5350,9 @@ func (v *NetworkLimits) Equal(u *NetworkLimits) bool {
 		return false
 	}
 	if !(v.EventsPerBlock == u.EventsPerBlock) {
+		return false
+	}
+	if !(v.MempoolBackpressurePercent == u.MempoolBackpressurePercent) {
 		return false
 	}
 
@@ -11054,6 +11060,7 @@ var fieldNames_NetworkLimits = []string{
 	5: "IdentityAccounts",
 	6: "PendingMajorBlocks",
 	7: "EventsPerBlock",
+	8: "MempoolBackpressurePercent",
 }
 
 func (v *NetworkLimits) MarshalBinary() ([]byte, error) {
@@ -11086,6 +11093,9 @@ func (v *NetworkLimits) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.EventsPerBlock == 0) {
 		writer.WriteUint(7, v.EventsPerBlock)
+	}
+	if !(v.MempoolBackpressurePercent == 0) {
+		writer.WriteUint(8, v.MempoolBackpressurePercent)
 	}
 
 	_, _, err := writer.Reset(fieldNames_NetworkLimits)
@@ -18057,6 +18067,9 @@ func (v *NetworkLimits) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(7); ok {
 		v.EventsPerBlock = x
 	}
+	if x, ok := reader.ReadUint(8); ok {
+		v.MempoolBackpressurePercent = x
+	}
 
 	seen, err := reader.Reset(fieldNames_NetworkLimits)
 	if err != nil {
@@ -21092,6 +21105,7 @@ func init() {
 		encoding.NewTypeField("identityAccounts", "uint64"),
 		encoding.NewTypeField("pendingMajorBlocks", "uint64"),
 		encoding.NewTypeField("eventsPerBlock", "uint64"),
+		encoding.NewTypeField("mempoolBackpressurePercent", "uint64"),
 	}, "NetworkLimits", "networkLimits")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{

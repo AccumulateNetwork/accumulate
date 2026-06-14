@@ -64,11 +64,18 @@ type Accumulator struct {
 	ready          bool
 
 	// mempoolSize returns the current CometBFT mempool transaction count and
-	// mempoolCap is its configured capacity. When both are set (see
-	// SetMempoolLimiter), CheckTx rejects new transactions once the mempool is
-	// at least half full, shedding load before it saturates.
+	// mempoolCap is its configured capacity (see SetMempoolLimiter). When set,
+	// CheckTx rejects new transactions once the mempool reaches the
+	// backpressure threshold, shedding load before it saturates.
 	mempoolSize func() int
 	mempoolCap  int
+	// mempoolBackpressurePct is the fill percentage at or above which new
+	// transactions are rejected. It is sourced from the network globals
+	// (NetworkLimits.MempoolBackpressurePercent) — the same on-chain mechanism
+	// as the oracle/fee schedule — and cached here so CheckTx, which runs
+	// outside block context, can read it. 0 means "use the default" (see
+	// defaultMempoolBackpressurePct).
+	mempoolBackpressurePct atomic.Int64
 
 	onFatal func(error)
 
@@ -120,6 +127,11 @@ func NewAccumulator(opts AccumulatorOptions) *Accumulator {
 }
 
 var _ abci.Application = (*Accumulator)(nil)
+
+// defaultMempoolBackpressurePct is the mempool fill percentage at which CheckTx
+// rejects new transactions when the network globals do not specify a value
+// (NetworkLimits.MempoolBackpressurePercent == 0).
+const defaultMempoolBackpressurePct = 50
 
 // SetMempoolLimiter wires the CometBFT mempool's occupancy into CheckTx so new
 // transactions are rejected once the mempool is at least half full (load-shed
@@ -180,6 +192,14 @@ func (app *Accumulator) recover() {
 // willChangeGlobals populates the validator update list, which is passed to
 // Tendermint to update the validator set.
 func (app *Accumulator) willChangeGlobals(e events.WillChangeGlobals) error {
+	// Cache the mempool backpressure threshold from the network globals so
+	// CheckTx (which runs outside block context) can apply it. This is the
+	// same on-chain distribution mechanism as the oracle and fee schedule.
+	// Done before the e.Old==nil guard so it is captured on first load too.
+	if e.New != nil && e.New.Globals != nil && e.New.Globals.Limits != nil {
+		app.mempoolBackpressurePct.Store(int64(e.New.Globals.Limits.MempoolBackpressurePercent))
+	}
+
 	// Don't do anything when the globals are first loaded
 	if e.Old == nil {
 		return nil
@@ -556,13 +576,19 @@ func (app *Accumulator) CheckTx(_ context.Context, req *abci.RequestCheckTx) (rc
 		return nil, errors.NotReady.With("not ready")
 	}
 
-	// Backpressure: reject NEW transactions once the mempool is at least half
-	// full, so the node sheds load before it saturates (a saturated mempool
-	// stalls block production and cascades). Rechecks of already-admitted
-	// transactions are never rejected here.
+	// Backpressure: reject NEW transactions once the mempool reaches the
+	// configured fill threshold, so the node sheds load before it saturates (a
+	// saturated mempool stalls block production and cascades). The threshold is
+	// a network global (NetworkLimits.MempoolBackpressurePercent); 0 uses the
+	// default. Rechecks of already-admitted transactions are never rejected.
 	if req.Type != abci.CheckTxType_Recheck && app.mempoolSize != nil && app.mempoolCap > 0 {
-		if n := app.mempoolSize(); n*2 >= app.mempoolCap {
-			msg := fmt.Sprintf("mempool is half full (%d of %d); rejecting to apply backpressure", n, app.mempoolCap)
+		pct := int(app.mempoolBackpressurePct.Load())
+		if pct <= 0 {
+			pct = defaultMempoolBackpressurePct
+		}
+		if n := app.mempoolSize(); n*100 >= app.mempoolCap*pct {
+			msg := fmt.Sprintf("mempool at %d%% of capacity (>= %d%% backpressure threshold): %d of %d; rejecting",
+				n*100/app.mempoolCap, pct, n, app.mempoolCap)
 			var res abci.ResponseCheckTx
 			res.Code = uint32(protocol.ErrorCodeFailed)
 			res.Info = msg
