@@ -142,6 +142,28 @@ func (app *Accumulator) SetMempoolLimiter(size func() int, capacity int) {
 	app.mempoolCap = capacity
 }
 
+// mempoolBackpressureReject reports whether a transaction should be rejected to
+// shed load, given the current mempool occupancy and the configured threshold,
+// returning a human-readable reason. Rechecks of already-admitted transactions
+// are never rejected, and rejection is disabled until SetMempoolLimiter wires
+// the mempool. The threshold percentage comes from the network globals
+// (NetworkLimits.MempoolBackpressurePercent); 0 uses defaultMempoolBackpressurePct.
+func (app *Accumulator) mempoolBackpressureReject(isRecheck bool) (string, bool) {
+	if isRecheck || app.mempoolSize == nil || app.mempoolCap <= 0 {
+		return "", false
+	}
+	pct := int(app.mempoolBackpressurePct.Load())
+	if pct <= 0 {
+		pct = defaultMempoolBackpressurePct
+	}
+	n := app.mempoolSize()
+	if n*100 >= app.mempoolCap*pct {
+		return fmt.Sprintf("mempool at %d%% of capacity (>= %d%% backpressure threshold): %d of %d; rejecting",
+			n*100/app.mempoolCap, pct, n, app.mempoolCap), true
+	}
+	return "", false
+}
+
 func (app *Accumulator) CurrentBlock() execute.Block           { return app.block }
 func (app *Accumulator) CurrentBlockState() execute.BlockState { return app.blockState }
 
@@ -558,25 +580,15 @@ func (app *Accumulator) CheckTx(_ context.Context, req *abci.RequestCheckTx) (rc
 		return nil, errors.NotReady.With("not ready")
 	}
 
-	// Backpressure: reject NEW transactions once the mempool reaches the
+	// Backpressure: reject new transactions once the mempool reaches the
 	// configured fill threshold, so the node sheds load before it saturates (a
-	// saturated mempool stalls block production and cascades). The threshold is
-	// a network global (NetworkLimits.MempoolBackpressurePercent); 0 uses the
-	// default. Rechecks of already-admitted transactions are never rejected.
-	if req.Type != abci.CheckTxType_Recheck && app.mempoolSize != nil && app.mempoolCap > 0 {
-		pct := int(app.mempoolBackpressurePct.Load())
-		if pct <= 0 {
-			pct = defaultMempoolBackpressurePct
-		}
-		if n := app.mempoolSize(); n*100 >= app.mempoolCap*pct {
-			msg := fmt.Sprintf("mempool at %d%% of capacity (>= %d%% backpressure threshold): %d of %d; rejecting",
-				n*100/app.mempoolCap, pct, n, app.mempoolCap)
-			var res abci.ResponseCheckTx
-			res.Code = uint32(protocol.ErrorCodeFailed)
-			res.Info = msg
-			res.Log = msg
-			return &res, nil
-		}
+	// saturated mempool stalls block production and cascades).
+	if msg, reject := app.mempoolBackpressureReject(req.Type == abci.CheckTxType_Recheck); reject {
+		var res abci.ResponseCheckTx
+		res.Code = uint32(protocol.ErrorCodeFailed)
+		res.Info = msg
+		res.Log = msg
+		return &res, nil
 	}
 
 	messages, results, respData, err := executeTransactions(app.logger.With("operation", "CheckTx"), func(envelope *messaging.Envelope) ([]*protocol.TransactionStatus, error) {
