@@ -149,7 +149,11 @@ func (app *Accumulator) SetMempoolLimiter(size func() int, capacity int) {
 // are never rejected, and rejection is disabled until SetMempoolLimiter wires
 // the mempool. The threshold percentage comes from the network globals
 // (NetworkLimits.MempoolBackpressurePercent); 0 uses defaultMempoolBackpressurePct.
-func (app *Accumulator) mempoolBackpressureReject(isRecheck bool) (string, bool) {
+//
+// Only USER submissions are shed. Synthetic and system traffic must always be
+// admitted (they count toward the threshold, which is why it is below 100%), so
+// the headroom above the threshold is reserved for them.
+func (app *Accumulator) mempoolBackpressureReject(isRecheck bool, raw []byte) (string, bool) {
 	if isRecheck || app.mempoolSize == nil || app.mempoolCap <= 0 {
 		return "", false
 	}
@@ -158,11 +162,57 @@ func (app *Accumulator) mempoolBackpressureReject(isRecheck bool) (string, bool)
 		pct = defaultMempoolBackpressurePct
 	}
 	n := app.mempoolSize()
-	if n*100 >= app.mempoolCap*pct {
-		return fmt.Sprintf("mempool at %d%% of capacity (>= %d%% backpressure threshold): %d of %d; rejecting",
-			n*100/app.mempoolCap, pct, n, app.mempoolCap), true
+	if n*100 < app.mempoolCap*pct {
+		return "", false // below threshold
 	}
-	return "", false
+	// At or over the threshold: shed user load only; never synthetics/system.
+	if !app.isUserSubmission(raw) {
+		return "", false
+	}
+	return fmt.Sprintf("mempool at %d%% of capacity (>= %d%% backpressure threshold): %d of %d; rejecting user transaction (synthetics still admitted)",
+		n*100/app.mempoolCap, pct, n, app.mempoolCap), true
+}
+
+// isUserSubmission reports whether a raw envelope is a user submission (subject
+// to backpressure) rather than synthetic/system traffic that must never be shed.
+// A decode failure returns false (do not shed): a malformed envelope is rejected
+// later by Validate, and erring toward admitting protects synthetics.
+func (app *Accumulator) isUserSubmission(raw []byte) bool {
+	env := new(messaging.Envelope)
+	if env.UnmarshalBinary(raw) != nil {
+		return false
+	}
+	msgs, err := env.Normalize()
+	if err != nil {
+		return false
+	}
+	return messagesAreUser(msgs)
+}
+
+// messagesAreUser reports whether a normalized message set is purely user
+// content. Any synthetic/system message (synthetic transaction, system
+// signature, anchor, sequenced message) makes the whole set non-user, so it is
+// never subject to backpressure.
+func messagesAreUser(msgs []messaging.Message) bool {
+	user := false
+	for _, m := range msgs {
+		switch m := m.(type) {
+		case *messaging.TransactionMessage:
+			if !m.Transaction.Body.Type().IsUser() {
+				return false
+			}
+			user = true
+		case *messaging.SignatureMessage:
+			if m.Signature.Type().IsSystem() {
+				return false
+			}
+			user = true
+		case *messaging.SyntheticMessage, *messaging.BadSyntheticMessage,
+			*messaging.BlockAnchor, *messaging.SequencedMessage:
+			return false
+		}
+	}
+	return user
 }
 
 func (app *Accumulator) CurrentBlock() execute.Block           { return app.block }
@@ -601,7 +651,7 @@ func (app *Accumulator) CheckTx(_ context.Context, req *abci.RequestCheckTx) (rc
 	// Backpressure: reject new transactions once the mempool reaches the
 	// configured fill threshold, so the node sheds load before it saturates (a
 	// saturated mempool stalls block production and cascades).
-	if msg, reject := app.mempoolBackpressureReject(req.Type == abci.CheckTxType_Recheck); reject {
+	if msg, reject := app.mempoolBackpressureReject(req.Type == abci.CheckTxType_Recheck, req.Tx); reject {
 		var res abci.ResponseCheckTx
 		res.Code = uint32(protocol.ErrorCodeFailed)
 		res.Info = msg
