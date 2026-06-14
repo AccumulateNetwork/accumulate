@@ -235,6 +235,10 @@ NetworkLimits:
     - name: EventsPerBlock
       description: is the maximum number of scheduled events that will be executed per block
       type: uint
+    - name: MempoolBackpressurePercent
+      description: is the mempool fill percentage at or above which a node rejects new transactions to shed load; 0 uses the built-in default (50)
+      type: uint
+      optional: true
 
 Rational:
   fields:
