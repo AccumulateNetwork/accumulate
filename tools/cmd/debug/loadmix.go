@@ -204,6 +204,7 @@ type metrics struct {
 	mempoolFull atomic.Uint64
 	otherErr    atomic.Uint64
 	notReady    atomic.Uint64 // gated/retry, not an error
+	resent      atomic.Uint64 // retryable rejections (backpressure/mempool) resent
 
 	mu        sync.Mutex
 	byType    map[string]uint64
@@ -443,9 +444,9 @@ loop:
 			}
 		}
 		actorsMu.Unlock()
-		fmt.Printf("[%s] actors=%d active=%d  sub=%d(%.1f/s) ok=%d(%.1f/s) mempoolFull=%d otherErr=%d notReady=%d\n",
+		fmt.Printf("[%s] actors=%d active=%d  sub=%d(%.1f/s) ok=%d(%.1f/s) mempoolFull=%d otherErr=%d notReady=%d resent=%d\n",
 			time.Now().Format("15:04:05"), na, nActive, s, float64(s-lastSub)/dt, k, float64(k-lastSucc)/dt,
-			m.mempoolFull.Load(), m.otherErr.Load(), m.notReady.Load())
+			m.mempoolFull.Load(), m.otherErr.Load(), m.notReady.Load(), m.resent.Load())
 		printTypeLine(m)
 		lastSub, lastSucc, lastT = s, k, t
 		if t.After(deadline) {
@@ -466,9 +467,10 @@ loop:
 	if s > 0 {
 		fmt.Printf("Success rate:    %.1f%%\n", 100*float64(k)/float64(s))
 	}
-	fmt.Printf("Mempool full:    %d\n", m.mempoolFull.Load())
+	fmt.Printf("Mempool full:    %d  (pushback after %d resends each)\n", m.mempoolFull.Load(), maxResendAttempts)
 	fmt.Printf("Other errors:    %d\n", m.otherErr.Load())
 	fmt.Printf("Not-ready waits: %d\n", m.notReady.Load())
+	fmt.Printf("Resends:         %d\n", m.resent.Load())
 	fmt.Println("--- per-type (submitted) ---")
 	printTypeTable(m)
 	fmt.Println("--- per-partition (submitted txns, BVN load spread) ---")
@@ -570,46 +572,90 @@ type engine struct {
 
 func (e *engine) fnonce() uint64 { return e.faucetNonce.Add(1) }
 
-// submit routes the envelope by its principal and records metrics. It returns
-// true on submit-success (accepted into mempool / delivered as appropriate).
+// Resend policy: a node under backpressure rejects user transactions until its
+// mempool drains below the threshold, and a momentarily-full mempool likewise
+// rejects. Both are transient, so we resend the SAME (already-signed) envelope —
+// idempotent, since a rejected tx never entered a block — a bounded number of
+// times with a short backoff before giving up. This keeps offered load steady
+// through backpressure instead of dropping work or stalling an actor.
+const (
+	maxResendAttempts = 6
+	resendBackoff     = 250 * time.Millisecond
+)
+
+// isRetryable reports whether a submit failure is transient pushback (mempool
+// full or backpressure shedding) and should be resent rather than counted as a
+// hard failure.
+func isRetryable(err error) bool {
+	if err == nil {
+		return false
+	}
+	return isMempoolFull(err) || strings.Contains(err.Error(), "backpressure")
+}
+
+// submit routes the envelope by its principal and records metrics. On transient
+// pushback (backpressure/mempool-full) it resends the same envelope up to
+// maxResendAttempts. It returns true on submit-success.
 func (e *engine) submit(principal *url.URL, txType string, env *messaging.Envelope) bool {
 	client, part := e.pc.clientFor(principal)
 	e.m.submitted.Add(1)
 	e.m.countType(txType)
 	e.m.countPart(part)
 
-	subs, err := client.Submit(e.ctx, env, api.SubmitOptions{})
-	if err != nil {
-		if isMempoolFull(err) {
+	for attempt := 0; ; attempt++ {
+		ok, retErr, hardErr := trySubmit(e.ctx, client, env)
+		switch {
+		case ok:
+			e.m.succeeded.Add(1)
+			return true
+		case retErr != nil && attempt < maxResendAttempts:
+			// Transient pushback — back off and resend the same envelope.
+			e.m.resent.Add(1)
+			select {
+			case <-e.ctx.Done():
+				e.m.otherErr.Add(1)
+				return false
+			case <-time.After(resendBackoff):
+			}
+			continue
+		case retErr != nil:
+			// Exhausted resends; still pushed back.
 			e.m.mempoolFull.Add(1)
-		} else {
+			return false
+		default:
 			e.m.otherErr.Add(1)
-			e.m.sampleErr(txType, err.Error())
+			e.m.sampleErr(txType, hardErr.Error())
+			return false
 		}
-		return false
 	}
-	anyFail := false
+}
+
+// trySubmit performs one submission attempt, classifying the outcome as
+// success, retryable pushback (retErr), or a hard error (hardErr).
+func trySubmit(ctx context.Context, client *jsonrpc.Client, env *messaging.Envelope) (ok bool, retErr, hardErr error) {
+	subs, err := client.Submit(ctx, env, api.SubmitOptions{})
+	if err != nil {
+		if isRetryable(err) {
+			return false, err, nil
+		}
+		return false, nil, err
+	}
 	for _, s := range subs {
 		if s.Success {
 			continue
 		}
-		anyFail = true
-		if s.Status != nil && s.Status.Error != nil && isMempoolFull(s.Status.Error) {
-			e.m.mempoolFull.Add(1)
+		var serr error
+		if s.Status != nil && s.Status.Error != nil {
+			serr = s.Status.Error
 		} else {
-			e.m.otherErr.Add(1)
-			msg := s.Message
-			if s.Status != nil && s.Status.Error != nil {
-				msg = s.Status.Error.Error()
-			}
-			e.m.sampleErr(txType, msg)
+			serr = fmt.Errorf("%s", s.Message)
 		}
+		if isRetryable(serr) {
+			return false, serr, nil
+		}
+		return false, nil, serr
 	}
-	if anyFail {
-		return false
-	}
-	e.m.succeeded.Add(1)
-	return true
+	return true, nil, nil
 }
 
 // committed reports whether an account exists and is queryable (used to gate
