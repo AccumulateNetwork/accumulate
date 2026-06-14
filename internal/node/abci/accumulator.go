@@ -63,6 +63,13 @@ type Accumulator struct {
 	startTime      time.Time
 	ready          bool
 
+	// mempoolSize returns the current CometBFT mempool transaction count and
+	// mempoolCap is its configured capacity. When both are set (see
+	// SetMempoolLimiter), CheckTx rejects new transactions once the mempool is
+	// at least half full, shedding load before it saturates.
+	mempoolSize func() int
+	mempoolCap  int
+
 	onFatal func(error)
 
 	// DisableLateCommit - DO NOT USE IN PRODUCTION - disables the late-commit
@@ -112,6 +119,16 @@ func NewAccumulator(opts AccumulatorOptions) *Accumulator {
 }
 
 var _ abci.Application = (*Accumulator)(nil)
+
+// SetMempoolLimiter wires the CometBFT mempool's occupancy into CheckTx so new
+// transactions are rejected once the mempool is at least half full (load-shed
+// backpressure). size returns the current transaction count; capacity is the
+// mempool's configured size. Called after the consensus node is created, since
+// the mempool does not exist when the application is constructed.
+func (app *Accumulator) SetMempoolLimiter(size func() int, capacity int) {
+	app.mempoolSize = size
+	app.mempoolCap = capacity
+}
 
 func (app *Accumulator) CurrentBlock() execute.Block           { return app.block }
 func (app *Accumulator) CurrentBlockState() execute.BlockState { return app.blockState }
@@ -519,6 +536,21 @@ func (app *Accumulator) CheckTx(_ context.Context, req *abci.RequestCheckTx) (rc
 	// ApplySnapshot
 	if !app.ready {
 		return nil, errors.NotReady.With("not ready")
+	}
+
+	// Backpressure: reject NEW transactions once the mempool is at least half
+	// full, so the node sheds load before it saturates (a saturated mempool
+	// stalls block production and cascades). Rechecks of already-admitted
+	// transactions are never rejected here.
+	if req.Type != abci.CheckTxType_Recheck && app.mempoolSize != nil && app.mempoolCap > 0 {
+		if n := app.mempoolSize(); n*2 >= app.mempoolCap {
+			msg := fmt.Sprintf("mempool is half full (%d of %d); rejecting to apply backpressure", n, app.mempoolCap)
+			var res abci.ResponseCheckTx
+			res.Code = uint32(protocol.ErrorCodeFailed)
+			res.Info = msg
+			res.Log = msg
+			return &res, nil
+		}
 	}
 
 	messages, results, respData, err := executeTransactions(app.logger.With("operation", "CheckTx"), func(envelope *messaging.Envelope) ([]*protocol.TransactionStatus, error) {
