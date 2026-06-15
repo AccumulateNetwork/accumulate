@@ -695,6 +695,11 @@ func trySubmit(ctx context.Context, client *jsonrpc.Client, env *messaging.Envel
 // retryable pushback (resent) for the step to count as "backpressure".
 const bpStepFraction = 0.05
 
+// stepMaxTPS caps the ramp so it stops (rather than climbing forever) if the
+// network never applies backpressure — meaning loadmix or the network has hit a
+// ceiling unrelated to mempool shedding.
+const stepMaxTPS = 2000
+
 // runStepController ramps the target TPS through 2,4,10,20,... holding each
 // level for stepDur, until it observes backpressure (a meaningful fraction of
 // submissions resent because the network is shedding user load). It then hunts
@@ -758,6 +763,11 @@ func (e *engine) runStepController(stepDur time.Duration, stop chan struct{}) {
 					tps = schedule[idx]
 				} else {
 					tps += tps / 2 // 1.5x beyond the seed schedule
+				}
+				if tps > stepMaxTPS {
+					fmt.Printf("\n=== no user-load backpressure up to %d TPS (loadmix or network ceiling) ===\n", lastClear)
+					close(stop)
+					return
 				}
 			}
 		case "hunt":
