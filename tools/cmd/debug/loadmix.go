@@ -54,6 +54,8 @@ var loadMixOpts struct {
 	duration time.Duration
 	actors   int
 	interval time.Duration
+	step     bool
+	stepSecs int
 }
 
 func init() {
@@ -61,6 +63,8 @@ func init() {
 	cmdLoadMix.Flags().DurationVar(&loadMixOpts.duration, "duration", 10*time.Minute, "Test duration")
 	cmdLoadMix.Flags().IntVar(&loadMixOpts.actors, "actors", 40, "Number of concurrent identities to maintain")
 	cmdLoadMix.Flags().DurationVar(&loadMixOpts.interval, "report-interval", 30*time.Second, "How often to print live metrics")
+	cmdLoadMix.Flags().BoolVar(&loadMixOpts.step, "step", false, "Stepped mode: ramp TPS (2,4,10,20,...) until backpressure, then hunt the boundary")
+	cmdLoadMix.Flags().IntVar(&loadMixOpts.stepSecs, "step-secs", 300, "Seconds per step in --step mode")
 	cmd.AddCommand(cmdLoadMix)
 }
 
@@ -323,13 +327,20 @@ func loadMix(_ *cobra.Command, args []string) {
 
 	rng := mrand.New(mrand.NewSource(time.Now().UnixNano()))
 
-	tick := time.Second / time.Duration(tps)
-	if tick <= 0 {
-		tick = time.Millisecond
+	// The dispatcher reads eng.targetTPS each iteration, so the rate can be
+	// adjusted live (by the step controller). Stepped mode starts low.
+	startTPS := tps
+	if loadMixOpts.step {
+		startTPS = 2
 	}
-	rampEvery := loadMixOpts.duration / time.Duration(maxActors+1)
-	if rampEvery < 200*time.Millisecond {
-		rampEvery = 200 * time.Millisecond
+	eng.targetTPS.Store(int64(startTPS))
+
+	rampEvery := 2 * time.Second
+	if !loadMixOpts.step {
+		rampEvery = loadMixOpts.duration / time.Duration(maxActors+1)
+		if rampEvery < 200*time.Millisecond {
+			rampEvery = 200 * time.Millisecond
+		}
 	}
 
 	stop := make(chan struct{})
@@ -360,22 +371,30 @@ func loadMix(_ *cobra.Command, args []string) {
 	// Seed the first actor immediately so we don't idle.
 	actors = append(actors, newActor(0))
 
-	fmt.Printf("Running ~%d TPS for %v, ramping to %d actors (tick=%v)\n",
-		tps, loadMixOpts.duration, maxActors, tick)
+	if loadMixOpts.step {
+		fmt.Printf("Stepped mode: start %d TPS, %ds/step, ramping to %d actors\n",
+			startTPS, loadMixOpts.stepSecs, maxActors)
+	} else {
+		fmt.Printf("Running ~%d TPS for %v, ramping to %d actors\n",
+			tps, loadMixOpts.duration, maxActors)
+	}
 
-	// Dispatcher: one transaction per tick, advancing a randomly chosen actor.
+	// Dispatcher: one transaction per pacing interval (derived from the live
+	// target TPS), advancing a randomly chosen actor.
 	go func() {
 		defer close(done)
-		ticker := time.NewTicker(tick)
-		defer ticker.Stop()
 		// Bounded concurrency for the (blocking) confirmation queries inside
-		// advance(): we don't want a slow query to stall the whole rate.
-		sem := make(chan struct{}, tps*2+8)
+		// advance(); sized generously so it isn't the limiter at high TPS.
+		sem := make(chan struct{}, 2048)
 		for {
+			tps := eng.targetTPS.Load()
+			if tps < 1 {
+				tps = 1
+			}
 			select {
 			case <-stop:
 				return
-			case <-ticker.C:
+			case <-time.After(time.Second / time.Duration(tps)):
 			}
 			actorsMu.Lock()
 			n := len(actors)
@@ -423,7 +442,13 @@ func loadMix(_ *cobra.Command, args []string) {
 		}
 	}()
 
-	// Reporter.
+	// In stepped mode a controller drives target TPS through the schedule +
+	// boundary hunt and closes `stop` once the backpressure boundary is found.
+	if loadMixOpts.step {
+		go eng.runStepController(time.Duration(loadMixOpts.stepSecs)*time.Second, stop)
+	}
+
+	// Reporter (live, mid-step visibility).
 	deadline := time.Now().Add(loadMixOpts.duration)
 	reportTicker := time.NewTicker(loadMixOpts.interval)
 	defer reportTicker.Stop()
@@ -431,7 +456,12 @@ func loadMix(_ *cobra.Command, args []string) {
 	lastT := time.Now()
 loop:
 	for {
-		t := <-reportTicker.C
+		var t time.Time
+		select {
+		case <-stop: // step controller finished
+			break loop
+		case t = <-reportTicker.C:
+		}
 		s := m.submitted.Load()
 		k := m.succeeded.Load()
 		dt := t.Sub(lastT).Seconds()
@@ -444,16 +474,18 @@ loop:
 			}
 		}
 		actorsMu.Unlock()
-		fmt.Printf("[%s] actors=%d active=%d  sub=%d(%.1f/s) ok=%d(%.1f/s) mempoolFull=%d otherErr=%d notReady=%d resent=%d\n",
-			time.Now().Format("15:04:05"), na, nActive, s, float64(s-lastSub)/dt, k, float64(k-lastSucc)/dt,
+		fmt.Printf("[%s] tps=%d actors=%d active=%d  sub=%d(%.1f/s) ok=%d(%.1f/s) mempoolFull=%d otherErr=%d notReady=%d resent=%d\n",
+			time.Now().Format("15:04:05"), eng.targetTPS.Load(), na, nActive, s, float64(s-lastSub)/dt, k, float64(k-lastSucc)/dt,
 			m.mempoolFull.Load(), m.otherErr.Load(), m.notReady.Load(), m.resent.Load())
 		printTypeLine(m)
 		lastSub, lastSucc, lastT = s, k, t
-		if t.After(deadline) {
+		if !loadMixOpts.step && t.After(deadline) {
 			break loop
 		}
 	}
-	close(stop)
+	if !loadMixOpts.step {
+		close(stop) // step mode: the controller already closed it
+	}
 	<-done
 
 	// Final summary.
@@ -568,6 +600,7 @@ type engine struct {
 	faucetLid   *url.URL
 	faucetLta   *url.URL
 	faucetNonce *atomic.Uint64
+	targetTPS   atomic.Int64 // dispatcher reads this each tick (adjustable for --step)
 }
 
 func (e *engine) fnonce() uint64 { return e.faucetNonce.Add(1) }
@@ -656,6 +689,96 @@ func trySubmit(ctx context.Context, client *jsonrpc.Client, env *messaging.Envel
 		return false, nil, serr
 	}
 	return true, nil, nil
+}
+
+// bpStepFraction is the fraction of a step's submissions that must hit
+// retryable pushback (resent) for the step to count as "backpressure".
+const bpStepFraction = 0.05
+
+// runStepController ramps the target TPS through 2,4,10,20,... holding each
+// level for stepDur, until it observes backpressure (a meaningful fraction of
+// submissions resent because the network is shedding user load). It then hunts
+// the boundary: drop the rate when backpressure is present, raise it when it
+// clears, halving the adjustment each reversal until it converges, then closes
+// stop to end the run. Each step prints a summary so the ramp is observable.
+func (e *engine) runStepController(stepDur time.Duration, stop chan struct{}) {
+	schedule := []int64{2, 4, 10, 20}
+	phase := "ramp"
+	idx := 0
+	tps := schedule[0]
+	var lastClear int64 = 1 // highest TPS with no backpressure
+	var delta int64
+
+	fmt.Printf("\n[STEP] stepped ramp: %v per step; finding the backpressure boundary\n", stepDur)
+
+	// runStep holds the current TPS for one step and reports whether the
+	// network applied backpressure during it. Returns false if stopped.
+	runStep := func() (bp bool, ok bool) {
+		sub0 := e.m.submitted.Load()
+		rs0 := e.m.resent.Load()
+		ok0 := e.m.succeeded.Load()
+		select {
+		case <-stop:
+			return false, false
+		case <-time.After(stepDur):
+		}
+		subD := e.m.submitted.Load() - sub0
+		rsD := e.m.resent.Load() - rs0
+		okD := e.m.succeeded.Load() - ok0
+		frac := 0.0
+		if subD > 0 {
+			frac = float64(rsD) / float64(subD)
+		}
+		bp = frac > bpStepFraction
+		fmt.Printf("\n[STEP] target=%-4d TPS | achieved=%6.1f ok/s | resent=%-7d (%4.1f%% of submits) | BACKPRESSURE=%v\n",
+			tps, float64(okD)/stepDur.Seconds(), rsD, frac*100, bp)
+		return bp, true
+	}
+
+	for {
+		bp, ok := runStep()
+		if !ok {
+			return
+		}
+		switch phase {
+		case "ramp":
+			if bp {
+				phase = "hunt"
+				hi := tps
+				delta = (hi - lastClear) / 2
+				if delta < 1 {
+					delta = 1
+				}
+				tps = hi - delta
+				fmt.Printf("[STEP] backpressure onset between %d and %d TPS — hunting boundary\n", lastClear, hi)
+			} else {
+				lastClear = tps
+				idx++
+				if idx < len(schedule) {
+					tps = schedule[idx]
+				} else {
+					tps += tps / 2 // 1.5x beyond the seed schedule
+				}
+			}
+		case "hunt":
+			if bp {
+				tps -= delta // boundary is below
+			} else {
+				tps += delta // headroom above
+			}
+			delta /= 2
+			if delta < 1 {
+				fmt.Printf("\n=== BOUNDARY: user-load backpressure onset ≈ %d TPS ===\n", tps)
+				close(stop)
+				return
+			}
+		}
+		if tps < 1 {
+			tps = 1
+		}
+		e.targetTPS.Store(tps)
+		fmt.Printf("[STEP] -> next target %d TPS\n", tps)
+	}
 }
 
 // committed reports whether an account exists and is queryable (used to gate
