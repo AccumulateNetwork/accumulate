@@ -71,10 +71,11 @@ type Accumulator struct {
 	mempoolCap  int
 	// mempoolBackpressurePct is the fill percentage at or above which new
 	// transactions are rejected. It is sourced from the network globals
-	// (NetworkLimits.MempoolBackpressurePercent) — the same on-chain mechanism
-	// as the oracle/fee schedule — and cached here so CheckTx, which runs
-	// outside block context, can read it. 0 means "use the default" (see
-	// defaultMempoolBackpressurePct).
+	// (NetworkLimits.MempoolBackpressurePercent, defaulted to 20 at genesis) —
+	// the same on-chain mechanism as the oracle/fee schedule — and cached here
+	// so CheckTx, which runs outside block context, can read it. This global is
+	// the single source of truth; a 0 or out-of-range cached value means
+	// backpressure is not configured (nothing is shed).
 	mempoolBackpressurePct atomic.Int64
 
 	onFatal func(error)
@@ -127,16 +128,13 @@ func NewAccumulator(opts AccumulatorOptions) *Accumulator {
 
 var _ abci.Application = (*Accumulator)(nil)
 
-// defaultMempoolBackpressurePct is the mempool fill percentage at which CheckTx
-// rejects new transactions when the network globals do not specify a value
-// (NetworkLimits.MempoolBackpressurePercent == 0).
-const defaultMempoolBackpressurePct = 50
-
 // SetMempoolLimiter wires the CometBFT mempool's occupancy into CheckTx so new
-// transactions are rejected once the mempool is at least half full (load-shed
-// backpressure). size returns the current transaction count; capacity is the
-// mempool's configured size. Called after the consensus node is created, since
-// the mempool does not exist when the application is constructed.
+// transactions are rejected once the mempool reaches the backpressure threshold
+// configured by the network global (NetworkLimits.MempoolBackpressurePercent;
+// defaulted to 20 at genesis by network.NewGlobals). size returns the current
+// transaction count; capacity is the mempool's configured size. Called after the
+// consensus node is created, since the mempool does not exist when the
+// application is constructed.
 func (app *Accumulator) SetMempoolLimiter(size func() int, capacity int) {
 	app.mempoolSize = size
 	app.mempoolCap = capacity
@@ -146,8 +144,10 @@ func (app *Accumulator) SetMempoolLimiter(size func() int, capacity int) {
 // shed load, given the current mempool occupancy and the configured threshold,
 // returning a human-readable reason. Rechecks of already-admitted transactions
 // are never rejected, and rejection is disabled until SetMempoolLimiter wires
-// the mempool. The threshold percentage comes from the network globals
-// (NetworkLimits.MempoolBackpressurePercent); 0 uses defaultMempoolBackpressurePct.
+// the mempool. The threshold percentage is configured solely by the network
+// global (NetworkLimits.MempoolBackpressurePercent, defaulted to 20 at genesis);
+// an unset (0) or out-of-range (>100) value means backpressure is not configured
+// and nothing is shed.
 //
 // Only USER submissions are shed. Synthetic and system traffic must always be
 // admitted (they count toward the threshold, which is why it is below 100%), so
@@ -157,8 +157,13 @@ func (app *Accumulator) mempoolBackpressureReject(isRecheck bool, raw []byte) (s
 		return "", false
 	}
 	pct := int(app.mempoolBackpressurePct.Load())
-	if pct <= 0 {
-		pct = defaultMempoolBackpressurePct
+	if pct < 1 || pct > 100 {
+		// The threshold is configured solely by the network global, which
+		// network.NewGlobals defaults to 20 at genesis. An unset (0) or
+		// nonsensical out-of-range value (a mempool can't be more than 100%
+		// full) means it is not configured: admit. Critically, never treat 0 as
+		// a threshold — n*100 >= cap*0 is always true and would shed everything.
+		return "", false
 	}
 	n := app.mempoolSize()
 	if n*100 < app.mempoolCap*pct {
@@ -174,8 +179,20 @@ func (app *Accumulator) mempoolBackpressureReject(isRecheck bool, raw []byte) (s
 
 // isUserSubmission reports whether a raw envelope is a user submission (subject
 // to backpressure) rather than synthetic/system traffic that must never be shed.
-// A decode failure returns false (do not shed): a malformed envelope is rejected
-// later by Validate, and erring toward admitting protects synthetics.
+//
+// A decode failure returns false (admit, do not shed). This is deliberate: a
+// well-formed synthetic always decodes, so an undecodable envelope is never a
+// synthetic — admitting it is not about protecting synthetics. It is so the
+// envelope reaches Validate, which returns the real terminal decode error.
+// Shedding it here instead would return a retryable "backpressure" rejection,
+// which a client (e.g. loadmix) would resend in a loop. Admitting junk costs a
+// cheap failed unmarshal; it never enters the mempool.
+//
+// Note: above the threshold this decode is repeated by executeTransactions for
+// admitted traffic (synthetics), i.e. each admitted synthetic is decoded twice.
+// That is accepted: it only happens in the already-degraded shedding state, and
+// sharing the decode would require forking the executeTransactions path that
+// block processing (DeliverTx) also uses — not worth it for a synthetic decode.
 func (app *Accumulator) isUserSubmission(raw []byte) bool {
 	env := new(messaging.Envelope)
 	if env.UnmarshalBinary(raw) != nil {
