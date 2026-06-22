@@ -41,8 +41,10 @@ func userEnvRaw(t *testing.T) []byte {
 	return raw
 }
 
-// TestMempoolBackpressureReject covers the load-shed decision for USER traffic:
-// the default (50%) and configured thresholds, the >= boundary, and the
+// TestMempoolBackpressureReject covers the load-shed decision for USER traffic.
+// The threshold comes solely from the cached global; this verifies the >=
+// boundary for configured values, that an unset (0) or out-of-range value
+// disables shedding (and is never misread as "shed everything"), and the
 // recheck / not-wired / cap-zero exemptions.
 func TestMempoolBackpressureReject(t *testing.T) {
 	const poolCap = 5000
@@ -52,18 +54,24 @@ func TestMempoolBackpressureReject(t *testing.T) {
 		wire    bool
 		size    int
 		cap     int
-		pct     int64 // configured global; 0 => default (50)
+		pct     int64 // cached global threshold; 1-100 active, else disabled
 		recheck bool
 		want    bool
 	}{
-		{name: "limiter not wired", wire: false, size: poolCap, want: false},
-		{name: "cap zero", wire: true, size: poolCap, cap: 0, want: false},
-		{name: "recheck never rejected", wire: true, size: poolCap, cap: poolCap, recheck: true, want: false},
-		{name: "empty mempool", wire: true, size: 0, cap: poolCap, want: false},
+		{name: "limiter not wired", wire: false, size: poolCap, pct: 20, want: false},
+		{name: "cap zero", wire: true, size: poolCap, cap: 0, pct: 20, want: false},
+		{name: "recheck never rejected", wire: true, size: poolCap, cap: poolCap, pct: 20, recheck: true, want: false},
+		{name: "empty mempool", wire: true, size: 0, cap: poolCap, pct: 20, want: false},
 
-		{name: "default just below half", wire: true, size: 2499, cap: poolCap, want: false},
-		{name: "default exactly half", wire: true, size: 2500, cap: poolCap, want: true},
-		{name: "default above half", wire: true, size: 3000, cap: poolCap, want: true},
+		// Unset/out-of-range disables shedding — and must NOT be read as a 0%
+		// threshold, which would shed even a full mempool.
+		{name: "unset (0) disables, full admitted", wire: true, size: poolCap, cap: poolCap, pct: 0, want: false},
+		{name: "over 100 disables, full admitted", wire: true, size: poolCap, cap: poolCap, pct: 150, want: false},
+
+		// Genesis default 20% of 5000 => threshold 1000.
+		{name: "20pct just below", wire: true, size: 999, cap: poolCap, pct: 20, want: false},
+		{name: "20pct at", wire: true, size: 1000, cap: poolCap, pct: 20, want: true},
+		{name: "20pct above", wire: true, size: 2000, cap: poolCap, pct: 20, want: true},
 
 		{name: "custom 70 below", wire: true, size: 3499, cap: poolCap, pct: 70, want: false},
 		{name: "custom 70 at", wire: true, size: 3500, cap: poolCap, pct: 70, want: true},
@@ -84,6 +92,19 @@ func TestMempoolBackpressureReject(t *testing.T) {
 				t.Fatalf("reject=%v, want %v", got, c.want)
 			}
 		})
+	}
+}
+
+// TestBackpressureAdmitsGarbageAboveThreshold locks the #3 invariant: an
+// undecodable envelope is admitted even when the mempool is full, so it reaches
+// Validate for a terminal (non-retryable) decode error instead of being shed
+// with a retryable "backpressure" rejection that a client would resend in a loop.
+func TestBackpressureAdmitsGarbageAboveThreshold(t *testing.T) {
+	app := new(Accumulator)
+	app.SetMempoolLimiter(func() int { return 5000 }, 5000) // 100% full
+	app.mempoolBackpressurePct.Store(50)
+	if _, reject := app.mempoolBackpressureReject(false, []byte("not an envelope")); reject {
+		t.Fatal("garbage shed as backpressure; must be admitted for a terminal decode error")
 	}
 }
 

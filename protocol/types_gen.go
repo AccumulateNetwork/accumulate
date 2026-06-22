@@ -629,7 +629,7 @@ type NetworkLimits struct {
 	PendingMajorBlocks uint64 `json:"pendingMajorBlocks,omitempty" form:"pendingMajorBlocks" query:"pendingMajorBlocks" validate:"required"`
 	// EventsPerBlock is the maximum number of scheduled events that will be executed per block.
 	EventsPerBlock uint64 `json:"eventsPerBlock,omitempty" form:"eventsPerBlock" query:"eventsPerBlock" validate:"required"`
-	// MempoolBackpressurePercent is the mempool fill percentage at or above which a node rejects new transactions to shed load; 0 uses the built-in default (50).
+	// MempoolBackpressurePercent is the mempool fill percentage (1-100) at or above which a node rejects new user transactions to shed load. Genesis initializes it to 20; 0 or an out-of-range value means backpressure is disabled.
 	MempoolBackpressurePercent uint64 `json:"mempoolBackpressurePercent,omitempty" form:"mempoolBackpressurePercent" query:"mempoolBackpressurePercent"`
 	extraData                  []byte
 }
