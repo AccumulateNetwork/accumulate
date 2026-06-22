@@ -203,12 +203,12 @@ func newActor(id int) *actor {
 // ---------------------------------------------------------------------------
 
 type metrics struct {
-	submitted   atomic.Uint64
-	succeeded   atomic.Uint64
-	mempoolFull atomic.Uint64
-	otherErr    atomic.Uint64
-	notReady    atomic.Uint64 // gated/retry, not an error
-	resent      atomic.Uint64 // retryable rejections (backpressure/mempool) resent
+	submitted  atomic.Uint64
+	succeeded  atomic.Uint64
+	pushedBack atomic.Uint64 // still shed (backpressure or mempool-full) after resends exhausted
+	otherErr   atomic.Uint64
+	notReady   atomic.Uint64 // gated/retry, not an error
+	resent     atomic.Uint64 // retryable rejections (backpressure/mempool) resent
 
 	mu        sync.Mutex
 	byType    map[string]uint64
@@ -474,9 +474,9 @@ loop:
 			}
 		}
 		actorsMu.Unlock()
-		fmt.Printf("[%s] tps=%d actors=%d active=%d  sub=%d(%.1f/s) ok=%d(%.1f/s) mempoolFull=%d otherErr=%d notReady=%d resent=%d\n",
+		fmt.Printf("[%s] tps=%d actors=%d active=%d  sub=%d(%.1f/s) ok=%d(%.1f/s) pushedBack=%d otherErr=%d notReady=%d resent=%d\n",
 			time.Now().Format("15:04:05"), eng.targetTPS.Load(), na, nActive, s, float64(s-lastSub)/dt, k, float64(k-lastSucc)/dt,
-			m.mempoolFull.Load(), m.otherErr.Load(), m.notReady.Load(), m.resent.Load())
+			m.pushedBack.Load(), m.otherErr.Load(), m.notReady.Load(), m.resent.Load())
 		printTypeLine(m)
 		lastSub, lastSucc, lastT = s, k, t
 		if !loadMixOpts.step && t.After(deadline) {
@@ -499,7 +499,7 @@ loop:
 	if s > 0 {
 		fmt.Printf("Success rate:    %.1f%%\n", 100*float64(k)/float64(s))
 	}
-	fmt.Printf("Mempool full:    %d  (pushback after %d resends each)\n", m.mempoolFull.Load(), maxResendAttempts)
+	fmt.Printf("Pushed back:     %d  (shed after %d resends each: backpressure or mempool-full)\n", m.pushedBack.Load(), maxResendAttempts)
 	fmt.Printf("Other errors:    %d\n", m.otherErr.Load())
 	fmt.Printf("Not-ready waits: %d\n", m.notReady.Load())
 	fmt.Printf("Resends:         %d\n", m.resent.Load())
@@ -653,7 +653,7 @@ func (e *engine) submit(principal *url.URL, txType string, env *messaging.Envelo
 			continue
 		case retErr != nil:
 			// Exhausted resends; still pushed back.
-			e.m.mempoolFull.Add(1)
+			e.m.pushedBack.Add(1)
 			return false
 		default:
 			e.m.otherErr.Add(1)
