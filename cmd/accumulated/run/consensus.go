@@ -329,6 +329,15 @@ func (c *ConsensusService) start(inst *Instance) error {
 		return errors.UnknownError.WithFormat("initialize consensus: %w", err)
 	}
 
+	// Apply mempool backpressure: once the node's mempool reaches the configured
+	// fill threshold, CheckTx rejects new transactions so the node sheds load
+	// before the mempool saturates (a full mempool stalls block production and
+	// cascades).
+	if acc, ok := app.(*abci.Accumulator); ok {
+		mp := node.Mempool()
+		acc.SetMempoolLimiter(mp.Size, d.config.Mempool.Size)
+	}
+
 	err = node.Start()
 	if err != nil {
 		return errors.UnknownError.WithFormat("start consensus: %w", err)

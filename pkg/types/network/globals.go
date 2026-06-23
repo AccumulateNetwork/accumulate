@@ -76,6 +76,14 @@ func NewGlobals(g *GlobalValues) *GlobalValues {
 	if g.Globals.Limits.IdentityAccounts == 0 {
 		g.Globals.Limits.IdentityAccounts = 100
 	}
+	if g.Globals.Limits.MempoolBackpressurePercent == 0 {
+		// Mempool fill % at or above which a node sheds new user transactions.
+		// 20% held up best under load testing: enough headroom for synthetics
+		// to keep block production flowing, without shedding so eagerly that
+		// throughput suffers on normal bursts. This is the single source of
+		// truth for the threshold; the node reads it from the globals.
+		g.Globals.Limits.MempoolBackpressurePercent = 20
+	}
 	return g
 }
 

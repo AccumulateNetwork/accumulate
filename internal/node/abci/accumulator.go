@@ -63,6 +63,21 @@ type Accumulator struct {
 	startTime      time.Time
 	ready          bool
 
+	// mempoolSize returns the current CometBFT mempool transaction count and
+	// mempoolCap is its configured capacity (see SetMempoolLimiter). When set,
+	// CheckTx rejects new transactions once the mempool reaches the
+	// backpressure threshold, shedding load before it saturates.
+	mempoolSize func() int
+	mempoolCap  int
+	// mempoolBackpressurePct is the fill percentage at or above which new
+	// transactions are rejected. It is sourced from the network globals
+	// (NetworkLimits.MempoolBackpressurePercent, defaulted to 20 at genesis) —
+	// the same on-chain mechanism as the oracle/fee schedule — and cached here
+	// so CheckTx, which runs outside block context, can read it. This global is
+	// the single source of truth; a 0 or out-of-range cached value means
+	// backpressure is not configured (nothing is shed).
+	mempoolBackpressurePct atomic.Int64
+
 	onFatal func(error)
 
 	// DisableLateCommit - DO NOT USE IN PRODUCTION - disables the late-commit
@@ -114,6 +129,109 @@ func NewAccumulator(opts AccumulatorOptions) *Accumulator {
 
 var _ abci.Application = (*Accumulator)(nil)
 
+// SetMempoolLimiter wires the CometBFT mempool's occupancy into CheckTx so new
+// transactions are rejected once the mempool reaches the backpressure threshold
+// configured by the network global (NetworkLimits.MempoolBackpressurePercent;
+// defaulted to 20 at genesis by network.NewGlobals). size returns the current
+// transaction count; capacity is the mempool's configured size. Called after the
+// consensus node is created, since the mempool does not exist when the
+// application is constructed.
+func (app *Accumulator) SetMempoolLimiter(size func() int, capacity int) {
+	app.mempoolSize = size
+	app.mempoolCap = capacity
+}
+
+// mempoolBackpressureReject reports whether a transaction should be rejected to
+// shed load, given the current mempool occupancy and the configured threshold,
+// returning a human-readable reason. Rechecks of already-admitted transactions
+// are never rejected, and rejection is disabled until SetMempoolLimiter wires
+// the mempool. The threshold percentage is configured solely by the network
+// global (NetworkLimits.MempoolBackpressurePercent, defaulted to 20 at genesis);
+// an unset (0) or out-of-range (>100) value means backpressure is not configured
+// and nothing is shed.
+//
+// Only USER submissions are shed. Synthetic and system traffic must always be
+// admitted (they count toward the threshold, which is why it is below 100%), so
+// the headroom above the threshold is reserved for them.
+func (app *Accumulator) mempoolBackpressureReject(isRecheck bool, raw []byte) (string, bool) {
+	if isRecheck || app.mempoolSize == nil || app.mempoolCap <= 0 {
+		return "", false
+	}
+	pct := int(app.mempoolBackpressurePct.Load())
+	if pct < 1 || pct > 100 {
+		// The threshold is configured solely by the network global, which
+		// network.NewGlobals defaults to 20 at genesis. An unset (0) or
+		// nonsensical out-of-range value (a mempool can't be more than 100%
+		// full) means it is not configured: admit. Critically, never treat 0 as
+		// a threshold — n*100 >= cap*0 is always true and would shed everything.
+		return "", false
+	}
+	n := app.mempoolSize()
+	if n*100 < app.mempoolCap*pct {
+		return "", false // below threshold
+	}
+	// At or over the threshold: shed user load only; never synthetics/system.
+	if !app.isUserSubmission(raw) {
+		return "", false
+	}
+	return fmt.Sprintf("mempool at %d%% of capacity (>= %d%% backpressure threshold): %d of %d; rejecting user transaction (synthetics still admitted)",
+		n*100/app.mempoolCap, pct, n, app.mempoolCap), true
+}
+
+// isUserSubmission reports whether a raw envelope is a user submission (subject
+// to backpressure) rather than synthetic/system traffic that must never be shed.
+//
+// A decode failure returns false (admit, do not shed). This is deliberate: a
+// well-formed synthetic always decodes, so an undecodable envelope is never a
+// synthetic — admitting it is not about protecting synthetics. It is so the
+// envelope reaches Validate, which returns the real terminal decode error.
+// Shedding it here instead would return a retryable "backpressure" rejection,
+// which a client (e.g. loadmix) would resend in a loop. Admitting junk costs a
+// cheap failed unmarshal; it never enters the mempool.
+//
+// Note: above the threshold this decode is repeated by executeTransactions for
+// admitted traffic (synthetics), i.e. each admitted synthetic is decoded twice.
+// That is accepted: it only happens in the already-degraded shedding state, and
+// sharing the decode would require forking the executeTransactions path that
+// block processing (DeliverTx) also uses — not worth it for a synthetic decode.
+func (app *Accumulator) isUserSubmission(raw []byte) bool {
+	env := new(messaging.Envelope)
+	if env.UnmarshalBinary(raw) != nil {
+		return false
+	}
+	msgs, err := env.Normalize()
+	if err != nil {
+		return false
+	}
+	return messagesAreUser(msgs)
+}
+
+// messagesAreUser reports whether a normalized message set is purely user
+// content. Any synthetic/system message (synthetic transaction, system
+// signature, anchor, sequenced message) makes the whole set non-user, so it is
+// never subject to backpressure.
+func messagesAreUser(msgs []messaging.Message) bool {
+	user := false
+	for _, m := range msgs {
+		switch m := m.(type) {
+		case *messaging.TransactionMessage:
+			if !m.Transaction.Body.Type().IsUser() {
+				return false
+			}
+			user = true
+		case *messaging.SignatureMessage:
+			if m.Signature.Type().IsSystem() {
+				return false
+			}
+			user = true
+		case *messaging.SyntheticMessage, *messaging.BadSyntheticMessage,
+			*messaging.BlockAnchor, *messaging.SequencedMessage:
+			return false
+		}
+	}
+	return user
+}
+
 func (app *Accumulator) CurrentBlock() execute.Block           { return app.block }
 func (app *Accumulator) CurrentBlockState() execute.BlockState { return app.blockState }
 
@@ -163,6 +281,14 @@ func (app *Accumulator) recover() {
 // willChangeGlobals populates the validator update list, which is passed to
 // Tendermint to update the validator set.
 func (app *Accumulator) willChangeGlobals(e events.WillChangeGlobals) error {
+	// Cache the mempool backpressure threshold from the network globals so
+	// CheckTx (which runs outside block context) can apply it. This is the
+	// same on-chain distribution mechanism as the oracle and fee schedule.
+	// Done before the e.Old==nil guard so it is captured on first load too.
+	if e.New != nil && e.New.Globals != nil && e.New.Globals.Limits != nil {
+		app.mempoolBackpressurePct.Store(int64(e.New.Globals.Limits.MempoolBackpressurePercent))
+	}
+
 	// Don't do anything when the globals are first loaded
 	if e.Old == nil {
 		return nil
@@ -537,6 +663,17 @@ func (app *Accumulator) CheckTx(_ context.Context, req *abci.RequestCheckTx) (rc
 	// ApplySnapshot
 	if !app.ready {
 		return nil, errors.NotReady.With("not ready")
+	}
+
+	// Backpressure: reject new transactions once the mempool reaches the
+	// configured fill threshold, so the node sheds load before it saturates (a
+	// saturated mempool stalls block production and cascades).
+	if msg, reject := app.mempoolBackpressureReject(req.Type == abci.CheckTxType_Recheck, req.Tx); reject {
+		var res abci.ResponseCheckTx
+		res.Code = uint32(protocol.ErrorCodeFailed)
+		res.Info = msg
+		res.Log = msg
+		return &res, nil
 	}
 
 	messages, results, respData, err := executeTransactions(app.logger.With("operation", "CheckTx"), func(envelope *messaging.Envelope) ([]*protocol.TransactionStatus, error) {

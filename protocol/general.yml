@@ -235,6 +235,10 @@ NetworkLimits:
     - name: EventsPerBlock
       description: is the maximum number of scheduled events that will be executed per block
       type: uint
+    - name: MempoolBackpressurePercent
+      description: is the mempool fill percentage (1-100) at or above which a node rejects new user transactions to shed load. Genesis initializes it to 20; 0 or an out-of-range value means backpressure is disabled
+      type: uint
+      optional: true
 
 Rational:
   fields:
