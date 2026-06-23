@@ -1,0 +1,196 @@
+# Bootstrap-v3 test network — 1 BVN × 4 validators, 1-minute major blocks.
+#
+# Distinct from docker-compose.yml (load-test 3-BVN setup) so this can run
+# alongside or in isolation. Uses the accumulate:bootstrap-v3 image so the
+# new BptPageQuery dispatch and accumulated bootstrap subcommand are present.
+#
+# Usage:
+#   docker compose -f test/docker/docker-compose.bootstrap-v3.yml up -d
+#   docker compose -f test/docker/docker-compose.bootstrap-v3.yml logs -f
+#   docker compose -f test/docker/docker-compose.bootstrap-v3.yml down -v
+#
+# API port mapping (host → container):
+#   bvn1-val1 → 26680 (Accumulate API), 26690 (DN TM RPC), 26696 (DN TM P2P)
+#   bvn1-val2 → 26681 (Accumulate API), 26691 (DN TM RPC), 26697 (DN TM P2P)
+#   bvn1-val3 → 26682 (Accumulate API), 26692 (DN TM RPC), 26698 (DN TM P2P)
+#   bvn1-val4 → 26683 (Accumulate API), 26693 (DN TM RPC), 26699 (DN TM P2P)
+# (different range from the load-test compose to avoid port conflicts).
+# Tendermint RPC is exposed so the bootstrap-v3 launcher can pre-populate
+# CometBFT state via NewLightClientStateProvider; P2P is exposed so the
+# bootstrapped follower can blocksync against the network.
+
+services:
+  # libp2p discovery bootstrap (distinct from bootstrap-v3 concept).
+  bootstrap:
+    image: accumulate:bootstrap-v3
+    container_name: acc-bv3-bootstrap
+    mem_limit: 512m
+    ports:
+      - "17693:16593"  # different host port from the load-test bootstrap and host accumulated
+    entrypoint: ["/bin/accumulated-bootstrap"]
+    command:
+      - --listen
+      - /ip4/0.0.0.0/tcp/16593
+      - --key
+      - "626f6f74737472617076332d6e6f64652d6b65792d7365656400000000000000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "netstat -tuln | grep -q ':16593 ' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - bv3net
+
+  # Initialize network configuration.
+  init:
+    image: accumulate:bootstrap-v3
+    container_name: acc-bv3-init
+    volumes:
+      - bv3-config:/root/.accumulate
+      - ../..:/workspace
+    working_dir: /workspace
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        # The init network --reset only matches dirs named dnn/bvnn/node-*/bsn-*,
+        # not bvn1-N, so explicitly wipe the bv3-config volume first to ensure
+        # fresh state on every up.
+        rm -rf /root/.accumulate/*
+        accumulated init network test/docker/docker-network.bootstrap-v3.yml --reset --faucet-seed=FAUCET
+        # Enable periodic major-block snapshots on every validator's
+        # partition config. Bootstrap-v3 launcher fetches these to seed
+        # its local DB at a verified boundary state.
+        for f in /root/.accumulate/*/accumulate.toml; do
+          # Insert enable-snapshots = true after the line that says
+          # type = "coreValidator" inside each [[configurations]].
+          sed -i '/type = "coreValidator"/a\  enable-snapshots = true' "$$f"
+        done
+    networks:
+      - bv3net
+
+  # 4 validators on BVN1 (each runs both DN and BVN subnodes via run-dual).
+  bvn1-val1:
+    image: accumulate:bootstrap-v3
+    container_name: acc-bv3-bvn1-val1
+    mem_limit: 1g
+    environment:
+      # Disabled (set to a huge value) for the bootstrap-v3 catch-up
+      # test — when set to 50, validators prune below latest-50 which
+      # makes the launched node unable to blocksync from snapshot
+      # height to current. Set to 1000000 in regular tests; back to
+      # ~50 to demonstrate steady-state pruning.
+      ACCUMULATE_RETAIN_BLOCKS: "1000000"
+    volumes:
+      - bv3-config:/root/.accumulate
+    command:
+      - -w=/root/.accumulate/bvn1-1
+      - --pprof=0.0.0.0:6060
+      - /root/.accumulate/bvn1-1/accumulate.toml
+    ports:
+      - "26680:26660"
+      - "26690:26657"
+      - "26696:26656"
+      - "6061:6060"
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      bootstrap:
+        condition: service_started
+    networks:
+      - bv3net
+
+  bvn1-val2:
+    image: accumulate:bootstrap-v3
+    container_name: acc-bv3-bvn1-val2
+    mem_limit: 1g
+    environment:
+      # Disabled (set to a huge value) for the bootstrap-v3 catch-up
+      # test — when set to 50, validators prune below latest-50 which
+      # makes the launched node unable to blocksync from snapshot
+      # height to current. Set to 1000000 in regular tests; back to
+      # ~50 to demonstrate steady-state pruning.
+      ACCUMULATE_RETAIN_BLOCKS: "1000000"
+    volumes:
+      - bv3-config:/root/.accumulate
+    command:
+      - -w=/root/.accumulate/bvn1-2
+      - --pprof=0.0.0.0:6060
+      - /root/.accumulate/bvn1-2/accumulate.toml
+    ports:
+      - "26681:26660"
+      - "26691:26657"
+      - "26697:26656"
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      bootstrap:
+        condition: service_started
+    networks:
+      - bv3net
+
+  bvn1-val3:
+    image: accumulate:bootstrap-v3
+    container_name: acc-bv3-bvn1-val3
+    mem_limit: 1g
+    environment:
+      # Disabled (set to a huge value) for the bootstrap-v3 catch-up
+      # test — when set to 50, validators prune below latest-50 which
+      # makes the launched node unable to blocksync from snapshot
+      # height to current. Set to 1000000 in regular tests; back to
+      # ~50 to demonstrate steady-state pruning.
+      ACCUMULATE_RETAIN_BLOCKS: "1000000"
+    volumes:
+      - bv3-config:/root/.accumulate
+    command:
+      - -w=/root/.accumulate/bvn1-3
+      - --pprof=0.0.0.0:6060
+      - /root/.accumulate/bvn1-3/accumulate.toml
+    ports:
+      - "26682:26660"
+      - "26692:26657"
+      - "26698:26656"
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      bootstrap:
+        condition: service_started
+    networks:
+      - bv3net
+
+  bvn1-val4:
+    image: accumulate:bootstrap-v3
+    container_name: acc-bv3-bvn1-val4
+    mem_limit: 1g
+    environment:
+      # Disabled (set to a huge value) for the bootstrap-v3 catch-up
+      # test — when set to 50, validators prune below latest-50 which
+      # makes the launched node unable to blocksync from snapshot
+      # height to current. Set to 1000000 in regular tests; back to
+      # ~50 to demonstrate steady-state pruning.
+      ACCUMULATE_RETAIN_BLOCKS: "1000000"
+    volumes:
+      - bv3-config:/root/.accumulate
+    command:
+      - -w=/root/.accumulate/bvn1-4
+      - --pprof=0.0.0.0:6060
+      - /root/.accumulate/bvn1-4/accumulate.toml
+    ports:
+      - "26683:26660"
+      - "26693:26657"
+      - "26699:26656"
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      bootstrap:
+        condition: service_started
+    networks:
+      - bv3net
+
+volumes:
+  bv3-config:
+
+networks:
+  bv3net:
+    driver: bridge

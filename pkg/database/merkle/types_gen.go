@@ -148,25 +148,8 @@ func (v *ReceiptList) Copy() *ReceiptList {
 
 func (v *ReceiptList) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *State) Copy() *State {
-	u := new(State)
-
-	u.Count = v.Count
-	u.Pending = make([][]byte, len(v.Pending))
-	for i, v := range v.Pending {
-		v := v
-		u.Pending[i] = encoding.BytesCopy(v)
-	}
-	u.HashList = make([][]byte, len(v.HashList))
-	for i, v := range v.HashList {
-		v := v
-		u.HashList[i] = encoding.BytesCopy(v)
-	}
-
-	return u
-}
-
-func (v *State) CopyAsInterface() interface{} { return v.Copy() }
+// State.Copy and CopyAsInterface are hand-written in state.go (see
+// types.yml `no-copy: true`).
 
 func (v *chainIndexBlock) Copy() *chainIndexBlock {
 	u := new(chainIndexBlock)

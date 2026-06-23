@@ -7,10 +7,13 @@
 package run
 
 import (
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -123,6 +126,59 @@ func (h *HttpService) start(inst *Instance) error {
 				_ = json.NewEncoder(w).Encode(haltInst.GetHaltStatus())
 			default:
 				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			}
+			return
+		}
+
+		// Bootstrap-v3 state observability. Returns the contents of
+		// every bootstrap-state.json found under haltInst.rootDir
+		// (typically dnn/ and bvnn/) keyed by partition. Operators can
+		// curl this to confirm whether a node was bootstrapped via
+		// bootstrap-v3 and at what state, without parsing logs.
+		if r.Method == http.MethodGet && r.URL.Path == "/admin/bootstrap-state" {
+			states := haltInst.collectBootstrapStates()
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(states)
+			return
+		}
+
+		// Atomic per-partition snapshot for the bootstrap-v3 launcher.
+		// Returns snapshot v2 bytes as a binary body; metadata is in
+		// response headers. Bypasses jsonrpc/websocket so a 25-30 MB
+		// body doesn't get base64'd into a JSON field. Rate-limited per
+		// partition (see PartitionStateMinInterval) — repeated requests
+		// inside the window get HTTP 429 with a Retry-After hint.
+		const psPrefix = "/v3/partition-state/"
+		if r.Method == "GET" && strings.HasPrefix(r.URL.Path, psPrefix) {
+			partition := r.URL.Path[len(psPrefix):]
+			h, ok := inst.PartitionStateHandler(partition)
+			if !ok {
+				http.Error(w, "unknown partition", http.StatusNotFound)
+				return
+			}
+			if ok, retryAfter := inst.ReservePartitionState(partition); !ok {
+				retrySecs := int(retryAfter.Round(time.Second).Seconds())
+				if retrySecs < 1 {
+					retrySecs = 1
+				}
+				w.Header().Set("Retry-After", strconv.Itoa(retrySecs))
+				http.Error(w,
+					fmt.Sprintf("partition-state rate limit: retry in %ds", retrySecs),
+					http.StatusTooManyRequests)
+				return
+			}
+			block, root, body, err := h.BuildPartitionState()
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Header().Set("X-Accumulate-Block-Index", strconv.FormatUint(block, 10))
+			w.Header().Set("X-Accumulate-Bpt-Root", hex.EncodeToString(root[:]))
+			w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+			if _, err := w.Write(body); err != nil {
+				slog.ErrorContext(r.Context(), "partition-state write failed",
+					"error", err, "partition", partition)
 			}
 			return
 		}

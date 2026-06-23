@@ -9,6 +9,7 @@ package block
 import (
 	"crypto/ed25519"
 
+	lru "github.com/hashicorp/golang-lru/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
@@ -20,6 +21,11 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
+
+// sigCacheSize is the LRU cap for the signature-verification cache. The
+// CometBFT default mempool size is 5000; sizing the cache at 2x ensures
+// recheck after a block commit is a hit for every pending tx.
+const sigCacheSize = 10000
 
 var messageExecutors []ExecutorFactory1[messaging.MessageType, *MessageContext]
 var signatureExecutors []ExecutorFactory1[protocol.SignatureType, *SignatureContext]
@@ -37,6 +43,13 @@ type Executor struct {
 	isValidator        bool
 	isGenesis          bool
 	mainDispatcher     Dispatcher
+
+	// sigCache memoizes successful cryptographic signature verifications
+	// keyed by sha256(sig.Metadata().Hash() || msgHash). At sustained load
+	// CometBFT calls CheckTx → Validate twice for every pending tx (once
+	// on submit, once on every block-commit recheck); the underlying
+	// (sig, msg) pair is identical, so re-running ed25519 is wasted CPU.
+	sigCache *lru.Cache[[32]byte, struct{}]
 }
 
 type ExecutorOptions = execute.Options
@@ -109,6 +122,12 @@ func NewExecutor(opts ExecutorOptions) (*Executor, error) {
 	m.db = opts.Database
 	m.mainDispatcher = opts.NewDispatcher()
 	m.isGenesis = false
+
+	c, cacheErr := lru.New[[32]byte, struct{}](sigCacheSize)
+	if cacheErr != nil {
+		return nil, errors.InternalError.WithFormat("init sigCache: %w", cacheErr)
+	}
+	m.sigCache = c
 
 	if opts.Logger != nil {
 		m.logger.L = opts.Logger.With("module", "executor")

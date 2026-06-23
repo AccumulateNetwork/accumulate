@@ -1,0 +1,628 @@
+// Copyright 2026 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
+// Package orchestrator wires the bootstrap-v3 phases together:
+//
+//   - Spine pull (DN only): pulls the four DN-side spine accounts in
+//     ModeFullSpine — anchor pool, ledger, operators, operators/1.
+//     These are the cryptographic spine the launcher needs full chain
+//     history for.
+//
+//   - Enumerate: paginates the partition's BPT and inserts every leaf
+//     locally, reconstructing the full state map up to the source's
+//     current root.
+//
+//   - Steady-state: subscribes to the partition's BlockEvents via
+//     gossip and applies on-demand state pulls for each touched
+//     account, keeping the local DB in sync. Concurrently polls an
+//     AnchorSource for signed major-block anchors and feeds them to a
+//     Tracker that flips nodestate.Machine BOOTING → ACTIVE on first
+//     local-root match.
+//
+// The orchestrator is sequential by phase: spine → enumerate →
+// steady-state. The "concurrent enumeration+gossip" idea from the
+// design notes is an optimization deferred to a future revision —
+// keeping enumeration ahead of live ingestion is fine for an initial
+// sync, since the tracker will catch up once steady-state begins.
+package orchestrator
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/enumerate"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/tracker"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	apierrors "gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+)
+
+// isNotFound classifies an error as "the source returned NotFound for
+// this account's Main." Used by the hydrate path so that stale BPT
+// entries the source can't resolve (per #4019) don't get counted as
+// hard errors — the leaf is already in the local BPT with the source's
+// BPT-recorded hash from enumerate, so omitting Main is fine.
+func isNotFound(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, apierrors.NotFound) {
+		return true
+	}
+	// Unwrap doesn't always reach the typed code in nested wraps from
+	// the v3 message client. Fall back to string-match on the canonical
+	// message produced by Account.Main().GetAs in the source.
+	return strings.Contains(err.Error(), "not found")
+}
+
+// AnchorSource hands the orchestrator verified major-block anchors.
+// Production wires this to a peer's anchor pool query; tests fake it.
+// Returning a zero anchor with no error means "no anchor yet,
+// retry" — the orchestrator does not treat this as failure.
+type AnchorSource interface {
+	LatestAnchor(ctx context.Context, partition string) (block uint64, anchor [32]byte, err error)
+}
+
+// Source is the combined surface the orchestrator needs from the
+// network. Production satisfies all three with a single Querier2 +
+// EventService client; tests can build a single fake.
+type Source interface {
+	pull.Source
+	enumerate.Source
+	AnchorSource
+}
+
+// Options configures Run.
+type Options struct {
+	// Partition is the partition this orchestrator is syncing —
+	// "Directory" for DN, "<bvn-name>" for a BVN.
+	Partition string
+
+	// PartitionURL is the scope passed to BPT enumeration. Production
+	// uses protocol.PartitionUrl(Partition); tests can override.
+	PartitionURL *url.URL
+
+	// IsDirectory is retained for backward compatibility but no
+	// longer toggles spine pull. Both DN and BVN bootstraps now pull
+	// the partition's own spine accounts in ModeFullSpine — the BVN
+	// case needs the local validator keypage to verify signed
+	// anchors per #3988.
+	IsDirectory bool
+
+	// PageSize for paginated state-pull and BPT enumeration calls.
+	// Default 256.
+	PageSize uint64
+
+	// AnchorPollInterval is how often the steady-state loop queries
+	// AnchorSource. Default 5s. Tests override to a short tick.
+	AnchorPollInterval time.Duration
+
+	// OnPhase, if non-nil, is invoked at phase boundaries with a short
+	// human-readable status. Useful for CLI progress output.
+	OnPhase func(phase string, msg string)
+
+	// MatchThreshold overrides tracker.DefaultMatchThreshold. Zero
+	// keeps the default. Tests use 1 for immediate promotion on
+	// single match.
+	MatchThreshold int
+}
+
+// Run executes the bootstrap-v3 phases. Returns when the tracker
+// promotes the machine to StateActive, the event channel closes, or
+// the context is canceled.
+//
+// On clean ACTIVE, returns nil. On context cancel, returns nil. On
+// other errors (failed spine pull, failed enumeration page, etc.),
+// returns the error and leaves the machine in StateBooting — the
+// caller can retry from scratch (the local DB has partial state and
+// would be discarded by a real launcher).
+func Run(
+	ctx context.Context,
+	src Source,
+	eventCh <-chan api.Event,
+	db *database.Database,
+	machine *nodestate.Machine,
+	opts Options,
+) error {
+	if src == nil {
+		return fmt.Errorf("orchestrator.Run: src required")
+	}
+	if db == nil {
+		return fmt.Errorf("orchestrator.Run: db required")
+	}
+	if machine == nil {
+		return fmt.Errorf("orchestrator.Run: machine required")
+	}
+	if opts.PartitionURL == nil {
+		return fmt.Errorf("orchestrator.Run: PartitionURL required")
+	}
+	if opts.Partition == "" {
+		return fmt.Errorf("orchestrator.Run: Partition required")
+	}
+	pageSize := opts.PageSize
+	if pageSize == 0 {
+		pageSize = 256
+	}
+	pollEvery := opts.AnchorPollInterval
+	if pollEvery == 0 {
+		pollEvery = 5 * time.Second
+	}
+
+	tr, err := tracker.New(db, machine)
+	if err != nil {
+		return fmt.Errorf("tracker: %w", err)
+	}
+	if opts.MatchThreshold > 0 {
+		tr.MatchThreshold = opts.MatchThreshold
+	}
+
+	phase := func(name, msg string) {
+		if opts.OnPhase != nil {
+			opts.OnPhase(name, msg)
+		}
+	}
+
+	// Phase 1: spine pull (this partition's own).
+	phase("spine", fmt.Sprintf("pulling %s spine accounts in full", opts.Partition))
+	if err := pullSpine(ctx, src, db, opts.PartitionURL, pageSize); err != nil {
+		return fmt.Errorf("spine: %w", err)
+	}
+
+	// Phase 2: enumerate the partition BPT.
+	phase("enumerate", "scanning partition BPT")
+	if err := runEnumerate(ctx, src, db, opts.PartitionURL, pageSize, opts.OnPhase); err != nil {
+		return fmt.Errorf("enumerate: %w", err)
+	}
+
+	// Phase 3: steady-state — gossip ingestion + anchor polling.
+	// Exits when tracker flips machine to ACTIVE.
+	phase("steady", "applying gossip and watching anchors")
+	return runSteady(ctx, src, eventCh, db, tr, opts.PartitionURL, opts.Partition, pageSize, pollEvery, opts.OnPhase)
+}
+
+// RunSteady runs only the steady-state portion of the orchestrator:
+// gossip ingestion + anchor polling, until the tracker promotes the
+// machine to StateActive, eventCh closes, or ctx is canceled.
+//
+// Used by `accumulated run` to resume a partially-bootstrapped node
+// after spine pull and enumeration already completed in a prior
+// `accumulated bootstrap` invocation (#3989). The caller is expected
+// to have already restored any persisted observed-anchor set onto
+// the tracker via tracker.RestoreFrom.
+func RunSteady(
+	ctx context.Context,
+	src Source,
+	eventCh <-chan api.Event,
+	db *database.Database,
+	machine *nodestate.Machine,
+	tr *tracker.Tracker,
+	opts Options,
+) error {
+	if src == nil {
+		return fmt.Errorf("orchestrator.RunSteady: src required")
+	}
+	if db == nil {
+		return fmt.Errorf("orchestrator.RunSteady: db required")
+	}
+	if machine == nil {
+		return fmt.Errorf("orchestrator.RunSteady: machine required")
+	}
+	if tr == nil {
+		return fmt.Errorf("orchestrator.RunSteady: tracker required")
+	}
+	if opts.Partition == "" {
+		return fmt.Errorf("orchestrator.RunSteady: Partition required")
+	}
+	pageSize := opts.PageSize
+	if pageSize == 0 {
+		pageSize = 256
+	}
+	pollEvery := opts.AnchorPollInterval
+	if pollEvery == 0 {
+		pollEvery = 5 * time.Second
+	}
+	return runSteady(ctx, src, eventCh, db, tr, opts.PartitionURL, opts.Partition, pageSize, pollEvery, opts.OnPhase)
+}
+
+// pullSpine pulls the partition's spine accounts in ModeFullSpine
+// into a single batch and commits it. UpdateBPT is called before
+// Commit so the observer's per-account hashes land as BPT leaves —
+// without this, account writes never reach the BPT and the tracker's
+// local-root check never matches.
+func pullSpine(ctx context.Context, src pull.Source, db *database.Database, partitionURL *url.URL, pageSize uint64) error {
+	batch := db.Begin(true)
+	defer batch.Discard()
+	for _, u := range pull.SpineAccounts(partitionURL) {
+		if err := pull.Account(ctx, src, batch, u, pull.Options{
+			Mode:     pull.ModeFullSpine,
+			PageSize: pageSize,
+		}); err != nil {
+			return fmt.Errorf("pull spine %s: %w", u, err)
+		}
+	}
+	if err := batch.UpdateBPT(); err != nil {
+		return fmt.Errorf("update BPT: %w", err)
+	}
+	if err := batch.Commit(); err != nil {
+		return fmt.Errorf("commit spine: %w", err)
+	}
+	return nil
+}
+
+// runEnumerate runs enumerate.Run inside a single commit, then
+// hydrates account state for every leaf that doesn't already have
+// it. After this returns, every account source has at the moment
+// the scan completed exists in the local DB with full state
+// (Main + Directory + Pending + chain heads). The launcher's BPT
+// after observer-recompute will equal source's BPT at that moment
+// (modulo the source advancing during the pull).
+//
+// Already-populated accounts (e.g., the spine) are skipped — pull
+// only fires on a NotFound for Main.
+func runEnumerate(
+	ctx context.Context,
+	src Source,
+	db *database.Database,
+	scope *url.URL,
+	pageSize uint64,
+	onPhase func(phase, msg string),
+) error {
+	batch := db.Begin(true)
+	defer batch.Discard()
+	res, err := enumerate.Run(ctx, src, scope, batch, enumerate.Options{
+		PageSize: pageSize,
+	})
+	if err != nil {
+		return err
+	}
+	if err := batch.Commit(); err != nil {
+		return fmt.Errorf("commit enumerate: %w", err)
+	}
+	if onPhase != nil {
+		onPhase("enumerate", fmt.Sprintf("scanned %d leaves across %d pages; hydrating missing state",
+			res.LeavesInserted, res.PagesPulled))
+	}
+
+	// Post-enumerate state-pull pass.
+	//
+	// `notInSource` counts accounts whose BPT leaf the enumerate phase
+	// recorded but whose Main state the source returns NotFound for.
+	// This is expected on networks with stale BPT entries (e.g.,
+	// per-block ledger accounts left over from the V1/early-V2 to
+	// V2Jiuquan migration; see #4019). The enumerate phase already
+	// inserted the leaf with the source's BPT-recorded hash — we
+	// just don't have its Main state record. Skipping the hydrate
+	// keeps the local BPT root consistent with the source's.
+	pulled, skipped, notInSource, errs := 0, 0, 0, 0
+	for _, u := range res.Accounts {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		// Cheap probe: does this account already have Main locally?
+		if hasMain(db, u) {
+			skipped++
+			continue
+		}
+		hbatch := db.Begin(true)
+		err := pull.Account(ctx, src, hbatch, u, pull.Options{
+			Mode:     pull.ModeStateOnly,
+			PageSize: pageSize,
+		})
+		if err != nil {
+			hbatch.Discard()
+			if isNotFound(err) {
+				notInSource++
+				if onPhase != nil {
+					onPhase("enumerate", fmt.Sprintf("source has no Main for %s; keeping enumerate-recorded BPT leaf hash", u))
+				}
+				continue
+			}
+			errs++
+			if onPhase != nil {
+				onPhase("enumerate", fmt.Sprintf("hydrate %s: %v", u, err))
+			}
+			continue
+		}
+		if err := hbatch.UpdateBPT(); err != nil {
+			hbatch.Discard()
+			errs++
+			continue
+		}
+		if err := hbatch.Commit(); err != nil {
+			errs++
+			continue
+		}
+		pulled++
+	}
+	if onPhase != nil {
+		onPhase("enumerate", fmt.Sprintf("hydrated %d accounts (skipped %d already-populated, %d not-in-source, errored %d)",
+			pulled, skipped, notInSource, errs))
+	}
+	return nil
+}
+
+// hasMain reports whether the account at u has its Main record
+// populated locally — the cheapest probe that distinguishes
+// "BPT leaf only" from "fully hydrated."
+func hasMain(db *database.Database, u *url.URL) bool {
+	b := db.Begin(false)
+	defer b.Discard()
+	v, err := b.Account(u).Main().Get()
+	if err != nil {
+		return false
+	}
+	// Main().Get() may return a non-nil default for accounts that
+	// were never written. Treat zero/empty as "not populated."
+	return v != nil
+}
+
+// runSteady runs the gossip+anchor loop until tracker promotes,
+// eventCh closes, or ctx is canceled.
+//
+// Per-anchor-tick we ALSO re-enumerate the partition's BPT. Why:
+// gossip BlockEvents only carry chain-modified accounts, but
+// state-changing system updates (e.g., dn.acme/ledger metadata)
+// can happen without a chain entry. Without re-enumeration the
+// local BPT diverges from source's. Empirical: 6 accounts only
+// on source after 60s of pure-gossip steady-state on a quiet
+// 4-validator devnet. Re-enumeration is O(N) per tick — fine for
+// small networks; mainnet would need a smarter delta path.
+func runSteady(
+	ctx context.Context,
+	src Source,
+	eventCh <-chan api.Event,
+	db *database.Database,
+	tr *tracker.Tracker,
+	partitionURL *url.URL,
+	partition string,
+	pageSize uint64,
+	pollEvery time.Duration,
+	onPhase func(phase, msg string),
+) error {
+	// Anchor polling: select-driven, not a separate goroutine. Keeps
+	// concurrency model trivial. We poll once at start for fast
+	// promotion when the BPT is already current after enumerate.
+	if err := pollAnchor(ctx, src, tr, partition); err != nil {
+		// Anchor poll failure during steady-state isn't fatal — the
+		// peer might be momentarily unavailable. Log via onPhase if
+		// configured and continue.
+		if onPhase != nil {
+			onPhase("steady", fmt.Sprintf("initial anchor poll: %v", err))
+		}
+	}
+	if promoted, err := tr.Check(ctx); err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return nil
+		}
+		return fmt.Errorf("initial check: %w", err)
+	} else if promoted {
+		if onPhase != nil {
+			onPhase("active", fmt.Sprintf("matched at block %d", tr.LatestObservedBlock()))
+		}
+		return nil
+	}
+
+	ticker := time.NewTicker(pollEvery)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+			// Re-enumerate first so the local BPT picks up
+			// anything gossip events missed.
+			if err := runEnumerate(ctx, src, db, partitionURL, pageSize, onPhase); err != nil {
+				if onPhase != nil {
+					onPhase("steady", fmt.Sprintf("re-enumerate: %v", err))
+				}
+			}
+			if err := pollAnchor(ctx, src, tr, partition); err != nil && onPhase != nil {
+				onPhase("steady", fmt.Sprintf("anchor poll: %v", err))
+			}
+			if onPhase != nil {
+				logRoots(db, tr, onPhase)
+			}
+			if promoted, err := tr.Check(ctx); err != nil {
+				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+					return nil
+				}
+				return fmt.Errorf("check: %w", err)
+			} else if promoted {
+				if onPhase != nil {
+					onPhase("active", fmt.Sprintf("matched at block %d", tr.LatestObservedBlock()))
+				}
+				return nil
+			}
+		case ev, ok := <-eventCh:
+			if !ok {
+				// Stream closed before we promoted. Treat as
+				// non-error so the caller can retry — same shape as
+				// gossip.RunChannel.
+				return nil
+			}
+			if err := applyEvent(ctx, src, db, ev, pageSize); err != nil {
+				return fmt.Errorf("apply event: %w", err)
+			}
+			// On a major-block boundary event, re-enumerate
+			// immediately. The major-block anchor in the AnchorSource
+			// corresponds to source's BPT at the boundary; re-pulling
+			// state right after the boundary gives us the best chance
+			// of local-root matching the anchor before source advances.
+			if blockEv, isBlock := ev.(*api.BlockEvent); isBlock && blockEv.Major > 0 {
+				if onPhase != nil {
+					onPhase("steady", fmt.Sprintf("major-block %d boundary; re-enumerate + repoll", blockEv.Major))
+				}
+				if err := runEnumerate(ctx, src, db, partitionURL, pageSize, onPhase); err != nil {
+					if onPhase != nil {
+						onPhase("steady", fmt.Sprintf("major-block re-enumerate: %v", err))
+					}
+				}
+				if err := pollAnchor(ctx, src, tr, partition); err != nil && onPhase != nil {
+					onPhase("steady", fmt.Sprintf("post-major anchor poll: %v", err))
+				}
+			}
+			if promoted, err := tr.Check(ctx); err != nil {
+				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+					return nil
+				}
+				return fmt.Errorf("check: %w", err)
+			} else if promoted {
+				if onPhase != nil {
+					onPhase("active", fmt.Sprintf("matched at block %d", tr.LatestObservedBlock()))
+				}
+				return nil
+			}
+		}
+	}
+}
+
+// pollAnchor queries src for the latest signed anchor and records it
+// with the tracker. Zero anchors are silently skipped (the source's
+// signal that no fresh anchor is available yet).
+func pollAnchor(ctx context.Context, src AnchorSource, tr *tracker.Tracker, partition string) error {
+	block, anchor, err := src.LatestAnchor(ctx, partition)
+	if err != nil {
+		return err
+	}
+	tr.Observe(block, anchor)
+	return nil
+}
+
+// logRoots emits the current local BPT root and the latest observed
+// anchor for diagnosing why tracker.Check isn't matching.
+func logRoots(db *database.Database, tr *tracker.Tracker, onPhase func(phase, msg string)) {
+	b := db.Begin(false)
+	defer b.Discard()
+	r, err := b.GetBptRootHash()
+	if err != nil {
+		onPhase("debug", fmt.Sprintf("local root err: %v", err))
+		return
+	}
+	onPhase("debug", fmt.Sprintf("local root=%x..  observed=%d  latest=%d", r[:8], tr.ObservedCount(), tr.LatestObservedBlock()))
+}
+
+// applyEvent processes a BlockEvent. For each chain entry on a
+// main chain (transaction hashes), fetch the transaction via
+// QueryMessage and pull every account it references — signers,
+// principal — in addition to the chain-touched account itself.
+// This widens state coverage beyond just chain-modified accounts;
+// without it, transactions that change Main-state without a chain
+// entry get missed and the local BPT diverges.
+//
+// (#72 will replace this with deterministic executor execution.
+// Until then this prefetch is the closest approximation of "what
+// the executor would write next.")
+func applyEvent(
+	ctx context.Context,
+	src Source,
+	db *database.Database,
+	ev api.Event,
+	pageSize uint64,
+) error {
+	blockEv, ok := ev.(*api.BlockEvent)
+	if !ok {
+		return nil
+	}
+	// Start with chain-touched accounts (existing behavior).
+	wanted := make(map[string]*url.URL)
+	for _, e := range blockEv.Entries {
+		if e == nil || e.Account == nil {
+			continue
+		}
+		wanted[e.Account.String()] = e.Account
+	}
+
+	// For every main-chain entry that points to a transaction,
+	// fetch the transaction and add its signer + principal to the
+	// wanted set.
+	for _, e := range blockEv.Entries {
+		if e == nil || e.Account == nil {
+			continue
+		}
+		if e.Name != "main" || len(e.Entry) != 32 {
+			continue
+		}
+		var hash [32]byte
+		copy(hash[:], e.Entry[:])
+		txid := e.Account.WithTxID(hash)
+		rec, err := src.QueryMessage(ctx, txid, nil)
+		if err != nil || rec == nil || rec.Message == nil {
+			continue
+		}
+		tm, ok := rec.Message.(*messaging.TransactionMessage)
+		if !ok || tm.Transaction == nil || tm.Transaction.Header.Principal == nil {
+			continue
+		}
+		wanted[tm.Transaction.Header.Principal.String()] = tm.Transaction.Header.Principal
+		// Walk the signature sets for signer URLs.
+		if rec.Signatures != nil {
+			for _, set := range rec.Signatures.Records {
+				if set != nil && set.Account != nil {
+					u := set.Account.GetUrl()
+					if u != nil {
+						wanted[u.String()] = u
+					}
+				}
+			}
+		}
+	}
+
+	if len(wanted) == 0 {
+		return nil
+	}
+
+	batch := db.Begin(true)
+	for _, u := range wanted {
+		if err := pull.Account(ctx, src, batch, u, pull.Options{
+			Mode:     pull.ModeStateOnly,
+			PageSize: pageSize,
+		}); err != nil {
+			batch.Discard()
+			return fmt.Errorf("pull %s: %w", u, err)
+		}
+	}
+	if err := batch.UpdateBPT(); err != nil {
+		batch.Discard()
+		return fmt.Errorf("update BPT: %w", err)
+	}
+	if err := batch.Commit(); err != nil {
+		return fmt.Errorf("commit: %w", err)
+	}
+	return nil
+}
+
+// dedupAccounts collapses chain entries' Account URLs into a unique
+// slice. Same logic as gossip.dedupAccounts; lifted here to avoid
+// importing the gossip package solely for one helper.
+func dedupAccounts(entries []*api.ChainEntryRecord[api.Record]) []*url.URL {
+	if len(entries) == 0 {
+		return nil
+	}
+	seen := make(map[string]*url.URL, len(entries))
+	for _, e := range entries {
+		if e == nil || e.Account == nil {
+			continue
+		}
+		key := e.Account.String()
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = e.Account
+	}
+	out := make([]*url.URL, 0, len(seen))
+	for _, u := range seen {
+		out = append(out, u)
+	}
+	return out
+}

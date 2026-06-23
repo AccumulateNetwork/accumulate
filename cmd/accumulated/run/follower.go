@@ -12,7 +12,6 @@ import (
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -69,6 +68,7 @@ func (c *FollowerConfiguration) apply(inst *Instance, cfg *Config) error {
 			Genesis:               c.DnGenesis,
 			BootstrapPeers:        c.DnBootstrapPeers,
 			Dir:                   "dnn",
+			ConsensusPeerBroker:   c.ConsensusPeerBroker,
 		}.apply(cfg)
 		if err != nil {
 			return err
@@ -85,6 +85,7 @@ func (c *FollowerConfiguration) apply(inst *Instance, cfg *Config) error {
 			Genesis:               c.BvnGenesis,
 			BootstrapPeers:        c.BvnBootstrapPeers,
 			Dir:                   "bvnn",
+			ConsensusPeerBroker:   c.ConsensusPeerBroker,
 		}.apply(cfg)
 		if err != nil {
 			return err
@@ -116,18 +117,17 @@ func (c *FollowerConfiguration) apply(inst *Instance, cfg *Config) error {
 
 type followerPartOpts struct {
 	*FollowerConfiguration
-	ValidatorKey     PrivateKey
-	ID               string
-	Type             protocol.PartitionType
-	Genesis          string
-	Dir              string
-	BootstrapPeers   []multiaddr.Multiaddr
-	MetricsNamespace string
+	ValidatorKey        PrivateKey
+	ID                  string
+	Type                protocol.PartitionType
+	Genesis             string
+	Dir                 string
+	BootstrapPeers      []multiaddr.Multiaddr
+	MetricsNamespace    string
+	ConsensusPeerBroker string
 }
 
 func (p followerPartOpts) apply(cfg *Config) error {
-	setDefaultPtr(&p.EnableSnapshots, false)
-
 	var offset portOffset
 	if p.Type == protocol.PartitionTypeDirectory {
 		offset = portDir
@@ -138,12 +138,13 @@ func (p followerPartOpts) apply(cfg *Config) error {
 	// Consensus - with transient key for follower mode
 	addService(cfg,
 		&ConsensusService{
-			NodeDir:          p.Dir,
-			ValidatorKey:     p.ValidatorKey, // TransientPrivateKey - voting_power=0
-			Genesis:          p.Genesis,
-			Listen:           applyAddrTransforms(p.Listen, offset),
-			BootstrapPeers:   p.BootstrapPeers,
-			MetricsNamespace: p.MetricsNamespace,
+			NodeDir:             p.Dir,
+			ValidatorKey:        p.ValidatorKey, // TransientPrivateKey - voting_power=0
+			Genesis:             p.Genesis,
+			Listen:              applyAddrTransforms(p.Listen, offset),
+			BootstrapPeers:      p.BootstrapPeers,
+			MetricsNamespace:    p.MetricsNamespace,
+			ConsensusPeerBroker: p.ConsensusPeerBroker,
 			App: &CoreConsensusApp{
 				EnableHealing:        p.EnableHealing,
 				EnableDirectDispatch: p.EnableDirectDispatch,
@@ -165,16 +166,6 @@ func (p followerPartOpts) apply(cfg *Config) error {
 
 		storage.setPath(filepath.Join(p.Dir, "data", "accumulate.db"))
 		cfg.Services = append(cfg.Services, &StorageService{Name: p.ID, Storage: storage})
-	}
-
-	// Snapshots; capture on every major block
-	if *p.EnableSnapshots {
-		addService(cfg,
-			&SnapshotService{
-				Partition: p.ID,
-				Directory: filepath.Join(p.Dir, "snapshots"),
-				Schedule:  network.MustParseCron("* * * * *")},
-			func(s *SnapshotService) string { return s.Partition })
 	}
 
 	// Services

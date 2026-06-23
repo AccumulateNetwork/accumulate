@@ -264,13 +264,14 @@ func (v *ConsensusAppType) UnmarshalJSON(b []byte) error {
 }
 
 type ConsensusService struct {
-	NodeDir          string
-	ValidatorKey     PrivateKey
-	Genesis          string
-	Listen           Multiaddr
-	BootstrapPeers   []Multiaddr
-	MetricsNamespace string
-	App              ConsensusApp
+	NodeDir             string
+	ValidatorKey        PrivateKey
+	Genesis             string
+	Listen              Multiaddr
+	BootstrapPeers      []Multiaddr
+	MetricsNamespace    string
+	ConsensusPeerBroker string
+	App                 ConsensusApp
 }
 
 func (ConsensusService) Type() ServiceType { return ServiceTypeConsensus }
@@ -335,9 +336,9 @@ type CoreValidatorConfiguration struct {
 	BvnBootstrapPeers    []Multiaddr
 	EnableHealing        *bool
 	EnableDirectDispatch *bool
-	EnableSnapshots      *bool
 	MaxEnvelopesPerBlock *uint64
 	StorageType          *StorageType
+	ConsensusPeerBroker  string
 }
 
 func (CoreValidatorConfiguration) Type() ConfigurationType { return ConfigurationTypeCoreValidator }
@@ -518,9 +519,9 @@ type FollowerConfiguration struct {
 	BvnBootstrapPeers    []Multiaddr
 	EnableHealing        *bool
 	EnableDirectDispatch *bool
-	EnableSnapshots      *bool
 	MaxEnvelopesPerBlock *uint64
 	StorageType          *StorageType
+	ConsensusPeerBroker  string
 }
 
 func (FollowerConfiguration) Type() ConfigurationType { return ConfigurationTypeFollower }
@@ -1160,7 +1161,6 @@ const (
 	ServiceTypeNetwork   ServiceType = 4
 	ServiceTypeQuerier   ServiceType = 3
 	ServiceTypeRouter    ServiceType = 8
-	ServiceTypeSnapshot  ServiceType = 9
 	ServiceTypeStorage   ServiceType = 1
 	ServiceTypeSubnode   ServiceType = 11
 )
@@ -1190,41 +1190,6 @@ func (v ServiceType) MarshalJSON() ([]byte, error) {
 // UnmarshalJSON unmarshals the ServiceType from JSON.
 func (v *ServiceType) UnmarshalJSON(b []byte) error {
 	return sServiceType.UnmarshalJSON(b, v)
-}
-
-type SnapshotService struct {
-	Partition string
-	Storage   *StorageOrRef
-	// Directory is the directory to store snapshots in.
-	Directory string
-	// Schedule is the schedule for automatically capturing snapshots.
-	Schedule *network.CronSchedule
-	// RetainCount is the number of snapshots to retain.
-	RetainCount *uint64
-	// EnableIndexing enables indexing of snapshots.
-	EnableIndexing *bool
-}
-
-func (SnapshotService) Type() ServiceType { return ServiceTypeSnapshot }
-
-// Copy returns a copy of the SnapshotService.
-func (v *SnapshotService) Copy() *SnapshotService {
-	return sSnapshotService.Copy(v)
-}
-
-// EqualSnapshotService returns true if V is equal to U.
-func (v *SnapshotService) Equal(u *SnapshotService) bool {
-	return sSnapshotService.Equal(v, u)
-}
-
-// MarshalBinary marshals the SnapshotService to JSON.
-func (v *SnapshotService) MarshalJSON() ([]byte, error) {
-	return sSnapshotService.MarshalJSON(v)
-}
-
-// UnmarshalJSON unmarshals the SnapshotService from JSON.
-func (v *SnapshotService) UnmarshalJSON(b []byte) error {
-	return sSnapshotService.UnmarshalJSON(b, v)
 }
 
 // TODO type Storage interface {}

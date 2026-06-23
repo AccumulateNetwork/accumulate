@@ -66,6 +66,7 @@ func (q *Querier) start(inst *Instance) error {
 		Consensus: consensus,
 	})
 	registerRpcService(inst, impl.Type().AddressFor(q.Partition), message.Querier{Querier: impl})
+	inst.registerPartitionStateHandler(q.Partition, impl)
 	return querierProvides.Register(inst.services, q, impl)
 }
 

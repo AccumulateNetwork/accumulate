@@ -93,14 +93,16 @@ var flagInitDualNode struct {
 }
 
 var flagInitNetwork struct {
-	GenesisDoc     string
-	FactomBalances string
+	GenesisDoc          string
+	FactomBalances      string
+	ConsensusPeerBroker bool
 }
 
 func initInitFlags() {
 	cmdInitNetwork.ResetFlags()
 	cmdInitNetwork.Flags().StringVar(&flagInitNetwork.GenesisDoc, "genesis-doc", "", "Genesis doc for the target network")
 	cmdInitNetwork.Flags().StringVar(&flagInitNetwork.FactomBalances, "factom-balances", "", "Factom addresses and balances file path for writing onto the genesis block")
+	cmdInitNetwork.Flags().BoolVar(&flagInitNetwork.ConsensusPeerBroker, "consensus-peer-broker", false, "Let the bootstrap server manage CometBFT peers: wire nodes to the network's own bootstrap, derive the broker URL from it, and drop static peers (#4043)")
 
 	cmdInit.ResetFlags()
 	cmdInit.PersistentFlags().BoolVar(&flagInit.NoEmptyBlocks, "no-empty-blocks", false, "Do not create empty blocks")
@@ -500,15 +502,6 @@ outer:
 	// 	//if we have a healthy node with a matching id, add it as a bootstrap peer
 	// 	config.P2P.BootstrapPeers += "," + u.String()
 	// }
-
-	// Check for snapshots
-	err = selectSnapshot(cmd.Context(), config, accClient, v3.ListSnapshotsOptions{
-		NodeID:    ni.PeerID.String(),
-		Partition: partitionID,
-	}, tmRPC, true)
-	if err != nil {
-		return 0, nil, nil, err
-	}
 
 	config.Accumulate.Describe = cfg.Describe{
 		NetworkType: partitionType,

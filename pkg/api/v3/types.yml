@@ -48,3 +48,18 @@ ServiceAddress:
     - name: Argument
       type: string
       optional: true
+
+# BptLeafSummary is one BPT leaf — account-key hash + value hash +
+# the account URL. The URL is what the launcher needs to pull state
+# for that account; without it the launcher would have to maintain
+# its own keyhash → URL map. Used by BptPageRecord for paginated
+# BPT enumeration during the bootstrap-v3 launcher's sync phase.
+BptLeafSummary:
+  fields:
+    - name: KeyHash
+      type: hash
+    - name: ValueHash
+      type: hash
+    - name: Account
+      type: url
+      pointer: true

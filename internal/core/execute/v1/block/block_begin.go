@@ -27,6 +27,16 @@ import (
 
 // BeginBlock implements ./Chain
 func (x *Executor) BeginBlock(block *Block) error {
+	// Globals are loaded by NewExecutor only if the DB was initialized
+	// at construction time. After a CometBFT state-sync bootstrap, the
+	// DB is populated AFTER NewExecutor returns, so globals is still
+	// nil. Lazy-load on first BeginBlock so the state-synced node can
+	// catch up via blocksync.
+	if x.globals == nil {
+		if err := x.loadGlobals(x.Database.View); err != nil {
+			return errors.UnknownError.WithFormat("lazy-load globals after state-sync: %w", err)
+		}
+	}
 	if x.globals.Active.ExecutorVersion.V2Enabled() {
 		return errors.Conflict.WithFormat("executor v1 is incompatible with version %v", x.globals.Active.ExecutorVersion)
 	}

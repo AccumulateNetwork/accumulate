@@ -231,14 +231,14 @@ Configuration:
         - name: EnableDirectDispatch
           type: '*bool'
           optional: true
-        - name: EnableSnapshots
-          type: '*bool'
-          optional: true
         - name: MaxEnvelopesPerBlock
           type: '*uint'
           optional: true
         - name: StorageType
           type: '*StorageType'
+          optional: true
+        - name: ConsensusPeerBroker
+          type: string
           optional: true
 
     - name: GatewayConfiguration
@@ -291,14 +291,14 @@ Configuration:
         - name: EnableDirectDispatch
           type: '*bool'
           optional: true
-        - name: EnableSnapshots
-          type: '*bool'
-          optional: true
         - name: MaxEnvelopesPerBlock
           type: '*uint'
           optional: true
         - name: StorageType
           type: '*StorageType'
+          optional: true
+        - name: ConsensusPeerBroker
+          type: string
           optional: true
 
 Service:
@@ -326,8 +326,6 @@ Service:
           value: 7
         Router:
           value: 8
-        Snapshot:
-          value: 9
         Faucet:
           value: 10
         Subnode:
@@ -359,6 +357,9 @@ Service:
         - name: BootstrapPeers
           type: '[]Multiaddr'
         - name: MetricsNamespace
+          type: string
+          optional: true
+        - name: ConsensusPeerBroker
           type: string
           optional: true
         - name: App
@@ -497,31 +498,6 @@ Service:
         - name: PeerMap
           description: uses a hard-coded peer map for initializing routing
           type: '[]*HttpPeerMapEntry'
-
-    - name: SnapshotService
-      class: composite
-      pointer: true
-      fields:
-        - name: Partition
-          type: string
-        - name: Storage
-          type: '*StorageOrRef'
-          optional: true
-        - name: Directory
-          description: is the directory to store snapshots in
-          type: string
-        - name: Schedule
-          description: is the schedule for automatically capturing snapshots
-          type: '*network.CronSchedule'
-          optional: true
-        - name: RetainCount
-          description:  is the number of snapshots to retain
-          type: '*uint'
-          optional: true
-        - name: EnableIndexing
-          description: enables indexing of snapshots
-          type: '*bool'
-          optional: true
 
     - name: FaucetService
       class: composite

@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"net/http"
 	"runtime/debug"
+	"sync"
 
 	"github.com/gorilla/websocket"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
@@ -84,6 +85,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // handle handles incoming connections.
 func (h *Handler) handle(s message.StreamOf[*Message], ctx context.Context, cancel context.CancelFunc) {
+	// streams is touched by the main read loop (insert + lookup) and
+	// by per-stream cleanup goroutines (delete). Without a mutex,
+	// concurrent map access can panic with "concurrent map writes".
+	// Hit reliably under bootstrap-v3 launcher disconnects.
+	var streamsMu sync.Mutex
 	streams := map[uint64]streamCanceller{}
 
 	// Write loop
@@ -118,7 +124,9 @@ func (h *Handler) handle(s message.StreamOf[*Message], ctx context.Context, canc
 		}
 
 		// Is the message for an existing stream?
+		streamsMu.Lock()
 		s, ok := streams[req.ID]
+		streamsMu.Unlock()
 		if ok {
 			err = s.Write(req.WebSocketMessage)
 			if err != nil {
@@ -133,12 +141,16 @@ func (h *Handler) handle(s message.StreamOf[*Message], ctx context.Context, canc
 		// Open a new stream
 		ctx, cancel := context.WithCancel(ctx)
 		p, q := message.DuplexPipe(ctx)
+		streamsMu.Lock()
 		streams[req.ID] = streamCanceller{p, cancel}
+		streamsMu.Unlock()
 
 		// Cleanup
 		go func() {
 			<-ctx.Done()
+			streamsMu.Lock()
 			delete(streams, req.ID)
+			streamsMu.Unlock()
 			outgoing <- &Message{ID: req.ID, Status: StreamStatusClosed}
 		}()
 

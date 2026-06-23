@@ -14,7 +14,9 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/host"
@@ -84,6 +86,7 @@ type InfoServer struct {
 	external    []multiaddr.Multiaddr
 	metrics     *MetricsCollector
 	partitions  *PartitionTracker
+	versions    *VersionTracker
 	connections *ConnectionManager
 }
 
@@ -104,6 +107,8 @@ func NewInfoServer(h host.Host, listen multiaddr.Multiaddr, external []multiaddr
 	mux.HandleFunc("/health", s.handleHealth)
 	mux.HandleFunc("/peers", s.handlePeers)
 	mux.HandleFunc("/peers/", s.handlePeersByPartition)
+	mux.HandleFunc("/consensus-peers/", s.handleConsensusPeers)
+	mux.HandleFunc("/consensus/", s.handleConsensus)
 	mux.HandleFunc("/partitions", s.handlePartitions)
 	mux.HandleFunc("/connect", s.handleConnect)
 	mux.HandleFunc("/stats", s.handleStats)
@@ -432,6 +437,9 @@ func (s *InfoServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 
 // Shutdown gracefully shuts down the info server
 func (s *InfoServer) Shutdown(ctx context.Context) error {
+	if s.versions != nil {
+		s.versions.Stop()
+	}
 	if s.partitions != nil {
 		s.partitions.Stop()
 	}
@@ -454,6 +462,12 @@ func (s *InfoServer) Partitions() *PartitionTracker {
 // SetConnectionManager sets the connection manager
 func (s *InfoServer) SetConnectionManager(cm *ConnectionManager) {
 	s.connections = cm
+}
+
+// SetVersionTracker wires the fleet version-consensus tracker so the
+// /consensus/{partition} endpoint can serve its reports (#4043, §4.8).
+func (s *InfoServer) SetVersionTracker(vt *VersionTracker) {
+	s.versions = vt
 }
 
 // Connections returns the connection manager for external use
@@ -502,7 +516,7 @@ func buildExternalAddresses(h host.Host, external []multiaddr.Multiaddr) []strin
 		}
 
 		// Also add DNS-based variants if we can get the hostname
-		hostname := getHostname()
+		hostname := getHostname(external)
 		if hostname != "" {
 			// Extract unique ports from external addresses
 			ports := make(map[string]bool)
@@ -552,7 +566,7 @@ func buildExternalAddresses(h host.Host, external []multiaddr.Multiaddr) []strin
 		}
 
 		// Also add DNS-based addresses if available
-		hostname := getHostname()
+		hostname := getHostname(external)
 		if hostname != "" {
 			for port := range ports {
 				fullAddr := fmt.Sprintf("/dns/%s/tcp/%s/p2p/%s", hostname, port, peerID)
@@ -572,45 +586,79 @@ func buildExternalAddresses(h host.Host, external []multiaddr.Multiaddr) []strin
 	return result
 }
 
-// getPublicIP attempts to get the public IP from AWS metadata service
-func getPublicIP() string {
+// awsMetadata fetches a value from the AWS instance metadata service.
+// The result is memoized per-path so it is fetched at most once for the
+// process lifetime (the underlying IP/hostname does not change).
+var (
+	awsMetaMu    sync.Mutex
+	awsMetaCache = map[string]string{}
+)
+
+func awsMetadata(path string) string {
+	awsMetaMu.Lock()
+	defer awsMetaMu.Unlock()
+	if v, ok := awsMetaCache[path]; ok {
+		return v
+	}
+
 	client := &http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Get("http://169.254.169.254/latest/meta-data/public-ipv4")
+	resp, err := client.Get("http://169.254.169.254/latest/meta-data/" + path)
 	if err != nil {
+		awsMetaCache[path] = ""
 		return ""
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
+		awsMetaCache[path] = ""
 		return ""
 	}
 
-	return strings.TrimSpace(string(body))
+	v := strings.TrimSpace(string(body))
+	awsMetaCache[path] = v
+	return v
 }
 
-// getHostname attempts to get the public hostname
-func getHostname() string {
-	client := &http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Get("http://169.254.169.254/latest/meta-data/public-hostname")
-	if err != nil {
-		return ""
+// getPublicIP attempts to get the public IP from AWS metadata service
+// (memoized).
+func getPublicIP() string {
+	return awsMetadata("public-ipv4")
+}
+
+// getHostname derives the external host to advertise. It prefers a DNS
+// name from the configured --external addresses, then the AWS
+// public-hostname (memoized), and finally the OS hostname. AWS-internal
+// hostnames (compute.amazonaws.com) are not externally useful, so they
+// are skipped in favor of the OS hostname.
+func getHostname(external []multiaddr.Multiaddr) string {
+	// Prefer a DNS host from the configured external addresses.
+	for _, addr := range external {
+		var dnsHost string
+		multiaddr.ForEach(addr, func(c multiaddr.Component) bool {
+			switch c.Protocol().Code {
+			case multiaddr.P_DNS, multiaddr.P_DNS4, multiaddr.P_DNS6:
+				dnsHost = c.Value()
+				return false
+			}
+			return true
+		})
+		if dnsHost != "" {
+			return dnsHost
+		}
 	}
-	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return ""
+	// AWS public-hostname, unless it's an internal compute hostname.
+	if hostname := awsMetadata("public-hostname"); hostname != "" &&
+		!strings.Contains(hostname, "compute.amazonaws.com") {
+		return hostname
 	}
 
-	hostname := strings.TrimSpace(string(body))
-
-	// If we got an AWS hostname, prefer our custom DNS name
-	if strings.Contains(hostname, "compute.amazonaws.com") {
-		return "bootstrap.accumulate.defidevs.io"
+	// Fall back to the OS hostname.
+	if h, err := os.Hostname(); err == nil {
+		return h
 	}
-
-	return hostname
+	return ""
 }
 
 // listenMultiaddr creates a listener from a multiaddr
@@ -686,17 +734,20 @@ func (s *InfoServer) handlePeersByPartition(w http.ResponseWriter, r *http.Reque
 	path := strings.TrimPrefix(r.URL.Path, "/peers/")
 	partition := strings.ToLower(strings.TrimSpace(path))
 
+	status := http.StatusOK
+	start := time.Now()
+	defer func() {
+		s.metrics.RecordHTTPRequest("/peers/"+partition, status, time.Since(start))
+	}()
+
 	if partition == "" {
-		http.Error(w, "Partition name required", http.StatusBadRequest)
+		status = http.StatusBadRequest
+		http.Error(w, "Partition name required", status)
 		return
 	}
 
-	start := time.Now()
-	defer func() {
-		s.metrics.RecordHTTPRequest("/peers/"+partition, http.StatusOK, time.Since(start))
-	}()
-
-	// Get peers from partition tracker
+	// Get peers from partition tracker. An unknown or empty partition
+	// yields an empty list — never a fallback to all connected peers.
 	partitionPeers := s.partitions.GetPeersByPartition(partition)
 
 	// Build response with detailed peer info
@@ -711,29 +762,9 @@ func (s *InfoServer) handlePeersByPartition(w http.ResponseWriter, r *http.Reque
 		peerInfos = append(peerInfos, map[string]interface{}{
 			"peer_id":    info.PeerID.String(),
 			"addresses":  addrStrs,
-			"score":      info.Score,
 			"first_seen": info.FirstSeen.Format(time.RFC3339),
 			"last_seen":  info.LastSeen.Format(time.RFC3339),
 		})
-	}
-
-	// If no peers found in tracker, fall back to all connected peers
-	if len(peerInfos) == 0 {
-		peers := s.host.Network().Peers()
-		for _, peerID := range peers {
-			addrs := s.host.Peerstore().Addrs(peerID)
-			addrStrs := make([]string, 0, len(addrs))
-			for _, addr := range addrs {
-				fullAddr := addr.String() + "/p2p/" + peerID.String()
-				addrStrs = append(addrStrs, fullAddr)
-			}
-
-			peerInfos = append(peerInfos, map[string]interface{}{
-				"peer_id":   peerID.String(),
-				"addresses": addrStrs,
-				"note":      "partition not yet determined",
-			})
-		}
 	}
 
 	response := map[string]interface{}{
@@ -743,12 +774,135 @@ func (s *InfoServer) handlePeersByPartition(w http.ResponseWriter, r *http.Reque
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
+	w.WriteHeader(status)
 
 	encoder := json.NewEncoder(w)
 	encoder.SetIndent("", "  ")
 	if err := encoder.Encode(response); err != nil {
 		slog.Error("Failed to encode peers by partition response", "error", err)
+	}
+}
+
+// handleConsensusPeers serves the CometBFT consensus peers
+// (`NodeID@host:port`) for a partition, derived from tracked libp2p
+// addresses (#4043). A node feeds the returned dial strings into
+// CometBFT's Switch().DialPeersAsync to keep its consensus peer set
+// current without hand-edited persistent_peers.
+func (s *InfoServer) handleConsensusPeers(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Extract partition from path: /consensus-peers/{partition}
+	path := strings.TrimPrefix(r.URL.Path, "/consensus-peers/")
+	partition := strings.ToLower(strings.TrimSpace(path))
+
+	status := http.StatusOK
+	start := time.Now()
+	defer func() {
+		s.metrics.RecordHTTPRequest("/consensus-peers/"+partition, status, time.Since(start))
+	}()
+
+	if partition == "" {
+		status = http.StatusBadRequest
+		http.Error(w, "Partition name required", status)
+		return
+	}
+
+	peers := s.partitions.GetConsensusPeers(partition)
+
+	peerInfos := make([]map[string]interface{}, 0, len(peers))
+	dials := make([]string, 0, len(peers))
+	for _, p := range peers {
+		dials = append(dials, p.DialString())
+		peerInfos = append(peerInfos, map[string]interface{}{
+			"node_id": string(p.ID),
+			"host":    p.Host,
+			"port":    p.Port,
+			"dial":    p.DialString(),
+		})
+	}
+
+	response := map[string]interface{}{
+		"partition": partition,
+		"count":     len(peerInfos),
+		"peers":     peerInfos,
+		// persistent_peers is the comma-joined form a node can drop
+		// straight into CometBFT config or DialPeersAsync.
+		"persistent_peers": strings.Join(dials, ","),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+
+	encoder := json.NewEncoder(w)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(response); err != nil {
+		slog.Error("Failed to encode consensus peers response", "error", err)
+	}
+}
+
+// handleConsensus serves the fleet version-consensus report for a
+// partition (#4043, §4.8): whether every on-chain validator of the
+// partition is reachable and running the same accumulated version. This
+// is the go/no-go gate before activating a consensus-critical protocol
+// version (e.g. V2CyclopsBptRepair).
+//
+// Status codes: 400 on an empty partition; 200 with the report
+// otherwise. When no probe pass has produced a report yet (or no roster
+// is known) the report is returned with pending=true and
+// validatorConsensus=false — a fail-safe "not ready", still 200 so a
+// poller can read the body.
+func (s *InfoServer) handleConsensus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Extract partition from path: /consensus/{partition}
+	path := strings.TrimPrefix(r.URL.Path, "/consensus/")
+	partition := strings.ToLower(strings.TrimSpace(path))
+
+	status := http.StatusOK
+	start := time.Now()
+	defer func() {
+		s.metrics.RecordHTTPRequest("/consensus/"+partition, status, time.Since(start))
+	}()
+
+	if partition == "" {
+		status = http.StatusBadRequest
+		http.Error(w, "Partition name required", status)
+		return
+	}
+
+	var report ConsensusReport
+	if s.versions != nil {
+		if rep, ok := s.versions.GetConsensusReport(partition); ok {
+			report = rep
+		}
+	}
+	// No report yet: return a clear pending state (still 200).
+	if report.Partition == "" {
+		report.Partition = partition
+	}
+	if report.Versions == nil {
+		report.Versions = map[string][]string{}
+	}
+	if report.Validators == nil {
+		report.Validators = []ValidatorVersion{}
+	}
+	if report.UpdatedAt.IsZero() {
+		report.Pending = true
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+
+	encoder := json.NewEncoder(w)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(report); err != nil {
+		slog.Error("Failed to encode consensus report response", "error", err)
 	}
 }
 
@@ -767,29 +921,14 @@ func (s *InfoServer) handlePartitions(w http.ResponseWriter, r *http.Request) {
 	// Get partition stats from partition tracker
 	partitionStats := s.partitions.GetPartitionStats()
 
-	// Build response with detailed partition info
+	// Build response with detailed partition info. Partitions are
+	// reported as advertised by peers (#4043); there are no hardcoded
+	// partition names.
 	partitions := make(map[string]interface{})
 	for name, stats := range partitionStats {
 		partitions[name] = map[string]interface{}{
 			"total_peers":     stats.TotalPeers,
 			"connected_peers": stats.ConnectedPeers,
-			"average_score":   stats.AverageScore,
-		}
-	}
-
-	// Ensure known partitions are present even if empty
-	if _, ok := partitions[PartitionDN]; !ok {
-		partitions[PartitionDN] = map[string]interface{}{
-			"total_peers":     0,
-			"connected_peers": 0,
-			"average_score":   0.0,
-		}
-	}
-	if _, ok := partitions[PartitionCyclops]; !ok {
-		partitions[PartitionCyclops] = map[string]interface{}{
-			"total_peers":     0,
-			"connected_peers": 0,
-			"average_score":   0.0,
 		}
 	}
 

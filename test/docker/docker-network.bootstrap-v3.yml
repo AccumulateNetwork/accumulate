@@ -1,0 +1,48 @@
+id: "BootstrapV3Test"
+
+# Bootstrap node configuration for Docker peer discovery (libp2p — distinct
+# from bootstrap-v3 launcher).
+bootstrap:
+  peerAddress: "acc-bv3-bootstrap"
+  advertizeAddress: "acc-bv3-bootstrap"
+  listenAddress: "0.0.0.0"
+  basePort: 16593
+
+# Global network configuration tuned for fast bootstrap-v3 testing.
+globals:
+  executorVersion: "v2"
+  oracle:
+    price: 10000000  # 1000 * AcmeOraclePrecision (devnet default: 0.10 USD per ACME)
+  globals:
+    # Major blocks every minute (vs 12h in production) so the launcher can
+    # converge in a reasonable test window.
+    majorBlockSchedule: "*/1 * * * *"
+
+# 1 BVN × 4 validators — minimum production-style topology for quorum testing.
+bvns:
+  - id: "BVN1"
+    nodes:
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bv3-bvn1-val1"
+        advertizeAddress: "acc-bv3-bvn1-val1"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bv3-bvn1-val2"
+        advertizeAddress: "acc-bv3-bvn1-val2"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bv3-bvn1-val3"
+        advertizeAddress: "acc-bv3-bvn1-val3"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bv3-bvn1-val4"
+        advertizeAddress: "acc-bv3-bvn1-val4"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"

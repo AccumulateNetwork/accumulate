@@ -9,10 +9,13 @@ package api
 import (
 	"bytes"
 	"context"
+	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/cometbft/cometbft/libs/log"
+	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/bptproof"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -301,10 +304,134 @@ func (s *Querier) query(ctx context.Context, batch *database.Batch, scope *url.U
 		}
 		return r, err
 
+	case *api.BptPageQuery:
+		return s.queryBptPage(batch, query)
+
+	case *api.PartitionStateQuery:
+		return s.queryPartitionState(batch)
+
 	default:
 		return nil, errors.NotAllowed.WithFormat("unknown query type %v", query.QueryType())
 	}
 }
+
+// queryBptPage handles BPT enumeration for the bootstrap-v3 launcher's
+// sync phase. Returns a paginated chunk of (KeyHash, ValueHash) pairs
+// in BPT key order. Per-leaf Merkle proofs are intentionally omitted
+// — the launcher reconstructs the full BPT and matches its root against
+// a trusted current StateTreeAnchor; per-leaf proofs add nothing on
+// top of root match.
+func (s *Querier) queryBptPage(batch *database.Batch, query *api.BptPageQuery) (*api.BptPageRecord, error) {
+	const defaultPageSize = 256
+	const maxPageSize = 4096
+
+	count := query.Count
+	if count == 0 || count > maxPageSize {
+		count = defaultPageSize
+	}
+
+	var startKey [32]byte
+	if query.StartHash != ([32]byte{}) {
+		startKey = query.StartHash
+	} else {
+		startKey = bptproof.FullScanStart()
+	}
+
+	page, err := bptproof.GetPage(batch, startKey, int(count))
+	if err != nil {
+		return nil, err
+	}
+
+	out := &api.BptPageRecord{
+		NextStart: page.NextStart,
+		BptRoot:   page.BptRoot,
+		Done:      page.Done,
+		Entries:   make([]*api.BptLeafSummary, len(page.Entries)),
+	}
+	for i, e := range page.Entries {
+		out.Entries[i] = &api.BptLeafSummary{
+			KeyHash:   e.KeyHash,
+			ValueHash: e.ValueHash,
+			Account:   e.Account,
+		}
+	}
+	return out, nil
+}
+
+// queryPartitionState is the v3-API path for the atomic partition
+// snapshot. It works for small partitions but JSON-encoding 25-30 MB
+// of bytes through the message layer is the wrong shape for a real
+// network — see WritePartitionState below for the binary HTTP path
+// the launcher actually uses.
+func (s *Querier) queryPartitionState(batch *database.Batch) (*api.PartitionStateRecord, error) {
+	slog.Info("[partition-state] handler entered", "partition", s.partition.URL)
+	var ledger *protocol.SystemLedger
+	err := batch.Account(s.partition.Ledger()).Main().GetAs(&ledger)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load system ledger: %w", err)
+	}
+
+	bptRoot, err := batch.GetBptRootHash()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("get bpt root: %w", err)
+	}
+
+	buf := new(ioutil.Buffer)
+	_, err = batch.Collect(buf, s.partition.URL, &database.CollectOptions{
+		SkipMessages: true,
+	})
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("collect snapshot: %w", err)
+	}
+
+	return &api.PartitionStateRecord{
+		BlockIndex: ledger.Index,
+		BptRoot:    bptRoot,
+		Snapshot:   buf.Bytes(),
+	}, nil
+}
+
+// WritePartitionState atomically captures the partition's state under
+// a single database read view and writes the snapshot v2 file to w.
+// Metadata is returned: BlockIndex (the minor block the snapshot
+// reflects) and BptRoot (the BPT root at that block). Used by the
+// bootstrap-v3 launcher's HTTP fetch path — see
+// internal/node/http and cmd/accumulated/cmd_bootstrap.go.
+//
+// The HTTP layer should call BuildPartitionState first to learn
+// metadata + body, then set headers and write the body. This split
+// avoids streaming bytes before headers can carry the block/root.
+func (s *Querier) BuildPartitionState() (blockIndex uint64, bptRoot [32]byte, body []byte, err error) {
+	buf := new(ioutil.Buffer)
+	err = s.db.View(func(batch *database.Batch) error {
+		var ledger *protocol.SystemLedger
+		if err := batch.Account(s.partition.Ledger()).Main().GetAs(&ledger); err != nil {
+			return errors.UnknownError.WithFormat("load system ledger: %w", err)
+		}
+		blockIndex = ledger.Index
+
+		root, err := batch.GetBptRootHash()
+		if err != nil {
+			return errors.UnknownError.WithFormat("get bpt root: %w", err)
+		}
+		bptRoot = root
+
+		_, err = batch.Collect(buf, s.partition.URL, &database.CollectOptions{
+			SkipMessages: true,
+		})
+		return errors.UnknownError.Wrap(err)
+	})
+	if err != nil {
+		return 0, [32]byte{}, nil, err
+	}
+	body = buf.Bytes()
+	slog.Info("[partition-state] built", "partition", s.partition.URL,
+		"block", blockIndex, "root", bptRoot[:8], "bytes", len(body))
+	return blockIndex, bptRoot, body, nil
+}
+
+// PartitionURL exposes the partition's URL for HTTP route registration.
+func (s *Querier) PartitionURL() *url.URL { return s.partition.URL }
 
 func (s *Querier) queryAccount(ctx context.Context, batch *database.Batch, record *database.Account, wantReceipt *api.ReceiptOptions) (*api.AccountRecord, error) {
 	r := new(api.AccountRecord)

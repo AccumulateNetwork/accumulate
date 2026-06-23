@@ -25,6 +25,31 @@ func (q Querier2) QueryAccount(ctx context.Context, account *url.URL, query *Def
 	return recordIs[*AccountRecord](doQuery(q, ctx, account, query))
 }
 
+// QueryBptPage paginates the partition's BPT for the bootstrap-v3
+// launcher's sync phase. Pass StartHash = [32]byte{} (zero) for the
+// initial page; pass the previous page's NextStart for subsequent
+// pages. Done = true on the final page. See
+// internal/core/bootstrap/bptproof for the server-side logic and
+// internal/core/bootstrap/enumerate for the client loop.
+func (q Querier2) QueryBptPage(ctx context.Context, scope *url.URL, query *BptPageQuery) (*BptPageRecord, error) {
+	if query == nil {
+		query = new(BptPageQuery)
+	}
+	return recordIs[*BptPageRecord](doQuery(q, ctx, scope, query))
+}
+
+// QueryPartitionState requests an atomic single-block dump of the
+// partition's BPT and account bodies. The server holds one read view
+// of its database for the whole walk, so the returned snapshot is
+// internally consistent at one minor block. The launcher uses this
+// to seed local state at a verifiable BPT root.
+func (q Querier2) QueryPartitionState(ctx context.Context, scope *url.URL, query *PartitionStateQuery) (*PartitionStateRecord, error) {
+	if query == nil {
+		query = new(PartitionStateQuery)
+	}
+	return recordIs[*PartitionStateRecord](doQuery(q, ctx, scope, query))
+}
+
 func (q Querier2) QueryAccountAs(ctx context.Context, account *url.URL, query *DefaultQuery, target any) (*AccountRecord, error) {
 	r, err := q.QueryAccount(ctx, account, query)
 	if err != nil {

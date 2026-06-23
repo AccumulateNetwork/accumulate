@@ -1,0 +1,120 @@
+# 3 BVN x 2 validator network exercising the CometBFT consensus-peer
+# broker (#4043). Each node advertises its per-partition CometBFT
+# endpoint to the bootstrap server; the bootstrap serves
+# /consensus-peers/{partition}; each node's feeder pulls and dials.
+#
+# Usage:
+#   docker compose -p acc-cb -f test/docker/docker-compose.consensus-broker.yml build
+#   docker compose -p acc-cb -f test/docker/docker-compose.consensus-broker.yml up -d
+#   docker compose -p acc-cb -f test/docker/docker-compose.consensus-broker.yml down -v
+
+services:
+  # init runs first and generates the bootstrap key (#4043); the
+  # bootstrap server reads that key file so its identity matches what
+  # init wired into the node configs — nothing is hand-pasted.
+  init:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    container_name: acc-cb-init
+    volumes:
+      - network-config-cb:/root/.accumulate
+      - ../..:/workspace
+    working_dir: /workspace
+    command:
+      - init
+      - network
+      - test/docker/docker-network.consensus-broker.yml
+      - --reset
+      - --faucet-seed=FAUCET
+      - --consensus-peer-broker
+
+  bootstrap:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    container_name: acc-cb-bootstrap
+    mem_limit: 1g
+    ports:
+      - "18080:8080"    # info server + /consensus-peers (libp2p stays on the docker network)
+    volumes:
+      - network-config-cb:/root/.accumulate:ro
+    entrypoint: ["/bin/accumulated-bootstrap"]
+    command:
+      - --listen
+      - /ip4/0.0.0.0/tcp/16593
+      - --key
+      - /root/.accumulate/bootstrap/node_key.hex
+    restart: unless-stopped
+    depends_on:
+      init:
+        condition: service_completed_successfully
+
+  bvn1-1:
+    build: { context: ../.., dockerfile: Dockerfile }
+    container_name: acc-cb-bvn1-1
+    mem_limit: 1g
+    volumes: [ "network-config-cb:/root/.accumulate" ]
+    command: [ "-w=/root/.accumulate/bvn1-1", "/root/.accumulate/bvn1-1/accumulate.toml" ]
+    ports: [ "27660:26660" ]
+    depends_on:
+      init: { condition: service_completed_successfully }
+      bootstrap: { condition: service_started }
+
+  bvn1-2:
+    build: { context: ../.., dockerfile: Dockerfile }
+    container_name: acc-cb-bvn1-2
+    mem_limit: 1g
+    volumes: [ "network-config-cb:/root/.accumulate" ]
+    command: [ "-w=/root/.accumulate/bvn1-2", "/root/.accumulate/bvn1-2/accumulate.toml" ]
+    ports: [ "27661:26660" ]
+    depends_on:
+      init: { condition: service_completed_successfully }
+      bootstrap: { condition: service_started }
+
+  bvn2-1:
+    build: { context: ../.., dockerfile: Dockerfile }
+    container_name: acc-cb-bvn2-1
+    mem_limit: 1g
+    volumes: [ "network-config-cb:/root/.accumulate" ]
+    command: [ "-w=/root/.accumulate/bvn2-1", "/root/.accumulate/bvn2-1/accumulate.toml" ]
+    ports: [ "27662:26660" ]
+    depends_on:
+      init: { condition: service_completed_successfully }
+      bootstrap: { condition: service_started }
+
+  bvn2-2:
+    build: { context: ../.., dockerfile: Dockerfile }
+    container_name: acc-cb-bvn2-2
+    mem_limit: 1g
+    volumes: [ "network-config-cb:/root/.accumulate" ]
+    command: [ "-w=/root/.accumulate/bvn2-2", "/root/.accumulate/bvn2-2/accumulate.toml" ]
+    ports: [ "27663:26660" ]
+    depends_on:
+      init: { condition: service_completed_successfully }
+      bootstrap: { condition: service_started }
+
+  bvn3-1:
+    build: { context: ../.., dockerfile: Dockerfile }
+    container_name: acc-cb-bvn3-1
+    mem_limit: 1g
+    volumes: [ "network-config-cb:/root/.accumulate" ]
+    command: [ "-w=/root/.accumulate/bvn3-1", "/root/.accumulate/bvn3-1/accumulate.toml" ]
+    ports: [ "27664:26660" ]
+    depends_on:
+      init: { condition: service_completed_successfully }
+      bootstrap: { condition: service_started }
+
+  bvn3-2:
+    build: { context: ../.., dockerfile: Dockerfile }
+    container_name: acc-cb-bvn3-2
+    mem_limit: 1g
+    volumes: [ "network-config-cb:/root/.accumulate" ]
+    command: [ "-w=/root/.accumulate/bvn3-2", "/root/.accumulate/bvn3-2/accumulate.toml" ]
+    ports: [ "27665:26660" ]
+    depends_on:
+      init: { condition: service_completed_successfully }
+      bootstrap: { condition: service_started }
+
+volumes:
+  network-config-cb:

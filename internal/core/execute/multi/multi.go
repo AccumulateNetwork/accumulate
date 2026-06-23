@@ -143,6 +143,24 @@ func (m *Multi) Validate(envelope *messaging.Envelope, recheck bool) ([]*protoco
 }
 
 func (m *Multi) Begin(params BlockParams) (Block, error) {
+	// After CometBFT state-sync, the database may have come up at a
+	// V2 height while we constructed a V1-active multi-executor (the
+	// DB was empty at NewExecutor time, so the V1 fallback path was
+	// taken). Detect that here and upgrade to V2 lazily.
+	if !m.version.V2Enabled() {
+		part := config.NetworkUrl{URL: protocol.PartitionUrl(m.opts.Describe.PartitionId)}
+		var ledger *protocol.SystemLedger
+		err := m.opts.Database.View(func(batch *database.Batch) error {
+			return batch.Account(part.Ledger()).Main().GetAs(&ledger)
+		})
+		if err == nil && ledger != nil && ledger.ExecutorVersion.V2Enabled() {
+			m.newVersion = ledger.ExecutorVersion
+			if err := m.updateActive(); err != nil {
+				return nil, errors.UnknownError.WithFormat("upgrade to V2 after state-sync: %w", err)
+			}
+		}
+	}
+
 	b, err := (*m.active.Load()).Begin(params)
 	if err != nil {
 		return nil, err

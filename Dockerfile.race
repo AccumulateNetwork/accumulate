@@ -1,0 +1,42 @@
+# Race-detector build of `accumulated` for the consensus-load test (#4044).
+# Goal: catch a data race in the state/BPT/leveldb write path that is corrupting
+# goleveldb SSTables under load. The race detector needs CGO and a glibc runtime,
+# so the final image is debian (not the usual alpine/musl). Only `accumulated`
+# is built with -race; the helper binaries stay static.
+FROM golang:1.24 as build
+
+ARG GIT_DESCRIBE
+ARG GIT_COMMIT
+ARG TAGS=production,mainnet
+
+WORKDIR /root
+COPY . .
+
+# accumulated WITH the race detector (requires CGO)
+ENV CGO_ENABLED=1
+RUN go build -trimpath -race -tags $TAGS \
+    -ldflags "-X 'gitlab.com/accumulatenetwork/accumulate.Version=$GIT_DESCRIBE' -X 'gitlab.com/accumulatenetwork/accumulate.Commit=$GIT_COMMIT'" \
+    -o /root/accumulated ./cmd/accumulated
+
+# helper binaries — no race needed, keep them static
+ENV CGO_ENABLED=0
+RUN go install github.com/cometbft/cometbft/cmd/cometbft
+RUN go build -o /root/snapshot ./tools/cmd/snapshot
+RUN go build -o /root/dbrepair ./tools/cmd/dbrepair
+RUN go build -o /root/debug ./tools/cmd/debug
+RUN go build -o /root/accumulated-bootstrap ./cmd/accumulated-bootstrap
+
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash jq curl ca-certificates && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /scripts
+COPY scripts .
+
+COPY --from=build /root/accumulated /root/snapshot /root/dbrepair /root/debug /root/accumulated-bootstrap /go/bin/cometbft /bin/
+
+HEALTHCHECK CMD curl --fail --silent http://localhost:26660/status || exit 1
+
+ENTRYPOINT ["accumulated"]
+CMD ["run-dual", "/node/dnn", "/node/bvnn"]

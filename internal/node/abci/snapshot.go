@@ -6,6 +6,25 @@
 
 package abci
 
+// This file implements the four ABCI state-sync methods that
+// Application requires: ListSnapshots, LoadSnapshotChunk, OfferSnapshot,
+// and ApplySnapshotChunk. They are required to satisfy
+// abci.Application; they are NOT the active bootstrap path.
+//
+// The active bootstrap is the bootstrap-v3 launcher in cmd/accumulated:
+// it pulls a per-partition snapshot over HTTP, restores it into the
+// daemon's data dir, and hands off to `accumulated run`. CometBFT
+// state-sync is left disabled in writeTendermintToml so peers never
+// drive these methods, and on this node the methods either no-op
+// (Snapshots config nil) or operate over an empty manager.
+//
+// Kept dormant rather than stubbed because the implementation is
+// already correct should we re-enable CometBFT state-sync later, and
+// stubbing would require equivalent boilerplate to satisfy the
+// interface. If state-sync is decisively retired, this whole file
+// (plus the snapshots field on Accumulator) can be reduced to four
+// no-op methods.
+
 import (
 	"bytes"
 	"context"
@@ -32,6 +51,11 @@ import (
 // This is one of four ABCI functions we have to implement for
 // Tendermint/CometBFT.
 func (app *Accumulator) ListSnapshots(ctx context.Context, req *abci.RequestListSnapshots) (*abci.ResponseListSnapshots, error) {
+	// If Snapshots config wasn't plumbed in, this node can't serve
+	// snapshots. Return an empty list rather than nil-panic.
+	if app.Snapshots == nil {
+		return &abci.ResponseListSnapshots{}, nil
+	}
 	info, err := ListSnapshots(ctx, config.MakeAbsolute(app.RootDir, app.Snapshots.Directory))
 	if err != nil {
 		return nil, err
@@ -67,6 +91,9 @@ func (app *Accumulator) ListSnapshots(ctx context.Context, req *abci.RequestList
 // This is one of four ABCI functions we have to implement for
 // Tendermint/CometBFT.
 func (app *Accumulator) LoadSnapshotChunk(_ context.Context, req *abci.RequestLoadSnapshotChunk) (*abci.ResponseLoadSnapshotChunk, error) {
+	if app.Snapshots == nil {
+		return &abci.ResponseLoadSnapshotChunk{}, nil
+	}
 	snapDir := config.MakeAbsolute(app.RootDir, app.Snapshots.Directory)
 	f, err := os.Open(filepath.Join(snapDir, fmt.Sprintf(core.SnapshotMajorFormat, req.Height)))
 	if err != nil {
@@ -80,12 +107,15 @@ func (app *Accumulator) LoadSnapshotChunk(_ context.Context, req *abci.RequestLo
 	}
 
 	var buf [chunkSize]byte
-	_, err = io.ReadFull(f, buf[:])
-	if err != nil {
+	// io.ReadFull errs with UnexpectedEOF if the last chunk is shorter
+	// than chunkSize — which it always is for snapshots smaller than
+	// 10MB. Use Read and tolerate short reads.
+	n, err := f.Read(buf[:])
+	if err != nil && err != io.EOF {
 		return nil, err
 	}
 
-	return &abci.ResponseLoadSnapshotChunk{Chunk: buf[:]}, nil
+	return &abci.ResponseLoadSnapshotChunk{Chunk: buf[:n]}, nil
 }
 
 // OfferSnapshot offers a snapshot to this node. This initiates the snapshot

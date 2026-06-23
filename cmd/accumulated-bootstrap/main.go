@@ -108,6 +108,14 @@ func run(*cobra.Command, []string) {
 		// Register connection manager with info server
 		infoServer.SetConnectionManager(connManager)
 
+		// Start the fleet version-consensus tracker. It probes each
+		// partition's consensus peers' CometBFT RPC for their running
+		// accumulated version and answers GET /consensus/{partition}
+		// (#4043, §4.8).
+		versionTracker := NewVersionTracker(infoServer.Partitions())
+		versionTracker.Start()
+		infoServer.SetVersionTracker(versionTracker)
+
 		// Start active peer discovery
 		discovery = NewActiveDiscovery(
 			inst.P2P().Host(),

@@ -14,6 +14,35 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
 
+// Copy is a shallow copy: it clones the slice headers but shares the
+// underlying 32-byte hash slices. The hashes are immutable in practice
+// (every caller that needs to mutate one allocates a fresh slice via
+// copyHash before storing), so sharing them is safe and avoids the deep
+// per-element BytesCopy that the type generator would otherwise emit.
+//
+// Profile motivation: under sustained load (~70 TPS) the deep copy was
+// ~600 MB / 30 s of allocation, ~19% of total — driven by
+// sendSyntheticTransactionsForBlock → Chain.Receipt → buildReceipt →
+// StateAt → getState, which calls Copy on every fetch. types.yml has
+// `no-copy: true` set on State so the generator skips this method.
+//
+// If a future caller mutates a hash in place (HashList[i][j] = …),
+// either re-introduce a deep copy here OR fix the call site to copy
+// the hash first.
+func (v *State) Copy() *State {
+	u := new(State)
+	u.Count = v.Count
+	if v.Pending != nil {
+		u.Pending = append(make([][]byte, 0, len(v.Pending)), v.Pending...)
+	}
+	if v.HashList != nil {
+		u.HashList = append(make([][]byte, 0, len(v.HashList)), v.HashList...)
+	}
+	return u
+}
+
+func (v *State) CopyAsInterface() interface{} { return v.Copy() }
+
 // State
 // A Merkle Dag State is the state kept while building a Merkle Tree.  Except where a Merkle Tree has a clean
 // power of two number of elements as leaf nodes, there will be multiple Sub Merkle Trees that make up a

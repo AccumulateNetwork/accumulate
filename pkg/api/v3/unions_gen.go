@@ -1,4 +1,4 @@
-// Copyright 2026 The Accumulate Authors
+// Copyright 2022 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -23,6 +23,8 @@ func NewRecord(typ RecordType) (Record, error) {
 	switch typ {
 	case RecordTypeAccount:
 		return new(AccountRecord), nil
+	case RecordTypeBptPage:
+		return new(BptPageRecord), nil
 	case RecordTypeChainEntry:
 		return new(ChainEntryRecord[Record]), nil
 	case RecordTypeChain:
@@ -39,6 +41,8 @@ func NewRecord(typ RecordType) (Record, error) {
 		return new(MessageRecord[messaging.Message]), nil
 	case RecordTypeMinorBlock:
 		return new(MinorBlockRecord), nil
+	case RecordTypePartitionState:
+		return new(PartitionStateRecord), nil
 	case RecordTypeRange:
 		return new(RecordRange[Record]), nil
 	case RecordTypeSignatureSet:
@@ -62,6 +66,12 @@ func EqualRecord(a, b Record) bool {
 			return b == nil
 		}
 		b, ok := b.(*AccountRecord)
+		return ok && a.Equal(b)
+	case *BptPageRecord:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*BptPageRecord)
 		return ok && a.Equal(b)
 	case *ChainEntryRecord[Record]:
 		if a == nil {
@@ -111,6 +121,12 @@ func EqualRecord(a, b Record) bool {
 		}
 		b, ok := b.(*MinorBlockRecord)
 		return ok && a.Equal(b)
+	case *PartitionStateRecord:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*PartitionStateRecord)
+		return ok && a.Equal(b)
 	case *RecordRange[Record]:
 		if a == nil {
 			return b == nil
@@ -144,6 +160,8 @@ func CopyRecord(v Record) Record {
 	switch v := v.(type) {
 	case *AccountRecord:
 		return v.Copy()
+	case *BptPageRecord:
+		return v.Copy()
 	case *ChainRecord:
 		return v.Copy()
 	case *ErrorRecord:
@@ -155,6 +173,8 @@ func CopyRecord(v Record) Record {
 	case *MajorBlockRecord:
 		return v.Copy()
 	case *MinorBlockRecord:
+		return v.Copy()
+	case *PartitionStateRecord:
 		return v.Copy()
 	case *SignatureSetRecord:
 		return v.Copy()
@@ -232,6 +252,8 @@ func NewQuery(typ QueryType) (Query, error) {
 		return new(AnchorSearchQuery), nil
 	case QueryTypeBlock:
 		return new(BlockQuery), nil
+	case QueryTypeBptPage:
+		return new(BptPageQuery), nil
 	case QueryTypeChain:
 		return new(ChainQuery), nil
 	case QueryTypeData:
@@ -244,6 +266,8 @@ func NewQuery(typ QueryType) (Query, error) {
 		return new(DirectoryQuery), nil
 	case QueryTypeMessageHashSearch:
 		return new(MessageHashSearchQuery), nil
+	case QueryTypePartitionState:
+		return new(PartitionStateQuery), nil
 	case QueryTypePending:
 		return new(PendingQuery), nil
 	case QueryTypePublicKeyHashSearch:
@@ -271,6 +295,12 @@ func EqualQuery(a, b Query) bool {
 			return b == nil
 		}
 		b, ok := b.(*BlockQuery)
+		return ok && a.Equal(b)
+	case *BptPageQuery:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*BptPageQuery)
 		return ok && a.Equal(b)
 	case *ChainQuery:
 		if a == nil {
@@ -308,6 +338,12 @@ func EqualQuery(a, b Query) bool {
 		}
 		b, ok := b.(*MessageHashSearchQuery)
 		return ok && a.Equal(b)
+	case *PartitionStateQuery:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*PartitionStateQuery)
+		return ok && a.Equal(b)
 	case *PendingQuery:
 		if a == nil {
 			return b == nil
@@ -337,6 +373,8 @@ func CopyQuery(v Query) Query {
 		return v.Copy()
 	case *BlockQuery:
 		return v.Copy()
+	case *BptPageQuery:
+		return v.Copy()
 	case *ChainQuery:
 		return v.Copy()
 	case *DataQuery:
@@ -348,6 +386,8 @@ func CopyQuery(v Query) Query {
 	case *DirectoryQuery:
 		return v.Copy()
 	case *MessageHashSearchQuery:
+		return v.Copy()
+	case *PartitionStateQuery:
 		return v.Copy()
 	case *PendingQuery:
 		return v.Copy()
