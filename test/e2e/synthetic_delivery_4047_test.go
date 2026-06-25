@@ -25,26 +25,33 @@ import (
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
-// TestSyntheticStuckWhenRouteDead reproduces #4047 (reliable cross-partition
-// synthetic delivery).
+// TestSyntheticStuckWhenRouteDead documents the SYMPTOM of #4047 at the
+// delivery layer.
 //
-// Accumulate ALREADY auto-re-dispatches a transiently-dropped synthetic — see
-// TestDropDeposit, which drops a deposit once and still ends with the recipient
-// credited in full. So the reliability gap is NOT "no retry".
+// Findings established here:
+//   - Accumulate ALREADY auto-re-dispatches a transiently-dropped synthetic
+//     (see TestDropDeposit — drop once, recipient still credited in full). So
+//     the gap is NOT "no retry".
+//   - When delivery to a destination keeps failing, there is no recovery: the
+//     source is debited, the destination is never credited, tokens stuck in
+//     limbo (recoverable only by manual healing). This test shows that symptom
+//     by persistently dropping the cross-partition deposit.
 //
-// The gap is the absence of a FALLBACK ROUTE. When the route to the destination
-// partition is persistently unavailable — exactly what churn causes when a
-// producer's known peers are stale/gone and discovery hasn't found live ones —
-// re-dispatch retries the same dead route forever with nowhere else to go. The
-// tokens are debited on the source and never credited on the destination: stuck
-// in limbo, recoverable only by manual healing.
+// IMPORTANT — this is not the acceptance test for the fix. Per the design, the
+// fix is a peer-discovery backstop, NOT a relay: on failure the producer asks
+// the DN for the destination BVN's *current* peers and retries DIRECT delivery
+// to a fresh live peer (the DN never carries the transaction). The real wound is
+// therefore at the peer level — the producer keeps hitting a stale peer instead
+// of refreshing to a live one. The simulator abstracts peer routing away (it
+// dispatches per-partition, not per-peer), so it CANNOT model the refresh fix:
+// here the destination drops everything, which no peer-refresh could deliver to.
 //
-// This test models the dead route by persistently dropping the cross-partition
-// SyntheticDepositTokens, then asserts the DESIRED behaviour (the deposit is
-// eventually delivered by SOME path). It therefore FAILS on current code — that
-// failure is the reproduction / baseline. It should pass once #4047 adds the
-// DN-relay fallback + durable cross-route retry.
+// The faithful reproduction / acceptance test is the docker discovery-churn
+// scenario (move/kill a destination BVN's known peer while others stay live, and
+// require the synthetic to deliver after a DN peer-refresh) — TODO on this
+// branch. This test is kept, skipped, as the delivery-layer documentation.
 func TestSyntheticStuckWhenRouteDead(t *testing.T) {
+	t.Skip("#4047: symptom-level only — the peer-refresh fix needs a real network (per-peer routing); see the docker discovery-churn acceptance test (TODO)")
 	var timestamp uint64
 
 	globals := new(core.GlobalValues)
