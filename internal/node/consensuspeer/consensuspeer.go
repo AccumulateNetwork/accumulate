@@ -67,6 +67,10 @@ type Advertised struct {
 	Host      string `json:"host"`
 	Port      int    `json:"port"`
 	RPCPort   int    `json:"rpcPort,omitempty"`
+	// Private marks an endpoint that must NOT be redistributed to other nodes —
+	// a guarded validator advertises this to its guards so the registry knows
+	// it but never serves it publicly (#4047, spec §6, privacy-by-absence).
+	Private bool `json:"private,omitempty"`
 }
 
 // NodeIDFromPeerID derives the CometBFT node ID from a libp2p peer ID by
@@ -101,6 +105,10 @@ type Peer struct {
 	Host    string
 	Port    int
 	RPCPort int
+	// Private is set for a peer that must not be redistributed to other nodes.
+	// The registry stores it but filters it out of the served peer set
+	// (#4047, spec §6).
+	Private bool
 }
 
 // DialString returns the `NodeID@host:port` form CometBFT expects in

@@ -239,7 +239,7 @@ func (pt *PartitionTracker) probeConsensusAdvertise(peerID peer.ID) {
 		if rpcPort == 0 {
 			rpcPort = a.Port + 1
 		}
-		pt.consensusByPartition[key][peerID] = consensuspeer.Peer{ID: id, Host: a.Host, Port: a.Port, RPCPort: rpcPort}
+		pt.consensusByPartition[key][peerID] = consensuspeer.Peer{ID: id, Host: a.Host, Port: a.Port, RPCPort: rpcPort, Private: a.Private}
 	}
 }
 
@@ -300,6 +300,12 @@ func (pt *PartitionTracker) GetPeersByPartition(partition string) []PeerPartitio
 // from each peer's libp2p key; the host:port is what that peer
 // advertised for this partition, so dual nodes resolve to the correct
 // per-partition endpoint. Returns nil for an unknown partition.
+//
+// Peers marked private are EXCLUDED. This is the provide path — what is served
+// to feeders and directory queries — so a guarded validator that advertised
+// itself private to its guards is never redistributed, even though the registry
+// knows it (#4047, spec §6, privacy-by-absence). Private peers are reached only
+// via static configured peers, never the registry.
 func (pt *PartitionTracker) GetConsensusPeers(partition string) []consensuspeer.Peer {
 	pt.mu.RLock()
 	defer pt.mu.RUnlock()
@@ -310,6 +316,9 @@ func (pt *PartitionTracker) GetConsensusPeers(partition string) []consensuspeer.
 	}
 	out := make([]consensuspeer.Peer, 0, len(byPeer))
 	for _, p := range byPeer {
+		if p.Private {
+			continue // never redistribute a private peer
+		}
 		out = append(out, p)
 	}
 	return out

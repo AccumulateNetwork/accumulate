@@ -81,6 +81,23 @@ func TestGetConsensusPeers_UnknownPartition(t *testing.T) {
 	assert.Empty(t, pt.GetConsensusPeers("nope"))
 }
 
+func TestGetConsensusPeers_ExcludesPrivate(t *testing.T) {
+	pt := newBareTracker()
+
+	pubID, pubNode := newTrackerPeer(t)
+	privID, privNode := newTrackerPeer(t)
+	pt.recordAdvertised(pubID, pubNode, "bvn1", "198.51.100.4", 26656)
+	// A guarded validator advertised itself private to its guard: the registry
+	// knows it but must never serve it (#4047, privacy-by-absence).
+	pt.consensusByPartition["bvn1"][privID] = consensuspeer.Peer{
+		ID: tmp2p.ID(privNode), Host: "203.0.113.9", Port: 26656, Private: true,
+	}
+
+	peers := pt.GetConsensusPeers("bvn1")
+	require.Len(t, peers, 1, "the private peer must not be served")
+	assert.Equal(t, pubNode, string(peers[0].ID))
+}
+
 func TestForgetConsensusPeer(t *testing.T) {
 	pt := newBareTracker()
 	id, nodeID := newTrackerPeer(t)
