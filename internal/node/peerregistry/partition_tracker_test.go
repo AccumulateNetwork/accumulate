@@ -40,6 +40,7 @@ func newBareTracker() *PartitionTracker {
 	return &PartitionTracker{
 		peers:                make(map[peer.ID]*PeerPartitionInfo),
 		consensusByPartition: make(map[string]map[peer.ID]consensuspeer.Peer),
+		privatePeers:         make(map[peer.ID]bool),
 	}
 }
 
@@ -96,6 +97,31 @@ func TestGetConsensusPeers_ExcludesPrivate(t *testing.T) {
 	peers := pt.GetConsensusPeers("bvn1")
 	require.Len(t, peers, 1, "the private peer must not be served")
 	assert.Equal(t, pubNode, string(peers[0].ID))
+}
+
+func TestListingsExcludePrivate(t *testing.T) {
+	pt := newBareTracker()
+
+	pubID, pubNode := newTrackerPeer(t)
+	privID, privNode := newTrackerPeer(t)
+	pt.recordAdvertised(pubID, pubNode, "bvn1", "198.51.100.4", 26656)
+	pt.consensusByPartition["bvn1"][privID] = consensuspeer.Peer{
+		ID: tmp2p.ID(privNode), Host: "203.0.113.9", Port: 26656, Private: true,
+	}
+	pt.privatePeers[privID] = true
+	// Both are connected at the libp2p level (as the validator is to its guard).
+	pt.peers[pubID] = &PeerPartitionInfo{PeerID: pubID}
+	pt.peers[privID] = &PeerPartitionInfo{PeerID: privID}
+
+	// GetPeersByPartition (per-entry Private flag) excludes the private peer.
+	byPart := pt.GetPeersByPartition("bvn1")
+	require.Len(t, byPart, 1)
+	require.Equal(t, pubID, byPart[0].PeerID)
+
+	// GetAllPeers (privatePeers set) excludes it too — no libp2p-level leak.
+	all := pt.GetAllPeers()
+	require.Len(t, all, 1)
+	require.Equal(t, pubID, all[0].PeerID)
 }
 
 func TestForgetConsensusPeer(t *testing.T) {

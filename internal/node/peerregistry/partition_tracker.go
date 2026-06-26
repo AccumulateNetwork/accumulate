@@ -45,7 +45,12 @@ type PartitionTracker struct {
 	// view: a node advertises the exact per-partition CometBFT host:port,
 	// which protocol-ID derivation cannot disambiguate for dual nodes.
 	consensusByPartition map[string]map[peer.ID]consensuspeer.Peer
-	metrics              *MetricsCollector
+	// privatePeers holds peer IDs that advertised themselves private (a guarded
+	// validator to its guards). They are never surfaced in any directory
+	// listing — consensus or libp2p — so the registry cannot leak a guarded
+	// node (#4047, spec §2/§6).
+	privatePeers map[peer.ID]bool
+	metrics      *MetricsCollector
 	notifiee             *network.NotifyBundle
 	stopCh               chan struct{}
 	consensusTick        *time.Ticker
@@ -58,6 +63,7 @@ func NewPartitionTracker(h host.Host, metrics *MetricsCollector) *PartitionTrack
 		host:                 h,
 		peers:                make(map[peer.ID]*PeerPartitionInfo),
 		consensusByPartition: make(map[string]map[peer.ID]consensuspeer.Peer),
+		privatePeers:         make(map[peer.ID]bool),
 		metrics:              metrics,
 		stopCh:               make(chan struct{}),
 	}
@@ -224,7 +230,11 @@ func (pt *PartitionTracker) probeConsensusAdvertise(peerID peer.ID) {
 	// prior entries so stale host:port/partitions don't persist.
 	pt.forgetConsensusPeer(peerID)
 
+	anyPrivate := false
 	for _, a := range adv.Peers {
+		if a.Private {
+			anyPrivate = true
+		}
 		if a.Host == "" || a.Port == 0 || isUnroutableHost(a.Host) {
 			continue
 		}
@@ -240,6 +250,11 @@ func (pt *PartitionTracker) probeConsensusAdvertise(peerID peer.ID) {
 			rpcPort = a.Port + 1
 		}
 		pt.consensusByPartition[key][peerID] = consensuspeer.Peer{ID: id, Host: a.Host, Port: a.Port, RPCPort: rpcPort, Private: a.Private}
+	}
+	// Remember a private peer so it is suppressed from libp2p-level listings
+	// too, not just the consensus provide path (#4047, spec §2/§6).
+	if anyPrivate {
+		pt.privatePeers[peerID] = true
 	}
 }
 
@@ -263,6 +278,7 @@ func (pt *PartitionTracker) forgetConsensusPeer(peerID peer.ID) {
 	for _, byPeer := range pt.consensusByPartition {
 		delete(byPeer, peerID)
 	}
+	delete(pt.privatePeers, peerID)
 }
 
 // GetPeersByPartition returns the tracked peers that advertised a
@@ -278,7 +294,10 @@ func (pt *PartitionTracker) GetPeersByPartition(partition string) []PeerPartitio
 	}
 
 	result := make([]PeerPartitionInfo, 0, len(byPeer))
-	for peerID := range byPeer {
+	for peerID, cp := range byPeer {
+		if cp.Private {
+			continue // never surface a private peer in a directory listing
+		}
 		if info, exists := pt.peers[peerID]; exists {
 			result = append(result, *info)
 			continue
@@ -387,7 +406,10 @@ func (pt *PartitionTracker) GetAllPeers() []PeerPartitionInfo {
 	defer pt.mu.RUnlock()
 
 	result := make([]PeerPartitionInfo, 0, len(pt.peers))
-	for _, info := range pt.peers {
+	for pid, info := range pt.peers {
+		if pt.privatePeers[pid] {
+			continue // a private peer is never surfaced, even at the libp2p level
+		}
 		result = append(result, *info)
 	}
 
