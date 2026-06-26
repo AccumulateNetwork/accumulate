@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/peerregistry"
 	"io"
 	"log/slog"
 	"net"
@@ -84,21 +85,21 @@ type InfoServer struct {
 	server      *http.Server
 	startTime   time.Time
 	external    []multiaddr.Multiaddr
-	metrics     *MetricsCollector
-	partitions  *PartitionTracker
-	versions    *VersionTracker
-	connections *ConnectionManager
+	metrics     *peerregistry.MetricsCollector
+	partitions  *peerregistry.PartitionTracker
+	versions    *peerregistry.VersionTracker
+	connections *peerregistry.ConnectionManager
 }
 
 // NewInfoServer creates a new info server
 func NewInfoServer(h host.Host, listen multiaddr.Multiaddr, external []multiaddr.Multiaddr) (*InfoServer, error) {
-	metrics := NewMetricsCollector(h)
+	metrics := peerregistry.NewMetricsCollector(h)
 	s := &InfoServer{
 		host:       h,
 		startTime:  time.Now(),
 		external:   external,
 		metrics:    metrics,
-		partitions: NewPartitionTracker(h, metrics),
+		partitions: peerregistry.NewPartitionTracker(h, metrics),
 	}
 
 	// Create HTTP server
@@ -450,28 +451,28 @@ func (s *InfoServer) Shutdown(ctx context.Context) error {
 }
 
 // Metrics returns the metrics collector for external use
-func (s *InfoServer) Metrics() *MetricsCollector {
+func (s *InfoServer) Metrics() *peerregistry.MetricsCollector {
 	return s.metrics
 }
 
 // Partitions returns the partition tracker for external use
-func (s *InfoServer) Partitions() *PartitionTracker {
+func (s *InfoServer) Partitions() *peerregistry.PartitionTracker {
 	return s.partitions
 }
 
 // SetConnectionManager sets the connection manager
-func (s *InfoServer) SetConnectionManager(cm *ConnectionManager) {
+func (s *InfoServer) SetConnectionManager(cm *peerregistry.ConnectionManager) {
 	s.connections = cm
 }
 
 // SetVersionTracker wires the fleet version-consensus tracker so the
 // /consensus/{partition} endpoint can serve its reports (#4043, §4.8).
-func (s *InfoServer) SetVersionTracker(vt *VersionTracker) {
+func (s *InfoServer) SetVersionTracker(vt *peerregistry.VersionTracker) {
 	s.versions = vt
 }
 
 // Connections returns the connection manager for external use
-func (s *InfoServer) Connections() *ConnectionManager {
+func (s *InfoServer) Connections() *peerregistry.ConnectionManager {
 	return s.connections
 }
 
@@ -876,7 +877,7 @@ func (s *InfoServer) handleConsensus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var report ConsensusReport
+	var report peerregistry.ConsensusReport
 	if s.versions != nil {
 		if rep, ok := s.versions.GetConsensusReport(partition); ok {
 			report = rep
@@ -890,7 +891,7 @@ func (s *InfoServer) handleConsensus(w http.ResponseWriter, r *http.Request) {
 		report.Versions = map[string][]string{}
 	}
 	if report.Validators == nil {
-		report.Validators = []ValidatorVersion{}
+		report.Validators = []peerregistry.ValidatorVersion{}
 	}
 	if report.UpdatedAt.IsZero() {
 		report.Pending = true
@@ -985,11 +986,11 @@ func (s *InfoServer) handleDebugDHT(w http.ResponseWriter, r *http.Request) {
 		}
 
 		peerDetails = append(peerDetails, map[string]interface{}{
-			"peer_id":    peerID.String(),
-			"addresses":  multiaddrToStrings(addrs),
-			"protocols":  protocols,
-			"connected":  connected,
-			"direction":  connDirection,
+			"peer_id":   peerID.String(),
+			"addresses": multiaddrToStrings(addrs),
+			"protocols": protocols,
+			"connected": connected,
+			"direction": connDirection,
 		})
 	}
 

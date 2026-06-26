@@ -8,6 +8,7 @@ package main
 
 import (
 	"context"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/peerregistry"
 	"time"
 
 	dht "github.com/libp2p/go-libp2p-kad-dht"
@@ -85,8 +86,8 @@ func run(*cobra.Command, []string) {
 	Check(err)
 
 	var infoServer *InfoServer
-	var discovery *ActiveDiscovery
-	var connManager *ConnectionManager
+	var discovery *peerregistry.ActiveDiscovery
+	var connManager *peerregistry.ConnectionManager
 
 	// Start info server on port 8080 if configured
 	if flag.InfoListen != nil {
@@ -97,11 +98,11 @@ func run(*cobra.Command, []string) {
 		}
 
 		// Start connection manager
-		connManager = NewConnectionManager(
+		connManager = peerregistry.NewConnectionManager(
 			inst.P2P().Host(),
 			infoServer.Partitions(),
 			infoServer.Metrics(),
-			DefaultConnectionConfig(),
+			peerregistry.DefaultConnectionConfig(),
 		)
 		connManager.Start()
 
@@ -112,17 +113,17 @@ func run(*cobra.Command, []string) {
 		// partition's consensus peers' CometBFT RPC for their running
 		// accumulated version and answers GET /consensus/{partition}
 		// (#4043, §4.8).
-		versionTracker := NewVersionTracker(infoServer.Partitions())
+		versionTracker := peerregistry.NewVersionTracker(infoServer.Partitions())
 		versionTracker.Start()
 		infoServer.SetVersionTracker(versionTracker)
 
 		// Start active peer discovery
-		discovery = NewActiveDiscovery(
+		discovery = peerregistry.NewActiveDiscovery(
 			inst.P2P().Host(),
 			inst.P2P().DHT(),
 			infoServer.Partitions(),
 			infoServer.Metrics(),
-			DefaultDiscoveryConfig(),
+			peerregistry.DefaultDiscoveryConfig(),
 		)
 
 		// Set bootstrap peers for discovery to connect to
