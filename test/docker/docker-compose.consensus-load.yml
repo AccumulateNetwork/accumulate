@@ -22,8 +22,8 @@ x-build: &build
 
 x-node: &node
   build: *build
-  mem_limit: 1g
-  restart: unless-stopped
+  mem_limit: 4g                       # generous headroom so an OOM can't confound the corruption repro
+  restart: "no"                       # keep a crashed node DOWN so its corrupted DB is preserved for forensics
   volumes: [ "network-config-cl:/root/.accumulate" ]
   depends_on:
     init: { condition: service_completed_successfully }
@@ -63,7 +63,7 @@ services:
     depends_on:
       init: { condition: service_completed_successfully }
 
-  bvn1-1: { <<: *node, container_name: acc-cl-bvn1-1, command: [ "-w=/root/.accumulate/bvn1-1", "/root/.accumulate/bvn1-1/accumulate.toml" ], ports: [ "27680:26660" ] }
+  bvn1-1: { <<: *node, container_name: acc-cl-bvn1-1, command: [ "-w=/root/.accumulate/bvn1-1", "--pprof", "0.0.0.0:6061", "/root/.accumulate/bvn1-1/accumulate.toml" ], ports: [ "27680:26660", "6061:6061" ] }
   bvn1-2: { <<: *node, container_name: acc-cl-bvn1-2, command: [ "-w=/root/.accumulate/bvn1-2", "/root/.accumulate/bvn1-2/accumulate.toml" ], ports: [ "27681:26660" ] }
   bvn1-3: { <<: *node, container_name: acc-cl-bvn1-3, command: [ "-w=/root/.accumulate/bvn1-3", "/root/.accumulate/bvn1-3/accumulate.toml" ], ports: [ "27682:26660" ] }
   bvn1-4: { <<: *node, container_name: acc-cl-bvn1-4, command: [ "-w=/root/.accumulate/bvn1-4", "/root/.accumulate/bvn1-4/accumulate.toml" ], ports: [ "27683:26660" ] }
@@ -79,4 +79,16 @@ services:
   bvn3-4: { <<: *node, container_name: acc-cl-bvn3-4, command: [ "-w=/root/.accumulate/bvn3-4", "/root/.accumulate/bvn3-4/accumulate.toml" ], ports: [ "27691:26660" ] }
 
 volumes:
+  # Storage on the HEALTHY Kingston drive (nvme1, /mnt/secondary). The main drive
+  # (nvme0, Crucial T700) FAILED validation: under the 30 TPS soak its controller
+  # still timed out WRITE commands and reset 3x in 8h (kernel: "nvme nvme0: ...
+  # timeout, reset controller"), dropping acked writes -> corrupt leveldb SSTable
+  # on bvn1-3's tx_index.db. SMART stayed clean (controller stall, not media), so
+  # the fault is invisible to SMART. T700 pulled from this workload (warranty
+  # claim filed); nvme1 logged zero resets, so the test runs here.
   network-config-cl:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /mnt/secondary/acc-cl-data

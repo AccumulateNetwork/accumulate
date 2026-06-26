@@ -1,0 +1,21 @@
+id: "MixVer"
+
+# v1.4.1 libp2p bootstrap peer (the deployed network's bootstrap).
+bootstrap:
+  peerAddress: "acc-mv-boot"
+  advertizeAddress: "acc-mv-boot"
+  listenAddress: "0.0.0.0"
+  basePort: 16593
+
+globals:
+  executorVersion: "v2"
+  oracle:
+    price: 10000000
+  globals:
+    majorBlockSchedule: "0 */12 * * *"
+
+# Single dual validator = the entire validator set (DN + BVN1).
+bvns:
+  - id: "BVN1"
+    nodes:
+      - { listenAddress: "0.0.0.0", peerAddress: "acc-mv-val", advertizeAddress: "acc-mv-val", basePort: 26656, dnnType: "validator", bvnnType: "validator" }

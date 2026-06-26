@@ -13,6 +13,12 @@ globals:
     price: 10000000
   globals:
     majorBlockSchedule: "0 */12 * * *"
+    # #4044: shed user load once the mempool reaches 6% of its 5000 cap
+    # (= 300 txns) — aggressive backpressure to keep write/compaction pressure
+    # low so the per-validator compaction backlog (and the leveldb corruption it
+    # eventually triggers) never builds.
+    limits:
+      mempoolBackpressurePercent: 6
 
 # 3 BVNs x 4 validators. Every node is a dual node: a DN validator AND a
 # validator of its BVN — so the DN has 12 validators and each BVN has 4.
