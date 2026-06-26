@@ -789,6 +789,12 @@ func (s *InfoServer) handlePeersByPartition(w http.ResponseWriter, r *http.Reque
 // addresses (#4043). A node feeds the returned dial strings into
 // CometBFT's Switch().DialPeersAsync to keep its consensus peer set
 // current without hand-edited persistent_peers.
+//
+// INVARIANT (#4047, spec §3): this is an ANONYMOUS query — it must require no
+// querier identity or authentication. A guarded validator reaches the network
+// through its guards; identity-free queries ensure a guard (or anyone observing
+// it) cannot attribute a query to the validator. Do not add auth here. Private
+// peers are already excluded upstream by GetConsensusPeers (§6).
 func (s *InfoServer) handleConsensusPeers(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "GET" {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
