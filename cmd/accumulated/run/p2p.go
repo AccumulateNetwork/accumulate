@@ -10,15 +10,24 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"net"
 	"strconv"
 
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/peerregistry"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 func (p *P2P) start(inst *Instance) error {
+	// Two-plane concealment guardrail (#4047 §2): refuse to start a private node
+	// with a publicly-reachable listen, and force DHT client mode so it never
+	// advertises itself. Must run before the P2P host binds.
+	if err := p.enforcePrivateConcealment(inst); err != nil {
+		return err
+	}
+
 	sk, err := getPrivateKey(p.Key, inst)
 	if err != nil {
 		return err
@@ -117,4 +126,41 @@ func (d *DhtMode) UnmarshalJSON(b []byte) error {
 	}
 	*d = DhtMode(dht.ModeOpt(i))
 	return nil
+}
+
+// enforcePrivateConcealment applies the two-plane concealment guardrail for a
+// private (guarded) node (#4047 §2). A private node must be reachable only by
+// its guards: it refuses to start with a publicly-routable libp2p listen, and
+// is forced into DHT client mode so it never advertises itself. Leaking the
+// libp2p address would also leak the CometBFT node ID via key derivation, so
+// concealment must hold on both planes. No-op for a public node.
+func (p *P2P) enforcePrivateConcealment(inst *Instance) error {
+	if p.Private == nil || !*p.Private {
+		return nil
+	}
+	for _, addr := range p.Listen {
+		_, host, _, _, err := decomposeListen(addr)
+		if err == nil && isPublicHost(host) {
+			return errors.BadRequest.WithFormat(
+				"private node must not listen on public address %q: a guarded validator binds guard-facing only (#4047 §2)", host)
+		}
+	}
+	clientMode := DhtMode(dht.ModeClient)
+	p.DiscoveryMode = &clientMode
+	if inst != nil && inst.logger != nil {
+		inst.logger.Info("Private node: forcing DHT client mode so it never advertises itself (#4047 §2)")
+	}
+	return nil
+}
+
+// isPublicHost reports whether a listen host is publicly reachable. Loopback,
+// RFC1918/ULA private, and link-local addresses are guard-facing and allowed;
+// the unspecified address (0.0.0.0/::) and globally-routable IPs are public. A
+// non-IP host (DNS name) is treated as public, conservatively.
+func isPublicHost(host string) bool {
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return true
+	}
+	return !(ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast())
 }
