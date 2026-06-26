@@ -14,6 +14,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/consensuspeer"
 )
 
 // ConsensusPeerSource supplies the current set of CometBFT consensus
@@ -108,6 +110,68 @@ func (f *ConsensusPeerFeeder) refreshOnce(ctx context.Context) (int, error) {
 	}
 	slog.DebugContext(ctx, "Consensus peer feed: dialed peers", "partition", f.Partition, "count", len(peers))
 	return len(peers), nil
+}
+
+// ConsensusPeerLister is the in-process peer registry interface a node
+// satisfies when it runs the embedded registry (peerregistry.PartitionTracker).
+// Kept as an interface so this package does not import peerregistry.
+type ConsensusPeerLister interface {
+	GetConsensusPeers(partition string) []consensuspeer.Peer
+}
+
+// LocalConsensusPeerSource serves consensus peers from an in-process peer
+// registry — a node that runs the embedded registry reads its own tracker with
+// no network round-trip. This is the provider half of "no single bootstrap":
+// every required-number registry node can answer locally (#4047).
+type LocalConsensusPeerSource struct {
+	Registry ConsensusPeerLister
+}
+
+// ConsensusPeers implements ConsensusPeerSource.
+func (s *LocalConsensusPeerSource) ConsensusPeers(_ context.Context, partition string) ([]string, error) {
+	peers := s.Registry.GetConsensusPeers(partition)
+	out := make([]string, 0, len(peers))
+	for _, p := range peers {
+		if d := p.DialString(); d != "" {
+			out = append(out, d)
+		}
+	}
+	return out, nil
+}
+
+// MultiConsensusPeerSource queries several sources and returns the union of
+// their peers, de-duplicated. It is fail-soft: a source that errors is skipped,
+// and an error is returned only when EVERY source fails — so a single registry
+// node going down cannot starve the consumer. This is the consume-side
+// no-SPOF: feed from several registry nodes with failover (#4047, spec §4/§8).
+type MultiConsensusPeerSource struct {
+	Sources []ConsensusPeerSource
+}
+
+// ConsensusPeers implements ConsensusPeerSource.
+func (m *MultiConsensusPeerSource) ConsensusPeers(ctx context.Context, partition string) ([]string, error) {
+	seen := make(map[string]bool)
+	out := make([]string, 0)
+	failed := 0
+	var lastErr error
+	for _, s := range m.Sources {
+		peers, err := s.ConsensusPeers(ctx, partition)
+		if err != nil {
+			failed++
+			lastErr = err
+			continue
+		}
+		for _, p := range peers {
+			if !seen[p] {
+				seen[p] = true
+				out = append(out, p)
+			}
+		}
+	}
+	if len(m.Sources) > 0 && failed == len(m.Sources) {
+		return nil, fmt.Errorf("all %d consensus-peer sources failed: %w", failed, lastErr)
+	}
+	return out, nil
 }
 
 // HTTPConsensusPeerSource fetches consensus peers from a bootstrap

@@ -14,6 +14,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/consensuspeer"
 )
 
 type fakeSource struct {
@@ -119,5 +120,49 @@ func TestHTTPConsensusPeerSourceStatusError(t *testing.T) {
 
 	src := &HTTPConsensusPeerSource{BaseURL: srv.URL}
 	_, err := src.ConsensusPeers(context.Background(), "dn")
+	require.Error(t, err)
+}
+
+type fakeLister struct{ peers []consensuspeer.Peer }
+
+func (f *fakeLister) GetConsensusPeers(string) []consensuspeer.Peer { return f.peers }
+
+func TestLocalConsensusPeerSource(t *testing.T) {
+	src := &LocalConsensusPeerSource{Registry: &fakeLister{peers: []consensuspeer.Peer{
+		{ID: "abc", Host: "1.2.3.4", Port: 16591},
+		{ID: "def", Host: "5.6.7.8", Port: 16591},
+	}}}
+	peers, err := src.ConsensusPeers(context.Background(), "dn")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"abc@1.2.3.4:16591", "def@5.6.7.8:16591"}, peers)
+}
+
+func TestMultiConsensusPeerSourceUnionDedup(t *testing.T) {
+	m := &MultiConsensusPeerSource{Sources: []ConsensusPeerSource{
+		&fakeSource{peers: []string{"a@1.1.1.1:1", "b@2.2.2.2:2"}},
+		&fakeSource{peers: []string{"b@2.2.2.2:2", "c@3.3.3.3:3"}}, // b is a duplicate
+	}}
+	peers, err := m.ConsensusPeers(context.Background(), "dn")
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"a@1.1.1.1:1", "b@2.2.2.2:2", "c@3.3.3.3:3"}, peers)
+}
+
+func TestMultiConsensusPeerSourceFailSoft(t *testing.T) {
+	// One source fails; the survivor's peers still come through (no SPOF).
+	m := &MultiConsensusPeerSource{Sources: []ConsensusPeerSource{
+		&fakeSource{err: assert.AnError},
+		&fakeSource{peers: []string{"c@3.3.3.3:3"}},
+	}}
+	peers, err := m.ConsensusPeers(context.Background(), "dn")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"c@3.3.3.3:3"}, peers)
+}
+
+func TestMultiConsensusPeerSourceAllFail(t *testing.T) {
+	m := &MultiConsensusPeerSource{Sources: []ConsensusPeerSource{
+		&fakeSource{err: assert.AnError},
+		&fakeSource{err: assert.AnError},
+	}}
+	_, err := m.ConsensusPeers(context.Background(), "dn")
 	require.Error(t, err)
 }
