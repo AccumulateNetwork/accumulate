@@ -393,15 +393,28 @@ func (c *ConsensusService) start(inst *Instance) error {
 	// dials them, keeping the consensus peer set current without
 	// hand-edited persistent_peers (#4043). Additive: the static
 	// persistent_peers remains the cold-start seed.
-	if c.ConsensusPeerBroker != "" {
+	// Build the consensus-peer source(s) for the feeder: the in-process registry
+	// if this node runs one, plus any configured broker endpoint(s) (comma-
+	// separated). Several sources give failover — no single bootstrap is a SPOF
+	// (#4047).
+	var sources []accumulated.ConsensusPeerSource
+	if inst.consensusRegistry != nil {
+		sources = append(sources, &accumulated.LocalConsensusPeerSource{Registry: inst.consensusRegistry})
+	}
+	for _, b := range strings.Split(c.ConsensusPeerBroker, ",") {
+		if b = strings.TrimSpace(b); b != "" {
+			sources = append(sources, &accumulated.HTTPConsensusPeerSource{BaseURL: b})
+		}
+	}
+	if len(sources) > 0 {
 		partition := c.App.partition().ID
 		feeder := &accumulated.ConsensusPeerFeeder{
-			Source:    &accumulated.HTTPConsensusPeerSource{BaseURL: c.ConsensusPeerBroker},
+			Source:    &accumulated.MultiConsensusPeerSource{Sources: sources},
 			Dialer:    node.Switch(),
 			Partition: partition,
 		}
 		inst.logger.Info("Starting consensus peer feeder",
-			"broker", c.ConsensusPeerBroker, "partition", partition)
+			"sources", len(sources), "local_registry", inst.consensusRegistry != nil, "partition", partition)
 		go feeder.Run(inst.context)
 	}
 

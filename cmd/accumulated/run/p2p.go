@@ -13,6 +13,8 @@ import (
 	"strconv"
 
 	dht "github.com/libp2p/go-libp2p-kad-dht"
+	"github.com/libp2p/go-libp2p/core/peer"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/peerregistry"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
 )
 
@@ -35,6 +37,24 @@ func (p *P2P) start(inst *Instance) error {
 		return err
 	}
 	inst.p2p = node
+
+	// Run the embedded peer registry on this node's own libp2p host when
+	// enabled — the no-SPOF model: a required number of nodes each hold the
+	// peer map and answer locally, instead of one standalone bootstrap (#4047).
+	if p.Registry != nil && *p.Registry {
+		var seeds []peer.AddrInfo
+		for _, addr := range p.BootstrapPeers {
+			if ai, err := peer.AddrInfoFromP2pAddr(addr); err == nil {
+				seeds = append(seeds, *ai)
+			}
+		}
+		inst.consensusRegistry = peerregistry.StartEmbedded(node.Host(), node.DHT(), seeds)
+		slog.InfoContext(inst.context, "Started embedded peer registry", "module", "run")
+		inst.cleanup("peer registry", func(context.Context) error {
+			inst.consensusRegistry.Stop()
+			return nil
+		})
+	}
 
 	slog.InfoContext(inst.context, "We are", "node-id", node.ID(), "instance-id", inst.id, "module", "run")
 

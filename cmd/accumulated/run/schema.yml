@@ -65,6 +65,9 @@ Config:
             type: '*DhtMode'
           - name: External
             type: Multiaddr
+          - name: Registry
+            type: '*bool'
+            optional: true
 
     - name: Logging
       type:

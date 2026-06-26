@@ -18,6 +18,7 @@ import (
 	"github.com/google/uuid"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/bootpersist"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/peerregistry"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"go.opentelemetry.io/otel"
@@ -40,6 +41,13 @@ type Instance struct {
 	logger   *slog.Logger
 	p2p      *p2p.Node
 	services ioc.Registry
+
+	// consensusRegistry is the in-process peer registry, run when [p2p]
+	// registry is enabled. When set, this node holds the peer map locally and
+	// the consensus-peer feeder reads it directly — the no-SPOF model where a
+	// required number of nodes each run the registry instead of one bootstrap
+	// (#4047).
+	consensusRegistry *peerregistry.Embedded
 
 	// parentInstance is set for subnodes to allow registering halt controllers
 	// on the parent instance (where the HTTP service runs)

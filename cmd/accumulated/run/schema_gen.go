@@ -1057,6 +1057,14 @@ func init() {
 			(&schema.Field{
 				Name: "External",
 			}).ResolveTo(&deferredTypes, "Multiaddr"),
+			{
+				Name:     "Registry",
+				Optional: true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     &schema.SimpleType{Type: schema.SimpleTypeBool},
+				},
+			},
 		},
 	}).SetGoType()
 

@@ -941,6 +941,7 @@ type P2P struct {
 	EnablePeerTracking bool
 	DiscoveryMode      *DhtMode
 	External           Multiaddr
+	Registry           *bool
 }
 
 // Copy returns a copy of the P2P.
