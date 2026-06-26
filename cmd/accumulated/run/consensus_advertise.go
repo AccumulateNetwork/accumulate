@@ -57,6 +57,9 @@ func (i *Instance) advertiseConsensusEndpoint(partition, host string, port, rpcP
 		Host:      host,
 		Port:      port,
 		RPCPort:   rpcPort,
+		// A private (guarded) node marks its advertisement so any node that
+		// learns it — its guards — never redistributes it (#4047, spec §6).
+		Private: i.isPrivateNode(),
 	}
 
 	if !i.consensusAdv.registered && i.p2p != nil {
@@ -64,6 +67,14 @@ func (i *Instance) advertiseConsensusEndpoint(partition, host string, port, rpcP
 		i.p2p.Host().SetStreamHandler(consensuspeer.ProtocolID, i.handleConsensusAdvertise)
 		i.logger.Info("Serving consensus-peer advertisements", "protocol", consensuspeer.ProtocolID)
 	}
+}
+
+// isPrivateNode reports whether this node is configured private (a guarded
+// validator). A private node is reachable only by its configured guards and is
+// never redistributed by the registry (#4047, spec §2/§6).
+func (i *Instance) isPrivateNode() bool {
+	return i.config != nil && i.config.P2P != nil &&
+		i.config.P2P.Private != nil && *i.config.P2P.Private
 }
 
 // handleConsensusAdvertise writes the node's current advertisement as

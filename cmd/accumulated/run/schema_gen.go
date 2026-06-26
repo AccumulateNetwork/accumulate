@@ -1065,6 +1065,14 @@ func init() {
 					Elem:     &schema.SimpleType{Type: schema.SimpleTypeBool},
 				},
 			},
+			{
+				Name:     "Private",
+				Optional: true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     &schema.SimpleType{Type: schema.SimpleTypeBool},
+				},
+			},
 		},
 	}).SetGoType()
 

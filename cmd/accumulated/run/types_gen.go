@@ -942,6 +942,7 @@ type P2P struct {
 	DiscoveryMode      *DhtMode
 	External           Multiaddr
 	Registry           *bool
+	Private            *bool
 }
 
 // Copy returns a copy of the P2P.

@@ -68,6 +68,9 @@ Config:
           - name: Registry
             type: '*bool'
             optional: true
+          - name: Private
+            type: '*bool'
+            optional: true
 
     - name: Logging
       type:
