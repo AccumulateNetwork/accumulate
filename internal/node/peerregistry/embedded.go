@@ -48,6 +48,20 @@ func (e *Embedded) GetConsensusPeers(partition string) []consensuspeer.Peer {
 	return e.tracker.GetConsensusPeers(partition)
 }
 
+// GetServicePeers returns the libp2p peers known to serve a partition, as
+// AddrInfos to dial. This is the delivery-discovery backstop (#4047 §10): when
+// DHT service discovery is slow/stale under churn, the dialer can fall back to
+// the partition's known peers from the directory the node already holds.
+// Private peers are already excluded by GetPeersByPartition.
+func (e *Embedded) GetServicePeers(partition string) []peer.AddrInfo {
+	infos := e.tracker.GetPeersByPartition(partition)
+	out := make([]peer.AddrInfo, 0, len(infos))
+	for _, in := range infos {
+		out = append(out, peer.AddrInfo{ID: in.PeerID, Addrs: in.Addresses})
+	}
+	return out
+}
+
 // Stop shuts the registry down.
 func (e *Embedded) Stop() {
 	if e == nil {

@@ -15,7 +15,9 @@ import (
 
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/peerregistry"
+	api "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
@@ -62,6 +64,18 @@ func (p *P2P) start(inst *Instance) error {
 		inst.cleanup("peer registry", func(context.Context) error {
 			inst.consensusRegistry.Stop()
 			return nil
+		})
+
+		// Wire the registry as the delivery-discovery backstop (#4047 §10): when
+		// DHT service discovery is insufficient, fall back to the destination
+		// partition's known public peers from the directory this node holds.
+		reg := inst.consensusRegistry
+		node.SetServiceFallback(func(_ context.Context, sa multiaddr.Multiaddr) []peer.AddrInfo {
+			_, _, svc, _, err := api.UnpackAddress(sa)
+			if err != nil || svc == nil || svc.Argument == "" {
+				return nil
+			}
+			return reg.GetServicePeers(svc.Argument)
 		})
 	}
 
