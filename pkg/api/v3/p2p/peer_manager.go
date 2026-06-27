@@ -29,10 +29,20 @@ type peerManager struct {
 	getServices func() []*serviceHandler
 	dht         *dht.IpfsDHT
 	routing     *routing.RoutingDiscovery
+	// fallback, when set, supplies additional peers for a service address that
+	// DHT discovery did not surface — the registry-backed delivery backstop so
+	// cross-partition routing keeps finding live peers under churn (#4047). Nil
+	// by default: getPeers then behaves exactly as before.
+	fallback    ServiceFallback
 	sendEvent   chan<- event
 	broadcast   chan struct{}
 	wait        chan chan struct{}
 }
+
+// ServiceFallback returns additional candidate peers for a service address when
+// DHT discovery is insufficient. A node wires this to its peer registry so
+// cross-partition delivery has a directory backstop under churn (#4047 §10).
+type ServiceFallback func(ctx context.Context, serviceAddr multiaddr.Multiaddr) []peer.AddrInfo
 
 // newPeerManager constructs a new [peerManager] for the given host with the
 // given options.
@@ -94,28 +104,97 @@ func newPeerManager(ctx context.Context, host host.Host, getServices func() []*s
 // getPeers queries the DHT for peers that provide the given service.
 func (m *peerManager) getPeers(ctx context.Context, ma multiaddr.Multiaddr, limit int, timeout time.Duration) (<-chan peer.AddrInfo, error) {
 	ch, err := m.routing.FindPeers(ctx, ma.String(), discovery.Limit(limit))
-	if err != nil || timeout == 0 {
+	if err != nil {
 		return ch, err
 	}
 
-	ch2 := make(chan peer.AddrInfo)
-	stop := time.After(timeout)
+	// Default (no registry backstop): behaviour unchanged.
+	if m.fallback == nil {
+		if timeout == 0 {
+			return ch, nil
+		}
+		ch2 := make(chan peer.AddrInfo)
+		stop := time.After(timeout)
+		go func() {
+			defer close(ch2)
+			for {
+				select {
+				case <-stop:
+					return
+				case v, ok := <-ch:
+					if !ok {
+						return
+					}
+					ch2 <- v
+				}
+			}
+		}()
+		return ch2, nil
+	}
+
+	// Backstop: forward DHT results (honoring the timeout) then append
+	// registry-known peers the DHT did not surface (#4047 §10).
+	return mergeServiceFallback(ctx, ch, timeout, m.fallback(ctx, ma)), nil
+}
+
+// mergeServiceFallback forwards the DHT result channel (stopping after timeout
+// when timeout > 0) and then appends any extra peers not already emitted,
+// de-duplicated by peer ID. The DHT is preferred; the registry-known extras are
+// the backstop that keeps service discovery working under churn (#4047).
+func mergeServiceFallback(ctx context.Context, dhtCh <-chan peer.AddrInfo, timeout time.Duration, extra []peer.AddrInfo) <-chan peer.AddrInfo {
+	out := make(chan peer.AddrInfo)
 	go func() {
-		defer close(ch2)
-		for {
+		defer close(out)
+		seen := make(map[peer.ID]struct{})
+		emit := func(p peer.AddrInfo) bool {
+			if _, dup := seen[p.ID]; dup {
+				return true
+			}
+			seen[p.ID] = struct{}{}
 			select {
-			case <-stop:
+			case out <- p:
+				return true
+			case <-ctx.Done():
+				return false
+			}
+		}
+
+		var stop <-chan time.Time
+		if timeout > 0 {
+			stop = time.After(timeout)
+		}
+		src := dhtCh
+		for src != nil {
+			select {
+			case <-ctx.Done():
 				return
-			case v, ok := <-ch:
+			case <-stop:
+				src = nil
+			case v, ok := <-src:
 				if !ok {
+					src = nil
+					continue
+				}
+				if !emit(v) {
 					return
 				}
-				ch2 <- v
+			}
+		}
+
+		for _, p := range extra {
+			if !emit(p) {
+				return
 			}
 		}
 	}()
-	return ch2, nil
+	return out
 }
+
+// SetServiceFallback wires a registry-backed delivery backstop into the node's
+// peer discovery: peers it returns for a service address are tried after DHT
+// discovery, keeping cross-partition routing alive under churn (#4047). Safe to
+// leave unset.
+func (n *Node) SetServiceFallback(fn ServiceFallback) { n.peermgr.fallback = fn }
 
 // advertizeNewService advertizes new whoami info to everyone.
 func (m *peerManager) advertizeNewService(sa *api.ServiceAddress) error {
