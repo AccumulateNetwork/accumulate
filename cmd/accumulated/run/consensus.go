@@ -418,6 +418,25 @@ func (c *ConsensusService) start(inst *Instance) error {
 		go feeder.Run(inst.context)
 	}
 
+	// A node WITHOUT a local registry backs delivery discovery with a remote
+	// query to the configured registry nodes (#4047 §10) — so cross-partition
+	// delivery keeps resolving live peers under churn even when this node does
+	// not hold the map. Registry nodes already got the local fallback (p2p.go).
+	if inst.consensusRegistry == nil && inst.p2p != nil {
+		var bases []string
+		for _, b := range strings.Split(c.ConsensusPeerBroker, ",") {
+			if b = strings.TrimSpace(b); b != "" {
+				bases = append(bases, b)
+			}
+		}
+		if len(bases) > 0 {
+			inst.serviceFallbackOnce.Do(func() {
+				inst.p2p.SetServiceFallback(remoteServiceFallback(bases))
+				inst.logger.Info("Wired remote delivery-discovery backstop", "registries", len(bases))
+			})
+		}
+	}
+
 	return nil
 }
 

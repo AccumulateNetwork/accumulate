@@ -49,6 +49,10 @@ type Instance struct {
 	// (#4047).
 	consensusRegistry *peerregistry.Embedded
 
+	// serviceFallbackOnce guards wiring the node-wide delivery-discovery
+	// backstop exactly once (a dual node starts two ConsensusServices) (#4047).
+	serviceFallbackOnce sync.Once
+
 	// parentInstance is set for subnodes to allow registering halt controllers
 	// on the parent instance (where the HTTP service runs)
 	parentInstance *Instance
