@@ -14,6 +14,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/discovery"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/peerstore"
 	"github.com/libp2p/go-libp2p/p2p/discovery/routing"
 	"github.com/libp2p/go-libp2p/p2p/discovery/util"
 	"github.com/multiformats/go-multiaddr"
@@ -132,9 +133,20 @@ func (m *peerManager) getPeers(ctx context.Context, ma multiaddr.Multiaddr, limi
 		return ch2, nil
 	}
 
-	// Backstop: forward DHT results (honoring the timeout) then append
-	// registry-known peers the DHT did not surface (#4047 §10).
-	return mergeServiceFallback(ctx, ch, timeout, m.fallback(ctx, ma)), nil
+	// Backstop: merge in registry-known peers the DHT did not surface (#4047
+	// §10). Their addresses must be registered in the peerstore — the dialer
+	// dials by peer ID and relies on the peerstore for addresses (DHT-found
+	// peers are added automatically; HTTP-fetched backstop peers are not, so
+	// without this every backstop dial fails with "no live peers"). A short TTL
+	// is right: the fallback re-supplies fresh addresses on each query, which is
+	// exactly what keeps routing correct as peers move under churn.
+	extra := m.fallback(ctx, ma)
+	for _, ai := range extra {
+		if len(ai.Addrs) > 0 {
+			m.host.Peerstore().AddAddrs(ai.ID, ai.Addrs, peerstore.TempAddrTTL)
+		}
+	}
+	return mergeServiceFallback(ctx, ch, timeout, extra), nil
 }
 
 // mergeServiceFallback emits the registry-known backstop peers FIRST, then
