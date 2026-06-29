@@ -9,6 +9,7 @@ package peerregistry
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -281,6 +282,32 @@ func (pt *PartitionTracker) forgetConsensusPeer(peerID peer.ID) {
 	delete(pt.privatePeers, peerID)
 }
 
+// libp2pAddrFromConsensus derives a peer's dialable libp2p multiaddr from its
+// consensus advertisement: the advertised host with the CometBFT P2P port
+// mapped to the libp2p port (the inverse of Libp2pToCometPortOffset). Returns
+// nil if the advertisement lacks a usable host/port. This is what keeps the
+// directory's service peers dialable without a live libp2p connection (#4047).
+func libp2pAddrFromConsensus(cp consensuspeer.Peer) multiaddr.Multiaddr {
+	if cp.Host == "" || cp.Port == 0 {
+		return nil
+	}
+	libp2pPort := cp.Port - consensuspeer.Libp2pToCometPortOffset // CometBFT port + 2
+	proto := "dns4"
+	switch ip := net.ParseIP(cp.Host); {
+	case ip == nil:
+		proto = "dns4" // hostname
+	case ip.To4() != nil:
+		proto = "ip4"
+	default:
+		proto = "ip6"
+	}
+	ma, err := multiaddr.NewMultiaddr(fmt.Sprintf("/%s/%s/tcp/%d", proto, cp.Host, libp2pPort))
+	if err != nil {
+		return nil
+	}
+	return ma
+}
+
 // GetPeersByPartition returns the tracked peers that advertised a
 // CometBFT endpoint for the given partition (#4043). Membership comes
 // from consensusByPartition, not from any protocol-ID guess.
@@ -298,16 +325,29 @@ func (pt *PartitionTracker) GetPeersByPartition(partition string) []PeerPartitio
 		if cp.Private {
 			continue // never surface a private peer in a directory listing
 		}
-		if info, exists := pt.peers[peerID]; exists {
-			result = append(result, *info)
-			continue
+		var info PeerPartitionInfo
+		if p, exists := pt.peers[peerID]; exists {
+			info = *p
+		} else {
+			info = PeerPartitionInfo{PeerID: peerID}
+			if pt.host != nil {
+				info.Addresses = pt.host.Peerstore().Addrs(peerID)
+			}
 		}
-		// The peer advertised this partition but isn't in the peers map
-		// (e.g. transient connection state); synthesize a minimal entry.
-		result = append(result, PeerPartitionInfo{
-			PeerID:    peerID,
-			Addresses: pt.host.Peerstore().Addrs(peerID),
-		})
+		// If we have no libp2p-learned address for this peer, derive a dialable
+		// one from the consensus advertisement (advertised host + CometBFT P2P
+		// port mapped to the libp2p port). Without this the directory hands the
+		// delivery backstop peer IDs with no addresses — the dialer dials by ID
+		// via the peerstore, finds nothing, and every cross-partition dial fails
+		// with "no live peers". The advertisement is always present (it is what
+		// put the peer in this list), so the backstop stays usable even when the
+		// registry holds no live libp2p connection to the peer (#4047).
+		if len(info.Addresses) == 0 {
+			if a := libp2pAddrFromConsensus(cp); a != nil {
+				info.Addresses = []multiaddr.Multiaddr{a}
+			}
+		}
+		result = append(result, info)
 	}
 
 	return result
