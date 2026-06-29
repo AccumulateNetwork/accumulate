@@ -81,8 +81,18 @@ active_actors() { grep -oE "active=[0-9]+" "$LOG/load.log" 2>/dev/null | tail -1
 cleanup() { log "leaving network up (tear down: $COMPOSE down -v)"; }
 trap cleanup EXIT
 
-log "=== clean slate: down -v + up --build ==="
+log "=== clean slate: down -v + clear bind target + up --build ==="
 $COMPOSE down -v >/dev/null 2>&1
+# This compose's named volume is bind-backed (driver_opts device=...), so
+# `down -v` removes the volume OBJECT but leaves the underlying directory — the
+# genesis snapshots survive and `init --reset` reuses them, wedging the network
+# on stale state (it bootstraps a 6-day-old height and never produces blocks).
+# Clear the bind target (read from the compose) so init regenerates fresh.
+BIND_DIR=$(grep -A4 'driver_opts' test/docker/docker-compose.consensus-load.yml | grep -m1 'device:' | awk '{print $2}')
+if [ -n "$BIND_DIR" ]; then
+  log "clearing bind target $BIND_DIR (root container — dirs are root-owned)"
+  docker run --rm -v "$BIND_DIR":/data alpine sh -c 'rm -rf /data/* /data/.[!.]* 2>/dev/null' || true
+fi
 GIT_DESCRIBE=$(git describe --tags --always 2>/dev/null || echo dc) GIT_COMMIT=$(git rev-parse --short HEAD) \
   $COMPOSE up -d --build > "$LOG/up.log" 2>&1 || { echo "up failed; see $LOG/up.log"; exit 1; }
 
