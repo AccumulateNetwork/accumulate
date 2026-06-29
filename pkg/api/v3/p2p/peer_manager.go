@@ -137,10 +137,16 @@ func (m *peerManager) getPeers(ctx context.Context, ma multiaddr.Multiaddr, limi
 	return mergeServiceFallback(ctx, ch, timeout, m.fallback(ctx, ma)), nil
 }
 
-// mergeServiceFallback forwards the DHT result channel (stopping after timeout
-// when timeout > 0) and then appends any extra peers not already emitted,
-// de-duplicated by peer ID. The DHT is preferred; the registry-known extras are
-// the backstop that keeps service discovery working under churn (#4047).
+// mergeServiceFallback emits the registry-known backstop peers FIRST, then
+// forwards DHT-discovered peers (stopping after timeout when timeout > 0),
+// de-duplicated by peer ID. The backstop must not be gated behind DHT
+// exhaustion: a FindPeers lookup for a key with no providers keeps its channel
+// open until the query exhausts the routing table, which routinely outlasts the
+// caller's dial deadline. Appending the backstop only after that drains means
+// cross-partition routing reports "no live peers" before the backstop is ever
+// tried (timeout == 0 is the common query path). Emitting it up front keeps
+// service discovery alive under churn (#4047); DHT results still follow as
+// additional candidates.
 func mergeServiceFallback(ctx context.Context, dhtCh <-chan peer.AddrInfo, timeout time.Duration, extra []peer.AddrInfo) <-chan peer.AddrInfo {
 	out := make(chan peer.AddrInfo)
 	go func() {
@@ -156,6 +162,13 @@ func mergeServiceFallback(ctx context.Context, dhtCh <-chan peer.AddrInfo, timeo
 				return true
 			case <-ctx.Done():
 				return false
+			}
+		}
+
+		// Backstop first — reliable, registry-vetted peers, available promptly.
+		for _, p := range extra {
+			if !emit(p) {
+				return
 			}
 		}
 
@@ -178,12 +191,6 @@ func mergeServiceFallback(ctx context.Context, dhtCh <-chan peer.AddrInfo, timeo
 				if !emit(v) {
 					return
 				}
-			}
-		}
-
-		for _, p := range extra {
-			if !emit(p) {
-				return
 			}
 		}
 	}()
