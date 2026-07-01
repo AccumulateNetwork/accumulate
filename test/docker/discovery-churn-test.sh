@@ -96,6 +96,41 @@ fi
 GIT_DESCRIBE=$(git describe --tags --always 2>/dev/null || echo dc) GIT_COMMIT=$(git rev-parse --short HEAD) \
   $COMPOSE up -d --build > "$LOG/up.log" 2>&1 || { echo "up failed; see $LOG/up.log"; exit 1; }
 
+# #4047 diagnosis: cross-partition recovery after a partition outage depends on
+# the DESTINATION pulling the sequenced anchors/synthetics it missed
+# (requestMissingSyntheticTransactions -> Sequencer -> registry discovery
+# backstop). That pull is gated by EnableHealing, which defaults OFF (and the
+# source-side healAnchors is hardcoded off). With both off, a node that misses a
+# DN anchor during an outage wedges permanently (anchor delivered stalls, every
+# later synthetic blocks on the missing anchor proof). Enable healing on every
+# node and turn on INFO logging so the "Missing anchor"/"Out of sequence" path
+# is visible. Patch each RUNNING node's config (docker cp to a running container
+# writes through to the volume; a stopped container does not) then restart the
+# nodes directly with `docker restart` — NOT via compose, which would re-run the
+# one-shot `init --reset` service and regenerate (wipe) the configs.
+NODES=(bvn1-1 bvn1-2 bvn1-3 bvn1-4 bvn2-1 bvn2-2 bvn2-3 bvn2-4 bvn3-1 bvn3-2 bvn3-3 bvn3-4)
+log "=== waiting for 12 nodes to be running before patching ==="
+for _ in $(seq 1 90); do
+  [ "$(docker ps --filter name=acc-cl-bvn --filter status=running -q | wc -l)" -ge 12 ] && break
+  sleep 2
+done
+log "=== patch all 12 node configs: enable-healing + INFO logging ==="
+PTMP=$(mktemp -d)
+for c in "${NODES[@]}"; do
+  cfg="/root/.accumulate/$c/accumulate.toml"
+  docker cp "acc-cl-$c:$cfg" "$PTMP/$c.toml" 2>/dev/null || { echo "cannot read $cfg"; exit 1; }
+  grep -q 'enable-healing' "$PTMP/$c.toml" || sed -i '/type = "coreValidator"/a\  enable-healing = true' "$PTMP/$c.toml"
+  grep -q 'logging.rules'  "$PTMP/$c.toml" || sed -i 's/^\[logging\]$/[logging]\n  [[logging.rules]]\n    level = "info"/' "$PTMP/$c.toml"
+  docker cp "$PTMP/$c.toml" "acc-cl-$c:$cfg"
+done
+rm -rf "$PTMP"
+# sanity: confirm the patch landed on at least one node
+docker exec acc-cl-bvn2-1 grep -q 'enable-healing' /root/.accumulate/bvn2-1/accumulate.toml \
+  || { echo "patch did not persist to node volume"; exit 1; }
+log "=== restart all 12 nodes to load patched config ==="
+docker restart "${NODES[@]/#/acc-cl-}" >/dev/null 2>&1
+log "patched + restarted: $(printf '%s ' "${NODES[@]}")"
+
 log "waiting 90s for consensus..."; sleep 90
 echo "running nodes: $(docker ps --filter name=acc-cl-bvn --filter status=running -q | wc -l)"
 
