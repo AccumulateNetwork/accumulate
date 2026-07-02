@@ -215,6 +215,11 @@ func (c *ConsensusService) start(inst *Instance) error {
 		return err
 	}
 
+	// #4049: once the node is past genesis (marker present), strip the multi-GB
+	// AppState out of the genesis doc cached in the state DB, so it is neither
+	// loaded nor kept on subsequent boots. Must run before NewNode opens the DB.
+	stripGenesisAppState(d.config, d.logger, abci.GenesisMarkerPath(d.config.RootDir, c.App.partition().ID))
+
 	// Start consensus
 	node, err := tmnode.NewNode(
 		d.config,
@@ -311,6 +316,56 @@ func convertKeyToComet(inst *Instance, key PrivateKey) (tmcrypto.PrivKey, error)
 	default:
 		return nil, errors.BadRequest.With("unsupported key type %v", addr.GetType())
 	}
+}
+
+// cometGenesisDocKey mirrors CometBFT's unexported node.genesisDocKey, the
+// state-DB key under which it caches the genesis document.
+var cometGenesisDocKey = []byte("genesisDoc")
+
+// stripGenesisAppState removes the (multi-GB) AppState from the genesis document
+// CometBFT caches in the state DB, once the node is past genesis (the #4049
+// marker is present). CometBFT only uses AppState for InitChain, so after that
+// it is dead weight that is otherwise re-marshaled into the DB and loaded into
+// memory on every boot. The rest of the genesis doc (chain ID, validators,
+// consensus params, app hash) is preserved. Must run before NewNode opens the
+// state DB. Best-effort: any failure is logged and the node boots normally.
+func stripGenesisAppState(config *tmcfg.Config, logger log.Logger, markerPath string) {
+	// Before the node is past genesis the AppState is still needed for InitChain.
+	if _, err := os.Stat(markerPath); err != nil {
+		return
+	}
+
+	db, err := tmcfg.DefaultDBProvider(&tmcfg.DBContext{ID: "state", Config: config})
+	if err != nil {
+		logger.Error("Genesis AppState strip: cannot open state DB", "error", err)
+		return
+	}
+	defer db.Close()
+
+	b, err := db.Get(cometGenesisDocKey)
+	if err != nil || len(b) == 0 {
+		return
+	}
+	var genDoc *tmtypes.GenesisDoc
+	if err := cmtjson.Unmarshal(b, &genDoc); err != nil {
+		logger.Error("Genesis AppState strip: cannot unmarshal genesis doc", "error", err)
+		return
+	}
+	if len(genDoc.AppState) == 0 {
+		return // already stripped
+	}
+
+	genDoc.AppState = nil
+	nb, err := cmtjson.Marshal(genDoc)
+	if err != nil {
+		logger.Error("Genesis AppState strip: cannot marshal genesis doc", "error", err)
+		return
+	}
+	if err := db.SetSync(cometGenesisDocKey, nb); err != nil {
+		logger.Error("Genesis AppState strip: cannot store genesis doc", "error", err)
+		return
+	}
+	logger.Info("Stripped genesis AppState from the state DB; no longer loaded on boot")
 }
 
 func (c *ConsensusService) genesisDocProvider(inst *Instance) tmnode.GenesisDocProvider {

@@ -301,8 +301,15 @@ type genesisMarker struct {
 	AppHash       []byte `json:"appHash"`
 }
 
+// GenesisMarkerPath is the path of the per-partition "genesis verified" marker
+// (#4049). Exported so the run package can gate the state-DB AppState strip on
+// the same marker without duplicating the filename convention.
+func GenesisMarkerPath(rootDir, partition string) string {
+	return filepath.Join(rootDir, "genesis-verified-"+partition+".json")
+}
+
 func (app *Accumulator) genesisMarkerPath() string {
-	return filepath.Join(app.RootDir, "genesis-verified-"+app.Partition+".json")
+	return GenesisMarkerPath(app.RootDir, app.Partition)
 }
 
 // genesisCheck returns the genesis {InitialHeight, AppHash}. It reads them from
