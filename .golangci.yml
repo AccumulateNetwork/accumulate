@@ -9,10 +9,15 @@ linters-settings:
 
   goheader:
     values:
+      regexp:
+        # Accept any 4-digit year so the header check does not go red every
+        # January until every file is re-stamped (goheader's built-in {{ YEAR }}
+        # matches the current year only).
+        COPYRIGHT_YEAR: \d{4}
       const:
         AUTHOR: The Accumulate Authors
     template: |-
-      Copyright {{ YEAR }} {{ AUTHOR }}
+      Copyright {{ COPYRIGHT_YEAR }} {{ AUTHOR }}
 
       Use of this source code is governed by an MIT-style
       license that can be found in the LICENSE file or at
