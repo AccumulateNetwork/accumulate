@@ -58,23 +58,20 @@ fi
 log "=== step 3: stop a follower (bvn1-2) ==="
 docker stop accfo-bvn1-2 >/dev/null 2>&1
 
-log "=== step 4: promote bvn1-2 — copy the validator identity + reset priv-val state ==="
-# bvn1-3 shares the /data volume and is still running, use it to move the files.
-docker exec accfo-bvn1-3 sh -c '
-  set -e
-  cp -f /data/bvn1-1/dnn/config/priv_validator_key.json  /data/bvn1-2/dnn/config/priv_validator_key.json
-  cp -f /data/bvn1-1/bvnn/config/priv_validator_key.json /data/bvn1-2/bvnn/config/priv_validator_key.json
-  for p in dnn bvnn; do
-    printf "%s" "{\"height\":\"0\",\"round\":0,\"step\":0}" > /data/bvn1-2/$p/data/priv_validator_state.json
-  done
-  echo "copied validator keys to bvn1-2 (DN+BVN); reset priv_validator_state"
-' 2>&1
-# sanity: the copied BVN validator pubkey must equal bvn1-1's original
-match=$(docker exec accfo-bvn1-3 sh -c '
-  a=$(grep -o "\"value\":[^,}]*" /data/bvn1-1/bvnn/config/priv_validator_key.json | tail -1)
-  b=$(grep -o "\"value\":[^,}]*" /data/bvn1-2/bvnn/config/priv_validator_key.json | tail -1)
-  [ "$a" = "$b" ] && echo yes || echo no')
-log "bvn1-2 BVN validator key == bvn1-1 original: $match"
+log "=== step 4: promote bvn1-2 — set its validator-key to bvn1-1's + reset priv-val state ==="
+# The run.Config framework holds the validator key in accumulate.toml
+# ([configurations.validator-key]), not a priv_validator_key.json. bvn1-3 shares
+# the /data volume, so pull/edit/push bvn1-2's toml through it. One validator-key
+# covers both the DN and BVN of the core validator.
+vk_of() { docker exec accfo-bvn1-3 sh -c "grep -A1 configurations.validator-key /data/$1/accumulate.toml | grep address | head -1" 2>/dev/null | sed -E 's/.*"([^"]+)".*/\1/'; }
+VK=$(vk_of bvn1-1); log "bvn1-1 validator key: $VK"
+docker cp accfo-bvn1-3:/data/bvn1-2/accumulate.toml "$LOG/b2.toml" 2>/dev/null
+awk -v vk="$VK" '/\[configurations.validator-key\]/{b=1} b&&/address =/{sub(/address = "[^"]*"/,"address = \"" vk "\"");b=0} {print}' "$LOG/b2.toml" > "$LOG/b2.new" && mv "$LOG/b2.new" "$LOG/b2.toml"
+docker cp "$LOG/b2.toml" accfo-bvn1-3:/data/bvn1-2/accumulate.toml 2>/dev/null
+docker exec accfo-bvn1-3 sh -c 'for p in dnn bvnn; do printf "%s" "{\"height\":\"0\",\"round\":0,\"step\":0}" > /data/bvn1-2/$p/data/priv_validator_state.json; done'
+VK2=$(vk_of bvn1-2)
+match=$([ -n "$VK" ] && [ "$VK" = "$VK2" ] && echo yes || echo no)
+log "bvn1-2 validator key now == bvn1-1's: $match ($VK2)"
 
 log "=== step 5: start bvn1-2 as the new validator (bvn1-1 stays stopped) ==="
 docker start accfo-bvn1-2 >/dev/null 2>&1

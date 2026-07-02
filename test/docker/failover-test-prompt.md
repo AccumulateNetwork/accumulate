@@ -35,13 +35,18 @@ nodes run via `run-dual /data/<node>/dnn /data/<node>/bvnn`.
 2. **Stop the validator** (node-1). Confirm the BVN **halts** — block height stops
    advancing (its sole validator is down). This is expected.
 3. **Stop one follower** (node-2).
-4. **Promote node-2 to validator** — copy node-1's validator identity onto node-2:
-   - `node-1/dnn/config/priv_validator_key.json` → `node-2/dnn/config/priv_validator_key.json`
-   - `node-1/bvnn/config/priv_validator_key.json` → `node-2/bvnn/config/priv_validator_key.json`
-   - Also reset node-2's `priv_validator_state.json` for both partitions to a
-     clean state (height 0) so it does not conflict with node-1's last-signed
-     state. The validator set is unchanged (same pubkey).
+4. **Promote node-2 to validator** — give node-2 node-1's validator identity.
+   NOTE: with the `run.Config` framework (what `init network` generates), the
+   validator key is **not** a `priv_validator_key.json` file — it is the
+   `[configurations.validator-key]` `address` in the node's `accumulate.toml`
+   (one key covers the core validator's DN + BVN). So:
+   - Set node-2's `accumulate.toml` `validator-key` address to node-1's value.
+   - Reset node-2's `{dnn,bvnn}/data/priv_validator_state.json` to `{"height":"0",…}`
+     so it can sign from the current height forward. The validator set is
+     unchanged (same key).
    - Leave node-1 **stopped** for the remainder of the test.
+   (Old-style deployments that use `config/priv_validator_key.json` — e.g. mainnet
+   BVN0 — would instead copy that file. This test uses the config-key layout.)
 5. **Restart the network**: node-2 (now the validator) + node-3..5 (followers).
 6. Confirm **node-2 now signs as the validator** and the BVN **resumes producing
    blocks** under the same validator identity.
