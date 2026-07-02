@@ -1,0 +1,43 @@
+# Follower-to-validator failover test (#4050): single BVN, 1 validator (bvn1-1)
+# + 4 followers (bvn1-2..5), 5 dual DN+BVN nodes. Static peering.
+#
+#   docker compose -p accfo -f test/docker/docker-compose.failover.yml up -d --build
+#   docker compose -p accfo -f test/docker/docker-compose.failover.yml down -v
+#
+# Node API on the host: 127.0.0.1:27720 .. 27724
+
+x-build: &build
+  context: ../..
+  dockerfile: test/docker/Dockerfile.net4049
+  args:
+    TAGS: production,mainnet
+    GIT_DESCRIBE: ${GIT_DESCRIBE:-4050}
+    GIT_COMMIT: ${GIT_COMMIT:-}
+
+x-node: &node
+  build: *build
+  mem_limit: 2g
+  restart: "no"
+  volumes: [ "failover-data:/data" ]
+  depends_on:
+    init: { condition: service_completed_successfully }
+
+services:
+  init:
+    build: *build
+    container_name: accfo-init
+    volumes:
+      - failover-data:/data
+      - ../..:/workspace
+    working_dir: /workspace
+    entrypoint: ["/bin/accumulated"]
+    command: [ "init", "network", "test/docker/failover-network.yml", "-w", "/data", "--reset", "--faucet-seed", "FAUCET" ]
+
+  accfo-bvn1-1: { <<: *node, container_name: accfo-bvn1-1, command: [ "run-dual", "/data/bvn1-1/dnn", "/data/bvn1-1/bvnn" ], ports: [ "27720:26660" ] }
+  accfo-bvn1-2: { <<: *node, container_name: accfo-bvn1-2, command: [ "run-dual", "/data/bvn1-2/dnn", "/data/bvn1-2/bvnn" ], ports: [ "27721:26660" ] }
+  accfo-bvn1-3: { <<: *node, container_name: accfo-bvn1-3, command: [ "run-dual", "/data/bvn1-3/dnn", "/data/bvn1-3/bvnn" ], ports: [ "27722:26660" ] }
+  accfo-bvn1-4: { <<: *node, container_name: accfo-bvn1-4, command: [ "run-dual", "/data/bvn1-4/dnn", "/data/bvn1-4/bvnn" ], ports: [ "27723:26660" ] }
+  accfo-bvn1-5: { <<: *node, container_name: accfo-bvn1-5, command: [ "run-dual", "/data/bvn1-5/dnn", "/data/bvn1-5/bvnn" ], ports: [ "27724:26660" ] }
+
+volumes:
+  failover-data: {}
