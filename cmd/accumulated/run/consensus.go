@@ -514,16 +514,21 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 		return nil, errors.UnknownError.WithFormat("initialize chain executor: %w", err)
 	}
 
+	genesisPath := d.config.GenesisFile()
+	if filepath.Ext(genesisPath) == ".json" {
+		genesisPath = "" // never auto-delete a JSON genesis (#4049)
+	}
 	app := abci.NewAccumulator(abci.AccumulatorOptions{
-		ID:        inst.id,
-		Address:   d.privVal.Key.PubKey.Address(),
-		Executor:  exec,
-		Logger:    d.logger.With("module", "abci"),
-		EventBus:  d.eventBus,
-		Database:  db,
-		Genesis:   genesis.DocProvider(d.config),
-		Partition: c.Partition.ID,
-		RootDir:   d.config.RootDir,
+		ID:          inst.id,
+		Address:     d.privVal.Key.PubKey.Address(),
+		Executor:    exec,
+		Logger:      d.logger.With("module", "abci"),
+		EventBus:    d.eventBus,
+		Database:    db,
+		Genesis:     genesis.DocProvider(d.config),
+		GenesisPath: genesisPath,
+		Partition:   c.Partition.ID,
+		RootDir:     d.config.RootDir,
 
 		MaxEnvelopesPerBlock: int(*c.MaxEnvelopesPerBlock),
 	})

@@ -80,6 +80,7 @@ type AccumulatorOptions struct {
 	Database             coredb.Beginner
 	Address              crypto.Address // This is the address of this node, and is used to determine if the node is the leader
 	Genesis              node.GenesisDocProvider
+	GenesisPath          string // path to the genesis snapshot; if set, it is deleted once the node is past genesis (#4049)
 	Partition            string
 	RootDir              string
 	AnalysisLog          config.AnalysisLog
@@ -258,25 +259,31 @@ func (app *Accumulator) Info(context.Context, *abci.RequestInfo) (*abci.Response
 		return res, nil
 	}
 
-	// Check the genesis document
-	genDoc, err := app.Genesis()
+	// Check the database against genesis. Use a cached marker so a synced node
+	// does not need the (multi-GB) genesis snapshot present on every boot: the
+	// snapshot is only read the first time, then {InitialHeight, AppHash} is
+	// persisted and reused (#4049).
+	initialHeight, genAppHash, err := app.genesisCheck()
 	if err != nil {
 		return nil, err
 	}
 
 	// This field is the height of the first block after genesis, so
 	// decrementing it makes it the height of genesis
-	genDoc.InitialHeight -= 1
+	genesisHeight := initialHeight - 1
 
-	if genDoc.InitialHeight < res.LastBlockHeight {
+	if genesisHeight < res.LastBlockHeight {
 		app.ready = true
+		// Past genesis and the marker is persisted, so the snapshot is no
+		// longer needed to boot — remove it if we own the path (#4049).
+		app.maybeDeleteGenesisSnapshot()
 		return res, nil
 	}
-	if genDoc.InitialHeight > res.LastBlockHeight {
+	if genesisHeight > res.LastBlockHeight {
 		return nil, errors.FatalError.With("database state is older than genesis")
 	}
 
-	if !bytes.Equal(genDoc.AppHash, res.LastBlockAppHash) {
+	if !bytes.Equal(genAppHash, res.LastBlockAppHash) {
 		return nil, errors.FatalError.With("database state does not match genesis")
 	}
 
@@ -285,6 +292,68 @@ func (app *Accumulator) Info(context.Context, *abci.RequestInfo) (*abci.Response
 	res.LastBlockAppHash = nil
 	res.LastBlockHeight = 0
 	return res, nil
+}
+
+// genesisMarker caches the identity of the genesis document so a synced node
+// does not have to read the (multi-GB) genesis snapshot on every boot (#4049).
+type genesisMarker struct {
+	InitialHeight int64  `json:"initialHeight"`
+	AppHash       []byte `json:"appHash"`
+}
+
+func (app *Accumulator) genesisMarkerPath() string {
+	return filepath.Join(app.RootDir, "genesis-verified-"+app.Partition+".json")
+}
+
+// genesisCheck returns the genesis {InitialHeight, AppHash}. It reads them from
+// a small persisted marker when present; otherwise it reads them from the
+// genesis snapshot (app.Genesis) and writes the marker so subsequent boots do
+// not need the snapshot (#4049).
+func (app *Accumulator) genesisCheck() (int64, []byte, error) {
+	path := app.genesisMarkerPath()
+	if b, err := os.ReadFile(path); err == nil {
+		var m genesisMarker
+		if json.Unmarshal(b, &m) == nil && len(m.AppHash) > 0 {
+			return m.InitialHeight, m.AppHash, nil
+		}
+		app.logger.Error("Ignoring corrupt genesis marker", "path", path)
+	}
+
+	genDoc, err := app.Genesis()
+	if err != nil {
+		return 0, nil, err
+	}
+
+	m := genesisMarker{InitialHeight: genDoc.InitialHeight, AppHash: genDoc.AppHash}
+	if b, err := json.Marshal(m); err != nil {
+		app.logger.Error("Failed to marshal genesis marker", "error", err)
+	} else if err := os.WriteFile(path, b, 0o644); err != nil {
+		app.logger.Error("Failed to persist genesis marker", "error", err, "path", path)
+	} else {
+		app.logger.Info("Persisted genesis marker; genesis snapshot no longer required to boot", "path", path)
+	}
+	return genDoc.InitialHeight, genDoc.AppHash, nil
+}
+
+// maybeDeleteGenesisSnapshot removes the genesis snapshot once the node is past
+// genesis, provided the marker is durably persisted so the node can still boot
+// without it (#4049).
+func (app *Accumulator) maybeDeleteGenesisSnapshot() {
+	if app.GenesisPath == "" {
+		return
+	}
+	// Only delete once the marker exists, so a boot without the snapshot works.
+	if _, err := os.Stat(app.genesisMarkerPath()); err != nil {
+		return
+	}
+	switch err := os.Remove(app.GenesisPath); {
+	case err == nil:
+		app.logger.Info("Deleted genesis snapshot; node is past genesis and marker is persisted", "path", app.GenesisPath)
+	case os.IsNotExist(err):
+		// already gone
+	default:
+		app.logger.Error("Failed to delete genesis snapshot", "error", err, "path", app.GenesisPath)
+	}
 }
 
 // Query implements github.com/cometbft/cometbft/abci/types.Application.
