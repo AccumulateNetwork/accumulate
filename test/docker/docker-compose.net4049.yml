@@ -34,20 +34,20 @@ services:
     entrypoint: ["/bin/accumulated"]
     command: [ "init", "network", "test/docker/network-4049.yml", "-w", "/data", "--reset", "--faucet-seed", "FAUCET" ]
 
-  acc49-bvn1-1: { <<: *node, container_name: acc49-bvn1-1, command: [ "run", "-w", "/data/bvn1-1" ], ports: [ "27700:26660" ] }
-  acc49-bvn1-2: { <<: *node, container_name: acc49-bvn1-2, command: [ "run", "-w", "/data/bvn1-2" ], ports: [ "27701:26660" ] }
-  acc49-bvn1-3: { <<: *node, container_name: acc49-bvn1-3, command: [ "run", "-w", "/data/bvn1-3" ], ports: [ "27702:26660" ] }
-  acc49-bvn1-4: { <<: *node, container_name: acc49-bvn1-4, command: [ "run", "-w", "/data/bvn1-4" ], ports: [ "27703:26660" ] }
+  acc49-bvn1-1: { <<: *node, container_name: acc49-bvn1-1, command: [ "run-dual", "/data/bvn1-1/dnn", "/data/bvn1-1/bvnn" ], ports: [ "27700:26660" ] }
+  acc49-bvn1-2: { <<: *node, container_name: acc49-bvn1-2, command: [ "run-dual", "/data/bvn1-2/dnn", "/data/bvn1-2/bvnn" ], ports: [ "27701:26660" ] }
+  acc49-bvn1-3: { <<: *node, container_name: acc49-bvn1-3, command: [ "run-dual", "/data/bvn1-3/dnn", "/data/bvn1-3/bvnn" ], ports: [ "27702:26660" ] }
+  acc49-bvn1-4: { <<: *node, container_name: acc49-bvn1-4, command: [ "run-dual", "/data/bvn1-4/dnn", "/data/bvn1-4/bvnn" ], ports: [ "27703:26660" ] }
 
-  acc49-bvn2-1: { <<: *node, container_name: acc49-bvn2-1, command: [ "run", "-w", "/data/bvn2-1" ], ports: [ "27704:26660" ] }
-  acc49-bvn2-2: { <<: *node, container_name: acc49-bvn2-2, command: [ "run", "-w", "/data/bvn2-2" ], ports: [ "27705:26660" ] }
-  acc49-bvn2-3: { <<: *node, container_name: acc49-bvn2-3, command: [ "run", "-w", "/data/bvn2-3" ], ports: [ "27706:26660" ] }
-  acc49-bvn2-4: { <<: *node, container_name: acc49-bvn2-4, command: [ "run", "-w", "/data/bvn2-4" ], ports: [ "27707:26660" ] }
+  acc49-bvn2-1: { <<: *node, container_name: acc49-bvn2-1, command: [ "run-dual", "/data/bvn2-1/dnn", "/data/bvn2-1/bvnn" ], ports: [ "27704:26660" ] }
+  acc49-bvn2-2: { <<: *node, container_name: acc49-bvn2-2, command: [ "run-dual", "/data/bvn2-2/dnn", "/data/bvn2-2/bvnn" ], ports: [ "27705:26660" ] }
+  acc49-bvn2-3: { <<: *node, container_name: acc49-bvn2-3, command: [ "run-dual", "/data/bvn2-3/dnn", "/data/bvn2-3/bvnn" ], ports: [ "27706:26660" ] }
+  acc49-bvn2-4: { <<: *node, container_name: acc49-bvn2-4, command: [ "run-dual", "/data/bvn2-4/dnn", "/data/bvn2-4/bvnn" ], ports: [ "27707:26660" ] }
 
-  acc49-bvn3-1: { <<: *node, container_name: acc49-bvn3-1, command: [ "run", "-w", "/data/bvn3-1" ], ports: [ "27708:26660" ] }
-  acc49-bvn3-2: { <<: *node, container_name: acc49-bvn3-2, command: [ "run", "-w", "/data/bvn3-2" ], ports: [ "27709:26660" ] }
-  acc49-bvn3-3: { <<: *node, container_name: acc49-bvn3-3, command: [ "run", "-w", "/data/bvn3-3" ], ports: [ "27710:26660" ] }
-  acc49-bvn3-4: { <<: *node, container_name: acc49-bvn3-4, command: [ "run", "-w", "/data/bvn3-4" ], ports: [ "27711:26660" ] }
+  acc49-bvn3-1: { <<: *node, container_name: acc49-bvn3-1, command: [ "run-dual", "/data/bvn3-1/dnn", "/data/bvn3-1/bvnn" ], ports: [ "27708:26660" ] }
+  acc49-bvn3-2: { <<: *node, container_name: acc49-bvn3-2, command: [ "run-dual", "/data/bvn3-2/dnn", "/data/bvn3-2/bvnn" ], ports: [ "27709:26660" ] }
+  acc49-bvn3-3: { <<: *node, container_name: acc49-bvn3-3, command: [ "run-dual", "/data/bvn3-3/dnn", "/data/bvn3-3/bvnn" ], ports: [ "27710:26660" ] }
+  acc49-bvn3-4: { <<: *node, container_name: acc49-bvn3-4, command: [ "run-dual", "/data/bvn3-4/dnn", "/data/bvn3-4/bvnn" ], ports: [ "27711:26660" ] }
 
 volumes:
   net4049-data: {}
