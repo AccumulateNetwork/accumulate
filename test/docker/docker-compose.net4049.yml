@@ -9,7 +9,7 @@
 
 x-build: &build
   context: ../..
-  dockerfile: Dockerfile
+  dockerfile: test/docker/Dockerfile.net4049
   args:
     TAGS: production,mainnet
     GIT_DESCRIBE: ${GIT_DESCRIBE:-4049}

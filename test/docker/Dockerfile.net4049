@@ -1,0 +1,16 @@
+# Lean image for the #4049 docker network test: builds only `accumulated`.
+# (The repo-root Dockerfile also installs dlv/cometbft/tools, which have bit-rotted
+# against v1.4.3's Go 1.22 — not needed here.)
+FROM golang:1.22 as build
+WORKDIR /root
+COPY . .
+ENV CGO_ENABLED=0
+ARG TAGS=production,mainnet
+ARG GIT_DESCRIBE
+ARG GIT_COMMIT
+RUN make -B TAGS=$TAGS GIT_DESCRIBE=$GIT_DESCRIBE GIT_COMMIT=$GIT_COMMIT
+
+FROM alpine:3
+RUN apk add --no-cache curl ca-certificates
+COPY --from=build /root/accumulated /bin/accumulated
+ENTRYPOINT ["/bin/accumulated"]
