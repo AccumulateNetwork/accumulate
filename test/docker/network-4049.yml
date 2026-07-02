@@ -1,0 +1,24 @@
+# 3 BVN x 4 validator dual-node network for validating #4049 (boot without the
+# genesis snapshot). Every node is a dual node: a DN validator AND a validator
+# of its BVN — so the DN has 12 validators and each BVN has 4. Static peering
+# (v1.4.3 has no consensus-peer broker).
+id: DevNet4049
+bvns:
+  - id: BVN1
+    nodes:
+      - { listenAddress: "0.0.0.0", advertizeAddress: "acc49-bvn1-1", peerAddress: "acc49-bvn1-1", basePort: 26656, dnnType: validator, bvnnType: validator }
+      - { listenAddress: "0.0.0.0", advertizeAddress: "acc49-bvn1-2", peerAddress: "acc49-bvn1-2", basePort: 26656, dnnType: validator, bvnnType: validator }
+      - { listenAddress: "0.0.0.0", advertizeAddress: "acc49-bvn1-3", peerAddress: "acc49-bvn1-3", basePort: 26656, dnnType: validator, bvnnType: validator }
+      - { listenAddress: "0.0.0.0", advertizeAddress: "acc49-bvn1-4", peerAddress: "acc49-bvn1-4", basePort: 26656, dnnType: validator, bvnnType: validator }
+  - id: BVN2
+    nodes:
+      - { listenAddress: "0.0.0.0", advertizeAddress: "acc49-bvn2-1", peerAddress: "acc49-bvn2-1", basePort: 26656, dnnType: validator, bvnnType: validator }
+      - { listenAddress: "0.0.0.0", advertizeAddress: "acc49-bvn2-2", peerAddress: "acc49-bvn2-2", basePort: 26656, dnnType: validator, bvnnType: validator }
+      - { listenAddress: "0.0.0.0", advertizeAddress: "acc49-bvn2-3", peerAddress: "acc49-bvn2-3", basePort: 26656, dnnType: validator, bvnnType: validator }
+      - { listenAddress: "0.0.0.0", advertizeAddress: "acc49-bvn2-4", peerAddress: "acc49-bvn2-4", basePort: 26656, dnnType: validator, bvnnType: validator }
+  - id: BVN3
+    nodes:
+      - { listenAddress: "0.0.0.0", advertizeAddress: "acc49-bvn3-1", peerAddress: "acc49-bvn3-1", basePort: 26656, dnnType: validator, bvnnType: validator }
+      - { listenAddress: "0.0.0.0", advertizeAddress: "acc49-bvn3-2", peerAddress: "acc49-bvn3-2", basePort: 26656, dnnType: validator, bvnnType: validator }
+      - { listenAddress: "0.0.0.0", advertizeAddress: "acc49-bvn3-3", peerAddress: "acc49-bvn3-3", basePort: 26656, dnnType: validator, bvnnType: validator }
+      - { listenAddress: "0.0.0.0", advertizeAddress: "acc49-bvn3-4", peerAddress: "acc49-bvn3-4", basePort: 26656, dnnType: validator, bvnnType: validator }
