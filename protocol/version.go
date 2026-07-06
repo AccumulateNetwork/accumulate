@@ -62,3 +62,10 @@ func (v ExecutorVersion) V2JiuquanEnabled() bool {
 func (v ExecutorVersion) V2TanegashimaEnabled() bool {
 	return v >= ExecutorVersionV2Tanegashima
 }
+
+// VNextEnabled checks if the version is at least VNext. Collection proofs
+// (#4048) are gated on VNext until they are assigned a named activation
+// version.
+func (v ExecutorVersion) VNextEnabled() bool {
+	return v >= ExecutorVersionVNext
+}

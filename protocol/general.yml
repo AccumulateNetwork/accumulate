@@ -363,3 +363,9 @@ AnnotatedReceipt:
       type: AnchorMetadata
       marshal-as: reference
       pointer: true
+    - name: ReceiptList
+      description: is a collection proof covering a contiguous range of entries; mutually exclusive with Receipt
+      type: merkle.ReceiptList
+      marshal-as: reference
+      pointer: true
+      optional: true
