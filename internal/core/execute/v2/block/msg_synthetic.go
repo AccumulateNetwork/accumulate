@@ -69,14 +69,34 @@ func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*mess
 	if syn.Proof == nil {
 		return nil, errors.BadRequest.With("missing proof")
 	}
-	if syn.Proof.Receipt == nil {
-		return nil, errors.BadRequest.With("missing proof receipt")
-	}
 	if syn.Proof.Anchor == nil || syn.Proof.Anchor.Account == nil {
 		return nil, errors.BadRequest.With("missing proof metadata")
 	}
-	if !syn.Proof.Receipt.Validate(nil) {
-		return nil, errors.BadRequest.With("proof is invalid")
+
+	// A proof carries either an individual receipt or a collection proof
+	// (#4048). Collection proofs are gated so that acceptance activates
+	// atomically across the network — until then only individual receipts are
+	// valid.
+	switch {
+	case syn.Proof.ReceiptList != nil:
+		if !ctx.GetActiveGlobals().ExecutorVersion.VNextEnabled() {
+			return nil, errors.BadRequest.With("collection proofs are not enabled")
+		}
+		if syn.Proof.Receipt != nil {
+			return nil, errors.BadRequest.With("proof must carry a receipt or a receipt list, not both")
+		}
+		if len(syn.Proof.ReceiptList.Elements) > protocol.MaxReceiptListElements {
+			return nil, errors.BadRequest.WithFormat("collection proof exceeds %d elements", protocol.MaxReceiptListElements)
+		}
+		if !syn.Proof.ReceiptList.Validate(nil) {
+			return nil, errors.BadRequest.With("proof is invalid")
+		}
+	case syn.Proof.Receipt != nil:
+		if !syn.Proof.Receipt.Validate(nil) {
+			return nil, errors.BadRequest.With("proof is invalid")
+		}
+	default:
+		return nil, errors.BadRequest.With("missing proof receipt")
 	}
 
 	// A synthetic message must be sequenced (may change in the future)
@@ -107,8 +127,13 @@ func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*mess
 		return nil, errors.Unauthorized.WithFormat("key is not an active validator for %s", partition)
 	}
 
-	// Verify the proof starts with the transaction hash
-	if !bytes.Equal(h[:], syn.Proof.Receipt.Start) {
+	// Verify the proof covers the transaction hash: an individual receipt must
+	// start with it, a collection proof must include it as an element
+	if syn.Proof.ReceiptList != nil {
+		if !syn.Proof.ReceiptList.Included(h[:]) {
+			return nil, errors.BadRequest.WithFormat("collection proof does not include %x", h)
+		}
+	} else if !bytes.Equal(h[:], syn.Proof.Receipt.Start) {
 		return nil, errors.BadRequest.WithFormat("invalid proof start: expected %x, got %x", h, syn.Proof.Receipt.Start)
 	}
 
@@ -171,18 +196,20 @@ func (x SyntheticMessage) process(batch *database.Batch, ctx *MessageContext) er
 		return errors.UnknownError.Wrap(err)
 	}
 
-	// Verify the proof ends with a DN anchor
+	// Verify the proof ends with a DN anchor. Individual and collection proofs
+	// terminate at the same trust root, so one check covers either form.
+	anchor := syn.Proof.TerminalAnchor()
 	_, err = batch.Account(ctx.Executor.Describe.AnchorPool()).
 		AnchorChain(protocol.Directory).
 		Root().
-		IndexOf(syn.Proof.Receipt.Anchor)
+		IndexOf(anchor)
 	switch {
 	case err == nil:
 		// Ok
 	case errors.Is(err, errors.NotFound):
-		return errors.BadRequest.WithFormat("invalid proof anchor: %x is not a known directory anchor", syn.Proof.Receipt.Anchor)
+		return errors.BadRequest.WithFormat("invalid proof anchor: %x is not a known directory anchor", anchor)
 	default:
-		return errors.UnknownError.WithFormat("search for directory anchor %x: %w", syn.Proof.Receipt.Anchor, err)
+		return errors.UnknownError.WithFormat("search for directory anchor %x: %w", anchor, err)
 	}
 
 	// Execute the inner message
