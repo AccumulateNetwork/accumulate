@@ -80,7 +80,7 @@ func (d *DevnetConfiguration) apply(inst *Instance, cfg *Config) error {
 	setDefaultVal(&d.Bvns, 2)
 	setDefaultVal(&d.Validators, 2)
 	setDefaultVal(&d.Listen, multiaddr.StringCast("/tcp/26656"))
-	setDefaultPtr(&d.StorageType, StorageTypeLevelDB)
+	setDefaultPtr(&d.StorageType, DefaultStorageType)
 
 	// Prepare nodes
 	perPart := int(d.Validators) + int(d.Followers)

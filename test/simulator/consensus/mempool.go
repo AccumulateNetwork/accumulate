@@ -11,7 +11,6 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -32,9 +31,9 @@ type mpEntry struct {
 	env   *messaging.Envelope
 }
 
-func newMempool(logger log.Logger) *mempool {
+func newMempool(logger logging.Logger) *mempool {
 	m := new(mempool)
-	m.logger.Set(logging.FromCometBFT(logger))
+	m.logger.Set(logger)
 	m.pool = map[[32]byte]*mpEntry{}
 	return m
 }

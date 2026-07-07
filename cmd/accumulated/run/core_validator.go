@@ -19,7 +19,7 @@ import (
 
 func (c *CoreValidatorConfiguration) apply(_ *Instance, cfg *Config) error {
 	// Set core validator defaults
-	setDefaultPtr(&c.StorageType, StorageTypeLevelDB)
+	setDefaultPtr(&c.StorageType, DefaultStorageType)
 
 	// Validate
 	if c.Listen == nil {

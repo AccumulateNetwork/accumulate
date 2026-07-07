@@ -212,6 +212,12 @@ func initNetwork(cmd *cobra.Command, args []string) {
 			cfg.Configurations = []run.Configuration{cvc}
 			cvc.Listen = node.Listen().Scheme("tcp").Directory().TendermintP2P().Multiaddr()
 			cvc.BVN = bvn.Id
+
+			// Pin the storage backend in the generated config. The backend of
+			// an existing node must never depend on the running binary's
+			// default - that could reboot a node into a different (empty)
+			// database.
+			cvc.StorageType = run.Ptr(run.DefaultStorageType)
 			// Use Directory().AccumulateP2P() for all bootstrap peers to match the actual P2P listen port
 			// (CoreValidatorConfiguration derives P2P listen from cvc.Listen + portDir + portAccP2P = base + 0 + 2)
 			cvc.BvnBootstrapPeers = bvn.Peers(node).Scheme("tcp").Directory().AccumulateP2P().WithKey().Multiaddr()

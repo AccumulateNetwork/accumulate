@@ -5,6 +5,11 @@
 **Topology**: 3 BVNs (Block Validator Networks)  
 **Total Nodes**: 12 validators (4 per BVN)
 
+The network runs in **docker** (`test/docker/docker-compose.yml`: bootstrap +
+init + 12 validators). `test/run-dagbft-network.sh up` builds, starts, and
+waits for block production; node APIs are on host ports 26660-26671. The
+loopback addresses below describe the container-internal layout.
+
 ### BVN1 - 4 Validator Nodes
 - Node 1: 127.0.1.1:26656
 - Node 2: 127.0.1.2:26656
@@ -35,7 +40,7 @@ cd test
 
 # In another terminal, run load test
 cd test/cmd/load
-go run . -s http://127.0.1.1:26660/v2 -t 10 -d 1800 -dashboard
+go run . -s http://127.0.0.1:26660/v2 -t 10 -d 1800 -dashboard
 
 # Monitor for:
 - Block production consistency
@@ -55,7 +60,7 @@ go run . -s http://127.0.1.1:26660/v2 -t 10 -d 1800 -dashboard
 #### Test 1.2: Medium Load (100 TPS)
 ```bash
 # Same setup, higher TPS
-go run . -s http://127.0.1.1:26660/v2 -t 100 -d 1800 -dashboard
+go run . -s http://127.0.0.1:26660/v2 -t 100 -d 1800 -dashboard
 ```
 
 **Success Criteria**:
@@ -70,7 +75,7 @@ go run . -s http://127.0.1.1:26660/v2 -t 100 -d 1800 -dashboard
 #### Test 2.1: Sustained Load (50 TPS)
 ```bash
 # 24-hour test
-go run . -s http://127.0.1.1:26660/v2 -t 50 -d 86400 -dashboard
+go run . -s http://127.0.0.1:26660/v2 -t 50 -d 86400 -dashboard
 ```
 
 **Success Criteria**:
@@ -91,7 +96,7 @@ watch -n 10 'ps aux | grep accumulated-dagbft | awk "{print \$2, \$3, \$4, \$6}"
 tail -f /tmp/dagbft-*.log | grep -E "ERROR|FATAL|panic"
 
 # Check block heights
-curl http://127.0.1.1:26660/v2/metrics | grep block_height
+curl http://127.0.0.1:26660/v2/metrics | grep block_height
 ```
 
 ### Phase 3: Stress Tests
@@ -99,7 +104,7 @@ curl http://127.0.1.1:26660/v2/metrics | grep block_height
 #### Test 3.1: Peak Load (200 TPS)
 ```bash
 # 30-minute peak load test
-go run . -s http://127.0.1.1:26660/v2 -t 200 -d 1800 -dashboard
+go run . -s http://127.0.0.1:26660/v2 -t 200 -d 1800 -dashboard
 ```
 
 **Success Criteria**:

@@ -248,7 +248,7 @@ func (f *simFactory) getLogger() log.Logger {
 		return f.logger
 	}
 
-	f.logger = (*logging.Slogger)(slog.Default()).With("module", "sim")
+	f.logger = logging.CometBFTLogger((*logging.Slogger)(slog.Default()).With("module", "sim"))
 	return f.logger
 }
 
