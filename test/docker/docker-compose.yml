@@ -21,7 +21,10 @@ services:
     container_name: acc-bootstrap
     mem_limit: 1g
     ports:
-      - "16593:16593"
+      # Host port 16653 (not 16593) - accman-managed follower nodes use the
+      # 165xx range on the host. In-network peers reach acc-bootstrap:16593
+      # via docker DNS regardless of this mapping.
+      - "16653:16593"
     entrypoint: ["/bin/accumulated-bootstrap"]
     command:
       - --listen
