@@ -21,3 +21,14 @@ const ServiceTypeSequencer api.ServiceType = 0xF001
 type Sequencer interface {
 	Sequence(ctx context.Context, src, dst *url.URL, num uint64, opts SequenceOptions) (*api.MessageRecord[messaging.Message], error)
 }
+
+// SequenceRanger is an optional extension of [Sequencer] that serves a
+// contiguous range of synthetic messages with a single collection proof
+// (#4048). The proof (a merkle.ReceiptList covering every message of the
+// range) is set as SourceReceiptList on the last record. Implementations that
+// do not support ranges simply do not implement this interface, and callers
+// fall back to per-message [Sequencer.Sequence] calls.
+type SequenceRanger interface {
+	Sequencer
+	SequenceRange(ctx context.Context, src, dst *url.URL, start, end uint64, opts SequenceOptions) ([]*api.MessageRecord[messaging.Message], error)
+}

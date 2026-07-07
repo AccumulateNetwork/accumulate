@@ -267,15 +267,16 @@ type MessageRecord[T messaging.Message] struct {
 	Error     *errors2.Error             `json:"error,omitempty" form:"error" query:"error" validate:"required"`
 	Result    protocol.TransactionResult `json:"result,omitempty" form:"result" query:"result" validate:"required"`
 	// Received is the block when the transaction was first received.
-	Received      uint64                            `json:"received,omitempty" form:"received" query:"received" validate:"required"`
-	Produced      *RecordRange[*TxIDRecord]         `json:"produced,omitempty" form:"produced" query:"produced" validate:"required"`
-	Cause         *RecordRange[*TxIDRecord]         `json:"cause,omitempty" form:"cause" query:"cause" validate:"required"`
-	Signatures    *RecordRange[*SignatureSetRecord] `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
-	Historical    bool                              `json:"historical,omitempty" form:"historical" query:"historical" validate:"required"`
-	Sequence      *messaging.SequencedMessage       `json:"sequence,omitempty" form:"sequence" query:"sequence"`
-	SourceReceipt *merkle.Receipt                   `json:"sourceReceipt,omitempty" form:"sourceReceipt" query:"sourceReceipt" validate:"required"`
-	LastBlockTime *time.Time                        `json:"lastBlockTime,omitempty" form:"lastBlockTime" query:"lastBlockTime" validate:"required"`
-	extraData     []byte
+	Received          uint64                            `json:"received,omitempty" form:"received" query:"received" validate:"required"`
+	Produced          *RecordRange[*TxIDRecord]         `json:"produced,omitempty" form:"produced" query:"produced" validate:"required"`
+	Cause             *RecordRange[*TxIDRecord]         `json:"cause,omitempty" form:"cause" query:"cause" validate:"required"`
+	Signatures        *RecordRange[*SignatureSetRecord] `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
+	Historical        bool                              `json:"historical,omitempty" form:"historical" query:"historical" validate:"required"`
+	Sequence          *messaging.SequencedMessage       `json:"sequence,omitempty" form:"sequence" query:"sequence"`
+	SourceReceipt     *merkle.Receipt                   `json:"sourceReceipt,omitempty" form:"sourceReceipt" query:"sourceReceipt" validate:"required"`
+	SourceReceiptList *merkle.ReceiptList               `json:"sourceReceiptList,omitempty" form:"sourceReceiptList" query:"sourceReceiptList"`
+	LastBlockTime     *time.Time                        `json:"lastBlockTime,omitempty" form:"lastBlockTime" query:"lastBlockTime" validate:"required"`
+	extraData         []byte
 }
 
 type Metrics struct {
@@ -1124,6 +1125,9 @@ func (v *MessageRecord[T]) Copy() *MessageRecord[T] {
 	if v.SourceReceipt != nil {
 		u.SourceReceipt = (v.SourceReceipt).Copy()
 	}
+	if v.SourceReceiptList != nil {
+		u.SourceReceiptList = (v.SourceReceiptList).Copy()
+	}
 	if v.LastBlockTime != nil {
 		u.LastBlockTime = new(time.Time)
 		*u.LastBlockTime = *v.LastBlockTime
@@ -1161,6 +1165,7 @@ func MessageRecordAs[T2 messaging.Message, T1 messaging.Message](v *MessageRecor
 	u.Historical = v.Historical
 	u.Sequence = v.Sequence
 	u.SourceReceipt = v.SourceReceipt
+	u.SourceReceiptList = v.SourceReceiptList
 	u.LastBlockTime = v.LastBlockTime
 	return u, nil
 }
@@ -2303,6 +2308,14 @@ func (v *MessageRecord[T]) Equal(u *MessageRecord[T]) bool {
 	case v.SourceReceipt == nil || u.SourceReceipt == nil:
 		return false
 	case !((v.SourceReceipt).Equal(u.SourceReceipt)):
+		return false
+	}
+	switch {
+	case v.SourceReceiptList == u.SourceReceiptList:
+		// equal
+	case v.SourceReceiptList == nil || u.SourceReceiptList == nil:
+		return false
+	case !((v.SourceReceiptList).Equal(u.SourceReceiptList)):
 		return false
 	}
 	switch {
@@ -4599,7 +4612,8 @@ var fieldNames_MessageRecord = []string{
 	11: "Historical",
 	12: "Sequence",
 	13: "SourceReceipt",
-	14: "LastBlockTime",
+	14: "SourceReceiptList",
+	15: "LastBlockTime",
 }
 
 func (v *MessageRecord[T]) MarshalBinary() ([]byte, error) {
@@ -4649,8 +4663,11 @@ func (v *MessageRecord[T]) MarshalBinary() ([]byte, error) {
 	if !(v.SourceReceipt == nil) {
 		writer.WriteValue(13, v.SourceReceipt.MarshalBinary)
 	}
+	if !(v.SourceReceiptList == nil) {
+		writer.WriteValue(14, v.SourceReceiptList.MarshalBinary)
+	}
 	if !(v.LastBlockTime == nil) {
-		writer.WriteTime(14, *v.LastBlockTime)
+		writer.WriteTime(15, *v.LastBlockTime)
 	}
 
 	_, _, err := writer.Reset(fieldNames_MessageRecord)
@@ -4726,7 +4743,7 @@ func (v *MessageRecord[T]) IsValid() error {
 	} else if v.SourceReceipt == nil {
 		errs = append(errs, "field SourceReceipt is not set")
 	}
-	if len(v.fieldsSet) > 13 && !v.fieldsSet[13] {
+	if len(v.fieldsSet) > 14 && !v.fieldsSet[14] {
 		errs = append(errs, "field LastBlockTime is missing")
 	} else if v.LastBlockTime == nil {
 		errs = append(errs, "field LastBlockTime is not set")
@@ -7267,7 +7284,10 @@ func (v *MessageRecord[T]) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x := new(merkle.Receipt); reader.ReadValue(13, x.UnmarshalBinaryFrom) {
 		v.SourceReceipt = x
 	}
-	if x, ok := reader.ReadTime(14); ok {
+	if x := new(merkle.ReceiptList); reader.ReadValue(14, x.UnmarshalBinaryFrom) {
+		v.SourceReceiptList = x
+	}
+	if x, ok := reader.ReadTime(15); ok {
 		v.LastBlockTime = &x
 	}
 
@@ -8250,6 +8270,7 @@ func init() {
 		encoding.NewTypeField("historical", "bool"),
 		encoding.NewTypeField("sequence", "messaging.SequencedMessage"),
 		encoding.NewTypeField("sourceReceipt", "merkle.Receipt"),
+		encoding.NewTypeField("sourceReceiptList", "merkle.ReceiptList"),
 		encoding.NewTypeField("lastBlockTime", "string"),
 	}, "MessageRecord", "messageRecord")
 
@@ -8939,22 +8960,23 @@ func (v *MessageHashSearchQuery) MarshalJSON() ([]byte, error) {
 
 func (v *MessageRecord[T]) MarshalJSON() ([]byte, error) {
 	u := struct {
-		RecordType    RecordType                                              `json:"recordType"`
-		ID            *url.TxID                                               `json:"id,omitempty"`
-		Message       *encoding.JsonUnmarshalWith[T]                          `json:"message,omitempty"`
-		Status        errors2.Status                                          `json:"status,omitempty"`
-		StatusNo      uint64                                                  `json:"statusNo,omitempty"`
-		Error         *errors2.Error                                          `json:"error,omitempty"`
-		Result        *encoding.JsonUnmarshalWith[protocol.TransactionResult] `json:"result,omitempty"`
-		Received      uint64                                                  `json:"received,omitempty"`
-		Produced      *RecordRange[*TxIDRecord]                               `json:"produced,omitempty"`
-		Cause         *RecordRange[*TxIDRecord]                               `json:"cause,omitempty"`
-		Signatures    *RecordRange[*SignatureSetRecord]                       `json:"signatures,omitempty"`
-		Historical    bool                                                    `json:"historical,omitempty"`
-		Sequence      *messaging.SequencedMessage                             `json:"sequence,omitempty"`
-		SourceReceipt *merkle.Receipt                                         `json:"sourceReceipt,omitempty"`
-		LastBlockTime *time.Time                                              `json:"lastBlockTime,omitempty"`
-		ExtraData     *string                                                 `json:"$epilogue,omitempty"`
+		RecordType        RecordType                                              `json:"recordType"`
+		ID                *url.TxID                                               `json:"id,omitempty"`
+		Message           *encoding.JsonUnmarshalWith[T]                          `json:"message,omitempty"`
+		Status            errors2.Status                                          `json:"status,omitempty"`
+		StatusNo          uint64                                                  `json:"statusNo,omitempty"`
+		Error             *errors2.Error                                          `json:"error,omitempty"`
+		Result            *encoding.JsonUnmarshalWith[protocol.TransactionResult] `json:"result,omitempty"`
+		Received          uint64                                                  `json:"received,omitempty"`
+		Produced          *RecordRange[*TxIDRecord]                               `json:"produced,omitempty"`
+		Cause             *RecordRange[*TxIDRecord]                               `json:"cause,omitempty"`
+		Signatures        *RecordRange[*SignatureSetRecord]                       `json:"signatures,omitempty"`
+		Historical        bool                                                    `json:"historical,omitempty"`
+		Sequence          *messaging.SequencedMessage                             `json:"sequence,omitempty"`
+		SourceReceipt     *merkle.Receipt                                         `json:"sourceReceipt,omitempty"`
+		SourceReceiptList *merkle.ReceiptList                                     `json:"sourceReceiptList,omitempty"`
+		LastBlockTime     *time.Time                                              `json:"lastBlockTime,omitempty"`
+		ExtraData         *string                                                 `json:"$epilogue,omitempty"`
 	}{}
 	u.RecordType = v.RecordType()
 	if !(v.ID == nil) {
@@ -8995,6 +9017,9 @@ func (v *MessageRecord[T]) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.SourceReceipt == nil) {
 		u.SourceReceipt = v.SourceReceipt
+	}
+	if !(v.SourceReceiptList == nil) {
+		u.SourceReceiptList = v.SourceReceiptList
 	}
 	if !(v.LastBlockTime == nil) {
 		u.LastBlockTime = v.LastBlockTime
@@ -10022,22 +10047,23 @@ func (v *MessageHashSearchQuery) UnmarshalJSON(data []byte) error {
 
 func (v *MessageRecord[T]) UnmarshalJSON(data []byte) error {
 	u := struct {
-		RecordType    RecordType                                              `json:"recordType"`
-		ID            *url.TxID                                               `json:"id,omitempty"`
-		Message       *encoding.JsonUnmarshalWith[T]                          `json:"message,omitempty"`
-		Status        errors2.Status                                          `json:"status,omitempty"`
-		StatusNo      uint64                                                  `json:"statusNo,omitempty"`
-		Error         *errors2.Error                                          `json:"error,omitempty"`
-		Result        *encoding.JsonUnmarshalWith[protocol.TransactionResult] `json:"result,omitempty"`
-		Received      uint64                                                  `json:"received,omitempty"`
-		Produced      *RecordRange[*TxIDRecord]                               `json:"produced,omitempty"`
-		Cause         *RecordRange[*TxIDRecord]                               `json:"cause,omitempty"`
-		Signatures    *RecordRange[*SignatureSetRecord]                       `json:"signatures,omitempty"`
-		Historical    bool                                                    `json:"historical,omitempty"`
-		Sequence      *messaging.SequencedMessage                             `json:"sequence,omitempty"`
-		SourceReceipt *merkle.Receipt                                         `json:"sourceReceipt,omitempty"`
-		LastBlockTime *time.Time                                              `json:"lastBlockTime,omitempty"`
-		ExtraData     *string                                                 `json:"$epilogue,omitempty"`
+		RecordType        RecordType                                              `json:"recordType"`
+		ID                *url.TxID                                               `json:"id,omitempty"`
+		Message           *encoding.JsonUnmarshalWith[T]                          `json:"message,omitempty"`
+		Status            errors2.Status                                          `json:"status,omitempty"`
+		StatusNo          uint64                                                  `json:"statusNo,omitempty"`
+		Error             *errors2.Error                                          `json:"error,omitempty"`
+		Result            *encoding.JsonUnmarshalWith[protocol.TransactionResult] `json:"result,omitempty"`
+		Received          uint64                                                  `json:"received,omitempty"`
+		Produced          *RecordRange[*TxIDRecord]                               `json:"produced,omitempty"`
+		Cause             *RecordRange[*TxIDRecord]                               `json:"cause,omitempty"`
+		Signatures        *RecordRange[*SignatureSetRecord]                       `json:"signatures,omitempty"`
+		Historical        bool                                                    `json:"historical,omitempty"`
+		Sequence          *messaging.SequencedMessage                             `json:"sequence,omitempty"`
+		SourceReceipt     *merkle.Receipt                                         `json:"sourceReceipt,omitempty"`
+		SourceReceiptList *merkle.ReceiptList                                     `json:"sourceReceiptList,omitempty"`
+		LastBlockTime     *time.Time                                              `json:"lastBlockTime,omitempty"`
+		ExtraData         *string                                                 `json:"$epilogue,omitempty"`
 	}{}
 	u.RecordType = v.RecordType()
 	u.ID = v.ID
@@ -10053,6 +10079,7 @@ func (v *MessageRecord[T]) UnmarshalJSON(data []byte) error {
 	u.Historical = v.Historical
 	u.Sequence = v.Sequence
 	u.SourceReceipt = v.SourceReceipt
+	u.SourceReceiptList = v.SourceReceiptList
 	u.LastBlockTime = v.LastBlockTime
 	err := json.Unmarshal(data, &u)
 	if err != nil {
@@ -10079,6 +10106,7 @@ func (v *MessageRecord[T]) UnmarshalJSON(data []byte) error {
 	v.Historical = u.Historical
 	v.Sequence = u.Sequence
 	v.SourceReceipt = u.SourceReceipt
+	v.SourceReceiptList = u.SourceReceiptList
 	v.LastBlockTime = u.LastBlockTime
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
