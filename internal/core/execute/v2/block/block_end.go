@@ -487,6 +487,18 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	// Once collection proofs are active, recover a run of missing synthetic
+	// messages with a single range request and one shared collection proof
+	// (#4048) instead of a per-message query. Falls back to the per-message
+	// path if the source does not serve ranges.
+	if !anchor && x.globals.Active.ExecutorVersion.VNextEnabled() {
+		if ranger, ok := x.Sequencer.(private.SequenceRanger); ok {
+			if x.requestMissingViaRange(ctx, dispatcher, ranger, partition) {
+				return
+			}
+		}
+	}
+
 	// For each pending synthetic transaction
 	dest := x.Describe.NodeUrl()
 	for i, txid := range partition.Pending {
@@ -607,6 +619,88 @@ func (x *Executor) getKeySignature(r *api.MessageRecord[messaging.Message], part
 		}
 	}
 	return nil, false
+}
+
+// requestMissingViaRange recovers the missing synthetic messages of partition
+// with a single range request. The source returns the run of messages with one
+// collection proof (a ReceiptList covering every message), which each
+// re-submitted message carries. Returns false if recovery was not possible, in
+// which case the caller falls back to per-message requests.
+func (x *Executor) requestMissingViaRange(ctx context.Context, dispatcher Dispatcher, ranger private.SequenceRanger, partition *protocol.PartitionSyntheticLedger) bool {
+	// Find the run of unknown messages
+	first, last := uint64(0), uint64(0)
+	for i, txid := range partition.Pending {
+		if txid != nil {
+			continue
+		}
+		seqNum := partition.Delivered + uint64(i) + 1
+		if first == 0 {
+			first = seqNum
+		}
+		last = seqNum
+	}
+	if first == 0 {
+		return true // Nothing to do
+	}
+
+	src := partition.Url.JoinPath(protocol.Synthetic)
+	dest := x.Describe.NodeUrl()
+	x.logger.Info("Recovering missing synthetic transactions", "source", partition.Url, "start", first, "end", last)
+
+	records, err := ranger.SequenceRange(ctx, src, dest, first, last, private.SequenceOptions{})
+	if err != nil {
+		x.logger.Error("Failed to request sequenced transaction range", "error", err, "from", src, "start", first, "end", last)
+		return false
+	}
+	if len(records) == 0 {
+		return false
+	}
+
+	// The collection proof is set on the last record and covers the whole run
+	list := records[len(records)-1].SourceReceiptList
+	if list == nil {
+		x.logger.Error("Response to range request is missing the collection proof", "from", partition.Url, "start", first, "end", last)
+		return false
+	}
+
+	for _, resp := range records {
+		// Sanity check: the response includes a transaction
+		if resp.Message == nil || resp.Sequence == nil || resp.Sequence.Source == nil || resp.Signatures == nil {
+			x.logger.Error("Response to range request is missing required fields", "from", partition.Url)
+			return false
+		}
+
+		seq := &messaging.SequencedMessage{
+			Message:     resp.Message,
+			Source:      resp.Sequence.Source,
+			Destination: resp.Sequence.Destination,
+			Number:      resp.Sequence.Number,
+		}
+
+		keySig, bad := x.getKeySignature(resp, partition, seq, false)
+		if keySig == nil || bad {
+			x.logger.Error("Invalid message in range response", "error", "missing key signature", "hash", logging.AsHex(resp.Message.Hash()).Slice(0, 4))
+			return false
+		}
+
+		msg := &messaging.SyntheticMessage{
+			Message:   seq,
+			Signature: keySig,
+			Proof: &protocol.AnnotatedReceipt{
+				ReceiptList: list,
+				Anchor: &protocol.AnchorMetadata{
+					Account: protocol.DnUrl(),
+				},
+			},
+		}
+
+		err = dispatcher.Submit(ctx, dest, &messaging.Envelope{Messages: []messaging.Message{msg}})
+		if err != nil {
+			x.logger.Error("Failed to dispatch recovered transaction", "error", err, "from", partition.Url)
+			return false
+		}
+	}
+	return true
 }
 
 func (b *Block) shouldSendAnchor() bool {
