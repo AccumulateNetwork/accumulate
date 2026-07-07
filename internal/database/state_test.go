@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
@@ -81,7 +82,7 @@ func TestState(t *testing.T) {
 
 func TestVersion(t *testing.T) {
 	logger := acctesting.NewTestLogger(t)
-	db := database.OpenInMemory(logger)
+	db := database.OpenInMemory(logging.FromCometBFT(logger))
 
 	foo := protocol.AccountUrl("foo")
 	get := func(batch *database.Batch) (a *protocol.UnknownSigner) {
