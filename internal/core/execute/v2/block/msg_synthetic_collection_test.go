@@ -17,6 +17,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	dbmerkle "gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -154,9 +155,42 @@ func TestSyntheticCollectionProof(t *testing.T) {
 		require.NoError(t, status.AsError())
 	})
 
-	t.Run("process rejects an unknown anchor", func(t *testing.T) {
+	t.Run("process leaves an unknown anchor pending, then retries", func(t *testing.T) {
+		// Before activation an unknown anchor is a terminal failure; once
+		// collection proofs are active it must stay retryable (#4048)
 		block := newBlock(protocol.ExecutorVersionVNext)
-		status, err := run(t, block, newMsg(collectionProof), false, SyntheticMessage.Process)
+		msg := newMsg(collectionProof)
+		ctx := &MessageContext{message: msg, bundle: &bundle{Block: block}}
+		db := database.OpenInMemory(nil)
+		batch := db.Begin(true)
+		t.Cleanup(batch.Discard)
+
+		// Without the anchor the message is recorded pending, not failed
+		status, err := x.Process(batch, ctx)
+		require.NoError(t, err)
+		require.Equal(t, errors.Pending, status.Code)
+
+		// Once the anchor arrives, reprocessing the same message delivers it
+		require.NoError(t, batch.Account(ctx.Executor.Describe.AnchorPool()).
+			AnchorChain(protocol.Directory).
+			Root().
+			Inner().
+			AddEntry(collectionProof.TerminalAnchor(), false))
+		ctx = &MessageContext{message: msg, bundle: &bundle{Block: block}}
+		status, err = x.Process(batch, ctx)
+		require.NoError(t, err)
+		require.Equal(t, errors.Delivered, status.Code)
+	})
+
+	t.Run("process fails terminally on an unknown anchor before activation", func(t *testing.T) {
+		// The pre-activation path must be unchanged: individual proof, latest
+		// released version, unknown anchor -> terminal failure
+		block := newBlock(protocol.ExecutorVersionV2Tanegashima)
+		individual := &protocol.AnnotatedReceipt{
+			Anchor:  &protocol.AnchorMetadata{Account: protocol.UnknownUrl()},
+			Receipt: &dbmerkle.Receipt{Start: hash[:], Anchor: hash[:]},
+		}
+		status, err := run(t, block, newMsg(individual), false, SyntheticMessage.Process)
 		require.NoError(t, err)
 		require.ErrorContains(t, status.AsError(), "not a known directory anchor")
 	})

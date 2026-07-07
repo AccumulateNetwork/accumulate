@@ -180,6 +180,16 @@ func (x SyntheticMessage) Process(batch *database.Batch, ctx *MessageContext) (_
 	// Process the message (error is handled by the next step)
 	err = x.process(batch, ctx)
 
+	// A pending result is not a failure — record the message with a pending
+	// status, leaving it retryable for when the proof's anchor arrives
+	if errors.Code(err) == errors.Pending {
+		err = ctx.recordMessageAndStatus(batch, status, errors.Pending, nil)
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+		return status, nil
+	}
+
 	// Record the message and its status
 	err = ctx.recordMessageAndStatus(batch, status, errors.Delivered, err)
 	if err != nil {
@@ -207,6 +217,13 @@ func (x SyntheticMessage) process(batch *database.Batch, ctx *MessageContext) er
 	case err == nil:
 		// Ok
 	case errors.Is(err, errors.NotFound):
+		// If the anchor simply hasn't arrived yet, failing the message
+		// terminally wedges recovery: the same message can never be
+		// re-applied once the anchor shows up. Once collection proofs are
+		// active, record it as pending instead so it can be retried (#4048).
+		if ctx.GetActiveGlobals().ExecutorVersion.VNextEnabled() {
+			return errors.Pending.WithFormat("proof anchor %x has not been received", anchor)
+		}
 		return errors.BadRequest.WithFormat("invalid proof anchor: %x is not a known directory anchor", anchor)
 	default:
 		return errors.UnknownError.WithFormat("search for directory anchor %x: %w", anchor, err)
