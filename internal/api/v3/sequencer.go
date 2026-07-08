@@ -428,9 +428,6 @@ func (s *Sequencer) SequenceRange(ctx context.Context, src, dst *url.URL, start,
 	if !s.partition.URL.ParentOf(src) {
 		return nil, errors.BadRequest.WithFormat("requested source is %s but this partition is %s", src.RootIdentity(), s.partitionID)
 	}
-	if !s.partition.Synthetic().Equal(src) {
-		return nil, errors.BadRequest.With("only synthetic sequence ranges are supported")
-	}
 
 	globals := s.globals.Load().(*core.GlobalValues)
 	if globals == nil {
@@ -439,10 +436,20 @@ func (s *Sequencer) SequenceRange(ctx context.Context, src, dst *url.URL, start,
 
 	var r []*api.MessageRecord[messaging.Message]
 	var err error
-	return r, s.db.View(func(batch *database.Batch) error {
-		r, err = s.getSynthRange(batch, globals, dst, start, end)
-		return err
-	})
+	switch {
+	case s.partition.Synthetic().Equal(src):
+		return r, s.db.View(func(batch *database.Batch) error {
+			r, err = s.getSynthRange(batch, globals, dst, start, end)
+			return err
+		})
+	case s.partition.AnchorPool().Equal(src):
+		return r, s.db.View(func(batch *database.Batch) error {
+			r, err = s.getAnchorRange(batch, globals, dst, start, end)
+			return err
+		})
+	default:
+		return nil, errors.BadRequest.With("only synthetic and anchor sequence ranges are supported")
+	}
 }
 
 func (s *Sequencer) getSynthRange(batch *database.Batch, globals *core.GlobalValues, dst *url.URL, start, end uint64) ([]*api.MessageRecord[messaging.Message], error) {
@@ -546,6 +553,125 @@ func (s *Sequencer) getSynthRange(batch *database.Batch, globals *core.GlobalVal
 	}
 
 	list, err := merkle.GetReceiptList(ledger.MainChain().Inner(), int64(indices[0]), int64(mainAnchorEntry.Source))
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("build receipt list: %w", err)
+	}
+	list.ContinuedReceipt = continued
+	if !list.Validate(nil) {
+		return nil, errors.InternalError.With("built an invalid receipt list")
+	}
+	records[len(records)-1].SourceReceiptList = list
+
+	return records, nil
+}
+
+// getAnchorRange serves anchors start through end (inclusive, 1-based) for
+// the given destination, with a single collection proof covering the whole
+// range (#4056). The proof is built over the anchor sequence chain, whose
+// entries are the hashes of the anchor transactions in their canonical stored
+// form (no principal). Unlike synthetic messages, anchor sequence numbers map
+// directly to chain indices — sequence n is entry n-1 — and the same run
+// serves every destination.
+func (s *Sequencer) getAnchorRange(batch *database.Batch, globals *core.GlobalValues, dst *url.URL, start, end uint64) ([]*api.MessageRecord[messaging.Message], error) {
+	ledger := batch.Account(s.partition.AnchorPool())
+	sequenceChain, err := ledger.AnchorSequenceChain().Get()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load anchor sequence chain: %w", err)
+	}
+	if end > uint64(sequenceChain.Height()) {
+		return nil, errors.NotFound.WithFormat("anchor %d not found: chain has %d entries", end, sequenceChain.Height())
+	}
+
+	records := make([]*api.MessageRecord[messaging.Message], 0, end-start+1)
+	for num := start; num <= end; num++ {
+		hash, err := sequenceChain.Entry(int64(num) - 1)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("load anchor sequence chain entry %d: %w", num-1, err)
+		}
+
+		var msg messaging.MessageWithTransaction
+		err = batch.Message2(hash).Main().GetAs(&msg)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("load anchor %d: %w", num, err)
+		}
+
+		// Serve the stored body verbatim — the proof binds the destination to
+		// the canonical stored form, so the served body must hash to the
+		// chain entry once the principal is stripped. Post-Vandenberg all
+		// anchors sent from the DN are identical across destinations, and
+		// this path is only used post-Kourou.
+		txn := new(protocol.Transaction)
+		txn.Header.Principal = dst.JoinPath(protocol.AnchorPool)
+		txn.Body = msg.GetTransaction().Body
+
+		seq := new(messaging.SequencedMessage)
+		seq.Message = &messaging.TransactionMessage{Transaction: txn}
+		seq.Source = s.partition.URL
+		seq.Destination = dst
+		seq.Number = num
+
+		// Sign the sequenced message opportunistically. The collection proof
+		// is the authorization; the signature only helps old-style checks.
+		h := seq.Hash()
+		keySig, err := new(signing.Builder).
+			SetType(protocol.SignatureTypeED25519).
+			SetPrivateKey(s.valKey).
+			SetUrl(s.partition.JoinPath(protocol.Network)).
+			SetVersion(globals.Network.Version).
+			SetTimestampToNow().
+			Sign(h[:])
+		if err != nil {
+			return nil, errors.InternalError.Wrap(err)
+		}
+
+		r := new(api.MessageRecord[messaging.Message])
+		r.ID = txn.ID()
+		r.Sequence = seq
+		r.Message = seq.Message
+
+		sigMsg := &messaging.SignatureMessage{
+			Signature: keySig,
+			TxID:      r.ID,
+		}
+		r.Signatures = &api.RecordRange[*api.SignatureSetRecord]{
+			Total: 1,
+			Records: []*api.SignatureSetRecord{{
+				Account: &protocol.UnknownAccount{Url: keySig.GetSigner()},
+				Signatures: &api.RecordRange[*api.MessageRecord[messaging.Message]]{
+					Total: 1,
+					Records: []*api.MessageRecord[messaging.Message]{{
+						ID:      sigMsg.ID(),
+						Message: sigMsg,
+					}},
+				},
+			}},
+		}
+		records = append(records, r)
+	}
+
+	// Extend the proven range to the block-boundary anchor point covering the
+	// last entry, so the proof can be continued to a directory-anchored root
+	indexChain, err := ledger.AnchorSequenceChain().Index().Get()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load anchor sequence index chain: %w", err)
+	}
+	if indexChain.Height() == 0 {
+		return nil, errors.Conflict.With("anchor sequence index chain is empty")
+	}
+	_, anchorEntry, err := indexing.SearchIndexChain(indexChain, uint64(indexChain.Height()-1), indexing.MatchAfter, indexing.SearchIndexChainBySource(end-1))
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("locate index entry for anchor sequence chain entry %d: %w", end-1, err)
+	}
+
+	continued, err := s.getRootContinuation(batch, anchorEntry)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	if continued == nil {
+		return nil, errors.NotReady.With("the directory has not receipted the block yet")
+	}
+
+	list, err := merkle.GetReceiptList(ledger.AnchorSequenceChain().Inner(), int64(start)-1, int64(anchorEntry.Source))
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("build receipt list: %w", err)
 	}
