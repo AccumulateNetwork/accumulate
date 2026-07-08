@@ -15,6 +15,7 @@ import (
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -31,12 +32,14 @@ func startDHT(host host.Host, ctx context.Context, mode dht.ModeOpt, bootstrapPe
 
 	// Connect to the bootstrap peers
 	wg := new(sync.WaitGroup)
+	var peers []*peer.AddrInfo
 	for _, addr := range bootstrapPeers {
 		addr = oldQuicCompat(addr)
 		pi, err := peer.AddrInfoFromP2pAddr(addr)
 		if err != nil {
 			return nil, errors.BadRequest.WithFormat("parse address: %w", err)
 		}
+		peers = append(peers, pi)
 
 		wg.Add(1)
 		go func() {
@@ -71,6 +74,35 @@ func startDHT(host host.Host, ctx context.Context, mode dht.ModeOpt, bootstrapPe
 		}()
 	}
 	wg.Wait()
+
+	// Keep bootstrap connectivity alive FOREVER, not just at startup.
+	// Connections die when a peer is unreachable for a while (network
+	// outage, paused or restarting container) and nothing else re-dials:
+	// gossipsub only attaches peers when a connection forms, so a node
+	// that loses its peers stays isolated indefinitely — observed as a
+	// partition whose consensus never resumes after a brief outage (#4056).
+	go func() {
+		ticker := time.NewTicker(15 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
+			for _, pi := range peers {
+				if host.Network().Connectedness(pi.ID) == network.Connected {
+					continue
+				}
+				pi := pi
+				go func() {
+					if err := host.Connect(ctx, *pi); err == nil {
+						slog.Info("Reconnected to bootstrap peer", "peer", pi.ID, "module", "api")
+					}
+				}()
+			}
+		}
+	}()
 
 	// Bootstrap the DHT?
 	err = d.Bootstrap(ctx)
