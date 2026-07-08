@@ -14,18 +14,34 @@ import (
 )
 
 // Default rate limiting configuration values.
+//
+// The limits must sit well above legitimate consensus traffic: every header
+// rebroadcast triggers a vote resend from every validator that already voted,
+// so a committee of N validators recovering from a delivery gap legitimately
+// produces N × pending-headers votes per rebroadcast pass. With the previous
+// defaults (100/s, ban 5 minutes, violations never forgiven) the Directory
+// partition's own recovery traffic tripped the limiter, votes were dropped,
+// certificates never formed, and consensus stalled permanently (#4054). The
+// limiter exists to stop a malfunctioning peer from flooding us, not to
+// police normal bursts — banning a committee member is a liveness hazard.
 const (
 	// DefaultVotesPerSecond is the default maximum votes per second per peer.
-	DefaultVotesPerSecond = 100
+	DefaultVotesPerSecond = 1000
 
 	// DefaultBurstSize is the default burst allowance for votes.
-	DefaultBurstSize = 200
+	DefaultBurstSize = 2000
 
 	// DefaultBanThreshold is the default number of rate limit violations before banning.
 	DefaultBanThreshold = 5
 
 	// DefaultBanDuration is the default duration for which a peer is banned.
-	DefaultBanDuration = 5 * time.Minute
+	DefaultBanDuration = 30 * time.Second
+
+	// DefaultViolationDecay is how long a peer must behave before its
+	// accumulated violations are forgiven. Without decay, a peer that ever
+	// reaches the ban threshold is re-banned by its next single violation,
+	// which makes any ban effectively permanent under load.
+	DefaultViolationDecay = 30 * time.Second
 )
 
 // RateLimitConfig configures the rate limiter.
@@ -45,6 +61,10 @@ type RateLimitConfig struct {
 	// BanDuration is how long a peer is banned after exceeding threshold.
 	// Defaults to DefaultBanDuration.
 	BanDuration time.Duration
+
+	// ViolationDecay is how long a peer must go without violations before
+	// its violation count resets. Defaults to DefaultViolationDecay.
+	ViolationDecay time.Duration
 }
 
 // applyDefaults fills in default values for unset configuration fields.
@@ -61,6 +81,9 @@ func (c *RateLimitConfig) applyDefaults() {
 	if c.BanDuration <= 0 {
 		c.BanDuration = DefaultBanDuration
 	}
+	if c.ViolationDecay <= 0 {
+		c.ViolationDecay = DefaultViolationDecay
+	}
 }
 
 // peerBucket tracks the token bucket state for a single peer.
@@ -68,6 +91,7 @@ type peerBucket struct {
 	tokens        float64   // Current tokens available
 	lastUpdate    time.Time // Last time tokens were updated
 	violations    int       // Number of rate limit violations
+	lastViolation time.Time // Last time a violation occurred
 	bannedUntil   time.Time // Time until which peer is banned
 	totalRejected int64     // Total votes rejected for metrics
 }
@@ -128,6 +152,7 @@ func (r *PeerRateLimiter) Allow(peerID peer.ID) bool {
 	if bucket.tokens < 1.0 {
 		// Rate limit exceeded
 		bucket.violations++
+		bucket.lastViolation = now
 		bucket.totalRejected++
 
 		// Check if we should ban this peer
@@ -136,6 +161,13 @@ func (r *PeerRateLimiter) Allow(peerID peer.ID) bool {
 		}
 
 		return false
+	}
+
+	// Forgive old violations once the peer has behaved for a while.
+	// Otherwise a single future violation instantly re-bans the peer,
+	// making any ban effectively permanent under sustained load.
+	if bucket.violations > 0 && now.Sub(bucket.lastViolation) > r.config.ViolationDecay {
+		bucket.violations = 0
 	}
 
 	// Consume one token

@@ -153,6 +153,7 @@ func NewNode(config NodeConfig, committee *types.Committee, h host.Host, ps *pub
 
 	// Create Bullshark
 	bs := bullshark.New(committee, d)
+	bs.SetPartition(config.Partition)
 
 	// NOTE: We intentionally do NOT set an onCommit callback for batch pruning here.
 	// The consumer of the committed channel (e.g., main.go or test code) is responsible

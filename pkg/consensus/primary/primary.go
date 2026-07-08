@@ -224,6 +224,9 @@ func (p *Primary) Start(ctx context.Context) error {
 	ticker := time.NewTicker(p.config.RoundAdvanceInterval)
 	defer ticker.Stop()
 
+	// Pacing for header rebroadcast — see the ticker case below.
+	var lastRebroadcast time.Time
+
 	// Get current round/epoch for logging (thread-safe)
 	p.roundMu.Lock()
 	startRound := p.currentRound
@@ -262,8 +265,16 @@ func (p *Primary) Start(ctx context.Context) error {
 			p.tryAdvanceRound()
 			// Periodically prune old pending certificates
 			p.prunePendingCerts()
-			// Re-broadcast pending headers that haven't achieved quorum
-			p.rebroadcastPendingHeaders()
+			// Re-broadcast pending headers that haven't achieved quorum.
+			// This is a recovery mechanism for lost deliveries, so pace it
+			// at 1s rather than the ticker's 50ms: every rebroadcast makes
+			// every validator that already voted resend its vote, and at
+			// ticker frequency that vote storm trips the per-peer rate
+			// limiter and permanently stalls large committees (#4054).
+			if time.Since(lastRebroadcast) >= time.Second {
+				lastRebroadcast = time.Now()
+				p.rebroadcastPendingHeaders()
+			}
 		}
 	}
 }

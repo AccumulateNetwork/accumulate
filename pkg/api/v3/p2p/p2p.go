@@ -88,9 +88,15 @@ func New(opts Options) (_ *Node, err error) {
 		}
 	}()
 
-	// Configure libp2p host options
+	// Configure libp2p host options.
+	//
+	// Listen addresses are NOT passed here. The host accepts inbound
+	// connections the instant it listens, and a peer's gossipsub router
+	// attaches on connect — if our protocol handlers are not registered yet
+	// the peer receives "protocols not supported", marks us dead, and never
+	// retries (#4054). Listening starts below, after the peer manager has
+	// registered every protocol handler.
 	options := []config.Option{
-		libp2p.ListenAddrs(opts.Listen...),
 		libp2p.EnableNATService(),
 		libp2p.EnableRelay(),
 		libp2p.EnableHolePunching(),
@@ -145,6 +151,15 @@ func New(opts Options) (_ *Node, err error) {
 		return nil, err
 	}
 	n.RegisterService(api.ServiceTypeNode.Address(), mh.Handle)
+
+	// Start listening now that the pubsub router, DHT, and node service have
+	// registered their protocol handlers — see the comment on the host
+	// options above (#4054).
+	if len(opts.Listen) > 0 {
+		if err := n.host.Network().Listen(opts.Listen...); err != nil {
+			return nil, err
+		}
+	}
 
 	// List the node as part of the network
 	if opts.Network != "" {

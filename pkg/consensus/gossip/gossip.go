@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -159,13 +160,14 @@ func (g *GossipLayer) Start(ctx context.Context) error {
 
 	// Start message handlers BEFORE waiting for mesh formation.
 	// This ensures we can receive messages while waiting for peers.
-	g.wg.Add(6)
+	g.wg.Add(7)
 	go g.handleSubscription(TopicBatches, g.handleBatchMessage)
 	go g.handleSubscription(TopicHeaders, g.handleHeaderMessage)
 	go g.handleVoteSubscription()
 	go g.handleSubscription(TopicCerts, g.handleCertMessage)
 	go g.handleSubscription(TopicCertSync, g.handleCertSyncMessage)
 	go g.rateLimiterCleanup()
+	go g.meshMonitor()
 
 	// Wait for GossipSub mesh to form before signaling ready.
 	// This ensures peers are connected before the Primary starts broadcasting.
@@ -543,6 +545,58 @@ func (g *GossipLayer) handleVoteSubscription() {
 
 		// Process the vote
 		g.handleVoteMessage(msg.Data)
+	}
+}
+
+// meshMonitor periodically logs gossip mesh health: how many peers the host
+// is connected to versus how many peers each consensus topic actually has.
+// The distinction diagnoses #4054-class failures — a topic with zero peers
+// while the host has connections means subscription announcements are not
+// propagating; zero host peers means the node is isolated at the libp2p level.
+func (g *GossipLayer) meshMonitor() {
+	defer g.wg.Done()
+
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-g.ctx.Done():
+			return
+		case <-ticker.C:
+			hostPeers := g.host.Network().Peers()
+
+			headerPeers := 0
+			if t := g.topics.GetTopic(TopicHeaders); t != nil {
+				headerPeers = len(t.ListPeers())
+			}
+			votePeers := 0
+			if t := g.topics.GetTopic(TopicVotes); t != nil {
+				votePeers = len(t.ListPeers())
+			}
+			certPeers := 0
+			if t := g.topics.GetTopic(TopicCerts); t != nil {
+				certPeers = len(t.ListPeers())
+			}
+
+			// Sample of connected peer IDs so cross-node connectivity can be
+			// reconstructed from logs.
+			sample := make([]string, 0, 16)
+			for i, p := range hostPeers {
+				if i == 16 {
+					break
+				}
+				sample = append(sample, p.String()[len(p.String())-8:])
+			}
+
+			slog.Info("Gossip mesh status",
+				"partition", g.partition,
+				"hostPeers", len(hostPeers),
+				"headerTopicPeers", headerPeers,
+				"voteTopicPeers", votePeers,
+				"certTopicPeers", certPeers,
+				"connectedTo", strings.Join(sample, ","))
+		}
 	}
 }
 
