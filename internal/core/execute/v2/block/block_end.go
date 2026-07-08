@@ -633,17 +633,29 @@ func (x *Executor) requestMissingViaRange(ctx context.Context, dispatcher Dispat
 	// can still be stuck waiting for a signature quorum that may take
 	// minutes (or, after validator churn, forever) to re-gather, and a
 	// proof-authorized resubmission executes immediately (#4056) — so for
-	// anchors the whole undelivered run is recovered.
+	// anchors, when nothing is unknown, the known-but-stuck run is
+	// recovered. When unknown entries DO exist the range stays bounded by
+	// them: extending it moves the collection proof's anchor point to a
+	// newer directory root, which a destination that is far behind may not
+	// know yet.
 	first, last := uint64(0), uint64(0)
+	firstKnown, lastKnown := uint64(0), uint64(0)
 	for i, txid := range partition.Pending {
-		if txid != nil && !anchor {
+		seqNum := partition.Delivered + uint64(i) + 1
+		if txid != nil {
+			if firstKnown == 0 {
+				firstKnown = seqNum
+			}
+			lastKnown = seqNum
 			continue
 		}
-		seqNum := partition.Delivered + uint64(i) + 1
 		if first == 0 {
 			first = seqNum
 		}
 		last = seqNum
+	}
+	if first == 0 && anchor {
+		first, last = firstKnown, lastKnown
 	}
 	if first == 0 {
 		return true // Nothing to do
