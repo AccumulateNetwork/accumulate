@@ -210,8 +210,14 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		Database:            execOpts.Database,
 		Querier:             v3.Querier2{Querier: client},
 		Dispatcher:          execOpts.NewDispatcher(),
-		RunTask:             execOpts.BackgroundTaskLauncher,
-		EnableAnchorHealing: Ptr(false),
+		RunTask: execOpts.BackgroundTaskLauncher,
+		// Healing is the ONLY retry mechanism for anchors — the conductor's
+		// per-block dispatch is one-shot, and a single lost anchor freezes
+		// the destination's delivered-sequence forever (observed as BVN
+		// ledgers stuck at height 2, #4054). The conductor paces healing
+		// scans internally (HealInterval), so this is safe even at DAG-BFT
+		// block rates.
+		EnableAnchorHealing: Ptr(true),
 	}
 	err = conductor.Start(s.eventBus)
 	if err != nil {

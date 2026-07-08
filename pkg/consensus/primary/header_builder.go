@@ -54,6 +54,10 @@ func (p *Primary) createHeaderLockedWithRound(round types.Round, epoch uint64) (
 	// 3. Build header
 	pubKey := p.config.KeyPair.Public().(ed25519.PublicKey)
 	header := types.NewHeader(pubKey, round, epoch, payload, parents)
+	// Stamp the author's clock. Executors use this (not their own clocks) as
+	// the block time so that execution is deterministic across validators —
+	// see types.Header.Timestamp (#4054).
+	header.Timestamp = time.Now().UnixNano()
 
 	// 4. Sign
 	if err := header.Sign(p.config.KeyPair); err != nil {

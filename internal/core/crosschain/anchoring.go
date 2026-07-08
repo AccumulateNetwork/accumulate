@@ -42,6 +42,15 @@ func (c *Conductor) healAnchors(ctx context.Context, batch *database.Batch, dest
 	}
 	ledger2 := ledger1.Partition(c.Url())
 
+	// Paced to HealInterval, so this is cheap — and scan visibility is what
+	// makes silent anchor-delivery failures diagnosable (#4054).
+	slog.Info("Anchor heal scan", "module", "conductor",
+		"source", c.Url(),
+		"destination", destination,
+		"produced", head.Count,
+		"delivered", ledger2.Delivered,
+		"currentBlock", currentBlock)
+
 	// For each not-yet delivered anchor
 	for i := ledger2.Delivered + 1; i <= uint64(head.Count); i++ {
 		// Load it
@@ -63,6 +72,10 @@ func (c *Conductor) healAnchors(ctx context.Context, batch *database.Batch, dest
 
 		// Ignore anchors from the last 10 blocks
 		if currentBlock-anchor.GetPartitionAnchor().MinorBlockIndex < 10 {
+			slog.Info("Heal: anchor too recent", "module", "conductor",
+				"destination", destination, "sequence", i,
+				"anchorBlock", anchor.GetPartitionAnchor().MinorBlockIndex,
+				"currentBlock", currentBlock)
 			continue
 		}
 
@@ -83,10 +96,17 @@ func (c *Conductor) healAnchors(ctx context.Context, batch *database.Batch, dest
 		}
 		if ok {
 			// If we've already signed this one, skip it
+			slog.Info("Heal: already signed", "module", "conductor",
+				"destination", destination, "sequence", i, "txid", txn.ID())
 			continue
 		}
 
 		// Submit it
+		slog.Info("Healing anchor", "module", "conductor",
+			"source", c.Url(),
+			"destination", destination,
+			"sequence", i,
+			"delivered", ledger2.Delivered)
 		err = c.submit(ctx, destination, env)
 		if err != nil {
 			return err

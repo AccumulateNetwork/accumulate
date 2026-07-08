@@ -386,7 +386,9 @@ func (g *GossipLayer) handleVoteMessage(data []byte) {
 func (g *GossipLayer) handleCertMessage(data []byte) {
 	cert, err := types.UnmarshalCertificate(data)
 	if err != nil {
-		slog.Debug("Invalid certificate message",
+		// Info, not Debug: an undecodable certificate (e.g. wire-format skew
+		// between builds) stalls consensus with no visible cause (#4054).
+		slog.Info("Invalid certificate message",
 			"error", err,
 			"partition", g.partition)
 		return

@@ -440,8 +440,21 @@ func (s *Service) processCommittedCertificate(cert *types.Certificate) error {
 	pubKey := s.config.NodeConfig.KeyPair.Public().(ed25519.PublicKey)
 	isLeader := types.ValidatorsEqual(cert.Header.Author, pubKey)
 
-	// Produce block
-	blockTime := time.Now()
+	// Produce block. The block time MUST be derived from the certificate,
+	// not the local clock: block time is part of executed state, so if each
+	// validator stamps its own wall clock the state trees diverge on the
+	// very first block and cross-partition anchors never gather a signature
+	// quorum — each validator signs a different version of the "same" anchor
+	// (#4054). The header timestamp is the author's clock, covered by the
+	// header signature; clamp it to be strictly increasing so a bad clock
+	// cannot move time backwards.
+	s.mu.RLock()
+	lastTime := s.lastBlockTime
+	s.mu.RUnlock()
+	blockTime := time.Unix(0, cert.Header.Timestamp).UTC()
+	if !blockTime.After(lastTime) {
+		blockTime = lastTime.Add(time.Millisecond)
+	}
 
 	params := adapter.BlockParams{
 		Index:       blockIndex,

@@ -44,6 +44,14 @@ type Header struct {
 	Round Round
 	// Epoch is the epoch number for committee changes.
 	Epoch uint64
+	// Timestamp is the author's wall clock at header creation, in Unix
+	// nanoseconds. It is covered by the digest (and thus the signature) and
+	// is used as the deterministic block time when the certificate is
+	// executed — every validator MUST derive block time from the certificate
+	// rather than its own clock, otherwise their state trees diverge and
+	// cross-partition anchors can never gather a signature quorum (#4054).
+	// Genesis headers use zero.
+	Timestamp int64
 	// Payload maps batch digests to the worker IDs that created them.
 	Payload map[BatchDigest]WorkerID
 	// Parents contains digests of certificates from round-1 (must have 2f+1).
@@ -107,13 +115,14 @@ func (h *Header) Digest() HeaderDigest {
 //   - Author (32 bytes)
 //   - Round (8 bytes)
 //   - Epoch (8 bytes)
+//   - Timestamp (8 bytes)
 //   - NumPayload (4 bytes)
 //   - Payload entries (sorted by digest): [digest (32 bytes)][worker (1 byte)] each
 //   - NumParents (4 bytes)
 //   - Parents (sorted): [digest (32 bytes)] each
 func (h *Header) marshalForDigest() []byte {
 	// Calculate size
-	size := 32 + 8 + 8 + 4 + len(h.Payload)*33 + 4 + len(h.Parents)*32
+	size := 32 + 8 + 8 + 8 + 4 + len(h.Payload)*33 + 4 + len(h.Parents)*32
 
 	data := make([]byte, size)
 	offset := 0
@@ -128,6 +137,10 @@ func (h *Header) marshalForDigest() []byte {
 
 	// Epoch
 	binary.BigEndian.PutUint64(data[offset:], h.Epoch)
+	offset += 8
+
+	// Timestamp
+	binary.BigEndian.PutUint64(data[offset:], uint64(h.Timestamp))
 	offset += 8
 
 	// Payload (sorted by digest for deterministic hashing)
@@ -209,7 +222,7 @@ func (h *Header) Verify() error {
 // Marshal serializes the header to bytes.
 func (h *Header) Marshal() ([]byte, error) {
 	// Calculate size
-	size := 32 + 8 + 8 + 4 + len(h.Payload)*33 + 4 + len(h.Parents)*32 + 4 + len(h.Signature)
+	size := 32 + 8 + 8 + 8 + 4 + len(h.Payload)*33 + 4 + len(h.Parents)*32 + 4 + len(h.Signature)
 
 	data := make([]byte, size)
 	offset := 0
@@ -224,6 +237,10 @@ func (h *Header) Marshal() ([]byte, error) {
 
 	// Epoch
 	binary.BigEndian.PutUint64(data[offset:], h.Epoch)
+	offset += 8
+
+	// Timestamp
+	binary.BigEndian.PutUint64(data[offset:], uint64(h.Timestamp))
 	offset += 8
 
 	// Payload (sorted)
@@ -272,7 +289,7 @@ func (h *Header) Marshal() ([]byte, error) {
 
 // UnmarshalHeader deserializes a header from bytes.
 func UnmarshalHeader(data []byte) (*Header, error) {
-	if len(data) < 32+8+8+4 {
+	if len(data) < 32+8+8+8+4 {
 		return nil, errors.New("header data too short")
 	}
 
@@ -290,6 +307,10 @@ func UnmarshalHeader(data []byte) (*Header, error) {
 
 	// Epoch
 	h.Epoch = binary.BigEndian.Uint64(data[offset:])
+	offset += 8
+
+	// Timestamp
+	h.Timestamp = int64(binary.BigEndian.Uint64(data[offset:]))
 	offset += 8
 
 	// Payload
@@ -388,6 +409,7 @@ func (h *Header) copyFields() Header {
 		Author:    author,
 		Round:     h.Round,
 		Epoch:     h.Epoch,
+		Timestamp: h.Timestamp,
 		Payload:   payload,
 		Parents:   parents,
 		Signature: signature,

@@ -22,8 +22,12 @@ func (p *Primary) OnCertificateReceived(cert *types.Certificate) {
 
 	// Verify certificate
 	if err := cert.Verify(p.committee); err != nil {
-		slog.Debug("Invalid certificate",
+		// Info, not Debug: silently dropping peers' certificates stalls
+		// round advancement with no externally visible cause (#4054).
+		slog.Info("Invalid certificate",
 			"error", err,
+			"round", cert.Round(),
+			"author", hexEncode(cert.Author()),
 			"digest", cert.Digest().String())
 		return
 	}
@@ -68,8 +72,9 @@ func (p *Primary) insertCertificateAndProcessPending(cert *types.Certificate) {
 		}
 
 		// Some other error (e.g., already exists)
-		slog.Debug("Failed to insert certificate into DAG",
+		slog.Info("Failed to insert certificate into DAG",
 			"error", err,
+			"round", cert.Round(),
 			"digest", cert.Digest().String())
 		return
 	}
