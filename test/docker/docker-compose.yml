@@ -10,6 +10,14 @@
 #   docker compose -f test/docker/docker-compose.yml logs -f
 #   docker compose -f test/docker/docker-compose.yml down -v
 
+# Cap container logs: nodes log heavily (~700 MB/hour each at DAG-BFT block
+# rates) and this host's drives must stay under 50% capacity.
+x-logging: &bounded-logging
+  driver: json-file
+  options:
+    max-size: "200m"
+    max-file: "2"
+
 services:
   # CRITICAL: Bootstrap server is REQUIRED for peer discovery
   # All validators need this to find each other on the network
@@ -19,6 +27,7 @@ services:
       context: ../..
       dockerfile: Dockerfile
     container_name: acc-bootstrap
+    logging: *bounded-logging
     mem_limit: 1g
     ports:
       # Host port 16653 (not 16593) - accman-managed follower nodes use the
@@ -45,6 +54,7 @@ services:
       context: ../..
       dockerfile: Dockerfile
     container_name: acc-init
+    logging: *bounded-logging
     volumes:
       - network-config:/root/.accumulate
       - ../..:/workspace
@@ -62,6 +72,7 @@ services:
       context: ../..
       dockerfile: Dockerfile
     container_name: acc-bvn1-val1
+    logging: *bounded-logging
     mem_limit: 1g
     volumes:
       - network-config:/root/.accumulate
@@ -81,6 +92,7 @@ services:
       context: ../..
       dockerfile: Dockerfile
     container_name: acc-bvn1-val2
+    logging: *bounded-logging
     mem_limit: 1g
     volumes:
       - network-config:/root/.accumulate
@@ -100,6 +112,7 @@ services:
       context: ../..
       dockerfile: Dockerfile
     container_name: acc-bvn1-val3
+    logging: *bounded-logging
     mem_limit: 1g
     volumes:
       - network-config:/root/.accumulate
@@ -119,6 +132,7 @@ services:
       context: ../..
       dockerfile: Dockerfile
     container_name: acc-bvn1-val4
+    logging: *bounded-logging
     mem_limit: 1g
     volumes:
       - network-config:/root/.accumulate
@@ -139,6 +153,7 @@ services:
       context: ../..
       dockerfile: Dockerfile
     container_name: acc-bvn2-val1
+    logging: *bounded-logging
     mem_limit: 1g
     volumes:
       - network-config:/root/.accumulate
@@ -158,6 +173,7 @@ services:
       context: ../..
       dockerfile: Dockerfile
     container_name: acc-bvn2-val2
+    logging: *bounded-logging
     mem_limit: 1g
     volumes:
       - network-config:/root/.accumulate
@@ -177,6 +193,7 @@ services:
       context: ../..
       dockerfile: Dockerfile
     container_name: acc-bvn2-val3
+    logging: *bounded-logging
     mem_limit: 1g
     volumes:
       - network-config:/root/.accumulate
@@ -196,6 +213,7 @@ services:
       context: ../..
       dockerfile: Dockerfile
     container_name: acc-bvn2-val4
+    logging: *bounded-logging
     mem_limit: 1g
     volumes:
       - network-config:/root/.accumulate
@@ -216,6 +234,7 @@ services:
       context: ../..
       dockerfile: Dockerfile
     container_name: acc-bvn3-val1
+    logging: *bounded-logging
     mem_limit: 1g
     volumes:
       - network-config:/root/.accumulate
@@ -235,6 +254,7 @@ services:
       context: ../..
       dockerfile: Dockerfile
     container_name: acc-bvn3-val2
+    logging: *bounded-logging
     mem_limit: 1g
     volumes:
       - network-config:/root/.accumulate
@@ -254,6 +274,7 @@ services:
       context: ../..
       dockerfile: Dockerfile
     container_name: acc-bvn3-val3
+    logging: *bounded-logging
     mem_limit: 1g
     volumes:
       - network-config:/root/.accumulate
@@ -273,6 +294,7 @@ services:
       context: ../..
       dockerfile: Dockerfile
     container_name: acc-bvn3-val4
+    logging: *bounded-logging
     mem_limit: 1g
     volumes:
       - network-config:/root/.accumulate

@@ -7,14 +7,17 @@
 package adapter
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
 	"sync"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 )
@@ -192,9 +195,22 @@ func (b *ExecutorBridge) ProduceBlock(ctx context.Context, params BlockParams) (
 		return [32]byte{}, fmt.Errorf("begin block: %w", err)
 	}
 
-	// Process transactions from all batches
+	// Process transactions from all batches, in DETERMINISTIC order. Batches
+	// is a map, and Go randomizes map iteration per process — executing a
+	// multi-batch block in map order made every validator apply the same
+	// transactions in a different order, so chain entries and BPT roots
+	// diverged and cross-partition anchors could not gather a quorum (#4054).
+	digests := make([]types.BatchDigest, 0, len(params.Batches))
+	for digest := range params.Batches {
+		digests = append(digests, digest)
+	}
+	sort.Slice(digests, func(i, j int) bool {
+		return bytes.Compare(digests[i][:], digests[j][:]) < 0
+	})
+
 	txCount := 0
-	for digest, batch := range params.Batches {
+	for _, digest := range digests {
+		batch := params.Batches[digest]
 		if batch == nil {
 			slog.Warn("Missing batch in certificate",
 				"digest", digest.String(),
