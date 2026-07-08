@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"math/big"
 	"sync"
+	"time"
 
 	"github.com/cometbft/cometbft/libs/log"
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -596,6 +597,11 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 		RunTask:             execOpts.BackgroundTaskLauncher,
 		DropInitialAnchor:   f.dropInitialAnchor,
 		EnableAnchorHealing: &enableAnchorHealing,
+
+		// Healing is paced by wall-clock time, but the simulator executes
+		// dozens of blocks per second — tests that rely on healing (e.g.
+		// TestDropInitialAnchor) would starve under the default pacing.
+		HealInterval: time.Nanosecond,
 
 		// Setting Intercept is not necessary because the dispatcher will
 		// intercept messages
