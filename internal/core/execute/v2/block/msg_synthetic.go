@@ -79,7 +79,7 @@ func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*mess
 	// valid.
 	switch {
 	case syn.Proof.ReceiptList != nil:
-		if !ctx.GetActiveGlobals().ExecutorVersion.VNextEnabled() {
+		if !ctx.GetActiveGlobals().ExecutorVersion.V2KourouEnabled() {
 			return nil, errors.BadRequest.With("collection proofs are not enabled")
 		}
 		if syn.Proof.Receipt != nil {
@@ -221,7 +221,7 @@ func (x SyntheticMessage) process(batch *database.Batch, ctx *MessageContext) er
 		// terminally wedges recovery: the same message can never be
 		// re-applied once the anchor shows up. Once collection proofs are
 		// active, record it as pending instead so it can be retried (#4048).
-		if ctx.GetActiveGlobals().ExecutorVersion.VNextEnabled() {
+		if ctx.GetActiveGlobals().ExecutorVersion.V2KourouEnabled() {
 			return errors.Pending.WithFormat("proof anchor %x has not been received", anchor)
 		}
 		return errors.BadRequest.WithFormat("invalid proof anchor: %x is not a known directory anchor", anchor)

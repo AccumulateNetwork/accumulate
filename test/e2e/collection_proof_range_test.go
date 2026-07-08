@@ -31,8 +31,8 @@ import (
 // per-message healing path, without any collection proofs on the wire.
 func TestRangeRecovery(t *testing.T) {
 	Run(t, map[string]ExecutorVersion{
-		"activated": ExecutorVersionVNext,
-		"fallback":  ExecutorVersionLatest,
+		"activated": ExecutorVersionLatest,
+		"fallback":  ExecutorVersionV2Tanegashima,
 	}, func(t *testing.T, version ExecutorVersion) {
 		var timestamp uint64
 		const transfers = 5
@@ -124,7 +124,7 @@ func TestRangeRecovery(t *testing.T) {
 		lta := GetAccount[*LiteTokenAccount](t, sim.DatabaseFor(bobUrl), bobUrl)
 		require.Equal(t, transfers*int(protocol.AcmePrecision), int(lta.Balance.Uint64()))
 
-		if version.VNextEnabled() {
+		if version.V2KourouEnabled() {
 			// The dropped run must have been recovered via the range path:
 			// each resubmitted message carries the shared collection proof.
 			require.GreaterOrEqual(t, int(recovered.Load()), drops,

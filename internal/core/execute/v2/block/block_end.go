@@ -491,7 +491,7 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 	// messages with a single range request and one shared collection proof
 	// (#4048) instead of a per-message query. Falls back to the per-message
 	// path if the source does not serve ranges.
-	if !anchor && x.globals.Active.ExecutorVersion.VNextEnabled() {
+	if !anchor && x.globals.Active.ExecutorVersion.V2KourouEnabled() {
 		if ranger, ok := x.Sequencer.(private.SequenceRanger); ok {
 			if x.requestMissingViaRange(ctx, dispatcher, ranger, partition) {
 				return

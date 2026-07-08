@@ -149,8 +149,11 @@ const ExecutorVersionV2Jiuquan ExecutorVersion = 8
 // ExecutorVersionV2Tanegashima enables lite account delegation and transaction whitelists.
 const ExecutorVersionV2Tanegashima ExecutorVersion = 9
 
+// ExecutorVersionV2Kourou enables collection proofs for cross-partition messaging.
+const ExecutorVersionV2Kourou ExecutorVersion = 10
+
 // ExecutorVersionVNext is a placeholder for testing. DO NOT USE.
-const ExecutorVersionVNext ExecutorVersion = 10
+const ExecutorVersionVNext ExecutorVersion = 11
 
 // KeyPageOperationTypeUnknown is used when the key page operation is not known.
 const KeyPageOperationTypeUnknown KeyPageOperationType = 0
@@ -833,7 +836,7 @@ func (v ExecutorVersion) GetEnumValue() uint64 { return uint64(v) }
 func (v *ExecutorVersion) SetEnumValue(id uint64) bool {
 	u := ExecutorVersion(id)
 	switch u {
-	case ExecutorVersionV1, ExecutorVersionV1SignatureAnchoring, ExecutorVersionV1DoubleHashEntries, ExecutorVersionV1Halt, ExecutorVersionV2, ExecutorVersionV2Baikonur, ExecutorVersionV2Vandenberg, ExecutorVersionV2Jiuquan, ExecutorVersionV2Tanegashima, ExecutorVersionVNext:
+	case ExecutorVersionV1, ExecutorVersionV1SignatureAnchoring, ExecutorVersionV1DoubleHashEntries, ExecutorVersionV1Halt, ExecutorVersionV2, ExecutorVersionV2Baikonur, ExecutorVersionV2Vandenberg, ExecutorVersionV2Jiuquan, ExecutorVersionV2Tanegashima, ExecutorVersionV2Kourou, ExecutorVersionVNext:
 		*v = u
 		return true
 	}
@@ -861,6 +864,8 @@ func (v ExecutorVersion) String() string {
 		return "v2-jiuquan"
 	case ExecutorVersionV2Tanegashima:
 		return "v2-tanegashima"
+	case ExecutorVersionV2Kourou:
+		return "v2-kourou"
 	case ExecutorVersionVNext:
 		return "vnext"
 	}
@@ -902,6 +907,10 @@ func ExecutorVersionByName(name string) (ExecutorVersion, bool) {
 		return ExecutorVersionV2Tanegashima, true
 	case "v2-tanegashima":
 		return ExecutorVersionV2Tanegashima, true
+	case "v2kourou":
+		return ExecutorVersionV2Kourou, true
+	case "v2-kourou":
+		return ExecutorVersionV2Kourou, true
 	case "vnext":
 		return ExecutorVersionVNext, true
 	}

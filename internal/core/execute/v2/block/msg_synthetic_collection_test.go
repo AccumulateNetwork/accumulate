@@ -123,7 +123,7 @@ func TestSyntheticCollectionProof(t *testing.T) {
 	})
 
 	t.Run("rejected with both proof forms", func(t *testing.T) {
-		block := newBlock(protocol.ExecutorVersionVNext)
+		block := newBlock(protocol.ExecutorVersionV2Kourou)
 		both := collectionProof.Copy()
 		both.Receipt = &dbmerkle.Receipt{Start: hash[:], Anchor: hash[:]}
 		_, err := run(t, block, newMsg(both), false, SyntheticMessage.Validate)
@@ -131,7 +131,7 @@ func TestSyntheticCollectionProof(t *testing.T) {
 	})
 
 	t.Run("rejected if the message is not included", func(t *testing.T) {
-		block := newBlock(protocol.ExecutorVersionVNext)
+		block := newBlock(protocol.ExecutorVersionV2Kourou)
 		shortList, err := dbmerkle.GetReceiptList(src, 0, 0) // excludes the message hash
 		require.NoError(t, err)
 		proof := &protocol.AnnotatedReceipt{
@@ -143,13 +143,13 @@ func TestSyntheticCollectionProof(t *testing.T) {
 	})
 
 	t.Run("validates once enabled", func(t *testing.T) {
-		block := newBlock(protocol.ExecutorVersionVNext)
+		block := newBlock(protocol.ExecutorVersionV2Kourou)
 		_, err := run(t, block, newMsg(collectionProof), false, SyntheticMessage.Validate)
 		require.NoError(t, err)
 	})
 
 	t.Run("processes with a known anchor", func(t *testing.T) {
-		block := newBlock(protocol.ExecutorVersionVNext)
+		block := newBlock(protocol.ExecutorVersionV2Kourou)
 		status, err := run(t, block, newMsg(collectionProof), true, SyntheticMessage.Process)
 		require.NoError(t, err)
 		require.NoError(t, status.AsError())
@@ -158,7 +158,7 @@ func TestSyntheticCollectionProof(t *testing.T) {
 	t.Run("process leaves an unknown anchor pending, then retries", func(t *testing.T) {
 		// Before activation an unknown anchor is a terminal failure; once
 		// collection proofs are active it must stay retryable (#4048)
-		block := newBlock(protocol.ExecutorVersionVNext)
+		block := newBlock(protocol.ExecutorVersionV2Kourou)
 		msg := newMsg(collectionProof)
 		ctx := &MessageContext{message: msg, bundle: &bundle{Block: block}}
 		db := database.OpenInMemory(nil)

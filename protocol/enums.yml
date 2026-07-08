@@ -34,8 +34,13 @@ ExecutorVersion:
     label: v2-tanegashima
     description: enables lite account delegation and transaction whitelists
 
-  VNext:
+  V2Kourou:
     value: 10
+    label: v2-kourou
+    description: enables collection proofs for cross-partition messaging
+
+  VNext:
+    value: 11
     description: is a placeholder for testing. DO NOT USE
 
 PartitionType:
