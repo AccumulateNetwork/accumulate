@@ -275,6 +275,14 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		globals = new(network.GlobalValues)
 	}
 
+	// Seed the conductor's globals directly. The conductor subscribes to
+	// WillChangeGlobals, but whether it observes the INITIAL event is a
+	// startup ordering race — a conductor that misses it returns early from
+	// every willBeginBlock and never sends or heals a single anchor, which
+	// is exactly the same race the InitialValidators handling above works
+	// around for the adapter (#4056).
+	conductor.Globals.Store(globals)
+
 	// Extract initial validators from globals
 	var initialValidators []adapter.ValidatorInfo
 	if globals != nil && globals.Network != nil {
