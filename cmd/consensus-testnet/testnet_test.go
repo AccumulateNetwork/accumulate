@@ -326,11 +326,11 @@ func TestSingleNodeBlockProduction_ADI(t *testing.T) {
 				// Get batches for this certificate from workers
 				batches := make(map[types.BatchDigest]*types.Batch)
 				digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
-				for digest := range cert.Header.Payload {
-					digests = append(digests, digest)
+				for _, entry := range cert.Header.Payload {
+					digests = append(digests, entry.Digest)
 					for _, w := range workers {
-						if batch, err := w.GetBatch(digest); err == nil && batch != nil {
-							batches[digest] = batch
+						if batch, err := w.GetBatch(entry.Digest); err == nil && batch != nil {
+							batches[entry.Digest] = batch
 							break
 						}
 					}
@@ -466,11 +466,11 @@ func TestSingleNodeBlockProduction_MemoryStability(t *testing.T) {
 				}
 				batches := make(map[types.BatchDigest]*types.Batch)
 				digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
-				for digest := range cert.Header.Payload {
-					digests = append(digests, digest)
+				for _, entry := range cert.Header.Payload {
+					digests = append(digests, entry.Digest)
 					for _, w := range workers {
-						if batch, err := w.GetBatch(digest); err == nil && batch != nil {
-							batches[digest] = batch
+						if batch, err := w.GetBatch(entry.Digest); err == nil && batch != nil {
+							batches[entry.Digest] = batch
 							break
 						}
 					}

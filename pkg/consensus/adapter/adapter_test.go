@@ -83,7 +83,7 @@ func TestBlockParams(t *testing.T) {
 		IsLeader:    true,
 		LeaderRound: types.Round(50),
 		Certificate: nil, // Can be nil for testing
-		Batches:     make(map[types.BatchDigest]*types.Batch),
+		Batches:     nil,
 	}
 
 	assert.Equal(t, uint64(100), params.Index)

@@ -52,8 +52,13 @@ type Header struct {
 	// cross-partition anchors can never gather a signature quorum (#4054).
 	// Genesis headers use zero.
 	Timestamp int64
-	// Payload maps batch digests to the worker IDs that created them.
-	Payload map[BatchDigest]WorkerID
+	// Payload lists the batches this header commits, in canonical order
+	// (strictly ascending by digest — NewHeader sorts, UnmarshalHeader
+	// rejects anything else). Order is load-bearing: batches are EXECUTED in
+	// this order, so it must be identical on every validator. This was a map
+	// once, and iterating it made each validator execute batches in its own
+	// random order, diverging the state trees (#4054).
+	Payload []PayloadEntry
 	// Parents contains digests of certificates from round-1 (must have 2f+1).
 	Parents []CertificateDigest
 	// Signature is the ed25519 signature over the header digest.
@@ -67,14 +72,25 @@ type Header struct {
 	digestComputed bool
 }
 
-// NewHeader creates a new unsigned header.
+// PayloadEntry pairs a batch digest with the worker that produced it.
+type PayloadEntry struct {
+	Digest BatchDigest
+	Worker WorkerID
+}
+
+// NewHeader creates a new unsigned header. The payload is sorted into
+// canonical order (ascending by digest); the caller must not pass duplicate
+// digests.
 func NewHeader(
 	author ed25519.PublicKey,
 	round Round,
 	epoch uint64,
-	payload map[BatchDigest]WorkerID,
+	payload []PayloadEntry,
 	parents []CertificateDigest,
 ) *Header {
+	sort.Slice(payload, func(i, j int) bool {
+		return bytes.Compare(payload[i].Digest[:], payload[j].Digest[:]) < 0
+	})
 	return &Header{
 		Author:  author,
 		Round:   round,
@@ -143,24 +159,15 @@ func (h *Header) marshalForDigest() []byte {
 	binary.BigEndian.PutUint64(data[offset:], uint64(h.Timestamp))
 	offset += 8
 
-	// Payload (sorted by digest for deterministic hashing)
+	// Payload (already in canonical order — see the Payload field docs)
 	binary.BigEndian.PutUint32(data[offset:], uint32(len(h.Payload)))
 	offset += 4
 
-	// Sort payload keys
-	payloadKeys := make([]BatchDigest, 0, len(h.Payload))
-	for k := range h.Payload {
-		payloadKeys = append(payloadKeys, k)
-	}
-	sort.Slice(payloadKeys, func(i, j int) bool {
-		return bytes.Compare(payloadKeys[i][:], payloadKeys[j][:]) < 0
-	})
-
-	for _, k := range payloadKeys {
-		k := k // Create local copy to avoid rangevarref lint warning
-		copy(data[offset:], k[:])
+	for _, e := range h.Payload {
+		e := e // Create local copy to avoid rangevarref lint warning
+		copy(data[offset:], e.Digest[:])
 		offset += 32
-		data[offset] = byte(h.Payload[k])
+		data[offset] = byte(e.Worker)
 		offset++
 	}
 
@@ -243,23 +250,15 @@ func (h *Header) Marshal() ([]byte, error) {
 	binary.BigEndian.PutUint64(data[offset:], uint64(h.Timestamp))
 	offset += 8
 
-	// Payload (sorted)
+	// Payload (already in canonical order)
 	binary.BigEndian.PutUint32(data[offset:], uint32(len(h.Payload)))
 	offset += 4
 
-	payloadKeys := make([]BatchDigest, 0, len(h.Payload))
-	for k := range h.Payload {
-		payloadKeys = append(payloadKeys, k)
-	}
-	sort.Slice(payloadKeys, func(i, j int) bool {
-		return bytes.Compare(payloadKeys[i][:], payloadKeys[j][:]) < 0
-	})
-
-	for _, k := range payloadKeys {
-		k := k // Create local copy to avoid rangevarref lint warning
-		copy(data[offset:], k[:])
+	for _, e := range h.Payload {
+		e := e // Create local copy to avoid rangevarref lint warning
+		copy(data[offset:], e.Digest[:])
 		offset += 32
-		data[offset] = byte(h.Payload[k])
+		data[offset] = byte(e.Worker)
 		offset++
 	}
 
@@ -324,16 +323,22 @@ func UnmarshalHeader(data []byte) (*Header, error) {
 		return nil, errors.New("header has too many payload entries")
 	}
 
-	h.Payload = make(map[BatchDigest]WorkerID, numPayload)
+	h.Payload = make([]PayloadEntry, numPayload)
 	for i := uint32(0); i < numPayload; i++ {
 		if offset+33 > len(data) {
 			return nil, errors.New("header data truncated: missing payload entry")
 		}
-		var digest BatchDigest
-		copy(digest[:], data[offset:offset+32])
+		copy(h.Payload[i].Digest[:], data[offset:offset+32])
 		offset += 32
-		h.Payload[digest] = WorkerID(data[offset])
+		h.Payload[i].Worker = WorkerID(data[offset])
 		offset++
+
+		// Enforce canonical order: strictly ascending digests. This also
+		// rejects duplicates, which would otherwise execute a batch twice —
+		// the map representation this replaced deduplicated silently.
+		if i > 0 && bytes.Compare(h.Payload[i-1].Digest[:], h.Payload[i].Digest[:]) >= 0 {
+			return nil, errors.New("header payload is not in canonical order")
+		}
 	}
 
 	// Parents
@@ -391,10 +396,8 @@ func (h *Header) Clone() *Header {
 // This avoids copying the mutex by constructing a new Header with only the
 // exported fields. The returned Header has fresh mutex/cache fields.
 func (h *Header) copyFields() Header {
-	payload := make(map[BatchDigest]WorkerID, len(h.Payload))
-	for k, v := range h.Payload {
-		payload[k] = v
-	}
+	payload := make([]PayloadEntry, len(h.Payload))
+	copy(payload, h.Payload)
 
 	parents := make([]CertificateDigest, len(h.Parents))
 	copy(parents, h.Parents)

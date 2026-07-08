@@ -17,7 +17,7 @@ import (
 func TestHeaderTimestampRoundTrip(t *testing.T) {
 	pub, priv, _ := ed25519.GenerateKey(nil)
 
-	h := NewHeader(pub, 3, 0, map[BatchDigest]WorkerID{{1, 2, 3}: 7}, []CertificateDigest{{9}})
+	h := NewHeader(pub, 3, 0, []PayloadEntry{{Digest: BatchDigest{1, 2, 3}, Worker: 7}}, []CertificateDigest{{9}})
 	h.Timestamp = 1234567890123456789
 	if err := h.Sign(priv); err != nil {
 		t.Fatal(err)

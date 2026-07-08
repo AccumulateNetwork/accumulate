@@ -40,9 +40,11 @@ type BlockParams struct {
 	// Certificate is the committed certificate that triggered this block.
 	Certificate *types.Certificate
 
-	// Batches contains the transaction batches referenced by the certificate.
-	// Map from batch digest to batch data.
-	Batches map[types.BatchDigest]*types.Batch
+	// Batches contains the transaction batches referenced by the
+	// certificate, in the certificate's canonical payload order. Batches
+	// are executed in this order, so it must be identical on every
+	// validator (#4054).
+	Batches []*types.Batch
 }
 
 // TransactionValidator validates transactions before they are added to batches.

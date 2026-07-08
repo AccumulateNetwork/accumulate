@@ -43,11 +43,12 @@ func (p *Primary) createHeaderLockedWithRound(round types.Round, epoch uint64) (
 
 	// 2. THEN: Collect available batch digests from workers
 	// Now that we know parents exist, it's safe to consume batches.
-	payload := make(map[types.BatchDigest]types.WorkerID)
+	// NewHeader sorts the payload into canonical (execution) order.
+	var payload []types.PayloadEntry
 	for _, w := range p.workers {
 		// Use ConsumeAvailableBatches to get and clear available batches
 		for _, digest := range w.ConsumeAvailableBatches() {
-			payload[digest] = w.ID()
+			payload = append(payload, types.PayloadEntry{Digest: digest, Worker: w.ID()})
 		}
 	}
 
