@@ -323,21 +323,25 @@ func (f *simFactory) getDispatcherFunc() func() execute.Dispatcher {
 	hub := f.getHub()
 	interceptor := f.interceptDispatchedMessages
 
+	// Use ONE shared dispatcher, registered with the hub for the lifetime of
+	// the simulator. The previous per-call dispatcher unregistered itself
+	// from the hub on Close — BEFORE the hub's next message cycle could
+	// collect its queue — so anything submitted from a background task
+	// (synthetic/anchor healing) was silently lost unless a consensus cycle
+	// happened to run in the window between Submit and Close. That race is
+	// why healing never worked reliably in the simulator and why
+	// TestMissingSynthTxn was flaky (#4048). The shared dispatcher's queue
+	// survives Close and is drained by the next consensus cycle.
+	shared := consensus.NewDispatcher(router)
+	hub.Register(shared)
+
 	f.dispatcherFunc = func() execute.Dispatcher {
-		d := consensus.NewDispatcher(router)
-		hub.Register(d)
-
-		e := &closeDispatcher{
-			Dispatcher: d,
-			close:      func() { hub.Unregister(d) },
-		}
-
 		if interceptor == nil {
-			return e
+			return shared
 		}
 
 		return &interceptDispatcher{
-			Dispatcher:  e,
+			Dispatcher:  shared,
 			interceptor: interceptor,
 		}
 	}
