@@ -34,6 +34,17 @@ func (c *Conductor) healAnchors(ctx context.Context, batch *database.Batch, dest
 		return errors.UnknownError.WithFormat("load anchor sequence chain head: %w", err)
 	}
 
+	// Paced to HealInterval, so this is cheap — and scan visibility is what
+	// makes silent anchor-delivery failures diagnosable (#4054). Log BEFORE
+	// querying the destination: if the destination is unreachable the query
+	// blocks until the scan deadline, and a scan that never logs is
+	// indistinguishable from healing being broken (#4056).
+	slog.Info("Anchor heal scan", "module", "conductor",
+		"source", c.Url(),
+		"destination", destination,
+		"produced", head.Count,
+		"currentBlock", currentBlock)
+
 	// Load the destination anchor ledger
 	var ledger1 *protocol.AnchorLedger
 	_, err = c.Querier.QueryAccountAs(ctx, destination.JoinPath(protocol.AnchorPool), nil, &ledger1)
@@ -41,15 +52,6 @@ func (c *Conductor) healAnchors(ctx context.Context, batch *database.Batch, dest
 		return errors.UnknownError.WithFormat("query %v anchor ledger: %w", destination, err)
 	}
 	ledger2 := ledger1.Partition(c.Url())
-
-	// Paced to HealInterval, so this is cheap — and scan visibility is what
-	// makes silent anchor-delivery failures diagnosable (#4054).
-	slog.Info("Anchor heal scan", "module", "conductor",
-		"source", c.Url(),
-		"destination", destination,
-		"produced", head.Count,
-		"delivered", ledger2.Delivered,
-		"currentBlock", currentBlock)
 
 	// For each not-yet delivered anchor
 	for i := ledger2.Delivered + 1; i <= uint64(head.Count); i++ {

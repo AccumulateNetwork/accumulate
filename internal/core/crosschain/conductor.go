@@ -64,6 +64,10 @@ type Conductor struct {
 	// DefaultHealInterval.
 	HealInterval time.Duration
 
+	// HealTimeout is the deadline for a single healing scan, including its
+	// queries to the destination. Defaults to DefaultHealTimeout.
+	HealTimeout *time.Duration
+
 	// lastHeal tracks the last healing scan per destination.
 	lastHealMu sync.Mutex
 	lastHeal   map[string]time.Time
@@ -72,6 +76,9 @@ type Conductor struct {
 // DefaultHealInterval is the default minimum time between anchor-healing
 // scans per destination.
 const DefaultHealInterval = 10 * time.Second
+
+// DefaultHealTimeout is the default deadline for a single healing scan.
+const DefaultHealTimeout = 30 * time.Second
 
 // shouldHeal returns true if enough time has passed since the last healing
 // scan for the given destination, and records the scan time.
@@ -139,35 +146,33 @@ func (c *Conductor) willBeginBlock(e execute.WillBeginBlock) error {
 		})
 	}()
 
-	// Check old anchors
+	// Check old anchors. Healing queries the DESTINATION, so every scan gets
+	// a deadline: an unreachable or restarted destination (stale peer IDs)
+	// otherwise hangs the query forever — the goroutine leaks silently and
+	// that destination is never healed again (#4056).
+	healOne := func(destination *url.URL) {
+		c.runTask(func() {
+			ctx, cancel := context.WithTimeout(context.Background(), def(c.HealTimeout, DefaultHealTimeout))
+			defer cancel()
+
+			batch := c.Database.Begin(false)
+			defer batch.Discard()
+
+			err := c.healAnchors(ctx, batch, destination, e.Index)
+			if err != nil {
+				slog.Error("Error while healing anchors", "destination", destination, "error", err)
+			}
+		})
+	}
 	if c.Partition.Type != protocol.PartitionTypeDirectory {
 		if c.shouldHeal(protocol.Directory) {
-			c.runTask(func() {
-				batch := c.Database.Begin(false)
-				defer batch.Discard()
-
-				err := c.healAnchors(context.Background(), batch, protocol.DnUrl(), e.Index)
-				if err != nil {
-					slog.Error("Error while healing anchors", "error", err)
-				}
-			})
+			healOne(protocol.DnUrl())
 		}
-
 	} else {
 		for _, dst := range c.Globals.Load().Network.Partitions {
-			dst := dst
-			if !c.shouldHeal(dst.ID) {
-				continue
+			if c.shouldHeal(dst.ID) {
+				healOne(protocol.PartitionUrl(dst.ID))
 			}
-			c.runTask(func() {
-				batch := c.Database.Begin(false)
-				defer batch.Discard()
-
-				err := c.healAnchors(context.Background(), batch, protocol.PartitionUrl(dst.ID), e.Index)
-				if err != nil {
-					slog.Error("Error while healing anchors", "error", err)
-				}
-			})
 		}
 	}
 
