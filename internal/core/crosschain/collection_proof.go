@@ -26,6 +26,12 @@ import (
 // anchor against its DN anchor pool exactly as it does for an individual
 // receipt. Pass nil only when the chain's own root at end is itself the
 // anchored root.
+//
+// Collection proofs are currently emitted only by the recovery path
+// (SequenceRange): steady-state synthetics dispatch one at a time, where a
+// single-element list has no advantage over a per-message receipt. Batching
+// steady-state emission is #4055 — a sender-side change only, since the
+// v2-kourou accept path already handles both proof forms.
 func BuildCollectionProof(chain *merkle.Chain, start, end int64, continued *merkle.Receipt) (*protocol.AnnotatedReceipt, error) {
 	if end-start+1 > protocol.MaxReceiptListElements {
 		return nil, errors.BadRequest.WithFormat("range [%d, %d] exceeds %d elements", start, end, protocol.MaxReceiptListElements)
