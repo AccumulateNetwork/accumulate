@@ -127,6 +127,7 @@ type Primary struct {
 	// Set of headers we've already voted on (to avoid duplicate votes)
 	// Maps header digest to the round it was for (enables round-based cleanup)
 	votedHeaders map[types.HeaderDigest]types.Round
+	sentVotes    map[types.HeaderDigest]*types.Vote
 
 	// pendingCerts buffers certificates that cannot be inserted due to missing parents
 	pendingCerts *PendingCertificates
@@ -174,6 +175,7 @@ func New(config Config, committee *types.Committee, g *gossip.GossipLayer, d *da
 		ourHeaders:   make(map[types.HeaderDigest]*types.Header),
 		ourCerts:     make(map[types.Round]*types.Certificate),
 		votedHeaders: make(map[types.HeaderDigest]types.Round),
+		sentVotes:    make(map[types.HeaderDigest]*types.Vote),
 		pendingCerts: pendingCerts,
 		newCerts:     make(chan *types.Certificate, config.NewCertsChannelSize),
 	}

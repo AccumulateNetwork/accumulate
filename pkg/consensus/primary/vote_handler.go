@@ -298,7 +298,16 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 	headerDigest := header.Digest()
 	p.pendingMu.Lock()
 	if _, voted := p.votedHeaders[headerDigest]; voted {
+		// The author rebroadcasts a header until it achieves quorum. If we
+		// see the header again, our vote may have been lost — votes are
+		// otherwise sent exactly once, which permanently stalls the round if
+		// the gossip mesh was still forming when we voted (#4054). Resend the
+		// stored vote; receivers deduplicate.
+		vote := p.sentVotes[headerDigest]
 		p.pendingMu.Unlock()
+		if vote != nil {
+			p.broadcastVoteAsync(vote, headerDigest)
+		}
 		return
 	}
 	p.pendingMu.Unlock()
@@ -321,9 +330,11 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 		return
 	}
 
-	// Mark as voted (store round for cleanup)
+	// Mark as voted (store round for cleanup) and keep the vote so it can be
+	// resent if the author rebroadcasts the header (#4054)
 	p.pendingMu.Lock()
 	p.votedHeaders[headerDigest] = header.Round
+	p.sentVotes[headerDigest] = vote
 	p.pendingMu.Unlock()
 
 	p.votesSent.Add(1)
@@ -334,6 +345,11 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 		"round", header.Round)
 
 	// Broadcast vote
+	p.broadcastVoteAsync(vote, headerDigest)
+}
+
+// broadcastVoteAsync broadcasts a vote in the background.
+func (p *Primary) broadcastVoteAsync(vote *types.Vote, headerDigest types.HeaderDigest) {
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()
