@@ -372,7 +372,7 @@ func (p *Primary) tryCreateAndBroadcastHeader() {
 
 	p.headersCreated.Add(1)
 
-	slog.Debug("Created header",
+	slog.Info("Created header",
 		"digest", digest.String(),
 		"round", header.Round,
 		"payload", len(header.Payload),

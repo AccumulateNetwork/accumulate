@@ -8,6 +8,7 @@ package p2p
 
 import (
 	"context"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"time"
 
 	dht "github.com/libp2p/go-libp2p-kad-dht"
@@ -30,6 +31,7 @@ type peerManager struct {
 	dht         *dht.IpfsDHT
 	routing     *routing.RoutingDiscovery
 	sendEvent   chan<- event
+	pubsub      *pubsub.PubSub
 	broadcast   chan struct{}
 	wait        chan chan struct{}
 }
@@ -55,7 +57,7 @@ func newPeerManager(ctx context.Context, host host.Host, getServices func() []*s
 
 	// Setup events
 	var recvEvent <-chan event
-	m.sendEvent, recvEvent, err = startServiceDiscovery(ctx, host)
+	m.pubsub, m.sendEvent, recvEvent, err = startServiceDiscovery(ctx, host)
 	if err != nil {
 		return nil, err
 	}

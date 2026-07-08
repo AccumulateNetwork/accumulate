@@ -9,6 +9,7 @@ package p2p
 import (
 	"context"
 	"crypto/ed25519"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"net"
 	"strings"
 	"time"
@@ -182,6 +183,11 @@ func (n *Node) ID() peer.ID { return n.host.ID() }
 // Host returns the underlying libp2p host.
 // This can be used to create additional protocols (e.g., GossipSub) on the same host.
 func (n *Node) Host() host.Host { return n.host }
+
+// Pubsub returns the host's gossipsub router. A libp2p host must have exactly
+// one pubsub router — creating a second one splits the meshsub protocol
+// streams between them (#4054) — so anything needing pubsub must reuse this.
+func (n *Node) Pubsub() *pubsub.PubSub { return n.peermgr.pubsub }
 
 // DHT returns the underlying DHT instance for advanced operations.
 // This is primarily used by the bootstrap server for active peer discovery.

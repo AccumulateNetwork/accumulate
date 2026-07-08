@@ -13,6 +13,7 @@ package bullshark
 import (
 	"crypto/ed25519"
 	"encoding/hex"
+	"log/slog"
 	"sync"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/dag"
@@ -142,15 +143,23 @@ func (b *Bullshark) ProcessCertificate(cert *types.Certificate) []ConsensusOutpu
 	leader := b.electLeader(leaderRound)
 	if leader == nil {
 		// No leader certificate exists for this round.
+		slog.Info("Bullshark: no leader certificate",
+			"leaderRound", leaderRound,
+			"dagCertsInRound", len(b.dag.GetRound(leaderRound)))
 		return nil
 	}
 
 	// Check if leader has f+1 support from round+1 certificates.
 	if !b.hasSupport(leader, round) {
+		slog.Info("Bullshark: leader lacks support",
+			"leaderRound", leaderRound,
+			"votingRound", round,
+			"votingCerts", len(b.dag.GetRound(round)))
 		return nil
 	}
 
 	// Leader has support! Commit the leader chain.
+	slog.Info("Bullshark: committing leader chain", "leaderRound", leaderRound)
 	return b.commitLeaderChain(leader)
 }
 

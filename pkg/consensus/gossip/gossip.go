@@ -277,6 +277,11 @@ func (g *GossipLayer) publish(ctx context.Context, pattern string, data []byte) 
 	if topic == nil {
 		return fmt.Errorf("topic not joined: %s", g.topics.TopicName(pattern))
 	}
+	if peers := topic.ListPeers(); len(peers) == 0 {
+		slog.Info("Publishing to topic with no peers",
+			"topic", g.topics.TopicName(pattern),
+			"partition", g.partition)
+	}
 	return topic.Publish(ctx, data)
 }
 
