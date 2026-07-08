@@ -175,11 +175,11 @@ func TestConsensusTestnet_TwoNodeCommunication(t *testing.T) {
 
 						batches := make(map[types.BatchDigest]*types.Batch)
 						digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
-						for digest := range cert.Header.Payload {
-							digests = append(digests, digest)
+						for _, entry := range cert.Header.Payload {
+							digests = append(digests, entry.Digest)
 							for _, w := range workers {
-								if batch, err := w.GetBatch(digest); err == nil && batch != nil {
-									batches[digest] = batch
+								if batch, err := w.GetBatch(entry.Digest); err == nil && batch != nil {
+									batches[entry.Digest] = batch
 									break
 								}
 							}
@@ -458,11 +458,11 @@ func TestConsensusTestnet_BasicConsensus(t *testing.T) {
 					if cert != nil {
 						batches := make(map[types.BatchDigest]*types.Batch)
 						digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
-						for digest := range cert.Header.Payload {
-							digests = append(digests, digest)
+						for _, entry := range cert.Header.Payload {
+							digests = append(digests, entry.Digest)
 							for _, w := range workers {
-								if batch, err := w.GetBatch(digest); err == nil && batch != nil {
-									batches[digest] = batch
+								if batch, err := w.GetBatch(entry.Digest); err == nil && batch != nil {
+									batches[entry.Digest] = batch
 									break
 								}
 							}
@@ -694,11 +694,11 @@ func TestConsensusTestnet_Throughput(t *testing.T) {
 					if cert != nil {
 						batches := make(map[types.BatchDigest]*types.Batch)
 						digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
-						for digest := range cert.Header.Payload {
-							digests = append(digests, digest)
+						for _, entry := range cert.Header.Payload {
+							digests = append(digests, entry.Digest)
 							for _, w := range workers {
-								if batch, err := w.GetBatch(digest); err == nil && batch != nil {
-									batches[digest] = batch
+								if batch, err := w.GetBatch(entry.Digest); err == nil && batch != nil {
+									batches[entry.Digest] = batch
 									break
 								}
 							}
@@ -942,11 +942,11 @@ func TestConsensusTestnet_NodeRestart(t *testing.T) {
 					if cert != nil {
 						batches := make(map[types.BatchDigest]*types.Batch)
 						digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
-						for digest := range cert.Header.Payload {
-							digests = append(digests, digest)
+						for _, entry := range cert.Header.Payload {
+							digests = append(digests, entry.Digest)
 							for _, w := range workers {
-								if batch, err := w.GetBatch(digest); err == nil && batch != nil {
-									batches[digest] = batch
+								if batch, err := w.GetBatch(entry.Digest); err == nil && batch != nil {
+									batches[entry.Digest] = batch
 									break
 								}
 							}
@@ -1103,11 +1103,11 @@ func TestConsensusTestnet_NodeRestart(t *testing.T) {
 				if cert != nil {
 					batches := make(map[types.BatchDigest]*types.Batch)
 					digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
-					for digest := range cert.Header.Payload {
-						digests = append(digests, digest)
+					for _, entry := range cert.Header.Payload {
+						digests = append(digests, entry.Digest)
 						for _, w := range workers {
-							if batch, err := w.GetBatch(digest); err == nil && batch != nil {
-								batches[digest] = batch
+							if batch, err := w.GetBatch(entry.Digest); err == nil && batch != nil {
+								batches[entry.Digest] = batch
 								break
 							}
 						}

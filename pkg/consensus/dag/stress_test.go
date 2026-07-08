@@ -377,13 +377,13 @@ func BenchmarkDAG_LargeBatch(b *testing.B) {
 			d := dag.NewDAG(100)
 
 			// Create payload with batch digests
-			payload := make(map[types.BatchDigest]types.WorkerID, batchSize)
+			payload := make([]types.PayloadEntry, 0, batchSize)
 			for i := 0; i < batchSize; i++ {
 				var digest types.BatchDigest
 				digest[0] = byte(i)
 				digest[1] = byte(i >> 8)
 				digest[2] = byte(i >> 16)
-				payload[digest] = types.WorkerID(i % 4)
+				payload = append(payload, types.PayloadEntry{Digest: digest, Worker: types.WorkerID(i % 4)})
 			}
 
 			pub := committee.Validators[0].PublicKey

@@ -22,7 +22,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	multiexec "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
@@ -211,8 +210,14 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		Database:            execOpts.Database,
 		Querier:             v3.Querier2{Querier: client},
 		Dispatcher:          execOpts.NewDispatcher(),
-		RunTask:             execOpts.BackgroundTaskLauncher,
-		EnableAnchorHealing: Ptr(false),
+		RunTask: execOpts.BackgroundTaskLauncher,
+		// Healing is the ONLY retry mechanism for anchors — the conductor's
+		// per-block dispatch is one-shot, and a single lost anchor freezes
+		// the destination's delivered-sequence forever (observed as BVN
+		// ledgers stuck at height 2, #4054). The conductor paces healing
+		// scans internally (HealInterval), so this is safe even at DAG-BFT
+		// block rates.
+		EnableAnchorHealing: Ptr(true),
 	}
 	err = conductor.Start(s.eventBus)
 	if err != nil {
@@ -407,8 +412,11 @@ func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Begin
 // loadGenesisIfNeeded loads the genesis snapshot into the database if needed.
 // It returns true if genesis was loaded, false if the database already has data.
 func (s *DAGBFTService) loadGenesisIfNeeded(db *database.Database, genesisPath string, logger logging.Logger) (bool, error) {
-	// Set the database observer (required for BPT updates)
-	db.SetObserver(execute.NewDatabaseObserver())
+	// Do NOT override the database observer. The default (production)
+	// observer computes real account hashes; execute.NewDatabaseObserver is a
+	// stub whose hasher is nil, so with it every account hash is empty — the
+	// BPT stops committing to state and genesis restore fails its hash check
+	// against the snapshot (#4053).
 
 	// Check if database already has state
 	batch := db.Begin(false)

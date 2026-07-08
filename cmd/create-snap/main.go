@@ -15,7 +15,6 @@ import (
 	"time"
 
 	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
-	cometLog "github.com/cometbft/cometbft/libs/log"
 	cmtversion "github.com/cometbft/cometbft/proto/tendermint/version"
 	cmttypes "github.com/cometbft/cometbft/types"
 	"github.com/cometbft/cometbft/version"
@@ -65,7 +64,6 @@ func main() {
 		Level: slog.LevelInfo,
 	}))
 	logger := (*logging.Slogger)(slogLogger)
-	cometLogger := cometLog.NewNopLogger()
 
 	// Open database
 	var db *database.Database
@@ -75,7 +73,7 @@ func main() {
 	case "leveldb":
 		db, err = database.OpenLevelDB(dbPath, logger)
 	case "badger":
-		db, err = database.OpenBadger(dbPath, cometLogger)
+		db, err = database.OpenBadger(dbPath, logger)
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown database type: %s (use 'leveldb' or 'badger')\n", dbType)
 		os.Exit(1)
@@ -94,7 +92,7 @@ func main() {
 		case "leveldb":
 			dnDb, err = database.OpenLevelDB(dnDbPath, logger)
 		case "badger":
-			dnDb, err = database.OpenBadger(dnDbPath, cometLogger)
+			dnDb, err = database.OpenBadger(dnDbPath, logger)
 		}
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to open DN database: %v\n", err)
@@ -102,9 +100,6 @@ func main() {
 		}
 		defer dnDb.Close()
 	}
-
-	_ = logger
-	_ = cometLogger
 
 	// Create partition URL
 	partitionURL := protocol.PartitionUrl(partition)

@@ -9,6 +9,7 @@ package p2p
 import (
 	"context"
 	"crypto/ed25519"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"net"
 	"strings"
 	"time"
@@ -87,9 +88,15 @@ func New(opts Options) (_ *Node, err error) {
 		}
 	}()
 
-	// Configure libp2p host options
+	// Configure libp2p host options.
+	//
+	// Listen addresses are NOT passed here. The host accepts inbound
+	// connections the instant it listens, and a peer's gossipsub router
+	// attaches on connect — if our protocol handlers are not registered yet
+	// the peer receives "protocols not supported", marks us dead, and never
+	// retries (#4054). Listening starts below, after the peer manager has
+	// registered every protocol handler.
 	options := []config.Option{
-		libp2p.ListenAddrs(opts.Listen...),
 		libp2p.EnableNATService(),
 		libp2p.EnableRelay(),
 		libp2p.EnableHolePunching(),
@@ -145,6 +152,15 @@ func New(opts Options) (_ *Node, err error) {
 	}
 	n.RegisterService(api.ServiceTypeNode.Address(), mh.Handle)
 
+	// Start listening now that the pubsub router, DHT, and node service have
+	// registered their protocol handlers — see the comment on the host
+	// options above (#4054).
+	if len(opts.Listen) > 0 {
+		if err := n.host.Network().Listen(opts.Listen...); err != nil {
+			return nil, err
+		}
+	}
+
 	// List the node as part of the network
 	if opts.Network != "" {
 		c, err := multiaddr.NewComponent(api.N_ACC, opts.Network)
@@ -182,6 +198,11 @@ func (n *Node) ID() peer.ID { return n.host.ID() }
 // Host returns the underlying libp2p host.
 // This can be used to create additional protocols (e.g., GossipSub) on the same host.
 func (n *Node) Host() host.Host { return n.host }
+
+// Pubsub returns the host's gossipsub router. A libp2p host must have exactly
+// one pubsub router — creating a second one splits the meshsub protocol
+// streams between them (#4054) — so anything needing pubsub must reuse this.
+func (n *Node) Pubsub() *pubsub.PubSub { return n.peermgr.pubsub }
 
 // DHT returns the underlying DHT instance for advanced operations.
 // This is primarily used by the bootstrap server for active peer discovery.

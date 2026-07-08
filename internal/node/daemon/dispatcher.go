@@ -79,11 +79,15 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 
 	errs := make(chan error)
 	check := func(err error) {
+		// CheckDispatchError returns nil for benign errors (e.g. "tx already
+		// in cache") and the error itself otherwise. This check used to be
+		// inverted — real dispatch failures were silently dropped and nil
+		// was reported as a failure ('Failed to dispatch ... error="<nil>"'),
+		// which hid every lost anchor (#4054).
 		err = tendermint.CheckDispatchError(err)
 		if err != nil {
-			return
+			errs <- err
 		}
-		errs <- err
 	}
 
 	// Run asynchronously

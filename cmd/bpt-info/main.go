@@ -14,7 +14,6 @@ import (
 	"os"
 	"sort"
 
-	cometLog "github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	cmdutil "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
@@ -50,7 +49,6 @@ func main() {
 		Level: slog.LevelInfo,
 	}))
 	logger := (*logging.Slogger)(slogLogger)
-	cometLogger := cometLog.NewNopLogger()
 
 	// Open database
 	var db *database.Database
@@ -60,7 +58,7 @@ func main() {
 	case "leveldb":
 		db, err = database.OpenLevelDB(dbPath, logger)
 	case "badger":
-		db, err = database.OpenBadger(dbPath, cometLogger)
+		db, err = database.OpenBadger(dbPath, logger)
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown database type: %s (use 'leveldb' or 'badger')\n", dbType)
 		os.Exit(1)

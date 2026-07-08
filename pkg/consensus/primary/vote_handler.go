@@ -30,7 +30,7 @@ func (p *Primary) OnVoteReceived(vote *types.Vote) {
 	p.committeeMu.RUnlock()
 
 	if !inCommittee {
-		slog.Debug("Vote from unknown validator",
+		slog.Info("Vote from unknown validator",
 			"author", hexEncode(vote.Author))
 		return
 	}
@@ -38,7 +38,7 @@ func (p *Primary) OnVoteReceived(vote *types.Vote) {
 	// EXPENSIVE CHECK SECOND: Signature verification (~29µs)
 	// Only verify signatures from committee members
 	if err := vote.Verify(); err != nil {
-		slog.Debug("Invalid vote signature",
+		slog.Info("Invalid vote signature",
 			"error", err,
 			"author", hexEncode(vote.Author))
 		return
@@ -57,14 +57,14 @@ func (p *Primary) OnVoteReceived(vote *types.Vote) {
 
 	// Check vote round/epoch matches
 	if vote.Round != header.Round {
-		slog.Debug("Vote round mismatch",
+		slog.Info("Vote round mismatch",
 			"voteRound", vote.Round,
 			"headerRound", header.Round)
 		return
 	}
 
 	if vote.Epoch != header.Epoch {
-		slog.Debug("Vote epoch mismatch",
+		slog.Info("Vote epoch mismatch",
 			"voteEpoch", vote.Epoch,
 			"headerEpoch", header.Epoch)
 		return
@@ -104,7 +104,7 @@ func (p *Primary) OnVoteReceived(vote *types.Vote) {
 	// Add the unique vote
 	p.pendingVotes[vote.HeaderDigest] = append(votes, vote)
 
-	slog.Debug("Added vote",
+	slog.Info("Added vote",
 		"headerDigest", vote.HeaderDigest.String(),
 		"author", hexEncode(vote.Author),
 		"totalVotes", len(p.pendingVotes[vote.HeaderDigest]))
@@ -135,7 +135,7 @@ func (p *Primary) tryCreateCertificateLocked(headerDigest types.HeaderDigest) {
 
 	// Need 2f+1 stake
 	if !hasQuorum {
-		slog.Debug("Not enough stake for certificate",
+		slog.Info("Not enough stake for certificate",
 			"headerDigest", headerDigest.String(),
 			"totalStake", totalStake,
 			"threshold", quorumThreshold)
@@ -237,9 +237,14 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 		return
 	}
 
+	slog.Info("Header handled by primary",
+		"partition", p.config.Partition,
+		"author", hexEncode(header.Author),
+		"round", header.Round)
+
 	// Verify header signature
 	if err := header.Verify(); err != nil {
-		slog.Debug("Invalid header signature",
+		slog.Info("Invalid header signature",
 			"error", err,
 			"author", hexEncode(header.Author))
 		return
@@ -251,7 +256,7 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 	p.committeeMu.RUnlock()
 
 	if !inCommittee {
-		slog.Debug("Header from unknown validator",
+		slog.Info("Header from unknown validator",
 			"author", hexEncode(header.Author))
 		return
 	}
@@ -270,7 +275,7 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 
 	// Check epoch matches
 	if header.Epoch != currentEpoch {
-		slog.Debug("Header epoch mismatch",
+		slog.Info("Header epoch mismatch",
 			"headerEpoch", header.Epoch,
 			"currentEpoch", currentEpoch)
 		return
@@ -286,7 +291,7 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 	maxRound := currentRound + 1
 
 	if header.Round < minRound || header.Round > maxRound {
-		slog.Debug("Header round out of range",
+		slog.Info("Header round out of range",
 			"headerRound", header.Round,
 			"currentRound", currentRound,
 			"minRound", minRound,
@@ -298,7 +303,16 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 	headerDigest := header.Digest()
 	p.pendingMu.Lock()
 	if _, voted := p.votedHeaders[headerDigest]; voted {
+		// The author rebroadcasts a header until it achieves quorum. If we
+		// see the header again, our vote may have been lost — votes are
+		// otherwise sent exactly once, which permanently stalls the round if
+		// the gossip mesh was still forming when we voted (#4054). Resend the
+		// stored vote; receivers deduplicate.
+		vote := p.sentVotes[headerDigest]
 		p.pendingMu.Unlock()
+		if vote != nil {
+			p.broadcastVoteAsync(vote, headerDigest)
+		}
 		return
 	}
 	p.pendingMu.Unlock()
@@ -306,7 +320,7 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 	// Check we have all parent certificates
 	for _, parentDigest := range header.Parents {
 		if p.dag.GetByDigest(parentDigest) == nil {
-			slog.Debug("Missing parent for header",
+			slog.Info("Missing parent for header",
 				"headerDigest", headerDigest.String(),
 				"parentDigest", parentDigest.String())
 			return // missing parent, can't vote
@@ -321,19 +335,27 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 		return
 	}
 
-	// Mark as voted (store round for cleanup)
+	// Mark as voted (store round for cleanup) and keep the vote so it can be
+	// resent if the author rebroadcasts the header (#4054)
 	p.pendingMu.Lock()
 	p.votedHeaders[headerDigest] = header.Round
+	p.sentVotes[headerDigest] = vote
 	p.pendingMu.Unlock()
 
 	p.votesSent.Add(1)
 
-	slog.Debug("Voting on header",
+	slog.Info("Voting on header",
+		"partition", p.config.Partition,
 		"headerDigest", headerDigest.String(),
 		"author", hexEncode(header.Author),
 		"round", header.Round)
 
 	// Broadcast vote
+	p.broadcastVoteAsync(vote, headerDigest)
+}
+
+// broadcastVoteAsync broadcasts a vote in the background.
+func (p *Primary) broadcastVoteAsync(vote *types.Vote, headerDigest types.HeaderDigest) {
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()

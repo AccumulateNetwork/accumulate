@@ -184,16 +184,17 @@ func (inst *Instance) StartFiltered(predicate func(Service) bool) (err error) {
 		return errors.UnknownError.WithFormat("start p2p: %w", err)
 	}
 
-	// Create shared GossipSub for DAG-BFT services (must be created ONCE per host)
+	// Reuse the P2P node's GossipSub for DAG-BFT services. A libp2p host must
+	// have exactly ONE pubsub router: creating a second one here made the two
+	// routers compete for the meshsub protocol streams, and whichever lost
+	// saw empty topics forever — consensus messages were published into the
+	// void (#4054).
 	if inst.p2p != nil && inst.p2p.Host() != nil {
-		inst.pubsub, err = pubsub.NewGossipSub(inst.context, inst.p2p.Host(),
-			pubsub.WithPeerExchange(true),
-			pubsub.WithFloodPublish(true),
-		)
-		if err != nil {
-			return errors.UnknownError.WithFormat("create gossipsub: %w", err)
+		inst.pubsub = inst.p2p.Pubsub()
+		if inst.pubsub == nil {
+			return errors.InternalError.With("p2p node has no pubsub router")
 		}
-		slog.Info("Created shared GossipSub for DAG-BFT")
+		slog.Info("Using P2P node's GossipSub for DAG-BFT")
 	}
 
 	// Prestart

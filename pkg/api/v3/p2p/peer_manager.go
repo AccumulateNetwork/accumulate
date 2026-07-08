@@ -8,6 +8,7 @@ package p2p
 
 import (
 	"context"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"time"
 
 	dht "github.com/libp2p/go-libp2p-kad-dht"
@@ -30,6 +31,7 @@ type peerManager struct {
 	dht         *dht.IpfsDHT
 	routing     *routing.RoutingDiscovery
 	sendEvent   chan<- event
+	pubsub      *pubsub.PubSub
 	broadcast   chan struct{}
 	wait        chan chan struct{}
 }
@@ -44,21 +46,27 @@ func newPeerManager(ctx context.Context, host host.Host, getServices func() []*s
 	m.network = opts.Network
 	m.getServices = getServices
 
-	// Setup the DHT
+	// Create the gossipsub router BEFORE dialing anyone. A peer's router
+	// attaches to us the moment a connection forms; if our meshsub protocol
+	// handlers are not registered yet, the peer gets an explicit "protocols
+	// not supported" rejection, marks us dead, and NEVER retries — the
+	// gossip mesh is then permanently broken for that peer pair even though
+	// the connection is fine (#4054). startDHT connects to the bootstrap
+	// peers, so the router must exist before it runs.
 	var err error
+	var recvEvent <-chan event
+	m.pubsub, m.sendEvent, recvEvent, err = startServiceDiscovery(ctx, host)
+	if err != nil {
+		return nil, err
+	}
+
+	// Setup the DHT
 	m.dht, err = startDHT(host, ctx, opts.DiscoveryMode, opts.BootstrapPeers)
 	if err != nil {
 		return nil, err
 	}
 
 	m.routing = routing.NewRoutingDiscovery(m.dht)
-
-	// Setup events
-	var recvEvent <-chan event
-	m.sendEvent, recvEvent, err = startServiceDiscovery(ctx, host)
-	if err != nil {
-		return nil, err
-	}
 
 	// Create an event loop to handle service registration notifications
 	m.broadcast = make(chan struct{}, 1)

@@ -80,10 +80,10 @@ func (tn *TestNetwork) AssertCommitsContainTransactions(t *testing.T, expectedTx
 		var allTxs [][]byte
 
 		for _, cert := range commits {
-			for batchDigest := range cert.Header.Payload {
+			for _, entry := range cert.Header.Payload {
 				// Get batch from any worker
 				for _, w := range n.Node.Workers() {
-					batch, _ := w.GetBatch(batchDigest)
+					batch, _ := w.GetBatch(entry.Digest)
 					if batch != nil {
 						allTxs = append(allTxs, batch.Transactions...)
 					}

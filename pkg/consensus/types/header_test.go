@@ -57,8 +57,8 @@ func TestHeader_Digest(t *testing.T) {
 
 	t.Run("with payload", func(t *testing.T) {
 		batch := types.NewBatch([][]byte{[]byte("test")})
-		payload := map[types.BatchDigest]types.WorkerID{
-			batch.Digest(): 0,
+		payload := []types.PayloadEntry{
+			{Digest: batch.Digest(), Worker: 0},
 		}
 
 		header1 := types.NewHeader(pub, 1, 0, nil, nil)
@@ -72,13 +72,13 @@ func TestHeader_Digest(t *testing.T) {
 		batch2 := types.NewBatch([][]byte{[]byte("test2")})
 
 		// Create payloads in different order
-		payload1 := map[types.BatchDigest]types.WorkerID{
-			batch1.Digest(): 0,
-			batch2.Digest(): 1,
+		payload1 := []types.PayloadEntry{
+			{Digest: batch1.Digest(), Worker: 0},
+			{Digest: batch2.Digest(), Worker: 1},
 		}
-		payload2 := map[types.BatchDigest]types.WorkerID{
-			batch2.Digest(): 1,
-			batch1.Digest(): 0,
+		payload2 := []types.PayloadEntry{
+			{Digest: batch2.Digest(), Worker: 1},
+			{Digest: batch1.Digest(), Worker: 0},
 		}
 
 		header1 := types.NewHeader(pub, 1, 0, payload1, nil)
@@ -185,8 +185,8 @@ func TestHeader_Marshal(t *testing.T) {
 
 	t.Run("with payload and parents", func(t *testing.T) {
 		batch := types.NewBatch([][]byte{[]byte("test")})
-		payload := map[types.BatchDigest]types.WorkerID{
-			batch.Digest(): 5,
+		payload := []types.PayloadEntry{
+			{Digest: batch.Digest(), Worker: 5},
 		}
 		parents := []types.CertificateDigest{{1, 2, 3}}
 
@@ -202,7 +202,8 @@ func TestHeader_Marshal(t *testing.T) {
 
 		assert.Len(t, unmarshaled.Payload, 1)
 		assert.Len(t, unmarshaled.Parents, 1)
-		assert.Equal(t, types.WorkerID(5), unmarshaled.Payload[batch.Digest()])
+		assert.Equal(t, batch.Digest(), unmarshaled.Payload[0].Digest)
+		assert.Equal(t, types.WorkerID(5), unmarshaled.Payload[0].Worker)
 
 		err = unmarshaled.Verify()
 		assert.NoError(t, err)
@@ -251,9 +252,9 @@ func TestHeader_UnmarshalErrors(t *testing.T) {
 func TestHeader_Clone(t *testing.T) {
 	pub, priv := generateKeyPair(t)
 	batch := types.NewBatch([][]byte{[]byte("test")})
-	payload := map[types.BatchDigest]types.WorkerID{
-		batch.Digest(): 1,
-	}
+	payload := []types.PayloadEntry{
+			{Digest: batch.Digest(), Worker: 1},
+		}
 	parents := []types.CertificateDigest{{1, 2, 3}}
 
 	original := types.NewHeader(pub, 5, 2, payload, parents)

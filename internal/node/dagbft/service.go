@@ -415,23 +415,25 @@ func (s *Service) processCommittedCertificate(cert *types.Certificate) error {
 	blockIndex := s.lastBlockIndex + 1
 	s.mu.Unlock()
 
-	// Get batches from workers outside the lock - this involves I/O
-	batches := make(map[types.BatchDigest]*types.Batch)
+	// Get batches from workers outside the lock - this involves I/O.
+	// The payload slice is in canonical order and batches are executed in
+	// payload order — identical on every validator (#4054).
+	batches := make([]*types.Batch, 0, len(cert.Header.Payload))
 	committedDigests := make([]types.BatchDigest, 0)
-	for digest := range cert.Header.Payload {
+	for _, entry := range cert.Header.Payload {
 		var found bool
 		for _, w := range workers {
-			batch, err := w.GetBatch(digest)
+			batch, err := w.GetBatch(entry.Digest)
 			if err == nil && batch != nil {
-				batches[digest] = batch
-				committedDigests = append(committedDigests, digest)
+				batches = append(batches, batch)
+				committedDigests = append(committedDigests, entry.Digest)
 				found = true
 				break
 			}
 		}
 		if !found {
 			s.logger.Error("Batch missing from all workers",
-				"digest", fmt.Sprintf("%x", digest[:]),
+				"digest", fmt.Sprintf("%x", entry.Digest[:]),
 				"round", cert.Header.Round)
 		}
 	}
@@ -440,8 +442,21 @@ func (s *Service) processCommittedCertificate(cert *types.Certificate) error {
 	pubKey := s.config.NodeConfig.KeyPair.Public().(ed25519.PublicKey)
 	isLeader := types.ValidatorsEqual(cert.Header.Author, pubKey)
 
-	// Produce block
-	blockTime := time.Now()
+	// Produce block. The block time MUST be derived from the certificate,
+	// not the local clock: block time is part of executed state, so if each
+	// validator stamps its own wall clock the state trees diverge on the
+	// very first block and cross-partition anchors never gather a signature
+	// quorum — each validator signs a different version of the "same" anchor
+	// (#4054). The header timestamp is the author's clock, covered by the
+	// header signature; clamp it to be strictly increasing so a bad clock
+	// cannot move time backwards.
+	s.mu.RLock()
+	lastTime := s.lastBlockTime
+	s.mu.RUnlock()
+	blockTime := time.Unix(0, cert.Header.Timestamp).UTC()
+	if !blockTime.After(lastTime) {
+		blockTime = lastTime.Add(time.Millisecond)
+	}
 
 	params := adapter.BlockParams{
 		Index:       blockIndex,

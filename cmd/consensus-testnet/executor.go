@@ -7,7 +7,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"crypto/ed25519"
 	"encoding/binary"
@@ -16,7 +15,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"sort"
+
 	"sync"
 	"time"
 
@@ -256,16 +255,12 @@ func (e *Executor) produceBlock() *Block {
 // Digests are sorted to ensure deterministic ordering across all nodes.
 // Transactions are accumulated and blocks are produced on the timer interval.
 func (e *Executor) ProcessCertificate(cert *types.Certificate, batches map[types.BatchDigest]*types.Batch) {
-	// Collect and sort digests for deterministic processing order
-	// Go map iteration is non-deterministic, so we must sort to ensure
-	// all nodes process transactions in the same order.
+	// The payload is a slice in canonical order, so processing it in order
+	// is deterministic across nodes.
 	digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
-	for digest := range cert.Header.Payload {
-		digests = append(digests, digest)
+	for _, entry := range cert.Header.Payload {
+		digests = append(digests, entry.Digest)
 	}
-	sort.Slice(digests, func(i, j int) bool {
-		return bytes.Compare(digests[i][:], digests[j][:]) < 0
-	})
 
 	// Extract all transactions from the certificate's batches in sorted order
 	for _, digest := range digests {

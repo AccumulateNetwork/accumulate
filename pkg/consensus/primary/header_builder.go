@@ -43,17 +43,22 @@ func (p *Primary) createHeaderLockedWithRound(round types.Round, epoch uint64) (
 
 	// 2. THEN: Collect available batch digests from workers
 	// Now that we know parents exist, it's safe to consume batches.
-	payload := make(map[types.BatchDigest]types.WorkerID)
+	// NewHeader sorts the payload into canonical (execution) order.
+	var payload []types.PayloadEntry
 	for _, w := range p.workers {
 		// Use ConsumeAvailableBatches to get and clear available batches
 		for _, digest := range w.ConsumeAvailableBatches() {
-			payload[digest] = w.ID()
+			payload = append(payload, types.PayloadEntry{Digest: digest, Worker: w.ID()})
 		}
 	}
 
 	// 3. Build header
 	pubKey := p.config.KeyPair.Public().(ed25519.PublicKey)
 	header := types.NewHeader(pubKey, round, epoch, payload, parents)
+	// Stamp the author's clock. Executors use this (not their own clocks) as
+	// the block time so that execution is deterministic across validators —
+	// see types.Header.Timestamp (#4054).
+	header.Timestamp = time.Now().UnixNano()
 
 	// 4. Sign
 	if err := header.Sign(p.config.KeyPair); err != nil {

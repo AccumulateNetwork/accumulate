@@ -13,7 +13,6 @@ import (
 	"os"
 	"path/filepath"
 
-	cometLog "github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -53,7 +52,6 @@ func createSnapshot() {
 		Level: slog.LevelInfo,
 	}))
 	logger := (*logging.Slogger)(slogLogger)
-	cometLogger := cometLog.NewNopLogger()
 
 	// Open database
 	fmt.Printf("Opening %s database at %s...\n", storageType, dataDir)
@@ -62,7 +60,7 @@ func createSnapshot() {
 	var err error
 	switch storageType {
 	case "badger":
-		db, err = database.OpenBadger(dbPath, cometLogger)
+		db, err = database.OpenBadger(dbPath, logger)
 	case "levelDB":
 		db, err = database.OpenLevelDB(dbPath, logger)
 	default:
@@ -92,7 +90,7 @@ func createSnapshot() {
 	batch := db.Begin(false)
 	defer batch.Discard()
 
-	err = snapshot.FullCollect(batch, file, partitionURL, cometLogger, false)
+	err = snapshot.FullCollect(batch, file, partitionURL, logger, false)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to collect snapshot: %v\n", err)
 		os.Exit(1)

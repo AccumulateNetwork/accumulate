@@ -12,7 +12,9 @@ import (
 	"fmt"
 	"log/slog"
 	"runtime/debug"
+	"sync"
 	"sync/atomic"
+	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
@@ -53,6 +55,43 @@ type Conductor struct {
 
 	// **FOR TESTING PURPOSES ONLY**. Intercepts dispatched envelopes.
 	Intercept interceptor
+
+	// HealInterval is the minimum time between anchor-healing scans per
+	// destination. Healing fires from WillBeginBlock; with CometBFT that is
+	// ~1 block/s but DAG-BFT produces a block per committed certificate —
+	// dozens per second — and each scan queries the destination partition,
+	// so healing must be paced independently of block cadence. Defaults to
+	// DefaultHealInterval.
+	HealInterval time.Duration
+
+	// lastHeal tracks the last healing scan per destination.
+	lastHealMu sync.Mutex
+	lastHeal   map[string]time.Time
+}
+
+// DefaultHealInterval is the default minimum time between anchor-healing
+// scans per destination.
+const DefaultHealInterval = 10 * time.Second
+
+// shouldHeal returns true if enough time has passed since the last healing
+// scan for the given destination, and records the scan time.
+func (c *Conductor) shouldHeal(destination string) bool {
+	interval := c.HealInterval
+	if interval <= 0 {
+		interval = DefaultHealInterval
+	}
+
+	c.lastHealMu.Lock()
+	defer c.lastHealMu.Unlock()
+
+	if c.lastHeal == nil {
+		c.lastHeal = make(map[string]time.Time)
+	}
+	if time.Since(c.lastHeal[destination]) < interval {
+		return false
+	}
+	c.lastHeal[destination] = time.Now()
+	return true
 }
 
 func (c *Conductor) Start(bus *events.Bus) error {
@@ -102,19 +141,24 @@ func (c *Conductor) willBeginBlock(e execute.WillBeginBlock) error {
 
 	// Check old anchors
 	if c.Partition.Type != protocol.PartitionTypeDirectory {
-		c.runTask(func() {
-			batch := c.Database.Begin(false)
-			defer batch.Discard()
+		if c.shouldHeal(protocol.Directory) {
+			c.runTask(func() {
+				batch := c.Database.Begin(false)
+				defer batch.Discard()
 
-			err := c.healAnchors(context.Background(), batch, protocol.DnUrl(), e.Index)
-			if err != nil {
-				slog.Error("Error while healing anchors", "error", err)
-			}
-		})
+				err := c.healAnchors(context.Background(), batch, protocol.DnUrl(), e.Index)
+				if err != nil {
+					slog.Error("Error while healing anchors", "error", err)
+				}
+			})
+		}
 
 	} else {
 		for _, dst := range c.Globals.Load().Network.Partitions {
 			dst := dst
+			if !c.shouldHeal(dst.ID) {
+				continue
+			}
 			c.runTask(func() {
 				batch := c.Database.Begin(false)
 				defer batch.Discard()
@@ -221,6 +265,7 @@ func (c *Conductor) submit(ctx context.Context, url *url.URL, env *messaging.Env
 func (c *Conductor) runTask(task func()) {
 	if c.RunTask != nil {
 		c.RunTask(task)
+		return
 	}
 
 	go func() {

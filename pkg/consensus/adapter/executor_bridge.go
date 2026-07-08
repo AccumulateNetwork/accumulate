@@ -192,15 +192,18 @@ func (b *ExecutorBridge) ProduceBlock(ctx context.Context, params BlockParams) (
 		return [32]byte{}, fmt.Errorf("begin block: %w", err)
 	}
 
-	// Process transactions from all batches
+	// Process transactions from all batches. Batches arrive in the
+	// certificate's canonical payload order and MUST be executed in that
+	// order — executing in any node-local order (this used to iterate a map)
+	// diverges chain entries and BPT roots across validators (#4054).
 	txCount := 0
-	for digest, batch := range params.Batches {
+	for _, batch := range params.Batches {
 		if batch == nil {
 			slog.Warn("Missing batch in certificate",
-				"digest", digest.String(),
 				"round", params.LeaderRound)
 			continue
 		}
+		digest := batch.Digest()
 
 		for i, txBytes := range batch.Transactions {
 			// Unmarshal transaction to envelope

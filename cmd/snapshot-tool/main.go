@@ -49,7 +49,7 @@ func _mainOld() { // Unused, kept for reference
 		fmt.Fprintf(os.Stderr, "Failed to create logger: %v\n", err)
 		os.Exit(1)
 	}
-	tmLogger := log.NewTMLogger(logger)
+	tmLogger := logging.FromCometBFT(log.NewTMLogger(logger))
 
 	// Open database
 	fmt.Printf("Opening database at %s...\n", workDir)
