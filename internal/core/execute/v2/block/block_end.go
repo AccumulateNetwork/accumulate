@@ -627,10 +627,16 @@ func (x *Executor) getKeySignature(r *api.MessageRecord[messaging.Message], part
 // which each re-submitted message carries. Returns false if recovery was not
 // possible, in which case the caller falls back to per-message requests.
 func (x *Executor) requestMissingViaRange(ctx context.Context, dispatcher Dispatcher, ranger private.SequenceRanger, partition *protocol.PartitionSyntheticLedger, anchor bool) bool {
-	// Find the run of unknown messages
+	// Find the run of undelivered messages. For synthetic messages only
+	// UNKNOWN entries need recovery — known entries execute on their own
+	// once their predecessors arrive. Anchors are different: a known anchor
+	// can still be stuck waiting for a signature quorum that may take
+	// minutes (or, after validator churn, forever) to re-gather, and a
+	// proof-authorized resubmission executes immediately (#4056) — so for
+	// anchors the whole undelivered run is recovered.
 	first, last := uint64(0), uint64(0)
 	for i, txid := range partition.Pending {
-		if txid != nil {
+		if txid != nil && !anchor {
 			continue
 		}
 		seqNum := partition.Delivered + uint64(i) + 1
