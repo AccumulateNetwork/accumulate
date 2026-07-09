@@ -402,6 +402,16 @@ func (s *CertSyncer) handleSyncRequest(req *gossip.CertSyncRequest) {
 
 	// Only respond if we have certificates to send
 	if len(certs) == 0 {
+		if len(req.Rounds) > 0 {
+			// A round request that matches nothing means the requester is
+			// asking for rounds we do not have — that is load-bearing
+			// diagnosis for round catch-up (#4057), not noise.
+			slog.Info("Sync request matched nothing",
+				"rounds", len(req.Rounds),
+				"firstRound", req.Rounds[0],
+				"lastRound", req.Rounds[len(req.Rounds)-1],
+				"requestID", req.RequestID)
+		}
 		return
 	}
 
@@ -417,14 +427,15 @@ func (s *CertSyncer) handleSyncRequest(req *gossip.CertSyncRequest) {
 	}
 
 	if err := s.gossip.BroadcastSyncResponse(s.ctx, resp); err != nil {
-		slog.Debug("Failed to send sync response",
-			"error", err)
+		slog.Warn("Failed to send sync response",
+			"error", err, "certificates", len(certs))
 		return
 	}
 
-	slog.Debug("Sent sync response",
+	slog.Info("Sent sync response",
 		"certificates", len(certs),
 		"missing", len(missing),
+		"rounds", len(req.Rounds),
 		"requestID", req.RequestID)
 }
 
@@ -482,7 +493,7 @@ func (s *CertSyncer) handleSyncResponse(resp *gossip.CertSyncResponse) {
 		s.certificatesRecv.Add(1)
 	}
 
-	slog.Debug("Received sync response",
+	slog.Info("Received sync response",
 		"certificates", len(resp.Certificates),
 		"requestID", resp.RequestID)
 }
