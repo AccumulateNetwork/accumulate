@@ -15,8 +15,10 @@ import (
 // Default configuration values for DAG-BFT consensus.
 const (
 	// Consensus defaults
-	DefaultNumWorkers       = 1
-	DefaultDAGGCDepth       = 50
+	DefaultNumWorkers = 1
+	// DefaultDAGGCDepth is also the round catch-up window (#4057) — see
+	// consensus.DefaultDAGGCDepth. Keep the two in sync.
+	DefaultDAGGCDepth       = 10_000
 	DefaultCommitBufferSize = 5000
 
 	// Batching defaults
