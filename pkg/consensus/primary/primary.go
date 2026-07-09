@@ -516,10 +516,23 @@ func (p *Primary) rebroadcastPendingHeaders() {
 		return
 	}
 
+	p.roundMu.Lock()
+	currentRound := p.currentRound
+	p.roundMu.Unlock()
+
 	p.pendingMu.Lock()
 	// Collect headers that need rebroadcast (those without certificates yet)
 	var toRebroadcast []*types.Header
-	for _, header := range p.ourHeaders {
+	for digest, header := range p.ourHeaders {
+		// Voters accept rounds no older than their current round minus one, so
+		// a header two or more rounds behind can never gather votes — drop it
+		// here rather than spam the network with it (cleanupOldHeaders only
+		// runs when the round advances, which it may not during a stall)
+		if header.Round+1 < currentRound {
+			delete(p.ourHeaders, digest)
+			delete(p.pendingVotes, digest)
+			continue
+		}
 		// Only rebroadcast if we don't have a certificate for this round yet
 		if _, hasCert := p.ourCerts[header.Round]; !hasCert {
 			toRebroadcast = append(toRebroadcast, header)

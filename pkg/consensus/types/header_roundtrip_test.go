@@ -65,3 +65,49 @@ func TestHeaderTimestampRoundTrip(t *testing.T) {
 		t.Fatalf("verify header after cert round trip: %v", err)
 	}
 }
+
+// TestHeaderDuplicatePayloadRoundTrip verifies NewHeader deduplicates payload
+// entries. Workers can queue the same batch digest twice; without dedup the
+// author signs a header UnmarshalHeader rejects (strictly-ascending payload
+// check), so peers silently drop it and the round wedges (#4057).
+func TestHeaderDuplicatePayloadRoundTrip(t *testing.T) {
+	pub, priv, _ := ed25519.GenerateKey(nil)
+
+	payload := []PayloadEntry{
+		{Digest: BatchDigest{5}, Worker: 2},
+		{Digest: BatchDigest{1, 2, 3}, Worker: 7},
+		{Digest: BatchDigest{5}, Worker: 1},
+		{Digest: BatchDigest{1, 2, 3}, Worker: 7},
+	}
+	h := NewHeader(pub, 3, 0, payload, []CertificateDigest{{9}})
+	if len(h.Payload) != 2 {
+		t.Fatalf("payload not deduplicated: %d entries", len(h.Payload))
+	}
+	// Deterministic survivor: lowest worker ID wins for a duplicated digest
+	if h.Payload[1].Digest != (BatchDigest{5}) || h.Payload[1].Worker != 1 {
+		t.Fatalf("unexpected surviving entry: %+v", h.Payload[1])
+	}
+	if err := h.Sign(priv); err != nil {
+		t.Fatal(err)
+	}
+
+	hd, err := h.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	h2, err := UnmarshalHeader(hd)
+	if err != nil {
+		t.Fatalf("peers would reject this header: %v", err)
+	}
+	if err := h2.Verify(); err != nil {
+		t.Fatalf("verify after round trip: %v", err)
+	}
+
+	// Empty and nil payloads still work
+	for _, p := range [][]PayloadEntry{nil, {}} {
+		h := NewHeader(pub, 1, 0, p, nil)
+		if len(h.Payload) != 0 {
+			t.Fatalf("expected empty payload, got %d", len(h.Payload))
+		}
+	}
+}

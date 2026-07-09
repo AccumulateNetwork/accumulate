@@ -79,8 +79,12 @@ type PayloadEntry struct {
 }
 
 // NewHeader creates a new unsigned header. The payload is sorted into
-// canonical order (ascending by digest); the caller must not pass duplicate
-// digests.
+// canonical order (strictly ascending by digest) and deduplicated. Workers
+// can queue the same batch digest more than once — identical transaction
+// content produces identical batches — and a duplicate must not survive
+// here: UnmarshalHeader rejects non-strict order, so a header with a
+// duplicate digest is valid to its author but unparseable to every peer,
+// which silently wedges the round (#4057).
 func NewHeader(
 	author ed25519.PublicKey,
 	round Round,
@@ -89,8 +93,20 @@ func NewHeader(
 	parents []CertificateDigest,
 ) *Header {
 	sort.Slice(payload, func(i, j int) bool {
-		return bytes.Compare(payload[i].Digest[:], payload[j].Digest[:]) < 0
+		c := bytes.Compare(payload[i].Digest[:], payload[j].Digest[:])
+		if c != 0 {
+			return c < 0
+		}
+		return payload[i].Worker < payload[j].Worker
 	})
+	dedup := payload[:0]
+	for i, entry := range payload {
+		if i > 0 && entry.Digest == payload[i-1].Digest {
+			continue
+		}
+		dedup = append(dedup, entry)
+	}
+	payload = dedup
 	return &Header{
 		Author:  author,
 		Round:   round,
