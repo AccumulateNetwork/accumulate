@@ -130,9 +130,10 @@ type Primary struct {
 	sentVotes    map[types.HeaderDigest]*types.Vote
 
 	// Round-sync pacing (#4057)
-	roundSyncMu   sync.Mutex
-	lastRoundPull time.Time
-	lastRoundPush time.Time
+	roundSyncMu       sync.Mutex
+	lastRoundPull     time.Time
+	lastRoundPush     time.Time
+	lastStallRecovery time.Time
 
 	// pendingCerts buffers certificates that cannot be inserted due to missing parents
 	pendingCerts *PendingCertificates
@@ -280,6 +281,14 @@ func (p *Primary) Start(ctx context.Context) error {
 				lastRebroadcast = time.Now()
 				p.rebroadcastPendingHeaders()
 			}
+			// Recover from a silent stall (#4057): after an outage all
+			// validators can end up with their OWN header certified but
+			// missing each other's certificates — nothing is pending (so
+			// nothing rebroadcasts), the round cannot advance (no quorum
+			// of certificates), and with no traffic nothing triggers
+			// round sync. Re-share the current round's certificates and
+			// pull for what we are missing.
+			p.recoverFromStall()
 		}
 	}
 }
@@ -539,4 +548,62 @@ func (p *Primary) rebroadcastPendingHeaders() {
 			}
 		}(header)
 	}
+}
+
+// recoverFromStall re-shares the current round's certificates and requests
+// the ones we are missing when the round has not advanced for a while. Paced
+// internally; a no-op while consensus is healthy.
+func (p *Primary) recoverFromStall() {
+	p.roundMu.Lock()
+	current := p.currentRound
+	stalled := !p.lastRoundAdvance.IsZero() && time.Since(p.lastRoundAdvance) > 5*time.Second
+	p.roundMu.Unlock()
+	if !stalled {
+		return
+	}
+
+	p.roundSyncMu.Lock()
+	if time.Since(p.lastStallRecovery) < 2*time.Second {
+		p.roundSyncMu.Unlock()
+		return
+	}
+	p.lastStallRecovery = time.Now()
+	p.roundSyncMu.Unlock()
+
+	// Re-share every certificate we hold for the current and previous round
+	// so peers that missed the one-shot broadcast can assemble quorum
+	var shared int
+	if p.gossip != nil {
+		start := current
+		if start > 0 {
+			start--
+		}
+		for r := start; r <= current; r++ {
+			for _, cert := range p.dag.GetRound(r) {
+				cert := cert
+				p.wg.Add(1)
+				go func() {
+					defer p.wg.Done()
+					if err := p.gossip.BroadcastCertificate(p.ctx, cert); err != nil {
+						slog.Debug("Failed to re-share certificate", "error", err)
+					}
+				}()
+				shared++
+			}
+		}
+	}
+
+	// And pull whatever we are missing around the current round
+	if p.certSyncer != nil {
+		rounds := []types.Round{current, current + 1}
+		if current > 0 {
+			rounds = append([]types.Round{current - 1}, rounds...)
+		}
+		p.certSyncer.RequestRounds(rounds)
+	}
+
+	slog.Info("Consensus stalled - re-sharing certificates",
+		"partition", p.config.Partition,
+		"round", current,
+		"shared", shared)
 }
