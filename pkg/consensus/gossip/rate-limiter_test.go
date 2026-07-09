@@ -60,7 +60,7 @@ func TestRateLimiter_TokenRefill(t *testing.T) {
 	require.True(t, limiter.Allow(peerID), "Should allow after token refill")
 }
 
-func TestRateLimiter_BanThreshold(t *testing.T){
+func TestRateLimiter_BanThreshold(t *testing.T) {
 	config := RateLimitConfig{
 		VotesPerSecond: 10,
 		BurstSize:      5,

@@ -23,7 +23,14 @@ type CertSyncRequest struct {
 	Requester ed25519.PublicKey
 	// RequestID is used for response correlation
 	RequestID uint64
+	// Rounds requests every certificate of the given rounds. Used for round
+	// catch-up: a node that has fallen behind cannot know the digests it is
+	// missing, only the rounds (#4057).
+	Rounds []types.Round
 }
+
+// MaxSyncRounds bounds the number of rounds a single request may ask for.
+const MaxSyncRounds = 64
 
 // CertSyncResponse is a response containing requested certificates.
 type CertSyncResponse struct {
@@ -46,8 +53,11 @@ func (r *CertSyncRequest) Marshal() ([]byte, error) {
 	if len(r.Digests) > MaxSyncDigests {
 		return nil, fmt.Errorf("too many digests: %d > %d", len(r.Digests), MaxSyncDigests)
 	}
+	if len(r.Rounds) > MaxSyncRounds {
+		return nil, fmt.Errorf("too many rounds: %d > %d", len(r.Rounds), MaxSyncRounds)
+	}
 
-	size := 8 + 4 + len(r.Requester) + 4 + len(r.Digests)*32
+	size := 8 + 4 + len(r.Requester) + 4 + len(r.Digests)*32 + 4 + len(r.Rounds)*8
 	data := make([]byte, size)
 	offset := 0
 
@@ -69,6 +79,14 @@ func (r *CertSyncRequest) Marshal() ([]byte, error) {
 		digest := digest // Create local copy to avoid rangevarref lint warning
 		copy(data[offset:], digest[:])
 		offset += 32
+	}
+
+	// Rounds (appended after digests; older parsers ignore trailing bytes)
+	binary.BigEndian.PutUint32(data[offset:], uint32(len(r.Rounds)))
+	offset += 4
+	for _, round := range r.Rounds {
+		binary.BigEndian.PutUint64(data[offset:], uint64(round))
+		offset += 8
 	}
 
 	return data, nil
@@ -122,6 +140,23 @@ func UnmarshalCertSyncRequest(data []byte) (*CertSyncRequest, error) {
 		}
 		copy(r.Digests[i][:], data[offset:offset+32])
 		offset += 32
+	}
+
+	// Rounds (optional trailing section, absent in older senders)
+	if offset+4 <= len(data) {
+		numRounds := binary.BigEndian.Uint32(data[offset:])
+		offset += 4
+		if numRounds > MaxSyncRounds {
+			return nil, fmt.Errorf("too many rounds: %d > %d", numRounds, MaxSyncRounds)
+		}
+		r.Rounds = make([]types.Round, numRounds)
+		for i := uint32(0); i < numRounds; i++ {
+			if offset+8 > len(data) {
+				return nil, errors.New("cert sync request truncated: missing round")
+			}
+			r.Rounds[i] = types.Round(binary.BigEndian.Uint64(data[offset:]))
+			offset += 8
+		}
 	}
 
 	return r, nil

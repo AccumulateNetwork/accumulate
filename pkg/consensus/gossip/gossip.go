@@ -24,7 +24,7 @@ import (
 // Sized for high throughput (~30k+ TPS) to avoid dropped messages.
 const (
 	DefaultBatchChannelSize       = 1000
-	DefaultHeaderChannelSize      = 500  // Increased from 100 for high throughput
+	DefaultHeaderChannelSize      = 500 // Increased from 100 for high throughput
 	DefaultVoteChannelSize        = 1000
 	DefaultCertificateChannelSize = 1000 // Increased from 100 for high throughput
 	DefaultCertSyncChannelSize    = 500  // Increased from 200 to handle sustained load
@@ -40,11 +40,11 @@ type GossipLayer struct {
 	partition string
 
 	// Channels for received messages
-	batches      chan *types.Batch
-	headers      chan *types.Header
-	votes        chan *types.Vote
-	certs        chan *types.Certificate
-	syncRequests chan *CertSyncRequest
+	batches       chan *types.Batch
+	headers       chan *types.Header
+	votes         chan *types.Vote
+	certs         chan *types.Certificate
+	syncRequests  chan *CertSyncRequest
 	syncResponses chan *CertSyncResponse
 
 	// Rate limiting

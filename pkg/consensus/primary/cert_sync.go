@@ -237,6 +237,32 @@ func (s *CertSyncer) RequestMissing(digests []types.CertificateDigest) {
 	}
 }
 
+// RequestRounds requests every certificate of the given rounds from peers.
+// Used for round catch-up (#4057): a node that has fallen behind cannot know
+// which digests it is missing, only which rounds. The caller is responsible
+// for pacing.
+func (s *CertSyncer) RequestRounds(rounds []types.Round) {
+	if len(rounds) == 0 || s.gossip == nil {
+		return
+	}
+	if len(rounds) > gossip.MaxSyncRounds {
+		rounds = rounds[:gossip.MaxSyncRounds]
+	}
+
+	req := &gossip.CertSyncRequest{
+		Rounds:    rounds,
+		Requester: s.config.PublicKey,
+		RequestID: s.nextReqID.Add(1),
+	}
+	if err := s.gossip.BroadcastSyncRequest(s.ctx, req); err != nil {
+		slog.Warn("Failed to send round sync request",
+			"error", err, "start", rounds[0], "end", rounds[len(rounds)-1])
+		return
+	}
+	slog.Info("Requested certificates by round",
+		"start", rounds[0], "end", rounds[len(rounds)-1], "count", len(rounds))
+}
+
 // sendBatchRequest sends a batch of certificate sync requests.
 func (s *CertSyncer) sendBatchRequest() {
 	s.batchQueueMu.Lock()
@@ -343,7 +369,7 @@ func (s *CertSyncer) handleSyncRequests() {
 
 // handleSyncRequest processes a single sync request.
 func (s *CertSyncer) handleSyncRequest(req *gossip.CertSyncRequest) {
-	if req == nil || len(req.Digests) == 0 {
+	if req == nil || (len(req.Digests) == 0 && len(req.Rounds) == 0) {
 		return
 	}
 
@@ -361,6 +387,16 @@ func (s *CertSyncer) handleSyncRequest(req *gossip.CertSyncRequest) {
 			}
 		} else {
 			missing = append(missing, digest)
+		}
+	}
+
+	// Serve whole rounds for round catch-up (#4057)
+	for _, round := range req.Rounds {
+		for _, cert := range s.dag.GetRound(round) {
+			if len(certs) >= gossip.MaxSyncCertificates {
+				break
+			}
+			certs = append(certs, cert)
 		}
 	}
 

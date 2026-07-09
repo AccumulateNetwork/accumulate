@@ -129,6 +129,11 @@ type Primary struct {
 	votedHeaders map[types.HeaderDigest]types.Round
 	sentVotes    map[types.HeaderDigest]*types.Vote
 
+	// Round-sync pacing (#4057)
+	roundSyncMu   sync.Mutex
+	lastRoundPull time.Time
+	lastRoundPush time.Time
+
 	// pendingCerts buffers certificates that cannot be inserted due to missing parents
 	pendingCerts *PendingCertificates
 

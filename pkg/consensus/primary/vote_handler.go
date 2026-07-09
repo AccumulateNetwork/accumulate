@@ -10,7 +10,9 @@ import (
 	"bytes"
 	"crypto/ed25519"
 	"log/slog"
+	"time"
 
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 )
 
@@ -296,6 +298,20 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 			"currentRound", currentRound,
 			"minRound", minRound,
 			"maxRound", maxRound)
+
+		// A round mismatch after an outage is a deadlock without recovery:
+		// certificates are broadcast exactly once, so a node that missed
+		// them can neither advance (it rejects newer headers) nor help a
+		// stale author advance (the author never learns its round already
+		// completed). Sync rounds in both directions (#4057).
+		switch {
+		case header.Round > maxRound:
+			// We are behind — pull the certificates that will advance us
+			p.requestRoundCatchUp(currentRound, header.Round)
+		case header.Round < minRound:
+			// The author is behind — push the certificates it is missing
+			p.pushCertsForStaleRound(header.Round, currentRound)
+		}
 		return
 	}
 
@@ -385,4 +401,77 @@ func hexEncode(key ed25519.PublicKey) string {
 		return ""
 	}
 	return types.HeaderDigest(key).String()[:8]
+}
+
+// requestRoundCatchUp pulls the certificates of rounds (current, target] so
+// this node can advance after falling behind (#4057). Paced to once per
+// second; the certificate handler inserts what arrives and round advancement
+// follows naturally.
+func (p *Primary) requestRoundCatchUp(current, target types.Round) {
+	if p.certSyncer == nil {
+		return
+	}
+
+	p.roundSyncMu.Lock()
+	if time.Since(p.lastRoundPull) < time.Second {
+		p.roundSyncMu.Unlock()
+		return
+	}
+	p.lastRoundPull = time.Now()
+	p.roundSyncMu.Unlock()
+
+	// Request at most MaxSyncRounds rounds, starting from where we are —
+	// certificates insert parent-first, so pulling the oldest gap first
+	// makes steady forward progress even across a large gap.
+	first := current
+	if first > 0 {
+		first-- // Re-fetch the previous round in case our copy is partial
+	}
+	var rounds []types.Round
+	for r := first; r <= target && len(rounds) < gossip.MaxSyncRounds; r++ {
+		rounds = append(rounds, r)
+	}
+	p.certSyncer.RequestRounds(rounds)
+}
+
+// pushCertsForStaleRound rebroadcasts the certificates of a stale round (and
+// the following round) when a peer is observed rebroadcasting a header for
+// it (#4057). The peer is behind: it never saw these certificates — they are
+// broadcast exactly once — so it can neither complete its round nor advance.
+// Paced to once per second.
+func (p *Primary) pushCertsForStaleRound(stale, current types.Round) {
+	if p.gossip == nil {
+		return
+	}
+
+	p.roundSyncMu.Lock()
+	if time.Since(p.lastRoundPush) < time.Second {
+		p.roundSyncMu.Unlock()
+		return
+	}
+	p.lastRoundPush = time.Now()
+	p.roundSyncMu.Unlock()
+
+	end := stale + 1
+	if end > current {
+		end = current
+	}
+	var pushed int
+	for r := stale; r <= end; r++ {
+		for _, cert := range p.dag.GetRound(r) {
+			cert := cert
+			p.wg.Add(1)
+			go func() {
+				defer p.wg.Done()
+				if err := p.gossip.BroadcastCertificate(p.ctx, cert); err != nil {
+					slog.Debug("Failed to push certificate", "error", err)
+				}
+			}()
+			pushed++
+		}
+	}
+	if pushed > 0 {
+		slog.Info("Pushed certificates for stale round",
+			"staleRound", stale, "certificates", pushed)
+	}
 }
