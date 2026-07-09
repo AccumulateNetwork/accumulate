@@ -104,7 +104,7 @@ type Coordinator struct {
 	anchorReceipts  []*AnchorReceipt
 
 	// Callbacks
-	onAnchorReceived func(anchor *Anchor)
+	onAnchorReceived  func(anchor *Anchor)
 	onReceiptReceived func(receipt *AnchorReceipt)
 }
 

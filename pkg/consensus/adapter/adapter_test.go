@@ -69,10 +69,10 @@ func (m *mockValidatorSetProvider) OnValidatorSetChange(callback func([]adapter.
 
 // Verify interface compliance at compile time
 var (
-	_ adapter.BlockProducer         = (*mockBlockProducer)(nil)
-	_ adapter.TransactionValidator  = (*mockTransactionValidator)(nil)
-	_ adapter.StateProvider         = (*mockStateProvider)(nil)
-	_ adapter.ValidatorSetProvider  = (*mockValidatorSetProvider)(nil)
+	_ adapter.BlockProducer        = (*mockBlockProducer)(nil)
+	_ adapter.TransactionValidator = (*mockTransactionValidator)(nil)
+	_ adapter.StateProvider        = (*mockStateProvider)(nil)
+	_ adapter.ValidatorSetProvider = (*mockValidatorSetProvider)(nil)
 )
 
 func TestBlockParams(t *testing.T) {

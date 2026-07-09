@@ -158,9 +158,9 @@ type Worker struct {
 	pendingSize int
 
 	// Batch storage with LRU eviction
-	batchMu    sync.RWMutex
-	batches    map[types.BatchDigest]*lruEntry
-	lruList    *list.List // LRU tracking: front = most recent, back = least recent
+	batchMu sync.RWMutex
+	batches map[types.BatchDigest]*lruEntry
+	lruList *list.List // LRU tracking: front = most recent, back = least recent
 
 	// Available batch digests (for header creation) - bounded queue with backpressure
 	availableBatchQueue chan types.BatchDigest
@@ -176,11 +176,11 @@ type Worker struct {
 	closed      atomic.Bool
 
 	// Metrics
-	batchesCreated   atomic.Uint64
-	txnsProcessed    atomic.Uint64
-	txnsReceived     atomic.Uint64
-	txnsValidated    atomic.Uint64
-	txnsRejected     atomic.Uint64
+	batchesCreated atomic.Uint64
+	txnsProcessed  atomic.Uint64
+	txnsReceived   atomic.Uint64
+	txnsValidated  atomic.Uint64
+	txnsRejected   atomic.Uint64
 
 	// Trigger channel for immediate batch creation
 	triggerBatch chan struct{}

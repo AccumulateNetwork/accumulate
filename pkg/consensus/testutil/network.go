@@ -40,14 +40,14 @@ type TestNetwork struct {
 
 // TestNode wraps a consensus Node with test-specific state.
 type TestNode struct {
-	Node     *consensus.Node
-	Host     host.Host
-	PubSub   *pubsub.PubSub
-	KeyPair  ed25519.PrivateKey
-	Index    int
-	Commits  []*types.Certificate
-	mu       sync.Mutex
-	stopped  bool
+	Node    *consensus.Node
+	Host    host.Host
+	PubSub  *pubsub.PubSub
+	KeyPair ed25519.PrivateKey
+	Index   int
+	Commits []*types.Certificate
+	mu      sync.Mutex
+	stopped bool
 }
 
 // NetworkOption configures a TestNetwork.

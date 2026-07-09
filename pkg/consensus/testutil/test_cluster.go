@@ -116,10 +116,10 @@ type TestCluster struct {
 
 // ClusterConfig holds configuration for a test cluster.
 type ClusterConfig struct {
-	NumNodes     int
-	Stakes       []uint64
-	Partition    string
-	UseRegistry  bool // Whether to use a shared pubsub registry
+	NumNodes    int
+	Stakes      []uint64
+	Partition   string
+	UseRegistry bool // Whether to use a shared pubsub registry
 }
 
 // DefaultClusterConfig returns default cluster configuration.

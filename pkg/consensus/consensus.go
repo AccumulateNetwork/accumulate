@@ -31,8 +31,15 @@ import (
 
 // Default configuration values.
 const (
-	DefaultNumWorkers       = 1
-	DefaultDAGGCDepth       = 50
+	DefaultNumWorkers = 1
+	// DefaultDAGGCDepth is how many rounds of DAG history are retained past
+	// the last commit. This is also the round catch-up window (#4057): a
+	// node that falls further behind than this cannot recover round-by-round
+	// because its peers have pruned the certificates it needs. At ~10
+	// rounds/second the old value of 50 retained FIVE SECONDS of history —
+	// any outage longer than that wedged the node permanently. 10,000
+	// rounds is ~16 minutes at that rate and costs roughly 25 MB.
+	DefaultDAGGCDepth       = 10_000
 	DefaultCommitBufferSize = 5000 // Increased from 1000 for high throughput
 )
 

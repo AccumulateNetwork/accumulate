@@ -321,13 +321,13 @@ func (s *MockStream) IsClosed() bool {
 
 // MockConn implements network.Conn for testing.
 type MockConn struct {
-	mu          sync.Mutex
-	localPeer   peer.ID
-	remotePeer  peer.ID
-	streams     []*MockStream
-	closed      bool
-	localAddr   multiaddr.Multiaddr
-	remoteAddr  multiaddr.Multiaddr
+	mu         sync.Mutex
+	localPeer  peer.ID
+	remotePeer peer.ID
+	streams    []*MockStream
+	closed     bool
+	localAddr  multiaddr.Multiaddr
+	remoteAddr multiaddr.Multiaddr
 }
 
 // Close closes the connection.
@@ -510,7 +510,9 @@ func (n *MockNetworkAdapter) Listen(...multiaddr.Multiaddr) error { return nil }
 func (n *MockNetworkAdapter) ListenAddresses() []multiaddr.Multiaddr { return nil }
 
 // InterfaceListenAddresses returns interface listen addresses (stub).
-func (n *MockNetworkAdapter) InterfaceListenAddresses() ([]multiaddr.Multiaddr, error) { return nil, nil }
+func (n *MockNetworkAdapter) InterfaceListenAddresses() ([]multiaddr.Multiaddr, error) {
+	return nil, nil
+}
 
 // Process is required by the interface.
 func (n *MockNetworkAdapter) Process() interface{} { return nil }

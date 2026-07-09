@@ -384,7 +384,7 @@ func TestFourNodeQuorumThresholds(t *testing.T) {
 
 	// Verify thresholds
 	assert.Equal(t, uint64(400), committee.TotalStake())
-	assert.Equal(t, uint64(267), committee.QuorumThreshold()) // > 2/3 of 400
+	assert.Equal(t, uint64(267), committee.QuorumThreshold())   // > 2/3 of 400
 	assert.Equal(t, uint64(134), committee.ValidityThreshold()) // > 1/3 of 400
 
 	// Verify quorum requirements

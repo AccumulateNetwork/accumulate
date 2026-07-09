@@ -105,8 +105,8 @@ func TestInitGenesis_KeyMismatch(t *testing.T) {
 
 	validators := []ValidatorInfo{
 		{
-			PublicKey:  pubKey2,           // Wrong public key
-			PrivateKey: privKey1,          // Doesn't match
+			PublicKey:  pubKey2,  // Wrong public key
+			PrivateKey: privKey1, // Doesn't match
 			Stake:      1,
 		},
 	}

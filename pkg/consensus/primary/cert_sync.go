@@ -111,6 +111,11 @@ type CertSyncer struct {
 	// Request ID counter
 	nextReqID atomic.Uint64
 
+	// Response suppression (#4057): requests are broadcast, so peers skip
+	// answering when another peer's response has already been observed
+	answered   map[uint64]struct{}
+	answeredMu sync.Mutex
+
 	// Callback for received certificates
 	onCertReceived func(*types.Certificate)
 
@@ -143,6 +148,7 @@ func NewCertSyncer(
 	config.applyDefaults()
 
 	return &CertSyncer{
+		answered: map[uint64]struct{}{},
 		config:   config,
 		dag:      d,
 		gossip:   g,
@@ -373,6 +379,27 @@ func (s *CertSyncer) handleSyncRequest(req *gossip.CertSyncRequest) {
 		return
 	}
 
+	// Requests and responses are broadcast, so without suppression every
+	// peer answers every request — an N-fold amplification that floods the
+	// requester with duplicates (#4057). Delay a beat, then skip if another
+	// peer's response for this request has already been observed.
+	jitter := time.Duration(rand.Int64N(int64(200 * time.Millisecond)))
+	if s.ctx != nil {
+		select {
+		case <-s.ctx.Done():
+			return
+		case <-time.After(jitter):
+		}
+	} else {
+		time.Sleep(jitter)
+	}
+	s.answeredMu.Lock()
+	_, answered := s.answered[req.RequestID]
+	s.answeredMu.Unlock()
+	if answered {
+		return
+	}
+
 	// Build response
 	var certs []*types.Certificate
 	var missing []types.CertificateDigest
@@ -470,6 +497,14 @@ func (s *CertSyncer) handleSyncResponse(resp *gossip.CertSyncResponse) {
 	if resp == nil || len(resp.Certificates) == 0 {
 		return
 	}
+
+	// Note the response so we do not also answer this request (suppression)
+	s.answeredMu.Lock()
+	if len(s.answered) > 4096 {
+		s.answered = make(map[uint64]struct{})
+	}
+	s.answered[resp.RequestID] = struct{}{}
+	s.answeredMu.Unlock()
 
 	s.responsesRecv.Add(1)
 

@@ -253,8 +253,8 @@ func TestHeader_Clone(t *testing.T) {
 	pub, priv := generateKeyPair(t)
 	batch := types.NewBatch([][]byte{[]byte("test")})
 	payload := []types.PayloadEntry{
-			{Digest: batch.Digest(), Worker: 1},
-		}
+		{Digest: batch.Digest(), Worker: 1},
+	}
 	parents := []types.CertificateDigest{{1, 2, 3}}
 
 	original := types.NewHeader(pub, 5, 2, payload, parents)

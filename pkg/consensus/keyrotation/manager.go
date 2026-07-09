@@ -196,13 +196,13 @@ func (m *Manager) RevokeKey(operator, reason string) error {
 	// Log audit event
 	if m.audit != nil {
 		m.audit.Log(&AuditEvent{
-			Timestamp:     now,
-			Event:         "key_revoked",
-			KeyID:         m.activeKey.KeyID,
-			ValidatorID:   m.validatorID,
-			RotationType:  RotationTypeEmergency,
-			Operator:      operator,
-			Reason:        reason,
+			Timestamp:    now,
+			Event:        "key_revoked",
+			KeyID:        m.activeKey.KeyID,
+			ValidatorID:  m.validatorID,
+			RotationType: RotationTypeEmergency,
+			Operator:     operator,
+			Reason:       reason,
 		})
 	}
 

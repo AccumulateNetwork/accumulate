@@ -222,7 +222,7 @@ func TestChannelBufferConfigValidate(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name:    "custom high values are valid",
+			name: "custom high values are valid",
 			cfg: ChannelBufferConfig{
 				CertificateBufferSize: 5000,
 				BatchBufferSize:       5000,

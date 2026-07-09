@@ -26,12 +26,12 @@ import (
 
 // MockExecutor implements execute.Executor for testing.
 type MockExecutor struct {
-	mu           sync.RWMutex
-	blocks       []*MockBlock
-	lastIndex    uint64
-	lastHash     [32]byte
-	validators   []*execute.ValidatorUpdate
-	timersOn     bool
+	mu         sync.RWMutex
+	blocks     []*MockBlock
+	lastIndex  uint64
+	lastHash   [32]byte
+	validators []*execute.ValidatorUpdate
+	timersOn   bool
 
 	// Hooks for customizing behavior
 	OnBegin   func(params execute.BlockParams) error

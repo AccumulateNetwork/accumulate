@@ -22,7 +22,7 @@ const (
 	// Batching defaults
 	DefaultBatchSize        = 500
 	DefaultBatchTimeout     = 100 * time.Millisecond
-	DefaultMaxBatchBytes    = 500 * 1024      // 500KB
+	DefaultMaxBatchBytes    = 500 * 1024       // 500KB
 	DefaultMaxPendingSize   = 10 * 1024 * 1024 // 10MB
 	DefaultMaxStoredBatches = 10000
 
