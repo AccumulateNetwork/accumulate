@@ -68,14 +68,15 @@ everything else:
   a versioned data entry on `dn.acme/network` (`GlobalValues.ParseNetwork`
   enforces monotonic versions, pkg/types/network/globals.go:188), and every
   change travels inside `DirectoryAnchor.Updates` (protocol/types_gen.go:326).
-  Since the walk verifies every spine DirectoryAnchor in order, **the walk
-  itself yields the validator set at every major boundary** — verify each
-  anchor with the set as of the previous one, apply its `Updates`, continue.
-  This is the light-client induction step and needs no "validator set at
-  height N" API.
+  The set-at-any-height comes from the network account itself: `dn.acme/network`
+  is an account like any other, so **one collection proof over its elements
+  yields the complete, ordered, spine-proven validator-set timeline** — updates
+  landing between major boundaries included. Verify each spine anchor against
+  the timeline as of its height; the timeline's own proof terminates in the
+  spine, closing the induction. No "validator set at height N" API needed.
 - **The sync-epoch anchor (quorum-verified):** the recent block whose
   `StateTreeAnchor` all account proofs target is verified against the *current*
-  validator set, which the induction just produced.
+  validator set from the timeline.
 - **Everything between (proof-carried):** no per-anchor quorum verification of
   the dense minor run. An account's collection proof (`merkle.ReceiptList`,
   pkg/database/merkle/receipt_list.go:98) proves **all the elements of the
@@ -86,6 +87,16 @@ everything else:
   intermediate anchor quorums adds nothing: tampering with any intermediate
   block would break the Merkle path. Receipts carry the structure; the spine
   and epoch quorums carry the trust.
+- **The tail is role-dependent (decision 2026-07-12):** updates from
+  transactions *beyond* the spine — after the last major block, not yet
+  covered by any spine anchor — split by what the node is deploying as:
+  - **Validator:** tail updates need **full quorum verification** on the
+    anchors that carry them. A validator signs and validates against the
+    current set and globals immediately; it cannot treat them as provisional.
+  - **Follower (willing to wait):** tail updates are held as provisional and
+    applied once the next major block's spine anchor covers them by proof.
+    The follower serves verified state up to its spine coverage and simply
+    lags the tail.
 
 **Cost note:** this keeps the client O(spine anchors + one quorum at the epoch
 + receipts), instead of O(all anchors × quorum size). Mainnet's ~30.6M minor
@@ -171,12 +182,13 @@ New subcommand (the vestigial slot is cmd/accumulated/cmd_sync.go; the CometBFT
   the binary — the only out-of-band trust input (same pinned artifact as
   #3953, but walked forward not backward). The full spine is always walked;
   an operator may supply an alternate anchor for private networks.
-- **Phase 1:** pull `MajorHeaderRange` from genesis to present. Verify each
-  closing anchor's quorum, applying `DirectoryAnchor.Updates` to the tracked
-  validator set as it goes. Output: verified spine + validator-set timeline +
-  current globals.
+- **Phase 1:** pull `MajorHeaderRange` from genesis to present, plus the
+  `dn.acme/network` account's collection proof (its elements ARE the
+  validator-set timeline, spine-proven). Verify each spine anchor's quorum
+  against the timeline as of its height. Output: verified spine +
+  validator-set timeline + current globals.
 - **Phase 2:** verify the sync-epoch anchor's archived quorum against the
-  current validator set from the induction, and bind its `StateTreeAnchor`
+  current validator set from the timeline, and bind its `StateTreeAnchor`
   into the spine via `MinorRootRange`. No per-block quorum walk. Output: a
   verified epoch root that all account proofs will target.
 - **Phase 3:** page through `AccountStateRange` against the epoch root,
@@ -186,7 +198,11 @@ New subcommand (the vestigial slot is cmd/accumulated/cmd_sync.go; the CometBFT
   hydration, replay buffered blocks epoch→tip; once within `DAGGCDepth` of the
   live round, the existing cert-sync/round-catchup path
   (`requestRoundCatchUp`, pkg/consensus/primary/vote_handler.go:406) finishes
-  the job. Then start/resume consensus participation.
+  the job. Then start/resume consensus participation — applying the tail rule:
+  a node joining as a **validator** quorum-verifies the anchors carrying any
+  network-account updates beyond the spine before acting on them; a
+  **follower** may hold tail updates as provisional until the next major
+  block's spine anchor covers them by proof.
 - **Automatic fallback:** in the out-of-window branch of `vote_handler.go`
   (:308-311), when the round gap exceeds `DAGGCDepth`, trigger this sync
   instead of the futile `RequestRounds` loop. That converts #4057's "wedged
