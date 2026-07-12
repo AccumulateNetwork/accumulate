@@ -44,3 +44,25 @@ PrivateSequenceRangeResponse:
       marshal-as: reference
       pointer: true
       repeatable: true
+
+PrivateMajorHeaderRangeRequest:
+  union: { type: message }
+  fields:
+    - name: Partition
+      type: url
+      pointer: true
+    - name: Start
+      type: uint
+    - name: End
+      type: uint
+    - type: private.SequenceOptions
+      marshal-as: reference
+
+PrivateMajorHeaderRangeResponse:
+  union: { type: message }
+  fields:
+    - name: Value
+      type: private.MajorHeaderRecord
+      marshal-as: reference
+      pointer: true
+      repeatable: true

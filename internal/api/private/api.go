@@ -32,3 +32,16 @@ type SequenceRanger interface {
 	Sequencer
 	SequenceRange(ctx context.Context, src, dst *url.URL, start, end uint64, opts SequenceOptions) ([]*api.MessageRecord[messaging.Message], error)
 }
+
+// MajorHeaderRanger is an optional extension of [Sequencer] that serves the
+// major-block spine (#4058): for each major block in the range, the
+// major-block index chain entry plus the partition's self-anchor for the
+// minor block that closed it, with the archived validator-quorum signatures.
+// A fast-syncing node walks these records from its trust anchor to the
+// present, verifying each quorum against the validator set tracked by
+// induction. Only the directory partition serves this — it is the only
+// partition that anchors to itself.
+type MajorHeaderRanger interface {
+	Sequencer
+	MajorHeaderRange(ctx context.Context, partition *url.URL, start, end uint64, opts SequenceOptions) ([]*MajorHeaderRecord, error)
+}

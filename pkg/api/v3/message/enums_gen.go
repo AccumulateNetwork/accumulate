@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -98,6 +98,12 @@ const TypePrivateSequenceRangeRequest Type = 130
 // TypePrivateSequenceRangeResponse .
 const TypePrivateSequenceRangeResponse Type = 131
 
+// TypePrivateMajorHeaderRangeRequest .
+const TypePrivateMajorHeaderRangeRequest Type = 132
+
+// TypePrivateMajorHeaderRangeResponse .
+const TypePrivateMajorHeaderRangeResponse Type = 133
+
 // TypeAddressed .
 const TypeAddressed Type = 255
 
@@ -108,7 +114,7 @@ func (v Type) GetEnumValue() uint64 { return uint64(v) }
 func (v *Type) SetEnumValue(id uint64) bool {
 	u := Type(id)
 	switch u {
-	case TypeNodeInfoRequest, TypeFindServiceRequest, TypeConsensusStatusRequest, TypeNetworkStatusRequest, TypeMetricsRequest, TypeQueryRequest, TypeSubmitRequest, TypeValidateRequest, TypeSubscribeRequest, TypeFaucetRequest, TypeListSnapshotsRequest, TypeErrorResponse, TypeNodeInfoResponse, TypeFindServiceResponse, TypeConsensusStatusResponse, TypeNetworkStatusResponse, TypeMetricsResponse, TypeRecordResponse, TypeSubmitResponse, TypeValidateResponse, TypeSubscribeResponse, TypeFaucetResponse, TypeListSnapshotsResponse, TypeEvent, TypePrivateSequenceRequest, TypePrivateSequenceResponse, TypePrivateSequenceRangeRequest, TypePrivateSequenceRangeResponse, TypeAddressed:
+	case TypeNodeInfoRequest, TypeFindServiceRequest, TypeConsensusStatusRequest, TypeNetworkStatusRequest, TypeMetricsRequest, TypeQueryRequest, TypeSubmitRequest, TypeValidateRequest, TypeSubscribeRequest, TypeFaucetRequest, TypeListSnapshotsRequest, TypeErrorResponse, TypeNodeInfoResponse, TypeFindServiceResponse, TypeConsensusStatusResponse, TypeNetworkStatusResponse, TypeMetricsResponse, TypeRecordResponse, TypeSubmitResponse, TypeValidateResponse, TypeSubscribeResponse, TypeFaucetResponse, TypeListSnapshotsResponse, TypeEvent, TypePrivateSequenceRequest, TypePrivateSequenceResponse, TypePrivateSequenceRangeRequest, TypePrivateSequenceRangeResponse, TypePrivateMajorHeaderRangeRequest, TypePrivateMajorHeaderRangeResponse, TypeAddressed:
 		*v = u
 		return true
 	}
@@ -178,6 +184,10 @@ func (v Type) String() string {
 		return "privateSequenceRangeRequest"
 	case TypePrivateSequenceRangeResponse:
 		return "privateSequenceRangeResponse"
+	case TypePrivateMajorHeaderRangeRequest:
+		return "privateMajorHeaderRangeRequest"
+	case TypePrivateMajorHeaderRangeResponse:
+		return "privateMajorHeaderRangeResponse"
 	case TypeAddressed:
 		return "addressed"
 	}
@@ -246,6 +256,10 @@ func TypeByName(name string) (Type, bool) {
 		return TypePrivateSequenceRangeRequest, true
 	case "privatesequencerangeresponse":
 		return TypePrivateSequenceRangeResponse, true
+	case "privatemajorheaderrangerequest":
+		return TypePrivateMajorHeaderRangeRequest, true
+	case "privatemajorheaderrangeresponse":
+		return TypePrivateMajorHeaderRangeResponse, true
 	case "addressed":
 		return TypeAddressed, true
 	}

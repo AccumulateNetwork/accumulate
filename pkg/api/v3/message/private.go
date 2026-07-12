@@ -24,7 +24,8 @@ type Sequencer struct {
 func (s Sequencer) methods() serviceMethodMap {
 	typ, fn := makeServiceMethod(s.sequence)
 	typ2, fn2 := makeServiceMethod(s.sequenceRange)
-	return serviceMethodMap{typ: fn, typ2: fn2}
+	typ3, fn3 := makeServiceMethod(s.majorHeaderRange)
+	return serviceMethodMap{typ: fn, typ2: fn2, typ3: fn3}
 }
 
 func (s Sequencer) sequence(c *call[*PrivateSequenceRequest]) {
@@ -48,6 +49,20 @@ func (s Sequencer) sequenceRange(c *call[*PrivateSequenceRangeRequest]) {
 		return
 	}
 	c.Write(&PrivateSequenceRangeResponse{Value: res})
+}
+
+func (s Sequencer) majorHeaderRange(c *call[*PrivateMajorHeaderRangeRequest]) {
+	ranger, ok := s.Sequencer.(private.MajorHeaderRanger)
+	if !ok {
+		c.Write(&ErrorResponse{Error: errors.NotAllowed.With("major header range is not supported")})
+		return
+	}
+	res, err := ranger.MajorHeaderRange(c.context, c.params.Partition, c.params.Start, c.params.End, c.params.SequenceOptions)
+	if err != nil {
+		c.Write(&ErrorResponse{Error: errors.UnknownError.Wrap(err).(*errors.Error)})
+		return
+	}
+	c.Write(&PrivateMajorHeaderRangeResponse{Value: res})
 }
 
 // PrivateClient is a binary message transport client for private API v3 services.
@@ -75,4 +90,12 @@ func (c PrivateClient) SequenceRange(ctx context.Context, src, dst *url.URL, sta
 	return typedRequest[*PrivateSequenceRangeResponse, []*api.MessageRecord[messaging.Message]](AddressedClient(c), ctx, req)
 }
 
+// MajorHeaderRange implements [private.MajorHeaderRanger.MajorHeaderRange].
+func (c PrivateClient) MajorHeaderRange(ctx context.Context, partition *url.URL, start, end uint64, opts private.SequenceOptions) ([]*private.MajorHeaderRecord, error) {
+	req := &PrivateMajorHeaderRangeRequest{Partition: partition, Start: start, End: end, SequenceOptions: opts}
+	return typedRequest[*PrivateMajorHeaderRangeResponse, []*private.MajorHeaderRecord](AddressedClient(c), ctx, req)
+}
+
 func (r *PrivateSequenceRangeResponse) rval() []*api.MessageRecord[messaging.Message] { return r.Value } //nolint:unused
+
+func (r *PrivateMajorHeaderRangeResponse) rval() []*private.MajorHeaderRecord { return r.Value } //nolint:unused

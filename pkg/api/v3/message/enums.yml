@@ -72,3 +72,7 @@ Type:
     value: 0x82
   PrivateSequenceRangeResponse:
     value: 0x83
+  PrivateMajorHeaderRangeRequest:
+    value: 0x84
+  PrivateMajorHeaderRangeResponse:
+    value: 0x85
