@@ -66,13 +66,18 @@ func (s *Sequencer) getMajorHeaderRange(batch *database.Batch, start, end uint64
 		return nil, errors.NotFound.With("no major blocks exist")
 	}
 
+	// Clamp to the last major block so clients can page blindly — a short
+	// page tells the client it has reached the end of the spine
 	last := new(protocol.IndexEntry)
 	err = majorChain.EntryAs(majorChain.Height()-1, last)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load last major block entry: %w", err)
 	}
+	if start > last.BlockIndex {
+		return nil, errors.NotFound.WithFormat("major block %d not found: the last major block is %d", start, last.BlockIndex)
+	}
 	if end > last.BlockIndex {
-		return nil, errors.NotFound.WithFormat("major block %d not found: the last major block is %d", end, last.BlockIndex)
+		end = last.BlockIndex
 	}
 
 	seqChain, err := account.AnchorSequenceChain().Get()

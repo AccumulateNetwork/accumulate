@@ -227,6 +227,43 @@ func TestFastSyncSpine(t *testing.T) {
 	}))
 	err = fastsync.RestoreSnapshot(tamperedDB, file, config.NetworkUrl{URL: DnUrl()}, spine.StateTreeAnchor)
 	require.Error(t, err, "a database with extra state must not match the verified root")
+
+	// ——— The full Sync orchestrator, from genesis to restored state ———
+
+	// The poll hook stands in for a live network: it steps the simulator
+	// and generates traffic so anchors keep being prepared
+	var pollCount int
+	trafficTimestamp := uint64(4)
+	poll := func(context.Context) error {
+		pollCount++
+		require.Less(t, pollCount, 500, "sync never converged")
+		if pollCount%5 == 1 {
+			g := loadDirectoryGlobals(t, sim)
+			k := acctesting.GenerateKey(t.Name(), "traffic", trafficTimestamp)
+			g.Network.AddValidator(k[32:], Directory, false)
+			g.Network.Version++
+			sim.BuildAndSubmitTxnSuccessfully(
+				build.Transaction().For(DnUrl(), Network).
+					Body(&WriteData{Entry: g.FormatNetwork(), WriteToState: true}).
+					SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(trafficTimestamp).Signer(sim.SignWithNode(Directory, 0)))
+			trafficTimestamp++
+		}
+		sim.Step()
+		return nil
+	}
+
+	syncDB := database.OpenInMemory(nil)
+	res, err := fastsync.Sync(context.Background(), fastsync.Options{
+		Client:    sim.S.Services().Private().(fastsync.Client),
+		Genesis:   genesis,
+		Partition: config.NetworkUrl{URL: DnUrl()},
+		Database:  syncDB,
+		Poll:      poll,
+	})
+	require.NoError(t, err)
+	require.NotZero(t, res.EpochBlock)
+	require.Equal(t, res.EpochBlock, res.Spine.LastMinorBlock)
+	require.GreaterOrEqual(t, res.Spine.NextMajor, uint64(4), "the sync must have walked the whole spine")
 }
 
 func loadDirectoryGlobals(t *testing.T, sim *Sim) *core.GlobalValues {
