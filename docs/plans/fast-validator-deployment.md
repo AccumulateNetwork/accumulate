@@ -173,6 +173,27 @@ batch/snapshot view), and the client closes the gap from that epoch to the tip
 with block replay (phase 3's "updating accounts as transactions are issued").
 The epoch only needs to be stable for the duration of one client's state pull.
 
+**Implementation simplification (2026-07-12, phases 1–3 built):** for a full
+deployment, per-account receipts are unnecessary — a deploying node restores
+*every* account, so the complete-set proof degenerates to one root equality.
+The implemented `SnapshotRange` streams a state snapshot collected at a
+provable pin; the client restores it with `snapshot.FullRestore` (which
+re-hashes every account from its actual contents) and requires the rebuilt
+BPT root to equal the quorum-verified `StateTreeAnchor`. Tampering with any
+account changes the rebuilt root and fails the check. `AccountStateRange`
+with per-account receipts remains the design for lazy/partial serving (phase
+3b, light clients). Two mechanics discovered during implementation:
+- An anchor's roots are populated at **recording** — the start of the block
+  after it was prepared — from the state as of its own block
+  (buildDirectoryAnchor's comment; internal/core/execute/v2/block/block_end.go
+  ~line 854). Blocks that only execute anchor deliveries bump the ledger but
+  never prepare an anchor, so their state is never attested. The provable pin
+  moment is `ledger.Anchor != nil && ledger.Anchor.MinorBlockIndex ==
+  ledger.Index`; otherwise the server answers NotReady and the client retries.
+- Tip anchors lack their quorum for a few blocks (dn→dn execution lag), so
+  the server only serves records for quorum-complete anchors and the client
+  treats NotFound/NotReady as retry-next-block.
+
 ### Client side — the `accumulated` deployment path
 
 New subcommand (the vestigial slot is cmd/accumulated/cmd_sync.go; the CometBFT
