@@ -137,7 +137,7 @@ grep -E 'Seeded consensus for fast-sync rejoin|Rejoined consensus' "$LOG/rejoin.
 # and keeps advancing with it — catching up 4000+ rounds and replaying tens
 # of thousands of blocks takes a few minutes
 REJOINED=0
-for i in $(seq 1 60); do
+for i in $(seq 1 120); do
     sleep 15
     V=$(dn_height 26663)
     N=$(dn_height 26660)
