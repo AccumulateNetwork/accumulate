@@ -66,3 +66,24 @@ PrivateMajorHeaderRangeResponse:
       marshal-as: reference
       pointer: true
       repeatable: true
+
+PrivateMinorRootRangeRequest:
+  union: { type: message }
+  fields:
+    - name: Partition
+      type: url
+      pointer: true
+    - name: Since
+      type: uint
+    - name: Until
+      type: uint
+    - type: private.SequenceOptions
+      marshal-as: reference
+
+PrivateMinorRootRangeResponse:
+  union: { type: message }
+  fields:
+    - name: Value
+      type: private.MinorRootRecord
+      marshal-as: reference
+      pointer: true

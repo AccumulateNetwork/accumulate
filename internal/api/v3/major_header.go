@@ -103,26 +103,9 @@ func (s *Sequencer) getMajorHeaderRange(batch *database.Batch, start, end uint64
 			return nil, errors.UnknownError.WithFormat("collect network updates for major block %d: %w", index, err)
 		}
 
-		// Reconstruct the transaction as it was received: begin block clears
-		// MakeMajorBlock on anchors from the DN to the DN, so the executed
-		// transaction — the one the validator signatures are archived under —
-		// has it zeroed (see Sequencer.getAnchor)
-		if dir, ok := anchor.(*protocol.DirectoryAnchor); ok {
-			dir.MakeMajorBlock = 0
-		}
-		txn := new(protocol.Transaction)
-		txn.Header.Principal = s.partition.AnchorPool()
-		txn.Body = anchor
-
-		seq := new(messaging.SequencedMessage)
-		seq.Message = &messaging.TransactionMessage{Transaction: txn}
-		seq.Source = s.partition.URL
-		seq.Destination = s.partition.URL
-		seq.Number = num
-
-		sigs, err := account.Transaction(txn.ID().Hash()).ValidatorSignatures().Get()
+		seq, sigs, err := s.buildSelfAnchor(batch, anchor, num)
 		if err != nil {
-			return nil, errors.UnknownError.WithFormat("load validator signatures for major block %d: %w", index, err)
+			return nil, errors.UnknownError.WithFormat("build self-anchor for major block %d: %w", index, err)
 		}
 
 		records = append(records, &private.MajorHeaderRecord{
@@ -189,35 +172,44 @@ func (s *Sequencer) getNetworkUpdatesInWindow(batch *database.Batch, prevClose u
 	return updates, nil
 }
 
+// buildSelfAnchor reconstructs the partition's self-anchor as it was
+// received and loads its archived validator-quorum signatures. Begin block
+// clears MakeMajorBlock on anchors from the DN to the DN, so the executed
+// transaction — the one the signatures are archived under — has it zeroed
+// (see Sequencer.getAnchor).
+func (s *Sequencer) buildSelfAnchor(batch *database.Batch, anchor protocol.AnchorBody, num uint64) (*messaging.SequencedMessage, []protocol.KeySignature, error) {
+	if dir, ok := anchor.(*protocol.DirectoryAnchor); ok {
+		dir.MakeMajorBlock = 0
+	}
+	txn := new(protocol.Transaction)
+	txn.Header.Principal = s.partition.AnchorPool()
+	txn.Body = anchor
+
+	seq := new(messaging.SequencedMessage)
+	seq.Message = &messaging.TransactionMessage{Transaction: txn}
+	seq.Source = s.partition.URL
+	seq.Destination = s.partition.URL
+	seq.Number = num
+
+	sigs, err := batch.Account(s.partition.AnchorPool()).Transaction(txn.ID().Hash()).ValidatorSignatures().Get()
+	if err != nil {
+		return nil, nil, errors.UnknownError.WithFormat("load validator signatures: %w", err)
+	}
+	return seq, sigs, nil
+}
+
 // findSelfAnchorForBlock finds the first anchor in the sequence chain whose
 // MinorBlockIndex is at least the given block, and returns a copy of its body
 // and its sequence number. MinorBlockIndex increases monotonically along the
 // sequence chain, so a binary search suffices.
 func (s *Sequencer) findSelfAnchorForBlock(batch *database.Batch, seqChain *database.Chain, block uint64) (protocol.AnchorBody, uint64, error) {
-	load := func(num uint64) (protocol.AnchorBody, error) {
-		hash, err := seqChain.Entry(int64(num) - 1)
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("load anchor sequence chain entry %d: %w", num-1, err)
-		}
-		var msg messaging.MessageWithTransaction
-		err = batch.Message2(hash).Main().GetAs(&msg)
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("load anchor %d: %w", num, err)
-		}
-		body, ok := msg.GetTransaction().Body.(protocol.AnchorBody)
-		if !ok {
-			return nil, errors.InternalError.WithFormat("anchor %d is not an anchor body", num)
-		}
-		return body, nil
-	}
-
 	height := uint64(seqChain.Height())
 	var searchErr error
 	i := sort.Search(int(height), func(i int) bool {
 		if searchErr != nil {
 			return false
 		}
-		body, err := load(uint64(i) + 1)
+		body, err := s.loadAnchorBody(batch, seqChain, uint64(i)+1)
 		if err != nil {
 			searchErr = err
 			return false
@@ -232,7 +224,7 @@ func (s *Sequencer) findSelfAnchorForBlock(batch *database.Batch, seqChain *data
 	}
 
 	num := uint64(i) + 1
-	body, err := load(num)
+	body, err := s.loadAnchorBody(batch, seqChain, num)
 	if err != nil {
 		return nil, 0, err
 	}

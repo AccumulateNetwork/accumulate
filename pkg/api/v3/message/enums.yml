@@ -76,3 +76,7 @@ Type:
     value: 0x84
   PrivateMajorHeaderRangeResponse:
     value: 0x85
+  PrivateMinorRootRangeRequest:
+    value: 0x86
+  PrivateMinorRootRangeResponse:
+    value: 0x87

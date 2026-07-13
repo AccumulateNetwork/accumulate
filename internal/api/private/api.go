@@ -45,3 +45,15 @@ type MajorHeaderRanger interface {
 	Sequencer
 	MajorHeaderRange(ctx context.Context, partition *url.URL, start, end uint64, opts SequenceOptions) ([]*MajorHeaderRecord, error)
 }
+
+// MinorRootRanger is an optional extension of [Sequencer] that binds minor
+// blocks past the spine to it (#4058). Since is the client's last verified
+// minor block — the block of its last verified self-anchor. Until is the
+// target block, or zero for as far as possible. The server returns a record
+// for the furthest anchored block it can prove in one receipt list; the
+// client verifies and calls again from the new position until it reaches the
+// tip. Only the directory serves this.
+type MinorRootRanger interface {
+	Sequencer
+	MinorRootRange(ctx context.Context, partition *url.URL, since, until uint64, opts SequenceOptions) (*MinorRootRecord, error)
+}

@@ -75,71 +75,125 @@ func (s *Spine) Advance(r *private.MajorHeaderRecord) error {
 		return errors.BadRequest.WithFormat("index entry is for major block %d, not %d", r.Entry.BlockIndex, r.Index)
 	}
 
-	// The anchor must be a directory self-anchor
-	txnMsg, ok := r.Anchor.Message.(*messaging.TransactionMessage)
-	if !ok {
-		return errors.BadRequest.With("anchor is not a transaction")
-	}
-	body, ok := txnMsg.Transaction.Body.(*protocol.DirectoryAnchor)
-	if !ok {
-		return errors.BadRequest.WithFormat("anchor is %v, not a directory anchor", txnMsg.Transaction.Body.Type())
-	}
-	if !protocol.DnUrl().Equal(r.Anchor.Source) ||
-		!protocol.DnUrl().Equal(r.Anchor.Destination) ||
-		!protocol.DnUrl().JoinPath(protocol.AnchorPool).Equal(txnMsg.Transaction.Header.Principal) {
-		return errors.BadRequest.With("anchor is not a directory self-anchor")
+	// The anchor must be a directory self-anchor that advances the walk
+	body, err := checkDirectorySelfAnchor(r.Anchor)
+	if err != nil {
+		return err
 	}
 	if body.MinorBlockIndex <= s.LastMinorBlock {
 		return errors.Conflict.WithFormat("anchor for minor block %d does not advance past %d", body.MinorBlockIndex, s.LastMinorBlock)
 	}
 
-	// Apply the record's proven network updates to a candidate state — this
-	// is the induction step that tracks the validator set forward. The
-	// receipts bind each update to this anchor's root chain anchor, so the
-	// updates inherit the anchor's quorum trust.
+	err = s.verifyAndCommit(body, r.Anchor, r.Signatures, r.Updates)
+	if err != nil {
+		return errors.UnknownError.WithFormat("major block %d: %w", r.Index, err)
+	}
+	s.NextMajor++
+	return nil
+}
+
+// AdvanceEpoch verifies a minor-root record — the binding of blocks past the
+// spine — and advances the walk. In addition to the quorum check, the root
+// proof must chain the previously verified root chain anchor to this
+// anchor's, proving the anchor extends the verified history rather than
+// forking it.
+func (s *Spine) AdvanceEpoch(r *private.MinorRootRecord) error {
+	if r == nil || r.Anchor == nil || r.RootProof == nil {
+		return errors.BadRequest.With("incomplete minor root record")
+	}
+	body, err := checkDirectorySelfAnchor(r.Anchor)
+	if err != nil {
+		return err
+	}
+	if body.MinorBlockIndex <= s.LastMinorBlock {
+		return errors.Conflict.WithFormat("anchor for minor block %d does not advance past %d", body.MinorBlockIndex, s.LastMinorBlock)
+	}
+
+	// The proof must start at the verified root and end at this anchor's root
+	proof := r.RootProof
+	if proof.MerkleState == nil || proof.Receipt == nil {
+		return errors.BadRequest.With("incomplete root proof")
+	}
+	if !bytes.Equal(proof.MerkleState.Anchor(), s.RootChainAnchor[:]) {
+		return errors.Unauthenticated.With("root proof does not start at the verified root")
+	}
+	if !bytes.Equal(proof.Receipt.Anchor, body.RootChainAnchor[:]) {
+		return errors.Unauthenticated.With("root proof does not end at the anchor's root")
+	}
+	if !proof.Validate(nil) {
+		return errors.Unauthenticated.With("invalid root proof")
+	}
+
+	err = s.verifyAndCommit(body, r.Anchor, r.Signatures, r.Updates)
+	if err != nil {
+		return errors.UnknownError.WithFormat("block %d: %w", body.MinorBlockIndex, err)
+	}
+	return nil
+}
+
+// verifyAndCommit applies the proven updates to a candidate state, verifies
+// the anchor's quorum, and commits. The updates are the induction step that
+// tracks the validator set forward: the receipts bind each update to this
+// anchor's root chain anchor, so they inherit the anchor's quorum trust.
+func (s *Spine) verifyAndCommit(body *protocol.DirectoryAnchor, anchor *messaging.SequencedMessage, sigs []protocol.KeySignature, updates []*private.NetworkUpdateProof) error {
 	candidate := s.globals.Copy()
-	for _, u := range r.Updates {
+	for _, u := range updates {
 		err := applyProvenUpdate(candidate, u, body.RootChainAnchor)
 		if err != nil {
-			return errors.UnknownError.WithFormat("major block %d: %w", r.Index, err)
+			return err
 		}
 	}
 
-	// Verify the quorum. Updates take effect when they execute, so an anchor
-	// after a mid-window set change is signed by the post-update set — but a
-	// change in the closing block itself is signed by the pre-update set, so
-	// accept either.
-	err := verifyQuorum(candidate, r)
-	if err != nil && len(r.Updates) > 0 {
-		err = verifyQuorum(s.globals, r)
+	// Updates take effect when they execute, so an anchor after a mid-window
+	// set change is signed by the post-update set — but a change in the
+	// anchor's own block is signed by the pre-update set, so accept either.
+	err := verifyQuorum(candidate, anchor, sigs)
+	if err != nil && len(updates) > 0 {
+		err = verifyQuorum(s.globals, anchor, sigs)
 	}
 	if err != nil {
 		return err
 	}
 
 	s.globals = candidate
-	s.NextMajor++
 	s.LastMinorBlock = body.MinorBlockIndex
 	s.RootChainAnchor = body.RootChainAnchor
 	s.StateTreeAnchor = body.StateTreeAnchor
 	return nil
 }
 
-func verifyQuorum(g *network.GlobalValues, r *private.MajorHeaderRecord) error {
+func checkDirectorySelfAnchor(anchor *messaging.SequencedMessage) (*protocol.DirectoryAnchor, error) {
+	txnMsg, ok := anchor.Message.(*messaging.TransactionMessage)
+	if !ok {
+		return nil, errors.BadRequest.With("anchor is not a transaction")
+	}
+	body, ok := txnMsg.Transaction.Body.(*protocol.DirectoryAnchor)
+	if !ok {
+		return nil, errors.BadRequest.WithFormat("anchor is %v, not a directory anchor", txnMsg.Transaction.Body.Type())
+	}
+	if !protocol.DnUrl().Equal(anchor.Source) ||
+		!protocol.DnUrl().Equal(anchor.Destination) ||
+		!protocol.DnUrl().JoinPath(protocol.AnchorPool).Equal(txnMsg.Transaction.Header.Principal) {
+		return nil, errors.BadRequest.With("anchor is not a directory self-anchor")
+	}
+	return body, nil
+}
+
+func verifyQuorum(g *network.GlobalValues, anchor *messaging.SequencedMessage, sigs []protocol.KeySignature) error {
 	seen := map[[32]byte]bool{}
-	for _, sig := range r.Signatures {
-		if !sig.Verify(nil, r.Anchor) {
-			return errors.Unauthenticated.WithFormat("major block %d: invalid signature", r.Index)
+	for _, sig := range sigs {
+		if !sig.Verify(nil, anchor) {
+			return errors.Unauthenticated.With("invalid signature")
 		}
 		v, ok := findDirectoryValidator(g, sig.GetPublicKey())
 		if !ok {
-			return errors.Unauthorized.WithFormat("major block %d: signer is not an active directory validator", r.Index)
+			return errors.Unauthorized.With("signer is not an active directory validator")
 		}
 		seen[v.PublicKeyHash] = true
 	}
 	threshold := g.ValidatorThreshold(protocol.Directory)
 	if uint64(len(seen)) < threshold {
-		return errors.Unauthorized.WithFormat("major block %d: quorum not met: %d of %d validator signatures", r.Index, len(seen), threshold)
+		return errors.Unauthorized.WithFormat("quorum not met: %d of %d validator signatures", len(seen), threshold)
 	}
 	return nil
 }

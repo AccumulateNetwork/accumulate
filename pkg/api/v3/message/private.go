@@ -25,7 +25,8 @@ func (s Sequencer) methods() serviceMethodMap {
 	typ, fn := makeServiceMethod(s.sequence)
 	typ2, fn2 := makeServiceMethod(s.sequenceRange)
 	typ3, fn3 := makeServiceMethod(s.majorHeaderRange)
-	return serviceMethodMap{typ: fn, typ2: fn2, typ3: fn3}
+	typ4, fn4 := makeServiceMethod(s.minorRootRange)
+	return serviceMethodMap{typ: fn, typ2: fn2, typ3: fn3, typ4: fn4}
 }
 
 func (s Sequencer) sequence(c *call[*PrivateSequenceRequest]) {
@@ -65,6 +66,20 @@ func (s Sequencer) majorHeaderRange(c *call[*PrivateMajorHeaderRangeRequest]) {
 	c.Write(&PrivateMajorHeaderRangeResponse{Value: res})
 }
 
+func (s Sequencer) minorRootRange(c *call[*PrivateMinorRootRangeRequest]) {
+	ranger, ok := s.Sequencer.(private.MinorRootRanger)
+	if !ok {
+		c.Write(&ErrorResponse{Error: errors.NotAllowed.With("minor root range is not supported")})
+		return
+	}
+	res, err := ranger.MinorRootRange(c.context, c.params.Partition, c.params.Since, c.params.Until, c.params.SequenceOptions)
+	if err != nil {
+		c.Write(&ErrorResponse{Error: errors.UnknownError.Wrap(err).(*errors.Error)})
+		return
+	}
+	c.Write(&PrivateMinorRootRangeResponse{Value: res})
+}
+
 // PrivateClient is a binary message transport client for private API v3 services.
 type PrivateClient AddressedClient
 
@@ -98,4 +113,12 @@ func (c PrivateClient) MajorHeaderRange(ctx context.Context, partition *url.URL,
 
 func (r *PrivateSequenceRangeResponse) rval() []*api.MessageRecord[messaging.Message] { return r.Value } //nolint:unused
 
+// MinorRootRange implements [private.MinorRootRanger.MinorRootRange].
+func (c PrivateClient) MinorRootRange(ctx context.Context, partition *url.URL, since, until uint64, opts private.SequenceOptions) (*private.MinorRootRecord, error) {
+	req := &PrivateMinorRootRangeRequest{Partition: partition, Since: since, Until: until, SequenceOptions: opts}
+	return typedRequest[*PrivateMinorRootRangeResponse, *private.MinorRootRecord](AddressedClient(c), ctx, req)
+}
+
 func (r *PrivateMajorHeaderRangeResponse) rval() []*private.MajorHeaderRecord { return r.Value } //nolint:unused
+
+func (r *PrivateMinorRootRangeResponse) rval() *private.MinorRootRecord { return r.Value } //nolint:unused

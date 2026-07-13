@@ -39,6 +39,19 @@ type MajorHeaderRecord struct {
 	extraData []byte
 }
 
+type MinorRootRecord struct {
+	fieldsSet []bool
+	// Anchor is the partition's self-anchor covering the end of the run.
+	Anchor *messaging.SequencedMessage `json:"anchor,omitempty" form:"anchor" query:"anchor" validate:"required"`
+	// Signatures is the archived validator quorum over the anchor.
+	Signatures []protocol.KeySignature `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
+	// Updates is the network-account transactions of the run, proven into the anchor.
+	Updates []*NetworkUpdateProof `json:"updates,omitempty" form:"updates" query:"updates" validate:"required"`
+	// RootProof proves the root chain extends the previously verified root to this anchor's root.
+	RootProof *merkle.ReceiptList `json:"rootProof,omitempty" form:"rootProof" query:"rootProof" validate:"required"`
+	extraData []byte
+}
+
 type NetworkUpdateProof struct {
 	fieldsSet   []bool
 	Transaction *protocol.Transaction `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
@@ -85,6 +98,39 @@ func (v *MajorHeaderRecord) Copy() *MajorHeaderRecord {
 }
 
 func (v *MajorHeaderRecord) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *MinorRootRecord) Copy() *MinorRootRecord {
+	u := new(MinorRootRecord)
+
+	if v.Anchor != nil {
+		u.Anchor = (v.Anchor).Copy()
+	}
+	u.Signatures = make([]protocol.KeySignature, len(v.Signatures))
+	for i, v := range v.Signatures {
+		v := v
+		if v != nil {
+			u.Signatures[i] = protocol.CopyKeySignature(v)
+		}
+	}
+	u.Updates = make([]*NetworkUpdateProof, len(v.Updates))
+	for i, v := range v.Updates {
+		v := v
+		if v != nil {
+			u.Updates[i] = (v).Copy()
+		}
+	}
+	if v.RootProof != nil {
+		u.RootProof = (v.RootProof).Copy()
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *MinorRootRecord) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *NetworkUpdateProof) Copy() *NetworkUpdateProof {
 	u := new(NetworkUpdateProof)
@@ -156,6 +202,43 @@ func (v *MajorHeaderRecord) Equal(u *MajorHeaderRecord) bool {
 		if !((v.Updates[i]).Equal(u.Updates[i])) {
 			return false
 		}
+	}
+
+	return true
+}
+
+func (v *MinorRootRecord) Equal(u *MinorRootRecord) bool {
+	switch {
+	case v.Anchor == u.Anchor:
+		// equal
+	case v.Anchor == nil || u.Anchor == nil:
+		return false
+	case !((v.Anchor).Equal(u.Anchor)):
+		return false
+	}
+	if len(v.Signatures) != len(u.Signatures) {
+		return false
+	}
+	for i := range v.Signatures {
+		if !(protocol.EqualKeySignature(v.Signatures[i], u.Signatures[i])) {
+			return false
+		}
+	}
+	if len(v.Updates) != len(u.Updates) {
+		return false
+	}
+	for i := range v.Updates {
+		if !((v.Updates[i]).Equal(u.Updates[i])) {
+			return false
+		}
+	}
+	switch {
+	case v.RootProof == u.RootProof:
+		// equal
+	case v.RootProof == nil || u.RootProof == nil:
+		return false
+	case !((v.RootProof).Equal(u.RootProof)):
+		return false
 	}
 
 	return true
@@ -267,6 +350,86 @@ func (v *MajorHeaderRecord) IsValid() error {
 		errs = append(errs, "field Updates is missing")
 	} else if len(v.Updates) == 0 {
 		errs = append(errs, "field Updates is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_MinorRootRecord = []string{
+	1: "Anchor",
+	2: "Signatures",
+	3: "Updates",
+	4: "RootProof",
+}
+
+func (v *MinorRootRecord) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Anchor == nil) {
+		writer.WriteValue(1, v.Anchor.MarshalBinary)
+	}
+	if !(len(v.Signatures) == 0) {
+		for _, v := range v.Signatures {
+			writer.WriteValue(2, v.MarshalBinary)
+		}
+	}
+	if !(len(v.Updates) == 0) {
+		for _, v := range v.Updates {
+			writer.WriteValue(3, v.MarshalBinary)
+		}
+	}
+	if !(v.RootProof == nil) {
+		writer.WriteValue(4, v.RootProof.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_MinorRootRecord)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *MinorRootRecord) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Anchor is missing")
+	} else if v.Anchor == nil {
+		errs = append(errs, "field Anchor is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Signatures is missing")
+	} else if len(v.Signatures) == 0 {
+		errs = append(errs, "field Signatures is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Updates is missing")
+	} else if len(v.Updates) == 0 {
+		errs = append(errs, "field Updates is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field RootProof is missing")
+	} else if v.RootProof == nil {
+		errs = append(errs, "field RootProof is not set")
 	}
 
 	switch len(errs) {
@@ -434,6 +597,51 @@ func (v *MajorHeaderRecord) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *MinorRootRecord) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *MinorRootRecord) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x := new(messaging.SequencedMessage); reader.ReadValue(1, x.UnmarshalBinaryFrom) {
+		v.Anchor = x
+	}
+	for {
+		ok := reader.ReadValue(2, func(r io.Reader) error {
+			x, err := protocol.UnmarshalKeySignatureFrom(r)
+			if err == nil {
+				v.Signatures = append(v.Signatures, x)
+			}
+			return err
+		})
+		if !ok {
+			break
+		}
+	}
+	for {
+		if x := new(NetworkUpdateProof); reader.ReadValue(3, x.UnmarshalBinaryFrom) {
+			v.Updates = append(v.Updates, x)
+		} else {
+			break
+		}
+	}
+	if x := new(merkle.ReceiptList); reader.ReadValue(4, x.UnmarshalBinaryFrom) {
+		v.RootProof = x
+	}
+
+	seen, err := reader.Reset(fieldNames_MinorRootRecord)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *NetworkUpdateProof) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -498,6 +706,13 @@ func init() {
 	}, "MajorHeaderRecord", "majorHeaderRecord")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("anchor", "messaging.SequencedMessage"),
+		encoding.NewTypeField("signatures", "protocol.KeySignature[]"),
+		encoding.NewTypeField("updates", "NetworkUpdateProof[]"),
+		encoding.NewTypeField("rootProof", "merkle.ReceiptList"),
+	}, "MinorRootRecord", "minorRootRecord")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("transaction", "protocol.Transaction"),
 		encoding.NewTypeField("receipt", "merkle.Receipt"),
 	}, "NetworkUpdateProof", "networkUpdateProof")
@@ -531,6 +746,30 @@ func (v *MajorHeaderRecord) MarshalJSON() ([]byte, error) {
 	}
 	if !(len(v.Updates) == 0) {
 		u.Updates = v.Updates
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *MinorRootRecord) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Anchor     *messaging.SequencedMessage                            `json:"anchor,omitempty"`
+		Signatures *encoding.JsonUnmarshalListWith[protocol.KeySignature] `json:"signatures,omitempty"`
+		Updates    encoding.JsonList[*NetworkUpdateProof]                 `json:"updates,omitempty"`
+		RootProof  *merkle.ReceiptList                                    `json:"rootProof,omitempty"`
+		ExtraData  *string                                                `json:"$epilogue,omitempty"`
+	}{}
+	if !(v.Anchor == nil) {
+		u.Anchor = v.Anchor
+	}
+	if !(len(v.Signatures) == 0) {
+		u.Signatures = &encoding.JsonUnmarshalListWith[protocol.KeySignature]{Value: v.Signatures, Func: protocol.UnmarshalKeySignatureJSON}
+	}
+	if !(len(v.Updates) == 0) {
+		u.Updates = v.Updates
+	}
+	if !(v.RootProof == nil) {
+		u.RootProof = v.RootProof
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -576,6 +815,38 @@ func (v *MajorHeaderRecord) UnmarshalJSON(data []byte) error {
 		}
 	}
 	v.Updates = u.Updates
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *MinorRootRecord) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Anchor     *messaging.SequencedMessage                            `json:"anchor,omitempty"`
+		Signatures *encoding.JsonUnmarshalListWith[protocol.KeySignature] `json:"signatures,omitempty"`
+		Updates    encoding.JsonList[*NetworkUpdateProof]                 `json:"updates,omitempty"`
+		RootProof  *merkle.ReceiptList                                    `json:"rootProof,omitempty"`
+		ExtraData  *string                                                `json:"$epilogue,omitempty"`
+	}{}
+	u.Anchor = v.Anchor
+	u.Signatures = &encoding.JsonUnmarshalListWith[protocol.KeySignature]{Value: v.Signatures, Func: protocol.UnmarshalKeySignatureJSON}
+	u.Updates = v.Updates
+	u.RootProof = v.RootProof
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	v.Anchor = u.Anchor
+	if u.Signatures != nil && u.Signatures.Value != nil {
+		v.Signatures = make([]protocol.KeySignature, len(u.Signatures.Value))
+		for i, x := range u.Signatures.Value {
+			v.Signatures[i] = x
+		}
+	}
+	v.Updates = u.Updates
+	v.RootProof = u.RootProof
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err

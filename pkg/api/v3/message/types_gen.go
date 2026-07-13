@@ -146,6 +146,21 @@ type PrivateMajorHeaderRangeResponse struct {
 	extraData []byte
 }
 
+type PrivateMinorRootRangeRequest struct {
+	fieldsSet []bool
+	Partition *url.URL `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
+	Since     uint64   `json:"since,omitempty" form:"since" query:"since" validate:"required"`
+	Until     uint64   `json:"until,omitempty" form:"until" query:"until" validate:"required"`
+	private.SequenceOptions
+	extraData []byte
+}
+
+type PrivateMinorRootRangeResponse struct {
+	fieldsSet []bool
+	Value     *private.MinorRootRecord `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	extraData []byte
+}
+
 type PrivateSequenceRangeRequest struct {
 	fieldsSet   []bool
 	Source      *url.URL `json:"source,omitempty" form:"source" query:"source" validate:"required"`
@@ -264,6 +279,10 @@ func (*NodeInfoResponse) Type() Type { return TypeNodeInfoResponse }
 func (*PrivateMajorHeaderRangeRequest) Type() Type { return TypePrivateMajorHeaderRangeRequest }
 
 func (*PrivateMajorHeaderRangeResponse) Type() Type { return TypePrivateMajorHeaderRangeResponse }
+
+func (*PrivateMinorRootRangeRequest) Type() Type { return TypePrivateMinorRootRangeRequest }
+
+func (*PrivateMinorRootRangeResponse) Type() Type { return TypePrivateMinorRootRangeResponse }
 
 func (*PrivateSequenceRangeRequest) Type() Type { return TypePrivateSequenceRangeRequest }
 
@@ -603,6 +622,41 @@ func (v *PrivateMajorHeaderRangeResponse) Copy() *PrivateMajorHeaderRangeRespons
 }
 
 func (v *PrivateMajorHeaderRangeResponse) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *PrivateMinorRootRangeRequest) Copy() *PrivateMinorRootRangeRequest {
+	u := new(PrivateMinorRootRangeRequest)
+
+	if v.Partition != nil {
+		u.Partition = v.Partition
+	}
+	u.Since = v.Since
+	u.Until = v.Until
+	u.SequenceOptions = *v.SequenceOptions.Copy()
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *PrivateMinorRootRangeRequest) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *PrivateMinorRootRangeResponse) Copy() *PrivateMinorRootRangeResponse {
+	u := new(PrivateMinorRootRangeResponse)
+
+	if v.Value != nil {
+		u.Value = (v.Value).Copy()
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *PrivateMinorRootRangeResponse) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *PrivateSequenceRangeRequest) Copy() *PrivateSequenceRangeRequest {
 	u := new(PrivateSequenceRangeRequest)
@@ -1041,6 +1095,41 @@ func (v *PrivateMajorHeaderRangeResponse) Equal(u *PrivateMajorHeaderRangeRespon
 		if !((v.Value[i]).Equal(u.Value[i])) {
 			return false
 		}
+	}
+
+	return true
+}
+
+func (v *PrivateMinorRootRangeRequest) Equal(u *PrivateMinorRootRangeRequest) bool {
+	switch {
+	case v.Partition == u.Partition:
+		// equal
+	case v.Partition == nil || u.Partition == nil:
+		return false
+	case !((v.Partition).Equal(u.Partition)):
+		return false
+	}
+	if !(v.Since == u.Since) {
+		return false
+	}
+	if !(v.Until == u.Until) {
+		return false
+	}
+	if !v.SequenceOptions.Equal(&u.SequenceOptions) {
+		return false
+	}
+
+	return true
+}
+
+func (v *PrivateMinorRootRangeResponse) Equal(u *PrivateMinorRootRangeResponse) bool {
+	switch {
+	case v.Value == u.Value:
+		// equal
+	case v.Value == nil || u.Value == nil:
+		return false
+	case !((v.Value).Equal(u.Value)):
+		return false
 	}
 
 	return true
@@ -2250,6 +2339,137 @@ func (v *PrivateMajorHeaderRangeResponse) IsValid() error {
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Value is missing")
 	} else if len(v.Value) == 0 {
+		errs = append(errs, "field Value is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_PrivateMinorRootRangeRequest = []string{
+	1: "Type",
+	2: "Partition",
+	3: "Since",
+	4: "Until",
+	5: "SequenceOptions",
+}
+
+func (v *PrivateMinorRootRangeRequest) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Partition == nil) {
+		writer.WriteUrl(2, v.Partition)
+	}
+	if !(v.Since == 0) {
+		writer.WriteUint(3, v.Since)
+	}
+	if !(v.Until == 0) {
+		writer.WriteUint(4, v.Until)
+	}
+	writer.WriteValue(5, v.SequenceOptions.MarshalBinary)
+
+	_, _, err := writer.Reset(fieldNames_PrivateMinorRootRangeRequest)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *PrivateMinorRootRangeRequest) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Partition is missing")
+	} else if v.Partition == nil {
+		errs = append(errs, "field Partition is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Since is missing")
+	} else if v.Since == 0 {
+		errs = append(errs, "field Since is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Until is missing")
+	} else if v.Until == 0 {
+		errs = append(errs, "field Until is not set")
+	}
+	if err := v.SequenceOptions.IsValid(); err != nil {
+		errs = append(errs, err.Error())
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_PrivateMinorRootRangeResponse = []string{
+	1: "Type",
+	2: "Value",
+}
+
+func (v *PrivateMinorRootRangeResponse) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Value == nil) {
+		writer.WriteValue(2, v.Value.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_PrivateMinorRootRangeResponse)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *PrivateMinorRootRangeResponse) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Value is missing")
+	} else if v.Value == nil {
 		errs = append(errs, "field Value is not set")
 	}
 
@@ -3658,6 +3878,83 @@ func (v *PrivateMajorHeaderRangeResponse) UnmarshalFieldsFrom(reader *encoding.R
 	return nil
 }
 
+func (v *PrivateMinorRootRangeRequest) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *PrivateMinorRootRangeRequest) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *PrivateMinorRootRangeRequest) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadUrl(2); ok {
+		v.Partition = x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.Since = x
+	}
+	if x, ok := reader.ReadUint(4); ok {
+		v.Until = x
+	}
+	reader.ReadValue(5, v.SequenceOptions.UnmarshalBinaryFrom)
+
+	seen, err := reader.Reset(fieldNames_PrivateMinorRootRangeRequest)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *PrivateMinorRootRangeResponse) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *PrivateMinorRootRangeResponse) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *PrivateMinorRootRangeResponse) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x := new(private.MinorRootRecord); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+		v.Value = x
+	}
+
+	seen, err := reader.Reset(fieldNames_PrivateMinorRootRangeResponse)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *PrivateSequenceRangeRequest) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -4227,6 +4524,19 @@ func init() {
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("partition", "string"),
+		encoding.NewTypeField("since", "uint64"),
+		encoding.NewTypeField("until", "uint64"),
+		encoding.NewTypeField("nodeID", "p2p.PeerID"),
+	}, "PrivateMinorRootRangeRequest", "privateMinorRootRangeRequest")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("value", "private.MinorRootRecord"),
+	}, "PrivateMinorRootRangeResponse", "privateMinorRootRangeResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
 		encoding.NewTypeField("source", "string"),
 		encoding.NewTypeField("destination", "string"),
 		encoding.NewTypeField("start", "uint64"),
@@ -4606,6 +4916,46 @@ func (v *PrivateMajorHeaderRangeResponse) MarshalJSON() ([]byte, error) {
 	}{}
 	u.Type = v.Type()
 	if !(len(v.Value) == 0) {
+		u.Value = v.Value
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *PrivateMinorRootRangeRequest) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      Type                                    `json:"type"`
+		Partition *url.URL                                `json:"partition,omitempty"`
+		Since     uint64                                  `json:"since,omitempty"`
+		Until     uint64                                  `json:"until,omitempty"`
+		NodeID    *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"nodeID,omitempty"`
+		ExtraData *string                                 `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.Partition == nil) {
+		u.Partition = v.Partition
+	}
+	if !(v.Since == 0) {
+		u.Since = v.Since
+	}
+	if !(v.Until == 0) {
+		u.Until = v.Until
+	}
+	if !(v.SequenceOptions.NodeID == ("")) {
+		u.NodeID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.SequenceOptions.NodeID, Func: p2p.UnmarshalPeerIDJSON}
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *PrivateMinorRootRangeResponse) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      Type                     `json:"type"`
+		Value     *private.MinorRootRecord `json:"value,omitempty"`
+		ExtraData *string                  `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.Value == nil) {
 		u.Value = v.Value
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
@@ -5299,6 +5649,64 @@ func (v *PrivateMajorHeaderRangeResponse) UnmarshalJSON(data []byte) error {
 		Type      Type                                          `json:"type"`
 		Value     encoding.JsonList[*private.MajorHeaderRecord] `json:"value,omitempty"`
 		ExtraData *string                                       `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Value = v.Value
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Value = u.Value
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *PrivateMinorRootRangeRequest) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      Type                                    `json:"type"`
+		Partition *url.URL                                `json:"partition,omitempty"`
+		Since     uint64                                  `json:"since,omitempty"`
+		Until     uint64                                  `json:"until,omitempty"`
+		NodeID    *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"nodeID,omitempty"`
+		ExtraData *string                                 `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Partition = v.Partition
+	u.Since = v.Since
+	u.Until = v.Until
+	u.NodeID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.SequenceOptions.NodeID, Func: p2p.UnmarshalPeerIDJSON}
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Partition = u.Partition
+	v.Since = u.Since
+	v.Until = u.Until
+	if u.NodeID != nil {
+		v.SequenceOptions.NodeID = u.NodeID.Value
+	}
+
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *PrivateMinorRootRangeResponse) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      Type                     `json:"type"`
+		Value     *private.MinorRootRecord `json:"value,omitempty"`
+		ExtraData *string                  `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Value = v.Value

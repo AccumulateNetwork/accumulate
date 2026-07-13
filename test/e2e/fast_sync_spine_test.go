@@ -108,6 +108,59 @@ func TestFastSyncSpine(t *testing.T) {
 	spine4, err := fastsync.NewSpine(genesis, 1)
 	require.NoError(t, err)
 	require.Error(t, spine4.Advance(records[1]), "major block 2 must not apply before 1")
+
+	// ——— Phase 2: bind the tail past the spine (#4058 MinorRootRange) ———
+
+	// More churn in the tail, past the last major block
+	current = loadDirectoryGlobals(t, sim)
+	newKey2 := acctesting.GenerateKey(t.Name(), "tail-validator")
+	current.Network.AddValidator(newKey2[32:], Directory, false)
+	current.Network.Version++
+	st = sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(DnUrl(), Network).
+			Body(&WriteData{Entry: current.FormatNetwork(), WriteToState: true}).
+			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(2).Signer(sim.SignWithNode(Directory, 0)))
+	sim.StepUntil(Txn(st.TxID).Completes())
+	sim.StepN(10)
+
+	// Bind the epoch: chunk from the spine's position to the tip
+	epoch, ok := sim.S.Services().Private().(private.MinorRootRanger)
+	require.True(t, ok, "private client does not serve minor root ranges")
+	before := spine.LastMinorBlock
+	for {
+		r, err := epoch.MinorRootRange(context.Background(), DnUrl(), spine.LastMinorBlock, 0, private.SequenceOptions{})
+		require.NoError(t, err)
+		require.NoError(t, spine.AdvanceEpoch(r), "advance epoch past block %d", spine.LastMinorBlock)
+		if len(r.RootProof.Elements) < int(MaxReceiptListElements) {
+			break // reached the tip
+		}
+	}
+	require.Greater(t, spine.LastMinorBlock, before, "the epoch must advance past the spine")
+	require.True(t, hasValidator(spine.Globals().Network, newKey2[32:]),
+		"the walked validator set is missing the tail validator")
+
+	// Rebuild a second walker at the spine position for the negative cases
+	spineT, err := fastsync.NewSpine(genesis, 1)
+	require.NoError(t, err)
+	for _, r := range records {
+		require.NoError(t, spineT.Advance(r))
+	}
+
+	// A tampered root proof must be rejected. Fetch a dedicated record —
+	// Copy shares the element buffers, so tampering must not touch the
+	// record used for the positive case.
+	tampered2, err := epoch.MinorRootRange(context.Background(), DnUrl(), before, 0, private.SequenceOptions{})
+	require.NoError(t, err)
+	tampered2.RootProof.Elements[0][0]++
+	require.Error(t, spineT.AdvanceEpoch(tampered2), "a tampered root proof must not verify")
+
+	// The real record still verifies from the same position
+	r2, err := epoch.MinorRootRange(context.Background(), DnUrl(), before, 0, private.SequenceOptions{})
+	require.NoError(t, err)
+	require.NoError(t, spineT.AdvanceEpoch(r2))
+
+	// A replayed record must be rejected — it no longer advances
+	require.Error(t, spineT.AdvanceEpoch(r2), "a replayed epoch record must not verify")
 }
 
 func loadDirectoryGlobals(t *testing.T, sim *Sim) *core.GlobalValues {

@@ -58,3 +58,31 @@ NetworkUpdateProof:
       type: merkle.Receipt
       marshal-as: reference
       pointer: true
+
+# MinorRootRecord binds a run of minor blocks to the verified spine (#4058):
+# the self-anchor covering the end of the run with its archived quorum, the
+# window's network-account updates, and a receipt list proving the root chain
+# extends the client's last verified root to this anchor's root.
+MinorRootRecord:
+  fields:
+    - name: Anchor
+      description: is the partition's self-anchor covering the end of the run
+      type: messaging.SequencedMessage
+      marshal-as: reference
+      pointer: true
+    - name: Signatures
+      description: is the archived validator quorum over the anchor
+      type: protocol.KeySignature
+      marshal-as: union
+      repeatable: true
+    - name: Updates
+      description: is the network-account transactions of the run, proven into the anchor
+      type: NetworkUpdateProof
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+    - name: RootProof
+      description: proves the root chain extends the previously verified root to this anchor's root
+      type: merkle.ReceiptList
+      marshal-as: reference
+      pointer: true
