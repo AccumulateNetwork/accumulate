@@ -109,7 +109,7 @@ $COMPOSE stop $VICTIM >>"$LOG/compose.log" 2>&1
 PEER=$($COMPOSE run --rm --no-deps --entrypoint sh bvn1-val1 -c \
     "grep -o '/dns/acc-bvn1-val1/tcp/[0-9]*/p2p/[A-Za-z0-9]*' /root/.accumulate/$VDIR/accumulate.toml | head -1" 2>/dev/null | tr -d '\r' | tail -1)
 log "Fastsync $VICTIM's directory database (peer $PEER)"
-$COMPOSE run --rm --no-deps $VICTIM fastsync http://acc-bvn1-val1:26660/v3 \
+$COMPOSE run --rm --no-deps $VICTIM fastsync http://acc-bvn1-val1:26660 \
     --genesis "/root/.accumulate/$VDIR/directory-genesis.snap" \
     --database "/root/.accumulate/$VDIR/dnn/data/accumulate.db" \
     --storage leveldb \

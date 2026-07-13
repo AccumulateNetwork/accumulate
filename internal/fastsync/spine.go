@@ -109,12 +109,19 @@ func (s *Spine) AdvanceEpoch(r *private.MinorRootRecord) error {
 		return errors.Conflict.WithFormat("anchor for minor block %d does not advance past %d", body.MinorBlockIndex, s.LastMinorBlock)
 	}
 
-	// The proof must start at the verified root and end at this anchor's root
+	// The proof must start at the verified root and end at this anchor's
+	// root. A walk starting from genesis on a young network — no major
+	// blocks yet — has no verified root; the proof then covers the root
+	// chain from its beginning and the quorum carries the trust alone.
 	proof := r.RootProof
 	if proof.MerkleState == nil || proof.Receipt == nil {
 		return errors.BadRequest.With("incomplete root proof")
 	}
-	if !bytes.Equal(proof.MerkleState.Anchor(), s.RootChainAnchor[:]) {
+	if s.LastMinorBlock == 0 && s.RootChainAnchor == [32]byte{} {
+		if proof.MerkleState.Count != 0 {
+			return errors.Unauthenticated.With("root proof does not start at genesis")
+		}
+	} else if !bytes.Equal(proof.MerkleState.Anchor(), s.RootChainAnchor[:]) {
 		return errors.Unauthenticated.With("root proof does not start at the verified root")
 	}
 	if !bytes.Equal(proof.Receipt.Anchor, body.RootChainAnchor[:]) {

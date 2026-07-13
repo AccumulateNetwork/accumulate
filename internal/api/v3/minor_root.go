@@ -33,9 +33,6 @@ func (s *Sequencer) MinorRootRange(ctx context.Context, partition *url.URL, sinc
 	if partition == nil {
 		return nil, errors.BadRequest.With("missing partition")
 	}
-	if since == 0 {
-		return nil, errors.BadRequest.With("missing since — walk the major spine first")
-	}
 	if until != 0 && until <= since {
 		return nil, errors.BadRequest.WithFormat("invalid range (%d, %d]", since, until)
 	}
@@ -65,15 +62,24 @@ func (s *Sequencer) getMinorRootRange(batch *database.Batch, since, until uint64
 		return nil, errors.NotFound.With("no anchors exist")
 	}
 
-	// The client's position must be an anchored block it verified
-	sinceBody, sinceNum, err := s.findSelfAnchorForBlock(batch, seqChain, since)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("locate anchor for block %d: %w", since, err)
+	// The client's position must be an anchored block it verified. Zero
+	// means the client is starting from genesis — a young network with no
+	// major blocks yet (#4058): the proof then covers the root chain from
+	// its beginning and the anchor's quorum carries the trust alone.
+	var sinceNum uint64
+	sinceRoot := int64(-1)
+	if since > 0 {
+		var sinceBody protocol.AnchorBody
+		var err error
+		sinceBody, sinceNum, err = s.findSelfAnchorForBlock(batch, seqChain, since)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("locate anchor for block %d: %w", since, err)
+		}
+		if sinceBody.GetPartitionAnchor().MinorBlockIndex != since {
+			return nil, errors.BadRequest.WithFormat("block %d is not an anchored block", since)
+		}
+		sinceRoot = int64(sinceBody.GetPartitionAnchor().RootChainIndex)
 	}
-	if sinceBody.GetPartitionAnchor().MinorBlockIndex != since {
-		return nil, errors.BadRequest.WithFormat("block %d is not an anchored block", since)
-	}
-	sinceRoot := sinceBody.GetPartitionAnchor().RootChainIndex
 
 	// Resolve the target anchor
 	var endBody protocol.AnchorBody
@@ -98,8 +104,8 @@ func (s *Sequencer) getMinorRootRange(batch *database.Batch, since, until uint64
 	// Cap the chunk at one receipt list. RootChainIndex increases
 	// monotonically along the sequence chain, so a binary search finds the
 	// furthest anchor within the cap.
-	if endBody.GetPartitionAnchor().RootChainIndex-sinceRoot > protocol.MaxReceiptListElements {
-		limit := sinceRoot + protocol.MaxReceiptListElements
+	if int64(endBody.GetPartitionAnchor().RootChainIndex)-sinceRoot > protocol.MaxReceiptListElements {
+		limit := uint64(sinceRoot + protocol.MaxReceiptListElements)
 		var searchErr error
 		i := sort.Search(int(height), func(i int) bool {
 			if searchErr != nil {
@@ -130,7 +136,7 @@ func (s *Sequencer) getMinorRootRange(batch *database.Batch, since, until uint64
 	// Prove the root chain extends the client's verified root to this
 	// anchor's root
 	rootChain := batch.Account(s.partition.Ledger()).RootChain()
-	proof, err := merkle.GetReceiptList(rootChain.Inner(), int64(sinceRoot)+1, int64(end.RootChainIndex))
+	proof, err := merkle.GetReceiptList(rootChain.Inner(), sinceRoot+1, int64(end.RootChainIndex))
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("build root proof (%d, %d]: %w", sinceRoot, end.RootChainIndex, err)
 	}

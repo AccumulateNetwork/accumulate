@@ -96,6 +96,9 @@ func Sync(ctx context.Context, opts Options) (*Result, error) {
 	for {
 		records, err := opts.Client.MajorHeaderRange(ctx, opts.Partition.URL, spine.NextMajor, spine.NextMajor+spinePageSize-1, private.SequenceOptions{})
 		if err != nil {
+			if spine.NextMajor == 1 && errors.Code(err) == errors.NotFound {
+				break // A young network — no major blocks yet; the epoch binding starts from genesis
+			}
 			return nil, errors.UnknownError.WithFormat("fetch major headers from %d: %w", spine.NextMajor, err)
 		}
 		for _, r := range records {
