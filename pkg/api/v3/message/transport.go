@@ -207,6 +207,12 @@ func (c *RoutedTransport) routeRequest(req Message) (multiaddr.Multiaddr, error)
 	// Does the message already have an address?
 	var addr multiaddr.Multiaddr
 	if msg, ok := req.(*Addressed); ok {
+		if msg.Address == nil {
+			// A crash here takes down the node (observed during fast-sync
+			// replay, #4058); report it instead so the dispatcher can log
+			// the failure and healing can retry
+			return nil, errors.InternalError.With("addressed message has no address")
+		}
 		addr, req = msg.Address, msg.Message
 		sa, _, _, err := extractAddr(addr)
 		if err != nil {
