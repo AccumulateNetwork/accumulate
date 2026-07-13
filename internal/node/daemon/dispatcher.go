@@ -43,6 +43,16 @@ func (d *dispatcher) Close() { /* Nothing to do */ }
 // Submit routes the account URL, constructs a multiaddr, and queues addressed
 // submit requests.
 func (d *dispatcher) Submit(ctx context.Context, u *url.URL, env *messaging.Envelope) error {
+	// A panic here takes down the node — observed twice from the conductor's
+	// healing path during post-fast-sync replay (#4058). Report the problem
+	// instead; the caller logs it and healing retries.
+	if u == nil {
+		return errors.InternalError.With("cannot submit: no destination")
+	}
+	if d.router == nil {
+		return errors.InternalError.With("cannot submit: router not set")
+	}
+
 	// If there's something wrong with the envelope, it's better for that error
 	// to be logged closer to the source, at the sending side instead of the
 	// receiving side
