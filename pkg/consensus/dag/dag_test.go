@@ -417,3 +417,29 @@ func TestDAG_RoundCount(t *testing.T) {
 	assert.Equal(t, 2, d.RoundCount(0))
 	assert.Equal(t, 0, d.RoundCount(1))
 }
+
+// TestDAG_InsertAtCommitFloor verifies that a certificate whose parents were
+// pruned — by garbage collection or because the node rejoined after a fast
+// sync with an empty DAG (#4058) — inserts at the commit floor, while
+// certificates above the floor still require their parents.
+func TestDAG_InsertAtCommitFloor(t *testing.T) {
+	committee, privKeys := makeTestCommittee(t, 4)
+	d := dag.NewDAG(10)
+	d.SetLastCommitRound(9282)
+
+	pruned := types.CertificateDigest{1, 2, 3}
+
+	// At the floor: parents are pruned history — insert succeeds
+	atFloor := createTestCert(t, committee, privKeys, 0, 9283, []types.CertificateDigest{pruned})
+	require.NoError(t, d.Insert(atFloor))
+
+	// Above the floor: parents must exist
+	aboveFloor := createTestCert(t, committee, privKeys, 1, 9285, []types.CertificateDigest{pruned})
+	err := d.Insert(aboveFloor)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "parent")
+
+	// Above the floor with a real parent — insert succeeds
+	next := createTestCert(t, committee, privKeys, 1, 9284, []types.CertificateDigest{atFloor.Digest()})
+	require.NoError(t, d.Insert(next))
+}

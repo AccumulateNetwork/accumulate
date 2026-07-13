@@ -78,8 +78,16 @@ func (d *DAG) Insert(cert *types.Certificate) error {
 		}
 	}
 
-	// Validate parents exist (skip for round 0 which has no parents)
-	if round > 0 && len(cert.Parents()) > 0 {
+	// Validate parents exist (skip for round 0 which has no parents).
+	// Once there is a commit floor, parents at or below it may be
+	// legitimately absent: garbage collection prunes them, and a node
+	// rejoining after a fast sync (#4058) starts with an EMPTY DAG whose
+	// history is embodied in its restored state — requiring parents there
+	// recurses into pruned history and wedges the rejoin. The certificate
+	// itself is quorum-verified before insertion, so accepting it without
+	// its pruned parents does not weaken trust.
+	pruned := d.lastCommitRound > 0 && round <= d.lastCommitRound+1
+	if round > 0 && !pruned && len(cert.Parents()) > 0 {
 		for _, parentDigest := range cert.Parents() {
 			// Use digest index for O(1) lookup
 			if _, found := d.digestIndex[parentDigest]; !found {
