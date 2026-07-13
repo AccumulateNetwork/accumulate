@@ -75,7 +75,11 @@ type SnapshotChunk struct {
 	// Offset is the offset of this chunk.
 	Offset uint64 `json:"offset,omitempty" form:"offset" query:"offset" validate:"required"`
 	// Data is the chunk data.
-	Data      []byte `json:"data,omitempty" form:"data" query:"data" validate:"required"`
+	Data []byte `json:"data,omitempty" form:"data" query:"data" validate:"required"`
+	// Round is the consensus round that committed the epoch block (zero if unknown).
+	Round uint64 `json:"round,omitempty" form:"round" query:"round" validate:"required"`
+	// Epoch is the committee epoch of that round (may be zero).
+	Epoch     uint64 `json:"epoch,omitempty" form:"epoch" query:"epoch" validate:"required"`
 	extraData []byte
 }
 
@@ -188,6 +192,8 @@ func (v *SnapshotChunk) Copy() *SnapshotChunk {
 	u.Total = v.Total
 	u.Offset = v.Offset
 	u.Data = encoding.BytesCopy(v.Data)
+	u.Round = v.Round
+	u.Epoch = v.Epoch
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -315,6 +321,12 @@ func (v *SnapshotChunk) Equal(u *SnapshotChunk) bool {
 		return false
 	}
 	if !(bytes.Equal(v.Data, u.Data)) {
+		return false
+	}
+	if !(v.Round == u.Round) {
+		return false
+	}
+	if !(v.Epoch == u.Epoch) {
 		return false
 	}
 
@@ -602,6 +614,8 @@ var fieldNames_SnapshotChunk = []string{
 	2: "Total",
 	3: "Offset",
 	4: "Data",
+	5: "Round",
+	6: "Epoch",
 }
 
 func (v *SnapshotChunk) MarshalBinary() ([]byte, error) {
@@ -625,6 +639,12 @@ func (v *SnapshotChunk) MarshalBinary() ([]byte, error) {
 	}
 	if !(len(v.Data) == 0) {
 		writer.WriteBytes(4, v.Data)
+	}
+	if !(v.Round == 0) {
+		writer.WriteUint(5, v.Round)
+	}
+	if !(v.Epoch == 0) {
+		writer.WriteUint(6, v.Epoch)
 	}
 
 	_, _, err := writer.Reset(fieldNames_SnapshotChunk)
@@ -661,6 +681,16 @@ func (v *SnapshotChunk) IsValid() error {
 		errs = append(errs, "field Data is missing")
 	} else if len(v.Data) == 0 {
 		errs = append(errs, "field Data is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Round is missing")
+	} else if v.Round == 0 {
+		errs = append(errs, "field Round is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field Epoch is missing")
+	} else if v.Epoch == 0 {
+		errs = append(errs, "field Epoch is not set")
 	}
 
 	switch len(errs) {
@@ -838,6 +868,12 @@ func (v *SnapshotChunk) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBytes(4); ok {
 		v.Data = x
 	}
+	if x, ok := reader.ReadUint(5); ok {
+		v.Round = x
+	}
+	if x, ok := reader.ReadUint(6); ok {
+		v.Epoch = x
+	}
 
 	seen, err := reader.Reset(fieldNames_SnapshotChunk)
 	if err != nil {
@@ -882,6 +918,8 @@ func init() {
 		encoding.NewTypeField("total", "uint64"),
 		encoding.NewTypeField("offset", "uint64"),
 		encoding.NewTypeField("data", "bytes"),
+		encoding.NewTypeField("round", "uint64"),
+		encoding.NewTypeField("epoch", "uint64"),
 	}, "SnapshotChunk", "snapshotChunk")
 
 }
@@ -956,6 +994,8 @@ func (v *SnapshotChunk) MarshalJSON() ([]byte, error) {
 		Total     uint64  `json:"total,omitempty"`
 		Offset    uint64  `json:"offset,omitempty"`
 		Data      *string `json:"data,omitempty"`
+		Round     uint64  `json:"round,omitempty"`
+		Epoch     uint64  `json:"epoch,omitempty"`
 		ExtraData *string `json:"$epilogue,omitempty"`
 	}{}
 	if !(v.Block == 0) {
@@ -969,6 +1009,12 @@ func (v *SnapshotChunk) MarshalJSON() ([]byte, error) {
 	}
 	if !(len(v.Data) == 0) {
 		u.Data = encoding.BytesToJSON(v.Data)
+	}
+	if !(v.Round == 0) {
+		u.Round = v.Round
+	}
+	if !(v.Epoch == 0) {
+		u.Epoch = v.Epoch
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -1068,12 +1114,16 @@ func (v *SnapshotChunk) UnmarshalJSON(data []byte) error {
 		Total     uint64  `json:"total,omitempty"`
 		Offset    uint64  `json:"offset,omitempty"`
 		Data      *string `json:"data,omitempty"`
+		Round     uint64  `json:"round,omitempty"`
+		Epoch     uint64  `json:"epoch,omitempty"`
 		ExtraData *string `json:"$epilogue,omitempty"`
 	}{}
 	u.Block = v.Block
 	u.Total = v.Total
 	u.Offset = v.Offset
 	u.Data = encoding.BytesToJSON(v.Data)
+	u.Round = v.Round
+	u.Epoch = v.Epoch
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -1086,6 +1136,8 @@ func (v *SnapshotChunk) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Data = x
 	}
+	v.Round = u.Round
+	v.Epoch = u.Epoch
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err

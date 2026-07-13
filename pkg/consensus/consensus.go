@@ -356,6 +356,20 @@ func (n *Node) CurrentRound() types.Round {
 }
 
 // LastCommitRound returns the last committed leader round.
+// Rejoin seeds the consensus position after a fast sync (#4058). The node's
+// executor state was restored to a block committed at the given round, so
+// consensus resumes there: the primary participates from the next round and
+// Bullshark orders nothing at or below the seed. The seed must be within
+// DAGGCDepth of the network's current round — fast sync's epoch is always a
+// few blocks behind the tip, so it is — and the normal certificate-sync
+// catch-up covers the remainder.
+func (n *Node) Rejoin(round types.Round) {
+	n.primary.SetRound(round)
+	n.bullshark.SetLastCommitRound(round)
+	n.dag.SetLastCommitRound(round)
+	slog.Info("Rejoined consensus", "partition", n.config.Partition, "round", round)
+}
+
 func (n *Node) LastCommitRound() types.Round {
 	return n.bullshark.LastCommitRound()
 }

@@ -62,8 +62,9 @@ type Result struct {
 	// and its roots are the verified position.
 	Spine *Spine
 
-	// EpochBlock is the minor block whose state was restored.
-	EpochBlock uint64
+	// Epoch is the restored position, including the consensus round and
+	// committee epoch a rejoining validator seeds from (server-reported).
+	Epoch Epoch
 }
 
 // Sync deploys a node's state from the network (#4058): it walks the
@@ -138,7 +139,7 @@ func Sync(ctx context.Context, opts Options) (*Result, error) {
 		_ = f.Close()
 		defer func() { _ = os.Remove(path) }()
 	}
-	var epoch uint64
+	var epoch Epoch
 	for {
 		file, err := os.Create(path)
 		if err != nil {
@@ -160,8 +161,8 @@ func Sync(ctx context.Context, opts Options) (*Result, error) {
 
 	// Phase 3b: verify exactly up to the epoch block — its anchor is
 	// recorded a block later and reaches quorum a few blocks after that
-	for spine.LastMinorBlock < epoch {
-		r, err := opts.Client.MinorRootRange(ctx, opts.Partition.URL, spine.LastMinorBlock, epoch, private.SequenceOptions{})
+	for spine.LastMinorBlock < epoch.Block {
+		r, err := opts.Client.MinorRootRange(ctx, opts.Partition.URL, spine.LastMinorBlock, epoch.Block, private.SequenceOptions{})
 		switch {
 		case err == nil:
 			err = spine.AdvanceEpoch(r)
@@ -174,11 +175,11 @@ func Sync(ctx context.Context, opts Options) (*Result, error) {
 				return nil, errors.UnknownError.Wrap(err)
 			}
 		default:
-			return nil, errors.UnknownError.WithFormat("bind epoch block %d: %w", epoch, err)
+			return nil, errors.UnknownError.WithFormat("bind epoch block %d: %w", epoch.Block, err)
 		}
 	}
-	if spine.LastMinorBlock != epoch {
-		return nil, errors.Conflict.WithFormat("the epoch block %d is not anchored exactly — verified position is %d", epoch, spine.LastMinorBlock)
+	if spine.LastMinorBlock != epoch.Block {
+		return nil, errors.Conflict.WithFormat("the epoch block %d is not anchored exactly — verified position is %d", epoch.Block, spine.LastMinorBlock)
 	}
 
 	// Phase 3c: restore and prove the state
@@ -192,7 +193,7 @@ func Sync(ctx context.Context, opts Options) (*Result, error) {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	return &Result{Spine: spine, EpochBlock: epoch}, nil
+	return &Result{Spine: spine, Epoch: epoch}, nil
 }
 
 // retryable reports whether the error means "the network has not advanced

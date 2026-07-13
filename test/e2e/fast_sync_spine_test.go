@@ -186,9 +186,9 @@ func TestFastSyncSpine(t *testing.T) {
 			Body(&WriteData{Entry: current.FormatNetwork(), WriteToState: true}).
 			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(3).Signer(sim.SignWithNode(Directory, 0)))
 
-	var epochBlock uint64
+	var pinned fastsync.Epoch
 	for i := 0; ; i++ {
-		epochBlock, err = fastsync.FetchSnapshot(context.Background(), snap, DnUrl(), file)
+		pinned, err = fastsync.FetchSnapshot(context.Background(), snap, DnUrl(), file)
 		if err == nil {
 			break
 		}
@@ -196,10 +196,10 @@ func TestFastSyncSpine(t *testing.T) {
 		require.Less(t, i, 100, "the pin window never opened")
 		sim.Step()
 	}
-	require.GreaterOrEqual(t, epochBlock, spine.LastMinorBlock)
+	require.GreaterOrEqual(t, pinned.Block, spine.LastMinorBlock)
 
-	for i := 0; spine.LastMinorBlock < epochBlock; i++ {
-		r, err := epoch.MinorRootRange(context.Background(), DnUrl(), spine.LastMinorBlock, epochBlock, private.SequenceOptions{})
+	for i := 0; spine.LastMinorBlock < pinned.Block; i++ {
+		r, err := epoch.MinorRootRange(context.Background(), DnUrl(), spine.LastMinorBlock, pinned.Block, private.SequenceOptions{})
 		if err != nil {
 			// Not found: the anchor is not produced yet. Not ready: it has
 			// not reached quorum yet. Both resolve with more blocks.
@@ -212,7 +212,7 @@ func TestFastSyncSpine(t *testing.T) {
 		}
 		require.NoError(t, spine.AdvanceEpoch(r))
 	}
-	require.Equal(t, epochBlock, spine.LastMinorBlock, "the epoch block must be anchored exactly")
+	require.Equal(t, pinned.Block, spine.LastMinorBlock, "the epoch block must be anchored exactly")
 
 	// Restore into a fresh database. RestoreSnapshot rebuilds the BPT from
 	// the restored accounts and requires its root to equal the verified
@@ -261,8 +261,8 @@ func TestFastSyncSpine(t *testing.T) {
 		Poll:      poll,
 	})
 	require.NoError(t, err)
-	require.NotZero(t, res.EpochBlock)
-	require.Equal(t, res.EpochBlock, res.Spine.LastMinorBlock)
+	require.NotZero(t, res.Epoch.Block)
+	require.Equal(t, res.Epoch.Block, res.Spine.LastMinorBlock)
 	require.GreaterOrEqual(t, res.Spine.NextMajor, uint64(4), "the sync must have walked the whole spine")
 }
 

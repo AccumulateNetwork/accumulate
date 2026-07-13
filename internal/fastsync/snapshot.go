@@ -20,38 +20,50 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
+// Epoch identifies a fetched snapshot's position: the minor block whose
+// state it holds, and — when the server runs DAG-BFT — the consensus round
+// and committee epoch that committed that block, which a rejoining validator
+// seeds its consensus state from. Round and CommitteeEpoch are reported by
+// the server and are NOT covered by the state proof; a wrong value cannot
+// corrupt verified state but can leave the node unable to rejoin until it
+// resyncs from another peer.
+type Epoch struct {
+	Block          uint64
+	Round          uint64
+	CommitteeEpoch uint64
+}
+
 // FetchSnapshot pins a sync epoch on the server and streams the epoch's
-// snapshot into w. It returns the epoch's block — the caller must verify
-// that block's anchor (Spine.AdvanceEpoch) before trusting the state, and
-// RestoreSnapshot compares the rebuilt BPT root against the anchor's
-// StateTreeAnchor.
-func FetchSnapshot(ctx context.Context, svc private.SnapshotRanger, partition *url.URL, w io.Writer) (uint64, error) {
+// snapshot into w. The caller must verify the epoch block's anchor
+// (Spine.AdvanceEpoch) before trusting the state, and RestoreSnapshot
+// compares the rebuilt BPT root against the anchor's StateTreeAnchor.
+func FetchSnapshot(ctx context.Context, svc private.SnapshotRanger, partition *url.URL, w io.Writer) (Epoch, error) {
 	chunk, err := svc.SnapshotRange(ctx, partition, 0, 0, private.SequenceOptions{})
 	if err != nil {
-		return 0, errors.UnknownError.WithFormat("pin snapshot: %w", err)
+		return Epoch{}, errors.UnknownError.WithFormat("pin snapshot: %w", err)
 	}
-	epoch := chunk.Block
+	epoch := Epoch{Block: chunk.Block, Round: chunk.Round, CommitteeEpoch: chunk.Epoch}
 
 	var offset uint64
 	for {
-		if chunk.Block != epoch {
-			return 0, errors.Conflict.WithFormat("the server re-pinned the epoch: %d became %d", epoch, chunk.Block)
+		if chunk.Block != epoch.Block {
+			return Epoch{}, errors.Conflict.WithFormat("the server re-pinned the epoch: %d became %d", epoch.Block, chunk.Block)
 		}
 		if chunk.Offset != offset {
-			return 0, errors.Conflict.WithFormat("expected offset %d, got %d", offset, chunk.Offset)
+			return Epoch{}, errors.Conflict.WithFormat("expected offset %d, got %d", offset, chunk.Offset)
 		}
 		_, err = w.Write(chunk.Data)
 		if err != nil {
-			return 0, errors.UnknownError.Wrap(err)
+			return Epoch{}, errors.UnknownError.Wrap(err)
 		}
 		offset += uint64(len(chunk.Data))
 		if offset >= chunk.Total {
 			return epoch, nil
 		}
 
-		chunk, err = svc.SnapshotRange(ctx, partition, epoch, offset, private.SequenceOptions{})
+		chunk, err = svc.SnapshotRange(ctx, partition, epoch.Block, offset, private.SequenceOptions{})
 		if err != nil {
-			return 0, errors.UnknownError.WithFormat("fetch snapshot at %d: %w", offset, err)
+			return Epoch{}, errors.UnknownError.WithFormat("fetch snapshot at %d: %w", offset, err)
 		}
 	}
 }

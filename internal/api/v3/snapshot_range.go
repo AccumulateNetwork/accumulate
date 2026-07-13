@@ -70,12 +70,16 @@ func (s *Sequencer) SnapshotRange(ctx context.Context, partition *url.URL, epoch
 		return nil, errors.UnknownError.WithFormat("read snapshot: %w", err)
 	}
 
-	return &private.SnapshotChunk{
+	chunk := &private.SnapshotChunk{
 		Block:  s.snap.block,
 		Total:  s.snap.size,
 		Offset: offset,
 		Data:   data,
-	}, nil
+	}
+	if c, ok := s.commitRoundFor(s.snap.block); ok {
+		chunk.Round, chunk.Epoch = c.round, c.epoch
+	}
+	return chunk, nil
 }
 
 func (s *Sequencer) pinSnapshot() error {

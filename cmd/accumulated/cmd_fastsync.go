@@ -18,6 +18,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/fastsync"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/dagbft"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc"
@@ -31,6 +32,7 @@ func init() {
 	cmdFastSync.Flags().StringVar(&flagFastSync.Genesis, "genesis", "", "Genesis snapshot — the trust anchor (required)")
 	cmdFastSync.Flags().StringVar(&flagFastSync.Database, "database", "", "Directory for the synced database (required)")
 	cmdFastSync.Flags().StringVar(&flagFastSync.Partition, "partition", protocol.Directory, "Partition to sync")
+	cmdFastSync.Flags().StringVar(&flagFastSync.RejoinDir, "rejoin-dir", "", "Node work directory to write the consensus rejoin seed into")
 	_ = cmdFastSync.MarkFlagRequired("genesis")
 	_ = cmdFastSync.MarkFlagRequired("database")
 }
@@ -39,6 +41,7 @@ var flagFastSync = struct {
 	Genesis   string
 	Database  string
 	Partition string
+	RejoinDir string
 }{}
 
 var cmdFastSync = &cobra.Command{
@@ -112,7 +115,23 @@ func runFastSync(_ *cobra.Command, args []string) {
 	checkf(err, "sync")
 
 	fmt.Printf("Synced and verified in %v\n", time.Since(start).Round(time.Second))
-	fmt.Printf("  Epoch block:       %d\n", res.EpochBlock)
+	fmt.Printf("  Epoch block:       %d (round %d, committee epoch %d)\n", res.Epoch.Block, res.Epoch.Round, res.Epoch.CommitteeEpoch)
 	fmt.Printf("  State tree anchor: %x\n", res.Spine.StateTreeAnchor)
 	fmt.Printf("  Validators:        %d (network version %d)\n", len(res.Spine.Globals().Network.Validators), res.Spine.Globals().Network.Version)
+
+	// Write the consensus rejoin seed for the node's next startup
+	if flagFastSync.RejoinDir != "" {
+		if res.Epoch.Round == 0 {
+			fmt.Println("WARNING: the server did not report the epoch block's consensus round — no rejoin seed written; the node will start at round zero")
+			return
+		}
+		err = dagbft.WriteRejoinSeed(flagFastSync.RejoinDir, &dagbft.RejoinSeed{
+			Partition: flagFastSync.Partition,
+			Block:     res.Epoch.Block,
+			Round:     res.Epoch.Round,
+			Epoch:     res.Epoch.CommitteeEpoch,
+		})
+		checkf(err, "write rejoin seed")
+		fmt.Printf("  Rejoin seed:       %s\n", dagbft.RejoinSeedName(flagFastSync.Partition))
+	}
 }

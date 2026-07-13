@@ -105,3 +105,9 @@ SnapshotChunk:
     - name: Data
       description: is the chunk data
       type: bytes
+    - name: Round
+      description: is the consensus round that committed the epoch block (zero if unknown)
+      type: uint
+    - name: Epoch
+      description: is the committee epoch of that round (may be zero)
+      type: uint

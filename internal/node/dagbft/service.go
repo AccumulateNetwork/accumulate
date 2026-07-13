@@ -49,6 +49,13 @@ type ServiceConfig struct {
 	// Genesis is the path to the genesis file/snapshot.
 	Genesis string
 
+	// Rejoin seeds the consensus position after a fast sync (#4058). The
+	// executor database was restored to a block committed at Rejoin.Round in
+	// committee epoch Rejoin.Epoch; consensus resumes from there instead of
+	// round zero, which would wedge once the network's age exceeds the DAG
+	// GC depth.
+	Rejoin *RejoinSeed
+
 	// Host is the libp2p host for networking (optional, enables multi-node).
 	Host host.Host
 
@@ -133,6 +140,14 @@ func (s *Service) Start(ctx context.Context) error {
 	if err != nil {
 		return errors.UnknownError.WithFormat("initialize committee: %w", err)
 	}
+
+	// A rejoining node's committee (from its restored globals) is current,
+	// but the epoch counter — the number of validator-set changes since
+	// genesis — only exists in the running network's memory. Certificates
+	// are rejected on epoch mismatch, so seed it.
+	if s.config.Rejoin != nil && s.config.Rejoin.Epoch > committee.Epoch {
+		committee = types.NewCommittee(committee.Validators, s.config.Rejoin.Epoch)
+	}
 	s.committee = committee
 
 	// Create consensus node with optional libp2p networking
@@ -148,6 +163,16 @@ func (s *Service) Start(ctx context.Context) error {
 	// Initialize genesis if needed
 	if err := s.initializeGenesis(); err != nil {
 		return errors.UnknownError.WithFormat("initialize genesis: %w", err)
+	}
+
+	// Seed the consensus position for a fast-sync rejoin
+	if s.config.Rejoin != nil && s.config.Rejoin.Round > 0 {
+		s.node.Rejoin(types.Round(s.config.Rejoin.Round))
+		s.logger.Info("Seeded consensus for fast-sync rejoin",
+			"partition", s.config.Partition.ID,
+			"round", s.config.Rejoin.Round,
+			"epoch", s.config.Rejoin.Epoch,
+			"block", s.lastBlockIndex)
 	}
 
 	// Start consensus node
@@ -493,6 +518,8 @@ func (s *Service) processCommittedCertificate(cert *types.Certificate) error {
 	event := events.DidCommitBlock{
 		Index: blockIndex,
 		Time:  blockTime,
+		Round: uint64(cert.Header.Round),
+		Epoch: s.committee.Epoch,
 	}
 	if err := s.eventBus.Publish(event); err != nil {
 		s.logger.Error("Failed to publish block event", "error", err)
