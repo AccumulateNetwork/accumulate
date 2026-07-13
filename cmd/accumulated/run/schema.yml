@@ -243,6 +243,9 @@ Configuration:
         - name: NumWorkers
           type: '*int'
           optional: true
+        - name: DagGcDepth
+          type: '*int'
+          optional: true
 
     - name: GatewayConfiguration
       class: composite

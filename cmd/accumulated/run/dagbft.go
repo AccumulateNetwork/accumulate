@@ -205,12 +205,12 @@ func (s *DAGBFTService) start(inst *Instance) error {
 
 	// Start conductor for cross-chain communication
 	conductor := &crosschain.Conductor{
-		Partition:           s.Partition,
-		ValidatorKey:        execOpts.Key,
-		Database:            execOpts.Database,
-		Querier:             v3.Querier2{Querier: client},
-		Dispatcher:          execOpts.NewDispatcher(),
-		RunTask: execOpts.BackgroundTaskLauncher,
+		Partition:    s.Partition,
+		ValidatorKey: execOpts.Key,
+		Database:     execOpts.Database,
+		Querier:      v3.Querier2{Querier: client},
+		Dispatcher:   execOpts.NewDispatcher(),
+		RunTask:      execOpts.BackgroundTaskLauncher,
 		// Healing is the ONLY retry mechanism for anchors — the conductor's
 		// per-block dispatch is one-shot, and a single lost anchor freezes
 		// the destination's delivered-sequence forever (observed as BVN

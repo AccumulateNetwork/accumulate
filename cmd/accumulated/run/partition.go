@@ -42,6 +42,7 @@ func (p partOpts) apply(cfg *Config) error {
 			EnableDirectDispatch: p.EnableDirectDispatch,
 			MaxEnvelopesPerBlock: p.MaxEnvelopesPerBlock,
 			NumWorkers:           p.NumWorkers,
+			DAGGCDepth:           p.DagGcDepth,
 		},
 		func(s *DAGBFTService) string { return s.Partition.ID })
 

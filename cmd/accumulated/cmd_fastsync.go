@@ -10,7 +10,10 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
+
+	"github.com/multiformats/go-multiaddr"
 
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/exp/apiutil"
@@ -33,6 +36,8 @@ func init() {
 	cmdFastSync.Flags().StringVar(&flagFastSync.Database, "database", "", "Directory for the synced database (required)")
 	cmdFastSync.Flags().StringVar(&flagFastSync.Partition, "partition", protocol.Directory, "Partition to sync")
 	cmdFastSync.Flags().StringVar(&flagFastSync.RejoinDir, "rejoin-dir", "", "Node work directory to write the consensus rejoin seed into")
+	cmdFastSync.Flags().StringVar(&flagFastSync.Storage, "storage", "badger", "Database backend: badger or leveldb")
+	cmdFastSync.Flags().StringSliceVar(&flagFastSync.Peers, "peer", nil, "Bootstrap peers (multiaddrs); defaults to the Accumulate bootstrap servers")
 	_ = cmdFastSync.MarkFlagRequired("genesis")
 	_ = cmdFastSync.MarkFlagRequired("database")
 }
@@ -42,6 +47,8 @@ var flagFastSync = struct {
 	Database  string
 	Partition string
 	RejoinDir string
+	Storage   string
+	Peers     []string
 }{}
 
 var cmdFastSync = &cobra.Command{
@@ -71,7 +78,15 @@ func runFastSync(_ *cobra.Command, args []string) {
 	fmt.Printf("Trust anchor loaded: network version %d, %d validators\n", genesis.Network.Version, len(genesis.Network.Validators))
 
 	// The target database
-	db, err := database.OpenBadger(flagFastSync.Database, nil)
+	var db *database.Database
+	switch strings.ToLower(flagFastSync.Storage) {
+	case "badger":
+		db, err = database.OpenBadger(flagFastSync.Database, nil)
+	case "leveldb":
+		db, err = database.OpenLevelDB(flagFastSync.Database, nil)
+	default:
+		fatalf("unknown storage backend %q", flagFastSync.Storage)
+	}
 	checkf(err, "open database")
 	defer db.Close()
 
@@ -80,9 +95,17 @@ func runFastSync(_ *cobra.Command, args []string) {
 	ni, err := c1.NodeInfo(ctx, api.NodeInfoOptions{})
 	checkf(err, "query node info")
 
+	peers := accumulate.BootstrapServers
+	if len(flagFastSync.Peers) > 0 {
+		peers = make([]multiaddr.Multiaddr, len(flagFastSync.Peers))
+		for i, p := range flagFastSync.Peers {
+			peers[i], err = multiaddr.NewMultiaddr(p)
+			checkf(err, "parse peer %q", p)
+		}
+	}
 	node, err := p2p.New(p2p.Options{
 		Network:        ni.Network,
-		BootstrapPeers: accumulate.BootstrapServers,
+		BootstrapPeers: peers,
 	})
 	checkf(err, "start p2p node")
 	defer func() { _ = node.Close() }()
