@@ -33,10 +33,10 @@ type pinnedSnapshot struct {
 }
 
 // SnapshotRange implements [private.SnapshotRanger.SnapshotRange]. Epoch
-// zero pins the current state as the sync epoch — the state is collected
-// into a temporary file within one database view, so the snapshot is
-// consistent as of one block. Any other epoch must match the pinned one;
-// a mismatch means the pin was replaced and the client must start over.
+// zero pins the sync epoch — the state is collected into a temporary file
+// from a view captured at a provable moment, so the snapshot is consistent
+// as of one anchored block. Any other epoch must match the pinned one; a
+// mismatch means the pin was replaced and the client must start over.
 func (s *Sequencer) SnapshotRange(ctx context.Context, partition *url.URL, epoch, offset uint64, _ private.SequenceOptions) (*private.SnapshotChunk, error) {
 	if partition == nil {
 		return nil, errors.BadRequest.With("missing partition")
@@ -82,41 +82,86 @@ func (s *Sequencer) SnapshotRange(ctx context.Context, partition *url.URL, epoch
 	return chunk, nil
 }
 
+// captureProvableView is called synchronously from the DidCommitBlock event.
+// The snapshot is only provable if some anchor will attest its exact state:
+// anchor roots are populated when the anchor is RECORDED — at the start of
+// the block after it was prepared — from precisely the state as of its own
+// block. So the provable moment is when the system ledger holds a freshly
+// prepared anchor for the block that just committed. At block rates the
+// window is one block wide, far too narrow to catch by polling, so the
+// commit event — which fires synchronously, before the next block can begin
+// — captures a read view of it. The view is a point-in-time database
+// transaction, replaced at every provable commit and only consumed by
+// pinSnapshot.
+func (s *Sequencer) captureProvableView(index uint64) {
+	beginner, ok := s.db.(database.Beginner)
+	if !ok {
+		return
+	}
+
+	batch := beginner.Begin(false)
+	var ledger *protocol.SystemLedger
+	err := batch.Account(s.partition.Ledger()).Main().GetAs(&ledger)
+	if err != nil || ledger.Anchor == nil || ledger.Index != index {
+		batch.Discard()
+		return
+	}
+	anchor, ok := ledger.Anchor.(protocol.AnchorBody)
+	if !ok || anchor.GetPartitionAnchor().MinorBlockIndex != ledger.Index {
+		batch.Discard()
+		return
+	}
+
+	s.viewMu.Lock()
+	if s.provable != nil {
+		s.provable.Discard()
+	}
+	s.provable = batch
+	s.provableBlock = ledger.Index
+	s.viewMu.Unlock()
+}
+
 func (s *Sequencer) pinSnapshot() error {
+	// Take ownership of the captured provable view. When none was captured —
+	// no commit event carried a round (CometBFT) or no recent block prepared
+	// an anchor — fall back to checking whether the current committed state
+	// happens to be provable right now.
+	s.viewMu.Lock()
+	batch, block := s.provable, s.provableBlock
+	s.provable = nil
+	s.viewMu.Unlock()
+
+	if batch == nil {
+		beginner, ok := s.db.(database.Beginner)
+		if !ok {
+			return errors.NotReady.With("no provable state captured yet — retry after the next block that prepares an anchor")
+		}
+		batch = beginner.Begin(false)
+		var ledger *protocol.SystemLedger
+		err := batch.Account(s.partition.Ledger()).Main().GetAs(&ledger)
+		switch {
+		case err != nil:
+			batch.Discard()
+			return errors.UnknownError.WithFormat("load system ledger: %w", err)
+		case ledger.Anchor == nil:
+			batch.Discard()
+			return errors.NotReady.With("no anchor is pending — retry after the next block that prepares one")
+		}
+		anchor, ok := ledger.Anchor.(protocol.AnchorBody)
+		if !ok || anchor.GetPartitionAnchor().MinorBlockIndex != ledger.Index {
+			batch.Discard()
+			return errors.NotReady.With("the pending anchor is stale — retry after the next block that prepares one")
+		}
+		block = ledger.Index
+	}
+	defer batch.Discard()
+
 	file, err := os.CreateTemp("", "fastsync-snapshot-*")
 	if err != nil {
 		return errors.UnknownError.WithFormat("create temporary file: %w", err)
 	}
 
-	var block uint64
-	err = s.db.View(func(batch *database.Batch) error {
-		// The snapshot is only provable if some anchor will attest this
-		// exact state. Anchor roots are populated when the anchor is
-		// RECORDED — at the start of the block after it was prepared — from
-		// precisely the state as of its own block. So the provable moment
-		// is when the system ledger holds a freshly prepared anchor for the
-		// current ledger block: the next block will record it with this
-		// snapshot's root as its StateTreeAnchor. At any other moment (e.g.
-		// after blocks that only executed anchor deliveries, which never
-		// prepare an anchor) the current state will never be attested, and
-		// the client must retry.
-		var ledger *protocol.SystemLedger
-		err := batch.Account(s.partition.Ledger()).Main().GetAs(&ledger)
-		if err != nil {
-			return errors.UnknownError.WithFormat("load system ledger: %w", err)
-		}
-		if ledger.Anchor == nil {
-			return errors.NotReady.With("no anchor is pending — retry after the next block that prepares one")
-		}
-		anchor, ok := ledger.Anchor.(protocol.AnchorBody)
-		if !ok || anchor.GetPartitionAnchor().MinorBlockIndex != ledger.Index {
-			return errors.NotReady.WithFormat("the pending anchor is stale — retry after the next block that prepares one")
-		}
-		block = ledger.Index
-
-		_, err = batch.Collect(file, s.partition.URL, &database.CollectOptions{})
-		return errors.UnknownError.Wrap(err)
-	})
+	_, err = batch.Collect(file, s.partition.URL, &database.CollectOptions{})
 	if err != nil {
 		_ = file.Close()
 		_ = os.Remove(file.Name())

@@ -40,6 +40,11 @@ type Sequencer struct {
 	snapMu sync.Mutex
 	snap   *pinnedSnapshot
 
+	// The latest provable state view, captured synchronously at commit
+	viewMu        sync.Mutex
+	provable      *database.Batch
+	provableBlock uint64
+
 	// Recent block → (consensus round, committee epoch), from DidCommitBlock
 	// events. A fast-syncing node needs its epoch block's round and epoch to
 	// rejoin consensus; nothing else records the mapping (#4058).
@@ -84,6 +89,7 @@ func NewSequencer(params SequencerParams) *Sequencer {
 		if e.Round == 0 {
 			return nil // CometBFT — no rounds
 		}
+		s.captureProvableView(e.Index)
 		s.commitMu.Lock()
 		defer s.commitMu.Unlock()
 		s.commitRounds[e.Index] = blockCommit{round: e.Round, epoch: e.Epoch}
