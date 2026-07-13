@@ -48,7 +48,13 @@ services:
       retries: 3
       start_period: 10s
 
-  # Initialize network configuration
+  # Initialize network configuration.
+  #
+  # ⚠️  Guarded by a marker file: compose re-runs this service whenever a
+  # dependent is started via `docker compose start/up` — and an unguarded
+  # `--reset` regenerates every config and genesis with NEW RANDOM KEYS while
+  # the validators keep running on the old ones, silently poisoning the
+  # network. (Use `docker start acc-<name>` to restart single nodes.)
   init:
     build:
       context: ../..
@@ -59,12 +65,15 @@ services:
       - network-config:/root/.accumulate
       - ../..:/workspace
     working_dir: /workspace
+    entrypoint: ["sh", "-c"]
     command:
-      - init
-      - network
-      - test/docker/docker-network.yml
-      - --reset
-      - --faucet-seed=FAUCET
+      - |
+        if [ -f /root/.accumulate/init-done ]; then
+          echo 'network already initialized — skipping (remove the volume to re-init)'
+          exit 0
+        fi
+        accumulated init network test/docker/docker-network.yml --reset --faucet-seed=FAUCET \
+          && touch /root/.accumulate/init-done
 
   # BVN1 Validators
   bvn1-val1:

@@ -16,6 +16,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/p2p"
 )
 
 // spinePageSize is how many major headers are requested per page.
@@ -54,6 +55,10 @@ type Options struct {
 	// moment). It should wait for the network to advance. Defaults to a
 	// one-second sleep.
 	Poll func(ctx context.Context) error
+
+	// NodeID, if set, directs every request to that specific peer instead of
+	// routing by service discovery.
+	NodeID p2p.PeerID
 }
 
 // Result reports what a fast sync verified and restored.
@@ -94,7 +99,7 @@ func Sync(ctx context.Context, opts Options) (*Result, error) {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 	for {
-		records, err := opts.Client.MajorHeaderRange(ctx, opts.Partition.URL, spine.NextMajor, spine.NextMajor+spinePageSize-1, private.SequenceOptions{})
+		records, err := opts.Client.MajorHeaderRange(ctx, opts.Partition.URL, spine.NextMajor, spine.NextMajor+spinePageSize-1, private.SequenceOptions{NodeID: opts.NodeID})
 		if err != nil {
 			if spine.NextMajor == 1 && errors.Code(err) == errors.NotFound {
 				break // A young network — no major blocks yet; the epoch binding starts from genesis
@@ -114,7 +119,7 @@ func Sync(ctx context.Context, opts Options) (*Result, error) {
 
 	// Phase 2: bind the tail past the spine to the latest provable block
 	for {
-		r, err := opts.Client.MinorRootRange(ctx, opts.Partition.URL, spine.LastMinorBlock, 0, private.SequenceOptions{})
+		r, err := opts.Client.MinorRootRange(ctx, opts.Partition.URL, spine.LastMinorBlock, 0, private.SequenceOptions{NodeID: opts.NodeID})
 		switch {
 		case err == nil:
 			err = spine.AdvanceEpoch(r)
@@ -148,7 +153,7 @@ func Sync(ctx context.Context, opts Options) (*Result, error) {
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
 		}
-		epoch, err = FetchSnapshot(ctx, opts.Client, opts.Partition.URL, file)
+		epoch, err = FetchSnapshot(ctx, opts.Client, opts.Partition.URL, file, private.SequenceOptions{NodeID: opts.NodeID})
 		_ = file.Close()
 		if err == nil {
 			break
@@ -165,7 +170,7 @@ func Sync(ctx context.Context, opts Options) (*Result, error) {
 	// Phase 3b: verify exactly up to the epoch block — its anchor is
 	// recorded a block later and reaches quorum a few blocks after that
 	for spine.LastMinorBlock < epoch.Block {
-		r, err := opts.Client.MinorRootRange(ctx, opts.Partition.URL, spine.LastMinorBlock, epoch.Block, private.SequenceOptions{})
+		r, err := opts.Client.MinorRootRange(ctx, opts.Partition.URL, spine.LastMinorBlock, epoch.Block, private.SequenceOptions{NodeID: opts.NodeID})
 		switch {
 		case err == nil:
 			err = spine.AdvanceEpoch(r)

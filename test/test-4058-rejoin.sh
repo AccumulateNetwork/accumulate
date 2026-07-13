@@ -97,7 +97,8 @@ log "DN height advanced $H0 -> $H1 during the outage"
 # ——— 3. Control: a plain restart must wedge ————————————————————————————————
 
 log "Control: plain restart of $VICTIM (expected to wedge)"
-$COMPOSE start $VICTIM >>"$LOG/compose.log" 2>&1
+# Raw docker start — `compose start` would re-run the init dependency
+docker start "acc-$VICTIM" >>"$LOG/compose.log" 2>&1
 sleep 90
 docker logs "acc-$VICTIM" --since 2m >"$LOG/control.log" 2>&1
 CONTROL_BLOCKS=$(grep -c 'Produced block' "$LOG/control.log" || true)
@@ -106,8 +107,13 @@ $COMPOSE stop $VICTIM >>"$LOG/compose.log" 2>&1
 
 # ——— 4. Fastsync the victim's directory database ———————————————————————————
 
-PEER=$($COMPOSE run --rm --no-deps --entrypoint sh bvn1-val1 -c \
-    "grep -o '/dns/acc-bvn1-val1/tcp/[0-9]*/p2p/[A-Za-z0-9]*' /root/.accumulate/$VDIR/accumulate.toml | head -1" 2>/dev/null | tr -d '\r' | tail -1)
+# The TOML-advertised peer IDs do not match the nodes' actual API p2p
+# identities — ask the node itself
+PEERID=$(curl -s -m 5 -X POST http://127.0.0.1:26660/v3 \
+    -H 'Content-Type: application/json' \
+    -d '{"jsonrpc":"2.0","id":1,"method":"node-info","params":{}}' | jq -r '.result.peerID // empty')
+[ -n "$PEERID" ] || fail "could not determine bvn1-val1's peer ID"
+PEER="/dns/acc-bvn1-val1/tcp/26658/p2p/$PEERID"
 log "Fastsync $VICTIM's directory database (peer $PEER)"
 $COMPOSE run --rm --no-deps $VICTIM fastsync http://acc-bvn1-val1:26660 \
     --genesis "/root/.accumulate/$VDIR/directory-genesis.snap" \
@@ -115,14 +121,14 @@ $COMPOSE run --rm --no-deps $VICTIM fastsync http://acc-bvn1-val1:26660 \
     --storage leveldb \
     --partition Directory \
     --rejoin-dir "/root/.accumulate/$VDIR" \
-    --peer "$PEER" >"$LOG/fastsync.log" 2>&1 \
+    --peer "$PEER" --node "$PEERID" >"$LOG/fastsync.log" 2>&1 \
     || fail "fastsync failed — see $LOG/fastsync.log"
 grep -E 'Synced and verified|Epoch block|Rejoin seed|State tree anchor' "$LOG/fastsync.log" | tee -a "$LOG/test.log"
 
 # ——— 5. Restart and verify the rejoin ——————————————————————————————————————
 
 log "Restarting $VICTIM with the rejoin seed"
-$COMPOSE start $VICTIM >>"$LOG/compose.log" 2>&1
+docker start "acc-$VICTIM" >>"$LOG/compose.log" 2>&1
 sleep 120
 docker logs "acc-$VICTIM" --since 3m >"$LOG/rejoin.log" 2>&1
 

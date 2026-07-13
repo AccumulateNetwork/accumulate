@@ -37,8 +37,12 @@ type Epoch struct {
 // snapshot into w. The caller must verify the epoch block's anchor
 // (Spine.AdvanceEpoch) before trusting the state, and RestoreSnapshot
 // compares the rebuilt BPT root against the anchor's StateTreeAnchor.
-func FetchSnapshot(ctx context.Context, svc private.SnapshotRanger, partition *url.URL, w io.Writer) (Epoch, error) {
-	chunk, err := svc.SnapshotRange(ctx, partition, 0, 0, private.SequenceOptions{})
+func FetchSnapshot(ctx context.Context, svc private.SnapshotRanger, partition *url.URL, w io.Writer, opts ...private.SequenceOptions) (Epoch, error) {
+	var so private.SequenceOptions
+	if len(opts) > 0 {
+		so = opts[0]
+	}
+	chunk, err := svc.SnapshotRange(ctx, partition, 0, 0, so)
 	if err != nil {
 		return Epoch{}, errors.UnknownError.WithFormat("pin snapshot: %w", err)
 	}
@@ -61,7 +65,7 @@ func FetchSnapshot(ctx context.Context, svc private.SnapshotRanger, partition *u
 			return epoch, nil
 		}
 
-		chunk, err = svc.SnapshotRange(ctx, partition, epoch.Block, offset, private.SequenceOptions{})
+		chunk, err = svc.SnapshotRange(ctx, partition, epoch.Block, offset, so)
 		if err != nil {
 			return Epoch{}, errors.UnknownError.WithFormat("fetch snapshot at %d: %w", offset, err)
 		}

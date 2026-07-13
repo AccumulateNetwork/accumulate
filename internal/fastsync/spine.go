@@ -194,7 +194,7 @@ func verifyQuorum(g *network.GlobalValues, anchor *messaging.SequencedMessage, s
 		}
 		v, ok := findDirectoryValidator(g, sig.GetPublicKey())
 		if !ok {
-			return errors.Unauthorized.With("signer is not an active directory validator")
+			return errors.Unauthorized.WithFormat("signer %x is not an active directory validator (set has %d, e.g. %x)", sig.GetPublicKey()[:8], len(g.Network.Validators), g.Network.Validators[0].PublicKey[:8])
 		}
 		seen[v.PublicKeyHash] = true
 	}

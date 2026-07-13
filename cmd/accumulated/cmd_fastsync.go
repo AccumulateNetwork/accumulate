@@ -13,11 +13,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
 
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/exp/apiutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/fastsync"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
@@ -27,6 +29,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
+	p2ptypes "gitlab.com/accumulatenetwork/accumulate/pkg/types/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -38,6 +42,7 @@ func init() {
 	cmdFastSync.Flags().StringVar(&flagFastSync.RejoinDir, "rejoin-dir", "", "Node work directory to write the consensus rejoin seed into")
 	cmdFastSync.Flags().StringVar(&flagFastSync.Storage, "storage", "badger", "Database backend: badger or leveldb")
 	cmdFastSync.Flags().StringSliceVar(&flagFastSync.Peers, "peer", nil, "Bootstrap peers (multiaddrs); defaults to the Accumulate bootstrap servers")
+	cmdFastSync.Flags().StringVar(&flagFastSync.Node, "node", "", "Peer ID of a specific node to sync from (skips service discovery)")
 	_ = cmdFastSync.MarkFlagRequired("genesis")
 	_ = cmdFastSync.MarkFlagRequired("database")
 }
@@ -49,6 +54,7 @@ var flagFastSync = struct {
 	RejoinDir string
 	Storage   string
 	Peers     []string
+	Node      string
 }{}
 
 var cmdFastSync = &cobra.Command{
@@ -66,7 +72,7 @@ input is the genesis snapshot.`,
 func runFastSync(_ *cobra.Command, args []string) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	network := args[0]
+	netName := args[0]
 
 	// The trust anchor
 	genesisFile, err := os.Open(flagFastSync.Genesis)
@@ -91,7 +97,7 @@ func runFastSync(_ *cobra.Command, args []string) {
 	defer db.Close()
 
 	// Connect to the network
-	c1 := jsonrpc.NewClient(accumulate.ResolveWellKnownEndpoint(network, "v3"))
+	c1 := jsonrpc.NewClient(accumulate.ResolveWellKnownEndpoint(netName, "v3"))
 	ni, err := c1.NodeInfo(ctx, api.NodeInfoOptions{})
 	checkf(err, "query node info")
 
@@ -110,14 +116,34 @@ func runFastSync(_ *cobra.Command, args []string) {
 	checkf(err, "start p2p node")
 	defer func() { _ = node.Close() }()
 
+	// Build the router from the network status fetched over HTTP — waiting
+	// for DHT service discovery can hang on small networks
+	ns, err := c1.NetworkStatus(ctx, api.NetworkStatusOptions{Partition: protocol.Directory})
+	checkf(err, "query network status")
+	eventBus := events.NewBus(nil)
 	router, err := apiutil.InitRouter(apiutil.RouterOptions{
 		Context: ctx,
 		Node:    node,
 		Network: ni.Network,
+		Events:  eventBus,
 	})
 	checkf(err, "initialize router")
+	err = eventBus.Publish(events.WillChangeGlobals{New: &network.GlobalValues{
+		Oracle:          ns.Oracle,
+		Globals:         ns.Globals,
+		Network:         ns.Network,
+		Routing:         ns.Routing,
+		ExecutorVersion: ns.ExecutorVersion,
+	}})
+	checkf(err, "seed router")
 	if ok := <-router.(*routing.RouterInstance).Ready(); !ok {
 		fatalf("failed to initialize router")
+	}
+
+	var nodeID p2ptypes.PeerID
+	if flagFastSync.Node != "" {
+		nodeID, err = peer.Decode(flagFastSync.Node)
+		checkf(err, "parse node peer ID")
 	}
 
 	client := &message.Client{Transport: &message.RoutedTransport{
@@ -127,13 +153,14 @@ func runFastSync(_ *cobra.Command, args []string) {
 	}}
 
 	// Sync
-	fmt.Printf("Syncing %s from %s\n", partition.URL, network)
+	fmt.Printf("Syncing %s from %s\n", partition.URL, netName)
 	start := time.Now()
 	res, err := fastsync.Sync(ctx, fastsync.Options{
 		Client:    client.Private().(fastsync.Client),
 		Genesis:   genesis,
 		Partition: partition,
 		Database:  db,
+		NodeID:    nodeID,
 	})
 	checkf(err, "sync")
 
