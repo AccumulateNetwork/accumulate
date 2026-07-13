@@ -242,6 +242,19 @@ New subcommand (the vestigial slot is cmd/accumulated/cmd_sync.go; the CometBFT
   node's minor-root verification can ride the DN spine.
 - Never serve `AccountStateRange` from a dirty batch; pin the epoch view.
 
+### The rejoin race (docker-test finding, 2026-07-13)
+
+The rejoin seed — the consensus round of the restored epoch block — ages at
+the network's round rate from the moment the snapshot is pinned. The node
+can only catch up from the seeded round if the gap to the live round is
+within `DAGGCDepth` when it starts, so **sync + restart must complete within
+the GC window**. At production settings (10,000 rounds ≈ 16+ minutes) a
+~4-minute sync fits with a wide margin; the docker test must use a window
+proportioned the same way (its first attempt with a 300-round window failed
+exactly this way — the seed was ~1,600 rounds stale by the time the node
+started). The phase-4b auto-fallback should detect a stale seed (gap >
+DAGGCDepth on first contact) and re-sync instead of wedging.
+
 ## Phasing
 
 1. **Serve + verify headers** — `MajorHeaderRange` service, client-side spine
