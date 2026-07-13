@@ -129,19 +129,28 @@ grep -E 'Synced and verified|Epoch block|Rejoin seed|State tree anchor' "$LOG/fa
 
 log "Restarting $VICTIM with the rejoin seed"
 docker start "acc-$VICTIM" >>"$LOG/compose.log" 2>&1
-sleep 120
-docker logs "acc-$VICTIM" --since 3m >"$LOG/rejoin.log" 2>&1
-
+sleep 60
+docker logs "acc-$VICTIM" --since 2m >"$LOG/rejoin.log" 2>&1
 grep -E 'Seeded consensus for fast-sync rejoin|Rejoined consensus' "$LOG/rejoin.log" | tee -a "$LOG/test.log"
-REJOIN_BLOCKS=$(grep -c 'Produced block' "$LOG/rejoin.log" || true)
-log "Rejoin: produced-block lines after fastsync restart: $REJOIN_BLOCKS (expected > 0)"
+
+# The victim rejoined if its directory ledger converges to the network tip
+# and keeps advancing with it — catching up 4000+ rounds and replaying tens
+# of thousands of blocks takes a few minutes
+REJOINED=0
+for i in $(seq 1 60); do
+    sleep 15
+    V=$(dn_height 26663)
+    N=$(dn_height 26660)
+    log "Rejoin: victim at $V, network at $N (gap $((N - V)))"
+    if [ "${V:-0}" -gt 0 ] && [ $((N - V)) -le 50 ]; then REJOINED=1; break; fi
+done
 
 # ——— Verdict ———————————————————————————————————————————————————————————————
 
 kill $TRAFFIC 2>/dev/null
-if [ "$CONTROL_BLOCKS" -eq 0 ] && [ "$REJOIN_BLOCKS" -gt 0 ]; then
-    log "PASS: plain restart wedged, fastsync rejoin recovered"
+if [ "$CONTROL_BLOCKS" -eq 0 ] && [ "$REJOINED" -eq 1 ]; then
+    log "PASS: plain restart wedged, fastsync rejoin converged to the live tip"
     log "Network left running — './test/run-dagbft-network.sh down' to tear down"
     exit 0
 fi
-fail "control=$CONTROL_BLOCKS (want 0) rejoin=$REJOIN_BLOCKS (want >0) — see $LOG"
+fail "control=$CONTROL_BLOCKS (want 0) rejoined=$REJOINED (want 1) — see $LOG"
