@@ -8,6 +8,7 @@ package fastsync
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"time"
 
@@ -117,26 +118,12 @@ func Sync(ctx context.Context, opts Options) (*Result, error) {
 		}
 	}
 
-	// Phase 2: bind the tail past the spine to the latest provable block
-	for {
-		r, err := opts.Client.MinorRootRange(ctx, opts.Partition.URL, spine.LastMinorBlock, 0, private.SequenceOptions{NodeID: opts.NodeID})
-		switch {
-		case err == nil:
-			err = spine.AdvanceEpoch(r)
-			if err != nil {
-				return nil, errors.UnknownError.Wrap(err)
-			}
-			continue
-		case retryable(err):
-			// The tail is fully bound — nothing provable past this point yet
-		default:
-			return nil, errors.UnknownError.WithFormat("bind tail from %d: %w", spine.LastMinorBlock, err)
-		}
-		break
-	}
+	slog.Info("Fast sync: spine verified", "module", "fastsync", "lastMajor", spine.NextMajor-1, "block", spine.LastMinorBlock)
 
-	// Phase 3a: pin the sync epoch and fetch its snapshot. Pinning only
-	// succeeds at a provable moment, so poll until the window opens.
+	// Phase 2: pin the sync epoch and fetch its snapshot. Pinning only
+	// succeeds at a provable moment, so poll until the window opens. Binding
+	// happens after — exactly to the pinned block — so the walk never chases
+	// the moving tip.
 	path := opts.SnapshotPath
 	if path == "" {
 		f, err := os.CreateTemp("", "fastsync-*.snapshot")
@@ -161,13 +148,15 @@ func Sync(ctx context.Context, opts Options) (*Result, error) {
 		if !retryable(err) {
 			return nil, errors.UnknownError.WithFormat("fetch snapshot: %w", err)
 		}
+		slog.Info("Fast sync: waiting for a provable pin moment", "module", "fastsync")
 		err = poll(ctx)
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
 		}
 	}
+	slog.Info("Fast sync: snapshot fetched", "module", "fastsync", "block", epoch.Block, "round", epoch.Round)
 
-	// Phase 3b: verify exactly up to the epoch block — its anchor is
+	// Phase 3: verify exactly up to the epoch block — its anchor is
 	// recorded a block later and reaches quorum a few blocks after that
 	for spine.LastMinorBlock < epoch.Block {
 		r, err := opts.Client.MinorRootRange(ctx, opts.Partition.URL, spine.LastMinorBlock, epoch.Block, private.SequenceOptions{NodeID: opts.NodeID})
@@ -177,7 +166,9 @@ func Sync(ctx context.Context, opts Options) (*Result, error) {
 			if err != nil {
 				return nil, errors.UnknownError.Wrap(err)
 			}
+			slog.Info("Fast sync: bound", "module", "fastsync", "block", spine.LastMinorBlock, "target", epoch.Block)
 		case retryable(err):
+			slog.Info("Fast sync: waiting for the epoch anchor", "module", "fastsync", "block", spine.LastMinorBlock, "target", epoch.Block, "reason", err)
 			err = poll(ctx)
 			if err != nil {
 				return nil, errors.UnknownError.Wrap(err)
@@ -190,7 +181,9 @@ func Sync(ctx context.Context, opts Options) (*Result, error) {
 		return nil, errors.Conflict.WithFormat("the epoch block %d is not anchored exactly — verified position is %d", epoch.Block, spine.LastMinorBlock)
 	}
 
-	// Phase 3c: restore and prove the state
+	slog.Info("Fast sync: restoring state", "module", "fastsync", "block", epoch.Block)
+
+	// Phase 4: restore and prove the state
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
