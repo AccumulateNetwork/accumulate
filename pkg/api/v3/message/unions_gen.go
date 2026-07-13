@@ -72,6 +72,10 @@ func New(typ Type) (Message, error) {
 		return new(PrivateSequenceRequest), nil
 	case TypePrivateSequenceResponse:
 		return new(PrivateSequenceResponse), nil
+	case TypePrivateSnapshotRangeRequest:
+		return new(PrivateSnapshotRangeRequest), nil
+	case TypePrivateSnapshotRangeResponse:
+		return new(PrivateSnapshotRangeResponse), nil
 	case TypeQueryRequest:
 		return new(QueryRequest), nil
 	case TypeRecordResponse:
@@ -251,6 +255,18 @@ func Equal(a, b Message) bool {
 		}
 		b, ok := b.(*PrivateSequenceResponse)
 		return ok && a.Equal(b)
+	case *PrivateSnapshotRangeRequest:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*PrivateSnapshotRangeRequest)
+		return ok && a.Equal(b)
+	case *PrivateSnapshotRangeResponse:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*PrivateSnapshotRangeResponse)
+		return ok && a.Equal(b)
 	case *QueryRequest:
 		if a == nil {
 			return b == nil
@@ -355,6 +371,10 @@ func Copy(v Message) Message {
 	case *PrivateSequenceRequest:
 		return v.Copy()
 	case *PrivateSequenceResponse:
+		return v.Copy()
+	case *PrivateSnapshotRangeRequest:
+		return v.Copy()
+	case *PrivateSnapshotRangeResponse:
 		return v.Copy()
 	case *QueryRequest:
 		return v.Copy()

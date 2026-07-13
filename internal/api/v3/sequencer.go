@@ -9,6 +9,7 @@ package api
 import (
 	"context"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
@@ -34,6 +35,10 @@ type Sequencer struct {
 	partition   config.NetworkUrl
 	valKey      []byte
 	globals     atomic.Value
+
+	// The pinned sync-epoch snapshot (#4058)
+	snapMu sync.Mutex
+	snap   *pinnedSnapshot
 }
 
 var _ private.Sequencer = (*Sequencer)(nil)

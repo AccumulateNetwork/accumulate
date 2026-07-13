@@ -86,3 +86,22 @@ MinorRootRecord:
       type: merkle.ReceiptList
       marshal-as: reference
       pointer: true
+
+# SnapshotChunk is one chunk of a pinned-epoch snapshot stream (#4058). The
+# first request (epoch zero) pins the server's current state as the sync
+# epoch and returns its block; subsequent requests page through the collected
+# snapshot by offset.
+SnapshotChunk:
+  fields:
+    - name: Block
+      description: is the minor block the snapshot was taken at
+      type: uint
+    - name: Total
+      description: is the total size of the snapshot in bytes
+      type: uint
+    - name: Offset
+      description: is the offset of this chunk
+      type: uint
+    - name: Data
+      description: is the chunk data
+      type: bytes

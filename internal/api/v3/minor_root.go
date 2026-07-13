@@ -145,6 +145,14 @@ func (s *Sequencer) getMinorRootRange(batch *database.Batch, since, until uint64
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
+	// Do not serve a record the client cannot verify — recently executed
+	// anchors accumulate their quorum over a few blocks
+	if globals := s.globals.Load().(*core.GlobalValues); globals != nil {
+		if uint64(len(sigs)) < globals.ValidatorThreshold(s.partitionID) {
+			return nil, errors.NotReady.WithFormat("the anchor for block %d does not have a quorum yet", end.MinorBlockIndex)
+		}
+	}
+
 	return &private.MinorRootRecord{
 		Anchor:     seq,
 		Signatures: sigs,

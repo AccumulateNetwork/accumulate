@@ -80,3 +80,7 @@ Type:
     value: 0x86
   PrivateMinorRootRangeResponse:
     value: 0x87
+  PrivateSnapshotRangeRequest:
+    value: 0x88
+  PrivateSnapshotRangeResponse:
+    value: 0x89

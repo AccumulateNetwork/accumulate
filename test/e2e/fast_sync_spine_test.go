@@ -8,6 +8,8 @@ package e2e
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -15,7 +17,9 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/fastsync"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -161,6 +165,68 @@ func TestFastSyncSpine(t *testing.T) {
 
 	// A replayed record must be rejected — it no longer advances
 	require.Error(t, spineT.AdvanceEpoch(r2), "a replayed epoch record must not verify")
+
+	// ——— Phase 3: fetch the epoch snapshot and restore it (#4058) ———
+
+	snap, ok := sim.S.Services().Private().(private.SnapshotRanger)
+	require.True(t, ok, "private client does not serve snapshot ranges")
+	file, err := os.Create(filepath.Join(t.TempDir(), "state.snapshot"))
+	require.NoError(t, err)
+	defer file.Close()
+
+	// Pinning succeeds only at a provable moment — when the current block
+	// prepared an anchor that the next block will record with this state's
+	// root. Submit a transaction to open the window and retry until it hits.
+	current = loadDirectoryGlobals(t, sim)
+	newKey3 := acctesting.GenerateKey(t.Name(), "epoch-validator")
+	current.Network.AddValidator(newKey3[32:], Directory, false)
+	current.Network.Version++
+	sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(DnUrl(), Network).
+			Body(&WriteData{Entry: current.FormatNetwork(), WriteToState: true}).
+			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(3).Signer(sim.SignWithNode(Directory, 0)))
+
+	var epochBlock uint64
+	for i := 0; ; i++ {
+		epochBlock, err = fastsync.FetchSnapshot(context.Background(), snap, DnUrl(), file)
+		if err == nil {
+			break
+		}
+		require.Equal(t, errors.NotReady, errors.Code(err), "pin must only fail as not-ready, got %v", err)
+		require.Less(t, i, 100, "the pin window never opened")
+		sim.Step()
+	}
+	require.GreaterOrEqual(t, epochBlock, spine.LastMinorBlock)
+
+	for i := 0; spine.LastMinorBlock < epochBlock; i++ {
+		r, err := epoch.MinorRootRange(context.Background(), DnUrl(), spine.LastMinorBlock, epochBlock, private.SequenceOptions{})
+		if err != nil {
+			// Not found: the anchor is not produced yet. Not ready: it has
+			// not reached quorum yet. Both resolve with more blocks.
+			code := errors.Code(err)
+			require.True(t, code == errors.NotReady || code == errors.NotFound,
+				"binding must only fail as not-ready or not-found, got %v", err)
+			require.Less(t, i, 100, "the epoch block's anchor never reached quorum")
+			sim.Step()
+			continue
+		}
+		require.NoError(t, spine.AdvanceEpoch(r))
+	}
+	require.Equal(t, epochBlock, spine.LastMinorBlock, "the epoch block must be anchored exactly")
+
+	// Restore into a fresh database. RestoreSnapshot rebuilds the BPT from
+	// the restored accounts and requires its root to equal the verified
+	// StateTreeAnchor — the complete-set proof of every account state.
+	restored := database.OpenInMemory(nil)
+	require.NoError(t, fastsync.RestoreSnapshot(restored, file, config.NetworkUrl{URL: DnUrl()}, spine.StateTreeAnchor))
+
+	// A restored database with any account tampered must not verify
+	tamperedDB := database.OpenInMemory(nil)
+	require.NoError(t, tamperedDB.Update(func(batch *database.Batch) error {
+		return batch.Account(DnUrl().JoinPath("tampered")).Main().Put(&UnknownAccount{Url: DnUrl().JoinPath("tampered")})
+	}))
+	err = fastsync.RestoreSnapshot(tamperedDB, file, config.NetworkUrl{URL: DnUrl()}, spine.StateTreeAnchor)
+	require.Error(t, err, "a database with extra state must not match the verified root")
 }
 
 func loadDirectoryGlobals(t *testing.T, sim *Sim) *core.GlobalValues {

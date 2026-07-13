@@ -192,6 +192,21 @@ type PrivateSequenceResponse struct {
 	extraData []byte
 }
 
+type PrivateSnapshotRangeRequest struct {
+	fieldsSet []bool
+	Partition *url.URL `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
+	Epoch     uint64   `json:"epoch,omitempty" form:"epoch" query:"epoch" validate:"required"`
+	Offset    uint64   `json:"offset,omitempty" form:"offset" query:"offset" validate:"required"`
+	private.SequenceOptions
+	extraData []byte
+}
+
+type PrivateSnapshotRangeResponse struct {
+	fieldsSet []bool
+	Value     *private.SnapshotChunk `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	extraData []byte
+}
+
 type QueryRequest struct {
 	fieldsSet []bool
 	Scope     *url.URL  `json:"scope,omitempty" form:"scope" query:"scope" validate:"required"`
@@ -291,6 +306,10 @@ func (*PrivateSequenceRangeResponse) Type() Type { return TypePrivateSequenceRan
 func (*PrivateSequenceRequest) Type() Type { return TypePrivateSequenceRequest }
 
 func (*PrivateSequenceResponse) Type() Type { return TypePrivateSequenceResponse }
+
+func (*PrivateSnapshotRangeRequest) Type() Type { return TypePrivateSnapshotRangeRequest }
+
+func (*PrivateSnapshotRangeResponse) Type() Type { return TypePrivateSnapshotRangeResponse }
 
 func (*QueryRequest) Type() Type { return TypeQueryRequest }
 
@@ -736,6 +755,41 @@ func (v *PrivateSequenceResponse) Copy() *PrivateSequenceResponse {
 }
 
 func (v *PrivateSequenceResponse) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *PrivateSnapshotRangeRequest) Copy() *PrivateSnapshotRangeRequest {
+	u := new(PrivateSnapshotRangeRequest)
+
+	if v.Partition != nil {
+		u.Partition = v.Partition
+	}
+	u.Epoch = v.Epoch
+	u.Offset = v.Offset
+	u.SequenceOptions = *v.SequenceOptions.Copy()
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *PrivateSnapshotRangeRequest) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *PrivateSnapshotRangeResponse) Copy() *PrivateSnapshotRangeResponse {
+	u := new(PrivateSnapshotRangeResponse)
+
+	if v.Value != nil {
+		u.Value = (v.Value).Copy()
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *PrivateSnapshotRangeResponse) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *QueryRequest) Copy() *QueryRequest {
 	u := new(QueryRequest)
@@ -1206,6 +1260,41 @@ func (v *PrivateSequenceRequest) Equal(u *PrivateSequenceRequest) bool {
 }
 
 func (v *PrivateSequenceResponse) Equal(u *PrivateSequenceResponse) bool {
+	switch {
+	case v.Value == u.Value:
+		// equal
+	case v.Value == nil || u.Value == nil:
+		return false
+	case !((v.Value).Equal(u.Value)):
+		return false
+	}
+
+	return true
+}
+
+func (v *PrivateSnapshotRangeRequest) Equal(u *PrivateSnapshotRangeRequest) bool {
+	switch {
+	case v.Partition == u.Partition:
+		// equal
+	case v.Partition == nil || u.Partition == nil:
+		return false
+	case !((v.Partition).Equal(u.Partition)):
+		return false
+	}
+	if !(v.Epoch == u.Epoch) {
+		return false
+	}
+	if !(v.Offset == u.Offset) {
+		return false
+	}
+	if !v.SequenceOptions.Equal(&u.SequenceOptions) {
+		return false
+	}
+
+	return true
+}
+
+func (v *PrivateSnapshotRangeResponse) Equal(u *PrivateSnapshotRangeResponse) bool {
 	switch {
 	case v.Value == u.Value:
 		// equal
@@ -2756,6 +2845,137 @@ func (v *PrivateSequenceResponse) IsValid() error {
 	}
 }
 
+var fieldNames_PrivateSnapshotRangeRequest = []string{
+	1: "Type",
+	2: "Partition",
+	3: "Epoch",
+	4: "Offset",
+	5: "SequenceOptions",
+}
+
+func (v *PrivateSnapshotRangeRequest) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Partition == nil) {
+		writer.WriteUrl(2, v.Partition)
+	}
+	if !(v.Epoch == 0) {
+		writer.WriteUint(3, v.Epoch)
+	}
+	if !(v.Offset == 0) {
+		writer.WriteUint(4, v.Offset)
+	}
+	writer.WriteValue(5, v.SequenceOptions.MarshalBinary)
+
+	_, _, err := writer.Reset(fieldNames_PrivateSnapshotRangeRequest)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *PrivateSnapshotRangeRequest) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Partition is missing")
+	} else if v.Partition == nil {
+		errs = append(errs, "field Partition is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Epoch is missing")
+	} else if v.Epoch == 0 {
+		errs = append(errs, "field Epoch is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Offset is missing")
+	} else if v.Offset == 0 {
+		errs = append(errs, "field Offset is not set")
+	}
+	if err := v.SequenceOptions.IsValid(); err != nil {
+		errs = append(errs, err.Error())
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_PrivateSnapshotRangeResponse = []string{
+	1: "Type",
+	2: "Value",
+}
+
+func (v *PrivateSnapshotRangeResponse) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Value == nil) {
+		writer.WriteValue(2, v.Value.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_PrivateSnapshotRangeResponse)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *PrivateSnapshotRangeResponse) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Value is missing")
+	} else if v.Value == nil {
+		errs = append(errs, "field Value is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_QueryRequest = []string{
 	1: "Type",
 	2: "Scope",
@@ -4116,6 +4336,83 @@ func (v *PrivateSequenceResponse) UnmarshalFieldsFrom(reader *encoding.Reader) e
 	return nil
 }
 
+func (v *PrivateSnapshotRangeRequest) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *PrivateSnapshotRangeRequest) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *PrivateSnapshotRangeRequest) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadUrl(2); ok {
+		v.Partition = x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.Epoch = x
+	}
+	if x, ok := reader.ReadUint(4); ok {
+		v.Offset = x
+	}
+	reader.ReadValue(5, v.SequenceOptions.UnmarshalBinaryFrom)
+
+	seen, err := reader.Reset(fieldNames_PrivateSnapshotRangeRequest)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *PrivateSnapshotRangeResponse) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *PrivateSnapshotRangeResponse) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *PrivateSnapshotRangeResponse) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x := new(private.SnapshotChunk); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+		v.Value = x
+	}
+
+	seen, err := reader.Reset(fieldNames_PrivateSnapshotRangeResponse)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *QueryRequest) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -4561,6 +4858,19 @@ func init() {
 		encoding.NewTypeField("type", "string"),
 		encoding.NewTypeField("value", "api.MessageRecord[messaging.Message]"),
 	}, "PrivateSequenceResponse", "privateSequenceResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("partition", "string"),
+		encoding.NewTypeField("epoch", "uint64"),
+		encoding.NewTypeField("offset", "uint64"),
+		encoding.NewTypeField("nodeID", "p2p.PeerID"),
+	}, "PrivateSnapshotRangeRequest", "privateSnapshotRangeRequest")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("value", "private.SnapshotChunk"),
+	}, "PrivateSnapshotRangeResponse", "privateSnapshotRangeResponse")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("type", "string"),
@@ -5037,6 +5347,46 @@ func (v *PrivateSequenceResponse) MarshalJSON() ([]byte, error) {
 		Type      Type                                  `json:"type"`
 		Value     *api.MessageRecord[messaging.Message] `json:"value,omitempty"`
 		ExtraData *string                               `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.Value == nil) {
+		u.Value = v.Value
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *PrivateSnapshotRangeRequest) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      Type                                    `json:"type"`
+		Partition *url.URL                                `json:"partition,omitempty"`
+		Epoch     uint64                                  `json:"epoch,omitempty"`
+		Offset    uint64                                  `json:"offset,omitempty"`
+		NodeID    *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"nodeID,omitempty"`
+		ExtraData *string                                 `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.Partition == nil) {
+		u.Partition = v.Partition
+	}
+	if !(v.Epoch == 0) {
+		u.Epoch = v.Epoch
+	}
+	if !(v.Offset == 0) {
+		u.Offset = v.Offset
+	}
+	if !(v.SequenceOptions.NodeID == ("")) {
+		u.NodeID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.SequenceOptions.NodeID, Func: p2p.UnmarshalPeerIDJSON}
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *PrivateSnapshotRangeResponse) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      Type                   `json:"type"`
+		Value     *private.SnapshotChunk `json:"value,omitempty"`
+		ExtraData *string                `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Value == nil) {
@@ -5826,6 +6176,64 @@ func (v *PrivateSequenceResponse) UnmarshalJSON(data []byte) error {
 		Type      Type                                  `json:"type"`
 		Value     *api.MessageRecord[messaging.Message] `json:"value,omitempty"`
 		ExtraData *string                               `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Value = v.Value
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Value = u.Value
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *PrivateSnapshotRangeRequest) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      Type                                    `json:"type"`
+		Partition *url.URL                                `json:"partition,omitempty"`
+		Epoch     uint64                                  `json:"epoch,omitempty"`
+		Offset    uint64                                  `json:"offset,omitempty"`
+		NodeID    *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"nodeID,omitempty"`
+		ExtraData *string                                 `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Partition = v.Partition
+	u.Epoch = v.Epoch
+	u.Offset = v.Offset
+	u.NodeID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.SequenceOptions.NodeID, Func: p2p.UnmarshalPeerIDJSON}
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Partition = u.Partition
+	v.Epoch = u.Epoch
+	v.Offset = u.Offset
+	if u.NodeID != nil {
+		v.SequenceOptions.NodeID = u.NodeID.Value
+	}
+
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *PrivateSnapshotRangeResponse) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      Type                   `json:"type"`
+		Value     *private.SnapshotChunk `json:"value,omitempty"`
+		ExtraData *string                `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Value = v.Value

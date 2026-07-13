@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 
@@ -62,6 +63,19 @@ type NetworkUpdateProof struct {
 type SequenceOptions struct {
 	fieldsSet []bool
 	NodeID    p2p.PeerID `json:"nodeID,omitempty" form:"nodeID" query:"nodeID" validate:"required"`
+	extraData []byte
+}
+
+type SnapshotChunk struct {
+	fieldsSet []bool
+	// Block is the minor block the snapshot was taken at.
+	Block uint64 `json:"block,omitempty" form:"block" query:"block" validate:"required"`
+	// Total is the total size of the snapshot in bytes.
+	Total uint64 `json:"total,omitempty" form:"total" query:"total" validate:"required"`
+	// Offset is the offset of this chunk.
+	Offset uint64 `json:"offset,omitempty" form:"offset" query:"offset" validate:"required"`
+	// Data is the chunk data.
+	Data      []byte `json:"data,omitempty" form:"data" query:"data" validate:"required"`
 	extraData []byte
 }
 
@@ -167,6 +181,23 @@ func (v *SequenceOptions) Copy() *SequenceOptions {
 
 func (v *SequenceOptions) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *SnapshotChunk) Copy() *SnapshotChunk {
+	u := new(SnapshotChunk)
+
+	u.Block = v.Block
+	u.Total = v.Total
+	u.Offset = v.Offset
+	u.Data = encoding.BytesCopy(v.Data)
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *SnapshotChunk) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *MajorHeaderRecord) Equal(u *MajorHeaderRecord) bool {
 	if !(v.Index == u.Index) {
 		return false
@@ -267,6 +298,23 @@ func (v *NetworkUpdateProof) Equal(u *NetworkUpdateProof) bool {
 
 func (v *SequenceOptions) Equal(u *SequenceOptions) bool {
 	if !(p2p.EqualPeerID(v.NodeID, u.NodeID)) {
+		return false
+	}
+
+	return true
+}
+
+func (v *SnapshotChunk) Equal(u *SnapshotChunk) bool {
+	if !(v.Block == u.Block) {
+		return false
+	}
+	if !(v.Total == u.Total) {
+		return false
+	}
+	if !(v.Offset == u.Offset) {
+		return false
+	}
+	if !(bytes.Equal(v.Data, u.Data)) {
 		return false
 	}
 
@@ -549,6 +597,82 @@ func (v *SequenceOptions) IsValid() error {
 	}
 }
 
+var fieldNames_SnapshotChunk = []string{
+	1: "Block",
+	2: "Total",
+	3: "Offset",
+	4: "Data",
+}
+
+func (v *SnapshotChunk) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Block == 0) {
+		writer.WriteUint(1, v.Block)
+	}
+	if !(v.Total == 0) {
+		writer.WriteUint(2, v.Total)
+	}
+	if !(v.Offset == 0) {
+		writer.WriteUint(3, v.Offset)
+	}
+	if !(len(v.Data) == 0) {
+		writer.WriteBytes(4, v.Data)
+	}
+
+	_, _, err := writer.Reset(fieldNames_SnapshotChunk)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *SnapshotChunk) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Block is missing")
+	} else if v.Block == 0 {
+		errs = append(errs, "field Block is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Total is missing")
+	} else if v.Total == 0 {
+		errs = append(errs, "field Total is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Offset is missing")
+	} else if v.Offset == 0 {
+		errs = append(errs, "field Offset is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Data is missing")
+	} else if len(v.Data) == 0 {
+		errs = append(errs, "field Data is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 func (v *MajorHeaderRecord) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -695,6 +819,38 @@ func (v *SequenceOptions) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *SnapshotChunk) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *SnapshotChunk) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUint(1); ok {
+		v.Block = x
+	}
+	if x, ok := reader.ReadUint(2); ok {
+		v.Total = x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.Offset = x
+	}
+	if x, ok := reader.ReadBytes(4); ok {
+		v.Data = x
+	}
+
+	seen, err := reader.Reset(fieldNames_SnapshotChunk)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func init() {
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -720,6 +876,13 @@ func init() {
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("nodeID", "p2p.PeerID"),
 	}, "SequenceOptions", "sequenceOptions")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("block", "uint64"),
+		encoding.NewTypeField("total", "uint64"),
+		encoding.NewTypeField("offset", "uint64"),
+		encoding.NewTypeField("data", "bytes"),
+	}, "SnapshotChunk", "snapshotChunk")
 
 }
 
@@ -782,6 +945,30 @@ func (v *SequenceOptions) MarshalJSON() ([]byte, error) {
 	}{}
 	if !(v.NodeID == ("")) {
 		u.NodeID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.NodeID, Func: p2p.UnmarshalPeerIDJSON}
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *SnapshotChunk) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Block     uint64  `json:"block,omitempty"`
+		Total     uint64  `json:"total,omitempty"`
+		Offset    uint64  `json:"offset,omitempty"`
+		Data      *string `json:"data,omitempty"`
+		ExtraData *string `json:"$epilogue,omitempty"`
+	}{}
+	if !(v.Block == 0) {
+		u.Block = v.Block
+	}
+	if !(v.Total == 0) {
+		u.Total = v.Total
+	}
+	if !(v.Offset == 0) {
+		u.Offset = v.Offset
+	}
+	if !(len(v.Data) == 0) {
+		u.Data = encoding.BytesToJSON(v.Data)
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -868,6 +1055,37 @@ func (v *SequenceOptions) UnmarshalJSON(data []byte) error {
 		v.NodeID = u.NodeID.Value
 	}
 
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *SnapshotChunk) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Block     uint64  `json:"block,omitempty"`
+		Total     uint64  `json:"total,omitempty"`
+		Offset    uint64  `json:"offset,omitempty"`
+		Data      *string `json:"data,omitempty"`
+		ExtraData *string `json:"$epilogue,omitempty"`
+	}{}
+	u.Block = v.Block
+	u.Total = v.Total
+	u.Offset = v.Offset
+	u.Data = encoding.BytesToJSON(v.Data)
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	v.Block = u.Block
+	v.Total = u.Total
+	v.Offset = u.Offset
+	if x, err := encoding.BytesFromJSON(u.Data); err != nil {
+		return fmt.Errorf("error decoding Data: %w", err)
+	} else {
+		v.Data = x
+	}
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err

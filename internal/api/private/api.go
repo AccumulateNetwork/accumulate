@@ -57,3 +57,14 @@ type MinorRootRanger interface {
 	Sequencer
 	MinorRootRange(ctx context.Context, partition *url.URL, since, until uint64, opts SequenceOptions) (*MinorRootRecord, error)
 }
+
+// SnapshotRanger is an optional extension of [Sequencer] that streams a
+// pinned-epoch state snapshot (#4058). A request with epoch zero pins the
+// server's current state as the sync epoch — the returned chunk names the
+// epoch's block. Subsequent requests page through the snapshot by offset.
+// The client verifies the restored state by rebuilding the BPT and comparing
+// its root to the quorum-verified StateTreeAnchor of the epoch's anchor.
+type SnapshotRanger interface {
+	Sequencer
+	SnapshotRange(ctx context.Context, partition *url.URL, epoch, offset uint64, opts SequenceOptions) (*SnapshotChunk, error)
+}

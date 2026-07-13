@@ -87,3 +87,24 @@ PrivateMinorRootRangeResponse:
       type: private.MinorRootRecord
       marshal-as: reference
       pointer: true
+
+PrivateSnapshotRangeRequest:
+  union: { type: message }
+  fields:
+    - name: Partition
+      type: url
+      pointer: true
+    - name: Epoch
+      type: uint
+    - name: Offset
+      type: uint
+    - type: private.SequenceOptions
+      marshal-as: reference
+
+PrivateSnapshotRangeResponse:
+  union: { type: message }
+  fields:
+    - name: Value
+      type: private.SnapshotChunk
+      marshal-as: reference
+      pointer: true

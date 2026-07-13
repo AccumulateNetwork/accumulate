@@ -26,7 +26,8 @@ func (s Sequencer) methods() serviceMethodMap {
 	typ2, fn2 := makeServiceMethod(s.sequenceRange)
 	typ3, fn3 := makeServiceMethod(s.majorHeaderRange)
 	typ4, fn4 := makeServiceMethod(s.minorRootRange)
-	return serviceMethodMap{typ: fn, typ2: fn2, typ3: fn3, typ4: fn4}
+	typ5, fn5 := makeServiceMethod(s.snapshotRange)
+	return serviceMethodMap{typ: fn, typ2: fn2, typ3: fn3, typ4: fn4, typ5: fn5}
 }
 
 func (s Sequencer) sequence(c *call[*PrivateSequenceRequest]) {
@@ -80,6 +81,20 @@ func (s Sequencer) minorRootRange(c *call[*PrivateMinorRootRangeRequest]) {
 	c.Write(&PrivateMinorRootRangeResponse{Value: res})
 }
 
+func (s Sequencer) snapshotRange(c *call[*PrivateSnapshotRangeRequest]) {
+	ranger, ok := s.Sequencer.(private.SnapshotRanger)
+	if !ok {
+		c.Write(&ErrorResponse{Error: errors.NotAllowed.With("snapshot range is not supported")})
+		return
+	}
+	res, err := ranger.SnapshotRange(c.context, c.params.Partition, c.params.Epoch, c.params.Offset, c.params.SequenceOptions)
+	if err != nil {
+		c.Write(&ErrorResponse{Error: errors.UnknownError.Wrap(err).(*errors.Error)})
+		return
+	}
+	c.Write(&PrivateSnapshotRangeResponse{Value: res})
+}
+
 // PrivateClient is a binary message transport client for private API v3 services.
 type PrivateClient AddressedClient
 
@@ -121,4 +136,12 @@ func (c PrivateClient) MinorRootRange(ctx context.Context, partition *url.URL, s
 
 func (r *PrivateMajorHeaderRangeResponse) rval() []*private.MajorHeaderRecord { return r.Value } //nolint:unused
 
+// SnapshotRange implements [private.SnapshotRanger.SnapshotRange].
+func (c PrivateClient) SnapshotRange(ctx context.Context, partition *url.URL, epoch, offset uint64, opts private.SequenceOptions) (*private.SnapshotChunk, error) {
+	req := &PrivateSnapshotRangeRequest{Partition: partition, Epoch: epoch, Offset: offset, SequenceOptions: opts}
+	return typedRequest[*PrivateSnapshotRangeResponse, *private.SnapshotChunk](AddressedClient(c), ctx, req)
+}
+
 func (r *PrivateMinorRootRangeResponse) rval() *private.MinorRootRecord { return r.Value } //nolint:unused
+
+func (r *PrivateSnapshotRangeResponse) rval() *private.SnapshotChunk { return r.Value } //nolint:unused
