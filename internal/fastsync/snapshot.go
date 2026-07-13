@@ -98,8 +98,16 @@ func LoadGenesisGlobals(file ioutil2.SectionReader, partition config.NetworkUrl)
 // re-hashes every account), so if its root equals the quorum-verified
 // StateTreeAnchor of the epoch's anchor, every account state is proven into
 // the verified spine.
+//
+// The snapshot's own per-account hash check is skipped: the snapshot's BPT
+// section reflects the server's committed BPT, which lags the account
+// records by one block at the provable pin moment (the BPT for block N is
+// only computed when block N+1 records the anchor). The root equality below
+// is recomputed from the restored contents and subsumes the per-account
+// check.
 func RestoreSnapshot(db database.Beginner, file ioutil2.SectionReader, partition config.NetworkUrl, expectedRoot [32]byte) error {
-	err := snapshot.FullRestore(db, file, nil, partition)
+	_ = partition
+	err := database.Restore(db, file, &database.RestoreOptions{SkipHashCheck: true})
 	if err != nil {
 		return errors.UnknownError.WithFormat("restore: %w", err)
 	}
