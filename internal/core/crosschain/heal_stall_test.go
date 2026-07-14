@@ -14,32 +14,40 @@ import (
 
 // TestDeliveryStalled verifies the gate that keeps anchor healing from
 // re-driving a destination that is delivering on its own: healing fires only
-// when Delivered has not advanced since the previous scan while anchors remain
-// undelivered.
+// after Delivered has been pinned across StallScans consecutive scans while
+// anchors remain undelivered. Delivered is monotonic in reality, so each
+// scenario uses a fresh destination key and a non-decreasing sequence.
 func TestDeliveryStalled(t *testing.T) {
 	c := new(Conductor)
-
-	// Delivered is monotonic in reality, so each scenario uses a fresh
-	// destination key and a non-decreasing sequence.
 
 	// Caught up (delivered >= produced) is never stalled.
 	require.False(t, c.deliveryStalled("caughtup", 10, 10), "caught up must not heal")
 
-	// A destination that keeps advancing is catching up on its own — never heal,
-	// including on the first (deferring) observation.
-	require.False(t, c.deliveryStalled("advancing", 5, 20), "first look defers")
-	require.False(t, c.deliveryStalled("advancing", 8, 20), "advancing delivery must not heal")
-	require.False(t, c.deliveryStalled("advancing", 12, 20), "advancing delivery must not heal")
+	// A destination that keeps advancing is catching up on its own — never heal.
+	require.False(t, c.deliveryStalled("advancing", 5, 20))
+	require.False(t, c.deliveryStalled("advancing", 8, 20))
+	require.False(t, c.deliveryStalled("advancing", 12, 20))
 	require.False(t, c.deliveryStalled("advancing", 20, 20), "reaching produced must not heal")
 
-	// A destination stuck at the same Delivered across scans is genuinely stuck.
-	require.False(t, c.deliveryStalled("stuck", 15, 20), "first look defers")
-	require.True(t, c.deliveryStalled("stuck", 15, 20), "delivery stuck at 15 must heal")
-	require.True(t, c.deliveryStalled("stuck", 15, 20), "still stuck must keep healing")
-	require.False(t, c.deliveryStalled("stuck", 18, 20), "resumed delivery must stop healing")
+	// A momentary pause shorter than the window is not a stall (bursty delivery).
+	require.False(t, c.deliveryStalled("bursty", 10, 20), "advance")
+	for i := 1; i < StallScans; i++ {
+		require.False(t, c.deliveryStalled("bursty", 10, 20), "pause within the window must not heal")
+	}
+	require.False(t, c.deliveryStalled("bursty", 14, 20), "delivery resumed before the window elapsed")
+	require.False(t, c.deliveryStalled("bursty", 14, 20), "the stall count reset on the advance")
 
-	// Destinations are tracked independently.
-	require.False(t, c.deliveryStalled("other", 3, 20), "first look at a new destination defers")
-	require.True(t, c.deliveryStalled("other", 3, 20), "stuck new destination heals")
-	require.True(t, c.deliveryStalled("stuck", 18, 20), "unrelated destination stuck again heals independently")
+	// Pinned across the full window: genuinely stuck, heal.
+	require.False(t, c.deliveryStalled("stuck", 15, 20), "first observation")
+	for i := 1; i < StallScans; i++ {
+		require.False(t, c.deliveryStalled("stuck", 15, 20), "not yet past the window")
+	}
+	require.True(t, c.deliveryStalled("stuck", 15, 20), "stalled across the window must heal")
+	require.True(t, c.deliveryStalled("stuck", 15, 20), "still stuck keeps healing")
+	require.False(t, c.deliveryStalled("stuck", 18, 20), "resumed delivery stops healing")
+
+	// Destinations are tracked independently: a new destination starts its own
+	// window and does not inherit another's stall count.
+	require.False(t, c.deliveryStalled("other", 3, 20), "a new destination starts its own window")
+	require.False(t, c.deliveryStalled("other", 3, 20), "still within its own window")
 }
