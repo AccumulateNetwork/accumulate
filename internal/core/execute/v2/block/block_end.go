@@ -64,7 +64,11 @@ func (block *Block) Close() (execute.BlockState, error) {
 		return nil, errors.UnknownError.WithFormat("load synthetic ledger: %w", err)
 	}
 
-	if m.EnableHealing {
+	// Pace the healing scan: it fires per block, which was once per second
+	// under CometBFT but is 10-75 per second under DAG-BFT — unpaced, a gap
+	// triggers a storm of identical range requests before the first response
+	// lands
+	if m.EnableHealing && m.shouldAttemptHealing() {
 		m.BackgroundTaskLauncher(func() { m.requestMissingSyntheticTransactions(block.Index, synthLedger, anchorLedger) })
 	}
 
@@ -453,6 +457,18 @@ func (m *Executor) anchorSynthChain(block *Block, rootChain *database.Chain) (in
 	})
 
 	return indexIndex, nil
+}
+
+// shouldAttemptHealing rate-limits the per-block healing scan to one attempt
+// per interval.
+func (x *Executor) shouldAttemptHealing() bool {
+	interval := x.HealInterval
+	if interval == 0 {
+		interval = 10 * time.Second
+	}
+	now := time.Now().UnixNano()
+	last := x.lastHealAttempt.Load()
+	return now-last >= int64(interval) && x.lastHealAttempt.CompareAndSwap(last, now)
 }
 
 func (x *Executor) requestMissingSyntheticTransactions(blockIndex uint64, synthLedger *protocol.SyntheticLedger, anchorLedger *protocol.AnchorLedger) {

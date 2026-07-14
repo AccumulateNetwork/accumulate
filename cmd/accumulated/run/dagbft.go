@@ -92,7 +92,13 @@ func (s *DAGBFTService) prestart(inst *Instance) error {
 // start initializes and starts the DAG-BFT service.
 func (s *DAGBFTService) start(inst *Instance) error {
 	// Apply defaults
-	setDefaultPtr(&s.EnableHealing, false)
+	// Healing recovers lost synthetic messages and anchors via range
+	// requests (#4048/#4056). Without it a gap is PERMANENT: delivery is
+	// strictly sequential, so one lost message wedges everything after it —
+	// observed as a BVN that never delivered a single synthetic transaction
+	// (seq-want=1, seq-got=388) and therefore never produced an anchor. The
+	// per-block scan is paced inside the executor.
+	setDefaultPtr(&s.EnableHealing, true)
 	setDefaultPtr(&s.EnableDirectDispatch, true)
 	setDefaultPtr(&s.MaxEnvelopesPerBlock, uint64(100))
 	setDefaultPtr(&s.NumWorkers, dagconfig.DefaultNumWorkers)

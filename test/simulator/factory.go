@@ -572,6 +572,7 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 		Sequencer:     f.getServices().Private(),
 		Querier:       f.getServices(),
 		EnableHealing: true,
+		HealInterval:  time.Nanosecond, // the simulator steps far faster than wall time
 		Describe:      execute.DescribeShim{NetworkType: f.networkFactory.typ, PartitionId: f.networkFactory.id},
 	}
 

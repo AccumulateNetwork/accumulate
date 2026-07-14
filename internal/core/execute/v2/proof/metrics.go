@@ -15,10 +15,10 @@ var (
 	proofMeter = otel.Meter("gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/proof")
 
 	// Proof creation metrics
-	proofIndividualCreated   metric.Int64Counter
-	proofCollectionCreated   metric.Int64Counter
-	proofGenerationTime      metric.Int64Histogram
-	proofSize                metric.Int64Histogram
+	proofIndividualCreated metric.Int64Counter
+	proofCollectionCreated metric.Int64Counter
+	proofGenerationTime    metric.Int64Histogram
+	proofSize              metric.Int64Histogram
 
 	// Proof validation metrics
 	proofValidationAttempts  metric.Int64Counter
@@ -26,8 +26,8 @@ var (
 	proofValidationErrors    metric.Int64Counter
 
 	// Error metrics
-	proofGenerationErrors    metric.Int64Counter
-	proofValidationFailures  metric.Int64Counter
+	proofGenerationErrors   metric.Int64Counter
+	proofValidationFailures metric.Int64Counter
 )
 
 func init() {
