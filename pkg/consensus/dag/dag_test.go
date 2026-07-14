@@ -64,6 +64,7 @@ func TestDAG_NewDAG(t *testing.T) {
 
 	assert.Equal(t, types.Round(0), d.LatestRound())
 	assert.Equal(t, 0, d.Size())
+	assert.Equal(t, types.Round(10), d.GCDepth(), "GCDepth reports the configured catch-up horizon")
 }
 
 func TestDAG_InsertGenesis(t *testing.T) {

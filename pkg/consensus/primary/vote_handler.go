@@ -306,8 +306,20 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 		// completed). Sync rounds in both directions (#4057).
 		switch {
 		case header.Round > maxRound:
-			// We are behind — pull the certificates that will advance us
-			p.requestRoundCatchUp(currentRound, header.Round)
+			// We are behind. Certificate catch-up can only bridge a gap that
+			// peers still retain — up to the DAG's GC depth. A wider gap
+			// (a fast-sync rejoin whose seed aged past the horizon before the
+			// node restarted, or an outage longer than the horizon) is
+			// unbridgeable: the intervening certificates have been collected,
+			// so pulling them returns nothing and the node stays pinned at its
+			// seed round forever, voting on nothing while gossip floods its
+			// channels. Surface that explicitly rather than spinning silently;
+			// recovery requires a fresh fast-sync (#4058 fallback).
+			if header.Round-currentRound > p.dag.GCDepth() {
+				p.warnStrandedBeyondHorizon(currentRound, header.Round)
+			} else {
+				p.requestRoundCatchUp(currentRound, header.Round)
+			}
 		case header.Round < minRound:
 			// The author is behind — push the certificates it is missing
 			p.pushCertsForStaleRound(header.Round, currentRound)
@@ -401,6 +413,29 @@ func hexEncode(key ed25519.PublicKey) string {
 		return ""
 	}
 	return types.HeaderDigest(key).String()[:8]
+}
+
+// warnStrandedBeyondHorizon reports, at most once a minute, that this node has
+// fallen further behind than certificate catch-up can bridge — the live round
+// exceeds its own by more than the DAG's GC depth, so the certificates it would
+// need have already been collected by every peer. Without a fresh fast-sync the
+// node cannot advance; the warning turns a silent freeze (a seed round pinned
+// forever while gossip floods the channels) into a diagnosable one.
+func (p *Primary) warnStrandedBeyondHorizon(current, live types.Round) {
+	p.roundSyncMu.Lock()
+	if time.Since(p.lastStrandedWarn) < time.Minute {
+		p.roundSyncMu.Unlock()
+		return
+	}
+	p.lastStrandedWarn = time.Now()
+	p.roundSyncMu.Unlock()
+
+	slog.Warn("Stranded beyond the catch-up horizon — a fresh fast-sync is required",
+		"partition", p.config.Partition,
+		"round", current,
+		"liveRound", live,
+		"gap", live-current,
+		"gcDepth", p.dag.GCDepth())
 }
 
 // requestRoundCatchUp pulls the certificates of rounds (current, target] so

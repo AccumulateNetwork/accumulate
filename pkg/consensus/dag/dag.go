@@ -240,6 +240,14 @@ func (d *DAG) SetLastCommitRound(round types.Round) {
 	}
 }
 
+// GCDepth returns the number of rounds of certificate history kept after the
+// last commit. It bounds how far behind a node can fall and still catch up by
+// pulling certificates from peers: a gap wider than this cannot be bridged,
+// because peers have already collected the intervening rounds.
+func (d *DAG) GCDepth() types.Round {
+	return d.gcDepth
+}
+
 // GarbageCollect removes rounds older than (commitRound - gcDepth).
 // This should be called periodically to prevent unbounded memory growth.
 func (d *DAG) GarbageCollect(commitRound types.Round) {

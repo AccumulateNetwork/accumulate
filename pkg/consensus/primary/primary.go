@@ -134,6 +134,7 @@ type Primary struct {
 	lastRoundPull     time.Time
 	lastRoundPush     time.Time
 	lastStallRecovery time.Time
+	lastStrandedWarn  time.Time
 
 	// pendingCerts buffers certificates that cannot be inserted due to missing parents
 	pendingCerts *PendingCertificates
