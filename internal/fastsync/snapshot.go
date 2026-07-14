@@ -33,10 +33,12 @@ type Epoch struct {
 	Round          uint64
 	CommitteeEpoch uint64
 
-	// StateRoot is the state tree anchor of the pinned block's prepared
-	// anchor, as reported by the server. A BVN sync verifies it against the
-	// directory's record of the anchor (PartitionRootRange) — until then it
-	// is an unverified claim.
+	// StateRoot is the state root the server computed at pin time. It is NOT
+	// used for verification: the server's committed BPT lags the account
+	// records by a block at the provable moment, so this is the previous
+	// block's root and the directory never has it. The BVN sync proves the
+	// root REBUILT from the restored accounts instead (RestoreSnapshot). Kept
+	// for diagnostics only.
 	StateRoot [32]byte
 }
 
@@ -100,46 +102,50 @@ func LoadGenesisGlobals(file ioutil2.SectionReader, partition config.NetworkUrl)
 	return g, nil
 }
 
-// RestoreSnapshot restores a fetched snapshot into the database and verifies
-// it: the BPT is rebuilt from the restored accounts' actual contents (restore
-// re-hashes every account), so if its root equals the quorum-verified
-// StateTreeAnchor of the epoch's anchor, every account state is proven into
-// the verified spine.
+// RestoreSnapshot restores a fetched snapshot into the database and returns the
+// rebuilt state root: the BPT is rebuilt from the restored accounts' actual
+// contents (restore re-hashes every account), so the returned root is the true
+// state of the pinned block. It equals the StateTreeAnchor the partition's
+// anchor carries and the directory records — which is why the caller proves the
+// RETURNED root, not the server's reported one.
 //
 // The snapshot's own per-account hash check is skipped: the snapshot's BPT
-// section reflects the server's committed BPT, which lags the account
-// records by one block at the provable pin moment (the BPT for block N is
-// only computed when block N+1 records the anchor). The root equality below
-// is recomputed from the restored contents and subsumes the per-account
-// check.
-func RestoreSnapshot(db database.Beginner, file ioutil2.SectionReader, partition config.NetworkUrl, expectedRoot [32]byte, expectedBlock uint64) error {
+// section reflects the server's committed BPT, which lags the account records
+// by one block at the provable pin moment (the BPT for block N is only computed
+// when block N+1 records the anchor). The rebuilt root recomputed here is block
+// N's true state and subsumes the per-account check.
+//
+// If expectedRoot is non-zero the rebuilt root must equal it (the directory
+// self-sync path, where the spine already carries the verified StateTreeAnchor).
+// A zero expectedRoot skips the check — the BVN path proves the rebuilt root
+// against the directory afterward instead. A non-zero expectedBlock binds the
+// restored state to the claimed epoch block: the system ledger is in the BPT,
+// so a server cannot pass off a different (even genuine) epoch as this one.
+func RestoreSnapshot(db database.Beginner, file ioutil2.SectionReader, partition config.NetworkUrl, expectedRoot [32]byte, expectedBlock uint64) ([32]byte, error) {
 	err := database.Restore(db, file, &database.RestoreOptions{SkipHashCheck: true})
 	if err != nil {
-		return errors.UnknownError.WithFormat("restore: %w", err)
+		return [32]byte{}, errors.UnknownError.WithFormat("restore: %w", err)
 	}
 
 	batch := db.Begin(false)
 	defer batch.Discard()
 	root, err := batch.GetBptRootHash()
 	if err != nil {
-		return errors.UnknownError.WithFormat("compute state root: %w", err)
+		return [32]byte{}, errors.UnknownError.WithFormat("compute state root: %w", err)
 	}
-	if root != expectedRoot {
-		return errors.Unauthenticated.WithFormat("restored state root %x does not match the verified state tree anchor %x", root, expectedRoot)
+	if expectedRoot != ([32]byte{}) && root != expectedRoot {
+		return [32]byte{}, errors.Unauthenticated.WithFormat("restored state root %x does not match the verified state tree anchor %x", root, expectedRoot)
 	}
 
-	// The block index is part of the verified state (the system ledger is in
-	// the BPT), so this binds the restored state to the claimed epoch block —
-	// a server cannot pass off a different (even genuine) epoch as this one
 	if expectedBlock != 0 {
 		var ledger *protocol.SystemLedger
 		err = batch.Account(partition.Ledger()).Main().GetAs(&ledger)
 		if err != nil {
-			return errors.UnknownError.WithFormat("load restored system ledger: %w", err)
+			return [32]byte{}, errors.UnknownError.WithFormat("load restored system ledger: %w", err)
 		}
 		if ledger.Index != expectedBlock {
-			return errors.Unauthenticated.WithFormat("restored state is for block %d, not the pinned epoch block %d", ledger.Index, expectedBlock)
+			return [32]byte{}, errors.Unauthenticated.WithFormat("restored state is for block %d, not the pinned epoch block %d", ledger.Index, expectedBlock)
 		}
 	}
-	return nil
+	return root, nil
 }

@@ -218,14 +218,15 @@ func TestFastSyncSpine(t *testing.T) {
 	// the restored accounts and requires its root to equal the verified
 	// StateTreeAnchor — the complete-set proof of every account state.
 	restored := database.OpenInMemory(nil)
-	require.NoError(t, fastsync.RestoreSnapshot(restored, file, config.NetworkUrl{URL: DnUrl()}, spine.StateTreeAnchor, pinned.Block))
+	_, err = fastsync.RestoreSnapshot(restored, file, config.NetworkUrl{URL: DnUrl()}, spine.StateTreeAnchor, pinned.Block)
+	require.NoError(t, err)
 
 	// A restored database with any account tampered must not verify
 	tamperedDB := database.OpenInMemory(nil)
 	require.NoError(t, tamperedDB.Update(func(batch *database.Batch) error {
 		return batch.Account(DnUrl().JoinPath("tampered")).Main().Put(&UnknownAccount{Url: DnUrl().JoinPath("tampered")})
 	}))
-	err = fastsync.RestoreSnapshot(tamperedDB, file, config.NetworkUrl{URL: DnUrl()}, spine.StateTreeAnchor, pinned.Block)
+	_, err = fastsync.RestoreSnapshot(tamperedDB, file, config.NetworkUrl{URL: DnUrl()}, spine.StateTreeAnchor, pinned.Block)
 	require.Error(t, err, "a database with extra state must not match the verified root")
 
 	// ——— The full Sync orchestrator, from genesis to restored state ———

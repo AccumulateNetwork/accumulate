@@ -17,6 +17,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
+	"log/slog"
+
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -454,7 +456,27 @@ func (s *Sequencer) getRootContinuation(batch *database.Batch, mainAnchorEntry *
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
-	return rootReceipt.Combine(dirReceipt.RootChainReceipt)
+	combined, err := rootReceipt.Combine(dirReceipt.RootChainReceipt)
+	if err != nil {
+		// The BVN root receipt must end at the same root the directory
+		// anchored. Dump both sides when they disagree so the misalignment is
+		// diagnosable on a live network (#4048 range recovery falls back to the
+		// slow per-message path on this failure).
+		slog.Error("Collection-proof continuation failed to combine",
+			"partition", s.partitionID,
+			"block", mainAnchorEntry.BlockIndex,
+			"messageRootIndex", mainAnchorEntry.Anchor,
+			"anchoredRootIndex", dirReceipt.Anchor.RootChainIndex,
+			"anchoredBlock", dirReceipt.Anchor.MinorBlockIndex,
+			"rootReceiptStart", logging.AsHex(rootReceipt.Start).Slice(0, 8),
+			"rootReceiptEnd", logging.AsHex(rootReceipt.End).Slice(0, 8),
+			"rootReceiptAnchor", logging.AsHex(rootReceipt.Anchor).Slice(0, 8),
+			"dirReceiptStart", logging.AsHex(dirReceipt.RootChainReceipt.Start).Slice(0, 8),
+			"anchorRootChainAnchor", logging.AsHex(dirReceipt.Anchor.RootChainAnchor[:]).Slice(0, 8),
+			"error", err)
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	return combined, nil
 }
 
 // SequenceRange implements [private.SequenceRanger.SequenceRange]: it serves

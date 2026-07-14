@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -231,4 +232,82 @@ func TestAnchorRangeRecovery(t *testing.T) {
 	require.Equal(t, int(protocol.AcmePrecision), int(lta.Balance.Uint64()))
 	require.Greater(t, int(recovered.Load()), 0,
 		"expected the dropped anchor to be recovered with a collection proof")
+}
+
+// TestRangeRecoveryOldRange reproduces the live-network failure where a
+// SequenceRange over synthetic messages whose block was anchored long ago
+// fails with "receipts cannot be combined" (the collection-proof continuation
+// receipt does not chain to the directory root), forcing the slow per-message
+// fallback. Unlike TestRangeRecovery, which recovers immediately, this steps
+// the network far past the messages' anchor point before requesting the range.
+func TestRangeRecoveryOldRange(t *testing.T) {
+	var timestamp uint64
+	const transfers = 6
+
+	globals := new(core.GlobalValues)
+	globals.ExecutorVersion = ExecutorVersionLatest
+	globals.Globals = new(NetworkGlobals)
+	globals.Globals.MajorBlockSchedule = "* * * * *" // a major block every minute (60 minor blocks)
+	sim := NewSim(t,
+		simulator.SimpleNetwork(t.Name(), 3, 1),
+		simulator.GenesisWith(GenesisTime, globals),
+	)
+
+	alice := acctesting.GenerateKey("Alice")
+	aliceUrl := acctesting.AcmeLiteAddressStdPriv(alice)
+	alicePart, err := sim.Router().RouteAccount(aliceUrl)
+	require.NoError(t, err)
+	var bobUrl *url.URL
+	var bobPart string
+	for i := 0; ; i++ {
+		bob := acctesting.GenerateKey("Bob", i)
+		bobUrl = acctesting.AcmeLiteAddressStdPriv(bob)
+		bobPart, err = sim.Router().RouteAccount(bobUrl)
+		require.NoError(t, err)
+		if alicePart != bobPart {
+			break
+		}
+	}
+	MakeLiteTokenAccount(t, sim.DatabaseFor(aliceUrl), alice[32:], AcmeUrl())
+
+	// Produce a run of cross-partition synthetic deposits and let them deliver.
+	st := make([]*protocol.TransactionStatus, transfers)
+	for i := range st {
+		st[i] = sim.SubmitTxnSuccessfully(MustBuild(t,
+			build.Transaction().For(aliceUrl).
+				SendTokens(1, protocol.AcmePrecisionPower).To(bobUrl).
+				SignWith(aliceUrl).Version(1).Timestamp(&timestamp).PrivateKey(alice)))
+	}
+	for _, st := range st {
+		sim.StepUntilN(200, Txn(st.TxID).Succeeds(), Txn(st.TxID).Produced().Succeeds())
+	}
+
+	// Age the messages: run the network far past their anchor point so the
+	// directory has recorded many more anchors for alice's partition. Poke it
+	// with a self-transfer every so often so anchors keep being produced.
+	sim.StepUntilN(200, MajorBlock(1))
+	for i := 0; i < 40; i++ {
+		sim.SubmitTxnSuccessfully(MustBuild(t,
+			build.Transaction().For(aliceUrl).
+				SendTokens(1, protocol.AcmePrecisionPower).To(aliceUrl).
+				SignWith(aliceUrl).Version(1).Timestamp(&timestamp).PrivateKey(alice)))
+		sim.StepN(10)
+	}
+	sim.StepUntilN(200, MajorBlock(2))
+
+	// Now recover the OLD range directly. This is the exact call the executor's
+	// healing path makes; on the live network it errors with "receipts cannot
+	// be combined" and falls back to per-message.
+	ranger, ok := sim.S.Services().Private().(private.SequenceRanger)
+	require.True(t, ok, "private client does not serve sequence ranges")
+	records, err := ranger.SequenceRange(context.Background(),
+		protocol.PartitionUrl(alicePart).JoinPath(protocol.Synthetic),
+		protocol.PartitionUrl(bobPart), 1, transfers, private.SequenceOptions{})
+	require.NoError(t, err, "range recovery of an old anchored run must not fail")
+	require.NotEmpty(t, records)
+
+	// The whole run must be covered by one shared collection proof.
+	list := records[len(records)-1].SourceReceiptList
+	require.NotNil(t, list, "the range must carry a collection proof")
+	require.True(t, list.Validate(nil), "the collection proof must be valid")
 }

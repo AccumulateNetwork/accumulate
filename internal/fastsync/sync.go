@@ -165,36 +165,48 @@ func Sync(ctx context.Context, opts Options) (*Result, error) {
 	}
 	slog.Info("Fast sync: snapshot fetched", "module", "fastsync", "block", epoch.Block, "round", epoch.Round)
 
-	// Phase 3: verify the pinned state's root. For the directory the epoch
-	// block is bound to the spine exactly and the anchor's StateTreeAnchor is
-	// the verified root. For a BVN, the directory records every received
-	// partition anchor's state root — one receipt proves the pinned root into
-	// a directory block, and the spine binds to that block (#4058 phase 3b).
-	var stateRoot [32]byte
-	if dn.Equal(opts.Partition.URL) {
-		err = bindDirectoryEpoch(ctx, opts, poll, spine, epoch.Block)
-		if err != nil {
-			return nil, err
-		}
-		stateRoot = spine.StateTreeAnchor
-	} else {
-		stateRoot, err = bindPartitionRoot(ctx, opts, poll, spine, &epoch)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	slog.Info("Fast sync: restoring state", "module", "fastsync", "block", epoch.Block)
 
-	// Phase 4: restore and prove the state
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 	defer file.Close()
-	err = RestoreSnapshot(opts.Database, file, opts.Partition, stateRoot, epoch.Block)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
+
+	// Phases 3 and 4: bind the epoch to the verified spine, restore the state,
+	// and prove the restored state against the spine.
+	//
+	// For the directory the epoch block binds to the spine exactly and the
+	// anchor's StateTreeAnchor is the verified root, so restore checks the
+	// rebuilt root against it directly.
+	//
+	// For a BVN the directory records every received partition anchor's
+	// StateTreeAnchor, so one receipt proves that root into a directory block.
+	// The proven root must be the block's TRUE state — the value the anchor
+	// carries and the directory recorded — which is the root rebuilt from the
+	// restored accounts, NOT the root the server reports at pin time. The
+	// server's committed BPT lags by one block at the provable moment (block
+	// N's BPT is computed when N+1 records the anchor), so its reported root is
+	// block N-1's and the directory never has it. So restore first, then prove
+	// the rebuilt root (#4058 phase 3b).
+	if dn.Equal(opts.Partition.URL) {
+		err = bindDirectoryEpoch(ctx, opts, poll, spine, epoch.Block)
+		if err != nil {
+			return nil, err
+		}
+		_, err = RestoreSnapshot(opts.Database, file, opts.Partition, spine.StateTreeAnchor, epoch.Block)
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+	} else {
+		stateRoot, err := RestoreSnapshot(opts.Database, file, opts.Partition, [32]byte{}, epoch.Block)
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+		err = bindPartitionRoot(ctx, opts, poll, spine, stateRoot, epoch.Block)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &Result{Spine: spine, Epoch: epoch}, nil
@@ -235,9 +247,9 @@ func bindDirectoryEpoch(ctx context.Context, opts Options, poll func(context.Con
 // server-reported root enters as a claim and leaves proven — the receipt only
 // validates if the root is on the directory's record of the BVN's anchors,
 // which only executing the BVN's quorum-signed anchors can append to.
-func bindPartitionRoot(ctx context.Context, opts Options, poll func(context.Context) error, spine *Spine, epoch *Epoch) ([32]byte, error) {
-	if epoch.StateRoot == ([32]byte{}) {
-		return [32]byte{}, errors.NotAllowed.With("the server did not report the pinned block's state root — it may predate BVN fast sync")
+func bindPartitionRoot(ctx context.Context, opts Options, poll func(context.Context) error, spine *Spine, stateRoot [32]byte, block uint64) error {
+	if stateRoot == ([32]byte{}) {
+		return errors.InternalError.With("the restored state has no root")
 	}
 
 	// The anchor for the pinned block reaches the directory a few blocks
@@ -245,43 +257,43 @@ func bindPartitionRoot(ctx context.Context, opts Options, poll func(context.Cont
 	var record *private.PartitionRootRecord
 	for {
 		var err error
-		record, err = opts.Client.PartitionRootRange(ctx, opts.Partition.URL, epoch.StateRoot, private.SequenceOptions{NodeID: opts.NodeID})
+		record, err = opts.Client.PartitionRootRange(ctx, opts.Partition.URL, stateRoot, private.SequenceOptions{NodeID: opts.NodeID})
 		if err == nil {
 			break
 		}
 		if !retryable(err) {
-			return [32]byte{}, errors.UnknownError.WithFormat("fetch partition root receipt: %w", err)
+			return errors.UnknownError.WithFormat("fetch partition root receipt: %w", err)
 		}
-		slog.Info("Fast sync: waiting for the pinned anchor to reach the directory", "module", "fastsync", "block", epoch.Block, "reason", err)
+		slog.Info("Fast sync: waiting for the pinned anchor to reach the directory", "module", "fastsync", "block", block, "reason", err)
 		err = poll(ctx)
 		if err != nil {
-			return [32]byte{}, errors.UnknownError.Wrap(err)
+			return errors.UnknownError.Wrap(err)
 		}
 	}
 	if record.Receipt == nil {
-		return [32]byte{}, errors.BadRequest.With("incomplete partition root record")
+		return errors.BadRequest.With("incomplete partition root record")
 	}
 
 	// Bind the spine to exactly the directory block the receipt ends at
 	err := bindDirectoryEpoch(ctx, opts, poll, spine, record.DirectoryBlock)
 	if err != nil {
-		return [32]byte{}, err
+		return err
 	}
 
-	// The receipt must chain the pinned state root to the verified root
-	if !bytes.Equal(record.Receipt.Start, epoch.StateRoot[:]) {
-		return [32]byte{}, errors.Unauthenticated.With("the receipt does not start at the pinned state root")
+	// The receipt must chain the restored state root to the verified root
+	if !bytes.Equal(record.Receipt.Start, stateRoot[:]) {
+		return errors.Unauthenticated.With("the receipt does not start at the restored state root")
 	}
 	if !bytes.Equal(record.Receipt.Anchor, spine.RootChainAnchor[:]) {
-		return [32]byte{}, errors.Unauthenticated.With("the receipt does not end at the verified directory root")
+		return errors.Unauthenticated.With("the receipt does not end at the verified directory root")
 	}
 	if !record.Receipt.Validate(nil) {
-		return [32]byte{}, errors.Unauthenticated.With("invalid partition root receipt")
+		return errors.Unauthenticated.With("invalid partition root receipt")
 	}
 
 	slog.Info("Fast sync: partition root proven into the directory", "module", "fastsync",
-		"partition", opts.Partition.URL, "block", epoch.Block, "directoryBlock", record.DirectoryBlock)
-	return epoch.StateRoot, nil
+		"partition", opts.Partition.URL, "block", block, "directoryBlock", record.DirectoryBlock)
+	return nil
 }
 
 // retryable reports whether the error means "the network has not advanced
