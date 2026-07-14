@@ -91,3 +91,50 @@ func (f routerFunc) RouteAccount(u *url.URL) (string, error) {
 func (f routerFunc) Route(env ...*messaging.Envelope) (string, error) {
 	return routing.RouteEnvelopes(f, env...)
 }
+
+// TestDispatcherConcurrentSubmitSend hammers Submit and Send from many
+// goroutines at once. The dispatcher's message queue is shared between the two;
+// without synchronization the slice header is read torn — a nil data pointer
+// with a non-zero length — and RoundTrip crashes the node ranging over it
+// (observed mid-replay during a fast-sync rejoin, #4058). The race detector
+// flags the unsynchronized access; the test also fails if it panics.
+func TestDispatcherConcurrentSubmitSend(t *testing.T) {
+	alice := url.MustParse("alice")
+	aliceKey := acctesting.GenerateKey(alice)
+	env := helpers.MustBuild(t,
+		build.Transaction().For(alice, "tokens").BurnTokens(1, 0).
+			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey))
+
+	d := accumulated.NewDispatcher(t.Name(),
+		routerFunc(func(u *url.URL) (string, error) { return "foo", nil }),
+		dialerFunc(func(ctx context.Context, m multiaddr.Multiaddr) (message.Stream, error) {
+			return nil, errFailDial // fail fast so Send returns without a real peer
+		}),
+	)
+
+	ctx := context.Background()
+	wg := new(sync.WaitGroup)
+	for i := 0; i < 8; i++ {
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 300; j++ {
+				_ = d.Submit(ctx, protocol.AccountUrl("foo"), env)
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 300; j++ {
+				for range d.Send(ctx) { //nolint:revive // drain
+				}
+			}
+		}()
+	}
+	wg.Wait()
+}
+
+var errFailDial = errorString("dial disabled for test")
+
+type errorString string
+
+func (e errorString) Error() string { return string(e) }
