@@ -53,6 +53,15 @@ func (c *Conductor) healAnchors(ctx context.Context, batch *database.Batch, dest
 	}
 	ledger2 := ledger1.Partition(c.Url())
 
+	// Heal only when delivery is genuinely stalled. A destination that is
+	// delivering our anchors — including one merely catching up — advances its
+	// Delivered count between scans and needs no help; re-driving its in-flight
+	// anchors would just add cross-partition traffic. Only a stalled Delivered
+	// marks the next anchor as stuck and in need of resubmission.
+	if !c.deliveryStalled(destination.String(), ledger2.Delivered, uint64(head.Count)) {
+		return nil
+	}
+
 	// For each not-yet delivered anchor
 	for i := ledger2.Delivered + 1; i <= uint64(head.Count); i++ {
 		// Load it

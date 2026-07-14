@@ -71,6 +71,12 @@ type Conductor struct {
 	// lastHeal tracks the last healing scan per destination.
 	lastHealMu sync.Mutex
 	lastHeal   map[string]time.Time
+
+	// lastDelivered tracks each destination's delivered anchor count as of the
+	// previous scan, so healing acts only when delivery is genuinely stalled
+	// rather than merely catching up.
+	lastDeliveredMu sync.Mutex
+	lastDelivered   map[string]uint64
 }
 
 // DefaultHealInterval is the default minimum time between anchor-healing
@@ -99,6 +105,35 @@ func (c *Conductor) shouldHeal(destination string) bool {
 	}
 	c.lastHeal[destination] = time.Now()
 	return true
+}
+
+// deliveryStalled reports whether the destination's delivered anchor count has
+// failed to advance since the previous scan while anchors remain undelivered.
+// Anchors deliver sequentially, so a destination whose Delivered is climbing is
+// flowing on its own and needs no help — re-driving its in-flight anchors only
+// adds load, and under DAG-BFT's dozens-of-blocks-per-second cadence that is
+// the feedback that saturates a partition. Only a Delivered that has not moved
+// across a full scan interval marks the next anchor as genuinely stuck — a
+// quorum lost to validator churn, say — and worth a resubmission (#4056). It
+// records delivered for the next comparison.
+func (c *Conductor) deliveryStalled(destination string, delivered, produced uint64) bool {
+	c.lastDeliveredMu.Lock()
+	defer c.lastDeliveredMu.Unlock()
+
+	if c.lastDelivered == nil {
+		c.lastDelivered = make(map[string]uint64)
+	}
+	prev, seen := c.lastDelivered[destination]
+	c.lastDelivered[destination] = delivered
+
+	switch {
+	case delivered >= produced:
+		return false // Caught up — nothing undelivered
+	case !seen || delivered > prev:
+		return false // First look, or still advancing — give the normal path another interval
+	default:
+		return true // Undelivered and not moving since last scan
+	}
 }
 
 func (c *Conductor) Start(bus *events.Bus) error {
