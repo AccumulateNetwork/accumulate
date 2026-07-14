@@ -324,6 +324,10 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		InitialValidators: initialValidators,
 		Rejoin:            rejoin,
 	}
+	if globals != nil && globals.Network != nil {
+		// The committee epoch is the network definition version (state-derived)
+		svcConfig.InitialNetworkVersion = globals.Network.Version
+	}
 
 	// Wire in libp2p networking if available
 	if inst.p2p != nil && ps != nil {

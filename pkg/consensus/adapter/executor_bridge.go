@@ -38,7 +38,8 @@ type ExecutorBridge struct {
 	lastBlockIndex         uint64
 	lastBlockHash          [32]byte
 	validators             []ValidatorInfo
-	validatorChangeHandler func(validators []ValidatorInfo)
+	validatorVersion       uint64
+	validatorChangeHandler func(validators []ValidatorInfo, version uint64)
 }
 
 // ExecutorBridgeConfig holds configuration for creating an ExecutorBridge.
@@ -125,19 +126,27 @@ func (b *ExecutorBridge) updateValidatorsFromGlobals(globals *network.GlobalValu
 		})
 	}
 
+	version := globals.Network.Version
+
 	b.mu.Lock()
 	oldValidators := b.validators
+	oldVersion := b.validatorVersion
 	b.validators = validators
+	b.validatorVersion = version
 	handler := b.validatorChangeHandler
 	b.mu.Unlock()
 
-	// Notify handler if validators changed
-	if handler != nil && !validatorSetsEqual(oldValidators, validators) {
+	// Notify on a version change even when the validator set is unchanged:
+	// the committee epoch tracks the network definition version, and every
+	// node must bump it at the same block or a node that joins at a later
+	// version can never match the epoch of nodes that skipped the bump.
+	if handler != nil && (version != oldVersion || !validatorSetsEqual(oldValidators, validators)) {
 		slog.Info("Validator set changed",
 			"partition", b.partitionID,
 			"oldCount", len(oldValidators),
-			"newCount", len(validators))
-		handler(validators)
+			"newCount", len(validators),
+			"version", version)
+		handler(validators, version)
 	}
 }
 
@@ -158,17 +167,19 @@ func validatorSetsEqual(a, b []ValidatorInfo) bool {
 
 // SetValidators explicitly sets the validator set.
 // This can be used for initial setup or testing.
-func (b *ExecutorBridge) SetValidators(validators []ValidatorInfo) {
+func (b *ExecutorBridge) SetValidators(validators []ValidatorInfo, version uint64) {
 	b.mu.Lock()
 	oldValidators := b.validators
+	oldVersion := b.validatorVersion
 	b.validators = make([]ValidatorInfo, len(validators))
 	copy(b.validators, validators)
+	b.validatorVersion = version
 	handler := b.validatorChangeHandler
 	b.mu.Unlock()
 
 	// Notify handler if validators changed
-	if handler != nil && !validatorSetsEqual(oldValidators, validators) {
-		handler(validators)
+	if handler != nil && (version != oldVersion || !validatorSetsEqual(oldValidators, validators)) {
+		handler(validators, version)
 	}
 }
 
@@ -269,9 +280,13 @@ func (b *ExecutorBridge) ProduceBlock(ctx context.Context, params BlockParams) (
 		"transactions", txCount,
 		"hash", fmt.Sprintf("%x", hash[:8]))
 
-	// Check for validator updates
-	if updates, changed := state.DidUpdateValidators(); changed {
-		b.handleValidatorUpdates(updates)
+	// Validator changes are handled via the WillChangeGlobals event (which
+	// fires during block execution with the FULL new set and the network
+	// definition version), not via DidUpdateValidators: that returns a DIFF —
+	// added and removed keys only — and building a committee from a diff
+	// replaces the whole validator set with just the change.
+	if _, changed := state.DidUpdateValidators(); changed {
+		slog.Debug("Block updated validators", "index", params.Index)
 	}
 
 	return hash, nil
@@ -331,40 +346,10 @@ func (b *ExecutorBridge) Validators() []ValidatorInfo {
 }
 
 // OnValidatorSetChange registers a callback for validator set changes.
-func (b *ExecutorBridge) OnValidatorSetChange(callback func(validators []ValidatorInfo)) {
+func (b *ExecutorBridge) OnValidatorSetChange(callback func(validators []ValidatorInfo, version uint64)) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.validatorChangeHandler = callback
-}
-
-// handleValidatorUpdates converts executor validator updates to adapter format
-// and calls the registered handler.
-func (b *ExecutorBridge) handleValidatorUpdates(updates []*execute.ValidatorUpdate) {
-	b.mu.RLock()
-	handler := b.validatorChangeHandler
-	b.mu.RUnlock()
-
-	if handler == nil {
-		return
-	}
-
-	validators := make([]ValidatorInfo, 0, len(updates))
-	for _, u := range updates {
-		if len(u.PublicKey) != 32 {
-			continue
-		}
-
-		var pubKey [32]byte
-		copy(pubKey[:], u.PublicKey)
-
-		validators = append(validators, ValidatorInfo{
-			PublicKey: pubKey,
-			Stake:     uint64(u.Power),
-			Active:    u.Power > 0,
-		})
-	}
-
-	handler(validators)
 }
 
 // Ensure ExecutorBridge implements ConsensusAdapter

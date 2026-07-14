@@ -56,14 +56,14 @@ func (m *mockStateProvider) StateHash() [32]byte {
 // mockValidatorSetProvider implements ValidatorSetProvider for testing.
 type mockValidatorSetProvider struct {
 	validators []adapter.ValidatorInfo
-	callback   func([]adapter.ValidatorInfo)
+	callback   func([]adapter.ValidatorInfo, uint64)
 }
 
 func (m *mockValidatorSetProvider) Validators() []adapter.ValidatorInfo {
 	return m.validators
 }
 
-func (m *mockValidatorSetProvider) OnValidatorSetChange(callback func([]adapter.ValidatorInfo)) {
+func (m *mockValidatorSetProvider) OnValidatorSetChange(callback func([]adapter.ValidatorInfo, uint64)) {
 	m.callback = callback
 }
 
@@ -155,7 +155,7 @@ func TestMockValidatorSetProvider(t *testing.T) {
 
 	assert.Equal(t, validators, mock.Validators())
 
-	mock.OnValidatorSetChange(func(v []adapter.ValidatorInfo) {
+	mock.OnValidatorSetChange(func(v []adapter.ValidatorInfo, version uint64) {
 		// Callback registered
 	})
 	assert.NotNil(t, mock.callback)

@@ -66,6 +66,12 @@ type ServiceConfig struct {
 	// This is needed because the WillChangeGlobals event that populates the adapter's
 	// validators fires before the adapter is created.
 	InitialValidators []adapter.ValidatorInfo
+
+	// InitialNetworkVersion is the network definition version the initial
+	// validators were read from. It becomes the initial committee epoch —
+	// the epoch tracks the version so that every node, including one
+	// restoring from a snapshot, derives the same epoch from state.
+	InitialNetworkVersion uint64
 }
 
 // Service wraps the DAG-BFT consensus node for integration with accumulated.
@@ -141,10 +147,11 @@ func (s *Service) Start(ctx context.Context) error {
 		return errors.UnknownError.WithFormat("initialize committee: %w", err)
 	}
 
-	// A rejoining node's committee (from its restored globals) is current,
-	// but the epoch counter — the number of validator-set changes since
-	// genesis — only exists in the running network's memory. Certificates
-	// are rejected on epoch mismatch, so seed it.
+	// The committee epoch is the network definition version, which is part
+	// of executed state — a rejoining node derives it from its restored
+	// globals (InitialNetworkVersion), so the seed epoch normally matches.
+	// Prefer the seed only if it is ahead (a version bump between the
+	// snapshot pin and the epoch block the seed was cut from).
 	if s.config.Rejoin != nil && s.config.Rejoin.Epoch > committee.Epoch {
 		committee = types.NewCommittee(committee.Validators, s.config.Rejoin.Epoch)
 	}
@@ -331,7 +338,7 @@ func (s *Service) initializeCommittee() (*types.Committee, error) {
 			"partition", s.config.Partition.ID)
 	}
 
-	committee := types.NewCommittee(validators, 0)
+	committee := types.NewCommittee(validators, s.config.InitialNetworkVersion)
 	return committee, nil
 }
 
@@ -584,14 +591,28 @@ func (s *Service) Status() Status {
 // For genesis loading - use existing infrastructure
 var _ = genesis.DocProvider
 
-// onValidatorSetChange is called when the adapter detects a validator set change.
-// It updates the consensus node's committee to reflect the new validator set.
-func (s *Service) onValidatorSetChange(validators []adapter.ValidatorInfo) {
+// onValidatorSetChange is called when the adapter detects a validator set
+// change (or a network definition version bump). It updates the consensus
+// node's committee to reflect the new validator set.
+//
+// The committee epoch IS the network definition version. The version is part
+// of executed state, so a node that replays these blocks later — or restores
+// state from a snapshot — derives exactly the same epoch at exactly the same
+// block as every node that executed them live. A locally incremented counter
+// (the previous scheme) only exists in the memory of nodes that were running
+// at the time, which is precisely what a joining node is not.
+func (s *Service) onValidatorSetChange(validators []adapter.ValidatorInfo, version uint64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if s.node == nil {
 		slog.Warn("Validator set change received but node not started")
+		return
+	}
+
+	if version <= s.committee.Epoch {
+		// Replayed or out-of-order notification — the committee is already at
+		// or past this version
 		return
 	}
 
@@ -604,8 +625,7 @@ func (s *Service) onValidatorSetChange(validators []adapter.ValidatorInfo) {
 		}
 	}
 
-	// Create new committee with incremented epoch
-	newEpoch := s.committee.Epoch + 1
+	newEpoch := version
 	newCommittee := types.NewCommittee(committeeValidators, newEpoch)
 
 	slog.Info("Validator set changed, updating committee",
