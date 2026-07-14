@@ -15,8 +15,9 @@
 #   5. Restart and confirm it rejoins: seeds the round, catches up, and
 #      produces directory blocks again.
 #
-# The victim's BVN side is expected to stay wedged — BVN fastsync is #4058
-# phase 3b (BVN roots ride the DN spine via PartitionAnchorReceipt).
+# The victim's BVN is fastsynced too (#4058 phase 3b): its state root is
+# proven into the directory spine via the directory's record of the BVN's
+# anchors, so both partitions must converge.
 #
 # Usage: ./test/test-4058-rejoin.sh [--skip-build]
 
@@ -38,6 +39,13 @@ dn_height() {
     curl -s -m 5 -X POST "http://127.0.0.1:${1:-26660}/v3" \
         -H 'Content-Type: application/json' \
         -d '{"jsonrpc":"2.0","id":1,"method":"query","params":{"scope":"acc://dn.acme/ledger"}}' \
+        | jq -r '.result.account.index // 0' 2>/dev/null || echo 0
+}
+
+bvn_height() {
+    curl -s -m 5 -X POST "http://127.0.0.1:${1:-26660}/v3" \
+        -H 'Content-Type: application/json' \
+        -d '{"jsonrpc":"2.0","id":1,"method":"query","params":{"scope":"acc://bvn-BVN1.acme/ledger"}}' \
         | jq -r '.result.account.index // 0' 2>/dev/null || echo 0
 }
 
@@ -125,6 +133,17 @@ $COMPOSE run --rm --no-deps $VICTIM fastsync http://acc-bvn1-val1:26660 \
     || fail "fastsync failed — see $LOG/fastsync.log"
 grep -E 'Synced and verified|Epoch block|Rejoin seed|State tree anchor' "$LOG/fastsync.log" | tee -a "$LOG/test.log"
 
+log "Fastsync $VICTIM's BVN database (#4058 phase 3b)"
+$COMPOSE run --rm --no-deps $VICTIM fastsync http://acc-bvn1-val1:26660 \
+    --genesis "/root/.accumulate/$VDIR/directory-genesis.snap" \
+    --database "/root/.accumulate/$VDIR/bvnn/data/accumulate.db" \
+    --storage leveldb \
+    --partition BVN1 \
+    --rejoin-dir "/root/.accumulate/$VDIR" \
+    --peer "$PEER" --node "$PEERID" >"$LOG/fastsync-bvn.log" 2>&1 \
+    || fail "BVN fastsync failed — see $LOG/fastsync-bvn.log"
+grep -E 'Synced and verified|Epoch block|Rejoin seed|partition root' "$LOG/fastsync-bvn.log" | tee -a "$LOG/test.log"
+
 # ——— 5. Restart and verify the rejoin ——————————————————————————————————————
 
 log "Restarting $VICTIM with the rejoin seed"
@@ -133,24 +152,29 @@ sleep 60
 docker logs "acc-$VICTIM" --since 2m >"$LOG/rejoin.log" 2>&1
 grep -E 'Seeded consensus for fast-sync rejoin|Rejoined consensus' "$LOG/rejoin.log" | tee -a "$LOG/test.log"
 
-# The victim rejoined if its directory ledger converges to the network tip
-# and keeps advancing with it — catching up 4000+ rounds and replaying tens
-# of thousands of blocks takes a few minutes
+# The victim rejoined if BOTH its ledgers converge to the network tip and
+# keep advancing with it — catching up 4000+ rounds and replaying tens of
+# thousands of blocks takes a few minutes
 REJOINED=0
+BVN_REJOINED=0
 for i in $(seq 1 120); do
     sleep 15
     V=$(dn_height 26663)
     N=$(dn_height 26660)
-    log "Rejoin: victim at $V, network at $N (gap $((N - V)))"
-    if [ "${V:-0}" -gt 0 ] && [ $((N - V)) -le 50 ]; then REJOINED=1; break; fi
+    BV=$(bvn_height 26663)
+    BN=$(bvn_height 26660)
+    log "Rejoin: victim DN $V/$N (gap $((N - V))), BVN $BV/$BN (gap $((BN - BV)))"
+    [ "${V:-0}" -gt 0 ] && [ $((N - V)) -le 50 ] && REJOINED=1
+    [ "${BV:-0}" -gt 0 ] && [ $((BN - BV)) -le 50 ] && BVN_REJOINED=1
+    [ "$REJOINED" = 1 ] && [ "$BVN_REJOINED" = 1 ] && break
 done
 
 # ——— Verdict ———————————————————————————————————————————————————————————————
 
 kill $TRAFFIC 2>/dev/null
-if [ "$CONTROL_BLOCKS" -eq 0 ] && [ "$REJOINED" -eq 1 ]; then
-    log "PASS: plain restart wedged, fastsync rejoin converged to the live tip"
+if [ "$CONTROL_BLOCKS" -eq 0 ] && [ "$REJOINED" -eq 1 ] && [ "$BVN_REJOINED" -eq 1 ]; then
+    log "PASS: plain restart wedged, fastsync rejoin converged both partitions to the live tip"
     log "Network left running — './test/run-dagbft-network.sh down' to tear down"
     exit 0
 fi
-fail "control=$CONTROL_BLOCKS (want 0) rejoined=$REJOINED (want 1) — see $LOG"
+fail "control=$CONTROL_BLOCKS (want 0) dn=$REJOINED bvn=$BVN_REJOINED (want 1 1) — see $LOG"

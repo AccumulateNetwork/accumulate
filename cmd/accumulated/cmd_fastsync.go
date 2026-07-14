@@ -74,12 +74,20 @@ func runFastSync(_ *cobra.Command, args []string) {
 	defer cancel()
 	netName := args[0]
 
-	// The trust anchor
+	// The trust anchor. Globals live under the paths of the partition the
+	// snapshot belongs to — try the sync partition's paths first, then the
+	// directory's, so a BVN sync works with either genesis snapshot (the
+	// network definition is identical in both).
 	genesisFile, err := os.Open(flagFastSync.Genesis)
 	checkf(err, "open genesis snapshot")
 	defer genesisFile.Close()
 	partition := config.NetworkUrl{URL: protocol.PartitionUrl(flagFastSync.Partition)}
 	genesis, err := fastsync.LoadGenesisGlobals(genesisFile, partition)
+	if err != nil && !protocol.DnUrl().Equal(partition.URL) {
+		_, err = genesisFile.Seek(0, 0)
+		checkf(err, "rewind genesis snapshot")
+		genesis, err = fastsync.LoadGenesisGlobals(genesisFile, config.NetworkUrl{URL: protocol.DnUrl()})
+	}
 	checkf(err, "load trust anchor")
 	fmt.Printf("Trust anchor loaded: network version %d, %d validators\n", genesis.Network.Version, len(genesis.Network.Validators))
 
