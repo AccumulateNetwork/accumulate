@@ -122,17 +122,9 @@ PEERID=$(curl -s -m 5 -X POST http://127.0.0.1:26660/v3 \
     -d '{"jsonrpc":"2.0","id":1,"method":"node-info","params":{}}' | jq -r '.result.peerID // empty')
 [ -n "$PEERID" ] || fail "could not determine bvn1-val1's peer ID"
 PEER="/dns/acc-bvn1-val1/tcp/26658/p2p/$PEERID"
-log "Fastsync $VICTIM's directory database (peer $PEER)"
-$COMPOSE run --rm --no-deps $VICTIM fastsync http://acc-bvn1-val1:26660 \
-    --genesis "/root/.accumulate/$VDIR/directory-genesis.snap" \
-    --database "/root/.accumulate/$VDIR/dnn/data/accumulate.db" \
-    --storage leveldb \
-    --partition Directory \
-    --rejoin-dir "/root/.accumulate/$VDIR" \
-    --peer "$PEER" --node "$PEERID" >"$LOG/fastsync.log" 2>&1 \
-    || fail "fastsync failed — see $LOG/fastsync.log"
-grep -E 'Synced and verified|Epoch block|Rejoin seed|State tree anchor' "$LOG/fastsync.log" | tee -a "$LOG/test.log"
-
+# BVN first, directory last: each rejoin seed ages at its partition's round
+# rate from the moment its snapshot is pinned, and directory rounds advance
+# fastest — so the directory's seed must be the freshest at restart
 log "Fastsync $VICTIM's BVN database (#4058 phase 3b)"
 $COMPOSE run --rm --no-deps $VICTIM fastsync http://acc-bvn1-val1:26660 \
     --genesis "/root/.accumulate/$VDIR/directory-genesis.snap" \
@@ -143,6 +135,17 @@ $COMPOSE run --rm --no-deps $VICTIM fastsync http://acc-bvn1-val1:26660 \
     --peer "$PEER" --node "$PEERID" >"$LOG/fastsync-bvn.log" 2>&1 \
     || fail "BVN fastsync failed — see $LOG/fastsync-bvn.log"
 grep -E 'Synced and verified|Epoch block|Rejoin seed|partition root' "$LOG/fastsync-bvn.log" | tee -a "$LOG/test.log"
+
+log "Fastsync $VICTIM's directory database (peer $PEER)"
+$COMPOSE run --rm --no-deps $VICTIM fastsync http://acc-bvn1-val1:26660 \
+    --genesis "/root/.accumulate/$VDIR/directory-genesis.snap" \
+    --database "/root/.accumulate/$VDIR/dnn/data/accumulate.db" \
+    --storage leveldb \
+    --partition Directory \
+    --rejoin-dir "/root/.accumulate/$VDIR" \
+    --peer "$PEER" --node "$PEERID" >"$LOG/fastsync.log" 2>&1 \
+    || fail "fastsync failed — see $LOG/fastsync.log"
+grep -E 'Synced and verified|Epoch block|Rejoin seed|State tree anchor' "$LOG/fastsync.log" | tee -a "$LOG/test.log"
 
 # ——— 5. Restart and verify the rejoin ——————————————————————————————————————
 
