@@ -111,3 +111,24 @@ SnapshotChunk:
     - name: Epoch
       description: is the committee epoch of that round (may be zero)
       type: uint
+    - name: StateRoot
+      description: is the state tree anchor of the pinned block's prepared anchor, for verification against a directory receipt (BVN sync, #4058)
+      type: hash
+
+# PartitionRootRecord proves a BVN's state root into the directory (#4058
+# phase 3b): the directory records every received partition anchor's
+# StateTreeAnchor on a dedicated chain, so one receipt from that entry to a
+# quorum-anchored directory root proves the state root without a separate BVN
+# quorum check. DirectoryBlock is the directory block whose root chain anchor
+# the receipt ends at — the client binds its verified spine to exactly that
+# block and compares roots.
+PartitionRootRecord:
+  fields:
+    - name: Receipt
+      description: proves the state root entry into the directory root chain anchor
+      type: merkle.Receipt
+      marshal-as: reference
+      pointer: true
+    - name: DirectoryBlock
+      description: is the directory block whose root chain anchor the receipt ends at
+      type: uint

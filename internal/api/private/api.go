@@ -68,3 +68,16 @@ type SnapshotRanger interface {
 	Sequencer
 	SnapshotRange(ctx context.Context, partition *url.URL, epoch, offset uint64, opts SequenceOptions) (*SnapshotChunk, error)
 }
+
+// PartitionRootRanger is an optional extension of [Sequencer] that proves a
+// BVN's state root into the directory (#4058 phase 3b). The directory records
+// every received partition anchor's StateTreeAnchor on a dedicated chain; the
+// server locates the given root on that chain and returns one receipt from it
+// to the root chain anchor of a quorum-anchored directory block. A BVN
+// fast-sync verifies the receipt against its directory spine walk instead of
+// collecting a BVN validator quorum (whose signatures live on the directory,
+// not the BVN). Only the directory serves this; partition names the BVN.
+type PartitionRootRanger interface {
+	Sequencer
+	PartitionRootRange(ctx context.Context, partition *url.URL, stateRoot [32]byte, opts SequenceOptions) (*PartitionRootRecord, error)
+}

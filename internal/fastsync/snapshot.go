@@ -18,6 +18,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // Epoch identifies a fetched snapshot's position: the minor block whose
@@ -31,6 +32,12 @@ type Epoch struct {
 	Block          uint64
 	Round          uint64
 	CommitteeEpoch uint64
+
+	// StateRoot is the state tree anchor of the pinned block's prepared
+	// anchor, as reported by the server. A BVN sync verifies it against the
+	// directory's record of the anchor (PartitionRootRange) — until then it
+	// is an unverified claim.
+	StateRoot [32]byte
 }
 
 // FetchSnapshot pins a sync epoch on the server and streams the epoch's
@@ -46,7 +53,7 @@ func FetchSnapshot(ctx context.Context, svc private.SnapshotRanger, partition *u
 	if err != nil {
 		return Epoch{}, errors.UnknownError.WithFormat("pin snapshot: %w", err)
 	}
-	epoch := Epoch{Block: chunk.Block, Round: chunk.Round, CommitteeEpoch: chunk.Epoch}
+	epoch := Epoch{Block: chunk.Block, Round: chunk.Round, CommitteeEpoch: chunk.Epoch, StateRoot: chunk.StateRoot}
 
 	var offset uint64
 	for {
@@ -105,8 +112,7 @@ func LoadGenesisGlobals(file ioutil2.SectionReader, partition config.NetworkUrl)
 // only computed when block N+1 records the anchor). The root equality below
 // is recomputed from the restored contents and subsumes the per-account
 // check.
-func RestoreSnapshot(db database.Beginner, file ioutil2.SectionReader, partition config.NetworkUrl, expectedRoot [32]byte) error {
-	_ = partition
+func RestoreSnapshot(db database.Beginner, file ioutil2.SectionReader, partition config.NetworkUrl, expectedRoot [32]byte, expectedBlock uint64) error {
 	err := database.Restore(db, file, &database.RestoreOptions{SkipHashCheck: true})
 	if err != nil {
 		return errors.UnknownError.WithFormat("restore: %w", err)
@@ -120,6 +126,20 @@ func RestoreSnapshot(db database.Beginner, file ioutil2.SectionReader, partition
 	}
 	if root != expectedRoot {
 		return errors.Unauthenticated.WithFormat("restored state root %x does not match the verified state tree anchor %x", root, expectedRoot)
+	}
+
+	// The block index is part of the verified state (the system ledger is in
+	// the BPT), so this binds the restored state to the claimed epoch block —
+	// a server cannot pass off a different (even genuine) epoch as this one
+	if expectedBlock != 0 {
+		var ledger *protocol.SystemLedger
+		err = batch.Account(partition.Ledger()).Main().GetAs(&ledger)
+		if err != nil {
+			return errors.UnknownError.WithFormat("load restored system ledger: %w", err)
+		}
+		if ledger.Index != expectedBlock {
+			return errors.Unauthenticated.WithFormat("restored state is for block %d, not the pinned epoch block %d", ledger.Index, expectedBlock)
+		}
 	}
 	return nil
 }

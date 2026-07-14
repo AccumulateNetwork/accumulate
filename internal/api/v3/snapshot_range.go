@@ -27,9 +27,10 @@ const SnapshotChunkSize = 256 << 10
 // consistency pin only needs to last for the collection — the file is
 // immutable afterward, so serving needs no live database view.
 type pinnedSnapshot struct {
-	block uint64
-	file  *os.File
-	size  uint64
+	block     uint64
+	file      *os.File
+	size      uint64
+	stateRoot [32]byte
 }
 
 // SnapshotRange implements [private.SnapshotRanger.SnapshotRange]. Epoch
@@ -71,10 +72,11 @@ func (s *Sequencer) SnapshotRange(ctx context.Context, partition *url.URL, epoch
 	}
 
 	chunk := &private.SnapshotChunk{
-		Block:  s.snap.block,
-		Total:  s.snap.size,
-		Offset: offset,
-		Data:   data,
+		Block:     s.snap.block,
+		Total:     s.snap.size,
+		Offset:    offset,
+		Data:      data,
+		StateRoot: s.snap.stateRoot,
 	}
 	if c, ok := s.commitRoundFor(s.snap.block); ok {
 		chunk.Round, chunk.Epoch = c.round, c.epoch
@@ -156,6 +158,17 @@ func (s *Sequencer) pinSnapshot() error {
 	}
 	defer batch.Discard()
 
+	// Record the pinned block's state root the same way the anchor for it
+	// will: the prepared anchor's roots are only populated when the NEXT
+	// block records it (crosschain.ConstructLastAnchor), from exactly the
+	// committed state this view holds. A BVN client verifies this root
+	// against the directory's record of that anchor instead of collecting a
+	// local quorum (#4058).
+	stateRoot, err := batch.BPT().GetRootHash()
+	if err != nil {
+		return errors.UnknownError.WithFormat("load state root: %w", err)
+	}
+
 	file, err := os.CreateTemp("", "fastsync-snapshot-*")
 	if err != nil {
 		return errors.UnknownError.WithFormat("create temporary file: %w", err)
@@ -179,6 +192,6 @@ func (s *Sequencer) pinSnapshot() error {
 		_ = s.snap.file.Close()
 		_ = os.Remove(s.snap.file.Name())
 	}
-	s.snap = &pinnedSnapshot{block: block, file: file, size: uint64(info.Size())}
+	s.snap = &pinnedSnapshot{block: block, file: file, size: uint64(info.Size()), stateRoot: stateRoot}
 	return nil
 }

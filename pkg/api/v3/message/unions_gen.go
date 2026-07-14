@@ -64,6 +64,10 @@ func New(typ Type) (Message, error) {
 		return new(PrivateMinorRootRangeRequest), nil
 	case TypePrivateMinorRootRangeResponse:
 		return new(PrivateMinorRootRangeResponse), nil
+	case TypePrivatePartitionRootRangeRequest:
+		return new(PrivatePartitionRootRangeRequest), nil
+	case TypePrivatePartitionRootRangeResponse:
+		return new(PrivatePartitionRootRangeResponse), nil
 	case TypePrivateSequenceRangeRequest:
 		return new(PrivateSequenceRangeRequest), nil
 	case TypePrivateSequenceRangeResponse:
@@ -231,6 +235,18 @@ func Equal(a, b Message) bool {
 		}
 		b, ok := b.(*PrivateMinorRootRangeResponse)
 		return ok && a.Equal(b)
+	case *PrivatePartitionRootRangeRequest:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*PrivatePartitionRootRangeRequest)
+		return ok && a.Equal(b)
+	case *PrivatePartitionRootRangeResponse:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*PrivatePartitionRootRangeResponse)
+		return ok && a.Equal(b)
 	case *PrivateSequenceRangeRequest:
 		if a == nil {
 			return b == nil
@@ -363,6 +379,10 @@ func Copy(v Message) Message {
 	case *PrivateMinorRootRangeRequest:
 		return v.Copy()
 	case *PrivateMinorRootRangeResponse:
+		return v.Copy()
+	case *PrivatePartitionRootRangeRequest:
+		return v.Copy()
+	case *PrivatePartitionRootRangeResponse:
 		return v.Copy()
 	case *PrivateSequenceRangeRequest:
 		return v.Copy()

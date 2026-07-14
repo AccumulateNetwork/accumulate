@@ -108,3 +108,22 @@ PrivateSnapshotRangeResponse:
       type: private.SnapshotChunk
       marshal-as: reference
       pointer: true
+
+PrivatePartitionRootRangeRequest:
+  union: { type: message }
+  fields:
+    - name: Partition
+      type: url
+      pointer: true
+    - name: StateRoot
+      type: hash
+    - type: private.SequenceOptions
+      marshal-as: reference
+
+PrivatePartitionRootRangeResponse:
+  union: { type: message }
+  fields:
+    - name: Value
+      type: private.PartitionRootRecord
+      marshal-as: reference
+      pointer: true
