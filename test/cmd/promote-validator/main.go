@@ -84,10 +84,11 @@ func main() {
 		log.Fatalf("query network status: %v", err)
 	}
 	gv := &network.GlobalValues{
-		Oracle:  ns.Oracle,
-		Globals: ns.Globals,
-		Network: ns.Network,
-		Routing: ns.Routing,
+		Oracle:          ns.Oracle,
+		Globals:         ns.Globals,
+		Network:         ns.Network,
+		Routing:         ns.Routing,
+		ExecutorVersion: ns.ExecutorVersion, // drives FormatNetwork's data-entry type (DoubleHash on v2)
 	}
 	oldVersion := gv.Network.Version
 	for _, part := range splitNonEmpty(*partitions) {
