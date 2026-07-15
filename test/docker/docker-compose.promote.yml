@@ -1,0 +1,45 @@
+# On-chain follower->validator promotion test (#4058 churn-soak P3): single BVN,
+# 1 validator (bvn1-1) + 4 followers (bvn1-2..5), 5 dual DN+BVN nodes. A follower
+# is promoted by registering its own validator key on-chain (dn.acme/network),
+# NOT by copying an identity. Static peering.
+#
+#   docker compose -p accp -f test/docker/docker-compose.promote.yml up -d --build
+#   docker compose -p accp -f test/docker/docker-compose.promote.yml down -v
+#
+# Node API on the host: 127.0.0.1:27720 .. 27724
+
+x-build: &build
+  context: ../..
+  dockerfile: Dockerfile
+  args:
+    TAGS: production,mainnet
+    GIT_DESCRIBE: ${GIT_DESCRIBE:-p3}
+    GIT_COMMIT: ${GIT_COMMIT:-}
+
+x-node: &node
+  build: *build
+  mem_limit: 2g
+  restart: "no"
+  volumes: [ "promote-data:/data" ]
+  depends_on:
+    init: { condition: service_completed_successfully }
+
+services:
+  init:
+    build: *build
+    container_name: accp-init
+    volumes:
+      - promote-data:/data
+      - ../..:/workspace
+    working_dir: /workspace
+    entrypoint: ["/bin/accumulated"]
+    command: [ "init", "network", "test/docker/promote-network.yml", "-w", "/data", "--reset", "--faucet-seed", "FAUCET" ]
+
+  accp-bvn1-1: { <<: *node, container_name: accp-bvn1-1, command: [ "run-dual", "/data/bvn1-1/dnn", "/data/bvn1-1/bvnn" ], ports: [ "27720:26660" ] }
+  accp-bvn1-2: { <<: *node, container_name: accp-bvn1-2, command: [ "run-dual", "/data/bvn1-2/dnn", "/data/bvn1-2/bvnn" ], ports: [ "27721:26660" ] }
+  accp-bvn1-3: { <<: *node, container_name: accp-bvn1-3, command: [ "run-dual", "/data/bvn1-3/dnn", "/data/bvn1-3/bvnn" ], ports: [ "27722:26660" ] }
+  accp-bvn1-4: { <<: *node, container_name: accp-bvn1-4, command: [ "run-dual", "/data/bvn1-4/dnn", "/data/bvn1-4/bvnn" ], ports: [ "27723:26660" ] }
+  accp-bvn1-5: { <<: *node, container_name: accp-bvn1-5, command: [ "run-dual", "/data/bvn1-5/dnn", "/data/bvn1-5/bvnn" ], ports: [ "27724:26660" ] }
+
+volumes:
+  promote-data: {}

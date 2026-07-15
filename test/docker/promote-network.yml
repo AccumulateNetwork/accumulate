@@ -1,0 +1,12 @@
+# Follower-to-validator failover test (#4050): a single BVN with 1 validator and
+# 4 followers (5 dual DN+BVN nodes). node bvn1-1 is the validator; bvn1-2..5 are
+# followers. Static peering via docker DNS hostnames (accfo-bvn1-N).
+id: FailoverTest
+bvns:
+  - id: BVN1
+    nodes:
+      - { listenAddress: "0.0.0.0", advertizeAddress: "accfo-bvn1-1", peerAddress: "accfo-bvn1-1", basePort: 26656, dnnType: validator, bvnnType: validator }
+      - { listenAddress: "0.0.0.0", advertizeAddress: "accfo-bvn1-2", peerAddress: "accfo-bvn1-2", basePort: 26656, dnnType: follower,  bvnnType: follower }
+      - { listenAddress: "0.0.0.0", advertizeAddress: "accfo-bvn1-3", peerAddress: "accfo-bvn1-3", basePort: 26656, dnnType: follower,  bvnnType: follower }
+      - { listenAddress: "0.0.0.0", advertizeAddress: "accfo-bvn1-4", peerAddress: "accfo-bvn1-4", basePort: 26656, dnnType: follower,  bvnnType: follower }
+      - { listenAddress: "0.0.0.0", advertizeAddress: "accfo-bvn1-5", peerAddress: "accfo-bvn1-5", basePort: 26656, dnnType: follower,  bvnnType: follower }
