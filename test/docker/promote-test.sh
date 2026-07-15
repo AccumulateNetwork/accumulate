@@ -68,7 +68,7 @@ AUTHOR=$("$BIN" -server http://127.0.0.1:27720 -promote "$LOG/bvn1-2.toml" -oper
 [ -n "$AUTHOR" ] || fail "could not resolve bvn1-2 author key"
 A8=${AUTHOR:0:8}
 log "bvn1-2 author key: $AUTHOR (short $A8)"
-if docker logs --tail 200 accp-bvn1-3 2>&1 | grep -q "unknown validator.*$A8"; then
+if docker logs accp-bvn1-3 2>&1 | grep -q "unknown validator.*$A8"; then
   log "confirmed: peers see $A8 as an unknown validator (follower)"
 else
   log "note: did not observe an explicit 'unknown validator $A8' line (may simply be idle)"
@@ -85,7 +85,7 @@ log "=== step 5: verify the committee epoch bumped on every node ==="
 ok=0
 for i in 1 2 3 4 5; do
   for _ in $(seq 1 20); do
-    if docker logs --tail 400 "accp-bvn1-$i" 2>&1 | grep -q "Validator set changed, updating committee"; then
+    if docker logs "accp-bvn1-$i" 2>&1 | grep -q "Validator set changed, updating committee"; then
       log "  accp-bvn1-$i: committee updated"; ok=$((ok+1)); break
     fi
     sleep 3
@@ -99,7 +99,7 @@ promoted=0
 for _ in $(seq 1 20); do
   # bvn1-2's headers should now be handled without the "unknown validator" rejection,
   # and its author should appear among certificate signers on a peer.
-  if docker logs --tail 300 accp-bvn1-3 2>&1 | grep -E "Created certificate|Header handled by primary" | grep -q "$A8"; then
+  if docker logs accp-bvn1-3 2>&1 | grep -E "Created certificate|Header handled by primary" | grep -q "$A8"; then
     promoted=1; break
   fi
   sleep 3

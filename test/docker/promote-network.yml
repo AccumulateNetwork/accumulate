@@ -2,6 +2,14 @@
 # 4 followers (5 dual DN+BVN nodes). node bvn1-1 is the validator; bvn1-2..5 are
 # followers. Static peering via docker DNS hostnames (accp-bvn1-N).
 id: FailoverTest
+
+# Without this the net silently boots ExecutorVersion 0 -> the legacy v1
+# executor, whose one-shot anchor dispatch has no retry and whose crosschain
+# Conductor (anchor producer + #4056 healer) is v2-gated and never runs, so a
+# lost bootstrap anchor wedges cross-partition delivery forever.
+globals:
+  executorVersion: "v2-kourou"
+
 bvns:
   - id: BVN1
     nodes:
