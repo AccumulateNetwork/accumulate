@@ -2,10 +2,11 @@
 # Follower-to-validator failover test (#4050).
 #
 # Single BVN, 1 validator (bvn1-1) + 4 followers (bvn1-2..5). Stop the validator
-# (BVN halts), stop a follower (bvn1-2), copy the validator's identity
-# (priv_validator_key.json for DN + BVN) onto bvn1-2, restart it, and confirm the
-# BVN resumes producing blocks under the same validator identity. bvn1-1 stays
-# stopped (never run two nodes with the same key -> double-sign).
+# (BVN halts), stop a follower (bvn1-2), copy the validator's identity (the
+# [configurations.validator-key] in accumulate.toml, covering DN + BVN) onto
+# bvn1-2, restart it, and confirm the BVN resumes producing blocks under the same
+# validator identity. bvn1-1 stays stopped (never run two nodes with the same
+# key -> double-sign).
 #
 # PASS: height is flat while the validator is down, then advances again after the
 #       former follower is promoted.
@@ -20,10 +21,16 @@ log() { echo "[$(date +%T)] $*"; }
 running() { docker ps --filter name=accfo-bvn --filter status=running -q | wc -l; }
 wait_running() { for _ in $(seq 1 "$2"); do [ "$(running)" -ge "$1" ] && return 0; sleep 3; done; return 1; }
 
-# bvn_height NODE -> BVN CometBFT latest_block_height (via the node's RPC), or NA
+# bvn_height NODE -> BVN ledger height via the node's v3 API, or NA. DAG-BFT nodes
+# serve the v3 API on container port 26660, mapped to host 27720+(N-1); they do
+# not run a CometBFT RPC. bvn1-1 -> 27720 .. bvn1-5 -> 27724.
 bvn_height() {
-  docker exec "accfo-$1" curl -s -m5 localhost:26757/status 2>/dev/null \
-    | python3 -c "import json,sys;print(json.load(sys.stdin)['result']['sync_info']['latest_block_height'])" 2>/dev/null || echo NA
+  local n=${1##*-} port
+  port=$((27719 + n))
+  curl -s -m5 -X POST "http://127.0.0.1:$port/v3" \
+    -H 'Content-Type: application/json' \
+    -d '{"jsonrpc":"2.0","id":1,"method":"query","params":{"scope":"acc://bvn-BVN1.acme/ledger"}}' \
+    | jq -r '.result.account.index // "NA"' 2>/dev/null || echo NA
 }
 # wait until bvn_height on NODE advances past $2 (within $3 polls), echo final height
 wait_advance() {
