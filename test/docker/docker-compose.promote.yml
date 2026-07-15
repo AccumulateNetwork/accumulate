@@ -1,7 +1,7 @@
 # On-chain follower->validator promotion test (#4058 churn-soak P3): single BVN,
-# 1 validator (bvn1-1) + 4 followers (bvn1-2..5), 5 dual DN+BVN nodes. A follower
-# is promoted by registering its own validator key on-chain (dn.acme/network),
-# NOT by copying an identity. Static peering.
+# 1 validator (bvn1-1) + 4 followers (bvn1-2..5), 5 dual DN+BVN nodes, plus a
+# dedicated bootstrap/DHT-server node for P2P service discovery. A follower is
+# promoted by registering its own validator key on-chain (dn.acme/network).
 #
 #   docker compose -p accp -f test/docker/docker-compose.promote.yml up -d --build
 #   docker compose -p accp -f test/docker/docker-compose.promote.yml down -v
@@ -23,8 +23,15 @@ x-node: &node
   volumes: [ "promote-data:/data" ]
   depends_on:
     init: { condition: service_completed_successfully }
+    accp-bootstrap: { condition: service_started }
 
 services:
+  # init runs `init network`, then repoints every node's bootstrap peer at the
+  # accp-bootstrap container by DNS (init writes 127.0.0.1, unreachable across
+  # containers). The peer ID is unchanged. Without a reachable DHT-server
+  # bootstrap, nodes gossip consensus but never discover each other's query:*
+  # API services, so anchor healing can't query ledgers and a lost anchor wedges
+  # the destination forever.
   init:
     build: *build
     container_name: accp-init
@@ -32,8 +39,30 @@ services:
       - promote-data:/data
       - ../..:/workspace
     working_dir: /workspace
-    entrypoint: ["/bin/accumulated"]
-    command: [ "init", "network", "test/docker/promote-network.yml", "-w", "/data", "--reset", "--faucet-seed", "FAUCET" ]
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -e
+        accumulated init network test/docker/promote-network.yml -w /data --reset --faucet-seed FAUCET
+        sed -i 's|/ip4/127.0.0.1/tcp/16658/|/dns/accp-bootstrap/tcp/16658/|g' /data/bvn1-*/accumulate.toml
+        echo "init + bootstrap rewiring complete"
+
+  # Dedicated DHT-server bootstrap node, keyed with the init-generated bootstrap
+  # key (so its peer ID matches what the nodes were configured with).
+  accp-bootstrap:
+    build: *build
+    container_name: accp-bootstrap
+    mem_limit: 1g
+    restart: "no"
+    volumes: [ "promote-data:/data" ]
+    depends_on:
+      init: { condition: service_completed_successfully }
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        KEY=$$(grep -A2 'p2p.key' /data/bootstrap/accumulate.toml | grep address | sed -E 's/.*"([^"]+)".*/\1/')
+        echo "bootstrap key: $$KEY"
+        exec accumulated-bootstrap --key "$$KEY" --listen /ip4/0.0.0.0/tcp/16658
 
   accp-bvn1-1: { <<: *node, container_name: accp-bvn1-1, command: [ "run-dual", "/data/bvn1-1/dnn", "/data/bvn1-1/bvnn" ], ports: [ "27720:26660" ] }
   accp-bvn1-2: { <<: *node, container_name: accp-bvn1-2, command: [ "run-dual", "/data/bvn1-2/dnn", "/data/bvn1-2/bvnn" ], ports: [ "27721:26660" ] }
