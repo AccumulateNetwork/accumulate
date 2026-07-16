@@ -9,7 +9,7 @@ COPY . .
 ENV CGO_ENABLED 0
 ARG TAGS=production,mainnet
 RUN make -B TAGS=$TAGS GIT_DESCRIBE=$GIT_DESCRIBE GIT_COMMIT=$GIT_COMMIT
-RUN go install github.com/go-delve/delve/cmd/dlv@latest
+RUN go install github.com/go-delve/delve/cmd/dlv@v1.22.1
 RUN go install github.com/cometbft/cometbft/cmd/cometbft
 RUN go build ./tools/cmd/snapshot
 RUN go build ./tools/cmd/dbrepair
