@@ -41,3 +41,19 @@ tmp
 
 #jj
 .newscripts
+
+# Compiled test and tooling binaries
+/netsim
+/export-snapshot
+/parallel-loadtest
+/promote-validator
+/simulator
+/genesis
+/snapshot
+/acc/acc
+/test/docker/loadtest-bin
+/cmd/accumulated/go_build*
+mcp/mcp-server
+
+# Generated snapshot URL lists
+**/snapshot.urls
