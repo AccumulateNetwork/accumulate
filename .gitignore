@@ -87,3 +87,11 @@ go.work.sum
 /snapshot-tool
 .archive/
 mcp/mcp-server
+# Compiled test and tooling binaries
+/netsim
+/export-snapshot
+/parallel-loadtest
+/promote-validator
+/acc/acc
+/test/docker/loadtest-bin
+/cmd/accumulated/go_build*
