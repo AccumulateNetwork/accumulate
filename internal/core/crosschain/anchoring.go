@@ -91,6 +91,11 @@ func (c *Conductor) healAnchors(ctx context.Context, batch *database.Batch, dest
 		if err != nil {
 			return err
 		}
+
+		if c.Heals != nil {
+			c.Heals.Anchor.Add(1)
+		}
+		mHeals.WithLabelValues("anchor", c.Partition.ID, partitionLabel(destination)).Inc()
 	}
 
 	return nil

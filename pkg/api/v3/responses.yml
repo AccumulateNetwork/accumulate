@@ -56,6 +56,14 @@ ConsensusStatus:
       marshal-as: reference
       pointer: true
       repeatable: true
+    - name: SyntheticHeals
+      description: counts synthetic messages recovered by receiver-pull healing (#4064)
+      type: uint
+      optional: true
+    - name: AnchorHeals
+      description: counts anchors recovered by healing
+      type: uint
+      optional: true
 
 NetworkStatus:
   fields:

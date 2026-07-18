@@ -127,7 +127,11 @@ type ConsensusStatus struct {
 	PartitionID      string                 `json:"partitionID,omitempty" form:"partitionID" query:"partitionID" validate:"required"`
 	PartitionType    protocol.PartitionType `json:"partitionType,omitempty" form:"partitionType" query:"partitionType" validate:"required"`
 	Peers            []*ConsensusPeerInfo   `json:"peers,omitempty" form:"peers" query:"peers" validate:"required"`
-	extraData        []byte
+	// SyntheticHeals counts synthetic messages recovered by receiver-pull healing (#4064).
+	SyntheticHeals uint64 `json:"syntheticHeals,omitempty" form:"syntheticHeals" query:"syntheticHeals"`
+	// AnchorHeals counts anchors recovered by healing.
+	AnchorHeals uint64 `json:"anchorHeals,omitempty" form:"anchorHeals" query:"anchorHeals"`
+	extraData   []byte
 }
 
 type ConsensusStatusOptions struct {
@@ -763,6 +767,8 @@ func (v *ConsensusStatus) Copy() *ConsensusStatus {
 			u.Peers[i] = (v).Copy()
 		}
 	}
+	u.SyntheticHeals = v.SyntheticHeals
+	u.AnchorHeals = v.AnchorHeals
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -1905,6 +1911,12 @@ func (v *ConsensusStatus) Equal(u *ConsensusStatus) bool {
 		if !((v.Peers[i]).Equal(u.Peers[i])) {
 			return false
 		}
+	}
+	if !(v.SyntheticHeals == u.SyntheticHeals) {
+		return false
+	}
+	if !(v.AnchorHeals == u.AnchorHeals) {
+		return false
 	}
 
 	return true
@@ -3326,15 +3338,17 @@ func (v *ConsensusPeerInfo) IsValid() error {
 }
 
 var fieldNames_ConsensusStatus = []string{
-	1: "Ok",
-	2: "LastBlock",
-	3: "Version",
-	4: "Commit",
-	5: "NodeKeyHash",
-	6: "ValidatorKeyHash",
-	7: "PartitionID",
-	8: "PartitionType",
-	9: "Peers",
+	1:  "Ok",
+	2:  "LastBlock",
+	3:  "Version",
+	4:  "Commit",
+	5:  "NodeKeyHash",
+	6:  "ValidatorKeyHash",
+	7:  "PartitionID",
+	8:  "PartitionType",
+	9:  "Peers",
+	10: "SyntheticHeals",
+	11: "AnchorHeals",
 }
 
 func (v *ConsensusStatus) MarshalBinary() ([]byte, error) {
@@ -3373,6 +3387,12 @@ func (v *ConsensusStatus) MarshalBinary() ([]byte, error) {
 		for _, v := range v.Peers {
 			writer.WriteValue(9, v.MarshalBinary)
 		}
+	}
+	if !(v.SyntheticHeals == 0) {
+		writer.WriteUint(10, v.SyntheticHeals)
+	}
+	if !(v.AnchorHeals == 0) {
+		writer.WriteUint(11, v.AnchorHeals)
 	}
 
 	_, _, err := writer.Reset(fieldNames_ConsensusStatus)
@@ -6237,6 +6257,12 @@ func (v *ConsensusStatus) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
+	if x, ok := reader.ReadUint(10); ok {
+		v.SyntheticHeals = x
+	}
+	if x, ok := reader.ReadUint(11); ok {
+		v.AnchorHeals = x
+	}
 
 	seen, err := reader.Reset(fieldNames_ConsensusStatus)
 	if err != nil {
@@ -7775,6 +7801,8 @@ func init() {
 		encoding.NewTypeField("partitionID", "string"),
 		encoding.NewTypeField("partitionType", "string"),
 		encoding.NewTypeField("peers", "ConsensusPeerInfo[]"),
+		encoding.NewTypeField("syntheticHeals", "uint64"),
+		encoding.NewTypeField("anchorHeals", "uint64"),
 	}, "ConsensusStatus", "consensusStatus")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -8276,6 +8304,8 @@ func (v *ConsensusStatus) MarshalJSON() ([]byte, error) {
 		PartitionID      string                                `json:"partitionID,omitempty"`
 		PartitionType    protocol.PartitionType                `json:"partitionType,omitempty"`
 		Peers            encoding.JsonList[*ConsensusPeerInfo] `json:"peers,omitempty"`
+		SyntheticHeals   uint64                                `json:"syntheticHeals,omitempty"`
+		AnchorHeals      uint64                                `json:"anchorHeals,omitempty"`
 		ExtraData        *string                               `json:"$epilogue,omitempty"`
 	}{}
 	if !(!v.Ok) {
@@ -8304,6 +8334,12 @@ func (v *ConsensusStatus) MarshalJSON() ([]byte, error) {
 	}
 	if !(len(v.Peers) == 0) {
 		u.Peers = v.Peers
+	}
+	if !(v.SyntheticHeals == 0) {
+		u.SyntheticHeals = v.SyntheticHeals
+	}
+	if !(v.AnchorHeals == 0) {
+		u.AnchorHeals = v.AnchorHeals
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -9216,6 +9252,8 @@ func (v *ConsensusStatus) UnmarshalJSON(data []byte) error {
 		PartitionID      string                                `json:"partitionID,omitempty"`
 		PartitionType    protocol.PartitionType                `json:"partitionType,omitempty"`
 		Peers            encoding.JsonList[*ConsensusPeerInfo] `json:"peers,omitempty"`
+		SyntheticHeals   uint64                                `json:"syntheticHeals,omitempty"`
+		AnchorHeals      uint64                                `json:"anchorHeals,omitempty"`
 		ExtraData        *string                               `json:"$epilogue,omitempty"`
 	}{}
 	u.Ok = v.Ok
@@ -9227,6 +9265,8 @@ func (v *ConsensusStatus) UnmarshalJSON(data []byte) error {
 	u.PartitionID = v.PartitionID
 	u.PartitionType = v.PartitionType
 	u.Peers = v.Peers
+	u.SyntheticHeals = v.SyntheticHeals
+	u.AnchorHeals = v.AnchorHeals
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -9248,6 +9288,8 @@ func (v *ConsensusStatus) UnmarshalJSON(data []byte) error {
 	v.PartitionID = u.PartitionID
 	v.PartitionType = u.PartitionType
 	v.Peers = u.Peers
+	v.SyntheticHeals = u.SyntheticHeals
+	v.AnchorHeals = u.AnchorHeals
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err
