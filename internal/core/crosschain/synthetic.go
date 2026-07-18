@@ -32,14 +32,16 @@ import (
 // every validator — before most others fire. See issue #4064.
 const syntheticHealWindow = 10 * time.Second
 
-// mHeals counts cross-partition messages that were healed (re-requested from the
-// source and resubmitted locally). Exposed on the node's Prometheus endpoint.
+// mHeals counts cross-partition messages that were healed. For synthetics the
+// heal is receiver-side (remote = the source partition the message was pulled
+// from); for anchors it is source-side (remote = the destination partition the
+// anchor was re-submitted to). Exposed on the node's Prometheus endpoint.
 var mHeals = promauto.NewCounterVec(prometheus.CounterOpts{
 	Namespace: "accumulate",
 	Subsystem: "crosschain",
 	Name:      "heals_total",
-	Help:      "Number of cross-partition messages healed (re-requested and resubmitted)",
-}, []string{"type", "partition", "source"})
+	Help:      "Number of cross-partition messages healed (re-requested or re-submitted)",
+}, []string{"type", "partition", "remote"})
 
 // synthHealEntry tracks this node's back-off state for a single stalled inbound
 // synthetic stream.
@@ -175,6 +177,9 @@ func (c *Conductor) requestSyntheticFrom(ctx context.Context, source *url.URL, n
 	}
 
 	c.synthHeals.Add(1)
+	if c.Heals != nil {
+		c.Heals.Synthetic.Add(1)
+	}
 	mHeals.WithLabelValues("synthetic", c.Partition.ID, partitionLabel(source)).Inc()
 	slog.InfoContext(ctx, "Requested missing synthetic transaction",
 		"source", source, "destination", c.Url(), "number", num, "id", r.ID)

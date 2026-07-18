@@ -83,6 +83,16 @@ type tendermint struct {
 	eventBus     *events.Bus
 	globals      chan *network.GlobalValues
 	snapshotPath string // Path to genesis snapshot for ABCI InitChain
+	heals        *crosschain.HealCounters
+}
+
+// healCounters lazily creates the heal counters shared between the conductor
+// and the consensus API service.
+func (d *tendermint) healCounters() *crosschain.HealCounters {
+	if d.heals == nil {
+		d.heals = new(crosschain.HealCounters)
+	}
+	return d.heals
 }
 
 var _ prestarter = (*ConsensusService)(nil)
@@ -660,6 +670,10 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 		// until validated in production; enable per-node to recover stalled
 		// synthetic streams.
 		EnableSyntheticHealing: c.EnableSyntheticHealing,
+
+		// Shared with the consensus service, which reports the counts in
+		// ConsensusStatus.
+		Heals: d.healCounters(),
 	}
 	err = conductor.Start(d.eventBus)
 	if err != nil {
@@ -763,6 +777,7 @@ func (c *CoreConsensusApp) register(inst *Instance, d *tendermint, node *tmnode.
 		EventBus:         d.eventBus,
 		NodeKeyHash:      sha256.Sum256(d.nodeKey.PubKey().Bytes()),
 		ValidatorKeyHash: sha256.Sum256(d.privVal.Key.PubKey.Bytes()),
+		Heals:            d.healCounters(),
 	})
 	registerRpcService(inst, svcImpl.Type().AddressFor(c.Partition.ID), message.ConsensusService{ConsensusService: svcImpl})
 	err = consensusProvidesService.Register(inst.services, c, svcImpl)

@@ -69,10 +69,22 @@ type Conductor struct {
 	// **FOR TESTING PURPOSES ONLY**. Intercepts dispatched envelopes.
 	Intercept interceptor
 
+	// Heals counts successful heals, shared with the consensus service so they
+	// can be reported in ConsensusStatus. Optional.
+	Heals *HealCounters
+
 	// synthHeal* track per-source back-off state for synthetic healing.
 	synthHealMu    sync.Mutex
 	synthHealState map[string]*synthHealEntry
 	synthHeals     atomic.Uint64
+}
+
+// HealCounters counts cross-partition messages recovered by healing. Shared
+// between the Conductor (which increments) and the consensus API service
+// (which reports them in ConsensusStatus).
+type HealCounters struct {
+	Synthetic atomic.Uint64
+	Anchor    atomic.Uint64
 }
 
 func (c *Conductor) Start(bus *events.Bus) error {

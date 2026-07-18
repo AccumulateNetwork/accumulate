@@ -129,7 +129,11 @@ type ConsensusStatus struct {
 	// CatchingUp indicates whether the node is still catching up to the network.
 	CatchingUp bool                 `json:"catchingUp,omitempty" form:"catchingUp" query:"catchingUp"`
 	Peers      []*ConsensusPeerInfo `json:"peers,omitempty" form:"peers" query:"peers" validate:"required"`
-	extraData  []byte
+	// SyntheticHeals counts synthetic messages recovered by receiver-pull healing (#4064).
+	SyntheticHeals uint64 `json:"syntheticHeals,omitempty" form:"syntheticHeals" query:"syntheticHeals"`
+	// AnchorHeals counts anchors recovered by healing.
+	AnchorHeals uint64 `json:"anchorHeals,omitempty" form:"anchorHeals" query:"anchorHeals"`
+	extraData   []byte
 }
 
 type ConsensusStatusOptions struct {
@@ -770,6 +774,8 @@ func (v *ConsensusStatus) Copy() *ConsensusStatus {
 			u.Peers[i] = (v).Copy()
 		}
 	}
+	u.SyntheticHeals = v.SyntheticHeals
+	u.AnchorHeals = v.AnchorHeals
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -1923,6 +1929,12 @@ func (v *ConsensusStatus) Equal(u *ConsensusStatus) bool {
 		if !((v.Peers[i]).Equal(u.Peers[i])) {
 			return false
 		}
+	}
+	if !(v.SyntheticHeals == u.SyntheticHeals) {
+		return false
+	}
+	if !(v.AnchorHeals == u.AnchorHeals) {
+		return false
 	}
 
 	return true
@@ -3418,6 +3430,8 @@ var fieldNames_ConsensusStatus = []string{
 	8:  "PartitionType",
 	9:  "CatchingUp",
 	10: "Peers",
+	11: "SyntheticHeals",
+	12: "AnchorHeals",
 }
 
 func (v *ConsensusStatus) MarshalBinary() ([]byte, error) {
@@ -3461,6 +3475,12 @@ func (v *ConsensusStatus) MarshalBinary() ([]byte, error) {
 		for _, v := range v.Peers {
 			writer.WriteValue(10, v.MarshalBinary)
 		}
+	}
+	if !(v.SyntheticHeals == 0) {
+		writer.WriteUint(11, v.SyntheticHeals)
+	}
+	if !(v.AnchorHeals == 0) {
+		writer.WriteUint(12, v.AnchorHeals)
 	}
 
 	_, _, err := writer.Reset(fieldNames_ConsensusStatus)
@@ -6586,6 +6606,12 @@ func (v *ConsensusStatus) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
+	if x, ok := reader.ReadUint(11); ok {
+		v.SyntheticHeals = x
+	}
+	if x, ok := reader.ReadUint(12); ok {
+		v.AnchorHeals = x
+	}
 
 	seen, err := reader.Reset(fieldNames_ConsensusStatus)
 	if err != nil {
@@ -8131,6 +8157,8 @@ func init() {
 		encoding.NewTypeField("partitionType", "string"),
 		encoding.NewTypeField("catchingUp", "bool"),
 		encoding.NewTypeField("peers", "ConsensusPeerInfo[]"),
+		encoding.NewTypeField("syntheticHeals", "uint64"),
+		encoding.NewTypeField("anchorHeals", "uint64"),
 	}, "ConsensusStatus", "consensusStatus")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -8635,6 +8663,8 @@ func (v *ConsensusStatus) MarshalJSON() ([]byte, error) {
 		PartitionType    protocol.PartitionType                `json:"partitionType,omitempty"`
 		CatchingUp       bool                                  `json:"catchingUp,omitempty"`
 		Peers            encoding.JsonList[*ConsensusPeerInfo] `json:"peers,omitempty"`
+		SyntheticHeals   uint64                                `json:"syntheticHeals,omitempty"`
+		AnchorHeals      uint64                                `json:"anchorHeals,omitempty"`
 		ExtraData        *string                               `json:"$epilogue,omitempty"`
 	}{}
 	if !(!v.Ok) {
@@ -8666,6 +8696,12 @@ func (v *ConsensusStatus) MarshalJSON() ([]byte, error) {
 	}
 	if !(len(v.Peers) == 0) {
 		u.Peers = v.Peers
+	}
+	if !(v.SyntheticHeals == 0) {
+		u.SyntheticHeals = v.SyntheticHeals
+	}
+	if !(v.AnchorHeals == 0) {
+		u.AnchorHeals = v.AnchorHeals
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -9587,6 +9623,8 @@ func (v *ConsensusStatus) UnmarshalJSON(data []byte) error {
 		PartitionType    protocol.PartitionType                `json:"partitionType,omitempty"`
 		CatchingUp       bool                                  `json:"catchingUp,omitempty"`
 		Peers            encoding.JsonList[*ConsensusPeerInfo] `json:"peers,omitempty"`
+		SyntheticHeals   uint64                                `json:"syntheticHeals,omitempty"`
+		AnchorHeals      uint64                                `json:"anchorHeals,omitempty"`
 		ExtraData        *string                               `json:"$epilogue,omitempty"`
 	}{}
 	u.Ok = v.Ok
@@ -9599,6 +9637,8 @@ func (v *ConsensusStatus) UnmarshalJSON(data []byte) error {
 	u.PartitionType = v.PartitionType
 	u.CatchingUp = v.CatchingUp
 	u.Peers = v.Peers
+	u.SyntheticHeals = v.SyntheticHeals
+	u.AnchorHeals = v.AnchorHeals
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -9621,6 +9661,8 @@ func (v *ConsensusStatus) UnmarshalJSON(data []byte) error {
 	v.PartitionType = u.PartitionType
 	v.CatchingUp = u.CatchingUp
 	v.Peers = u.Peers
+	v.SyntheticHeals = u.SyntheticHeals
+	v.AnchorHeals = u.AnchorHeals
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err
