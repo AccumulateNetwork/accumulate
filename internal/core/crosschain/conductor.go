@@ -12,8 +12,11 @@ import (
 	"fmt"
 	"log/slog"
 	"runtime/debug"
+	"sync"
 	"sync/atomic"
+	"time"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -51,8 +54,25 @@ type Conductor struct {
 	// Enables healing of anchors after they are initially submitted.
 	EnableAnchorHealing *bool
 
+	// Sequencer is used to pull missing synthetic messages from a source
+	// partition when an inbound stream stalls (receiver-pull healing, #4064).
+	Sequencer private.Sequencer
+
+	// Enables receiver-pull healing of missing synthetic messages. Default off.
+	EnableSyntheticHealing *bool
+
+	// SyntheticHealWindow overrides the jitter/back-off window for synthetic
+	// healing. Zero uses the default (syntheticHealWindow). Tests set a small
+	// value because simulator blocks are not wall-clock paced.
+	SyntheticHealWindow time.Duration
+
 	// **FOR TESTING PURPOSES ONLY**. Intercepts dispatched envelopes.
 	Intercept interceptor
+
+	// synthHeal* track per-source back-off state for synthetic healing.
+	synthHealMu    sync.Mutex
+	synthHealState map[string]*synthHealEntry
+	synthHeals     atomic.Uint64
 }
 
 func (c *Conductor) Start(bus *events.Bus) error {
@@ -120,6 +140,17 @@ func (c *Conductor) willBeginBlock(e execute.WillBeginBlock) error {
 			})
 		}
 	}
+
+	// Request any missing inbound synthetic messages (receiver-pull healing).
+	c.runTask(func() {
+		batch := c.Database.Begin(false)
+		defer batch.Discard()
+
+		err := c.requestMissingSynthetics(context.Background(), batch)
+		if err != nil {
+			slog.Error("Error while requesting missing synthetics", "error", err)
+		}
+	})
 
 	// Load the ledger state
 	var ledger *protocol.SystemLedger
