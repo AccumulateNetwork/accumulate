@@ -367,6 +367,14 @@ func init() {
 				},
 			},
 			{
+				Name:     "EnableSyntheticHealing",
+				Optional: true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     &schema.SimpleType{Type: schema.SimpleTypeBool},
+				},
+			},
+			{
 				Name:     "MaxEnvelopesPerBlock",
 				Optional: true,
 				Type: &schema.PointerType{
@@ -427,6 +435,14 @@ func init() {
 			},
 			{
 				Name:     "EnableDirectDispatch",
+				Optional: true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     &schema.SimpleType{Type: schema.SimpleTypeBool},
+				},
+			},
+			{
+				Name:     "EnableSyntheticHealing",
 				Optional: true,
 				Type: &schema.PointerType{
 					TypeBase: schema.TypeBase{},

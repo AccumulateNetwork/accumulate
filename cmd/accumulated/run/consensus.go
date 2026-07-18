@@ -415,6 +415,7 @@ func (c *CoreConsensusApp) prestart(inst *Instance) error {
 func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Application, error) {
 	setDefaultPtr(&c.EnableHealing, false)
 	setDefaultPtr(&c.EnableDirectDispatch, true)
+	setDefaultPtr(&c.EnableSyntheticHealing, false)
 	setDefaultPtr(&c.MaxEnvelopesPerBlock, 100)
 
 	store, err := coreConsensusNeedsStorage.Get(inst.services, c)
@@ -505,13 +506,26 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 		// TODO Fix the flooding issues and enable this by default
 		EnableAnchorHealing: Ptr(false),
 
-		// Receiver-pull synthetic healing (#4064). Default off until validated
-		// in production; enable per-node to recover stalled synthetic streams.
-		EnableSyntheticHealing: Ptr(false),
+		// Receiver-pull synthetic healing (#4064). Config-driven, default off
+		// until validated in production; enable per-node to recover stalled
+		// synthetic streams.
+		EnableSyntheticHealing: c.EnableSyntheticHealing,
 	}
 	err = conductor.Start(d.eventBus)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("start conductor: %v", err)
+	}
+
+	// DEBUG/TEST ONLY: reproduce a wedged synthetic stream by dropping the first
+	// N synthetics to a partition. Wraps only the executor's dispatcher (created
+	// below) — the conductor's dispatcher is already built above, so heal
+	// re-submissions are never dropped. No-op unless ACC_DEBUG_DROP_SYNTHETIC is
+	// set. See #4064.
+	if dropper := parseDropSyntheticSpec(os.Getenv("ACC_DEBUG_DROP_SYNTHETIC")); dropper != nil {
+		base := execOpts.NewDispatcher
+		execOpts.NewDispatcher = func() execute.Dispatcher {
+			return &droppingDispatcher{Dispatcher: base(), dropper: dropper}
+		}
 	}
 
 	exec, err := execute.NewExecutor(execOpts)

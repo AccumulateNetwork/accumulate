@@ -14,6 +14,7 @@ RUN go build ./tools/cmd/snapshot
 RUN go build ./tools/cmd/dbrepair
 RUN go build ./tools/cmd/debug
 RUN go build ./cmd/accumulated-bootstrap
+RUN go build ./cmd/accumulated-http
 
 FROM alpine:3
 
@@ -25,7 +26,7 @@ WORKDIR /scripts
 COPY scripts .
 
 # Copy binaries
-COPY --from=build /root/accumulated /root/snapshot /root/dbrepair /root/debug /root/accumulated-bootstrap /go/bin/cometbft /bin/
+COPY --from=build /root/accumulated /root/snapshot /root/dbrepair /root/debug /root/accumulated-bootstrap /root/accumulated-http /go/bin/cometbft /bin/
 
 # Set health check
 HEALTHCHECK CMD curl --fail --silent http://localhost:26660/status || exit 1

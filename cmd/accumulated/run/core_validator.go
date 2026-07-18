@@ -135,9 +135,10 @@ func (p partOpts) apply(cfg *Config) error {
 			BootstrapPeers:   p.BootstrapPeers,
 			MetricsNamespace: p.MetricsNamespace,
 			App: &CoreConsensusApp{
-				EnableHealing:        p.EnableHealing,
-				EnableDirectDispatch: p.EnableDirectDispatch,
-				MaxEnvelopesPerBlock: p.MaxEnvelopesPerBlock,
+				EnableHealing:          p.EnableHealing,
+				EnableDirectDispatch:   p.EnableDirectDispatch,
+				EnableSyntheticHealing: p.EnableSyntheticHealing,
+				MaxEnvelopesPerBlock:   p.MaxEnvelopesPerBlock,
 				Partition: &protocol.PartitionInfo{
 					ID:   p.ID,
 					Type: p.Type,
