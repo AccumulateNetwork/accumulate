@@ -499,10 +499,15 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 		Database:     execOpts.Database,
 		Querier:      v3.Querier2{Querier: client},
 		Dispatcher:   execOpts.NewDispatcher(),
+		Sequencer:    client.Private(),
 		RunTask:      execOpts.BackgroundTaskLauncher,
 
 		// TODO Fix the flooding issues and enable this by default
 		EnableAnchorHealing: Ptr(false),
+
+		// Receiver-pull synthetic healing (#4064). Default off until validated
+		// in production; enable per-node to recover stalled synthetic streams.
+		EnableSyntheticHealing: Ptr(false),
 	}
 	err = conductor.Start(d.eventBus)
 	if err != nil {

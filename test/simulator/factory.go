@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"math/big"
 	"sync"
+	"time"
 
 	"github.com/cometbft/cometbft/libs/log"
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -55,6 +56,7 @@ type simFactory struct {
 	deterministic               bool
 	dropInitialAnchor           bool
 	disableAnchorHealing        bool
+	enableSyntheticHealing      bool
 	interceptDispatchedMessages DispatchInterceptor
 
 	// State
@@ -582,15 +584,22 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 	// Create the conductor. This must happen before creating the executor since
 	// it needs to receive the initial WillChangeGlobals event.
 	enableAnchorHealing := !f.disableAnchorHealing
+	enableSyntheticHealing := f.enableSyntheticHealing
 	conductor := &crosschain.Conductor{
-		Partition:           &protocol.PartitionInfo{ID: f.networkFactory.id, Type: f.typ},
-		ValidatorKey:        execOpts.Key,
-		Database:            execOpts.Database,
-		Querier:             api.Querier2{Querier: f.getServices()},
-		Dispatcher:          execOpts.NewDispatcher(),
-		RunTask:             execOpts.BackgroundTaskLauncher,
-		DropInitialAnchor:   f.dropInitialAnchor,
-		EnableAnchorHealing: &enableAnchorHealing,
+		Partition:              &protocol.PartitionInfo{ID: f.networkFactory.id, Type: f.typ},
+		ValidatorKey:           execOpts.Key,
+		Database:               execOpts.Database,
+		Querier:                api.Querier2{Querier: f.getServices()},
+		Dispatcher:             execOpts.NewDispatcher(),
+		Sequencer:              f.getServices().Private(),
+		RunTask:                execOpts.BackgroundTaskLauncher,
+		DropInitialAnchor:      f.dropInitialAnchor,
+		EnableAnchorHealing:    &enableAnchorHealing,
+		EnableSyntheticHealing: &enableSyntheticHealing,
+
+		// Simulator blocks are not wall-clock paced, so use a tiny jitter window
+		// to keep healing deterministic and fast in tests.
+		SyntheticHealWindow: time.Millisecond,
 
 		// Setting Intercept is not necessary because the dispatcher will
 		// intercept messages
