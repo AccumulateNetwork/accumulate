@@ -27,6 +27,16 @@ func (c *Conductor) healAnchors(ctx context.Context, batch *database.Batch, dest
 		return nil
 	}
 
+	// Once collection proofs are active the DESTINATION owns anchor recovery:
+	// its healing loop pulls missed runs with a range request and a single
+	// collection proof, which executes without a signature quorum (#4048,
+	// #4056). The source-side push below — every validator independently
+	// re-signing and re-submitting historical anchors — is then redundant and
+	// is the flooding-prone path, so retire it.
+	if c.Globals.Load().ExecutorVersion.V2KourouEnabled() {
+		return nil
+	}
+
 	// Load the source sequence chain
 	sequence := batch.Account(c.Url(protocol.AnchorPool)).AnchorSequenceChain()
 	head, err := sequence.Head().Get()

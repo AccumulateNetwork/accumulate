@@ -15,8 +15,11 @@ import (
 )
 
 // TestHealNeeded verifies the gate that keeps the healing scan from launching
-// on a healthy node: it fires only when a pending window has a nil (unknown)
-// entry — a message a later one proves exists but that never arrived.
+// on a healthy node. For synthetic messages it fires only when a pending window
+// has a nil (unknown) entry — known synthetic messages deliver on their own
+// once their predecessors arrive. For anchors ANY pending entry fires it: a
+// known anchor can be quorum-stuck forever after validator churn, and a
+// proof-authorized resubmission recovers it immediately (#4056).
 func TestHealNeeded(t *testing.T) {
 	txid := protocol.PartitionUrl("BVN1").JoinPath(protocol.Synthetic).WithTxID([32]byte{1})
 
@@ -36,9 +39,11 @@ func TestHealNeeded(t *testing.T) {
 	// Healthy: no pending at all.
 	require.False(t, healNeeded(empty, emptyAnchors), "no pending must not need healing")
 
-	// Healthy: every pending entry is known — they deliver on their own.
+	// Healthy: known pending synthetic messages deliver on their own.
 	require.False(t, healNeeded(synth(txid, txid), emptyAnchors), "all-known synthetic pending must not need healing")
-	require.False(t, healNeeded(empty, anchors(txid)), "a known pending anchor must not need healing")
+
+	// A known pending anchor may be quorum-stuck — it needs the healing scan.
+	require.True(t, healNeeded(empty, anchors(txid)), "a known pending anchor must need healing")
 
 	// Gap: a nil entry means a later message arrived but this one never did.
 	require.True(t, healNeeded(synth(nil), emptyAnchors), "a missing synthetic message must need healing")

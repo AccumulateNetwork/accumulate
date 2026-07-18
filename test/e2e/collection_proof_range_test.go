@@ -8,6 +8,7 @@ package e2e
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -232,6 +233,114 @@ func TestAnchorRangeRecovery(t *testing.T) {
 	require.Equal(t, int(protocol.AcmePrecision), int(lta.Balance.Uint64()))
 	require.Greater(t, int(recovered.Load()), 0,
 		"expected the dropped anchor to be recovered with a collection proof")
+}
+
+// TestAnchorQuorumStuckRecovery covers the KNOWN-but-stuck anchor case: the
+// destination receives anchor #1 from exactly one validator — below the 2-of-3
+// signature threshold — and every further proof-less copy is dropped, so the
+// quorum can never complete (the analogue of validator churn making historical
+// re-signing impossible). The anchor is a known pending entry, not an unknown
+// gap, so recovery depends on healNeeded treating any pending anchor as
+// healable and on the proof-authorized resubmission executing without a
+// quorum (#4056).
+func TestAnchorQuorumStuckRecovery(t *testing.T) {
+	var timestamp uint64
+
+	// dropped counts proof-less copies suppressed after the first; recovered
+	// counts proof-authorized anchors — only the range-recovery path produces
+	// those.
+	var dropped, recovered atomic.Int32
+	var mu sync.Mutex
+	passed := map[string]bool{}
+
+	globals := new(core.GlobalValues)
+	globals.ExecutorVersion = ExecutorVersionLatest
+	sim := NewSim(t,
+		simulator.SimpleNetwork(t.Name(), 2, 3),
+		simulator.GenesisWith(GenesisTime, globals),
+
+		simulator.CaptureDispatchedMessages(func(ctx context.Context, env *messaging.Envelope) (send bool, err error) {
+			messages, err := env.Normalize()
+			if err != nil {
+				return false, err
+			}
+
+			var drop bool
+			for _, msg := range messages {
+				anchor, ok := msg.(*messaging.BlockAnchor)
+				if !ok {
+					continue
+				}
+				if anchor.Proof != nil {
+					// A proof-authorized recovery — count it, never drop it
+					recovered.Add(1)
+					continue
+				}
+				seq, ok := anchor.Anchor.(*messaging.SequencedMessage)
+				if !ok {
+					continue
+				}
+				txn, ok := seq.Message.(*messaging.TransactionMessage)
+				if !ok {
+					continue
+				}
+				if txn.Transaction.Body.Type() != TransactionTypeDirectoryAnchor || seq.Number != 1 {
+					continue
+				}
+				// Let the FIRST copy of the directory's anchor #1 through to
+				// each destination — the anchor becomes a KNOWN pending entry
+				// with one signature, below the 2-of-3 threshold — and drop
+				// every later proof-less copy, so the quorum never completes.
+				mu.Lock()
+				first := !passed[seq.Destination.String()]
+				passed[seq.Destination.String()] = true
+				mu.Unlock()
+				if !first {
+					dropped.Add(1)
+					drop = true
+				}
+			}
+			return !drop, nil
+		}),
+	)
+
+	// Alice and Bob must live on different partitions so the deposit needs
+	// cross-partition anchoring to complete.
+	alice := acctesting.GenerateKey("Alice")
+	aliceUrl := acctesting.AcmeLiteAddressStdPriv(alice)
+	alicePart, err := sim.Router().RouteAccount(aliceUrl)
+	require.NoError(t, err)
+	var bobUrl *url.URL
+	for i := 0; ; i++ {
+		bob := acctesting.GenerateKey("Bob", i)
+		bobUrl = acctesting.AcmeLiteAddressStdPriv(bob)
+		bobPart, err := sim.Router().RouteAccount(bobUrl)
+		require.NoError(t, err)
+		if alicePart != bobPart {
+			break
+		}
+	}
+	MakeLiteTokenAccount(t, sim.DatabaseFor(aliceUrl), alice[32:], AcmeUrl())
+
+	// Execute a cross-partition transfer. Its deposit cannot be delivered
+	// until the destination has the directory anchors covering it, so this
+	// completes only if the quorum-stuck anchor is recovered.
+	st := sim.SubmitTxnSuccessfully(MustBuild(t,
+		build.Transaction().For(aliceUrl).
+			SendTokens(1, protocol.AcmePrecisionPower).To(bobUrl).
+			SignWith(aliceUrl).Version(1).Timestamp(&timestamp).PrivateKey(alice)))
+
+	sim.StepUntil(True(func(*Harness) bool { return dropped.Load() > 0 }))
+
+	sim.StepUntilN(400,
+		Txn(st.TxID).Succeeds(),
+		Txn(st.TxID).Produced().Succeeds())
+
+	// The token arrived and at least one anchor was recovered by proof
+	lta := GetAccount[*LiteTokenAccount](t, sim.DatabaseFor(bobUrl), bobUrl)
+	require.Equal(t, int(protocol.AcmePrecision), int(lta.Balance.Uint64()))
+	require.Greater(t, int(recovered.Load()), 0,
+		"expected the quorum-stuck anchor to be recovered with a collection proof")
 }
 
 // TestRangeRecoveryOldRange reproduces the live-network failure where a

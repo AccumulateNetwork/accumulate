@@ -464,14 +464,20 @@ func (m *Executor) anchorSynthChain(block *Block, rootChain *database.Chain) (in
 	return indexIndex, nil
 }
 
-// healNeeded reports whether either ledger has a genuine gap the background
-// heal scan must act on: a nil (unknown) entry in a pending window, meaning a
-// later message arrived so we know this one exists, but it never reached us and
-// everything after it is blocked behind it. Known (non-nil) pending entries are
-// not a gap — a synthetic message delivers on its own once its predecessors
-// arrive, and a pending anchor gathering its signature quorum is driven by the
-// source-side conductor, not here. It reads only the already-loaded ledgers, so
-// the common healthy case costs one slice walk and no I/O.
+// healNeeded reports whether either ledger has a gap the background heal scan
+// must act on. For synthetic messages only nil (unknown) pending entries count:
+// a later message arrived so we know this one exists, but it never reached us
+// and everything after it is blocked behind it — known synthetic messages
+// deliver on their own once their predecessors arrive. Anchors are different:
+// ANY pending anchor counts, known or not, because a known anchor can be stuck
+// gathering a signature quorum that after validator churn may never complete,
+// and a proof-authorized resubmission executes immediately (#4056) — this is
+// what lets the receiver-side range recovery own anchor healing instead of the
+// source-side conductor's per-validator re-signing. The scan itself is
+// rate-limited by shouldAttemptHealing, so an anchor legitimately gathering
+// its quorum for a block or two does not trigger redundant work. It reads only
+// the already-loaded ledgers, so the common healthy case costs one slice walk
+// and no I/O.
 func healNeeded(synthLedger *protocol.SyntheticLedger, anchorLedger *protocol.AnchorLedger) bool {
 	for _, p := range synthLedger.Sequence {
 		for _, txid := range p.Pending {
@@ -481,10 +487,8 @@ func healNeeded(synthLedger *protocol.SyntheticLedger, anchorLedger *protocol.An
 		}
 	}
 	for _, p := range anchorLedger.Sequence {
-		for _, txid := range p.Pending {
-			if txid == nil {
-				return true
-			}
+		if len(p.Pending) > 0 {
+			return true
 		}
 	}
 	return false
