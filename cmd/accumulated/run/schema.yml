@@ -232,6 +232,9 @@ Configuration:
         - name: EnableSyntheticHealing
           type: '*bool'
           optional: true
+        - name: EnableAnchorHealing
+          type: '*bool'
+          optional: true
         - name: EnableSnapshots
           type: '*bool'
           optional: true
@@ -355,6 +358,9 @@ Service:
                     type: '*bool'
                     optional: true
                   - name: EnableSyntheticHealing
+                    type: '*bool'
+                    optional: true
+                  - name: EnableAnchorHealing
                     type: '*bool'
                     optional: true
                   - name: MaxEnvelopesPerBlock

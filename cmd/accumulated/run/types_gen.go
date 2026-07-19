@@ -299,6 +299,7 @@ type CoreConsensusApp struct {
 	EnableHealing          *bool
 	EnableDirectDispatch   *bool
 	EnableSyntheticHealing *bool
+	EnableAnchorHealing    *bool
 	MaxEnvelopesPerBlock   *uint64
 }
 
@@ -336,6 +337,7 @@ type CoreValidatorConfiguration struct {
 	EnableHealing          *bool
 	EnableDirectDispatch   *bool
 	EnableSyntheticHealing *bool
+	EnableAnchorHealing    *bool
 	EnableSnapshots        *bool
 	MaxEnvelopesPerBlock   *uint64
 	StorageType            *StorageType
