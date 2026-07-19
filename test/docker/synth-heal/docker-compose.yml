@@ -12,6 +12,19 @@
 # to bvn1's. Driven by run-test.sh.
 
 services:
+  # Bootstrap server — required for peer/service discovery (the release
+  # lineage's P2P stack depends on it; key matches init's deterministic seed).
+  bootstrap:
+    image: acc-synthheal:test
+    container_name: acc-bootstrap
+    entrypoint: ["/bin/accumulated-bootstrap"]
+    command:
+      - --listen
+      - /ip4/0.0.0.0/tcp/16593
+      - --key
+      - "626f6f7473747261702d6e6f64652d6b65792d736565642d7631000000000000"
+    restart: unless-stopped
+
   # Generate configs, then enable synthetic healing on every node.
   init:
     image: acc-synthheal:test
@@ -25,7 +38,12 @@ services:
           if ! grep -q 'enable-synthetic-healing' "$$d/accumulate.toml"; then
             sed -i 's/  type = "coreValidator"/  type = "coreValidator"\n  enable-synthetic-healing = true\n  enable-anchor-healing = true/' "$$d/accumulate.toml"
           fi
-          echo "== $$d ==" && grep -E 'bvn =|enable-.*-healing' "$$d/accumulate.toml"
+          # Point p2p discovery at the local bootstrap (default is the public
+          # mainnet bootstrap servers, unreachable/poisonous inside this net)
+          if ! grep -q 'acc-bootstrap' "$$d/accumulate.toml"; then
+            sed -i 's|^\[p2p\]|[p2p]\n  bootstrap-peers = ["/dns/acc-bootstrap/tcp/16593/p2p/12D3KooWRq3UGwehqoLWg6wDLJDQHduhUbQZ5UHPXKgkPvvWYfvg"]\n  discovery-mode = "auto-server"\n  enable-peer-tracking = true|' "$$d/accumulate.toml"
+          fi
+          echo "== $$d ==" && grep -E 'bvn =|enable-.*-healing|bootstrap-peers' "$$d/accumulate.toml"
         done
     volumes:
       - network-config:/root/.accumulate
@@ -46,6 +64,8 @@ services:
     depends_on:
       init:
         condition: service_completed_successfully
+      bootstrap:
+        condition: service_started
 
   bvn2:
     image: acc-synthheal:test
@@ -61,6 +81,8 @@ services:
     depends_on:
       init:
         condition: service_completed_successfully
+      bootstrap:
+        condition: service_started
 
   bvn3:
     image: acc-synthheal:test
@@ -74,6 +96,8 @@ services:
     depends_on:
       init:
         condition: service_completed_successfully
+      bootstrap:
+        condition: service_started
 
 volumes:
   network-config:
