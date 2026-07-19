@@ -23,9 +23,9 @@ services:
         accumulated init network /workspace/test/docker/synth-heal/network.yml --reset --faucet-seed=FAUCET
         for d in /root/.accumulate/bvn*-1; do
           if ! grep -q 'enable-synthetic-healing' "$$d/accumulate.toml"; then
-            sed -i 's/  type = "coreValidator"/  type = "coreValidator"\n  enable-synthetic-healing = true/' "$$d/accumulate.toml"
+            sed -i 's/  type = "coreValidator"/  type = "coreValidator"\n  enable-synthetic-healing = true\n  enable-anchor-healing = true/' "$$d/accumulate.toml"
           fi
-          echo "== $$d ==" && grep -E 'bvn =|enable-synthetic-healing' "$$d/accumulate.toml"
+          echo "== $$d ==" && grep -E 'bvn =|enable-.*-healing' "$$d/accumulate.toml"
         done
     volumes:
       - network-config:/root/.accumulate
