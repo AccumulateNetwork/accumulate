@@ -138,6 +138,7 @@ func (p partOpts) apply(cfg *Config) error {
 				EnableHealing:          p.EnableHealing,
 				EnableDirectDispatch:   p.EnableDirectDispatch,
 				EnableSyntheticHealing: p.EnableSyntheticHealing,
+				EnableAnchorHealing:    p.EnableAnchorHealing,
 				MaxEnvelopesPerBlock:   p.MaxEnvelopesPerBlock,
 				Partition: &protocol.PartitionInfo{
 					ID:   p.ID,

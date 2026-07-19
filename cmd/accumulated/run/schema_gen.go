@@ -387,6 +387,14 @@ func init() {
 				},
 			},
 			{
+				Name:     "EnableAnchorHealing",
+				Optional: true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     &schema.SimpleType{Type: schema.SimpleTypeBool},
+				},
+			},
+			{
 				Name:     "MaxEnvelopesPerBlock",
 				Optional: true,
 				Type: &schema.PointerType{
@@ -455,6 +463,14 @@ func init() {
 			},
 			{
 				Name:     "EnableSyntheticHealing",
+				Optional: true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     &schema.SimpleType{Type: schema.SimpleTypeBool},
+				},
+			},
+			{
+				Name:     "EnableAnchorHealing",
 				Optional: true,
 				Type: &schema.PointerType{
 					TypeBase: schema.TypeBase{},

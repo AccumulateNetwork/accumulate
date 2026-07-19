@@ -576,6 +576,7 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 	setDefaultPtr(&c.EnableHealing, false)
 	setDefaultPtr(&c.EnableDirectDispatch, true)
 	setDefaultPtr(&c.EnableSyntheticHealing, false)
+	setDefaultPtr(&c.EnableAnchorHealing, false)
 	setDefaultPtr(&c.MaxEnvelopesPerBlock, 100)
 
 	store, err := coreConsensusNeedsStorage.Get(inst.services, c)
@@ -663,8 +664,11 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 		Sequencer:    client.Private(),
 		RunTask:      execOpts.BackgroundTaskLauncher,
 
-		// TODO Fix the flooding issues and enable this by default
-		EnableAnchorHealing: Ptr(false),
+		// Anchor healing (source-side re-sign + resubmit). Config-driven,
+		// default off — the spontaneous multi-validator re-push floods, but on
+		// a single-validator network (threshold = 1) it is safe and sufficient,
+		// so enable it per-node where the topology allows (#4064).
+		EnableAnchorHealing: c.EnableAnchorHealing,
 
 		// Receiver-pull synthetic healing (#4064). Config-driven, default off
 		// until validated in production; enable per-node to recover stalled
