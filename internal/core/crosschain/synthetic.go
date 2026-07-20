@@ -11,6 +11,7 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"log/slog"
+	"strconv"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -56,6 +57,35 @@ type synthHealEntry struct {
 	lastTry time.Time // when this node last requested it (for back-off)
 }
 
+// claimSequence reports whether this node should (re)submit a heal for a
+// specific sequence number. Suppression by Delivered alone is not enough: if
+// delivery is blocked for any reason, Delivered never advances, every
+// validator's back-off expires and they all re-submit the same holes forever —
+// a heal storm that sustains the freeze (#4067). Bounding by DISTINCT hole
+// instead of by elapsed time keeps heal traffic proportional to the real gap.
+func (c *Conductor) claimSequence(source *url.URL, seq uint64, now time.Time, window time.Duration) bool {
+	c.synthHealMu.Lock()
+	defer c.synthHealMu.Unlock()
+	if c.seqHealAt == nil {
+		c.seqHealAt = map[string]time.Time{}
+	}
+	key := source.String() + "#" + strconv.FormatUint(seq, 10)
+	if last, ok := c.seqHealAt[key]; ok && now.Sub(last) < window {
+		return false
+	}
+	c.seqHealAt[key] = now
+
+	// Bound the map: drop entries older than 10 windows.
+	if len(c.seqHealAt) > 10000 {
+		for k, t := range c.seqHealAt {
+			if now.Sub(t) > 10*window {
+				delete(c.seqHealAt, k)
+			}
+		}
+	}
+	return true
+}
+
 // requestMissingSynthetics implements receiver-pull-on-gap healing. When an
 // inbound synthetic stream is stalled (Received > Delivered) it means the
 // predecessor Delivered+1 was never received, so nothing can advance until it
@@ -84,6 +114,10 @@ func (c *Conductor) requestMissingSynthetics(ctx context.Context, batch *databas
 	}
 
 	now := time.Now()
+	window := c.SyntheticHealWindow
+	if window <= 0 {
+		window = syntheticHealWindow
+	}
 	for _, part := range ledger.Sequence {
 		// A gap exists only if we have received past what we have delivered.
 		// The missing message is always Delivered+1 (receiving a later message
@@ -110,6 +144,9 @@ func (c *Conductor) requestMissingSynthetics(ctx context.Context, batch *databas
 				continue
 			}
 			seq := part.Delivered + 1 + uint64(i)
+			if !c.claimSequence(part.Url, seq, now, window) {
+				continue
+			}
 			err := c.requestSyntheticFrom(ctx, part.Url, seq)
 			if err != nil {
 				slog.ErrorContext(ctx, "Failed to request missing synthetic",

@@ -76,6 +76,7 @@ type Conductor struct {
 	// synthHeal* track per-source back-off state for synthetic healing.
 	synthHealMu    sync.Mutex
 	synthHealState map[string]*synthHealEntry
+	seqHealAt      map[string]time.Time // per-(source,seq) last heal submission
 	synthHeals     atomic.Uint64
 }
 
