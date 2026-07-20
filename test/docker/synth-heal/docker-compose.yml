@@ -63,7 +63,7 @@ services:
     container_name: acc-bvn1
     mem_limit: 2g
     environment:
-      ACC_DEBUG_DROP_SYNTHETIC: "${DROP:-*:1}"
+      ACC_DEBUG_DROP_SYNTHETIC: "${DROP-*:1}"
     command: ["-w=/root/.accumulate/bvn1-1", "/root/.accumulate/bvn1-1/accumulate.toml"]
     volumes:
       - network-config:/root/.accumulate
@@ -80,7 +80,7 @@ services:
     container_name: acc-bvn1b
     mem_limit: 2g
     environment:
-      ACC_DEBUG_DROP_SYNTHETIC: "${DROP:-*:1}"
+      ACC_DEBUG_DROP_SYNTHETIC: "${DROP-*:1}"
     command: ["-w=/root/.accumulate/bvn1-2", "/root/.accumulate/bvn1-2/accumulate.toml"]
     volumes:
       - network-config:/root/.accumulate
@@ -95,7 +95,7 @@ services:
     container_name: acc-bvn2
     mem_limit: 2g
     environment:
-      ACC_DEBUG_DROP_SYNTHETIC: "${DROP:-*:1}"
+      ACC_DEBUG_DROP_SYNTHETIC: "${DROP-*:1}"
     command: ["-w=/root/.accumulate/bvn2-1", "/root/.accumulate/bvn2-1/accumulate.toml"]
     volumes:
       - network-config:/root/.accumulate
@@ -112,7 +112,7 @@ services:
     container_name: acc-bvn2b
     mem_limit: 2g
     environment:
-      ACC_DEBUG_DROP_SYNTHETIC: "${DROP:-*:1}"
+      ACC_DEBUG_DROP_SYNTHETIC: "${DROP-*:1}"
     command: ["-w=/root/.accumulate/bvn2-2", "/root/.accumulate/bvn2-2/accumulate.toml"]
     volumes:
       - network-config:/root/.accumulate
@@ -127,7 +127,7 @@ services:
     container_name: acc-bvn3
     mem_limit: 2g
     environment:
-      ACC_DEBUG_DROP_SYNTHETIC: "${DROP:-*:1}"
+      ACC_DEBUG_DROP_SYNTHETIC: "${DROP-*:1}"
     command: ["-w=/root/.accumulate/bvn3-1", "/root/.accumulate/bvn3-1/accumulate.toml"]
     volumes:
       - network-config:/root/.accumulate
@@ -142,7 +142,7 @@ services:
     container_name: acc-bvn3b
     mem_limit: 2g
     environment:
-      ACC_DEBUG_DROP_SYNTHETIC: "${DROP:-*:1}"
+      ACC_DEBUG_DROP_SYNTHETIC: "${DROP-*:1}"
     command: ["-w=/root/.accumulate/bvn3-2", "/root/.accumulate/bvn3-2/accumulate.toml"]
     volumes:
       - network-config:/root/.accumulate
