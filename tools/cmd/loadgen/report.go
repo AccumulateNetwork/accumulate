@@ -211,11 +211,13 @@ func (e *env) reportMix() {
 		fmt.Printf(" %s %-28s followed=%-6d rejected=%-5d skipped=%d\n", mark, n, followed, failed, skipped)
 	}
 
-	adis, books, pages, accounts := e.u.counts()
+	adis, books, pages, accounts, issuers := e.u.counts()
 	fmt.Println()
 	fmt.Println("== accounts created ==")
-	fmt.Printf("  identities=%d key-books=%d key-pages=%d accounts=%d\n", adis, books, pages, accounts)
+	fmt.Printf("  identities=%d key-books=%d key-pages=%d token-issuers=%d accounts=%d\n",
+		adis, books, pages, issuers, accounts)
 	e.reportPageShapes()
+	e.reportTokens()
 }
 
 // reportPageShapes summarises the range of key counts and thresholds the run
@@ -239,6 +241,57 @@ func (e *env) reportPageShapes() {
 	}
 	fmt.Printf("  key-page shapes: %s\n", histogram(byKeys))
 	fmt.Printf("  thresholds:      %s\n", histogramU(byThreshold))
+}
+
+// reportTokens summarises the custom tokens created, so "created a token" can
+// never again mean "created and abandoned".
+func (e *env) reportTokens() {
+	e.u.mu.Lock()
+	defer e.u.mu.Unlock()
+
+	byPrecision := map[int]int{}
+	total, limited, holders := 0, 0, 0
+	for _, a := range e.u.adis {
+		for _, t := range a.issuers {
+			total++
+			byPrecision[int(t.precision)]++
+			holders += len(t.accounts)
+			if t.limited {
+				limited++
+			}
+		}
+	}
+	if total == 0 {
+		return
+	}
+	fmt.Printf("  custom tokens:   %d (%d supply-limited), %d holding accounts\n", total, limited, holders)
+	fmt.Printf("  token precision: %s\n", histogramPrec(byPrecision))
+
+	// Name a sample of what was created. A run that reports counts but no URLs
+	// cannot be checked against the chain by anyone but itself.
+	shown := 0
+	for _, a := range e.u.adis {
+		for _, t := range a.issuers {
+			if shown >= 2 {
+				return
+			}
+			fmt.Printf("  e.g. %v (%s, precision %d) held by %v\n", t.url, t.symbol, t.precision, t.accounts)
+			shown++
+		}
+	}
+}
+
+func histogramPrec(m map[int]int) string {
+	keys := make([]int, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Ints(keys)
+	var parts []string
+	for _, k := range keys {
+		parts = append(parts, fmt.Sprintf("p%d=%d", k, m[k]))
+	}
+	return strings.Join(parts, " ")
 }
 
 func histogram(m map[int]int) string {

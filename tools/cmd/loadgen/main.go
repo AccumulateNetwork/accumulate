@@ -299,9 +299,9 @@ func (e *env) logProgress(sent, failed, skipped, total int, started time.Time) {
 	if elapsed > 0 {
 		rate = float64(sent) / elapsed
 	}
-	adis, books, pages, accts := e.u.counts()
-	log.Printf("sent=%d/%d rejected=%d skipped=%d rate=%.1f/s | adis=%d books=%d pages=%d accounts=%d",
-		sent, total, failed, skipped, rate, adis, books, pages, accts)
+	adis, books, pages, accts, issuers := e.u.counts()
+	log.Printf("sent=%d/%d rejected=%d skipped=%d rate=%.1f/s | adis=%d books=%d pages=%d tokens=%d accounts=%d",
+		sent, total, failed, skipped, rate, adis, books, pages, issuers, accts)
 }
 
 // openTreasury establishes the account everything else is funded from: either

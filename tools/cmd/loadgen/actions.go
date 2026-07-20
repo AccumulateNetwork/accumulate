@@ -32,8 +32,9 @@ var menu = []action{
 	sendTokensLite, sendTokensADI, addCreditsLite, addCreditsPage,
 	writeDataADI, writeDataLite, burnTokens, burnCredits, transferCredits,
 	setThreshold, addPageKey, updatePageKey, removePageKey,
-	updateAccountAuth, createTokenIssue, lockAccount,
+	updateAccountAuth, lockAccount,
 	addBook, addAccount,
+	addToken, issueTokens, sendTokensCustom, burnTokensCustom,
 }
 
 // pick chooses the next action, skipping any that cannot run yet.
@@ -376,26 +377,67 @@ var updateAccountAuth = action{
 
 // --- tokens ---------------------------------------------------------------
 
-// createTokenIssue creates a custom token issuer and immediately issues from
-// it, exercising a path that ACME-only load never reaches.
-var createTokenIssue = action{
-	name: "create-token", weight: 1, needsIdentity: true,
+// addToken builds a whole custom-token economy: issuer, holders, initial
+// issuance. Detached because it is a multi-transaction sequence with ordering
+// constraints, like the other growth actions.
+var addToken = action{
+	name: "add-token", weight: 1, needsIdentity: true,
 	run: func(ctx context.Context, e *env) ([]*url.TxID, error) {
 		a := e.u.randIdentity()
+		if a == nil || len(a.issuers) >= 3 {
+			return nil, errors.NotReady.With("no identity wanting another token")
+		}
+		e.detach(ctx, "add-token", func(ctx context.Context) error { return e.growToken(ctx, a) })
+		return nil, nil
+	},
+}
+
+// issueTokens mints more of a custom token. Only the issuer's own authority
+// can do this, which is a different authorization path from moving tokens.
+var issueTokens = action{
+	name: "issue-tokens", weight: 2, needsIdentity: true,
+	run: func(ctx context.Context, e *env) ([]*url.TxID, error) {
+		a, tok := e.u.randIssuer(1)
 		if a == nil || a.signer() == nil {
-			return nil, errors.NotReady.With("no signer")
+			return nil, errors.NotReady.With("no custom token")
 		}
 		s := a.signer()
-		// Creating a token issuer is by far the most expensive transaction.
-		// Submitting one the signer cannot pay for does not fail cleanly: the
-		// signature is rejected and the transaction is left pending forever.
-		// Skip instead, and let a credit top-up make it possible later.
-		if e.creditBalance(ctx, s.url) < uint64(protocol.FeeCreateToken)+protocol.CreditPrecision {
-			return nil, errors.NotReady.With("signer cannot afford to create a token")
+		to := tok.accounts[e.u.intn(len(tok.accounts))]
+		return e.submit(ctx, e.build(tok.url).
+			IssueTokens(1, tok.precision).To(to).
+			SignWith(s.url).Version(s.version).Timestamp(e.nonce.next()).PrivateKey(a.key()))
+	},
+}
+
+// sendTokensCustom moves a non-ACME token. The resulting synthetic deposit
+// carries a custom token URL rather than ACME, which ACME-only load never
+// produces.
+var sendTokensCustom = action{
+	name: "send-tokens-custom", weight: 3, needsIdentity: true,
+	run: func(ctx context.Context, e *env) ([]*url.TxID, error) {
+		a, tok := e.u.randIssuer(2)
+		if a == nil || a.signer() == nil {
+			return nil, errors.NotReady.With("no custom token with two holders")
 		}
-		u := a.url.JoinPath("tok" + itoa(e.u.intn(1<<20)))
-		return e.submit(ctx, e.build(a).
-			CreateToken(u).WithSymbol("LG").WithPrecision(2).
+		s := a.signer()
+		return e.submit(ctx, e.build(tok.accounts[0]).
+			SendTokens(1, tok.precision).To(tok.accounts[1]).
+			SignWith(s.url).Version(s.version).Timestamp(e.nonce.next()).PrivateKey(a.key()))
+	},
+}
+
+// burnTokensCustom burns a non-ACME token, so the SyntheticBurnTokens routes
+// to this issuer instead of to acc://ACME on the Directory.
+var burnTokensCustom = action{
+	name: "burn-tokens-custom", weight: 1, needsIdentity: true,
+	run: func(ctx context.Context, e *env) ([]*url.TxID, error) {
+		a, tok := e.u.randIssuer(1)
+		if a == nil || a.signer() == nil {
+			return nil, errors.NotReady.With("no custom token")
+		}
+		s := a.signer()
+		return e.submit(ctx, e.build(tok.accounts[0]).
+			BurnTokens(1, tok.precision).
 			SignWith(s.url).Version(s.version).Timestamp(e.nonce.next()).PrivateKey(a.key()))
 	},
 }

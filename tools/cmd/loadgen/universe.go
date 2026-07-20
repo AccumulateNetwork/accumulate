@@ -45,10 +45,27 @@ type liteAccount struct {
 
 // identity is an ADI and everything created under it.
 type identity struct {
-	url    *url.URL
-	books  []*keyBook
-	tokens []*url.URL
-	data   []*url.URL
+	url     *url.URL
+	books   []*keyBook
+	tokens  []*url.URL // ACME token accounts
+	data    []*url.URL
+	issuers []*tokenIssuer
+}
+
+// tokenIssuer is a custom token and the accounts that hold it.
+//
+// The accounts deliberately live under the SAME identity as the issuer.
+// Creating a token account for a non-ACME issuer that is not local to the
+// principal requires a TokenIssuerProof; keeping them together sidesteps that
+// while still exercising every non-ACME path — issuance, transfer between
+// accounts of a custom token, and burns that route to the issuer rather than
+// to acc://ACME on the DN.
+type tokenIssuer struct {
+	url       *url.URL
+	symbol    string
+	precision uint64
+	limited   bool       // a supply limit was set
+	accounts  []*url.URL // token accounts holding this token
 }
 
 // keyBook is a key book and its pages. Page 1 is the generator's signer for
@@ -87,7 +104,7 @@ func (u *universe) shouldGrow(p0 float64, scale int) bool {
 	return u.rng.Float64() < p
 }
 
-func (u *universe) counts() (adis, books, pages, accounts int) {
+func (u *universe) counts() (adis, books, pages, accounts, issuers int) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	adis = len(u.adis)
@@ -95,11 +112,39 @@ func (u *universe) counts() (adis, books, pages, accounts int) {
 	for _, a := range u.adis {
 		books += len(a.books)
 		accounts += len(a.tokens) + len(a.data)
+		issuers += len(a.issuers)
+		for _, i := range a.issuers {
+			accounts += len(i.accounts)
+		}
 		for _, b := range a.books {
 			pages += len(b.pages)
 		}
 	}
 	return
+}
+
+// randIssuer returns a random custom token that has at least minAccounts
+// accounts, along with its identity. Returns nil if none qualify.
+func (u *universe) randIssuer(minAccounts int) (*identity, *tokenIssuer) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	type pair struct {
+		a *identity
+		t *tokenIssuer
+	}
+	var cand []pair
+	for _, a := range u.adis {
+		for _, t := range a.issuers {
+			if len(t.accounts) >= minAccounts {
+				cand = append(cand, pair{a, t})
+			}
+		}
+	}
+	if len(cand) == 0 {
+		return nil, nil
+	}
+	c := cand[u.rng.Intn(len(cand))]
+	return c.a, c.t
 }
 
 func (u *universe) addIdentity(a *identity) {

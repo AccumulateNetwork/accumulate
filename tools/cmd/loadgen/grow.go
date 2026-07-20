@@ -285,6 +285,81 @@ func (e *env) growPage(ctx context.Context, adi *identity, book *keyBook) error 
 	return nil
 }
 
+// growToken creates a custom token and everything needed to actually use it:
+// the issuer, two accounts that hold it, and an initial issuance.
+//
+// Creating the issuer alone would be a dangling transaction — it succeeds,
+// reports no rejection, and leaves nothing any later action can reference. The
+// point of a custom token is the paths it opens up: issuance, a SendTokens
+// carrying a non-ACME token URL, and a burn that routes to this issuer instead
+// of to acc://ACME on the Directory.
+func (e *env) growToken(ctx context.Context, adi *identity) error {
+	signer := adi.signer()
+	if signer == nil {
+		return errors.NotReady.With("identity has no signer")
+	}
+	// The most expensive transaction there is. A signer that cannot pay has
+	// its signature rejected and the transaction stranded, so skip instead.
+	if e.creditBalance(ctx, signer.url) < uint64(protocol.FeeCreateToken)+protocol.CreditPrecision {
+		return errors.NotReady.With("signer cannot afford to create a token")
+	}
+
+	n := e.u.intn(1 << 20)
+	tok := &tokenIssuer{
+		url:       adi.url.JoinPath("tok" + itoa(n)),
+		symbol:    "LG" + itoa(n%1000),
+		precision: uint64(e.u.intn(maxTokenPrecision + 1)),
+	}
+
+	b := e.build(adi).CreateToken(tok.url).WithSymbol(tok.symbol).WithPrecision(tok.precision)
+	// Give some tokens a supply limit so that path is exercised too. It is set
+	// far above what the generator issues, so it constrains nothing.
+	if e.u.intn(2) == 0 {
+		tok.limited = true
+		b = b.WithSupplyLimit(tokenSupplyLimit)
+	}
+	ids, err := e.submit(ctx, b.
+		SignWith(signer.url).Version(signer.version).Timestamp(e.nonce.next()).PrivateKey(adi.key()))
+	if err != nil {
+		return errors.UnknownError.WithFormat("create token: %w", err)
+	}
+	e.track.follow("grow:create-token", ids)
+	if err := e.awaitAccount(ctx, tok.url, 3*time.Minute); err != nil {
+		return err
+	}
+
+	// Two accounts, so tokens have somewhere to move between. They are local
+	// to the issuer, so no TokenIssuerProof is needed.
+	for i := 0; i < 2; i++ {
+		acct := adi.url.JoinPath("tok" + itoa(n) + "-" + itoa(i))
+		ids, err := e.submit(ctx, e.build(adi).
+			CreateTokenAccount(acct).ForToken(tok.url).
+			SignWith(signer.url).Version(signer.version).Timestamp(e.nonce.next()).PrivateKey(adi.key()))
+		if err != nil {
+			return errors.UnknownError.WithFormat("create token account: %w", err)
+		}
+		e.track.follow("grow:create-token-holder", ids)
+		if err := e.awaitAccount(ctx, acct, 3*time.Minute); err != nil {
+			return err
+		}
+		tok.accounts = append(tok.accounts, acct)
+	}
+
+	// Issue an initial supply into the first account.
+	ids, err = e.submit(ctx, e.build(tok.url).
+		IssueTokens(initialIssuance, tok.precision).To(tok.accounts[0]).
+		SignWith(signer.url).Version(signer.version).Timestamp(e.nonce.next()).PrivateKey(adi.key()))
+	if err != nil {
+		return errors.UnknownError.WithFormat("issue tokens: %w", err)
+	}
+	e.track.follow("grow:issue-tokens", ids)
+
+	e.u.mu.Lock()
+	adi.issuers = append(adi.issuers, tok)
+	e.u.mu.Unlock()
+	return nil
+}
+
 // growBook adds another key book to an existing identity, with one page.
 func (e *env) growBook(ctx context.Context, adi *identity) error {
 	signer := adi.signer()
@@ -412,6 +487,11 @@ const (
 
 	fundTokenAccount = 1 // ACME into each new token account
 	maxPageKeys      = 5 // most keys a generated page may carry
+
+	// Custom tokens.
+	maxTokenPrecision = 4         // issuers span precision 0..4
+	initialIssuance   = 1_000_000 // whole tokens minted into the first holder
+	tokenSupplyLimit  = 1_000_000_000
 
 	// Treasury refill thresholds.
 	minTreasuryAcme        = 50        // whole ACME
