@@ -154,15 +154,18 @@ func (c *Conductor) willBeginBlock(e execute.WillBeginBlock) error {
 	}
 
 	// Request any missing inbound synthetic messages (receiver-pull healing).
-	c.runTask(func() {
-		batch := c.Database.Begin(false)
-		defer batch.Discard()
+	// Gate before spawning so the default (disabled) path costs nothing (#4066).
+	if def(c.EnableSyntheticHealing, false) && c.Sequencer != nil {
+		c.runTask(func() {
+			batch := c.Database.Begin(false)
+			defer batch.Discard()
 
-		err := c.requestMissingSynthetics(context.Background(), batch)
-		if err != nil {
-			slog.Error("Error while requesting missing synthetics", "error", err)
-		}
-	})
+			err := c.requestMissingSynthetics(context.Background(), batch)
+			if err != nil {
+				slog.Error("Error while requesting missing synthetics", "error", err)
+			}
+		})
+	}
 
 	// Load the ledger state
 	var ledger *protocol.SystemLedger
@@ -257,7 +260,10 @@ func (c *Conductor) submit(ctx context.Context, url *url.URL, env *messaging.Env
 
 func (c *Conductor) runTask(task func()) {
 	if c.RunTask != nil {
+		// The launcher owns the task; running it again below would execute it
+		// twice (#4066).
 		c.RunTask(task)
+		return
 	}
 
 	go func() {

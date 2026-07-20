@@ -15,6 +15,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -126,4 +128,127 @@ func gatherHealCount(t testing.TB) float64 {
 		}
 	}
 	return total
+}
+
+// TestSyntheticHealingSignatureRequest reproduces #4066 finding 1: a healed
+// synthetic that is a MessageForTransaction (here a SignatureRequest) must
+// bundle the companion transaction, because in a wedged stream the destination
+// may never have received it. Alice initiates a transaction requiring bob's
+// authority; the SignatureRequest synthetic to bob's partition is dropped, so
+// only healing (with the companion transaction) can deliver it — proven by
+// bob's authority signature completing (with a rejection memo, since bob's
+// book does not exist).
+func TestSyntheticHealingSignatureRequest(t *testing.T) {
+	var timestamp uint64
+	alice := AccountUrl("alice")
+	aliceKey := acctesting.GenerateKey(alice)
+
+	var didDrop bool
+	globals := new(core.GlobalValues)
+	globals.ExecutorVersion = ExecutorVersionLatest
+	sim := NewSim(t,
+		simulator.SimpleNetwork(t.Name(), 3, 1),
+		simulator.GenesisWith(GenesisTime, globals),
+		simulator.SkipProposalCheck(),
+		simulator.EnableSyntheticHealing(),
+
+		simulator.CaptureDispatchedMessages(func(ctx context.Context, env *messaging.Envelope) (send bool, err error) {
+			if didDrop {
+				return true, nil
+			}
+			messages, err := env.Normalize()
+			if err != nil {
+				return false, err
+			}
+			for _, msg := range messages {
+				syn, ok := msg.(*messaging.SyntheticMessage)
+				if !ok {
+					continue
+				}
+				seq, ok := syn.Message.(*messaging.SequencedMessage)
+				if !ok {
+					continue
+				}
+				if _, ok := seq.Message.(*messaging.SignatureRequest); ok {
+					fmt.Printf("Dropping signature request %X\n", seq.Message.Hash())
+					didDrop = true
+					return false, nil
+				}
+			}
+			return true, nil
+		}),
+	)
+
+	// Bob must live on a different partition than alice so the signature
+	// request is a cross-partition synthetic.
+	alicePart, err := sim.Router().RouteAccount(alice)
+	require.NoError(t, err)
+	var bob *url.URL
+	for i := 0; ; i++ {
+		bob = AccountUrl(fmt.Sprintf("bob%d", i))
+		bobPart, err := sim.Router().RouteAccount(bob)
+		require.NoError(t, err)
+		if bobPart != alicePart {
+			break
+		}
+	}
+
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e12)
+	// DO NOT CREATE BOB — his authority signature carries a rejection memo,
+	// which can only happen if the signature request DELIVERS on his partition.
+
+	healsBefore := gatherHealCount(t)
+
+	st := sim.BuildAndSubmitSuccessfully(
+		build.Transaction().For(alice).
+			CreateTokenAccount(alice, "tokens").ForToken(AcmeUrl()).
+			WithAuthority(bob, "book").
+			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey))
+
+	sim.StepUntil(True(func(*Harness) bool { return didDrop }))
+
+	// Receiver-pull needs a LATER message on the same stream to see the gap
+	// (Received > Delivered) — the incident shape. Send a deposit across the
+	// same partition pair so the dropped signature request becomes a visible
+	// hole instead of a silent trailing loss.
+	var senderKey, recvKey []byte
+	for i := 0; ; i++ {
+		k := acctesting.GenerateKey("sender", i)
+		part, err := sim.Router().RouteAccount(acctesting.AcmeLiteAddressStdPriv(k))
+		require.NoError(t, err)
+		if part == alicePart {
+			senderKey = k
+			break
+		}
+	}
+	bobPart, err := sim.Router().RouteAccount(bob)
+	require.NoError(t, err)
+	for i := 0; ; i++ {
+		k := acctesting.GenerateKey("recv", i)
+		part, err := sim.Router().RouteAccount(acctesting.AcmeLiteAddressStdPriv(k))
+		require.NoError(t, err)
+		if part == bobPart {
+			recvKey = k
+			break
+		}
+	}
+	senderUrl := acctesting.AcmeLiteAddressStdPriv(senderKey)
+	MakeLiteTokenAccount(t, sim.DatabaseFor(senderUrl), senderKey[32:], AcmeUrl())
+	var ts2 uint64
+	sim.SubmitTxnSuccessfully(MustBuild(t,
+		build.Transaction().For(senderUrl).
+			SendTokens(1, protocol.AcmePrecisionPower).To(acctesting.AcmeLiteAddressStdPriv(recvKey)).
+			SignWith(senderUrl).Version(1).Timestamp(&ts2).PrivateKey(senderKey)))
+
+	// The healer must fire
+	sim.StepUntilN(200, True(func(*Harness) bool { return gatherHealCount(t) > healsBefore }))
+
+	// The dropped signature request must be healed — with its companion
+	// transaction — for bob's partition to process it and answer.
+	sim.StepUntilN(400,
+		Txn(st[0].TxID).Fails().WithError(errors.Rejected),
+		Sig(st[1].TxID).SignatureRequestTo(bob, "book").AuthoritySignature().Completes())
+
+	require.Greater(t, gatherHealCount(t), healsBefore, "expected synthetic healing to fire")
 }

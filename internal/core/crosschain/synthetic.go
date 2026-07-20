@@ -152,6 +152,16 @@ func (c *Conductor) claimSyntheticRequest(source *url.URL, want uint64, now time
 // requestSyntheticFrom pulls a single missing synthetic message from the source
 // partition's sequencer service and resubmits it into this partition.
 func (c *Conductor) requestSyntheticFrom(ctx context.Context, source *url.URL, num uint64) error {
+	// Bound the pull: a hung RPC must not pin the goroutine (and its read
+	// batch) forever. The heal window is a natural bound — by the time it
+	// expires the back-off would allow a fresh attempt anyway (#4066).
+	window := c.SyntheticHealWindow
+	if window <= 0 {
+		window = syntheticHealWindow
+	}
+	ctx, cancel := context.WithTimeout(ctx, window)
+	defer cancel()
+
 	// Pull the missing synthetic — message, proof, and the source's signature —
 	// from the source partition's sequencer. Routing sends this to whatever
 	// live node serves the source partition; any of them holds the message
@@ -169,6 +179,20 @@ func (c *Conductor) requestSyntheticFrom(ctx context.Context, source *url.URL, n
 		// Not yet provable (the source can't anchor it yet). A later scan will
 		// retry once anchors catch up.
 		return nil
+	}
+
+	// If the synthetic message is for a transaction (SignatureRequest,
+	// CreditPayment), bundle the transaction itself, exactly like the normal
+	// outbound path (block_begin.go) and the heal tool do — in a wedged stream
+	// the destination may never have received it, and without it the healed
+	// message fails on "load transaction" and the stream stays stuck (#4066).
+	if m, ok := r.Sequence.Message.(messaging.MessageForTransaction); ok &&
+		r.Sequence.Message.Type() != messaging.MessageTypeBlockAnchor {
+		txr, err := c.Querier.QueryTransaction(ctx, source.WithTxID(m.GetTxID().Hash()), nil)
+		if err != nil {
+			return errors.UnknownError.WithFormat("query companion transaction for %v→%v #%d: %w", source, c.Url(), num, err)
+		}
+		env.Messages = append(env.Messages, txr.Message)
 	}
 
 	err = c.submit(ctx, c.Url(), env)
