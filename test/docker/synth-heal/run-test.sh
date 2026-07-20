@@ -45,15 +45,17 @@ echo
 echo "== Evidence =="
 echo "-- drop (wedge formed) --"
 $compose logs 2>/dev/null | grep -i "dropping synthetic envelope" | head -3 || echo "(none)"
-echo "-- heal counters via ConsensusStatus (receiver-pull fired) --"
+echo "-- heal counters via ConsensusStatus, every validator (receiver-pull fired) --"
+# The jitter picks WHICH validator pulls (occasionally two overlap — harmless,
+# duplicates are idempotent), so ask every node for its own counters.
 heals=""
-nid=$(curl -s -X POST http://localhost:26660/v3 -H 'content-type: application/json' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"node-info","params":{}}' | grep -oE '"peerID":"[^"]+"' | cut -d'"' -f4)
-for part in Directory BVN1 BVN2 BVN3; do
-  h=$(curl -s -X POST http://localhost:26660/v3 -H 'content-type: application/json' \
-    -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"consensus-status\",\"params\":{\"partition\":\"$part\",\"nodeID\":\"$nid\"}}" \
-    | grep -oE '"(syntheticHeals|anchorHeals)":[0-9]+' || true)
-  [ -n "$h" ] && { echo "  $part: $h"; heals=1; }
+for c in $(docker ps --filter name=acc-bvn --format '{{.Names}}'); do
+  h=$(docker exec "$c" sh -c '
+    nid=$(curl -s -X POST http://localhost:26660/v3 -H "content-type: application/json" -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"node-info\",\"params\":{}}" | grep -oE "\"peerID\":\"[^\"]+\"" | cut -d"\"" -f4)
+    for part in Directory BVN1 BVN2 BVN3; do
+      curl -s -X POST http://localhost:26660/v3 -H "content-type: application/json" -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"consensus-status\",\"params\":{\"partition\":\"$part\",\"nodeID\":\"$nid\"}}" | grep -oE "\"(syntheticHeals|anchorHeals)\":[0-9]+" | sed "s/^/$part /"
+    done' 2>/dev/null || true)
+  [ -n "$h" ] && { echo "  $c:"; echo "$h" | sed 's/^/    /'; heals=1; }
 done
 [ -n "$heals" ] || echo "(no heals recorded)"
 
