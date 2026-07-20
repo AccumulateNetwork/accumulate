@@ -43,7 +43,7 @@ DRIVER=$!
 CHAOS=$!
 
 # Monitor: heights + total heals every 5 min
-echo "time,dnHeight,heals" > "$mon"
+echo "time,dnHeight,heals,cpuPct" > "$mon"
 ( while kill -0 $DRIVER 2>/dev/null; do
     h=$(curl -s -X POST http://localhost:26660/v3 -H 'content-type: application/json' \
       -d '{"jsonrpc":"2.0","id":1,"method":"query","params":{"scope":"acc://dn.acme/ledger"}}' \
@@ -57,7 +57,8 @@ echo "time,dnHeight,heals" > "$mon"
         done' 2>/dev/null | paste -sd+ - | bc 2>/dev/null)
       heals=$((heals + ${x:-0}))
     done
-    echo "$(date -u +%FT%T),${h:-?},$heals" >> "$mon"
+    cpu=$(docker stats --no-stream --format '{{.CPUPerc}}' 2>/dev/null | tr -d '%' | awk '{s+=$1} END {printf "%.0f", s}')
+    echo "$(date -u +%FT%T),${h:-?},$heals,${cpu:-?}" >> "$mon"
     up=""; for _ in $(seq 1 60); do curl -sf -X POST http://localhost:26660/v3 -H "content-type: application/json" -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"network-status\",\"params\":{\"partition\":\"Directory\"}}" >/dev/null 2>&1 && { up=1; break; }; sleep 5; done; [ -n "$up" ] || { echo "network never came up" | tee -a "$log"; exit 1; }; sleep 300
   done ) &
 
