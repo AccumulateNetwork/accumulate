@@ -50,6 +50,8 @@ func main() {
 	faucetSeed := flag.String("faucet-seed", "FAUCET", "genesis faucet seed (matches init --faucet-seed)")
 	count := flag.Int("count", 5, "number of cross-partition sends")
 	timeout := flag.Duration("timeout", 4*time.Minute, "overall timeout")
+	tps := flag.Float64("tps", 0, "soak mode: sends per second (runs for -duration)")
+	duration := flag.Duration("duration", 24*time.Hour, "soak mode duration")
 	flag.Parse()
 
 	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
@@ -91,6 +93,11 @@ func main() {
 	_, recipientURL := keyRoutingTo(tree, dest)
 	log.Printf("sender (faucet) %v -> %s", senderURL, srcPart)
 	log.Printf("recipient       %v -> %s", recipientURL, dest)
+
+	if *tps > 0 {
+		soak(ctx, c, Q, tree, ns, senderKey, senderURL, lid, srcPart, *tps, *duration)
+		return
+	}
 
 	// Send ACME across the partition boundary N times. The first synthetic is
 	// dropped by the network; the rest wedge behind it until healing recovers.
@@ -205,5 +212,93 @@ func waitFor(ctx context.Context, Q api.Querier2, id *url.TxID) {
 func fatalIf(err error, format string, args ...any) {
 	if err != nil {
 		log.Fatalf("%s: %v", fmt.Sprintf(format, args...), err)
+	}
+}
+
+// soak sends ACME to one recipient per foreign partition at the given rate for
+// the given duration, then verifies every send was delivered. Progress and the
+// final verdict go to stdout.
+func soak(ctx context.Context, c *jsonrpc.Client, Q api.Querier2, tree *routing.RouteTree, ns *api.NetworkStatus, key ed25519.PrivateKey, sender, lid *url.URL, srcPart string, tps float64, duration time.Duration) {
+	type target struct {
+		url  *url.URL
+		sent uint64
+	}
+	var targets []*target
+	for _, p := range ns.Network.Partitions {
+		if p.Type != protocol.PartitionTypeBlockValidator || strings.EqualFold(p.ID, srcPart) {
+			continue
+		}
+		_, u := keyRoutingTo(tree, p.ID)
+		targets = append(targets, &target{url: u})
+		log.Printf("soak target %v -> %s", u, p.ID)
+	}
+	if len(targets) == 0 {
+		log.Fatal("no foreign partitions")
+	}
+
+	nonce := uint64(time.Now().UTC().UnixMilli())
+	interval := time.Duration(float64(time.Second) / tps)
+	deadline := time.Now().Add(duration)
+	lastLog := time.Now()
+	var sent, errs uint64
+	for i := 0; time.Now().Before(deadline); i++ {
+		tgt := targets[i%len(targets)]
+		env, err := build.Transaction().For(sender).
+			SendTokens(1, protocol.AcmePrecisionPower).To(tgt.url).
+			SignWith(lid).Version(1).Timestamp(&nonce).PrivateKey(key).Done()
+		if err != nil {
+			log.Fatalf("build: %v", err)
+		}
+		subs, err := c.Submit(ctx, env, api.SubmitOptions{})
+		ok := err == nil
+		for _, s := range subs {
+			if !s.Success {
+				ok = false
+			}
+		}
+		if ok {
+			tgt.sent++
+			sent++
+		} else {
+			errs++ // node briefly down/paused — expected under chaos
+		}
+
+		if time.Since(lastLog) > time.Minute {
+			var delivered uint64
+			for _, tgt := range targets {
+				var acct *protocol.LiteTokenAccount
+				_, err := Q.QueryAccountAs(ctx, tgt.url, nil, &acct)
+				if err == nil {
+					delivered += acct.TokenBalance().Uint64() / protocol.AcmePrecision
+				}
+			}
+			log.Printf("soak: sent=%d submit-errors=%d delivered=%d lag=%d", sent, errs, delivered, sent-delivered)
+			lastLog = time.Now()
+		}
+		time.Sleep(interval)
+	}
+
+	// Grace period: healing must drain everything that was accepted.
+	log.Printf("soak done sending: sent=%d submit-errors=%d; waiting for full delivery...", sent, errs)
+	grace := time.Now().Add(10 * time.Minute)
+	for {
+		var delivered uint64
+		for _, tgt := range targets {
+			var acct *protocol.LiteTokenAccount
+			_, err := Q.QueryAccountAs(ctx, tgt.url, nil, &acct)
+			if err == nil {
+				delivered += acct.TokenBalance().Uint64() / protocol.AcmePrecision
+			}
+		}
+		if delivered >= sent {
+			fmt.Printf("SOAK PASS: %d sent, %d delivered, %d submit errors\n", sent, delivered, errs)
+			return
+		}
+		if time.Now().After(grace) {
+			fmt.Printf("SOAK FAIL: %d sent, only %d delivered after grace\n", sent, delivered)
+			os.Exit(1)
+		}
+		log.Printf("draining: %d/%d", delivered, sent)
+		time.Sleep(15 * time.Second)
 	}
 }

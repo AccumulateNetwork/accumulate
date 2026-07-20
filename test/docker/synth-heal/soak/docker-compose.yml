@@ -1,0 +1,237 @@
+# Docker harness reproducing a wedged synthetic stream and proving receiver-pull
+# healing (#4064).
+#
+#   The genesis faucet (partition P) sends ACME to a recipient on another
+#   partition Q, producing a P->Q synthetic transaction. Every node is told to
+#   DROP the first cross-partition synthetic it emits (ACC_DEBUG_DROP_SYNTHETIC=*:1),
+#   so the first P->Q synthetic is lost and every later one wedges behind it.
+#   With enable-synthetic-healing = true, Q pulls the missing message from P over
+#   real libp2p and the stream recovers.
+#
+# Each node serves the accumulate JSON-RPC API on :26660 (DN) — the driver talks
+# to bvn1's. Driven by run-test.sh.
+
+services:
+  # Bootstrap server — required for peer/service discovery (the release
+  # lineage's P2P stack depends on it; key matches init's deterministic seed).
+  bootstrap:
+    image: acc-synthheal:test
+    container_name: acc-bootstrap
+    entrypoint: ["/bin/accumulated-bootstrap"]
+    command:
+      - --listen
+      - /ip4/0.0.0.0/tcp/16593
+      - --key
+      - "626f6f7473747261702d6e6f64652d6b65792d736565642d7631000000000000"
+    restart: unless-stopped
+
+  # Generate configs, then enable synthetic healing on every node.
+  init:
+    image: acc-synthheal:test
+    container_name: acc-sh-init
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -e
+        accumulated init network /workspace/test/docker/synth-heal/soak/network.yml --reset --faucet-seed=FAUCET
+        for d in /root/.accumulate/bvn*-?; do
+          if ! grep -q 'enable-synthetic-healing' "$$d/accumulate.toml"; then
+            sed -i 's/  type = "coreValidator"/  type = "coreValidator"\n  enable-synthetic-healing = true\n  enable-anchor-healing = true/' "$$d/accumulate.toml"
+          fi
+          # Point p2p discovery at the local bootstrap (default is the public
+          # mainnet bootstrap servers, unreachable/poisonous inside this net)
+          if ! grep -q 'acc-bootstrap' "$$d/accumulate.toml"; then
+            sed -i 's|^\[p2p\]|[p2p]\n  bootstrap-peers = ["/dns/acc-bootstrap/tcp/16593/p2p/12D3KooWRq3UGwehqoLWg6wDLJDQHduhUbQZ5UHPXKgkPvvWYfvg"]\n  discovery-mode = "auto-server"\n  enable-peer-tracking = true|' "$$d/accumulate.toml"
+          fi
+          echo "== $$d ==" && grep -E 'bvn =|enable-.*-healing|bootstrap-peers' "$$d/accumulate.toml"
+        done
+    volumes:
+      - network-config:/root/.accumulate
+      - ../../../..:/workspace
+    working_dir: /workspace
+
+
+  s1a:
+    image: acc-synthheal:test
+    container_name: acc-s1a
+    mem_limit: 2g
+    environment:
+      ACC_DEBUG_DROP_SYNTHETIC: "*:1"
+    command: ["-w=/root/.accumulate/bvn1-1", "/root/.accumulate/bvn1-1/accumulate.toml"]
+    volumes:
+      - network-config:/root/.accumulate
+    ports:
+      - "26660:26660"
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      bootstrap:
+        condition: service_started
+
+  s1b:
+    image: acc-synthheal:test
+    container_name: acc-s1b
+    mem_limit: 2g
+    environment:
+      ACC_DEBUG_DROP_SYNTHETIC: "*:1"
+    command: ["-w=/root/.accumulate/bvn1-2", "/root/.accumulate/bvn1-2/accumulate.toml"]
+    volumes:
+      - network-config:/root/.accumulate
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      bootstrap:
+        condition: service_started
+
+  s1c:
+    image: acc-synthheal:test
+    container_name: acc-s1c
+    mem_limit: 2g
+    environment:
+      ACC_DEBUG_DROP_SYNTHETIC: "*:1"
+    command: ["-w=/root/.accumulate/bvn1-3", "/root/.accumulate/bvn1-3/accumulate.toml"]
+    volumes:
+      - network-config:/root/.accumulate
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      bootstrap:
+        condition: service_started
+
+  s1d:
+    image: acc-synthheal:test
+    container_name: acc-s1d
+    mem_limit: 2g
+    environment:
+      ACC_DEBUG_DROP_SYNTHETIC: "*:1"
+    command: ["-w=/root/.accumulate/bvn1-4", "/root/.accumulate/bvn1-4/accumulate.toml"]
+    volumes:
+      - network-config:/root/.accumulate
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      bootstrap:
+        condition: service_started
+
+  s2a:
+    image: acc-synthheal:test
+    container_name: acc-s2a
+    mem_limit: 2g
+    environment:
+      ACC_DEBUG_DROP_SYNTHETIC: "*:1"
+    command: ["-w=/root/.accumulate/bvn2-1", "/root/.accumulate/bvn2-1/accumulate.toml"]
+    volumes:
+      - network-config:/root/.accumulate
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      bootstrap:
+        condition: service_started
+
+  s2b:
+    image: acc-synthheal:test
+    container_name: acc-s2b
+    mem_limit: 2g
+    environment:
+      ACC_DEBUG_DROP_SYNTHETIC: "*:1"
+    command: ["-w=/root/.accumulate/bvn2-2", "/root/.accumulate/bvn2-2/accumulate.toml"]
+    volumes:
+      - network-config:/root/.accumulate
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      bootstrap:
+        condition: service_started
+
+  s2c:
+    image: acc-synthheal:test
+    container_name: acc-s2c
+    mem_limit: 2g
+    environment:
+      ACC_DEBUG_DROP_SYNTHETIC: "*:1"
+    command: ["-w=/root/.accumulate/bvn2-3", "/root/.accumulate/bvn2-3/accumulate.toml"]
+    volumes:
+      - network-config:/root/.accumulate
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      bootstrap:
+        condition: service_started
+
+  s2d:
+    image: acc-synthheal:test
+    container_name: acc-s2d
+    mem_limit: 2g
+    environment:
+      ACC_DEBUG_DROP_SYNTHETIC: "*:1"
+    command: ["-w=/root/.accumulate/bvn2-4", "/root/.accumulate/bvn2-4/accumulate.toml"]
+    volumes:
+      - network-config:/root/.accumulate
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      bootstrap:
+        condition: service_started
+
+  s3a:
+    image: acc-synthheal:test
+    container_name: acc-s3a
+    mem_limit: 2g
+    environment:
+      ACC_DEBUG_DROP_SYNTHETIC: "*:1"
+    command: ["-w=/root/.accumulate/bvn3-1", "/root/.accumulate/bvn3-1/accumulate.toml"]
+    volumes:
+      - network-config:/root/.accumulate
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      bootstrap:
+        condition: service_started
+
+  s3b:
+    image: acc-synthheal:test
+    container_name: acc-s3b
+    mem_limit: 2g
+    environment:
+      ACC_DEBUG_DROP_SYNTHETIC: "*:1"
+    command: ["-w=/root/.accumulate/bvn3-2", "/root/.accumulate/bvn3-2/accumulate.toml"]
+    volumes:
+      - network-config:/root/.accumulate
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      bootstrap:
+        condition: service_started
+
+  s3c:
+    image: acc-synthheal:test
+    container_name: acc-s3c
+    mem_limit: 2g
+    environment:
+      ACC_DEBUG_DROP_SYNTHETIC: "*:1"
+    command: ["-w=/root/.accumulate/bvn3-3", "/root/.accumulate/bvn3-3/accumulate.toml"]
+    volumes:
+      - network-config:/root/.accumulate
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      bootstrap:
+        condition: service_started
+
+  s3d:
+    image: acc-synthheal:test
+    container_name: acc-s3d
+    mem_limit: 2g
+    environment:
+      ACC_DEBUG_DROP_SYNTHETIC: "*:1"
+    command: ["-w=/root/.accumulate/bvn3-4", "/root/.accumulate/bvn3-4/accumulate.toml"]
+    volumes:
+      - network-config:/root/.accumulate
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      bootstrap:
+        condition: service_started
+
+volumes:
+  network-config:
