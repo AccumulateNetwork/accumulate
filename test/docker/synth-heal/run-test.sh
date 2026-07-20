@@ -45,11 +45,15 @@ echo
 echo "== Evidence =="
 echo "-- drop (wedge formed) --"
 $compose logs 2>/dev/null | grep -i "dropping synthetic envelope" | head -3 || echo "(none)"
-echo "-- heal counter (receiver-pull fired; INFO log is filtered at the default WARN level) --"
+echo "-- heal counters via ConsensusStatus (receiver-pull fired) --"
 heals=""
-for n in bvn1 bvn2 bvn3; do
-  m=$(docker exec "acc-$n" sh -c 'curl -s http://localhost:26659/metrics 2>/dev/null | grep "^accumulate_crosschain_heals_total"' 2>/dev/null || true)
-  [ -n "$m" ] && { echo "$n:"; echo "$m" | sed 's/^/    /'; heals=1; }
+nid=$(curl -s -X POST http://localhost:26660/v3 -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"node-info","params":{}}' | grep -oE '"peerID":"[^"]+"' | cut -d'"' -f4)
+for part in Directory BVN1 BVN2 BVN3; do
+  h=$(curl -s -X POST http://localhost:26660/v3 -H 'content-type: application/json' \
+    -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"consensus-status\",\"params\":{\"partition\":\"$part\",\"nodeID\":\"$nid\"}}" \
+    | grep -oE '"(syntheticHeals|anchorHeals)":[0-9]+' || true)
+  [ -n "$h" ] && { echo "  $part: $h"; heals=1; }
 done
 [ -n "$heals" ] || echo "(no heals recorded)"
 

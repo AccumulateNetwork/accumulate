@@ -152,8 +152,14 @@ func initNetwork(cmd *cobra.Command, args []string) {
 			cfg.Configurations = []run.Configuration{cvc}
 			cvc.Listen = node.Listen().Scheme("tcp").Directory().TendermintP2P().Multiaddr()
 			cvc.BVN = bvn.Id
-			cvc.BvnBootstrapPeers = bvn.Peers(node).Scheme("tcp").BlockValidator().TendermintP2P().WithKey().Multiaddr()
-			cvc.DnBootstrapPeers = network.Peers(node).Scheme("tcp").Directory().TendermintP2P().WithKey().Multiaddr()
+			// Emit bootstrap peers with the AccumulateP2P port (+2): the
+			// consensus service's cmtPeerAddress derives the CometBFT peer
+			// address by subtracting 2 (the libp2p convention, e.g. 16593 ->
+			// 16591). Emitting TendermintP2P (+0) addresses here made every
+			// generated config dial peers two ports low, so consensus never
+			// formed on multi-node networks (#4065).
+			cvc.BvnBootstrapPeers = bvn.Peers(node).Scheme("tcp").BlockValidator().AccumulateP2P().WithKey().Multiaddr()
+			cvc.DnBootstrapPeers = network.Peers(node).Scheme("tcp").Directory().AccumulateP2P().WithKey().Multiaddr()
 
 			// Configure the validator key
 			addr = address.FromED25519PrivateKey(node.PrivValKey)
