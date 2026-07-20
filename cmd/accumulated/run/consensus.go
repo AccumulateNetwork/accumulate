@@ -282,8 +282,8 @@ func (c *ConsensusService) start(inst *Instance) error {
 		}
 
 		// Increase bandwidth limits for fast sync (default 5MB/s)
-		d.config.P2P.SendRate = 20480000  // 20 MB/s
-		d.config.P2P.RecvRate = 20480000  // 20 MB/s
+		d.config.P2P.SendRate = 20480000 // 20 MB/s
+		d.config.P2P.RecvRate = 20480000 // 20 MB/s
 
 		// Reduce flush throttle for more responsive connections
 		d.config.P2P.FlushThrottleTimeout = 50 * time.Millisecond // default 100ms
@@ -689,10 +689,15 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 	// below) — the conductor's dispatcher is already built above, so heal
 	// re-submissions are never dropped. No-op unless ACC_DEBUG_DROP_SYNTHETIC is
 	// set. See #4064.
-	if dropper := parseDropSyntheticSpec(os.Getenv("ACC_DEBUG_DROP_SYNTHETIC")); dropper != nil {
+	synthDrop := parseDropSyntheticSpec(os.Getenv("ACC_DEBUG_DROP_SYNTHETIC"))
+	anchorDrop := parseDropSyntheticSpec(os.Getenv("ACC_DEBUG_DROP_ANCHOR"))
+	if anchorDrop != nil {
+		anchorDrop.anchors = true
+	}
+	if synthDrop != nil || anchorDrop != nil {
 		base := execOpts.NewDispatcher
 		execOpts.NewDispatcher = func() execute.Dispatcher {
-			return &droppingDispatcher{Dispatcher: base(), dropper: dropper}
+			return &droppingDispatcher{Dispatcher: base(), dropper: synthDrop, anchorDropper: anchorDrop}
 		}
 	}
 

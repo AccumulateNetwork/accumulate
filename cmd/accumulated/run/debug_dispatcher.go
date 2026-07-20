@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
@@ -25,8 +26,20 @@ import (
 // message wedges every later one. Enabled via
 // ACC_DEBUG_DROP_SYNTHETIC=<partition>:<count>; a no-op when unset.
 type synthDropper struct {
-	dest   string
-	remain atomic.Int32
+	dest    string
+	anchors bool // match anchor envelopes instead of synthetics
+	remain  atomic.Int32
+
+	// Modulo mode ("<dest>:%K"): drop the FIRST submission of any message
+	// whose sequence number is divisible by K. Because everything is
+	// sequenced, every validator evaluates the same rule and drops the same
+	// message — a guaranteed real wedge with no coordination — while the
+	// healer's re-submission of the same sequence number passes (each seq is
+	// dropped only once per node). Recurs throughout a long soak (#4067).
+	modulo  uint64
+	run     uint64 // drop seqs where seq%modulo < run (a RUN of consecutive losses)
+	mu      sync.Mutex
+	dropped map[uint64]bool
 }
 
 // parseDropSyntheticSpec parses "<partition>:<count>" (count defaults to 1).
@@ -37,16 +50,39 @@ func parseDropSyntheticSpec(spec string) *synthDropper {
 		return nil
 	}
 	dest, countStr, hasCount := strings.Cut(spec, ":")
+	d := &synthDropper{dest: strings.TrimSpace(dest)}
+	countStr = strings.TrimSpace(countStr)
+	if hasCount && strings.HasPrefix(countStr, "%") {
+		kStr, rStr, hasRun := strings.Cut(countStr[1:], "+")
+		k, err := strconv.ParseUint(kStr, 10, 64)
+		if err != nil || k == 0 {
+			slog.Error("Ignoring malformed drop spec", "spec", spec)
+			return nil
+		}
+		d.run = 1
+		if hasRun {
+			r, err := strconv.ParseUint(rStr, 10, 64)
+			if err != nil || r == 0 || r >= k {
+				slog.Error("Ignoring malformed drop spec", "spec", spec)
+				return nil
+			}
+			d.run = r
+		}
+		d.modulo = k
+		d.dropped = map[uint64]bool{}
+		slog.Warn("DEBUG sequence-drop enabled — every Kth sequence dropped once",
+			"destination", d.dest, "modulo", k)
+		return d
+	}
 	count := 1
 	if hasCount {
-		n, err := strconv.Atoi(strings.TrimSpace(countStr))
+		n, err := strconv.Atoi(countStr)
 		if err != nil || n < 0 {
-			slog.Error("Ignoring malformed ACC_DEBUG_DROP_SYNTHETIC", "spec", spec)
+			slog.Error("Ignoring malformed drop spec", "spec", spec)
 			return nil
 		}
 		count = n
 	}
-	d := &synthDropper{dest: strings.TrimSpace(dest)}
 	d.remain.Store(int32(count))
 	slog.Warn("DEBUG synthetic-drop enabled — reproducing a wedged synthetic stream",
 		"destination", d.dest, "count", count)
@@ -56,7 +92,25 @@ func parseDropSyntheticSpec(spec string) *synthDropper {
 // tryDrop reports whether this synthetic envelope to dest should be dropped,
 // consuming one of the remaining drops if so.
 func (d *synthDropper) tryDrop(dest *url.URL, env *messaging.Envelope) bool {
-	if !d.matches(dest) || !envHasSynthetic(env) {
+	if !d.matches(dest) {
+		return false
+	}
+	if d.modulo > 0 {
+		seq, ok := envSequenceNumber(env, d.anchors)
+		if !ok || seq%d.modulo >= d.run {
+			return false
+		}
+		d.mu.Lock()
+		already := d.dropped[seq]
+		d.dropped[seq] = true
+		d.mu.Unlock()
+		if already {
+			return false // let the healed re-submission through
+		}
+		slog.Warn("DEBUG dropping sequenced envelope", "destination", dest, "sequence", seq, "anchor", d.anchors)
+		return true
+	}
+	if !envHasSynthetic(env) {
 		return false
 	}
 	for {
@@ -84,6 +138,34 @@ func (d *synthDropper) matches(dest *url.URL) bool {
 	return strings.EqualFold(dest.String(), d.dest)
 }
 
+// envSequenceNumber extracts the sequence number of the envelope's synthetic
+// or anchor message.
+func envSequenceNumber(env *messaging.Envelope, anchors bool) (uint64, bool) {
+	for _, msg := range env.Messages {
+		switch m := msg.(type) {
+		case *messaging.SyntheticMessage:
+			if !anchors {
+				if seq, ok := m.Message.(*messaging.SequencedMessage); ok {
+					return seq.Number, true
+				}
+			}
+		case *messaging.BadSyntheticMessage:
+			if !anchors {
+				if seq, ok := m.Message.(*messaging.SequencedMessage); ok {
+					return seq.Number, true
+				}
+			}
+		case *messaging.BlockAnchor:
+			if anchors {
+				if seq, ok := m.Anchor.(*messaging.SequencedMessage); ok {
+					return seq.Number, true
+				}
+			}
+		}
+	}
+	return 0, false
+}
+
 func envHasSynthetic(env *messaging.Envelope) bool {
 	for _, msg := range env.Messages {
 		switch msg.(type) {
@@ -98,11 +180,15 @@ func envHasSynthetic(env *messaging.Envelope) bool {
 // synthDropper.
 type droppingDispatcher struct {
 	execute.Dispatcher
-	dropper *synthDropper
+	dropper       *synthDropper // synthetics
+	anchorDropper *synthDropper // anchors
 }
 
 func (d *droppingDispatcher) Submit(ctx context.Context, dest *url.URL, env *messaging.Envelope) error {
-	if d.dropper.tryDrop(dest, env) {
+	if d.dropper != nil && d.dropper.tryDrop(dest, env) {
+		return nil // silently drop
+	}
+	if d.anchorDropper != nil && d.anchorDropper.tryDrop(dest, env) {
 		return nil // silently drop
 	}
 	return d.Dispatcher.Submit(ctx, dest, env)

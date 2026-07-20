@@ -32,6 +32,11 @@ import (
 // every validator — before most others fire. See issue #4064.
 const syntheticHealWindow = 10 * time.Second
 
+// syntheticHealBatch caps how many missing messages one scan pulls per stream.
+// Runs and dense drop patterns produce many holes at once; healing them one
+// per window cannot keep up (#4067).
+const syntheticHealBatch = 10
+
 // mHeals counts cross-partition messages that were healed. For synthetics the
 // heal is receiver-side (remote = the source partition the message was pulled
 // from); for anchors it is source-side (remote = the destination partition the
@@ -94,11 +99,36 @@ func (c *Conductor) requestMissingSynthetics(ctx context.Context, batch *databas
 			continue
 		}
 
-		err := c.requestSyntheticFrom(ctx, part.Url, want)
-		if err != nil {
-			slog.ErrorContext(ctx, "Failed to request missing synthetic",
-				"source", part.Url, "destination", c.Url(), "number", want, "error", err)
-			continue
+		// Pull EVERY missing message in the pending window (nil entries), not
+		// just Delivered+1 — a run of consecutive drops or a dense drop
+		// pattern would otherwise heal one message per window and never catch
+		// up (#4067). The receiver knows exactly which sequence numbers are
+		// holes; batch them, capped per scan. Each pull is idempotent.
+		healed := 0
+		for i, txid := range part.Pending {
+			if txid != nil {
+				continue
+			}
+			seq := part.Delivered + 1 + uint64(i)
+			err := c.requestSyntheticFrom(ctx, part.Url, seq)
+			if err != nil {
+				slog.ErrorContext(ctx, "Failed to request missing synthetic",
+					"source", part.Url, "destination", c.Url(), "number", seq, "error", err)
+				break
+			}
+			healed++
+			if healed >= syntheticHealBatch {
+				break
+			}
+		}
+		if healed == 0 {
+			// Delivered+1 may be missing without a pending entry
+			err := c.requestSyntheticFrom(ctx, part.Url, want)
+			if err != nil {
+				slog.ErrorContext(ctx, "Failed to request missing synthetic",
+					"source", part.Url, "destination", c.Url(), "number", want, "error", err)
+				continue
+			}
 		}
 	}
 	return nil

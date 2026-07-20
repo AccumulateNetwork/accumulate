@@ -36,7 +36,8 @@ func TestSyntheticHealing(t *testing.T) {
 
 	// Drop the first synthetic deposit exactly once. Every later deposit's
 	// synthetic will be received but stuck pending behind the missing one.
-	var didDrop bool
+	const drops = 3 // a RUN of consecutive losses must heal batched (#4067)
+	var dropped int
 
 	globals := new(core.GlobalValues)
 	globals.ExecutorVersion = ExecutorVersionLatest
@@ -47,7 +48,7 @@ func TestSyntheticHealing(t *testing.T) {
 		simulator.EnableSyntheticHealing(),
 
 		simulator.CaptureDispatchedMessages(func(ctx context.Context, env *messaging.Envelope) (send bool, err error) {
-			if didDrop {
+			if dropped >= drops {
 				return true, nil
 			}
 
@@ -65,7 +66,7 @@ func TestSyntheticHealing(t *testing.T) {
 				case messaging.MessageWithTransaction:
 					if m.GetTransaction().Body.Type() == TransactionTypeSyntheticDepositTokens {
 						fmt.Printf("Dropping synthetic %X\n", m.GetTransaction().GetHash()[:4])
-						didDrop = true
+						dropped++
 						return false, nil
 					}
 				}
@@ -93,7 +94,7 @@ func TestSyntheticHealing(t *testing.T) {
 	}
 
 	// Confirm the wedge actually formed.
-	sim.StepUntil(True(func(*Harness) bool { return didDrop }))
+	sim.StepUntil(True(func(*Harness) bool { return dropped >= drops }))
 
 	// All deposits — including the one whose synthetic was dropped — must
 	// eventually deliver once healing pulls the missing message.
