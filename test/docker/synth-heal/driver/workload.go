@@ -255,6 +255,16 @@ func bootstrap(ctx context.Context, e *env, parts []string, kinds []kind) *world
 		e.nudgeTo[p] = lite
 	}
 
+	// The faucet's own partition needs a nudge target too. Accounts created
+	// there still arrive by synthetic transaction — a lite account and an ADI
+	// are different root identities, so the produce is sequenced and dropped
+	// like any other, even though source and destination are the same
+	// partition. Nudging a foreign partition does not advance that stream.
+	if _, ok := e.nudgeTo[e.srcPart]; !ok {
+		_, local := keyRoutingTo(e.tree, e.srcPart)
+		e.nudgeTo[e.srcPart] = local
+	}
+
 	for _, t := range w.targets {
 		// Fund the lite account. This also creates it and its identity, so
 		// later credit purchases have somewhere to land.

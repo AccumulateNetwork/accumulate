@@ -1,9 +1,17 @@
 #!/usr/bin/env bash
-# Docker test for #4064: reproduce a wedged synthetic stream and prove
+# Docker test for #4064/#4067: reproduce a wedged synthetic stream and prove
 # receiver-pull healing recovers it over a real libp2p network.
 #
-#   ./run-test.sh            # build image if needed, run, tear down
-#   KEEP=1 ./run-test.sh     # leave the network up afterward for inspection
+# The load generator is the driver's MIXED workload — every user transaction
+# type that produces a cross-partition synthetic — so this covers every heal
+# path, not just token deposits. The verdict fails if any expected synthetic
+# type was never produced.
+#
+#   ./run-test.sh                 # build image if needed, run, tear down
+#   KEEP=1 ./run-test.sh          # leave the network up afterward
+#   DROP='*:%16' ./run-test.sh    # recurring drops instead of one per node
+#   WORKLOAD=transfers ./run-test.sh   # the original lite->lite-only repro
+#   COUNT=128 ./run-test.sh       # longer run
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -37,15 +45,16 @@ done
 echo "API is serving; letting the network produce a few blocks..."
 sleep 15
 
-echo "== Driving cross-partition sends (first synthetic is dropped) =="
+echo "== Driving the ${WORKLOAD:-mixed} workload (drop pattern ${DROP:-*:1}) =="
 rc=0
 go run "$repo/test/docker/synth-heal/driver" -endpoint http://localhost:26660 \
-  -workload transfers -count 5 -timeout 240s || rc=$?
+  -workload "${WORKLOAD:-mixed}" -count "${COUNT:-64}" -timeout "${TIMEOUT:-20m}" || rc=$?
 
 echo
 echo "== Evidence =="
 echo "-- drop (wedge formed) --"
-$compose logs 2>/dev/null | grep -i "dropping synthetic envelope" | head -3 || echo "(none)"
+# "synthetic envelope" is the *:N form, "sequenced envelope" the *:%K form.
+$compose logs 2>/dev/null | grep -iE "dropping (synthetic|sequenced) envelope" | head -3 || echo "(none)"
 echo "-- heal counters via ConsensusStatus, every validator (receiver-pull fired) --"
 # The jitter picks WHICH validator pulls (occasionally two overlap — harmless,
 # duplicates are idempotent), so ask every node for its own counters.
@@ -64,7 +73,7 @@ if [ "$rc" -eq 0 ] && [ -n "$heals" ]; then
   echo; echo "RESULT: PASS (stream wedged and healed via receiver-pull)"
   rc=0
 elif [ "$rc" -eq 0 ]; then
-  echo; echo "RESULT: INCONCLUSIVE (deposits delivered but no heal was recorded)"
+  echo; echo "RESULT: INCONCLUSIVE (workload delivered but no heal was recorded)"
   rc=1
 else
   echo; echo "RESULT: FAIL (driver exit $rc)"

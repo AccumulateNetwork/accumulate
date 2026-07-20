@@ -1,26 +1,27 @@
-# Synthetic-healing docker test (#4064)
+# Synthetic-healing docker test (#4064, #4067)
 
 Reproduces a **wedged synthetic stream** on a real multi-container libp2p network
-and proves that **receiver-pull healing** recovers it.
+and proves that **receiver-pull healing** recovers it — across **every**
+transaction type that produces a cross-partition synthetic.
 
 ## What it does
 
 1. `init` generates a 3-node network (each node runs the Directory plus one BVN)
    and turns on `enable-synthetic-healing` for every node.
-2. Every node runs with `ACC_DEBUG_DROP_SYNTHETIC=*:1`, a debug hook that
-   **silently drops the first cross-partition synthetic the node emits**.
-   Production has no automatic synthetic retry, so that single drop wedges every
-   later synthetic behind it — exactly the mainnet incident this issue is about.
-3. `driver` funds from the genesis faucet and drives cross-partition traffic —
-   see [Workloads](#workloads); `run-test.sh` here uses `-workload transfers`,
-   five ACME sends. The first send's synthetic is dropped; the rest pile up
-   pending.
+2. Every node runs with `ACC_DEBUG_DROP_SYNTHETIC=$DROP` (default `*:1`), a
+   debug hook that **silently drops cross-partition synthetics**. Production has
+   no automatic synthetic retry, so a single drop wedges every later synthetic
+   behind it — exactly the mainnet incident this issue is about.
+3. `driver` funds from the genesis faucet and drives the **mixed** workload —
+   see [Workloads](#workloads) — so every heal path is exercised, not just token
+   deposits.
 4. With healing enabled, the destination partition pulls the missing message
    from the source partition's sequencer over real libp2p and re-submits it; the
    normal `MessageIsReady` cascade then drains the tail.
-5. The driver asserts the recipient eventually receives **all five** deposits,
-   and `run-test.sh` confirms `accumulate_crosschain_heals_total` incremented —
-   proving the recovery went through the receiver-pull healer, not another path.
+5. The driver asserts every followed transaction and every message it produced
+   was delivered, **and** that every expected synthetic type was produced;
+   `run-test.sh` confirms the heal counters incremented — proving the recovery
+   went through the receiver-pull healer, not another path.
 
 ## Workloads
 
@@ -68,28 +69,45 @@ expected synthetic type actually crosses a partition boundary.
 ## Run
 
 ```sh
-./run-test.sh            # builds the image if needed, runs, tears down
-KEEP=1 ./run-test.sh     # leave the network up afterwards for inspection
+./run-test.sh                      # builds the image if needed, runs, tears down
+KEEP=1 ./run-test.sh               # leave the network up afterwards for inspection
+DROP='*:%16' ./run-test.sh         # recurring drops instead of one per node
+WORKLOAD=transfers ./run-test.sh   # the original lite -> lite-only repro
+COUNT=128 TIMEOUT=30m ./run-test.sh
 ```
-
-`../synth-mixed/` is the same harness wired for the mixed workload, on its own
-compose project (`synthmix`), container names (`acc-mx-*`), image tag
-(`acc-synthmix:test`) and host ports (26670+), so it can run alongside this one.
 
 Expected tail:
 
 ```
 == cross-partition message coverage ==
-   syntheticDepositTokens           produced=5      delivered=5
+   creditPayment                    produced=9      delivered=9
+   signature                        produced=9      delivered=9
+   signatureRequest                 produced=18     delivered=18
+   syntheticBurnTokens              produced=3      delivered=3
+   syntheticCreateIdentity          produced=3      delivered=3
+   syntheticDepositCredits          produced=9      delivered=9
+   syntheticDepositTokens           produced=28     delivered=28
+   syntheticWriteData               produced=12     delivered=12
+   writeData                        produced=9      delivered=9
 
 PASS: every tracked transaction was delivered and every expected synthetic type was produced
 -- drop (wedge formed) --
 acc-bvn2 | ... DEBUG dropping synthetic envelope destination=acc://bvn-BVN1.acme
 -- heal counters via ConsensusStatus, every validator (receiver-pull fired) --
   acc-bvn1:
-    BVN1 "syntheticHeals":1
+    BVN1 "syntheticHeals":2
 RESULT: PASS (stream wedged and healed via receiver-pull)
 ```
+
+`signature` and `writeData` are in the table because they genuinely cross a
+partition boundary too: a cross-auth transaction forwards its signature to the
+principal's partition, and the transaction itself is executed there. They are
+healed like any other cross-partition message. A `!` in the left margin marks a
+type with undelivered messages, or one that was expected but never produced —
+either fails the run.
+
+The soak (`soak/soak.sh`) drives the same mixed workload at a fixed TPS for
+hours, with chaos restarts, using `*:%97+3` so drops recur throughout.
 
 ## Notes
 

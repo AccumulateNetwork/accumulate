@@ -21,7 +21,7 @@ up=""; for _ in $(seq 1 60); do curl -sf -X POST http://localhost:26660/v3 -H "c
 
 # Load driver (host)
 nohup go run "$repo/test/docker/synth-heal/driver" -endpoint http://localhost:26660 \
-  -workload transfers -tps "$TPS" -duration "$DURATION" -timeout 26h >> "$log" 2>&1 &
+  -workload mixed -tps "$TPS" -duration "$DURATION" -timeout 26h >> "$log" 2>&1 &
 DRIVER=$!
 
 # Chaos: every ~10 min disturb ONE random node (quorum 3/4 preserved)
