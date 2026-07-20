@@ -34,9 +34,11 @@ import (
 const syntheticHealWindow = 10 * time.Second
 
 // syntheticHealBatch caps how many missing messages one scan pulls per stream.
-// Runs and dense drop patterns produce many holes at once; healing them one
-// per window cannot keep up (#4067).
-const syntheticHealBatch = 10
+// Drain time must not scale with backlog: a stream that missed hundreds of
+// messages during an outage has to catch up in a window or two, not minutes
+// (#4067). Safe to be large because per-sequence suppression bounds heal
+// traffic by DISTINCT hole; the remaining bound is mempool capacity.
+const syntheticHealBatch = 200
 
 // mHeals counts cross-partition messages that were healed. For synthetics the
 // heal is receiver-side (remote = the source partition the message was pulled
@@ -149,9 +151,12 @@ func (c *Conductor) requestMissingSynthetics(ctx context.Context, batch *databas
 			}
 			err := c.requestSyntheticFrom(ctx, part.Url, seq)
 			if err != nil {
+				// Never abandon the batch: delivery is ordered, so failing to
+				// pull the FIRST hole must not stop us pulling the rest — and
+				// a stream must never wedge because one pull failed (#4067).
 				slog.ErrorContext(ctx, "Failed to request missing synthetic",
 					"source", part.Url, "destination", c.Url(), "number", seq, "error", err)
-				break
+				continue
 			}
 			healed++
 			if healed >= syntheticHealBatch {
@@ -233,7 +238,23 @@ func (c *Conductor) requestSyntheticFrom(ctx context.Context, source *url.URL, n
 	// from the source partition's sequencer. Routing sends this to whatever
 	// live node serves the source partition; any of them holds the message
 	// (the source provably produced it), so we don't target a specific node.
-	r, err := c.Sequencer.Sequence(ctx, source.JoinPath(protocol.Synthetic), c.Url(), num, private.SequenceOptions{})
+	// Retry: routing picks a peer per attempt and marks failures bad, so a
+	// retry lands on a different node. Without this, ONE transient
+	// "no live peers" permanently wedged a stream in the #4067 soak — the
+	// mechanism meant to prevent wedges became the cause of one.
+	var r *api.MessageRecord[messaging.Message]
+	var err error
+	for attempt := 0; attempt < 3; attempt++ {
+		r, err = c.Sequencer.Sequence(ctx, source.JoinPath(protocol.Synthetic), c.Url(), num, private.SequenceOptions{})
+		if err == nil {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return errors.UnknownError.WithFormat("request synthetic %v→%v #%d: %w", source, c.Url(), num, ctx.Err())
+		case <-time.After(250 * time.Millisecond):
+		}
+	}
 	if err != nil {
 		return errors.UnknownError.WithFormat("request synthetic %v→%v #%d: %w", source, c.Url(), num, err)
 	}
