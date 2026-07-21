@@ -59,6 +59,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -698,6 +699,22 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 		base := execOpts.NewDispatcher
 		execOpts.NewDispatcher = func() execute.Dispatcher {
 			return &droppingDispatcher{Dispatcher: base(), dropper: synthDrop, anchorDropper: anchorDrop}
+		}
+		// Anchors — and the DN-directed cross-chain messages that ride the
+		// anchoring path — are dispatched by the conductor, not the executor, so
+		// the dispatcher wrapper above never sees them. That is why anchor drops
+		// (and any DN-destined drop) otherwise never fire. Drop them here too,
+		// via the conductor's test-only Intercept hook. In modulo mode each
+		// sequence is dropped exactly once, so the healer's re-submission of that
+		// sequence still passes and the wedge recovers.
+		conductor.Intercept = func(ctx context.Context, env *messaging.Envelope) (bool, error) {
+			if anchorDrop != nil && anchorDrop.tryDropEnv(env) {
+				return false, nil
+			}
+			if synthDrop != nil && synthDrop.tryDropEnv(env) {
+				return false, nil
+			}
+			return true, nil
 		}
 	}
 

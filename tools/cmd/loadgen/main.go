@@ -30,11 +30,13 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
 	"math/rand"
 	"os"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -68,10 +70,20 @@ type env struct {
 	growSlots chan struct{}
 	nonce     nonce
 
+	// signerLocks serializes each signer's draw-and-submit; see muFor.
+	signerLocks sync.Map // signer URL string -> *sync.Mutex
+
 	// treasuryCredits is the treasury's credit balance in credit-units, kept
 	// fresh by the funding keeper. Actions consult it instead of querying, so
 	// the check costs nothing per transaction.
 	treasuryCredits atomic.Uint64
+
+	// statsPhase drives the phase field of the live stats file:
+	// 0 generating, 1 settling (waiting for delivery), 2 done.
+	statsPhase atomic.Int32
+
+	// targetTps is the configured -tps, reported in the stats file.
+	targetTps float64
 }
 
 // canPay reports whether the treasury can cover a fee, in credit-units. A
@@ -81,8 +93,44 @@ func (e *env) canPay(units uint64) bool {
 	return e.treasuryCredits.Load() >= units
 }
 
-// submitAsTreasury submits a transaction signed by the treasury and debits the
-// cached balance.
+// txBuilder is the tail of a build chain: it produces the signed envelope.
+type txBuilder interface {
+	Done() (*messaging.Envelope, error)
+}
+
+// muFor returns the submission lock for a signer.
+//
+// Every transaction a signer makes must reach the mempool in the same order its
+// timestamp was drawn. The executor rejects any signature whose timestamp is
+// not strictly greater than that signer's last (BadTimestamp,
+// internal/core/execute/v2/block/sig_user.go), and a rejected signature does
+// not fail loudly — the transaction is stored with no signature and left
+// pending forever. The global nonce makes timestamps unique and monotonic in
+// draw order, but that is not enough: when several goroutines sign as the same
+// signer — above all the treasury, which the main loop and every background
+// goroutine draw on — whoever draws a timestamp first may submit it second, and
+// the lower timestamp is then executed after the higher one and rejected.
+//
+// Holding this lock across [draw nonce -> submit] makes submit order match draw
+// order for each signer, so the timestamps a signer presents are monotonic in
+// execution order too. Different signers take different locks, so unrelated
+// signers still submit concurrently.
+func (e *env) muFor(signer *url.URL) *sync.Mutex {
+	m, _ := e.signerLocks.LoadOrStore(signer.String(), &sync.Mutex{})
+	return m.(*sync.Mutex)
+}
+
+// sign serializes a signer's draw-and-submit. build must draw its own timestamp
+// (e.nonce.next()), so the draw happens under the lock alongside the submit.
+func (e *env) sign(ctx context.Context, signer *url.URL, build func() txBuilder) ([]*url.TxID, error) {
+	mu := e.muFor(signer)
+	mu.Lock()
+	defer mu.Unlock()
+	return e.submit(ctx, build())
+}
+
+// submitAsTreasury submits a treasury-signed transaction — serialized on the
+// treasury's signer lock, see muFor — and debits the cached balance.
 //
 // Polling alone is not enough: the keeper refreshes every few seconds, and at
 // any real rate hundreds of transactions are signed in between. A cache that
@@ -90,10 +138,8 @@ func (e *env) canPay(units uint64) bool {
 // each one is stranded pending forever. Debiting an over-estimate as we spend
 // keeps the cache conservative between refreshes — the worst case is skipping
 // slightly early and refilling slightly sooner.
-func (e *env) submitAsTreasury(ctx context.Context, b interface {
-	Done() (*messaging.Envelope, error)
-}) ([]*url.TxID, error) {
-	ids, err := e.submit(ctx, b)
+func (e *env) submitAsTreasury(ctx context.Context, build func() txBuilder) ([]*url.TxID, error) {
+	ids, err := e.sign(ctx, e.treasury.id, build)
 	if err == nil {
 		for {
 			have := e.treasuryCredits.Load()
@@ -128,6 +174,7 @@ func main() {
 	maxStranded := flag.Int("max-stranded", 0, "exit non-zero if more than this many followed transactions never landed")
 	reportParts := flag.Bool("report-partitions", false, "also report how accounts and traffic landed across partitions")
 	reportHeals := flag.Bool("report-heals", false, "also report each validator's heal counters")
+	statsFile := flag.String("stats-file", "", "if set, write a live JSON snapshot of the run (per-type mix, totals, account counts) here every few seconds")
 	flag.Parse()
 
 	// -duration selects a timed run; otherwise -count transactions are sent at
@@ -169,6 +216,7 @@ func main() {
 	}
 	e.nonce.v.Store(uint64(time.Now().UTC().UnixMilli()))
 	e.track = newTracker(e.Q)
+	e.targetTps = *tps
 
 	log.Printf("== funding the treasury ==")
 	e.treasury, err = e.openTreasury(ctx, *faucetSeed)
@@ -194,6 +242,13 @@ func main() {
 	// Keep the treasury solvent for the length of the run.
 	go e.keepTreasuryFunded(ctx, *faucetSeed == "")
 
+	// A live stats file lets an external monitor read the per-type mix and
+	// totals while the run is in flight, not only from the end-of-run report.
+	start := time.Now()
+	if *statsFile != "" {
+		go e.writeStatsLoop(ctx, *statsFile, start, total)
+	}
+
 	log.Printf("== generating %d transactions ==", total)
 	limit := time.Duration(0)
 	if timed {
@@ -205,8 +260,13 @@ func main() {
 	// its transactions are counted rather than abandoned.
 	e.drainGrowth(ctx, 2*time.Minute)
 
+	e.statsPhase.Store(1)
 	log.Printf("== waiting for delivery ==")
 	stranded := e.track.settle(ctx, *grace)
+	e.statsPhase.Store(2)
+	if *statsFile != "" {
+		e.writeStats(*statsFile, start, total) // a final snapshot marked done
+	}
 
 	e.reportMix()
 	if *reportParts {
@@ -276,6 +336,7 @@ func generate(ctx context.Context, e *env, total int, tps float64, limit time.Du
 			}
 		default:
 			sent++
+			e.track.generated(act.name)
 			if trackEvery <= 1 || i%trackEvery == 0 {
 				e.track.follow(act.name, ids)
 			}
@@ -337,9 +398,11 @@ func (e *env) openTreasury(ctx context.Context, seed string) (*liteAccount, erro
 	}
 
 	// A lite identity needs credits before it can sign anything.
-	ids, err := e.submit(ctx, e.build(l).
-		AddCredits().WithOracle(e.oracle).Purchase(60000).To(l.id).
-		SignWith(l.id).Version(1).Timestamp(e.nonce.next()).PrivateKey(l.key))
+	ids, err := e.sign(ctx, l.id, func() txBuilder {
+		return e.build(l).
+			AddCredits().WithOracle(e.oracle).Purchase(60000).To(l.id).
+			SignWith(l.id).Version(1).Timestamp(e.nonce.next()).PrivateKey(l.key)
+	})
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("buy credits for the treasury: %w", err)
 	}
@@ -348,6 +411,83 @@ func (e *env) openTreasury(ctx context.Context, seed string) (*liteAccount, erro
 		return nil, err
 	}
 	return l, nil
+}
+
+// liveStats is the JSON an external monitor reads while the run is in flight.
+type liveStats struct {
+	UpdatedUnix int64               `json:"updatedUnix"`
+	StartUnix   int64               `json:"startUnix"`
+	ElapsedSec  int64               `json:"elapsedSec"`
+	Phase       string              `json:"phase"` // generating | settling | done
+	Target      int                 `json:"target"`
+	Generated   int                 `json:"generated"`
+	Rejected    int                 `json:"rejected"`
+	Skipped     int                 `json:"skipped"`
+	Rate        float64             `json:"rate"`      // cumulative average user tx/s
+	TargetTps   float64             `json:"targetTps"` // configured -tps target
+	PerType     map[string]typeStat `json:"perType"`
+	Accounts    struct {
+		Identities   int `json:"identities"`
+		KeyBooks     int `json:"keyBooks"`
+		KeyPages     int `json:"keyPages"`
+		TokenIssuers int `json:"tokenIssuers"`
+		Accounts     int `json:"accounts"`
+	} `json:"accounts"`
+}
+
+// writeStatsLoop refreshes the stats file every few seconds until the context
+// ends. A monitor polls the file; the writer never blocks the generator.
+func (e *env) writeStatsLoop(ctx context.Context, path string, start time.Time, total int) {
+	for {
+		e.writeStats(path, start, total)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(3 * time.Second):
+		}
+	}
+}
+
+// writeStats writes one snapshot atomically (temp file + rename) so a reader
+// never sees a half-written file.
+func (e *env) writeStats(path string, start time.Time, total int) {
+	perType, gen, rej, skip := e.track.snapshot()
+	phase := []string{"generating", "settling", "done"}[e.statsPhase.Load()]
+	elapsed := time.Since(start).Seconds()
+	rate := 0.0
+	if elapsed > 0 {
+		rate = float64(gen) / elapsed
+	}
+	s := liveStats{
+		UpdatedUnix: time.Now().Unix(),
+		StartUnix:   start.Unix(),
+		ElapsedSec:  int64(elapsed),
+		Phase:       phase,
+		Target:      total,
+		Generated:   gen,
+		Rejected:    rej,
+		Skipped:     skip,
+		Rate:        rate,
+		TargetTps:   e.targetTps,
+		PerType:     perType,
+	}
+	adis, books, pages, accts, issuers := e.u.counts()
+	s.Accounts.Identities = adis
+	s.Accounts.KeyBooks = books
+	s.Accounts.KeyPages = pages
+	s.Accounts.TokenIssuers = issuers
+	s.Accounts.Accounts = accts
+
+	b, err := json.MarshalIndent(&s, "", "  ")
+	if err != nil {
+		return
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, b, 0o644); err != nil {
+		log.Printf("stats: write: %v", err)
+		return
+	}
+	_ = os.Rename(tmp, path)
 }
 
 // isSet reports whether a flag was given on the command line.
@@ -372,10 +512,16 @@ func fatalIf(err error, format string, args ...any) {
 //
 // It MUST be atomic. The generation loop, the lite-account promoter, the
 // treasury keeper and every background account-creation goroutine all draw
-// from it concurrently. A plain increment races, two callers get the same
-// timestamp, and the second signature for that signer is rejected as a replay
-// — which does not fail loudly: the transaction is simply stranded pending
-// forever with no signature recorded against it.
+// from it concurrently; a plain increment races and hands two callers the same
+// timestamp, and the second signature for that signer is rejected as a replay.
+//
+// Atomicity is necessary but not sufficient: unique, monotonic-in-draw-order
+// timestamps still strand transactions if a signer submits them out of order,
+// because the executor rejects any timestamp that is not strictly greater than
+// the signer's last. Ordering the submissions of each signer is muFor's job;
+// this only guarantees the values themselves never collide. Neither failure is
+// loud — a rejected signature leaves the transaction pending forever with no
+// signature recorded against it.
 type nonce struct{ v atomic.Uint64 }
 
 func (n *nonce) next() *uint64 {

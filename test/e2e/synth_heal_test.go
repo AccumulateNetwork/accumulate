@@ -14,6 +14,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -111,6 +112,88 @@ func TestSyntheticHealing(t *testing.T) {
 	// And the recovery went through the receiver-pull healer (proving the fix
 	// ran, not some other retry path).
 	require.Greater(t, gatherHealCount(t), healsBefore, "expected synthetic healing to fire")
+}
+
+// TestSyntheticHeldForMissingAnchor reproduces the #4070 wedge: a synthetic that
+// arrives before its proof anchor. Under network disruption the DN→BVN anchor is
+// delayed, so the synthetic's DeliverTx anchor check fails. It must be HELD
+// (recorded pending) and re-attempted IN PLACE when the anchor arrives — not
+// terminally failed. Terminal failure wedges the stream permanently: the healer
+// re-submits a byte-identical message, which is deduplicated and never
+// re-processed. This restores the V1 hold-for-anchor behavior that V2 dropped.
+func TestSyntheticHeldForMissingAnchor(t *testing.T) {
+	var timestamp uint64
+	var trap bool // while true, drop DN anchors destined to BVN1
+
+	globals := new(core.GlobalValues)
+	globals.ExecutorVersion = ExecutorVersionLatest // V2Jiuquan gates the hold
+	sim := NewSim(t,
+		simulator.SimpleNetwork(t.Name(), 3, 1),
+		simulator.GenesisWith(GenesisTime, globals),
+		simulator.SkipProposalCheck(),
+
+		// Drop directory anchors to BVN1 while trapping, so the deposit's synthetic
+		// arrives at BVN1 with its proof anchor missing → the anchor check fails.
+		simulator.CaptureDispatchedMessages(func(ctx context.Context, env *messaging.Envelope) (send bool, err error) {
+			if !trap || len(env.Messages) != 1 {
+				return true, nil
+			}
+			blk, ok := env.Messages[0].(*messaging.BlockAnchor)
+			if !ok {
+				return true, nil
+			}
+			seq, ok := blk.Anchor.(*messaging.SequencedMessage)
+			if !ok {
+				return true, nil
+			}
+			txn, ok := seq.Message.(*messaging.TransactionMessage)
+			if !ok {
+				return true, nil
+			}
+			if _, ok := txn.Transaction.Body.(*DirectoryAnchor); !ok {
+				return true, nil
+			}
+			if seq.Destination != nil && seq.Destination.Equal(PartitionUrl("BVN1")) {
+				return false, nil // drop
+			}
+			return true, nil
+		}),
+	)
+
+	alice := acctesting.GenerateKey("Alice")
+	aliceUrl := acctesting.AcmeLiteAddressStdPriv(alice)
+	bob := acctesting.GenerateKey("Bob")
+	bobUrl := acctesting.AcmeLiteAddressStdPriv(bob)
+	sim.SetRoute(aliceUrl, "BVN0")
+	sim.SetRoute(bobUrl, "BVN1")
+	MakeLiteTokenAccount(t, sim.DatabaseFor(aliceUrl), alice[32:], AcmeUrl())
+
+	// Trap DN→BVN1 anchors, then send a cross-partition deposit BVN0→BVN1.
+	trap = true
+	st := sim.SubmitTxnSuccessfully(MustBuild(t,
+		build.Transaction().For(aliceUrl).
+			SendTokens(1, protocol.AcmePrecisionPower).To(bobUrl).
+			SignWith(aliceUrl).Version(1).Timestamp(&timestamp).PrivateKey(alice)))
+	sim.StepUntil(Txn(st.TxID).Succeeds())
+
+	// The deposit's synthetic reaches BVN1 but its anchor is trapped, so it is
+	// held — the recipient account is not even created. (Without the fix the
+	// synthetic would be terminally failed here and never recover.)
+	sim.StepN(25)
+	heldErr := sim.DatabaseFor(bobUrl).View(func(batch *database.Batch) error {
+		_, err := batch.Account(bobUrl).Main().Get()
+		return err
+	})
+	require.Error(t, heldErr, "deposit must be held while its anchor is missing (recipient not yet created)")
+
+	// Release: stop trapping so anchor healing re-pushes the DN anchor. The held
+	// synthetic re-attempts in place (no re-submission) and delivers.
+	trap = false
+	sim.StepUntil(
+		Txn(st.TxID).Produced().Succeeds())
+
+	lta := GetAccount[*LiteTokenAccount](t, sim.DatabaseFor(bobUrl), bobUrl)
+	require.Equal(t, int(protocol.AcmePrecision), int(lta.Balance.Uint64()))
 }
 
 // gatherHealCount sums the accumulate_crosschain_heals_total counter across all

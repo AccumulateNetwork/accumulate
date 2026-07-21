@@ -19,9 +19,15 @@ for _ in $(seq 1 90); do
 done
 up=""; for _ in $(seq 1 60); do curl -sf -X POST http://localhost:26660/v3 -H "content-type: application/json" -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"network-status\",\"params\":{\"partition\":\"Directory\"}}" >/dev/null 2>&1 && { up=1; break; }; sleep 5; done; [ -n "$up" ] || { echo "network never came up" | tee -a "$log"; exit 1; }; sleep 30
 
-# Load driver (host)
-nohup go run "$repo/test/docker/synth-heal/driver" -endpoint http://localhost:26660 \
-  -workload mixed -tps "$TPS" -duration "$DURATION" -timeout 26h >> "$log" 2>&1 &
+# Load generator (host): the general-purpose loadgen drives the full menu of
+# user transaction types against an ever-growing account set. -faucet-seed
+# FAUCET matches init's genesis faucet, so its treasury funds from there. A
+# small -max-stranded tolerance absorbs the odd straggler left by a chaos
+# pause/restart landing on the settle window without failing the whole run;
+# a strand regression produces far more than that.
+nohup go run "$repo/tools/cmd/loadgen" -endpoint http://localhost:26660 \
+  -faucet-seed FAUCET -tps "$TPS" -duration "$DURATION" -timeout 26h \
+  -grace 5m -max-stranded 20 -stats-file "$here/loadgen-stats.json" >> "$log" 2>&1 &
 DRIVER=$!
 
 # Chaos: every ~10 min disturb ONE random node (quorum 3/4 preserved)

@@ -41,6 +41,12 @@ type liteAccount struct {
 	// tokens to cannot: the deposit that creates it is asynchronous, and
 	// signing needs credits on top of that.
 	ready bool
+
+	// funded means the account has been sent ACME, so it can be a distribution
+	// SOURCE. Value cascades: the treasury seeds a few funded lites, and funded
+	// lites send to others, which become funded in turn — so sends originate
+	// from accounts on every partition rather than only the treasury's.
+	funded bool
 }
 
 // identity is an ADI and everything created under it.
@@ -214,6 +220,41 @@ func (u *universe) markReady(l *liteAccount) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	l.ready = true
+}
+
+// markFunded records that a lite has been sent ACME, so it can distribute.
+func (u *universe) markFunded(l *liteAccount) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	l.funded = true
+}
+
+// randSourceLite returns a random lite that can be a distribution SOURCE: ready
+// (holds credits to sign) and funded (holds ACME to send). nil if none yet.
+func (u *universe) randSourceLite() *liteAccount {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	var c []*liteAccount
+	for _, l := range u.lites {
+		if l.ready && l.funded {
+			c = append(c, l)
+		}
+	}
+	if len(c) == 0 {
+		return nil
+	}
+	return c[u.rng.Intn(len(c))]
+}
+
+// randPage returns a random key page in the identity's first book, or nil.
+func (u *universe) randPage(a *identity) *keyPage {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if len(a.books) == 0 || len(a.books[0].pages) == 0 {
+		return nil
+	}
+	p := a.books[0].pages
+	return p[u.rng.Intn(len(p))]
 }
 
 func (u *universe) intn(n int) int {

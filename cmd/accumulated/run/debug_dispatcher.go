@@ -14,11 +14,36 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
+
+// mDrops counts messages dropped by the debug drop hook, so wedges are read from
+// a counter rather than scraped from logs. kind is synthetic|anchor.
+var mDrops = promauto.NewCounterVec(prometheus.CounterOpts{
+	Namespace: "accumulate", Subsystem: "debug", Name: "dropped_total",
+	Help: "Cross-partition messages dropped by ACC_DEBUG_DROP_SYNTHETIC/ANCHOR",
+}, []string{"kind", "destination"})
+
+// dropKind labels a drop as anchor or synthetic.
+func dropKind(anchors bool) string {
+	if anchors {
+		return "anchor"
+	}
+	return "synthetic"
+}
+
+// dropLabel is the partition id of a destination URL, or the raw string.
+func dropLabel(dest *url.URL) string {
+	if id, ok := protocol.ParsePartitionUrl(dest); ok {
+		return id
+	}
+	return dest.String()
+}
 
 // synthDropper holds the shared "drop the first N synthetics to <dest>" state.
 // It exists ONLY to reproduce a stalled synthetic stream (#4064) in a real
@@ -35,11 +60,16 @@ type synthDropper struct {
 	// sequenced, every validator evaluates the same rule and drops the same
 	// message — a guaranteed real wedge with no coordination — while the
 	// healer's re-submission of the same sequence number passes (each seq is
-	// dropped only once per node). Recurs throughout a long soak (#4067).
+	// dropped only once per stream). Recurs throughout a long soak (#4067).
+	//
+	// For a "*" (all-destinations) spec the period is spread per destination
+	// partition — base+0 for the DN, base+n for BVN<n> — so the drop windows
+	// drift apart instead of every partition dropping at the same sequence (and,
+	// for anchors, which advance one-per-block, at the same time). See #4067.
 	modulo  uint64
 	run     uint64 // drop seqs where seq%modulo < run (a RUN of consecutive losses)
 	mu      sync.Mutex
-	dropped map[uint64]bool
+	dropped map[string]bool // keyed by "<destination>#<seq>": each stream drops independently
 }
 
 // parseDropSyntheticSpec parses "<partition>:<count>" (count defaults to 1).
@@ -69,7 +99,7 @@ func parseDropSyntheticSpec(spec string) *synthDropper {
 			d.run = r
 		}
 		d.modulo = k
-		d.dropped = map[uint64]bool{}
+		d.dropped = map[string]bool{}
 		slog.Warn("DEBUG sequence-drop enabled — every Kth sequence dropped once",
 			"destination", d.dest, "modulo", k)
 		return d
@@ -97,17 +127,33 @@ func (d *synthDropper) tryDrop(dest *url.URL, env *messaging.Envelope) bool {
 	}
 	if d.modulo > 0 {
 		seq, ok := envSequenceNumber(env, d.anchors)
-		if !ok || seq%d.modulo >= d.run {
+		if !ok {
 			return false
 		}
+		// A "*" spec gives each destination partition its own period so their
+		// drop windows drift apart; a specific-partition spec keeps its exact K.
+		k := d.modulo
+		if d.dest == "*" {
+			k += partitionOffset(dest)
+		}
+		if seq%k >= d.run {
+			return false
+		}
+		// Track drops per (destination, seq). A seq-only key let whichever
+		// stream reached a sequence first suppress the drop for every other
+		// stream sharing this dropper — so only one destination ever lost a
+		// message per sequence. Per-stream keying drops each independently,
+		// while still letting a healed re-submission of the same seq through.
+		key := dest.String() + "#" + strconv.FormatUint(seq, 10)
 		d.mu.Lock()
-		already := d.dropped[seq]
-		d.dropped[seq] = true
+		already := d.dropped[key]
+		d.dropped[key] = true
 		d.mu.Unlock()
 		if already {
 			return false // let the healed re-submission through
 		}
-		slog.Warn("DEBUG dropping sequenced envelope", "destination", dest, "sequence", seq, "anchor", d.anchors)
+		slog.Warn("DEBUG dropping sequenced envelope", "destination", dest, "sequence", seq, "anchor", d.anchors, "period", k)
+		mDrops.WithLabelValues(dropKind(d.anchors), dropLabel(dest)).Inc()
 		return true
 	}
 	if !envHasSynthetic(env) {
@@ -120,9 +166,68 @@ func (d *synthDropper) tryDrop(dest *url.URL, env *messaging.Envelope) bool {
 		}
 		if d.remain.CompareAndSwap(n, n-1) {
 			slog.Warn("DEBUG dropping synthetic envelope", "destination", dest, "remaining", n-1)
+			mDrops.WithLabelValues(dropKind(d.anchors), dropLabel(dest)).Inc()
 			return true
 		}
 	}
+}
+
+// tryDropEnv is tryDrop for the conductor's Intercept hook, which is handed only
+// the envelope — the destination lives inside the envelope's sequenced message.
+// Anchors, and DN-directed cross-chain messages, are dispatched by the conductor
+// rather than the executor, so this is the only place the drop hook can see them.
+func (d *synthDropper) tryDropEnv(env *messaging.Envelope) bool {
+	return d.tryDrop(envDestination(env, d.anchors), env)
+}
+
+// envDestination extracts the destination of the envelope's synthetic or anchor
+// message, mirroring envSequenceNumber.
+func envDestination(env *messaging.Envelope, anchors bool) *url.URL {
+	for _, msg := range env.Messages {
+		switch m := msg.(type) {
+		case *messaging.SyntheticMessage:
+			if !anchors {
+				if seq, ok := m.Message.(*messaging.SequencedMessage); ok {
+					return seq.Destination
+				}
+			}
+		case *messaging.BadSyntheticMessage:
+			if !anchors {
+				if seq, ok := m.Message.(*messaging.SequencedMessage); ok {
+					return seq.Destination
+				}
+			}
+		case *messaging.BlockAnchor:
+			if anchors {
+				if seq, ok := m.Anchor.(*messaging.SequencedMessage); ok {
+					return seq.Destination
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// partitionOffset gives each destination partition a small, stable period
+// offset so a "*" modulo spec de-correlates across partitions: the DN adds 0,
+// BVN<n> adds n. With base 211 that yields DN 211, BVN1 212, BVN2 213, BVN3 214.
+func partitionOffset(dest *url.URL) uint64 {
+	id, ok := protocol.ParsePartitionUrl(dest)
+	if !ok {
+		return 0
+	}
+	i := len(id)
+	for i > 0 && id[i-1] >= '0' && id[i-1] <= '9' {
+		i--
+	}
+	if i == len(id) {
+		return 0 // no trailing digits, e.g. the Directory
+	}
+	n, err := strconv.ParseUint(id[i:], 10, 64)
+	if err != nil {
+		return 0
+	}
+	return n
 }
 
 func (d *synthDropper) matches(dest *url.URL) bool {

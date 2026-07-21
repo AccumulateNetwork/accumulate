@@ -50,9 +50,11 @@ func (e *env) promoteLites(ctx context.Context) {
 			}
 			// Signing costs credits, which a plain token deposit does not give.
 			if !e.hasCredits(ctx, l.id) {
-				_, _ = e.submit(ctx, e.build(e.treasury).
-					AddCredits().WithOracle(e.oracle).Purchase(liteCreditGrant).To(l.id).
-					SignWith(e.treasury.id).Version(1).Timestamp(e.nonce.next()).PrivateKey(e.treasury.key))
+				_, _ = e.sign(ctx, e.treasury.id, func() txBuilder {
+					return e.build(e.treasury).
+						AddCredits().WithOracle(e.oracle).Purchase(liteCreditGrant).To(l.id).
+						SignWith(e.treasury.id).Version(1).Timestamp(e.nonce.next()).PrivateKey(e.treasury.key)
+				})
 				continue
 			}
 			e.u.markReady(l)
@@ -88,9 +90,11 @@ func (e *env) keepTreasuryFunded(ctx context.Context, useFaucetService bool) {
 		}
 
 		if e.treasuryCredits.Load() < minTreasuryCreditUnits {
-			if _, err := e.submit(ctx, e.build(t).
-				AddCredits().WithOracle(e.oracle).Purchase(treasuryCreditTopUp).To(t.id).
-				SignWith(t.id).Version(1).Timestamp(e.nonce.next()).PrivateKey(t.key)); err == nil {
+			if _, err := e.sign(ctx, t.id, func() txBuilder {
+				return e.build(t).
+					AddCredits().WithOracle(e.oracle).Purchase(treasuryCreditTopUp).To(t.id).
+					SignWith(t.id).Version(1).Timestamp(e.nonce.next()).PrivateKey(t.key)
+			}); err == nil {
 				log.Printf("treasury bought more credits")
 			}
 		}
@@ -150,58 +154,68 @@ func (e *env) growIdentity(ctx context.Context) error {
 	adi.books = append(adi.books, book)
 
 	t := e.treasury
-	ids, err := e.submit(ctx, e.build(t).
-		CreateIdentity(adiURL).WithKey(signerKey, protocol.SignatureTypeED25519).WithKeyBook(book.url).
-		SignWith(t.id).Version(1).Timestamp(e.nonce.next()).PrivateKey(t.key))
+	ids, err := e.sign(ctx, t.id, func() txBuilder {
+		return e.build(t).
+			CreateIdentity(adiURL).WithKey(signerKey, protocol.SignatureTypeED25519).WithKeyBook(book.url).
+			SignWith(t.id).Version(1).Timestamp(e.nonce.next()).PrivateKey(t.key)
+	})
 	if err != nil {
 		return errors.UnknownError.WithFormat("create identity: %w", err)
 	}
-	e.track.follow("grow:create-identity", ids)
+	e.track.track("grow:create-identity", ids)
 	if err := e.awaitAccount(ctx, page1.url, 3*time.Minute); err != nil {
 		return err
 	}
 
 	// The signer needs credits before it can sign anything.
-	ids, err = e.submit(ctx, e.build(t).
-		AddCredits().WithOracle(e.oracle).Purchase(pageCredits).To(page1.url).
-		SignWith(t.id).Version(1).Timestamp(e.nonce.next()).PrivateKey(t.key))
+	ids, err = e.sign(ctx, t.id, func() txBuilder {
+		return e.build(t).
+			AddCredits().WithOracle(e.oracle).Purchase(pageCredits).To(page1.url).
+			SignWith(t.id).Version(1).Timestamp(e.nonce.next()).PrivateKey(t.key)
+	})
 	if err != nil {
 		return errors.UnknownError.WithFormat("credit signer: %w", err)
 	}
-	e.track.follow("grow:add-credits", ids)
+	e.track.track("grow:add-credits", ids)
 	if err := e.awaitCredits(ctx, page1.url, 3*time.Minute); err != nil {
 		return err
 	}
 
 	// A token account, funded so it can send.
 	tokens := adiURL.JoinPath("tokens")
-	ids, err = e.submit(ctx, e.build(adi).
-		CreateTokenAccount(tokens).ForToken(protocol.AcmeUrl()).
-		SignWith(page1.url).Version(page1.version).Timestamp(e.nonce.next()).PrivateKey(signerKey))
+	ids, err = e.sign(ctx, page1.url, func() txBuilder {
+		return e.build(adi).
+			CreateTokenAccount(tokens).ForToken(protocol.AcmeUrl()).
+			SignWith(page1.url).Version(page1.version).Timestamp(e.nonce.next()).PrivateKey(signerKey)
+	})
 	if err != nil {
 		return errors.UnknownError.WithFormat("create token account: %w", err)
 	}
-	e.track.follow("grow:create-token-account", ids)
+	e.track.track("grow:create-token-account", ids)
 	if err := e.awaitAccount(ctx, tokens, 3*time.Minute); err != nil {
 		return err
 	}
 	adi.tokens = append(adi.tokens, tokens)
 
-	if _, err := e.submit(ctx, e.build(t).
-		SendTokens(fundTokenAccount, protocol.AcmePrecisionPower).To(tokens).
-		SignWith(t.id).Version(1).Timestamp(e.nonce.next()).PrivateKey(t.key)); err != nil {
+	if _, err := e.sign(ctx, t.id, func() txBuilder {
+		return e.build(t).
+			SendTokens(fundTokenAccount, protocol.AcmePrecisionPower).To(tokens).
+			SignWith(t.id).Version(1).Timestamp(e.nonce.next()).PrivateKey(t.key)
+	}); err != nil {
 		return errors.UnknownError.WithFormat("fund token account: %w", err)
 	}
 
 	// A data account.
 	data := adiURL.JoinPath("data")
-	ids, err = e.submit(ctx, e.build(adi).
-		CreateDataAccount(data).
-		SignWith(page1.url).Version(page1.version).Timestamp(e.nonce.next()).PrivateKey(signerKey))
+	ids, err = e.sign(ctx, page1.url, func() txBuilder {
+		return e.build(adi).
+			CreateDataAccount(data).
+			SignWith(page1.url).Version(page1.version).Timestamp(e.nonce.next()).PrivateKey(signerKey)
+	})
 	if err != nil {
 		return errors.UnknownError.WithFormat("create data account: %w", err)
 	}
-	e.track.follow("grow:create-data-account", ids)
+	e.track.track("grow:create-data-account", ids)
 	if err := e.awaitAccount(ctx, data, 3*time.Minute); err != nil {
 		return err
 	}
@@ -238,12 +252,14 @@ func (e *env) growPage(ctx context.Context, adi *identity, book *keyBook) error 
 		b = b.WithEntry().Key(keys[i], protocol.SignatureTypeED25519).FinishEntry()
 	}
 
-	ids, err := e.submit(ctx, b.
-		SignWith(signer.url).Version(signer.version).Timestamp(e.nonce.next()).PrivateKey(adi.key()))
+	ids, err := e.sign(ctx, signer.url, func() txBuilder {
+		return b.
+			SignWith(signer.url).Version(signer.version).Timestamp(e.nonce.next()).PrivateKey(adi.key())
+	})
 	if err != nil {
 		return errors.UnknownError.WithFormat("create key page: %w", err)
 	}
-	e.track.follow("grow:create-key-page", ids)
+	e.track.track("grow:create-key-page", ids)
 
 	page := &keyPage{
 		url:       protocol.FormatKeyPageUrl(book.url, uint64(len(book.pages))),
@@ -260,9 +276,11 @@ func (e *env) growPage(ctx context.Context, adi *identity, book *keyBook) error 
 	e.u.mu.Unlock()
 
 	// Pages need credits of their own to be updated later.
-	if _, err := e.submit(ctx, e.build(e.treasury).
-		AddCredits().WithOracle(e.oracle).Purchase(pageCredits).To(page.url).
-		SignWith(e.treasury.id).Version(1).Timestamp(e.nonce.next()).PrivateKey(e.treasury.key)); err != nil {
+	if _, err := e.sign(ctx, e.treasury.id, func() txBuilder {
+		return e.build(e.treasury).
+			AddCredits().WithOracle(e.oracle).Purchase(pageCredits).To(page.url).
+			SignWith(e.treasury.id).Version(1).Timestamp(e.nonce.next()).PrivateKey(e.treasury.key)
+	}); err != nil {
 		return errors.UnknownError.WithFormat("credit page: %w", err)
 	}
 
@@ -270,13 +288,15 @@ func (e *env) growPage(ctx context.Context, adi *identity, book *keyBook) error 
 	// outranks this page, so a high threshold here never strands anything.
 	if n > 1 {
 		threshold := uint64(1 + e.u.intn(n))
-		ids, err := e.submit(ctx, e.build(page).
-			UpdateKeyPage().SetThreshold(threshold).
-			SignWith(signer.url).Version(signer.version).Timestamp(e.nonce.next()).PrivateKey(adi.key()))
+		ids, err := e.sign(ctx, signer.url, func() txBuilder {
+			return e.build(page).
+				UpdateKeyPage().SetThreshold(threshold).
+				SignWith(signer.url).Version(signer.version).Timestamp(e.nonce.next()).PrivateKey(adi.key())
+		})
 		if err != nil {
 			return errors.UnknownError.WithFormat("set threshold: %w", err)
 		}
-		e.track.follow("grow:set-threshold", ids)
+		e.track.track("grow:set-threshold", ids)
 		e.u.mu.Lock()
 		page.threshold = threshold
 		page.version++
@@ -318,12 +338,14 @@ func (e *env) growToken(ctx context.Context, adi *identity) error {
 		tok.limited = true
 		b = b.WithSupplyLimit(tokenSupplyLimit)
 	}
-	ids, err := e.submit(ctx, b.
-		SignWith(signer.url).Version(signer.version).Timestamp(e.nonce.next()).PrivateKey(adi.key()))
+	ids, err := e.sign(ctx, signer.url, func() txBuilder {
+		return b.
+			SignWith(signer.url).Version(signer.version).Timestamp(e.nonce.next()).PrivateKey(adi.key())
+	})
 	if err != nil {
 		return errors.UnknownError.WithFormat("create token: %w", err)
 	}
-	e.track.follow("grow:create-token", ids)
+	e.track.track("grow:create-token", ids)
 	if err := e.awaitAccount(ctx, tok.url, 3*time.Minute); err != nil {
 		return err
 	}
@@ -332,13 +354,15 @@ func (e *env) growToken(ctx context.Context, adi *identity) error {
 	// to the issuer, so no TokenIssuerProof is needed.
 	for i := 0; i < 2; i++ {
 		acct := adi.url.JoinPath("tok" + itoa(n) + "-" + itoa(i))
-		ids, err := e.submit(ctx, e.build(adi).
-			CreateTokenAccount(acct).ForToken(tok.url).
-			SignWith(signer.url).Version(signer.version).Timestamp(e.nonce.next()).PrivateKey(adi.key()))
+		ids, err := e.sign(ctx, signer.url, func() txBuilder {
+			return e.build(adi).
+				CreateTokenAccount(acct).ForToken(tok.url).
+				SignWith(signer.url).Version(signer.version).Timestamp(e.nonce.next()).PrivateKey(adi.key())
+		})
 		if err != nil {
 			return errors.UnknownError.WithFormat("create token account: %w", err)
 		}
-		e.track.follow("grow:create-token-holder", ids)
+		e.track.track("grow:create-token-holder", ids)
 		if err := e.awaitAccount(ctx, acct, 3*time.Minute); err != nil {
 			return err
 		}
@@ -346,13 +370,15 @@ func (e *env) growToken(ctx context.Context, adi *identity) error {
 	}
 
 	// Issue an initial supply into the first account.
-	ids, err = e.submit(ctx, e.build(tok.url).
-		IssueTokens(initialIssuance, tok.precision).To(tok.accounts[0]).
-		SignWith(signer.url).Version(signer.version).Timestamp(e.nonce.next()).PrivateKey(adi.key()))
+	ids, err = e.sign(ctx, signer.url, func() txBuilder {
+		return e.build(tok.url).
+			IssueTokens(initialIssuance, tok.precision).To(tok.accounts[0]).
+			SignWith(signer.url).Version(signer.version).Timestamp(e.nonce.next()).PrivateKey(adi.key())
+	})
 	if err != nil {
 		return errors.UnknownError.WithFormat("issue tokens: %w", err)
 	}
-	e.track.follow("grow:issue-tokens", ids)
+	e.track.track("grow:issue-tokens", ids)
 
 	e.u.mu.Lock()
 	adi.issuers = append(adi.issuers, tok)
@@ -369,13 +395,15 @@ func (e *env) growBook(ctx context.Context, adi *identity) error {
 
 	key := newKey()
 	bookURL := adi.url.JoinPath("book" + itoa(len(adi.books)+1))
-	ids, err := e.submit(ctx, e.build(adi).
-		CreateKeyBook(bookURL).WithKey(key, protocol.SignatureTypeED25519).
-		SignWith(signer.url).Version(signer.version).Timestamp(e.nonce.next()).PrivateKey(adi.key()))
+	ids, err := e.sign(ctx, signer.url, func() txBuilder {
+		return e.build(adi).
+			CreateKeyBook(bookURL).WithKey(key, protocol.SignatureTypeED25519).
+			SignWith(signer.url).Version(signer.version).Timestamp(e.nonce.next()).PrivateKey(adi.key())
+	})
 	if err != nil {
 		return errors.UnknownError.WithFormat("create key book: %w", err)
 	}
-	e.track.follow("grow:create-key-book", ids)
+	e.track.track("grow:create-key-book", ids)
 
 	if err := e.awaitAccount(ctx, bookURL, 3*time.Minute); err != nil {
 		return err
@@ -403,13 +431,15 @@ func (e *env) growAccount(ctx context.Context, adi *identity) error {
 
 	if e.u.intn(2) == 0 {
 		u := adi.url.JoinPath("tokens" + itoa(len(adi.tokens)+1))
-		ids, err := e.submit(ctx, e.build(adi).
-			CreateTokenAccount(u).ForToken(protocol.AcmeUrl()).
-			SignWith(signer.url).Version(signer.version).Timestamp(e.nonce.next()).PrivateKey(adi.key()))
+		ids, err := e.sign(ctx, signer.url, func() txBuilder {
+			return e.build(adi).
+				CreateTokenAccount(u).ForToken(protocol.AcmeUrl()).
+				SignWith(signer.url).Version(signer.version).Timestamp(e.nonce.next()).PrivateKey(adi.key())
+		})
 		if err != nil {
 			return errors.UnknownError.WithFormat("create token account: %w", err)
 		}
-		e.track.follow("grow:create-token-account", ids)
+		e.track.track("grow:create-token-account", ids)
 		if err := e.awaitAccount(ctx, u, 3*time.Minute); err != nil {
 			return err
 		}
@@ -420,13 +450,15 @@ func (e *env) growAccount(ctx context.Context, adi *identity) error {
 	}
 
 	u := adi.url.JoinPath("data" + itoa(len(adi.data)+1))
-	ids, err := e.submit(ctx, e.build(adi).
-		CreateDataAccount(u).
-		SignWith(signer.url).Version(signer.version).Timestamp(e.nonce.next()).PrivateKey(adi.key()))
+	ids, err := e.sign(ctx, signer.url, func() txBuilder {
+		return e.build(adi).
+			CreateDataAccount(u).
+			SignWith(signer.url).Version(signer.version).Timestamp(e.nonce.next()).PrivateKey(adi.key())
+	})
 	if err != nil {
 		return errors.UnknownError.WithFormat("create data account: %w", err)
 	}
-	e.track.follow("grow:create-data-account", ids)
+	e.track.track("grow:create-data-account", ids)
 	if err := e.awaitAccount(ctx, u, 3*time.Minute); err != nil {
 		return err
 	}
@@ -475,9 +507,11 @@ const (
 	// run makes hundreds of thousands of transactions. Transfers therefore
 	// move dust — the point is to exercise the transaction, not move value.
 	sendAmount = 0.0001 // ACME per transfer or burn
+	liteSeed   = 0.1    // ACME the treasury seeds a lite with, enough to relay many times
 
 	liteCreditGrant = 500   // credits: a lite identity only signs cheap things
-	pageCreditGrant = 5000  // credits: per top-up for a key page
+	pageCreditGrant = 5000  // credits: treasury per top-up for a key page
+	adiCreditGrant  = 500   // credits: an identity buys this for a page from its OWN ACME
 	pageCredits     = 30000 // credits: what a new key page starts with
 
 	// A page must be able to afford the expensive transactions, not just the
@@ -485,7 +519,10 @@ const (
 	// that cannot pay has its SIGNATURE rejected, which leaves the transaction
 	// pending forever with no signature recorded rather than failing loudly.
 
-	fundTokenAccount = 1 // ACME into each new token account
+	fundTokenAccount = 1000 // ACME into each new token account: enough that the
+	//                        identity can send, burn, and buy its own credits for
+	//                        a long run, so cross-partition load originates from
+	//                        every identity's partition, not just the treasury's.
 	maxPageKeys      = 5 // most keys a generated page may carry
 
 	// Custom tokens.

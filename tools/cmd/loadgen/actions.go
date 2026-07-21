@@ -30,7 +30,7 @@ type action struct {
 // load looks like, but every structural transaction fires regularly.
 var menu = []action{
 	sendTokensLite, sendTokensADI, addCreditsLite, addCreditsPage,
-	writeDataADI, writeDataLite, burnTokens, burnCredits, transferCredits,
+	writeDataADI, writeDataLite, burnTokens, burnTokensADI, burnCredits, transferCredits,
 	setThreshold, addPageKey, updatePageKey, removePageKey,
 	updateAccountAuth, lockAccount,
 	addBook, addAccount,
@@ -67,23 +67,42 @@ func (e *env) pick() action {
 
 // --- value movement -------------------------------------------------------
 
-// sendTokensLite sends ACME to a lite account, occasionally a brand new one so
-// the set of lite accounts keeps growing.
+// sendTokensLite cascades ACME between lite accounts. A funded lite distributes
+// to another lite (occasionally a brand new one, so the set keeps growing), so
+// value moves account -> account -> account across partitions. The treasury only
+// seeds: when no funded lite exists yet, it sends a larger amount to one lite so
+// that lite can then relay many times.
 var sendTokensLite = action{
-	name: "send-tokens-lite", weight: 20,
+	name: "send-tokens-lite", weight: 18,
 	run: func(ctx context.Context, e *env) ([]*url.TxID, error) {
-		if !e.canPay(treasuryFloorUnits) {
-			return nil, errors.NotReady.With("treasury is low on credits")
-		}
 		to := e.u.randLite()
 		if to == nil || e.u.intn(8) == 0 {
 			to = newLiteAccount(e.u.rng)
 			e.u.addLite(to)
 		}
+
+		// Cascade: a funded, ready lite distributes to another lite.
+		if src := e.u.randSourceLite(); src != nil && src != to {
+			e.u.markFunded(to)
+			return e.sign(ctx, src.id, func() txBuilder {
+				return e.build(src).
+					SendTokens(sendAmount, protocol.AcmePrecisionPower).To(to.acct).
+					SignWith(src.id).Version(1).Timestamp(e.nonce.next()).PrivateKey(src.key)
+			})
+		}
+
+		// Seed: no funded lite yet — the treasury seeds this one so the cascade
+		// can start from it.
+		if !e.canPay(treasuryFloorUnits) {
+			return nil, errors.NotReady.With("treasury is low on credits")
+		}
+		e.u.markFunded(to)
 		t := e.treasury
-		return e.submitAsTreasury(ctx, e.build(t).
-			SendTokens(sendAmount, protocol.AcmePrecisionPower).To(to.acct).
-			SignWith(t.id).Version(1).Timestamp(e.nonce.next()).PrivateKey(t.key))
+		return e.submitAsTreasury(ctx, func() txBuilder {
+			return e.build(t).
+				SendTokens(liteSeed, protocol.AcmePrecisionPower).To(to.acct).
+				SignWith(t.id).Version(1).Timestamp(e.nonce.next()).PrivateKey(t.key)
+		})
 	},
 }
 
@@ -97,16 +116,19 @@ var sendTokensADI = action{
 		}
 		var to *url.URL
 		if other := e.u.randIdentity(); other != nil && len(other.tokens) > 0 && other != from {
-			to = other.tokens[0]
+			to = other.tokens[0] // prefer another token account — the cascade
 		} else if l := e.u.randLite(); l != nil {
 			to = l.acct
+			e.u.markFunded(l) // it now holds ACME and can relay
 		} else {
 			return nil, errors.NotReady.With("nowhere to send")
 		}
 		s := from.signer()
-		return e.submit(ctx, e.build(from.tokens[e.u.intn(len(from.tokens))]).
-			SendTokens(sendAmount, protocol.AcmePrecisionPower).To(to).
-			SignWith(s.url).Version(s.version).Timestamp(e.nonce.next()).PrivateKey(from.key()))
+		return e.sign(ctx, s.url, func() txBuilder {
+			return e.build(from.tokens[e.u.intn(len(from.tokens))]).
+				SendTokens(sendAmount, protocol.AcmePrecisionPower).To(to).
+				SignWith(s.url).Version(s.version).Timestamp(e.nonce.next()).PrivateKey(from.key())
+		})
 	},
 }
 
@@ -122,27 +144,36 @@ var addCreditsLite = action{
 			return nil, errors.NotReady.With("no lite account")
 		}
 		t := e.treasury
-		return e.submitAsTreasury(ctx, e.build(t).
-			AddCredits().WithOracle(e.oracle).Purchase(liteCreditGrant).To(to.id).
-			SignWith(t.id).Version(1).Timestamp(e.nonce.next()).PrivateKey(t.key))
+		return e.submitAsTreasury(ctx, func() txBuilder {
+			return e.build(t).
+				AddCredits().WithOracle(e.oracle).Purchase(liteCreditGrant).To(to.id).
+				SignWith(t.id).Version(1).Timestamp(e.nonce.next()).PrivateKey(t.key)
+		})
 	},
 }
 
 // addCreditsPage tops a key page up, which also keeps long runs solvent.
+// addCreditsPage has an identity buy credits for one of its own key pages, paid
+// from its OWN ACME token account. The credit purchase burns ACME to acc://ACME
+// on the DN, so this produces a synthetic sourced from wherever the identity
+// lives — populating BVN->DN traffic from every partition, not just the treasury.
 var addCreditsPage = action{
 	name: "add-credits-page", weight: 8, needsIdentity: true,
 	run: func(ctx context.Context, e *env) ([]*url.TxID, error) {
-		if !e.canPay(treasuryFloorUnits) {
-			return nil, errors.NotReady.With("treasury is low on credits")
-		}
 		a := e.u.randIdentity()
-		if a == nil || a.signer() == nil {
-			return nil, errors.NotReady.With("no signer")
+		if a == nil {
+			return nil, errors.NotReady.With("no identity")
 		}
-		t := e.treasury
-		return e.submitAsTreasury(ctx, e.build(t).
-			AddCredits().WithOracle(e.oracle).Purchase(pageCreditGrant).To(a.signer().url).
-			SignWith(t.id).Version(1).Timestamp(e.nonce.next()).PrivateKey(t.key))
+		s := a.signer()
+		p := e.u.randPage(a)
+		if s == nil || p == nil || len(a.tokens) == 0 {
+			return nil, errors.NotReady.With("no funded identity to buy credits")
+		}
+		return e.sign(ctx, s.url, func() txBuilder {
+			return e.build(a.tokens[0]).
+				AddCredits().WithOracle(e.oracle).Purchase(adiCreditGrant).To(p.url).
+				SignWith(s.url).Version(s.version).Timestamp(e.nonce.next()).PrivateKey(a.key())
+		})
 	},
 }
 
@@ -153,9 +184,30 @@ var burnTokens = action{
 			return nil, errors.NotReady.With("treasury is low on credits")
 		}
 		t := e.treasury
-		return e.submitAsTreasury(ctx, e.build(t).
-			BurnTokens(sendAmount, protocol.AcmePrecisionPower).
-			SignWith(t.id).Version(1).Timestamp(e.nonce.next()).PrivateKey(t.key))
+		return e.submitAsTreasury(ctx, func() txBuilder {
+			return e.build(t).
+				BurnTokens(sendAmount, protocol.AcmePrecisionPower).
+				SignWith(t.id).Version(1).Timestamp(e.nonce.next()).PrivateKey(t.key)
+		})
+	},
+}
+
+// burnTokensADI burns ACME from an identity's own token account. The burn routes
+// to acc://ACME on the DN, so — like addCreditsPage — it sources BVN->DN traffic
+// from every partition, not just the treasury's.
+var burnTokensADI = action{
+	name: "burn-tokens-adi", weight: 4, needsIdentity: true,
+	run: func(ctx context.Context, e *env) ([]*url.TxID, error) {
+		a := e.u.randIdentity()
+		if a == nil || len(a.tokens) == 0 || a.signer() == nil {
+			return nil, errors.NotReady.With("no funded token account")
+		}
+		s := a.signer()
+		return e.sign(ctx, s.url, func() txBuilder {
+			return e.build(a.tokens[e.u.intn(len(a.tokens))]).
+				BurnTokens(sendAmount, protocol.AcmePrecisionPower).
+				SignWith(s.url).Version(s.version).Timestamp(e.nonce.next()).PrivateKey(a.key())
+		})
 	},
 }
 
@@ -167,9 +219,11 @@ var burnCredits = action{
 			return nil, errors.NotReady.With("no signer")
 		}
 		s := a.signer()
-		return e.submit(ctx, e.build(s).
-			BurnCredits(1).
-			SignWith(s.url).Version(s.version).Timestamp(e.nonce.next()).PrivateKey(a.key()))
+		return e.sign(ctx, s.url, func() txBuilder {
+			return e.build(s).
+				BurnCredits(1).
+				SignWith(s.url).Version(s.version).Timestamp(e.nonce.next()).PrivateKey(a.key())
+		})
 	},
 }
 
@@ -187,9 +241,11 @@ var transferCredits = action{
 			return nil, errors.NotReady.With("no second page to transfer to")
 		}
 		s := a.signer()
-		return e.submit(ctx, e.build(s).
-			TransferCredits(1).To(to.url).
-			SignWith(s.url).Version(s.version).Timestamp(e.nonce.next()).PrivateKey(a.key()))
+		return e.sign(ctx, s.url, func() txBuilder {
+			return e.build(s).
+				TransferCredits(1).To(to.url).
+				SignWith(s.url).Version(s.version).Timestamp(e.nonce.next()).PrivateKey(a.key())
+		})
 	},
 }
 
@@ -203,9 +259,11 @@ var writeDataADI = action{
 			return nil, errors.NotReady.With("no data account")
 		}
 		s := a.signer()
-		return e.submit(ctx, e.build(a.data[e.u.intn(len(a.data))]).
-			WriteData().DoubleHash("loadgen", fmt.Sprintf("%d", e.u.intn(1<<30))).
-			SignWith(s.url).Version(s.version).Timestamp(e.nonce.next()).PrivateKey(a.key()))
+		return e.sign(ctx, s.url, func() txBuilder {
+			return e.build(a.data[e.u.intn(len(a.data))]).
+				WriteData().DoubleHash("loadgen", fmt.Sprintf("%d", e.u.intn(1<<30))).
+				SignWith(s.url).Version(s.version).Timestamp(e.nonce.next()).PrivateKey(a.key())
+		})
 	},
 }
 
@@ -226,9 +284,11 @@ var writeDataLite = action{
 			return nil, err
 		}
 		t := e.treasury
-		return e.submitAsTreasury(ctx, e.build(t).
-			WriteData().Entry(entry).To(lda).
-			SignWith(t.id).Version(1).Timestamp(e.nonce.next()).PrivateKey(t.key))
+		return e.submitAsTreasury(ctx, func() txBuilder {
+			return e.build(t).
+				WriteData().Entry(entry).To(lda).
+				SignWith(t.id).Version(1).Timestamp(e.nonce.next()).PrivateKey(t.key)
+		})
 	},
 }
 
@@ -251,9 +311,11 @@ var setThreshold = action{
 		}
 		s := a.signer()
 		threshold := uint64(1 + e.u.intn(len(p.keys)))
-		ids, err := e.submit(ctx, e.build(p).
-			UpdateKeyPage().SetThreshold(threshold).
-			SignWith(s.url).Version(s.version).Timestamp(e.nonce.next()).PrivateKey(a.key()))
+		ids, err := e.sign(ctx, s.url, func() txBuilder {
+			return e.build(p).
+				UpdateKeyPage().SetThreshold(threshold).
+				SignWith(s.url).Version(s.version).Timestamp(e.nonce.next()).PrivateKey(a.key())
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -277,9 +339,11 @@ var addPageKey = action{
 		}
 		s := a.signer()
 		k := newKey()
-		ids, err := e.submit(ctx, e.build(p).
-			UpdateKeyPage().Add().Entry().Key(k, protocol.SignatureTypeED25519).FinishEntry().FinishOperation().
-			SignWith(s.url).Version(s.version).Timestamp(e.nonce.next()).PrivateKey(a.key()))
+		ids, err := e.sign(ctx, s.url, func() txBuilder {
+			return e.build(p).
+				UpdateKeyPage().Add().Entry().Key(k, protocol.SignatureTypeED25519).FinishEntry().FinishOperation().
+				SignWith(s.url).Version(s.version).Timestamp(e.nonce.next()).PrivateKey(a.key())
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -305,12 +369,14 @@ var updatePageKey = action{
 		s := a.signer()
 		i := e.u.intn(len(p.keys))
 		k := newKey()
-		ids, err := e.submit(ctx, e.build(p).
-			UpdateKeyPage().Update().
-			Entry().Key(p.keys[i], protocol.SignatureTypeED25519).FinishEntry().
-			To().Key(k, protocol.SignatureTypeED25519).FinishEntry().
-			FinishOperation().
-			SignWith(s.url).Version(s.version).Timestamp(e.nonce.next()).PrivateKey(a.key()))
+		ids, err := e.sign(ctx, s.url, func() txBuilder {
+			return e.build(p).
+				UpdateKeyPage().Update().
+				Entry().Key(p.keys[i], protocol.SignatureTypeED25519).FinishEntry().
+				To().Key(k, protocol.SignatureTypeED25519).FinishEntry().
+				FinishOperation().
+				SignWith(s.url).Version(s.version).Timestamp(e.nonce.next()).PrivateKey(a.key())
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -337,9 +403,11 @@ var removePageKey = action{
 		}
 		s := a.signer()
 		i := e.u.intn(len(p.keys))
-		ids, err := e.submit(ctx, e.build(p).
-			UpdateKeyPage().Remove().Entry().Key(p.keys[i], protocol.SignatureTypeED25519).FinishEntry().FinishOperation().
-			SignWith(s.url).Version(s.version).Timestamp(e.nonce.next()).PrivateKey(a.key()))
+		ids, err := e.sign(ctx, s.url, func() txBuilder {
+			return e.build(p).
+				UpdateKeyPage().Remove().Entry().Key(p.keys[i], protocol.SignatureTypeED25519).FinishEntry().FinishOperation().
+				SignWith(s.url).Version(s.version).Timestamp(e.nonce.next()).PrivateKey(a.key())
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -370,8 +438,10 @@ var updateAccountAuth = action{
 		} else {
 			b = b.Enable(a.books[0].url)
 		}
-		return e.submit(ctx, b.
-			SignWith(s.url).Version(s.version).Timestamp(e.nonce.next()).PrivateKey(a.key()))
+		return e.sign(ctx, s.url, func() txBuilder {
+			return b.
+				SignWith(s.url).Version(s.version).Timestamp(e.nonce.next()).PrivateKey(a.key())
+		})
 	},
 }
 
@@ -403,9 +473,11 @@ var issueTokens = action{
 		}
 		s := a.signer()
 		to := tok.accounts[e.u.intn(len(tok.accounts))]
-		return e.submit(ctx, e.build(tok.url).
-			IssueTokens(1, tok.precision).To(to).
-			SignWith(s.url).Version(s.version).Timestamp(e.nonce.next()).PrivateKey(a.key()))
+		return e.sign(ctx, s.url, func() txBuilder {
+			return e.build(tok.url).
+				IssueTokens(1, tok.precision).To(to).
+				SignWith(s.url).Version(s.version).Timestamp(e.nonce.next()).PrivateKey(a.key())
+		})
 	},
 }
 
@@ -420,9 +492,11 @@ var sendTokensCustom = action{
 			return nil, errors.NotReady.With("no custom token with two holders")
 		}
 		s := a.signer()
-		return e.submit(ctx, e.build(tok.accounts[0]).
-			SendTokens(1, tok.precision).To(tok.accounts[1]).
-			SignWith(s.url).Version(s.version).Timestamp(e.nonce.next()).PrivateKey(a.key()))
+		return e.sign(ctx, s.url, func() txBuilder {
+			return e.build(tok.accounts[0]).
+				SendTokens(1, tok.precision).To(tok.accounts[1]).
+				SignWith(s.url).Version(s.version).Timestamp(e.nonce.next()).PrivateKey(a.key())
+		})
 	},
 }
 
@@ -436,9 +510,11 @@ var burnTokensCustom = action{
 			return nil, errors.NotReady.With("no custom token")
 		}
 		s := a.signer()
-		return e.submit(ctx, e.build(tok.accounts[0]).
-			BurnTokens(1, tok.precision).
-			SignWith(s.url).Version(s.version).Timestamp(e.nonce.next()).PrivateKey(a.key()))
+		return e.sign(ctx, s.url, func() txBuilder {
+			return e.build(tok.accounts[0]).
+				BurnTokens(1, tok.precision).
+				SignWith(s.url).Version(s.version).Timestamp(e.nonce.next()).PrivateKey(a.key())
+		})
 	},
 }
 
@@ -449,9 +525,11 @@ var lockAccount = action{
 		if l == nil {
 			return nil, errors.NotReady.With("no confirmed lite account")
 		}
-		return e.submit(ctx, e.build(l).
-			LockAccount(1).
-			SignWith(l.id).Version(1).Timestamp(e.nonce.next()).PrivateKey(l.key))
+		return e.sign(ctx, l.id, func() txBuilder {
+			return e.build(l).
+				LockAccount(1).
+				SignWith(l.id).Version(1).Timestamp(e.nonce.next()).PrivateKey(l.key)
+		})
 	},
 }
 

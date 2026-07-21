@@ -30,18 +30,73 @@ type tracker struct {
 	Q api.Querier2
 
 	mu       sync.Mutex
+	gen      map[string]int         // action name -> transactions generated (every one, not sampled)
 	roots    map[string][]*url.TxID // action name -> followed transaction IDs
 	failures map[string]int         // action name -> submissions the network rejected
 	skips    map[string]int         // action name -> times preconditions were not met
 }
 
 func newTracker(q api.Querier2) *tracker {
-	return &tracker{Q: q, roots: map[string][]*url.TxID{}, failures: map[string]int{}, skips: map[string]int{}}
+	return &tracker{Q: q, gen: map[string]int{}, roots: map[string][]*url.TxID{}, failures: map[string]int{}, skips: map[string]int{}}
+}
+
+// generated records that a transaction of this type was submitted. Unlike
+// follow, which keeps only a sample for the delivery report, this counts every
+// one, so the live per-type mix is exact rather than 1-in-N.
+func (t *tracker) generated(name string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.gen[name]++
+}
+
+// typeStat is one row of the live per-type mix.
+type typeStat struct {
+	Generated int `json:"generated"`
+	Rejected  int `json:"rejected"`
+	Skipped   int `json:"skipped"`
+}
+
+// snapshot returns the current per-type counts and their totals, for the live
+// stats file. Names present in any of the three maps appear.
+func (t *tracker) snapshot() (perType map[string]typeStat, totGen, totRej, totSkip int) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	perType = map[string]typeStat{}
+	add := func(name string) {
+		if _, ok := perType[name]; ok {
+			return
+		}
+		s := typeStat{Generated: t.gen[name], Rejected: t.failures[name], Skipped: t.skips[name]}
+		perType[name] = s
+		totGen += s.Generated
+		totRej += s.Rejected
+		totSkip += s.Skipped
+	}
+	for n := range t.gen {
+		add(n)
+	}
+	for n := range t.failures {
+		add(n)
+	}
+	for n := range t.skips {
+		add(n)
+	}
+	return perType, totGen, totRej, totSkip
 }
 
 func (t *tracker) follow(name string, ids []*url.TxID) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	t.roots[name] = append(t.roots[name], ids...)
+}
+
+// track counts a transaction in the live mix and follows it for the delivery
+// report. The growth sequences use it because, unlike the main loop, they are
+// not sampled — every growth transaction is both counted and followed.
+func (t *tracker) track(name string, ids []*url.TxID) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.gen[name]++
 	t.roots[name] = append(t.roots[name], ids...)
 }
 
