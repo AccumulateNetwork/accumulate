@@ -158,10 +158,10 @@ func (c *Conductor) willBeginBlock(e execute.WillBeginBlock) error {
 	// Gate before spawning so the default (disabled) path costs nothing (#4066).
 	if def(c.EnableSyntheticHealing, false) && c.Sequencer != nil {
 		c.runTask(func() {
-			batch := c.Database.Begin(false)
-			defer batch.Discard()
-
-			err := c.requestMissingSynthetics(context.Background(), batch)
+			// requestMissingSynthetics opens and releases its own read batch
+			// before pulling, so no database batch is held across the network
+			// RPCs and a slow source sequencer can be waited out (#4067).
+			err := c.requestMissingSynthetics(context.Background())
 			if err != nil {
 				slog.Error("Error while requesting missing synthetics", "error", err)
 			}

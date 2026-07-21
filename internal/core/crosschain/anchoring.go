@@ -43,12 +43,22 @@ func (c *Conductor) healAnchors(ctx context.Context, batch *database.Batch, dest
 	}
 	ledger2 := ledger1.Partition(c.Url())
 
+	// Publish this source->dest anchor pair as gauges (same src/dst convention as
+	// synthetics): received/delivered are the destination's view of us; produced
+	// is our own anchor sequence height. delivered lagging received is a wedge.
+	{
+		me, dst := c.Partition.ID, partitionLabel(destination)
+		mSequence.WithLabelValues("anchor", "produced", me, dst).Set(float64(head.Count))
+		mSequence.WithLabelValues("anchor", "received", me, dst).Set(float64(ledger2.Received))
+		mSequence.WithLabelValues("anchor", "delivered", me, dst).Set(float64(ledger2.Delivered))
+	}
+
 	// Throttle: one heal pass per destination per heal window, jittered — the
 	// unthrottled per-block rescan re-submitted the whole undelivered tail
 	// from every validator every block (measured: 1.2M re-submissions and 14
 	// cores in 25 minutes of the #4067 pattern soak) and floods the network,
 	// which is the historical reason anchor healing was disabled.
-	if !c.claimSyntheticRequest(destination.JoinPath("anchor-heal"), ledger2.Delivered+1, time.Now()) {
+	if fire, _, _ := c.claimSyntheticRequest(destination.JoinPath("anchor-heal"), ledger2.Delivered+1, time.Now()); !fire {
 		return nil
 	}
 

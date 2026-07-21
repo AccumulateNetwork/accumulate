@@ -37,6 +37,33 @@ func (x SyntheticMessage) Validate(batch *database.Batch, ctx *MessageContext) (
 	return nil, errors.UnknownError.Wrap(err)
 }
 
+// synthDropped surfaces a synthetic message that was rejected with a client
+// error while being processed. Such a rejection is otherwise recorded only as a
+// terminal failed status with no log, and the source's synthetic ledger never
+// advances past it — so without this a dropped synthetic wedges the receiver's
+// stream silently and invisibly (this is what made #4070 so hard to find). It
+// is logged with the stream coordinates so a stuck stream is diagnosable from
+// the destination's logs.
+func synthDropped(ctx *MessageContext, cause error) {
+	var syn *messaging.SynthFields
+	switch m := ctx.message.(type) {
+	case *messaging.SyntheticMessage:
+		syn = m.Data()
+	case *messaging.BadSyntheticMessage:
+		syn = m.Data()
+	}
+	if syn == nil {
+		return
+	}
+	seq, ok := syn.Message.(*messaging.SequencedMessage)
+	if !ok {
+		return
+	}
+	ctx.Executor.logger.Info("Synthetic message rejected — stream will not advance past it",
+		"module", "synthetic", "source", seq.Source,
+		"destination", seq.Destination, "number", seq.Number, "error", cause)
+}
+
 func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*messaging.SynthFields, error) {
 	// Using messaging.SynthFields is safer than converting one message type
 	// into the other because that could lead to issues with the different Hash
@@ -154,6 +181,13 @@ func (x SyntheticMessage) Process(batch *database.Batch, ctx *MessageContext) (_
 
 	// Process the message (error is handled by the next step)
 	err = x.process(batch, ctx)
+
+	// recordMessageAndStatus records a client-error rejection as a terminal
+	// failed status and swallows the error — with no other trace. Surface it
+	// first, or a dropped synthetic wedges the receiver's stream silently (#4070).
+	if err != nil && errors.Code(err).IsClientError() {
+		synthDropped(ctx, err)
+	}
 
 	// Record the message and its status
 	err = ctx.recordMessageAndStatus(batch, status, errors.Delivered, err)
