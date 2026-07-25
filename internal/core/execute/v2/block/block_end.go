@@ -64,7 +64,13 @@ func (block *Block) Close() (execute.BlockState, error) {
 		return nil, errors.UnknownError.WithFormat("load synthetic ledger: %w", err)
 	}
 
-	if m.EnableHealing {
+	// Heal only when a gap is actually present. A gap is a nil (unknown) entry
+	// in a pending window: a message with a higher sequence number arrived, so
+	// we know this one exists, but it never reached us and every later message
+	// is blocked behind it. On a healthy node no such entry exists and the scan
+	// never launches. The time-pace is a second guard so that while a gap
+	// persists a fresh scan does not launch every block on top of the last.
+	if m.EnableHealing && healNeeded(synthLedger, anchorLedger) && m.shouldAttemptHealing() {
 		m.BackgroundTaskLauncher(func() { m.requestMissingSyntheticTransactions(block.Index, synthLedger, anchorLedger) })
 	}
 
@@ -954,4 +960,43 @@ func (x *Executor) enumerateModifiedChains(block *Block) error {
 	sort.Slice(e, func(i, j int) bool { return e[i].Compare(e[j]) < 0 })
 
 	return nil
+}
+
+// healNeeded reports whether either ledger has a genuine gap the background
+// heal scan must act on: a nil (unknown) entry in a pending window, meaning a
+// later message arrived so we know this one exists, but it never reached us and
+// everything after it is blocked behind it. Known (non-nil) pending entries are
+// not a gap — a synthetic message delivers on its own once its predecessors
+// arrive, and a pending anchor gathering its signature quorum is driven by the
+// source-side conductor, not here. It reads only the already-loaded ledgers, so
+// the common healthy case costs one slice walk and no I/O.
+func healNeeded(synthLedger *protocol.SyntheticLedger, anchorLedger *protocol.AnchorLedger) bool {
+	for _, p := range synthLedger.Sequence {
+		for _, txid := range p.Pending {
+			if txid == nil {
+				return true
+			}
+		}
+	}
+	for _, p := range anchorLedger.Sequence {
+		for _, txid := range p.Pending {
+			if txid == nil {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// shouldAttemptHealing rate-limits the healing scan to one attempt per
+// interval, so that a gap which takes several blocks to close does not launch
+// a fresh scan every block while the first is still fetching.
+func (x *Executor) shouldAttemptHealing() bool {
+	interval := x.HealInterval
+	if interval == 0 {
+		interval = 10 * time.Second
+	}
+	now := time.Now().UnixNano()
+	last := x.lastHealAttempt.Load()
+	return now-last >= int64(interval) && x.lastHealAttempt.CompareAndSwap(last, now)
 }

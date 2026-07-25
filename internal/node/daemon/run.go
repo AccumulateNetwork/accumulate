@@ -403,7 +403,7 @@ func (d *Daemon) startApp(caughtUp <-chan struct{}) (types.Application, error) {
 		EventBus:      d.eventBus,
 		Sequencer:     client.Private(),
 		Querier:       client,
-		EnableHealing: d.Config.Accumulate.Healing.Enable,
+		EnableHealing: d.Config.Accumulate.Healing.Enable == nil || *d.Config.Accumulate.Healing.Enable,
 		Describe: execute.DescribeShim{
 			NetworkType: d.Config.Accumulate.Describe.NetworkType,
 			PartitionId: d.Config.Accumulate.Describe.PartitionId,

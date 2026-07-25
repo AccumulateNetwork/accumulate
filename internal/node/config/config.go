@@ -135,6 +135,8 @@ func Default(netName string, net protocol.PartitionType, _ NodeType, partitionId
 	c.Accumulate.Snapshots.Directory = "snapshots"
 	c.Accumulate.Snapshots.RetainCount = 10
 	c.Accumulate.Snapshots.Schedule = protocol.DefaultMajorBlockSchedule
+	healingOn := true
+	c.Accumulate.Healing.Enable = &healingOn
 	c.Accumulate.AnalysisLog.Directory = "analysis"
 	c.Accumulate.AnalysisLog.Enabled = false
 	c.Accumulate.API.ReadHeaderTimeout = 10 * time.Second
@@ -177,8 +179,10 @@ type Logging struct {
 }
 
 type Healing struct {
-	// Enable enables healing
-	Enable bool `toml:"enable" mapstructure:"enable"`
+	// Enable enables healing. A nil (unset) value defaults to on, so nodes with
+	// no [healing] section self-heal missing synthetic/anchor messages; set it
+	// explicitly to false to disable (a break-glass kill-switch).
+	Enable *bool `toml:"enable,omitempty" mapstructure:"enable"`
 }
 
 type Snapshots struct {
