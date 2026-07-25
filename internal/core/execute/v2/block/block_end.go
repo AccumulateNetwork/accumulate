@@ -64,7 +64,9 @@ func (block *Block) Close() (execute.BlockState, error) {
 		return nil, errors.UnknownError.WithFormat("load synthetic ledger: %w", err)
 	}
 
-	if m.EnableHealing {
+	// Heal only when a gap is actually present (see healNeeded), paced to one
+	// attempt per interval. Matches the Tier-A fix merged to main.
+	if m.EnableHealing && healNeeded(synthLedger, anchorLedger) && m.shouldAttemptHealing() {
 		m.BackgroundTaskLauncher(func() { m.requestMissingSyntheticTransactions(block.Index, synthLedger, anchorLedger) })
 	}
 
@@ -954,4 +956,36 @@ func (x *Executor) enumerateModifiedChains(block *Block) error {
 	sort.Slice(e, func(i, j int) bool { return e[i].Compare(e[j]) < 0 })
 
 	return nil
+}
+
+// healNeeded reports whether either ledger has a genuine gap the background
+// heal scan must act on: a nil (unknown) entry in a pending window. Matches the
+// Tier-A fix merged to main.
+func healNeeded(synthLedger *protocol.SyntheticLedger, anchorLedger *protocol.AnchorLedger) bool {
+	for _, p := range synthLedger.Sequence {
+		for _, txid := range p.Pending {
+			if txid == nil {
+				return true
+			}
+		}
+	}
+	for _, p := range anchorLedger.Sequence {
+		for _, txid := range p.Pending {
+			if txid == nil {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// shouldAttemptHealing rate-limits the healing scan to one attempt per interval.
+func (x *Executor) shouldAttemptHealing() bool {
+	interval := x.HealInterval
+	if interval == 0 {
+		interval = 10 * time.Second
+	}
+	now := time.Now().UnixNano()
+	last := x.lastHealAttempt.Load()
+	return now-last >= int64(interval) && x.lastHealAttempt.CompareAndSwap(last, now)
 }

@@ -2,3 +2,4 @@ soak.log
 chaos.log
 monitor.csv
 launch.log
+loadgen-stats.json

@@ -59,10 +59,11 @@ services:
   s1a:
     image: acc-synthheal:test
     container_name: acc-s1a
-    mem_limit: 2g
+    mem_limit: 4g
+    restart: unless-stopped
     environment:
-      ACC_DEBUG_DROP_SYNTHETIC: "${DROP_SYN:-*:%499+3}"
-      ACC_DEBUG_DROP_ANCHOR: "${DROP_ANC:-*:%997+3}"
+      ACC_DEBUG_DROP_SYNTHETIC: "${DROP_SYN-*:%499+3}"
+      ACC_DEBUG_DROP_ANCHOR: "${DROP_ANC-*:%997+3}"
     command: ["-w=/root/.accumulate/bvn1-1", "/root/.accumulate/bvn1-1/accumulate.toml"]
     volumes:
       - network-config:/root/.accumulate
@@ -77,11 +78,14 @@ services:
   s1b:
     image: acc-synthheal:test
     container_name: acc-s1b
-    mem_limit: 2g
+    mem_limit: 4g
+    restart: unless-stopped
     environment:
-      ACC_DEBUG_DROP_SYNTHETIC: "${DROP_SYN:-*:%499+3}"
-      ACC_DEBUG_DROP_ANCHOR: "${DROP_ANC:-*:%997+3}"
+      ACC_DEBUG_DROP_SYNTHETIC: "${DROP_SYN-*:%499+3}"
+      ACC_DEBUG_DROP_ANCHOR: "${DROP_ANC-*:%997+3}"
     command: ["-w=/root/.accumulate/bvn1-2", "/root/.accumulate/bvn1-2/accumulate.toml"]
+    ports:
+      - "26661:26660"
     volumes:
       - network-config:/root/.accumulate
     depends_on:
@@ -93,11 +97,14 @@ services:
   s1c:
     image: acc-synthheal:test
     container_name: acc-s1c
-    mem_limit: 2g
+    mem_limit: 4g
+    restart: unless-stopped
     environment:
-      ACC_DEBUG_DROP_SYNTHETIC: "${DROP_SYN:-*:%499+3}"
-      ACC_DEBUG_DROP_ANCHOR: "${DROP_ANC:-*:%997+3}"
+      ACC_DEBUG_DROP_SYNTHETIC: "${DROP_SYN-*:%499+3}"
+      ACC_DEBUG_DROP_ANCHOR: "${DROP_ANC-*:%997+3}"
     command: ["-w=/root/.accumulate/bvn1-3", "/root/.accumulate/bvn1-3/accumulate.toml"]
+    ports:
+      - "26662:26660"
     volumes:
       - network-config:/root/.accumulate
     depends_on:
@@ -109,11 +116,14 @@ services:
   s1d:
     image: acc-synthheal:test
     container_name: acc-s1d
-    mem_limit: 2g
+    mem_limit: 4g
+    restart: unless-stopped
     environment:
-      ACC_DEBUG_DROP_SYNTHETIC: "${DROP_SYN:-*:%499+3}"
-      ACC_DEBUG_DROP_ANCHOR: "${DROP_ANC:-*:%997+3}"
+      ACC_DEBUG_DROP_SYNTHETIC: "${DROP_SYN-*:%499+3}"
+      ACC_DEBUG_DROP_ANCHOR: "${DROP_ANC-*:%997+3}"
     command: ["-w=/root/.accumulate/bvn1-4", "/root/.accumulate/bvn1-4/accumulate.toml"]
+    ports:
+      - "26663:26660"
     volumes:
       - network-config:/root/.accumulate
     depends_on:
@@ -125,11 +135,14 @@ services:
   s2a:
     image: acc-synthheal:test
     container_name: acc-s2a
-    mem_limit: 2g
+    mem_limit: 4g
+    restart: unless-stopped
     environment:
-      ACC_DEBUG_DROP_SYNTHETIC: "${DROP_SYN:-*:%499+3}"
-      ACC_DEBUG_DROP_ANCHOR: "${DROP_ANC:-*:%997+3}"
+      ACC_DEBUG_DROP_SYNTHETIC: "${DROP_SYN-*:%499+3}"
+      ACC_DEBUG_DROP_ANCHOR: "${DROP_ANC-*:%997+3}"
     command: ["-w=/root/.accumulate/bvn2-1", "/root/.accumulate/bvn2-1/accumulate.toml"]
+    ports:
+      - "26664:26660"
     volumes:
       - network-config:/root/.accumulate
     depends_on:
@@ -141,11 +154,14 @@ services:
   s2b:
     image: acc-synthheal:test
     container_name: acc-s2b
-    mem_limit: 2g
+    mem_limit: 4g
+    restart: unless-stopped
     environment:
-      ACC_DEBUG_DROP_SYNTHETIC: "${DROP_SYN:-*:%499+3}"
-      ACC_DEBUG_DROP_ANCHOR: "${DROP_ANC:-*:%997+3}"
+      ACC_DEBUG_DROP_SYNTHETIC: "${DROP_SYN-*:%499+3}"
+      ACC_DEBUG_DROP_ANCHOR: "${DROP_ANC-*:%997+3}"
     command: ["-w=/root/.accumulate/bvn2-2", "/root/.accumulate/bvn2-2/accumulate.toml"]
+    ports:
+      - "26665:26660"
     volumes:
       - network-config:/root/.accumulate
     depends_on:
@@ -157,11 +173,14 @@ services:
   s2c:
     image: acc-synthheal:test
     container_name: acc-s2c
-    mem_limit: 2g
+    mem_limit: 4g
+    restart: unless-stopped
     environment:
-      ACC_DEBUG_DROP_SYNTHETIC: "${DROP_SYN:-*:%499+3}"
-      ACC_DEBUG_DROP_ANCHOR: "${DROP_ANC:-*:%997+3}"
+      ACC_DEBUG_DROP_SYNTHETIC: "${DROP_SYN-*:%499+3}"
+      ACC_DEBUG_DROP_ANCHOR: "${DROP_ANC-*:%997+3}"
     command: ["-w=/root/.accumulate/bvn2-3", "/root/.accumulate/bvn2-3/accumulate.toml"]
+    ports:
+      - "26666:26660"
     volumes:
       - network-config:/root/.accumulate
     depends_on:
@@ -173,11 +192,14 @@ services:
   s2d:
     image: acc-synthheal:test
     container_name: acc-s2d
-    mem_limit: 2g
+    mem_limit: 4g
+    restart: unless-stopped
     environment:
-      ACC_DEBUG_DROP_SYNTHETIC: "${DROP_SYN:-*:%499+3}"
-      ACC_DEBUG_DROP_ANCHOR: "${DROP_ANC:-*:%997+3}"
+      ACC_DEBUG_DROP_SYNTHETIC: "${DROP_SYN-*:%499+3}"
+      ACC_DEBUG_DROP_ANCHOR: "${DROP_ANC-*:%997+3}"
     command: ["-w=/root/.accumulate/bvn2-4", "/root/.accumulate/bvn2-4/accumulate.toml"]
+    ports:
+      - "26667:26660"
     volumes:
       - network-config:/root/.accumulate
     depends_on:
@@ -189,11 +211,14 @@ services:
   s3a:
     image: acc-synthheal:test
     container_name: acc-s3a
-    mem_limit: 2g
+    mem_limit: 4g
+    restart: unless-stopped
     environment:
-      ACC_DEBUG_DROP_SYNTHETIC: "${DROP_SYN:-*:%499+3}"
-      ACC_DEBUG_DROP_ANCHOR: "${DROP_ANC:-*:%997+3}"
+      ACC_DEBUG_DROP_SYNTHETIC: "${DROP_SYN-*:%499+3}"
+      ACC_DEBUG_DROP_ANCHOR: "${DROP_ANC-*:%997+3}"
     command: ["-w=/root/.accumulate/bvn3-1", "/root/.accumulate/bvn3-1/accumulate.toml"]
+    ports:
+      - "26668:26660"
     volumes:
       - network-config:/root/.accumulate
     depends_on:
@@ -205,11 +230,14 @@ services:
   s3b:
     image: acc-synthheal:test
     container_name: acc-s3b
-    mem_limit: 2g
+    mem_limit: 4g
+    restart: unless-stopped
     environment:
-      ACC_DEBUG_DROP_SYNTHETIC: "${DROP_SYN:-*:%499+3}"
-      ACC_DEBUG_DROP_ANCHOR: "${DROP_ANC:-*:%997+3}"
+      ACC_DEBUG_DROP_SYNTHETIC: "${DROP_SYN-*:%499+3}"
+      ACC_DEBUG_DROP_ANCHOR: "${DROP_ANC-*:%997+3}"
     command: ["-w=/root/.accumulate/bvn3-2", "/root/.accumulate/bvn3-2/accumulate.toml"]
+    ports:
+      - "26669:26660"
     volumes:
       - network-config:/root/.accumulate
     depends_on:
@@ -221,11 +249,14 @@ services:
   s3c:
     image: acc-synthheal:test
     container_name: acc-s3c
-    mem_limit: 2g
+    mem_limit: 4g
+    restart: unless-stopped
     environment:
-      ACC_DEBUG_DROP_SYNTHETIC: "${DROP_SYN:-*:%499+3}"
-      ACC_DEBUG_DROP_ANCHOR: "${DROP_ANC:-*:%997+3}"
+      ACC_DEBUG_DROP_SYNTHETIC: "${DROP_SYN-*:%499+3}"
+      ACC_DEBUG_DROP_ANCHOR: "${DROP_ANC-*:%997+3}"
     command: ["-w=/root/.accumulate/bvn3-3", "/root/.accumulate/bvn3-3/accumulate.toml"]
+    ports:
+      - "26670:26660"
     volumes:
       - network-config:/root/.accumulate
     depends_on:
@@ -237,11 +268,14 @@ services:
   s3d:
     image: acc-synthheal:test
     container_name: acc-s3d
-    mem_limit: 2g
+    mem_limit: 4g
+    restart: unless-stopped
     environment:
-      ACC_DEBUG_DROP_SYNTHETIC: "${DROP_SYN:-*:%499+3}"
-      ACC_DEBUG_DROP_ANCHOR: "${DROP_ANC:-*:%997+3}"
+      ACC_DEBUG_DROP_SYNTHETIC: "${DROP_SYN-*:%499+3}"
+      ACC_DEBUG_DROP_ANCHOR: "${DROP_ANC-*:%997+3}"
     command: ["-w=/root/.accumulate/bvn3-4", "/root/.accumulate/bvn3-4/accumulate.toml"]
+    ports:
+      - "26671:26660"
     volumes:
       - network-config:/root/.accumulate
     depends_on:

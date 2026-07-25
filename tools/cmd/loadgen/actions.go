@@ -22,7 +22,11 @@ type action struct {
 	// needsIdentity marks actions that require at least one fully built
 	// identity. Early in a run there are none, so those are skipped.
 	needsIdentity bool
-	run           func(ctx context.Context, e *env) ([]*url.TxID, error)
+	// expectFail marks actions that deliberately submit a transaction that is
+	// meant to fail (forcing a refund). They are counted but NOT followed for
+	// delivery, so they never count toward -max-stranded.
+	expectFail bool
+	run        func(ctx context.Context, e *env) ([]*url.TxID, error)
 }
 
 // menu is the full set of user transaction types the generator exercises.
@@ -35,6 +39,9 @@ var menu = []action{
 	updateAccountAuth, lockAccount,
 	addBook, addAccount,
 	addToken, issueTokens, sendTokensCustom, burnTokensCustom,
+	// Refund/failure paths (deliberately fail; see failures.go).
+	sendTokensToVoid, overSpendTokens, overBurnCredits, overBurnTokens,
+	createSubAdiOnVoid, writeDataToVoid,
 }
 
 // pick chooses the next action, skipping any that cannot run yet.

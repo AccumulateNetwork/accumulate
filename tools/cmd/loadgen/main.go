@@ -36,6 +36,7 @@ import (
 	"log"
 	"math/rand"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -57,15 +58,27 @@ type config struct {
 
 // env is everything an action needs to build, sign and submit.
 type env struct {
-	c   *jsonrpc.Client
-	Q   api.Querier2
+	c   *jsonrpc.Client // primary (faucet, network/consensus status)
+	Q   api.Querier2    // rotates across all endpoints (see poolQuerier)
 	cfg config
+
+	// clients is the pool of node endpoints; submissions and queries round-robin
+	// across them (subIdx) so a single paused/restarted/OOM'd node does not
+	// reject transactions or concentrate all load on itself.
+	clients []*jsonrpc.Client
+	subIdx  atomic.Uint64
 
 	treasury *liteAccount // funds everything else
 	oracle   float64
 
 	u     *universe
 	track *tracker
+
+	// led mirrors per-account balances/credits/txn-counts for verification;
+	// observe-only (see accounting.go). fees is the live schedule it dead-reckons
+	// credit costs from.
+	led  *ledger
+	fees *protocol.FeeSchedule
 
 	growSlots chan struct{}
 	nonce     nonce
@@ -156,7 +169,8 @@ func (e *env) submitAsTreasury(ctx context.Context, build func() txBuilder) ([]*
 }
 
 func main() {
-	endpoint := flag.String("endpoint", "http://localhost:26660", "node JSON-RPC endpoint")
+	endpoint := flag.String("endpoint", "http://localhost:26660", "single node JSON-RPC endpoint (fallback if -endpoints unset)")
+	endpoints := flag.String("endpoints", "", "comma-separated node endpoints to rotate submissions/queries across (skips dead ones)")
 	faucetSeed := flag.String("faucet-seed", "", "genesis faucet seed; if unset, funds come from the network's faucet service")
 	count := flag.Int("count", 100, "number of transactions to generate (ignored when -tps is set)")
 	// Pacing matters even for a fixed count. Submitting as fast as the client
@@ -167,6 +181,7 @@ func main() {
 	duration := flag.Duration("duration", time.Hour, "how long to generate for when -tps is set")
 	timeout := flag.Duration("timeout", 0, "overall timeout (default: duration + grace + slack)")
 	grace := flag.Duration("grace", 5*time.Minute, "how long to wait for delivery after generation stops")
+	bootstrap := flag.Int("bootstrap", 100, "sub-treasuries to seed before the workload, spreading funding sources across BVNs (0 disables)")
 	growth := flag.Float64("growth", 0.02, "initial fraction of transactions that create new account structure")
 	growthScale := flag.Int("growth-scale", 50, "growth rate decays as the ADI count grows past this")
 	seed := flag.Int64("seed", 0, "RNG seed for a reproducible mix (0 = random)")
@@ -196,8 +211,20 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
 	defer cancel()
 
-	c := jsonrpc.NewClient(accumulate.ResolveWellKnownEndpoint(*endpoint, "v3"))
-	c.Client.Timeout = 30 * time.Second
+	// Build the endpoint pool. -endpoints (comma-separated) rotates submissions
+	// and queries across every node; -endpoint is the single-node fallback.
+	eps := splitEndpoints(*endpoints)
+	if len(eps) == 0 {
+		eps = []string{*endpoint}
+	}
+	var clients []*jsonrpc.Client
+	for _, ep := range eps {
+		cc := jsonrpc.NewClient(accumulate.ResolveWellKnownEndpoint(ep, "v3"))
+		cc.Client.Timeout = 30 * time.Second
+		clients = append(clients, cc)
+	}
+	c := clients[0]
+	log.Printf("endpoints: %d (%s)", len(clients), strings.Join(eps, ", "))
 
 	ns, err := c.NetworkStatus(ctx, api.NetworkStatusOptions{Partition: protocol.Directory})
 	fatalIf(err, "network status")
@@ -208,12 +235,16 @@ func main() {
 	log.Printf("network %s, executor %v, seed %d", ns.Network.NetworkName, ns.ExecutorVersion, *seed)
 
 	e := &env{
-		c: c, Q: api.Querier2{Querier: c},
+		c:         c,
 		cfg:       config{growth: *growth, growthScale: *growthScale, maxGrowJobs: 4},
 		oracle:    float64(ns.Oracle.Price) / protocol.AcmeOraclePrecision,
 		u:         newUniverse(rand.New(rand.NewSource(*seed))),
 		growSlots: make(chan struct{}, 4),
+		fees:      ns.Globals.FeeSchedule,
+		clients:   clients,
 	}
+	e.Q = api.Querier2{Querier: &poolQuerier{clients: clients, idx: &e.subIdx}}
+	e.led = newLedger(e.fees)
 	e.nonce.v.Store(uint64(time.Now().UTC().UnixMilli()))
 	e.track = newTracker(e.Q)
 	e.targetTps = *tps
@@ -225,6 +256,19 @@ func main() {
 	// skip until the keeper's first tick.
 	e.treasuryCredits.Store(e.creditBalance(ctx, e.treasury.id))
 	log.Printf("treasury %v (%d credits)", e.treasury.acct, e.treasuryCredits.Load()/protocol.CreditPrecision)
+
+	// Keep the treasury solvent for the length of the run. Started first so its
+	// refills cover the bootstrap burst below.
+	go e.keepTreasuryFunded(ctx, *faucetSeed == "")
+
+	// Seed a base of funding sources spread across every BVN BEFORE the workload
+	// starts, so random source selection originates cross-partition traffic from
+	// all partitions instead of cascading from one. Synchronous by design: the
+	// mix should run against the spread base, not build it. Non-fatal on partial
+	// failure — a smaller base still beats the single-treasury star.
+	if err := e.bootstrapSubTreasuries(ctx, *bootstrap); err != nil {
+		log.Printf("bootstrap: %v — continuing with whatever seeded", err)
+	}
 
 	// Seed the universe in the background. Creating an identity is a sequence
 	// of transactions that each have to land before the next can be built, and
@@ -239,8 +283,9 @@ func main() {
 	// sign as a lite identity always have a valid signer available.
 	go e.promoteLites(ctx)
 
-	// Keep the treasury solvent for the length of the run.
-	go e.keepTreasuryFunded(ctx, *faucetSeed == "")
+	// Keep the local balance mirror honest: sample and re-sync against the chain
+	// every few minutes (dead reckoning drifts on refunds/oracle moves).
+	go e.reconcile(ctx, 3*time.Minute, 20)
 
 	// A live stats file lets an external monitor read the per-type mix and
 	// totals while the run is in flight, not only from the end-of-run report.
@@ -337,7 +382,9 @@ func generate(ctx context.Context, e *env, total int, tps float64, limit time.Du
 		default:
 			sent++
 			e.track.generated(act.name)
-			if trackEvery <= 1 || i%trackEvery == 0 {
+			// expectFail actions are meant not to deliver — count them, but do
+			// not follow them, or they would count toward -max-stranded.
+			if !act.expectFail && (trackEvery <= 1 || i%trackEvery == 0) {
 				e.track.follow(act.name, ids)
 			}
 		}
@@ -538,7 +585,27 @@ func (e *env) submit(ctx context.Context, b interface {
 	if err != nil {
 		return nil, err
 	}
-	subs, err := e.c.Submit(ctx, env, api.SubmitOptions{})
+	// Choose the endpoint by SIGNER, not round-robin: a signer's transactions
+	// carry strictly increasing timestamps and the executor rejects any that
+	// reach a mempool out of order, so all of one signer's transactions must go
+	// to the same node (the muFor lock keeps them ordered there). Different
+	// signers hash to different nodes, which is what spreads the load. On a
+	// transport error advance to the next node; a business rejection returns
+	// as-is. Queries have no such constraint and rotate freely (poolQuerier).
+	var subs []*api.Submission
+	n := len(e.clients)
+	start := int(e.subIdx.Add(1)) % n // fallback for unsigned/edge envelopes
+	if len(env.Signatures) > 0 {
+		if s := env.Signatures[0].GetSigner(); s != nil {
+			start = int(hashString(s.String()) % uint32(n))
+		}
+	}
+	for i := 0; i < n; i++ {
+		subs, err = e.clients[(start+i)%n].Submit(ctx, env, api.SubmitOptions{})
+		if err == nil || !isNetErr(err) {
+			break
+		}
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -554,5 +621,6 @@ func (e *env) submit(ctx context.Context, b interface {
 			ids = append(ids, s.Status.TxID)
 		}
 	}
+	e.led.record(env) // observe-only local mirror; panic-safe
 	return ids, nil
 }

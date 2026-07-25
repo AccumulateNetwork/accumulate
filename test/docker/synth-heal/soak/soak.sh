@@ -25,7 +25,12 @@ up=""; for _ in $(seq 1 60); do curl -sf -X POST http://localhost:26660/v3 -H "c
 # small -max-stranded tolerance absorbs the odd straggler left by a chaos
 # pause/restart landing on the settle window without failing the whole run;
 # a strand regression produces far more than that.
-nohup go run "$repo/tools/cmd/loadgen" -endpoint http://localhost:26660 \
+# Rotate submissions/queries across all 12 nodes (host ports 26660-26671), so a
+# node chaos pauses/restarts (or that OOMs) no longer rejects traffic or carries
+# the whole load — the connection-error rejections and the API-node OOM both
+# traced to a single endpoint.
+EPS=$(for p in $(seq 26660 26671); do printf "http://localhost:%d," "$p"; done | sed 's/,$//')
+nohup go run "$repo/tools/cmd/loadgen" -endpoints "$EPS" \
   -faucet-seed FAUCET -tps "$TPS" -duration "$DURATION" -timeout 26h \
   -grace 5m -max-stranded 20 -stats-file "$here/loadgen-stats.json" >> "$log" 2>&1 &
 DRIVER=$!
