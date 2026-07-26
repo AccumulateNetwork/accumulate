@@ -296,12 +296,9 @@ func (v *ConsensusService) UnmarshalJSON(b []byte) error {
 }
 
 type CoreConsensusApp struct {
-	Partition              *protocol.PartitionInfo
-	EnableHealing          *bool
-	EnableDirectDispatch   *bool
-	EnableSyntheticHealing *bool
-	EnableAnchorHealing    *bool
-	MaxEnvelopesPerBlock   *uint64
+	Partition            *protocol.PartitionInfo
+	EnableDirectDispatch *bool
+	MaxEnvelopesPerBlock *uint64
 }
 
 func (CoreConsensusApp) Type() ConsensusAppType { return ConsensusAppTypeCore }
@@ -327,21 +324,18 @@ func (v *CoreConsensusApp) UnmarshalJSON(b []byte) error {
 }
 
 type CoreValidatorConfiguration struct {
-	Mode                   CoreValidatorMode
-	Listen                 Multiaddr
-	BVN                    string
-	ValidatorKey           PrivateKey
-	DnGenesis              string
-	BvnGenesis             string
-	DnBootstrapPeers       []Multiaddr
-	BvnBootstrapPeers      []Multiaddr
-	EnableHealing          *bool
-	EnableDirectDispatch   *bool
-	EnableSyntheticHealing *bool
-	EnableAnchorHealing    *bool
-	EnableSnapshots        *bool
-	MaxEnvelopesPerBlock   *uint64
-	StorageType            *StorageType
+	Mode                 CoreValidatorMode
+	Listen               Multiaddr
+	BVN                  string
+	ValidatorKey         PrivateKey
+	DnGenesis            string
+	BvnGenesis           string
+	DnBootstrapPeers     []Multiaddr
+	BvnBootstrapPeers    []Multiaddr
+	EnableDirectDispatch *bool
+	EnableSnapshots      *bool
+	MaxEnvelopesPerBlock *uint64
+	StorageType          *StorageType
 }
 
 func (CoreValidatorConfiguration) Type() ConfigurationType { return ConfigurationTypeCoreValidator }
@@ -520,7 +514,6 @@ type FollowerConfiguration struct {
 	BvnGenesis           string
 	DnBootstrapPeers     []Multiaddr
 	BvnBootstrapPeers    []Multiaddr
-	EnableHealing        *bool
 	EnableDirectDispatch *bool
 	EnableSnapshots      *bool
 	MaxEnvelopesPerBlock *uint64

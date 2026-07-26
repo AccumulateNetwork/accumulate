@@ -56,7 +56,6 @@ type simFactory struct {
 	deterministic               bool
 	dropInitialAnchor           bool
 	disableAnchorHealing        bool
-	enableSyntheticHealing      bool
 	interceptDispatchedMessages DispatchInterceptor
 
 	// State
@@ -568,7 +567,6 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 		NewDispatcher: f.getDispatcherFunc(),
 		Sequencer:     f.getServices().Private(),
 		Querier:       f.getServices(),
-		EnableHealing: true,
 		Describe:      execute.DescribeShim{NetworkType: f.networkFactory.typ, PartitionId: f.networkFactory.id},
 	}
 
@@ -584,8 +582,6 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 
 	// Create the conductor. This must happen before creating the executor since
 	// it needs to receive the initial WillChangeGlobals event.
-	enableAnchorHealing := !f.disableAnchorHealing
-	enableSyntheticHealing := f.enableSyntheticHealing
 	conductor := &crosschain.Conductor{
 		Partition:              &protocol.PartitionInfo{ID: f.networkFactory.id, Type: f.typ},
 		ValidatorKey:           execOpts.Key,
@@ -595,8 +591,7 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 		Sequencer:              f.getServices().Private(),
 		RunTask:                execOpts.BackgroundTaskLauncher,
 		DropInitialAnchor:      f.dropInitialAnchor,
-		EnableAnchorHealing:    &enableAnchorHealing,
-		EnableSyntheticHealing: &enableSyntheticHealing,
+		DisableAnchorHealing:   f.disableAnchorHealing,
 
 		// Simulator blocks are not wall-clock paced, so use a tiny jitter window
 		// to keep healing deterministic and fast in tests.

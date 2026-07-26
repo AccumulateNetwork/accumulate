@@ -24,8 +24,8 @@ import (
 )
 
 func (c *Conductor) healAnchors(ctx context.Context, batch *database.Batch, destination *url.URL, currentBlock uint64) error {
-	if !def(c.EnableAnchorHealing, true) {
-		return nil
+	if c.DisableAnchorHealing {
+		return nil // test-only, see the field
 	}
 
 	// Load the source sequence chain

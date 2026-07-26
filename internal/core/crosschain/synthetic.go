@@ -99,10 +99,6 @@ func (c *Conductor) claimSequence(source *url.URL, seq uint64, now time.Time, wi
 // the entire partition — jitter + check-then-fire keep N validators from all
 // firing. See issue #4064.
 func (c *Conductor) requestMissingSynthetics(ctx context.Context, batch *database.Batch) error {
-	// Default off until validated in production.
-	if !def(c.EnableSyntheticHealing, false) {
-		return nil
-	}
 	if c.Sequencer == nil {
 		return nil
 	}

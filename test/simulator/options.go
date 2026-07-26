@@ -88,15 +88,6 @@ func DisableAnchorHealing() Option {
 	})
 }
 
-// EnableSyntheticHealing enables receiver-pull healing of missing synthetic
-// messages (#4064).
-func EnableSyntheticHealing() Option {
-	return optionFunc(func(opts *simFactory) error {
-		opts.enableSyntheticHealing = true
-		return nil
-	})
-}
-
 // CaptureDispatchedMessages allows the caller to capture internally dispatched
 // messages.
 func CaptureDispatchedMessages(fn DispatchInterceptor) Option {

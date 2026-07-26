@@ -51,15 +51,15 @@ type Conductor struct {
 	// the anchor the first time around.
 	DropInitialAnchor bool
 
-	// Enables healing of anchors after they are initially submitted.
-	EnableAnchorHealing *bool
+	// **FOR TESTING PURPOSES ONLY**. Suppresses anchor healing so a test can
+	// observe the un-healed path. There is deliberately no configuration for
+	// this: in production a node always heals, because a lost anchor wedges the
+	// destination permanently and recovery is not an operator preference.
+	DisableAnchorHealing bool
 
 	// Sequencer is used to pull missing synthetic messages from a source
 	// partition when an inbound stream stalls (receiver-pull healing, #4064).
 	Sequencer private.Sequencer
-
-	// Enables receiver-pull healing of missing synthetic messages. Default off.
-	EnableSyntheticHealing *bool
 
 	// SyntheticHealWindow overrides the jitter/back-off window for synthetic
 	// healing. Zero uses the default (syntheticHealWindow). Tests set a small
@@ -155,8 +155,9 @@ func (c *Conductor) willBeginBlock(e execute.WillBeginBlock) error {
 	}
 
 	// Request any missing inbound synthetic messages (receiver-pull healing).
-	// Gate before spawning so the default (disabled) path costs nothing (#4066).
-	if def(c.EnableSyntheticHealing, false) && c.Sequencer != nil {
+	// Unconditional: a lost synthetic wedges the stream permanently, so recovery
+	// is not an option an operator should be able to switch off.
+	if c.Sequencer != nil {
 		c.runTask(func() {
 			batch := c.Database.Begin(false)
 			defer batch.Discard()
