@@ -1,0 +1,5 @@
+# Test records are the evidence for a release and must be committed. The repo
+# root .gitignore has a blanket `*.log` rule that would otherwise discard every
+# captured test run — the same trap that nearly lost the soak results.
+!*.log
+!*.out
