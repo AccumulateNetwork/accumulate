@@ -111,6 +111,27 @@ nohup go run "$repo/tools/cmd/loadgen" -endpoints "$EPS" \
   -grace 5m -max-stranded 20 -stats-file "$rd/loadgen-stats.json" >> "$log" 2>&1 &
 DRIVER=$!
 
+# Observability. Launch these WITH the run, never by hand afterwards — the
+# coarse monitor below only samples height/heals/CPU every 5 min and cannot see
+# a wedged stream, which is usually the thing being tested. soakmon serves the
+# per-stream gap/wedge/heal detail that seizewatch trips on; without it a
+# seizure is invisible until the loadgen strands transactions much later.
+if [ -x "$here/soakmon.py" ]; then
+  nohup "$here/soakmon.py" > "$rd/soakmon.log" 2>&1 &
+  MON=$!
+  for _ in $(seq 1 20); do
+    curl -sf -m3 http://127.0.0.1:8099/data >/dev/null 2>&1 && break
+    sleep 3
+  done
+  curl -sf -m3 http://127.0.0.1:8099/data >/dev/null 2>&1 \
+    && echo "   soakmon: http://127.0.0.1:8099" | tee -a "$log" \
+    || echo "   WARNING: soakmon did not come up — no wedge detection this run" | tee -a "$log"
+fi
+if [ -x "$here/seizewatch.sh" ]; then
+  nohup "$here/seizewatch.sh" > "$rd/seizewatch.out" 2>&1 &
+  SEIZE=$!
+fi
+
 # Chaos: every ~10 min disturb ONE random node (quorum 3/4 preserved).
 # Full ISO dates — time-of-day alone cannot be attributed to a run.
 ( end=$(( $(date +%s) + $(( $(echo "$DURATION" | sed 's/h//') * 3600 )) ))
@@ -151,7 +172,7 @@ echo "time,dnHeight,heals,cpuPct" > "$mon"
   done ) &
 
 wait $DRIVER; rc=$?
-kill $CHAOS 2>/dev/null
+kill $CHAOS ${MON:-} ${SEIZE:-} 2>/dev/null
 ended=$(date -u +%FT%TZ)
 echo "== soak finished $(date -u) driver-exit=$rc ==" | tee -a "$log"
 
@@ -178,6 +199,7 @@ n_chaos=$(wc -l < "$chaos" 2>/dev/null || echo 0)
   echo "| heals | ${first_x:-?} -> ${last_x:-?} |"
   echo "| chaos events | $n_chaos |"
   echo "| monitor samples | $(( $(wc -l < "$mon") - 1 )) |"
+  echo "| seizure | $(grep -q SEIZED "$rd/seizewatch.out" 2>/dev/null && grep SEIZED "$rd/seizewatch.out" | tail -1 || echo 'none detected') |"
   echo
   echo "Raw: \`soak.log\`, \`monitor.csv\`, \`chaos.log\`, \`loadgen-stats.json\`."
 } >> "$manifest"
