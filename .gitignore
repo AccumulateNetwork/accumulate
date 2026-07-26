@@ -72,3 +72,4 @@ tmp
 .newscripts
 .archive/
 mcp/mcp-server
+__pycache__/
