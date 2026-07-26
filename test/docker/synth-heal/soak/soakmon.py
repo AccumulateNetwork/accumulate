@@ -20,8 +20,14 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 COMPOSE = os.path.join(HERE, "docker-compose.yml")
-STATS = os.path.join(HERE, "loadgen-stats.json")
-CHAOS = os.path.join(HERE, "chaos.log")
+
+# soak.sh writes each run's output to runs/<timestamp>/ and passes that path in
+# RUN_DIR. Falling back to HERE keeps the monitor usable standalone, but when a
+# run is live its stats and chaos log are NOT here — reading the old fixed
+# locations is why the dashboard showed loadgen: null and no chaos events.
+RUN_DIR = os.environ.get("RUN_DIR") or HERE
+STATS = os.path.join(RUN_DIR, "loadgen-stats.json")
+CHAOS = os.path.join(RUN_DIR, "chaos.log")
 API = "http://localhost:26660/v3"
 PORT = int(os.environ.get("PORT", "8099"))
 

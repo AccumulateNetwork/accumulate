@@ -117,7 +117,8 @@ DRIVER=$!
 # per-stream gap/wedge/heal detail that seizewatch trips on; without it a
 # seizure is invisible until the loadgen strands transactions much later.
 if [ -x "$here/soakmon.py" ]; then
-  nohup "$here/soakmon.py" > "$rd/soakmon.log" 2>&1 &
+  # RUN_DIR so the dashboard reads THIS run's loadgen stats and chaos log.
+  nohup env RUN_DIR="$rd" "$here/soakmon.py" > "$rd/soakmon.log" 2>&1 &
   MON=$!
   for _ in $(seq 1 20); do
     curl -sf -m3 http://127.0.0.1:8099/data >/dev/null 2>&1 && break
