@@ -36,7 +36,12 @@ exec_ver=$(grep -E '^\s*executorVersion:' "$here/network.yml" | head -1 | sed 's
 # From v1.4.5 healing has no configuration — the conductor always heals. Older
 # trees injected enable-*-healing into accumulate.toml, so keep reading it: a
 # run against an older image must still record what it was configured with.
-heal_flags=$(grep -oE 'enable-[a-z-]*healing = [a-z]+' "$here/docker-compose.yml" | sort -u | paste -sd'; ' -)
+# Strip comments first: the compose has an explanatory header mentioning
+# "enable-synthetic-healing = true", and matching that made a v1.4.5 run — which
+# has no healing config at all — report the flag as set. A provenance record
+# that quietly reports the opposite of the truth is worse than none.
+heal_flags=$(sed 's/#.*//' "$here/docker-compose.yml" \
+  | grep -oE 'enable-[a-z-]*healing = [a-z]+' | sort -u | paste -sd'; ' -)
 heal_flags="${heal_flags:-unconditional (no config, v1.4.5+)}"
 # The compose declares these as "${DROP_SYN-<default>}", so the value that
 # actually reaches the nodes depends on the environment. Record the EFFECTIVE
