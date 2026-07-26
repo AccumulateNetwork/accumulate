@@ -69,24 +69,15 @@ var overSpendTokens = action{
 	},
 }
 
-// overBurnCredits burns more credits than the page holds. Page 1 carries credits
-// (created with pageCredits), so it can pay the small burn-transaction fee; the
-// burn amount then fails and refunds.
-var overBurnCredits = action{
-	name: "fail:overburn-credits", weight: 1, needsIdentity: true, expectFail: true,
-	run: func(ctx context.Context, e *env) ([]*url.TxID, error) {
-		a := e.u.randIdentity()
-		if a == nil || a.signer() == nil {
-			return nil, errors.NotReady.With("no signer")
-		}
-		s := a.signer()
-		return e.sign(ctx, s.url, func() txBuilder {
-			return e.build(s).
-				BurnCredits(1 << 40). // vastly more than any page holds
-				SignWith(s.url).Version(s.version).Timestamp(e.nonce.next()).PrivateKey(a.key())
-		})
-	},
-}
+// NOTE: there is deliberately no fail:overburn-credits action. Burning more
+// credits than the page holds does NOT reach execution — BurnCredits validates
+// the balance at submit, so the envelope is rejected outright with
+// insufficientBalance. Nothing is charged, so there is no fee to refund and the
+// refund path is never exercised: the action produced only rejection noise in
+// the loadgen stats, which obscures the real rejections a soak needs to
+// surface. The refund path is covered by fail:overspend, fail:overburn-tokens,
+// fail:send-to-void, and the two void-target cases, all of which are valid
+// enough to execute and be charged before failing on business logic.
 
 // overBurnTokens burns far more ACME than an ADI token account holds. Executes,
 // fails on insufficient balance, refunds.

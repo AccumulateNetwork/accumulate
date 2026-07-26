@@ -81,9 +81,12 @@ docker-compose.yml) + `tools/cmd/loadgen`. Machine: 24-core laptop, single NVMe.
   and all `growAsync` ADI funding still source from the treasury (on BVN2).
   Fix: route those actions + ADI funding through random sub-treasuries. Not a
   network defect — a load-shape artifact.
-- **`fail:overburn-credits` rejects at validation, not a refund** — it fails at
-  submit (insufficient credits to burn), so no fee is charged to refund. The
-  other 5 `fail:*` do exercise the refund path.
+- ~~**`fail:overburn-credits` rejects at validation, not a refund**~~ —
+  **removed 2026-07-26.** It failed at submit (insufficient credits to burn), so
+  nothing was charged and no refund path ran; all it produced was rejection
+  noise that obscured the real rejections a soak needs to surface. The
+  remaining 5 `fail:*` actions all execute and are charged before failing, so
+  refund coverage is unchanged.
 - **Accounting credit drift metric** is dominated by the treasury's huge,
   under-modeled balance; normal-account refund drift is what matters and the
   reconciler handles it. Cosmetic.

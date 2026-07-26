@@ -40,7 +40,7 @@ var menu = []action{
 	addBook, addAccount,
 	addToken, issueTokens, sendTokensCustom, burnTokensCustom,
 	// Refund/failure paths (deliberately fail; see failures.go).
-	sendTokensToVoid, overSpendTokens, overBurnCredits, overBurnTokens,
+	sendTokensToVoid, overSpendTokens, overBurnTokens,
 	createSubAdiOnVoid, writeDataToVoid,
 }
 
