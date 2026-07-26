@@ -1,0 +1,380 @@
+?   	gitlab.com/accumulatenetwork/accumulate	[no test files]
+ok  	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated	0.024s
+ok  	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run	38.945s
+?   	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated-bootstrap	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated-faucet	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated-http	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/cmd/bpt-info	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/cmd/check-acc-height	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/cmd/check-state	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/cmd/cleanup-bpt	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/cmd/create-snap	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/cmd/db-block-height	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/cmd/debug-consensus	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/cmd/extract-validators	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/cmd/init-state	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/cmd/play-accumulate	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/cmd/play-accumulate/cmd	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/cmd/play-accumulate/pkg	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/cmd/play-accumulate-kernel	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/cmd/repair-snapshot	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/cmd/snapshot-info	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/cmd/snapshot-tool	[no test files]
+ok  	gitlab.com/accumulatenetwork/accumulate/exp/apiutil	0.355s
+ok  	gitlab.com/accumulatenetwork/accumulate/exp/checkpoint	0.014s
+ok  	gitlab.com/accumulatenetwork/accumulate/exp/faucet	0.072s
+?   	gitlab.com/accumulatenetwork/accumulate/exp/ioc	[no test files]
+ok  	gitlab.com/accumulatenetwork/accumulate/exp/ioutil	0.002s
+ok  	gitlab.com/accumulatenetwork/accumulate/exp/light	0.164s
+?   	gitlab.com/accumulatenetwork/accumulate/exp/loki	[no test files]
+ok  	gitlab.com/accumulatenetwork/accumulate/exp/lxrand	0.002s
+?   	gitlab.com/accumulatenetwork/accumulate/exp/promise	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/exp/telemetry	[no test files]
+ok  	gitlab.com/accumulatenetwork/accumulate/exp/tendermint	0.024s
+ok  	gitlab.com/accumulatenetwork/accumulate/exp/torrent	0.012s
+?   	gitlab.com/accumulatenetwork/accumulate/internal/api/ethereum	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/internal/api/private	[no test files]
+ok  	gitlab.com/accumulatenetwork/accumulate/internal/api/routing	0.012s
+ok  	gitlab.com/accumulatenetwork/accumulate/internal/api/v2	0.337s
+ok  	gitlab.com/accumulatenetwork/accumulate/internal/api/v3	2.164s
+ok  	gitlab.com/accumulatenetwork/accumulate/internal/api/v3/tm	0.095s
+ok  	gitlab.com/accumulatenetwork/accumulate/internal/bsn	0.032s
+?   	gitlab.com/accumulatenetwork/accumulate/internal/core	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/internal/core/block/shared	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/internal/core/events	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/internal/core/execute	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/internal/core/execute/internal	[no test files]
+ok  	gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi	0.685s
+ok  	gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block	1.586s
+ok  	gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain	0.271s
+?   	gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/simulator	[no test files]
+ok  	gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block	0.276s
+?   	gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/internal/core/hash	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/internal/core/healing	[no test files]
+ok  	gitlab.com/accumulatenetwork/accumulate/internal/database	2.403s
+?   	gitlab.com/accumulatenetwork/accumulate/internal/database/indexing	[no test files]
+ok  	gitlab.com/accumulatenetwork/accumulate/internal/database/record	0.006s
+ok  	gitlab.com/accumulatenetwork/accumulate/internal/database/smt/common	0.017s
+?   	gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage	[no test files]
+ok  	gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot	0.408s
+ok  	gitlab.com/accumulatenetwork/accumulate/internal/logging	0.011s
+ok  	gitlab.com/accumulatenetwork/accumulate/internal/node	0.017s
+ok  	gitlab.com/accumulatenetwork/accumulate/internal/node/abci	4.190s
+ok  	gitlab.com/accumulatenetwork/accumulate/internal/node/config	0.019s
+ok  	gitlab.com/accumulatenetwork/accumulate/internal/node/daemon	0.021s
+ok  	gitlab.com/accumulatenetwork/accumulate/internal/node/genesis	0.020s
+?   	gitlab.com/accumulatenetwork/accumulate/internal/node/http	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/internal/node/web	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/internal/util/cmd	[no test files]
+ok  	gitlab.com/accumulatenetwork/accumulate/internal/util/indexing	0.091s
+?   	gitlab.com/accumulatenetwork/accumulate/internal/util/io	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/internal/util/pool	[no test files]
+ok  	gitlab.com/accumulatenetwork/accumulate/internal/util/sort	0.003s
+ok  	gitlab.com/accumulatenetwork/accumulate/pkg/accumulate	0.016s
+?   	gitlab.com/accumulatenetwork/accumulate/pkg/api/ethereum	[no test files]
+ok  	gitlab.com/accumulatenetwork/accumulate/pkg/api/v3	0.016s
+ok  	gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc	0.025s
+ok  	gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message	0.026s
+ok  	gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p	0.372s
+ok  	gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p/dial	0.024s
+ok  	gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p/peerdb	0.014s
+?   	gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/rest	[no test files]
+ok  	gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/websocket	0.016s
+ok  	gitlab.com/accumulatenetwork/accumulate/pkg/build	0.023s
+?   	gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/pkg/client/signing	[no test files]
+ok  	gitlab.com/accumulatenetwork/accumulate/pkg/crypto	0.011s
+ok  	gitlab.com/accumulatenetwork/accumulate/pkg/database	0.129s
+ok  	gitlab.com/accumulatenetwork/accumulate/pkg/database/bpt	1.549s
+ok  	gitlab.com/accumulatenetwork/accumulate/pkg/database/indexing	0.029s
+?   	gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue	[no test files]
+ok  	gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/badger	5.751s
+ok  	gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/block	0.268s
+ok  	gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/bolt	1.509s
+?   	gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/kvtest	[no test files]
+ok  	gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/leveldb	0.573s
+ok  	gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory	0.086s
+ok  	gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/overlay	0.397s
+ok  	gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/remote	0.304s
+ok  	gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle	1.640s
+ok  	gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot	0.183s
+ok  	gitlab.com/accumulatenetwork/accumulate/pkg/database/values	0.015s [no tests to run]
+?   	gitlab.com/accumulatenetwork/accumulate/pkg/errors	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/pkg/proxy	[no test files]
+ok  	gitlab.com/accumulatenetwork/accumulate/pkg/types/address	0.025s
+?   	gitlab.com/accumulatenetwork/accumulate/pkg/types/cometbft	[no test files]
+{"types":{"AddKeyOperation":[{"name":"entry","type":"KeySpecParams"}],"EIP712Domain":[{"name":"name","type":"string"},{"name":"version","type":"string"},{"name":"chainId","type":"uint256"}],"KeyPageOperation":[{"name":"add","type":"AddKeyOperation"}],"KeySpecParams":[{"name":"delegate","type":"string"},{"name":"keyHash","type":"bytes"}],"SignatureMetadata":[{"name":"publicKey","type":"bytes"},{"name":"signer","type":"string"},{"name":"signerVersion","type":"uint64"},{"name":"timestamp","type":"uint64"},{"name":"type","type":"string"}],"Transaction":[{"name":"header","type":"TransactionHeader"},{"name":"signature","type":"SignatureMetadata"},{"name":"updateKeyPage","type":"UpdateKeyPage"}],"TransactionHeader":[{"name":"initiator","type":"bytes32"},{"name":"principal","type":"string"}],"UpdateKeyPage":[{"name":"operation","type":"KeyPageOperation[]"}]},"primaryType":"Transaction","domain":{"name":"Accumulate","version":"1.0.0","chainId":"2478899481"},"message":{"header":{"authorities":[],"initiator":"0xf347ff5c08ab27068a6b22162ce007a8e762abd69ea455256b5956c58ab5bc77","memo":"","metadata":"","principal":"acc://adi.acme/book/1"},"signature":{"data":"","delegators":[],"memo":"","publicKey":"0x04353156d6121acc9ef71628fa54a8f0f671d8597b9f8a226e62ba86611c2b2c7dbc90d9353a8391163f77ce30cdf08558a8118050b2dca49aa1573de03e617699","signer":"acc://adi.acme/book/1","signerVersion":1,"timestamp":1720564975623,"type":"typedData","vote":""},"updateKeyPage":{"operation":[{"add":{"entry":{"delegate":"","keyHash":"0x0102030000000000000000000000000000000000000000000000000000000000"},"type":""}},{"add":{"entry":{"delegate":"acc://foo.bar","keyHash":""},"type":""}}],"type":""}}}
+node:internal/modules/cjs/loader:1424
+  throw err;
+  ^
+
+Error: Cannot find module './encryption'
+Require stack:
+- /home/paul/repos/gitlab.com/accumulatenetwork/release-4070/test/cmd/eth_signTypedData/node_modules/@metamask/eth-sig-util/dist/index.js
+- /home/paul/repos/gitlab.com/accumulatenetwork/release-4070/test/cmd/eth_signTypedData/main.js
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1421:15)
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1059:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1064:22)
+    at Module._load (node:internal/modules/cjs/loader:1227:37)
+    at TracingChannel.traceSync (node:diagnostics_channel:328:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:245:24)
+    at Module.require (node:internal/modules/cjs/loader:1504:12)
+    at require (node:internal/modules/helpers:152:16)
+    at Object.<anonymous> (/home/paul/repos/gitlab.com/accumulatenetwork/release-4070/test/cmd/eth_signTypedData/node_modules/@metamask/eth-sig-util/dist/index.js:20:14)
+    at Module._compile (node:internal/modules/cjs/loader:1761:14) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [
+    '/home/paul/repos/gitlab.com/accumulatenetwork/release-4070/test/cmd/eth_signTypedData/node_modules/@metamask/eth-sig-util/dist/index.js',
+    '/home/paul/repos/gitlab.com/accumulatenetwork/release-4070/test/cmd/eth_signTypedData/main.js'
+  ]
+}
+
+Node.js v24.13.0
+{"types":{"AddKeyOperation":[{"name":"entry","type":"KeySpecParams"}],"EIP712Domain":[{"name":"name","type":"string"},{"name":"version","type":"string"},{"name":"chainId","type":"uint256"}],"KeyPageOperation":[{"name":"add","type":"AddKeyOperation"},{"name":"setThreshold","type":"SetThresholdKeyPageOperation"}],"KeySpecParams":[{"name":"keyHash","type":"bytes"}],"SetThresholdKeyPageOperation":[{"name":"threshold","type":"uint64"}],"SignatureMetadata":[{"name":"publicKey","type":"bytes"},{"name":"signer","type":"string"},{"name":"signerVersion","type":"uint64"},{"name":"timestamp","type":"uint64"},{"name":"type","type":"string"}],"Transaction":[{"name":"header","type":"TransactionHeader"},{"name":"signature","type":"SignatureMetadata"},{"name":"updateKeyPage","type":"UpdateKeyPage"}],"TransactionHeader":[{"name":"initiator","type":"bytes32"},{"name":"principal","type":"string"}],"UpdateKeyPage":[{"name":"operation","type":"KeyPageOperation[]"}]},"primaryType":"Transaction","domain":{"name":"Accumulate","version":"1.0.0","chainId":"2478899481"},"message":{"header":{"authorities":[],"initiator":"0xbe146819b13cd29498a677ddd36e4ea713c46e1dd8cb7b39d882742cb6f1e197","memo":"","metadata":"","principal":"acc://adi.acme/book/1"},"signature":{"data":"","delegators":[],"memo":"","publicKey":"0x04222032ab5d8e859808256588417278f2df10a90a72c3ca87d5732aeb61ea4797fd546b04dfdad95f6d3860bc4f9e7c0f5d97230ce4436ae91e872818205c42cd","signer":"acc://adi.acme/book/1","signerVersion":1,"timestamp":1720564975623,"type":"typedData","vote":""},"updateKeyPage":{"operation":[{"add":{"entry":{"delegate":"","keyHash":"0x0102030000000000000000000000000000000000000000000000000000000000"},"type":""}},{"setThreshold":{"threshold":2,"type":""}}],"type":""}}}
+node:internal/modules/cjs/loader:1424
+  throw err;
+  ^
+
+Error: Cannot find module '@metamask/eth-sig-util'
+Require stack:
+- /home/paul/repos/gitlab.com/accumulatenetwork/release-4070/test/cmd/eth_signTypedData/main.js
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1421:15)
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1059:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1064:22)
+    at Module._load (node:internal/modules/cjs/loader:1227:37)
+    at TracingChannel.traceSync (node:diagnostics_channel:328:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:245:24)
+    at Module.require (node:internal/modules/cjs/loader:1504:12)
+    at require (node:internal/modules/helpers:152:16)
+    at Object.<anonymous> (/home/paul/repos/gitlab.com/accumulatenetwork/release-4070/test/cmd/eth_signTypedData/main.js:1:13)
+    at Module._compile (node:internal/modules/cjs/loader:1761:14) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [
+    '/home/paul/repos/gitlab.com/accumulatenetwork/release-4070/test/cmd/eth_signTypedData/main.js'
+  ]
+}
+
+Node.js v24.13.0
+--- FAIL: TestEIP712Arrays (0.96s)
+    --- FAIL: TestEIP712Arrays/6409bfe956ff5c8397efcd32c2c529eeaf6c059bdfd8257a4f1a7b27170ec9fe (0.75s)
+        eip712_test.go:65: 
+            	Error Trace:	/home/paul/repos/gitlab.com/accumulatenetwork/release-4070/pkg/types/encoding/eip712_test.go:65
+            	Error:      	Received unexpected error:
+            	            	exit status 1
+            	Test:       	TestEIP712Arrays/6409bfe956ff5c8397efcd32c2c529eeaf6c059bdfd8257a4f1a7b27170ec9fe
+    --- FAIL: TestEIP712Arrays/735f8b8b12bbcab3f81e9450acac92decea6be6efe0e859a3c487dc92739e821 (0.21s)
+        eip712_test.go:65: 
+            	Error Trace:	/home/paul/repos/gitlab.com/accumulatenetwork/release-4070/pkg/types/encoding/eip712_test.go:65
+            	Error:      	Received unexpected error:
+            	            	exit status 1
+            	Test:       	TestEIP712Arrays/735f8b8b12bbcab3f81e9450acac92decea6be6efe0e859a3c487dc92739e821
+FAIL
+FAIL	gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding	10.281s
+?   	gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/pkg/types/network	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/pkg/types/p2p	[no test files]
+ok  	gitlab.com/accumulatenetwork/accumulate/pkg/types/record	0.006s
+ok  	gitlab.com/accumulatenetwork/accumulate/pkg/url	0.002s
+[INFO] Starting snapshot file creation
+[INFO] Created snapshot writer
+[INFO] Writing snapshot header
+[INFO] Wrote snapshot header
+[INFO] Calling DidWriteHeader hook
+[INFO] DidWriteHeader hook complete
+[INFO] Collecting BPT
+[INFO] Collected BPT count=14 (total time: 0s)
+[INFO] BPT Account Type Distribution:
+[INFO] anchorLedger        :          1 (  7.14%) (est. final: 1)
+[INFO] blockLedger         :          1 (  7.14%) (est. final: 1)
+[INFO] dataAccount         :          6 ( 42.86%) (est. final: 6)
+[INFO] identity            :          1 (  7.14%) (est. final: 1)
+[INFO] keyBook             :          1 (  7.14%) (est. final: 1)
+[INFO] keyPage             :          1 (  7.14%) (est. final: 1)
+[INFO] syntheticLedger     :          1 (  7.14%) (est. final: 1)
+[INFO] systemLedger        :          1 (  7.14%) (est. final: 1)
+[INFO] tokenIssuer         :          1 (  7.14%) (est. final: 1)
+[INFO] Creating temporary directory for snapshot construction
+[INFO] Created temporary directory: /tmp/accumulate-snapshot-1268987777
+[INFO] Starting snapshot file creation
+[INFO] Created snapshot writer
+[INFO] Writing snapshot header
+[INFO] Wrote snapshot header
+[INFO] Calling DidWriteHeader hook
+[INFO] DidWriteHeader hook complete
+[INFO] Collecting BPT
+[INFO] Collected BPT count=13 (total time: 0s)
+[INFO] BPT Account Type Distribution:
+[INFO] anchorLedger        :          1 (  7.69%) (est. final: 1)
+[INFO] blockLedger         :          1 (  7.69%) (est. final: 1)
+[INFO] dataAccount         :          6 ( 46.15%) (est. final: 6)
+[INFO] identity            :          1 (  7.69%) (est. final: 1)
+[INFO] keyBook             :          1 (  7.69%) (est. final: 1)
+[INFO] keyPage             :          1 (  7.69%) (est. final: 1)
+[INFO] syntheticLedger     :          1 (  7.69%) (est. final: 1)
+[INFO] systemLedger        :          1 (  7.69%) (est. final: 1)
+[INFO] Creating temporary directory for snapshot construction
+[INFO] Created temporary directory: /tmp/accumulate-snapshot-1407124775
+[INFO] Starting snapshot file creation
+[INFO] Created snapshot writer
+[INFO] Writing snapshot header
+[INFO] Wrote snapshot header
+[INFO] Calling DidWriteHeader hook
+[INFO] DidWriteHeader hook complete
+[INFO] Collecting BPT
+[INFO] Collected BPT count=14 (total time: 0s)
+[INFO] BPT Account Type Distribution:
+[INFO] anchorLedger        :          1 (  7.14%) (est. final: 1)
+[INFO] blockLedger         :          1 (  7.14%) (est. final: 1)
+[INFO] dataAccount         :          6 ( 42.86%) (est. final: 6)
+[INFO] identity            :          1 (  7.14%) (est. final: 1)
+[INFO] keyBook             :          1 (  7.14%) (est. final: 1)
+[INFO] keyPage             :          1 (  7.14%) (est. final: 1)
+[INFO] syntheticLedger     :          1 (  7.14%) (est. final: 1)
+[INFO] systemLedger        :          1 (  7.14%) (est. final: 1)
+[INFO] tokenIssuer         :          1 (  7.14%) (est. final: 1)
+[INFO] Creating temporary directory for snapshot construction
+[INFO] Created temporary directory: /tmp/accumulate-snapshot-1946661404
+[INFO] Starting snapshot file creation
+[INFO] Created snapshot writer
+[INFO] Writing snapshot header
+[INFO] Wrote snapshot header
+[INFO] Calling DidWriteHeader hook
+[INFO] DidWriteHeader hook complete
+[INFO] Collecting BPT
+[INFO] Collected BPT count=13 (total time: 0s)
+[INFO] BPT Account Type Distribution:
+[INFO] anchorLedger        :          1 (  7.69%) (est. final: 1)
+[INFO] blockLedger         :          1 (  7.69%) (est. final: 1)
+[INFO] dataAccount         :          6 ( 46.15%) (est. final: 6)
+[INFO] identity            :          1 (  7.69%) (est. final: 1)
+[INFO] keyBook             :          1 (  7.69%) (est. final: 1)
+[INFO] keyPage             :          1 (  7.69%) (est. final: 1)
+[INFO] syntheticLedger     :          1 (  7.69%) (est. final: 1)
+[INFO] systemLedger        :          1 (  7.69%) (est. final: 1)
+[INFO] Creating temporary directory for snapshot construction
+[INFO] Created temporary directory: /tmp/accumulate-snapshot-1391591763
+[INFO] Starting snapshot file creation
+[INFO] Created snapshot writer
+[INFO] Writing snapshot header
+[INFO] Wrote snapshot header
+[INFO] Calling DidWriteHeader hook
+[INFO] DidWriteHeader hook complete
+[INFO] Collecting BPT
+[INFO] Collected BPT count=14 (total time: 0s)
+[INFO] BPT Account Type Distribution:
+[INFO] anchorLedger        :          1 (  7.14%) (est. final: 1)
+[INFO] blockLedger         :          1 (  7.14%) (est. final: 1)
+[INFO] dataAccount         :          6 ( 42.86%) (est. final: 6)
+[INFO] identity            :          1 (  7.14%) (est. final: 1)
+[INFO] keyBook             :          1 (  7.14%) (est. final: 1)
+[INFO] keyPage             :          1 (  7.14%) (est. final: 1)
+[INFO] syntheticLedger     :          1 (  7.14%) (est. final: 1)
+[INFO] systemLedger        :          1 (  7.14%) (est. final: 1)
+[INFO] tokenIssuer         :          1 (  7.14%) (est. final: 1)
+[INFO] Creating temporary directory for snapshot construction
+[INFO] Created temporary directory: /tmp/accumulate-snapshot-1111299394
+[INFO] Starting snapshot file creation
+[INFO] Created snapshot writer
+[INFO] Writing snapshot header
+[INFO] Wrote snapshot header
+[INFO] Calling DidWriteHeader hook
+[INFO] DidWriteHeader hook complete
+[INFO] Collecting BPT
+[INFO] Collected BPT count=13 (total time: 0s)
+[INFO] BPT Account Type Distribution:
+[INFO] anchorLedger        :          1 (  7.69%) (est. final: 1)
+[INFO] blockLedger         :          1 (  7.69%) (est. final: 1)
+[INFO] dataAccount         :          6 ( 46.15%) (est. final: 6)
+[INFO] identity            :          1 (  7.69%) (est. final: 1)
+[INFO] keyBook             :          1 (  7.69%) (est. final: 1)
+[INFO] keyPage             :          1 (  7.69%) (est. final: 1)
+[INFO] syntheticLedger     :          1 (  7.69%) (est. final: 1)
+[INFO] systemLedger        :          1 (  7.69%) (est. final: 1)
+[INFO] Creating temporary directory for snapshot construction
+[INFO] Created temporary directory: /tmp/accumulate-snapshot-3796313158
+{"types":{"EIP712Domain":[{"name":"name","type":"string"},{"name":"version","type":"string"},{"name":"chainId","type":"uint256"}],"SendTokens":[{"name":"to","type":"TokenRecipient[]"}],"SignatureMetadata":[{"name":"publicKey","type":"bytes"},{"name":"signer","type":"string"},{"name":"signerVersion","type":"uint64"},{"name":"timestamp","type":"uint64"},{"name":"type","type":"string"}],"TokenRecipient":[{"name":"amount","type":"uint256"},{"name":"url","type":"string"}],"Transaction":[{"name":"header","type":"TransactionHeader"},{"name":"sendTokens","type":"SendTokens"},{"name":"signature","type":"SignatureMetadata"}],"TransactionHeader":[{"name":"initiator","type":"bytes32"},{"name":"principal","type":"string"}]},"primaryType":"Transaction","domain":{"name":"Accumulate","version":"1.0.0","chainId":"281"},"message":{"header":{"authorities":[],"initiator":"0xe54c19b8e2069a90a390c99c5d3a49cbf6c054f20f2ca611e821bc5189b6d51c","memo":"","metadata":"","principal":"acc://adi.acme/ACME"},"sendTokens":{"hash":"","meta":"","to":[{"amount":"10000000000","url":"acc://other.acme/ACME"}],"type":""},"signature":{"data":"","delegators":[],"memo":"","publicKey":"0x04fb8c16cf3165ac6cd2188aa2014dbc2528e66ce06c881fa1f99fcc6598bf13dc5091400e4e335db65dca5130f037e367b138573f2808665772ffb35208943606","signer":"acc://adi.acme/book/1","signerVersion":1,"timestamp":1720564975623,"type":"typedData","vote":""}}}
+node:internal/modules/cjs/loader:1424
+  throw err;
+  ^
+
+Error: Cannot find module '@metamask/eth-sig-util'
+Require stack:
+- /home/paul/repos/gitlab.com/accumulatenetwork/release-4070/test/cmd/eth_signTypedData/main.js
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1421:15)
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1059:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1064:22)
+    at Module._load (node:internal/modules/cjs/loader:1227:37)
+    at TracingChannel.traceSync (node:diagnostics_channel:328:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:245:24)
+    at Module.require (node:internal/modules/cjs/loader:1504:12)
+    at require (node:internal/modules/helpers:152:16)
+    at Object.<anonymous> (/home/paul/repos/gitlab.com/accumulatenetwork/release-4070/test/cmd/eth_signTypedData/main.js:1:13)
+    at Module._compile (node:internal/modules/cjs/loader:1761:14) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [
+    '/home/paul/repos/gitlab.com/accumulatenetwork/release-4070/test/cmd/eth_signTypedData/main.js'
+  ]
+}
+
+Node.js v24.13.0
+--- FAIL: TestEIP712MessageForWallet (2.74s)
+    signature_test.go:588: 
+        	Error Trace:	/home/paul/repos/gitlab.com/accumulatenetwork/release-4070/protocol/signature_test.go:588
+        	Error:      	Received unexpected error:
+        	            	exit status 1
+        	Test:       	TestEIP712MessageForWallet
+FAIL
+FAIL	gitlab.com/accumulatenetwork/accumulate/protocol	3.043s
+?   	gitlab.com/accumulatenetwork/accumulate/test/cmd/devnet	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/test/cmd/gen-testdata	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/test/cmd/load	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/test/docker	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/test/docker/synth-heal/driver	[no test files]
+ok  	gitlab.com/accumulatenetwork/accumulate/test/e2e	20.619s
+ok  	gitlab.com/accumulatenetwork/accumulate/test/e2e2	0.007s
+ok  	gitlab.com/accumulatenetwork/accumulate/test/e2e2/generated	0.348s
+ok  	gitlab.com/accumulatenetwork/accumulate/test/encoding	0.354s
+?   	gitlab.com/accumulatenetwork/accumulate/test/harness	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/test/helpers	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/test/mocks/api_v3	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/test/mocks/internal_/api/private	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/test/mocks/pkg/api/v3	[no test files]
+ok  	gitlab.com/accumulatenetwork/accumulate/test/sdk	0.012s
+ok  	gitlab.com/accumulatenetwork/accumulate/test/simulator	1.103s
+?   	gitlab.com/accumulatenetwork/accumulate/test/simulator/compat	[no test files]
+ok  	gitlab.com/accumulatenetwork/accumulate/test/simulator/consensus	0.528s
+?   	gitlab.com/accumulatenetwork/accumulate/test/simulator/services	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/test/testing	[no test files]
+ok  	gitlab.com/accumulatenetwork/accumulate/test/util	0.007s
+?   	gitlab.com/accumulatenetwork/accumulate/test/util/fuzz	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/test/util/http	[no test files]
+ok  	gitlab.com/accumulatenetwork/accumulate/test/validate	3.949s
+?   	gitlab.com/accumulatenetwork/accumulate/tools/cmd/convert-node-id	[no test files]
+ok  	gitlab.com/accumulatenetwork/accumulate/tools/cmd/dbrepair	42.380s
+ok  	gitlab.com/accumulatenetwork/accumulate/tools/cmd/debug	0.128s
+ok  	gitlab.com/accumulatenetwork/accumulate/tools/cmd/debug/docs	0.550s
+?   	gitlab.com/accumulatenetwork/accumulate/tools/cmd/export-snapshot	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-api	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-enum	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-model	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-sdk	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/tools/cmd/genesis	[no test files]
+ok  	gitlab.com/accumulatenetwork/accumulate/tools/cmd/golangci-lint	0.425s
+?   	gitlab.com/accumulatenetwork/accumulate/tools/cmd/loadgen	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/tools/cmd/mempoolstat	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/tools/cmd/recode	[no test files]
+ok  	gitlab.com/accumulatenetwork/accumulate/tools/cmd/repair-indices	0.152s
+?   	gitlab.com/accumulatenetwork/accumulate/tools/cmd/routeprobe	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/tools/cmd/simulator	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/tools/cmd/snapshot	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/tools/internal/factom	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/tools/internal/typegen	[no test files]
+ok  	gitlab.com/accumulatenetwork/accumulate/tools/test	0.005s
+?   	gitlab.com/accumulatenetwork/accumulate/vdk/logger	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/vdk/node	[no test files]
+?   	gitlab.com/accumulatenetwork/accumulate/vdk/utils	[no test files]
+FAIL
