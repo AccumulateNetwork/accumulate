@@ -1,4 +1,4 @@
-id: "SynthHealSoak"
+id: "MixVerTest"
 
 # 24h chaos soak network: 3 BVNs x 4 validators (#4064 soak).
 
@@ -9,7 +9,7 @@ bootstrap:
   basePort: 16593
 
 globals:
-  executorVersion: "v2-jiuquan"
+  executorVersion: "v2-vandenberg"
   oracle:
     price: 10000000
   globals:

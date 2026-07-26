@@ -1,4 +1,12 @@
-soak.log
-chaos.log
-monitor.csv
-launch.log
+# Run outputs live in runs/<id>/ and are deliberately NOT ignored — the whole
+# point is that results accumulate and survive.
+#
+# These patterns are ANCHORED with a leading slash so they match only the stale
+# top-level files left by the old script. Unanchored, `soak.log` would also match
+# `runs/<id>/soak.log` and silently discard every run's evidence.
+/soak.log
+/chaos.log
+/monitor.csv
+/launch.log
+/loadgen-stats.json
+/runs/latest
