@@ -473,6 +473,28 @@ func (x TransactionMessage) processDirAnchor(batch *database.Batch, ctx *Message
 		ctx.queueAdditional(msg)
 	}
 
+	// Release synthetic messages that were held because their proof anchor was
+	// not yet known. This anchor (anchor.RootChainAnchor) was just written to the
+	// directory anchor chain by the DirectoryAnchor executor, which is the chain
+	// the synthetic proof check queries — so re-attempting the held synthetics now
+	// lets them deliver in place, with no re-submission (#4070, restoring the V1
+	// behavior). Version-gated because holding-vs-failing changes recorded state.
+	if ctx.GetActiveGlobals().ExecutorVersion.V2JiuquanEnabled() {
+		held := batch.Account(ctx.Executor.Describe.Ledger()).SyntheticForAnchor(anchor.RootChainAnchor)
+		txids, err := held.Get()
+		if err != nil {
+			return errors.UnknownError.WithFormat("load synthetics held for anchor: %w", err)
+		}
+		if len(txids) > 0 {
+			if err = held.Put(nil); err != nil {
+				return errors.UnknownError.WithFormat("clear synthetics held for anchor: %w", err)
+			}
+			for _, txid := range txids {
+				ctx.queueAdditional(&internal.MessageIsReady{TxID: txid})
+			}
+		}
+	}
+
 	return nil
 }
 
