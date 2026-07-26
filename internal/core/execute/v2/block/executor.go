@@ -8,8 +8,6 @@ package block
 
 import (
 	"crypto/ed25519"
-	"sync/atomic"
-	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
@@ -39,11 +37,6 @@ type Executor struct {
 	isValidator        bool
 	isGenesis          bool
 	mainDispatcher     Dispatcher
-
-	// HealInterval is the minimum time between background heal scans; zero
-	// defaults to 10s. lastHealAttempt paces the scan (see shouldAttemptHealing).
-	HealInterval    time.Duration
-	lastHealAttempt atomic.Int64
 }
 
 type ExecutorOptions = execute.Options

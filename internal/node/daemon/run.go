@@ -403,7 +403,6 @@ func (d *Daemon) startApp(caughtUp <-chan struct{}) (types.Application, error) {
 		EventBus:      d.eventBus,
 		Sequencer:     client.Private(),
 		Querier:       client,
-		EnableHealing: d.Config.Accumulate.Healing.Enable == nil || *d.Config.Accumulate.Healing.Enable,
 		Describe: execute.DescribeShim{
 			NetworkType: d.Config.Accumulate.Describe.NetworkType,
 			PartitionId: d.Config.Accumulate.Describe.PartitionId,
@@ -427,17 +426,14 @@ func (d *Daemon) startApp(caughtUp <-chan struct{}) (types.Application, error) {
 
 	// This must happen before creating the executor since it needs to receive
 	// the initial WillChangeGlobals event
-	no := false
 	conductor := &crosschain.Conductor{
 		Partition:    &protocol.PartitionInfo{ID: d.Config.Accumulate.PartitionId, Type: d.Config.Accumulate.NetworkType},
 		ValidatorKey: execOpts.Key,
 		Database:     execOpts.Database,
 		Querier:      v3.Querier2{Querier: client},
 		Dispatcher:   execOpts.NewDispatcher(),
+		Sequencer:    client.Private(),
 		RunTask:      execOpts.BackgroundTaskLauncher,
-
-		// TODO Fix the flooding issues and enable this by default
-		EnableAnchorHealing: &no,
 
 		Ready: func(execute.WillBeginBlock) bool {
 			// Pause the conductor until the node has caught up

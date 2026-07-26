@@ -45,7 +45,6 @@ func TestSyntheticHealing(t *testing.T) {
 		simulator.SimpleNetwork(t.Name(), 3, 1),
 		simulator.GenesisWith(GenesisTime, globals),
 		simulator.SkipProposalCheck(), // FIXME should not be necessary
-		simulator.EnableSyntheticHealing(),
 
 		simulator.CaptureDispatchedMessages(func(ctx context.Context, env *messaging.Envelope) (send bool, err error) {
 			if dropped >= drops {
@@ -151,7 +150,6 @@ func TestSyntheticHealingSignatureRequest(t *testing.T) {
 		simulator.SimpleNetwork(t.Name(), 3, 1),
 		simulator.GenesisWith(GenesisTime, globals),
 		simulator.SkipProposalCheck(),
-		simulator.EnableSyntheticHealing(),
 
 		simulator.CaptureDispatchedMessages(func(ctx context.Context, env *messaging.Envelope) (send bool, err error) {
 			if didDrop {

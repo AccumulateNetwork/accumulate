@@ -363,31 +363,7 @@ func init() {
 				},
 			},
 			{
-				Name:     "EnableHealing",
-				Optional: true,
-				Type: &schema.PointerType{
-					TypeBase: schema.TypeBase{},
-					Elem:     &schema.SimpleType{Type: schema.SimpleTypeBool},
-				},
-			},
-			{
 				Name:     "EnableDirectDispatch",
-				Optional: true,
-				Type: &schema.PointerType{
-					TypeBase: schema.TypeBase{},
-					Elem:     &schema.SimpleType{Type: schema.SimpleTypeBool},
-				},
-			},
-			{
-				Name:     "EnableSyntheticHealing",
-				Optional: true,
-				Type: &schema.PointerType{
-					TypeBase: schema.TypeBase{},
-					Elem:     &schema.SimpleType{Type: schema.SimpleTypeBool},
-				},
-			},
-			{
-				Name:     "EnableAnchorHealing",
 				Optional: true,
 				Type: &schema.PointerType{
 					TypeBase: schema.TypeBase{},
@@ -446,31 +422,7 @@ func init() {
 					ResolveElemTo(&deferredTypes, "Multiaddr"),
 			},
 			{
-				Name:     "EnableHealing",
-				Optional: true,
-				Type: &schema.PointerType{
-					TypeBase: schema.TypeBase{},
-					Elem:     &schema.SimpleType{Type: schema.SimpleTypeBool},
-				},
-			},
-			{
 				Name:     "EnableDirectDispatch",
-				Optional: true,
-				Type: &schema.PointerType{
-					TypeBase: schema.TypeBase{},
-					Elem:     &schema.SimpleType{Type: schema.SimpleTypeBool},
-				},
-			},
-			{
-				Name:     "EnableSyntheticHealing",
-				Optional: true,
-				Type: &schema.PointerType{
-					TypeBase: schema.TypeBase{},
-					Elem:     &schema.SimpleType{Type: schema.SimpleTypeBool},
-				},
-			},
-			{
-				Name:     "EnableAnchorHealing",
 				Optional: true,
 				Type: &schema.PointerType{
 					TypeBase: schema.TypeBase{},
@@ -650,14 +602,6 @@ func init() {
 					TypeBase: schema.TypeBase{},
 				}).
 					ResolveElemTo(&deferredTypes, "Multiaddr"),
-			},
-			{
-				Name:     "EnableHealing",
-				Optional: true,
-				Type: &schema.PointerType{
-					TypeBase: schema.TypeBase{},
-					Elem:     &schema.SimpleType{Type: schema.SimpleTypeBool},
-				},
 			},
 			{
 				Name:     "EnableDirectDispatch",

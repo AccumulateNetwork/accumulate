@@ -606,10 +606,7 @@ func (c *CoreConsensusApp) prestart(inst *Instance) error {
 }
 
 func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Application, error) {
-	setDefaultPtr(&c.EnableHealing, false)
 	setDefaultPtr(&c.EnableDirectDispatch, true)
-	setDefaultPtr(&c.EnableSyntheticHealing, false)
-	setDefaultPtr(&c.EnableAnchorHealing, false)
 	setDefaultPtr(&c.MaxEnvelopesPerBlock, 100)
 
 	store, err := coreConsensusNeedsStorage.Get(inst.services, c)
@@ -634,14 +631,13 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 	}}
 	db := database.New(store, d.logger)
 	execOpts := execute.Options{
-		Logger:        d.logger.With("module", "executor"),
-		Database:      db,
-		Key:           d.privVal.Key.PrivKey.Bytes(),
-		Router:        router,
-		EventBus:      d.eventBus,
-		Sequencer:     client.Private(),
-		Querier:       client,
-		EnableHealing: *c.EnableHealing,
+		Logger:    d.logger.With("module", "executor"),
+		Database:  db,
+		Key:       d.privVal.Key.PrivKey.Bytes(),
+		Router:    router,
+		EventBus:  d.eventBus,
+		Sequencer: client.Private(),
+		Querier:   client,
 		Describe: execute.DescribeShim{
 			NetworkType: c.Partition.Type,
 			PartitionId: c.Partition.ID,
@@ -696,17 +692,6 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 		Dispatcher:   execOpts.NewDispatcher(),
 		Sequencer:    client.Private(),
 		RunTask:      execOpts.BackgroundTaskLauncher,
-
-		// Anchor healing (source-side re-sign + resubmit). Config-driven,
-		// default off — the spontaneous multi-validator re-push floods, but on
-		// a single-validator network (threshold = 1) it is safe and sufficient,
-		// so enable it per-node where the topology allows (#4064).
-		EnableAnchorHealing: c.EnableAnchorHealing,
-
-		// Receiver-pull synthetic healing (#4064). Config-driven, default off
-		// until validated in production; enable per-node to recover stalled
-		// synthetic streams.
-		EnableSyntheticHealing: c.EnableSyntheticHealing,
 
 		// Shared with the consensus service, which reports the counts in
 		// ConsensusStatus.
