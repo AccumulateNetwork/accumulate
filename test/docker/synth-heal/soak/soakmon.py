@@ -195,9 +195,75 @@ def collect_metrics():
     # rate (synthetics/anchors emitted per second across all partition pairs).
     syn_prod = sum(c.get("produced", 0) for (k, _, _), c in seq.items() if k == "synthetic")
     anc_prod = sum(c.get("produced", 0) for (k, _, _), c in seq.items() if k == "anchor")
+
+    # The accumulate_crosschain_sequence gauge exists only on the dagbft
+    # lineage. On the release lineage the nodes serve heals_total and nothing
+    # else, so the flow matrix comes back EMPTY — and an empty matrix reads as
+    # "no gaps anywhere", which is indistinguishable from healthy and silently
+    # disarms seizewatch. Fall back to the ledgers over the API, which carry the
+    # same produced/received/delivered per source on every lineage.
+    if not flows["synthetic"] and not flows["anchor"]:
+        af, asp, aap = collect_flows_api()
+        if af["synthetic"] or af["anchor"]:
+            flows, syn_prod, anc_prod = af, asp, aap
+
     return {"heals": heals, "wedges": drops, "flows": flows,
             "synProduced": syn_prod, "ancProduced": anc_prod,
             "nodes": len(cs), "scraped": sum(1 for r in per.values() if r)}
+
+
+def collect_flows_api():
+    # Flow matrix from the ledgers, for lineages that do not emit the
+    # accumulate_crosschain_sequence gauge. Each partition's synthetic/anchor
+    # ledger holds one entry per remote partition carrying BOTH directions:
+    # `produced` counts what THIS partition sent to the remote, while
+    # `received`/`delivered` count what the remote sent to THIS one. So a single
+    # pass over all four ledgers fills every src->dst cell.
+    flows = {"synthetic": {}, "anchor": {}}
+    syn_prod = anc_prod = 0
+
+    def cell(kind, src, dst):
+        return flows[kind].setdefault(src, {}).setdefault(
+            dst, {"sent": 0, "recv": 0, "deliv": 0, "pending": 0})
+
+    for kind, path in (("synthetic", "synthetic"), ("anchor", "anchors")):
+        for dst in PARTITIONS:
+            r = curl_api("query", {"scope": "acc://%s.acme/%s" % (SCOPE[dst], path)})
+            try:
+                seq = r["result"]["account"]["sequence"] or []
+            except Exception:
+                continue
+            for e in seq:
+                url = e.get("url") or ""
+                if not url:
+                    continue
+                try:
+                    remote = _plabel(url)
+                except Exception:
+                    continue
+                if remote not in PARTITIONS:
+                    continue
+                # remote -> dst
+                inbound = cell(kind, remote, dst)
+                inbound["recv"] = max(inbound["recv"], int(e.get("received") or 0))
+                inbound["deliv"] = max(inbound["deliv"], int(e.get("delivered") or 0))
+                inbound["pending"] = max(inbound["pending"], len(e.get("pending") or []))
+                # dst -> remote
+                produced = int(e.get("produced") or 0)
+                outbound = cell(kind, dst, remote)
+                outbound["sent"] = max(outbound["sent"], produced)
+                if kind == "synthetic":
+                    syn_prod += produced
+                else:
+                    anc_prod += produced
+
+    # A partition's entry for itself is bookkeeping, not a cross-partition flow.
+    for kind in flows:
+        for src in list(flows[kind]):
+            flows[kind][src].pop(src, None)
+            if not flows[kind][src]:
+                flows[kind].pop(src, None)
+    return flows, syn_prod, anc_prod
 
 
 def collect_wedges():
