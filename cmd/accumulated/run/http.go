@@ -95,7 +95,38 @@ func (h *HttpService) start(inst *Instance) error {
 		return err
 	}
 
+	// Determine which instance holds the halt controllers
+	// (if we're a subnode, use the parent instance)
+	haltInst := inst
+	if inst.parentInstance != nil {
+		haltInst = inst.parentInstance
+	}
+
 	api2 := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Handle admin endpoints
+		if r.URL.Path == "/admin/halt" {
+			w.Header().Set("Content-Type", "application/json")
+			switch r.Method {
+			case http.MethodPost:
+				haltInst.RequestHaltAll()
+				json.NewEncoder(w).Encode(HaltResponse{
+					Status:  "scheduled",
+					Message: "Node will halt after next major block",
+				})
+			case http.MethodDelete:
+				haltInst.CancelHaltAll()
+				json.NewEncoder(w).Encode(HaltResponse{
+					Status:  "cancelled",
+					Message: "Halt request cancelled",
+				})
+			case http.MethodGet:
+				json.NewEncoder(w).Encode(haltInst.GetHaltStatus())
+			default:
+				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			}
+			return
+		}
+
 		const prefix = "/timestamp/"
 		if r.Method != "GET" || !strings.HasPrefix(r.URL.Path, prefix) {
 			api.ServeHTTP(w, r)

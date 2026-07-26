@@ -218,7 +218,6 @@ func (p *partitionBeginner) SetObserver(observer database.Observer) {}
 func (p *partitionBeginner) Begin(writable bool) *database.Batch {
 	s := p.store.Begin(record.NewKey(p.partition+"·"), true)
 	b := database.NewBatch(p.partition, s, writable, p.logger)
-	b.SetObserver(execute.NewDatabaseObserver())
 	return b
 }
 

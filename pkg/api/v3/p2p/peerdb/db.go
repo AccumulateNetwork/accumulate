@@ -12,6 +12,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
@@ -61,7 +62,18 @@ func (p *PeerStatus) prune() bool {
 }
 
 func (a *PeerAddressStatus) prune() bool {
-	return a.Last.Success == nil
+	// Prune if never succeeded
+	if a.Last.Success == nil {
+		return true
+	}
+
+	// Prune if not seen in 7 days
+	age := a.Last.SinceSuccess()
+	if age > 7*24*time.Hour {
+		return true
+	}
+
+	return false
 }
 
 func (n *PeerNetworkStatus) prune() bool {
@@ -70,7 +82,18 @@ func (n *PeerNetworkStatus) prune() bool {
 }
 
 func (a *PeerServiceStatus) prune() bool {
-	return a.Last.Success == nil
+	// Prune if never succeeded
+	if a.Last.Success == nil {
+		return true
+	}
+
+	// Prune if not seen in 7 days
+	age := a.Last.SinceSuccess()
+	if age > 7*24*time.Hour {
+		return true
+	}
+
+	return false
 }
 
 func (db *DB) StoreFile(file string) error {

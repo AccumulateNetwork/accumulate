@@ -51,11 +51,23 @@ ConsensusStatus:
     - name: PartitionType
       type: protocol.PartitionType
       marshal-as: enum
+    - name: CatchingUp
+      description: indicates whether the node is still catching up to the network
+      type: bool
+      optional: true
     - name: Peers
       type: ConsensusPeerInfo
       marshal-as: reference
       pointer: true
       repeatable: true
+    - name: SyntheticHeals
+      description: counts synthetic messages recovered by receiver-pull healing (#4064)
+      type: uint
+      optional: true
+    - name: AnchorHeals
+      description: counts anchors recovered by healing
+      type: uint
+      optional: true
 
 NetworkStatus:
   fields:
@@ -91,6 +103,16 @@ NetworkStatus:
       marshal-as: reference
       pointer: true
       repeatable: true
+    - name: LastBlockTime
+      description: is the timestamp of the last block, for detecting stale data
+      type: time
+      pointer: true
+      optional: true
+    - name: CatchingUp
+      description: indicates whether the node is still catching up to the network
+      type: bool
+      pointer: true
+      optional: true
 
 SnapshotInfo:
   fields:

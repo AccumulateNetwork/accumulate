@@ -17,7 +17,6 @@ import (
 
 	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
@@ -85,6 +84,15 @@ func DropInitialAnchor() Option {
 func DisableAnchorHealing() Option {
 	return optionFunc(func(opts *simFactory) error {
 		opts.disableAnchorHealing = true
+		return nil
+	})
+}
+
+// EnableSyntheticHealing enables receiver-pull healing of missing synthetic
+// messages (#4064).
+func EnableSyntheticHealing() Option {
+	return optionFunc(func(opts *simFactory) error {
+		opts.enableSyntheticHealing = true
 		return nil
 	})
 }
@@ -319,7 +327,6 @@ func (g genesis) apply(opts *simFactory) error {
 				}
 
 				db := database.OpenInMemory(nil)
-				db.SetObserver(execute.NewDatabaseObserver())
 
 				// Fake the system ledger
 				err := db.Update(func(batch *database.Batch) error {

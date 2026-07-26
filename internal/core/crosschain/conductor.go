@@ -12,8 +12,11 @@ import (
 	"fmt"
 	"log/slog"
 	"runtime/debug"
+	"sync"
 	"sync/atomic"
+	"time"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -51,8 +54,38 @@ type Conductor struct {
 	// Enables healing of anchors after they are initially submitted.
 	EnableAnchorHealing *bool
 
+	// Sequencer is used to pull missing synthetic messages from a source
+	// partition when an inbound stream stalls (receiver-pull healing, #4064).
+	Sequencer private.Sequencer
+
+	// Enables receiver-pull healing of missing synthetic messages. Default off.
+	EnableSyntheticHealing *bool
+
+	// SyntheticHealWindow overrides the jitter/back-off window for synthetic
+	// healing. Zero uses the default (syntheticHealWindow). Tests set a small
+	// value because simulator blocks are not wall-clock paced.
+	SyntheticHealWindow time.Duration
+
 	// **FOR TESTING PURPOSES ONLY**. Intercepts dispatched envelopes.
 	Intercept interceptor
+
+	// Heals counts successful heals, shared with the consensus service so they
+	// can be reported in ConsensusStatus. Optional.
+	Heals *HealCounters
+
+	// synthHeal* track per-source back-off state for synthetic healing.
+	synthHealMu    sync.Mutex
+	synthHealState map[string]*synthHealEntry
+	seqHealAt      map[string]time.Time // per-(source,seq) last heal submission
+	synthHeals     atomic.Uint64
+}
+
+// HealCounters counts cross-partition messages recovered by healing. Shared
+// between the Conductor (which increments) and the consensus API service
+// (which reports them in ConsensusStatus).
+type HealCounters struct {
+	Synthetic atomic.Uint64
+	Anchor    atomic.Uint64
 }
 
 func (c *Conductor) Start(bus *events.Bus) error {
@@ -119,6 +152,20 @@ func (c *Conductor) willBeginBlock(e execute.WillBeginBlock) error {
 				}
 			})
 		}
+	}
+
+	// Request any missing inbound synthetic messages (receiver-pull healing).
+	// Gate before spawning so the default (disabled) path costs nothing (#4066).
+	if def(c.EnableSyntheticHealing, false) && c.Sequencer != nil {
+		c.runTask(func() {
+			batch := c.Database.Begin(false)
+			defer batch.Discard()
+
+			err := c.requestMissingSynthetics(context.Background(), batch)
+			if err != nil {
+				slog.Error("Error while requesting missing synthetics", "error", err)
+			}
+		})
 	}
 
 	// Load the ledger state
@@ -214,7 +261,10 @@ func (c *Conductor) submit(ctx context.Context, url *url.URL, env *messaging.Env
 
 func (c *Conductor) runTask(task func()) {
 	if c.RunTask != nil {
+		// The launcher owns the task; running it again below would execute it
+		// twice (#4066).
 		c.RunTask(task)
+		return
 	}
 
 	go func() {
