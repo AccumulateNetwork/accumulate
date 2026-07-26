@@ -33,7 +33,11 @@ git_desc=$(git -C "$repo" describe --tags --always --dirty 2>/dev/null || echo u
 git_branch=$(git -C "$repo" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)
 git_dirty=$(git -C "$repo" status --porcelain 2>/dev/null | wc -l)
 exec_ver=$(grep -E '^\s*executorVersion:' "$here/network.yml" | head -1 | sed 's/.*: *//; s/"//g')
+# From v1.4.5 healing has no configuration — the conductor always heals. Older
+# trees injected enable-*-healing into accumulate.toml, so keep reading it: a
+# run against an older image must still record what it was configured with.
 heal_flags=$(grep -oE 'enable-[a-z-]*healing = [a-z]+' "$here/docker-compose.yml" | sort -u | paste -sd'; ' -)
+heal_flags="${heal_flags:-unconditional (no config, v1.4.5+)}"
 # The compose declares these as "${DROP_SYN-<default>}", so the value that
 # actually reaches the nodes depends on the environment. Record the EFFECTIVE
 # value — recording the template would make two differently-configured runs look
@@ -46,6 +50,8 @@ composed_default() { # $1=env var name, $2=compose key
 }
 drop_synth="${DROP_SYN:-$(composed_default DROP_SYN ACC_DEBUG_DROP_SYNTHETIC)}"
 drop_anchor="${DROP_ANC:-$(composed_default DROP_ANC ACC_DEBUG_DROP_ANCHOR)}"
+soak_image="${SOAK_IMAGE:-acc-synthheal:test}"
+image_id=$(docker image inspect --format '{{.Id}}' "$soak_image" 2>/dev/null || echo unknown)
 n_bvn=$(grep -cE '^\s*- id: "BVN' "$here/network.yml")
 n_node=$(grep -cE '^\s*- listenAddress:' "$here/network.yml")
 
@@ -65,6 +71,8 @@ git -C "$repo" diff > "$rd/config/uncommitted.patch" 2>/dev/null
   echo "| describe | \`$git_desc\` |"
   echo "| branch | \`$git_branch\` |"
   echo "| uncommitted files | $git_dirty $([ "$git_dirty" -gt 0 ] && echo '(see config/uncommitted.patch)') |"
+  echo "| image | \`$soak_image\` |"
+  echo "| image id | \`$image_id\` |"
   echo "| executor version | **$exec_ver** |"
   echo "| healing | $heal_flags |"
   echo "| synthetic drops | \`$drop_synth\` |"
@@ -76,22 +84,23 @@ git -C "$repo" diff > "$rd/config/uncommitted.patch" 2>/dev/null
   echo "Config as run is frozen in \`config/\`. Results appended below on exit."
 } > "$manifest"
 
-printf '{"runId":"%s","startedUtc":"%s","commit":"%s","describe":"%s","branch":"%s","uncommittedFiles":%s,"executorVersion":"%s","healing":"%s","dropSynthetic":"%s","dropAnchor":"%s","bvns":%s,"nodes":%s,"duration":"%s","tps":"%s","note":"%s"}\n' \
-  "$run_id" "$(date -u +%FT%TZ)" "$git_head" "$git_desc" "$git_branch" "$git_dirty" \
+printf '{"runId":"%s","startedUtc":"%s","image":"%s","imageId":"%s","commit":"%s","describe":"%s","branch":"%s","uncommittedFiles":%s,"executorVersion":"%s","healing":"%s","dropSynthetic":"%s","dropAnchor":"%s","bvns":%s,"nodes":%s,"duration":"%s","tps":"%s","note":"%s"}\n' \
+  "$run_id" "$(date -u +%FT%TZ)" "$soak_image" "$image_id" "$git_head" "$git_desc" "$git_branch" "$git_dirty" \
   "$exec_ver" "$heal_flags" "$drop_synth" "${drop_anchor:-none}" "$n_bvn" "$n_node" \
   "$DURATION" "$TPS" "$NOTE" > "$runjson"
 
 echo "== soak start $(date -u) duration=$DURATION tps=$TPS ==" | tee "$log"
 echo "   run dir: $rd" | tee -a "$log"
 echo "   commit:  $git_desc ($git_head)" | tee -a "$log"
+echo "   image:   $soak_image ($image_id)" | tee -a "$log"
 echo "   version: $exec_ver | healing: $heal_flags" | tee -a "$log"
 
 $compose down -v --remove-orphans >/dev/null 2>&1
 $compose up -d >/dev/null 2>&1 || { echo "up failed" | tee -a "$log"; exit 1; }
 
 # Record the image actually running, so a rebuild later cannot be confused for this run.
-docker images --no-trunc --format '{{.Repository}}:{{.Tag}} {{.ID}}' 2>/dev/null \
-  | grep -E '^acc-synthheal' > "$rd/config/image.txt" 2>/dev/null
+docker image inspect --format '{{.Id}} {{.RepoTags}}' "$soak_image" \
+  > "$rd/config/image.txt" 2>/dev/null
 
 up=""; for _ in $(seq 1 90); do
   curl -sf -X POST http://localhost:26660/v3 -H 'content-type: application/json' \

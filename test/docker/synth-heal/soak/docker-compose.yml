@@ -15,7 +15,7 @@ services:
   # Bootstrap server — required for peer/service discovery (the release
   # lineage's P2P stack depends on it; key matches init's deterministic seed).
   bootstrap:
-    image: acc-synthheal:test
+    image: ${SOAK_IMAGE:-acc-synthheal:test}
     container_name: acc-bootstrap
     entrypoint: ["/bin/accumulated-bootstrap"]
     command:
@@ -27,7 +27,7 @@ services:
 
   # Generate configs, then enable synthetic healing on every node.
   init:
-    image: acc-synthheal:test
+    image: ${SOAK_IMAGE:-acc-synthheal:test}
     container_name: acc-sh-init
     entrypoint: ["/bin/bash", "-c"]
     command:
@@ -35,9 +35,9 @@ services:
         set -e
         accumulated init network /workspace/test/docker/synth-heal/soak/network.yml --reset --faucet-seed=FAUCET
         for d in /root/.accumulate/bvn*-?; do
-          if ! grep -q 'enable-synthetic-healing' "$$d/accumulate.toml"; then
-            sed -i 's/  type = "coreValidator"/  type = "coreValidator"\n  enable-synthetic-healing = true\n  enable-anchor-healing = true/' "$$d/accumulate.toml"
-          fi
+          # Healing is unconditional as of v1.4.5 — there is no enable-*-healing
+          # config any more, and injecting the removed keys would make the node
+          # reject its own config. Nothing to do here.
           # Point p2p discovery at the local bootstrap (default is the public
           # mainnet bootstrap servers, unreachable/poisonous inside this net)
           if ! grep -q 'acc-bootstrap' "$$d/accumulate.toml"; then
@@ -57,7 +57,7 @@ services:
 
 
   s1a:
-    image: acc-synthheal:test
+    image: ${SOAK_IMAGE:-acc-synthheal:test}
     container_name: acc-s1a
     mem_limit: 4g
     restart: unless-stopped
@@ -76,7 +76,7 @@ services:
         condition: service_started
 
   s1b:
-    image: acc-synthheal:test
+    image: ${SOAK_IMAGE:-acc-synthheal:test}
     container_name: acc-s1b
     mem_limit: 4g
     restart: unless-stopped
@@ -95,7 +95,7 @@ services:
         condition: service_started
 
   s1c:
-    image: acc-synthheal:test
+    image: ${SOAK_IMAGE:-acc-synthheal:test}
     container_name: acc-s1c
     mem_limit: 4g
     restart: unless-stopped
@@ -114,7 +114,7 @@ services:
         condition: service_started
 
   s1d:
-    image: acc-synthheal:test
+    image: ${SOAK_IMAGE:-acc-synthheal:test}
     container_name: acc-s1d
     mem_limit: 4g
     restart: unless-stopped
@@ -133,7 +133,7 @@ services:
         condition: service_started
 
   s2a:
-    image: acc-synthheal:test
+    image: ${SOAK_IMAGE:-acc-synthheal:test}
     container_name: acc-s2a
     mem_limit: 4g
     restart: unless-stopped
@@ -152,7 +152,7 @@ services:
         condition: service_started
 
   s2b:
-    image: acc-synthheal:test
+    image: ${SOAK_IMAGE:-acc-synthheal:test}
     container_name: acc-s2b
     mem_limit: 4g
     restart: unless-stopped
@@ -171,7 +171,7 @@ services:
         condition: service_started
 
   s2c:
-    image: acc-synthheal:test
+    image: ${SOAK_IMAGE:-acc-synthheal:test}
     container_name: acc-s2c
     mem_limit: 4g
     restart: unless-stopped
@@ -190,7 +190,7 @@ services:
         condition: service_started
 
   s2d:
-    image: acc-synthheal:test
+    image: ${SOAK_IMAGE:-acc-synthheal:test}
     container_name: acc-s2d
     mem_limit: 4g
     restart: unless-stopped
@@ -209,7 +209,7 @@ services:
         condition: service_started
 
   s3a:
-    image: acc-synthheal:test
+    image: ${SOAK_IMAGE:-acc-synthheal:test}
     container_name: acc-s3a
     mem_limit: 4g
     restart: unless-stopped
@@ -228,7 +228,7 @@ services:
         condition: service_started
 
   s3b:
-    image: acc-synthheal:test
+    image: ${SOAK_IMAGE:-acc-synthheal:test}
     container_name: acc-s3b
     mem_limit: 4g
     restart: unless-stopped
@@ -247,7 +247,7 @@ services:
         condition: service_started
 
   s3c:
-    image: acc-synthheal:test
+    image: ${SOAK_IMAGE:-acc-synthheal:test}
     container_name: acc-s3c
     mem_limit: 4g
     restart: unless-stopped
@@ -266,7 +266,7 @@ services:
         condition: service_started
 
   s3d:
-    image: acc-synthheal:test
+    image: ${SOAK_IMAGE:-acc-synthheal:test}
     container_name: acc-s3d
     mem_limit: 4g
     restart: unless-stopped
