@@ -14,6 +14,31 @@
 set -uo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"; repo="$(cd "$here/../../../.." && pwd)"
 DURATION="${DURATION:-24h}"; TPS="${TPS:-2}"
+
+# Parse Go-style durations so short runs work. The old parser did
+# `sed 's/h//' * 3600`, which silently produced a shell arithmetic error for
+# anything but whole hours — so DURATION=5m ran chaos with end=now and no chaos
+# at all, while the loadgen honoured the 5m. Short runs are how a targeted fix
+# gets proven, so they have to work.
+case "$DURATION" in
+  *h) duration_seconds=$(( ${DURATION%h} * 3600 )) ;;
+  *m) duration_seconds=$(( ${DURATION%m} * 60 )) ;;
+  *s) duration_seconds=${DURATION%s} ;;
+  *)  duration_seconds=$(( DURATION * 3600 )) ;;   # bare number = hours, as before
+esac
+# Chaos every ~10 min is meaningless in a 5-minute run; scale the interval so a
+# short run still exercises disruption.
+if [ "$duration_seconds" -le 1800 ]; then
+  CHAOS_MIN=${CHAOS_MIN:-25}; CHAOS_JITTER=${CHAOS_JITTER:-20}
+else
+  CHAOS_MIN=${CHAOS_MIN:-480}; CHAOS_JITTER=${CHAOS_JITTER:-240}
+fi
+# A 5m grace on a 5m run doubles the wall clock for no benefit; scale it.
+if [ "$duration_seconds" -le 1800 ]; then
+  LG_GRACE=${LG_GRACE:-45s}; LG_TIMEOUT=${LG_TIMEOUT:-20m}
+else
+  LG_GRACE=${LG_GRACE:-5m}; LG_TIMEOUT=${LG_TIMEOUT:-26h}
+fi
 NOTE="${1:-}"
 
 runs="$here/runs"
@@ -121,8 +146,8 @@ sleep 30
 # nor carries the whole load.
 EPS=$(for p in $(seq 26660 26671); do printf "http://localhost:%d," "$p"; done | sed 's/,$//')
 nohup go run "$repo/tools/cmd/loadgen" -endpoints "$EPS" \
-  -faucet-seed FAUCET -tps "$TPS" -duration "$DURATION" -timeout 26h \
-  -grace 5m -max-stranded 20 -stats-file "$rd/loadgen-stats.json" >> "$log" 2>&1 &
+  -faucet-seed FAUCET -tps "$TPS" -duration "$DURATION" -timeout "$LG_TIMEOUT" \
+  -grace "$LG_GRACE" -max-stranded 20 -stats-file "$rd/loadgen-stats.json" >> "$log" 2>&1 &
 DRIVER=$!
 
 # Observability. Launch these WITH the run, never by hand afterwards — the
@@ -149,10 +174,10 @@ fi
 
 # Chaos: every ~10 min disturb ONE random node (quorum 3/4 preserved).
 # Full ISO dates — time-of-day alone cannot be attributed to a run.
-( end=$(( $(date +%s) + $(( $(echo "$DURATION" | sed 's/h//') * 3600 )) ))
+( end=$(( $(date +%s) + duration_seconds )) 
   nodes=$(docker ps --filter name=acc-s --format '{{.Names}}')
   while [ "$(date +%s)" -lt "$end" ]; do
-    sleep $(( 480 + RANDOM % 240 ))
+    sleep $(( CHAOS_MIN + RANDOM % CHAOS_JITTER ))
     n=$(echo "$nodes" | shuf -n1); r=$((RANDOM % 10))
     if [ "$r" -lt 4 ]; then
       echo "$(date -u +%FT%TZ) restart $n" >> "$chaos"; docker restart "$n" >/dev/null 2>&1
@@ -183,7 +208,7 @@ echo "time,dnHeight,heals,cpuPct" > "$mon"
     done
     cpu=$(docker stats --no-stream --format '{{.CPUPerc}}' 2>/dev/null | tr -d '%' | awk '{s+=$1} END {printf "%.0f", s}')
     echo "$(date -u +%FT%T),${h:-?},$heals,${cpu:-?}" >> "$mon"
-    sleep 300
+    sleep ${MON_INTERVAL:-$([ "$duration_seconds" -le 1800 ] && echo 20 || echo 300)}
   done ) &
 
 wait $DRIVER; rc=$?
