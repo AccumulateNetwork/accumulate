@@ -169,6 +169,24 @@ func (c *Conductor) willBeginBlock(e execute.WillBeginBlock) error {
 		})
 	}
 
+	// Periodically reconcile every inbound stream against its source. The scan
+	// above only fires on evidence a LATER message provides — a nil hole in a
+	// pending window, or Received ahead of Delivered. A stream that loses its
+	// first messages, or its last, produces neither, so on a low-traffic stream
+	// the evidence never arrives and the loss is permanent (#4073). Asking the
+	// source what it has produced needs no such evidence.
+	if e.Index%reconcileInterval == 0 && c.Sequencer != nil {
+		c.runTask(func() {
+			batch := c.Database.Begin(false)
+			defer batch.Discard()
+
+			err := c.reconcileInboundStreams(context.Background(), batch)
+			if err != nil {
+				slog.Error("Error while reconciling inbound streams", "error", err)
+			}
+		})
+	}
+
 	// Load the ledger state
 	var ledger *protocol.SystemLedger
 	batch := c.Database.Begin(false)

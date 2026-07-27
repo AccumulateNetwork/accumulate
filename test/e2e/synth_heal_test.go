@@ -14,6 +14,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -250,4 +251,102 @@ func TestSyntheticHealingSignatureRequest(t *testing.T) {
 		Sig(st[1].TxID).SignatureRequestTo(bob, "book").AuthoritySignature().Completes())
 
 	require.Greater(t, gatherHealCount(t), healsBefore, "expected synthetic healing to fire")
+}
+
+// TestSyntheticHealingLostPrefix reproduces #4073: a stream whose FIRST message
+// is lost and which has nothing following it.
+//
+// This is the case every gap-based recovery path is blind to. A dropped message
+// with later traffic behind it leaves a nil hole in the destination's pending
+// window, which is what TestSyntheticHealing exercises. Here the drop is the
+// whole stream: the destination never receives anything, so Received stays 0,
+// Pending stays empty, and Received > Delivered is never true. The stream is
+// indistinguishable from a healthy idle one, and before the interval reconcile
+// it stayed broken forever — observed live as DN->BVN1 stuck at produced=2
+// received=0 for 23 hours of a chaos soak.
+//
+// Recovery here can only come from asking the source what it produced.
+func TestSyntheticHealingLostPrefix(t *testing.T) {
+	var timestamp uint64
+
+	// Drop the one and only synthetic this test produces, so nothing ever
+	// follows it. This is what makes the case undetectable by a gap scan.
+	var dropped int
+	const drops = 1
+
+	globals := new(core.GlobalValues)
+	globals.ExecutorVersion = ExecutorVersionLatest
+	sim := NewSim(t,
+		simulator.SimpleNetwork(t.Name(), 3, 1),
+		simulator.GenesisWith(GenesisTime, globals),
+		simulator.SkipProposalCheck(), // FIXME should not be necessary
+
+		simulator.CaptureDispatchedMessages(func(ctx context.Context, env *messaging.Envelope) (send bool, err error) {
+			if dropped >= drops {
+				return true, nil
+			}
+			messages, err := env.Normalize()
+			if err != nil {
+				return false, err
+			}
+			for _, msg := range messages {
+			again:
+				switch m := msg.(type) {
+				case interface{ Unwrap() messaging.Message }:
+					msg = m.Unwrap()
+					goto again
+				case messaging.MessageWithTransaction:
+					if m.GetTransaction().Body.Type() == TransactionTypeSyntheticDepositTokens {
+						dropped++
+						return false, nil
+					}
+				}
+			}
+			return true, nil
+		}),
+	)
+
+	healsBefore := gatherHealCount(t)
+
+	alice := acctesting.GenerateKey("Alice")
+	aliceUrl := acctesting.AcmeLiteAddressStdPriv(alice)
+	bob := acctesting.GenerateKey("Bob")
+	bobUrl := acctesting.AcmeLiteAddressStdPriv(bob)
+	MakeLiteTokenAccount(t, sim.DatabaseFor(aliceUrl), alice[32:], AcmeUrl())
+
+	// Exactly one deposit. Its synthetic is dropped, and no further traffic on
+	// this stream ever exposes the hole.
+	st := sim.SubmitTxnSuccessfully(MustBuild(t,
+		build.Transaction().For(aliceUrl).
+			SendTokens(1, protocol.AcmePrecisionPower).To(bobUrl).
+			SignWith(aliceUrl).Version(1).Timestamp(&timestamp).PrivateKey(alice)))
+
+	sim.StepUntil(True(func(*Harness) bool { return dropped >= drops }))
+
+	// The destination's ledger must show the shape that defeats a gap scan:
+	// nothing received, nothing pending. If this ever fails the test has stopped
+	// reproducing #4073 and is just re-testing #4064.
+	sim.Step()
+	for _, p := range sim.S.Partitions() {
+		View(t, sim.S.Database(p.ID), func(batch *database.Batch) {
+			var ledger *protocol.SyntheticLedger
+			err := batch.Account(protocol.PartitionUrl(p.ID).JoinPath(protocol.Synthetic)).Main().GetAs(&ledger)
+			if err != nil {
+				return // no ledger yet is itself the lost-prefix shape
+			}
+			for _, part := range ledger.Sequence {
+				require.Zero(t, len(part.Pending),
+					"%s has a pending entry, so this is a gap case (#4064), not a lost prefix (#4073)", p.ID)
+			}
+		})
+	}
+
+	// Only the interval reconcile can recover this.
+	sim.StepUntil(
+		Txn(st.TxID).Succeeds(),
+		Txn(st.TxID).Produced().Succeeds())
+
+	lta := GetAccount[*LiteTokenAccount](t, sim.DatabaseFor(bobUrl), bobUrl)
+	require.Equal(t, int(protocol.AcmePrecision), int(lta.Balance.Uint64()))
+	require.Greater(t, gatherHealCount(t), healsBefore, "expected healing to fire")
 }

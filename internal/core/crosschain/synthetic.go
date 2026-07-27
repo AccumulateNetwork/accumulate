@@ -12,6 +12,7 @@ import (
 	"encoding/binary"
 	"log/slog"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -381,4 +382,111 @@ func randDuration(max time.Duration) time.Duration {
 	}
 	n := binary.BigEndian.Uint64(b[:]) % uint64(max)
 	return time.Duration(n)
+}
+
+// reconcileInterval is how often (in blocks) a partition asks its peers what
+// they have produced for it. Every other recovery path is reactive — it needs a
+// later message to expose the hole — so on a stream carrying a couple of
+// messages a day nothing ever triggers them. Five blocks is a few seconds at
+// mainnet block times, and the check is a read that produces nothing unless
+// something is actually missing.
+const reconcileInterval = 5
+
+// reconcileInboundStreams asks every peer partition what it has produced for
+// this partition and pulls anything that was never received.
+//
+// This is the one recovery path that does not depend on a subsequent message
+// existing. requestMissingSynthetics needs Received > Delivered, and the
+// executor's old healNeeded needed a nil entry in a pending window; a stream
+// that lost its FIRST messages has neither — Received stays 0, Pending stays
+// empty, and it is indistinguishable from a healthy idle stream. A lost tail
+// looks the same. Observed live: DN->BVN1 sat at produced=2 received=0 for 23
+// hours while every gap-based check reported healthy (#4073).
+//
+// Counterparties come from the network definition rather than from our own
+// ledger, so this works even when we hold no entry at all for a source — which
+// is exactly the state a lost prefix leaves behind.
+func (c *Conductor) reconcileInboundStreams(ctx context.Context, batch *database.Batch) error {
+	if c.Sequencer == nil {
+		return nil
+	}
+
+	// What we have received from each source.
+	var ledger *protocol.SyntheticLedger
+	err := batch.Account(c.Url(protocol.Synthetic)).Main().GetAs(&ledger)
+	if err != nil {
+		return errors.UnknownError.WithFormat("load synthetic ledger: %w", err)
+	}
+	received := map[[32]byte]uint64{}
+	for _, part := range ledger.Sequence {
+		if part.Url != nil {
+			received[part.Url.AccountID32()] = part.Received
+		}
+	}
+
+	globals := c.Globals.Load()
+	if globals == nil {
+		return nil
+	}
+
+	me := c.Url()
+	now := time.Now()
+	for _, peer := range globals.Network.Partitions {
+		if strings.EqualFold(peer.ID, c.Partition.ID) {
+			continue
+		}
+		source := protocol.PartitionUrl(peer.ID)
+
+		// Ask the source what it has produced for us. The answer is an unproven
+		// hint and does not need to be trusted: acting on it means issuing a
+		// pull, and the pulled message arrives proof-carrying and is verified
+		// like any other synthetic. A lying peer can at worst make us request
+		// messages that do not exist, which fails harmlessly.
+		var remote *protocol.SyntheticLedger
+		_, err := c.Querier.QueryAccountAs(ctx, source.JoinPath(protocol.Synthetic), nil, &remote)
+		if err != nil {
+			// An unreachable peer must never wedge a stream (#4067). Try again
+			// next window.
+			slog.DebugContext(ctx, "Reconcile: cannot query source ledger",
+				"module", "synthetic", "source", source, "error", err)
+			continue
+		}
+
+		var produced uint64
+		for _, part := range remote.Sequence {
+			if part.Url != nil && part.Url.Equal(me) {
+				produced = part.Produced
+				break
+			}
+		}
+
+		have := received[source.AccountID32()]
+		if produced <= have {
+			continue
+		}
+
+		// Pull the missing range, capped like any other heal scan. The
+		// per-(source,sequence) claim keeps N validators from all pulling the
+		// same message.
+		healed := 0
+		for seq := have + 1; seq <= produced && healed < syntheticHealBatch; seq++ {
+			if !c.claimSyntheticRequest(source, seq, now) {
+				continue
+			}
+			err := c.requestSyntheticFrom(ctx, source, seq)
+			if err != nil {
+				slog.ErrorContext(ctx, "Reconcile: failed to request missing synthetic",
+					"module", "synthetic", "source", source, "destination", me,
+					"number", seq, "error", err)
+				continue
+			}
+			healed++
+		}
+		if healed > 0 {
+			slog.InfoContext(ctx, "Reconcile: pulled messages a gap scan cannot see",
+				"module", "synthetic", "source", source, "destination", me,
+				"received", have, "produced", produced, "requested", healed)
+		}
+	}
+	return nil
 }
