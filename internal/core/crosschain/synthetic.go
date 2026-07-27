@@ -387,10 +387,16 @@ func randDuration(max time.Duration) time.Duration {
 // reconcileInterval is how often (in blocks) a partition asks its peers what
 // they have produced for it. Every other recovery path is reactive — it needs a
 // later message to expose the hole — so on a stream carrying a couple of
-// messages a day nothing ever triggers them. Five blocks is a few seconds at
-// mainnet block times, and the check is a read that produces nothing unless
-// something is actually missing.
-const reconcileInterval = 5
+// messages a day nothing ever triggers them.
+//
+// Every block, so a stalled stream recovers in about a second at mainnet block
+// times rather than waiting out an interval. The cost of checking is a read per
+// peer that produces nothing unless something is actually missing: one query per
+// second on mainnet's two partitions, three on a four-partition network. The
+// pull itself is still rate-limited per (source, sequence) by
+// claimSyntheticRequest, so detecting every block cannot turn into repeated
+// requests for the same message.
+const reconcileInterval = 1
 
 // reconcileInboundStreams asks every peer partition what it has produced for
 // this partition and pulls anything that was never received.
