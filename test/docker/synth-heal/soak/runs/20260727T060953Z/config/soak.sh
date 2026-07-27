@@ -39,11 +39,6 @@ if [ "$duration_seconds" -le 1800 ]; then
 else
   LG_GRACE=${LG_GRACE:-5m}; LG_TIMEOUT=${LG_TIMEOUT:-26h}
 fi
-# The 100-sub-treasury bootstrap front-loads cross-partition funding traffic
-# regardless of -tps, which keeps every channel busy. Reproducing an idle-stream
-# stall (#4073) needs channels that actually go quiet, so allow it to be turned
-# off. Default keeps the realistic funding spread.
-LG_BOOTSTRAP=${LG_BOOTSTRAP:-100}
 NOTE="${1:-}"
 
 runs="$here/runs"
@@ -152,7 +147,6 @@ sleep 30
 EPS=$(for p in $(seq 26660 26671); do printf "http://localhost:%d," "$p"; done | sed 's/,$//')
 nohup go run "$repo/tools/cmd/loadgen" -endpoints "$EPS" \
   -faucet-seed FAUCET -tps "$TPS" -duration "$DURATION" -timeout "$LG_TIMEOUT" \
-  -bootstrap "$LG_BOOTSTRAP" \
   -grace "$LG_GRACE" -max-stranded 20 -stats-file "$rd/loadgen-stats.json" >> "$log" 2>&1 &
 DRIVER=$!
 
@@ -222,19 +216,6 @@ kill $CHAOS ${MON:-} ${SEIZE:-} 2>/dev/null
 ended=$(date -u +%FT%TZ)
 echo "== soak finished $(date -u) driver-exit=$rc ==" | tee -a "$log"
 
-# Capture evidence that only exists while the containers are alive. The
-# interval reconcile (#4073) logs each pull, and those logs die with the
-# containers — so a run that proved the fix would otherwise leave no trace.
-$compose logs --no-color > "$rd/node-logs.txt" 2>/dev/null
-grep "Reconcile: pulled messages" "$rd/node-logs.txt" > "$rd/reconcile-pulls.txt" 2>/dev/null
-reconcile_pulls=$(wc -l < "$rd/reconcile-pulls.txt" 2>/dev/null || echo 0)
-# Final produced-vs-received across every channel, the check that sees a stall.
-if [ -x "$here/streams.py" ]; then
-  "$here/streams.py" > "$rd/streams-final.txt" 2>&1
-  stalled_end=$(grep -oE 'stalled channels: [0-9]+' "$rd/streams-final.txt" | grep -oE '[0-9]+' | head -1)
-fi
-stalled_end="${stalled_end:-unknown}"
-
 # ---- verdict ----------------------------------------------------------------
 elapsed_h=$(python3 -c "
 import json
@@ -259,8 +240,6 @@ n_chaos=$(wc -l < "$chaos" 2>/dev/null || echo 0)
   echo "| chaos events | $n_chaos |"
   echo "| monitor samples | $(( $(wc -l < "$mon") - 1 )) |"
   echo "| seizure | $(grep -q SEIZED "$rd/seizewatch.out" 2>/dev/null && grep SEIZED "$rd/seizewatch.out" | tail -1 || echo 'none detected') |"
-  echo "| reconcile pulls (#4073) | $reconcile_pulls |"
-  echo "| stalled channels at end | $stalled_end |"
   echo
   echo "Raw: \`soak.log\`, \`monitor.csv\`, \`chaos.log\`, \`loadgen-stats.json\`."
 } >> "$manifest"

@@ -40,3 +40,9 @@ synthetic never delivers.
 What the short runs do establish: the fix causes no regression in normal healing
 (run 4 matches run 3 under identical drops), the harness now supports sub-hour
 durations, and the `undeliv` metric and its seizewatch trip are wired in.
+| [20260727T061434Z](20260727T061434Z/manifest.md) | `v1.4.5-3-ge39a450ff` | v2-jiuquan | unconditional (no config, v1.4.5+) | 0.1h | 0 | 8→234 | 0→0 | #4073 proof D: NO fix, sparse load 0.2tps, 50% synthetic drop into BVN1 |
+| [20260727T062207Z](20260727T062207Z/manifest.md) | `v1.4.5-3-ge39a450ff-dirty` | v2-jiuquan | unconditional (no config, v1.4.5+) | 0.08h | 0 | 7→197 | 0→6 | #4073 proof E: WITH fix, identical config to D |
+| [20260727T063116Z](20260727T063116Z/manifest.md) | `v1.4.5-3-ge39a450ff-dirty` | v2-jiuquan | unconditional (no config, v1.4.5+) | 0.09h | 0 | 8→249 | 0→31 | #4073 proof F: NO fix, 0.02tps so every channel is quiet |
+| [20260727T063833Z](20260727T063833Z/manifest.md) | `v1.4.5-3-ge39a450ff-dirty` | v2-jiuquan | unconditional (no config, v1.4.5+) | 0.08h | 0 | 9→209 | 0→4 | #4073 proof G: NO fix, quiet channels (no bootstrap) |
+| [20260727T064442Z](20260727T064442Z/manifest.md) | `v1.4.5-3-ge39a450ff-dirty` | v2-jiuquan | unconditional (no config, v1.4.5+) | 0.09h | 0 | 8→215 | 0→426 | #4073 proof H: NO fix, quiet channels, 50% drop all destinations |
+| [20260727T065123Z](20260727T065123Z/manifest.md) | `v1.4.5-3-ge39a450ff-dirty` | v2-jiuquan | unconditional (no config, v1.4.5+) | 0.08h | 0 | 8→199 | 0→21 | #4073 proof I: WITH fix, identical config to H |
