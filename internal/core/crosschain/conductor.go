@@ -77,6 +77,7 @@ type Conductor struct {
 	synthHealMu    sync.Mutex
 	synthHealState map[string]*synthHealEntry
 	seqHealAt      map[string]time.Time // per-(source,seq) last heal submission
+	reconcileSeen  map[string]uint64    // per-(source,seq) block a gap was first seen
 	synthHeals     atomic.Uint64
 }
 
@@ -180,7 +181,7 @@ func (c *Conductor) willBeginBlock(e execute.WillBeginBlock) error {
 			batch := c.Database.Begin(false)
 			defer batch.Discard()
 
-			err := c.reconcileInboundStreams(context.Background(), batch)
+			err := c.reconcileInboundStreams(context.Background(), batch, e.Index)
 			if err != nil {
 				slog.Error("Error while reconciling inbound streams", "error", err)
 			}

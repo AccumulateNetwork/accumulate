@@ -46,3 +46,45 @@ durations, and the `undeliv` metric and its seizewatch trip are wired in.
 | [20260727T063833Z](20260727T063833Z/manifest.md) | `v1.4.5-3-ge39a450ff-dirty` | v2-jiuquan | unconditional (no config, v1.4.5+) | 0.08h | 0 | 9→209 | 0→4 | #4073 proof G: NO fix, quiet channels (no bootstrap) |
 | [20260727T064442Z](20260727T064442Z/manifest.md) | `v1.4.5-3-ge39a450ff-dirty` | v2-jiuquan | unconditional (no config, v1.4.5+) | 0.09h | 0 | 8→215 | 0→426 | #4073 proof H: NO fix, quiet channels, 50% drop all destinations |
 | [20260727T065123Z](20260727T065123Z/manifest.md) | `v1.4.5-3-ge39a450ff-dirty` | v2-jiuquan | unconditional (no config, v1.4.5+) | 0.08h | 0 | 8→199 | 0→21 | #4073 proof I: WITH fix, identical config to H |
+| [20260727T221813Z](20260727T221813Z/manifest.md) | `v1.4.5-5-geeafbfb60-dirty` | v2-jiuquan | unconditional (no config, v1.4.5+) | 0.09h | 0 | 8→207 | 0→31 | #4073 A/B rep 1: WITH fix + 1s reconcile, run H config |
+| [20260727T223014Z](20260727T223014Z/manifest.md) | `v1.4.5-5-geeafbfb60-dirty` | v2-jiuquan | unconditional (no config, v1.4.5+) | 0.08h | 0 | 8→190 | 0→286 | #4073 diagnostic: is the reconcile running at all? |
+| [20260727T233228Z](20260727T233228Z/manifest.md) | `v1.4.5-5-geeafbfb60-dirty` | v2-jiuquan | unconditional (no config, v1.4.5+) | 0.09h | 0 | 8→218 | 0→168 | #4073 grace: does the reconcile stop racing delivery in docker? |
+| [20260728T000643Z](20260728T000643Z/manifest.md) | `v1.4.5-5-geeafbfb60-dirty` | v2-jiuquan | unconditional (no config, v1.4.5+) | 0.08h | 0 | 8→216 | 0→0 | #4073 J: NO fix, 100% drop into BVN3 |
+| [20260728T001321Z](20260728T001321Z/manifest.md) | `v1.4.5-5-geeafbfb60-dirty` | v2-jiuquan | unconditional (no config, v1.4.5+) | 0.12h | 0 | 25→297 | 0→1131 | #4073 K: WITH fix, ~100% drop everywhere |
+| [20260728T002325Z](20260728T002325Z/manifest.md) | `v1.4.5-5-geeafbfb60-dirty` | v2-jiuquan | unconditional (no config, v1.4.5+) | 0.09h | 1 | 8→7 | 0→0 | diag2 |
+| [20260728T002848Z](20260728T002848Z/manifest.md) | `v1.4.5-5-geeafbfb60-dirty` | v2-jiuquan | unconditional (no config, v1.4.5+) | 0.09h | 0 | 7→237 | 0→874 | diag3 |
+| [20260728T004607Z](20260728T004607Z/manifest.md) | `v1.4.5-5-geeafbfb60-dirty` | v2-jiuquan | unconditional (no config, v1.4.5+) | 0.09h | 0 | 8→224 | 0→1410 | #4073 N: WITH per-sequence claim — same config as K which stalled 552 |
+| [20260728T010357Z](20260728T010357Z/manifest.md) | `v1.4.5-5-geeafbfb60-dirty` | v2-jiuquan | unconditional (no config, v1.4.5+) | 0.17h | 0 | 8→397 | 0→2846 | #4073 P: grace 60 blocks + per-sequence claim |
+| [20260728T011520Z](20260728T011520Z/manifest.md) | `v1.4.5-5-geeafbfb60-dirty` | v2-jiuquan | unconditional (no config, v1.4.5+) | 0.1h | 0 | 13→257 | 0→2917 | #4073 Q: 5m load then 6m idle so tail losses age past the 60-block grace |
+| [20260728T013006Z](20260728T013006Z/manifest.md) | `v1.4.5-5-geeafbfb60-dirty` | v2-jiuquan | unconditional (no config, v1.4.5+) | 0.08h | 0 | 8→209 | 0→524 | #4073 R: ISOLATION — gap healer OFF, reconcile is the only recovery path |
+
+## #4073 attribution attempts, 2026-07-27/28 — the harness cannot test this
+
+Runs J through R tried to demonstrate the interval reconcile recovering a real
+loss in docker. **None could, and the reason is the injector, not the fix.**
+
+`synthDropper.tryDrop` records each `(destination, sequence)` in a `dropped` map
+and returns false on every later sighting — deliberately, so a healed
+re-submission gets through. The source re-dispatches, the second attempt passes,
+and the message arrives. **The injector produces a delay, not a loss.**
+
+Proven by run R: the gap healer compiled out, so the reconcile was the only
+recovery path, 355 drops injected — and `received == produced` on every channel.
+With no healer at all, nothing was lost.
+
+This invalidates the earlier "reproductions" in this file: run H's
+`produced=12 received=11` and run K's 552 undelivered were in-flight messages
+caught at the instant the run ended, not durable losses.
+
+It also explains the genuine 24h case. DN→BVN1 produced two messages and went
+silent; with no later traffic there was no re-dispatch, so that drop became
+permanent. That is the condition #4073 addresses, and it needs a channel that
+goes quiet — which continuous load prevents by construction.
+
+**To test this in docker the injector needs a permanent-drop mode** that drops a
+sequence every time rather than once. Until then the e2e test
+`TestSyntheticHealingLostPrefix` is the only thing that exercises the mechanism.
+
+What these runs did establish: the reconcile no longer misbehaves. Attempts went
+from 0 (silently gated off) to firing correctly, and failures from 102/102 to
+~3, with zero premature pulls.

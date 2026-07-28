@@ -218,17 +218,6 @@ echo "time,dnHeight,heals,cpuPct" > "$mon"
   done ) &
 
 wait $DRIVER; rc=$?
-
-# Keep the network running after the load stops. Recovery of a TAIL loss can only
-# be observed once the loss has aged past reconcileGraceBlocks, and while load
-# continues most losses are recovered by the ordinary gap healer long before
-# that. An idle tail is the only window in which the interval reconcile is the
-# mechanism actually doing the work — without it a run ends with stragglers that
-# were simply too young, which reads as "the fix did nothing".
-if [ "${IDLE_AFTER:-0}" -gt 0 ]; then
-  echo "== load finished; idling ${IDLE_AFTER}s so tail losses age past the grace ==" | tee -a "$log"
-  sleep "$IDLE_AFTER"
-fi
 kill $CHAOS ${MON:-} ${SEIZE:-} 2>/dev/null
 ended=$(date -u +%FT%TZ)
 echo "== soak finished $(date -u) driver-exit=$rc ==" | tee -a "$log"

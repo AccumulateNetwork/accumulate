@@ -1,0 +1,67 @@
+diff --git a/test/docker/synth-heal/soak/runs/20260727T192851Z/loadgen-stats.json b/test/docker/synth-heal/soak/runs/20260727T192851Z/loadgen-stats.json
+index 95efce761..ee336afd5 100644
+--- a/test/docker/synth-heal/soak/runs/20260727T192851Z/loadgen-stats.json
++++ b/test/docker/synth-heal/soak/runs/20260727T192851Z/loadgen-stats.json
+@@ -1,13 +1,13 @@
+ {
+-  "updatedUnix": 1785190611,
++  "updatedUnix": 1785191059,
+   "startUnix": 1785180569,
+-  "elapsedSec": 10042,
++  "elapsedSec": 10490,
+   "phase": "generating",
+   "target": 288,
+   "generated": 106,
+-  "rejected": 1,
++  "rejected": 5,
+   "skipped": 4,
+-  "rate": 0.010555011231709507,
++  "rate": 0.0101039754999088,
+   "targetTps": 0.01,
+   "perType": {
+     "add-account": {
+@@ -122,7 +122,7 @@
+     },
+     "send-tokens-adi": {
+       "generated": 21,
+-      "rejected": 1,
++      "rejected": 2,
+       "skipped": 0
+     },
+     "send-tokens-custom": {
+@@ -132,7 +132,7 @@
+     },
+     "send-tokens-lite": {
+       "generated": 18,
+-      "rejected": 0,
++      "rejected": 3,
+       "skipped": 0
+     },
+     "set-threshold": {
+diff --git a/test/docker/synth-heal/soak/runs/20260727T192851Z/soak.log b/test/docker/synth-heal/soak/runs/20260727T192851Z/soak.log
+index 163af6975..1e6bbd20d 100644
+--- a/test/docker/synth-heal/soak/runs/20260727T192851Z/soak.log
++++ b/test/docker/synth-heal/soak/runs/20260727T192851Z/soak.log
+@@ -165,3 +165,13 @@
+ 2026/07/27 17:16:21 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
+ 2026/07/27 17:16:39 send-tokens-adi: Post "http://localhost:26660/v3": dial tcp [::1]:26660: connect: connection refused
+ 2026/07/27 17:16:39 sent=96/288 rejected=1 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 17:18:19 send-tokens-adi: envelope(1/notFound) load signer: Account.acc://lg-bc020acd069a874e.acme/book/1.Main not found;
++2026/07/27 17:18:19 sent=96/288 rejected=2 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 17:19:21 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
++2026/07/27 17:19:59 send-tokens-lite: envelope(1/notFound) load signer: Account.acc://d9c46a815ce538461facd3c17da99ef659f09e510c8efe4a.Main not found;
++2026/07/27 17:19:59 sent=96/288 rejected=3 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 17:21:44 send-tokens-lite: envelope(1/badTimestamp) invalid timestamp: have 1785190730946, got 1785180569193;
++2026/07/27 17:21:44 sent=96/288 rejected=4 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 17:23:07 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
++2026/07/27 17:23:24 send-tokens-lite: envelope(1/notFound) load signer: Account.acc://d9c46a815ce538461facd3c17da99ef659f09e510c8efe4a.Main not found;
++2026/07/27 17:23:24 sent=96/288 rejected=5 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+diff --git a/test/docker/synth-heal/soak/runs/INDEX.md b/test/docker/synth-heal/soak/runs/INDEX.md
+index 2748bba14..01a6552da 100644
+--- a/test/docker/synth-heal/soak/runs/INDEX.md
++++ b/test/docker/synth-heal/soak/runs/INDEX.md
+@@ -46,3 +46,4 @@ durations, and the `undeliv` metric and its seizewatch trip are wired in.
+ | [20260727T063833Z](20260727T063833Z/manifest.md) | `v1.4.5-3-ge39a450ff-dirty` | v2-jiuquan | unconditional (no config, v1.4.5+) | 0.08h | 0 | 9→209 | 0→4 | #4073 proof G: NO fix, quiet channels (no bootstrap) |
+ | [20260727T064442Z](20260727T064442Z/manifest.md) | `v1.4.5-3-ge39a450ff-dirty` | v2-jiuquan | unconditional (no config, v1.4.5+) | 0.09h | 0 | 8→215 | 0→426 | #4073 proof H: NO fix, quiet channels, 50% drop all destinations |
+ | [20260727T065123Z](20260727T065123Z/manifest.md) | `v1.4.5-3-ge39a450ff-dirty` | v2-jiuquan | unconditional (no config, v1.4.5+) | 0.08h | 0 | 8→199 | 0→21 | #4073 proof I: WITH fix, identical config to H |
++| [20260727T221813Z](20260727T221813Z/manifest.md) | `v1.4.5-5-geeafbfb60-dirty` | v2-jiuquan | unconditional (no config, v1.4.5+) | 0.09h | 0 | 8→207 | 0→31 | #4073 A/B rep 1: WITH fix + 1s reconcile, run H config |
