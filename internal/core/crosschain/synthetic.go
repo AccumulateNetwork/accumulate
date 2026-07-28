@@ -543,7 +543,12 @@ func (c *Conductor) reconcileInboundStreams(ctx context.Context, batch *database
 			healed++
 		}
 		if healed > 0 {
-			slog.InfoContext(ctx, "Reconcile: pulled messages a gap scan cannot see",
+			// Warn, not Info: nodes drop Info at their default level, so this
+			// logged nothing even when it worked — the recovery had to be
+			// inferred from a control run. Pulling here means a message was
+			// lost outright and would never have arrived, which is worth
+			// surfacing.
+			slog.WarnContext(ctx, "Reconcile: pulled messages a gap scan cannot see",
 				"module", "synthetic", "source", source, "destination", me,
 				"received", have, "produced", produced, "requested", healed)
 		}

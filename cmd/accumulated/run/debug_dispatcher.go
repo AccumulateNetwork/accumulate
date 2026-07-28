@@ -40,6 +40,18 @@ type synthDropper struct {
 	run     uint64 // drop seqs where seq%modulo < run (a RUN of consecutive losses)
 	mu      sync.Mutex
 	dropped map[uint64]bool
+
+	// permanent ("<dest>:%K+R!") drops a matching sequence EVERY time rather
+	// than once. Without it the injector produces a delay, not a loss: the
+	// source re-dispatches and the second attempt is let through, so the stream
+	// repairs itself with no healer involved. That makes it impossible to test
+	// recovery of a genuinely lost message (#4073) — verified by disabling the
+	// gap healer entirely and still seeing received == produced.
+	//
+	// This is safe as a test of healing because the hook wraps only the
+	// EXECUTOR's dispatcher; the conductor builds its own dispatcher earlier, so
+	// heal and reconcile re-submissions bypass the dropper and can still land.
+	permanent bool
 }
 
 // parseDropSyntheticSpec parses "<partition>:<count>" (count defaults to 1).
@@ -52,6 +64,10 @@ func parseDropSyntheticSpec(spec string) *synthDropper {
 	dest, countStr, hasCount := strings.Cut(spec, ":")
 	d := &synthDropper{dest: strings.TrimSpace(dest)}
 	countStr = strings.TrimSpace(countStr)
+	if strings.HasSuffix(countStr, "!") {
+		d.permanent = true
+		countStr = strings.TrimSuffix(countStr, "!")
+	}
 	if hasCount && strings.HasPrefix(countStr, "%") {
 		kStr, rStr, hasRun := strings.Cut(countStr[1:], "+")
 		k, err := strconv.ParseUint(kStr, 10, 64)
@@ -70,8 +86,8 @@ func parseDropSyntheticSpec(spec string) *synthDropper {
 		}
 		d.modulo = k
 		d.dropped = map[uint64]bool{}
-		slog.Warn("DEBUG sequence-drop enabled — every Kth sequence dropped once",
-			"destination", d.dest, "modulo", k)
+		slog.Warn("DEBUG sequence-drop enabled",
+			"destination", d.dest, "modulo", k, "run", d.run, "permanent", d.permanent)
 		return d
 	}
 	count := 1
@@ -104,7 +120,7 @@ func (d *synthDropper) tryDrop(dest *url.URL, env *messaging.Envelope) bool {
 		already := d.dropped[seq]
 		d.dropped[seq] = true
 		d.mu.Unlock()
-		if already {
+		if already && !d.permanent {
 			return false // let the healed re-submission through
 		}
 		slog.Warn("DEBUG dropping sequenced envelope", "destination", dest, "sequence", seq, "anchor", d.anchors)

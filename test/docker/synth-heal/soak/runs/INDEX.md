@@ -88,3 +88,47 @@ sequence every time rather than once. Until then the e2e test
 What these runs did establish: the reconcile no longer misbehaves. Attempts went
 from 0 (silently gated off) to firing correctly, and failures from 102/102 to
 ~3, with zero premature pulls.
+| [20260728T161659Z](20260728T161659Z/manifest.md) | `v1.4.5-6-g988486db9-dirty` | v2-jiuquan | unconditional (no config, v1.4.5+) | 0.08h | 0 | 8→197 | 0→2974 | #4073 CONTROL: permanent drops into BVN3, reconcile OFF |
+| [20260728T162643Z](20260728T162643Z/manifest.md) | `v1.4.5-6-g988486db9-dirty` | v2-jiuquan | unconditional (no config, v1.4.5+) | 0.08h | 0 | 7→213 | 0→231 | #4073 CONTROL2: permanent drops into BVN3 (correct partition id), reconcile OFF |
+| [20260728T163801Z](20260728T163801Z/manifest.md) | `v1.4.5-6-g988486db9-dirty` | v2-jiuquan | unconditional (no config, v1.4.5+) | 0.07h | 0 | 7→169 | 0→3 | #4073 TREATMENT: permanent drops into BVN3, reconcile ON — identical to CONTROL2 |
+| [20260728T164728Z](20260728T164728Z/manifest.md) | `v1.4.5-6-g988486db9-dirty` | v2-jiuquan | unconditional (no config, v1.4.5+) | 0.08h | 0 | 8→205 | 0→8 | #4073 CONTROL3: prefix permanently dropped into BVN3, reconcile OFF |
+| [20260728T165623Z](20260728T165623Z/manifest.md) | `v1.4.5-6-g988486db9-dirty` | v2-jiuquan | unconditional (no config, v1.4.5+) | 0.06h | 0 | 8→142 | 0→720 | #4073 CONTROL4: ALL synthetics into BVN3 permanently dropped, reconcile OFF |
+| [20260728T170348Z](20260728T170348Z/manifest.md) | `v1.4.5-6-g988486db9-dirty` | v2-jiuquan | unconditional (no config, v1.4.5+) | 0.1h | 0 | 9→246 | 0→97 | #4073 TREATMENT4: identical to CONTROL4 but reconcile ON |
+| [20260728T200406Z](20260728T200406Z/manifest.md) | `v1.4.5-6-g988486db9-dirty` | v2-jiuquan | unconditional (no config, v1.4.5+) | 0.08h | 0 | 9→202 | 0→105 | #4073 TREATMENT5: same as TREATMENT4, success log now visible |
+
+## #4073 VALIDATED in docker, 2026-07-28
+
+Controlled A/B. Identical config and injector; only the interval reconcile differs.
+
+| run | reconcile | drops | `→ BVN3` | stalled |
+|---|---|---|---|---|
+| CONTROL4 | **off** | 16 | `produced=11 received=0`, `produced=5 received=0` | **2 channels, 16 lost** |
+| TREATMENT4 | on | 33 | `2/2`, `31/31` | **0** |
+| TREATMENT5 | on | — | `2/2`, `54/54`, **129 reconcile pulls logged** | **0** |
+
+With the reconcile off every message into BVN3 is permanently lost and the gap
+healer cannot see it: `received=0` means no hole ever forms. With it on, all are
+recovered, and TREATMENT5 shows the pulls directly —
+`produced=17 received=0 requested=1`, then `received=1`, climbing to 54/54.
+
+### Reproduction recipe
+
+```
+DROP_SYN='BVN3:%1000+999!'  TPS=2  LG_BOOTSTRAP=0  IDLE_AFTER=180
+```
+
+Three things are load-bearing, each of which silently defeated earlier attempts:
+
+- **`!` = permanent drop.** Without it the injector produces a delay, not a loss:
+  it drops each (dest, seq) once and lets the source's re-dispatch through, so
+  the stream repairs itself with no healer involved. Proven by disabling the gap
+  healer entirely and still seeing `received == produced`.
+- **`BVN3`, not `bvn-BVN3`.** `matches()` compares the partition ID from
+  `ParsePartitionUrl`, so every `bvn-*` spec used before this was a silent no-op
+  and only `*` ever matched.
+- **Drop essentially everything on the channel.** A prefix or tail loss with any
+  later traffic behind it leaves a hole the #4064 gap healer finds and fixes, so
+  the reconcile is never the mechanism under test. `received` must stay 0.
+
+`LG_BOOTSTRAP=0` keeps channels quiet; `IDLE_AFTER` lets a loss age past
+reconcileGraceBlocks after load stops.
