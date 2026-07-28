@@ -262,7 +262,18 @@ func (v *RestoreVisitor) refreshBatch() error {
 
 	// Working with top-level batches - commit the current one and create a new one
 	if v.batch != nil {
-		err := v.batch.Commit()
+		// Fold this batch's accounts into the BPT before committing. Commit does
+		// NOT do this, and once the batch is replaced the chance is gone, so a
+		// restore large enough to refresh more than once leaves every account
+		// outside the final batch missing from the BPT — a wrong state root, and
+		// on a live network an app-hash mismatch against every other node.
+		// Duplicated from !1163 so this MR's own tests can pass; the two changes
+		// are identical.
+		err := v.batch.UpdateBPT()
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+		err = v.batch.Commit()
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
 		}
