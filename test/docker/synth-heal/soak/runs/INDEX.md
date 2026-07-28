@@ -132,3 +132,4 @@ Three things are load-bearing, each of which silently defeated earlier attempts:
 
 `LG_BOOTSTRAP=0` keeps channels quiet; `IDLE_AFTER` lets a loss age past
 reconcileGraceBlocks after load stops.
+| [20260726T051821Z](20260726T051821Z/manifest.md) | `v1.4.5` | v2-jiuquan | unconditional | 24.14h | 0 (clean) | 8→57836 | 738 syn / 4227 anc | PASS — deploy-approved; found #4073 (DN→BVN1 dead 24h, undetected) |
