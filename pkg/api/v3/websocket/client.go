@@ -126,8 +126,8 @@ func newClient(network string, s message.StreamOf[*Message]) *Client {
 			}
 
 			// Write the message to the sub-stream
-			if msg.Message != nil {
-				err = p.Write(msg.Message)
+			if msg.WebSocketMessage != nil {
+				err = p.Write(msg.WebSocketMessage)
 				if err != nil {
 					if !errors.Is(err, io.EOF) {
 						slog.Info("Failed to write to stream", "id", msg.ID, "error", err, "module", "api")
@@ -258,7 +258,7 @@ func (c *clientDialer) Dial(ctx context.Context, _ multiaddr.Multiaddr) (message
 				return
 			}
 
-			c.outgoing <- &Message{ID: id, Message: msg}
+			c.outgoing <- &Message{ID: id, WebSocketMessage: msg}
 		}
 	}()
 

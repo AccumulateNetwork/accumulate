@@ -25,6 +25,7 @@ import (
 
 type Simulator struct {
 	deterministic bool
+	networkId     string
 	logger        log.Logger
 	router        *Router
 	services      *services.Network
