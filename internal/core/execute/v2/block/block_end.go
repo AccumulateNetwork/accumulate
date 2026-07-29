@@ -7,21 +7,16 @@
 package block
 
 import (
-	"context"
-	"fmt"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
@@ -58,15 +53,14 @@ func (block *Block) Close() (execute.BlockState, error) {
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load synthetic ledger: %w", err)
 	}
-	var anchorLedger *protocol.AnchorLedger
-	err = block.Batch.Account(m.Describe.AnchorPool()).Main().GetAs(&anchorLedger)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load synthetic ledger: %w", err)
-	}
-
-	if m.EnableHealing {
-		m.BackgroundTaskLauncher(func() { m.requestMissingSyntheticTransactions(block.Index, synthLedger, anchorLedger) })
-	}
+	// Synthetic and anchor recovery is owned by the crosschain conductor
+	// (internal/core/crosschain), not by the executor. The executor-side pull
+	// that used to run here was the same mechanism — walk the pending window
+	// for nil entries, ask the source sequencer, resubmit locally — but without
+	// the conductor's jittered per-node claim, per-sequence suppression, or
+	// batch cap. Running both meant every validator also fired an unthrottled
+	// scan on every gap, which is the heal storm #4067 closed. The conductor's
+	// version is the one validated by the 20h chaos soak, so it is the only one.
 
 	// List all of the chains that have been modified. shouldPrepareAnchor
 	// relies on this list so this must be done first.
@@ -453,160 +447,6 @@ func (m *Executor) anchorSynthChain(block *Block, rootChain *database.Chain) (in
 	})
 
 	return indexIndex, nil
-}
-
-func (x *Executor) requestMissingSyntheticTransactions(blockIndex uint64, synthLedger *protocol.SyntheticLedger, anchorLedger *protocol.AnchorLedger) {
-	batch := x.Database.Begin(false)
-	defer batch.Discard()
-
-	// Setup
-	dispatcher := x.NewDispatcher()
-	defer dispatcher.Close()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// For each partition
-	for _, partition := range synthLedger.Sequence {
-		x.requestMissingTransactionsFromPartition(ctx, dispatcher, partition, false)
-	}
-	for _, partition := range anchorLedger.Sequence {
-		x.requestMissingTransactionsFromPartition(ctx, dispatcher, partition, true)
-	}
-
-	for err := range dispatcher.Send(ctx) {
-		switch err := err.(type) {
-		case protocol.TransactionStatusError:
-			x.logger.Error("Failed to dispatch transactions", "block", blockIndex, "error", err, "stack", err.TransactionStatus.Error.PrintFullCallstack(), "txid", err.TxID)
-		default:
-			x.logger.Error("Failed to dispatch transactions", "block", blockIndex, "error", err, "stack", fmt.Sprintf("%+v\n", err))
-		}
-	}
-}
-
-func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, dispatcher Dispatcher, partition *protocol.PartitionSyntheticLedger, anchor bool) {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	// For each pending synthetic transaction
-	dest := x.Describe.NodeUrl()
-	for i, txid := range partition.Pending {
-		// If we know the ID we must have a local copy (so we don't need to
-		// fetch it)
-		if txid != nil {
-			continue
-		}
-
-		seqNum := partition.Delivered + uint64(i) + 1
-		message := "Missing synthetic transaction"
-		src := partition.Url.JoinPath(protocol.Synthetic)
-		if anchor {
-			message = "Missing anchor transaction"
-			src = partition.Url.JoinPath(protocol.AnchorPool)
-		}
-		x.logger.Info(message, "seq-num", seqNum, "source", partition.Url)
-
-		// Request the transaction by sequence number
-		resp, err := x.Sequencer.Sequence(ctx, src, dest, seqNum, private.SequenceOptions{})
-		if err != nil {
-			x.logger.Error("Failed to request sequenced transaction", "error", err, "from", src, "seq-num", seqNum)
-			continue
-		}
-
-		// Sanity check: the response includes a transaction
-		if resp.Message == nil {
-			x.logger.Error("Response to query-synth is missing the transaction", "from", partition.Url, "seq-num", seqNum, "is-anchor", anchor)
-			continue
-		}
-		if resp.Sequence == nil || resp.Sequence.Source == nil {
-			x.logger.Error("Response to query-synth is missing the source", "from", partition.Url, "seq-num", seqNum, "is-anchor", anchor)
-			continue
-		}
-		if resp.Signatures == nil {
-			x.logger.Error("Response to query-synth is missing the signatures", "from", partition.Url, "seq-num", seqNum, "is-anchor", anchor)
-			continue
-		}
-		if !anchor {
-			if resp.SourceReceipt == nil {
-				x.logger.Error("Response to query-synth is missing the proof", "from", partition.Url, "seq-num", seqNum, "is-anchor", anchor)
-				continue
-			}
-		}
-
-		seq := &messaging.SequencedMessage{
-			Message:     resp.Message,
-			Source:      resp.Sequence.Source,
-			Destination: resp.Sequence.Destination,
-			Number:      resp.Sequence.Number,
-		}
-
-		keySig, bad := x.getKeySignature(resp, partition, seq, anchor)
-		if keySig == nil {
-			x.logger.Error("Invalid anchor transaction", "error", "missing key signature", "hash", logging.AsHex(resp.Message.Hash()).Slice(0, 4))
-			bad = true
-		}
-		if bad {
-			continue
-		}
-
-		var msg messaging.Message
-		if anchor {
-			msg = &messaging.BlockAnchor{
-				Anchor:    seq,
-				Signature: keySig,
-			}
-		} else if x.globals.Active.ExecutorVersion.V2BaikonurEnabled() {
-			msg = &messaging.SyntheticMessage{
-				Message:   seq,
-				Signature: keySig,
-				Proof: &protocol.AnnotatedReceipt{
-					Receipt: resp.SourceReceipt,
-					Anchor: &protocol.AnchorMetadata{
-						Account: protocol.DnUrl(),
-					},
-				},
-			}
-		} else {
-			msg = &messaging.BadSyntheticMessage{
-				Message:   seq,
-				Signature: keySig,
-				Proof: &protocol.AnnotatedReceipt{
-					Receipt: resp.SourceReceipt,
-					Anchor: &protocol.AnchorMetadata{
-						Account: protocol.DnUrl(),
-					},
-				},
-			}
-		}
-
-		err = dispatcher.Submit(ctx, dest, &messaging.Envelope{Messages: []messaging.Message{msg}})
-		if err != nil {
-			x.logger.Error("Failed to dispatch transaction", "error", err, "from", partition.Url)
-			continue
-		}
-	}
-}
-
-func (x *Executor) getKeySignature(r *api.MessageRecord[messaging.Message], partition *protocol.PartitionSyntheticLedger, seq *messaging.SequencedMessage, anchor bool) (_ protocol.KeySignature, bad bool) {
-	for _, set := range r.Signatures.Records {
-		if set.Signatures == nil {
-			x.logger.Error("Response to query-synth is missing the signatures", "from", partition.Url, "seq-num", seq.Number, "is-anchor", anchor)
-			continue
-		}
-
-		for _, r := range set.Signatures.Records {
-			msg, ok := r.Message.(*messaging.SignatureMessage)
-			if !ok {
-				continue
-			}
-			sig, ok := msg.Signature.(protocol.KeySignature)
-			if !ok {
-				x.logger.Error("Invalid signature in response to query-synth", "errors", errors.Conflict.WithFormat("expected key signature, got %T", msg.Signature), "from", partition.Url, "seq-num", seq.Number, "is-anchor", anchor, "hash", logging.AsHex(msg.Signature.Hash()), "signature", msg.Signature)
-				return nil, true
-			}
-			return sig, false
-		}
-	}
-	return nil, false
 }
 
 func (b *Block) shouldSendAnchor() bool {

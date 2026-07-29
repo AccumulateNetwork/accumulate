@@ -8,6 +8,7 @@ package accumulated
 
 import (
 	"context"
+	"sync"
 
 	"gitlab.com/accumulatenetwork/accumulate/exp/tendermint"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
@@ -21,9 +22,13 @@ import (
 
 // dispatcher implements [block.Dispatcher].
 type dispatcher struct {
-	network  string
-	router   routing.Router
-	dialer   message.Dialer
+	network string
+	router  routing.Router
+	dialer  message.Dialer
+
+	// mu guards messages — see #4067: the conductor submits from concurrent
+	// background tasks while the per-block flush snapshots the queue.
+	mu       sync.Mutex
 	messages []message.Message
 }
 
@@ -64,18 +69,22 @@ func (d *dispatcher) Submit(ctx context.Context, u *url.URL, env *messaging.Enve
 	}
 
 	// Queue a pre-addressed message
+	d.mu.Lock()
 	d.messages = append(d.messages, &message.Addressed{
 		Address: addr,
 		Message: &message.SubmitRequest{Envelope: env},
 	})
+	d.mu.Unlock()
 	return nil
 }
 
 // Send sends all of the batches asynchronously using one connection per
 // partition.
 func (d *dispatcher) Send(ctx context.Context) <-chan error {
+	d.mu.Lock()
 	messages := d.messages
 	d.messages = nil
+	d.mu.Unlock()
 
 	errs := make(chan error)
 	check := func(err error) {

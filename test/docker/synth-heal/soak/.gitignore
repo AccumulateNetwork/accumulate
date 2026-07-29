@@ -1,0 +1,22 @@
+# Run outputs live in runs/<id>/ and are deliberately NOT ignored — the whole
+# point is that results accumulate and survive.
+#
+# These patterns are ANCHORED with a leading slash so they match only the stale
+# top-level files left by the old script. Unanchored, `soak.log` would also match
+# `runs/<id>/soak.log` and silently discard every run's evidence.
+/soak.log
+/chaos.log
+/monitor.csv
+/launch.log
+/loadgen-stats.json
+/runs/latest
+
+# The repo root .gitignore has blanket `*.log` and `*.out` rules that otherwise
+# swallow every run's soak.log, chaos.log, seizewatch.out and soakmon.log —
+# exactly the evidence these directories exist to preserve. Re-include them.
+# (Negation works because `runs/` itself is not ignored; git cannot re-include a
+# file whose parent directory is excluded.)
+!runs/**/*.log
+!runs/**/*.out
+!runs/**/*.csv
+!runs/**/*.json

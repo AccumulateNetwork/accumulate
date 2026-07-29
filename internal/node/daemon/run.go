@@ -396,14 +396,13 @@ func (d *Daemon) startApp(caughtUp <-chan struct{}) (types.Application, error) {
 		Router:  routing.MessageRouter{Router: d.router},
 	}}
 	execOpts := execute.Options{
-		Logger:        d.Logger,
-		Database:      d.db,
-		Key:           d.Key().Bytes(),
-		Router:        d.router,
-		EventBus:      d.eventBus,
-		Sequencer:     client.Private(),
-		Querier:       client,
-		EnableHealing: d.Config.Accumulate.Healing.Enable,
+		Logger:    d.Logger,
+		Database:  d.db,
+		Key:       d.Key().Bytes(),
+		Router:    d.router,
+		EventBus:  d.eventBus,
+		Sequencer: client.Private(),
+		Querier:   client,
 		Describe: execute.DescribeShim{
 			NetworkType: d.Config.Accumulate.Describe.NetworkType,
 			PartitionId: d.Config.Accumulate.Describe.PartitionId,
@@ -427,17 +426,14 @@ func (d *Daemon) startApp(caughtUp <-chan struct{}) (types.Application, error) {
 
 	// This must happen before creating the executor since it needs to receive
 	// the initial WillChangeGlobals event
-	no := false
 	conductor := &crosschain.Conductor{
 		Partition:    &protocol.PartitionInfo{ID: d.Config.Accumulate.PartitionId, Type: d.Config.Accumulate.NetworkType},
 		ValidatorKey: execOpts.Key,
 		Database:     execOpts.Database,
 		Querier:      v3.Querier2{Querier: client},
 		Dispatcher:   execOpts.NewDispatcher(),
+		Sequencer:    client.Private(),
 		RunTask:      execOpts.BackgroundTaskLauncher,
-
-		// TODO Fix the flooding issues and enable this by default
-		EnableAnchorHealing: &no,
 
 		Ready: func(execute.WillBeginBlock) bool {
 			// Pause the conductor until the node has caught up
@@ -528,15 +524,23 @@ func (d *Daemon) startConsensus(app types.Application, caughtUp chan<- struct{})
 	// Signal once the node is caught up
 	if caughtUp != nil {
 		go func() {
+			// Create a sync monitor to detect stuck sync and attempt recovery
+			monitor := NewSyncMonitor(
+				&daemonStatusProvider{d.localTm},
+				&daemonPeerDialer{d.node.Node.Switch()},
+				d.Config.P2P.PersistentPeers,
+			)
+
 			t := time.NewTicker(time.Second)
 			defer t.Stop()
 			for range t.C {
-				st, err := d.localTm.Status(context.Background())
+				result, err := monitor.Check(context.Background())
 				if err != nil {
 					slog.Error("Querying consensus status", "error", err)
 					continue
 				}
-				if !st.SyncInfo.CatchingUp {
+
+				if result == CheckResultSynced {
 					close(caughtUp)
 					return
 				}
@@ -563,10 +567,11 @@ func (d *Daemon) startServices(chGlobals <-chan *core.GlobalValues) error {
 		ValidatorKeyHash: sha256.Sum256(d.privVal.Key.PubKey.Bytes()),
 	})
 	netSvc := api.NewNetworkService(api.NetworkServiceParams{
-		Logger:    d.Logger.With("module", "acc-rpc"),
-		EventBus:  d.eventBus,
-		Partition: d.Config.Accumulate.PartitionId,
-		Database:  d.db,
+		Logger:     d.Logger.With("module", "acc-rpc"),
+		EventBus:   d.eventBus,
+		Partition:  d.Config.Accumulate.PartitionId,
+		Database:   d.db,
+		NodeStatus: d.localTm,
 	})
 	querySvc := api.NewQuerier(api.QuerierParams{
 		Logger:    d.Logger.With("module", "acc-rpc"),
@@ -655,6 +660,35 @@ func (d *Daemon) StartP2P() error {
 	if err != nil {
 		return errors.UnknownError.WithFormat("initialize P2P: %w", err)
 	}
+
+	// Start P2P peer database pruning
+	// This prevents stale peers from accumulating indefinitely
+	if tracker := d.p2pnode.Tracker(); tracker != nil {
+		if pt, ok := tracker.(interface{ DB() interface{ prune() } }); ok {
+			db := pt.DB()
+
+			// Initial aggressive prune on startup
+			db.prune()
+			d.Logger.Info("Initial P2P peer pruning completed")
+
+			// Start periodic pruning (every hour)
+			go func() {
+				ticker := time.NewTicker(1 * time.Hour)
+				defer ticker.Stop()
+
+				for {
+					select {
+					case <-ticker.C:
+						db.prune()
+						d.Logger.Debug("Periodic P2P peer pruning completed")
+					case <-d.done:
+						return
+					}
+				}
+			}()
+		}
+	}
+
 	return nil
 }
 
