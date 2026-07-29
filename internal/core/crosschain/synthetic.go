@@ -12,6 +12,7 @@ import (
 	"encoding/binary"
 	"log/slog"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -50,6 +51,17 @@ var mHeals = promauto.NewCounterVec(prometheus.CounterOpts{
 	Name:      "heals_total",
 	Help:      "Number of cross-partition messages healed (re-requested or re-submitted)",
 }, []string{"type", "partition", "remote"})
+
+// mReconcile counts interval-reconcile pull ATTEMPTS and successes separately.
+// Counting only successes makes a reconcile that fails every time
+// indistinguishable from one with nothing to do — both report zero, which hid a
+// completely broken pull path across six soak runs (#4073).
+var mReconcile = promauto.NewCounterVec(prometheus.CounterOpts{
+	Namespace: "accumulate",
+	Subsystem: "crosschain",
+	Name:      "reconcile_pulls_total",
+	Help:      "Interval-reconcile pull attempts by outcome",
+}, []string{"outcome"}) // attempted | succeeded | failed
 
 // synthHealEntry tracks this node's back-off state for a single stalled inbound
 // synthetic stream.
@@ -381,4 +393,200 @@ func randDuration(max time.Duration) time.Duration {
 	}
 	n := binary.BigEndian.Uint64(b[:]) % uint64(max)
 	return time.Duration(n)
+}
+
+// reconcileInterval is how often (in blocks) a partition asks its peers what
+// they have produced for it. Every other recovery path is reactive — it needs a
+// later message to expose the hole — so on a stream carrying a couple of
+// messages a day nothing ever triggers them.
+//
+// Every block, so a stalled stream recovers in about a second at mainnet block
+// times rather than waiting out an interval. The cost of checking is a read per
+// peer that produces nothing unless something is actually missing: one query per
+// second on mainnet's two partitions, three on a four-partition network. The
+// pull itself is still rate-limited per (source, sequence) by
+// claimSyntheticRequest, so detecting every block cannot turn into repeated
+// requests for the same message.
+const reconcileInterval = 1
+
+// reconcileGraceBlocks is how long a gap must persist before the reconcile acts
+// on it. Produced-at-source minus received-at-destination is routinely non-zero
+// on a healthy network — a message counts as produced the moment the source
+// emits it and has not reached us yet. Acting immediately means requesting
+// messages that are merely in flight, and the source cannot even build a receipt
+// for them because they are not anchored yet, so every such pull fails with
+// "reached the end of the chain".
+//
+// It must also exceed ANCHORING latency, not just delivery latency. The source
+// builds a receipt from its own anchor index chain, so a sequence produced in
+// block N cannot be served until block N is anchored — asking sooner fails with
+// "locate anchor index chain entry for block N: reached the end of the chain".
+// At 10 blocks that was 79 of 102 attempts. 60 blocks is ~60s at mainnet block
+// times, well past both delivery and anchoring, and costs nothing: a genuinely
+// lost message is lost for good, so a minute of patience is free.
+//
+// Counted in BLOCKS, not wall clock: simulator blocks are not time-paced, so a
+// duration-based grace is meaningless there and the bug would go untested.
+const reconcileGraceBlocks = 60
+
+// reconcileInboundStreams asks every peer partition what it has produced for
+// this partition and pulls anything that was never received.
+//
+// This is the one recovery path that does not depend on a subsequent message
+// existing. requestMissingSynthetics needs Received > Delivered, and the
+// executor's old healNeeded needed a nil entry in a pending window; a stream
+// that lost its FIRST messages has neither — Received stays 0, Pending stays
+// empty, and it is indistinguishable from a healthy idle stream. A lost tail
+// looks the same. Observed live: DN->BVN1 sat at produced=2 received=0 for 23
+// hours while every gap-based check reported healthy (#4073).
+//
+// Counterparties come from the network definition rather than from our own
+// ledger, so this works even when we hold no entry at all for a source — which
+// is exactly the state a lost prefix leaves behind.
+func (c *Conductor) reconcileInboundStreams(ctx context.Context, batch *database.Batch, blockIndex uint64) error {
+	if c.Sequencer == nil {
+		return nil
+	}
+
+	// What we have received from each source.
+	var ledger *protocol.SyntheticLedger
+	err := batch.Account(c.Url(protocol.Synthetic)).Main().GetAs(&ledger)
+	if err != nil {
+		return errors.UnknownError.WithFormat("load synthetic ledger: %w", err)
+	}
+	received := map[[32]byte]uint64{}
+	for _, part := range ledger.Sequence {
+		if part.Url != nil {
+			received[part.Url.AccountID32()] = part.Received
+		}
+	}
+
+	globals := c.Globals.Load()
+	if globals == nil {
+		return nil
+	}
+
+	me := c.Url()
+	now := time.Now()
+	window := c.SyntheticHealWindow
+	if window <= 0 {
+		window = syntheticHealWindow
+	}
+	for _, peer := range globals.Network.Partitions {
+		if strings.EqualFold(peer.ID, c.Partition.ID) {
+			continue
+		}
+		source := protocol.PartitionUrl(peer.ID)
+
+		// Ask the source what it has produced for us. The answer is an unproven
+		// hint and does not need to be trusted: acting on it means issuing a
+		// pull, and the pulled message arrives proof-carrying and is verified
+		// like any other synthetic. A lying peer can at worst make us request
+		// messages that do not exist, which fails harmlessly.
+		var remote *protocol.SyntheticLedger
+		_, err := c.Querier.QueryAccountAs(ctx, source.JoinPath(protocol.Synthetic), nil, &remote)
+		if err != nil {
+			// An unreachable peer must never wedge a stream (#4067). Try again
+			// next window.
+			// Warn, not Debug: a reconcile that cannot reach its peer is the
+			// mechanism silently not working, which is indistinguishable from
+			// "nothing to do" unless it says so.
+			slog.WarnContext(ctx, "Reconcile: cannot query source ledger",
+				"module", "synthetic", "source", source, "error", err)
+			continue
+		}
+
+		var produced uint64
+		for _, part := range remote.Sequence {
+			if part.Url != nil && part.Url.Equal(me) {
+				produced = part.Produced
+				break
+			}
+		}
+
+		have := received[source.AccountID32()]
+		c.pruneOverdue(source, have)
+		if produced <= have {
+			continue
+		}
+
+		// Pull the missing range, capped like any other heal scan. The
+		// per-(source,sequence) claim keeps N validators from all pulling the
+		// same message.
+		healed := 0
+		for seq := have + 1; seq <= produced && healed < syntheticHealBatch; seq++ {
+			// Wait for the gap to persist before believing it. Without this the
+			// reconcile races normal delivery (#4073).
+			if !c.gapIsOverdue(source, seq, blockIndex) {
+				continue
+			}
+			// claimSequence, NOT claimSyntheticRequest. The latter keeps
+			// per-source back-off around a single `want` value because #4064
+			// heals one hole at a time; calling it across a range makes each
+			// sequence clobber the previous one's state and they all back off
+			// against each other. Observed: 21 of 26 overdue sequences silently
+			// discarded, zero pulls, no error. claimSequence is keyed per
+			// (source, sequence), which is what a range needs.
+			if !c.claimSequence(source, seq, now, window) {
+				continue
+			}
+			mReconcile.WithLabelValues("attempted").Inc()
+			err := c.requestSyntheticFrom(ctx, source, seq)
+			if err != nil {
+				mReconcile.WithLabelValues("failed").Inc()
+				slog.ErrorContext(ctx, "Reconcile: failed to request missing synthetic",
+					"module", "synthetic", "source", source, "destination", me,
+					"number", seq, "error", err)
+				continue
+			}
+			mReconcile.WithLabelValues("succeeded").Inc()
+			healed++
+		}
+		if healed > 0 {
+			// Warn, not Info: nodes drop Info at their default level, so this
+			// logged nothing even when it worked — the recovery had to be
+			// inferred from a control run. Pulling here means a message was
+			// lost outright and would never have arrived, which is worth
+			// surfacing.
+			slog.WarnContext(ctx, "Reconcile: pulled messages a gap scan cannot see",
+				"module", "synthetic", "source", source, "destination", me,
+				"received", have, "produced", produced, "requested", healed)
+		}
+	}
+	return nil
+}
+
+// gapIsOverdue reports whether (source, seq) has been missing long enough to be
+// treated as lost rather than in flight. The first sighting only starts the
+// clock; the caller must see the same gap still open reconcileGraceBlocks later.
+// Entries for sequences that arrive on their own are dropped by pruneOverdue.
+func (c *Conductor) gapIsOverdue(source *url.URL, seq uint64, blockIndex uint64) bool {
+	key := source.String() + "#" + strconv.FormatUint(seq, 10)
+	c.synthHealMu.Lock()
+	defer c.synthHealMu.Unlock()
+	if c.reconcileSeen == nil {
+		c.reconcileSeen = map[string]uint64{}
+	}
+	first, ok := c.reconcileSeen[key]
+	if !ok {
+		c.reconcileSeen[key] = blockIndex
+		return false
+	}
+	return blockIndex >= first+reconcileGraceBlocks
+}
+
+// pruneOverdue forgets gaps below the given received watermark, so the map does
+// not grow without bound as streams advance normally.
+func (c *Conductor) pruneOverdue(source *url.URL, received uint64) {
+	prefix := source.String() + "#"
+	c.synthHealMu.Lock()
+	defer c.synthHealMu.Unlock()
+	for k := range c.reconcileSeen {
+		if !strings.HasPrefix(k, prefix) {
+			continue
+		}
+		if n, err := strconv.ParseUint(k[len(prefix):], 10, 64); err == nil && n <= received {
+			delete(c.reconcileSeen, k)
+		}
+	}
 }

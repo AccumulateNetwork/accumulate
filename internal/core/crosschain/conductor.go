@@ -77,6 +77,7 @@ type Conductor struct {
 	synthHealMu    sync.Mutex
 	synthHealState map[string]*synthHealEntry
 	seqHealAt      map[string]time.Time // per-(source,seq) last heal submission
+	reconcileSeen  map[string]uint64    // per-(source,seq) block a gap was first seen
 	synthHeals     atomic.Uint64
 }
 
@@ -165,6 +166,24 @@ func (c *Conductor) willBeginBlock(e execute.WillBeginBlock) error {
 			err := c.requestMissingSynthetics(context.Background(), batch)
 			if err != nil {
 				slog.Error("Error while requesting missing synthetics", "error", err)
+			}
+		})
+	}
+
+	// Periodically reconcile every inbound stream against its source. The scan
+	// above only fires on evidence a LATER message provides — a nil hole in a
+	// pending window, or Received ahead of Delivered. A stream that loses its
+	// first messages, or its last, produces neither, so on a low-traffic stream
+	// the evidence never arrives and the loss is permanent (#4073). Asking the
+	// source what it has produced needs no such evidence.
+	if e.Index%reconcileInterval == 0 && c.Sequencer != nil {
+		c.runTask(func() {
+			batch := c.Database.Begin(false)
+			defer batch.Discard()
+
+			err := c.reconcileInboundStreams(context.Background(), batch, e.Index)
+			if err != nil {
+				slog.Error("Error while reconciling inbound streams", "error", err)
 			}
 		})
 	}

@@ -1,0 +1,88 @@
+== soak start Tue Jul 28 12:23:25 AM UTC 2026 duration=3m tps=2 ==
+   run dir: /home/paul/repos/gitlab.com/accumulatenetwork/i4073/test/docker/synth-heal/soak/runs/20260728T002325Z
+   commit:  v1.4.5-5-geeafbfb60-dirty (eeafbfb6018dc4de3bea2d1c6342af1fe4960ec7)
+   image:   acc-4073:diag2 (sha256:3700bf16c2aaf8686c143ad8b92fd2b1f45878d65d66c232a4e1cc18d3d6b00c)
+   version: v2-jiuquan | healing: unconditional (no config, v1.4.5+)
+   soakmon: http://127.0.0.1:8099
+2026/07/27 19:24:03 endpoints: 12 (http://localhost:26660, http://localhost:26661, http://localhost:26662, http://localhost:26663, http://localhost:26664, http://localhost:26665, http://localhost:26666, http://localhost:26667, http://localhost:26668, http://localhost:26669, http://localhost:26670, http://localhost:26671)
+2026/07/27 19:24:03 network SynthHealSoak, executor v2-jiuquan, seed 1785198243228040641
+2026/07/27 19:24:03 == funding the treasury ==
+2026/07/27 19:24:03 treasury acc://f4a327b7cfbe971258b5a24c5ba3529bda09d8078ed35fac/ACME (184467440737095516 credits)
+2026/07/27 19:24:03 == generating 360 transactions ==
+2026/07/27 19:25:15 sent=73/360 rejected=0 skipped=12 rate=1.0/s | adis=0 books=0 pages=0 tokens=0 accounts=6
+2026/07/27 19:25:48 add-credits-page: envelope(1/insufficientBalance) insufficient tokens: have 0.00000000, want 0.00500000;
+2026/07/27 19:26:21 sent=83/360 rejected=1 skipped=13 rate=0.6/s | adis=1 books=1 pages=2 tokens=0 accounts=8
+2026/07/27 19:26:21 add-credits-page: envelope(1/insufficientBalance) insufficient tokens: have 0.00000000, want 0.00500000;
+2026/07/27 19:26:22 add-credits-page: envelope(1/insufficientBalance) insufficient tokens: have 0.00000000, want 0.00500000;
+2026/07/27 19:26:22 add-credits-page: envelope(1/insufficientBalance) insufficient tokens: have 0.00000000, want 0.00500000;
+2026/07/27 19:26:25 add-credits-page: envelope(1/insufficientBalance) insufficient tokens: have 0.00000000, want 0.00500000;
+2026/07/27 19:26:36 add-credits-page: envelope(1/insufficientBalance) insufficient tokens: have 0.00000000, want 0.00500000;
+2026/07/27 19:27:03 reconcile: 29 accounts tracked, 172 principal-txns, max credit drift 29999999700 units
+2026/07/27 19:27:03 grow: timed out waiting for acc://lg-b23ced926e38a29e.acme/book/1
+2026/07/27 19:27:03 sent=152/360 rejected=6 skipped=13 rate=0.8/s | adis=1 books=2 pages=3 tokens=0 accounts=12
+2026/07/27 19:28:02 grow: timed out waiting for acc://lg-0c2208b8a7916b0e.acme/book/1 to hold credits
+2026/07/27 19:28:48 grow: query acc://lg-7026fc4268a7465a.acme/book/1: Post "http://localhost:26664/v3": dial tcp [::1]:26664: connect: connection refused
+2026/07/27 19:28:48 == waiting for delivery ==
+2026/07/27 19:28:48 waiting on 320 undelivered messages...
+2026/07/27 19:29:03 waiting on 320 undelivered messages...
+2026/07/27 19:29:18 waiting on 320 undelivered messages...
+2026/07/27 19:29:33 320 messages still undelivered after the grace period
+
+== undelivered messages ==
+  burn-tokens              acc://04491e8b1313d6f13bdfcd550f44d9165696808bb3ebd1b54be71b9f636e89c3@f4a327b7cfbe971258b5a24c5ba3529bda09d8078ed35fac/ACME: not found (request failed: message 04491e8b1313d6f13bdfcd550f44d9165696808bb3ebd1b54be71b9f636e89c3 not found)
+  burn-tokens              acc://ce42a5bba8226310b9442bffeebfd3089c94f1e7eaac063aa6debf7052ace76a@f4a327b7cfbe971258b5a24c5ba3529bda09d8078ed35fac: not found (request failed: message ce42a5bba8226310b9442bffeebfd3089c94f1e7eaac063aa6debf7052ace76a not found)
+  burn-tokens              acc://21187761d374421af690858487129402fbad31ce09c09d8db5b46e433e86ad5d@f4a327b7cfbe971258b5a24c5ba3529bda09d8078ed35fac/ACME: not found (request failed: message 21187761d374421af690858487129402fbad31ce09c09d8db5b46e433e86ad5d not found)
+  burn-tokens              acc://2c6a8a4e838cf0291689bc633545cf84866078b9eea066dac03098471bd2ed7b@f4a327b7cfbe971258b5a24c5ba3529bda09d8078ed35fac: not found (request failed: message 2c6a8a4e838cf0291689bc633545cf84866078b9eea066dac03098471bd2ed7b not found)
+  burn-tokens              acc://282875ec1dd150dddb3f7740a491aa2c928249463f2fbe4926e01c087efdb9f0@f4a327b7cfbe971258b5a24c5ba3529bda09d8078ed35fac/ACME: not found (request failed: message 282875ec1dd150dddb3f7740a491aa2c928249463f2fbe4926e01c087efdb9f0 not found)
+  burn-tokens              acc://580c92ae7b2d125531091f4e346c18db28c4e8368940e8b0187dfa58f6423851@f4a327b7cfbe971258b5a24c5ba3529bda09d8078ed35fac: not found (request failed: message 580c92ae7b2d125531091f4e346c18db28c4e8368940e8b0187dfa58f6423851 not found)
+  burn-tokens              acc://b183b95e2d0e16e10a587245bac0d18fd4edb86a2bd515fa3e4f7d331832a771@f4a327b7cfbe971258b5a24c5ba3529bda09d8078ed35fac/ACME: not found (request failed: message b183b95e2d0e16e10a587245bac0d18fd4edb86a2bd515fa3e4f7d331832a771 not found)
+  burn-tokens              acc://1f6e101ade6c771fb96fb9029d45ecf2a4589b9382f40fba91537087e6a43342@f4a327b7cfbe971258b5a24c5ba3529bda09d8078ed35fac: not found (request failed: message 1f6e101ade6c771fb96fb9029d45ecf2a4589b9382f40fba91537087e6a43342 not found)
+  burn-tokens              acc://bd9d5ffa36c1331ebd3e2ac2ae2e71f87abc142edaf5df44c281ffee42680153@f4a327b7cfbe971258b5a24c5ba3529bda09d8078ed35fac/ACME: not found (request failed: message bd9d5ffa36c1331ebd3e2ac2ae2e71f87abc142edaf5df44c281ffee42680153 not found)
+  burn-tokens              acc://08a1379786f8d600028153738f97a02716a9f8c4bc7218fa572bae0acc1a8f8d@f4a327b7cfbe971258b5a24c5ba3529bda09d8078ed35fac: not found (request failed: message 08a1379786f8d600028153738f97a02716a9f8c4bc7218fa572bae0acc1a8f8d not found)
+  burn-tokens              acc://61cf9fa94a486c7d62f40efa67d084933618f43dc1e6533d2c6a218678e0cb24@f4a327b7cfbe971258b5a24c5ba3529bda09d8078ed35fac/ACME: not found (request failed: message 61cf9fa94a486c7d62f40efa67d084933618f43dc1e6533d2c6a218678e0cb24 not found)
+  burn-tokens              acc://ba0563e4ffbecb4e5e9514251c9ba4e0c7205fca91a23be181d34792b0beee2d@f4a327b7cfbe971258b5a24c5ba3529bda09d8078ed35fac: not found (request failed: message ba0563e4ffbecb4e5e9514251c9ba4e0c7205fca91a23be181d34792b0beee2d not found)
+  burn-tokens              acc://9128e70356b311c6a0163419c12345b617a5a7307f28097741c33ca0b1c2dd99@f4a327b7cfbe971258b5a24c5ba3529bda09d8078ed35fac/ACME: not found (request failed: message 9128e70356b311c6a0163419c12345b617a5a7307f28097741c33ca0b1c2dd99 not found)
+  burn-tokens              acc://10c3e8c4b848c984b49ae9593db70ed4bca07a169ed6be07ea53f747cf04fa44@f4a327b7cfbe971258b5a24c5ba3529bda09d8078ed35fac: not found (request failed: message 10c3e8c4b848c984b49ae9593db70ed4bca07a169ed6be07ea53f747cf04fa44 not found)
+  burn-tokens              acc://01132e1e87c6eb314056c002ffe0c2ac570ce852c7e5e8126d060726f5cefe0c@f4a327b7cfbe971258b5a24c5ba3529bda09d8078ed35fac/ACME: not found (request failed: message 01132e1e87c6eb314056c002ffe0c2ac570ce852c7e5e8126d060726f5cefe0c not found)
+  burn-tokens              acc://3369bbc55e445f1242fa760b94acbed89b45fea094bd6b79e64ecf8d32345e4a@f4a327b7cfbe971258b5a24c5ba3529bda09d8078ed35fac: not found (request failed: message 3369bbc55e445f1242fa760b94acbed89b45fea094bd6b79e64ecf8d32345e4a not found)
+  update-page-key          acc://90e0b3599abb9b8e4e47c240eeac59e9d389e6b2551c85b75b7204d4c7a009ca@lg-55ec4c3f1ee0d93e.acme/book/2: not found (request failed: message 90e0b3599abb9b8e4e47c240eeac59e9d389e6b2551c85b75b7204d4c7a009ca not found)
+  update-page-key          acc://e101d36f9d3159c81ad4418781834ab3b2b1b84a3580bea4ab3be095f6d7fbb6@lg-55ec4c3f1ee0d93e.acme/book/1: not found (request failed: message e101d36f9d3159c81ad4418781834ab3b2b1b84a3580bea4ab3be095f6d7fbb6 not found)
+  update-page-key          acc://a25bac776e179600d31c03d33e117c18a1be38495d3081a64a5ee037e7aa1db4@lg-55ec4c3f1ee0d93e.acme/book/2: not found (request failed: message a25bac776e179600d31c03d33e117c18a1be38495d3081a64a5ee037e7aa1db4 not found)
+  update-page-key          acc://77b9423a9f29b7934e66baf5bac1a3afd571e652fcc35e65dbcc8ed1e08b2659@lg-55ec4c3f1ee0d93e.acme/book/1: not found (request failed: message 77b9423a9f29b7934e66baf5bac1a3afd571e652fcc35e65dbcc8ed1e08b2659 not found)
+  ... (truncated)
+
+== transaction mix ==
+   add-account                  followed=0      rejected=0     skipped=0
+   add-credits-lite             followed=42     rejected=0     skipped=0
+ ! add-credits-page             followed=0      rejected=6     skipped=0
+   add-key-book                 followed=0      rejected=0     skipped=0
+   add-page-key                 followed=2      rejected=0     skipped=1
+   burn-credits                 followed=2      rejected=0     skipped=0
+   burn-tokens                  followed=16     rejected=0     skipped=0
+   burn-tokens-adi              followed=2      rejected=0     skipped=0
+   fail:overspend               followed=0      rejected=0     skipped=4
+   fail:send-to-void            followed=0      rejected=0     skipped=6
+   grow:add-credits             followed=6      rejected=0     skipped=0
+   grow:create-data-account     followed=4      rejected=0     skipped=0
+   grow:create-identity         followed=10     rejected=0     skipped=0
+   grow:create-key-book         followed=2      rejected=0     skipped=0
+   grow:create-key-page         followed=4      rejected=0     skipped=0
+   grow:create-token-account    followed=6      rejected=0     skipped=0
+   grow:set-threshold           followed=4      rejected=0     skipped=0
+   lock-account                 followed=2      rejected=0     skipped=2
+   remove-page-key              followed=4      rejected=0     skipped=0
+   send-tokens-adi              followed=22     rejected=0     skipped=0
+   send-tokens-lite             followed=114    rejected=0     skipped=0
+   set-threshold                followed=6      rejected=0     skipped=0
+   transfer-credits             followed=8      rejected=0     skipped=0
+   update-page-key              followed=4      rejected=0     skipped=0
+   write-data-adi               followed=16     rejected=0     skipped=0
+   write-data-lite              followed=44     rejected=0     skipped=0
+
+== accounts created ==
+  identities=2 key-books=3 key-pages=5 token-issuers=0 accounts=14
+  key-page shapes: 1key=3 4key=1 5key=1
+  thresholds:      t1=4 t2=1
+INCOMPLETE: 320 followed transactions never landed (see above)
+exit status 1
+== soak finished Tue Jul 28 12:29:33 AM UTC 2026 driver-exit=1 ==
