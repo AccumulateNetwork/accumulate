@@ -1,0 +1,63 @@
+== soak start Tue Jul 28 08:04:06 PM UTC 2026 duration=3m tps=2 ==
+   run dir: /home/paul/repos/gitlab.com/accumulatenetwork/i4073/test/docker/synth-heal/soak/runs/20260728T200406Z
+   commit:  v1.4.5-6-g988486db9-dirty (988486db9737d5b7a6108ac63f3da75fadbaa030)
+   image:   acc-4073:final2 (sha256:8201c9507f5abb580ee3f4a95dcffd99425fc0749a6dfe17e09134e95148879b)
+   version: v2-jiuquan | healing: unconditional (no config, v1.4.5+)
+   soakmon: http://127.0.0.1:8099
+2026/07/28 15:04:44 endpoints: 12 (http://localhost:26660, http://localhost:26661, http://localhost:26662, http://localhost:26663, http://localhost:26664, http://localhost:26665, http://localhost:26666, http://localhost:26667, http://localhost:26668, http://localhost:26669, http://localhost:26670, http://localhost:26671)
+2026/07/28 15:04:44 network SynthHealSoak, executor v2-jiuquan, seed 1785269084314635811
+2026/07/28 15:04:44 == funding the treasury ==
+2026/07/28 15:04:44 treasury acc://f4a327b7cfbe971258b5a24c5ba3529bda09d8078ed35fac/ACME (184467440737095516 credits)
+2026/07/28 15:04:44 == generating 360 transactions ==
+2026/07/28 15:05:44 sent=118/360 rejected=0 skipped=3 rate=2.0/s | adis=1 books=1 pages=1 tokens=0 accounts=11
+2026/07/28 15:05:46 add-credits-page: envelope(1/insufficientBalance) insufficient tokens: have 0.00000000, want 0.00500000;
+2026/07/28 15:05:51 add-credits-page: envelope(1/insufficientBalance) insufficient tokens: have 0.00000000, want 0.00500000;
+2026/07/28 15:06:44 sent=222/360 rejected=2 skipped=17 rate=1.8/s | adis=4 books=4 pages=8 tokens=1 accounts=21
+2026/07/28 15:07:44 sent=279/360 rejected=2 skipped=18 rate=1.5/s | adis=5 books=5 pages=10 tokens=1 accounts=24
+2026/07/28 15:09:04 == waiting for delivery ==
+2026/07/28 15:09:05 reconcile: 74 accounts tracked, 362 principal-txns, max credit drift 30996899700 units
+2026/07/28 15:09:05 waiting on 3 undelivered messages...
+
+== transaction mix ==
+   add-account                  followed=0      rejected=0     skipped=0
+   add-credits-lite             followed=76     rejected=0     skipped=0
+ ! add-credits-page             followed=22     rejected=2     skipped=0
+   add-key-book                 followed=0      rejected=0     skipped=0
+   add-page-key                 followed=6      rejected=0     skipped=3
+   add-token                    followed=0      rejected=0     skipped=0
+   burn-tokens                  followed=36     rejected=0     skipped=0
+   burn-tokens-adi              followed=8      rejected=0     skipped=0
+   burn-tokens-custom           followed=4      rejected=0     skipped=3
+   fail:send-to-void            followed=0      rejected=0     skipped=1
+   grow:add-credits             followed=12     rejected=0     skipped=0
+   grow:create-data-account     followed=12     rejected=0     skipped=0
+   grow:create-identity         followed=12     rejected=0     skipped=0
+   grow:create-key-page         followed=12     rejected=0     skipped=0
+   grow:create-token            followed=2      rejected=0     skipped=0
+   grow:create-token-account    followed=16     rejected=0     skipped=0
+   grow:create-token-holder     followed=4      rejected=0     skipped=0
+   grow:issue-tokens            followed=2      rejected=0     skipped=0
+   grow:set-threshold           followed=10     rejected=0     skipped=0
+   issue-tokens                 followed=4      rejected=0     skipped=2
+   lock-account                 followed=4      rejected=0     skipped=1
+   remove-page-key              followed=4      rejected=0     skipped=2
+   send-tokens-adi              followed=50     rejected=0     skipped=0
+   send-tokens-custom           followed=6      rejected=0     skipped=4
+   send-tokens-lite             followed=164    rejected=0     skipped=0
+   set-threshold                followed=12     rejected=0     skipped=0
+   transfer-credits             followed=18     rejected=0     skipped=0
+   update-account-auth          followed=4      rejected=0     skipped=0
+   update-page-key              followed=10     rejected=0     skipped=2
+   write-data-adi               followed=28     rejected=0     skipped=0
+   write-data-lite              followed=46     rejected=0     skipped=0
+
+== accounts created ==
+  identities=6 key-books=6 key-pages=12 token-issuers=1 accounts=26
+  key-page shapes: 1key=6 2key=2 3key=1 4key=3
+  thresholds:      t1=11 t2=1
+  custom tokens:   1 (0 supply-limited), 2 holding accounts
+  token precision: p1=1
+  e.g. acc://lg-af3f0c6ee671a62d.acme/tok686512 (LG512, precision 1) held by [acc://lg-af3f0c6ee671a62d.acme/tok686512-0 acc://lg-af3f0c6ee671a62d.acme/tok686512-1]
+OK: every followed transaction was delivered
+== load finished; idling 180s so tail losses age past the grace ==
+== soak finished Tue Jul 28 08:12:20 PM UTC 2026 driver-exit=0 ==

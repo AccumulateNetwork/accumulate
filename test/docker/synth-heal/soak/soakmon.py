@@ -257,6 +257,18 @@ def collect_flows_api():
                 else:
                     anc_prod += produced
 
+    # undeliv = produced at the source minus received at the destination. This is
+    # the ONLY signal that catches a missing PREFIX or a trailing drop: when the
+    # very first messages of a stream are lost and nothing follows them, the
+    # destination never forms a pending window, so recv == deliv == 0 and the
+    # recv-deliv gap stays 0 forever while the messages are gone. A 23h soak ran
+    # with DN->BVN1 stuck at produced=2 received=0 and every gap-based check
+    # reported healthy.
+    for kind in flows:
+        for src, row in flows[kind].items():
+            for dst, c in row.items():
+                c["undeliv"] = max(0, c.get("sent", 0) - c.get("recv", 0))
+
     # A partition's entry for itself is bookkeeping, not a cross-partition flow.
     for kind in flows:
         for src in list(flows[kind]):

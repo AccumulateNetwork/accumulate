@@ -1,0 +1,12 @@
+Traceback (most recent call last):
+  File "/home/paul/repos/gitlab.com/accumulatenetwork/i4073/test/docker/synth-heal/soak/soakmon.py", line 688, in <module>
+    main()
+  File "/home/paul/repos/gitlab.com/accumulatenetwork/i4073/test/docker/synth-heal/soak/soakmon.py", line 679, in main
+    srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
+  File "/usr/lib/python3.10/socketserver.py", line 452, in __init__
+    self.server_bind()
+  File "/usr/lib/python3.10/http/server.py", line 137, in server_bind
+    socketserver.TCPServer.server_bind(self)
+  File "/usr/lib/python3.10/socketserver.py", line 466, in server_bind
+    self.socket.bind(self.server_address)
+OSError: [Errno 98] Address already in use

@@ -1,0 +1,11 @@
+2026-07-28T00:55:19 stuck=0 stuckStream= worst=none undeliv=none
+2026-07-28T00:56:04 stuck=0 stuckStream= worst=BVN2->Directory gap=7 deliv=11 undeliv=synthetic BVN2->BVN1 undeliv=32
+2026-07-28T00:56:49 stuck=0 stuckStream= worst=BVN2->BVN3 gap=8 deliv=23 undeliv=synthetic BVN2->BVN1 undeliv=68
+2026-07-28T00:57:34 stuck=0 stuckStream= worst=BVN2->Directory gap=0 deliv=65 undeliv=synthetic BVN2->BVN1 undeliv=76
+2026-07-28T00:58:20 stuck=0 stuckStream= worst=BVN2->Directory gap=0 deliv=65 undeliv=synthetic BVN2->BVN1 undeliv=69
+2026-07-28T00:59:05 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=8 undeliv=synthetic BVN2->BVN1 undeliv=50
+2026-07-28T00:59:50 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=8 undeliv=synthetic BVN2->BVN1 undeliv=37
+2026-07-28T01:00:35 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=8 undeliv=synthetic BVN2->BVN1 undeliv=43
+2026-07-28T01:01:20 stuck=0 stuckStream= worst=BVN2->BVN3 gap=5 deliv=44 undeliv=synthetic BVN2->BVN1 undeliv=58
+2026-07-28T01:02:05 stuck=0 stuckStream= worst=BVN2->BVN3 gap=5 deliv=44 undeliv=synthetic BVN2->BVN1 undeliv=58
+2026-07-28T01:02:50 stuck=0 stuckStream= worst=BVN2->Directory gap=5 deliv=149 undeliv=synthetic BVN1->Directory undeliv=12

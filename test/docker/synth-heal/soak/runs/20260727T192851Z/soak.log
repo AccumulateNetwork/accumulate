@@ -1,0 +1,575 @@
+== soak start Mon Jul 27 07:28:51 PM UTC 2026 duration=8h tps=0.01 ==
+   run dir: /home/paul/repos/gitlab.com/accumulatenetwork/i4073/test/docker/synth-heal/soak/runs/20260727T192851Z
+   commit:  v1.4.5-4-gcff4c91d7 (cff4c91d750797b1cd085778cef02523eccf696f)
+   image:   acc-4073:test (sha256:28d1704607694da9b77a75179a00e2cb857d88006422420209d231fcf6a92ffd)
+   version: v2-jiuquan | healing: unconditional (no config, v1.4.5+)
+2026/07/27 14:29:29 endpoints: 12 (http://localhost:26660, http://localhost:26661, http://localhost:26662, http://localhost:26663, http://localhost:26664, http://localhost:26665, http://localhost:26666, http://localhost:26667, http://localhost:26668, http://localhost:26669, http://localhost:26670, http://localhost:26671)
+2026/07/27 14:29:29 network SynthHealSoak, executor v2-jiuquan, seed 1785180569045871845
+2026/07/27 14:29:29 == funding the treasury ==
+2026/07/27 14:29:29 treasury acc://f4a327b7cfbe971258b5a24c5ba3529bda09d8078ed35fac/ACME (184467440737095516 credits)
+2026/07/27 14:29:29 == generating 288 transactions ==
+   soakmon: http://127.0.0.1:8099
+2026/07/27 14:31:09 sent=1/288 rejected=0 skipped=1 rate=0.0/s | adis=1 books=1 pages=2 tokens=0 accounts=3
+2026/07/27 14:32:29 reconcile: 9 accounts tracked, 15 principal-txns, max credit drift 29997000000 units
+2026/07/27 14:32:49 sent=2/288 rejected=0 skipped=1 rate=0.0/s | adis=1 books=1 pages=2 tokens=0 accounts=3
+2026/07/27 14:34:29 sent=3/288 rejected=0 skipped=1 rate=0.0/s | adis=1 books=1 pages=2 tokens=0 accounts=3
+2026/07/27 14:35:29 reconcile: 9 accounts tracked, 17 principal-txns, max credit drift 29997000000 units
+2026/07/27 14:36:09 sent=4/288 rejected=0 skipped=1 rate=0.0/s | adis=1 books=1 pages=2 tokens=0 accounts=3
+2026/07/27 14:37:49 sent=5/288 rejected=0 skipped=1 rate=0.0/s | adis=1 books=1 pages=2 tokens=0 accounts=3
+2026/07/27 14:38:29 reconcile: 9 accounts tracked, 19 principal-txns, max credit drift 29997000000 units
+2026/07/27 14:39:29 sent=6/288 rejected=0 skipped=1 rate=0.0/s | adis=1 books=1 pages=2 tokens=0 accounts=3
+2026/07/27 14:41:09 sent=7/288 rejected=0 skipped=1 rate=0.0/s | adis=1 books=1 pages=2 tokens=0 accounts=3
+2026/07/27 14:41:29 reconcile: 9 accounts tracked, 21 principal-txns, max credit drift 29997000000 units
+2026/07/27 14:42:49 sent=8/288 rejected=0 skipped=1 rate=0.0/s | adis=1 books=1 pages=2 tokens=0 accounts=3
+2026/07/27 14:44:29 reconcile: 9 accounts tracked, 22 principal-txns, max credit drift 29997000000 units
+2026/07/27 14:44:29 sent=9/288 rejected=0 skipped=1 rate=0.0/s | adis=1 books=1 pages=2 tokens=0 accounts=3
+2026/07/27 14:46:09 sent=10/288 rejected=0 skipped=1 rate=0.0/s | adis=1 books=1 pages=2 tokens=0 accounts=3
+2026/07/27 14:47:29 reconcile: 9 accounts tracked, 24 principal-txns, max credit drift 29997000000 units
+2026/07/27 14:47:49 sent=11/288 rejected=0 skipped=1 rate=0.0/s | adis=1 books=1 pages=2 tokens=0 accounts=3
+2026/07/27 14:49:29 sent=12/288 rejected=0 skipped=1 rate=0.0/s | adis=1 books=1 pages=2 tokens=0 accounts=3
+2026/07/27 14:50:29 reconcile: 10 accounts tracked, 26 principal-txns, max credit drift 29997000000 units
+2026/07/27 14:51:09 sent=13/288 rejected=0 skipped=1 rate=0.0/s | adis=1 books=1 pages=2 tokens=0 accounts=3
+2026/07/27 14:52:49 sent=14/288 rejected=0 skipped=1 rate=0.0/s | adis=1 books=1 pages=2 tokens=0 accounts=3
+2026/07/27 14:53:29 reconcile: 11 accounts tracked, 28 principal-txns, max credit drift 29997000000 units
+2026/07/27 14:54:29 sent=15/288 rejected=0 skipped=1 rate=0.0/s | adis=1 books=1 pages=2 tokens=0 accounts=3
+2026/07/27 14:56:09 sent=16/288 rejected=0 skipped=1 rate=0.0/s | adis=1 books=1 pages=2 tokens=0 accounts=3
+2026/07/27 14:56:29 reconcile: 11 accounts tracked, 30 principal-txns, max credit drift 29997000000 units
+2026/07/27 14:58:19 sent=17/288 rejected=0 skipped=1 rate=0.0/s | adis=1 books=1 pages=2 tokens=0 accounts=3
+2026/07/27 14:59:49 reconcile: 11 accounts tracked, 31 principal-txns, max credit drift 29997000000 units
+2026/07/27 14:59:59 sent=18/288 rejected=0 skipped=1 rate=0.0/s | adis=1 books=1 pages=2 tokens=0 accounts=3
+2026/07/27 15:01:39 sent=19/288 rejected=0 skipped=1 rate=0.0/s | adis=1 books=1 pages=2 tokens=0 accounts=3
+2026/07/27 15:02:49 reconcile: 12 accounts tracked, 33 principal-txns, max credit drift 29997000000 units
+2026/07/27 15:03:19 sent=20/288 rejected=0 skipped=1 rate=0.0/s | adis=1 books=1 pages=2 tokens=0 accounts=3
+2026/07/27 15:04:59 sent=21/288 rejected=0 skipped=1 rate=0.0/s | adis=1 books=1 pages=2 tokens=0 accounts=3
+2026/07/27 15:05:49 reconcile: 13 accounts tracked, 35 principal-txns, max credit drift 29997000000 units
+2026/07/27 15:06:39 sent=22/288 rejected=0 skipped=1 rate=0.0/s | adis=1 books=1 pages=2 tokens=0 accounts=3
+2026/07/27 15:08:19 sent=23/288 rejected=0 skipped=1 rate=0.0/s | adis=1 books=1 pages=2 tokens=0 accounts=3
+2026/07/27 15:08:49 reconcile: 13 accounts tracked, 37 principal-txns, max credit drift 29997000000 units
+2026/07/27 15:09:59 sent=24/288 rejected=0 skipped=1 rate=0.0/s | adis=1 books=1 pages=2 tokens=0 accounts=3
+2026/07/27 15:11:39 sent=25/288 rejected=0 skipped=1 rate=0.0/s | adis=1 books=1 pages=2 tokens=0 accounts=3
+2026/07/27 15:11:49 reconcile: 13 accounts tracked, 39 principal-txns, max credit drift 29997000000 units
+2026/07/27 15:13:19 sent=26/288 rejected=0 skipped=1 rate=0.0/s | adis=1 books=1 pages=2 tokens=0 accounts=3
+2026/07/27 15:14:49 reconcile: 13 accounts tracked, 40 principal-txns, max credit drift 29997000000 units
+2026/07/27 15:14:59 sent=26/288 rejected=0 skipped=2 rate=0.0/s | adis=1 books=1 pages=2 tokens=0 accounts=3
+2026/07/27 15:16:39 sent=27/288 rejected=0 skipped=2 rate=0.0/s | adis=1 books=1 pages=2 tokens=0 accounts=3
+2026/07/27 15:17:49 reconcile: 13 accounts tracked, 41 principal-txns, max credit drift 29997000000 units
+2026/07/27 15:18:19 sent=28/288 rejected=0 skipped=2 rate=0.0/s | adis=1 books=1 pages=2 tokens=0 accounts=3
+2026/07/27 15:19:59 sent=29/288 rejected=0 skipped=2 rate=0.0/s | adis=1 books=1 pages=2 tokens=0 accounts=3
+2026/07/27 15:20:49 reconcile: 13 accounts tracked, 43 principal-txns, max credit drift 29997000000 units
+2026/07/27 15:21:39 sent=30/288 rejected=0 skipped=2 rate=0.0/s | adis=1 books=1 pages=2 tokens=0 accounts=3
+2026/07/27 15:23:19 sent=31/288 rejected=0 skipped=2 rate=0.0/s | adis=1 books=1 pages=2 tokens=0 accounts=3
+2026/07/27 15:23:49 reconcile: 13 accounts tracked, 45 principal-txns, max credit drift 29997000000 units
+2026/07/27 15:24:59 sent=32/288 rejected=0 skipped=2 rate=0.0/s | adis=1 books=1 pages=2 tokens=0 accounts=3
+2026/07/27 15:26:39 sent=33/288 rejected=0 skipped=2 rate=0.0/s | adis=1 books=1 pages=2 tokens=0 accounts=3
+2026/07/27 15:26:49 reconcile: 13 accounts tracked, 47 principal-txns, max credit drift 29997000000 units
+2026/07/27 15:28:19 sent=34/288 rejected=0 skipped=2 rate=0.0/s | adis=1 books=1 pages=2 tokens=0 accounts=3
+2026/07/27 15:29:49 reconcile: 13 accounts tracked, 48 principal-txns, max credit drift 29997000000 units
+2026/07/27 15:29:59 sent=35/288 rejected=0 skipped=2 rate=0.0/s | adis=1 books=1 pages=2 tokens=0 accounts=3
+2026/07/27 15:31:39 sent=36/288 rejected=0 skipped=2 rate=0.0/s | adis=1 books=1 pages=2 tokens=0 accounts=3
+2026/07/27 15:32:49 reconcile: 13 accounts tracked, 50 principal-txns, max credit drift 29997000000 units
+2026/07/27 15:33:19 sent=37/288 rejected=0 skipped=2 rate=0.0/s | adis=1 books=1 pages=2 tokens=0 accounts=3
+2026/07/27 15:34:59 sent=38/288 rejected=0 skipped=2 rate=0.0/s | adis=1 books=1 pages=2 tokens=0 accounts=3
+2026/07/27 15:35:51 reconcile: 13 accounts tracked, 52 principal-txns, max credit drift 29997000000 units
+2026/07/27 15:36:39 sent=39/288 rejected=0 skipped=2 rate=0.0/s | adis=1 books=1 pages=2 tokens=0 accounts=3
+2026/07/27 15:38:19 sent=40/288 rejected=0 skipped=2 rate=0.0/s | adis=1 books=1 pages=2 tokens=0 accounts=3
+2026/07/27 15:38:51 reconcile: 13 accounts tracked, 54 principal-txns, max credit drift 29997000000 units
+2026/07/27 15:39:59 sent=41/288 rejected=0 skipped=2 rate=0.0/s | adis=1 books=1 pages=2 tokens=0 accounts=3
+2026/07/27 15:41:39 sent=42/288 rejected=0 skipped=2 rate=0.0/s | adis=1 books=1 pages=2 tokens=0 accounts=3
+2026/07/27 15:41:51 reconcile: 13 accounts tracked, 58 principal-txns, max credit drift 29997000000 units
+2026/07/27 15:43:19 sent=43/288 rejected=0 skipped=2 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=5
+2026/07/27 15:44:59 sent=44/288 rejected=0 skipped=2 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=5
+2026/07/27 15:45:51 reconcile: 14 accounts tracked, 61 principal-txns, max credit drift 29997000000 units
+2026/07/27 15:46:39 sent=45/288 rejected=0 skipped=2 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=5
+2026/07/27 15:48:19 sent=46/288 rejected=0 skipped=2 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=5
+2026/07/27 15:48:51 reconcile: 14 accounts tracked, 63 principal-txns, max credit drift 29997000000 units
+2026/07/27 15:49:59 sent=47/288 rejected=0 skipped=2 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=5
+2026/07/27 15:51:39 sent=48/288 rejected=0 skipped=2 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=5
+2026/07/27 15:51:51 reconcile: 14 accounts tracked, 65 principal-txns, max credit drift 29997000000 units
+2026/07/27 15:53:19 sent=49/288 rejected=0 skipped=2 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=5
+2026/07/27 15:54:51 reconcile: 14 accounts tracked, 66 principal-txns, max credit drift 29997000000 units
+2026/07/27 15:54:59 sent=50/288 rejected=0 skipped=2 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=5
+2026/07/27 15:56:39 sent=51/288 rejected=0 skipped=2 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=5
+2026/07/27 15:57:51 reconcile: 14 accounts tracked, 68 principal-txns, max credit drift 29997000000 units
+2026/07/27 15:58:19 sent=52/288 rejected=0 skipped=2 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=5
+2026/07/27 15:59:59 sent=53/288 rejected=0 skipped=2 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=5
+2026/07/27 16:00:51 reconcile: 14 accounts tracked, 70 principal-txns, max credit drift 29997000000 units
+2026/07/27 16:01:39 sent=54/288 rejected=0 skipped=2 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=5
+2026/07/27 16:03:19 sent=55/288 rejected=0 skipped=2 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=5
+2026/07/27 16:03:51 reconcile: 14 accounts tracked, 72 principal-txns, max credit drift 29997000000 units
+2026/07/27 16:04:59 sent=56/288 rejected=0 skipped=2 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=5
+2026/07/27 16:06:39 sent=57/288 rejected=0 skipped=2 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=5
+2026/07/27 16:06:51 reconcile: 14 accounts tracked, 74 principal-txns, max credit drift 29997000000 units
+2026/07/27 16:08:19 sent=58/288 rejected=0 skipped=2 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=5
+2026/07/27 16:09:51 reconcile: 14 accounts tracked, 75 principal-txns, max credit drift 29997000000 units
+2026/07/27 16:09:59 sent=59/288 rejected=0 skipped=2 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=5
+2026/07/27 16:11:39 sent=60/288 rejected=0 skipped=2 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=5
+2026/07/27 16:12:51 reconcile: 14 accounts tracked, 77 principal-txns, max credit drift 29997000000 units
+2026/07/27 16:13:19 sent=61/288 rejected=0 skipped=2 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=5
+2026/07/27 16:14:59 sent=62/288 rejected=0 skipped=2 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=5
+2026/07/27 16:15:51 reconcile: 14 accounts tracked, 79 principal-txns, max credit drift 29997000000 units
+2026/07/27 16:16:39 sent=63/288 rejected=0 skipped=2 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=5
+2026/07/27 16:18:19 sent=64/288 rejected=0 skipped=2 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=5
+2026/07/27 16:18:51 reconcile: 14 accounts tracked, 81 principal-txns, max credit drift 29997000000 units
+2026/07/27 16:19:59 sent=65/288 rejected=0 skipped=2 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=6
+2026/07/27 16:21:39 sent=66/288 rejected=0 skipped=2 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=6
+2026/07/27 16:21:51 reconcile: 16 accounts tracked, 86 principal-txns, max credit drift 29997000000 units
+2026/07/27 16:23:19 sent=67/288 rejected=0 skipped=2 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=6
+2026/07/27 16:24:51 reconcile: 16 accounts tracked, 87 principal-txns, max credit drift 29997000000 units
+2026/07/27 16:24:59 sent=68/288 rejected=0 skipped=2 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=6
+2026/07/27 16:26:39 sent=69/288 rejected=0 skipped=2 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=6
+2026/07/27 16:27:51 reconcile: 16 accounts tracked, 89 principal-txns, max credit drift 29997000000 units
+2026/07/27 16:28:19 sent=70/288 rejected=0 skipped=2 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=6
+2026/07/27 16:29:59 sent=71/288 rejected=0 skipped=2 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=6
+2026/07/27 16:30:51 reconcile: 16 accounts tracked, 91 principal-txns, max credit drift 29997000000 units
+2026/07/27 16:31:39 sent=72/288 rejected=0 skipped=2 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=6
+2026/07/27 16:33:19 sent=72/288 rejected=0 skipped=3 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=6
+2026/07/27 16:33:51 reconcile: 16 accounts tracked, 92 principal-txns, max credit drift 29997000000 units
+2026/07/27 16:34:59 sent=72/288 rejected=0 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=6
+2026/07/27 16:36:39 sent=73/288 rejected=0 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=6
+2026/07/27 16:36:51 reconcile: 16 accounts tracked, 93 principal-txns, max credit drift 29997000000 units
+2026/07/27 16:38:19 sent=74/288 rejected=0 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=6
+2026/07/27 16:39:59 sent=75/288 rejected=0 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=6
+2026/07/27 16:40:21 reconcile: 16 accounts tracked, 95 principal-txns, max credit drift 29997000000 units
+2026/07/27 16:41:39 sent=76/288 rejected=0 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=6
+2026/07/27 16:43:19 sent=77/288 rejected=0 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=6
+2026/07/27 16:43:21 reconcile: 16 accounts tracked, 97 principal-txns, max credit drift 29997000000 units
+2026/07/27 16:44:59 sent=78/288 rejected=0 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=6
+2026/07/27 16:46:21 reconcile: 17 accounts tracked, 98 principal-txns, max credit drift 29997000000 units
+2026/07/27 16:46:39 sent=79/288 rejected=0 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=6
+2026/07/27 16:48:19 sent=80/288 rejected=0 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=6
+2026/07/27 16:49:21 reconcile: 17 accounts tracked, 100 principal-txns, max credit drift 29997000000 units
+2026/07/27 16:49:59 sent=81/288 rejected=0 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=6
+2026/07/27 16:51:39 sent=82/288 rejected=0 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=6
+2026/07/27 16:52:21 reconcile: 17 accounts tracked, 102 principal-txns, max credit drift 29997000000 units
+2026/07/27 16:53:19 sent=83/288 rejected=0 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=6
+2026/07/27 16:54:59 sent=84/288 rejected=0 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=6
+2026/07/27 16:55:21 reconcile: 17 accounts tracked, 104 principal-txns, max credit drift 29997000000 units
+2026/07/27 16:56:39 sent=85/288 rejected=0 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=6
+2026/07/27 16:58:19 sent=86/288 rejected=0 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=6
+2026/07/27 16:58:21 reconcile: 17 accounts tracked, 106 principal-txns, max credit drift 29997000000 units
+2026/07/27 16:59:59 sent=87/288 rejected=0 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=6
+2026/07/27 17:01:21 reconcile: 17 accounts tracked, 107 principal-txns, max credit drift 29997000000 units
+2026/07/27 17:01:39 sent=88/288 rejected=0 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=6
+2026/07/27 17:03:19 sent=89/288 rejected=0 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=6
+2026/07/27 17:04:21 reconcile: 17 accounts tracked, 109 principal-txns, max credit drift 29997000000 units
+2026/07/27 17:04:59 sent=90/288 rejected=0 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=6
+2026/07/27 17:06:39 sent=91/288 rejected=0 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=6
+2026/07/27 17:07:21 reconcile: 17 accounts tracked, 111 principal-txns, max credit drift 29997000000 units
+2026/07/27 17:08:19 sent=92/288 rejected=0 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=6
+2026/07/27 17:09:59 sent=93/288 rejected=0 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=6
+2026/07/27 17:10:21 reconcile: 19 accounts tracked, 113 principal-txns, max credit drift 29997000000 units
+2026/07/27 17:11:39 sent=94/288 rejected=0 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=6
+2026/07/27 17:13:19 sent=95/288 rejected=0 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=6
+2026/07/27 17:13:21 reconcile: 19 accounts tracked, 115 principal-txns, max credit drift 29997000000 units
+2026/07/27 17:14:59 sent=96/288 rejected=0 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 17:16:21 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
+2026/07/27 17:16:39 send-tokens-adi: Post "http://localhost:26660/v3": dial tcp [::1]:26660: connect: connection refused
+2026/07/27 17:16:39 sent=96/288 rejected=1 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 17:18:19 send-tokens-adi: envelope(1/notFound) load signer: Account.acc://lg-bc020acd069a874e.acme/book/1.Main not found;
+2026/07/27 17:18:19 sent=96/288 rejected=2 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 17:19:21 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
+2026/07/27 17:19:59 send-tokens-lite: envelope(1/notFound) load signer: Account.acc://d9c46a815ce538461facd3c17da99ef659f09e510c8efe4a.Main not found;
+2026/07/27 17:19:59 sent=96/288 rejected=3 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 17:21:44 send-tokens-lite: envelope(1/badTimestamp) invalid timestamp: have 1785190730946, got 1785180569193;
+2026/07/27 17:21:44 sent=96/288 rejected=4 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 17:23:07 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
+2026/07/27 17:23:24 send-tokens-lite: envelope(1/notFound) load signer: Account.acc://d9c46a815ce538461facd3c17da99ef659f09e510c8efe4a.Main not found;
+2026/07/27 17:23:24 sent=96/288 rejected=5 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 17:25:04 add-credits-page: envelope(1/notFound) load signer: Account.acc://lg-bc020acd069a874e.acme/book/1.Main not found;
+2026/07/27 17:25:04 sent=96/288 rejected=6 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 17:26:44 send-tokens-adi: envelope(1/notFound) load signer: Account.acc://lg-bc020acd069a874e.acme/book/1.Main not found;
+2026/07/27 17:26:44 sent=96/288 rejected=7 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 17:27:07 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
+2026/07/27 17:28:24 set-threshold: envelope(1/notFound) load signer: Account.acc://lg-bc020acd069a874e.acme/book/1.Main not found;
+2026/07/27 17:28:24 sent=96/288 rejected=8 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 17:30:04 send-tokens-lite: envelope(1/notFound) load signer: Account.acc://988ba91314a87ff3ac291efbe57b2da16bd7e0fb19cbe5f2.Main not found;
+2026/07/27 17:30:04 sent=96/288 rejected=9 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 17:30:07 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
+2026/07/27 17:31:44 send-tokens-lite: envelope(1/notFound) load signer: Account.acc://988ba91314a87ff3ac291efbe57b2da16bd7e0fb19cbe5f2.Main not found;
+2026/07/27 17:31:44 sent=96/288 rejected=10 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 17:33:07 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
+2026/07/27 17:33:24 update-page-key: envelope(1/notFound) load signer: Account.acc://lg-bc020acd069a874e.acme/book/1.Main not found;
+2026/07/27 17:33:24 sent=96/288 rejected=11 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 17:35:04 send-tokens-adi: envelope(1/notFound) load signer: Account.acc://lg-bc020acd069a874e.acme/book/1.Main not found;
+2026/07/27 17:35:04 sent=96/288 rejected=12 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 17:36:07 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
+2026/07/27 17:36:44 write-data-adi: envelope(1/notFound) load signer: Account.acc://lg-bc020acd069a874e.acme/book/1.Main not found;
+2026/07/27 17:36:44 sent=96/288 rejected=13 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 17:38:24 write-data-adi: envelope(1/notFound) load signer: Account.acc://lg-bc020acd069a874e.acme/book/1.Main not found;
+2026/07/27 17:38:24 sent=96/288 rejected=14 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 17:39:07 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
+2026/07/27 17:40:04 add-credits-page: envelope(1/notFound) load signer: Account.acc://lg-bc020acd069a874e.acme/book/1.Main not found;
+2026/07/27 17:40:04 sent=96/288 rejected=15 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 17:41:44 write-data-adi: envelope(1/notFound) load signer: Account.acc://lg-bc020acd069a874e.acme/book/1.Main not found;
+2026/07/27 17:41:44 sent=96/288 rejected=16 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 17:42:07 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
+2026/07/27 17:43:24 burn-tokens-adi: envelope(1/notFound) load signer: Account.acc://lg-bc020acd069a874e.acme/book/1.Main not found;
+2026/07/27 17:43:24 sent=96/288 rejected=17 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 17:45:04 write-data-adi: envelope(1/notFound) load signer: Account.acc://lg-bc020acd069a874e.acme/book/1.Main not found;
+2026/07/27 17:45:04 sent=96/288 rejected=18 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 17:45:07 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
+2026/07/27 17:46:44 update-page-key: envelope(1/notFound) load signer: Account.acc://lg-bc020acd069a874e.acme/book/1.Main not found;
+2026/07/27 17:46:44 sent=96/288 rejected=19 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 17:48:07 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
+2026/07/27 17:48:24 fail:send-to-void: envelope(1/notFound) load signer: Account.acc://d9c46a815ce538461facd3c17da99ef659f09e510c8efe4a.Main not found;
+2026/07/27 17:48:24 sent=96/288 rejected=20 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 17:50:04 sent=96/288 rejected=21 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 17:51:07 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
+2026/07/27 17:51:44 sent=96/288 rejected=22 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 17:53:24 sent=97/288 rejected=22 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 17:53:24 add-account: create data account: envelope(1/notFound) load signer: Account.acc://lg-bc020acd069a874e.acme/book/1.Main not found;
+2026/07/27 17:54:07 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
+2026/07/27 17:55:04 sent=97/288 rejected=23 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 17:56:44 sent=97/288 rejected=24 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 17:57:07 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
+2026/07/27 17:58:24 sent=97/288 rejected=25 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 18:00:04 sent=98/288 rejected=25 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 18:00:04 add-key-book: create key book: envelope(1/notFound) load signer: Account.acc://lg-bc020acd069a874e.acme/book/1.Main not found;
+2026/07/27 18:00:07 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
+2026/07/27 18:01:44 sent=98/288 rejected=26 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 18:03:07 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
+2026/07/27 18:03:24 sent=98/288 rejected=27 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 18:05:04 sent=98/288 rejected=28 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 18:06:07 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
+2026/07/27 18:06:44 sent=98/288 rejected=29 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 18:08:24 sent=98/288 rejected=30 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 18:09:07 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
+2026/07/27 18:10:04 sent=98/288 rejected=31 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 18:11:44 sent=98/288 rejected=32 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 18:12:07 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
+2026/07/27 18:13:24 sent=98/288 rejected=33 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 18:15:04 sent=98/288 rejected=34 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 18:15:07 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
+2026/07/27 18:16:44 sent=98/288 rejected=35 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 18:18:08 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
+2026/07/27 18:18:24 sent=98/288 rejected=36 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 18:20:04 sent=98/288 rejected=37 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 18:21:08 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
+2026/07/27 18:21:44 sent=98/288 rejected=38 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 18:23:24 sent=99/288 rejected=38 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 18:23:24 add-token: signer cannot afford to create a token
+2026/07/27 18:24:08 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
+2026/07/27 18:25:04 sent=99/288 rejected=39 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 18:26:44 sent=99/288 rejected=40 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 18:27:08 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
+2026/07/27 18:28:24 sent=99/288 rejected=41 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 18:30:04 sent=99/288 rejected=42 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 18:30:08 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
+2026/07/27 18:31:44 sent=99/288 rejected=43 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 18:31:44 grow: create identity: envelope(1/badTimestamp) invalid timestamp: have 1785191451990, got 1785180569236;
+2026/07/27 18:33:08 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
+2026/07/27 18:33:24 sent=99/288 rejected=44 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 18:35:32 sent=99/288 rejected=45 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 18:36:08 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
+2026/07/27 18:37:12 sent=99/288 rejected=46 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 18:38:52 sent=99/288 rejected=47 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 18:40:08 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
+2026/07/27 18:40:32 sent=99/288 rejected=48 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 18:42:12 sent=99/288 rejected=49 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 18:43:38 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
+2026/07/27 18:43:52 sent=99/288 rejected=50 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 18:45:32 sent=99/288 rejected=51 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 18:47:12 sent=99/288 rejected=52 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 18:48:08 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
+2026/07/27 18:48:52 sent=99/288 rejected=53 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 18:50:32 sent=99/288 rejected=53 skipped=5 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 18:51:38 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
+2026/07/27 18:52:12 sent=99/288 rejected=54 skipped=5 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 18:53:52 sent=99/288 rejected=55 skipped=5 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 18:55:32 sent=99/288 rejected=56 skipped=5 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 18:56:08 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
+2026/07/27 18:57:12 sent=99/288 rejected=57 skipped=5 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 18:58:52 sent=99/288 rejected=58 skipped=5 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 18:59:38 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
+2026/07/27 19:00:32 sent=99/288 rejected=59 skipped=5 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 19:02:12 sent=99/288 rejected=60 skipped=5 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 19:03:52 sent=99/288 rejected=61 skipped=5 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 19:04:08 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
+2026/07/27 19:05:32 sent=99/288 rejected=62 skipped=5 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 19:07:08 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
+2026/07/27 19:07:12 sent=99/288 rejected=63 skipped=5 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 19:08:52 sent=99/288 rejected=64 skipped=5 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 19:10:32 sent=99/288 rejected=65 skipped=5 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 19:12:00 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
+2026/07/27 19:12:12 sent=99/288 rejected=66 skipped=5 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 19:13:52 sent=100/288 rejected=66 skipped=5 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 19:15:00 reconcile: 19 accounts tracked, 117 principal-txns, max credit drift 29997000000 units
+2026/07/27 19:15:32 sent=100/288 rejected=67 skipped=5 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 19:17:12 sent=100/288 rejected=68 skipped=5 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 19:18:00 reconcile: 19 accounts tracked, 117 principal-txns, max credit drift 29997000000 units
+2026/07/27 19:18:52 sent=100/288 rejected=69 skipped=5 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 19:20:32 sent=100/288 rejected=70 skipped=5 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 19:21:00 reconcile: 19 accounts tracked, 117 principal-txns, max credit drift 29997000000 units
+2026/07/27 19:22:12 sent=101/288 rejected=70 skipped=5 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 19:22:12 add-account: create token account: envelope(1/notFound) load signer: Account.acc://lg-bc020acd069a874e.acme/book/1.Main not found;
+2026/07/27 19:23:52 sent=101/288 rejected=71 skipped=5 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 19:24:00 reconcile: 19 accounts tracked, 117 principal-txns, max credit drift 29997000000 units
+2026/07/27 19:25:32 sent=101/288 rejected=72 skipped=5 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 19:27:00 reconcile: 19 accounts tracked, 117 principal-txns, max credit drift 29997000000 units
+2026/07/27 19:27:12 sent=101/288 rejected=73 skipped=5 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 19:28:52 sent=101/288 rejected=74 skipped=5 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 19:30:00 reconcile: 19 accounts tracked, 117 principal-txns, max credit drift 29997000000 units
+2026/07/27 19:30:32 sent=101/288 rejected=75 skipped=5 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 19:32:12 sent=101/288 rejected=76 skipped=5 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 19:33:52 sent=101/288 rejected=77 skipped=5 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 19:34:00 reconcile: 19 accounts tracked, 117 principal-txns, max credit drift 29997000000 units
+2026/07/27 19:35:32 sent=101/288 rejected=78 skipped=5 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 19:37:00 reconcile: 19 accounts tracked, 117 principal-txns, max credit drift 29997000000 units
+2026/07/27 19:37:12 sent=101/288 rejected=79 skipped=5 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 19:38:52 sent=101/288 rejected=80 skipped=5 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 19:40:00 reconcile: 19 accounts tracked, 117 principal-txns, max credit drift 29997000000 units
+2026/07/27 19:40:32 sent=101/288 rejected=81 skipped=5 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 19:42:12 sent=101/288 rejected=82 skipped=5 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 19:43:00 reconcile: 19 accounts tracked, 117 principal-txns, max credit drift 29997000000 units
+2026/07/27 19:43:52 sent=101/288 rejected=83 skipped=5 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 19:45:32 sent=101/288 rejected=84 skipped=5 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 19:46:00 reconcile: 19 accounts tracked, 117 principal-txns, max credit drift 29997000000 units
+2026/07/27 19:47:12 sent=101/288 rejected=85 skipped=5 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 19:48:52 sent=101/288 rejected=85 skipped=6 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 19:50:00 reconcile: 19 accounts tracked, 117 principal-txns, max credit drift 29997000000 units
+2026/07/27 19:50:32 sent=101/288 rejected=86 skipped=6 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 19:52:12 sent=101/288 rejected=87 skipped=6 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 19:53:00 reconcile: 19 accounts tracked, 117 principal-txns, max credit drift 29997000000 units
+2026/07/27 19:53:52 grow: create identity: envelope(1/badTimestamp) invalid timestamp: have 1785199605036, got 1785180569290;
+2026/07/27 19:53:52 sent=101/288 rejected=88 skipped=6 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 19:55:32 sent=101/288 rejected=89 skipped=6 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 19:56:00 reconcile: 19 accounts tracked, 117 principal-txns, max credit drift 29997000000 units
+2026/07/27 19:57:12 sent=101/288 rejected=90 skipped=6 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 19:58:52 sent=101/288 rejected=91 skipped=6 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 20:00:11 reconcile: 19 accounts tracked, 117 principal-txns, max credit drift 29997000000 units
+2026/07/27 20:00:32 sent=101/288 rejected=92 skipped=6 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 20:02:12 sent=101/288 rejected=93 skipped=6 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 20:03:46 reconcile: 19 accounts tracked, 117 principal-txns, max credit drift 29997000000 units
+2026/07/27 20:03:52 sent=101/288 rejected=94 skipped=6 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 20:05:32 sent=101/288 rejected=95 skipped=6 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 20:07:12 sent=101/288 rejected=96 skipped=6 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 20:07:21 reconcile: 19 accounts tracked, 117 principal-txns, max credit drift 29997000000 units
+2026/07/27 20:08:52 sent=101/288 rejected=97 skipped=6 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 20:10:32 sent=102/288 rejected=97 skipped=6 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 20:10:32 add-account: create token account: envelope(1/notFound) load signer: Account.acc://lg-bc020acd069a874e.acme/book/1.Main not found;
+2026/07/27 20:12:12 sent=102/288 rejected=98 skipped=6 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 20:12:18 reconcile: 19 accounts tracked, 117 principal-txns, max credit drift 29997000000 units
+2026/07/27 20:13:52 sent=102/288 rejected=99 skipped=6 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 20:15:18 reconcile: 19 accounts tracked, 117 principal-txns, max credit drift 29997000000 units
+2026/07/27 20:15:32 sent=103/288 rejected=99 skipped=6 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 20:17:12 sent=103/288 rejected=100 skipped=6 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 20:18:18 reconcile: 19 accounts tracked, 118 principal-txns, max credit drift 29997000000 units
+2026/07/27 20:18:52 sent=103/288 rejected=101 skipped=6 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 20:20:32 sent=103/288 rejected=102 skipped=6 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 20:21:18 reconcile: 19 accounts tracked, 118 principal-txns, max credit drift 29997000000 units
+2026/07/27 20:22:12 sent=103/288 rejected=103 skipped=6 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
+2026/07/27 20:23:52 sent=103/288 rejected=104 skipped=6 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 20:24:18 reconcile: 19 accounts tracked, 118 principal-txns, max credit drift 29997000000 units
+2026/07/27 20:25:32 sent=103/288 rejected=105 skipped=6 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 20:27:12 sent=104/288 rejected=105 skipped=6 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 20:27:12 add-token: signer cannot afford to create a token
+2026/07/27 20:27:18 reconcile: 19 accounts tracked, 118 principal-txns, max credit drift 29997000000 units
+2026/07/27 20:28:52 sent=104/288 rejected=106 skipped=6 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 20:30:18 reconcile: 19 accounts tracked, 118 principal-txns, max credit drift 29997000000 units
+2026/07/27 20:30:32 sent=105/288 rejected=106 skipped=6 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 20:30:32 add-account: create data account: envelope(1/notFound) load signer: Account.acc://lg-bc020acd069a874e.acme/book/1.Main not found;
+2026/07/27 20:32:12 sent=105/288 rejected=107 skipped=6 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 20:33:18 reconcile: 19 accounts tracked, 118 principal-txns, max credit drift 29997000000 units
+2026/07/27 20:34:23 sent=105/288 rejected=108 skipped=6 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 20:36:03 sent=105/288 rejected=109 skipped=6 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 20:36:18 reconcile: 19 accounts tracked, 118 principal-txns, max credit drift 29997000000 units
+2026/07/27 20:37:43 sent=105/288 rejected=110 skipped=6 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 20:39:18 reconcile: 19 accounts tracked, 118 principal-txns, max credit drift 29997000000 units
+2026/07/27 20:39:23 sent=105/288 rejected=111 skipped=6 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 20:41:03 sent=105/288 rejected=112 skipped=6 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 20:42:18 reconcile: 19 accounts tracked, 118 principal-txns, max credit drift 29997000000 units
+2026/07/27 20:42:43 sent=105/288 rejected=112 skipped=7 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 20:44:23 sent=105/288 rejected=113 skipped=7 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 20:45:19 reconcile: 19 accounts tracked, 118 principal-txns, max credit drift 29997000000 units
+2026/07/27 20:46:03 sent=105/288 rejected=113 skipped=8 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 20:47:43 sent=105/288 rejected=113 skipped=9 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 20:48:19 reconcile: 19 accounts tracked, 118 principal-txns, max credit drift 29997000000 units
+2026/07/27 20:49:23 sent=105/288 rejected=114 skipped=9 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 20:51:03 sent=105/288 rejected=114 skipped=10 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 20:51:19 reconcile: 19 accounts tracked, 118 principal-txns, max credit drift 29997000000 units
+2026/07/27 20:52:43 grow: create identity: Post "http://localhost:26669/v3": dial tcp [::1]:26669: connect: connection refused
+2026/07/27 20:52:43 sent=105/288 rejected=115 skipped=10 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 20:54:19 reconcile: 19 accounts tracked, 118 principal-txns, max credit drift 29997000000 units
+2026/07/27 20:54:23 sent=105/288 rejected=116 skipped=10 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 20:56:03 sent=105/288 rejected=116 skipped=11 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 20:57:19 reconcile: 19 accounts tracked, 118 principal-txns, max credit drift 29997000000 units
+2026/07/27 20:57:43 sent=105/288 rejected=117 skipped=11 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 20:59:23 sent=105/288 rejected=118 skipped=11 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 21:00:19 reconcile: 19 accounts tracked, 118 principal-txns, max credit drift 29997000000 units
+2026/07/27 21:01:03 sent=105/288 rejected=119 skipped=11 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 21:02:43 sent=105/288 rejected=120 skipped=11 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 21:03:19 reconcile: 19 accounts tracked, 118 principal-txns, max credit drift 29997000000 units
+2026/07/27 21:04:23 sent=105/288 rejected=121 skipped=11 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 21:06:03 sent=105/288 rejected=121 skipped=12 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 21:06:19 reconcile: 19 accounts tracked, 118 principal-txns, max credit drift 29997000000 units
+2026/07/27 21:07:43 sent=105/288 rejected=122 skipped=12 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 21:09:19 reconcile: 19 accounts tracked, 118 principal-txns, max credit drift 29997000000 units
+2026/07/27 21:09:23 sent=105/288 rejected=123 skipped=12 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 21:11:03 sent=105/288 rejected=124 skipped=12 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 21:12:19 reconcile: 19 accounts tracked, 118 principal-txns, max credit drift 29997000000 units
+2026/07/27 21:12:43 sent=105/288 rejected=125 skipped=12 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 21:14:23 sent=105/288 rejected=126 skipped=12 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 21:15:19 reconcile: 19 accounts tracked, 118 principal-txns, max credit drift 29997000000 units
+2026/07/27 21:16:03 sent=105/288 rejected=126 skipped=13 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 21:17:43 sent=105/288 rejected=126 skipped=14 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 21:18:19 reconcile: 19 accounts tracked, 118 principal-txns, max credit drift 29997000000 units
+2026/07/27 21:19:23 sent=105/288 rejected=127 skipped=14 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 21:21:03 sent=105/288 rejected=128 skipped=14 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 21:21:19 reconcile: 19 accounts tracked, 118 principal-txns, max credit drift 29997000000 units
+2026/07/27 21:22:43 sent=105/288 rejected=129 skipped=14 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 21:24:19 reconcile: 19 accounts tracked, 118 principal-txns, max credit drift 29997000000 units
+2026/07/27 21:24:23 sent=105/288 rejected=130 skipped=14 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 21:26:03 sent=105/288 rejected=130 skipped=15 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 21:27:19 reconcile: 19 accounts tracked, 118 principal-txns, max credit drift 29997000000 units
+2026/07/27 21:27:43 sent=105/288 rejected=131 skipped=15 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 21:29:23 sent=105/288 rejected=132 skipped=15 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 21:30:19 reconcile: 19 accounts tracked, 118 principal-txns, max credit drift 29997000000 units
+2026/07/27 21:31:03 sent=105/288 rejected=133 skipped=15 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 21:32:43 sent=105/288 rejected=134 skipped=15 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 21:33:19 reconcile: 19 accounts tracked, 118 principal-txns, max credit drift 29997000000 units
+2026/07/27 21:34:23 sent=105/288 rejected=135 skipped=15 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 21:36:03 sent=105/288 rejected=135 skipped=16 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 21:36:19 reconcile: 19 accounts tracked, 118 principal-txns, max credit drift 29997000000 units
+2026/07/27 21:37:43 sent=105/288 rejected=136 skipped=16 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 21:39:19 reconcile: 19 accounts tracked, 118 principal-txns, max credit drift 29997000000 units
+2026/07/27 21:39:23 sent=105/288 rejected=137 skipped=16 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 21:41:03 sent=105/288 rejected=137 skipped=17 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 21:42:19 reconcile: 19 accounts tracked, 118 principal-txns, max credit drift 29997000000 units
+2026/07/27 21:42:43 sent=105/288 rejected=137 skipped=18 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 21:44:23 sent=105/288 rejected=138 skipped=18 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 21:45:19 reconcile: 19 accounts tracked, 118 principal-txns, max credit drift 29997000000 units
+2026/07/27 21:46:03 sent=105/288 rejected=139 skipped=18 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 21:47:43 sent=105/288 rejected=139 skipped=19 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 21:48:19 reconcile: 19 accounts tracked, 118 principal-txns, max credit drift 29997000000 units
+2026/07/27 21:49:23 sent=105/288 rejected=140 skipped=19 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 21:51:03 sent=105/288 rejected=141 skipped=19 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 21:51:19 reconcile: 19 accounts tracked, 118 principal-txns, max credit drift 29997000000 units
+2026/07/27 21:52:43 sent=105/288 rejected=141 skipped=20 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 21:54:19 reconcile: 19 accounts tracked, 118 principal-txns, max credit drift 29997000000 units
+2026/07/27 21:54:23 sent=105/288 rejected=141 skipped=21 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 21:56:03 sent=105/288 rejected=142 skipped=21 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 21:57:19 reconcile: 19 accounts tracked, 118 principal-txns, max credit drift 29997000000 units
+2026/07/27 21:57:43 sent=105/288 rejected=143 skipped=21 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 21:59:23 sent=105/288 rejected=144 skipped=21 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 22:00:20 reconcile: 19 accounts tracked, 118 principal-txns, max credit drift 29997000000 units
+2026/07/27 22:01:03 sent=105/288 rejected=145 skipped=21 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 22:02:43 sent=105/288 rejected=146 skipped=21 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 22:03:20 reconcile: 19 accounts tracked, 118 principal-txns, max credit drift 29997000000 units
+2026/07/27 22:04:23 sent=105/288 rejected=147 skipped=21 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 22:06:03 sent=105/288 rejected=148 skipped=21 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 22:06:20 reconcile: 19 accounts tracked, 118 principal-txns, max credit drift 29997000000 units
+2026/07/27 22:07:43 sent=105/288 rejected=149 skipped=21 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 22:09:20 reconcile: 19 accounts tracked, 118 principal-txns, max credit drift 29997000000 units
+2026/07/27 22:09:23 sent=105/288 rejected=150 skipped=21 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 22:11:03 sent=105/288 rejected=151 skipped=21 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 22:12:20 reconcile: 19 accounts tracked, 118 principal-txns, max credit drift 29997000000 units
+2026/07/27 22:12:43 sent=105/288 rejected=152 skipped=21 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 22:14:23 sent=105/288 rejected=153 skipped=21 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 22:15:20 reconcile: 19 accounts tracked, 118 principal-txns, max credit drift 29997000000 units
+2026/07/27 22:16:03 sent=105/288 rejected=154 skipped=21 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 22:17:43 sent=105/288 rejected=154 skipped=22 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 22:18:20 reconcile: 19 accounts tracked, 118 principal-txns, max credit drift 29997000000 units
+2026/07/27 22:19:23 sent=105/288 rejected=155 skipped=22 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 22:21:03 sent=105/288 rejected=156 skipped=22 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 22:21:20 reconcile: 19 accounts tracked, 118 principal-txns, max credit drift 29997000000 units
+2026/07/27 22:22:43 sent=105/288 rejected=157 skipped=22 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 22:24:20 reconcile: 19 accounts tracked, 118 principal-txns, max credit drift 29997000000 units
+2026/07/27 22:24:23 sent=105/288 rejected=158 skipped=22 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 22:26:03 sent=105/288 rejected=158 skipped=23 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 22:27:20 reconcile: 19 accounts tracked, 118 principal-txns, max credit drift 29997000000 units
+2026/07/27 22:27:43 sent=105/288 rejected=159 skipped=23 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 22:29:23 sent=105/288 rejected=160 skipped=23 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 22:30:20 reconcile: 19 accounts tracked, 118 principal-txns, max credit drift 29997000000 units
+2026/07/27 22:31:03 sent=105/288 rejected=160 skipped=23 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=8
+2026/07/27 22:31:03 == waiting for delivery ==
+2026/07/27 22:31:03 waiting on 202 undelivered messages...
+2026/07/27 22:31:18 waiting on 202 undelivered messages...
+2026/07/27 22:31:33 waiting on 202 undelivered messages...
+2026/07/27 22:31:48 waiting on 202 undelivered messages...
+2026/07/27 22:32:03 waiting on 202 undelivered messages...
+2026/07/27 22:32:18 waiting on 202 undelivered messages...
+2026/07/27 22:32:34 waiting on 202 undelivered messages...
+2026/07/27 22:32:49 waiting on 202 undelivered messages...
+2026/07/27 22:33:04 waiting on 202 undelivered messages...
+2026/07/27 22:33:19 waiting on 202 undelivered messages...
+2026/07/27 22:33:20 reconcile: 19 accounts tracked, 118 principal-txns, max credit drift 29997000000 units
+2026/07/27 22:33:34 waiting on 202 undelivered messages...
+2026/07/27 22:33:49 waiting on 202 undelivered messages...
+2026/07/27 22:34:04 waiting on 202 undelivered messages...
+2026/07/27 22:34:19 waiting on 202 undelivered messages...
+2026/07/27 22:34:34 waiting on 202 undelivered messages...
+2026/07/27 22:34:49 waiting on 202 undelivered messages...
+2026/07/27 22:35:04 waiting on 202 undelivered messages...
+2026/07/27 22:35:19 waiting on 202 undelivered messages...
+2026/07/27 22:35:34 waiting on 202 undelivered messages...
+2026/07/27 22:35:49 waiting on 202 undelivered messages...
+2026/07/27 22:36:04 202 messages still undelivered after the grace period
+
+== undelivered messages ==
+  burn-credits             acc://6e1be1e58529b99d326dd53d1573ea9fda659203636e3de5e55e2fa5cd5be9cb@lg-bc020acd069a874e.acme/book/1: not found (Post "http://localhost:26664/v3": dial tcp [::1]:26664: connect: connection refused)
+  burn-credits             acc://bd09afde112c3a08a9ed1da2b880f64677a4f09d583b4214845477c1d25cb49c@lg-bc020acd069a874e.acme/book/1: not found (Post "http://localhost:26665/v3": dial tcp [::1]:26665: connect: connection refused)
+  burn-credits             acc://c550635f8fef8a9992bebb9cac42c3b5cef846509a94fa75b1b9c9b11e916057@lg-bc020acd069a874e.acme/book/1: not found (Post "http://localhost:26666/v3": dial tcp [::1]:26666: connect: connection refused)
+  burn-credits             acc://be8d63e71a7b18870c1a1cdf6f6d6d4e4c520402d50c78b3de6bdec416faea81@lg-bc020acd069a874e.acme/book/1: not found (Post "http://localhost:26667/v3": dial tcp [::1]:26667: connect: connection refused)
+  grow:create-key-page     acc://0116dcf04a941ff028fceee34f86027f0d7756f9bb4454d232f59028dcb88142@lg-bc020acd069a874e.acme/book: not found (Post "http://localhost:26668/v3": dial tcp [::1]:26668: connect: connection refused)
+  grow:create-key-page     acc://49213b291d8d22c84caffd7c517436cdfcf68f9361cafaa53c72825a3a6d1447@lg-bc020acd069a874e.acme/book/1: not found (Post "http://localhost:26669/v3": dial tcp [::1]:26669: connect: connection refused)
+  send-tokens-adi          acc://4090758ab039f48aa64b37b70060c9fe4995ed2b384a6f17c2b529cad17bb056@lg-bc020acd069a874e.acme/tokens: not found (Post "http://localhost:26670/v3": dial tcp [::1]:26670: connect: connection refused)
+  send-tokens-adi          acc://6512d9975a663312db6c1537b7a6cd85aa9e368f3dc88b4766f31ad9175df654@lg-bc020acd069a874e.acme/book/1: not found (Post "http://localhost:26671/v3": dial tcp [::1]:26671: connect: connection refused)
+  send-tokens-adi          acc://51f77ae6e658087857bf1d2d7bc37331a16601e35628e720d5845f8d1e88d9bf@lg-bc020acd069a874e.acme/tokens: not found (Post "http://localhost:26660/v3": dial tcp [::1]:26660: connect: connection refused)
+  send-tokens-adi          acc://7178c24fb7f0d30f57964f4df5c3e0d5446a3f36d99252cbdd7b3ce95a707fba@lg-bc020acd069a874e.acme/book/1: not found (Post "http://localhost:26661/v3": dial tcp [::1]:26661: connect: connection refused)
+  send-tokens-adi          acc://3de31ac6852b71f81dda111d9f333add2cdc0b398cba95fa9755af75ddd620d9@lg-bc020acd069a874e.acme/tokens: not found (Post "http://localhost:26662/v3": dial tcp [::1]:26662: connect: connection refused)
+  send-tokens-adi          acc://c0d57a3da6e435acbba979e89226f3f6eac6ddcd681840ea0ddb60d64ac389b2@lg-bc020acd069a874e.acme/book/1: not found (Post "http://localhost:26663/v3": dial tcp [::1]:26663: connect: connection refused)
+  send-tokens-adi          acc://199e89d66b73703ecdda48c9e3ac23c141215fcb4c611ed11e5e3ff1ef0ef712@lg-bc020acd069a874e.acme/tokens: not found (Post "http://localhost:26664/v3": dial tcp [::1]:26664: connect: connection refused)
+  send-tokens-adi          acc://09c2e807d2643c2422f91c0cefb2925f2a9d47535db9f18c14f99e65b9f9547e@lg-bc020acd069a874e.acme/book/1: not found (Post "http://localhost:26665/v3": dial tcp [::1]:26665: connect: connection refused)
+  send-tokens-adi          acc://351a49b10f502dd09e796ccb64b6b717e3c0703034d3ec01fa6eb27fd129fabb@lg-bc020acd069a874e.acme/tokens: not found (Post "http://localhost:26666/v3": dial tcp [::1]:26666: connect: connection refused)
+  send-tokens-adi          acc://22d32f0602ab6251c85702b33a78453ec7eec95a68ca8bc8cf3131f21e82aaaa@lg-bc020acd069a874e.acme/book/1: not found (Post "http://localhost:26667/v3": dial tcp [::1]:26667: connect: connection refused)
+  send-tokens-adi          acc://ae6afa8301da924a05c3b707a1ff2123fa45ca5b74d1fd39b12baa618f71f9d5@lg-bc020acd069a874e.acme/tokens: not found (Post "http://localhost:26668/v3": dial tcp [::1]:26668: connect: connection refused)
+  send-tokens-adi          acc://40f00e2729e27e8ad7f1f012373ad15786098db7c070dbdb1f58ec58ad9f6dac@lg-bc020acd069a874e.acme/book/1: not found (Post "http://localhost:26669/v3": dial tcp [::1]:26669: connect: connection refused)
+  send-tokens-adi          acc://67479a0229f3cddbe07bdbea3d741c1a71bff0794173005dc1546ab02a6b3ba5@lg-bc020acd069a874e.acme/tokens: not found (Post "http://localhost:26670/v3": dial tcp [::1]:26670: connect: connection refused)
+  send-tokens-adi          acc://ce2c941c8a77a87f3b250d975aec76b91bf7d057d55df57b1ef7e0dac50bb64a@lg-bc020acd069a874e.acme/book/1: not found (Post "http://localhost:26671/v3": dial tcp [::1]:26671: connect: connection refused)
+  ... (truncated)
+
+== transaction mix ==
+   add-account                  followed=0      rejected=0     skipped=0
+ ! add-credits-lite             followed=8      rejected=11    skipped=6
+ ! add-credits-page             followed=12     rejected=16    skipped=0
+   add-key-book                 followed=0      rejected=0     skipped=0
+ ! add-page-key                 followed=10     rejected=10    skipped=2
+   add-token                    followed=0      rejected=0     skipped=0
+ ! burn-credits                 followed=4      rejected=1     skipped=0
+ ! burn-tokens                  followed=4      rejected=1     skipped=1
+ ! burn-tokens-adi              followed=8      rejected=7     skipped=0
+ ! fail:data-to-void            followed=0      rejected=1     skipped=0
+ ! fail:overburn-tokens         followed=0      rejected=1     skipped=0
+ ! fail:overspend               followed=0      rejected=3     skipped=2
+ ! fail:send-to-void            followed=0      rejected=2     skipped=0
+ ! fail:sub-adi-on-void         followed=0      rejected=4     skipped=0
+   grow:add-credits             followed=2      rejected=0     skipped=0
+   grow:create-data-account     followed=4      rejected=0     skipped=0
+   grow:create-identity         followed=2      rejected=0     skipped=0
+   grow:create-key-page         followed=2      rejected=0     skipped=0
+   grow:create-token            followed=2      rejected=0     skipped=0
+   grow:create-token-account    followed=2      rejected=0     skipped=0
+   grow:create-token-holder     followed=4      rejected=0     skipped=0
+   grow:issue-tokens            followed=2      rejected=0     skipped=0
+ ! issue-tokens                 followed=2      rejected=2     skipped=1
+ ! lock-account                 followed=0      rejected=1     skipped=0
+   remove-page-key              followed=4      rejected=0     skipped=0
+ ! send-tokens-adi              followed=42     rejected=25    skipped=0
+ ! send-tokens-custom           followed=2      rejected=3     skipped=1
+ ! send-tokens-lite             followed=38     rejected=24    skipped=3
+ ! set-threshold                followed=4      rejected=8     skipped=0
+ ! transfer-credits             followed=4      rejected=2     skipped=0
+ ! update-account-auth          followed=2      rejected=5     skipped=0
+ ! update-page-key              followed=6      rejected=6     skipped=0
+ ! write-data-adi               followed=12     rejected=21    skipped=0
+ ! write-data-lite              followed=20     rejected=6     skipped=7
+
+== accounts created ==
+  identities=1 key-books=1 key-pages=2 token-issuers=1 accounts=8
+  key-page shapes: 1key=1 4key=1
+  thresholds:      t1=1 t3=1
+  custom tokens:   1 (1 supply-limited), 2 holding accounts
+  token precision: p0=1
+  e.g. acc://lg-bc020acd069a874e.acme/tok774893 (LG893, precision 0) held by [acc://lg-bc020acd069a874e.acme/tok774893-0 acc://lg-bc020acd069a874e.acme/tok774893-1]
+INCOMPLETE: 202 followed transactions never landed (see above)
+exit status 1
