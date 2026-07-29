@@ -10,6 +10,7 @@ import (
 	"context"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
@@ -37,7 +38,13 @@ type DispatcherClient interface {
 type dispatcher struct {
 	router routing.Router
 	self   map[string]DispatcherClient
-	queue  map[string][]*messaging.Envelope
+
+	// mu guards queue: the conductor submits from concurrent background tasks
+	// (anchor healing per destination + synthetic healing) while the per-block
+	// flush swaps the queue — an unguarded map write here crashed four soak
+	// validators (#4067).
+	mu    sync.Mutex
+	queue map[string][]*messaging.Envelope
 }
 
 var _ execute.Dispatcher = (*dispatcher)(nil)
@@ -83,7 +90,9 @@ func (d *dispatcher) Submit(ctx context.Context, u *url.URL, env *messaging.Enve
 
 	// Queue the envelope (copy for insurance)
 	partition = strings.ToLower(partition)
+	d.mu.Lock()
 	d.queue[partition] = append(d.queue[partition], env.Copy())
+	d.mu.Unlock()
 	return nil
 }
 
@@ -131,8 +140,10 @@ func CheckDispatchError(err error) error {
 // Send sends all of the batches asynchronously using one connection per
 // partition.
 func (d *dispatcher) Send(ctx context.Context) <-chan error {
+	d.mu.Lock()
 	queue := d.queue
 	d.queue = make(map[string][]*messaging.Envelope, len(queue))
+	d.mu.Unlock()
 
 	errs := make(chan error)
 	if len(queue) == 0 {

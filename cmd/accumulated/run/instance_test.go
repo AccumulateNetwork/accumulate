@@ -26,10 +26,9 @@ func TestCoreValidatorConfig(t *testing.T) {
 		Network: "MainNet",
 		Configurations: []Configuration{
 			&CoreValidatorConfiguration{
-				Listen:        multiaddr.StringCast("/tcp/16591"),
-				BVN:           "Apollo",
-				EnableHealing: Ptr(true),
-				StorageType:   Ptr(StorageTypeBadger),
+				Listen:      multiaddr.StringCast("/tcp/16591"),
+				BVN:         "Apollo",
+				StorageType: Ptr(StorageTypeBadger),
 			},
 		},
 	}
@@ -123,7 +122,6 @@ func TestRun(t *testing.T) {
 				NodeDir: "node-1/dnn",
 				Genesis: "node-1/dn-genesis.snap",
 				App: &CoreConsensusApp{
-					EnableHealing: Ptr(true),
 					Partition: &protocol.PartitionInfo{
 						ID:   protocol.Directory,
 						Type: protocol.PartitionTypeDirectory,
@@ -134,7 +132,6 @@ func TestRun(t *testing.T) {
 				NodeDir: "node-1/bvnn",
 				Genesis: "node-1/bvn-genesis.snap",
 				App: &CoreConsensusApp{
-					EnableHealing: Ptr(true),
 					Partition: &protocol.PartitionInfo{
 						ID:   "BVN1",
 						Type: protocol.PartitionTypeBlockValidator,

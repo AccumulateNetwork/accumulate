@@ -1,3 +1,9 @@
+// Copyright 2026 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package main
 
 import (
@@ -37,7 +43,6 @@ var targetTPS atomic.Int64
 type accountPool struct {
 	mu       sync.RWMutex
 	accounts []liteAccount
-	nextIdx  atomic.Uint64
 }
 
 type liteAccount struct {
@@ -64,16 +69,6 @@ func (p *accountPool) getRandom() liteAccount {
 		return liteAccount{}
 	}
 	idx := rand.Intn(len(p.accounts))
-	return p.accounts[idx]
-}
-
-func (p *accountPool) getNext() liteAccount {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	if len(p.accounts) == 0 {
-		return liteAccount{}
-	}
-	idx := p.nextIdx.Add(1) % uint64(len(p.accounts))
 	return p.accounts[idx]
 }
 
@@ -361,7 +356,7 @@ func main() {
 	}
 
 	cancel()
-	controlServer.Shutdown(context.Background())
+	_ = controlServer.Shutdown(context.Background())
 
 	done := make(chan struct{})
 	go func() {

@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"math/big"
 	"sync"
+	"time"
 
 	"github.com/cometbft/cometbft/libs/log"
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -101,6 +102,7 @@ func (f *simFactory) Build() *Simulator {
 	// Initialize
 	s := new(Simulator)
 	s.deterministic = f.deterministic
+	s.networkId = f.network.Id
 	s.logger = f.getLogger()
 	s.router = f.getRouter()
 	s.hub = f.getHub()
@@ -301,7 +303,7 @@ func (f *simFactory) getServices() *services.Network {
 		return f.services
 	}
 
-	f.services = services.NewNetwork(f.getRouter())
+	f.services = services.NewNetwork(f.network.Id, f.getRouter())
 	return f.services
 }
 
@@ -565,7 +567,6 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 		NewDispatcher: f.getDispatcherFunc(),
 		Sequencer:     f.getServices().Private(),
 		Querier:       f.getServices(),
-		EnableHealing: true,
 		Describe:      execute.DescribeShim{NetworkType: f.networkFactory.typ, PartitionId: f.networkFactory.id},
 	}
 
@@ -581,16 +582,20 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 
 	// Create the conductor. This must happen before creating the executor since
 	// it needs to receive the initial WillChangeGlobals event.
-	enableAnchorHealing := !f.disableAnchorHealing
 	conductor := &crosschain.Conductor{
-		Partition:           &protocol.PartitionInfo{ID: f.networkFactory.id, Type: f.typ},
-		ValidatorKey:        execOpts.Key,
-		Database:            execOpts.Database,
-		Querier:             api.Querier2{Querier: f.getServices()},
-		Dispatcher:          execOpts.NewDispatcher(),
-		RunTask:             execOpts.BackgroundTaskLauncher,
-		DropInitialAnchor:   f.dropInitialAnchor,
-		EnableAnchorHealing: &enableAnchorHealing,
+		Partition:            &protocol.PartitionInfo{ID: f.networkFactory.id, Type: f.typ},
+		ValidatorKey:         execOpts.Key,
+		Database:             execOpts.Database,
+		Querier:              api.Querier2{Querier: f.getServices()},
+		Dispatcher:           execOpts.NewDispatcher(),
+		Sequencer:            f.getServices().Private(),
+		RunTask:              execOpts.BackgroundTaskLauncher,
+		DropInitialAnchor:    f.dropInitialAnchor,
+		DisableAnchorHealing: f.disableAnchorHealing,
+
+		// Simulator blocks are not wall-clock paced, so use a tiny jitter window
+		// to keep healing deterministic and fast in tests.
+		SyntheticHealWindow: time.Millisecond,
 
 		// Setting Intercept is not necessary because the dispatcher will
 		// intercept messages

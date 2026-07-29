@@ -1,7 +1,7 @@
 all: build
 
 # Go handles build caching, so Go targets should always be marked phony.
-.PHONY: all build docker docker-push http http-docker http-docker-push faucet-docker faucet-docker-push healing healing-docker healing-docker-push
+.PHONY: all build test docker docker-push http http-docker http-docker-push faucet-docker faucet-docker-push healing healing-docker healing-docker-push
 
 GIT_DESCRIBE = $(shell git fetch --tags -q ; git describe --dirty)
 GIT_COMMIT = $(shell git rev-parse HEAD)
@@ -51,3 +51,6 @@ sim-docker:
 
 sim-docker-push: sim-docker
 	docker push "$(IMAGE)/simulator"
+
+test:
+	go test -tags 'testnet ci' -p 1 $(shell go list ./... | grep -v /test/validate)

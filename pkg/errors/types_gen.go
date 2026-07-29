@@ -135,7 +135,9 @@ func (v *CallSite) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(len(v.FuncName) == 0) {
@@ -153,7 +155,11 @@ func (v *CallSite) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *CallSite) IsValid() error {
@@ -198,7 +204,9 @@ func (v *ErrorBase[Status]) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
 	writer := encoding.NewWriter(buffer)
 
 	if !(len(v.Message) == 0) {
@@ -224,7 +232,11 @@ func (v *ErrorBase[Status]) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
 
 func (v *ErrorBase[Status]) IsValid() error {

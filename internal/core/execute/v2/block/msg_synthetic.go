@@ -37,6 +37,31 @@ func (x SyntheticMessage) Validate(batch *database.Batch, ctx *MessageContext) (
 	return nil, errors.UnknownError.Wrap(err)
 }
 
+// synthDropped surfaces a synthetic message that was rejected with a client
+// error at delivery. Such a rejection is otherwise recorded only as a terminal
+// failed status with no other trace — which is what made the #4070 wedge so hard
+// to find. A synthetic whose proof anchor is not yet known is now HELD, not
+// dropped (see process), so this fires only for genuinely terminal rejections.
+func synthDropped(ctx *MessageContext, cause error) {
+	var syn *messaging.SynthFields
+	switch m := ctx.message.(type) {
+	case *messaging.SyntheticMessage:
+		syn = m.Data()
+	case *messaging.BadSyntheticMessage:
+		syn = m.Data()
+	}
+	if syn == nil {
+		return
+	}
+	seq, ok := syn.Message.(*messaging.SequencedMessage)
+	if !ok {
+		return
+	}
+	ctx.Executor.logger.Info("Synthetic message rejected",
+		"module", "synthetic", "source", seq.Source,
+		"destination", seq.Destination, "number", seq.Number, "error", cause)
+}
+
 func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*messaging.SynthFields, error) {
 	// Using messaging.SynthFields is safer than converting one message type
 	// into the other because that could lead to issues with the different Hash
@@ -152,11 +177,26 @@ func (x SyntheticMessage) Process(batch *database.Batch, ctx *MessageContext) (_
 	// Add a transaction state to ensure the block gets recorded
 	ctx.state.Set(ctx.message.Hash(), new(chain.ProcessTransactionState))
 
-	// Process the message (error is handled by the next step)
-	err = x.process(batch, ctx)
+	// Process the message. `held` means the proof anchor has not yet arrived.
+	held, err := x.process(batch, ctx)
+
+	// A synthetic whose proof anchor is not yet known is HELD — recorded pending,
+	// not failed — so it re-runs in place when the anchor is delivered (see
+	// processDirAnchor). Before this, the anchor race under network disruption
+	// recorded a terminal failure that wedged the stream permanently, because the
+	// healer's byte-identical re-submission is deduplicated and never re-processed
+	// (#4070). Any real failure still records a failed status, and is surfaced —
+	// recordMessageAndStatus otherwise swallows a client error into a status with
+	// no other trace.
+	s := errors.Delivered
+	if held {
+		s = errors.Pending
+	} else if err != nil {
+		synthDropped(ctx, err)
+	}
 
 	// Record the message and its status
-	err = ctx.recordMessageAndStatus(batch, status, errors.Delivered, err)
+	err = ctx.recordMessageAndStatus(batch, status, s, err)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -164,11 +204,13 @@ func (x SyntheticMessage) Process(batch *database.Batch, ctx *MessageContext) (_
 	return status, nil
 }
 
-func (x SyntheticMessage) process(batch *database.Batch, ctx *MessageContext) error {
+// process delivers the synthetic message. The returned bool reports that the
+// message was HELD awaiting its proof anchor rather than delivered or failed.
+func (x SyntheticMessage) process(batch *database.Batch, ctx *MessageContext) (bool, error) {
 	// Validate
 	syn, err := x.check(batch, ctx)
 	if err != nil {
-		return errors.UnknownError.Wrap(err)
+		return false, errors.UnknownError.Wrap(err)
 	}
 
 	// Verify the proof ends with a DN anchor
@@ -180,15 +222,30 @@ func (x SyntheticMessage) process(batch *database.Batch, ctx *MessageContext) er
 	case err == nil:
 		// Ok
 	case errors.Is(err, errors.NotFound):
-		return errors.BadRequest.WithFormat("invalid proof anchor: %x is not a known directory anchor", syn.Proof.Receipt.Anchor)
+		// The proof anchor is not (yet) known. From V2Jiuquan, HOLD the synthetic
+		// keyed by the anchor it is waiting for and record it pending, so that when
+		// a DirectoryAnchor carrying that anchor is delivered, processDirAnchor
+		// re-attempts it IN PLACE — no re-submission. This restores the V1 behavior
+		// that V2 dropped; before Jiuquan the anchor race was a terminal failure
+		// that wedged the receiver's stream permanently (#4070).
+		if ctx.GetActiveGlobals().ExecutorVersion.V2JiuquanEnabled() {
+			err = batch.Account(ctx.Executor.Describe.Ledger()).
+				SyntheticForAnchor(*(*[32]byte)(syn.Proof.Receipt.Anchor)).
+				Add(ctx.message.ID())
+			if err != nil {
+				return false, errors.UnknownError.WithFormat("hold synthetic for anchor: %w", err)
+			}
+			return true, nil
+		}
+		return false, errors.BadRequest.WithFormat("invalid proof anchor: %x is not a known directory anchor", syn.Proof.Receipt.Anchor)
 	default:
-		return errors.UnknownError.WithFormat("search for directory anchor %x: %w", syn.Proof.Receipt.Anchor, err)
+		return false, errors.UnknownError.WithFormat("search for directory anchor %x: %w", syn.Proof.Receipt.Anchor, err)
 	}
 
 	// Execute the inner message
 	_, err = ctx.callMessageExecutor(batch, syn.Message)
 	if err != nil {
-		return errors.UnknownError.Wrap(err)
+		return false, errors.UnknownError.Wrap(err)
 	}
 
 	// Record the signature (must not fail)
@@ -196,5 +253,5 @@ func (x SyntheticMessage) process(batch *database.Batch, ctx *MessageContext) er
 		Transaction(syn.Message.Hash()).
 		ValidatorSignatures().
 		Add(syn.Signature)
-	return errors.InternalError.Wrap(err)
+	return false, errors.InternalError.Wrap(err)
 }
