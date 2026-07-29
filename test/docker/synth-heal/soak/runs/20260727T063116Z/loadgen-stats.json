@@ -1,0 +1,76 @@
+{
+  "updatedUnix": 1785134268,
+  "startUnix": 1785133938,
+  "elapsedSec": 330,
+  "phase": "done",
+  "target": 6,
+  "generated": 10,
+  "rejected": 0,
+  "skipped": 1,
+  "rate": 0.030301069807010472,
+  "targetTps": 0.02,
+  "perType": {
+    "add-credits-lite": {
+      "generated": 1,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "fail:sub-adi-on-void": {
+      "generated": 1,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:add-credits": {
+      "generated": 1,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:create-data-account": {
+      "generated": 1,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:create-identity": {
+      "generated": 1,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:create-key-page": {
+      "generated": 1,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:create-token-account": {
+      "generated": 1,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "remove-page-key": {
+      "generated": 0,
+      "rejected": 0,
+      "skipped": 1
+    },
+    "send-tokens-adi": {
+      "generated": 1,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "send-tokens-lite": {
+      "generated": 1,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "set-threshold": {
+      "generated": 1,
+      "rejected": 0,
+      "skipped": 0
+    }
+  },
+  "accounts": {
+    "identities": 1,
+    "keyBooks": 1,
+    "keyPages": 2,
+    "tokenIssuers": 0,
+    "accounts": 103
+  }
+}

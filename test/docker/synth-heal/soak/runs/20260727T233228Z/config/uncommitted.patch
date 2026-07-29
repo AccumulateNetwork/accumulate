@@ -1,0 +1,518 @@
+diff --git a/internal/core/crosschain/conductor.go b/internal/core/crosschain/conductor.go
+index 557cb3d84..d72209c84 100644
+--- a/internal/core/crosschain/conductor.go
++++ b/internal/core/crosschain/conductor.go
+@@ -77,6 +77,7 @@ type Conductor struct {
+ 	synthHealMu    sync.Mutex
+ 	synthHealState map[string]*synthHealEntry
+ 	seqHealAt      map[string]time.Time // per-(source,seq) last heal submission
++	reconcileSeen  map[string]uint64    // per-(source,seq) block a gap was first seen
+ 	synthHeals     atomic.Uint64
+ }
+ 
+@@ -180,7 +181,7 @@ func (c *Conductor) willBeginBlock(e execute.WillBeginBlock) error {
+ 			batch := c.Database.Begin(false)
+ 			defer batch.Discard()
+ 
+-			err := c.reconcileInboundStreams(context.Background(), batch)
++			err := c.reconcileInboundStreams(context.Background(), batch, e.Index)
+ 			if err != nil {
+ 				slog.Error("Error while reconciling inbound streams", "error", err)
+ 			}
+diff --git a/internal/core/crosschain/synthetic.go b/internal/core/crosschain/synthetic.go
+index d28e323aa..15d100060 100644
+--- a/internal/core/crosschain/synthetic.go
++++ b/internal/core/crosschain/synthetic.go
+@@ -52,6 +52,17 @@ var mHeals = promauto.NewCounterVec(prometheus.CounterOpts{
+ 	Help:      "Number of cross-partition messages healed (re-requested or re-submitted)",
+ }, []string{"type", "partition", "remote"})
+ 
++// mReconcile counts interval-reconcile pull ATTEMPTS and successes separately.
++// Counting only successes makes a reconcile that fails every time
++// indistinguishable from one with nothing to do — both report zero, which hid a
++// completely broken pull path across six soak runs (#4073).
++var mReconcile = promauto.NewCounterVec(prometheus.CounterOpts{
++	Namespace: "accumulate",
++	Subsystem: "crosschain",
++	Name:      "reconcile_pulls_total",
++	Help:      "Interval-reconcile pull attempts by outcome",
++}, []string{"outcome"}) // attempted | succeeded | failed
++
+ // synthHealEntry tracks this node's back-off state for a single stalled inbound
+ // synthetic stream.
+ type synthHealEntry struct {
+@@ -398,6 +409,18 @@ func randDuration(max time.Duration) time.Duration {
+ // requests for the same message.
+ const reconcileInterval = 1
+ 
++// reconcileGraceBlocks is how long a gap must persist before the reconcile acts
++// on it. Produced-at-source minus received-at-destination is routinely non-zero
++// on a healthy network — a message counts as produced the moment the source
++// emits it and has not reached us yet. Acting immediately means requesting
++// messages that are merely in flight, and the source cannot even build a receipt
++// for them because they are not anchored yet, so every such pull fails with
++// "reached the end of the chain".
++//
++// Counted in BLOCKS, not wall clock: simulator blocks are not time-paced, so a
++// duration-based grace is meaningless there and the bug would go untested.
++const reconcileGraceBlocks = 10
++
+ // reconcileInboundStreams asks every peer partition what it has produced for
+ // this partition and pulls anything that was never received.
+ //
+@@ -412,7 +435,7 @@ const reconcileInterval = 1
+ // Counterparties come from the network definition rather than from our own
+ // ledger, so this works even when we hold no entry at all for a source — which
+ // is exactly the state a lost prefix leaves behind.
+-func (c *Conductor) reconcileInboundStreams(ctx context.Context, batch *database.Batch) error {
++func (c *Conductor) reconcileInboundStreams(ctx context.Context, batch *database.Batch, blockIndex uint64) error {
+ 	if c.Sequencer == nil {
+ 		return nil
+ 	}
+@@ -453,7 +476,10 @@ func (c *Conductor) reconcileInboundStreams(ctx context.Context, batch *database
+ 		if err != nil {
+ 			// An unreachable peer must never wedge a stream (#4067). Try again
+ 			// next window.
+-			slog.DebugContext(ctx, "Reconcile: cannot query source ledger",
++			// Warn, not Debug: a reconcile that cannot reach its peer is the
++			// mechanism silently not working, which is indistinguishable from
++			// "nothing to do" unless it says so.
++			slog.WarnContext(ctx, "Reconcile: cannot query source ledger",
+ 				"module", "synthetic", "source", source, "error", err)
+ 			continue
+ 		}
+@@ -467,6 +493,10 @@ func (c *Conductor) reconcileInboundStreams(ctx context.Context, batch *database
+ 		}
+ 
+ 		have := received[source.AccountID32()]
++		c.pruneOverdue(source, have)
++		slog.InfoContext(ctx, "Reconcile: checked peer",
++			"module", "synthetic", "source", source, "destination", me,
++			"theirProduced", produced, "ourReceived", have)
+ 		if produced <= have {
+ 			continue
+ 		}
+@@ -476,16 +506,24 @@ func (c *Conductor) reconcileInboundStreams(ctx context.Context, batch *database
+ 		// same message.
+ 		healed := 0
+ 		for seq := have + 1; seq <= produced && healed < syntheticHealBatch; seq++ {
++			// Wait for the gap to persist before believing it. Without this the
++			// reconcile races normal delivery (#4073).
++			if !c.gapIsOverdue(source, seq, blockIndex) {
++				continue
++			}
+ 			if !c.claimSyntheticRequest(source, seq, now) {
+ 				continue
+ 			}
++			mReconcile.WithLabelValues("attempted").Inc()
+ 			err := c.requestSyntheticFrom(ctx, source, seq)
+ 			if err != nil {
++				mReconcile.WithLabelValues("failed").Inc()
+ 				slog.ErrorContext(ctx, "Reconcile: failed to request missing synthetic",
+ 					"module", "synthetic", "source", source, "destination", me,
+ 					"number", seq, "error", err)
+ 				continue
+ 			}
++			mReconcile.WithLabelValues("succeeded").Inc()
+ 			healed++
+ 		}
+ 		if healed > 0 {
+@@ -496,3 +534,39 @@ func (c *Conductor) reconcileInboundStreams(ctx context.Context, batch *database
+ 	}
+ 	return nil
+ }
++
++
++// gapIsOverdue reports whether (source, seq) has been missing long enough to be
++// treated as lost rather than in flight. The first sighting only starts the
++// clock; the caller must see the same gap still open reconcileGraceBlocks later.
++// Entries for sequences that arrive on their own are dropped by pruneOverdue.
++func (c *Conductor) gapIsOverdue(source *url.URL, seq uint64, blockIndex uint64) bool {
++	key := source.String() + "#" + strconv.FormatUint(seq, 10)
++	c.synthHealMu.Lock()
++	defer c.synthHealMu.Unlock()
++	if c.reconcileSeen == nil {
++		c.reconcileSeen = map[string]uint64{}
++	}
++	first, ok := c.reconcileSeen[key]
++	if !ok {
++		c.reconcileSeen[key] = blockIndex
++		return false
++	}
++	return blockIndex >= first+reconcileGraceBlocks
++}
++
++// pruneOverdue forgets gaps below the given received watermark, so the map does
++// not grow without bound as streams advance normally.
++func (c *Conductor) pruneOverdue(source *url.URL, received uint64) {
++	prefix := source.String() + "#"
++	c.synthHealMu.Lock()
++	defer c.synthHealMu.Unlock()
++	for k := range c.reconcileSeen {
++		if !strings.HasPrefix(k, prefix) {
++			continue
++		}
++		if n, err := strconv.ParseUint(k[len(prefix):], 10, 64); err == nil && n <= received {
++			delete(c.reconcileSeen, k)
++		}
++	}
++}
+diff --git a/test/docker/synth-heal/soak/runs/20260727T192851Z/loadgen-stats.json b/test/docker/synth-heal/soak/runs/20260727T192851Z/loadgen-stats.json
+index 95efce761..428b257fa 100644
+--- a/test/docker/synth-heal/soak/runs/20260727T192851Z/loadgen-stats.json
++++ b/test/docker/synth-heal/soak/runs/20260727T192851Z/loadgen-stats.json
+@@ -1,27 +1,32 @@
+ {
+-  "updatedUnix": 1785190611,
++  "updatedUnix": 1785195148,
+   "startUnix": 1785180569,
+-  "elapsedSec": 10042,
++  "elapsedSec": 14579,
+   "phase": "generating",
+   "target": 288,
+-  "generated": 106,
+-  "rejected": 1,
++  "generated": 109,
++  "rejected": 43,
+   "skipped": 4,
+-  "rate": 0.010555011231709507,
++  "rate": 0.0074762270710464875,
+   "targetTps": 0.01,
+   "perType": {
+     "add-account": {
+-      "generated": 1,
++      "generated": 2,
+       "rejected": 0,
+       "skipped": 0
+     },
+     "add-credits-lite": {
+       "generated": 4,
+-      "rejected": 0,
++      "rejected": 3,
+       "skipped": 0
+     },
+     "add-credits-page": {
+       "generated": 6,
++      "rejected": 3,
++      "skipped": 0
++    },
++    "add-key-book": {
++      "generated": 1,
+       "rejected": 0,
+       "skipped": 0
+     },
+@@ -31,13 +36,13 @@
+       "skipped": 2
+     },
+     "add-token": {
+-      "generated": 1,
++      "generated": 2,
+       "rejected": 0,
+       "skipped": 0
+     },
+     "burn-credits": {
+       "generated": 2,
+-      "rejected": 0,
++      "rejected": 1,
+       "skipped": 0
+     },
+     "burn-tokens": {
+@@ -47,7 +52,7 @@
+     },
+     "burn-tokens-adi": {
+       "generated": 4,
+-      "rejected": 0,
++      "rejected": 3,
+       "skipped": 0
+     },
+     "fail:data-to-void": {
+@@ -57,12 +62,17 @@
+     },
+     "fail:overburn-tokens": {
+       "generated": 1,
+-      "rejected": 0,
++      "rejected": 1,
++      "skipped": 0
++    },
++    "fail:overspend": {
++      "generated": 0,
++      "rejected": 1,
+       "skipped": 0
+     },
+     "fail:send-to-void": {
+       "generated": 2,
+-      "rejected": 0,
++      "rejected": 1,
+       "skipped": 0
+     },
+     "fail:sub-adi-on-void": {
+@@ -112,9 +122,14 @@
+     },
+     "issue-tokens": {
+       "generated": 1,
+-      "rejected": 0,
++      "rejected": 1,
+       "skipped": 1
+     },
++    "lock-account": {
++      "generated": 0,
++      "rejected": 1,
++      "skipped": 0
++    },
+     "remove-page-key": {
+       "generated": 2,
+       "rejected": 0,
+@@ -122,7 +137,7 @@
+     },
+     "send-tokens-adi": {
+       "generated": 21,
+-      "rejected": 1,
++      "rejected": 6,
+       "skipped": 0
+     },
+     "send-tokens-custom": {
+@@ -132,37 +147,37 @@
+     },
+     "send-tokens-lite": {
+       "generated": 18,
+-      "rejected": 0,
++      "rejected": 7,
+       "skipped": 0
+     },
+     "set-threshold": {
+       "generated": 2,
+-      "rejected": 0,
++      "rejected": 3,
+       "skipped": 0
+     },
+     "transfer-credits": {
+       "generated": 2,
+-      "rejected": 0,
++      "rejected": 1,
+       "skipped": 0
+     },
+     "update-account-auth": {
+       "generated": 1,
+-      "rejected": 0,
++      "rejected": 1,
+       "skipped": 0
+     },
+     "update-page-key": {
+       "generated": 3,
+-      "rejected": 0,
++      "rejected": 2,
+       "skipped": 0
+     },
+     "write-data-adi": {
+       "generated": 6,
+-      "rejected": 0,
++      "rejected": 7,
+       "skipped": 0
+     },
+     "write-data-lite": {
+       "generated": 9,
+-      "rejected": 0,
++      "rejected": 1,
+       "skipped": 0
+     }
+   },
+diff --git a/test/docker/synth-heal/soak/runs/20260727T192851Z/soak.log b/test/docker/synth-heal/soak/runs/20260727T192851Z/soak.log
+index 163af6975..86db9785e 100644
+--- a/test/docker/synth-heal/soak/runs/20260727T192851Z/soak.log
++++ b/test/docker/synth-heal/soak/runs/20260727T192851Z/soak.log
+@@ -165,3 +165,95 @@
+ 2026/07/27 17:16:21 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
+ 2026/07/27 17:16:39 send-tokens-adi: Post "http://localhost:26660/v3": dial tcp [::1]:26660: connect: connection refused
+ 2026/07/27 17:16:39 sent=96/288 rejected=1 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 17:18:19 send-tokens-adi: envelope(1/notFound) load signer: Account.acc://lg-bc020acd069a874e.acme/book/1.Main not found;
++2026/07/27 17:18:19 sent=96/288 rejected=2 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 17:19:21 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
++2026/07/27 17:19:59 send-tokens-lite: envelope(1/notFound) load signer: Account.acc://d9c46a815ce538461facd3c17da99ef659f09e510c8efe4a.Main not found;
++2026/07/27 17:19:59 sent=96/288 rejected=3 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 17:21:44 send-tokens-lite: envelope(1/badTimestamp) invalid timestamp: have 1785190730946, got 1785180569193;
++2026/07/27 17:21:44 sent=96/288 rejected=4 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 17:23:07 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
++2026/07/27 17:23:24 send-tokens-lite: envelope(1/notFound) load signer: Account.acc://d9c46a815ce538461facd3c17da99ef659f09e510c8efe4a.Main not found;
++2026/07/27 17:23:24 sent=96/288 rejected=5 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 17:25:04 add-credits-page: envelope(1/notFound) load signer: Account.acc://lg-bc020acd069a874e.acme/book/1.Main not found;
++2026/07/27 17:25:04 sent=96/288 rejected=6 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 17:26:44 send-tokens-adi: envelope(1/notFound) load signer: Account.acc://lg-bc020acd069a874e.acme/book/1.Main not found;
++2026/07/27 17:26:44 sent=96/288 rejected=7 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 17:27:07 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
++2026/07/27 17:28:24 set-threshold: envelope(1/notFound) load signer: Account.acc://lg-bc020acd069a874e.acme/book/1.Main not found;
++2026/07/27 17:28:24 sent=96/288 rejected=8 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 17:30:04 send-tokens-lite: envelope(1/notFound) load signer: Account.acc://988ba91314a87ff3ac291efbe57b2da16bd7e0fb19cbe5f2.Main not found;
++2026/07/27 17:30:04 sent=96/288 rejected=9 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 17:30:07 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
++2026/07/27 17:31:44 send-tokens-lite: envelope(1/notFound) load signer: Account.acc://988ba91314a87ff3ac291efbe57b2da16bd7e0fb19cbe5f2.Main not found;
++2026/07/27 17:31:44 sent=96/288 rejected=10 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 17:33:07 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
++2026/07/27 17:33:24 update-page-key: envelope(1/notFound) load signer: Account.acc://lg-bc020acd069a874e.acme/book/1.Main not found;
++2026/07/27 17:33:24 sent=96/288 rejected=11 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 17:35:04 send-tokens-adi: envelope(1/notFound) load signer: Account.acc://lg-bc020acd069a874e.acme/book/1.Main not found;
++2026/07/27 17:35:04 sent=96/288 rejected=12 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 17:36:07 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
++2026/07/27 17:36:44 write-data-adi: envelope(1/notFound) load signer: Account.acc://lg-bc020acd069a874e.acme/book/1.Main not found;
++2026/07/27 17:36:44 sent=96/288 rejected=13 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 17:38:24 write-data-adi: envelope(1/notFound) load signer: Account.acc://lg-bc020acd069a874e.acme/book/1.Main not found;
++2026/07/27 17:38:24 sent=96/288 rejected=14 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 17:39:07 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
++2026/07/27 17:40:04 add-credits-page: envelope(1/notFound) load signer: Account.acc://lg-bc020acd069a874e.acme/book/1.Main not found;
++2026/07/27 17:40:04 sent=96/288 rejected=15 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 17:41:44 write-data-adi: envelope(1/notFound) load signer: Account.acc://lg-bc020acd069a874e.acme/book/1.Main not found;
++2026/07/27 17:41:44 sent=96/288 rejected=16 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 17:42:07 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
++2026/07/27 17:43:24 burn-tokens-adi: envelope(1/notFound) load signer: Account.acc://lg-bc020acd069a874e.acme/book/1.Main not found;
++2026/07/27 17:43:24 sent=96/288 rejected=17 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 17:45:04 write-data-adi: envelope(1/notFound) load signer: Account.acc://lg-bc020acd069a874e.acme/book/1.Main not found;
++2026/07/27 17:45:04 sent=96/288 rejected=18 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 17:45:07 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
++2026/07/27 17:46:44 update-page-key: envelope(1/notFound) load signer: Account.acc://lg-bc020acd069a874e.acme/book/1.Main not found;
++2026/07/27 17:46:44 sent=96/288 rejected=19 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 17:48:07 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
++2026/07/27 17:48:24 fail:send-to-void: envelope(1/notFound) load signer: Account.acc://d9c46a815ce538461facd3c17da99ef659f09e510c8efe4a.Main not found;
++2026/07/27 17:48:24 sent=96/288 rejected=20 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 17:50:04 sent=96/288 rejected=21 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 17:51:07 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
++2026/07/27 17:51:44 sent=96/288 rejected=22 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 17:53:24 sent=97/288 rejected=22 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 17:53:24 add-account: create data account: envelope(1/notFound) load signer: Account.acc://lg-bc020acd069a874e.acme/book/1.Main not found;
++2026/07/27 17:54:07 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
++2026/07/27 17:55:04 sent=97/288 rejected=23 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 17:56:44 sent=97/288 rejected=24 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 17:57:07 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
++2026/07/27 17:58:24 sent=97/288 rejected=25 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 18:00:04 sent=98/288 rejected=25 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 18:00:04 add-key-book: create key book: envelope(1/notFound) load signer: Account.acc://lg-bc020acd069a874e.acme/book/1.Main not found;
++2026/07/27 18:00:07 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
++2026/07/27 18:01:44 sent=98/288 rejected=26 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 18:03:07 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
++2026/07/27 18:03:24 sent=98/288 rejected=27 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 18:05:04 sent=98/288 rejected=28 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 18:06:07 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
++2026/07/27 18:06:44 sent=98/288 rejected=29 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 18:08:24 sent=98/288 rejected=30 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 18:09:07 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
++2026/07/27 18:10:04 sent=98/288 rejected=31 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 18:11:44 sent=98/288 rejected=32 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 18:12:07 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
++2026/07/27 18:13:24 sent=98/288 rejected=33 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 18:15:04 sent=98/288 rejected=34 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 18:15:07 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
++2026/07/27 18:16:44 sent=98/288 rejected=35 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 18:18:08 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
++2026/07/27 18:18:24 sent=98/288 rejected=36 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 18:20:04 sent=98/288 rejected=37 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 18:21:08 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
++2026/07/27 18:21:44 sent=98/288 rejected=38 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 18:23:24 sent=99/288 rejected=38 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 18:23:24 add-token: signer cannot afford to create a token
++2026/07/27 18:24:08 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
++2026/07/27 18:25:04 sent=99/288 rejected=39 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 18:26:44 sent=99/288 rejected=40 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 18:27:08 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
++2026/07/27 18:28:24 sent=99/288 rejected=41 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 18:30:04 sent=99/288 rejected=42 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 18:30:08 reconcile: 19 accounts tracked, 116 principal-txns, max credit drift 29997000000 units
++2026/07/27 18:31:44 sent=99/288 rejected=43 skipped=4 rate=0.0/s | adis=1 books=1 pages=2 tokens=1 accounts=7
++2026/07/27 18:31:44 grow: create identity: envelope(1/badTimestamp) invalid timestamp: have 1785191451990, got 1785180569236;
+diff --git a/test/docker/synth-heal/soak/runs/INDEX.md b/test/docker/synth-heal/soak/runs/INDEX.md
+index 2748bba14..2c56ac3b8 100644
+--- a/test/docker/synth-heal/soak/runs/INDEX.md
++++ b/test/docker/synth-heal/soak/runs/INDEX.md
+@@ -46,3 +46,5 @@ durations, and the `undeliv` metric and its seizewatch trip are wired in.
+ | [20260727T063833Z](20260727T063833Z/manifest.md) | `v1.4.5-3-ge39a450ff-dirty` | v2-jiuquan | unconditional (no config, v1.4.5+) | 0.08h | 0 | 9→209 | 0→4 | #4073 proof G: NO fix, quiet channels (no bootstrap) |
+ | [20260727T064442Z](20260727T064442Z/manifest.md) | `v1.4.5-3-ge39a450ff-dirty` | v2-jiuquan | unconditional (no config, v1.4.5+) | 0.09h | 0 | 8→215 | 0→426 | #4073 proof H: NO fix, quiet channels, 50% drop all destinations |
+ | [20260727T065123Z](20260727T065123Z/manifest.md) | `v1.4.5-3-ge39a450ff-dirty` | v2-jiuquan | unconditional (no config, v1.4.5+) | 0.08h | 0 | 8→199 | 0→21 | #4073 proof I: WITH fix, identical config to H |
++| [20260727T221813Z](20260727T221813Z/manifest.md) | `v1.4.5-5-geeafbfb60-dirty` | v2-jiuquan | unconditional (no config, v1.4.5+) | 0.09h | 0 | 8→207 | 0→31 | #4073 A/B rep 1: WITH fix + 1s reconcile, run H config |
++| [20260727T223014Z](20260727T223014Z/manifest.md) | `v1.4.5-5-geeafbfb60-dirty` | v2-jiuquan | unconditional (no config, v1.4.5+) | 0.08h | 0 | 8→190 | 0→286 | #4073 diagnostic: is the reconcile running at all? |
+diff --git a/test/e2e/synth_heal_test.go b/test/e2e/synth_heal_test.go
+index 7a359976e..6e606eddd 100644
+--- a/test/e2e/synth_heal_test.go
++++ b/test/e2e/synth_heal_test.go
+@@ -350,3 +350,85 @@ func TestSyntheticHealingLostPrefix(t *testing.T) {
+ 	require.Equal(t, int(protocol.AcmePrecision), int(lta.Balance.Uint64()))
+ 	require.Greater(t, gatherHealCount(t), healsBefore, "expected healing to fire")
+ }
++
++// gatherCounter sums a Prometheus counter, optionally filtered to one label value.
++func gatherCounter(t testing.TB, name, label, value string) float64 {
++	t.Helper()
++	mfs, err := prometheus.DefaultGatherer.Gather()
++	require.NoError(t, err)
++	var total float64
++	for _, mf := range mfs {
++		if mf.GetName() != name {
++			continue
++		}
++		for _, m := range mf.GetMetric() {
++			if label != "" {
++				ok := false
++				for _, l := range m.GetLabel() {
++					if l.GetName() == label && l.GetValue() == value {
++						ok = true
++					}
++				}
++				if !ok {
++					continue
++				}
++			}
++			total += m.GetCounter().GetValue()
++		}
++	}
++	return total
++}
++
++// TestReconcileDoesNotRaceNormalDelivery pins the defect that #4073's first
++// implementation shipped with.
++//
++// The reconcile compares the source's Produced against our Received. On a
++// healthy network that comparison is routinely, transiently true: a message
++// counts as produced the moment the source emits it, and it has not reached us
++// yet. Treating that as loss makes the reconcile request messages that are
++// simply in flight — and the source cannot even build a receipt for them,
++// because they are not anchored yet, so every such pull fails with
++// "locate anchor index chain entry for block N: reached the end of the chain".
++//
++// With nothing dropped there is nothing to recover, so a correct reconcile must
++// attempt ZERO pulls. Any attempt here is the mechanism racing normal delivery.
++//
++// This is asserted on ATTEMPTS, not successes: the original counter only
++// incremented on success, so a pull path that failed 100% of the time reported
++// the same zero as one with nothing to do. That is why six soak runs looked
++// clean while the fix was completely broken.
++func TestReconcileDoesNotRaceNormalDelivery(t *testing.T) {
++	var timestamp uint64
++
++	globals := new(core.GlobalValues)
++	globals.ExecutorVersion = ExecutorVersionLatest
++	sim := NewSim(t,
++		simulator.SimpleNetwork(t.Name(), 3, 1),
++		simulator.GenesisWith(GenesisTime, globals),
++		simulator.SkipProposalCheck(),
++	)
++
++	before := gatherCounter(t, "accumulate_crosschain_reconcile_pulls_total", "outcome", "attempted")
++
++	alice := acctesting.GenerateKey("Alice")
++	aliceUrl := acctesting.AcmeLiteAddressStdPriv(alice)
++	bob := acctesting.GenerateKey("Bob")
++	bobUrl := acctesting.AcmeLiteAddressStdPriv(bob)
++	MakeLiteTokenAccount(t, sim.DatabaseFor(aliceUrl), alice[32:], AcmeUrl())
++
++	// Ordinary cross-partition traffic. Nothing is dropped.
++	for i := 0; i < 5; i++ {
++		st := sim.SubmitTxnSuccessfully(MustBuild(t,
++			build.Transaction().For(aliceUrl).
++				SendTokens(1, protocol.AcmePrecisionPower).To(bobUrl).
++				SignWith(aliceUrl).Version(1).Timestamp(&timestamp).PrivateKey(alice)))
++		sim.StepUntil(
++			Txn(st.TxID).Succeeds(),
++			Txn(st.TxID).Produced().Succeeds())
++	}
++
++	attempted := gatherCounter(t, "accumulate_crosschain_reconcile_pulls_total", "outcome", "attempted") - before
++	require.Zero(t, attempted,
++		"reconcile attempted %v pull(s) with nothing dropped — it is racing normal "+
++			"delivery and requesting messages that are merely in flight", attempted)
++}
