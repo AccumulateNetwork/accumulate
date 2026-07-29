@@ -14,6 +14,36 @@
 set -uo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"; repo="$(cd "$here/../../../.." && pwd)"
 DURATION="${DURATION:-24h}"; TPS="${TPS:-2}"
+
+# Parse Go-style durations so short runs work. The old parser did
+# `sed 's/h//' * 3600`, which silently produced a shell arithmetic error for
+# anything but whole hours — so DURATION=5m ran chaos with end=now and no chaos
+# at all, while the loadgen honoured the 5m. Short runs are how a targeted fix
+# gets proven, so they have to work.
+case "$DURATION" in
+  *h) duration_seconds=$(( ${DURATION%h} * 3600 )) ;;
+  *m) duration_seconds=$(( ${DURATION%m} * 60 )) ;;
+  *s) duration_seconds=${DURATION%s} ;;
+  *)  duration_seconds=$(( DURATION * 3600 )) ;;   # bare number = hours, as before
+esac
+# Chaos every ~10 min is meaningless in a 5-minute run; scale the interval so a
+# short run still exercises disruption.
+if [ "$duration_seconds" -le 1800 ]; then
+  CHAOS_MIN=${CHAOS_MIN:-25}; CHAOS_JITTER=${CHAOS_JITTER:-20}
+else
+  CHAOS_MIN=${CHAOS_MIN:-480}; CHAOS_JITTER=${CHAOS_JITTER:-240}
+fi
+# A 5m grace on a 5m run doubles the wall clock for no benefit; scale it.
+if [ "$duration_seconds" -le 1800 ]; then
+  LG_GRACE=${LG_GRACE:-45s}; LG_TIMEOUT=${LG_TIMEOUT:-20m}
+else
+  LG_GRACE=${LG_GRACE:-5m}; LG_TIMEOUT=${LG_TIMEOUT:-26h}
+fi
+# The 100-sub-treasury bootstrap front-loads cross-partition funding traffic
+# regardless of -tps, which keeps every channel busy. Reproducing an idle-stream
+# stall (#4073) needs channels that actually go quiet, so allow it to be turned
+# off. Default keeps the realistic funding spread.
+LG_BOOTSTRAP=${LG_BOOTSTRAP:-100}
 NOTE="${1:-}"
 
 runs="$here/runs"
@@ -121,8 +151,9 @@ sleep 30
 # nor carries the whole load.
 EPS=$(for p in $(seq 26660 26671); do printf "http://localhost:%d," "$p"; done | sed 's/,$//')
 nohup go run "$repo/tools/cmd/loadgen" -endpoints "$EPS" \
-  -faucet-seed FAUCET -tps "$TPS" -duration "$DURATION" -timeout 26h \
-  -grace 5m -max-stranded 20 -stats-file "$rd/loadgen-stats.json" >> "$log" 2>&1 &
+  -faucet-seed FAUCET -tps "$TPS" -duration "$DURATION" -timeout "$LG_TIMEOUT" \
+  -bootstrap "$LG_BOOTSTRAP" \
+  -grace "$LG_GRACE" -max-stranded 20 -stats-file "$rd/loadgen-stats.json" >> "$log" 2>&1 &
 DRIVER=$!
 
 # Observability. Launch these WITH the run, never by hand afterwards — the
@@ -149,10 +180,10 @@ fi
 
 # Chaos: every ~10 min disturb ONE random node (quorum 3/4 preserved).
 # Full ISO dates — time-of-day alone cannot be attributed to a run.
-( end=$(( $(date +%s) + $(( $(echo "$DURATION" | sed 's/h//') * 3600 )) ))
+( end=$(( $(date +%s) + duration_seconds ))
   nodes=$(docker ps --filter name=acc-s --format '{{.Names}}')
   while [ "$(date +%s)" -lt "$end" ]; do
-    sleep $(( 480 + RANDOM % 240 ))
+    sleep $(( CHAOS_MIN + RANDOM % CHAOS_JITTER ))
     n=$(echo "$nodes" | shuf -n1); r=$((RANDOM % 10))
     if [ "$r" -lt 4 ]; then
       echo "$(date -u +%FT%TZ) restart $n" >> "$chaos"; docker restart "$n" >/dev/null 2>&1
@@ -183,13 +214,37 @@ echo "time,dnHeight,heals,cpuPct" > "$mon"
     done
     cpu=$(docker stats --no-stream --format '{{.CPUPerc}}' 2>/dev/null | tr -d '%' | awk '{s+=$1} END {printf "%.0f", s}')
     echo "$(date -u +%FT%T),${h:-?},$heals,${cpu:-?}" >> "$mon"
-    sleep 300
+    sleep ${MON_INTERVAL:-$([ "$duration_seconds" -le 1800 ] && echo 20 || echo 300)}
   done ) &
 
 wait $DRIVER; rc=$?
+
+# Keep the network running after the load stops. Recovery of a TAIL loss can only
+# be observed once the loss has aged past reconcileGraceBlocks, and while load
+# continues most losses are recovered by the ordinary gap healer long before
+# that. An idle tail is the only window in which the interval reconcile is the
+# mechanism actually doing the work — without it a run ends with stragglers that
+# were simply too young, which reads as "the fix did nothing".
+if [ "${IDLE_AFTER:-0}" -gt 0 ]; then
+  echo "== load finished; idling ${IDLE_AFTER}s so tail losses age past the grace ==" | tee -a "$log"
+  sleep "$IDLE_AFTER"
+fi
 kill $CHAOS ${MON:-} ${SEIZE:-} 2>/dev/null
 ended=$(date -u +%FT%TZ)
 echo "== soak finished $(date -u) driver-exit=$rc ==" | tee -a "$log"
+
+# Capture evidence that only exists while the containers are alive. The
+# interval reconcile (#4073) logs each pull, and those logs die with the
+# containers — so a run that proved the fix would otherwise leave no trace.
+$compose logs --no-color > "$rd/node-logs.txt" 2>/dev/null
+grep "Reconcile: pulled messages" "$rd/node-logs.txt" > "$rd/reconcile-pulls.txt" 2>/dev/null
+reconcile_pulls=$(wc -l < "$rd/reconcile-pulls.txt" 2>/dev/null || echo 0)
+# Final produced-vs-received across every channel, the check that sees a stall.
+if [ -x "$here/streams.py" ]; then
+  "$here/streams.py" > "$rd/streams-final.txt" 2>&1
+  stalled_end=$(grep -oE 'stalled channels: [0-9]+' "$rd/streams-final.txt" | grep -oE '[0-9]+' | head -1)
+fi
+stalled_end="${stalled_end:-unknown}"
 
 # ---- verdict ----------------------------------------------------------------
 elapsed_h=$(python3 -c "
@@ -215,6 +270,8 @@ n_chaos=$(wc -l < "$chaos" 2>/dev/null || echo 0)
   echo "| chaos events | $n_chaos |"
   echo "| monitor samples | $(( $(wc -l < "$mon") - 1 )) |"
   echo "| seizure | $(grep -q SEIZED "$rd/seizewatch.out" 2>/dev/null && grep SEIZED "$rd/seizewatch.out" | tail -1 || echo 'none detected') |"
+  echo "| reconcile pulls (#4073) | $reconcile_pulls |"
+  echo "| stalled channels at end | $stalled_end |"
   echo
   echo "Raw: \`soak.log\`, \`monitor.csv\`, \`chaos.log\`, \`loadgen-stats.json\`."
 } >> "$manifest"
