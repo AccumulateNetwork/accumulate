@@ -29,6 +29,7 @@ type RestoreVisitor struct {
 	DisableWriteBatching bool
 	CompressChains       bool
 	providedBatch        bool // true if db is a batch, not a database
+	SkipHashVerification bool
 }
 
 func Restore(db database.Beginner, file ioutil2.SectionReader, logger log.Logger) error {
@@ -190,9 +191,11 @@ func (v *RestoreVisitor) VisitAccount(acct *Account, i int) error {
 	// DO NOT reuse the existing record - it may have changed
 	record := v.batch.Account(acct.Url)
 
-	err = record.VerifyHash(acct.Hash[:])
-	if err != nil {
-		return errors.UnknownError.WithFormat("restore %v: %w", acct.Url, err)
+	if !v.SkipHashVerification {
+		err = record.VerifyHash(acct.Hash[:])
+		if err != nil {
+			return errors.UnknownError.WithFormat("restore %v: %w", acct.Url, err)
+		}
 	}
 	return nil
 }
@@ -262,7 +265,19 @@ func (v *RestoreVisitor) refreshBatch() error {
 
 	// Working with top-level batches - commit the current one and create a new one
 	if v.batch != nil {
-		err := v.batch.Commit()
+		// Fold this batch's accounts into the BPT before committing. Commit does
+		// NOT do this: UpdateBPT walks the batch's dirty accounts and commits
+		// them so their BPT entries are recomputed, and once the batch is gone
+		// that opportunity is lost. Restores large enough to refresh the batch
+		// more than once would otherwise leave every account except those in the
+		// final batch missing from the BPT — end() only covers the last one — and
+		// the node comes up with a wrong state root. Caught by
+		// TestExecutorConsistency.
+		err := v.batch.UpdateBPT()
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+		err = v.batch.Commit()
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
 		}

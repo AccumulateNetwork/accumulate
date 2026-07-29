@@ -38,7 +38,13 @@ build main image:
 build binaries:
   stage: test
   extends: [ .rules release, .go ]
-  needs: [ git describe ]
+  needs:
+    - job: git describe
+    # Overriding `needs` drops the optional dependency `.go` consumers rely on to
+    # wait for the CI image, so restate it — otherwise this job races the image
+    # build and pulls a tag that does not exist yet.
+    - job: build-image:golang
+      optional: true
   # rules:
   # - if: ($CI_COMMIT_BRANCH != 'develop' && $CI_COMMIT_TAG == null) || $CI_PIPELINE_SOURCE == 'merge_request_event'
   #   when: manual

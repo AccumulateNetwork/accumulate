@@ -64,7 +64,8 @@ func (p *Partition) Begin(writable bool) *database.Batch {
 
 func (p *Partition) SetObserver(observer database.Observer) {
 	for _, n := range p.nodes {
-		n.database.SetObserver(observer)
+		n.database.SetObserver( //nolint:staticcheck // SA1019: deprecated except for tests, which is exactly this
+			observer)
 	}
 }
 

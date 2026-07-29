@@ -589,7 +589,6 @@ func (x *ExecEntry) init(sim *Simulator, logger log.Logger, partition *config.Pa
 		Describe:      execute.DescribeShim{NetworkType: network.NetworkType, PartitionId: network.PartitionId},
 		Router:        sim.Router(),
 		EventBus:      eventBus,
-		EnableHealing: true,
 		NewDispatcher: func() block.Dispatcher { return &dispatcher{sim: sim, envelopes: map[string][]*messaging.Envelope{}} },
 		Sequencer:     sim.Services(),
 		Querier:       sim.Services(),

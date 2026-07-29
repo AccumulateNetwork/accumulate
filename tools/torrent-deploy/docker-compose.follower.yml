@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  # Step 1: Bootstrap - Download and extract database volumes
+  bootstrap:
+    build:
+      context: ../..
+      dockerfile: tools/torrent-deploy/Dockerfile.bootstrap
+    image: accumulate-bootstrap:latest
+    container_name: accumulate-bootstrap
+    volumes:
+      - bvn-data:/output
+    environment:
+      - MAGNET_LINK=${MAGNET_LINK}
+    command: ["${MAGNET_LINK}", "/output"]
+    profiles:
+      - bootstrap
+
+  # Step 2: Run follower with the extracted volumes
+  follower:
+    image: registry.gitlab.com/accumulatenetwork/accumulate:latest
+    container_name: accumulate-follower
+    restart: unless-stopped
+    volumes:
+      - bvn-data:/node/bvnn
+      - dn-data:/node/dnn
+      - ./accumulate.toml:/node/accumulate.toml
+    ports:
+      - "16591-16593:16591-16593"  # DN ports
+      - "16691-16693:16691-16693"  # BVN ports
+    command: ["run-dual", "/node/dnn", "/node/bvnn"]
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+
+volumes:
+  bvn-data:
+    driver: local
+  dn-data:
+    driver: local

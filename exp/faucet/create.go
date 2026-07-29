@@ -11,7 +11,6 @@ import (
 	"math/big"
 
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -31,7 +30,6 @@ func CreateLite(url *url.URL) ([]byte, error) {
 	lid.CreditBalance = math.MaxUint64
 
 	db := database.OpenInMemory(nil)
-	db.SetObserver(execute.NewDatabaseObserver())
 	batch := db.Begin(true)
 	defer batch.Discard()
 	for _, a := range []protocol.Account{lta, lid} {
