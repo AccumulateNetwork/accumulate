@@ -59,16 +59,27 @@ curl -s -X POST http://localhost:26660/v3 -H 'content-type: application/json' \
 sleep 15
 
 echo
-echo "== Driving cross-partition sends (the first synthetic is dropped) =="
+echo "== Driving cross-partition sends (drop spec: ${MS_DROP:-*:1}) =="
 rc=0
-go run "$repo/test/docker/synth-heal/mainnet-shape/driver" -endpoint http://localhost:26660 -count 5 -timeout 420s || rc=$?
+go run "$repo/test/docker/synth-heal/mainnet-shape/driver" -endpoint http://localhost:26660 \
+  -count "${MS_COUNT:-5}" -timeout "${MS_TIMEOUT:-420s}" || rc=$?
 
 echo
 echo "== Evidence =="
 echo "-- the wedge was actually created --"
-$compose logs 2>/dev/null | grep -i "dropping synthetic envelope" | head -3 || echo "  (none — no drop, so nothing to heal)"
-echo "-- reconcile activity (#4073) --"
-$compose logs 2>/dev/null | grep -iE "Reconcile: pulled messages|reconcile" | tail -5 || echo "  (none)"
+# Count mode logs "dropping synthetic envelope"; modulo mode ("%K") logs
+# "dropping sequenced envelope". Match both, or the evidence reads as "no drop"
+# on a run that dropped everything.
+drops=$($compose logs 2>/dev/null | grep -iE "dropping (synthetic|sequenced) envelope")
+if [ -n "$drops" ]; then
+  echo "$drops" | head -3 | sed 's/^/  /'
+  echo "  ... $(echo "$drops" | wc -l) dropped in total"
+else
+  echo "  (none — no drop, so nothing to heal)"
+fi
+echo "-- interval reconcile (#4073) — the ONLY path that finds an invisible hole --"
+recon=$($compose logs 2>/dev/null | grep -iE "Reconcile: pulled messages" | tail -5)
+if [ -n "$recon" ]; then echo "$recon" | sed 's/^/  /'; else echo "  (none — recovery came from gap-based receiver-pull, not reconcile)"; fi
 echo "-- heal counters on the node --"
 nid=$(curl -s -X POST http://localhost:26660/v3 -H 'content-type: application/json' \
       -d '{"jsonrpc":"2.0","id":1,"method":"node-info","params":{}}' \

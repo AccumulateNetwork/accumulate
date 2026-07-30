@@ -85,19 +85,23 @@ func main() {
 	// envelope the node emits first, which in practice is the burn. Watching one
 	// direction only reports a false failure while the other one wedges.
 	type stream struct {
-		name   string
-		ledger *url.URL // the RECEIVER's synthetic ledger
-		source *url.URL
-		d0     uint64
+		name    string
+		rxLedge *url.URL // the RECEIVER's synthetic ledger
+		txLedge *url.URL // the SOURCE's synthetic ledger
+		source  *url.URL
+		dest    *url.URL
+		d0      uint64
 	}
+	dn, cyc := protocol.DnUrl(), protocol.PartitionUrl("Cyclops")
 	streams := []*stream{
-		{name: "DN->Cyclops", ledger: protocol.PartitionUrl("Cyclops").JoinPath(protocol.Synthetic), source: protocol.DnUrl()},
-		{name: "Cyclops->DN", ledger: protocol.DnUrl().JoinPath(protocol.Synthetic), source: protocol.PartitionUrl("Cyclops")},
+		{name: "DN->Cyclops", rxLedge: cyc.JoinPath(protocol.Synthetic), txLedge: dn.JoinPath(protocol.Synthetic), source: dn, dest: cyc},
+		{name: "Cyclops->DN", rxLedge: dn.JoinPath(protocol.Synthetic), txLedge: cyc.JoinPath(protocol.Synthetic), source: cyc, dest: dn},
 	}
 	for _, s := range streams {
-		d, r, p := seq(ctx, Q, s.ledger, s.source)
+		d, r, p := seq(ctx, Q, s.rxLedge, s.source)
 		s.d0 = d
-		log.Printf("%s before: delivered=%d received=%d pending=%d", s.name, d, r, p)
+		log.Printf("%s before: produced=%d delivered=%d received=%d pending=%d",
+			s.name, produced(ctx, Q, s.txLedge, s.dest), d, r, p)
 	}
 
 	nonce := uint64(time.Now().UTC().UnixMilli())
@@ -121,14 +125,27 @@ func main() {
 		allClear, advanced := true, false
 		var report []string
 		for _, s := range streams {
-			d, r, p := seq(ctx, Q, s.ledger, s.source)
+			d, r, p := seq(ctx, Q, s.rxLedge, s.source)
+			prod := produced(ctx, Q, s.txLedge, s.dest)
+			// Two distinct failure shapes:
+			//   visible   — received ran ahead of delivered; #4064 handles this.
+			//   INVISIBLE — the source produced more than the receiver ever
+			//               delivered, while received == delivered throughout.
+			//               Every gap-based check reports healthy. Only #4073's
+			//               interval reconcile can find it.
 			gap := int64(r) - int64(d)
-			report = append(report, fmt.Sprintf("%s d=%d r=%d p=%d", s.name, d, r, p))
-			if (gap > 0 || p > 0) && !sawWedge[s.name] {
-				log.Printf("WEDGE on %s: delivered=%d received=%d pending=%d (gap=%d)", s.name, d, r, p, gap)
+			shortfall := int64(prod) - int64(d)
+			report = append(report, fmt.Sprintf("%s produced=%d d=%d r=%d p=%d", s.name, prod, d, r, p))
+			if (gap > 0 || p > 0 || shortfall > 0) && !sawWedge[s.name] {
+				kind := "visible gap"
+				if gap <= 0 && p == 0 {
+					kind = "INVISIBLE hole — received==delivered, only reconcile can see it"
+				}
+				log.Printf("WEDGE on %s [%s]: produced=%d delivered=%d received=%d pending=%d",
+					s.name, kind, prod, d, r, p)
 				sawWedge[s.name] = true
 			}
-			if gap > 0 || p > 0 {
+			if gap > 0 || p > 0 || shortfall > 0 {
 				allClear = false
 			}
 			if d > s.d0 {
@@ -158,18 +175,43 @@ func main() {
 
 // seq returns delivered/received/pending for one source on a synthetic ledger.
 func seq(ctx context.Context, Q api.Querier2, ledger, source *url.URL) (delivered, received uint64, pending int) {
+	e := entry(ctx, Q, ledger, source)
+	if e == nil {
+		return 0, 0, 0
+	}
+	return e.Delivered, e.Received, len(e.Pending)
+}
+
+// produced returns how many messages `ledger`'s partition has PRODUCED for peer.
+//
+// This is the only number that exposes an invisible hole. On a stream that
+// loses its first or last messages, the receiver's received and delivered both
+// stay put and stay equal, so every gap-based check reports healthy — the
+// receiver cannot distinguish "nothing was sent" from "everything was lost".
+// Comparing the source's produced count against the receiver's delivered count
+// is what #4073's interval reconcile does, and it is what this driver must
+// assert on.
+func produced(ctx context.Context, Q api.Querier2, ledger, peer *url.URL) uint64 {
+	e := entry(ctx, Q, ledger, peer)
+	if e == nil {
+		return 0
+	}
+	return e.Produced
+}
+
+func entry(ctx context.Context, Q api.Querier2, ledger, peer *url.URL) *protocol.PartitionSyntheticLedger {
 	var acct *protocol.SyntheticLedger
 	_, err := Q.QueryAccountAs(ctx, ledger, nil, &acct)
 	if errors.Is(err, errors.NotFound) {
-		return 0, 0, 0
+		return nil
 	}
 	fatalIf(err, "query %v", ledger)
 	for _, s := range acct.Sequence {
-		if s.Url != nil && s.Url.Equal(source) {
-			return s.Delivered, s.Received, len(s.Pending)
+		if s.Url != nil && s.Url.Equal(peer) {
+			return s
 		}
 	}
-	return 0, 0, 0
+	return nil
 }
 
 // faucetAccount derives the genesis faucet key and ACME account from its seed,
