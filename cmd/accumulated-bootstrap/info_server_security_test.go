@@ -7,8 +7,10 @@
 package main
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -132,5 +134,55 @@ func TestAdminListenerDefaultsToLoopback(t *testing.T) {
 	}
 	if !isLoopbackMultiaddr(multiaddr.StringCast("/ip6/::1/tcp/8082/http")) {
 		t.Error("::1 not recognised as loopback")
+	}
+}
+
+// TestPublicInfoOmitsTopology covers the rest of #4034. The deployed server was
+// publishing its private VPC address (/ip4/172.31.9.165/), DHT routing table
+// size, inbound/outbound split, and an uptime that dates the last restart — all
+// from /info, which is a PUBLIC endpoint. filterLocalAddresses only strips
+// loopback, so RFC1918 went straight out.
+//
+// Marshalling is the real test: `omitempty` on a non-pointer struct is a no-op,
+// so the first attempt still emitted dht and connections as zero values. The
+// assertion is on the encoded bytes for that reason, not on the Go struct.
+func TestPublicInfoOmitsTopology(t *testing.T) {
+	reduced := BootstrapInfo{
+		PeerID:            "12D3KooWtest",
+		ExternalAddresses: []string{"/ip4/203.0.113.7/tcp/16593/p2p/12D3KooWtest"},
+	}
+	b, err := json.Marshal(reduced)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(b)
+
+	for _, leak := range []string{"listen_addresses", "dht", "connections", "uptime_seconds"} {
+		if strings.Contains(body, leak) {
+			t.Errorf("public /info still carries %q: %s", leak, body)
+		}
+	}
+	for _, want := range []string{"peer_id", "external_addresses"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("public /info lost %q — it is the point of the endpoint", want)
+		}
+	}
+
+	// The admin record must still carry everything.
+	full := BootstrapInfo{
+		PeerID:            "12D3KooWtest",
+		ListenAddresses:   []string{"/ip4/172.31.9.165/tcp/16593"},
+		ExternalAddresses: []string{"/ip4/203.0.113.7/tcp/16593/p2p/12D3KooWtest"},
+		DHT:               &DHTInfo{Mode: "server", RoutingTableSize: 8},
+		Connections:       &ConnectionInfo{Total: 8, Inbound: 8},
+		UptimeSeconds:     7700583,
+	}
+	if b, err = json.Marshal(full); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"listen_addresses", "dht", "connections", "uptime_seconds"} {
+		if !strings.Contains(string(b), want) {
+			t.Errorf("admin /info lost %q — operators need the full record", want)
+		}
 	}
 }

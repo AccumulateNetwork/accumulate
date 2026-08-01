@@ -24,12 +24,12 @@ import (
 
 // BootstrapInfo contains information about the bootstrap server
 type BootstrapInfo struct {
-	PeerID            string         `json:"peer_id"`
-	ListenAddresses   []string       `json:"listen_addresses"`
-	ExternalAddresses []string       `json:"external_addresses"`
-	DHT               DHTInfo        `json:"dht"`
-	Connections       ConnectionInfo `json:"connections"`
-	UptimeSeconds     int64          `json:"uptime_seconds"`
+	PeerID            string          `json:"peer_id"`
+	ListenAddresses   []string        `json:"listen_addresses,omitempty"`
+	ExternalAddresses []string        `json:"external_addresses"`
+	DHT               *DHTInfo        `json:"dht,omitempty"`
+	Connections       *ConnectionInfo `json:"connections,omitempty"`
+	UptimeSeconds     int64           `json:"uptime_seconds,omitempty"`
 }
 
 // DHTInfo contains DHT statistics
@@ -99,7 +99,7 @@ func NewInfoServer(h host.Host, listen, adminListen multiaddr.Multiaddr, externa
 	// assist, and an unbounded outbound-connection amplifier. Discovery never
 	// needed an externally triggered dial, and nothing in the fleet called it.
 	mux := http.NewServeMux()
-	mux.HandleFunc("/info", s.handleInfo)
+	mux.HandleFunc("/info", s.handlePublicInfo) // reduced record (#4034)
 	mux.HandleFunc("/health", s.handleHealth)
 
 	admin := http.NewServeMux()
@@ -169,7 +169,24 @@ func NewInfoServer(h host.Host, listen, adminListen multiaddr.Multiaddr, externa
 }
 
 // handleInfo serves bootstrap server information
+// handleInfo serves the full record. Registered on the admin listener only.
 func (s *InfoServer) handleInfo(w http.ResponseWriter, r *http.Request) {
+	s.serveInfo(w, r, true)
+}
+
+// handlePublicInfo serves the reduced record: peer ID and the addresses this
+// node already advertises to the world, nothing else.
+//
+// The full record is topology disclosure (#4034). The deployed server was
+// publishing its private VPC address (/ip4/172.31.9.165/), its DHT routing
+// table size, its inbound/outbound connection split, and an uptime that dates
+// the last restart. filterLocalAddresses only strips loopback, so RFC1918
+// addresses went out to anyone who asked.
+func (s *InfoServer) handlePublicInfo(w http.ResponseWriter, r *http.Request) {
+	s.serveInfo(w, r, false)
+}
+
+func (s *InfoServer) serveInfo(w http.ResponseWriter, r *http.Request, full bool) {
 	if r.Method != "GET" {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -192,19 +209,16 @@ func (s *InfoServer) handleInfo(w http.ResponseWriter, r *http.Request) {
 
 	// Build response
 	info := BootstrapInfo{
-		PeerID:            s.host.ID().String(),
-		ListenAddresses:   filterLocalAddresses(s.host.Addrs()),
+		PeerID: s.host.ID().String(),
+		// External addresses are what this node already advertises for dialing,
+		// so publishing them discloses nothing new.
 		ExternalAddresses: buildExternalAddresses(s.host, s.external),
-		DHT: DHTInfo{
-			Mode:             "server",
-			RoutingTableSize: len(peers),
-		},
-		Connections: ConnectionInfo{
-			Total:    len(conns),
-			Inbound:  inbound,
-			Outbound: outbound,
-		},
-		UptimeSeconds: int64(time.Since(s.startTime).Seconds()),
+	}
+	if full {
+		info.ListenAddresses = filterLocalAddresses(s.host.Addrs())
+		info.DHT = &DHTInfo{Mode: "server", RoutingTableSize: len(peers)}
+		info.Connections = &ConnectionInfo{Total: len(conns), Inbound: inbound, Outbound: outbound}
+		info.UptimeSeconds = int64(time.Since(s.startTime).Seconds())
 	}
 
 	w.Header().Set("Content-Type", "application/json")
