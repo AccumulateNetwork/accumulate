@@ -19,7 +19,6 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
-	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
 )
 
@@ -64,22 +63,11 @@ type PeersResponse struct {
 	Peers []PeerInfo `json:"peers"`
 }
 
-// ConnectRequest contains a peer address to connect to
-type ConnectRequest struct {
-	Address string `json:"address"`
-}
-
-// ConnectResponse contains the result of a connection attempt
-type ConnectResponse struct {
-	Success bool   `json:"success"`
-	PeerID  string `json:"peer_id,omitempty"`
-	Error   string `json:"error,omitempty"`
-}
-
 // InfoServer serves bootstrap server information on HTTP
 type InfoServer struct {
 	host        host.Host
 	server      *http.Server
+	adminServer *http.Server
 	startTime   time.Time
 	external    []multiaddr.Multiaddr
 	metrics     *MetricsCollector
@@ -88,7 +76,9 @@ type InfoServer struct {
 }
 
 // NewInfoServer creates a new info server
-func NewInfoServer(h host.Host, listen multiaddr.Multiaddr, external []multiaddr.Multiaddr) (*InfoServer, error) {
+// NewInfoServer starts the public info listener and, when adminListen is
+// non-nil, the admin listener carrying the topology endpoints.
+func NewInfoServer(h host.Host, listen, adminListen multiaddr.Multiaddr, external []multiaddr.Multiaddr) (*InfoServer, error) {
 	metrics := NewMetricsCollector(h)
 	s := &InfoServer{
 		host:       h,
@@ -98,20 +88,37 @@ func NewInfoServer(h host.Host, listen multiaddr.Multiaddr, external []multiaddr
 		partitions: NewPartitionTracker(h, metrics),
 	}
 
-	// Create HTTP server
+	// The public listener serves liveness only. Everything that describes the
+	// network — peer lists, partition membership, connection tables, DHT state
+	// — is topology disclosure (#4034) and moves to the admin listener, which
+	// binds loopback unless an operator deliberately says otherwise.
+	//
+	// /connect is gone entirely (#4026). It accepted an unauthenticated POST
+	// and dialled any multiaddr it was handed, returning the dial error
+	// verbatim: a scanning oracle for internal address space, an eclipse
+	// assist, and an unbounded outbound-connection amplifier. Discovery never
+	// needed an externally triggered dial, and nothing in the fleet called it.
 	mux := http.NewServeMux()
 	mux.HandleFunc("/info", s.handleInfo)
 	mux.HandleFunc("/health", s.handleHealth)
-	mux.HandleFunc("/peers", s.handlePeers)
-	mux.HandleFunc("/peers/", s.handlePeersByPartition)
-	mux.HandleFunc("/partitions", s.handlePartitions)
-	mux.HandleFunc("/connect", s.handleConnect)
-	mux.HandleFunc("/stats", s.handleStats)
-	mux.HandleFunc("/connections", s.handleConnections)
-	mux.HandleFunc("/debug/dht", s.handleDebugDHT)
+
+	admin := http.NewServeMux()
+	admin.HandleFunc("/info", s.handleInfo)
+	admin.HandleFunc("/health", s.handleHealth)
+	admin.HandleFunc("/peers", s.handlePeers)
+	admin.HandleFunc("/peers/", s.handlePeersByPartition)
+	admin.HandleFunc("/partitions", s.handlePartitions)
+	admin.HandleFunc("/stats", s.handleStats)
+	admin.HandleFunc("/connections", s.handleConnections)
+	admin.HandleFunc("/debug/dht", s.handleDebugDHT) // #4033
+
+	// The public listener is rate limited (#4039). The admin listener is not:
+	// it is loopback by default, and throttling an operator debugging a live
+	// node is a cost with no matching benefit.
+	limiter := newRateLimiter(defaultRateBurst, defaultRatePerSecond)
 
 	s.server = &http.Server{
-		Handler:           mux,
+		Handler:           limiter.limit(mux),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      30 * time.Second,
@@ -125,12 +132,38 @@ func NewInfoServer(h host.Host, listen multiaddr.Multiaddr, external []multiaddr
 	}
 
 	go func() {
-		slog.Info("Info server listening", "address", listener.Addr())
+		slog.Info("Info server listening", "address", listener.Addr(), "endpoints", "/info /health")
 		err := s.server.Serve(listener)
 		if err != nil && err != http.ErrServerClosed {
 			slog.Error("Info server stopped", "error", err)
 		}
 	}()
+
+	if adminListen != nil {
+		s.adminServer = &http.Server{
+			Handler:           admin,
+			ReadHeaderTimeout: 10 * time.Second,
+			ReadTimeout:       30 * time.Second,
+			WriteTimeout:      30 * time.Second,
+			IdleTimeout:       120 * time.Second,
+		}
+		adminListener, err := listenMultiaddr(adminListen)
+		if err != nil {
+			return nil, err
+		}
+		if !isLoopbackMultiaddr(adminListen) {
+			slog.Warn("Admin info listener is NOT on loopback — peer, partition, connection and DHT state are exposed to the network",
+				"address", adminListener.Addr())
+		}
+		go func() {
+			slog.Info("Admin info server listening", "address", adminListener.Addr(),
+				"endpoints", "/peers /partitions /stats /connections /debug/dht")
+			err := s.adminServer.Serve(adminListener)
+			if err != nil && err != http.ErrServerClosed {
+				slog.Error("Admin info server stopped", "error", err)
+			}
+		}()
+	}
 
 	return s, nil
 }
@@ -350,93 +383,17 @@ func (s *InfoServer) handlePeers(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleConnect attempts to connect to a peer
-func (s *InfoServer) handleConnect(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	// Parse request body
-	var req ConnectRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(ConnectResponse{
-			Success: false,
-			Error:   "invalid request body: " + err.Error(),
-		})
-		return
-	}
-
-	if req.Address == "" {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(ConnectResponse{
-			Success: false,
-			Error:   "address is required",
-		})
-		return
-	}
-
-	// Parse the multiaddr
-	addr, err := multiaddr.NewMultiaddr(req.Address)
-	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(ConnectResponse{
-			Success: false,
-			Error:   "invalid multiaddr: " + err.Error(),
-		})
-		return
-	}
-
-	// Extract peer info from multiaddr
-	peerInfo, err := peer.AddrInfoFromP2pAddr(addr)
-	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(ConnectResponse{
-			Success: false,
-			Error:   "could not extract peer info: " + err.Error(),
-		})
-		return
-	}
-
-	// Attempt to connect
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
-	defer cancel()
-
-	slog.Info("Attempting to connect to peer", "peer_id", peerInfo.ID, "addrs", peerInfo.Addrs)
-
-	if err := s.host.Connect(ctx, *peerInfo); err != nil {
-		slog.Error("Failed to connect to peer", "peer_id", peerInfo.ID, "error", err)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(ConnectResponse{
-			Success: false,
-			PeerID:  peerInfo.ID.String(),
-			Error:   "connection failed: " + err.Error(),
-		})
-		return
-	}
-
-	slog.Info("Successfully connected to peer", "peer_id", peerInfo.ID)
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(ConnectResponse{
-		Success: true,
-		PeerID:  peerInfo.ID.String(),
-	})
-}
-
-// Shutdown gracefully shuts down the info server
 func (s *InfoServer) Shutdown(ctx context.Context) error {
 	if s.partitions != nil {
 		s.partitions.Stop()
 	}
 	if s.metrics != nil {
 		s.metrics.Stop()
+	}
+	if s.adminServer != nil {
+		// Report the public listener's error; the admin listener must still be
+		// closed or its port survives shutdown and a restart fails to bind.
+		_ = s.adminServer.Shutdown(ctx)
 	}
 	return s.server.Shutdown(ctx)
 }
@@ -918,4 +875,15 @@ func (s *InfoServer) handleConnections(w http.ResponseWriter, r *http.Request) {
 	if err := encoder.Encode(response); err != nil {
 		slog.Error("Failed to encode connections response", "error", err)
 	}
+}
+
+// isLoopbackMultiaddr reports whether addr binds only the loopback interface.
+// Used to warn when the admin endpoints are exposed beyond the host.
+func isLoopbackMultiaddr(addr multiaddr.Multiaddr) bool {
+	for _, p := range []int{multiaddr.P_IP4, multiaddr.P_IP6} {
+		if v, err := addr.ValueForProtocol(p); err == nil {
+			return net.ParseIP(v).IsLoopback()
+		}
+	}
+	return false
 }
