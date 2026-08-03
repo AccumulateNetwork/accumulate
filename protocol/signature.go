@@ -18,10 +18,11 @@ import (
 	"fmt"
 	"io"
 
+	btc "github.com/btcsuite/btcd/btcec"
 	"github.com/btcsuite/btcutil/base58"
+	eth "github.com/ethereum/go-ethereum/crypto"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/hash"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/common"
-	altcrypto "gitlab.com/accumulatenetwork/accumulate/pkg/crypto"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -146,15 +147,15 @@ func BTCaddress(pubKey []byte) string {
 
 // ETHhash returns the truncated hash (i.e. binary ethereum address)
 func ETHhash(pubKey []byte) []byte {
-	p, err := altcrypto.UnmarshalPubkey(pubKey)
+	p, err := eth.UnmarshalPubkey(pubKey)
 	if err != nil {
-		p, err = altcrypto.DecompressPubkey(pubKey)
+		p, err = eth.DecompressPubkey(pubKey)
 		if err != nil {
 			return nil
 		}
 	}
-	a := altcrypto.PubkeyToAddress(*p)
-	return a[:] // Convert [20]byte to []byte
+	a := eth.PubkeyToAddress(*p)
+	return a.Bytes()
 }
 
 func ETHaddress(pubKey []byte) (string, error) {
@@ -495,11 +496,7 @@ func (s *RCD1Signature) GetVote() VoteType {
  * BTC Signature
  */
 func SignBTC(sig *BTCSignature, privateKey, sigMdHash, txnHash []byte) error {
-	pvkeyEcdsa, _ := altcrypto.BTCPrivKeyFromBytes(altcrypto.S256(), privateKey)
-	if pvkeyEcdsa == nil {
-		return fmt.Errorf("invalid private key")
-	}
-	pvkey := &altcrypto.BTCPrivKey{PrivateKey: pvkeyEcdsa}
+	pvkey, _ := btc.PrivKeyFromBytes(btc.S256(), privateKey)
 	sign, err := pvkey.Sign(signingHash(sig, doSha256, sigMdHash, txnHash))
 	if err != nil {
 		return err
@@ -565,11 +562,11 @@ func (s *BTCSignature) GetVote() VoteType {
 // Verify returns true if this signature is a valid SECP256K1 signature of the
 // hash.
 func (e *BTCSignature) Verify(sig Signature, msg Signable) bool {
-	bsig, err := altcrypto.ParseSignature(e.Signature)
+	bsig, err := btc.ParseSignature(e.Signature, btc.S256())
 	if err != nil {
 		return false
 	}
-	pbkey, err := altcrypto.ParsePubKey(e.PublicKey)
+	pbkey, err := btc.ParsePubKey(e.PublicKey, btc.S256())
 	if err != nil {
 		return false
 	}
@@ -583,11 +580,7 @@ func (e *BTCSignature) Verify(sig Signature, msg Signable) bool {
  */
 
 func SignBTCLegacy(sig *BTCLegacySignature, privateKey, sigMdHash, txnHash []byte) error {
-	pvkeyEcdsa, _ := altcrypto.BTCPrivKeyFromBytes(altcrypto.S256(), privateKey)
-	if pvkeyEcdsa == nil {
-		return fmt.Errorf("invalid private key")
-	}
-	pvkey := &altcrypto.BTCPrivKey{PrivateKey: pvkeyEcdsa}
+	pvkey, _ := btc.PrivKeyFromBytes(btc.S256(), privateKey)
 	sign, err := pvkey.Sign(signingHash(sig, doSha256, sigMdHash, txnHash))
 	if err != nil {
 		return err
@@ -653,11 +646,11 @@ func (s *BTCLegacySignature) GetVote() VoteType {
 // Verify returns true if this signature is a valid SECP256K1 signature of the
 // hash.
 func (e *BTCLegacySignature) Verify(sig Signature, msg Signable) bool {
-	bsig, err := altcrypto.ParseSignature(e.Signature)
+	bsig, err := btc.ParseSignature(e.Signature, btc.S256())
 	if err != nil {
 		return false
 	}
-	pbkey, err := altcrypto.ParsePubKey(e.PublicKey)
+	pbkey, err := btc.ParsePubKey(e.PublicKey, btc.S256())
 	if err != nil {
 		return false
 	}
@@ -671,16 +664,12 @@ func (e *BTCLegacySignature) Verify(sig Signature, msg Signable) bool {
  */
 
 func SignEthAsDer(sig *ETHSignature, privateKey, sigMdHash, txnHash []byte) (err error) {
-	pvkeyEcdsa, pubEcdsa := altcrypto.BTCPrivKeyFromBytes(altcrypto.S256(), privateKey)
-	if pvkeyEcdsa == nil {
-		return fmt.Errorf("invalid private key")
-	}
-	pvkey := &altcrypto.BTCPrivKey{PrivateKey: pvkeyEcdsa}
-	pk2, err := altcrypto.ParsePubKey(sig.PublicKey)
+	pvkey, pub := btc.PrivKeyFromBytes(btc.S256(), privateKey)
+	pk2, err := btc.ParsePubKey(sig.PublicKey, btc.S256())
 	if err != nil {
 		return err
 	}
-	if !altcrypto.IsEqual(pubEcdsa, pk2) {
+	if !pub.IsEqual(pk2) {
 		return fmt.Errorf("public key is not what is expected")
 	}
 	sign, err := pvkey.Sign(signingHash(sig, doSha256, sigMdHash, txnHash))
@@ -696,13 +685,13 @@ func SignEthAsDer(sig *ETHSignature, privateKey, sigMdHash, txnHash []byte) (err
  */
 
 func SignETH(sig *ETHSignature, privateKey, sigMdHash, txnHash []byte) (err error) {
-	priv, err := altcrypto.ToECDSA(privateKey)
+	priv, err := eth.ToECDSA(privateKey)
 	if err != nil {
 		return err
 	}
 
-	sig.PublicKey = altcrypto.FromECDSAPub(&priv.PublicKey)
-	sig.Signature, err = altcrypto.Sign(signingHash(sig, doSha256, sigMdHash, txnHash), priv)
+	sig.PublicKey = eth.FromECDSAPub(&priv.PublicKey)
+	sig.Signature, err = eth.Sign(signingHash(sig, doSha256, sigMdHash, txnHash), priv)
 	return err
 }
 
@@ -763,11 +752,11 @@ func (s *ETHSignature) GetVote() VoteType {
 // Deprecated: Verify returns true if this signature is a valid signature in DER format of the hash.
 func (e *ethSignatureV1) Verify(sig Signature, msg Signable) bool {
 	//process signature as DER format
-	bsig, err := altcrypto.ParseSignature(e.Signature)
+	bsig, err := btc.ParseSignature(e.Signature, btc.S256())
 	if err != nil {
 		return false
 	}
-	pbkey, err := altcrypto.ParsePubKey(e.PublicKey)
+	pbkey, err := btc.ParsePubKey(e.PublicKey, btc.S256())
 	if err != nil {
 		return false
 	}
@@ -784,7 +773,7 @@ func (e *ETHSignature) Verify(sig Signature, msg Signable) bool {
 		s = s[:64]
 	}
 	return verifySig(e, sig, true, msg, func(msg []byte) bool {
-		return altcrypto.VerifySignature(e.PublicKey, msg, s)
+		return eth.VerifySignature(e.PublicKey, msg, s)
 	})
 }
 
@@ -1213,13 +1202,13 @@ func SignEip712TypedData(sig *TypedDataSignature, privateKey []byte, outer Signa
 		return err
 	}
 
-	priv, err := altcrypto.ToECDSA(privateKey)
+	priv, err := eth.ToECDSA(privateKey)
 	if err != nil {
 		return err
 	}
 
 	sig.TransactionHash = txn.Hash()
-	sig.Signature, err = altcrypto.Sign(hash, priv)
+	sig.Signature, err = eth.Sign(hash, priv)
 	return err
 }
 
@@ -1299,5 +1288,5 @@ func (e *TypedDataSignature) Verify(sig Signature, msg Signable) bool {
 		//extract RS of the RSV format
 		s = s[:64]
 	}
-	return altcrypto.VerifySignature(e.PublicKey, typedDataTxnHash, s)
+	return eth.VerifySignature(e.PublicKey, typedDataTxnHash, s)
 }

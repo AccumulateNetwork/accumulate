@@ -164,9 +164,7 @@ func (v *Header) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := encoding.GetBuffer()
-	defer encoding.PutBuffer(buffer)
-
+	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.Version == 0) {
@@ -184,11 +182,7 @@ func (v *Header) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-
-	// Return a copy since the buffer will be reused
-	result := make([]byte, buffer.Len())
-	copy(result, buffer.Bytes())
-	return result, nil
+	return buffer.Bytes(), nil
 }
 
 func (v *Header) IsValid() error {
@@ -231,9 +225,7 @@ func (v *RecordEntry) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := encoding.GetBuffer()
-	defer encoding.PutBuffer(buffer)
-
+	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.Key == nil) {
@@ -251,11 +243,7 @@ func (v *RecordEntry) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-
-	// Return a copy since the buffer will be reused
-	result := make([]byte, buffer.Len())
-	copy(result, buffer.Bytes())
-	return result, nil
+	return buffer.Bytes(), nil
 }
 
 func (v *RecordEntry) IsValid() error {
@@ -296,9 +284,7 @@ func (v *versionHeader) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := encoding.GetBuffer()
-	defer encoding.PutBuffer(buffer)
-
+	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.Version == 0) {
@@ -310,11 +296,7 @@ func (v *versionHeader) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-
-	// Return a copy since the buffer will be reused
-	result := make([]byte, buffer.Len())
-	copy(result, buffer.Bytes())
-	return result, nil
+	return buffer.Bytes(), nil
 }
 
 func (v *versionHeader) IsValid() error {

@@ -25,10 +25,11 @@ import (
 	"testing"
 	"time"
 
+	btc "github.com/btcsuite/btcd/btcec"
 	"github.com/btcsuite/btcutil/base58"
+	eth "github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
-	altcrypto "gitlab.com/accumulatenetwork/accumulate/pkg/crypto"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/address"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -44,6 +45,7 @@ func init() {
 }
 
 func TestBTCSignature(t *testing.T) {
+
 	//m/44'/60'/0'/0/0 yellow ->
 	privKey := base58.Decode("KxukKhTPU11xH2Wfk2366e375166QE4r7y8FWojU9XPbzLYYSM3j")
 
@@ -51,11 +53,11 @@ func TestBTCSignature(t *testing.T) {
 	hash := sha256.Sum256([]byte(message))
 	secp := new(BTCSignature)
 
-	privkey, pbkey := altcrypto.BTCPrivKeyFromBytes(altcrypto.S256(), privKey)
+	privkey, pbkey := btc.PrivKeyFromBytes(btc.S256(), privKey)
 
-	secp.PublicKey = altcrypto.SerializeCompressed(pbkey)
+	secp.PublicKey = pbkey.SerializeCompressed()
 
-	require.NoError(t, SignBTC(secp, altcrypto.SerializePrivateKey(privkey), nil, hash[:]))
+	require.NoError(t, SignBTC(secp, privkey.Serialize(), nil, hash[:]))
 	res := secp.Verify(nil, SignableHash(hash))
 
 	require.Equal(t, res, true)
@@ -63,6 +65,7 @@ func TestBTCSignature(t *testing.T) {
 }
 
 func TestBTCLegacySignature(t *testing.T) {
+
 	//m/44'/60'/0'/0/0 yellow ->
 	privKey := base58.Decode("KxukKhTPU11xH2Wfk2366e375166QE4r7y8FWojU9XPbzLYYSM3j")
 
@@ -70,11 +73,11 @@ func TestBTCLegacySignature(t *testing.T) {
 	hash := sha256.Sum256([]byte(message))
 	secp := new(BTCLegacySignature)
 
-	privkey, pbkey := altcrypto.BTCPrivKeyFromBytes(altcrypto.S256(), privKey)
+	privkey, pbkey := btc.PrivKeyFromBytes(btc.S256(), privKey)
 
-	secp.PublicKey = altcrypto.SerializeUncompressed(pbkey)
+	secp.PublicKey = pbkey.SerializeUncompressed()
 
-	require.NoError(t, SignBTCLegacy(secp, altcrypto.SerializePrivateKey(privkey), nil, hash[:]))
+	require.NoError(t, SignBTCLegacy(secp, privkey.Serialize(), nil, hash[:]))
 	res := secp.Verify(nil, SignableHash(hash))
 
 	require.Equal(t, res, true)
@@ -82,18 +85,17 @@ func TestBTCLegacySignature(t *testing.T) {
 }
 
 func TestETHSignature(t *testing.T) {
+
 	privKeyHex := "1b48e04041e23c72cacdaa9b0775d31515fc74d6a6d3c8804172f7e7d1248529"
 
 	message := "ACME will rule DEFI"
 	hash := sha256.Sum256([]byte(message))
 	secp := new(ETHSignature)
 
-	privKeyBytes, err := hex.DecodeString(privKeyHex)
+	privKey, err := eth.HexToECDSA(privKeyHex)
 	require.NoError(t, err)
-	privKey, err := altcrypto.ToECDSA(privKeyBytes)
-	require.NoError(t, err)
-	secp.PublicKey = altcrypto.FromECDSAPub(&privKey.PublicKey)
-	require.NoError(t, SignEthAsDer(secp, altcrypto.FromECDSA(privKey), nil, hash[:]))
+	secp.PublicKey = eth.FromECDSAPub(&privKey.PublicKey)
+	require.NoError(t, SignEthAsDer(secp, eth.FromECDSA(privKey), nil, hash[:]))
 
 	t.Logf("Eth as Der public key  %x", secp.PublicKey)
 	t.Logf("Eth as Der signature   %x", secp.Signature)
@@ -105,15 +107,15 @@ func TestETHSignature(t *testing.T) {
 	require.Equal(t, VerifyUserSignatureV1(secp, SignableHash(hash)), true)
 
 	//public key should still match
-	keyComp, err := altcrypto.UnmarshalPubkey(secp.PublicKey)
+	keyComp, err := eth.UnmarshalPubkey(secp.PublicKey)
 
 	require.NoError(t, err)
 	require.True(t, keyComp.Equal(privKey.Public()), "public keys don't match")
 
 	//version 2 signature test
 	secp = new(ETHSignature)
-	secp.PublicKey = altcrypto.FromECDSAPub(&privKey.PublicKey)
-	require.NoError(t, SignETH(secp, altcrypto.FromECDSA(privKey), nil, hash[:]))
+	secp.PublicKey = eth.FromECDSAPub(&privKey.PublicKey)
+	require.NoError(t, SignETH(secp, eth.FromECDSA(privKey), nil, hash[:]))
 
 	t.Logf("Eth as VRS public key %x", secp.PublicKey)
 	t.Logf("Eth as VRS signature  %x", secp.Signature)
@@ -162,19 +164,19 @@ func mustDecodeHex(t testing.TB, s string) []byte {
 
 func TestInitWithOtherKeys(t *testing.T) {
 	ethPriv := mustDecodeHex(t, "1b48e04041e23c72cacdaa9b0775d31515fc74d6a6d3c8804172f7e7d1248529")
-	_, ethPub := altcrypto.BTCPrivKeyFromBytes(altcrypto.S256(), ethPriv)
+	_, ethPub := btc.PrivKeyFromBytes(btc.S256(), ethPriv)
 	btcPriv := base58.Decode("KxukKhTPU11xH2Wfk2366e375166QE4r7y8FWojU9XPbzLYYSM3j")
-	_, btcPub := altcrypto.BTCPrivKeyFromBytes(altcrypto.S256(), btcPriv)
+	_, btcPub := btc.PrivKeyFromBytes(btc.S256(), btcPriv)
 	btclPriv := base58.Decode("KxukKhTPU11xH2Wfk2366e375166QE4r7y8FWojU9XPbzLYYSM3j")
-	_, btclPub := altcrypto.BTCPrivKeyFromBytes(altcrypto.S256(), btclPriv)
+	_, btclPub := btc.PrivKeyFromBytes(btc.S256(), btclPriv)
 
 	cases := map[string]struct {
 		PrivKey []byte
 		Signer  KeySignature
 	}{
-		"ETH":       {PrivKey: ethPriv, Signer: &ETHSignature{PublicKey: altcrypto.SerializeUncompressed(ethPub)}},
-		"BTC":       {PrivKey: btcPriv, Signer: &BTCSignature{PublicKey: altcrypto.SerializeCompressed(btcPub)}},
-		"BTCLegacy": {PrivKey: btclPriv, Signer: &BTCLegacySignature{PublicKey: altcrypto.SerializeUncompressed(btclPub)}},
+		"ETH":       {PrivKey: ethPriv, Signer: &ETHSignature{PublicKey: ethPub.SerializeUncompressed()}},
+		"BTC":       {PrivKey: btcPriv, Signer: &BTCSignature{PublicKey: btcPub.SerializeCompressed()}},
+		"BTCLegacy": {PrivKey: btclPriv, Signer: &BTCLegacySignature{PublicKey: btclPub.SerializeUncompressed()}},
 	}
 
 	for name, c := range cases {
@@ -503,7 +505,7 @@ func TestEip712TypedDataSignature(t *testing.T) {
 	priv := acctesting.NewSECP256K1(t.Name())
 	eip712sig := &TypedDataSignature{
 		ChainID:       protocol.EthChainID("MainNet"),
-		PublicKey:     altcrypto.FromECDSAPub(&priv.PublicKey),
+		PublicKey:     eth.FromECDSAPub(&priv.PublicKey),
 		Signer:        url.MustParse("acc://adi.acme/book/1"),
 		SignerVersion: 1,
 		Timestamp:     1720564975623,
@@ -513,7 +515,7 @@ func TestEip712TypedDataSignature(t *testing.T) {
 
 	// Sign the transaction
 
-	require.NoError(t, SignEip712TypedData(eip712sig, altcrypto.SerializePrivateKey((*ecdsa.PrivateKey)(priv)), nil, txn))
+	require.NoError(t, SignEip712TypedData(eip712sig, priv.Serialize(), nil, txn))
 
 	// Verify the signature
 	require.True(t, eip712sig.Verify(nil, txn))
@@ -530,7 +532,7 @@ func TestEIP712DelegatedKeyPageUpdate(t *testing.T) {
 	priv := acctesting.NewSECP256K1(t.Name())
 	inner := &TypedDataSignature{
 		ChainID:       protocol.EthChainID("MainNet"),
-		PublicKey:     altcrypto.FromECDSAPub(&priv.PublicKey),
+		PublicKey:     eth.FromECDSAPub(&priv.PublicKey),
 		Signer:        url.MustParse("acc://adi.acme/book/1"),
 		SignerVersion: 1,
 		Timestamp:     1720564975623,
@@ -543,7 +545,7 @@ func TestEIP712DelegatedKeyPageUpdate(t *testing.T) {
 	txn.Header.Initiator = [32]byte(outer.Metadata().Hash())
 
 	// Sign the transaction
-	require.NoError(t, SignEip712TypedData(inner, altcrypto.SerializePrivateKey((*ecdsa.PrivateKey)(priv)), outer, txn))
+	require.NoError(t, SignEip712TypedData(inner, priv.Serialize(), outer, txn))
 
 	// Verify the signature
 	require.True(t, outer.Verify(nil, txn))
@@ -570,7 +572,7 @@ func TestEIP712MessageForWallet(t *testing.T) {
 	priv := acctesting.NewSECP256K1(t.Name())
 	sig := &TypedDataSignature{
 		ChainID:       protocol.EthChainID("MainNet"),
-		PublicKey:     altcrypto.FromECDSAPub(&priv.PublicKey),
+		PublicKey:     eth.FromECDSAPub(&priv.PublicKey),
 		Signer:        url.MustParse("acc://adi.acme/book/1"),
 		SignerVersion: 1,
 		Timestamp:     1720564975623,
@@ -582,7 +584,7 @@ func TestEIP712MessageForWallet(t *testing.T) {
 	require.NoError(t, err)
 	fmt.Printf("%s\n", b)
 
-	cmd := exec.Command("../test/cmd/eth_signTypedData/execute.sh", hex.EncodeToString(altcrypto.SerializePrivateKey((*ecdsa.PrivateKey)(priv))), string(b))
+	cmd := exec.Command("../test/cmd/eth_signTypedData/execute.sh", hex.EncodeToString(priv.Serialize()), string(b))
 	cmd.Stderr = os.Stderr
 	out, err := cmd.Output()
 	require.NoError(t, err)

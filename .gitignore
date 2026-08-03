@@ -9,35 +9,6 @@ tools/cmd/gen-enum/gen-enum
 tools/cmd/gen-types/go_build*
 tools/cmd/gen-enum/go_build*
 
-# Custom tool binaries
-/accumulated-*
-/bpt-info
-/check-acc-height
-/check-state
-/cleanup-bpt
-/create-snap
-/db-block-height
-/debug-consensus
-/deploy-follower
-/follower-monitor
-/init-state
-/repair-snapshot
-/snapshot-info
-/cmd/accumulated-bootstrap/accumulated-bootstrap
-/cmd/check-state/check-state
-/cmd/extract-validators/extract-validators
-/cmd/init-state/init-state
-/tools/deploy-follower/deploy-follower
-/tools/follower-monitor/follower-monitor
-/tools/torrent-deploy/cmd/torrent-server/torrent-server
-
-# Data directories and snapshots
-/accumulate-dual-data/
-/accumulate-dual-test/
-/*.snap
-**/snapshot.urls
-/snapshot-tool
-
 # Binaries and test data
 *.exe
 *.test
@@ -70,21 +41,3 @@ tmp
 
 #jj
 .newscripts
-.archive/
-mcp/mcp-server
-__pycache__/
-
-# Compiled test and tooling binaries
-/netsim
-/export-snapshot
-/parallel-loadtest
-/promote-validator
-/simulator
-/genesis
-/snapshot
-/acc/acc
-/test/docker/loadtest-bin
-/cmd/accumulated/go_build*
-
-# Generated snapshot URL lists
-**/snapshot.urls

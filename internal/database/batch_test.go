@@ -11,13 +11,16 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
 func TestBatchCommit(t *testing.T) {
 	db := OpenInMemory(nil)
+	db.SetObserver(acctesting.NullObserver{})
 	ledgerUrl := protocol.DnUrl().JoinPath(protocol.Ledger)
 
 	// Setup
@@ -53,6 +56,7 @@ func TestBatchCommit(t *testing.T) {
 
 func TestGetBptRootHash(t *testing.T) {
 	db := OpenInMemory(nil)
+	db.SetObserver(execute.NewDatabaseObserver())
 	ledgerUrl := protocol.DnUrl().JoinPath(protocol.Ledger)
 
 	// Setup
@@ -106,6 +110,7 @@ func TestGetBptRootHash(t *testing.T) {
 func TestResolveAccountKey(t *testing.T) {
 	// Setup
 	db := OpenInMemory(nil)
+	db.SetObserver(acctesting.NullObserver{})
 	account := protocol.AccountUrl("foo")
 	require.NoError(t, db.Update(func(batch *Batch) error {
 		return batch.Account(account).Main().Put(&protocol.UnknownAccount{

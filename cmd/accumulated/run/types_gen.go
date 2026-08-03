@@ -180,7 +180,6 @@ type ConfigurationType int64
 const (
 	ConfigurationTypeCoreValidator ConfigurationType = 1
 	ConfigurationTypeDevnet        ConfigurationType = 3
-	ConfigurationTypeFollower      ConfigurationType = 4
 	ConfigurationTypeGateway       ConfigurationType = 2
 )
 
@@ -297,6 +296,7 @@ func (v *ConsensusService) UnmarshalJSON(b []byte) error {
 
 type CoreConsensusApp struct {
 	Partition            *protocol.PartitionInfo
+	EnableHealing        *bool
 	EnableDirectDispatch *bool
 	MaxEnvelopesPerBlock *uint64
 }
@@ -332,6 +332,7 @@ type CoreValidatorConfiguration struct {
 	BvnGenesis           string
 	DnBootstrapPeers     []Multiaddr
 	BvnBootstrapPeers    []Multiaddr
+	EnableHealing        *bool
 	EnableDirectDispatch *bool
 	EnableSnapshots      *bool
 	MaxEnvelopesPerBlock *uint64
@@ -504,42 +505,6 @@ func (v *FaucetService) MarshalJSON() ([]byte, error) {
 // UnmarshalJSON unmarshals the FaucetService from JSON.
 func (v *FaucetService) UnmarshalJSON(b []byte) error {
 	return sFaucetService.UnmarshalJSON(b, v)
-}
-
-type FollowerConfiguration struct {
-	Mode                 CoreValidatorMode
-	Listen               Multiaddr
-	BVN                  string
-	DnGenesis            string
-	BvnGenesis           string
-	DnBootstrapPeers     []Multiaddr
-	BvnBootstrapPeers    []Multiaddr
-	EnableDirectDispatch *bool
-	EnableSnapshots      *bool
-	MaxEnvelopesPerBlock *uint64
-	StorageType          *StorageType
-}
-
-func (FollowerConfiguration) Type() ConfigurationType { return ConfigurationTypeFollower }
-
-// Copy returns a copy of the FollowerConfiguration.
-func (v *FollowerConfiguration) Copy() *FollowerConfiguration {
-	return sFollowerConfiguration.Copy(v)
-}
-
-// EqualFollowerConfiguration returns true if V is equal to U.
-func (v *FollowerConfiguration) Equal(u *FollowerConfiguration) bool {
-	return sFollowerConfiguration.Equal(v, u)
-}
-
-// MarshalBinary marshals the FollowerConfiguration to JSON.
-func (v *FollowerConfiguration) MarshalJSON() ([]byte, error) {
-	return sFollowerConfiguration.MarshalJSON(v)
-}
-
-// UnmarshalJSON unmarshals the FollowerConfiguration from JSON.
-func (v *FollowerConfiguration) UnmarshalJSON(b []byte) error {
-	return sFollowerConfiguration.UnmarshalJSON(b, v)
 }
 
 type GatewayConfiguration struct {

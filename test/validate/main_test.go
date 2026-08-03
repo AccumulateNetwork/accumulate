@@ -69,17 +69,9 @@ func TestValidateAPI(t *testing.T) {
 	s := new(ValidationTestSuite)
 	s.sim, s.faucetSvc = setupSim(t, net)
 
-	// Replace simFaucet with v3impl.Faucet BEFORE ListenAndServe so the P2P
-	// nodes register the correct handler. v3impl.Faucet creates real transactions
-	// that can be queried, unlike simFaucet which just updates the database directly.
-	handler, err := message.NewHandler(message.Faucet{Faucet: s.faucetSvc})
-	require.NoError(t, err)
-	s.sim.SetService(api.ServiceTypeFaucet.AddressForUrl(protocol.AcmeUrl()), handler.Handle)
-
 	// Start listening
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	err = s.sim.ListenAndServe(ctx, simulator.ListenOptions{
+	err := s.sim.ListenAndServe(ctx, simulator.ListenOptions{
 		ListenP2Pv3: true,
 	})
 	require.NoError(t, err)
@@ -100,12 +92,15 @@ func TestValidateAPI(t *testing.T) {
 		cancel()
 	})
 
-	// Wait for the nodes to get connected (both submit and query services)
+	// Run the faucet through the API
+	handler, err := message.NewHandler(message.Faucet{Faucet: s.faucetSvc})
+	require.NoError(t, err)
+	node.RegisterService(api.ServiceTypeFaucet.AddressForUrl(protocol.AcmeUrl()), handler.Handle)
+
+	// Wait for the nodes to get connected
 	waitFor(t, node, net.Id, api.ServiceTypeSubmit.AddressFor(Directory), time.Minute)
-	waitFor(t, node, net.Id, api.ServiceTypeQuery.AddressFor(Directory), time.Minute)
 	for _, b := range net.Bvns {
 		waitFor(t, node, net.Id, api.ServiceTypeSubmit.AddressFor(b.Id), time.Minute)
-		waitFor(t, node, net.Id, api.ServiceTypeQuery.AddressFor(b.Id), time.Minute)
 	}
 
 	// Create a harness that uses the P2P client node for services but steps the
@@ -223,7 +218,7 @@ func setupSim(t *testing.T, net *accumulated.NetworkInit) (*simulator.Simulator,
 		Submitter: sim.Services(),
 		Querier:   sim.Services(),
 		Events:    sim.Services(),
-		Amount:    50000, // 50k ACME per faucet call (enough for 2x Purchase(1e6) at testnet oracle)
+		Amount:    20000, // 20k ACME per faucet call (enough for Purchase(1e6) at mainnet oracle)
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { faucetSvc.Stop() })

@@ -9,6 +9,7 @@ package bsn
 import (
 	"strings"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 )
@@ -35,5 +36,6 @@ func (c *ChangeSet) newPartition(key partitionKey) *database.Batch {
 
 	s := c.kvstore.Begin(record.NewKey(key.ID+"·"), true)
 	b := database.NewBatch(key.ID, s, true, c.logger)
+	b.SetObserver(execute.NewDatabaseObserver())
 	return b
 }

@@ -18,7 +18,7 @@ import (
 
 func (c *CoreValidatorConfiguration) apply(_ *Instance, cfg *Config) error {
 	// Set core validator defaults
-	setDefaultPtr(&c.StorageType, StorageTypeLevelDB)
+	setDefaultPtr(&c.StorageType, StorageTypeBadger)
 
 	// Validate
 	if c.Listen == nil {
@@ -135,6 +135,7 @@ func (p partOpts) apply(cfg *Config) error {
 			BootstrapPeers:   p.BootstrapPeers,
 			MetricsNamespace: p.MetricsNamespace,
 			App: &CoreConsensusApp{
+				EnableHealing:        p.EnableHealing,
 				EnableDirectDispatch: p.EnableDirectDispatch,
 				MaxEnvelopesPerBlock: p.MaxEnvelopesPerBlock,
 				Partition: &protocol.PartitionInfo{

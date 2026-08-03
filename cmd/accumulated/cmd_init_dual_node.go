@@ -126,7 +126,7 @@ func initDualNodeFromPeer(cmd *cobra.Command, args []string) error {
 	args = []string{dnnUrl}
 
 	flagInitNode.GenesisDoc = flagInitDualNode.DnGenesis
-	_, err = initNode(cmd, args, protocol.PartitionTypeDirectory)
+	_, err = initNode(cmd, args)
 	if err != nil {
 		return err
 	}
@@ -134,7 +134,7 @@ func initDualNodeFromPeer(cmd *cobra.Command, args []string) error {
 	args = []string{bvnHost}
 
 	flagInitNode.GenesisDoc = flagInitDualNode.BvnGenesis
-	_, err = initNode(cmd, args, protocol.PartitionTypeBlockValidator)
+	_, err = initNode(cmd, args)
 	if err != nil {
 		return err
 	}
