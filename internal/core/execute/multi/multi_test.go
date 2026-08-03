@@ -27,6 +27,16 @@ func init() {
 }
 
 func TestVersionSwitch(t *testing.T) {
+	// Activating a protocol version usually converges in ~17 steps, but roughly
+	// one run in 30 takes exactly 75, because simulator message ordering is not
+	// deterministic: background conductor tasks run concurrently and
+	// orderMessagesDeterministically is not wired into the block path, so an
+	// activation occasionally lands on the far side of a boundary and waits a
+	// fixed extra span. StepUntil's default 50 sits between the two, which made
+	// this test flaky in CI. The slow path is bounded, not a stall, and occurs
+	// with anchor healing disabled as well.
+	const versionSwitchSteps = 200
+
 	var timestamp uint64
 
 	// Initialize
@@ -207,7 +217,7 @@ func TestVersionSwitch(t *testing.T) {
 			ActivateProtocolVersion(ExecutorVersionV2Vandenberg).
 			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(&timestamp).Signer(sim.SignWithNode(Directory, 0))))
 
-	sim.StepUntil(
+	sim.StepUntilN(versionSwitchSteps,
 		Txn(st.TxID).Succeeds(),
 		VersionIs(ExecutorVersionV2Vandenberg))
 
@@ -228,7 +238,7 @@ func TestVersionSwitch(t *testing.T) {
 			ActivateProtocolVersion(ExecutorVersionV2Jiuquan).
 			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(&timestamp).Signer(sim.SignWithNode(Directory, 0))))
 
-	sim.StepUntil(
+	sim.StepUntilN(versionSwitchSteps,
 		Txn(st.TxID).Succeeds(),
 		VersionIs(ExecutorVersionV2Jiuquan))
 
@@ -245,7 +255,7 @@ func TestVersionSwitch(t *testing.T) {
 			ActivateProtocolVersion(ExecutorVersionVNext).
 			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(&timestamp).Signer(sim.SignWithNode(Directory, 0))))
 
-	sim.StepUntil(
+	sim.StepUntilN(versionSwitchSteps,
 		Txn(st.TxID).Succeeds(),
 		VersionIs(ExecutorVersionVNext))
 }
