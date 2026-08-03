@@ -42,13 +42,13 @@ func healSynth(cmd *cobra.Command, args []string) {
 			srcUrl := protocol.PartitionUrl(src.ID)
 			dstUrl := protocol.PartitionUrl(dst.ID)
 
-			// Pull chains
-			pullSynthDirChains(h)
-			pullSynthSrcChains(h, srcUrl)
-
-			// Pull accounts
-			pullSynthLedger(h, srcUrl)
-			pullSynthLedger(h, dstUrl)
+			// Pull chains and accounts (only needed by the light client)
+			if h.light != nil {
+				pullSynthDirChains(h)
+				pullSynthSrcChains(h, srcUrl)
+				pullSynthLedger(h, srcUrl)
+				pullSynthLedger(h, dstUrl)
+			}
 
 			// Heal
 			healSingleSynth(h, src.ID, dst.ID, num, txid)
@@ -57,9 +57,11 @@ func healSynth(cmd *cobra.Command, args []string) {
 			srcUrl := protocol.PartitionUrl(src.ID)
 			dstUrl := protocol.PartitionUrl(dst.ID)
 
-			// Pull chains
-			pullSynthDirChains(h)
-			pullSynthSrcChains(h, srcUrl)
+			// Pull chains (only needed by the light client)
+			if h.light != nil {
+				pullSynthDirChains(h)
+				pullSynthSrcChains(h, srcUrl)
+			}
 
 			// Pull accounts
 		pullAgain:
@@ -94,7 +96,7 @@ retry:
 	err := h.HealSynthetic(h.ctx, healing.HealSyntheticArgs{
 		Client:    h.C2.ForAddress(nil),
 		Querier:   h.C2,
-		Submitter: h.C2,
+		Submitter: h.C1,
 		NetInfo:   h.net,
 		Light:     h.light,
 		Pretend:   pretend,
@@ -157,6 +159,13 @@ func pullSynthSrcChains(h *healer, part *url.URL) {
 }
 
 func pullSynthLedger(h *healer, part *url.URL) *protocol.SyntheticLedger {
+	if h.light == nil {
+		var ledger *protocol.SyntheticLedger
+		_, err := api.Querier2{Querier: h.C2}.QueryAccountAs(h.ctx, part.JoinPath(protocol.Synthetic), nil, &ledger)
+		check(err)
+		return ledger
+	}
+
 	check(h.light.PullAccountWithChains(h.ctx, part.JoinPath(protocol.Synthetic), func(cr *api.ChainRecord) bool { return false }))
 
 	batch := h.light.OpenDB(false)
