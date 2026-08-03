@@ -79,7 +79,9 @@ func (h *Healer) HealSynthetic(ctx context.Context, args HealSyntheticArgs, si S
 
 	// Build the receipt
 	var receipt *merkle.Receipt
-	if args.NetInfo.Status.ExecutorVersion.V2VandenbergEnabled() {
+	if args.Light == nil {
+		receipt, err = h.buildSynthReceiptViaAPI(ctx, args, si, r.Sequence.Hash())
+	} else if args.NetInfo.Status.ExecutorVersion.V2VandenbergEnabled() {
 		receipt, err = h.buildSynthReceiptV2(ctx, args, si)
 	} else {
 		receipt, err = h.buildSynthReceiptV1(ctx, args, si)
@@ -229,6 +231,56 @@ func waitFor(ctx context.Context, Q api.Querier, id *url.TxID) error {
 		time.Sleep(time.Second / 2)
 	}
 	return ErrRetry
+}
+
+// buildSynthReceiptViaAPI builds the synthetic receipt from server-side
+// receipt queries instead of a light-client database. The source partition
+// provides a receipt from the synthetic main chain entry to its root anchor,
+// and the DN provides a receipt from that anchor to its root chain. This
+// avoids pulling entire chains, which can take days on a large network.
+func (h *Healer) buildSynthReceiptViaAPI(ctx context.Context, args HealSyntheticArgs, si SequencedInfo, seqHash [32]byte) (*merkle.Receipt, error) {
+	Q := api.Querier2{Querier: args.Querier}
+	uSrcSynth := protocol.PartitionUrl(si.Source).JoinPath(protocol.Synthetic)
+
+	// Build a receipt from the synthetic main chain entry to the source
+	// partition's root anchor
+	r, err := Q.QueryChainEntry(ctx, uSrcSynth, &api.ChainQuery{
+		Name:           "main",
+		Entry:          seqHash[:],
+		IncludeReceipt: &api.ReceiptOptions{ForAny: true},
+	})
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("query %v main chain entry %x: %w", uSrcSynth, seqHash, err)
+	}
+	if r.Receipt == nil {
+		return nil, errors.InternalError.WithFormat("no receipt for %v main chain entry %x", uSrcSynth, seqHash)
+	}
+	receipt := &r.Receipt.Receipt
+
+	// If the source is the DN we don't need to do anything else
+	if strings.EqualFold(si.Source, protocol.Directory) {
+		return receipt, nil
+	}
+
+	// Extend the receipt through the DN's anchor chain to its root chain
+	sr, err := Q.SearchForAnchor(ctx, protocol.DnUrl().JoinPath(protocol.AnchorPool), &api.AnchorSearchQuery{
+		Anchor:         receipt.Anchor,
+		IncludeReceipt: &api.ReceiptOptions{ForAny: true},
+	})
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("search DN for anchor %x: %w", receipt.Anchor, err)
+	}
+	for _, ar := range sr.Records {
+		if ar.Receipt == nil {
+			continue
+		}
+		out, err := receipt.Combine(&ar.Receipt.Receipt)
+		if err != nil {
+			continue
+		}
+		return out, nil
+	}
+	return nil, errors.UnknownError.WithFormat("unable to extend receipt for %x to the DN root chain", seqHash)
 }
 
 func (h *Healer) buildSynthReceiptV1(_ context.Context, args HealSyntheticArgs, si SequencedInfo) (*merkle.Receipt, error) {

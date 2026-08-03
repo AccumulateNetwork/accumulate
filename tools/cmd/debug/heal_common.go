@@ -146,7 +146,7 @@ func (h *healer) setup(ctx context.Context, network string) {
 	h.router, err = apiutil.InitRouter(apiutil.RouterOptions{
 		Context: ctx,
 		Node:    node,
-		Network: network,
+		Network: ni.Network,
 	})
 	check(err)
 
