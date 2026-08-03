@@ -41,12 +41,9 @@ var _ Beginner = (*Database)(nil)
 var _ Beginner = (*Batch)(nil)
 
 // SetObserver sets the database observer.
-//
-// Deprecated: The production observer is now the default. This method should
-// only be used for testing with specialized observers.
 func (b *Batch) SetObserver(observer Observer) {
 	if observer == nil {
-		panic("SetObserver called with nil")
+		observer = unsetObserver{}
 	}
 	b.observer = observer
 }
@@ -64,7 +61,6 @@ func NewBatch(id string, store keyvalue.Store, writable bool, logger log.Logger)
 	b := new(Batch)
 	b.id = id
 	b.writable = writable
-	b.observer = NewDatabaseObserver()
 	b.logger.Set(logger)
 	b.store = keyvalue.RecordStore{Store: store}
 	return b

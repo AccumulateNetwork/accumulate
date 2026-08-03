@@ -11,7 +11,6 @@ import (
 	"sync/atomic"
 
 	"github.com/cometbft/cometbft/libs/log"
-	coretypes "github.com/cometbft/cometbft/rpc/core/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -23,17 +22,11 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// NodeStatusClient is the interface for querying node status from CometBFT.
-type NodeStatusClient interface {
-	Status(context.Context) (*coretypes.ResultStatus, error)
-}
-
 type NetworkService struct {
-	logger     logging.OptionalLogger
-	values     atomic.Pointer[core.GlobalValues]
-	database   database.Viewer
-	partition  string
-	nodeStatus NodeStatusClient
+	logger    logging.OptionalLogger
+	values    atomic.Pointer[core.GlobalValues]
+	database  database.Viewer
+	partition string
 }
 
 var _ api.NetworkService = (*NetworkService)(nil)
@@ -43,9 +36,6 @@ type NetworkServiceParams struct {
 	EventBus  *events.Bus
 	Partition string
 	Database  database.Viewer
-	// NodeStatus is optional; if provided, NetworkStatus will include
-	// staleness detection fields (LastBlockTime and CatchingUp).
-	NodeStatus NodeStatusClient
 }
 
 func NewNetworkService(params NetworkServiceParams) *NetworkService {
@@ -53,7 +43,6 @@ func NewNetworkService(params NetworkServiceParams) *NetworkService {
 	s.logger.L = params.Logger
 	s.database = params.Database
 	s.partition = params.Partition
-	s.nodeStatus = params.NodeStatus
 	events.SubscribeAsync(params.EventBus, func(e events.WillChangeGlobals) {
 		s.values.Store(e.New)
 	})
@@ -102,19 +91,6 @@ func (s *NetworkService) NetworkStatus(ctx context.Context, _ api.NetworkStatusO
 	})
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
-	}
-
-	// If a node status client is available, populate staleness detection fields
-	if s.nodeStatus != nil {
-		status, err := s.nodeStatus.Status(ctx)
-		if err != nil {
-			s.logger.Error("Failed to get node status for staleness detection", "error", err)
-		} else {
-			t := status.SyncInfo.LatestBlockTime
-			res.LastBlockTime = &t
-			catchingUp := status.SyncInfo.CatchingUp
-			res.CatchingUp = &catchingUp
-		}
 	}
 
 	return res, nil

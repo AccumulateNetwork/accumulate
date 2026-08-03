@@ -8,13 +8,13 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"log/slog"
 	"net/http"
 	_ "net/http/pprof" //nolint:gosec
 	"os"
 	"os/user"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
@@ -55,7 +55,6 @@ var flag = struct {
 	PeerDatabase  string
 	Pprof         string
 	ExtraServices string
-	Peers_File    string
 }{
 	LogLevel: []*LoggingRule{{
 		Level: slog.LevelInfo,
@@ -90,7 +89,6 @@ func init() {
 	cmd.Flags().BoolVar(&jsonrpc2.DebugMethodFunc, "debug", false, "Print out a stack trace if an API method fails")
 	cmd.Flags().StringVar(&flag.Pprof, "pprof", "", "Address to run net/http/pprof on")
 	cmd.Flags().StringVar(&flag.ExtraServices, "extra-services", "", "A file containing additional services, formatted the same as accumulate.toml")
-	cmd.Flags().StringVar(&flag.Peers_File, "peers", "", "JSON file containing the HTTP peer map. Format: [{\"id\":\"<peer-id>\",\"addresses\":[\"<multiaddr>\",...],\"partitions\":[\"<partition>\",...]},...]. Reloaded on process restart; accman is expected to manage this file.")
 
 	cmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
 		if !cmd.Flag("prom-listen").Changed {
@@ -160,8 +158,25 @@ func run(cmd *cobra.Command, args []string) {
 		},
 	}
 
-	if flag.Peers_File != "" {
-		http.PeerMap = loadPeerMap(flag.Peers_File)
+	if strings.EqualFold(args[0], "MainNet") {
+		// Hard code the peers used for the MainNet as a hack for stability
+		http.PeerMap = []*HttpPeerMapEntry{
+			{
+				ID:         mustParsePeer("12D3KooWAgrBYpWEXRViTnToNmpCoC3dvHdmR6m1FmyKjDn1NYpj"),
+				Addresses:  []multiaddr.Multiaddr{mustParseMulti("/dns/apollo-mainnet.accumulate.defidevs.io/tcp/16593")},
+				Partitions: []string{"Apollo", "Directory"},
+			},
+			{
+				ID:         mustParsePeer("12D3KooWDqFDwjHEog1bNbxai2dKSaR1aFvq2LAZ2jivSohgoSc7"),
+				Addresses:  []multiaddr.Multiaddr{mustParseMulti("/dns/yutu-mainnet.accumulate.defidevs.io/tcp/16593")},
+				Partitions: []string{"Yutu", "Directory"},
+			},
+			{
+				ID:         mustParsePeer("12D3KooWHzjkoeAqe7L55tAaepCbMbhvNu9v52ayZNVQobdEE1RL"),
+				Addresses:  []multiaddr.Multiaddr{mustParseMulti("/dns/chandrayaan-mainnet.accumulate.defidevs.io/tcp/16593")},
+				Partitions: []string{"Chandrayaan", "Directory"},
+			},
+		}
 	}
 
 	if flag.ExtraServices != "" {
@@ -192,30 +207,4 @@ func mustParseMulti(s string) multiaddr.Multiaddr {
 		panic(err)
 	}
 	return addr
-}
-
-type peerMapEntryJSON struct {
-	ID         string   `json:"id"`
-	Addresses  []string `json:"addresses"`
-	Partitions []string `json:"partitions"`
-}
-
-func loadPeerMap(path string) []*HttpPeerMapEntry {
-	data, err := os.ReadFile(path)
-	Check(err)
-	var raw []peerMapEntryJSON
-	Check(json.Unmarshal(data, &raw))
-	out := make([]*HttpPeerMapEntry, len(raw))
-	for i, e := range raw {
-		addrs := make([]multiaddr.Multiaddr, len(e.Addresses))
-		for j, a := range e.Addresses {
-			addrs[j] = mustParseMulti(a)
-		}
-		out[i] = &HttpPeerMapEntry{
-			ID:         mustParsePeer(e.ID),
-			Addresses:  addrs,
-			Partitions: e.Partitions,
-		}
-	}
-	return out
 }

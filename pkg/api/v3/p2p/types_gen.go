@@ -84,9 +84,7 @@ func (v *serviceRegisteredEvent) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := encoding.GetBuffer()
-	defer encoding.PutBuffer(buffer)
-
+	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
@@ -105,11 +103,7 @@ func (v *serviceRegisteredEvent) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-
-	// Return a copy since the buffer will be reused
-	result := make([]byte, buffer.Len())
-	copy(result, buffer.Bytes())
-	return result, nil
+	return buffer.Bytes(), nil
 }
 
 func (v *serviceRegisteredEvent) IsValid() error {

@@ -12,19 +12,17 @@ import (
 	"io"
 )
 
-func ChunksBySize(file io.Reader, size uint64) ([]*ChunkMetadata, [32]byte, error) {
-	fileHash := sha256.New()
+func ChunksBySize(file io.Reader, size uint64) ([]*ChunkMetadata, error) {
 	buf := make([]byte, size)
 	var chunks []*ChunkMetadata
 	for i := 0; ; i++ {
 		n, err := readAll(file, buf)
 		if err != nil {
-			return nil, [32]byte{}, err
+			return nil, err
 		}
 		if n == 0 {
-			break
+			return chunks, nil
 		}
-		fileHash.Write(buf)
 		chunks = append(chunks, &ChunkMetadata{
 			Index:  uint64(i),
 			Size:   uint64(n),
@@ -32,8 +30,6 @@ func ChunksBySize(file io.Reader, size uint64) ([]*ChunkMetadata, [32]byte, erro
 			Hash:   sha256.Sum256(buf[:n]),
 		})
 	}
-
-	return chunks, [32]byte(fileHash.Sum(nil)), nil
 }
 
 func readAll(file io.Reader, buf []byte) (int, error) {

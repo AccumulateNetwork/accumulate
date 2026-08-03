@@ -1,36 +1,5 @@
 # Changelog
 
-## 1.4.4.2
-
-- Healing (#4064)
-  - In-node receiver-pull synthetic healing: a stalled inbound stream pulls the
-    missing message from the source partition and the pending tail drains.
-    Jittered (10s) check-then-fire keeps N validators to ~one pull. Healed
-    `MessageForTransaction` synthetics bundle the companion transaction (#4066).
-  - Anchor healing is config-exposed (`enable-anchor-healing`; safe and
-    sufficient on single-validator networks).
-  - Both default **off**; enable per node with `enable-synthetic-healing` /
-    `enable-anchor-healing` in the `coreValidator` configuration.
-  - Observability: `ConsensusStatus.syntheticHeals`/`anchorHeals` and the
-    `accumulate_crosschain_heals_total` metric (counts heal attempts).
-- Deployment fixes (#4065)
-  - `DiscoveryMode` is passed through to the p2p node; with
-    `discovery-mode = "auto-server"` service discovery works on private
-    multi-node networks.
-  - `init network` emits bootstrap peers at the AccumulateP2P port (+2),
-    matching the CometBFT address conversion — multi-node networks form
-    consensus (previously dialed peers two ports low).
-- Build
-  - Docker image builds again: `golang:1.25` base (go.mod requires 1.24,
-    dlv@latest requires 1.25); image includes `accumulated-http`.
-- Testing
-  - Self-contained docker deployment test (`test/docker/synth-heal`): per-node
-    containers + own bootstrap, 2 validators per partition, proves wedge →
-    receiver-pull heal on real transport. `ACC_DEBUG_DROP_SYNTHETIC` debug
-    hook (no-op unless set) deterministically drops synthetics.
-  - e2e healing tests incl. red/green companion-transaction case.
-
-
 ## 1.4
 
 - Protocol

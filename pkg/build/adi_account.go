@@ -15,13 +15,13 @@ import (
 	"io"
 	"math/big"
 
+	altcrypto "gitlab.com/accumulatenetwork/accumulate/pkg/crypto"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
-	altcrypto "gitlab.com/accumulatenetwork/accumulate/pkg/crypto"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/address"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"golang.org/x/crypto/hkdf"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 type IdentityBuilder struct {

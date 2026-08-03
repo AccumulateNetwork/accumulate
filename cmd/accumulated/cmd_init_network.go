@@ -32,6 +32,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/address"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/test/testing"
 	"gopkg.in/yaml.v3"
 )
 
@@ -152,14 +153,8 @@ func initNetwork(cmd *cobra.Command, args []string) {
 			cfg.Configurations = []run.Configuration{cvc}
 			cvc.Listen = node.Listen().Scheme("tcp").Directory().TendermintP2P().Multiaddr()
 			cvc.BVN = bvn.Id
-			// Emit bootstrap peers with the AccumulateP2P port (+2): the
-			// consensus service's cmtPeerAddress derives the CometBFT peer
-			// address by subtracting 2 (the libp2p convention, e.g. 16593 ->
-			// 16591). Emitting TendermintP2P (+0) addresses here made every
-			// generated config dial peers two ports low, so consensus never
-			// formed on multi-node networks (#4065).
-			cvc.BvnBootstrapPeers = bvn.Peers(node).Scheme("tcp").BlockValidator().AccumulateP2P().WithKey().Multiaddr()
-			cvc.DnBootstrapPeers = network.Peers(node).Scheme("tcp").Directory().AccumulateP2P().WithKey().Multiaddr()
+			cvc.BvnBootstrapPeers = bvn.Peers(node).Scheme("tcp").BlockValidator().TendermintP2P().WithKey().Multiaddr()
+			cvc.DnBootstrapPeers = network.Peers(node).Scheme("tcp").Directory().TendermintP2P().WithKey().Multiaddr()
 
 			// Configure the validator key
 			addr = address.FromED25519PrivateKey(node.PrivValKey)
@@ -201,6 +196,7 @@ func prepareGenesis(cmd *cobra.Command, args []string) {
 	defer tick.Stop()
 
 	db := coredb.OpenInMemory(nil)
+	db.SetObserver(testing.NullObserver{})
 	for _, path := range args[1:] {
 		fmt.Println("Processing", path)
 		file, err := os.Open(path)

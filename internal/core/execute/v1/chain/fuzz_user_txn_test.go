@@ -465,6 +465,7 @@ func FuzzUpdateKey(f *testing.F) {
 		require.NoError(t, err)
 
 		db := database.OpenInMemory(nil)
+		db.SetObserver(acctesting.NullObserver{})
 		Update(t, db, func(batch *database.Batch) {
 			_, err := batch.Transaction(txn.GetHash()).AddSignature(0, sig)
 			require.NoError(t, err)
@@ -506,6 +507,7 @@ func unpackTransaction[PT bodyPtr[T], T any](t *testing.T, dataHeader, dataBody 
 
 func validateTransaction(t *testing.T, txn *Transaction, executor chain.TransactionExecutor, requireSuccess bool, accounts ...Account) {
 	db := database.OpenInMemory(nil)
+	db.SetObserver(acctesting.NullObserver{})
 	validateTransactionDb(t, db, txn, executor, requireSuccess, accounts...)
 }
 

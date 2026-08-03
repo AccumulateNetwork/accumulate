@@ -13,15 +13,10 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
-	"net"
 	"os"
 	"path/filepath"
-	"reflect"
-	"strconv"
 	"strings"
-	"time"
 
-	dbm "github.com/cometbft/cometbft-db"
 	types "github.com/cometbft/cometbft/abci/types"
 	tmcfg "github.com/cometbft/cometbft/config"
 	tmcrypto "github.com/cometbft/cometbft/crypto"
@@ -77,23 +72,12 @@ var (
 )
 
 type tendermint struct {
-	config       *tmcfg.Config
-	privVal      *tmpv.FilePV
-	nodeKey      *tmp2p.NodeKey
-	logger       log.Logger
-	eventBus     *events.Bus
-	globals      chan *network.GlobalValues
-	snapshotPath string // Path to genesis snapshot for ABCI InitChain
-	heals        *crosschain.HealCounters
-}
-
-// healCounters lazily creates the heal counters shared between the conductor
-// and the consensus API service.
-func (d *tendermint) healCounters() *crosschain.HealCounters {
-	if d.heals == nil {
-		d.heals = new(crosschain.HealCounters)
-	}
-	return d.heals
+	config   *tmcfg.Config
+	privVal  *tmpv.FilePV
+	nodeKey  *tmp2p.NodeKey
+	logger   log.Logger
+	eventBus *events.Bus
+	globals  chan *network.GlobalValues
 }
 
 var _ prestarter = (*ConsensusService)(nil)
@@ -124,9 +108,8 @@ func (c *ConsensusService) prestart(inst *Instance) error {
 }
 
 func (c *ConsensusService) start(inst *Instance) error {
-	// Note: MetricsNamespace is intentionally NOT set by default.
-	// If MetricsNamespace is empty, Prometheus metrics will be disabled.
-	// This prevents duplicate registration panics when running multiple tests.
+	// Defaults
+	setDefaultVal(&c.MetricsNamespace, fmt.Sprintf("consensus_%s", c.App.partition().ID))
 
 	d := new(tendermint)
 	d.logger = (*logging.Slogger)(inst.logger)
@@ -136,15 +119,6 @@ func (c *ConsensusService) start(inst *Instance) error {
 		slog.ErrorContext(inst.context, "Shutting down due to a fatal error", "error", e.Err)
 		inst.shutdown()
 	})
-
-	// Create and register halt controller for this partition
-	haltController := NewHaltController(
-		c.App.partition().ID,
-		inst.shutdown,
-		inst.logger.With("module", "halt", "partition", c.App.partition().ID),
-	)
-	events.SubscribeSync(d.eventBus, haltController.OnDidCommitBlock)
-	inst.RegisterHaltController(haltController)
 
 	// Make the node directories
 	err := os.MkdirAll(inst.path(c.NodeDir, "config"), 0700)
@@ -159,8 +133,6 @@ func (c *ConsensusService) start(inst *Instance) error {
 	// Load CometBFT config
 	d.config = tmcfg.DefaultConfig()
 	d.config.SetRoot(inst.path(c.NodeDir))
-	// Disable Prometheus by default to prevent duplicate registration panics in tests
-	d.config.Instrumentation.Prometheus = false
 	_, err = os.Stat(inst.path(c.NodeDir, "config", "tendermint.toml"))
 	switch {
 	case err == nil:
@@ -179,55 +151,9 @@ func (c *ConsensusService) start(inst *Instance) error {
 			return err
 		}
 
-		// Only enable Prometheus if explicitly configured with a namespace
-		if c.MetricsNamespace != "" && d.config.Instrumentation.Prometheus {
+		if d.config.Instrumentation.Prometheus {
 			d.config.Instrumentation.Namespace = c.MetricsNamespace
-		} else {
-			d.config.Instrumentation.Prometheus = false
 		}
-
-		// Process bootstrap peers from configuration if provided
-		if len(c.BootstrapPeers) > 0 {
-			inst.logger.Info("Updating persistent peers from bootstrap configuration",
-				"count", len(c.BootstrapPeers))
-
-			d.config.P2P.PersistentPeers = ""
-			for i, peer := range c.BootstrapPeers {
-				id, err := cmtPeerAddress(peer)
-				if err != nil {
-					return errors.UnknownError.WithFormat("bootstrap peer %d: %w", i, err)
-				}
-				if i > 0 {
-					d.config.P2P.PersistentPeers += ","
-				}
-				d.config.P2P.PersistentPeers += id
-			}
-
-			inst.logger.Info("Persistent peers configured",
-				"peers", d.config.P2P.PersistentPeers)
-		}
-
-		// P2P connection optimizations for stable block sync
-		// Always apply these optimizations for better sync performance
-		d.config.P2P.MaxNumOutboundPeers = 20
-		if d.config.P2P.PersistentPeers != "" {
-			// Extract node IDs from persistent peers (format: id@ip:port,id@ip:port,...)
-			// UnconditionalPeerIDs only takes node IDs, not full addresses
-			var ids []string
-			for _, peer := range strings.Split(d.config.P2P.PersistentPeers, ",") {
-				if idx := strings.Index(peer, "@"); idx > 0 {
-					ids = append(ids, peer[:idx])
-				}
-			}
-			d.config.P2P.UnconditionalPeerIDs = strings.Join(ids, ",")
-		}
-		d.config.P2P.SendRate = 20480000
-		d.config.P2P.RecvRate = 20480000
-		d.config.P2P.FlushThrottleTimeout = 50 * time.Millisecond
-		d.config.P2P.PersistentPeersMaxDialPeriod = 30 * time.Second
-
-		// Write updated config back to file
-		tmcfg.WriteConfigFile(inst.path(c.NodeDir, "config", "tendermint.toml"), d.config)
 
 	case errors.Is(err, fs.ErrNotExist):
 		d.config.NodeKey = ""
@@ -235,13 +161,9 @@ func (c *ConsensusService) start(inst *Instance) error {
 		d.config.Genesis = filepath.Join("..", c.Genesis)
 		d.config.Mempool.MaxTxBytes = 4194304
 
-		// Only enable Prometheus metrics if a metrics namespace is explicitly configured
-		// This prevents duplicate registration panics when running multiple tests
-		if c.MetricsNamespace != "" {
-			d.config.Instrumentation.Prometheus = true
-			d.config.Instrumentation.PrometheusListenAddr = listenHostPort(c.Listen, defaultHost, portMetrics)
-			d.config.Instrumentation.Namespace = c.MetricsNamespace
-		}
+		d.config.Instrumentation.Prometheus = true
+		d.config.Instrumentation.PrometheusListenAddr = listenHostPort(c.Listen, defaultHost, portMetrics)
+		d.config.Instrumentation.Namespace = c.MetricsNamespace
 
 		d.config.P2P.ListenAddress = listenUrl(c.Listen, defaultHost, useTCP{}, portCmtP2P)
 		d.config.RPC.ListenAddress = listenUrl(c.Listen, defaultHost, useTCP{}, portCmtRPC)
@@ -265,48 +187,10 @@ func (c *ConsensusService) start(inst *Instance) error {
 		// Set whether unroutable addresses are allowed
 		d.config.P2P.AddrBookStrict = !isPrivate(c.Listen)
 
-		// P2P connection optimizations for stable block sync
-		// Increase outbound peers for better block sync source diversity
-		d.config.P2P.MaxNumOutboundPeers = 20 // default 10
-
-		// Unconditional peers - never disconnect from bootstrap peers
-		// This prevents the disconnect/reconnect cycle during sync
-		// Extract node IDs from persistent peers (format: id@ip:port,id@ip:port,...)
-		if d.config.P2P.PersistentPeers != "" {
-			var ids []string
-			for _, peer := range strings.Split(d.config.P2P.PersistentPeers, ",") {
-				if idx := strings.Index(peer, "@"); idx > 0 {
-					ids = append(ids, peer[:idx])
-				}
-			}
-			d.config.P2P.UnconditionalPeerIDs = strings.Join(ids, ",")
-		}
-
-		// Increase bandwidth limits for fast sync (default 5MB/s)
-		d.config.P2P.SendRate = 20480000 // 20 MB/s
-		d.config.P2P.RecvRate = 20480000 // 20 MB/s
-
-		// Reduce flush throttle for more responsive connections
-		d.config.P2P.FlushThrottleTimeout = 50 * time.Millisecond // default 100ms
-
-		// Longer dial period for persistent peers to reduce reconnection churn
-		d.config.P2P.PersistentPeersMaxDialPeriod = 30 * time.Second // default 0 (exponential)
-
 		tmcfg.WriteConfigFile(inst.path(c.NodeDir, "config", "tendermint.toml"), d.config)
 
 	default:
 		return err
-	}
-
-	// Advertise this node's real external address to CometBFT peers. CometBFT
-	// otherwise leaves ExternalAddress empty and auto-detects, which on
-	// NAT'd/multi-homed hosts resolves to the wrong IP; PEX then propagates
-	// that wrong address across the network and every node collapses to a
-	// single peer (the long-standing "nodes only ever get one peer" problem).
-	// Derived fresh from the operator-configured [p2p] external on every start
-	// so it always reflects current config rather than a stale tendermint.toml.
-	if ext := c.cometExternalAddress(inst); ext != "" {
-		d.config.P2P.ExternalAddress = ext
 	}
 
 	err = d.config.ValidateBasic()
@@ -325,11 +209,6 @@ func (c *ConsensusService) start(inst *Instance) error {
 		return errors.UnknownError.WithFormat("load node key: %w", err)
 	}
 
-	// Set the snapshot path for ABCI InitChain (only for snapshot files, not JSON)
-	if filepath.Ext(c.Genesis) != ".json" {
-		d.snapshotPath = inst.path(c.Genesis)
-	}
-
 	// Start the application
 	app, err := c.App.start(inst, d)
 	if err != nil {
@@ -343,7 +222,7 @@ func (c *ConsensusService) start(inst *Instance) error {
 		d.nodeKey,
 		proxy.NewLocalClientCreator(app),
 		c.genesisDocProvider(inst),
-		clearCachedGenesisDBProvider(d.logger),
+		tmcfg.DefaultDBProvider,
 		tmnode.DefaultMetricsProvider(d.config.Instrumentation),
 		d.logger,
 	)
@@ -374,52 +253,16 @@ func convertNodeKey(inst *Instance) (*tmp2p.NodeKey, error) {
 	var key PrivateKey
 	if inst.config.P2P != nil {
 		key = inst.config.P2P.Key
-		inst.logger.Info("P2P config found", "has_key", key != nil, "key_type", fmt.Sprintf("%T", key))
-
-		// Log the key details for debugging
-		if key != nil {
-			switch k := key.(type) {
-			case *RawPrivateKey:
-				inst.logger.Info("P2P key is RawPrivateKey", "address", k.Address)
-			case *CometNodeKeyFile:
-				inst.logger.Info("P2P key is CometNodeKeyFile", "path", k.Path)
-			case *TransientPrivateKey:
-				inst.logger.Info("P2P key is TransientPrivateKey")
-			case *PrivateKeySeed:
-				inst.logger.Info("P2P key is PrivateKeySeed")
-			default:
-				inst.logger.Info("P2P key is unknown type")
-			}
-		}
-	} else {
-		inst.logger.Info("No P2P config - will fail")
 	}
-
-	key2, err := convertKeyToComet(inst, key, true) // Allow transient keys for P2P
+	key2, err := convertKeyToComet(inst, key)
 	if err != nil {
-		inst.logger.Error("Failed to convert key to CometBFT format", "error", err)
 		return nil, err
 	}
-
-	nodeKey := &tmp2p.NodeKey{PrivKey: key2}
-	nodeID := nodeKey.ID()
-	inst.logger.Info("Node P2P identity generated",
-		"node_id", string(nodeID),
-		"node_id_short", string(nodeID)[:8]+"...",
-		"pubkey", fmt.Sprintf("%X", nodeKey.PubKey().Bytes()))
-
-	return nodeKey, nil
+	return &tmp2p.NodeKey{PrivKey: key2}, nil
 }
 
 func (c *ConsensusService) loadPrivVal(inst *Instance, config *tmcfg.Config, key PrivateKey) (*tmpv.FilePV, error) {
-	// Allow transient keys for followers (voting_power=0 since key not in genesis)
-	allowTransient := false
-	if _, ok := key.(*TransientPrivateKey); ok {
-		inst.logger.Info("Using TransientPrivateKey for follower mode")
-		allowTransient = true
-	}
-
-	key2, err := convertKeyToComet(inst, key, allowTransient)
+	key2, err := convertKeyToComet(inst, key)
 	if err != nil {
 		return nil, err
 	}
@@ -444,16 +287,12 @@ func (c *ConsensusService) loadPrivVal(inst *Instance, config *tmcfg.Config, key
 	return pv, err
 }
 
-func convertKeyToComet(inst *Instance, key PrivateKey, allowTransient bool) (tmcrypto.PrivKey, error) {
+func convertKeyToComet(inst *Instance, key PrivateKey) (tmcrypto.PrivKey, error) {
 	switch key.(type) {
 	case nil:
 		return nil, errors.BadRequest.With("key is nil")
 	case *TransientPrivateKey:
-		if !allowTransient {
-			return nil, errors.BadRequest.With("key is transient")
-		}
-		// For P2P keys, transient keys are allowed (generates new identity each startup)
-		inst.logger.Info("Allowing transient key for P2P (follower mode)")
+		return nil, errors.BadRequest.With("key is transient")
 	}
 
 	addr, err := key.get(inst)
@@ -494,27 +333,6 @@ func (c *ConsensusService) genesisDocProvider(inst *Instance) tmnode.GenesisDocP
 	}
 }
 
-// cometExternalAddress returns the CometBFT external (advertised) P2P address
-// for this consensus node: the host from the operator-configured [p2p] external
-// multiaddr combined with this partition's CometBFT P2P port (the same port
-// ListenAddress uses). Returns "" when no external address is configured, in
-// which case CometBFT keeps its default auto-detection behaviour.
-func (c *ConsensusService) cometExternalAddress(inst *Instance) string {
-	if inst.config.P2P == nil || inst.config.P2P.External == nil {
-		return ""
-	}
-	_, host, _, _, err := decomposeListen(inst.config.P2P.External)
-	if err != nil || host == "" {
-		return ""
-	}
-	// Reuse the exact port logic of ListenAddress, swapping in the external host.
-	_, _, port, _, err := decomposeListen(listen(c.Listen, defaultHost, useTCP{}, portCmtP2P))
-	if err != nil || port == "" {
-		return ""
-	}
-	return net.JoinHostPort(host, port)
-}
-
 func cmtPeerAddress(addr multiaddr.Multiaddr) (string, error) {
 	var pub *multihash.DecodedMultihash
 	var host, port string
@@ -551,17 +369,6 @@ func cmtPeerAddress(addr multiaddr.Multiaddr) (string, error) {
 		return "", errors.BadRequest.With("missing port")
 	}
 
-	// Convert libp2p port to CometBFT P2P port
-	// libp2p uses port offset +2 (16593, 16693), CometBFT uses offset +0 (16591, 16691)
-	portNum, err := strconv.Atoi(port)
-	if err != nil {
-		return "", errors.BadRequest.WithFormat("invalid port %q: %w", port, err)
-	}
-	cmtPort := portNum - 2
-	if cmtPort < 1 || cmtPort > 65535 {
-		return "", errors.BadRequest.WithFormat("adjusted port %d out of valid range", cmtPort)
-	}
-
 	var hash []byte
 	switch pub.Code {
 	case multihash.IDENTITY:
@@ -579,7 +386,7 @@ func cmtPeerAddress(addr multiaddr.Multiaddr) (string, error) {
 	default:
 		return "", errors.BadRequest.WithFormat("unsupported multihash type %v", pub.Name)
 	}
-	return tmp2p.IDAddressString(tmp2p.ID(hex.EncodeToString(hash)), fmt.Sprintf("%s:%d", host, cmtPort)), nil
+	return tmp2p.IDAddressString(tmp2p.ID(hex.EncodeToString(hash)), fmt.Sprintf("%s:%s", host, port)), nil
 }
 
 func (c *CoreConsensusApp) partition() *protocol.PartitionInfo { return c.Partition }
@@ -606,6 +413,7 @@ func (c *CoreConsensusApp) prestart(inst *Instance) error {
 }
 
 func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Application, error) {
+	setDefaultPtr(&c.EnableHealing, false)
 	setDefaultPtr(&c.EnableDirectDispatch, true)
 	setDefaultPtr(&c.MaxEnvelopesPerBlock, 100)
 
@@ -631,13 +439,14 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 	}}
 	db := database.New(store, d.logger)
 	execOpts := execute.Options{
-		Logger:    d.logger.With("module", "executor"),
-		Database:  db,
-		Key:       d.privVal.Key.PrivKey.Bytes(),
-		Router:    router,
-		EventBus:  d.eventBus,
-		Sequencer: client.Private(),
-		Querier:   client,
+		Logger:        d.logger.With("module", "executor"),
+		Database:      db,
+		Key:           d.privVal.Key.PrivKey.Bytes(),
+		Router:        router,
+		EventBus:      d.eventBus,
+		Sequencer:     client.Private(),
+		Querier:       client,
+		EnableHealing: *c.EnableHealing,
 		Describe: execute.DescribeShim{
 			NetworkType: c.Partition.Type,
 			PartitionId: c.Partition.ID,
@@ -690,33 +499,14 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 		Database:     execOpts.Database,
 		Querier:      v3.Querier2{Querier: client},
 		Dispatcher:   execOpts.NewDispatcher(),
-		Sequencer:    client.Private(),
 		RunTask:      execOpts.BackgroundTaskLauncher,
 
-		// Shared with the consensus service, which reports the counts in
-		// ConsensusStatus.
-		Heals: d.healCounters(),
+		// TODO Fix the flooding issues and enable this by default
+		EnableAnchorHealing: Ptr(false),
 	}
 	err = conductor.Start(d.eventBus)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("start conductor: %v", err)
-	}
-
-	// DEBUG/TEST ONLY: reproduce a wedged synthetic stream by dropping the first
-	// N synthetics to a partition. Wraps only the executor's dispatcher (created
-	// below) — the conductor's dispatcher is already built above, so heal
-	// re-submissions are never dropped. No-op unless ACC_DEBUG_DROP_SYNTHETIC is
-	// set. See #4064.
-	synthDrop := parseDropSyntheticSpec(os.Getenv("ACC_DEBUG_DROP_SYNTHETIC"))
-	anchorDrop := parseDropSyntheticSpec(os.Getenv("ACC_DEBUG_DROP_ANCHOR"))
-	if anchorDrop != nil {
-		anchorDrop.anchors = true
-	}
-	if synthDrop != nil || anchorDrop != nil {
-		base := execOpts.NewDispatcher
-		execOpts.NewDispatcher = func() execute.Dispatcher {
-			return &droppingDispatcher{Dispatcher: base(), dropper: synthDrop, anchorDropper: anchorDrop}
-		}
 	}
 
 	exec, err := execute.NewExecutor(execOpts)
@@ -725,16 +515,15 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 	}
 
 	app := abci.NewAccumulator(abci.AccumulatorOptions{
-		ID:           inst.id,
-		Address:      d.privVal.Key.PubKey.Address(),
-		Executor:     exec,
-		Logger:       d.logger.With("module", "abci"),
-		EventBus:     d.eventBus,
-		Database:     db,
-		Genesis:      genesis.DocProvider(d.config),
-		Partition:    c.Partition.ID,
-		RootDir:      d.config.RootDir,
-		SnapshotPath: d.snapshotPath,
+		ID:        inst.id,
+		Address:   d.privVal.Key.PubKey.Address(),
+		Executor:  exec,
+		Logger:    d.logger.With("module", "abci"),
+		EventBus:  d.eventBus,
+		Database:  db,
+		Genesis:   genesis.DocProvider(d.config),
+		Partition: c.Partition.ID,
+		RootDir:   d.config.RootDir,
 
 		MaxEnvelopesPerBlock: int(*c.MaxEnvelopesPerBlock),
 	})
@@ -747,49 +536,9 @@ func (c *CoreConsensusApp) register(inst *Instance, d *tendermint, node *tmnode.
 		return err
 	}
 
-	// Clear the AppState from the genesis doc to free ~2GB of memory.
-	// This is safe because InitChain (which needs AppState) has already run
-	// during node.Start(), or will load the snapshot from disk (for new nodes).
-	// Both Environment #1 (from startRPC) and Environment #2 (from local.New)
-	// share the same GenesisDoc pointer, so this clears AppState for both.
-	// Note: Environment #1's genChunks are already created with the full AppState
-	// but we can't easily clear those (~7GB). This at least frees the raw AppState.
-	if genDoc := node.GenesisDoc(); genDoc != nil && len(genDoc.AppState) > 0 {
-		d.logger.Info("Clearing genesis AppState to free memory", "size", len(genDoc.AppState))
-		genDoc.AppState = nil
-	}
-
 	// Register the tendermint node
-	localClient := local.New(node)
-
-	// Clear the genesis cache to free ~10GB of memory. This must be done
-	// after local.New() which triggers ConfigureRPC() and InitGenesisChunks().
-	clearGenesisCache(localClient, d.logger)
-
-	// Start sync monitor to detect and recover from stuck sync (CometBFT bug workaround)
-	go func() {
-		monitor := accumulated.NewSyncMonitor(
-			&consensusStatusProvider{localClient},
-			node.Switch(),
-			d.config.P2P.PersistentPeers,
-		)
-
-		t := time.NewTicker(time.Second)
-		defer t.Stop()
-		for {
-			select {
-			case <-inst.context.Done():
-				return
-			case <-t.C:
-				_, err := monitor.Check(inst.context)
-				if err != nil {
-					slog.ErrorContext(inst.context, "Sync monitor check failed", "error", err)
-				}
-			}
-		}
-	}()
-
-	err = coreConsensusProvidesClient.Register(inst.services, c, localClient)
+	local := local.New(node)
+	err = coreConsensusProvidesClient.Register(inst.services, c, local)
 	if err != nil {
 		return err
 	}
@@ -797,14 +546,13 @@ func (c *CoreConsensusApp) register(inst *Instance, d *tendermint, node *tmnode.
 	// Register the consensus service
 	svcImpl := tmapi.NewConsensusService(tmapi.ConsensusServiceParams{
 		Logger:           d.logger.With("module", "api"),
-		Local:            localClient,
+		Local:            local,
 		Database:         database.New(store, d.logger),
 		PartitionID:      c.Partition.ID,
 		PartitionType:    c.Partition.Type,
 		EventBus:         d.eventBus,
 		NodeKeyHash:      sha256.Sum256(d.nodeKey.PubKey().Bytes()),
 		ValidatorKeyHash: sha256.Sum256(d.privVal.Key.PubKey.Bytes()),
-		Heals:            d.healCounters(),
 	})
 	registerRpcService(inst, svcImpl.Type().AddressFor(c.Partition.ID), message.ConsensusService{ConsensusService: svcImpl})
 	err = consensusProvidesService.Register(inst.services, c, svcImpl)
@@ -815,7 +563,7 @@ func (c *CoreConsensusApp) register(inst *Instance, d *tendermint, node *tmnode.
 	// Register the submitter
 	subImpl := tmapi.NewSubmitter(tmapi.SubmitterParams{
 		Logger: d.logger.With("module", "api"),
-		Local:  localClient,
+		Local:  local,
 	})
 	registerRpcService(inst, subImpl.Type().AddressFor(c.Partition.ID), message.Submitter{Submitter: subImpl})
 	err = consensusProvidesSubmitter.Register(inst.services, c, subImpl)
@@ -826,7 +574,7 @@ func (c *CoreConsensusApp) register(inst *Instance, d *tendermint, node *tmnode.
 	// Register the validator
 	valImpl := tmapi.NewValidator(tmapi.ValidatorParams{
 		Logger: d.logger.With("module", "api"),
-		Local:  localClient,
+		Local:  local,
 	})
 	registerRpcService(inst, valImpl.Type().AddressFor(c.Partition.ID), message.Validator{Validator: valImpl})
 	err = consensusProvidesValidator.Register(inst.services, c, valImpl)
@@ -851,94 +599,4 @@ func (c *CoreConsensusApp) register(inst *Instance, d *tendermint, node *tmnode.
 
 	inst.logger.Info(color.HiBlueString("Running"), "partition", c.Partition.ID, "module", "run", "service", "consensus")
 	return nil
-}
-
-// clearCachedGenesisDBProvider wraps CometBFT's DefaultDBProvider to delete
-// the cached genesis document from the state database. CometBFT caches the full
-// genesis (including the 2.68GB AppState) to the database on first run and
-// loads it on every subsequent start. By deleting this cached copy, we force
-// CometBFT to call our genesisDocProvider which returns null AppState.
-func clearCachedGenesisDBProvider(logger log.Logger) tmcfg.DBProvider {
-	return func(ctx *tmcfg.DBContext) (dbm.DB, error) {
-		logger.Info("DBProvider called", "id", ctx.ID)
-		db, err := tmcfg.DefaultDBProvider(ctx)
-		if err != nil {
-			return nil, err
-		}
-
-		// Only clear from the state database
-		if ctx.ID == "state" {
-			genesisDocKey := []byte("genesisDoc")
-			has, err := db.Has(genesisDocKey)
-			if err != nil {
-				logger.Error("Failed to check for cached genesis", "error", err)
-			} else if has {
-				logger.Info("Deleting cached genesis from state database to free memory")
-				if err := db.Delete(genesisDocKey); err != nil {
-					logger.Error("Failed to delete cached genesis", "error", err)
-				} else {
-					logger.Info("Successfully deleted cached genesis from state database")
-				}
-			} else {
-				logger.Info("No cached genesis found in state database")
-			}
-		}
-
-		return db, nil
-	}
-}
-
-// clearGenesisCache clears the cached genesis data from CometBFT's RPC
-// environment to free ~10GB of memory. The genesis data is only needed during
-// initialization and for the rarely-used genesis RPC endpoints.
-func clearGenesisCache(localClient *local.Local, logger log.Logger) {
-	// Use reflection with unsafe to access and clear private fields in Local.env
-	localVal := reflect.ValueOf(localClient).Elem()
-	envField := localVal.FieldByName("env")
-	if !envField.IsValid() {
-		logger.Error("Failed to clear genesis cache: env field not found")
-		return
-	}
-
-	// Get the Environment pointer using unsafe to bypass unexported restrictions
-	envPtrVal := reflect.NewAt(envField.Type(), envField.Addr().UnsafePointer()).Elem()
-	if envPtrVal.IsNil() {
-		return
-	}
-
-	env := envPtrVal.Elem()
-
-	// Clear genChunks ([]string) - use unsafe to set unexported field
-	genChunksField := env.FieldByName("genChunks")
-	if genChunksField.IsValid() {
-		// Create a settable version using unsafe
-		genChunksPtr := reflect.NewAt(genChunksField.Type(), genChunksField.Addr().UnsafePointer()).Elem()
-		genChunksPtr.Set(reflect.Zero(genChunksField.Type()))
-		logger.Info("Cleared genesis chunks cache")
-	}
-
-	// Clear GenDoc (*types.GenesisDoc) - use unsafe to set unexported field
-	genDocField := env.FieldByName("GenDoc")
-	if genDocField.IsValid() {
-		genDocPtr := reflect.NewAt(genDocField.Type(), genDocField.Addr().UnsafePointer()).Elem()
-		genDocPtr.Set(reflect.Zero(genDocField.Type()))
-		logger.Info("Cleared genesis doc cache")
-	}
-}
-
-// consensusStatusProvider adapts the CometBFT local client to the StatusProvider interface
-type consensusStatusProvider struct {
-	client *local.Local
-}
-
-func (p *consensusStatusProvider) Status(ctx context.Context) (*accumulated.SyncStatus, error) {
-	st, err := p.client.Status(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return &accumulated.SyncStatus{
-		CatchingUp:        st.SyncInfo.CatchingUp,
-		LatestBlockHeight: st.SyncInfo.LatestBlockHeight,
-		LatestBlockTime:   st.SyncInfo.LatestBlockTime,
-	}, nil
 }

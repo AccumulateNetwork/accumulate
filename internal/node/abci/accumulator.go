@@ -84,7 +84,6 @@ type AccumulatorOptions struct {
 	RootDir              string
 	AnalysisLog          config.AnalysisLog
 	MaxEnvelopesPerBlock int
-	SnapshotPath         string // Path to genesis snapshot file (for loading during InitChain)
 }
 
 // NewAccumulator returns a new Accumulator.
@@ -318,29 +317,12 @@ func (app *Accumulator) InitChain(_ context.Context, req *abci.RequestInitChain)
 
 	app.logger.Info("Initializing")
 
-	// Initialize the database from snapshot
+	// Initialize the database
 	var snap []byte
-
-	// Check if AppStateBytes contains actual snapshot data or is just a marker.
-	// If it's null/empty, load the snapshot directly from disk to avoid
-	// wasting ~10GB of memory caching it in CometBFT's genesis chunks.
-	if len(req.AppStateBytes) == 0 || string(req.AppStateBytes) == "null" {
-		if app.SnapshotPath == "" {
-			return nil, fmt.Errorf("failed to init chain: AppStateBytes is empty and no SnapshotPath configured")
-		}
-		app.logger.Info("Loading genesis snapshot from disk", "path", app.SnapshotPath)
-		snap, err = os.ReadFile(app.SnapshotPath)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read genesis snapshot from %s: %+v", app.SnapshotPath, err)
-		}
-	} else {
-		// Backward compatibility: AppStateBytes contains the actual snapshot
-		err = json.Unmarshal(req.AppStateBytes, &snap)
-		if err != nil {
-			return nil, fmt.Errorf("failed to init chain: %+v", err)
-		}
+	err = json.Unmarshal(req.AppStateBytes, &snap)
+	if err != nil {
+		return nil, fmt.Errorf("failed to init chain: %+v", err)
 	}
-
 	err = snapshot.FullRestore(app.Database, ioutil.NewBuffer(snap), app.logger, config.NetworkUrl{
 		URL: protocol.PartitionUrl(app.Partition),
 	})

@@ -8,10 +8,13 @@ package block
 
 import (
 	"crypto/ed25519"
+	"sync/atomic"
+	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
@@ -37,6 +40,11 @@ type Executor struct {
 	isValidator        bool
 	isGenesis          bool
 	mainDispatcher     Dispatcher
+
+	// HealInterval is the minimum time between background heal scans; zero
+	// defaults to 10s. lastHealAttempt paces the scan (see shouldAttemptHealing).
+	HealInterval    time.Duration
+	lastHealAttempt atomic.Int64
 }
 
 type ExecutorOptions = execute.Options
@@ -59,7 +67,6 @@ func NewExecutor(opts ExecutorOptions) (*Executor, error) {
 		chain.IssueTokens{},
 		chain.LockAccount{},
 		chain.SendTokens{},
-		chain.SetLiteAccountDelegate{},
 		chain.TransferCredits{},
 		chain.UpdateAccountAuth{},
 		chain.UpdateKey{},
@@ -107,6 +114,8 @@ func NewExecutor(opts ExecutorOptions) (*Executor, error) {
 	m.db = opts.Database
 	m.mainDispatcher = opts.NewDispatcher()
 	m.isGenesis = false
+
+	m.db.SetObserver(internal.NewDatabaseObserver())
 
 	if opts.Logger != nil {
 		m.logger.L = opts.Logger.With("module", "executor")
@@ -179,22 +188,7 @@ func (x *Executor) LastBlock() (*execute.BlockParams, [32]byte, error) {
 		return nil, [32]byte{}, errors.FatalError.WithFormat("load root index chain: %w", err)
 	}
 	if c.Height() == 0 {
-		// Fallback: try to read the SystemLedger directly
-		// This handles backup databases where the root chain index is empty
-		ledger := batch.Account(x.Describe.NodeUrl(protocol.Ledger))
-		var ledgerState *protocol.SystemLedger
-		err := ledger.Main().GetAs(&ledgerState)
-		if err != nil {
-			return nil, [32]byte{}, errors.NotFound
-		}
-		if ledgerState.Index == 0 {
-			return nil, [32]byte{}, errors.NotFound
-		}
-		b := new(execute.BlockParams)
-		b.Index = ledgerState.Index
-		b.Time = ledgerState.Timestamp
-		h, err := batch.GetBptRootHash()
-		return b, h, err
+		return nil, [32]byte{}, errors.NotFound
 	}
 
 	entry := new(protocol.IndexEntry)

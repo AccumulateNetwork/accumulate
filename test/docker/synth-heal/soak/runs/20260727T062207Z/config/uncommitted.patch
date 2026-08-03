@@ -1,9 +1,0 @@
-diff --git a/test/docker/synth-heal/soak/runs/INDEX.md b/test/docker/synth-heal/soak/runs/INDEX.md
-index 2698cbad9..28c9cfc3c 100644
---- a/test/docker/synth-heal/soak/runs/INDEX.md
-+++ b/test/docker/synth-heal/soak/runs/INDEX.md
-@@ -40,3 +40,4 @@ synthetic never delivers.
- What the short runs do establish: the fix causes no regression in normal healing
- (run 4 matches run 3 under identical drops), the harness now supports sub-hour
- durations, and the `undeliv` metric and its seizewatch trip are wired in.
-+| [20260727T061434Z](20260727T061434Z/manifest.md) | `v1.4.5-3-ge39a450ff` | v2-jiuquan | unconditional (no config, v1.4.5+) | 0.1h | 0 | 8→234 | 0→0 | #4073 proof D: NO fix, sparse load 0.2tps, 50% synthetic drop into BVN1 |

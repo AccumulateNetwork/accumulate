@@ -379,9 +379,7 @@ func (v *BlockStateSynthTxnEntry) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := encoding.GetBuffer()
-	defer encoding.PutBuffer(buffer)
-
+	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.Account == nil) {
@@ -399,11 +397,7 @@ func (v *BlockStateSynthTxnEntry) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-
-	// Return a copy since the buffer will be reused
-	result := make([]byte, buffer.Len())
-	copy(result, buffer.Bytes())
-	return result, nil
+	return buffer.Bytes(), nil
 }
 
 func (v *BlockStateSynthTxnEntry) IsValid() error {
@@ -446,9 +440,7 @@ func (v *SigOrTxn) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := encoding.GetBuffer()
-	defer encoding.PutBuffer(buffer)
-
+	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.Transaction == nil) {
@@ -466,11 +458,7 @@ func (v *SigOrTxn) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-
-	// Return a copy since the buffer will be reused
-	result := make([]byte, buffer.Len())
-	copy(result, buffer.Bytes())
-	return result, nil
+	return buffer.Bytes(), nil
 }
 
 func (v *SigOrTxn) IsValid() error {
@@ -514,9 +502,7 @@ func (v *SigSetEntry) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := encoding.GetBuffer()
-	defer encoding.PutBuffer(buffer)
-
+	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.Type == 0) {
@@ -537,11 +523,7 @@ func (v *SigSetEntry) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-
-	// Return a copy since the buffer will be reused
-	result := make([]byte, buffer.Len())
-	copy(result, buffer.Bytes())
-	return result, nil
+	return buffer.Bytes(), nil
 }
 
 func (v *SigSetEntry) IsValid() error {
@@ -590,9 +572,7 @@ func (v *SignatureSetEntry) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := encoding.GetBuffer()
-	defer encoding.PutBuffer(buffer)
-
+	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteUint(1, v.KeyIndex)
@@ -613,11 +593,7 @@ func (v *SignatureSetEntry) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-
-	// Return a copy since the buffer will be reused
-	result := make([]byte, buffer.Len())
-	copy(result, buffer.Bytes())
-	return result, nil
+	return buffer.Bytes(), nil
 }
 
 func (v *SignatureSetEntry) IsValid() error {
@@ -664,9 +640,7 @@ func (v *TransactionChainEntry) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := encoding.GetBuffer()
-	defer encoding.PutBuffer(buffer)
-
+	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.Account == nil) {
@@ -687,11 +661,7 @@ func (v *TransactionChainEntry) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-
-	// Return a copy since the buffer will be reused
-	result := make([]byte, buffer.Len())
-	copy(result, buffer.Bytes())
-	return result, nil
+	return buffer.Bytes(), nil
 }
 
 func (v *TransactionChainEntry) IsValid() error {
@@ -738,9 +708,7 @@ func (v *VoteEntry) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := encoding.GetBuffer()
-	defer encoding.PutBuffer(buffer)
-
+	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.Authority == nil) {
@@ -755,11 +723,7 @@ func (v *VoteEntry) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-
-	// Return a copy since the buffer will be reused
-	result := make([]byte, buffer.Len())
-	copy(result, buffer.Bytes())
-	return result, nil
+	return buffer.Bytes(), nil
 }
 
 func (v *VoteEntry) IsValid() error {
@@ -796,9 +760,7 @@ func (v *sigSetData) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := encoding.GetBuffer()
-	defer encoding.PutBuffer(buffer)
-
+	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.Version == 0) {
@@ -815,11 +777,7 @@ func (v *sigSetData) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-
-	// Return a copy since the buffer will be reused
-	result := make([]byte, buffer.Len())
-	copy(result, buffer.Bytes())
-	return result, nil
+	return buffer.Bytes(), nil
 }
 
 func (v *sigSetData) IsValid() error {

@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
@@ -107,6 +108,7 @@ func TestSyntheticAnchor(t *testing.T) {
 			}
 
 			db := database.OpenInMemory(nil)
+			db.SetObserver(execute.NewDatabaseObserver())
 			batch := db.Begin(true)
 			defer batch.Discard()
 

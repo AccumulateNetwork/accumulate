@@ -332,9 +332,7 @@ func (v *Receipt) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := encoding.GetBuffer()
-	defer encoding.PutBuffer(buffer)
-
+	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
 	if !(len(v.Start) == 0) {
@@ -363,11 +361,7 @@ func (v *Receipt) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-
-	// Return a copy since the buffer will be reused
-	result := make([]byte, buffer.Len())
-	copy(result, buffer.Bytes())
-	return result, nil
+	return buffer.Bytes(), nil
 }
 
 func (v *Receipt) IsValid() error {
@@ -424,9 +418,7 @@ func (v *ReceiptEntry) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := encoding.GetBuffer()
-	defer encoding.PutBuffer(buffer)
-
+	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
 	if !(!v.Right) {
@@ -441,11 +433,7 @@ func (v *ReceiptEntry) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-
-	// Return a copy since the buffer will be reused
-	result := make([]byte, buffer.Len())
-	copy(result, buffer.Bytes())
-	return result, nil
+	return buffer.Bytes(), nil
 }
 
 func (v *ReceiptEntry) IsValid() error {
@@ -484,9 +472,7 @@ func (v *ReceiptList) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := encoding.GetBuffer()
-	defer encoding.PutBuffer(buffer)
-
+	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.MerkleState == nil) {
@@ -509,11 +495,7 @@ func (v *ReceiptList) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-
-	// Return a copy since the buffer will be reused
-	result := make([]byte, buffer.Len())
-	copy(result, buffer.Bytes())
-	return result, nil
+	return buffer.Bytes(), nil
 }
 
 func (v *ReceiptList) IsValid() error {
@@ -561,9 +543,7 @@ func (v *chainIndexBlock) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := encoding.GetBuffer()
-	defer encoding.PutBuffer(buffer)
-
+	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.Level == 0) {
@@ -583,11 +563,7 @@ func (v *chainIndexBlock) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-
-	// Return a copy since the buffer will be reused
-	result := make([]byte, buffer.Len())
-	copy(result, buffer.Bytes())
-	return result, nil
+	return buffer.Bytes(), nil
 }
 
 func (v *chainIndexBlock) IsValid() error {
@@ -629,9 +605,7 @@ func (v *chainIndexEntry) MarshalBinary() ([]byte, error) {
 		return []byte{encoding.EmptyObject}, nil
 	}
 
-	buffer := encoding.GetBuffer()
-	defer encoding.PutBuffer(buffer)
-
+	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.Index == 0) {
@@ -646,11 +620,7 @@ func (v *chainIndexEntry) MarshalBinary() ([]byte, error) {
 		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-
-	// Return a copy since the buffer will be reused
-	result := make([]byte, buffer.Len())
-	copy(result, buffer.Bytes())
-	return result, nil
+	return buffer.Bytes(), nil
 }
 
 func (v *chainIndexEntry) IsValid() error {

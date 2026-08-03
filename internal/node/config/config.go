@@ -135,6 +135,8 @@ func Default(netName string, net protocol.PartitionType, _ NodeType, partitionId
 	c.Accumulate.Snapshots.Directory = "snapshots"
 	c.Accumulate.Snapshots.RetainCount = 10
 	c.Accumulate.Snapshots.Schedule = protocol.DefaultMajorBlockSchedule
+	healingOn := true
+	c.Accumulate.Healing.Enable = &healingOn
 	c.Accumulate.AnalysisLog.Directory = "analysis"
 	c.Accumulate.AnalysisLog.Enabled = false
 	c.Accumulate.API.ReadHeaderTimeout = 10 * time.Second
@@ -160,6 +162,7 @@ type Accumulate struct {
 
 	// TODO: move network config to its own file since it will be constantly changing over time.
 	//	NetworkConfig string      `toml:"network" mapstructure:"network"`
+	Healing     Healing     `toml:"healing" mapstructure:"healing"`
 	Snapshots   Snapshots   `toml:"snapshots" mapstructure:"snapshots"`
 	Storage     Storage     `toml:"storage" mapstructure:"storage"`
 	P2P         P2P         `toml:"p2p" mapstructure:"p2p"`
@@ -173,6 +176,13 @@ type Logging struct {
 	LokiUrl      string `toml:"loki-url" mapstructure:"loki-url"`
 	LokiUsername string `toml:"loki-username" mapstructure:"loki-username"`
 	LokiPassword string `toml:"loki-password" mapstructure:"loki-password"`
+}
+
+type Healing struct {
+	// Enable enables healing. A nil (unset) value defaults to on, so nodes with
+	// no [healing] section self-heal missing synthetic/anchor messages; set it
+	// explicitly to false to disable (a break-glass kill-switch).
+	Enable *bool `toml:"enable,omitempty" mapstructure:"enable"`
 }
 
 type Snapshots struct {
@@ -370,26 +380,7 @@ func load(dir, file string, c interface{}) error {
 	v.AddConfigPath(dir)
 	err := v.ReadInConfig()
 	if err != nil {
-		// Check if the error is because we're trying to read a directory as a file
-		if strings.Contains(err.Error(), "is a directory") {
-			return fmt.Errorf("read config file %q: path is a directory, not a file.\n"+
-				"Expected structure:\n"+
-				"  work-dir/\n"+
-				"  ├── dnn/\n"+
-				"  │   └── config/\n"+
-				"  │       ├── config.toml\n"+
-				"  │       └── accumulate.toml\n"+
-				"  ├── bvnn/\n"+
-				"  │   └── config/\n"+
-				"  │       ├── config.toml\n"+
-				"  │       └── accumulate.toml\n"+
-				"  └── accumulate.toml (optional, for new-style config)\n"+
-				"\nIf you're using 'accumulated run-dual', make sure:\n"+
-				"  1. You provide node directory paths (dnn, bvnn) not file paths\n"+
-				"  2. Each directory has config/ subdirectory with configuration files\n"+
-				"  3. Use 'accumulated init dual' first to create the proper structure", file)
-		}
-		return fmt.Errorf("read config file %q: %v", file, err)
+		return fmt.Errorf("read: %v", err)
 	}
 
 	err = v.Unmarshal(c, viper.DecodeHook(mapstructure.ComposeDecodeHookFunc(

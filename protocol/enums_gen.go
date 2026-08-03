@@ -1,4 +1,4 @@
-// Copyright 2026 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -316,9 +316,6 @@ const TransactionTypeUpdateAccountAuth TransactionType = 21
 
 // TransactionTypeUpdateKey update key for existing keys.
 const TransactionTypeUpdateKey TransactionType = 22
-
-// TransactionTypeSetLiteAccountDelegate sets or clears the delegate authority on a lite token account.
-const TransactionTypeSetLiteAccountDelegate TransactionType = 23
 
 // TransactionTypeNetworkMaintenance executes network maintenance operations.
 const TransactionTypeNetworkMaintenance TransactionType = 46
@@ -1355,7 +1352,7 @@ func (v TransactionType) GetEnumValue() uint64 { return uint64(v) }
 func (v *TransactionType) SetEnumValue(id uint64) bool {
 	u := TransactionType(id)
 	switch u {
-	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateLiteTokenAccount, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeLockAccount, TransactionTypeBurnCredits, TransactionTypeTransferCredits, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeSetLiteAccountDelegate, TransactionTypeNetworkMaintenance, TransactionTypeActivateProtocolVersion, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeSystemGenesis, TransactionTypeDirectoryAnchor, TransactionTypeBlockValidatorAnchor, TransactionTypeSystemWriteData:
+	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateLiteTokenAccount, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeLockAccount, TransactionTypeBurnCredits, TransactionTypeTransferCredits, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeNetworkMaintenance, TransactionTypeActivateProtocolVersion, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeSystemGenesis, TransactionTypeDirectoryAnchor, TransactionTypeBlockValidatorAnchor, TransactionTypeSystemWriteData:
 		*v = u
 		return true
 	}
@@ -1407,8 +1404,6 @@ func (v TransactionType) String() string {
 		return "updateAccountAuth"
 	case TransactionTypeUpdateKey:
 		return "updateKey"
-	case TransactionTypeSetLiteAccountDelegate:
-		return "setLiteAccountDelegate"
 	case TransactionTypeNetworkMaintenance:
 		return "networkMaintenance"
 	case TransactionTypeActivateProtocolVersion:
@@ -1484,8 +1479,6 @@ func TransactionTypeByName(name string) (TransactionType, bool) {
 		return TransactionTypeUpdateAccountAuth, true
 	case "updatekey":
 		return TransactionTypeUpdateKey, true
-	case "setliteaccountdelegate":
-		return TransactionTypeSetLiteAccountDelegate, true
 	case "networkmaintenance":
 		return TransactionTypeNetworkMaintenance, true
 	case "activateprotocolversion":

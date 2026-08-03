@@ -29,7 +29,7 @@ func (s *simFaucet) Faucet(ctx context.Context, account *url.URL, opts api.Fauce
 				return errors.BadRequest.WithFormat("%v is not an ACME account", account)
 			}
 
-			acct.CreditTokens(big.NewInt(50000 * protocol.AcmePrecision))
+			acct.CreditTokens(big.NewInt(10 * protocol.AcmePrecision))
 			return nil
 
 		case !errors.Is(err, errors.NotFound):
@@ -53,7 +53,7 @@ func (s *simFaucet) Faucet(ctx context.Context, account *url.URL, opts api.Fauce
 
 		lta := new(protocol.LiteTokenAccount)
 		lta.Url = account
-		lta.Balance = *big.NewInt(50000 * protocol.AcmePrecision)
+		lta.Balance = *big.NewInt(10 * protocol.AcmePrecision)
 		lta.TokenUrl = protocol.AcmeUrl()
 		return batch.Account(lta.Url).Main().Put(lta)
 	})

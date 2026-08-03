@@ -17,6 +17,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/badger"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/leveldb"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -34,7 +35,7 @@ type Database struct {
 func New(store keyvalue.Beginner, logger log.Logger) *Database {
 	d := new(Database)
 	d.store = store
-	d.observer = NewDatabaseObserver()
+	d.observer = unsetObserver{}
 
 	if logger != nil {
 		d.logger = logger.With("module", "database")
@@ -88,12 +89,9 @@ func (d *Database) Store() (keyvalue.Beginner, error) {
 }
 
 // SetObserver sets the database observer.
-//
-// Deprecated: The production observer is now the default. This method should
-// only be used for testing with specialized observers.
 func (d *Database) SetObserver(observer Observer) {
 	if observer == nil {
-		panic("SetObserver called with nil")
+		observer = unsetObserver{}
 	}
 	d.observer = observer
 }
@@ -117,4 +115,10 @@ func (b *Batch) GetMinorRootChainAnchor(describe *config.Describe) ([]byte, erro
 
 type Observer interface {
 	DidChangeAccount(batch *Batch, account *Account) (hash.Hasher, error)
+}
+
+type unsetObserver struct{}
+
+func (unsetObserver) DidChangeAccount(batch *Batch, account *Account) (hash.Hasher, error) {
+	return nil, errors.NotReady.WithFormat("cannot modify account - observer is not set")
 }

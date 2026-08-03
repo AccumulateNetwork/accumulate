@@ -8,7 +8,6 @@ package genesis
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -40,123 +39,44 @@ func DocProvider(config *tm.Config) node.GenesisDocProvider {
 	}
 
 	return func() (*types.GenesisDoc, error) {
-		snapshotPath := config.GenesisFile()
-
-		// Check for cached genesis metadata to avoid re-reading snapshot headers
-		cachePath := snapshotPath + ".genesis-cache.json"
-		if cached, err := loadCachedGenesis(cachePath); err == nil {
-			return cached, nil
-		}
-
-		// Open the snapshot file for reading (uses seeking, not full read)
-		doc, err := ReadGenesisFromSnapshot(snapshotPath)
+		// Open the snapshot
+		all, err := os.ReadFile(config.GenesisFile())
 		if err != nil {
 			return nil, err
 		}
 
-		// Cache the genesis metadata for future restarts
-		_ = saveGenesisCache(cachePath, doc) // Ignore errors, caching is optional
-
-		return doc, nil
+		return ConvertSnapshotToJson(all)
 	}
 }
 
-// ReadGenesisFromSnapshot reads genesis metadata from a snapshot file using
-// file seeking. This only reads the header and consensus sections (~KB),
-// not the full snapshot (~GB).
-func ReadGenesisFromSnapshot(path string) (*types.GenesisDoc, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, fmt.Errorf("open snapshot: %w", err)
-	}
-	defer f.Close()
-
-	s, err := snapshot.Open(f)
-	if err != nil {
-		return nil, fmt.Errorf("parse snapshot: %w", err)
-	}
-
-	return buildGenesisDoc(s)
-}
-
-// loadCachedGenesis loads genesis metadata from a cache file.
-func loadCachedGenesis(path string) (*types.GenesisDoc, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-
-	var doc types.GenesisDoc
-	if err := json.Unmarshal(data, &doc); err != nil {
-		return nil, err
-	}
-
-	return &doc, nil
-}
-
-// saveGenesisCache saves genesis metadata to a cache file.
-func saveGenesisCache(path string, doc *types.GenesisDoc) error {
-	data, err := json.MarshalIndent(doc, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, data, 0644)
-}
-
-// ConvertSnapshotToJson converts snapshot bytes to a CometBFT genesis document.
-// Deprecated: Use ReadGenesisFromSnapshot for file-based reading which avoids
-// loading the full snapshot into memory.
 func ConvertSnapshotToJson(snap []byte) (*types.GenesisDoc, error) {
 	s, err := snapshot.Open(bytes.NewReader(snap))
 	if err != nil {
 		return nil, err
 	}
-	return buildGenesisDoc(s)
-}
 
-// buildGenesisDoc extracts genesis metadata from an opened snapshot.
-// This only reads the header and consensus sections.
-func buildGenesisDoc(s *snapshot.Reader) (*types.GenesisDoc, error) {
-	// Try to read the consensus section (may not exist or may be malformed)
-	p := new(cometbft.GenesisDoc)
+	// Read the consensus section
 	rd, err := s.Open(snapshot.SectionTypeConsensus)
-	if err == nil {
-		// Consensus section exists, try to parse it
-		if parseErr := p.UnmarshalBinaryFrom(rd); parseErr != nil {
-			// Parsing failed - continue with empty GenesisDoc
-			// This can happen with genesis snapshots that have partial data
-			p = new(cometbft.GenesisDoc)
-		}
+	if err != nil {
+		return nil, err
 	}
-	// If consensus section doesn't exist, p remains empty
-
-	// Don't embed the full snapshot in AppState - it wastes ~10GB of memory.
-	// The ABCI app will load the snapshot directly from disk when needed.
-	// We store null as a marker that the snapshot should be loaded from disk.
-	jsonBytes := []byte("null")
-
-	// Use default consensus params if not provided
-	var consensusParams *types.ConsensusParams
-	if p.Params != nil {
-		consensusParams = (*types.ConsensusParams)(p.Params)
-	} else {
-		consensusParams = types.DefaultConsensusParams()
+	p := new(cometbft.GenesisDoc)
+	err = p.UnmarshalBinaryFrom(rd)
+	if err != nil {
+		return nil, err
 	}
 
-	// Derive chain ID from partition URL if not provided
-	chainID := p.ChainID
-	if chainID == "" && s.Header.SystemLedger != nil && s.Header.SystemLedger.Url != nil {
-		chainID = s.Header.SystemLedger.Url.Authority
-	}
-	if chainID == "" {
-		chainID = "accumulate"
+	// Convert
+	jsonBytes, err := cmtjson.Marshal(snap)
+	if err != nil {
+		return nil, err
 	}
 
 	doc := &types.GenesisDoc{
 		GenesisTime:     s.Header.SystemLedger.Timestamp,
-		ChainID:         chainID,
+		ChainID:         p.ChainID,
 		InitialHeight:   int64(s.Header.SystemLedger.Index) + 1,
-		ConsensusParams: consensusParams,
+		ConsensusParams: (*types.ConsensusParams)(p.Params),
 		Validators:      make([]types.GenesisValidator, len(p.Validators)),
 		AppHash:         s.Header.RootHash[:],
 		AppState:        jsonBytes,

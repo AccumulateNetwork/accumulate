@@ -16,6 +16,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
@@ -217,6 +218,7 @@ func (op *PutDbPatchOp) Apply(cs keyvalue.ChangeSet) error {
 	// Make the account look dirty
 	batch := coredb.New(cs, nil).Begin(true)
 	defer batch.Discard()
+	batch.SetObserver(execute.NewDatabaseObserver())
 
 	err = batch.Account(u).MarkDirty()
 	if err != nil {

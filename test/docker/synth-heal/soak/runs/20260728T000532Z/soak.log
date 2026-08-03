@@ -1,5 +1,0 @@
-== soak start Tue Jul 28 12:05:32 AM UTC 2026 duration=5m tps=0.2 ==
-   run dir: /home/paul/repos/gitlab.com/accumulatenetwork/i4073/test/docker/synth-heal/soak/runs/20260728T000532Z
-   commit:  v1.4.5-5-geeafbfb60-dirty (eeafbfb6018dc4de3bea2d1c6342af1fe4960ec7)
-   image:   acc-release:v1.4.5 (sha256:7e0c0553b4cdc0796efc91445c2566c9679342bf72c3da2158459e4f11602f61)
-   version: v2-jiuquan | healing: unconditional (no config, v1.4.5+)

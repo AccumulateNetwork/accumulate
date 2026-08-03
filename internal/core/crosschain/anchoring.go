@@ -11,7 +11,6 @@ import (
 	"context"
 	"crypto/ed25519"
 	"log/slog"
-	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/shared"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -24,8 +23,8 @@ import (
 )
 
 func (c *Conductor) healAnchors(ctx context.Context, batch *database.Batch, destination *url.URL, currentBlock uint64) error {
-	if c.DisableAnchorHealing {
-		return nil // test-only, see the field
+	if !def(c.EnableAnchorHealing, true) {
+		return nil
 	}
 
 	// Load the source sequence chain
@@ -43,17 +42,7 @@ func (c *Conductor) healAnchors(ctx context.Context, batch *database.Batch, dest
 	}
 	ledger2 := ledger1.Partition(c.Url())
 
-	// Throttle: one heal pass per destination per heal window, jittered — the
-	// unthrottled per-block rescan re-submitted the whole undelivered tail
-	// from every validator every block (measured: 1.2M re-submissions and 14
-	// cores in 25 minutes of the #4067 pattern soak) and floods the network,
-	// which is the historical reason anchor healing was disabled.
-	if !c.claimSyntheticRequest(destination.JoinPath("anchor-heal"), ledger2.Delivered+1, time.Now()) {
-		return nil
-	}
-
-	// For each not-yet delivered anchor, capped per pass
-	healed := 0
+	// For each not-yet delivered anchor
 	for i := ledger2.Delivered + 1; i <= uint64(head.Count); i++ {
 		// Load it
 		hash, err := sequence.Entry(int64(i) - 1)
@@ -101,16 +90,6 @@ func (c *Conductor) healAnchors(ctx context.Context, batch *database.Batch, dest
 		err = c.submit(ctx, destination, env)
 		if err != nil {
 			return err
-		}
-
-		if c.Heals != nil {
-			c.Heals.Anchor.Add(1)
-		}
-		mHeals.WithLabelValues("anchor", c.Partition.ID, partitionLabel(destination)).Inc()
-
-		healed++
-		if healed >= syntheticHealBatch {
-			break
 		}
 	}
 

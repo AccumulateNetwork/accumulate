@@ -15,7 +15,6 @@ import (
 	"github.com/cometbft/cometbft/libs/log"
 	coretypes "github.com/cometbft/cometbft/rpc/core/types"
 	"gitlab.com/accumulatenetwork/accumulate"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -39,7 +38,6 @@ type ConsensusService struct {
 	partition     config.NetworkUrl
 	nodeKeyHash   [32]byte
 	valKeyHash    [32]byte
-	heals         *crosschain.HealCounters
 }
 
 var _ api.ConsensusService = (*ConsensusService)(nil)
@@ -53,9 +51,6 @@ type ConsensusServiceParams struct {
 	EventBus         *events.Bus
 	NodeKeyHash      [32]byte
 	ValidatorKeyHash [32]byte
-
-	// Heals reports the conductor's healing counters (#4064). Optional.
-	Heals *crosschain.HealCounters
 }
 
 func NewConsensusService(params ConsensusServiceParams) *ConsensusService {
@@ -68,7 +63,6 @@ func NewConsensusService(params ConsensusServiceParams) *ConsensusService {
 	s.partition.URL = protocol.PartitionUrl(params.PartitionID)
 	s.nodeKeyHash = params.NodeKeyHash
 	s.valKeyHash = params.ValidatorKeyHash
-	s.heals = params.Heals
 	return s
 }
 
@@ -84,10 +78,6 @@ func (s *ConsensusService) ConsensusStatus(ctx context.Context, opts api.Consens
 	res.ValidatorKeyHash = s.valKeyHash
 	res.PartitionID = s.partitionID
 	res.PartitionType = s.partitionType
-	if s.heals != nil {
-		res.SyntheticHeals = s.heals.Synthetic.Load()
-		res.AnchorHeals = s.heals.Anchor.Load()
-	}
 
 	// Load values from the database
 	res.LastBlock = new(api.LastBlock)
@@ -125,9 +115,6 @@ func (s *ConsensusService) ConsensusStatus(ctx context.Context, opts api.Consens
 	default:
 		return nil, errors.InternalError.WithFormat("invalid block hash returned from Tendermint")
 	}
-
-	// Expose whether the node is catching up to the network
-	res.CatchingUp = status.SyncInfo.CatchingUp
 
 	if !boolOpt(opts.IncludePeers, true) {
 		return res, nil
