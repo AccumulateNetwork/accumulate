@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.4.6.1
+
+- API (#4074)
+  - Fix v3 `includeReceipt` queries hanging indefinitely for chain entries with
+    old anchors. `SearchIndexChain` walked index chains linearly from the newest
+    entry, so receipts for old entries scanned the entire root index chain:
+    requests hung (HDD) or took minutes (SSD), ballooned node memory by tens of
+    GB, and kept computing after the client disconnected — a wedge-the-node
+    vector on any public endpoint. Index chains are ordered, so the search is
+    now a binary search (O(log n) reads); semantics are verified unchanged by a
+    property test against the previous implementation.
+
 ## 1.4.4.2
 
 - Healing (#4064)
