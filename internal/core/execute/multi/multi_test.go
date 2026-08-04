@@ -27,6 +27,20 @@ func init() {
 }
 
 func TestVersionSwitch(t *testing.T) {
+	// How many steps a version activation takes is not part of what this test
+	// asserts - it asserts that the version propagates to the DN and every BVN.
+	// So this budget is only a guard against looping forever, and is set where
+	// it cannot trip on anything but a genuine hang. It must not be tuned to
+	// observed performance: activation normally converges in ~17 steps but
+	// sometimes takes exactly 75 (simulator message ordering is not
+	// deterministic - conductor tasks run concurrently and
+	// orderMessagesDeterministically is not wired into the block path - so an
+	// activation can land on the far side of a boundary and wait a fixed extra
+	// span; see #4076). StepUntil's default of 50 fell between those two modes,
+	// which is what made this test flaky in CI. The cost of a generous budget is
+	// paid only when the test is already failing.
+	const versionSwitchSteps = 1000
+
 	var timestamp uint64
 
 	// Initialize
@@ -207,7 +221,7 @@ func TestVersionSwitch(t *testing.T) {
 			ActivateProtocolVersion(ExecutorVersionV2Vandenberg).
 			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(&timestamp).Signer(sim.SignWithNode(Directory, 0))))
 
-	sim.StepUntil(
+	sim.StepUntilN(versionSwitchSteps,
 		Txn(st.TxID).Succeeds(),
 		VersionIs(ExecutorVersionV2Vandenberg))
 
@@ -228,7 +242,7 @@ func TestVersionSwitch(t *testing.T) {
 			ActivateProtocolVersion(ExecutorVersionV2Jiuquan).
 			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(&timestamp).Signer(sim.SignWithNode(Directory, 0))))
 
-	sim.StepUntil(
+	sim.StepUntilN(versionSwitchSteps,
 		Txn(st.TxID).Succeeds(),
 		VersionIs(ExecutorVersionV2Jiuquan))
 
@@ -245,7 +259,7 @@ func TestVersionSwitch(t *testing.T) {
 			ActivateProtocolVersion(ExecutorVersionVNext).
 			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(&timestamp).Signer(sim.SignWithNode(Directory, 0))))
 
-	sim.StepUntil(
+	sim.StepUntilN(versionSwitchSteps,
 		Txn(st.TxID).Succeeds(),
 		VersionIs(ExecutorVersionVNext))
 }

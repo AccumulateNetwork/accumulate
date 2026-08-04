@@ -63,86 +63,116 @@ func SearchIndexChain2(chain *database.Chain2, index uint64, mode MatchMode, fin
 	return SearchIndexChain(c, index, mode, find)
 }
 
-// SearchIndexChain searches along an index chain using the given search
-// function. The search starts from the given index and proceeds forwards or
-// backwards along the chain depending on the result of the search function.
-func SearchIndexChain(chain *database.Chain, index uint64, mode MatchMode, find IndexChainSearchFunction) (uint64, *protocol.IndexEntry, error) {
-	entry := new(protocol.IndexEntry)
-	err := chain.EntryAs(int64(index), entry)
-	if err != nil {
-		return 0, nil, fmt.Errorf("entry %d %w", index, err)
-	}
-
-	dir := find(entry)
-	if dir == SearchComplete {
-		return index, entry, nil
-	}
-
-	// If the entry is the first and is after the target and the mode is after,
-	// return it
-	if index == 0 && dir == SearchBackward && mode == MatchAfter {
-		return index, entry, nil
-	}
-
-	// If the entry is the last and is before the target and the mode is before,
-	// return it
-	if index == uint64(chain.Height())-1 && dir == SearchForward && mode == MatchBefore {
-		return index, entry, nil
-	}
-
-	for {
-		// TODO Add a guard to prevent scanning the entire chain?
-		prevIndex := index
-		if dir == SearchForward {
-			index++
-			if index >= uint64(chain.Height()) {
-				return 0, nil, ErrReachedChainEnd
-			}
-		} else {
-			if index == 0 {
-				if mode == MatchAfter {
-					// If the entry is the first and is after the target and the
-					// mode is after, return it
-					return index, entry, nil
-				}
-				return 0, nil, ErrReachedChainStart
-			}
-			index--
-		}
-
-		prevEntry := entry
-		entry = new(protocol.IndexEntry)
-		err := chain.EntryAs(int64(index), entry)
+// SearchIndexChain searches an index chain using the given search function.
+// Index chains are ordered, and every search function is monotone over that
+// order, so the search runs in O(log n) reads via binary search. The starting
+// index only affects which entry of a run of equally-matching entries is
+// returned (for range search functions) and the boundary-condition errors,
+// preserving the semantics of the original linear walk.
+func SearchIndexChain(chain *database.Chain, start uint64, mode MatchMode, find IndexChainSearchFunction) (uint64, *protocol.IndexEntry, error) {
+	height := uint64(chain.Height())
+	read := func(i uint64) (*protocol.IndexEntry, error) {
+		entry := new(protocol.IndexEntry)
+		err := chain.EntryAs(int64(i), entry)
 		if err != nil {
-			return 0, nil, fmt.Errorf("entry %d %w", index, err)
+			return nil, fmt.Errorf("entry %d %w", i, err)
 		}
+		return entry, nil
+	}
 
-		dir2 := find(entry)
-		if dir2 == 0 {
-			return index, entry, nil
+	// Read the starting entry first to preserve the original behavior: a match
+	// at the start returns immediately, and the boundary special cases depend
+	// on the direction the walk would have taken from the start.
+	startEntry, err := read(start)
+	if err != nil {
+		return 0, nil, err
+	}
+	switch find(startEntry) {
+	case SearchComplete:
+		return start, startEntry, nil
+	case SearchBackward:
+		if start == 0 && mode == MatchAfter {
+			return start, startEntry, nil
 		}
-
-		// If the direction is unchanged, continue searching
-		if dir == dir2 {
-			continue
+	case SearchForward:
+		if start == height-1 {
+			if mode == MatchBefore {
+				return start, startEntry, nil
+			}
+			return 0, nil, ErrReachedChainEnd
 		}
+	}
 
-		if dir == SearchBackward {
-			prevIndex, index = index, prevIndex
-			prevEntry, entry = entry, prevEntry
+	// Binary search for the boundary: the lowest index whose entry does not
+	// sort before the target (i.e. find does not return SearchForward).
+	lo, hi := uint64(0), height
+	for lo < hi {
+		mid := lo + (hi-lo)/2
+		e, err := read(mid)
+		if err != nil {
+			return 0, nil, err
 		}
+		if find(e) == SearchForward {
+			lo = mid + 1
+		} else {
+			hi = mid
+		}
+	}
 
-		// If the starting and current entries are on either side of the target,
-		// the target does not exist
+	// Every entry sorts before the target, so a forward walk would have run off
+	// the end of the chain (the start == height-1 case is handled above)
+	if lo == height {
+		return 0, nil, ErrReachedChainEnd
+	}
+
+	e, err := read(lo)
+	if err != nil {
+		return 0, nil, err
+	}
+	switch find(e) {
+	case SearchComplete:
+		// Entries below lo sort before the target, so lo is the first entry of
+		// the run of matches. A walk approaching from below returns the first
+		// match; a walk approaching from above returns the last match.
+		if start <= lo {
+			return lo, e, nil
+		}
+		for lo+1 < height {
+			n, err := read(lo + 1)
+			if err != nil {
+				return 0, nil, err
+			}
+			if find(n) != SearchComplete {
+				break
+			}
+			lo, e = lo+1, n
+			if start == lo {
+				break
+			}
+		}
+		return lo, e, nil
+
+	default: // SearchBackward: lo is the first entry past the target
+		if lo == 0 {
+			// Every entry sorts after the target, so a backward walk would have
+			// run off the start of the chain (the start == 0 && MatchAfter case
+			// is handled above)
+			if mode == MatchAfter {
+				return lo, e, nil
+			}
+			return 0, nil, ErrReachedChainStart
+		}
 		switch mode {
-		default: // SearchExact
-			return 0, nil, ErrTargetDoesNotExist
-
-		case MatchBefore:
-			return prevIndex, prevEntry, nil
-
 		case MatchAfter:
-			return index, entry, nil
+			return lo, e, nil
+		case MatchBefore:
+			p, err := read(lo - 1)
+			if err != nil {
+				return 0, nil, err
+			}
+			return lo - 1, p, nil
+		default: // MatchExact
+			return 0, nil, ErrTargetDoesNotExist
 		}
 	}
 }
