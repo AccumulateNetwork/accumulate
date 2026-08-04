@@ -7,16 +7,20 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"math/big"
+	"net/http"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -430,10 +434,22 @@ func (e *env) reportPartitions(ctx context.Context) {
 	}
 }
 
-// reportHeals asks every validator for its own heal counters. This is why the
-// tool talks to ConsensusStatus directly rather than leaving it to a shell
-// pipeline: the counters are per node, per partition, and only the node itself
-// can report its own.
+// reportHeals asks the node for its own heal counters, per partition. This is
+// why the tool talks to ConsensusStatus directly rather than leaving it to a
+// shell pipeline: the counters are per node, per partition, and only the node
+// itself can report its own.
+//
+// Two wrinkles are handled here. consensus-status requires an explicit nodeID
+// — omitting it is a badRequest, which is why this previously reported nothing
+// at all — so the node's own peer ID is fetched first. And the counters are
+// read from the raw JSON-RPC response rather than through the typed client,
+// because the client's ConsensusStatus struct silently drops fields it does not
+// declare, and the consolidation line dropped syntheticHeals/anchorHeals from
+// that struct (#4075).
+//
+// Note the counters are tagged omitempty, so a zero counter is indistinguishable
+// on the wire from a build that does not report them at all; both are reported
+// as "none".
 func (e *env) reportHeals(ctx context.Context) {
 	ns, err := e.c.NetworkStatus(ctx, api.NetworkStatusOptions{Partition: "Directory"})
 	if err != nil {
@@ -444,26 +460,99 @@ func (e *env) reportHeals(ctx context.Context) {
 	fmt.Println()
 	fmt.Println("== heal counters ==")
 
+	if len(e.endpointURLs) == 0 {
+		fmt.Println("  (no endpoint recorded)")
+		return
+	}
+	url := accumulate.ResolveWellKnownEndpoint(e.endpointURLs[0], "v3")
+
+	nodeID, err := rawNodeID(ctx, url)
+	if err != nil {
+		fmt.Printf("  (could not determine node ID: %v)\n", err)
+		return
+	}
+
 	any := false
 	for _, p := range ns.Network.Partitions {
-		st, err := e.c.ConsensusStatus(ctx, api.ConsensusStatusOptions{Partition: p.ID})
-		switch {
-		case errors.Is(err, errors.NotFound):
-			continue
-		case err != nil:
-			continue
-		case st == nil:
+		syn, anc, err := rawHealCounters(ctx, url, nodeID, p.ID)
+		if err != nil {
+			fmt.Printf("  %-12s query failed: %v\n", p.ID, err)
 			continue
 		}
-		if st.SyntheticHeals == 0 && st.AnchorHeals == 0 {
+		if syn == 0 && anc == 0 {
 			continue
 		}
 		any = true
-		fmt.Printf("  %-12s syntheticHeals=%-6d anchorHeals=%d\n", p.ID, st.SyntheticHeals, st.AnchorHeals)
+		fmt.Printf("  %-12s syntheticHeals=%-6d anchorHeals=%d\n", p.ID, syn, anc)
 	}
 	if !any {
-		fmt.Println("  (none recorded on the node this tool is talking to)")
+		fmt.Println("  (none reported — either nothing was healed, or this build does not count heals)")
 	}
+}
+
+// rawPost sends a JSON-RPC request and decodes result into out.
+func rawPost(ctx context.Context, url, method string, params, out any) error {
+	body, err := json.Marshal(map[string]any{
+		"jsonrpc": "2.0", "id": 1, "method": method, "params": params,
+	})
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var env struct {
+		Result json.RawMessage `json:"result"`
+		Error  *struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&env); err != nil {
+		return err
+	}
+	if env.Error != nil {
+		return fmt.Errorf("%s", env.Error.Message)
+	}
+	return json.Unmarshal(env.Result, out)
+}
+
+// rawNodeID returns the peer ID of the node serving url. consensus-status
+// requires it; omitting it is rejected as a bad request.
+func rawNodeID(ctx context.Context, url string) (string, error) {
+	var info struct {
+		PeerID string `json:"peerID"`
+	}
+	if err := rawPost(ctx, url, "node-info", map[string]any{}, &info); err != nil {
+		return "", err
+	}
+	if info.PeerID == "" {
+		return "", fmt.Errorf("node reported no peer ID")
+	}
+	return info.PeerID, nil
+}
+
+// rawHealCounters reads the heal counters for one partition. Absent counters
+// read as zero — they are omitempty, so zero is indistinguishable from absent.
+func rawHealCounters(ctx context.Context, url, nodeID, partition string) (synthetic, anchor uint64, err error) {
+	var st struct {
+		SyntheticHeals uint64 `json:"syntheticHeals"`
+		AnchorHeals    uint64 `json:"anchorHeals"`
+	}
+	err = rawPost(ctx, url, "consensus-status",
+		map[string]any{"partition": partition, "nodeID": nodeID}, &st)
+	if err != nil {
+		return 0, 0, err
+	}
+	return st.SyntheticHeals, st.AnchorHeals, nil
 }
 
 // --- waiting helpers ------------------------------------------------------
