@@ -1,5 +1,34 @@
 # Changelog
 
+## 1.4.6.2
+
+- Testing (#4076)
+  - `TestVersionSwitch` no longer fails a few percent of runs, which is what
+    failed the `go test 1/2` job of the v1.4.6.1 release pipeline. Activating a
+    protocol version normally converges in ~17 simulator steps but sometimes
+    takes exactly 75, and `StepUntil`'s default budget of 50 fell between the
+    two modes. How many steps an activation takes is not part of what the test
+    asserts, so the budget is now a hang guard rather than a number tuned to
+    observed performance. Measured cost of the generous budget when the test is
+    genuinely broken: 1.09s.
+  - The underlying cause is unfixed and tracked by #4076: simulator message
+    ordering is not deterministic, because conductor background tasks run
+    concurrently, `Simulator.Step` does not honour the `Deterministic()` option,
+    and `orderMessagesDeterministically` is never called outside its own unit
+    test.
+
+## 1.4.6.1
+
+- API (#4074)
+  - Fix v3 `includeReceipt` queries hanging indefinitely for chain entries with
+    old anchors. `SearchIndexChain` walked index chains linearly from the newest
+    entry, so receipts for old entries scanned the entire root index chain:
+    requests hung (HDD) or took minutes (SSD), ballooned node memory by tens of
+    GB, and kept computing after the client disconnected — a wedge-the-node
+    vector on any public endpoint. Index chains are ordered, so the search is
+    now a binary search (O(log n) reads); semantics are verified unchanged by a
+    property test against the previous implementation.
+
 ## 1.4.4.2
 
 - Healing (#4064)
