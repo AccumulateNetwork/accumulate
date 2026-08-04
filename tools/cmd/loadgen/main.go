@@ -68,6 +68,10 @@ type env struct {
 	clients []*jsonrpc.Client
 	subIdx  atomic.Uint64
 
+	// endpointURLs are the raw -endpoint/-endpoints values, kept so reportHeals
+	// can read fields the typed client does not declare (see report.go).
+	endpointURLs []string
+
 	treasury *liteAccount // funds everything else
 	oracle   float64
 
@@ -235,13 +239,14 @@ func main() {
 	log.Printf("network %s, executor %v, seed %d", ns.Network.NetworkName, ns.ExecutorVersion, *seed)
 
 	e := &env{
-		c:         c,
-		cfg:       config{growth: *growth, growthScale: *growthScale, maxGrowJobs: 4},
-		oracle:    float64(ns.Oracle.Price) / protocol.AcmeOraclePrecision,
-		u:         newUniverse(rand.New(rand.NewSource(*seed))),
-		growSlots: make(chan struct{}, 4),
-		fees:      ns.Globals.FeeSchedule,
-		clients:   clients,
+		c:            c,
+		cfg:          config{growth: *growth, growthScale: *growthScale, maxGrowJobs: 4},
+		oracle:       float64(ns.Oracle.Price) / protocol.AcmeOraclePrecision,
+		u:            newUniverse(rand.New(rand.NewSource(*seed))),
+		growSlots:    make(chan struct{}, 4),
+		fees:         ns.Globals.FeeSchedule,
+		clients:      clients,
+		endpointURLs: eps,
 	}
 	e.Q = api.Querier2{Querier: &poolQuerier{clients: clients, idx: &e.subIdx}}
 	e.led = newLedger(e.fees)
