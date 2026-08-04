@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.4.6.2
+
+- Testing (#4076)
+  - `TestVersionSwitch` no longer fails a few percent of runs, which is what
+    failed the `go test 1/2` job of the v1.4.6.1 release pipeline. Activating a
+    protocol version normally converges in ~17 simulator steps but sometimes
+    takes exactly 75, and `StepUntil`'s default budget of 50 fell between the
+    two modes. How many steps an activation takes is not part of what the test
+    asserts, so the budget is now a hang guard rather than a number tuned to
+    observed performance. Measured cost of the generous budget when the test is
+    genuinely broken: 1.09s.
+  - The underlying cause is unfixed and tracked by #4076: simulator message
+    ordering is not deterministic, because conductor background tasks run
+    concurrently, `Simulator.Step` does not honour the `Deterministic()` option,
+    and `orderMessagesDeterministically` is never called outside its own unit
+    test.
+
 ## 1.4.6.1
 
 - API (#4074)
