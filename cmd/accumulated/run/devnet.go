@@ -128,7 +128,10 @@ func (d *DevnetConfiguration) apply(inst *Instance, cfg *Config) error {
 		for node := range nodes[bvn] {
 			n := nodes[bvn][node]
 			dnPeers = append(dnPeers, addrForPeer(listen(d.Listen, devNetDefaultHost, n.IP, useTCP{}, portDir, portCmtP2P), n.PeerID))
-			bvnPeers[bvn] = append(bvnPeers[bvn], addrForPeer(listen(d.Listen, devNetDefaultHost, n.IP, useTCP{}, portBVN, portCmtP2P), n.PeerID))
+			// Must use the same per-BVN offset the partition itself binds
+			// (portForBVN in nodeOpts.apply), or peers point at a port
+			// nothing is listening on.
+			bvnPeers[bvn] = append(bvnPeers[bvn], addrForPeer(listen(d.Listen, devNetDefaultHost, n.IP, useTCP{}, portForBVN(bvn+1), portCmtP2P), n.PeerID))
 		}
 	}
 
@@ -345,7 +348,13 @@ func (d *DevnetConfiguration) applyBootstrap(inst *Instance, root *Config, ip ip
 	setDefaultVal(&faucet.Router, ServiceReference[*RouterService](""))
 	inst.logger.Info("Faucet", "account", faucetUrl)
 
-	return d.writeSubNode(inst, root, cfg, sub, ip)
+	// The bootstrap node advertises every partition, so it needs a
+	// listener for each BVN, not just one.
+	allBvns := make([]int, d.Bvns)
+	for i := range allBvns {
+		allBvns[i] = i + 1
+	}
+	return d.writeSubNode(inst, root, cfg, sub, ip, allBvns)
 }
 
 type nodeOpts struct {
@@ -391,6 +400,10 @@ func (n nodeOpts) apply(inst *Instance, root *Config) error {
 	opts.ID = fmt.Sprintf("BVN%d", n.BVN)
 	opts.Type = protocol.PartitionTypeBlockValidator
 	opts.Dir = "bvnn"
+	// Each BVN gets its own port offset. A devnet runs several BVNs in one
+	// process, so separating them by address alone would leave every partition
+	// listening on the same port and none of them individually addressable.
+	opts.PortOffset = portForBVN(n.BVN)
 	opts.Genesis = filepath.Join("..", fmt.Sprintf("bvn%d-genesis.snap", n.BVN))
 	// MetricsNamespace is intentionally not set to avoid Prometheus duplicate registration panics in tests
 	opts.BootstrapPeers = n.BvnBootstrap
@@ -399,7 +412,7 @@ func (n nodeOpts) apply(inst *Instance, root *Config) error {
 		return err
 	}
 
-	return n.DevNet.writeSubNode(inst, root, cfg, sub, n.IP)
+	return n.DevNet.writeSubNode(inst, root, cfg, sub, n.IP, []int{n.BVN})
 }
 
 func (d *DevnetConfiguration) addSubNode(inst *Instance, root *Config, name string) (*Config, *SubnodeService, error) {
@@ -416,7 +429,11 @@ func (d *DevnetConfiguration) addSubNode(inst *Instance, root *Config, name stri
 	return cfg, sub, nil
 }
 
-func (d *DevnetConfiguration) writeSubNode(_ *Instance, root, cfg *Config, sub *SubnodeService, ip ipOffset) error {
+// writeSubNode finalizes and writes one sub-node's config. bvns lists the
+// block validators this node must expose a P2P listener for: the BVN it hosts,
+// or every BVN in the network for the bootstrap node, which has to be
+// reachable for each partition it advertises.
+func (d *DevnetConfiguration) writeSubNode(_ *Instance, root, cfg *Config, sub *SubnodeService, ip ipOffset, bvns []int) error {
 	// Update the subnode configuration
 	sub.NodeKey = cfg.P2P.Key
 	sub.Services = cfg.Services
@@ -425,12 +442,18 @@ func (d *DevnetConfiguration) writeSubNode(_ *Instance, root, cfg *Config, sub *
 	cfg.Network = root.Network
 	cfg.Logging = root.Logging
 
-	// P2P listening addresses
+	// P2P listening addresses. The directory is always present; each block
+	// validator gets its own port (portForBVN) so every partition is
+	// individually addressable rather than sharing one BVN port.
 	cfg.P2P.Listen = []multiaddr.Multiaddr{
 		listen(d.Listen, devNetDefaultHost, ip, portDir+portAccP2P, useTCP{}),
 		listen(d.Listen, devNetDefaultHost, ip, portDir+portAccP2P, useQUIC{}),
-		listen(d.Listen, devNetDefaultHost, ip, portBVN+portAccP2P, useTCP{}),
-		listen(d.Listen, devNetDefaultHost, ip, portBVN+portAccP2P, useQUIC{}),
+	}
+	for _, bvn := range bvns {
+		cfg.P2P.Listen = append(cfg.P2P.Listen,
+			listen(d.Listen, devNetDefaultHost, ip, portForBVN(bvn)+portAccP2P, useTCP{}),
+			listen(d.Listen, devNetDefaultHost, ip, portForBVN(bvn)+portAccP2P, useQUIC{}),
+		)
 	}
 
 	// Sub-nodes are bootstrapped from the bootstrap node

@@ -36,6 +36,20 @@ var (
 	portAccP2P  = portOffset(config.PortOffsetAccumulateP2P)
 )
 
+// portForBVN returns the port offset of the nth block validator, where n is
+// 1-based (BVN1 → 100, BVN2 → 200, BVN3 → 300 with the default spacing).
+//
+// A normal deployment runs one BVN per node and every BVN can share
+// PortOffsetBlockValidator, because nodes are separated by address. A devnet
+// runs several BVNs in one process on one host: separating them by address
+// alone leaves every partition on the same port, so no partition can be
+// reached or published individually. Giving each BVN its own offset makes the
+// partitions addressable by port, which is what the rest of the tooling —
+// firewalls, proxies, followers pointing at a specific partition — assumes.
+func portForBVN(n int) portOffset {
+	return portOffset(config.PortOffsetBlockValidator * n)
+}
+
 func must[V any](v V, err error) V {
 	if err != nil {
 		panic(err)
