@@ -100,7 +100,10 @@ if new.Delegate != nil || !preserveDelegate {
 ```
 
 `UpdateKey` also refuses to modify a validator key book, and deliberately does
-not bump the page version or reset `LastUsedOn`.
+not bump the page version or reset `LastUsedOn`. The version matters in practice:
+signatures specify the signer version, so after an `UpdateKey` the page is still
+at its previous version and subsequent signatures must use that number, not an
+incremented one.
 
 ### Side keys
 
@@ -110,17 +113,16 @@ directly with that key or through the delegated book. This is the supported way
 to add a signing key to a slot you hold by delegation, and it needs no
 cooperation from the page's other entries.
 
-> **Unverified, and relevant before relying on it.**
-> `compareSignatureSetEntries` (`internal/database/signatures.go`) keys the
-> active signature set on **(KeyIndex, delegation path)** rather than key index
-> alone, and readiness is `len(all) >= GetSignatureThreshold()`
-> (`internal/core/execute/v2/block/sig_common.go`). Read literally, one entry
-> holding both a key hash and a delegate could contribute two set entries toward
-> a single threshold — once signed directly with an empty path, once through the
-> delegation. This has **not** been tested and may be prevented elsewhere. If it
-> is real it dilutes m-of-n on any page that mixes a key hash and a delegate on
-> the same entry. See issue #4079; confirm or refute with an executor test
-> before designing around either answer.
+**One entry contributes one signature, even with a side key.**
+`compareSignatureSetEntries` (`internal/database/signatures.go`) keys the active
+signature set on (KeyIndex, delegation path) rather than key index alone, which
+raised the question of whether one entry holding both a key hash and a delegate
+could contribute twice toward a single threshold — once signed directly, once
+through the delegation. **It cannot.** `TestDelegate_SideKeyDoesNotDoubleCount`
+signs both ways from a single entry against a threshold of 2 and the transaction
+does not execute; a signature from a second entry then completes it, confirming
+the threshold was genuinely reachable. A side key widens *how* you can sign, not
+*how much* your entry counts.
 
 ## What requires page authorization
 
@@ -142,6 +144,17 @@ consent**: `updateKeyPage_getNewOwners` collects `Entry.Delegate` /
 (`internal/core/execute/v2/chain/update_key_page.go`), and those must vote
 accept alongside normal authorization. A book cannot be conscripted into a
 delegation it has not agreed to.
+
+## Verification
+
+Every claim above is asserted by `test/e2e/txn_delegate_authority_test.go`:
+
+| test | claim |
+|---|---|
+| `TestDelegate_RotatesOwnEntryBelowThreshold` | a delegate rotates its own entry alone on a 4-of-7 page |
+| `TestDelegate_UpdateKeyAddsSideKeyPreservingDelegate` | `UpdateKey` adds a key while preserving the delegate; the side key then signs directly; the page version is not bumped |
+| `TestDelegate_CannotRepointOwnDelegateAlone` | repointing a delegate does not execute below the page threshold |
+| `TestDelegate_SideKeyDoesNotDoubleCount` | one entry contributes one signature, with a control proving the threshold is reachable |
 
 ## Summary
 
