@@ -113,6 +113,16 @@ directly with that key or through the delegated book. This is the supported way
 to add a signing key to a slot you hold by delegation, and it needs no
 cooperation from the page's other entries.
 
+**The two signing paths bill different accounts.** The signature fee is charged
+to the signer named on the signature itself (`SignatureContext.getSigner`, debited
+in `internal/core/execute/v2/block/sig_user.go`). Signing **directly** with a side
+key charges the page that holds the entry; signing **through the delegation**
+charges the delegate's own page. So attaching a side key does not just change how
+you sign, it moves who pays: the page you are signing *for* funds direct
+signatures, while the delegate funds delegated ones. Keep credits on whichever
+page you actually intend to use, and note that a delegated page with no credits
+cannot sign even though the entry is valid.
+
 **One entry contributes one signature, even with a side key.**
 `compareSignatureSetEntries` (`internal/database/signatures.go`) keys the active
 signature set on (KeyIndex, delegation path) rather than key index alone, which
@@ -155,6 +165,7 @@ Every claim above is asserted by `test/e2e/txn_delegate_authority_test.go`:
 | `TestDelegate_UpdateKeyAddsSideKeyPreservingDelegate` | `UpdateKey` adds a key while preserving the delegate; the side key then signs directly; the page version is not bumped |
 | `TestDelegate_CannotRepointOwnDelegateAlone` | repointing a delegate does not execute below the page threshold |
 | `TestDelegate_SideKeyDoesNotDoubleCount` | one entry contributes one signature, with a control proving the threshold is reachable |
+| `TestDelegate_SideKeyVsDelegatePaysDifferentCredits` | a direct signature is paid by the page holding the entry; a delegated one by the delegate's page |
 
 ## Summary
 
