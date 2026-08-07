@@ -271,3 +271,72 @@ func TestDelegate_SideKeyDoesNotDoubleCount(t *testing.T) {
 			Url(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey))
 	sim.StepUntil(Txn(st.TxID).Completes())
 }
+
+// TestDelegate_SideKeyVsDelegatePaysDifferentCredits verifies who pays for a
+// signature when an entry carries both a key hash and a delegate.
+//
+// The fee is charged to ctx.signer, which is the signer named on the signature
+// itself (SignatureContext.getSigner). For a delegated signature that is the
+// delegate's own page; for a direct signature it is the page holding the entry.
+// So the two signing paths bill different accounts.
+func TestDelegate_SideKeyVsDelegatePaysDifferentCredits(t *testing.T) {
+	alice := url.MustParse("alice")
+	bob := url.MustParse("bob")
+	aliceKey := acctesting.GenerateKey(alice)
+	bobKey := acctesting.GenerateKey(bob)
+	sideKey := acctesting.GenerateKey(bob, "side")
+
+	var timestamp uint64
+	sim := NewSim(t,
+		simulator.SimpleNetwork(t.Name(), 3, 3),
+		simulator.Genesis(GenesisTime),
+	)
+
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	MakeIdentity(t, sim.DatabaseFor(bob), bob, bobKey[32:])
+	UpdateAccount(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), func(page *KeyPage) {
+		page.CreditBalance = 1e9
+		// One entry carrying BOTH a delegate and a side key
+		page.AddKeySpec(&KeySpec{
+			Delegate:      bob.JoinPath("book"),
+			PublicKeyHash: keyHash(sideKey[32:]),
+		})
+	})
+	UpdateAccount(t, sim.DatabaseFor(bob), bob.JoinPath("book", "1"), func(page *KeyPage) {
+		page.CreditBalance = 1e9
+	})
+
+	credits := func(u *url.URL) uint64 {
+		return GetAccount[*KeyPage](t, sim.DatabaseFor(u.Identity()), u).CreditBalance
+	}
+	aliceBefore, bobBefore := credits(alice.JoinPath("book", "1")), credits(bob.JoinPath("book", "1"))
+
+	// Path 1: the side key signs DIRECTLY on alice's page
+	st := sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().
+			For(alice).
+			CreateDataAccount(alice, "data1").
+			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(sideKey))
+	sim.StepUntil(Txn(st.TxID).Completes())
+
+	aliceAfter1, bobAfter1 := credits(alice.JoinPath("book", "1")), credits(bob.JoinPath("book", "1"))
+	require.Less(t, aliceAfter1, aliceBefore,
+		"a direct signature must be paid by the page holding the entry")
+	require.Equal(t, bobBefore, bobAfter1,
+		"the delegate's page must not pay for a direct signature")
+
+	// Path 2: the same entry signs THROUGH the delegation
+	st2 := sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().
+			For(alice).
+			CreateDataAccount(alice, "data2").
+			SignWith(bob, "book", "1").Delegator(alice, "book", "1").
+			Version(1).Timestamp(&timestamp).PrivateKey(bobKey))
+	sim.StepUntil(Txn(st2.TxID).Completes())
+
+	aliceAfter2, bobAfter2 := credits(alice.JoinPath("book", "1")), credits(bob.JoinPath("book", "1"))
+	require.Less(t, bobAfter2, bobAfter1,
+		"a delegated signature must be paid by the delegate's own page")
+	require.Equal(t, aliceAfter1, aliceAfter2,
+		"the delegating page must not pay for a delegated signature")
+}
