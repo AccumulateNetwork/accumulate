@@ -340,3 +340,79 @@ func TestDelegate_SideKeyVsDelegatePaysDifferentCredits(t *testing.T) {
 	require.Equal(t, aliceAfter1, aliceAfter2,
 		"the delegating page must not pay for a delegated signature")
 }
+
+// TestDelegate_InertHomePageButUsableSidecar tests a containment construction:
+// park the sidecar key on its own page together with a bogus key nobody holds,
+// set that page's threshold to 2, and the page can never reach its threshold —
+// so the key cannot sign for anything its own book authorizes. The same key is
+// also attached as a side key on a delegate entry in ANOTHER book's page, where
+// it is matched by key hash and its home page's threshold is irrelevant.
+//
+// Claim under test: the key is inert through its own book, yet usable as the
+// sidecar.
+func TestDelegate_InertHomePageButUsableSidecar(t *testing.T) {
+	alice := url.MustParse("alice")
+	bob := url.MustParse("bob")
+	aliceKey := acctesting.GenerateKey(alice)
+	bobKey := acctesting.GenerateKey(bob)
+	sidecarKey := acctesting.GenerateKey(alice, "sidecar")
+	bogusKey := acctesting.GenerateKey(alice, "bogus") // private half never used
+
+	var timestamp uint64
+	sim := NewSim(t,
+		simulator.SimpleNetwork(t.Name(), 3, 3),
+		simulator.Genesis(GenesisTime),
+	)
+
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	MakeIdentity(t, sim.DatabaseFor(bob), bob, bobKey[32:])
+	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
+
+	// alice/book/2: the sidecar key plus a bogus key, threshold 2. Nobody can
+	// ever produce two signatures here.
+	MakeKeyPage(t, sim.DatabaseFor(alice), alice.JoinPath("book"),
+		sidecarKey[32:], bogusKey[32:])
+	UpdateAccount(t, sim.DatabaseFor(alice), alice.JoinPath("book", "2"), func(page *KeyPage) {
+		page.CreditBalance = 1e9
+		page.AcceptThreshold = 2
+	})
+
+	// bob/book/1 carries a delegate entry for alice's book, with the sidecar
+	// key attached to that entry as a side key.
+	UpdateAccount(t, sim.DatabaseFor(bob), bob.JoinPath("book", "1"), func(page *KeyPage) {
+		page.CreditBalance = 1e9
+		page.AddKeySpec(&KeySpec{
+			Delegate:      alice.JoinPath("book"),
+			PublicKeyHash: keyHash(sidecarKey[32:]),
+		})
+	})
+
+	// Claim 1: the sidecar key cannot sign through its own page. alice/book/2
+	// needs 2 signatures and only one key is usable.
+	st := sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().
+			For(alice).
+			CreateDataAccount(alice, "viaOwnPage").
+			SignWith(alice, "book", "2").Version(1).Timestamp(&timestamp).PrivateKey(sidecarKey))
+	sim.StepUntil(Txn(st.TxID).IsPending())
+	sim.StepN(50)
+	require.False(t, sim.QueryTransaction(st.TxID, nil).Status.Delivered(),
+		"the sidecar key must not be able to sign through its own page")
+
+	// Claim 2: the same key CAN sign where its hash sits on another page's
+	// entry. Here the signer is bob/book/1, whose threshold is 1.
+	st2 := sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().
+			For(bob).
+			CreateDataAccount(bob, "viaSidecar").
+			SignWith(bob, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(sidecarKey))
+	sim.StepUntil(Txn(st2.TxID).Completes())
+
+	// Control: alice's own page 1 is unaffected — the book still works.
+	st3 := sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().
+			For(alice).
+			CreateDataAccount(alice, "viaPage1").
+			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey))
+	sim.StepUntil(Txn(st3.TxID).Completes())
+}
