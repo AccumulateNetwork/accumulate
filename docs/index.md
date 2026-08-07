@@ -16,6 +16,10 @@ This index provides organized access to all Accumulate project documentation.
 - [Configuration Validation](guides/configuration-validation.md) - Guide for validating Accumulate configuration files
 - [MCP Prompts Usage](guides/prompts-usage.md) - How to use MCP server prompts for common workflows
 
+## Protocol
+
+- [Key Books and Delegation](protocol/key-books-and-delegation.md) - Key page entries, side keys, page priority, and which changes a delegate can make on its own authority
+
 ## Architecture
 
 - [Bootstrap Server Architecture](architecture/bootstrap-architecture.md) - Technical architecture of the bootstrap server system
