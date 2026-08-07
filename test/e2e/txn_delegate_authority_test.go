@@ -12,10 +12,12 @@ package e2e
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/address"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
@@ -415,4 +417,106 @@ func TestDelegate_InertHomePageButUsableSidecar(t *testing.T) {
 			CreateDataAccount(alice, "viaPage1").
 			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey))
 	sim.StepUntil(Txn(st3.TxID).Completes())
+}
+
+// TestDelegate_DeadKeyHashViaTransactions exercises the sidecar containment
+// construction through real transactions rather than database setup, using an
+// obviously-bogus key hash in the canonical AC1 display encoding.
+//
+// The dead entry is a hash with no known preimage, so no private key can ever
+// satisfy it — unlike a generated-then-discarded keypair, which is only as dead
+// as one's confidence that the private half was destroyed. Encoding it as an
+// AC1 address means it renders like any other key in tooling, and the DEADBEEF
+// payload makes it self-documenting to anyone auditing the page.
+func TestDelegate_DeadKeyHashViaTransactions(t *testing.T) {
+	alice := url.MustParse("alice")
+	bob := url.MustParse("bob")
+	aliceKey := acctesting.GenerateKey(alice)
+	bobKey := acctesting.GenerateKey(bob)
+	sidecarKey := acctesting.GenerateKey(alice, "sidecar")
+
+	// An obviously bogus key hash. Round-trips through the AC1 encoding, so it
+	// can be handed to tooling as a normal address.
+	deadHash, err := hex.DecodeString(
+		"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
+	require.NoError(t, err)
+	deadAddr := address.FormatAC1(deadHash)
+	parsed, err := address.Parse(deadAddr)
+	require.NoError(t, err, "the dead address must parse")
+	gotHash, ok := parsed.GetPublicKeyHash()
+	require.True(t, ok)
+	require.Equal(t, deadHash, gotHash, "the dead address must round-trip to the same hash")
+
+	var timestamp uint64
+	sim := NewSim(t,
+		simulator.SimpleNetwork(t.Name(), 3, 3),
+		simulator.Genesis(GenesisTime),
+	)
+
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	MakeIdentity(t, sim.DatabaseFor(bob), bob, bobKey[32:])
+	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
+
+	// alice/book/2 starts with only the sidecar key
+	MakeKeyPage(t, sim.DatabaseFor(alice), alice.JoinPath("book"), sidecarKey[32:])
+	UpdateAccount(t, sim.DatabaseFor(alice), alice.JoinPath("book", "2"), func(page *KeyPage) {
+		page.CreditBalance = 1e9
+	})
+
+	// bob carries a delegate entry for alice's book with the sidecar key
+	// attached as a side key
+	UpdateAccount(t, sim.DatabaseFor(bob), bob.JoinPath("book", "1"), func(page *KeyPage) {
+		page.CreditBalance = 1e9
+		page.AddKeySpec(&KeySpec{
+			Delegate:      alice.JoinPath("book"),
+			PublicKeyHash: keyHash(sidecarKey[32:]),
+		})
+	})
+
+	// Step 1: add the dead key hash to alice/book/2, signed by the
+	// higher-priority page 1
+	st := sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().
+			For(alice, "book", "2").
+			UpdateKeyPage().
+			Add().Entry().Hash(deadHash).FinishEntry().FinishOperation().
+			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey))
+	sim.StepUntil(Txn(st.TxID).Completes())
+
+	// Step 2: raise the threshold to 2, which the page can now never reach
+	st2 := sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().
+			For(alice, "book", "2").
+			UpdateKeyPage().
+			SetThreshold(2).
+			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey))
+	sim.StepUntil(Txn(st2.TxID).Completes())
+
+	page := GetAccount[*KeyPage](t, sim.DatabaseFor(alice), alice.JoinPath("book", "2"))
+	require.Equal(t, 2, len(page.Keys), "page should hold the sidecar key and the dead entry")
+	require.Equal(t, uint64(2), page.AcceptThreshold)
+	_, _, ok = page.EntryByKeyHash(deadHash)
+	require.True(t, ok, "the dead entry must be present")
+	// Unlike UpdateKey, each UpdateKeyPage bumps the page version: 1 -> 3 here
+	require.Equal(t, uint64(3), page.Version,
+		"UpdateKeyPage bumps the page version, unlike UpdateKey")
+
+	// The sidecar key cannot sign through its own page
+	st3 := sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().
+			For(alice).
+			CreateDataAccount(alice, "viaOwnPage").
+			SignWith(alice, "book", "2").Version(3).Timestamp(&timestamp).PrivateKey(sidecarKey))
+	sim.StepUntil(Txn(st3.TxID).IsPending())
+	sim.StepN(50)
+	require.False(t, sim.QueryTransaction(st3.TxID, nil).Status.Delivered(),
+		"the sidecar key must not be able to sign through its own page")
+
+	// ...but still signs as the sidecar on bob's page
+	st4 := sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().
+			For(bob).
+			CreateDataAccount(bob, "viaSidecar").
+			SignWith(bob, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(sidecarKey))
+	sim.StepUntil(Txn(st4.TxID).Completes())
 }
