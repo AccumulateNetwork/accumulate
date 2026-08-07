@@ -123,6 +123,22 @@ signatures, while the delegate funds delegated ones. Keep credits on whichever
 page you actually intend to use, and note that a delegated page with no credits
 cannot sign even though the entry is valid.
 
+**Containing a sidecar key with an unreachable home page.** A key can be made
+usable *only* as a sidecar: park it on its own page alongside a second entry
+nobody can sign for, and set that page's threshold to 2. The page can never
+reach its threshold, so the key cannot sign for anything its own book
+authorizes — but where the same key's hash is attached to an entry on another
+book's page it is matched by key hash, and its home page's threshold is
+irrelevant. Verified by `TestDelegate_InertHomePageButUsableSidecar`.
+
+Two caveats. Higher-priority pages of the same book are unaffected, so the book
+itself retains full authority via page 1 — the containment applies to the key,
+not to the book. And for the unusable second entry, prefer adding a **random
+32-byte key hash** over a generated keypair: the page stores only the hash, so
+a hash with no known preimage provably has no corresponding private key, whereas
+a discarded keypair is only as dead as your confidence that the private half was
+destroyed.
+
 **One entry contributes one signature, even with a side key.**
 `compareSignatureSetEntries` (`internal/database/signatures.go`) keys the active
 signature set on (KeyIndex, delegation path) rather than key index alone, which
@@ -166,6 +182,7 @@ Every claim above is asserted by `test/e2e/txn_delegate_authority_test.go`:
 | `TestDelegate_CannotRepointOwnDelegateAlone` | repointing a delegate does not execute below the page threshold |
 | `TestDelegate_SideKeyDoesNotDoubleCount` | one entry contributes one signature, with a control proving the threshold is reachable |
 | `TestDelegate_SideKeyVsDelegatePaysDifferentCredits` | a direct signature is paid by the page holding the entry; a delegated one by the delegate's page |
+| `TestDelegate_InertHomePageButUsableSidecar` | a key on an unreachable-threshold page cannot sign through its own book, yet still signs as a sidecar elsewhere |
 
 ## Summary
 
