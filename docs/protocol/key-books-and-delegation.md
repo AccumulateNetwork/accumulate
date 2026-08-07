@@ -133,11 +133,25 @@ irrelevant. Verified by `TestDelegate_InertHomePageButUsableSidecar`.
 
 Two caveats. Higher-priority pages of the same book are unaffected, so the book
 itself retains full authority via page 1 — the containment applies to the key,
-not to the book. And for the unusable second entry, prefer adding a **random
-32-byte key hash** over a generated keypair: the page stores only the hash, so
-a hash with no known preimage provably has no corresponding private key, whereas
-a discarded keypair is only as dead as your confidence that the private half was
-destroyed.
+not to the book. And for the unusable second entry, add a **key hash with no
+known preimage** rather than a generated-then-discarded keypair: the page stores
+only the hash, so such an entry provably has no private key, while a discarded
+keypair is only as dead as one's confidence that the private half was destroyed.
+
+An obviously-bogus value documents itself. Encoded in the canonical AC1 display
+format it renders like any other key in tooling and round-trips through
+`address.Parse`:
+
+```
+hash  deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef
+AC1   AC12h52eWFrPCxvNhd45B5Xt5BG2nEvk6V1W4bXuraEh1eT8hJPsZ
+```
+
+`address.FormatAC1` appends a four-byte double-SHA256 checksum before base58
+encoding, so the string is well formed and parses back to exactly that hash. A
+`DEAD…` payload also gives these addresses a recognisable `AC12h5…` prefix.
+The executor does not inspect hash contents — `AddKeyOperation` assigns
+`entry.PublicKeyHash = op.Entry.KeyHash` — so any 32-byte value is accepted.
 
 **One entry contributes one signature, even with a side key.**
 `compareSignatureSetEntries` (`internal/database/signatures.go`) keys the active
@@ -183,6 +197,7 @@ Every claim above is asserted by `test/e2e/txn_delegate_authority_test.go`:
 | `TestDelegate_SideKeyDoesNotDoubleCount` | one entry contributes one signature, with a control proving the threshold is reachable |
 | `TestDelegate_SideKeyVsDelegatePaysDifferentCredits` | a direct signature is paid by the page holding the entry; a delegated one by the delegate's page |
 | `TestDelegate_InertHomePageButUsableSidecar` | a key on an unreachable-threshold page cannot sign through its own book, yet still signs as a sidecar elsewhere |
+| `TestDelegate_DeadKeyHashViaTransactions` | the same, built through real transactions with an AC1-encoded dead key hash; also that `UpdateKeyPage` bumps the page version |
 
 ## Summary
 
