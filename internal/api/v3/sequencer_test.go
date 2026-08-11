@@ -18,6 +18,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -96,4 +97,36 @@ func TestSequencer(t *testing.T) {
 	require.IsType(t, (*PartitionSignature)(nil), sigs[0].Message.(*messaging.SignatureMessage).Signature)
 	require.IsType(t, (*ReceiptSignature)(nil), sigs[1].Message.(*messaging.SignatureMessage).Signature)
 	require.IsType(t, (*ED25519Signature)(nil), sigs[2].Message.(*messaging.SignatureMessage).Signature)
+
+	// A sequencer whose key is NOT an active validator of the source partition
+	// must DECLINE, rather than re-sign the message with a key the destination
+	// will reject as "not an active validator" — which silently and permanently
+	// wedges the receiver's synthetic stream (#4070). A non-validator node (seed,
+	// bootstrap, or follower) running the sequencer service can serve the data
+	// but cannot produce a usable signature, so it must return an error, letting
+	// the caller route the pull to a peer that IS a validator.
+	notAValidator := acctesting.GenerateKey("not-a-validator")
+	badSvc := dut.NewSequencer(dut.SequencerParams{
+		Logger:       logger,
+		Database:     sim.DatabaseFor(alice),
+		EventBus:     events.NewBus(logger),
+		Globals:      g,
+		Partition:    "BVN0",
+		ValidatorKey: notAValidator, // 64-byte ed25519 private key; pubkey is not in the validator set
+	})
+
+	_, err = badSvc.Sequence(context.Background(), PartitionUrl("BVN0").JoinPath(Synthetic), PartitionUrl("BVN1").JoinPath(Synthetic), 1, private.SequenceOptions{})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "not an active validator")
+
+	// Requesting a sequence number the source has NOT produced yet must return a
+	// clean NotFound, not a generic load error. The tail-probe healer relies on
+	// this to tell "the stream is caught up" from a real failure: a synthetic
+	// dropped at the tail leaves no visible gap, so the receiver speculatively
+	// asks for Delivered+1, and NotFound is the answer when nothing more exists
+	// to send (#4070). Only one synthetic (seq 1) was produced above, so seq 2
+	// is beyond the produced head.
+	_, err = svc.Sequence(context.Background(), PartitionUrl("BVN0").JoinPath(Synthetic), PartitionUrl("BVN1").JoinPath(Synthetic), 2, private.SequenceOptions{})
+	require.Error(t, err)
+	require.True(t, errors.Is(err, errors.NotFound), "expected NotFound, got %v", err)
 }
