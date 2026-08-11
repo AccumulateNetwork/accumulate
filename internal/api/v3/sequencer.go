@@ -84,6 +84,19 @@ func (s *Sequencer) Sequence(ctx context.Context, src, dst *url.URL, num uint64,
 		return nil, errors.NotReady
 	}
 
+	// A synthetic or anchor message sequenced for healing is re-signed with this
+	// node's key (getSynth/getAnchor below). The destination only accepts it if
+	// the signer is an ACTIVE VALIDATOR of this (the source) partition. A node
+	// that runs the sequencer service but is not a validator of this partition —
+	// a seed/bootstrap node, or a follower — can serve the message data but can
+	// only produce a signature the destination will reject as "not an active
+	// validator", which silently and permanently wedges the receiver's stream
+	// (#4070). Such a node must therefore DECLINE, so the caller's retry routes
+	// the pull to a peer that IS a validator and can sign a usable heal.
+	if _, _, ok := core.AnchorSigner(globals, s.partitionID).EntryByKey(s.valKey[32:]); !ok {
+		return nil, errors.NotReady.WithFormat("cannot sequence for %s: this node is not an active validator of that partition", s.partitionID)
+	}
+
 	// Starting a batch would not be safe if the ABCI were updated to commit in
 	// the middle of a block
 
@@ -202,6 +215,16 @@ func (s *Sequencer) getSynth(batch *database.Batch, globals *core.GlobalValues, 
 	sequenceChain, err := ledger.SyntheticSequenceChain(partition).Get()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load synthetic sequence chain: %w", err)
+	}
+
+	// Report NotFound (cleanly, distinct from a load error) when the requested
+	// sequence number is beyond what this partition has produced for the
+	// destination. A tail-probe healer uses this to tell "the stream is caught
+	// up" from a real failure: a synthetic dropped at the tail leaves no gap the
+	// receiver can see, so the receiver speculatively asks for Delivered+1, and
+	// this is the answer when there is genuinely nothing more to send (#4070).
+	if int64(num) > sequenceChain.Height() {
+		return nil, errors.NotFound.WithFormat("synthetic %d has not been produced for %v", num, partition)
 	}
 
 	// Load the Nth sequence chain entry
