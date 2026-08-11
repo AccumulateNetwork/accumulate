@@ -30,12 +30,13 @@ var cmd = &cobra.Command{
 }
 
 var flag = struct {
-	Key        PrivateKeyFlag
-	Listen     []multiaddr.Multiaddr
-	PromListen []multiaddr.Multiaddr
-	InfoListen multiaddr.Multiaddr
-	Peers      []multiaddr.Multiaddr
-	External   []multiaddr.Multiaddr
+	Key         PrivateKeyFlag
+	Listen      []multiaddr.Multiaddr
+	PromListen  []multiaddr.Multiaddr
+	InfoListen  multiaddr.Multiaddr
+	AdminListen multiaddr.Multiaddr
+	Peers       []multiaddr.Multiaddr
+	External    []multiaddr.Multiaddr
 }{
 	Key: PrivateKeyFlag{Value: &TransientPrivateKey{}},
 }
@@ -45,6 +46,7 @@ func init() {
 	cmd.Flags().VarP((*MultiaddrSliceFlag)(&flag.Listen), "listen", "l", "Listening address")
 	cmd.Flags().Var((*MultiaddrSliceFlag)(&flag.PromListen), "prom-listen", "Prometheus listening address(es) (default /ip4/0.0.0.0/tcp/8081/http)")
 	cmd.Flags().Var(MultiaddrFlag{Value: &flag.InfoListen}, "info-listen", "Info server listening address (default /ip4/0.0.0.0/tcp/8080/http)")
+	cmd.Flags().Var(MultiaddrFlag{Value: &flag.AdminListen}, "admin-listen", "Admin info listening address for peer/partition/connection/DHT endpoints (default /ip4/127.0.0.1/tcp/8082/http; these are topology disclosure and should not be public)")
 	cmd.Flags().VarP((*MultiaddrSliceFlag)(&flag.Peers), "peer", "p", "Peers to connect to")
 	cmd.Flags().Var((*MultiaddrSliceFlag)(&flag.External), "external", "External address(es) to advertize")
 
@@ -54,6 +56,12 @@ func init() {
 		}
 		if !cmd.Flag("info-listen").Changed {
 			flag.InfoListen = multiaddr.StringCast("/ip4/0.0.0.0/tcp/8080/http")
+		}
+		// Loopback by default: the topology endpoints answer "who is on this
+		// network and how do I reach them", which is reconnaissance when it is
+		// public and diagnostics when it is not (#4034).
+		if !cmd.Flag("admin-listen").Changed {
+			flag.AdminListen = multiaddr.StringCast("/ip4/127.0.0.1/tcp/8082/http")
 		}
 	}
 }
@@ -90,7 +98,7 @@ func run(*cobra.Command, []string) {
 
 	// Start info server on port 8080 if configured
 	if flag.InfoListen != nil {
-		infoServer, err = NewInfoServer(inst.P2P().Host(), flag.InfoListen, flag.External)
+		infoServer, err = NewInfoServer(inst.P2P().Host(), flag.InfoListen, flag.AdminListen, flag.External)
 		if err != nil {
 			inst.Stop()
 			Checkf(err, "failed to start info server")
