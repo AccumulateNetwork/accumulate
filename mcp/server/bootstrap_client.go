@@ -391,10 +391,16 @@ func (c *BootstrapClient) QueryBootstrapServerHealth(serverURL string) (*Bootstr
 	return &health, nil
 }
 
-// QueryBootstrapServerPeers queries the bootstrap server's /peers endpoint
+// QueryBootstrapServerPeers queries the bootstrap server's /peers endpoint.
+//
+// /peers moved off the public listener (#4034): a peer list is a map of the
+// network for whoever asks. It now lives on the admin listener, which binds
+// loopback by default, so this succeeds only from the bootstrap host itself or
+// against an address the operator deliberately exposed. Pass that address as
+// serverURL; the default targets the local admin port.
 func (c *BootstrapClient) QueryBootstrapServerPeers(serverURL string) (*BootstrapPeersResponse, error) {
 	if serverURL == "" {
-		serverURL = "http://bootstrap.accumulate.defidevs.io:8080"
+		serverURL = "http://127.0.0.1:8082"
 	}
 
 	url := fmt.Sprintf("%s/peers", serverURL)
@@ -404,6 +410,9 @@ func (c *BootstrapClient) QueryBootstrapServerPeers(serverURL string) (*Bootstra
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("bootstrap server at %s has no /peers: it moved to the admin listener (default 127.0.0.1:8082) when topology endpoints were taken off the public port (#4034)", serverURL)
+	}
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("bootstrap server returned status %d: %s", resp.StatusCode, string(body))
