@@ -25,6 +25,11 @@
 # structurally confounded and no choice of recipient separates them. Telling
 # them apart needs executor-side instrumentation, not traffic shaping.
 #
+#   ./arm-test.sh none        # NO fault injection: a clean baseline under load.
+#                             # Asserts zero drops AND zero wedged streams, i.e.
+#                             # the network delivers everything unaided. Use this
+#                             # to validate a release candidate before deploying.
+#
 #   KEEP=1 ./arm-test.sh ...  # leave the network up for inspection
 set -euo pipefail
 
@@ -46,13 +51,21 @@ cd "$here"
 # original never arrives and only a heal can recover it. The hook wraps the
 # executor's dispatcher only — conductor heal/reconcile re-submissions bypass it
 # and can still land, which makes this a test of healing rather than of retry.
-export DROP_SPEC="${dest}:%${drop_every}!"
+if [ "$dest" = "none" ]; then
+  export DROP_SPEC=""          # no injector at all — clean baseline
+else
+  export DROP_SPEC="${dest}:%${drop_every}!"
+fi
 compose="docker compose -f docker-compose.yml"
 
 cleanup() { [ -n "${KEEP:-}" ] || $compose down -v --remove-orphans >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 
-echo "== ARM: drop destination=$dest  spec=$DROP_SPEC  txns=$txns =="
+if [ "$dest" = "none" ]; then
+  echo "== BASELINE: no fault injection, $txns txns =="
+else
+  echo "== ARM: drop destination=$dest  spec=$DROP_SPEC  txns=$txns =="
+fi
 
 # Rebuild unless REUSE_IMAGE=1. A stale image silently invalidates a run: an
 # image built before the modulo/permanent drop syntax landed (ea15ef2f7) parses
@@ -152,6 +165,23 @@ echo "drops injected:    ${drops:-0}"
 echo "gap-scan heals:    ${heals:-0}"
 echo "reconcile pulls:   ${recon:-0}"
 echo "total recoveries:  $(( ${heals:-0} + ${recon:-0} ))"
+
+if [ "$dest" = "none" ]; then
+  if [ "${drops:-0}" -ne 0 ]; then
+    echo
+    echo "RESULT: INVALID — baseline run injected ${drops} drop(s); it must inject none."
+    exit 3
+  fi
+  if [ "$rc" -ne 0 ]; then
+    echo
+    echo "RESULT: FAIL — a stream wedged with NO fault injected. That is a real defect,"
+    echo "not an un-healed drop."
+    exit "$rc"
+  fi
+  echo
+  echo "RESULT: BASELINE CLEAN — full load delivered with no drops and no wedges."
+  exit 0
+fi
 
 if [ "${drops:-0}" -eq 0 ]; then
   echo
