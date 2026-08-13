@@ -1,0 +1,3 @@
+# Soak run artifacts: logs, samples, manifests. Results are read from the run
+# directory itself, never committed — see soak-run-provenance.
+soak/runs/
