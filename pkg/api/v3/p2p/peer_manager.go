@@ -107,22 +107,42 @@ func (m *peerManager) getPeers(ctx context.Context, ma multiaddr.Multiaddr, limi
 	}
 
 	ch2 := make(chan peer.AddrInfo)
-	stop := time.After(timeout)
-	go func() {
-		defer close(ch2)
-		for {
+	go forwardPeers(ctx, ch, ch2, time.After(timeout))
+	return ch2, nil
+}
+
+// forwardPeers copies peers from ch to ch2 until ch closes, the timeout fires,
+// or ctx is cancelled, and closes ch2 on the way out.
+//
+// Both the send and the receive are guarded. Guarding only the receive is not
+// enough: callers are not required to drain ch2 — the dialer takes the first
+// usable peer and returns, and its deferred drain is bounded and non-blocking —
+// so an unguarded send parks here permanently once nobody is reading. A parked
+// goroutine can no longer observe the timeout that is supposed to bound it, and
+// it pins the upstream FindPeers channel and that query's libp2p streams for the
+// life of the process. That leaked one goroutine per discovery-backed dial and
+// OOM-killed the API node (#4085).
+func forwardPeers(ctx context.Context, ch <-chan peer.AddrInfo, ch2 chan<- peer.AddrInfo, stop <-chan time.Time) {
+	defer close(ch2)
+	for {
+		select {
+		case <-stop:
+			return
+		case <-ctx.Done():
+			return
+		case v, ok := <-ch:
+			if !ok {
+				return
+			}
 			select {
+			case ch2 <- v:
 			case <-stop:
 				return
-			case v, ok := <-ch:
-				if !ok {
-					return
-				}
-				ch2 <- v
+			case <-ctx.Done():
+				return
 			}
 		}
-	}()
-	return ch2, nil
+	}
 }
 
 // advertizeNewService advertizes new whoami info to everyone.
