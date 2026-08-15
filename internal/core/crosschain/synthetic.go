@@ -531,7 +531,10 @@ func (c *Conductor) recoverSyntheticsViaRange(ctx context.Context, source *url.U
 		mHeals.WithLabelValues("synthetic-range", c.Partition.ID, partitionLabel(source)).Inc()
 	}
 
-	slog.InfoContext(ctx, "Recovered synthetic messages by range", "module", "synthetic",
+	// Warn for the same reason the reconcile logs at Warn: this only happens when
+	// messages were lost, and it has to be visible at a node's default level or
+	// the path cannot be told apart from one that never ran.
+	slog.WarnContext(ctx, "Recovered synthetic messages by range", "module", "synthetic",
 		"source", source, "destination", c.Url(), "start", first, "end", last, "under-anchor", held)
 	return true, nil
 }

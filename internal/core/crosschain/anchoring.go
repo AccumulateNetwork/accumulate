@@ -389,7 +389,12 @@ func (c *Conductor) recoverAnchorsViaRange(ctx context.Context, batch *database.
 		return nil
 	}
 
-	slog.InfoContext(ctx, "Recovering anchors by range", "module", "conductor",
+	// Warn, not Info: nodes default to error level for this module, so an Info
+	// line here is invisible on a real deployment — and a recovery that cannot be
+	// observed is indistinguishable from one that never ran, which is how #4073
+	// hid a completely broken pull path across six soak runs. Reaching this point
+	// means anchors were lost outright, which is worth surfacing anyway.
+	slog.WarnContext(ctx, "Recovering anchors by range", "module", "conductor",
 		"source", source, "start", first, "end", last)
 
 	records, err := ranger.SequenceRange(ctx, source.JoinPath(protocol.AnchorPool), c.Url(), first, last, private.SequenceOptions{})
