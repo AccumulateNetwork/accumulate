@@ -29,15 +29,15 @@ ExecutorVersion:
     value: 8
     label: v2-jiuquan
     description: enables the Jiuquan release
-  V2Tanegashima:
-    value: 9
-    label: v2-tanegashima
-    description: enables lite account delegation and transaction whitelists
-
   V2Kourou:
-    value: 10
+    value: 9
     label: v2-kourou
     description: enables collection proofs for cross-partition messaging
+
+  V2Tanegashima:
+    value: 10
+    label: v2-tanegashima
+    description: enables lite account delegation and transaction whitelists
 
   VNext:
     value: 11

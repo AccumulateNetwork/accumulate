@@ -117,7 +117,7 @@ func TestSyntheticCollectionProof(t *testing.T) {
 	}
 
 	t.Run("rejected before activation", func(t *testing.T) {
-		block := newBlock(protocol.ExecutorVersionV2Tanegashima)
+		block := newBlock(protocol.ExecutorVersionV2Jiuquan)
 		_, err := run(t, block, newMsg(collectionProof), false, SyntheticMessage.Validate)
 		require.ErrorContains(t, err, "collection proofs are not enabled")
 	})
@@ -185,7 +185,7 @@ func TestSyntheticCollectionProof(t *testing.T) {
 	t.Run("process fails terminally on an unknown anchor before activation", func(t *testing.T) {
 		// The pre-activation path must be unchanged: individual proof, latest
 		// released version, unknown anchor -> terminal failure
-		block := newBlock(protocol.ExecutorVersionV2Tanegashima)
+		block := newBlock(protocol.ExecutorVersionV2Jiuquan)
 		individual := &protocol.AnnotatedReceipt{
 			Anchor:  &protocol.AnchorMetadata{Account: protocol.UnknownUrl()},
 			Receipt: &dbmerkle.Receipt{Start: hash[:], Anchor: hash[:]},

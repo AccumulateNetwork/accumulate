@@ -11,7 +11,7 @@ type ExecutorVersion uint64
 
 // ExecutorVersionLatest is the latest version of the executor.
 // ExecutorVersionLatest is intended primarily for testing.
-const ExecutorVersionLatest = ExecutorVersionV2Kourou
+const ExecutorVersionLatest = ExecutorVersionV2Tanegashima
 
 func init() {
 	// Verify that ExecutorVersionLatest has been updated, so that tests can
