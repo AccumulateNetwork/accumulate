@@ -351,20 +351,31 @@ func (c *Conductor) recoverAnchorsViaRange(ctx context.Context, batch *database.
 	}
 	part := ledger.Partition(source)
 
-	// The run of anchors we do not have. Bounded by the unknown entries: the
-	// collection proof anchors at the last element, and extending the range
-	// past what we are missing moves that anchor point to a newer directory
-	// root this node may not know yet.
+	// The FIRST CONTIGUOUS run of anchors we do not have.
+	//
+	// Contiguous matters: the source proves the run against the anchor numbered
+	// last+1, so that anchor has to be one we hold. Taking every hole at once
+	// would produce a range spanning entries we already have, and last+1 would
+	// then be a different anchor than the one bounding the first hole. One run
+	// per scan; the next block's scan takes the next.
+	//
+	// The run is always bounded above, which is the whole reason a hole is
+	// visible at all: Pending only extends as far as the highest anchor received,
+	// so its last entry is never nil. A gap exists because something later
+	// arrived — and that later something is what proves the gap's contents.
 	first, last := uint64(0), uint64(0)
 	for i, txid := range part.Pending {
 		seq := part.Delivered + uint64(i) + 1
-		if txid != nil {
+		if txid == nil {
+			if first == 0 {
+				first = seq
+			}
+			last = seq
 			continue
 		}
-		if first == 0 {
-			first = seq
+		if first != 0 {
+			break
 		}
-		last = seq
 	}
 	if first == 0 {
 		return nil // Nothing missing
@@ -394,9 +405,12 @@ func (c *Conductor) recoverAnchorsViaRange(ctx context.Context, batch *database.
 	if list == nil {
 		return errors.InvalidRecord.WithFormat("anchor range response from %v carries no collection proof", source)
 	}
+	// The proof terminates at a root of the SOURCE, not of the directory: it is
+	// the source's own root chain, committed by the anchor we already hold from
+	// it (#4087).
 	proof := &protocol.AnnotatedReceipt{
 		ReceiptList: list,
-		Anchor:      &protocol.AnchorMetadata{Account: protocol.DnUrl()},
+		Anchor:      &protocol.AnchorMetadata{Account: source},
 	}
 
 	for _, r := range records {

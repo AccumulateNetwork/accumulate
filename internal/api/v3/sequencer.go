@@ -763,7 +763,7 @@ func (s *Sequencer) getAnchorRange(batch *database.Batch, globals *core.GlobalVa
 	}
 
 	// Extend the proven range to the block-boundary anchor point covering the
-	// last entry, so the proof can be continued to a directory-anchored root
+	// last entry, so the proof can be continued to this partition's root chain
 	indexChain, err := ledger.AnchorSequenceChain().Index().Get()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load anchor sequence index chain: %w", err)
@@ -776,12 +776,48 @@ func (s *Sequencer) getAnchorRange(batch *database.Batch, globals *core.GlobalVa
 		return nil, errors.UnknownError.WithFormat("locate index entry for anchor sequence chain entry %d: %w", end-1, err)
 	}
 
-	continued, err := s.getRootContinuation(batch, anchorEntry)
+	// Continue the proof to OUR OWN root chain, at the point committed by the
+	// anchor immediately after the range — the one the destination must already
+	// hold, since a gap is only visible to it because something later arrived.
+	// The directory takes no part.
+	//
+	// Rooting at a directory-receipted root instead is what deadlocked #4087:
+	// proving anchor N required N's block to have been anchored to the DN, and
+	// the anchor that would have carried it there is exactly the one that went
+	// missing. Recovery cannot depend on the recovery having already happened.
+	//
+	// What replaces it is a property of merkle chains rather than anything about
+	// anchors: holding a validated state of a chain proves every entry added
+	// before it. The destination holds anchor end+1, validated by quorum when it
+	// arrived, and that anchor commits to this partition's root chain — which
+	// commits to the anchor sequence chain, which contains the run being served.
+	// So the destination can verify the whole run by replay against a root it
+	// already has, and we are never asked to prove anything.
+	proving := end + 1
+	if proving > uint64(sequenceChain.Height()) {
+		return nil, errors.NotReady.WithFormat("anchor %d has not been produced; a range is only provable below an anchor the destination already holds", proving)
+	}
+	provingHash, err := sequenceChain.Entry(int64(proving) - 1)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load anchor sequence chain entry %d: %w", proving-1, err)
+	}
+	var provingMsg messaging.MessageWithTransaction
+	err = batch.Message2(provingHash).Main().GetAs(&provingMsg)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load anchor %d: %w", proving, err)
+	}
+	provingBody, ok := provingMsg.GetTransaction().Body.(protocol.AnchorBody)
+	if !ok {
+		return nil, errors.InternalError.WithFormat("anchor %d is a %v", proving, provingMsg.GetTransaction().Body.Type())
+	}
+	provingIndex := provingBody.GetPartitionAnchor().RootChainIndex
+	if provingIndex < anchorEntry.Anchor {
+		return nil, errors.NotReady.WithFormat("anchor %d does not commit to anchor sequence chain entry %d yet", proving, end-1)
+	}
+
+	continued, err := s.getRootReceipt(batch, anchorEntry.Anchor, provingIndex)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
-	}
-	if continued == nil {
-		return nil, errors.NotReady.With("the directory has not receipted the block yet")
 	}
 
 	list, err := merkle.GetReceiptList(ledger.AnchorSequenceChain().Inner(), int64(start)-1, int64(anchorEntry.Source))

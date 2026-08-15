@@ -8,6 +8,7 @@ package e2e
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -40,13 +41,6 @@ import (
 // failure mode worth guarding, since the pull is reached through a runtime type
 // assertion that can quietly miss.
 func TestAnchorHoleRecoveredByRange(t *testing.T) {
-	t.Skip("FAILS, and the reason is a design gap, not a coding bug. The source " +
-		"cannot build the proof: getAnchorRange returns \"the directory has not " +
-		"receipted the block yet\" for the very anchor that is missing. The proof " +
-		"is rooted at a DN-receipted root, so recovering an anchor requires that " +
-		"anchor to have been anchored — circular. Rooting the proof at the LATER " +
-		"anchor the destination already holds is what breaks the cycle (#4087).")
-
 	alice := build.
 		Identity("alice").Create("book").
 		Tokens("tokens").Create("ACME").Add(1e9).Identity().
@@ -66,8 +60,13 @@ func TestAnchorHoleRecoveredByRange(t *testing.T) {
 	// copy of an anchor, so the others still arrive and reach quorum and no gap
 	// ever forms. Dropping every copy of number 2, and nothing else, leaves a
 	// hole that later anchors expose.
+	//
+	// Every partition pair has its own stream, so the hole — and the single
+	// recovered copy allowed to repair it — is per direction.
 	const holeAt = 2
 	var dropped atomic.Bool
+	var mu sync.Mutex
+	recovered := map[string]bool{}
 	sim := NewSim(t,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.Genesis(GenesisTime).With(alice, bob),
@@ -82,8 +81,29 @@ func TestAnchorHoleRecoveredByRange(t *testing.T) {
 				if !ok || seq.Number != holeAt {
 					continue
 				}
-				dropped.Store(true)
-				return false, nil // Do not send
+				// Drop every ORIGINAL copy — that is the hole.
+				if ba.Proof == nil {
+					dropped.Store(true)
+					return false, nil // Do not send
+				}
+
+				// Let exactly ONE recovered copy through, and drop the rest.
+				//
+				// Without this the test proves less than it appears to. Every
+				// destination validator runs its own conductor, so each pulls the
+				// missing anchor and submits its own signed copy — three copies,
+				// three signatures, quorum reached, and the anchor executes by the
+				// ordinary path whether or not the proof was ever consulted. One
+				// copy carries one signature, which is below the threshold of 2,
+				// so completion can only mean the collection proof authorized it.
+				key := seq.Source.String() + " -> " + seq.Destination.String()
+				mu.Lock()
+				defer mu.Unlock()
+				if recovered[key] {
+					return false, nil
+				}
+				recovered[key] = true
+				return true, nil
 			}
 			return true, nil
 		}),
