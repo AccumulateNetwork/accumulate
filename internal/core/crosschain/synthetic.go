@@ -534,6 +534,34 @@ func (c *Conductor) reconcileInboundStreams(ctx context.Context, batch *database
 			err := c.requestSyntheticFrom(ctx, source, seq)
 			if err != nil {
 				mReconcile.WithLabelValues("failed").Inc()
+
+				// A sequence the source cannot prove yet ends the scan for this
+				// source. Sequences are ordered, so if the source cannot build a
+				// receipt for seq -- almost always because the block that
+				// produced it is not anchored yet -- it cannot build one for
+				// seq+1 either, and every remaining request in this pass fails
+				// identically.
+				//
+				// reconcileGraceBlocks is supposed to keep us behind anchoring,
+				// but it is a fixed block count and anchoring latency is not
+				// bounded: under load a partition can fall arbitrarily far
+				// behind, at which point no constant is large enough. Observed
+				// on a soak with anchoring ~11,800 blocks behind: 1,492
+				// identical failures in ten minutes, 2.5 per second, burying
+				// every other log line (#4086).
+				//
+				// Stopping costs nothing. The next window rescans from the same
+				// place, so a sequence that becomes provable is picked up then;
+				// we only decline to ask again in a pass we already know cannot
+				// be served.
+				if errors.Is(err, errors.NotFound) {
+					slog.InfoContext(ctx, "Reconcile: source cannot prove this sequence yet, ending scan",
+						"module", "synthetic", "source", source, "destination", me,
+						"number", seq, "received", have, "produced", produced,
+						"error", err)
+					break
+				}
+
 				slog.ErrorContext(ctx, "Reconcile: failed to request missing synthetic",
 					"module", "synthetic", "source", source, "destination", me,
 					"number", seq, "error", err)
