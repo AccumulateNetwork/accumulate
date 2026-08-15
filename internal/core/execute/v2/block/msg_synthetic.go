@@ -94,14 +94,42 @@ func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*mess
 	if syn.Proof == nil {
 		return nil, errors.BadRequest.With("missing proof")
 	}
-	if syn.Proof.Receipt == nil {
-		return nil, errors.BadRequest.With("missing proof receipt")
-	}
 	if syn.Proof.Anchor == nil || syn.Proof.Anchor.Account == nil {
 		return nil, errors.BadRequest.With("missing proof metadata")
 	}
-	if !syn.Proof.Receipt.Validate(nil) {
-		return nil, errors.BadRequest.With("proof is invalid")
+
+	// Accept either proof form. An individual receipt proves one message; a
+	// collection proof proves a contiguous range with a single proof, which is
+	// what makes range recovery cheap (#4087). Both terminate at a DN anchor, so
+	// the trust root below is unchanged.
+	switch {
+	case syn.Proof.ReceiptList != nil:
+		// Gated: what a node accepts is consensus-critical. If one node took a
+		// collection proof while another rejected it, they would disagree about
+		// the state. Nothing emits one before this activates network-wide.
+		if !ctx.GetActiveGlobals().ExecutorVersion.V2KourouEnabled() {
+			return nil, errors.BadRequest.With("collection proofs are not enabled")
+		}
+		if syn.Proof.Receipt != nil {
+			return nil, errors.BadRequest.With("proof carries both a receipt and a receipt list")
+		}
+		// Bound the work before doing any: an unbounded list is an invitation to
+		// make a validator allocate and hash arbitrarily much.
+		if len(syn.Proof.ReceiptList.Elements) > protocol.MaxReceiptListElements {
+			return nil, errors.BadRequest.WithFormat("collection proof carries %d elements, limit is %d",
+				len(syn.Proof.ReceiptList.Elements), protocol.MaxReceiptListElements)
+		}
+		if !syn.Proof.ReceiptList.Validate(nil) {
+			return nil, errors.BadRequest.With("proof is invalid")
+		}
+
+	case syn.Proof.Receipt != nil:
+		if !syn.Proof.Receipt.Validate(nil) {
+			return nil, errors.BadRequest.With("proof is invalid")
+		}
+
+	default:
+		return nil, errors.BadRequest.With("missing proof receipt")
 	}
 
 	// A synthetic message must be sequenced (may change in the future)
@@ -132,8 +160,16 @@ func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*mess
 		return nil, errors.Unauthorized.WithFormat("key is not an active validator for %s", partition)
 	}
 
-	// Verify the proof starts with the transaction hash
-	if !bytes.Equal(h[:], syn.Proof.Receipt.Start) {
+	// Verify the proof covers this message. An individual receipt must start at
+	// the message hash; a collection proof must contain it. Included also binds
+	// the element's absolute index, because the list carries the counted merkle
+	// state at its start — so a collection proof pins the sequence number
+	// without any additional machinery.
+	if syn.Proof.ReceiptList != nil {
+		if !syn.Proof.ReceiptList.Included(h[:]) {
+			return nil, errors.BadRequest.WithFormat("message %x is not included in the collection proof", h)
+		}
+	} else if !bytes.Equal(h[:], syn.Proof.Receipt.Start) {
 		return nil, errors.BadRequest.WithFormat("invalid proof start: expected %x, got %x", h, syn.Proof.Receipt.Start)
 	}
 
@@ -213,11 +249,18 @@ func (x SyntheticMessage) process(batch *database.Batch, ctx *MessageContext) (b
 		return false, errors.UnknownError.Wrap(err)
 	}
 
-	// Verify the proof ends with a DN anchor
+	// Verify the proof ends with a DN anchor. TerminalAnchor resolves to the
+	// receipt's anchor for an individual proof and to the continuation's (or the
+	// list's own) for a collection proof, so both forms are checked against the
+	// same trust root.
+	terminal := syn.Proof.TerminalAnchor()
+	if len(terminal) != 32 {
+		return false, errors.BadRequest.With("proof has no terminal anchor")
+	}
 	_, err = batch.Account(ctx.Executor.Describe.AnchorPool()).
 		AnchorChain(protocol.Directory).
 		Root().
-		IndexOf(syn.Proof.Receipt.Anchor)
+		IndexOf(terminal)
 	switch {
 	case err == nil:
 		// Ok
@@ -230,16 +273,16 @@ func (x SyntheticMessage) process(batch *database.Batch, ctx *MessageContext) (b
 		// that wedged the receiver's stream permanently (#4070).
 		if ctx.GetActiveGlobals().ExecutorVersion.V2JiuquanEnabled() {
 			err = batch.Account(ctx.Executor.Describe.Ledger()).
-				SyntheticForAnchor(*(*[32]byte)(syn.Proof.Receipt.Anchor)).
+				SyntheticForAnchor(*(*[32]byte)(terminal)).
 				Add(ctx.message.ID())
 			if err != nil {
 				return false, errors.UnknownError.WithFormat("hold synthetic for anchor: %w", err)
 			}
 			return true, nil
 		}
-		return false, errors.BadRequest.WithFormat("invalid proof anchor: %x is not a known directory anchor", syn.Proof.Receipt.Anchor)
+		return false, errors.BadRequest.WithFormat("invalid proof anchor: %x is not a known directory anchor", terminal)
 	default:
-		return false, errors.UnknownError.WithFormat("search for directory anchor %x: %w", syn.Proof.Receipt.Anchor, err)
+		return false, errors.UnknownError.WithFormat("search for directory anchor %x: %w", terminal, err)
 	}
 
 	// Execute the inner message
