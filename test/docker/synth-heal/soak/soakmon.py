@@ -152,6 +152,7 @@ def collect_metrics():
 
     heals = {"synthetic": 0, "anchor": 0, "deferred": 0, "errors": 0, "focus": 0, "stuck": 0, "stuckStream": "", "byPartition": {}}
     drops = {"synthetic": 0, "anchor": 0, "byDest": {p: 0 for p in PARTITIONS}}
+    heal_types = set()
     seq = {}
 
     def pslot(p):
@@ -164,7 +165,18 @@ def collect_metrics():
         for name, lab, v in rows:
             iv = int(v)
             if name == N("crosschain_heals_total"):
-                t = lab.get("type", ""); heals[t] = heals.get(t, 0) + iv; pslot(lab.get("partition", ""))[t] = pslot(lab.get("partition", ""))[t] + iv
+                # Tolerate heal types this script has never heard of. The label
+                # set is owned by the node, not by the monitor: #4087 added
+                # "synthetic-range" and "anchor-range", and indexing a fixed dict
+                # killed the collector thread outright with a KeyError. The
+                # dashboard then served its last good sample forever — reporting a
+                # frozen height and a frozen heal count while the network ran on,
+                # which reads exactly like a seizure and hides a real one.
+                t = lab.get("type", "")
+                heals[t] = heals.get(t, 0) + iv
+                heal_types.add(t)
+                s = pslot(lab.get("partition", ""))
+                s[t] = s.get(t, 0) + iv
             elif name == N("crosschain_heal_deferred_total"):
                 heals["deferred"] += iv; pslot(lab.get("partition", ""))["deferred"] += iv
             elif name == N("crosschain_heal_errors_total"):
@@ -183,7 +195,10 @@ def collect_metrics():
                 f = lab.get("field", "")
                 cell[f] = max(cell.get(f, 0), iv)
 
-    heals["total"] = heals["synthetic"] + heals["anchor"]
+    # Sum the heal TYPES actually seen on heals_total, not a fixed pair, so a
+    # recovery path added later cannot go uncounted. Deliberately not a sum over
+    # `heals`, which also holds deferred/errors/focus/stuck — those are not heals.
+    heals["total"] = sum(heals.get(t, 0) for t in heal_types)
     drops["total"] = drops["synthetic"] + drops["anchor"]
     flows = {"synthetic": {}, "anchor": {}}
     for (kind, src, dst), cell in seq.items():
