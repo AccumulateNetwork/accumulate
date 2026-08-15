@@ -40,10 +40,12 @@ import (
 // failure mode worth guarding, since the pull is reached through a runtime type
 // assertion that can quietly miss.
 func TestAnchorHoleRecoveredByRange(t *testing.T) {
-	t.Skip("FAILS: the destination-side pull does not recover a hole. " +
-		"With every copy of anchor 2 dropped and the source-side push disabled, " +
-		"nothing recovers and the transaction never completes. This test is the " +
-		"repro; recoverAnchorsViaRange is not functional yet (#4087).")
+	t.Skip("FAILS, and the reason is a design gap, not a coding bug. The source " +
+		"cannot build the proof: getAnchorRange returns \"the directory has not " +
+		"receipted the block yet\" for the very anchor that is missing. The proof " +
+		"is rooted at a DN-receipted root, so recovering an anchor requires that " +
+		"anchor to have been anchored — circular. Rooting the proof at the LATER " +
+		"anchor the destination already holds is what breaks the cycle (#4087).")
 
 	alice := build.
 		Identity("alice").Create("book").
