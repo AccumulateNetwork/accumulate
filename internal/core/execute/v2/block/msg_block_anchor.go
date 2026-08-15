@@ -348,14 +348,12 @@ func (x BlockAnchor) proofAnchorIsHeld(batch *database.Batch, ctx *blockAnchorCo
 	anchorPool := batch.Account(ctx.Executor.Describe.AnchorPool())
 
 	// A root from an anchor we have already executed
-	_, err := anchorPool.AnchorChain(partition).Root().IndexOf(terminal)
-	switch {
-	case err == nil:
+	held, err := holdsAnchorRoot(batch, ctx.Executor.Describe.AnchorPool(), partition, terminal)
+	if err != nil {
+		return false, errors.UnknownError.Wrap(err)
+	}
+	if held {
 		return true, nil
-	case errors.Is(err, errors.NotFound):
-		// Keep looking
-	default:
-		return false, errors.UnknownError.WithFormat("search for %s anchor %x: %w", partition, terminal, err)
 	}
 
 	// A root from the next anchor we hold but have not executed

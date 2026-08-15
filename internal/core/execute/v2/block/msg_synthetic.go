@@ -14,6 +14,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -60,6 +61,33 @@ func synthDropped(ctx *MessageContext, cause error) {
 	ctx.Executor.logger.Info("Synthetic message rejected",
 		"module", "synthetic", "source", seq.Source,
 		"destination", seq.Destination, "number", seq.Number, "error", cause)
+}
+
+// holdsAnchorRoot reports whether the given root is on our anchor chain for the
+// named partition — that is, whether it arrived on an anchor we have already
+// received, validated and executed.
+//
+// This is the trust question every proof reduces to. What differs between a
+// directory root and a source's own root is only which chain to look on, not how
+// much is being trusted: both got there by an anchor meeting its partition's
+// validator quorum.
+func sourcePartition(seq *messaging.SequencedMessage) (string, bool) {
+	if seq == nil || seq.Source == nil {
+		return "", false
+	}
+	return protocol.ParsePartitionUrl(seq.Source)
+}
+
+func holdsAnchorRoot(batch *database.Batch, anchorPool *url.URL, partition string, root []byte) (bool, error) {
+	_, err := batch.Account(anchorPool).AnchorChain(partition).Root().IndexOf(root)
+	switch {
+	case err == nil:
+		return true, nil
+	case errors.Is(err, errors.NotFound):
+		return false, nil
+	default:
+		return false, errors.UnknownError.WithFormat("search for %s anchor %x: %w", partition, root, err)
+	}
 }
 
 func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*messaging.SynthFields, error) {
@@ -249,28 +277,48 @@ func (x SyntheticMessage) process(batch *database.Batch, ctx *MessageContext) (b
 		return false, errors.UnknownError.Wrap(err)
 	}
 
-	// Verify the proof ends with a DN anchor. TerminalAnchor resolves to the
-	// receipt's anchor for an individual proof and to the continuation's (or the
-	// list's own) for a collection proof, so both forms are checked against the
-	// same trust root.
+	// Verify the proof ends at an anchor root we hold. TerminalAnchor resolves to
+	// the receipt's anchor for an individual proof and to the continuation's (or
+	// the list's own) for a collection proof, so both forms are checked the same
+	// way.
+	//
+	// Two roots qualify. A directory root is what the ordinary outbound path
+	// produces, and is unchanged. A root of the SOURCE — committed by an anchor
+	// we already received from it and validated — is what recovery uses (#4087),
+	// and it is the one that works while the directory is behind: an anchor from
+	// S commits to S's root chain, which commits to S's synthetic chains, so one
+	// anchor we already hold proves S's earlier synthetic messages by replay.
+	// Nothing newer than what we have is needed, and the directory is not asked
+	// for anything — which is what dissolves #4086 rather than mitigating it.
 	terminal := syn.Proof.TerminalAnchor()
 	if len(terminal) != 32 {
 		return false, errors.BadRequest.With("proof has no terminal anchor")
 	}
-	_, err = batch.Account(ctx.Executor.Describe.AnchorPool()).
-		AnchorChain(protocol.Directory).
-		Root().
-		IndexOf(terminal)
-	switch {
-	case err == nil:
-		// Ok
-	case errors.Is(err, errors.NotFound):
+	held, err := holdsAnchorRoot(batch, ctx.Executor.Describe.AnchorPool(), protocol.Directory, terminal)
+	if err != nil {
+		return false, errors.UnknownError.Wrap(err)
+	}
+	// Gated: what a node is willing to accept is consensus-critical. If one node
+	// took a source-rooted proof while another rejected it, they would disagree
+	// about state. Nothing produces one before this activates network-wide.
+	if !held && ctx.GetActiveGlobals().ExecutorVersion.V2KourouEnabled() {
+		// check has already verified the message is sequenced
+		seq, _ := syn.Message.(*messaging.SequencedMessage)
+		if partition, ok := sourcePartition(seq); ok {
+			held, err = holdsAnchorRoot(batch, ctx.Executor.Describe.AnchorPool(), partition, terminal)
+			if err != nil {
+				return false, errors.UnknownError.Wrap(err)
+			}
+		}
+	}
+	if !held {
 		// The proof anchor is not (yet) known. From V2Jiuquan, HOLD the synthetic
 		// keyed by the anchor it is waiting for and record it pending, so that when
-		// a DirectoryAnchor carrying that anchor is delivered, processDirAnchor
+		// an anchor carrying that root is delivered, releaseSyntheticsHeldFor
 		// re-attempts it IN PLACE — no re-submission. This restores the V1 behavior
 		// that V2 dropped; before Jiuquan the anchor race was a terminal failure
-		// that wedged the receiver's stream permanently (#4070).
+		// that wedged the receiver's stream permanently (#4070). Both directory and
+		// partition anchors release what they carry, so either root can be waited on.
 		if ctx.GetActiveGlobals().ExecutorVersion.V2JiuquanEnabled() {
 			err = batch.Account(ctx.Executor.Describe.Ledger()).
 				SyntheticForAnchor(*(*[32]byte)(terminal)).
@@ -280,9 +328,7 @@ func (x SyntheticMessage) process(batch *database.Batch, ctx *MessageContext) (b
 			}
 			return true, nil
 		}
-		return false, errors.BadRequest.WithFormat("invalid proof anchor: %x is not a known directory anchor", terminal)
-	default:
-		return false, errors.UnknownError.WithFormat("search for directory anchor %x: %w", terminal, err)
+		return false, errors.BadRequest.WithFormat("invalid proof anchor: %x is not a known anchor", terminal)
 	}
 
 	// Execute the inner message

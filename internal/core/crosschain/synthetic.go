@@ -143,6 +143,22 @@ func (c *Conductor) requestMissingSynthetics(ctx context.Context, batch *databas
 			continue
 		}
 
+		// One range request under one collection proof beats N per-message pulls,
+		// and unlike them it does not need the directory to have caught up
+		// (#4087). Falls through to the per-message path when unavailable — a
+		// stream must never wedge because the fast path was not usable.
+		if held, ok := c.rangeProofAnchor(batch, part.Url); ok {
+			if first, last, ok := firstMissingRun(part); ok {
+				done, err := c.recoverSyntheticsViaRange(ctx, part.Url, first, last, held)
+				if err != nil {
+					slog.ErrorContext(ctx, "Failed to recover synthetics by range",
+						"source", part.Url, "destination", c.Url(), "start", first, "end", last, "error", err)
+				} else if done {
+					continue
+				}
+			}
+		}
+
 		// Pull EVERY missing message in the pending window (nil entries), not
 		// just Delivered+1 — a run of consecutive drops or a dense drop
 		// pattern would otherwise heal one message per window and never catch
@@ -182,6 +198,58 @@ func (c *Conductor) requestMissingSynthetics(ctx context.Context, batch *databas
 		}
 	}
 	return nil
+}
+
+// rangeProofAnchor returns the anchor a range request should be proven against:
+// the newest one from this source that we have EXECUTED, so its root is on our
+// anchor chain for that partition and the destination-side check will find it.
+//
+// Separate from the pull itself because callers must know whether the range path
+// is usable BEFORE they claim a sequence. Claiming and then falling back would
+// leave the per-message path suppressed by the claim the fast path just made.
+//
+// Not usable when nothing from the source has ever been anchored into us: there
+// is then no root to verify against. That is the case for BVN->BVN streams,
+// where partitions hold no anchors from each other and the chain of trust runs
+// through the directory by construction.
+func (c *Conductor) rangeProofAnchor(batch *database.Batch, source *url.URL) (uint64, bool) {
+	if !c.Globals.Load().ExecutorVersion.V2KourouEnabled() {
+		return 0, false
+	}
+	if _, ok := c.Sequencer.(private.SequenceRanger); !ok {
+		return 0, false
+	}
+
+	var anchors *protocol.AnchorLedger
+	err := batch.Account(c.Url(protocol.AnchorPool)).Main().GetAs(&anchors)
+	if err != nil {
+		slog.Debug("Cannot load anchor ledger for range proof", "module", "synthetic", "error", err)
+		return 0, false
+	}
+	held := anchors.Partition(source).Delivered
+	return held, held > 0
+}
+
+// firstMissingRun returns the first contiguous run of holes in a partition's
+// pending window. Contiguous because that is what a single collection proof
+// covers: the proof is a merkle range, so it proves a run of adjacent entries,
+// not an arbitrary selection.
+func firstMissingRun(part *protocol.PartitionSyntheticLedger) (uint64, uint64, bool) {
+	first, last := uint64(0), uint64(0)
+	for i, txid := range part.Pending {
+		seq := part.Delivered + uint64(i) + 1
+		if txid == nil {
+			if first == 0 {
+				first = seq
+			}
+			last = seq
+			continue
+		}
+		if first != 0 {
+			break
+		}
+	}
+	return first, last, first != 0
 }
 
 // claimSyntheticRequest returns true if this node should request source→self
@@ -267,7 +335,7 @@ func (c *Conductor) requestSyntheticFrom(ctx context.Context, source *url.URL, n
 		return errors.UnknownError.WithFormat("request synthetic %v→%v #%d: %w", source, c.Url(), num, err)
 	}
 
-	env, err := c.buildSyntheticSubmission(r)
+	env, err := c.buildSyntheticSubmission(r, nil)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
@@ -311,11 +379,14 @@ func (c *Conductor) requestSyntheticFrom(ctx context.Context, source *url.URL, n
 // produces (block_begin.go): the sequenced message, an anchor proof, and the
 // source's key signature — so no receipt needs to be rebuilt here. Returns a
 // nil envelope (no error) if the message cannot yet be proven.
-func (c *Conductor) buildSyntheticSubmission(r *api.MessageRecord[messaging.Message]) (*messaging.Envelope, error) {
+//
+// A non-nil proof overrides the per-message one: that is the collection proof
+// covering a whole range, which every record of that range shares.
+func (c *Conductor) buildSyntheticSubmission(r *api.MessageRecord[messaging.Message], proof *protocol.AnnotatedReceipt) (*messaging.Envelope, error) {
 	if r.Sequence == nil {
 		return nil, errors.UnknownError.With("sequencer returned no sequenced message")
 	}
-	if r.SourceReceipt == nil {
+	if proof == nil && r.SourceReceipt == nil {
 		// The source cannot prove this message yet (its anchor is not
 		// available). Skip; a later scan retries.
 		return nil, nil
@@ -343,9 +414,11 @@ func (c *Conductor) buildSyntheticSubmission(r *api.MessageRecord[messaging.Mess
 		return nil, errors.UnknownError.With("sequencer response is not signed")
 	}
 
-	proof := &protocol.AnnotatedReceipt{
-		Receipt: r.SourceReceipt,
-		Anchor:  &protocol.AnchorMetadata{Account: protocol.DnUrl()},
+	if proof == nil {
+		proof = &protocol.AnnotatedReceipt{
+			Receipt: r.SourceReceipt,
+			Anchor:  &protocol.AnchorMetadata{Account: protocol.DnUrl()},
+		}
 	}
 
 	var inner messaging.Message
@@ -370,6 +443,97 @@ func (c *Conductor) buildSyntheticSubmission(r *api.MessageRecord[messaging.Mess
 	}
 
 	return &messaging.Envelope{Messages: []messaging.Message{inner}}, nil
+}
+
+// recoverSyntheticsViaRange pulls the run [first, last] from source with ONE
+// range request carrying ONE collection proof covering every message in it, and
+// submits them (#4087).
+//
+// The proof is rooted at an anchor we ALREADY HOLD from that source, and we name
+// which one in the request. That is the whole point, and it is what the
+// per-message path cannot do: the individual receipt the source builds is
+// continued to a directory-anchored root, so a message produced in a block the
+// directory has not caught up to cannot be served at all — 1,492 such failures
+// in ten minutes in #4086, and no constant-sized grace period can bound a lag
+// that is unbounded.
+//
+// Rooting at an anchor we hold removes the directory from the path entirely. An
+// anchor from S commits to S's root chain, which commits to S's synthetic
+// chains, so a validated anchor from S proves every synthetic S produced before
+// it — by replay, against a root we already trust. The source is not asked to
+// prove anything; it returns the messages and the merkle state to replay them
+// onto. And because we name the anchor, we can never be handed a proof we are
+// unable to check.
+//
+// held is the anchor to prove against, from rangeProofAnchor. Returns false when
+// the range path is unavailable, so callers fall back to per-message pulls
+// rather than leaving a stream stuck.
+func (c *Conductor) recoverSyntheticsViaRange(ctx context.Context, source *url.URL, first, last, held uint64) (bool, error) {
+	ranger, ok := c.Sequencer.(private.SequenceRanger)
+	if !ok {
+		return false, nil // Peer does not serve ranges
+	}
+	if first == 0 || last < first {
+		return false, nil
+	}
+	if last-first+1 > protocol.MaxReceiptListElements {
+		last = first + protocol.MaxReceiptListElements - 1
+	}
+
+	records, err := ranger.SequenceRange(ctx, source.JoinPath(protocol.Synthetic), c.Url(), first, last,
+		private.SequenceOptions{ProveAgainstAnchor: held})
+	if err != nil {
+		return false, errors.UnknownError.WithFormat("request synthetic range [%d, %d] from %v: %w", first, last, source, err)
+	}
+	if len(records) == 0 {
+		return false, nil
+	}
+
+	// One proof, carried on the last record, covers the whole run.
+	list := records[len(records)-1].SourceReceiptList
+	if list == nil {
+		return false, errors.InvalidRecord.WithFormat("synthetic range response from %v carries no collection proof", source)
+	}
+	proof := &protocol.AnnotatedReceipt{
+		ReceiptList: list,
+		Anchor:      &protocol.AnchorMetadata{Account: source},
+	}
+
+	for _, r := range records {
+		env, err := c.buildSyntheticSubmission(r, proof)
+		if err != nil {
+			return false, errors.UnknownError.Wrap(err)
+		}
+		if env == nil {
+			continue
+		}
+
+		// Bundle the companion transaction, exactly as the per-message path does:
+		// in a wedged stream the destination may never have received it, and
+		// without it the healed message fails on "load transaction" (#4066).
+		if m, ok := r.Sequence.Message.(messaging.MessageForTransaction); ok &&
+			r.Sequence.Message.Type() != messaging.MessageTypeBlockAnchor {
+			txr, err := c.Querier.QueryTransaction(ctx, source.WithTxID(m.GetTxID().Hash()), nil)
+			if err != nil {
+				return false, errors.UnknownError.WithFormat("query companion transaction for %v→%v #%d: %w", source, c.Url(), r.Sequence.Number, err)
+			}
+			env.Messages = append(env.Messages, txr.Message)
+		}
+
+		err = c.submit(ctx, c.Url(), env)
+		if err != nil {
+			return false, errors.UnknownError.WithFormat("submit synthetic %v→%v #%d: %w", source, c.Url(), r.Sequence.Number, err)
+		}
+		c.synthHeals.Add(1)
+		if c.Heals != nil {
+			c.Heals.Synthetic.Add(1)
+		}
+		mHeals.WithLabelValues("synthetic-range", c.Partition.ID, partitionLabel(source)).Inc()
+	}
+
+	slog.InfoContext(ctx, "Recovered synthetic messages by range", "module", "synthetic",
+		"source", source, "destination", c.Url(), "start", first, "end", last, "under-anchor", held)
+	return true, nil
 }
 
 // partitionLabel returns the partition ID for a partition URL, for use as a
@@ -508,6 +672,41 @@ func (c *Conductor) reconcileInboundStreams(ctx context.Context, batch *database
 		c.pruneOverdue(source, have)
 		if produced <= have {
 			continue
+		}
+
+		// Prefer one range request under one collection proof (#4087). Only the
+		// OVERDUE prefix is pulled: sequence have+1 is the oldest missing, and a
+		// higher sequence is never sighted earlier than a lower one, so the
+		// overdue entries form a prefix. Anything past it is merely in flight.
+		//
+		// Availability is checked BEFORE claiming: claiming and then falling back
+		// would leave the per-message path suppressed by the claim the fast path
+		// just made, and the stream would sit unhealed until the window expired.
+		if held, ok := c.rangeProofAnchor(batch, source); ok {
+			overdue := have
+			for seq := have + 1; seq <= produced && overdue-have < syntheticHealBatch; seq++ {
+				if !c.gapIsOverdue(source, seq, blockIndex) {
+					break
+				}
+				overdue = seq
+			}
+			if overdue > have && c.claimSequence(source, have+1, now, window) {
+				mReconcile.WithLabelValues("attempted").Inc()
+				done, err := c.recoverSyntheticsViaRange(ctx, source, have+1, overdue, held)
+				switch {
+				case err != nil:
+					mReconcile.WithLabelValues("failed").Inc()
+					slog.ErrorContext(ctx, "Reconcile: failed to recover synthetics by range",
+						"module", "synthetic", "source", source, "destination", me,
+						"start", have+1, "end", overdue, "error", err)
+				case done:
+					mReconcile.WithLabelValues("succeeded").Inc()
+					slog.WarnContext(ctx, "Reconcile: pulled messages a gap scan cannot see",
+						"module", "synthetic", "source", source, "destination", me,
+						"received", have, "produced", produced, "requested", overdue-have)
+					continue
+				}
+			}
 		}
 
 		// Pull the missing range, capped like any other heal scan. The

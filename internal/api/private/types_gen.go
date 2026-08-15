@@ -22,9 +22,10 @@ import (
 )
 
 type SequenceOptions struct {
-	fieldsSet []bool
-	NodeID    p2p.PeerID `json:"nodeID,omitempty" form:"nodeID" query:"nodeID" validate:"required"`
-	extraData []byte
+	fieldsSet          []bool
+	NodeID             p2p.PeerID `json:"nodeID,omitempty" form:"nodeID" query:"nodeID" validate:"required"`
+	ProveAgainstAnchor uint64     `json:"proveAgainstAnchor,omitempty" form:"proveAgainstAnchor" query:"proveAgainstAnchor" validate:"required"`
+	extraData          []byte
 }
 
 func (v *SequenceOptions) Copy() *SequenceOptions {
@@ -33,6 +34,7 @@ func (v *SequenceOptions) Copy() *SequenceOptions {
 	if v.NodeID != "" {
 		u.NodeID = p2p.CopyPeerID(v.NodeID)
 	}
+	u.ProveAgainstAnchor = v.ProveAgainstAnchor
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -47,12 +49,16 @@ func (v *SequenceOptions) Equal(u *SequenceOptions) bool {
 	if !(p2p.EqualPeerID(v.NodeID, u.NodeID)) {
 		return false
 	}
+	if !(v.ProveAgainstAnchor == u.ProveAgainstAnchor) {
+		return false
+	}
 
 	return true
 }
 
 var fieldNames_SequenceOptions = []string{
 	1: "NodeID",
+	2: "ProveAgainstAnchor",
 }
 
 func (v *SequenceOptions) MarshalBinary() ([]byte, error) {
@@ -67,6 +73,9 @@ func (v *SequenceOptions) MarshalBinary() ([]byte, error) {
 
 	if !(v.NodeID == ("")) {
 		writer.WriteValue(1, v.NodeID.MarshalBinary)
+	}
+	if !(v.ProveAgainstAnchor == 0) {
+		writer.WriteUint(2, v.ProveAgainstAnchor)
 	}
 
 	_, _, err := writer.Reset(fieldNames_SequenceOptions)
@@ -88,6 +97,11 @@ func (v *SequenceOptions) IsValid() error {
 		errs = append(errs, "field NodeID is missing")
 	} else if v.NodeID == ("") {
 		errs = append(errs, "field NodeID is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field ProveAgainstAnchor is missing")
+	} else if v.ProveAgainstAnchor == 0 {
+		errs = append(errs, "field ProveAgainstAnchor is not set")
 	}
 
 	switch len(errs) {
@@ -114,6 +128,9 @@ func (v *SequenceOptions) UnmarshalBinaryFrom(rd io.Reader) error {
 		}
 		return err
 	})
+	if x, ok := reader.ReadUint(2); ok {
+		v.ProveAgainstAnchor = x
+	}
 
 	seen, err := reader.Reset(fieldNames_SequenceOptions)
 	if err != nil {
@@ -131,17 +148,22 @@ func init() {
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("nodeID", "p2p.PeerID"),
+		encoding.NewTypeField("proveAgainstAnchor", "uint64"),
 	}, "SequenceOptions", "sequenceOptions")
 
 }
 
 func (v *SequenceOptions) MarshalJSON() ([]byte, error) {
 	u := struct {
-		NodeID    *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"nodeID,omitempty"`
-		ExtraData *string                                 `json:"$epilogue,omitempty"`
+		NodeID             *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"nodeID,omitempty"`
+		ProveAgainstAnchor uint64                                  `json:"proveAgainstAnchor,omitempty"`
+		ExtraData          *string                                 `json:"$epilogue,omitempty"`
 	}{}
 	if !(v.NodeID == ("")) {
 		u.NodeID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.NodeID, Func: p2p.UnmarshalPeerIDJSON}
+	}
+	if !(v.ProveAgainstAnchor == 0) {
+		u.ProveAgainstAnchor = v.ProveAgainstAnchor
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -149,10 +171,12 @@ func (v *SequenceOptions) MarshalJSON() ([]byte, error) {
 
 func (v *SequenceOptions) UnmarshalJSON(data []byte) error {
 	u := struct {
-		NodeID    *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"nodeID,omitempty"`
-		ExtraData *string                                 `json:"$epilogue,omitempty"`
+		NodeID             *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"nodeID,omitempty"`
+		ProveAgainstAnchor uint64                                  `json:"proveAgainstAnchor,omitempty"`
+		ExtraData          *string                                 `json:"$epilogue,omitempty"`
 	}{}
 	u.NodeID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.NodeID, Func: p2p.UnmarshalPeerIDJSON}
+	u.ProveAgainstAnchor = v.ProveAgainstAnchor
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -161,6 +185,7 @@ func (v *SequenceOptions) UnmarshalJSON(data []byte) error {
 		v.NodeID = u.NodeID.Value
 	}
 
+	v.ProveAgainstAnchor = u.ProveAgainstAnchor
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err
