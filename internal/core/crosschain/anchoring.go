@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"log/slog"
 	"time"
 
@@ -26,6 +27,15 @@ import (
 func (c *Conductor) healAnchors(ctx context.Context, batch *database.Batch, destination *url.URL, currentBlock uint64) error {
 	if c.DisableAnchorHealing {
 		return nil // test-only, see the field
+	}
+
+	// Once collection proofs are active the DESTINATION pulls what it is
+	// missing (recoverAnchorsViaRange), so this source-side push — every
+	// validator re-signing and re-submitting historical anchors, one
+	// destination query per candidate — is redundant and is the flooding-prone
+	// path. Retire it (#4087).
+	if c.Globals.Load().ExecutorVersion.V2KourouEnabled() {
+		return nil
 	}
 
 	// Load the source sequence chain
@@ -292,4 +302,112 @@ func didUpdateToV2(anchor protocol.AnchorBody) bool {
 		}
 	}
 	return false
+}
+
+// recoverAnchorsViaRange pulls the run of anchors this partition is missing
+// from source, with ONE range request carrying ONE collection proof covering
+// every anchor in it (#4087).
+//
+// This inverts who owns anchor recovery. The source-side push in healAnchors
+// has every validator independently re-sign and re-submit each historical
+// anchor, and consults the destination once per candidate anchor to see whether
+// it already signed — so the query load grows with the size of the gap, aimed at
+// a destination that is by definition behind. Main's own comment records the
+// cost: 1.2M re-submissions and 14 cores in 25 minutes of the #4067 soak.
+//
+// Pulling instead costs one request and one proof regardless of gap size, and
+// the proof is the authorization, so no signature quorum has to be re-gathered.
+//
+// The invariant that makes this always serviceable: only ever ask for anchors
+// BELOW something we already hold. An anchor is a merkle root committing to
+// every prior entry, so a gap is visible only because a later anchor arrived —
+// and that later anchor is the root the recovered run proves against. Asking
+// above it would be asking the source to prove something it has not anchored
+// yet, which is exactly the failure that produced 1,492 errors in ten minutes
+// in #4086.
+func (c *Conductor) recoverAnchorsViaRange(ctx context.Context, batch *database.Batch, source *url.URL) error {
+	if !c.Globals.Load().ExecutorVersion.V2KourouEnabled() {
+		return nil
+	}
+	ranger, ok := c.Sequencer.(private.SequenceRanger)
+	if !ok {
+		return nil // Peer does not serve ranges; the per-message path still applies
+	}
+
+	// Our own ledger: what have we received from that source?
+	var ledger *protocol.AnchorLedger
+	err := batch.Account(c.Url(protocol.AnchorPool)).Main().GetAs(&ledger)
+	if err != nil {
+		return errors.UnknownError.WithFormat("load anchor ledger: %w", err)
+	}
+	part := ledger.Partition(source)
+
+	// The run of anchors we do not have. Bounded by the unknown entries: the
+	// collection proof anchors at the last element, and extending the range
+	// past what we are missing moves that anchor point to a newer directory
+	// root this node may not know yet.
+	first, last := uint64(0), uint64(0)
+	for i, txid := range part.Pending {
+		seq := part.Delivered + uint64(i) + 1
+		if txid != nil {
+			continue
+		}
+		if first == 0 {
+			first = seq
+		}
+		last = seq
+	}
+	if first == 0 {
+		return nil // Nothing missing
+	}
+	if last-first+1 > protocol.MaxReceiptListElements {
+		last = first + protocol.MaxReceiptListElements - 1
+	}
+
+	// Throttle per (source, run) so every block does not re-pull the same run.
+	if !c.claimSyntheticRequest(source.JoinPath("anchor-range"), first, time.Now()) {
+		return nil
+	}
+
+	slog.InfoContext(ctx, "Recovering anchors by range", "module", "conductor",
+		"source", source, "start", first, "end", last)
+
+	records, err := ranger.SequenceRange(ctx, source.JoinPath(protocol.AnchorPool), c.Url(), first, last, private.SequenceOptions{})
+	if err != nil {
+		return errors.UnknownError.WithFormat("request anchor range [%d, %d] from %v: %w", first, last, source, err)
+	}
+	if len(records) == 0 {
+		return nil
+	}
+
+	// One proof, carried on the last record, covers the whole run.
+	list := records[len(records)-1].SourceReceiptList
+	if list == nil {
+		return errors.InvalidRecord.WithFormat("anchor range response from %v carries no collection proof", source)
+	}
+	proof := &protocol.AnnotatedReceipt{
+		ReceiptList: list,
+		Anchor:      &protocol.AnchorMetadata{Account: protocol.DnUrl()},
+	}
+
+	for _, r := range records {
+		if r.Message == nil || r.Sequence == nil || r.Sequence.Source == nil {
+			return errors.InvalidRecord.WithFormat("anchor range response from %v is missing required fields", source)
+		}
+		msg := &messaging.BlockAnchor{
+			Anchor: &messaging.SequencedMessage{
+				Message:     r.Message,
+				Source:      r.Sequence.Source,
+				Destination: r.Sequence.Destination,
+				Number:      r.Sequence.Number,
+			},
+			Proof: proof,
+		}
+		err = c.submit(ctx, c.Url(), &messaging.Envelope{Messages: []messaging.Message{msg}})
+		if err != nil {
+			return errors.UnknownError.WithFormat("submit recovered anchor %d: %w", r.Sequence.Number, err)
+		}
+		mHeals.WithLabelValues("anchor-range", c.Partition.ID, partitionLabel(source)).Inc()
+	}
+	return nil
 }

@@ -114,13 +114,38 @@ func (x BlockAnchor) check(ctx *MessageContext, batch *database.Batch) (*blockAn
 		return nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", messaging.MessageTypeBlockAnchor, ctx.message.Type())
 	}
 
-	if anchor.Signature == nil {
+	// A block anchor is authorized either by a validator signature counted
+	// toward the quorum, or by a collection proof under a directory root the
+	// node already trusts (#4087). The proof form matters for recovery: a
+	// historical quorum can be impossible to re-gather after validator churn,
+	// while the proof depends only on the current root, which every synced node
+	// has.
+	if anchor.Proof != nil {
+		if !ctx.GetActiveGlobals().ExecutorVersion.V2KourouEnabled() {
+			return nil, errors.BadRequest.With("anchor collection proofs are not enabled")
+		}
+		if anchor.Proof.ReceiptList == nil {
+			return nil, errors.BadRequest.With("anchor proof must carry a receipt list")
+		}
+		if anchor.Proof.Receipt != nil {
+			return nil, errors.BadRequest.With("anchor proof must carry a receipt or a receipt list, not both")
+		}
+		if len(anchor.Proof.ReceiptList.Elements) > protocol.MaxReceiptListElements {
+			return nil, errors.BadRequest.WithFormat("collection proof carries %d elements, limit is %d",
+				len(anchor.Proof.ReceiptList.Elements), protocol.MaxReceiptListElements)
+		}
+		if !anchor.Proof.ReceiptList.Validate(nil) {
+			return nil, errors.BadRequest.With("anchor proof is invalid")
+		}
+	}
+
+	if anchor.Signature == nil && anchor.Proof == nil {
 		return nil, errors.BadRequest.With("missing signature")
 	}
 	if anchor.Anchor == nil {
 		return nil, errors.BadRequest.With("missing anchor")
 	}
-	if anchor.Signature.GetTransactionHash() == ([32]byte{}) {
+	if anchor.Signature != nil && anchor.Signature.GetTransactionHash() == ([32]byte{}) {
 		return nil, errors.BadRequest.With("missing transaction hash")
 	}
 
@@ -177,10 +202,26 @@ func (x BlockAnchor) check(ctx *MessageContext, batch *database.Batch) (*blockAn
 	// it takes some time for changes to propagate, so we'd need an activation
 	// height or something.
 
+	// The signer is still needed to build the context below, but the validator
+	// check only applies when a signature is present — a proof-authorized anchor
+	// carries none.
 	signer := core.AnchorSigner(&ctx.Executor.globals.Active, partition)
-	_, _, ok = signer.EntryByKeyHash(anchor.Signature.GetPublicKeyHash())
-	if !ok {
-		return nil, errors.Unauthorized.WithFormat("key is not an active validator for %s", partition)
+	if anchor.Signature != nil {
+		_, _, ok = signer.EntryByKeyHash(anchor.Signature.GetPublicKeyHash())
+		if !ok {
+			return nil, errors.Unauthorized.WithFormat("key is not an active validator for %s", partition)
+		}
+	}
+
+	// A collection proof must include the anchor transaction in its canonical
+	// stored form: the anchor sequence chain records it without a principal, and
+	// post-Vandenberg the body is identical for every destination.
+	if anchor.Proof != nil {
+		stored := new(protocol.Transaction)
+		stored.Body = txn.Body
+		if !anchor.Proof.ReceiptList.Included(stored.GetHash()) {
+			return nil, errors.BadRequest.WithFormat("collection proof does not include anchor %x", stored.GetHash())
+		}
 	}
 
 	// Basic validation
@@ -199,6 +240,13 @@ func (x BlockAnchor) check(ctx *MessageContext, batch *database.Batch) (*blockAn
 }
 
 func (x BlockAnchor) checkSignature(ctx *blockAnchorContext) error {
+	// A proof-authorized anchor carries no signature to check. Its
+	// authorization was established by the collection proof, which was
+	// validated and shown to include this anchor before we got here.
+	if ctx.blockAnchor.Signature == nil {
+		return nil
+	}
+
 	// Recalculate the hash in case the transaction was originally a remote
 	// transaction
 	txn := &messaging.TransactionMessage{Transaction: ctx.transaction}
@@ -226,6 +274,26 @@ func (x BlockAnchor) checkSignature(ctx *blockAnchorContext) error {
 }
 
 func (x BlockAnchor) txnIsReady(batch *database.Batch, ctx *blockAnchorContext) (bool, error) {
+	// A collection proof under a directory root we already hold authorizes the
+	// anchor by itself — no signature quorum (#4087). If the terminal anchor is
+	// not known yet we fall through to the quorum check rather than failing, and
+	// recovery resubmits once a later anchor extends what we know.
+	if ctx.blockAnchor.Proof != nil {
+		terminal := ctx.blockAnchor.Proof.TerminalAnchor()
+		_, err := batch.Account(ctx.Executor.Describe.AnchorPool()).
+			AnchorChain(protocol.Directory).
+			Root().
+			IndexOf(terminal)
+		switch {
+		case err == nil:
+			return true, nil
+		case errors.Is(err, errors.NotFound):
+			// Fall through to the signature-quorum check
+		default:
+			return false, errors.UnknownError.WithFormat("search for directory anchor %x: %w", terminal, err)
+		}
+	}
+
 	sigs, err := batch.Account(ctx.transaction.Header.Principal).
 		Transaction(ctx.transaction.ID().Hash()).
 		ValidatorSignatures().

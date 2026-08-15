@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"log/slog"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -127,6 +128,25 @@ func (c *Conductor) willBeginBlock(e execute.WillBeginBlock) error {
 			}
 		})
 	}()
+
+	// Pull anchors we are missing. Under collection proofs the destination owns
+	// recovery: one range request, one proof, no signature quorum and no query
+	// per candidate anchor (#4087). healAnchors yields to this when Kourou is
+	// active.
+	c.runTask(func() {
+		batch := c.Database.Begin(false)
+		defer batch.Discard()
+
+		for _, src := range c.Globals.Load().Network.Partitions {
+			if strings.EqualFold(src.ID, c.Partition.ID) {
+				continue
+			}
+			err := c.recoverAnchorsViaRange(context.Background(), batch, protocol.PartitionUrl(src.ID))
+			if err != nil {
+				slog.Error("Error while recovering anchors by range", "source", src.ID, "error", err)
+			}
+		}
+	})
 
 	// Check old anchors
 	if c.Partition.Type != protocol.PartitionTypeDirectory {
