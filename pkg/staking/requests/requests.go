@@ -1,0 +1,349 @@
+// Package requests owns the vocabulary of the staking requests account
+// (acc://staking.acme/requests on mainnet).
+//
+// It exists because that vocabulary was implemented twice, independently, and
+// the two implementations did not agree. The staking system's production report
+// read the pre-contract encoding and rendered conforming entries as
+// "informational" (core/staking#449); the wallet read only the contract and
+// rendered pre-contract entries as "refused" (core/wallet#272). Same bug,
+// opposite directions, one root cause.
+//
+// It lives here, rather than in either consumer, because core/staking and
+// core/wallet both already depend on this module and neither should depend on
+// the other. Anything that reads or writes staking requests should use this
+// package rather than growing a third dialect.
+//
+// The package deliberately has no dependencies beyond the standard library:
+// URLs are plain strings so a consumer is not forced into a particular URL
+// type, and errors are plain errors so no error-code vocabulary is imposed.
+//
+// The asymmetry is deliberate and load-bearing:
+//
+//   - Parse reads EVERY era that exists on chain.
+//   - Encode writes ONE, the current contract.
+//
+// Reading has to be generous because the chain is immutable and the old entries
+// are still there. Writing has to be strict because a request outside the
+// contract is accepted by the chain, billed, and never fulfilled. One encoder
+// means the format cannot fork again.
+package requests
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"regexp"
+	"strings"
+)
+
+// Kind is what a request asks the staking system to do. These are the only two
+// the validator fleet acts on.
+type Kind string
+
+const (
+	KindWithdraw Kind = "withdraw"
+	KindRegister Kind = "register"
+)
+
+// Era is the encoding an entry was written in.
+type Era int
+
+const (
+	// EraContract is the current encoding: one JSON payload per entry.
+	EraContract Era = iota + 1
+	// EraLegacy is the pre-contract encoding: a bare action marker and
+	// key=value parts, several payloads per entry. Read, never written.
+	EraLegacy
+)
+
+func (e Era) String() string {
+	switch e {
+	case EraContract:
+		return "contract"
+	case EraLegacy:
+		return "legacy"
+	default:
+		return "unknown"
+	}
+}
+
+// ErrNotARequest reports an entry that is not a staking request in any era:
+// announcements, test entries, binary blobs. These are not malformed requests —
+// they were never requests — so callers should say so rather than reporting a
+// refusal.
+var ErrNotARequest = errors.New("not a staking request")
+
+// Request is one request, normalised across eras. A legacy addAccount and a
+// contract register expressing the same intent parse to the same value; if they
+// did not, this package would just move the divergence up a level.
+type Request struct {
+	Kind Kind
+
+	// Account is the staking account a withdrawal draws from.
+	Account string
+	// Destination is where a withdrawal's tokens go. Any token account.
+	Destination string
+	// Amount is ACME as a plain decimal string, never nanoACME.
+	Amount string
+
+	// Stake is the staking account a registration registers.
+	Stake string
+	// Type is the staking class.
+	Type string
+	// Rewards is the payout destination. Empty means the stake itself.
+	Rewards string
+	// Delegate is the delegate's STAKING ACCOUNT url, not its ADI.
+	Delegate string
+
+	// Identity is the registration's ADI. Carried by some legacy entries; the
+	// contract derives it from the stake instead, so Encode drops it.
+	Identity string
+	// RequestTx is a legacy cross-reference to another transaction. The
+	// contract has no such field; Encode drops it.
+	RequestTx string
+
+	// Era is the encoding this request was parsed from. Zero for a request
+	// built by Withdraw or Register.
+	Era Era
+}
+
+// Subject is the account a request names — the one whose key book must have
+// signed it. Withdrawals name it as the account, registrations as the stake.
+func (r *Request) Subject() string {
+	if r.Account != "" {
+		return r.Account
+	}
+	return r.Stake
+}
+
+// amountPattern is the only amount syntax the fleet accepts. It must stay
+// identical to amountPattern in core/staking's cmd/asp/requests.go. A general
+// number parser would also accept "1e9", "0x2710" and "1/3", none of which read
+// as the amount that would actually move.
+var amountPattern = regexp.MustCompile(`^\d{1,12}(\.\d{1,8})?$`)
+
+// Classes are the staking classes a registration may name, canonically spelled.
+// Comparison is case-insensitive, matching stakingRegisterClasses in
+// core/staking's pkg/genbrowser/requests.go. A class outside this set is
+// statically dead: the signers refuse it on every pass, so such a request can
+// never be fulfilled.
+var Classes = []string{"pure", "delegated", "coreValidator", "coreFollower", "stakingValidator"}
+
+// CanonicalClass returns the canonical spelling of a staking class, accepting
+// any case and the hyphenated forms people type on a command line
+// ("core-validator"). The second result reports whether it is a class at all.
+func CanonicalClass(s string) (string, bool) {
+	norm := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(s), "-", ""))
+	for _, c := range Classes {
+		if strings.ToLower(c) == norm {
+			return c, true
+		}
+	}
+	return "", false
+}
+
+// Withdraw builds a withdrawal request.
+//
+// The destination may be any token account. Where it points decides when the
+// withdrawal pays — the same pay period to another staking account, two periods
+// later to an account outside staking — but that is derived from the entry by
+// the fleet. A caller that branches on the destination is deciding something it
+// does not own.
+//
+// amount is ACME as the user wrote it, not nanoACME.
+func Withdraw(account, destination, amount string) (*Request, error) {
+	r := &Request{
+		Kind:        KindWithdraw,
+		Account:     strings.TrimSpace(account),
+		Destination: strings.TrimSpace(destination),
+		Amount:      strings.TrimSpace(amount),
+	}
+	return r, r.Validate()
+}
+
+// Register builds a registration request.
+//
+// Registration is also how every change is made: there is no change action, so
+// re-registering with new values is how the type, the delegate and the payout
+// destination are all updated. Because the registry entry the fleet writes is a
+// whole record, a re-registration REPLACES — a field left empty is reset, not
+// preserved. Callers changing one field must carry the others.
+//
+// rewards is the payout destination and defaults to the stake when empty.
+// delegate is the delegate's staking account url, not its ADI: the signers match
+// it against registered stakers' account URLs, so an ADI never resolves.
+func Register(stake, class, rewards, delegate string) (*Request, error) {
+	canonical, ok := CanonicalClass(class)
+	if !ok {
+		canonical = strings.TrimSpace(class) // let Validate produce the message
+	}
+	r := &Request{
+		Kind:     KindRegister,
+		Stake:    strings.TrimSpace(stake),
+		Type:     canonical,
+		Rewards:  strings.TrimSpace(rewards),
+		Delegate: strings.TrimSpace(delegate),
+	}
+	return r, r.Validate()
+}
+
+// Validate applies the fleet's own acceptance rules, so a caller can refuse
+// locally instead of billing a permanent entry the fleet will never act on.
+//
+// It does not apply the governance gates — the full-stake minimum, and whether
+// a delegate is a registered staker. Those are not validity: a request failing
+// them is well formed, is re-checked every pass, and starts working once the
+// precondition is met, without being refiled. Refusing them locally would
+// refuse requests that are merely early.
+func (r *Request) Validate() error {
+	switch r.Kind {
+	case KindWithdraw:
+		if r.Account == "" || r.Destination == "" {
+			return fmt.Errorf("a withdraw request needs an account and a destination")
+		}
+		if !amountPattern.MatchString(r.Amount) {
+			return fmt.Errorf(
+				"amount %q must be a plain decimal such as 12.5 — at most 12 digits and 8 decimal places, no exponent, no symbols",
+				r.Amount)
+		}
+		return nil
+
+	case KindRegister:
+		if r.Stake == "" || r.Type == "" {
+			return fmt.Errorf("a register request needs a stake account and a type")
+		}
+		if _, ok := CanonicalClass(r.Type); !ok {
+			return fmt.Errorf("%q is not a staking class; the signers refuse it — use one of %s",
+				r.Type, strings.Join(Classes, ", "))
+		}
+		if strings.EqualFold(r.Type, "delegated") && r.Delegate == "" {
+			return fmt.Errorf("a delegated registration needs a delegate")
+		}
+		return nil
+
+	default:
+		return fmt.Errorf("%q is not a staking request; the fleet acts on %q and %q only",
+			r.Kind, KindWithdraw, KindRegister)
+	}
+}
+
+// contractEntry is the wire form of the current encoding. Field order and names
+// are the contract; core/staking's cmd/asp/requests.go unmarshals into the
+// equivalent struct.
+type contractEntry struct {
+	ActionType  string `json:"actionType"`
+	Account     string `json:"account,omitempty"`
+	Destination string `json:"destination,omitempty"`
+	Amount      string `json:"amount,omitempty"`
+	Type        string `json:"type,omitempty"`
+	Stake       string `json:"stake,omitempty"`
+	Rewards     string `json:"rewards,omitempty"`
+	Delegate    string `json:"delegate,omitempty"`
+}
+
+// Encode renders a request in the current contract encoding: the data payloads
+// of a WriteData entry, always exactly one, a JSON object.
+//
+// Legacy encodings are never produced. Parsing a legacy entry and encoding it
+// again yields a CONTRACT entry, not the original bytes — this is a one-way
+// migration, not a round trip, and anything depending on byte-identical
+// re-encoding has to say so.
+//
+// Identity and RequestTx are dropped: the contract has no such fields, and the
+// fleet derives the identity from the stake.
+func (r *Request) Encode() ([][]byte, error) {
+	if err := r.Validate(); err != nil {
+		return nil, err
+	}
+
+	e := contractEntry{ActionType: string(r.Kind)}
+	switch r.Kind {
+	case KindWithdraw:
+		e.Account, e.Destination, e.Amount = r.Account, r.Destination, r.Amount
+	case KindRegister:
+		e.Type, e.Stake, e.Rewards, e.Delegate = r.Type, r.Stake, r.Rewards, r.Delegate
+	}
+
+	b, err := json.Marshal(e)
+	if err != nil {
+		return nil, fmt.Errorf("encode staking request: %w", err)
+	}
+	// One entry, one request. Two payloads would share an entry hash and so a
+	// fulfillment memo, making their fulfillments indistinguishable — the fleet
+	// refuses such an entry whole.
+	return [][]byte{b}, nil
+}
+
+// Parse decodes an entry of the requests account in any era.
+//
+// It returns ErrNotARequest for entries that were never requests — the
+// historical announcements, test entries and binary blobs that do not lead with
+// a recognisable staking request. Those are not malformed requests and should
+// not be reported as refusals.
+//
+// A returned Request may still fail Validate: parsing recognises the shape,
+// validation judges whether the fleet will act on it. The two are separate on
+// purpose, so a caller can show a badly-formed request AND say what is wrong
+// with it.
+func Parse(parts [][]byte) (*Request, error) {
+	if r, ok := parseContract(parts); ok {
+		return r, nil
+	}
+	if r, ok := parseLegacy(parts); ok {
+		return r, nil
+	}
+	return nil, ErrNotARequest
+}
+
+// parseContract reads the current encoding: exactly one payload, a JSON object
+// with a recognised actionType.
+func parseContract(parts [][]byte) (*Request, bool) {
+	if len(parts) != 1 {
+		// Several contract payloads in one entry is a refusal, but it is still
+		// the contract era, so report it as such rather than falling through to
+		// the legacy reader.
+		if r, ok := parseMultiContract(parts); ok {
+			return r, true
+		}
+		return nil, false
+	}
+	return parseOneContract(parts[0])
+}
+
+func parseOneContract(part []byte) (*Request, bool) {
+	var e contractEntry
+	if err := json.Unmarshal(part, &e); err != nil {
+		return nil, false
+	}
+	kind := Kind(strings.ToLower(strings.TrimSpace(e.ActionType)))
+	if kind != KindWithdraw && kind != KindRegister {
+		return nil, false
+	}
+	r := &Request{
+		Kind:        kind,
+		Account:     e.Account,
+		Destination: e.Destination,
+		Amount:      e.Amount,
+		Stake:       e.Stake,
+		Type:        e.Type,
+		Rewards:     e.Rewards,
+		Delegate:    e.Delegate,
+		Era:         EraContract,
+	}
+	return r, true
+}
+
+// parseMultiContract recognises an entry of several contract payloads. The
+// fleet refuses these, but they belong to the contract era; reporting the first
+// payload lets a caller say what was attempted.
+func parseMultiContract(parts [][]byte) (*Request, bool) {
+	if len(parts) < 2 {
+		return nil, false
+	}
+	for _, p := range parts {
+		if _, ok := parseOneContract(p); !ok {
+			return nil, false
+		}
+	}
+	return parseOneContract(parts[0])
+}
