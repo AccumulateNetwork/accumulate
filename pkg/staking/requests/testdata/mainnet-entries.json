@@ -1,0 +1,109 @@
+[
+ {
+  "chainIndex": 3,
+  "parts": [
+   "identity=ethan.acme",
+   "type=delegated",
+   "stake=ethan.acme/stake",
+   "rewards=ethan.acme/rewards",
+   "delegate=highstakes.acme/CashCow"
+  ],
+  "expect": {
+   "kind": "register",
+   "era": "legacy",
+   "stake": "ethan.acme/stake",
+   "rewards": "ethan.acme/rewards",
+   "delegate": "highstakes.acme/CashCow",
+   "type": "delegated"
+  }
+ },
+ {
+  "chainIndex": 200,
+  "parts": [
+   "withdrawTokens",
+   "account=acc://defidevs.acme/stake",
+   "amount=25000000000000",
+   "recipient=acc://Quentin.acme/vault"
+  ],
+  "expect": {
+   "kind": "withdraw",
+   "era": "legacy",
+   "account": "acc://defidevs.acme/stake",
+   "destination": "acc://Quentin.acme/vault",
+   "amount": "250000"
+  }
+ },
+ {
+  "chainIndex": 280,
+  "parts": [
+   "addAccount",
+   "account=acc://BullAnna.acme/token",
+   "delegate=acc://defidevs.acme",
+   "type=delegated"
+  ],
+  "expect": {
+   "kind": "register",
+   "era": "legacy",
+   "stake": "acc://BullAnna.acme/token",
+   "delegate": "acc://defidevs.acme",
+   "type": "delegated"
+  }
+ },
+ {
+  "chainIndex": 340,
+  "parts": [
+   "Accu2",
+   "actionType=addAccount",
+   "account=acc://saulyte.acme/staking",
+   "type=delegated",
+   "payout=acc://saulyte.acme/staking",
+   "delegate=acc://kompendium.acme",
+   "request_tx_hash=acc://63e0c0fdb1f4e99f37d030369a6963b5aeeeba60db2b223b0caa2b266ec76fa7@saulyte.acme/staking"
+  ],
+  "expect": {
+   "kind": "register",
+   "era": "legacy",
+   "stake": "acc://saulyte.acme/staking",
+   "rewards": "acc://saulyte.acme/staking",
+   "type": "delegated"
+  }
+ },
+ {
+  "chainIndex": 344,
+  "parts": [
+   "Accu2",
+   "actionType=addAccount",
+   "account=acc://sjailineminer112.acme/staking",
+   "type=delegated",
+   "payout=acc://sjailineminer112.acme/tokens",
+   "delegate=acc://kompendium.acme",
+   "request_txid=acc://c41bb7f25e5055f607cacd4c4c48882db0fadc0f25c7755c4681a36dd11abe46@sjailineminer112.acme"
+  ],
+  "expect": {
+   "kind": "register",
+   "era": "legacy",
+   "stake": "acc://sjailineminer112.acme/staking",
+   "rewards": "acc://sjailineminer112.acme/tokens",
+   "type": "delegated"
+  }
+ },
+ {
+  "chainIndex": 346,
+  "parts": [
+   "Accu2",
+   "actionType=addAccount",
+   "account=acc://LV8RMPT.acme/staking",
+   "type=delegated",
+   "payout=acc://LV8RMPT.acme/staking",
+   "delegate=acc://kompendium.acme",
+   "request_tx_hash=acc://38159b8a808e13242ac0a6532a3f508cec8bd902b46c466e31b76a39091dbca4@lv8rmpt.acme/staking"
+  ],
+  "expect": {
+   "kind": "register",
+   "era": "legacy",
+   "stake": "acc://LV8RMPT.acme/staking",
+   "rewards": "acc://LV8RMPT.acme/staking",
+   "type": "delegated"
+  }
+ }
+]

@@ -17,6 +17,11 @@
 // URLs are plain strings so a consumer is not forced into a particular URL
 // type, and errors are plain errors so no error-code vocabulary is imposed.
 //
+// The SPEC remains normative: core/staking's spec/ directory (the staking
+// distribution specification and its numbered decomposition) defines what a
+// request IS; this package implements that definition. Where this package and
+// the spec disagree, the spec wins and this package has a bug.
+//
 // The asymmetry is deliberate and load-bearing:
 //
 //   - Parse reads EVERY era that exists on chain.
@@ -33,6 +38,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -105,6 +111,14 @@ type Request struct {
 	// Era is the encoding this request was parsed from. Zero for a request
 	// built by Withdraw or Register.
 	Era Era
+
+	// UnknownFields are top-level JSON keys a contract-era entry carried
+	// that the contract does not define. They are the silent-wrong-outcome
+	// trap: {"payout": …} instead of {"rewards": …} parses as a valid
+	// register whose payout DEFAULTS TO THE STAKE — well-formed, fulfilled,
+	// and pointed somewhere the author did not choose. Validate refuses
+	// while any are present; display callers can show the entry anyway.
+	UnknownFields []string
 }
 
 // Subject is the account a request names — the one whose key book must have
@@ -196,6 +210,16 @@ func Register(stake, class, rewards, delegate string) (*Request, error) {
 // precondition is met, without being refiled. Refusing them locally would
 // refuse requests that are merely early.
 func (r *Request) Validate() error {
+	if len(r.UnknownFields) > 0 {
+		hints := ""
+		for _, f := range r.UnknownFields {
+			if want, ok := fieldHints[strings.ToLower(f)]; ok {
+				hints += fmt.Sprintf(" (%q is not a contract field — use %q)", f, want)
+			}
+		}
+		return fmt.Errorf("unknown field(s) %s%s — the fleet ignores fields it does not define, so this request would be fulfilled with defaults the author did not choose",
+			strings.Join(r.UnknownFields, ", "), hints)
+	}
 	switch r.Kind {
 	case KindWithdraw:
 		if r.Account == "" || r.Destination == "" {
@@ -310,6 +334,19 @@ func parseContract(parts [][]byte) (*Request, bool) {
 	return parseOneContract(parts[0])
 }
 
+// contractFields are the only top-level keys the contract defines.
+// fieldHints map the near-misses people actually type to the field they
+// meant — the legacy aliases, mostly.
+var (
+	contractFields = map[string]bool{"actiontype": true, "account": true, "destination": true,
+		"amount": true, "type": true, "stake": true, "rewards": true, "delegate": true}
+	fieldHints = map[string]string{
+		"payout": "rewards", "awards": "rewards", "rewardsaccount": "rewards",
+		"recipient": "destination", "staking_account": "account", "stakingaccount": "account",
+		"delegate_to": "delegate", "action": "actionType",
+	}
+)
+
 func parseOneContract(part []byte) (*Request, bool) {
 	var e contractEntry
 	if err := json.Unmarshal(part, &e); err != nil {
@@ -319,16 +356,29 @@ func parseOneContract(part []byte) (*Request, bool) {
 	if kind != KindWithdraw && kind != KindRegister {
 		return nil, false
 	}
+	// Collect keys the contract does not define. json.Unmarshal ignores
+	// them silently, which is exactly the trap: see Request.UnknownFields.
+	var unknown []string
+	var raw map[string]json.RawMessage
+	if json.Unmarshal(part, &raw) == nil {
+		for k := range raw {
+			if !contractFields[strings.ToLower(k)] {
+				unknown = append(unknown, k)
+			}
+		}
+		sort.Strings(unknown)
+	}
 	r := &Request{
-		Kind:        kind,
-		Account:     e.Account,
-		Destination: e.Destination,
-		Amount:      e.Amount,
-		Stake:       e.Stake,
-		Type:        e.Type,
-		Rewards:     e.Rewards,
-		Delegate:    e.Delegate,
-		Era:         EraContract,
+		Kind:          kind,
+		Account:       e.Account,
+		Destination:   e.Destination,
+		Amount:        e.Amount,
+		Stake:         e.Stake,
+		Type:          e.Type,
+		Rewards:       e.Rewards,
+		Delegate:      e.Delegate,
+		Era:           EraContract,
+		UnknownFields: unknown,
 	}
 	return r, true
 }
