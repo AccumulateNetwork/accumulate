@@ -11,6 +11,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
+	api "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"log/slog"
 	"time"
 
@@ -29,14 +30,22 @@ func (c *Conductor) healAnchors(ctx context.Context, batch *database.Batch, dest
 		return nil // test-only, see the field
 	}
 
-	// Once collection proofs are active the DESTINATION pulls what it is
-	// missing (recoverAnchorsViaRange), so this source-side push — every
-	// validator re-signing and re-submitting historical anchors, one
-	// destination query per candidate — is redundant and is the flooding-prone
-	// path. Retire it (#4087).
-	if c.Globals.Load().ExecutorVersion.V2KourouEnabled() {
-		return nil
-	}
+	// NOTE: this push is NOT retired under collection proofs, even though the
+	// destination-side pull (recoverAnchorsViaRange) is much cheaper.
+	//
+	// The pull can only see a HOLE — a missing anchor revealed because a LATER
+	// one arrived, which is what puts a nil in the destination's Pending list.
+	// It cannot see a TAIL: when the most recent anchors simply never arrive,
+	// the destination holds no evidence anything is missing and its ledger is
+	// indistinguishable from an idle stream. Only the source knows what it sent
+	// and was never acknowledged.
+	//
+	// Retiring this path made TestDropInitialAnchor fail — nothing recovered at
+	// all, because a dropped initial anchor is precisely a tail. Both paths run:
+	// the pull handles holes in one request, the push remains the only thing
+	// that can notice a tail. Closing that gap means teaching the destination
+	// the source's produced count, the way reconcileInboundStreams does for
+	// synthetic messages (#4073) — tracked as follow-up work on #4087.
 
 	// Load the source sequence chain
 	sequence := batch.Account(c.Url(protocol.AnchorPool)).AnchorSequenceChain()
@@ -394,6 +403,16 @@ func (c *Conductor) recoverAnchorsViaRange(ctx context.Context, batch *database.
 		if r.Message == nil || r.Sequence == nil || r.Sequence.Source == nil {
 			return errors.InvalidRecord.WithFormat("anchor range response from %v is missing required fields", source)
 		}
+		// The collection proof is the authorization, but the serving node's
+		// signature is carried through as well: BlockAnchor.ID() derives the
+		// message identity from the signer, so an anchor with no signature
+		// panics before it can be validated. The signature is not what makes
+		// the anchor acceptable here — the proof is — it is what keeps identity
+		// and the pre-Kourou checks working.
+		keySig := anchorKeySignature(r)
+		if keySig == nil {
+			return errors.InvalidRecord.WithFormat("anchor %d in range response from %v carries no signature", r.Sequence.Number, source)
+		}
 		msg := &messaging.BlockAnchor{
 			Anchor: &messaging.SequencedMessage{
 				Message:     r.Message,
@@ -401,13 +420,37 @@ func (c *Conductor) recoverAnchorsViaRange(ctx context.Context, batch *database.
 				Destination: r.Sequence.Destination,
 				Number:      r.Sequence.Number,
 			},
-			Proof: proof,
+			Signature: keySig,
+			Proof:     proof,
 		}
 		err = c.submit(ctx, c.Url(), &messaging.Envelope{Messages: []messaging.Message{msg}})
 		if err != nil {
 			return errors.UnknownError.WithFormat("submit recovered anchor %d: %w", r.Sequence.Number, err)
 		}
 		mHeals.WithLabelValues("anchor-range", c.Partition.ID, partitionLabel(source)).Inc()
+	}
+	return nil
+}
+
+// anchorKeySignature extracts the serving node's key signature from a range
+// response record, if it has one.
+func anchorKeySignature(r *api.MessageRecord[messaging.Message]) protocol.KeySignature {
+	if r.Signatures == nil {
+		return nil
+	}
+	for _, set := range r.Signatures.Records {
+		if set.Signatures == nil {
+			continue
+		}
+		for _, sr := range set.Signatures.Records {
+			msg, ok := sr.Message.(*messaging.SignatureMessage)
+			if !ok {
+				continue
+			}
+			if sig, ok := msg.Signature.(protocol.KeySignature); ok {
+				return sig
+			}
+		}
 	}
 	return nil
 }
