@@ -92,6 +92,12 @@ const TypePrivateSequenceRequest Type = 128
 // TypePrivateSequenceResponse .
 const TypePrivateSequenceResponse Type = 129
 
+// TypePrivateSequenceRangeRequest .
+const TypePrivateSequenceRangeRequest Type = 130
+
+// TypePrivateSequenceRangeResponse .
+const TypePrivateSequenceRangeResponse Type = 131
+
 // TypeAddressed .
 const TypeAddressed Type = 255
 
@@ -102,7 +108,7 @@ func (v Type) GetEnumValue() uint64 { return uint64(v) }
 func (v *Type) SetEnumValue(id uint64) bool {
 	u := Type(id)
 	switch u {
-	case TypeNodeInfoRequest, TypeFindServiceRequest, TypeConsensusStatusRequest, TypeNetworkStatusRequest, TypeMetricsRequest, TypeQueryRequest, TypeSubmitRequest, TypeValidateRequest, TypeSubscribeRequest, TypeFaucetRequest, TypeListSnapshotsRequest, TypeErrorResponse, TypeNodeInfoResponse, TypeFindServiceResponse, TypeConsensusStatusResponse, TypeNetworkStatusResponse, TypeMetricsResponse, TypeRecordResponse, TypeSubmitResponse, TypeValidateResponse, TypeSubscribeResponse, TypeFaucetResponse, TypeListSnapshotsResponse, TypeEvent, TypePrivateSequenceRequest, TypePrivateSequenceResponse, TypeAddressed:
+	case TypeNodeInfoRequest, TypeFindServiceRequest, TypeConsensusStatusRequest, TypeNetworkStatusRequest, TypeMetricsRequest, TypeQueryRequest, TypeSubmitRequest, TypeValidateRequest, TypeSubscribeRequest, TypeFaucetRequest, TypeListSnapshotsRequest, TypeErrorResponse, TypeNodeInfoResponse, TypeFindServiceResponse, TypeConsensusStatusResponse, TypeNetworkStatusResponse, TypeMetricsResponse, TypeRecordResponse, TypeSubmitResponse, TypeValidateResponse, TypeSubscribeResponse, TypeFaucetResponse, TypeListSnapshotsResponse, TypeEvent, TypePrivateSequenceRequest, TypePrivateSequenceResponse, TypePrivateSequenceRangeRequest, TypePrivateSequenceRangeResponse, TypeAddressed:
 		*v = u
 		return true
 	}
@@ -168,6 +174,10 @@ func (v Type) String() string {
 		return "privateSequenceRequest"
 	case TypePrivateSequenceResponse:
 		return "privateSequenceResponse"
+	case TypePrivateSequenceRangeRequest:
+		return "privateSequenceRangeRequest"
+	case TypePrivateSequenceRangeResponse:
+		return "privateSequenceRangeResponse"
 	case TypeAddressed:
 		return "addressed"
 	}
@@ -232,6 +242,10 @@ func TypeByName(name string) (Type, bool) {
 		return TypePrivateSequenceRequest, true
 	case "privatesequenceresponse":
 		return TypePrivateSequenceResponse, true
+	case "privatesequencerangerequest":
+		return TypePrivateSequenceRangeRequest, true
+	case "privatesequencerangeresponse":
+		return TypePrivateSequenceRangeResponse, true
 	case "addressed":
 		return TypeAddressed, true
 	}

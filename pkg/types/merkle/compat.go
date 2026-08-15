@@ -23,3 +23,6 @@ type (
 	ReceiptList     = merkle.ReceiptList
 	ValidateOptions = merkle.ValidateOptions
 )
+
+// GetReceiptList builds a [ReceiptList] proving a contiguous range of a chain.
+var GetReceiptList = merkle.GetReceiptList
