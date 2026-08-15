@@ -355,3 +355,8 @@ AnnotatedReceipt:
       type: AnchorMetadata
       marshal-as: reference
       pointer: true
+    - name: ReceiptList
+      description: proves a contiguous range of chain entries with a single proof instead of one Receipt per entry; optional, and an individual Receipt is the degenerate one-element case
+      type: merkle.ReceiptList
+      marshal-as: reference
+      pointer: true

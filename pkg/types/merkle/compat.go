@@ -20,5 +20,6 @@ type (
 	State           = merkle.State
 	Receipt         = merkle.Receipt
 	ReceiptEntry    = merkle.ReceiptEntry
+	ReceiptList     = merkle.ReceiptList
 	ValidateOptions = merkle.ValidateOptions
 )

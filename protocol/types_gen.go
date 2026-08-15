@@ -124,7 +124,9 @@ type AnnotatedReceipt struct {
 	fieldsSet []bool
 	Receipt   *merkle.Receipt `json:"receipt,omitempty" form:"receipt" query:"receipt" validate:"required"`
 	Anchor    *AnchorMetadata `json:"anchor,omitempty" form:"anchor" query:"anchor" validate:"required"`
-	extraData []byte
+	// ReceiptList proves a contiguous range of chain entries with a single proof instead of one Receipt per entry; optional, and an individual Receipt is the degenerate one-element case.
+	ReceiptList *merkle.ReceiptList `json:"receiptList,omitempty" form:"receiptList" query:"receiptList" validate:"required"`
+	extraData   []byte
 }
 
 type AuthorityEntry struct {
@@ -1567,6 +1569,9 @@ func (v *AnnotatedReceipt) Copy() *AnnotatedReceipt {
 	}
 	if v.Anchor != nil {
 		u.Anchor = (v.Anchor).Copy()
+	}
+	if v.ReceiptList != nil {
+		u.ReceiptList = (v.ReceiptList).Copy()
 	}
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
@@ -4031,6 +4036,14 @@ func (v *AnnotatedReceipt) Equal(u *AnnotatedReceipt) bool {
 	case v.Anchor == nil || u.Anchor == nil:
 		return false
 	case !((v.Anchor).Equal(u.Anchor)):
+		return false
+	}
+	switch {
+	case v.ReceiptList == u.ReceiptList:
+		// equal
+	case v.ReceiptList == nil || u.ReceiptList == nil:
+		return false
+	case !((v.ReceiptList).Equal(u.ReceiptList)):
 		return false
 	}
 
@@ -7125,6 +7138,7 @@ func (v *AnchorMetadata) IsValid() error {
 var fieldNames_AnnotatedReceipt = []string{
 	1: "Receipt",
 	2: "Anchor",
+	3: "ReceiptList",
 }
 
 func (v *AnnotatedReceipt) MarshalBinary() ([]byte, error) {
@@ -7142,6 +7156,9 @@ func (v *AnnotatedReceipt) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.Anchor == nil) {
 		writer.WriteValue(2, v.Anchor.MarshalBinary)
+	}
+	if !(v.ReceiptList == nil) {
+		writer.WriteValue(3, v.ReceiptList.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_AnnotatedReceipt)
@@ -7168,6 +7185,11 @@ func (v *AnnotatedReceipt) IsValid() error {
 		errs = append(errs, "field Anchor is missing")
 	} else if v.Anchor == nil {
 		errs = append(errs, "field Anchor is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field ReceiptList is missing")
+	} else if v.ReceiptList == nil {
+		errs = append(errs, "field ReceiptList is not set")
 	}
 
 	switch len(errs) {
@@ -15305,6 +15327,9 @@ func (v *AnnotatedReceipt) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(AnchorMetadata); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
 		v.Anchor = x
 	}
+	if x := new(merkle.ReceiptList); reader.ReadValue(3, x.UnmarshalBinaryFrom) {
+		v.ReceiptList = x
+	}
 
 	seen, err := reader.Reset(fieldNames_AnnotatedReceipt)
 	if err != nil {
@@ -19797,6 +19822,7 @@ func init() {
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("receipt", "merkle.Receipt"),
 		encoding.NewTypeField("anchor", "AnchorMetadata"),
+		encoding.NewTypeField("receiptList", "merkle.ReceiptList"),
 	}, "AnnotatedReceipt", "annotatedReceipt")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
