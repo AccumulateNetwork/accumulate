@@ -195,6 +195,36 @@ def collect_metrics():
                 f = lab.get("field", "")
                 cell[f] = max(cell.get(f, 0), iv)
 
+    # Per-node size. Reported as min/avg/max rather than a single number because
+    # the spread is the interesting part: nodes are restarted by chaos at
+    # different times, so a fleet average hides both the freshly-started node and
+    # the one that has been up longest. Goroutines ride along because an
+    # unbounded goroutine count is what #4089 looked like before anyone noticed
+    # the memory — and it shows up there hours earlier than RSS does.
+    nodes = {"count": 0, "rssMinMiB": 0, "rssAvgMiB": 0, "rssMaxMiB": 0, "rssMaxNode": "",
+             "grMin": 0, "grAvg": 0, "grMax": 0, "grMaxNode": "", "byNode": {}}
+    rss, gor = {}, {}
+    for c, rows in per.items():
+        for name, lab, v in rows:
+            if name == "process_resident_memory_bytes":
+                rss[c] = float(v) / 1048576.0
+            elif name == "go_goroutines":
+                gor[c] = int(float(v))
+    if rss:
+        vals = sorted(rss.values())
+        nodes["count"] = len(vals)
+        nodes["rssMinMiB"] = round(vals[0])
+        nodes["rssAvgMiB"] = round(sum(vals) / len(vals))
+        nodes["rssMaxMiB"] = round(vals[-1])
+        nodes["rssMaxNode"] = max(rss, key=rss.get)
+    if gor:
+        gv = sorted(gor.values())
+        nodes["grMin"], nodes["grMax"] = gv[0], gv[-1]
+        nodes["grAvg"] = round(sum(gv) / len(gv))
+        nodes["grMaxNode"] = max(gor, key=gor.get)
+    for c in sorted(set(rss) | set(gor)):
+        nodes["byNode"][c] = {"rssMiB": round(rss.get(c, 0)), "goroutines": gor.get(c, 0)}
+
     # Sum the heal TYPES actually seen on heals_total, not a fixed pair, so a
     # recovery path added later cannot go uncounted. Deliberately not a sum over
     # `heals`, which also holds deferred/errors/focus/stuck — those are not heals.
@@ -223,7 +253,7 @@ def collect_metrics():
             flows, syn_prod, anc_prod = af, asp, aap
 
     return {"heals": heals, "wedges": drops, "flows": flows,
-            "synProduced": syn_prod, "ancProduced": anc_prod,
+            "synProduced": syn_prod, "ancProduced": anc_prod, "nodeStats": nodes,
             "nodes": len(cs), "scraped": sum(1 for r in per.values() if r)}
 
 
@@ -400,6 +430,7 @@ def collector():
             upd["synProduced"] = m["synProduced"]
             upd["ancProduced"] = m["ancProduced"]
             upd["scrape"] = {"nodes": m["nodes"], "scraped": m["scraped"]}
+            upd["nodeStats"] = m.get("nodeStats", {})
             with LOCK:
                 heights = STATE.get("heights") or {}
             upd["matrix"] = {"flows": m["flows"], "heights": heights, "parts": PARTITIONS}
@@ -464,11 +495,11 @@ h1{font-size:18px;margin:0;font-weight:650}
 .up{background:rgba(63,185,80,.15);color:var(--grn)} .down{background:rgba(248,81,73,.15);color:var(--red)}
 .phase{background:rgba(88,166,255,.15);color:var(--acc)}
 .grid{display:grid;gap:12px}
-.cards{grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin:14px 0}
-.card{background:var(--panel);border:1px solid var(--bd);border-radius:10px;padding:12px 14px}
-.card .k{color:var(--mut);font-size:11px;text-transform:uppercase;letter-spacing:.04em}
-.card .v{font-size:25px;font-weight:680;margin-top:3px;font-variant-numeric:tabular-nums}
-.card .d{color:var(--mut);font-size:12px;margin-top:2px}
+.cards{grid-template-columns:repeat(auto-fit,minmax(104px,1fr));gap:8px;margin:10px 0}
+.card{background:var(--panel);border:1px solid var(--bd);border-radius:8px;padding:7px 9px}
+.card .k{color:var(--mut);font-size:10px;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap}
+.card .v{font-size:19px;font-weight:680;margin-top:1px;font-variant-numeric:tabular-nums;line-height:1.15}
+.card .d{color:var(--mut);font-size:10.5px;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .panel{background:var(--panel);border:1px solid var(--bd);border-radius:10px;padding:14px 16px;margin-bottom:12px}
 .panel h2{font-size:13px;margin:0 0 10px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em;font-weight:650}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
@@ -503,6 +534,13 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
 .heights .n{font-size:20px;font-weight:680;font-variant-numeric:tabular-nums}
 .heights .l{color:var(--mut);font-size:11px;margin-left:4px}
 .legend{color:var(--mut);font-size:11px;margin-top:8px}
+.strip{display:flex;flex-wrap:wrap;gap:6px 22px;align-items:baseline}
+.sgrp{display:flex;align-items:baseline;gap:5px;white-space:nowrap}
+.sgrp b{font-size:16px;font-weight:680;font-variant-numeric:tabular-nums}
+.sh{color:var(--mut);font-size:10px;text-transform:uppercase;letter-spacing:.04em;margin-right:2px}
+.sl{color:var(--mut);font-size:10.5px;margin-right:5px}
+.strip .n{font-size:16px;font-weight:680;font-variant-numeric:tabular-nums}
+.strip .l{color:var(--mut);font-size:10.5px;margin-left:3px;margin-right:6px}
 </style></head><body><div class=wrap>
 <header>
   <h1>Synthetic-healing soak</h1>
@@ -511,20 +549,28 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
   <span class=sub id=sub></span>
 </header>
 <div class="grid cards" id=cards></div>
-<div class=two>
-  <div class=panel>
-    <h2>Block heights</h2>
-    <div class=heights id=heights></div>
-  </div>
-  <div class=panel>
-    <h2>Transaction rate</h2>
-    <div class=pills>
-      <div class=pill><div class=n id=rtgt>—</div><div class=l>target user tx/s</div></div>
-      <div class=pill><div class="n grn" id=ruser>—</div><div class=l>actual user tx/s</div></div>
-      <div class=pill><div class="n" id=rsyn>—</div><div class=l>synthetic tx/s</div></div>
-      <div class=pill><div class="n" id=ranc>—</div><div class=l>anchor tx/s</div></div>
-      <div class=pill><div class="n mut" id=rratio>—</div><div class=l>synthetic / user tx</div></div>
+<div class=panel style="padding:9px 12px">
+  <div class=strip>
+    <div class=sgrp><span class=sh>tx/s</span>
+      <b id=ruser>—</b><span class=sl>user</span>
+      <span class=mut id=rtgt>—</span><span class=sl>target</span>
+      <b id=rsyn>—</b><span class=sl>syn</span>
+      <b id=ranc>—</b><span class=sl>anc</span>
+      <span class=mut id=rratio>—</span><span class=sl>syn/user</span>
     </div>
+    <div class=sgrp><span class=sh>node RSS</span>
+      <b id=nrssavg>—</b><span class=sl>avg</span>
+      <b id=nrssmax>—</b><span class=sl>max</span>
+      <span class=mut id=nrssmin>—</span><span class=sl>min</span>
+      <span class=sl id=nrssnode></span>
+    </div>
+    <div class=sgrp><span class=sh>goroutines</span>
+      <b id=ngravg>—</b><span class=sl>avg</span>
+      <b id=ngrmax>—</b><span class=sl>max</span>
+      <span class=mut id=ngrmin>—</span><span class=sl>min</span>
+      <span class=sl id=ngrnode></span>
+    </div>
+    <div class=sgrp><span class=sh>heights</span><span id=heights></span></div>
   </div>
 </div>
 <div class=two>
@@ -625,7 +671,7 @@ async function tick(){
   matrix($('mxSyn'),(mx.flows||{}).synthetic,mx.parts&&parts);
   matrix($('mxAnc'),(mx.flows||{}).anchor,mx.parts&&parts);
   const hh=mx.heights||{};
-  $('heights').innerHTML=parts.map(p=>`<div><span class=n>${fmt(hh[p])}</span><span class=l>${shortP(p)}</span></div>`).join('')||'<span class=mut>—</span>';
+  $('heights').innerHTML=parts.map(p=>`<span class=n>${fmt(hh[p])}</span><span class=l>${shortP(p)}</span>`).join('')||'<span class=mut>—</span>';
   // header
   const ph=lg.phase||'—';$('phase').textContent=ph;
   const nu=nw.api==='up';$('net').className='badge '+(nu?'up':'down');$('net').innerHTML=`<span class=dot style="background:${nu?'var(--grn)':'var(--red)'}"></span>network ${nw.api||'?'}`;
@@ -633,14 +679,29 @@ async function tick(){
   $('sub').textContent=`elapsed ${dur(lg.elapsedSec||0)} · ${(lg.rate||0).toFixed(2)} tx/s`+(lg.stale?' · loadgen stats stale':'');
   // cards
   const pct=tgt?(100*gen/tgt):0;
+  const ns=s.nodeStats||{};
+  // Heals split by mechanism, not just by kind: range pulls are the path #4087
+  // added, and lumping them into one total hides whether it is doing anything.
+  const hRange=(h['anchor-range']||0)+(h['synthetic-range']||0);
+  const hPer=(h.synthetic||0)+(h.anchor||0);
   $('cards').innerHTML=[
-    card('Generated',fmt(gen),`of ${fmt(tgt)} · ${pct.toFixed(1)}%`),
-    card('Rejected',`<span class="${(lg.rejected||0)?'red':''}">${fmt(lg.rejected||0)}</span>`,'submission failures'),
-    card('Skipped',fmt(lg.skipped||0),'preconditions unmet'),
-    card('Wedges',fmt(w.total||0),`${fmt(w.synthetic||0)} syn · ${fmt(w.anchor||0)} anc`),
-    card('Heals',`<span class=grn>${fmt(h.total||0)}</span>`,`${fmt(h.synthetic||0)} syn · ${fmt(h.anchor||0)} anc`),
-    card('DN height',fmt(nw.dnHeight),'directory blocks'),
+    card('DN height',fmt(nw.dnHeight),`${fmt(gen)} tx · ${pct.toFixed(0)}% of plan`),
+    card('Heals',`<span class=grn>${fmt(h.total||0)}</span>`,`${fmt(hRange)} range · ${fmt(hPer)} per-msg`),
+    card('Anchor',fmt((h.anchor||0)+(h['anchor-range']||0)),`${fmt(h['anchor-range']||0)} by range`),
+    card('Synthetic',fmt((h.synthetic||0)+(h['synthetic-range']||0)),`${fmt(h['synthetic-range']||0)} by range`),
+    card('Wedges',`<span class="${(w.total||0)?'yel':''}">${fmt(w.total||0)}</span>`,`${fmt(w.synthetic||0)} syn · ${fmt(w.anchor||0)} anc`),
+    card('Heal errors',`<span class="${(h.errors||0)?'red':''}">${fmt(h.errors||0)}</span>`,`stuck ${fmt(h.stuck||0)}`),
+    card('Rejected',`<span class="${(lg.rejected||0)?'red':''}">${fmt(lg.rejected||0)}</span>`,`${fmt(lg.skipped||0)} skipped`),
+    card('Nodes',fmt(ns.count||0),`${fmt(ns.rssAvgMiB||0)} MiB avg · ${fmt(ns.rssMaxMiB||0)} max`),
   ].join('');
+  const mib=v=>v?fmt(v)+' MiB':'—';
+  $('nrssavg').textContent=mib(ns.rssAvgMiB); $('nrssmax').textContent=mib(ns.rssMaxMiB);
+  $('nrssmin').textContent=mib(ns.rssMinMiB);
+  $('nrssnode').textContent=ns.rssMaxNode?('max '+ns.rssMaxNode):'';
+  $('ngravg').textContent=ns.grAvg!=null?fmt(ns.grAvg):'—';
+  $('ngrmax').textContent=ns.grMax!=null?fmt(ns.grMax):'—';
+  $('ngrmin').textContent=ns.grMin!=null?fmt(ns.grMin):'—';
+  $('ngrnode').textContent=ns.grMaxNode?('max '+ns.grMaxNode):'';
   // wedges / heals pills
   $('wsyn').textContent=fmt(w.synthetic||0);$('wanc').textContent=fmt(w.anchor||0);$('wtot').textContent=fmt(w.total||0);
   $('hsyn').textContent=fmt(h.synthetic||0);$('hanc').textContent=fmt(h.anchor||0);
