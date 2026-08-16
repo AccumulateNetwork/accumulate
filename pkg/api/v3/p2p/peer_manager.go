@@ -98,23 +98,48 @@ func (m *peerManager) getPeers(ctx context.Context, ma multiaddr.Multiaddr, limi
 		return ch, err
 	}
 
-	ch2 := make(chan peer.AddrInfo)
+	return forwardUntil(ctx, ch, timeout), nil
+}
+
+// forwardUntil copies src to a new channel until the timeout expires, the
+// context is cancelled, or src is closed.
+//
+// The send MUST be abandonable, which is the whole point of this function
+// existing separately. Callers of getPeers stop reading as soon as they have a
+// usable peer — dial.DiscoveredPeers does exactly that — so a bare `out <- v`
+// parks this goroutine in chansend forever, unreachable by the timeout and by
+// the context, because neither is re-examined once the send blocks. Every
+// successful peer discovery then costs one permanently blocked goroutine.
+//
+// Measured in the #4087 soak before the fix: 3,582 of 4,106 goroutines on one
+// node were parked here, one of them for 164 minutes, growing at roughly 1.6 per
+// second on the busiest node.
+func forwardUntil(ctx context.Context, src <-chan peer.AddrInfo, timeout time.Duration) <-chan peer.AddrInfo {
+	out := make(chan peer.AddrInfo)
 	stop := time.After(timeout)
 	go func() {
-		defer close(ch2)
+		defer close(out)
 		for {
 			select {
 			case <-stop:
 				return
-			case v, ok := <-ch:
+			case <-ctx.Done():
+				return
+			case v, ok := <-src:
 				if !ok {
 					return
 				}
-				ch2 <- v
+				select {
+				case out <- v:
+				case <-stop:
+					return
+				case <-ctx.Done():
+					return
+				}
 			}
 		}
 	}()
-	return ch2, nil
+	return out
 }
 
 // advertizeNewService advertizes new whoami info to everyone.
