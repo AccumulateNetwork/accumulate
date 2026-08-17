@@ -1,0 +1,71 @@
+# Mainnet-shaped healing test: ONE dual-partition validator at v2-vandenberg,
+# running the actual v1.4.6 release image that is deployed to server6.
+#
+#   The genesis faucet sends ACME across the DN <-> Cyclops boundary, producing a
+#   cross-partition synthetic. ACC_DEBUG_DROP_SYNTHETIC drops the first one, so
+#   the stream wedges exactly as it did in #4064. Nothing enables healing —
+#   v1.4.6 removed the flags and heals unconditionally, which is the behaviour
+#   under test.
+#
+# Driven by run-test.sh. Container and volume names are prefixed acc-ms- so this
+# can run alongside the sibling harness without colliding.
+
+services:
+  # Bootstrap server. Mainnet nodes still need one for discovery even when every
+  # service resolves to self; the compiled-in default points at the public
+  # mainnet bootstrap, which must not be reachable from this network.
+  bootstrap:
+    image: ${MS_IMAGE:-acc-release:v1.4.6}
+    container_name: acc-ms-bootstrap
+    entrypoint: ["/bin/accumulated-bootstrap"]
+    command:
+      - --listen
+      - /ip4/0.0.0.0/tcp/16593
+      - --key
+      - "626f6f7473747261702d6e6f64652d6b65792d736565642d7631000000000000"
+    restart: unless-stopped
+
+  init:
+    image: ${MS_IMAGE:-acc-release:v1.4.6}
+    container_name: acc-ms-init
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -e
+        accumulated init network /workspace/test/docker/synth-heal/mainnet-shape/network.yml --reset --faucet-seed=FAUCET
+        # init names config dirs by index (bvn1-1), not by BVN id (cyclops-1).
+        for d in /root/.accumulate/bvn*-?; do
+          # Deliberately NO enable-*-healing keys: v1.4.6 removed them and heals
+          # unconditionally. Adding them would test a config that no longer exists.
+          if ! grep -q 'acc-ms-bootstrap' "$$d/accumulate.toml"; then
+            sed -i 's|^\[p2p\]|[p2p]\n  bootstrap-peers = ["/dns/acc-ms-bootstrap/tcp/16593/p2p/12D3KooWRq3UGwehqoLWg6wDLJDQHduhUbQZ5UHPXKgkPvvWYfvg"]\n  discovery-mode = "auto-server"\n  enable-peer-tracking = true|' "$$d/accumulate.toml"
+          fi
+          echo "== $$d ==" && grep -E 'bvn =|bootstrap-peers|enable-.*-healing' "$$d/accumulate.toml" || true
+        done
+    volumes:
+      - ms-config:/root/.accumulate
+      - ../../../..:/workspace
+    working_dir: /workspace
+
+  node:
+    image: ${MS_IMAGE:-acc-release:v1.4.6}
+    container_name: acc-ms-node
+    mem_limit: 4g
+    environment:
+      # Drop the first cross-partition synthetic this node emits, wedging the
+      # stream. Healing has to notice and pull it back.
+      ACC_DEBUG_DROP_SYNTHETIC: "${MS_DROP:-*:1}"
+    command: ["-w=/root/.accumulate/bvn1-1", "/root/.accumulate/bvn1-1/accumulate.toml"]
+    volumes:
+      - ms-config:/root/.accumulate
+    ports:
+      - "26660:26660" # DN JSON-RPC
+      - "26760:26760" # Cyclops JSON-RPC
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      bootstrap:
+        condition: service_started
+
+volumes:
+  ms-config:
