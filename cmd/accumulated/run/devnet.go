@@ -203,13 +203,7 @@ func (d *DevnetConfiguration) buildGenesis(inst *Instance, cfg *Config, nodes []
 	for bvn := 0; bvn < int(d.Bvns); bvn++ {
 		n.AddPartition(fmt.Sprintf("BVN%d", bvn+1), protocol.PartitionTypeBlockValidator)
 	}
-	for bvn := range nodes {
-		for node := range nodes[bvn] {
-			m := nodes[bvn][node]
-			n.AddValidator(m.PrivVal[32:], protocol.Directory, true)
-			n.AddValidator(m.PrivVal[32:], fmt.Sprintf("BVN%d", bvn+1), true)
-		}
-	}
+	addDevnetValidators(n, nodes)
 
 	// Generate the faucet account
 	faucetKey, err := d.generateKey(inst, cfg, "faucet")
@@ -353,6 +347,25 @@ func (d *DevnetConfiguration) applyBootstrap(inst *Instance, root *Config, ip ip
 	inst.logger.Info("Faucet", "account", faucetUrl)
 
 	return d.writeSubNode(inst, root, cfg, sub, ip)
+}
+
+// addDevnetValidators registers every node in the network definition, marking
+// only the validators active.
+//
+// Followers are registered but INACTIVE: they are known to the network and
+// take part in gossip, they simply do not vote. Previously this passed true
+// unconditionally, so IsVal — computed at construction and never read
+// anywhere — had no effect and every node became a voting validator. A devnet
+// with 2 validators and 1 follower produced a 3-validator network, and there
+// was no way to create a non-validating node at all (#4078).
+func addDevnetValidators(n *protocol.NetworkDefinition, nodes [][]*nodeOpts) {
+	for bvn := range nodes {
+		for node := range nodes[bvn] {
+			m := nodes[bvn][node]
+			n.AddValidator(m.PrivVal[32:], protocol.Directory, m.IsVal)
+			n.AddValidator(m.PrivVal[32:], fmt.Sprintf("BVN%d", bvn+1), m.IsVal)
+		}
+	}
 }
 
 type nodeOpts struct {
