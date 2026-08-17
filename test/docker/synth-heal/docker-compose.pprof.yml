@@ -1,0 +1,21 @@
+# Overlay for debugging the API-node OOM (#4085).
+#
+#   docker compose -f docker-compose.yml -f docker-compose.pprof.yml up -d
+#
+# bvn1 is the API node and the only container that died in the 24h soak, so it
+# is the one that gets net/http/pprof. The built-in memory monitor is no use
+# here: it only fires above an allocation rate of 50 MiB/s (instrumentation.go),
+# while the observed growth was ~1.25 GiB over 8h, roughly 45 KiB/s. Profiles
+# have to be pulled on a schedule and diffed instead.
+#
+# mem_limit stays at 2g deliberately: the point is to reproduce the same ceiling
+# the kernel enforced, not to avoid it.
+services:
+  bvn1:
+    command:
+      - "--pprof=0.0.0.0:6060"
+      - "-w=/root/.accumulate/bvn1-1"
+      - "/root/.accumulate/bvn1-1/accumulate.toml"
+    ports:
+      - "27660:26660"
+      - "16060:6060"

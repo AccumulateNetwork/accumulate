@@ -1,0 +1,47 @@
+id: "MainnetShape"
+
+# A network shaped like MAINNET, not like a test lab.
+#
+# Mainnet is ONE node running the Directory and a single BVN in the same
+# process, at v2-vandenberg. The sibling harness (../network.yml) runs 3 BVNs x 2
+# validators at v2-jiuquan, which differs in three ways that matter:
+#
+#   - cross-partition synthetics travel over p2p between nodes, where mainnet's
+#     travel intra-process (every dial resolves to self)
+#   - cross-node receiver-pull needs peer service discovery, which #4065 says is
+#     broken on this release lineage — so that harness can fail for reasons
+#     mainnet will never hit, or pass without exercising mainnet's path
+#   - v2-jiuquan activates #4070's late-anchor hold, which is INERT on mainnet
+#
+# So a green run over there says little about server6. This file exists to close
+# the "No Vandenberg soak" gap recorded in test/records/v1.4.6.md.
+#
+# The BVN is named Cyclops to match production; the wedge under test is the
+# DN -> Cyclops stream that #4064 stalled with 84 staking payouts behind it.
+
+bootstrap:
+  peerAddress: "acc-ms-bootstrap"
+  advertizeAddress: "acc-ms-bootstrap"
+  listenAddress: "0.0.0.0"
+  basePort: 16593
+
+globals:
+  # The whole point: mainnet runs Vandenberg, and every soak to date ran
+  # Jiuquan. #4070 is gated on V2JiuquanEnabled() and is therefore inactive
+  # here, exactly as it is on server6.
+  executorVersion: "v2-vandenberg"
+  oracle:
+    price: 10000000
+  globals:
+    majorBlockSchedule: "0 */12 * * *"
+
+bvns:
+  - id: "Cyclops"
+    nodes:
+      # ONE node, both roles — a single dual-partition validator, as in production.
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-ms-node"
+        advertizeAddress: "acc-ms-node"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
