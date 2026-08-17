@@ -57,6 +57,12 @@ func TestSyntheticHealing(t *testing.T) {
 				return false, err
 			}
 
+			// Count the DEPOSITS lost, not the envelopes. Since #4090 a block's
+			// synthetics for one destination may travel together in a package, so
+			// one dropped envelope can carry several messages — counting envelopes
+			// would understate the loss and the run of consecutive drops this test
+			// needs would never form.
+			n := 0
 			for _, msg := range messages {
 			again:
 				switch m := msg.(type) {
@@ -66,10 +72,13 @@ func TestSyntheticHealing(t *testing.T) {
 				case messaging.MessageWithTransaction:
 					if m.GetTransaction().Body.Type() == TransactionTypeSyntheticDepositTokens {
 						fmt.Printf("Dropping synthetic %X\n", m.GetTransaction().GetHash()[:4])
-						dropped++
-						return false, nil
+						n++
 					}
 				}
+			}
+			if n > 0 {
+				dropped += n
+				return false, nil
 			}
 			return true, nil
 		}),
@@ -91,6 +100,14 @@ func TestSyntheticHealing(t *testing.T) {
 			build.Transaction().For(aliceUrl).
 				SendTokens(1, protocol.AcmePrecisionPower).To(bobUrl).
 				SignWith(aliceUrl).Version(1).Timestamp(&timestamp).PrivateKey(alice)))
+
+		// One deposit per block. Since #4090 a block's synthetics for one
+		// destination travel together, and the drop hook can only refuse a whole
+		// envelope — so submitting all five at once loses all five and leaves a
+		// TAIL, which no gap scan can see. This test is about a RUN of losses
+		// followed by arrivals that expose the gap, so the deposits have to be in
+		// separate blocks for the hook to drop only the first three.
+		sim.StepN(2)
 	}
 
 	// Confirm the wedge actually formed.

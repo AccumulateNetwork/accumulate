@@ -82,6 +82,23 @@ BadSyntheticMessage:
   union: { type: message }
   fields: *synthetic
 
+# One proof for a whole envelope of synthetic messages (#4090). A synthetic
+# message in the same envelope may then omit its own proof; the executor resolves
+# it against this one, which covers a contiguous span of the source's synthetic
+# main chain and therefore proves every message in the package at once.
+#
+# Deliberately self-contained: each package carries the proof covering exactly
+# its own contents, so packages are verifiable independently and in any order. A
+# scheme where one package holds the proof and later ones refer back to it would
+# reintroduce the ordering dependency #4087 exists to remove.
+SyntheticProof:
+  union: { type: message }
+  fields:
+    - name: Proof
+      type: protocol.AnnotatedReceipt
+      marshal-as: reference
+      pointer: true
+
 SyntheticMessage:
   union: { type: message }
   fields: *synthetic
