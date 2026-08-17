@@ -551,8 +551,13 @@ func cmtPeerAddress(addr multiaddr.Multiaddr) (string, error) {
 		return "", errors.BadRequest.With("missing port")
 	}
 
-	// Convert libp2p port to CometBFT P2P port
-	// libp2p uses port offset +2 (16593, 16693), CometBFT uses offset +0 (16591, 16691)
+	// Convert libp2p port to CometBFT P2P port.
+	//
+	// Callers MUST supply an Accumulate-P2P (libp2p) address: offset +2, e.g.
+	// 16593/16693. This returns the CometBFT P2P address at offset +0, e.g.
+	// 16591/16691. Passing an address that is already at the CometBFT port
+	// yields base-2, which nothing listens on — see #4081, where the devnet
+	// did exactly that and no multi-node devnet could reach consensus.
 	portNum, err := strconv.Atoi(port)
 	if err != nil {
 		return "", errors.BadRequest.WithFormat("invalid port %q: %w", port, err)
