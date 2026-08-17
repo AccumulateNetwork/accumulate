@@ -100,6 +100,15 @@ func (m *NetworkUpdate) ID() *url.TxID {
 	return protocol.DnUrl().WithTxID(m.Hash())
 }
 
+// ID identifies the proof by its own content. A SyntheticProof is not addressed
+// to an account and is never recorded on its own — it exists to be resolved by
+// the synthetic messages travelling with it — so the ID only has to be stable
+// and unique, which the hash gives. The directory is used as the authority
+// because a proof carries no partition of its own.
+func (m *SyntheticProof) ID() *url.TxID {
+	return protocol.DnUrl().WithTxID(m.Hash())
+}
+
 func (m *MakeMajorBlock) ID() *url.TxID {
 	return protocol.DnUrl().WithTxID(m.Hash())
 }
@@ -196,3 +205,4 @@ func (m *SyntheticMessage) Hash() [32]byte         { return encoding.Hash(m) }
 func (m *NetworkUpdate) Hash() [32]byte            { return encoding.Hash(m) }
 func (m *MakeMajorBlock) Hash() [32]byte           { return encoding.Hash(m) }
 func (m *DidUpdateExecutorVersion) Hash() [32]byte { return encoding.Hash(m) }
+func (m *SyntheticProof) Hash() [32]byte           { return encoding.Hash(m) }
