@@ -1,5 +1,82 @@
 # Changelog
 
+## 1.4.6.3
+
+Fifty commits since 1.4.6.2, against two to five in each of the releases before
+it, and it defines a new executor version — which would normally argue for a
+minor bump. It stays in the 1.4.6.x series deliberately: this release is the one
+that gets proven in deployment first, and 1.4.7 is cut once it has.
+
+That is safe to do here precisely because `v2-kourou` is activated on no network.
+Everything below is either inert until a network activates it, or a fix to
+behaviour that is already live.
+
+- Cross-partition recovery (#4087, #4089, #4090)
+  - **New executor version `v2-kourou` (9)**, gating collection proofs. It is
+    defined and inert — activated on no network — so this release changes no
+    behaviour until a network activates it.
+  - Recovery is proven against a root the destination ALREADY HOLDS rather than
+    one the directory has caught up to. Holding a validated state of a chain
+    proves every entry added before it, so one anchor a destination already
+    trusts proves any earlier run of that partition's messages by replay; the
+    source returns the messages and the merkle state to replay them onto, and is
+    never asked to prove anything.
+  - This removes the directory from the recovery path, which is what makes
+    recovery work while the network is behind — the only time it is needed. The
+    previous construction rooted proofs at a directory-receipted root, so
+    recovering anchor N required N's own block to have been anchored to the DN,
+    and the anchor that would have carried it there was the missing one.
+  - Requesters NAME the anchor they hold (`SequenceOptions.ProveAgainstAnchor`),
+    so a requester can never be handed a proof it cannot check.
+  - Synthetic emission sends one collection proof per package instead of one
+    receipt per message (#4090), batching per destination under a 3 MiB budget
+    against the 4 MiB `max_tx_bytes`. Groups below two messages keep the
+    per-message form, where a list would be no smaller.
+  - The source-side anchor push is deliberately KEPT: the pull sees a hole
+    because a later message exposes it, and cannot see a tail.
+  - **Known limitation:** BVN→BVN streams still route through the directory by
+    construction, because partitions hold no anchors from each other. #4086 is
+    dissolved for directory-adjacent streams and only mitigated for BVN→BVN.
+  - Fixes a goroutine leak in `getPeers` (#4089, duplicate of #4085): every
+    successful peer discovery left a goroutine blocked in `chansend` forever,
+    because the send was outside the select and neither the timeout nor the
+    context could reach it. Measured: one node reached 10,003 goroutines in 6.5h
+    before the fix, 473–572 across all twelve nodes over 22.6h after.
+  - Validated by a 22.6h chaos soak at `v2-kourou`: 153,533 transactions through
+    123 chaos events, 913 anchor and 807 synthetic range pulls plus 385
+    reconcile pulls against 3,954 and 551 induced drops, zero wedged streams,
+    zero stranded transactions, zero heal errors.
+- Staking (#4079 and the requests package)
+  - New `pkg/staking/requests`: one implementation of the staking-requests
+    vocabulary for the wallet (which writes) and the ASP staking app (which
+    reads and fulfils). It exists because the vocabulary was implemented twice
+    and disagreed — core/staking#449 rendered contract entries "informational",
+    core/wallet#272 called pre-contract entries "refused".
+  - `Parse` reads every era on chain because the chain is immutable; `Encode`
+    writes only the current contract because a malformed request is accepted,
+    billed, and never fulfilled. `Validate` refuses entries that parse but must
+    not be acted on — unknown fields, and now multi-payload entries, whose
+    fulfilments would be indistinguishable because they share an entry hash.
+  - Key books, delegation and side keys documented and backed by executor tests.
+- Networking and deployment (#4091, #4092, #4078, #4081)
+  - Stop advertising addresses a remote caller cannot dial.
+  - Resolve bootstrap peers from the network's URL.
+  - Devnet: followers are no longer voting validators; peers are built at the
+    Accumulate-P2P port so consensus forms; each partition gets its own port.
+- Security (#4026, #4033, #4034, #4039)
+  - Bootstrap info server hardened.
+- Healing (#4070)
+  - A node declines to sequence unless it validates the source partition.
+- Testing and tooling
+  - Mixed-workload synthetic coverage, a mainnet-shape harness at Vandenberg,
+    pprof overlay and an OOM diagnosis script, a two-arm drop harness, and a
+    no-fault baseline mode for the synth-heal harness.
+  - The soak harness runs at `v2-kourou`, `ACC_DEBUG_DROP_ANCHOR` actually drops
+    anchors (it wrapped the wrong dispatcher and was a silent no-op), and the
+    soak monitor survives heal types it has never heard of.
+  - **Not covered by any soak:** #4090's one-proof-per-package emission merged
+    after the 22.6h run started. It has e2e coverage only.
+
 ## 1.4.6.2
 
 - Testing (#4076)
