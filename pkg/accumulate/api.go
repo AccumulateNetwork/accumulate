@@ -15,7 +15,18 @@ import (
 
 var BootstrapServers = func() []multiaddr.Multiaddr {
 	s := []string{
-		"/dns/bootstrap.accumulate.defidevs.io/tcp/16593/p2p/12D3KooWGJTh4aeF7bFnwo9sAYRujCkuVU1Cq8wNeTNGpFgZgXdg",
+		// Rotated 2026-08-17. The previous identity
+		// (12D3KooWGJTh4aeF7bFnwo9sAYRujCkuVU1Cq8wNeTNGpFgZgXdg) had its
+		// private key disclosed and is retired; nothing answers on it.
+		//
+		// Named under the network's own domain rather than the operator's
+		// (was bootstrap.accumulate.defidevs.io). Peer discovery is the
+		// network's entry point; it should not depend on a name belonging
+		// to whoever happens to host it. Both names currently resolve to
+		// the same address, so moving the host is now a DNS change rather
+		// than a release — though rotating the KEY still is not, because
+		// libp2p authenticates the peer ID below, not the hostname.
+		"/dns/bootstrap.accumulatenetwork.io/tcp/16593/p2p/12D3KooWQaWn1L63nJUxfidDomh6W6o1jXJ1VHykzEEdKASSbURr",
 	}
 	addrs := make([]multiaddr.Multiaddr, len(s))
 	for i, s := range s {
