@@ -24,6 +24,7 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 	mafmt "github.com/multiformats/go-multiaddr-fmt"
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/accumulate/bootstrap"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p/dial"
@@ -51,8 +52,16 @@ type Options struct {
 	Listen []multiaddr.Multiaddr
 
 	// BootstrapPeers is an array of addresses of the bootstrap peers to connect
-	// to on bootup.
+	// to on bootup. On a well-known network these are augmented at startup
+	// with peers reported by that network's endpoint, unless
+	// DisableBootstrapDiscovery is set.
 	BootstrapPeers []multiaddr.Multiaddr
+
+	// DisableBootstrapDiscovery stops the node asking the network's
+	// well-known endpoint for additional bootstrap peers, restricting it to
+	// BootstrapPeers exactly. For deployments that must not depend on, or
+	// talk to, anything outside their configuration.
+	DisableBootstrapDiscovery bool
 
 	// Key is the node's private key. If Key is omitted, the node will
 	// generate a new key.
@@ -79,6 +88,21 @@ func New(opts Options) (_ *Node, err error) {
 	// Initialize basic fields
 	n := new(Node)
 	n.context, n.cancel = context.WithCancel(context.Background())
+
+	// Ask the network who its bootstrap peers are, and add them behind the
+	// configured ones (#4092).
+	//
+	// This is the only place BootstrapPeers is consumed, which is why it is
+	// the only place that changes: resolving in the config layer instead
+	// would write a peer list into accumulate.toml and bake in the staleness
+	// this is meant to remove.
+	//
+	// Augment rather than replace — see that function for why. Costs nothing
+	// on a network with no well-known endpoint (a devnet, the simulator, a
+	// private deployment), where no request is made at all.
+	if !opts.DisableBootstrapDiscovery {
+		opts.BootstrapPeers = bootstrap.Augment(n.context, opts.Network, opts.BootstrapPeers)
+	}
 
 	// Cancel on fail
 	defer func() {
