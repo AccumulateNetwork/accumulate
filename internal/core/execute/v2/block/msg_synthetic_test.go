@@ -98,7 +98,7 @@ func TestSyntheticAnchor(t *testing.T) {
 	}
 
 	// Run the tests
-	errMsg := fmt.Sprintf("invalid proof anchor: %x is not a known directory anchor", syn.Proof.Receipt.Anchor)
+	errMsg := fmt.Sprintf("invalid proof anchor: %x is not a known anchor", syn.Proof.Receipt.Anchor)
 	for i, c := range cases {
 		t.Run(fmt.Sprintf("Case %d", i+1), func(t *testing.T) {
 			ctx := &MessageContext{

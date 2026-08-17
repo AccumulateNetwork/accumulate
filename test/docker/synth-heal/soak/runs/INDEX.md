@@ -133,3 +133,6 @@ Three things are load-bearing, each of which silently defeated earlier attempts:
 `LG_BOOTSTRAP=0` keeps channels quiet; `IDLE_AFTER` lets a loss age past
 reconcileGraceBlocks after load stops.
 | [20260726T051821Z](20260726T051821Z/manifest.md) | `v1.4.5` | v2-jiuquan | unconditional | 24.14h | 0 (clean) | 8→57836 | 738 syn / 4227 anc | PASS — deploy-approved; found #4073 (DN→BVN1 dead 24h, undetected) |
+| [20260815T212904Z](20260815T212904Z/manifest.md) | `fb4450498` | v2-kourou | unconditional | 12m | aborted | 12 | 0 | ABORTED — blind: range recovery logged below the default log level |
+| [20260815T213350Z](20260815T213350Z/manifest.md) | `75313c32c` | v2-kourou | unconditional | 75m | cut short | ~1600 | 25 syn-range | CUT SHORT — proved ACC_DEBUG_DROP_ANCHOR was a silent no-op; synthetic path validated |
+| [20260815T223732Z](20260815T223732Z/manifest.md) | `54ce86ed6` | v2-kourou | unconditional | 6.5h | stopped | ~13700 | 236 anc-range / 172 syn-range | #4087 BOTH paths validated; FOUND #4089 goroutine leak (ours) and #4088 CometBFT shutdown panic |

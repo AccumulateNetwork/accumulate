@@ -184,6 +184,18 @@ func (r MessageRouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 
 		service = api.ServiceTypeFaucet.AddressForUrl(token)
 
+	case *message.PrivateSequenceRangeRequest:
+		// A range is served by the same partition sequencer as a single
+		// message, so it routes identically (#4087).
+		service.Type = private.ServiceTypeSequencer
+
+		var ok bool
+		service.Argument, ok = protocol.ParsePartitionUrl(msg.Source)
+		if !ok {
+			return nil, errors.BadRequest.WithFormat("%v is not a partition URL", msg.Source)
+		}
+		return service.Multiaddr(), nil
+
 	case *message.PrivateSequenceRequest:
 		service.Type = private.ServiceTypeSequencer
 

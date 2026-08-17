@@ -9,7 +9,11 @@ bootstrap:
   basePort: 16593
 
 globals:
-  executorVersion: "v2-jiuquan"
+  # Kourou, not Jiuquan: collection proofs — and every recovery path that roots a
+  # proof at an anchor the destination already holds — are gated on it (#4087). A
+  # soak at Jiuquan exercises none of that while looking exactly like one that
+  # does, which is the failure mode worth guarding against.
+  executorVersion: "v2-kourou"
   oracle:
     price: 10000000
   globals:
