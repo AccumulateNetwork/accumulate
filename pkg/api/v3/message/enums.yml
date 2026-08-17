@@ -68,3 +68,7 @@ Type:
     value: 0x80
   PrivateSequenceResponse:
     value: 0x81
+  PrivateSequenceRangeRequest:
+    value: 0x82
+  PrivateSequenceRangeResponse:
+    value: 0x83

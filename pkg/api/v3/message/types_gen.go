@@ -131,6 +131,22 @@ type NodeInfoResponse struct {
 	extraData []byte
 }
 
+type PrivateSequenceRangeRequest struct {
+	fieldsSet   []bool
+	Source      *url.URL `json:"source,omitempty" form:"source" query:"source" validate:"required"`
+	Destination *url.URL `json:"destination,omitempty" form:"destination" query:"destination" validate:"required"`
+	Start       uint64   `json:"start,omitempty" form:"start" query:"start" validate:"required"`
+	End         uint64   `json:"end,omitempty" form:"end" query:"end" validate:"required"`
+	private.SequenceOptions
+	extraData []byte
+}
+
+type PrivateSequenceRangeResponse struct {
+	fieldsSet []bool
+	Value     []*api.MessageRecord[messaging.Message] `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	extraData []byte
+}
+
 type PrivateSequenceRequest struct {
 	fieldsSet      []bool
 	Source         *url.URL `json:"source,omitempty" form:"source" query:"source" validate:"required"`
@@ -229,6 +245,10 @@ func (*NetworkStatusResponse) Type() Type { return TypeNetworkStatusResponse }
 func (*NodeInfoRequest) Type() Type { return TypeNodeInfoRequest }
 
 func (*NodeInfoResponse) Type() Type { return TypeNodeInfoResponse }
+
+func (*PrivateSequenceRangeRequest) Type() Type { return TypePrivateSequenceRangeRequest }
+
+func (*PrivateSequenceRangeResponse) Type() Type { return TypePrivateSequenceRangeResponse }
 
 func (*PrivateSequenceRequest) Type() Type { return TypePrivateSequenceRequest }
 
@@ -525,6 +545,48 @@ func (v *NodeInfoResponse) Copy() *NodeInfoResponse {
 }
 
 func (v *NodeInfoResponse) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *PrivateSequenceRangeRequest) Copy() *PrivateSequenceRangeRequest {
+	u := new(PrivateSequenceRangeRequest)
+
+	if v.Source != nil {
+		u.Source = v.Source
+	}
+	if v.Destination != nil {
+		u.Destination = v.Destination
+	}
+	u.Start = v.Start
+	u.End = v.End
+	u.SequenceOptions = *v.SequenceOptions.Copy()
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *PrivateSequenceRangeRequest) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *PrivateSequenceRangeResponse) Copy() *PrivateSequenceRangeResponse {
+	u := new(PrivateSequenceRangeResponse)
+
+	u.Value = make([]*api.MessageRecord[messaging.Message], len(v.Value))
+	for i, v := range v.Value {
+		v := v
+		if v != nil {
+			u.Value[i] = (v).Copy()
+		}
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *PrivateSequenceRangeResponse) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *PrivateSequenceRequest) Copy() *PrivateSequenceRequest {
 	u := new(PrivateSequenceRequest)
@@ -886,6 +948,49 @@ func (v *NodeInfoResponse) Equal(u *NodeInfoResponse) bool {
 		return false
 	case !((v.Value).Equal(u.Value)):
 		return false
+	}
+
+	return true
+}
+
+func (v *PrivateSequenceRangeRequest) Equal(u *PrivateSequenceRangeRequest) bool {
+	switch {
+	case v.Source == u.Source:
+		// equal
+	case v.Source == nil || u.Source == nil:
+		return false
+	case !((v.Source).Equal(u.Source)):
+		return false
+	}
+	switch {
+	case v.Destination == u.Destination:
+		// equal
+	case v.Destination == nil || u.Destination == nil:
+		return false
+	case !((v.Destination).Equal(u.Destination)):
+		return false
+	}
+	if !(v.Start == u.Start) {
+		return false
+	}
+	if !(v.End == u.End) {
+		return false
+	}
+	if !v.SequenceOptions.Equal(&u.SequenceOptions) {
+		return false
+	}
+
+	return true
+}
+
+func (v *PrivateSequenceRangeResponse) Equal(u *PrivateSequenceRangeResponse) bool {
+	if len(v.Value) != len(u.Value) {
+		return false
+	}
+	for i := range v.Value {
+		if !((v.Value[i]).Equal(u.Value[i])) {
+			return false
+		}
 	}
 
 	return true
@@ -1919,6 +2024,148 @@ func (v *NodeInfoResponse) IsValid() error {
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Value is missing")
 	} else if v.Value == nil {
+		errs = append(errs, "field Value is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_PrivateSequenceRangeRequest = []string{
+	1: "Type",
+	2: "Source",
+	3: "Destination",
+	4: "Start",
+	5: "End",
+	6: "SequenceOptions",
+}
+
+func (v *PrivateSequenceRangeRequest) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Source == nil) {
+		writer.WriteUrl(2, v.Source)
+	}
+	if !(v.Destination == nil) {
+		writer.WriteUrl(3, v.Destination)
+	}
+	if !(v.Start == 0) {
+		writer.WriteUint(4, v.Start)
+	}
+	if !(v.End == 0) {
+		writer.WriteUint(5, v.End)
+	}
+	writer.WriteValue(6, v.SequenceOptions.MarshalBinary)
+
+	_, _, err := writer.Reset(fieldNames_PrivateSequenceRangeRequest)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *PrivateSequenceRangeRequest) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Source is missing")
+	} else if v.Source == nil {
+		errs = append(errs, "field Source is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Destination is missing")
+	} else if v.Destination == nil {
+		errs = append(errs, "field Destination is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Start is missing")
+	} else if v.Start == 0 {
+		errs = append(errs, "field Start is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field End is missing")
+	} else if v.End == 0 {
+		errs = append(errs, "field End is not set")
+	}
+	if err := v.SequenceOptions.IsValid(); err != nil {
+		errs = append(errs, err.Error())
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_PrivateSequenceRangeResponse = []string{
+	1: "Type",
+	2: "Value",
+}
+
+func (v *PrivateSequenceRangeResponse) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(len(v.Value) == 0) {
+		for _, v := range v.Value {
+			writer.WriteValue(2, v.MarshalBinary)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_PrivateSequenceRangeResponse)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *PrivateSequenceRangeResponse) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Value is missing")
+	} else if len(v.Value) == 0 {
 		errs = append(errs, "field Value is not set")
 	}
 
@@ -3104,6 +3351,90 @@ func (v *NodeInfoResponse) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
+func (v *PrivateSequenceRangeRequest) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *PrivateSequenceRangeRequest) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *PrivateSequenceRangeRequest) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadUrl(2); ok {
+		v.Source = x
+	}
+	if x, ok := reader.ReadUrl(3); ok {
+		v.Destination = x
+	}
+	if x, ok := reader.ReadUint(4); ok {
+		v.Start = x
+	}
+	if x, ok := reader.ReadUint(5); ok {
+		v.End = x
+	}
+	reader.ReadValue(6, v.SequenceOptions.UnmarshalBinaryFrom)
+
+	seen, err := reader.Reset(fieldNames_PrivateSequenceRangeRequest)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *PrivateSequenceRangeResponse) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *PrivateSequenceRangeResponse) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *PrivateSequenceRangeResponse) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	for {
+		if x := new(api.MessageRecord[messaging.Message]); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+			v.Value = append(v.Value, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_PrivateSequenceRangeResponse)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *PrivateSequenceRequest) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -3578,8 +3909,24 @@ func init() {
 		encoding.NewTypeField("type", "string"),
 		encoding.NewTypeField("source", "string"),
 		encoding.NewTypeField("destination", "string"),
+		encoding.NewTypeField("start", "uint64"),
+		encoding.NewTypeField("end", "uint64"),
+		encoding.NewTypeField("nodeID", "p2p.PeerID"),
+		encoding.NewTypeField("proveAgainstAnchor", "uint64"),
+	}, "PrivateSequenceRangeRequest", "privateSequenceRangeRequest")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("value", "api.MessageRecord[messaging.Message][]"),
+	}, "PrivateSequenceRangeResponse", "privateSequenceRangeResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("source", "string"),
+		encoding.NewTypeField("destination", "string"),
 		encoding.NewTypeField("sequenceNumber", "uint64"),
 		encoding.NewTypeField("nodeID", "p2p.PeerID"),
+		encoding.NewTypeField("proveAgainstAnchor", "uint64"),
 	}, "PrivateSequenceRequest", "privateSequenceRequest")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -3907,14 +4254,63 @@ func (v *NodeInfoResponse) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *PrivateSequenceRangeRequest) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type               Type                                    `json:"type"`
+		Source             *url.URL                                `json:"source,omitempty"`
+		Destination        *url.URL                                `json:"destination,omitempty"`
+		Start              uint64                                  `json:"start,omitempty"`
+		End                uint64                                  `json:"end,omitempty"`
+		NodeID             *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"nodeID,omitempty"`
+		ProveAgainstAnchor uint64                                  `json:"proveAgainstAnchor,omitempty"`
+		ExtraData          *string                                 `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.Source == nil) {
+		u.Source = v.Source
+	}
+	if !(v.Destination == nil) {
+		u.Destination = v.Destination
+	}
+	if !(v.Start == 0) {
+		u.Start = v.Start
+	}
+	if !(v.End == 0) {
+		u.End = v.End
+	}
+	if !(v.SequenceOptions.NodeID == ("")) {
+		u.NodeID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.SequenceOptions.NodeID, Func: p2p.UnmarshalPeerIDJSON}
+	}
+	if !(v.SequenceOptions.ProveAgainstAnchor == 0) {
+		u.ProveAgainstAnchor = v.SequenceOptions.ProveAgainstAnchor
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *PrivateSequenceRangeResponse) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      Type                                                     `json:"type"`
+		Value     encoding.JsonList[*api.MessageRecord[messaging.Message]] `json:"value,omitempty"`
+		ExtraData *string                                                  `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.Value) == 0) {
+		u.Value = v.Value
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
 func (v *PrivateSequenceRequest) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type           Type                                    `json:"type"`
-		Source         *url.URL                                `json:"source,omitempty"`
-		Destination    *url.URL                                `json:"destination,omitempty"`
-		SequenceNumber uint64                                  `json:"sequenceNumber,omitempty"`
-		NodeID         *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"nodeID,omitempty"`
-		ExtraData      *string                                 `json:"$epilogue,omitempty"`
+		Type               Type                                    `json:"type"`
+		Source             *url.URL                                `json:"source,omitempty"`
+		Destination        *url.URL                                `json:"destination,omitempty"`
+		SequenceNumber     uint64                                  `json:"sequenceNumber,omitempty"`
+		NodeID             *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"nodeID,omitempty"`
+		ProveAgainstAnchor uint64                                  `json:"proveAgainstAnchor,omitempty"`
+		ExtraData          *string                                 `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Source == nil) {
@@ -3928,6 +4324,9 @@ func (v *PrivateSequenceRequest) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.SequenceOptions.NodeID == ("")) {
 		u.NodeID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.SequenceOptions.NodeID, Func: p2p.UnmarshalPeerIDJSON}
+	}
+	if !(v.SequenceOptions.ProveAgainstAnchor == 0) {
+		u.ProveAgainstAnchor = v.SequenceOptions.ProveAgainstAnchor
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -4510,20 +4909,86 @@ func (v *NodeInfoResponse) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *PrivateSequenceRangeRequest) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type               Type                                    `json:"type"`
+		Source             *url.URL                                `json:"source,omitempty"`
+		Destination        *url.URL                                `json:"destination,omitempty"`
+		Start              uint64                                  `json:"start,omitempty"`
+		End                uint64                                  `json:"end,omitempty"`
+		NodeID             *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"nodeID,omitempty"`
+		ProveAgainstAnchor uint64                                  `json:"proveAgainstAnchor,omitempty"`
+		ExtraData          *string                                 `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Source = v.Source
+	u.Destination = v.Destination
+	u.Start = v.Start
+	u.End = v.End
+	u.NodeID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.SequenceOptions.NodeID, Func: p2p.UnmarshalPeerIDJSON}
+	u.ProveAgainstAnchor = v.SequenceOptions.ProveAgainstAnchor
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Source = u.Source
+	v.Destination = u.Destination
+	v.Start = u.Start
+	v.End = u.End
+	if u.NodeID != nil {
+		v.SequenceOptions.NodeID = u.NodeID.Value
+	}
+
+	v.SequenceOptions.ProveAgainstAnchor = u.ProveAgainstAnchor
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *PrivateSequenceRangeResponse) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      Type                                                     `json:"type"`
+		Value     encoding.JsonList[*api.MessageRecord[messaging.Message]] `json:"value,omitempty"`
+		ExtraData *string                                                  `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Value = v.Value
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Value = u.Value
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (v *PrivateSequenceRequest) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type           Type                                    `json:"type"`
-		Source         *url.URL                                `json:"source,omitempty"`
-		Destination    *url.URL                                `json:"destination,omitempty"`
-		SequenceNumber uint64                                  `json:"sequenceNumber,omitempty"`
-		NodeID         *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"nodeID,omitempty"`
-		ExtraData      *string                                 `json:"$epilogue,omitempty"`
+		Type               Type                                    `json:"type"`
+		Source             *url.URL                                `json:"source,omitempty"`
+		Destination        *url.URL                                `json:"destination,omitempty"`
+		SequenceNumber     uint64                                  `json:"sequenceNumber,omitempty"`
+		NodeID             *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"nodeID,omitempty"`
+		ProveAgainstAnchor uint64                                  `json:"proveAgainstAnchor,omitempty"`
+		ExtraData          *string                                 `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Source = v.Source
 	u.Destination = v.Destination
 	u.SequenceNumber = v.SequenceNumber
 	u.NodeID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.SequenceOptions.NodeID, Func: p2p.UnmarshalPeerIDJSON}
+	u.ProveAgainstAnchor = v.SequenceOptions.ProveAgainstAnchor
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -4538,6 +5003,7 @@ func (v *PrivateSequenceRequest) UnmarshalJSON(data []byte) error {
 		v.SequenceOptions.NodeID = u.NodeID.Value
 	}
 
+	v.SequenceOptions.ProveAgainstAnchor = u.ProveAgainstAnchor
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err

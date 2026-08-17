@@ -56,6 +56,10 @@ func New(typ Type) (Message, error) {
 		return new(NodeInfoRequest), nil
 	case TypeNodeInfoResponse:
 		return new(NodeInfoResponse), nil
+	case TypePrivateSequenceRangeRequest:
+		return new(PrivateSequenceRangeRequest), nil
+	case TypePrivateSequenceRangeResponse:
+		return new(PrivateSequenceRangeResponse), nil
 	case TypePrivateSequenceRequest:
 		return new(PrivateSequenceRequest), nil
 	case TypePrivateSequenceResponse:
@@ -191,6 +195,18 @@ func Equal(a, b Message) bool {
 		}
 		b, ok := b.(*NodeInfoResponse)
 		return ok && a.Equal(b)
+	case *PrivateSequenceRangeRequest:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*PrivateSequenceRangeRequest)
+		return ok && a.Equal(b)
+	case *PrivateSequenceRangeResponse:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*PrivateSequenceRangeResponse)
+		return ok && a.Equal(b)
 	case *PrivateSequenceRequest:
 		if a == nil {
 			return b == nil
@@ -291,6 +307,10 @@ func Copy(v Message) Message {
 	case *NodeInfoRequest:
 		return v.Copy()
 	case *NodeInfoResponse:
+		return v.Copy()
+	case *PrivateSequenceRangeRequest:
+		return v.Copy()
+	case *PrivateSequenceRangeResponse:
 		return v.Copy()
 	case *PrivateSequenceRequest:
 		return v.Copy()
