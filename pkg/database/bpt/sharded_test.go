@@ -502,7 +502,8 @@ func TestShardedBPTStressTest(t *testing.T) {
 		k := record.NewKey(keyStr)
 		retrieved, err := s.Get(k)
 		require.NoError(t, err)
-		require.Equal(t, value[:], retrieved, "data corruption for key %s", keyStr)
+		want := value // copy: slicing the range variable directly takes its address
+		require.Equal(t, want[:], retrieved, "data corruption for key %s", keyStr)
 		verified++
 	}
 

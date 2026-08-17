@@ -242,11 +242,11 @@ func migrateCfg(cfg *run.Config, cvc *run.CoreValidatorConfiguration, dir string
 	// BPT-level sync. Detect the legacy [snapshots] section in
 	// accumulate.toml and warn the operator that scheduled snapshotting is
 	// being dropped, so they can verify the new behavior is acceptable.
-	if warned, err := warnLegacySnapshotsConfig(dir); err != nil {
+	// The warning itself is emitted inside warnLegacySnapshotsConfig, so its
+	// bool result is not needed here — only a scan failure is worth reporting.
+	if _, err := warnLegacySnapshotsConfig(dir); err != nil {
 		// A scan failure is non-fatal — log and continue.
 		fmt.Fprintln(os.Stderr, color.YellowString("(%s) Could not check for legacy [snapshots] config: %v", dir, err))
-	} else if warned {
-		// Warning was already emitted by warnLegacySnapshotsConfig.
 	}
 
 	// DN-/BVN-specific values

@@ -356,8 +356,8 @@ func (r *devnetRunner) runBlockProduction(running *runningNode) {
 
 			// Prune batches
 			digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
-			for d := range cert.Header.Payload {
-				digests = append(digests, d)
+			for _, e := range cert.Header.Payload {
+				digests = append(digests, e.Digest)
 			}
 			for _, w := range running.node.Workers() {
 				w.PruneBatches(digests)
