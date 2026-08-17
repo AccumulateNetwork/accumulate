@@ -22,3 +22,35 @@ AddCreditsResult:
       type: uvarint
     - name: Oracle
       type: uvarint
+
+ReleaseLockedOperationResult:
+  union: { type: result }
+  description: result of releasing a locked deposit, includes preimage for cross-chain extraction
+  fields:
+    - name: Preimage
+      description: the revealed preimage
+      type: bytes
+    - name: HashAlgorithm
+      description: the hash algorithm used
+      type: HashAlgorithm
+      marshal-as: enum
+    - name: Hash
+      description: the hash that was unlocked
+      type: bytes
+    - name: Amount
+      description: the amount of tokens released
+      type: bigint
+    - name: Token
+      description: the token type released
+      type: url
+      pointer: true
+
+SyntheticLockedDepositResult:
+  union: { type: result }
+  description: result of a synthetic locked deposit, tracks release status
+  fields:
+    - name: ReleaseTxID
+      description: the transaction ID of the ReleaseLockedOperation that released this deposit, nil if not yet released
+      type: txid
+      pointer: true
+      optional: true
