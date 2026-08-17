@@ -84,6 +84,7 @@ __pycache__/
 /snapshot
 /acc/acc
 /test/docker/loadtest-bin
+/htlc-devnet
 /cmd/accumulated/go_build*
 
 # Generated snapshot URL lists
