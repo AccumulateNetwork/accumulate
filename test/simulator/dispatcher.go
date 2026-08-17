@@ -31,16 +31,6 @@ func (fakeDispatcher) Send(context.Context) <-chan error {
 	return ch
 }
 
-type closeDispatcher struct {
-	execute.Dispatcher
-	close func()
-}
-
-func (d *closeDispatcher) Close() {
-	d.close()
-	d.Dispatcher.Close()
-}
-
 type DispatchInterceptor = func(ctx context.Context, env *messaging.Envelope) (send bool, err error)
 
 type interceptDispatcher struct {

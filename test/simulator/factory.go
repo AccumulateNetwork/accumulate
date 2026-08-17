@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"math/big"
 	"sync"
+	"time"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -321,21 +322,25 @@ func (f *simFactory) getDispatcherFunc() func() execute.Dispatcher {
 	hub := f.getHub()
 	interceptor := f.interceptDispatchedMessages
 
+	// Use ONE shared dispatcher, registered with the hub for the lifetime of
+	// the simulator. The previous per-call dispatcher unregistered itself
+	// from the hub on Close — BEFORE the hub's next message cycle could
+	// collect its queue — so anything submitted from a background task
+	// (synthetic/anchor healing) was silently lost unless a consensus cycle
+	// happened to run in the window between Submit and Close. That race is
+	// why healing never worked reliably in the simulator and why
+	// TestMissingSynthTxn was flaky (#4048). The shared dispatcher's queue
+	// survives Close and is drained by the next consensus cycle.
+	shared := consensus.NewDispatcher(router)
+	hub.Register(shared)
+
 	f.dispatcherFunc = func() execute.Dispatcher {
-		d := consensus.NewDispatcher(router)
-		hub.Register(d)
-
-		e := &closeDispatcher{
-			Dispatcher: d,
-			close:      func() { hub.Unregister(d) },
-		}
-
 		if interceptor == nil {
-			return e
+			return shared
 		}
 
 		return &interceptDispatcher{
-			Dispatcher:  e,
+			Dispatcher:  shared,
 			interceptor: interceptor,
 		}
 	}
@@ -553,6 +558,7 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 		Sequencer:     f.getServices().Private(),
 		Querier:       f.getServices(),
 		EnableHealing: true,
+		HealInterval:  time.Nanosecond, // the simulator steps far faster than wall time
 		Describe:      execute.DescribeShim{NetworkType: f.networkFactory.typ, PartitionId: f.networkFactory.id},
 	}
 
@@ -578,6 +584,11 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 		RunTask:             execOpts.BackgroundTaskLauncher,
 		DropInitialAnchor:   f.dropInitialAnchor,
 		EnableAnchorHealing: &enableAnchorHealing,
+
+		// Healing is paced by wall-clock time, but the simulator executes
+		// dozens of blocks per second — tests that rely on healing (e.g.
+		// TestDropInitialAnchor) would starve under the default pacing.
+		HealInterval: time.Nanosecond,
 
 		// Setting Intercept is not necessary because the dispatcher will
 		// intercept messages
