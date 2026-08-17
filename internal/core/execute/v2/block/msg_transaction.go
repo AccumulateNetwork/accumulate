@@ -382,10 +382,22 @@ func (x TransactionMessage) executeTransaction(batch *database.Batch, ctx *Trans
 
 	// Process scheduled events
 	if status.Delivered() {
-		if body, ok := ctx.transaction.Body.(*protocol.DirectoryAnchor); ok {
+		switch body := ctx.transaction.Body.(type) {
+		case *protocol.DirectoryAnchor:
 			err = x.processDirAnchor(batch, ctx.MessageContext, body)
 			if err != nil {
 				return nil, errors.UnknownError.Wrap(err)
+			}
+		case *protocol.BlockValidatorAnchor:
+			// A partition anchor writes its root to that partition's anchor chain,
+			// so it can release synthetics proven against it (#4087). Gated with
+			// the proofs that can wait on such a root — before Kourou nothing is
+			// ever held for a partition root, and releasing is state-changing.
+			if ctx.GetActiveGlobals().ExecutorVersion.V2KourouEnabled() {
+				err = x.releaseSyntheticsHeldFor(batch, ctx.MessageContext, body.RootChainAnchor)
+				if err != nil {
+					return nil, errors.UnknownError.Wrap(err)
+				}
 			}
 		}
 	}
@@ -474,27 +486,44 @@ func (x TransactionMessage) processDirAnchor(batch *database.Batch, ctx *Message
 	}
 
 	// Release synthetic messages that were held because their proof anchor was
-	// not yet known. This anchor (anchor.RootChainAnchor) was just written to the
-	// directory anchor chain by the DirectoryAnchor executor, which is the chain
-	// the synthetic proof check queries — so re-attempting the held synthetics now
-	// lets them deliver in place, with no re-submission (#4070, restoring the V1
-	// behavior). Version-gated because holding-vs-failing changes recorded state.
-	if ctx.GetActiveGlobals().ExecutorVersion.V2JiuquanEnabled() {
-		held := batch.Account(ctx.Executor.Describe.Ledger()).SyntheticForAnchor(anchor.RootChainAnchor)
-		txids, err := held.Get()
-		if err != nil {
-			return errors.UnknownError.WithFormat("load synthetics held for anchor: %w", err)
-		}
-		if len(txids) > 0 {
-			if err = held.Put(nil); err != nil {
-				return errors.UnknownError.WithFormat("clear synthetics held for anchor: %w", err)
-			}
-			for _, txid := range txids {
-				ctx.queueAdditional(&internal.MessageIsReady{TxID: txid})
-			}
-		}
+	// not yet known.
+	err = x.releaseSyntheticsHeldFor(batch, ctx, anchor.RootChainAnchor)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
 	}
 
+	return nil
+}
+
+// releaseSyntheticsHeldFor re-attempts synthetic messages that were held waiting
+// for the given anchor root, which the caller has just written to an anchor
+// chain — the chain the synthetic proof check queries. Re-attempting them now
+// lets them deliver IN PLACE, with no re-submission (#4070, restoring the V1
+// behavior). Version-gated because holding-vs-failing changes recorded state.
+//
+// Both anchor kinds call this. A directory root is what the ordinary outbound
+// path proves against; a partition's own root is what recovery proves against
+// (#4087), and a synthetic waiting on one would wedge forever if only directory
+// anchors released.
+func (x TransactionMessage) releaseSyntheticsHeldFor(batch *database.Batch, ctx *MessageContext, root [32]byte) error {
+	if !ctx.GetActiveGlobals().ExecutorVersion.V2JiuquanEnabled() {
+		return nil
+	}
+
+	held := batch.Account(ctx.Executor.Describe.Ledger()).SyntheticForAnchor(root)
+	txids, err := held.Get()
+	if err != nil {
+		return errors.UnknownError.WithFormat("load synthetics held for anchor: %w", err)
+	}
+	if len(txids) == 0 {
+		return nil
+	}
+	if err = held.Put(nil); err != nil {
+		return errors.UnknownError.WithFormat("clear synthetics held for anchor: %w", err)
+	}
+	for _, txid := range txids {
+		ctx.queueAdditional(&internal.MessageIsReady{TxID: txid})
+	}
 	return nil
 }
 

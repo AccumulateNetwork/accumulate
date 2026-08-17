@@ -682,6 +682,32 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 		return nil
 	})
 
+	// DEBUG/TEST ONLY. Parsed here rather than below because the ANCHOR dropper
+	// has to wrap the conductor's dispatcher, and the conductor is built next.
+	// No-op unless the variables are set.
+	synthDrop := parseDropSyntheticSpec(os.Getenv("ACC_DEBUG_DROP_SYNTHETIC"))
+	anchorDrop := parseDropSyntheticSpec(os.Getenv("ACC_DEBUG_DROP_ANCHOR"))
+	if anchorDrop != nil {
+		anchorDrop.anchors = true
+	}
+
+	// Anchors are EMITTED by the conductor, so an anchor dropper that wraps only
+	// the executor's dispatcher never sees one. ACC_DEBUG_DROP_ANCHOR was
+	// therefore a silent no-op: a 75-minute soak logged zero anchor drops while
+	// every stream's anchor sequence passed 1000, and the run reported no
+	// anchor-range recovery — which reads as "the path lost a race" when the
+	// truth was "the path was never exercised" (#4087).
+	//
+	// Safe to wrap because modulo mode drops each sequence ONCE per node: the
+	// original push is lost, and the re-submission that repairs it — from either
+	// the source-side push or the destination-side pull — passes. Marking it
+	// permanent ("!") would instead drop the recovery too and wedge the stream
+	// forever, which tests nothing.
+	conductorDispatcher := execOpts.NewDispatcher()
+	if anchorDrop != nil {
+		conductorDispatcher = &droppingDispatcher{Dispatcher: conductorDispatcher, anchorDropper: anchorDrop}
+	}
+
 	// This must happen before creating the executor since it needs to receive
 	// the initial WillChangeGlobals event
 	conductor := &crosschain.Conductor{
@@ -689,7 +715,7 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 		ValidatorKey: execOpts.Key,
 		Database:     execOpts.Database,
 		Querier:      v3.Querier2{Querier: client},
-		Dispatcher:   execOpts.NewDispatcher(),
+		Dispatcher:   conductorDispatcher,
 		Sequencer:    client.Private(),
 		RunTask:      execOpts.BackgroundTaskLauncher,
 
@@ -703,19 +729,14 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 	}
 
 	// DEBUG/TEST ONLY: reproduce a wedged synthetic stream by dropping the first
-	// N synthetics to a partition. Wraps only the executor's dispatcher (created
-	// below) — the conductor's dispatcher is already built above, so heal
-	// re-submissions are never dropped. No-op unless ACC_DEBUG_DROP_SYNTHETIC is
-	// set. See #4064.
-	synthDrop := parseDropSyntheticSpec(os.Getenv("ACC_DEBUG_DROP_SYNTHETIC"))
-	anchorDrop := parseDropSyntheticSpec(os.Getenv("ACC_DEBUG_DROP_ANCHOR"))
-	if anchorDrop != nil {
-		anchorDrop.anchors = true
-	}
-	if synthDrop != nil || anchorDrop != nil {
+	// N synthetics to a partition (#4064). Synthetics are emitted by the
+	// executor, so this is the dispatcher that carries them. The conductor's
+	// dispatcher is wrapped separately above, for anchors only — synthetic heal
+	// re-submissions go through the conductor and must never be dropped.
+	if synthDrop != nil {
 		base := execOpts.NewDispatcher
 		execOpts.NewDispatcher = func() execute.Dispatcher {
-			return &droppingDispatcher{Dispatcher: base(), dropper: synthDrop, anchorDropper: anchorDrop}
+			return &droppingDispatcher{Dispatcher: base(), dropper: synthDrop}
 		}
 	}
 

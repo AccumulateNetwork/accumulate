@@ -64,7 +64,7 @@ services:
     environment:
       ACC_DEBUG_DROP_SYNTHETIC: "${DROP_SYN-*:%499+3}"
       ACC_DEBUG_DROP_ANCHOR: "${DROP_ANC-*:%997+3}"
-    command: ["-w=/root/.accumulate/bvn1-1", "/root/.accumulate/bvn1-1/accumulate.toml"]
+    command: ["--pprof=0.0.0.0:6060", "-w=/root/.accumulate/bvn1-1", "/root/.accumulate/bvn1-1/accumulate.toml"]
     volumes:
       - network-config:/root/.accumulate
     ports:
@@ -83,7 +83,7 @@ services:
     environment:
       ACC_DEBUG_DROP_SYNTHETIC: "${DROP_SYN-*:%499+3}"
       ACC_DEBUG_DROP_ANCHOR: "${DROP_ANC-*:%997+3}"
-    command: ["-w=/root/.accumulate/bvn1-2", "/root/.accumulate/bvn1-2/accumulate.toml"]
+    command: ["--pprof=0.0.0.0:6060", "-w=/root/.accumulate/bvn1-2", "/root/.accumulate/bvn1-2/accumulate.toml"]
     ports:
       - "26661:26660"
     volumes:
@@ -102,7 +102,7 @@ services:
     environment:
       ACC_DEBUG_DROP_SYNTHETIC: "${DROP_SYN-*:%499+3}"
       ACC_DEBUG_DROP_ANCHOR: "${DROP_ANC-*:%997+3}"
-    command: ["-w=/root/.accumulate/bvn1-3", "/root/.accumulate/bvn1-3/accumulate.toml"]
+    command: ["--pprof=0.0.0.0:6060", "-w=/root/.accumulate/bvn1-3", "/root/.accumulate/bvn1-3/accumulate.toml"]
     ports:
       - "26662:26660"
     volumes:
@@ -121,7 +121,7 @@ services:
     environment:
       ACC_DEBUG_DROP_SYNTHETIC: "${DROP_SYN-*:%499+3}"
       ACC_DEBUG_DROP_ANCHOR: "${DROP_ANC-*:%997+3}"
-    command: ["-w=/root/.accumulate/bvn1-4", "/root/.accumulate/bvn1-4/accumulate.toml"]
+    command: ["--pprof=0.0.0.0:6060", "-w=/root/.accumulate/bvn1-4", "/root/.accumulate/bvn1-4/accumulate.toml"]
     ports:
       - "26663:26660"
     volumes:
@@ -140,7 +140,7 @@ services:
     environment:
       ACC_DEBUG_DROP_SYNTHETIC: "${DROP_SYN-*:%499+3}"
       ACC_DEBUG_DROP_ANCHOR: "${DROP_ANC-*:%997+3}"
-    command: ["-w=/root/.accumulate/bvn2-1", "/root/.accumulate/bvn2-1/accumulate.toml"]
+    command: ["--pprof=0.0.0.0:6060", "-w=/root/.accumulate/bvn2-1", "/root/.accumulate/bvn2-1/accumulate.toml"]
     ports:
       - "26664:26660"
     volumes:
@@ -159,7 +159,7 @@ services:
     environment:
       ACC_DEBUG_DROP_SYNTHETIC: "${DROP_SYN-*:%499+3}"
       ACC_DEBUG_DROP_ANCHOR: "${DROP_ANC-*:%997+3}"
-    command: ["-w=/root/.accumulate/bvn2-2", "/root/.accumulate/bvn2-2/accumulate.toml"]
+    command: ["--pprof=0.0.0.0:6060", "-w=/root/.accumulate/bvn2-2", "/root/.accumulate/bvn2-2/accumulate.toml"]
     ports:
       - "26665:26660"
     volumes:
@@ -178,7 +178,7 @@ services:
     environment:
       ACC_DEBUG_DROP_SYNTHETIC: "${DROP_SYN-*:%499+3}"
       ACC_DEBUG_DROP_ANCHOR: "${DROP_ANC-*:%997+3}"
-    command: ["-w=/root/.accumulate/bvn2-3", "/root/.accumulate/bvn2-3/accumulate.toml"]
+    command: ["--pprof=0.0.0.0:6060", "-w=/root/.accumulate/bvn2-3", "/root/.accumulate/bvn2-3/accumulate.toml"]
     ports:
       - "26666:26660"
     volumes:
@@ -197,7 +197,7 @@ services:
     environment:
       ACC_DEBUG_DROP_SYNTHETIC: "${DROP_SYN-*:%499+3}"
       ACC_DEBUG_DROP_ANCHOR: "${DROP_ANC-*:%997+3}"
-    command: ["-w=/root/.accumulate/bvn2-4", "/root/.accumulate/bvn2-4/accumulate.toml"]
+    command: ["--pprof=0.0.0.0:6060", "-w=/root/.accumulate/bvn2-4", "/root/.accumulate/bvn2-4/accumulate.toml"]
     ports:
       - "26667:26660"
     volumes:
@@ -216,7 +216,7 @@ services:
     environment:
       ACC_DEBUG_DROP_SYNTHETIC: "${DROP_SYN-*:%499+3}"
       ACC_DEBUG_DROP_ANCHOR: "${DROP_ANC-*:%997+3}"
-    command: ["-w=/root/.accumulate/bvn3-1", "/root/.accumulate/bvn3-1/accumulate.toml"]
+    command: ["--pprof=0.0.0.0:6060", "-w=/root/.accumulate/bvn3-1", "/root/.accumulate/bvn3-1/accumulate.toml"]
     ports:
       - "26668:26660"
     volumes:
@@ -235,7 +235,7 @@ services:
     environment:
       ACC_DEBUG_DROP_SYNTHETIC: "${DROP_SYN-*:%499+3}"
       ACC_DEBUG_DROP_ANCHOR: "${DROP_ANC-*:%997+3}"
-    command: ["-w=/root/.accumulate/bvn3-2", "/root/.accumulate/bvn3-2/accumulate.toml"]
+    command: ["--pprof=0.0.0.0:6060", "-w=/root/.accumulate/bvn3-2", "/root/.accumulate/bvn3-2/accumulate.toml"]
     ports:
       - "26669:26660"
     volumes:
@@ -254,7 +254,7 @@ services:
     environment:
       ACC_DEBUG_DROP_SYNTHETIC: "${DROP_SYN-*:%499+3}"
       ACC_DEBUG_DROP_ANCHOR: "${DROP_ANC-*:%997+3}"
-    command: ["-w=/root/.accumulate/bvn3-3", "/root/.accumulate/bvn3-3/accumulate.toml"]
+    command: ["--pprof=0.0.0.0:6060", "-w=/root/.accumulate/bvn3-3", "/root/.accumulate/bvn3-3/accumulate.toml"]
     ports:
       - "26670:26660"
     volumes:
@@ -273,7 +273,7 @@ services:
     environment:
       ACC_DEBUG_DROP_SYNTHETIC: "${DROP_SYN-*:%499+3}"
       ACC_DEBUG_DROP_ANCHOR: "${DROP_ANC-*:%997+3}"
-    command: ["-w=/root/.accumulate/bvn3-4", "/root/.accumulate/bvn3-4/accumulate.toml"]
+    command: ["--pprof=0.0.0.0:6060", "-w=/root/.accumulate/bvn3-4", "/root/.accumulate/bvn3-4/accumulate.toml"]
     ports:
       - "26671:26660"
     volumes:
