@@ -27,6 +27,14 @@ type Discoverer interface {
 	Discover(context.Context, *DiscoveryRequest) (DiscoveryResponse, error)
 }
 
+// LocalDiscoverer reports whether this node provides a service itself. It exists
+// so the dialer can answer that question without issuing a network query, since
+// Discover cannot distinguish "I provide this" from "let me go ask the DHT"
+// until after the query has been made.
+type LocalDiscoverer interface {
+	DiscoverLocal(network string, service *api.ServiceAddress) (DiscoveredLocal, bool)
+}
+
 type DiscoveryRequest struct {
 	Network string
 	Service *api.ServiceAddress
@@ -134,6 +142,34 @@ func (d *dialer) newNetworkStream(ctx context.Context, service *api.ServiceAddre
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
+	// Handle the service ourselves if we provide it. This is a local check and
+	// must come first: it is both the cheapest answer and the correct one.
+	if l, ok := d.peers.(LocalDiscoverer); ok {
+		if local, ok := l.DiscoverLocal(netName, service); ok {
+			return local(ctx)
+		}
+	}
+
+	// Prefer peers we already know are good, before asking the network.
+	//
+	// Discovery is a network query, and with the DHT behind it that is one
+	// lookup per dial -- measured at 496/s on an *idle* six-node network, which
+	// is what drives the kad-dht stream growth in #4085. The tracker check used
+	// to run after this query, so even when it answered we had already paid for
+	// the lookup and then abandoned its channel. Asking what we already know
+	// first makes the network query the fallback it was meant to be.
+	//
+	// Any known-good peer is worth trying, not four. The old call site required
+	// four before consulting the tracker at all, which a partition served by two
+	// nodes can never satisfy -- so small networks queried the DHT on every
+	// single dial, forever. Trying one and falling through on failure costs a
+	// dial attempt; not trying costs a DHT lookup per dial.
+	if len(d.tracker.All(addr, api.PeerStatusIsKnownGood)) > 0 {
+		if s := d.dialFromTracker(ctx, service, addr, wg); s != nil {
+			return s, nil
+		}
+	}
+
 	// Discover peers that provide the service
 	callCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -177,14 +213,6 @@ func (d *dialer) newNetworkStream(ctx context.Context, service *api.ServiceAddre
 			}
 		}
 	}()
-
-	// If there are at least 4 known-good peers, try those
-	if len(d.tracker.All(addr, api.PeerStatusIsKnownGood)) >= 4 {
-		s := d.dialFromTracker(ctx, service, addr, wg)
-		if s != nil {
-			return s, nil
-		}
-	}
 
 	// Try peers from the DHT
 	var bad []peer.ID

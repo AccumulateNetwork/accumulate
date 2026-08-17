@@ -56,14 +56,24 @@ func (d *selfDiscoverer) Discover(ctx context.Context, req *dial.DiscoveryReques
 		return d.d.Discover(ctx, req)
 	}
 
-	s, ok := d.n.getOwnService(req.Network, req.Service)
+	local, ok := d.DiscoverLocal(req.Network, req.Service)
 	if !ok {
 		return d.d.Discover(ctx, req)
+	}
+	return local, nil
+}
+
+// DiscoverLocal implements [dial.LocalDiscoverer], letting the dialer check
+// whether this node provides the service before it issues a network query.
+func (d *selfDiscoverer) DiscoverLocal(network string, service *api.ServiceAddress) (dial.DiscoveredLocal, bool) {
+	s, ok := d.n.getOwnService(network, service)
+	if !ok {
+		return nil, false
 	}
 
 	return dial.DiscoveredLocal(func(ctx context.Context) (message.Stream, error) {
 		return handleLocally(ctx, s), nil
-	}), nil
+	}), true
 }
 
 type dhtDiscoverer Node
