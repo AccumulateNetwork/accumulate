@@ -400,6 +400,8 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(LockAccount), nil
 	case TransactionTypeNetworkMaintenance:
 		return new(NetworkMaintenance), nil
+	case TransactionTypeReleaseLockedOperation:
+		return new(ReleaseLockedOperation), nil
 	case TransactionTypeRemote:
 		return new(RemoteTransaction), nil
 	case TransactionTypeSendTokens:
@@ -416,6 +418,8 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(SyntheticDepositTokens), nil
 	case TransactionTypeSyntheticForwardTransaction:
 		return new(SyntheticForwardTransaction), nil
+	case TransactionTypeSyntheticLockedDeposit:
+		return new(SyntheticLockedDeposit), nil
 	case TransactionTypeSyntheticWriteData:
 		return new(SyntheticWriteData), nil
 	case TransactionTypeSystemGenesis:
@@ -546,6 +550,12 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 		}
 		b, ok := b.(*NetworkMaintenance)
 		return ok && a.Equal(b)
+	case *ReleaseLockedOperation:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*ReleaseLockedOperation)
+		return ok && a.Equal(b)
 	case *RemoteTransaction:
 		if a == nil {
 			return b == nil
@@ -593,6 +603,12 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 			return b == nil
 		}
 		b, ok := b.(*SyntheticForwardTransaction)
+		return ok && a.Equal(b)
+	case *SyntheticLockedDeposit:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*SyntheticLockedDeposit)
 		return ok && a.Equal(b)
 	case *SyntheticWriteData:
 		if a == nil {
@@ -689,6 +705,8 @@ func CopyTransactionBody(v TransactionBody) TransactionBody {
 		return v.Copy()
 	case *NetworkMaintenance:
 		return v.Copy()
+	case *ReleaseLockedOperation:
+		return v.Copy()
 	case *RemoteTransaction:
 		return v.Copy()
 	case *SendTokens:
@@ -704,6 +722,8 @@ func CopyTransactionBody(v TransactionBody) TransactionBody {
 	case *SyntheticDepositTokens:
 		return v.Copy()
 	case *SyntheticForwardTransaction:
+		return v.Copy()
+	case *SyntheticLockedDeposit:
 		return v.Copy()
 	case *SyntheticWriteData:
 		return v.Copy()

@@ -9,6 +9,7 @@ package chain
 import (
 	"fmt"
 	"math/big"
+	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -36,6 +37,38 @@ func (SendTokens) check(st *StateManager, tx *Delivery) (*protocol.SendTokens, e
 		}
 		if to.Amount.Sign() < 0 {
 			return nil, fmt.Errorf("amount can't be a negative value")
+		}
+	}
+
+	// Validate hashlock if present
+	if tx.Transaction.Header.HashLock != nil {
+		lock := tx.Transaction.Header.HashLock
+		if len(lock.Hash) == 0 {
+			return nil, errors.BadRequest.With("hashlock hash cannot be empty")
+		}
+		// Validate hash length based on algorithm
+		switch lock.HashAlgorithm {
+		case protocol.HashAlgorithmSHA256, protocol.HashAlgorithmSHA256D:
+			if len(lock.Hash) != 32 {
+				return nil, errors.BadRequest.WithFormat("hashlock hash must be 32 bytes for %v, got %d", lock.HashAlgorithm, len(lock.Hash))
+			}
+		case protocol.HashAlgorithmHASH160:
+			if len(lock.Hash) != 20 {
+				return nil, errors.BadRequest.WithFormat("hashlock hash must be 20 bytes for HASH160, got %d", len(lock.Hash))
+			}
+		default:
+			return nil, errors.BadRequest.WithFormat("unsupported hashlock algorithm: %v", lock.HashAlgorithm)
+		}
+		if lock.Expiration == nil {
+			return nil, errors.BadRequest.With("hashlock expiration is required")
+		}
+		// Minimum 10 minutes in the future
+		if time.Until(*lock.Expiration) < 10*time.Minute {
+			return nil, errors.BadRequest.With("hashlock expiration must be at least 10 minutes in the future")
+		}
+		// Maximum 30 days
+		if time.Until(*lock.Expiration) > 30*24*time.Hour {
+			return nil, errors.BadRequest.With("hashlock expiration cannot exceed 30 days")
 		}
 	}
 
@@ -75,10 +108,27 @@ func (x SendTokens) Execute(st *StateManager, tx *Delivery) (protocol.Transactio
 	}
 
 	for _, to := range body.To {
-		deposit := new(protocol.SyntheticDepositTokens)
-		deposit.Token = account.GetTokenUrl()
-		deposit.Amount = to.Amount
-		st.Submit(to.Url, deposit)
+		if tx.Transaction.Header.HashLock != nil {
+			// Produce locked deposit when hashlock is present
+			locked := new(protocol.SyntheticLockedDeposit)
+			locked.Token = account.GetTokenUrl()
+			locked.Amount = to.Amount
+			locked.Sender = tx.Transaction.Header.Principal
+			locked.HashAlgorithm = tx.Transaction.Header.HashLock.HashAlgorithm
+			locked.Hash = tx.Transaction.Header.HashLock.Hash
+			locked.Expiration = tx.Transaction.Header.HashLock.Expiration
+			// Check if sender is token issuer
+			if issuer, ok := st.Origin.(*protocol.TokenIssuer); ok {
+				locked.IsIssuer = issuer.GetUrl().Equal(account.GetTokenUrl())
+			}
+			st.Submit(to.Url, locked)
+		} else {
+			// Normal deposit
+			deposit := new(protocol.SyntheticDepositTokens)
+			deposit.Token = account.GetTokenUrl()
+			deposit.Amount = to.Amount
+			st.Submit(to.Url, deposit)
+		}
 	}
 
 	// Is the account locked?
