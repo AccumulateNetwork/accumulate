@@ -71,6 +71,34 @@ func synthDropped(ctx *MessageContext, cause error) {
 // directory root and a source's own root is only which chain to look on, not how
 // much is being trusted: both got there by an anchor meeting its partition's
 // validator quorum.
+// findProofInBundle returns the collection proof carried alongside this message
+// that covers it, or nil (#4090).
+//
+// Matching is by INCLUSION rather than by position or count: an envelope may
+// carry more than one proof, and a package's span can cover elements belonging
+// to other destinations, because the source's synthetic main chain interleaves
+// them. Asking "which proof contains me" is the only question with a stable
+// answer, and it is the same question the message would ask of its own proof.
+func findProofInBundle(ctx *MessageContext, h [32]byte) *protocol.AnnotatedReceipt {
+	for _, msg := range ctx.messages {
+		p, ok := msg.(*messaging.SyntheticProof)
+		if !ok || p.Proof == nil || p.Proof.ReceiptList == nil {
+			continue
+		}
+		// Bound before hashing: Included walks the list, and an unbounded list
+		// from an untrusted envelope is an invitation to burn CPU. The executor
+		// for the proof rejects these too, but a sibling must not depend on
+		// having been reached first.
+		if len(p.Proof.ReceiptList.Elements) > protocol.MaxReceiptListElements {
+			continue
+		}
+		if p.Proof.ReceiptList.Included(h[:]) {
+			return p.Proof
+		}
+	}
+	return nil
+}
+
 func sourcePartition(seq *messaging.SequencedMessage) (string, bool) {
 	if seq == nil || seq.Source == nil {
 		return "", false
@@ -118,6 +146,21 @@ func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*mess
 	}
 	if syn.Signature == nil {
 		return nil, errors.BadRequest.With("missing signature")
+	}
+	// A synthetic message may omit its own proof when a SyntheticProof travels
+	// with it in the same envelope (#4090). One proof then covers every message
+	// in the package, instead of each message carrying its own receipt plus a
+	// duplicate of the shared continuation.
+	//
+	// Resolution is confined to THIS bundle — one envelope, delivered atomically.
+	// A proof from another envelope is not consulted even if it would verify,
+	// because that would make a message's acceptance depend on what else arrived
+	// and in what order, which is the coupling collection proofs exist to remove.
+	//
+	// syn is a copy (SyntheticMessage.Data builds a fresh SynthFields), so
+	// filling it in here does not mutate the message or its hash.
+	if syn.Proof == nil && ctx.GetActiveGlobals().ExecutorVersion.V2KourouEnabled() {
+		syn.Proof = findProofInBundle(ctx, syn.Message.Hash())
 	}
 	if syn.Proof == nil {
 		return nil, errors.BadRequest.With("missing proof")
