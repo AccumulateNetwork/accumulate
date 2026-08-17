@@ -113,16 +113,27 @@ type partOpts struct {
 	Dir              string
 	BootstrapPeers   []multiaddr.Multiaddr
 	MetricsNamespace string
+
+	// PortOffset overrides the partition's port offset. Zero means "use the
+	// default for this partition type" — directory at PortOffsetDirectory,
+	// block validator at PortOffsetBlockValidator.
+	//
+	// A normal deployment hosts one BVN per node, so the default is right and
+	// this stays unset. A devnet hosts several BVNs and needs each on its own
+	// port, so it sets this per partition. See DevnetConfiguration.
+	PortOffset portOffset
 }
 
 func (p partOpts) apply(cfg *Config) error {
 	setDefaultPtr(&p.EnableSnapshots, false)
 
-	var offset portOffset
-	if p.Type == protocol.PartitionTypeDirectory {
-		offset = portDir
-	} else {
-		offset = portBVN
+	offset := p.PortOffset
+	if offset == 0 {
+		if p.Type == protocol.PartitionTypeDirectory {
+			offset = portDir
+		} else {
+			offset = portBVN
+		}
 	}
 
 	// Consensus

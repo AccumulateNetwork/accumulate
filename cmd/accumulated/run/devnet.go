@@ -127,15 +127,21 @@ func (d *DevnetConfiguration) apply(inst *Instance, cfg *Config) error {
 	for bvn := range nodes {
 		for node := range nodes[bvn] {
 			n := nodes[bvn][node]
-			// These become ConsensusService.BootstrapPeers, which are
-			// libp2p (Accumulate P2P, base+2) addresses — cmtPeerAddress
-			// subtracts the offset to reach the CometBFT port. Building them
-			// at portCmtP2P (base+0) meant that subtraction ran against an
-			// address that had never had the offset applied, so every node
-			// dialled base-2 and no multi-node devnet ever reached consensus
-			// (#4081). init network has always used AccumulateP2P here.
+			// Two independent requirements meet on these lines.
+			//
+			// portAccP2P (not portCmtP2P): these become
+			// ConsensusService.BootstrapPeers, which are libp2p addresses at
+			// base+2; cmtPeerAddress subtracts the offset to reach the
+			// CometBFT port. Building them at base+0 made that subtraction
+			// yield base-2 and no multi-node devnet reached consensus (#4081).
+			//
+			// portForBVN(bvn+1) (not portBVN): each BVN binds its own offset,
+			// so a peer built at the shared default points at a port nothing
+			// is listening on.
+			//
+			// Dropping either one reintroduces a bug that looks like the other.
 			dnPeers = append(dnPeers, addrForPeer(listen(d.Listen, devNetDefaultHost, n.IP, useTCP{}, portDir, portAccP2P), n.PeerID))
-			bvnPeers[bvn] = append(bvnPeers[bvn], addrForPeer(listen(d.Listen, devNetDefaultHost, n.IP, useTCP{}, portBVN, portAccP2P), n.PeerID))
+			bvnPeers[bvn] = append(bvnPeers[bvn], addrForPeer(listen(d.Listen, devNetDefaultHost, n.IP, useTCP{}, portForBVN(bvn+1), portAccP2P), n.PeerID))
 		}
 	}
 
@@ -346,7 +352,13 @@ func (d *DevnetConfiguration) applyBootstrap(inst *Instance, root *Config, ip ip
 	setDefaultVal(&faucet.Router, ServiceReference[*RouterService](""))
 	inst.logger.Info("Faucet", "account", faucetUrl)
 
-	return d.writeSubNode(inst, root, cfg, sub, ip)
+	// The bootstrap node advertises every partition, so it needs a
+	// listener for each BVN, not just one.
+	allBvns := make([]int, d.Bvns)
+	for i := range allBvns {
+		allBvns[i] = i + 1
+	}
+	return d.writeSubNode(inst, root, cfg, sub, ip, allBvns)
 }
 
 // addDevnetValidators registers every node in the network definition, marking
@@ -411,6 +423,10 @@ func (n nodeOpts) apply(inst *Instance, root *Config) error {
 	opts.ID = fmt.Sprintf("BVN%d", n.BVN)
 	opts.Type = protocol.PartitionTypeBlockValidator
 	opts.Dir = "bvnn"
+	// Each BVN gets its own port offset. A devnet runs several BVNs in one
+	// process, so separating them by address alone would leave every partition
+	// listening on the same port and none of them individually addressable.
+	opts.PortOffset = portForBVN(n.BVN)
 	opts.Genesis = filepath.Join("..", fmt.Sprintf("bvn%d-genesis.snap", n.BVN))
 	// MetricsNamespace is intentionally not set to avoid Prometheus duplicate registration panics in tests
 	opts.BootstrapPeers = n.BvnBootstrap
@@ -419,7 +435,7 @@ func (n nodeOpts) apply(inst *Instance, root *Config) error {
 		return err
 	}
 
-	return n.DevNet.writeSubNode(inst, root, cfg, sub, n.IP)
+	return n.DevNet.writeSubNode(inst, root, cfg, sub, n.IP, []int{n.BVN})
 }
 
 func (d *DevnetConfiguration) addSubNode(inst *Instance, root *Config, name string) (*Config, *SubnodeService, error) {
@@ -436,7 +452,11 @@ func (d *DevnetConfiguration) addSubNode(inst *Instance, root *Config, name stri
 	return cfg, sub, nil
 }
 
-func (d *DevnetConfiguration) writeSubNode(_ *Instance, root, cfg *Config, sub *SubnodeService, ip ipOffset) error {
+// writeSubNode finalizes and writes one sub-node's config. bvns lists the
+// block validators this node must expose a P2P listener for: the BVN it hosts,
+// or every BVN in the network for the bootstrap node, which has to be
+// reachable for each partition it advertises.
+func (d *DevnetConfiguration) writeSubNode(_ *Instance, root, cfg *Config, sub *SubnodeService, ip ipOffset, bvns []int) error {
 	// Update the subnode configuration
 	sub.NodeKey = cfg.P2P.Key
 	sub.Services = cfg.Services
@@ -445,12 +465,18 @@ func (d *DevnetConfiguration) writeSubNode(_ *Instance, root, cfg *Config, sub *
 	cfg.Network = root.Network
 	cfg.Logging = root.Logging
 
-	// P2P listening addresses
+	// P2P listening addresses. The directory is always present; each block
+	// validator gets its own port (portForBVN) so every partition is
+	// individually addressable rather than sharing one BVN port.
 	cfg.P2P.Listen = []multiaddr.Multiaddr{
 		listen(d.Listen, devNetDefaultHost, ip, portDir+portAccP2P, useTCP{}),
 		listen(d.Listen, devNetDefaultHost, ip, portDir+portAccP2P, useQUIC{}),
-		listen(d.Listen, devNetDefaultHost, ip, portBVN+portAccP2P, useTCP{}),
-		listen(d.Listen, devNetDefaultHost, ip, portBVN+portAccP2P, useQUIC{}),
+	}
+	for _, bvn := range bvns {
+		cfg.P2P.Listen = append(cfg.P2P.Listen,
+			listen(d.Listen, devNetDefaultHost, ip, portForBVN(bvn)+portAccP2P, useTCP{}),
+			listen(d.Listen, devNetDefaultHost, ip, portForBVN(bvn)+portAccP2P, useQUIC{}),
+		)
 	}
 
 	// Sub-nodes are bootstrapped from the bootstrap node
